@@ -109,9 +109,9 @@ test('preferred MFA set-preference stays refused and money stays locked', async 
   assert.ok(MFA_AUTH_ROUTES['/auth/mfa/verify']);
 });
 
-test('ninth UUID is a fail-closed orphan and is excluded from Cognito invite', () => {
+test('ninth UUID is not a live production user and is excluded from Cognito invite', () => {
   const ninth = classifyNinthUuid();
-  assert.equal(ninth.classification, 'orphan_unlinked');
+  assert.equal(ninth.classification, 'not_found');
   assert.equal(ninth.cognitoInvite, false);
   assert.equal(ninth.inventEmail, false);
   assert.equal(ninth.failClosed, true);
