@@ -35,7 +35,7 @@ const json = (statusCode, body) => ({
     'content-type': 'application/json',
     'cache-control': 'no-store',
     'access-control-allow-origin': '*',
-    'access-control-allow-headers': 'authorization,content-type,x-request-id,x-user-id,x-tenant-id,x-role,x-cognito-sub,x-signature,x-timestamp,x-nonce,x-webhook-id,webhook-id,webhook-timestamp,webhook-signature,x-moov-signature,x-moov-timestamp,x-moov-webhook-id',
+    'access-control-allow-headers': 'authorization,content-type,x-request-id,x-user-id,x-tenant-id,x-role,x-cognito-sub,x-bridge-secret,x-signature,x-timestamp,x-nonce,x-webhook-id,webhook-id,webhook-timestamp,webhook-signature,x-moov-signature,x-moov-timestamp,x-moov-webhook-id',
     'access-control-allow-methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
   },
   body: JSON.stringify(body),
@@ -68,6 +68,7 @@ const READ_ONLY_PATHS = new Set([
   '/identity/me',
   '/identity/session',
   '/ops/readiness',
+  '/cutover/readiness',
 ]);
 
 const tenantComplianceMatch = (path) => path.match(/^\/tenants\/([^/]+)\/security-compliance$/);
@@ -100,7 +101,7 @@ export const handler = async (event) => {
     });
   }
 
-  if (method === 'GET' && path === '/ops/readiness') {
+  if (method === 'GET' && (path === '/ops/readiness' || path === '/cutover/readiness')) {
     const snapshot = readinessSnapshot();
     const holds = stagingSafetyHolds(snapshot);
     return json(200, {
@@ -240,7 +241,7 @@ export const handler = async (event) => {
           'cache-control': 'no-store',
           location: result.location,
           'access-control-allow-origin': '*',
-          'access-control-allow-headers': 'authorization,content-type,x-request-id,x-user-id,x-tenant-id,x-role,x-cognito-sub,x-signature,x-timestamp,x-nonce,x-webhook-id,webhook-id,webhook-timestamp,webhook-signature,x-moov-signature,x-moov-timestamp,x-moov-webhook-id',
+          'access-control-allow-headers': 'authorization,content-type,x-request-id,x-user-id,x-tenant-id,x-role,x-cognito-sub,x-bridge-secret,x-signature,x-timestamp,x-nonce,x-webhook-id,webhook-id,webhook-timestamp,webhook-signature,x-moov-signature,x-moov-timestamp,x-moov-webhook-id',
           'access-control-allow-methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
         },
         body: JSON.stringify({

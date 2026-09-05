@@ -65,6 +65,40 @@ test('bridge teardown and webhook docs refuse current execution', () => {
   assert.match(rollback, /Point C/);
 });
 
+test('production-prep templates keep flags off, skip apex aliases, and do not reuse staging Cognito', () => {
+  const prep = read('aws/production/prep-stack.yaml');
+  const api = read('aws/production/api-template.yaml');
+  assert.match(prep, /Default: us-east-1_h00WorYMT/);
+  assert.match(prep, /Default: checksops\.com/);
+  assert.match(prep, /checksops-production-frontend-oac-prep2/);
+  assert.match(prep, /OriginRequestPolicyId: 88a5eaf4-2fd4-4709-b370-b4c650ea3fcf/);
+  assert.doesNotMatch(prep, /UserPoolName:/);
+  assert.doesNotMatch(prep, /Default: us-east-1_vPmQ7cL1F/);
+  assert.match(prep, /StagingPoolMustNotBeReused/);
+  assert.doesNotMatch(prep, /Aliases:/);
+  assert.match(prep, /no checksops.com aliases/);
+  assert.match(api, /AllowedValues:\n      - production-prep/);
+  assert.doesNotMatch(api, /- production\n/);
+  assert.match(api, /AWS_PROVIDER_EXECUTION_ENABLED: "false"/);
+  assert.match(api, /AWS_MOOV_ENABLED: "false"/);
+  assert.match(api, /AWS_CHECKALT_ENABLED: "false"/);
+  assert.match(api, /AWS_FINANCIAL_PERMISSIONS_ACTIVATED: "false"/);
+  assert.match(api, /AWS_COGNITO_MFA_PREFERRED: "false"/);
+  assert.match(api, /FunctionName: checksops-production-prep-api/);
+  assert.match(api, /AlarmName: checksops-production-prep-api-errors/);
+  assert.match(api, /Default: us-east-1_h00WorYMT/);
+  assert.doesNotMatch(api, /Default: us-east-1_vPmQ7cL1F/);
+  const apiCfn = read('aws/production/api-cfn.yaml');
+  assert.match(apiCfn, /FunctionName: checksops-production-prep-api/);
+  assert.match(apiCfn, /AWS_PROVIDER_EXECUTION_ENABLED: "false"/);
+  assert.match(apiCfn, /AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: "false"/);
+  assert.match(apiCfn, /AWS_FINANCIAL_PERMISSIONS_ACTIVATED: "false"/);
+  assert.match(apiCfn, /ExistingExecutionRoleArn/);
+  assert.match(apiCfn, /checksops-staging-ApiFunctionRole-7E7XRyLe3nyi/);
+  assert.doesNotMatch(apiCfn, /AWS::IAM::Role/);
+  assert.doesNotMatch(apiCfn, /Default: us-east-1_vPmQ7cL1F/);
+});
+
 test('production example configs are marked do-not-deploy and keep flags false', () => {
   const params = read('aws/cutover/production/parameters.production.example.json');
   const sam = read('aws/cutover/production/samconfig.production.example.toml');
@@ -76,6 +110,53 @@ test('production example configs are marked do-not-deploy and keep flags false',
   assert.match(cf, /DO NOT DEPLOY/);
   assert.match(cw, /DO NOT DEPLOY/);
   assert.match(cf, /AllowedValues: \['true'\]/);
+});
+
+test('write-freeze drill and identity scripts refuse production mutation flags', () => {
+  const freezeApply = spawnSync(process.execPath, [path.join(ROOT, 'aws/cutover/scripts/write-freeze-drill.mjs'), '--apply'], { encoding: 'utf8' });
+  assert.equal(freezeApply.status, 2);
+  assert.match(freezeApply.stderr, /refusing_production_write_freeze/);
+
+  const freezeFlag = spawnSync(process.execPath, [path.join(ROOT, 'aws/cutover/scripts/write-freeze-drill.mjs'), '--freeze'], { encoding: 'utf8' });
+  assert.equal(freezeFlag.status, 2);
+
+  const ninthSrc = read('aws/cutover/scripts/ninth-uuid-live-investigate.mjs');
+  assert.match(ninthSrc, /Never prints emails/);
+  assert.match(ninthSrc, /Never creates Cognito users/);
+  assert.doesNotMatch(ninthSrc, /EXPECTED_EIGHT/);
+
+  const freezeSrc = read('aws/cutover/scripts/write-freeze-drill.mjs');
+  assert.match(freezeSrc, /Does not freeze production/);
+  assert.match(freezeSrc, /does not run a final delta/);
+});
+
+test('safe-prep docs record WebAuthn, SES gap, realtime waiver, and ninth UUID not_found', () => {
+  const matrix = read('aws/cutover/CUTOVER_READINESS_MATRIX.md');
+  assert.match(matrix, /WebAuthn RP \*\*`checksops\.com`\*\*/);
+  assert.match(matrix, /SES From \*\*PARTIAL\*\*/);
+  assert.match(matrix, /Realtime 15s polling waived/);
+  assert.match(matrix, /Ninth UUID \*\*not present\*\* on live production \(`not_found`\)/);
+  assert.match(matrix, /https:\/\/kiqojucc02\.execute-api\.us-east-1\.amazonaws\.com\/prep/);
+  assert.match(matrix, /ExistingExecutionRoleArn|existing staging Lambda role reused/);
+  assert.doesNotMatch(matrix, /Pool WebAuthn RP ID not yet set/);
+
+  const ses = read('aws/production/SES_FROM.md');
+  assert.match(ses, /COGNITO_DEFAULT/);
+  assert.match(ses, /ListIdentities/);
+  assert.match(ses, /us-east-1_h00WorYMT/);
+  assert.doesNotMatch(ses, /us-east-1_vPmQ7cL1F only/);
+
+  const waiver = read('aws/cutover/REALTIME_POLLING_WAIVER.md');
+  assert.match(waiver, /15s poll/);
+  assert.match(waiver, /does not change `\.env\.production`/);
+
+  const ninth = read('aws/identity/NINTH_UUID_RESOLUTION.md');
+  assert.match(ninth, /not_found/);
+  assert.match(ninth, /Do not invent an email/);
+
+  const apiCfn = read('aws/production/api-cfn.yaml');
+  assert.match(apiCfn, /Default: 'false'/);
+  assert.doesNotMatch(apiCfn, /AWS::IAM::Role/);
 });
 
 test('dry-run scripts refuse --apply and print no production mutation', () => {
@@ -92,6 +173,8 @@ test('dry-run scripts refuse --apply and print no production mutation', () => {
   assert.equal(identityBody.mappedEligibleCount, 8);
   assert.equal(identityBody.subEqualsApplicationUserIdCount, 0);
   assert.equal(identityBody.productionAuthSwitch, false);
+  assert.equal(identityBody.ninth.classification, 'not_found');
+  assert.equal(identityBody.ninthExcludedFromInvite, true);
   assert.doesNotMatch(identity.stdout, /@/);
 
   const identityApply = spawnSync(process.execPath, [path.join(ROOT, scripts[1][0]), '--apply'], { encoding: 'utf8' });

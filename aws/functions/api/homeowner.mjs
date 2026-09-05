@@ -4,9 +4,9 @@
  */
 import { randomBytes, createHash, randomUUID } from 'node:crypto';
 import pg from 'pg';
-import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { CopyObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { withIdentity, parseBody, ignoredSpoof } from './data.mjs';
+import { withIdentity, withIdentityWrite, parseBody, ignoredSpoof } from './data.mjs';
 import { loadDatabaseCredentials } from './secrets.mjs';
 import { buildClientConfig, buildWriteClientConfig, sanitizePublicError } from './db-health.mjs';
 import { normalizePath, s3KeyFor } from './storage-paths.mjs';
@@ -886,3 +886,131 @@ export const handleLookupPartnerCodePublic = async (event) => {
     }
   }
 };
+
+const copyHomeownerUploadToClaimFiles = async (tenantId, claimId, srcPath) => {
+  const srcRel = normalizePath(srcPath, 'homeowner-uploads') || String(srcPath || '').replace(/^\/+/, '');
+  const filename = srcRel.split('/').pop() || 'check';
+  const destRel = `${tenantId}/${claimId}/homeowner-checks/${Date.now()}-${filename}`;
+  const fromKey = s3KeyFor('homeowner-uploads', srcRel);
+  const toKey = s3KeyFor('claim-files', destRel);
+  if (!fromKey || !toKey || !filesBucket()) {
+    throw new Error('s3_not_configured');
+  }
+  await s3().send(new CopyObjectCommand({
+    Bucket: filesBucket(),
+    CopySource: encodeURI(`${filesBucket()}/${fromKey}`),
+    Key: toKey,
+  }));
+  return destRel;
+};
+
+/**
+ * Staff attach of a homeowner ledger upload onto a claim/check.
+ * Ignores browser-supplied amount; uses homeowner_ledger_check_uploads.amount_estimate.
+ * Does not execute deposits.
+ */
+export const handleHomeownerLedgerAttachUpload = async (event) => withIdentityWrite(event, async ({
+  client, mapping, body, spoof,
+}) => {
+  const uploadId = body.upload_id || body.uploadId;
+  const claimId = body.claim_id || body.claimId || null;
+  if (!uploadId) {
+    return { ok: false, statusCode: 400, error: 'missing_params', spoofFieldsIgnored: spoof };
+  }
+
+  const up = (await client.query(
+    `SELECT * FROM public.homeowner_ledger_check_uploads WHERE id = $1::uuid LIMIT 1`,
+    [uploadId],
+  )).rows[0];
+  if (!up) return { ok: false, statusCode: 404, error: 'upload_not_found', spoofFieldsIgnored: spoof };
+  if (up.status === 'attached') {
+    return {
+      ok: false,
+      statusCode: 409,
+      error: 'already_attached',
+      check_id: up.attached_check_id,
+      spoofFieldsIgnored: spoof,
+    };
+  }
+
+  let claimNumber = null;
+  if (claimId) {
+    const claim = (await client.query(
+      `SELECT id, org_id AS tenant_id, claim_number FROM public.claims WHERE id = $1::uuid LIMIT 1`,
+      [claimId],
+    )).rows[0];
+    if (!claim) return { ok: false, statusCode: 404, error: 'claim_not_found', spoofFieldsIgnored: spoof };
+    if (String(claim.tenant_id) !== String(up.tenant_id)) {
+      return { ok: false, statusCode: 403, error: 'tenant_mismatch', spoofFieldsIgnored: spoof };
+    }
+    claimNumber = claim.claim_number;
+  }
+
+  const membership = (await client.query(
+    `SELECT user_id FROM public.tenant_users
+     WHERE user_id = $1::uuid AND tenant_id = $2::uuid LIMIT 1`,
+    [mapping.application_user_id, up.tenant_id],
+  )).rows[0];
+  if (!membership) return { ok: false, statusCode: 403, error: 'forbidden', spoofFieldsIgnored: spoof };
+
+  const amount = up.amount_estimate ?? null;
+  const copied = await copyHomeownerUploadToClaimFiles(
+    up.tenant_id,
+    claimId || 'unlinked',
+    up.front_path,
+  );
+  const backCopied = up.back_path
+    ? await copyHomeownerUploadToClaimFiles(up.tenant_id, claimId || 'unlinked', up.back_path)
+    : null;
+
+  const check = (await client.query(
+    `INSERT INTO public.check_intake_items (
+       claim_id, tenant_id, uploaded_by, front_image_path, back_image_path,
+       amount, status, check_stage, check_source
+     ) VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, 'pending', 'review', 'insurance')
+     RETURNING id`,
+    [claimId, up.tenant_id, mapping.application_user_id, copied, backCopied, amount],
+  )).rows[0];
+
+  await client.query(
+    `UPDATE public.homeowner_ledger_check_uploads
+     SET status = 'attached',
+         attached_check_id = $2::uuid,
+         claim_id = $3::uuid,
+         reviewed_by = $4::uuid,
+         reviewed_at = now()
+     WHERE id = $1::uuid`,
+    [uploadId, check.id, claimId, mapping.application_user_id],
+  );
+
+  if (up.token_id && claimId) {
+    await client.query(
+      `UPDATE public.homeowner_ledger_tokens
+       SET claim_id = $2::uuid
+       WHERE id = $1::uuid AND claim_id IS NULL`,
+      [up.token_id, claimId],
+    );
+  }
+
+  await client.query(
+    `INSERT INTO public.homeowner_ledger_events (
+       tenant_id, claim_id, event_type, amount, actor_label, payload_json
+     ) VALUES ($1::uuid, $2::uuid, 'homeowner_upload_attached', $3, 'Staff', $4::jsonb)`,
+    [
+      up.tenant_id,
+      claimId,
+      amount,
+      JSON.stringify({ upload_id: uploadId, check_id: check.id, claim_number: claimNumber }),
+    ],
+  );
+
+  return {
+    ok: true,
+    statusCode: 200,
+    check_id: check.id,
+    claim_id: claimId,
+    amount_source: 'homeowner_ledger_check_uploads.amount_estimate',
+    clientAmountIgnored: Object.prototype.hasOwnProperty.call(body, 'amount'),
+    spoofFieldsIgnored: spoof,
+  };
+});

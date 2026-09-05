@@ -32,6 +32,13 @@ export const readinessSnapshot = () => {
     plaidRequired: false,
     bridgesMustRemainDeployed: true,
     checkAltHandledSeparately: true,
+    classA: {
+      ingestSharedCheck: true,
+      homeownerLedgerAttachUpload: true,
+      sendSignatureRequest: true,
+      stripeFailClosed: true,
+      quickbooksFailClosed: true,
+    },
     cognitoMfaPreferred: flagTrue('AWS_COGNITO_MFA_PREFERRED'),
     flags,
     webauthn: {

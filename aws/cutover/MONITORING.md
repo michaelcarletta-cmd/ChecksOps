@@ -10,9 +10,10 @@ Example template (not attached to production): `production/cloudwatch-alarms.exa
 | `GET /health` | **GO** — 200, `productionSupabaseChanged=false` |
 | `GET /db-health` | **GO** — RDS private, `checksops` / `transactionReadOnly=on` |
 | Lambda tracing | **GO** — SAM `Tracing: Active` |
-| `GET /ops/readiness` | **PARTIAL** — implemented in this PR; live staging Lambda still 404 until a later overlay (do **not** overlay from this branch; CheckAlt work is separate) |
-| CloudWatch alarms | **PARTIAL** — example YAML only. Agent role `ChecksOpsCursorCloudStaging` is denied `cloudwatch:DescribeAlarms` and `cloudwatch:GetMetricStatistics` |
-| Production alarms | **BLOCKED** (not created) |
+| `GET /ops/readiness` | **GO (prep API)** — `https://kiqojucc02.execute-api.us-east-1.amazonaws.com/prep/ops/readiness` flags all false. Live staging Lambda still 404 until a later overlay (do **not** overlay from this branch) |
+| CloudWatch alarms | **PARTIAL** — `PutMetricAlarm` / `DescribeAlarms` denied. Log metric filters on `/aws/lambda/checksops-production-prep-api` exist |
+| Production-prep log group | **GO (inspectable)** |
+| Production-prep `/health` | **GO** — `environment=production-prep`, `productionSupabaseChanged=false`, no RDS |
 
 ## Cutover-night dashboard (operator)
 
@@ -34,3 +35,12 @@ Watch, in order:
 ## IAM gap to close later (not this PR)
 
 Grant a dedicated ops role (not the Cloud Agent staging role) `cloudwatch:DescribeAlarms`, `cloudwatch:GetMetricStatistics`, and SNS publish for the production alarm topic. Do not broaden `ChecksOpsCursorCloudStaging` automatically.
+
+Inspect production-prep health without those APIs:
+
+```bash
+aws cloudformation describe-stacks --stack-name checksops-production-prep-api --query 'Stacks[0].Outputs'
+aws logs describe-metric-filters --log-group-name /aws/lambda/checksops-production-prep-api
+curl -sS https://kiqojucc02.execute-api.us-east-1.amazonaws.com/prep/health
+curl -sS https://kiqojucc02.execute-api.us-east-1.amazonaws.com/prep/ops/readiness
+```

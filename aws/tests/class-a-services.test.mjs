@@ -48,6 +48,9 @@ test('class A function path parsing and registry', () => {
   assert.equal(functionNameFromPath('/functions/check-ocr-intake'), 'check-ocr-intake');
   assert.ok(CLASS_A_FUNCTIONS.has('homeowner-ledger-view'));
   assert.ok(CLASS_A_FUNCTIONS.has('homeowner-upload-check'));
+  assert.ok(CLASS_A_FUNCTIONS.has('ingest-shared-check'));
+  assert.ok(CLASS_A_FUNCTIONS.has('homeowner-ledger-attach-upload'));
+  assert.ok(CLASS_A_FUNCTIONS.has('send-signature-request'));
   assert.ok(CLASS_A_FUNCTIONS.has('check-ocr-intake'));
   assert.ok(!CLASS_A_FUNCTIONS.has('moov-disburse'));
 });

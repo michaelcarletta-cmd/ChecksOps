@@ -1,23 +1,28 @@
 #!/usr/bin/env node
 /**
- * Identity import dry-run. Prints counts only (no emails).
- * Does not create Cognito users. --apply is refused.
+ * Validate production identity mappings without switching authentication.
+ * Never creates Cognito users. --apply is refused.
+ * Prints counts and UUID match flags only (no emails).
  */
 import { EXPECTED_EIGHT, NINTH_ID } from '../../identity/expected-mappings.mjs';
+import { classifyNinthUuid, ninthExcludedFromInvite } from '../../identity/ninth-uuid.mjs';
 
 const apply = process.argv.includes('--apply');
 const collisions = EXPECTED_EIGHT.filter((row) => row.applicationUserId === row.cognitoSub);
+const uniqueIds = new Set(EXPECTED_EIGHT.map((row) => row.applicationUserId));
 
 const report = {
-  ok: !apply && collisions.length === 0,
+  ok: !apply && collisions.length === 0 && uniqueIds.size === 8 && ninthExcludedFromInvite(),
   mode: apply ? 'apply_refused' : 'dry_run',
   mappedEligibleCount: EXPECTED_EIGHT.length,
-  ninthUuidPresent: Boolean(NINTH_ID),
-  ninthExcludedFromInvite: true,
+  uniqueApplicationUserIds: uniqueIds.size,
+  ninth: classifyNinthUuid(),
+  ninthExcludedFromInvite: ninthExcludedFromInvite(),
   subEqualsApplicationUserIdCount: collisions.length,
   refuseSubEqualsApplicationUserId: true,
   productionAuthSwitch: false,
   productionPoolMustNotBeStaging: 'us-east-1_vPmQ7cL1F',
+  inviteNotPerformed: true,
 };
 
 if (apply) {

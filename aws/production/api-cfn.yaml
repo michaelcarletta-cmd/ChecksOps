@@ -1,0 +1,161 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  ChecksOps production-prep API without SAM transform. Separate from staging.
+  Reuses the existing approved staging Lambda execution role (PassRole) because
+  this Cloud Agent cannot iam:CreateRole. No VPC/RDS. All provider/financial
+  flags false. Do not point production DNS or webhooks at this API.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: production-prep
+    AllowedValues:
+      - production-prep
+  CognitoUserPoolId:
+    Type: String
+    Default: us-east-1_h00WorYMT
+  CognitoClientId:
+    Type: String
+  CodeS3Bucket:
+    Type: String
+  CodeS3Key:
+    Type: String
+    Default: checksops-production-prep-api.zip
+  ExistingExecutionRoleArn:
+    Type: String
+    Default: arn:aws:iam::806168576068:role/checksops-staging-ApiFunctionRole-7E7XRyLe3nyi
+    Description: Existing SAM Lambda role. Do not create a new IAM role from this agent.
+  EnableErrorsAlarm:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: Keep false unless an ops role can cloudwatch:PutMetricAlarm. Live deploy used false.
+
+Conditions:
+  CreateErrorsAlarm: !Equals [!Ref EnableErrorsAlarm, 'true']
+
+Resources:
+  ProductionPrepFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: checksops-production-prep-api
+      Runtime: nodejs22.x
+      Architectures:
+        - arm64
+      Handler: index.handler
+      Timeout: 29
+      MemorySize: 1024
+      Role: !Ref ExistingExecutionRoleArn
+      TracingConfig:
+        Mode: Active
+      Code:
+        S3Bucket: !Ref CodeS3Bucket
+        S3Key: !Ref CodeS3Key
+      Environment:
+        Variables:
+          CHECKSOPS_ENV: !Ref Environment
+          COGNITO_USER_POOL_ID: !Ref CognitoUserPoolId
+          COGNITO_CLIENT_ID: !Ref CognitoClientId
+          COGNITO_WEBAUTHN_ORIGIN: "https://checksops.com"
+          COGNITO_WEBAUTHN_RP_ID: "checksops.com"
+          SIGN_BASE_URL: "https://checksops.com"
+          AWS_WRITES_ENABLED: "false"
+          AWS_CHECK_WORKFLOW_WRITES_ENABLED: "false"
+          AWS_STORAGE_WRITES_ENABLED: "false"
+          AWS_APPLICATION_WORKFLOW_WRITES_ENABLED: "false"
+          AWS_FINANCIAL_SANDBOX_SIMULATION_ENABLED: "false"
+          AWS_PROVIDER_EXECUTION_ENABLED: "false"
+          AWS_MOOV_ENABLED: "false"
+          AWS_CHECKALT_ENABLED: "false"
+          AWS_PLAID_ENABLED: "false"
+          AWS_ACTUM_ENABLED: "false"
+          AWS_QUICKBOOKS_ENABLED: "false"
+          AWS_PROVIDER_LIVE_READS_ENABLED: "false"
+          AWS_PROVIDER_WEBHOOK_DRY_RUN: "true"
+          AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: "false"
+          AWS_FINANCIAL_PERMISSIONS_ACTIVATED: "false"
+          AWS_COGNITO_MFA_PREFERRED: "false"
+      Tags:
+        - Key: Environment
+          Value: production-prep
+        - Key: DoNotCutover
+          Value: 'true'
+
+  ProductionPrepHttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: checksops-production-prep-http
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowOrigins:
+          - '*'
+        AllowHeaders:
+          - authorization
+          - content-type
+          - x-request-id
+          - x-bridge-secret
+        AllowMethods:
+          - GET
+          - POST
+          - OPTIONS
+
+  ProductionPrepIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ProductionPrepHttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt ProductionPrepFunction.Arn
+      PayloadFormatVersion: '2.0'
+
+  ProductionPrepDefaultRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ProductionPrepHttpApi
+      RouteKey: '$default'
+      Target: !Sub integrations/${ProductionPrepIntegration}
+
+  ProductionPrepStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref ProductionPrepHttpApi
+      StageName: prep
+      AutoDeploy: true
+
+  ProductionPrepInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ProductionPrepFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ProductionPrepHttpApi}/*
+
+  ProductionPrepErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: CreateErrorsAlarm
+    Properties:
+      AlarmName: checksops-production-prep-api-errors
+      AlarmDescription: Inspectable prep alarm. Not a cutover trigger. Flags remain false.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: checksops-production-prep-api
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+Outputs:
+  ApiUrl:
+    Value: !Sub https://${ProductionPrepHttpApi}.execute-api.${AWS::Region}.amazonaws.com/prep
+  FunctionName:
+    Value: !Ref ProductionPrepFunction
+  ExecutionRoleArn:
+    Value: !Ref ExistingExecutionRoleArn
+  AlarmName:
+    Condition: CreateErrorsAlarm
+    Value: !Ref ProductionPrepErrorsAlarm
+  DoNotPointProductionDns:
+    Value: 'true'

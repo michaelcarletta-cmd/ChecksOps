@@ -1,0 +1,175 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  ChecksOps PRODUCTION-PREP stack. Does NOT create a Cognito user pool
+  (leftover pool us-east-1_h00WorYMT / checksops-production already exists).
+  Creates a production-web client on that pool, a frontend S3 bucket, and a
+  CloudFront distribution WITHOUT checksops.com aliases. Does not change DNS,
+  Lovable, production auth, webhooks, Moov, CheckAlt, or execution flags.
+  Do not point .env.production at these resources until cutover is approved.
+
+Parameters:
+  DoNotSwitchAuth:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true']
+    Description: Guardrail. This stack must not be used to switch production auth.
+  WebAuthnRpId:
+    Type: String
+    Default: checksops.com
+  ExistingUserPoolId:
+    Type: String
+    Default: us-east-1_h00WorYMT
+    Description: Existing production-prep Cognito pool. Must not be us-east-1_vPmQ7cL1F.
+  FrontendBucketName:
+    Type: String
+    Default: checksops-production-frontend-806168576068
+    Description: Dedicated production SPA bucket. Not the staging frontend bucket.
+  OriginAccessControlName:
+    Type: String
+    Default: checksops-production-frontend-oac-prep2
+    Description: New OAC name; leftover checksops-production-frontend-oac already exists outside this stack.
+
+Resources:
+  ProductionUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: checksops-production-web
+      UserPoolId: !Ref ExistingUserPoolId
+      GenerateSecret: false
+      PreventUserExistenceErrors: ENABLED
+      EnableTokenRevocation: true
+      AccessTokenValidity: 60
+      IdTokenValidity: 60
+      RefreshTokenValidity: 30
+      TokenValidityUnits:
+        AccessToken: minutes
+        IdToken: minutes
+        RefreshToken: days
+      ExplicitAuthFlows:
+        - ALLOW_USER_AUTH
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+
+  ProductionFrontendBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Ref FrontendBucketName
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+        - Key: Environment
+          Value: production-prep
+        - Key: DoNotCutover
+          Value: 'true'
+
+  ProductionFrontendOAC:
+    Type: AWS::CloudFront::OriginAccessControl
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Ref OriginAccessControlName
+        Description: OAC for production-prep SPA bucket. No apex/www aliases on this distribution.
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  ProductionFrontendDistribution:
+    Type: AWS::CloudFront::Distribution
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      DistributionConfig:
+        Comment: checksops-production-prep SPA (no checksops.com aliases; DNS unchanged)
+        Enabled: true
+        HttpVersion: http2
+        IPV6Enabled: true
+        PriceClass: PriceClass_100
+        DefaultRootObject: index.html
+        Origins:
+          - Id: ProductionSpaS3
+            DomainName: !GetAtt ProductionFrontendBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt ProductionFrontendOAC.Id
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+        DefaultCacheBehavior:
+          TargetOriginId: ProductionSpaS3
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD, OPTIONS]
+          CachedMethods: [GET, HEAD]
+          Compress: true
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+          # Managed CORS-S3Origin (8-4-4-4-12). Do not drop the b370 group.
+          OriginRequestPolicyId: 88a5eaf4-2fd4-4709-b370-b4c650ea3fcf
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+            ErrorCachingMinTTL: 0
+          - ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+            ErrorCachingMinTTL: 0
+      Tags:
+        - Key: Environment
+          Value: production-prep
+        - Key: DoNotCutover
+          Value: 'true'
+
+  ProductionFrontendBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ProductionFrontendBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowCloudFrontOAC
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub ${ProductionFrontendBucket.Arn}/*
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub arn:aws:cloudfront::${AWS::AccountId}:distribution/${ProductionFrontendDistribution}
+
+  ProductionApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    Properties:
+      LogGroupName: /aws/lambda/checksops-production-prep-api
+      RetentionInDays: 30
+
+Outputs:
+  ProductionUserPoolId:
+    Value: !Ref ExistingUserPoolId
+  ProductionUserPoolClientId:
+    Value: !Ref ProductionUserPoolClient
+  ProductionFrontendBucketName:
+    Value: !Ref ProductionFrontendBucket
+  ProductionCloudFrontDomain:
+    Value: !GetAtt ProductionFrontendDistribution.DomainName
+  ProductionCloudFrontId:
+    Value: !Ref ProductionFrontendDistribution
+  ProductionApiLogGroupName:
+    Value: !Ref ProductionApiLogGroup
+  DoNotChangeDns:
+    Value: 'This distribution has no checksops.com aliases. Lovable apex/www stay authoritative.'
+  DoNotSwitchAuth:
+    Value: !Ref DoNotSwitchAuth
+  WebAuthnRpId:
+    Value: !Ref WebAuthnRpId
+  StagingPoolMustNotBeReused:
+    Value: us-east-1_vPmQ7cL1F

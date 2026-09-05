@@ -13,6 +13,8 @@ test('staging safety holds when execution flags are unset', () => {
   assert.equal(snap.flags.AWS_PLAID_ENABLED, false);
   assert.equal(snap.bridgesMustRemainDeployed, true);
   assert.equal(snap.checkAltHandledSeparately, true);
+  assert.equal(snap.classA.ingestSharedCheck, true);
+  assert.equal(snap.classA.stripeFailClosed, true);
   assert.equal(snap.cognitoMfaPreferred, false);
 });
 

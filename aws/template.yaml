@@ -63,6 +63,11 @@ Parameters:
     NoEcho: true
     Default: ''
     Description: Staging CHECKSOPS_SANDBOX_SECRET_EPOCH. Provide from live Lambda env at deploy; do not commit the value.
+  CrossAppBridgeSecret:
+    Type: String
+    NoEcho: true
+    Default: ''
+    Description: Staging CROSS_APP_BRIDGE_SECRET for ingest-shared-check. Provide at deploy; do not commit the value. Empty keeps ingest unauthorized.
 
 Conditions:
   CreateStagingNat: !And
@@ -90,6 +95,9 @@ Globals:
         # WebAuthn origin stays staging until a separately approved production pool exists.
         COGNITO_WEBAUTHN_ORIGIN: "https://staging.checksops.com"
         COGNITO_WEBAUTHN_RP_ID: "staging.checksops.com"
+        SIGN_BASE_URL: "https://staging.checksops.com"
+        CROSS_APP_BRIDGE_SECRET: !Ref CrossAppBridgeSecret
+        AWS_COGNITO_MFA_PREFERRED: "false"
         # Preserve live staging write/workflow overlay behavior.
         AWS_WRITES_ENABLED: "true"
         AWS_CHECK_WORKFLOW_WRITES_ENABLED: "true"
@@ -125,6 +133,7 @@ Resources:
           - authorization
           - content-type
           - x-request-id
+          - x-bridge-secret
         AllowMethods:
           - GET
           - POST

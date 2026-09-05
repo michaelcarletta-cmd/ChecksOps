@@ -1,4 +1,5 @@
 import { WEBAUTHN_AUTH_ROUTES, WEBAUTHN_STAGING } from './auth-webauthn.mjs';
+import { MFA_AUTH_ROUTES } from './auth-mfa.mjs';
 
 const POOL_ID = () => process.env.COGNITO_USER_POOL_ID;
 const CLIENT_ID = () => process.env.COGNITO_CLIENT_ID;
@@ -348,6 +349,7 @@ export const AUTH_ROUTES = {
   '/auth/confirm-forgot': handleAuthConfirmForgot,
   '/auth/logout': handleAuthLogout,
   ...WEBAUTHN_AUTH_ROUTES,
+  ...MFA_AUTH_ROUTES,
 };
 
 export const PASSWORDLESS_AUTH = {
