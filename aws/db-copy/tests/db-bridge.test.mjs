@@ -243,6 +243,7 @@ test('skipped overlay tables force PARTIAL / NO-GO even when recon gates pass', 
     pkStatus: 'PASS',
     identityStatus: 'PASS',
     membershipStatus: 'PASS',
+    nullStatus: 'PASS',
   };
   const withDdlGap = rehearsalVerdict({
     failClosed: true,

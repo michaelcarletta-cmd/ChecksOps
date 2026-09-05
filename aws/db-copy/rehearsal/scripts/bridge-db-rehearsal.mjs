@@ -343,6 +343,51 @@ const invokeLambda = async (payload) => {
   throw lastErr;
 };
 
+const overlayLiveTables = async (token, schemaByTable, tableNames) => {
+  const tables = [...new Set(tableNames.filter(Boolean))];
+  if (!tables.length) return { ok: true, tableSummary: [], upsertedRows: 0 };
+  const prefixInner = `Migration/rehearsal-20260905/delta-refresh`;
+  const manifestTables = [];
+  for (const table of tables) {
+    const pkColumns = primaryKeyColumns(schemaByTable[table] || {});
+    const full = await pageRows(token, { table, keysOnly: false, limit: LIVE_PAGE_SIZE });
+    const secretCols = redactedColumnNames(schemaByTable[table] || {});
+    const payload = {
+      pkColumns,
+      replaceAll: true,
+      upserts: full.map((row) => stripRedactedFields(row, secretCols).row),
+      deletes: [],
+      skippedSecretColumns: secretCols,
+    };
+    manifestTables.push({
+      name: table,
+      pkColumns,
+      inserted: full.length,
+      updated: 0,
+      deleted: 0,
+      skippedSecretColumns: secretCols,
+    });
+    const local = path.join(WORK, `${table}.json`);
+    await writeFile(local, JSON.stringify(payload));
+    await run(AWS, ['s3', 'cp', local, `s3://${FILES_BUCKET}/${prefixInner}/tables/${table}.json`]);
+    await unlink(local);
+    progress({ step: 'refresh_table_fetched', table, count: full.length });
+  }
+  await writeFile(path.join(WORK, 'manifest.json'), JSON.stringify({
+    generatedAt: new Date().toISOString(),
+    rehearsalDatabase: DB_NAME,
+    tables: manifestTables,
+  }));
+  await run(AWS, ['s3', 'cp', path.join(WORK, 'manifest.json'), `s3://${FILES_BUCKET}/${prefixInner}/manifest.json`]);
+  return invokeLambda({
+    step: 'apply_delta',
+    database: DB_NAME,
+    bucket: FILES_BUCKET,
+    manifestPrefix: prefixInner,
+    onlyTables: tables,
+  });
+};
+
 const deleteOneshot = async () => {
   try { awsJson(['lambda', 'delete-function', '--function-name', LAMBDA_NAME]); } catch { /* gone */ }
   try { awsJson(['iam', 'delete-role-policy', '--role-name', ROLE_NAME, '--policy-name', 'oneshot-rehearsal-least-privilege']); } catch { /* gone */ }
@@ -803,8 +848,26 @@ const main = async () => {
       pkColumns: primaryKeyColumns(schemaByTable[table] || {}),
     }));
     progress({ step: 'lambda_reconcile' });
-    const reconciled = await invokeLambda({ step: 'reconcile', database: DB_NAME, pkTables });
-    const skippedMissing = skippedMissingTables(applied.tableSummary);
+    let reconciled = await invokeLambda({ step: 'reconcile', database: DB_NAME, pkTables });
+    let skippedMissing = skippedMissingTables(applied.tableSummary);
+    let rehearsalCounts = reconciled.tableCounts || {};
+    let countDiffs = countDiffVsBaseline(rehearsalCounts, counted.counts, new Set(['spatial_ref_sys']));
+    if (applyDdlOverlay && countDiffs.length) {
+      const driftTables = countDiffs.map((row) => row.table);
+      progress({ step: 'refresh_count_drift', tables: driftTables });
+      const refresh = await overlayLiveTables(token, schemaByTable, driftTables);
+      if (!refresh.ok) throw new Error(`count-drift overlay failed: ${String(refresh.error || 'unknown').slice(0, 180)}`);
+      applied = {
+        ok: applied.ok && refresh.ok,
+        tableSummary: [...(applied.tableSummary || []), ...(refresh.tableSummary || [])],
+      };
+      skippedMissing = skippedMissingTables(applied.tableSummary);
+      const countsResp2 = await bridgeFetch(token, { action: 'counts' });
+      counted = numericCounts(countsResp2.json.counts || countsResp2.json);
+      reconciled = await invokeLambda({ step: 'reconcile', database: DB_NAME, pkTables });
+      rehearsalCounts = reconciled.tableCounts || {};
+      countDiffs = countDiffVsBaseline(rehearsalCounts, counted.counts, new Set(['spatial_ref_sys']));
+    }
     restore = {
       created: restored.created ?? restored.ok === true,
       restoreOk: restored.ok === true,
@@ -823,8 +886,6 @@ const main = async () => {
           ? `Isolated ${DB_NAME} cloned from staging checksops TEMPLATE, then business tables replaced with live production rows. Live checksops was not overwritten.`
           : null),
     };
-    const rehearsalCounts = reconciled.tableCounts || {};
-    const countDiffs = countDiffVsBaseline(rehearsalCounts, counted.counts, new Set(['spatial_ref_sys']));
     const countsPresent = Object.keys(rehearsalCounts).length >= 100;
     const financialDiffs = [];
     const rehearsalFin = reconciled.financialAggregates || {};

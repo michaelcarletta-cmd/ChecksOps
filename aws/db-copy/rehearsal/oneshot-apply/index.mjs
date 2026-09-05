@@ -343,7 +343,7 @@ const reconcile = async (event) => {
     const requiredChecks = [
       ['tenants_id_null', `SELECT count(*)::int AS n FROM public.tenants WHERE id IS NULL`],
       ['check_intake_items_id_null', `SELECT count(*)::int AS n FROM public.check_intake_items WHERE id IS NULL`],
-      ['claims_org_id_null', `SELECT count(*)::int AS n FROM public.claims WHERE org_id IS NULL`],
+      ['claims_id_null', `SELECT count(*)::int AS n FROM public.claims WHERE id IS NULL`],
       ['financial_stepup_log_id_null', `SELECT count(*)::int AS n FROM public.financial_stepup_log WHERE id IS NULL`],
       ['financial_stepup_log_user_id_null', `SELECT count(*)::int AS n FROM public.financial_stepup_log WHERE user_id IS NULL`],
       ['financial_stepup_log_action_key_null', `SELECT count(*)::int AS n FROM public.financial_stepup_log WHERE action_key IS NULL`],

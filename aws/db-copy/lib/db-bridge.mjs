@@ -479,6 +479,7 @@ export const rehearsalVerdict = ({
     'pkStatus',
     'identityStatus',
     'membershipStatus',
+    'nullStatus',
   ];
   const gatesPass = gates.every((key) => recon[key] === 'PASS');
   const ddlOutstanding = skippedMissing.length > 0;
