@@ -2,6 +2,8 @@
 
 **DO NOT EXECUTE this runbook in this phase.**
 
+**2026-09-05 update:** Moov sandbox is **PASS** (PR #124). Older “Moov NO-GO / no NAT” rows below are historical. Authoritative cutover matrix: `aws/cutover/CUTOVER_READINESS_MATRIX.md`. Do not apply `64_financial_activation_grants.sql`.
+
 It is a precise go/no-go sequence for a later, separately approved cutover. Provider sandbox validation (this PR) does not enable production providers, redirect production webhooks, change production DNS, deploy production frontend, or move money.
 
 ## Current go / no-go (after real-provider UAT HTTP)

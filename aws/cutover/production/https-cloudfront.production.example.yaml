@@ -1,0 +1,36 @@
+# https-cloudfront.production.example.yaml — DO NOT DEPLOY
+
+# Future production SPA distribution for checksops.com / www.checksops.com.
+# This is not the live staging stack (checksops-staging-frontend-https / E1CG52WRQZI7X1).
+# Do not run `aws cloudformation deploy` against this file from this PR.
+# Do not create or validate an ACM certificate from this PR.
+# Do not change Cloudflare apex/www.
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  EXAMPLE ONLY. Production CloudFront+ACM placeholders for a later approved cutover.
+  Not attached to the live account by this file.
+
+Parameters:
+  DoNotDeploy:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true']
+  ProductionHostname:
+    Type: String
+    Default: checksops.com
+  WwwHostname:
+    Type: String
+    Default: www.checksops.com
+  FrontendBucketName:
+    Type: String
+    Default: REPLACE-WITH-PRODUCTION-FRONTEND-BUCKET
+  ExistingCertificateArn:
+    Type: String
+    Default: REPLACE-WITH-ISSUED-ACM-ARN-USEAST1
+    Description: Request/issue a us-east-1 ACM cert in a later approved change. Not this PR.
+
+# No Resources on purpose: CloudFormation would otherwise be tempting to deploy.
+# When a future PR is approved to create production CloudFront, copy the staging
+# template structure (OAC, SPA 403/404 → /index.html, TLS1.2) with production
+# aliases. Keep the live staging distribution E1CG52WRQZI7X1 unchanged.

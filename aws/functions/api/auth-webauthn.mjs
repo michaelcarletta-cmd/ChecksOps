@@ -1,15 +1,41 @@
 /**
- * Staging Cognito native WebAuthn (passkey) routes.
+ * Cognito native WebAuthn (passkey) routes.
  * Production Supabase SimpleWebAuthn is untouched.
  *
- * RP ID is configured on the staging user pool (staging.checksops.com).
+ * Default RP ID / origin is the staging pool (staging.checksops.com).
+ * A future production pool may set COGNITO_WEBAUTHN_ORIGIN / COGNITO_WEBAUTHN_RP_ID.
  * Registration requires an already-authenticated Cognito access token (EMAIL_OTP first).
  */
 
 const POOL_ID = () => process.env.COGNITO_USER_POOL_ID;
 const CLIENT_ID = () => process.env.COGNITO_CLIENT_ID;
-const STAGING_ORIGIN = 'https://staging.checksops.com';
-const STAGING_RP_ID = 'staging.checksops.com';
+export const DEFAULT_WEBAUTHN_ORIGIN = 'https://staging.checksops.com';
+export const DEFAULT_WEBAUTHN_RP_ID = 'staging.checksops.com';
+
+export const configuredWebAuthnOrigin = () => {
+  const raw = String(process.env.COGNITO_WEBAUTHN_ORIGIN || DEFAULT_WEBAUTHN_ORIGIN).trim().replace(/\/$/, '');
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'https:') return DEFAULT_WEBAUTHN_ORIGIN;
+    return `${url.protocol}//${url.host}`;
+  } catch {
+    return DEFAULT_WEBAUTHN_ORIGIN;
+  }
+};
+
+export const configuredWebAuthnRpId = () => {
+  const explicit = String(process.env.COGNITO_WEBAUTHN_RP_ID || '').trim().toLowerCase();
+  if (explicit) return explicit;
+  try {
+    return new URL(configuredWebAuthnOrigin()).hostname;
+  } catch {
+    return DEFAULT_WEBAUTHN_RP_ID;
+  }
+};
+
+export const isAllowedWebAuthnOrigin = (requestOrigin, allowedOrigin = configuredWebAuthnOrigin()) => (
+  String(requestOrigin || '').replace(/\/$/, '') === allowedOrigin
+);
 
 const cognitoJson = async (target, payload) => {
   const response = await fetch('https://cognito-idp.us-east-1.amazonaws.com/', {
@@ -69,10 +95,7 @@ const authenticationOf = (result, refreshTokenFallback = null) => {
   };
 };
 
-const originAllowed = (event) => {
-  const origin = String(headerOf(event, 'origin') || '').replace(/\/$/, '');
-  return origin === STAGING_ORIGIN;
-};
+const originAllowed = (event) => isAllowedWebAuthnOrigin(headerOf(event, 'origin'));
 
 const requireStagingOrigin = (event) => {
   if (!originAllowed(event)) {
@@ -80,8 +103,8 @@ const requireStagingOrigin = (event) => {
       ok: false,
       statusCode: 403,
       error: 'staging_https_origin_required',
-      message: `Passkeys are only available from ${STAGING_ORIGIN}`,
-      rpId: STAGING_RP_ID,
+      message: `Passkeys are only available from ${configuredWebAuthnOrigin()}`,
+      rpId: configuredWebAuthnRpId(),
     };
   }
   return null;
@@ -135,7 +158,7 @@ export const mapWebAuthnCredential = (row = {}) => {
   return {
     credentialId: row.CredentialId || row.credentialId || null,
     friendlyName,
-    relyingPartyId: row.RelyingPartyId || row.relyingPartyId || STAGING_RP_ID,
+    relyingPartyId: row.RelyingPartyId || row.relyingPartyId || configuredWebAuthnRpId(),
     createdAt: normalizeWebAuthnCreatedAt(row.CreatedAt ?? row.createdAt),
     authenticatorAttachment: attachment,
     authenticatorTransports: Array.isArray(transports) ? transports : [],
@@ -155,8 +178,8 @@ export const handleAuthPasskeyRegisterOptions = async (event) => {
     return {
       ok: true,
       statusCode: 200,
-      rpId: STAGING_RP_ID,
-      origin: STAGING_ORIGIN,
+      rpId: configuredWebAuthnRpId(),
+      origin: configuredWebAuthnOrigin(),
       // Cognito returns CredentialCreationOptions under CredentialCreationOptions or similar
       options: result.CredentialCreationOptions || result.credentialCreationOptions || result,
     };
@@ -188,7 +211,7 @@ export const handleAuthPasskeyRegisterVerify = async (event) => {
       ok: true,
       statusCode: 200,
       registered: true,
-      rpId: STAGING_RP_ID,
+      rpId: configuredWebAuthnRpId(),
     };
   } catch (error) {
     return {
@@ -213,7 +236,7 @@ export const handleAuthPasskeyList = async (event) => {
       ok: true,
       statusCode: 200,
       credentials: credentials.map((row) => mapWebAuthnCredential(row)),
-      rpId: STAGING_RP_ID,
+      rpId: configuredWebAuthnRpId(),
     };
   } catch (error) {
     return {
@@ -302,7 +325,7 @@ export const handleAuthPasskeyAuthenticateStart = async (event) => {
       session: result.Session,
       email,
       options: credentialRequestOptions,
-      rpId: STAGING_RP_ID,
+      rpId: configuredWebAuthnRpId(),
       passwordUsed: false,
     };
   } catch (error) {
@@ -351,7 +374,7 @@ export const handleAuthPasskeyAuthenticateVerify = async (event) => {
       completed: true,
       authentication,
       passwordUsed: false,
-      rpId: STAGING_RP_ID,
+      rpId: configuredWebAuthnRpId(),
     };
   } catch (error) {
     return {
@@ -373,9 +396,9 @@ export const WEBAUTHN_AUTH_ROUTES = {
 };
 
 export const WEBAUTHN_STAGING = {
-  enabled: Boolean(POOL_ID()) && Boolean(CLIENT_ID()),
-  rpId: STAGING_RP_ID,
-  requiredOrigin: STAGING_ORIGIN,
+  get enabled() { return Boolean(POOL_ID()) && Boolean(CLIENT_ID()); },
+  get rpId() { return configuredWebAuthnRpId(); },
+  get requiredOrigin() { return configuredWebAuthnOrigin(); },
   registrationRequiresAuthenticatedSession: true,
   emailOtpFallback: true,
 };

@@ -1,0 +1,15 @@
+{
+  "comment": "Placeholder production SAM parameters. No secrets. Do not deploy from this file.",
+  "doNotDeploy": true,
+  "Environment": "not-an-allowed-live-value",
+  "COGNITO_WEBAUTHN_ORIGIN": "https://checksops.com",
+  "COGNITO_WEBAUTHN_RP_ID": "checksops.com",
+  "SIGN_BASE_URL": "https://checksops.com",
+  "AWS_PROVIDER_EXECUTION_ENABLED": "false",
+  "AWS_MOOV_ENABLED": "false",
+  "AWS_CHECKALT_ENABLED": "false",
+  "AWS_PLAID_ENABLED": "false",
+  "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": "false",
+  "AWS_COGNITO_MFA_PREFERRED": "false",
+  "stagingPoolMustNotBeReused": "us-east-1_vPmQ7cL1F"
+}

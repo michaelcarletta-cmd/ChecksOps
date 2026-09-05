@@ -87,6 +87,9 @@ Globals:
         DATABASE_NAME: checksops
         COGNITO_USER_POOL_ID: !Ref ChecksOpsUserPool
         COGNITO_CLIENT_ID: !Ref ChecksOpsUserPoolClient
+        # WebAuthn origin stays staging until a separately approved production pool exists.
+        COGNITO_WEBAUTHN_ORIGIN: "https://staging.checksops.com"
+        COGNITO_WEBAUTHN_RP_ID: "staging.checksops.com"
         # Preserve live staging write/workflow overlay behavior.
         AWS_WRITES_ENABLED: "true"
         AWS_CHECK_WORKFLOW_WRITES_ENABLED: "true"

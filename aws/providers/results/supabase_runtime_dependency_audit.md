@@ -44,10 +44,12 @@ Scope: frontend + staging API path after PR #121. Production Supabase/Lovable pa
 
 | Dependency | Classification | Notes |
 |---|---|---|
-| CheckOpsLogin EMAIL_OTP + passkeys | **obsolete/removable on staging** | Cognito |
-| WhiteLabelLogin / MortgageOpsLogin | **still required temporarily** | Not fully Cognito-wired |
-| `/h/upload` magic-link `signInWithOtp` | **still required temporarily** | Homeowner upload API is AWS; OTP session still Supabase Auth |
-| MFA / step-up on financial surfaces | **production-only** / gated | Staging financial execution off |
+| CheckOpsLogin EMAIL_OTP + passkeys | **obsolete/removable on staging** | Cognito (PR #126 PASS) |
+| WhiteLabelLogin / MortgageOpsLogin | **obsolete/removable on staging** | Cognito EMAIL_OTP + WebAuthn + portal session isolation (PR #126 PASS) |
+| `/h/upload` magic-link `signInWithOtp` | **obsolete/removable on staging** | AWS OTP functions (no Cognito SPA session) |
+| MFA / step-up on financial surfaces | **production-only** / gated | Staging financial execution off; Cognito MFA remains OFF |
+
+Cutover matrix: `aws/cutover/CUTOVER_READINESS_MATRIX.md`. Production SPA still uses `.env.production` Supabase Auth until an approved DNS/auth switch.
 
 ## Do not remove yet
 

@@ -4,9 +4,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import {
+  configuredWebAuthnOrigin,
+  configuredWebAuthnRpId,
   handleAuthPasskeyAuthenticateStart,
   handleAuthPasskeyList,
   handleAuthPasskeyRegisterOptions,
+  isAllowedWebAuthnOrigin,
   WEBAUTHN_AUTH_ROUTES,
   WEBAUTHN_STAGING,
 } from '../functions/api/auth-webauthn.mjs';
@@ -77,6 +80,15 @@ test('template SignInPolicy includes WEB_AUTHN alongside EMAIL_OTP', () => {
   assert.match(yaml, /SignInPolicy:/);
   assert.match(yaml, /EMAIL_OTP/);
   assert.match(yaml, /WEB_AUTHN/);
+});
+
+test('default WebAuthn origin is staging and rejects production/apex hosts', () => {
+  assert.equal(configuredWebAuthnOrigin(), 'https://staging.checksops.com');
+  assert.equal(configuredWebAuthnRpId(), 'staging.checksops.com');
+  assert.equal(isAllowedWebAuthnOrigin('https://staging.checksops.com'), true);
+  assert.equal(isAllowedWebAuthnOrigin('https://checksops.com'), false);
+  assert.equal(isAllowedWebAuthnOrigin('https://www.checksops.com'), false);
+  assert.equal(isAllowedWebAuthnOrigin('https://checksops.com', 'https://checksops.com'), true);
 });
 
 test('CloudFront HTTPS template is staging-only and targets staging.checksops.com', () => {

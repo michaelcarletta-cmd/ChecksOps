@@ -1,0 +1,23 @@
+# samconfig.production.example.toml — DO NOT DEPLOY
+
+# Copy to a private operator machine only after human approval.
+# Confirm changeset. Keep every production execution flag false.
+# Do not point this at the staging Cognito pool or staging API stack.
+
+version = 0.1
+
+[production.global.parameters]
+region = "us-east-1"
+
+[production.deploy.parameters]
+stack_name = "checksops-production"
+resolve_s3 = true
+s3_prefix = "checksops-production"
+region = "us-east-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+# Environment=production is NOT an AllowedValues entry on the live template.
+# A future production template must still hard-code execution flags to "false"
+# until a later activation PR.
+parameter_overrides = "Environment=staging"
+disable_rollback = false
