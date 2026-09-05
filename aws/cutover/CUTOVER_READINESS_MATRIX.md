@@ -3,11 +3,13 @@
 **STOP FOR REVIEW.** This document is an audit. It is **not** authorization to cut over.
 
 Prepared: 2026-09-05  
-Base: PR #131 HEAD `782971d4` (still open on GitHub; treat as the production-readiness baseline)  
+Base: current `main` after PR **#130** (CheckAlt Architecture A) and PR **#131** (cutover readiness docs) merged.  
+This PR (#132) is rebased onto that `main`. It does **not** revert Architecture A.
+
 Live verify: staging API `/health` 200, Lambda flags all production-execution **false**, both Lovable bridges still fail-closed, production DNS still Lovable.
 
 Plaid is **N/A** (not used; keep `AWS_PLAID_ENABLED=false`).  
-CheckAlt is **PARTIAL** and is handled in a separate chat (PR #125 / #130). This document does not modify those PRs.
+CheckAlt **code** is on `main` via #130. Production `AWS_CHECKALT_ENABLED` stays **false**. This PR does not modify Architecture A files.
 
 | Area | Status | Evidence / remaining |
 |---|---|---|
@@ -24,7 +26,7 @@ CheckAlt is **PARTIAL** and is handled in a separate chat (PR #125 / #130). This
 | Final storage delta via temporary storage bridge | **GO** (procedure) | Live `aws-staging-storage-bridge` `health` HTTP 200, `mode:sign_only`, deletes **false**, dbWrites **false**. **Not executed** this PR. |
 | Production webhook transition | **PARTIAL** | AWS `/webhooks/{moov,checkalt}` exist; `AWS_PROVIDER_WEBHOOK_DRY_RUN=true`. Production URLs still on Supabase. Dual-run **not started**. **Cutover decision** to start dual-run. |
 | Moov production transition | **PARTIAL** | Sandbox certification **PASS** (PR #124). Production `AWS_MOOV_ENABLED=false`. Production keys/IDs not loaded on AWS. Dual-run not started. **Cutover decision**. |
-| CheckAlt | **PARTIAL** | Separate chat. Production `AWS_CHECKALT_ENABLED=false`. Full cut usually needs CheckAlt GO **or** a signed exception. **Cutover decision**. |
+| CheckAlt | **PARTIAL** | Architecture A **merged** (#130). Production `AWS_CHECKALT_ENABLED=false`. Full cut usually needs CheckAlt GO **or** a signed exception. **Cutover decision**. |
 | Plaid | **N/A** | Not used. Missing keys are not a blocker. |
 | Monitoring / CloudWatch / health checks | **PARTIAL** | `/health` 200, `/db-health` connected. Production-prep log group inspectable via `DescribeLogGroups`. Agent role **cannot** `cloudwatch:DescribeAlarms` / `GetMetricStatistics`. Ops-role IAM still needed for alarm APIs. |
 | Reconciliation immediately after cutover | **GO** (procedure) | Report-only SQL + `/financial/reconcile` (`autoCorrected=false`). See `POST_CUTOVER_RECONCILIATION.md`. |
@@ -80,10 +82,11 @@ CheckAlt is **PARTIAL** and is handled in a separate chat (PR #125 / #130). This
 
 Non-blockers: Plaid; ninth UUID (fail-closed orphan); `profiles.preferred_auth_method`; staging-only S3 extras; Moov sandbox PASS.
 
-## Related open PRs (do not merge from this chat)
+## Related PRs (do not merge #132 from this chat)
 
-| PR | Topic | This chat |
+| PR | Topic | Status |
 |---|---|---|
-| #125 / #130 | CheckAlt UAT / architecture A | **Do not modify** |
-| #132 | Production AWS prep (this PR) | Stacked on #131; flags off; no DNS/auth switch |
-| #128 / #129 | Earlier cutover-prep drafts | Superseded for matrix/runbooks by #131; Class A ports landed here instead of merging #129 blindly |
+| #130 | CheckAlt Architecture A | **Merged** to `main`. Preserved in this rebase. Production flag still false. |
+| #131 | Cutover matrix/runbooks | **Merged** to `main`. |
+| #132 | Production AWS prep (this PR) | Open draft on `main`; flags off; no DNS/auth switch |
+| #128 / #129 | Earlier cutover-prep drafts | Superseded for matrix/runbooks by #131 |
