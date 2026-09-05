@@ -1,6 +1,13 @@
 # Production provider cutover checklist
 
-**Current verdict: NO-GO. Do not execute production cutover.**
+**Superseded for sequencing by** `aws/cutover/FINAL_PRODUCTION_CUTOVER_RUNBOOK.md` (2026-09-05).  
+This file remains historical provider-gate evidence. When they conflict, use the runbook + current code.
+
+**Current verdict: BLOCKED for production cutover. Do not execute.**
+
+Data/storage migration (PR #127): **GO**. Moov sandbox (PR #124): **PASS**. CheckAlt UAT: **PARTIAL** (vendor IQA). Plaid: **N/A, not required**.
+
+Production ChecksOps stays on Lovable/Supabase until every required gate in the runbook is proven and explicitly approved.
 
 This checklist is the current handoff for provider cutover readiness after PRs #102 and #103. Older Tranche 4 and UAT result documents are historical evidence; when they conflict with this checklist, use the newer code/parity state and re-prove live AWS/provider gates before production approval.
 
@@ -51,7 +58,7 @@ No single sandbox transfer or UAT deposit is sufficient to mark a provider GO.
 - [ ] Confirm RDS remains private after NAT/route changes
 - [ ] Confirm the public/main VPC route table was not replaced
 
-Historical UAT evidence showed the staging Lambda had no NAT and returned `503 provider_egress_failed`; that remains a blocker until re-tested live.
+Historical UAT evidence (pre–PR #124) showed the staging Lambda had no NAT and returned `503 provider_egress_failed`. **Moov sandbox certification 2026-09-04 recorded Lambda egress PASS.** Re-prove only if NAT/routing changes. Production Moov activation remains a separate hold.
 
 ## Moov sandbox gates
 
@@ -159,11 +166,17 @@ Before flipping any production URL:
 
 ## Current GO / NO-GO
 
+See `aws/cutover/FINAL_PRODUCTION_CUTOVER_RUNBOOK.md` for the live scorecard.
+
 | Gate | Status | Current blocker |
 | --- | --- | --- |
-| Moov | **NO-GO** | Lambda NAT/egress not yet proven; sandbox platform/connected account + payment-method mapping not live-proven; real transfer/status/idempotency/webhook proof outstanding |
-| CheckAlt | **NO-GO** | Lambda NAT/egress not yet proven; CheckAlt-approved UAT deposit account/depositor `ssoKey` outstanding; real deposit/status/idempotency/webhook proof outstanding |
-| AWS ChecksOps overall | **NO-GO** | Provider live tests, sandbox financial grants/reconciliation, final regression, and production cutover approval remain incomplete |
+| Data / storage migration | **GO** | PR #127 rehearsal PASS; not production cutover |
+| Moov sandbox | **PASS** | Production keys/webhooks/flags still held |
+| Moov production | **BLOCKED** | Deliberate flag hold + dual-run not started |
+| CheckAlt UAT | **PARTIAL** | Vendor IQA / approved UAT deposit account / depositor `ssoKey` (PR #125 untouched) |
+| CheckAlt production | **BLOCKED** | Flags OFF; UAT IQA outstanding |
+| Plaid | **N/A** | Not used; not a cutover requirement |
+| AWS ChecksOps overall | **BLOCKED** | No production Cognito/DNS/webhook/financial activation |
 
 ## STOP conditions
 
@@ -178,4 +191,4 @@ Stop immediately and do not activate production if any of the following occurs:
 - any production execution flag changes before explicit approval
 - DNS or production webhook routing changes before explicit approval
 
-Until every required gate above is resolved, the verdict remains **Moov NO-GO / CheckAlt NO-GO / ChecksOps AWS NO-GO**.
+Until every required gate in `FINAL_PRODUCTION_CUTOVER_RUNBOOK.md` is resolved, the verdict remains **BLOCKED for production cutover**.

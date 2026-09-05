@@ -1,6 +1,8 @@
-# Supabase runtime dependency audit (AWS staging after Class A batch)
+# Supabase runtime dependency audit (AWS staging after Class A + PR #127)
 
-Scope: frontend + staging API path after PR #121. Production Supabase/Lovable paths intentionally retained.
+Scope: frontend + staging API path after Cognito WhiteLabel/MortgageOps and data/storage rehearsal. Production Supabase/Lovable paths intentionally retained until cutover.
+
+Authoritative cutover scorecard: `aws/cutover/FINAL_PRODUCTION_CUTOVER_RUNBOOK.md`.
 
 ## `supabase.functions.invoke`
 
@@ -9,22 +11,27 @@ Scope: frontend + staging API path after PR #121. Production Supabase/Lovable pa
 | Email send/transactional/unsubscribe/notifies/portal invite | **obsolete/removable on staging** | Routed to AWS Class A handlers (`AWS_EMAIL_MODE=sink`) |
 | OCR intake / backlog / endorsement zone | **obsolete/removable on staging** | AWS Textract path + stored OCR fallback |
 | Homeowner ledger/claim/upload/sign-link/send | **obsolete/removable on staging** | AWS public/token handlers; deductible pay remains Class C |
+| `homeowner-ledger-attach-upload` | **still required temporarily** | Not in `CLASS_A_FUNCTIONS` |
+| `ingest-shared-check` | **still required temporarily** | Not in `CLASS_A_FUNCTIONS` |
+| `check-endorsement` (public token) | **AWS-native on staging** | `publicWorkflowApi` `/public/endorsement`; authenticated invoke still production Edge |
 | get-check-image-urls / public directory / partner code | **obsolete/removable on staging** | AWS handlers |
-| Moov / CheckAlt / Plaid money movement | **provider/financial dependent** | Must stay disabled |
+| Document PDF generators / endorsement packets | **obsolete/removable on staging** | Class A handlers present |
+| tenant-invite-user / hire-mortgage-agent / Cognito admin | **obsolete/removable on staging** | Class A Cognito admin |
+| passkey-* SimpleWebAuthn | **obsolete/removable on AWS Cognito mode** | Cognito WebAuthn for CheckOps / WhiteLabel / MortgageOps |
+| Moov / CheckAlt money movement | **provider/financial dependent** | Must stay disabled |
 | Stripe billing / tenant-checkout / usage report | **provider/financial dependent** | Keep disabled |
 | QuickBooks / Zapier / DocuPost / e-sign vendor | **provider/financial dependent** (B) | Needs sandbox creds |
-| Document PDF generators / endorsement packets | **still required temporarily** | Class A outstanding |
-| tenant-invite-user / Cognito admin user ops | **still required temporarily** | Class A outstanding |
-| passkey-* SimpleWebAuthn | **obsolete/removable on CheckOps staging** | Cognito WebAuthn; still used by WhiteLabel/MortgageOps surfaces |
+| `send-signature-request` | **still required temporarily** | E-sign vendor |
 | homeowner-deductible-pay | **provider/financial dependent** | Class C |
+| Plaid / `moov-plaid-bridge` | **N/A — not a cutover requirement** | Keep `AWS_PLAID_ENABLED=false` |
 
 ## Direct Supabase Storage
 
 | Dependency | Classification | Notes |
 |---|---|---|
 | Staging SPA `/storage/*` S3 sign/upload | **AWS-native** | Prefer AWS; production still Supabase storage |
-| `tenant-logos` / branding uploads via `supabase.storage` | **still required temporarily** / **production-only path** | Staging may still call client; expand AWS storage writes when needed |
-| MortgageOps message attachments `supabase.storage` | **still required temporarily** | Bridge or port to `/storage/upload-url` |
+| `tenant-logos` / branding uploads via `supabase.storage` | **AWS adapter on Cognito mode** / **production-only path** | |
+| MortgageOps message attachments | **AWS adapter on Cognito mode** | |
 
 ## Direct Supabase database (`supabase.from`)
 
@@ -44,11 +51,11 @@ Scope: frontend + staging API path after PR #121. Production Supabase/Lovable pa
 
 | Dependency | Classification | Notes |
 |---|---|---|
-| CheckOpsLogin EMAIL_OTP + passkeys | **obsolete/removable on staging** | Cognito |
-| WhiteLabelLogin / MortgageOpsLogin | **still required temporarily** | Not fully Cognito-wired |
-| `/h/upload` magic-link `signInWithOtp` | **still required temporarily** | Homeowner upload API is AWS; OTP session still Supabase Auth |
-| MFA / step-up on financial surfaces | **production-only** / gated | Staging financial execution off |
+| CheckOps / WhiteLabel / MortgageOps login | **obsolete/removable on staging** | Cognito EMAIL_OTP + WebAuthn |
+| `/h/upload` OTP | **obsolete/removable on staging** | Dedicated AWS OTP functions (no Cognito SPA session) |
+| MFA / TOTP / step-up on financial surfaces | **production-only** / gated | Staging financial execution off; Cognito MFA not provisioned |
+| Production passkeys | **not migrated** | Users re-enroll on a future production Cognito pool |
 
 ## Do not remove yet
 
-Any production Supabase code path still used by Lovable production DNS/auth/storage/functions. Staging-only removals should wait until production cutover checklist items are complete.
+Any production Supabase code path still used by Lovable production DNS/auth/storage/functions. Staging-only removals should wait until the cutover runbook gates are complete.

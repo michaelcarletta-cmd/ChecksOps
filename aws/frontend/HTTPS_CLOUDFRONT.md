@@ -64,5 +64,5 @@ Note: deploying this stack replaces the staging frontend bucket policy with Clou
 - `WebAuthnConfiguration.RelyingPartyId`: `staging.checksops.com`
 - `UserVerification`: `preferred`
 - MFA remains `OFF`
-- API routes: `/auth/passkey/*` (require `Origin: https://staging.checksops.com`)
+- API routes: `/auth/passkey/*` (require configured HTTPS Origin; default `https://staging.checksops.com`, overridable via `COGNITO_WEBAUTHN_ORIGIN` — staging template keeps the default)
 - Frontend gate: `isAwsStagingHttpsPasskeysEnabled()` — fail closed on HTTP / unexpected host

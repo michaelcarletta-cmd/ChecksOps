@@ -1,6 +1,8 @@
 # Final cutover delta procedure (design + dry-run only)
 
-This document defines the repeatable last-mile procedure for a future production cutover.  
+**Night-of sequencing and GO/BLOCKED scorecard:** `aws/cutover/FINAL_PRODUCTION_CUTOVER_RUNBOOK.md`.
+
+This document defines the repeatable last-mile DB/storage delta for a future production cutover.  
 **This PR does not execute cutover.**
 
 ## What must be frozen / read-only during final cutover
