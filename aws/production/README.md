@@ -20,7 +20,7 @@ Do not apply `64_financial_activation_grants.sql`.
 | `ACM_DNS_VALIDATION.md` | Exact ACM CNAMEs. **Do not add them from the agent.** |
 | `COGNITO_VALIDATION.md` | Live pool/client snapshot. No import. |
 | `SES_EMAIL_OTP_READINESS.md` | Production pool is SES `DEVELOPER` / `support@checksops.com`; staging still `COGNITO_DEFAULT` |
-| `iam/OPERATOR_LAMBDA_ROLE.md` | **Step 4** — dedicated prep Lambda role (**verified**; CFN param still Step 5A) |
+| `iam/OPERATOR_LAMBDA_ROLE.md` | **Step 4** — dedicated prep Lambda role (**verified**; CFN param aligned) |
 | `LIVE_RESOURCES.md` | IDs of prepared objects |
 | `iam/OPERATOR_CLOUDWATCH_IAM.md` | **Step 5** — inspect policy + disabled alarms |
 
@@ -31,7 +31,7 @@ Do not apply `64_financial_activation_grants.sql`.
 | `checksops-production-prep` | `prep-stack.yaml` | Cognito **client** on existing pool, frontend bucket, CloudFront **without** apex/www aliases, API log group | Unchanged |
 | `checksops-production-prep-alarms` | `cloudwatch-alarms.yaml` | Inspect-only alarms (`ActionsEnabled=false`) | Unchanged |
 | `checksops-production-prep-cw-inspect-policy` | `iam/operator-cloudwatch-inspect.yaml` | Managed policy only (not attached) | Unchanged |
-| `checksops-production-prep-api` | `api-template.yaml` (SAM) or `api-cfn.yaml` (vanilla CFN) | Separate Lambda/HTTP API, flags **false** | Unchanged. **Live 2026-09-05T22:56Z:** `/prep/health` 200, `environment=production-prep`, no DB, no VPC. Lambda role is `checksops-production-prep-api-role`. Do **not** CloudFormation-deploy git `api-cfn.yaml` (that would create a second role). Align `ExistingExecutionRoleArn` in **Step 5A**. |
+| `checksops-production-prep-api` | `api-template.yaml` (SAM) or `api-cfn.yaml` (vanilla CFN) | Separate Lambda/HTTP API, flags **false** | Unchanged. **Live 2026-09-05T23:09Z:** stack `UPDATE_COMPLETE`, `/prep/health` 200, no VPC. Lambda role and `ExistingExecutionRoleArn` are `checksops-production-prep-api-role`. `EnableErrorsAlarm=false`. Do **not** CloudFormation-deploy git `api-cfn.yaml` (that would create a second role). |
 
 ## Operator deploy (after review — not cutover)
 

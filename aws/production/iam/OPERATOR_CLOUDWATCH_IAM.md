@@ -4,13 +4,11 @@
 
 Live `cloudformation deploy` of `checksops-production-prep-alarms` previously failed with `cloudwatch:PutMetricAlarm` denied; that stack is **absent**. Metric filters on `/aws/lambda/checksops-production-prep-api` already exist.
 
+**5A verified 2026-09-05T23:09:58Z:** stack `checksops-production-prep-api` is `UPDATE_COMPLETE`. `ExistingExecutionRoleArn` and output `ExecutionRoleArn` are `arn:aws:iam::806168576068:role/checksops-production-prep-api-role`. `EnableErrorsAlarm=false`. Lambda still that role, `/prep/health` 200, no VPC (`VpcId` empty), flags false.
+
 The policy JSON (`operator-cloudwatch-inspect.json`) / YAML (`operator-cloudwatch-inspect.yaml`) **does not attach** itself. A human must attach after create.
 
-## Why 5A comes first
-
-Lambda `checksops-production-prep-api` already uses `checksops-production-prep-api-role` (verified 2026-09-05T22:56Z). Stack `checksops-production-prep-api` still has parameter `ExistingExecutionRoleArn` = staging role. The next CloudFormation update of that stack would **revert** the Lambda role unless you change the parameter first.
-
-## 5A. Align CloudFormation (existing API stack only)
+## 5A. Align CloudFormation — **done**
 
 1. CloudFormation → Stacks → **`checksops-production-prep-api`**.
 2. **Update** → **Use existing template**. Do **not** upload `api-cfn.yaml`.
@@ -87,11 +85,9 @@ The staging alarm **only watches** `checksops-staging-api` Errors. It must not c
 
 Do **not** set `ActionsEnabled=true`. Do **not** add an SNS topic in this step.
 
-## What to send back
+## What to send back (current: 5B only)
 
-1. API stack `UPDATE_COMPLETE` and `ExistingExecutionRoleArn` = `checksops-production-prep-api-role`.
-2. Policy ARN for `ChecksOpsProductionPrepCloudWatchInspect` and which role it is attached to.
-3. Alarm stack `CREATE_COMPLETE` plus confirmation **Actions enabled = false** on all five names.
+1. **Done:** API stack `UPDATE_COMPLETE` and `ExistingExecutionRoleArn` = `checksops-production-prep-api-role`.
+2. After 5B: policy ARN for `ChecksOpsProductionPrepCloudWatchInspect`. Do **not** attach yet (5C). Do **not** create the alarm stack yet (5D).
+3. After 5C–5D (later): attach target; alarm stack `CREATE_COMPLETE`; **Actions enabled = false** on all five names.
 4. Confirmation you did not edit staging Lambda, production DNS, Cognito, or flags.
-
-After that, this agent will re-verify (alarms + role parameter) and say whether PR #133 is safe to merge as **prep only**. Cutover stays BLOCKED.
