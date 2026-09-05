@@ -85,6 +85,10 @@ test('operator CloudWatch inspect policy is scoped and not auto-attached', () =>
   assert.equal(policy.Statement.some((s) => (s.Action || []).includes('route53:ChangeResourceRecordSets')), false);
   const iamDoc = read('aws/production/iam/OPERATOR_CLOUDWATCH_IAM.md');
   assert.match(iamDoc, /does not attach/i);
+  assert.match(iamDoc, /Step 5/);
+  assert.match(iamDoc, /ActionsEnabled=false/);
+  assert.match(iamDoc, /checksops-production-prep-alarms/);
+  assert.match(iamDoc, /ExistingExecutionRoleArn/);
 });
 
 test('validate-production-prep refuses --apply and passes static checks', () => {

@@ -1,40 +1,52 @@
-# Operator CloudWatch inspect IAM
+# Step 5 — CloudWatch inspect IAM + disabled alarms
 
-`ChecksOpsCursorCloudStaging` can create CloudFormation resources and describe the production-prep log group. It **cannot**:
+**Operator only.** This Cloud Agent cannot `iam:CreatePolicy`, `iam:AttachRolePolicy`, `cloudwatch:PutMetricAlarm`, or `cloudwatch:DescribeAlarms`. Do **not** enable alarm actions. Do **not** add SNS. Do **not** overlay `checksops-staging-api`. Do **not** change DNS, Cognito, or flags.
 
-- `cloudwatch:DescribeAlarms`
-- `cloudwatch:PutMetricAlarm`
-- `cloudwatch:GetMetricStatistics` / `ListMetrics`
-- `iam:PutRolePolicy` / `iam:GetRole` / `iam:CreateRole` (including leftover `checksops-production-prep-api-role`)
+Live `cloudformation deploy` of `checksops-production-prep-alarms` previously failed with `cloudwatch:PutMetricAlarm` denied; that stack is **absent**. Metric filters on `/aws/lambda/checksops-production-prep-api` already exist.
 
-This pass therefore:
+The policy JSON (`operator-cloudwatch-inspect.json`) / YAML (`operator-cloudwatch-inspect.yaml`) **does not attach** itself. A human must attach after create.
 
-1. Leaves a deployable alarm template (`aws/production/cloudwatch-alarms.yaml`). Live `cloudformation deploy` **failed** with `cloudwatch:PutMetricAlarm` denied; leftover stack was deleted.
-2. Created metric filter `checksops-production-prep-api-errors-filter` on the prep log group (allowed).
-3. Leaves a managed-policy template and JSON for a human to create/attach. `iam:CreatePolicy` / `PutRolePolicy` are denied on this agent.
+## Why 5A comes first
 
-The inspect policy also includes scoped `PutMetricAlarm` / `DeleteAlarms` so the operator can finish the alarm stack deploy.
+Lambda `checksops-production-prep-api` already uses `checksops-production-prep-api-role` (verified 2026-09-05T22:56Z). Stack `checksops-production-prep-api` still has parameter `ExistingExecutionRoleArn` = staging role. The next CloudFormation update of that stack would **revert** the Lambda role unless you change the parameter first.
 
-## Attach (human)
+## 5A. Align CloudFormation (existing API stack only)
 
-Attach `ChecksOpsProductionPrepCloudWatchInspect` to **either**:
+1. CloudFormation → Stacks → **`checksops-production-prep-api`**.
+2. **Update** → **Use existing template**. Do **not** upload `api-cfn.yaml`.
+3. Change **only** `ExistingExecutionRoleArn` to:
 
-- `ChecksOpsCursorCloudStaging` (so later Cloud Agents can inspect), or
-- a dedicated ops role used in the console / CLI during cutover night.
+   `arn:aws:iam::806168576068:role/checksops-production-prep-api-role`
 
-Do **not** grant `iam:*`, DNS, Cognito admin, SES send, or `cloudwatch:PutMetricAlarm` on `Resource: *` as part of this attach.
+4. Keep:
+   - `Environment=production-prep`
+   - `CognitoUserPoolId=us-east-1_h00WorYMT`
+   - `CognitoClientId=3ja9fqaq2fjkv3i6up2varcqpe`
+   - `EnableErrorsAlarm=false`
+   - Code bucket/key unchanged
+5. Review changeset: Lambda `Role` property only. No VPC. No new resources on staging.
+6. Execute. Wait for `UPDATE_COMPLETE`.
+7. Confirm stack output `ExecutionRoleArn` is the dedicated role, not `checksops-staging-ApiFunctionRole-7E7XRyLe3nyi`.
+
+## 5B. Create the inspect policy (does not attach)
+
+**Console**
+
+1. IAM → **Policies** → **Create policy** → **JSON**.
+2. Paste the document in `aws/production/iam/operator-cloudwatch-inspect.json` (scoped to the five named alarms below; `PutMetricAlarm` is **not** `Resource: *`).
+3. Policy name: `ChecksOpsProductionPrepCloudWatchInspect` (exact).
+4. Description: `Inspect production-prep CloudWatch alarms. No DNS/auth/SES/financial grants.`
+5. Create policy. Do **not** attach yet on this screen if you prefer the next step.
+
+**Or CLI** (from this repo, your admin credentials — not the Cloud Agent role):
 
 ```bash
 aws iam create-policy \
   --policy-name ChecksOpsProductionPrepCloudWatchInspect \
   --policy-document file://aws/production/iam/operator-cloudwatch-inspect.json
-
-aws iam attach-role-policy \
-  --role-name ChecksOpsCursorCloudStaging \
-  --policy-arn arn:aws:iam::806168576068:policy/ChecksOpsProductionPrepCloudWatchInspect
 ```
 
-Or deploy the policy-only stack (still does not attach):
+**Or** deploy the policy-only stack (still **does not attach**):
 
 ```bash
 aws cloudformation deploy \
@@ -44,10 +56,42 @@ aws cloudformation deploy \
   --capabilities CAPABILITY_NAMED_IAM
 ```
 
-Inspect without DescribeAlarms (already allowed):
+## 5C. Attach the policy
 
-```bash
-aws cloudformation describe-stacks --stack-name checksops-production-prep-alarms --query 'Stacks[0].Outputs'
-aws logs describe-log-groups --log-group-name-prefix /aws/lambda/checksops-production-prep
-aws logs describe-metric-filters --log-group-name /aws/lambda/checksops-production-prep-api
-```
+IAM → Roles → **`ChecksOpsCursorCloudStaging`** (so later Cloud Agents can verify) **or** a dedicated ops role you will use in console/CLI.
+
+- Add permissions → Attach policies → `ChecksOpsProductionPrepCloudWatchInspect`.
+
+Do **not** grant `iam:*`, Route 53 / Cloudflare DNS, Cognito admin, SES send, or `cloudwatch:PutMetricAlarm` on `Resource: *`.
+
+## 5D. Deploy inspect-only alarms (`ActionsEnabled=false`)
+
+1. CloudFormation → **Create stack** → With new resources.
+2. Upload `aws/production/cloudwatch-alarms.yaml`.
+3. Stack name: `checksops-production-prep-alarms` (exact).
+4. Parameters: leave defaults (`checksops-production-prep-api`, `checksops-staging-api`).
+5. Tags: `Environment=production-prep`, `DoNotCutover=true`.
+6. Create stack. Wait for `CREATE_COMPLETE`.
+
+Confirm each alarm shows **Actions enabled = false** and **no SNS / no Auto Scaling actions**:
+
+| Alarm name |
+|---|
+| `checksops-production-prep-api-errors` |
+| `checksops-production-prep-api-throttles` |
+| `checksops-production-prep-api-duration-p99` |
+| `checksops-production-prep-api-logged-errors` |
+| `checksops-staging-api-errors-inspect` |
+
+The staging alarm **only watches** `checksops-staging-api` Errors. It must not change staging code, VPC, or flags.
+
+Do **not** set `ActionsEnabled=true`. Do **not** add an SNS topic in this step.
+
+## What to send back
+
+1. API stack `UPDATE_COMPLETE` and `ExistingExecutionRoleArn` = `checksops-production-prep-api-role`.
+2. Policy ARN for `ChecksOpsProductionPrepCloudWatchInspect` and which role it is attached to.
+3. Alarm stack `CREATE_COMPLETE` plus confirmation **Actions enabled = false** on all five names.
+4. Confirmation you did not edit staging Lambda, production DNS, Cognito, or flags.
+
+After that, this agent will re-verify (alarms + role parameter) and say whether PR #133 is safe to merge as **prep only**. Cutover stays BLOCKED.

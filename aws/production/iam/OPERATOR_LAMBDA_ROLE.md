@@ -1,10 +1,12 @@
 # Step 4 — Dedicated production-prep Lambda IAM role
 
+**Verified 2026-09-05T22:56Z:** Lambda `checksops-production-prep-api` execution role is `arn:aws:iam::806168576068:role/checksops-production-prep-api-role`. `/prep/health` 200, `VpcConfig` null, all provider/financial execution flags `false`. Staging Lambda still uses `checksops-staging-ApiFunctionRole-7E7XRyLe3nyi` with its VPC. CloudFormation parameter `ExistingExecutionRoleArn` still points at the staging role — finish that in **Step 5A** so the next stack update does not revert the role.
+
 **Operator only.** This Cloud Agent cannot `iam:CreateRole` / `iam:GetRole` / `iam:PassRole` on a new role. Do **not** overlay staging. Do **not** attach VPC. Do **not** enable provider/financial flags. Do **not** point `checksops.com` DNS at this API.
 
 ## Why
 
-Live Lambda `checksops-production-prep-api` currently uses the **staging** execution role via CloudFormation `ExistingExecutionRoleArn`:
+Before Step 4, live Lambda `checksops-production-prep-api` used the **staging** execution role via CloudFormation `ExistingExecutionRoleArn`:
 
 `arn:aws:iam::806168576068:role/checksops-staging-ApiFunctionRole-7E7XRyLe3nyi`
 

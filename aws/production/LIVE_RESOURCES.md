@@ -13,10 +13,10 @@ Account `806168576068`, region `us-east-1`. Re-verified 2026-09-05 (this PR).
 | CloudFront | `E1B0ZWWO5559U5` / `dmgs35lzv89ms.cloudfront.net` | **Aliases quantity 0.** Deployed. Default cert. |
 | ACM | `arn:aws:acm:us-east-1:806168576068:certificate/5cdde8e7-49fb-4b42-ba36-9aaa9d9b1aa3` | **`ISSUED`** — operator CNAMEs present; not attached to CloudFront |
 | API log group | `/aws/lambda/checksops-production-prep-api` | Retention 30d; metric filter `checksops-production-prep-api-errors-filter` |
-| API Lambda/HTTP | `checksops-production-prep-api` / `https://kiqojucc02.execute-api.us-east-1.amazonaws.com/prep` | CREATE_COMPLETE. Flags all false. **No VPC.** Still reuses staging execution role via PassRole until **Step 4**. Do not point DNS here. |
+| API Lambda/HTTP | `checksops-production-prep-api` / `https://kiqojucc02.execute-api.us-east-1.amazonaws.com/prep` | Flags all false. **No VPC.** Execution role **`checksops-production-prep-api-role`** (Lambda updated 2026-09-05T22:56Z). CFN parameter still lists staging role until **Step 5A**. Do not point DNS here. |
 | Artifacts bucket | `checksops-production-prep-artifacts-806168576068` | Holds `checksops-production-prep-api.zip` |
 | CFN `checksops-production-prep` | CREATE_COMPLETE | No apex/www aliases |
-| CFN `checksops-production-prep-api` | CREATE_COMPLETE | Flags false; staging role PassRole workaround |
+| CFN `checksops-production-prep-api` | CREATE_COMPLETE | Flags false. Parameter `ExistingExecutionRoleArn` still staging until Step 5A (Lambda already on dedicated role). |
 | CFN `checksops-production-prep-alarms` | not present | Deploy blocked: `cloudwatch:PutMetricAlarm` denied. Template ready. |
 | Production DNS | apex + `www` → `185.158.133.1` | Unchanged (Lovable) |
 | Staging API | `https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging` | `/health` 200, flags false |

@@ -14,7 +14,7 @@ CheckAlt is **PARTIAL** and is handled in a separate chat (PR #125 / #130). This
 | Production → AWS DB migration rehearsal | **GO** | PR #127 isolated overlay `checksops_rehearsal_20260905` matched live production counts, critical PKs, `financial_stepup_log` 2/2, financial aggregates, identity, membership, FKs. Live `checksops` not overwritten. |
 | Production → AWS storage migration/reconciliation | **GO** | PR #127 COPY 1,411/1,411 objects, 0 missing/failed/mismatched. 21 staging-only UAT objects left in place. Live S3 now **1,439** objects / 2,566,275,762 bytes (expected drift since rehearsal; final delta still required). |
 | Remaining Supabase/Lovable runtime dependencies | **PARTIAL** | AWS staging (`VITE_AUTH_PROVIDER=cognito`) already proxies DB/storage/Class A. Production SPA is still `.env.production` Supabase-only. Draft PR #132 ports vendor e-sign / ingest (not merged here). Stripe/QuickBooks stay fail-closed. Realtime still polling. |
-| Production frontend / API AWS configuration | **GO (prepared, not switched)** | SPA: CloudFront `E1B0ZWWO5559U5` placeholder, aliases **0**. API: `checksops-production-prep-api` CREATE_COMPLETE, `https://kiqojucc02.execute-api.us-east-1.amazonaws.com/prep` `/health` 200, `environment=production-prep`, all execution flags **false**, no VPC/RDS. Role is staging `PassRole` workaround until `iam:CreateRole` exists. `.env.production` stays Supabase. Do not overlay `checksops-staging-api`. Do not point DNS at this API. |
+| Production frontend / API AWS configuration | **GO (prepared, not switched)** | SPA: CloudFront `E1B0ZWWO5559U5` placeholder, aliases **0**. API: `checksops-production-prep-api`, `https://kiqojucc02.execute-api.us-east-1.amazonaws.com/prep` `/health` 200, `environment=production-prep`, all execution flags **false**, no VPC/RDS. Lambda role **`checksops-production-prep-api-role`**. CFN `ExistingExecutionRoleArn` still staging until Step 5A. `.env.production` stays Supabase. Do not overlay `checksops-staging-api`. Do not point DNS at this API. |
 | Cognito EMAIL_OTP / WebAuthn (staging) | **GO** | PR #126. Pool `us-east-1_vPmQ7cL1F`, `ALLOW_USER_AUTH`, MFA OFF, EMAIL_OTP preferred, WebAuthn RP `staging.checksops.com`. |
 | Cognito EMAIL_OTP / WebAuthn (production transition) | **GO (prepared, not switched)** | Pool `us-east-1_h00WorYMT`, 0 users, EMAIL_OTP+PASSWORD+WEB_AUTHN, MFA OFF, deletion protection ACTIVE, client `3ja9fqaq2fjkv3i6up2varcqpe`, WebAuthn RP ID `checksops.com`, email **`DEVELOPER`** / SES `support@checksops.com`. **Do not invite.** Staging pool remains `COGNITO_DEFAULT`. |
 | Tenant identity mapping + RLS / isolation | **GO (validated, not imported)** | Mapping proven on staging. Live DB bridge `identity_map` count **8**. Ninth UUID fail-closed. `--apply` refused. Production still uses Supabase Auth until API/DNS switch. |
@@ -27,7 +27,7 @@ CheckAlt is **PARTIAL** and is handled in a separate chat (PR #125 / #130). This
 | Moov production transition | **PARTIAL** | Sandbox certification **PASS** (PR #124). Production `AWS_MOOV_ENABLED=false`. **Cutover decision**. |
 | CheckAlt | **PARTIAL** | Separate chat. Production `AWS_CHECKALT_ENABLED=false`. **Cutover decision**. |
 | Plaid | **N/A** | Not used. Missing keys are not a blocker. |
-| Monitoring / CloudWatch / health checks | **PARTIAL** | `/health` 200, `/db-health` connected. Prep log group inspectable. Alarm template `aws/production/cloudwatch-alarms.yaml` (`ActionsEnabled=false`). Agent **cannot** `DescribeAlarms` / `PutMetricAlarm`. Operator policy ready but not attached (`iam:PutRolePolicy` denied). |
+| Monitoring / CloudWatch / health checks | **PARTIAL** | Prep `/health` 200. Prep log group inspectable. Alarm template `aws/production/cloudwatch-alarms.yaml` (`ActionsEnabled=false`). Agent **cannot** `DescribeAlarms` / `PutMetricAlarm`. **Step 5** operator attach + deploy outstanding. |
 | Reconciliation immediately after cutover | **GO** (procedure) | Report-only SQL + `/financial/reconcile` (`autoCorrected=false`). |
 | Rollback if AWS production validation fails | **GO** (procedure) | Points A/B/C in `ROLLBACK.md`. Dry-run script prints only. |
 | Temporary bridge teardown (after successful cutover) | **GO** (procedure) | **Do not run now.** Dry-run scripts refuse `--apply`. |
@@ -56,12 +56,11 @@ CheckAlt is **PARTIAL** and is handled in a separate chat (PR #125 / #130). This
 
 ### Still prep (can continue without switching production)
 
-- **Step 4:** Dedicated production-prep Lambda role (`iam:CreateRole` / `GetRole` / `PassRole`); live function currently PassRoles the staging execution role and has **no VPC**. See `aws/production/iam/OPERATOR_LAMBDA_ROLE.md`.
-- **Step 5:** Operator IAM to finish CloudWatch alarms (`cloudwatch:PutMetricAlarm` + `DescribeAlarms`); leftover named role may be reused in Step 4 instead of deleted
+- **Step 4:** Dedicated production-prep Lambda role **verified** (`checksops-production-prep-api-role`, no VPC, flags false). CFN parameter still staging — **Step 5A**.
+- **Step 5:** Align CFN `ExistingExecutionRoleArn`; create/attach `ChecksOpsProductionPrepCloudWatchInspect`; deploy `checksops-production-prep-alarms` with `ActionsEnabled=false`. See `aws/production/iam/OPERATOR_CLOUDWATCH_IAM.md`.
 - SES sandbox / deliverability (Cognito `DEVELOPER` already attached; no OTP sent)
 - Confirm WebAuthn RP ID `checksops.com` remains on `us-east-1_h00WorYMT` only (already set; do not edit staging)
 - ACM already **ISSUED** (validation only; not apex cut)
-- Attach `ChecksOpsProductionPrepCloudWatchInspect` to the operator/ops role
 - Timed write-freeze drill (measurement only)
 - Realtime: accept 15s polling **or** later design
 - CheckAlt UAT in the separate chat

@@ -14,8 +14,8 @@ Operator inspect IAM: `aws/production/iam/OPERATOR_CLOUDWATCH_IAM.md`. The Cloud
 | Lambda tracing | **GO** — SAM `Tracing: Active` |
 | `GET /ops/readiness` | **PARTIAL** — implemented in git; live staging Lambda still 404 until a later overlay (do **not** overlay from this branch) |
 | Production-prep log group | **GO (inspectable)** — `/aws/lambda/checksops-production-prep-api` plus metric filter `checksops-production-prep-api-errors-filter` |
-| CloudWatch alarms | **PARTIAL** — template ready; live deploy denied `cloudwatch:PutMetricAlarm`. Metric filter on prep log group exists. |
-| Operator inspect | **PARTIAL** — policy JSON ready; `iam:PutRolePolicy` / `CreatePolicy` denied on this agent |
+| CloudWatch alarms | **PARTIAL** — template ready; stack `checksops-production-prep-alarms` absent. Metric filters on prep log group exist. **Step 5**. |
+| Operator inspect | **PARTIAL** — policy JSON ready; `iam:CreatePolicy` / `AttachRolePolicy` denied on this agent. **Step 5**. |
 | Production cutover alarms / SNS | **BLOCKED** (no paging topic; ActionsEnabled false) |
 
 ## Cutover-night dashboard (operator)
