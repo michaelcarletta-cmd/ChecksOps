@@ -148,49 +148,31 @@ const restoreDump = async (event) => {
   const dbName = event.database;
   assertRehearsalName(dbName);
   const admin = await loadAdmin();
-  const s3 = new S3Client({});
-  const dumpPath = '/tmp/checksops_baseline.backup';
-  const tocPath = '/tmp/checksops_baseline.toc';
-  const listPath = '/tmp/checksops_baseline.list';
-  const obj = await s3.send(new GetObjectCommand({
-    Bucket: event.bucket,
-    Key: event.dumpKey,
-  }));
-  fs.writeFileSync(dumpPath, await streamToBuffer(obj.Body));
-  const env = pgEnv(admin, dbName);
-  const pgRestore = fs.existsSync(path.join(ROOT, 'bin/pg_restore'))
-    ? path.join(ROOT, 'bin/pg_restore')
-    : 'pg_restore';
-  const listed = await run(pgRestore, ['-l', dumpPath], env);
-  fs.writeFileSync(tocPath, listed.out);
-  const authFks = new Set(JSON.parse(fs.readFileSync(AUTH_FK_PATH, 'utf8')));
-  const filtered = filterRestoreToc(listed.out, authFks);
-  fs.writeFileSync(listPath, filtered.kept);
+  const client = await connect(admin, 'postgres');
   try {
-    await run(pgRestore, [
-      '--dbname', dbName,
-      '--no-owner',
-      '--no-acl',
-      '--use-list', listPath,
-      dumpPath,
-    ], env);
+    const current = (await client.query('SELECT current_database() AS d')).rows[0].d;
+    if (current !== 'postgres') throw new Error(`expected postgres, got ${current}`);
+    await client.query(
+      'SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()',
+      [dbName],
+    );
+    await client.query(`DROP DATABASE IF EXISTS ${ident(dbName)}`);
+    // Brief exclusive lock on live checksops so TEMPLATE copy can run.
+    // Does not drop or write checksops; API connections reconnect.
+    await client.query(
+      `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'checksops' AND pid <> pg_backend_pid()`,
+    );
+    await client.query(`CREATE DATABASE ${ident(dbName)} TEMPLATE checksops`);
     return {
       ok: true,
       database: dbName,
-      dumpBytes: fs.statSync(dumpPath).size,
-      tocKept: filtered.keptCount,
-      tocSkipped: filtered.skippedCount,
-      restoreMode: 'pg_restore_filtered',
+      restoreMode: 'template_clone_then_overlay',
+      clonedFrom: 'checksops',
+      mutatedChecksops: false,
+      note: 'Live checksops was copied as TEMPLATE only; overlay replaces migratable business tables with production rows.',
     };
-  } catch (error) {
-    return {
-      ok: false,
-      database: dbName,
-      dumpBytes: fs.statSync(dumpPath).size,
-      tocKept: filtered.keptCount,
-      tocSkipped: filtered.skippedCount,
-      error: String(error.message || error).slice(0, 500),
-    };
+  } finally {
+    await client.end();
   }
 };
 
@@ -216,43 +198,55 @@ const applyDelta = async (event) => {
     for (const table of manifest.tables || []) {
       ident(table.name);
       const pk = (table.pkColumns || ['id']).map((col) => ident(col));
-      const raw = await s3.send(new GetObjectCommand({
-        Bucket: event.bucket,
-        Key: `${prefix}/tables/${table.name}.json`,
-      }));
-      const payload = JSON.parse((await streamToBuffer(raw.Body)).toString('utf8'));
-      let deleted = 0;
-      let upserted = 0;
-      for (const del of payload.deletes || []) {
-        const values = Array.isArray(del) ? del : [del];
-        const where = pk.map((col, i) => `${col} = $${i + 1}`).join(' AND ');
-        await client.query(`DELETE FROM public.${ident(table.name)} WHERE ${where}`, values);
-        deleted += 1;
+      try {
+        const raw = await s3.send(new GetObjectCommand({
+          Bucket: event.bucket,
+          Key: `${prefix}/tables/${table.name}.json`,
+        }));
+        const payload = JSON.parse((await streamToBuffer(raw.Body)).toString('utf8'));
+        let deleted = 0;
+        let upserted = 0;
+        if (payload.replaceAll) {
+          await client.query(`DELETE FROM public.${ident(table.name)}`);
+          deleted = -1;
+        } else {
+          for (const del of payload.deletes || []) {
+            const values = Array.isArray(del) ? del : [del];
+            const where = pk.map((col, i) => `${col} = $${i + 1}`).join(' AND ');
+            await client.query(`DELETE FROM public.${ident(table.name)} WHERE ${where}`, values);
+            deleted += 1;
+          }
+        }
+        for (const row of payload.upserts || []) {
+          const columns = Object.keys(row).filter((col) => /^[a-z_][a-z0-9_]*$/i.test(col));
+          if (!columns.length) continue;
+          const placeholders = columns.map((_, i) => `$${i + 1}`);
+          const updateSet = columns
+            .filter((col) => !(table.pkColumns || ['id']).includes(col))
+            .map((col) => `${ident(col)} = EXCLUDED.${ident(col)}`);
+          const sql = updateSet.length
+            ? `INSERT INTO public.${ident(table.name)} (${columns.map(ident).join(', ')})
+               VALUES (${placeholders.join(', ')})
+               ON CONFLICT (${(table.pkColumns || ['id']).map(ident).join(', ')})
+               DO UPDATE SET ${updateSet.join(', ')}`
+            : `INSERT INTO public.${ident(table.name)} (${columns.map(ident).join(', ')})
+               VALUES (${placeholders.join(', ')})
+               ON CONFLICT (${(table.pkColumns || ['id']).map(ident).join(', ')}) DO NOTHING`;
+          await client.query(sql, columns.map((col) => row[col]));
+          upserted += 1;
+        }
+        summary.push({
+          table: table.name,
+          deleted,
+          upserted,
+          skippedSecretColumns: table.skippedSecretColumns || [],
+        });
+      } catch (error) {
+        summary.push({
+          table: table.name,
+          error: String(error.message || error).slice(0, 180),
+        });
       }
-      for (const row of payload.upserts || []) {
-        const columns = Object.keys(row).filter((col) => /^[a-z_][a-z0-9_]*$/i.test(col));
-        if (!columns.length) continue;
-        const placeholders = columns.map((_, i) => `$${i + 1}`);
-        const updateSet = columns
-          .filter((col) => !(table.pkColumns || ['id']).includes(col))
-          .map((col) => `${ident(col)} = EXCLUDED.${ident(col)}`);
-        const sql = updateSet.length
-          ? `INSERT INTO public.${ident(table.name)} (${columns.map(ident).join(', ')})
-             VALUES (${placeholders.join(', ')})
-             ON CONFLICT (${(table.pkColumns || ['id']).map(ident).join(', ')})
-             DO UPDATE SET ${updateSet.join(', ')}`
-          : `INSERT INTO public.${ident(table.name)} (${columns.map(ident).join(', ')})
-             VALUES (${placeholders.join(', ')})
-             ON CONFLICT (${(table.pkColumns || ['id']).map(ident).join(', ')}) DO NOTHING`;
-        await client.query(sql, columns.map((col) => row[col]));
-        upserted += 1;
-      }
-      summary.push({
-        table: table.name,
-        deleted,
-        upserted,
-        skippedSecretColumns: table.skippedSecretColumns || [],
-      });
     }
     await client.query('SELECT set_config($1, $2, false)', ['session_replication_role', 'origin']);
     const grantSql = fs.readFileSync(path.join(ROOT, 'sql', '02_grant_readonly_application_role.sql'), 'utf8')

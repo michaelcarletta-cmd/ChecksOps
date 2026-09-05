@@ -566,24 +566,20 @@ const main = async () => {
     totals.unchanged += summary.unchanged;
 
     const need = new Set(reconstructKeys(delta));
-    if (financialTables.has(table)) {
-      for (const pk of currentKeys.keys()) need.add(pk);
-    }
-    const payload = { pkColumns, upserts: [], deletes: delta.deleted.map((pk) => pk.split('\0')), skippedSecretColumns: redactedColumnNames(schemaByTable[table] || {}) };
-    if (need.size) {
+    const payload = {
+      pkColumns,
+      replaceAll: true,
+      upserts: [],
+      deletes: [],
+      skippedSecretColumns: redactedColumnNames(schemaByTable[table] || {}),
+    };
+    if (currentKeys.size > 0 || financialTables.has(table)) {
       const full = await pageRows(token, { table, keysOnly: false, limit: LIVE_PAGE_SIZE });
       if (financialTables.has(table)) financialRows[table] = full;
       for (const row of full) {
-        const pk = rowPrimaryKey(row, pkColumns);
-        if (!need.has(pk) && !delta.inserted.includes(pk) && !delta.updated.includes(pk)) continue;
-        if (!delta.inserted.includes(pk) && !delta.updated.includes(pk) && !financialTables.has(table)) continue;
-        if (delta.inserted.includes(pk) || delta.updated.includes(pk)) {
-          const stripped = stripRedactedFields(row, payload.skippedSecretColumns);
-          payload.upserts.push(stripped.row);
-        }
+        const stripped = stripRedactedFields(row, payload.skippedSecretColumns);
+        payload.upserts.push(stripped.row);
       }
-    } else if (delta.deleted.length) {
-      /* deletes only */
     }
     reconstruct[table] = payload;
     prodFingerprints[table] = [...currentKeys.keys()].map((pk) => sha256Hex(pk)).sort();
@@ -608,7 +604,6 @@ const main = async () => {
   await writeFile(path.join(WORK, 'manifest.json'), JSON.stringify(manifest));
   await run(AWS, ['s3', 'cp', path.join(WORK, 'manifest.json'), `s3://${FILES_BUCKET}/${prefix}/manifest.json`]);
   for (const [table, payload] of Object.entries(reconstruct)) {
-    if (!payload.upserts.length && !payload.deletes.length) continue;
     const local = path.join(WORK, `${table}.json`);
     await writeFile(local, JSON.stringify(payload));
     await run(AWS, ['s3', 'cp', local, `s3://${FILES_BUCKET}/${prefix}/tables/${table}.json`]);
@@ -625,17 +620,12 @@ const main = async () => {
     if (!adminSecret) throw new Error('checksops_admin secret not listed');
     const zip = await packOneshot();
     await ensureLambda(zip, adminSecret.ARN);
-    progress({ step: 'lambda_create_db' });
-    const created = await invokeLambda({ step: 'create_db', database: DB_NAME, recreate: true });
-    const boot = await invokeLambda({ step: 'bootstrap', database: DB_NAME });
     progress({ step: 'lambda_restore' });
     const restored = await invokeLambda({
       step: 'restore',
       database: DB_NAME,
-      bucket: FILES_BUCKET,
-      dumpKey: BASELINE_DUMP_KEY,
     });
-    progress({ step: 'lambda_apply_delta', restoreOk: restored.ok });
+    progress({ step: 'lambda_apply_delta', restoreOk: restored.ok, restoreMode: restored.restoreMode || null });
     const applied = await invokeLambda({
       step: 'apply_delta',
       database: DB_NAME,
@@ -649,8 +639,9 @@ const main = async () => {
     progress({ step: 'lambda_reconcile' });
     const reconciled = await invokeLambda({ step: 'reconcile', database: DB_NAME, pkTables });
     restore = {
-      created: created.created ?? created.ok,
+      created: restored.ok === true,
       restoreOk: restored.ok === true,
+      restoreMode: restored.restoreMode || null,
       tocKept: restored.tocKept,
       tocSkipped: restored.tocSkipped,
       deltaOk: applied.ok === true,
