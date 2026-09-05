@@ -161,3 +161,21 @@ One synthetic VOID UAT submit through corrected A path still returned CheckAlt H
 
 Evidence: `aws/providers/results/checkalt_pr130_architecture_a_review.md`, `checkalt_pr130_evidence_summary.json`.
 
+### Known-good CheckAlt `120846345` forensic (2026-09-05) — STOP FOR REVIEW
+
+Provider portal confirmed Accepted transaction **`120846345`** (2026-08-31, **$3,802.10**). Read-only forensic only — **not resubmitted**.
+
+| Mapping | Value |
+|---|---|
+| ChecksOps deposit | `e630c449-48b3-4b92-8585-8a24421c600c` |
+| Fingerprint | `ed9b7609164ba6f0` (**first of PR #130 offline 8/8**) |
+| Check intake item | `76ead31d-25ec-436c-b1f4-1e86dc05fc42` |
+| Prep path | front `reuse_cache` 1600×796 / 245945B; back `browser_reencode` 1200×583 / 109522B (`.deposit2.jpg`) |
+| AWS #130 Architecture A | **byte-identical** front+back offline; **reproduces this known-good processing/request path** |
+
+Measurable differences vs rejected synthetic VOID UAT remain **image content**, **CheckAlt env (prod vs UAT)**, and **amount/dims** — not a pipeline/process-key gap.
+
+**Do not merge #125 or #130. Do not submit another CheckAlt deposit. Do not make speculative IQA changes.**
+
+Evidence: `aws/providers/results/checkalt_known_good_120846345_forensic.md`, `.json`, `_stop.json`.
+

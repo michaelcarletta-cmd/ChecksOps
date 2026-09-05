@@ -1,0 +1,21 @@
+{
+  "stop_for_review": true,
+  "merge_125": false,
+  "merge_130": false,
+  "checkAlt_submission_performed": false,
+  "historical_or_customer_check_resubmitted": false,
+  "production_modified": false,
+  "production_provider_financial_flags": "OFF",
+  "forensic_complete": true,
+  "known_good_checkalt_id": "120846345",
+  "checksops_deposit_id": "e630c449-48b3-4b92-8585-8a24421c600c",
+  "check_intake_item_id": "76ead31d-25ec-436c-b1f4-1e86dc05fc42",
+  "deposit_fingerprint": "ed9b7609164ba6f0",
+  "in_pr130_8_of_8": true,
+  "aws_130_reproduces_known_good_path": true,
+  "speculative_iqa_changes_made": false,
+  "artifacts": [
+    "aws/providers/results/checkalt_known_good_120846345_forensic.json",
+    "aws/providers/results/checkalt_known_good_120846345_forensic.md"
+  ]
+}
