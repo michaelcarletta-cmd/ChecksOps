@@ -1,0 +1,132 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  ChecksOps production-prep API. Separate stack from checksops-staging.
+  All provider/financial execution flags are false. No VPC/RDS attachment.
+  Do not point production DNS or webhooks at this API until cutover approval.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: production-prep
+    AllowedValues:
+      - production-prep
+    Description: Not staging. Not live cutover.
+  CognitoUserPoolId:
+    Type: String
+    Default: us-east-1_h00WorYMT
+    Description: Production Cognito pool id from leftover checksops-production. Must not be us-east-1_vPmQ7cL1F.
+  CognitoClientId:
+    Type: String
+    Description: Production Cognito app client id from checksops-production-prep. Must not be the staging client.
+  EnableErrorsAlarm:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: Leave false. Dedicated stack aws/production/cloudwatch-alarms.yaml owns alarm names.
+
+Conditions:
+  CreateErrorsAlarm: !Equals [!Ref EnableErrorsAlarm, 'true']
+  SkipErrorsAlarm: !Not [!Condition CreateErrorsAlarm]
+
+Globals:
+  Function:
+    Runtime: nodejs22.x
+    Architectures:
+      - arm64
+    Timeout: 29
+    MemorySize: 1024
+    Tracing: Active
+    Environment:
+      Variables:
+        CHECKSOPS_ENV: !Ref Environment
+        COGNITO_USER_POOL_ID: !Ref CognitoUserPoolId
+        COGNITO_CLIENT_ID: !Ref CognitoClientId
+        COGNITO_WEBAUTHN_ORIGIN: "https://checksops.com"
+        COGNITO_WEBAUTHN_RP_ID: "checksops.com"
+        SIGN_BASE_URL: "https://checksops.com"
+        AWS_WRITES_ENABLED: "false"
+        AWS_CHECK_WORKFLOW_WRITES_ENABLED: "false"
+        AWS_STORAGE_WRITES_ENABLED: "false"
+        AWS_APPLICATION_WORKFLOW_WRITES_ENABLED: "false"
+        AWS_FINANCIAL_SANDBOX_SIMULATION_ENABLED: "false"
+        AWS_PROVIDER_EXECUTION_ENABLED: "false"
+        AWS_MOOV_ENABLED: "false"
+        AWS_CHECKALT_ENABLED: "false"
+        AWS_PLAID_ENABLED: "false"
+        AWS_ACTUM_ENABLED: "false"
+        AWS_QUICKBOOKS_ENABLED: "false"
+        AWS_PROVIDER_LIVE_READS_ENABLED: "false"
+        AWS_PROVIDER_WEBHOOK_DRY_RUN: "true"
+        AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: "false"
+        AWS_FINANCIAL_PERMISSIONS_ACTIVATED: "false"
+        AWS_COGNITO_MFA_PREFERRED: "false"
+
+Resources:
+  ProductionPrepApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: prep
+      CorsConfiguration:
+        AllowOrigins:
+          - '*'
+        AllowHeaders:
+          - authorization
+          - content-type
+          - x-request-id
+          - x-bridge-secret
+        AllowMethods:
+          - GET
+          - POST
+          - OPTIONS
+
+  ProductionPrepFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: checksops-production-prep-api
+      CodeUri: ../functions/api/
+      Handler: index.handler
+      Description: Production-prep API. Flags off. No RDS. Not production DNS.
+      Events:
+        Root:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ProductionPrepApi
+            Path: /
+            Method: ANY
+        Proxy:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ProductionPrepApi
+            Path: /{proxy+}
+            Method: ANY
+
+  ProductionPrepErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: CreateErrorsAlarm
+    Properties:
+      AlarmName: checksops-production-prep-api-errors
+      AlarmDescription: Inspectable prep alarm. Not a cutover trigger.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: checksops-production-prep-api
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+Outputs:
+  ApiUrl:
+    Value: !Sub https://${ProductionPrepApi}.execute-api.${AWS::Region}.amazonaws.com/prep
+  FunctionName:
+    Value: !Ref ProductionPrepFunction
+  AlarmName:
+    Condition: CreateErrorsAlarm
+    Value: !Ref ProductionPrepErrorsAlarm
+  AlarmSkipped:
+    Condition: SkipErrorsAlarm
+    Value: 'EnableErrorsAlarm=false; inspect /aws/lambda/checksops-production-prep-api via DescribeLogGroups'

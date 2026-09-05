@@ -1,0 +1,146 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  ChecksOps production-prep API without SAM transform. Separate from staging.
+  All provider/financial execution flags are false. No VPC/RDS.
+  Do not point production DNS or webhooks at this API until cutover approval.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: production-prep
+    AllowedValues:
+      - production-prep
+  CognitoUserPoolId:
+    Type: String
+    Default: us-east-1_h00WorYMT
+    Description: Production Cognito pool. Must not be us-east-1_vPmQ7cL1F.
+  CognitoClientId:
+    Type: String
+    Description: Production Cognito app client from checksops-production-prep. Must not be the staging client.
+  CodeS3Bucket:
+    Type: String
+  CodeS3Key:
+    Type: String
+    Default: checksops-production-prep-api.zip
+
+Resources:
+  ProductionPrepRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess
+      Tags:
+        - Key: Environment
+          Value: production-prep
+        - Key: DoNotCutover
+          Value: 'true'
+
+  ProductionPrepFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: checksops-production-prep-api
+      Runtime: nodejs22.x
+      Architectures:
+        - arm64
+      Handler: index.handler
+      Timeout: 29
+      MemorySize: 1024
+      Role: !GetAtt ProductionPrepRole.Arn
+      TracingConfig:
+        Mode: Active
+      Code:
+        S3Bucket: !Ref CodeS3Bucket
+        S3Key: !Ref CodeS3Key
+      Environment:
+        Variables:
+          CHECKSOPS_ENV: !Ref Environment
+          COGNITO_USER_POOL_ID: !Ref CognitoUserPoolId
+          COGNITO_CLIENT_ID: !Ref CognitoClientId
+          COGNITO_WEBAUTHN_ORIGIN: "https://checksops.com"
+          COGNITO_WEBAUTHN_RP_ID: "checksops.com"
+          SIGN_BASE_URL: "https://checksops.com"
+          AWS_WRITES_ENABLED: "false"
+          AWS_CHECK_WORKFLOW_WRITES_ENABLED: "false"
+          AWS_STORAGE_WRITES_ENABLED: "false"
+          AWS_APPLICATION_WORKFLOW_WRITES_ENABLED: "false"
+          AWS_FINANCIAL_SANDBOX_SIMULATION_ENABLED: "false"
+          AWS_PROVIDER_EXECUTION_ENABLED: "false"
+          AWS_MOOV_ENABLED: "false"
+          AWS_CHECKALT_ENABLED: "false"
+          AWS_PLAID_ENABLED: "false"
+          AWS_ACTUM_ENABLED: "false"
+          AWS_QUICKBOOKS_ENABLED: "false"
+          AWS_PROVIDER_LIVE_READS_ENABLED: "false"
+          AWS_PROVIDER_WEBHOOK_DRY_RUN: "true"
+          AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: "false"
+          AWS_FINANCIAL_PERMISSIONS_ACTIVATED: "false"
+          AWS_COGNITO_MFA_PREFERRED: "false"
+      Tags:
+        - Key: Environment
+          Value: production-prep
+        - Key: DoNotCutover
+          Value: 'true'
+
+  ProductionPrepHttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: checksops-production-prep-http
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowOrigins:
+          - '*'
+        AllowHeaders:
+          - authorization
+          - content-type
+          - x-request-id
+          - x-bridge-secret
+        AllowMethods:
+          - GET
+          - POST
+          - OPTIONS
+
+  ProductionPrepIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ProductionPrepHttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt ProductionPrepFunction.Arn
+      PayloadFormatVersion: '2.0'
+
+  ProductionPrepDefaultRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ProductionPrepHttpApi
+      RouteKey: '$default'
+      Target: !Sub integrations/${ProductionPrepIntegration}
+
+  ProductionPrepStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref ProductionPrepHttpApi
+      StageName: prep
+      AutoDeploy: true
+
+  ProductionPrepInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ProductionPrepFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ProductionPrepHttpApi}/*
+
+Outputs:
+  ApiUrl:
+    Value: !Sub https://${ProductionPrepHttpApi}.execute-api.${AWS::Region}.amazonaws.com/prep
+  FunctionName:
+    Value: !Ref ProductionPrepFunction
+  DoNotPointProductionDns:
+    Value: 'true'

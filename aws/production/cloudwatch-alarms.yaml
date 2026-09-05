@@ -1,0 +1,141 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  ChecksOps production-prep CloudWatch alarms. Inspect-only.
+  Does not change DNS, Cognito, webhooks, provider flags, financial grants, or bridges.
+  TreatMissingData=notBreaching so a not-yet-deployed prep Lambda does not alarm.
+
+Parameters:
+  ProductionPrepFunctionName:
+    Type: String
+    Default: checksops-production-prep-api
+  StagingFunctionName:
+    Type: String
+    Default: checksops-staging-api
+    Description: Staging Lambda already exists. Alarm is inspect-only and does not overlay code.
+
+Resources:
+  ProductionPrepApiErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: checksops-production-prep-api-errors
+      AlarmDescription: Prep-only. Lambda Errors on checksops-production-prep-api. Not a cutover trigger.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref ProductionPrepFunctionName
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      ActionsEnabled: false
+      Tags:
+        - Key: Environment
+          Value: production-prep
+        - Key: DoNotCutover
+          Value: 'true'
+
+  ProductionPrepApiThrottlesAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: checksops-production-prep-api-throttles
+      AlarmDescription: Prep-only. Lambda Throttles on checksops-production-prep-api.
+      Namespace: AWS/Lambda
+      MetricName: Throttles
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref ProductionPrepFunctionName
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      ActionsEnabled: false
+      Tags:
+        - Key: Environment
+          Value: production-prep
+        - Key: DoNotCutover
+          Value: 'true'
+
+  ProductionPrepApiDurationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: checksops-production-prep-api-duration-p99
+      AlarmDescription: Prep-only. p99 Duration vs 29s timeout on checksops-production-prep-api.
+      Namespace: AWS/Lambda
+      MetricName: Duration
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref ProductionPrepFunctionName
+      ExtendedStatistic: p99
+      Period: 60
+      EvaluationPeriods: 3
+      Threshold: 25000
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      ActionsEnabled: false
+      Tags:
+        - Key: Environment
+          Value: production-prep
+        - Key: DoNotCutover
+          Value: 'true'
+
+  ProductionPrepLoggedErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: checksops-production-prep-api-logged-errors
+      AlarmDescription: >
+        Prep-only. Metric filter ChecksOps/ProductionPrep PrepApiLoggedErrors
+        on /aws/lambda/checksops-production-prep-api.
+      Namespace: ChecksOps/ProductionPrep
+      MetricName: PrepApiLoggedErrors
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      ActionsEnabled: false
+      Tags:
+        - Key: Environment
+          Value: production-prep
+        - Key: DoNotCutover
+          Value: 'true'
+
+  StagingApiErrorsInspectAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: checksops-staging-api-errors-inspect
+      AlarmDescription: Inspect-only staging Errors alarm. Does not overlay staging Lambda or change flags.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref StagingFunctionName
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      ActionsEnabled: false
+      Tags:
+        - Key: Environment
+          Value: staging
+        - Key: DoNotCutover
+          Value: 'true'
+
+Outputs:
+  AlarmNames:
+    Value: !Sub '${ProductionPrepApiErrorsAlarm},${ProductionPrepApiThrottlesAlarm},${ProductionPrepApiDurationAlarm},${ProductionPrepLoggedErrorsAlarm},${StagingApiErrorsInspectAlarm}'
+  OperatorInspectPolicy:
+    Value: aws/production/iam/operator-cloudwatch-inspect.json
+  AttachPolicyToOperator:
+    Value: 'Human must attach ChecksOpsProductionPrepCloudWatchInspect to ChecksOpsCursorCloudStaging or a dedicated ops role. This stack does not attach IAM.'
+  DoNotChangeDns:
+    Value: 'true'
+  ActionsEnabled:
+    Value: 'false'

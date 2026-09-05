@@ -1,0 +1,51 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Managed policy for inspecting production-prep CloudWatch alarms.
+  Does not attach the policy. Does not change DNS, auth, webhooks, or flags.
+
+Resources:
+  OperatorCloudWatchInspectPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: ChecksOpsProductionPrepCloudWatchInspect
+      Description: Inspect production-prep CloudWatch alarms. Attach to ChecksOpsCursorCloudStaging or a dedicated ops role. No DNS/auth/SES/financial grants.
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DescribePrepAndStagingAlarms
+            Effect: Allow
+            Action:
+              - cloudwatch:DescribeAlarms
+              - cloudwatch:DescribeAlarmsForMetric
+              - cloudwatch:DescribeAlarmHistory
+            Resource:
+              - !Sub arn:aws:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:checksops-production-prep-api-errors
+              - !Sub arn:aws:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:checksops-production-prep-api-throttles
+              - !Sub arn:aws:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:checksops-production-prep-api-duration-p99
+              - !Sub arn:aws:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:checksops-production-prep-api-logged-errors
+              - !Sub arn:aws:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:checksops-staging-api-errors-inspect
+          - Sid: PutAndDeletePrepAlarms
+            Effect: Allow
+            Action:
+              - cloudwatch:PutMetricAlarm
+              - cloudwatch:DeleteAlarms
+              - cloudwatch:TagResource
+            Resource:
+              - !Sub arn:aws:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:checksops-production-prep-api-errors
+              - !Sub arn:aws:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:checksops-production-prep-api-throttles
+              - !Sub arn:aws:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:checksops-production-prep-api-duration-p99
+              - !Sub arn:aws:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:checksops-production-prep-api-logged-errors
+              - !Sub arn:aws:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:checksops-staging-api-errors-inspect
+          - Sid: GetLambdaAndCustomMetrics
+            Effect: Allow
+            Action:
+              - cloudwatch:GetMetricData
+              - cloudwatch:GetMetricStatistics
+              - cloudwatch:ListMetrics
+            Resource: '*'
+
+Outputs:
+  PolicyArn:
+    Value: !Ref OperatorCloudWatchInspectPolicy
+  MustAttach:
+    Value: Attach to ChecksOpsCursorCloudStaging or a dedicated ops role. This stack does not attach.

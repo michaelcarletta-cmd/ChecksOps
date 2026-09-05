@@ -1,0 +1,59 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DescribePrepAndStagingAlarms",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:DescribeAlarms",
+        "cloudwatch:DescribeAlarmsForMetric",
+        "cloudwatch:DescribeAlarmHistory"
+      ],
+      "Resource": [
+        "arn:aws:cloudwatch:us-east-1:806168576068:alarm:checksops-production-prep-api-errors",
+        "arn:aws:cloudwatch:us-east-1:806168576068:alarm:checksops-production-prep-api-throttles",
+        "arn:aws:cloudwatch:us-east-1:806168576068:alarm:checksops-production-prep-api-duration-p99",
+        "arn:aws:cloudwatch:us-east-1:806168576068:alarm:checksops-production-prep-api-logged-errors",
+        "arn:aws:cloudwatch:us-east-1:806168576068:alarm:checksops-staging-api-errors-inspect"
+      ]
+    },
+    {
+      "Sid": "PutAndDeletePrepAlarms",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:PutMetricAlarm",
+        "cloudwatch:DeleteAlarms",
+        "cloudwatch:TagResource"
+      ],
+      "Resource": [
+        "arn:aws:cloudwatch:us-east-1:806168576068:alarm:checksops-production-prep-api-errors",
+        "arn:aws:cloudwatch:us-east-1:806168576068:alarm:checksops-production-prep-api-throttles",
+        "arn:aws:cloudwatch:us-east-1:806168576068:alarm:checksops-production-prep-api-duration-p99",
+        "arn:aws:cloudwatch:us-east-1:806168576068:alarm:checksops-production-prep-api-logged-errors",
+        "arn:aws:cloudwatch:us-east-1:806168576068:alarm:checksops-staging-api-errors-inspect"
+      ]
+    },
+    {
+      "Sid": "GetLambdaAndCustomMetrics",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:GetMetricData",
+        "cloudwatch:GetMetricStatistics",
+        "cloudwatch:ListMetrics"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DescribePrepLogGroup",
+      "Effect": "Allow",
+      "Action": [
+        "logs:DescribeLogGroups",
+        "logs:DescribeMetricFilters"
+      ],
+      "Resource": [
+        "arn:aws:logs:us-east-1:806168576068:log-group:/aws/lambda/checksops-production-prep-api",
+        "arn:aws:logs:us-east-1:806168576068:log-group:/aws/lambda/checksops-production-prep-api:*"
+      ]
+    }
+  ]
+}
