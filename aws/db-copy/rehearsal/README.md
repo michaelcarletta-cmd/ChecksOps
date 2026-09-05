@@ -16,6 +16,7 @@
 | Do not migrate/invalidate production passkeys | Required |
 | Leave PR #125 untouched | Required |
 | No PII / bank data / check images in Git evidence | Required |
+| Do not overwrite live AWS staging DB `checksops` | Required |
 
 ## Baselines
 
@@ -24,32 +25,36 @@
 | Production dump used for first AWS copy | `Migration/checksops_260901(1).backup` (2026-09-01, 49.1 MB) |
 | First-copy restore status | `aws/db-copy/FIRST_COPY_STATUS.md` |
 | Committed live catalog (Lovable inventory) | `aws/db-copy/LIVE_SOURCE_INVENTORY.md` |
-| Storage COPY reconcile | `aws/storage/RECONCILE.json` (2026-09-02, 1,334 objects) |
+| Storage COPY reconcile | `aws/storage/RECONCILE.json` (2026-09-02, 1,334 objects) plus live bridge COPY 2026-09-05 (1,411 objects) |
+| DB bridge recon | `DB_BRIDGE_RECONCILE.md` (2026-09-05) |
 
 ## Phase map
 
-### Phase 1 — Fresh production inventory
+### Phase 1 — Validate the read-only DB bridge
 
-**Authoritative path:** operator-held READ-ONLY URI on an operator host (never paste into Cursor).  
-Cloud Agents must not request/store the production DB password (`aws/db-copy/lib/live-access.mjs`).
+Cloud Agents must not request/store the production DB password (`aws/db-copy/lib/live-access.mjs`). The temporary fail-closed Lovable DB bridge is the Cloud Agent read path:
 
-Operator checklist:
+`POST` `aws-staging-db-bridge` with `health` / `tables` / `schema` / `counts` / `rows` / `identity_map`.
 
-1. Run sanitized catalog counts (tables/views/routines/triggers/RLS/auth.users/storage.objects) via Lovable SQL or `psql` RO.
-2. `pg_dump -Fc --no-owner --no-acl` of public (+ required schemas per FIRST_COPY_PROCEDURE).
-3. Upload to `s3://checksops-staging-privatefilesbucket-erzqsolpucjp/Migration/checksops_YYYYMMDD.backup` **without** overwriting `checksops_260901(1).backup`.
-4. Confirm the S3 key in the PR thread.
+Require `mode: read_only` and `writes`/`deletes`/`rpc`/`rawSql` all false. A fresh `pg_dump` is **not** required when the bridge supplies those actions.
 
-Scripts/docs:
+Optional extra dump (not a blocker): `aws/db-copy/rehearsal/scripts/operator-fresh-dump.md`.
 
-- `aws/db-copy/rehearsal/scripts/operator-fresh-dump.md`
-- Committed inventory refresh target: `aws/db-copy/LIVE_SOURCE_INVENTORY.md`
+### Phase 2 — Authoritative production delta vs Sept. 1
 
-### Phase 2 — Fresh migration rehearsal (staging)
+Worker: `node aws/db-copy/rehearsal/scripts/bridge-db-rehearsal.mjs`
 
-Goal: bring a **rehearsal database** (recommended name `checksops_rehearsal_YYYYMMDD`) from empty/extensions → restored dump → post-restore stubs/grants, **without** destroying the live staging app DB `checksops` that holds Cognito identity overlays and UAT state.
+1. Keyset-page approved business tables (`keysOnly: true`).
+2. Classify insert / update / delete / unchanged vs the Sept. 1 dump keys.
+3. Fetch full rows only for reconstruct keys. Omit `[redacted]` secret columns; preserve SQL NULL.
 
-Preserve on live `checksops` (do **not** blind overwrite):
+### Phase 3 — Isolated rehearsal restore/sync
+
+Goal: bring `checksops_rehearsal_YYYYMMDD` to current production application state **without** destroying live `checksops` (Cognito identity overlays and UAT).
+
+This rehearsal used `CREATE DATABASE … TEMPLATE checksops` then overlay. Dump restore remains an optional alternative (PostgreSQL 18 `pg_restore` for dump v1.16).
+
+Preserve on live `checksops`:
 
 - `public.identity_accounts` and Cognito pool/users
 - Staging Lambda env / provider flags
@@ -57,43 +62,32 @@ Preserve on live `checksops` (do **not** blind overwrite):
 - Staging-only OTP/session tables if present
 - RLS policies applied after first copy
 
-Repeatable restore path (operator / VPC oneshot — same pattern as first copy):
+Storage delta (already PASS; rerun only for a final delta check):
 
-1. Create DB `checksops_rehearsal_YYYYMMDD` on existing RDS instance.
-2. Enable RDS-supported extensions (`aws/db-copy/sql/00_rds_supported_extensions.sql`).
-3. `pg_restore` from the new S3 dump (ephemeral VPC Lambda; least-privilege role).
-4. Apply auth stubs + readonly grants (`01_`, `02_` SQLs).
-5. Run recon SQL against rehearsal DB.
-6. Optionally merge identity mappings via explicit script (never set `application_user_id = cognito_sub`).
+- `node aws/db-copy/rehearsal/scripts/bridge-storage-copy.mjs`
+- Leave both Lovable bridges deployed until final cutover rehearsal and final delta sync.
 
-Storage delta:
-
-- Cloud Agent / staging host: `node aws/db-copy/rehearsal/scripts/bridge-storage-copy.mjs` (reads the migration token from Secrets Manager, signs ≤50 URLs, never logs tokens/URLs/paths).
-- Operator host alternative: `aws/storage/copy-from-supabase.mjs` or `bridge-copy.mjs` with service role — never commit the key.
-- Reconcile counts/bytes only; never commit object keys with customer paths.
-- Leave the Lovable `aws-staging-storage-bridge` deployed until the final production delta sync.
-
-### Phase 3 — Reconciliation
-
-Automated (offline) tools in this PR:
+### Phase 4 — Reconciliation
 
 | Script | Purpose |
 |---|---|
+| `rehearsal/scripts/bridge-db-rehearsal.mjs` | Live prod vs isolated rehearsal (counts/PK/financial/FK/identity) |
 | `rehearsal/oneshot/index.mjs` | In-VPC sanitized staging inventory |
 | `rehearsal/scripts/reconcile-vs-baseline.mjs` | Staging vs Sept-1 dump counts/financial |
 | `rehearsal/scripts/storage-delta-summary.mjs` | S3 aggregate delta vs Sept-1 COPY |
 
 Required gates before any cutover consideration:
 
-- 166 business tables present; row-count diff explained
+- Business table counts match live production
 - Financial aggregates match (report-only)
 - PK set / tenant ownership checks
 - FK orphan counts = 0 for critical edges
-- `identity_accounts`: `cognito_sub ≠ application_user_id`; no unsafe equals
-- Storage object counts + total bytes within agreed tolerance
+- Application-user UUIDs + membership/role relationships
+- Storage object counts + total bytes exact
 - Zero unexpected duplicates / null regressions on required columns
+- Any production tables missing on staging have DDL applied (`financial_stepup_log`)
 
-### Phase 4 — Final cutover delta procedure (design only)
+### Phase 5 — Final cutover delta procedure (design only)
 
 See `CUTOVER_DELTA_PROCEDURE.md` in this folder.
 
@@ -101,10 +95,12 @@ See `CUTOVER_DELTA_PROCEDURE.md` in this folder.
 
 ## Current rehearsal evidence (this PR)
 
-See `MIGRATION_REHEARSAL_REPORT.md`, `STORAGE_COPY_RECONCILE.md`, and `analysis/*`.
+See `MIGRATION_REHEARSAL_REPORT.md`, `DB_BRIDGE_RECONCILE.md`, `STORAGE_COPY_RECONCILE.md`, and `analysis/*`.
 
-Storage vs live production (2026-09-05): **PASS** — 1,411/1,411 objects, 2,565,912,220 bytes, 21 staging-only UAT keys left in place. Bridge not torn down.
+Storage vs live production (2026-09-05): **PASS** — 1,411/1,411 objects, 2,565,912,220 bytes, 21 staging-only UAT keys left in place.
+
+DB vs live production on isolated rehearsal (2026-09-05): migratable counts/financial/critical PKs/FKs **PASS**; `financial_stepup_log` DDL outstanding → overall **PARTIAL / NO-GO**. Bridges not torn down.
 
 ## Scorecard
 
-See report: overall **PARTIAL / NO-GO** until a fresh production dump is placed and restored into an isolated rehearsal database with full prod↔rehearsal reconciliation.
+See report: overall **PARTIAL / NO-GO** until `financial_stepup_log` DDL is applied and overlaid. Production cutover is **STOP FOR REVIEW**.

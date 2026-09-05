@@ -1,6 +1,8 @@
-# Operator: fresh production dump (read-only)
+# Operator: optional extra production dump (read-only)
 
 Cloud Agents cannot hold the production DB URI (`aws/db-copy/lib/live-access.mjs`).
+
+The 2026-09-05 rehearsal used the fail-closed `aws-staging-db-bridge` plus the Sept. 1 dump as baseline. A fresh dump is **optional extra evidence**, not a blocker, while that bridge remains deployed.
 
 ## Dump (operator host)
 

@@ -1,0 +1,439 @@
+{
+  "generatedAt": "2026-09-05T02:56:57.212Z",
+  "httpStatus": 200,
+  "mode": "read_only",
+  "failClosed": true,
+  "healthFailures": [],
+  "actions": [
+    "health",
+    "tables",
+    "schema",
+    "counts",
+    "rows",
+    "identity_map"
+  ],
+  "maxPageSize": 500,
+  "defaultPageSize": 200,
+  "schemas": [
+    "public"
+  ],
+  "redaction": "credential/token-like columns replaced with \"[redacted]\"",
+  "approvedTableCount": 161,
+  "excluded": [
+    "email_unsubscribe_tokens",
+    "homeowner_bank_link_tokens",
+    "homeowner_ledger_tokens",
+    "payment_idempotency_keys",
+    "spatial_ref_sys",
+    "tenant_openai_credentials",
+    "user_passkeys",
+    "webauthn_challenges"
+  ],
+  "skippedViews": [
+    "check_dashboard_counts",
+    "claim_last_activity",
+    "claim_money_snapshot",
+    "contractor_directory_view",
+    "deposit_aging_dashboard",
+    "deposit_aging_summary",
+    "deposit_daily_log",
+    "deposit_exception_kpis",
+    "deposit_manager_rollup",
+    "deposit_ops_kpis",
+    "deposit_owner_performance",
+    "deposit_queue_scored",
+    "deposit_reconciliation_summary",
+    "deposit_reminder_queue",
+    "geography_columns",
+    "geometry_columns",
+    "loss_draft_dashboard",
+    "stale_endorsements",
+    "tenant_safe",
+    "tenants_public"
+  ],
+  "newSinceBaseline": [
+    "financial_stepup_log"
+  ],
+  "numericTables": 180,
+  "sumRows": 12397,
+  "zeroTables": 68,
+  "countDiffsVsSept1": [
+    {
+      "table": "audit_logs",
+      "baseline": 344,
+      "current": 377,
+      "delta": 33
+    },
+    {
+      "table": "check_audit_log",
+      "baseline": 1924,
+      "current": 2007,
+      "delta": 83
+    },
+    {
+      "table": "check_billing_events",
+      "baseline": 115,
+      "current": 126,
+      "delta": 11
+    },
+    {
+      "table": "check_cases",
+      "baseline": 139,
+      "current": 142,
+      "delta": 3
+    },
+    {
+      "table": "check_eligibility_results",
+      "baseline": 113,
+      "current": 125,
+      "delta": 12
+    },
+    {
+      "table": "check_endorsement_events",
+      "baseline": 227,
+      "current": 232,
+      "delta": 5
+    },
+    {
+      "table": "check_endorsements",
+      "baseline": 502,
+      "current": 533,
+      "delta": 31
+    },
+    {
+      "table": "check_intake_items",
+      "baseline": 182,
+      "current": 194,
+      "delta": 12
+    },
+    {
+      "table": "check_payees",
+      "baseline": 493,
+      "current": 525,
+      "delta": 32
+    },
+    {
+      "table": "check_payment_directions",
+      "baseline": 62,
+      "current": 65,
+      "delta": 3
+    },
+    {
+      "table": "check_reconciliation_alerts",
+      "baseline": 98,
+      "current": 101,
+      "delta": 3
+    },
+    {
+      "table": "check_review_decisions",
+      "baseline": 166,
+      "current": 174,
+      "delta": 8
+    },
+    {
+      "table": "check_stakeholders",
+      "baseline": 1,
+      "current": 8,
+      "delta": 7
+    },
+    {
+      "table": "checkalt_deposits",
+      "baseline": 58,
+      "current": 69,
+      "delta": 11
+    },
+    {
+      "table": "claim_checks",
+      "baseline": 75,
+      "current": 83,
+      "delta": 8
+    },
+    {
+      "table": "claim_folders",
+      "baseline": 1260,
+      "current": 1281,
+      "delta": 21
+    },
+    {
+      "table": "claim_operational_state",
+      "baseline": 180,
+      "current": 183,
+      "delta": 3
+    },
+    {
+      "table": "claim_payments",
+      "baseline": 13,
+      "current": 18,
+      "delta": 5
+    },
+    {
+      "table": "claim_project_plans",
+      "baseline": 0,
+      "current": 2,
+      "delta": 2
+    },
+    {
+      "table": "claim_settlements",
+      "baseline": 61,
+      "current": 64,
+      "delta": 3
+    },
+    {
+      "table": "claims",
+      "baseline": 180,
+      "current": 183,
+      "delta": 3
+    },
+    {
+      "table": "deposit_audit_log",
+      "baseline": 318,
+      "current": 340,
+      "delta": 22
+    },
+    {
+      "table": "deposit_batches",
+      "baseline": 115,
+      "current": 126,
+      "delta": 11
+    },
+    {
+      "table": "deposit_items",
+      "baseline": 114,
+      "current": 125,
+      "delta": 11
+    },
+    {
+      "table": "disbursement_batches",
+      "baseline": 109,
+      "current": 118,
+      "delta": 9
+    },
+    {
+      "table": "disbursement_splits",
+      "baseline": 108,
+      "current": 117,
+      "delta": 9
+    },
+    {
+      "table": "email_send_log",
+      "baseline": 112,
+      "current": 140,
+      "delta": 28
+    },
+    {
+      "table": "endorsement_audit_log",
+      "baseline": 1331,
+      "current": 1399,
+      "delta": 68
+    },
+    {
+      "table": "endorsement_requests",
+      "baseline": 389,
+      "current": 400,
+      "delta": 11
+    },
+    {
+      "table": "external_payment_recipients",
+      "baseline": 3,
+      "current": 4,
+      "delta": 1
+    },
+    {
+      "table": "glba_security_events",
+      "baseline": 80,
+      "current": 83,
+      "delta": 3
+    },
+    {
+      "table": "homeowner_ledger_events",
+      "baseline": 657,
+      "current": 716,
+      "delta": 59
+    },
+    {
+      "table": "loss_draft_audit_log",
+      "baseline": 96,
+      "current": 101,
+      "delta": 5
+    },
+    {
+      "table": "loss_draft_documents",
+      "baseline": 217,
+      "current": 218,
+      "delta": 1
+    },
+    {
+      "table": "loss_draft_tracking",
+      "baseline": 34,
+      "current": 36,
+      "delta": 2
+    },
+    {
+      "table": "mortgage_companies",
+      "baseline": 2,
+      "current": 4,
+      "delta": 2
+    },
+    {
+      "table": "notification_preferences",
+      "baseline": 0,
+      "current": 2,
+      "delta": 2
+    },
+    {
+      "table": "payment_event_log",
+      "baseline": 243,
+      "current": 266,
+      "delta": 23
+    },
+    {
+      "table": "payment_provider_methods",
+      "baseline": 2,
+      "current": 3,
+      "delta": 1
+    },
+    {
+      "table": "payment_webhook_events",
+      "baseline": 227,
+      "current": 257,
+      "delta": 30
+    },
+    {
+      "table": "shared_check_messages",
+      "baseline": 12,
+      "current": 14,
+      "delta": 2
+    },
+    {
+      "table": "shared_checks",
+      "baseline": 102,
+      "current": 108,
+      "delta": 6
+    },
+    {
+      "table": "stakeholder_account_verification_log",
+      "baseline": 20,
+      "current": 23,
+      "delta": 3
+    },
+    {
+      "table": "stakeholder_accounts",
+      "baseline": 67,
+      "current": 69,
+      "delta": 2
+    },
+    {
+      "table": "tenant_usage_logs",
+      "baseline": 21,
+      "current": 38,
+      "delta": 17
+    }
+  ],
+  "identity": {
+    "note": "auth schema is not exposed; application identity keys are profiles.id (UUID)",
+    "profiles": 8,
+    "profileIdFingerprints": [
+      "0883fb28b39198d765348c321f7935c431bae100f78d5b11ff2c47109c88ad4e",
+      "42284db1fdbdceada22f712dba8062a24bdd77aac510086bbf848920933c7517",
+      "437b065341f90b8e763255a61bde029b41129f21ef0adacf4620cf301baa5d87",
+      "67f16851972f20d414984e0dd3e8a02cee6761c9c2f0f933f0dce37a04174130",
+      "83371b8457b2a7b36844a5f185e0644e60addfbfd1b65420de0f7523e90664fd",
+      "a7800179bbb603ed78dbf86ad30e9f136e7d51d9c8ee2451fc471ee490d718a9",
+      "cf8ef771fb90a2dc91a9cd9cf65ccbaecbf66b41b23c2bb882a3555bf65afdd8",
+      "cfff441d52f31ecdbae024b8abb3741cb6d4b181dba2fa719ac1942351a3ceb5"
+    ],
+    "tenantMemberships": 7,
+    "tenantIds": 4,
+    "membershipUserFingerprints": [
+      "0883fb28b39198d765348c321f7935c431bae100f78d5b11ff2c47109c88ad4e",
+      "42284db1fdbdceada22f712dba8062a24bdd77aac510086bbf848920933c7517",
+      "437b065341f90b8e763255a61bde029b41129f21ef0adacf4620cf301baa5d87",
+      "67f16851972f20d414984e0dd3e8a02cee6761c9c2f0f933f0dce37a04174130",
+      "83371b8457b2a7b36844a5f185e0644e60addfbfd1b65420de0f7523e90664fd",
+      "a7800179bbb603ed78dbf86ad30e9f136e7d51d9c8ee2451fc471ee490d718a9",
+      "cf8ef771fb90a2dc91a9cd9cf65ccbaecbf66b41b23c2bb882a3555bf65afdd8"
+    ],
+    "membershipRoleCounts": {
+      "admin": 6,
+      "operator": 1
+    },
+    "applicationRoles": 8,
+    "applicationRoleCounts": {
+      "admin": 6,
+      "mortgage_agent": 1,
+      "staff": 1
+    },
+    "applicationUserFingerprints": [
+      "0883fb28b39198d765348c321f7935c431bae100f78d5b11ff2c47109c88ad4e",
+      "42284db1fdbdceada22f712dba8062a24bdd77aac510086bbf848920933c7517",
+      "437b065341f90b8e763255a61bde029b41129f21ef0adacf4620cf301baa5d87",
+      "67f16851972f20d414984e0dd3e8a02cee6761c9c2f0f933f0dce37a04174130",
+      "83371b8457b2a7b36844a5f185e0644e60addfbfd1b65420de0f7523e90664fd",
+      "a7800179bbb603ed78dbf86ad30e9f136e7d51d9c8ee2451fc471ee490d718a9",
+      "cf8ef771fb90a2dc91a9cd9cf65ccbaecbf66b41b23c2bb882a3555bf65afdd8",
+      "cfff441d52f31ecdbae024b8abb3741cb6d4b181dba2fa719ac1942351a3ceb5"
+    ]
+  },
+  "redactedByTable": {
+    "check_endorsements": [
+      "token",
+      "token_expires_at"
+    ],
+    "check_payees": [
+      "endorsement_token",
+      "endorsement_token_expires_at"
+    ],
+    "check_payment_directions": [
+      "secure_token"
+    ],
+    "checkalt_config": [
+      "webhook_secret"
+    ],
+    "claims": [
+      "mortgage_portal_password"
+    ],
+    "external_payment_recipients": [
+      "secure_token",
+      "token_expires_at",
+      "token_used_at"
+    ],
+    "homeowner_deductible_payments": [
+      "token_id"
+    ],
+    "homeowner_intro_requests": [
+      "access_token"
+    ],
+    "homeowner_ledger_check_uploads": [
+      "token_id"
+    ],
+    "moov_invoices": [
+      "public_token"
+    ],
+    "mortgage_companies": [
+      "portal_password"
+    ],
+    "profiles": [
+      "jobnimbus_api_key",
+      "totp_enrolled_at",
+      "password_login_disabled"
+    ],
+    "signature_signers": [
+      "access_token",
+      "token_hash"
+    ],
+    "stakeholder_accounts": [
+      "verification_token",
+      "verification_token_expires_at",
+      "homeowner_link_token_id",
+      "plaid_access_token"
+    ],
+    "tenants": [
+      "actum_webhook_secret",
+      "actum_password",
+      "actum_test_password"
+    ],
+    "user_sessions": [
+      "session_token"
+    ]
+  }
+}

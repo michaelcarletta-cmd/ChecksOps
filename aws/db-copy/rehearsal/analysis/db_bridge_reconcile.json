@@ -1,0 +1,2541 @@
+{
+  "generatedAt": "2026-09-05T03:15:25.535Z",
+  "productionSupabaseChanged": false,
+  "productionCutoverPerformed": false,
+  "liveChecksopsMutated": false,
+  "rehearsalDatabase": "checksops_rehearsal_20260905",
+  "bridge": {
+    "generatedAt": "2026-09-05T02:56:57.212Z",
+    "httpStatus": 200,
+    "mode": "read_only",
+    "failClosed": true,
+    "healthFailures": [],
+    "actions": [
+      "health",
+      "tables",
+      "schema",
+      "counts",
+      "rows",
+      "identity_map"
+    ],
+    "maxPageSize": 500,
+    "defaultPageSize": 200,
+    "schemas": [
+      "public"
+    ],
+    "redaction": "credential/token-like columns replaced with \"[redacted]\"",
+    "approvedTableCount": 161,
+    "excluded": [
+      "email_unsubscribe_tokens",
+      "homeowner_bank_link_tokens",
+      "homeowner_ledger_tokens",
+      "payment_idempotency_keys",
+      "spatial_ref_sys",
+      "tenant_openai_credentials",
+      "user_passkeys",
+      "webauthn_challenges"
+    ],
+    "skippedViews": [
+      "check_dashboard_counts",
+      "claim_last_activity",
+      "claim_money_snapshot",
+      "contractor_directory_view",
+      "deposit_aging_dashboard",
+      "deposit_aging_summary",
+      "deposit_daily_log",
+      "deposit_exception_kpis",
+      "deposit_manager_rollup",
+      "deposit_ops_kpis",
+      "deposit_owner_performance",
+      "deposit_queue_scored",
+      "deposit_reconciliation_summary",
+      "deposit_reminder_queue",
+      "geography_columns",
+      "geometry_columns",
+      "loss_draft_dashboard",
+      "stale_endorsements",
+      "tenant_safe",
+      "tenants_public"
+    ],
+    "newSinceBaseline": [
+      "financial_stepup_log"
+    ],
+    "numericTables": 180,
+    "sumRows": 12397,
+    "zeroTables": 68,
+    "countDiffsVsSept1": [
+      {
+        "table": "audit_logs",
+        "baseline": 344,
+        "current": 377,
+        "delta": 33
+      },
+      {
+        "table": "check_audit_log",
+        "baseline": 1924,
+        "current": 2007,
+        "delta": 83
+      },
+      {
+        "table": "check_billing_events",
+        "baseline": 115,
+        "current": 126,
+        "delta": 11
+      },
+      {
+        "table": "check_cases",
+        "baseline": 139,
+        "current": 142,
+        "delta": 3
+      },
+      {
+        "table": "check_eligibility_results",
+        "baseline": 113,
+        "current": 125,
+        "delta": 12
+      },
+      {
+        "table": "check_endorsement_events",
+        "baseline": 227,
+        "current": 232,
+        "delta": 5
+      },
+      {
+        "table": "check_endorsements",
+        "baseline": 502,
+        "current": 533,
+        "delta": 31
+      },
+      {
+        "table": "check_intake_items",
+        "baseline": 182,
+        "current": 194,
+        "delta": 12
+      },
+      {
+        "table": "check_payees",
+        "baseline": 493,
+        "current": 525,
+        "delta": 32
+      },
+      {
+        "table": "check_payment_directions",
+        "baseline": 62,
+        "current": 65,
+        "delta": 3
+      },
+      {
+        "table": "check_reconciliation_alerts",
+        "baseline": 98,
+        "current": 101,
+        "delta": 3
+      },
+      {
+        "table": "check_review_decisions",
+        "baseline": 166,
+        "current": 174,
+        "delta": 8
+      },
+      {
+        "table": "check_stakeholders",
+        "baseline": 1,
+        "current": 8,
+        "delta": 7
+      },
+      {
+        "table": "checkalt_deposits",
+        "baseline": 58,
+        "current": 69,
+        "delta": 11
+      },
+      {
+        "table": "claim_checks",
+        "baseline": 75,
+        "current": 83,
+        "delta": 8
+      },
+      {
+        "table": "claim_folders",
+        "baseline": 1260,
+        "current": 1281,
+        "delta": 21
+      },
+      {
+        "table": "claim_operational_state",
+        "baseline": 180,
+        "current": 183,
+        "delta": 3
+      },
+      {
+        "table": "claim_payments",
+        "baseline": 13,
+        "current": 18,
+        "delta": 5
+      },
+      {
+        "table": "claim_project_plans",
+        "baseline": 0,
+        "current": 2,
+        "delta": 2
+      },
+      {
+        "table": "claim_settlements",
+        "baseline": 61,
+        "current": 64,
+        "delta": 3
+      },
+      {
+        "table": "claims",
+        "baseline": 180,
+        "current": 183,
+        "delta": 3
+      },
+      {
+        "table": "deposit_audit_log",
+        "baseline": 318,
+        "current": 340,
+        "delta": 22
+      },
+      {
+        "table": "deposit_batches",
+        "baseline": 115,
+        "current": 126,
+        "delta": 11
+      },
+      {
+        "table": "deposit_items",
+        "baseline": 114,
+        "current": 125,
+        "delta": 11
+      },
+      {
+        "table": "disbursement_batches",
+        "baseline": 109,
+        "current": 118,
+        "delta": 9
+      },
+      {
+        "table": "disbursement_splits",
+        "baseline": 108,
+        "current": 117,
+        "delta": 9
+      },
+      {
+        "table": "email_send_log",
+        "baseline": 112,
+        "current": 140,
+        "delta": 28
+      },
+      {
+        "table": "endorsement_audit_log",
+        "baseline": 1331,
+        "current": 1399,
+        "delta": 68
+      },
+      {
+        "table": "endorsement_requests",
+        "baseline": 389,
+        "current": 400,
+        "delta": 11
+      },
+      {
+        "table": "external_payment_recipients",
+        "baseline": 3,
+        "current": 4,
+        "delta": 1
+      },
+      {
+        "table": "glba_security_events",
+        "baseline": 80,
+        "current": 83,
+        "delta": 3
+      },
+      {
+        "table": "homeowner_ledger_events",
+        "baseline": 657,
+        "current": 716,
+        "delta": 59
+      },
+      {
+        "table": "loss_draft_audit_log",
+        "baseline": 96,
+        "current": 101,
+        "delta": 5
+      },
+      {
+        "table": "loss_draft_documents",
+        "baseline": 217,
+        "current": 218,
+        "delta": 1
+      },
+      {
+        "table": "loss_draft_tracking",
+        "baseline": 34,
+        "current": 36,
+        "delta": 2
+      },
+      {
+        "table": "mortgage_companies",
+        "baseline": 2,
+        "current": 4,
+        "delta": 2
+      },
+      {
+        "table": "notification_preferences",
+        "baseline": 0,
+        "current": 2,
+        "delta": 2
+      },
+      {
+        "table": "payment_event_log",
+        "baseline": 243,
+        "current": 266,
+        "delta": 23
+      },
+      {
+        "table": "payment_provider_methods",
+        "baseline": 2,
+        "current": 3,
+        "delta": 1
+      },
+      {
+        "table": "payment_webhook_events",
+        "baseline": 227,
+        "current": 257,
+        "delta": 30
+      },
+      {
+        "table": "shared_check_messages",
+        "baseline": 12,
+        "current": 14,
+        "delta": 2
+      },
+      {
+        "table": "shared_checks",
+        "baseline": 102,
+        "current": 108,
+        "delta": 6
+      },
+      {
+        "table": "stakeholder_account_verification_log",
+        "baseline": 20,
+        "current": 23,
+        "delta": 3
+      },
+      {
+        "table": "stakeholder_accounts",
+        "baseline": 67,
+        "current": 69,
+        "delta": 2
+      },
+      {
+        "table": "tenant_usage_logs",
+        "baseline": 21,
+        "current": 38,
+        "delta": 17
+      }
+    ],
+    "identity": {
+      "note": "auth schema is not exposed; application identity keys are profiles.id (UUID)",
+      "profiles": 8,
+      "profileIdFingerprints": [
+        "0883fb28b39198d765348c321f7935c431bae100f78d5b11ff2c47109c88ad4e",
+        "42284db1fdbdceada22f712dba8062a24bdd77aac510086bbf848920933c7517",
+        "437b065341f90b8e763255a61bde029b41129f21ef0adacf4620cf301baa5d87",
+        "67f16851972f20d414984e0dd3e8a02cee6761c9c2f0f933f0dce37a04174130",
+        "83371b8457b2a7b36844a5f185e0644e60addfbfd1b65420de0f7523e90664fd",
+        "a7800179bbb603ed78dbf86ad30e9f136e7d51d9c8ee2451fc471ee490d718a9",
+        "cf8ef771fb90a2dc91a9cd9cf65ccbaecbf66b41b23c2bb882a3555bf65afdd8",
+        "cfff441d52f31ecdbae024b8abb3741cb6d4b181dba2fa719ac1942351a3ceb5"
+      ],
+      "tenantMemberships": 7,
+      "tenantIds": 4,
+      "membershipUserFingerprints": [
+        "0883fb28b39198d765348c321f7935c431bae100f78d5b11ff2c47109c88ad4e",
+        "42284db1fdbdceada22f712dba8062a24bdd77aac510086bbf848920933c7517",
+        "437b065341f90b8e763255a61bde029b41129f21ef0adacf4620cf301baa5d87",
+        "67f16851972f20d414984e0dd3e8a02cee6761c9c2f0f933f0dce37a04174130",
+        "83371b8457b2a7b36844a5f185e0644e60addfbfd1b65420de0f7523e90664fd",
+        "a7800179bbb603ed78dbf86ad30e9f136e7d51d9c8ee2451fc471ee490d718a9",
+        "cf8ef771fb90a2dc91a9cd9cf65ccbaecbf66b41b23c2bb882a3555bf65afdd8"
+      ],
+      "membershipRoleCounts": {
+        "admin": 6,
+        "operator": 1
+      },
+      "applicationRoles": 8,
+      "applicationRoleCounts": {
+        "admin": 6,
+        "mortgage_agent": 1,
+        "staff": 1
+      },
+      "applicationUserFingerprints": [
+        "0883fb28b39198d765348c321f7935c431bae100f78d5b11ff2c47109c88ad4e",
+        "42284db1fdbdceada22f712dba8062a24bdd77aac510086bbf848920933c7517",
+        "437b065341f90b8e763255a61bde029b41129f21ef0adacf4620cf301baa5d87",
+        "67f16851972f20d414984e0dd3e8a02cee6761c9c2f0f933f0dce37a04174130",
+        "83371b8457b2a7b36844a5f185e0644e60addfbfd1b65420de0f7523e90664fd",
+        "a7800179bbb603ed78dbf86ad30e9f136e7d51d9c8ee2451fc471ee490d718a9",
+        "cf8ef771fb90a2dc91a9cd9cf65ccbaecbf66b41b23c2bb882a3555bf65afdd8",
+        "cfff441d52f31ecdbae024b8abb3741cb6d4b181dba2fa719ac1942351a3ceb5"
+      ]
+    },
+    "redactedByTable": {
+      "check_endorsements": [
+        "token",
+        "token_expires_at"
+      ],
+      "check_payees": [
+        "endorsement_token",
+        "endorsement_token_expires_at"
+      ],
+      "check_payment_directions": [
+        "secure_token"
+      ],
+      "checkalt_config": [
+        "webhook_secret"
+      ],
+      "claims": [
+        "mortgage_portal_password"
+      ],
+      "external_payment_recipients": [
+        "secure_token",
+        "token_expires_at",
+        "token_used_at"
+      ],
+      "homeowner_deductible_payments": [
+        "token_id"
+      ],
+      "homeowner_intro_requests": [
+        "access_token"
+      ],
+      "homeowner_ledger_check_uploads": [
+        "token_id"
+      ],
+      "moov_invoices": [
+        "public_token"
+      ],
+      "mortgage_companies": [
+        "portal_password"
+      ],
+      "profiles": [
+        "jobnimbus_api_key",
+        "totp_enrolled_at",
+        "password_login_disabled"
+      ],
+      "signature_signers": [
+        "access_token",
+        "token_hash"
+      ],
+      "stakeholder_accounts": [
+        "verification_token",
+        "verification_token_expires_at",
+        "homeowner_link_token_id",
+        "plaid_access_token"
+      ],
+      "tenants": [
+        "actum_webhook_secret",
+        "actum_password",
+        "actum_test_password"
+      ],
+      "user_sessions": [
+        "session_token"
+      ]
+    }
+  },
+  "delta": {
+    "totals": {
+      "inserted": 632,
+      "updated": 66,
+      "deleted": 3,
+      "unchanged": 10914
+    },
+    "tables": [
+      {
+        "table": "ach_authorizations",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 10,
+        "baselineKeys": 10,
+        "currentKeys": 10
+      },
+      {
+        "table": "actum_transactions",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 6,
+        "baselineKeys": 6,
+        "currentKeys": 6
+      },
+      {
+        "table": "ai_response_cache",
+        "pkColumns": [
+          "cache_key"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "audit_logs",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 33,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 344,
+        "baselineKeys": 344,
+        "currentKeys": 377
+      },
+      {
+        "table": "cash_job_attachments",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "cash_job_line_items",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "cash_job_payments",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "cash_jobs",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 1,
+        "baselineKeys": 1,
+        "currentKeys": 1
+      },
+      {
+        "table": "check_audit_log",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 83,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 1924,
+        "baselineKeys": 1924,
+        "currentKeys": 2007
+      },
+      {
+        "table": "check_billing_config",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 1,
+        "baselineKeys": 1,
+        "currentKeys": 1
+      },
+      {
+        "table": "check_billing_events",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 11,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 115,
+        "baselineKeys": 115,
+        "currentKeys": 126
+      },
+      {
+        "table": "check_cases",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 3,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 139,
+        "baselineKeys": 139,
+        "currentKeys": 142
+      },
+      {
+        "table": "check_deletion_log",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 16,
+        "baselineKeys": 16,
+        "currentKeys": 16
+      },
+      {
+        "table": "check_deposit_image_backfill_queue",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 102,
+        "baselineKeys": 102,
+        "currentKeys": 102
+      },
+      {
+        "table": "check_eligibility_results",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 12,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 113,
+        "baselineKeys": 113,
+        "currentKeys": 125
+      },
+      {
+        "table": "check_endorsement_events",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 5,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 227,
+        "baselineKeys": 227,
+        "currentKeys": 232
+      },
+      {
+        "table": "check_endorsements",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 32,
+        "updated": 3,
+        "deleted": 1,
+        "unchanged": 498,
+        "baselineKeys": 502,
+        "currentKeys": 533
+      },
+      {
+        "table": "check_files",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 11,
+        "baselineKeys": 11,
+        "currentKeys": 11
+      },
+      {
+        "table": "check_intake_items",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 12,
+        "updated": 18,
+        "deleted": 0,
+        "unchanged": 164,
+        "baselineKeys": 182,
+        "currentKeys": 194
+      },
+      {
+        "table": "check_intake_mortgage_draws",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "check_message_reads",
+        "pkColumns": [
+          "user_id",
+          "check_id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 19,
+        "baselineKeys": 19,
+        "currentKeys": 19
+      },
+      {
+        "table": "check_messages",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 7,
+        "baselineKeys": 7,
+        "currentKeys": 7
+      },
+      {
+        "table": "check_payees",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 32,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 493,
+        "baselineKeys": 493,
+        "currentKeys": 525
+      },
+      {
+        "table": "check_payment_directions",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 3,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 62,
+        "baselineKeys": 62,
+        "currentKeys": 65
+      },
+      {
+        "table": "check_reconciliation_alerts",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 3,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 98,
+        "baselineKeys": 98,
+        "currentKeys": 101
+      },
+      {
+        "table": "check_reissue_requests",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 1,
+        "baselineKeys": 1,
+        "currentKeys": 1
+      },
+      {
+        "table": "check_review_decisions",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 8,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 166,
+        "baselineKeys": 166,
+        "currentKeys": 174
+      },
+      {
+        "table": "check_stakeholders",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 7,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 1,
+        "baselineKeys": 1,
+        "currentKeys": 8
+      },
+      {
+        "table": "check_status_audit",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "checkalt_config",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 1,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 1,
+        "currentKeys": 1
+      },
+      {
+        "table": "checkalt_deposits",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 11,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 58,
+        "baselineKeys": 58,
+        "currentKeys": 69
+      },
+      {
+        "table": "checkalt_tenant_accounts",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 1,
+        "baselineKeys": 1,
+        "currentKeys": 1
+      },
+      {
+        "table": "checkalt_webhook_events",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 2,
+        "baselineKeys": 2,
+        "currentKeys": 2
+      },
+      {
+        "table": "claim_check_mortgage_draws",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "claim_check_payments",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "claim_checks",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 8,
+        "updated": 7,
+        "deleted": 0,
+        "unchanged": 68,
+        "baselineKeys": 75,
+        "currentKeys": 83
+      },
+      {
+        "table": "claim_disbursements",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "claim_files",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 3,
+        "baselineKeys": 3,
+        "currentKeys": 3
+      },
+      {
+        "table": "claim_folders",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 21,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 1260,
+        "baselineKeys": 1260,
+        "currentKeys": 1281
+      },
+      {
+        "table": "claim_operational_state",
+        "pkColumns": [
+          "claim_id"
+        ],
+        "inserted": 3,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 180,
+        "baselineKeys": 180,
+        "currentKeys": 183
+      },
+      {
+        "table": "claim_payments",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 5,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 13,
+        "baselineKeys": 13,
+        "currentKeys": 18
+      },
+      {
+        "table": "claim_project_plans",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 2,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 2
+      },
+      {
+        "table": "claim_settlements",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 3,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 61,
+        "baselineKeys": 61,
+        "currentKeys": 64
+      },
+      {
+        "table": "claims",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 3,
+        "updated": 12,
+        "deleted": 0,
+        "unchanged": 168,
+        "baselineKeys": 180,
+        "currentKeys": 183
+      },
+      {
+        "table": "company_branding",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "contractor_profiles",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 2,
+        "baselineKeys": 2,
+        "currentKeys": 2
+      },
+      {
+        "table": "contractor_reviews",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "deposit_attachments",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "deposit_audit_log",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 22,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 318,
+        "baselineKeys": 318,
+        "currentKeys": 340
+      },
+      {
+        "table": "deposit_automation_runs",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "deposit_automation_settings",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 3,
+        "baselineKeys": 3,
+        "currentKeys": 3
+      },
+      {
+        "table": "deposit_batches",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 11,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 115,
+        "baselineKeys": 115,
+        "currentKeys": 126
+      },
+      {
+        "table": "deposit_daily_digest",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "deposit_digest_delivery_log",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "deposit_escalation_events",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "deposit_escalation_rules",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "deposit_exceptions",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "deposit_items",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 11,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 114,
+        "baselineKeys": 114,
+        "currentKeys": 125
+      },
+      {
+        "table": "deposit_manager_snapshots",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "deposit_notification_prefs",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "deposit_pending_approvals",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "deposit_provider_attempts",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "deposit_provider_config",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 5,
+        "baselineKeys": 5,
+        "currentKeys": 5
+      },
+      {
+        "table": "deposit_webhook_events",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "disbursement_batches",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 9,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 109,
+        "baselineKeys": 109,
+        "currentKeys": 118
+      },
+      {
+        "table": "disbursement_splits",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 9,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 108,
+        "baselineKeys": 108,
+        "currentKeys": 117
+      },
+      {
+        "table": "document_templates",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "email_send_log",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 28,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 112,
+        "baselineKeys": 112,
+        "currentKeys": 140
+      },
+      {
+        "table": "email_send_state",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 1,
+        "baselineKeys": 1,
+        "currentKeys": 1
+      },
+      {
+        "table": "email_templates",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "emails",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "endorsement_audit_log",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 69,
+        "updated": 0,
+        "deleted": 1,
+        "unchanged": 1330,
+        "baselineKeys": 1331,
+        "currentKeys": 1399
+      },
+      {
+        "table": "endorsement_automated_reminders",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "endorsement_requests",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 11,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 389,
+        "baselineKeys": 389,
+        "currentKeys": 400
+      },
+      {
+        "table": "esign_event_logs",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 72,
+        "baselineKeys": 72,
+        "currentKeys": 72
+      },
+      {
+        "table": "external_payment_recipients",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 1,
+        "updated": 2,
+        "deleted": 0,
+        "unchanged": 1,
+        "baselineKeys": 3,
+        "currentKeys": 4
+      },
+      {
+        "table": "financial_stepup_log",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 2,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 2
+      },
+      {
+        "table": "glba_security_events",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 3,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 80,
+        "baselineKeys": 80,
+        "currentKeys": 83
+      },
+      {
+        "table": "homeowner_check_uploads",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "homeowner_deductible_payments",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "homeowner_directory_leads",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 45,
+        "baselineKeys": 45,
+        "currentKeys": 45
+      },
+      {
+        "table": "homeowner_intro_requests",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 3,
+        "baselineKeys": 3,
+        "currentKeys": 3
+      },
+      {
+        "table": "homeowner_ledger_check_uploads",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 4,
+        "baselineKeys": 4,
+        "currentKeys": 4
+      },
+      {
+        "table": "homeowner_ledger_events",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 59,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 657,
+        "baselineKeys": 657,
+        "currentKeys": 716
+      },
+      {
+        "table": "loss_draft_audit_log",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 5,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 96,
+        "baselineKeys": 96,
+        "currentKeys": 101
+      },
+      {
+        "table": "loss_draft_documents",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 1,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 217,
+        "baselineKeys": 217,
+        "currentKeys": 218
+      },
+      {
+        "table": "loss_draft_mortgage_intake",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "loss_draft_releases",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "loss_draft_tracking",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 2,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 34,
+        "baselineKeys": 34,
+        "currentKeys": 36
+      },
+      {
+        "table": "micro_deposit_verifications",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 1,
+        "baselineKeys": 1,
+        "currentKeys": 1
+      },
+      {
+        "table": "moov_invoice_customers",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "moov_invoices",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "mortgage_companies",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 2,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 2,
+        "baselineKeys": 2,
+        "currentKeys": 4
+      },
+      {
+        "table": "mortgage_desk_config",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 1,
+        "updated": 0,
+        "deleted": 1,
+        "unchanged": 0,
+        "baselineKeys": 1,
+        "currentKeys": 1
+      },
+      {
+        "table": "mortgage_handling_requests",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 2,
+        "baselineKeys": 2,
+        "currentKeys": 2
+      },
+      {
+        "table": "mortgage_releases",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "mortgage_request_library_documents",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "notification_delivery_logs",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "notification_preferences",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 2,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 2
+      },
+      {
+        "table": "notifications",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "payment_event_log",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 23,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 243,
+        "baselineKeys": 243,
+        "currentKeys": 266
+      },
+      {
+        "table": "payment_method_verifications",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "payment_methods",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "payment_provider_accounts",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 2,
+        "deleted": 0,
+        "unchanged": 1,
+        "baselineKeys": 3,
+        "currentKeys": 3
+      },
+      {
+        "table": "payment_provider_files",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 6,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 6,
+        "currentKeys": 6
+      },
+      {
+        "table": "payment_provider_methods",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 1,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 2,
+        "baselineKeys": 2,
+        "currentKeys": 3
+      },
+      {
+        "table": "payment_sweep_configs",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "payment_transfer_groups",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "payment_transfers",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "payment_wallet_ledger",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "payment_wallet_sub_ledgers",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "payment_wallets",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 1,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 1,
+        "currentKeys": 1
+      },
+      {
+        "table": "payment_webhook_events",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 30,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 227,
+        "baselineKeys": 227,
+        "currentKeys": 257
+      },
+      {
+        "table": "payroll_runs",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "pii_reveal_logs",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "plaid_transfer_events",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 1,
+        "baselineKeys": 1,
+        "currentKeys": 1
+      },
+      {
+        "table": "plaid_webhook_cursors",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 1,
+        "baselineKeys": 1,
+        "currentKeys": 1
+      },
+      {
+        "table": "platform_announcements",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "platform_fee_line_items",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 1,
+        "baselineKeys": 1,
+        "currentKeys": 1
+      },
+      {
+        "table": "platform_fee_occurrences",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "platform_fee_schedules",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "privacy_notice_acknowledgments",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "profiles",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 8,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 8,
+        "currentKeys": 8
+      },
+      {
+        "table": "recipient_tax_profiles",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "referral_alerts",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "referral_events",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 2,
+        "baselineKeys": 2,
+        "currentKeys": 2
+      },
+      {
+        "table": "referrers",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "role_version_tracker",
+        "pkColumns": [
+          "user_id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 9,
+        "baselineKeys": 9,
+        "currentKeys": 9
+      },
+      {
+        "table": "shared_check_messages",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 2,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 12,
+        "baselineKeys": 12,
+        "currentKeys": 14
+      },
+      {
+        "table": "shared_checks",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 6,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 102,
+        "baselineKeys": 102,
+        "currentKeys": 108
+      },
+      {
+        "table": "signature_document_presets",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "signature_field_templates",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "signature_field_values",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 2,
+        "baselineKeys": 2,
+        "currentKeys": 2
+      },
+      {
+        "table": "signature_fields",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 2,
+        "baselineKeys": 2,
+        "currentKeys": 2
+      },
+      {
+        "table": "signature_requests",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 6,
+        "baselineKeys": 6,
+        "currentKeys": 6
+      },
+      {
+        "table": "signature_signers",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 6,
+        "baselineKeys": 6,
+        "currentKeys": 6
+      },
+      {
+        "table": "sms_messages",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "stakeholder_account_verification_log",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 3,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 20,
+        "baselineKeys": 20,
+        "currentKeys": 23
+      },
+      {
+        "table": "stakeholder_accounts",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 2,
+        "updated": 3,
+        "deleted": 0,
+        "unchanged": 64,
+        "baselineKeys": 67,
+        "currentKeys": 69
+      },
+      {
+        "table": "stakeholder_limit_requests",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "storage_backup_log",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "suppressed_emails",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "tenant_bank_accounts",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 1,
+        "baselineKeys": 1,
+        "currentKeys": 1
+      },
+      {
+        "table": "tenant_billing_accounts",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "tenant_credit_balances",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 6,
+        "baselineKeys": 6,
+        "currentKeys": 6
+      },
+      {
+        "table": "tenant_credit_transactions",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "tenant_documents",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 1,
+        "baselineKeys": 1,
+        "currentKeys": 1
+      },
+      {
+        "table": "tenant_email_settings",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 1,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 1,
+        "currentKeys": 1
+      },
+      {
+        "table": "tenant_maintenance_payments",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 1,
+        "baselineKeys": 1,
+        "currentKeys": 1
+      },
+      {
+        "table": "tenant_partner_code_aliases",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 1,
+        "baselineKeys": 1,
+        "currentKeys": 1
+      },
+      {
+        "table": "tenant_partnerships",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 3,
+        "baselineKeys": 3,
+        "currentKeys": 3
+      },
+      {
+        "table": "tenant_usage_logs",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 17,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 21,
+        "baselineKeys": 21,
+        "currentKeys": 38
+      },
+      {
+        "table": "tenant_users",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 7,
+        "baselineKeys": 7,
+        "currentKeys": 7
+      },
+      {
+        "table": "tenant_vetting_documents",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 3,
+        "baselineKeys": 3,
+        "currentKeys": 3
+      },
+      {
+        "table": "tenant_wallet_funding_settings",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 1,
+        "baselineKeys": 1,
+        "currentKeys": 1
+      },
+      {
+        "table": "tenants",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 2,
+        "deleted": 0,
+        "unchanged": 4,
+        "baselineKeys": 6,
+        "currentKeys": 6
+      },
+      {
+        "table": "user_roles",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 10,
+        "baselineKeys": 10,
+        "currentKeys": 10
+      },
+      {
+        "table": "user_sessions",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "wallet_funding_queue",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "wallet_funding_requests",
+        "pkColumns": [
+          "id"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 0
+      },
+      {
+        "table": "zip_geocache",
+        "pkColumns": [
+          "zip"
+        ],
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 2,
+        "baselineKeys": 2,
+        "currentKeys": 2
+      }
+    ],
+    "cutoff": "2026-09-01T20:36:44.000Z"
+  },
+  "restore": {
+    "created": true,
+    "restoreOk": true,
+    "restoreMode": "template_clone_then_overlay",
+    "deltaOk": true,
+    "error": null,
+    "deltaError": null,
+    "skippedMissingTables": [
+      "financial_stepup_log"
+    ],
+    "upsertedRows": 11610,
+    "note": "Isolated checksops_rehearsal_20260905 cloned from staging checksops TEMPLATE, then business tables replaced with live production rows. Live checksops was not overwritten."
+  },
+  "recon": {
+    "countsStatus": "PASS",
+    "financialStatus": "PASS",
+    "pkStatus": "PASS",
+    "tenantStatus": "PASS",
+    "identityStatus": "PASS",
+    "membershipStatus": "PASS",
+    "fkStatus": "PASS",
+    "nullStatus": "PASS",
+    "countDiffs": [],
+    "financialDiffs": [],
+    "rehearsalCountsSelected": {
+      "tenants": 6,
+      "profiles": 8,
+      "check_intake_items": 194,
+      "check_endorsements": 533,
+      "claims": 183,
+      "deposit_items": 125,
+      "disbursement_splits": 117,
+      "homeowner_ledger_events": 716
+    },
+    "fkOrphanCounts": {
+      "check_endorsements_check_id": 0,
+      "deposit_items_batch_id": 0,
+      "disbursement_splits_batch_id": 0,
+      "claim_folders_claim_id": 0,
+      "user_roles_duplicate_user_role": 0
+    },
+    "identityAccountsPresent": true,
+    "productionFinancial": {
+      "check_intake_amount": 1417824.6,
+      "check_intake_pa_fee_amount": 5393.27,
+      "deposit_items_amount": 1037630.29,
+      "deposit_batches_total_amount": 1038410.29,
+      "checkalt_deposits_amount": 453990.48,
+      "disbursement_splits_amount": 880702.79,
+      "disbursement_batches_check_amount": 888258.73,
+      "disbursement_batches_amount_reserved_cents": 0,
+      "claim_check_payments_check_amount": 0,
+      "claim_check_payments_payment_amount": 0,
+      "payment_transfers_amount_cents": 0,
+      "payment_wallet_ledger_amount_cents": 0,
+      "claim_payments_amount": 114621.5,
+      "homeowner_ledger_amount": 3154787.52,
+      "endorsed_check_intake_amount": 4195489.64
+    },
+    "rehearsalFinancial": {
+      "checkalt_deposits_amount": "453990.48",
+      "check_intake_amount": "1417824.60",
+      "check_intake_pa_fee_amount": "5393.27",
+      "claim_check_payments_check_amount": "0",
+      "claim_check_payments_payment_amount": "0",
+      "claim_payments_amount": "114621.50",
+      "deposit_batches_total_amount": "1038410.29",
+      "deposit_items_amount": "1037630.29",
+      "disbursement_batches_amount_reserved_cents": "0",
+      "disbursement_batches_check_amount": "888258.734",
+      "disbursement_splits_amount": "880702.79",
+      "endorsed_check_intake_amount": "4195489.64",
+      "homeowner_ledger_amount": "3154787.52",
+      "payment_transfers_amount_cents": "0",
+      "payment_wallet_ledger_amount_cents": "0"
+    },
+    "pkCriticalFingerprints": {
+      "tenants": {
+        "prod": 6,
+        "rehearsal": 6,
+        "match": true
+      },
+      "profiles": {
+        "prod": 8,
+        "rehearsal": 8,
+        "match": true
+      },
+      "user_roles": {
+        "prod": 10,
+        "rehearsal": 10,
+        "match": true
+      },
+      "tenant_users": {
+        "prod": 7,
+        "rehearsal": 7,
+        "match": true
+      },
+      "check_intake_items": {
+        "prod": 194,
+        "rehearsal": 194,
+        "match": true
+      },
+      "check_endorsements": {
+        "prod": 533,
+        "rehearsal": 533,
+        "match": true
+      },
+      "claims": {
+        "prod": 183,
+        "rehearsal": 183,
+        "match": true
+      },
+      "deposit_items": {
+        "prod": 125,
+        "rehearsal": 125,
+        "match": true
+      },
+      "disbursement_splits": {
+        "prod": 117,
+        "rehearsal": 117,
+        "match": true
+      },
+      "homeowner_ledger_events": {
+        "prod": 716,
+        "rehearsal": 716,
+        "match": true
+      }
+    },
+    "claimsTenantColumn": "org_id (tenant_id not present)"
+  },
+  "discrepancies": [
+    "financial_stepup_log exists in live production (2 rows) but has no table on staging RDS; overlay skipped. Apply DDL on rehearsal/staging before cutover.",
+    "TEMPLATE clone copied staging-only identity_accounts onto rehearsal. That table is not production migratable data; live checksops identity_accounts was not modified.",
+    "profiles.preferred_auth_method exists in production but not on staging schema; column skipped (null-ness/new-column DDL later)."
+  ],
+  "storage": {
+    "objects": 1411,
+    "bytes": 2565912220,
+    "status": "PASS",
+    "stagingOnlyUat": 21,
+    "rerun": false
+  },
+  "verdict": {
+    "bridge": "PASS",
+    "database": "PARTIAL",
+    "storage": "PASS",
+    "overall": "PARTIAL",
+    "goNoGo": "NO-GO",
+    "productionCutover": "STOP FOR REVIEW — production cutover not performed",
+    "note": "Outstanding DDL/overlay for: financial_stepup_log"
+  }
+}

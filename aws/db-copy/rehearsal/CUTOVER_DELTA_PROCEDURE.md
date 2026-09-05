@@ -13,19 +13,28 @@ This document defines the repeatable last-mile procedure for a future production
 
 ## How the last production delta is captured
 
+Preferred path (this rehearsal): the temporary read-only DB bridge. A fresh dump is **optional**, not a blocker, while the bridge remains deployed and fail-closed.
+
 1. Enter write-freeze (T0).
-2. Operator runs READ-ONLY `pg_dump -Fc` → upload `Migration/checksops_cutover_YYYYmmdd_HHMM.backup`.
-3. Operator runs storage inventory (object count + bytes per bucket) without downloading customer documents to Git.
-4. Record Auth user count + email→UUID map hashes (no password hashes).
-5. Capture provider webhook cursor/high-water marks (IDs only) for replay planning — still do not redirect.
+2. `POST` `health` on `aws-staging-db-bridge`; require `mode: read_only` and writes/deletes/rpc/rawSql false.
+3. `POST` `tables`, `schema`, `counts`.
+4. For each approved table, `POST` `rows` with `keysOnly: true` and stable keyset paging (`after` = last `nextAfter`).
+5. Classify insert / update / delete vs the last rehearsal overlay (or vs the Sept. 1 dump keys).
+6. Fetch full rows only for inserted + updated PKs. Strip `[redacted]` secret columns; preserve SQL NULL.
+7. `POST` `identity_map` (sanitize emails/names in any stored report).
+8. Upload overlay JSON to a private S3 prefix. Record overlay SHA-256.
+9. Optional extra: operator READ-ONLY `pg_dump -Fc` → `Migration/checksops_cutover_YYYYmmdd_HHMM.backup` (PostgreSQL 18 `pg_restore` for dump v1.16).
+10. Operator runs storage inventory (object count + bytes per bucket) without downloading customer documents to Git.
+11. Record Auth user count + email→UUID map hashes (no password hashes).
+12. Capture provider webhook cursor/high-water marks (IDs only) for replay planning — still do not redirect.
 
 ## Order of migration (cutover night)
 
 | Step | Action | Rollback point |
 |---|---|---|
 | 1 | Write-freeze production | Abort freeze; resume prod |
-| 2 | Final dump + storage inventory | N/A (read-only) |
-| 3 | Restore dump into isolated RDS rehearsal DB (or swap-ready DB) | Drop rehearsal DB |
+| 2 | Final bridge delta (and optional dump) + storage inventory | N/A (read-only) |
+| 3 | Overlay/restore into isolated RDS rehearsal DB (or swap-ready DB) | Drop rehearsal DB |
 | 4 | Reconcile counts/financial/FK/identity | Drop rehearsal DB |
 | 5 | Storage delta COPY to S3 (append-only) | Leave extras; do not delete prod |
 | 6 | Cognito identity delta for new users only | Disable new Cognito users |
@@ -38,9 +47,9 @@ This document defines the repeatable last-mile procedure for a future production
 | Segment | Estimate |
 |---|---|
 | Announce + enable write-freeze | 5–10 min |
-| Final `pg_dump` of ~50–100 MB class DB | 5–15 min (measure on rehearsal) |
-| Upload to S3 | 2–5 min |
-| VPC restore into empty DB | 10–25 min |
+| Bridge keyset + reconstruct rows (or optional `pg_dump`) | 5–15 min (this rehearsal: minutes for ~12k rows) |
+| Upload overlay/dump to S3 | 2–5 min |
+| Isolated overlay / restore | 10–25 min |
 | Automated recon + financial gates | 5–10 min |
 | Storage delta COPY (incremental objects only) | 5–30 min (depends on delta size) |
 | Cognito identity delta | 5–15 min |
@@ -83,6 +92,8 @@ After DNS switch (future PR only): rollback is DNS revert + webhook revert withi
 |---|---|
 | Procedure written | PASS |
 | Staging inventory vs Sept-1 baseline | PASS (tooling + evidence) |
-| Fresh production dump restore rehearsal | **BLOCKED** — awaiting operator dump in S3 |
-| Timed write-freeze measurement on fresh dump | **BLOCKED** (depends on above) |
+| DB bridge validation + Sept. 1 → live delta | PASS (632 inserted / 66 updated / 3 deleted) |
+| Isolated rehearsal overlay vs live production | **PARTIAL** — migratable counts/financial/PKs/FKs PASS; `financial_stepup_log` DDL outstanding |
+| Storage COPY vs live production | PASS (1,411 objects) |
+| Timed write-freeze measurement | Not measured (production was not frozen) |
 | DNS/webhook switch | **NOT PERFORMED** (forbidden) |
