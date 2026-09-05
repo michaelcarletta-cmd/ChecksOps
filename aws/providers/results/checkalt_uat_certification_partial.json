@@ -1,0 +1,73 @@
+{
+  "verdict": "PARTIAL",
+  "date": "2026-09-04",
+  "documentationAuthority": {
+    "file": "aws/providers/results/CheckAlt_PR125_Minimal_API.json",
+    "collectionName": "Checkalt Clearingworks IR API Specifications - OpenAPI 3.1",
+    "postmanId": "7809f55f-150c-454f-a85a-baece44cd6e3"
+  },
+  "submitEndpoint": {
+    "path": "/fincapture/deposit/process",
+    "postmanName": "Submit deposit transaction",
+    "isDirectSubmission": true,
+    "missingPreProcessStepOnAws": false
+  },
+  "postTransactionOnly": {
+    "Retrieve Transaction with High-Resolution Images": {
+      "path": "GET /cw/transaction/getTransactionWithHighResImages/{partitionNumber}/{transactionId}",
+      "partOfSubmission": false,
+      "note": "Postman: use high-res only for detail, print, or IRD generation"
+    },
+    "Generate Image Replacement Document (IRD)": {
+      "path": "POST /cw/transaction/generateIRD",
+      "partOfSubmission": false,
+      "note": "Requires existing eligible check item; returns TIFF IRD"
+    },
+    "deposit/approve": { "partOfSubmission": false },
+    "deposit/item": { "partOfSubmission": false },
+    "deposit/history": { "partOfSubmission": false }
+  },
+  "processSampleFieldsPresentInPostman": [
+    "fiKey",
+    "ssoKey",
+    "firstName",
+    "lastName",
+    "emailAddress",
+    "captureDateTime",
+    "depositAccountNumber",
+    "dailyDepositLimit",
+    "userAmount",
+    "frontImage",
+    "rearImage",
+    "performRiskAssessment"
+  ],
+  "lovableParityPreserved": {
+    "optionalNameEmailLimitNotRequiredByWorkingLovable": true,
+    "performRiskAssessment": true,
+    "testDeposit": false,
+    "userAmountIntegerCents": true,
+    "rawBase64ImagesViaPreparePipeline": true
+  },
+  "http500Classification": {
+    "missingDocumentedWorkflowStep": false,
+    "missingRequiredFieldVsPostmanCoreAndLovable": false,
+    "checkAltUatIqaOrImageAcceptance": true,
+    "photographicFixtureRequiredByPostman": false,
+    "apiMessage": "Check deposit processing failed. Please retake the check images and resubmit."
+  },
+  "scorecard": {
+    "authentication": "PASS",
+    "merchant_fi_context": "PASS",
+    "deposit_account_binding": "PASS",
+    "depositor_ssoKey": "PASS",
+    "image_pipeline_parity": "PASS",
+    "fincapture_sequence_postman": "PASS",
+    "uat_submission": "PARTIAL",
+    "status_retrieval": "BLOCKED",
+    "callback_webhook": "N/A",
+    "idempotency": "BLOCKED",
+    "reconciliation": "PASS",
+    "tenant_isolation": "PASS"
+  },
+  "production_remain_off": true
+}

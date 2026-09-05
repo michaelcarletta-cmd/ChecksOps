@@ -1,0 +1,233 @@
+{
+  "verdict": "IDENTICAL_500_CLIENT_DIAGNOSTICS_EXHAUSTED",
+  "date": "2026-09-05T15:15:21.351Z",
+  "productionUntouched": true,
+  "negotiableCheckSubmitted": false,
+  "imagesRegenerated": false,
+  "frozenSource": {
+    "frontPath": "/opt/cursor/artifacts/checkalt-iqa-matrix/outbound-front.jpg",
+    "rearPath": "/opt/cursor/artifacts/checkalt-iqa-matrix/outbound-rear.jpg",
+    "frontSha256": "2c46627eb7d729fbd01737079600bcc6f8b32d38b7a2964deee11e1b81418036",
+    "rearSha256": "025d4b5c2b6dc1b3c27c6035ea1cf93ff1c9c84202d554b92062db3416c4c109",
+    "expectedFrontSha256": "2c46627eb7d729fbd01737079600bcc6f8b32d38b7a2964deee11e1b81418036",
+    "expectedRearSha256": "025d4b5c2b6dc1b3c27c6035ea1cf93ff1c9c84202d554b92062db3416c4c109",
+    "hashMatch": true
+  },
+  "auth": {
+    "ok": true,
+    "authPath": "/public/fincapture/authenticate",
+    "httpStatus": 200
+  },
+  "depositor": {
+    "listedCount": 2,
+    "depositAccountRedacted": "31\u202673",
+    "depositAccountFingerprint": "46bed6e573bb",
+    "registerOk": true,
+    "registerHttp": 200,
+    "depositorInfoOk": true,
+    "hasSsoKey": true,
+    "ssoUserIdPrefix": "aws-uat-riskab-m"
+  },
+  "transmittedBase64Inspection": {
+    "front": {
+      "label": "front-frozen-transmitted",
+      "hasDataUriPrefix": false,
+      "looksDoubleEncoded": false,
+      "innerLooksLikeB64Jpeg": false,
+      "jpegMagicHex": "ffd8ff",
+      "isJpeg": true,
+      "bytes": 179129,
+      "b64Chars": 238840,
+      "sha256": "2c46627eb7d729fbd01737079600bcc6f8b32d38b7a2964deee11e1b81418036",
+      "roundTripB64Matches": true,
+      "width": 1600,
+      "height": 733,
+      "landscape": true,
+      "jpegDecodeOk": true,
+      "decodeError": null,
+      "b64Prefix24": "/9j/4AAQSkZJRgABAQAAAQAB"
+    },
+    "rear": {
+      "label": "rear-frozen-transmitted",
+      "hasDataUriPrefix": false,
+      "looksDoubleEncoded": false,
+      "innerLooksLikeB64Jpeg": false,
+      "jpegMagicHex": "ffd8ff",
+      "isJpeg": true,
+      "bytes": 150243,
+      "b64Chars": 200324,
+      "sha256": "025d4b5c2b6dc1b3c27c6035ea1cf93ff1c9c84202d554b92062db3416c4c109",
+      "roundTripB64Matches": true,
+      "width": 1600,
+      "height": 733,
+      "landscape": true,
+      "jpegDecodeOk": true,
+      "decodeError": null,
+      "b64Prefix24": "/9j/4AAQSkZJRgABAQAAAQAB"
+    },
+    "decodedFilesWritten": {
+      "front": "/opt/cursor/artifacts/checkalt-risk-ab-frozen/transmitted-front-decoded.jpg",
+      "rear": "/opt/cursor/artifacts/checkalt-risk-ab-frozen/transmitted-rear-decoded.jpg"
+    },
+    "decodedMatchesFrozenBytes": {
+      "front": true,
+      "rear": true
+    }
+  },
+  "base64Guarantees": {
+    "noDataUri": true,
+    "noDoubleEncoding": true,
+    "roundTripOk": true,
+    "jpegValid": true,
+    "sameFrontHashInBothTests": true,
+    "sameRearHashInBothTests": true
+  },
+  "comparison": {
+    "riskTrue": {
+      "httpStatus": 500,
+      "message": "Check deposit processing failed. Please retake the check images and resubmit.",
+      "sanitizedProviderBody": {
+        "status": 500,
+        "error": "Internal Server Error",
+        "timestamp": "2026-09-05T15:15:19.120068843Z",
+        "message": "Check deposit processing failed. Please retake the check images and resubmit."
+      },
+      "providerResponseKeys": [
+        "error",
+        "message",
+        "status",
+        "timestamp"
+      ],
+      "startedAt": "2026-09-05T15:15:16.848Z",
+      "endedAt": "2026-09-05T15:15:19.137Z",
+      "performRiskAssessment": true
+    },
+    "riskFalse": {
+      "httpStatus": 500,
+      "message": "Check deposit processing failed. Please retake the check images and resubmit.",
+      "sanitizedProviderBody": {
+        "status": 500,
+        "error": "Internal Server Error",
+        "timestamp": "2026-09-05T15:15:21.330181248Z",
+        "message": "Check deposit processing failed. Please retake the check images and resubmit."
+      },
+      "providerResponseKeys": [
+        "error",
+        "message",
+        "status",
+        "timestamp"
+      ],
+      "startedAt": "2026-09-05T15:15:19.139Z",
+      "endedAt": "2026-09-05T15:15:21.351Z",
+      "performRiskAssessment": false
+    },
+    "performRiskAssessmentChangedOutcome": false,
+    "identicalHttp500": true,
+    "onlyPayloadDifference": "performRiskAssessment boolean",
+    "identicalExceptTimestamp": true,
+    "timestampOnlyDifference": true,
+    "sanitizedBodyWithoutTimestamp": {
+      "riskTrue": {
+        "status": 500,
+        "error": "Internal Server Error",
+        "message": "Check deposit processing failed. Please retake the check images and resubmit."
+      },
+      "riskFalse": {
+        "status": 500,
+        "error": "Internal Server Error",
+        "message": "Check deposit processing failed. Please retake the check images and resubmit."
+      }
+    }
+  },
+  "tests": [
+    {
+      "label": "RISK_TRUE_frozen_improved_pair",
+      "startedAt": "2026-09-05T15:15:16.848Z",
+      "endedAt": "2026-09-05T15:15:19.137Z",
+      "path": "/fincapture/deposit/process",
+      "performRiskAssessment": true,
+      "requestFieldNames": [
+        "fiKey",
+        "ssoKey",
+        "depositAccountNumber",
+        "captureDateTime",
+        "userAmount",
+        "frontImage",
+        "rearImage",
+        "performRiskAssessment"
+      ],
+      "optionalFieldsPresent": {
+        "firstName": false,
+        "lastName": false,
+        "emailAddress": false,
+        "dailyDepositLimit": false
+      },
+      "serializedBytes": 439403,
+      "frontB64Chars": 238840,
+      "rearB64Chars": 200324,
+      "frontSha256": "2c46627eb7d729fbd01737079600bcc6f8b32d38b7a2964deee11e1b81418036",
+      "rearSha256": "025d4b5c2b6dc1b3c27c6035ea1cf93ff1c9c84202d554b92062db3416c4c109",
+      "ok": false,
+      "httpStatus": 500,
+      "message": "Check deposit processing failed. Please retake the check images and resubmit.",
+      "sanitizedProviderBody": {
+        "status": 500,
+        "error": "Internal Server Error",
+        "timestamp": "2026-09-05T15:15:19.120068843Z",
+        "message": "Check deposit processing failed. Please retake the check images and resubmit."
+      },
+      "providerResponseKeys": [
+        "error",
+        "message",
+        "status",
+        "timestamp"
+      ],
+      "referencePresent": false
+    },
+    {
+      "label": "RISK_FALSE_same_exact_bytes",
+      "startedAt": "2026-09-05T15:15:19.139Z",
+      "endedAt": "2026-09-05T15:15:21.351Z",
+      "path": "/fincapture/deposit/process",
+      "performRiskAssessment": false,
+      "requestFieldNames": [
+        "fiKey",
+        "ssoKey",
+        "depositAccountNumber",
+        "captureDateTime",
+        "userAmount",
+        "frontImage",
+        "rearImage",
+        "performRiskAssessment"
+      ],
+      "optionalFieldsPresent": {
+        "firstName": false,
+        "lastName": false,
+        "emailAddress": false,
+        "dailyDepositLimit": false
+      },
+      "serializedBytes": 439404,
+      "frontB64Chars": 238840,
+      "rearB64Chars": 200324,
+      "frontSha256": "2c46627eb7d729fbd01737079600bcc6f8b32d38b7a2964deee11e1b81418036",
+      "rearSha256": "025d4b5c2b6dc1b3c27c6035ea1cf93ff1c9c84202d554b92062db3416c4c109",
+      "ok": false,
+      "httpStatus": 500,
+      "message": "Check deposit processing failed. Please retake the check images and resubmit.",
+      "sanitizedProviderBody": {
+        "status": 500,
+        "error": "Internal Server Error",
+        "timestamp": "2026-09-05T15:15:21.330181248Z",
+        "message": "Check deposit processing failed. Please retake the check images and resubmit."
+      },
+      "providerResponseKeys": [
+        "error",
+        "message",
+        "status",
+        "timestamp"
+      ],
+      "referencePresent": false
+    }
+  ],
+  "note": "performRiskAssessment true vs false returned identical HTTP 500 and message; only CheckAlt timestamp differed."
+}

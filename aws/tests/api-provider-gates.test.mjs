@@ -136,6 +136,35 @@ test('synthetic CheckAlt images re-encode oversized rasters and keep under-limit
   assert.equal(toDepositPath('checks/x/back.jpeg'), 'checks/x/back.deposit2.jpg');
 });
 
+test('UAT synthetic fixture exercises production prepare pipeline (>=1300 landscape JPEG)', async () => {
+  const {
+    prepareSyntheticUatDepositImages,
+    buildSyntheticUatCheckSource,
+    TARGET_MAX_DIM,
+    MIN_DIM,
+  } = await import('../functions/api/providers/parity/checkalt-image.mjs');
+  const source = buildSyntheticUatCheckSource({ side: 'front', amountCents: 1 });
+  const sourceInfo = inspectImage(source);
+  assert.equal(sourceInfo.landscape, true);
+  assert.ok(Math.max(sourceInfo.width, sourceInfo.height) > TARGET_MAX_DIM);
+  // Check-like aspect (~6×2.75 ≈ 2.18); not a hard CheckAlt DPI claim.
+  assert.ok(Math.abs(sourceInfo.width / sourceInfo.height - 6 / 2.75) < 0.05);
+  const prepared = prepareSyntheticUatDepositImages({ amountCents: 1 });
+  assert.equal(prepared.imageKind, 'synthetic_uat_via_prepare_pipeline');
+  assert.equal(prepared.amountCents, 1);
+  assert.ok(Math.max(prepared.frontInfo.width, prepared.frontInfo.height) >= MIN_DIM);
+  assert.ok(Math.max(prepared.frontInfo.width, prepared.frontInfo.height) <= TARGET_MAX_DIM);
+  assert.equal(prepared.frontInfo.landscape, true);
+  assert.equal(prepared.rearInfo.landscape, true);
+  assert.ok(prepared.frontInfo.preparedBytes <= PER_IMAGE_BYTES_BUDGET);
+  assert.equal(prepared.frontImage.startsWith('data:'), false);
+  assert.equal(prepared.rearImage.startsWith('data:'), false);
+  assert.equal(Buffer.from(prepared.frontImage, 'base64')[0], 0xff);
+  assert.equal(Buffer.from(prepared.rearImage, 'base64')[0], 0xff);
+  // Rear must be non-blank (more bytes than a near-empty JPEG).
+  assert.ok(prepared.rearInfo.preparedBytes > 20_000);
+});
+
 test('checkalt-prepare-image writes .deposit2.jpg for front and rear synthetic checks', async () => {
   const uploaded = [];
   const frontSrc = syntheticCheckRaster({ width: 2200, height: 1400, seed: 11 });

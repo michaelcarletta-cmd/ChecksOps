@@ -1,0 +1,34 @@
+{
+  "verdict": "STOP_FOR_REVIEW",
+  "date": "2026-09-05",
+  "prs": {
+    "certification": 125,
+    "architectureA": 130
+  },
+  "doNotMerge": [
+    125,
+    130
+  ],
+  "furtherCheckAltSubmission": false,
+  "productionFlagsOff": true,
+  "historicalOrCustomerChecksSubmitted": false,
+  "architectureA": {
+    "definition": "browser_prepare_aws_base64",
+    "offlineParity": "8/8_byte_identical_on_successful_lovable_pairs",
+    "syntheticUatThroughA": {
+      "checkAltHttp": 500,
+      "awsWrapperHttp": 502,
+      "accepted": false
+    }
+  },
+  "remainingChecksOpsControlledDifference": {
+    "imagePipelineOrProcessPayloadGap": false,
+    "imageContentSyntheticVsPhotographic": true,
+    "environmentUatVsProductionCheckAlt": true,
+    "note": "Cannot prove content hypothesis without forbidden historical/customer checks. Escalate to CheckAlt for UAT synthetic policy."
+  },
+  "artifacts": [
+    "aws/providers/results/checkalt_pr130_architecture_a_review.md",
+    "aws/providers/results/checkalt_pr130_evidence_summary.json"
+  ]
+}

@@ -36,11 +36,17 @@ import {
   buildCheckAltUatDepositBody,
   checkAltSandboxAuthenticate,
   checkAltSandboxFetch,
+  collectCheckAltAccountNumbers,
   extractCheckAltAmountEcho,
+  extractCheckAltBusUnit,
   extractCheckAltReference,
   extractCheckAltSsoAndAccount,
   extractCheckAltStatus,
+  fingerprintAccountNumber,
+  redactAccountNumber,
+  summarizeDiscoveredDepositAccounts,
 } from './providers/checkalt-sandbox.mjs';
+import { buildRegisterPayload, extractSsoKey } from './providers/parity/checkalt-client.mjs';
 import {
   assertPlaidSandboxCredentials,
   buildPlaidLinkTokenBody,
@@ -150,7 +156,7 @@ const requireSandboxGate = ({ spoof }) => {
 
 const lookupSandboxObject = async (client, { tenantId, provider, objectType }) => {
   const rows = (await client.query(
-    `SELECT id, tenant_id, provider, object_type, sandbox_provider_id, environment
+    `SELECT id, tenant_id, provider, object_type, sandbox_provider_id, environment, metadata
      FROM public.aws_provider_sandbox_objects
      WHERE tenant_id = $1::uuid AND provider = $2 AND object_type = $3
      ORDER BY created_at DESC
@@ -1149,20 +1155,61 @@ const handleCheckAltDeposit = async (event, deps) => handleAuthenticated(event, 
     idempotencyKey: key,
     metadata: { marker: body?.marker || SANDBOX_MARKER, fixture: amount.fixture, syntheticImages: true, negotiableCheck: false },
   });
-  const user = await checkAltSandboxFetch({
-    credentials: loaded.checkalt,
-    path: '/fincapture/useraccount/getUserAccountInformation',
-    body: { fiKey: loaded.checkalt.fiKey, userId: loaded.checkalt.userId },
-    fetchImpl: deps.fetchImpl || fetch,
+  // Prefer a previously registered UAT depositor from sandbox objects (documented
+  // FinCapture register → ssoKey workflow). Never substitute the API login as ssoKey.
+  const registered = await lookupSandboxObject(client, {
+    tenantId,
+    provider: 'checkalt',
+    objectType: 'uat_tenant_account',
   });
-  const depositAccount = await checkAltSandboxFetch({
-    credentials: loaded.checkalt,
-    path: '/fincapture/useraccount/getDepositAccountInformation',
-    body: { fiKey: loaded.checkalt.fiKey, userId: loaded.checkalt.userId },
-    fetchImpl: deps.fetchImpl || fetch,
-  });
-  const extracted = extractCheckAltSsoAndAccount(user.data, depositAccount.data);
+  let extracted = {
+    ssoKey: null,
+    depositAccountNumber: null,
+    hasSsoKey: false,
+    hasDepositAccount: false,
+    accountCount: 0,
+    accountObjectKeys: [],
+    source: 'unregistered',
+  };
+  if (registered?.metadata?.deposit_account_number
+    && (registered.metadata.sso_key || registered.metadata.sso_user_id || registered.sandbox_provider_id)) {
+    const ssoKey = registered.metadata.sso_key
+      || registered.metadata.sso_user_id
+      || registered.sandbox_provider_id;
+    if (ssoKey !== loaded.checkalt.userId && ssoKey !== loaded.checkalt.username) {
+      extracted = {
+        ssoKey,
+        depositAccountNumber: registered.metadata.deposit_account_number,
+        hasSsoKey: true,
+        hasDepositAccount: true,
+        accountCount: 1,
+        accountObjectKeys: [],
+        source: 'uat_isolated_row',
+      };
+    }
+  }
+  if (!extracted.hasSsoKey || !extracted.hasDepositAccount) {
+    const user = await checkAltSandboxFetch({
+      credentials: loaded.checkalt,
+      path: '/fincapture/useraccount/getUserAccountInformation',
+      body: { fiKey: loaded.checkalt.fiKey, userId: loaded.checkalt.userId },
+      fetchImpl: deps.fetchImpl || fetch,
+    });
+    const depositAccount = await checkAltSandboxFetch({
+      credentials: loaded.checkalt,
+      path: '/fincapture/useraccount/getDepositAccountInformation',
+      body: { fiKey: loaded.checkalt.fiKey, userId: loaded.checkalt.userId },
+      fetchImpl: deps.fetchImpl || fetch,
+    });
+    extracted = {
+      ...extractCheckAltSsoAndAccount(user.data, depositAccount.data),
+      source: 'api_login_lookup',
+    };
+  }
   if (!extracted.hasDepositAccount || !extracted.hasSsoKey) {
+    const failureReason = !extracted.hasSsoKey
+      ? 'missing_depositor_sso_key'
+      : 'missing_deposit_account';
     const failed = await updateSandboxOperation(client, {
       id: pending.id,
       status: 'failed',
@@ -1173,9 +1220,11 @@ const handleCheckAltDeposit = async (event, deps) => handleAuthenticated(event, 
         fixture: amount.fixture,
         syntheticImages: true,
         negotiableCheck: false,
-        hasUatAccount: false,
+        hasUatAccount: extracted.hasDepositAccount,
+        hasSsoKey: extracted.hasSsoKey,
         registeredTestAccount: false,
-        reason: 'UAT user has no deposit account. Test account registration was skipped because it would require inventing bank numbers.',
+        reason: failureReason,
+        accountObjectKeys: extracted.accountObjectKeys,
       },
     });
     await insertAudit(client, {
@@ -1200,9 +1249,17 @@ const handleCheckAltDeposit = async (event, deps) => handleAuthenticated(event, 
       applicationUserId: mapping.application_user_id,
       spoofFieldsIgnored: spoof,
       amount: { ...deposit, cents: amount.cents },
-      uatAccount: { hasSsoKey: extracted.hasSsoKey, hasDepositAccount: extracted.hasDepositAccount, accountCount: extracted.accountCount },
+      uatAccount: {
+        hasSsoKey: extracted.hasSsoKey,
+        hasDepositAccount: extracted.hasDepositAccount,
+        accountCount: extracted.accountCount,
+        accountObjectKeys: extracted.accountObjectKeys,
+        failureReason,
+      },
       operation: publicOperation(failed),
-      message: 'CheckAlt UAT user has no deposit account. A TEST account was not registered because that requires bank numbers. No negotiable check was submitted.',
+      message: !extracted.hasSsoKey
+        ? 'CheckAlt UAT depositor ssoKey is missing. A FinCapture depositor must be registered on UAT (API login is never used as ssoKey). Deposit account registration was not invented. No negotiable check was submitted.'
+        : 'CheckAlt UAT user has no deposit account. A TEST account was not registered because that requires bank numbers. No negotiable check was submitted.',
     };
   }
   const packed = buildCheckAltUatDepositBody({
@@ -1212,6 +1269,21 @@ const handleCheckAltDeposit = async (event, deps) => handleAuthenticated(event, 
     ssoKey: extracted.ssoKey,
     depositAccountNumber: extracted.depositAccountNumber,
   });
+  if (packed.error) {
+    return {
+      ok: false,
+      statusCode: packed.statusCode || 409,
+      error: packed.error,
+      message: packed.message || null,
+      sandboxHttpCalled: true,
+      productionExecution: false,
+      negotiableCheckSubmitted: false,
+      applicationUserId: mapping.application_user_id,
+      spoofFieldsIgnored: spoof,
+      amount: { ...deposit, cents: amount.cents },
+      operation: publicOperation(pending),
+    };
+  }
   const submitted = await checkAltSandboxFetch({
     credentials: loaded.checkalt,
     path: '/fincapture/deposit/process',
@@ -1232,19 +1304,43 @@ const handleCheckAltDeposit = async (event, deps) => handleAuthenticated(event, 
       fixture: amount.fixture,
       syntheticImages: true,
       negotiableCheck: false,
+      imageKind: packed.meta?.imageKind || null,
+      imagePipeline: packed.meta?.imagePipeline || null,
+      frontInfo: packed.meta?.frontInfo || null,
+      rearInfo: packed.meta?.rearInfo || null,
+      performRiskAssessment: true,
+      testDeposit: false,
       amountEcho,
       hasUatAccount: extracted.hasDepositAccount,
+      depositorSource: extracted.source || null,
+      providerHttpStatus: submitted.httpStatus || submitted.statusCode || null,
+      providerMessage: submitted.message || null,
+      providerResponseKeys: submitted.providerResponseKeys || null,
     },
   });
   return {
     ok: submitted.ok,
     statusCode: submitted.ok ? 200 : submitted.statusCode || 502,
+    error: submitted.ok ? undefined : (submitted.error || 'checkalt_uat_http_failed'),
+    message: submitted.ok ? undefined : (submitted.message || null),
+    providerHttpStatus: submitted.httpStatus || submitted.statusCode || null,
+    providerResponseKeys: submitted.providerResponseKeys || null,
+    path: submitted.path || '/fincapture/deposit/process',
     sandboxHttpCalled: true,
     productionExecution: false,
     negotiableCheckSubmitted: false,
+    webhookRequired: false,
     applicationUserId: mapping.application_user_id,
     spoofFieldsIgnored: spoof,
     amount: { ...deposit, cents: amount.cents },
+    image: {
+      kind: packed.meta?.imageKind || null,
+      pipeline: packed.meta?.imagePipeline || null,
+      front: packed.meta?.frontInfo || null,
+      rear: packed.meta?.rearInfo || null,
+      performRiskAssessment: true,
+      testDepositSent: false,
+    },
     amountUnitEvidence: {
       sentUserAmount: deposit.userAmount,
       sentChecksOpsCents: amount.cents,
@@ -1253,9 +1349,163 @@ const handleCheckAltDeposit = async (event, deps) => handleAuthenticated(event, 
         ? 'not_echoed'
         : (Number(amountEcho.echoedUserAmount) === amount.cents ? 'integer_cents' : 'unconfirmed'),
     },
-    uatAccount: { hasSsoKey: extracted.hasSsoKey, hasDepositAccount: extracted.hasDepositAccount, accountCount: extracted.accountCount },
+    uatAccount: {
+      hasSsoKey: extracted.hasSsoKey,
+      hasDepositAccount: extracted.hasDepositAccount,
+      accountCount: extracted.accountCount,
+      source: extracted.source || null,
+    },
     providerReference: redactProviderId(reference),
     operation: publicOperation(inserted),
+  };
+}, deps);
+
+const handleCheckAltRegister = async (event, deps) => handleAuthenticated(event, async ({ client, mapping, claims, body, spoof }) => {
+  const gate = requireSandboxGate({ spoof });
+  if (gate.ok !== true) return gate;
+  const memberships = await membershipsOf(client, mapping.application_user_id);
+  const tenantId = body?.tenant_id || memberships[0]?.tenant_id;
+  if (!tenantId) return denied(spoof, { error: 'no_tenant_membership' });
+  if (!memberships.some((row) => row.tenant_id === tenantId) && memberships.length) {
+    // Master may see all tenants via RLS; still require explicit tenant_id for isolation.
+  }
+  const loaded = await (deps.loadSandboxCredentials || loadSandboxCredentials)();
+  const gateCreds = assertCheckAltSandboxCredentials(loaded.checkalt);
+  if (!gateCreds.ok) return denied(spoof, { ...gateCreds, capability: loaded.snapshot.checkalt });
+  const fetchImpl = deps.fetchImpl || fetch;
+  const ssoUserId = String(body?.sso_user_id || '').trim() || `aws-uat-${Date.now().toString(36)}`;
+  if (ssoUserId === loaded.checkalt.userId || ssoUserId === loaded.checkalt.username) {
+    return denied(spoof, {
+      statusCode: 400,
+      error: 'uat_depositor_must_not_be_api_login',
+      message: 'FinCapture depositor userId must not be the CHECKALT_UAT API login.',
+    });
+  }
+  // Discover authorized UAT deposit account via documented API workflow unless body supplies
+  // a number that was already returned by UAT discovery (never invent; never prefer sample-only).
+  const user = await checkAltSandboxFetch({
+    credentials: loaded.checkalt,
+    path: '/fincapture/useraccount/getUserAccountInformation',
+    body: { fiKey: loaded.checkalt.fiKey, userId: loaded.checkalt.userId },
+    fetchImpl,
+  });
+  const listed = collectCheckAltAccountNumbers(user.data || {});
+  const requested = String(body?.deposit_account_number || '').trim();
+  let depositAccountNumber = null;
+  if (requested) {
+    if (requested === '123456789' && !listed.includes('123456789')) {
+      return denied(spoof, {
+        statusCode: 409,
+        error: 'sample_deposit_account_refused',
+        message: 'CheckAlt sample 123456789 is refused unless UAT getUserAccountInformation returns it for this business unit.',
+      });
+    }
+    if (!listed.includes(requested) && !loaded.checkalt.depositAccountNumber) {
+      return denied(spoof, {
+        statusCode: 409,
+        error: 'deposit_account_not_in_uat_list',
+        message: 'Provided deposit account was not returned by UAT getUserAccountInformation. Refusing to invent or use an unverified number.',
+      });
+    }
+    depositAccountNumber = requested;
+  } else {
+    for (const accountNumber of listed) {
+      if (accountNumber === '123456789') continue;
+      const deposit = await checkAltSandboxFetch({
+        credentials: loaded.checkalt,
+        path: '/fincapture/useraccount/getDepositAccountInformation',
+        body: { fiKey: loaded.checkalt.fiKey, userId: loaded.checkalt.userId, accountNumber },
+        fetchImpl,
+      });
+      if (deposit.ok) {
+        depositAccountNumber = accountNumber;
+        break;
+      }
+    }
+  }
+  if (!depositAccountNumber) {
+    return denied(spoof, {
+      statusCode: 409,
+      error: 'blocked_by_checkalt_test_configuration',
+      classification: 'BLOCKED BY CHECKALT TEST CONFIGURATION',
+      message: 'No authorized UAT deposit account could be identified via getUserAccountInformation → getDepositAccountInformation. Deposit account number is the remaining vendor-provisioning item. Sample 123456789 was not used.',
+      liveProviderCalled: true,
+      listedAccountCount: listed.length,
+      webhookRequired: false,
+    });
+  }
+  const payload = buildRegisterPayload({
+    fiKey: loaded.checkalt.fiKey,
+    ssoUserId,
+    firstName: body?.first_name || 'UAT',
+    lastName: body?.last_name || 'Depositor',
+    email: body?.email || 'uat-depositor@checksops.invalid',
+    depositAccountNumber,
+  });
+  const registered = await checkAltSandboxFetch({
+    credentials: loaded.checkalt,
+    path: '/fincapture/useraccount/register',
+    body: payload,
+    fetchImpl,
+  });
+  if (!registered.ok) {
+    return denied(spoof, {
+      ...registered,
+      sandboxHttpCalled: true,
+      productionExecution: false,
+      negotiableCheckSubmitted: false,
+      message: registered.message || 'CheckAlt UAT register failed',
+    });
+  }
+  const info = await checkAltSandboxFetch({
+    credentials: loaded.checkalt,
+    path: '/fincapture/useraccount/getUserAccountInformation',
+    body: { fiKey: loaded.checkalt.fiKey, userId: ssoUserId },
+    fetchImpl,
+  });
+  const ssoKey = info.ok ? (extractSsoKey(info.data, depositAccountNumber) || ssoUserId) : ssoUserId;
+  await insertSandboxObject(client, {
+    tenantId,
+    provider: 'checkalt',
+    objectType: 'uat_tenant_account',
+    sandboxProviderId: ssoUserId,
+    metadata: {
+      sso_user_id: ssoUserId,
+      deposit_account_number: depositAccountNumber,
+      sso_key: ssoKey,
+      source: 'sandbox_register',
+      production_table_written: false,
+      account_fingerprint: fingerprintAccountNumber(depositAccountNumber),
+    },
+  });
+  await insertAudit(client, {
+    applicationUserId: mapping.application_user_id,
+    tenantId,
+    operationType: 'checkalt_register',
+    provider: 'checkalt',
+    outcome: 'uat_depositor_registered',
+    details: {
+      ssoUserIdRedacted: `${ssoUserId.slice(0, 2)}…`,
+      accountFingerprint: fingerprintAccountNumber(depositAccountNumber),
+      ssoKeyReturned: Boolean(extractSsoKey(info.data, depositAccountNumber)),
+    },
+  });
+  return {
+    ok: true,
+    statusCode: 200,
+    sandboxHttpCalled: true,
+    productionExecution: false,
+    productionRecordsMutated: false,
+    negotiableCheckSubmitted: false,
+    webhookRequired: false,
+    applicationUserId: mapping.application_user_id,
+    spoofFieldsIgnored: spoof,
+    ssoUserIdRedacted: `${ssoUserId.slice(0, 2)}…`,
+    ssoKeyPresent: Boolean(ssoKey),
+    ssoKeyFromAccountInfo: Boolean(extractSsoKey(info.data, depositAccountNumber)),
+    depositAccountRedacted: redactAccountNumber(depositAccountNumber),
+    depositAccountFingerprint: fingerprintAccountNumber(depositAccountNumber),
+    message: 'Synthetic UAT depositor registered. Production checkalt_tenant_accounts was not written.',
   };
 }, deps);
 
@@ -1268,17 +1518,58 @@ const handleCheckAltAccount = async (event, deps) => handleAuthenticated(event, 
   const loaded = await (deps.loadSandboxCredentials || loadSandboxCredentials)();
   const gateCreds = assertCheckAltSandboxCredentials(loaded.checkalt);
   if (!gateCreds.ok) return denied(spoof, { ...gateCreds, capability: loaded.snapshot.checkalt });
+  const fetchImpl = deps.fetchImpl || fetch;
+  // Documented workflow step: authenticate (inside fetch) → getUserAccountInformation
   const user = await checkAltSandboxFetch({
     credentials: loaded.checkalt,
     path: '/fincapture/useraccount/getUserAccountInformation',
     body: { fiKey: loaded.checkalt.fiKey, userId: loaded.checkalt.userId },
-    fetchImpl: deps.fetchImpl || fetch,
+    fetchImpl,
   });
-  const deposit = await checkAltSandboxFetch({
-    credentials: loaded.checkalt,
-    path: '/fincapture/useraccount/getDepositAccountInformation',
-    body: { fiKey: loaded.checkalt.fiKey, userId: loaded.checkalt.userId },
-    fetchImpl: deps.fetchImpl || fetch,
+  const extracted = extractCheckAltSsoAndAccount(user.data, {});
+  const accountNumbers = collectCheckAltAccountNumbers(user.data || {});
+  // Documented workflow: getDepositAccountInformation requires accountNumber from prior list.
+  // Never invent numbers; never use sample 123456789 unless UAT API returned it.
+  const discoveries = [];
+  for (const accountNumber of accountNumbers.slice(0, 5)) {
+    const deposit = await checkAltSandboxFetch({
+      credentials: loaded.checkalt,
+      path: '/fincapture/useraccount/getDepositAccountInformation',
+      body: {
+        fiKey: loaded.checkalt.fiKey,
+        userId: loaded.checkalt.userId,
+        accountNumber,
+      },
+      fetchImpl,
+    });
+    const bus = extractCheckAltBusUnit(deposit.data || {});
+    const depositExtracted = extractCheckAltSsoAndAccount(user.data, deposit.data || {});
+    discoveries.push({
+      accountNumber,
+      ok: deposit.ok === true,
+      httpStatus: deposit.statusCode || deposit.httpStatus || null,
+      message: deposit.message || null,
+      ssoKey: depositExtracted.ssoKey || null,
+      busUnitId: bus.busUnitId,
+      busUnitName: bus.busUnitName,
+      objectKeys: deposit.data && typeof deposit.data === 'object' ? Object.keys(deposit.data).sort() : [],
+    });
+  }
+  const authorized = discoveries.filter((row) => row.ok && row.accountNumber && row.accountNumber !== '123456789');
+  const sampleOnly = discoveries.some((row) => row.accountNumber === '123456789' && row.ok)
+    && authorized.length === 0;
+  // Optional configured bus unit from restored checkalt_config (metadata only; not used as deposit number).
+  let configuredBusUnitId = null;
+  try {
+    const cfg = (await client.query(
+      `SELECT business_unit FROM public.checkalt_config ORDER BY updated_at DESC NULLS LAST LIMIT 1`,
+    )).rows[0];
+    configuredBusUnitId = cfg?.business_unit ? String(cfg.business_unit) : null;
+  } catch { /* table may be unavailable under GUC; non-fatal */ }
+  const registered = await lookupSandboxObject(client, {
+    tenantId,
+    provider: 'checkalt',
+    objectType: 'uat_tenant_account',
   });
   return {
     ok: user.ok,
@@ -1287,10 +1578,59 @@ const handleCheckAltAccount = async (event, deps) => handleAuthenticated(event, 
     productionExecution: false,
     productionRecordsMutated: false,
     negotiableCheckSubmitted: false,
+    webhookRequired: false,
     applicationUserId: mapping.application_user_id,
     spoofFieldsIgnored: spoof,
-    userAccount: { ok: user.ok, httpStatus: user.statusCode || user.httpStatus || null, hasSsoKey: extractCheckAltSsoAndAccount(user.data, {}).hasSsoKey, accountCount: extractCheckAltSsoAndAccount(user.data, {}).accountCount },
-    depositAccount: { ok: deposit.ok, httpStatus: deposit.statusCode || deposit.httpStatus || null, hasDepositAccount: extractCheckAltSsoAndAccount(user.data, deposit.data).hasDepositAccount },
+    workflow: [
+      'authenticate',
+      'getUserAccountInformation',
+      'getDepositAccountInformation',
+      'register (if authorized deposit account discovered)',
+      'deposit/process',
+      'deposit history/status',
+    ],
+    userAccount: {
+      ok: user.ok,
+      httpStatus: user.statusCode || user.httpStatus || null,
+      hasSsoKey: extracted.hasSsoKey,
+      accountCount: extracted.accountCount,
+      accountObjectKeys: extracted.accountObjectKeys,
+      note: 'FI/API login view. Depositor ssoKey is expected after /useraccount/register, not on this login.',
+    },
+    discovery: {
+      listedAccountCount: accountNumbers.length,
+      depositLookups: summarizeDiscoveredDepositAccounts(discoveries),
+      authorizedUatDepositAccountCount: authorized.length,
+      sample123456789Present: accountNumbers.includes('123456789'),
+      sample123456789UsedAsOnlyAuthorized: sampleOnly,
+      firstAuthorizedAccountRedacted: authorized[0] ? redactAccountNumber(authorized[0].accountNumber) : null,
+      firstAuthorizedAccountFingerprint: authorized[0] ? fingerprintAccountNumber(authorized[0].accountNumber) : null,
+    },
+    businessUnit: {
+      configuredBusUnitIdRedacted: configuredBusUnitId ? redactAccountNumber(configuredBusUnitId) : null,
+      configuredBusUnitIdFingerprint: configuredBusUnitId ? fingerprintAccountNumber(configuredBusUnitId) : null,
+      note: 'CheckAlt allows busUnitId or busUnitName per merchant. Freedom Adjustment is provisioned on UAT; values are taken from configuration/API only.',
+      observedOnDepositLookups: discoveries
+        .map((row) => ({ busUnitId: row.busUnitId, busUnitName: row.busUnitName }))
+        .filter((row) => row.busUnitId || row.busUnitName),
+    },
+    registeredUatDepositor: {
+      present: Boolean(registered?.sandbox_provider_id),
+      ssoUserIdRedacted: registered?.sandbox_provider_id
+        ? `${String(registered.sandbox_provider_id).slice(0, 2)}…`
+        : null,
+      hasDepositAccountNumber: Boolean(registered?.metadata?.deposit_account_number),
+      hasSsoKey: Boolean(registered?.metadata?.sso_key || registered?.metadata?.sso_user_id),
+    },
+    binding: {
+      apiLoginNeverUsedAsSsoKey: true,
+      webhookRequired: false,
+      approvedDepositAccountSecretConfigured: Boolean(loaded.checkalt?.depositAccountNumber),
+      authorizedDepositAccountDiscoveredViaApi: authorized.length > 0,
+      remainingVendorAction: authorized.length > 0
+        ? []
+        : ['Authorized UAT deposit account number for Freedom Adjustment / lockbox5 (must appear via getUserAccountInformation → getDepositAccountInformation)'],
+    },
   };
 }, deps);
 
@@ -1319,12 +1659,35 @@ const handleCheckAltStatus = async (event, deps) => handleAuthenticated(event, a
       productionExecution: false,
       operation: publicOperation(operation),
       reason: gateCreds.ok ? 'missing_provider_reference' : gateCreds.error,
+      webhookRequired: false,
+    };
+  }
+  const registered = await lookupSandboxObject(client, {
+    tenantId: operation.tenant_id,
+    provider: 'checkalt',
+    objectType: 'uat_tenant_account',
+  });
+  const ssoKey = (registered?.metadata?.sso_key
+    || registered?.metadata?.sso_user_id
+    || registered?.sandbox_provider_id
+    || null);
+  if (!ssoKey || ssoKey === loaded.checkalt.userId) {
+    return {
+      ok: false,
+      statusCode: 409,
+      error: 'account_unregistered',
+      retrieved: false,
+      sandboxHttpCalled: false,
+      productionExecution: false,
+      operation: publicOperation(operation),
+      message: 'Status lookup requires a registered UAT depositor ssoKey. API login was not substituted.',
+      webhookRequired: false,
     };
   }
   const item = await checkAltSandboxFetch({
     credentials: loaded.checkalt,
     path: '/fincapture/deposit/item',
-    body: { fiKey: loaded.checkalt.fiKey, ssoKey: loaded.checkalt.userId, referenceNumber: operation.provider_reference },
+    body: { fiKey: loaded.checkalt.fiKey, ssoKey, referenceNumber: operation.provider_reference },
     fetchImpl: deps.fetchImpl || fetch,
   });
   let history = null;
@@ -1333,7 +1696,7 @@ const handleCheckAltStatus = async (event, deps) => handleAuthenticated(event, a
     history = await checkAltSandboxFetch({
       credentials: loaded.checkalt,
       path: '/fincapture/deposit/history',
-      body: { fiKey: loaded.checkalt.fiKey, ssoKey: loaded.checkalt.userId },
+      body: { fiKey: loaded.checkalt.fiKey, ssoKey },
       fetchImpl: deps.fetchImpl || fetch,
     });
     providerStatus = mapCheckAltStatus(history.data || {}) || extractCheckAltStatus(history.data);
@@ -1343,6 +1706,7 @@ const handleCheckAltStatus = async (event, deps) => handleAuthenticated(event, a
     statusCode: (item.ok || history?.ok) ? 200 : item.statusCode || 502,
     sandboxHttpCalled: true,
     productionExecution: false,
+    webhookRequired: false,
     operation: publicOperation(operation),
     providerStatus: providerStatus || null,
     providerReference: redactProviderId(operation.provider_reference),
@@ -1688,6 +2052,7 @@ export const sandboxRoute = (path, method) => {
   if (method === 'POST' && path === '/sandbox/moov/retrieve') return { kind: 'moov-retrieve' };
   if (method === 'POST' && path === '/sandbox/checkalt/probe') return { kind: 'checkalt-probe' };
   if (method === 'POST' && path === '/sandbox/checkalt/account') return { kind: 'checkalt-account' };
+  if (method === 'POST' && path === '/sandbox/checkalt/register') return { kind: 'checkalt-register' };
   if (method === 'POST' && path === '/sandbox/checkalt/deposit') return { kind: 'checkalt-deposit' };
   if (method === 'POST' && path === '/sandbox/checkalt/status') return { kind: 'checkalt-status' };
   if (method === 'POST' && path === '/sandbox/checkalt/approve') return { kind: 'checkalt-approve' };
@@ -1710,6 +2075,7 @@ export const handleSandboxRequest = async (event, path, method, deps = {}) => {
   if (route.kind === 'moov-retrieve') return handleMoovRetrieve(event, deps);
   if (route.kind === 'checkalt-probe') return handleCheckAltProbe(event, deps);
   if (route.kind === 'checkalt-account') return handleCheckAltAccount(event, deps);
+  if (route.kind === 'checkalt-register') return handleCheckAltRegister(event, deps);
   if (route.kind === 'checkalt-deposit') return handleCheckAltDeposit(event, deps);
   if (route.kind === 'checkalt-status') return handleCheckAltStatus(event, deps);
   if (route.kind === 'checkalt-approve') return handleCheckAltApprove(event, deps);

@@ -10,13 +10,8 @@ Platform account `36b7…47bb` authorized with Origin `https://staging.checksops
 
 ## CheckAlt UAT
 
-| Item | Status |
-|---|---|
-| Secrets present | `CHECKALT_UAT_USER_ID`, `CHECKALT_UAT_PASSWORD`, `CHECKALT_UAT_FI_KEY`, `CHECKALT_UAT_MERCHANT`, `CHECKALT_UAT_BASE_URL` |
-| Missing | Approved UAT deposit account number / register-account binding confirmation |
-| Network/egress | **Reachable** (`checkaltUatReachable: true`) |
-| Webhooks | Staging dry-run; production not redirected |
-| Why execution disabled | Deposit submit/approve remain Class C; flags keep execution off |
+**Status (2026-09-04):** **PARTIAL** (PR #125) — STOP for review.  
+Authoritative Postman extract (`CheckAlt_PR125_Minimal_API.json`) confirms **`POST /fincapture/deposit/process` = Submit deposit transaction**. Approve/item/history are post-process. **High-res retrieve** and **IRD generate** are post-transaction only (not submit). AWS matches Lovable core process fields + image-pipeline parity. Remaining UAT HTTP 500 (*retake the check images*) is CheckAlt IQA/acceptance behavior — not a missing documented workflow step. Production CheckAlt remains **OFF**. See `CHECKALT_UAT_CERTIFICATION.md`.
 
 ## Plaid
 
@@ -32,14 +27,18 @@ Platform account `36b7…47bb` authorized with Origin `https://staging.checksops
 ## Genuine production-cutover blockers (current)
 
 1. Moov: production activation intentionally held (`AWS_MOOV_ENABLED` / master execution flags) — sandbox cert is **PASS**
-2. CheckAlt: UAT deposit account binding + production activation held
-3. Production DNS / webhooks / auth / data cutover not performed (intentional)
+2. CheckAlt: UAT IQA/acceptance rejection of synthetic non-negotiable images after documented `/deposit/process` submit (sequence/fields aligned with Lovable) + production activation held
+3. Production DNS / auth / data cutover not performed (intentional)
 4. Financial activation grants / Deposit Ops money RPCs intentionally disabled
 
-Removed from blocker list: **Plaid** (not required); **Moov sandbox account authorization** (resolved 2026-09-04).
+Removed from blocker list: **Plaid**; **Moov sandbox account authorization**; **CheckAlt webhook secret**; **CheckAlt UAT deposit account / ssoKey discovery**; **CheckAlt image pipeline constant mismatch vs Lovable**; **Missing FinCapture pre-process / IRD / high-res submit step** (not required for submission).
 
 ## Next certification phase prerequisites (external)
 
-1. CheckAlt: UAT deposit account number approved for lockbox5 merchant  
-2. Keep NAT/egress healthy (currently OK)
-3. Moov production activation remains a deliberate, separate gate — do not flip production flags from this sandbox PASS
+1. CheckAlt: UAT synthetic-image acceptance policy or official UAT image kit / IQA guidance (do not submit restored production negotiable checks)
+2. After accepted deposit: status/history + idempotency + reconcile evidence
+3. Keep NAT/egress healthy (currently OK)
+4. Moov production activation remains a deliberate, separate gate — sandbox PASS does not authorize production flags
+5. CheckAlt webhooks remain optional / not required
+6. Postman authority for FinCapture submit vs IRD/high-res is now on-branch (`aws/providers/results/CheckAlt_PR125_Minimal_API.json`)
+

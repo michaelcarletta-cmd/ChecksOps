@@ -1,0 +1,49 @@
+{
+  "review_date": "2026-09-05",
+  "pr": 130,
+  "merge_recommendation": "YES",
+  "merge_performed": false,
+  "stop_for_review": true,
+  "production_flags_remain_off": true,
+  "checkalt_submission_performed": false,
+  "synthetic_void_uat_500": "separate_certification_limitation_not_merge_blocker",
+  "do_not_change_architecture_a_for_synthetic_iqa": true,
+  "safety": {
+    "no_production_activation": true,
+    "no_historical_resubmit_behavior": true,
+    "no_tenant_isolation_regression": true,
+    "no_unsafe_storage_access": true,
+    "no_client_image_injection": true,
+    "no_lovable_production_flow_regression": true,
+    "notes": [
+      "AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED=true is pre-existing on staging template; production CheckAlt/provider/financial flags stay false",
+      "Optional follow-up: explicit tenant membership check on deposit2 write-by-path (same RLS trust model as existing check-UUID writes)"
+    ]
+  },
+  "tests": {
+    "github_aws_migration_ci": "pass",
+    "ci_run_id": "33982421982",
+    "ci_tests": "249/249",
+    "local_pr130_relevant": "63/63 pass",
+    "local_full_suite_unrelated_failures": [
+      "api-sandbox GET /sandbox/status env assert (also fails on main locally)",
+      "passkeyDisplay .ts loader without bun (CI bun passes)"
+    ]
+  },
+  "known_good_120846345": {
+    "in_pr130_8_of_8": true,
+    "architecture_a_byte_identical": true,
+    "aws_reproduces_known_good_path": true
+  },
+  "pr_125_after_130": {
+    "keep_open_as_uat_cert_evidence": true,
+    "rebase_after_130_merge": "recommended_when_convenient",
+    "supersede_close": false,
+    "merge_125": false,
+    "reason": "125 still tracks open UAT synthetic VOID certification; 130 only closes Architecture A implementation gap"
+  },
+  "artifacts": [
+    "aws/providers/results/checkalt_pr130_merge_readiness.md",
+    "aws/providers/results/checkalt_known_good_120846345_forensic.md"
+  ]
+}

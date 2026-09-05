@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { formatCheckAltUserAmount, dollarsToIntegerCents, validateProviderCents } from './amounts.mjs';
 import {
   CHECKALT_UAT_HOST,
@@ -9,6 +10,9 @@ import {
   providerEgressFailure,
 } from '../sandbox-credentials.mjs';
 import { SANDBOX_MIN_CENTS } from './moov-sandbox.mjs';
+import {
+  prepareSyntheticUatDepositImages,
+} from './parity/checkalt-image.mjs';
 
 /**
  * CheckAlt FinCapture `userAmount` is integer cents with no decimal point.
@@ -74,6 +78,56 @@ export const extractCheckAltSsoAndAccount = (userData = {}, depositData = {}) =>
   };
 };
 
+/** Redact deposit/account numbers for API responses (never log full values). */
+export const redactAccountNumber = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  if (raw.length <= 4) return '[redacted]';
+  return `${raw.slice(0, 2)}…${raw.slice(-2)}`;
+};
+
+export const fingerprintAccountNumber = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  return createHash('sha256').update(raw).digest('hex').slice(0, 12);
+};
+
+export const collectCheckAltAccountNumbers = (userData = {}) => {
+  const list = Array.isArray(userData?.accountDataList) ? userData.accountDataList : [];
+  return list
+    .map((row) => row?.accountNumber || row?.AccountNumber || row?.depositAccountNumber || null)
+    .filter(Boolean)
+    .map((value) => String(value));
+};
+
+export const extractCheckAltBusUnit = (payload = {}) => {
+  const row = payload?.accountDataList?.[0] || payload || {};
+  return {
+    busUnitId: row.busUnitId || row.BusUnitId || row.businessUnitId || row.business_unit_id
+      || payload.busUnitId || payload.businessUnitId || payload.business_unit || null,
+    busUnitName: row.busUnitName || row.BusUnitName || row.businessUnitName || row.business_unit_name
+      || payload.busUnitName || payload.businessUnitName || payload.businessUnit || null,
+  };
+};
+
+/**
+ * Documented FinCapture discovery: getUserAccountInformation account numbers are
+ * fed into getDepositAccountInformation. Never invent numbers; never use sample 123456789
+ * unless that exact value appears in the UAT API response.
+ */
+export const summarizeDiscoveredDepositAccounts = (discoveries = []) => discoveries.map((row) => ({
+  accountNumberRedacted: redactAccountNumber(row.accountNumber),
+  accountFingerprint: fingerprintAccountNumber(row.accountNumber),
+  isSample123456789: String(row.accountNumber || '') === '123456789',
+  depositLookupOk: row.ok === true,
+  depositHttpStatus: row.httpStatus || null,
+  depositMessage: row.message || null,
+  hasSsoKey: Boolean(row.ssoKey),
+  busUnitId: row.busUnitId || null,
+  busUnitName: row.busUnitName || null,
+  objectKeys: row.objectKeys || [],
+}));
+
 export const extractCheckAltAmountEcho = (data = {}) => ({
   echoedUserAmount: data?.userAmount ?? data?.UserAmount ?? null,
   echoedAmount: data?.amount ?? null,
@@ -91,8 +145,14 @@ export const extractCheckAltStatus = (data = {}) => (
   data?.statusDescription || data?.status || data?.statusCode || data?.itemStatus || null
 );
 
-/** Minimal valid PNG. Not a check image. Labeled non-negotiable test fixture. */
+/** Minimal 1x1 PNG kept for unit tests only — live UAT uses prepareSyntheticUatDepositImages. */
 export const SYNTHETIC_VOID_PNG_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+/**
+ * Build front/rear base64 through the same normalizeToBudget pipeline as
+ * production checkalt-prepare-image (landscape, 1600px, q78→35, ≥1300px, 450KB).
+ */
+export const buildPreparedSyntheticUatImages = () => prepareSyntheticUatDepositImages();
 
 export const convertChecksOpsCentsToCheckAltUserAmount = (cents) => {
   const validated = validateProviderCents(cents);
@@ -157,7 +217,7 @@ export const buildCheckAltSandboxDeposit = ({ amountCents = SANDBOX_MIN_CENTS, r
     reference: reference || null,
     negotiableCheck: false,
     imageIncluded: true,
-    imageKind: 'synthetic_void_png',
+    imageKind: 'synthetic_uat_via_prepare_pipeline',
     unit: CHECKALT_USER_AMOUNT,
   };
 };
@@ -264,6 +324,7 @@ export const checkAltSandboxFetch = async ({
     const text = await response.text();
     try { json = text ? JSON.parse(text) : null; } catch { json = null; }
     if (!response.ok) {
+      const textSnippet = String(text || '').replace(/\s+/g, ' ').slice(0, 240);
       return {
         ok: false,
         statusCode: response.status,
@@ -271,7 +332,10 @@ export const checkAltSandboxFetch = async ({
         provider: 'checkalt',
         httpStatus: response.status,
         path,
-        message: json?.message || json?.statusDescription || json?.error || null,
+        message: json?.message || json?.statusDescription || json?.error || json?.title || textSnippet || null,
+        providerResponseKeys: json && typeof json === 'object' ? Object.keys(json).sort() : [],
+        // Include parsed body for UAT diagnostics (callers must sanitize before logging).
+        data: json,
       };
     }
     return { ok: true, statusCode: response.status, data: json };
@@ -299,6 +363,10 @@ export const buildCheckAltUatDepositBody = ({
       negotiableCheck: false,
     };
   }
+  // Match production checkalt-submit-deposit process body field-for-field.
+  // Images go through normalizeToBudget (same constants as checkalt-prepare-image).
+  // No testDeposit — production does not send it. No data-URI prefix.
+  const images = prepareSyntheticUatDepositImages({ amountCents: deposit.checksOpsCents });
   return {
     request: {
       fiKey: credentials?.fiKey || null,
@@ -306,12 +374,18 @@ export const buildCheckAltUatDepositBody = ({
       depositAccountNumber,
       captureDateTime: new Date().toISOString(),
       userAmount: deposit.userAmount,
-      frontImage: SYNTHETIC_VOID_PNG_B64,
-      rearImage: SYNTHETIC_VOID_PNG_B64,
+      frontImage: images.frontImage,
+      rearImage: images.rearImage,
       performRiskAssessment: true,
-      testDeposit: true,
     },
-    meta: deposit,
+    meta: {
+      ...deposit,
+      imageKind: images.imageKind,
+      imagePipeline: images.pipeline,
+      frontInfo: images.frontInfo,
+      rearInfo: images.rearInfo,
+      imageAmountCents: images.amountCents,
+    },
   };
 };
 

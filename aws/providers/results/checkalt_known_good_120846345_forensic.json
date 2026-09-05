@@ -1,0 +1,230 @@
+{
+  "title": "Read-only forensic comparison: CheckAlt Accepted 120846345 vs AWS #130 Architecture A vs rejected synthetic VOID",
+  "date": "2026-09-05",
+  "mode": "read_only_forensic",
+  "safety": {
+    "resubmitted_120846345": false,
+    "resubmitted_any_historical_or_customer_check": false,
+    "checkAlt_http_called_this_run": false,
+    "production_modified": false,
+    "merged_125": false,
+    "merged_130": false,
+    "production_provider_financial_flags": "OFF",
+    "images_or_customer_sensitive_data_exposed": false
+  },
+  "portal_confirmation": {
+    "checkAlt_transaction_id": "120846345",
+    "status": "Accepted",
+    "date": "2026-08-31",
+    "amount_usd": 3802.1
+  },
+  "checksops_lovable_mapping": {
+    "found": true,
+    "source": "staging API snapshot /tmp/prod-ca.json (liveProviderCalled:false) + PR #130 offline parity artifact",
+    "checkalt_deposit_id": "e630c449-48b3-4b92-8585-8a24421c600c",
+    "deposit_fingerprint_sha256_16": "ed9b7609164ba6f0",
+    "check_intake_item_id": "76ead31d-25ec-436c-b1f4-1e86dc05fc42",
+    "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+    "tenant_slug": "freedom",
+    "checkalt_reference": "120846345",
+    "status": "submitted",
+    "amount_usd": 3802.1,
+    "amount_integer_cents": 380210,
+    "submitted_at": "2026-08-31T19:16:17.117Z",
+    "approved_at": "2026-08-31T19:16:17.117Z",
+    "amount_matches_portal": true,
+    "date_matches_portal": true
+  },
+  "in_pr130_offline_8_of_8_sample": {
+    "yes": true,
+    "position": "first of 8",
+    "deposit_fingerprint": "ed9b7609164ba6f0",
+    "pairPass": true,
+    "frontAwsAIdentical": true,
+    "backAwsAIdentical": true,
+    "offlineParityPassed_for_this_pair": true,
+    "pair_summary_from_pr130_evidence": {
+      "front": "reuse_cache 1600x796 JPEG 245945B",
+      "back": "browser_reencode 1200x583 JPEG 109522B",
+      "awsAIdentical": true
+    }
+  },
+  "image_preparation_path": {
+    "architecture": "A_browser_prepare_then_base64_only_submit",
+    "browser_helper": "src/lib/prepareCheckAltDeposit.ts",
+    "constants": {
+      "targetMaxDim": 1600,
+      "minAcceptableDim": 1300,
+      "perImageBytesBudget": 450000,
+      "qualityLadder": [
+        0.8,
+        0.62,
+        0.5,
+        0.38
+      ],
+      "preparedSiblingSuffix": ".deposit2.jpg"
+    },
+    "front": {
+      "decision": "reuse_cache",
+      "meaning": "Existing browser-prepared .deposit2.jpg sibling reused; original was not already-good (\u22651300 landscape JPEG under budget)",
+      "alreadyGood": false,
+      "hasEndorsedDepositJpeg": true,
+      "source_oriented": {
+        "width": 3923,
+        "height": 1953,
+        "orientation": 1,
+        "landscape": true,
+        "jpeg": true,
+        "bytes": 2173886
+      },
+      "source_sha256": "3eb80f1f4694aecf938397c765274c7dc9054c82792012822c0d7df818b34395",
+      "source_path_fingerprint": "6ec36a09e5e7e952",
+      "submitted_prepared_oriented": {
+        "width": 1600,
+        "height": 796,
+        "orientation": 1,
+        "landscape": true,
+        "jpeg": true,
+        "jpeg_magic": "ffd8ff",
+        "bytes": 245945
+      },
+      "submitted_prepared_sha256": "e25199a6c941419d42c2838805e04e688aaa2477b9df78207b6a9c1135eb6826",
+      "submitted_prepared_b64_chars": 327928,
+      "note": "Submitted object is the .deposit2.jpg sibling of the front source path (path fingerprint only; full storage path withheld)."
+    },
+    "back": {
+      "decision": "browser_reencode",
+      "meaning": "1200px endorsed rear fails \u22651300 already-good rule; browser wrote .deposit2.jpg (no upscale; quality ladder)",
+      "alreadyGood": false,
+      "hasEndorsedDepositJpeg": true,
+      "source_oriented": {
+        "width": 1200,
+        "height": 583,
+        "orientation": 1,
+        "landscape": true,
+        "jpeg": true,
+        "bytes": 191798
+      },
+      "source_sha256": "a372eb0f9a6706b361859c5acd716be4b9fdf4857410db391ac0537f6fc95237",
+      "source_path_fingerprint": "6afaa2d561222660",
+      "submitted_prepared_oriented": {
+        "width": 1200,
+        "height": 583,
+        "orientation": 1,
+        "landscape": true,
+        "jpeg": true,
+        "jpeg_magic": "ffd8ff",
+        "bytes": 109522
+      },
+      "submitted_prepared_sha256": "272ce1114a2ca7558b35cf31721bfb6586e7291873f026e6fd48cf2d14699feb",
+      "submitted_prepared_b64_chars": 146032,
+      "note": "Submitted object is the .deposit2.jpg sibling of the back/endorsed source path (fingerprint only)."
+    },
+    "submit_encode_behavior": {
+      "lovable_function": "supabase/functions/checkalt-submit-deposit",
+      "when_prepared_paths_present": "downloadPreparedAsB64 \u2014 Base64 only; no second JPEG encode",
+      "client_supplied_frontImage_rearImage": "ignored / not part of Lovable BodySchema; AWS #130 also ignores client image bytes",
+      "data_uri_prefix": false,
+      "double_base64": false
+    }
+  },
+  "process_request_characteristics_non_sensitive": {
+    "method": "POST",
+    "path": "/fincapture/deposit/process",
+    "body_keys_exact_lovable_and_pr130": [
+      "fiKey",
+      "ssoKey",
+      "depositAccountNumber",
+      "captureDateTime",
+      "userAmount",
+      "frontImage",
+      "rearImage",
+      "performRiskAssessment"
+    ],
+    "userAmount_integer_cents": 380210,
+    "performRiskAssessment": true,
+    "optional_postman_depositor_name_email_fields": "omitted (both Lovable and AWS #130)",
+    "frontImage_rearImage": "raw Base64 of stored prepared JPEG bytes (no data: prefix)",
+    "combined_prepared_bytes": 355467,
+    "combined_b64_chars": 473960,
+    "under_1_6M_b64_budget": true,
+    "secrets_redacted": [
+      "fiKey",
+      "ssoKey",
+      "depositAccountNumber",
+      "captureDateTime_exact_wall_clock"
+    ]
+  },
+  "aws_pr130_would_reproduce_this_transaction": {
+    "same_image_bytes": true,
+    "evidence": "PR #130 offline Architecture A for fingerprint ed9b7609164ba6f0: frontAwsAIdentical=true, backAwsAIdentical=true (Base64 of stored prepared object byte-identical to Lovable prepared bytes)",
+    "same_process_body_keys_and_semantics": true,
+    "imagePipeline": "browser_prepare_aws_base64",
+    "explicit_statement": "AWS #130 Architecture A reproduces this known-good transaction's processing/request path: browser-prepared stored JPEG objects \u2192 Base64-only POST /fincapture/deposit/process with the same non-image field set and semantics. For deposit e630c449-48b3-4b92-8585-8a24421c600c / CheckAlt 120846345, offline measurement showed byte-identical front and rear vs the stored prepared objects that Lovable submitted.",
+    "not_done": "No live resubmit of 120846345; no production call"
+  },
+  "measurable_differences_vs_rejected_synthetic_void_uat": [
+    {
+      "dimension": "acceptance_outcome",
+      "known_good": "CheckAlt Accepted; reference 120846345; ChecksOps status submitted/approved 2026-08-31T19:16:17.117Z",
+      "synthetic_void": "CheckAlt HTTP 500 / AWS wrapper 502; retake-images style failure; no reference"
+    },
+    {
+      "dimension": "image_content",
+      "known_good": "Photographic check front + real endorsed rear",
+      "synthetic_void": "Non-negotiable synthetic VOID / geometric JPEG content"
+    },
+    {
+      "dimension": "checkalt_environment",
+      "known_good": "Production CheckAlt (portal Accepted historical)",
+      "synthetic_void": "CheckAlt UAT host + UAT FI credentials"
+    },
+    {
+      "dimension": "amount",
+      "known_good": "userAmount 380210 ($3802.10)",
+      "synthetic_void": "userAmount 1 ($0.01) on improved/#125 matrix; $0.01-class on #130 synthetic"
+    },
+    {
+      "dimension": "front_prepared_dims_bytes",
+      "known_good": "1600x796 JPEG 245945B sha256 e25199a6\u2026eb6826",
+      "synthetic_void_pr130": "1600x700 JPEG 60162B already-good pass-through",
+      "synthetic_void_pr125_improved": "1600x733 JPEG 179129B"
+    },
+    {
+      "dimension": "back_prepared_dims_bytes",
+      "known_good": "1200x583 JPEG 109522B sha256 272ce111\u2026699feb; endorsed deposit JPEG present",
+      "synthetic_void_pr130": "1400x650 JPEG 54414B",
+      "synthetic_void_pr125_improved": "1600x733 JPEG 150243B"
+    },
+    {
+      "dimension": "prep_decision",
+      "known_good": "front reuse_cache (.deposit2.jpg); back browser_reencode (.deposit2.jpg); alreadyGood false both sides",
+      "synthetic_void_pr130": "already-good pass-through on synthetic landscapes"
+    },
+    {
+      "dimension": "image_pipeline_code_path",
+      "known_good": "Architecture A browser prepare \u2192 Base64 only",
+      "synthetic_void_pr130": "Same Architecture A (browser_prepare_aws_base64); client inject ignored",
+      "pipeline_gap": false
+    },
+    {
+      "dimension": "process_body_keys",
+      "known_good": "fiKey,ssoKey,depositAccountNumber,captureDateTime,userAmount,frontImage,rearImage,performRiskAssessment",
+      "synthetic_void": "Same builder / same keys",
+      "pipeline_gap": false
+    }
+  ],
+  "verdict": {
+    "known_good_located": true,
+    "was_in_pr130_8_of_8": true,
+    "aws_130_reproduces_known_good_processing_request_path": true,
+    "remaining_synthetic_failure_explained_by_pipeline_gap": false,
+    "remaining_measurable_differentiators": [
+      "image_content (real photographic/endorsed vs synthetic VOID)",
+      "CheckAlt environment (prod Accepted vs UAT)",
+      "amount and exact JPEG dimensions/bytes (content-derived)"
+    ],
+    "do_not_make_speculative_iqa_code_changes": true,
+    "stop_for_review": true
+  }
+}

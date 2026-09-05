@@ -1,0 +1,4 @@
+{
+  "superseded_by": "checkalt_uat_certification_partial.json",
+  "note": "Prior BLOCKED scorecard (missing ssoKey / deposit account / webhook). Revised 2026-09-04 after CheckAlt confirmed webhooks not required and FinCapture discovery/register succeeded. See checkalt_uat_certification_partial.json for current PARTIAL verdict."
+}
