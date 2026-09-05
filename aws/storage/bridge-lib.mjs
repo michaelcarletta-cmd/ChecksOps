@@ -3,6 +3,7 @@ import { APP_BUCKET_SET, SKIP_BUCKET_SET, s3KeyFor } from '../functions/api/stor
 
 export const BRIDGE_TOKEN_SHA256 = 'e5549ea0d88afb24b3b0d7d99db10d6f72a88fa3a724cb8e07d468b11c0625d9';
 export const MAX_SIGN_BATCH = 20;
+export const LIVE_SIGN_BATCH = 50;
 export const PUBLIC_ALREADY_COPIED = new Set(['tenant-logos', 'email-assets']);
 
 export const sha256Hex = (value) => createHash('sha256').update(String(value)).digest('hex');
@@ -32,6 +33,47 @@ export const remainingPrivateObjects = (objects) =>
     && !PUBLIC_ALREADY_COPIED.has(obj.bucket)
   ));
 
+export const approvedSourceObjects = (objects) =>
+  (objects || []).filter((obj) => isApprovedMigrationObject(obj.bucket, obj.name));
+
+export const keyFingerprint = (key) => sha256Hex(String(key || ''));
+
+export const resolvedDownloadedSize = (downloadedBytes, inventorySize) => {
+  if (Number.isFinite(downloadedBytes)) return downloadedBytes;
+  if (inventorySize == null || inventorySize === '') return null;
+  const n = Number(inventorySize);
+  return Number.isFinite(n) ? n : null;
+};
+
+export const classifyCopyPreserveExisting = ({ exists, existingHash, sourceHash }) => {
+  if (!exists) return { action: 'put', reason: 'not_in_s3' };
+  if (existingHash && sourceHash && existingHash === sourceHash) {
+    return { action: 'skip_existing', reason: 'hash_match' };
+  }
+  if (existingHash && sourceHash && existingHash !== sourceHash) {
+    return { action: 'conflict', reason: 'hash_mismatch' };
+  }
+  if (!existingHash) return { action: 'need_dest_hash', reason: 'missing_dest_hash' };
+  return { action: 'conflict', reason: 'unverified_existing' };
+};
+
+export const supabaseBucketFromS3Key = (key) => {
+  const k = String(key || '');
+  if (!k.startsWith('files/')) return null;
+  const rest = k.slice('files/'.length);
+  const slash = rest.indexOf('/');
+  if (slash <= 0) return rest || null;
+  return rest.slice(0, slash);
+};
+
+export const sanitizeCopyRow = (row = {}) => ({
+  bucket: row.bucket || null,
+  keyHash: row.key ? keyFingerprint(row.key) : (row.keyHash || null),
+  reason: row.reason || null,
+  bytes: Number.isFinite(row.bytes) ? row.bytes : null,
+  status: row.status || null,
+});
+
 export const batchesOf = (items, size = MAX_SIGN_BATCH) => {
   const out = [];
   for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
@@ -57,12 +99,13 @@ export const parseSignUrls = (body, bucket) => {
   const failed = [];
   for (const row of rows) {
     const name = row.path || row.name;
+    const rowBucket = row.bucket || bucket;
     const url = row.signed_url || row.signedUrl;
     if (row.error || !url) {
-      failed.push({ bucket, name, reason: row.error || 'sign_failed' });
+      failed.push({ bucket: rowBucket, name, reason: row.error || 'sign_failed' });
       continue;
     }
-    byName.set(`${bucket}/${name}`, url);
+    byName.set(`${rowBucket}/${name}`, url);
   }
   return { byName, failed };
 };

@@ -68,8 +68,10 @@ Repeatable restore path (operator / VPC oneshot — same pattern as first copy):
 
 Storage delta:
 
-- Use `aws/storage/copy-from-supabase.mjs` or `bridge-copy.mjs` with service role on operator host.
+- Cloud Agent / staging host: `node aws/db-copy/rehearsal/scripts/bridge-storage-copy.mjs` (reads the migration token from Secrets Manager, signs ≤50 URLs, never logs tokens/URLs/paths).
+- Operator host alternative: `aws/storage/copy-from-supabase.mjs` or `bridge-copy.mjs` with service role — never commit the key.
 - Reconcile counts/bytes only; never commit object keys with customer paths.
+- Leave the Lovable `aws-staging-storage-bridge` deployed until the final production delta sync.
 
 ### Phase 3 — Reconciliation
 
