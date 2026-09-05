@@ -1,0 +1,155 @@
+{
+  "generatedAt": "2026-09-05T01:57:08.767Z",
+  "result": "PASS",
+  "copyMode": "bridge_signed_urls",
+  "filesBucket": "checksops-staging-privatefilesbucket-erzqsolpucjp",
+  "productionSupabaseChanged": false,
+  "lovableBridgeRemoved": false,
+  "signRequested": true,
+  "maxSignBatchUsed": 50,
+  "s3CopyRequested": true,
+  "tokenExposed": false,
+  "signedUrlsLogged": false,
+  "objectPathsCommitted": false,
+  "health": {
+    "ok": true,
+    "mode": "sign_only",
+    "deletes": false,
+    "dbWrites": false,
+    "maxSign": 50
+  },
+  "productionInventory": {
+    "reportedTotal": 1411,
+    "approvedObjects": 1411,
+    "expectedObjects": 1411,
+    "inventoryPages": 15,
+    "byBucket": {
+      "claim-files": 1254,
+      "document-templates": 1,
+      "email-assets": 1,
+      "endorsement-packets": 131,
+      "homeowner-uploads": 8,
+      "loss-draft-documents": 3,
+      "tenant-documents": 8,
+      "tenant-logos": 5
+    },
+    "excludedSkipBuckets": 0,
+    "duplicateSourceKeys": 0,
+    "nullSizeInventory": 2
+  },
+  "copy": {
+    "copiedNew": 77,
+    "verifiedExisting": 1334,
+    "failed": 0,
+    "conflicts": 0,
+    "skipped": 0,
+    "downloadedBytes": 2565912220,
+    "signRetries": 0,
+    "downloadRetries": 0,
+    "putRetries": 0,
+    "destHashFetches": 0,
+    "failedByReason": {},
+    "conflictByReason": {},
+    "nullSizeVerified": [
+      {
+        "actualBytes": 0,
+        "destExisted": true,
+        "destBytesAfter": 0
+      },
+      {
+        "actualBytes": 0,
+        "destExisted": true,
+        "destBytesAfter": 0
+      }
+    ]
+  },
+  "reconciliation": {
+    "productionObjects": 1411,
+    "migratedProductionObjects": 1411,
+    "missingProductionObjects": 0,
+    "failedObjects": 0,
+    "mismatchedObjects": 0,
+    "duplicateSourceKeys": 0,
+    "totalProductionBytesOnS3": 2565912220,
+    "hashComparisons": {
+      "compared": 1411,
+      "matched": 1411,
+      "mismatched": 0
+    },
+    "expectedBucketDiffs": [],
+    "perBucket": {
+      "claim-files": {
+        "production": 1254,
+        "expected": 1254,
+        "migrated": 1254,
+        "bytes": 2519452045
+      },
+      "document-templates": {
+        "production": 1,
+        "expected": 1,
+        "migrated": 1,
+        "bytes": 3124
+      },
+      "email-assets": {
+        "production": 1,
+        "expected": 1,
+        "migrated": 1,
+        "bytes": 1015445
+      },
+      "endorsement-packets": {
+        "production": 131,
+        "expected": 131,
+        "migrated": 131,
+        "bytes": 9474059
+      },
+      "homeowner-uploads": {
+        "production": 8,
+        "expected": 8,
+        "migrated": 8,
+        "bytes": 30364235
+      },
+      "loss-draft-documents": {
+        "production": 3,
+        "expected": 3,
+        "migrated": 3,
+        "bytes": 116262
+      },
+      "tenant-documents": {
+        "production": 8,
+        "expected": 8,
+        "migrated": 8,
+        "bytes": 2800034
+      },
+      "tenant-logos": {
+        "production": 5,
+        "expected": 5,
+        "migrated": 5,
+        "bytes": 2687016
+      }
+    },
+    "stagingOnlyUat": {
+      "objects": 21,
+      "bytes": 133931,
+      "byBucket": {
+        "claim-files": {
+          "objects": 17,
+          "bytes": 130408
+        },
+        "homeowner-uploads": {
+          "objects": 4,
+          "bytes": 3523
+        }
+      },
+      "note": "Left in place. Not overwritten or deleted."
+    },
+    "s3FilesPrefix": {
+      "before": 1355,
+      "after": 1432
+    }
+  },
+  "samples": {
+    "failed": [],
+    "conflicts": [],
+    "missing": []
+  }
+}

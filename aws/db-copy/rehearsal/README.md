@@ -101,7 +101,9 @@ See `CUTOVER_DELTA_PROCEDURE.md` in this folder.
 
 ## Current rehearsal evidence (this PR)
 
-See `MIGRATION_REHEARSAL_REPORT.md` and `analysis/*`.
+See `MIGRATION_REHEARSAL_REPORT.md`, `STORAGE_COPY_RECONCILE.md`, and `analysis/*`.
+
+Storage vs live production (2026-09-05): **PASS** — 1,411/1,411 objects, 2,565,912,220 bytes, 21 staging-only UAT keys left in place. Bridge not torn down.
 
 ## Scorecard
 
