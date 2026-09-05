@@ -5,6 +5,7 @@ import { handleProviderRequest } from '../functions/api/providers.mjs';
 import { resetMoovTokenCache } from '../functions/api/providers/parity/moov-client.mjs';
 import { selectRail } from '../functions/api/providers/parity/rail-router.mjs';
 import { formatCheckAltUserAmount } from '../functions/api/providers/amounts.mjs';
+import { syntheticCheckRaster } from '../functions/api/providers/parity/checkalt-image.mjs';
 
 const FREEDOM_APP = 'abd3c2a0-6dc0-4680-92dd-a013e1141c91';
 const FREEDOM_TENANT = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
@@ -360,7 +361,7 @@ test('checkalt-submit-deposit uses production auth path, integer cents from chec
         fetchImpl,
         downloadClaimFile: async () => {
           const { syntheticCheckRaster } = await import('../functions/api/providers/parity/checkalt-image.mjs');
-          return syntheticCheckRaster({ width: 200, height: 160, flat: true });
+          return syntheticCheckRaster({ width: 1400, height: 700, flat: true });
         },
       },
     );
@@ -385,11 +386,151 @@ test('checkalt-submit-deposit uses production auth path, integer cents from chec
     assert.equal(processBody.fiKey, 'fi-key-uat');
     assert.equal(processBody.depositAccountNumber, '90001111');
     assert.equal(processBody.testDeposit, undefined);
+    assert.equal(processBody.performRiskAssessment, true);
+    assert.equal(processBody.businessUnit, undefined);
+    assert.equal(processBody.checkNumber, undefined);
     assert.ok(processBody.frontImage);
     assert.ok(processBody.rearImage);
+    assert.ok(!String(processBody.frontImage).startsWith('data:'));
+    assert.deepEqual(
+      Object.keys(processBody).sort(),
+      ['captureDateTime', 'depositAccountNumber', 'fiKey', 'frontImage', 'performRiskAssessment', 'rearImage', 'ssoKey', 'userAmount'],
+    );
     assert.ok(!Object.values(processBody).includes('api-login') || processBody.ssoKey !== 'api-login');
     const queued = client.queries.find((q) => q.sql.includes('INSERT INTO public.aws_provider_sandbox_operations'));
     assert.ok(queued);
+    assert.equal(result.imagePipeline, 'browser_prepare_aws_base64');
+    const sandboxGuc = client.queries.find((q) => q.sql.includes('set_config') && q.params?.[0] === 'request.provider_sandbox');
+    assert.ok(sandboxGuc);
+    assert.equal(sandboxGuc.params[1], '1');
+  });
+});
+
+test('checkalt-submit-deposit Base64s prepared paths and ignores injected client images', async () => {
+  const frontBytes = syntheticCheckRaster({ width: 1600, height: 800, seed: 21 });
+  const backBytes = syntheticCheckRaster({ width: 1200, height: 583, flat: true });
+  const { fetchImpl, calls } = recordedFetch([
+    { match: '/public/fincapture/authenticate', method: 'POST', body: 'header.payload.sig' },
+    { match: '/fincapture/deposit/process', method: 'POST', body: { referenceNumber: 111, status: 127 } },
+  ]);
+  const downloaded = [];
+  await withEnv({
+    AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'true',
+    AWS_PROVIDER_EXECUTION_ENABLED: 'false',
+    AWS_CHECKALT_ENABLED: 'false',
+  }, async () => {
+    const client = parityClient({
+      checks: [{
+        id: CHECK_ID,
+        tenant_id: FREEDOM_TENANT,
+        amount: 123.45,
+        check_number: '1001',
+        front_image_path: `checks/${CHECK_ID}/front.jpg`,
+        back_image_path: `checks/${CHECK_ID}/back.jpg`,
+        back_image_deposit_path: `checks/${CHECK_ID}/endorsed.jpg`,
+      }],
+    });
+    const result = await handleProviderRequest(
+      jwtEvent('/functions/v1/checkalt-submit-deposit', 'POST', {
+        tenant_id: FREEDOM_TENANT,
+        check_intake_item_id: CHECK_ID,
+        deposit_front_path: `checks/${CHECK_ID}/front.deposit2.jpg`,
+        deposit_back_path: `checks/${CHECK_ID}/endorsed.deposit2.jpg`,
+        frontImage: 'SHOULD_BE_IGNORED',
+        rearImage: 'ALSO_IGNORED',
+      }),
+      '/functions/v1/checkalt-submit-deposit',
+      'POST',
+      {
+        loadDatabaseCredentials: async () => ({ host: 'localhost', username: 'checksops', password: 'x', database: 'checksops' }),
+        createClient: () => client,
+        loadSandboxCredentials: async () => sandboxCreds(),
+        fetchImpl,
+        downloadClaimFile: async (p) => {
+          downloaded.push(p);
+          if (String(p).includes('front.deposit2')) return frontBytes;
+          if (String(p).includes('endorsed.deposit2')) return backBytes;
+          throw new Error(`unexpected download ${p}`);
+        },
+      },
+    );
+    assert.equal(result.success, true, JSON.stringify(result));
+    assert.equal(result.imagePipeline, 'browser_prepare_aws_base64');
+    const process = calls.find((c) => c.url.includes('/fincapture/deposit/process'));
+    const processBody = JSON.parse(process.body);
+    assert.equal(processBody.frontImage, frontBytes.toString('base64'));
+    assert.equal(processBody.rearImage, backBytes.toString('base64'));
+    assert.notEqual(processBody.frontImage, 'SHOULD_BE_IGNORED');
+    assert.ok(Math.max(1200, 583) < 1300);
+    assert.deepEqual(downloaded, [
+      `checks/${CHECK_ID}/front.deposit2.jpg`,
+      `checks/${CHECK_ID}/endorsed.deposit2.jpg`,
+    ]);
+  });
+});
+
+test('checkalt-submit-deposit rejects a prepared path that is not this check', async () => {
+  const { fetchImpl } = recordedFetch([
+    { match: '/public/fincapture/authenticate', method: 'POST', body: 'header.payload.sig' },
+  ]);
+  await withEnv({
+    AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'true',
+    AWS_PROVIDER_EXECUTION_ENABLED: 'false',
+    AWS_CHECKALT_ENABLED: 'false',
+  }, async () => {
+    const result = await handleProviderRequest(
+      jwtEvent('/functions/v1/checkalt-submit-deposit', 'POST', {
+        tenant_id: FREEDOM_TENANT,
+        check_intake_item_id: CHECK_ID,
+        deposit_front_path: 'checks/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/front.deposit2.jpg',
+      }),
+      '/functions/v1/checkalt-submit-deposit',
+      'POST',
+      {
+        loadDatabaseCredentials: async () => ({ host: 'localhost', username: 'checksops', password: 'x', database: 'checksops' }),
+        createClient: () => parityClient(),
+        loadSandboxCredentials: async () => sandboxCreds(),
+        fetchImpl,
+        downloadClaimFile: async () => syntheticCheckRaster({ width: 1400, height: 700, flat: true }),
+      },
+    );
+    assert.equal(result.success, false);
+    assert.equal(result.error, 'prepared_path_denied');
+    assert.equal(result.statusCode, 403);
+  });
+});
+
+test('checkalt-submit-deposit requires browser prep for oversized originals', async () => {
+  const oversized = syntheticCheckRaster({ width: 2200, height: 1400, seed: 11 });
+  assert.ok(oversized.length > 450_000);
+  const { fetchImpl, calls } = recordedFetch([
+    { match: '/public/fincapture/authenticate', method: 'POST', body: 'header.payload.sig' },
+    { match: '/fincapture/deposit/process', method: 'POST', body: { referenceNumber: 1, status: 127 } },
+  ]);
+  await withEnv({
+    AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'true',
+    AWS_PROVIDER_EXECUTION_ENABLED: 'false',
+    AWS_CHECKALT_ENABLED: 'false',
+  }, async () => {
+    const result = await handleProviderRequest(
+      jwtEvent('/functions/v1/checkalt-submit-deposit', 'POST', {
+        tenant_id: FREEDOM_TENANT,
+        check_intake_item_id: CHECK_ID,
+      }),
+      '/functions/v1/checkalt-submit-deposit',
+      'POST',
+      {
+        loadDatabaseCredentials: async () => ({ host: 'localhost', username: 'checksops', password: 'x', database: 'checksops' }),
+        createClient: () => parityClient(),
+        loadSandboxCredentials: async () => sandboxCreds(),
+        fetchImpl,
+        downloadClaimFile: async () => oversized,
+      },
+    );
+    assert.equal(result.success, false);
+    assert.equal(result.error, 'browser_prepare_required');
+    assert.equal(result.statusCode, 400);
+    assert.equal(calls.some((c) => c.url.includes('/fincapture/deposit/process')), false);
   });
 });
 

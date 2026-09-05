@@ -6,6 +6,8 @@ import {
   handleStoragePublic,
   handleStorageWritesDisabled,
   authorizeObject,
+  BUCKET_AUTH_SQL,
+  CHECK_INTAKE_CLAIM_FILES_AUTH_SQL,
 } from '../functions/api/storage.mjs';
 import {
   handleStorageUploadUrl,
@@ -42,7 +44,7 @@ const jwtEvent = (path, method, body, extra = {}) => ({
   },
 });
 
-const mockClient = ({ authorize = false, writeCheck = false, publicLogo = false, mapping = {
+const mockClient = ({ authorize = false, writeCheck = false, writeSibling = false, publicLogo = false, mapping = {
   application_user_id: APP_ID,
   cognito_sub: COGNITO_SUB,
   email: 'checksops-tester@freedomadj.com',
@@ -59,8 +61,11 @@ const mockClient = ({ authorize = false, writeCheck = false, publicLogo = false,
       if (sql === LOOKUP_MAPPING_SQL) {
         return { rows: params[0] === mapping.cognito_sub ? [mapping] : [] };
       }
-      if (/SELECT id, tenant_id FROM public.check_intake_items/.test(sql)) {
+      if (sql === 'SELECT id, tenant_id FROM public.check_intake_items WHERE id = $1::uuid') {
         return { rows: writeCheck && params[0] === CHECK_ID ? [{ id: CHECK_ID, tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a' }] : [] };
+      }
+      if (sql.includes("regexp_replace") && sql.includes("deposit2.jpg") && sql.includes('check_intake_items')) {
+        return { rows: writeSibling ? [{ id: CHECK_ID, tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a' }] : [] };
       }
       if (String(sql).includes('tenants_public')) {
         return { rows: publicLogo ? [{ logo_url: 'https://example.supabase.co/storage/v1/object/public/tenant-logos/freedom/logo.png' }] : [] };
@@ -300,5 +305,43 @@ test('delete and move require server-side authorization', async () => {
   }), depsFor(client, { forceStorageWrites: true }));
   assert.equal(moved.ok, true, JSON.stringify(moved));
   assert.equal(moved.to, `check-intake/${CHECK_ID}/files/aws-t3-test-moved.pdf`);
+});
+
+test('claim-files read auth includes endorsed deposit JPEGs and .deposit2.jpg siblings', () => {
+  assert.match(CHECK_INTAKE_CLAIM_FILES_AUTH_SQL, /back_image_deposit_path/);
+  assert.match(CHECK_INTAKE_CLAIM_FILES_AUTH_SQL, /deposit2\.jpg/);
+  assert.equal(BUCKET_AUTH_SQL['claim-files'].includes(CHECK_INTAKE_CLAIM_FILES_AUTH_SQL), true);
+});
+
+test('browser .deposit2.jpg sibling of a stored check image is writable', async () => {
+  const sibling = 'checks/user-not-a-check-id/front.deposit2.jpg';
+  const denied = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {
+    bucket: 'claim-files',
+    path: sibling,
+    contentType: 'image/jpeg',
+    upsert: true,
+  }), depsFor(mockClient({ writeSibling: false }), { forceStorageWrites: true }));
+  assert.equal(denied.statusCode, 403);
+
+  const allowed = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {
+    bucket: 'claim-files',
+    path: sibling,
+    contentType: 'image/jpeg',
+    upsert: true,
+  }), depsFor(mockClient({ writeSibling: true }), { forceStorageWrites: true }));
+  assert.equal(allowed.ok, true, JSON.stringify(allowed));
+  assert.equal(allowed.path, sibling);
+});
+
+test('check-scoped .deposit2.jpg remains writable via the check UUID prefix', async () => {
+  const path = `checks/${CHECK_ID}/front.deposit2.jpg`;
+  const result = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {
+    bucket: 'claim-files',
+    path,
+    contentType: 'image/jpeg',
+    upsert: true,
+  }), depsFor(mockClient({ writeCheck: true }), { forceStorageWrites: true }));
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(result.path, path);
 });
 

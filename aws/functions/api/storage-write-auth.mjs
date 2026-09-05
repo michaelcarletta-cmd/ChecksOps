@@ -38,6 +38,22 @@ const lookupWritableCheck = async (client, checkId) => {
   return { check: rows[0] };
 };
 
+/** Allow overwrite of stored check images and browser `.deposit2.jpg` siblings (architecture A). */
+export const CHECK_IMAGE_OR_DEPOSIT2_WRITE_SQL = `
+SELECT id, tenant_id FROM public.check_intake_items
+WHERE split_part(front_image_path, '?', 1) = $1
+   OR split_part(back_image_path, '?', 1) = $1
+   OR split_part(back_image_deposit_path, '?', 1) = $1
+   OR regexp_replace(split_part(COALESCE(front_image_path, ''), '?', 1), '\\.[^.]+$', '') || '.deposit2.jpg' = $1
+   OR regexp_replace(split_part(COALESCE(back_image_path, ''), '?', 1), '\\.[^.]+$', '') || '.deposit2.jpg' = $1
+   OR regexp_replace(split_part(COALESCE(back_image_deposit_path, ''), '?', 1), '\\.[^.]+$', '') || '.deposit2.jpg' = $1
+LIMIT 1`;
+
+const lookupWritableCheckByImagePath = async (client, rel) => {
+  const rows = (await client.query(CHECK_IMAGE_OR_DEPOSIT2_WRITE_SQL, [rel])).rows;
+  return rows[0] || null;
+};
+
 const hasTenantMembership = async (client, userId, tenantId) => {
   if (!UUID_RE.test(String(tenantId || ''))) return false;
   const rows = (await client.query(
@@ -64,6 +80,18 @@ export const authorizeStorageWritePath = async (client, bucket, objectPath, user
   if (bucket === 'claim-files' || bucket === 'endorsement-packets') {
     const checkId = matchCheckScopedPath(rel);
     if (!checkId) {
+      if (bucket === 'claim-files') {
+        const existing = await lookupWritableCheckByImagePath(client, rel);
+        if (existing) {
+          return {
+            ok: true,
+            rel,
+            check: existing,
+            key: s3KeyFor(bucket, rel),
+            strategy: 'existing_check_image_or_deposit2',
+          };
+        }
+      }
       return {
         ok: false,
         statusCode: 403,

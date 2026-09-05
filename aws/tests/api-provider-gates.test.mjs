@@ -105,16 +105,16 @@ test('CheckAlt UAT amount interpretation stays integer cents for 1, 100, and 123
   assert.equal(formatCheckAltUserAmount(123.45).userAmount, 12345);
 });
 
-test('synthetic CheckAlt images re-encode oversized rasters and keep under-limit JPEGs', () => {
+test('synthetic CheckAlt images re-encode oversized rasters and keep under-limit JPEGs', async () => {
   const under = syntheticCheckRaster({ width: 1400, height: 1000, flat: true });
   assert.ok(under.length < PER_IMAGE_BYTES_BUDGET);
-  const underOut = normalizeToBudget(under, 'front');
+  const underOut = await normalizeToBudget(under, 'front');
   assert.equal(Buffer.compare(underOut, under), 0);
   assert.ok(inspectImage(underOut).landscape);
 
   const oversized = syntheticCheckRaster({ width: 2200, height: 1600, seed: 9 });
   assert.ok(oversized.length > PER_IMAGE_BYTES_BUDGET);
-  const overOut = normalizeToBudget(oversized, 'front');
+  const overOut = await normalizeToBudget(oversized, 'front');
   assert.ok(overOut.length <= PER_IMAGE_BYTES_BUDGET);
   assert.equal(overOut[0], 0xff);
   assert.equal(overOut[1], 0xd8);
@@ -123,20 +123,20 @@ test('synthetic CheckAlt images re-encode oversized rasters and keep under-limit
   assert.ok(Math.max(overInfo.width, overInfo.height) <= 1600);
 
   const portrait = syntheticCheckRaster({ width: 900, height: 1400, seed: 3 });
-  const rotated = normalizeToBudget(portrait, 'rear');
+  const rotated = await normalizeToBudget(portrait, 'rear');
   const rotatedInfo = inspectImage(rotated);
   assert.equal(rotatedInfo.landscape, true);
   assert.ok(rotated.length <= PER_IMAGE_BYTES_BUDGET);
 
   const png = syntheticCheckPng({ width: 200, height: 160 });
-  const fromPng = normalizeToBudget(png, 'front');
+  const fromPng = await normalizeToBudget(png, 'front');
   assert.equal(fromPng[0], 0xff);
   assert.ok(fromPng.length <= PER_IMAGE_BYTES_BUDGET);
   assert.equal(toDepositPath('checks/x/front.png'), 'checks/x/front.deposit2.jpg');
   assert.equal(toDepositPath('checks/x/back.jpeg'), 'checks/x/back.deposit2.jpg');
 });
 
-test('checkalt-prepare-image writes .deposit2.jpg for front and rear synthetic checks', async () => {
+test('checkalt-prepare-image does not re-encode oversized images (architecture A)', async () => {
   const uploaded = [];
   const frontSrc = syntheticCheckRaster({ width: 2200, height: 1400, seed: 11 });
   const rearSrc = syntheticCheckRaster({ width: 800, height: 1500, seed: 12 });
@@ -191,15 +191,74 @@ test('checkalt-prepare-image writes .deposit2.jpg for front and rear synthetic c
     );
     const front = await run('front', frontSrc);
     const rear = await run('back', rearSrc);
-    assert.equal(front.success, true);
-    assert.equal(front.prepared_path, `checks/${CHECK_ID}/front.deposit2.jpg`);
-    assert.equal(front.cached, false);
-    assert.ok(front.bytes <= PER_IMAGE_BYTES_BUDGET);
-    assert.ok(front.source_bytes > PER_IMAGE_BYTES_BUDGET);
-    assert.equal(rear.success, true);
-    assert.equal(rear.prepared_path, `checks/${CHECK_ID}/back.deposit2.jpg`);
-    assert.equal(uploaded.length, 2);
-    assert.ok(uploaded.every((row) => row.jpeg && row.bytes <= PER_IMAGE_BYTES_BUDGET));
+    assert.equal(front.success, false);
+    assert.equal(front.error, 'browser_prepare_required');
+    assert.equal(front.statusCode, 409);
+    assert.equal(rear.success, false);
+    assert.equal(rear.error, 'browser_prepare_required');
+    assert.equal(uploaded.length, 0);
+  });
+});
+
+test('checkalt-prepare-image returns the original path for an already-good landscape JPEG', async () => {
+  const uploaded = [];
+  const ready = syntheticCheckRaster({ width: 1400, height: 1000, flat: true });
+  await withEnv({
+    AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'true',
+    AWS_PROVIDER_EXECUTION_ENABLED: 'false',
+    AWS_CHECKALT_ENABLED: 'false',
+  }, async () => {
+    const client = identityClient((sql) => {
+      if (sql.includes('FROM public.check_intake_items')) {
+        return {
+          rows: [{
+            id: CHECK_ID,
+            tenant_id: FREEDOM_TENANT,
+            front_image_path: `checks/${CHECK_ID}/front.jpg`,
+            back_image_path: null,
+            back_image_deposit_path: null,
+          }],
+        };
+      }
+      return { rows: [] };
+    });
+    const result = await handleProviderRequest(
+      jwtEvent('/functions/v1/checkalt-prepare-image', 'POST', {
+        tenant_id: FREEDOM_TENANT,
+        check_intake_item_id: CHECK_ID,
+        side: 'front',
+      }),
+      '/functions/v1/checkalt-prepare-image',
+      'POST',
+      {
+        loadDatabaseCredentials: async () => ({ host: 'localhost', username: 'checksops', password: 'x', database: 'checksops' }),
+        createClient: () => client,
+        loadSandboxCredentials: async () => ({
+          checkalt: {
+            environment: 'uat',
+            baseUrl: 'https://uatapi.checkalt.com',
+            username: 'api-login',
+            userId: 'api-login',
+            password: 'x',
+            fiKey: 'fi',
+            merchant: 'lockbox5',
+          },
+        }),
+        downloadClaimFile: async (p) => {
+          if (String(p).includes('.deposit2.jpg')) return null;
+          return ready;
+        },
+        uploadClaimFile: async (p, buf) => {
+          uploaded.push({ path: p, bytes: buf.length });
+          return p;
+        },
+      },
+    );
+    assert.equal(result.success, true);
+    assert.equal(result.prepared_path, `checks/${CHECK_ID}/front.jpg`);
+    assert.equal(result.passthrough, true);
+    assert.equal(uploaded.length, 0);
+    assert.equal(result.bytes, ready.length);
   });
 });
 
