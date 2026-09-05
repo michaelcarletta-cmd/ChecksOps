@@ -127,39 +127,84 @@ Deno.serve(async (req) => {
     if (action === "inventory") {
       const buckets = (Array.isArray(body.buckets) ? body.buckets : [...APP_BUCKETS])
         .map((item) => String(item))
-        .filter(allowedBucket);
+        .filter(allowedBucket)
+        .sort();
       const limit = Math.min(Math.max(Number(body.limit) || 100, 1), MAX_INVENTORY);
       const offset = Math.max(Number(body.offset) || 0, 0);
-      const { data, error } = await admin
-        .schema("storage")
-        .from("objects")
-        .select("bucket_id,name,metadata,created_at")
-        .in("bucket_id", buckets)
-        .order("bucket_id", { ascending: true })
-        .order("name", { ascending: true })
-        .range(offset, offset + limit - 1);
-      if (error) return json({ error: "inventory_failed", message: error.message }, 503);
-      const objects = (data || []).filter((row) => allowedBucket(String(row.bucket_id))).map((row) => {
-        const metadata = (row.metadata || {}) as Record<string, unknown>;
-        return {
-          bucket: row.bucket_id,
-          name: row.name,
-          size: Number(metadata.size || metadata.contentLength || 0) || null,
-          mimetype: metadata.mimetype || metadata.contentType || null,
-          createdAt: row.created_at || null,
-          etag: (metadata.eTag ?? metadata.etag ?? null) as string | null,
-          cacheControl: (metadata.cacheControl ?? null) as string | null,
-          lastModified: (metadata.lastModified ?? null) as string | null,
-        };
-      });
+
+      type Row = {
+        bucket: string;
+        name: string;
+        size: number | null;
+        mimetype: string | null;
+        createdAt: string | null;
+        updatedAt: string | null;
+        etag: string | null;
+        cacheControl: string | null;
+        lastModified: string | null;
+      };
+
+      const all: Row[] = [];
+      const PAGE = 1000;
+
+      // Enumerate via the Storage server API (service role), never PostgREST.
+      const walk = async (bucket: string, prefix: string): Promise<void> => {
+        let page = 0;
+        for (;;) {
+          const { data, error } = await admin.storage.from(bucket).list(prefix, {
+            limit: PAGE,
+            offset: page * PAGE,
+            sortBy: { column: "name", order: "asc" },
+          });
+          if (error) throw new Error(`${bucket}: ${error.message}`);
+          const entries = data || [];
+          for (const entry of entries) {
+            const path = prefix ? `${prefix}/${entry.name}` : entry.name;
+            const meta = (entry.metadata || null) as Record<string, unknown> | null;
+            const isFolder = !entry.id && !meta;
+            if (isFolder) {
+              await walk(bucket, path);
+              continue;
+            }
+            all.push({
+              bucket,
+              name: path,
+              size: Number(meta?.size ?? meta?.contentLength ?? 0) || null,
+              mimetype: (meta?.mimetype ?? meta?.contentType ?? null) as string | null,
+              createdAt: (entry as { created_at?: string }).created_at ?? null,
+              updatedAt: (entry as { updated_at?: string }).updated_at ?? null,
+              etag: (meta?.eTag ?? meta?.etag ?? null) as string | null,
+              cacheControl: (meta?.cacheControl ?? null) as string | null,
+              lastModified: (meta?.lastModified ?? null) as string | null,
+            });
+          }
+          if (entries.length < PAGE) break;
+          page += 1;
+        }
+      };
+
+      try {
+        for (const bucket of buckets) {
+          await walk(bucket, "");
+        }
+      } catch (walkError) {
+        const message = walkError instanceof Error ? walkError.message : "list_failed";
+        return json({ error: "inventory_failed", message: message.slice(0, 180) }, 503);
+      }
+
+      all.sort((a, b) => (a.bucket === b.bucket ? (a.name < b.name ? -1 : a.name > b.name ? 1 : 0) : a.bucket < b.bucket ? -1 : 1));
+      const objects = all.slice(offset, offset + limit);
       return json({
         ok: true,
         offset,
         limit,
+        total: all.length,
         count: objects.length,
+        hasMore: offset + objects.length < all.length,
         objects,
       });
     }
+
 
     if (action === "sign") {
       const items = Array.isArray(body.items) ? body.items : [];
