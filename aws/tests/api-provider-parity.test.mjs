@@ -400,6 +400,9 @@ test('checkalt-submit-deposit uses production auth path, integer cents from chec
     const queued = client.queries.find((q) => q.sql.includes('INSERT INTO public.aws_provider_sandbox_operations'));
     assert.ok(queued);
     assert.equal(result.imagePipeline, 'browser_prepare_aws_base64');
+    const sandboxGuc = client.queries.find((q) => q.sql.includes('set_config') && q.params?.[0] === 'request.provider_sandbox');
+    assert.ok(sandboxGuc);
+    assert.equal(sandboxGuc.params[1], '1');
   });
 });
 

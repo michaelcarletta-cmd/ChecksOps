@@ -111,6 +111,8 @@ const loadUatTenantAccount = async (client, tenantId) => {
 const wrap = (handler) => async (event, deps = {}) => {
   const { withIdentityWrite } = await import('../../data.mjs');
   return withIdentityWrite(event, async ({ client, mapping, claims, body, spoof }) => {
+    // Isolated UAT rows live behind request.provider_sandbox RLS (sql/70).
+    await client.query('SELECT set_config($1, $2, true)', ['request.provider_sandbox', '1']);
     const ctx = await checkAltParityContext({
       client,
       mapping,
