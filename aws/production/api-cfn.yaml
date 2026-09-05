@@ -1,8 +1,9 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
   ChecksOps production-prep API without SAM transform. Separate from staging.
-  All provider/financial execution flags are false. No VPC/RDS.
-  Do not point production DNS or webhooks at this API until cutover approval.
+  Reuses the existing approved staging Lambda execution role (PassRole) because
+  this Cloud Agent cannot iam:CreateRole. No VPC/RDS. All provider/financial
+  flags false. Do not point production DNS or webhooks at this API.
 
 Parameters:
   Environment:
@@ -20,27 +21,20 @@ Parameters:
   CodeS3Key:
     Type: String
     Default: checksops-production-prep-api.zip
+  ExistingExecutionRoleArn:
+    Type: String
+    Default: arn:aws:iam::806168576068:role/checksops-staging-ApiFunctionRole-7E7XRyLe3nyi
+    Description: Existing SAM Lambda role. Do not create a new IAM role from this agent.
+  EnableErrorsAlarm:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: Keep false unless an ops role can cloudwatch:PutMetricAlarm. Live deploy used false.
+
+Conditions:
+  CreateErrorsAlarm: !Equals [!Ref EnableErrorsAlarm, 'true']
 
 Resources:
-  ProductionPrepRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-        - arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess
-      Tags:
-        - Key: Environment
-          Value: production-prep
-        - Key: DoNotCutover
-          Value: 'true'
-
   ProductionPrepFunction:
     Type: AWS::Lambda::Function
     Properties:
@@ -51,7 +45,7 @@ Resources:
       Handler: index.handler
       Timeout: 29
       MemorySize: 1024
-      Role: !GetAtt ProductionPrepRole.Arn
+      Role: !Ref ExistingExecutionRoleArn
       TracingConfig:
         Mode: Active
       Code:
@@ -135,10 +129,33 @@ Resources:
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ProductionPrepHttpApi}/*
 
+  ProductionPrepErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: CreateErrorsAlarm
+    Properties:
+      AlarmName: checksops-production-prep-api-errors
+      AlarmDescription: Inspectable prep alarm. Not a cutover trigger. Flags remain false.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: checksops-production-prep-api
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
 Outputs:
   ApiUrl:
     Value: !Sub https://${ProductionPrepHttpApi}.execute-api.${AWS::Region}.amazonaws.com/prep
   FunctionName:
     Value: !Ref ProductionPrepFunction
+  ExecutionRoleArn:
+    Value: !Ref ExistingExecutionRoleArn
+  AlarmName:
+    Condition: CreateErrorsAlarm
+    Value: !Ref ProductionPrepErrorsAlarm
   DoNotPointProductionDns:
     Value: 'true'
