@@ -2,6 +2,9 @@
  * Ports of production CheckAlt Edge Functions.
  * Source: supabase/functions/checkalt-* /index.ts and _shared/checkalt.ts
  *
+ * Image prep follows the known-good Lovable browser path
+ * (prepareCheckAltDeposit), not the ImageScript edge fallback.
+ *
  * Staging uses CHECKALT_UAT_* against https://uatapi.checkalt.com.
  * Auth body remains { userName, password }.
  * Depositor identity is never the API login.
@@ -11,6 +14,7 @@ import { formatCheckAltUserAmount } from '../amounts.mjs';
 import { CHECKALT_UAT_HOST } from '../../sandbox-credentials.mjs';
 import { isPlatformAdmin, jsonResult, fail, checkAltParityContext } from './caller.mjs';
 import {
+  buildDepositProcessBody,
   buildRegisterPayload,
   checkAltFetch,
   extractSsoKey,
@@ -19,10 +23,16 @@ import {
   getUserAccountInfo,
   uatConfigOverlay,
 } from './checkalt-client.mjs';
-import { normalizeToBudget, PER_IMAGE_BYTES_BUDGET as IMAGE_BUDGET, toDepositPath } from './checkalt-image.mjs';
+import {
+  inspectOriented,
+  isAlreadyDepositReady,
+  isRasterPath,
+  isReusablePreparedCache,
+  prepareLikeLovableBrowser,
+  toDepositPath,
+} from './checkalt-image.mjs';
 
 const jwtCache = { token: null, expiresAt: null };
-const PER_IMAGE_BYTES_BUDGET = IMAGE_BUDGET;
 const MAX_TOTAL_B64_CHARS = 1_600_000;
 
 const bytesToBase64 = (bytes) => Buffer.from(bytes).toString('base64');
@@ -45,29 +55,6 @@ async function downloadClaimFileBytes(path, deps = {}) {
   return Buffer.concat(chunks);
 }
 
-async function headClaimFileBytes(path, deps = {}) {
-  if (!path) return null;
-  if (typeof deps.headClaimFile === 'function') return deps.headClaimFile(path);
-  const { HeadObjectCommand, GetObjectCommand, S3Client } = await import('@aws-sdk/client-s3');
-  const { s3KeyFor } = await import('../../storage-paths.mjs');
-  const bucket = process.env.FILES_BUCKET;
-  if (!bucket) return null;
-  const key = s3KeyFor('claim-files', path);
-  if (!key) return null;
-  const s3 = deps.s3 || new S3Client({ region: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1' });
-  try {
-    const head = await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
-    const size = Number(head.ContentLength || 0);
-    if (size <= 0 || size > PER_IMAGE_BYTES_BUDGET) return null;
-    const out = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
-    const chunks = [];
-    for await (const chunk of out.Body) chunks.push(chunk);
-    return Buffer.concat(chunks);
-  } catch {
-    return null;
-  }
-}
-
 async function uploadClaimFileBytes(path, bytes, deps = {}) {
   if (typeof deps.uploadClaimFile === 'function') return deps.uploadClaimFile(path, bytes);
   const { PutObjectCommand, S3Client } = await import('@aws-sdk/client-s3');
@@ -88,9 +75,19 @@ async function uploadClaimFileBytes(path, bytes, deps = {}) {
 
 async function imageToBudgetB64(bytes, label, { prepared = false } = {}) {
   if (!bytes) return null;
-  if (prepared && bytes.length <= PER_IMAGE_BYTES_BUDGET) return bytesToBase64(bytes);
-  const normalized = normalizeToBudget(bytes, label);
+  // Lovable checkalt-submit-deposit downloadPreparedAsB64 is a raw Base64 of
+  // the prepared bytes — no second normalize, even if slightly over budget.
+  if (prepared) return bytesToBase64(bytes);
+  const normalized = await prepareLikeLovableBrowser(bytes, label);
   return bytesToBase64(normalized);
+}
+
+async function reusablePreparedBytes(path, deps = {}) {
+  const bytes = await downloadClaimFileBytes(path, deps).catch(() => null);
+  if (!bytes || bytes.length === 0) return null;
+  const info = await inspectOriented(bytes);
+  if (!isReusablePreparedCache(info)) return null;
+  return bytes;
 }
 
 const uatCfg = (uat) => uatConfigOverlay({
@@ -490,6 +487,9 @@ const submitDeposit = {
     if (isSvgPath(check.back_image_path) && !check.back_image_deposit_path && !depositBackPath) {
       return fail('Back image needs an approved deposit JPEG before submission. Generate and approve the deposit image before depositing.', 400);
     }
+    if (check.back_image_path && !check.back_image_deposit_path && !depositBackPath && !isRasterPath(check.back_image_path)) {
+      return fail('Back image needs an approved deposit JPEG before submission. Generate and approve the deposit image before depositing.', 400);
+    }
     let frontImage = body.frontImage || body.front_image || null;
     let rearImage = body.rearImage || body.rear_image || body.backImage || null;
     if (!frontImage) {
@@ -509,16 +509,16 @@ const submitDeposit = {
     if (totalB64 > MAX_TOTAL_B64_CHARS) {
       return fail('Combined check images still exceed CheckAlt\'s limit after compression. Please reupload smaller front/back images.', 400);
     }
-    const processBody = {
+    const processBody = buildDepositProcessBody({
       fiKey: cfg.fi_key,
       ssoKey,
       depositAccountNumber: acct.deposit_account_number,
       captureDateTime: new Date().toISOString(),
       userAmount,
-      performRiskAssessment: true,
       frontImage,
-      ...(rearImage ? { rearImage } : {}),
-    };
+      rearImage,
+      performRiskAssessment: true,
+    });
     const resp = await checkAltFetch({
       cfg,
       credentials: creds,
@@ -652,9 +652,12 @@ const prepareImage = {
     if (isSvgPath(sourcePath) && side === 'back') {
       return fail('Back image needs an approved deposit JPEG before submission. Generate and approve the deposit image before depositing.', 400);
     }
+    if (side === 'back' && !check.back_image_deposit_path && !isRasterPath(sourcePath)) {
+      return fail('Back image needs an approved deposit JPEG before submission. Generate and approve the deposit image before depositing.', 400);
+    }
     const preparedPath = toDepositPath(sourcePath);
-    const cached = await headClaimFileBytes(preparedPath, deps);
-    if (cached && cached.length > 0 && cached.length <= PER_IMAGE_BYTES_BUDGET) {
+    const cached = await reusablePreparedBytes(preparedPath, deps);
+    if (cached) {
       return jsonResult({
         success: true,
         prepared_path: preparedPath,
@@ -665,9 +668,22 @@ const prepareImage = {
     }
     const bytes = await downloadClaimFileBytes(sourcePath, deps);
     if (!bytes) return fail(`${side} image download failed`, 404);
+    const sourceInfo = await inspectOriented(bytes);
+    // Browser alreadyGood: return the original storage path, do not re-encode.
+    if (isAlreadyDepositReady(sourceInfo)) {
+      return jsonResult({
+        success: true,
+        prepared_path: sourcePath,
+        cached: false,
+        passthrough: true,
+        liveProviderCalled: false,
+        bytes: bytes.length,
+        source_bytes: bytes.length,
+      });
+    }
     let normalized;
     try {
-      normalized = normalizeToBudget(bytes, side);
+      normalized = await prepareLikeLovableBrowser(bytes, side);
     } catch (error) {
       return fail(error.message, 413);
     }
@@ -676,6 +692,7 @@ const prepareImage = {
       success: true,
       prepared_path: preparedPath,
       cached: false,
+      passthrough: false,
       liveProviderCalled: false,
       bytes: normalized.length,
       source_bytes: bytes.length,

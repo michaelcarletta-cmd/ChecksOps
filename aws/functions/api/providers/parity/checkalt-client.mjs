@@ -196,3 +196,42 @@ export function buildRegisterPayload({ fiKey, ssoUserId, firstName, lastName, em
     accountDataList: [{ accountNumber: depositAccountNumber }],
   };
 }
+
+/**
+ * Exact /fincapture/deposit/process body produced by
+ * supabase/functions/checkalt-submit-deposit after image prep.
+ * Lovable does not send checkNumber, routing, businessUnit, testDeposit, or
+ * a data: prefix on the images.
+ */
+export const LOVABLE_PROCESS_BODY_KEYS = Object.freeze([
+  'fiKey',
+  'ssoKey',
+  'depositAccountNumber',
+  'captureDateTime',
+  'userAmount',
+  'frontImage',
+  'rearImage',
+  'performRiskAssessment',
+]);
+
+export function buildDepositProcessBody({
+  fiKey,
+  ssoKey,
+  depositAccountNumber,
+  captureDateTime,
+  userAmount,
+  frontImage,
+  rearImage,
+  performRiskAssessment = true,
+}) {
+  return {
+    fiKey,
+    ssoKey,
+    depositAccountNumber,
+    captureDateTime,
+    userAmount,
+    frontImage,
+    ...(rearImage ? { rearImage } : {}),
+    performRiskAssessment,
+  };
+}

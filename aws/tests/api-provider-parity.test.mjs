@@ -385,8 +385,16 @@ test('checkalt-submit-deposit uses production auth path, integer cents from chec
     assert.equal(processBody.fiKey, 'fi-key-uat');
     assert.equal(processBody.depositAccountNumber, '90001111');
     assert.equal(processBody.testDeposit, undefined);
+    assert.equal(processBody.performRiskAssessment, true);
+    assert.equal(processBody.businessUnit, undefined);
+    assert.equal(processBody.checkNumber, undefined);
     assert.ok(processBody.frontImage);
     assert.ok(processBody.rearImage);
+    assert.ok(!String(processBody.frontImage).startsWith('data:'));
+    assert.deepEqual(
+      Object.keys(processBody).sort(),
+      ['captureDateTime', 'depositAccountNumber', 'fiKey', 'frontImage', 'performRiskAssessment', 'rearImage', 'ssoKey', 'userAmount'],
+    );
     assert.ok(!Object.values(processBody).includes('api-login') || processBody.ssoKey !== 'api-login');
     const queued = client.queries.find((q) => q.sql.includes('INSERT INTO public.aws_provider_sandbox_operations'));
     assert.ok(queued);
