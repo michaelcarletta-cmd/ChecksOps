@@ -179,3 +179,13 @@ Measurable differences vs rejected synthetic VOID UAT remain **image content**, 
 
 Evidence: `aws/providers/results/checkalt_known_good_120846345_forensic.md`, `.json`, `_stop.json`.
 
+
+### PR #130 merge readiness (2026-09-05) — STOP FOR REVIEW
+
+Final code/safety review of draft PR #130: **MERGE #130: YES** with production CheckAlt/provider/financial flags remaining OFF. Synthetic VOID UAT 500 stays a separate #125 certification limitation — do not change Architecture A to chase it.
+
+After #130 merges: keep #125 open as UAT evidence; rebase when convenient; do **not** supersede/close #125 for certification; do **not** merge #125 yet.
+
+**Do not merge #125 or #130 in this turn. No further CheckAlt submission.**
+
+Evidence: `aws/providers/results/checkalt_pr130_merge_readiness.md`, `.json`.
