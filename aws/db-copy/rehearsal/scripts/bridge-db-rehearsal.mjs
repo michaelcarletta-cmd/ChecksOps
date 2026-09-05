@@ -190,10 +190,10 @@ const pageRows = async (token, {
 };
 
 const extractDumpKeys = async (dumpPath, table, pkColumns) => {
-  const pgRestore = process.env.PG_RESTORE || 'pg_restore';
+  const pgRestore = process.env.PG_RESTORE || '/usr/lib/postgresql/18/bin/pg_restore';
   let sql = '';
   try {
-    sql = await run(pgRestore, ['-a', '--no-owner', '-t', table, dumpPath]);
+    sql = await run(pgRestore, ['-a', '--no-owner', '-f', '-', '-t', table, dumpPath]);
   } catch (error) {
     if (/did not find|no matching|not found/i.test(String(error.message))) return new Map();
     throw error;
@@ -227,11 +227,11 @@ const packOneshot = async () => {
   const fks = JSON.parse(await readFile(path.join(ROOT, 'aws/db-copy/analysis/skipped_auth_users_fks.json'), 'utf8'));
   await writeFile(path.join(staging, 'auth-fk-names.json'), JSON.stringify([...new Set(fks.map((row) => row.fk_constraint))]));
   execFileSync('npm', ['install', '--omit=dev'], { cwd: staging, stdio: 'ignore' });
-  const pgRestore = '/usr/lib/postgresql/16/bin/pg_restore';
+  const pgRestore = '/usr/lib/postgresql/18/bin/pg_restore';
   if (fs.existsSync(pgRestore)) {
     await copyFile(pgRestore, path.join(staging, 'bin/pg_restore'));
     await fs.promises.chmod(path.join(staging, 'bin/pg_restore'), 0o755);
-    for (const lib of ['libpq.so.5', 'libpq.so.5.16']) {
+    for (const lib of ['libpq.so.5']) {
       const src = `/usr/lib/x86_64-linux-gnu/${lib}`;
       if (fs.existsSync(src)) await copyFile(src, path.join(staging, 'lib', lib));
     }
