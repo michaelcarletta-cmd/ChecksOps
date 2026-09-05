@@ -1434,9 +1434,9 @@ export default function CheckCommandCenter() {
                     onCheckCreated={(id) => {
                       setActiveTab("review");
                       setReviewCheckId(id);
-                      // Trigger OCR for the new check
-                      supabase.functions.invoke("ingest-shared-check", {
-                        body: { check_id: id, action: "ocr_only" }
+                      // Trigger OCR for the new check (not partner ingest).
+                      supabase.functions.invoke("check-ocr-intake", {
+                        body: { check_id: id, checkId: id }
                       }).catch(console.error);
                     }} 
                   />
