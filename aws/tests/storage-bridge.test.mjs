@@ -4,7 +4,6 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
-  BRIDGE_TOKEN_SHA256,
   LIVE_SIGN_BATCH,
   approvedSourceObjects,
   batchesOf,
@@ -26,11 +25,14 @@ import {
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
 
-test('pinned token SHA-256 matches the Edge Function constant', () => {
+test('storage bridge token hash is env-configured and fail-closed', () => {
   const src = readFileSync(join(ROOT, 'supabase/functions/aws-staging-storage-bridge/index.ts'), 'utf8');
-  assert.match(src, new RegExp(`PINNED_TOKEN_SHA256 = "${BRIDGE_TOKEN_SHA256}"`));
+  assert.match(src, /AWS_MIGRATION_TOKEN_SHA256/);
+  assert.match(src, /CHECKSOPS_STORAGE_MIGRATION_TOKEN_SHA256/);
+  assert.match(src, /unconfigured/);
   assert.match(src, /dbWrites: false/);
   assert.match(src, /deletes: false/);
+  assert.doesNotMatch(src, /PINNED_TOKEN_SHA256/);
   assert.doesNotMatch(src, /console\.(log|info|debug|error)\([^)]*SERVICE_ROLE/);
 });
 

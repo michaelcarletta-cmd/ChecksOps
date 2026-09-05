@@ -67,6 +67,9 @@ const mockIdentityClient = ({ mapping = {
         assert.equal(params[0], APP_ID);
         return { rows: [{ role: 'admin' }, { role: 'staff' }] };
       }
+      if (sql.includes('is_master_owner()')) {
+        return { rows: [{ is_master_owner: false }] };
+      }
       throw new Error(`unexpected query: ${sql}`);
     },
     end: async () => {},
