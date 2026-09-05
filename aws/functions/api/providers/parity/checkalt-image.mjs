@@ -21,7 +21,6 @@
 import { createHash } from 'node:crypto';
 import jpeg from 'jpeg-js';
 import { PNG } from 'pngjs';
-import sharp from 'sharp';
 
 export const TARGET_MAX_DIM = 1600;
 export const TARGET_JPEG_QUALITY = 78;
@@ -114,6 +113,109 @@ export const inspectStoredRaster = (bytes) => {
 /** Stored-pixel inspect (no EXIF). Kept for ImageScript A/B. */
 export const inspectImage = (bytes) => inspectStoredRaster(bytes);
 
+const rotate90Ccw = (img) => rotate90Cw(rotate90Cw(rotate90Cw(img)));
+
+const flipH = (img) => {
+  const out = Buffer.alloc(img.width * img.height * 4);
+  for (let y = 0; y < img.height; y += 1) {
+    for (let x = 0; x < img.width; x += 1) {
+      const src = (y * img.width + x) * 4;
+      const dst = (y * img.width + (img.width - 1 - x)) * 4;
+      img.data.copy(out, dst, src, src + 4);
+    }
+  }
+  return { width: img.width, height: img.height, data: out };
+};
+
+const flipV = (img) => {
+  const out = Buffer.alloc(img.width * img.height * 4);
+  for (let y = 0; y < img.height; y += 1) {
+    const src = y * img.width * 4;
+    const dst = (img.height - 1 - y) * img.width * 4;
+    img.data.copy(out, dst, src, src + img.width * 4);
+  }
+  return { width: img.width, height: img.height, data: out };
+};
+
+const applyExifOrientation = (img, orientation) => {
+  switch (Number(orientation || 1)) {
+    case 2: return flipH(img);
+    case 3: return rotate90Cw(rotate90Cw(img));
+    case 4: return flipV(img);
+    case 5: return rotate90Cw(flipH(img));
+    case 6: return rotate90Cw(img);
+    case 7: return rotate90Ccw(flipH(img));
+    case 8: return rotate90Ccw(img);
+    default: return img;
+  }
+};
+
+const resizeBilinear = (img, newW, newH) => {
+  const out = Buffer.alloc(newW * newH * 4);
+  if (newW <= 1 || newH <= 1) return resizeNearest(img, newW, newH);
+  const xRatio = (img.width - 1) / (newW - 1);
+  const yRatio = (img.height - 1) / (newH - 1);
+  for (let y = 0; y < newH; y += 1) {
+    const fy = y * yRatio;
+    const y0 = Math.floor(fy);
+    const y1 = Math.min(img.height - 1, y0 + 1);
+    const wy = fy - y0;
+    for (let x = 0; x < newW; x += 1) {
+      const fx = x * xRatio;
+      const x0 = Math.floor(fx);
+      const x1 = Math.min(img.width - 1, x0 + 1);
+      const wx = fx - x0;
+      const dst = (y * newW + x) * 4;
+      for (let c = 0; c < 4; c += 1) {
+        const p00 = img.data[(y0 * img.width + x0) * 4 + c];
+        const p10 = img.data[(y0 * img.width + x1) * 4 + c];
+        const p01 = img.data[(y1 * img.width + x0) * 4 + c];
+        const p11 = img.data[(y1 * img.width + x1) * 4 + c];
+        out[dst + c] = Math.round(
+          p00 * (1 - wx) * (1 - wy) + p10 * wx * (1 - wy) + p01 * (1 - wx) * wy + p11 * wx * wy,
+        );
+      }
+    }
+  }
+  return { width: newW, height: newH, data: out };
+};
+
+export function readJpegExifOrientation(bytes) {
+  const buf = asBuffer(bytes);
+  if (!isJpegMagic(buf)) return 1;
+  let offset = 2;
+  while (offset + 4 < buf.length) {
+    if (buf[offset] !== 0xff) break;
+    const marker = buf[offset + 1];
+    if (marker === 0xda) break;
+    const size = buf.readUInt16BE(offset + 2);
+    if (size < 2 || offset + 2 + size > buf.length) break;
+    if (marker === 0xe1 && size >= 16) {
+      const start = offset + 4;
+      if (buf.toString('ascii', start, start + 4) === 'Exif') {
+        const tiff = start + 6;
+        const le = buf.toString('ascii', tiff, tiff + 2) === 'II';
+        const read16 = (p) => (le ? buf.readUInt16LE(p) : buf.readUInt16BE(p));
+        const read32 = (p) => (le ? buf.readUInt32LE(p) : buf.readUInt32BE(p));
+        const ifd0 = tiff + read32(tiff + 4);
+        if (ifd0 + 2 < buf.length) {
+          const count = read16(ifd0);
+          for (let i = 0; i < count; i += 1) {
+            const entry = ifd0 + 2 + i * 12;
+            if (entry + 12 > buf.length) break;
+            if (read16(entry) === 0x0112) {
+              const value = read16(entry + 8);
+              if (value >= 1 && value <= 8) return value;
+            }
+          }
+        }
+      }
+    }
+    offset += 2 + size;
+  }
+  return 1;
+}
+
 const orientedDims = (width, height, orientation) => {
   const o = Number(orientation || 1);
   if (o >= 5 && o <= 8) return { width: height, height: width };
@@ -126,18 +228,19 @@ const orientedDims = (width, height, orientation) => {
  */
 export async function inspectOriented(bytes) {
   const buf = asBuffer(bytes);
-  const meta = await sharp(buf, { failOn: 'none' }).metadata();
-  const dims = orientedDims(meta.width || 0, meta.height || 0, meta.orientation);
+  const stored = decodeRaster(buf);
+  const orientation = isJpegMagic(buf) ? readJpegExifOrientation(buf) : 1;
+  const dims = orientedDims(stored.width, stored.height, orientation);
   return {
     width: dims.width,
     height: dims.height,
-    storedWidth: meta.width || 0,
-    storedHeight: meta.height || 0,
-    orientation: meta.orientation || 1,
-    format: meta.format || null,
+    storedWidth: stored.width,
+    storedHeight: stored.height,
+    orientation,
+    format: isJpegMagic(buf) ? 'jpeg' : 'png',
     bytes: buf.length,
     landscape: dims.width >= dims.height,
-    jpeg: meta.format === 'jpeg' || isJpegMagic(buf),
+    jpeg: isJpegMagic(buf),
   };
 }
 
@@ -172,59 +275,27 @@ export async function prepareLikeLovableBrowser(bytes, label = 'image') {
   const info = await inspectOriented(source);
   if (isAlreadyDepositReady(info)) return Buffer.from(source);
 
-  // Decode + EXIF-orient once (createImageBitmap). Stay in raw pixels until
-  // the final JPEG so we do not triple-encode the way a naive sharp pipeline would.
-  const oriented = await sharp(source, { failOn: 'none' })
-    .rotate()
-    .flatten({ background: { r: 255, g: 255, b: 255 } })
-    .raw()
-    .toBuffer({ resolveWithObject: true });
-
-  let raw = oriented.data;
-  let width = oriented.info.width;
-  let height = oriented.info.height;
-  let channels = oriented.info.channels;
-
-  if (height > width) {
-    const rotated = await sharp(raw, { raw: { width, height, channels } })
-      .rotate(90)
-      .raw()
-      .toBuffer({ resolveWithObject: true });
-    raw = rotated.data;
-    width = rotated.info.width;
-    height = rotated.info.height;
-    channels = rotated.info.channels;
+  let img = decodeRaster(source);
+  if (info.orientation && info.orientation !== 1) {
+    img = applyExifOrientation(img, info.orientation);
   }
+  if (img.height > img.width) img = rotate90Cw(img);
 
-  const longest = Math.max(info.width, info.height);
+  const longest = Math.max(img.width, img.height);
   if (longest > TARGET_MAX_DIM) {
     const scale = TARGET_MAX_DIM / longest;
-    const targetW = Math.round(info.width * scale);
-    const targetH = Math.round(info.height * scale);
-    const resized = await sharp(raw, { raw: { width, height, channels } })
-      .resize({
-        width: targetW,
-        height: targetH,
-        fit: 'fill',
-      })
-      .raw()
-      .toBuffer({ resolveWithObject: true });
-    raw = resized.data;
-    width = resized.info.width;
-    height = resized.info.height;
-    channels = resized.info.channels;
+    img = resizeBilinear(
+      img,
+      Math.round(img.width * scale),
+      Math.round(img.height * scale),
+    );
   }
 
-  const rawOpts = { raw: { width, height, channels } };
   let last = null;
   for (const quality of BROWSER_QUALITY_LADDER) {
-    last = await sharp(raw, rawOpts).jpeg({
-      quality,
-      chromaSubsampling: '4:2:0',
-    }).toBuffer();
-    if (last.length <= PER_IMAGE_BYTES_BUDGET) return last;
+    last = encodeJpeg(img, quality);
+    if (last.length <= PER_IMAGE_BYTES_BUDGET) return Buffer.from(last);
   }
-
   throw new Error(`${label} image is still too large after browser compression`);
 }
 
@@ -344,5 +415,20 @@ export const syntheticCheckPng = ({ width, height } = {}) => {
 
 export async function syntheticJpegWithExifOrientation({ width, height, orientation = 6 } = {}) {
   const raw = syntheticCheckRaster({ width, height, flat: true });
-  return sharp(raw).withMetadata({ orientation }).jpeg({ quality: 78 }).toBuffer();
+  const app1 = Buffer.alloc(36);
+  app1[0] = 0xff;
+  app1[1] = 0xe1;
+  app1.writeUInt16BE(34, 2);
+  app1.write('Exif\0\0', 4, 6, 'ascii');
+  app1.write('MM', 10, 2, 'ascii');
+  app1.writeUInt16BE(0x002a, 12);
+  app1.writeUInt32BE(8, 14);
+  app1.writeUInt16BE(1, 18);
+  app1.writeUInt16BE(0x0112, 20);
+  app1.writeUInt16BE(3, 22);
+  app1.writeUInt32BE(1, 24);
+  app1.writeUInt16BE(orientation, 28);
+  app1.writeUInt16BE(0, 30);
+  app1.writeUInt32BE(0, 32);
+  return Buffer.concat([raw.subarray(0, 2), app1, raw.subarray(2)]);
 }
