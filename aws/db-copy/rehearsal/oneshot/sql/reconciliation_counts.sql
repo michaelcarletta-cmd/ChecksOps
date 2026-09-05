@@ -1,4 +1,4 @@
--- Row-count reconciliation for all 166 live public base tables.
+-- Row-count reconciliation for live public base tables (167 including financial_stepup_log).
 -- PREPARATION ONLY: do not run against live or staging databases yet.
 -- Run the same statement on the source snapshot and the RDS restore, then diff.
 -- Table names come from generated types, which match the live base-table count.
@@ -80,6 +80,7 @@ UNION ALL SELECT 'endorsement_automated_reminders', count(*) FROM public.endorse
 UNION ALL SELECT 'endorsement_requests', count(*) FROM public.endorsement_requests
 UNION ALL SELECT 'esign_event_logs', count(*) FROM public.esign_event_logs
 UNION ALL SELECT 'external_payment_recipients', count(*) FROM public.external_payment_recipients
+UNION ALL SELECT 'financial_stepup_log', count(*) FROM public.financial_stepup_log
 UNION ALL SELECT 'glba_security_events', count(*) FROM public.glba_security_events
 UNION ALL SELECT 'homeowner_bank_link_tokens', count(*) FROM public.homeowner_bank_link_tokens
 UNION ALL SELECT 'homeowner_check_uploads', count(*) FROM public.homeowner_check_uploads

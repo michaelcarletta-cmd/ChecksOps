@@ -195,8 +195,10 @@ const applyDelta = async (event) => {
     } catch {
       await client.query('SET session_replication_role = replica');
     }
+    const onlyTables = Array.isArray(event.onlyTables) ? new Set(event.onlyTables) : null;
     for (const table of manifest.tables || []) {
       ident(table.name);
+      if (onlyTables && !onlyTables.has(table.name)) continue;
       const pk = (table.pkColumns || ['id']).map((col) => ident(col));
       try {
         const raw = await s3.send(new GetObjectCommand({
@@ -330,6 +332,8 @@ const reconcile = async (event) => {
       ['disbursement_splits_batch_id', `SELECT count(*)::int AS n FROM public.disbursement_splits s LEFT JOIN public.disbursement_batches b ON b.id = s.batch_id WHERE s.batch_id IS NOT NULL AND b.id IS NULL`],
       ['claim_folders_claim_id', `SELECT count(*)::int AS n FROM public.claim_folders f LEFT JOIN public.claims c ON c.id = f.claim_id WHERE f.claim_id IS NOT NULL AND c.id IS NULL`],
       ['user_roles_duplicate_user_role', `SELECT count(*)::int AS n FROM (SELECT user_id, role, count(*) FROM public.user_roles GROUP BY 1,2 HAVING count(*) > 1) d`],
+      ['financial_stepup_log_user_id', `SELECT count(*)::int AS n FROM public.financial_stepup_log s LEFT JOIN public.profiles p ON p.id = s.user_id WHERE s.user_id IS NOT NULL AND p.id IS NULL`],
+      ['financial_stepup_log_tenant_id', `SELECT count(*)::int AS n FROM public.financial_stepup_log s LEFT JOIN public.tenants t ON t.id = s.tenant_id WHERE s.tenant_id IS NOT NULL AND t.id IS NULL`],
     ];
     for (const [name, sql] of fkChecks) {
       try { fk[name] = (await client.query(sql)).rows[0].n; }
@@ -339,7 +343,10 @@ const reconcile = async (event) => {
     const requiredChecks = [
       ['tenants_id_null', `SELECT count(*)::int AS n FROM public.tenants WHERE id IS NULL`],
       ['check_intake_items_id_null', `SELECT count(*)::int AS n FROM public.check_intake_items WHERE id IS NULL`],
-      ['claims_tenant_null', `SELECT count(*)::int AS n FROM public.claims WHERE tenant_id IS NULL`],
+      ['claims_org_id_null', `SELECT count(*)::int AS n FROM public.claims WHERE org_id IS NULL`],
+      ['financial_stepup_log_id_null', `SELECT count(*)::int AS n FROM public.financial_stepup_log WHERE id IS NULL`],
+      ['financial_stepup_log_user_id_null', `SELECT count(*)::int AS n FROM public.financial_stepup_log WHERE user_id IS NULL`],
+      ['financial_stepup_log_action_key_null', `SELECT count(*)::int AS n FROM public.financial_stepup_log WHERE action_key IS NULL`],
     ];
     for (const [name, sql] of requiredChecks) {
       try { requiredNulls[name] = (await client.query(sql)).rows[0].n; }
@@ -371,6 +378,90 @@ const reconcile = async (event) => {
   }
 };
 
+const applyDdl = async (event) => {
+  const dbName = event.database;
+  let checksopsDdl = false;
+  if (dbName === 'checksops') {
+    if (event.confirmChecksopsDdl !== true || event.ddlOnly !== true) {
+      throw new Error('refusing DDL on checksops without confirmChecksopsDdl and ddlOnly');
+    }
+    checksopsDdl = true;
+  } else {
+    assertRehearsalName(dbName);
+  }
+  const admin = await loadAdmin();
+  const client = await connect(admin, dbName);
+  try {
+    const current = (await client.query('SELECT current_database() AS d')).rows[0].d;
+    if (current !== dbName) throw new Error(`connected to ${current}`);
+    const sqlPath = [
+      path.join(ROOT, 'sql', '37_financial_stepup_log.sql'),
+      '/var/task/sql/37_financial_stepup_log.sql',
+    ].find((p) => fs.existsSync(p));
+    if (!sqlPath) throw new Error('37_financial_stepup_log.sql missing from Lambda package');
+    await client.query('BEGIN');
+    try {
+      await client.query(fs.readFileSync(sqlPath, 'utf8'));
+      const exists = (await client.query(`SELECT to_regclass('public.financial_stepup_log') IS NOT NULL AS ok`)).rows[0].ok;
+      const columns = (await client.query(`
+      SELECT a.attname AS name, t.typname AS type, NOT a.attnotnull AS nullable,
+             EXISTS (
+               SELECT 1 FROM pg_index i
+               WHERE i.indrelid = a.attrelid AND i.indisprimary AND a.attnum = ANY (i.indkey)
+             ) AS pk
+      FROM pg_attribute a
+      JOIN pg_class c ON c.oid = a.attrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      JOIN pg_type t ON t.oid = a.atttypid
+      WHERE n.nspname = 'public' AND c.relname = 'financial_stepup_log'
+        AND a.attnum > 0 AND NOT a.attisdropped
+      ORDER BY a.attnum
+    `)).rows;
+      const indexes = (await client.query(`
+      SELECT indexrelid::regclass::text AS name
+      FROM pg_index
+      WHERE indrelid = 'public.financial_stepup_log'::regclass
+      ORDER BY 1
+    `)).rows.map((row) => row.name);
+      const policies = (await client.query(`
+      SELECT polname FROM pg_policy
+      WHERE polrelid = 'public.financial_stepup_log'::regclass
+      ORDER BY 1
+    `)).rows.map((row) => row.polname);
+      const rls = (await client.query(`
+      SELECT relrowsecurity AS enabled FROM pg_class
+      WHERE oid = 'public.financial_stepup_log'::regclass
+    `)).rows[0];
+      const n = (await client.query('SELECT count(*)::int AS n FROM public.financial_stepup_log')).rows[0].n;
+      await client.query('COMMIT');
+      return {
+        ok: exists === true,
+        database: dbName,
+        ddlOnly: true,
+        checksopsDdl,
+        mutatedChecksopsData: false,
+        tableExists: exists,
+        columnCount: columns.length,
+        columns: columns.map((col) => ({
+          name: col.name,
+          type: col.type,
+          nullable: col.nullable,
+          primaryKey: Boolean(col.pk),
+        })),
+        indexes,
+        policies,
+        rlsEnabled: Boolean(rls?.enabled),
+        rowCount: n,
+      };
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+      throw error;
+    }
+  } finally {
+    await client.end();
+  }
+};
+
 export const handler = async (event = {}) => {
   const step = event.step || 'create_db';
   const base = {
@@ -383,6 +474,7 @@ export const handler = async (event = {}) => {
     if (step === 'create_db') return { ...base, ...(await createDatabase(event)) };
     if (step === 'bootstrap') return { ...base, ...(await bootstrapSchema(event)) };
     if (step === 'restore') return { ...base, ...(await restoreDump(event)) };
+    if (step === 'apply_ddl') return { ...base, ...(await applyDdl(event)), liveChecksopsMutated: false };
     if (step === 'apply_delta') return { ...base, ...(await applyDelta(event)) };
     if (step === 'reconcile') return { ...base, ...(await reconcile(event)) };
     throw new Error(`unknown step ${step}`);

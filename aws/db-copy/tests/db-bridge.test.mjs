@@ -31,6 +31,10 @@ import {
   summarizeDelta,
 } from '../lib/db-bridge.mjs';
 import { filterRestoreToc, shouldSkipRestoreTocLine } from '../lib/restore-toc.mjs';
+import {
+  pickAllowlistedValues,
+  WRITE_ALLOWLIST,
+} from '../../functions/api/write-allowlist.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const countsSql = fs.readFileSync(path.join(here, '../sql/reconciliation_counts.sql'), 'utf8');
@@ -48,12 +52,13 @@ test('db bridge health is fail-closed on write/sql flags', () => {
   assert.deepEqual(REQUIRED_ACTIONS, ['health', 'tables', 'schema', 'counts', 'rows', 'identity_map']);
 });
 
-test('reconciliation SQL still lists 166 business tables', () => {
+test('reconciliation SQL lists 167 business tables including financial_stepup_log', () => {
   const names = parseCountTableNames(countsSql);
-  assert.equal(names.length, 166);
+  assert.equal(names.length, 167);
   assert.ok(names.includes('check_intake_items'));
   assert.ok(names.includes('tenants'));
-  assert.equal(new Set(names).size, 166);
+  assert.ok(names.includes('financial_stepup_log'));
+  assert.equal(new Set(names).size, 167);
 });
 
 test('approved business tables skip views, excluded secrets, and staging-only tables', () => {
@@ -261,4 +266,45 @@ test('skipped overlay tables force PARTIAL / NO-GO even when recon gates pass', 
   });
   assert.equal(complete.database, 'PASS');
   assert.equal(complete.goNoGo, 'GO for data migration readiness');
+});
+
+test('staging financial_stepup_log SQL matches production columns and omits preferred_auth_method', () => {
+  const sql = fs.readFileSync(path.join(here, '../../write-path/sql/37_financial_stepup_log.sql'), 'utf8');
+  assert.match(sql, /CREATE TABLE IF NOT EXISTS public\.financial_stepup_log/);
+  for (const col of ['user_id', 'tenant_id', 'action_key', 'factor_type', 'succeeded', 'metadata', 'created_at', 'updated_at']) {
+    assert.match(sql, new RegExp(`\\b${col}\\b`));
+  }
+  assert.match(sql, /idx_financial_stepup_log_user/);
+  assert.match(sql, /idx_financial_stepup_log_tenant/);
+  assert.match(sql, /ENABLE ROW LEVEL SECURITY/);
+  assert.match(sql, /aws_select_financial_stepup_log/);
+  assert.match(sql, /aws_write_financial_stepup_log/);
+  assert.match(sql, /GRANT SELECT, INSERT/);
+  assert.equal(/preferred_auth_method/.test(sql), false);
+  assert.equal(/user_passkeys/.test(sql), false);
+  assert.equal(/64_financial_activation/.test(sql), false);
+});
+
+test('financial_stepup_log write allowlist is insert-only and ignores spoofed user_id', () => {
+  assert.equal(WRITE_ALLOWLIST.financial_stepup_log.ops.has('insert'), true);
+  assert.equal(WRITE_ALLOWLIST.financial_stepup_log.ops.has('update'), false);
+  const denied = pickAllowlistedValues('financial_stepup_log', {
+    user_id: '00000000-0000-0000-0000-000000000099',
+    tenant_id: 'abd3c2a0-6dc0-4680-92dd-a013e1141c91',
+    action_key: 'disburse',
+    factor_type: 'totp',
+    succeeded: true,
+    amount: 12,
+  });
+  assert.equal(denied.error, 'column_not_allowlisted');
+  const ok = pickAllowlistedValues('financial_stepup_log', {
+    user_id: '00000000-0000-0000-0000-000000000099',
+    tenant_id: 'abd3c2a0-6dc0-4680-92dd-a013e1141c91',
+    action_key: 'disburse',
+    factor_type: 'totp',
+    succeeded: true,
+  });
+  assert.equal(ok.error, undefined);
+  assert.equal(ok.values.user_id, undefined);
+  assert.equal(ok.values.action_key, 'disburse');
 });

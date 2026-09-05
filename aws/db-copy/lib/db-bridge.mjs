@@ -312,6 +312,15 @@ export const sanitizeIdentityMap = (payload = {}) => {
   };
 };
 
+export const sanitizeColumnList = (spec = {}) =>
+  (spec.columns || []).map((col) => ({
+    name: col.name,
+    type: col.type || null,
+    nullable: col.nullable !== false,
+    primaryKey: Boolean(col.primaryKey),
+    redacted: Boolean(col.redacted),
+  }));
+
 export const sanitizeSchemaCatalog = (schemaByTable = {}) => {
   const out = {};
   const redactedByTable = {};

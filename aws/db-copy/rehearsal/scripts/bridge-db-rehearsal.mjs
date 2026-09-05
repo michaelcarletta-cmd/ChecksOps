@@ -29,16 +29,17 @@ import {
   keysToMap,
   loadBusinessTableNames,
   numericCounts,
+  overlayUpsertedRows,
   parseCopyKeyset,
   primaryKeyColumns,
   reconstructKeys,
   redactedColumnNames,
+  rehearsalVerdict,
   roundMoney,
   rowPrimaryKey,
+  sanitizeColumnList,
   sanitizeIdentityMap,
   sanitizeSchemaCatalog,
-  overlayUpsertedRows,
-  rehearsalVerdict,
   sha256Hex,
   skippedMissingTables,
   stripRedactedFields,
@@ -227,6 +228,10 @@ const packOneshot = async () => {
   ]) {
     await copyFile(path.join(ROOT, 'aws/db-copy/sql', sql), path.join(staging, 'sql', sql));
   }
+  await copyFile(
+    path.join(ROOT, 'aws/write-path/sql/37_financial_stepup_log.sql'),
+    path.join(staging, 'sql/37_financial_stepup_log.sql'),
+  );
   const fks = JSON.parse(await readFile(path.join(ROOT, 'aws/db-copy/analysis/skipped_auth_users_fks.json'), 'utf8'));
   await writeFile(path.join(staging, 'auth-fk-names.json'), JSON.stringify([...new Set(fks.map((row) => row.fk_constraint))]));
   execFileSync('npm', ['install', '--omit=dev'], { cwd: staging, stdio: 'ignore' });
@@ -399,6 +404,10 @@ ${deltaRows || '| _(none)_ | 0 | 0 | 0 | |'}
 
 Secret columns were not copied (\`[redacted]\` omitted; null preserved).
 
+## Preferred auth method (not added)
+
+Production \`profiles.preferred_auth_method\` is present. AWS login uses Cognito WebAuthn / EMAIL_OTP; the write allowlist ignores this column. It was **not** added to staging schema.
+
 ## Phase 3 — Isolated rehearsal restore/sync
 
 Isolated rehearsal was created without overwriting live \`checksops\`, then migratable business tables were replaced with current production rows from the DB bridge. Secret columns with value \`[redacted]\` were omitted; generated columns were skipped.
@@ -482,10 +491,12 @@ STOP FOR REVIEW. Production cutover was not performed.
 };
 
 const main = async () => {
-  const resumeLambda = process.argv.includes('--resume-lambda');
+  const applyDdlOverlay = process.argv.includes('--apply-ddl-overlay');
+  const applyChecksopsDdl = process.argv.includes('--apply-checksops-ddl');
+  const resumeLambda = process.argv.includes('--resume-lambda') || applyDdlOverlay;
   await mkdir(WORK, { recursive: true });
   await mkdir(path.join(REPORT_DIR, 'analysis'), { recursive: true });
-  progress({ step: 'assume_aws', resumeLambda });
+  progress({ step: 'assume_aws', resumeLambda, applyDdlOverlay, applyChecksopsDdl });
   try { awsJson(['sts', 'get-caller-identity']); }
   catch { await assumeRole(); }
 
@@ -500,6 +511,10 @@ const main = async () => {
   let prodFingerprints = {};
   let prodFinancial = {};
   let reconstruct = {};
+  let preferredAuthMethod = {
+    addedToStaging: false,
+    reason: 'AWS Cognito WebAuthn/EMAIL_OTP replaced this preference; not added for cosmetic schema parity.',
+  };
   const financialTables = new Set([
     'check_intake_items', 'deposit_items', 'deposit_batches', 'checkalt_deposits',
     'disbursement_splits', 'disbursement_batches', 'claim_check_payments',
@@ -531,6 +546,40 @@ const main = async () => {
       financialRows[table] = await pageRows(token, { table, keysOnly: false, limit: LIVE_PAGE_SIZE });
     }
     prodFinancial = financialFromRows(financialRows);
+    const stepupCols = sanitizeColumnList(schemaByTable.financial_stepup_log || {});
+    const profileCols = sanitizeColumnList(schemaByTable.profiles || {});
+    const preferredAuthMethodInspect = {
+      productionPresent: profileCols.some((col) => col.name === 'preferred_auth_method'),
+      productionType: profileCols.find((col) => col.name === 'preferred_auth_method') || null,
+      addedToStaging: false,
+      awsFrontendReads: true,
+      awsBackendPersists: false,
+      awsLoginUsesColumn: false,
+      reason: 'AWS CheckOps/WhiteLabel/MortgageOps sign-in uses Cognito WebAuthn and EMAIL_OTP. profiles.preferred_auth_method is clientIgnored in the write allowlist. Do not add it for cosmetic schema parity.',
+    };
+    preferredAuthMethod = preferredAuthMethodInspect;
+    await writeFile(path.join(REPORT_DIR, 'analysis/financial_stepup_log_schema.json'), JSON.stringify({
+      generatedAt: new Date().toISOString(),
+      financial_stepup_log: stepupCols,
+      preferredAuthMethod,
+    }, null, 2));
+    progress({
+      step: 'schema_inspected',
+      stepupColumns: stepupCols.map((col) => col.name),
+      preferredAuthPresent: preferredAuthMethod.productionPresent,
+    });
+    const fingerprintTables = [
+      'tenants', 'profiles', 'user_roles', 'tenant_users',
+      'check_intake_items', 'check_endorsements', 'claims',
+      'deposit_items', 'disbursement_splits', 'homeowner_ledger_events',
+      'financial_stepup_log',
+    ];
+    for (const table of fingerprintTables) {
+      const pkColumns = primaryKeyColumns(schemaByTable[table] || {});
+      const rows = await pageRows(token, { table, keysOnly: true, limit: LIVE_PAGE_SIZE });
+      prodFingerprints[table] = [...keysToMap(rows, pkColumns).keys()].map((pk) => sha256Hex(pk)).sort();
+      progress({ step: 'fingerprint_keys', table, n: rows.length });
+    }
     progress({ step: 'resume_lambda_ready', approved: classifiedTables.approved.length });
   } else {
   progress({ step: 'phase1_health' });
@@ -674,20 +723,82 @@ const main = async () => {
     const zip = await packOneshot();
     await ensureLambda(zip, adminSecret.ARN);
     progress({ step: 'lambda_restore' });
-    const restored = process.argv.includes('--skip-restore')
+    const skipRestore = process.argv.includes('--skip-restore') || applyDdlOverlay;
+    const restored = skipRestore
       ? { ok: true, restoreMode: 'skipped_existing_rehearsal', created: false }
       : await invokeLambda({
         step: 'restore',
         database: DB_NAME,
       });
-    progress({ step: 'lambda_apply_delta', restoreOk: restored.ok, restoreMode: restored.restoreMode || null });
-    const applied = await invokeLambda({
-      step: 'apply_delta',
-      database: DB_NAME,
-      bucket: FILES_BUCKET,
-      manifestPrefix: prefix,
-    });
-    const pkTables = classifiedTables.approved.filter((name) => businessTableNames.includes(name)).map((table) => ({
+    let applied;
+    if (applyDdlOverlay) {
+      progress({ step: 'lambda_apply_ddl', database: DB_NAME });
+      const ddl = await invokeLambda({ step: 'apply_ddl', database: DB_NAME });
+      if (!ddl.ok) throw new Error(`rehearsal DDL failed: ${String(ddl.error || 'unknown').slice(0, 180)}`);
+      restore.ddl = {
+        ok: ddl.ok,
+        database: ddl.database,
+        columnCount: ddl.columnCount,
+        columns: ddl.columns,
+        indexes: ddl.indexes,
+        policies: ddl.policies,
+        rlsEnabled: ddl.rlsEnabled,
+        rowCountBeforeOverlay: ddl.rowCount,
+      };
+      progress({
+        step: 'rehearsal_ddl_ok',
+        columns: (ddl.columns || []).map((col) => col.name),
+        policies: ddl.policies,
+        rlsEnabled: ddl.rlsEnabled,
+      });
+      const table = 'financial_stepup_log';
+      const pkColumns = primaryKeyColumns(schemaByTable[table] || {});
+      const full = await pageRows(token, { table, keysOnly: false, limit: LIVE_PAGE_SIZE });
+      progress({ step: 'stepup_rows_fetched', count: full.length });
+      const secretCols = redactedColumnNames(schemaByTable[table] || {});
+      const payload = {
+        pkColumns,
+        replaceAll: true,
+        upserts: full.map((row) => stripRedactedFields(row, secretCols).row),
+        deletes: [],
+        skippedSecretColumns: secretCols,
+      };
+      const prefixInner = 'Migration/rehearsal-20260905/delta-stepup';
+      const manifest = {
+        generatedAt: new Date().toISOString(),
+        rehearsalDatabase: DB_NAME,
+        tables: [{ name: table, pkColumns, inserted: full.length, updated: 0, deleted: 0, skippedSecretColumns: secretCols }],
+      };
+      await writeFile(path.join(WORK, 'manifest.json'), JSON.stringify(manifest));
+      await run(AWS, ['s3', 'cp', path.join(WORK, 'manifest.json'), `s3://${FILES_BUCKET}/${prefixInner}/manifest.json`]);
+      const local = path.join(WORK, `${table}.json`);
+      await writeFile(local, JSON.stringify(payload));
+      await run(AWS, ['s3', 'cp', local, `s3://${FILES_BUCKET}/${prefixInner}/tables/${table}.json`]);
+      await unlink(local);
+      progress({ step: 'lambda_apply_delta', restoreOk: restored.ok, restoreMode: restored.restoreMode || null, onlyTables: [table] });
+      applied = await invokeLambda({
+        step: 'apply_delta',
+        database: DB_NAME,
+        bucket: FILES_BUCKET,
+        manifestPrefix: prefixInner,
+        onlyTables: [table],
+      });
+    } else {
+      progress({ step: 'lambda_apply_delta', restoreOk: restored.ok, restoreMode: restored.restoreMode || null });
+      applied = await invokeLambda({
+        step: 'apply_delta',
+        database: DB_NAME,
+        bucket: FILES_BUCKET,
+        manifestPrefix: prefix,
+      });
+    }
+    const fingerprintTables = [
+      'tenants', 'profiles', 'user_roles', 'tenant_users',
+      'check_intake_items', 'check_endorsements', 'claims',
+      'deposit_items', 'disbursement_splits', 'homeowner_ledger_events',
+      'financial_stepup_log',
+    ];
+    const pkTables = (applyDdlOverlay ? fingerprintTables : classifiedTables.approved.filter((name) => businessTableNames.includes(name))).map((table) => ({
       table,
       pkColumns: primaryKeyColumns(schemaByTable[table] || {}),
     }));
@@ -697,7 +808,7 @@ const main = async () => {
     restore = {
       created: restored.created ?? restored.ok === true,
       restoreOk: restored.ok === true,
-      restoreMode: restored.restoreMode || null,
+      restoreMode: applyDdlOverlay ? 'existing_rehearsal_plus_stepup_ddl' : (restored.restoreMode || null),
       tocKept: restored.tocKept,
       tocSkipped: restored.tocSkipped,
       deltaOk: applied.ok === true,
@@ -705,9 +816,12 @@ const main = async () => {
       deltaError: applied.error || null,
       skippedMissingTables: skippedMissing,
       upsertedRows: overlayUpsertedRows(applied.tableSummary),
-      note: restored.restoreMode === 'template_clone_then_overlay'
-        ? `Isolated ${DB_NAME} cloned from staging checksops TEMPLATE, then business tables replaced with live production rows. Live checksops was not overwritten.`
-        : null,
+      ddl: restore.ddl || null,
+      note: applyDdlOverlay
+        ? `Applied financial_stepup_log DDL on isolated ${DB_NAME} and overlaid current production rows. Live checksops data was not overwritten.`
+        : (restored.restoreMode === 'template_clone_then_overlay'
+          ? `Isolated ${DB_NAME} cloned from staging checksops TEMPLATE, then business tables replaced with live production rows. Live checksops was not overwritten.`
+          : null),
     };
     const rehearsalCounts = reconciled.tableCounts || {};
     const countDiffs = countDiffVsBaseline(rehearsalCounts, counted.counts, new Set(['spatial_ref_sys']));
@@ -747,11 +861,25 @@ const main = async () => {
         deposit_items: rehearsalCounts.deposit_items,
         disbursement_splits: rehearsalCounts.disbursement_splits,
         homeowner_ledger_events: rehearsalCounts.homeowner_ledger_events,
+        financial_stepup_log: rehearsalCounts.financial_stepup_log,
       },
       fkOrphanCounts: reconciled.fkOrphanCounts,
       identityAccountsPresent: reconciled.identityAccountsPresent,
       productionFinancial: Object.fromEntries(Object.entries(prodFinancial).map(([k, v]) => [k, roundMoney(v)])),
       rehearsalFinancial: rehearsalFin,
+      pkCriticalFingerprints: Object.fromEntries(
+        ['tenants', 'profiles', 'user_roles', 'tenant_users', 'check_intake_items', 'check_endorsements', 'claims', 'deposit_items', 'disbursement_splits', 'homeowner_ledger_events', 'financial_stepup_log']
+          .map((table) => {
+            const rehearsalPrints = pkFingerprints[table] || [];
+            const prodPrints = prodFingerprints[table] || [];
+            return [table, {
+              prod: prodPrints.length,
+              rehearsal: rehearsalPrints.length,
+              match: prodPrints.join(' ') === rehearsalPrints.join(' '),
+            }];
+          }),
+      ),
+      requiredNullCounts: reconciled.requiredNullCounts,
     };
     if (!restored.ok) discrepancies.push(`Dump restore into rehearsal failed: ${String(restored.error || 'unknown').slice(0, 180)}`);
     if (!applied.ok) discrepancies.push(`Delta apply failed: ${String(applied.error || 'unknown').slice(0, 180)}`);
@@ -762,6 +890,33 @@ const main = async () => {
     }
     if (reconciled.identityAccountsPresent) {
       discrepancies.push('TEMPLATE clone copied staging-only identity_accounts onto rehearsal. That table is not production migratable data; live checksops identity_accounts was not modified.');
+    }
+    if (applyChecksopsDdl) {
+      const ddlReady = skippedMissing.length === 0 && applied.ok === true && restored.ok === true
+        && recon.countsStatus === 'PASS' && recon.financialStatus === 'PASS' && recon.pkStatus === 'PASS'
+        && recon.fkStatus === 'PASS';
+      if (!ddlReady) {
+        discrepancies.push('Skipped checksops DDL: rehearsal gates were not all PASS');
+      } else {
+        progress({ step: 'lambda_apply_ddl_checksops' });
+        const stagingDdl = await invokeLambda({
+          step: 'apply_ddl',
+          database: 'checksops',
+          confirmChecksopsDdl: true,
+          ddlOnly: true,
+        });
+        restore.checksopsDdl = {
+          ok: stagingDdl.ok === true,
+          columnCount: stagingDdl.columnCount,
+          policies: stagingDdl.policies,
+          rlsEnabled: stagingDdl.rlsEnabled,
+          rowCount: stagingDdl.rowCount,
+          mutatedChecksopsData: stagingDdl.mutatedChecksopsData === true,
+          error: stagingDdl.error || null,
+        };
+        if (!stagingDdl.ok) discrepancies.push(`checksops DDL failed: ${String(stagingDdl.error || 'unknown').slice(0, 180)}`);
+        progress({ step: 'checksops_ddl_done', ok: stagingDdl.ok === true, rowCount: stagingDdl.rowCount });
+      }
     }
   } catch (error) {
     discrepancies.push(`Rehearsal Lambda path blocked: ${String(error.message || error).slice(0, 240)}`);
@@ -792,6 +947,7 @@ const main = async () => {
     restore,
     recon,
     discrepancies,
+    preferredAuthMethod,
     storage: {
       objects: 1411,
       bytes: 2565912220,
