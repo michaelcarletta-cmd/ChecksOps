@@ -56,8 +56,9 @@ CheckAlt is **PARTIAL** and is handled in a separate chat (PR #125 / #130). This
 
 ### Still prep (can continue without switching production)
 
-- **Step 4 + 5A:** Dedicated production-prep Lambda role **verified** (`checksops-production-prep-api-role`, no VPC, flags false). CFN stack `UPDATE_COMPLETE` with matching `ExistingExecutionRoleArn`.
-- **Step 5B–5D:** Create/attach `ChecksOpsProductionPrepCloudWatchInspect`; deploy `checksops-production-prep-alarms` with `ActionsEnabled=false`. See `aws/production/iam/OPERATOR_CLOUDWATCH_IAM.md`. One operator action at a time.
+- **Step 4 + 5A:** Dedicated production-prep Lambda role **verified**.
+- **Step 5B:** Operator created `ChecksOpsProductionPrepCloudWatchInspect` (agent cannot `iam:GetPolicy`). Not attached yet.
+- **Step 5C–5D:** Attach that policy to `ChecksOpsCursorCloudStaging`; deploy `checksops-production-prep-alarms` with `ActionsEnabled=false`. One operator action at a time.
 - SES sandbox / deliverability (Cognito `DEVELOPER` already attached; no OTP sent)
 - Confirm WebAuthn RP ID `checksops.com` remains on `us-east-1_h00WorYMT` only (already set; do not edit staging)
 - ACM already **ISSUED** (validation only; not apex cut)

@@ -4,9 +4,9 @@
 
 Live `cloudformation deploy` of `checksops-production-prep-alarms` previously failed with `cloudwatch:PutMetricAlarm` denied; that stack is **absent**. Metric filters on `/aws/lambda/checksops-production-prep-api` already exist.
 
-**5A verified 2026-09-05T23:09:58Z:** stack `checksops-production-prep-api` is `UPDATE_COMPLETE`. `ExistingExecutionRoleArn` and output `ExecutionRoleArn` are `arn:aws:iam::806168576068:role/checksops-production-prep-api-role`. `EnableErrorsAlarm=false`. Lambda still that role, `/prep/health` 200, no VPC (`VpcId` empty), flags false.
+**5A verified 2026-09-05T23:09:58Z:** stack `checksops-production-prep-api` is `UPDATE_COMPLETE`. Dedicated Lambda role, `/prep/health` 200, no VPC, flags false.
 
-The policy JSON (`operator-cloudwatch-inspect.json`) / YAML (`operator-cloudwatch-inspect.yaml`) **does not attach** itself. A human must attach after create.
+**5B operator-complete 2026-09-05:** policy name `ChecksOpsProductionPrepCloudWatchInspect` (expected ARN `arn:aws:iam::806168576068:policy/ChecksOpsProductionPrepCloudWatchInspect`). Operator did not attach. This agent is denied `iam:GetPolicy` / `ListEntitiesForPolicy`, so the JSON cannot be re-read from IAM. Alarm stack `checksops-production-prep-alarms` is still **absent**. The policy JSON in git **does not attach** itself.
 
 ## 5A. Align CloudFormation — **done**
 
@@ -26,7 +26,7 @@ The policy JSON (`operator-cloudwatch-inspect.json`) / YAML (`operator-cloudwatc
 6. Execute. Wait for `UPDATE_COMPLETE`.
 7. Confirm stack output `ExecutionRoleArn` is the dedicated role, not `checksops-staging-ApiFunctionRole-7E7XRyLe3nyi`.
 
-## 5B. Create the inspect policy (does not attach)
+## 5B. Create the inspect policy — **operator done (do not attach)**
 
 **Console**
 
@@ -85,9 +85,9 @@ The staging alarm **only watches** `checksops-staging-api` Errors. It must not c
 
 Do **not** set `ActionsEnabled=true`. Do **not** add an SNS topic in this step.
 
-## What to send back (current: 5B only)
+## What to send back (current: 5C only)
 
-1. **Done:** API stack `UPDATE_COMPLETE` and `ExistingExecutionRoleArn` = `checksops-production-prep-api-role`.
-2. After 5B: policy ARN for `ChecksOpsProductionPrepCloudWatchInspect`. Do **not** attach yet (5C). Do **not** create the alarm stack yet (5D).
-3. After 5C–5D (later): attach target; alarm stack `CREATE_COMPLETE`; **Actions enabled = false** on all five names.
-4. Confirmation you did not edit staging Lambda, production DNS, Cognito, or flags.
+1. **Done:** API stack `UPDATE_COMPLETE` and dedicated Lambda role.
+2. **5B:** operator created `ChecksOpsProductionPrepCloudWatchInspect` (agent cannot `iam:GetPolicy`).
+3. After 5C: which role the policy is attached to (`ChecksOpsCursorCloudStaging` preferred). Do **not** create the alarm stack yet (5D).
+4. Confirmation you did not attach it to `checksops-production-prep-api-role` or the staging API role.
