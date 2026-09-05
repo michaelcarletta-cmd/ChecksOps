@@ -1,7 +1,7 @@
 # Cognito EMAIL_OTP / WebAuthn production transition and rollback
 
 **Do not create production Cognito users or switch production authentication from this PR.**
-The production-prep pool `us-east-1_h00WorYMT` already exists (0 users) from an earlier retained CloudFormation resource. This PR attaches a web client only.
+Production pool `us-east-1_h00WorYMT` already exists (0 users) from an earlier retained CloudFormation resource. This PR attaches a web client, sets WebAuthn RP ID `checksops.com` via `SetUserPoolMfaConfig` (MFA stays OFF), and does **not** invite users. Staging pool WebAuthn RP remains `staging.checksops.com`.
 
 ## Staging (proven — PR #126)
 
@@ -22,9 +22,9 @@ Production SimpleWebAuthn rows in `user_passkeys` are **not** migrated.
 
 ## Production transition (future)
 
-1. Dedicated user pool `checksops-production` — **already exists** as `us-east-1_h00WorYMT` (0 users). **Do not reuse** `us-east-1_vPmQ7cL1F`. Do not invite production emails until cutover.
-2. RP ID / origin `checksops.com` / `https://checksops.com` (pick one canonical host; `www` must redirect to it or be in the RP allowlist). Pool WebAuthn RP ID is **not** set yet — AWS CLI 2.36 `UpdateUserPool` has no `WebAuthnConfiguration` member; set in console or a newer API **on this pool only**.
-3. SES verified identity; Cognito `EmailSendingAccount=DEVELOPER`. Still outstanding.
+1. Dedicated user pool `checksops-production` — **exists** as `us-east-1_h00WorYMT` (0 users). **Do not reuse** `us-east-1_vPmQ7cL1F`. Do not invite production emails until cutover.
+2. RP ID / origin `checksops.com` / `https://checksops.com` — **set** on the production pool (`SetUserPoolMfaConfig`, MFA OFF, `UserVerification=preferred`, `SINGLE_FACTOR`). Staging unchanged.
+3. SES verified identity; Cognito `EmailSendingAccount=DEVELOPER`. **Still outstanding** — agent SES APIs are denied. Pool remains `COGNITO_DEFAULT`. See `aws/production/SES_FROM.md`.
 4. First-auth factors: EMAIL_OTP, WEB_AUTHN, PASSWORD (master/UAT only) — already on the pool. Preferred software MFA stays **false** until TOTP is approved.
 5. Import/link the eight production emails onto existing application UUIDs. Exclude ninth UUID. **Not performed.**
 6. First login: EMAIL_OTP. Then register new Cognito passkeys.

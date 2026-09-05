@@ -12,9 +12,11 @@ aws acm request-certificate \
   --tags Key=Environment,Value=production-prep Key=DoNotCutover,Value=true
 ```
 
-**STOP.** Do not create Cloudflare records from the agent. Copy the `ResourceRecord` CNAME name/value from `aws acm describe-certificate` into an operator change window.
+**STOP.** Do not create Cloudflare records from the agent unless a future run has explicit DNS-write access that still leaves apex/`www` A records on Lovable.
 
-Until those CNAMEs exist, `Status=PENDING_VALIDATION`. Production CloudFront in `prep-stack.yaml` has **no** aliases, so Lovable apex/www stay authoritative even after this cert is requested.
+Until those CNAMEs exist, `Status=PENDING_VALIDATION`. This agent has **no Cloudflare credentials**. Validation CNAMEs would **not** change apex/`www` A records (`185.158.133.1`), but they cannot be added from here.
+
+Live check 2026-09-05: `dig` for both ACM CNAME names returned **empty**. Apex/`www` still `185.158.133.1`.
 
 Requested 2026-09-05 (do not add these records from this agent):
 

@@ -1,0 +1,17 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Desired CloudWatch alarms for production-prep API. Direct PutMetricAlarm is
+  denied for ChecksOpsCursorCloudStaging. Live inspectability is log metric
+  filters on /aws/lambda/checksops-production-prep-api plus GET /health and
+  GET /ops/readiness. Do not treat this file as a cutover trigger.
+
+Parameters:
+  FunctionName:
+    Type: String
+    Default: checksops-production-prep-api
+
+# Resources omitted: this agent cannot cloudwatch:PutMetricAlarm / DescribeAlarms /
+# DeleteAlarms. A dedicated ops role should create Errors + Throttles alarms with
+# TreatMissingData=notBreaching. Metric filters already exist:
+#   checksops-production-prep-api-error-filter → ChecksOps/Prep PrepApiErrorLogs
+#   checksops-production-prep-api-errors-filter → ChecksOps/ProductionPrep PrepApiLoggedErrors
