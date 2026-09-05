@@ -65,6 +65,31 @@ test('bridge teardown and webhook docs refuse current execution', () => {
   assert.match(rollback, /Point C/);
 });
 
+test('production-prep templates keep flags off, skip apex aliases, and do not reuse staging Cognito', () => {
+  const prep = read('aws/production/prep-stack.yaml');
+  const api = read('aws/production/api-template.yaml');
+  assert.match(prep, /Default: us-east-1_h00WorYMT/);
+  assert.match(prep, /Default: checksops\.com/);
+  assert.match(prep, /checksops-production-frontend-oac-prep2/);
+  assert.match(prep, /OriginRequestPolicyId: 88a5eaf4-2fd4-4709-b370-b4c650ea3fcf/);
+  assert.doesNotMatch(prep, /UserPoolName:/);
+  assert.doesNotMatch(prep, /Default: us-east-1_vPmQ7cL1F/);
+  assert.match(prep, /StagingPoolMustNotBeReused/);
+  assert.doesNotMatch(prep, /Aliases:/);
+  assert.match(prep, /no checksops.com aliases/);
+  assert.match(api, /AllowedValues:\n      - production-prep/);
+  assert.doesNotMatch(api, /- production\n/);
+  assert.match(api, /AWS_PROVIDER_EXECUTION_ENABLED: "false"/);
+  assert.match(api, /AWS_MOOV_ENABLED: "false"/);
+  assert.match(api, /AWS_CHECKALT_ENABLED: "false"/);
+  assert.match(api, /AWS_FINANCIAL_PERMISSIONS_ACTIVATED: "false"/);
+  assert.match(api, /AWS_COGNITO_MFA_PREFERRED: "false"/);
+  assert.match(api, /FunctionName: checksops-production-prep-api/);
+  assert.match(api, /AlarmName: checksops-production-prep-api-errors/);
+  assert.match(api, /Default: us-east-1_h00WorYMT/);
+  assert.doesNotMatch(api, /Default: us-east-1_vPmQ7cL1F/);
+});
+
 test('production example configs are marked do-not-deploy and keep flags false', () => {
   const params = read('aws/cutover/production/parameters.production.example.json');
   const sam = read('aws/cutover/production/samconfig.production.example.toml');

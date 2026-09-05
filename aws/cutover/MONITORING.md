@@ -10,9 +10,10 @@ Example template (not attached to production): `production/cloudwatch-alarms.exa
 | `GET /health` | **GO** — 200, `productionSupabaseChanged=false` |
 | `GET /db-health` | **GO** — RDS private, `checksops` / `transactionReadOnly=on` |
 | Lambda tracing | **GO** — SAM `Tracing: Active` |
-| `GET /ops/readiness` | **PARTIAL** — implemented in this PR; live staging Lambda still 404 until a later overlay (do **not** overlay from this branch; CheckAlt work is separate) |
-| CloudWatch alarms | **PARTIAL** — example YAML only. Agent role `ChecksOpsCursorCloudStaging` is denied `cloudwatch:DescribeAlarms` and `cloudwatch:GetMetricStatistics` |
-| Production alarms | **BLOCKED** (not created) |
+| `GET /ops/readiness` | **PARTIAL** — implemented; live staging Lambda still 404 until a later overlay (do **not** overlay from this branch; CheckAlt work is separate) |
+| CloudWatch alarms | **PARTIAL** — example YAML plus production-prep Errors alarm (optional CFN). Agent role `ChecksOpsCursorCloudStaging` is denied `cloudwatch:DescribeAlarms` and `cloudwatch:GetMetricStatistics` |
+| Production-prep log group | **GO (inspectable)** — `/aws/lambda/checksops-production-prep-api` via `logs:DescribeLogGroups` / stack outputs |
+| Production alarms | **PARTIAL** — inspect via CloudFormation outputs, not DescribeAlarms |
 
 ## Cutover-night dashboard (operator)
 
@@ -34,3 +35,10 @@ Watch, in order:
 ## IAM gap to close later (not this PR)
 
 Grant a dedicated ops role (not the Cloud Agent staging role) `cloudwatch:DescribeAlarms`, `cloudwatch:GetMetricStatistics`, and SNS publish for the production alarm topic. Do not broaden `ChecksOpsCursorCloudStaging` automatically.
+
+Inspect production-prep health without those APIs:
+
+```bash
+aws cloudformation describe-stacks --stack-name checksops-production-prep --query 'Stacks[0].Outputs'
+aws logs describe-log-groups --log-group-name-prefix /aws/lambda/checksops-production-prep
+```
