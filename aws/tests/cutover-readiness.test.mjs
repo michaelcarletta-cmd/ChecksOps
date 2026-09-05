@@ -88,6 +88,12 @@ test('production-prep templates keep flags off, skip apex aliases, and do not re
   assert.match(api, /AlarmName: checksops-production-prep-api-errors/);
   assert.match(api, /Default: us-east-1_h00WorYMT/);
   assert.doesNotMatch(api, /Default: us-east-1_vPmQ7cL1F/);
+  const apiCfn = read('aws/production/api-cfn.yaml');
+  assert.match(apiCfn, /FunctionName: checksops-production-prep-api/);
+  assert.match(apiCfn, /AWS_PROVIDER_EXECUTION_ENABLED: "false"/);
+  assert.match(apiCfn, /AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: "false"/);
+  assert.match(apiCfn, /AWS_FINANCIAL_PERMISSIONS_ACTIVATED: "false"/);
+  assert.doesNotMatch(apiCfn, /Default: us-east-1_vPmQ7cL1F/);
 });
 
 test('production example configs are marked do-not-deploy and keep flags false', () => {

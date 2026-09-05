@@ -14,7 +14,7 @@ CheckAlt is **PARTIAL** and is handled in a separate chat (PR #125 / #130). This
 | Production → AWS DB migration rehearsal | **GO** | PR #127 isolated overlay `checksops_rehearsal_20260905` matched live production counts, critical PKs, `financial_stepup_log` 2/2, financial aggregates, identity, membership, FKs. Live `checksops` not overwritten. |
 | Production → AWS storage migration/reconciliation | **GO** | PR #127 COPY 1,411/1,411 objects, 0 missing/failed/mismatched. 21 staging-only UAT objects left in place. Live S3 now **1,439** objects / 2,566,275,762 bytes (expected drift since rehearsal; final delta still required). |
 | Remaining Supabase/Lovable runtime dependencies | **PARTIAL** | AWS staging (`VITE_AUTH_PROVIDER=cognito`) already proxies DB/storage/Class A (email, OCR/Textract, homeowner OTP, tenant admin, hire-mortgage-agent). This PR ports first-party vendor e-sign, `ingest-shared-check` (bridge secret), and `homeowner-ledger-attach-upload`. Stripe/QuickBooks stay **fail-closed**. Realtime still polling. Production SPA is still `.env.production` Supabase-only. |
-| Production frontend / API AWS configuration | **GO (prepared, not switched)** | Dedicated stack `checksops-production-prep`: SPA bucket + CloudFront **without** apex/`www` aliases. Separate SAM `aws/production/api-template.yaml` (`Environment=production-prep` only, flags false). `.env.production` stays Supabase. Do not overlay `checksops-staging-api`. |
+| Production frontend / API AWS configuration | **GO (prepared, not switched)** for SPA; **PARTIAL** for API stack | SPA bucket + CloudFront `E1B0ZWWO5559U5` / `dmgs35lzv89ms.cloudfront.net` **without** apex/`www` aliases (placeholder only). Separate API templates exist (`Environment=production-prep` only, flags false). Agent cannot create the Lambda IAM role (`iam:GetRole` denied). `.env.production` stays Supabase. Do not overlay `checksops-staging-api`. |
 | Cognito EMAIL_OTP / WebAuthn (staging) | **GO** | PR #126: CheckOps / WhiteLabel / MortgageOps / `/h/upload`. Pool `us-east-1_vPmQ7cL1F`, client allows `ALLOW_USER_AUTH`, MFA OFF, EMAIL_OTP preferred. |
 | Cognito EMAIL_OTP / WebAuthn (production transition) | **GO (prepared, not switched)** | Pool `us-east-1_h00WorYMT` (`checksops-production`), 0 users, EMAIL_OTP+PASSWORD+WEB_AUTHN, MFA OFF, deletion protection ACTIVE. Web client from prep stack. **Do not invite.** SES From still outstanding. Pool WebAuthn RP ID not yet set (CLI `UpdateUserPool` has no `WebAuthnConfiguration`; operator console on this pool only). |
 | Tenant identity mapping + RLS / isolation | **GO (validated, not imported)** | Mapping `cognito_sub → identity_accounts.application_user_id → auth.uid()` proven on staging. Live DB bridge `identity_map` count **8**; **8/8** expected application UUIDs matched; ninth UUID fail-closed. `--apply` refused. Production still uses Supabase Auth until API/DNS switch. |
@@ -48,12 +48,14 @@ CheckAlt is **PARTIAL** and is handled in a separate chat (PR #125 / #130). This
 | Production Cognito | `us-east-1_h00WorYMT`, 0 users, not switched |
 | Identity map | 8/8 expected UUIDs via read-only bridge; ninth excluded |
 | ACM | `PENDING_VALIDATION` (no Cloudflare records added) |
-| CFN | `checksops-staging` UPDATE_COMPLETE; `checksops-staging-frontend-https` UPDATE_COMPLETE; `checksops-production-prep` see stack outputs |
+| Production CloudFront (unused) | `E1B0ZWWO5559U5` / `dmgs35lzv89ms.cloudfront.net`, aliases **0** |
+| CFN | `checksops-staging` UPDATE_COMPLETE; `checksops-staging-frontend-https` UPDATE_COMPLETE; `checksops-production-prep` CREATE_COMPLETE |
 
 ## Remaining blockers — more prep vs cutover decision
 
 ### Still prep (can continue without switching production)
 
+- Operator IAM to deploy `checksops-production-prep-api` (`iam:CreateRole` / `GetRole` / `PassRole`); delete leftover `checksops-production-prep-api-role` if it exists
 - SES From / Cognito `DEVELOPER` email on `us-east-1_h00WorYMT`
 - Set WebAuthn RP ID `checksops.com` on that pool (console; not staging)
 - Operator ACM DNS CNAMEs (DNS change, but not apex cut)
@@ -83,5 +85,5 @@ Non-blockers: Plaid; ninth UUID (fail-closed orphan); `profiles.preferred_auth_m
 | PR | Topic | This chat |
 |---|---|---|
 | #125 / #130 | CheckAlt UAT / architecture A | **Do not modify** |
-| #131 | Cutover matrix/runbooks | Baseline; do not land activation |
+| #132 | Production AWS prep (this PR) | Stacked on #131; flags off; no DNS/auth switch |
 | #128 / #129 | Earlier cutover-prep drafts | Superseded for matrix/runbooks by #131; Class A ports landed here instead of merging #129 blindly |
