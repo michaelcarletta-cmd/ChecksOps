@@ -35,11 +35,22 @@ const columnMatchSql = (table, columns) => {
   return `SELECT 1 FROM ${table} WHERE ${tests.join(' OR ')} LIMIT 1`;
 };
 
+const deposit2Sibling = (column) =>
+  `regexp_replace(split_part(COALESCE(${column}, ''), '?', 1), '\\.[^.]+$', '') || '.deposit2.jpg' = $2`;
+
+/** Read auth for check images, endorsed deposit JPEGs, and browser `.deposit2.jpg` siblings. */
+export const CHECK_INTAKE_CLAIM_FILES_AUTH_SQL = `SELECT 1 FROM check_intake_items WHERE ${[
+  '(front_image_path = ANY($1::text[]) OR split_part(front_image_path, \'?\', 1) LIKE \'%\' || $2)',
+  '(back_image_path = ANY($1::text[]) OR split_part(back_image_path, \'?\', 1) LIKE \'%\' || $2)',
+  '(back_image_deposit_path = ANY($1::text[]) OR split_part(back_image_deposit_path, \'?\', 1) LIKE \'%\' || $2)',
+  `(${deposit2Sibling('front_image_path')} OR ${deposit2Sibling('back_image_path')} OR ${deposit2Sibling('back_image_deposit_path')})`,
+].join(' OR ')} LIMIT 1`;
+
 export const BUCKET_AUTH_SQL = {
   'claim-files': [
     columnMatchSql('check_files', ['file_path']),
     columnMatchSql('claim_files', ['file_path']),
-    columnMatchSql('check_intake_items', ['front_image_path', 'back_image_path']),
+    CHECK_INTAKE_CLAIM_FILES_AUTH_SQL,
     columnMatchSql('homeowner_check_uploads', ['file_path']),
     columnMatchSql('signature_requests', ['document_path', 'final_pdf_path']),
     columnMatchSql('cash_job_attachments', ['file_path']),
@@ -79,7 +90,7 @@ export const LIST_SQL = {
   'claim-files': [
     `SELECT file_path AS path, file_name AS name, file_type AS mimetype, file_size AS size, created_at FROM check_files WHERE split_part(file_path, '?', 1) LIKE '%' || $1 LIMIT 100`,
     `SELECT file_path AS path, file_name AS name, file_type AS mimetype, file_size AS size, created_at FROM claim_files WHERE split_part(file_path, '?', 1) LIKE '%' || $1 LIMIT 100`,
-    `SELECT COALESCE(front_image_path, back_image_path) AS path, NULL::text AS name, NULL::text AS mimetype, NULL::bigint AS size, created_at FROM check_intake_items WHERE front_image_path LIKE '%' || $1 OR back_image_path LIKE '%' || $1 LIMIT 100`,
+    `SELECT COALESCE(front_image_path, back_image_path, back_image_deposit_path) AS path, NULL::text AS name, NULL::text AS mimetype, NULL::bigint AS size, created_at FROM check_intake_items WHERE front_image_path LIKE '%' || $1 OR back_image_path LIKE '%' || $1 OR back_image_deposit_path LIKE '%' || $1 LIMIT 100`,
   ],
   'endorsement-packets': [
     `SELECT endorsement_packet_path AS path, NULL::text AS name, 'image/svg+xml'::text AS mimetype, NULL::bigint AS size, created_at FROM check_intake_items WHERE endorsement_packet_path LIKE '%' || $1 LIMIT 100`,

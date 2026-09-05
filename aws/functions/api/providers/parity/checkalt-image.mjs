@@ -1,22 +1,19 @@
 /**
  * CheckAlt image preparation.
  *
- * Known-good Lovable path (CheckCommandCenter / DepositOperationsConsole):
- *   prepareCheckAltDeposit → browser-image-compression + canvas ensureLandscape
- *   then checkalt-submit-deposit downloads those bytes and Base64-encodes them
- *   with NO second re-encode.
+ * Production architecture (A) — source of truth:
+ *   Browser prepareCheckAltDeposit (canvas EXIF/orientation, 1600px, 450KB,
+ *   quality 0.80→0.62→0.50→0.38) uploads prepared JPEGs (or returns an
+ *   already-good original / 1200px endorsed rear after browser re-encode).
+ *   AWS checkalt-submit-deposit downloads those stored bytes and Base64s them
+ *   with NO second re-encode. Client-supplied frontImage/rearImage is ignored.
  *
- * The ImageScript edge function (checkalt-prepare-image) is only a fallback
- * when browser prep cannot run. AWS previously ported that fallback and used
- * it as the primary path. That is not the production happy path.
+ * Architecture B (server-side encoder clone) is not the production path and
+ * must not run on submit. `prepareLikeLovableBrowser` documents browser
+ * semantics for offline fixtures/tests only.
  *
- * Default AWS prep (`prepareLikeLovableBrowser` / `normalizeToBudget`) follows
- * the browser control flow: EXIF-aware dimensions, already-good pass-through,
- * 90° CW landscape fix, 1600px cap, quality 0.80→0.62→0.50→0.38, never shrink
- * below the 1300px DPI floor.
- *
- * `normalizeToBudgetImageScript` is retained only so we can A/B the old AWS
- * port against the known-good path. Do not use it for submit/prepare.
+ * The ImageScript edge function is a dead fallback for Command Center when a
+ * raster front exists (browser failure throws). Do not use it on AWS submit.
  */
 import { createHash } from 'node:crypto';
 import jpeg from 'jpeg-js';
@@ -41,6 +38,81 @@ export const toDepositPath = (path) => {
   }
   return `${raw}.deposit2.jpg`;
 };
+
+export const normalizeClaimRel = (path) =>
+  String(path || '').split('?')[0].replace(/^\/+/, '').trim();
+
+export const checkImageColumnPaths = (check = {}) =>
+  [
+    check.front_image_path,
+    check.back_image_path,
+    check.back_image_deposit_path,
+  ]
+    .map(normalizeClaimRel)
+    .filter(Boolean);
+
+export const allowedPreparedPaths = (check = {}) => {
+  const allowed = new Set();
+  for (const rel of checkImageColumnPaths(check)) {
+    allowed.add(rel);
+    allowed.add(toDepositPath(rel));
+  }
+  return allowed;
+};
+
+export const isAllowedPreparedPath = (check, path) => {
+  const rel = normalizeClaimRel(path);
+  if (!rel) return false;
+  return allowedPreparedPaths(check).has(rel);
+};
+
+/**
+ * Browser prepareCheckAltDeposit path decision for a stored original.
+ * `cachedDeposit2Bytes` is the sibling `.deposit2.jpg` when present.
+ * Does not re-encode — returns which stored bytes Lovable would submit.
+ */
+export async function lovableBrowserPathDecision({
+  sourcePath,
+  sourceBytes,
+  cachedDeposit2Bytes = null,
+} = {}) {
+  const rel = normalizeClaimRel(sourcePath);
+  const preparedPath = rel ? toDepositPath(rel) : null;
+  if (cachedDeposit2Bytes && cachedDeposit2Bytes.length) {
+    const cachedInfo = await inspectOriented(cachedDeposit2Bytes);
+    if (isReusablePreparedCache(cachedInfo)) {
+      return {
+        decision: 'reuse_cache',
+        path: preparedPath,
+        bytes: cachedDeposit2Bytes,
+        reencoded: false,
+        info: cachedInfo,
+      };
+    }
+  }
+  if (!sourceBytes || !sourceBytes.length) {
+    return { decision: 'missing_source', path: null, bytes: null, reencoded: false, info: null };
+  }
+  const sourceInfo = await inspectOriented(sourceBytes);
+  const jpegPath = /\.jpe?g(\?|$)/i.test(rel);
+  if (jpegPath && isAlreadyDepositReady(sourceInfo)) {
+    return {
+      decision: 'passthrough_original',
+      path: rel,
+      bytes: sourceBytes,
+      reencoded: false,
+      info: sourceInfo,
+    };
+  }
+  return {
+    decision: 'browser_reencode',
+    path: preparedPath,
+    bytes: cachedDeposit2Bytes && cachedDeposit2Bytes.length ? cachedDeposit2Bytes : null,
+    reencoded: true,
+    info: sourceInfo,
+    storedPreparedPresent: Boolean(cachedDeposit2Bytes && cachedDeposit2Bytes.length),
+  };
+}
 
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 

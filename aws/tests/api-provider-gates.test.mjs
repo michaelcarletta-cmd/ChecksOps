@@ -136,7 +136,7 @@ test('synthetic CheckAlt images re-encode oversized rasters and keep under-limit
   assert.equal(toDepositPath('checks/x/back.jpeg'), 'checks/x/back.deposit2.jpg');
 });
 
-test('checkalt-prepare-image writes .deposit2.jpg for front and rear synthetic checks', async () => {
+test('checkalt-prepare-image does not re-encode oversized images (architecture A)', async () => {
   const uploaded = [];
   const frontSrc = syntheticCheckRaster({ width: 2200, height: 1400, seed: 11 });
   const rearSrc = syntheticCheckRaster({ width: 800, height: 1500, seed: 12 });
@@ -191,15 +191,12 @@ test('checkalt-prepare-image writes .deposit2.jpg for front and rear synthetic c
     );
     const front = await run('front', frontSrc);
     const rear = await run('back', rearSrc);
-    assert.equal(front.success, true);
-    assert.equal(front.prepared_path, `checks/${CHECK_ID}/front.deposit2.jpg`);
-    assert.equal(front.cached, false);
-    assert.ok(front.bytes <= PER_IMAGE_BYTES_BUDGET);
-    assert.ok(front.source_bytes > PER_IMAGE_BYTES_BUDGET);
-    assert.equal(rear.success, true);
-    assert.equal(rear.prepared_path, `checks/${CHECK_ID}/back.deposit2.jpg`);
-    assert.equal(uploaded.length, 2);
-    assert.ok(uploaded.every((row) => row.jpeg && row.bytes <= PER_IMAGE_BYTES_BUDGET));
+    assert.equal(front.success, false);
+    assert.equal(front.error, 'browser_prepare_required');
+    assert.equal(front.statusCode, 409);
+    assert.equal(rear.success, false);
+    assert.equal(rear.error, 'browser_prepare_required');
+    assert.equal(uploaded.length, 0);
   });
 });
 

@@ -4,8 +4,10 @@ import {
   BROWSER_QUALITY_LADDER,
   comparePrepPipelines,
   inspectOriented,
+  isAllowedPreparedPath,
   isAlreadyDepositReady,
   LANDSCAPE_JPEG_QUALITY,
+  lovableBrowserPathDecision,
   MIN_ACCEPTABLE_DIM,
   PER_IMAGE_BYTES_BUDGET,
   prepareLikeLovableBrowser,
@@ -110,4 +112,46 @@ test('/fincapture/deposit/process body matches Lovable field set', () => {
     frontImage: 'Zm9v',
   });
   assert.equal('rearImage' in noRear, false);
+});
+
+test('prepared path allowlist is the check columns plus .deposit2.jpg siblings', () => {
+  const check = {
+    front_image_path: 'checks/u/front.jpg',
+    back_image_path: 'checks/u/back.png',
+    back_image_deposit_path: 'checks/u/endorsed.jpg',
+  };
+  assert.equal(isAllowedPreparedPath(check, 'checks/u/front.jpg'), true);
+  assert.equal(isAllowedPreparedPath(check, 'checks/u/front.deposit2.jpg'), true);
+  assert.equal(isAllowedPreparedPath(check, 'checks/u/endorsed.jpg'), true);
+  assert.equal(isAllowedPreparedPath(check, 'checks/u/endorsed.deposit2.jpg'), true);
+  assert.equal(isAllowedPreparedPath(check, 'checks/other/front.jpg'), false);
+  assert.equal(isAllowedPreparedPath(check, 'checks/u/front.jpg.evil'), false);
+});
+
+test('1200px endorsed rear is not already-good and is not a reusable cache', async () => {
+  const rear = syntheticCheckRaster({ width: 1200, height: 583, flat: true });
+  const info = await inspectOriented(rear);
+  assert.equal(info.landscape, true);
+  assert.equal(Math.max(info.width, info.height), 1200);
+  assert.ok(rear.length <= PER_IMAGE_BYTES_BUDGET);
+  assert.equal(isAlreadyDepositReady(info), false);
+  const decision = await lovableBrowserPathDecision({
+    sourcePath: 'checks/u/endorsed.jpg',
+    sourceBytes: rear,
+    cachedDeposit2Bytes: rear,
+  });
+  assert.equal(decision.decision, 'browser_reencode');
+  assert.equal(decision.path, 'checks/u/endorsed.deposit2.jpg');
+  assert.equal(decision.storedPreparedPresent, true);
+});
+
+test('already-good landscape JPEG decides passthrough_original', async () => {
+  const src = syntheticCheckRaster({ width: 1400, height: 1000, flat: true });
+  const decision = await lovableBrowserPathDecision({
+    sourcePath: 'checks/u/front.jpg',
+    sourceBytes: src,
+  });
+  assert.equal(decision.decision, 'passthrough_original');
+  assert.equal(decision.path, 'checks/u/front.jpg');
+  assert.equal(Buffer.compare(decision.bytes, src), 0);
 });

@@ -2,8 +2,9 @@
  * Ports of production CheckAlt Edge Functions.
  * Source: supabase/functions/checkalt-* /index.ts and _shared/checkalt.ts
  *
- * Image prep follows the known-good Lovable browser path
- * (prepareCheckAltDeposit), not the ImageScript edge fallback.
+ * Image pipeline is architecture A, matching successful Lovable deposits:
+ *   Browser prepareCheckAltDeposit → AWS downloads prepared storage bytes →
+ *   Base64 only. Submit never re-encodes. Client frontImage/rearImage is ignored.
  *
  * Staging uses CHECKALT_UAT_* against https://uatapi.checkalt.com.
  * Auth body remains { userName, password }.
@@ -25,10 +26,11 @@ import {
 } from './checkalt-client.mjs';
 import {
   inspectOriented,
+  isAllowedPreparedPath,
   isAlreadyDepositReady,
+  isJpegMagic,
   isRasterPath,
   isReusablePreparedCache,
-  prepareLikeLovableBrowser,
   toDepositPath,
 } from './checkalt-image.mjs';
 
@@ -55,31 +57,12 @@ async function downloadClaimFileBytes(path, deps = {}) {
   return Buffer.concat(chunks);
 }
 
-async function uploadClaimFileBytes(path, bytes, deps = {}) {
-  if (typeof deps.uploadClaimFile === 'function') return deps.uploadClaimFile(path, bytes);
-  const { PutObjectCommand, S3Client } = await import('@aws-sdk/client-s3');
-  const { s3KeyFor } = await import('../../storage-paths.mjs');
-  const bucket = process.env.FILES_BUCKET;
-  if (!bucket) throw new Error('FILES_BUCKET is not configured');
-  const key = s3KeyFor('claim-files', path);
-  if (!key) throw new Error(`invalid claim-files path: ${path}`);
-  const s3 = deps.s3 || new S3Client({ region: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1' });
-  await s3.send(new PutObjectCommand({
-    Bucket: bucket,
-    Key: key,
-    Body: bytes,
-    ContentType: 'image/jpeg',
-  }));
-  return path;
-}
-
-async function imageToBudgetB64(bytes, label, { prepared = false } = {}) {
-  if (!bytes) return null;
-  // Lovable checkalt-submit-deposit downloadPreparedAsB64 is a raw Base64 of
-  // the prepared bytes — no second normalize, even if slightly over budget.
-  if (prepared) return bytesToBase64(bytes);
-  const normalized = await prepareLikeLovableBrowser(bytes, label);
-  return bytesToBase64(normalized);
+async function downloadPreparedAsB64(bytes, label) {
+  if (!bytes || !bytes.length) return null;
+  if (!isJpegMagic(bytes)) {
+    throw Object.assign(new Error(`${label} prepared image is not a JPEG`), { statusCode: 400, code: 'invalid_jpeg' });
+  }
+  return bytesToBase64(bytes);
 }
 
 async function reusablePreparedBytes(path, deps = {}) {
@@ -460,6 +443,70 @@ const submitDeposit = {
     if (formatted?.error) return fail(formatted.message || 'invalid_amount', 400);
     const userAmount = formatted.userAmount;
     const ssoKey = acct.sso_key || acct.sso_user_id;
+    const depositFrontPath = body.deposit_front_path || null;
+    const depositBackPath = body.deposit_back_path || null;
+    if (isSvgPath(check.back_image_path) && !check.back_image_deposit_path && !depositBackPath) {
+      return fail('Back image needs an approved deposit JPEG before submission. Generate and approve the deposit image before depositing.', 400);
+    }
+    if (check.back_image_path && !check.back_image_deposit_path && !depositBackPath && !isRasterPath(check.back_image_path)) {
+      return fail('Back image needs an approved deposit JPEG before submission. Generate and approve the deposit image before depositing.', 400);
+    }
+    // Architecture A: ignore client-supplied image bytes. Lovable BodySchema
+    // never accepts frontImage/rearImage; AWS must not either.
+    if (depositFrontPath && !isAllowedPreparedPath(check, depositFrontPath)) {
+      return fail('Prepared front image path is not allowed for this check', 403, { error: 'prepared_path_denied' });
+    }
+    if (depositBackPath && !isAllowedPreparedPath(check, depositBackPath)) {
+      return fail('Prepared back image path is not allowed for this check', 403, { error: 'prepared_path_denied' });
+    }
+    const frontPath = depositFrontPath || check.front_image_path;
+    const frontBytes = await downloadClaimFileBytes(frontPath, deps);
+    if (!frontBytes) return fail('Front image required for CheckAlt submission', 400);
+    if (!isJpegMagic(frontBytes)) return fail('Front prepared image is not a JPEG', 400);
+    if (!depositFrontPath) {
+      const frontInfo = await inspectOriented(frontBytes);
+      if (!isAlreadyDepositReady(frontInfo)) {
+        return fail(
+          'Front check image must be prepared in the browser before submission.',
+          400,
+          { error: 'browser_prepare_required', side: 'front' },
+        );
+      }
+    }
+    let frontImage;
+    try {
+      frontImage = await downloadPreparedAsB64(frontBytes, 'front');
+    } catch (error) {
+      return fail(error.message, error.statusCode || 400, { error: error.code || 'invalid_jpeg' });
+    }
+    let rearImage = null;
+    const backPath = depositBackPath || check.back_image_deposit_path || check.back_image_path;
+    if (backPath && !isSvgPath(backPath)) {
+      const backBytes = await downloadClaimFileBytes(backPath, deps);
+      if (backBytes) {
+        if (!isJpegMagic(backBytes)) return fail('Back prepared image is not a JPEG', 400);
+        if (!depositBackPath) {
+          const backInfo = await inspectOriented(backBytes);
+          if (!isAlreadyDepositReady(backInfo)) {
+            return fail(
+              'Back check image must be prepared in the browser before submission.',
+              400,
+              { error: 'browser_prepare_required', side: 'back' },
+            );
+          }
+        }
+        try {
+          rearImage = await downloadPreparedAsB64(backBytes, 'back');
+        } catch (error) {
+          return fail(error.message, error.statusCode || 400, { error: error.code || 'invalid_jpeg' });
+        }
+      }
+    }
+    if (!frontImage) return fail('Front image required for CheckAlt submission', 400);
+    const totalB64 = String(frontImage).length + String(rearImage || '').length;
+    if (totalB64 > MAX_TOTAL_B64_CHARS) {
+      return fail('Combined check images still exceed CheckAlt\'s limit after compression. Please reupload smaller front/back images.', 400);
+    }
     const queued = (await client.query(
       `INSERT INTO public.aws_provider_sandbox_operations
         (tenant_id, application_user_id, operation_type, provider, amount_cents, currency,
@@ -477,38 +524,12 @@ const submitDeposit = {
           scale: 'integer_cents',
           sso_key: ssoKey,
           production_table_written: false,
+          imagePipeline: 'browser_prepare_aws_base64',
         }),
       ],
     )).rows[0];
     const cfg = uatCfg(ctx.uat);
     const creds = credentialsOf(ctx.uat);
-    const depositFrontPath = body.deposit_front_path || null;
-    const depositBackPath = body.deposit_back_path || null;
-    if (isSvgPath(check.back_image_path) && !check.back_image_deposit_path && !depositBackPath) {
-      return fail('Back image needs an approved deposit JPEG before submission. Generate and approve the deposit image before depositing.', 400);
-    }
-    if (check.back_image_path && !check.back_image_deposit_path && !depositBackPath && !isRasterPath(check.back_image_path)) {
-      return fail('Back image needs an approved deposit JPEG before submission. Generate and approve the deposit image before depositing.', 400);
-    }
-    let frontImage = body.frontImage || body.front_image || null;
-    let rearImage = body.rearImage || body.rear_image || body.backImage || null;
-    if (!frontImage) {
-      const frontPath = depositFrontPath || check.front_image_path;
-      const frontBytes = await downloadClaimFileBytes(frontPath, deps);
-      frontImage = await imageToBudgetB64(frontBytes, 'front', { prepared: Boolean(depositFrontPath) });
-    }
-    if (!rearImage) {
-      const backPath = depositBackPath || check.back_image_deposit_path || check.back_image_path;
-      if (backPath && !isSvgPath(backPath)) {
-        const backBytes = await downloadClaimFileBytes(backPath, deps);
-        rearImage = await imageToBudgetB64(backBytes, 'back', { prepared: Boolean(depositBackPath) });
-      }
-    }
-    if (!frontImage) return fail('Front image required for CheckAlt submission', 400);
-    const totalB64 = String(frontImage).length + String(rearImage || '').length;
-    if (totalB64 > MAX_TOTAL_B64_CHARS) {
-      return fail('Combined check images still exceed CheckAlt\'s limit after compression. Please reupload smaller front/back images.', 400);
-    }
     const processBody = buildDepositProcessBody({
       fiKey: cfg.fi_key,
       ssoKey,
@@ -550,6 +571,7 @@ const submitDeposit = {
       status,
       ssoKeySource: 'uat_tenant_account',
       deposit_id: queued.id,
+      imagePipeline: 'browser_prepare_aws_base64',
       data: json,
     }, resp.ok ? 200 : 502);
   },
@@ -681,22 +703,14 @@ const prepareImage = {
         source_bytes: bytes.length,
       });
     }
-    let normalized;
-    try {
-      normalized = await prepareLikeLovableBrowser(bytes, side);
-    } catch (error) {
-      return fail(error.message, 413);
-    }
-    await uploadClaimFileBytes(preparedPath, normalized, deps);
-    return jsonResult({
-      success: true,
-      prepared_path: preparedPath,
-      cached: false,
-      passthrough: false,
-      liveProviderCalled: false,
-      bytes: normalized.length,
-      source_bytes: bytes.length,
-    });
+    // Architecture A: AWS does not clone the browser JPEG encoder. Command
+    // Center / deposit ops run prepareCheckAltDeposit in the browser; this
+    // function only reuses an already-good original or a cached .deposit2.jpg.
+    return fail(
+      'Check image must be prepared in the browser before submission.',
+      409,
+      { error: 'browser_prepare_required', side, source_bytes: bytes.length },
+    );
   },
 };
 
