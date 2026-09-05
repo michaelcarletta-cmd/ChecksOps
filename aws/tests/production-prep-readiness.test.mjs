@@ -60,6 +60,22 @@ test('CloudWatch alarm template is deployable and actions stay disabled', () => 
   assert.match(example, /DO NOT DEPLOY/);
 });
 
+test('operator Lambda role doc isolates prep API from staging VPC/role', () => {
+  const doc = read('aws/production/iam/OPERATOR_LAMBDA_ROLE.md');
+  assert.match(doc, /checksops-production-prep-api-role/);
+  assert.match(doc, /AWSLambdaBasicExecutionRole/);
+  assert.match(doc, /AWSXRayDaemonWriteAccess/);
+  assert.match(doc, /Do \*\*not\*\* attach `AWSLambdaVPCAccessExecutionRole`/);
+  assert.match(doc, /checksops-staging-api/);
+  assert.doesNotMatch(doc, /point production DNS/i);
+  const cfn = read('aws/production/api-cfn.yaml');
+  assert.match(cfn, /ProductionPrepRole:/);
+  assert.match(cfn, /AWSLambdaBasicExecutionRole/);
+  assert.match(cfn, /AWSXRayDaemonWriteAccess/);
+  assert.doesNotMatch(cfn, /AWSLambdaVPCAccessExecutionRole/);
+  assert.doesNotMatch(cfn, /VpcConfig:/);
+});
+
 test('operator CloudWatch inspect policy is scoped and not auto-attached', () => {
   const policy = JSON.parse(read('aws/production/iam/operator-cloudwatch-inspect.json'));
   const actions = policy.Statement.flatMap((s) => s.Action);

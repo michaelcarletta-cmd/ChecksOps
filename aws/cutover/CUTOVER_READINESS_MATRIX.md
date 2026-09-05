@@ -16,11 +16,11 @@ CheckAlt is **PARTIAL** and is handled in a separate chat (PR #125 / #130). This
 | Remaining Supabase/Lovable runtime dependencies | **PARTIAL** | AWS staging (`VITE_AUTH_PROVIDER=cognito`) already proxies DB/storage/Class A. Production SPA is still `.env.production` Supabase-only. Draft PR #132 ports vendor e-sign / ingest (not merged here). Stripe/QuickBooks stay fail-closed. Realtime still polling. |
 | Production frontend / API AWS configuration | **GO (prepared, not switched)** | SPA: CloudFront `E1B0ZWWO5559U5` placeholder, aliases **0**. API: `checksops-production-prep-api` CREATE_COMPLETE, `https://kiqojucc02.execute-api.us-east-1.amazonaws.com/prep` `/health` 200, `environment=production-prep`, all execution flags **false**, no VPC/RDS. Role is staging `PassRole` workaround until `iam:CreateRole` exists. `.env.production` stays Supabase. Do not overlay `checksops-staging-api`. Do not point DNS at this API. |
 | Cognito EMAIL_OTP / WebAuthn (staging) | **GO** | PR #126. Pool `us-east-1_vPmQ7cL1F`, `ALLOW_USER_AUTH`, MFA OFF, EMAIL_OTP preferred, WebAuthn RP `staging.checksops.com`. |
-| Cognito EMAIL_OTP / WebAuthn (production transition) | **GO (prepared, not switched)** / SES **PARTIAL** | Pool `us-east-1_h00WorYMT`, 0 users, EMAIL_OTP+PASSWORD+WEB_AUTHN, MFA OFF, deletion protection ACTIVE, client `3ja9fqaq2fjkv3i6up2varcqpe`, WebAuthn RP ID `checksops.com`. **Do not invite.** SES From still `COGNITO_DEFAULT`. |
+| Cognito EMAIL_OTP / WebAuthn (production transition) | **GO (prepared, not switched)** | Pool `us-east-1_h00WorYMT`, 0 users, EMAIL_OTP+PASSWORD+WEB_AUTHN, MFA OFF, deletion protection ACTIVE, client `3ja9fqaq2fjkv3i6up2varcqpe`, WebAuthn RP ID `checksops.com`, email **`DEVELOPER`** / SES `support@checksops.com`. **Do not invite.** Staging pool remains `COGNITO_DEFAULT`. |
 | Tenant identity mapping + RLS / isolation | **GO (validated, not imported)** | Mapping proven on staging. Live DB bridge `identity_map` count **8**. Ninth UUID fail-closed. `--apply` refused. Production still uses Supabase Auth until API/DNS switch. |
 | CloudFront / DNS / API routing | **BLOCKED** (switch) / **GO (prepared)** unused distribution | Staging: `staging.checksops.com` → `E1CG52WRQZI7X1`. Production-prep CloudFront has **no** aliases. Production apex/`www` still `185.158.133.1` (Lovable). Switching DNS is a **cutover decision**. |
 | ACM for `checksops.com` / `www` | **GO (issued, not attached)** | Cert `5cdde8e7-49fb-4b42-ba36-9aaa9d9b1aa3` **`ISSUED`** 2026-09-05T20:23:49Z. Cloudflare validation CNAMEs present (DNS-only). Apex/`www` still Lovable. Not in use by CloudFront. |
-| SES production EMAIL_OTP | **PARTIAL** | Public DNS has Microsoft 365 SPF/MX, no `_amazonses` / SES DKIM. Agent denied SES APIs. Cognito still `COGNITO_DEFAULT`. See `aws/production/SES_EMAIL_OTP_READINESS.md`. |
+| SES production EMAIL_OTP | **GO (Cognito attached)** / SES account **PARTIAL** | Cognito production is `DEVELOPER` + `SourceArn` identity `Support@checksops.com`. Staging unchanged. Agent still denied `ses:GetAccount` (sandbox unknown). Public SPF is Outlook-only. See `aws/production/SES_EMAIL_OTP_READINESS.md`. |
 | Final DB delta via temporary DB bridge | **GO** (procedure) | Live `aws-staging-db-bridge` `health` HTTP 200, `mode:read_only`. **Not executed** this PR. |
 | Final storage delta via temporary storage bridge | **GO** (procedure) | Live `aws-staging-storage-bridge` `health` HTTP 200, `mode:sign_only`. **Not executed** this PR. |
 | Production webhook transition | **PARTIAL** | AWS `/webhooks/{moov,checkalt}` exist; `AWS_PROVIDER_WEBHOOK_DRY_RUN=true`. Production URLs still on Supabase. Dual-run **not started**. **Cutover decision**. |
@@ -56,11 +56,11 @@ CheckAlt is **PARTIAL** and is handled in a separate chat (PR #125 / #130). This
 
 ### Still prep (can continue without switching production)
 
-- Dedicated production-prep Lambda role (`iam:CreateRole` / `GetRole` / `PassRole`); live function currently PassRoles the staging execution role and has **no VPC**
-- Operator IAM to finish CloudWatch alarms (`cloudwatch:PutMetricAlarm` + `DescribeAlarms`); delete leftover `checksops-production-prep-api-role` if it exists
-- SES From / Cognito `DEVELOPER` email on `us-east-1_h00WorYMT` after SES identity + DNS
+- **Step 4:** Dedicated production-prep Lambda role (`iam:CreateRole` / `GetRole` / `PassRole`); live function currently PassRoles the staging execution role and has **no VPC**. See `aws/production/iam/OPERATOR_LAMBDA_ROLE.md`.
+- **Step 5:** Operator IAM to finish CloudWatch alarms (`cloudwatch:PutMetricAlarm` + `DescribeAlarms`); leftover named role may be reused in Step 4 instead of deleted
+- SES sandbox / deliverability (Cognito `DEVELOPER` already attached; no OTP sent)
 - Confirm WebAuthn RP ID `checksops.com` remains on `us-east-1_h00WorYMT` only (already set; do not edit staging)
-- Operator ACM DNS CNAMEs (validation only; not apex cut)
+- ACM already **ISSUED** (validation only; not apex cut)
 - Attach `ChecksOpsProductionPrepCloudWatchInspect` to the operator/ops role
 - Timed write-freeze drill (measurement only)
 - Realtime: accept 15s polling **or** later design

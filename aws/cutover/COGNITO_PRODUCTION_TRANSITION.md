@@ -25,8 +25,8 @@ Live validation: `aws/production/COGNITO_VALIDATION.md`. SES: `aws/production/SE
 
 1. Pool `checksops-production` / `us-east-1_h00WorYMT` exists. **Do not reuse** `us-east-1_vPmQ7cL1F`.
 2. Client `checksops-production-web` / `3ja9fqaq2fjkv3i6up2varcqpe` — `ALLOW_USER_AUTH`, MFA OFF, 0 users.
-3. RP ID / origin still need operator console set to `checksops.com` / `https://checksops.com` on **this pool only**.
-4. SES verified identity and Cognito `EmailSendingAccount=DEVELOPER` still outstanding (`COGNITO_DEFAULT` today).
+3. Live WebAuthn RP ID is `checksops.com` (`UserVerification=preferred`) on **this pool only**. Staging remains `staging.checksops.com`.
+4. Cognito `EmailSendingAccount=DEVELOPER` with SES `SourceArn` identity `Support@checksops.com` is **live** on this pool. Staging remains `COGNITO_DEFAULT`. Do not send OTP or import users.
 5. Import/link the eight production emails onto existing application UUIDs is a **cutover decision**. Exclude ninth UUID. `--apply` remains refused.
 6. First login: EMAIL_OTP. Then register new Cognito passkeys.
 7. Production-prep API templates (not live staging SAM) hard-code:

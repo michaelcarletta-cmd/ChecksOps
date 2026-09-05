@@ -19,7 +19,8 @@ Do not apply `64_financial_activation_grants.sql`.
 |---|---|
 | `ACM_DNS_VALIDATION.md` | Exact ACM CNAMEs. **Do not add them from the agent.** |
 | `COGNITO_VALIDATION.md` | Live pool/client snapshot. No import. |
-| `SES_EMAIL_OTP_READINESS.md` | SES not ready; no DNS/Cognito email change |
+| `SES_EMAIL_OTP_READINESS.md` | Production pool is SES `DEVELOPER` / `support@checksops.com`; staging still `COGNITO_DEFAULT` |
+| `iam/OPERATOR_LAMBDA_ROLE.md` | **Step 4** — dedicated prep Lambda role (operator console; no VPC) |
 | `LIVE_RESOURCES.md` | IDs of prepared objects |
 | `iam/OPERATOR_CLOUDWATCH_IAM.md` | Policy a human must attach |
 
@@ -30,7 +31,7 @@ Do not apply `64_financial_activation_grants.sql`.
 | `checksops-production-prep` | `prep-stack.yaml` | Cognito **client** on existing pool, frontend bucket, CloudFront **without** apex/www aliases, API log group | Unchanged |
 | `checksops-production-prep-alarms` | `cloudwatch-alarms.yaml` | Inspect-only alarms (`ActionsEnabled=false`) | Unchanged |
 | `checksops-production-prep-cw-inspect-policy` | `iam/operator-cloudwatch-inspect.yaml` | Managed policy only (not attached) | Unchanged |
-| `checksops-production-prep-api` | `api-template.yaml` (SAM) or `api-cfn.yaml` (vanilla CFN) | Separate Lambda/HTTP API, flags **false** | Unchanged. **Live 2026-09-05:** `CREATE_COMPLETE`, `/prep/health` 200, `environment=production-prep`, no DB, no VPC. Execution role is the staging Lambda role (`PassRole` workaround). `api-cfn.yaml` in git still creates a dedicated role for when `iam:CreateRole` is granted. |
+| `checksops-production-prep-api` | `api-template.yaml` (SAM) or `api-cfn.yaml` (vanilla CFN) | Separate Lambda/HTTP API, flags **false** | Unchanged. **Live 2026-09-05:** `CREATE_COMPLETE`, `/prep/health` 200, `environment=production-prep`, no DB, no VPC. Execution role is still the staging Lambda role (`PassRole` workaround) until operator **Step 4**. Do **not** CloudFormation-deploy git `api-cfn.yaml` during Step 4 (that would create a second role). |
 
 ## Operator deploy (after review — not cutover)
 
@@ -58,7 +59,7 @@ aws cloudformation deploy \
     CodeS3Key=checksops-production-prep-api.zip
 ```
 
-If leftover `checksops-production-prep-api-role` exists, delete or import it before redeploying. Do **not** `AdminCreateUser` on the production pool.
+If leftover `checksops-production-prep-api-role` exists, inspect it in **Step 4** (`iam/OPERATOR_LAMBDA_ROLE.md`) and reuse it when it is basic-execution + X-Ray only. Do **not** `AdminCreateUser` on the production pool.
 
 ## Frontend
 
