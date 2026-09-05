@@ -6,6 +6,10 @@
  *
  * Dump (when later approved) must use an operator-held read-only URI
  * outside this Cloud Agent. See FIRST_COPY_PROCEDURE.md.
+ *
+ * PR #127 may also use the temporary fail-closed Lovable DB bridge
+ * (health/tables/schema/counts/rows/identity_map) with the Secrets Manager
+ * migration token. That is not a database URI and is not a dump.
  */
 
 export const LIVE_ACCESS_POLICY = Object.freeze({
@@ -17,6 +21,7 @@ export const LIVE_ACCESS_POLICY = Object.freeze({
   dumpFromOperatorHost: true,
   operatorMustUseReadOnlyUri: true,
   neverLogUriOrPassword: true,
+  dbBridgeReadOnly: true,
 });
 
 export function describeLiveAccess() {
@@ -24,8 +29,9 @@ export function describeLiveAccess() {
     ...LIVE_ACCESS_POLICY,
     message:
       "Live catalog is already in LIVE_SOURCE_INVENTORY.md. Do not request another " +
-      "Supabase access token or database password. When dump is approved, an operator " +
-      "with existing Lovable/Supabase read access must run pg_dump from a host that " +
-      "can reach the source, using a read-only URI that is never logged or committed.",
+      "Supabase access token or database password. The temporary aws-staging-db-bridge " +
+      "is the Cloud Agent read path (no SQL/RPC/writes). When a new dump is required, " +
+      "an operator with existing Lovable/Supabase read access must run pg_dump from a " +
+      "host that can reach the source, using a read-only URI that is never logged or committed.",
   };
 }

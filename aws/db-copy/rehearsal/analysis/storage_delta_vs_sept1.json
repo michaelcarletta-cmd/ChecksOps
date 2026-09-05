@@ -1,0 +1,31 @@
+{
+  "generatedAt": "2026-09-04T21:59:09.748Z",
+  "sept1": {
+    "dumpObjectCount": 1334,
+    "reconciledS3Objects": 1334,
+    "reconciledS3Bytes": 2501472395
+  },
+  "stagingNow": {
+    "totalObjects": 1355,
+    "totalBytes": 2501606326
+  },
+  "deltaObjects": 21,
+  "deltaBytes": 133931,
+  "bucketDiffs": [
+    {
+      "bucket": "claim-files",
+      "sept1DumpObjects": 1184,
+      "stagingObjects": 1201,
+      "deltaObjects": 17,
+      "stagingBytes": 2455438378
+    },
+    {
+      "bucket": "homeowner-uploads",
+      "sept1DumpObjects": 8,
+      "stagingObjects": 12,
+      "deltaObjects": 4,
+      "stagingBytes": 30367758
+    }
+  ],
+  "note": "Object keys omitted intentionally (may contain PII paths). Storage delta sync must use bridge/copy scripts with service role on an operator host."
+}

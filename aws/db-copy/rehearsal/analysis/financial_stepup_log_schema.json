@@ -1,0 +1,83 @@
+{
+  "generatedAt": "2026-09-05T10:40:20.975Z",
+  "financial_stepup_log": [
+    {
+      "name": "id",
+      "type": "uuid",
+      "nullable": false,
+      "primaryKey": true,
+      "redacted": false
+    },
+    {
+      "name": "user_id",
+      "type": "uuid",
+      "nullable": false,
+      "primaryKey": false,
+      "redacted": false
+    },
+    {
+      "name": "tenant_id",
+      "type": "uuid",
+      "nullable": true,
+      "primaryKey": false,
+      "redacted": false
+    },
+    {
+      "name": "action_key",
+      "type": "text",
+      "nullable": false,
+      "primaryKey": false,
+      "redacted": false
+    },
+    {
+      "name": "factor_type",
+      "type": "text",
+      "nullable": false,
+      "primaryKey": false,
+      "redacted": false
+    },
+    {
+      "name": "succeeded",
+      "type": "boolean",
+      "nullable": false,
+      "primaryKey": false,
+      "redacted": false
+    },
+    {
+      "name": "metadata",
+      "type": "jsonb",
+      "nullable": false,
+      "primaryKey": false,
+      "redacted": false
+    },
+    {
+      "name": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "primaryKey": false,
+      "redacted": false
+    },
+    {
+      "name": "updated_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "primaryKey": false,
+      "redacted": false
+    }
+  ],
+  "preferredAuthMethod": {
+    "productionPresent": true,
+    "productionType": {
+      "name": "preferred_auth_method",
+      "type": "text",
+      "nullable": false,
+      "primaryKey": false,
+      "redacted": false
+    },
+    "addedToStaging": false,
+    "awsFrontendReads": true,
+    "awsBackendPersists": false,
+    "awsLoginUsesColumn": false,
+    "reason": "AWS CheckOps/WhiteLabel/MortgageOps sign-in uses Cognito WebAuthn and EMAIL_OTP. profiles.preferred_auth_method is clientIgnored in the write allowlist. Do not add it for cosmetic schema parity."
+  }
+}

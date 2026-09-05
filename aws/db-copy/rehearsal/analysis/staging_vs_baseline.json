@@ -1,0 +1,177 @@
+{
+  "generatedAt": "2026-09-04T21:59:09.727Z",
+  "baselineLabel": "checksops_260901 (2026-09-01 first copy)",
+  "stagingInventoriedAt": "2026-09-04T21:57:39.955Z",
+  "productionSupabaseChanged": false,
+  "catalog": {
+    "staging": {
+      "baseTables": 180,
+      "views": 22,
+      "routines": 1023,
+      "triggers": 211,
+      "rlsPolicies": 307,
+      "extensions": [
+        "pg_stat_statements",
+        "pgcrypto",
+        "plpgsql",
+        "postgis",
+        "uuid-ossp",
+        "vector"
+      ],
+      "identityAccountsTablePresent": true
+    },
+    "liveInventoryCommitted": null
+  },
+  "rowCounts": {
+    "tablesCompared": 166,
+    "unchanged": 153,
+    "changedOrMissing": 13,
+    "diffs": [
+      {
+        "table": "audit_logs",
+        "baseline": 344,
+        "staging": 345,
+        "delta": 1,
+        "status": "changed"
+      },
+      {
+        "table": "check_audit_log",
+        "baseline": 1924,
+        "staging": 1934,
+        "delta": 10,
+        "status": "changed"
+      },
+      {
+        "table": "check_cases",
+        "baseline": 139,
+        "staging": 140,
+        "delta": 1,
+        "status": "changed"
+      },
+      {
+        "table": "check_messages",
+        "baseline": 7,
+        "staging": 18,
+        "delta": 11,
+        "status": "changed"
+      },
+      {
+        "table": "homeowner_check_uploads",
+        "baseline": 0,
+        "staging": 3,
+        "delta": 3,
+        "status": "changed"
+      },
+      {
+        "table": "homeowner_ledger_events",
+        "baseline": 657,
+        "staging": 665,
+        "delta": 8,
+        "status": "changed"
+      },
+      {
+        "table": "loss_draft_audit_log",
+        "baseline": 96,
+        "staging": 98,
+        "delta": 2,
+        "status": "changed"
+      },
+      {
+        "table": "notification_preferences",
+        "baseline": 0,
+        "staging": 2,
+        "delta": 2,
+        "status": "changed"
+      },
+      {
+        "table": "profiles",
+        "baseline": 8,
+        "staging": 9,
+        "delta": 1,
+        "status": "changed"
+      },
+      {
+        "table": "role_version_tracker",
+        "baseline": 9,
+        "staging": 10,
+        "delta": 1,
+        "status": "changed"
+      },
+      {
+        "table": "tenant_usage_logs",
+        "baseline": 21,
+        "staging": 35,
+        "delta": 14,
+        "status": "changed"
+      },
+      {
+        "table": "user_roles",
+        "baseline": 10,
+        "staging": 11,
+        "delta": 1,
+        "status": "changed"
+      },
+      {
+        "table": "user_sessions",
+        "baseline": 0,
+        "staging": 1,
+        "delta": 1,
+        "status": "changed"
+      }
+    ]
+  },
+  "financial": {
+    "unchanged": 15,
+    "changedOrMissing": 0,
+    "diffs": []
+  },
+  "identity": {
+    "present": true,
+    "total": 10,
+    "active": 9,
+    "pending": 1,
+    "isolated_test": 0,
+    "with_cognito_sub": 9,
+    "unsafe_sub_eq_app": 0,
+    "rolesByName": {
+      "admin": 7,
+      "staff": 2,
+      "mortgage_agent": 2
+    },
+    "tenants": 6
+  },
+  "fkOrphanCounts": {
+    "check_endorsements_check_id": 0,
+    "deposit_items_batch_id": 0,
+    "disbursement_splits_batch_id": 0,
+    "user_roles_user_id_identity": 0,
+    "profiles_id_identity": 0
+  },
+  "stagingOnlyMarkers": {
+    "identity_accounts": {
+      "present": true,
+      "rows": 10
+    },
+    "_checksops_restore_complete": {
+      "present": true,
+      "rows": 1
+    },
+    "aws_provider_sandbox_operations": {
+      "present": true,
+      "rows": 2
+    },
+    "homeowner_upload_otp_sessions": {
+      "present": false
+    }
+  },
+  "interpretation": {
+    "note": "Deltas here are staging vs Sept-1 dump baseline. Staging has accumulated Cognito identity overlays, UAT hires, and grants since first copy. A fresh production dump is required before claiming production↔staging parity.",
+    "preserveOnRehearsalRestore": [
+      "public.identity_accounts (and Cognito mappings)",
+      "staging Cognito user pool state",
+      "AWS_WRITES_ENABLED / provider flags on Lambda",
+      "aws_provider_sandbox_operations (if present)",
+      "homeowner_upload_otp_sessions (if present)"
+    ]
+  }
+}

@@ -144,6 +144,29 @@ test('allowlist rejects financial tables and unknown columns; ignores spoof iden
   assert.equal(ok.values.user_id, undefined);
   assert.equal(ok.ignored.includes('user_id'), true);
   assert.equal(CLIENT_IDENTITY_KEYS.has('tenant_id'), true);
+  assert.equal(WRITE_ALLOWLIST.financial_stepup_log.ops.has('insert'), true);
+  assert.equal(WRITE_ALLOWLIST.financial_stepup_log.ops.has('update'), false);
+  const stepup = pickAllowlistedValues('financial_stepup_log', {
+    user_id: SPOOF_ID,
+    tenant_id: APP_ID,
+    action_key: 'disburse',
+    factor_type: 'totp',
+    succeeded: true,
+    amount: 12,
+  });
+  assert.equal(stepup.error, 'column_not_allowlisted');
+  assert.deepEqual(stepup.columns, ['amount']);
+  const stepupOk = pickAllowlistedValues('financial_stepup_log', {
+    user_id: SPOOF_ID,
+    tenant_id: APP_ID,
+    action_key: 'disburse',
+    factor_type: 'totp',
+    succeeded: true,
+  });
+  assert.equal(stepupOk.error, undefined);
+  assert.equal(stepupOk.values.user_id, undefined);
+  assert.equal(stepupOk.values.action_key, 'disburse');
+  assert.equal(stepupOk.values.tenant_id, APP_ID);
 });
 
 test('POST /data/write upserts check_message_reads as mapped UUID and ignores spoofed ids', async () => {
