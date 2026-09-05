@@ -1,0 +1,92 @@
+{
+  "verdict": "STOP_FOR_REVIEW",
+  "date": "2026-09-05",
+  "pr": 125,
+  "branch": "cursor/staging-checkalt-uat-cert-c8f0",
+  "doNotMerge": true,
+  "productionFlagsOff": true,
+  "negotiableCheckSubmitted": false,
+  "productionImagePipelineChanged": false,
+  "productionCheckAltConfigChanged": false,
+  "controlledMatrix": {
+    "verdict": "CLIENT_DIAGNOSTICS_EXHAUSTED",
+    "identicalHttp500": true,
+    "performRiskAssessmentChangedOutcome": false,
+    "tests": [
+      {
+        "label": "A_improved_pair_risk_true",
+        "httpStatus": 500,
+        "performRiskAssessment": true,
+        "message": "Check deposit processing failed. Please retake the check images and resubmit.",
+        "startedAt": "2026-09-05T13:13:44.879Z",
+        "endedAt": "2026-09-05T13:13:47.046Z",
+        "providerTimestamp": "2026-09-05T13:13:47.024612424Z",
+        "frontSha256": "2c46627eb7d729fbd01737079600bcc6f8b32d38b7a2964deee11e1b81418036",
+        "rearSha256": "025d4b5c2b6dc1b3c27c6035ea1cf93ff1c9c84202d554b92062db3416c4c109"
+      },
+      {
+        "label": "B_same_pair_risk_false",
+        "httpStatus": 500,
+        "performRiskAssessment": false,
+        "message": "Check deposit processing failed. Please retake the check images and resubmit.",
+        "startedAt": "2026-09-05T13:13:47.048Z",
+        "endedAt": "2026-09-05T13:13:49.187Z",
+        "providerTimestamp": "2026-09-05T13:13:49.164433433Z",
+        "frontSha256": "2c46627eb7d729fbd01737079600bcc6f8b32d38b7a2964deee11e1b81418036",
+        "rearSha256": "025d4b5c2b6dc1b3c27c6035ea1cf93ff1c9c84202d554b92062db3416c4c109"
+      },
+      {
+        "label": "C_same_front_simplified_rear_risk_true",
+        "httpStatus": 500,
+        "performRiskAssessment": true,
+        "message": "Check deposit processing failed. Please retake the check images and resubmit.",
+        "startedAt": "2026-09-05T13:13:49.189Z",
+        "endedAt": "2026-09-05T13:13:51.515Z",
+        "providerTimestamp": "2026-09-05T13:13:51.493883957Z",
+        "frontSha256": "2c46627eb7d729fbd01737079600bcc6f8b32d38b7a2964deee11e1b81418036",
+        "rearSha256": "86e5e9367fc54fd3d553733815c7a7266e575d6f2bcf80665cf3778986190ee7"
+      }
+    ]
+  },
+  "base64RoundTrip": {
+    "frontOk": true,
+    "rearOk": true,
+    "noDataUri": true,
+    "noDoubleEncoding": true
+  },
+  "outboundImages": {
+    "front": {
+      "width": 1600,
+      "height": 733,
+      "bytes": 179129,
+      "format": "JPEG",
+      "mode": "RGB"
+    },
+    "rear": {
+      "width": 1600,
+      "height": 733,
+      "bytes": 150243,
+      "format": "JPEG",
+      "mode": "RGB"
+    },
+    "rearSimplified": {
+      "width": 1600,
+      "height": 733,
+      "bytes": 88810,
+      "format": "JPEG",
+      "mode": "RGB"
+    }
+  },
+  "lovableParity": {
+    "processFieldsMatch": true,
+    "optionalFieldsBothOmitted": true,
+    "prepareConstantsMatch": true,
+    "encoderDifference": "ImageScript vs jpeg-js",
+    "smallestUatOnlyFix": null,
+    "reasonNoFix": "No request-shape or prepare-constant gap vs Lovable; risk flag does not change outcome; rear simplification does not change outcome."
+  },
+  "escalationPackage": "aws/providers/results/checkalt_iqa_escalation_package.md",
+  "matrixReport": "aws/providers/results/checkalt_iqa_diagnostic_matrix.json",
+  "continuedCertification": false,
+  "reasonStopped": "Controlled UAT IQA matrix exhausted; identical HTTP 500; escalate to CheckAlt."
+}

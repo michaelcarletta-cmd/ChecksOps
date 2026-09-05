@@ -1,0 +1,465 @@
+{
+  "verdict": "CLIENT_DIAGNOSTICS_EXHAUSTED",
+  "date": "2026-09-05T13:13:51.515Z",
+  "productionUntouched": true,
+  "negotiableCheckSubmitted": false,
+  "auth": {
+    "ok": true,
+    "authPath": "/public/fincapture/authenticate",
+    "httpStatus": 200
+  },
+  "depositor": {
+    "listedCount": 2,
+    "depositAccountRedacted": "31…73",
+    "depositAccountFingerprint": "46bed6e573bb",
+    "registerOk": true,
+    "registerHttp": 200,
+    "depositorInfoOk": true,
+    "hasSsoKey": true,
+    "ssoUserIdPrefix": "aws-uat-iqa-mt"
+  },
+  "outboundImageInspection": {
+    "front": {
+      "label": "front-improved",
+      "hasDataUriPrefix": false,
+      "looksDoubleEncoded": false,
+      "jpegMagicHex": "ffd8ff",
+      "isJpeg": true,
+      "bytes": 179129,
+      "b64Chars": 238840,
+      "sha256": "2c46627eb7d729fbd01737079600bcc6f8b32d38b7a2964deee11e1b81418036",
+      "roundTripB64Matches": true,
+      "width": 1600,
+      "height": 733,
+      "landscape": true,
+      "jpegDecodeOk": true,
+      "decodeError": null
+    },
+    "rear": {
+      "label": "rear-improved",
+      "hasDataUriPrefix": false,
+      "looksDoubleEncoded": false,
+      "jpegMagicHex": "ffd8ff",
+      "isJpeg": true,
+      "bytes": 150243,
+      "b64Chars": 200324,
+      "sha256": "025d4b5c2b6dc1b3c27c6035ea1cf93ff1c9c84202d554b92062db3416c4c109",
+      "roundTripB64Matches": true,
+      "width": 1600,
+      "height": 733,
+      "landscape": true,
+      "jpegDecodeOk": true,
+      "decodeError": null
+    },
+    "rearSimplified": {
+      "label": "rear-simplified",
+      "hasDataUriPrefix": false,
+      "looksDoubleEncoded": false,
+      "jpegMagicHex": "ffd8ff",
+      "isJpeg": true,
+      "bytes": 88810,
+      "b64Chars": 118416,
+      "sha256": "86e5e9367fc54fd3d553733815c7a7266e575d6f2bcf80665cf3778986190ee7",
+      "roundTripB64Matches": true,
+      "width": 1600,
+      "height": 733,
+      "landscape": true,
+      "jpegDecodeOk": true,
+      "decodeError": null
+    },
+    "imageKind": "synthetic_uat_via_prepare_pipeline",
+    "pipeline": {
+      "source": "buildSyntheticUatCheckSource",
+      "browserCap": "browserCapToDepositTarget",
+      "prepare": "normalizeToBudget",
+      "targetMaxDim": 1600,
+      "minDim": 1300,
+      "targetJpegQuality": 78,
+      "perImageBytesBudget": 450000,
+      "maxTotalB64Chars": 1600000
+    },
+    "amountCents": 1,
+    "targetMaxDim": 1600,
+    "minDim": 1300,
+    "targetJpegQuality": 78,
+    "perImageBytesBudget": 450000
+  },
+  "base64RoundTrip": {
+    "frontOk": true,
+    "rearOk": true,
+    "noDataUri": true,
+    "noDoubleEncoding": true
+  },
+  "matrix": [
+    {
+      "label": "A_improved_pair_risk_true",
+      "startedAt": "2026-09-05T13:13:44.879Z",
+      "endedAt": "2026-09-05T13:13:47.046Z",
+      "path": "/fincapture/deposit/process",
+      "performRiskAssessment": true,
+      "requestFieldNames": [
+        "fiKey",
+        "ssoKey",
+        "depositAccountNumber",
+        "captureDateTime",
+        "userAmount",
+        "frontImage",
+        "rearImage",
+        "performRiskAssessment"
+      ],
+      "optionalFieldsPresent": {
+        "firstName": false,
+        "lastName": false,
+        "emailAddress": false,
+        "dailyDepositLimit": false
+      },
+      "serializedBytes": 439400,
+      "frontB64Chars": 238840,
+      "rearB64Chars": 200324,
+      "frontSha256": "2c46627eb7d729fbd01737079600bcc6f8b32d38b7a2964deee11e1b81418036",
+      "rearSha256": "025d4b5c2b6dc1b3c27c6035ea1cf93ff1c9c84202d554b92062db3416c4c109",
+      "ok": false,
+      "httpStatus": 500,
+      "message": "Check deposit processing failed. Please retake the check images and resubmit.",
+      "sanitizedProviderBody": {
+        "status": 500,
+        "error": "Internal Server Error",
+        "timestamp": "2026-09-05T13:13:47.024612424Z",
+        "message": "Check deposit processing failed. Please retake the check images and resubmit."
+      },
+      "providerResponseKeys": [
+        "error",
+        "message",
+        "status",
+        "timestamp"
+      ],
+      "referencePresent": false,
+      "status": 500,
+      "amountEcho": {
+        "echoedUserAmount": null,
+        "echoedAmount": null,
+        "echoedAmountCents": null,
+        "status": 500,
+        "statusDescription": "Check deposit processing failed. Please retake the check images and resubmit."
+      }
+    },
+    {
+      "label": "B_same_pair_risk_false",
+      "startedAt": "2026-09-05T13:13:47.048Z",
+      "endedAt": "2026-09-05T13:13:49.187Z",
+      "path": "/fincapture/deposit/process",
+      "performRiskAssessment": false,
+      "requestFieldNames": [
+        "fiKey",
+        "ssoKey",
+        "depositAccountNumber",
+        "captureDateTime",
+        "userAmount",
+        "frontImage",
+        "rearImage",
+        "performRiskAssessment"
+      ],
+      "optionalFieldsPresent": {
+        "firstName": false,
+        "lastName": false,
+        "emailAddress": false,
+        "dailyDepositLimit": false
+      },
+      "serializedBytes": 439401,
+      "frontB64Chars": 238840,
+      "rearB64Chars": 200324,
+      "frontSha256": "2c46627eb7d729fbd01737079600bcc6f8b32d38b7a2964deee11e1b81418036",
+      "rearSha256": "025d4b5c2b6dc1b3c27c6035ea1cf93ff1c9c84202d554b92062db3416c4c109",
+      "ok": false,
+      "httpStatus": 500,
+      "message": "Check deposit processing failed. Please retake the check images and resubmit.",
+      "sanitizedProviderBody": {
+        "status": 500,
+        "error": "Internal Server Error",
+        "timestamp": "2026-09-05T13:13:49.164433433Z",
+        "message": "Check deposit processing failed. Please retake the check images and resubmit."
+      },
+      "providerResponseKeys": [
+        "error",
+        "message",
+        "status",
+        "timestamp"
+      ],
+      "referencePresent": false,
+      "status": 500,
+      "amountEcho": {
+        "echoedUserAmount": null,
+        "echoedAmount": null,
+        "echoedAmountCents": null,
+        "status": 500,
+        "statusDescription": "Check deposit processing failed. Please retake the check images and resubmit."
+      }
+    },
+    {
+      "label": "C_same_front_simplified_rear_risk_true",
+      "startedAt": "2026-09-05T13:13:49.189Z",
+      "endedAt": "2026-09-05T13:13:51.515Z",
+      "path": "/fincapture/deposit/process",
+      "performRiskAssessment": true,
+      "requestFieldNames": [
+        "fiKey",
+        "ssoKey",
+        "depositAccountNumber",
+        "captureDateTime",
+        "userAmount",
+        "frontImage",
+        "rearImage",
+        "performRiskAssessment"
+      ],
+      "optionalFieldsPresent": {
+        "firstName": false,
+        "lastName": false,
+        "emailAddress": false,
+        "dailyDepositLimit": false
+      },
+      "serializedBytes": 357492,
+      "frontB64Chars": 238840,
+      "rearB64Chars": 118416,
+      "frontSha256": "2c46627eb7d729fbd01737079600bcc6f8b32d38b7a2964deee11e1b81418036",
+      "rearSha256": "86e5e9367fc54fd3d553733815c7a7266e575d6f2bcf80665cf3778986190ee7",
+      "ok": false,
+      "httpStatus": 500,
+      "message": "Check deposit processing failed. Please retake the check images and resubmit.",
+      "sanitizedProviderBody": {
+        "status": 500,
+        "error": "Internal Server Error",
+        "timestamp": "2026-09-05T13:13:51.493883957Z",
+        "message": "Check deposit processing failed. Please retake the check images and resubmit."
+      },
+      "providerResponseKeys": [
+        "error",
+        "message",
+        "status",
+        "timestamp"
+      ],
+      "referencePresent": false,
+      "status": 500,
+      "amountEcho": {
+        "echoedUserAmount": null,
+        "echoedAmount": null,
+        "echoedAmountCents": null,
+        "status": 500,
+        "statusDescription": "Check deposit processing failed. Please retake the check images and resubmit."
+      }
+    }
+  ],
+  "analysis": {
+    "performRiskAssessmentChangedOutcome": false,
+    "allIdenticalHttp500": true,
+    "distinctMessages": [
+      "Check deposit processing failed. Please retake the check images and resubmit."
+    ],
+    "sameFrontHashAcrossABC": true,
+    "rearHashAEqualsB": true,
+    "rearHashAEqualsC": false
+  },
+  "lovableParity": {
+    "processPath": {
+      "lovable": "/fincapture/deposit/process",
+      "aws": "/fincapture/deposit/process",
+      "match": true
+    },
+    "processCoreFields": {
+      "lovable": [
+        "fiKey",
+        "ssoKey",
+        "depositAccountNumber",
+        "captureDateTime",
+        "userAmount",
+        "frontImage",
+        "rearImage",
+        "performRiskAssessment"
+      ],
+      "aws": [
+        "fiKey",
+        "ssoKey",
+        "depositAccountNumber",
+        "captureDateTime",
+        "userAmount",
+        "frontImage",
+        "rearImage",
+        "performRiskAssessment"
+      ],
+      "match": true
+    },
+    "optionalPostmanSampleFields": {
+      "fields": [
+        "firstName",
+        "lastName",
+        "emailAddress",
+        "dailyDepositLimit"
+      ],
+      "lovableSends": false,
+      "awsSends": false,
+      "match": true,
+      "note": "Both omit optional Postman sample fields. No client-side field gap to flip first."
+    },
+    "imagePrepareConstants": {
+      "lovablePrepareImageEdge": {
+        "targetMaxDim": 1600,
+        "jpegQuality": "78→35",
+        "minDim": 1300,
+        "perImageBudget": 450000,
+        "encoder": "ImageScript"
+      },
+      "awsNormalizeToBudget": {
+        "targetMaxDim": 1600,
+        "jpegQuality": "78→35",
+        "minDim": 1300,
+        "perImageBudget": 450000,
+        "encoder": "jpeg-js"
+      },
+      "constantsMatch": true,
+      "encoderDifference": "Lovable prepare-image uses ImageScript; AWS Node uses jpeg-js. Numeric resize/quality loop matches."
+    },
+    "lovableSubmitFallbackNormalize": {
+      "note": "Only when image exceeds 450KB and was not pre-prepared",
+      "targetMaxDim": 1200,
+      "jpegQuality": 68,
+      "minDim": 600,
+      "differsFromPreparePath": true
+    }
+  },
+  "escalationPackage": {
+    "endpoint": "POST /fincapture/deposit/process",
+    "host": "uatapi.checkalt.com",
+    "timestamps": [
+      {
+        "label": "A_improved_pair_risk_true",
+        "startedAt": "2026-09-05T13:13:44.879Z",
+        "endedAt": "2026-09-05T13:13:47.046Z"
+      },
+      {
+        "label": "B_same_pair_risk_false",
+        "startedAt": "2026-09-05T13:13:47.048Z",
+        "endedAt": "2026-09-05T13:13:49.187Z"
+      },
+      {
+        "label": "C_same_front_simplified_rear_risk_true",
+        "startedAt": "2026-09-05T13:13:49.189Z",
+        "endedAt": "2026-09-05T13:13:51.515Z"
+      }
+    ],
+    "httpStatus": 500,
+    "sanitizedResponses": [
+      {
+        "label": "A_improved_pair_risk_true",
+        "httpStatus": 500,
+        "message": "Check deposit processing failed. Please retake the check images and resubmit.",
+        "sanitizedProviderBody": {
+          "status": 500,
+          "error": "Internal Server Error",
+          "timestamp": "2026-09-05T13:13:47.024612424Z",
+          "message": "Check deposit processing failed. Please retake the check images and resubmit."
+        },
+        "providerResponseKeys": [
+          "error",
+          "message",
+          "status",
+          "timestamp"
+        ],
+        "referencePresent": false,
+        "performRiskAssessment": true
+      },
+      {
+        "label": "B_same_pair_risk_false",
+        "httpStatus": 500,
+        "message": "Check deposit processing failed. Please retake the check images and resubmit.",
+        "sanitizedProviderBody": {
+          "status": 500,
+          "error": "Internal Server Error",
+          "timestamp": "2026-09-05T13:13:49.164433433Z",
+          "message": "Check deposit processing failed. Please retake the check images and resubmit."
+        },
+        "providerResponseKeys": [
+          "error",
+          "message",
+          "status",
+          "timestamp"
+        ],
+        "referencePresent": false,
+        "performRiskAssessment": false
+      },
+      {
+        "label": "C_same_front_simplified_rear_risk_true",
+        "httpStatus": 500,
+        "message": "Check deposit processing failed. Please retake the check images and resubmit.",
+        "sanitizedProviderBody": {
+          "status": 500,
+          "error": "Internal Server Error",
+          "timestamp": "2026-09-05T13:13:51.493883957Z",
+          "message": "Check deposit processing failed. Please retake the check images and resubmit."
+        },
+        "providerResponseKeys": [
+          "error",
+          "message",
+          "status",
+          "timestamp"
+        ],
+        "referencePresent": false,
+        "performRiskAssessment": true
+      }
+    ],
+    "imageDimensionsFormat": {
+      "front": {
+        "width": 1600,
+        "height": 733,
+        "format": "JPEG",
+        "bytes": 179129
+      },
+      "rear": {
+        "width": 1600,
+        "height": 733,
+        "format": "JPEG",
+        "bytes": 150243
+      },
+      "rearSimplified": {
+        "width": 1600,
+        "height": 733,
+        "format": "JPEG",
+        "bytes": 88810
+      }
+    },
+    "requestFieldNames": [
+      "fiKey",
+      "ssoKey",
+      "depositAccountNumber",
+      "captureDateTime",
+      "userAmount",
+      "frontImage",
+      "rearImage",
+      "performRiskAssessment"
+    ],
+    "performRiskAssessmentResults": {
+      "true": {
+        "httpStatus": 500,
+        "message": "Check deposit processing failed. Please retake the check images and resubmit."
+      },
+      "false": {
+        "httpStatus": 500,
+        "message": "Check deposit processing failed. Please retake the check images and resubmit."
+      },
+      "changedOutcome": false
+    },
+    "nonSensitiveIds": {
+      "referencePresent": false,
+      "providerResponseKeysUnion": [
+        "error",
+        "message",
+        "status",
+        "timestamp"
+      ]
+    },
+    "priorPassingStages": {
+      "authentication": true,
+      "register": true,
+      "accountBinding": true
+    },
+    "note": "Credentials, fiKey, ssoKey, and account numbers intentionally omitted."
+  }
+}

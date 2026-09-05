@@ -122,5 +122,24 @@ Live CheckAlt UAT `POST /fincapture/deposit/process` with the improved pair stil
 
 No provider reference. Status/history/idempotency **not** continued. See `aws/providers/results/checkalt_synthetic_iqa_review.md` and `checkalt_synthetic_iqa_stop.json`.
 
+### Controlled IQA diagnostic matrix (same day)
+
+One-variable UAT matrix against exact outbound JPEG/Base64 (not source-only):
+
+| Test | Variable | HTTP | Outcome |
+|---|---|---|---|
+| A | improved pair, `performRiskAssessment: true` | 500 | retake images |
+| B | **same image bytes**, `performRiskAssessment: false` | 500 | identical |
+| C | same front, simplified rear (endorsement kept), risk `true` | 500 | identical |
+
+Also verified: Base64 round-trip / JPEG reopen / no data-URI / no double encoding; AWS process field shape and prepare constants match Lovable (optional Postman name/email/limit fields omitted on both). Residual encoder note only: Lovable ImageScript vs AWS `jpeg-js` with the same numeric loop — **no smallest UAT-only field fix identified**.
+
+**Verdict:** client-side diagnostics exhausted → sanitized escalation package for CheckAlt:
+
+- `aws/providers/results/checkalt_iqa_diagnostic_matrix.json`
+- `aws/providers/results/checkalt_iqa_escalation_package.md`
+- `aws/providers/results/checkalt_iqa_matrix_stop.json`
+- oneshot: `aws/providers/oneshots/checkalt-iqa-matrix.mjs`
+
 **Do not merge PR #125.**
 

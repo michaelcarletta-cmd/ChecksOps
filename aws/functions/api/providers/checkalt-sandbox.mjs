@@ -334,6 +334,8 @@ export const checkAltSandboxFetch = async ({
         path,
         message: json?.message || json?.statusDescription || json?.error || json?.title || textSnippet || null,
         providerResponseKeys: json && typeof json === 'object' ? Object.keys(json).sort() : [],
+        // Include parsed body for UAT diagnostics (callers must sanitize before logging).
+        data: json,
       };
     }
     return { ok: true, statusCode: response.status, data: json };
