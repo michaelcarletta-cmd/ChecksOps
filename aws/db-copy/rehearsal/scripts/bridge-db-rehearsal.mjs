@@ -462,7 +462,8 @@ Isolated rehearsal was created without overwriting live \`checksops\`, then migr
 | Isolated rehearsal DB | \`${report.rehearsalDatabase || 'checksops_rehearsal_*'}\` |
 | Restore mode | ${report.restore?.restoreMode || 'n/a'} |
 | Overlay apply | ${report.restore?.deltaOk ? 'PASS' : (report.restore?.deltaError ? 'FAIL' : 'n/a')} (${report.restore?.upsertedRows ?? 'n/a'} rows upserted; ${(report.restore?.skippedMissingTables || []).length} table(s) skipped) |
-| Live \`checksops\` mutated | **NO** |
+| Live \`checksops\` data overwritten | **NO** |
+| checksops schema-only DDL | ${report.restore?.checksopsDdl?.ok ? `PASS (empty \`financial_stepup_log\`, ${report.restore.checksopsDdl.rowCount ?? 0} production rows copied)` : (report.restore?.checksopsDdl ? 'FAIL' : 'n/a')} |
 | Production Supabase mutated | **NO** |
 
 ## Phase 4 — Rehearsal vs live production

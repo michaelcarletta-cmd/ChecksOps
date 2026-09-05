@@ -1,6 +1,6 @@
 # DB bridge rehearsal recon — PR #127
 
-**Generated:** 2026-09-05T03:15:25.535Z  
+**Generated:** 2026-09-05T10:41:31.340Z  
 **Production cutover performed:** **NO**  
 **Live staging DB `checksops` overwritten:** **NO**  
 **Rehearsal database:** `checksops_rehearsal_20260905`
@@ -97,30 +97,38 @@ Tables with any insert/update/delete:
 
 Secret columns were not copied (`[redacted]` omitted; null preserved).
 
+## Preferred auth method (not added)
+
+Production `profiles.preferred_auth_method` is present. AWS login uses Cognito WebAuthn / EMAIL_OTP; the write allowlist ignores this column. It was **not** added to staging schema.
+
 ## Phase 3 — Isolated rehearsal restore/sync
 
-Isolated `checksops_rehearsal_20260905` was created with `CREATE DATABASE … TEMPLATE checksops` (brief exclusive lock only; live `checksops` was not dropped or overwritten), then migratable business tables were replaced with current production rows from the DB bridge. Secret columns with value `[redacted]` were omitted; generated columns were skipped.
+Isolated rehearsal was created without overwriting live `checksops`, then migratable business tables were replaced with current production rows from the DB bridge. Secret columns with value `[redacted]` were omitted; generated columns were skipped.
 
 | Step | Result |
 |---|---|
 | Isolated rehearsal DB | `checksops_rehearsal_20260905` |
-| Restore mode | TEMPLATE clone + production overlay |
-| Overlay apply | **PASS** (11,610 rows upserted; 1 table skipped) |
-| Live `checksops` mutated | **NO** |
+| Restore mode | existing_rehearsal_plus_stepup_ddl |
+| Overlay apply | PASS (188 rows upserted; 0 table(s) skipped) |
+| Live `checksops` data overwritten | **NO** |
+| checksops schema-only DDL | **PASS** (empty `financial_stepup_log`, 0 production rows copied) |
 | Production Supabase mutated | **NO** |
 
 ## Phase 4 — Rehearsal vs live production
 
 | Gate | Result |
 |---|---|
-| Table row counts (166 recon SQL tables) | **PASS** (0 mismatches) |
-| Primary-key fingerprints (critical tables) | **PASS** — tenants 6, profiles 8, user_roles 10, tenant_users 7, check_intake_items 194, check_endorsements 533, claims 183, deposit_items 125, disbursement_splits 117, homeowner_ledger_events 716 |
-| Tenant ownership | **PASS** (6 tenants / 6 distinct IDs) |
-| Financial aggregates (report-only) | **PASS** (exact match, including check_intake 1417824.60 and homeowner_ledger 3154787.52) |
-| Application-user UUIDs / identity_map | **PASS** (8 profiles, 10 user_roles, 7 tenant_users) |
-| Membership/role relationships | **PASS** |
-| FK integrity | **PASS** (0 orphans on endorsement/deposit/disbursement/claim_folder edges; 0 duplicate user_roles) |
-| Required-null regressions | **PASS** (`tenants.id` / `check_intake_items.id` null counts 0; claims ownership column is `org_id`) |
+| Table row counts | PASS |
+| Primary-key sets (fingerprints) | PASS |
+| Tenant ownership | PASS |
+| Financial aggregates (report-only) | PASS |
+| Application-user UUIDs / identity_map | PASS |
+| Membership/role relationships | PASS |
+| FK integrity | PASS |
+| Duplicates / required-null regressions | PASS |
+
+Count mismatches: []  
+Financial mismatches: []
 
 ## Phase 5 — Storage (already completed; not rerun)
 
@@ -133,29 +141,24 @@ Isolated `checksops_rehearsal_20260905` was created with `CREATE DATABASE … TE
 
 ## Discrepancies & remediation
 
-| Discrepancy | Remediation |
-|---|---|
-| `financial_stepup_log` is in live production (2 inserted rows since Sept. 1) but has no table on staging RDS | Apply production DDL for this table on rehearsal/staging before cutover, then overlay the 2 rows |
-| TEMPLATE clone copied staging-only `identity_accounts` onto rehearsal | Expected. Do not treat as production data. Live `checksops` identity/Cognito mapping was not modified |
-| Production `profiles.preferred_auth_method` is not on staging schema | Skip on overlay (done). Add column via staging migration if the app requires it |
+- TEMPLATE clone copied staging-only identity_accounts onto rehearsal. That table is not production migratable data; live checksops identity_accounts was not modified.
 
 ## Repeatable final cutover delta procedure
 
 1. Leave both temporary Lovable bridges deployed.
 2. Enter production write-freeze.
 3. `health` must remain `mode:read_only` with writes/deletes/rpc/rawSql false.
-4. Page `keysOnly` for approved business tables; classify vs the frozen baseline (or vs this rehearsal snapshot).
-5. Fetch full rows only for reconstruct keys; omit `[redacted]` secret columns; skip generated columns.
-6. Create a new `checksops_rehearsal_YYYYMMDD` (TEMPLATE clone or Sept. 1 dump restore). **Do not overwrite live `checksops`.**
-7. Replace migratable business tables with current production rows (or apply I/U/D delta if restoring the dump).
+4. Page `keysOnly` for approved business tables; classify vs the frozen baseline (or vs the prior rehearsal snapshot).
+5. Fetch full rows only for reconstruct keys; omit `[redacted]` secret columns.
+6. Restore Sept. 1 dump (or last rehearsal snapshot) into a new `checksops_rehearsal_YYYYMMDD`.
+7. Apply insert/update/delete delta. Do not overwrite live `checksops`.
 8. Reconcile counts, PK fingerprints, financial aggregates (report-only), identity UUID fingerprints, FKs.
 9. Storage: inventory delta only; COPY new objects; do not overwrite hash-verified keys.
-10. Apply any missing DDL (`financial_stepup_log`) before declaring DB parity.
-11. **STOP FOR REVIEW.** Do not switch DNS, auth, webhooks, or provider flags.
+10. **STOP FOR REVIEW.** Do not switch DNS, auth, webhooks, or provider flags.
 
 ## Expected write-freeze window
 
-Still estimated **45–110 minutes** to freeze, capture bridge delta (or dump), overlay/restore, recon, and storage delta. This rehearsal did **not** freeze production. Bridge keyset paging + overlay of ~12k rows completed on the order of **minutes**, so the dump-restore portion of the window can shrink once DDL is current.
+Still estimated **45–110 minutes** for a final freeze (dump or bridge delta + restore + recon + storage delta). This rehearsal did **not** freeze production.
 
 ## Rollback
 
@@ -169,10 +172,10 @@ Production Supabase remains system of record until a future cutover PR.
 ## Verdict
 
 **Bridge validation:** **PASS**  
-**DB rehearsal recon:** **PARTIAL** (migratable counts/financial/critical PKs/FKs **PASS**; new-table DDL outstanding)  
+**DB rehearsal recon:** **PASS**  
 **Storage:** **PASS**  
-**Overall data-migration readiness:** **PARTIAL**  
-**GO/NO-GO for data migration readiness:** **NO-GO**  
-**Production cutover:** **STOP FOR REVIEW** (not performed)
+**Overall data-migration readiness:** **PASS**  
+**GO/NO-GO for data migration readiness:** **GO for data migration readiness**  
+**Production cutover:** **STOP FOR REVIEW — production cutover not performed**
 
 STOP FOR REVIEW. Production cutover was not performed.

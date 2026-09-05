@@ -93,7 +93,7 @@ After DNS switch (future PR only): rollback is DNS revert + webhook revert withi
 | Procedure written | PASS |
 | Staging inventory vs Sept-1 baseline | PASS (tooling + evidence) |
 | DB bridge validation + Sept. 1 → live delta | PASS (632 inserted / 66 updated / 3 deleted) |
-| Isolated rehearsal overlay vs live production | **PARTIAL** — migratable counts/financial/PKs/FKs PASS; `financial_stepup_log` DDL outstanding |
+| Isolated rehearsal overlay vs live production | **PASS** — counts/financial/PKs/FKs/`financial_stepup_log` 2/2 |
 | Storage COPY vs live production | PASS (1,411 objects) |
 | Timed write-freeze measurement | Not measured (production was not frozen) |
 | DNS/webhook switch | **NOT PERFORMED** (forbidden) |

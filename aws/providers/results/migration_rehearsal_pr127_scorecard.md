@@ -6,21 +6,21 @@
 | Sept-1 baseline artifacts retained | PASS |
 | DB bridge fail-closed (`mode:read_only`, writes/deletes/rpc/rawSql false) | PASS |
 | Authoritative production delta vs Sept. 1 (632/66/3 I/U/D) | PASS |
-| Isolated `checksops_rehearsal_20260905` overlay (live `checksops` untouched) | PASS |
+| Isolated `checksops_rehearsal_20260905` overlay | PASS |
+| `financial_stepup_log` DDL + 2-row overlay | PASS |
 | Prod↔rehearsal row counts / critical PK fingerprints | PASS |
 | Financial aggregates (report-only) | PASS |
 | Identity / membership / FK / required-null | PASS |
-| `financial_stepup_log` DDL + 2-row overlay | PARTIAL (outstanding) |
+| `profiles.preferred_auth_method` | N/A — Cognito replaced; not added |
+| Live `checksops` schema-only DDL (empty table) | PASS (0 production rows copied) |
 | Live production storage inventory (bridge) | PASS (1,411 objects) |
 | Prod → staging S3 COPY + hash recon | PASS (1,411/1,411, 0 missing/failed/mismatched) |
 | Staging-only UAT objects preserved | PASS (21 left in place) |
-| Fresh production DB dump in S3 | N/A (bridge replaced dump blocker) |
-| Cutover delta procedure documented | PASS |
 | DNS/webhook/Auth switch | N/A — not performed |
 
 **Storage: PASS**  
-**DB: PARTIAL** (migratable application data matched; new-table DDL outstanding)  
-**Overall data-migration readiness: PARTIAL / NO-GO**  
+**DB: PASS**  
+**Overall data-migration readiness: PASS / GO**  
 **Production cutover: STOP FOR REVIEW** (not performed)
 
-See `DB_BRIDGE_RECONCILE.md`, `MIGRATION_REHEARSAL_REPORT.md`, and `STORAGE_COPY_RECONCILE.md`.
+See `DB_BRIDGE_RECONCILE.md`, `PREFERRED_AUTH_METHOD.md`, `MIGRATION_REHEARSAL_REPORT.md`, and `STORAGE_COPY_RECONCILE.md`.

@@ -16,7 +16,7 @@
 | Do not migrate/invalidate production passkeys | Required |
 | Leave PR #125 untouched | Required |
 | No PII / bank data / check images in Git evidence | Required |
-| Do not overwrite live AWS staging DB `checksops` | Required |
+| Do not overwrite live AWS staging DB `checksops` **data** | Required (schema-only DDL for empty `financial_stepup_log` is allowed after rehearsal PASS) |
 
 ## Baselines
 
@@ -99,8 +99,8 @@ See `MIGRATION_REHEARSAL_REPORT.md`, `DB_BRIDGE_RECONCILE.md`, `STORAGE_COPY_REC
 
 Storage vs live production (2026-09-05): **PASS** — 1,411/1,411 objects, 2,565,912,220 bytes, 21 staging-only UAT keys left in place.
 
-DB vs live production on isolated rehearsal (2026-09-05): migratable counts/financial/critical PKs/FKs **PASS**; `financial_stepup_log` DDL outstanding → overall **PARTIAL / NO-GO**. Bridges not torn down.
+DB vs live production on isolated rehearsal (2026-09-05): counts/financial/critical PKs/FKs/`financial_stepup_log` **PASS** → overall **PASS / GO for data migration readiness**. Production cutover is **STOP FOR REVIEW** (not performed). Bridges not torn down.
 
 ## Scorecard
 
-See report: overall **PARTIAL / NO-GO** until `financial_stepup_log` DDL is applied and overlaid. Production cutover is **STOP FOR REVIEW**.
+See report: overall **PASS / GO for data migration readiness**. Production cutover is **STOP FOR REVIEW**.

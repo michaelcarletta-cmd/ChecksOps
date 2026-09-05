@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-05T03:15:25.535Z",
+  "generatedAt": "2026-09-05T10:41:31.340Z",
   "productionSupabaseChanged": false,
   "productionCutoverPerformed": false,
   "liveChecksopsMutated": false,
@@ -2388,17 +2388,99 @@
     "cutoff": "2026-09-01T20:36:44.000Z"
   },
   "restore": {
-    "created": true,
+    "created": false,
     "restoreOk": true,
-    "restoreMode": "template_clone_then_overlay",
+    "restoreMode": "existing_rehearsal_plus_stepup_ddl",
     "deltaOk": true,
     "error": null,
     "deltaError": null,
-    "skippedMissingTables": [
-      "financial_stepup_log"
-    ],
-    "upsertedRows": 11610,
-    "note": "Isolated checksops_rehearsal_20260905 cloned from staging checksops TEMPLATE, then business tables replaced with live production rows. Live checksops was not overwritten."
+    "skippedMissingTables": [],
+    "upsertedRows": 188,
+    "ddl": {
+      "ok": true,
+      "database": "checksops_rehearsal_20260905",
+      "columnCount": 9,
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "primaryKey": true
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "nullable": false,
+          "primaryKey": false
+        },
+        {
+          "name": "tenant_id",
+          "type": "uuid",
+          "nullable": true,
+          "primaryKey": false
+        },
+        {
+          "name": "action_key",
+          "type": "text",
+          "nullable": false,
+          "primaryKey": false
+        },
+        {
+          "name": "factor_type",
+          "type": "text",
+          "nullable": false,
+          "primaryKey": false
+        },
+        {
+          "name": "succeeded",
+          "type": "bool",
+          "nullable": false,
+          "primaryKey": false
+        },
+        {
+          "name": "metadata",
+          "type": "jsonb",
+          "nullable": false,
+          "primaryKey": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "nullable": false,
+          "primaryKey": false
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "nullable": false,
+          "primaryKey": false
+        }
+      ],
+      "indexes": [
+        "financial_stepup_log_pkey",
+        "idx_financial_stepup_log_tenant",
+        "idx_financial_stepup_log_user"
+      ],
+      "policies": [
+        "aws_select_financial_stepup_log",
+        "aws_write_financial_stepup_log"
+      ],
+      "rlsEnabled": true,
+      "rowCountBeforeOverlay": 2
+    },
+    "note": "Applied financial_stepup_log DDL on isolated checksops_rehearsal_20260905 and overlaid current production rows. Live checksops data was not overwritten.",
+    "checksopsDdl": {
+      "ok": true,
+      "columnCount": 9,
+      "policies": [
+        "aws_select_financial_stepup_log",
+        "aws_write_financial_stepup_log"
+      ],
+      "rlsEnabled": true,
+      "rowCount": 0,
+      "mutatedChecksopsData": false,
+      "error": null
+    }
   },
   "recon": {
     "countsStatus": "PASS",
@@ -2419,14 +2501,17 @@
       "claims": 183,
       "deposit_items": 125,
       "disbursement_splits": 117,
-      "homeowner_ledger_events": 716
+      "homeowner_ledger_events": 716,
+      "financial_stepup_log": 2
     },
     "fkOrphanCounts": {
       "check_endorsements_check_id": 0,
       "deposit_items_batch_id": 0,
       "disbursement_splits_batch_id": 0,
       "claim_folders_claim_id": 0,
-      "user_roles_duplicate_user_role": 0
+      "user_roles_duplicate_user_role": 0,
+      "financial_stepup_log_user_id": 0,
+      "financial_stepup_log_tenant_id": 0
     },
     "identityAccountsPresent": true,
     "productionFinancial": {
@@ -2513,15 +2598,40 @@
         "prod": 716,
         "rehearsal": 716,
         "match": true
+      },
+      "financial_stepup_log": {
+        "prod": 2,
+        "rehearsal": 2,
+        "match": true
       }
     },
-    "claimsTenantColumn": "org_id (tenant_id not present)"
+    "requiredNullCounts": {
+      "tenants_id_null": 0,
+      "check_intake_items_id_null": 0,
+      "claims_id_null": 0,
+      "financial_stepup_log_id_null": 0,
+      "financial_stepup_log_user_id_null": 0,
+      "financial_stepup_log_action_key_null": 0
+    }
   },
   "discrepancies": [
-    "financial_stepup_log exists in live production (2 rows) but has no table on staging RDS; overlay skipped. Apply DDL on rehearsal/staging before cutover.",
-    "TEMPLATE clone copied staging-only identity_accounts onto rehearsal. That table is not production migratable data; live checksops identity_accounts was not modified.",
-    "profiles.preferred_auth_method exists in production but not on staging schema; column skipped (null-ness/new-column DDL later)."
+    "TEMPLATE clone copied staging-only identity_accounts onto rehearsal. That table is not production migratable data; live checksops identity_accounts was not modified."
   ],
+  "preferredAuthMethod": {
+    "productionPresent": true,
+    "productionType": {
+      "name": "preferred_auth_method",
+      "type": "text",
+      "nullable": false,
+      "primaryKey": false,
+      "redacted": false
+    },
+    "addedToStaging": false,
+    "awsFrontendReads": true,
+    "awsBackendPersists": false,
+    "awsLoginUsesColumn": false,
+    "reason": "AWS CheckOps/WhiteLabel/MortgageOps sign-in uses Cognito WebAuthn and EMAIL_OTP. profiles.preferred_auth_method is clientIgnored in the write allowlist. Do not add it for cosmetic schema parity."
+  },
   "storage": {
     "objects": 1411,
     "bytes": 2565912220,
@@ -2531,11 +2641,11 @@
   },
   "verdict": {
     "bridge": "PASS",
-    "database": "PARTIAL",
+    "database": "PASS",
     "storage": "PASS",
-    "overall": "PARTIAL",
-    "goNoGo": "NO-GO",
+    "overall": "PASS",
+    "goNoGo": "GO for data migration readiness",
     "productionCutover": "STOP FOR REVIEW — production cutover not performed",
-    "note": "Outstanding DDL/overlay for: financial_stepup_log"
+    "note": "Migratable application counts, financial aggregates, critical PK fingerprints, membership/roles, and FK checks matched live production on isolated rehearsal."
   }
 }
