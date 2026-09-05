@@ -15,7 +15,7 @@ Validated live 2026-09-05 via `cognito-idp describe-user-pool` / `describe-user-
 | MFA | OFF | OFF until TOTP approved | **GO** |
 | First-auth factors | EMAIL_OTP, PASSWORD, WEB_AUTHN | same | **GO** |
 | Email sending | `COGNITO_DEFAULT` | SES `DEVELOPER` + verified From | **PARTIAL** — SES From outstanding |
-| WebAuthn RP ID | **not returned** (`get-user-pool-mfa-config` has MFA OFF only) | `checksops.com` | **PARTIAL** — set in console on this pool only |
+| WebAuthn RP ID | `checksops.com` (`UserVerification=preferred`, `SINGLE_FACTOR`) | `checksops.com` | **GO (prepared, not switched)** |
 | Domain / custom domain | none | none until cutover | **GO** |
 | Lambda triggers | none | none | **GO** |
 | Tags | `DoNotCutover=true`, `DoNotSwitchAuth=true`, `Environment=production-prep` | present | **GO** |
@@ -23,7 +23,7 @@ Validated live 2026-09-05 via `cognito-idp describe-user-pool` / `describe-user-
 
 Staging comparison: pool `us-east-1_vPmQ7cL1F` has `WebAuthnConfiguration.RelyingPartyId=staging.checksops.com`, MFA OFF, 13 users, also `COGNITO_DEFAULT` email. Do not copy staging users onto production.
 
-AWS CLI `update-user-pool` in this account has **no** `WebAuthnConfiguration` member. Operator must set RP ID `checksops.com` in the Cognito console on **`us-east-1_h00WorYMT` only**. Preserve SignInPolicy / MFA / deletion protection; omitted `UpdateUserPool` fields reset to defaults.
+Live `get-user-pool-mfa-config` on `us-east-1_h00WorYMT` already returns `RelyingPartyId=checksops.com`. Staging pool remains `staging.checksops.com`. Do not run `UpdateUserPool` (omitted fields reset to defaults). Do not invite or import users.
 
 ## Client `3ja9fqaq2fjkv3i6up2varcqpe` (`checksops-production-web`)
 

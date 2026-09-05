@@ -8,7 +8,7 @@
 |---|---|
 | ARN | `arn:aws:acm:us-east-1:806168576068:certificate/5cdde8e7-49fb-4b42-ba36-9aaa9d9b1aa3` |
 | Region | `us-east-1` (required for CloudFront) |
-| Status (2026-09-05) | `PENDING_VALIDATION` |
+| Status (2026-09-05 20:23 UTC) | **`ISSUED`** (both names `SUCCESS`). Not attached to CloudFront (`InUseBy` empty). |
 | Domains | `checksops.com`, `www.checksops.com` |
 | Method | DNS |
 | In use by | none (`InUseBy` empty) |
@@ -22,8 +22,8 @@ These values came from `aws acm describe-certificate` on 2026-09-05. Re-describe
 
 | Domain | Validation status | Type | Name (host) | Value (target) |
 |---|---|---|---|---|
-| `checksops.com` | PENDING_VALIDATION | CNAME | `_424da145c81cf0e7659ae4a2559d8f82.checksops.com.` | `_6e2cf5fd041966fbe6c8925823deca17.jkddzztszm.acm-validations.aws.` |
-| `www.checksops.com` | PENDING_VALIDATION | CNAME | `_4ed6942e58099ae2ecedf7cf0da89c69.www.checksops.com.` | `_94d94bddd98b0b11148e9581801530c8.jkddzztszm.acm-validations.aws.` |
+| `checksops.com` | SUCCESS (cert ISSUED) | CNAME | `_424da145c81cf0e7659ae4a2559d8f82.checksops.com.` | `_6e2cf5fd041966fbe6c8925823deca17.jkddzztszm.acm-validations.aws.` |
+| `www.checksops.com` | SUCCESS (cert ISSUED) | CNAME | `_4ed6942e58099ae2ecedf7cf0da89c69.www.checksops.com.` | `_94d94bddd98b0b11148e9581801530c8.jkddzztszm.acm-validations.aws.` |
 
 Cloudflare notes (operator):
 
@@ -31,7 +31,7 @@ Cloudflare notes (operator):
 - Do **not** change apex or `www` A records. They must remain `185.158.133.1` (Lovable) until a cutover decision.
 - These hosts are unique ACM hashes, not `checksops.com` / `www`.
 
-Live `dig` on 2026-09-05: both validation CNAMEs are **absent**. Apex/`www` A still `185.158.133.1`.
+Operator added both CNAMEs as Cloudflare **DNS-only** (grey cloud) on 2026-09-05. Public `dig` matches the ACM targets. Apex/`www` A still `185.158.133.1`. Certificate became **`ISSUED`** at 2026-09-05T20:23:49Z. Valid through 2027-03-21. Still not in use by any CloudFront distribution.
 
 ## After ISSUED (still not cutover)
 

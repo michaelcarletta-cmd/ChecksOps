@@ -87,8 +87,11 @@ test('validate-production-prep refuses --apply and passes static checks', () => 
 
 test('cutover matrix remains STOP / BLOCKED for executing cutover', () => {
   const matrix = read('aws/cutover/CUTOVER_READINESS_MATRIX.md');
+  const acm = read('aws/production/ACM_DNS_VALIDATION.md');
   assert.match(matrix, /STOP FOR REVIEW/);
   assert.match(matrix, /ChecksOps AWS overall/);
   assert.match(matrix, /\*\*BLOCKED\*\*/);
-  assert.match(matrix, /PENDING_VALIDATION/);
+  assert.match(matrix, /\*\*`ISSUED`\*\*/);
+  assert.match(acm, /\*\*`ISSUED`\*\*/);
+  assert.doesNotMatch(acm, /Status \(2026-09-05 20:23 UTC\) \| `PENDING_VALIDATION`/);
 });
