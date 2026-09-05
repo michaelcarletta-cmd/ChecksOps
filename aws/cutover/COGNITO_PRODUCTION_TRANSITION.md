@@ -1,6 +1,6 @@
 # Cognito EMAIL_OTP / WebAuthn production transition and rollback
 
-**Do not create a production user pool or switch production authentication from this PR.**
+**Do not switch production authentication from this PR.** Production pool `us-east-1_h00WorYMT` is prepared with **0 users**. Do not invite or import.
 
 ## Staging (proven — PR #126)
 
@@ -19,15 +19,17 @@
 
 Production SimpleWebAuthn rows in `user_passkeys` are **not** migrated.
 
-## Production transition (future)
+## Production pool (prepared, not switched)
 
-1. New user pool `checksops-production`. **Do not reuse** `us-east-1_vPmQ7cL1F`.
-2. RP ID / origin `checksops.com` / `https://checksops.com` (pick one canonical host; `www` must redirect to it or be in the RP allowlist).
-3. SES verified identity; Cognito `EmailSendingAccount=DEVELOPER`.
-4. First-auth factors: EMAIL_OTP, WEB_AUTHN, PASSWORD (master/UAT only). Preferred software MFA stays **false** until TOTP is approved.
-5. Import/link the eight production emails onto existing application UUIDs. Exclude ninth UUID.
+Live validation: `aws/production/COGNITO_VALIDATION.md`. SES: `aws/production/SES_EMAIL_OTP_READINESS.md`.
+
+1. Pool `checksops-production` / `us-east-1_h00WorYMT` exists. **Do not reuse** `us-east-1_vPmQ7cL1F`.
+2. Client `checksops-production-web` / `3ja9fqaq2fjkv3i6up2varcqpe` — `ALLOW_USER_AUTH`, MFA OFF, 0 users.
+3. RP ID / origin still need operator console set to `checksops.com` / `https://checksops.com` on **this pool only**.
+4. SES verified identity and Cognito `EmailSendingAccount=DEVELOPER` still outstanding (`COGNITO_DEFAULT` today).
+5. Import/link the eight production emails onto existing application UUIDs is a **cutover decision**. Exclude ninth UUID. `--apply` remains refused.
 6. First login: EMAIL_OTP. Then register new Cognito passkeys.
-7. Production Lambda env (not staging template):
+7. Production-prep API templates (not live staging SAM) hard-code:
 
 ```
 COGNITO_WEBAUTHN_ORIGIN=https://checksops.com

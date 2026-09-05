@@ -1,18 +1,22 @@
 # Monitoring / CloudWatch / health checks (cutover window)
 
-**Do not deploy a production alarm stack from this PR.**  
-Example template (not attached to production): `production/cloudwatch-alarms.example.yaml`.
+Inspect-only production-prep alarms live in `aws/production/cloudwatch-alarms.yaml` (`ActionsEnabled=false`).  
+The older example file remains unused: `production/cloudwatch-alarms.example.yaml` (**DO NOT DEPLOY**).
 
-## What is live today (staging)
+Operator inspect IAM: `aws/production/iam/OPERATOR_CLOUDWATCH_IAM.md`. The Cloud Agent role cannot `DescribeAlarms` until a human attaches that policy.
+
+## What is live today (staging + prep)
 
 | Signal | Status |
 |---|---|
 | `GET /health` | **GO** — 200, `productionSupabaseChanged=false` |
 | `GET /db-health` | **GO** — RDS private, `checksops` / `transactionReadOnly=on` |
 | Lambda tracing | **GO** — SAM `Tracing: Active` |
-| `GET /ops/readiness` | **PARTIAL** — implemented in this PR; live staging Lambda still 404 until a later overlay (do **not** overlay from this branch; CheckAlt work is separate) |
-| CloudWatch alarms | **PARTIAL** — example YAML only. Agent role `ChecksOpsCursorCloudStaging` is denied `cloudwatch:DescribeAlarms` and `cloudwatch:GetMetricStatistics` |
-| Production alarms | **BLOCKED** (not created) |
+| `GET /ops/readiness` | **PARTIAL** — implemented in git; live staging Lambda still 404 until a later overlay (do **not** overlay from this branch) |
+| Production-prep log group | **GO (inspectable)** — `/aws/lambda/checksops-production-prep-api` plus metric filter `checksops-production-prep-api-errors-filter` |
+| CloudWatch alarms | **PARTIAL** — template ready; live deploy denied `cloudwatch:PutMetricAlarm`. Metric filter on prep log group exists. |
+| Operator inspect | **PARTIAL** — policy JSON ready; `iam:PutRolePolicy` / `CreatePolicy` denied on this agent |
+| Production cutover alarms / SNS | **BLOCKED** (no paging topic; ActionsEnabled false) |
 
 ## Cutover-night dashboard (operator)
 
@@ -31,6 +35,14 @@ Watch, in order:
 - Flags remain false until T7
 - If `/health` goes 500: roll back **that** Lambda `CodeSha256` immediately (do not continue cutover)
 
-## IAM gap to close later (not this PR)
+## IAM gap (human attach)
 
-Grant a dedicated ops role (not the Cloud Agent staging role) `cloudwatch:DescribeAlarms`, `cloudwatch:GetMetricStatistics`, and SNS publish for the production alarm topic. Do not broaden `ChecksOpsCursorCloudStaging` automatically.
+Grant `ChecksOpsProductionPrepCloudWatchInspect` to `ChecksOpsCursorCloudStaging` or a dedicated ops role. Do not broaden the Cloud Agent role with DNS, Cognito admin, or SES send.
+
+Inspect production-prep health without DescribeAlarms:
+
+```bash
+aws cloudformation describe-stacks --stack-name checksops-production-prep --query 'Stacks[0].Outputs'
+aws cloudformation describe-stacks --stack-name checksops-production-prep-alarms --query 'Stacks[0].Outputs'
+aws logs describe-log-groups --log-group-name-prefix /aws/lambda/checksops-production-prep
+```
