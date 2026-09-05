@@ -50,7 +50,9 @@ Not applied: the 47 skipped `auth.users` FKs (`aws/identity/sql/06_retarget_auth
 | `30d0505c-bcfa-4732-81fd-869dc46da5dd` | support@homeheropros.com | yes (AJ Kolesa) | admin | Home Hero admin |
 | `dd24eea5-5d12-47d1-999e-d5930c278b7d` | **unknown** | **no** | admin, staff | none |
 
-Later Cognito invites must use these emails as the match key and write the new `sub` onto the **same** `application_user_id`. Do not mint a new UUID for the 9th user; optionally add a `profiles` row with id `dd24eea5-5d12-47d1-999e-d5930c278b7d` after an operator supplies the email.
+Later Cognito invites must use these emails as the match key and write the new `sub` onto the **same** `application_user_id`. Do not mint a new UUID for the 9th user.
+
+**Resolution:** `aws/identity/NINTH_UUID_RESOLUTION.md` — fail-closed orphan. Do not invent email or Cognito.
 
 `identity_accounts` now has those 9 rows. Eight remain `pending` with `cognito_sub` NULL. None of the 8 real emails were invited.
 
@@ -96,7 +98,7 @@ Before RLS can be enabled, still required:
 
 ## Unresolved before inviting the 9 users
 
-- Email for `dd24eea5-5d12-47d1-999e-d5930c278b7d` (admin+staff, no profile). Do not guess.
+- Email for `dd24eea5-5d12-47d1-999e-d5930c278b7d` — **resolved as orphan**; do not guess; do not invite.
 - Remove `isolated_test` mapping for ChecksOps Tester.
 - Delete or disable the probe Cognito user if it should not remain.
 - Invite the 9 by email; store each new `sub`; set `status=active`.

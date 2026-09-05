@@ -11,8 +11,8 @@ Authoritative cutover scorecard: `aws/cutover/FINAL_PRODUCTION_CUTOVER_RUNBOOK.m
 | Email send/transactional/unsubscribe/notifies/portal invite | **obsolete/removable on staging** | Routed to AWS Class A handlers (`AWS_EMAIL_MODE=sink`) |
 | OCR intake / backlog / endorsement zone | **obsolete/removable on staging** | AWS Textract path + stored OCR fallback |
 | Homeowner ledger/claim/upload/sign-link/send | **obsolete/removable on staging** | AWS public/token handlers; deductible pay remains Class C |
-| `homeowner-ledger-attach-upload` | **still required temporarily** | Not in `CLASS_A_FUNCTIONS` |
-| `ingest-shared-check` | **still required temporarily** | Not in `CLASS_A_FUNCTIONS` |
+| `homeowner-ledger-attach-upload` | **obsolete/removable on staging** | AWS Class A staff attach; ignores browser amount |
+| `ingest-shared-check` | **obsolete/removable on staging** | AWS Class A bridge-secret ingest; S3 copy; amount from partner payload |
 | `check-endorsement` (public token) | **AWS-native on staging** | `publicWorkflowApi` `/public/endorsement`; authenticated invoke still production Edge |
 | get-check-image-urls / public directory / partner code | **obsolete/removable on staging** | AWS handlers |
 | Document PDF generators / endorsement packets | **obsolete/removable on staging** | Class A handlers present |
@@ -20,8 +20,8 @@ Authoritative cutover scorecard: `aws/cutover/FINAL_PRODUCTION_CUTOVER_RUNBOOK.m
 | passkey-* SimpleWebAuthn | **obsolete/removable on AWS Cognito mode** | Cognito WebAuthn for CheckOps / WhiteLabel / MortgageOps |
 | Moov / CheckAlt money movement | **provider/financial dependent** | Must stay disabled |
 | Stripe billing / tenant-checkout / usage report | **provider/financial dependent** | Keep disabled |
-| QuickBooks / Zapier / DocuPost / e-sign vendor | **provider/financial dependent** (B) | Needs sandbox creds |
-| `send-signature-request` | **still required temporarily** | E-sign vendor |
+| QuickBooks / Zapier / DocuPost | **provider/financial dependent** (B) | Keep disabled |
+| `send-signature-request` | **obsolete/removable on staging** | AWS first-party adapter (SES/sink). Not Lovable Resend. Not DocuSign/HelloSign. |
 | homeowner-deductible-pay | **provider/financial dependent** | Class C |
 | Plaid / `moov-plaid-bridge` | **N/A — not a cutover requirement** | Keep `AWS_PLAID_ENABLED=false` |
 
@@ -53,7 +53,7 @@ Authoritative cutover scorecard: `aws/cutover/FINAL_PRODUCTION_CUTOVER_RUNBOOK.m
 |---|---|---|
 | CheckOps / WhiteLabel / MortgageOps login | **obsolete/removable on staging** | Cognito EMAIL_OTP + WebAuthn |
 | `/h/upload` OTP | **obsolete/removable on staging** | Dedicated AWS OTP functions (no Cognito SPA session) |
-| MFA / TOTP / step-up on financial surfaces | **production-only** / gated | Staging financial execution off; Cognito MFA not provisioned |
+| MFA / TOTP / step-up on financial surfaces | **prepared / gated** | Cognito associate/verify exist; preferred MFA off; financial flags false |
 | Production passkeys | **not migrated** | Users re-enroll on a future production Cognito pool |
 
 ## Do not remove yet

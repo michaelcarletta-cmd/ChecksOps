@@ -25,17 +25,18 @@ PR #127 proved production → AWS staging **data + storage** migration. This doc
 |---|---|---|
 | Data migration (DB overlay + recon) | **GO** | Isolated `checksops_rehearsal_20260905` matched live production counts, critical PKs (including `financial_stepup_log` 2/2), financial aggregates, identity, membership, FKs, required-null. Live `checksops` business data was not overwritten. |
 | Storage migration | **GO** | 1,411 production objects / 2,565,912,220 bytes exact; 21 staging-only UAT objects left in place. |
-| Remaining Supabase runtime deps | **PARTIAL** | AWS staging (`VITE_AUTH_PROVIDER=cognito`) already proxies DB/storage/Class A. Production SPA is still `.env.production` Supabase-only. Gaps: MFA/TOTP step-up stub; some workflow invokes (`ingest-shared-check`, `homeowner-ledger-attach-upload`, e-sign vendor); money-movement still Supabase on prod / `provider_disabled` on AWS. |
-| Cognito EMAIL_OTP / WebAuthn | **PARTIAL** | Staging CheckOps / WhiteLabel / MortgageOps / `/h/upload` work on Cognito or AWS OTP. **No production Cognito user pool.** Production passkeys (SimpleWebAuthn) are **not** migrated. Users re-enroll on a future production pool (`RelyingPartyId` must be `checksops.com`). TOTP/step-up is a financial-activation gap, not a DNS-hold if money flags stay OFF. |
+| Remaining Supabase runtime deps | **GO** (normal non-financial) | Class A now includes `ingest-shared-check`, `homeowner-ledger-attach-upload`, and first-party `send-signature-request` (SES/sink). Money-movement / Stripe / QuickBooks stay disabled. Realtime remains polling. Production SPA is still `.env.production` Supabase-only. |
+| Cognito EMAIL_OTP / WebAuthn | **GO** (EMAIL_OTP) / **PARTIAL** (production pool) | Staging EMAIL_OTP + WebAuthn proven. Production pool/SES/RP `checksops.com` **prepared, not created**. Passkeys not migrated. TOTP preferred-MFA not enabled. |
+| Production AWS frontend/API config | **GO** (prepared) | Example production SAM/Cognito/WebAuthn params exist under `aws/cutover/production/`. Live SAM `Environment` AllowedValues remains **`staging` only**. `.env.production.aws.example` unused. **Not deployed.** |
+| Tenant isolation / RLS | **GO** (ninth UUID) / **PARTIAL** (production switch) | Ninth UUID classified as fail-closed orphan (no email/Cognito). Staging RLS still fail-closed for that UUID. Production still uses Supabase RLS until DNS/API switch. |
+| Smoke / recon / monitoring / rollback | **GO** (tooling) | `/ops/readiness`, `staging-smoke.mjs`, `rollback-dry-run.mjs` runnable without cutover. Production smoke transaction **not run** (forbidden). |
+| Financial TOTP / step-up | **PARTIAL** | Cognito associate/verify enrollment prepared. Preferred MFA refused. `AWS_FINANCIAL_PERMISSIONS_ACTIVATED=false`. Does not unlock money. |
 | Final DB + storage delta (bridges) | **GO** (procedure) | Repeatable via remaining bridges. Timed write-freeze not measured. Overlay into isolated rehearsal first; never overwrite live `checksops` until a later approved swap. |
-| Production AWS frontend/API config | **PARTIAL** | Staging API + CloudFront + Cognito exist. SAM `Environment` AllowedValues is **`staging` only**. No production stack, no production Cognito pool, no production frontend env in use. `.env.production.aws.example` is a **template only**. |
 | DNS / CloudFront / API routing | **BLOCKED** (switch) | `staging.checksops.com` → CloudFront `d2p55gobpvrxya.cloudfront.net`. Apex/`www` remain Lovable. Do not change Cloudflare apex until every other GO gate is signed. |
 | Moov webhook / provider | **PARTIAL** | Sandbox certification **PASS** (2026-09-04, PR #124) including Lambda egress. Production `AWS_MOOV_ENABLED` / master execution **false**. Production webhooks still on Supabase. Dual-run not started. |
 | CheckAlt | **PARTIAL** | Treat UAT as **pending vendor IQA**. Auth/egress historically OK; approved UAT deposit account / depositor `ssoKey` still required. PR #125 remains untouched. Production CheckAlt flags **false**. |
 | Plaid | **N/A** | Not used. Keep `AWS_PLAID_ENABLED=false`. Missing Plaid keys are not a blocker. |
-| Tenant isolation / RLS | **PARTIAL** | Staging RLS on 165 inventory tables + fail-closed identity proven. Ninth UUID unresolved. Production still uses Supabase RLS until DNS/API switch. |
 | Financial activation / grants | **GO (hold)** | `64_financial_activation_grants.sql` is a no-op `NOT_APPLIED` stub. CI refuses auto-apply. `AWS_FINANCIAL_PERMISSIONS_ACTIVATED=false`. **BLOCKED** to activate until human approval. |
-| Smoke / recon / monitoring / rollback | **PARTIAL** | Staging smoke + PR #127 recon documented. Production smoke transaction **not run** (forbidden). Rollback is DNS/flag revert until webhooks move. |
 
 **ChecksOps AWS overall for production cutover: BLOCKED.**  
 Data/storage rehearsal **GO** does **not** authorize DNS, auth, webhook, Moov, CheckAlt, or financial activation.
@@ -57,15 +58,15 @@ Must be resolved (or explicitly waived in writing) **before** any production cut
 9. **Moov production** — production keys/IDs (never sandbox IDs), webhook dual-run, then flags. Sandbox PASS is not production GO.
 10. **CheckAlt vendor IQA** — approved UAT deposit account + depositor `ssoKey` **or** a signed exception that CheckAlt stays disabled at DNS cut (deposits remain on Supabase until then — usually unacceptable).
 11. **Financial grants** — apply `64_financial_activation_grants.sql` only after webhook dry-run + named review. Not in this PR.
-12. **TOTP / financial step-up** — AWS MFA is a stub. Accept EMAIL_OTP/WebAuthn-only at DNS cut **or** provision Cognito MFA / keep step-up on a documented exception. `financial_stepup_log` exists on staging schema; production TOTP factors are not Cognito.
-13. **Workflow invoke gaps on AWS** — `ingest-shared-check`, `homeowner-ledger-attach-upload`, vendor e-sign (`send-signature-request`), Stripe/QuickBooks remain non-Class-A. Confirm each is either ported, fail-closed acceptably, or still served by a dual-run Edge Function.
+12. **TOTP / financial step-up** — Enrollment APIs exist; preferred MFA stays off so EMAIL_OTP login is unchanged. Accept EMAIL_OTP/WebAuthn-only at DNS cut **or** enable preferred MFA later. Never treat step-up as money authority while flags are false.
+13. **Workflow invoke gaps on AWS** — Stripe/QuickBooks/money-movement remain non-Class-A. `ingest-shared-check`, `homeowner-ledger-attach-upload`, and first-party e-sign are ported. Apply `70_ingest_shared_check.sql` on staging before live partner ingest (RLS). CheckAlt stays on PR #125.
 14. **Realtime** — AWS is polling fallback. Accept 15s poll or add a later realtime design.
-15. **Ninth UUID** — unmapped identity stays fail-closed (0 rows). Resolve or accept as non-user.
-16. **Timed write-freeze drill** — never measured against live production freeze. Budget ~45–110 min pre-DNS from rehearsal.
+15. **Timed write-freeze drill** — never measured against live production freeze. Budget ~45–110 min pre-DNS from rehearsal.
 
 Non-blockers:
 
 - **Plaid**
+- Ninth UUID `dd24eea5-…` (classified fail-closed orphan; do not invite)
 - Cosmetic `profiles.preferred_auth_method` on AWS (Cognito replaced it)
 - Staging-only UAT S3 extras (21 objects)
 - Moov sandbox certification (already PASS; still not production activation)
@@ -253,10 +254,13 @@ Require `mode: read_only`. Do not tear down either function after this PR.
 
 ## Safe preparation in the accompanying PR (activation still disabled)
 
-- This runbook + night-of operator checklist.
+- Class A: `ingest-shared-check`, `homeowner-ledger-attach-upload`, first-party `send-signature-request` (SES/sink, no Lovable).
+- Production SAM/Cognito/WebAuthn/EMAIL_OTP **examples only** (`aws/cutover/production/`). Live template still forbids `Environment=production`.
+- Ninth UUID classified as fail-closed orphan. Identity import dry-run refuses `--apply`.
+- TOTP enrollment routes prepared; preferred MFA and financial flags stay false.
+- `/ops/readiness`, staging-smoke, rollback dry-run (no production changes).
 - `.env.production.aws.example` — placeholders only; `.env.production` unchanged (Supabase).
-- WebAuthn origin/RP ID from env with **staging defaults**; apex origin still 403 unless env is later pointed at production.
-- SAM `Environment` remains **staging-only**; all production provider flags remain `"false"`.
-- Tests lock flags, `64` stub, Plaid non-requirement, and default WebAuthn origin.
+- WebAuthn origin/RP ID with **staging defaults**; apex origin still 403 unless env is later pointed at production.
+- Tests lock flags, `64` stub, Plaid non-requirement, Class A registry, and default WebAuthn origin.
 
-Not in this PR: production Cognito pool, DNS, webhook redirect, `64` grants, provider flag flips, PR #125, bridge teardown, Plaid enablement.
+Not in this PR: production Cognito pool deploy, DNS, webhook redirect, `64` grants, provider flag flips, PR #125, bridge teardown, Plaid enablement, production cutover.

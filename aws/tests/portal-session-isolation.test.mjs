@@ -35,10 +35,14 @@ test('MortgageOps AWS session key is isolated from CheckOps/WhiteLabel', () => {
   assert.match(passkeys, /sessionKey/);
 });
 
-test('AWS staging auth client stubs MFA and keeps identity mapping guard', () => {
+test('AWS staging auth client wires MFA to Cognito routes without unlocking money', () => {
   const awsClient = fs.readFileSync(path.join(ROOT, 'src/integrations/aws/client.ts'), 'utf8');
   assert.match(awsClient, /mfa:\s*\{/);
-  assert.match(awsClient, /listFactors/);
+  assert.match(awsClient, /\/auth\/mfa\/status/);
+  assert.match(awsClient, /\/auth\/mfa\/associate/);
+  assert.match(awsClient, /\/auth\/mfa\/verify/);
+  assert.match(awsClient, /financialPermissionsActivated:\s*false/);
+  assert.match(awsClient, /moneyMovementUnlocked:\s*false/);
   assert.match(awsClient, /application_user_id equals cognito_sub/);
   assert.match(awsClient, /establishCognitoSession/);
   assert.match(awsClient, /\/identity\/me/);

@@ -27,6 +27,7 @@ import {
   handleHomeownerLedgerView,
   handleHomeownerClaimPortal,
   handleHomeownerLedgerUpload,
+  handleHomeownerLedgerAttachUpload,
   handleHomeownerLedgerSignLink,
   handleHomeownerLedgerSend,
   handleSendFileToHomeowner,
@@ -65,6 +66,8 @@ import {
   handleTenantRemoveOpenaiKey,
   handleHireMortgageAgent,
 } from './tenant-admin.mjs';
+import { handleIngestSharedCheck } from './ingest-shared-check.mjs';
+import { handleSendSignatureRequest } from './esign.mjs';
 
 export const CLASS_A_FUNCTIONS = new Set([
   // Email
@@ -102,7 +105,10 @@ export const CLASS_A_FUNCTIONS = new Set([
   'homeowner-ledger-upload',
   'homeowner-ledger-sign-link',
   'homeowner-ledger-send',
+  'homeowner-ledger-attach-upload',
   'homeowner-upload-check',
+  'ingest-shared-check',
+  'send-signature-request',
   'homeowner-upload-otp-start',
   'homeowner-upload-otp-verify',
   'homeowner-upload-session',
@@ -213,6 +219,12 @@ export const handleAppServiceRequest = async (event, path, method) => {
       return handleHomeownerLedgerSignLink(event);
     case 'homeowner-ledger-send':
       return handleHomeownerLedgerSend(event);
+    case 'homeowner-ledger-attach-upload':
+      return handleHomeownerLedgerAttachUpload(event);
+    case 'ingest-shared-check':
+      return handleIngestSharedCheck(event);
+    case 'send-signature-request':
+      return handleSendSignatureRequest(event);
     case 'homeowner-upload-check':
       return handleHomeownerUploadCheck(event);
     case 'homeowner-upload-otp-start':

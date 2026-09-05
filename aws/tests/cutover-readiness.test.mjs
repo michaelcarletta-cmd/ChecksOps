@@ -15,8 +15,11 @@ test('production provider flags stay false and SAM forbids Environment=productio
   assert.match(template, /AWS_CHECKALT_ENABLED: "false"/);
   assert.match(template, /AWS_PLAID_ENABLED: "false"/);
   assert.match(template, /AWS_FINANCIAL_PERMISSIONS_ACTIVATED: "false"/);
+  assert.match(template, /AWS_COGNITO_MFA_PREFERRED: "false"/);
   assert.match(template, /COGNITO_WEBAUTHN_ORIGIN: "https:\/\/staging\.checksops\.com"/);
   assert.match(template, /COGNITO_WEBAUTHN_RP_ID: "staging\.checksops\.com"/);
+  assert.match(template, /SIGN_BASE_URL: "https:\/\/staging\.checksops\.com"/);
+  assert.match(template, /x-bridge-secret/);
   const allowed = template.match(/AllowedValues:\n(?:[ \t]+-[^\n]+\n)+/);
   assert.ok(allowed);
   assert.match(allowed[0], /- staging\b/);
@@ -40,6 +43,20 @@ test('live production frontend env stays Supabase-only', () => {
   assert.match(example, /DO NOT USE YET/);
   assert.match(example, /us-east-1_vPmQ7cL1F/);
   assert.match(example, /Plaid is not required/);
+});
+
+test('production SAM example exists but live samconfig stays staging-only', () => {
+  const live = read('aws/samconfig.toml');
+  assert.match(live, /stack_name = "checksops-staging"/);
+  assert.doesNotMatch(live, /stack_name = "checksops-production"/);
+  const example = read('aws/cutover/production/samconfig.production.example.toml');
+  assert.match(example, /DO NOT DEPLOY/);
+  const params = read('aws/cutover/production/parameters.production.example.json');
+  assert.match(params, /checksops\.com/);
+  assert.match(params, /"AWS_PLAID_ENABLED": "false"/);
+  const cognito = read('aws/cutover/production/COGNITO_PRODUCTION.md');
+  assert.match(cognito, /us-east-1_vPmQ7cL1F/);
+  assert.match(cognito, /do not reuse/);
 });
 
 test('cutover runbook is STOP / BLOCKED and keeps bridges; Plaid is not required', () => {

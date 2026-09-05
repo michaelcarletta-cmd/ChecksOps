@@ -4,6 +4,8 @@ import { validateReadonlyCoreTables } from './db-readonly-validate.mjs';
 import { handleIdentityMe } from './identity.mjs';
 import { handleAuthorizationProbe, handleJwksCheck } from './authorization.mjs';
 import { AUTH_ROUTES } from './auth-cognito.mjs';
+import { MFA_AUTH_ROUTES } from './auth-mfa.mjs';
+import { readinessSnapshot, stagingSafetyHolds } from './ops-readiness.mjs';
 import { handleDataQuery, handleDataRpc, handleWritesDisabled, handleFunctionsDisabled } from './data.mjs';
 import { handleWrite } from './write.mjs';
 import { handleProviderRequest } from './providers.mjs';
@@ -34,7 +36,7 @@ const json = (statusCode, body) => ({
     'content-type': 'application/json',
     'cache-control': 'no-store',
     'access-control-allow-origin': '*',
-    'access-control-allow-headers': 'authorization,content-type,x-request-id,x-user-id,x-tenant-id,x-role,x-cognito-sub,x-signature,x-timestamp,x-nonce,x-webhook-id,webhook-id,webhook-timestamp,webhook-signature,x-moov-signature,x-moov-timestamp,x-moov-webhook-id',
+    'access-control-allow-headers': 'authorization,content-type,x-request-id,x-user-id,x-tenant-id,x-role,x-cognito-sub,x-bridge-secret,x-signature,x-timestamp,x-nonce,x-webhook-id,webhook-id,webhook-timestamp,webhook-signature,x-moov-signature,x-moov-timestamp,x-moov-webhook-id',
     'access-control-allow-methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
   },
   body: JSON.stringify(body),
@@ -66,6 +68,8 @@ const READ_ONLY_PATHS = new Set([
   '/db-readonly-validate',
   '/identity/me',
   '/identity/session',
+  '/ops/readiness',
+  '/cutover/readiness',
 ]);
 
 const tenantComplianceMatch = (path) => path.match(/^\/tenants\/([^/]+)\/security-compliance$/);
@@ -83,6 +87,15 @@ export const handler = async (event) => {
     return json(405, {
       error: 'method_not_allowed',
       message: 'This staging validation route is GET-only. No writes.',
+    });
+  }
+
+  if (method === 'GET' && (path === '/ops/readiness' || path === '/cutover/readiness')) {
+    const snapshot = readinessSnapshot();
+    const holds = stagingSafetyHolds(snapshot);
+    return json(holds.ok ? 200 : 409, {
+      ...snapshot,
+      holds,
     });
   }
 
@@ -169,8 +182,8 @@ export const handler = async (event) => {
     });
   }
 
-  if (method === 'POST' && AUTH_ROUTES[path]) {
-    const result = await AUTH_ROUTES[path](event);
+  if (method === 'POST' && (AUTH_ROUTES[path] || MFA_AUTH_ROUTES[path])) {
+    const result = await (AUTH_ROUTES[path] || MFA_AUTH_ROUTES[path])(event);
     return json(result.statusCode || (result.ok ? 200 : 400), {
       service: 'checksops-api',
       environment: process.env.CHECKSOPS_ENV || 'unknown',
@@ -229,7 +242,7 @@ export const handler = async (event) => {
           'cache-control': 'no-store',
           location: result.location,
           'access-control-allow-origin': '*',
-          'access-control-allow-headers': 'authorization,content-type,x-request-id,x-user-id,x-tenant-id,x-role,x-cognito-sub,x-signature,x-timestamp,x-nonce,x-webhook-id,webhook-id,webhook-timestamp,webhook-signature,x-moov-signature,x-moov-timestamp,x-moov-webhook-id',
+          'access-control-allow-headers': 'authorization,content-type,x-request-id,x-user-id,x-tenant-id,x-role,x-cognito-sub,x-bridge-secret,x-signature,x-timestamp,x-nonce,x-webhook-id,webhook-id,webhook-timestamp,webhook-signature,x-moov-signature,x-moov-timestamp,x-moov-webhook-id',
           'access-control-allow-methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
         },
         body: JSON.stringify({

@@ -507,11 +507,6 @@ export function createAwsStagingClient(options: AwsStagingClientOptions = {}) {
   const store = createAwsSessionStore(sessionKey);
   const { emit, addListener, removeListener, readStored, writeStored, identityFromTokens, restoreSession } = store;
 
-  const mfaUnavailable = async () => ({
-    data: null,
-    error: authError("Supabase MFA/TOTP is not available on AWS staging Cognito. Step-up remains production-only until Cognito MFA is enabled."),
-  });
-
   const auth = {
     signInWithPassword: async ({ email, password }: { email: string; password: string }) => {
       const { response, body } = await apiFetch("/auth/login", {
@@ -704,13 +699,78 @@ export function createAwsStagingClient(options: AwsStagingClientOptions = {}) {
       data: { user: null, session: null },
       error: authError("Supabase OTP verify is disabled on AWS staging"),
     }),
-    /** Staging stub — Cognito MFA not provisioned; production Supabase TOTP unchanged. */
+    /**
+     * Cognito software-token MFA for step-up enrollment.
+     * Preferred MFA at login stays off. Financial flags stay false.
+     * Production Supabase TOTP is unchanged until auth is switched.
+     */
     mfa: {
-      listFactors: async () => ({ data: { totp: [], all: [], phone: [] }, error: null }),
-      enroll: mfaUnavailable,
-      challenge: mfaUnavailable,
-      verify: mfaUnavailable,
-      unenroll: mfaUnavailable,
+      listFactors: async () => {
+        const accessToken = String((readStored()?.tokens as Record<string, unknown> | undefined)?.accessToken || "");
+        const { response, body } = await apiFetch("/auth/mfa/status", {
+          method: "POST",
+          body: JSON.stringify({ accessToken }),
+        });
+        const factors = Array.isArray(body.factors) ? body.factors : [];
+        if (!response.ok) {
+          return { data: { totp: [], all: [], phone: [] }, error: authError(String(body.error || "mfa_status_failed")) };
+        }
+        return { data: { totp: factors, all: factors, phone: [] }, error: null };
+      },
+      enroll: async () => {
+        const accessToken = String((readStored()?.tokens as Record<string, unknown> | undefined)?.accessToken || "");
+        const { response, body } = await apiFetch("/auth/mfa/associate", {
+          method: "POST",
+          body: JSON.stringify({ accessToken }),
+        });
+        const totp = (body.totp && typeof body.totp === "object") ? body.totp as Record<string, unknown> : {};
+        if (!response.ok) {
+          return { data: null, error: authError(String(body.message || body.error || "mfa_associate_failed")) };
+        }
+        return {
+          data: {
+            id: String(body.id || "software-token"),
+            totp: {
+              qr_code: totp.qr_code || null,
+              secret: totp.secret || "",
+              uri: totp.otpauth_uri || null,
+            },
+          },
+          error: null,
+        };
+      },
+      challenge: async () => ({
+        data: { id: "software-token-challenge", type: "totp" },
+        error: null,
+      }),
+      verify: async ({ code }: { factorId?: string; challengeId?: string; code: string }) => {
+        const accessToken = String((readStored()?.tokens as Record<string, unknown> | undefined)?.accessToken || "");
+        const { response, body } = await apiFetch("/auth/mfa/verify", {
+          method: "POST",
+          body: JSON.stringify({ accessToken, code }),
+        });
+        if (!response.ok || body.verified !== true) {
+          return { data: null, error: authError(String(body.message || body.error || "mfa_verify_failed")) };
+        }
+        return {
+          data: {
+            verified: true,
+            financialPermissionsActivated: false,
+            moneyMovementUnlocked: false,
+          },
+          error: null,
+        };
+      },
+      unenroll: async () => {
+        const { response, body } = await apiFetch("/auth/mfa/set-preference", {
+          method: "POST",
+          body: JSON.stringify({}),
+        });
+        return {
+          data: null,
+          error: authError(String(body.error || "cognito_preferred_mfa_disabled"), { status: response.status }),
+        };
+      },
       getAuthenticatorAssuranceLevel: async () => ({
         data: { currentLevel: "aal1", nextLevel: "aal1" },
         error: null,
