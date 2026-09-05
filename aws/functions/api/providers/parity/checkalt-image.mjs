@@ -55,7 +55,7 @@ export const isJpegMagic = (bytes) => {
 const decodeRaster = (bytes) => {
   const buf = asBuffer(bytes);
   if (isJpegMagic(buf)) {
-    const decoded = jpeg.decode(buf, { maxMemoryUsageInMB: 128 });
+    const decoded = jpeg.decode(buf, { maxMemoryUsageInMB: 512 });
     return { width: decoded.width, height: decoded.height, data: Buffer.from(decoded.data) };
   }
   if (buf.length >= 8 && buf[0] === 0x89 && buf[1] === 0x50) {
@@ -172,39 +172,55 @@ export async function prepareLikeLovableBrowser(bytes, label = 'image') {
   const info = await inspectOriented(source);
   if (isAlreadyDepositReady(info)) return Buffer.from(source);
 
-  const oriented = await sharp(source, { failOn: 'none' }).rotate().toBuffer({ resolveWithObject: true });
-  let working = oriented.data;
+  // Decode + EXIF-orient once (createImageBitmap). Stay in raw pixels until
+  // the final JPEG so we do not triple-encode the way a naive sharp pipeline would.
+  const oriented = await sharp(source, { failOn: 'none' })
+    .rotate()
+    .flatten({ background: { r: 255, g: 255, b: 255 } })
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  let raw = oriented.data;
   let width = oriented.info.width;
   let height = oriented.info.height;
+  let channels = oriented.info.channels;
 
   if (height > width) {
-    const rotated = await sharp(working)
+    const rotated = await sharp(raw, { raw: { width, height, channels } })
       .rotate(90)
-      .jpeg({ quality: LANDSCAPE_JPEG_QUALITY, chromaSubsampling: '4:2:0', mozjpeg: true })
+      .raw()
       .toBuffer({ resolveWithObject: true });
-    working = rotated.data;
+    raw = rotated.data;
     width = rotated.info.width;
     height = rotated.info.height;
+    channels = rotated.info.channels;
   }
 
-  const longest = Math.max(width, height);
+  const longest = Math.max(info.width, info.height);
   if (longest > TARGET_MAX_DIM) {
-    working = await sharp(working)
+    const scale = TARGET_MAX_DIM / longest;
+    const targetW = Math.round(info.width * scale);
+    const targetH = Math.round(info.height * scale);
+    const resized = await sharp(raw, { raw: { width, height, channels } })
       .resize({
-        width: TARGET_MAX_DIM,
-        height: TARGET_MAX_DIM,
-        fit: 'inside',
-        withoutEnlargement: true,
+        width: targetW,
+        height: targetH,
+        fit: 'fill',
       })
-      .toBuffer();
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    raw = resized.data;
+    width = resized.info.width;
+    height = resized.info.height;
+    channels = resized.info.channels;
   }
 
-  let last = working;
+  const rawOpts = { raw: { width, height, channels } };
+  let last = null;
   for (const quality of BROWSER_QUALITY_LADDER) {
-    last = await sharp(working).jpeg({
+    last = await sharp(raw, rawOpts).jpeg({
       quality,
       chromaSubsampling: '4:2:0',
-      mozjpeg: true,
     }).toBuffer();
     if (last.length <= PER_IMAGE_BYTES_BUDGET) return last;
   }
@@ -259,11 +275,19 @@ export const normalizeToBudgetImageScript = (bytes, label = 'image') => {
   return Buffer.from(out);
 };
 
-export async function comparePrepPipelines(bytes, label = 'image') {
+export async function comparePrepPipelines(bytes, label = 'image', { skipImageScript = false } = {}) {
   const source = asBuffer(bytes);
   const browser = await prepareLikeLovableBrowser(source, label);
-  const imageScript = normalizeToBudgetImageScript(source, label);
   const oriented = await inspectOriented(source);
+  let imageScript = null;
+  let imageScriptError = null;
+  if (!skipImageScript) {
+    try {
+      imageScript = normalizeToBudgetImageScript(source, label);
+    } catch (error) {
+      imageScriptError = String(error?.message || error).slice(0, 180);
+    }
+  }
   return {
     label,
     sourceBytes: source.length,
@@ -274,13 +298,17 @@ export async function comparePrepPipelines(bytes, label = 'image') {
     alreadyGood: isAlreadyDepositReady(oriented),
     browserBytes: browser.length,
     browserSha256: sha256(browser),
-    imageScriptBytes: imageScript.length,
-    imageScriptSha256: sha256(imageScript),
+    browserOriented: await inspectOriented(browser).then((info) => ({
+      width: info.width, height: info.height, landscape: info.landscape,
+    })),
+    imageScriptBytes: imageScript ? imageScript.length : null,
+    imageScriptSha256: imageScript ? sha256(imageScript) : null,
+    imageScriptError,
     browserVsSourceIdentical: Buffer.compare(browser, source) === 0,
-    browserVsImageScriptIdentical: Buffer.compare(browser, imageScript) === 0,
-    imageScriptVsSourceIdentical: Buffer.compare(imageScript, source) === 0,
+    browserVsImageScriptIdentical: imageScript ? Buffer.compare(browser, imageScript) === 0 : false,
+    imageScriptVsSourceIdentical: imageScript ? Buffer.compare(imageScript, source) === 0 : false,
     browserB64Chars: browser.toString('base64').length,
-    imageScriptB64Chars: imageScript.toString('base64').length,
+    imageScriptB64Chars: imageScript ? imageScript.toString('base64').length : null,
   };
 }
 
