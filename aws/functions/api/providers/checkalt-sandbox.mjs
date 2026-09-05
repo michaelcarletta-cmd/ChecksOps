@@ -364,7 +364,7 @@ export const buildCheckAltUatDepositBody = ({
   // Match production checkalt-submit-deposit process body field-for-field.
   // Images go through normalizeToBudget (same constants as checkalt-prepare-image).
   // No testDeposit — production does not send it. No data-URI prefix.
-  const images = prepareSyntheticUatDepositImages();
+  const images = prepareSyntheticUatDepositImages({ amountCents: deposit.checksOpsCents });
   return {
     request: {
       fiKey: credentials?.fiKey || null,
@@ -382,6 +382,7 @@ export const buildCheckAltUatDepositBody = ({
       imagePipeline: images.pipeline,
       frontInfo: images.frontInfo,
       rearInfo: images.rearInfo,
+      imageAmountCents: images.amountCents,
     },
   };
 };

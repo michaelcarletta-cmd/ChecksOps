@@ -111,3 +111,16 @@ Moov untouched. Production Supabase/Lovable CheckAlt untouched.
 - `aws/providers/results/checkalt_uat_certification_partial.json`
 - `/opt/cursor/artifacts/checkalt_fincapture_doc_findings.json`
 - `/opt/cursor/artifacts/checkalt_uat_prepare_pipeline_deposit.json`
+
+## STOP FOR REVIEW — synthetic IQA (2026-09-05)
+
+Reviewed and improved the **UAT-only** synthetic front/rear generator (readable written amount, clearer MICR-style band, rear ink endorsement). Production prepare pipeline unchanged.
+
+Live CheckAlt UAT `POST /fincapture/deposit/process` with the improved pair still returned HTTP **500**:
+
+> Check deposit processing failed. Please retake the check images and resubmit.
+
+No provider reference. Status/history/idempotency **not** continued. See `aws/providers/results/checkalt_synthetic_iqa_review.md` and `checkalt_synthetic_iqa_stop.json`.
+
+**Do not merge PR #125.**
+

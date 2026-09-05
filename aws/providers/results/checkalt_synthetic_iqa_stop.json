@@ -1,0 +1,45 @@
+{
+  "verdict": "STOP_FOR_REVIEW",
+  "date": "2026-09-05",
+  "pr": 125,
+  "branch": "cursor/staging-checkalt-uat-cert-c8f0",
+  "productionImagePipelineChanged": false,
+  "productionCheckAltConfigChanged": false,
+  "negotiableCheckSubmitted": false,
+  "review": {
+    "priorDeficiencies": [
+      "missing_written_amount",
+      "crude_micr_ascii_placeholders",
+      "missing_glyph_J",
+      "rear_endorsement_print_only"
+    ],
+    "improved": true,
+    "hardcodedUnverifiedHypotheses": false
+  },
+  "uatProcess": {
+    "path": "/fincapture/deposit/process",
+    "httpStatus": 500,
+    "message": "Check deposit processing failed. Please retake the check images and resubmit.",
+    "referencePresent": false,
+    "frontPrepared": {
+      "width": 1600,
+      "height": 733,
+      "bytes": 179129,
+      "landscape": true,
+      "preparedBytes": 179129
+    },
+    "rearPrepared": {
+      "width": 1600,
+      "height": 733,
+      "bytes": 150243,
+      "landscape": true,
+      "preparedBytes": 150243
+    },
+    "userAmount": 1,
+    "imageAmountCents": 1,
+    "dataUriPrefix": false
+  },
+  "continuedCertification": false,
+  "reasonStopped": "Improved non-negotiable synthetic images still rejected by CheckAlt UAT IQA; do not guess further undocumented requirements.",
+  "liveResultArtifact": "/opt/cursor/artifacts/checkalt_improved_synthetic_uat_result.json"
+}

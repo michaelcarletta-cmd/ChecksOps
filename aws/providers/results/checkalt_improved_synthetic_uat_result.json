@@ -1,0 +1,68 @@
+{
+  "ok": false,
+  "stage": "process",
+  "path": "/fincapture/deposit/process",
+  "providerHttpStatus": 500,
+  "providerMessage": "Check deposit processing failed. Please retake the check images and resubmit.",
+  "providerResponseKeys": [
+    "error",
+    "message",
+    "status",
+    "timestamp"
+  ],
+  "referencePresent": false,
+  "status": null,
+  "amountEcho": {
+    "echoedUserAmount": null,
+    "echoedAmount": null,
+    "echoedAmountCents": null,
+    "status": null,
+    "statusDescription": null
+  },
+  "image": {
+    "kind": "synthetic_uat_via_prepare_pipeline",
+    "pipeline": {
+      "source": "buildSyntheticUatCheckSource",
+      "browserCap": "browserCapToDepositTarget",
+      "prepare": "normalizeToBudget",
+      "targetMaxDim": 1600,
+      "minDim": 1300,
+      "targetJpegQuality": 78,
+      "perImageBytesBudget": 450000,
+      "maxTotalB64Chars": 1600000
+    },
+    "front": {
+      "width": 1600,
+      "height": 733,
+      "bytes": 179129,
+      "landscape": true,
+      "preparedBytes": 179129
+    },
+    "rear": {
+      "width": 1600,
+      "height": 733,
+      "bytes": 150243,
+      "landscape": true,
+      "preparedBytes": 150243
+    },
+    "imageAmountCents": 1,
+    "userAmount": 1,
+    "hasDataUriPrefix": false
+  },
+  "discovery": {
+    "listedCount": 2,
+    "depositAccountRedacted": "31…73",
+    "depositAccountFingerprint": "46bed6e573bb",
+    "registerOk": true,
+    "registerHttp": 200,
+    "registerMessage": null,
+    "registerKeys": null,
+    "depositorInfoOk": true,
+    "depositorHttp": 200,
+    "hasSsoKey": true,
+    "ssoUserIdPrefix": "aws-uat-synt"
+  },
+  "productionUntouched": true,
+  "negotiableCheckSubmitted": false,
+  "verdict": "IQA_REJECTED_OR_PROVIDER_500"
+}
