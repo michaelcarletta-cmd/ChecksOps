@@ -308,19 +308,31 @@ const ensureLambda = async (zipPath, adminSecretArn) => {
       '--vpc-config', vpcConfig,
     ]);
   }
+  await run(AWS, ['lambda', 'wait', 'function-active', '--function-name', LAMBDA_NAME]);
+  try { await run(AWS, ['lambda', 'wait', 'function-updated', '--function-name', LAMBDA_NAME]); } catch { /* ok */ }
   return LAMBDA_NAME;
 };
 
 const invokeLambda = async (payload) => {
   const outFile = path.join(WORK, `lambda-${payload.step}.json`);
-  await run(AWS, [
-    'lambda', 'invoke',
-    '--function-name', LAMBDA_NAME,
-    '--cli-binary-format', 'raw-in-base64-out',
-    '--payload', JSON.stringify(payload),
-    outFile,
-  ]);
-  return JSON.parse(await readFile(outFile, 'utf8'));
+  let lastErr = null;
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    try {
+      await run(AWS, [
+        'lambda', 'invoke',
+        '--function-name', LAMBDA_NAME,
+        '--cli-binary-format', 'raw-in-base64-out',
+        '--payload', JSON.stringify(payload),
+        outFile,
+      ]);
+      return JSON.parse(await readFile(outFile, 'utf8'));
+    } catch (error) {
+      lastErr = error;
+      if (!/ResourceConflictException|Pending|TooManyRequests/i.test(String(error.message))) throw error;
+      await new Promise((r) => setTimeout(r, 10000 * (attempt + 1)));
+    }
+  }
+  throw lastErr;
 };
 
 const deleteOneshot = async () => {
@@ -464,13 +476,57 @@ STOP FOR REVIEW. Production cutover was not performed.
 };
 
 const main = async () => {
+  const resumeLambda = process.argv.includes('--resume-lambda');
   await mkdir(WORK, { recursive: true });
   await mkdir(path.join(REPORT_DIR, 'analysis'), { recursive: true });
-  progress({ step: 'assume_aws' });
+  progress({ step: 'assume_aws', resumeLambda });
   try { awsJson(['sts', 'get-caller-identity']); }
   catch { await assumeRole(); }
 
   const token = await loadToken();
+  let phase1;
+  let classifiedTables;
+  let schemaByTable = {};
+  let counted;
+  let identity;
+  let deltaTables = [];
+  let totals = { inserted: 0, updated: 0, deleted: 0, unchanged: 0 };
+  let prodFingerprints = {};
+  let prodFinancial = {};
+  let reconstruct = {};
+  const financialTables = new Set([
+    'check_intake_items', 'deposit_items', 'deposit_batches', 'checkalt_deposits',
+    'disbursement_splits', 'disbursement_batches', 'claim_check_payments',
+    'payment_transfers', 'payment_wallet_ledger', 'claim_payments',
+    'homeowner_ledger_events', 'check_endorsements',
+  ]);
+  const types = parseGeneratedDatabaseTypes(path.join(ROOT, 'src/integrations/supabase/types.ts'));
+  const businessTableNames = loadBusinessTableNames(path.join(ROOT, 'aws/db-copy/sql/reconciliation_counts.sql'));
+
+  if (resumeLambda) {
+    const existing = JSON.parse(await readFile(path.join(REPORT_DIR, 'analysis/db_bridge_reconcile.json'), 'utf8'));
+    phase1 = existing.bridge;
+    deltaTables = existing.delta?.tables || [];
+    totals = existing.delta?.totals || totals;
+    identity = phase1.identity;
+    const tablesResp = await bridgeFetch(token, { action: 'tables' });
+    const schemaResp = await bridgeFetch(token, { action: 'schema' });
+    const countsResp = await bridgeFetch(token, { action: 'counts' });
+    schemaByTable = schemaResp.json.schema || {};
+    counted = numericCounts(countsResp.json.counts || countsResp.json);
+    classifiedTables = approvedBusinessTables({
+      bridgeTables: tablesResp.json.tables || [],
+      excluded: tablesResp.json.excluded || phase1.excluded || [],
+      viewNames: types.views,
+      businessTableNames,
+    });
+    const financialRows = {};
+    for (const table of financialTables) {
+      financialRows[table] = await pageRows(token, { table, keysOnly: false, limit: LIVE_PAGE_SIZE });
+    }
+    prodFinancial = financialFromRows(financialRows);
+    progress({ step: 'resume_lambda_ready', approved: classifiedTables.approved.length });
+  } else {
   progress({ step: 'phase1_health' });
   const health = await bridgeFetch(token, { action: 'health' });
   const failClosed = isDbBridgeHealthy(health.json);
@@ -484,22 +540,20 @@ const main = async () => {
 
   const bridgeTables = tablesResp.json.tables || [];
   const excluded = tablesResp.json.excluded || [];
-  const types = parseGeneratedDatabaseTypes(path.join(ROOT, 'src/integrations/supabase/types.ts'));
-  const businessTableNames = loadBusinessTableNames(path.join(ROOT, 'aws/db-copy/sql/reconciliation_counts.sql'));
-  const classifiedTables = approvedBusinessTables({
+  classifiedTables = approvedBusinessTables({
     bridgeTables,
     excluded,
     viewNames: types.views,
     businessTableNames,
   });
-  const schemaByTable = schemaResp.json.schema || {};
+  schemaByTable = schemaResp.json.schema || {};
   const sanitizedSchema = sanitizeSchemaCatalog(schemaByTable);
-  const counted = numericCounts(countsResp.json.counts || countsResp.json);
-  const identity = sanitizeIdentityMap(identityResp.json);
+  counted = numericCounts(countsResp.json.counts || countsResp.json);
+  identity = sanitizeIdentityMap(identityResp.json);
   const baselineCounts = JSON.parse(await readFile(path.join(ROOT, 'aws/db-copy/analysis/table_counts_backup_vs_restore.json'), 'utf8')).backup_counts || {};
   const countDiffsVsSept1 = countDiffVsBaseline(counted.counts, baselineCounts, new Set(['spatial_ref_sys']));
 
-  const phase1 = {
+  phase1 = {
     generatedAt: new Date().toISOString(),
     httpStatus: health.status,
     mode: health.json.mode || null,
@@ -536,17 +590,7 @@ const main = async () => {
     await run(AWS, ['s3', 'cp', `s3://${FILES_BUCKET}/${BASELINE_DUMP_KEY}`, dumpPath]);
   }
 
-  const deltaTables = [];
-  const totals = { inserted: 0, updated: 0, deleted: 0, unchanged: 0 };
-  const reconstruct = {};
-  const prodFingerprints = {};
   const financialRows = {};
-  const financialTables = new Set([
-    'check_intake_items', 'deposit_items', 'deposit_batches', 'checkalt_deposits',
-    'disbursement_splits', 'disbursement_batches', 'claim_check_payments',
-    'payment_transfers', 'payment_wallet_ledger', 'claim_payments',
-    'homeowner_ledger_events', 'check_endorsements',
-  ]);
 
   for (const table of classifiedTables.approved) {
     const pkColumns = primaryKeyColumns(schemaByTable[table] || {});
@@ -565,7 +609,6 @@ const main = async () => {
     totals.deleted += summary.deleted;
     totals.unchanged += summary.unchanged;
 
-    const need = new Set(reconstructKeys(delta));
     const payload = {
       pkColumns,
       replaceAll: true,
@@ -586,8 +629,8 @@ const main = async () => {
     progress({ step: 'table_delta', table, ...summary });
   }
 
-  const prodFinancial = financialFromRows(financialRows);
-  const prefix = `Migration/rehearsal-20260905/delta`;
+  prodFinancial = financialFromRows(financialRows);
+  const prefixInner = `Migration/rehearsal-20260905/delta`;
   const manifest = {
     generatedAt: new Date().toISOString(),
     baseline: BASELINE_DUMP_KEY,
@@ -602,13 +645,17 @@ const main = async () => {
     })),
   };
   await writeFile(path.join(WORK, 'manifest.json'), JSON.stringify(manifest));
-  await run(AWS, ['s3', 'cp', path.join(WORK, 'manifest.json'), `s3://${FILES_BUCKET}/${prefix}/manifest.json`]);
+  await run(AWS, ['s3', 'cp', path.join(WORK, 'manifest.json'), `s3://${FILES_BUCKET}/${prefixInner}/manifest.json`]);
   for (const [table, payload] of Object.entries(reconstruct)) {
     const local = path.join(WORK, `${table}.json`);
     await writeFile(local, JSON.stringify(payload));
-    await run(AWS, ['s3', 'cp', local, `s3://${FILES_BUCKET}/${prefix}/tables/${table}.json`]);
+    await run(AWS, ['s3', 'cp', local, `s3://${FILES_BUCKET}/${prefixInner}/tables/${table}.json`]);
     await unlink(local);
   }
+  }
+
+  const prefix = `Migration/rehearsal-20260905/delta`;
+  const failClosed = phase1.failClosed === true;
 
   progress({ step: 'pack_lambda' });
   let restore = { created: false, restoreOk: false, deltaOk: false };
