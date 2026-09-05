@@ -149,3 +149,15 @@ Also verified: Base64 round-trip / JPEG reopen / no data-URI / no double encodin
 Re-used exact outbound improved JPEG bytes. `performRiskAssessment: true` and `false` both returned identical HTTP **500** (timestamp-only body difference). Base64 round-trip verified. AWS↔Lovable process fields and prepare constants match; no smallest UAT-only fix. Escalation: `checkalt_risk_ab_parity_escalation.md`, `checkalt_risk_ab_frozen.json`.
 
 **Do not merge PR #125.**
+
+
+### PR #130 Architecture A (2026-09-05) — continue #125, do not merge
+
+Draft PR #130 found successful Lovable deposits use **Architecture A** (browser prepares/stores JPEG; backend Base64 only). AWS staging was updated to match. Offline parity vs successful Lovable prepared pairs: **8/8 byte-identical**. Prior jpeg-js re-encode was not identical.
+
+One synthetic VOID UAT submit through corrected A path still returned CheckAlt HTTP **500** (AWS wrapper 502). Production writes: 0.
+
+**Remaining measurable ChecksOps-controlled difference vs successful Lovable:** image content (synthetic VOID vs photographic/endorsed checks). Image pipeline + process payload gaps are closed. Do not resubmit historical/customer checks. Do not merge #125 or #130.
+
+Evidence: `aws/providers/results/checkalt_pr130_architecture_a_review.md`, `checkalt_pr130_evidence_summary.json`.
+

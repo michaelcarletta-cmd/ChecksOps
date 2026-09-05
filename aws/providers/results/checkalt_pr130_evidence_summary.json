@@ -1,0 +1,151 @@
+{
+  "source": {
+    "agentBcId": "bc-27f549f5-ddd1-4582-9986-f09f951d3a4a",
+    "pr": 130,
+    "prUrl": "https://github.com/michaelcarletta-cmd/ChecksOps/pull/130",
+    "branch": "cursor/checkalt-lovable-parity-3a4a",
+    "checkAltCalledByThisExtraction": false,
+    "merged": false
+  },
+  "offline_8_of_8": {
+    "architecture": "A_browser_prepare_aws_base64",
+    "compared": "42 Lovable submitted deposits with refs+pairs on staging copy; sampled 8/8 complete pairs",
+    "offlineParityPassed": true,
+    "completePairCount": 8,
+    "passedPairCount": 8,
+    "successfulLovableDepositsWithRef": 42,
+    "checkAltHttpCalled": false,
+    "productionModified": false,
+    "pairs": [
+      {
+        "fp": "ed9b7609164ba6f0",
+        "front": "reuse_cache 1600x796 JPEG 245945B",
+        "back": "browser_reencode 1200x583 JPEG 109522B",
+        "awsAIdentical": true
+      },
+      {
+        "fp": "4bcb3d264efc3761",
+        "front": "reuse_cache 1600x693 JPEG 206035B",
+        "back": "browser_reencode 1200x551 JPEG 106910B",
+        "awsAIdentical": true
+      },
+      {
+        "fp": "fb857c9554122263",
+        "front": "reuse_cache 1520x1140 JPEG 352943B",
+        "back": "browser_reencode 1200x900 JPEG 256125B",
+        "awsAIdentical": true
+      },
+      {
+        "fp": "93373325944ab505",
+        "front": "reuse_cache 1600x697 JPEG 208345B",
+        "back": "browser_reencode 1200x510 JPEG 85106B",
+        "awsAIdentical": true
+      },
+      {
+        "fp": "5f39120fca044d54",
+        "front": "browser_reencode 945x428 JPEG 55762B",
+        "back": "browser_reencode 1200x568 JPEG 87476B",
+        "awsAIdentical": true
+      },
+      {
+        "fp": "fd033ae138320250",
+        "front": "browser_reencode 945x428 JPEG 55762B",
+        "back": "browser_reencode 1200x568 JPEG 87476B",
+        "awsAIdentical": true
+      },
+      {
+        "fp": "9a5f035ae41dedb2",
+        "front": "reuse_cache 1600x1200 JPEG 397578B",
+        "back": "browser_reencode 1200x900 JPEG 204539B",
+        "awsAIdentical": true
+      },
+      {
+        "fp": "02ee71d2dcf100a3",
+        "front": "reuse_cache",
+        "back": "passthrough_original",
+        "awsAIdentical": true
+      }
+    ],
+    "byteIdenticalConfirmation": "AWS A Base64 of the Lovable-decided stored object is byte-identical to those stored prepared bytes for all 8 pairs. jpeg-js server re-encode previously diverged (245945 vs 273457 front on the first pair).",
+    "priorJpegJsDivergenceExample": {
+      "lovablePreparedBytes": 245945,
+      "jpegJsReencodeBytes": 273457,
+      "identical": false
+    }
+  },
+  "synthetic_uat_submit": {
+    "productionModified": false,
+    "historicalCheckResubmitted": false,
+    "flags": {
+      "AWS_CHECKALT_ENABLED": "false",
+      "AWS_PROVIDER_EXECUTION_ENABLED": "false",
+      "AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED": "true"
+    },
+    "architecture": "A_browser_prepare_aws_base64",
+    "imagePipeline": "browser_prepare_aws_base64",
+    "frontDims": {
+      "width": 1600,
+      "height": 700
+    },
+    "backDims": {
+      "width": 1400,
+      "height": 650
+    },
+    "frontBytes": 60162,
+    "backBytes": 54414,
+    "alreadyGoodPassThrough": true,
+    "injectedClientImageIgnored": true,
+    "checkAltHttpCalled": true,
+    "http": {
+      "checkAltApiStatus": 500,
+      "awsWrapperLambdaStatus": 502,
+      "bodyStatusCode": 502,
+      "accepted": false,
+      "liveProviderCalled": true
+    },
+    "sanitizedCheckAltResponse": {
+      "reference": null,
+      "deposit_id": "5b9f5c69-4da2-4cc4-84ca-9d560808165c",
+      "dataKeys": [
+        "details",
+        "error",
+        "message",
+        "status",
+        "timestamp"
+      ],
+      "statusDescription": null,
+      "note": "Raw details/error/message values were not retained in the UAT artifact."
+    },
+    "productionWrites": {
+      "productionCheckAltDepositsWritten": 0,
+      "productionRecordsMutated": false,
+      "productionExecution": false,
+      "historicalCheckResubmitted": false
+    },
+    "stopBecauseIqa": true
+  },
+  "remaining_differences_successful_lovable_vs_rejected_synthetic": [
+    "Image content: real Lovable endorsed check photos vs synthetic VOID non-negotiable JPEGs",
+    "Acceptance: offline Architecture A byte-identity pass vs CheckAlt 500 / AWS wrapper 502 on synthetic",
+    "Cause separation: AWS re-encode defect fixed; remaining failure is CheckAlt IQA/acceptance of synthetic VOID image, not a second AWS JPEG encode",
+    "Follow-ons not run without acceptance: poll / idempotency / reconciliation"
+  ],
+  "remaining_differences_quote_from_final": "AWS migration re-encode defect is fixed by architecture A. Remaining CheckAlt 500 on this synthetic VOID JPEG is vendor IQA/acceptance of non-negotiable test images, not a second AWS encoder pass.",
+  "production_flags_confirmed_off": {
+    "confirmed": true,
+    "finalProductionFlags": {
+      "AWS_CHECKALT_ENABLED": false,
+      "AWS_PROVIDER_EXECUTION_ENABLED": false,
+      "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": false
+    },
+    "uatFlags": {
+      "AWS_CHECKALT_ENABLED": "false",
+      "AWS_PROVIDER_EXECUTION_ENABLED": "false",
+      "AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED": "true"
+    },
+    "stagingHealth": {
+      "status": "ok",
+      "productionSupabaseChanged": false
+    }
+  }
+}
