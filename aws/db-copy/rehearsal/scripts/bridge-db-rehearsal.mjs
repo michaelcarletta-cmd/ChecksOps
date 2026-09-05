@@ -668,10 +668,12 @@ const main = async () => {
     const zip = await packOneshot();
     await ensureLambda(zip, adminSecret.ARN);
     progress({ step: 'lambda_restore' });
-    const restored = await invokeLambda({
-      step: 'restore',
-      database: DB_NAME,
-    });
+    const restored = process.argv.includes('--skip-restore')
+      ? { ok: true, restoreMode: 'skipped_existing_rehearsal', created: false }
+      : await invokeLambda({
+        step: 'restore',
+        database: DB_NAME,
+      });
     progress({ step: 'lambda_apply_delta', restoreOk: restored.ok, restoreMode: restored.restoreMode || null });
     const applied = await invokeLambda({
       step: 'apply_delta',
@@ -686,7 +688,7 @@ const main = async () => {
     progress({ step: 'lambda_reconcile' });
     const reconciled = await invokeLambda({ step: 'reconcile', database: DB_NAME, pkTables });
     restore = {
-      created: restored.ok === true,
+      created: restored.created ?? restored.ok === true,
       restoreOk: restored.ok === true,
       restoreMode: restored.restoreMode || null,
       tocKept: restored.tocKept,
@@ -697,6 +699,7 @@ const main = async () => {
     };
     const rehearsalCounts = reconciled.tableCounts || {};
     const countDiffs = countDiffVsBaseline(rehearsalCounts, counted.counts, new Set(['spatial_ref_sys']));
+    const countsPresent = Object.keys(rehearsalCounts).length >= 100;
     const financialDiffs = [];
     const rehearsalFin = reconciled.financialAggregates || {};
     for (const [metric, value] of Object.entries(prodFinancial)) {
@@ -713,8 +716,8 @@ const main = async () => {
       if (prodPrints.join(' ') !== rehearsalPrints.join(' ')) pkMismatches += 1;
     }
     recon = {
-      countsStatus: countDiffs.length === 0 ? 'PASS' : 'FAIL',
-      financialStatus: financialDiffs.length === 0 ? 'PASS' : 'FAIL',
+      countsStatus: countsPresent && countDiffs.length === 0 ? 'PASS' : 'FAIL',
+      financialStatus: financialDiffs.length === 0 && Object.keys(rehearsalFin).length > 0 ? 'PASS' : 'FAIL',
       pkStatus: pkMismatches === 0 && reconciled.ok ? 'PASS' : 'FAIL',
       tenantStatus: Number(reconciled.tenants?.n) === Number(counted.counts.tenants) ? 'PASS' : 'FAIL',
       identityStatus: Number(reconciled.profiles) === identity.profiles ? 'PASS' : 'FAIL',

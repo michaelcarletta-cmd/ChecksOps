@@ -99,7 +99,7 @@ export const redactedColumnNames = (tableSchema = {}) =>
   (tableSchema.columns || []).filter((col) => col.redacted).map((col) => col.name);
 
 export const rowPrimaryKey = (row = {}, pkColumns = ['id']) =>
-  pkColumns.map((col) => (row[col] == null ? '' : String(row[col]))).join('\0');
+  pkColumns.map((col) => (row[col] == null ? '' : String(row[col]))).join('|');
 
 export const timestampMs = (value) => {
   if (value == null || value === '') return null;
@@ -387,7 +387,7 @@ export const parseCopyKeyset = (sqlText, { pkColumns = ['id'], table } = {}) => 
     if (line === '\\.') break;
     if (!line || line.startsWith('--')) continue;
     const fields = splitCopyLine(line);
-    const pk = pkIdx.map((idx) => decodeCopyField(fields[idx])).join('\0');
+    const pk = pkIdx.map((idx) => decodeCopyField(fields[idx])).join('|');
     if (!pk) continue;
     map.set(pk, {
       created_at: createdIdx >= 0 ? decodeCopyField(fields[createdIdx]) : null,

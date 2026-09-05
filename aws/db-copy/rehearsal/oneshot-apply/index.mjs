@@ -204,8 +204,32 @@ const applyDelta = async (event) => {
           Key: `${prefix}/tables/${table.name}.json`,
         }));
         const payload = JSON.parse((await streamToBuffer(raw.Body)).toString('utf8'));
+        const exists = (await client.query('SELECT to_regclass($1) IS NOT NULL AS ok', [`public.${table.name}`])).rows[0].ok;
+        if (!exists) {
+          summary.push({ table: table.name, skipped: 'missing_on_rehearsal' });
+          continue;
+        }
+        const colMeta = (await client.query(`
+          SELECT a.attname AS name, t.typname AS type, a.attgenerated AS generated, a.attidentity AS identity
+          FROM pg_attribute a
+          JOIN pg_class c ON c.oid = a.attrelid
+          JOIN pg_namespace n ON n.oid = c.relnamespace
+          JOIN pg_type t ON t.oid = a.atttypid
+          WHERE n.nspname = 'public' AND c.relname = $1 AND a.attnum > 0 AND NOT a.attisdropped
+        `, [table.name])).rows;
+        const writable = new Set(colMeta
+          .filter((col) => !col.generated && col.identity !== 'a')
+          .map((col) => col.name));
+        const jsonCols = new Set(colMeta.filter((col) => ['json', 'jsonb'].includes(col.type)).map((col) => col.name));
+        const coerce = (name, value) => {
+          if (value === undefined) return null;
+          if (jsonCols.has(name) && value !== null && typeof value === 'object') return JSON.stringify(value);
+          if (jsonCols.has(name) && value === '') return null;
+          return value;
+        };
         let deleted = 0;
         let upserted = 0;
+        let skippedCols = 0;
         if (payload.replaceAll) {
           await client.query(`DELETE FROM public.${ident(table.name)}`);
           deleted = -1;
@@ -218,7 +242,8 @@ const applyDelta = async (event) => {
           }
         }
         for (const row of payload.upserts || []) {
-          const columns = Object.keys(row).filter((col) => /^[a-z_][a-z0-9_]*$/i.test(col));
+          const columns = Object.keys(row).filter((col) => writable.has(col));
+          skippedCols += Object.keys(row).filter((col) => /^[a-z_][a-z0-9_]*$/i.test(col) && !writable.has(col)).length ? 1 : 0;
           if (!columns.length) continue;
           const placeholders = columns.map((_, i) => `$${i + 1}`);
           const updateSet = columns
@@ -232,13 +257,14 @@ const applyDelta = async (event) => {
             : `INSERT INTO public.${ident(table.name)} (${columns.map(ident).join(', ')})
                VALUES (${placeholders.join(', ')})
                ON CONFLICT (${(table.pkColumns || ['id']).map(ident).join(', ')}) DO NOTHING`;
-          await client.query(sql, columns.map((col) => row[col]));
+          await client.query(sql, columns.map((col) => coerce(col, row[col])));
           upserted += 1;
         }
         summary.push({
           table: table.name,
           deleted,
           upserted,
+          skippedGeneratedOrMissingColumns: Boolean(skippedCols),
           skippedSecretColumns: table.skippedSecretColumns || [],
         });
       } catch (error) {
@@ -284,7 +310,7 @@ const reconcile = async (event) => {
         pkSets[table] = { present: false, count: 0, fingerprints: [] };
         continue;
       }
-      const expr = pkColumns.map((col) => `${ident(col)}::text`).join(" || chr(0) || ");
+      const expr = `concat_ws('|', ${pkColumns.map((col) => `${ident(col)}::text`).join(', ')})`;
       const rows = (await client.query(`SELECT ${expr} AS pk FROM public.${ident(table)}`)).rows;
       pkSets[table] = {
         present: true,
