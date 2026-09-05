@@ -1,0 +1,60 @@
+{
+  "verdict": "STOP_FOR_REVIEW",
+  "date": "2026-09-05",
+  "pr": 125,
+  "doNotMerge": true,
+  "imagesRegenerated": false,
+  "negotiableCheckSubmitted": false,
+  "productionFlagsOff": true,
+  "frozenRiskAB": {
+    "frontSha256": "2c46627eb7d729fbd01737079600bcc6f8b32d38b7a2964deee11e1b81418036",
+    "rearSha256": "025d4b5c2b6dc1b3c27c6035ea1cf93ff1c9c84202d554b92062db3416c4c109",
+    "dims": "1600x733",
+    "performRiskAssessmentTrue": {
+      "httpStatus": 500,
+      "message": "Check deposit processing failed. Please retake the check images and resubmit."
+    },
+    "performRiskAssessmentFalse": {
+      "httpStatus": 500,
+      "message": "Check deposit processing failed. Please retake the check images and resubmit."
+    },
+    "outcomeChanged": false,
+    "difference": "provider timestamp only"
+  },
+  "base64": {
+    "noDataUri": true,
+    "noDoubleEncoding": true,
+    "roundTripOk": true,
+    "jpegValid": true
+  },
+  "lovableParity": {
+    "processFieldsMatch": true,
+    "optionalFieldsBothOmitted": true,
+    "prepareConstantsMatch": true,
+    "differences": [
+      {
+        "area": "image_source",
+        "detail": "Lovable real photos vs AWS synthetic VOID",
+        "plausibleImpact": "yes"
+      },
+      {
+        "area": "jpeg_encoder",
+        "detail": "ImageScript vs jpeg-js",
+        "plausibleImpact": "low"
+      },
+      {
+        "area": "submit_fallback_normalize",
+        "detail": "Lovable 1200/q68 when unprepared; N/A for prepared UAT path",
+        "plausibleImpact": "n/a"
+      }
+    ],
+    "smallestUatOnlyFix": null
+  },
+  "continuedCertification": false,
+  "reasonStopped": "Frozen risk A/B identical 500; AWS payload/prepare equivalent to Lovable; escalate to CheckAlt.",
+  "artifacts": [
+    "aws/providers/results/checkalt_risk_ab_frozen.json",
+    "aws/providers/results/checkalt_risk_ab_parity_escalation.md",
+    "aws/providers/results/checkalt_iqa_escalation_package.md"
+  ]
+}

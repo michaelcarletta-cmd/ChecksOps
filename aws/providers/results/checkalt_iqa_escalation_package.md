@@ -96,3 +96,19 @@ AWS Node prepare uses `jpeg-js`; Lovable edge prepare uses ImageScript. Numeric 
 ## Machine-readable companion
 
 `aws/providers/results/checkalt_iqa_diagnostic_matrix.json`
+
+
+## Frozen risk A/B addendum (2026-09-05T15:15Z)
+
+Exact improved outbound JPEG bytes (no regenerate) re-submitted:
+
+| performRiskAssessment | HTTP | Sanitized message |
+|---|---|---|
+| true | 500 | Check deposit processing failed. Please retake the check images and resubmit. |
+| false | 500 | identical (timestamp only differed) |
+
+Base64 of transmitted fields: decode → same SHA-256 as frozen files; JPEG 1600×733; no data-URI; no double encoding.
+
+AWS process field set and prepare constants match Lovable. Residual diffs (synthetic source; ImageScript vs jpeg-js encoder) do not yield a smallest UAT-only field flip.
+
+Client diagnostics exhausted. Escalate to CheckAlt for UAT synthetic/VOID IQA policy.

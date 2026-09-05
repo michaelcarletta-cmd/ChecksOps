@@ -143,3 +143,9 @@ Also verified: Base64 round-trip / JPEG reopen / no data-URI / no double encodin
 
 **Do not merge PR #125.**
 
+
+### Frozen risk A/B (same day, no image changes)
+
+Re-used exact outbound improved JPEG bytes. `performRiskAssessment: true` and `false` both returned identical HTTP **500** (timestamp-only body difference). Base64 round-trip verified. AWS↔Lovable process fields and prepare constants match; no smallest UAT-only fix. Escalation: `checkalt_risk_ab_parity_escalation.md`, `checkalt_risk_ab_frozen.json`.
+
+**Do not merge PR #125.**
