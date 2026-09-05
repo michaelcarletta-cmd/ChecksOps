@@ -37,7 +37,10 @@ import {
   rowPrimaryKey,
   sanitizeIdentityMap,
   sanitizeSchemaCatalog,
+  overlayUpsertedRows,
+  rehearsalVerdict,
   sha256Hex,
+  skippedMissingTables,
   stripRedactedFields,
   summarizeDelta,
 } from '../../lib/db-bridge.mjs';
@@ -398,13 +401,15 @@ Secret columns were not copied (\`[redacted]\` omitted; null preserved).
 
 ## Phase 3 — Isolated rehearsal restore/sync
 
+Isolated rehearsal was created without overwriting live \`checksops\`, then migratable business tables were replaced with current production rows from the DB bridge. Secret columns with value \`[redacted]\` were omitted; generated columns were skipped.
+
 | Step | Result |
 |---|---|
-| CREATE DATABASE ${report.rehearsalDatabase || 'checksops_rehearsal_*'} | ${report.restore?.created ?? 'n/a'} |
-| Sept. 1 dump restore | ${report.restore?.restoreOk ? 'PASS' : (report.restore?.error ? 'FAIL' : 'n/a')} |
-| TOC kept/skipped | ${report.restore?.tocKept ?? 'n/a'} / ${report.restore?.tocSkipped ?? 'n/a'} |
-| Delta applied | ${report.restore?.deltaOk ? 'PASS' : (report.restore?.deltaError ? 'FAIL' : 'n/a')} |
+| Isolated rehearsal DB | \`${report.rehearsalDatabase || 'checksops_rehearsal_*'}\` |
+| Restore mode | ${report.restore?.restoreMode || 'n/a'} |
+| Overlay apply | ${report.restore?.deltaOk ? 'PASS' : (report.restore?.deltaError ? 'FAIL' : 'n/a')} (${report.restore?.upsertedRows ?? 'n/a'} rows upserted; ${(report.restore?.skippedMissingTables || []).length} table(s) skipped) |
 | Live \`checksops\` mutated | **NO** |
+| Production Supabase mutated | **NO** |
 
 ## Phase 4 — Rehearsal vs live production
 
@@ -463,11 +468,12 @@ Production Supabase remains system of record until a future cutover PR.
 
 ## Verdict
 
-**Bridge validation:** ${report.verdict?.bridge || 'n/a'}  
-**DB rehearsal recon:** ${report.verdict?.database || 'n/a'}  
-**Storage:** PASS  
+**Bridge validation:** **${report.verdict?.bridge || 'n/a'}**  
+**DB rehearsal recon:** **${report.verdict?.database || 'n/a'}**  
+**Storage:** **PASS**  
 **Overall data-migration readiness:** **${report.verdict?.overall || 'PARTIAL'}**  
-**GO/NO-GO for data migration readiness:** **${report.verdict?.goNoGo || 'NO-GO'}**
+**GO/NO-GO for data migration readiness:** **${report.verdict?.goNoGo || 'NO-GO'}**  
+**Production cutover:** **${report.verdict?.productionCutover || 'STOP FOR REVIEW — production cutover not performed'}**
 
 STOP FOR REVIEW. Production cutover was not performed.
 `;
@@ -687,6 +693,7 @@ const main = async () => {
     }));
     progress({ step: 'lambda_reconcile' });
     const reconciled = await invokeLambda({ step: 'reconcile', database: DB_NAME, pkTables });
+    const skippedMissing = skippedMissingTables(applied.tableSummary);
     restore = {
       created: restored.created ?? restored.ok === true,
       restoreOk: restored.ok === true,
@@ -696,6 +703,11 @@ const main = async () => {
       deltaOk: applied.ok === true,
       error: restored.error || null,
       deltaError: applied.error || null,
+      skippedMissingTables: skippedMissing,
+      upsertedRows: overlayUpsertedRows(applied.tableSummary),
+      note: restored.restoreMode === 'template_clone_then_overlay'
+        ? `Isolated ${DB_NAME} cloned from staging checksops TEMPLATE, then business tables replaced with live production rows. Live checksops was not overwritten.`
+        : null,
     };
     const rehearsalCounts = reconciled.tableCounts || {};
     const countDiffs = countDiffVsBaseline(rehearsalCounts, counted.counts, new Set(['spatial_ref_sys']));
@@ -745,8 +757,11 @@ const main = async () => {
     if (!applied.ok) discrepancies.push(`Delta apply failed: ${String(applied.error || 'unknown').slice(0, 180)}`);
     if (countDiffs.length) discrepancies.push(`${countDiffs.length} table count mismatches between rehearsal and live production`);
     if (financialDiffs.length) discrepancies.push(`${financialDiffs.length} financial aggregate mismatches (report-only)`);
+    if (skippedMissing.length) {
+      discrepancies.push(`${skippedMissing.join(', ')} exist in live production but have no table on rehearsal; overlay skipped. Apply DDL before cutover.`);
+    }
     if (reconciled.identityAccountsPresent) {
-      discrepancies.push('Rehearsal unexpectedly has identity_accounts; staging-only table should stay on live checksops only');
+      discrepancies.push('TEMPLATE clone copied staging-only identity_accounts onto rehearsal. That table is not production migratable data; live checksops identity_accounts was not modified.');
     }
   } catch (error) {
     discrepancies.push(`Rehearsal Lambda path blocked: ${String(error.message || error).slice(0, 240)}`);
@@ -766,12 +781,6 @@ const main = async () => {
     progress({ step: 'lambda_blocked', error: restore.error });
   }
 
-  const dbPass = recon.countsStatus === 'PASS'
-    && recon.financialStatus === 'PASS'
-    && recon.fkStatus === 'PASS'
-    && recon.tenantStatus === 'PASS'
-    && restore.restoreOk
-    && restore.deltaOk;
   const report = {
     generatedAt: new Date().toISOString(),
     productionSupabaseChanged: false,
@@ -790,12 +799,13 @@ const main = async () => {
       stagingOnlyUat: 21,
       rerun: false,
     },
-    verdict: {
-      bridge: failClosed ? 'PASS' : 'FAIL',
-      database: dbPass ? 'PASS' : 'PARTIAL',
-      overall: dbPass && failClosed ? 'PASS' : 'PARTIAL',
-      goNoGo: dbPass && failClosed ? 'GO for data migration readiness (cutover still STOP FOR REVIEW)' : 'NO-GO',
-    },
+    verdict: rehearsalVerdict({
+      failClosed,
+      restoreOk: restore.restoreOk,
+      deltaOk: restore.deltaOk,
+      recon,
+      skippedMissing: restore.skippedMissingTables || [],
+    }),
   };
   const written = await writeSanitizedReports(report);
   progress({ step: 'reports_written', ...written, verdict: report.verdict });

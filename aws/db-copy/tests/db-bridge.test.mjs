@@ -22,8 +22,11 @@ import {
   primaryKeyColumns,
   reconstructKeys,
   rowPrimaryKey,
+  overlayUpsertedRows,
+  rehearsalVerdict,
   sanitizeIdentityMap,
   sanitizeSchemaCatalog,
+  skippedMissingTables,
   stripRedactedFields,
   summarizeDelta,
 } from '../lib/db-bridge.mjs';
@@ -214,4 +217,48 @@ test('restore TOC filter skips policies, ACLs, excluded schemas, and auth FKs', 
   assert.equal(filtered.kept.includes('POLICY'), false);
   assert.equal(filtered.kept.includes('auth users'), false);
   assert.equal(filtered.kept.includes('audit_logs_user_id_fkey'), false);
+});
+
+test('skipped overlay tables force PARTIAL / NO-GO even when recon gates pass', () => {
+  assert.deepEqual(skippedMissingTables([
+    { table: 'tenants', upserted: 6 },
+    { table: 'financial_stepup_log', skipped: 'missing_on_rehearsal' },
+  ]), ['financial_stepup_log']);
+  assert.equal(overlayUpsertedRows([
+    { table: 'tenants', upserted: 6 },
+    { table: 'claims', upserted: 183 },
+    { table: 'financial_stepup_log', skipped: 'missing_on_rehearsal' },
+  ]), 189);
+
+  const passingRecon = {
+    countsStatus: 'PASS',
+    financialStatus: 'PASS',
+    fkStatus: 'PASS',
+    tenantStatus: 'PASS',
+    pkStatus: 'PASS',
+    identityStatus: 'PASS',
+    membershipStatus: 'PASS',
+  };
+  const withDdlGap = rehearsalVerdict({
+    failClosed: true,
+    restoreOk: true,
+    deltaOk: true,
+    recon: passingRecon,
+    skippedMissing: ['financial_stepup_log'],
+  });
+  assert.equal(withDdlGap.bridge, 'PASS');
+  assert.equal(withDdlGap.database, 'PARTIAL');
+  assert.equal(withDdlGap.overall, 'PARTIAL');
+  assert.equal(withDdlGap.goNoGo, 'NO-GO');
+  assert.match(withDdlGap.productionCutover, /STOP FOR REVIEW/);
+
+  const complete = rehearsalVerdict({
+    failClosed: true,
+    restoreOk: true,
+    deltaOk: true,
+    recon: passingRecon,
+    skippedMissing: [],
+  });
+  assert.equal(complete.database, 'PASS');
+  assert.equal(complete.goNoGo, 'GO for data migration readiness');
 });

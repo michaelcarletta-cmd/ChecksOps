@@ -441,3 +441,48 @@ export const gateStatus = (pass, blocked = false) => {
   if (blocked) return 'FAIL';
   return pass ? 'PASS' : 'FAIL';
 };
+
+export const skippedMissingTables = (tableSummary = []) =>
+  (tableSummary || [])
+    .filter((row) => row?.skipped === 'missing_on_rehearsal' && row.table)
+    .map((row) => row.table)
+    .sort();
+
+export const overlayUpsertedRows = (tableSummary = []) =>
+  (tableSummary || []).reduce((sum, row) => sum + Number(row.upserted || 0), 0);
+
+/**
+ * Honest rehearsal verdict. Missing production tables on rehearsal are PARTIAL/NO-GO
+ * even when the 166-table recon SQL still matches. Cutover is never authorized here.
+ */
+export const rehearsalVerdict = ({
+  failClosed = false,
+  restoreOk = false,
+  deltaOk = false,
+  recon = {},
+  skippedMissing = [],
+} = {}) => {
+  const gates = [
+    'countsStatus',
+    'financialStatus',
+    'fkStatus',
+    'tenantStatus',
+    'pkStatus',
+    'identityStatus',
+    'membershipStatus',
+  ];
+  const gatesPass = gates.every((key) => recon[key] === 'PASS');
+  const ddlOutstanding = skippedMissing.length > 0;
+  const dbComplete = Boolean(failClosed && restoreOk && deltaOk && gatesPass && !ddlOutstanding);
+  return {
+    bridge: failClosed ? 'PASS' : 'FAIL',
+    database: dbComplete ? 'PASS' : ((restoreOk && deltaOk) ? 'PARTIAL' : 'FAIL'),
+    storage: 'PASS',
+    overall: dbComplete && failClosed ? 'PASS' : (failClosed ? 'PARTIAL' : 'FAIL'),
+    goNoGo: dbComplete && failClosed ? 'GO for data migration readiness' : 'NO-GO',
+    productionCutover: 'STOP FOR REVIEW — production cutover not performed',
+    note: ddlOutstanding
+      ? `Outstanding DDL/overlay for: ${skippedMissing.join(', ')}`
+      : 'Migratable application counts, financial aggregates, critical PK fingerprints, membership/roles, and FK checks matched live production on isolated rehearsal.',
+  };
+};
