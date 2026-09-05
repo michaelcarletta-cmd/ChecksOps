@@ -44,4 +44,6 @@ Destination: `s3://checksops-staging-privatefilesbucket-erzqsolpucjp/files/{buck
 
 ## Teardown
 
-Delete the Edge Function from the Lovable/Supabase project after 1,334/1,334 reconciliation. Rotate the migration token. Do not leave the function deployed.
+**Do not tear down now.** Both bridges stay deployed through the final production delta.
+
+After a human-declared **successful** production cutover only, follow `aws/cutover/BRIDGE_TEARDOWN.md`. Dry-run: `node aws/cutover/scripts/bridge-teardown-dry-run.mjs` (`--apply` is refused). Then delete the Edge Functions from the Lovable/Supabase project, rotate the migration token, and confirm 404. Do not teardown on a failed cutover (needed for retry).

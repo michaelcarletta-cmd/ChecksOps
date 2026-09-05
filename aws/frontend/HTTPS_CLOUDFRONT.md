@@ -2,6 +2,8 @@
 
 Staging-only. Production DNS / Lovable / Supabase are out of scope.
 
+A production CloudFront **example** (not deployed) lives at `aws/cutover/production/https-cloudfront.production.example.yaml`. Live apex/`www` remain Lovable (`185.158.133.1` as of 2026-09-05).
+
 ## Goal
 
 Serve the AWS vite build at **https://staging.checksops.com** with:

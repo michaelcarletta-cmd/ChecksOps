@@ -17,8 +17,11 @@ SPA still contains `supabase.auth` / `supabase.from` / `supabase.functions.invok
 
 ## Still required temporarily on staging surfaces
 
-- WhiteLabelLogin / MortgageOpsLogin Cognito wiring incomplete → may still hit Supabase Auth/passkey invokes
-- Signature vendor / QuickBooks / Stripe / Moov / CheckAlt / Plaid invokes remain provider_disabled or Class B/C
+- WhiteLabelLogin / MortgageOpsLogin Cognito wiring is **complete on staging** (PR #126). Production SPA still uses Supabase Auth until cutover.
+- Signature vendor / QuickBooks / Stripe / Moov / CheckAlt invokes remain provider_disabled or Class B/C. Plaid is not used.
+- `ingest-shared-check` / first-party e-sign remain Class A outstanding on `main` (not this PR).
+
+See `aws/cutover/CUTOVER_READINESS_MATRIX.md`.
 
 ## Obsolete / removable later
 

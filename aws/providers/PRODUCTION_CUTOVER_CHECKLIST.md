@@ -1,6 +1,12 @@
 # Production provider cutover checklist
 
-**Current verdict: NO-GO. Do not execute production cutover.**
+**Current verdict: BLOCKED for executing production cutover.**  
+**Moov sandbox: PASS (PR #124). CheckAlt: PARTIAL (separate chat; do not modify #125/#130).**  
+**Data/storage rehearsal: GO (PR #127).** Production execution flags remain **false**.
+
+Authoritative matrix + night-of runbooks: `aws/cutover/CUTOVER_READINESS_MATRIX.md` and `aws/cutover/FINAL_PRODUCTION_CUTOVER_RUNBOOK.md`.
+
+Historical sections below still describe provider UAT gates. When they conflict with the 2026-09-05 matrix (for example older “Moov NO-GO / no NAT” lines), **use the matrix**.
 
 This checklist is the current handoff for provider cutover readiness after PRs #102 and #103. Older Tranche 4 and UAT result documents are historical evidence; when they conflict with this checklist, use the newer code/parity state and re-prove live AWS/provider gates before production approval.
 
@@ -161,9 +167,10 @@ Before flipping any production URL:
 
 | Gate | Status | Current blocker |
 | --- | --- | --- |
-| Moov | **NO-GO** | Lambda NAT/egress not yet proven; sandbox platform/connected account + payment-method mapping not live-proven; real transfer/status/idempotency/webhook proof outstanding |
-| CheckAlt | **NO-GO** | Lambda NAT/egress not yet proven; CheckAlt-approved UAT deposit account/depositor `ssoKey` outstanding; real deposit/status/idempotency/webhook proof outstanding |
-| AWS ChecksOps overall | **NO-GO** | Provider live tests, sandbox financial grants/reconciliation, final regression, and production cutover approval remain incomplete |
+| Moov sandbox | **PASS** | Production `AWS_MOOV_ENABLED` still false; production keys/webhook dual-run outstanding |
+| CheckAlt | **PARTIAL** | Separate chat (PR #125/#130). Production `AWS_CHECKALT_ENABLED` false |
+| Data/storage rehearsal | **GO** | Final production delta not executed; bridges remain |
+| AWS ChecksOps overall (execute cutover) | **BLOCKED** | See `aws/cutover/CUTOVER_READINESS_MATRIX.md` |
 
 ## STOP conditions
 
@@ -178,4 +185,4 @@ Stop immediately and do not activate production if any of the following occurs:
 - any production execution flag changes before explicit approval
 - DNS or production webhook routing changes before explicit approval
 
-Until every required gate above is resolved, the verdict remains **Moov NO-GO / CheckAlt NO-GO / ChecksOps AWS NO-GO**.
+Until every required gate in `aws/cutover/CUTOVER_READINESS_MATRIX.md` is resolved, the verdict remains **BLOCKED for executing production cutover**. Moov sandbox is PASS; CheckAlt stays PARTIAL on a separate track.

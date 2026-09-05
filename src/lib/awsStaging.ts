@@ -1,11 +1,28 @@
 /**
- * Staging-only switch. Production Vite builds use `.env.production` and never
- * set VITE_AUTH_PROVIDER=cognito, so this stays false for ChecksOps.com.
+ * AWS Cognito frontend switch. Production Vite builds use `.env.production`
+ * and never set VITE_AUTH_PROVIDER=cognito, so this stays false for ChecksOps.com
+ * until an approved production AWS frontend env is deployed.
  */
 
-/** Cognito native WebAuthn RP ID / HTTPS origin for AWS staging only. */
-export const AWS_STAGING_HTTPS_ORIGIN = "https://staging.checksops.com";
-export const AWS_STAGING_RP_ID = "staging.checksops.com";
+const DEFAULT_ORIGIN = "https://staging.checksops.com";
+const DEFAULT_RP_ID = "staging.checksops.com";
+
+const originFromAppUrl = (appUrl) => {
+  const raw = String(appUrl || DEFAULT_ORIGIN).trim().replace(/\/$/, "");
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "https:") return { origin: DEFAULT_ORIGIN, rpId: DEFAULT_RP_ID };
+    return { origin: `${url.protocol}//${url.host}`, rpId: url.hostname };
+  } catch {
+    return { origin: DEFAULT_ORIGIN, rpId: DEFAULT_RP_ID };
+  }
+};
+
+const configured = originFromAppUrl(import.meta.env.VITE_APP_URL);
+
+/** Cognito native WebAuthn RP ID / HTTPS origin (staging default). */
+export const AWS_STAGING_HTTPS_ORIGIN = configured.origin;
+export const AWS_STAGING_RP_ID = configured.rpId;
 
 /** Default CheckOps / WhiteLabel Cognito session localStorage key. */
 export const AWS_STAGING_AUTH_SESSION_KEY = "checksops.aws.staging.auth";
@@ -22,8 +39,10 @@ export function awsApiBaseUrl(): string {
 
 /**
  * Fail-closed gate for Cognito native WebAuthn.
- * Enabled only on the dedicated HTTPS staging hostname — never on HTTP S3
- * website endpoints, localhost, apex, www, or unexpected hosts.
+ * Enabled only when the browser HTTPS origin matches VITE_APP_URL
+ * (default https://staging.checksops.com). HTTP S3 / localhost / unexpected
+ * hosts fail closed. Production `.env.production` does not set Cognito, so
+ * this stays false on ChecksOps.com until an approved AWS frontend env exists.
  */
 export function isAwsStagingHttpsPasskeysEnabled(): boolean {
   if (!isAwsStaging()) return false;

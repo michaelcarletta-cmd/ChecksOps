@@ -3,6 +3,8 @@
 This document defines the repeatable last-mile procedure for a future production cutover.  
 **This PR does not execute cutover.**
 
+The ordered night-of sequence, rollback, webhook plan, and bridge teardown live in `aws/cutover/`. This file remains the DB/storage delta design used by PR #127.
+
 ## What must be frozen / read-only during final cutover
 
 1. **Production Supabase writes** — application write-freeze (maintenance mode or feature flag) so no new checks/deposits/disbursements/ledger rows or storage objects land mid-delta.

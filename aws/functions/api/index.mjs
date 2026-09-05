@@ -4,6 +4,7 @@ import { validateReadonlyCoreTables } from './db-readonly-validate.mjs';
 import { handleIdentityMe } from './identity.mjs';
 import { handleAuthorizationProbe, handleJwksCheck } from './authorization.mjs';
 import { AUTH_ROUTES } from './auth-cognito.mjs';
+import { readinessSnapshot, stagingSafetyHolds } from './ops-readiness.mjs';
 import { handleDataQuery, handleDataRpc, handleWritesDisabled, handleFunctionsDisabled } from './data.mjs';
 import { handleWrite } from './write.mjs';
 import { handleProviderRequest } from './providers.mjs';
@@ -66,6 +67,7 @@ const READ_ONLY_PATHS = new Set([
   '/db-readonly-validate',
   '/identity/me',
   '/identity/session',
+  '/ops/readiness',
 ]);
 
 const tenantComplianceMatch = (path) => path.match(/^\/tenants\/([^/]+)\/security-compliance$/);
@@ -95,6 +97,15 @@ export const handler = async (event) => {
       databaseSecretConfigured: databaseSecretConfigured(),
       databaseName: process.env.DATABASE_NAME || null,
       productionSupabaseChanged: false,
+    });
+  }
+
+  if (method === 'GET' && path === '/ops/readiness') {
+    const snapshot = readinessSnapshot();
+    const holds = stagingSafetyHolds(snapshot);
+    return json(200, {
+      ...snapshot,
+      holds,
     });
   }
 

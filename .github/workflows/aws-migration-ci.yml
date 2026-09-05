@@ -9,6 +9,7 @@ on:
       - 'package.json'
       - 'bun.lock'
       - '.env.aws.example'
+      - '.env.production.aws.example'
       - '.github/workflows/aws-migration-ci.yml'
   push:
     branches:
@@ -20,6 +21,7 @@ on:
       - 'package.json'
       - 'bun.lock'
       - '.env.aws.example'
+      - '.env.production.aws.example'
       - '.github/workflows/aws-migration-ci.yml'
 
 permissions:
@@ -69,6 +71,8 @@ jobs:
           grep -Eq 'AWS_FINANCIAL_PERMISSIONS_ACTIVATED[^\n]*false|AWS_FINANCIAL_PERMISSIONS_ACTIVATED[[:space:]]*:[[:space:]]*"?false"?' aws/template.yaml
           grep -Eq 'AWS_MOOV_ENABLED[^\n]*false|AWS_MOOV_ENABLED[[:space:]]*:[[:space:]]*"?false"?' aws/template.yaml
           grep -Eq 'AWS_CHECKALT_ENABLED[^\n]*false|AWS_CHECKALT_ENABLED[[:space:]]*:[[:space:]]*"?false"?' aws/template.yaml
+          grep -Fq 'COGNITO_WEBAUTHN_ORIGIN: "https://staging.checksops.com"' aws/template.yaml
+          grep -Fq 'COGNITO_WEBAUTHN_RP_ID: "staging.checksops.com"' aws/template.yaml
 
       - name: Assert production financial activation SQL is never auto-applied
         shell: bash

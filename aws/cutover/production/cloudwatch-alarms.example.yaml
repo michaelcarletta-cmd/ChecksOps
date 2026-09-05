@@ -1,0 +1,26 @@
+# cloudwatch-alarms.example.yaml — DO NOT DEPLOY
+
+# Example production/staging API alarms. Not attached to the live account.
+# The Cloud Agent staging role cannot DescribeAlarms; a dedicated ops role is required later.
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: EXAMPLE ONLY. ChecksOps API error/latency alarms for a later approved deploy.
+
+Parameters:
+  DoNotDeploy:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true']
+  FunctionName:
+    Type: String
+    Default: checksops-production-api
+    Description: Do not point this example at checksops-staging-api from this PR.
+  AlarmTopicArn:
+    Type: String
+    Default: REPLACE-WITH-SNS-TOPIC-ARN
+
+# No Resources on purpose. A future PR may add:
+# - AWS::CloudWatch::Alarm on AWS/Lambda Errors Sum >= 1 for 1 period of 60s
+# - AWS::CloudWatch::Alarm on AWS/Lambda Duration p99 vs timeout
+# - AWS::CloudWatch::Alarm on AWS/ApiGateway 5XXError
+# Keep /health as the first human gate. Flags stay false until T7.
