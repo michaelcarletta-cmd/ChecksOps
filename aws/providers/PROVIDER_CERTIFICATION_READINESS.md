@@ -8,10 +8,16 @@
 **Status (2026-09-04):** **PASS** on AWS staging (PR #124).  
 Platform account `36b7…47bb` authorized with Origin `https://staging.checksops.com`. Probe → $0.01 transfer → webhook signature/idempotency → reconcile → C1C cross-tenant denial all green. Production Moov/CheckAlt/financial execution flags remain **false**.
 
-## CheckAlt UAT
+## CheckAlt
 
-**Status (2026-09-04):** **PARTIAL** (PR #125) — STOP for review.  
-Authoritative Postman extract (`CheckAlt_PR125_Minimal_API.json`) confirms **`POST /fincapture/deposit/process` = Submit deposit transaction**. Approve/item/history are post-process. **High-res retrieve** and **IRD generate** are post-transaction only (not submit). AWS matches Lovable core process fields + image-pipeline parity. Remaining UAT HTTP 500 (*retake the check images*) is CheckAlt IQA/acceptance behavior — not a missing documented workflow step. Production CheckAlt remains **OFF**. See `CHECKALT_UAT_CERTIFICATION.md`.
+**Reassessed 2026-09-06** (Architecture A on `main` via merged PR #130; known-good Accepted `120846345` byte-identical). See `results/checkalt_cutover_readiness_reassessment.md`.
+
+| Gate | Status |
+|---|---|
+| **Production integration** | **READY** — Architecture A on `main`; offline 8/8 incl. provider-Accepted `120846345`; Lovable process parity. Execution flags stay **OFF**. |
+| **Synthetic UAT certification** | **PARTIAL** (PR #125) — synthetic VOID still HTTP 500 / IQA rejection. Not a pipeline gap. |
+
+Authoritative Postman extract (`CheckAlt_PR125_Minimal_API.json`) confirms **`POST /fincapture/deposit/process` = Submit deposit transaction**. Approve/item/history and high-res/IRD are post-process only. Production CheckAlt remains **OFF**. Cutover may be **scheduled** with CheckAlt OFF; enable later under separate approval. Do **not** merge #125 for this classification.
 
 ## Plaid
 
@@ -27,11 +33,11 @@ Authoritative Postman extract (`CheckAlt_PR125_Minimal_API.json`) confirms **`PO
 ## Genuine production-cutover blockers (current)
 
 1. Moov: production activation intentionally held (`AWS_MOOV_ENABLED` / master execution flags) — sandbox cert is **PASS**
-2. CheckAlt: UAT IQA/acceptance rejection of synthetic non-negotiable images after documented `/deposit/process` submit (sequence/fields aligned with Lovable) + production activation held
+2. CheckAlt: **production enablement** intentionally held (`AWS_CHECKALT_ENABLED` / master execution flags) — **integration READY**; synthetic UAT remains **PARTIAL** and does **not** block scheduling DNS/auth cut while flags stay OFF
 3. Production DNS / auth / data cutover not performed (intentional)
 4. Financial activation grants / Deposit Ops money RPCs intentionally disabled
 
-Removed from blocker list: **Plaid**; **Moov sandbox account authorization**; **CheckAlt webhook secret**; **CheckAlt UAT deposit account / ssoKey discovery**; **CheckAlt image pipeline constant mismatch vs Lovable**; **Missing FinCapture pre-process / IRD / high-res submit step** (not required for submission).
+Removed from blocker list: **Plaid**; **Moov sandbox account authorization**; **CheckAlt webhook secret**; **CheckAlt UAT deposit account / ssoKey discovery**; **CheckAlt image pipeline constant mismatch vs Lovable**; **Missing FinCapture pre-process / IRD / high-res submit step**; **CheckAlt Architecture A / known-good parity gap** (closed by #130 + Accepted `120846345`). Synthetic VOID UAT 500 is **not** a schedule blocker when production CheckAlt stays OFF.
 
 ## Next certification phase prerequisites (external)
 

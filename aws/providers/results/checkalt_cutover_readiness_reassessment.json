@@ -1,0 +1,52 @@
+{
+  "reassessed_at": "2026-09-06",
+  "stop_for_review": true,
+  "actions_not_taken": {
+    "architecture_a_changed": false,
+    "checkalt_submission": false,
+    "production_checkalt_or_provider_enabled": false,
+    "merged_125": false
+  },
+  "facts": {
+    "pr_130_merged_into_main": true,
+    "pr_130_merge_commit": "a5c099644f180afa7969db1b34c03a01749dd535",
+    "pr_130_merged_at": "2026-09-05T19:12:03Z",
+    "architecture_a_on_main": "browser_prepare_aws_base64",
+    "known_good_checkalt_txn": "120846345",
+    "known_good_status": "Accepted",
+    "architecture_a_byte_identical_to_known_good": true,
+    "aws_reproduces_known_good_process_path": true,
+    "synthetic_void_uat_http": 500,
+    "synthetic_void_classification": "checkalt_uat_iqa_image_acceptance_not_pipeline_gap",
+    "production_flags_on_main_template": {
+      "AWS_CHECKALT_ENABLED": false,
+      "AWS_PROVIDER_EXECUTION_ENABLED": false,
+      "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": false,
+      "AWS_MOOV_ENABLED": false,
+      "AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED": true
+    },
+    "ses_cognito_email_otp": "READY"
+  },
+  "classification": {
+    "checkalt_production_integration": "READY",
+    "checkalt_production_integration_basis": "Architecture A merged to main; offline 8/8 byte-identical including provider-Accepted 120846345; process body keys/semantics match Lovable; remaining synthetic UAT failure is image-content/IQA not an integration gap",
+    "checkalt_synthetic_uat_certification": "PARTIAL",
+    "checkalt_synthetic_uat_basis": "Non-negotiable synthetic VOID still receives CheckAlt UAT HTTP 500 / retake-images IQA rejection after Architecture A parity",
+    "production_execution": "INTENTIONALLY_OFF"
+  },
+  "cutover_scheduling": {
+    "checkalt_blocks_scheduling_dns_auth_cut": false,
+    "condition": "AWS cutover may be scheduled with AWS_CHECKALT_ENABLED and AWS_PROVIDER_EXECUTION_ENABLED remaining false at DNS/auth cut; enable CheckAlt production in a later controlled step after explicit approval",
+    "checkalt_blocks_enabling_production_checkalt_flag": true,
+    "enablement_prerequisite": "Human approval for production CheckAlt traffic; synthetic UAT PARTIAL may remain as vendor limitation if production parity evidence is accepted as sufficient"
+  },
+  "pr_125_recommendation": {
+    "merge_now": false,
+    "keep_open": true,
+    "as": "UAT certification evidence / PARTIAL synthetic VOID tracker",
+    "rebase_onto_main": "recommended_when_convenient",
+    "close_as_superseded": false,
+    "reason": "Architecture A is already on main via #130; #125 should not merge code. Keep open only for PARTIAL UAT synthetic certification documentation until product closes that gate."
+  },
+  "recommendation_summary": "Classify CheckAlt production integration READY (parity-proven, flag OFF). Keep synthetic UAT PARTIAL. Do not let synthetic VOID 500 block scheduling DNS/auth cutover. Do not merge #125. Do not enable production CheckAlt at cut."
+}

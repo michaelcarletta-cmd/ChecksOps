@@ -189,3 +189,21 @@ After #130 merges: keep #125 open as UAT evidence; rebase when convenient; do **
 **Do not merge #125 or #130 in this turn. No further CheckAlt submission.**
 
 Evidence: `aws/providers/results/checkalt_pr130_merge_readiness.md`, `.json`.
+
+### Cutover reassessment (2026-09-06) — STOP FOR REVIEW
+
+PR #130 is **merged** on `main`. Split classification:
+
+| Gate | Status |
+|---|---|
+| CheckAlt **production integration** | **READY** (parity to Accepted `120846345`; Architecture A on `main`) |
+| CheckAlt **synthetic UAT certification** | **PARTIAL** (VOID HTTP 500 / IQA) |
+| Production CheckAlt execution | **OFF** (intentional) |
+
+**Cutover scheduling:** synthetic UAT PARTIAL does **not** block scheduling DNS/auth cut while `AWS_CHECKALT_ENABLED` / provider execution stay **false**. Enable CheckAlt later under separate approval.
+
+**PR #125:** keep open; **do not merge**; rebase when convenient; remains PARTIAL UAT evidence only.
+
+No Architecture A changes. No CheckAlt submit. No production flag enablement.
+
+Evidence: `aws/providers/results/checkalt_cutover_readiness_reassessment.md`, `.json`.
