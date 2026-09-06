@@ -101,7 +101,8 @@ test('SES OTP proof doc forbids auto user create and keeps Lovable DNS', () => {
   assert.match(doc, /Will not happen/);
   assert.match(doc, /Import of the eight production users/);
   assert.match(doc, /185\.158\.133\.1/);
-  assert.match(doc, /Test user \*\*not deleted yet\*\*/);
+  assert.match(doc, /EMAIL_OTP deliverability is \*\*READY\*\*/);
+  assert.match(doc, /production pool \*\*0 users\*\*/);
 });
 
 test('validate-production-prep refuses --apply and passes static checks', () => {

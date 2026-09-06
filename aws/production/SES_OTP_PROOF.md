@@ -1,15 +1,15 @@
 # SES EMAIL_OTP proof (prep only)
 
-**STOP FOR REVIEW.** 6B OTP **sent once**. Waiting for you to confirm inbox/spam receipt. Test user **not deleted yet**. This does **not** switch production auth, import the eight production users, or change DNS A records.
+**STOP FOR REVIEW.** SES/Cognito EMAIL_OTP deliverability is **READY**. 6B OTP arrived; test user **deleted**; production pool **0 users**. This does **not** switch production auth, import the eight production users, or change DNS A records.
 
-A Cognito test user is **not** created in this step unless 6B is explicitly approved. 6B is **in progress** (one EMAIL_OTP sent; waiting for receipt; user not deleted).
+6B **complete**: invitation suppressed; one EMAIL_OTP delivered; `AdminDeleteUser` for `14e8f4f8-4001-703d-8990-5a588a482cf0`; `list-users` empty.
 
 ## Live re-check 2026-09-06 (this agent)
 
 | Check | Result |
 |---|---|
 | Production pool email | `EmailSendingAccount=DEVELOPER`, `SourceArn=arn:aws:ses:us-east-1:806168576068:identity/Support@checksops.com` |
-| Production users | **1 isolated 6B test user** (invitation suppressed). OTP challenge `EMAIL_OTP` returned once. **Not deleted yet.** |
+| Production users | **0** after 6B cleanup (`list-users` empty; `EstimatedNumberOfUsers=0`) |
 | Staging pool email | still `COGNITO_DEFAULT` |
 | Apex/`www` A | `185.158.133.1` (Lovable) — **unchanged** |
 | Agent SES APIs | still **Denied** (`ses:GetAccount`, `GetEmailIdentity` on `checksops.com` and `support@checksops.com`) |
@@ -85,4 +85,4 @@ aws cognito-idp admin-delete-user \
 - Staging pool edits
 - Webhooks, flags, grants, DB, storage, bridges, DNS A records
 
-READY for **this SES gate** = successful 6B OTP + test user deleted + pool still 0 users.
+READY for **this SES gate** = **met** (OTP received; test user deleted; pool 0 users). Cutover remains **BLOCKED**.

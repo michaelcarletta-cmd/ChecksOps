@@ -6,7 +6,7 @@ Account `806168576068`, region `us-east-1`. Re-verified 2026-09-05 (this PR).
 
 | Resource | Id / name | Cutover status |
 |---|---|---|
-| Cognito pool | `us-east-1_h00WorYMT` (`checksops-production`) | Prepared, **0 users**, not switched. Email **`DEVELOPER`** / SES identity `support@checksops.com` |
+| Cognito pool | `us-east-1_h00WorYMT` (`checksops-production`) | Prepared, **0 users**, not switched. Email **`DEVELOPER`** / `support@checksops.com`. Isolated EMAIL_OTP **READY**. |
 | Staging Cognito (do not reuse) | `us-east-1_vPmQ7cL1F` | Live staging only |
 | Cognito client | `3ja9fqaq2fjkv3i6up2varcqpe` (`checksops-production-web`) | Prepared, not in `.env.production` |
 | Frontend bucket | `checksops-production-frontend-806168576068` | Placeholder `index.html` only |

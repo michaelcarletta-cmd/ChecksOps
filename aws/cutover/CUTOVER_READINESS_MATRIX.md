@@ -2,7 +2,7 @@
 
 **STOP FOR REVIEW.** This document is an audit. It is **not** authorization to cut over.
 
-Prepared: 2026-09-06 (production-prep Steps 1–5D verified; **STOP FOR REVIEW**)  
+Prepared: 2026-09-06 (prep Steps 1–5D + SES EMAIL_OTP 6B **READY**; **STOP FOR REVIEW**)  
 Base: current `main` `8a9181ae` (PR #132 merged) plus this prep PR live objects  
 Live verify: staging + prep `/health` 200, production-execution flags **false**, bridges still deployed (fail-closed 401 without token), production DNS still Lovable. Cutover **not** executed.
 
@@ -20,7 +20,7 @@ CheckAlt is **PARTIAL** and is handled in a separate chat (PR #125 / #130). This
 | Tenant identity mapping + RLS / isolation | **GO (validated, not imported)** | Mapping proven on staging. Live DB bridge `identity_map` count **8**. Ninth UUID fail-closed. `--apply` refused. Production still uses Supabase Auth until API/DNS switch. |
 | CloudFront / DNS / API routing | **BLOCKED** (switch) / **GO (prepared)** unused distribution | Staging: `staging.checksops.com` → `E1CG52WRQZI7X1`. Production-prep CloudFront has **no** aliases. Production apex/`www` still `185.158.133.1` (Lovable). Switching DNS is a **cutover decision**. |
 | ACM for `checksops.com` / `www` | **GO (issued, not attached)** | Cert `5cdde8e7-49fb-4b42-ba36-9aaa9d9b1aa3` **`ISSUED`** 2026-09-05T20:23:49Z. Cloudflare validation CNAMEs present (DNS-only). Apex/`www` still Lovable. Not in use by CloudFront. |
-| SES production EMAIL_OTP | **PARTIAL** (OTP sent, receipt unconfirmed) | 6B: one isolated test user in `us-east-1_h00WorYMT`; `InitiateAuth` returned `EMAIL_OTP` / EMAIL to masked Gmail. Staging untouched. Waiting to delete after receipt. |
+| SES production EMAIL_OTP | **READY** (prep; not switched) | Operator: SES us-east-1 production access + domain DKIM. Cognito `DEVELOPER` / `Support@checksops.com`. Isolated EMAIL_OTP **delivered**; test user deleted; pool **0 users**. Staging `COGNITO_DEFAULT` unchanged. Apex/`www` still Lovable. |
 | Final DB delta via temporary DB bridge | **GO** (procedure) | Live `aws-staging-db-bridge` `health` HTTP 200, `mode:read_only`. **Not executed** this PR. |
 | Final storage delta via temporary storage bridge | **GO** (procedure) | Live `aws-staging-storage-bridge` `health` HTTP 200, `mode:sign_only`. **Not executed** this PR. |
 | Production webhook transition | **PARTIAL** | AWS `/webhooks/{moov,checkalt}` exist; `AWS_PROVIDER_WEBHOOK_DRY_RUN=true`. Production URLs still on Supabase. Dual-run **not started**. **Cutover decision**. |
@@ -56,13 +56,13 @@ CheckAlt is **PARTIAL** and is handled in a separate chat (PR #125 / #130). This
 
 ### Still prep (can continue without switching production)
 
-- SES first allowlisted EMAIL_OTP — **6B STOP** until you name an isolated mailbox and say **approve 6B** (`aws/production/SES_OTP_PROOF.md`). Operator reports SES production access + domain DKIM. Public SPF still Outlook-only. Pool still **0 users**.
 - CheckAlt UAT GO **or** signed exception (separate chat; production flag stays false)
 - Timed write-freeze drill (measurement only)
 - Realtime: accept 15s polling **or** later design
 - Optional: attach ACM to unused CloudFront **without** aliases (not done; `InUseBy` empty)
+- Optional: SPF `include:amazonses.com` without moving apex/`www` A (OTP already delivered)
 
-Prep walkthrough Steps 1–5D (ACM, WebAuthn RP, SES Cognito attach, dedicated Lambda role, CloudWatch inspect + disabled alarms) are **verified**.
+Prep walkthrough Steps 1–5D and SES EMAIL_OTP proof (6A–6B) are **verified**.
 
 ### Require a human **cutover decision** (not more agent prep)
 

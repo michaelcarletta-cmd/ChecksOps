@@ -27,15 +27,13 @@ Staging uses `COGNITO_DEFAULT`. That is acceptable for UAT intercept mail. Leave
 | MX | `checksops-com.mail.protection.outlook.com` |
 | Production DNS A | apex + `www` still `185.158.133.1` (Lovable) |
 
-Verdict: **Cognito SES attach is done.** Operator reports SES **production access** in us-east-1 and domain DKIM. Agent still cannot `ses:GetAccount`. Public SPF from this resolver is still Outlook-only. **6B OTP not sent.** See `SES_OTP_PROOF.md`.
+Verdict: **READY** for SES/Cognito EMAIL_OTP deliverability (prep). Isolated OTP arrived; test user deleted; pool **0 users**. Production auth **not** switched. Optional SPF `include:amazonses.com` is not required for this gate.
 
 Do **not** add SES DKIM/SPF from the Cloud Agent. Apex/`www` A records must stay Lovable.
 
 ## Operator follow-ups (deliverability proof — not cutover)
 
-**6A operator-complete 2026-09-06:** you reported SES us-east-1 production access granted and domain `checksops.com` verified with DKIM. This agent still cannot `ses:GetAccount`. Cognito From remains `support@checksops.com`. **0 users. No OTP sent.**
-
-After a successful **6B** OTP and user delete, a later cutover window can still optionally publish SPF `include:amazonses.com` without moving apex/`www` A.
+**6A–6B complete 2026-09-06:** production access (operator); isolated EMAIL_OTP delivered; test user deleted; pool 0 users. Optional later: SPF `include:amazonses.com` without moving apex/`www` A.
 
 IAM fragment the operator can attach to a dedicated SES-ops role (not required on `ChecksOpsCursorCloudStaging`):
 

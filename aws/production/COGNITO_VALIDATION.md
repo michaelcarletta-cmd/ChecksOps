@@ -2,7 +2,7 @@
 
 **Do not invite, import, or switch production auth.** Pool `us-east-1_h00WorYMT` is prepared only. Staging pool `us-east-1_vPmQ7cL1F` must not be reused.
 
-Validated live 2026-09-05 via `cognito-idp describe-user-pool` / `describe-user-pool-client` / `list-users` / `get-user-pool-mfa-config`. No `UpdateUserPool` / `AdminCreateUser` from this pass. Re-verified after operator SES attach (same APIs; still 0 users; staging unmodified).
+Re-verified 2026-09-06 after 6B: isolated EMAIL_OTP delivered; test user deleted; **0 users**; staging unmodified.
 
 ## Pool `us-east-1_h00WorYMT` (`checksops-production`)
 
@@ -43,4 +43,3 @@ Live `get-user-pool-mfa-config` on `us-east-1_h00WorYMT` already returns `Relyin
 - Identity import of the eight production emails (`--apply` remains refused)
 - Pointing `.env.production` at this pool/client
 - Creating a Cognito domain
-- Sending a test OTP (not done; no users)
