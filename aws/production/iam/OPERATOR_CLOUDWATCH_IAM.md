@@ -1,12 +1,14 @@
 # Step 5 — CloudWatch inspect IAM + disabled alarms
 
-**Operator only.** This Cloud Agent cannot `iam:CreatePolicy`, `iam:AttachRolePolicy`, `cloudwatch:PutMetricAlarm`, or `cloudwatch:DescribeAlarms`. Do **not** enable alarm actions. Do **not** add SNS. Do **not** overlay `checksops-staging-api`. Do **not** change DNS, Cognito, or flags.
+**Operator only for stack create.** After 5C this Cloud Agent **can** `cloudwatch:DescribeAlarms` / `ListMetrics` on the named prep alarms. It still cannot `iam:GetPolicy`. Do **not** enable alarm actions. Do **not** add SNS. Do **not** overlay `checksops-staging-api`. Do **not** change DNS, Cognito, or flags.
 
 Live `cloudformation deploy` of `checksops-production-prep-alarms` previously failed with `cloudwatch:PutMetricAlarm` denied; that stack is **absent**. Metric filters on `/aws/lambda/checksops-production-prep-api` already exist.
 
 **5A verified 2026-09-05T23:09:58Z:** stack `checksops-production-prep-api` is `UPDATE_COMPLETE`. Dedicated Lambda role, `/prep/health` 200, no VPC, flags false.
 
-**5B operator-complete 2026-09-05:** policy name `ChecksOpsProductionPrepCloudWatchInspect` (expected ARN `arn:aws:iam::806168576068:policy/ChecksOpsProductionPrepCloudWatchInspect`). Operator did not attach. This agent is denied `iam:GetPolicy` / `ListEntitiesForPolicy`, so the JSON cannot be re-read from IAM. Alarm stack `checksops-production-prep-alarms` is still **absent**. The policy JSON in git **does not attach** itself.
+**5C verified 2026-09-06T00:20Z:** `cloudwatch:DescribeAlarms` on the five named alarms now returns **200 with empty `MetricAlarms`** (previously AccessDenied). `ListMetrics` allowed. Alarm stack still **absent**. `iam:GetPolicy` / `ListAttachedRolePolicies` still denied. Prep Lambda unchanged; `/prep/health` 200.
+
+The policy JSON in git **does not attach** itself.
 
 ## 5A. Align CloudFormation — **done**
 
@@ -54,7 +56,7 @@ aws cloudformation deploy \
   --capabilities CAPABILITY_NAMED_IAM
 ```
 
-## 5C. Attach the policy
+## 5C. Attach the policy — **done** (`ChecksOpsCursorCloudStaging`)
 
 IAM → Roles → **`ChecksOpsCursorCloudStaging`** (so later Cloud Agents can verify) **or** a dedicated ops role you will use in console/CLI.
 
@@ -85,9 +87,8 @@ The staging alarm **only watches** `checksops-staging-api` Errors. It must not c
 
 Do **not** set `ActionsEnabled=true`. Do **not** add an SNS topic in this step.
 
-## What to send back (current: 5C only)
+## What to send back (current: 5D only)
 
-1. **Done:** API stack `UPDATE_COMPLETE` and dedicated Lambda role.
-2. **5B:** operator created `ChecksOpsProductionPrepCloudWatchInspect` (agent cannot `iam:GetPolicy`).
-3. After 5C: which role the policy is attached to (`ChecksOpsCursorCloudStaging` preferred). Do **not** create the alarm stack yet (5D).
-4. Confirmation you did not attach it to `checksops-production-prep-api-role` or the staging API role.
+1. Alarm stack `checksops-production-prep-alarms` = `CREATE_COMPLETE`.
+2. All five alarm names with **Actions enabled = false** and no SNS.
+3. Confirmation staging Lambda code/VPC/flags were not changed.

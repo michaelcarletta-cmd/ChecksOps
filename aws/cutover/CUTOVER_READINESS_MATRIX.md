@@ -27,7 +27,7 @@ CheckAlt is **PARTIAL** and is handled in a separate chat (PR #125 / #130). This
 | Moov production transition | **PARTIAL** | Sandbox certification **PASS** (PR #124). Production `AWS_MOOV_ENABLED=false`. **Cutover decision**. |
 | CheckAlt | **PARTIAL** | Separate chat. Production `AWS_CHECKALT_ENABLED=false`. **Cutover decision**. |
 | Plaid | **N/A** | Not used. Missing keys are not a blocker. |
-| Monitoring / CloudWatch / health checks | **PARTIAL** | Prep `/health` 200. Prep log group inspectable. Alarm template `aws/production/cloudwatch-alarms.yaml` (`ActionsEnabled=false`). Agent **cannot** `DescribeAlarms` / `PutMetricAlarm`. **Step 5** operator attach + deploy outstanding. |
+| CloudWatch alarms | **PARTIAL** | Prep `/health` 200. `DescribeAlarms` allowed (empty). Alarm stack absent until **Step 5D** (`ActionsEnabled=false`). |
 | Reconciliation immediately after cutover | **GO** (procedure) | Report-only SQL + `/financial/reconcile` (`autoCorrected=false`). |
 | Rollback if AWS production validation fails | **GO** (procedure) | Points A/B/C in `ROLLBACK.md`. Dry-run script prints only. |
 | Temporary bridge teardown (after successful cutover) | **GO** (procedure) | **Do not run now.** Dry-run scripts refuse `--apply`. |
@@ -57,8 +57,8 @@ CheckAlt is **PARTIAL** and is handled in a separate chat (PR #125 / #130). This
 ### Still prep (can continue without switching production)
 
 - **Step 4 + 5A:** Dedicated production-prep Lambda role **verified**.
-- **Step 5B:** Operator created `ChecksOpsProductionPrepCloudWatchInspect` (agent cannot `iam:GetPolicy`). Not attached yet.
-- **Step 5C–5D:** Attach that policy to `ChecksOpsCursorCloudStaging`; deploy `checksops-production-prep-alarms` with `ActionsEnabled=false`. One operator action at a time.
+- **Step 5B–5C:** `ChecksOpsProductionPrepCloudWatchInspect` created and attached to `ChecksOpsCursorCloudStaging`. `DescribeAlarms` now allowed.
+- **Step 5D:** Deploy `checksops-production-prep-alarms` with `ActionsEnabled=false`. See `aws/production/iam/OPERATOR_CLOUDWATCH_IAM.md`.
 - SES sandbox / deliverability (Cognito `DEVELOPER` already attached; no OTP sent)
 - Confirm WebAuthn RP ID `checksops.com` remains on `us-east-1_h00WorYMT` only (already set; do not edit staging)
 - ACM already **ISSUED** (validation only; not apex cut)

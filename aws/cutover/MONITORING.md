@@ -3,7 +3,7 @@
 Inspect-only production-prep alarms live in `aws/production/cloudwatch-alarms.yaml` (`ActionsEnabled=false`).  
 The older example file remains unused: `production/cloudwatch-alarms.example.yaml` (**DO NOT DEPLOY**).
 
-Operator inspect IAM: `aws/production/iam/OPERATOR_CLOUDWATCH_IAM.md`. The Cloud Agent role cannot `DescribeAlarms` until a human attaches that policy.
+Operator inspect IAM: `aws/production/iam/OPERATOR_CLOUDWATCH_IAM.md`. `DescribeAlarms` is allowed after 5C attach; alarm stack is still **Step 5D**.
 
 ## What is live today (staging + prep)
 
@@ -15,7 +15,7 @@ Operator inspect IAM: `aws/production/iam/OPERATOR_CLOUDWATCH_IAM.md`. The Cloud
 | `GET /ops/readiness` | **PARTIAL** — implemented in git; live staging Lambda still 404 until a later overlay (do **not** overlay from this branch) |
 | Production-prep log group | **GO (inspectable)** — `/aws/lambda/checksops-production-prep-api` plus metric filter `checksops-production-prep-api-errors-filter` |
 | CloudWatch alarms | **PARTIAL** — template ready; stack `checksops-production-prep-alarms` absent. Metric filters on prep log group exist. **Step 5**. |
-| Operator inspect | **PARTIAL** — policy JSON ready; `iam:CreatePolicy` / `AttachRolePolicy` denied on this agent. **Step 5**. |
+| Operator inspect | **GO (attached)** — `DescribeAlarms` allowed on named prep alarms (empty until stack exists). `iam:GetPolicy` still denied. |
 | Production cutover alarms / SNS | **BLOCKED** (no paging topic; ActionsEnabled false) |
 
 ## Cutover-night dashboard (operator)
