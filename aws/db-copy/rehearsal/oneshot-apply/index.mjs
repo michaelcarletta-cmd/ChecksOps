@@ -589,7 +589,11 @@ const applyTriggerParity = async (event) => {
     ].find((p) => fs.existsSync(p));
     if (!sqlPath) throw new Error('39_parity_payee_mirror_trigger_only.sql missing from Lambda package');
     const sql = fs.readFileSync(sqlPath, 'utf8');
-    if (/\bGRANT\b/i.test(sql) || /\bALTER\s+TABLE\b/i.test(sql) || /\b64_financial/i.test(sql)) {
+    const activeSql = sql
+      .split('\n')
+      .filter((line) => !line.trim().startsWith('--'))
+      .join('\n');
+    if (/\bGRANT\b/i.test(activeSql) || /\bALTER\s+TABLE\b/i.test(activeSql) || /\b64_financial/i.test(activeSql)) {
       throw new Error('trigger-only SQL failed safety scan');
     }
     const before = await inspectParitySchema(client);

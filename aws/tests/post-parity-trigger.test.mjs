@@ -33,6 +33,7 @@ test('oneshot refuses apply_parity_ddl on live checksops and gates trigger overl
   assert.match(oneshot, /39_parity_payee_mirror_trigger_only\.sql/);
   assert.match(oneshot, /validate_trigger_rename_txn/);
   assert.match(oneshot, /ROLLBACK/);
+  assert.match(oneshot, /filter\(\(line\) => !line\.trim\(\)\.startsWith\('--'\)\)/);
   assert.doesNotMatch(oneshot, /64_financial_activation_grants\.sql/);
 });
 

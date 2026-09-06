@@ -240,8 +240,14 @@ const loadToken = () => {
   return String(parsed.token);
 };
 
+const progress = (msg) => {
+  const line = `${new Date().toISOString()} ${msg}`;
+  try { fs.appendFileSync('/tmp/post-parity-progress.log', `${line}\n`); } catch { /* ignore */ }
+  console.error(line);
+};
+
 const bridgeFetch = async (url, token, body) => {
-  const response = await fetch(url, {
+  const response = await fetchWithTimeout(url, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -250,15 +256,29 @@ const bridgeFetch = async (url, token, body) => {
       'x-checksops-migration-token': token,
     },
     body: JSON.stringify(body),
-  });
+  }, 30000);
   const json = await response.json().catch(() => ({}));
   return { status: response.status, json };
 };
 
+const fetchWithTimeout = async (url, options = {}, ms = 30000) => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
 const jsonGet = async (url) => {
-  const response = await fetch(url);
-  const json = await response.json().catch(() => ({}));
-  return { status: response.status, json };
+  try {
+    const response = await fetchWithTimeout(url, {}, 20000);
+    const json = await response.json().catch(() => ({}));
+    return { status: response.status, json };
+  } catch (error) {
+    return { status: 0, json: {}, error: String(error.message || error).slice(0, 120) };
+  }
 };
 
 const digA = (name) => {
@@ -288,12 +308,23 @@ const compareSampleHashes = async (token, historical) => {
   }
   const objects = [];
   let offset = 0;
-  for (let page = 0; page < 40; page += 1) {
-    const resp = await bridgeFetch(STORAGE_BRIDGE, token, { action: 'inventory', limit: 100, offset });
-    if (resp.status !== 200 || !Array.isArray(resp.json.objects)) break;
-    objects.push(...resp.json.objects);
-    if (resp.json.objects.length < 100) break;
-    offset += 100;
+  try {
+    for (let page = 0; page < 40; page += 1) {
+      const resp = await bridgeFetch(STORAGE_BRIDGE, token, { action: 'inventory', limit: 100, offset });
+      if (resp.status !== 200 || !Array.isArray(resp.json.objects)) break;
+      objects.push(...resp.json.objects);
+      if (resp.json.objects.length < 100) break;
+      offset += 100;
+    }
+  } catch (error) {
+    return {
+      compared: 0,
+      matched: 0,
+      missingSource: wanted.size,
+      mismatched: 0,
+      error: String(error.message || error).slice(0, 160),
+      sampleKeyHashes: wanted.size,
+    };
   }
   const matches = [];
   for (const obj of objects) {
@@ -305,27 +336,39 @@ const compareSampleHashes = async (token, historical) => {
   let compared = 0;
   let matched = 0;
   let mismatched = 0;
-  for (const batch of [matches.slice(0, 50)]) {
-    if (!batch.length) continue;
-    const signed = await bridgeFetch(STORAGE_BRIDGE, token, {
-      action: 'sign',
-      items: batch.map((obj) => ({ bucket: obj.bucket, name: obj.name })),
-    });
-    const parsed = parseSignUrls(signed.json);
-    for (const obj of batch) {
-      const url = parsed.byName.get(`${obj.bucket}/${obj.name}`);
-      if (!url) continue;
-      const response = await fetch(url);
-      if (!response.ok) continue;
-      const buf = Buffer.from(await response.arrayBuffer());
-      const sourceHash = sha256Buffer(buf);
-      buf.fill(0);
-      const destHash = destHashes[obj.fp];
-      if (!destHash) continue;
-      compared += 1;
-      if (sourceHash === destHash) matched += 1;
-      else mismatched += 1;
+  try {
+    if (matches.length) {
+      const signed = await bridgeFetch(STORAGE_BRIDGE, token, {
+        action: 'sign',
+        items: matches.slice(0, 50).map((obj) => ({ bucket: obj.bucket, name: obj.name })),
+      });
+      const parsed = parseSignUrls(signed.json);
+      for (const obj of matches.slice(0, 50)) {
+        const url = parsed.byName.get(`${obj.bucket}/${obj.name}`);
+        if (!url) continue;
+        const response = await fetchWithTimeout(url, {}, 45000);
+        if (!response.ok) continue;
+        const buf = Buffer.from(await response.arrayBuffer());
+        const sourceHash = sha256Buffer(buf);
+        buf.fill(0);
+        const destHash = destHashes[obj.fp];
+        if (!destHash) continue;
+        compared += 1;
+        if (sourceHash === destHash) matched += 1;
+        else mismatched += 1;
+      }
     }
+  } catch (error) {
+    return {
+      sourceInventoryObjects: objects.length,
+      sampleKeyHashes: wanted.size,
+      sourceMatchesForSample: matches.length,
+      missingSource: Math.max(0, wanted.size - matches.length),
+      compared,
+      matched,
+      mismatched,
+      error: String(error.message || error).slice(0, 160),
+    };
   }
   return {
     sourceInventoryObjects: objects.length,
@@ -399,27 +442,48 @@ const main = async () => {
     process.exit(1);
   }
 
+  progress('applying trigger overlay');
   const apply = invokeLambda({
     step: 'apply_trigger_parity',
     database: 'checksops',
     confirmChecksopsTriggerParity: true,
     ddlOnly: true,
   });
+  progress(`apply ok=${apply.ok} error=${apply.error || ''}`);
   const inspectAfter = invokeLambda({ step: 'inspect_return_columns', database: 'checksops' });
   await writeArtifact('post_apply_function_body.sql', inspectAfter.functionDef || '-- missing function def\n');
+  progress('running rollback rename probe');
   const renameTxn = invokeLambda({ step: 'validate_trigger_rename_txn', database: 'checksops' });
+  progress(`renameTxn ok=${renameTxn.ok} updatesExisting=${renameTxn.renameUpdatesExisting}`);
   const recon = invokeLambda({ step: 'targeted_db_recon', database: 'checksops' });
+  progress(`recon ok=${recon.ok}`);
+  progress('inspecting historical check images');
   const historical = invokeLambda({
     step: 'inspect_historical_check_images',
     database: 'checksops',
     hashObjects: true,
   });
+  progress(`historical ok=${historical.ok} sample=${historical.sampleSize}`);
 
-  const token = loadToken();
-  const dbHealth = await bridgeFetch(DB_BRIDGE, token, { action: 'health' });
-  const storageHealth = await bridgeFetch(STORAGE_BRIDGE, token, { action: 'health' });
-  const hashCompare = await compareSampleHashes(token, historical);
-  const s3Prefix = countS3FilesPrefix();
+  let token = null;
+  let dbHealth = { status: 0, json: {} };
+  let storageHealth = { status: 0, json: {} };
+  let hashCompare = { compared: 0, matched: 0, mismatched: 0, error: 'not_run' };
+  let s3Prefix = { objects: null, bytes: null };
+  try {
+    progress('loading migration token');
+    token = loadToken();
+    progress('checking bridges');
+    dbHealth = await bridgeFetch(DB_BRIDGE, token, { action: 'health' });
+    storageHealth = await bridgeFetch(STORAGE_BRIDGE, token, { action: 'health' });
+    progress('comparing sample hashes');
+    hashCompare = await compareSampleHashes(token, historical);
+    progress(`hashCompare compared=${hashCompare.compared} matched=${hashCompare.matched}`);
+    s3Prefix = countS3FilesPrefix();
+  } catch (error) {
+    progress(`audit fetch failed: ${String(error.message || error).slice(0, 160)}`);
+    hashCompare = { ...hashCompare, error: String(error.message || error).slice(0, 160) };
+  }
 
   const stagingHealth = await jsonGet(`${STAGING_API}/health`);
   const stagingDb = await jsonGet(`${STAGING_API}/db-health`);
