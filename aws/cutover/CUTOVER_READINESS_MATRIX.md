@@ -2,9 +2,13 @@
 
 **STOP FOR REVIEW.** This document is an audit. It is **not** authorization to cut over.
 
-Prepared: 2026-09-05  
+Updated: 2026-09-06 after PR **#135** (application parity) and the targeted live `checksops` Sept 3 payee-mirror trigger overlay. See `POST_PARITY_READINESS.md`.
+
+**FINAL CUTOVER READINESS: PASS** — prepared for a human T0 decision only. T0 was **not** selected.
+
+Prepared originally: 2026-09-05  
 Base: current `main` after PR **#130** (CheckAlt Architecture A) and PR **#131** (cutover readiness docs) merged.  
-This PR (#132) is rebased onto that `main`. It does **not** revert Architecture A.
+Later: #132 prep, #135 application parity, then this post-parity overlay. Architecture A is **unchanged**.
 
 Live verify: staging API `/health` 200, Lambda flags all production-execution **false**, both Lovable bridges still fail-closed, production DNS still Lovable.
 
@@ -13,8 +17,8 @@ CheckAlt **code** is on `main` via #130. Production `AWS_CHECKALT_ENABLED` stays
 
 | Area | Status | Evidence / remaining |
 |---|---|---|
-| Production → AWS DB migration rehearsal | **GO** | PR #127 isolated overlay `checksops_rehearsal_20260905` matched live production counts, critical PKs, `financial_stepup_log` 2/2, financial aggregates, identity, membership, FKs. Live `checksops` not overwritten. |
-| Production → AWS storage migration/reconciliation | **GO** | PR #127 COPY 1,411/1,411 objects, 0 missing/failed/mismatched. 21 staging-only UAT objects left in place. Live S3 now **1,439** objects / 2,566,275,762 bytes (expected drift since rehearsal; final delta still required). |
+| Production → AWS DB migration rehearsal | **GO** | Timed rehearsal `checksops_rehearsal_20260906` remains valid (not recreated). Live `checksops` received **only** the Sept 3 `tg_mirror_payee_to_endorsement` function overlay; row counts/histograms unchanged. |
+| Production → AWS storage migration/reconciliation | **GO** | PR #127 COPY 1,411/1,411, 0 hash mismatches. 2026-09-06 historical sample: 8/8 older checks, 16/16 source SHA-256 matches. Live S3 `files/` **1,439** objects / 2,566,275,762 bytes. Final T0 storage delta still required. |
 | Remaining Supabase/Lovable runtime dependencies | **PARTIAL** | Class A e-sign / ingest / attach-upload ported. Stripe/QBO fail-closed. **Realtime 15s polling waived** (`REALTIME_POLLING_WAIVER.md`). Production SPA still `.env.production` Supabase-only until cutover. |
 | Production frontend / API AWS configuration | **GO (prepared, not switched)** | SPA CloudFront `E1B0ZWWO5559U5` (no aliases). Prep API live at `https://kiqojucc02.execute-api.us-east-1.amazonaws.com/prep`, flags **false**, no VPC, existing staging Lambda role reused. `.env.production` stays Supabase. Staging Lambda **not** overlaid. |
 | Cognito EMAIL_OTP / WebAuthn (staging) | **GO** | PR #126: CheckOps / WhiteLabel / MortgageOps / `/h/upload`. Pool `us-east-1_vPmQ7cL1F`, client allows `ALLOW_USER_AUTH`, MFA OFF, EMAIL_OTP preferred. WebAuthn RP **`staging.checksops.com`** (unchanged this PR). |

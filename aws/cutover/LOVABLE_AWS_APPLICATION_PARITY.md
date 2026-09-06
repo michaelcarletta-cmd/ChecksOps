@@ -13,9 +13,9 @@ Validated 2026-09-06:
 - `bun run build:aws` succeeds
 - Isolated oneshot apply on `checksops_rehearsal_20260906` (not recreated, not live `checksops`)
 - Live `checksops` already has `returned_*` / `return_*` columns
-- Live `checksops` `tg_mirror_payee_to_endorsement` still **lacks** the Sept 3 rename-delete body; rehearsal now has it
+- Live `checksops` `tg_mirror_payee_to_endorsement` received the Sept 3 rename-delete body via the post-#135 overlay (`39_parity_payee_mirror_trigger_only.sql`). See `POST_PARITY_READINESS.md`.
 
-Targeted DB overlay of the trigger function is still required before production RDS matches Lovable payee-rename behavior. This PR does not apply that overlay to live `checksops`.
+Targeted live overlay is complete. This document still does not authorize T0 or production cutover.
 
 ## Implemented on AWS (this PR)
 
