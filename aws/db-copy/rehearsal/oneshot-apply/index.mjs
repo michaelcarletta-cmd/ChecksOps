@@ -9,7 +9,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
-import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { GetObjectCommand, HeadObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { GetSecretValueCommand, SecretsManagerClient } from '@aws-sdk/client-secrets-manager';
 import { filterRestoreToc } from './restore-toc.mjs';
 
@@ -517,6 +517,9 @@ const inspectParitySchema = async (client) => {
       && /DELETE FROM public\.check_endorsements/i.test(fn),
     triggerHasPreferredAuth: /preferred_auth_method|user_passkeys/i.test(fn),
     checkStageHasReturned: enumVals.includes('returned'),
+    functionDefSha256: fn ? sha256Hex(fn) : null,
+    functionDefLength: fn.length,
+    functionDef: fn || null,
   };
 };
 
@@ -536,6 +539,407 @@ const inspectReturnColumns = async (event) => {
       mutatedChecksops: false,
       liveChecksopsMutated: false,
       ...inspected,
+    };
+  } finally {
+    await client.end();
+  }
+};
+
+const snapshotRowCounts = async (client) => {
+  const tables = ['check_intake_items', 'check_payees', 'check_endorsements'];
+  const out = {};
+  for (const table of tables) {
+    out[table] = (await client.query(`SELECT count(*)::int AS n FROM public.${ident(table)}`)).rows[0].n;
+  }
+  const stages = (await client.query(`
+    SELECT check_stage::text AS k, count(*)::int AS n
+    FROM public.check_intake_items
+    GROUP BY 1
+    ORDER BY 1
+  `)).rows;
+  const statuses = (await client.query(`
+    SELECT status AS k, count(*)::int AS n
+    FROM public.check_intake_items
+    GROUP BY 1
+    ORDER BY 1
+  `)).rows;
+  return {
+    tables: out,
+    checkStageHistogram: Object.fromEntries(stages.map((row) => [row.k, row.n])),
+    checkStatusHistogram: Object.fromEntries(statuses.map((row) => [row.k, row.n])),
+  };
+};
+
+const applyTriggerParity = async (event) => {
+  const dbName = event.database;
+  if (dbName !== 'checksops') {
+    throw new Error('apply_trigger_parity is limited to live checksops after explicit confirmation');
+  }
+  if (event.confirmChecksopsTriggerParity !== true || event.ddlOnly !== true) {
+    throw new Error('apply_trigger_parity requires confirmChecksopsTriggerParity=true and ddlOnly=true');
+  }
+  const admin = await loadAdmin();
+  const client = await connect(admin, dbName);
+  try {
+    const current = (await client.query('SELECT current_database() AS d')).rows[0].d;
+    if (current !== dbName) throw new Error(`connected to ${current}`);
+    const sqlPath = [
+      path.join(ROOT, 'sql', '39_parity_payee_mirror_trigger_only.sql'),
+      '/var/task/sql/39_parity_payee_mirror_trigger_only.sql',
+    ].find((p) => fs.existsSync(p));
+    if (!sqlPath) throw new Error('39_parity_payee_mirror_trigger_only.sql missing from Lambda package');
+    const sql = fs.readFileSync(sqlPath, 'utf8');
+    if (/\bGRANT\b/i.test(sql) || /\bALTER\s+TABLE\b/i.test(sql) || /\b64_financial/i.test(sql)) {
+      throw new Error('trigger-only SQL failed safety scan');
+    }
+    const before = await inspectParitySchema(client);
+    if (before.missingIntakeReturnColumns.length || before.missingCheckaltReturnColumns.length) {
+      throw new Error('required returned_* / return_* columns missing; refuse trigger overlay');
+    }
+    const countsBefore = await snapshotRowCounts(client);
+    await client.query(sql);
+    const after = await inspectParitySchema(client);
+    const countsAfter = await snapshotRowCounts(client);
+    return {
+      ok: after.triggerHasRenameDelete === true && after.triggerHasPreferredAuth === false,
+      database: dbName,
+      applied: '39_parity_payee_mirror_trigger_only.sql',
+      ddlOnly: true,
+      checksopsDdl: true,
+      mutatedChecksopsData: false,
+      liveChecksopsMutated: false,
+      liveChecksopsDdlApplied: true,
+      before,
+      after,
+      countsBefore,
+      countsAfter,
+      rowCountsUnchanged: JSON.stringify(countsBefore) === JSON.stringify(countsAfter),
+    };
+  } finally {
+    await client.end();
+  }
+};
+
+const PROBE_FRONT = 'checks/aws-parity-trigger-probe/pending_front.jpg';
+const PROBE_OLD = 'ParityProbeOld';
+const PROBE_NEW = 'ParityProbeNew';
+
+const leftoverProbeCount = async (client) => {
+  const checks = (await client.query(
+    `SELECT count(*)::int AS n FROM public.check_intake_items WHERE front_image_path = $1`,
+    [PROBE_FRONT],
+  )).rows[0].n;
+  const payees = (await client.query(
+    `SELECT count(*)::int AS n FROM public.check_payees WHERE payee_name IN ($1, $2)`,
+    [PROBE_OLD, PROBE_NEW],
+  )).rows[0].n;
+  return { leftoverChecks: checks, leftoverPayees: payees };
+};
+
+const validateTriggerRenameTxn = async (event) => {
+  const dbName = event.database || 'checksops';
+  if (dbName !== 'checksops') assertRehearsalName(dbName);
+  const admin = await loadAdmin();
+  const client = await connect(admin, dbName);
+  try {
+    const current = (await client.query('SELECT current_database() AS d')).rows[0].d;
+    if (current !== dbName) throw new Error(`connected to ${current}`);
+    const leftoverBefore = await leftoverProbeCount(client);
+    const tenant = (await client.query(`SELECT id FROM public.tenants ORDER BY created_at NULLS LAST LIMIT 1`)).rows[0];
+    if (!tenant?.id) throw new Error('no tenant available for transactional probe');
+    await client.query('BEGIN');
+    try {
+      const check = (await client.query(
+        `INSERT INTO public.check_intake_items (tenant_id, front_image_path, status)
+         VALUES ($1::uuid, $2, 'uploaded')
+         RETURNING id`,
+        [tenant.id, PROBE_FRONT],
+      )).rows[0];
+      const payee = (await client.query(
+        `INSERT INTO public.check_payees (check_id, tenant_id, payee_name, payee_type, endorsement_status)
+         VALUES ($1::uuid, $2::uuid, $3, 'unknown', 'pending')
+         RETURNING id`,
+        [check.id, tenant.id, PROBE_OLD],
+      )).rows[0];
+      const afterInsert = (await client.query(
+        `SELECT
+           count(*) FILTER (WHERE lower(trim(payee_name)) = lower($2) AND status NOT IN ('signed','waived'))::int AS old_unsigned,
+           count(*) FILTER (WHERE lower(trim(payee_name)) = lower($3) AND status NOT IN ('signed','waived'))::int AS new_unsigned,
+           count(*)::int AS total
+         FROM public.check_endorsements
+         WHERE check_id = $1::uuid`,
+        [check.id, PROBE_OLD, PROBE_NEW],
+      )).rows[0];
+      await client.query(
+        `UPDATE public.check_payees SET payee_name = $2 WHERE id = $1::uuid`,
+        [payee.id, PROBE_NEW],
+      );
+      const afterRename = (await client.query(
+        `SELECT
+           count(*) FILTER (WHERE lower(trim(payee_name)) = lower($2) AND status NOT IN ('signed','waived'))::int AS old_unsigned,
+           count(*) FILTER (WHERE lower(trim(payee_name)) = lower($3) AND status NOT IN ('signed','waived'))::int AS new_unsigned,
+           count(*)::int AS total
+         FROM public.check_endorsements
+         WHERE check_id = $1::uuid`,
+        [check.id, PROBE_OLD, PROBE_NEW],
+      )).rows[0];
+      await client.query('ROLLBACK');
+      const leftoverAfter = await leftoverProbeCount(client);
+      const renameUpdatesExisting = afterRename.old_unsigned === 0
+        && afterRename.new_unsigned === 1
+        && afterRename.total === afterInsert.total;
+      return {
+        ok: renameUpdatesExisting && leftoverAfter.leftoverChecks === 0 && leftoverAfter.leftoverPayees === 0,
+        database: dbName,
+        transactional: true,
+        rolledBack: true,
+        mutatedChecksopsData: false,
+        liveChecksopsMutated: false,
+        leftoverBefore,
+        leftoverAfter,
+        afterInsert,
+        afterRename,
+        renameUpdatesExisting,
+        customerRecordsChanged: false,
+      };
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+      const leftoverAfter = await leftoverProbeCount(client);
+      throw new Error(`${String(error.message || error).slice(0, 220)} leftover=${JSON.stringify(leftoverAfter)}`);
+    }
+  } finally {
+    await client.end();
+  }
+};
+
+const s3KeyForClaim = (objectPath) => {
+  const raw = String(objectPath || '').trim().split('?')[0].replace(/^\/+/, '');
+  if (!raw || raw.includes('..') || raw.includes('\0')) return null;
+  const rel = raw.replace(/^claim-files\//, '');
+  if (!rel) return null;
+  return `files/claim-files/${rel}`;
+};
+
+const headOrHashObject = async (s3, bucket, key, hashObjects) => {
+  if (!key) return { expected: false, present: false, bytes: null, sha256: null, keyHash: null };
+  const keyHash = sha256Hex(key);
+  try {
+    const head = await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+    const bytes = Number(head.ContentLength);
+    let digest = null;
+    if (hashObjects) {
+      const obj = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+      const hash = createHash('sha256');
+      for await (const chunk of obj.Body) hash.update(chunk);
+      digest = hash.digest('hex');
+    }
+    return {
+      expected: true,
+      present: true,
+      bytes: Number.isFinite(bytes) ? bytes : null,
+      sha256: digest,
+      keyHash,
+    };
+  } catch (error) {
+    const missing = /NotFound|NoSuchKey|404/i.test(String(error.name || error.Code || error.message || error));
+    return {
+      expected: true,
+      present: false,
+      bytes: null,
+      sha256: null,
+      keyHash,
+      missing,
+    };
+  }
+};
+
+const inspectHistoricalCheckImages = async (event) => {
+  const dbName = event.database || 'checksops';
+  if (dbName !== 'checksops') assertRehearsalName(dbName);
+  const filesBucket = process.env.FILES_BUCKET || 'checksops-staging-privatefilesbucket-erzqsolpucjp';
+  const hashObjects = event.hashObjects === true;
+  const admin = await loadAdmin();
+  const client = await connect(admin, dbName);
+  const s3 = new S3Client({});
+  try {
+    const current = (await client.query('SELECT current_database() AS d')).rows[0].d;
+    if (current !== dbName) throw new Error(`connected to ${current}`);
+    const eligible = (await client.query(`
+      SELECT count(*)::int AS n
+      FROM public.check_intake_items
+      WHERE COALESCE(deposited_at, created_at) < now() - interval '60 days'
+        AND (
+          deposited_at IS NOT NULL
+          OR check_stage::text IN ('deposited', 'cleared', 'completed')
+          OR status IN ('deposited', 'cleared', 'completed')
+        )
+    `)).rows[0].n;
+    const rows = (await client.query(`
+      SELECT id, created_at, deposited_at, front_image_path, back_image_path, back_image_deposit_path
+      FROM public.check_intake_items
+      WHERE COALESCE(deposited_at, created_at) < now() - interval '60 days'
+        AND (
+          deposited_at IS NOT NULL
+          OR check_stage::text IN ('deposited', 'cleared', 'completed')
+          OR status IN ('deposited', 'cleared', 'completed')
+        )
+      ORDER BY COALESCE(deposited_at, created_at) ASC
+      LIMIT 8
+    `)).rows;
+    const ids = rows.map((row) => row.id);
+    let filesByCheck = new Map();
+    if (ids.length) {
+      try {
+        const files = (await client.query(
+          `SELECT check_intake_item_id, file_path
+           FROM public.check_files
+           WHERE check_intake_item_id = ANY($1::uuid[])`,
+          [ids],
+        )).rows;
+        for (const file of files) {
+          const list = filesByCheck.get(file.check_intake_item_id) || [];
+          list.push(file.file_path);
+          filesByCheck.set(file.check_intake_item_id, list);
+        }
+      } catch { /* table optional */ }
+    }
+    const sample = [];
+    let frontPresent = 0;
+    let rearPresent = 0;
+    let extraExpected = 0;
+    let extraPresent = 0;
+    const destObjects = [];
+    for (const row of rows) {
+      const ageDays = Math.floor(
+        (Date.now() - new Date(row.deposited_at || row.created_at).getTime()) / 86400000,
+      );
+      const front = await headOrHashObject(s3, filesBucket, s3KeyForClaim(row.front_image_path), hashObjects);
+      const rearPath = row.back_image_path || row.back_image_deposit_path;
+      const rear = await headOrHashObject(s3, filesBucket, s3KeyForClaim(rearPath), hashObjects);
+      if (front.present) frontPresent += 1;
+      if (rear.present) rearPresent += 1;
+      const extras = [];
+      for (const filePath of filesByCheck.get(row.id) || []) {
+        const extra = await headOrHashObject(s3, filesBucket, s3KeyForClaim(filePath), hashObjects);
+        extraExpected += extra.expected ? 1 : 0;
+        extraPresent += extra.present ? 1 : 0;
+        extras.push({ present: extra.present, bytes: extra.bytes, sha256: extra.sha256, keyHash: extra.keyHash });
+        if (extra.keyHash) destObjects.push(extra);
+      }
+      if (front.keyHash) destObjects.push(front);
+      if (rear.keyHash) destObjects.push(rear);
+      sample.push({
+        checkIdHash: sha256Hex(row.id),
+        ageDays,
+        dbRecordPresent: true,
+        front: { present: front.present, bytes: front.bytes, sha256: front.sha256, keyHash: front.keyHash },
+        rear: { present: rear.present, bytes: rear.bytes, sha256: rear.sha256, keyHash: rear.keyHash, expected: Boolean(rearPath) },
+        extraDocuments: {
+          expected: extras.length,
+          present: extras.filter((item) => item.present).length,
+        },
+      });
+    }
+    return {
+      ok: sample.length > 0 && frontPresent === sample.length && rearPresent === sample.filter((row) => row.rear.expected).length,
+      readOnly: true,
+      database: dbName,
+      mutatedChecksops: false,
+      filesBucketPresent: true,
+      hashObjects,
+      eligibleOlderCheckCount: eligible,
+      sampleSize: sample.length,
+      frontPresent,
+      rearPresent,
+      extraExpected,
+      extraPresent,
+      sample,
+      destObjectKeyHashes: destObjects.map((item) => item.keyHash).filter(Boolean),
+      destHashesByKeyHash: Object.fromEntries(
+        destObjects.filter((item) => item.keyHash && item.sha256).map((item) => [item.keyHash, item.sha256]),
+      ),
+    };
+  } finally {
+    await client.end();
+  }
+};
+
+const targetedDbRecon = async (event) => {
+  const dbName = event.database || 'checksops';
+  if (dbName !== 'checksops') assertRehearsalName(dbName);
+  const admin = await loadAdmin();
+  const client = await connect(admin, dbName);
+  try {
+    const current = (await client.query('SELECT current_database() AS d')).rows[0].d;
+    if (current !== dbName) throw new Error(`connected to ${current}`);
+    const schema = await inspectParitySchema(client);
+    const counts = await snapshotRowCounts(client);
+    const leftover = await leftoverProbeCount(client);
+    const rlsTables = [
+      'check_intake_items',
+      'check_payees',
+      'check_endorsements',
+      'checkalt_deposits',
+      'tenants',
+      'check_files',
+    ];
+    const rls = {};
+    for (const table of rlsTables) {
+      const exists = (await client.query('SELECT to_regclass($1) IS NOT NULL AS ok', [`public.${table}`])).rows[0].ok;
+      if (!exists) {
+        rls[table] = { present: false };
+        continue;
+      }
+      const row = (await client.query(`
+        SELECT c.relrowsecurity AS enabled, count(p.polname)::int AS policies
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        LEFT JOIN pg_policy p ON p.polrelid = c.oid
+        WHERE n.nspname = 'public' AND c.relname = $1
+        GROUP BY 1
+      `, [table])).rows[0];
+      rls[table] = { present: true, enabled: Boolean(row?.enabled), policies: row?.policies || 0 };
+    }
+    let financialExecuteGrants = 0;
+    try {
+      financialExecuteGrants = (await client.query(`
+        SELECT count(*)::int AS n
+        FROM information_schema.routine_privileges
+        WHERE routine_schema = 'public'
+          AND routine_name LIKE 'aws_financial_%'
+          AND grantee IN ('checksops', 'authenticated', 'PUBLIC')
+          AND privilege_type = 'EXECUTE'
+      `)).rows[0].n;
+    } catch { financialExecuteGrants = 0; }
+    const triggerOnPayees = (await client.query(`
+      SELECT tgname, pg_get_triggerdef(t.oid) AS def
+      FROM pg_trigger t
+      JOIN pg_class c ON c.oid = t.tgrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public' AND c.relname = 'check_payees' AND NOT t.tgisinternal
+      ORDER BY 1
+    `)).rows.map((row) => row.tgname);
+    return {
+      ok: schema.missingIntakeReturnColumns.length === 0
+        && schema.missingCheckaltReturnColumns.length === 0
+        && schema.triggerHasRenameDelete === true
+        && schema.triggerHasPreferredAuth === false
+        && leftover.leftoverChecks === 0
+        && leftover.leftoverPayees === 0
+        && financialExecuteGrants === 0
+        && rls.check_intake_items.enabled === true
+        && rls.check_payees.enabled === true
+        && rls.check_endorsements.enabled === true,
+      readOnly: true,
+      database: dbName,
+      mutatedChecksops: false,
+      liveChecksopsMutated: false,
+      schema,
+      counts,
+      leftover,
+      rls,
+      financialExecuteGrants,
+      payeeTriggerNames: triggerOnPayees,
     };
   } finally {
     await client.end();
@@ -608,6 +1012,10 @@ export const handler = async (event = {}) => {
     if (step === 'apply_ddl') return { ...base, ...(await applyDdl(event)), liveChecksopsMutated: false };
     if (step === 'inspect_return_columns') return { ...base, ...(await inspectReturnColumns(event)), liveChecksopsMutated: false };
     if (step === 'apply_parity_ddl') return { ...base, ...(await applyParityDdl(event)), liveChecksopsMutated: false };
+    if (step === 'apply_trigger_parity') return { ...base, ...(await applyTriggerParity(event)), liveChecksopsMutated: false };
+    if (step === 'validate_trigger_rename_txn') return { ...base, ...(await validateTriggerRenameTxn(event)), liveChecksopsMutated: false };
+    if (step === 'inspect_historical_check_images') return { ...base, ...(await inspectHistoricalCheckImages(event)), liveChecksopsMutated: false };
+    if (step === 'targeted_db_recon') return { ...base, ...(await targetedDbRecon(event)), liveChecksopsMutated: false };
     if (step === 'apply_delta') return { ...base, ...(await applyDelta(event)) };
     if (step === 'reconcile') return { ...base, ...(await reconcile(event)) };
     throw new Error(`unknown step ${step}`);

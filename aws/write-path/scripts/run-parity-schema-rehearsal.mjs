@@ -93,6 +93,10 @@ const packOneshot = async () => {
     path.join(ROOT, 'aws/write-path/sql/38_parity_payee_mirror_and_returns.sql'),
     path.join(staging, 'sql/38_parity_payee_mirror_and_returns.sql'),
   );
+  await copyFile(
+    path.join(ROOT, 'aws/write-path/sql/39_parity_payee_mirror_trigger_only.sql'),
+    path.join(staging, 'sql/39_parity_payee_mirror_trigger_only.sql'),
+  );
   execFileSync('npm', ['install', '--omit=dev'], { cwd: staging, stdio: 'ignore' });
   const zip = path.join(os.tmpdir(), 'checksops-parity-oneshot.zip');
   await rm(zip, { force: true });
