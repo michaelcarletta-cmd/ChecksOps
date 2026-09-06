@@ -191,3 +191,20 @@ test('dry-run scripts refuse --apply and print no production mutation', () => {
   assert.equal(rollback.status, 0);
   assert.equal(JSON.parse(rollback.stdout).wouldChangeProduction, false);
 });
+
+test('T0 promote and identity import refuse without confirm flags', () => {
+  const identity = spawnSync(process.execPath, [path.join(ROOT, 'aws/cutover/scripts/t0-identity-import.mjs')], { encoding: 'utf8' });
+  assert.equal(identity.status, 2);
+  assert.match(identity.stderr, /refusing_identity_import/);
+
+  const promote = spawnSync(process.execPath, [path.join(ROOT, 'aws/cutover/scripts/t0-promote-live.mjs')], { encoding: 'utf8' });
+  assert.equal(promote.status, 2);
+  assert.match(promote.stderr, /refusing_live_promote/);
+
+  const oneshot = read('aws/db-copy/rehearsal/oneshot-apply/index.mjs');
+  assert.match(oneshot, /confirmChecksopsOverlay/);
+  assert.match(oneshot, /confirmIsolatedReconPass/);
+  assert.match(oneshot, /staging_only_identity/);
+  assert.match(oneshot, /confirmT0Identity/);
+  assert.match(oneshot, /Never applies 64_financial_activation_grants/);
+});

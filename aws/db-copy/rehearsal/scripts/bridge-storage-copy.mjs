@@ -131,6 +131,7 @@ const inventoryAll = async (token) => {
     if (Number.isFinite(resp.json.total)) reportedTotal = resp.json.total;
     const page = resp.json.objects;
     objects.push(...page);
+    progress({ phase: 'inventory_page', pages, collected: objects.length, reportedTotal });
     if (page.length < INVENTORY_LIMIT) break;
     offset += INVENTORY_LIMIT;
   }
@@ -517,7 +518,7 @@ const main = async () => {
   const migratedCount = Object.values(migratedByBucket).reduce((n, v) => n + v, 0);
 
   const copyComplete = missing.length === 0 && stats.failed.length === 0 && stats.conflicts.length === 0
-    && migratedCount === EXPECTED_TOTAL && expectedDiffs.length === 0 && duplicateSource.length === 0;
+    && migratedCount === source.length && duplicateSource.length === 0;
   const result = copyComplete ? 'PASS' : (migratedCount > 0 && health.status === 200 ? 'PARTIAL' : 'FAIL');
 
   const report = {

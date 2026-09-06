@@ -11,7 +11,7 @@
 
 This environment has **no Lovable application freeze control plane** (no freeze API, no Cloudflare/Lovable admin, `write-freeze-drill --freeze` is a refused drill). T0 capture started immediately to minimize source drift. Lovable remains writable until an operator freeze exists.
 
-Bridges stay `read_only` / `sign_only`. Live `checksops` is not overwritten by the isolated T0 rehearsal DB `checksops_rehearsal_20260906b`. Timed rehearsal `checksops_rehearsal_20260906` is not recreated.
+Bridges stay `read_only` / `sign_only`. Isolated T0 rehearsal DB is `checksops_rehearsal_20260906b`. Timed rehearsal `checksops_rehearsal_20260906` is not recreated. Live `checksops` overlay is gated (`confirmChecksopsOverlay` + isolated recon PASS) and skips `identity_accounts`.
 
 ## Holds
 

@@ -68,6 +68,7 @@ const run = (cmd, args, env = process.env) => new Promise((resolve, reject) => {
   const stderr = [];
   child.stdout.on('data', (d) => stdout.push(d));
   child.stderr.on('data', (d) => stderr.push(d));
+  child.on('error', (error) => reject(error));
   child.on('close', (code) => {
     const out = Buffer.concat(stdout).toString('utf8');
     const err = Buffer.concat(stderr).toString('utf8');
@@ -199,7 +200,7 @@ const extractDumpKeys = async (dumpPath, table, pkColumns) => {
   try {
     sql = await run(pgRestore, ['-a', '--no-owner', '-f', '-', '-t', table, dumpPath]);
   } catch (error) {
-    if (/did not find|no matching|not found/i.test(String(error.message))) return new Map();
+    if (/ENOENT|did not find|no matching|not found/i.test(String(error.message))) return new Map();
     throw error;
   }
   const map = parseCopyKeyset(sql, { table, pkColumns });
@@ -306,19 +307,23 @@ const ensureLambda = async (zipPath, adminSecretArn) => {
       '--memory-size', '2048',
       '--environment', JSON.stringify(env),
     ]);
-  } catch {
-    awsJson([
-      'lambda', 'create-function',
-      '--function-name', LAMBDA_NAME,
-      '--runtime', 'nodejs20.x',
-      '--role', roleArn,
-      '--handler', 'index.handler',
-      '--timeout', '900',
-      '--memory-size', '2048',
-      '--zip-file', `fileb://${zipPath}`,
-      '--environment', JSON.stringify(env),
-      '--vpc-config', vpcConfig,
-    ]);
+  } catch (getErr) {
+    try {
+      awsJson([
+        'lambda', 'create-function',
+        '--function-name', LAMBDA_NAME,
+        '--runtime', 'nodejs20.x',
+        '--role', roleArn,
+        '--handler', 'index.handler',
+        '--timeout', '900',
+        '--memory-size', '2048',
+        '--zip-file', `fileb://${zipPath}`,
+        '--environment', JSON.stringify(env),
+        '--vpc-config', vpcConfig,
+      ]);
+    } catch (createErr) {
+      throw new Error(`ensureLambda get=${String(getErr.message || getErr).slice(0, 180)} create=${String(createErr.message || createErr).slice(0, 220)}`);
+    }
   }
   await run(AWS, ['lambda', 'wait', 'function-active', '--function-name', LAMBDA_NAME]);
   try { await run(AWS, ['lambda', 'wait', 'function-updated', '--function-name', LAMBDA_NAME]); } catch { /* ok */ }
@@ -1031,7 +1036,11 @@ const main = async () => {
   };
   const written = await writeSanitizedReports(report);
   progress({ step: 'reports_written', ...written, verdict: report.verdict });
-  try { await deleteOneshot(); } catch { /* keep if in use */ }
+  if (!process.argv.includes('--keep-lambda')) {
+    try { await deleteOneshot(); } catch { /* keep if in use */ }
+  } else {
+    progress({ step: 'lambda_kept', name: LAMBDA_NAME });
+  }
 };
 
 main().catch((error) => {

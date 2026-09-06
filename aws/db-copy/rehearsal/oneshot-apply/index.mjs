@@ -1,7 +1,8 @@
 /**
  * Isolated rehearsal restore + production delta apply.
- * Writes only to checksops_rehearsal_YYYYMMDD. Never mutates checksops or postgres.
- * Returns counts/aggregates/orphan counts — never row contents or PII.
+ * Default writes only to checksops_rehearsal_YYYYMMDD.
+ * Live checksops overlay requires confirmChecksopsOverlay + confirmIsolatedReconPass.
+ * Never applies 64_financial_activation_grants.sql. Never logs PII.
  */
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
@@ -176,9 +177,21 @@ const restoreDump = async (event) => {
   }
 };
 
+const STAGING_ONLY_SKIP = new Set(['identity_accounts']);
+
+const assertOverlayTarget = (name, event) => {
+  if (name === 'checksops') {
+    if (event.confirmChecksopsOverlay !== true || event.confirmIsolatedReconPass !== true) {
+      throw new Error('refusing overlay on checksops without confirmChecksopsOverlay and confirmIsolatedReconPass');
+    }
+    return;
+  }
+  assertRehearsalName(name);
+};
+
 const applyDelta = async (event) => {
   const dbName = event.database;
-  assertRehearsalName(dbName);
+  assertOverlayTarget(dbName, event);
   const admin = await loadAdmin();
   const s3 = new S3Client({});
   const prefix = String(event.manifestPrefix || '').replace(/\/+$/, '');
@@ -198,6 +211,10 @@ const applyDelta = async (event) => {
     const onlyTables = Array.isArray(event.onlyTables) ? new Set(event.onlyTables) : null;
     for (const table of manifest.tables || []) {
       ident(table.name);
+      if (STAGING_ONLY_SKIP.has(table.name)) {
+        summary.push({ table: table.name, skipped: 'staging_only_identity' });
+        continue;
+      }
       if (onlyTables && !onlyTables.has(table.name)) continue;
       const pk = (table.pkColumns || ['id']).map((col) => ident(col));
       try {
@@ -289,9 +306,129 @@ const applyDelta = async (event) => {
   }
 };
 
+const NINTH_ID = 'dd24eea5-5d12-47d1-999e-d5930c278b7d';
+const PROBE_SUB = '2418c458-c011-70b7-07ac-6b9da2d9415d';
+
+const applyProductionIdentityLinks = async (event) => {
+  if (event.confirmT0Identity !== true) {
+    throw new Error('refusing identity remap without confirmT0Identity');
+  }
+  const links = event.links || [];
+  if (!Array.isArray(links) || links.length !== 8) {
+    throw new Error(`expected 8 links, got ${links?.length}`);
+  }
+  const admin = await loadAdmin();
+  const client = await connect(admin, 'checksops');
+  try {
+    const db = (await client.query('SELECT current_database() AS d')).rows[0].d;
+    if (db !== 'checksops') throw new Error(`connected to ${db}`);
+    const seenSubs = new Set();
+    const seenIds = new Set();
+    const applied = [];
+    for (const link of links) {
+      const applicationUserId = link.applicationUserId || link.application_user_id;
+      const cognitoSub = link.cognitoSub || link.cognito_sub;
+      const email = link.email;
+      if (!applicationUserId || !cognitoSub || !email) {
+        throw new Error('each link needs applicationUserId, cognitoSub, email');
+      }
+      if (applicationUserId === NINTH_ID) throw new Error('refusing to link the ninth UUID');
+      if (cognitoSub === PROBE_SUB) throw new Error('refusing to reuse the isolated probe Cognito sub');
+      if (String(applicationUserId) === String(cognitoSub)) {
+        throw new Error('refusing application_user_id equal to cognito_sub');
+      }
+      if (seenSubs.has(cognitoSub) || seenIds.has(applicationUserId)) {
+        throw new Error('duplicate application UUID or cognito_sub in payload');
+      }
+      seenSubs.add(cognitoSub);
+      seenIds.add(applicationUserId);
+      const updated = await client.query(
+        `UPDATE public.identity_accounts
+         SET cognito_sub = $1,
+             status = 'active',
+             linked_at = now()
+         WHERE application_user_id = $2::uuid
+           AND lower(email) = lower($3)
+           AND application_user_id <> $4::uuid
+         RETURNING application_user_id::text AS application_user_id, status`,
+        [cognitoSub, applicationUserId, email, NINTH_ID],
+      );
+      if (!updated.rows[0]) {
+        throw new Error(`no matching identity row for ${applicationUserId}`);
+      }
+      applied.push({ applicationUserId: updated.rows[0].application_user_id, status: updated.rows[0].status });
+    }
+    const ninth = (await client.query(
+      `SELECT application_user_id::text AS application_user_id, cognito_sub, status
+       FROM public.identity_accounts WHERE application_user_id = $1::uuid`,
+      [NINTH_ID],
+    )).rows[0] || null;
+    const active = Number((await client.query(
+      `SELECT count(*)::int AS n FROM public.identity_accounts WHERE status = 'active'`,
+    )).rows[0].n);
+    const uniqueSubs = Number((await client.query(
+      `SELECT count(DISTINCT cognito_sub)::int AS n FROM public.identity_accounts WHERE cognito_sub IS NOT NULL`,
+    )).rows[0].n);
+    const ninthUntouched = Boolean(ninth)
+      && ninth.cognito_sub == null
+      && ninth.status === 'pending';
+    return {
+      ok: applied.length === 8 && ninthUntouched && uniqueSubs >= 8,
+      database: 'checksops',
+      applied: applied.length,
+      active,
+      uniqueSubs,
+      ninthUntouched,
+      emailsLogged: false,
+      realInvitationEmailsSent: false,
+    };
+  } finally {
+    await client.end();
+  }
+};
+
+const inspectCheckImages = async (event) => {
+  const dbName = event.database || 'checksops';
+  if (dbName !== 'checksops') assertRehearsalName(dbName);
+  const admin = await loadAdmin();
+  const client = await connect(admin, dbName);
+  try {
+    const rows = (await client.query(`
+      SELECT
+        count(*)::int AS intake,
+        count(front_image_path) FILTER (WHERE coalesce(front_image_path, '') <> '')::int AS front_paths,
+        count(back_image_path) FILTER (WHERE coalesce(back_image_path, '') <> '')::int AS rear_paths
+      FROM public.check_intake_items
+    `)).rows[0];
+    const older = (await client.query(`
+      SELECT count(*)::int AS n
+      FROM public.check_intake_items
+      WHERE created_at < now() - interval '60 days'
+    `)).rows[0].n;
+    return {
+      ok: true,
+      readOnly: true,
+      database: dbName,
+      intake: rows.intake,
+      frontPaths: rows.front_paths,
+      rearPaths: rows.rear_paths,
+      olderThan60Days: older,
+      pathsLogged: false,
+    };
+  } finally {
+    await client.end();
+  }
+};
+
 const reconcile = async (event) => {
   const dbName = event.database;
-  assertRehearsalName(dbName);
+  if (dbName === 'checksops') {
+    if (event.confirmLiveRecon !== true) {
+      throw new Error('refusing reconcile on checksops without confirmLiveRecon');
+    }
+  } else {
+    assertRehearsalName(dbName);
+  }
   const admin = await loadAdmin();
   const client = await connect(admin, dbName);
   try {
@@ -608,8 +745,22 @@ export const handler = async (event = {}) => {
     if (step === 'apply_ddl') return { ...base, ...(await applyDdl(event)), liveChecksopsMutated: false };
     if (step === 'inspect_return_columns') return { ...base, ...(await inspectReturnColumns(event)), liveChecksopsMutated: false };
     if (step === 'apply_parity_ddl') return { ...base, ...(await applyParityDdl(event)), liveChecksopsMutated: false };
-    if (step === 'apply_delta') return { ...base, ...(await applyDelta(event)) };
-    if (step === 'reconcile') return { ...base, ...(await reconcile(event)) };
+    if (step === 'apply_delta') {
+      const result = await applyDelta(event);
+      return {
+        ...base,
+        ...result,
+        liveChecksopsMutated: event.database === 'checksops',
+        productionCutoverPerformed: event.database === 'checksops',
+      };
+    }
+    if (step === 'reconcile') return { ...base, ...(await reconcile(event)), liveChecksopsMutated: false };
+    if (step === 'apply_production_identity_links') {
+      return { ...base, ...(await applyProductionIdentityLinks(event)), liveChecksopsMutated: true };
+    }
+    if (step === 'inspect_check_images') {
+      return { ...base, ...(await inspectCheckImages(event)), liveChecksopsMutated: false };
+    }
     throw new Error(`unknown step ${step}`);
   } catch (error) {
     return { ...base, ok: false, error: String(error.message || error).slice(0, 500) };
