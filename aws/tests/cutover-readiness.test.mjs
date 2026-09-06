@@ -201,6 +201,13 @@ test('T0 promote and identity import refuse without confirm flags', () => {
   assert.equal(promote.status, 2);
   assert.match(promote.stderr, /refusing_live_promote/);
 
+  const api = spawnSync(process.execPath, [path.join(ROOT, 'aws/cutover/scripts/t0-enable-prod-api.mjs')], { encoding: 'utf8' });
+  assert.equal(api.status, 2);
+  const spa = spawnSync(process.execPath, [path.join(ROOT, 'aws/cutover/scripts/t0-deploy-spa.mjs')], { encoding: 'utf8' });
+  assert.equal(spa.status, 2);
+  const dns = spawnSync(process.execPath, [path.join(ROOT, 'aws/cutover/scripts/t0-dns-switch.mjs')], { encoding: 'utf8' });
+  assert.equal(dns.status, 2);
+
   const oneshot = read('aws/db-copy/rehearsal/oneshot-apply/index.mjs');
   assert.match(oneshot, /confirmChecksopsOverlay/);
   assert.match(oneshot, /confirmIsolatedReconPass/);
