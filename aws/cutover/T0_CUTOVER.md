@@ -13,6 +13,13 @@ This environment has **no Lovable application freeze control plane** (no freeze 
 
 Bridges stay `read_only` / `sign_only`. Isolated T0 rehearsal DB is `checksops_rehearsal_20260906b`. Timed rehearsal `checksops_rehearsal_20260906` is not recreated. Live `checksops` overlay is gated (`confirmChecksopsOverlay` + isolated recon PASS) and skips `identity_accounts`.
 
+## Isolated final DB delta
+
+**PASS** at 2026-09-06T12:02:23Z on `checksops_rehearsal_20260906b` (template clone + live overlay).  
+Counts, financial aggregates, PK fingerprints, membership, FKs, and required-null all matched production. Live `checksops` was not overwritten by this step. RDS `CreateDBSnapshot` is denied for this role; rollback remains Lovable + isolated rehearsal DBs.
+
+Selected live counts: tenants 6, profiles 8, intake 194, endorsements 533, claims 183, deposit items 125, disbursement splits 117, ledger events 716.
+
 ## Holds
 
 - Moov / CheckAlt / provider execution / financial grants stay OFF

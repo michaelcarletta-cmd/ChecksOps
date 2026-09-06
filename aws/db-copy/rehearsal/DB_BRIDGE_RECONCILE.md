@@ -1,9 +1,9 @@
 # DB bridge rehearsal recon — PR #127
 
-**Generated:** 2026-09-05T10:41:31.340Z  
+**Generated:** 2026-09-06T12:02:23.895Z  
 **Production cutover performed:** **NO**  
 **Live staging DB `checksops` overwritten:** **NO**  
-**Rehearsal database:** `checksops_rehearsal_20260905`
+**Rehearsal database:** `checksops_rehearsal_20260906b`
 
 ## Safety attestation
 
@@ -26,7 +26,7 @@
 | Approved tables | 161 |
 | Excluded secret/token tables | email_unsubscribe_tokens, homeowner_bank_link_tokens, homeowner_ledger_tokens, payment_idempotency_keys, spatial_ref_sys, tenant_openai_credentials, user_passkeys, webauthn_challenges |
 | Numeric count tables | 180 |
-| Current production row sum (approved counted) | 12397 |
+| Current production row sum (approved counted) | 12401 |
 
 ## Phase 2 — Production delta vs Sept. 1 baseline
 
@@ -34,66 +34,109 @@ Baseline dump: `Migration/checksops_260901(1).backup` (49100401 bytes, cutoff 20
 
 | Totals | Inserted | Updated | Deleted | Unchanged |
 |---|---:|---:|---:|---:|
-| All approved business tables | 632 | 66 | 3 | 10914 |
+| All approved business tables | 11616 | 0 | 0 | 0 |
 
 Tables with any insert/update/delete:
 
 | Table | Inserted | Updated | Deleted | Unchanged |
 |---|---:|---:|---:|---:|
-| audit_logs | 33 | 0 | 0 | 344 |
-| check_audit_log | 83 | 0 | 0 | 1924 |
-| check_billing_events | 11 | 0 | 0 | 115 |
-| check_cases | 3 | 0 | 0 | 139 |
-| check_eligibility_results | 12 | 0 | 0 | 113 |
-| check_endorsement_events | 5 | 0 | 0 | 227 |
-| check_endorsements | 32 | 3 | 1 | 498 |
-| check_intake_items | 12 | 18 | 0 | 164 |
-| check_payees | 32 | 0 | 0 | 493 |
-| check_payment_directions | 3 | 0 | 0 | 62 |
-| check_reconciliation_alerts | 3 | 0 | 0 | 98 |
-| check_review_decisions | 8 | 0 | 0 | 166 |
-| check_stakeholders | 7 | 0 | 0 | 1 |
-| checkalt_config | 0 | 1 | 0 | 0 |
-| checkalt_deposits | 11 | 0 | 0 | 58 |
-| claim_checks | 8 | 7 | 0 | 68 |
-| claim_folders | 21 | 0 | 0 | 1260 |
-| claim_operational_state | 3 | 0 | 0 | 180 |
-| claim_payments | 5 | 0 | 0 | 13 |
+| ach_authorizations | 10 | 0 | 0 | 0 |
+| actum_transactions | 6 | 0 | 0 | 0 |
+| audit_logs | 377 | 0 | 0 | 0 |
+| cash_jobs | 1 | 0 | 0 | 0 |
+| check_audit_log | 2007 | 0 | 0 | 0 |
+| check_billing_config | 1 | 0 | 0 | 0 |
+| check_billing_events | 126 | 0 | 0 | 0 |
+| check_cases | 142 | 0 | 0 | 0 |
+| check_deletion_log | 16 | 0 | 0 | 0 |
+| check_deposit_image_backfill_queue | 102 | 0 | 0 | 0 |
+| check_eligibility_results | 125 | 0 | 0 | 0 |
+| check_endorsement_events | 232 | 0 | 0 | 0 |
+| check_endorsements | 533 | 0 | 0 | 0 |
+| check_files | 11 | 0 | 0 | 0 |
+| check_intake_items | 194 | 0 | 0 | 0 |
+| check_message_reads | 19 | 0 | 0 | 0 |
+| check_messages | 7 | 0 | 0 | 0 |
+| check_payees | 525 | 0 | 0 | 0 |
+| check_payment_directions | 65 | 0 | 0 | 0 |
+| check_reconciliation_alerts | 103 | 0 | 0 | 0 |
+| check_reissue_requests | 1 | 0 | 0 | 0 |
+| check_review_decisions | 174 | 0 | 0 | 0 |
+| check_stakeholders | 8 | 0 | 0 | 0 |
+| checkalt_config | 1 | 0 | 0 | 0 |
+| checkalt_deposits | 69 | 0 | 0 | 0 |
+| checkalt_tenant_accounts | 1 | 0 | 0 | 0 |
+| checkalt_webhook_events | 2 | 0 | 0 | 0 |
+| claim_checks | 83 | 0 | 0 | 0 |
+| claim_files | 3 | 0 | 0 | 0 |
+| claim_folders | 1281 | 0 | 0 | 0 |
+| claim_operational_state | 183 | 0 | 0 | 0 |
+| claim_payments | 18 | 0 | 0 | 0 |
 | claim_project_plans | 2 | 0 | 0 | 0 |
-| claim_settlements | 3 | 0 | 0 | 61 |
-| claims | 3 | 12 | 0 | 168 |
-| deposit_audit_log | 22 | 0 | 0 | 318 |
-| deposit_batches | 11 | 0 | 0 | 115 |
-| deposit_items | 11 | 0 | 0 | 114 |
-| disbursement_batches | 9 | 0 | 0 | 109 |
-| disbursement_splits | 9 | 0 | 0 | 108 |
-| email_send_log | 28 | 0 | 0 | 112 |
-| endorsement_audit_log | 69 | 0 | 1 | 1330 |
-| endorsement_requests | 11 | 0 | 0 | 389 |
-| external_payment_recipients | 1 | 2 | 0 | 1 |
+| claim_settlements | 64 | 0 | 0 | 0 |
+| claims | 183 | 0 | 0 | 0 |
+| contractor_profiles | 2 | 0 | 0 | 0 |
+| deposit_audit_log | 340 | 0 | 0 | 0 |
+| deposit_automation_settings | 3 | 0 | 0 | 0 |
+| deposit_batches | 126 | 0 | 0 | 0 |
+| deposit_items | 125 | 0 | 0 | 0 |
+| deposit_provider_config | 5 | 0 | 0 | 0 |
+| disbursement_batches | 118 | 0 | 0 | 0 |
+| disbursement_splits | 117 | 0 | 0 | 0 |
+| email_send_log | 140 | 0 | 0 | 0 |
+| email_send_state | 1 | 0 | 0 | 0 |
+| endorsement_audit_log | 1399 | 0 | 0 | 0 |
+| endorsement_requests | 400 | 0 | 0 | 0 |
+| esign_event_logs | 72 | 0 | 0 | 0 |
+| external_payment_recipients | 4 | 0 | 0 | 0 |
 | financial_stepup_log | 2 | 0 | 0 | 0 |
-| glba_security_events | 3 | 0 | 0 | 80 |
-| homeowner_ledger_events | 59 | 0 | 0 | 657 |
-| loss_draft_audit_log | 5 | 0 | 0 | 96 |
-| loss_draft_documents | 1 | 0 | 0 | 217 |
-| loss_draft_tracking | 2 | 0 | 0 | 34 |
-| mortgage_companies | 2 | 0 | 0 | 2 |
-| mortgage_desk_config | 1 | 0 | 1 | 0 |
+| glba_security_events | 85 | 0 | 0 | 0 |
+| homeowner_directory_leads | 45 | 0 | 0 | 0 |
+| homeowner_intro_requests | 3 | 0 | 0 | 0 |
+| homeowner_ledger_check_uploads | 4 | 0 | 0 | 0 |
+| homeowner_ledger_events | 716 | 0 | 0 | 0 |
+| loss_draft_audit_log | 101 | 0 | 0 | 0 |
+| loss_draft_documents | 218 | 0 | 0 | 0 |
+| loss_draft_tracking | 36 | 0 | 0 | 0 |
+| micro_deposit_verifications | 1 | 0 | 0 | 0 |
+| mortgage_companies | 4 | 0 | 0 | 0 |
+| mortgage_desk_config | 1 | 0 | 0 | 0 |
+| mortgage_handling_requests | 2 | 0 | 0 | 0 |
 | notification_preferences | 2 | 0 | 0 | 0 |
-| payment_event_log | 23 | 0 | 0 | 243 |
-| payment_provider_accounts | 0 | 2 | 0 | 1 |
-| payment_provider_files | 0 | 6 | 0 | 0 |
-| payment_provider_methods | 1 | 0 | 0 | 2 |
-| payment_wallets | 0 | 1 | 0 | 0 |
-| payment_webhook_events | 30 | 0 | 0 | 227 |
-| profiles | 0 | 8 | 0 | 0 |
-| shared_check_messages | 2 | 0 | 0 | 12 |
-| shared_checks | 6 | 0 | 0 | 102 |
-| stakeholder_account_verification_log | 3 | 0 | 0 | 20 |
-| stakeholder_accounts | 2 | 3 | 0 | 64 |
-| tenant_email_settings | 0 | 1 | 0 | 0 |
-| tenant_usage_logs | 17 | 0 | 0 | 21 |
-| tenants | 0 | 2 | 0 | 4 |
+| payment_event_log | 266 | 0 | 0 | 0 |
+| payment_provider_accounts | 3 | 0 | 0 | 0 |
+| payment_provider_files | 6 | 0 | 0 | 0 |
+| payment_provider_methods | 3 | 0 | 0 | 0 |
+| payment_wallets | 1 | 0 | 0 | 0 |
+| payment_webhook_events | 257 | 0 | 0 | 0 |
+| plaid_transfer_events | 1 | 0 | 0 | 0 |
+| plaid_webhook_cursors | 1 | 0 | 0 | 0 |
+| platform_fee_line_items | 1 | 0 | 0 | 0 |
+| profiles | 8 | 0 | 0 | 0 |
+| referral_events | 2 | 0 | 0 | 0 |
+| role_version_tracker | 9 | 0 | 0 | 0 |
+| shared_check_messages | 14 | 0 | 0 | 0 |
+| shared_checks | 108 | 0 | 0 | 0 |
+| signature_field_values | 2 | 0 | 0 | 0 |
+| signature_fields | 2 | 0 | 0 | 0 |
+| signature_requests | 6 | 0 | 0 | 0 |
+| signature_signers | 6 | 0 | 0 | 0 |
+| stakeholder_account_verification_log | 23 | 0 | 0 | 0 |
+| stakeholder_accounts | 69 | 0 | 0 | 0 |
+| tenant_bank_accounts | 1 | 0 | 0 | 0 |
+| tenant_credit_balances | 6 | 0 | 0 | 0 |
+| tenant_documents | 1 | 0 | 0 | 0 |
+| tenant_email_settings | 1 | 0 | 0 | 0 |
+| tenant_maintenance_payments | 1 | 0 | 0 | 0 |
+| tenant_partner_code_aliases | 1 | 0 | 0 | 0 |
+| tenant_partnerships | 3 | 0 | 0 | 0 |
+| tenant_usage_logs | 38 | 0 | 0 | 0 |
+| tenant_users | 7 | 0 | 0 | 0 |
+| tenant_vetting_documents | 3 | 0 | 0 | 0 |
+| tenant_wallet_funding_settings | 1 | 0 | 0 | 0 |
+| tenants | 6 | 0 | 0 | 0 |
+| user_roles | 10 | 0 | 0 | 0 |
+| zip_geocache | 2 | 0 | 0 | 0 |
 
 Secret columns were not copied (`[redacted]` omitted; null preserved).
 
@@ -107,11 +150,11 @@ Isolated rehearsal was created without overwriting live `checksops`, then migrat
 
 | Step | Result |
 |---|---|
-| Isolated rehearsal DB | `checksops_rehearsal_20260905` |
-| Restore mode | existing_rehearsal_plus_stepup_ddl |
-| Overlay apply | PASS (188 rows upserted; 0 table(s) skipped) |
+| Isolated rehearsal DB | `checksops_rehearsal_20260906b` |
+| Restore mode | template_clone_then_overlay |
+| Overlay apply | PASS (11616 rows upserted; 0 table(s) skipped) |
 | Live `checksops` data overwritten | **NO** |
-| checksops schema-only DDL | **PASS** (empty `financial_stepup_log`, 0 production rows copied) |
+| checksops schema-only DDL | n/a |
 | Production Supabase mutated | **NO** |
 
 ## Phase 4 — Rehearsal vs live production

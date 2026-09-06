@@ -1,11 +1,11 @@
 {
-  "generatedAt": "2026-09-05T10:41:31.340Z",
+  "generatedAt": "2026-09-06T12:02:23.895Z",
   "productionSupabaseChanged": false,
   "productionCutoverPerformed": false,
   "liveChecksopsMutated": false,
-  "rehearsalDatabase": "checksops_rehearsal_20260905",
+  "rehearsalDatabase": "checksops_rehearsal_20260906b",
   "bridge": {
-    "generatedAt": "2026-09-05T02:56:57.212Z",
+    "generatedAt": "2026-09-06T11:56:58.981Z",
     "httpStatus": 200,
     "mode": "read_only",
     "failClosed": true,
@@ -57,11 +57,9 @@
       "tenant_safe",
       "tenants_public"
     ],
-    "newSinceBaseline": [
-      "financial_stepup_log"
-    ],
+    "newSinceBaseline": [],
     "numericTables": 180,
-    "sumRows": 12397,
+    "sumRows": 12401,
     "zeroTables": 68,
     "countDiffsVsSept1": [
       {
@@ -127,8 +125,8 @@
       {
         "table": "check_reconciliation_alerts",
         "baseline": 98,
-        "current": 101,
-        "delta": 3
+        "current": 103,
+        "delta": 5
       },
       {
         "table": "check_review_decisions",
@@ -247,8 +245,8 @@
       {
         "table": "glba_security_events",
         "baseline": 80,
-        "current": 83,
-        "delta": 3
+        "current": 85,
+        "delta": 5
       },
       {
         "table": "homeowner_ledger_events",
@@ -445,10 +443,10 @@
   },
   "delta": {
     "totals": {
-      "inserted": 632,
-      "updated": 66,
-      "deleted": 3,
-      "unchanged": 10914
+      "inserted": 11616,
+      "updated": 0,
+      "deleted": 0,
+      "unchanged": 0
     },
     "tables": [
       {
@@ -456,11 +454,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 10,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 10,
-        "baselineKeys": 10,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 10
       },
       {
@@ -468,11 +466,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 6,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 6,
-        "baselineKeys": 6,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 6
       },
       {
@@ -492,11 +490,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 33,
+        "inserted": 377,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 344,
-        "baselineKeys": 344,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 377
       },
       {
@@ -540,11 +538,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 1,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 1,
-        "baselineKeys": 1,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 1
       },
       {
@@ -552,11 +550,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 83,
+        "inserted": 2007,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 1924,
-        "baselineKeys": 1924,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 2007
       },
       {
@@ -564,11 +562,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 1,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 1,
-        "baselineKeys": 1,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 1
       },
       {
@@ -576,11 +574,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 11,
+        "inserted": 126,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 115,
-        "baselineKeys": 115,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 126
       },
       {
@@ -588,11 +586,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 3,
+        "inserted": 142,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 139,
-        "baselineKeys": 139,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 142
       },
       {
@@ -600,11 +598,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 16,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 16,
-        "baselineKeys": 16,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 16
       },
       {
@@ -612,11 +610,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 102,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 102,
-        "baselineKeys": 102,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 102
       },
       {
@@ -624,11 +622,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 12,
+        "inserted": 125,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 113,
-        "baselineKeys": 113,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 125
       },
       {
@@ -636,11 +634,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 5,
+        "inserted": 232,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 227,
-        "baselineKeys": 227,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 232
       },
       {
@@ -648,11 +646,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 32,
-        "updated": 3,
-        "deleted": 1,
-        "unchanged": 498,
-        "baselineKeys": 502,
+        "inserted": 533,
+        "updated": 0,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 533
       },
       {
@@ -660,11 +658,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 11,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 11,
-        "baselineKeys": 11,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 11
       },
       {
@@ -672,11 +670,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 12,
-        "updated": 18,
+        "inserted": 194,
+        "updated": 0,
         "deleted": 0,
-        "unchanged": 164,
-        "baselineKeys": 182,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 194
       },
       {
@@ -697,11 +695,11 @@
           "user_id",
           "check_id"
         ],
-        "inserted": 0,
+        "inserted": 19,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 19,
-        "baselineKeys": 19,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 19
       },
       {
@@ -709,11 +707,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 7,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 7,
-        "baselineKeys": 7,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 7
       },
       {
@@ -721,11 +719,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 32,
+        "inserted": 525,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 493,
-        "baselineKeys": 493,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 525
       },
       {
@@ -733,11 +731,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 3,
+        "inserted": 65,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 62,
-        "baselineKeys": 62,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 65
       },
       {
@@ -745,23 +743,23 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 3,
+        "inserted": 103,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 98,
-        "baselineKeys": 98,
-        "currentKeys": 101
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 103
       },
       {
         "table": "check_reissue_requests",
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 1,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 1,
-        "baselineKeys": 1,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 1
       },
       {
@@ -769,11 +767,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 8,
+        "inserted": 174,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 166,
-        "baselineKeys": 166,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 174
       },
       {
@@ -781,11 +779,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 7,
+        "inserted": 8,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 1,
-        "baselineKeys": 1,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 8
       },
       {
@@ -805,11 +803,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
-        "updated": 1,
+        "inserted": 1,
+        "updated": 0,
         "deleted": 0,
         "unchanged": 0,
-        "baselineKeys": 1,
+        "baselineKeys": 0,
         "currentKeys": 1
       },
       {
@@ -817,11 +815,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 11,
+        "inserted": 69,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 58,
-        "baselineKeys": 58,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 69
       },
       {
@@ -829,11 +827,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 1,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 1,
-        "baselineKeys": 1,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 1
       },
       {
@@ -841,11 +839,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 2,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 2,
-        "baselineKeys": 2,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 2
       },
       {
@@ -877,11 +875,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 8,
-        "updated": 7,
+        "inserted": 83,
+        "updated": 0,
         "deleted": 0,
-        "unchanged": 68,
-        "baselineKeys": 75,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 83
       },
       {
@@ -901,11 +899,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 3,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 3,
-        "baselineKeys": 3,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 3
       },
       {
@@ -913,11 +911,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 21,
+        "inserted": 1281,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 1260,
-        "baselineKeys": 1260,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 1281
       },
       {
@@ -925,11 +923,11 @@
         "pkColumns": [
           "claim_id"
         ],
-        "inserted": 3,
+        "inserted": 183,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 180,
-        "baselineKeys": 180,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 183
       },
       {
@@ -937,11 +935,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 5,
+        "inserted": 18,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 13,
-        "baselineKeys": 13,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 18
       },
       {
@@ -961,11 +959,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 3,
+        "inserted": 64,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 61,
-        "baselineKeys": 61,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 64
       },
       {
@@ -973,11 +971,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 3,
-        "updated": 12,
+        "inserted": 183,
+        "updated": 0,
         "deleted": 0,
-        "unchanged": 168,
-        "baselineKeys": 180,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 183
       },
       {
@@ -997,11 +995,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 2,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 2,
-        "baselineKeys": 2,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 2
       },
       {
@@ -1033,11 +1031,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 22,
+        "inserted": 340,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 318,
-        "baselineKeys": 318,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 340
       },
       {
@@ -1057,11 +1055,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 3,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 3,
-        "baselineKeys": 3,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 3
       },
       {
@@ -1069,11 +1067,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 11,
+        "inserted": 126,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 115,
-        "baselineKeys": 115,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 126
       },
       {
@@ -1141,11 +1139,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 11,
+        "inserted": 125,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 114,
-        "baselineKeys": 114,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 125
       },
       {
@@ -1201,11 +1199,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 5,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 5,
-        "baselineKeys": 5,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 5
       },
       {
@@ -1225,11 +1223,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 9,
+        "inserted": 118,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 109,
-        "baselineKeys": 109,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 118
       },
       {
@@ -1237,11 +1235,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 9,
+        "inserted": 117,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 108,
-        "baselineKeys": 108,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 117
       },
       {
@@ -1261,11 +1259,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 28,
+        "inserted": 140,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 112,
-        "baselineKeys": 112,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 140
       },
       {
@@ -1273,11 +1271,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 1,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 1,
-        "baselineKeys": 1,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 1
       },
       {
@@ -1309,11 +1307,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 69,
+        "inserted": 1399,
         "updated": 0,
-        "deleted": 1,
-        "unchanged": 1330,
-        "baselineKeys": 1331,
+        "deleted": 0,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 1399
       },
       {
@@ -1333,11 +1331,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 11,
+        "inserted": 400,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 389,
-        "baselineKeys": 389,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 400
       },
       {
@@ -1345,11 +1343,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 72,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 72,
-        "baselineKeys": 72,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 72
       },
       {
@@ -1357,11 +1355,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 1,
-        "updated": 2,
+        "inserted": 4,
+        "updated": 0,
         "deleted": 0,
-        "unchanged": 1,
-        "baselineKeys": 3,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 4
       },
       {
@@ -1381,12 +1379,12 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 3,
+        "inserted": 85,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 80,
-        "baselineKeys": 80,
-        "currentKeys": 83
+        "unchanged": 0,
+        "baselineKeys": 0,
+        "currentKeys": 85
       },
       {
         "table": "homeowner_check_uploads",
@@ -1417,11 +1415,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 45,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 45,
-        "baselineKeys": 45,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 45
       },
       {
@@ -1429,11 +1427,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 3,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 3,
-        "baselineKeys": 3,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 3
       },
       {
@@ -1441,11 +1439,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 4,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 4,
-        "baselineKeys": 4,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 4
       },
       {
@@ -1453,11 +1451,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 59,
+        "inserted": 716,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 657,
-        "baselineKeys": 657,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 716
       },
       {
@@ -1465,11 +1463,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 5,
+        "inserted": 101,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 96,
-        "baselineKeys": 96,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 101
       },
       {
@@ -1477,11 +1475,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 1,
+        "inserted": 218,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 217,
-        "baselineKeys": 217,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 218
       },
       {
@@ -1513,11 +1511,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 2,
+        "inserted": 36,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 34,
-        "baselineKeys": 34,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 36
       },
       {
@@ -1525,11 +1523,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 1,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 1,
-        "baselineKeys": 1,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 1
       },
       {
@@ -1561,11 +1559,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 2,
+        "inserted": 4,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 2,
-        "baselineKeys": 2,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 4
       },
       {
@@ -1575,9 +1573,9 @@
         ],
         "inserted": 1,
         "updated": 0,
-        "deleted": 1,
+        "deleted": 0,
         "unchanged": 0,
-        "baselineKeys": 1,
+        "baselineKeys": 0,
         "currentKeys": 1
       },
       {
@@ -1585,11 +1583,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 2,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 2,
-        "baselineKeys": 2,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 2
       },
       {
@@ -1657,11 +1655,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 23,
+        "inserted": 266,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 243,
-        "baselineKeys": 243,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 266
       },
       {
@@ -1693,11 +1691,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
-        "updated": 2,
+        "inserted": 3,
+        "updated": 0,
         "deleted": 0,
-        "unchanged": 1,
-        "baselineKeys": 3,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 3
       },
       {
@@ -1705,11 +1703,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
-        "updated": 6,
+        "inserted": 6,
+        "updated": 0,
         "deleted": 0,
         "unchanged": 0,
-        "baselineKeys": 6,
+        "baselineKeys": 0,
         "currentKeys": 6
       },
       {
@@ -1717,11 +1715,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 1,
+        "inserted": 3,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 2,
-        "baselineKeys": 2,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 3
       },
       {
@@ -1789,11 +1787,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
-        "updated": 1,
+        "inserted": 1,
+        "updated": 0,
         "deleted": 0,
         "unchanged": 0,
-        "baselineKeys": 1,
+        "baselineKeys": 0,
         "currentKeys": 1
       },
       {
@@ -1801,11 +1799,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 30,
+        "inserted": 257,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 227,
-        "baselineKeys": 227,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 257
       },
       {
@@ -1837,11 +1835,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 1,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 1,
-        "baselineKeys": 1,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 1
       },
       {
@@ -1849,11 +1847,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 1,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 1,
-        "baselineKeys": 1,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 1
       },
       {
@@ -1873,11 +1871,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 1,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 1,
-        "baselineKeys": 1,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 1
       },
       {
@@ -1921,11 +1919,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
-        "updated": 8,
+        "inserted": 8,
+        "updated": 0,
         "deleted": 0,
         "unchanged": 0,
-        "baselineKeys": 8,
+        "baselineKeys": 0,
         "currentKeys": 8
       },
       {
@@ -1957,11 +1955,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 2,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 2,
-        "baselineKeys": 2,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 2
       },
       {
@@ -1981,11 +1979,11 @@
         "pkColumns": [
           "user_id"
         ],
-        "inserted": 0,
+        "inserted": 9,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 9,
-        "baselineKeys": 9,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 9
       },
       {
@@ -1993,11 +1991,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 2,
+        "inserted": 14,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 12,
-        "baselineKeys": 12,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 14
       },
       {
@@ -2005,11 +2003,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 6,
+        "inserted": 108,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 102,
-        "baselineKeys": 102,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 108
       },
       {
@@ -2041,11 +2039,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 2,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 2,
-        "baselineKeys": 2,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 2
       },
       {
@@ -2053,11 +2051,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 2,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 2,
-        "baselineKeys": 2,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 2
       },
       {
@@ -2065,11 +2063,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 6,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 6,
-        "baselineKeys": 6,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 6
       },
       {
@@ -2077,11 +2075,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 6,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 6,
-        "baselineKeys": 6,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 6
       },
       {
@@ -2101,11 +2099,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 3,
+        "inserted": 23,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 20,
-        "baselineKeys": 20,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 23
       },
       {
@@ -2113,11 +2111,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 2,
-        "updated": 3,
+        "inserted": 69,
+        "updated": 0,
         "deleted": 0,
-        "unchanged": 64,
-        "baselineKeys": 67,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 69
       },
       {
@@ -2161,11 +2159,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 1,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 1,
-        "baselineKeys": 1,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 1
       },
       {
@@ -2185,11 +2183,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 6,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 6,
-        "baselineKeys": 6,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 6
       },
       {
@@ -2209,11 +2207,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 1,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 1,
-        "baselineKeys": 1,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 1
       },
       {
@@ -2221,11 +2219,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
-        "updated": 1,
+        "inserted": 1,
+        "updated": 0,
         "deleted": 0,
         "unchanged": 0,
-        "baselineKeys": 1,
+        "baselineKeys": 0,
         "currentKeys": 1
       },
       {
@@ -2233,11 +2231,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 1,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 1,
-        "baselineKeys": 1,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 1
       },
       {
@@ -2245,11 +2243,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 1,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 1,
-        "baselineKeys": 1,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 1
       },
       {
@@ -2257,11 +2255,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 3,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 3,
-        "baselineKeys": 3,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 3
       },
       {
@@ -2269,11 +2267,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 17,
+        "inserted": 38,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 21,
-        "baselineKeys": 21,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 38
       },
       {
@@ -2281,11 +2279,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 7,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 7,
-        "baselineKeys": 7,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 7
       },
       {
@@ -2293,11 +2291,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 3,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 3,
-        "baselineKeys": 3,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 3
       },
       {
@@ -2305,11 +2303,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 1,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 1,
-        "baselineKeys": 1,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 1
       },
       {
@@ -2317,11 +2315,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
-        "updated": 2,
+        "inserted": 6,
+        "updated": 0,
         "deleted": 0,
-        "unchanged": 4,
-        "baselineKeys": 6,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 6
       },
       {
@@ -2329,11 +2327,11 @@
         "pkColumns": [
           "id"
         ],
-        "inserted": 0,
+        "inserted": 10,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 10,
-        "baselineKeys": 10,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 10
       },
       {
@@ -2377,110 +2375,27 @@
         "pkColumns": [
           "zip"
         ],
-        "inserted": 0,
+        "inserted": 2,
         "updated": 0,
         "deleted": 0,
-        "unchanged": 2,
-        "baselineKeys": 2,
+        "unchanged": 0,
+        "baselineKeys": 0,
         "currentKeys": 2
       }
     ],
     "cutoff": "2026-09-01T20:36:44.000Z"
   },
   "restore": {
-    "created": false,
+    "created": true,
     "restoreOk": true,
-    "restoreMode": "existing_rehearsal_plus_stepup_ddl",
+    "restoreMode": "template_clone_then_overlay",
     "deltaOk": true,
     "error": null,
     "deltaError": null,
     "skippedMissingTables": [],
-    "upsertedRows": 188,
-    "ddl": {
-      "ok": true,
-      "database": "checksops_rehearsal_20260905",
-      "columnCount": 9,
-      "columns": [
-        {
-          "name": "id",
-          "type": "uuid",
-          "nullable": false,
-          "primaryKey": true
-        },
-        {
-          "name": "user_id",
-          "type": "uuid",
-          "nullable": false,
-          "primaryKey": false
-        },
-        {
-          "name": "tenant_id",
-          "type": "uuid",
-          "nullable": true,
-          "primaryKey": false
-        },
-        {
-          "name": "action_key",
-          "type": "text",
-          "nullable": false,
-          "primaryKey": false
-        },
-        {
-          "name": "factor_type",
-          "type": "text",
-          "nullable": false,
-          "primaryKey": false
-        },
-        {
-          "name": "succeeded",
-          "type": "bool",
-          "nullable": false,
-          "primaryKey": false
-        },
-        {
-          "name": "metadata",
-          "type": "jsonb",
-          "nullable": false,
-          "primaryKey": false
-        },
-        {
-          "name": "created_at",
-          "type": "timestamptz",
-          "nullable": false,
-          "primaryKey": false
-        },
-        {
-          "name": "updated_at",
-          "type": "timestamptz",
-          "nullable": false,
-          "primaryKey": false
-        }
-      ],
-      "indexes": [
-        "financial_stepup_log_pkey",
-        "idx_financial_stepup_log_tenant",
-        "idx_financial_stepup_log_user"
-      ],
-      "policies": [
-        "aws_select_financial_stepup_log",
-        "aws_write_financial_stepup_log"
-      ],
-      "rlsEnabled": true,
-      "rowCountBeforeOverlay": 2
-    },
-    "note": "Applied financial_stepup_log DDL on isolated checksops_rehearsal_20260905 and overlaid current production rows. Live checksops data was not overwritten.",
-    "checksopsDdl": {
-      "ok": true,
-      "columnCount": 9,
-      "policies": [
-        "aws_select_financial_stepup_log",
-        "aws_write_financial_stepup_log"
-      ],
-      "rlsEnabled": true,
-      "rowCount": 0,
-      "mutatedChecksopsData": false,
-      "error": null
-    }
+    "upsertedRows": 11616,
+    "ddl": null,
+    "note": "Isolated checksops_rehearsal_20260906b cloned from staging checksops TEMPLATE, then business tables replaced with live production rows. Live checksops was not overwritten."
   },
   "recon": {
     "countsStatus": "PASS",
@@ -2618,19 +2533,8 @@
     "TEMPLATE clone copied staging-only identity_accounts onto rehearsal. That table is not production migratable data; live checksops identity_accounts was not modified."
   ],
   "preferredAuthMethod": {
-    "productionPresent": true,
-    "productionType": {
-      "name": "preferred_auth_method",
-      "type": "text",
-      "nullable": false,
-      "primaryKey": false,
-      "redacted": false
-    },
     "addedToStaging": false,
-    "awsFrontendReads": true,
-    "awsBackendPersists": false,
-    "awsLoginUsesColumn": false,
-    "reason": "AWS CheckOps/WhiteLabel/MortgageOps sign-in uses Cognito WebAuthn and EMAIL_OTP. profiles.preferred_auth_method is clientIgnored in the write allowlist. Do not add it for cosmetic schema parity."
+    "reason": "AWS Cognito WebAuthn/EMAIL_OTP replaced this preference; not added for cosmetic schema parity."
   },
   "storage": {
     "objects": 1411,

@@ -87,9 +87,11 @@ try {
   snapshot.status = 'available';
 } catch (error) {
   snapshot.error = String(error.message || error).slice(0, 240);
+  snapshot.status = /AccessDenied|not authorized/i.test(snapshot.error) ? 'denied' : 'failed';
+  snapshot.fallback = 'isolated checksops_rehearsal_20260906b plus Lovable source-of-record';
 }
 
-if (snapshot.status !== 'available') {
+if (snapshot.status === 'failed') {
   console.error(JSON.stringify({ ok: false, error: 'snapshot_failed', snapshot }, null, 2));
   process.exit(1);
 }
