@@ -1,0 +1,123 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Regional WAFv2 for the production HTTP API. Same COUNT managed rules and
+  conservative path rate limits as the CloudFront ACL. Associates to the prep stage.
+
+Parameters:
+  ApiId:
+    Type: String
+    Default: kiqojucc02
+  StageName:
+    Type: String
+    Default: prep
+
+Resources:
+  ProductionApiWebACL:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: checksops-production-api-waf
+      Scope: REGIONAL
+      DefaultAction:
+        Allow: {}
+      VisibilityConfig:
+        SampledRequestsEnabled: true
+        CloudWatchMetricsEnabled: true
+        MetricName: checksopsProductionApiWaf
+      Rules:
+        - Name: AWSManagedCommonCount
+          Priority: 0
+          OverrideAction:
+            Count: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesCommonRuleSet
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: ApiAWSManagedCommonCount
+        - Name: AWSManagedKnownBadInputsCount
+          Priority: 1
+          OverrideAction:
+            Count: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesKnownBadInputsRuleSet
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: ApiAWSManagedKnownBadInputsCount
+        - Name: RateLimitAuth
+          Priority: 20
+          Action:
+            Block: {}
+          Statement:
+            RateBasedStatement:
+              Limit: 100
+              AggregateKeyType: IP
+              ScopeDownStatement:
+                ByteMatchStatement:
+                  SearchString: /auth
+                  FieldToMatch:
+                    UriPath: {}
+                  TextTransformations:
+                    - Priority: 0
+                      Type: LOWERCASE
+                  PositionalConstraint: CONTAINS
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: ApiRateLimitAuth
+        - Name: RateLimitStorage
+          Priority: 21
+          Action:
+            Block: {}
+          Statement:
+            RateBasedStatement:
+              Limit: 300
+              AggregateKeyType: IP
+              ScopeDownStatement:
+                ByteMatchStatement:
+                  SearchString: /storage
+                  FieldToMatch:
+                    UriPath: {}
+                  TextTransformations:
+                    - Priority: 0
+                      Type: LOWERCASE
+                  PositionalConstraint: CONTAINS
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: ApiRateLimitStorage
+        - Name: RateLimitPublic
+          Priority: 22
+          Action:
+            Block: {}
+          Statement:
+            RateBasedStatement:
+              Limit: 200
+              AggregateKeyType: IP
+              ScopeDownStatement:
+                ByteMatchStatement:
+                  SearchString: /public
+                  FieldToMatch:
+                    UriPath: {}
+                  TextTransformations:
+                    - Priority: 0
+                      Type: LOWERCASE
+                  PositionalConstraint: CONTAINS
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: ApiRateLimitPublic
+
+  ProductionApiWebACLAssociation:
+    Type: AWS::WAFv2::WebACLAssociation
+    Properties:
+      ResourceArn: !Sub arn:aws:apigateway:${AWS::Region}::/apis/${ApiId}/stages/${StageName}
+      WebACLArn: !GetAtt ProductionApiWebACL.Arn
+
+Outputs:
+  WebACLArn:
+    Value: !GetAtt ProductionApiWebACL.Arn

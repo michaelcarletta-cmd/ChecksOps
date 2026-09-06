@@ -28,15 +28,15 @@ import {
 import { handleWorkflowRequest } from './workflow.mjs';
 import { handleFinancialRequest } from './financial.mjs';
 import { handleSandboxRequest } from './sandbox.mjs';
+import { corsHeaders } from './cors.mjs';
 
-const json = (statusCode, body) => ({
+const jsonWith = (event) => (statusCode, body, extraHeaders = {}) => ({
   statusCode,
   headers: {
     'content-type': 'application/json',
     'cache-control': 'no-store',
-    'access-control-allow-origin': '*',
-    'access-control-allow-headers': 'authorization,content-type,x-request-id,x-user-id,x-tenant-id,x-role,x-cognito-sub,x-bridge-secret,x-signature,x-timestamp,x-nonce,x-webhook-id,webhook-id,webhook-timestamp,webhook-signature,x-moov-signature,x-moov-timestamp,x-moov-webhook-id',
-    'access-control-allow-methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
+    ...corsHeaders(event),
+    ...extraHeaders,
   },
   body: JSON.stringify(body),
 });
@@ -74,6 +74,7 @@ const READ_ONLY_PATHS = new Set([
 const tenantComplianceMatch = (path) => path.match(/^\/tenants\/([^/]+)\/security-compliance$/);
 
 export const handler = async (event) => {
+  const json = jsonWith(event);
   const method = (event?.requestContext?.http?.method || event?.httpMethod || 'GET').toUpperCase();
   const path = requestPath(event);
 
@@ -240,9 +241,7 @@ export const handler = async (event) => {
           'content-type': 'application/json',
           'cache-control': 'no-store',
           location: result.location,
-          'access-control-allow-origin': '*',
-          'access-control-allow-headers': 'authorization,content-type,x-request-id,x-user-id,x-tenant-id,x-role,x-cognito-sub,x-bridge-secret,x-signature,x-timestamp,x-nonce,x-webhook-id,webhook-id,webhook-timestamp,webhook-signature,x-moov-signature,x-moov-timestamp,x-moov-webhook-id',
-          'access-control-allow-methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
+          ...corsHeaders(event),
         },
         body: JSON.stringify({
           service: 'checksops-api',

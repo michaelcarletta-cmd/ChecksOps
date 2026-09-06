@@ -93,6 +93,10 @@ test('production-prep templates keep flags off, skip apex aliases, and do not re
   assert.match(apiCfn, /AWS_PROVIDER_EXECUTION_ENABLED: "false"/);
   assert.match(apiCfn, /AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: "false"/);
   assert.match(apiCfn, /AWS_FINANCIAL_PERMISSIONS_ACTIVATED: "false"/);
+  assert.match(apiCfn, /https:\/\/checksops\.com/);
+  assert.doesNotMatch(apiCfn, /AllowOrigins:\n        - '\*'/);
+  const stagingTpl = read('aws/template.yaml');
+  assert.match(stagingTpl, /AllowOrigins:\n          - '\*'/);
   assert.match(apiCfn, /ExistingExecutionRoleArn/);
   assert.match(apiCfn, /checksops-staging-ApiFunctionRole-7E7XRyLe3nyi/);
   assert.doesNotMatch(apiCfn, /AWS::IAM::Role/);
@@ -256,6 +260,14 @@ test('T0 promote and identity import refuse without confirm flags', () => {
   assert.match(postDns, /NO_ROLLBACK/);
   assert.match(postDns, /185\.158\.133\.1/);
   assert.match(postDns, /STOP FOR REVIEW/);
+
+  const batch2Inspect = spawnSync(process.execPath, [path.join(ROOT, 'aws/cutover/scripts/hardening-batch2-inspect.mjs'), '--apply'], { encoding: 'utf8' });
+  assert.equal(batch2Inspect.status, 2);
+  assert.match(batch2Inspect.stderr, /refusing_mutation_from_batch2_inspect/);
+
+  const batch2Apply = spawnSync(process.execPath, [path.join(ROOT, 'aws/cutover/scripts/hardening-batch2-apply.mjs')], { encoding: 'utf8' });
+  assert.equal(batch2Apply.status, 2);
+  assert.match(batch2Apply.stderr, /refusing_batch2_apply/);
 
   const hardening = spawnSync(process.execPath, [path.join(ROOT, 'aws/cutover/scripts/security-hardening-inspect.mjs'), '--apply'], { encoding: 'utf8' });
   assert.equal(hardening.status, 2);

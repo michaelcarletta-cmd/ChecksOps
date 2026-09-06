@@ -69,7 +69,8 @@ Resources:
       StageName: prep
       CorsConfiguration:
         AllowOrigins:
-          - '*'
+          - https://checksops.com
+          - https://www.checksops.com
         AllowHeaders:
           - authorization
           - content-type
