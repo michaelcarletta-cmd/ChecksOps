@@ -42,6 +42,7 @@ const digAt = (server, name, type = 'A') => {
     return [];
   }
 };
+const ipv4Only = (rows) => rows.filter((row) => /^\d{1,3}(?:\.\d{1,3}){3}$/.test(row));
 
 const fetchTimeout = async (url, options = {}, ms = 25000) => {
   const controller = new AbortController();
@@ -50,42 +51,58 @@ const fetchTimeout = async (url, options = {}, ms = 25000) => {
   finally { clearTimeout(timer); }
 };
 
-const inspectTls = (host) => {
+const inspectTlsPublic = (host, ip) => {
+  if (!ip) return { ok: false, error: 'no_public_a' };
   try {
     const pem = execFileSync('openssl', [
-      's_client', '-connect', `${host}:443`, '-servername', host,
+      's_client', '-connect', `${ip}:443`, '-servername', host,
     ], { encoding: 'utf8', input: '', stdio: ['pipe', 'pipe', 'pipe'] });
-    const parsed = execFileSync('openssl', ['x509', '-noout', '-issuer', '-subject'], {
+    const parsed = execFileSync('openssl', ['x509', '-noout', '-issuer', '-subject', '-dates'], {
       encoding: 'utf8',
       input: pem,
     });
     return {
       ok: true,
+      peerIp: ip,
+      resolver: '1.1.1.1',
       issuerAmazon: /Amazon/i.test(parsed),
       issuerGoogleTrust: /Google Trust Services/i.test(parsed),
       subject: (parsed.match(/subject=.*$/m) || [''])[0],
       issuer: (parsed.match(/issuer=.*$/m) || [''])[0],
+      notAfter: (parsed.match(/notAfter=.*$/m) || [''])[0],
     };
   } catch (error) {
-    return { ok: false, error: String(error.message || error).slice(0, 200) };
+    return { ok: false, peerIp: ip, error: String(error.message || error).slice(0, 200) };
   }
 };
 
-const publicGet = async (url) => {
-  const response = await fetchTimeout(url, { redirect: 'manual' });
-  const headers = Object.fromEntries(response.headers.entries());
-  const text = await response.text().catch(() => '');
+const headerVal = (raw, name) => {
+  const match = raw.match(new RegExp(`^${name}:\\s*(.*)$`, 'im'));
+  return match ? match[1].trim() : null;
+};
+
+const publicGetDoh = (url) => {
+  mkdirSync('/tmp/t0', { recursive: true });
+  const result = execFileSync('curl', [
+    '-sL', '--max-time', '25', '--doh-url', 'https://cloudflare-dns.com/dns-query',
+    '-D', '-', '-o', '/tmp/t0/public-body.html', '-w', '\n__PEER__:%{remote_ip}:%{http_code}',
+    url,
+  ], { encoding: 'utf8' });
+  const peerMatch = result.match(/__PEER__:([^:]*):(\d+)\s*$/);
+  const head = result.replace(/\n__PEER__:.*$/, '');
+  const html = readFileSync('/tmp/t0/public-body.html', 'utf8').slice(0, 8000);
   return {
-    status: response.status,
-    location: headers.location || null,
-    server: headers.server || null,
-    via: headers.via || null,
-    cfRay: headers['cf-ray'] || null,
-    amzCfId: headers['x-amz-cf-id'] || null,
-    cache: headers['x-cache'] || null,
-    deploymentId: headers['x-deployment-id'] || null,
-    contentType: headers['content-type'] || null,
-    html: text.slice(0, 4000),
+    status: Number(peerMatch?.[2] || headerVal(head, 'HTTP/2') || 0) || Number((head.match(/^HTTP\/\S+\s+(\d+)/m) || [])[1] || 0),
+    peerIp: peerMatch?.[1] || null,
+    location: headerVal(head, 'location'),
+    server: headerVal(head, 'server'),
+    via: headerVal(head, 'via'),
+    cfRay: headerVal(head, 'cf-ray'),
+    amzCfId: headerVal(head, 'x-amz-cf-id'),
+    cache: headerVal(head, 'x-cache'),
+    deploymentId: headerVal(head, 'x-deployment-id'),
+    contentType: headerVal(head, 'content-type'),
+    html,
   };
 };
 
@@ -118,30 +135,45 @@ const apiCall = async (token, apiPath, body, method = 'POST') => {
 
 const pathOnly = (value) => (value ? String(value).split('?')[0] : null);
 
-const apexA1111 = digAt('1.1.1.1', 'checksops.com');
-const apexA8888 = digAt('8.8.8.8', 'checksops.com');
-const wwwA1111 = digAt('1.1.1.1', 'www.checksops.com');
-const wwwA8888 = digAt('8.8.8.8', 'www.checksops.com');
+mkdirSync('/tmp/t0', { recursive: true });
+const apexA1111 = ipv4Only(digAt('1.1.1.1', 'checksops.com'));
+const apexA8888 = ipv4Only(digAt('8.8.8.8', 'checksops.com'));
+const wwwA1111 = ipv4Only(digAt('1.1.1.1', 'www.checksops.com'));
+const wwwA8888 = ipv4Only(digAt('8.8.8.8', 'www.checksops.com'));
 const wwwCname = digAt('1.1.1.1', 'www.checksops.com', 'CNAME');
-const cfA = digAt('1.1.1.1', CF_DOMAIN);
+const cfA = ipv4Only(digAt('1.1.1.1', CF_DOMAIN));
 const stillLovable = [...apexA1111, ...apexA8888, ...wwwA1111, ...wwwA8888].includes(LOVABLE_IP);
-const apexOnCloudFront = apexA1111.length > 0 && apexA1111.every((ip) => cfA.includes(ip)) && !apexA1111.includes(LOVABLE_IP);
-const wwwOnCloudFront = (wwwCname.some((v) => v.includes(CF_DOMAIN)) || (wwwA1111.length > 0 && wwwA1111.every((ip) => cfA.includes(ip))))
+const sameCloudFrontSet = (rows) => rows.length > 0 && rows.every((ip) => cfA.includes(ip));
+const apexOnCloudFront = sameCloudFrontSet(apexA1111) && !apexA1111.includes(LOVABLE_IP);
+const wwwOnCloudFront = (wwwCname.some((v) => v.includes(CF_DOMAIN)) || sameCloudFrontSet(wwwA1111))
   && !wwwA1111.includes(LOVABLE_IP);
 
-const apexHttp = await publicGet('https://checksops.com/');
-const wwwHttp = await publicGet('https://www.checksops.com/');
-const apexTls = inspectTls('checksops.com');
-const wwwTls = inspectTls('www.checksops.com');
-const cfHttp = await publicGet(`https://${CF_DOMAIN}/`);
+const apexHttp = publicGetDoh('https://checksops.com/');
+const wwwHttp = publicGetDoh('https://www.checksops.com/');
+const apexTls = inspectTlsPublic('checksops.com', apexA1111[0]);
+const wwwTls = inspectTlsPublic('www.checksops.com', wwwA1111[0] || apexA1111[0]);
+const cfHttp = publicGetDoh(`https://${CF_DOMAIN}/`);
 
 const apexHtml = apexHttp.html || '';
 const cfHtml = cfHttp.html || '';
 const publicHasLovableFlock = /\/~flock\.js/.test(apexHtml);
-const publicIsCloudFront = Boolean(apexHttp.amzCfId || /cloudfront\.net/i.test(apexHttp.via || '')) && !apexHttp.cfRay;
-const publicIsLovable = Boolean(apexHttp.cfRay || apexHttp.deploymentId || publicHasLovableFlock || /Google Trust Services/i.test(apexTls.issuer || ''));
-const publicSpaAws = /us-east-1_h00WorYMT|kiqojucc02\.execute-api/.test(apexHtml) && !publicHasLovableFlock;
-const cfSpaAws = /us-east-1_h00WorYMT|kiqojucc02\.execute-api/.test(cfHtml)
+const jsSrc = (apexHtml.match(/src="(\/assets\/index-[^"]+\.js)"/) || [])[1] || null;
+let jsText = '';
+if (jsSrc) {
+  execFileSync('curl', [
+    '-sL', '--max-time', '25', '--doh-url', 'https://cloudflare-dns.com/dns-query',
+    '-o', '/tmp/t0/public-spa.js', `https://checksops.com${jsSrc}`,
+  ]);
+  jsText = readFileSync('/tmp/t0/public-spa.js', 'utf8');
+}
+const publicIsCloudFront = Boolean(apexHttp.amzCfId || /cloudfront\.net/i.test(apexHttp.via || ''))
+  && /AmazonS3|cloudfront/i.test(apexHttp.server || apexHttp.via || '');
+const publicIsLovable = Boolean(apexHttp.deploymentId || publicHasLovableFlock)
+  && !publicIsCloudFront;
+const publicSpaAws = /us-east-1_h00WorYMT/.test(jsText)
+  && /kiqojucc02\.execute-api/.test(jsText)
+  && !publicHasLovableFlock;
+const cfSpaAws = /us-east-1_h00WorYMT/.test(jsText)
   || (/<div id="root">/.test(cfHtml) && !/\/~flock\.js/.test(cfHtml));
 
 const token = JSON.parse(run(AWS, [
@@ -277,7 +309,7 @@ const flagsOff = flagOff(stagingFlags, 'AWS_PROVIDER_EXECUTION_ENABLED')
 const checks = {
   publicDnsMovedToCloudFront: apexOnCloudFront && wwwOnCloudFront && !stillLovable,
   publicApexHttpsAws: apexHttp.status === 200 && publicIsCloudFront && !publicIsLovable,
-  publicWwwHttpsAws: (wwwHttp.status === 200 || wwwHttp.status === 301 || wwwHttp.status === 302) && !wwwHttp.cfRay,
+  publicWwwHttpsAws: wwwHttp.status === 200 && Boolean(wwwHttp.amzCfId),
   tlsAcmOnPublicHost: apexTls.issuerAmazon === true && wwwTls.issuerAmazon === true,
   productionSpaFromAws: publicSpaAws === true,
   cognitoLogin: Boolean(testerToken && c1cToken),
@@ -347,7 +379,7 @@ const report = {
       stillLovable,
     },
     publicHttp: {
-      apex: { ...apexHttp, html: undefined, spaLooksAws: publicSpaAws, looksCloudFront: publicIsCloudFront, looksLovable: publicIsLovable, lovableFlock: publicHasLovableFlock },
+      apex: { ...apexHttp, html: undefined, jsSrc, spaLooksAws: publicSpaAws, looksCloudFront: publicIsCloudFront, looksLovable: publicIsLovable, lovableFlock: publicHasLovableFlock },
       www: { ...wwwHttp, html: undefined },
       cloudfrontHostname: { status: cfHttp.status, amzCfId: Boolean(cfHttp.amzCfId), spaLooksAws: cfSpaAws },
     },
