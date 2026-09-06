@@ -9,12 +9,13 @@
 
 | Field | Value |
 |---|---|
-| Prepared | 2026-09-05 |
-| Base commit | `main` after PR #127 (`19f6c196`) |
+| Prepared | 2026-09-06 |
+| Base commit | current `main` `8a9181ae` (PR #132) |
 | Nature | Readiness audit + ordered procedure. Production activation remains disabled. |
-| Overall | **PARTIAL** readiness / **BLOCKED** for executing production cutover |
+| Scheduling | **READY TO SCHEDULE PRODUCTION CUTOVER: YES** (DNS/auth; flags OFF). See `SCHEDULING_READINESS.md`. |
+| Overall | **BLOCKED** for executing production cutover |
 | Plaid | **N/A — not used; not a cutover requirement** |
-| CheckAlt | **PARTIAL** — handled separately; production flag stays false |
+| CheckAlt | **PARTIAL** UAT — non-blocking for schedule; stay `AWS_CHECKALT_ENABLED=false` at DNS cut; enable later under separate approval |
 
 Temporary Lovable **DB** (`aws-staging-db-bridge`) and **Storage** (`aws-staging-storage-bridge`) bridges **must remain deployed**. They are the last-mile delta path on cutover night.
 
@@ -44,9 +45,15 @@ Night-of checkbox copy: `CUTOVER_NIGHT_OPERATOR_CHECKLIST.md`.
 
 ---
 
+## Initial scheduled cut vs later T7
+
+The **scheduled** window is T−7 through T6 + T8 monitor. Keep `AWS_CHECKALT_ENABLED=false` and all provider/financial execution flags **false**. Do not apply `64_financial_activation_grants.sql`. Do not redirect production webhooks. Do not tear down bridges.
+
+T7 (Moov, CheckAlt, financial grants, webhook ownership, `AWS_PROVIDER_EXECUTION_ENABLED`) is a **later** night with separate explicit approvals.
+
 ## Exact ordered cutover procedure
 
-**Do not start this sequence until every blocker in `CUTOVER_READINESS_MATRIX.md` is GO or waived.** Fill blanks at execution time. This PR does not run it.
+**Do not start this sequence until every blocker in `CUTOVER_READINESS_MATRIX.md` is GO or waived, and a human has approved T0.** Fill blanks at execution time. This PR does not run it.
 
 ### T−7 to T−1 (still no DNS / no flags)
 
@@ -59,7 +66,7 @@ Night-of checkbox copy: `CUTOVER_NIGHT_OPERATOR_CHECKLIST.md`.
 7. Announce user-visible passkey re-enrollment + EMAIL_OTP-first login.
 8. Capture pre-cutover financial aggregates (report-only) on production and on isolated rehearsal.
 9. Record current production DNS targets (apex + `www`): `________________` (live verify 2026-09-05: `185.158.133.1`).
-10. Confirm CheckAlt production plan: disabled-at-DNS **with signed exception** **or** vendor GO from the separate chat.
+10. Confirm CheckAlt production plan: **disabled-at-DNS** (synthetic UAT PARTIAL is waived for this cut). Enable later under a separate explicit approval. PR #125 stays open.
 
 ### T0 — write-freeze (production still on Lovable)
 
@@ -122,14 +129,16 @@ node aws/db-copy/rehearsal/scripts/bridge-storage-copy.mjs
 39. **Do not** flip Moov/CheckAlt execution flags in the same step as DNS.
 40. Immediate post-DNS recon: `POST_CUTOVER_RECONCILIATION.md`.
 
-### T7 — financial / provider activation (separate approval; may be later)
+### T7 — financial / provider activation (**not** the scheduled DNS/auth cut)
+
+Do **not** run T7 in the same window as T6. Each flag/SQL change needs its own explicit approval.
 
 41. Named review of `deposit.submit`, `deposit.approve`, `disbursement.send`, wallet/stakeholder pay.
 42. Apply `64_financial_activation_grants.sql` **only** on the production DB after that review.
 43. Set `AWS_FINANCIAL_PERMISSIONS_ACTIVATED=true` on production Lambda only.
 44. `AWS_PROVIDER_LIVE_READS_ENABLED=true` (read-only).
-45. `AWS_CHECKALT_ENABLED=true` only if vendor GO / exception is signed.
-46. `AWS_MOOV_ENABLED=true`.
+45. `AWS_CHECKALT_ENABLED` stays **false** until a later explicit CheckAlt-on approval (PR #125).
+46. `AWS_MOOV_ENABLED=true` only under its own approval.
 47. `AWS_PLAID_ENABLED` stays **false**.
 48. `AWS_PROVIDER_EXECUTION_ENABLED=true` **last**.
 49. First production money movement is dual-controlled, lowest risk, abortable. **Not this PR.**

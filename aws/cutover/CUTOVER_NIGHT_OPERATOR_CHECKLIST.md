@@ -15,7 +15,7 @@ Date: __________  Approver: __________  Git SHA: __________
 - [ ] `AWS_FINANCIAL_PERMISSIONS_ACTIVATED=false`
 - [ ] `64_financial_activation_grants.sql` not applied
 - [ ] DB + Storage Lovable bridges still deployed and read-only / COPY-only
-- [ ] CheckAlt production plan signed (GO from separate chat **or** stay disabled)
+- [ ] CheckAlt stays disabled at this cut (`AWS_CHECKALT_ENABLED=false`; synthetic UAT PARTIAL is non-blocking for DNS/auth)
 - [ ] Production Cognito pool is **not** `us-east-1_vPmQ7cL1F`
 
 ## T0 write-freeze

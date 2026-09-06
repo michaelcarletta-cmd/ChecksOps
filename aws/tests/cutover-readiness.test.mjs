@@ -45,13 +45,19 @@ test('live production frontend env stays Supabase-only', () => {
 test('cutover runbook is STOP / BLOCKED and keeps bridges; Plaid is not required', () => {
   const runbook = read('aws/cutover/FINAL_PRODUCTION_CUTOVER_RUNBOOK.md');
   const matrix = read('aws/cutover/CUTOVER_READINESS_MATRIX.md');
+  const scheduling = read('aws/cutover/SCHEDULING_READINESS.md');
   assert.match(runbook, /DO NOT EXECUTE PRODUCTION CUTOVER/);
   assert.match(runbook, /\*\*BLOCKED\*\* for executing production cutover/);
   assert.match(runbook, /Plaid \| \*\*N\/A/);
   assert.match(runbook, /must remain deployed/);
   assert.match(runbook, /64_financial_activation_grants\.sql/);
+  assert.match(runbook, /READY TO SCHEDULE PRODUCTION CUTOVER: YES/);
   assert.match(matrix, /ChecksOps AWS overall/);
   assert.match(matrix, /\*\*BLOCKED\*\*/);
+  assert.match(matrix, /READY TO SCHEDULE PRODUCTION CUTOVER: YES/);
+  assert.match(scheduling, /READY TO SCHEDULE PRODUCTION CUTOVER: \*\*YES\*\*/);
+  assert.match(scheduling, /AWS_CHECKALT_ENABLED/);
+  assert.match(scheduling, /Point B/);
   assert.doesNotMatch(runbook, /perform production cutover from this PR/i);
 });
 
