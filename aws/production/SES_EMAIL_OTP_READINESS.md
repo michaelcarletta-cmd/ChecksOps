@@ -31,13 +31,15 @@ Verdict: **Cognito SES attach is done** on the production pool only. SES sandbox
 
 Do **not** add SES DKIM/SPF from the Cloud Agent. Apex/`www` A records must stay Lovable.
 
-## Operator follow-ups (not Step 4)
+## Operator follow-ups (deliverability proof — not cutover)
+
+See `aws/production/SES_OTP_PROOF.md`. **Next action is 6A only** (read SES Account dashboard in us-east-1). Do not create Cognito users until you approve 6B.
 
 After Step 4–5 prep, a later cutover window can:
 
-1. Confirm SES production access (out of sandbox) in the SES console.
+1. Confirm SES production access (out of sandbox) in the SES console (**6A**).
 2. Optionally publish SES DNS (DKIM / `_amazonses` / SPF `include:amazonses.com`) without moving apex/`www` A.
-3. Send one test OTP to an allowlisted operator mailbox **without** importing production users.
+3. Send one test OTP to an allowlisted operator mailbox **without** importing production users (**6B**, after explicit approval).
 
 IAM fragment the operator can attach to a dedicated SES-ops role (not required on `ChecksOpsCursorCloudStaging`):
 

@@ -56,7 +56,7 @@ CheckAlt is **PARTIAL** and is handled in a separate chat (PR #125 / #130). This
 
 ### Still prep (can continue without switching production)
 
-- SES sandbox / first allowlisted OTP (Cognito `DEVELOPER` attached; **0 users**; no OTP sent). `ses:GetAccount` denied. Public SPF is Outlook-only.
+- SES sandbox / first allowlisted OTP — **6A console read next** (`aws/production/SES_OTP_PROOF.md`). Cognito `DEVELOPER` attached; **0 users**; no OTP sent. `ses:GetAccount` denied. Public SPF is Outlook-only.
 - CheckAlt UAT GO **or** signed exception (separate chat; production flag stays false)
 - Timed write-freeze drill (measurement only)
 - Realtime: accept 15s polling **or** later design

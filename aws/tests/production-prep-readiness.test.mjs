@@ -91,6 +91,17 @@ test('operator CloudWatch inspect policy is scoped and not auto-attached', () =>
   assert.match(iamDoc, /ExistingExecutionRoleArn/);
 });
 
+test('SES OTP proof doc forbids auto user create and keeps Lovable DNS', () => {
+  const doc = read('aws/production/SES_OTP_PROOF.md');
+  assert.match(doc, /6A/);
+  assert.match(doc, /MessageAction=SUPPRESS/);
+  assert.match(doc, /AdminDeleteUser/);
+  assert.match(doc, /us-east-1_h00WorYMT/);
+  assert.doesNotMatch(doc, /import the eight production users/i);
+  assert.match(doc, /185\.158\.133\.1/);
+  assert.match(doc, /not created in this step/i);
+});
+
 test('validate-production-prep refuses --apply and passes static checks', () => {
   const script = path.join(ROOT, 'aws/production/scripts/validate-production-prep.mjs');
   const applied = spawnSync(process.execPath, [script, '--apply'], { encoding: 'utf8' });

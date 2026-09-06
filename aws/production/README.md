@@ -20,6 +20,7 @@ Do not apply `64_financial_activation_grants.sql`.
 | `ACM_DNS_VALIDATION.md` | Exact ACM CNAMEs. **Do not add them from the agent.** |
 | `COGNITO_VALIDATION.md` | Live pool/client snapshot. No import. |
 | `SES_EMAIL_OTP_READINESS.md` | Production pool is SES `DEVELOPER` / `support@checksops.com`; staging still `COGNITO_DEFAULT` |
+| `SES_OTP_PROOF.md` | **6A** sandbox vs production console check; **6B** isolated OTP explained, not run |
 | `iam/OPERATOR_LAMBDA_ROLE.md` | **Step 4** — dedicated prep Lambda role (**verified**; CFN param aligned) |
 | `LIVE_RESOURCES.md` | IDs of prepared objects |
 | `iam/OPERATOR_CLOUDWATCH_IAM.md` | **Step 5** — inspect policy + disabled alarms |
