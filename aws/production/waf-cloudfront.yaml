@@ -1,0 +1,136 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Production CloudFront WAFv2 for checksops.com. Managed rule groups are COUNT
+  (monitor) to avoid false-positive blocks. Path rate limits for /auth /storage
+  /public are BLOCK at conservative ceilings. Do not attach to staging.
+
+Resources:
+  ProductionCloudFrontWebACL:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: checksops-production-cloudfront-waf
+      Scope: CLOUDFRONT
+      DefaultAction:
+        Allow: {}
+      VisibilityConfig:
+        SampledRequestsEnabled: true
+        CloudWatchMetricsEnabled: true
+        MetricName: checksopsProductionCloudFrontWaf
+      Rules:
+        - Name: AWSManagedCommonCount
+          Priority: 0
+          OverrideAction:
+            Count: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesCommonRuleSet
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: AWSManagedCommonCount
+        - Name: AWSManagedKnownBadInputsCount
+          Priority: 1
+          OverrideAction:
+            Count: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesKnownBadInputsRuleSet
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: AWSManagedKnownBadInputsCount
+        - Name: AWSManagedIpReputationCount
+          Priority: 2
+          OverrideAction:
+            Count: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesAmazonIpReputationList
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: AWSManagedIpReputationCount
+        - Name: RateLimitGeneralCount
+          Priority: 10
+          Action:
+            Count: {}
+          Statement:
+            RateBasedStatement:
+              Limit: 2000
+              AggregateKeyType: IP
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: RateLimitGeneralCount
+        - Name: RateLimitAuth
+          Priority: 20
+          Action:
+            Block: {}
+          Statement:
+            RateBasedStatement:
+              Limit: 100
+              AggregateKeyType: IP
+              ScopeDownStatement:
+                ByteMatchStatement:
+                  SearchString: /auth
+                  FieldToMatch:
+                    UriPath: {}
+                  TextTransformations:
+                    - Priority: 0
+                      Type: LOWERCASE
+                  PositionalConstraint: CONTAINS
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: RateLimitAuth
+        - Name: RateLimitStorage
+          Priority: 21
+          Action:
+            Block: {}
+          Statement:
+            RateBasedStatement:
+              Limit: 300
+              AggregateKeyType: IP
+              ScopeDownStatement:
+                ByteMatchStatement:
+                  SearchString: /storage
+                  FieldToMatch:
+                    UriPath: {}
+                  TextTransformations:
+                    - Priority: 0
+                      Type: LOWERCASE
+                  PositionalConstraint: CONTAINS
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: RateLimitStorage
+        - Name: RateLimitPublic
+          Priority: 22
+          Action:
+            Block: {}
+          Statement:
+            RateBasedStatement:
+              Limit: 200
+              AggregateKeyType: IP
+              ScopeDownStatement:
+                ByteMatchStatement:
+                  SearchString: /public
+                  FieldToMatch:
+                    UriPath: {}
+                  TextTransformations:
+                    - Priority: 0
+                      Type: LOWERCASE
+                  PositionalConstraint: CONTAINS
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: RateLimitPublic
+
+Outputs:
+  WebACLArn:
+    Value: !GetAtt ProductionCloudFrontWebACL.Arn
+  WebACLId:
+    Value: !GetAtt ProductionCloudFrontWebACL.Id
