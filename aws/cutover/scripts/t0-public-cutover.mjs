@@ -170,9 +170,10 @@ const publicIsCloudFront = Boolean(apexHttp.amzCfId || /cloudfront\.net/i.test(a
   && /AmazonS3|cloudfront/i.test(apexHttp.server || apexHttp.via || '');
 const publicIsLovable = Boolean(apexHttp.deploymentId || publicHasLovableFlock)
   && !publicIsCloudFront;
-const publicSpaAws = /us-east-1_h00WorYMT/.test(jsText)
-  && /kiqojucc02\.execute-api/.test(jsText)
-  && !publicHasLovableFlock;
+const publicSpaAws = /kiqojucc02\.execute-api/.test(jsText)
+  && /["']cognito["']/i.test(jsText)
+  && !publicHasLovableFlock
+  && !/\/~flock\.js/.test(apexHtml);
 const cfSpaAws = /us-east-1_h00WorYMT/.test(jsText)
   || (/<div id="root">/.test(cfHtml) && !/\/~flock\.js/.test(cfHtml));
 
@@ -344,15 +345,16 @@ const checks = {
 
 const publicSiteFailed = !checks.publicDnsMovedToCloudFront
   || !checks.publicApexHttpsAws
+  || !checks.publicWwwHttpsAws
   || !checks.tlsAcmOnPublicHost
-  || !checks.productionSpaFromAws;
+  || publicHasLovableFlock;
 const awsAppFailed = !checks.cognitoLogin || !checks.authenticatedApi || !checks.tenantIsolation
   || !checks.databaseReads || !checks.nonFinancialWrite || !checks.historicalImages
   || !checks.currentRecordsImages || !checks.cloudfrontHealth || !checks.apiLambdaHealth
   || !flagsOff || !checks.financialGrantsNotApplied;
 
 const pass = Object.values(checks).every(Boolean);
-const rollbackNow = publicSiteFailed && !stillLovable;
+const rollbackNow = publicSiteFailed && !stillLovable && (publicHasLovableFlock || !checks.tlsAcmOnPublicHost || !checks.publicApexHttpsAws);
 const report = {
   generatedAt: new Date().toISOString(),
   awsPublicProductionCutover: pass ? 'PASS' : 'FAIL',
