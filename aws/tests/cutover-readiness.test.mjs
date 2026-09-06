@@ -208,6 +208,18 @@ test('T0 promote and identity import refuse without confirm flags', () => {
   const dns = spawnSync(process.execPath, [path.join(ROOT, 'aws/cutover/scripts/t0-dns-switch.mjs')], { encoding: 'utf8' });
   assert.equal(dns.status, 2);
 
+  const cfAliases = spawnSync(process.execPath, [path.join(ROOT, 'aws/cutover/scripts/t0-cloudfront-aliases.mjs')], { encoding: 'utf8' });
+  assert.equal(cfAliases.status, 2);
+  assert.match(cfAliases.stderr, /refusing_cloudfront_alias_update/);
+
+  const finalDelta = spawnSync(process.execPath, [path.join(ROOT, 'aws/cutover/scripts/t0-final-source-delta.mjs')], { encoding: 'utf8' });
+  assert.equal(finalDelta.status, 2);
+  assert.match(finalDelta.stderr, /refusing_final_delta/);
+
+  const predns = spawnSync(process.execPath, [path.join(ROOT, 'aws/cutover/scripts/t0-predns-readiness.mjs'), '--dns'], { encoding: 'utf8' });
+  assert.equal(predns.status, 2);
+  assert.match(predns.stderr, /refusing_dns_or_activation_from_predns_check/);
+
   const oneshot = read('aws/db-copy/rehearsal/oneshot-apply/index.mjs');
   assert.match(oneshot, /confirmChecksopsOverlay/);
   assert.match(oneshot, /confirmIsolatedReconPass/);
