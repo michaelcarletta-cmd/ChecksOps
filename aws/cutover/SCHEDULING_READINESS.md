@@ -190,21 +190,22 @@ The agent must not perform these without a new, named approval:
 
 ## Expected downtime / write-freeze window
 
-**Not measured.** Production was never frozen. There is no drill clock for a full freeze.
+Timed freeze-free rehearsal **2026-09-06** (production was **not** frozen). Details: `aws/db-copy/rehearsal/WRITE_FREEZE_TIMING.md`.
 
-| Segment | Estimate (from rehearsal, not a freeze drill) |
+| Segment | Measured / budget |
 |---|---|
-| Announce + enable write-freeze | 5–10 min |
-| Bridge keyset + reconstruct (~12k rows was minutes in rehearsal) | 5–15 min |
-| Upload overlay to S3 | 2–5 min |
-| Isolated overlay / restore | 10–25 min |
-| Automated recon + financial gates | 5–10 min |
-| Storage delta COPY (incremental) | 5–30 min |
-| Cognito identity delta | 5–15 min |
-| **Write-freeze until DB+storage ready, pre-DNS** | **~45–110 min** |
-| T6 DNS / TLS / SPA switch | additional; depends on Cloudflare TTL (keep TTL low before T0) |
+| Announce + enable write-freeze | 5 min (operator; not timed) |
+| DB capture + S3 overlay JSON | **4 min 47 s** |
+| Isolated TEMPLATE clone + overlay + recon | **44 s** |
+| Storage inventory (post-freeze) | **7 min 53 s** |
+| Storage COPY new objects | **0** this drill (full re-verify of 1,411 objects was **11 min 16 s** and can stay pre-freeze) |
+| Identity import of eight users | **~9 s** estimated (not imported) |
+| T4 human OTP smoke | **10 min** budget |
+| **T0 → ready for T6 (parallel DB + storage inventory)** | **~25–35 min** |
+| **Customer-facing maintenance page** | **45 min** |
+| **Calendar hold** | **60 min** |
 
-Rehearsal overlay of the ~12k-row keyset completed on the order of **minutes**. The 45–110 minute band is the published planning window until a timed freeze drill exists. DNS switch is a separate controlled window **after** recon PASS; keep flags OFF so Point B rollback is DNS revert only.
+T6 DNS/TLS is additional Cloudflare TTL after recon PASS. Keep flags OFF so Point B rollback is DNS revert only.
 
 ## Tripwires (abort to the matching rollback point)
 

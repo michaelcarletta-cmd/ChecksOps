@@ -245,7 +245,10 @@ const main = async () => {
   };
   const dbLog = path.join(ARTIFACT_DIR, 'timed-db-rehearsal.log');
   const storageLog = path.join(ARTIFACT_DIR, 'timed-storage-rehearsal.log');
-  const db = await spawnLogged(process.execPath, [path.join(ROOT, 'aws/db-copy/rehearsal/scripts/bridge-db-rehearsal.mjs')], dbLog, env);
+  const db = await spawnLogged(process.execPath, [
+    path.join(ROOT, 'aws/db-copy/rehearsal/scripts/bridge-db-rehearsal.mjs'),
+    '--skip-baseline-dump',
+  ], dbLog, env);
   await assumeRole();
   const storageEnv = { ...process.env, RECONCILE_TO_LIVE: '1' };
   const storage = await spawnLogged(process.execPath, [path.join(ROOT, 'aws/db-copy/rehearsal/scripts/bridge-storage-copy.mjs')], storageLog, storageEnv);
@@ -254,7 +257,7 @@ const main = async () => {
   const storageEvents = parseProgress(fs.readFileSync(storageLog, 'utf8'));
   const dbPhases = {
     assumeAndHealthMs: phaseMs(dbEvents, (e) => e.step === 'assume_aws', (e) => e.step === 'phase1_done'),
-    captureIncludingBaselineMs: phaseMs(dbEvents, (e) => e.step === 'phase1_done', (e) => e.step === 'pack_lambda'),
+    captureIncludingBaselineMs: phaseMs(dbEvents, (e) => e.step === 'phase1_done' || e.step === 'skip_baseline_dump', (e) => e.step === 'pack_lambda'),
     packLambdaMs: phaseMs(dbEvents, (e) => e.step === 'pack_lambda', (e) => e.step === 'lambda_restore'),
     restoreMs: phaseMs(dbEvents, (e) => e.step === 'lambda_restore', (e) => e.step === 'lambda_apply_delta'),
     overlayMs: phaseMs(dbEvents, (e) => e.step === 'lambda_apply_delta', (e) => e.step === 'lambda_reconcile'),

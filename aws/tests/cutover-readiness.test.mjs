@@ -58,6 +58,10 @@ test('cutover runbook is STOP / BLOCKED and keeps bridges; Plaid is not required
   assert.match(scheduling, /READY TO SCHEDULE PRODUCTION CUTOVER: \*\*YES\*\*/);
   assert.match(scheduling, /AWS_CHECKALT_ENABLED/);
   assert.match(scheduling, /Point B/);
+  const timing = read('aws/db-copy/rehearsal/WRITE_FREEZE_TIMING.md');
+  assert.match(timing, /Production write-freeze \| \*\*NO\*\*/);
+  assert.match(timing, /Recommended customer-facing window/);
+  assert.match(timing, /45 minutes/);
   assert.doesNotMatch(runbook, /perform production cutover from this PR/i);
 });
 

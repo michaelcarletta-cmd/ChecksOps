@@ -68,6 +68,7 @@ const run = (cmd, args, env = process.env) => new Promise((resolve, reject) => {
   const stderr = [];
   child.stdout.on('data', (d) => stdout.push(d));
   child.stderr.on('data', (d) => stderr.push(d));
+  child.on('error', (error) => reject(error));
   child.on('close', (code) => {
     const out = Buffer.concat(stdout).toString('utf8');
     const err = Buffer.concat(stderr).toString('utf8');
@@ -515,7 +516,7 @@ ${(report.discrepancies || ['None recorded.']).map((d) => `- ${d}`).join('\n')}
 
 ## Expected write-freeze window
 
-Still estimated **45–110 minutes** for a final freeze (dump or bridge delta + restore + recon + storage delta). This rehearsal did **not** freeze production.
+Timed freeze-free rehearsal 2026-09-06 (production **not** frozen): DB capture+overlay+recon **~6 min**; storage inventory **~8 min**; full hash re-verify **~11 min** with **0** new objects. See `WRITE_FREEZE_TIMING.md`. Customer-facing hold **45 min**; calendar hold **60 min**.
 
 ## Rollback
 
@@ -545,9 +546,10 @@ const main = async () => {
   const applyDdlOverlay = process.argv.includes('--apply-ddl-overlay');
   const applyChecksopsDdl = process.argv.includes('--apply-checksops-ddl');
   const resumeLambda = process.argv.includes('--resume-lambda') || applyDdlOverlay;
+  const skipBaselineDump = process.argv.includes('--skip-baseline-dump');
   await mkdir(WORK, { recursive: true });
   await mkdir(path.join(REPORT_DIR, 'analysis'), { recursive: true });
-  progress({ step: 'assume_aws', resumeLambda, applyDdlOverlay, applyChecksopsDdl });
+  progress({ step: 'assume_aws', resumeLambda, applyDdlOverlay, applyChecksopsDdl, skipBaselineDump });
   try { awsJson(['sts', 'get-caller-identity']); }
   catch { await assumeRole(); }
 
@@ -690,10 +692,14 @@ const main = async () => {
     identityProfiles: identity.profiles,
   });
 
-  progress({ step: 'download_baseline_dump' });
-  const dumpPath = path.join(WORK, 'checksops_260901.backup');
-  if (!fs.existsSync(dumpPath) || fs.statSync(dumpPath).size !== BASELINE_DUMP_BYTES) {
-    await run(AWS, ['s3', 'cp', `s3://${FILES_BUCKET}/${BASELINE_DUMP_KEY}`, dumpPath]);
+  if (!skipBaselineDump) {
+    progress({ step: 'download_baseline_dump' });
+    const dumpPath = path.join(WORK, 'checksops_260901.backup');
+    if (!fs.existsSync(dumpPath) || fs.statSync(dumpPath).size !== BASELINE_DUMP_BYTES) {
+      await run(AWS, ['s3', 'cp', `s3://${FILES_BUCKET}/${BASELINE_DUMP_KEY}`, dumpPath]);
+    }
+  } else {
+    progress({ step: 'skip_baseline_dump', reason: 'T0 overlay is replaceAll of live rows; Sept 1 dump extract is pre-freeze diagnostic' });
   }
 
   const financialRows = {};
@@ -703,12 +709,17 @@ const main = async () => {
     const currentRows = await pageRows(token, { table, keysOnly: true, limit: LIVE_PAGE_SIZE });
     const currentKeys = keysToMap(currentRows, pkColumns);
     let baselineKeys = new Map();
-    try { baselineKeys = await extractDumpKeys(dumpPath, table, pkColumns); }
-    catch (error) {
-      progress({ step: 'dump_keys_error', table, error: String(error.message || error).slice(0, 120) });
+    if (!skipBaselineDump) {
+      const dumpPath = path.join(WORK, 'checksops_260901.backup');
+      try { baselineKeys = await extractDumpKeys(dumpPath, table, pkColumns); }
+      catch (error) {
+        progress({ step: 'dump_keys_error', table, error: String(error.message || error).slice(0, 120) });
+      }
     }
     const delta = classifyTableDelta({ baselineKeys, currentKeys });
-    const summary = summarizeDelta(delta);
+    const summary = skipBaselineDump
+      ? { inserted: 0, updated: 0, deleted: 0, unchanged: currentKeys.size, baselineSkipped: true }
+      : summarizeDelta(delta);
     deltaTables.push({ table, pkColumns, ...summary, baselineKeys: baselineKeys.size, currentKeys: currentKeys.size });
     totals.inserted += summary.inserted;
     totals.updated += summary.updated;

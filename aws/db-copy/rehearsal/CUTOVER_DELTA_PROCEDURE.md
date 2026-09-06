@@ -48,14 +48,15 @@ Preferred path (this rehearsal): the temporary read-only DB bridge. A fresh dump
 
 | Segment | Estimate |
 |---|---|
-| Announce + enable write-freeze | 5–10 min |
-| Bridge keyset + reconstruct rows (or optional `pg_dump`) | 5–15 min (this rehearsal: minutes for ~12k rows) |
-| Upload overlay/dump to S3 | 2–5 min |
-| Isolated overlay / restore | 10–25 min |
-| Automated recon + financial gates | 5–10 min |
-| Storage delta COPY (incremental objects only) | 5–30 min (depends on delta size) |
-| Cognito identity delta | 5–15 min |
-| **Total write-freeze (DB+storage ready, pre-DNS)** | **~45–110 min** (refine after first full rehearsal restore) |
+| Announce + enable write-freeze | 5 min (operator) |
+| Bridge keyset + reconstruct rows | **2 min 55 s** measured |
+| Upload overlay JSON to S3 | **1 min 52 s** measured |
+| Isolated overlay / restore | **42 s** measured (TEMPLATE clone + 11,614 upserts) |
+| Automated recon + financial gates | **1.5 s** measured |
+| Storage inventory | **7 min 53 s** measured |
+| Storage delta COPY (new objects only) | **0** this drill; full re-verify of 1,411 objects **11 min 16 s** (pre-freeze) |
+| Cognito identity delta (8 users, not imported) | **~9 s** estimated |
+| **Total write-freeze (DB+storage ready, pre-DNS)** | **~25–35 min** freeze-critical path (parallel DB capture + storage inventory); **45 min** customer-facing hold. See `WRITE_FREEZE_TIMING.md`. |
 
 DNS/webhook switch adds a separate controlled window and is **not** authorized by this PR.
 
@@ -97,5 +98,5 @@ After DNS switch (future PR only): rollback is DNS revert + webhook revert withi
 | DB bridge validation + Sept. 1 → live delta | PASS (632 inserted / 66 updated / 3 deleted) |
 | Isolated rehearsal overlay vs live production | **PASS** — counts/financial/PKs/FKs/`financial_stepup_log` 2/2 |
 | Storage COPY vs live production | PASS (1,411 objects) |
-| Timed write-freeze measurement | Not measured (production was not frozen) |
+| Timed write-freeze measurement | **Measured 2026-09-06** (production not frozen). DB **~6 min**; storage inventory **~8 min**; full re-verify **~11 min** / 0 new copies. `WRITE_FREEZE_TIMING.md` |
 | DNS/webhook switch | **NOT PERFORMED** (forbidden) |

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-05T02:56:57.212Z",
+  "generatedAt": "2026-09-06T02:21:46.069Z",
   "httpStatus": 200,
   "mode": "read_only",
   "failClosed": true,
@@ -51,11 +51,9 @@
     "tenant_safe",
     "tenants_public"
   ],
-  "newSinceBaseline": [
-    "financial_stepup_log"
-  ],
+  "newSinceBaseline": [],
   "numericTables": 180,
-  "sumRows": 12397,
+  "sumRows": 12399,
   "zeroTables": 68,
   "countDiffsVsSept1": [
     {
@@ -121,8 +119,8 @@
     {
       "table": "check_reconciliation_alerts",
       "baseline": 98,
-      "current": 101,
-      "delta": 3
+      "current": 102,
+      "delta": 4
     },
     {
       "table": "check_review_decisions",
@@ -241,8 +239,8 @@
     {
       "table": "glba_security_events",
       "baseline": 80,
-      "current": 83,
-      "delta": 3
+      "current": 84,
+      "delta": 4
     },
     {
       "table": "homeowner_ledger_events",

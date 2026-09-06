@@ -61,7 +61,7 @@ CheckAlt synthetic UAT is **PARTIAL** (PR #125 stays open). That does **not** bl
 ### Still prep (can continue without switching production; **not** schedule-blockers)
 
 - CheckAlt stay-OFF exception for the initial DNS/auth cut is **signed** (this audit). Synthetic UAT remains PARTIAL on PR #125.
-- Timed write-freeze drill (measurement only; still unmeasured)
+- Timed write-freeze drill: **measured 2026-09-06** (production not frozen). See `aws/db-copy/rehearsal/WRITE_FREEZE_TIMING.md`. Customer hold **45 min**.
 - Realtime: accept 15s polling **or** later design
 - Optional: attach ACM to unused CloudFront **without** aliases (not done; `InUseBy` empty)
 - Optional: SPF `include:amazonses.com` without moving apex/`www` A (OTP already delivered)

@@ -125,7 +125,7 @@ Cutover design: `CUTOVER_DELTA_PROCEDURE.md`
 
 ## Estimated final cutover / write-freeze
 
-**~45–110 minutes** to freeze, capture bridge delta (or dump), overlay/restore, recon, and storage delta. This rehearsal did **not** freeze production. Bridge keyset paging + overlay of ~12k rows completed on the order of **minutes**.
+**~25–35 minutes** freeze-critical path (parallel DB capture + storage inventory) after a freeze-free timed rehearsal on 2026-09-06. Customer-facing hold **45 minutes**. Calendar hold **60 minutes**. Production was **not** frozen for the drill. See `WRITE_FREEZE_TIMING.md`.
 
 ## Rollback
 
@@ -153,7 +153,7 @@ Before DNS/webhook switch: keep Supabase as system of record; drop `checksops_re
 
 **This GO is not authorization to perform production cutover.** Remaining cutover-night work (future PR):
 
-1. Timed write-freeze measurement on the next delta capture
+1. Timed write-freeze measurement — **done 2026-09-06** (`WRITE_FREEZE_TIMING.md`; production not frozen)
 2. Separate future PR for DNS/webhook/auth — not this PR
 
 ## STOP

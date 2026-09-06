@@ -1,0 +1,63 @@
+{
+  "generatedAt": "2026-09-06T02:33:04Z",
+  "productionFrozen": false,
+  "productionSupabaseChanged": false,
+  "productionCutoverPerformed": false,
+  "identityImported": false,
+  "dnsChanged": false,
+  "flagsChanged": false,
+  "bridgesRemoved": false,
+  "rehearsalDatabase": "checksops_rehearsal_20260906",
+  "skipBaselineDump": true,
+  "db": {
+    "wallMs": 384467,
+    "phase1HealthMs": 25479,
+    "captureKeysAndRowsMs": 174773,
+    "overlayJsonS3UploadMs": 112403,
+    "packLambdaMs": 24529,
+    "restoreTemplateCloneMs": 7746,
+    "overlayApplyMs": 34574,
+    "reconcileMs": 1510,
+    "upsertedRows": 11614,
+    "approvedTables": 161,
+    "sumRows": 12399,
+    "recon": {
+      "countsStatus": "PASS",
+      "financialStatus": "PASS",
+      "pkStatus": "PASS",
+      "fkStatus": "PASS",
+      "identityStatus": "PASS"
+    }
+  },
+  "storage": {
+    "wallMs": 1149986,
+    "healthMs": 726,
+    "inventoryMs": 472780,
+    "inventoryPages": 15,
+    "s3ListMs": 857,
+    "copyVerifyMs": 675623,
+    "approvedObjects": 1411,
+    "copiedNew": 0,
+    "verifiedExisting": 1411,
+    "failed": 0,
+    "conflicts": 0,
+    "missing": 0,
+    "bytes": 2565912220,
+    "stagingOnlyLeftInPlace": 28,
+    "result": "PASS"
+  },
+  "identity": {
+    "imported": false,
+    "mappedEligibleCount": 8,
+    "dryRunMs": 24,
+    "cognitoControlPlaneAverageRttMs": 575,
+    "estimatedEightUserImportMs": 9200,
+    "productionPoolUsersAfterRehearsal": 0
+  },
+  "t4Smoke": {
+    "stagingHealthMs": 1122,
+    "prepHealthMs": 926,
+    "stagingDbHealth": "ok",
+    "budgetMinutes": 10
+  }
+}
