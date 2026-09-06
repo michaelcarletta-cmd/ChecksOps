@@ -75,8 +75,13 @@ const run = (cmd, args, env = process.env) => new Promise((resolve, reject) => {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const TIMING_ORIGIN = Date.now();
 const progress = (obj) => {
-  console.log(JSON.stringify(obj));
+  console.log(JSON.stringify({
+    t: new Date().toISOString(),
+    elapsedMs: Date.now() - TIMING_ORIGIN,
+    ...obj,
+  }));
 };
 
 const loadToken = async () => {
@@ -499,7 +504,10 @@ const main = async () => {
     stagingOnlyBytes += item.bytes;
   }
 
-  const expectedDiffs = Object.entries(EXPECTED_BY_BUCKET)
+  const reconcileToLive = process.env.RECONCILE_TO_LIVE === '1';
+  const expectedTotal = reconcileToLive ? source.length : EXPECTED_TOTAL;
+  const expectedByBucket = reconcileToLive ? byBucketSource : EXPECTED_BY_BUCKET;
+  const expectedDiffs = Object.entries(expectedByBucket)
     .map(([bucket, expected]) => ({ bucket, expected, actual: migratedByBucket[bucket] || 0, delta: (migratedByBucket[bucket] || 0) - expected }))
     .filter((row) => row.delta !== 0);
 
@@ -517,7 +525,7 @@ const main = async () => {
   const migratedCount = Object.values(migratedByBucket).reduce((n, v) => n + v, 0);
 
   const copyComplete = missing.length === 0 && stats.failed.length === 0 && stats.conflicts.length === 0
-    && migratedCount === EXPECTED_TOTAL && expectedDiffs.length === 0 && duplicateSource.length === 0;
+    && migratedCount === expectedTotal && expectedDiffs.length === 0 && duplicateSource.length === 0;
   const result = copyComplete ? 'PASS' : (migratedCount > 0 && health.status === 200 ? 'PARTIAL' : 'FAIL');
 
   const report = {
@@ -543,7 +551,8 @@ const main = async () => {
     productionInventory: {
       reportedTotal: inv.reportedTotal,
       approvedObjects: source.length,
-      expectedObjects: EXPECTED_TOTAL,
+      expectedObjects: expectedTotal,
+      reconcileToLive,
       inventoryPages: inv.pages,
       byBucket: byBucketSource,
       excludedSkipBuckets: skippedExcluded,

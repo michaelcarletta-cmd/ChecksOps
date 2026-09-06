@@ -85,7 +85,12 @@ const awsJson = (args) => {
   return out.trim() ? JSON.parse(out) : {};
 };
 
-const progress = (obj) => console.log(JSON.stringify(obj));
+const TIMING_ORIGIN = Date.now();
+const progress = (obj) => console.log(JSON.stringify({
+  t: new Date().toISOString(),
+  elapsedMs: Date.now() - TIMING_ORIGIN,
+  ...obj,
+}));
 
 const oidcToken = () => new Promise((resolve, reject) => {
   const req = http.request({

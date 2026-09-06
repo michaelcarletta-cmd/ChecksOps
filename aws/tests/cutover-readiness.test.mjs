@@ -113,4 +113,8 @@ test('dry-run scripts refuse --apply and print no production mutation', () => {
   const rollback = spawnSync(process.execPath, [path.join(ROOT, scripts[4][0])], { encoding: 'utf8' });
   assert.equal(rollback.status, 0);
   assert.equal(JSON.parse(rollback.stdout).wouldChangeProduction, false);
+
+  const timedApply = spawnSync(process.execPath, [path.join(ROOT, 'aws/db-copy/rehearsal/scripts/timed-cutover-rehearsal.mjs'), '--apply'], { encoding: 'utf8' });
+  assert.equal(timedApply.status, 2);
+  assert.match(timedApply.stderr, /refusing_cutover_apply/);
 });
