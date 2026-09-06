@@ -97,7 +97,9 @@ test('SES OTP proof doc forbids auto user create and keeps Lovable DNS', () => {
   assert.match(doc, /MessageAction=SUPPRESS/);
   assert.match(doc, /AdminDeleteUser/);
   assert.match(doc, /us-east-1_h00WorYMT/);
-  assert.doesNotMatch(doc, /import the eight production users/i);
+  assert.match(doc, /does \*\*not\*\* switch production auth/);
+  assert.match(doc, /Will not happen/);
+  assert.match(doc, /Import of the eight production users/);
   assert.match(doc, /185\.158\.133\.1/);
   assert.match(doc, /not created in this step/i);
 });
