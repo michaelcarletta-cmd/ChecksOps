@@ -231,6 +231,11 @@ test('T0 promote and identity import refuse without confirm flags', () => {
   assert.match(prednsDoc, /DNS only \(grey cloud\)/);
   assert.doesNotMatch(prednsDoc, /Route53 hosted zone/);
 
+  const postDns = read('aws/cutover/POST_DNS_CUTOVER.md');
+  assert.match(postDns, /AWS PUBLIC PRODUCTION CUTOVER: FAIL/);
+  assert.match(postDns, /DO NOT immediately roll back DNS/);
+  assert.match(postDns, /185\.158\.133\.1/);
+
   const oneshot = read('aws/db-copy/rehearsal/oneshot-apply/index.mjs');
   assert.match(oneshot, /confirmChecksopsOverlay/);
   assert.match(oneshot, /confirmIsolatedReconPass/);
