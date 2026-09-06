@@ -120,11 +120,8 @@ record('logBucketLifecycle', run(['s3api', 'put-bucket-lifecycle-configuration',
 record('logBucketOwnership', run(['s3api', 'put-bucket-ownership-controls', '--bucket', LOG_BUCKET, '--ownership-controls', JSON.stringify({
   Rules: [{ ObjectOwnership: 'BucketOwnerPreferred' }],
 })]));
-record('logBucketAcl', run([
-  's3api', 'put-bucket-acl',
-  '--bucket', LOG_BUCKET,
-  '--grant-full-control', 'id=c4c1ede66af53448b93c05326cd7962017542c5c326cbe91254c1c67ef2f1426',
-]));
+// Legacy CloudFront ACL grant is invalid in this account (Invalid id).
+// Standard logging v2 is enabled by hardening-batch2-logging-v2.mjs instead.
 record('logBucketPolicy', run(['s3api', 'put-bucket-policy', '--bucket', LOG_BUCKET, '--policy', JSON.stringify({
   Version: '2012-10-17',
   Statement: [
