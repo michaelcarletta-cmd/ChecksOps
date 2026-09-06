@@ -270,10 +270,17 @@ test('T0 promote and identity import refuse without confirm flags', () => {
   const batch1Doc = read('aws/cutover/SECURITY_HARDENING_BATCH1.md');
   assert.match(batch1Doc, /SECURITY HARDENING BATCH 1: FAIL/);
   assert.match(batch1Doc, /STOP FOR REVIEW/);
-  assert.match(batch1Doc, /rds:ModifyDBInstance/);
   assert.match(batch1Doc, /checksops-production-api-execution/);
   assert.match(batch1Doc, /64_financial_activation_grants\.sql/);
   assert.doesNotMatch(batch1Doc, /AWS_MOOV_ENABLED.*true/);
+
+  const c2ops = read('aws/cutover/SECURITY_HARDENING_C2_OPERATOR.md');
+  assert.match(c2ops, /CAPABILITY_NAMED_IAM/);
+  assert.match(c2ops, /checksops-production-api-role/);
+  assert.match(c2ops, /DELETE_FAILED/);
+  assert.match(c2ops, /Do \*\*not\*\* update CloudFormation stack `checksops-production-prep-api`/);
+  assert.match(c2ops, /checksops\/staging\/providers/);
+  assert.doesNotMatch(c2ops, /AWS_MOOV_ENABLED=true/);
 
   const roleYaml = read('aws/production/api-execution-role.yaml');
   assert.match(roleYaml, /checksops-production-api-execution/);

@@ -11,14 +11,14 @@ Live AWS mutations that require `rds:ModifyDBInstance` or IAM role create/update
 
 | Control | Result |
 |---|---|
-| C1 production RDS deletion protection + 35-day PITR | **FAIL** — `rds:ModifyDBInstance` denied |
+| C1 production RDS deletion protection + 35-day PITR | **PASS** — operator applied; agent read-only verify 2026-09-06T19:35:51Z |
 | C2 dedicated production API execution role | **FAIL** — `iam:CreateRole` / `PutRolePolicy` / CFN IAM denied |
 | Application regression after the attempt | **PASS** (no live control change) |
 | Financial / provider holds | **PASS** (still OFF / NOT_APPLIED) |
 
 **SECURITY HARDENING BATCH 1: FAIL**
 
-Do not treat C1/C2 as closed. Re-run the confirm-gated scripts after the minimum IAM below is granted to an IAM-capable operator (preferred) or, if review agrees, to this Cloud Agent role scoped to these resources only.
+C1 is closed (operator + read-only verify). C2 remains open. Use `SECURITY_HARDENING_C2_OPERATOR.md` (Console / CloudFormation). Do not broaden the Cloud Agent staging role.
 
 ## Before / after controls
 
@@ -27,8 +27,8 @@ Do not treat C1/C2 as closed. Re-run the confirm-gated scripts after the minimum
 | RDS identifier | `checksops-staging` | unchanged (not renamed) |
 | Publicly accessible | `false` | `false` |
 | Storage encrypted | `true` (KMS `ce55869a-433c-42e4-9b9a-3e0cf2c1d4b3`) | `true` (same key) |
-| Deletion protection | **OFF** | **OFF** (modify denied) |
-| Backup / PITR retention | **1 day** (`LatestRestorableTime` present) | **1 day** (modify denied) |
+| Deletion protection | **OFF** | **ON** (operator; verified 2026-09-06T19:35:51Z) |
+| Backup / PITR retention | **1 day** | **35 days** (operator; PITR `LatestRestorableTime` present) |
 | Multi-AZ | `false` | `false` (intentionally not enabled) |
 | Prep Lambda role | `checksops-staging-ApiFunctionRole-7E7XRyLe3nyi` | same shared role |
 | Staging Lambda role | same staging SAM role | unchanged |
@@ -53,8 +53,8 @@ Do not treat C1/C2 as closed. Re-run the confirm-gated scripts after the minimum
 | Historical / current check-image sign | PASS |
 | Production RDS private | PASS |
 | Production RDS encrypted | PASS |
-| Deletion protection ON | **FAIL** |
-| PITR / backup retention 35 days | **FAIL** (PITR window exists at 1 day only) |
+| Deletion protection ON | **PASS** (operator; re-verified read-only) |
+| PITR / backup retention 35 days | **PASS** (operator; re-verified read-only) |
 | Production and staging execution roles separated | **FAIL** |
 | Production cannot access staging sandbox provider credentials | **PARTIAL** — prep env has no `PROVIDER_SECRETS_ARN`; shared IAM role still allows `secretsmanager:GetSecretValue` on `checksops/staging/providers-W1DqaY` |
 | CloudWatch new application errors | PASS (0 ERROR events and 0 Lambda Errors in the last 20 minutes) |
@@ -139,8 +139,8 @@ An IAM-capable operator should delete or complete that stack (`iam:GetRole`, `ia
 
 ## Remaining concerns (this batch)
 
-1. Production data can still be deleted at the RDS instance layer (C1 open).
-2. Production API still shares the staging execution role, which can read staging sandbox provider secrets (C2 open). Env isolation (`PROVIDER_SECRETS_ARN` unset on prep) is not sufficient.
+1. C1 is closed. Keep Multi-AZ off unless a later review authorizes it.
+2. Production API still shares the staging execution role, which can read staging sandbox provider secrets (C2 open). Follow `SECURITY_HARDENING_C2_OPERATOR.md`. Env isolation (`PROVIDER_SECRETS_ARN` unset on prep) is not sufficient.
 3. Backup RPO is still 1 day.
 4. Multi-AZ remains off (cost/interruption tradeoff above).
 5. Failed CFN stack `checksops-production-api-role` needs operator cleanup.
