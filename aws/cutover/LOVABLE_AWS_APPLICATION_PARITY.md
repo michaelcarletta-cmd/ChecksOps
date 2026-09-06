@@ -4,7 +4,18 @@ Status of the controlled parity delta from `origin/main` (`8a9181ae`). This docu
 
 ## Verdict
 
-See the PR / agent report for the current `PASS` / `FAIL` after validation.
+**LOVABLE → AWS APPLICATION PARITY: PASS** after the delta in this branch.
+
+Validated 2026-09-06:
+
+- `npm run test:aws-api` — 298/298 pass
+- AWS template flags remain false; `64_financial_activation_grants.sql` is not auto-applied
+- `bun run build:aws` succeeds
+- Isolated oneshot apply on `checksops_rehearsal_20260906` (not recreated, not live `checksops`)
+- Live `checksops` already has `returned_*` / `return_*` columns
+- Live `checksops` `tg_mirror_payee_to_endorsement` still **lacks** the Sept 3 rename-delete body; rehearsal now has it
+
+Targeted DB overlay of the trigger function is still required before production RDS matches Lovable payee-rename behavior. This PR does not apply that overlay to live `checksops`.
 
 ## Implemented on AWS (this PR)
 
