@@ -65,8 +65,9 @@ Delta versus the Sept 1 dump (not versus the prior isolated rehearsal) includes 
 
 - Cognito production SPA built and uploaded to `s3://checksops-production-frontend-806168576068/`
 - `https://dmgs35lzv89ms.cloudfront.net/` returns 200 HTML
-- CloudFront aliases remain **0**; ACM cert is **ISSUED** but not attached (GetDistributionConfig denied)
-- DNS apex/`www` still `185.158.133.1` (Lovable). No Cloudflare token. Route53 ListHostedZones denied.
+- CloudFront `E1B0ZWWO5559U5` is **Deployed** with aliases `checksops.com` / `www.checksops.com` and ACM `5cdde8e7-49fb-4b42-ba36-9aaa9d9b1aa3` (ISSUED, InUseBy this distribution). TLS for both names was verified with `--resolve` against CloudFront without changing public DNS.
+- Public DNS apex/`www` still `A 185.158.133.1` (Lovable). No Cloudflare change. No Route53 change.
+- Pre-DNS readiness: see `PRE_DNS_READINESS.md`. **STOP FOR REVIEW** before Cloudflare DNS.
 
 ## CloudWatch
 
@@ -84,10 +85,9 @@ Prep API log filter (30 min): **0** ERROR/timeout events.
 
 **Available (Point A / Point B).** DNS never left Lovable. Revert is: leave apex/`www` on `185.158.133.1`. Isolated rehearsal DBs remain. Bridges remain. Do not delete S3 copies. Disable the 8 production-pool users only if this wave is abandoned.
 
-## Operator finish (not done)
+## Operator finish (CloudFront done; DNS not done)
 
-1. Enable Lovable write-freeze if still needed.
-2. Attach ACM `5cdde8e7-49fb-4b42-ba36-9aaa9d9b1aa3` and aliases `checksops.com` / `www.checksops.com` to CloudFront `E1B0ZWWO5559U5`.
-3. Switch Cloudflare apex/`www` to that distribution. Record Lovable `185.158.133.1` first.
-4. Re-run post-cutover checks on the public hostname.
-5. STOP. Do not activate Moov/CheckAlt/financial grants.
+1. Review `PRE_DNS_READINESS.md` (`FINAL DNS CUTOVER READINESS: GO`).
+2. After review, switch Cloudflare apex/`www` from Lovable `185.158.133.1` to `dmgs35lzv89ms.cloudfront.net` (DNS-only / grey cloud for the initial cutover). Do not use Route53.
+3. Re-run post-cutover checks on the public hostname.
+4. STOP. Do not activate Moov/CheckAlt/financial grants.

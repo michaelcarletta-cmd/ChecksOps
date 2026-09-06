@@ -220,6 +220,13 @@ test('T0 promote and identity import refuse without confirm flags', () => {
   assert.equal(predns.status, 2);
   assert.match(predns.stderr, /refusing_dns_or_activation_from_predns_check/);
 
+  const prednsDoc = read('aws/cutover/PRE_DNS_READINESS.md');
+  assert.match(prednsDoc, /FINAL DNS CUTOVER READINESS: GO/);
+  assert.match(prednsDoc, /STOP FOR REVIEW/);
+  assert.match(prednsDoc, /dmgs35lzv89ms\.cloudfront\.net/);
+  assert.match(prednsDoc, /DNS only \(grey cloud\)/);
+  assert.doesNotMatch(prednsDoc, /Route53 hosted zone/);
+
   const oneshot = read('aws/db-copy/rehearsal/oneshot-apply/index.mjs');
   assert.match(oneshot, /confirmChecksopsOverlay/);
   assert.match(oneshot, /confirmIsolatedReconPass/);
