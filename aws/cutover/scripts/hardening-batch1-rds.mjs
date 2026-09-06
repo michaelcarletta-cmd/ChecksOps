@@ -40,14 +40,44 @@ if (beforeDb.DBInstanceIdentifier !== RDS_ID) {
   process.exit(1);
 }
 
-awsJson([
-  'rds', 'modify-db-instance',
-  '--db-instance-identifier', RDS_ID,
-  '--deletion-protection',
-  '--backup-retention-period', '35',
-  '--no-publicly-accessible',
-  '--apply-immediately',
-]);
+const minimumAgentRds = {
+  note: 'Grant these on the Cloud Agent staging role for this instance only. Do not broaden the agent role. Do not enable Multi-AZ here.',
+  actions: ['rds:ModifyDBInstance', 'rds:DescribeDBInstances'],
+  resources: [`arn:aws:rds:${REGION}:806168576068:db:${RDS_ID}`],
+  modifyArgs: ['--deletion-protection', '--backup-retention-period 35', '--no-publicly-accessible', '--apply-immediately'],
+};
+
+let modifyDenied = null;
+try {
+  awsJson([
+    'rds', 'modify-db-instance',
+    '--db-instance-identifier', RDS_ID,
+    '--deletion-protection',
+    '--backup-retention-period', '35',
+    '--no-publicly-accessible',
+    '--apply-immediately',
+  ]);
+} catch (error) {
+  const text = String(error.stderr || error.message || error);
+  modifyDenied = {
+    action: 'rds:ModifyDBInstance',
+    denied: /AccessDenied|not authorized/i.test(text),
+    message: text.slice(0, 400),
+  };
+  const report = {
+    ok: false,
+    mutated: false,
+    multiAzEnabled: false,
+    before: summarize(beforeDb),
+    after: summarize(beforeDb),
+    modifyDenied,
+    minimumAgentRds,
+  };
+  mkdirSync('/tmp/security', { recursive: true });
+  writeFileSync('/tmp/security/batch1-rds.json', `${JSON.stringify(report, null, 2)}\n`);
+  console.log(JSON.stringify(report, null, 2));
+  process.exit(1);
+}
 
 const deadline = Date.now() + 10 * 60 * 1000;
 let afterDb = beforeDb;
@@ -75,6 +105,7 @@ const report = {
   multiAzEnabled: false,
   before: summarize(beforeDb),
   after,
+  minimumAgentRds,
 };
 mkdirSync('/tmp/security', { recursive: true });
 writeFileSync('/tmp/security/batch1-rds.json', `${JSON.stringify(report, null, 2)}\n`);

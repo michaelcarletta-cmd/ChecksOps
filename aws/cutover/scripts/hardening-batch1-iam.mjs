@@ -44,7 +44,7 @@ const run = (args) => {
 };
 
 const minimumAgentIam = {
-  note: 'Grant these on ChecksOpsCursorCloudStaging for this role only. Do not broaden the agent role.',
+  note: 'Grant these on the Cloud Agent staging role for this production API role only. Do not broaden the agent role.',
   actions: [
     'iam:CreateRole',
     'iam:TagRole',
@@ -63,7 +63,7 @@ const minimumAgentIam = {
     `arn:aws:lambda:${REGION}:806168576068:function:${PREP}`,
   ],
   passRoleCondition: { 'iam:PassedToService': 'lambda.amazonaws.com' },
-  alternative: `Operator can deploy ${ROLE_TEMPLATE} as stack ${ROLE_STACK} with CAPABILITY_NAMED_IAM, then rerun this script.`,
+  alternative: `Operator can deploy aws/production/api-execution-role.yaml as stack ${ROLE_STACK} with CAPABILITY_NAMED_IAM, then rerun this script.`,
 };
 
 const trust = JSON.stringify({
@@ -105,14 +105,12 @@ const created = run([
 attempts.push({ step: 'createRole', ...created, arn: created.data?.Role?.Arn || null });
 
 if (!created.ok && !created.alreadyExists) {
-  const cfn = run([
-    'cloudformation', 'deploy',
-    '--stack-name', ROLE_STACK,
-    '--template-file', ROLE_TEMPLATE,
-    '--capabilities', 'CAPABILITY_NAMED_IAM',
-    '--no-fail-on-empty-changeset',
-  ]);
-  attempts.push({ step: 'cloudformationDeployRole', ...cfn });
+  attempts.push({
+    step: 'cloudformationDeployRole',
+    ok: false,
+    skipped: true,
+    message: 'This agent must not deploy CAPABILITY_NAMED_IAM. An IAM-capable operator should deploy the role template, then rerun this script.',
+  });
 }
 
 const attachedVpc = run([
