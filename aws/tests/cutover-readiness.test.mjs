@@ -224,6 +224,26 @@ test('T0 promote and identity import refuse without confirm flags', () => {
   assert.equal(publicCutover.status, 2);
   assert.match(publicCutover.stderr, /refusing_activation_from_public_cutover_check/);
 
+  const batch1Inspect = spawnSync(process.execPath, [path.join(ROOT, 'aws/cutover/scripts/hardening-batch1-inspect.mjs'), '--apply'], { encoding: 'utf8' });
+  assert.equal(batch1Inspect.status, 2);
+  assert.match(batch1Inspect.stderr, /refusing_mutation_from_batch1_inspect/);
+
+  const batch1Rds = spawnSync(process.execPath, [path.join(ROOT, 'aws/cutover/scripts/hardening-batch1-rds.mjs')], { encoding: 'utf8' });
+  assert.equal(batch1Rds.status, 2);
+  assert.match(batch1Rds.stderr, /refusing_rds_protection/);
+
+  const batch1Iam = spawnSync(process.execPath, [path.join(ROOT, 'aws/cutover/scripts/hardening-batch1-iam.mjs')], { encoding: 'utf8' });
+  assert.equal(batch1Iam.status, 2);
+  assert.match(batch1Iam.stderr, /refusing_prod_role_separation/);
+
+  const batch1IamProbe = spawnSync(process.execPath, [path.join(ROOT, 'aws/cutover/scripts/hardening-batch1-iam-probe.mjs')], { encoding: 'utf8' });
+  assert.equal(batch1IamProbe.status, 2);
+  assert.match(batch1IamProbe.stderr, /refusing_iam_probe/);
+
+  const batch1Validate = spawnSync(process.execPath, [path.join(ROOT, 'aws/cutover/scripts/hardening-batch1-validate.mjs'), '--activate'], { encoding: 'utf8' });
+  assert.equal(batch1Validate.status, 2);
+  assert.match(batch1Validate.stderr, /refusing_mutation_from_batch1_validate/);
+
   const prednsDoc = read('aws/cutover/PRE_DNS_READINESS.md');
   assert.match(prednsDoc, /FINAL DNS CUTOVER READINESS: GO/);
   assert.match(prednsDoc, /STOP FOR REVIEW/);
@@ -246,6 +266,15 @@ test('T0 promote and identity import refuse without confirm flags', () => {
   assert.match(hardenDoc, /STOP FOR REVIEW/);
   assert.match(hardenDoc, /64_financial_activation_grants\.sql/);
   assert.doesNotMatch(hardenDoc, /activate Moov/);
+
+  const roleYaml = read('aws/production/api-execution-role.yaml');
+  assert.match(roleYaml, /checksops-production-api-execution/);
+  assert.match(roleYaml, /rds-db-credentials\/checksops-staging\/checksops\/1788286468693-b4U0Rn/);
+  assert.match(roleYaml, /AWSLambdaVPCAccessExecutionRole/);
+  assert.doesNotMatch(roleYaml, /checksops\/staging\/providers/);
+  assert.doesNotMatch(roleYaml, /checksops_admin/);
+  assert.doesNotMatch(roleYaml, /AdminCreateUser/);
+  assert.doesNotMatch(roleYaml, /textract:/);
 
   const oneshot = read('aws/db-copy/rehearsal/oneshot-apply/index.mjs');
   assert.match(oneshot, /confirmChecksopsOverlay/);

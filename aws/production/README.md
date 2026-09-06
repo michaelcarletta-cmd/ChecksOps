@@ -40,7 +40,8 @@ aws cloudformation deploy \
   --template-file aws/production/prep-stack.yaml
 
 # After client id exists (pool must remain us-east-1_h00WorYMT).
-# Live stack already uses ExistingExecutionRoleArn (staging SAM role) and EnableErrorsAlarm=false.
+# Live stack still uses ExistingExecutionRoleArn (staging SAM role) until
+# aws/production/api-execution-role.yaml is deployed by an IAM-capable operator.
 # Do not deploy aws/production/api-template.yaml from this agent (it still creates an IAM role).
 aws cloudformation deploy \
   --stack-name checksops-production-prep-api \
@@ -55,7 +56,20 @@ aws cloudformation deploy \
 
 WebAuthn RP ID `checksops.com` is **already set** on `us-east-1_h00WorYMT` (`SetUserPoolMfaConfig`, MFA OFF). Staging `us-east-1_vPmQ7cL1F` stays `staging.checksops.com`. Do not invite users.
 
-The prep API is deployed at `https://kiqojucc02.execute-api.us-east-1.amazonaws.com/prep` using the existing staging Lambda role **without VPC**. Do **not** overlay `checksops-staging-api`.
+The prep API is deployed at `https://kiqojucc02.execute-api.us-east-1.amazonaws.com/prep`. Live execution still uses the staging SAM role until an IAM-capable operator deploys `api-execution-role.yaml` and switches the function. Do **not** overlay `checksops-staging-api`.
+
+Dedicated production role (operator / IAM-capable principal only):
+
+```bash
+aws cloudformation deploy \
+  --region us-east-1 \
+  --stack-name checksops-production-api-role \
+  --template-file aws/production/api-execution-role.yaml \
+  --capabilities CAPABILITY_NAMED_IAM
+
+node aws/cutover/scripts/assume-and-run.mjs \
+  aws/cutover/scripts/hardening-batch1-iam.mjs --confirm-prod-role
+```
 
 ## ACM (checksops.com + www)
 

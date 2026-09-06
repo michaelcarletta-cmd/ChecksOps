@@ -47,7 +47,7 @@ CheckAlt **code** is on `main` via #130. Production `AWS_CHECKALT_ENABLED` stays
 | Staging flags false | `AWS_PROVIDER_EXECUTION_ENABLED`, `AWS_MOOV_ENABLED`, `AWS_CHECKALT_ENABLED`, `AWS_PLAID_ENABLED`, `AWS_FINANCIAL_PERMISSIONS_ACTIVATED`, `AWS_PROVIDER_LIVE_READS_ENABLED` |
 | Staging flags true (allowed) | `AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED`, `AWS_PROVIDER_WEBHOOK_DRY_RUN` |
 | Prep API | `https://kiqojucc02.execute-api.us-east-1.amazonaws.com/prep` — `/health` 200 `environment=production-prep`, no DB, flags **false**, sandbox execution **false** |
-| Prep Lambda role | `checksops-staging-ApiFunctionRole-7E7XRyLe3nyi` (existing SAM role; no VPC on this function) |
+| Prep Lambda role | `checksops-staging-ApiFunctionRole-7E7XRyLe3nyi` (existing SAM role reused until dedicated `checksops-production-api-execution` exists) |
 | Staging CloudFront | `E1CG52WRQZI7X1` Deployed, alias `staging.checksops.com` |
 | Production DNS | apex + `www` → `185.158.133.1` (unchanged) |
 | Production Cognito | `us-east-1_h00WorYMT`, 0 users, MFA OFF, WebAuthn RP `checksops.com`, EMAIL `COGNITO_DEFAULT`, not switched |

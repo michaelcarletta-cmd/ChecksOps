@@ -1,9 +1,11 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
   ChecksOps production-prep API without SAM transform. Separate from staging.
-  Reuses the existing approved staging Lambda execution role (PassRole) because
-  this Cloud Agent cannot iam:CreateRole. No VPC/RDS. All provider/financial
-  flags false. Do not point production DNS or webhooks at this API.
+  Parameterized Lambda execution role. Hardening Batch 1 intends a dedicated
+  production role (aws/production/api-execution-role.yaml) so this stack no
+  longer shares the staging SAM role. Default remains the live staging role
+  until that dedicated role exists and the function is switched. All
+  provider/financial flags stay false.
 
 Parameters:
   Environment:
@@ -24,7 +26,7 @@ Parameters:
   ExistingExecutionRoleArn:
     Type: String
     Default: arn:aws:iam::806168576068:role/checksops-staging-ApiFunctionRole-7E7XRyLe3nyi
-    Description: Existing SAM Lambda role. Do not create a new IAM role from this agent.
+    Description: Live default is still the shared staging role until checksops-production-api-execution exists. Do not pass staging provider-secret permissions to production.
   EnableErrorsAlarm:
     Type: String
     Default: 'false'
