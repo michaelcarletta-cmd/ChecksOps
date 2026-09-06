@@ -237,6 +237,16 @@ test('T0 promote and identity import refuse without confirm flags', () => {
   assert.match(postDns, /185\.158\.133\.1/);
   assert.match(postDns, /STOP FOR REVIEW/);
 
+  const hardening = spawnSync(process.execPath, [path.join(ROOT, 'aws/cutover/scripts/security-hardening-inspect.mjs'), '--apply'], { encoding: 'utf8' });
+  assert.equal(hardening.status, 2);
+  assert.match(hardening.stderr, /refusing_mutation_from_security_inspect/);
+
+  const hardenDoc = read('aws/cutover/SECURITY_HARDENING_PHASE1.md');
+  assert.match(hardenDoc, /CHECKSOPS SECURITY HARDENING READINESS: FAIL/);
+  assert.match(hardenDoc, /STOP FOR REVIEW/);
+  assert.match(hardenDoc, /64_financial_activation_grants\.sql/);
+  assert.doesNotMatch(hardenDoc, /activate Moov/);
+
   const oneshot = read('aws/db-copy/rehearsal/oneshot-apply/index.mjs');
   assert.match(oneshot, /confirmChecksopsOverlay/);
   assert.match(oneshot, /confirmIsolatedReconPass/);
