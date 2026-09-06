@@ -220,6 +220,10 @@ test('T0 promote and identity import refuse without confirm flags', () => {
   assert.equal(predns.status, 2);
   assert.match(predns.stderr, /refusing_dns_or_activation_from_predns_check/);
 
+  const publicCutover = spawnSync(process.execPath, [path.join(ROOT, 'aws/cutover/scripts/t0-public-cutover.mjs'), '--activate'], { encoding: 'utf8' });
+  assert.equal(publicCutover.status, 2);
+  assert.match(publicCutover.stderr, /refusing_activation_from_public_cutover_check/);
+
   const prednsDoc = read('aws/cutover/PRE_DNS_READINESS.md');
   assert.match(prednsDoc, /FINAL DNS CUTOVER READINESS: GO/);
   assert.match(prednsDoc, /STOP FOR REVIEW/);
