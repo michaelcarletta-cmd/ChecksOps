@@ -170,6 +170,21 @@ if (dist.ok && dist.data.Distribution?.DistributionConfig) {
   record('enableCloudFrontLogging', { ok: false, denied: Boolean(dist.denied), message: dist.message || 'missing_distribution_config' });
 }
 
+const waitCloudFrontDeployed = (label) => {
+  for (let i = 0; i < 36; i += 1) {
+    const current = run(['cloudfront', 'get-distribution', '--id', DIST]);
+    const status = current.data.Distribution?.Status;
+    if (status === 'Deployed') {
+      record(label, { ok: true, message: `deployed_after_${i}` });
+      return current;
+    }
+    execFileSync('sleep', ['10']);
+  }
+  record(label, { ok: false, message: 'cloudfront_still_in_progress' });
+  return run(['cloudfront', 'get-distribution', '--id', DIST]);
+};
+waitCloudFrontDeployed('waitCloudFrontAfterLogging');
+
 const cfWaf = record('deployCloudFrontWaf', run([
   'cloudformation', 'deploy',
   '--stack-name', 'checksops-production-cloudfront-waf',
@@ -189,7 +204,7 @@ if (cfWaf.ok) {
   const outputs = run(['cloudformation', 'describe-stacks', '--stack-name', 'checksops-production-cloudfront-waf']);
   const aclArn = (outputs.data.Stacks?.[0]?.Outputs || []).find((o) => o.OutputKey === 'WebACLArn')?.OutputValue;
   if (aclArn) {
-    const again = run(['cloudfront', 'get-distribution', '--id', DIST]);
+    const again = waitCloudFrontDeployed('waitCloudFrontBeforeWafAttach');
     if (again.ok && again.data.Distribution?.DistributionConfig) {
       const cfg = JSON.parse(JSON.stringify(again.data.Distribution.DistributionConfig));
       cfg.WebACLId = aclArn;
