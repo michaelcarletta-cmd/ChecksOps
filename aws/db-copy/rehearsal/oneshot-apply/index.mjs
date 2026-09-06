@@ -476,6 +476,8 @@ const REQUIRED_INTAKE_RETURN_COLS = [
 
 const REQUIRED_CHECKALT_RETURN_COLS = [
   'return_code',
+  'return_reason',
+  'returned_at',
   'return_window_until',
 ];
 

@@ -20,6 +20,8 @@ BEGIN
   IF to_regclass('public.checkalt_deposits') IS NOT NULL THEN
     ALTER TABLE public.checkalt_deposits
       ADD COLUMN IF NOT EXISTS return_code text,
+      ADD COLUMN IF NOT EXISTS return_reason text,
+      ADD COLUMN IF NOT EXISTS returned_at timestamptz,
       ADD COLUMN IF NOT EXISTS return_window_until timestamptz;
     CREATE INDEX IF NOT EXISTS idx_checkalt_deposits_return_window
       ON public.checkalt_deposits (return_window_until)
