@@ -14,7 +14,7 @@ Operator inspect IAM: `aws/production/iam/OPERATOR_CLOUDWATCH_IAM.md`. `Describe
 | Lambda tracing | **GO** — SAM `Tracing: Active` |
 | `GET /ops/readiness` | **PARTIAL** — implemented in git; live staging Lambda still 404 until a later overlay (do **not** overlay from this branch) |
 | Production-prep log group | **GO (inspectable)** — `/aws/lambda/checksops-production-prep-api` plus metric filter `checksops-production-prep-api-errors-filter` |
-| CloudWatch alarms | **PARTIAL** — template ready; stack `checksops-production-prep-alarms` absent. Metric filters on prep log group exist. **Step 5**. |
+| CloudWatch alarms | **GO (inspect-only)** — stack `checksops-production-prep-alarms` CREATE_COMPLETE; five alarms `ActionsEnabled=false`, no SNS. |
 | Operator inspect | **GO (attached)** — `DescribeAlarms` allowed on named prep alarms (empty until stack exists). `iam:GetPolicy` still denied. |
 | Production cutover alarms / SNS | **BLOCKED** (no paging topic; ActionsEnabled false) |
 

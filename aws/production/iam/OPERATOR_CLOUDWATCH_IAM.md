@@ -6,7 +6,7 @@ Live `cloudformation deploy` of `checksops-production-prep-alarms` previously fa
 
 **5A verified 2026-09-05T23:09:58Z:** stack `checksops-production-prep-api` is `UPDATE_COMPLETE`. Dedicated Lambda role, `/prep/health` 200, no VPC, flags false.
 
-**5C verified 2026-09-06T00:20Z:** `cloudwatch:DescribeAlarms` on the five named alarms now returns **200 with empty `MetricAlarms`** (previously AccessDenied). `ListMetrics` allowed. Alarm stack still **absent**. `iam:GetPolicy` / `ListAttachedRolePolicies` still denied. Prep Lambda unchanged; `/prep/health` 200.
+**5D verified 2026-09-06T00:43:57Z:** stack `checksops-production-prep-alarms` is `CREATE_COMPLETE`. All five named alarms exist, `ActionsEnabled=false`, `AlarmActions`/`OKActions`/`InsufficientDataActions` empty (no SNS).
 
 The policy JSON in git **does not attach** itself.
 
@@ -64,7 +64,7 @@ IAM → Roles → **`ChecksOpsCursorCloudStaging`** (so later Cloud Agents can v
 
 Do **not** grant `iam:*`, Route 53 / Cloudflare DNS, Cognito admin, SES send, or `cloudwatch:PutMetricAlarm` on `Resource: *`.
 
-## 5D. Deploy inspect-only alarms (`ActionsEnabled=false`)
+## 5D. Deploy inspect-only alarms — **done** (`ActionsEnabled=false`)
 
 1. CloudFormation → **Create stack** → With new resources.
 2. Upload `aws/production/cloudwatch-alarms.yaml`.
@@ -87,8 +87,6 @@ The staging alarm **only watches** `checksops-staging-api` Errors. It must not c
 
 Do **not** set `ActionsEnabled=true`. Do **not** add an SNS topic in this step.
 
-## What to send back (current: 5D only)
+## What to send back
 
-1. Alarm stack `checksops-production-prep-alarms` = `CREATE_COMPLETE`.
-2. All five alarm names with **Actions enabled = false** and no SNS.
-3. Confirmation staging Lambda code/VPC/flags were not changed.
+Prep Steps 1–5D are **verified**. Cutover remains **BLOCKED**. Do not change DNS, auth, users, webhooks, flags, or bridges.

@@ -18,7 +18,7 @@ Account `806168576068`, region `us-east-1`. Re-verified 2026-09-05 (this PR).
 | CFN `checksops-production-prep` | CREATE_COMPLETE | No apex/www aliases |
 | CFN `checksops-production-prep-api` | **UPDATE_COMPLETE** 2026-09-05T23:09:58Z | `ExistingExecutionRoleArn` + output = `checksops-production-prep-api-role`. `EnableErrorsAlarm=false`. |
 | IAM `ChecksOpsProductionPrepCloudWatchInspect` | expected `arn:aws:iam::806168576068:policy/ChecksOpsProductionPrepCloudWatchInspect` | **5C attached** to `ChecksOpsCursorCloudStaging`. `DescribeAlarms` now allowed (empty until 5D). |
-| CFN `checksops-production-prep-alarms` | not present | Still absent. **Step 5D**. Template ready (`ActionsEnabled=false`). |
+| CFN `checksops-production-prep-alarms` | **CREATE_COMPLETE** 2026-09-06T00:43:57Z | Five inspect alarms. `ActionsEnabled=false`. No SNS. |
 | Production DNS | apex + `www` → `185.158.133.1` | Unchanged (Lovable) |
 | Staging API | `https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging` | `/health` 200, flags false |
 

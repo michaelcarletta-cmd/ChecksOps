@@ -2,9 +2,9 @@
 
 **STOP FOR REVIEW.** This document is an audit. It is **not** authorization to cut over.
 
-Prepared: 2026-09-05 (production-prep validation pass)  
-Base: `main` after PR #131 (`4507565d`) plus live objects created by draft PR #132  
-Live verify: staging API `/health` 200, Lambda flags all production-execution **false**, both Lovable bridges still fail-closed, production DNS still Lovable. ACM CNAMEs identified and **not** published.
+Prepared: 2026-09-06 (production-prep Steps 1–5D verified; **STOP FOR REVIEW**)  
+Base: current `main` `8a9181ae` (PR #132 merged) plus this prep PR live objects  
+Live verify: staging + prep `/health` 200, production-execution flags **false**, bridges still deployed (fail-closed 401 without token), production DNS still Lovable. Cutover **not** executed.
 
 Plaid is **N/A** (not used; keep `AWS_PLAID_ENABLED=false`).  
 CheckAlt is **PARTIAL** and is handled in a separate chat (PR #125 / #130). This document does not modify those PRs.
@@ -27,7 +27,7 @@ CheckAlt is **PARTIAL** and is handled in a separate chat (PR #125 / #130). This
 | Moov production transition | **PARTIAL** | Sandbox certification **PASS** (PR #124). Production `AWS_MOOV_ENABLED=false`. **Cutover decision**. |
 | CheckAlt | **PARTIAL** | Separate chat. Production `AWS_CHECKALT_ENABLED=false`. **Cutover decision**. |
 | Plaid | **N/A** | Not used. Missing keys are not a blocker. |
-| CloudWatch alarms | **PARTIAL** | Prep `/health` 200. `DescribeAlarms` allowed (empty). Alarm stack absent until **Step 5D** (`ActionsEnabled=false`). |
+| Monitoring / CloudWatch / health checks | **GO (inspect-only)** | Prep `/health` 200. Five alarms on `checksops-production-prep-alarms` (`ActionsEnabled=false`, no SNS). `DescribeAlarms` allowed. |
 | Reconciliation immediately after cutover | **GO** (procedure) | Report-only SQL + `/financial/reconcile` (`autoCorrected=false`). |
 | Rollback if AWS production validation fails | **GO** (procedure) | Points A/B/C in `ROLLBACK.md`. Dry-run script prints only. |
 | Temporary bridge teardown (after successful cutover) | **GO** (procedure) | **Do not run now.** Dry-run scripts refuse `--apply`. |
@@ -49,22 +49,20 @@ CheckAlt is **PARTIAL** and is handled in a separate chat (PR #125 / #130). This
 | Production Cognito | `us-east-1_h00WorYMT`, 0 users, not switched |
 | ACM | **`ISSUED`** (not attached to CloudFront; apex/`www` still Lovable) |
 | Production CloudFront (unused) | `E1B0ZWWO5559U5` / `dmgs35lzv89ms.cloudfront.net`, aliases **0** |
-| CFN | `checksops-staging` UPDATE_COMPLETE; `checksops-staging-frontend-https` UPDATE_COMPLETE; `checksops-production-prep` CREATE_COMPLETE; `checksops-production-prep-api` CREATE_COMPLETE (flags false, no VPC) |
+| CFN | `checksops-staging` live; `checksops-production-prep` CREATE_COMPLETE; `checksops-production-prep-api` UPDATE_COMPLETE (dedicated role); `checksops-production-prep-alarms` CREATE_COMPLETE (`ActionsEnabled=false`) |
 | Production-prep API | `https://kiqojucc02.execute-api.us-east-1.amazonaws.com/prep` `/health` 200, `environment=production-prep`, `database=not-connected` |
 
 ## Remaining blockers — more prep vs cutover decision
 
 ### Still prep (can continue without switching production)
 
-- **Step 4 + 5A:** Dedicated production-prep Lambda role **verified**.
-- **Step 5B–5C:** `ChecksOpsProductionPrepCloudWatchInspect` created and attached to `ChecksOpsCursorCloudStaging`. `DescribeAlarms` now allowed.
-- **Step 5D:** Deploy `checksops-production-prep-alarms` with `ActionsEnabled=false`. See `aws/production/iam/OPERATOR_CLOUDWATCH_IAM.md`.
-- SES sandbox / deliverability (Cognito `DEVELOPER` already attached; no OTP sent)
-- Confirm WebAuthn RP ID `checksops.com` remains on `us-east-1_h00WorYMT` only (already set; do not edit staging)
-- ACM already **ISSUED** (validation only; not apex cut)
+- SES sandbox / first allowlisted OTP (Cognito `DEVELOPER` attached; **0 users**; no OTP sent). `ses:GetAccount` denied. Public SPF is Outlook-only.
+- CheckAlt UAT GO **or** signed exception (separate chat; production flag stays false)
 - Timed write-freeze drill (measurement only)
 - Realtime: accept 15s polling **or** later design
-- CheckAlt UAT in the separate chat
+- Optional: attach ACM to unused CloudFront **without** aliases (not done; `InUseBy` empty)
+
+Prep walkthrough Steps 1–5D (ACM, WebAuthn RP, SES Cognito attach, dedicated Lambda role, CloudWatch inspect + disabled alarms) are **verified**.
 
 ### Require a human **cutover decision** (not more agent prep)
 
