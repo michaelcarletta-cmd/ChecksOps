@@ -2,7 +2,7 @@
 
 **STOP FOR REVIEW.** 6B OTP **sent once**. Waiting for you to confirm inbox/spam receipt. Test user **not deleted yet**. This does **not** switch production auth, import the eight production users, or change DNS A records.
 
-Goal: move SES deliverability from **OPERATOR ACTION REQUIRED** → **READY** by proving pool `us-east-1_h00WorYMT` can deliver **one** EMAIL_OTP via SES From `support@checksops.com`.
+A Cognito test user is **not** created in this step unless 6B is explicitly approved. 6B is **in progress** (one EMAIL_OTP sent; waiting for receipt; user not deleted).
 
 ## Live re-check 2026-09-06 (this agent)
 
