@@ -85,9 +85,8 @@ Prep API log filter (30 min): **0** ERROR/timeout events.
 
 **Available (Point A / Point B).** DNS never left Lovable. Revert is: leave apex/`www` on `185.158.133.1`. Isolated rehearsal DBs remain. Bridges remain. Do not delete S3 copies. Disable the 8 production-pool users only if this wave is abandoned.
 
-## Operator finish (CloudFront done; public DNS still Lovable)
+## Operator finish (public DNS on CloudFront)
 
-1. Review `POST_DNS_CUTOVER.md` (`AWS PUBLIC PRODUCTION CUTOVER: FAIL`).
-2. Public DNS is still `A 185.158.133.1`. **Do not roll back** — it never left Lovable. Confirm the grey-cloud CNAME to `dmgs35lzv89ms.cloudfront.net` in Cloudflare.
-3. Re-run `t0-public-cutover.mjs` after the records are actually published.
-4. STOP. Do not activate Moov/CheckAlt/financial grants.
+1. Review `POST_DNS_CUTOVER.md` (`AWS PUBLIC PRODUCTION CUTOVER: PASS`).
+2. Public apex/`www` resolve to `dmgs35lzv89ms.cloudfront.net`. Keep Lovable `185.158.133.1` as rollback only.
+3. STOP. Do not activate Moov/CheckAlt/financial grants.

@@ -1,46 +1,43 @@
 # AWS public production cutover
 
-**Generated:** 2026-09-06T14:40:36Z  
-**Decision:** **AWS PUBLIC PRODUCTION CUTOVER: FAIL**  
+**Generated:** 2026-09-06T15:30:59Z  
+**Decision:** **AWS PUBLIC PRODUCTION CUTOVER: PASS**  
 **STOP FOR REVIEW.**
 
-Public DNS has **not** moved from Lovable to CloudFront. AWS application, identity, storage, and flags-off holds remain healthy. This script did not change Cloudflare or Route53 and did not activate providers or financial execution.
+Cloudflare grey-cloud CNAMEs now publish to CloudFront. Public apex and www were validated via 1.1.1.1 / 8.8.8.8 / Cloudflare DoH and live HTTPS to `https://checksops.com` and `https://www.checksops.com` (not the CloudFront hostname alone). This wave did not change DNS and did not activate providers or financial execution.
 
 ## Rollback recommendation
 
-**DO NOT immediately roll back DNS.**
+**NO_ROLLBACK.**
 
-Public apex and www still resolve to Lovable `A 185.158.133.1` on 1.1.1.1, 8.8.8.8, and Cloudflare DoH (TTL 3600). Rolling back would be a no-op. Confirm the grey-cloud CNAME change in the Cloudflare dashboard; it is not published on the public internet.
+Public DNS has left Lovable. The production site is healthy on CloudFront + ACM. Keep `185.158.133.1` documented as the rollback A target only. Do not restore those A records unless a later review finds a production outage.
 
-`185.158.133.1` remains reachable as the rollback target (Host `checksops.com` still 301s to `https://checksops.com/`).
-
-## Public site (real hostnames, no `--resolve`)
+## Public site
 
 | Check | Result |
 |---|---|
-| `checksops.com` A @1.1.1.1 / @8.8.8.8 | `185.158.133.1` (Lovable) |
-| `www.checksops.com` A | `185.158.133.1` (Lovable) |
-| www CNAME | none |
-| `https://checksops.com` | 200, `server: cloudflare`, `cf-ray`, `x-deployment-id`, `/~flock.js` |
-| `https://www.checksops.com` | 302 to `https://checksops.com/` via Cloudflare |
-| Public TLS | Google Trust Services **WE1**, not Amazon ACM |
-| Production SPA from AWS | **NO** — Lovable asset `index-U9NpDj7H.js` + flock |
-| CloudFront hostname `https://dmgs35lzv89ms.cloudfront.net/` | 200, Cognito + prep API bundle `index-C24V_ODo.js` |
+| `checksops.com` A @1.1.1.1 | CloudFront `18.238.25.x` (not `185.158.133.1`) |
+| `checksops.com` A @8.8.8.8 | CloudFront `13.249.141.x` |
+| `www.checksops.com` CNAME | `dmgs35lzv89ms.cloudfront.net` |
+| `https://checksops.com` | 200, `AmazonS3`, `x-amz-cf-id`, `Hit from cloudfront` |
+| `https://www.checksops.com` | 200, same CloudFront/S3 origin |
+| Public TLS | Amazon RSA 2048 M01, CN `checksops.com`, valid through 2027-03-21 (ACM) |
+| Production SPA from AWS | **YES** — bundle `index-C24V_ODo.js`, Cognito + prep API, no `/~flock.js` |
+| CloudFront `E1B0ZWWO5559U5` | **Deployed**, aliases apex + www, ACM attached |
 
-## AWS-side validation (still healthy)
+## Authenticated AWS application
 
 | Check | Result |
 |---|---|
 | Cognito production login | **PASS** |
 | Authenticated API | **PASS** |
 | Tenant isolation | **PASS** (tester 194 checks; C1C 0) |
-| Database reads | **PASS** |
+| RDS / database reads | **PASS** |
 | Non-financial write (`check_message_reads`) | **PASS** |
 | Historical check + front/rear images | **PASS** |
 | Current check + front/rear images | **PASS** |
-| Endorsement workflow live | **PASS** (`/public/endorsement` and `/functions/v1/check-endorsement` return `Token required`; no submit) |
-| Signature workflow live | **PASS** (`/public/signature-document` returns `validate_token`; 2 `signature_requests` readable) |
-| CloudFront `E1B0ZWWO5559U5` | **Deployed**, aliases + ACM attached |
+| Endorsement workflow | **PASS** (live; `Token required`; no submit) |
+| Signature workflow | **PASS** (live; `validate_token`; 2 requests readable) |
 | Prep API / Lambda | **PASS** (`production-prep`, DB `checksops`) |
 | CloudWatch errors (30 min) | **0** |
 
@@ -52,13 +49,8 @@ Public apex and www still resolve to Lovable `A 185.158.133.1` on 1.1.1.1, 8.8.8
 - Financial execution OFF
 - `64_financial_activation_grants.sql` **NOT_APPLIED**
 - Both migration bridges preserved (`read_only` / `sign_only`)
-- Lovable `185.158.133.1` remains the rollback target
+- Lovable `185.158.133.1` retained as rollback target
 
-## Next operator step
+## Next
 
-1. In Cloudflare, publish DNS-only (grey cloud) CNAMEs:
-   - `@` / `checksops.com` → `dmgs35lzv89ms.cloudfront.net`
-   - `www` → `dmgs35lzv89ms.cloudfront.net`
-2. Confirm 1.1.1.1 / 8.8.8.8 no longer return `185.158.133.1`.
-3. Re-run `aws/cutover/scripts/t0-public-cutover.mjs` (via `assume-and-run.mjs`).
-4. Do not activate Moov, CheckAlt, provider execution, or financial grants.
+STOP. Do not activate Moov, CheckAlt, provider execution, financial execution, or financial grants.
