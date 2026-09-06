@@ -282,6 +282,13 @@ test('T0 promote and identity import refuse without confirm flags', () => {
   assert.match(c2ops, /checksops\/staging\/providers/);
   assert.doesNotMatch(c2ops, /AWS_MOOV_ENABLED=true/);
 
+  const c2verify = read('aws/cutover/SECURITY_HARDENING_C2_VERIFY.md');
+  assert.match(c2verify, /C2 read-only verification: FAIL/);
+  assert.match(c2verify, /checksops-production-prep-api-role/);
+  assert.match(c2verify, /data_query_failed/);
+  assert.match(c2verify, /NOT_APPLIED/);
+  assert.doesNotMatch(c2verify, /AWS_MOOV_ENABLED=true/);
+
   const roleYaml = read('aws/production/api-execution-role.yaml');
   assert.match(roleYaml, /checksops-production-api-execution/);
   assert.match(roleYaml, /rds-db-credentials\/checksops-staging\/checksops\/1788286468693-b4U0Rn/);

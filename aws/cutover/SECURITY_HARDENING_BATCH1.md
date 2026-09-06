@@ -12,7 +12,7 @@ Live AWS mutations that require `rds:ModifyDBInstance` or IAM role create/update
 | Control | Result |
 |---|---|
 | C1 production RDS deletion protection + 35-day PITR | **PASS** — operator applied; agent read-only verify 2026-09-06T19:35:51Z |
-| C2 dedicated production API execution role | **FAIL** — `iam:CreateRole` / `PutRolePolicy` / CFN IAM denied |
+| C2 dedicated production API execution role | **FAIL** — reviewed role stack CREATE_COMPLETE; live prep Lambda uses leftover `checksops-production-prep-api-role`; DB path `503` |
 | Application regression after the attempt | **PASS** (no live control change) |
 | Financial / provider holds | **PASS** (still OFF / NOT_APPLIED) |
 
