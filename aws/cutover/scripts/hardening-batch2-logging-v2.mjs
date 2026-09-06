@@ -151,7 +151,7 @@ for (const name of ['checksops-production-cloudfront-waf', 'checksops-production
 
 const afterCf = run(['cloudfront', 'get-distribution', '--id', DIST]);
 const report = {
-  ok: Boolean(delivery) || Boolean(dest.ok),
+  ok: Boolean(delivery),
   mutated: true,
   financialActivated: false,
   v2: {

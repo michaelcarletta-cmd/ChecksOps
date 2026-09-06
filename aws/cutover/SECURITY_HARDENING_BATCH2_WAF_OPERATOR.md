@@ -104,6 +104,39 @@ Do **not** flip managed rules from COUNT to BLOCK in this batch.
 
 ---
 
+## CloudFront access logs (if objects are still empty)
+
+Legacy logging is already enabled on `E1B0ZWWO5559U5`
+(`IncludeCookies=false`, prefix `cloudfront/E1B0ZWWO5559U5/`, bucket
+`checksops-production-access-logs-806168576068`). The classic
+awslogsdelivery ACL id is rejected here (`Invalid id`). Standard
+logging v2 also failed: the agent lacks
+`cloudfront:AllowVendedLogDeliveryForResource`.
+
+Preferred operator path (no cookies / query strings):
+
+```bash
+aws logs put-delivery-source \
+  --region us-east-1 \
+  --name checksops-production-cf-e1b0 \
+  --resource-arn arn:aws:cloudfront::806168576068:distribution/E1B0ZWWO5559U5 \
+  --log-type ACCESS_LOGS
+
+aws logs create-delivery \
+  --region us-east-1 \
+  --delivery-source-name checksops-production-cf-e1b0 \
+  --delivery-destination-arn arn:aws:logs:us-east-1:806168576068:delivery-destination:checksops-production-cf-e1b0-s3 \
+  --record-fields date time x-edge-location sc-bytes c-ip cs-method 'cs(Host)' cs-uri-stem sc-status x-edge-result-type x-edge-request-id x-host-header cs-protocol cs-bytes time-taken cs-protocol-version c-port time-to-first-byte x-edge-detailed-result-type sc-content-type sc-content-len
+```
+
+Omit `cs(Cookie)`, `cs-uri-query`, and `cs(Referer)`. Destination
+`checksops-production-cf-e1b0-s3` already exists. Bucket lifecycle
+expires objects after **90 days**.
+
+Then disable legacy CloudFront logging so query strings are not stored.
+
+---
+
 ## After you finish
 
 Tell the agent the stacks are `CREATE_COMPLETE` and the CloudFront

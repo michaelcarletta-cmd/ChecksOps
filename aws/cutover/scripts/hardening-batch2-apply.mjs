@@ -109,7 +109,7 @@ const stageUpdate = record('updateStageThrottleAndAccessLogs', run([
 
 record('createLogBucket', run(['s3api', 'create-bucket', '--bucket', LOG_BUCKET]));
 record('logBucketPublicBlock', run(['s3api', 'put-public-access-block', '--bucket', LOG_BUCKET, '--public-access-block-configuration', JSON.stringify({
-  BlockPublicAcls: true, IgnorePublicAcls: true, BlockPublicPolicy: true, RestrictPublicBuckets: true,
+  BlockPublicAcls: false, IgnorePublicAcls: false, BlockPublicPolicy: true, RestrictPublicBuckets: true,
 })]));
 record('logBucketEncryption', run(['s3api', 'put-bucket-encryption', '--bucket', LOG_BUCKET, '--server-side-encryption-configuration', JSON.stringify({
   Rules: [{ ApplyServerSideEncryptionByDefault: { SSEAlgorithm: 'AES256' } }],
