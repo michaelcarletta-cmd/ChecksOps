@@ -232,6 +232,10 @@ const packOneshot = async () => {
     path.join(ROOT, 'aws/write-path/sql/37_financial_stepup_log.sql'),
     path.join(staging, 'sql/37_financial_stepup_log.sql'),
   );
+  await copyFile(
+    path.join(ROOT, 'aws/write-path/sql/38_parity_payee_mirror_and_returns.sql'),
+    path.join(staging, 'sql/38_parity_payee_mirror_and_returns.sql'),
+  );
   const fks = JSON.parse(await readFile(path.join(ROOT, 'aws/db-copy/analysis/skipped_auth_users_fks.json'), 'utf8'));
   await writeFile(path.join(staging, 'auth-fk-names.json'), JSON.stringify([...new Set(fks.map((row) => row.fk_constraint))]));
   execFileSync('npm', ['install', '--omit=dev'], { cwd: staging, stdio: 'ignore' });

@@ -19,7 +19,16 @@ const eventOf = ({ headers = {}, body = {}, method = 'POST' } = {}) => ({
 });
 
 test('class A registry includes remaining non-financial workflows', () => {
-  for (const name of ['ingest-shared-check', 'homeowner-ledger-attach-upload', 'send-signature-request']) {
+  for (const name of [
+    'ingest-shared-check',
+    'homeowner-ledger-attach-upload',
+    'send-signature-request',
+    'check-endorsement',
+    'check-reconciliation',
+    'send-payment-direction-request',
+    'admin-reset-totp',
+    'bill-mortgage-handling',
+  ]) {
     assert.ok(CLASS_A_FUNCTIONS.has(name), name);
   }
   assert.ok(!CLASS_A_FUNCTIONS.has('moov-disburse'));

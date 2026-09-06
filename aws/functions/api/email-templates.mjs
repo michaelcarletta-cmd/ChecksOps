@@ -14,6 +14,8 @@ export const TEMPLATE_NAMES = new Set([
   'generic-notification',
   'internal-notification',
   'mortgage-handling-request',
+  'endorsement-request',
+  'payment-direction-request',
 ]);
 
 const esc = (value) => String(value ?? '')
@@ -93,6 +95,18 @@ export const renderTransactionalTemplate = (name, data = {}) => {
         subject: 'Mortgage handling request',
         html: shell('Mortgage handling', `<p>Company: ${esc(data.mortgageCompany || data.mortgage_company)}</p><p>Status: ${esc(data.status)}</p><p>Request: ${esc(data.requestId || data.request_id)}</p>`),
         text: `Mortgage request ${data.requestId || data.request_id}`,
+      };
+    case 'endorsement-request':
+      return {
+        subject: data.subject || `Endorsement required — Check #${data.checkNumber || 'N/A'}`,
+        html: shell('Endorsement required', `<p>Hello ${esc(data.payeeName || '')},</p><p>Check #${esc(data.checkNumber || 'N/A')} from ${esc(data.carrier || 'the carrier')} needs your endorsement.</p><p>Amount: ${esc(data.amount ?? 'N/A')}</p><p><a href="${esc(data.endorseUrl)}">Review and endorse</a></p>`),
+        text: `Endorse check ${data.checkNumber || ''}: ${data.endorseUrl}`,
+      };
+    case 'payment-direction-request':
+      return {
+        subject: data.subject || 'Payment direction needed for your insurance check',
+        html: shell('Payment direction needed', `<p>Dear ${esc(data.policyholderName || 'Policyholder')},</p><p>Please tell us how you want funds handled so we can move your claim forward.</p>${data.claimNumber ? `<p>Claim: ${esc(data.claimNumber)}</p>` : ''}${data.carrier ? `<p>Carrier: ${esc(data.carrier)}</p>` : ''}<p><a href="${esc(data.requestUrl)}">Respond now</a></p>`),
+        text: `Payment direction needed: ${data.requestUrl}`,
       };
     default:
       return {
