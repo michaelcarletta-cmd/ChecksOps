@@ -381,7 +381,7 @@ const report = {
       stillLovable,
     },
     publicHttp: {
-      apex: { ...apexHttp, html: undefined, jsSrc, spaLooksAws: publicSpaAws, looksCloudFront: publicIsCloudFront, looksLovable: publicIsLovable, lovableFlock: publicHasLovableFlock },
+      apex: { ...apexHttp, html: undefined, jsSrc, spaLooksAws: publicSpaAws, looksCloudFront: publicIsCloudFront, looksLovable: publicIsLovable, lovableFlock: publicHasLovableFlock, jsHasPrepApi: /kiqojucc02\.execute-api/.test(jsText), jsHasCognito: /["']cognito["']/i.test(jsText) },
       www: { ...wwwHttp, html: undefined },
       cloudfrontHostname: { status: cfHttp.status, amzCfId: Boolean(cfHttp.amzCfId), spaLooksAws: cfSpaAws },
     },
