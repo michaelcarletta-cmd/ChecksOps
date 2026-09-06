@@ -20,7 +20,7 @@ CheckAlt is **PARTIAL** and is handled in a separate chat (PR #125 / #130). This
 | Tenant identity mapping + RLS / isolation | **GO (validated, not imported)** | Mapping proven on staging. Live DB bridge `identity_map` count **8**. Ninth UUID fail-closed. `--apply` refused. Production still uses Supabase Auth until API/DNS switch. |
 | CloudFront / DNS / API routing | **BLOCKED** (switch) / **GO (prepared)** unused distribution | Staging: `staging.checksops.com` → `E1CG52WRQZI7X1`. Production-prep CloudFront has **no** aliases. Production apex/`www` still `185.158.133.1` (Lovable). Switching DNS is a **cutover decision**. |
 | ACM for `checksops.com` / `www` | **GO (issued, not attached)** | Cert `5cdde8e7-49fb-4b42-ba36-9aaa9d9b1aa3` **`ISSUED`** 2026-09-05T20:23:49Z. Cloudflare validation CNAMEs present (DNS-only). Apex/`www` still Lovable. Not in use by CloudFront. |
-| SES production EMAIL_OTP | **GO (Cognito attached)** / SES account **PARTIAL** | Cognito production is `DEVELOPER` + `SourceArn` identity `Support@checksops.com`. Staging unchanged. Agent still denied `ses:GetAccount` (sandbox unknown). Public SPF is Outlook-only. See `aws/production/SES_EMAIL_OTP_READINESS.md`. |
+| SES production EMAIL_OTP | **PARTIAL** (OTP not sent) | Operator: SES us-east-1 **production access** + domain `checksops.com` verified/DKIM. Cognito still `DEVELOPER` / `Support@checksops.com`, **0 users**. Agent denied SES APIs. Public SPF still Outlook-only. **6B OTP not run.** See `aws/production/SES_OTP_PROOF.md`. |
 | Final DB delta via temporary DB bridge | **GO** (procedure) | Live `aws-staging-db-bridge` `health` HTTP 200, `mode:read_only`. **Not executed** this PR. |
 | Final storage delta via temporary storage bridge | **GO** (procedure) | Live `aws-staging-storage-bridge` `health` HTTP 200, `mode:sign_only`. **Not executed** this PR. |
 | Production webhook transition | **PARTIAL** | AWS `/webhooks/{moov,checkalt}` exist; `AWS_PROVIDER_WEBHOOK_DRY_RUN=true`. Production URLs still on Supabase. Dual-run **not started**. **Cutover decision**. |
@@ -56,7 +56,7 @@ CheckAlt is **PARTIAL** and is handled in a separate chat (PR #125 / #130). This
 
 ### Still prep (can continue without switching production)
 
-- SES sandbox / first allowlisted OTP — **6A console read next** (`aws/production/SES_OTP_PROOF.md`). Cognito `DEVELOPER` attached; **0 users**; no OTP sent. `ses:GetAccount` denied. Public SPF is Outlook-only.
+- SES first allowlisted EMAIL_OTP — **6B STOP** until you name an isolated mailbox and say **approve 6B** (`aws/production/SES_OTP_PROOF.md`). Operator reports SES production access + domain DKIM. Public SPF still Outlook-only. Pool still **0 users**.
 - CheckAlt UAT GO **or** signed exception (separate chat; production flag stays false)
 - Timed write-freeze drill (measurement only)
 - Realtime: accept 15s polling **or** later design

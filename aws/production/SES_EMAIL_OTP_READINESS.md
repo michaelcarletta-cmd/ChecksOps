@@ -27,19 +27,15 @@ Staging uses `COGNITO_DEFAULT`. That is acceptable for UAT intercept mail. Leave
 | MX | `checksops-com.mail.protection.outlook.com` |
 | Production DNS A | apex + `www` still `185.158.133.1` (Lovable) |
 
-Verdict: **Cognito SES attach is done** on the production pool only. SES sandbox vs production sending is still **unknown** to this agent (`ses:GetAccount` denied). Public SPF is still Outlook-only, so first real OTP deliverability should be tested later with a single allowlisted mailbox (**not** this step; no users, no OTP now).
+Verdict: **Cognito SES attach is done.** Operator reports SES **production access** in us-east-1 and domain DKIM. Agent still cannot `ses:GetAccount`. Public SPF from this resolver is still Outlook-only. **6B OTP not sent.** See `SES_OTP_PROOF.md`.
 
 Do **not** add SES DKIM/SPF from the Cloud Agent. Apex/`www` A records must stay Lovable.
 
 ## Operator follow-ups (deliverability proof — not cutover)
 
-See `aws/production/SES_OTP_PROOF.md`. **Next action is 6A only** (read SES Account dashboard in us-east-1). Do not create Cognito users until you approve 6B.
+**6A operator-complete 2026-09-06:** you reported SES us-east-1 production access granted and domain `checksops.com` verified with DKIM. This agent still cannot `ses:GetAccount`. Cognito From remains `support@checksops.com`. **0 users. No OTP sent.**
 
-After Step 4–5 prep, a later cutover window can:
-
-1. Confirm SES production access (out of sandbox) in the SES console (**6A**).
-2. Optionally publish SES DNS (DKIM / `_amazonses` / SPF `include:amazonses.com`) without moving apex/`www` A.
-3. Send one test OTP to an allowlisted operator mailbox **without** importing production users (**6B**, after explicit approval).
+After a successful **6B** OTP and user delete, a later cutover window can still optionally publish SPF `include:amazonses.com` without moving apex/`www` A.
 
 IAM fragment the operator can attach to a dedicated SES-ops role (not required on `ChecksOpsCursorCloudStaging`):
 

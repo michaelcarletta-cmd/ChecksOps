@@ -1,81 +1,88 @@
 # SES EMAIL_OTP proof (prep only)
 
-**STOP FOR REVIEW.** This does **not** switch production auth, import the eight production users, change DNS A records, or send OTP until you approve a later isolated test user.
+**STOP FOR REVIEW.** This does **not** switch production auth, import the eight production users, or change DNS A records. A Cognito test user is **not** created in this step. 6A is operator-complete (your report). **6B is not authorized yet.** No OTP has been sent.
 
-Goal: move SES deliverability from **OPERATOR ACTION REQUIRED** → **READY** by proving pool `us-east-1_h00WorYMT` can deliver **one** EMAIL_OTP via SES identity `support@checksops.com`.
+Goal: move SES deliverability from **OPERATOR ACTION REQUIRED** → **READY** by proving pool `us-east-1_h00WorYMT` can deliver **one** EMAIL_OTP via SES From `support@checksops.com`.
 
-This Cloud Agent **cannot** `ses:GetAccount` / `ses:GetEmailIdentity`. Sandbox vs production sending must be read in the console (**6A**). A Cognito test user is **not** created in this step (**6B** is explained only).
+## Live re-check 2026-09-06 (this agent)
 
-## Already verified (do not redo)
-
-| Check | Live |
+| Check | Result |
 |---|---|
-| Production pool email | `EmailSendingAccount=DEVELOPER`, `SourceArn=…/identity/Support@checksops.com` |
+| Production pool email | `EmailSendingAccount=DEVELOPER`, `SourceArn=arn:aws:ses:us-east-1:806168576068:identity/Support@checksops.com` |
 | Production users | **0** |
 | Staging pool email | still `COGNITO_DEFAULT` |
-| Apex/`www` A | `185.158.133.1` (Lovable) |
-| Public SPF | Outlook only (`include:spf.protection.outlook.com ~all`) — no `amazonses.com` |
-| `_amazonses` TXT | absent |
+| Apex/`www` A | `185.158.133.1` (Lovable) — **unchanged** |
+| Agent SES APIs | still **Denied** (`ses:GetAccount`, `GetEmailIdentity` on `checksops.com` and `support@checksops.com`) |
+| Public SPF (recursive DNS) | still `v=spf1 include:spf.protection.outlook.com ~all` — no `include:amazonses.com` |
+| `_amazonses` TXT | still empty from this resolver |
+| Selector1/2 `_domainkey` CNAME | empty from this resolver |
 
-The SES mailbox simulator **cannot** prove EMAIL_OTP: you never receive the code.
+**Operator-reported (this agent cannot re-read SES):** production access granted in us-east-1; domain `checksops.com` verified with DKIM; From remains `support@checksops.com`.
 
-## 6A — Read SES sandbox vs production (console only)
+The SES mailbox simulator **cannot** prove EMAIL_OTP.
 
-Region must be **N. Virginia (us-east-1)**. Cognito is in that region. Do **not** Request production access in this step. Do **not** change identities, DNS, or Cognito.
+## 6A — **done** (operator report)
 
-1. Open https://us-east-1.console.aws.amazon.com/ses/home?region=us-east-1#/account
-2. Confirm the top-right region is **N. Virginia**.
-3. **Account dashboard** (left nav).
-4. Read sending status:
-   - **Sandbox:** a yellow/info banner such as “Your Amazon SES account is in the sandbox”, and/or **Production access** = disabled / Get set up still offered.
-   - **Production:** no sandbox banner; **Production access** enabled. You can send to unverified recipients (From identity must still be verified).
-5. Left nav → **Verified identities** (or **Identities**).
-6. Open `support@checksops.com` (casing may show `Support@`).
-7. Confirm **Identity status** = **Verified** and sending from this identity is allowed.
-8. Stop. Do **not** click Request production access, do **not** send a test email from the SES console yet, do **not** create Cognito users.
+SES us-east-1 **production access granted**. Identity/domain verified per operator. Do not import users. Do not switch SPA.
 
-Reply with exactly:
+## 6B — isolated EMAIL_OTP (STOP — needs your mailbox + explicit go)
 
-- Region: `us-east-1`
-- Account: **sandbox** or **production access**
-- Identity `support@checksops.com`: **Verified** or not
-- Whether you already see a production-access request pending
+A temporary Cognito user **is required**. SES console “send test email” does not exercise Cognito EMAIL_OTP.
 
-## What a later isolated Cognito test user would do (6B — not authorized yet)
+**This agent will not create the user or send OTP until you reply with:**
 
-Do **not** run this until 6A is reported and you explicitly approve 6B. This agent will not `AdminCreateUser` / `InitiateAuth` on its own.
+1. The isolated test address (you control the inbox).
+2. Confirmation it is **not** one of the eight production mapped emails, not a staging UAT user, and not a customer.
+3. The exact phrase: **approve 6B**.
 
-**Purpose:** trigger **one** EMAIL_OTP from pool `us-east-1_h00WorYMT` through SES. Not a production login. Not an identity import. Not a SPA switch.
+### What will happen (once approved)
 
-**Mailbox rules**
+Pool **`us-east-1_h00WorYMT` only**. Client `3ja9fqaq2fjkv3i6up2varcqpe`. Staging pool **untouched**.
 
-- Use a throwaway operator inbox you control (for example a plus-address on your own domain).
-- **Forbidden:** the eight production mapped emails; staging UAT users; any customer mailbox.
-- **If 6A = sandbox:** SES will only deliver to **verified SES identities**. Either:
-  - verify that operator mailbox in SES us-east-1 first (email confirmation; no apex/`www` A change), **or**
-  - request SES production access (separate operator decision; not 6A), **or**
-  - send the OTP to `support@checksops.com` only if that mailbox is already the verified identity **and** you can read it.
-- **If 6A = production access:** the operator mailbox does not need to be an SES identity.
+1. `AdminCreateUser` with `MessageAction=SUPPRESS` and `email_verified=true` — **no invitation email**.
+2. `InitiateAuth` `USER_AUTH` with `PREFERRED_CHALLENGE=EMAIL_OTP` — **this sends the one OTP** via SES From `support@checksops.com` / identity `Support@`.
+3. You check inbox **and spam**. Reply: arrived yes/no, From address, Cognito error if any. **Do not** enter the code on production SPA (auth is still Supabase).
+4. `AdminDeleteUser` for that username.
+5. This agent re-checks `list-users` is **[]**.
 
-**Exact Cognito actions (when you later approve)**
+Example CLI (placeholders only — not executed):
 
-1. `AdminCreateUser` on **`us-east-1_h00WorYMT` only** (`MessageAction=SUPPRESS` so Cognito does **not** send an invitation).
-2. Username/email = the isolated test address. No `identity_map` row. No production client env change.
-3. Public `InitiateAuth` `USER_AUTH` with preferred challenge `EMAIL_OTP` on client `3ja9fqaq2fjkv3i6up2varcqpe`. **This sends the OTP** via SES From the configured identity (`support@checksops.com` / `Support@`).
-4. You report: arrived (inbox or spam), From address, and that Cognito did not error. You do **not** need to submit the code to production SPA (there is no production Cognito login).
-5. `AdminDeleteUser` for that one test user. Pool must return to **0** users.
+```bash
+aws cognito-idp admin-create-user \
+  --user-pool-id us-east-1_h00WorYMT \
+  --username 'TEST_EMAIL' \
+  --user-attributes Name=email,Value='TEST_EMAIL' Name=email_verified,Value=true \
+  --message-action SUPPRESS \
+  --desired-delivery-mediums EMAIL
 
-**Side effects to expect**
+aws cognito-idp initiate-auth \
+  --client-id 3ja9fqaq2fjkv3i6up2varcqpe \
+  --auth-flow USER_AUTH \
+  --auth-parameters USERNAME='TEST_EMAIL',PREFERRED_CHALLENGE=EMAIL_OTP
 
-- One transactional email through SES.
-- Brief Cognito user in `FORCE_CHANGE_PASSWORD` / unconfirmed until deleted.
-- Possible spam-folder placement while SPF is Outlook-only. Finding the message in spam still counts as SES delivery for this gate. Changing SPF/DKIM is optional and must **not** move apex/`www` A.
+aws cognito-idp admin-delete-user \
+  --user-pool-id us-east-1_h00WorYMT \
+  --username 'TEST_EMAIL'
+```
 
-**Will not happen**
+### Cleanup if anything fails
+
+- Delete the test user if it exists (`AdminDeleteUser`).
+- Confirm pool user count is 0.
+- Do **not** leave a FORCE_CHANGE_PASSWORD user in the production pool.
+- Do **not** create `identity_map` rows.
+
+### Side effects
+
+- One transactional SES message.
+- Possible spam-folder placement: public SPF is still Outlook-only from this resolver. Spam still counts as **delivered** for this gate.
+- Optional later (not 6B): add `include:amazonses.com` to SPF **without** changing apex/`www` A.
+
+### Will not happen
 
 - Import of the eight production users
-- Staging pool `us-east-1_vPmQ7cL1F` edits
 - `.env.production` Cognito switch
-- Webhooks, flags, grants, DB, storage, bridges
+- Staging pool edits
+- Webhooks, flags, grants, DB, storage, bridges, DNS A records
 
-READY for this gate requires: 6A production access **or** sandbox + verified recipient, plus a successful 6B OTP in the operator mailbox, then the test user deleted.
+READY for **this SES gate** = successful 6B OTP + test user deleted + pool still 0 users.
