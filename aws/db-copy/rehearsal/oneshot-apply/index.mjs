@@ -89,7 +89,7 @@ const connect = async (admin, database) => {
 };
 
 const assertRehearsalName = (name) => {
-  if (!/^checksops_rehearsal_[0-9]{8}$/.test(name)) {
+  if (!/^checksops_rehearsal_[0-9]{8}[a-z]?$/.test(name)) {
     throw new Error(`refusing database name ${name}`);
   }
 };
@@ -462,6 +462,135 @@ const applyDdl = async (event) => {
   }
 };
 
+const REQUIRED_INTAKE_RETURN_COLS = [
+  'returned_at',
+  'return_code',
+  'return_reason',
+  'return_notes',
+  'return_recorded_by',
+  'return_source',
+  'pre_return_stage',
+  'return_resolved_at',
+  'return_resolution',
+];
+
+const REQUIRED_CHECKALT_RETURN_COLS = [
+  'return_code',
+  'return_window_until',
+];
+
+const inspectParitySchema = async (client) => {
+  const intake = (await client.query(`
+    SELECT column_name
+    FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'check_intake_items'
+    ORDER BY ordinal_position
+  `)).rows.map((row) => row.column_name);
+  const deposits = (await client.query(`
+    SELECT column_name
+    FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'checkalt_deposits'
+    ORDER BY ordinal_position
+  `)).rows.map((row) => row.column_name);
+  const fn = (await client.query(`
+    SELECT pg_get_functiondef(p.oid) AS def
+    FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.proname = 'tg_mirror_payee_to_endorsement'
+    LIMIT 1
+  `)).rows[0]?.def || '';
+  const enumVals = (await client.query(`
+    SELECT e.enumlabel
+    FROM pg_type t
+    JOIN pg_enum e ON e.enumtypid = t.oid
+    WHERE t.typname = 'check_stage'
+    ORDER BY e.enumsortorder
+  `)).rows.map((row) => row.enumlabel);
+  return {
+    intakeColumns: intake,
+    checkaltColumns: deposits,
+    missingIntakeReturnColumns: REQUIRED_INTAKE_RETURN_COLS.filter((col) => !intake.includes(col)),
+    missingCheckaltReturnColumns: REQUIRED_CHECKALT_RETURN_COLS.filter((col) => !deposits.includes(col)),
+    triggerHasRenameDelete: /lower\(trim\(NEW\.payee_name\)\) IS DISTINCT FROM lower\(trim\(OLD\.payee_name\)\)/i.test(fn)
+      && /DELETE FROM public\.check_endorsements/i.test(fn),
+    triggerHasPreferredAuth: /preferred_auth_method|user_passkeys/i.test(fn),
+    checkStageHasReturned: enumVals.includes('returned'),
+  };
+};
+
+const inspectReturnColumns = async (event) => {
+  const dbName = event.database || 'checksops';
+  if (dbName !== 'checksops') assertRehearsalName(dbName);
+  const admin = await loadAdmin();
+  const client = await connect(admin, dbName);
+  try {
+    const current = (await client.query('SELECT current_database() AS d')).rows[0].d;
+    if (current !== dbName) throw new Error(`connected to ${current}`);
+    const inspected = await inspectParitySchema(client);
+    return {
+      ok: true,
+      readOnly: true,
+      database: dbName,
+      mutatedChecksops: false,
+      liveChecksopsMutated: false,
+      ...inspected,
+    };
+  } finally {
+    await client.end();
+  }
+};
+
+const applyParityDdl = async (event) => {
+  const dbName = event.database;
+  if (dbName === 'checksops') {
+    throw new Error('refusing parity DDL on checksops; use an isolated rehearsal database');
+  }
+  assertRehearsalName(dbName);
+  const admin = await loadAdmin();
+  const client = await connect(admin, dbName);
+  try {
+    const current = (await client.query('SELECT current_database() AS d')).rows[0].d;
+    if (current !== dbName) throw new Error(`connected to ${current}`);
+    const sqlPath = [
+      path.join(ROOT, 'sql', '38_parity_payee_mirror_and_returns.sql'),
+      '/var/task/sql/38_parity_payee_mirror_and_returns.sql',
+    ].find((p) => fs.existsSync(p));
+    if (!sqlPath) throw new Error('38_parity_payee_mirror_and_returns.sql missing from Lambda package');
+    const sql = fs.readFileSync(sqlPath, 'utf8');
+    const addValue = 'ALTER TYPE public.check_stage ADD VALUE IF NOT EXISTS \'returned\'';
+    try {
+      await client.query(addValue);
+    } catch (error) {
+      if (!/already exists|duplicate/i.test(String(error.message || error))) {
+        throw error;
+      }
+    }
+    await client.query('BEGIN');
+    try {
+      await client.query(sql.replace(addValue, '-- add value already applied'));
+      const inspected = await inspectParitySchema(client);
+      const ok = inspected.missingIntakeReturnColumns.length === 0
+        && inspected.triggerHasRenameDelete === true
+        && inspected.triggerHasPreferredAuth === false;
+      await client.query('COMMIT');
+      return {
+        ok,
+        database: dbName,
+        ddlOnly: true,
+        checksopsDdl: false,
+        mutatedChecksopsData: false,
+        liveChecksopsMutated: false,
+        ...inspected,
+      };
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+      throw error;
+    }
+  } finally {
+    await client.end();
+  }
+};
+
 export const handler = async (event = {}) => {
   const step = event.step || 'create_db';
   const base = {
@@ -475,6 +604,8 @@ export const handler = async (event = {}) => {
     if (step === 'bootstrap') return { ...base, ...(await bootstrapSchema(event)) };
     if (step === 'restore') return { ...base, ...(await restoreDump(event)) };
     if (step === 'apply_ddl') return { ...base, ...(await applyDdl(event)), liveChecksopsMutated: false };
+    if (step === 'inspect_return_columns') return { ...base, ...(await inspectReturnColumns(event)), liveChecksopsMutated: false };
+    if (step === 'apply_parity_ddl') return { ...base, ...(await applyParityDdl(event)), liveChecksopsMutated: false };
     if (step === 'apply_delta') return { ...base, ...(await applyDelta(event)) };
     if (step === 'reconcile') return { ...base, ...(await reconcile(event)) };
     throw new Error(`unknown step ${step}`);

@@ -68,6 +68,11 @@ import {
 } from './tenant-admin.mjs';
 import { handleIngestSharedCheck } from './ingest-shared-check.mjs';
 import { handleSendSignatureRequest } from './esign.mjs';
+import { handleCheckEndorsement } from './check-endorsement.mjs';
+import { handleCheckReconciliation } from './check-reconciliation.mjs';
+import { handleSendPaymentDirectionRequest } from './payment-direction-email.mjs';
+import { handleAdminResetTotp } from './admin-reset-totp.mjs';
+import { handleBillMortgageHandling } from './bill-mortgage-handling.mjs';
 
 export const CLASS_A_FUNCTIONS = new Set([
   // Email
@@ -109,6 +114,11 @@ export const CLASS_A_FUNCTIONS = new Set([
   'homeowner-upload-check',
   'ingest-shared-check',
   'send-signature-request',
+  'check-endorsement',
+  'check-reconciliation',
+  'send-payment-direction-request',
+  'admin-reset-totp',
+  'bill-mortgage-handling',
   'homeowner-upload-otp-start',
   'homeowner-upload-otp-verify',
   'homeowner-upload-session',
@@ -225,6 +235,16 @@ export const handleAppServiceRequest = async (event, path, method) => {
       return handleIngestSharedCheck(event);
     case 'send-signature-request':
       return handleSendSignatureRequest(event);
+    case 'check-endorsement':
+      return handleCheckEndorsement(event);
+    case 'check-reconciliation':
+      return handleCheckReconciliation(event);
+    case 'send-payment-direction-request':
+      return handleSendPaymentDirectionRequest(event);
+    case 'admin-reset-totp':
+      return handleAdminResetTotp(event);
+    case 'bill-mortgage-handling':
+      return handleBillMortgageHandling(event);
     case 'homeowner-upload-check':
       return handleHomeownerUploadCheck(event);
     case 'homeowner-upload-otp-start':

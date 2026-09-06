@@ -456,57 +456,7 @@ export const handlePublicSignatureDocument = async (event, deps = {}) => {
   }
 };
 
-export const handlePublicEndorsement = async (event, deps = {}) => {
-  const body = parseBody(event);
-  const spoof = ignoredSpoof(event, body);
-  const action = body.action || 'get_endorsement_data';
-  if (action !== 'get_endorsement_data') {
-    return {
-      ok: false,
-      statusCode: 403,
-      error: 'writes_disabled',
-      message: 'Endorsement submit/reject is disabled on AWS staging during the Storage phase',
-      spoofFieldsIgnored: spoof,
-    };
-  }
-  const token = String(body.token || '').trim();
-  if (!token) {
-    return { ok: false, statusCode: 400, error: 'Token required', spoofFieldsIgnored: spoof };
-  }
-  let client;
-  try {
-    client = await publicClient(deps);
-    const row = (await client.query('SELECT public.aws_public_endorsement_by_token($1) AS doc', [token])).rows[0]?.doc;
-    if (!row) {
-      return {
-        ok: false,
-        statusCode: 404,
-        error: 'This endorsement link has already been used or replaced.',
-        code: 'token_consumed',
-        spoofFieldsIgnored: spoof,
-      };
-    }
-    return {
-      ok: true,
-      statusCode: 200,
-      id: row.id,
-      payee_name: row.payee_name,
-      status: row.status,
-      carrier_name: row.carrier_name,
-      check_number: row.check_number,
-      amount: row.amount,
-      token: row.token,
-      requires_payment_direction: false,
-      spoofFieldsIgnored: spoof,
-    };
-  } catch (error) {
-    return { ok: false, statusCode: 503, error: 'endorsement_lookup_failed', message: sanitizePublicError(error), spoofFieldsIgnored: spoof };
-  } finally {
-    if (client) {
-      try { await client.end(); } catch { /* ignore */ }
-    }
-  }
-};
+export { handlePublicEndorsement } from './check-endorsement.mjs';
 
 export const handlePublicWritesDisabled = async (event) => ({
   ok: false,

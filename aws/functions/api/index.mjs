@@ -17,9 +17,9 @@ import {
   handleStoragePublic,
   handleStorageWritesDisabled,
   handlePublicSignatureDocument,
-  handlePublicEndorsement,
-  handlePublicWritesDisabled,
 } from './storage.mjs';
+import { handlePublicEndorsement } from './check-endorsement.mjs';
+import { handlePublicSignatureSubmit } from './signature-submit.mjs';
 import {
   handleStorageUploadUrl,
   handleStorageDelete,
@@ -363,8 +363,8 @@ export const handler = async (event) => {
   }
 
   if (method === 'POST' && path === '/public/signature-submit') {
-    const result = await handlePublicWritesDisabled(event);
-    return json(403, {
+    const result = await handlePublicSignatureSubmit(event);
+    return json(result.statusCode || (result.ok ? 200 : 400), {
       service: 'checksops-api',
       environment: process.env.CHECKSOPS_ENV || 'unknown',
       productionSupabaseChanged: false,
