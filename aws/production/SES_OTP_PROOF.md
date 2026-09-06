@@ -1,6 +1,6 @@
 # SES EMAIL_OTP proof (prep only)
 
-**STOP FOR REVIEW.** This does **not** switch production auth, import the eight production users, or change DNS A records. A Cognito test user is **not** created in this step. 6A is operator-complete (your report). **6B is not authorized yet.** No OTP has been sent.
+**STOP FOR REVIEW.** 6B OTP **sent once**. Waiting for you to confirm inbox/spam receipt. Test user **not deleted yet**. This does **not** switch production auth, import the eight production users, or change DNS A records.
 
 Goal: move SES deliverability from **OPERATOR ACTION REQUIRED** → **READY** by proving pool `us-east-1_h00WorYMT` can deliver **one** EMAIL_OTP via SES From `support@checksops.com`.
 
@@ -9,7 +9,7 @@ Goal: move SES deliverability from **OPERATOR ACTION REQUIRED** → **READY** by
 | Check | Result |
 |---|---|
 | Production pool email | `EmailSendingAccount=DEVELOPER`, `SourceArn=arn:aws:ses:us-east-1:806168576068:identity/Support@checksops.com` |
-| Production users | **0** |
+| Production users | **1 isolated 6B test user** (invitation suppressed). OTP challenge `EMAIL_OTP` returned once. **Not deleted yet.** |
 | Staging pool email | still `COGNITO_DEFAULT` |
 | Apex/`www` A | `185.158.133.1` (Lovable) — **unchanged** |
 | Agent SES APIs | still **Denied** (`ses:GetAccount`, `GetEmailIdentity` on `checksops.com` and `support@checksops.com`) |
