@@ -51,9 +51,11 @@ if (!prepVars.DATABASE_SECRET_ARN) {
 }
 
 const vpc = staging.VpcConfig || {};
+const stagingRole = staging.Role;
 awsJson([
   'lambda', 'update-function-configuration',
   '--function-name', PREP,
+  '--role', stagingRole,
   '--vpc-config', `SubnetIds=${(vpc.SubnetIds || []).join(',')},SecurityGroupIds=${(vpc.SecurityGroupIds || []).join(',')}`,
   '--environment', JSON.stringify({ Variables: prepVars }),
 ]);

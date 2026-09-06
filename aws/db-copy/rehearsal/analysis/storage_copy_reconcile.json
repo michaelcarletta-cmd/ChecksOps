@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-05T01:57:08.767Z",
+  "generatedAt": "2026-09-06T12:05:41.131Z",
   "result": "PASS",
   "copyMode": "bridge_signed_urls",
   "filesBucket": "checksops-staging-privatefilesbucket-erzqsolpucjp",
@@ -38,8 +38,8 @@
     "nullSizeInventory": 2
   },
   "copy": {
-    "copiedNew": 77,
-    "verifiedExisting": 1334,
+    "copiedNew": 0,
+    "verifiedExisting": 1411,
     "failed": 0,
     "conflicts": 0,
     "skipped": 0,
@@ -128,23 +128,23 @@
       }
     },
     "stagingOnlyUat": {
-      "objects": 21,
-      "bytes": 133931,
+      "objects": 28,
+      "bytes": 363542,
       "byBucket": {
         "claim-files": {
-          "objects": 17,
-          "bytes": 130408
+          "objects": 23,
+          "bytes": 359866
         },
         "homeowner-uploads": {
-          "objects": 4,
-          "bytes": 3523
+          "objects": 5,
+          "bytes": 3676
         }
       },
       "note": "Left in place. Not overwritten or deleted."
     },
     "s3FilesPrefix": {
-      "before": 1355,
-      "after": 1432
+      "before": 1439,
+      "after": 1439
     }
   },
   "samples": {

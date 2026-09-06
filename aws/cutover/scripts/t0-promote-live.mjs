@@ -86,8 +86,9 @@ try {
   });
   snapshot.status = 'available';
 } catch (error) {
-  snapshot.error = String(error.message || error).slice(0, 240);
-  snapshot.status = /AccessDenied|not authorized/i.test(snapshot.error) ? 'denied' : 'failed';
+  const raw = String(error.message || error);
+  snapshot.error = raw.slice(0, 240);
+  snapshot.status = /AccessDenied|not authorized|CreateDBSnapshot/i.test(raw) ? 'denied' : 'failed';
   snapshot.fallback = 'isolated checksops_rehearsal_20260906b plus Lovable source-of-record';
 }
 

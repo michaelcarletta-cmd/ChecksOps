@@ -342,19 +342,36 @@ const applyProductionIdentityLinks = async (event) => {
       }
       seenSubs.add(cognitoSub);
       seenIds.add(applicationUserId);
+      const profile = (await client.query(
+        `SELECT id::text AS id FROM public.profiles
+         WHERE id = $1::uuid AND lower(email) = lower($2)`,
+        [applicationUserId, email],
+      )).rows[0];
+      if (!profile) {
+        throw new Error(`no production profile match for ${applicationUserId}`);
+      }
       const updated = await client.query(
         `UPDATE public.identity_accounts
          SET cognito_sub = $1,
+             email = $3,
              status = 'active',
              linked_at = now()
          WHERE application_user_id = $2::uuid
-           AND lower(email) = lower($3)
            AND application_user_id <> $4::uuid
          RETURNING application_user_id::text AS application_user_id, status`,
         [cognitoSub, applicationUserId, email, NINTH_ID],
       );
       if (!updated.rows[0]) {
-        throw new Error(`no matching identity row for ${applicationUserId}`);
+        const inserted = await client.query(
+          `INSERT INTO public.identity_accounts
+             (application_user_id, cognito_sub, email, status, linked_at)
+           VALUES ($2::uuid, $1, $3, 'active', now())
+           RETURNING application_user_id::text AS application_user_id, status`,
+          [cognitoSub, applicationUserId, email],
+        );
+        if (!inserted.rows[0]) throw new Error(`could not link ${applicationUserId}`);
+        applied.push({ applicationUserId: inserted.rows[0].application_user_id, status: inserted.rows[0].status, created: true });
+        continue;
       }
       applied.push({ applicationUserId: updated.rows[0].application_user_id, status: updated.rows[0].status });
     }
