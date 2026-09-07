@@ -63,6 +63,7 @@ Resources:
           - Id: retain-365
             Status: Enabled
             ExpirationInDays: 365
+            Prefix: ''
       Tags:
         - Key: HardeningBatch
           Value: '5'
@@ -162,7 +163,7 @@ Resources:
       IsMultiRegionTrail: true
       IncludeGlobalServiceEvents: true
       EnableLogFileValidation: true
-      CloudWatchLogsLogGroupArn: !GetAtt CloudTrailLogGroup.Arn
+      CloudWatchLogsLogGroupArn: !Sub '${CloudTrailLogGroup.Arn}:*'
       CloudWatchLogsRoleArn: !GetAtt CloudTrailLogsRole.Arn
       EventSelectors:
         - IncludeManagementEvents: true
@@ -311,30 +312,6 @@ Resources:
       TopicArn: !Ref AlertTopic
       Protocol: email
       Endpoint: !Ref AlertEmail
-
-  Api5xxLogMetricFilter:
-    Type: AWS::Logs::MetricFilter
-    Properties:
-      LogGroupName: /aws/apigateway/checksops-production-prep-http
-      FilterName: checksops-prod-api-5xx-filter
-      FilterPattern: '{ $.status = "500" || $.status = "502" || $.status = "503" || $.status = "504" }'
-      MetricTransformations:
-        - MetricNamespace: ChecksOps/ProductionPrep
-          MetricName: PrepHttp5xx
-          MetricValue: '1'
-          DefaultValue: 0
-
-  ApiAuthFailLogMetricFilter:
-    Type: AWS::Logs::MetricFilter
-    Properties:
-      LogGroupName: /aws/apigateway/checksops-production-prep-http
-      FilterName: checksops-prod-api-auth-fail-filter
-      FilterPattern: '{ $.status = "401" || $.status = "403" }'
-      MetricTransformations:
-        - MetricNamespace: ChecksOps/ProductionPrep
-          MetricName: PrepAuthFailures
-          MetricValue: '1'
-          DefaultValue: 0
 
   LambdaErrorsAlarm:
     Type: AWS::CloudWatch::Alarm

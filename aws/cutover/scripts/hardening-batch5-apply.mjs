@@ -68,7 +68,22 @@ record('apiAuthFailFilter', run([
 ]));
 
 const described = run(['cloudformation', 'describe-stacks', '--stack-name', STACK]);
-const stackExists = Boolean(described.ok && described.data?.Stacks?.[0]);
+const existingStatus = described.data?.Stacks?.[0]?.StackStatus || '';
+if (/CREATE_FAILED|ROLLBACK_COMPLETE|REVIEW_IN_PROGRESS/.test(existingStatus)) {
+  record('deleteFailedEmptyStack', run(['cloudformation', 'delete-stack', '--stack-name', STACK]));
+  try {
+    execFileSync(AWS, ['--region', REGION, 'cloudformation', 'wait', 'stack-delete-complete', '--stack-name', STACK], {
+      encoding: 'utf8',
+      timeout: 180000,
+    });
+    record('waitDeleteFailedStack', { ok: true });
+  } catch (error) {
+    record('waitDeleteFailedStack', { ok: false, message: String(error.stderr || error.message || error).slice(0, 400) });
+  }
+}
+const describedAfterDelete = run(['cloudformation', 'describe-stacks', '--stack-name', STACK]);
+const stackExists = Boolean(describedAfterDelete.ok && describedAfterDelete.data?.Stacks?.[0]
+  && !/DELETE_COMPLETE/.test(describedAfterDelete.data?.Stacks?.[0]?.StackStatus || ''));
 if (stackExists) {
   const updated = run([
     'cloudformation', 'update-stack',
