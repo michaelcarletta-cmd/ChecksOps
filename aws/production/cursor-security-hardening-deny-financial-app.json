@@ -1,0 +1,82 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyFinancialAndAppMutation",
+      "Effect": "Deny",
+      "Action": [
+        "lambda:UpdateFunctionConfiguration",
+        "lambda:UpdateFunctionCode",
+        "lambda:PublishVersion",
+        "lambda:CreateFunction",
+        "lambda:DeleteFunction",
+        "lambda:AddPermission",
+        "lambda:RemovePermission",
+        "lambda:InvokeFunction",
+        "rds:ModifyDBInstance",
+        "rds:DeleteDBInstance",
+        "rds:CreateDBInstance",
+        "rds:RebootDBInstance",
+        "rds:StopDBInstance",
+        "rds:StartDBInstance",
+        "rds:RestoreDBInstanceFromDBSnapshot",
+        "rds:RestoreDBInstanceToPointInTime",
+        "rds-data:ExecuteStatement",
+        "rds-data:BatchExecuteStatement",
+        "cognito-idp:UpdateUserPool",
+        "cognito-idp:SetUserPoolMfaConfig",
+        "cognito-idp:UpdateUserPoolClient",
+        "cognito-idp:CreateUserPoolClient",
+        "cognito-idp:AdminSetUserPassword",
+        "wafv2:*",
+        "cloudfront:UpdateDistribution",
+        "cloudfront:CreateDistribution",
+        "cloudfront:DeleteDistribution",
+        "route53:ChangeResourceRecordSets",
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:PutSecretValue",
+        "secretsmanager:CreateSecret",
+        "secretsmanager:DeleteSecret",
+        "ssm:PutParameter",
+        "ssm:SendCommand",
+        "ssm:StartSession"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenySecurityLogsBucketMutation",
+      "Effect": "Deny",
+      "Action": [
+        "s3:DeleteBucket",
+        "s3:PutBucketPolicy",
+        "s3:DeleteBucketPolicy",
+        "s3:PutBucketAcl",
+        "s3:PutBucketPublicAccessBlock",
+        "s3:PutEncryptionConfiguration",
+        "s3:PutLifecycleConfiguration",
+        "s3:PutBucketVersioning",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:DeleteObjectVersion"
+      ],
+      "Resource": [
+        "arn:aws:s3:::checksops-production-security-logs-806168576068",
+        "arn:aws:s3:::checksops-production-security-logs-806168576068/*"
+      ]
+    },
+    {
+      "Sid": "DenyCloudTrailMutation",
+      "Effect": "Deny",
+      "Action": [
+        "cloudtrail:CreateTrail",
+        "cloudtrail:UpdateTrail",
+        "cloudtrail:DeleteTrail",
+        "cloudtrail:StartLogging",
+        "cloudtrail:StopLogging",
+        "cloudtrail:PutEventSelectors",
+        "cloudtrail:PutInsightSelectors"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

@@ -350,9 +350,9 @@ Reviewed as a **single** stack (do not split the template).
 
 ---
 
-**STOP FOR REVIEW — role template size fix; do not deploy.** The temp
-role CREATE_FAILED (`10240` byte inline-policy limit) and was rolled
-back. The corrected template splits the same permissions into five
-inline policies and keeps live OIDC trust `api.cursor.com` /
-`user:325724407`. **Do not create the role or start #2–#6 until
-reviewed.** See `aws/cutover/OPERATOR_TEMPORARY_ROLE.md`.
+**STOP FOR REVIEW — managed-policy redesign; do not deploy.** The 10240
+limit is the role **aggregate inline** quota. The template now uses six
+stack-owned customer-managed policies (each ≤6144) and zero inline
+policies. Live OIDC trust remains `api.cursor.com` / `user:325724407`.
+**Do not create the role or start #2–#6 until reviewed.** See
+`aws/cutover/OPERATOR_TEMPORARY_ROLE.md`.

@@ -2,15 +2,19 @@
 
 **STOP FOR REVIEW — do not deploy this role and do not start #2–#6.**
 
-The first CloudFormation create **CREATE_FAILED** and rolled back:
+Two CloudFormation creates **CREATE_FAILED** and rolled back:
 `Maximum policy size of 10240 bytes exceeded for role
-ChecksOpsCursorSecurityHardeningTemp`. The role **does not exist**.
+ChecksOpsCursorSecurityHardeningTemp`. That quota is the role’s
+**aggregate inline-policy** size, not per-policy. The role **does not
+exist**.
 
-This revision splits the same reviewed permissions into **five** inline
-policies, each under the IAM 10,240-character role-policy limit, and uses
-the live Cursor OIDC trust (`api.cursor.com` / `sts.amazonaws.com` /
-`user:325724407`). Permissions are not broadened. Financial/application
-Deny statements are kept.
+This revision attaches the same reviewed Allow/Deny statements as
+**six customer-managed policies** owned by the same stack. The role has
+**zero** inline policies (aggregate inline = 0 / 10240). Each managed
+policy is under the **6,144-character** customer-managed limit. Live
+OIDC trust is `api.cursor.com` / `sts.amazonaws.com` / `user:325724407`.
+Permissions are not broadened. Financial/application Deny statements
+are kept.
 
 Do not deploy SNS / Config / GuardDuty / Security Hub / VPC Flow
 Logs / CloudWatch alarms (`#2`–`#6`) until this template is reviewed and
@@ -42,7 +46,8 @@ only adds the **operator identity** those stacks will run as.
 | Template | `aws/production/cursor-security-hardening-role.yaml` |
 | Trust JSON (paste) | `aws/production/cursor-security-hardening-role-trust.json` |
 | Combined permissions (review) | `aws/production/cursor-security-hardening-role-permissions.json` |
-| Inline policies (5, each ≤10240) | `HardeningAllowCfnSns`, `HardeningAllowConfigPosture`, `HardeningAllowFlowAlarms`, `HardeningAllowReadonly`, `HardeningDenyGuardrails` |
+| Role inline policies | **None** (aggregate inline quota 10,240) |
+| Managed policies (6, each ≤6144) | `ChecksOpsCursorSecHardAllowCfnSns`, `AllowConfigPosture`, `AllowFlowAlarms`, `AllowReadonly`, `DenyFinancialApp`, `DenyIamInfra` |
 | Max session | `3600` seconds |
 | Credential type | Cursor Cloud OIDC → `sts:AssumeRoleWithWebIdentity` only |
 | Static keys | **None.** Do not create access keys. |
@@ -94,10 +99,9 @@ There is **no** `AWS` principal, **no** root, **no**
 
 Canonical combined document:
 `aws/production/cursor-security-hardening-role-permissions.json`.
-The CloudFormation role uses **five** inline policies (same statements,
-no added Allow). Each document is under IAM’s **10,240-character**
-role-policy limit (the unsplit document is 12,575 compact / 16,954
-pretty, which caused CREATE_FAILED). Summary:
+The CloudFormation stack creates **six** customer-managed policies and
+attaches them to the role (same statements, no added Allow). The role
+has no inline policies. Summary:
 
 | Allow | Why |
 |---|---|
@@ -155,20 +159,10 @@ Do **not** attach further policies. Do **not** edit
 `ChecksOpsCursorCloudStaging`. Do **not** touch
 `checksops-production-security-trail` or the security-logs bucket.
 
-Console alternative (same JSON, no CloudFormation): IAM → Roles → Create
-role → Web identity → Identity provider `api.cursor.com` → Audience
-`sts.amazonaws.com` → then replace the generated trust with
-`cursor-security-hardening-role-trust.json`, set role name
-`ChecksOpsCursorSecurityHardeningTemp`, max session 3600, and paste
-`cursor-security-hardening-role-permissions.json` as an inline policy named
-`SecurityHardeningDeployments2to6`. Prefer the CloudFormation path so revoke
-is `delete-stack`.
-
-If the role already exists with the old `oidc.cursor.sh` trust: IAM →
-Roles → `ChecksOpsCursorSecurityHardeningTemp` → Trust relationships →
-Edit trust policy → replace the document with
-`cursor-security-hardening-role-trust.json` → Update policy. Do **not**
-attach extra permissions. Do **not** edit `ChecksOpsCursorCloudStaging`.
+Do **not** paste the combined permissions JSON as one inline policy
+(that exceeds the 10,240 aggregate inline quota). Prefer this
+CloudFormation path so the six managed policies and the role are created
+and deleted together.
 
 ---
 
@@ -214,7 +208,7 @@ After `#2`–`#6` are PASS-verified:
 1. Unset `CURSOR_AWS_SECURITY_HARDENING_ROLE_ARN`. If the Cursor environment
    ARN was retargeted, restore `ChecksOpsCursorCloudStaging`.
 2. Console **CloudFormation → stack `checksops-cursor-security-hardening-role`
-   → Delete**. That removes the role and its inline policy.
+   → Delete**. That removes the role and all six managed policies.
 3. Confirm:
    `aws iam get-role --role-name ChecksOpsCursorSecurityHardeningTemp`
    → `NoSuchEntity`.

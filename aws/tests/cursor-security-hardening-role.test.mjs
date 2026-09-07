@@ -11,25 +11,28 @@ const yamlPath = path.join(ROOT, 'aws/production/cursor-security-hardening-role.
 const runbookPath = path.join(ROOT, 'aws/cutover/OPERATOR_TEMPORARY_ROLE.md');
 const assumePath = path.join(ROOT, 'aws/cutover/scripts/assume-and-run.mjs');
 
-const INLINE_POLICY_LIMIT = 10240;
-const INLINE_POLICY_FILES = [
+const ROLE_AGGREGATE_INLINE_LIMIT = 10240;
+const CUSTOMER_MANAGED_POLICY_LIMIT = 6144;
+const MANAGED_POLICY_FILES = [
   'cursor-security-hardening-allow-cfn-sns.json',
   'cursor-security-hardening-allow-config-posture.json',
   'cursor-security-hardening-allow-flow-alarms.json',
   'cursor-security-hardening-allow-readonly.json',
-  'cursor-security-hardening-deny-guardrails.json',
+  'cursor-security-hardening-deny-financial-app.json',
+  'cursor-security-hardening-deny-iam-infra.json',
 ];
-const INLINE_POLICY_NAMES = [
-  'HardeningAllowCfnSns',
-  'HardeningAllowConfigPosture',
-  'HardeningAllowFlowAlarms',
-  'HardeningAllowReadonly',
-  'HardeningDenyGuardrails',
+const MANAGED_POLICY_NAMES = [
+  'ChecksOpsCursorSecHardAllowCfnSns',
+  'ChecksOpsCursorSecHardAllowConfigPosture',
+  'ChecksOpsCursorSecHardAllowFlowAlarms',
+  'ChecksOpsCursorSecHardAllowReadonly',
+  'ChecksOpsCursorSecHardDenyFinancialApp',
+  'ChecksOpsCursorSecHardDenyIamInfra',
 ];
 
 const trust = JSON.parse(fs.readFileSync(trustPath, 'utf8'));
 const perms = JSON.parse(fs.readFileSync(permsPath, 'utf8'));
-const splitPolicies = INLINE_POLICY_FILES.map((name) => ({
+const managedPolicies = MANAGED_POLICY_FILES.map((name) => ({
   name,
   doc: JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/production', name), 'utf8')),
 }));
@@ -72,11 +75,14 @@ const extractJsonObjectsAfter = (text, label) => {
 const iamSize = (doc) => {
   const pretty = JSON.stringify(doc, null, 2);
   const compact = JSON.stringify(doc);
+  const noWs = compact.replace(/\s+/g, '');
   return {
     pretty: pretty.length,
     compact: compact.length,
+    noWs: noWs.length,
     utf8Pretty: Buffer.byteLength(pretty, 'utf8'),
     utf8Compact: Buffer.byteLength(compact, 'utf8'),
+    utf8NoWs: Buffer.byteLength(noWs, 'utf8'),
   };
 };
 
@@ -218,65 +224,81 @@ test('permissions are scoped to reviewed #2-#6 stacks and leftover protections',
   assert.ok(allowActions.includes('rds:DescribeDBInstances'));
 });
 
-test('yaml inlines the reviewed JSON documents and does not touch leftover trail stack', () => {
+test('yaml uses stack-owned managed policies and does not touch leftover trail stack', () => {
   for (const sid of perms.Statement.map((s) => s.Sid)) {
     assert.match(yaml, new RegExp(`"Sid": "${sid}"`));
   }
-  for (const name of INLINE_POLICY_NAMES) {
-    assert.match(yaml, new RegExp(`PolicyName: ${name}`));
+  for (const name of MANAGED_POLICY_NAMES) {
+    assert.match(yaml, new RegExp(`ManagedPolicyName: ${name}`));
   }
+  for (const ref of [
+    'AllowCfnSnsPolicy',
+    'AllowConfigPosturePolicy',
+    'AllowFlowAlarmsPolicy',
+    'AllowReadonlyPolicy',
+    'DenyFinancialAppPolicy',
+    'DenyIamInfraPolicy',
+  ]) {
+    assert.match(yaml, new RegExp(`!Ref ${ref}`));
+  }
+  assert.match(yaml, /Type: AWS::IAM::ManagedPolicy/);
+  assert.match(yaml, /ManagedPolicyArns:/);
+  assert.doesNotMatch(yaml, /^\s+Policies:/m);
+  assert.match(yaml, /RoleInlinePolicyCount:\s*\n\s+Value: '0'/);
   assert.match(yaml, /api\.cursor\.com:sub": "user:325724407"/);
   assert.match(yaml, /oidc-provider\/api\.cursor\.com/);
   assert.doesNotMatch(yaml, /oidc\.cursor\.sh/);
   assert.doesNotMatch(yaml, /checksops-production-management"/);
   assert.match(runbook, /STOP FOR REVIEW/);
   assert.match(runbook, /10240/);
+  assert.match(runbook, /6144/);
   assert.match(runbook, /ChecksOpsCursorCloudStaging/);
   assert.match(runbook, /add it to `ChecksOpsCursorCloudStaging`/);
 });
 
-test('split inline policies stay under the IAM 10240-character role-policy limit', () => {
-  assert.equal(splitPolicies.length, 5);
-  assert.ok(splitPolicies.length <= 10, 'default IAM quota is 10 inline policies per role');
+test('managed policies fit customer-managed 6144 and role aggregate inline stays 0/10240', () => {
+  assert.equal(managedPolicies.length, 6);
+  assert.ok(managedPolicies.length <= 10, 'default IAM quota is 10 managed policies per role');
 
-  const splitSids = splitPolicies.flatMap((p) => p.doc.Statement.map((s) => s.Sid)).sort();
+  const splitSids = managedPolicies.flatMap((p) => p.doc.Statement.map((s) => s.Sid)).sort();
   const combinedSids = perms.Statement.map((s) => s.Sid).sort();
   assert.deepEqual(splitSids, combinedSids);
 
   const combinedSize = iamSize(perms);
   assert.ok(
-    combinedSize.compact > INLINE_POLICY_LIMIT,
-    'the unsplit document must remain over 10240 so the split stays justified',
+    combinedSize.compact > ROLE_AGGREGATE_INLINE_LIMIT,
+    'combined permissions still exceed the role aggregate inline quota, so they must not be inline',
   );
 
-  for (const policy of splitPolicies) {
+  let aggregateInline = 0;
+  for (const policy of managedPolicies) {
     const size = iamSize(policy.doc);
-    assert.ok(
-      size.pretty <= INLINE_POLICY_LIMIT,
-      `${policy.name} pretty ${size.pretty} exceeds ${INLINE_POLICY_LIMIT}`,
-    );
-    assert.ok(
-      size.compact <= INLINE_POLICY_LIMIT,
-      `${policy.name} compact ${size.compact} exceeds ${INLINE_POLICY_LIMIT}`,
-    );
-    assert.ok(
-      size.utf8Pretty <= INLINE_POLICY_LIMIT,
-      `${policy.name} utf8 pretty ${size.utf8Pretty} exceeds ${INLINE_POLICY_LIMIT}`,
-    );
-    assert.ok(
-      size.utf8Compact <= INLINE_POLICY_LIMIT,
-      `${policy.name} utf8 compact ${size.utf8Compact} exceeds ${INLINE_POLICY_LIMIT}`,
-    );
+    for (const [label, value] of Object.entries({
+      pretty: size.pretty,
+      compact: size.compact,
+      noWs: size.noWs,
+      utf8Pretty: size.utf8Pretty,
+      utf8Compact: size.utf8Compact,
+      utf8NoWs: size.utf8NoWs,
+    })) {
+      assert.ok(
+        value <= CUSTOMER_MANAGED_POLICY_LIMIT,
+        `${policy.name} ${label} ${value} exceeds managed-policy ${CUSTOMER_MANAGED_POLICY_LIMIT}`,
+      );
+    }
   }
 
+  assert.equal(aggregateInline, 0);
+  assert.ok(aggregateInline <= ROLE_AGGREGATE_INLINE_LIMIT);
+
   const yamlDocs = extractJsonObjectsAfter(yaml, 'PolicyDocument:');
-  assert.equal(yamlDocs.length, 5);
+  assert.equal(yamlDocs.length, 6);
   for (const raw of yamlDocs) {
     const doc = JSON.parse(raw);
     const size = iamSize(doc);
-    assert.ok(size.pretty <= INLINE_POLICY_LIMIT, `yaml policy pretty ${size.pretty}`);
-    assert.ok(size.compact <= INLINE_POLICY_LIMIT, `yaml policy compact ${size.compact}`);
-    assert.ok(raw.length <= INLINE_POLICY_LIMIT, `yaml embedded policy text ${raw.length}`);
+    assert.ok(size.pretty <= CUSTOMER_MANAGED_POLICY_LIMIT, `yaml managed pretty ${size.pretty}`);
+    assert.ok(size.compact <= CUSTOMER_MANAGED_POLICY_LIMIT, `yaml managed compact ${size.compact}`);
+    assert.ok(size.noWs <= CUSTOMER_MANAGED_POLICY_LIMIT, `yaml managed noWs ${size.noWs}`);
   }
 
   const trustDocs = extractJsonObjectsAfter(yaml, 'AssumeRolePolicyDocument:');
@@ -286,7 +308,12 @@ test('split inline policies stay under the IAM 10240-character role-policy limit
   assert.equal(trustDoc.Statement[0].Condition.StringEquals['api.cursor.com:sub'], 'user:325724407');
   assert.ok(iamSize(trustDoc).pretty < 2048);
 
-  const deny = splitPolicies.find((p) => p.name.includes('deny-guardrails')).doc;
-  assert.ok(deny.Statement.every((s) => s.Effect === 'Deny'));
-  assert.ok(deny.Statement.some((s) => s.Sid === 'DenyFinancialAndAppMutation'));
+  const denyDocs = managedPolicies.filter((p) => p.name.includes('deny-'));
+  assert.equal(denyDocs.length, 2);
+  for (const deny of denyDocs) {
+    assert.ok(deny.doc.Statement.every((s) => s.Effect === 'Deny'));
+  }
+  assert.ok(
+    denyDocs.some((p) => p.doc.Statement.some((s) => s.Sid === 'DenyFinancialAndAppMutation')),
+  );
 });

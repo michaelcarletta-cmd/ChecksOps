@@ -5,31 +5,26 @@
 
 ## Root cause
 
-CloudFormation stack `checksops-cursor-security-hardening-role`
+Two CloudFormation creates of `checksops-cursor-security-hardening-role`
 **CREATE_FAILED** and rolled back:
 
 `Maximum policy size of 10240 bytes exceeded for role
 ChecksOpsCursorSecurityHardeningTemp`
 
-The role **does not exist**. The unsplit inline document was 12,575
-characters compact / 16,954 pretty.
+That quota is the role’s **aggregate inline-policy** size. Splitting the
+same statements into five inline policies still summed over 10,240. The
+role **does not exist**.
 
 ## Fix in this package (not yet deployed)
 
-`aws/production/cursor-security-hardening-role.yaml` now attaches five
-inline policies. Same Allow/Deny statements. Live OIDC trust:
+`aws/production/cursor-security-hardening-role.yaml` now:
 
-- provider `api.cursor.com`
-- aud `sts.amazonaws.com`
-- sub `user:325724407`
-
-| Policy | Purpose |
-|---|---|
-| `HardeningAllowCfnSns` | #2 stacks + SNS |
-| `HardeningAllowConfigPosture` | #3 Config + #4 GuardDuty/Hub |
-| `HardeningAllowFlowAlarms` | #5 Flow Logs + #6 alarms |
-| `HardeningAllowReadonly` | CloudTrail / logs bucket / RDS / Lambda flags |
-| `HardeningDenyGuardrails` | Financial/app/IAM/stack/bucket Denies |
+- Creates **six customer-managed policies** in the same stack
+- Attaches them via `ManagedPolicyArns`
+- Puts **zero** inline policies on the role (aggregate inline = 0)
+- Keeps live OIDC trust `api.cursor.com` / `sts.amazonaws.com` /
+  `user:325724407`
+- Keeps the same Allow/Deny statements (no broadening)
 
 ## Deployments
 
