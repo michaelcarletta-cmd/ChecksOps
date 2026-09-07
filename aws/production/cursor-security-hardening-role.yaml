@@ -2,10 +2,12 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: >
   TEMPORARY Cursor Cloud OIDC role for Security Hardening deployments #2-#6.
   Human/operator creates this stack from the Console (CAPABILITY_NAMED_IAM).
-  Cursor does not create this role. Delete the stack after #2-#6 PASS.
+  Split into five inline policies so each is under the IAM 10240-character
+  role-policy limit. Permissions are unchanged from the reviewed set.
+  Live trust is api.cursor.com / aud sts.amazonaws.com / sub user:325724407.
   Does not broaden ChecksOpsCursorCloudStaging. Cannot activate
-  financial/provider flags (explicit Deny on lambda:UpdateFunctionConfiguration).
-  Live trust is api.cursor.com / user:325724407 (current Cursor Cloud OIDC).
+  financial/provider flags. Do not deploy until reviewed. Do not start #2-#6
+  from this template create.
 
 Resources:
   ChecksOpsCursorSecurityHardeningTemp:
@@ -34,7 +36,7 @@ Resources:
           ]
         }
       Policies:
-        - PolicyName: SecurityHardeningDeployments2to6
+        - PolicyName: HardeningAllowCfnSns
           PolicyDocument: {
               "Version": "2012-10-17",
               "Statement": [
@@ -99,7 +101,13 @@ Resources:
                     "sns:SetSubscriptionAttributes"
                   ],
                   "Resource": "arn:aws:sns:us-east-1:806168576068:checksops-production-security-alerts"
-                },
+                }
+              ]
+            }
+        - PolicyName: HardeningAllowConfigPosture
+          PolicyDocument: {
+              "Version": "2012-10-17",
+              "Statement": [
                 {
                   "Sid": "ConfigRecorderNoNewRole",
                   "Effect": "Allow",
@@ -189,7 +197,13 @@ Resources:
                       ]
                     }
                   }
-                },
+                }
+              ]
+            }
+        - PolicyName: HardeningAllowFlowAlarms
+          PolicyDocument: {
+              "Version": "2012-10-17",
+              "Statement": [
                 {
                   "Sid": "DescribeFlowLogsAccount",
                   "Effect": "Allow",
@@ -296,7 +310,13 @@ Resources:
                     "cloudwatch:DescribeAlarmsForMetric"
                   ],
                   "Resource": "*"
-                },
+                }
+              ]
+            }
+        - PolicyName: HardeningAllowReadonly
+          PolicyDocument: {
+              "Version": "2012-10-17",
+              "Statement": [
                 {
                   "Sid": "ReadOnlyCloudTrailMgmtEvents",
                   "Effect": "Allow",
@@ -375,7 +395,13 @@ Resources:
                     "iam:ListRoleTags"
                   ],
                   "Resource": "arn:aws:iam::806168576068:role/ChecksOpsCursorSecurityHardeningTemp"
-                },
+                }
+              ]
+            }
+        - PolicyName: HardeningDenyGuardrails
+          PolicyDocument: {
+              "Version": "2012-10-17",
+              "Statement": [
                 {
                   "Sid": "DenyFinancialAndAppMutation",
                   "Effect": "Deny",
@@ -599,5 +625,9 @@ Outputs:
     Value: '3600'
   TrustIssuer:
     Value: api.cursor.com
+  InlinePolicyCount:
+    Value: '5'
+  IamInlinePolicyLimitChars:
+    Value: '10240'
   DoNotAttachToStagingRole:
     Value: ChecksOpsCursorCloudStaging

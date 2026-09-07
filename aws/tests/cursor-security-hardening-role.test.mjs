@@ -11,11 +11,74 @@ const yamlPath = path.join(ROOT, 'aws/production/cursor-security-hardening-role.
 const runbookPath = path.join(ROOT, 'aws/cutover/OPERATOR_TEMPORARY_ROLE.md');
 const assumePath = path.join(ROOT, 'aws/cutover/scripts/assume-and-run.mjs');
 
+const INLINE_POLICY_LIMIT = 10240;
+const INLINE_POLICY_FILES = [
+  'cursor-security-hardening-allow-cfn-sns.json',
+  'cursor-security-hardening-allow-config-posture.json',
+  'cursor-security-hardening-allow-flow-alarms.json',
+  'cursor-security-hardening-allow-readonly.json',
+  'cursor-security-hardening-deny-guardrails.json',
+];
+const INLINE_POLICY_NAMES = [
+  'HardeningAllowCfnSns',
+  'HardeningAllowConfigPosture',
+  'HardeningAllowFlowAlarms',
+  'HardeningAllowReadonly',
+  'HardeningDenyGuardrails',
+];
+
 const trust = JSON.parse(fs.readFileSync(trustPath, 'utf8'));
 const perms = JSON.parse(fs.readFileSync(permsPath, 'utf8'));
+const splitPolicies = INLINE_POLICY_FILES.map((name) => ({
+  name,
+  doc: JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/production', name), 'utf8')),
+}));
 const yaml = fs.readFileSync(yamlPath, 'utf8');
 const runbook = fs.readFileSync(runbookPath, 'utf8');
 const assume = fs.readFileSync(assumePath, 'utf8');
+
+const extractJsonObjectsAfter = (text, label) => {
+  const found = [];
+  let searchFrom = 0;
+  while (true) {
+    const idx = text.indexOf(label, searchFrom);
+    if (idx === -1) break;
+    const prev = idx > 0 ? text[idx - 1] : '\n';
+    if (label === 'PolicyDocument:' && /[A-Za-z]/.test(prev)) {
+      searchFrom = idx + label.length;
+      continue;
+    }
+    const start = text.indexOf('{', idx + label.length);
+    if (start === -1) break;
+    let depth = 0;
+    let end = -1;
+    for (let i = start; i < text.length; i += 1) {
+      if (text[i] === '{') depth += 1;
+      if (text[i] === '}') {
+        depth -= 1;
+        if (depth === 0) {
+          end = i;
+          break;
+        }
+      }
+    }
+    if (end === -1) break;
+    found.push(text.slice(start, end + 1));
+    searchFrom = end + 1;
+  }
+  return found;
+};
+
+const iamSize = (doc) => {
+  const pretty = JSON.stringify(doc, null, 2);
+  const compact = JSON.stringify(doc);
+  return {
+    pretty: pretty.length,
+    compact: compact.length,
+    utf8Pretty: Buffer.byteLength(pretty, 'utf8'),
+    utf8Compact: Buffer.byteLength(compact, 'utf8'),
+  };
+};
 
 const flattenActions = (statement) => {
   const raw = statement.Action;
@@ -159,10 +222,71 @@ test('yaml inlines the reviewed JSON documents and does not touch leftover trail
   for (const sid of perms.Statement.map((s) => s.Sid)) {
     assert.match(yaml, new RegExp(`"Sid": "${sid}"`));
   }
+  for (const name of INLINE_POLICY_NAMES) {
+    assert.match(yaml, new RegExp(`PolicyName: ${name}`));
+  }
   assert.match(yaml, /api\.cursor\.com:sub": "user:325724407"/);
+  assert.match(yaml, /oidc-provider\/api\.cursor\.com/);
+  assert.doesNotMatch(yaml, /oidc\.cursor\.sh/);
   assert.doesNotMatch(yaml, /checksops-production-management"/);
   assert.match(runbook, /STOP FOR REVIEW/);
-  assert.match(runbook, /handoff assume FAIL/);
+  assert.match(runbook, /10240/);
   assert.match(runbook, /ChecksOpsCursorCloudStaging/);
   assert.match(runbook, /add it to `ChecksOpsCursorCloudStaging`/);
+});
+
+test('split inline policies stay under the IAM 10240-character role-policy limit', () => {
+  assert.equal(splitPolicies.length, 5);
+  assert.ok(splitPolicies.length <= 10, 'default IAM quota is 10 inline policies per role');
+
+  const splitSids = splitPolicies.flatMap((p) => p.doc.Statement.map((s) => s.Sid)).sort();
+  const combinedSids = perms.Statement.map((s) => s.Sid).sort();
+  assert.deepEqual(splitSids, combinedSids);
+
+  const combinedSize = iamSize(perms);
+  assert.ok(
+    combinedSize.compact > INLINE_POLICY_LIMIT,
+    'the unsplit document must remain over 10240 so the split stays justified',
+  );
+
+  for (const policy of splitPolicies) {
+    const size = iamSize(policy.doc);
+    assert.ok(
+      size.pretty <= INLINE_POLICY_LIMIT,
+      `${policy.name} pretty ${size.pretty} exceeds ${INLINE_POLICY_LIMIT}`,
+    );
+    assert.ok(
+      size.compact <= INLINE_POLICY_LIMIT,
+      `${policy.name} compact ${size.compact} exceeds ${INLINE_POLICY_LIMIT}`,
+    );
+    assert.ok(
+      size.utf8Pretty <= INLINE_POLICY_LIMIT,
+      `${policy.name} utf8 pretty ${size.utf8Pretty} exceeds ${INLINE_POLICY_LIMIT}`,
+    );
+    assert.ok(
+      size.utf8Compact <= INLINE_POLICY_LIMIT,
+      `${policy.name} utf8 compact ${size.utf8Compact} exceeds ${INLINE_POLICY_LIMIT}`,
+    );
+  }
+
+  const yamlDocs = extractJsonObjectsAfter(yaml, 'PolicyDocument:');
+  assert.equal(yamlDocs.length, 5);
+  for (const raw of yamlDocs) {
+    const doc = JSON.parse(raw);
+    const size = iamSize(doc);
+    assert.ok(size.pretty <= INLINE_POLICY_LIMIT, `yaml policy pretty ${size.pretty}`);
+    assert.ok(size.compact <= INLINE_POLICY_LIMIT, `yaml policy compact ${size.compact}`);
+    assert.ok(raw.length <= INLINE_POLICY_LIMIT, `yaml embedded policy text ${raw.length}`);
+  }
+
+  const trustDocs = extractJsonObjectsAfter(yaml, 'AssumeRolePolicyDocument:');
+  assert.equal(trustDocs.length, 1);
+  const trustDoc = JSON.parse(trustDocs[0]);
+  assert.equal(trustDoc.Statement[0].Condition.StringEquals['api.cursor.com:aud'], 'sts.amazonaws.com');
+  assert.equal(trustDoc.Statement[0].Condition.StringEquals['api.cursor.com:sub'], 'user:325724407');
+  assert.ok(iamSize(trustDoc).pretty < 2048);
+
+  const deny = splitPolicies.find((p) => p.name.includes('deny-guardrails')).doc;
+  assert.ok(deny.Statement.every((s) => s.Effect === 'Deny'));
+  assert.ok(deny.Statement.some((s) => s.Sid === 'DenyFinancialAndAppMutation'));
 });

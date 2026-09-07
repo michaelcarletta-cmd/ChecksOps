@@ -350,9 +350,9 @@ Reviewed as a **single** stack (do not split the template).
 
 ---
 
-**STOP FOR REVIEW — handoff assume FAIL (retry).** Live token still
-assumes staging and still cannot assume
-`ChecksOpsCursorSecurityHardeningTemp`. **#2–#6 not deployed.** Confirm
-the live trust matches
-`aws/production/cursor-security-hardening-role-trust.json` exactly.
-See `aws/cutover/OPERATOR_SECURITY_HANDOFF_2TO6.md`.
+**STOP FOR REVIEW — role template size fix; do not deploy.** The temp
+role CREATE_FAILED (`10240` byte inline-policy limit) and was rolled
+back. The corrected template splits the same permissions into five
+inline policies and keeps live OIDC trust `api.cursor.com` /
+`user:325724407`. **Do not create the role or start #2–#6 until
+reviewed.** See `aws/cutover/OPERATOR_TEMPORARY_ROLE.md`.

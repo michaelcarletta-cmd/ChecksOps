@@ -1,0 +1,67 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CfnReadAccountStacks",
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:ListStacks",
+        "cloudformation:DescribeStacks",
+        "cloudformation:DescribeStackEvents",
+        "cloudformation:DescribeStackResources",
+        "cloudformation:DescribeStackResource",
+        "cloudformation:ListStackResources",
+        "cloudformation:GetTemplate",
+        "cloudformation:GetTemplateSummary",
+        "cloudformation:ValidateTemplate"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "CfnMutateOnlyDeployments2to6",
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:CreateStack",
+        "cloudformation:UpdateStack",
+        "cloudformation:DeleteStack",
+        "cloudformation:CreateChangeSet",
+        "cloudformation:DescribeChangeSet",
+        "cloudformation:ExecuteChangeSet",
+        "cloudformation:DeleteChangeSet",
+        "cloudformation:GetTemplate",
+        "cloudformation:GetTemplateSummary",
+        "cloudformation:DescribeStackEvents",
+        "cloudformation:DescribeStackResources",
+        "cloudformation:DescribeStackResource",
+        "cloudformation:ListStackResources"
+      ],
+      "Resource": [
+        "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-security-sns/*",
+        "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-security-config/*",
+        "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-security-posture/*",
+        "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-security-flow/*",
+        "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-security-alarms/*",
+        "arn:aws:cloudformation:us-east-1:806168576068:changeSet/*"
+      ]
+    },
+    {
+      "Sid": "SnsSecurityAlertTopic",
+      "Effect": "Allow",
+      "Action": [
+        "sns:CreateTopic",
+        "sns:DeleteTopic",
+        "sns:SetTopicAttributes",
+        "sns:GetTopicAttributes",
+        "sns:ListTagsForResource",
+        "sns:TagResource",
+        "sns:UntagResource",
+        "sns:Subscribe",
+        "sns:Unsubscribe",
+        "sns:ListSubscriptionsByTopic",
+        "sns:GetSubscriptionAttributes",
+        "sns:SetSubscriptionAttributes"
+      ],
+      "Resource": "arn:aws:sns:us-east-1:806168576068:checksops-production-security-alerts"
+    }
+  ]
+}

@@ -1,14 +1,20 @@
 # Temporary Cursor role for Security Hardening #2–#6
 
-**STOP FOR REVIEW — handoff assume FAIL.** Live Cursor OIDC tokens are
-issued by `https://api.cursor.com` with `sub=user:325724407`. The role
-trust copied from an older `oidc.cursor.sh` / `repo:…:staging` snapshot
-does not match, so `AssumeRoleWithWebIdentity` is AccessDenied.
-**#2–#6 were not deployed.** Update the live role trust to
-`cursor-security-hardening-role-trust.json`, then reopen the handoff.
+**STOP FOR REVIEW — do not deploy this role and do not start #2–#6.**
+
+The first CloudFormation create **CREATE_FAILED** and rolled back:
+`Maximum policy size of 10240 bytes exceeded for role
+ChecksOpsCursorSecurityHardeningTemp`. The role **does not exist**.
+
+This revision splits the same reviewed permissions into **five** inline
+policies, each under the IAM 10,240-character role-policy limit, and uses
+the live Cursor OIDC trust (`api.cursor.com` / `sts.amazonaws.com` /
+`user:325724407`). Permissions are not broadened. Financial/application
+Deny statements are kept.
 
 Do not deploy SNS / Config / GuardDuty / Security Hub / VPC Flow
-Logs / CloudWatch alarms (`#2`–`#6`) until assume succeeds.
+Logs / CloudWatch alarms (`#2`–`#6`) until this template is reviewed and
+the role create is **CREATE_COMPLETE**.
 
 **Account:** `806168576068`  
 **Region:** `us-east-1`  
@@ -35,7 +41,8 @@ only adds the **operator identity** those stacks will run as.
 | Console stack name | `checksops-cursor-security-hardening-role` |
 | Template | `aws/production/cursor-security-hardening-role.yaml` |
 | Trust JSON (paste) | `aws/production/cursor-security-hardening-role-trust.json` |
-| Permissions JSON (paste) | `aws/production/cursor-security-hardening-role-permissions.json` |
+| Combined permissions (review) | `aws/production/cursor-security-hardening-role-permissions.json` |
+| Inline policies (5, each ≤10240) | `HardeningAllowCfnSns`, `HardeningAllowConfigPosture`, `HardeningAllowFlowAlarms`, `HardeningAllowReadonly`, `HardeningDenyGuardrails` |
 | Max session | `3600` seconds |
 | Credential type | Cursor Cloud OIDC → `sts:AssumeRoleWithWebIdentity` only |
 | Static keys | **None.** Do not create access keys. |
@@ -85,8 +92,12 @@ There is **no** `AWS` principal, **no** root, **no**
 
 ## 3. Least-privilege permissions
 
-Canonical document: `aws/production/cursor-security-hardening-role-permissions.json`
-(inlined in the YAML). Summary:
+Canonical combined document:
+`aws/production/cursor-security-hardening-role-permissions.json`.
+The CloudFormation role uses **five** inline policies (same statements,
+no added Allow). Each document is under IAM’s **10,240-character**
+role-policy limit (the unsplit document is 12,575 compact / 16,954
+pretty, which caused CREATE_FAILED). Summary:
 
 | Allow | Why |
 |---|---|
