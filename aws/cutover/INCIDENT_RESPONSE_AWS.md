@@ -211,3 +211,12 @@ Operator mailbox: `security@checksops.com`.
 - Set Cognito MFA to REQUIRED
 - FORCE RLS
 - Broaden `ChecksOpsCursorCloudStaging`
+
+Leftover roles from Batch 5 failed creates (**do not delete** without
+review): `checksops-production-config-recorder` (needed for operator
+Config), `checksops-production-vpc-flow-logs`,
+`checksops-production-cloudtrail-logs`.
+
+CREATE_FAILED stack `checksops-production-security-trail` owns
+`checksops-production-security-logs-806168576068`. Delete only with
+`--retain-resources SecurityLogsBucket,SecurityLogsBucketPolicy`.
