@@ -350,10 +350,9 @@ Reviewed as a **single** stack (do not split the template).
 
 ---
 
-**STOP FOR REVIEW — handoff assume FAIL.** Live Cursor OIDC is
-`api.cursor.com` / `user:325724407`. The temp role still trusted
-`oidc.cursor.sh` / `repo:…:staging`, so Cursor could not assume it.
-**#2–#6 not deployed.** Update the live trust from
-`aws/production/cursor-security-hardening-role-trust.json`. Do not
-broaden `ChecksOpsCursorCloudStaging`. See
-`aws/cutover/OPERATOR_TEMPORARY_ROLE.md`.
+**STOP FOR REVIEW — handoff assume FAIL (retry).** Live token still
+assumes staging and still cannot assume
+`ChecksOpsCursorSecurityHardeningTemp`. **#2–#6 not deployed.** Confirm
+the live trust matches
+`aws/production/cursor-security-hardening-role-trust.json` exactly.
+See `aws/cutover/OPERATOR_SECURITY_HANDOFF_2TO6.md`.
