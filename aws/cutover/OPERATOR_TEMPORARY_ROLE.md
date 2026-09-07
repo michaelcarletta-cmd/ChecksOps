@@ -1,12 +1,16 @@
 # Temporary Cursor role for Security Hardening #2–#6
 
-**STOP FOR REVIEW — do not deploy this role and do not start #2–#6.**
+**STOP FOR REVIEW — role CREATE_COMPLETE. #2 SNS PASS. #3 Config FAIL.
+#4–#6 not started. Do not delete this role.**
 
-Two CloudFormation creates **CREATE_FAILED** and rolled back:
+The role exists (created `2026-09-07T17:45:35Z`) with **zero** inline
+policies and six customer-managed policies. Cursor OIDC assume
+succeeds. See `aws/cutover/OPERATOR_SECURITY_HANDOFF_2TO6.md`.
+
+Two earlier CloudFormation creates **CREATE_FAILED** and rolled back:
 `Maximum policy size of 10240 bytes exceeded for role
 ChecksOpsCursorSecurityHardeningTemp`. That quota is the role’s
-**aggregate inline-policy** size, not per-policy. The role **does not
-exist**.
+**aggregate inline-policy** size, not per-policy.
 
 This revision attaches the same reviewed Allow/Deny statements as
 **six customer-managed policies** owned by the same stack. The role has
@@ -15,10 +19,6 @@ policy is under the **6,144-character** customer-managed limit. Live
 OIDC trust is `api.cursor.com` / `sts.amazonaws.com` / `user:325724407`.
 Permissions are not broadened. Financial/application Deny statements
 are kept.
-
-Do not deploy SNS / Config / GuardDuty / Security Hub / VPC Flow
-Logs / CloudWatch alarms (`#2`–`#6`) until this template is reviewed and
-the role create is **CREATE_COMPLETE**.
 
 **Account:** `806168576068`  
 **Region:** `us-east-1`  
@@ -260,8 +260,9 @@ that feature flag.
 
 ## Holds (unchanged)
 
-- Do not deploy `#2`–`#6` until this role is reviewed **and** a later
-  message opens those deployments.
+- `#2` SNS is **PASS**. `#3` Config is **FAIL** (reserved channel name +
+  missing Config role). Do not start `#4`–`#6` until a reviewed `#3`
+  path exists. Do not delete this role yet.
 - Do not broaden `ChecksOpsCursorCloudStaging`.
 - Do not use root, access keys, passwords, OTPs, or secrets.
 - Do not modify application code, prep Lambda env/VPC/role, RDS data,

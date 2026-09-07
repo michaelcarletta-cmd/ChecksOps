@@ -33,7 +33,7 @@ the existing bucket.
 |---|---|---|
 | **1** | CloudTrail management-event logging | Foundational evidence. Resolves leftover trail/bucket state before Config writes to the same bucket. |
 | 2 | SNS security alerts | No traffic impact. Email confirm can complete before alarms. |
-| 3 | AWS Config | Uses the live logs bucket + retained Config role. |
+| 3 | AWS Config | Uses the live logs bucket. Config role is **NoSuchEntity**; channel name `checksops-production` is reserved on the failed trail stack. |
 | 4 | GuardDuty + Security Hub | Reviewed as **one** template. Hub is more useful after Config exists. Detection only. |
 | 5 | VPC Flow Logs | Network 5-tuple only. Independent of Hub. |
 | 6 | CloudWatch security alarms | After SNS subscription is **Confirmed**. |
@@ -54,8 +54,8 @@ deployments.
 | Stack `checksops-production-security-trail` | **CREATE_FAILED** (owns bucket + policy) | **Leave in place.** `retain-resources` is illegal until `DELETE_FAILED`. A plain `delete-stack` would delete the bucket. |
 | Trail `checksops-production-management` | **Not in CloudTrail** (`TrailNotFoundException`) but **reserved in CloudFormation** | **Do not create this name** (CLI or CFN). A future delete of the failed stack would DeleteTrail it. |
 | Stack `checksops-production-cloudtrail` | Rolled back / must not be retried with the old trail name | Do not recreate |
-| Role `checksops-production-config-recorder` | **Retained** | **Keep** for #3 |
-| Roles `checksops-production-vpc-flow-logs`, `checksops-production-cloudtrail-logs` | Leftover failed creates | **Do not delete** |
+| Role `checksops-production-config-recorder` | **NoSuchEntity** (2026-09-07 reopen) | #3 cannot reuse it. Do not invent a replacement without review. |
+| Roles `checksops-production-vpc-flow-logs`, `checksops-production-cloudtrail-logs` | vpc-flow-logs **NoSuchEntity** now; do not delete leftovers if they reappear | #5 can create `checksops-production-vpc-flow-logs` if still absent |
 | Metric filters on API/Lambda log groups | **LIVE** | Do not remove |
 
 ---
@@ -350,8 +350,10 @@ Reviewed as a **single** stack (do not split the template).
 
 ---
 
-**STOP FOR REVIEW — managed-policy redesign; do not deploy.** The third
-create uploaded the old five-inline YAML (`483adcec`), not HEAD
-`5e07501f`. See `aws/cutover/OPERATOR_ROLE_TEMPLATE_MISMATCH.md`. Delete
-the `ROLLBACK_COMPLETE` stack and upload only the current GitHub
-template. Do not start #2–#6.
+**STOP FOR REVIEW — #2 PASS, #3 FAIL, #4–#6 not started.** Handoff
+assume of `ChecksOpsCursorSecurityHardeningTemp` succeeded. SNS is
+`CREATE_COMPLETE` (email PendingConfirmation). Config rolled back:
+delivery channel `checksops-production` is reserved on
+`checksops-production-security-trail`. See
+`aws/cutover/OPERATOR_SECURITY_HANDOFF_2TO6.md`. Do not delete the
+temp role. Do not delete the trail stack.
