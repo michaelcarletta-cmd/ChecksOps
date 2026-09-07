@@ -10,6 +10,7 @@ const alarms = fs.readFileSync(path.join(ROOT, 'aws/production/security-alarms.y
 const sns = fs.readFileSync(path.join(ROOT, 'aws/production/security-alerts-sns.yaml'), 'utf8');
 const posture = fs.readFileSync(path.join(ROOT, 'aws/production/security-posture-services.yaml'), 'utf8');
 const flow = fs.readFileSync(path.join(ROOT, 'aws/production/security-vpc-flow.yaml'), 'utf8');
+const config = fs.readFileSync(path.join(ROOT, 'aws/production/security-config.yaml'), 'utf8');
 const playbook = fs.readFileSync(path.join(ROOT, 'aws/cutover/INCIDENT_RESPONSE_AWS.md'), 'utf8');
 const legacy = fs.readFileSync(path.join(ROOT, 'docs/INCIDENT_RESPONSE.md'), 'utf8');
 
@@ -18,7 +19,7 @@ test('security monitoring template is detection-only and does not block traffic'
   assert.match(posture, /AWS::SecurityHub::Hub/);
   assert.match(posture, /EBS_MALWARE_PROTECTION/);
   assert.match(posture, /Status: DISABLED/);
-  assert.match(yaml, /AWS::Config::ConfigurationRecorder/);
+  assert.match(config, /AWS::Config::ConfigurationRecorder/);
   assert.match(yaml, /AWS::CloudTrail::Trail/);
   assert.match(flow, /AWS::EC2::FlowLog/);
   assert.match(yaml, /IncludeManagementEvents: true/);

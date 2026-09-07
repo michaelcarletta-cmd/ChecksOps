@@ -8,7 +8,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 
 const AWS = process.env.AWS_CLI || `${process.env.HOME}/.local/bin/aws`;
 const REGION = 'us-east-1';
-const STACK = 'checksops-production-security-logs';
+const STACK = 'checksops-production-cloudtrail';
 const TEMPLATE = '/workspace/aws/production/security-monitoring.yaml';
 
 if (!process.argv.includes('--confirm-batch5')) {

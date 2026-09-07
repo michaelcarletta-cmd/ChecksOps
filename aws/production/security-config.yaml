@@ -1,0 +1,32 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Operator-only AWS Config recorder (Hardening Batch 5).
+  The Cloud Agent role cannot config:DescribeDeliveryChannels.
+  Reuse role checksops-production-config-recorder and bucket
+  checksops-production-security-logs-806168576068. Detection only.
+
+Parameters:
+  SecurityLogsBucketName:
+    Type: String
+    Default: checksops-production-security-logs-806168576068
+  ConfigRoleArn:
+    Type: String
+    Default: arn:aws:iam::806168576068:role/checksops-production-config-recorder
+
+Resources:
+  ConfigDeliveryChannel:
+    Type: AWS::Config::DeliveryChannel
+    Properties:
+      Name: checksops-production
+      S3BucketName: !Ref SecurityLogsBucketName
+      S3KeyPrefix: config
+
+  ConfigRecorder:
+    Type: AWS::Config::ConfigurationRecorder
+    DependsOn: ConfigDeliveryChannel
+    Properties:
+      Name: checksops-production
+      RoleARN: !Ref ConfigRoleArn
+      RecordingGroup:
+        AllSupported: true
+        IncludeGlobalResourceTypes: true

@@ -1,103 +1,22 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  Detection-only production security monitoring (Hardening Batch 5).
-  AWS Config, CloudTrail (management events), and VPC Flow Logs.
-  CloudWatch alarms, GuardDuty, Security Hub, and SNS are operator
-  templates because the agent role cannot PutMetricAlarm, TagResource,
-  or call SNS. Does not block application traffic. Does not enable
-  money/provider flags. Does not attach WAF. Does not delete bridges.
+  Detection-only CloudTrail (Hardening Batch 5).
+  Management events only to the existing security-logs bucket.
+  Does not create IAM roles, Config, GuardDuty, Security Hub, SNS,
+  or CloudWatch alarms (operator templates). Does not block traffic.
+  Does not enable money/provider flags.
 
 Parameters:
   SecurityLogsBucketName:
     Type: String
     Default: checksops-production-security-logs-806168576068
-  ConfigRoleArn:
-    Type: String
-    Default: arn:aws:iam::806168576068:role/checksops-production-config-recorder
-    Description: Existing Config recorder role. Do not recreate or delete.
 
 Resources:
-  SecurityLogsBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Ref SecurityLogsBucketName
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
-      OwnershipControls:
-        Rules:
-          - ObjectOwnership: BucketOwnerEnforced
-      BucketEncryption:
-        ServerSideEncryptionConfiguration:
-          - ServerSideEncryptionByDefault:
-              SSEAlgorithm: AES256
-      VersioningConfiguration:
-        Status: Enabled
-      LifecycleConfiguration:
-        Rules:
-          - Id: retain-365
-            Status: Enabled
-            ExpirationInDays: 365
-            Prefix: ''
-  SecurityLogsBucketPolicy:
-    Type: AWS::S3::BucketPolicy
-    Properties:
-      Bucket: !Ref SecurityLogsBucket
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Sid: AWSCloudTrailAclCheck
-            Effect: Allow
-            Principal:
-              Service: cloudtrail.amazonaws.com
-            Action:
-              - s3:GetBucketAcl
-              - s3:GetBucketLocation
-            Resource: !GetAtt SecurityLogsBucket.Arn
-            Condition:
-              StringEquals:
-                AWS:SourceAccount: !Ref AWS::AccountId
-          - Sid: AWSCloudTrailWrite
-            Effect: Allow
-            Principal:
-              Service: cloudtrail.amazonaws.com
-            Action: s3:PutObject
-            Resource: !Sub ${SecurityLogsBucket.Arn}/cloudtrail/AWSLogs/${AWS::AccountId}/*
-            Condition:
-              StringEquals:
-                s3:x-amz-acl: bucket-owner-full-control
-                AWS:SourceAccount: !Ref AWS::AccountId
-          - Sid: AWSConfigAclCheck
-            Effect: Allow
-            Principal:
-              Service: config.amazonaws.com
-            Action:
-              - s3:GetBucketAcl
-              - s3:ListBucket
-              - s3:GetBucketLocation
-            Resource: !GetAtt SecurityLogsBucket.Arn
-            Condition:
-              StringEquals:
-                AWS:SourceAccount: !Ref AWS::AccountId
-          - Sid: AWSConfigWrite
-            Effect: Allow
-            Principal:
-              Service: config.amazonaws.com
-            Action: s3:PutObject
-            Resource: !Sub ${SecurityLogsBucket.Arn}/config/AWSLogs/${AWS::AccountId}/*
-            Condition:
-              StringEquals:
-                s3:x-amz-acl: bucket-owner-full-control
-                AWS:SourceAccount: !Ref AWS::AccountId
-
   ProductionCloudTrail:
     Type: AWS::CloudTrail::Trail
-    DependsOn: SecurityLogsBucketPolicy
     Properties:
       TrailName: checksops-production-management
-      S3BucketName: !Ref SecurityLogsBucket
+      S3BucketName: !Ref SecurityLogsBucketName
       S3KeyPrefix: cloudtrail
       IsLogging: true
       IsMultiRegionTrail: true
@@ -107,27 +26,9 @@ Resources:
         - IncludeManagementEvents: true
           ReadWriteType: All
 
-  ConfigDeliveryChannel:
-    Type: AWS::Config::DeliveryChannel
-    DependsOn: SecurityLogsBucketPolicy
-    Properties:
-      Name: checksops-production
-      S3BucketName: !Ref SecurityLogsBucket
-      S3KeyPrefix: config
-
-  ConfigRecorder:
-    Type: AWS::Config::ConfigurationRecorder
-    DependsOn: ConfigDeliveryChannel
-    Properties:
-      Name: checksops-production
-      RoleARN: !Ref ConfigRoleArn
-      RecordingGroup:
-        AllSupported: true
-        IncludeGlobalResourceTypes: true
-
 Outputs:
   SecurityLogsBucketName:
-    Value: !Ref SecurityLogsBucket
+    Value: !Ref SecurityLogsBucketName
   CloudTrailName:
     Value: !Ref ProductionCloudTrail
   OperatorSnsTopicName:
