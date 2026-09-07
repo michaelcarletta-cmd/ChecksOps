@@ -429,7 +429,7 @@ Reviewed as a **single** stack (do not split the template).
 - IAM capability: **No**
 - Resources: GuardDuty detector (EBS malware **DISABLED**), Security Hub hub with default standards, `SECURITY_CONTROL` findings, no traffic block
 - Cost: GuardDuty often **$10–$50/month** here (CloudTrail analysis; EBS malware off avoids snapshot cost). Security Hub default standards often **$20–$100/month** (many controls × resources). Findings only — no auto-remediate.
-- PASS: `aws guardduty list-detectors` + `get-detector` shows `Status=ENABLED` and `EBS_MALWARE_PROTECTION` DISABLED; `aws securityhub describe-hub` succeeds; `get-enabled-standards` non-empty
+- **#4 PASS** (2026-09-07): detector `298dc17133dd46b1b2cf755bc1380e1f` ENABLED, `FIFTEEN_MINUTES`, EBS malware DISABLED. Hub enabled. Default CIS 1.2.0 + FSBP 1.0.0 subscriptions present (PENDING first enable).
 - Rollback: `delete-stack` (disables Hub/detector created by the stack). Do not delete leftover staging roles.
 
 ### #5 VPC Flow Logs — `aws/production/security-vpc-flow.yaml`
@@ -458,8 +458,10 @@ Reviewed as a **single** stack (do not split the template).
 
 ---
 
-**STOP FOR REVIEW — #2 PASS, #3 PASS, #4–#6 not started.** Config
-recorder/channel `checksops-production-config-items` is recording
-(`lastStatus: SUCCESS`) to the existing `config/` prefix. Do not start
-#4–#6. Do not delete the temp role. Do not delete the trail stack. See
+**STOP FOR REVIEW — #2 PASS, #3 PASS, #4 PASS, #5–#6 not started.**
+GuardDuty detector `298dc17133dd46b1b2cf755bc1380e1f` is ENABLED,
+`FIFTEEN_MINUTES`, EBS malware DISABLED. Security Hub hub is enabled;
+default CIS 1.2.0 and FSBP 1.0.0 subscriptions are present (still
+PENDING first enable). Do not start #5–#6. Do not delete the temp role.
+Do not delete the trail stack. See
 `aws/cutover/OPERATOR_SECURITY_HANDOFF_2TO6.md`.
