@@ -1,5 +1,12 @@
 # ChecksOps Incident Response Plan
 
+**Production AWS is authoritative here:**
+[`aws/cutover/INCIDENT_RESPONSE_AWS.md`](../aws/cutover/INCIDENT_RESPONSE_AWS.md)
+
+This file keeps GLBA notification roles. Do not use the old Supabase/Lovable
+containment steps (edge-function logs, Lovable API key rotation, Supabase
+service-role revoke) against live AWS ChecksOps.
+
 **Owner:** Qualified Individual — security@checksops.com  
 **Tested:** Annually (tabletop exercise)
 
@@ -17,26 +24,24 @@
 | Communications | Customer notifications, press |
 | CEO | Final authorization for public statements |
 
-## 3. Process
-1. **Detect** — alert sources: Supabase audit, `glba_security_events`, customer report, vendor notice
-2. **Triage** — within 1 hour, assign severity (Sev 1 NPI exposure / Sev 2 internal-only / Sev 3 attempted)
-3. **Contain** — revoke compromised tokens, rotate API keys (`ai_gateway--rotate_lovable_api_key`, Supabase service role, Actum, CheckAlt), block IPs
-4. **Eradicate** — patch vulnerability, remove malicious artifacts
-5. **Recover** — restore from clean backup if needed, monitor for recurrence
-6. **Notify** —
-   - Internal: within 24 hours to CEO + Legal
-   - FTC: within 30 days if ≥ 500 consumers (16 CFR 314.5)
-   - State AGs and consumers: per state matrix (typically 30–60 days)
-   - Tenants: within 72 hours of confirmation
-7. **Post-mortem** — written within 14 days, filed under `docs/incidents/YYYY-MM-DD.md`
+## 3. AWS process (summary)
 
-## 4. Evidence Preservation
-- Snapshot relevant Postgres tables and storage buckets before mutation
-- Export `audit_logs`, `glba_security_events`, `pii_reveal_logs` for impacted window
-- Preserve edge function logs (`supabase--edge_function_logs`)
+Use `aws/cutover/INCIDENT_RESPONSE_AWS.md` for:
 
-## 5. Communication Templates
-Drafts under `docs/templates/notification-*.md` (customer, regulator, vendor).
+- Credential compromise
+- Database compromise / 35-day PITR
+- S3 / check-image exposure
+- Cognito / account takeover
+- WAF / DDoS / API abuse
+- Provider/payment compromise (**providers stay OFF**)
 
-## 6. Tabletop Exercise
-Annually. Scenarios rotate: phishing → admin token compromise; vendor breach (CheckAlt); ransomware on engineer laptop; lost device with cached PII; insider exfiltration via export.
+Do not enable Moov, CheckAlt, provider execution, or financial grants
+during response.
+
+## 4. Notification (unchanged)
+
+- Internal: within 24 hours to CEO + Legal
+- FTC: within 30 days if ≥ 500 consumers (16 CFR 314.5)
+- State AGs and consumers: per state matrix (typically 30–60 days)
+- Tenants: within 72 hours of confirmation
+- Post-mortem: written within 14 days, filed under `docs/incidents/YYYY-MM-DD.md`

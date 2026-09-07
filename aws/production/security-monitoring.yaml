@@ -1,0 +1,626 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Detection-only production security monitoring (Hardening Batch 5).
+  GuardDuty, Security Hub, AWS Config, CloudTrail (management events),
+  VPC Flow Logs, SNS alerts, and CloudWatch alarms.
+  Does not block application traffic. Does not enable money/provider flags.
+  Does not attach WAF. Does not delete bridges or staging resources.
+
+Parameters:
+  AlertEmail:
+    Type: String
+    Default: security@checksops.com
+    Description: SNS subscription. AWS sends a confirm email. Does not change traffic.
+  VpcId:
+    Type: String
+    Default: vpc-09f2268778966ce97
+  PrepFunctionName:
+    Type: String
+    Default: checksops-production-prep-api
+  HttpApiId:
+    Type: String
+    Default: kiqojucc02
+  HttpApiStage:
+    Type: String
+    Default: prep
+  FilesBucketName:
+    Type: String
+    Default: checksops-staging-privatefilesbucket-erzqsolpucjp
+  RdsInstanceId:
+    Type: String
+    Default: checksops-staging
+  UserPoolId:
+    Type: String
+    Default: us-east-1_h00WorYMT
+  WafMetricName:
+    Type: String
+    Default: checksopsProductionCloudFrontWaf
+  SecurityLogsBucketName:
+    Type: String
+    Default: checksops-production-security-logs-806168576068
+
+Resources:
+  SecurityLogsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref SecurityLogsBucketName
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: retain-365
+            Status: Enabled
+            ExpirationInDays: 365
+      Tags:
+        - Key: HardeningBatch
+          Value: '5'
+
+  SecurityLogsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref SecurityLogsBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AWSCloudTrailAclCheck
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action:
+              - s3:GetBucketAcl
+              - s3:GetBucketLocation
+            Resource: !GetAtt SecurityLogsBucket.Arn
+            Condition:
+              StringEquals:
+                AWS:SourceAccount: !Ref AWS::AccountId
+          - Sid: AWSCloudTrailWrite
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub ${SecurityLogsBucket.Arn}/cloudtrail/AWSLogs/${AWS::AccountId}/*
+            Condition:
+              StringEquals:
+                s3:x-amz-acl: bucket-owner-full-control
+                AWS:SourceAccount: !Ref AWS::AccountId
+          - Sid: AWSConfigAclCheck
+            Effect: Allow
+            Principal:
+              Service: config.amazonaws.com
+            Action:
+              - s3:GetBucketAcl
+              - s3:ListBucket
+              - s3:GetBucketLocation
+            Resource: !GetAtt SecurityLogsBucket.Arn
+            Condition:
+              StringEquals:
+                AWS:SourceAccount: !Ref AWS::AccountId
+          - Sid: AWSConfigWrite
+            Effect: Allow
+            Principal:
+              Service: config.amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub ${SecurityLogsBucket.Arn}/config/AWSLogs/${AWS::AccountId}/*
+            Condition:
+              StringEquals:
+                s3:x-amz-acl: bucket-owner-full-control
+                AWS:SourceAccount: !Ref AWS::AccountId
+
+  CloudTrailLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/cloudtrail/checksops-production-management
+      RetentionInDays: 365
+
+  CloudTrailLogsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: checksops-production-cloudtrail-logs
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: WriteCloudTrailLogs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub ${CloudTrailLogGroup.Arn}:*
+      Tags:
+        - Key: HardeningBatch
+          Value: '5'
+
+  ProductionCloudTrail:
+    Type: AWS::CloudTrail::Trail
+    DependsOn:
+      - SecurityLogsBucketPolicy
+      - CloudTrailLogsRole
+    Properties:
+      TrailName: checksops-production-management
+      S3BucketName: !Ref SecurityLogsBucket
+      S3KeyPrefix: cloudtrail
+      IsLogging: true
+      IsMultiRegionTrail: true
+      IncludeGlobalServiceEvents: true
+      EnableLogFileValidation: true
+      CloudWatchLogsLogGroupArn: !GetAtt CloudTrailLogGroup.Arn
+      CloudWatchLogsRoleArn: !GetAtt CloudTrailLogsRole.Arn
+      EventSelectors:
+        - IncludeManagementEvents: true
+          ReadWriteType: All
+      Tags:
+        - Key: HardeningBatch
+          Value: '5'
+
+  IamChangeMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    DependsOn: ProductionCloudTrail
+    Properties:
+      LogGroupName: !Ref CloudTrailLogGroup
+      FilterName: checksops-prod-iam-security-changes
+      FilterPattern: >-
+        { ($.eventSource = iam.amazonaws.com) &&
+        ($.eventName = CreateUser || $.eventName = DeleteUser ||
+        $.eventName = CreateAccessKey || $.eventName = DeleteAccessKey ||
+        $.eventName = UpdateAccessKey || $.eventName = PutUserPolicy ||
+        $.eventName = AttachUserPolicy || $.eventName = AttachRolePolicy ||
+        $.eventName = PutRolePolicy || $.eventName = UpdateAssumeRolePolicy ||
+        $.eventName = CreateLoginProfile || $.eventName = UpdateLoginProfile) }
+      MetricTransformations:
+        - MetricNamespace: ChecksOps/ProductionPrep
+          MetricName: IamSecurityChanges
+          MetricValue: '1'
+          DefaultValue: 0
+
+  ConfigRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: checksops-production-config-recorder
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: config.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWS_ConfigRole
+      Tags:
+        - Key: HardeningBatch
+          Value: '5'
+
+  ConfigDeliveryChannel:
+    Type: AWS::Config::DeliveryChannel
+    DependsOn: SecurityLogsBucketPolicy
+    Properties:
+      Name: checksops-production
+      S3BucketName: !Ref SecurityLogsBucket
+      S3KeyPrefix: config
+
+  ConfigRecorder:
+    Type: AWS::Config::ConfigurationRecorder
+    DependsOn:
+      - ConfigRole
+      - ConfigDeliveryChannel
+    Properties:
+      Name: checksops-production
+      RoleARN: !GetAtt ConfigRole.Arn
+      RecordingGroup:
+        AllSupported: true
+        IncludeGlobalResourceTypes: true
+
+  GuardDutyDetector:
+    Type: AWS::GuardDuty::Detector
+    Properties:
+      Enable: true
+      FindingPublishingFrequency: FIFTEEN_MINUTES
+      Features:
+        - Name: EBS_MALWARE_PROTECTION
+          Status: DISABLED
+
+  SecurityHub:
+    Type: AWS::SecurityHub::Hub
+    Properties:
+      ControlFindingGenerator: SECURITY_CONTROL
+      EnableDefaultStandards: true
+      AutoEnableControls: true
+      Tags:
+        HardeningBatch: '5'
+
+  FlowLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/vpc/checksops-production-flow
+      RetentionInDays: 90
+
+  FlowLogRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: checksops-production-vpc-flow-logs
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: vpc-flow-logs.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: WriteFlowLogs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DescribeLogGroups
+                  - logs:DescribeLogStreams
+                Resource: !GetAtt FlowLogGroup.Arn
+      Tags:
+        - Key: HardeningBatch
+          Value: '5'
+
+  VpcFlowLog:
+    Type: AWS::EC2::FlowLog
+    Properties:
+      ResourceType: VPC
+      ResourceId: !Ref VpcId
+      TrafficType: ALL
+      LogDestinationType: cloud-watch-logs
+      LogGroupName: !Ref FlowLogGroup
+      DeliverLogsPermissionArn: !GetAtt FlowLogRole.Arn
+      MaxAggregationInterval: 600
+      Tags:
+        - Key: Name
+          Value: checksops-production-vpc-flow
+        - Key: HardeningBatch
+          Value: '5'
+
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: checksops-production-security-alerts
+      DisplayName: ChecksOps production security alerts
+      Tags:
+        - Key: HardeningBatch
+          Value: '5'
+
+  AlertSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref AlertTopic
+      Protocol: email
+      Endpoint: !Ref AlertEmail
+
+  Api5xxLogMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: /aws/apigateway/checksops-production-prep-http
+      FilterName: checksops-prod-api-5xx-filter
+      FilterPattern: '{ $.status = "500" || $.status = "502" || $.status = "503" || $.status = "504" }'
+      MetricTransformations:
+        - MetricNamespace: ChecksOps/ProductionPrep
+          MetricName: PrepHttp5xx
+          MetricValue: '1'
+          DefaultValue: 0
+
+  ApiAuthFailLogMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: /aws/apigateway/checksops-production-prep-http
+      FilterName: checksops-prod-api-auth-fail-filter
+      FilterPattern: '{ $.status = "401" || $.status = "403" }'
+      MetricTransformations:
+        - MetricNamespace: ChecksOps/ProductionPrep
+          MetricName: PrepAuthFailures
+          MetricValue: '1'
+          DefaultValue: 0
+
+  LambdaErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: checksops-prod-lambda-errors
+      AlarmDescription: Prep API Lambda error spike (detection).
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref PrepFunctionName
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
+
+  LambdaThrottlesAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: checksops-prod-lambda-throttles
+      AlarmDescription: Prep API Lambda throttle (detection).
+      Namespace: AWS/Lambda
+      MetricName: Throttles
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref PrepFunctionName
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
+
+  Api5xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: checksops-prod-api-5xx
+      AlarmDescription: HTTP API 5xx spike from AWS/ApiGateway metrics.
+      Namespace: AWS/ApiGateway
+      MetricName: 5xx
+      Dimensions:
+        - Name: ApiId
+          Value: !Ref HttpApiId
+        - Name: Stage
+          Value: !Ref HttpApiStage
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 20
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
+
+  Api5xxFromLogsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: checksops-production-http-api-5xx-from-logs
+      AlarmDescription: HTTP API access-log 5xx spike (requestId/status only; no payloads).
+      Namespace: ChecksOps/ProductionPrep
+      MetricName: PrepHttp5xx
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 20
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
+
+  ApiAuthFailFromLogsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: checksops-production-http-api-auth-failures
+      AlarmDescription: HTTP API 401/403 spike from access logs (auth anomaly signal).
+      Namespace: ChecksOps/ProductionPrep
+      MetricName: PrepAuthFailures
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 80
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
+
+  IamChangeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: checksops-prod-iam-security-changes
+      AlarmDescription: IAM user/key/policy changes from CloudTrail management events.
+      Namespace: ChecksOps/ProductionPrep
+      MetricName: IamSecurityChanges
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
+
+  Api4xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: checksops-prod-api-4xx
+      AlarmDescription: HTTP API 4xx spike (abuse / auth failures).
+      Namespace: AWS/ApiGateway
+      MetricName: 4xx
+      Dimensions:
+        - Name: ApiId
+          Value: !Ref HttpApiId
+        - Name: Stage
+          Value: !Ref HttpApiStage
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 200
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
+
+  CognitoSignInThrottleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: checksops-prod-cognito-signin-throttles
+      AlarmDescription: Cognito sign-in throttle spike (auth anomaly).
+      Namespace: AWS/Cognito
+      MetricName: SignInThrottles
+      Dimensions:
+        - Name: UserPool
+          Value: !Ref UserPoolId
+        - Name: UserPoolClient
+          Value: 3ja9fqaq2fjkv3i6up2varcqpe
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 20
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
+
+  WafBlockedAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: checksops-prod-waf-blocked
+      AlarmDescription: CloudFront WAF blocked-request spike (path rate limits).
+      Namespace: AWS/WAFV2
+      MetricName: BlockedRequests
+      Dimensions:
+        - Name: WebACL
+          Value: !Ref WafMetricName
+        - Name: Region
+          Value: us-east-1
+        - Name: Rule
+          Value: ALL
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 50
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
+
+  WafCountedAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: checksops-prod-waf-counted
+      AlarmDescription: CloudFront WAF counted-request spike (managed rules remain COUNT).
+      Namespace: AWS/WAFV2
+      MetricName: CountedRequests
+      Dimensions:
+        - Name: WebACL
+          Value: !Ref WafMetricName
+        - Name: Region
+          Value: us-east-1
+        - Name: Rule
+          Value: ALL
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 200
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
+
+  RdsFreeStorageAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: checksops-prod-rds-free-storage
+      AlarmDescription: RDS free storage below 10 GiB.
+      Namespace: AWS/RDS
+      MetricName: FreeStorageSpace
+      Dimensions:
+        - Name: DBInstanceIdentifier
+          Value: !Ref RdsInstanceId
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 10737418240
+      ComparisonOperator: LessThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
+
+  RdsConnectionsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: checksops-prod-rds-connections
+      AlarmDescription: RDS connection count anomaly.
+      Namespace: AWS/RDS
+      MetricName: DatabaseConnections
+      Dimensions:
+        - Name: DBInstanceIdentifier
+          Value: !Ref RdsInstanceId
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 80
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
+
+  RdsCpuAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: checksops-prod-rds-cpu
+      AlarmDescription: RDS CPU availability pressure.
+      Namespace: AWS/RDS
+      MetricName: CPUUtilization
+      Dimensions:
+        - Name: DBInstanceIdentifier
+          Value: !Ref RdsInstanceId
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 90
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
+
+  S3Files4xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: checksops-prod-s3-files-4xx
+      AlarmDescription: Files-bucket 4xx spike (suspicious access). Needs S3 request metrics; missing data does not alarm.
+      Namespace: AWS/S3
+      MetricName: 4xxErrors
+      Dimensions:
+        - Name: BucketName
+          Value: !Ref FilesBucketName
+        - Name: FilterId
+          Value: EntireBucket
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 50
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
+
+Outputs:
+  SecurityLogsBucketName:
+    Value: !Ref SecurityLogsBucket
+  CloudTrailName:
+    Value: !Ref ProductionCloudTrail
+  GuardDutyDetectorId:
+    Value: !Ref GuardDutyDetector
+  AlertTopicArn:
+    Value: !Ref AlertTopic
+  FlowLogGroup:
+    Value: !Ref FlowLogGroup
+  DetectionOnly:
+    Value: 'true'
+  MoneyFlagsUnchanged:
+    Value: 'true'
