@@ -21,6 +21,7 @@ import { replaySafeResponse, stableIdempotencyKey } from './financial-idempotenc
 import { isUuid, verifyOwnershipChain } from './financial-ownership.mjs';
 import { auditRow } from './financial-audit.mjs';
 import { reconcileOperations } from './financial-reconciliation.mjs';
+import { privilegedAuthPolicy } from './privileged-auth.mjs';
 
 export const CERTIFICATION_FIXTURE_CENTS = 12345;
 export const CERTIFICATION_MARKER = 'AWS T6 FINANCIAL';
@@ -295,6 +296,8 @@ export const handleFinancialStatus = async () => ({
   },
   operations: Object.keys(FINANCIAL_OPERATIONS),
   certificationFixtureCents: CERTIFICATION_FIXTURE_CENTS,
+  privilegedAuth: privilegedAuthPolicy(),
+  financialOperatorStepUp: 'totp_or_webauthn_required_before_activation',
 });
 
 const handlePrepare = async (event, deps) => withIdentityWrite(event, async ({ client, mapping, claims, body, spoof }) => {

@@ -4,6 +4,7 @@
  * Does NOT set AWS_FINANCIAL_PERMISSIONS_ACTIVATED. Money stays off.
  */
 import { flagTrue } from './ops-readiness.mjs';
+import { evaluatePrivilegedEnrollment, privilegedAuthPolicy } from './privileged-auth.mjs';
 
 const POOL_ID = () => process.env.COGNITO_USER_POOL_ID;
 const CLIENT_ID = () => process.env.COGNITO_CLIENT_ID;
@@ -47,7 +48,13 @@ const financialGate = () => ({
 
 const accessTokenOf = (event) => {
   const body = parseBody(event);
-  return String(body.accessToken || body.access_token || '').trim();
+  const fromBody = String(body.accessToken || body.access_token || '').trim();
+  if (fromBody) return fromBody;
+  const headers = event?.headers || {};
+  const match = Object.entries(headers).find(([key]) => key.toLowerCase() === 'authorization');
+  const header = match ? String(match[1] || '') : '';
+  const bearer = header.match(/^Bearer\s+(.+)$/i);
+  return bearer ? bearer[1].trim() : '';
 };
 
 const otpauthUri = (secret, email) => {
@@ -64,12 +71,22 @@ export const handleMfaStatus = async (event) => {
     const list = user.UserMFASettingList || [];
     const preferred = user.PreferredMfaSetting || null;
     const software = list.includes('SOFTWARE_TOKEN_MFA');
+    let passkeyCount = 0;
+    try {
+      const listed = await cognitoJson('ListWebAuthnCredentials', { AccessToken: accessToken });
+      passkeyCount = Array.isArray(listed.Credentials) ? listed.Credentials.length : 0;
+    } catch {
+      passkeyCount = 0;
+    }
     return {
       ok: true,
       statusCode: 200,
       totpEnrolled: software,
+      passkeyCount,
       preferredMfa: preferred,
       factors: software ? [{ id: 'software-token', factorType: 'totp', status: 'verified' }] : [],
+      privilegedAuth: privilegedAuthPolicy(),
+      enrollment: evaluatePrivilegedEnrollment({ totpEnrolled: software, passkeyCount }),
       ...financialGate(),
     };
   } catch (error) {

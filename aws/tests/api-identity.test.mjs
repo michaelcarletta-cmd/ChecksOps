@@ -99,6 +99,10 @@ test('resolves Cognito sub to existing application UUID and looks up tenant/role
   assert.equal(result.tenants[0].tenant_slug, 'acme');
   assert.equal(result.cognitoGroupsUsed, false);
   assert.equal(result.authorizationSource, 'user_roles_and_tenant_users');
+  assert.equal(result.privileged, true);
+  assert.equal(result.privilegedAuth.preferredMfaAtLogin, false);
+  assert.equal(result.privilegedAuth.moneyMovementUnlocked, false);
+  assert.equal(result.privilegedAuth.apiBehindCloudFrontRequiredBeforeFinancial, true);
   assert.equal(JSON.stringify(result).includes('unit-test-only-not-a-real-secret'), false);
 });
 
