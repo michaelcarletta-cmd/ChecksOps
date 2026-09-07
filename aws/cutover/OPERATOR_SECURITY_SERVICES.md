@@ -441,7 +441,7 @@ Reviewed as a **single** stack (do not split the template).
 - Conflict: that role name may already exist from Batch 5. If `EntityAlreadyExists`, **stop** and reuse/import — do not create a second role and do not delete the leftover without review.
 - Resources: log group `/aws/vpc/checksops-production-flow` (90 days), role, flow log ALL traffic, 600s aggregation, no payloads
 - Cost: CloudWatch Logs ingest ~$0.50/GB. Default-VPC Lambda ENIs are usually modest (**a few dollars to tens**/month). 90-day retention.
-- PASS: `aws ec2 describe-flow-logs --filter Name=resource-id,Values=vpc-09f2268778966ce97` shows `Active`; log group exists
+- **#5 PASS** (2026-09-07): stack `CREATE_COMPLETE`. Flow log `fl-0913268bc96a95205` ACTIVE, `DeliverLogsStatus=SUCCESS`, VPC `vpc-09f2268778966ce97`, ALL, destination `/aws/vpc/checksops-production-flow` (90 days), aggregation 600s. Role `checksops-production-vpc-flow-logs` trusts only `vpc-flow-logs.amazonaws.com`. ENI/NAT streams ingested.
 - Rollback: `delete-stack`. If delete fails on the named role, retain the role.
 
 ### #6 CloudWatch alarms — `aws/production/security-alarms.yaml`
@@ -458,10 +458,7 @@ Reviewed as a **single** stack (do not split the template).
 
 ---
 
-**STOP FOR REVIEW — #2 PASS, #3 PASS, #4 PASS, #5–#6 not started.**
-GuardDuty detector `298dc17133dd46b1b2cf755bc1380e1f` is ENABLED,
-`FIFTEEN_MINUTES`, EBS malware DISABLED. Security Hub hub is enabled;
-default CIS 1.2.0 and FSBP 1.0.0 subscriptions are present (still
-PENDING first enable). Do not start #5–#6. Do not delete the temp role.
-Do not delete the trail stack. See
-`aws/cutover/OPERATOR_SECURITY_HANDOFF_2TO6.md`.
+**STOP FOR REVIEW — #2–#5 PASS, #6 not started.** VPC Flow Log
+`fl-0913268bc96a95205` is ACTIVE on `vpc-09f2268778966ce97`. Do not
+start #6. Do not delete the temp role. Do not delete the trail stack.
+See `aws/cutover/OPERATOR_SECURITY_HANDOFF_2TO6.md`.

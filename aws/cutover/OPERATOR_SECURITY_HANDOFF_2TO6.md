@@ -1,14 +1,13 @@
-# Security Hardening #2–#6 handoff — STOP after #4 PASS
+# Security Hardening #2–#6 handoff — STOP after #5 PASS
 
 **Date:** 2026-09-07  
-**STOP FOR REVIEW.** `#4` GuardDuty + Security Hub is **PASS**.
-Temporary role **not** deleted. Trail stack left `CREATE_FAILED`. Money
-flags remain **false**. `64_` remains **NOT_APPLIED**. **#5–#6 not
-started.**
+**STOP FOR REVIEW.** `#5` VPC Flow Logs is **PASS**. Temporary role
+**not** deleted. Trail stack left `CREATE_FAILED`. Money flags remain
+**false**. `64_` remains **NOT_APPLIED**. **#6 not started.**
 
 Caller: `arn:aws:sts::806168576068:assumed-role/ChecksOpsCursorSecurityHardeningTemp/checksops-sec-hard`
 
-## Gates (this run)
+## Gates
 
 | Check | Result |
 |---|---|
@@ -20,31 +19,32 @@ Caller: `arn:aws:sts::806168576068:assumed-role/ChecksOpsCursorSecurityHardening
 
 | # | Service | Result |
 |---|---|---|
-| 1 | CloudTrail | **PASS** (prior). Still logging. |
+| 1 | CloudTrail | **PASS**. Still logging. |
 | 2 | SNS | **PASS**. Email still `PendingConfirmation`. |
 | 3 | AWS Config | **PASS**. Still `recording: true`, `lastStatus: SUCCESS`. |
-| 4 | GuardDuty + Security Hub | **PASS**. Stack `checksops-production-security-posture` `CREATE_COMPLETE`. |
-| 5–6 | Flow / Alarms | **NOT STARTED** |
+| 4 | GuardDuty + Security Hub | **PASS**. Detector `298dc17133dd46b1b2cf755bc1380e1f` ENABLED. Hub enabled. |
+| 5 | VPC Flow Logs | **PASS**. Stack `checksops-production-security-flow` `CREATE_COMPLETE`. |
+| 6 | CloudWatch alarms | **NOT STARTED** |
 
-## #4 evidence
+## #5 evidence
 
 | Item | Value |
 |---|---|
-| Stack | `checksops-production-security-posture` `CREATE_COMPLETE` |
-| Detector ID | `298dc17133dd46b1b2cf755bc1380e1f` (exactly one) |
-| Status | `ENABLED` |
-| Finding publishing | `FIFTEEN_MINUTES` |
-| `EBS_MALWARE_PROTECTION` | `DISABLED` |
-| Hub ARN | `arn:aws:securityhub:us-east-1:806168576068:hub/default` |
-| `ControlFindingGenerator` | `SECURITY_CONTROL` |
-| `AutoEnableControls` | `true` |
-| Default standards | CIS AWS Foundations 1.2.0, AWS FSBP 1.0.0 — both **PENDING** first enable |
-| Detection only | No WAF/SG/NACL/remediation change |
+| Stack | `checksops-production-security-flow` `CREATE_COMPLETE` |
+| FlowLogId | `fl-0913268bc96a95205` |
+| FlowLogStatus | `ACTIVE` |
+| DeliverLogsStatus | `SUCCESS` |
+| ResourceId | `vpc-09f2268778966ce97` |
+| TrafficType | `ALL` |
+| Destination | CloudWatch Logs `/aws/vpc/checksops-production-flow` |
+| Retention | 90 days |
+| MaxAggregationInterval | 600 |
+| IAM role | `checksops-production-vpc-flow-logs` trusts only `vpc-flow-logs.amazonaws.com` |
+| Log delivery | ENI/NAT streams present with `lastIngestionTime` (e.g. `eni-03224d8d3e5c575b1-all`) |
+| Format | 5-tuple + packets/bytes/action only (no payloads) |
 
-Warning: Security Hub standard subscriptions are present but still
-`PENDING` (normal after first enable). GuardDuty default features besides
-EBS malware (CloudTrail/DNS/Flow/S3/EKS audit/RDS login/Lambda network)
-came up ENABLED; runtime/malware/AI features stay DISABLED.
+`logs:FilterLogEvents` is denied on the temp role (expected; not
+broadened). Stream metadata is enough to show ingestion.
 
 ## Holds
 

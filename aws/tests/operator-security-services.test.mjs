@@ -26,7 +26,7 @@ test('operator package lists six detection-only deployments and stops at the tem
   assert.match(pack, /security-vpc-flow\.yaml/);
   assert.match(pack, /security-alarms\.yaml/);
   assert.match(pack, /Deployment #1 \(CloudTrail\):\*\* \*\*PASS/);
-  assert.match(pack, /STOP FOR REVIEW — #2 PASS, #3 PASS, #4 PASS/);
+  assert.match(pack, /STOP FOR REVIEW — #2–#5 PASS, #6 not started/);
   assert.match(pack, /put-configuration-recorder/);
   assert.match(pack, /put-delivery-channel/);
   assert.match(pack, /start-configuration-recorder/);
