@@ -8,6 +8,8 @@ import {
   authorizeObject,
   BUCKET_AUTH_SQL,
   CHECK_INTAKE_CLAIM_FILES_AUTH_SQL,
+  clampExpires,
+  SIGNING_DOCUMENT_EXPIRES,
 } from '../functions/api/storage.mjs';
 import {
   handleStorageUploadUrl,
@@ -109,6 +111,12 @@ const depsFor = (client, { keys = new Set(), signedUrl = 'https://s3.example/pre
     getSignedUrl: async () => signedUrl,
   };
 };
+
+test('check and document view TTL cannot exceed 300 seconds', () => {
+  assert.equal(clampExpires(14400), 300);
+  assert.equal(clampExpires(1800), 300);
+  assert.equal(SIGNING_DOCUMENT_EXPIRES, 1800);
+});
 
 test('S3 keys preserve bucket and object path under files/', () => {
   assert.equal(s3KeyFor('claim-files', FREEDOM_PATH), `files/claim-files/${FREEDOM_PATH}`);

@@ -203,7 +203,7 @@ export function createAwsStorageAdapter(opts: { getToken?: TokenGetter } = {}) {
       },
       createSignedUrl: async (rawPath: string, expiresIn = 300, options?: { download?: string | boolean }) =>
         signOne(rawPath, expiresIn, options?.download),
-      createSignedUrls: async (paths: string[], expiresIn = 1800) => {
+      createSignedUrls: async (paths: string[], expiresIn = 300) => {
         const token = await getToken();
         if (!token) return { data: [], error: storageError("JWT expired", 401) };
         const normalized = paths.map((p) => toStorageObjectPath(p, bucket) || p);

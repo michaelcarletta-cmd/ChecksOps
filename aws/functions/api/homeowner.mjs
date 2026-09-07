@@ -799,7 +799,7 @@ export const handleGetCheckImageUrls = async (event) => withIdentity(event, asyn
       return await getSignedUrl(
         s3(),
         new GetObjectCommand({ Bucket: filesBucket(), Key: key }),
-        { expiresIn: 900 },
+        { expiresIn: 300 },
       );
     } catch {
       return null;
