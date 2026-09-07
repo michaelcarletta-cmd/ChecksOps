@@ -64,12 +64,12 @@ test('temporary hardening role name, trust, and session match staging OIDC', () 
   assert.equal(stmt.Action, 'sts:AssumeRoleWithWebIdentity');
   assert.equal(
     stmt.Principal.Federated,
-    'arn:aws:iam::806168576068:oidc-provider/oidc.cursor.sh',
+    'arn:aws:iam::806168576068:oidc-provider/api.cursor.com',
   );
-  assert.equal(stmt.Condition.StringEquals['oidc.cursor.sh:aud'], 'sts.amazonaws.com');
+  assert.equal(stmt.Condition.StringEquals['api.cursor.com:aud'], 'sts.amazonaws.com');
   assert.equal(
-    stmt.Condition.StringEquals['oidc.cursor.sh:sub'],
-    'repo:michaelcarletta-cmd/ChecksOps:environment:staging',
+    stmt.Condition.StringEquals['api.cursor.com:sub'],
+    'user:325724407',
   );
   assert.equal(stmt.Principal.AWS, undefined);
   assert.match(yaml, /RoleName: ChecksOpsCursorSecurityHardeningTemp/);
@@ -159,10 +159,10 @@ test('yaml inlines the reviewed JSON documents and does not touch leftover trail
   for (const sid of perms.Statement.map((s) => s.Sid)) {
     assert.match(yaml, new RegExp(`"Sid": "${sid}"`));
   }
-  assert.match(yaml, /oidc\.cursor\.sh:sub": "repo:michaelcarletta-cmd\/ChecksOps:environment:staging"/);
+  assert.match(yaml, /api\.cursor\.com:sub": "user:325724407"/);
   assert.doesNotMatch(yaml, /checksops-production-management"/);
   assert.match(runbook, /STOP FOR REVIEW/);
-  assert.match(runbook, /Do not create this role in AWS/);
+  assert.match(runbook, /handoff assume FAIL/);
   assert.match(runbook, /ChecksOpsCursorCloudStaging/);
   assert.match(runbook, /add it to `ChecksOpsCursorCloudStaging`/);
 });

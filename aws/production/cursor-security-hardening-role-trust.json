@@ -2,16 +2,16 @@
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "CursorCloudOidcSameSubjectAsStaging",
+      "Sid": "CursorCloudOidcLiveApiCursorCom",
       "Effect": "Allow",
       "Principal": {
-        "Federated": "arn:aws:iam::806168576068:oidc-provider/oidc.cursor.sh"
+        "Federated": "arn:aws:iam::806168576068:oidc-provider/api.cursor.com"
       },
       "Action": "sts:AssumeRoleWithWebIdentity",
       "Condition": {
         "StringEquals": {
-          "oidc.cursor.sh:aud": "sts.amazonaws.com",
-          "oidc.cursor.sh:sub": "repo:michaelcarletta-cmd/ChecksOps:environment:staging"
+          "api.cursor.com:aud": "sts.amazonaws.com",
+          "api.cursor.com:sub": "user:325724407"
         }
       }
     }

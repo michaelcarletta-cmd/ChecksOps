@@ -5,7 +5,7 @@ Description: >
   Cursor does not create this role. Delete the stack after #2-#6 PASS.
   Does not broaden ChecksOpsCursorCloudStaging. Cannot activate
   financial/provider flags (explicit Deny on lambda:UpdateFunctionConfiguration).
-  Do not deploy this stack until the operator package has been reviewed.
+  Live trust is api.cursor.com / user:325724407 (current Cursor Cloud OIDC).
 
 Resources:
   ChecksOpsCursorSecurityHardeningTemp:
@@ -18,16 +18,16 @@ Resources:
           "Version": "2012-10-17",
           "Statement": [
             {
-              "Sid": "CursorCloudOidcSameSubjectAsStaging",
+              "Sid": "CursorCloudOidcLiveApiCursorCom",
               "Effect": "Allow",
               "Principal": {
-                "Federated": "arn:aws:iam::806168576068:oidc-provider/oidc.cursor.sh"
+                "Federated": "arn:aws:iam::806168576068:oidc-provider/api.cursor.com"
               },
               "Action": "sts:AssumeRoleWithWebIdentity",
               "Condition": {
                 "StringEquals": {
-                  "oidc.cursor.sh:aud": "sts.amazonaws.com",
-                  "oidc.cursor.sh:sub": "repo:michaelcarletta-cmd/ChecksOps:environment:staging"
+                  "api.cursor.com:aud": "sts.amazonaws.com",
+                  "api.cursor.com:sub": "user:325724407"
                 }
               }
             }
@@ -598,6 +598,6 @@ Outputs:
   MaxSessionSeconds:
     Value: '3600'
   TrustIssuer:
-    Value: oidc.cursor.sh
+    Value: api.cursor.com
   DoNotAttachToStagingRole:
     Value: ChecksOpsCursorCloudStaging

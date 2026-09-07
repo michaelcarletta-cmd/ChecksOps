@@ -1,8 +1,14 @@
 # Temporary Cursor role for Security Hardening #2–#6
 
-**STOP FOR REVIEW.** Do not create this role in AWS until this package is
-accepted. Do not deploy SNS / Config / GuardDuty / Security Hub / VPC Flow
-Logs / CloudWatch alarms (`#2`–`#6`) in this step.
+**STOP FOR REVIEW — handoff assume FAIL.** Live Cursor OIDC tokens are
+issued by `https://api.cursor.com` with `sub=user:325724407`. The role
+trust copied from an older `oidc.cursor.sh` / `repo:…:staging` snapshot
+does not match, so `AssumeRoleWithWebIdentity` is AccessDenied.
+**#2–#6 were not deployed.** Update the live role trust to
+`cursor-security-hardening-role-trust.json`, then reopen the handoff.
+
+Do not deploy SNS / Config / GuardDuty / Security Hub / VPC Flow
+Logs / CloudWatch alarms (`#2`–`#6`) until assume succeeds.
 
 **Account:** `806168576068`  
 **Region:** `us-east-1`  
@@ -41,11 +47,13 @@ add it to `ChecksOpsCursorCloudStaging`.
 
 ## 2. Trust policy
 
-Copied from the live trust of `ChecksOpsCursorCloudStaging` (OIDC provider
-`oidc.cursor.sh`, audience `sts.amazonaws.com`, subject
-`repo:michaelcarletta-cmd/ChecksOps:environment:staging`). Same issuer and
-subject so the **existing** Cursor Cloud environment token can assume this
-role. The staging role itself is unchanged: it does **not** gain
+**Live Cursor Cloud OIDC (2026-09-07 handoff):** issuer `https://api.cursor.com`,
+audience `sts.amazonaws.com`, subject `user:325724407`. The same token
+successfully assumes `ChecksOpsCursorCloudStaging`. The older
+`oidc.cursor.sh` / `repo:…:environment:staging` subject does **not** match
+current tokens and causes `AssumeRoleWithWebIdentity` AccessDenied.
+
+The staging role itself is unchanged: it does **not** gain
 `sts:AssumeRole` on this role.
 
 ```json
@@ -53,16 +61,16 @@ role. The staging role itself is unchanged: it does **not** gain
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "CursorCloudOidcSameSubjectAsStaging",
+      "Sid": "CursorCloudOidcLiveApiCursorCom",
       "Effect": "Allow",
       "Principal": {
-        "Federated": "arn:aws:iam::806168576068:oidc-provider/oidc.cursor.sh"
+        "Federated": "arn:aws:iam::806168576068:oidc-provider/api.cursor.com"
       },
       "Action": "sts:AssumeRoleWithWebIdentity",
       "Condition": {
         "StringEquals": {
-          "oidc.cursor.sh:aud": "sts.amazonaws.com",
-          "oidc.cursor.sh:sub": "repo:michaelcarletta-cmd/ChecksOps:environment:staging"
+          "api.cursor.com:aud": "sts.amazonaws.com",
+          "api.cursor.com:sub": "user:325724407"
         }
       }
     }
@@ -137,13 +145,19 @@ Do **not** attach further policies. Do **not** edit
 `checksops-production-security-trail` or the security-logs bucket.
 
 Console alternative (same JSON, no CloudFormation): IAM → Roles → Create
-role → Web identity → Identity provider `oidc.cursor.sh` → Audience
+role → Web identity → Identity provider `api.cursor.com` → Audience
 `sts.amazonaws.com` → then replace the generated trust with
 `cursor-security-hardening-role-trust.json`, set role name
 `ChecksOpsCursorSecurityHardeningTemp`, max session 3600, and paste
 `cursor-security-hardening-role-permissions.json` as an inline policy named
 `SecurityHardeningDeployments2to6`. Prefer the CloudFormation path so revoke
 is `delete-stack`.
+
+If the role already exists with the old `oidc.cursor.sh` trust: IAM →
+Roles → `ChecksOpsCursorSecurityHardeningTemp` → Trust relationships →
+Edit trust policy → replace the document with
+`cursor-security-hardening-role-trust.json` → Update policy. Do **not**
+attach extra permissions. Do **not** edit `ChecksOpsCursorCloudStaging`.
 
 ---
 
