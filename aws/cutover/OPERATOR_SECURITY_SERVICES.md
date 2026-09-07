@@ -38,7 +38,7 @@ fixes** that do **not** touch `checksops-production-security-trail`:
 |---|---|---|
 | **1** | CloudTrail management-event logging | Foundational evidence. Resolves leftover trail/bucket state before Config writes to the same bucket. |
 | 2 | SNS security alerts | No traffic impact. Email confirm can complete before alarms. |
-| 3 | AWS Config | Same collision class as #1. New name `checksops-production-config-items` + new role. Existing bucket `config/` prefix. **Not deployed yet.** |
+| 3 | AWS Config | **PASS.** CLI recorder/channel `checksops-production-config-items`. Existing bucket `config/` prefix. |
 | 4 | GuardDuty + Security Hub | Reviewed as **one** template. Hub is more useful after Config exists. Detection only. |
 | 5 | VPC Flow Logs | Network 5-tuple only. Independent of Hub. |
 | 6 | CloudWatch security alarms | After SNS subscription is **Confirmed**. |
@@ -305,7 +305,7 @@ message opens those deployments. Use the reviewed templates below as-is.
 - Rollback: `delete-stack checksops-production-security-sns`
 - Then pass `AlertTopicArn` into #6 (not into `security-monitoring.yaml`)
 
-### #3 Config — collision fix (do not deploy until reviewed)
+### #3 Config — **PASS** (CLI; do not retry CFN)
 
 Same class of fix as CloudTrail `#1`: the CFN name
 `checksops-production` is reserved on
@@ -320,7 +320,7 @@ role `checksops-production-config-recorder`.
 | IAM role name | `checksops-production-config-items-recorder` |
 | IAM role ARN | `arn:aws:iam::806168576068:role/checksops-production-config-items-recorder` |
 | Role template / stack | `aws/production/security-config-role.yaml` / `checksops-production-security-config-role` |
-| Recorder template / stack | `aws/production/security-config.yaml` / `checksops-production-security-config` |
+| Desired-state YAML | `aws/production/security-config.yaml` (**do not** `create-stack`) |
 | Bucket / prefix | `checksops-production-security-logs-806168576068` / `config` |
 | Recording | `AllSupported` + global types. Detection only. No remediation. |
 | Cursor PassRole | **only** the new role ARN to `config.amazonaws.com` |
@@ -341,40 +341,45 @@ already cover `config/`).
 The temp Cursor role still **cannot** `CreateRole` for Config. It only
 `PassRole` / `GetRole` this exact new ARN.
 
-#### One-time operator action (after this review; still do not start #4–#6)
+#### Operator prep (complete 2026-09-07)
 
-Privileged-ops / Administrator. **Not** root. **Not**
-`ChecksOpsCursorCloudStaging`. **Not** the temp Cursor role.
+Role stack `checksops-production-security-config-role` **CREATE_COMPLETE**.
+Temp role stack **UPDATE_COMPLETE**. Empty failed Config stack deleted.
+Trail stack not touched.
 
-1. Confirm SNS email `security@checksops.com` if not already Confirmed
-   (independent of #3).
-2. Create stack `checksops-production-security-config-role` from
-   `aws/production/security-config-role.yaml` in `us-east-1` with
-   `CAPABILITY_NAMED_IAM`. Wait for **CREATE_COMPLETE**.
-3. Update stack `checksops-cursor-security-hardening-role` with the
-   current GitHub `cursor-security-hardening-role.yaml` (PassRole /
-   GetRole / Deny-PassRole NotResource now name the new Config role
-   only). `CAPABILITY_NAMED_IAM`. Wait for **UPDATE_COMPLETE**.
-4. Delete the empty `ROLLBACK_COMPLETE` stack
-   `checksops-production-security-config` (owns nothing live) so a later
-   #3 create can reuse that stack name.
-5. **Stop.** Do **not** create-stack `security-config.yaml` yet. Do
-   **not** start #4–#6. Do **not** touch the trail stack, bucket, or
-   bucket policy.
+#### Why not CloudFormation
 
-#### Later #3 deploy (not this turn)
+A single CFN stack cannot create both resources with current APIs:
 
-IAM capability: **No** (role already exists). Parameters use defaults.
-Account limit: **one** recorder per region. If any recorder already
-exists, **stop**. Create the **recorder first**, then the delivery
-channel (`DependsOn: ConfigRecorder`). Current Config APIs reject
-`PutDeliveryChannel` with `NoAvailableConfigurationRecorderException`
-if no recorder exists yet.
+1. `PutDeliveryChannel` → `NoAvailableConfigurationRecorderException`
+   if no recorder exists.
+2. CFN `AWS::Config::ConfigurationRecorder` then calls
+   `StartConfigurationRecorder` → `NoAvailableDeliveryChannelException`
+   if no channel exists.
 
-PASS: `describe-configuration-recorder-status` for
-`checksops-production-config-items` shows `recording: true` and
-`lastStatus: SUCCESS`; objects under `s3://…/config/`. Failed trail
-stack still `CREATE_FAILED`. Money flags still `false`.
+Two `create-stack` attempts **ROLLBACK_COMPLETE**. Same class of fix as
+CloudTrail `#1`: **CLI** against the existing bucket.
+
+#### Deploy commands (historical; #3 is PASS — do not re-run)
+
+Account limit: **one** recorder per region.
+
+```bash
+aws configservice put-configuration-recorder --region us-east-1 \
+  --configuration-recorder '{"name":"checksops-production-config-items","roleARN":"arn:aws:iam::806168576068:role/checksops-production-config-items-recorder","recordingGroup":{"allSupported":true,"includeGlobalResourceTypes":true}}'
+
+aws configservice put-delivery-channel --region us-east-1 \
+  --delivery-channel '{"name":"checksops-production-config-items","s3BucketName":"checksops-production-security-logs-806168576068","s3KeyPrefix":"config"}'
+
+aws configservice start-configuration-recorder --region us-east-1 \
+  --configuration-recorder-name checksops-production-config-items
+```
+
+**#3 PASS** (2026-09-07): `recording: true`, `lastStatus: SUCCESS`,
+object `config/AWSLogs/806168576068/Config/ConfigWritabilityCheckFile`
+on the existing bucket. Trail stack still `CREATE_FAILED`. Money flags
+still `false`. First full Config snapshot may continue writing under
+`config/` after PASS.
 
 Cost: configuration items ~$0.003 each; a small account with
 `AllSupported` is commonly **$20–$150/month**.
@@ -386,12 +391,19 @@ Stops recording; does not touch the bucket, trail stack, or temp role:
 ```bash
 aws configservice stop-configuration-recorder --region us-east-1 \
   --configuration-recorder-name checksops-production-config-items
-aws cloudformation delete-stack --region us-east-1 \
-  --stack-name checksops-production-security-config
+```
+
+Only if the recorder/channel must be removed after stop:
+
+```bash
+aws configservice delete-delivery-channel --region us-east-1 \
+  --delivery-channel-name checksops-production-config-items
+aws configservice delete-configuration-recorder --region us-east-1 \
+  --configuration-recorder-name checksops-production-config-items
 ```
 
 Keep `checksops-production-config-items-recorder` unless the role itself
-must be removed (only after the recorder stack is gone):
+must be removed:
 
 ```bash
 aws cloudformation delete-stack --region us-east-1 \
@@ -446,10 +458,8 @@ Reviewed as a **single** stack (do not split the template).
 
 ---
 
-**STOP FOR REVIEW — #3 Config correction prepared; do not deploy.**
-#2 SNS remains **PASS**. #4–#6 not started. Templates now use recorder
-/ channel `checksops-production-config-items` and role
-`checksops-production-config-items-recorder`. Do not create those
-resources until this correction is reviewed. Do not delete the temp
-role. Do not delete the trail stack. See
+**STOP FOR REVIEW — #2 PASS, #3 PASS, #4–#6 not started.** Config
+recorder/channel `checksops-production-config-items` is recording
+(`lastStatus: SUCCESS`) to the existing `config/` prefix. Do not start
+#4–#6. Do not delete the temp role. Do not delete the trail stack. See
 `aws/cutover/OPERATOR_SECURITY_HANDOFF_2TO6.md`.

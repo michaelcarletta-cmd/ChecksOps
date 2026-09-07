@@ -1,12 +1,14 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  Operator-only AWS Config recorder (Hardening #3 name-collision fix).
-  Same class of fix as CloudTrail checksops-production-mgmt-events:
-  do not reuse CFN-reserved name checksops-production.
-  New recorder/channel name checksops-production-config-items.
-  PassRole checksops-production-config-items-recorder (operator-created).
-  Reuse bucket checksops-production-security-logs-806168576068 prefix config/.
-  Detection only. No auto-remediation. Do not modify the trail stack.
+  Desired-state reference for AWS Config #3. Do not deploy this file as a
+  single CloudFormation stack. Current Config APIs deadlock in CFN:
+  PutDeliveryChannel requires a recorder, and the CFN recorder resource
+  tries to StartConfigurationRecorder which requires a delivery channel.
+  Deploy with CLI put-configuration-recorder, put-delivery-channel, then
+  start-configuration-recorder (same class of fix as CloudTrail #1).
+  Names: checksops-production-config-items + role
+  checksops-production-config-items-recorder. Existing bucket prefix config/.
+  Detection only. Do not modify the trail stack.
 
 Parameters:
   SecurityLogsBucketName:

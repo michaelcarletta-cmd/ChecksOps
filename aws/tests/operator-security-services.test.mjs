@@ -26,7 +26,10 @@ test('operator package lists six detection-only deployments and stops at the tem
   assert.match(pack, /security-vpc-flow\.yaml/);
   assert.match(pack, /security-alarms\.yaml/);
   assert.match(pack, /Deployment #1 \(CloudTrail\):\*\* \*\*PASS/);
-  assert.match(pack, /STOP FOR REVIEW — #3 Config correction prepared/);
+  assert.match(pack, /STOP FOR REVIEW — #2 PASS, #3 PASS/);
+  assert.match(pack, /put-configuration-recorder/);
+  assert.match(pack, /put-delivery-channel/);
+  assert.match(pack, /start-configuration-recorder/);
   assert.match(pack, /ChecksOpsCursorSecurityHardeningTemp/);
   assert.match(pack, /OPERATOR_TEMPORARY_ROLE\.md/);
   assert.match(pack, /Do not\*\* use or broaden/);

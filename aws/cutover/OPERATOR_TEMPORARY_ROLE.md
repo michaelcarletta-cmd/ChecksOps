@@ -1,8 +1,7 @@
 # Temporary Cursor role for Security Hardening #2–#6
 
-**STOP FOR REVIEW — #3 Config correction prepared; do not deploy.**
-Role CREATE_COMPLETE. #2 SNS PASS. #4–#6 not started. Do not delete
-this role. Do not deploy Config until the correction is reviewed.
+**STOP FOR REVIEW — #2 PASS, #3 PASS, #4–#6 not started.**
+Role CREATE_COMPLETE. Do not delete this role. Do not start #4–#6.
 
 The role exists (created `2026-09-07T17:45:35Z`) with **zero** inline
 policies and six customer-managed policies. Cursor OIDC assume
@@ -262,8 +261,8 @@ that feature flag.
 
 ## Holds (unchanged)
 
-- `#2` SNS is **PASS**. `#3` Config correction is **prepared, not
-  deployed** (`checksops-production-config-items` +
+- `#2` SNS is **PASS**. `#3` Config is **PASS**
+  (`checksops-production-config-items` +
   `checksops-production-config-items-recorder`). Do not start `#4`–`#6`.
   Do not delete this role yet.
 - Do not broaden `ChecksOpsCursorCloudStaging`.
