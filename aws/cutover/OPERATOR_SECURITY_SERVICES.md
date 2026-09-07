@@ -2,8 +2,19 @@
 
 **Account:** `806168576068`  
 **Region:** `us-east-1`  
-**Role to use:** a privileged ops / Administrator role.  
-**Do not** use or broaden `ChecksOpsCursorCloudStaging`.
+**Deployment #1 (CloudTrail):** **PASS** (2026-09-07) —
+`checksops-production-mgmt-events`, `IsLogging=true`, multi-region, log-file
+validation on, management events All, `DataResources=[]`, objects in
+`checksops-production-security-logs-806168576068`. Money flags still
+`false`. Do **not** create a second management trail.
+
+**Role for #2–#6:** temporary Cursor OIDC role
+`ChecksOpsCursorSecurityHardeningTemp` — see
+`aws/cutover/OPERATOR_TEMPORARY_ROLE.md`. A privileged ops / Administrator
+principal creates **that role only** (one Console CloudFormation stack).
+Cursor then assumes it via existing OIDC. **Do not** use or broaden
+`ChecksOpsCursorCloudStaging`. **Do not** create the role or deploy `#2`–`#6`
+until that runbook is reviewed.
 
 Detection only. No application change. No staging change. No
 API-behind-CloudFront. Money/provider flags stay **OFF**.
@@ -27,8 +38,10 @@ the existing bucket.
 | 5 | VPC Flow Logs | Network 5-tuple only. Independent of Hub. |
 | 6 | CloudWatch security alarms | After SNS subscription is **Confirmed**. |
 
-Deploy and **PASS-verify #1** before starting #2.  
-This document stops the operator at **#1**.
+**#1 is PASS.** Next reviewed step is the temporary Cursor role
+(`OPERATOR_TEMPORARY_ROLE.md`), then `#2`–`#6` in this order. Do **not**
+start `#2` until that role exists and a later message opens those
+deployments.
 
 ---
 
@@ -49,7 +62,9 @@ This document stops the operator at **#1**.
 
 ## Deployment #1 — CloudTrail management-event logging (revised)
 
-**STOP after this deployment.** Do not start #2 until #1 is PASS.
+**#1 is PASS.** Commands below are the historical card (do not re-run
+`create-trail`). Do not start #2 until the temporary Cursor role is
+reviewed and created.
 
 **Do not** use CloudFormation for this step.  
 **Do not** delete or update `checksops-production-security-trail`.  
@@ -268,7 +283,9 @@ Do **not** do that in this deployment.
 ## Later deployments (do not run yet)
 
 Full cards for #2–#6 are in this file so the package is complete.
-**Do not execute them until #1 is PASS and the next stop is opened.**
+**#1 is PASS.** Do **not** execute `#2`–`#6` until
+`ChecksOpsCursorSecurityHardeningTemp` is reviewed, created, and a later
+message opens those deployments. Use the reviewed templates below as-is.
 
 ### #2 SNS — `aws/production/security-alerts-sns.yaml`
 
@@ -333,4 +350,7 @@ Reviewed as a **single** stack (do not split the template).
 
 ---
 
-**STOP FOR OPERATOR DEPLOYMENT #1.**
+**STOP FOR REVIEW — temporary Cursor role
+`ChecksOpsCursorSecurityHardeningTemp`.** Do not create the role in AWS
+until accepted. Do not deploy `#2`–`#6`. Do not broaden
+`ChecksOpsCursorCloudStaging`. See `aws/cutover/OPERATOR_TEMPORARY_ROLE.md`.

@@ -1,0 +1,19 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CursorCloudOidcSameSubjectAsStaging",
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::806168576068:oidc-provider/oidc.cursor.sh"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "oidc.cursor.sh:aud": "sts.amazonaws.com",
+          "oidc.cursor.sh:sub": "repo:michaelcarletta-cmd/ChecksOps:environment:staging"
+        }
+      }
+    }
+  ]
+}

@@ -8,7 +8,7 @@ const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const pack = fs.readFileSync(path.join(ROOT, 'aws/cutover/OPERATOR_SECURITY_SERVICES.md'), 'utf8');
 const trail = fs.readFileSync(path.join(ROOT, 'aws/production/security-monitoring.yaml'), 'utf8');
 
-test('operator package lists six detection-only deployments and stops at #1', () => {
+test('operator package lists six detection-only deployments and stops at the temp role', () => {
   assert.match(pack, /Deployment #1 — CloudTrail/);
   assert.match(pack, /checksops-production-mgmt-events/);
   assert.match(pack, /create-trail/);
@@ -21,8 +21,12 @@ test('operator package lists six detection-only deployments and stops at #1', ()
   assert.match(pack, /security-posture-services\.yaml/);
   assert.match(pack, /security-vpc-flow\.yaml/);
   assert.match(pack, /security-alarms\.yaml/);
-  assert.match(pack, /STOP FOR OPERATOR DEPLOYMENT #1/);
-  assert.match(pack, /Do not\*\* use or broaden `ChecksOpsCursorCloudStaging`/);
+  assert.match(pack, /Deployment #1 \(CloudTrail\):\*\* \*\*PASS/);
+  assert.match(pack, /STOP FOR REVIEW — temporary Cursor role/);
+  assert.match(pack, /ChecksOpsCursorSecurityHardeningTemp/);
+  assert.match(pack, /OPERATOR_TEMPORARY_ROLE\.md/);
+  assert.match(pack, /Do not\*\* use or broaden/);
+  assert.match(pack, /ChecksOpsCursorCloudStaging/);
   assert.match(pack, /64_financial_activation_grants\.sql` stays \*\*NOT_APPLIED/);
   assert.match(pack, /No application change/);
   assert.match(pack, /would delete the bucket/);

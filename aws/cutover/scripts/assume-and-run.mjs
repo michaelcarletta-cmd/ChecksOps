@@ -19,10 +19,16 @@ const oidcToken = () => new Promise((resolve, reject) => {
 });
 
 const token = await oidcToken();
+const hardeningRole = process.env.CURSOR_AWS_SECURITY_HARDENING_ROLE_ARN;
+const roleArn = hardeningRole || process.env.CURSOR_AWS_ASSUME_IAM_ROLE_ARN;
+if (!roleArn) {
+  console.error('Set CURSOR_AWS_ASSUME_IAM_ROLE_ARN or CURSOR_AWS_SECURITY_HARDENING_ROLE_ARN');
+  process.exit(1);
+}
 const creds = JSON.parse(execFileSync(AWS, [
   'sts', 'assume-role-with-web-identity',
-  '--role-arn', process.env.CURSOR_AWS_ASSUME_IAM_ROLE_ARN,
-  '--role-session-name', 'checksops-t0-run',
+  '--role-arn', roleArn,
+  '--role-session-name', hardeningRole ? 'checksops-sec-hard' : 'checksops-t0-run',
   '--web-identity-token', String(token),
   '--duration-seconds', '3600',
   '--output', 'json',
