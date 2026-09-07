@@ -8,9 +8,6 @@ Description: >
   money/provider flags. Does not attach WAF. Does not delete bridges.
 
 Parameters:
-  VpcId:
-    Type: String
-    Default: vpc-09f2268778966ce97
   SecurityLogsBucketName:
     Type: String
     Default: checksops-production-security-logs-806168576068
@@ -95,39 +92,9 @@ Resources:
                 s3:x-amz-acl: bucket-owner-full-control
                 AWS:SourceAccount: !Ref AWS::AccountId
 
-  CloudTrailLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: /aws/cloudtrail/checksops-production-management
-      RetentionInDays: 365
-
-  CloudTrailLogsRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: checksops-production-cloudtrail-logs
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: cloudtrail.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: WriteCloudTrailLogs
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                Resource: !Sub ${CloudTrailLogGroup.Arn}:*
-
   ProductionCloudTrail:
     Type: AWS::CloudTrail::Trail
-    DependsOn:
-      - SecurityLogsBucketPolicy
-      - CloudTrailLogsRole
+    DependsOn: SecurityLogsBucketPolicy
     Properties:
       TrailName: checksops-production-management
       S3BucketName: !Ref SecurityLogsBucket
@@ -136,31 +103,9 @@ Resources:
       IsMultiRegionTrail: true
       IncludeGlobalServiceEvents: true
       EnableLogFileValidation: true
-      CloudWatchLogsLogGroupArn: !Sub '${CloudTrailLogGroup.Arn}:*'
-      CloudWatchLogsRoleArn: !GetAtt CloudTrailLogsRole.Arn
       EventSelectors:
         - IncludeManagementEvents: true
           ReadWriteType: All
-
-  IamChangeMetricFilter:
-    Type: AWS::Logs::MetricFilter
-    DependsOn: ProductionCloudTrail
-    Properties:
-      LogGroupName: !Ref CloudTrailLogGroup
-      FilterName: checksops-prod-iam-security-changes
-      FilterPattern: >-
-        { ($.eventSource = iam.amazonaws.com) &&
-        ($.eventName = CreateUser || $.eventName = DeleteUser ||
-        $.eventName = CreateAccessKey || $.eventName = DeleteAccessKey ||
-        $.eventName = UpdateAccessKey || $.eventName = PutUserPolicy ||
-        $.eventName = AttachUserPolicy || $.eventName = AttachRolePolicy ||
-        $.eventName = PutRolePolicy || $.eventName = UpdateAssumeRolePolicy ||
-        $.eventName = CreateLoginProfile || $.eventName = UpdateLoginProfile) }
-      MetricTransformations:
-        - MetricNamespace: ChecksOps/ProductionPrep
-          MetricName: IamSecurityChanges
-          MetricValue: '1'
-          DefaultValue: 0
 
   ConfigDeliveryChannel:
     Type: AWS::Config::DeliveryChannel
@@ -180,48 +125,6 @@ Resources:
         AllSupported: true
         IncludeGlobalResourceTypes: true
 
-  FlowLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: /aws/vpc/checksops-production-flow
-      RetentionInDays: 90
-
-  FlowLogRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: checksops-production-vpc-flow-logs
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: vpc-flow-logs.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: WriteFlowLogs
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                  - logs:DescribeLogGroups
-                  - logs:DescribeLogStreams
-                Resource: !GetAtt FlowLogGroup.Arn
-
-  VpcFlowLog:
-    Type: AWS::EC2::FlowLog
-    Properties:
-      ResourceType: VPC
-      ResourceId: !Ref VpcId
-      TrafficType: ALL
-      LogDestinationType: cloud-watch-logs
-      LogGroupName: !Ref FlowLogGroup
-      DeliverLogsPermissionArn: !GetAtt FlowLogRole.Arn
-      MaxAggregationInterval: 600
-
 Outputs:
   SecurityLogsBucketName:
     Value: !Ref SecurityLogsBucket
@@ -229,8 +132,6 @@ Outputs:
     Value: !Ref ProductionCloudTrail
   OperatorSnsTopicName:
     Value: checksops-production-security-alerts
-  FlowLogGroup:
-    Value: !Ref FlowLogGroup
   DetectionOnly:
     Value: 'true'
   MoneyFlagsUnchanged:

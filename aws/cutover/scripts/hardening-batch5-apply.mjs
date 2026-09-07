@@ -8,7 +8,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 
 const AWS = process.env.AWS_CLI || `${process.env.HOME}/.local/bin/aws`;
 const REGION = 'us-east-1';
-const STACK = 'checksops-production-security-monitoring';
+const STACK = 'checksops-production-security-logs';
 const TEMPLATE = '/workspace/aws/production/security-monitoring.yaml';
 
 if (!process.argv.includes('--confirm-batch5')) {
@@ -69,12 +69,14 @@ record('apiAuthFailFilter', run([
 
 const described = run(['cloudformation', 'describe-stacks', '--stack-name', STACK]);
 const existingStatus = described.data?.Stacks?.[0]?.StackStatus || '';
-if (/CREATE_FAILED|ROLLBACK_COMPLETE|REVIEW_IN_PROGRESS|DELETE_FAILED/.test(existingStatus)) {
+if (/DELETE_FAILED/.test(existingStatus)) {
   record('deleteFailedEmptyStack', run([
     'cloudformation', 'delete-stack',
     '--stack-name', STACK,
     '--retain-resources', 'ConfigRole', 'CloudTrailLogsRole', 'FlowLogRole', 'SecurityLogsBucket',
   ]));
+} else if (/CREATE_FAILED|ROLLBACK_COMPLETE|REVIEW_IN_PROGRESS/.test(existingStatus)) {
+  record('deleteFailedEmptyStack', run(['cloudformation', 'delete-stack', '--stack-name', STACK]));
   try {
     execFileSync(AWS, ['--region', REGION, 'cloudformation', 'wait', 'stack-delete-complete', '--stack-name', STACK], {
       encoding: 'utf8',

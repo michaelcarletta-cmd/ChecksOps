@@ -9,6 +9,7 @@ const yaml = fs.readFileSync(path.join(ROOT, 'aws/production/security-monitoring
 const alarms = fs.readFileSync(path.join(ROOT, 'aws/production/security-alarms.yaml'), 'utf8');
 const sns = fs.readFileSync(path.join(ROOT, 'aws/production/security-alerts-sns.yaml'), 'utf8');
 const posture = fs.readFileSync(path.join(ROOT, 'aws/production/security-posture-services.yaml'), 'utf8');
+const flow = fs.readFileSync(path.join(ROOT, 'aws/production/security-vpc-flow.yaml'), 'utf8');
 const playbook = fs.readFileSync(path.join(ROOT, 'aws/cutover/INCIDENT_RESPONSE_AWS.md'), 'utf8');
 const legacy = fs.readFileSync(path.join(ROOT, 'docs/INCIDENT_RESPONSE.md'), 'utf8');
 
@@ -19,9 +20,9 @@ test('security monitoring template is detection-only and does not block traffic'
   assert.match(posture, /Status: DISABLED/);
   assert.match(yaml, /AWS::Config::ConfigurationRecorder/);
   assert.match(yaml, /AWS::CloudTrail::Trail/);
-  assert.match(yaml, /AWS::EC2::FlowLog/);
+  assert.match(flow, /AWS::EC2::FlowLog/);
   assert.match(yaml, /IncludeManagementEvents: true/);
-  assert.match(yaml, /IamSecurityChanges/);
+  assert.match(alarms, /IamSecurityChanges/);
   assert.match(yaml, /checksops-production-security-alerts/);
   assert.doesNotMatch(yaml, /AWS::CloudWatch::Alarm/);
   assert.doesNotMatch(yaml, /SecurityAlertsTopic/);
