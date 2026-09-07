@@ -20,12 +20,17 @@ Detection only. No application change. No staging change. No
 API-behind-CloudFront. Money/provider flags stay **OFF**.
 `64_financial_activation_grants.sql` stays **NOT_APPLIED**.
 
-Templates are the reviewed Batch 5 files except CloudTrail **#1
-revised**: do **not** deploy `security-monitoring.yaml` / stack
-`checksops-production-cloudtrail` / trail name
-`checksops-production-management`. That name is poisoned by the
-CREATE_FAILED stack. Use CLI `create-trail` with a **new** name against
-the existing bucket.
+Templates are the reviewed Batch 5 files except two **name-collision
+fixes** that do **not** touch `checksops-production-security-trail`:
+
+- CloudTrail **#1 revised:** do **not** deploy `security-monitoring.yaml`
+  / stack `checksops-production-cloudtrail` / trail name
+  `checksops-production-management`. Use CLI `create-trail` with
+  `checksops-production-mgmt-events` against the existing bucket.
+- Config **#3 revised:** do **not** reuse recorder/channel name
+  `checksops-production` (reserved on the failed trail stack). Use
+  `checksops-production-config-items` and a new recorder role. **Do not
+  deploy #3 until this correction is reviewed.**
 
 ## Recommended order
 
@@ -33,7 +38,7 @@ the existing bucket.
 |---|---|---|
 | **1** | CloudTrail management-event logging | Foundational evidence. Resolves leftover trail/bucket state before Config writes to the same bucket. |
 | 2 | SNS security alerts | No traffic impact. Email confirm can complete before alarms. |
-| 3 | AWS Config | Uses the live logs bucket. Config role is **NoSuchEntity**; channel name `checksops-production` is reserved on the failed trail stack. |
+| 3 | AWS Config | Same collision class as #1. New name `checksops-production-config-items` + new role. Existing bucket `config/` prefix. **Not deployed yet.** |
 | 4 | GuardDuty + Security Hub | Reviewed as **one** template. Hub is more useful after Config exists. Detection only. |
 | 5 | VPC Flow Logs | Network 5-tuple only. Independent of Hub. |
 | 6 | CloudWatch security alarms | After SNS subscription is **Confirmed**. |
@@ -54,7 +59,8 @@ deployments.
 | Stack `checksops-production-security-trail` | **CREATE_FAILED** (owns bucket + policy) | **Leave in place.** `retain-resources` is illegal until `DELETE_FAILED`. A plain `delete-stack` would delete the bucket. |
 | Trail `checksops-production-management` | **Not in CloudTrail** (`TrailNotFoundException`) but **reserved in CloudFormation** | **Do not create this name** (CLI or CFN). A future delete of the failed stack would DeleteTrail it. |
 | Stack `checksops-production-cloudtrail` | Rolled back / must not be retried with the old trail name | Do not recreate |
-| Role `checksops-production-config-recorder` | **NoSuchEntity** (2026-09-07 reopen) | #3 cannot reuse it. Do not invent a replacement without review. |
+| Role `checksops-production-config-recorder` | **NoSuchEntity** | **Do not recreate this name.** #3 uses `checksops-production-config-items-recorder`. |
+| Config channel/recorder `checksops-production` | Reserved on the failed trail stack (physical id `None`) | **Do not create this name.** Use `checksops-production-config-items`. |
 | Roles `checksops-production-vpc-flow-logs`, `checksops-production-cloudtrail-logs` | vpc-flow-logs **NoSuchEntity** now; do not delete leftovers if they reappear | #5 can create `checksops-production-vpc-flow-logs` if still absent |
 | Metric filters on API/Lambda log groups | **LIVE** | Do not remove |
 
@@ -299,17 +305,104 @@ message opens those deployments. Use the reviewed templates below as-is.
 - Rollback: `delete-stack checksops-production-security-sns`
 - Then pass `AlertTopicArn` into #6 (not into `security-monitoring.yaml`)
 
-### #3 Config — `aws/production/security-config.yaml`
+### #3 Config — collision fix (do not deploy until reviewed)
 
-- Stack: `checksops-production-security-config`
-- Region: `us-east-1`
-- Parameters: `SecurityLogsBucketName` (default bucket), `ConfigRoleArn` = `arn:aws:iam::806168576068:role/checksops-production-config-recorder`
-- IAM capability: **No** (reuses existing role)
-- Resources: delivery channel + recorder `checksops-production`, `AllSupported` + global types
-- Cost: often the largest item. Configuration items ~$0.003 each; a small account with `AllSupported` is commonly **$20–$150/month**. No auto-remediation.
-- PASS: `aws configservice describe-configuration-recorder-status` shows `recording: true` and `lastStatus: SUCCESS`; objects under `s3://…/config/`
-- Rollback: `stop-configuration-recorder --configuration-recorder-name checksops-production` then `delete-stack`. **Keep** the Config role.
-- Account limit: **one** recorder per region. If a `default` recorder already exists, **stop** and do not create a second.
+Same class of fix as CloudTrail `#1`: the CFN name
+`checksops-production` is reserved on
+`checksops-production-security-trail`. Do **not** delete or update that
+stack. Do **not** recreate channel/recorder `checksops-production` or
+role `checksops-production-config-recorder`.
+
+| Field | Value |
+|---|---|
+| Recorder name | `checksops-production-config-items` |
+| Delivery-channel name | `checksops-production-config-items` |
+| IAM role name | `checksops-production-config-items-recorder` |
+| IAM role ARN | `arn:aws:iam::806168576068:role/checksops-production-config-items-recorder` |
+| Role template / stack | `aws/production/security-config-role.yaml` / `checksops-production-security-config-role` |
+| Recorder template / stack | `aws/production/security-config.yaml` / `checksops-production-security-config` |
+| Bucket / prefix | `checksops-production-security-logs-806168576068` / `config` |
+| Recording | `AllSupported` + global types. Detection only. No remediation. |
+| Cursor PassRole | **only** the new role ARN to `config.amazonaws.com` |
+
+#### Config recorder IAM role permissions
+
+Trust: `config.amazonaws.com` with `AWS:SourceAccount=806168576068`.
+
+- AWS managed `arn:aws:iam::aws:policy/service-role/AWS_ConfigRole` — required read APIs for `AllSupported` recording. No remediation attach.
+- Inline `DeliverConfigItemsToSecurityLogs`:
+  - `s3:GetBucketAcl` / `GetBucketLocation` / `GetBucketVersioning` / `ListBucket` on the security-logs bucket
+  - `s3:PutObject` on `…/config/*` with `s3:x-amz-acl=bucket-owner-full-control`
+
+No SNS, no SQS, no SSM, no `config:PutRemediation*`. Does **not** edit
+the live bucket policy (existing Config service-principal statements
+already cover `config/`).
+
+The temp Cursor role still **cannot** `CreateRole` for Config. It only
+`PassRole` / `GetRole` this exact new ARN.
+
+#### One-time operator action (after this review; still do not start #4–#6)
+
+Privileged-ops / Administrator. **Not** root. **Not**
+`ChecksOpsCursorCloudStaging`. **Not** the temp Cursor role.
+
+1. Confirm SNS email `security@checksops.com` if not already Confirmed
+   (independent of #3).
+2. Create stack `checksops-production-security-config-role` from
+   `aws/production/security-config-role.yaml` in `us-east-1` with
+   `CAPABILITY_NAMED_IAM`. Wait for **CREATE_COMPLETE**.
+3. Update stack `checksops-cursor-security-hardening-role` with the
+   current GitHub `cursor-security-hardening-role.yaml` (PassRole /
+   GetRole / Deny-PassRole NotResource now name the new Config role
+   only). `CAPABILITY_NAMED_IAM`. Wait for **UPDATE_COMPLETE**.
+4. Delete the empty `ROLLBACK_COMPLETE` stack
+   `checksops-production-security-config` (owns nothing live) so a later
+   #3 create can reuse that stack name.
+5. **Stop.** Do **not** create-stack `security-config.yaml` yet. Do
+   **not** start #4–#6. Do **not** touch the trail stack, bucket, or
+   bucket policy.
+
+#### Later #3 deploy (not this turn)
+
+IAM capability: **No** (role already exists). Parameters use defaults.
+Account limit: **one** recorder per region. If any recorder already
+exists, **stop**.
+
+PASS: `describe-configuration-recorder-status` for
+`checksops-production-config-items` shows `recording: true` and
+`lastStatus: SUCCESS`; objects under `s3://…/config/`. Failed trail
+stack still `CREATE_FAILED`. Money flags still `false`.
+
+Cost: configuration items ~$0.003 each; a small account with
+`AllSupported` is commonly **$20–$150/month**.
+
+#### Rollback
+
+Stops recording; does not touch the bucket, trail stack, or temp role:
+
+```bash
+aws configservice stop-configuration-recorder --region us-east-1 \
+  --configuration-recorder-name checksops-production-config-items
+aws cloudformation delete-stack --region us-east-1 \
+  --stack-name checksops-production-security-config
+```
+
+Keep `checksops-production-config-items-recorder` unless the role itself
+must be removed (only after the recorder stack is gone):
+
+```bash
+aws cloudformation delete-stack --region us-east-1 \
+  --stack-name checksops-production-security-config-role
+```
+
+**Do not:**
+
+- `delete-stack` / update `checksops-production-security-trail`
+- Create recorder/channel `checksops-production`
+- Recreate `checksops-production-config-recorder`
+- Edit or replace the security-logs bucket or policy
+- Enable Config remediation or SNS delivery
+- Change Lambda env, WAF, or money flags
 
 ### #4 GuardDuty + Security Hub — `aws/production/security-posture-services.yaml`
 
@@ -350,10 +443,10 @@ Reviewed as a **single** stack (do not split the template).
 
 ---
 
-**STOP FOR REVIEW — #2 PASS, #3 FAIL, #4–#6 not started.** Handoff
-assume of `ChecksOpsCursorSecurityHardeningTemp` succeeded. SNS is
-`CREATE_COMPLETE` (email PendingConfirmation). Config rolled back:
-delivery channel `checksops-production` is reserved on
-`checksops-production-security-trail`. See
-`aws/cutover/OPERATOR_SECURITY_HANDOFF_2TO6.md`. Do not delete the
-temp role. Do not delete the trail stack.
+**STOP FOR REVIEW — #3 Config correction prepared; do not deploy.**
+#2 SNS remains **PASS**. #4–#6 not started. Templates now use recorder
+/ channel `checksops-production-config-items` and role
+`checksops-production-config-items-recorder`. Do not create those
+resources until this correction is reviewed. Do not delete the temp
+role. Do not delete the trail stack. See
+`aws/cutover/OPERATOR_SECURITY_HANDOFF_2TO6.md`.

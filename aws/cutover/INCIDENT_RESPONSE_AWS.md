@@ -213,9 +213,11 @@ Operator mailbox: `security@checksops.com`.
 - Broaden `ChecksOpsCursorCloudStaging`
 
 Leftover roles from Batch 5 failed creates (**do not delete** without
-review): `checksops-production-config-recorder` (needed for operator
-Config), `checksops-production-vpc-flow-logs`,
-`checksops-production-cloudtrail-logs`.
+review): `checksops-production-vpc-flow-logs`,
+`checksops-production-cloudtrail-logs`. Do **not** recreate
+`checksops-production-config-recorder`. Reviewed #3 Config role name is
+`checksops-production-config-items-recorder` (not deployed until
+reviewed).
 
 CREATE_FAILED stack `checksops-production-security-trail` owns
 `checksops-production-security-logs-806168576068`. Delete only with

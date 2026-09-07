@@ -46,7 +46,7 @@
       "Action": "iam:PassRole",
       "NotResource": [
         "arn:aws:iam::806168576068:role/checksops-production-vpc-flow-logs",
-        "arn:aws:iam::806168576068:role/checksops-production-config-recorder"
+        "arn:aws:iam::806168576068:role/checksops-production-config-items-recorder"
       ]
     },
     {

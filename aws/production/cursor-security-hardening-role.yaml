@@ -114,7 +114,7 @@ Resources:
               "Sid": "PassExistingConfigRecorderRole",
               "Effect": "Allow",
               "Action": "iam:PassRole",
-              "Resource": "arn:aws:iam::806168576068:role/checksops-production-config-recorder",
+              "Resource": "arn:aws:iam::806168576068:role/checksops-production-config-items-recorder",
               "Condition": {
                 "StringEquals": {
                   "iam:PassedToService": "config.amazonaws.com"
@@ -130,7 +130,7 @@ Resources:
                 "iam:ListRolePolicies",
                 "iam:ListAttachedRolePolicies"
               ],
-              "Resource": "arn:aws:iam::806168576068:role/checksops-production-config-recorder"
+              "Resource": "arn:aws:iam::806168576068:role/checksops-production-config-items-recorder"
             },
             {
               "Sid": "GuardDutyDetector",
@@ -534,7 +534,7 @@ Resources:
               "Action": "iam:PassRole",
               "NotResource": [
                 "arn:aws:iam::806168576068:role/checksops-production-vpc-flow-logs",
-                "arn:aws:iam::806168576068:role/checksops-production-config-recorder"
+                "arn:aws:iam::806168576068:role/checksops-production-config-items-recorder"
               ]
             },
             {

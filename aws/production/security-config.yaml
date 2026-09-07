@@ -1,9 +1,12 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  Operator-only AWS Config recorder (Hardening Batch 5).
-  The Cloud Agent role cannot config:DescribeDeliveryChannels.
-  Reuse role checksops-production-config-recorder and bucket
-  checksops-production-security-logs-806168576068. Detection only.
+  Operator-only AWS Config recorder (Hardening #3 name-collision fix).
+  Same class of fix as CloudTrail checksops-production-mgmt-events:
+  do not reuse CFN-reserved name checksops-production.
+  New recorder/channel name checksops-production-config-items.
+  PassRole checksops-production-config-items-recorder (operator-created).
+  Reuse bucket checksops-production-security-logs-806168576068 prefix config/.
+  Detection only. No auto-remediation. Do not modify the trail stack.
 
 Parameters:
   SecurityLogsBucketName:
@@ -11,13 +14,13 @@ Parameters:
     Default: checksops-production-security-logs-806168576068
   ConfigRoleArn:
     Type: String
-    Default: arn:aws:iam::806168576068:role/checksops-production-config-recorder
+    Default: arn:aws:iam::806168576068:role/checksops-production-config-items-recorder
 
 Resources:
   ConfigDeliveryChannel:
     Type: AWS::Config::DeliveryChannel
     Properties:
-      Name: checksops-production
+      Name: checksops-production-config-items
       S3BucketName: !Ref SecurityLogsBucketName
       S3KeyPrefix: config
 
@@ -25,8 +28,18 @@ Resources:
     Type: AWS::Config::ConfigurationRecorder
     DependsOn: ConfigDeliveryChannel
     Properties:
-      Name: checksops-production
+      Name: checksops-production-config-items
       RoleARN: !Ref ConfigRoleArn
       RecordingGroup:
         AllSupported: true
         IncludeGlobalResourceTypes: true
+
+Outputs:
+  ConfigRecorderName:
+    Value: !Ref ConfigRecorder
+  ConfigDeliveryChannelName:
+    Value: !Ref ConfigDeliveryChannel
+  ConfigRoleArn:
+    Value: !Ref ConfigRoleArn
+  DetectionOnly:
+    Value: 'true'

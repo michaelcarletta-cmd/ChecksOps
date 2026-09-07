@@ -1,7 +1,8 @@
 # Temporary Cursor role for Security Hardening #2–#6
 
-**STOP FOR REVIEW — role CREATE_COMPLETE. #2 SNS PASS. #3 Config FAIL.
-#4–#6 not started. Do not delete this role.**
+**STOP FOR REVIEW — #3 Config correction prepared; do not deploy.**
+Role CREATE_COMPLETE. #2 SNS PASS. #4–#6 not started. Do not delete
+this role. Do not deploy Config until the correction is reviewed.
 
 The role exists (created `2026-09-07T17:45:35Z`) with **zero** inline
 policies and six customer-managed policies. Cursor OIDC assume
@@ -107,7 +108,7 @@ has no inline policies. Summary:
 |---|---|
 | CloudFormation create/update/delete **only** on `checksops-production-security-sns`, `-config`, `-posture`, `-flow`, `-alarms` | Deploy / rollback `#2`–`#6` |
 | SNS on `checksops-production-security-alerts` | `#2` |
-| Config recorder/channel APIs; `iam:PassRole` **only** `checksops-production-config-recorder` to `config.amazonaws.com` | `#3` (reuse retained role; no `CreateRole` for Config) |
+| Config recorder/channel APIs; `iam:PassRole` **only** `checksops-production-config-items-recorder` to `config.amazonaws.com` | `#3` (operator creates that role; no `CreateRole` for Config) |
 | GuardDuty detector + Security Hub hub/standards + `TagResource` | `#4` (EBS malware stays **DISABLED** in the reviewed template) |
 | `iam:CreateServiceLinkedRole` **only** for `guardduty.amazonaws.com`, `securityhub.amazonaws.com`, `config.amazonaws.com` | First-enable of those services |
 | EC2 flow logs on `vpc-09f2268778966ce97`; log group `/aws/vpc/checksops-production-flow`; IAM create/get/put-inline/pass **only** `checksops-production-vpc-flow-logs` to `vpc-flow-logs.amazonaws.com` | `#5` (`CAPABILITY_NAMED_IAM` on that stack only) |
@@ -124,7 +125,7 @@ Explicit **Deny** (wins over Allow):
 - CloudFormation mutate of `checksops-production-security-trail`, `checksops-production-cloudtrail`, prep/spa/http-api stacks, **and this role’s own stack**
 - S3 delete/put-policy/put-object on `checksops-production-security-logs-806168576068`
 - CloudTrail create/update/delete/start/stop/selectors ( `#1` stays as-is )
-- IAM mutate except the named VPC Flow Logs role; `PassRole` except Config + Flow Logs roles; attach managed policies; create users/keys
+- IAM mutate except the named VPC Flow Logs role; `PassRole` except `checksops-production-config-items-recorder` + Flow Logs roles; attach managed policies; create users/keys
 - `sts:AssumeRole` (no chaining into `ChecksOpsCursorCloudStaging` or the API execution role)
 - SG/VPC/route/instance mutation
 - Delete/put metric filters on prep API/Lambda log groups
@@ -220,7 +221,8 @@ After `#2`–`#6` are PASS-verified:
 - Bucket `checksops-production-security-logs-806168576068` or its policy
 - CREATE_FAILED stack `checksops-production-security-trail`
 - Trail `checksops-production-mgmt-events`
-- Role `checksops-production-config-recorder`
+- Role `checksops-production-config-items-recorder` (after operator create)
+- Missing leftover name `checksops-production-config-recorder` (do not recreate)
 - Leftover `checksops-production-vpc-flow-logs` / `checksops-production-cloudtrail-logs` if still present
 - Live `#2`–`#6` detection resources (those stay; only the **Cursor** role goes)
 
@@ -260,9 +262,10 @@ that feature flag.
 
 ## Holds (unchanged)
 
-- `#2` SNS is **PASS**. `#3` Config is **FAIL** (reserved channel name +
-  missing Config role). Do not start `#4`–`#6` until a reviewed `#3`
-  path exists. Do not delete this role yet.
+- `#2` SNS is **PASS**. `#3` Config correction is **prepared, not
+  deployed** (`checksops-production-config-items` +
+  `checksops-production-config-items-recorder`). Do not start `#4`–`#6`.
+  Do not delete this role yet.
 - Do not broaden `ChecksOpsCursorCloudStaging`.
 - Do not use root, access keys, passwords, OTPs, or secrets.
 - Do not modify application code, prep Lambda env/VPC/role, RDS data,

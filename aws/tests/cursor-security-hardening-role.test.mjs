@@ -194,9 +194,11 @@ test('permissions are scoped to reviewed #2-#6 stacks and leftover protections',
     .filter((s) => s.Effect === 'Allow' && flattenActions(s).includes('iam:PassRole'))
     .map((s) => s.Resource);
   assert.deepEqual(new Set(passRoleAllow), new Set([
-    'arn:aws:iam::806168576068:role/checksops-production-config-recorder',
+    'arn:aws:iam::806168576068:role/checksops-production-config-items-recorder',
     'arn:aws:iam::806168576068:role/checksops-production-vpc-flow-logs',
   ]));
+  assert.match(runbook, /checksops-production-config-items-recorder/);
+  assert.doesNotMatch(yaml, /role\/checksops-production-config-recorder"/);
   assert.ok(!allowResources.some((r) => String(r).includes('ChecksOpsCursorCloudStaging')));
   assert.ok(!allowResources.some((r) => String(r).includes('checksops-production-api-execution')));
 

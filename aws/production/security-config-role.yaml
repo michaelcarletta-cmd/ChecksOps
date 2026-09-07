@@ -1,0 +1,61 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Operator-only AWS Config recorder role (Hardening #3 name-collision fix).
+  Privileged-ops creates this role once. Cursor does not CreateRole for Config.
+  Detection only. No remediation. No SNS. Does not modify the security-logs
+  bucket or checksops-production-security-trail.
+
+Parameters:
+  SecurityLogsBucketName:
+    Type: String
+    Default: checksops-production-security-logs-806168576068
+
+Resources:
+  ConfigItemsRecorderRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: checksops-production-config-items-recorder
+      Description: Least-privilege Config recorder for checksops-production-config-items. Detection only.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowAwsConfigAssume
+            Effect: Allow
+            Principal:
+              Service: config.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                AWS:SourceAccount: '806168576068'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWS_ConfigRole
+      Policies:
+        - PolicyName: DeliverConfigItemsToSecurityLogs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: ReadSecurityLogsBucketAcl
+                Effect: Allow
+                Action:
+                  - s3:GetBucketAcl
+                  - s3:GetBucketLocation
+                  - s3:GetBucketVersioning
+                  - s3:ListBucket
+                Resource: !Sub 'arn:aws:s3:::${SecurityLogsBucketName}'
+              - Sid: PutConfigItemsPrefix
+                Effect: Allow
+                Action: s3:PutObject
+                Resource: !Sub 'arn:aws:s3:::${SecurityLogsBucketName}/config/*'
+                Condition:
+                  StringEquals:
+                    s3:x-amz-acl: bucket-owner-full-control
+
+Outputs:
+  ConfigRoleName:
+    Value: !Ref ConfigItemsRecorderRole
+  ConfigRoleArn:
+    Value: !GetAtt ConfigItemsRecorderRole.Arn
+  RecorderName:
+    Value: checksops-production-config-items
+  DetectionOnly:
+    Value: 'true'
