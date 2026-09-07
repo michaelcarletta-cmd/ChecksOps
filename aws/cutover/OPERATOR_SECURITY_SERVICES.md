@@ -350,9 +350,8 @@ Reviewed as a **single** stack (do not split the template).
 
 ---
 
-**STOP FOR REVIEW — managed-policy redesign; do not deploy.** The 10240
-limit is the role **aggregate inline** quota. The template now uses six
-stack-owned customer-managed policies (each ≤6144) and zero inline
-policies. Live OIDC trust remains `api.cursor.com` / `user:325724407`.
-**Do not create the role or start #2–#6 until reviewed.** See
-`aws/cutover/OPERATOR_TEMPORARY_ROLE.md`.
+**STOP FOR REVIEW — managed-policy redesign; do not deploy.** The third
+create uploaded the old five-inline YAML (`483adcec`), not HEAD
+`5e07501f`. See `aws/cutover/OPERATOR_ROLE_TEMPLATE_MISMATCH.md`. Delete
+the `ROLLBACK_COMPLETE` stack and upload only the current GitHub
+template. Do not start #2–#6.
