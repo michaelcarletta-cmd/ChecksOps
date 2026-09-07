@@ -184,8 +184,11 @@ overwrite the live DB. Bridges stay deployed.
 
 ## 10. Alerting
 
-SNS topic `checksops-production-security-alerts` (confirm the email
-subscription). High-severity sources:
+SNS topic `checksops-production-security-alerts` is **operator-owned**.
+The Cloud Agent role cannot create SNS (`sns:GetTopicAttributes` denied)
+and cannot tag GuardDuty/Security Hub. Create the topic, confirm
+`security@checksops.com`, then pass `AlertTopicArn` into the monitoring
+stack. High-severity sources:
 
 - GuardDuty findings (filter HIGH/CRITICAL)
 - Security Hub CRITICAL/HIGH

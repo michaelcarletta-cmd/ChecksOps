@@ -7,10 +7,13 @@ Description: >
   Does not attach WAF. Does not delete bridges or staging resources.
 
 Parameters:
-  AlertEmail:
+  AlertTopicArn:
     Type: String
-    Default: security@checksops.com
-    Description: SNS subscription. AWS sends a confirm email. Does not change traffic.
+    Default: ''
+    Description: >
+      Optional existing SNS topic ARN. Leave empty if the agent cannot
+      create SNS (sns:GetTopicAttributes denied). Operator should create
+      topic checksops-production-security-alerts and pass the ARN later.
   VpcId:
     Type: String
     Default: vpc-09f2268778966ce97
@@ -39,6 +42,9 @@ Parameters:
     Type: String
     Default: checksops-production-security-logs-806168576068
 
+Conditions:
+  HasAlertTopic: !Not [!Equals [!Ref AlertTopicArn, '']]
+
 Resources:
   SecurityLogsBucket:
     Type: AWS::S3::Bucket
@@ -64,10 +70,6 @@ Resources:
             Status: Enabled
             ExpirationInDays: 365
             Prefix: ''
-      Tags:
-        - Key: HardeningBatch
-          Value: '5'
-
   SecurityLogsBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
@@ -146,9 +148,6 @@ Resources:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource: !Sub ${CloudTrailLogGroup.Arn}:*
-      Tags:
-        - Key: HardeningBatch
-          Value: '5'
 
   ProductionCloudTrail:
     Type: AWS::CloudTrail::Trail
@@ -168,9 +167,6 @@ Resources:
       EventSelectors:
         - IncludeManagementEvents: true
           ReadWriteType: All
-      Tags:
-        - Key: HardeningBatch
-          Value: '5'
 
   IamChangeMetricFilter:
     Type: AWS::Logs::MetricFilter
@@ -205,9 +201,6 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWS_ConfigRole
-      Tags:
-        - Key: HardeningBatch
-          Value: '5'
 
   ConfigDeliveryChannel:
     Type: AWS::Config::DeliveryChannel
@@ -244,8 +237,6 @@ Resources:
       ControlFindingGenerator: SECURITY_CONTROL
       EnableDefaultStandards: true
       AutoEnableControls: true
-      Tags:
-        HardeningBatch: '5'
 
   FlowLogGroup:
     Type: AWS::Logs::LogGroup
@@ -277,9 +268,6 @@ Resources:
                   - logs:DescribeLogGroups
                   - logs:DescribeLogStreams
                 Resource: !GetAtt FlowLogGroup.Arn
-      Tags:
-        - Key: HardeningBatch
-          Value: '5'
 
   VpcFlowLog:
     Type: AWS::EC2::FlowLog
@@ -291,27 +279,6 @@ Resources:
       LogGroupName: !Ref FlowLogGroup
       DeliverLogsPermissionArn: !GetAtt FlowLogRole.Arn
       MaxAggregationInterval: 600
-      Tags:
-        - Key: Name
-          Value: checksops-production-vpc-flow
-        - Key: HardeningBatch
-          Value: '5'
-
-  AlertTopic:
-    Type: AWS::SNS::Topic
-    Properties:
-      TopicName: checksops-production-security-alerts
-      DisplayName: ChecksOps production security alerts
-      Tags:
-        - Key: HardeningBatch
-          Value: '5'
-
-  AlertSubscription:
-    Type: AWS::SNS::Subscription
-    Properties:
-      TopicArn: !Ref AlertTopic
-      Protocol: email
-      Endpoint: !Ref AlertEmail
 
   LambdaErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
@@ -329,8 +296,10 @@ Resources:
       Threshold: 5
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
-      AlarmActions:
-        - !Ref AlertTopic
+      AlarmActions: !If
+        - HasAlertTopic
+        - - !Ref AlertTopicArn
+        - !Ref AWS::NoValue
 
   LambdaThrottlesAlarm:
     Type: AWS::CloudWatch::Alarm
@@ -348,8 +317,10 @@ Resources:
       Threshold: 1
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
-      AlarmActions:
-        - !Ref AlertTopic
+      AlarmActions: !If
+        - HasAlertTopic
+        - - !Ref AlertTopicArn
+        - !Ref AWS::NoValue
 
   Api5xxAlarm:
     Type: AWS::CloudWatch::Alarm
@@ -369,8 +340,10 @@ Resources:
       Threshold: 20
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
-      AlarmActions:
-        - !Ref AlertTopic
+      AlarmActions: !If
+        - HasAlertTopic
+        - - !Ref AlertTopicArn
+        - !Ref AWS::NoValue
 
   Api5xxFromLogsAlarm:
     Type: AWS::CloudWatch::Alarm
@@ -385,8 +358,10 @@ Resources:
       Threshold: 20
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
-      AlarmActions:
-        - !Ref AlertTopic
+      AlarmActions: !If
+        - HasAlertTopic
+        - - !Ref AlertTopicArn
+        - !Ref AWS::NoValue
 
   ApiAuthFailFromLogsAlarm:
     Type: AWS::CloudWatch::Alarm
@@ -401,8 +376,10 @@ Resources:
       Threshold: 80
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
-      AlarmActions:
-        - !Ref AlertTopic
+      AlarmActions: !If
+        - HasAlertTopic
+        - - !Ref AlertTopicArn
+        - !Ref AWS::NoValue
 
   IamChangeAlarm:
     Type: AWS::CloudWatch::Alarm
@@ -417,8 +394,10 @@ Resources:
       Threshold: 1
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
-      AlarmActions:
-        - !Ref AlertTopic
+      AlarmActions: !If
+        - HasAlertTopic
+        - - !Ref AlertTopicArn
+        - !Ref AWS::NoValue
 
   Api4xxAlarm:
     Type: AWS::CloudWatch::Alarm
@@ -438,8 +417,10 @@ Resources:
       Threshold: 200
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
-      AlarmActions:
-        - !Ref AlertTopic
+      AlarmActions: !If
+        - HasAlertTopic
+        - - !Ref AlertTopicArn
+        - !Ref AWS::NoValue
 
   CognitoSignInThrottleAlarm:
     Type: AWS::CloudWatch::Alarm
@@ -459,8 +440,10 @@ Resources:
       Threshold: 20
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
-      AlarmActions:
-        - !Ref AlertTopic
+      AlarmActions: !If
+        - HasAlertTopic
+        - - !Ref AlertTopicArn
+        - !Ref AWS::NoValue
 
   WafBlockedAlarm:
     Type: AWS::CloudWatch::Alarm
@@ -482,8 +465,10 @@ Resources:
       Threshold: 50
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
-      AlarmActions:
-        - !Ref AlertTopic
+      AlarmActions: !If
+        - HasAlertTopic
+        - - !Ref AlertTopicArn
+        - !Ref AWS::NoValue
 
   WafCountedAlarm:
     Type: AWS::CloudWatch::Alarm
@@ -505,8 +490,10 @@ Resources:
       Threshold: 200
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
-      AlarmActions:
-        - !Ref AlertTopic
+      AlarmActions: !If
+        - HasAlertTopic
+        - - !Ref AlertTopicArn
+        - !Ref AWS::NoValue
 
   RdsFreeStorageAlarm:
     Type: AWS::CloudWatch::Alarm
@@ -524,8 +511,10 @@ Resources:
       Threshold: 10737418240
       ComparisonOperator: LessThanThreshold
       TreatMissingData: notBreaching
-      AlarmActions:
-        - !Ref AlertTopic
+      AlarmActions: !If
+        - HasAlertTopic
+        - - !Ref AlertTopicArn
+        - !Ref AWS::NoValue
 
   RdsConnectionsAlarm:
     Type: AWS::CloudWatch::Alarm
@@ -543,8 +532,10 @@ Resources:
       Threshold: 80
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
-      AlarmActions:
-        - !Ref AlertTopic
+      AlarmActions: !If
+        - HasAlertTopic
+        - - !Ref AlertTopicArn
+        - !Ref AWS::NoValue
 
   RdsCpuAlarm:
     Type: AWS::CloudWatch::Alarm
@@ -562,8 +553,10 @@ Resources:
       Threshold: 90
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
-      AlarmActions:
-        - !Ref AlertTopic
+      AlarmActions: !If
+        - HasAlertTopic
+        - - !Ref AlertTopicArn
+        - !Ref AWS::NoValue
 
   S3Files4xxAlarm:
     Type: AWS::CloudWatch::Alarm
@@ -583,8 +576,10 @@ Resources:
       Threshold: 50
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
-      AlarmActions:
-        - !Ref AlertTopic
+      AlarmActions: !If
+        - HasAlertTopic
+        - - !Ref AlertTopicArn
+        - !Ref AWS::NoValue
 
 Outputs:
   SecurityLogsBucketName:
@@ -593,8 +588,8 @@ Outputs:
     Value: !Ref ProductionCloudTrail
   GuardDutyDetectorId:
     Value: !Ref GuardDutyDetector
-  AlertTopicArn:
-    Value: !Ref AlertTopic
+  OperatorSnsTopicName:
+    Value: checksops-production-security-alerts
   FlowLogGroup:
     Value: !Ref FlowLogGroup
   DetectionOnly:

@@ -90,7 +90,6 @@ if (stackExists) {
     '--stack-name', STACK,
     '--template-body', `file://${TEMPLATE}`,
     '--capabilities', 'CAPABILITY_NAMED_IAM',
-    '--tags', 'Key=HardeningBatch,Value=5',
   ]);
   record('updateSecurityStack', updated);
   if (updated.ok) {
@@ -113,7 +112,6 @@ if (stackExists) {
     '--template-body', `file://${TEMPLATE}`,
     '--capabilities', 'CAPABILITY_NAMED_IAM',
     '--on-failure', 'DO_NOTHING',
-    '--tags', 'Key=HardeningBatch,Value=5',
   ]);
   record('createSecurityStack', created);
   if (created.ok) {

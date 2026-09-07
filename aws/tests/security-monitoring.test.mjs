@@ -6,6 +6,7 @@ import { test } from 'node:test';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const yaml = fs.readFileSync(path.join(ROOT, 'aws/production/security-monitoring.yaml'), 'utf8');
+const sns = fs.readFileSync(path.join(ROOT, 'aws/production/security-alerts-sns.yaml'), 'utf8');
 const playbook = fs.readFileSync(path.join(ROOT, 'aws/cutover/INCIDENT_RESPONSE_AWS.md'), 'utf8');
 const legacy = fs.readFileSync(path.join(ROOT, 'docs/INCIDENT_RESPONSE.md'), 'utf8');
 
@@ -23,8 +24,9 @@ test('security monitoring template is detection-only and does not block traffic'
   assert.match(yaml, /PrepHttp5xx/);
   assert.match(yaml, /PrepAuthFailures/);
   assert.match(yaml, /IamSecurityChanges/);
-  assert.match(yaml, /!Ref AlertTopic/);
+  assert.match(yaml, /HasAlertTopic/);
   assert.doesNotMatch(yaml, /SecurityAlertsTopic/);
+  assert.doesNotMatch(yaml, /AWS::SNS::Topic/);
   assert.doesNotMatch(yaml, /AWS_MOOV_ENABLED|AWS_CHECKALT_ENABLED|AWS_FINANCIAL_PERMISSIONS_ACTIVATED/);
   assert.doesNotMatch(yaml, /64_financial_activation/);
   assert.doesNotMatch(yaml, /Action:\s*\n\s*Block:/);

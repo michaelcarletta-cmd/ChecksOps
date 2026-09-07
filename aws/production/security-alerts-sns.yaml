@@ -1,0 +1,29 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Operator-only SNS topic for Batch 5 security alarms.
+  The Cloud Agent role cannot create SNS (sns:GetTopicAttributes denied).
+  Deploy from a privileged ops role, confirm the email, then update
+  checksops-production-security-monitoring with AlertTopicArn.
+
+Parameters:
+  AlertEmail:
+    Type: String
+    Default: security@checksops.com
+
+Resources:
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: checksops-production-security-alerts
+      DisplayName: ChecksOps production security alerts
+
+  AlertSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref AlertTopic
+      Protocol: email
+      Endpoint: !Ref AlertEmail
+
+Outputs:
+  AlertTopicArn:
+    Value: !Ref AlertTopic
