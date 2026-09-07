@@ -1,8 +1,9 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
   Detection-only production security monitoring (Hardening Batch 5).
-  GuardDuty, Security Hub, AWS Config, CloudTrail (management events),
-  VPC Flow Logs, SNS alerts, and CloudWatch alarms.
+  AWS Config, CloudTrail (management events), VPC Flow Logs, and
+  CloudWatch alarms. GuardDuty, Security Hub, and SNS are operator
+  templates because the agent role cannot tag those services or call SNS.
   Does not block application traffic. Does not enable money/provider flags.
   Does not attach WAF. Does not delete bridges or staging resources.
 
@@ -41,6 +42,10 @@ Parameters:
   SecurityLogsBucketName:
     Type: String
     Default: checksops-production-security-logs-806168576068
+  ConfigRoleArn:
+    Type: String
+    Default: arn:aws:iam::806168576068:role/checksops-production-config-recorder
+    Description: Existing Config recorder role. Do not recreate or delete.
 
 Conditions:
   HasAlertTopic: !Not [!Equals [!Ref AlertTopicArn, '']]
@@ -188,20 +193,6 @@ Resources:
           MetricValue: '1'
           DefaultValue: 0
 
-  ConfigRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: checksops-production-config-recorder
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: config.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWS_ConfigRole
-
   ConfigDeliveryChannel:
     Type: AWS::Config::DeliveryChannel
     DependsOn: SecurityLogsBucketPolicy
@@ -212,31 +203,13 @@ Resources:
 
   ConfigRecorder:
     Type: AWS::Config::ConfigurationRecorder
-    DependsOn:
-      - ConfigRole
-      - ConfigDeliveryChannel
+    DependsOn: ConfigDeliveryChannel
     Properties:
       Name: checksops-production
-      RoleARN: !GetAtt ConfigRole.Arn
+      RoleARN: !Ref ConfigRoleArn
       RecordingGroup:
         AllSupported: true
         IncludeGlobalResourceTypes: true
-
-  GuardDutyDetector:
-    Type: AWS::GuardDuty::Detector
-    Properties:
-      Enable: true
-      FindingPublishingFrequency: FIFTEEN_MINUTES
-      Features:
-        - Name: EBS_MALWARE_PROTECTION
-          Status: DISABLED
-
-  SecurityHub:
-    Type: AWS::SecurityHub::Hub
-    Properties:
-      ControlFindingGenerator: SECURITY_CONTROL
-      EnableDefaultStandards: true
-      AutoEnableControls: true
 
   FlowLogGroup:
     Type: AWS::Logs::LogGroup
@@ -586,8 +559,6 @@ Outputs:
     Value: !Ref SecurityLogsBucket
   CloudTrailName:
     Value: !Ref ProductionCloudTrail
-  GuardDutyDetectorId:
-    Value: !Ref GuardDutyDetector
   OperatorSnsTopicName:
     Value: checksops-production-security-alerts
   FlowLogGroup:

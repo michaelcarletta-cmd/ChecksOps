@@ -8,10 +8,13 @@ Replaces the obsolete Supabase/Lovable-oriented plan in `docs/INCIDENT_RESPONSE.
 **Do not** apply `64_financial_activation_grants.sql` during an incident.  
 **Do not** delete migration bridges, rollback resources, or unused IAM roles without review.
 
-Detection stack (Batch 5): CloudFormation `checksops-production-security-monitoring`  
-(`aws/production/security-monitoring.yaml`) — GuardDuty, Security Hub, Config,
-CloudTrail (management events), VPC Flow Logs, SNS
-`checksops-production-security-alerts`.
+Detection stack (Batch 5): CloudFormation `checksops-production-security-monitoring`
+(`aws/production/security-monitoring.yaml`) — Config, CloudTrail (management
+events), VPC Flow Logs, CloudWatch alarms.
+
+Operator-only (agent IAM cannot tag/create these):
+- GuardDuty + Security Hub: `aws/production/security-posture-services.yaml`
+- SNS `checksops-production-security-alerts`: `aws/production/security-alerts-sns.yaml`
 
 Existing live controls to keep: CloudFront WAF (COUNT managed rules + path
 rate-limit BLOCK), API throttle 50/100, production CORS allow-list, Cognito JWT,
