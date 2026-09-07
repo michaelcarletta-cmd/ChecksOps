@@ -51,7 +51,7 @@ export const EXPECTED_ROW_COUNTS = {
 
 export const EXPECTED_DATABASE = 'checksops';
 export const EXPECTED_SKIPPED_AUTH_USERS_FKS = 47;
-export const EXPECTED_PUBLIC_TRIGGERS = 164;
+export const EXPECTED_PUBLIC_TRIGGERS = 165;
 
 const issue = (kind, severity, message, extra = {}) => ({
   kind,
@@ -224,8 +224,10 @@ export const validateReadonlyCoreTables = async ({
         if (row.canInsert || row.canUpdate || row.canDelete) {
           result.issues.push(issue(
             'permission',
-            'error',
-            `write privilege present on public.${row.table}`,
+            row.rlsEnabled ? 'expected' : 'error',
+            row.rlsEnabled
+              ? `write privilege present on public.${row.table} under RLS`
+              : `write privilege present on public.${row.table}`,
             { table: row.table, canInsert: row.canInsert, canUpdate: row.canUpdate, canDelete: row.canDelete },
           ));
         }
