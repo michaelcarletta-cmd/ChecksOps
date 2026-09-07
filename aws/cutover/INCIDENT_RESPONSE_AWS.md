@@ -39,7 +39,7 @@ consumers' unencrypted NPI (16 CFR 314.5).
 
 Before mutating IAM, S3, RDS, or Cognito:
 
-1. Export CloudTrail (`s3://checksops-production-security-logs-806168576068/cloudtrail/` or the account trail).
+1. Export CloudTrail (`s3://checksops-production-security-logs-806168576068/cloudtrail/` — live trail name after operator #1: `checksops-production-mgmt-events`; do not use poisoned CFN name `checksops-production-management`).
 2. Export GuardDuty findings and Security Hub CRITICAL/HIGH.
 3. Snapshot CloudWatch log groups:
    `/aws/lambda/checksops-production-prep-api`,

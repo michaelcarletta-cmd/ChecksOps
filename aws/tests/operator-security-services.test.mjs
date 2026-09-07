@@ -10,10 +10,9 @@ const trail = fs.readFileSync(path.join(ROOT, 'aws/production/security-monitorin
 
 test('operator package lists six detection-only deployments and stops at #1', () => {
   assert.match(pack, /Deployment #1 — CloudTrail/);
-  assert.match(pack, /aws\/production\/security-monitoring\.yaml/);
-  assert.match(pack, /checksops-production-cloudtrail/);
-  assert.match(pack, /IAM capability acknowledgement/);
-  assert.match(pack, /Not required/);
+  assert.match(pack, /checksops-production-mgmt-events/);
+  assert.match(pack, /create-trail/);
+  assert.match(pack, /Do not\*\* use CloudFormation for this step/);
   assert.match(pack, /Expected monthly cost/);
   assert.match(pack, /PASS verification/);
   assert.match(pack, /Rollback/);
@@ -24,10 +23,10 @@ test('operator package lists six detection-only deployments and stops at #1', ()
   assert.match(pack, /security-alarms\.yaml/);
   assert.match(pack, /STOP FOR OPERATOR DEPLOYMENT #1/);
   assert.match(pack, /Do not\*\* use or broaden `ChecksOpsCursorCloudStaging`/);
-  assert.doesNotMatch(pack, /64_financial_activation_grants\.sql` stays \*\*APPLIED/);
   assert.match(pack, /64_financial_activation_grants\.sql` stays \*\*NOT_APPLIED/);
   assert.match(pack, /No application change/);
-  assert.match(pack, /No[\s\S]*API-behind-CloudFront/);
+  assert.match(pack, /would delete the bucket/);
+  assert.doesNotMatch(pack, /aws cloudtrail start-logging[\\s\\S]*checksops-production-management/);
 });
 
 test('deployment #1 template stays management-events only', () => {

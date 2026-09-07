@@ -9,9 +9,12 @@ Detection only. No application change. No staging change. No
 API-behind-CloudFront. Money/provider flags stay **OFF**.
 `64_financial_activation_grants.sql` stays **NOT_APPLIED**.
 
-Templates are the reviewed Batch 5 files. Do not invent a new trail
-name, bucket, or detector if the named resource already exists — audit
-first, then create or start-logging.
+Templates are the reviewed Batch 5 files except CloudTrail **#1
+revised**: do **not** deploy `security-monitoring.yaml` / stack
+`checksops-production-cloudtrail` / trail name
+`checksops-production-management`. That name is poisoned by the
+CREATE_FAILED stack. Use CLI `create-trail` with a **new** name against
+the existing bucket.
 
 ## Recommended order
 
@@ -33,194 +36,152 @@ This document stops the operator at **#1**.
 
 | Resource | State | Action |
 |---|---|---|
-| Bucket `checksops-production-security-logs-806168576068` | **LIVE** (PAB, AES256, versioning, 365-day lifecycle, CloudTrail/Config bucket policy) | **Keep** |
-| Stack `checksops-production-security-trail` | **CREATE_FAILED** (owns the bucket + policy; may have reserved trail name) | Do **not** delete without `--retain-resources` |
-| Trail `checksops-production-management` | Name reserved; logging **not confirmed** (0 objects under `cloudtrail/` at Batch 5 close) | Audit, then start-logging **or** create |
+| Bucket `checksops-production-security-logs-806168576068` | **LIVE** (PAB, AES256, versioning, 365-day lifecycle, CloudTrail/Config bucket policy) | **Keep. Do not delete.** |
+| Bucket policy | **CREATE_COMPLETE** on the failed stack | **Keep. Do not replace.** |
+| Stack `checksops-production-security-trail` | **CREATE_FAILED** (owns bucket + policy) | **Leave in place.** `retain-resources` is illegal until `DELETE_FAILED`. A plain `delete-stack` would delete the bucket. |
+| Trail `checksops-production-management` | **Not in CloudTrail** (`TrailNotFoundException`) but **reserved in CloudFormation** | **Do not create this name** (CLI or CFN). A future delete of the failed stack would DeleteTrail it. |
+| Stack `checksops-production-cloudtrail` | Rolled back / must not be retried with the old trail name | Do not recreate |
 | Role `checksops-production-config-recorder` | **Retained** | **Keep** for #3 |
 | Roles `checksops-production-vpc-flow-logs`, `checksops-production-cloudtrail-logs` | Leftover failed creates | **Do not delete** |
 | Metric filters on API/Lambda log groups | **LIVE** | Do not remove |
 
 ---
 
-## Deployment #1 — CloudTrail management-event logging
+## Deployment #1 — CloudTrail management-event logging (revised)
 
 **STOP after this deployment.** Do not start #2 until #1 is PASS.
 
-### Template
+**Do not** use CloudFormation for this step.  
+**Do not** delete or update `checksops-production-security-trail`.  
+**Do not** delete or replace `checksops-production-security-logs-806168576068` or its bucket policy.  
+**Do not** create trail `checksops-production-management`.  
+**Do not** retry stack `checksops-production-cloudtrail` with `security-monitoring.yaml` (same poisoned `TrailName`).
 
-`aws/production/security-monitoring.yaml`
+### Method
 
-Creates **only** `AWS::CloudTrail::Trail`. Does **not** create the S3
-bucket (already live). Does **not** add `DataResources` (no S3 object-key
-/ check-image logging). Does **not** create IAM roles.
+Privileged-ops **CLI** `create-trail` + `start-logging` against the
+**existing** bucket. New trail name avoids the stale CloudFormation
+logical/physical ID.
 
-### Stack name
-
-`checksops-production-cloudtrail`
-
-Use this name only if the trail does **not** already exist. If the trail
-already exists, do **not** create a second stack — follow Path A or B.
-
-### Region
-
-`us-east-1`
-
-### Required parameters
-
-| Parameter | Value |
+| Field | Value |
 |---|---|
-| `SecurityLogsBucketName` | `checksops-production-security-logs-806168576068` (template default) |
+| Template | **None** (do not deploy `aws/production/security-monitoring.yaml` for #1) |
+| Stack name | **None** |
+| Region | `us-east-1` |
+| Trail name | `checksops-production-mgmt-events` |
+| Bucket | `checksops-production-security-logs-806168576068` (existing) |
+| Prefix | `cloudtrail` (matches live bucket policy) |
+| IAM capability | **Not applicable** |
+| Expected resource | One multi-region management trail, log-file validation on, **no** data events |
 
-No other parameters.
+The live bucket policy already allows `cloudtrail.amazonaws.com`
+`s3:GetBucketAcl` / `s3:GetBucketLocation` and `s3:PutObject` on
+`cloudtrail/AWSLogs/806168576068/*` with `bucket-owner-full-control`.
+Do not edit that policy.
 
-### IAM capability acknowledgement
+### Why not CFN / original name
 
-**Not required.** Template contains no `AWS::IAM::*` resources.  
-Do **not** pass `--capabilities CAPABILITY_IAM` or `CAPABILITY_NAMED_IAM`.
+CloudFormation reserved `checksops-production-management` on
+`ProductionCloudTrail` even though CloudTrail returns
+`TrailNotFoundException`. Creating that name via CLI would attach a
+**live** trail to a CREATE_FAILED stack whose later delete would destroy
+it. `retain-resources` cannot be used while the stack is CREATE_FAILED.
+Leaving the failed stack in place **protects** the bucket.
 
-### Expected resources
+### Duplicate-charge rule
 
-| Logical ID | Type | Physical name |
-|---|---|---|
-| `ProductionCloudTrail` | `AWS::CloudTrail::Trail` | `checksops-production-management` |
+AWS does not charge extra CloudTrail event fees for the **first**
+management-event trail. A **second** trail that also captures management
+events is ~$2.00 / 100k events.
 
-Expected properties:
+`describe-trails` first. If **any** trail already logs management events
+and is `IsLogging=true`, **stop** — reuse it (confirm no `DataResources`)
+instead of creating `checksops-production-mgmt-events`.
 
-- `IsLogging`: true
-- `IsMultiRegionTrail`: true
-- `IncludeGlobalServiceEvents`: true
-- `EnableLogFileValidation`: true
-- `S3BucketName`: `checksops-production-security-logs-806168576068`
-- `S3KeyPrefix`: `cloudtrail`
-- Event selector: management events **All**, **no** `DataResources`
-
-Does **not** create: GuardDuty, Security Hub, Config, Flow Logs, SNS,
-alarms, Lambda/API changes, WAF changes.
+If `describe-trails` is empty (expected: original name not found),
+creating **one** new trail is the first copy → no duplicate event charge.
+Never also create `checksops-production-management` later.
 
 ### Expected monthly cost
 
-Estimates for this account/region. Not a quote.
+Same as before: first management trail ≈ S3 cents (SSE-S3, 365-day
+lifecycle). Do **not** enable Insights or S3 data events (data events
+would log check-image keys).
 
-| Item | Consideration |
-|---|---|
-| Management events (first trail) | AWS includes one copy of management events at no extra CloudTrail event charge for the first trail in the account. This **is** intended to be that trail. |
-| Multi-region + global IAM | Still management events. Expect low volume in a single-app account (typically well under 100k events/month unless Console/API chatter is high). |
-| Extra trail copies | Do **not** create a second management trail. A second copy is charged (~$2.00 per 100k events). |
-| S3 storage | SSE-S3 in `us-east-1` ~$0.023/GB-month. 365-day lifecycle. Management-only logs are usually well under 5 GB/month here. |
-| S3 PUTs / LIST | Small; trail writes compressed files every few minutes when activity exists. |
-| Insight / data events | **Do not enable.** S3 data events would log check-image keys and add ~$0.10/100k data events. |
-
-If this is the account’s first CloudTrail, incremental cost is mostly S3
-cents. If another management trail already exists, **stop** and reuse it
-instead of paying for a second copy.
-
-### Pre-flight (required — audit, do not skip)
-
-Run from a privileged ops role in `us-east-1`:
+### Pre-flight
 
 ```bash
 aws cloudtrail describe-trails --region us-east-1 \
-  --query 'trailList[].[Name,S3BucketName,IsLogging,IsMultiRegionTrail,HomeRegion]'
+  --query 'trailList[].[Name,S3BucketName,IsMultiRegionTrail,HomeRegion,LogFileValidationEnabled]'
 
-aws cloudtrail get-trail --region us-east-1 \
-  --name checksops-production-management
+aws cloudtrail get-trail --region us-east-1 --name checksops-production-mgmt-events
+# expected first time: TrailNotFoundException
 
-aws cloudtrail get-trail-status --region us-east-1 \
-  --name checksops-production-management
-
-aws cloudtrail get-event-selectors --region us-east-1 \
-  --name checksops-production-management
+aws cloudtrail get-trail --region us-east-1 --name checksops-production-management
+# expected: TrailNotFoundException — do not create this name
 
 aws cloudformation describe-stacks --region us-east-1 \
   --stack-name checksops-production-security-trail \
   --query 'Stacks[0].StackStatus'
+# expected: CREATE_FAILED — leave it
 
 aws s3api head-bucket --bucket checksops-production-security-logs-806168576068
+aws s3api get-bucket-policy --bucket checksops-production-security-logs-806168576068
 aws s3api get-public-access-block --bucket checksops-production-security-logs-806168576068
-aws s3api get-bucket-encryption --bucket checksops-production-security-logs-806168576068
-aws s3api list-objects-v2 --bucket checksops-production-security-logs-806168576068 \
-  --prefix cloudtrail/ --max-keys 5
 ```
 
-Choose **exactly one** path:
+If `describe-trails` lists an already-logging management trail: **Path A**
+(reuse). Otherwise **Path B** (create the new name).
 
-#### Path A — trail exists and `IsLogging` is true
+#### Path A — a live management trail already exists
 
-Do **not** create stack `checksops-production-cloudtrail`.  
-Jump to **PASS verification**. If selectors include `DataResources`,
-**stop** and remove data events (do not leave check-image keys in the
-trail).
+Do not create a second trail. Confirm selectors have
+`IncludeManagementEvents=true` and **no** `DataResources`. If logging is
+off, `start-logging` that existing name only. Then PASS-verify using
+**that** name.
 
-#### Path B — trail exists, `IsLogging` is false
-
-Do **not** create a second trail.
-
-```bash
-aws cloudtrail start-logging --region us-east-1 \
-  --name checksops-production-management
-```
-
-If event selectors are missing or include data events, set management-only
-(no `DataResources`):
+#### Path B — no live trails (expected)
 
 ```bash
+aws cloudtrail create-trail --region us-east-1 \
+  --name checksops-production-mgmt-events \
+  --s3-bucket-name checksops-production-security-logs-806168576068 \
+  --s3-key-prefix cloudtrail \
+  --is-multi-region-trail \
+  --enable-log-file-validation
+
 aws cloudtrail put-event-selectors --region us-east-1 \
-  --trail-name checksops-production-management \
+  --trail-name checksops-production-mgmt-events \
   --event-selectors '[{"ReadWriteType":"All","IncludeManagementEvents":true}]'
+
+aws cloudtrail start-logging --region us-east-1 \
+  --name checksops-production-mgmt-events
 ```
 
-Then PASS-verify.
-
-#### Path C — trail does not exist (`TrailNotFoundException`)
-
-1. Leave stack `checksops-production-security-trail` in place **or**, if
-   you must remove the CREATE_FAILED record, retain the bucket:
-
-   ```bash
-   aws cloudformation delete-stack --region us-east-1 \
-     --stack-name checksops-production-security-trail \
-     --retain-resources SecurityLogsBucket SecurityLogsBucketPolicy ProductionCloudTrail
-   aws cloudformation wait stack-delete-complete --region us-east-1 \
-     --stack-name checksops-production-security-trail
-   ```
-
-   If `ProductionCloudTrail` is not a resource on that stack, omit it from
-   `--retain-resources`. **Never** omit `SecurityLogsBucket`.
-
-2. Deploy the reviewed template:
-
-   ```bash
-   aws cloudformation create-stack --region us-east-1 \
-     --stack-name checksops-production-cloudtrail \
-     --template-body file://aws/production/security-monitoring.yaml \
-     --parameters ParameterKey=SecurityLogsBucketName,ParameterValue=checksops-production-security-logs-806168576068
-
-   aws cloudformation wait stack-create-complete --region us-east-1 \
-     --stack-name checksops-production-cloudtrail
-   ```
-
-   No `--capabilities`. `--on-failure ROLLBACK` is acceptable here (trail
-   only; bucket is not in this stack).
+Do **not** pass `--s3-data-events` / Insight selectors.  
+`put-event-selectors` above has **no** `DataResources`.
 
 ### PASS verification (all must hold)
 
 ```bash
-# 1) Trail logging
 aws cloudtrail get-trail --region us-east-1 \
-  --name checksops-production-management \
+  --name checksops-production-mgmt-events \
   --query 'Trail.{Name:Name,Bucket:S3BucketName,Prefix:S3KeyPrefix,Multi:IsMultiRegionTrail,Global:IncludeGlobalServiceEvents,Validation:LogFileValidationEnabled}'
 
 aws cloudtrail get-trail-status --region us-east-1 \
-  --name checksops-production-management \
+  --name checksops-production-mgmt-events \
   --query '{IsLogging:IsLogging,LatestDeliveryTime:LatestDeliveryTime,LatestDeliveryError:LatestDeliveryError}'
 
-# 2) Management events only — DataResources must be absent/empty
 aws cloudtrail get-event-selectors --region us-east-1 \
-  --name checksops-production-management
+  --name checksops-production-mgmt-events
+
+aws cloudtrail describe-trails --region us-east-1 \
+  --query 'length(trailList)'
 ```
 
-Required values:
+Required:
 
+- `Name` = `checksops-production-mgmt-events`
 - `IsLogging` = `true`
 - `S3BucketName` = `checksops-production-security-logs-806168576068`
 - `S3KeyPrefix` = `cloudtrail`
@@ -228,28 +189,28 @@ Required values:
 - `LogFileValidationEnabled` = `true`
 - `IncludeManagementEvents` = `true`
 - **No** `DataResources`
+- **Exactly one** trail in `describe-trails` (no duplicate management copies)
+- Failed stack still `CREATE_FAILED` (bucket still owned there)
+- Bucket still exists
 
-Generate one harmless management event, wait **15 minutes**, then confirm
+Generate one harmless management event, wait **15 minutes**, confirm
 delivery:
 
 ```bash
 aws sts get-caller-identity --region us-east-1
-
 # wait ~15 minutes
 aws cloudtrail get-trail-status --region us-east-1 \
-  --name checksops-production-management \
+  --name checksops-production-mgmt-events \
   --query 'LatestDeliveryTime'
-
 aws s3api list-objects-v2 --bucket checksops-production-security-logs-806168576068 \
-  --prefix cloudtrail/AWSLogs/806168576068/ \
-  --max-keys 10
+  --prefix cloudtrail/AWSLogs/806168576068/ --max-keys 10
 ```
 
-PASS requires **at least one** object under
+PASS requires at least one object under
 `cloudtrail/AWSLogs/806168576068/` and `LatestDeliveryTime` within the
 last hour with **no** `LatestDeliveryError`.
 
-Holds (must still be true — read only):
+Holds (read only):
 
 ```bash
 aws lambda get-function-configuration --region us-east-1 \
@@ -261,40 +222,46 @@ aws rds describe-db-instances --region us-east-1 \
   --query 'DBInstances[0].{BackupRetentionPeriod:BackupRetentionPeriod,DeletionProtection:DeletionProtection}'
 ```
 
-Expected: all four flags `false` (or `"false"`). Backup retention `35`.
-Deletion protection `true`.
+Expected: flags `false`. Backup retention `35`. Deletion protection `true`.
 
-**#1 PASS** only when logging + S3 objects + no data events + flags still
-OFF. Then stop. Do not start deployment #2 until the next operator prompt.
+**#1 PASS** when logging + S3 objects + no data events + single trail +
+bucket untouched + flags OFF. Then stop. Do not start #2 yet.
 
 ### Rollback
 
-Preferred (keeps the trail definition, stops new writes):
+Stops new writes; does not touch the bucket or failed stack:
 
 ```bash
 aws cloudtrail stop-logging --region us-east-1 \
-  --name checksops-production-management
+  --name checksops-production-mgmt-events
 ```
 
-If you created stack `checksops-production-cloudtrail` and must remove it:
+Only if the new trail must be removed (after stop-logging):
 
 ```bash
-aws cloudformation delete-stack --region us-east-1 \
-  --stack-name checksops-production-cloudtrail
-aws cloudformation wait stack-delete-complete --region us-east-1 \
-  --stack-name checksops-production-cloudtrail
+aws cloudtrail delete-trail --region us-east-1 \
+  --name checksops-production-mgmt-events
 ```
-
-That delete removes **only** the trail. It does **not** delete
-`checksops-production-security-logs-806168576068`.
 
 **Do not:**
 
-- Delete the security-logs bucket
-- Delete `checksops-production-security-trail` without retain
+- `delete-stack` on `checksops-production-security-trail` (would delete the bucket)
+- `--retain-resources` while status is CREATE_FAILED (API rejects it)
+- `create-trail` / CFN using name `checksops-production-management`
+- Recreate stack `checksops-production-cloudtrail` with `security-monitoring.yaml`
+- Delete or replace the logs bucket or bucket policy
 - Delete leftover IAM roles
-- Enable S3 data events “to debug”
+- Enable S3 data events
 - Change Lambda env, WAF, or money flags
+
+### Later stack cleanup (not #1)
+
+Leave `checksops-production-security-trail` as the bucket’s CloudFormation
+owner. Optional future cleanup (only after a dedicated review): force
+`DELETE_FAILED` without losing the bucket (for example a Deny on
+`s3:DeleteBucket`, then `delete-stack`, then
+`delete-stack --retain-resources SecurityLogsBucket,SecurityLogsBucketPolicy`).
+Do **not** do that in this deployment.
 
 ---
 
