@@ -50,6 +50,8 @@ test('deployment #3 Config correction uses new names and does not collide', () =
   assert.match(config, /S3KeyPrefix: config/);
   assert.match(config, /AllSupported: true/);
   assert.match(config, /IncludeGlobalResourceTypes: true/);
+  assert.match(config, /DependsOn: ConfigRecorder/);
+  assert.doesNotMatch(config, /DependsOn: ConfigDeliveryChannel/);
   assert.match(
     config,
     /arn:aws:iam::806168576068:role\/checksops-production-config-items-recorder/,

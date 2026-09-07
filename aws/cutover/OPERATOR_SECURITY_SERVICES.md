@@ -366,7 +366,10 @@ Privileged-ops / Administrator. **Not** root. **Not**
 
 IAM capability: **No** (role already exists). Parameters use defaults.
 Account limit: **one** recorder per region. If any recorder already
-exists, **stop**.
+exists, **stop**. Create the **recorder first**, then the delivery
+channel (`DependsOn: ConfigRecorder`). Current Config APIs reject
+`PutDeliveryChannel` with `NoAvailableConfigurationRecorderException`
+if no recorder exists yet.
 
 PASS: `describe-configuration-recorder-status` for
 `checksops-production-config-items` shows `recording: true` and
