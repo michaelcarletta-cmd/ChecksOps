@@ -469,9 +469,10 @@ Reviewed as a **single** stack (do not split the template).
 ---
 
 **STOP FOR REVIEW — #2–#5 PASS, #6 WAITING on SNS confirmation.**
-CFN replace of `AlertSubscription` (2026-09-08) reattached the same
-pending ARN; AWS will not delete a `PendingConfirmation` email
-subscription. Do **not** deploy `checksops-production-security-alarms`
-until it is `Confirmed`. Do not create another topic or email. Do not
-delete the temp role. Do not delete the trail stack. See
+Temporary `support@checksops.com` email subscription added on the
+existing alerts topic (2026-09-08). `security@checksops.com` left
+pending and untouched. Do **not** deploy
+`checksops-production-security-alarms` until `support@` is `Confirmed`.
+Do not create another topic. Do not delete the temp role. Do not
+delete the trail stack. See
 `aws/cutover/OPERATOR_SECURITY_HANDOFF_2TO6.md`.
