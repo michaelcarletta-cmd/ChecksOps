@@ -468,11 +468,9 @@ Reviewed as a **single** stack (do not split the template).
 
 ---
 
-**STOP FOR REVIEW — #2–#5 PASS, #6 WAITING on SNS confirmation.**
-Temporary `support@checksops.com` email subscription added on the
-existing alerts topic (2026-09-08). `security@checksops.com` left
-pending and untouched. Do **not** deploy
-`checksops-production-security-alarms` until `support@` is `Confirmed`.
-Do not create another topic. Do not delete the temp role. Do not
-delete the trail stack. See
-`aws/cutover/OPERATOR_SECURITY_HANDOFF_2TO6.md`.
+**STOP FOR REVIEW — #1–#6 PASS.**
+`#6` stack `checksops-production-security-alarms` is
+**CREATE_COMPLETE** (2026-09-08). 14 alarms page the existing SNS topic.
+`support@checksops.com` is Confirmed. `security@checksops.com` left
+pending. Do **not** delete the temp role. Do not delete the trail stack.
+See `aws/cutover/OPERATOR_SECURITY_HANDOFF_2TO6.md`.

@@ -1,8 +1,8 @@
 # Temporary Cursor role for Security Hardening #2–#6
 
-**STOP FOR REVIEW — #2–#5 PASS, #6 WAITING on SNS confirmation.**
-Role CREATE_COMPLETE. Do not delete this role. Do not deploy #6 until
-`security@checksops.com` is Confirmed.
+**STOP FOR REVIEW — #1–#6 PASS.**
+Role CREATE_COMPLETE. Do not delete this role until a later reviewed
+cleanup. `#6` alarms are deployed.
 
 The role exists (created `2026-09-07T17:45:35Z`) with **zero** inline
 policies and six customer-managed policies. Cursor OIDC assume
@@ -262,8 +262,7 @@ that feature flag.
 
 ## Holds (unchanged)
 
-- `#2`–`#5` are **PASS**. `#6` is **WAITING** on SNS email confirmation.
-  Do not delete this role yet.
+- `#1`–`#6` are **PASS**. Do **not** delete this role until a later reviewed cleanup.
 - Do not broaden `ChecksOpsCursorCloudStaging`.
 - Do not use root, access keys, passwords, OTPs, or secrets.
 - Do not modify application code, prep Lambda env/VPC/role, RDS data,
