@@ -1,0 +1,155 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyDeleteOrCreateDistributions",
+      "Effect": "Deny",
+      "Action": [
+        "cloudfront:DeleteDistribution",
+        "cloudfront:CreateDistribution",
+        "cloudfront:CreateDistributionWithTags"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyMutatingOtherDistributions",
+      "Effect": "Deny",
+      "Action": [
+        "cloudfront:UpdateDistribution",
+        "cloudfront:CreateInvalidation"
+      ],
+      "NotResource": "arn:aws:cloudfront::806168576068:distribution/E1B0ZWWO5559U5"
+    },
+    {
+      "Sid": "DenyWafMutationAndDisassociation",
+      "Effect": "Deny",
+      "Action": [
+        "wafv2:*",
+        "waf:*",
+        "waf-regional:*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyApiGatewayAuthorizersAndExecuteApiDisable",
+      "Effect": "Deny",
+      "Action": [
+        "apigateway:*",
+        "apigatewayv2:*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyLambdaAuthorizerAndPrepApiMutation",
+      "Effect": "Deny",
+      "Action": "lambda:*",
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenySecretsOriginVerifyAndRds",
+      "Effect": "Deny",
+      "Action": "secretsmanager:*",
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyRds",
+      "Effect": "Deny",
+      "Action": [
+        "rds:*",
+        "rds-data:*",
+        "rds-db:*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyCognitoMutation",
+      "Effect": "Deny",
+      "Action": "cognito-idp:*",
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyRoute53",
+      "Effect": "Deny",
+      "Action": [
+        "route53:*",
+        "route53domains:*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyIamMutationPassRoleAndOldTempRoles",
+      "Effect": "Deny",
+      "Action": [
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:UpdateRole",
+        "iam:UpdateAssumeRolePolicy",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:CreatePolicy",
+        "iam:CreatePolicyVersion",
+        "iam:DeletePolicy",
+        "iam:PassRole",
+        "iam:CreateUser",
+        "iam:CreateAccessKey",
+        "iam:UpdateAssumeRolePolicy"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenySecurityMonitoringInfra",
+      "Effect": "Deny",
+      "Action": [
+        "cloudtrail:*",
+        "config:*",
+        "guardduty:*",
+        "securityhub:*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenySensitiveBuckets",
+      "Effect": "Deny",
+      "Action": "s3:*",
+      "Resource": [
+        "arn:aws:s3:::checksops-production-access-logs-806168576068",
+        "arn:aws:s3:::checksops-production-access-logs-806168576068/*",
+        "arn:aws:s3:::checksops-staging-privatefilesbucket-erzqsolpucjp",
+        "arn:aws:s3:::checksops-staging-privatefilesbucket-erzqsolpucjp/*",
+        "arn:aws:s3:::checksops-production-security-*",
+        "arn:aws:s3:::checksops-production-security-*/*"
+      ]
+    },
+    {
+      "Sid": "DenyKmsAndRoleChaining",
+      "Effect": "Deny",
+      "Action": [
+        "kms:*",
+        "sts:AssumeRole",
+        "sts:AssumeRoleWithSAML",
+        "sts:AssumeRoot"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyProtectedCloudFormation",
+      "Effect": "Deny",
+      "Action": [
+        "cloudformation:CreateStack",
+        "cloudformation:UpdateStack",
+        "cloudformation:DeleteStack",
+        "cloudformation:CreateChangeSet",
+        "cloudformation:ExecuteChangeSet"
+      ],
+      "Resource": [
+        "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-prep-api/*",
+        "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-cloudfront-waf/*",
+        "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-security-*",
+        "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-cursor-security-hardening-role/*",
+        "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-cursor-cloudtrail-cwlogs-role/*"
+      ]
+    }
+  ]
+}
