@@ -853,7 +853,8 @@ export default function CheckCommandCenter() {
       }
 
 
-      return (s === "needs_review" ||
+      return (stage === "review" ||
+        s === "needs_review" ||
         s === "manual_review_required" ||
         s === "endorsements_complete" ||
         s === "uploaded" ||

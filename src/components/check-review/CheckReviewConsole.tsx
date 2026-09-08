@@ -75,6 +75,7 @@ interface ReviewCheck {
   ocr_status: string;
   ocr_needs_verification?: boolean | null;
   status: string;
+  check_stage?: string | null;
   deposit_recommendation: string | null;
   deposit_recommendation_reasons: string[] | null;
   detected_claim_number: string | null;
@@ -223,6 +224,7 @@ const isInReviewQueue = (check: ReviewCheck): boolean => {
     return false;
   }
   return (
+    stage === "review" ||
     effectiveStatus === "needs_review" ||
     effectiveStatus === "in_review" ||
     effectiveStatus === "ocr_complete" ||
