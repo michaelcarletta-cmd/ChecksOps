@@ -459,10 +459,10 @@ Reviewed as a **single** stack (do not split the template).
 ---
 
 **STOP FOR REVIEW — #2–#5 PASS, #6 WAITING on SNS confirmation.**
-`security@checksops.com` on `checksops-production-security-alerts` is
-still `PendingConfirmation` (`SubscriptionsConfirmed=0`,
-`SubscriptionsPending=1`). Do **not** deploy
-`checksops-production-security-alarms` until that subscription is
-`Confirmed`. Do not create another topic or email. Do not delete the
-temp role. Do not delete the trail stack. See
+Confirmation was resent to existing `security@checksops.com` on
+`checksops-production-security-alerts` (2026-09-08). Subscription is
+still `PendingConfirmation`. Do **not** deploy
+`checksops-production-security-alarms` until it is `Confirmed`. Do not
+create another topic or email. Do not delete the temp role. Do not
+delete the trail stack. See
 `aws/cutover/OPERATOR_SECURITY_HANDOFF_2TO6.md`.

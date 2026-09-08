@@ -1,27 +1,26 @@
-# Security Hardening #2–#6 handoff — STOP: #6 WAITING on SNS
+# Security Hardening #2–#6 handoff — STOP: SNS confirmation resent
 
-**Date:** 2026-09-07  
-**STOP FOR REVIEW.** `#6` CloudWatch alarms were **not deployed**.
-SNS email `security@checksops.com` is still `PendingConfirmation`.
-Temporary role **not** deleted. Trail stack left `CREATE_FAILED`. Money
-flags remain **false**. `64_` remains **NOT_APPLIED**.
+**Date:** 2026-09-08  
+**STOP FOR REVIEW.** Confirmation was **resent** to the existing topic
+and `security@checksops.com`. `#6` was **not deployed**. Subscription
+is still `PendingConfirmation` until the mailbox clicks Confirm.
+Temporary role **not** deleted.
 
 Caller: `arn:aws:sts::806168576068:assumed-role/ChecksOpsCursorSecurityHardeningTemp/checksops-sec-hard`
 
-## SNS hard gate (this run)
+## SNS resend (this run)
 
 | Check | Result |
 |---|---|
-| Topic | `arn:aws:sns:us-east-1:806168576068:checksops-production-security-alerts` |
-| Stack | `checksops-production-security-sns` `CREATE_COMPLETE` |
-| Endpoint | `security@checksops.com` (email) |
-| SubscriptionArn | `PendingConfirmation` |
-| SubscriptionsConfirmed | `0` |
-| SubscriptionsPending | `1` |
+| Topic | `arn:aws:sns:us-east-1:806168576068:checksops-production-security-alerts` (unchanged) |
+| Endpoint | `security@checksops.com` (unchanged) |
+| `sns subscribe` | **OK** — AWS accepted resend; returned ARN `…:5365a46f-f2cd-4af0-b21e-00222be734b5` (`--return-subscription-arn`) |
+| After | still one email subscription, `PendingConfirmation` |
+| SubscriptionsConfirmed / Pending | `0` / `1` |
 | `#6` stack | does not exist |
 
-#6 is **WAITING**. Confirm the existing subscription. Do not create
-another topic, another email, or alarms without `AlarmActions`.
+Operator: open the new AWS SNS confirmation mail in the M365 shared
+mailbox and click Confirm. Then reopen #6.
 
 ## Deployments
 
