@@ -464,30 +464,30 @@ Reviewed as a **single** stack (do not split the template).
 - Cost: ~$0.10/alarm/month → about **$1.40/month** plus SNS
 - PASS: `aws cloudwatch describe-alarms --alarm-name-prefix checksops-prod` returns the set; missing metrics do **not** go ALARM
 - Rollback: `delete-stack`
-- Note: `IamSecurityChanges` stays quiet until CloudTrail is also delivered to CloudWatch Logs (not in #1). S3 4xx needs request metrics on the files bucket (optional later).
+- Note: CloudTrail → CloudWatch Logs for `IamSecurityChanges` is now
+  attached (follow-up PASS). The alarm stays non-ALARM until a matching
+  IAM event occurs. S3 4xx needs request metrics on the files bucket
+  (optional later).
 
 ---
 
-**STOP FOR REVIEW — #1–#6 PASS.**
-`#6` stack `checksops-production-security-alarms` is
+**STOP FOR REVIEW — #1–#6 PASS.** Follow-up CloudTrail → CloudWatch Logs
+is also **PASS**. `#6` stack `checksops-production-security-alarms` is
 **CREATE_COMPLETE** (2026-09-08). 14 alarms page the existing SNS topic.
 `support@checksops.com` is Confirmed. `security@checksops.com` left
-pending. Do **not** delete the temp role. Do not delete the trail stack.
+pending. Do **not** delete either temp role. Do not delete the trail stack.
 See `aws/cutover/OPERATOR_SECURITY_HANDOFF_2TO6.md`.
 
-### Proposed follow-up — CloudTrail to CloudWatch Logs (**not deployed**)
+### Proposed follow-up — CloudTrail to CloudWatch Logs (**PASS**)
 
-`IamSecurityChanges` is ineffective until the live trail
-`checksops-production-mgmt-events` is also delivered to CloudWatch Logs.
-Template (approved, not deployed): `aws/production/security-cloudtrail-cwlogs.yaml`.
-Stack name if later opened: `checksops-production-security-trail-cwlogs`.
+`IamSecurityChanges` now has CloudTrail → CloudWatch Logs delivery on
+`checksops-production-mgmt-events`. Stack
+`checksops-production-security-trail-cwlogs` is **CREATE_COMPLETE**.
+Template: `aws/production/security-cloudtrail-cwlogs.yaml`.
 Do **not** use `security-monitoring.yaml` or recreate the trail.
-Do **not** modify `ChecksOpsCursorSecurityHardeningTemp` (explicit
-`cloudtrail:UpdateTrail` Deny; IAM CreateRole/PassRole except flow/config;
-log-group create only for VPC flow).
+Do **not** modify `ChecksOpsCursorSecurityHardeningTemp`.
 
-Separate temporary OIDC role (created, identity **PASS**, follow-up
-**not** started): `ChecksOpsCursorCloudTrailCwLogsTemp`. See
-`aws/cutover/OPERATOR_CLOUDTRAIL_CWLOGS_ROLE.md`. Do **not** deploy the
-follow-up until a later message opens it. Do not generate an IAM change
-just to test.
+Operator identity: `ChecksOpsCursorCloudTrailCwLogsTemp`. See
+`aws/cutover/OPERATOR_CLOUDTRAIL_CWLOGS_ROLE.md`. Do **not** delete either
+temporary role. Do not generate an IAM change just to test. Do not start
+API-behind-CloudFront or financial activation.

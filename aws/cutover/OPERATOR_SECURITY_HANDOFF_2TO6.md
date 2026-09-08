@@ -77,16 +77,17 @@ INSUFFICIENT_DATA immediately after create is acceptable.
 
 ## Warnings
 
-- `IamSecurityChanges` stays quiet until CloudTrail is also delivered to CloudWatch Logs (not in `#1`).
+- `IamSecurityChanges` now has CloudTrail → CloudWatch Logs delivery. The
+  alarm stays quiet until a real IAM security-change event matches the
+  filter (none was generated for this follow-up).
 - S3 files 4xx alarm is already `OK` (request metrics present). Template note still applies if those metrics are later removed.
 - WAF `ListWebACLs` is denied on this role. Live `checksops-prod-waf-counted=OK` confirms the template metric name `checksopsProductionCloudFrontWaf` is receiving data.
 - `/financial/status` still reports `apiBehindCloudFrontRequiredBeforeFinancial: true`.
 
-## Proposed follow-up (not deployed)
+## Proposed follow-up (PASS)
 
-CloudTrail → CloudWatch Logs for `IamSecurityChanges`. Template:
-`aws/production/security-cloudtrail-cwlogs.yaml`. Do **not** modify
-`ChecksOpsCursorSecurityHardeningTemp` (cannot `UpdateTrail`). Separate
-role `ChecksOpsCursorCloudTrailCwLogsTemp` exists (identity PASS). See
-`aws/cutover/OPERATOR_CLOUDTRAIL_CWLOGS_ROLE.md`. Do **not** deploy the
-follow-up until reviewed.
+CloudTrail → CloudWatch Logs for `IamSecurityChanges` is **PASS**.
+Template: `aws/production/security-cloudtrail-cwlogs.yaml`. Stack
+`checksops-production-security-trail-cwlogs` **CREATE_COMPLETE**. Do **not**
+modify `ChecksOpsCursorSecurityHardeningTemp`. Do **not** delete either
+temporary role. See `aws/cutover/OPERATOR_CLOUDTRAIL_CWLOGS_ROLE.md`.
