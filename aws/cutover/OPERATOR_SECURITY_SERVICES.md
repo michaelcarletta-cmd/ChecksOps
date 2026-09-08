@@ -474,3 +474,15 @@ Reviewed as a **single** stack (do not split the template).
 `support@checksops.com` is Confirmed. `security@checksops.com` left
 pending. Do **not** delete the temp role. Do not delete the trail stack.
 See `aws/cutover/OPERATOR_SECURITY_HANDOFF_2TO6.md`.
+
+### Proposed follow-up — CloudTrail to CloudWatch Logs (**not deployed**)
+
+`IamSecurityChanges` is ineffective until the live trail
+`checksops-production-mgmt-events` is also delivered to CloudWatch Logs.
+Template (review only): `aws/production/security-cloudtrail-cwlogs.yaml`.
+Stack name if approved: `checksops-production-security-trail-cwlogs`.
+Do **not** use `security-monitoring.yaml` or recreate the trail.
+`ChecksOpsCursorSecurityHardeningTemp` **cannot** perform this (explicit
+`cloudtrail:UpdateTrail` Deny; IAM CreateRole/PassRole except flow/config;
+log-group create only for VPC flow). Deploy from a privileged ops
+principal after review. Do not generate an IAM change just to test.

@@ -1,0 +1,79 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Proposed follow-up (not deployed with #1–#6): CloudWatch Logs delivery
+  for the existing management-event trail checksops-production-mgmt-events.
+  Does not create or rename the trail. Does not change event selectors.
+  Does not touch checksops-production-security-trail. Does not create
+  CloudWatch alarms. Metric filter IamSecurityChanges feeds the existing
+  checksops-prod-iam-security-changes alarm.
+
+Parameters:
+  TrailName:
+    Type: String
+    Default: checksops-production-mgmt-events
+  LogGroupName:
+    Type: String
+    Default: /aws/cloudtrail/checksops-production-mgmt-events
+  RetentionInDays:
+    Type: Number
+    Default: 365
+    Description: Match security-logs S3 lifecycle (365 days).
+
+Resources:
+  CloudTrailLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Ref LogGroupName
+      RetentionInDays: !Ref RetentionInDays
+
+  CloudTrailLogsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: checksops-production-cloudtrail-cwlogs
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: TrustCloudTrailExistingTrailOnly
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: '806168576068'
+              ArnEquals:
+                aws:SourceArn: !Sub 'arn:aws:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/${TrailName}'
+      Policies:
+        - PolicyName: WriteCloudTrailLogs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: CreateStreamAndPutEvents
+                Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${LogGroupName}:*'
+
+  IamSecurityChangesFilter:
+    Type: AWS::Logs::MetricFilter
+    DependsOn: CloudTrailLogGroup
+    Properties:
+      LogGroupName: !Ref LogGroupName
+      FilterName: checksops-prod-iam-security-changes-filter
+      FilterPattern: '{ ($.eventSource = iam.amazonaws.com) && (($.eventName = CreateUser) || ($.eventName = DeleteUser) || ($.eventName = CreateAccessKey) || ($.eventName = DeleteAccessKey) || ($.eventName = UpdateAccessKey) || ($.eventName = CreateLoginProfile) || ($.eventName = DeleteLoginProfile) || ($.eventName = UpdateLoginProfile) || ($.eventName = ChangePassword) || ($.eventName = AttachUserPolicy) || ($.eventName = DetachUserPolicy) || ($.eventName = PutUserPolicy) || ($.eventName = DeleteUserPolicy) || ($.eventName = AttachRolePolicy) || ($.eventName = DetachRolePolicy) || ($.eventName = PutRolePolicy) || ($.eventName = DeleteRolePolicy) || ($.eventName = AttachGroupPolicy) || ($.eventName = DetachGroupPolicy) || ($.eventName = PutGroupPolicy) || ($.eventName = DeleteGroupPolicy) || ($.eventName = CreatePolicy) || ($.eventName = DeletePolicy) || ($.eventName = CreatePolicyVersion) || ($.eventName = DeletePolicyVersion) || ($.eventName = SetDefaultPolicyVersion) || ($.eventName = UpdateAssumeRolePolicy)) }'
+      MetricTransformations:
+        - MetricNamespace: ChecksOps/ProductionPrep
+          MetricName: IamSecurityChanges
+          MetricValue: '1'
+          DefaultValue: 0
+
+Outputs:
+  LogGroupArn:
+    Value: !GetAtt CloudTrailLogGroup.Arn
+  LogGroupArnForTrail:
+    Value: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${LogGroupName}:*'
+  LogsRoleArn:
+    Value: !GetAtt CloudTrailLogsRole.Arn
+  CloudWatchLogsLogGroupArnForUpdateTrail:
+    Value: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${LogGroupName}:*'

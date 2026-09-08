@@ -81,3 +81,9 @@ INSUFFICIENT_DATA immediately after create is acceptable.
 - S3 files 4xx alarm is already `OK` (request metrics present). Template note still applies if those metrics are later removed.
 - WAF `ListWebACLs` is denied on this role. Live `checksops-prod-waf-counted=OK` confirms the template metric name `checksopsProductionCloudFrontWaf` is receiving data.
 - `/financial/status` still reports `apiBehindCloudFrontRequiredBeforeFinancial: true`.
+
+## Proposed follow-up (not deployed)
+
+CloudTrail → CloudWatch Logs for `IamSecurityChanges`. Template:
+`aws/production/security-cloudtrail-cwlogs.yaml`. Temp role **cannot**
+`UpdateTrail`. See operator package. Do not deploy until reviewed.
