@@ -2,6 +2,7 @@
  * Shared helpers for Step 3 origin-verify tooling.
  * Never print origin-verification secret material or CloudFront header values.
  */
+import { spawnSync } from 'node:child_process';
 export const HEADER_NAME = 'x-checksops-origin-verify';
 export const SECRET_NAME = 'checksops/production/cloudfront-origin-verify';
 export const AUTHORIZER_NAME = 'checksops-production-origin-verify';
@@ -63,4 +64,53 @@ export function refuseRequireMode() {
     console.error('DO_NOT_DEPLOY Gate 3D / ORIGIN_VERIFY_REQUIRE=true is not part of this package.');
     process.exit(2);
   }
+}
+
+export function shouldExecute() {
+  return String(process.env.CHECKSOPS_STEP3_EXECUTE || '') === '1';
+}
+
+export const AWS_BIN = process.env.AWS_CLI || `${process.env.HOME}/.local/bin/aws`;
+
+export function awsJson(args, { input, allowFail = false } = {}) {
+  const r = spawnSync(AWS_BIN, ['--region', 'us-east-1', '--output', 'json', ...args], {
+    encoding: 'utf8',
+    input,
+    maxBuffer: 20 * 1024 * 1024,
+    env: process.env,
+  });
+  if (r.status !== 0) {
+    const err = redactCli((r.stderr || r.stdout || '').slice(0, 1500));
+    if (allowFail) return { __error: err, __status: r.status };
+    throw new Error(`${args[0]} ${args[1] || ''} failed: ${err}`);
+  }
+  return r.stdout.trim() ? JSON.parse(r.stdout) : {};
+}
+
+export function awsText(args) {
+  const r = spawnSync(AWS_BIN, ['--region', 'us-east-1', '--output', 'text', ...args], {
+    encoding: 'utf8',
+    env: process.env,
+  });
+  if (r.status !== 0) {
+    throw new Error(`${args[0]} ${args[1] || ''} failed: ${redactCli((r.stderr || r.stdout || '').slice(0, 1500))}`);
+  }
+  return String(r.stdout || '').trim();
+}
+
+export function redactCli(text) {
+  return String(text || '')
+    .replace(/"HeaderValue"\s*:\s*"[^"]*"/g, '"HeaderValue":"[REDACTED]"')
+    .replace(/"SecretString"\s*:\s*"[^"]*"/g, '"SecretString":"[REDACTED]"')
+    .replace(/"current"\s*:\s*"[^"]*"/g, '"current":"[REDACTED]"')
+    .replace(/"next"\s*:\s*"[^"]*"/g, '"next":"[REDACTED]"');
+}
+
+export function requireStep3Temp() {
+  const ident = awsJson(['sts', 'get-caller-identity']);
+  const arn = String(ident.Arn || '');
+  if (!arn.includes('ChecksOpsCursorApiPerimeterStep3Temp')) {
+    throw new Error(`refusing_wrong_identity ${arn}`);
+  }
+  return arn;
 }

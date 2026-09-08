@@ -23,18 +23,16 @@ const audit = read('aws/cutover/API_PERIMETER_STEP3_CALLER_AUDIT.md');
 const gates = read('aws/cutover/API_PERIMETER_STEP3_GATES.md');
 const banner = read('src/components/AwsStagingBanner.tsx');
 
-test('caller audit is FAIL until EventBridge/Scheduler/Synthetics are listed', () => {
-  assert.match(audit, /\*\*Result: FAIL\*\*/);
-  assert.match(audit, /AccessDenied/);
-  assert.match(audit, /events:ListRules/);
-  assert.match(audit, /scheduler:ListSchedules/);
-  assert.match(audit, /synthetics:DescribeCanaries/);
-  assert.match(audit, /Do \*\*not\*\* start Gate 3A/);
+test('caller audit is PASS after privileged operator list', () => {
+  assert.match(audit, /\*\*Result: PASS\*\*/);
+  assert.match(audit, /API Destinations \| none/);
+  assert.match(audit, /Synthetics canaries \| none/);
+  assert.match(audit, /checksops-prod-api-4xx/);
   assert.match(audit, /index-reP2FWHf\.js/);
   assert.match(audit, /holds\.ok=true/);
   assert.match(audit, /productionExecution=false/);
   assert.match(audit, /NOT_APPLIED/);
-  assert.match(audit, /ChecksOpsCursorApiPerimeterStep3AuditTemp/);
+  assert.match(audit, /Do \*\*not\*\* begin Gate 3D/);
   assert.doesNotMatch(audit, /aws cloudfront update-distribution/);
   assert.doesNotMatch(audit, /DisableExecuteApiEndpoint=true/);
 });
@@ -140,6 +138,16 @@ test('audit and deploy role templates stay gated and read-only vs mutate', () =>
   assert.match(JSON.stringify(allow), /events:ListRules/);
   assert.match(JSON.stringify(deny), /GetSecretValue/);
   assert.doesNotMatch(JSON.stringify(allow), /UpdateDistribution|CreateFunction|PutSecretValue/);
+});
+
+test('Gate 3A blocked record does not deploy and keeps execute-api', () => {
+  const blocked = read('aws/cutover/API_PERIMETER_STEP3_GATE3A_ROLE_BLOCKED.md');
+  assert.match(blocked, /Gate 3A BLOCKED/);
+  assert.match(blocked, /AuthorizationType=NONE/);
+  assert.match(blocked, /ChecksOpsCursorApiPerimeterStep3Temp/);
+  assert.match(blocked, /Do \*\*not\*\* begin Gate 3D/);
+  assert.doesNotMatch(blocked, /DisableExecuteApiEndpoint=true/);
+  assert.doesNotMatch(blocked, /ORIGIN_VERIFY_REQUIRE=true/);
 });
 
 test('banner and financial SQL remain untouched', () => {
