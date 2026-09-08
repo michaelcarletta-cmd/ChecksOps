@@ -8,7 +8,7 @@
   "apiOriginDomain": "kiqojucc02.execute-api.us-east-1.amazonaws.com",
   "originPath": "",
   "cachePolicyIdCachingDisabled": "4135ea2d-6df8-44a3-9df3-4b5a84be39ad",
-  "originRequestPolicyIdAllViewerExceptHostHeader": "33f36b7c-a70f-4668-a48e-7eab15d4e0c3",
+  "originRequestPolicyIdAllViewerExceptHostHeader": "b689b0a8-53d0-40ab-baf2-68738e2966ac",
   "pathPatterns": ["/prep", "/prep/*"],
   "allowedMethods": ["HEAD", "DELETE", "POST", "GET", "OPTIONS", "PUT", "PATCH"],
   "cachedMethods": ["HEAD", "GET"],

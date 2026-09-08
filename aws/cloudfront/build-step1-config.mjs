@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Build the Step 1 CloudFront DistributionConfig locally.
- * READ-ONLY / DRY-RUN. Does not call AWS. Does not deploy.
+ * Default invocation is DRY-RUN (writes proposed JSON, no AWS).
  *
  * Usage:
  *   node aws/cloudfront/build-step1-config.mjs
@@ -12,8 +12,9 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const APPLY = String(process.env.CHECKSOPS_APPLY_CF_STEP1 || '').trim();
+const isMain = path.resolve(process.argv[1] || '') === fileURLToPath(import.meta.url);
 
-if (APPLY) {
+if (isMain && APPLY && APPLY !== 'APPLY_GATE1') {
   console.error('DO_NOT_DEPLOY: this builder refuses AWS writes. Unset CHECKSOPS_APPLY_CF_STEP1.');
   process.exit(2);
 }
@@ -104,13 +105,19 @@ export function buildStep1Config(baselineConfig, functionArn = constants.functio
   return cfg;
 }
 
-const proposed = buildStep1Config(baselineDoc.DistributionConfig);
-const outPath = path.join(ROOT, 'aws/cloudfront/E1B0ZWWO5559U5.step1.proposed.json');
-fs.writeFileSync(outPath, `${JSON.stringify({
-  doNotDeploy: true,
-  distributionId: constants.distributionId,
-  functionName: constants.functionName,
-  note: 'Pass this DistributionConfig to UpdateDistribution with a fresh IfMatch ETag. DO NOT DEPLOY FROM THIS PR.',
-  DistributionConfig: proposed,
-}, null, 2)}\n`);
-console.log(JSON.stringify({ wrote: path.relative(ROOT, outPath), doNotDeploy: true }));
+if (isMain) {
+  if (APPLY && APPLY !== 'APPLY_GATE1') {
+    console.error('DO_NOT_DEPLOY: this builder refuses AWS writes. Unset CHECKSOPS_APPLY_CF_STEP1.');
+    process.exit(2);
+  }
+  const proposed = buildStep1Config(baselineDoc.DistributionConfig);
+  const outPath = path.join(ROOT, 'aws/cloudfront/E1B0ZWWO5559U5.step1.proposed.json');
+  fs.writeFileSync(outPath, `${JSON.stringify({
+    doNotDeploy: true,
+    distributionId: constants.distributionId,
+    functionName: constants.functionName,
+    note: 'Pass this DistributionConfig to UpdateDistribution with a fresh IfMatch ETag. DO NOT DEPLOY FROM THIS PR.',
+    DistributionConfig: proposed,
+  }, null, 2)}\n`);
+  console.log(JSON.stringify({ wrote: path.relative(ROOT, outPath), doNotDeploy: true }));
+}

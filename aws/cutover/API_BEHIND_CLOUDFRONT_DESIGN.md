@@ -135,7 +135,7 @@ No changes in this turn.
 
 | Resource | Change |
 |---|---|
-| CloudFront `E1B0ZWWO5559U5` | Add HTTPS origin `kiqojucc02.execute-api.us-east-1.amazonaws.com`. Add behaviors `/prep` and `/prep/*`: CachingDisabled `4135ea2d-6df8-44a3-9df3-4b5a84be39ad`, AllViewerExceptHostHeader `33f36b7c-a70f-4668-a48e-7eab15d4e0c3`, methods GET/HEAD/OPTIONS/PUT/POST/PATCH/DELETE, Viewer HTTPS. Later: origin custom header. |
+| CloudFront `E1B0ZWWO5559U5` | Add HTTPS origin `kiqojucc02.execute-api.us-east-1.amazonaws.com`. Add behaviors `/prep` and `/prep/*`: CachingDisabled `4135ea2d-6df8-44a3-9df3-4b5a84be39ad`, AllViewerExceptHostHeader `b689b0a8-53d0-40ab-baf2-68738e2966ac`, methods GET/HEAD/OPTIONS/PUT/POST/PATCH/DELETE, Viewer HTTPS. Later: origin custom header. |
 | CloudFront custom errors | **Must not** remain global 403/404→`index.html` once API is on this distribution (API 401/403/404 would become SPA HTML). Replace SPA fallback with a **CloudFront Function on the default S3 behavior only** (viewer-request rewrite to `/index.html` when the URI has no file extension and is not `/prep`). Then remove distribution CustomErrorResponses. |
 | WAF | No change. Existing CONTAINS `/auth|/storage|/public` will cover `/prep/...`. |
 | HTTP API / stage / Lambda / RDS / Cognito / DNS / S3 bucket policy | Unchanged in step 1. |

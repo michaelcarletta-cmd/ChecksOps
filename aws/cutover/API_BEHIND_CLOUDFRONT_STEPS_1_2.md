@@ -40,7 +40,7 @@ Builder (dry-run only): `aws/cloudfront/build-step1-config.mjs`
 | Origins | `ProductionSpaS3` only | + `ProductionPrepHttpApi` → `kiqojucc02.execute-api.us-east-1.amazonaws.com`, **OriginPath empty**, no custom headers |
 | Cache behaviors | 0 extra | `/prep` and `/prep/*` (not `/prep*`) |
 | API cache policy | — | CachingDisabled `4135ea2d-6df8-44a3-9df3-4b5a84be39ad` |
-| API origin-request | — | AllViewerExceptHostHeader `33f36b7c-a70f-4668-a48e-7eab15d4e0c3` |
+| API origin-request | — | AllViewerExceptHostHeader `b689b0a8-53d0-40ab-baf2-68738e2966ac` |
 | API methods | — | GET/HEAD/OPTIONS/PUT/POST/PATCH/DELETE |
 | Default behavior | GET/HEAD/OPTIONS, CachingOptimized, CORS-S3Origin, no function | **unchanged methods/cache** + Function association |
 | Custom errors | 403/404 → `/index.html` 200 | **removed** (`Quantity: 0`) |

@@ -75,7 +75,7 @@ test('Step 1 proposed distribution is API-behind-CloudFront without dropping WAF
   assert.deepEqual(cfg.CacheBehaviors.Items.map((b) => b.PathPattern), ['/prep', '/prep/*']);
   for (const b of cfg.CacheBehaviors.Items) {
     assert.equal(b.CachePolicyId, '4135ea2d-6df8-44a3-9df3-4b5a84be39ad');
-    assert.equal(b.OriginRequestPolicyId, '33f36b7c-a70f-4668-a48e-7eab15d4e0c3');
+    assert.equal(b.OriginRequestPolicyId, 'b689b0a8-53d0-40ab-baf2-68738e2966ac');
     assert.equal(b.FunctionAssociations.Quantity, 0);
     for (const m of ['GET', 'HEAD', 'OPTIONS', 'PUT', 'POST', 'PATCH', 'DELETE']) {
       assert.ok(b.AllowedMethods.Items.includes(m), m);
@@ -182,6 +182,25 @@ test('Steps 1-2 temp role is least-privilege, gated, and is not a deleted harden
   const compactDeny = JSON.stringify(deny);
   assert.ok(compactAllow.length < 6144, compactAllow.length);
   assert.ok(compactDeny.length < 6144, compactDeny.length);
+});
+
+test('apply-step1 refuses unless APPLY_GATE1 is set', () => {
+  const applied = spawnSync(process.execPath, [path.join(ROOT, 'aws/cloudfront/apply-step1.mjs')], {
+    encoding: 'utf8',
+    env: { ...process.env, CHECKSOPS_APPLY_CF_STEP1: '' },
+  });
+  assert.equal(applied.status, 2);
+  assert.match(applied.stderr, /APPLY_GATE1/);
+});
+
+test('Gate 1 Step 1 PASS record keeps Step 2 and origin-verify out of scope', () => {
+  const doc = read('aws/cutover/API_PERIMETER_GATE1_STEP1_PASS.md');
+  assert.match(doc, /Step 1 PASS/);
+  assert.match(doc, /Do not start Step 2/);
+  assert.match(doc, /b689b0a8-53d0-40ab-baf2-68738e2966ac/);
+  assert.match(doc, /productionExecution=false/);
+  assert.match(doc, /execute-api/);
+  assert.doesNotMatch(doc, /DisableExecuteApiEndpoint=true/);
 });
 
 test('Gate 0 role create is blocked on staging and does not recreate deleted roles', () => {
