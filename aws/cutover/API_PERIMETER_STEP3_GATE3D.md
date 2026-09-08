@@ -121,6 +121,15 @@ Step3Temp, preserve the complete existing authorizer environment, change
 only `ORIGIN_VERIFY_REQUIRE`, and use `RevisionId`. Do not recreate the
 secret. Do not print `HeaderValue` or the ID token.
 
+The privileged-operator apply path does **not** take
+`CHECKSOPS_GATE3D_ID_TOKEN`. Before any AWS write it starts T0 Tester
+passwordless EMAIL_OTP through CloudFront, prompts in CloudShell for the
+emailed code (hidden TTY input), holds the ID token in process memory only,
+then applies `ORIGIN_VERIFY_REQUIRE=true` and uses the token once for a
+read-only `POST /prep/data/query`. Login and authenticated query must
+succeed; skipped is not a pass. Failed login aborts before the write.
+Validation failure after the write rolls back automatically.
+
 Rollback has the same KMS residual because it also writes
 `ORIGIN_VERIFY_REQUIRE=false`. After rollback, re-read the Lambda and
 require `ORIGIN_VERIFY_REQUIRE=false`, then confirm CloudFront and raw

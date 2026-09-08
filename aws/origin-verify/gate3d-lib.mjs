@@ -2,6 +2,7 @@
  * Gate 3D shared helpers. Read-only collectors plus env merge.
  * Never prints origin-verification secret material or CloudFront HeaderValue.
  */
+import { LIFECYCLE_EMAILS } from '../identity/expected-mappings.mjs';
 import {
   API_ID,
   AUTHORIZER_NAME,
@@ -389,4 +390,242 @@ export function waitForLambdaReady({
     if (i < maxAttempts - 1) sleep(intervalMs);
   }
   throw new Error('origin_verify_lambda_update_timeout');
+}
+
+/** Existing T0 lifecycle Tester only. Do not create users or reset Cognito. */
+export const T0_TESTER_EMAIL = LIFECYCLE_EMAILS.freedom;
+
+/** Read-only, non-financial authenticated probe. Never select customer financial columns. */
+export const GATE3D_READONLY_QUERY = Object.freeze({
+  table: 'user_roles',
+  op: 'select',
+  select: 'role',
+  limit: 1,
+});
+
+const FINANCIAL_QUERY_RE =
+  /check_intake|disbursement|financial|payment|deposit|payout|moov|checkalt|funds|claim-files|bank|routing/i;
+
+export function redactAuthMaterial(text) {
+  return redactCli(String(text || ''))
+    .replace(/("?(?:password|idToken|accessToken|refreshToken|authorization|session|code|otp|emailOtp|CHECKSOPS_GATE3D_ID_TOKEN)"?\s*[:=]\s*)("[^"]*"|'[^']*'|\S+)/gi, '$1[REDACTED]');
+}
+
+export function assertReadOnlyNonFinancialQuery(body = {}) {
+  const table = String(body.table || '');
+  const select = String(body.select || '');
+  const op = String(body.op || 'select');
+  if (op !== 'select') throw new Error('refusing_non_select_query_probe');
+  if (FINANCIAL_QUERY_RE.test(table) || FINANCIAL_QUERY_RE.test(select)) {
+    throw new Error('refusing_financial_query_probe');
+  }
+  return true;
+}
+
+export function requireCloudShellTty(stdin = process.stdin) {
+  if (!stdin?.isTTY || typeof stdin.setRawMode !== 'function') {
+    throw new Error('cloudshell_tty_required');
+  }
+  return true;
+}
+
+/**
+ * CloudShell-only secret prompt. Does not echo, log, or persist the value.
+ * Refuses when stdin is not a TTY so plan/CI never hang or send an OTP.
+ */
+export async function promptCloudShellSecret({
+  stdin = process.stdin,
+  stdout = process.stdout,
+  label = 'Enter emailed verification code (input hidden): ',
+} = {}) {
+  requireCloudShellTty(stdin);
+  return new Promise((resolve, reject) => {
+    stdout.write(label);
+    stdin.setRawMode(true);
+    if (typeof stdin.resume === 'function') stdin.resume();
+    let value = '';
+    const finish = (err, result) => {
+      try { stdin.setRawMode(false); } catch { /* ignore */ }
+      stdin.removeListener('data', onData);
+      stdout.write('\n');
+      if (err) reject(err);
+      else resolve(result);
+    };
+    const onData = (buf) => {
+      const s = Buffer.isBuffer(buf) ? buf.toString('utf8') : String(buf);
+      if (s === '\u0003') return finish(new Error('cloudshell_prompt_cancelled'));
+      if (s === '\n' || s === '\r') {
+        const code = value.replace(/\s+/g, '');
+        value = '';
+        if (!code) return finish(new Error('cloudshell_code_required'));
+        return finish(null, code);
+      }
+      if (s === '\u007f' || s === '\b') {
+        value = value.slice(0, -1);
+        return;
+      }
+      if (s && s.charCodeAt(0) >= 32) value += s;
+    };
+    stdin.on('data', onData);
+  });
+}
+
+export function discardSecretRef(holder, key = 'idToken') {
+  if (!holder || typeof holder !== 'object') return null;
+  if (Object.prototype.hasOwnProperty.call(holder, key)) {
+    holder[key] = null;
+    delete holder[key];
+  }
+  return null;
+}
+
+export function publicLoginOutcome(login = {}) {
+  return {
+    ok: login.ok === true,
+    status: login.status ?? null,
+    cfId: login.cfId === true,
+    reachedPrep: login.reachedPrep === true,
+    skipped: false,
+    required: true,
+  };
+}
+
+export async function mintT0IdTokenViaPasswordless({
+  fetchImpl = fetch,
+  promptCode = promptCloudShellSecret,
+  email = T0_TESTER_EMAIL,
+} = {}) {
+  let session = null;
+  let code = null;
+  let idToken = null;
+  try {
+    const startRes = await fetchImpl(`${CF_APEX}/prep/auth/passwordless/start`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    const startText = await startRes.text();
+    let startJson = {};
+    try { startJson = JSON.parse(startText); } catch { startJson = {}; }
+    session = String(startJson.session || '').trim() || null;
+    discardSecretRef(startJson, 'session');
+    if (startJson.authentication) {
+      discardSecretRef(startJson.authentication, 'idToken');
+      discardSecretRef(startJson.authentication, 'accessToken');
+      discardSecretRef(startJson.authentication, 'refreshToken');
+    }
+    const startOk = startRes.status === 200
+      && startJson.challenge === 'EMAIL_OTP'
+      && Boolean(session);
+    if (!startOk) {
+      return {
+        ok: false,
+        status: startRes.status,
+        cfId: Boolean(startRes.headers.get?.('x-amz-cf-id')),
+        reachedPrep: reachedPrepLambda(startJson) || startRes.status === 200,
+        idToken: null,
+      };
+    }
+
+    code = String(await promptCode() || '').replace(/\s+/g, '');
+    if (!code) throw new Error('cloudshell_code_required');
+
+    const verifyRes = await fetchImpl(`${CF_APEX}/prep/auth/passwordless/verify`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify({ email, session, code }),
+    });
+    session = null;
+    code = null;
+    const verifyText = await verifyRes.text();
+    let verifyJson = {};
+    try { verifyJson = JSON.parse(verifyText); } catch { verifyJson = {}; }
+    idToken = String(verifyJson?.authentication?.idToken || '').trim() || null;
+    if (verifyJson && typeof verifyJson === 'object') {
+      discardSecretRef(verifyJson.authentication, 'idToken');
+      discardSecretRef(verifyJson.authentication, 'accessToken');
+      discardSecretRef(verifyJson.authentication, 'refreshToken');
+      if (verifyJson.authentication) verifyJson.authentication = { present: Boolean(idToken) };
+    }
+    const ok = verifyRes.status === 200 && Boolean(idToken);
+    return {
+      ok,
+      status: verifyRes.status,
+      cfId: Boolean(verifyRes.headers.get?.('x-amz-cf-id')),
+      reachedPrep: reachedPrepLambda(verifyJson) || verifyRes.status === 200,
+      idToken: ok ? idToken : null,
+    };
+  } catch (err) {
+    const msg = redactAuthMaterial(String(err?.message || err));
+    if (msg.includes('cloudshell_tty_required')) throw new Error('cloudshell_tty_required');
+    if (msg.includes('cloudshell_code_required')) throw new Error('cloudshell_code_required');
+    if (msg.includes('cloudshell_prompt_cancelled')) throw new Error('cloudshell_prompt_cancelled');
+    throw new Error('gate3d_login_failed');
+  } finally {
+    session = null;
+    code = null;
+  }
+}
+
+export async function probeAuthenticatedReadOnlyQuery({
+  fetchImpl = fetch,
+  idToken,
+  url = `${CF_APEX}/prep/data/query`,
+} = {}) {
+  assertReadOnlyNonFinancialQuery(GATE3D_READONLY_QUERY);
+  const token = String(idToken || '').trim();
+  if (!token) {
+    return {
+      required: true,
+      skipped: false,
+      status: null,
+      reachedPrep: false,
+      cfId: false,
+      readOnly: true,
+      table: GATE3D_READONLY_QUERY.table,
+    };
+  }
+  const res = await fetchImpl(url, {
+    method: 'POST',
+    headers: {
+      accept: 'application/json',
+      'content-type': 'application/json',
+      authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(GATE3D_READONLY_QUERY),
+  });
+  const text = await res.text();
+  let json = {};
+  try { json = JSON.parse(text); } catch { json = {}; }
+  const publicJson = {
+    service: json.service,
+    status: json.status,
+    error: json.error,
+    holds: json.holds,
+  };
+  return {
+    required: true,
+    skipped: false,
+    status: res.status,
+    cfId: Boolean(res.headers.get?.('x-amz-cf-id')),
+    reachedPrep: reachedPrepLambda(publicJson) || reachedPrepLambda({
+      service: json.service,
+      status: json.status,
+      error: json.error,
+    }),
+    readOnly: true,
+    table: GATE3D_READONLY_QUERY.table,
+  };
+}
+
+export async function withInMemoryIdToken(mint, use) {
+  let token = null;
+  try {
+    const minted = await mint();
+    token = minted?.idToken || null;
+    if (minted && typeof minted === 'object') discardSecretRef(minted, 'idToken');
+    return await use(token);
+  } finally {
+    token = null;
+  }
 }
