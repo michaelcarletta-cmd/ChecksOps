@@ -101,7 +101,8 @@ export function mergeEndorsementSummaryRows(
     if (!usedEndorsementIds.has(endorsement.id)) merged.push(endorsement);
   }
 
-  // Final deduplication by name to ensure no duplicate rows appear in the UI
+  // Final deduplication by payee identity. The same legal name can appear in
+  // more than one payee role, and each role may require its own endorsement.
   const best = new Map<string, CheckEndorsementSummary>();
   const rank = (e: CheckEndorsementSummary) => {
     const s = (e.status ?? "").toLowerCase();
@@ -111,7 +112,7 @@ export function mergeEndorsementSummaryRows(
     return 0;
   };
   for (const e of merged) {
-    const key = normalizeEndorsementName(e.payee_name);
+    const key = `${normalizeEndorsementName(e.payee_name)}::${normalizeEndorsementType(e.payee_type)}`;
     const prev = best.get(key);
     // Prefer higher rank, or earlier creation date for stability
     if (!prev || rank(e) > rank(prev)) {
