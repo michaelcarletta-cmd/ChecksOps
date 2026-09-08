@@ -10,6 +10,7 @@ import type { TenantComplianceReview } from "@/components/settings/TenantComplia
 import type { TenantComplianceIssue } from "@/components/settings/TenantComplianceIssues";
 import type { TenantComplianceDocument } from "@/components/settings/TenantComplianceDocuments";
 import type { TenantComplianceTimelineEvent } from "@/components/settings/TenantComplianceTimeline";
+import { awsApiBaseUrl } from "@/lib/awsStaging";
 
 export interface TenantComplianceSnapshot {
   overview: TenantComplianceOverview;
@@ -24,19 +25,14 @@ export interface TenantComplianceSnapshot {
   complianceTimelineEvents: TenantComplianceTimelineEvent[];
 }
 
-const getApiBaseUrl = () => {
-  const value = String(import.meta.env.VITE_CHECKSOPS_API_URL || "").trim();
-  return value.replace(/\/$/, "");
-};
-
-export const isAwsComplianceApiConfigured = () => Boolean(getApiBaseUrl());
+export const isAwsComplianceApiConfigured = () => Boolean(awsApiBaseUrl());
 
 export async function getTenantComplianceSnapshot(
   tenantId: string,
   accessToken?: string,
   signal?: AbortSignal,
 ): Promise<TenantComplianceSnapshot> {
-  const apiBaseUrl = getApiBaseUrl();
+  const apiBaseUrl = awsApiBaseUrl();
   if (!apiBaseUrl) {
     throw new Error("VITE_CHECKSOPS_API_URL is not configured.");
   }

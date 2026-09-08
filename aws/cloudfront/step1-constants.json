@@ -1,0 +1,29 @@
+{
+  "doNotDeploy": true,
+  "distributionId": "E1B0ZWWO5559U5",
+  "functionName": "checksops-production-spa-fallback",
+  "functionRuntime": "cloudfront-js-2.0",
+  "functionArn": "arn:aws:cloudfront::806168576068:function/checksops-production-spa-fallback",
+  "apiOriginId": "ProductionPrepHttpApi",
+  "apiOriginDomain": "kiqojucc02.execute-api.us-east-1.amazonaws.com",
+  "originPath": "",
+  "cachePolicyIdCachingDisabled": "4135ea2d-6df8-44a3-9df3-4b5a84be39ad",
+  "originRequestPolicyIdAllViewerExceptHostHeader": "b689b0a8-53d0-40ab-baf2-68738e2966ac",
+  "pathPatterns": ["/prep", "/prep/*"],
+  "allowedMethods": ["HEAD", "DELETE", "POST", "GET", "OPTIONS", "PUT", "PATCH"],
+  "cachedMethods": ["HEAD", "GET"],
+  "mustPreserve": [
+    "WebACLId",
+    "Aliases",
+    "ViewerCertificate",
+    "Logging",
+    "CallerReference",
+    "ProductionSpaS3",
+    "OriginAccessControlId"
+  ],
+  "mustNotSet": [
+    "DisableExecuteApiEndpoint",
+    "x-checksops-origin-verify",
+    "CustomErrorResponses 403/404 index.html"
+  ]
+}

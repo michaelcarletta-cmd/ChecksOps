@@ -1,0 +1,300 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  TEMPORARY Cursor Cloud OIDC role for API-behind-CloudFront Steps 1-2 only.
+  DO NOT DEPLOY FROM THIS PR. Do not create until a human sets DeployRole=true
+  after review. Does not broaden ChecksOpsCursorCloudStaging. Does not recreate
+  ChecksOpsCursorSecurityHardeningTemp or ChecksOpsCursorCloudTrailCwLogsTemp.
+  No API Gateway authorizers, no origin-verify secret, no Lambda authorizer,
+  no RDS, no Cognito mutation, no Route53, no WAF mutation, no prep Lambda
+  mutation, no financial/provider activation, no security-monitoring infra.
+
+Parameters:
+  DeployRole:
+    Type: String
+    Default: "false"
+    AllowedValues: ["false", "true"]
+    Description: Leave false. This PR must not create the role.
+  RoleName:
+    Type: String
+    Default: ChecksOpsCursorApiPerimeterSteps12Temp
+    AllowedValues:
+      - ChecksOpsCursorApiPerimeterSteps12Temp
+
+Conditions:
+  ShouldDeployRole: !Equals [!Ref DeployRole, "true"]
+
+Resources:
+  AllowPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Condition: ShouldDeployRole
+    Properties:
+      ManagedPolicyName: ChecksOpsCursorApiPerimeterSteps12Allow
+      Description: TEMPORARY allow CF+S3 SPA for Steps 1-2. Delete with stack.
+      PolicyDocument: {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Sid": "ReadAndUpdateProductionSpaDistribution",
+            "Effect": "Allow",
+            "Action": [
+              "cloudfront:GetDistribution",
+              "cloudfront:GetDistributionConfig",
+              "cloudfront:UpdateDistribution",
+              "cloudfront:CreateInvalidation",
+              "cloudfront:GetInvalidation",
+              "cloudfront:ListInvalidations"
+            ],
+            "Resource": "arn:aws:cloudfront::806168576068:distribution/E1B0ZWWO5559U5"
+          },
+          {
+            "Sid": "SpaFallbackFunctionOnly",
+            "Effect": "Allow",
+            "Action": [
+              "cloudfront:CreateFunction",
+              "cloudfront:UpdateFunction",
+              "cloudfront:PublishFunction",
+              "cloudfront:DescribeFunction",
+              "cloudfront:GetFunction"
+            ],
+            "Resource": "arn:aws:cloudfront::806168576068:function/checksops-production-spa-fallback"
+          },
+          {
+            "Sid": "ListCloudFrontFunctions",
+            "Effect": "Allow",
+            "Action": "cloudfront:ListFunctions",
+            "Resource": "*"
+          },
+          {
+            "Sid": "ProductionFrontendBucketList",
+            "Effect": "Allow",
+            "Action": [
+              "s3:ListBucket",
+              "s3:GetBucketLocation"
+            ],
+            "Resource": "arn:aws:s3:::checksops-production-frontend-806168576068"
+          },
+          {
+            "Sid": "ProductionFrontendObjects",
+            "Effect": "Allow",
+            "Action": [
+              "s3:GetObject",
+              "s3:GetObjectVersion",
+              "s3:PutObject",
+              "s3:DeleteObject",
+              "s3:AbortMultipartUpload"
+            ],
+            "Resource": "arn:aws:s3:::checksops-production-frontend-806168576068/*"
+          }
+        ]
+      }
+
+  DenyPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Condition: ShouldDeployRole
+    Properties:
+      ManagedPolicyName: ChecksOpsCursorApiPerimeterSteps12Deny
+      Description: TEMPORARY deny authorizer/secret/RDS/Cognito/WAF/financial.
+      PolicyDocument: {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Sid": "DenyDeleteOrCreateDistributions",
+            "Effect": "Deny",
+            "Action": [
+              "cloudfront:DeleteDistribution",
+              "cloudfront:CreateDistribution",
+              "cloudfront:CreateDistributionWithTags"
+            ],
+            "Resource": "*"
+          },
+          {
+            "Sid": "DenyMutatingOtherDistributions",
+            "Effect": "Deny",
+            "Action": [
+              "cloudfront:UpdateDistribution",
+              "cloudfront:CreateInvalidation"
+            ],
+            "NotResource": "arn:aws:cloudfront::806168576068:distribution/E1B0ZWWO5559U5"
+          },
+          {
+            "Sid": "DenyWafMutationAndDisassociation",
+            "Effect": "Deny",
+            "Action": [
+              "wafv2:*",
+              "waf:*",
+              "waf-regional:*"
+            ],
+            "Resource": "*"
+          },
+          {
+            "Sid": "DenyApiGatewayAuthorizersAndExecuteApiDisable",
+            "Effect": "Deny",
+            "Action": [
+              "apigateway:*",
+              "apigatewayv2:*"
+            ],
+            "Resource": "*"
+          },
+          {
+            "Sid": "DenyLambdaAuthorizerAndPrepApiMutation",
+            "Effect": "Deny",
+            "Action": "lambda:*",
+            "Resource": "*"
+          },
+          {
+            "Sid": "DenySecretsOriginVerifyAndRds",
+            "Effect": "Deny",
+            "Action": "secretsmanager:*",
+            "Resource": "*"
+          },
+          {
+            "Sid": "DenyRds",
+            "Effect": "Deny",
+            "Action": [
+              "rds:*",
+              "rds-data:*",
+              "rds-db:*"
+            ],
+            "Resource": "*"
+          },
+          {
+            "Sid": "DenyCognitoMutation",
+            "Effect": "Deny",
+            "Action": "cognito-idp:*",
+            "Resource": "*"
+          },
+          {
+            "Sid": "DenyRoute53",
+            "Effect": "Deny",
+            "Action": [
+              "route53:*",
+              "route53domains:*"
+            ],
+            "Resource": "*"
+          },
+          {
+            "Sid": "DenyIamMutationPassRoleAndOldTempRoles",
+            "Effect": "Deny",
+            "Action": [
+              "iam:CreateRole",
+              "iam:DeleteRole",
+              "iam:UpdateRole",
+              "iam:UpdateAssumeRolePolicy",
+              "iam:PutRolePolicy",
+              "iam:DeleteRolePolicy",
+              "iam:AttachRolePolicy",
+              "iam:DetachRolePolicy",
+              "iam:CreatePolicy",
+              "iam:CreatePolicyVersion",
+              "iam:DeletePolicy",
+              "iam:PassRole",
+              "iam:CreateUser",
+              "iam:CreateAccessKey",
+              "iam:UpdateAssumeRolePolicy"
+            ],
+            "Resource": "*"
+          },
+          {
+            "Sid": "DenySecurityMonitoringInfra",
+            "Effect": "Deny",
+            "Action": [
+              "cloudtrail:*",
+              "config:*",
+              "guardduty:*",
+              "securityhub:*"
+            ],
+            "Resource": "*"
+          },
+          {
+            "Sid": "DenySensitiveBuckets",
+            "Effect": "Deny",
+            "Action": "s3:*",
+            "Resource": [
+              "arn:aws:s3:::checksops-production-access-logs-806168576068",
+              "arn:aws:s3:::checksops-production-access-logs-806168576068/*",
+              "arn:aws:s3:::checksops-staging-privatefilesbucket-erzqsolpucjp",
+              "arn:aws:s3:::checksops-staging-privatefilesbucket-erzqsolpucjp/*",
+              "arn:aws:s3:::checksops-production-security-*",
+              "arn:aws:s3:::checksops-production-security-*/*"
+            ]
+          },
+          {
+            "Sid": "DenyKmsAndRoleChaining",
+            "Effect": "Deny",
+            "Action": [
+              "kms:*",
+              "sts:AssumeRole",
+              "sts:AssumeRoleWithSAML",
+              "sts:AssumeRoot"
+            ],
+            "Resource": "*"
+          },
+          {
+            "Sid": "DenyProtectedCloudFormation",
+            "Effect": "Deny",
+            "Action": [
+              "cloudformation:CreateStack",
+              "cloudformation:UpdateStack",
+              "cloudformation:DeleteStack",
+              "cloudformation:CreateChangeSet",
+              "cloudformation:ExecuteChangeSet"
+            ],
+            "Resource": [
+              "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-prep-api/*",
+              "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-cloudfront-waf/*",
+              "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-security-*",
+              "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-cursor-security-hardening-role/*",
+              "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-cursor-cloudtrail-cwlogs-role/*"
+            ]
+          }
+        ]
+      }
+
+  ApiPerimeterSteps12Role:
+    Type: AWS::IAM::Role
+    Condition: ShouldDeployRole
+    Properties:
+      RoleName: !Ref RoleName
+      Description: TEMPORARY Cursor OIDC role for CloudFront /prep Steps 1-2 only.
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument: {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Sid": "CursorCloudOidcLiveApiCursorCom",
+            "Effect": "Allow",
+            "Principal": {
+              "Federated": "arn:aws:iam::806168576068:oidc-provider/api.cursor.com"
+            },
+            "Action": "sts:AssumeRoleWithWebIdentity",
+            "Condition": {
+              "StringEquals": {
+                "api.cursor.com:aud": "sts.amazonaws.com",
+                "api.cursor.com:sub": "user:325724407"
+              }
+            }
+          }
+        ]
+      }
+      ManagedPolicyArns:
+        - !Ref AllowPolicy
+        - !Ref DenyPolicy
+      Tags:
+        - Key: Temporary
+          Value: "true"
+        - Key: Purpose
+          Value: api-perimeter-steps-1-2
+        - Key: DoNotBroadenStaging
+          Value: "true"
+        - Key: DoNotRecreateDeletedHardeningRoles
+          Value: "true"
+
+Outputs:
+  DoNotDeployFromThisPr:
+    Value: STOP FOR REVIEW. DeployRole default false. Do not create this role yet.
+  RoleName:
+    Condition: ShouldDeployRole
+    Value: !Ref ApiPerimeterSteps12Role
+  RoleArn:
+    Condition: ShouldDeployRole
+    Value: !GetAtt ApiPerimeterSteps12Role.Arn

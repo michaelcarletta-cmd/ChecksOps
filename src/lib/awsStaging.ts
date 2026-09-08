@@ -4,6 +4,10 @@
  * until an approved production AWS frontend env is deployed.
  */
 
+import { resolveAwsApiBaseUrl } from "@/lib/awsApiBase";
+
+export { resolveAwsApiBaseUrl } from "@/lib/awsApiBase";
+
 const DEFAULT_ORIGIN = "https://staging.checksops.com";
 const DEFAULT_RP_ID = "staging.checksops.com";
 
@@ -33,8 +37,17 @@ export function isAwsStaging(): boolean {
   return String(import.meta.env.VITE_AUTH_PROVIDER || "").toLowerCase() === "cognito";
 }
 
+/**
+ * AWS API base for Cognito builds.
+ * Production Step 2: VITE_CHECKSOPS_API_URL=/prep (or same-origin) resolves
+ * against window.location.origin so www.checksops.com stays same-origin.
+ * Staging continues to use an absolute execute-api URL.
+ * Does not change Cognito IdP, JWT, or WebAuthn semantics.
+ */
 export function awsApiBaseUrl(): string {
-  return String(import.meta.env.VITE_CHECKSOPS_API_URL || "").replace(/\/$/, "");
+  const configured = String(import.meta.env.VITE_CHECKSOPS_API_URL || "");
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  return resolveAwsApiBaseUrl(configured, origin);
 }
 
 /**
