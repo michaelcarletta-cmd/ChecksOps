@@ -7,11 +7,13 @@
  * preserve every existing variable and set ORIGIN_VERIFY_REQUIRE=true.
  * Uses RevisionId.
  *
- * After REQUIRE=true, logs in the existing T0 Tester through CloudFront
- * POST /prep/auth/login, holds the Cognito ID token in process memory only,
- * uses it once for a read-only POST /prep/data/query, then discards it.
- * Does not require CHECKSOPS_GATE3D_ID_TOKEN. Does not reset Cognito.
- * Never prints the token, password, secret, hash, prefix, or HeaderValue.
+ * Before any AWS write, starts T0 Tester passwordless EMAIL_OTP through
+ * CloudFront, securely prompts in CloudShell for the emailed code, and holds
+ * the Cognito ID token in process memory only. Then applies REQUIRE=true and
+ * uses the token once for a read-only POST /prep/data/query.
+ * Does not require CHECKSOPS_GATE3D_ID_TOKEN. Does not use a password file
+ * or password env var. Does not reset Cognito.
+ * Never prints the token, code, session, secret, hash, prefix, or HeaderValue.
  *
  * Plan (default): prints guards and exits 2.
  * Apply: CHECKSOPS_OPERATOR_GATE3D=I_UNDERSTAND_PRODUCTION
@@ -24,16 +26,16 @@ import {
   REQUIRE_KEY,
   collectObserveAndHolds,
   collectPreflight,
+  discardSecretRef,
   evaluatePreflight,
-  mintT0IdTokenViaCloudFrontLogin,
+  mintT0IdTokenViaPasswordless,
   publicLoginOutcome,
+  requireCloudShellTty,
   requirePrivilegedOperator,
   rollbackOriginVerifyRequireAndConfirm,
-  t0TesterCredentialPresent,
   mergeOriginVerifyRequire,
   updateOriginVerifyRequire,
   waitForLambdaReady,
-  withInMemoryIdToken,
 } from './gate3d-lib.mjs';
 import { validateGate3d } from './validate-gate3d.mjs';
 
@@ -51,7 +53,10 @@ export const plan = {
   manualIdTokenRequired: false,
   inProcessT0Login: true,
   t0LifecycleAccount: 'tester',
-  t0LoginUrl: 'https://checksops.com/prep/auth/login',
+  t0LoginUrl: 'https://checksops.com/prep/auth/passwordless/start',
+  t0VerifyUrl: 'https://checksops.com/prep/auth/passwordless/verify',
+  passwordlessBeforeAwsWrite: true,
+  cloudshellPrompt: true,
   authenticatedQueryUrl: 'https://checksops.com/prep/data/query',
   authenticatedQueryReadOnly: true,
   financialRowsProcessed: false,
@@ -73,17 +78,11 @@ export async function executePrivilegedOperatorGate3dApply({
   getLambdaConfig = () => awsJson(['lambda', 'get-function-configuration', '--function-name', LAMBDA_NAME]),
   updateRequire = () => updateOriginVerifyRequire('true'),
   waitReady = waitForLambdaReady,
-  mintLogin = mintT0IdTokenViaCloudFrontLogin,
+  mintLogin = mintT0IdTokenViaPasswordless,
   validateFn = validateGate3d,
   rollbackFn = rollbackOriginVerifyRequireAndConfirm,
   sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
-  credentialPresent = t0TesterCredentialPresent,
 } = {}) {
-  if (!credentialPresent()) {
-    const err = new Error('T0_TESTER_CREDENTIAL_required');
-    err.exitCode = 2;
-    throw err;
-  }
   requirePrivilegedOperator(identity);
 
   const base = collectPreflightFn();
@@ -96,6 +95,23 @@ export async function executePrivilegedOperatorGate3dApply({
   const before = getLambdaConfig();
   const merged = mergeOriginVerifyRequire(before.Environment?.Variables || {}, 'true');
 
+  const minted = await mintLogin();
+  const loginPublic = publicLoginOutcome(minted);
+  let idToken = minted?.idToken || null;
+  discardSecretRef(minted, 'idToken');
+
+  if (!loginPublic.ok || !idToken) {
+    idToken = null;
+    return {
+      ...plan,
+      mode: 'login_refused',
+      preservedKeys: merged.preservedKeys,
+      login: loginPublic,
+      validation: { authenticatedOk: false, loginOk: false },
+      ok: false,
+    };
+  }
+
   let applied = false;
   try {
     const updated = updateRequire();
@@ -103,35 +119,21 @@ export async function executePrivilegedOperatorGate3dApply({
     waitReady();
     await sleep(2000);
 
-    let loginPublic = { required: true, skipped: false, ok: false, status: null };
-    const report = await withInMemoryIdToken(
-      async () => {
-        const minted = await mintLogin();
-        loginPublic = publicLoginOutcome(minted);
-        return minted;
-      },
-      async (idToken) => {
-        if (!loginPublic.ok || !idToken) {
-          return { ok: false, checks: { authenticatedOk: false, loginOk: false }, executeApiEnabled: true };
-        }
-        const validation = await validateFn({ requireMode: true, idToken });
-        validation.checks = {
-          ...validation.checks,
-          loginOk: loginPublic.ok === true && loginPublic.skipped === false,
-        };
-        validation.ok = validation.ok === true && validation.checks.loginOk === true;
-        return validation;
-      },
-    );
+    const validation = await validateFn({ requireMode: true, idToken });
+    validation.checks = {
+      ...validation.checks,
+      loginOk: loginPublic.ok === true && loginPublic.skipped === false,
+    };
+    validation.ok = validation.ok === true && validation.checks.loginOk === true;
 
-    if (!report?.ok) {
+    if (!validation.ok) {
       const rollback = await rollbackFn();
       return {
         ...plan,
         mode: 'rolled_back',
         preservedKeys: merged.preservedKeys,
         login: loginPublic,
-        validation: report?.checks || { authenticatedOk: false, loginOk: false },
+        validation: validation.checks,
         rollback,
         ok: false,
       };
@@ -144,8 +146,8 @@ export async function executePrivilegedOperatorGate3dApply({
       envKeys: updated.envKeys,
       revisionIdUsed: Boolean(updated.revisionIdUsed),
       login: loginPublic,
-      validation: report.checks,
-      executeApiEnabled: report.executeApiEnabled,
+      validation: validation.checks,
+      executeApiEnabled: validation.executeApiEnabled,
       ok: true,
     };
   } catch (err) {
@@ -153,6 +155,9 @@ export async function executePrivilegedOperatorGate3dApply({
       await rollbackFn();
     }
     throw err;
+  } finally {
+    idToken = null;
+    discardSecretRef(minted, 'idToken');
   }
 }
 
@@ -163,13 +168,15 @@ if (isCli) {
     console.log(JSON.stringify({
       ...plan,
       mode: 'plan',
-      note: 'Plan only. Privileged operator sets CHECKSOPS_OPERATOR_GATE3D=I_UNDERSTAND_PRODUCTION and CHECKSOPS_OPERATOR_EXECUTE=1. Do not use Step3Temp. Live apply uses in-process T0 Tester CloudFront login; do not set CHECKSOPS_GATE3D_ID_TOKEN.',
+      note: 'Plan only. Privileged operator sets CHECKSOPS_OPERATOR_GATE3D=I_UNDERSTAND_PRODUCTION and CHECKSOPS_OPERATOR_EXECUTE=1 in CloudShell. Do not use Step3Temp. Live apply starts passwordless EMAIL_OTP before any AWS write, prompts for the emailed code on the TTY, then applies and validates. Do not set CHECKSOPS_GATE3D_ID_TOKEN.',
     }));
     process.exit(2);
   }
 
-  if (!t0TesterCredentialPresent()) {
-    console.error('T0_TESTER_CREDENTIAL_required');
+  try {
+    requireCloudShellTty(process.stdin);
+  } catch {
+    console.error('cloudshell_tty_required');
     process.exit(2);
   }
 
@@ -181,12 +188,16 @@ if (isCli) {
       throw new Error('gate3d_preflight_refused');
     }
     console.log(JSON.stringify(result));
+    if (result.mode === 'login_refused') {
+      throw new Error('gate3d_login_failed');
+    }
     if (result.mode === 'rolled_back' || result.ok === false) {
       throw new Error('gate3d_validation_failed_rolled_back');
     }
   } catch (err) {
-    if (String(err?.message || '') === 'T0_TESTER_CREDENTIAL_required') {
-      console.error('T0_TESTER_CREDENTIAL_required');
+    const msg = String(err?.message || '');
+    if (msg === 'cloudshell_tty_required' || msg === 'cloudshell_code_required' || msg === 'cloudshell_prompt_cancelled') {
+      console.error(msg);
       process.exit(2);
     }
     throw err;

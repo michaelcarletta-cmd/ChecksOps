@@ -2,7 +2,6 @@
  * Gate 3D shared helpers. Read-only collectors plus env merge.
  * Never prints origin-verification secret material or CloudFront HeaderValue.
  */
-import { readFileSync } from 'node:fs';
 import { LIFECYCLE_EMAILS } from '../identity/expected-mappings.mjs';
 import {
   API_ID,
@@ -409,7 +408,7 @@ const FINANCIAL_QUERY_RE =
 
 export function redactAuthMaterial(text) {
   return redactCli(String(text || ''))
-    .replace(/("?(?:password|idToken|accessToken|refreshToken|authorization|CHECKSOPS_T0_TESTER_PASSWORD|CHECKSOPS_GATE3D_ID_TOKEN)"?\s*[:=]\s*)("[^"]*"|'[^']*'|\S+)/gi, '$1[REDACTED]');
+    .replace(/("?(?:password|idToken|accessToken|refreshToken|authorization|session|code|otp|emailOtp|CHECKSOPS_GATE3D_ID_TOKEN)"?\s*[:=]\s*)("[^"]*"|'[^']*'|\S+)/gi, '$1[REDACTED]');
 }
 
 export function assertReadOnlyNonFinancialQuery(body = {}) {
@@ -423,36 +422,52 @@ export function assertReadOnlyNonFinancialQuery(body = {}) {
   return true;
 }
 
-export function t0TesterCredentialPresent(env = process.env) {
-  if (String(env.CHECKSOPS_T0_TESTER_PASSWORD || '').trim()) return true;
-  if (String(env.COGNITO_PASSWORD_FILE || '').trim()) return true;
-  return false;
+export function requireCloudShellTty(stdin = process.stdin) {
+  if (!stdin?.isTTY || typeof stdin.setRawMode !== 'function') {
+    throw new Error('cloudshell_tty_required');
+  }
+  return true;
 }
 
 /**
- * Load the existing T0 Tester password from the established operator sources.
- * Never logs, writes, or returns the value to reports. Callers must keep it
- * in process memory only.
+ * CloudShell-only secret prompt. Does not echo, log, or persist the value.
+ * Refuses when stdin is not a TTY so plan/CI never hang or send an OTP.
  */
-export function loadT0TesterPassword({
-  env = process.env,
-  readFile = readFileSync,
+export async function promptCloudShellSecret({
+  stdin = process.stdin,
+  stdout = process.stdout,
+  label = 'Enter emailed verification code (input hidden): ',
 } = {}) {
-  const fromEnv = String(env.CHECKSOPS_T0_TESTER_PASSWORD || '').trim();
-  if (fromEnv) return fromEnv;
-  const file = String(env.COGNITO_PASSWORD_FILE || '').trim();
-  if (!file) throw new Error('T0_TESTER_CREDENTIAL_required');
-  let parsed;
-  try {
-    parsed = JSON.parse(String(readFile(file, 'utf8') || ''));
-  } catch {
-    throw new Error('T0_TESTER_CREDENTIAL_required');
-  }
-  const pwd = String(
-    parsed?.[T0_TESTER_EMAIL] || parsed?.[String(T0_TESTER_EMAIL).toLowerCase()] || '',
-  ).trim();
-  if (!pwd) throw new Error('T0_TESTER_CREDENTIAL_required');
-  return pwd;
+  requireCloudShellTty(stdin);
+  return new Promise((resolve, reject) => {
+    stdout.write(label);
+    stdin.setRawMode(true);
+    if (typeof stdin.resume === 'function') stdin.resume();
+    let value = '';
+    const finish = (err, result) => {
+      try { stdin.setRawMode(false); } catch { /* ignore */ }
+      stdin.removeListener('data', onData);
+      stdout.write('\n');
+      if (err) reject(err);
+      else resolve(result);
+    };
+    const onData = (buf) => {
+      const s = Buffer.isBuffer(buf) ? buf.toString('utf8') : String(buf);
+      if (s === '\u0003') return finish(new Error('cloudshell_prompt_cancelled'));
+      if (s === '\n' || s === '\r') {
+        const code = value.replace(/\s+/g, '');
+        value = '';
+        if (!code) return finish(new Error('cloudshell_code_required'));
+        return finish(null, code);
+      }
+      if (s === '\u007f' || s === '\b') {
+        value = value.slice(0, -1);
+        return;
+      }
+      if (s && s.charCodeAt(0) >= 32) value += s;
+    };
+    stdin.on('data', onData);
+  });
 }
 
 export function discardSecretRef(holder, key = 'idToken') {
@@ -475,46 +490,80 @@ export function publicLoginOutcome(login = {}) {
   };
 }
 
-export async function mintT0IdTokenViaCloudFrontLogin({
+export async function mintT0IdTokenViaPasswordless({
   fetchImpl = fetch,
-  loadPassword = loadT0TesterPassword,
+  promptCode = promptCloudShellSecret,
   email = T0_TESTER_EMAIL,
 } = {}) {
-  let password = null;
+  let session = null;
+  let code = null;
   let idToken = null;
   try {
-    password = loadPassword();
-    const res = await fetchImpl(`${CF_APEX}/prep/auth/login`, {
+    const startRes = await fetchImpl(`${CF_APEX}/prep/auth/passwordless/start`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', accept: 'application/json' },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email }),
     });
-    password = null;
-    const text = await res.text();
-    let json = {};
-    try { json = JSON.parse(text); } catch { json = {}; }
-    idToken = String(json?.authentication?.idToken || '').trim() || null;
-    if (json && typeof json === 'object') {
-      discardSecretRef(json.authentication, 'idToken');
-      discardSecretRef(json.authentication, 'accessToken');
-      discardSecretRef(json.authentication, 'refreshToken');
-      if (json.authentication) json.authentication = { present: Boolean(idToken) };
+    const startText = await startRes.text();
+    let startJson = {};
+    try { startJson = JSON.parse(startText); } catch { startJson = {}; }
+    session = String(startJson.session || '').trim() || null;
+    discardSecretRef(startJson, 'session');
+    if (startJson.authentication) {
+      discardSecretRef(startJson.authentication, 'idToken');
+      discardSecretRef(startJson.authentication, 'accessToken');
+      discardSecretRef(startJson.authentication, 'refreshToken');
     }
-    const ok = res.status === 200 && Boolean(idToken);
+    const startOk = startRes.status === 200
+      && startJson.challenge === 'EMAIL_OTP'
+      && Boolean(session);
+    if (!startOk) {
+      return {
+        ok: false,
+        status: startRes.status,
+        cfId: Boolean(startRes.headers.get?.('x-amz-cf-id')),
+        reachedPrep: reachedPrepLambda(startJson) || startRes.status === 200,
+        idToken: null,
+      };
+    }
+
+    code = String(await promptCode() || '').replace(/\s+/g, '');
+    if (!code) throw new Error('cloudshell_code_required');
+
+    const verifyRes = await fetchImpl(`${CF_APEX}/prep/auth/passwordless/verify`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify({ email, session, code }),
+    });
+    session = null;
+    code = null;
+    const verifyText = await verifyRes.text();
+    let verifyJson = {};
+    try { verifyJson = JSON.parse(verifyText); } catch { verifyJson = {}; }
+    idToken = String(verifyJson?.authentication?.idToken || '').trim() || null;
+    if (verifyJson && typeof verifyJson === 'object') {
+      discardSecretRef(verifyJson.authentication, 'idToken');
+      discardSecretRef(verifyJson.authentication, 'accessToken');
+      discardSecretRef(verifyJson.authentication, 'refreshToken');
+      if (verifyJson.authentication) verifyJson.authentication = { present: Boolean(idToken) };
+    }
+    const ok = verifyRes.status === 200 && Boolean(idToken);
     return {
       ok,
-      status: res.status,
-      cfId: Boolean(res.headers.get?.('x-amz-cf-id')),
-      reachedPrep: reachedPrepLambda(json) || res.status === 200,
+      status: verifyRes.status,
+      cfId: Boolean(verifyRes.headers.get?.('x-amz-cf-id')),
+      reachedPrep: reachedPrepLambda(verifyJson) || verifyRes.status === 200,
       idToken: ok ? idToken : null,
     };
   } catch (err) {
     const msg = redactAuthMaterial(String(err?.message || err));
-    throw new Error(msg.includes('T0_TESTER_CREDENTIAL_required')
-      ? 'T0_TESTER_CREDENTIAL_required'
-      : 'gate3d_login_failed');
+    if (msg.includes('cloudshell_tty_required')) throw new Error('cloudshell_tty_required');
+    if (msg.includes('cloudshell_code_required')) throw new Error('cloudshell_code_required');
+    if (msg.includes('cloudshell_prompt_cancelled')) throw new Error('cloudshell_prompt_cancelled');
+    throw new Error('gate3d_login_failed');
   } finally {
-    password = null;
+    session = null;
+    code = null;
   }
 }
 

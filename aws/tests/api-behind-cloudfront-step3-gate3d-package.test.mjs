@@ -82,7 +82,8 @@ test('Gate 3D design is review-only and does not execute', () => {
   assert.match(operatorDoc, /Refuse if the caller ARN/);
   assert.match(operatorDoc, /806168576068/);
   assert.match(operatorDoc, /Do \*\*not\*\* set `CHECKSOPS_GATE3D_ID_TOKEN`/);
-  assert.match(operatorDoc, /in-process T0|process memory only/);
+  assert.match(operatorDoc, /passwordless|EMAIL_OTP|CloudShell/);
+  assert.doesNotMatch(operatorDoc, /CHECKSOPS_T0_TESTER_PASSWORD|COGNITO_PASSWORD_FILE/);
   assert.match(design, /privileged-operator apply path does \*\*not\*\* take/);
   assert.match(design, /LastUpdateStatus=Successful/);
 });
@@ -266,10 +267,11 @@ test('privileged-operator path is separately gated and refuses Step3Temp', () =>
   );
   assert.match(operatorApply, /Do not broaden|doNotBroadenStep3TempKms/);
   assert.match(operatorApply, /preserveExistingEnv/);
-  assert.match(operatorApply, /mintT0IdTokenViaCloudFrontLogin|withInMemoryIdToken/);
+  assert.match(operatorApply, /mintT0IdTokenViaPasswordless|passwordless\/start/);
   assert.doesNotMatch(operatorApply, /requireLiveIdToken/);
   assert.doesNotMatch(operatorApply, /GetSecretValue/);
   assert.doesNotMatch(operatorApply, /admin-set-user-password|AdminSetUserPassword|cognito-idp/);
+  assert.doesNotMatch(operatorApply, /CHECKSOPS_T0_TESTER_PASSWORD|COGNITO_PASSWORD_FILE/);
   assert.doesNotMatch(operatorRollback, /GetSecretValue/);
 
   const planned = run('aws/origin-verify/operator-apply-gate3d.mjs');
@@ -288,14 +290,14 @@ test('privileged-operator path is separately gated and refuses Step3Temp', () =>
   assert.match(rollbackPlan.stdout, /"confirmRequireFalse":true/);
   refuteSecrets(`${rollbackPlan.stdout}${rollbackPlan.stderr}`);
 
-  const missingCredential = run('aws/origin-verify/operator-apply-gate3d.mjs', {
+  const missingTty = run('aws/origin-verify/operator-apply-gate3d.mjs', {
     CHECKSOPS_OPERATOR_GATE3D: 'I_UNDERSTAND_PRODUCTION',
     CHECKSOPS_OPERATOR_EXECUTE: '1',
   });
-  assert.equal(missingCredential.status, 2);
-  assert.match(missingCredential.stderr, /T0_TESTER_CREDENTIAL_required/);
-  assert.doesNotMatch(missingCredential.stderr, /CHECKSOPS_GATE3D_ID_TOKEN_required/);
-  refuteSecrets(`${missingCredential.stdout}${missingCredential.stderr}`);
+  assert.equal(missingTty.status, 2);
+  assert.match(missingTty.stderr, /cloudshell_tty_required/);
+  assert.doesNotMatch(missingTty.stderr, /CHECKSOPS_GATE3D_ID_TOKEN_required/);
+  refuteSecrets(`${missingTty.stdout}${missingTty.stderr}`);
 });
 
 test('mergeOriginVerifyRequire preserves existing keys and only flips REQUIRE', () => {

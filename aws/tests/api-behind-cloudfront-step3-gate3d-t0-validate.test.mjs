@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,12 +10,12 @@ import {
   T0_TESTER_EMAIL,
   assertReadOnlyNonFinancialQuery,
   discardSecretRef,
-  loadT0TesterPassword,
-  mintT0IdTokenViaCloudFrontLogin,
+  mintT0IdTokenViaPasswordless,
   probeAuthenticatedReadOnlyQuery,
+  promptCloudShellSecret,
   publicLoginOutcome,
   redactAuthMaterial,
-  t0TesterCredentialPresent,
+  requireCloudShellTty,
   withInMemoryIdToken,
 } from '../origin-verify/gate3d-lib.mjs';
 import { executePrivilegedOperatorGate3dApply } from '../origin-verify/operator-apply-gate3d.mjs';
@@ -23,60 +24,91 @@ const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
 const FAKE_JWT = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0LXN1YiIsInRva2VuX3VzZSI6ImlkIn0.signature';
-const FAKE_PASSWORD = 'unit-test-only-not-a-real-secret';
+const FAKE_CODE = '123456';
+const FAKE_SESSION = 'cognito-session-not-a-secret-for-tests';
 
 function refuteSecrets(text) {
   assert.doesNotMatch(text, /SecretString|HeaderValue\s*[:=]\s*["'][^"']{4,}/);
   assert.doesNotMatch(text, /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+\./);
   assert.doesNotMatch(text, /Bearer [A-Za-z0-9._-]+/);
-  assert.doesNotMatch(text, /unit-test-only-not-a-real-secret/);
 }
 
-test('T0 credential loader uses existing sources and never requires a manual ID token', () => {
+test('operator path removes password env/file sources and does not require a manual ID token', () => {
   assert.equal(T0_TESTER_EMAIL, LIFECYCLE_EMAILS.freedom);
-  assert.equal(t0TesterCredentialPresent({}), false);
-  assert.equal(t0TesterCredentialPresent({ CHECKSOPS_GATE3D_ID_TOKEN: FAKE_JWT }), false);
-  assert.equal(t0TesterCredentialPresent({ CHECKSOPS_T0_TESTER_PASSWORD: FAKE_PASSWORD }), true);
-  assert.equal(t0TesterCredentialPresent({ COGNITO_PASSWORD_FILE: '/tmp/not-read-in-this-assert' }), true);
-
-  const fromEnv = loadT0TesterPassword({ env: { CHECKSOPS_T0_TESTER_PASSWORD: FAKE_PASSWORD } });
-  assert.equal(fromEnv, FAKE_PASSWORD);
-
-  const fromFile = loadT0TesterPassword({
-    env: { COGNITO_PASSWORD_FILE: 'in-memory.json' },
-    readFile: () => JSON.stringify({ [T0_TESTER_EMAIL]: FAKE_PASSWORD }),
-  });
-  assert.equal(fromFile, FAKE_PASSWORD);
-
-  assert.throws(
-    () => loadT0TesterPassword({ env: {} }),
-    /T0_TESTER_CREDENTIAL_required/,
-  );
-
-  const operatorApply = read('aws/origin-verify/operator-apply-gate3d.mjs');
-  assert.doesNotMatch(operatorApply, /CHECKSOPS_GATE3D_ID_TOKEN_required/);
-  assert.doesNotMatch(operatorApply, /requireLiveIdToken/);
-  assert.match(operatorApply, /T0_TESTER_CREDENTIAL_required/);
-  assert.match(operatorApply, /manualIdTokenRequired: false/);
+  const operatorSources = [
+    read('aws/origin-verify/operator-apply-gate3d.mjs'),
+    read('aws/cutover/API_PERIMETER_STEP3_OPERATOR_GATE3D.md'),
+  ].join('\n');
+  const lib = read('aws/origin-verify/gate3d-lib.mjs');
+  assert.doesNotMatch(operatorSources, /CHECKSOPS_T0_TESTER_PASSWORD/);
+  assert.doesNotMatch(operatorSources, /COGNITO_PASSWORD_FILE/);
+  assert.doesNotMatch(lib, /CHECKSOPS_T0_TESTER_PASSWORD/);
+  assert.doesNotMatch(lib, /COGNITO_PASSWORD_FILE/);
+  assert.doesNotMatch(operatorSources, /loadT0TesterPassword|t0TesterCredentialPresent|T0_TESTER_CREDENTIAL_required/);
+  assert.doesNotMatch(lib, /loadT0TesterPassword|t0TesterCredentialPresent|T0_TESTER_CREDENTIAL_required/);
+  assert.doesNotMatch(operatorSources, /CHECKSOPS_GATE3D_ID_TOKEN_required/);
+  assert.doesNotMatch(operatorSources, /requireLiveIdToken/);
+  assert.match(read('aws/origin-verify/operator-apply-gate3d.mjs'), /manualIdTokenRequired: false/);
 });
 
-test('auth material redaction never emits JWT, Bearer, or password values', () => {
+test('auth material redaction never emits JWT, Bearer, session, or code values', () => {
   const leaked = redactAuthMaterial(
-    `authorization: Bearer ${FAKE_JWT} password=${FAKE_PASSWORD} idToken:${FAKE_JWT}`,
+    `authorization: Bearer ${FAKE_JWT} session=${FAKE_SESSION} code=${FAKE_CODE} idToken:${FAKE_JWT}`,
   );
   refuteSecrets(leaked);
+  assert.doesNotMatch(leaked, /123456/);
   assert.match(leaked, /REDACTED/);
 });
 
-test('in-memory mint uses CloudFront login once and discards the token reference', async () => {
+test('CloudShell prompt refuses non-TTY and never echoes the code', async () => {
+  assert.throws(() => requireCloudShellTty({ isTTY: false }), /cloudshell_tty_required/);
+  await assert.rejects(
+    () => promptCloudShellSecret({ stdin: { isTTY: false } }),
+    /cloudshell_tty_required/,
+  );
+
+  const stdin = new EventEmitter();
+  stdin.isTTY = true;
+  stdin.setRawMode = () => {};
+  stdin.resume = () => {};
+  let written = '';
+  const stdout = { write: (s) => { written += String(s); } };
+  const pending = promptCloudShellSecret({ stdin, stdout, label: 'code: ' });
+  stdin.emit('data', Buffer.from(FAKE_CODE));
+  stdin.emit('data', Buffer.from('\n'));
+  const value = await pending;
+  assert.equal(value, FAKE_CODE);
+  assert.doesNotMatch(written, /123456/);
+});
+
+test('in-memory passwordless mint uses CloudFront EMAIL_OTP then discards the token', async () => {
   let seenAuthHeader = null;
   let fetchCalls = [];
   const fetchImpl = async (url, init = {}) => {
-    fetchCalls.push({ url: String(url), method: init.method, hasAuth: Boolean(init.headers?.authorization) });
-    if (String(url).endsWith('/prep/auth/login')) {
-      const body = JSON.parse(init.body);
-      assert.equal(body.email, T0_TESTER_EMAIL);
-      assert.equal(body.password, FAKE_PASSWORD);
+    const parsed = init.body ? JSON.parse(init.body) : {};
+    fetchCalls.push({
+      url: String(url),
+      method: init.method,
+      hasAuth: Boolean(init.headers?.authorization),
+      hasPassword: Object.prototype.hasOwnProperty.call(parsed, 'password'),
+    });
+    if (String(url).endsWith('/prep/auth/passwordless/start')) {
+      assert.equal(parsed.email, T0_TESTER_EMAIL);
+      assert.equal(parsed.password, undefined);
+      return {
+        status: 200,
+        headers: { get: (name) => (name === 'x-amz-cf-id' ? 'cf-test' : null) },
+        text: async () => JSON.stringify({
+          service: 'checksops-api',
+          challenge: 'EMAIL_OTP',
+          session: FAKE_SESSION,
+        }),
+      };
+    }
+    if (String(url).endsWith('/prep/auth/passwordless/verify')) {
+      assert.equal(parsed.email, T0_TESTER_EMAIL);
+      assert.equal(parsed.session, FAKE_SESSION);
+      assert.equal(parsed.code, FAKE_CODE);
       return {
         status: 200,
         headers: { get: (name) => (name === 'x-amz-cf-id' ? 'cf-test' : null) },
@@ -94,15 +126,13 @@ test('in-memory mint uses CloudFront login once and discards the token reference
     };
   };
 
-  const holder = { leftover: FAKE_JWT };
   const publicReport = await withInMemoryIdToken(
-    async () => mintT0IdTokenViaCloudFrontLogin({
+    async () => mintT0IdTokenViaPasswordless({
       fetchImpl,
-      loadPassword: () => FAKE_PASSWORD,
+      promptCode: async () => FAKE_CODE,
     }),
     async (idToken) => {
       assert.equal(idToken, FAKE_JWT);
-      holder.used = Boolean(idToken);
       const query = await probeAuthenticatedReadOnlyQuery({ fetchImpl, idToken });
       assert.equal(query.status, 200);
       assert.equal(query.skipped, false);
@@ -114,9 +144,10 @@ test('in-memory mint uses CloudFront login once and discards the token reference
     },
   );
 
-  assert.equal(fetchCalls[0].url, 'https://checksops.com/prep/auth/login');
-  assert.equal(fetchCalls[0].hasAuth, false);
-  assert.equal(fetchCalls[1].url, 'https://checksops.com/prep/data/query');
+  assert.equal(fetchCalls[0].url, 'https://checksops.com/prep/auth/passwordless/start');
+  assert.equal(fetchCalls[0].hasPassword, false);
+  assert.equal(fetchCalls[1].url, 'https://checksops.com/prep/auth/passwordless/verify');
+  assert.equal(fetchCalls[2].url, 'https://checksops.com/prep/data/query');
   assert.deepEqual(publicReport, {
     ok: true,
     status: 200,
@@ -174,8 +205,9 @@ test('discardSecretRef and withInMemoryIdToken drop the token after use', async 
   assert.equal(observed, FAKE_JWT);
 });
 
-test('operator apply rolls back when CloudFront login or authenticated query fails', async () => {
+test('operator apply mints before AWS write; login failure does not apply; later failures roll back', async () => {
   let rollbackCalls = 0;
+  let applyCalls = 0;
   const identity = {
     Account: '806168576068',
     Arn: 'arn:aws:sts::806168576068:assumed-role/Privileged/review',
@@ -186,10 +218,12 @@ test('operator apply rolls back when CloudFront login or authenticated query fai
     collectObserveFn: async () => ({}),
     evaluatePreflightFn: () => ({ ok: true, checks: {} }),
     getLambdaConfig: () => ({ Environment: { Variables: {} }, RevisionId: '1' }),
-    updateRequire: () => ({ requireFlag: 'true', envKeys: ['ORIGIN_VERIFY_REQUIRE'], revisionIdUsed: '1' }),
+    updateRequire: () => {
+      applyCalls += 1;
+      return { requireFlag: 'true', envKeys: ['ORIGIN_VERIFY_REQUIRE'], revisionIdUsed: '1' };
+    },
     waitReady: () => {},
     sleep: async () => {},
-    credentialPresent: () => true,
     rollbackFn: async () => {
       rollbackCalls += 1;
       return { requireFlag: 'false', cfHealth: true, rawHealth: true, executeApiEnabled: true };
@@ -203,10 +237,11 @@ test('operator apply rolls back when CloudFront login or authenticated query fai
       throw new Error('validate_should_not_run_without_login');
     },
   });
-  assert.equal(loginFail.mode, 'rolled_back');
+  assert.equal(loginFail.mode, 'login_refused');
   assert.equal(loginFail.login.ok, false);
   assert.equal(loginFail.validation.loginOk, false);
-  assert.equal(rollbackCalls, 1);
+  assert.equal(applyCalls, 0);
+  assert.equal(rollbackCalls, 0);
   refuteSecrets(JSON.stringify(loginFail));
 
   const queryFail = await executePrivilegedOperatorGate3dApply({
@@ -224,7 +259,8 @@ test('operator apply rolls back when CloudFront login or authenticated query fai
   assert.equal(queryFail.mode, 'rolled_back');
   assert.equal(queryFail.login.ok, true);
   assert.equal(queryFail.validation.authenticatedOk, false);
-  assert.equal(rollbackCalls, 2);
+  assert.equal(applyCalls, 1);
+  assert.equal(rollbackCalls, 1);
   refuteSecrets(JSON.stringify(queryFail));
 
   const healthFail = await executePrivilegedOperatorGate3dApply({
@@ -237,11 +273,13 @@ test('operator apply rolls back when CloudFront login or authenticated query fai
     }),
   });
   assert.equal(healthFail.mode, 'rolled_back');
-  assert.equal(rollbackCalls, 3);
+  assert.equal(applyCalls, 2);
+  assert.equal(rollbackCalls, 2);
   refuteSecrets(JSON.stringify(healthFail));
 });
 
 test('successful mocked operator apply never persists or reports the token', async () => {
+  let appliedAfterMint = false;
   const result = await executePrivilegedOperatorGate3dApply({
     identity: {
       Account: '806168576068',
@@ -251,16 +289,22 @@ test('successful mocked operator apply never persists or reports the token', asy
     collectObserveFn: async () => ({}),
     evaluatePreflightFn: () => ({ ok: true, checks: {} }),
     getLambdaConfig: () => ({ Environment: { Variables: { KEEP: '1' } }, RevisionId: '9' }),
-    updateRequire: () => ({
-      requireFlag: 'true',
-      envKeys: ['KEEP', 'ORIGIN_VERIFY_REQUIRE'],
-      revisionIdUsed: '9',
-    }),
+    mintLogin: async () => {
+      assert.equal(appliedAfterMint, false);
+      return { ok: true, status: 200, idToken: FAKE_JWT, cfId: true, reachedPrep: true };
+    },
+    updateRequire: () => {
+      appliedAfterMint = true;
+      return {
+        requireFlag: 'true',
+        envKeys: ['KEEP', 'ORIGIN_VERIFY_REQUIRE'],
+        revisionIdUsed: '9',
+      };
+    },
     waitReady: () => {},
     sleep: async () => {},
-    credentialPresent: () => true,
-    mintLogin: async () => ({ ok: true, status: 200, idToken: FAKE_JWT, cfId: true, reachedPrep: true }),
     validateFn: async ({ requireMode, idToken }) => {
+      assert.equal(appliedAfterMint, true);
       assert.equal(requireMode, true);
       assert.equal(idToken, FAKE_JWT);
       return {
@@ -278,6 +322,7 @@ test('successful mocked operator apply never persists or reports the token', asy
   assert.equal(result.login.ok, true);
   assert.equal(result.validation.authenticatedOk, true);
   assert.equal(result.validation.loginOk, true);
+  assert.equal(result.passwordlessBeforeAwsWrite, true);
   assert.equal(result.manualIdTokenRequired, false);
   assert.equal(result.financialRowsProcessed, false);
   refuteSecrets(JSON.stringify(result));
@@ -290,10 +335,12 @@ test('operator and helper sources never write tokens or call Cognito admin APIs'
     read('aws/origin-verify/validate-gate3d.mjs'),
     read('aws/cutover/API_PERIMETER_STEP3_OPERATOR_GATE3D.md'),
   ].join('\n');
-  assert.match(sources, /https:\/\/checksops.com\/prep\/auth\/login/);
+  assert.match(sources, /https:\/\/checksops.com\/prep\/auth\/passwordless\/start/);
+  assert.match(sources, /passwordless\/verify/);
   assert.match(sources, /user_roles/);
   assert.doesNotMatch(sources, /admin-set-user-password|AdminSetUserPassword|AdminCreateUser/);
   assert.doesNotMatch(sources, /writeFileSync|appendFileSync/);
   assert.doesNotMatch(sources, /spawnSync\([^\)]*PASSWORD/);
   assert.doesNotMatch(sources, /GetSecretValue/);
+  assert.doesNotMatch(sources, /CHECKSOPS_T0_TESTER_PASSWORD|COGNITO_PASSWORD_FILE/);
 });
