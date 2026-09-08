@@ -1,23 +1,63 @@
 # Temporary Cursor role for CloudTrail → CloudWatch Logs
 
 **STOP FOR REVIEW.** Follow-up remains **PASS**. Temporary-role cleanup is
-**BLOCKED**.
+**INCOMPLETE**.
 
-`ChecksOpsCursorCloudStaging` can start `cloudformation:DeleteStack` but
-is **denied** `iam:DetachRolePolicy` / `iam:GetRole` on the temporary
-roles. Stack `checksops-cursor-cloudtrail-cwlogs-role` is therefore
-**DELETE_FAILED** (role still present). Hardening stack
-`cursor-security-hardening-role` was **not** deleted. Do **not** broaden
-staging. Finish cleanup from a privileged IAM principal that can delete
-those named roles and their stack-owned managed policies.
+Privileged delete of stack `checksops-cursor-cloudtrail-cwlogs-role`
+succeeded (stack now does not exist). Live hardening stack
+`cursor-security-hardening-role` is still **UPDATE_COMPLETE**, and
+`ChecksOpsCursorSecurityHardeningTemp` still assumes. Remaining Cursor
+identities receive `AccessDenied` (not `NoSuchEntity`) on `iam:GetRole` /
+`iam:GetPolicy` for the deleted CW Logs temp role. Do **not** broaden
+staging.
 
-Permanent CloudTrail → CloudWatch Logs resources were **not** modified.
-
-Do **not** clean up `security@checksops.com`. Do **not** start
-API-behind-CloudFront or financial activation.
+Permanent CloudTrail → CloudWatch Logs resources remain. Do **not** clean
+up `security@checksops.com`. Do **not** start API-behind-CloudFront or
+financial activation.
 
 **Account:** `806168576068`  
 **Region:** `us-east-1`
+
+## Final read-only cleanup verification 2026-09-08T13:57Z — FAIL
+
+No AWS mutations. Staging cannot read CloudTrail/alarms/SNS attrs/Config/
+GuardDuty/Hub/Flow Logs/IAM GetRole. Remaining HardeningTemp was used
+only for those reads, which also proves that role is **not** gone.
+
+| Check | Result |
+|---|---|
+| Stack `checksops-cursor-cloudtrail-cwlogs-role` | **gone** (`does not exist`) |
+| Stack `cursor-security-hardening-role` | still **UPDATE_COMPLETE** (role + 6 managed policies) |
+| `ChecksOpsCursorCloudTrailCwLogsTemp` assume | **AccessDenied** |
+| `ChecksOpsCursorCloudTrailCwLogsTemp` `GetRole` | **AccessDenied** (not `NoSuchEntity`) |
+| `ChecksOpsCursorSecurityHardeningTemp` | **EXISTS**; assume `checksops-sec-hard` succeeds |
+| HardeningTemp attached policies | all **6** still attached |
+| Stack `checksops-production-security-trail-cwlogs` | still **CREATE_COMPLETE** |
+| Trail `checksops-production-mgmt-events` | `IsLogging=true`, exactly **1** trail |
+| CW Logs delivery | `LatestCloudWatchLogsDeliveryTime=2026-09-08T13:56:26Z`, error **none** |
+| Log group | `/aws/cloudtrail/checksops-production-mgmt-events`, retention **365** |
+| Metric filter | `checksops-prod-iam-security-changes-filter` present |
+| 14 security alarms | all present; all page `checksops-production-security-alerts` |
+| Alarm `checksops-prod-iam-security-changes` | **OK** as of `2026-09-08T13:54:09Z` (recovered; not suppressed) |
+| SNS `support@checksops.com` | **Confirmed** (`PendingConfirmation=false`) |
+| SNS `security@checksops.com` | still **PendingConfirmation** (untouched) |
+| Config `checksops-production-config-items` | recording **true**, `lastStatus=SUCCESS`, history **SUCCESS** |
+| GuardDuty | `298dc17133dd46b1b2cf755bc1380e1f` **ENABLED**, EBS malware **DISABLED** |
+| Security Hub | `hub/default` enabled |
+| VPC Flow Logs `fl-0913268bc96a95205` | **ACTIVE** / `DeliverLogsStatus=SUCCESS` |
+| RDS `checksops-staging` | backup **35**, deletion protection **on** |
+| Security-logs PAB | all four **true** |
+| Moov / CheckAlt / Provider / Financial | all **false** |
+| `productionExecution` | **false** |
+| `64_financial_activation_grants.sql` | **NOT_APPLIED** |
+| Smoke | `/health` 200, `/ops/readiness` 200 `holds.ok=true`, `/financial/status` 200 |
+| Failed trail stack | still **CREATE_FAILED** (untouched) |
+
+Privileged next step: delete live stack `cursor-security-hardening-role`,
+then confirm `GetRole` → `NoSuchEntity` for both temp roles and the nine
+stack-owned policies.
+
+---
 
 ## Cleanup attempt 2026-09-08 — BLOCKED
 
@@ -346,7 +386,7 @@ the four flags remain `false`.
 ## Holds (unchanged)
 
 - **STOP FOR REVIEW.** Follow-up remains PASS. Temporary-role cleanup is
-  **BLOCKED**. Do not clean up `security@checksops.com`. Do not deploy
+  **INCOMPLETE**. Do not clean up `security@checksops.com`. Do not deploy
   API-behind-CloudFront or financial activation.
 - Do not modify `ChecksOpsCursorSecurityHardeningTemp`.
 - Do not broaden `ChecksOpsCursorCloudStaging`.

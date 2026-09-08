@@ -1,10 +1,11 @@
 # Security Hardening #2–#6 handoff — STOP FOR FINAL REVIEW: #6 PASS
 
 **Date:** 2026-09-08  
-**STOP FOR FINAL REVIEW.** `#1`–`#6` are **PASS**. Temporary-role cleanup
-is **BLOCKED** (`iam:DetachRolePolicy` denied for
-`ChecksOpsCursorCloudStaging`). Stale `security@checksops.com` pending
-subscription **not** cleaned up. Failed trail stack not touched.
+**STOP FOR FINAL REVIEW.** `#1`–`#6` are **PASS**. Temporary CW Logs role
+stack is **gone**. Live hardening stack `cursor-security-hardening-role`
+and `ChecksOpsCursorSecurityHardeningTemp` **remain**. Stale
+`security@checksops.com` pending subscription **not** cleaned up. Failed
+trail stack not touched.
 
 Caller: `arn:aws:sts::806168576068:assumed-role/ChecksOpsCursorSecurityHardeningTemp/checksops-sec-hard`
 
@@ -68,7 +69,7 @@ INSUFFICIENT_DATA immediately after create is acceptable.
 
 ## Holds (not done)
 
-- Temporary roles kept; cleanup **BLOCKED** (privileged IAM delete required)
+- Temporary CW Logs role stack gone; `ChecksOpsCursorSecurityHardeningTemp` still live
 - Stale `security@` pending subscription kept
 - Trail stack `checksops-production-security-trail` not touched
 - No API-behind-CloudFront
@@ -90,5 +91,6 @@ INSUFFICIENT_DATA immediately after create is acceptable.
 CloudTrail → CloudWatch Logs for `IamSecurityChanges` is **PASS**.
 Template: `aws/production/security-cloudtrail-cwlogs.yaml`. Stack
 `checksops-production-security-trail-cwlogs` **CREATE_COMPLETE**. Do **not**
-modify permanent detection resources. Temporary-role cleanup is
-**BLOCKED**. See `aws/cutover/OPERATOR_CLOUDTRAIL_CWLOGS_ROLE.md`.
+modify permanent detection resources. Temporary CW Logs role stack is
+gone; hardening temp role **remains**. See
+`aws/cutover/OPERATOR_CLOUDTRAIL_CWLOGS_ROLE.md`.

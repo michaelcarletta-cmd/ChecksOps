@@ -1,10 +1,10 @@
 # Temporary Cursor role for Security Hardening #2–#6
 
 **STOP FOR REVIEW — #1–#6 PASS.**
-Role still exists. Temporary-role cleanup is **BLOCKED**:
-`ChecksOpsCursorCloudStaging` cannot `iam:DetachRolePolicy` on this role.
-Do **not** broaden staging. See
-`aws/cutover/OPERATOR_CLOUDTRAIL_CWLOGS_ROLE.md`.
+Role **still exists**. Privileged cleanup of stack
+`cursor-security-hardening-role` has **not** completed (still
+**UPDATE_COMPLETE**). OIDC assume still succeeds. Do **not** broaden
+staging. See `aws/cutover/OPERATOR_CLOUDTRAIL_CWLOGS_ROLE.md`.
 
 Do **not** modify this role except via privileged stack delete of
 `cursor-security-hardening-role` (live stack name). The CloudTrail →
