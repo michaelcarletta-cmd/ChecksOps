@@ -38,7 +38,10 @@ role from the failed staging probe.
 
 Operator download for this handoff (Step3Temp only):
 
-`aws/production/cursor-api-perimeter-step3-temp-role-only.yaml`
+- Path: `aws/production/cursor-api-perimeter-step3-temp-role-only.yaml`
+- Commit that added the YAML: `c3a7ce822b1f32655d9a89c982d498e1004f0fff`
+- Blob: `9c2d0566bf2a96ab9ed7e78540b4de63304f5c02`
+- Raw: `https://raw.githubusercontent.com/michaelcarletta-cmd/ChecksOps/c3a7ce822b1f32655d9a89c982d498e1004f0fff/aws/production/cursor-api-perimeter-step3-temp-role-only.yaml`
 
 Allow / deny / trust companions (unchanged, reviewed):
 

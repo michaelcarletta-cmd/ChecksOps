@@ -49,6 +49,7 @@ test('operator handoff is Step3Temp create only and does not deploy 3A-3C', () =
   assert.match(handoff, /CAPABILITY_NAMED_IAM/);
   assert.match(handoff, /ParameterKey=DeployRole,ParameterValue=true/);
   assert.match(handoff, /cursor-api-perimeter-step3-temp-role-only\.yaml/);
+  assert.match(handoff, /c3a7ce822b1f32655d9a89c982d498e1004f0fff/);
   assert.match(handoff, /67243a1b2ac17ac31f0d85ce2289839cf72432a5/);
   assert.match(handoff, /cf1fc7e10c2309f5e35584b26f62fc97a2c5f757/);
   assert.match(handoff, /b14ca5e9652eca58bb163967ae6886accdd92eb4/);
