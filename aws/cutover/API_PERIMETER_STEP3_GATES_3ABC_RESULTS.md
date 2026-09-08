@@ -47,14 +47,9 @@ headers still **0**. Status **Deployed**. Production WAF ARN unchanged.
 
 Do not attach the authorizer until the CloudFront header is live.
 
-## Privileged operator — unblock 3B only
+## Privileged operator — Gate 3B only
 
-Except `alias/aws/secretsmanager` /
-`arn:aws:kms:us-east-1:806168576068:key/691886af-d43c-4c6e-a411-3e55f44249ba`
-from `ChecksOpsCursorApiPerimeterStep3Deny` `DenyKmsAndRoleChaining`,
-and allow `kms:Decrypt` / `Encrypt` / `GenerateDataKey` / `DescribeKey`
-on that key.
-
-Do **not** print the secret. Do not set `ORIGIN_VERIFY_REQUIRE=true`.
-Do not disable execute-api. Do not modify SPA / prep Lambda / RDS /
-Cognito / WAF / DNS. Do not delete the temporary roles.
+Keep the Step3Temp KMS deny. Use
+`aws/cutover/API_PERIMETER_STEP3_OPERATOR_GATE3B.md`.
+Do not start Gate 3C. Do not attach the authorizer.
+Do not set `ORIGIN_VERIFY_REQUIRE=true`. Do not delete the temporary roles.

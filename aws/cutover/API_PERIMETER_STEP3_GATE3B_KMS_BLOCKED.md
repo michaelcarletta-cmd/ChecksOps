@@ -9,7 +9,6 @@ fails with `Access to KMS is not allowed` because Step3Temp
 CloudFront was not modified. Custom header quantity on
 `ProductionPrepHttpApi` remains 0. WAF remains attached.
 
-Operator: except `alias/aws/secretsmanager` (key
-`691886af-d43c-4c6e-a411-3e55f44249ba`) from that deny and allow
-`kms:Decrypt` (and Encrypt / GenerateDataKey / DescribeKey) on it.
-Do not print the secret. Then resume Gate 3B → 3C observe mode only.
+Do **not** broaden Step3Temp. Use the privileged-operator Gate 3B
+package in `aws/cutover/API_PERIMETER_STEP3_OPERATOR_GATE3B.md`.
+Do not start Gate 3C from that package.

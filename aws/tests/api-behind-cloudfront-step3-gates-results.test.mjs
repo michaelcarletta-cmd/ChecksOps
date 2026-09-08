@@ -25,6 +25,7 @@ test('3A pass / 3B KMS block record does not enable require-mode', () => {
   assert.doesNotMatch(results, /aws cloudfront update-distribution/);
   assert.match(blocked, /GetSecretValue/);
   assert.match(blocked, /Access to KMS is not allowed/);
+  assert.match(blocked, /OPERATOR_GATE3B/);
   assert.match(applyA, /CHECKSOPS_STEP3_REUSE_SECRET/);
   assert.match(applyA, /Authorizer defaults/);
   assert.match(applyB, /get_secret_kms_denied/);

@@ -42,7 +42,7 @@ try {
   const msg = String(err?.message || err);
   if (/Access to KMS is not allowed|kms/i.test(msg)) {
     throw new Error(
-      'get_secret_kms_denied. Step3Temp DenyKmsAndRoleChaining blocks GetSecretValue. Privileged operator must except alias/aws/secretsmanager from the KMS deny before Gate 3B. Do not print the secret. See aws/cutover/API_PERIMETER_STEP3_GATE3B_KMS_BLOCKED.md',
+      'get_secret_kms_denied. Keep Step3Temp KMS deny. Privileged operator must run aws/origin-verify/operator-apply-gate3b.mjs. See aws/cutover/API_PERIMETER_STEP3_OPERATOR_GATE3B.md',
     );
   }
   throw err;
