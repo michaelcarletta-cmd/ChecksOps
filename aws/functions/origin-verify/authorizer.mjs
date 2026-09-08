@@ -50,16 +50,33 @@ export function secretsMatch(provided, secrets) {
   );
 }
 
-export function evaluateOriginVerify({ header, secrets, require }) {
+export function publicVerifyState({ header, secrets }) {
   const present = Boolean(header);
-  const matched = secretsMatch(header, secrets);
+  const valid = secretsMatch(header, secrets);
   return {
-    isAuthorized: require ? matched : true,
+    originHeaderPresent: present,
+    originHeaderValid: valid,
+  };
+}
+
+export function evaluateOriginVerify({ header, secrets, require }) {
+  const state = publicVerifyState({ header, secrets });
+  return {
+    isAuthorized: require ? state.originHeaderValid : true,
     context: {
-      originVerified: matched ? '1' : '0',
-      originHeaderPresent: present ? '1' : '0',
+      originVerified: state.originHeaderValid ? '1' : '0',
+      originHeaderPresent: state.originHeaderPresent ? '1' : '0',
+      originHeaderValid: state.originHeaderValid ? '1' : '0',
     },
   };
+}
+
+export function safeObserveLog({ requestId, state }) {
+  return JSON.stringify({
+    requestId: String(requestId || ''),
+    originHeaderPresent: Boolean(state?.originHeaderPresent),
+    originHeaderValid: Boolean(state?.originHeaderValid),
+  });
 }
 
 let cached = { at: 0, value: null };
@@ -88,16 +105,34 @@ async function loadSecrets() {
 export async function handler(event) {
   const header = headerFromEvent(event);
   const require = String(process.env.ORIGIN_VERIFY_REQUIRE || '') === 'true';
+  const requestId = event?.requestContext?.requestId || event?.requestContext?.http?.requestId || '';
   try {
     const secrets = await loadSecrets();
-    return evaluateOriginVerify({ header, secrets, require });
+    const result = evaluateOriginVerify({ header, secrets, require });
+    console.log(safeObserveLog({
+      requestId,
+      state: {
+        originHeaderPresent: result.context.originHeaderPresent === '1',
+        originHeaderValid: result.context.originHeaderValid === '1',
+      },
+    }));
+    return result;
   } catch {
-    return {
+    const fallback = {
       isAuthorized: !require,
       context: {
         originVerified: '0',
         originHeaderPresent: header ? '1' : '0',
+        originHeaderValid: '0',
       },
     };
+    console.log(safeObserveLog({
+      requestId,
+      state: {
+        originHeaderPresent: fallback.context.originHeaderPresent === '1',
+        originHeaderValid: false,
+      },
+    }));
+    return fallback;
   }
 }

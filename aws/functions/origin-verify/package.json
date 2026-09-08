@@ -1,0 +1,9 @@
+{
+  "name": "checksops-origin-verify",
+  "private": true,
+  "type": "module",
+  "description": "HTTP API REQUEST authorizer for CloudFront origin verification. Do not deploy from the design PR.",
+  "dependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.686.0"
+  }
+}

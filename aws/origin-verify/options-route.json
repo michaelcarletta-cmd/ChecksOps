@@ -1,0 +1,6 @@
+{
+  "ApiId": "kiqojucc02",
+  "RouteKey": "OPTIONS /{proxy+}",
+  "AuthorizationType": "NONE",
+  "Target": "integrations/jci10de"
+}

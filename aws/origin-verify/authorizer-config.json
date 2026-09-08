@@ -1,0 +1,11 @@
+{
+  "Name": "checksops-production-origin-verify",
+  "AuthorizerType": "REQUEST",
+  "AuthorizerPayloadFormatVersion": "2.0",
+  "EnableSimpleResponses": true,
+  "IdentitySource": ["$context.httpMethod"],
+  "AuthorizerResultTtlInSeconds": 0,
+  "AuthorizerUriTemplate": "arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:806168576068:function:checksops-production-origin-verify/invocations",
+  "doNotAttachOnCreate": true,
+  "ORIGIN_VERIFY_REQUIRE": "false"
+}

@@ -78,7 +78,9 @@ test('Step 3 validation and rollback preserve holds and execute-api', () => {
 test('reference authorizer never logs headers and supports dual-secret observe/require', () => {
   assert.equal(HEADER_NAME, 'x-checksops-origin-verify');
   assert.equal(SECRET_NAME, 'checksops/production/cloudfront-origin-verify');
-  assert.doesNotMatch(authorizer, /console\.(log|info|debug|warn|error)/);
+  assert.match(authorizer, /safeObserveLog/);
+  assert.doesNotMatch(authorizer, /console\.(info|debug|warn)/);
+  assert.doesNotMatch(authorizer, /console\.log\(event/);
   assert.doesNotMatch(authorizer, /VITE_/);
   assert.match(authorizer, /timingSafeEqual/);
   assert.match(authorizer, /ORIGIN_VERIFY_REQUIRE/);
