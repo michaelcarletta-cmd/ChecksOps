@@ -26,6 +26,7 @@ import {
   probe,
   providerFinancialFlagsFalse,
   requireIsFalse,
+  requireLiveIdToken,
 } from './gate3d-lib.mjs';
 
 export async function validateGate3d({ requireMode }) {
@@ -63,12 +64,13 @@ export async function validateGate3d({ requireMode }) {
   const financial = await probe(`${CF_APEX}/prep/financial/status`);
 
   let authenticated = {
-    skipped: true,
+    required: Boolean(requireMode),
+    skipped: !requireMode,
     status: null,
     reachedPrep: false,
   };
-  const token = String(process.env.CHECKSOPS_GATE3D_ID_TOKEN || '');
-  if (token) {
+  if (requireMode) {
+    const token = requireLiveIdToken();
     const query = await probe(`${CF_APEX}/prep/data/query`, {
       method: 'POST',
       headers: {
@@ -78,6 +80,7 @@ export async function validateGate3d({ requireMode }) {
       body: JSON.stringify({ table: 'check_intake_items', select: 'id', limit: 1 }),
     });
     authenticated = {
+      required: true,
       skipped: false,
       status: query.status,
       reachedPrep: query.reachedPrep,
@@ -92,7 +95,9 @@ export async function validateGate3d({ requireMode }) {
     && publicSign.reachedPrep && publicEndorse.reachedPrep
     && !publicSign.gatewayUnauthorized && !publicEndorse.gatewayUnauthorized;
   const appThroughCfOk = appThroughCf.cfId && appThroughCf.reachedPrep && !appThroughCf.gatewayUnauthorized;
-  const authenticatedOk = authenticated.skipped || (authenticated.status === 200 && authenticated.reachedPrep);
+  const authenticatedOk = requireMode
+    ? authenticated.skipped === false && authenticated.status === 200 && authenticated.reachedPrep === true
+    : true;
   const rawDenied = isGatewayUnauthorized(rawNoHeader.status);
   const fabricatedDenied = isGatewayUnauthorized(rawFabricated.status);
 
@@ -124,6 +129,7 @@ export async function validateGate3d({ requireMode }) {
     financialActivationSqlAppliedFalse: readiness.financialActivationSqlApplied === false,
     secretPrinted: false,
     headerValuePrinted: false,
+    idTokenPrinted: false,
   };
 
   const checks = {
@@ -164,6 +170,7 @@ if (isCli) {
       validates: [
         'checksops.com/prep/health=200',
         'www.checksops.com/prep/health=200',
+        'CHECKSOPS_GATE3D_ID_TOKEN required; authenticated /prep/data/query=200',
         'CloudFront application requests reach prep Lambda',
         'CloudFront /prep/public/signature-document and /prep/public/endorsement reach prep',
         'OPTIONS=204',
@@ -186,6 +193,10 @@ if (isCli) {
       ok: false,
       note: 'Authorizer REQUIRE is unset/false. Post-apply require-mode checks were not run.',
     }));
+    process.exit(2);
+  }
+  if (!String(process.env.CHECKSOPS_GATE3D_ID_TOKEN || '').trim()) {
+    console.error('CHECKSOPS_GATE3D_ID_TOKEN_required');
     process.exit(2);
   }
   const report = await validateGate3d({ requireMode: true });

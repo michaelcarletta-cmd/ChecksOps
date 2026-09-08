@@ -21,9 +21,12 @@ const run = (rel, env = {}) =>
       CHECKSOPS_APPLY_GATE3D: '',
       CHECKSOPS_GATE3D_ENFORCE: '',
       CHECKSOPS_GATE3D_VALIDATE: '',
+      CHECKSOPS_GATE3D_ID_TOKEN: '',
       CHECKSOPS_APPLY_ROLLBACK: '',
       CHECKSOPS_ROLLBACK_GATE: '',
       CHECKSOPS_OPERATOR_GATE3B: '',
+      CHECKSOPS_OPERATOR_GATE3D: '',
+      CHECKSOPS_OPERATOR_ROLLBACK_GATE3D: '',
       CHECKSOPS_OPERATOR_EXECUTE: '',
       ORIGIN_VERIFY_REQUIRE: '',
       ...env,
@@ -35,8 +38,18 @@ const rollback = read('aws/origin-verify/rollback-gate3d.mjs');
 const preflight = read('aws/origin-verify/preflight-gate3d.mjs');
 const validate = read('aws/origin-verify/validate-gate3d.mjs');
 const lib = read('aws/origin-verify/gate3d-lib.mjs');
+const operatorApply = read('aws/origin-verify/operator-apply-gate3d.mjs');
+const operatorRollback = read('aws/origin-verify/operator-rollback-gate3d.mjs');
 const design = read('aws/cutover/API_PERIMETER_STEP3_GATE3D.md');
+const operatorDoc = read('aws/cutover/API_PERIMETER_STEP3_OPERATOR_GATE3D.md');
 const sql = read('aws/financial/sql/64_financial_activation_grants.sql');
+
+function refuteSecrets(text) {
+  assert.doesNotMatch(text, /SecretString|HeaderValue\s*[:=]\s*["'][^"']{4,}/);
+  assert.doesNotMatch(text, /"current"\s*:\s*"[A-Za-z0-9+/=]{8,}"/);
+  assert.doesNotMatch(text, /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+\./);
+  assert.doesNotMatch(text, /Bearer [A-Za-z0-9._-]+/);
+}
 
 test('Gate 3D design is review-only and does not execute', () => {
   assert.match(design, /STOP FOR REVIEW\. DO NOT APPLY GATE 3D/);
@@ -44,6 +57,10 @@ test('Gate 3D design is review-only and does not execute', () => {
   assert.match(design, /CHECKSOPS_APPLY_GATE3D=I_UNDERSTAND_PRODUCTION/);
   assert.match(design, /CHECKSOPS_GATE3D_ENFORCE=I_ACCEPT_REQUIRE_MODE/);
   assert.match(design, /CHECKSOPS_STEP3_EXECUTE=1/);
+  assert.match(design, /CHECKSOPS_GATE3D_ID_TOKEN/);
+  assert.match(design, /RevisionId/);
+  assert.match(design, /GATE3D_ROLLBACK_FATAL/);
+  assert.match(design, /operator-apply-gate3d/);
   assert.match(design, /automatic rollback/i);
   assert.match(design, /Do \*\*not\*\* disable the execute-api endpoint/);
   assert.match(design, /64_financial_activation_grants\.sql/);
@@ -51,9 +68,11 @@ test('Gate 3D design is review-only and does not execute', () => {
   assert.match(design, /Read-only preflight/);
   assert.match(design, /Apply was \*\*not\*\* executed/);
   assert.doesNotMatch(design, /DisableExecuteApiEndpoint=true/);
-  assert.doesNotMatch(design, /HeaderValue\s*[:=]\s*["'][^"']{4,}/);
-  assert.doesNotMatch(design, /SecretString/);
-  assert.doesNotMatch(design, /"current"\s*:\s*"[A-Za-z0-9+/=]{8,}"/);
+  refuteSecrets(design);
+  refuteSecrets(operatorDoc);
+  assert.match(operatorDoc, /DO NOT EXECUTE FROM THIS PR/);
+  assert.match(operatorDoc, /Do \*\*not\*\* broaden that role/);
+  assert.match(operatorDoc, /refusing_step3temp|Refuse if the caller ARN contains `ChecksOpsCursorApiPerimeterStep3Temp`/);
 });
 
 test('apply and rollback are plan-only without explicit production and execute gates', () => {
@@ -75,8 +94,11 @@ test('apply and rollback are plan-only without explicit production and execute g
   assert.match(twoGates.stdout, /"mode":"plan"/);
   assert.match(twoGates.stdout, /STOP FOR REVIEW/);
   assert.match(twoGates.stdout, /"DisableExecuteApiEndpoint":false/);
+  assert.match(twoGates.stdout, /"idTokenRequired":true/);
+  assert.match(twoGates.stdout, /"idTokenPrinted":false/);
+  assert.match(twoGates.stdout, /"revisionIdRequired":true/);
   assert.match(twoGates.stdout, /automaticRollback/);
-  assert.doesNotMatch(`${twoGates.stdout}${twoGates.stderr}`, /SecretString|HeaderValue/);
+  refuteSecrets(`${twoGates.stdout}${twoGates.stderr}`);
 
   const rollbackBlocked = run('aws/origin-verify/rollback-gate3d.mjs');
   assert.equal(rollbackBlocked.status, 2);
@@ -90,17 +112,38 @@ test('apply and rollback are plan-only without explicit production and execute g
   assert.match(rollbackPlan.stdout, /"mode":"plan"/);
   assert.match(rollbackPlan.stdout, /ORIGIN_VERIFY_REQUIRE=false/);
   assert.match(rollbackPlan.stdout, /"preserveExistingEnv":true/);
-  assert.doesNotMatch(`${rollbackPlan.stdout}${rollbackPlan.stderr}`, /SecretString|HeaderValue/);
+  assert.match(rollbackPlan.stdout, /"confirmRequireFalse":true/);
+  refuteSecrets(`${rollbackPlan.stdout}${rollbackPlan.stderr}`);
 
   const validatePlan = run('aws/origin-verify/validate-gate3d.mjs');
   assert.equal(validatePlan.status, 2);
   assert.match(validatePlan.stdout, /"mode":"plan"/);
+  assert.match(validatePlan.stdout, /CHECKSOPS_GATE3D_ID_TOKEN required/);
 });
 
-test('only the authorizer Lambda environment may change', () => {
-  for (const src of [apply, rollback, lib]) {
+test('live apply refuses without ID token and never treats skipped auth as pass', () => {
+  assert.match(apply, /idTokenPresent\(\)/);
+  assert.match(apply, /requireLiveIdToken\(\)/);
+  assert.match(apply, /CHECKSOPS_GATE3D_ID_TOKEN_required/);
+  assert.match(validate, /requireLiveIdToken\(\)/);
+  assert.match(validate, /authenticated\.skipped === false/);
+  assert.doesNotMatch(validate, /authenticated\.skipped \|\|/);
+  assert.match(lib, /CHECKSOPS_GATE3D_ID_TOKEN_required/);
+
+  const missingToken = run('aws/origin-verify/apply-gate3d.mjs', {
+    CHECKSOPS_APPLY_GATE3D: 'I_UNDERSTAND_PRODUCTION',
+    CHECKSOPS_GATE3D_ENFORCE: 'I_ACCEPT_REQUIRE_MODE',
+    CHECKSOPS_STEP3_EXECUTE: '1',
+  });
+  assert.equal(missingToken.status, 2);
+  assert.match(missingToken.stderr, /CHECKSOPS_GATE3D_ID_TOKEN_required/);
+  refuteSecrets(`${missingToken.stdout}${missingToken.stderr}`);
+});
+
+test('only the authorizer Lambda environment may change, with RevisionId', () => {
+  for (const src of [apply, rollback, lib, operatorApply, operatorRollback]) {
     assert.match(src, /checksops-production-origin-verify|LAMBDA_NAME/);
-    assert.match(src, /update-function-configuration|UpdateFunctionConfiguration|updateOriginVerifyRequire/);
+    assert.match(src, /update-function-configuration|updateOriginVerifyRequire|rollbackOriginVerifyRequireAndConfirm/);
     assert.doesNotMatch(src, /update-distribution/i);
     assert.doesNotMatch(src, /update-api/);
     assert.doesNotMatch(src, /update-route/);
@@ -110,14 +153,49 @@ test('only the authorizer Lambda environment may change', () => {
     assert.doesNotMatch(src, /64_financial_activation_grants\.sql/);
     assert.doesNotMatch(src, /MOOV_ENABLED["']?\s*:\s*["']true["']/);
   }
+  assert.match(lib, /--revision-id/);
+  assert.match(lib, /RevisionId/);
+  assert.match(lib, /lambda_revision_conflict/);
   assert.match(apply, /preserveExistingEnv/);
   assert.match(apply, /updateOriginVerifyRequire\('true'\)/);
-  assert.match(apply, /updateOriginVerifyRequire\('false'\)/);
-  assert.match(apply, /gate3d_validation_failed_rolled_back/);
-  assert.match(rollback, /updateOriginVerifyRequire\('false'\)/);
+  assert.match(apply, /rollbackOriginVerifyRequireAndConfirm/);
+  assert.match(rollback, /rollbackOriginVerifyRequireAndConfirm/);
   assert.doesNotMatch(rollback, /updateOriginVerifyRequire\('true'\)/);
+  assert.match(lib, /GATE3D_ROLLBACK_FATAL/);
+  assert.match(lib, /requireFlag === 'false'/);
   assert.match(preflight, /Read-only|Does not mutate AWS/);
   assert.doesNotMatch(preflight, /update-function-configuration/);
+});
+
+test('privileged-operator path is separately gated and refuses Step3Temp', () => {
+  assert.match(operatorApply, /refusing_step3temp|refuseStep3Temp/);
+  assert.match(operatorRollback, /refuseStep3Temp/);
+  assert.match(operatorApply, /Do not broaden|doNotBroadenStep3TempKms/);
+  assert.match(operatorApply, /preserveExistingEnv/);
+  assert.match(operatorApply, /requireLiveIdToken/);
+  assert.doesNotMatch(operatorApply, /GetSecretValue/);
+  assert.doesNotMatch(operatorRollback, /GetSecretValue/);
+
+  const planned = run('aws/origin-verify/operator-apply-gate3d.mjs');
+  assert.equal(planned.status, 2);
+  assert.match(planned.stdout, /"operatorOnly":true/);
+  assert.match(planned.stdout, /"doNotUseStep3Temp":true/);
+  assert.match(planned.stdout, /"idTokenRequired":true/);
+  refuteSecrets(`${planned.stdout}${planned.stderr}`);
+
+  const rollbackPlan = run('aws/origin-verify/operator-rollback-gate3d.mjs');
+  assert.equal(rollbackPlan.status, 2);
+  assert.match(rollbackPlan.stdout, /"operatorOnly":true/);
+  assert.match(rollbackPlan.stdout, /"confirmRequireFalse":true/);
+  refuteSecrets(`${rollbackPlan.stdout}${rollbackPlan.stderr}`);
+
+  const missingToken = run('aws/origin-verify/operator-apply-gate3d.mjs', {
+    CHECKSOPS_OPERATOR_GATE3D: 'I_UNDERSTAND_PRODUCTION',
+    CHECKSOPS_OPERATOR_EXECUTE: '1',
+  });
+  assert.equal(missingToken.status, 2);
+  assert.match(missingToken.stderr, /CHECKSOPS_GATE3D_ID_TOKEN_required/);
+  refuteSecrets(`${missingToken.stdout}${missingToken.stderr}`);
 });
 
 test('mergeOriginVerifyRequire preserves existing keys and only flips REQUIRE', () => {
@@ -148,8 +226,8 @@ test('financial activation and execute-api disable cannot occur from this packag
   assert.match(validate, /providerFinancialFlagsFalse/);
   assert.match(validate, /financialActivationSqlAppliedFalse/);
   assert.match(preflight, /financialActivationSqlAppliedFalse/);
-  assert.doesNotMatch(`${apply}${rollback}${preflight}${validate}`, /DisableExecuteApiEndpoint=true/);
+  assert.doesNotMatch(`${apply}${rollback}${preflight}${validate}${operatorApply}${operatorRollback}`, /DisableExecuteApiEndpoint=true/);
   assert.doesNotMatch(apply, /GetSecretValue/);
   assert.doesNotMatch(validate, /HeaderValue\s*[:=]\s*["'][^"']{4,}/);
-  assert.match(validate, /headerValuePrinted: false/);
+  assert.match(validate, /idTokenPrinted: false/);
 });

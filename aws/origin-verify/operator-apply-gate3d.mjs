@@ -1,27 +1,19 @@
 #!/usr/bin/env node
 /**
- * Gate 3D apply: ORIGIN_VERIFY_REQUIRE=true on checksops-production-origin-verify only.
- * STOP FOR REVIEW. Do not execute from the design PR.
+ * Privileged-operator Gate 3D apply. Do not run as Step3Temp.
+ * Keep Step3Temp kms:* deny. Do not broaden that role.
  *
- * Live apply requires all of:
- *   CHECKSOPS_APPLY_GATE3D=I_UNDERSTAND_PRODUCTION
- *   CHECKSOPS_GATE3D_ENFORCE=I_ACCEPT_REQUIRE_MODE
- *   CHECKSOPS_STEP3_EXECUTE=1
- *   CHECKSOPS_GATE3D_ID_TOKEN  (never printed or persisted)
+ * Changes only checksops-production-origin-verify environment:
+ * preserve every existing variable and set ORIGIN_VERIFY_REQUIRE=true.
+ * Uses RevisionId. Requires CHECKSOPS_GATE3D_ID_TOKEN for live apply.
+ * Never prints the token, secret, hash, prefix, or HeaderValue.
  *
- * Preserves every existing Lambda environment variable. Uses RevisionId.
- * Rolls back to ORIGIN_VERIFY_REQUIRE=false if CloudFront/API validation fails,
- * then re-reads the Lambda and requires REQUIRE=false plus CloudFront/raw health.
- * Does not disable execute-api. Does not modify CloudFront, WAF, SPA, DNS,
- * Cognito, RDS, prep Lambda, or financial/provider flags.
+ * Plan (default): prints guards and exits 2.
+ * Apply: CHECKSOPS_OPERATOR_GATE3D=I_UNDERSTAND_PRODUCTION
+ *        CHECKSOPS_OPERATOR_EXECUTE=1
+ *        CHECKSOPS_GATE3D_ID_TOKEN=<id token, not printed>
  */
-import {
-  LAMBDA_NAME,
-  awsJson,
-  requireGate,
-  requireStep3Temp,
-  shouldExecute,
-} from './lib.mjs';
+import { LAMBDA_NAME, awsJson } from './lib.mjs';
 import {
   REQUIRE_KEY,
   collectObserveAndHolds,
@@ -29,6 +21,7 @@ import {
   evaluatePreflight,
   idTokenPresent,
   mergeOriginVerifyRequire,
+  refuseStep3Temp,
   requireLiveIdToken,
   rollbackOriginVerifyRequireAndConfirm,
   updateOriginVerifyRequire,
@@ -36,11 +29,11 @@ import {
 } from './gate3d-lib.mjs';
 import { validateGate3d } from './validate-gate3d.mjs';
 
-requireGate('CHECKSOPS_APPLY_GATE3D');
-requireGate('CHECKSOPS_GATE3D_ENFORCE', 'I_ACCEPT_REQUIRE_MODE');
-
 const plan = {
   gate: '3D',
+  operatorOnly: true,
+  doNotUseStep3Temp: true,
+  doNotBroadenStep3TempKms: true,
   lambdaName: LAMBDA_NAME,
   change: `${REQUIRE_KEY}=true`,
   preserveExistingEnv: true,
@@ -51,18 +44,15 @@ const plan = {
   DisableExecuteApiEndpoint: false,
   cloudfront: 'unchanged',
   waf: 'unchanged',
-  spaDnsCognitoRds: 'unchanged',
-  financialSql: 'not_applied',
-  automaticRollback: `${REQUIRE_KEY}=false if CloudFront/API validation fails`,
-  independentRollback: 'node aws/origin-verify/rollback-gate3d.mjs',
-  operatorPath: 'aws/origin-verify/operator-apply-gate3d.mjs',
+  secretPrinted: false,
 };
 
-if (!shouldExecute()) {
+if (String(process.env.CHECKSOPS_OPERATOR_GATE3D || '') !== 'I_UNDERSTAND_PRODUCTION'
+  || String(process.env.CHECKSOPS_OPERATOR_EXECUTE || '') !== '1') {
   console.log(JSON.stringify({
     ...plan,
     mode: 'plan',
-    note: 'Plan only. STOP FOR REVIEW. Do not execute Gate 3D from this PR. Live apply also requires CHECKSOPS_GATE3D_ID_TOKEN.',
+    note: 'Plan only. Privileged operator sets CHECKSOPS_OPERATOR_GATE3D=I_UNDERSTAND_PRODUCTION and CHECKSOPS_OPERATOR_EXECUTE=1. Do not use Step3Temp. Live apply requires CHECKSOPS_GATE3D_ID_TOKEN.',
   }));
   process.exit(2);
 }
@@ -73,12 +63,14 @@ if (!idTokenPresent()) {
 }
 requireLiveIdToken();
 
-const identity = requireStep3Temp();
+const identity = awsJson(['sts', 'get-caller-identity']);
+refuseStep3Temp(identity.Arn);
+
 const base = collectPreflight();
 const observe = await collectObserveAndHolds();
-const preflight = evaluatePreflight(base, observe);
+const preflight = evaluatePreflight(base, observe, { requireStep3TempCaller: false });
 if (!preflight.ok) {
-  console.log(JSON.stringify({ gate: '3D', mode: 'preflight_refused', checks: preflight.checks }));
+  console.log(JSON.stringify({ gate: '3D', mode: 'preflight_refused', operatorOnly: true, checks: preflight.checks }));
   throw new Error('gate3d_preflight_refused');
 }
 
@@ -97,27 +89,21 @@ try {
     console.log(JSON.stringify({
       ...plan,
       mode: 'rolled_back',
-      identity,
       preservedKeys: merged.preservedKeys,
       validation: report.checks,
       rollback,
-      secretPrinted: false,
-      idTokenPrinted: false,
     }));
     throw new Error('gate3d_validation_failed_rolled_back');
   }
   console.log(JSON.stringify({
     ...plan,
     mode: 'executed',
-    identity,
     requireFlag: updated.requireFlag,
     preservedKeys: merged.preservedKeys,
     envKeys: updated.envKeys,
     revisionIdUsed: Boolean(updated.revisionIdUsed),
     validation: report.checks,
     executeApiEnabled: report.executeApiEnabled,
-    secretPrinted: false,
-    idTokenPrinted: false,
   }));
 } catch (err) {
   if (applied && !String(err?.message || '').includes('rolled_back') && !String(err?.message || '').includes('GATE3D_ROLLBACK_FATAL')) {

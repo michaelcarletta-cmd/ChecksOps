@@ -209,9 +209,11 @@ export async function collectObserveAndHolds() {
   };
 }
 
-export function evaluatePreflight(base, observe) {
+export function evaluatePreflight(base, observe, { requireStep3TempCaller = true } = {}) {
   const checks = {
-    step3Temp: base.step3Temp === true,
+    step3Temp: requireStep3TempCaller
+      ? base.step3Temp === true
+      : base.step3Temp === false,
     cloudfrontDeployed: base.cloudfront.deployed === true,
     wafUnchanged: base.cloudfront.wafUnchanged === true,
     exactlyOneOriginVerify: base.cloudfront.exactlyOneOriginVerify === true,
@@ -239,25 +241,97 @@ export function evaluatePreflight(base, observe) {
   };
 }
 
+export function idTokenPresent() {
+  return Boolean(String(process.env.CHECKSOPS_GATE3D_ID_TOKEN || '').trim());
+}
+
+/** Return the ID token for an Authorization header only. Never log or persist it. */
+export function requireLiveIdToken() {
+  const token = String(process.env.CHECKSOPS_GATE3D_ID_TOKEN || '').trim();
+  if (!token) throw new Error('CHECKSOPS_GATE3D_ID_TOKEN_required');
+  return token;
+}
+
+export function refuseStep3Temp(identityArn) {
+  if (String(identityArn || '').includes('ChecksOpsCursorApiPerimeterStep3Temp')) {
+    throw new Error('refusing_step3temp. Keep the KMS deny. Use the privileged-operator Gate 3D path.');
+  }
+}
+
 export function updateOriginVerifyRequire(value) {
   const cfg = awsJson(['lambda', 'get-function-configuration', '--function-name', LAMBDA_NAME]);
+  const revisionId = cfg.RevisionId;
+  if (!revisionId) throw new Error('lambda_revision_id_missing');
   const merged = mergeOriginVerifyRequire(cfg.Environment?.Variables || {}, value);
   if (merged.extraKeysAdded.length) {
     throw new Error('refusing_to_add_non_require_env_keys');
   }
-  const updated = awsJson([
-    'lambda',
-    'update-function-configuration',
-    '--function-name',
-    LAMBDA_NAME,
-    '--environment',
-    JSON.stringify({ Variables: merged.next }),
-  ]);
+  let updated;
+  try {
+    updated = awsJson([
+      'lambda',
+      'update-function-configuration',
+      '--function-name',
+      LAMBDA_NAME,
+      '--revision-id',
+      String(revisionId),
+      '--environment',
+      JSON.stringify({ Variables: merged.next }),
+    ]);
+  } catch (err) {
+    const msg = String(err?.message || err);
+    if (/Access to KMS is not allowed|kms/i.test(msg)) {
+      throw new Error(
+        'update_env_kms_denied. Keep Step3Temp KMS deny. Privileged operator must run aws/origin-verify/operator-apply-gate3d.mjs or aws/origin-verify/operator-rollback-gate3d.mjs.',
+      );
+    }
+    if (/PreconditionFailed|revision/i.test(msg)) {
+      throw new Error('lambda_revision_conflict');
+    }
+    throw err;
+  }
   return {
     requireFlag: updated.Environment?.Variables?.[REQUIRE_KEY] ?? '<unset>',
     envKeys: Object.keys(updated.Environment?.Variables || {}).sort(),
     preservedKeys: merged.preservedKeys,
+    revisionIdUsed: revisionId,
   };
+}
+
+export async function confirmRollbackHealth() {
+  const cfg = awsJson(['lambda', 'get-function-configuration', '--function-name', LAMBDA_NAME]);
+  const requireFlag = requireFlagValue(cfg) ?? '<unset>';
+  const apex = await probe(`${CF_APEX}/prep/health`);
+  const www = await probe(`${CF_WWW}/prep/health`);
+  const raw = await probe(`${RAW_API}/prep/health`);
+  const api = awsJson(['apigatewayv2', 'get-api', '--api-id', API_ID]);
+  const requireFalse = requireFlag === 'false';
+  const cfHealth = apex.status === 200 && apex.bodyStatus === 'ok' && apex.cfId
+    && www.status === 200 && www.bodyStatus === 'ok' && www.cfId;
+  const rawHealth = raw.status === 200 && raw.bodyStatus === 'ok';
+  const executeApiEnabled = api.DisableExecuteApiEndpoint === false;
+  const ok = requireFalse && cfHealth && rawHealth && executeApiEnabled;
+  if (!ok) {
+    throw new Error('GATE3D_ROLLBACK_FATAL: ORIGIN_VERIFY_REQUIRE=false and CloudFront/raw health could not be confirmed');
+  }
+  return {
+    requireFlag,
+    cfHealth,
+    rawHealth,
+    executeApiEnabled,
+  };
+}
+
+export async function rollbackOriginVerifyRequireAndConfirm() {
+  try {
+    updateOriginVerifyRequire('false');
+    waitForLambdaReady();
+    return await confirmRollbackHealth();
+  } catch (err) {
+    const msg = String(err?.message || err);
+    if (msg.startsWith('GATE3D_ROLLBACK_FATAL')) throw err;
+    throw new Error(`GATE3D_ROLLBACK_FATAL: ${msg.slice(0, 300)}`);
+  }
 }
 
 export function waitForLambdaReady() {

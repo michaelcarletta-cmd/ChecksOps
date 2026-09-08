@@ -11,7 +11,8 @@ This package prepares require-mode enforcement. It does **not** execute it.
 - Do **not** modify CloudFront, WAF, SPA, DNS, Cognito, RDS, Moov, CheckAlt,
   provider execution, financial execution, or `64_financial_activation_grants.sql`.
 - Do **not** delete `ChecksOpsCursorApiPerimeterStep3Temp`.
-- Do **not** print or record the secret, hash, prefix, or CloudFront `HeaderValue`.
+- Do **not** print or record the secret, hash, prefix, CloudFront `HeaderValue`,
+  or `CHECKSOPS_GATE3D_ID_TOKEN`.
 
 Secret value is **not** recorded here.
 
@@ -32,14 +33,21 @@ AWS resource is in the apply path.
 | `aws/origin-verify/apply-gate3d.mjs` | Apply require-mode, then validate; automatic rollback on failure | Plan-only, exit 2 |
 | `aws/origin-verify/rollback-gate3d.mjs` | Independent rollback: `ORIGIN_VERIFY_REQUIRE=false` only | Plan-only, exit 2 |
 | `aws/origin-verify/validate-gate3d.mjs` | Post-apply CloudFront/API checks | Plan-only, exit 2 |
+| `aws/origin-verify/operator-apply-gate3d.mjs` | Privileged-operator apply if Step3Temp KMS deny blocks env write | Plan-only, exit 2 |
+| `aws/origin-verify/operator-rollback-gate3d.mjs` | Privileged-operator rollback; same single-key change | Plan-only, exit 2 |
 
-Apply requires **all three**:
+Apply requires **all four**:
 
 ```
 CHECKSOPS_APPLY_GATE3D=I_UNDERSTAND_PRODUCTION
 CHECKSOPS_GATE3D_ENFORCE=I_ACCEPT_REQUIRE_MODE
 CHECKSOPS_STEP3_EXECUTE=1
+CHECKSOPS_GATE3D_ID_TOKEN=<id token; never print or persist>
 ```
+
+`update-function-configuration` sends the current Lambda `RevisionId` so a
+concurrent env change is rejected (`lambda_revision_conflict`) instead of
+overwritten.
 
 Rollback is independently executable if CloudFront health fails after a later
 approved apply:
@@ -75,8 +83,9 @@ Required:
 
 - `https://checksops.com/prep/health` = 200
 - `https://www.checksops.com/prep/health` = 200
-- Normal application requests through CloudFront reach the prep Lambda
-  (optional `CHECKSOPS_GATE3D_ID_TOKEN` proves authenticated `/prep/data/query` 200)
+- `CHECKSOPS_GATE3D_ID_TOKEN` is required. Authenticated
+  `POST /prep/data/query` through CloudFront must be 200. Skipped is **not** a pass.
+  The token is never printed or persisted.
 - Public `POST /prep/public/signature-document` and `/prep/public/endorsement`
   through CloudFront reach prep (not API Gateway 401/403)
 - OPTIONS through CloudFront remains 204
@@ -87,7 +96,9 @@ Required:
 - Provider and financial flags remain false
 
 If any required CloudFront/API check fails, apply sets
-`ORIGIN_VERIFY_REQUIRE=false` and preserves remaining env keys.
+`ORIGIN_VERIFY_REQUIRE=false` (preserving remaining env keys), re-reads the
+Lambda, and requires that flag is `false` plus CloudFront and raw health.
+If that cannot be confirmed, the process exits `GATE3D_ROLLBACK_FATAL`.
 
 ## Residual: Step3Temp KMS deny
 
@@ -95,14 +106,20 @@ Authorizer env is currently **empty**. Writing any environment variable uses
 Lambda env encryption (`kms:Encrypt`). `ChecksOpsCursorApiPerimeterStep3Temp`
 still has `DenyKmsAndRoleChaining` (`kms:*` deny). Keep that deny.
 
-A later approved execute may therefore fail closed on
+A later approved Step3Temp execute may therefore fail closed on
 `UpdateFunctionConfiguration` with “Access to KMS is not allowed”. That is
-not an invitation to broaden Step3Temp. If KMS blocks the env write, a
-privileged operator must apply the same single-key change. Do not recreate
-the secret. Do not print `HeaderValue`.
+not an invitation to broaden Step3Temp.
+
+Use the separately guarded privileged-operator scripts in
+`aws/cutover/API_PERIMETER_STEP3_OPERATOR_GATE3D.md`. Those scripts refuse
+Step3Temp, preserve the complete existing authorizer environment, change
+only `ORIGIN_VERIFY_REQUIRE`, and use `RevisionId`. Do not recreate the
+secret. Do not print `HeaderValue` or the ID token.
 
 Rollback has the same KMS residual because it also writes
-`ORIGIN_VERIFY_REQUIRE=false`.
+`ORIGIN_VERIFY_REQUIRE=false`. After rollback, re-read the Lambda and
+require `ORIGIN_VERIFY_REQUIRE=false`, then confirm CloudFront and raw
+health. Unconfirmed rollback is fatal.
 
 ## Read-only preflight (package time)
 

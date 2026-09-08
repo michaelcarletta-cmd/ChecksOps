@@ -2,15 +2,13 @@
 /**
  * Gate 3D rollback: set ORIGIN_VERIFY_REQUIRE=false on the authorizer Lambda only.
  * Independent of apply. Preserves every other existing environment variable.
+ * Uses RevisionId. Re-reads Lambda and requires REQUIRE=false plus CloudFront/raw health.
  * Does not touch CloudFront, WAF, HTTP API routes, or DisableExecuteApiEndpoint.
  */
-import { LAMBDA_NAME, awsJson, requireGate, requireStep3Temp, shouldExecute } from './lib.mjs';
+import { LAMBDA_NAME, requireGate, requireStep3Temp, shouldExecute } from './lib.mjs';
 import {
   REQUIRE_KEY,
-  mergeOriginVerifyRequire,
-  requireFlagValue,
-  updateOriginVerifyRequire,
-  waitForLambdaReady,
+  rollbackOriginVerifyRequireAndConfirm,
 } from './gate3d-lib.mjs';
 
 if (String(process.env.CHECKSOPS_ROLLBACK_GATE || '') !== '3D') {
@@ -25,11 +23,15 @@ const plan = {
   lambdaName: LAMBDA_NAME,
   change: `${REQUIRE_KEY}=false`,
   preserveExistingEnv: true,
+  revisionIdRequired: true,
   DisableExecuteApiEndpoint: false,
   cloudfront: 'unchanged',
   waf: 'unchanged',
   spaDnsCognitoRds: 'unchanged',
   financialSql: 'not_applied',
+  confirmRequireFalse: true,
+  confirmCloudfrontAndRawHealth: true,
+  operatorPath: 'aws/origin-verify/operator-rollback-gate3d.mjs',
 };
 
 if (!shouldExecute()) {
@@ -42,19 +44,11 @@ if (!shouldExecute()) {
 }
 
 const identity = requireStep3Temp();
-const before = awsJson(['lambda', 'get-function-configuration', '--function-name', LAMBDA_NAME]);
-const merged = mergeOriginVerifyRequire(before.Environment?.Variables || {}, 'false');
-const after = updateOriginVerifyRequire('false');
-waitForLambdaReady();
-const api = awsJson(['apigatewayv2', 'get-api', '--api-id', 'kiqojucc02']);
-
+const rollback = await rollbackOriginVerifyRequireAndConfirm();
 console.log(JSON.stringify({
   ...plan,
   mode: 'executed',
   identity,
-  requireFlagBefore: requireFlagValue(before) ?? '<unset>',
-  requireFlagAfter: after.requireFlag,
-  preservedKeys: merged.preservedKeys,
-  executeApiEnabled: api.DisableExecuteApiEndpoint === false,
+  rollback,
   secretPrinted: false,
 }));
