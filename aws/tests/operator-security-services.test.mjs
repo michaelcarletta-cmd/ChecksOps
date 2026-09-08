@@ -31,6 +31,9 @@ test('operator package lists six detection-only deployments and stops at the tem
   assert.match(pack, /security-alarms\.yaml/);
   assert.match(pack, /security-cloudtrail-cwlogs\.yaml/);
   assert.match(pack, /Proposed follow-up — CloudTrail to CloudWatch Logs/);
+  assert.match(pack, /ChecksOpsCursorCloudTrailCwLogsTemp/);
+  assert.match(pack, /OPERATOR_CLOUDTRAIL_CWLOGS_ROLE\.md/);
+  assert.match(pack, /Do \*\*not\*\* modify `ChecksOpsCursorSecurityHardeningTemp`/);
   assert.match(pack, /Deployment #1 \(CloudTrail\):\*\* \*\*PASS/);
   assert.match(pack, /STOP FOR REVIEW — #1–#6 PASS/);
   assert.match(pack, /put-configuration-recorder/);

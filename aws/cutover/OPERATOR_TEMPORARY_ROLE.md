@@ -4,6 +4,10 @@
 Role CREATE_COMPLETE. Do not delete this role until a later reviewed
 cleanup. `#6` alarms are deployed.
 
+Do **not** modify this role. A separate one-purpose follow-up role for
+CloudTrail → CloudWatch Logs is **design only** (not deployed) in
+`aws/cutover/OPERATOR_CLOUDTRAIL_CWLOGS_ROLE.md`.
+
 The role exists (created `2026-09-07T17:45:35Z`) with **zero** inline
 policies and six customer-managed policies. Cursor OIDC assume
 succeeds. See `aws/cutover/OPERATOR_SECURITY_HANDOFF_2TO6.md`.

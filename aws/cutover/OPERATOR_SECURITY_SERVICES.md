@@ -479,10 +479,15 @@ See `aws/cutover/OPERATOR_SECURITY_HANDOFF_2TO6.md`.
 
 `IamSecurityChanges` is ineffective until the live trail
 `checksops-production-mgmt-events` is also delivered to CloudWatch Logs.
-Template (review only): `aws/production/security-cloudtrail-cwlogs.yaml`.
-Stack name if approved: `checksops-production-security-trail-cwlogs`.
+Template (approved, not deployed): `aws/production/security-cloudtrail-cwlogs.yaml`.
+Stack name if later opened: `checksops-production-security-trail-cwlogs`.
 Do **not** use `security-monitoring.yaml` or recreate the trail.
-`ChecksOpsCursorSecurityHardeningTemp` **cannot** perform this (explicit
+Do **not** modify `ChecksOpsCursorSecurityHardeningTemp` (explicit
 `cloudtrail:UpdateTrail` Deny; IAM CreateRole/PassRole except flow/config;
-log-group create only for VPC flow). Deploy from a privileged ops
-principal after review. Do not generate an IAM change just to test.
+log-group create only for VPC flow).
+
+Separate temporary OIDC role (design only, **not deployed**):
+`ChecksOpsCursorCloudTrailCwLogsTemp`. See
+`aws/cutover/OPERATOR_CLOUDTRAIL_CWLOGS_ROLE.md`. Do not create that role
+or deploy the follow-up until that runbook is reviewed. Do not generate
+an IAM change just to test.

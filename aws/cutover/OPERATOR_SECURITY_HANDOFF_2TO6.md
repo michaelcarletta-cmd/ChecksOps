@@ -85,5 +85,8 @@ INSUFFICIENT_DATA immediately after create is acceptable.
 ## Proposed follow-up (not deployed)
 
 CloudTrail → CloudWatch Logs for `IamSecurityChanges`. Template:
-`aws/production/security-cloudtrail-cwlogs.yaml`. Temp role **cannot**
-`UpdateTrail`. See operator package. Do not deploy until reviewed.
+`aws/production/security-cloudtrail-cwlogs.yaml`. Do **not** modify
+`ChecksOpsCursorSecurityHardeningTemp` (cannot `UpdateTrail`). Separate
+role design: `aws/cutover/OPERATOR_CLOUDTRAIL_CWLOGS_ROLE.md`
+(`ChecksOpsCursorCloudTrailCwLogsTemp`). Do not deploy the role or the
+follow-up until reviewed.
