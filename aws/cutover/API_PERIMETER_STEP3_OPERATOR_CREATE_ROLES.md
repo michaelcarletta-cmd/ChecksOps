@@ -1,23 +1,25 @@
 # Operator: create Step 3 IAM roles (not this agent)
 
-Staging cannot `iam:CreateRole` / `iam:CreatePolicy` / `iam:PassRole`.
-`ChecksOpsCursorApiPerimeterStep3Temp` does **not** exist.
-Execution role `checksops-production-origin-verify` **may already exist**
-(retained after a failed stack). Do not recreate it blindly.
+**Use the Step3Temp-only handoff.** Do not deploy the combined
+template. Do not deploy Gate 3A–3C from this file.
 
-From a privileged IAM principal (not staging, not Steps12Temp):
+Canonical package: `aws/cutover/API_PERIMETER_STEP3_OPERATOR_HANDOFF.md`
+
+Template: `aws/production/cursor-api-perimeter-step3-temp-role-only.yaml`
 
 ```
 aws cloudformation create-stack \
   --region us-east-1 \
-  --stack-name checksops-cursor-api-perimeter-step3-role \
-  --template-body file://aws/production/cursor-api-perimeter-step3-role.yaml \
+  --stack-name checksops-cursor-api-perimeter-step3-temp-role \
+  --template-body file://aws/production/cursor-api-perimeter-step3-temp-role-only.yaml \
   --parameters ParameterKey=DeployRole,ParameterValue=true \
   --capabilities CAPABILITY_NAMED_IAM
 ```
 
-Wait `CREATE_COMPLETE`. Do not broaden staging. Do not recreate deleted
-hardening roles.
+Do **not** use stack `checksops-cursor-api-perimeter-step3-role` or
+`aws/production/cursor-api-perimeter-step3-role.yaml` (that template
+also creates `checksops-production-origin-verify` and can collide
+with the leftover probe role). Inspect that leftover role read-only.
+Do not change or delete it this turn.
 
-After the stack exists, Cursor OIDC can assume
-`ChecksOpsCursorApiPerimeterStep3Temp` and run Gates 3A–3C.
+Wait `CREATE_COMPLETE`. Then STOP. Do not begin Gate 3A.

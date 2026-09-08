@@ -32,17 +32,11 @@ Live `GET https://checksops.com/prep/health` still JSON `ok`.
 
 ## Operator action (privileged IAM, not staging)
 
-1. Confirm leftover execution role `checksops-production-origin-verify`
-   (Lambda trust). If its inline policy is missing, attach secret-read +
-   log writes from `aws/production/cursor-api-perimeter-step3-role.yaml`
-   (`OriginVerifyExecutionRole`).
-2. Create **only** `ChecksOpsCursorApiPerimeterStep3Temp` + its allow/deny
-   managed policies from the same template (do not recreate the execution
-   role if it already exists). Or create the OIDC role from
-   `cursor-api-perimeter-step3-role-allow.json` /
-   `cursor-api-perimeter-step3-role-deny.json` /
-   `cursor-api-perimeter-step3-role-trust.json`.
-3. Do not broaden staging. Do not recreate deleted hardening roles.
+Follow `aws/cutover/API_PERIMETER_STEP3_OPERATOR_HANDOFF.md`.
+Create **only** `ChecksOpsCursorApiPerimeterStep3Temp` from
+`aws/production/cursor-api-perimeter-step3-temp-role-only.yaml`.
+Inspect leftover `checksops-production-origin-verify` read-only.
+Do not change or delete it. Do not deploy Gate 3A–3C from that handoff.
 
-Then Cursor can assume Step3Temp and run Gates 3A–3C observe mode.
+Do not broaden staging. Do not recreate deleted hardening roles.
 Do **not** begin Gate 3D.
