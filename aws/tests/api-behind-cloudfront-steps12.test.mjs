@@ -183,3 +183,14 @@ test('Steps 1-2 temp role is least-privilege, gated, and is not a deleted harden
   assert.ok(compactAllow.length < 6144, compactAllow.length);
   assert.ok(compactDeny.length < 6144, compactDeny.length);
 });
+
+test('Gate 0 role create is blocked on staging and does not recreate deleted roles', () => {
+  const doc = read('aws/cutover/API_PERIMETER_GATE0_ROLE_BLOCKED.md');
+  assert.match(doc, /CREATE BLOCKED/);
+  assert.match(doc, /iam:CreatePolicy/);
+  assert.match(doc, /DeployRole=true/);
+  assert.match(doc, /Did \*\*not\*\*/);
+  assert.match(doc, /ChecksOpsCursorSecurityHardeningTemp/);
+  assert.match(doc, /Do not begin origin-verify|No origin-verify secret/);
+  assert.doesNotMatch(doc, /aws cloudfront update-distribution/);
+});
