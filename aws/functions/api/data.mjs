@@ -416,7 +416,10 @@ const runSelect = async (client, body) => {
     const dir = body.order.ascending === false ? 'DESC' : 'ASC';
     order = `ORDER BY ${ident(body.order.column, 'column')} ${dir}`;
   }
-  const limit = Number.isFinite(Number(body.limit)) ? Math.min(Math.max(Number(body.limit), 1), 500) : 200;
+  // Keep the service cap aligned with the active Check Command Center queue.
+  // The UI requests 2,000 slim rows; a lower silent cap makes aggregate tab
+  // counts correct while older Review/Endorsing rows disappear from the list.
+  const limit = Number.isFinite(Number(body.limit)) ? Math.min(Math.max(Number(body.limit), 1), 2000) : 200;
   const offset = Number.isFinite(Number(body.offset)) ? Math.max(Number(body.offset), 0) : 0;
   const needed = new Set(parsed.columns[0] === '*' ? ['*'] : parsed.columns);
   if (needed.has('*') === false) {
