@@ -67,15 +67,25 @@ const existingSecret = awsJson(
 let secretArn;
 if (existingSecret.__error) {
   const payload = JSON.stringify({ current: randomBytes(32).toString('hex'), next: '' });
-  const created = awsJson([
-    'secretsmanager',
-    'create-secret',
-    '--name',
-    SECRET_NAME,
-    '--secret-string',
-    payload,
-  ]);
-  secretArn = created.ARN;
+  try {
+    const created = awsJson([
+      'secretsmanager',
+      'create-secret',
+      '--name',
+      SECRET_NAME,
+      '--secret-string',
+      payload,
+    ]);
+    secretArn = created.ARN;
+  } catch (err) {
+    const msg = String(err?.message || err);
+    if (/Access to KMS is not allowed|kms/i.test(msg)) {
+      throw new Error(
+        'create_secret_kms_denied. Step3Temp DenyKmsAndRoleChaining blocks Secrets Manager. Privileged operator must create checksops/production/cloudfront-origin-verify without printing the value, or except alias/aws/secretsmanager from the KMS deny. See aws/cutover/API_PERIMETER_STEP3_GATE3A_KMS_BLOCKED.md',
+      );
+    }
+    throw err;
+  }
 } else {
   secretArn = existingSecret.ARN;
 }

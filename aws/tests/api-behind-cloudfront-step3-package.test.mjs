@@ -16,7 +16,15 @@ const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 const run = (rel, env = {}) =>
   spawnSync(process.execPath, [path.join(ROOT, rel)], {
     encoding: 'utf8',
-    env: { ...process.env, ...env },
+    env: {
+      ...process.env,
+      CHECKSOPS_STEP3_EXECUTE: '',
+      CHECKSOPS_APPLY_GATE3A: '',
+      CHECKSOPS_APPLY_GATE3B: '',
+      CHECKSOPS_APPLY_GATE3C: '',
+      ORIGIN_VERIFY_REQUIRE: '',
+      ...env,
+    },
   });
 
 const audit = read('aws/cutover/API_PERIMETER_STEP3_CALLER_AUDIT.md');
