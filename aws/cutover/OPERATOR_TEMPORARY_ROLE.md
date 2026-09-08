@@ -4,8 +4,9 @@
 Role CREATE_COMPLETE. Do not delete this role until a later reviewed
 cleanup. `#6` alarms are deployed.
 
-Do **not** modify this role. A separate one-purpose follow-up role for
-CloudTrail → CloudWatch Logs is **design only** (not deployed) in
+Do **not** modify this role. A separate one-purpose follow-up role
+`ChecksOpsCursorCloudTrailCwLogsTemp` now exists (identity verified).
+Do **not** deploy the CloudTrail → CloudWatch Logs follow-up yet. See
 `aws/cutover/OPERATOR_CLOUDTRAIL_CWLOGS_ROLE.md`.
 
 The role exists (created `2026-09-07T17:45:35Z`) with **zero** inline

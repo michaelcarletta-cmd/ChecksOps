@@ -1,19 +1,39 @@
 # Temporary Cursor role for CloudTrail → CloudWatch Logs
 
-**STOP FOR REVIEW. Do not deploy this role. Do not deploy the follow-up.**
+**STOP FOR REVIEW.** Role identity **PASS**. Do **not** deploy the
+CloudTrail → CloudWatch Logs follow-up.
 
-`aws/production/security-cloudtrail-cwlogs.yaml` is the approved follow-up
-template. This document is the **separate one-purpose operator identity**
-Cursor would assume to apply it. It is not live.
+`aws/production/security-cloudtrail-cwlogs.yaml` remains approved and
+**not deployed**. Stack `checksops-production-security-trail-cwlogs` does
+not exist. `UpdateTrail` was **not** called.
 
 Do **not** modify `ChecksOpsCursorSecurityHardeningTemp`. That role stays
 as deployed for `#2`–`#6` and **cannot** `cloudtrail:UpdateTrail`. Do **not**
-broaden `ChecksOpsCursorCloudStaging`.
+broaden `ChecksOpsCursorCloudStaging`. Do **not** delete either temporary
+role.
 
 **Account:** `806168576068`  
 **Region:** `us-east-1`  
 **#1 CloudTrail:** PASS (`checksops-production-mgmt-events`). Preserve S3
 delivery, multi-region, management-event selectors, `DataResources=[]`.
+Still **no** CloudWatch Logs destination.
+
+## Verification 2026-09-08 — identity PASS; follow-up not started
+
+| Check | Result |
+|---|---|
+| Stack `checksops-cursor-cloudtrail-cwlogs-role` | **CREATE_COMPLETE** (created `2026-09-08T11:20:31Z`) |
+| Assume `CURSOR_AWS_CLOUDTRAIL_CWLOGS_ROLE_ARN` | **PASS** session `checksops-ct-cwlogs` |
+| `sts get-caller-identity` | `arn:aws:sts::806168576068:assumed-role/ChecksOpsCursorCloudTrailCwLogsTemp/checksops-ct-cwlogs` |
+| Attached policies | `ChecksOpsCursorCtCwLogsAllow`, `DenyFinancial`, `DenyIam` (inline **0**) |
+| `ChecksOpsCursorSecurityHardeningTemp` | **unchanged** — CreateDate `2026-09-07T17:45:35Z`, six original managed policies, inline 0, trust `user:325724407`. Live CFN stack name is `cursor-security-hardening-role` (**UPDATE_COMPLETE**, last update `2026-09-07T18:15:36Z`, not touched today). |
+| Moov / CheckAlt / Provider / Financial Lambda flags | all **false** |
+| `/financial/status` `productionExecution` | **false** |
+| `64_financial_activation_grants.sql` | **NOT_APPLIED** (`SELECT 'NOT_APPLIED'`; `/ops/readiness` `financialActivationSqlApplied=false`, `holds.ok=true`) |
+| Trail `checksops-production-mgmt-events` | logging, multi-region, validation on, management All, `DataResources=[]`, exactly one trail, S3 prefix `cloudtrail` |
+| CloudWatch Logs on trail | **none** (`CloudWatchLogsLogGroupArn` / `CloudWatchLogsRoleArn` absent; no `/aws/cloudtrail/*` log groups) |
+| Follow-up stack | **absent** (not created) |
+| `UpdateTrail` this run | **not called** |
 
 ---
 
@@ -154,39 +174,19 @@ three encodings of each **attached** policy are ≤ 6,144:
 
 ---
 
-## 5. Exact one-time AWS Console action (after review only)
+## 5. Exact one-time AWS Console action (done)
 
-**Do not do this now.** After this design is approved, a privileged IAM
-user/role that already can `iam:CreateRole` (Administrator or IAM-full +
-CloudFormation) creates **this role only**. **Not** root. **Not**
-`ChecksOpsCursorCloudStaging`. **Not** by broadening
-`ChecksOpsCursorSecurityHardeningTemp`. No access keys, passwords, OTPs,
-or secrets.
+The role stack was created **2026-09-08**. Do **not** recreate it. Do **not**
+deploy `checksops-production-security-trail-cwlogs`. Do **not** call
+`UpdateTrail` until a later message opens that follow-up.
 
-1. Console region **N. Virginia (`us-east-1`)**.
-2. **CloudFormation → Stacks → Create stack → With new resources (standard)**.
-3. **Template source:** Upload a template file → choose
-   `aws/production/cursor-cloudtrail-cwlogs-role.yaml` from this branch.
-4. **Stack name (exact):** `checksops-cursor-cloudtrail-cwlogs-role`
-5. No parameters. Next through Configure stack options (do not add extra
-   IAM policies or a stack service role).
-6. **Capabilities:** check **I acknowledge that AWS CloudFormation might
-   create IAM resources with custom names** (`CAPABILITY_NAMED_IAM`).
-7. Submit. Wait for **CREATE_COMPLETE**.
-8. Outputs: `RoleArn` =
-   `arn:aws:iam::806168576068:role/ChecksOpsCursorCloudTrailCwLogsTemp`
-
-That is the only AWS write for the **role** step. Do **not** deploy
-`checksops-production-security-trail-cwlogs` in the same change. Do **not**
-attach further policies. Do **not** edit `ChecksOpsCursorCloudStaging` or
-`ChecksOpsCursorSecurityHardeningTemp`. Do **not** touch
-`checksops-production-security-trail` or the security-logs bucket.
-
-Do **not** paste the combined permissions JSON as one inline policy.
+Historical create (already done): upload
+`aws/production/cursor-cloudtrail-cwlogs-role.yaml`, stack name
+`checksops-cursor-cloudtrail-cwlogs-role`, `CAPABILITY_NAMED_IAM`.
 
 ---
 
-## 6. How Cursor will assume it (after the role exists)
+## 6. How Cursor assumes it
 
 Existing mechanism only. No new OIDC provider. No static keys.
 
@@ -213,8 +213,9 @@ Do **not** add `sts:AssumeRole` on `ChecksOpsCursorCloudStaging` or on
 `ChecksOpsCursorSecurityHardeningTemp` to chain into this role. Do **not**
 put a human IAM user in the trust.
 
-Until the Console create in §5 is done, assume will fail with
-`AccessDenied` / `NoSuchEntity`. That is expected.
+Identity verification on 2026-09-08 assumed this session successfully.
+Do **not** use it to deploy the follow-up until a later message opens
+that work.
 
 ---
 
@@ -283,9 +284,9 @@ the four flags remain `false`.
 
 ## Holds (unchanged)
 
-- **STOP FOR REVIEW.** Do not create this role until approved. Do not
-  deploy `security-cloudtrail-cwlogs.yaml` until a later message opens
-  that follow-up.
+- **STOP FOR REVIEW.** Role identity is PASS. Do not deploy
+  `security-cloudtrail-cwlogs.yaml` until a later message opens that
+  follow-up.
 - Do not modify `ChecksOpsCursorSecurityHardeningTemp`.
 - Do not broaden `ChecksOpsCursorCloudStaging`.
 - Do not use root, access keys, passwords, OTPs, or secrets.

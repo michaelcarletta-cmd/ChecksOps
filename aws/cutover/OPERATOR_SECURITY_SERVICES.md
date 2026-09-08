@@ -486,8 +486,8 @@ Do **not** modify `ChecksOpsCursorSecurityHardeningTemp` (explicit
 `cloudtrail:UpdateTrail` Deny; IAM CreateRole/PassRole except flow/config;
 log-group create only for VPC flow).
 
-Separate temporary OIDC role (design only, **not deployed**):
-`ChecksOpsCursorCloudTrailCwLogsTemp`. See
-`aws/cutover/OPERATOR_CLOUDTRAIL_CWLOGS_ROLE.md`. Do not create that role
-or deploy the follow-up until that runbook is reviewed. Do not generate
-an IAM change just to test.
+Separate temporary OIDC role (created, identity **PASS**, follow-up
+**not** started): `ChecksOpsCursorCloudTrailCwLogsTemp`. See
+`aws/cutover/OPERATOR_CLOUDTRAIL_CWLOGS_ROLE.md`. Do **not** deploy the
+follow-up until a later message opens it. Do not generate an IAM change
+just to test.
