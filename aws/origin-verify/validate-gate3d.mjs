@@ -24,12 +24,13 @@ import {
   isGatewayUnauthorized,
   originHeaderInventory,
   probe,
+  probeAuthenticatedReadOnlyQuery,
   providerFinancialFlagsFalse,
   requireIsFalse,
   requireLiveIdToken,
 } from './gate3d-lib.mjs';
 
-export async function validateGate3d({ requireMode }) {
+export async function validateGate3d({ requireMode, idToken } = {}) {
   const cfg = awsJson(['lambda', 'get-function-configuration', '--function-name', LAMBDA_NAME]);
   const dist = awsJson(['cloudfront', 'get-distribution', '--id', DISTRIBUTION_ID]);
   const integration = awsJson([
@@ -54,7 +55,7 @@ export async function validateGate3d({ requireMode }) {
   const appThroughCf = await probe(`${CF_APEX}/prep/data/query`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ table: 'check_intake_items', limit: 1 }),
+    body: JSON.stringify({ table: 'user_roles', op: 'select', select: 'role', limit: 1 }),
   });
   const rawNoHeader = await probe(`${RAW_API}/prep/health`);
   const rawFabricated = await probe(`${RAW_API}/prep/health`, {
@@ -70,21 +71,19 @@ export async function validateGate3d({ requireMode }) {
     reachedPrep: false,
   };
   if (requireMode) {
-    const token = requireLiveIdToken();
-    const query = await probe(`${CF_APEX}/prep/data/query`, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ table: 'check_intake_items', select: 'id', limit: 1 }),
-    });
+    const provided = idToken !== undefined;
+    const token = provided
+      ? String(idToken || '').trim()
+      : requireLiveIdToken();
+    const query = await probeAuthenticatedReadOnlyQuery({ idToken: token });
     authenticated = {
       required: true,
       skipped: false,
       status: query.status,
       reachedPrep: query.reachedPrep,
       cfId: query.cfId,
+      readOnly: query.readOnly === true,
+      table: query.table,
     };
   }
 
@@ -170,7 +169,7 @@ if (isCli) {
       validates: [
         'checksops.com/prep/health=200',
         'www.checksops.com/prep/health=200',
-        'CHECKSOPS_GATE3D_ID_TOKEN required; authenticated /prep/data/query=200',
+        'authenticated read-only /prep/data/query=200 (in-process token or CHECKSOPS_GATE3D_ID_TOKEN; skipped is not a pass)',
         'CloudFront application requests reach prep Lambda',
         'CloudFront /prep/public/signature-document and /prep/public/endorsement reach prep',
         'OPTIONS=204',

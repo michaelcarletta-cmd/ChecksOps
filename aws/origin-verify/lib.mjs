@@ -119,7 +119,9 @@ export function redactCli(text) {
     .replace(/"HeaderValue"\s*:\s*"[^"]*"/g, '"HeaderValue":"[REDACTED]"')
     .replace(/"SecretString"\s*:\s*"[^"]*"/g, '"SecretString":"[REDACTED]"')
     .replace(/"current"\s*:\s*"[^"]*"/g, '"current":"[REDACTED]"')
-    .replace(/"next"\s*:\s*"[^"]*"/g, '"next":"[REDACTED]"');
+    .replace(/"next"\s*:\s*"[^"]*"/g, '"next":"[REDACTED]"')
+    .replace(/eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, '[REDACTED_JWT]')
+    .replace(/Bearer\s+[A-Za-z0-9._-]+/gi, 'Bearer [REDACTED]');
 }
 
 export function requireStep3Temp() {

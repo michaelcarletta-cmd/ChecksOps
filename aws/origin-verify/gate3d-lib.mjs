@@ -2,6 +2,8 @@
  * Gate 3D shared helpers. Read-only collectors plus env merge.
  * Never prints origin-verification secret material or CloudFront HeaderValue.
  */
+import { readFileSync } from 'node:fs';
+import { LIFECYCLE_EMAILS } from '../identity/expected-mappings.mjs';
 import {
   API_ID,
   AUTHORIZER_NAME,
@@ -389,4 +391,192 @@ export function waitForLambdaReady({
     if (i < maxAttempts - 1) sleep(intervalMs);
   }
   throw new Error('origin_verify_lambda_update_timeout');
+}
+
+/** Existing T0 lifecycle Tester only. Do not create users or reset Cognito. */
+export const T0_TESTER_EMAIL = LIFECYCLE_EMAILS.freedom;
+
+/** Read-only, non-financial authenticated probe. Never select customer financial columns. */
+export const GATE3D_READONLY_QUERY = Object.freeze({
+  table: 'user_roles',
+  op: 'select',
+  select: 'role',
+  limit: 1,
+});
+
+const FINANCIAL_QUERY_RE =
+  /check_intake|disbursement|financial|payment|deposit|payout|moov|checkalt|funds|claim-files|bank|routing/i;
+
+export function redactAuthMaterial(text) {
+  return redactCli(String(text || ''))
+    .replace(/("?(?:password|idToken|accessToken|refreshToken|authorization|CHECKSOPS_T0_TESTER_PASSWORD|CHECKSOPS_GATE3D_ID_TOKEN)"?\s*[:=]\s*)("[^"]*"|'[^']*'|\S+)/gi, '$1[REDACTED]');
+}
+
+export function assertReadOnlyNonFinancialQuery(body = {}) {
+  const table = String(body.table || '');
+  const select = String(body.select || '');
+  const op = String(body.op || 'select');
+  if (op !== 'select') throw new Error('refusing_non_select_query_probe');
+  if (FINANCIAL_QUERY_RE.test(table) || FINANCIAL_QUERY_RE.test(select)) {
+    throw new Error('refusing_financial_query_probe');
+  }
+  return true;
+}
+
+export function t0TesterCredentialPresent(env = process.env) {
+  if (String(env.CHECKSOPS_T0_TESTER_PASSWORD || '').trim()) return true;
+  if (String(env.COGNITO_PASSWORD_FILE || '').trim()) return true;
+  return false;
+}
+
+/**
+ * Load the existing T0 Tester password from the established operator sources.
+ * Never logs, writes, or returns the value to reports. Callers must keep it
+ * in process memory only.
+ */
+export function loadT0TesterPassword({
+  env = process.env,
+  readFile = readFileSync,
+} = {}) {
+  const fromEnv = String(env.CHECKSOPS_T0_TESTER_PASSWORD || '').trim();
+  if (fromEnv) return fromEnv;
+  const file = String(env.COGNITO_PASSWORD_FILE || '').trim();
+  if (!file) throw new Error('T0_TESTER_CREDENTIAL_required');
+  let parsed;
+  try {
+    parsed = JSON.parse(String(readFile(file, 'utf8') || ''));
+  } catch {
+    throw new Error('T0_TESTER_CREDENTIAL_required');
+  }
+  const pwd = String(
+    parsed?.[T0_TESTER_EMAIL] || parsed?.[String(T0_TESTER_EMAIL).toLowerCase()] || '',
+  ).trim();
+  if (!pwd) throw new Error('T0_TESTER_CREDENTIAL_required');
+  return pwd;
+}
+
+export function discardSecretRef(holder, key = 'idToken') {
+  if (!holder || typeof holder !== 'object') return null;
+  if (Object.prototype.hasOwnProperty.call(holder, key)) {
+    holder[key] = null;
+    delete holder[key];
+  }
+  return null;
+}
+
+export function publicLoginOutcome(login = {}) {
+  return {
+    ok: login.ok === true,
+    status: login.status ?? null,
+    cfId: login.cfId === true,
+    reachedPrep: login.reachedPrep === true,
+    skipped: false,
+    required: true,
+  };
+}
+
+export async function mintT0IdTokenViaCloudFrontLogin({
+  fetchImpl = fetch,
+  loadPassword = loadT0TesterPassword,
+  email = T0_TESTER_EMAIL,
+} = {}) {
+  let password = null;
+  let idToken = null;
+  try {
+    password = loadPassword();
+    const res = await fetchImpl(`${CF_APEX}/prep/auth/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    password = null;
+    const text = await res.text();
+    let json = {};
+    try { json = JSON.parse(text); } catch { json = {}; }
+    idToken = String(json?.authentication?.idToken || '').trim() || null;
+    if (json && typeof json === 'object') {
+      discardSecretRef(json.authentication, 'idToken');
+      discardSecretRef(json.authentication, 'accessToken');
+      discardSecretRef(json.authentication, 'refreshToken');
+      if (json.authentication) json.authentication = { present: Boolean(idToken) };
+    }
+    const ok = res.status === 200 && Boolean(idToken);
+    return {
+      ok,
+      status: res.status,
+      cfId: Boolean(res.headers.get?.('x-amz-cf-id')),
+      reachedPrep: reachedPrepLambda(json) || res.status === 200,
+      idToken: ok ? idToken : null,
+    };
+  } catch (err) {
+    const msg = redactAuthMaterial(String(err?.message || err));
+    throw new Error(msg.includes('T0_TESTER_CREDENTIAL_required')
+      ? 'T0_TESTER_CREDENTIAL_required'
+      : 'gate3d_login_failed');
+  } finally {
+    password = null;
+  }
+}
+
+export async function probeAuthenticatedReadOnlyQuery({
+  fetchImpl = fetch,
+  idToken,
+  url = `${CF_APEX}/prep/data/query`,
+} = {}) {
+  assertReadOnlyNonFinancialQuery(GATE3D_READONLY_QUERY);
+  const token = String(idToken || '').trim();
+  if (!token) {
+    return {
+      required: true,
+      skipped: false,
+      status: null,
+      reachedPrep: false,
+      cfId: false,
+      readOnly: true,
+      table: GATE3D_READONLY_QUERY.table,
+    };
+  }
+  const res = await fetchImpl(url, {
+    method: 'POST',
+    headers: {
+      accept: 'application/json',
+      'content-type': 'application/json',
+      authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(GATE3D_READONLY_QUERY),
+  });
+  const text = await res.text();
+  let json = {};
+  try { json = JSON.parse(text); } catch { json = {}; }
+  const publicJson = {
+    service: json.service,
+    status: json.status,
+    error: json.error,
+    holds: json.holds,
+  };
+  return {
+    required: true,
+    skipped: false,
+    status: res.status,
+    cfId: Boolean(res.headers.get?.('x-amz-cf-id')),
+    reachedPrep: reachedPrepLambda(publicJson) || reachedPrepLambda({
+      service: json.service,
+      status: json.status,
+      error: json.error,
+    }),
+    readOnly: true,
+    table: GATE3D_READONLY_QUERY.table,
+  };
+}
+
+export async function withInMemoryIdToken(mint, use) {
+  let token = null;
+  try {
+    const minted = await mint();
+    token = minted?.idToken || null;
+    if (minted && typeof minted === 'object') discardSecretRef(minted, 'idToken');
+    return await use(token);
+  } finally {
+    token = null;
+  }
 }

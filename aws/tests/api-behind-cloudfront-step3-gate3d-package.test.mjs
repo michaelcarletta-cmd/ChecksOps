@@ -81,6 +81,9 @@ test('Gate 3D design is review-only and does not execute', () => {
   assert.match(operatorDoc, /ChecksOpsCursorApiPerimeterStep3Temp/);
   assert.match(operatorDoc, /Refuse if the caller ARN/);
   assert.match(operatorDoc, /806168576068/);
+  assert.match(operatorDoc, /Do \*\*not\*\* set `CHECKSOPS_GATE3D_ID_TOKEN`/);
+  assert.match(operatorDoc, /in-process T0|process memory only/);
+  assert.match(design, /privileged-operator apply path does \*\*not\*\* take/);
   assert.match(design, /LastUpdateStatus=Successful/);
 });
 
@@ -127,7 +130,7 @@ test('apply and rollback are plan-only without explicit production and execute g
   const validatePlan = run('aws/origin-verify/validate-gate3d.mjs');
   assert.equal(validatePlan.status, 2);
   assert.match(validatePlan.stdout, /"mode":"plan"/);
-  assert.match(validatePlan.stdout, /CHECKSOPS_GATE3D_ID_TOKEN required/);
+  assert.match(validatePlan.stdout, /authenticated read-only \/prep\/data\/query=200/);
 });
 
 test('live apply refuses without ID token and never treats skipped auth as pass', () => {
@@ -263,8 +266,10 @@ test('privileged-operator path is separately gated and refuses Step3Temp', () =>
   );
   assert.match(operatorApply, /Do not broaden|doNotBroadenStep3TempKms/);
   assert.match(operatorApply, /preserveExistingEnv/);
-  assert.match(operatorApply, /requireLiveIdToken/);
+  assert.match(operatorApply, /mintT0IdTokenViaCloudFrontLogin|withInMemoryIdToken/);
+  assert.doesNotMatch(operatorApply, /requireLiveIdToken/);
   assert.doesNotMatch(operatorApply, /GetSecretValue/);
+  assert.doesNotMatch(operatorApply, /admin-set-user-password|AdminSetUserPassword|cognito-idp/);
   assert.doesNotMatch(operatorRollback, /GetSecretValue/);
 
   const planned = run('aws/origin-verify/operator-apply-gate3d.mjs');
@@ -272,7 +277,9 @@ test('privileged-operator path is separately gated and refuses Step3Temp', () =>
   assert.match(planned.stdout, /"operatorOnly":true/);
   assert.match(planned.stdout, /"doNotUseStep3Temp":true/);
   assert.match(planned.stdout, /"expectedAccount":"806168576068"/);
-  assert.match(planned.stdout, /"idTokenRequired":true/);
+  assert.match(planned.stdout, /"manualIdTokenRequired":false/);
+  assert.match(planned.stdout, /"inProcessT0Login":true/);
+  assert.doesNotMatch(planned.stdout, /"idTokenRequired":true/);
   refuteSecrets(`${planned.stdout}${planned.stderr}`);
 
   const rollbackPlan = run('aws/origin-verify/operator-rollback-gate3d.mjs');
@@ -281,13 +288,14 @@ test('privileged-operator path is separately gated and refuses Step3Temp', () =>
   assert.match(rollbackPlan.stdout, /"confirmRequireFalse":true/);
   refuteSecrets(`${rollbackPlan.stdout}${rollbackPlan.stderr}`);
 
-  const missingToken = run('aws/origin-verify/operator-apply-gate3d.mjs', {
+  const missingCredential = run('aws/origin-verify/operator-apply-gate3d.mjs', {
     CHECKSOPS_OPERATOR_GATE3D: 'I_UNDERSTAND_PRODUCTION',
     CHECKSOPS_OPERATOR_EXECUTE: '1',
   });
-  assert.equal(missingToken.status, 2);
-  assert.match(missingToken.stderr, /CHECKSOPS_GATE3D_ID_TOKEN_required/);
-  refuteSecrets(`${missingToken.stdout}${missingToken.stderr}`);
+  assert.equal(missingCredential.status, 2);
+  assert.match(missingCredential.stderr, /T0_TESTER_CREDENTIAL_required/);
+  assert.doesNotMatch(missingCredential.stderr, /CHECKSOPS_GATE3D_ID_TOKEN_required/);
+  refuteSecrets(`${missingCredential.stdout}${missingCredential.stderr}`);
 });
 
 test('mergeOriginVerifyRequire preserves existing keys and only flips REQUIRE', () => {

@@ -11,19 +11,32 @@ environment: preserve every existing variable and flip `ORIGIN_VERIFY_REQUIRE`.
 Do not modify CloudFront, WAF, SPA, DNS, Cognito, RDS, Moov, CheckAlt,
 provider/financial flags, or `64_financial_activation_grants.sql`.
 Do not disable execute-api. Do not delete Step3Temp.
-Do not print the secret, hash, prefix, HeaderValue, or `CHECKSOPS_GATE3D_ID_TOKEN`.
+Do not print the secret, hash, prefix, HeaderValue, password, or ID token.
+Do not create Cognito users, reset credentials, or broaden permissions.
 
 ## Apply
 
 ```
 CHECKSOPS_OPERATOR_GATE3D=I_UNDERSTAND_PRODUCTION
 CHECKSOPS_OPERATOR_EXECUTE=1
-CHECKSOPS_GATE3D_ID_TOKEN=<id token; never print>
 node aws/origin-verify/operator-apply-gate3d.mjs
 ```
 
-Uses Lambda `RevisionId`. Validates authenticated `/prep/data/query` (token
-required; skipped is not a pass). Automatic rollback on CloudFront/API failure.
+Uses Lambda `RevisionId`. After `ORIGIN_VERIFY_REQUIRE=true`, the script logs
+in the existing T0 lifecycle Tester through
+`POST https://checksops.com/prep/auth/login`, holds the Cognito ID token in
+process memory only, uses it once for a read-only
+`POST https://checksops.com/prep/data/query` (`user_roles.role`, limit 1),
+then discards the token. Skipped login or skipped authenticated query is
+**not** a pass.
+
+Do **not** set `CHECKSOPS_GATE3D_ID_TOKEN`. Do not paste a browser token.
+The Tester password is read from the existing operator sources
+(`CHECKSOPS_T0_TESTER_PASSWORD` or explicit `COGNITO_PASSWORD_FILE`) and is
+never printed, persisted, or placed in command arguments.
+
+Automatic privileged rollback (`ORIGIN_VERIFY_REQUIRE=false`) runs if login,
+authenticated query, health, or any Gate 3D validation fails.
 
 ## Rollback
 
