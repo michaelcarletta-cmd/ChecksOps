@@ -297,11 +297,15 @@ message opens those deployments. Use the reviewed templates below as-is.
 
 - Stack: `checksops-production-security-sns`
 - Region: `us-east-1`
-- Parameters: `AlertEmail` = `security@checksops.com`
+- Parameters: `AlertEmail` = `security@checksops.com`; `CreateEmailSubscription` = `true`
 - IAM capability: **No**
 - Resources: topic `checksops-production-security-alerts` + email subscription
 - Cost: email notifies; first 1,000 SNS email notifications/month are typically free, then about $2.00 per 100,000
 - PASS: `aws sns get-topic-attributes --topic-arn arn:aws:sns:us-east-1:806168576068:checksops-production-security-alerts` and subscription `PendingConfirmation` → operator confirms mail → `Confirmed`
+- Stale pending repair (CloudFormation only; do not `sns unsubscribe` unless CFN cannot replace):
+  1. Change set with `CreateEmailSubscription=false` — must **Remove** only `AlertSubscription`
+  2. Change set with `CreateEmailSubscription=true` — must **Add** only `AlertSubscription`
+  Topic ARN/name, protocol `email`, and endpoint stay `security@checksops.com`. A single same-property update or `sns subscribe` does **not** send a new confirmation.
 - Rollback: `delete-stack checksops-production-security-sns`
 - Then pass `AlertTopicArn` into #6 (not into `security-monitoring.yaml`)
 

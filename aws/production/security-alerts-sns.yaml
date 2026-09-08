@@ -4,11 +4,26 @@ Description: >
   The Cloud Agent role cannot create SNS (sns:GetTopicAttributes denied).
   Deploy from a privileged ops role, confirm the email, then update
   checksops-production-security-monitoring with AlertTopicArn.
+  CreateEmailSubscription=false then true recreates a stale
+  PendingConfirmation email subscription. SNS Subscribe is idempotent
+  and does not resend. Topic ARN/name stay fixed.
 
 Parameters:
   AlertEmail:
     Type: String
     Default: security@checksops.com
+  CreateEmailSubscription:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: >
+      Set false then true to replace a stale pending email subscription
+      without replacing the topic.
+
+Conditions:
+  ShouldCreateEmailSubscription: !Equals [!Ref CreateEmailSubscription, 'true']
 
 Resources:
   AlertTopic:
@@ -19,6 +34,7 @@ Resources:
 
   AlertSubscription:
     Type: AWS::SNS::Subscription
+    Condition: ShouldCreateEmailSubscription
     Properties:
       TopicArn: !Ref AlertTopic
       Protocol: email

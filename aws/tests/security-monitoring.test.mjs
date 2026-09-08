@@ -35,6 +35,19 @@ test('security monitoring template is detection-only and does not block traffic'
   assert.match(alarms, /AWS::CloudWatch::Alarm/);
   assert.match(sns, /AWS::SNS::Topic/);
   assert.match(sns, /checksops-production-security-alerts/);
+  assert.match(sns, /CreateEmailSubscription/);
+  assert.match(sns, /ShouldCreateEmailSubscription/);
+  assert.match(
+    sns,
+    /AlertTopic:\s*\n\s*Type: AWS::SNS::Topic\s*\n\s*Properties:/,
+  );
+  assert.match(
+    sns,
+    /AlertSubscription:\s*\n\s*Type: AWS::SNS::Subscription\s*\n\s*Condition: ShouldCreateEmailSubscription/,
+  );
+  assert.match(sns, /Protocol: email/);
+  assert.match(sns, /Endpoint: !Ref AlertEmail/);
+  assert.match(sns, /Default: security@checksops\.com/);
   assert.doesNotMatch(yaml, /AWS_MOOV_ENABLED|AWS_CHECKALT_ENABLED|AWS_FINANCIAL_PERMISSIONS_ACTIVATED/);
   assert.doesNotMatch(yaml, /64_financial_activation/);
   assert.doesNotMatch(yaml, /Action:\s*\n\s*Block:/);

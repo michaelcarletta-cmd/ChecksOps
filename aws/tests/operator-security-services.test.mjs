@@ -21,6 +21,8 @@ test('operator package lists six detection-only deployments and stops at the tem
   assert.match(pack, /PASS verification/);
   assert.match(pack, /Rollback/);
   assert.match(pack, /security-alerts-sns\.yaml/);
+  assert.match(pack, /CreateEmailSubscription=false/);
+  assert.match(pack, /CreateEmailSubscription=true/);
   assert.match(pack, /security-config\.yaml/);
   assert.match(pack, /security-posture-services\.yaml/);
   assert.match(pack, /security-vpc-flow\.yaml/);
