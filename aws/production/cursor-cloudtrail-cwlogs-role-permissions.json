@@ -1,0 +1,417 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CfnReadAccountStacks",
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:ListStacks",
+        "cloudformation:DescribeStacks",
+        "cloudformation:DescribeStackEvents",
+        "cloudformation:DescribeStackResources",
+        "cloudformation:ListStackResources",
+        "cloudformation:GetTemplate",
+        "cloudformation:GetTemplateSummary",
+        "cloudformation:ValidateTemplate"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "CfnMutateOnlyTrailCwLogsStack",
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:CreateStack",
+        "cloudformation:UpdateStack",
+        "cloudformation:DeleteStack",
+        "cloudformation:CreateChangeSet",
+        "cloudformation:DescribeChangeSet",
+        "cloudformation:ExecuteChangeSet",
+        "cloudformation:DeleteChangeSet",
+        "cloudformation:GetTemplate",
+        "cloudformation:GetTemplateSummary",
+        "cloudformation:DescribeStackEvents",
+        "cloudformation:DescribeStackResources",
+        "cloudformation:ListStackResources"
+      ],
+      "Resource": [
+        "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-security-trail-cwlogs/*",
+        "arn:aws:cloudformation:us-east-1:806168576068:changeSet/*"
+      ]
+    },
+    {
+      "Sid": "ManageCloudTrailCwLogsRole",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:GetRole",
+        "iam:DeleteRole",
+        "iam:UpdateRole",
+        "iam:UpdateAssumeRolePolicy",
+        "iam:PutRolePolicy",
+        "iam:GetRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies",
+        "iam:TagRole"
+      ],
+      "Resource": "arn:aws:iam::806168576068:role/checksops-production-cloudtrail-cwlogs"
+    },
+    {
+      "Sid": "PassCloudTrailCwLogsRole",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::806168576068:role/checksops-production-cloudtrail-cwlogs",
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "cloudtrail.amazonaws.com"
+        }
+      }
+    },
+    {
+      "Sid": "ManageCloudTrailLogGroup",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:DeleteLogGroup",
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams",
+        "logs:PutRetentionPolicy",
+        "logs:DeleteRetentionPolicy",
+        "logs:PutMetricFilter",
+        "logs:DeleteMetricFilter",
+        "logs:DescribeMetricFilters",
+        "logs:ListTagsForResource",
+        "logs:TagResource",
+        "logs:UntagResource"
+      ],
+      "Resource": [
+        "arn:aws:logs:us-east-1:806168576068:log-group:/aws/cloudtrail/checksops-production-mgmt-events",
+        "arn:aws:logs:us-east-1:806168576068:log-group:/aws/cloudtrail/checksops-production-mgmt-events:*"
+      ]
+    },
+    {
+      "Sid": "DescribeLogGroupsAccount",
+      "Effect": "Allow",
+      "Action": "logs:DescribeLogGroups",
+      "Resource": "*"
+    },
+    {
+      "Sid": "CloudTrailListDescribeAccount",
+      "Effect": "Allow",
+      "Action": [
+        "cloudtrail:DescribeTrails",
+        "cloudtrail:ListTrails"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "CloudTrailReadExistingTrail",
+      "Effect": "Allow",
+      "Action": [
+        "cloudtrail:GetTrail",
+        "cloudtrail:GetTrailStatus",
+        "cloudtrail:GetEventSelectors"
+      ],
+      "Resource": "arn:aws:cloudtrail:us-east-1:806168576068:trail/checksops-production-mgmt-events"
+    },
+    {
+      "Sid": "UpdateTrailCwLogsOnly",
+      "Effect": "Allow",
+      "Action": "cloudtrail:UpdateTrail",
+      "Resource": "arn:aws:cloudtrail:us-east-1:806168576068:trail/checksops-production-mgmt-events"
+    },
+    {
+      "Sid": "ReadOnlySecurityLogsBucket",
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucket",
+        "s3:GetBucketLocation",
+        "s3:GetBucketPolicy",
+        "s3:GetBucketPolicyStatus",
+        "s3:GetBucketPublicAccessBlock",
+        "s3:GetEncryptionConfiguration",
+        "s3:GetLifecycleConfiguration"
+      ],
+      "Resource": "arn:aws:s3:::checksops-production-security-logs-806168576068"
+    },
+    {
+      "Sid": "ReadOnlyRdsHardeningState",
+      "Effect": "Allow",
+      "Action": [
+        "rds:DescribeDBInstances",
+        "rds:DescribeDBInstanceAutomatedBackups"
+      ],
+      "Resource": "arn:aws:rds:us-east-1:806168576068:db:checksops-staging"
+    },
+    {
+      "Sid": "ReadOnlyLambdaOffFlags",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:GetFunction",
+        "lambda:GetFunctionConfiguration",
+        "lambda:ListTags"
+      ],
+      "Resource": "arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api"
+    },
+    {
+      "Sid": "ReadExistingDetectionState",
+      "Effect": "Allow",
+      "Action": [
+        "config:DescribeConfigurationRecorders",
+        "config:DescribeConfigurationRecorderStatus",
+        "config:DescribeDeliveryChannels",
+        "config:DescribeDeliveryChannelStatus",
+        "guardduty:ListDetectors",
+        "guardduty:GetDetector",
+        "securityhub:DescribeHub",
+        "ec2:DescribeFlowLogs",
+        "cloudwatch:DescribeAlarms",
+        "cloudwatch:DescribeAlarmsForMetric"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ReadSnsAlertSubscriptions",
+      "Effect": "Allow",
+      "Action": [
+        "sns:GetTopicAttributes",
+        "sns:ListSubscriptionsByTopic"
+      ],
+      "Resource": "arn:aws:sns:us-east-1:806168576068:checksops-production-security-alerts"
+    },
+    {
+      "Sid": "ReadOwnIdentity",
+      "Effect": "Allow",
+      "Action": "sts:GetCallerIdentity",
+      "Resource": "*"
+    },
+    {
+      "Sid": "ReadOwnRole",
+      "Effect": "Allow",
+      "Action": [
+        "iam:GetRole",
+        "iam:GetRolePolicy",
+        "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies",
+        "iam:ListRoleTags"
+      ],
+      "Resource": "arn:aws:iam::806168576068:role/ChecksOpsCursorCloudTrailCwLogsTemp"
+    },
+    {
+      "Sid": "DenyFinancialAndAppMutation",
+      "Effect": "Deny",
+      "Action": [
+        "lambda:UpdateFunctionConfiguration",
+        "lambda:UpdateFunctionCode",
+        "lambda:PublishVersion",
+        "lambda:CreateFunction",
+        "lambda:DeleteFunction",
+        "lambda:AddPermission",
+        "lambda:RemovePermission",
+        "lambda:InvokeFunction",
+        "rds:ModifyDBInstance",
+        "rds:DeleteDBInstance",
+        "rds:CreateDBInstance",
+        "rds:RebootDBInstance",
+        "rds:StopDBInstance",
+        "rds:StartDBInstance",
+        "rds:RestoreDBInstanceFromDBSnapshot",
+        "rds:RestoreDBInstanceToPointInTime",
+        "rds-data:ExecuteStatement",
+        "rds-data:BatchExecuteStatement",
+        "rds-data:BeginTransaction",
+        "rds-data:CommitTransaction",
+        "rds-data:RollbackTransaction",
+        "cognito-idp:UpdateUserPool",
+        "cognito-idp:SetUserPoolMfaConfig",
+        "cognito-idp:UpdateUserPoolClient",
+        "cognito-idp:CreateUserPoolClient",
+        "cognito-idp:AdminSetUserPassword",
+        "wafv2:*",
+        "cloudfront:*",
+        "route53:ChangeResourceRecordSets",
+        "route53:CreateHostedZone",
+        "route53:DeleteHostedZone",
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:BatchGetSecretValue",
+        "secretsmanager:PutSecretValue",
+        "secretsmanager:CreateSecret",
+        "secretsmanager:DeleteSecret",
+        "secretsmanager:UpdateSecret",
+        "secretsmanager:DescribeSecret",
+        "secretsmanager:ListSecrets",
+        "ssm:PutParameter",
+        "ssm:SendCommand",
+        "ssm:StartSession"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenySecurityLogsBucketMutation",
+      "Effect": "Deny",
+      "Action": [
+        "s3:DeleteBucket",
+        "s3:PutBucketPolicy",
+        "s3:DeleteBucketPolicy",
+        "s3:PutBucketAcl",
+        "s3:PutBucketPublicAccessBlock",
+        "s3:PutEncryptionConfiguration",
+        "s3:PutLifecycleConfiguration",
+        "s3:PutBucketVersioning",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:DeleteObjectVersion"
+      ],
+      "Resource": [
+        "arn:aws:s3:::checksops-production-security-logs-806168576068",
+        "arn:aws:s3:::checksops-production-security-logs-806168576068/*"
+      ]
+    },
+    {
+      "Sid": "DenyCloudTrailCreateDeleteSelectors",
+      "Effect": "Deny",
+      "Action": [
+        "cloudtrail:CreateTrail",
+        "cloudtrail:DeleteTrail",
+        "cloudtrail:StartLogging",
+        "cloudtrail:StopLogging",
+        "cloudtrail:PutEventSelectors",
+        "cloudtrail:PutInsightSelectors"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyUpdateTrailExceptMgmtEvents",
+      "Effect": "Deny",
+      "Action": "cloudtrail:UpdateTrail",
+      "NotResource": "arn:aws:cloudtrail:us-east-1:806168576068:trail/checksops-production-mgmt-events"
+    },
+    {
+      "Sid": "DenyUnrelatedIamMutation",
+      "Effect": "Deny",
+      "Action": [
+        "iam:CreateUser",
+        "iam:DeleteUser",
+        "iam:CreateAccessKey",
+        "iam:CreateLoginProfile",
+        "iam:UpdateLoginProfile",
+        "iam:ChangePassword",
+        "iam:CreatePolicy",
+        "iam:CreatePolicyVersion",
+        "iam:DeletePolicy",
+        "iam:AttachUserPolicy",
+        "iam:PutUserPolicy",
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:PutRolePolicy",
+        "iam:UpdateAssumeRolePolicy",
+        "iam:PassRole",
+        "iam:TagRole",
+        "iam:UntagRole"
+      ],
+      "NotResource": "arn:aws:iam::806168576068:role/checksops-production-cloudtrail-cwlogs"
+    },
+    {
+      "Sid": "DenyAttachManagedPolicies",
+      "Effect": "Deny",
+      "Action": [
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:AttachUserPolicy",
+        "iam:DetachUserPolicy",
+        "iam:AttachGroupPolicy",
+        "iam:DetachGroupPolicy"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyPassRoleExceptCloudTrailService",
+      "Effect": "Deny",
+      "Action": "iam:PassRole",
+      "Resource": "*",
+      "Condition": {
+        "StringNotEquals": {
+          "iam:PassedToService": "cloudtrail.amazonaws.com"
+        }
+      }
+    },
+    {
+      "Sid": "DenyProtectedCloudFormationStacks",
+      "Effect": "Deny",
+      "Action": [
+        "cloudformation:CreateStack",
+        "cloudformation:UpdateStack",
+        "cloudformation:DeleteStack",
+        "cloudformation:CreateChangeSet",
+        "cloudformation:ExecuteChangeSet",
+        "cloudformation:ContinueUpdateRollback"
+      ],
+      "Resource": [
+        "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-security-trail/*",
+        "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-cloudtrail/*",
+        "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-prep-api/*",
+        "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-spa/*",
+        "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-http-api/*",
+        "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-cursor-security-hardening-role/*",
+        "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-cursor-cloudtrail-cwlogs-role/*",
+        "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-security-sns/*",
+        "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-security-config/*",
+        "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-security-posture/*",
+        "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-security-flow/*",
+        "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-security-alarms/*"
+      ]
+    },
+    {
+      "Sid": "DenyProtectedLogGroups",
+      "Effect": "Deny",
+      "Action": [
+        "logs:DeleteLogGroup",
+        "logs:DeleteMetricFilter",
+        "logs:PutMetricFilter",
+        "logs:DeleteRetentionPolicy",
+        "logs:PutRetentionPolicy",
+        "logs:CreateLogGroup"
+      ],
+      "Resource": [
+        "arn:aws:logs:us-east-1:806168576068:log-group:/aws/lambda/checksops-production-prep-api",
+        "arn:aws:logs:us-east-1:806168576068:log-group:/aws/lambda/checksops-production-prep-api:*",
+        "arn:aws:logs:us-east-1:806168576068:log-group:/aws/apigateway/checksops-production-prep-http",
+        "arn:aws:logs:us-east-1:806168576068:log-group:/aws/apigateway/checksops-production-prep-http:*",
+        "arn:aws:logs:us-east-1:806168576068:log-group:/aws/vpc/checksops-production-flow",
+        "arn:aws:logs:us-east-1:806168576068:log-group:/aws/vpc/checksops-production-flow:*"
+      ]
+    },
+    {
+      "Sid": "DenyRoleChaining",
+      "Effect": "Deny",
+      "Action": [
+        "sts:AssumeRole",
+        "sts:AssumeRoleWithSAML",
+        "sts:AssumeRoot"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyOtherDetectionMutation",
+      "Effect": "Deny",
+      "Action": [
+        "sns:CreateTopic",
+        "sns:DeleteTopic",
+        "sns:Subscribe",
+        "cloudwatch:PutMetricAlarm",
+        "cloudwatch:DeleteAlarms",
+        "config:PutConfigurationRecorder",
+        "config:DeleteConfigurationRecorder",
+        "config:PutDeliveryChannel",
+        "guardduty:CreateDetector",
+        "guardduty:DeleteDetector",
+        "guardduty:UpdateDetector",
+        "securityhub:EnableSecurityHub",
+        "securityhub:DisableSecurityHub",
+        "ec2:CreateFlowLogs",
+        "ec2:DeleteFlowLogs"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

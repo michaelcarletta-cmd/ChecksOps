@@ -1,0 +1,47 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Desired-state reference for AWS Config #3. Do not deploy this file as a
+  single CloudFormation stack. Current Config APIs deadlock in CFN:
+  PutDeliveryChannel requires a recorder, and the CFN recorder resource
+  tries to StartConfigurationRecorder which requires a delivery channel.
+  Deploy with CLI put-configuration-recorder, put-delivery-channel, then
+  start-configuration-recorder (same class of fix as CloudTrail #1).
+  Names: checksops-production-config-items + role
+  checksops-production-config-items-recorder. Existing bucket prefix config/.
+  Detection only. Do not modify the trail stack.
+
+Parameters:
+  SecurityLogsBucketName:
+    Type: String
+    Default: checksops-production-security-logs-806168576068
+  ConfigRoleArn:
+    Type: String
+    Default: arn:aws:iam::806168576068:role/checksops-production-config-items-recorder
+
+Resources:
+  ConfigRecorder:
+    Type: AWS::Config::ConfigurationRecorder
+    Properties:
+      Name: checksops-production-config-items
+      RoleARN: !Ref ConfigRoleArn
+      RecordingGroup:
+        AllSupported: true
+        IncludeGlobalResourceTypes: true
+
+  ConfigDeliveryChannel:
+    Type: AWS::Config::DeliveryChannel
+    DependsOn: ConfigRecorder
+    Properties:
+      Name: checksops-production-config-items
+      S3BucketName: !Ref SecurityLogsBucketName
+      S3KeyPrefix: config
+
+Outputs:
+  ConfigRecorderName:
+    Value: !Ref ConfigRecorder
+  ConfigDeliveryChannelName:
+    Value: !Ref ConfigDeliveryChannel
+  ConfigRoleArn:
+    Value: !Ref ConfigRoleArn
+  DetectionOnly:
+    Value: 'true'

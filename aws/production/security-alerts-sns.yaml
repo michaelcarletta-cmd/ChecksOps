@@ -1,0 +1,59 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Operator-only SNS topic for Batch 5 security alarms.
+  The Cloud Agent role cannot create SNS (sns:GetTopicAttributes denied).
+  Deploy from a privileged ops role, confirm the email, then update
+  checksops-production-security-monitoring with AlertTopicArn.
+  CreateEmailSubscription=false then true recreates a stale
+  PendingConfirmation email subscription. SNS Subscribe is idempotent
+  and does not resend. Topic ARN/name stay fixed.
+
+Parameters:
+  AlertEmail:
+    Type: String
+    Default: security@checksops.com
+  CreateEmailSubscription:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: >
+      Set false then true to replace a stale pending email subscription
+      without replacing the topic.
+  TemporaryAlertEmail:
+    Type: String
+    Default: support@checksops.com
+    Description: >
+      Extra email subscription so alarms can be confirmed without
+      waiting for a stale security@ pending subscription to expire.
+      Does not replace AlertEmail.
+
+Conditions:
+  ShouldCreateEmailSubscription: !Equals [!Ref CreateEmailSubscription, 'true']
+
+Resources:
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: checksops-production-security-alerts
+      DisplayName: ChecksOps production security alerts
+
+  AlertSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: ShouldCreateEmailSubscription
+    Properties:
+      TopicArn: !Ref AlertTopic
+      Protocol: email
+      Endpoint: !Ref AlertEmail
+
+  TemporaryAlertSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref AlertTopic
+      Protocol: email
+      Endpoint: !Ref TemporaryAlertEmail
+
+Outputs:
+  AlertTopicArn:
+    Value: !Ref AlertTopic

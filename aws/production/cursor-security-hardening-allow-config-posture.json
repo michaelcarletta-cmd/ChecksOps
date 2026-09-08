@@ -1,0 +1,95 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ConfigRecorderNoNewRole",
+      "Effect": "Allow",
+      "Action": [
+        "config:PutDeliveryChannel",
+        "config:DeleteDeliveryChannel",
+        "config:DescribeDeliveryChannels",
+        "config:DescribeDeliveryChannelStatus",
+        "config:PutConfigurationRecorder",
+        "config:DeleteConfigurationRecorder",
+        "config:DescribeConfigurationRecorders",
+        "config:DescribeConfigurationRecorderStatus",
+        "config:StartConfigurationRecorder",
+        "config:StopConfigurationRecorder",
+        "config:GetStatus"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "PassExistingConfigRecorderRole",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::806168576068:role/checksops-production-config-items-recorder",
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "config.amazonaws.com"
+        }
+      }
+    },
+    {
+      "Sid": "ReadConfigRecorderRole",
+      "Effect": "Allow",
+      "Action": [
+        "iam:GetRole",
+        "iam:GetRolePolicy",
+        "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies"
+      ],
+      "Resource": "arn:aws:iam::806168576068:role/checksops-production-config-items-recorder"
+    },
+    {
+      "Sid": "GuardDutyDetector",
+      "Effect": "Allow",
+      "Action": [
+        "guardduty:CreateDetector",
+        "guardduty:DeleteDetector",
+        "guardduty:GetDetector",
+        "guardduty:ListDetectors",
+        "guardduty:UpdateDetector",
+        "guardduty:TagResource",
+        "guardduty:UntagResource",
+        "guardduty:ListTagsForResource",
+        "guardduty:ListFindings"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "SecurityHubHubAndStandards",
+      "Effect": "Allow",
+      "Action": [
+        "securityhub:EnableSecurityHub",
+        "securityhub:DisableSecurityHub",
+        "securityhub:DescribeHub",
+        "securityhub:UpdateSecurityHubConfiguration",
+        "securityhub:GetEnabledStandards",
+        "securityhub:DescribeStandards",
+        "securityhub:BatchEnableStandards",
+        "securityhub:BatchDisableStandards",
+        "securityhub:TagResource",
+        "securityhub:UntagResource",
+        "securityhub:ListTagsForResource",
+        "securityhub:GetFindings"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "CreateDetectionServiceLinkedRoles",
+      "Effect": "Allow",
+      "Action": "iam:CreateServiceLinkedRole",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "iam:AWSServiceName": [
+            "guardduty.amazonaws.com",
+            "securityhub.amazonaws.com",
+            "config.amazonaws.com"
+          ]
+        }
+      }
+    }
+  ]
+}

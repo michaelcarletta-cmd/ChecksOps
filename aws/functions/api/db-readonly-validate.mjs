@@ -1,5 +1,6 @@
 import pg from 'pg';
 import { loadDatabaseCredentials } from './secrets.mjs';
+import { evaluateForceRls, summarizeRlsMatrix, TENANT_COLUMNS } from './rls-audit.mjs';
 import {
   buildClientConfig,
   classifyDbError,
@@ -50,7 +51,7 @@ export const EXPECTED_ROW_COUNTS = {
 
 export const EXPECTED_DATABASE = 'checksops';
 export const EXPECTED_SKIPPED_AUTH_USERS_FKS = 47;
-export const EXPECTED_PUBLIC_TRIGGERS = 164;
+export const EXPECTED_PUBLIC_TRIGGERS = 165;
 
 const issue = (kind, severity, message, extra = {}) => ({
   kind,
@@ -223,8 +224,10 @@ export const validateReadonlyCoreTables = async ({
         if (row.canInsert || row.canUpdate || row.canDelete) {
           result.issues.push(issue(
             'permission',
-            'error',
-            `write privilege present on public.${row.table}`,
+            row.rlsEnabled ? 'expected' : 'error',
+            row.rlsEnabled
+              ? `write privilege present on public.${row.table} under RLS`
+              : `write privilege present on public.${row.table}`,
             { table: row.table, canInsert: row.canInsert, canUpdate: row.canUpdate, canDelete: row.canDelete },
           ));
         }
@@ -501,6 +504,50 @@ export const validateReadonlyCoreTables = async ({
     }
 
     result.catalog = catalog;
+    try {
+      const roles = (await client.query(`SELECT rolname, rolsuper, rolbypassrls
+        FROM pg_roles
+        WHERE rolname IN ('checksops', 'checksops_admin', 'postgres', 'rdsadmin')
+        ORDER BY rolname`)).rows;
+      const tables = (await client.query(`SELECT c.relname AS table,
+        pg_get_userbyid(c.relowner) AS owner,
+        c.relrowsecurity AS rls_enabled,
+        c.relforcerowsecurity AS rls_forced,
+        EXISTS (
+          SELECT 1 FROM information_schema.columns col
+          WHERE col.table_schema = 'public'
+            AND col.table_name = c.relname
+            AND col.column_name = ANY($1::text[])
+        ) AS has_tenant_column
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public' AND c.relkind = 'r'
+        ORDER BY c.relname`, [TENANT_COLUMNS])).rows;
+      const policies = (await client.query(`SELECT tablename, cmd, count(*)::int AS n
+        FROM pg_policies WHERE schemaname = 'public'
+        GROUP BY tablename, cmd ORDER BY tablename, cmd`)).rows;
+      const summary = summarizeRlsMatrix(tables, policies);
+      result.rlsAudit = {
+        roles: roles.map((row) => ({
+          rolname: row.rolname,
+          rolsuper: row.rolsuper === true,
+          rolbypassrls: row.rolbypassrls === true,
+        })),
+        force: evaluateForceRls({ roles, tables }),
+        summary: {
+          tableCount: summary.tableCount,
+          rlsEnabled: summary.rlsEnabled,
+          rlsForced: summary.rlsForced,
+          tenantSensitive: summary.tenantSensitive,
+          missingRls: summary.missingRls,
+          missingSelect: summary.missingSelect,
+          unforcedEnabled: summary.unforcedEnabled,
+        },
+        matrix: summary.matrix,
+      };
+    } catch (error) {
+      result.rlsAudit = { error: sanitizePublicError(error) };
+    }
     result.ok = result.issues.every((item) => item.severity !== 'error')
       && result.tables.length === CORE_TABLES.length
       && result.tables.every((row) => row.present && row.countMatches && !row.error);

@@ -1,7 +1,10 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  Regional WAFv2 for the production HTTP API. Same COUNT managed rules and
-  conservative path rate limits as the CloudFront ACL. Associates to the prep stage.
+  DO NOT DEPLOY. HTTP API kiqojucc02 cannot use AWS::WAFv2::WebACLAssociation
+  (RESOURCE_ARN invalid on /apis/{id}/stages/{stage}; WAF associates REST
+  /restapis only). Do not change /apis to /restapis. Do not convert this API
+  to REST. See aws/cutover/SECURITY_HARDENING_BATCH2_API_PERIMETER.md.
+  Kept as a record of the reviewed COUNT/BLOCK rule intent only.
 
 Parameters:
   ApiId:

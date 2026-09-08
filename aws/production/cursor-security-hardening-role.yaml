@@ -1,0 +1,680 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  TEMPORARY Cursor Cloud OIDC role for Security Hardening deployments #2-#6.
+  Customer-managed policies (not role inline) because IAM enforces a 10240-byte
+  AGGREGATE inline-policy quota per role. Each managed policy is under the
+  6144-character customer-managed limit. Same reviewed Allow/Deny statements.
+  Live trust: api.cursor.com / aud sts.amazonaws.com / sub user:325724407.
+  Role has zero inline policies. Stack owns the role and all six managed
+  policies so delete-stack removes them together.
+  Does not broaden ChecksOpsCursorCloudStaging. Do not deploy until reviewed.
+  Do not start #2-#6 from this template create.
+
+Resources:
+  AllowCfnSnsPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: ChecksOpsCursorSecHardAllowCfnSns
+      Description: TEMPORARY allow CFN stacks #2-#6 and SNS alerts. Delete with stack.
+      PolicyDocument: {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "CfnReadAccountStacks",
+              "Effect": "Allow",
+              "Action": [
+                "cloudformation:ListStacks",
+                "cloudformation:DescribeStacks",
+                "cloudformation:DescribeStackEvents",
+                "cloudformation:DescribeStackResources",
+                "cloudformation:DescribeStackResource",
+                "cloudformation:ListStackResources",
+                "cloudformation:GetTemplate",
+                "cloudformation:GetTemplateSummary",
+                "cloudformation:ValidateTemplate"
+              ],
+              "Resource": "*"
+            },
+            {
+              "Sid": "CfnMutateOnlyDeployments2to6",
+              "Effect": "Allow",
+              "Action": [
+                "cloudformation:CreateStack",
+                "cloudformation:UpdateStack",
+                "cloudformation:DeleteStack",
+                "cloudformation:CreateChangeSet",
+                "cloudformation:DescribeChangeSet",
+                "cloudformation:ExecuteChangeSet",
+                "cloudformation:DeleteChangeSet",
+                "cloudformation:GetTemplate",
+                "cloudformation:GetTemplateSummary",
+                "cloudformation:DescribeStackEvents",
+                "cloudformation:DescribeStackResources",
+                "cloudformation:DescribeStackResource",
+                "cloudformation:ListStackResources"
+              ],
+              "Resource": [
+                "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-security-sns/*",
+                "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-security-config/*",
+                "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-security-posture/*",
+                "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-security-flow/*",
+                "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-security-alarms/*",
+                "arn:aws:cloudformation:us-east-1:806168576068:changeSet/*"
+              ]
+            },
+            {
+              "Sid": "SnsSecurityAlertTopic",
+              "Effect": "Allow",
+              "Action": [
+                "sns:CreateTopic",
+                "sns:DeleteTopic",
+                "sns:SetTopicAttributes",
+                "sns:GetTopicAttributes",
+                "sns:ListTagsForResource",
+                "sns:TagResource",
+                "sns:UntagResource",
+                "sns:Subscribe",
+                "sns:Unsubscribe",
+                "sns:ListSubscriptionsByTopic",
+                "sns:GetSubscriptionAttributes",
+                "sns:SetSubscriptionAttributes"
+              ],
+              "Resource": "arn:aws:sns:us-east-1:806168576068:checksops-production-security-alerts"
+            }
+          ]
+        }
+
+  AllowConfigPosturePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: ChecksOpsCursorSecHardAllowConfigPosture
+      Description: TEMPORARY allow Config and GuardDuty/Security Hub. Delete with stack.
+      PolicyDocument: {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "ConfigRecorderNoNewRole",
+              "Effect": "Allow",
+              "Action": [
+                "config:PutDeliveryChannel",
+                "config:DeleteDeliveryChannel",
+                "config:DescribeDeliveryChannels",
+                "config:DescribeDeliveryChannelStatus",
+                "config:PutConfigurationRecorder",
+                "config:DeleteConfigurationRecorder",
+                "config:DescribeConfigurationRecorders",
+                "config:DescribeConfigurationRecorderStatus",
+                "config:StartConfigurationRecorder",
+                "config:StopConfigurationRecorder",
+                "config:GetStatus"
+              ],
+              "Resource": "*"
+            },
+            {
+              "Sid": "PassExistingConfigRecorderRole",
+              "Effect": "Allow",
+              "Action": "iam:PassRole",
+              "Resource": "arn:aws:iam::806168576068:role/checksops-production-config-items-recorder",
+              "Condition": {
+                "StringEquals": {
+                  "iam:PassedToService": "config.amazonaws.com"
+                }
+              }
+            },
+            {
+              "Sid": "ReadConfigRecorderRole",
+              "Effect": "Allow",
+              "Action": [
+                "iam:GetRole",
+                "iam:GetRolePolicy",
+                "iam:ListRolePolicies",
+                "iam:ListAttachedRolePolicies"
+              ],
+              "Resource": "arn:aws:iam::806168576068:role/checksops-production-config-items-recorder"
+            },
+            {
+              "Sid": "GuardDutyDetector",
+              "Effect": "Allow",
+              "Action": [
+                "guardduty:CreateDetector",
+                "guardduty:DeleteDetector",
+                "guardduty:GetDetector",
+                "guardduty:ListDetectors",
+                "guardduty:UpdateDetector",
+                "guardduty:TagResource",
+                "guardduty:UntagResource",
+                "guardduty:ListTagsForResource",
+                "guardduty:ListFindings"
+              ],
+              "Resource": "*"
+            },
+            {
+              "Sid": "SecurityHubHubAndStandards",
+              "Effect": "Allow",
+              "Action": [
+                "securityhub:EnableSecurityHub",
+                "securityhub:DisableSecurityHub",
+                "securityhub:DescribeHub",
+                "securityhub:UpdateSecurityHubConfiguration",
+                "securityhub:GetEnabledStandards",
+                "securityhub:DescribeStandards",
+                "securityhub:BatchEnableStandards",
+                "securityhub:BatchDisableStandards",
+                "securityhub:TagResource",
+                "securityhub:UntagResource",
+                "securityhub:ListTagsForResource",
+                "securityhub:GetFindings"
+              ],
+              "Resource": "*"
+            },
+            {
+              "Sid": "CreateDetectionServiceLinkedRoles",
+              "Effect": "Allow",
+              "Action": "iam:CreateServiceLinkedRole",
+              "Resource": "*",
+              "Condition": {
+                "StringEquals": {
+                  "iam:AWSServiceName": [
+                    "guardduty.amazonaws.com",
+                    "securityhub.amazonaws.com",
+                    "config.amazonaws.com"
+                  ]
+                }
+              }
+            }
+          ]
+        }
+
+  AllowFlowAlarmsPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: ChecksOpsCursorSecHardAllowFlowAlarms
+      Description: TEMPORARY allow VPC Flow Logs and CloudWatch alarms. Delete with stack.
+      PolicyDocument: {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "DescribeFlowLogsAccount",
+              "Effect": "Allow",
+              "Action": "ec2:DescribeFlowLogs",
+              "Resource": "*"
+            },
+            {
+              "Sid": "VpcFlowLogsOnProductionVpc",
+              "Effect": "Allow",
+              "Action": [
+                "ec2:CreateFlowLogs",
+                "ec2:DeleteFlowLogs",
+                "ec2:CreateTags"
+              ],
+              "Resource": [
+                "arn:aws:ec2:us-east-1:806168576068:vpc/vpc-09f2268778966ce97",
+                "arn:aws:ec2:us-east-1:806168576068:vpc-flow-log/*"
+              ]
+            },
+            {
+              "Sid": "DescribeProductionVpc",
+              "Effect": "Allow",
+              "Action": "ec2:DescribeVpcs",
+              "Resource": "*"
+            },
+            {
+              "Sid": "FlowLogGroup",
+              "Effect": "Allow",
+              "Action": [
+                "logs:CreateLogGroup",
+                "logs:DeleteLogGroup",
+                "logs:DescribeLogGroups",
+                "logs:DescribeLogStreams",
+                "logs:PutRetentionPolicy",
+                "logs:ListTagsLogGroup",
+                "logs:TagLogGroup",
+                "logs:UntagLogGroup",
+                "logs:ListTagsForResource",
+                "logs:TagResource",
+                "logs:UntagResource"
+              ],
+              "Resource": [
+                "arn:aws:logs:us-east-1:806168576068:log-group:/aws/vpc/checksops-production-flow",
+                "arn:aws:logs:us-east-1:806168576068:log-group:/aws/vpc/checksops-production-flow:*"
+              ]
+            },
+            {
+              "Sid": "DescribeLogGroupsAccount",
+              "Effect": "Allow",
+              "Action": "logs:DescribeLogGroups",
+              "Resource": "*"
+            },
+            {
+              "Sid": "ManageNamedVpcFlowLogsRole",
+              "Effect": "Allow",
+              "Action": [
+                "iam:CreateRole",
+                "iam:GetRole",
+                "iam:DeleteRole",
+                "iam:UpdateRole",
+                "iam:UpdateAssumeRolePolicy",
+                "iam:PutRolePolicy",
+                "iam:GetRolePolicy",
+                "iam:DeleteRolePolicy",
+                "iam:ListRolePolicies",
+                "iam:TagRole",
+                "iam:UntagRole"
+              ],
+              "Resource": "arn:aws:iam::806168576068:role/checksops-production-vpc-flow-logs"
+            },
+            {
+              "Sid": "PassVpcFlowLogsRole",
+              "Effect": "Allow",
+              "Action": "iam:PassRole",
+              "Resource": "arn:aws:iam::806168576068:role/checksops-production-vpc-flow-logs",
+              "Condition": {
+                "StringEquals": {
+                  "iam:PassedToService": "vpc-flow-logs.amazonaws.com"
+                }
+              }
+            },
+            {
+              "Sid": "CloudWatchSecurityAlarms",
+              "Effect": "Allow",
+              "Action": [
+                "cloudwatch:PutMetricAlarm",
+                "cloudwatch:DeleteAlarms",
+                "cloudwatch:DescribeAlarms",
+                "cloudwatch:DescribeAlarmsForMetric",
+                "cloudwatch:ListTagsForResource",
+                "cloudwatch:TagResource",
+                "cloudwatch:UntagResource"
+              ],
+              "Resource": [
+                "arn:aws:cloudwatch:us-east-1:806168576068:alarm:checksops-prod*",
+                "arn:aws:cloudwatch:us-east-1:806168576068:alarm:checksops-production-http-api-*"
+              ]
+            },
+            {
+              "Sid": "CloudWatchDescribeAlarmsAccount",
+              "Effect": "Allow",
+              "Action": [
+                "cloudwatch:DescribeAlarms",
+                "cloudwatch:DescribeAlarmsForMetric"
+              ],
+              "Resource": "*"
+            }
+          ]
+        }
+
+  AllowReadonlyPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: ChecksOpsCursorSecHardAllowReadonly
+      Description: TEMPORARY read-only CloudTrail, logs bucket, RDS, Lambda flags. Delete with stack.
+      PolicyDocument: {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "ReadOnlyCloudTrailMgmtEvents",
+              "Effect": "Allow",
+              "Action": [
+                "cloudtrail:DescribeTrails",
+                "cloudtrail:ListTrails",
+                "cloudtrail:GetTrail",
+                "cloudtrail:GetTrailStatus",
+                "cloudtrail:GetEventSelectors",
+                "cloudtrail:LookupEvents"
+              ],
+              "Resource": "*"
+            },
+            {
+              "Sid": "ReadOnlySecurityLogsBucket",
+              "Effect": "Allow",
+              "Action": [
+                "s3:ListBucket",
+                "s3:GetBucketLocation",
+                "s3:GetBucketAcl",
+                "s3:GetBucketPolicy",
+                "s3:GetBucketPolicyStatus",
+                "s3:GetBucketVersioning",
+                "s3:GetBucketPublicAccessBlock",
+                "s3:GetEncryptionConfiguration",
+                "s3:GetLifecycleConfiguration",
+                "s3:GetBucketTagging"
+              ],
+              "Resource": "arn:aws:s3:::checksops-production-security-logs-806168576068"
+            },
+            {
+              "Sid": "ReadOnlySecurityLogObjects",
+              "Effect": "Allow",
+              "Action": [
+                "s3:GetObject",
+                "s3:GetObjectVersion"
+              ],
+              "Resource": [
+                "arn:aws:s3:::checksops-production-security-logs-806168576068/cloudtrail/*",
+                "arn:aws:s3:::checksops-production-security-logs-806168576068/config/*"
+              ]
+            },
+            {
+              "Sid": "ReadOnlyRdsHardeningState",
+              "Effect": "Allow",
+              "Action": [
+                "rds:DescribeDBInstances",
+                "rds:DescribeDBInstanceAutomatedBackups"
+              ],
+              "Resource": "arn:aws:rds:us-east-1:806168576068:db:checksops-staging"
+            },
+            {
+              "Sid": "ReadOnlyLambdaOffFlags",
+              "Effect": "Allow",
+              "Action": [
+                "lambda:GetFunction",
+                "lambda:GetFunctionConfiguration",
+                "lambda:ListTags"
+              ],
+              "Resource": "arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api"
+            },
+            {
+              "Sid": "ReadOwnIdentity",
+              "Effect": "Allow",
+              "Action": "sts:GetCallerIdentity",
+              "Resource": "*"
+            },
+            {
+              "Sid": "ReadOwnRole",
+              "Effect": "Allow",
+              "Action": [
+                "iam:GetRole",
+                "iam:GetRolePolicy",
+                "iam:ListRolePolicies",
+                "iam:ListAttachedRolePolicies",
+                "iam:ListRoleTags"
+              ],
+              "Resource": "arn:aws:iam::806168576068:role/ChecksOpsCursorSecurityHardeningTemp"
+            }
+          ]
+        }
+
+  DenyFinancialAppPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: ChecksOpsCursorSecHardDenyFinancialApp
+      Description: TEMPORARY deny financial/provider/app mutation, logs-bucket write, CloudTrail mutate. Delete with stack.
+      PolicyDocument: {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "DenyFinancialAndAppMutation",
+              "Effect": "Deny",
+              "Action": [
+                "lambda:UpdateFunctionConfiguration",
+                "lambda:UpdateFunctionCode",
+                "lambda:PublishVersion",
+                "lambda:CreateFunction",
+                "lambda:DeleteFunction",
+                "lambda:AddPermission",
+                "lambda:RemovePermission",
+                "lambda:InvokeFunction",
+                "rds:ModifyDBInstance",
+                "rds:DeleteDBInstance",
+                "rds:CreateDBInstance",
+                "rds:RebootDBInstance",
+                "rds:StopDBInstance",
+                "rds:StartDBInstance",
+                "rds:RestoreDBInstanceFromDBSnapshot",
+                "rds:RestoreDBInstanceToPointInTime",
+                "rds-data:ExecuteStatement",
+                "rds-data:BatchExecuteStatement",
+                "cognito-idp:UpdateUserPool",
+                "cognito-idp:SetUserPoolMfaConfig",
+                "cognito-idp:UpdateUserPoolClient",
+                "cognito-idp:CreateUserPoolClient",
+                "cognito-idp:AdminSetUserPassword",
+                "wafv2:*",
+                "cloudfront:UpdateDistribution",
+                "cloudfront:CreateDistribution",
+                "cloudfront:DeleteDistribution",
+                "route53:ChangeResourceRecordSets",
+                "secretsmanager:GetSecretValue",
+                "secretsmanager:PutSecretValue",
+                "secretsmanager:CreateSecret",
+                "secretsmanager:DeleteSecret",
+                "ssm:PutParameter",
+                "ssm:SendCommand",
+                "ssm:StartSession"
+              ],
+              "Resource": "*"
+            },
+            {
+              "Sid": "DenySecurityLogsBucketMutation",
+              "Effect": "Deny",
+              "Action": [
+                "s3:DeleteBucket",
+                "s3:PutBucketPolicy",
+                "s3:DeleteBucketPolicy",
+                "s3:PutBucketAcl",
+                "s3:PutBucketPublicAccessBlock",
+                "s3:PutEncryptionConfiguration",
+                "s3:PutLifecycleConfiguration",
+                "s3:PutBucketVersioning",
+                "s3:PutObject",
+                "s3:DeleteObject",
+                "s3:DeleteObjectVersion"
+              ],
+              "Resource": [
+                "arn:aws:s3:::checksops-production-security-logs-806168576068",
+                "arn:aws:s3:::checksops-production-security-logs-806168576068/*"
+              ]
+            },
+            {
+              "Sid": "DenyCloudTrailMutation",
+              "Effect": "Deny",
+              "Action": [
+                "cloudtrail:CreateTrail",
+                "cloudtrail:UpdateTrail",
+                "cloudtrail:DeleteTrail",
+                "cloudtrail:StartLogging",
+                "cloudtrail:StopLogging",
+                "cloudtrail:PutEventSelectors",
+                "cloudtrail:PutInsightSelectors"
+              ],
+              "Resource": "*"
+            }
+          ]
+        }
+
+  DenyIamInfraPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: ChecksOpsCursorSecHardDenyIamInfra
+      Description: TEMPORARY deny IAM/pass-role/EC2/protected stacks/log-group mutation. Delete with stack.
+      PolicyDocument: {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "DenyProtectedCloudFormationStacks",
+              "Effect": "Deny",
+              "Action": [
+                "cloudformation:CreateStack",
+                "cloudformation:UpdateStack",
+                "cloudformation:DeleteStack",
+                "cloudformation:CreateChangeSet",
+                "cloudformation:ExecuteChangeSet",
+                "cloudformation:ContinueUpdateRollback"
+              ],
+              "Resource": [
+                "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-security-trail/*",
+                "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-cloudtrail/*",
+                "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-prep-api/*",
+                "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-spa/*",
+                "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-http-api/*",
+                "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-cursor-security-hardening-role/*"
+              ]
+            },
+            {
+              "Sid": "DenyIamExceptFlowLogsRole",
+              "Effect": "Deny",
+              "Action": [
+                "iam:CreateRole",
+                "iam:DeleteRole",
+                "iam:UpdateRole",
+                "iam:UpdateAssumeRolePolicy",
+                "iam:PutRolePolicy",
+                "iam:DeleteRolePolicy",
+                "iam:AttachRolePolicy",
+                "iam:DetachRolePolicy",
+                "iam:PutRolePermissionsBoundary",
+                "iam:DeleteRolePermissionsBoundary",
+                "iam:TagRole",
+                "iam:UntagRole"
+              ],
+              "NotResource": "arn:aws:iam::806168576068:role/checksops-production-vpc-flow-logs"
+            },
+            {
+              "Sid": "DenyPassRoleExceptConfigAndFlowLogs",
+              "Effect": "Deny",
+              "Action": "iam:PassRole",
+              "NotResource": [
+                "arn:aws:iam::806168576068:role/checksops-production-vpc-flow-logs",
+                "arn:aws:iam::806168576068:role/checksops-production-config-items-recorder"
+              ]
+            },
+            {
+              "Sid": "DenyAttachManagedPolicies",
+              "Effect": "Deny",
+              "Action": [
+                "iam:AttachRolePolicy",
+                "iam:DetachRolePolicy",
+                "iam:CreateUser",
+                "iam:DeleteUser",
+                "iam:CreateAccessKey",
+                "iam:CreateLoginProfile",
+                "iam:UpdateLoginProfile",
+                "iam:ChangePassword",
+                "iam:CreatePolicy",
+                "iam:CreatePolicyVersion",
+                "iam:SetDefaultPolicyVersion",
+                "iam:DeletePolicy",
+                "iam:AttachUserPolicy",
+                "iam:PutUserPolicy"
+              ],
+              "Resource": "*"
+            },
+            {
+              "Sid": "DenyRoleChaining",
+              "Effect": "Deny",
+              "Action": [
+                "sts:AssumeRole",
+                "sts:AssumeRoleWithSAML",
+                "sts:AssumeRoot"
+              ],
+              "Resource": "*"
+            },
+            {
+              "Sid": "DenyEc2NetworkAndComputeMutation",
+              "Effect": "Deny",
+              "Action": [
+                "ec2:AuthorizeSecurityGroupIngress",
+                "ec2:AuthorizeSecurityGroupEgress",
+                "ec2:RevokeSecurityGroupIngress",
+                "ec2:RevokeSecurityGroupEgress",
+                "ec2:CreateSecurityGroup",
+                "ec2:DeleteSecurityGroup",
+                "ec2:ModifyVpcAttribute",
+                "ec2:CreateVpc",
+                "ec2:DeleteVpc",
+                "ec2:CreateSubnet",
+                "ec2:DeleteSubnet",
+                "ec2:CreateRoute",
+                "ec2:DeleteRoute",
+                "ec2:CreateRouteTable",
+                "ec2:DeleteRouteTable",
+                "ec2:AssociateRouteTable",
+                "ec2:CreateInternetGateway",
+                "ec2:AttachInternetGateway",
+                "ec2:CreateNatGateway",
+                "ec2:RunInstances",
+                "ec2:TerminateInstances"
+              ],
+              "Resource": "*"
+            },
+            {
+              "Sid": "DenyProtectedLogGroups",
+              "Effect": "Deny",
+              "Action": [
+                "logs:DeleteLogGroup",
+                "logs:DeleteMetricFilter",
+                "logs:PutMetricFilter",
+                "logs:DeleteRetentionPolicy"
+              ],
+              "Resource": [
+                "arn:aws:logs:us-east-1:806168576068:log-group:/aws/lambda/checksops-production-prep-api",
+                "arn:aws:logs:us-east-1:806168576068:log-group:/aws/lambda/checksops-production-prep-api:*",
+                "arn:aws:logs:us-east-1:806168576068:log-group:/aws/apigateway/checksops-production-prep-http",
+                "arn:aws:logs:us-east-1:806168576068:log-group:/aws/apigateway/checksops-production-prep-http:*"
+              ]
+            }
+          ]
+        }
+
+  ChecksOpsCursorSecurityHardeningTemp:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: ChecksOpsCursorSecurityHardeningTemp
+      Description: TEMPORARY Cursor OIDC role for Security Hardening #2-#6. Delete after PASS. Cannot set Lambda money/provider flags.
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument: {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "CursorCloudOidcLiveApiCursorCom",
+              "Effect": "Allow",
+              "Principal": {
+                "Federated": "arn:aws:iam::806168576068:oidc-provider/api.cursor.com"
+              },
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "api.cursor.com:aud": "sts.amazonaws.com",
+                  "api.cursor.com:sub": "user:325724407"
+                }
+              }
+            }
+          ]
+        }
+      ManagedPolicyArns:
+        - !Ref AllowCfnSnsPolicy
+        - !Ref AllowConfigPosturePolicy
+        - !Ref AllowFlowAlarmsPolicy
+        - !Ref AllowReadonlyPolicy
+        - !Ref DenyFinancialAppPolicy
+        - !Ref DenyIamInfraPolicy
+      Tags:
+        - Key: Purpose
+          Value: SecurityHardeningDeployments2to6
+        - Key: Temporary
+          Value: 'true'
+        - Key: ManagedBy
+          Value: operator-console
+        - Key: DoNotUseForFinancial
+          Value: 'true'
+        - Key: DoNotBroadenStagingRole
+          Value: ChecksOpsCursorCloudStaging
+
+Outputs:
+  RoleName:
+    Value: ChecksOpsCursorSecurityHardeningTemp
+  RoleArn:
+    Value: !GetAtt ChecksOpsCursorSecurityHardeningTemp.Arn
+  MaxSessionSeconds:
+    Value: '3600'
+  TrustIssuer:
+    Value: api.cursor.com
+  ManagedPolicyCount:
+    Value: '6'
+  RoleInlinePolicyCount:
+    Value: '0'
+  CustomerManagedPolicyLimitChars:
+    Value: '6144'
+  RoleAggregateInlinePolicyLimitChars:
+    Value: '10240'
+  DoNotAttachToStagingRole:
+    Value: ChecksOpsCursorCloudStaging

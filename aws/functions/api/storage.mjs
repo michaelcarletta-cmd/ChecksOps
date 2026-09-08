@@ -17,17 +17,19 @@ import {
 const { Client } = pg;
 
 const DEFAULT_EXPIRES = 300;
-const MAX_EXPIRES = 14400;
+const MAX_EXPIRES = 300;
 const MIN_EXPIRES = 30;
+/** Public signing sessions keep the PDF open; authenticated check/document views stay ≤300s. */
+export const SIGNING_DOCUMENT_EXPIRES = 1800;
 
 const filesBucket = () => process.env.FILES_BUCKET || '';
 
 const s3Region = () => process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1';
 
-export const clampExpires = (value, fallback = DEFAULT_EXPIRES) => {
+export const clampExpires = (value, fallback = DEFAULT_EXPIRES, max = MAX_EXPIRES) => {
   const n = Number(value);
   if (!Number.isFinite(n)) return fallback;
-  return Math.min(MAX_EXPIRES, Math.max(MIN_EXPIRES, Math.floor(n)));
+  return Math.min(max, Math.max(MIN_EXPIRES, Math.floor(n)));
 };
 
 const columnMatchSql = (table, columns) => {
@@ -138,7 +140,7 @@ export const authorizeObject = async (client, bucket, objectPath) => {
   return { authorized: false, reason: 'not_authorized', rel, candidates };
 };
 
-const presignGet = async (deps, key, { expiresIn, downloadName, contentType } = {}) => {
+const presignGet = async (deps, key, { expiresIn, downloadName, contentType, maxExpires } = {}) => {
   const sign = deps.getSignedUrl || getSignedUrl;
   const s3 = defaultS3(deps);
   const command = new GetObjectCommand({
@@ -149,7 +151,9 @@ const presignGet = async (deps, key, { expiresIn, downloadName, contentType } = 
       : undefined,
     ResponseContentType: contentType || undefined,
   });
-  const signedUrl = await sign(s3, command, { expiresIn: clampExpires(expiresIn) });
+  const signedUrl = await sign(s3, command, {
+    expiresIn: clampExpires(expiresIn, DEFAULT_EXPIRES, maxExpires || MAX_EXPIRES),
+  });
   return signedUrl;
 };
 
@@ -218,7 +222,7 @@ export const handleStorageSignMany = async (event, deps = {}) => withIdentity(ev
   const denied = denyBucket(bucket);
   if (denied) return { ...denied, spoofFieldsIgnored: spoof };
   const paths = Array.isArray(body.paths) ? body.paths.slice(0, 50) : [];
-  const expiresIn = clampExpires(body.expiresIn || body.expires_in, 1800);
+  const expiresIn = clampExpires(body.expiresIn || body.expires_in, DEFAULT_EXPIRES);
   const data = [];
   for (const objectPath of paths) {
     const auth = await authorizeObject(client, bucket, objectPath);
@@ -433,7 +437,10 @@ export const handlePublicSignatureDocument = async (event, deps = {}) => {
     if (!key || !(await objectExists(deps, key))) {
       return { ok: false, statusCode: 404, stage: 'document_url', error: 'Document not found in storage', spoofFieldsIgnored: spoof };
     }
-    const signedUrl = await presignGet(deps, key, { expiresIn: 14400 });
+    const signedUrl = await presignGet(deps, key, {
+      expiresIn: SIGNING_DOCUMENT_EXPIRES,
+      maxExpires: SIGNING_DOCUMENT_EXPIRES,
+    });
     return {
       ok: true,
       statusCode: 200,

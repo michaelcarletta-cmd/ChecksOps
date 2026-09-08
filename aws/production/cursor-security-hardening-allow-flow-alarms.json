@@ -1,0 +1,112 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DescribeFlowLogsAccount",
+      "Effect": "Allow",
+      "Action": "ec2:DescribeFlowLogs",
+      "Resource": "*"
+    },
+    {
+      "Sid": "VpcFlowLogsOnProductionVpc",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:CreateFlowLogs",
+        "ec2:DeleteFlowLogs",
+        "ec2:CreateTags"
+      ],
+      "Resource": [
+        "arn:aws:ec2:us-east-1:806168576068:vpc/vpc-09f2268778966ce97",
+        "arn:aws:ec2:us-east-1:806168576068:vpc-flow-log/*"
+      ]
+    },
+    {
+      "Sid": "DescribeProductionVpc",
+      "Effect": "Allow",
+      "Action": "ec2:DescribeVpcs",
+      "Resource": "*"
+    },
+    {
+      "Sid": "FlowLogGroup",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:DeleteLogGroup",
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams",
+        "logs:PutRetentionPolicy",
+        "logs:ListTagsLogGroup",
+        "logs:TagLogGroup",
+        "logs:UntagLogGroup",
+        "logs:ListTagsForResource",
+        "logs:TagResource",
+        "logs:UntagResource"
+      ],
+      "Resource": [
+        "arn:aws:logs:us-east-1:806168576068:log-group:/aws/vpc/checksops-production-flow",
+        "arn:aws:logs:us-east-1:806168576068:log-group:/aws/vpc/checksops-production-flow:*"
+      ]
+    },
+    {
+      "Sid": "DescribeLogGroupsAccount",
+      "Effect": "Allow",
+      "Action": "logs:DescribeLogGroups",
+      "Resource": "*"
+    },
+    {
+      "Sid": "ManageNamedVpcFlowLogsRole",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:GetRole",
+        "iam:DeleteRole",
+        "iam:UpdateRole",
+        "iam:UpdateAssumeRolePolicy",
+        "iam:PutRolePolicy",
+        "iam:GetRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:ListRolePolicies",
+        "iam:TagRole",
+        "iam:UntagRole"
+      ],
+      "Resource": "arn:aws:iam::806168576068:role/checksops-production-vpc-flow-logs"
+    },
+    {
+      "Sid": "PassVpcFlowLogsRole",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::806168576068:role/checksops-production-vpc-flow-logs",
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "vpc-flow-logs.amazonaws.com"
+        }
+      }
+    },
+    {
+      "Sid": "CloudWatchSecurityAlarms",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:PutMetricAlarm",
+        "cloudwatch:DeleteAlarms",
+        "cloudwatch:DescribeAlarms",
+        "cloudwatch:DescribeAlarmsForMetric",
+        "cloudwatch:ListTagsForResource",
+        "cloudwatch:TagResource",
+        "cloudwatch:UntagResource"
+      ],
+      "Resource": [
+        "arn:aws:cloudwatch:us-east-1:806168576068:alarm:checksops-prod*",
+        "arn:aws:cloudwatch:us-east-1:806168576068:alarm:checksops-production-http-api-*"
+      ]
+    },
+    {
+      "Sid": "CloudWatchDescribeAlarmsAccount",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:DescribeAlarms",
+        "cloudwatch:DescribeAlarmsForMetric"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

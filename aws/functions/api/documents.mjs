@@ -42,7 +42,7 @@ const putPdf = async (relPath, bytes, contentType = 'application/pdf') => {
   const url = await getSignedUrl(
     s3(),
     new GetObjectCommand({ Bucket: filesBucket(), Key: key }),
-    { expiresIn: 900 },
+    { expiresIn: 300 },
   );
   return { path: relPath, key, url };
 };
@@ -187,7 +187,7 @@ export const handleContractsPdf = async (event) => withIdentity(event, async ({
     const url = await getSignedUrl(
       s3(),
       new GetObjectCommand({ Bucket: filesBucket(), Key: key }),
-      { expiresIn: 900 },
+      { expiresIn: 300 },
     );
     return { ok: true, statusCode: 200, signedUrl: url, path: claim.contract_pdf_path, spoofFieldsIgnored: spoof };
   }

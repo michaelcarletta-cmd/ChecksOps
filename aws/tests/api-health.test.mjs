@@ -251,7 +251,7 @@ const mockValidateClient = ({
   canExecuteAuthUid = false,
   authUidError = Object.assign(new Error('permission denied for function uid'), { code: '42501' }),
   authUsersFkCount = 0,
-  triggerCount = 164,
+  triggerCount = 165,
   writePrivilege = false,
   rlsEnabled = false,
 } = {}) => {
@@ -328,6 +328,27 @@ const mockValidateClient = ({
       if (sql.includes('SELECT auth.uid()')) {
         if (authUidError) throw authUidError;
         return { rows: [{ auth_uid: null }] };
+      }
+      if (sql.includes('FROM pg_roles')) {
+        return { rows: [
+          { rolname: 'checksops', rolsuper: false, rolbypassrls: false },
+          { rolname: 'checksops_admin', rolsuper: false, rolbypassrls: false },
+        ] };
+      }
+      if (sql.includes('FROM pg_class c') && sql.includes('relrowsecurity')) {
+        return { rows: CORE_TABLES.map((table) => ({
+          table,
+          owner: 'postgres',
+          rls_enabled: true,
+          rls_forced: false,
+          has_tenant_column: table !== 'profiles',
+        })) };
+      }
+      if (sql.includes('FROM pg_policies')) {
+        return { rows: CORE_TABLES.flatMap((table) => [
+          { tablename: table, cmd: 'SELECT', n: 1 },
+          { tablename: table, cmd: 'ALL', n: 1 },
+        ]) };
       }
       throw new Error(`unexpected query: ${sql}`);
     },

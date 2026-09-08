@@ -1,0 +1,84 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadOnlyCloudTrailMgmtEvents",
+      "Effect": "Allow",
+      "Action": [
+        "cloudtrail:DescribeTrails",
+        "cloudtrail:ListTrails",
+        "cloudtrail:GetTrail",
+        "cloudtrail:GetTrailStatus",
+        "cloudtrail:GetEventSelectors",
+        "cloudtrail:LookupEvents"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ReadOnlySecurityLogsBucket",
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucket",
+        "s3:GetBucketLocation",
+        "s3:GetBucketAcl",
+        "s3:GetBucketPolicy",
+        "s3:GetBucketPolicyStatus",
+        "s3:GetBucketVersioning",
+        "s3:GetBucketPublicAccessBlock",
+        "s3:GetEncryptionConfiguration",
+        "s3:GetLifecycleConfiguration",
+        "s3:GetBucketTagging"
+      ],
+      "Resource": "arn:aws:s3:::checksops-production-security-logs-806168576068"
+    },
+    {
+      "Sid": "ReadOnlySecurityLogObjects",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:GetObjectVersion"
+      ],
+      "Resource": [
+        "arn:aws:s3:::checksops-production-security-logs-806168576068/cloudtrail/*",
+        "arn:aws:s3:::checksops-production-security-logs-806168576068/config/*"
+      ]
+    },
+    {
+      "Sid": "ReadOnlyRdsHardeningState",
+      "Effect": "Allow",
+      "Action": [
+        "rds:DescribeDBInstances",
+        "rds:DescribeDBInstanceAutomatedBackups"
+      ],
+      "Resource": "arn:aws:rds:us-east-1:806168576068:db:checksops-staging"
+    },
+    {
+      "Sid": "ReadOnlyLambdaOffFlags",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:GetFunction",
+        "lambda:GetFunctionConfiguration",
+        "lambda:ListTags"
+      ],
+      "Resource": "arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api"
+    },
+    {
+      "Sid": "ReadOwnIdentity",
+      "Effect": "Allow",
+      "Action": "sts:GetCallerIdentity",
+      "Resource": "*"
+    },
+    {
+      "Sid": "ReadOwnRole",
+      "Effect": "Allow",
+      "Action": [
+        "iam:GetRole",
+        "iam:GetRolePolicy",
+        "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies",
+        "iam:ListRoleTags"
+      ],
+      "Resource": "arn:aws:iam::806168576068:role/ChecksOpsCursorSecurityHardeningTemp"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Operator-only GuardDuty + Security Hub (Hardening Batch 5).
+  The Cloud Agent role cannot guardduty:TagResource or securityhub:TagResource,
+  so CFN create fails even with no tags. Deploy from a privileged ops role.
+  Detection only. EBS malware stays DISABLED (no volume snapshots).
+  Does not block traffic. Does not enable money/provider flags.
+
+Resources:
+  GuardDutyDetector:
+    Type: AWS::GuardDuty::Detector
+    Properties:
+      Enable: true
+      FindingPublishingFrequency: FIFTEEN_MINUTES
+      Features:
+        - Name: EBS_MALWARE_PROTECTION
+          Status: DISABLED
+
+  SecurityHub:
+    Type: AWS::SecurityHub::Hub
+    Properties:
+      ControlFindingGenerator: SECURITY_CONTROL
+      EnableDefaultStandards: true
+      AutoEnableControls: true
+
+Outputs:
+  GuardDutyDetectorId:
+    Value: !Ref GuardDutyDetector
+  DetectionOnly:
+    Value: 'true'

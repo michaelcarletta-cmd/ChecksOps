@@ -1,0 +1,58 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Operator-only VPC Flow Logs for Hardening Batch 5.
+  The Cloud Agent role cannot iam:GetRole on a new flow-log role.
+  Deploy from a privileged ops role. Logs 5-tuple only; no payloads.
+  Does not change security groups or routes.
+
+Parameters:
+  VpcId:
+    Type: String
+    Default: vpc-09f2268778966ce97
+
+Resources:
+  FlowLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/vpc/checksops-production-flow
+      RetentionInDays: 90
+
+  FlowLogRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: checksops-production-vpc-flow-logs
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: vpc-flow-logs.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: WriteFlowLogs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DescribeLogGroups
+                  - logs:DescribeLogStreams
+                Resource: !GetAtt FlowLogGroup.Arn
+
+  VpcFlowLog:
+    Type: AWS::EC2::FlowLog
+    Properties:
+      ResourceType: VPC
+      ResourceId: !Ref VpcId
+      TrafficType: ALL
+      LogDestinationType: cloud-watch-logs
+      LogGroupName: !Ref FlowLogGroup
+      DeliverLogsPermissionArn: !GetAtt FlowLogRole.Arn
+      MaxAggregationInterval: 600
+
+Outputs:
+  FlowLogGroup:
+    Value: !Ref FlowLogGroup

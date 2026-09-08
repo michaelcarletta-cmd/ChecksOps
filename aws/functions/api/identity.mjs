@@ -9,6 +9,7 @@ import {
   refuseSubAsApplicationId,
   verifyCognitoIdToken,
 } from './cognito.mjs';
+import { isPrivilegedRoleList, privilegedAuthPolicy } from './privileged-auth.mjs';
 
 const { Client } = pg;
 
@@ -104,6 +105,8 @@ export const resolveIdentitySession = async ({
       } : null,
       tenants,
       roles,
+      privileged: isPrivilegedRoleList(roles) || masterOwner,
+      privilegedAuth: privilegedAuthPolicy(),
       authorizationSource: 'user_roles_and_tenant_users',
       cognitoGroupsUsed: false,
     };

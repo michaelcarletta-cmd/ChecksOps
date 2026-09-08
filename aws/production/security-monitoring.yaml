@@ -1,0 +1,39 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Detection-only CloudTrail (Hardening Batch 5).
+  Management events only to the existing security-logs bucket.
+  Does not create IAM roles, Config, GuardDuty, Security Hub, SNS,
+  or CloudWatch alarms (operator templates). Does not block traffic.
+  Does not enable money/provider flags.
+
+Parameters:
+  SecurityLogsBucketName:
+    Type: String
+    Default: checksops-production-security-logs-806168576068
+
+Resources:
+  ProductionCloudTrail:
+    Type: AWS::CloudTrail::Trail
+    Properties:
+      TrailName: checksops-production-management
+      S3BucketName: !Ref SecurityLogsBucketName
+      S3KeyPrefix: cloudtrail
+      IsLogging: true
+      IsMultiRegionTrail: true
+      IncludeGlobalServiceEvents: true
+      EnableLogFileValidation: true
+      EventSelectors:
+        - IncludeManagementEvents: true
+          ReadWriteType: All
+
+Outputs:
+  SecurityLogsBucketName:
+    Value: !Ref SecurityLogsBucketName
+  CloudTrailName:
+    Value: !Ref ProductionCloudTrail
+  OperatorSnsTopicName:
+    Value: checksops-production-security-alerts
+  DetectionOnly:
+    Value: 'true'
+  MoneyFlagsUnchanged:
+    Value: 'true'

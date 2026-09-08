@@ -4,10 +4,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Input } from "@/components/ui/input";
 import { Loader2, ShieldCheck, ShieldAlert } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useStepUp } from "@/hooks/useStepUp";
 import { isAwsStaging } from "@/lib/awsStaging";
+import { associateAwsTotp, awsMfaAvailable, getAwsMfaStatus, verifyAwsTotp } from "@/lib/awsMfa";
+import { useAuth } from "@/hooks/useAuth";
 
 /**
  * Shows TOTP status and lets the user enrol. Enrolment reuses the same
@@ -15,12 +18,25 @@ import { isAwsStaging } from "@/lib/awsStaging";
  */
 export function TotpManagerCard() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const { requireStepUp, refreshFactors, verified } = useStepUp();
   const [enrolled, setEnrolled] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
+  const [awsSecret, setAwsSecret] = useState<string | null>(null);
+  const [awsCode, setAwsCode] = useState("");
   const awsStaging = isAwsStaging();
+  const awsMode = awsMfaAvailable();
 
   const load = useCallback(async () => {
+    if (awsMfaAvailable()) {
+      try {
+        const status = await getAwsMfaStatus();
+        setEnrolled(status.totpEnrolled);
+      } catch {
+        setEnrolled(false);
+      }
+      return;
+    }
     if (awsStaging) {
       setEnrolled(false);
       return;
@@ -37,6 +53,74 @@ export function TotpManagerCard() {
     void load();
   }, [load, verified]);
 
+  if (awsMode) {
+    const startAws = async () => {
+      setBusy(true);
+      try {
+        const associated = await associateAwsTotp(user?.email);
+        setAwsSecret(associated.secret);
+        toast({ title: "Authenticator secret ready", description: "Add it to your authenticator app, then enter a 6-digit code." });
+      } catch (error) {
+        toast({ title: "Could not start TOTP", description: String((error as Error).message || error), variant: "destructive" });
+      } finally {
+        setBusy(false);
+      }
+    };
+    const confirmAws = async () => {
+      setBusy(true);
+      try {
+        const ok = await verifyAwsTotp(awsCode.trim());
+        if (!ok) throw new Error("verify_failed");
+        setAwsSecret(null);
+        setAwsCode("");
+        await load();
+        toast({ title: "Authenticator enrolled", description: "Login still uses email OTP, password, or passkey. This code is for privileged and future financial step-up." });
+      } catch (error) {
+        toast({ title: "Could not verify code", description: String((error as Error).message || error), variant: "destructive" });
+      } finally {
+        setBusy(false);
+      }
+    };
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            {enrolled ? <ShieldCheck className="h-4 w-4 text-primary" /> : <ShieldAlert className="h-4 w-4 text-amber-500" />}
+            Authenticator (TOTP)
+            <Badge variant={enrolled ? "secondary" : "outline"} className="ml-1">
+              {enrolled ? "Enrolled" : "Optional at login"}
+            </Badge>
+          </CardTitle>
+          <CardDescription>
+            Sign-in still uses email OTP, password, or a passkey. Admin/staff should enroll TOTP or a passkey before privileged or financial actions. Money movement stays off.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {!enrolled && (
+            <Button onClick={() => void startAws()} disabled={busy}>
+              {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Set up authenticator
+            </Button>
+          )}
+          {awsSecret && (
+            <div className="space-y-2 text-xs">
+              <p className="font-mono break-all">{awsSecret}</p>
+              <Input
+                inputMode="numeric"
+                maxLength={6}
+                placeholder="6-digit code"
+                value={awsCode}
+                onChange={(event) => setAwsCode(event.target.value)}
+              />
+              <Button onClick={() => void confirmAws()} disabled={busy || awsCode.trim().length !== 6}>
+                Verify and enroll
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    );
+  }
   if (awsStaging) {
     return (
       <Card>
@@ -46,7 +130,7 @@ export function TotpManagerCard() {
             Authenticator (TOTP)
           </CardTitle>
           <CardDescription>
-            AWS staging uses Cognito EMAIL_OTP and WebAuthn passkeys. Supabase TOTP step-up is production-only until Cognito MFA is provisioned.
+            AWS Cognito TOTP enrollment is available when the API URL is configured. Login remains email OTP, password, or passkey.
           </CardDescription>
         </CardHeader>
       </Card>
