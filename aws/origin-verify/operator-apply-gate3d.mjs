@@ -21,8 +21,8 @@ import {
   evaluatePreflight,
   idTokenPresent,
   mergeOriginVerifyRequire,
-  refuseStep3Temp,
   requireLiveIdToken,
+  requirePrivilegedOperator,
   rollbackOriginVerifyRequireAndConfirm,
   updateOriginVerifyRequire,
   waitForLambdaReady,
@@ -34,6 +34,7 @@ const plan = {
   operatorOnly: true,
   doNotUseStep3Temp: true,
   doNotBroadenStep3TempKms: true,
+  expectedAccount: '806168576068',
   lambdaName: LAMBDA_NAME,
   change: `${REQUIRE_KEY}=true`,
   preserveExistingEnv: true,
@@ -64,7 +65,7 @@ if (!idTokenPresent()) {
 requireLiveIdToken();
 
 const identity = awsJson(['sts', 'get-caller-identity']);
-refuseStep3Temp(identity.Arn);
+requirePrivilegedOperator(identity);
 
 const base = collectPreflight();
 const observe = await collectObserveAndHolds();

@@ -13,9 +13,11 @@ import {
   WAF_ARN,
   awsJson,
   parseObserveLogLine,
+  redactCli,
 } from './lib.mjs';
 
 export const REQUIRE_KEY = 'ORIGIN_VERIFY_REQUIRE';
+export const EXPECTED_ACCOUNT = '806168576068';
 export const FABRICATED_HEADER = 'fabricated-origin-verify-not-secret';
 export const CF_APEX = 'https://checksops.com';
 export const CF_WWW = 'https://www.checksops.com';
@@ -258,6 +260,17 @@ export function refuseStep3Temp(identityArn) {
   }
 }
 
+export function requirePrivilegedOperator(identity = {}) {
+  const arn = String(identity.Arn || '');
+  const account = String(identity.Account || '');
+  refuseStep3Temp(arn);
+  const accountOk = account === EXPECTED_ACCOUNT || arn.includes(`:${EXPECTED_ACCOUNT}:`);
+  if (!accountOk) {
+    throw new Error('refusing_wrong_account. Privileged-operator Gate 3D requires AWS account 806168576068.');
+  }
+  return arn;
+}
+
 export function updateOriginVerifyRequire(value) {
   const cfg = awsJson(['lambda', 'get-function-configuration', '--function-name', LAMBDA_NAME]);
   const revisionId = cfg.RevisionId;
@@ -334,13 +347,46 @@ export async function rollbackOriginVerifyRequireAndConfirm() {
   }
 }
 
-export function waitForLambdaReady() {
-  for (let i = 0; i < 20; i += 1) {
-    const cfg = awsJson(['lambda', 'get-function-configuration', '--function-name', LAMBDA_NAME], { allowFail: true });
-    if (!cfg.__error && (cfg.State === 'Active' || cfg.LastUpdateStatus === 'Successful')) {
-      return cfg;
-    }
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1500);
+export function sanitizeLambdaFailureReason(raw) {
+  return redactCli(String(raw || 'lambda_update_failed'))
+    .replace(/HeaderValue\s*[:=]\s*("[^"]*"|'[^']*'|\S+)/gi, 'HeaderValue=[REDACTED]')
+    .replace(/SecretString\s*[:=]\s*("[^"]*"|'[^']*'|\S+)/gi, 'SecretString=[REDACTED]')
+    .replace(/Environment[^,]{0,400}/gi, 'Environment=[REDACTED]')
+    .replace(/Variables[^,]{0,400}/gi, 'Variables=[REDACTED]')
+    .replace(/ORIGIN_VERIFY_[A-Z0-9_]+\s*[:=]\s*[^,\s]{0,200}/g, 'ORIGIN_VERIFY_*=[REDACTED]')
+    .slice(0, 240);
+}
+
+export function inspectLambdaUpdate(cfg) {
+  if (!cfg || cfg.__error) return { status: 'retry' };
+  const state = cfg.State;
+  const update = cfg.LastUpdateStatus;
+  if (state === 'Failed' || update === 'Failed') {
+    return {
+      status: 'failed',
+      reason: sanitizeLambdaFailureReason(cfg.StateReason || cfg.LastUpdateStatusReason || 'lambda_update_failed'),
+    };
   }
-  throw new Error('origin_verify_lambda_not_ready');
+  if (state === 'Active' && update === 'Successful') {
+    return { status: 'ready' };
+  }
+  return { status: 'retry' };
+}
+
+export function waitForLambdaReady({
+  getConfig = () => awsJson(['lambda', 'get-function-configuration', '--function-name', LAMBDA_NAME], { allowFail: true }),
+  sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms),
+  maxAttempts = 20,
+  intervalMs = 1500,
+} = {}) {
+  for (let i = 0; i < maxAttempts; i += 1) {
+    const cfg = getConfig();
+    const inspected = inspectLambdaUpdate(cfg);
+    if (inspected.status === 'ready') return cfg;
+    if (inspected.status === 'failed') {
+      throw new Error(`origin_verify_lambda_update_failed: ${inspected.reason}`);
+    }
+    if (i < maxAttempts - 1) sleep(intervalMs);
+  }
+  throw new Error('origin_verify_lambda_update_timeout');
 }

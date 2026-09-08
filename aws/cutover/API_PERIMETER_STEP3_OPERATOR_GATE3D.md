@@ -37,4 +37,10 @@ Sets `ORIGIN_VERIFY_REQUIRE=false` only, re-reads the Lambda, requires that
 flag is `false`, then checks CloudFront and raw `/prep/health`. Exits fatal
 `GATE3D_ROLLBACK_FATAL` if that cannot be confirmed.
 
-Refuse if the caller ARN contains `ChecksOpsCursorApiPerimeterStep3Temp`.
+Refuse unless AWS account is `806168576068`. Refuse if the caller ARN
+contains `ChecksOpsCursorApiPerimeterStep3Temp`. Do not broaden that role.
+
+`waitForLambdaReady` returns only when `State=Active` and
+`LastUpdateStatus=Successful`. `Active` alone is not enough. `Failed`
+exits immediately with a sanitized reason. A stuck `InProgress` update
+times out closed.

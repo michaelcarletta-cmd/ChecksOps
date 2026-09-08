@@ -49,6 +49,11 @@ CHECKSOPS_GATE3D_ID_TOKEN=<id token; never print or persist>
 concurrent env change is rejected (`lambda_revision_conflict`) instead of
 overwritten.
 
+`waitForLambdaReady` returns only when `State=Active` **and**
+`LastUpdateStatus=Successful`. `Active` alone is not ready. `Failed` exits
+immediately with a sanitized reason (no environment values). A stuck update
+times out closed.
+
 Rollback is independently executable if CloudFront health fails after a later
 approved apply:
 

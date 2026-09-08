@@ -11,7 +11,7 @@
 import { LAMBDA_NAME, awsJson } from './lib.mjs';
 import {
   REQUIRE_KEY,
-  refuseStep3Temp,
+  requirePrivilegedOperator,
   rollbackOriginVerifyRequireAndConfirm,
 } from './gate3d-lib.mjs';
 
@@ -21,6 +21,7 @@ const plan = {
   operatorOnly: true,
   doNotUseStep3Temp: true,
   doNotBroadenStep3TempKms: true,
+  expectedAccount: '806168576068',
   lambdaName: LAMBDA_NAME,
   change: `${REQUIRE_KEY}=false`,
   preserveExistingEnv: true,
@@ -44,7 +45,7 @@ if (String(process.env.CHECKSOPS_OPERATOR_ROLLBACK_GATE3D || '') !== 'I_UNDERSTA
 }
 
 const identity = awsJson(['sts', 'get-caller-identity']);
-refuseStep3Temp(identity.Arn);
+requirePrivilegedOperator(identity);
 const rollback = await rollbackOriginVerifyRequireAndConfirm();
 console.log(JSON.stringify({
   ...plan,

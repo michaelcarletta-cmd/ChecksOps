@@ -5,7 +5,13 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 import { evaluateOriginVerify } from '../functions/origin-verify/authorizer.mjs';
-import { mergeOriginVerifyRequire } from '../origin-verify/gate3d-lib.mjs';
+import {
+  inspectLambdaUpdate,
+  mergeOriginVerifyRequire,
+  requirePrivilegedOperator,
+  sanitizeLambdaFailureReason,
+  waitForLambdaReady,
+} from '../origin-verify/gate3d-lib.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
@@ -72,7 +78,10 @@ test('Gate 3D design is review-only and does not execute', () => {
   refuteSecrets(operatorDoc);
   assert.match(operatorDoc, /DO NOT EXECUTE FROM THIS PR/);
   assert.match(operatorDoc, /Do \*\*not\*\* broaden that role/);
-  assert.match(operatorDoc, /refusing_step3temp|Refuse if the caller ARN contains `ChecksOpsCursorApiPerimeterStep3Temp`/);
+  assert.match(operatorDoc, /ChecksOpsCursorApiPerimeterStep3Temp/);
+  assert.match(operatorDoc, /Refuse if the caller ARN/);
+  assert.match(operatorDoc, /806168576068/);
+  assert.match(design, /LastUpdateStatus=Successful/);
 });
 
 test('apply and rollback are plan-only without explicit production and execute gates', () => {
@@ -167,9 +176,91 @@ test('only the authorizer Lambda environment may change, with RevisionId', () =>
   assert.doesNotMatch(preflight, /update-function-configuration/);
 });
 
+test('waitForLambdaReady requires Active and Successful and fails closed', () => {
+  assert.deepEqual(inspectLambdaUpdate({ State: 'Active', LastUpdateStatus: 'InProgress' }), { status: 'retry' });
+  assert.deepEqual(inspectLambdaUpdate({ State: 'Pending', LastUpdateStatus: 'Successful' }), { status: 'retry' });
+  assert.deepEqual(inspectLambdaUpdate({ State: 'Active', LastUpdateStatus: 'Successful' }), { status: 'ready' });
+
+  const failedState = inspectLambdaUpdate({
+    State: 'Failed',
+    LastUpdateStatus: 'InProgress',
+    StateReason: 'HeaderValue="super-secret" Environment={ORIGIN_VERIFY_REQUIRE:true}',
+  });
+  assert.equal(failedState.status, 'failed');
+  assert.doesNotMatch(failedState.reason, /super-secret/);
+  assert.doesNotMatch(failedState.reason, /ORIGIN_VERIFY_REQUIRE=true|ORIGIN_VERIFY_REQUIRE:true/);
+
+  const failedUpdate = inspectLambdaUpdate({
+    State: 'Active',
+    LastUpdateStatus: 'Failed',
+    LastUpdateStatusReason: 'SecretString={"current":"abcdef0123456789"}',
+  });
+  assert.equal(failedUpdate.status, 'failed');
+  assert.doesNotMatch(failedUpdate.reason, /abcdef0123456789/);
+
+  const sanitized = sanitizeLambdaFailureReason('Variables={"KEEP":"1"} HeaderValue="abc"');
+  assert.match(sanitized, /REDACTED/);
+  assert.doesNotMatch(sanitized, /"KEEP"/);
+  assert.doesNotMatch(sanitized, /HeaderValue":"abc"/);
+
+  const inProgressThenOk = [
+    { State: 'Active', LastUpdateStatus: 'InProgress' },
+    { State: 'Active', LastUpdateStatus: 'Successful' },
+  ];
+  const ready = waitForLambdaReady({
+    getConfig: () => inProgressThenOk.shift(),
+    sleep: () => {},
+    maxAttempts: 3,
+    intervalMs: 0,
+  });
+  assert.equal(ready.LastUpdateStatus, 'Successful');
+  assert.equal(ready.State, 'Active');
+
+  assert.throws(
+    () => waitForLambdaReady({
+      getConfig: () => ({ State: 'Active', LastUpdateStatus: 'Failed', LastUpdateStatusReason: 'HeaderValue="nope"' }),
+      sleep: () => {},
+      maxAttempts: 5,
+      intervalMs: 0,
+    }),
+    /origin_verify_lambda_update_failed/,
+  );
+  assert.throws(
+    () => waitForLambdaReady({
+      getConfig: () => ({ State: 'Active', LastUpdateStatus: 'InProgress' }),
+      sleep: () => {},
+      maxAttempts: 2,
+      intervalMs: 0,
+    }),
+    /origin_verify_lambda_update_timeout/,
+  );
+});
+
 test('privileged-operator path is separately gated and refuses Step3Temp', () => {
-  assert.match(operatorApply, /refusing_step3temp|refuseStep3Temp/);
-  assert.match(operatorRollback, /refuseStep3Temp/);
+  assert.match(operatorApply, /requirePrivilegedOperator/);
+  assert.match(operatorRollback, /requirePrivilegedOperator/);
+  assert.match(operatorApply, /806168576068/);
+  assert.throws(
+    () => requirePrivilegedOperator({
+      Account: '806168576068',
+      Arn: 'arn:aws:sts::806168576068:assumed-role/ChecksOpsCursorApiPerimeterStep3Temp/x',
+    }),
+    /refusing_step3temp/,
+  );
+  assert.throws(
+    () => requirePrivilegedOperator({
+      Account: '000000000000',
+      Arn: 'arn:aws:sts::000000000000:assumed-role/Admin/x',
+    }),
+    /refusing_wrong_account/,
+  );
+  assert.equal(
+    requirePrivilegedOperator({
+      Account: '806168576068',
+      Arn: 'arn:aws:sts::806168576068:assumed-role/Privileged/x',
+    }),
+    'arn:aws:sts::806168576068:assumed-role/Privileged/x',
+  );
   assert.match(operatorApply, /Do not broaden|doNotBroadenStep3TempKms/);
   assert.match(operatorApply, /preserveExistingEnv/);
   assert.match(operatorApply, /requireLiveIdToken/);
@@ -180,6 +271,7 @@ test('privileged-operator path is separately gated and refuses Step3Temp', () =>
   assert.equal(planned.status, 2);
   assert.match(planned.stdout, /"operatorOnly":true/);
   assert.match(planned.stdout, /"doNotUseStep3Temp":true/);
+  assert.match(planned.stdout, /"expectedAccount":"806168576068"/);
   assert.match(planned.stdout, /"idTokenRequired":true/);
   refuteSecrets(`${planned.stdout}${planned.stderr}`);
 
