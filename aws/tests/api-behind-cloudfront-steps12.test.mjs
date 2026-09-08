@@ -203,6 +203,23 @@ test('Gate 1 Step 1 PASS record keeps Step 2 and origin-verify out of scope', ()
   assert.doesNotMatch(doc, /DisableExecuteApiEndpoint=true/);
 });
 
+test('Gate 2 / Step 2 PASS record is same-origin /prep and does not start Step 3', () => {
+  const doc = read('aws/cutover/API_PERIMETER_STEP2_PASS.md');
+  assert.match(doc, /Step 2 PASS/);
+  assert.match(doc, /index-reP2FWHf\.js/);
+  assert.match(doc, /4ef3aaf9eac12f0a5ba47887683e7efdd93fa87b5de1af3ecc5be812b27ea076/);
+  assert.match(doc, /window\.location\.origin/);
+  assert.match(doc, /kiqojucc02\.execute-api/);
+  assert.match(doc, /\*\*absent\*\*/);
+  assert.match(doc, /productionExecution=false/);
+  assert.match(doc, /holds\.ok=true/);
+  assert.match(doc, /NOT_APPLIED/);
+  assert.match(doc, /Do not start Step 3/);
+  assert.match(doc, /Not used/);
+  assert.doesNotMatch(doc, /DisableExecuteApiEndpoint=true/);
+  assert.doesNotMatch(doc, /origin-verify secret created/);
+});
+
 test('Gate 0 role create is blocked on staging and does not recreate deleted roles', () => {
   const doc = read('aws/cutover/API_PERIMETER_GATE0_ROLE_BLOCKED.md');
   assert.match(doc, /CREATE BLOCKED/);
