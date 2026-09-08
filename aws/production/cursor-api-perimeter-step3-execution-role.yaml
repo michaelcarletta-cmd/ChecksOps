@@ -1,0 +1,65 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Authorizer Lambda execution role checksops-production-origin-verify
+  only. Reviewed least-privilege definition from
+  cursor-api-perimeter-step3-role.yaml OriginVerifyExecutionRole.
+  Does NOT create ChecksOpsCursorApiPerimeterStep3Temp. Does NOT
+  deploy Gate 3A-3C. Does not mutate CloudFront, prep Lambda, SPA,
+  WAF, DNS, Cognito, RDS, or financial/provider flags.
+
+Parameters:
+  DeployRole:
+    Type: String
+    Default: "false"
+    AllowedValues: ["false", "true"]
+    Description: Privileged operator sets true to create the execution role only.
+
+Conditions:
+  ShouldDeployRole: !Equals [!Ref DeployRole, "true"]
+
+Resources:
+  OriginVerifyExecutionRole:
+    Type: AWS::IAM::Role
+    Condition: ShouldDeployRole
+    Properties:
+      RoleName: checksops-production-origin-verify
+      Description: Execution role for origin-verify authorizer Lambda only.
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: origin-verify-secret-and-logs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: AuthorizerLogs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - arn:aws:logs:us-east-1:806168576068:log-group:/aws/lambda/checksops-production-origin-verify
+                  - arn:aws:logs:us-east-1:806168576068:log-group:/aws/lambda/checksops-production-origin-verify:*
+              - Sid: OriginVerifySecretRead
+                Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: arn:aws:secretsmanager:us-east-1:806168576068:secret:checksops/production/cloudfront-origin-verify*
+      Tags:
+        - Key: Purpose
+          Value: cloudfront-origin-verify
+
+Outputs:
+  DoNotDeployGatesFromThisStack:
+    Value: STOP. Execution role only. Do not deploy Gate 3A-3C from this stack.
+  RoleName:
+    Condition: ShouldDeployRole
+    Value: !Ref OriginVerifyExecutionRole
+  RoleArn:
+    Condition: ShouldDeployRole
+    Value: !GetAtt OriginVerifyExecutionRole.Arn
