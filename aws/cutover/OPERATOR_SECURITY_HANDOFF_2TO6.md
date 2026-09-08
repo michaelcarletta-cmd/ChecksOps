@@ -1,10 +1,10 @@
 # Security Hardening #2–#6 handoff — STOP: SNS confirmation resent
 
-**Date:** 2026-09-08  
-**STOP FOR REVIEW.** Confirmation was **resent** to the existing topic
-and `security@checksops.com`. `#6` was **not deployed**. Subscription
-is still `PendingConfirmation` until the mailbox clicks Confirm.
-Temporary role **not** deleted.
+**Date:** 2026-09-08 (second resend)  
+**STOP FOR REVIEW.** Confirmation was **resent again** to the existing
+topic and `security@checksops.com`. `#6` was **not deployed**.
+Subscription is still `PendingConfirmation` (exactly one email
+subscription). Temporary role **not** deleted.
 
 Caller: `arn:aws:sts::806168576068:assumed-role/ChecksOpsCursorSecurityHardeningTemp/checksops-sec-hard`
 
