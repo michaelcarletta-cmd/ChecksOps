@@ -1,0 +1,182 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  TEMPORARY read-only Cursor OIDC role to finish the Step 3 execute-api
+  caller audit. DO NOT DEPLOY FROM THIS PR. DeployRole default false.
+  Does not broaden ChecksOpsCursorCloudStaging. List/describe only.
+
+Parameters:
+  DeployRole:
+    Type: String
+    Default: "false"
+    AllowedValues: ["false", "true"]
+    Description: Leave false. This PR must not create the role.
+  RoleName:
+    Type: String
+    Default: ChecksOpsCursorApiPerimeterStep3AuditTemp
+    AllowedValues:
+      - ChecksOpsCursorApiPerimeterStep3AuditTemp
+
+Conditions:
+  ShouldDeployRole: !Equals [!Ref DeployRole, "true"]
+
+Resources:
+  AllowPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Condition: ShouldDeployRole
+    Properties:
+      ManagedPolicyName: ChecksOpsCursorApiPerimeterStep3AuditAllow
+      Description: TEMPORARY read-only EventBridge/Scheduler/Synthetics list.
+      PolicyDocument: {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Sid": "ListEventBridgeCallers",
+            "Effect": "Allow",
+            "Action": [
+              "events:ListRules",
+              "events:DescribeRule",
+              "events:ListTargetsByRule",
+              "events:ListEventBuses",
+              "events:ListApiDestinations",
+              "events:DescribeApiDestination",
+              "events:ListConnections",
+              "events:DescribeConnection"
+            ],
+            "Resource": "*"
+          },
+          {
+            "Sid": "ListSchedulerCallers",
+            "Effect": "Allow",
+            "Action": [
+              "scheduler:ListSchedules",
+              "scheduler:GetSchedule",
+              "scheduler:ListScheduleGroups"
+            ],
+            "Resource": "*"
+          },
+          {
+            "Sid": "ListSyntheticsAndAlarms",
+            "Effect": "Allow",
+            "Action": [
+              "synthetics:DescribeCanaries",
+              "synthetics:GetCanary",
+              "synthetics:DescribeCanariesLastRun",
+              "cloudwatch:DescribeAlarms",
+              "pipes:ListPipes",
+              "pipes:DescribePipe",
+              "states:ListStateMachines",
+              "states:DescribeStateMachine",
+              "ssm:DescribeParameters",
+              "route53:ListHealthChecks",
+              "route53:GetHealthCheck"
+            ],
+            "Resource": "*"
+          },
+          {
+            "Sid": "ReadLambdaAndHttpApiInventory",
+            "Effect": "Allow",
+            "Action": [
+              "lambda:ListFunctions",
+              "lambda:GetFunctionConfiguration",
+              "lambda:GetPolicy",
+              "lambda:ListEventSourceMappings",
+              "lambda:GetFunctionUrlConfig",
+              "apigateway:GET"
+            ],
+            "Resource": "*"
+          }
+        ]
+      }
+
+  DenyPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Condition: ShouldDeployRole
+    Properties:
+      ManagedPolicyName: ChecksOpsCursorApiPerimeterStep3AuditDeny
+      Description: TEMPORARY deny writes and secret/parameter values.
+      PolicyDocument: {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Sid": "DenyAllWrites",
+            "Effect": "Deny",
+            "NotAction": [
+              "events:ListRules",
+              "events:DescribeRule",
+              "events:ListTargetsByRule",
+              "events:ListEventBuses",
+              "events:ListApiDestinations",
+              "events:DescribeApiDestination",
+              "events:ListConnections",
+              "events:DescribeConnection",
+              "scheduler:ListSchedules",
+              "scheduler:GetSchedule",
+              "scheduler:ListScheduleGroups",
+              "synthetics:DescribeCanaries",
+              "synthetics:GetCanary",
+              "synthetics:DescribeCanariesLastRun",
+              "cloudwatch:DescribeAlarms",
+              "pipes:ListPipes",
+              "pipes:DescribePipe",
+              "states:ListStateMachines",
+              "states:DescribeStateMachine",
+              "ssm:DescribeParameters",
+              "route53:ListHealthChecks",
+              "route53:GetHealthCheck",
+              "lambda:ListFunctions",
+              "lambda:GetFunctionConfiguration",
+              "lambda:GetPolicy",
+              "lambda:ListEventSourceMappings",
+              "lambda:GetFunctionUrlConfig",
+              "apigateway:GET",
+              "sts:GetCallerIdentity"
+            ],
+            "Resource": "*"
+          },
+          {
+            "Sid": "DenySecretAndParameterValues",
+            "Effect": "Deny",
+            "Action": [
+              "secretsmanager:GetSecretValue",
+              "ssm:GetParameter",
+              "ssm:GetParameters",
+              "ssm:GetParametersByPath"
+            ],
+            "Resource": "*"
+          }
+        ]
+      }
+
+  AuditRole:
+    Type: AWS::IAM::Role
+    Condition: ShouldDeployRole
+    Properties:
+      RoleName: !Ref RoleName
+      Description: TEMPORARY read-only caller audit. Do not use for deploy.
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: CursorCloudOidcLiveApiCursorCom
+            Effect: Allow
+            Principal:
+              Federated: arn:aws:iam::806168576068:oidc-provider/api.cursor.com
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                api.cursor.com:aud: sts.amazonaws.com
+                api.cursor.com:sub: user:325724407
+      ManagedPolicyArns:
+        - !Ref AllowPolicy
+        - !Ref DenyPolicy
+      Tags:
+        - Key: Temporary
+          Value: "true"
+        - Key: Purpose
+          Value: api-perimeter-step3-caller-audit
+        - Key: DoNotBroadenStaging
+          Value: "true"
+
+Outputs:
+  DoNotDeployFromThisPr:
+    Value: STOP. DeployRole default false. Read-only audit role only.

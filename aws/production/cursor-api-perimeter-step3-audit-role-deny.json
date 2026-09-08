@@ -1,0 +1,67 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyAllWrites",
+      "Effect": "Deny",
+      "NotAction": [
+        "events:ListRules",
+        "events:DescribeRule",
+        "events:ListTargetsByRule",
+        "events:ListEventBuses",
+        "events:ListApiDestinations",
+        "events:DescribeApiDestination",
+        "events:ListConnections",
+        "events:DescribeConnection",
+        "scheduler:ListSchedules",
+        "scheduler:GetSchedule",
+        "scheduler:ListScheduleGroups",
+        "synthetics:DescribeCanaries",
+        "synthetics:GetCanary",
+        "synthetics:DescribeCanariesLastRun",
+        "cloudwatch:DescribeAlarms",
+        "pipes:ListPipes",
+        "pipes:DescribePipe",
+        "states:ListStateMachines",
+        "states:DescribeStateMachine",
+        "ssm:DescribeParameters",
+        "route53:ListHealthChecks",
+        "route53:GetHealthCheck",
+        "lambda:ListFunctions",
+        "lambda:GetFunctionConfiguration",
+        "lambda:GetPolicy",
+        "lambda:ListEventSourceMappings",
+        "lambda:GetFunctionUrlConfig",
+        "apigateway:GET",
+        "sts:GetCallerIdentity"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenySecretAndParameterValues",
+      "Effect": "Deny",
+      "Action": [
+        "secretsmanager:GetSecretValue",
+        "ssm:GetParameter",
+        "ssm:GetParameters",
+        "ssm:GetParametersByPath"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyRdsCognitoWafDnsMutateAndPrep",
+      "Effect": "Deny",
+      "Action": [
+        "rds:*",
+        "cognito-idp:*",
+        "wafv2:*",
+        "route53:ChangeResourceRecordSets",
+        "lambda:UpdateFunctionConfiguration",
+        "lambda:UpdateFunctionCode",
+        "lambda:CreateFunction",
+        "cloudfront:UpdateDistribution"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
