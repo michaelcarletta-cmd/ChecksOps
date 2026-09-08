@@ -306,6 +306,12 @@ message opens those deployments. Use the reviewed templates below as-is.
   1. Change set with `CreateEmailSubscription=false` — must **Remove** only `AlertSubscription`
   2. Change set with `CreateEmailSubscription=true` — must **Add** only `AlertSubscription`
   Topic ARN/name, protocol `email`, and endpoint stay `security@checksops.com`. A single same-property update or `sns subscribe` does **not** send a new confirmation.
+  **AWS limitation (observed 2026-09-08):** CFN cannot delete a pending
+  email subscription (it detaches). `sns unsubscribe` is also denied for
+  pending ARNs. Recreating `AlertSubscription` reattaches the same pending
+  ARN and does **not** send a new confirmation. Wait for SNS to auto-delete
+  the unconfirmed subscription (~48 hours), then run step 2 (or false→true)
+  when pending count is `0`. Do **not** delete the topic.
 - Rollback: `delete-stack checksops-production-security-sns`
 - Then pass `AlertTopicArn` into #6 (not into `security-monitoring.yaml`)
 
@@ -463,10 +469,9 @@ Reviewed as a **single** stack (do not split the template).
 ---
 
 **STOP FOR REVIEW — #2–#5 PASS, #6 WAITING on SNS confirmation.**
-Confirmation was resent again to existing `security@checksops.com` on
-`checksops-production-security-alerts` (2026-09-08, second resend).
-Subscription is still `PendingConfirmation` (one email subscription). Do **not** deploy
-`checksops-production-security-alarms` until it is `Confirmed`. Do not
-create another topic or email. Do not delete the temp role. Do not
-delete the trail stack. See
+CFN replace of `AlertSubscription` (2026-09-08) reattached the same
+pending ARN; AWS will not delete a `PendingConfirmation` email
+subscription. Do **not** deploy `checksops-production-security-alarms`
+until it is `Confirmed`. Do not create another topic or email. Do not
+delete the temp role. Do not delete the trail stack. See
 `aws/cutover/OPERATOR_SECURITY_HANDOFF_2TO6.md`.
