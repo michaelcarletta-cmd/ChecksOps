@@ -475,8 +475,9 @@ Reviewed as a **single** stack (do not split the template).
 is also **PASS**. `#6` stack `checksops-production-security-alarms` is
 **CREATE_COMPLETE** (2026-09-08). 14 alarms page the existing SNS topic.
 `support@checksops.com` is Confirmed. `security@checksops.com` left
-pending. Do **not** delete either temp role. Do not delete the trail stack.
-See `aws/cutover/OPERATOR_SECURITY_HANDOFF_2TO6.md`.
+pending. Temporary-role cleanup is **BLOCKED** (do not broaden staging).
+Do not delete the trail stack. See
+`aws/cutover/OPERATOR_SECURITY_HANDOFF_2TO6.md`.
 
 ### Proposed follow-up — CloudTrail to CloudWatch Logs (**PASS**)
 
@@ -488,6 +489,7 @@ Do **not** use `security-monitoring.yaml` or recreate the trail.
 Do **not** modify `ChecksOpsCursorSecurityHardeningTemp`.
 
 Operator identity: `ChecksOpsCursorCloudTrailCwLogsTemp`. See
-`aws/cutover/OPERATOR_CLOUDTRAIL_CWLOGS_ROLE.md`. Do **not** delete either
-temporary role. Do not generate an IAM change just to test. Do not start
-API-behind-CloudFront or financial activation.
+`aws/cutover/OPERATOR_CLOUDTRAIL_CWLOGS_ROLE.md`. Temporary-role cleanup
+is **BLOCKED** (`ChecksOpsCursorCloudStaging` denied `iam:DetachRolePolicy`).
+Do not broaden staging. Do not start API-behind-CloudFront or financial
+activation.

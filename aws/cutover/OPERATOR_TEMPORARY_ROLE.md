@@ -1,13 +1,14 @@
 # Temporary Cursor role for Security Hardening #2–#6
 
 **STOP FOR REVIEW — #1–#6 PASS.**
-Role CREATE_COMPLETE. Do not delete this role until a later reviewed
-cleanup. `#6` alarms are deployed.
+Role still exists. Temporary-role cleanup is **BLOCKED**:
+`ChecksOpsCursorCloudStaging` cannot `iam:DetachRolePolicy` on this role.
+Do **not** broaden staging. See
+`aws/cutover/OPERATOR_CLOUDTRAIL_CWLOGS_ROLE.md`.
 
-Do **not** modify this role. A separate one-purpose follow-up role
-`ChecksOpsCursorCloudTrailCwLogsTemp` exists. The CloudTrail → CloudWatch
-Logs follow-up is **PASS**. Do **not** delete either temporary role yet.
-See `aws/cutover/OPERATOR_CLOUDTRAIL_CWLOGS_ROLE.md`.
+Do **not** modify this role except via privileged stack delete of
+`cursor-security-hardening-role` (live stack name). The CloudTrail →
+CloudWatch Logs follow-up is **PASS**. Permanent detection resources stay.
 
 The role exists (created `2026-09-07T17:45:35Z`) with **zero** inline
 policies and six customer-managed policies. Cursor OIDC assume
@@ -48,7 +49,8 @@ only adds the **operator identity** those stacks will run as.
 |---|---|
 | Role name | `ChecksOpsCursorSecurityHardeningTemp` |
 | Role ARN | `arn:aws:iam::806168576068:role/ChecksOpsCursorSecurityHardeningTemp` |
-| Console stack name | `checksops-cursor-security-hardening-role` |
+| Console stack name (template / historical) | `checksops-cursor-security-hardening-role` |
+| Live CloudFormation stack | `cursor-security-hardening-role` |
 | Template | `aws/production/cursor-security-hardening-role.yaml` |
 | Trust JSON (paste) | `aws/production/cursor-security-hardening-role-trust.json` |
 | Combined permissions (review) | `aws/production/cursor-security-hardening-role-permissions.json` |
@@ -267,7 +269,9 @@ that feature flag.
 
 ## Holds (unchanged)
 
-- `#1`–`#6` are **PASS**. Do **not** delete this role until a later reviewed cleanup.
+- `#1`–`#6` are **PASS**. Temporary-role cleanup is **BLOCKED**; do not
+  broaden staging. Privileged next step: delete live stack
+  `cursor-security-hardening-role`.
 - Do not broaden `ChecksOpsCursorCloudStaging`.
 - Do not use root, access keys, passwords, OTPs, or secrets.
 - Do not modify application code, prep Lambda env/VPC/role, RDS data,

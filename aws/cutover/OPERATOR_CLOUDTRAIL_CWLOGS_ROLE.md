@@ -1,22 +1,71 @@
 # Temporary Cursor role for CloudTrail → CloudWatch Logs
 
-**STOP FOR REVIEW.** Follow-up **PASS** (2026-09-08). Do **not** delete
-either temporary role. Do **not** clean up the stale
-`security@checksops.com` subscription. Do **not** start
+**STOP FOR REVIEW.** Follow-up remains **PASS**. Temporary-role cleanup is
+**BLOCKED**.
+
+`ChecksOpsCursorCloudStaging` can start `cloudformation:DeleteStack` but
+is **denied** `iam:DetachRolePolicy` / `iam:GetRole` on the temporary
+roles. Stack `checksops-cursor-cloudtrail-cwlogs-role` is therefore
+**DELETE_FAILED** (role still present). Hardening stack
+`cursor-security-hardening-role` was **not** deleted. Do **not** broaden
+staging. Finish cleanup from a privileged IAM principal that can delete
+those named roles and their stack-owned managed policies.
+
+Permanent CloudTrail → CloudWatch Logs resources were **not** modified.
+
+Do **not** clean up `security@checksops.com`. Do **not** start
 API-behind-CloudFront or financial activation.
 
-`aws/production/security-cloudtrail-cwlogs.yaml` is **CREATE_COMPLETE** as
-stack `checksops-production-security-trail-cwlogs`. One
-`cloudtrail:UpdateTrail` attached CloudWatch Logs only. Frozen trail
-fields (S3, multi-region, validation, selectors) were unchanged.
-
-Do **not** modify `ChecksOpsCursorSecurityHardeningTemp`. Do **not**
-broaden `ChecksOpsCursorCloudStaging`.
-
 **Account:** `806168576068`  
-**Region:** `us-east-1`  
-**#1 CloudTrail:** PASS (`checksops-production-mgmt-events`) plus CloudWatch
-Logs delivery.
+**Region:** `us-east-1`
+
+## Cleanup attempt 2026-09-08 — BLOCKED
+
+Read-only preflight of the follow-up **PASS** (logging, CW Logs delivery,
+365-day log group, metric filter, alarm → existing SNS, `support@`
+Confirmed, money flags false, `64_` NOT_APPLIED).
+
+Then revoke was attempted as `ChecksOpsCursorCloudStaging` (the temp
+roles Deny mutation of their own stacks).
+
+| Stack | Result |
+|---|---|
+| `checksops-cursor-cloudtrail-cwlogs-role` | **DELETE_FAILED** — `iam:DetachRolePolicy` AccessDenied on `ChecksOpsCursorCloudTrailCwLogsTemp` |
+| `checksops-cursor-security-hardening-role` | already **does not exist** (historical). Live owner is `cursor-security-hardening-role` |
+| `cursor-security-hardening-role` | **UPDATE_COMPLETE** — not deleted after the first stack failed |
+| `checksops-production-security-trail-cwlogs` | still **CREATE_COMPLETE** |
+| `checksops-production-security-trail` | still **CREATE_FAILED** |
+
+Re-verified 2026-09-08T12:13Z as
+`ChecksOpsCursorCloudTrailCwLogsTemp/checksops-ct-cwlogs` (HardeningTemp
+still assumes separately):
+
+| Check | Result |
+|---|---|
+| Stack `checksops-production-security-trail-cwlogs` | still **CREATE_COMPLETE** |
+| Trail `checksops-production-mgmt-events` | `IsLogging=true`, exactly **1** trail |
+| CW Logs delivery | `LatestCloudWatchLogsDeliveryTime=2026-09-08T12:11:05Z`, error **none** |
+| Log group | `/aws/cloudtrail/checksops-production-mgmt-events`, retention **365** |
+| Metric filter | `checksops-prod-iam-security-changes-filter` present |
+| Alarm `checksops-prod-iam-security-changes` | still pages `checksops-production-security-alerts`; currently **ALARM** after the blocked `iam:DetachRolePolicy` attempt |
+| SNS `support@checksops.com` | **Confirmed** (`PendingConfirmation=false`) |
+| SNS `security@checksops.com` | still **PendingConfirmation** (untouched) |
+| Moov / CheckAlt / Provider / Financial | all **false** |
+| `productionExecution` | **false** |
+| `64_financial_activation_grants.sql` | **NOT_APPLIED** stub; `financialPermissionsActivated=false` |
+| Smoke | `/health` 200, `/ops/readiness` 200 `holds.ok=true`, `/financial/status` 200 |
+
+Both temporary roles still assume. Stack-owned managed policies still
+exist (CFN resource list). Delivery role
+`checksops-production-cloudtrail-cwlogs` kept.
+
+Privileged next step (not staging, not these temp roles): retry
+`delete-stack` on `checksops-cursor-cloudtrail-cwlogs-role`, then delete
+`cursor-security-hardening-role` (the live HardeningTemp stack). Confirm
+`GetRole` → `NoSuchEntity` for both temp roles and their nine managed
+policies. Do **not** broaden `ChecksOpsCursorCloudStaging`.
+
+---
 
 ## Follow-up verification 2026-09-08 — PASS
 
@@ -225,8 +274,9 @@ Do **not** add `sts:AssumeRole` on `ChecksOpsCursorCloudStaging` or on
 put a human IAM user in the trust.
 
 Identity verification on 2026-09-08 assumed this session successfully.
-The follow-up stack and single `UpdateTrail` are **PASS**. Do **not**
-delete this role until a later reviewed cleanup.
+The follow-up stack and single `UpdateTrail` are **PASS**. Stack delete
+of this role is **BLOCKED** for Cursor operators; finish from a
+privileged IAM principal.
 
 ---
 
@@ -295,8 +345,8 @@ the four flags remain `false`.
 
 ## Holds (unchanged)
 
-- **STOP FOR REVIEW.** Follow-up is PASS. Do not delete either temporary
-  role. Do not clean up `security@checksops.com`. Do not deploy
+- **STOP FOR REVIEW.** Follow-up remains PASS. Temporary-role cleanup is
+  **BLOCKED**. Do not clean up `security@checksops.com`. Do not deploy
   API-behind-CloudFront or financial activation.
 - Do not modify `ChecksOpsCursorSecurityHardeningTemp`.
 - Do not broaden `ChecksOpsCursorCloudStaging`.
