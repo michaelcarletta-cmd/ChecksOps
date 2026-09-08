@@ -66,6 +66,9 @@ const existingSecret = awsJson(
 );
 let secretArn;
 if (existingSecret.__error) {
+  if (String(process.env.CHECKSOPS_STEP3_REUSE_SECRET || '') === '1') {
+    throw new Error('secret_missing_reuse_required. Do not create or overwrite checksops/production/cloudfront-origin-verify.');
+  }
   const payload = JSON.stringify({ current: randomBytes(32).toString('hex'), next: '' });
   try {
     const created = awsJson([
@@ -110,47 +113,55 @@ const zip = spawnSync('zip', ['-qr', zipPath, 'authorizer.mjs', 'node_modules', 
 if (zip.status !== 0) throw new Error('zip failed');
 
 const fn = awsJson(['lambda', 'get-function', '--function-name', LAMBDA_NAME], { allowFail: true });
+const createArgs = [
+  'lambda',
+  'create-function',
+  '--function-name',
+  LAMBDA_NAME,
+  '--runtime',
+  'nodejs20.x',
+  '--role',
+  execArn,
+  '--handler',
+  'authorizer.handler',
+  '--timeout',
+  '10',
+  '--memory-size',
+  '256',
+  '--zip-file',
+  `fileb://${zipPath}`,
+];
 if (fn.__error) {
-  awsJson([
-    'lambda',
-    'create-function',
-    '--function-name',
-    LAMBDA_NAME,
-    '--runtime',
-    'nodejs20.x',
-    '--role',
-    execArn,
-    '--handler',
-    'authorizer.handler',
-    '--timeout',
-    '10',
-    '--memory-size',
-    '256',
-    '--zip-file',
-    `fileb://${zipPath}`,
-    '--environment',
-    JSON.stringify({
-      Variables: {
-        ORIGIN_VERIFY_REQUIRE: 'false',
-        ORIGIN_VERIFY_SECRET_ARN: secretArn,
-      },
-    }),
-  ]);
+  try {
+    awsJson([
+      ...createArgs,
+      '--environment',
+      JSON.stringify({
+        Variables: {
+          ORIGIN_VERIFY_REQUIRE: 'false',
+          ORIGIN_VERIFY_SECRET_ARN: secretArn,
+        },
+      }),
+    ]);
+  } catch (err) {
+    const msg = String(err?.message || err);
+    if (!/KMS|kms/i.test(msg)) throw err;
+    // Step3Temp denies kms:* so Lambda cannot encrypt env vars.
+    // Authorizer defaults: REQUIRE unset/false, SecretId = SECRET_NAME.
+    awsJson(createArgs);
+  }
 } else {
   awsJson(['lambda', 'update-function-code', '--function-name', LAMBDA_NAME, '--zip-file', `fileb://${zipPath}`]);
-  awsJson([
-    'lambda',
-    'update-function-configuration',
-    '--function-name',
-    LAMBDA_NAME,
-    '--environment',
-    JSON.stringify({
-      Variables: {
-        ORIGIN_VERIFY_REQUIRE: 'false',
-        ORIGIN_VERIFY_SECRET_ARN: secretArn,
-      },
-    }),
-  ]);
+}
+
+let cfg = {};
+for (let i = 0; i < 20; i += 1) {
+  cfg = awsJson(['lambda', 'get-function-configuration', '--function-name', LAMBDA_NAME], { allowFail: true });
+  if (!cfg.__error && (cfg.State === 'Active' || cfg.LastUpdateStatus === 'Successful')) break;
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1500);
+}
+if (String(cfg.Environment?.Variables?.ORIGIN_VERIFY_REQUIRE || '') === 'true') {
+  throw new Error('refusing_require_mode_on_authorizer');
 }
 
 const lambdaArn = `arn:aws:lambda:us-east-1:${account}:function:${LAMBDA_NAME}`;

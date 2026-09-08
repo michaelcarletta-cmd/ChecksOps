@@ -35,7 +35,18 @@ if (!shouldExecute()) {
 }
 
 const identity = requireStep3Temp();
-const secret = awsJson(['secretsmanager', 'get-secret-value', '--secret-id', SECRET_NAME]);
+let secret;
+try {
+  secret = awsJson(['secretsmanager', 'get-secret-value', '--secret-id', SECRET_NAME]);
+} catch (err) {
+  const msg = String(err?.message || err);
+  if (/Access to KMS is not allowed|kms/i.test(msg)) {
+    throw new Error(
+      'get_secret_kms_denied. Step3Temp DenyKmsAndRoleChaining blocks GetSecretValue. Privileged operator must except alias/aws/secretsmanager from the KMS deny before Gate 3B. Do not print the secret. See aws/cutover/API_PERIMETER_STEP3_GATE3B_KMS_BLOCKED.md',
+    );
+  }
+  throw err;
+}
 const parsed = JSON.parse(secret.SecretString || '{}');
 const current = String(parsed.current || '');
 if (current.length < 32) throw new Error('secret_current_too_short');
