@@ -1,0 +1,197 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyCreateDeleteDistributions",
+      "Effect": "Deny",
+      "Action": [
+        "cloudfront:DeleteDistribution",
+        "cloudfront:CreateDistribution",
+        "cloudfront:CreateDistributionWithTags",
+        "cloudfront:CreateInvalidation"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyOtherDistributionUpdates",
+      "Effect": "Deny",
+      "Action": "cloudfront:UpdateDistribution",
+      "NotResource": "arn:aws:cloudfront::806168576068:distribution/E1B0ZWWO5559U5"
+    },
+    {
+      "Sid": "DenyWafMutation",
+      "Effect": "Deny",
+      "Action": [
+        "wafv2:*",
+        "waf:*",
+        "waf-regional:*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyApiLevelAndStageMutation",
+      "Effect": "Deny",
+      "Action": [
+        "apigateway:POST",
+        "apigateway:PATCH",
+        "apigateway:DELETE",
+        "apigateway:PUT"
+      ],
+      "Resource": [
+        "arn:aws:apigateway:us-east-1::/apis/kiqojucc02",
+        "arn:aws:apigateway:us-east-1::/apis/kiqojucc02/stages",
+        "arn:aws:apigateway:us-east-1::/apis/kiqojucc02/stages/*",
+        "arn:aws:apigateway:us-east-1::/apis/kiqojucc02/cors"
+      ]
+    },
+    {
+      "Sid": "DenyOtherApis",
+      "Effect": "Deny",
+      "Action": "apigateway:*",
+      "NotResource": [
+        "arn:aws:apigateway:us-east-1::/apis/kiqojucc02",
+        "arn:aws:apigateway:us-east-1::/apis/kiqojucc02/*"
+      ]
+    },
+    {
+      "Sid": "DenyOtherLambdas",
+      "Effect": "Deny",
+      "Action": "lambda:*",
+      "NotResource": [
+        "arn:aws:lambda:us-east-1:806168576068:function:checksops-production-origin-verify",
+        "arn:aws:lambda:us-east-1:806168576068:function:checksops-production-origin-verify:*"
+      ]
+    },
+    {
+      "Sid": "DenyOtherSecrets",
+      "Effect": "Deny",
+      "Action": "secretsmanager:*",
+      "NotResource": "arn:aws:secretsmanager:us-east-1:806168576068:secret:checksops/production/cloudfront-origin-verify*"
+    },
+    {
+      "Sid": "DenySecretDestructive",
+      "Effect": "Deny",
+      "Action": [
+        "secretsmanager:DeleteSecret",
+        "secretsmanager:RotateSecret",
+        "secretsmanager:CancelRotateSecret",
+        "secretsmanager:RestoreSecret",
+        "secretsmanager:PutResourcePolicy",
+        "secretsmanager:DeleteResourcePolicy"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyRds",
+      "Effect": "Deny",
+      "Action": [
+        "rds:*",
+        "rds-data:*",
+        "rds-db:*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyCognito",
+      "Effect": "Deny",
+      "Action": "cognito-idp:*",
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyDns",
+      "Effect": "Deny",
+      "Action": [
+        "route53:*",
+        "route53domains:*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyIamExceptPassNamedAuthorizerRole",
+      "Effect": "Deny",
+      "Action": [
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:UpdateRole",
+        "iam:UpdateAssumeRolePolicy",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:CreatePolicy",
+        "iam:CreatePolicyVersion",
+        "iam:DeletePolicy",
+        "iam:CreateUser",
+        "iam:CreateAccessKey",
+        "iam:AttachUserPolicy"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyPassRoleExceptAuthorizerExecution",
+      "Effect": "Deny",
+      "Action": "iam:PassRole",
+      "NotResource": "arn:aws:iam::806168576068:role/checksops-production-origin-verify"
+    },
+    {
+      "Sid": "DenyProtectedRoles",
+      "Effect": "Deny",
+      "Action": "iam:*",
+      "Resource": [
+        "arn:aws:iam::806168576068:role/ChecksOpsCursor*",
+        "arn:aws:iam::806168576068:role/ChecksOpsCursorApiPerimeterSteps12Temp",
+        "arn:aws:iam::806168576068:role/ChecksOpsCursorSecurityHardeningTemp",
+        "arn:aws:iam::806168576068:role/ChecksOpsCursorCloudTrailCwLogsTemp",
+        "arn:aws:iam::806168576068:role/checksops-production-api-execution"
+      ]
+    },
+    {
+      "Sid": "DenySecurityMonitoringAndJobs",
+      "Effect": "Deny",
+      "Action": [
+        "cloudtrail:*",
+        "config:*",
+        "guardduty:*",
+        "securityhub:*",
+        "events:*",
+        "scheduler:*",
+        "synthetics:*",
+        "sns:*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenySensitiveBucketsAndSpa",
+      "Effect": "Deny",
+      "Action": "s3:*",
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyKmsAndRoleChaining",
+      "Effect": "Deny",
+      "Action": [
+        "kms:*",
+        "sts:AssumeRole",
+        "sts:AssumeRoleWithSAML",
+        "sts:AssumeRoot"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyProtectedCloudFormation",
+      "Effect": "Deny",
+      "Action": [
+        "cloudformation:CreateStack",
+        "cloudformation:UpdateStack",
+        "cloudformation:DeleteStack",
+        "cloudformation:CreateChangeSet",
+        "cloudformation:ExecuteChangeSet"
+      ],
+      "Resource": [
+        "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-prep-api/*",
+        "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-cloudfront-waf/*",
+        "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-security-*"
+      ]
+    }
+  ]
+}
