@@ -23,6 +23,8 @@ test('operator package lists six detection-only deployments and stops at the tem
   assert.match(pack, /security-alerts-sns\.yaml/);
   assert.match(pack, /CreateEmailSubscription=false/);
   assert.match(pack, /CreateEmailSubscription=true/);
+  assert.match(pack, /TemporaryAlertEmail/);
+  assert.match(pack, /support@checksops\.com/);
   assert.match(pack, /security-config\.yaml/);
   assert.match(pack, /security-posture-services\.yaml/);
   assert.match(pack, /security-vpc-flow\.yaml/);

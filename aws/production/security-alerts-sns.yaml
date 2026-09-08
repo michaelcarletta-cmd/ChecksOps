@@ -21,6 +21,13 @@ Parameters:
     Description: >
       Set false then true to replace a stale pending email subscription
       without replacing the topic.
+  TemporaryAlertEmail:
+    Type: String
+    Default: support@checksops.com
+    Description: >
+      Extra email subscription so alarms can be confirmed without
+      waiting for a stale security@ pending subscription to expire.
+      Does not replace AlertEmail.
 
 Conditions:
   ShouldCreateEmailSubscription: !Equals [!Ref CreateEmailSubscription, 'true']
@@ -39,6 +46,13 @@ Resources:
       TopicArn: !Ref AlertTopic
       Protocol: email
       Endpoint: !Ref AlertEmail
+
+  TemporaryAlertSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref AlertTopic
+      Protocol: email
+      Endpoint: !Ref TemporaryAlertEmail
 
 Outputs:
   AlertTopicArn:

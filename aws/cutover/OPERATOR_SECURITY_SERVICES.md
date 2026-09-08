@@ -297,9 +297,9 @@ message opens those deployments. Use the reviewed templates below as-is.
 
 - Stack: `checksops-production-security-sns`
 - Region: `us-east-1`
-- Parameters: `AlertEmail` = `security@checksops.com`; `CreateEmailSubscription` = `true`
+- Parameters: `AlertEmail` = `security@checksops.com`; `CreateEmailSubscription` = `true`; `TemporaryAlertEmail` = `support@checksops.com`
 - IAM capability: **No**
-- Resources: topic `checksops-production-security-alerts` + email subscription
+- Resources: topic `checksops-production-security-alerts` + `security@` subscription + temporary `support@` subscription
 - Cost: email notifies; first 1,000 SNS email notifications/month are typically free, then about $2.00 per 100,000
 - PASS: `aws sns get-topic-attributes --topic-arn arn:aws:sns:us-east-1:806168576068:checksops-production-security-alerts` and subscription `PendingConfirmation` → operator confirms mail → `Confirmed`
 - Stale pending repair (CloudFormation only; do not `sns unsubscribe` unless CFN cannot replace):
