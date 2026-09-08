@@ -53,6 +53,13 @@ const identity = requireStep3Temp();
 const account = '806168576068';
 const execArn = `arn:aws:iam::${account}:role/${EXECUTION_ROLE_NAME}`;
 
+const execRole = awsJson(['iam', 'get-role', '--role-name', EXECUTION_ROLE_NAME], { allowFail: true });
+if (execRole.__error) {
+  throw new Error(
+    `execution_role_missing ${EXECUTION_ROLE_NAME}. Privileged operator must create it from aws/production/cursor-api-perimeter-step3-execution-role.yaml before Gate 3A. Do not create the secret first.`,
+  );
+}
+
 const existingSecret = awsJson(
   ['secretsmanager', 'describe-secret', '--secret-id', SECRET_NAME],
   { allowFail: true },
