@@ -85,16 +85,22 @@ const integration = awsJson([
 if (!String(integration.IntegrationUri || '').includes(PREP_LAMBDA)) {
   throw new Error('refusing_to_retarget_prep_integration');
 }
-const params = { ...(integration.RequestParameters || {}), [`remove:header.${HEADER_NAME}`]: '' };
+const overwriteKey = `overwrite:header.${HEADER_NAME}`;
+const removeKey = `remove:header.${HEADER_NAME}`;
+// HTTP API drops empty remove: values via CLI and rejects combining remove+overwrite.
+// overwrite to an empty-string mapping blanks the header before the prep Lambda.
+const params = { ...(integration.RequestParameters || {}), [overwriteKey]: '""' };
+delete params[removeKey];
+const integInput = {
+  ApiId: API_ID,
+  IntegrationId: INTEGRATION_ID,
+  RequestParameters: params,
+};
 awsJson([
   'apigatewayv2',
   'update-integration',
-  '--api-id',
-  API_ID,
-  '--integration-id',
-  INTEGRATION_ID,
-  '--request-parameters',
-  JSON.stringify(params),
+  '--cli-input-json',
+  JSON.stringify(integInput),
 ]);
 const after = awsJson([
   'apigatewayv2',
@@ -134,7 +140,8 @@ console.log(JSON.stringify({
   optionsAuthorization: optAfter?.AuthorizationType,
   defaultAuthorizationType: defAfter?.AuthorizationType,
   authorizerId: authorizer.AuthorizerId,
-  headerStripConfigured: Boolean(after.RequestParameters?.[`remove:header.${HEADER_NAME}`] === ''),
+  headerStripConfigured: after.RequestParameters?.[overwriteKey] === '""'
+    || after.RequestParameters?.[removeKey] === '',
   integrationStillPrep: String(after.IntegrationUri || '').includes(PREP_LAMBDA),
   ORIGIN_VERIFY_REQUIRE: requireFlag || 'false',
   attachMode: 'observe',

@@ -52,6 +52,22 @@ export function publicVerifyLine(state) {
   };
 }
 
+/** Parse CloudWatch-prefixed authorizer lines into public booleans only. */
+export function parseObserveLogLine(line) {
+  const raw = String(line || '');
+  const start = raw.indexOf('{');
+  if (start < 0) return null;
+  try {
+    const obj = JSON.parse(raw.slice(start));
+    if (obj && typeof obj === 'object' && 'originHeaderPresent' in obj) {
+      return publicVerifyLine(obj);
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 export function requireGate(name, expected = 'I_UNDERSTAND_PRODUCTION') {
   if (String(process.env[name] || '') !== expected) {
     console.error(`DO_NOT_DEPLOY ${name} is unset. Step 3 must not run.`);

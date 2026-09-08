@@ -11,8 +11,7 @@ import {
   SECRET_NAME,
   WAF_ARN,
   awsJson,
-  awsText,
-  publicVerifyLine,
+  parseObserveLogLine,
 } from './lib.mjs';
 
 const CF = 'https://checksops.com';
@@ -40,17 +39,16 @@ const logs = awsJson([
   'filter-log-events',
   '--log-group-name',
   `/aws/lambda/${LAMBDA_NAME}`,
+  '--start-time',
+  String(Date.now() - 30 * 60 * 1000),
   '--limit',
   '40',
 ], { allowFail: true });
 
 const states = [];
 for (const ev of logs.events || []) {
-  const msg = String(ev.message || '').trim();
-  try {
-    const obj = JSON.parse(msg);
-    if ('originHeaderPresent' in obj) states.push(publicVerifyLine(obj));
-  } catch { /* ignore */ }
+  const parsed = parseObserveLogLine(ev.message);
+  if (parsed) states.push(parsed);
 }
 
 const cfState = states.find((s) => s.originHeaderPresent) || { originHeaderPresent: false, originHeaderValid: false };
@@ -90,10 +88,11 @@ const headerNamePresent = Boolean(
 );
 
 const integration = awsJson(['apigatewayv2', 'get-integration', '--api-id', API_ID, '--integration-id', 'jci10de']);
-const headerStripped = Object.prototype.hasOwnProperty.call(
-  integration.RequestParameters || {},
-  `remove:header.${HEADER_NAME}`,
-);
+const headerStripped = integration.RequestParameters?.[`overwrite:header.${HEADER_NAME}`] === '""'
+  || Object.prototype.hasOwnProperty.call(
+    integration.RequestParameters || {},
+    `remove:header.${HEADER_NAME}`,
+  );
 
 const flags = financial.json?.flags || {};
 const report = {
@@ -109,7 +108,7 @@ const report = {
   holdsOk: readiness.json?.holds?.ok === true,
   productionExecution: financial.json?.productionExecution === false,
   providerFinancialFlagsFalse: Object.entries(flags)
-    .filter(([k]) => /MOOV|CHECKALT|PLAID|ACTUM|QUICKBOOKS|PROVIDER_EXECUTION|PROVIDER_LIVE|FINANCIAL_PERMISSIONS|FINANCIAL_SANDBOX|SANDBOX_EXECUTION/.test(k))
+    .filter(([k]) => /MOOV|CHECKALT|PLAID|ACTUM|QUICKBOOKS|PROVIDER_EXECUTION|PROVIDER_LIVE|FINANCIAL_PERMISSIONS|FINANCIAL_SANDBOX|SANDBOX_EXECUTION|FINANCIAL_EXECUTION/.test(k))
     .every(([, v]) => v === false),
   financialActivationSqlApplied: readiness.json?.financialActivationSqlApplied === false,
 };
@@ -120,6 +119,8 @@ const ok = report.cloudfrontHealth
   && report.cloudfront.originHeaderPresent === true
   && report.cloudfront.originHeaderValid === true
   && report.executeApiDirect.originHeaderPresent === false
+  && report.executeApiDirect.originHeaderValid === false
+  && report.headerStrippedOnIntegration
   && report.wafAttached
   && report.holdsOk
   && report.productionExecution

@@ -4,19 +4,9 @@
  * Never prints the origin-verification secret, hash, prefix, or CloudFront header value.
  */
 import { spawnSync } from 'node:child_process';
-import { publicVerifyLine } from './lib.mjs';
+import { parseObserveLogLine, publicVerifyLine } from './lib.mjs';
 
-const parseLog = (line) => {
-  try {
-    const obj = JSON.parse(line);
-    if ('originHeaderPresent' in obj || 'originHeaderValid' in obj) {
-      return publicVerifyLine(obj);
-    }
-  } catch {
-    return null;
-  }
-  return null;
-};
+const parseLog = (line) => parseObserveLogLine(line);
 
 const raw = process.argv.slice(2).join('\n');
 if (raw.includes('HeaderValue') || raw.includes('SecretString') || /"current"\s*:\s*"[a-f0-9]{16,}"/i.test(raw)) {
