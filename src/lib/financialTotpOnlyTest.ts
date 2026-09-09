@@ -75,6 +75,17 @@ export const canShowFinancialTotpOnlyTestCard = (input: {
 }): boolean =>
   Boolean(input.awsMfaAvailable && input.userId && roleMayRunFinancialTotpOnlyTest(input.roles));
 
+/** Trusted roles from AWS GET /identity/me. Empty on any untrusted payload. */
+export const identityMeFinancialRoles = (identity: unknown): unknown => {
+  if (!identity || typeof identity !== "object") return [];
+  const record = identity as Record<string, unknown>;
+  if (record.ok === false || !record.applicationUserId) return [];
+  return {
+    roles: record.roles,
+    tenant_roles: Array.isArray(record.tenant_roles) ? record.tenant_roles : record.tenants,
+  };
+};
+
 export type FinancialTotpOnlyStop = {
   continued: false;
   invoked: readonly [];

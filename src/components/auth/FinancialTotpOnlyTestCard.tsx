@@ -8,8 +8,9 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
 import { useStepUp } from "@/hooks/useStepUp";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import { awsMfaAvailable } from "@/lib/awsMfa";
+import { awsApiBaseUrl } from "@/lib/awsStaging";
+import { loadAwsIdentityFinancialRoles } from "@/lib/financialTotpOnlyIdentity";
 import {
   FINANCIAL_TOTP_ONLY_COPY,
   FINANCIAL_TOTP_ONLY_FORBIDDEN,
@@ -30,8 +31,8 @@ export function FinancialTotpOnlyTestCard() {
   const [checkId, setCheckId] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<FinancialTotpOnlyOutcome | { error: string } | null>(null);
-  const [tenantRoles, setTenantRoles] = useState<unknown[] | null>(null);
-  const knownRoles = [userRole, user?.app_metadata, tenantRoles];
+  const [identityRoles, setIdentityRoles] = useState<unknown>(null);
+  const knownRoles = [userRole, user?.app_metadata, identityRoles];
   const visible = canShowFinancialTotpOnlyTestCard({
     awsMfaAvailable: awsMfaAvailable(),
     userId: user?.id,
@@ -40,7 +41,7 @@ export function FinancialTotpOnlyTestCard() {
 
   useEffect(() => {
     if (!awsMfaAvailable() || !user?.id) {
-      setTenantRoles([]);
+      setIdentityRoles([]);
       return;
     }
     if (
@@ -50,18 +51,17 @@ export function FinancialTotpOnlyTestCard() {
         roles: [userRole, user.app_metadata],
       })
     ) {
-      setTenantRoles([]);
+      setIdentityRoles([]);
       return;
     }
     let cancelled = false;
-    void supabase
-      .from("tenant_users")
-      .select("role")
-      .eq("user_id", user.id)
-      .then(({ data, error }) => {
-        if (cancelled) return;
-        setTenantRoles(error ? [] : ((data ?? []) as unknown[]));
-      });
+    void loadAwsIdentityFinancialRoles({
+      awsMfaAvailable: true,
+      apiBaseUrl: awsApiBaseUrl(),
+    }).then((result) => {
+      if (cancelled) return;
+      setIdentityRoles(result.ok ? result.roles : []);
+    });
     return () => {
       cancelled = true;
     };
