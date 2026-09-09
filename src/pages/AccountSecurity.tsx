@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ArrowLeft, ShieldCheck } from "lucide-react";
 import { PasskeyManagerCard } from "@/components/auth/PasskeyManagerCard";
 import { TotpManagerCard } from "@/components/auth/TotpManagerCard";
+import { FinancialTotpOnlyTestCard } from "@/components/auth/FinancialTotpOnlyTestCard";
 import { useAuth } from "@/hooks/useAuth";
 
 /** Self-service sign-in security: passkeys, two-factor, login preference. */
@@ -49,6 +50,7 @@ export default function AccountSecurity() {
 
       <PasskeyManagerCard onChanged={() => void setMethod("passkey")} />
       <TotpManagerCard />
+      <FinancialTotpOnlyTestCard />
 
       <Card>
         <CardHeader>
