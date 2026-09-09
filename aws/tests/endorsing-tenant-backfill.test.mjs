@@ -49,8 +49,9 @@ const pgPeer = (database) => ({
   user: process.env.USER || 'ubuntu',
   database,
 });
+const skipNoPostgres = !fs.existsSync('/var/run/postgresql/.s.PGSQL.5432');
 
-test('fixture database backfills only NULL children and rolls back', async () => {
+test('fixture database backfills only NULL children and rolls back', { skip: skipNoPostgres }, async () => {
   const requireFromApi = createRequire(new URL('../functions/api/package.json', import.meta.url));
   const { Client } = requireFromApi('pg');
   const dbName = `endorsing_backfill_test_${process.pid}_${Date.now()}`;
@@ -157,7 +158,7 @@ test('fixture database backfills only NULL children and rolls back', async () =>
   }
 });
 
-test('fixture aborts on tenant mismatch and does not overwrite non-null tenant_id', async () => {
+test('fixture aborts on tenant mismatch and does not overwrite non-null tenant_id', { skip: skipNoPostgres }, async () => {
   const requireFromApi = createRequire(new URL('../functions/api/package.json', import.meta.url));
   const { Client } = requireFromApi('pg');
   const dbName = `endorsing_backfill_mismatch_${process.pid}_${Date.now()}`;
