@@ -26,6 +26,7 @@ import {
 import { usePermissions } from "@/hooks/usePermissions";
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
 import { assessCheckValidity, isAtRisk } from "@/lib/checkValidity";
+import { REVIEW_QUEUE_SELECT, isInReviewQueue, reviewQueuePayeeReasons } from "@/lib/reviewQueueQuery";
 import { ShareCheckDialog } from "@/components/check-review/ShareCheckDialog";
 import { ReuploadCheckImageButton } from "@/components/checks/ReuploadCheckImageButton";
 import { AdminDeleteCheckButton } from "@/components/checks/AdminDeleteCheckButton";
@@ -176,66 +177,6 @@ function buildReviewFieldUpdatePayload(
   return { updates, fieldChanges };
 }
 
-const isMirroredCheck = (check: ReviewCheck) =>
-  !!check.external_origin && typeof check.external_origin === "object" &&
-  (check.external_origin as any).source_app === "freedom_crm";
-
-const lifecycleRank = (s: string | null | undefined): number => {
-  switch ((s || "").toLowerCase()) {
-    case "deposited": case "released": return 50;
-    case "approved_for_deposit": case "endorsed": return 40;
-    case "endorsements_in_progress": case "endorsement_pending": return 30;
-    case "loss_draft_required": return 25;
-    case "needs_review": case "in_review": case "ocr_complete": return 20;
-    case "held": return 15;
-    case "received": case "processing": case "uploaded": return 10;
-    case "voided": case "returned": return 5;
-    default: return 0;
-  }
-};
-
-const getEffectiveStatus = (check: ReviewCheck): string => {
-  if (isMirroredCheck(check) && check.partner_status) {
-    return lifecycleRank(check.status) >= lifecycleRank(check.partner_status)
-      ? check.status
-      : check.partner_status;
-  }
-  return check.status;
-};
-
-const isInReviewQueue = (check: ReviewCheck): boolean => {
-  const effectiveStatus = getEffectiveStatus(check);
-  const stage = (check as any).check_stage as string | undefined;
-  // Exclude checks already routed downstream so they don't double-list
-  // alongside Loss Draft, Endorsing, Branch, Reissue, or Deposited.
-  if (
-    stage === "loss_draft" ||
-    stage === "reissue" ||
-    stage === "branch" ||
-    stage === "deposited" ||
-    stage === "endorsing" ||
-    effectiveStatus === "loss_draft_required" ||
-    effectiveStatus === "reissue_requested" ||
-    effectiveStatus === "branch_deposit_required" ||
-    effectiveStatus === "deposited" ||
-    effectiveStatus === "endorsements_in_progress" ||
-    effectiveStatus === "approved_for_deposit"
-  ) {
-    return false;
-  }
-  return (
-    stage === "review" ||
-    effectiveStatus === "needs_review" ||
-    effectiveStatus === "in_review" ||
-    effectiveStatus === "ocr_complete" ||
-    effectiveStatus === "manual_review_required" ||
-    effectiveStatus === "endorsements_complete" ||
-    effectiveStatus === "uploaded" ||
-    check.ocr_status === "failed"
-  );
-};
-
-
 /**
  * Extract a clean insured/policyholder name from a raw check payee_line.
  * Filters out co-payees like banks, mortgage companies, public adjusters,
@@ -332,7 +273,7 @@ export function CheckReviewQueue({
       // 1. Tenant's own checks
       const { data: ownChecks, error } = await supabase
         .from("check_intake_items")
-        .select("*, check_payees(*)")
+        .select(REVIEW_QUEUE_SELECT)
         .eq("tenant_id", tenantId!)
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -349,7 +290,7 @@ export function CheckReviewQueue({
       if (sharedIds.length > 0) {
         const { data: sc } = await supabase
           .from("check_intake_items")
-          .select("*, check_payees(*)")
+          .select(REVIEW_QUEUE_SELECT)
           .in("id", sharedIds)
           .order("created_at", { ascending: false });
         sharedChecks = sc ?? [];
@@ -487,10 +428,7 @@ export function CheckReviewQueue({
     if (check.ocr_needs_verification) reasons.push("Needs Verification");
     if (check.ocr_status === "failed") reasons.push("OCR failed");
     if (check.deposit_recommendation === "manual_review_required") reasons.push("Manual review required");
-    if (check.check_payees?.some((p) => p.endorsement_status === "rejected")) reasons.push("Rejected endorsement");
-    if (check.check_payees?.some((p) => p.payee_type === "mortgage_company")) reasons.push("Mortgage payee");
-    if ((check.check_payees?.length ?? 0) >= 3) reasons.push("3+ payees");
-    if (check.check_payees?.some((p) => p.payee_type === "other")) reasons.push("Unclear payee classification");
+    reasons.push(...reviewQueuePayeeReasons(check.check_payees));
     if (reasons.length === 0) reasons.push("Awaiting routing");
     return reasons.join(" · ");
   }
