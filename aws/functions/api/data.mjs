@@ -113,6 +113,27 @@ export const logDataQueryFailure = (error, body = {}) => {
   return classified;
 };
 
+export const DEFAULT_PAGE_LIMIT = 200;
+export const MAX_PAGE_LIMIT = 500;
+
+/**
+ * Resolve SELECT LIMIT. null/undefined/''/NaN/0/negative use the default 200.
+ * Number(null)===0 must not become LIMIT 1. Explicit 1..500 is honored; larger values clamp to 500.
+ */
+export const resolvePageLimit = (limit) => {
+  if (limit === null || limit === undefined || limit === '') return DEFAULT_PAGE_LIMIT;
+  const n = Number(limit);
+  if (!Number.isFinite(n) || n <= 0) return DEFAULT_PAGE_LIMIT;
+  return Math.min(Math.max(Math.trunc(n), 1), MAX_PAGE_LIMIT);
+};
+
+export const resolvePageOffset = (offset) => {
+  if (offset === null || offset === undefined || offset === '') return 0;
+  const n = Number(offset);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.trunc(n);
+};
+
 export const parseBody = (event) => {
   if (!event?.body) return {};
   const raw = event.isBase64Encoded ? Buffer.from(event.body, 'base64').toString('utf8') : event.body;
@@ -573,8 +594,8 @@ const runSelect = async (client, body) => {
     const dir = body.order.ascending === false ? 'DESC' : 'ASC';
     order = `ORDER BY ${ident(body.order.column, 'column')} ${dir}`;
   }
-  const limit = Number.isFinite(Number(body.limit)) ? Math.min(Math.max(Number(body.limit), 1), 500) : 200;
-  const offset = Number.isFinite(Number(body.offset)) ? Math.max(Number(body.offset), 0) : 0;
+  const limit = resolvePageLimit(body.limit);
+  const offset = resolvePageOffset(body.offset);
   const needed = columnsNeededForEmbeds(table, parsed.columns, parsed.embeds);
   const cols = needed.has('*') ? '*' : [...needed].map((c) => ident(c, 'column')).join(', ');
   const countSql = `SELECT count(*)::int AS n FROM public.${table} ${where}`;
