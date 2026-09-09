@@ -60,6 +60,21 @@ These are the names current production Edge Functions actually read (`supabase/f
 | `MOOV_SANDBOX_WEBHOOK_SECRET` | Staging HMAC fixture |
 | Staging `AWS_MOOV_WEBHOOK_SECRET` | Lambda env fallback for sandbox dry-run only |
 
+## Read-only vs money-execution contracts (M3.1)
+
+Do **not** weaken the money-execution list. Distinguish:
+
+| Name | Read-only GET | Money execution |
+| --- | --- | --- |
+| `MOOV_PUBLIC_KEY` | **required** (OAuth client id) | required |
+| `MOOV_SECRET_KEY` | **required** | required |
+| `MOOV_ENVIRONMENT` | **required** `production` | required `production` |
+| `MOOV_ALLOWED_ORIGIN` | **required** (`https://checksops.com`; this integration's token request 401s without Origin) | required |
+| `MOOV_PLATFORM_ACCOUNT_ID` | not required for tenant account/wallet/bank/capability GET; required to GET a facilitator transfer | **required** facilitator |
+| `MOOV_WEBHOOK_SECRET` | **not required** for GET | **required** |
+
+`loadProductionMoovReadSecrets()` enforces the read minimum. `loadProductionMoovSecrets()` still enforces all six names.
+
 ## Fail closed
 
 If `PROVIDER_SECRETS_ARN` is unset, the secret is missing, any required production name is absent, `MOOV_ENVIRONMENT` is not `production`, Origin is staging/sandbox, or any `MOOV_SANDBOX_*` value equals a production name, the production adapter refuses **before** HTTP.
