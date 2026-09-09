@@ -1,87 +1,55 @@
 {
-  "phase": "M3b-resume",
-  "captured_at": "2026-09-09T22:18:00Z",
+  "phase": "M3b-resume-singular-secret",
+  "captured_at": "2026-09-09T22:50:00Z",
   "moov_http_called": false,
   "production_get_count": 0,
   "production_post_count": 0,
   "oauth_token_requests": 0,
   "money_moved": false,
-  "secrets_created": false,
   "secret_values_printed": false,
   "sql72_applied": false,
   "lovable_changed": false,
   "webhook_changed": false,
-  "deployment": {
-    "git_sha": "969a322eb7c0a510b4aa4eaeeed2bafd00c541f0",
-    "lambda_name": "checksops-production-prep-api",
-    "lambda_code_sha256": "nnTP3XZpEI+pfmKEAhgKI/s6nVNa9ZTCIGd9JGRSV94="
-  },
   "secret_contract": {
-    "secret_id": "checksops/production/providers",
+    "secret_id": "checksops/production/provider",
+    "arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:checksops/production/provider-At4ZFR",
     "exists": true,
-    "provider_secrets_arn_configured": true,
+    "awscurrent": true,
+    "old_plural_providers": "deleted",
+    "provider_secrets_arn_points_at_singular": true,
     "read_contract_complete": false,
     "full_execution_contract_complete": false,
     "names_configured": {
       "MOOV_PUBLIC_KEY": true,
-      "MOOV_SECRET_KEY": false,
-      "MOOV_PLATFORM_ACCOUNT_ID": false,
-      "MOOV_WEBHOOK_SECRET": false,
+      "MOOV_SECRET_KEY": true,
       "MOOV_ENVIRONMENT": false,
-      "MOOV_ALLOWED_ORIGIN": false
+      "MOOV_ALLOWED_ORIGIN": true,
+      "MOOV_PLATFORM_ACCOUNT_ID": false,
+      "MOOV_WEBHOOK_SECRET": false
     },
-    "MOOV_ENVIRONMENT_is_production": false,
-    "MOOV_ALLOWED_ORIGIN_approved": false,
-    "sandbox_key_names_present": [],
-    "sandbox_contamination_names": [],
-    "missing_read_names": [
-      "MOOV_SECRET_KEY",
-      "MOOV_ENVIRONMENT",
-      "MOOV_ALLOWED_ORIGIN"
-    ]
+    "typo_key_MOOV_ENVIRO_present": true,
+    "MOOV_ENVIRO_value_is_production": true,
+    "MOOV_ALLOWED_ORIGIN_approved": true
   },
   "flags": {
     "AWS_PROVIDER_LIVE_READS_ENABLED": true,
     "AWS_MOOV_ENABLED": false,
     "AWS_PROVIDER_EXECUTION_ENABLED": false,
     "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": false,
-    "AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED": false,
-    "AWS_PROVIDER_WEBHOOK_DRY_RUN": true
+    "AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED": false
   },
   "probes": {
-    "money_blocked_with_live_reads_on": {
-      "moov-transfer-create": {
-        "http": 403,
-        "error": "production_execution_blocked",
-        "liveProviderCalled": false
-      },
-      "moov-disburse": {
-        "http": 403,
-        "error": "production_execution_blocked",
-        "liveProviderCalled": false
-      }
-    },
-    "freedom_moov_readiness": {
+    "moov-transfer-create": {"http": 403, "error": "production_execution_blocked", "liveProviderCalled": false},
+    "moov-disburse": {"http": 403, "error": "production_execution_blocked", "liveProviderCalled": false},
+    "freedom_readiness": {
       "http": 503,
       "error": "production_secret_missing",
       "reason": "required_read_names_missing",
+      "missingNames": ["MOOV_ENVIRONMENT"],
       "liveProviderCalled": false,
-      "server_derived_local_account": true,
-      "browser_account_id_used": false
+      "moov_get_performed": false
     },
-    "spoofed_browser_account_id": {
-      "http": 400,
-      "error": "untrusted_provider_config",
-      "liveProviderCalled": false
-    },
-    "sql72_column_probe": {
-      "exists": false,
-      "status": "NOT_APPLIED"
-    },
-    "recipients": {
-      "verdict": "RECIPIENT_NOT_CONFIRMED",
-      "freedom_moov_onboarding_statuses": ["awaiting_bank"],
-      "c1c_used": false
-    }
+    "recipients": {"verdict": "RECIPIENT_NOT_CONFIRMED"},
+    "sql72": "NOT_APPLIED"
   }
 }
