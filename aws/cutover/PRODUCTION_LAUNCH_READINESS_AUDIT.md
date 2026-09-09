@@ -114,16 +114,20 @@ Live SPA talks to same-origin `/prep` only.
 
 ## 5. Production UI
 
-Walked on `https://checksops.com` (see recording).
+Walked on `https://checksops.com` (unauthenticated; 2026-09-09 recording).
 
 - Amber banner on **every** page: “AWS staging — Cognito + RDS. Production ChecksOps is unchanged.” Root: `AwsStagingBanner` + `isAwsStaging()` true whenever `VITE_AUTH_PROVIDER=cognito`.
-- Login copy still says “AWS staging: passkeys use Cognito WebAuthn…” and offers **“Use staging password (master UAT)”**.
-- Mortgage Desk and Freedom login also say “AWS staging”.
+- Login copy: “Access your organization's check workflows. AWS staging.” Passkey (Recommended) + “Email me a verification code” + **“Use staging password (master UAT)”**. Footer: “AWS staging: passkeys use Cognito WebAuthn; email verification remains available.”
+- Mortgage Desk (`/mortgage-ops/login`): “Employee sign-in · AWS staging”; same master-UAT password toggle as CheckOps login.
+- Authenticated Check Command Center / review copy still contains “AWS staging” strings (`CheckCommandCenter.tsx`, `CheckReviewConsole.tsx`) — not walked with a session.
 - `/forgot-password` → `/login`.
-- `/admin/tenants` access-restricted without session (expected).
-- `www.checksops.com/login` canonicalizes toward apex; WebAuthn RP is apex-only.
-- No supabase/execute-api console calls observed.
-- Authenticated empty tables / wrong counts **not measured** (no session).
+- `/sign` → “Invalid Link / No signing token provided” (not a crash).
+- `/endorse` → “Endorsement Error / No endorsement token provided.” (not a crash).
+- `/admin/tenants` → “Access Restricted / master merchant” (expected).
+- Unknown tenant paths (`/demo/checks`, `/checksops/checks`) → organization-not-found (expected without session).
+- `www.checksops.com/login` canonicalizes to apex; passkeys remain apex-only.
+- Console: CSP `frame-ancestors` ignored on `<meta>` (`index:7` / route HTML). No supabase/execute-api network calls observed.
+- Authenticated empty tables / wrong counts **not measured** (no EMAIL_OTP session).
 
 ---
 
