@@ -106,13 +106,17 @@ const grepFiles = (files, needles) => {
   return found;
 };
 
+// Login and TOTP are same-origin /prep (Lambda → Cognito). Pool/client IDs
+// are not required in the browser bundle; AWS_STAGING_PUBLIC_CONFIG is unused
+// and tree-shaken. Dual-control helper is unused (one Freedom financial user).
 const mustInclude = [
   '/auth/mfa/step-up',
+  '/auth/mfa/associate',
+  '/auth/mfa/verify',
   'check_intake_item_id',
   'deposit.submit',
-  'checkalt-dual-control',
-  'us-east-1_h00WorYMT',
-  '3ja9fqaq2fjkv3i6up2varcqpe',
+  'deposit.approve',
+  'https://checksops.com',
 ];
 
 const mustExclude = [
@@ -120,8 +124,6 @@ const mustExclude = [
   'us-east-1_vPmQ7cL1F',
   '71bb7a192cbl6o6s8m259tl589',
   'kiqojucc02.execute-api',
-  'staging.checksops.com',
-  'uatapi.checkalt.com',
   'api2.checkalt.com',
 ];
 
