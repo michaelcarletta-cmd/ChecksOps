@@ -10,8 +10,10 @@ import {
   commitDurableAttempt,
   insertQueuedDeposit,
   loadDepositByIdempotency,
+  loadDepositsForCheck,
   markHttpAttempted,
   persistProviderOutcome,
+  pickBlockingDeposit,
   replayDepositResponse,
   shouldReconcileInsteadOfPost,
 } from './checkalt-idempotency.mjs';
@@ -173,6 +175,59 @@ export async function handleProductionCheckAltSubmit({
     checkId: check.id,
     amountCents: userAmount,
   });
+  const existingForCheck = await loadDepositsForCheck(client, {
+    tenantId: check.tenant_id,
+    checkId: check.id,
+  });
+  const blocking = pickBlockingDeposit(existingForCheck);
+  if (blocking) {
+    if (blocking.checkalt_reference && ['submitted', 'pending_approval', 'cleared'].includes(String(blocking.status || ''))) {
+      return {
+        ...replayDepositResponse(blocking, {
+          message: 'Existing CheckAlt deposit for this check reused. A second FinCapture POST was not sent.',
+        }),
+        duplicate: true,
+        replayed: true,
+        spoofFieldsIgnored: spoof,
+        applicationUserId: mapping.application_user_id,
+      };
+    }
+    if (blocking.checkalt_reference) {
+      const reconciled = await reconcileProductionCheckAltDeposit({
+        client,
+        mapping,
+        row: blocking,
+        cfg: loadedCfg.cfg,
+        credentials: loadedCfg.credentials,
+        acct,
+        fetchImpl,
+      });
+      return {
+        ...reconciled,
+        duplicate: true,
+        replayed: true,
+        spoofFieldsIgnored: spoof,
+        applicationUserId: mapping.application_user_id,
+      };
+    }
+    return {
+      ...replayDepositResponse(blocking, {
+        message: 'An existing CheckAlt deposit for this check may already have reached the provider. Reconcile manually. A second FinCapture POST was not sent.',
+      }),
+      ok: true,
+      statusCode: 200,
+      success: false,
+      duplicate: true,
+      replayed: true,
+      reconciled: false,
+      uncertain: true,
+      error: 'reconciliation_required',
+      liveProviderCalled: false,
+      productionExecution: false,
+      spoofFieldsIgnored: spoof,
+      applicationUserId: mapping.application_user_id,
+    };
+  }
   const existing = await loadDepositByIdempotency(client, {
     tenantId: check.tenant_id,
     idempotencyKey,

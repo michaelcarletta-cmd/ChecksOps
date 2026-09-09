@@ -1,6 +1,7 @@
 import { FINANCIAL_ROLES, roleAllowsFinancial } from '../../financial-authz.mjs';
 import { membershipForTenant } from '../../financial-ownership.mjs';
 import { financialPermissionsActivated } from '../../financial-flags.mjs';
+import { formatCheckAltUserAmount } from '../amounts.mjs';
 import { productionCheckAltExecutionAllowed } from './checkalt-holds.mjs';
 
 export const CHECKALT_TOTP_ACTION = 'deposit.submit';
@@ -18,6 +19,33 @@ export const denyCheckAltAuthz = (error, extra = {}) => ({
   message: extra.message || 'Financial authorization denied. Cognito login is not money-movement authority.',
   ...extra,
 });
+
+export const serverAmountCentsFromCheck = (check) => {
+  const formatted = formatCheckAltUserAmount(check?.amount);
+  if (formatted?.error || !Number.isInteger(formatted?.userAmount)) return null;
+  return formatted.userAmount;
+};
+
+export const loggedAmountCents = (metadata) => {
+  const raw = metadata?.amount_cents;
+  if (raw === undefined || raw === null || raw === '') return null;
+  const cents = Number(raw);
+  return Number.isInteger(cents) ? cents : null;
+};
+
+export const stepUpMatchesCheck = (row, {
+  tenantId,
+  checkId,
+  amountCents,
+  actionKey,
+} = {}) => {
+  if (!row || !tenantId || !checkId || !Number.isInteger(Number(amountCents))) return false;
+  if (String(row.tenant_id) !== String(tenantId)) return false;
+  if (actionKey && String(row.action_key) !== String(actionKey)) return false;
+  if (row.succeeded !== true) return false;
+  if (String(row.metadata?.check_id || '') !== String(checkId)) return false;
+  return loggedAmountCents(row.metadata) === Number(amountCents);
+};
 
 export async function loadTenantRole(client, userId, tenantId) {
   if (!userId || !tenantId) return [];
@@ -37,25 +65,41 @@ export async function loadRecentStepUp(client, {
   tenantId,
   actionKey,
   checkId,
+  amountCents,
   sinceMs,
 } = {}) {
-  const params = [userId, tenantId, actionKey, new Date(Date.now() - sinceMs).toISOString()];
-  let sql = `SELECT id, user_id, tenant_id, action_key, factor_type, succeeded, metadata, created_at
+  if (!userId || !tenantId || !actionKey || !checkId || !Number.isInteger(Number(amountCents))) {
+    return [];
+  }
+  const rows = (await client.query(
+    `SELECT id, user_id, tenant_id, action_key, factor_type, succeeded, metadata, created_at
      FROM public.financial_stepup_log
      WHERE user_id = $1::uuid
        AND tenant_id = $2::uuid
        AND action_key = $3
        AND succeeded IS TRUE
-       AND created_at >= $4::timestamptz`;
-  if (checkId) {
-    params.push(checkId);
-    sql += ` AND (metadata->>'check_id') = $${params.length}`;
-  }
-  sql += ' ORDER BY created_at DESC LIMIT 5';
-  return (await client.query(sql, params)).rows;
+       AND created_at >= $4::timestamptz
+       AND (metadata->>'check_id') = $5
+       AND COALESCE((metadata->>'amount_cents')::bigint, -1) = $6::bigint
+     ORDER BY created_at DESC
+     LIMIT 5`,
+    [userId, tenantId, actionKey, new Date(Date.now() - sinceMs).toISOString(), String(checkId), Number(amountCents)],
+  )).rows;
+  return rows.filter((row) => stepUpMatchesCheck(row, {
+    tenantId,
+    checkId,
+    amountCents: Number(amountCents),
+    actionKey,
+  }));
 }
 
-export async function loadDualControlApproval(client, { tenantId, checkId, excludeUserId } = {}) {
+export async function loadDualControlApproval(client, {
+  tenantId,
+  checkId,
+  amountCents,
+  excludeUserId,
+} = {}) {
+  if (!tenantId || !checkId || !Number.isInteger(Number(amountCents))) return null;
   const rows = (await client.query(
     `SELECT id, user_id, tenant_id, action_key, factor_type, succeeded, metadata, created_at
      FROM public.financial_stepup_log
@@ -64,11 +108,30 @@ export async function loadDualControlApproval(client, { tenantId, checkId, exclu
        AND succeeded IS TRUE
        AND created_at >= $3::timestamptz
        AND (metadata->>'check_id') = $4
+       AND COALESCE((metadata->>'amount_cents')::bigint, -1) = $5::bigint
      ORDER BY created_at DESC
      LIMIT 20`,
-    [tenantId, CHECKALT_DUAL_CONTROL_ACTION, new Date(Date.now() - DUAL_CONTROL_TTL_MS).toISOString(), checkId],
+    [
+      tenantId,
+      CHECKALT_DUAL_CONTROL_ACTION,
+      new Date(Date.now() - DUAL_CONTROL_TTL_MS).toISOString(),
+      String(checkId),
+      Number(amountCents),
+    ],
   )).rows;
-  return rows.find((row) => String(row.user_id) !== String(excludeUserId)) || null;
+  for (const row of rows) {
+    if (String(row.user_id) === String(excludeUserId)) continue;
+    if (!stepUpMatchesCheck(row, {
+      tenantId,
+      checkId,
+      amountCents: Number(amountCents),
+      actionKey: CHECKALT_DUAL_CONTROL_ACTION,
+    })) continue;
+    const approverRoles = await loadTenantRole(client, row.user_id, tenantId);
+    if (!roleAllowsFinancial(approverRoles)) continue;
+    return row;
+  }
+  return null;
 }
 
 /**
@@ -105,7 +168,7 @@ export const evaluateCheckAltProductionAuthorization = ({
         : !roleOk
           ? 'Operator/staff cannot execute production CheckAlt. Owner/admin/manager required.'
           : !stepUpOk
-            ? 'Cognito TOTP step-up or dual-control approval from a distinct owner/admin/manager is required.'
+            ? 'Cognito TOTP step-up or dual-control approval from a distinct owner/admin/manager is required, bound to this check and amount.'
             : !flagsOk
               ? 'Production CheckAlt holds remain on.'
               : 'CheckAlt production authorization satisfied. Holds must still be lifted by a human.',
@@ -127,6 +190,13 @@ export async function authorizeCheckAltProduction({
       message: 'Authenticated user is not a member of the check tenant. Browser tenant_id is ignored.',
     });
   }
+  const amountCents = serverAmountCentsFromCheck(check);
+  if (requireStepUp && !Number.isInteger(amountCents)) {
+    return denyCheckAltAuthz('invalid_amount', {
+      statusCode: 400,
+      message: 'Server-derived check amount is required for financial step-up. Browser amount is ignored.',
+    });
+  }
   const roles = await loadTenantRole(client, userId, check.tenant_id);
   let totpOk = false;
   let dualControlOk = false;
@@ -138,23 +208,15 @@ export async function authorizeCheckAltProduction({
       tenantId: check.tenant_id,
       actionKey: CHECKALT_TOTP_ACTION,
       checkId: check.id,
+      amountCents,
       sinceMs: TOTP_STEPUP_TTL_MS,
     });
     totpRow = totpRows[0] || null;
     totpOk = Boolean(totpRow);
-    if (!totpOk) {
-      const totpAny = await loadRecentStepUp(client, {
-        userId,
-        tenantId: check.tenant_id,
-        actionKey: CHECKALT_TOTP_ACTION,
-        sinceMs: TOTP_STEPUP_TTL_MS,
-      });
-      totpRow = totpAny[0] || null;
-      totpOk = Boolean(totpRow);
-    }
     dualRow = await loadDualControlApproval(client, {
       tenantId: check.tenant_id,
       checkId: check.id,
+      amountCents,
       excludeUserId: userId,
     });
     dualControlOk = Boolean(dualRow);
@@ -184,5 +246,6 @@ export async function authorizeCheckAltProduction({
     roles,
     totpRow,
     dualRow,
+    amountCents,
   };
 }

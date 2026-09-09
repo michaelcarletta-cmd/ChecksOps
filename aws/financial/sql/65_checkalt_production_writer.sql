@@ -12,8 +12,8 @@
 --   3. Then lift financial/provider flags in the documented sequence
 --
 -- Writer requirements:
--- 1. Require current_setting('request.financial_execution', true) = '1'
--- 2. Require current_setting('request.aws_financial_permissions_activated', true) = '1'
+-- 1. Require financial execution GUCs to be explicitly '1' (unset/NULL is false)
+-- 2. Require request.aws_financial_permissions_activated to be explicitly '1'
 -- 3. Scope writes to the mapped tenant / owned checkalt_deposits row
 -- 4. Never accept browser-supplied tenant_id, user_id, or amount as authority
 -- 5. Persist idempotency_key BEFORE FinCapture HTTP
@@ -45,12 +45,15 @@ RETURNS boolean
 LANGUAGE sql
 STABLE
 AS $$
-  SELECT current_setting('request.financial_execution', true) = '1'
-     AND current_setting('request.aws_financial_permissions_activated', true) = '1';
+  SELECT COALESCE(
+    current_setting('request.financial_execution', true) = '1'
+    AND current_setting('request.aws_financial_permissions_activated', true) = '1',
+    false
+  );
 $$;
 
 COMMENT ON FUNCTION public.aws_financial_execution_active() IS
-  'True only when the AWS CheckAlt production writer bound financial GUCs. Default false.';
+  'True only when both financial GUCs are explicitly 1. Unset/NULL/false is false.';
 
 REVOKE ALL ON FUNCTION public.aws_financial_execution_active() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.aws_financial_execution_active() TO checksops, authenticated;
@@ -72,7 +75,7 @@ SET search_path = public
 SET row_security = off
 AS $$
 BEGIN
-  IF NOT public.aws_financial_execution_active() THEN
+  IF NOT COALESCE(public.aws_financial_execution_active(), false) THEN
     RAISE EXCEPTION 'checkalt production config requires financial execution GUCs'
       USING ERRCODE = '42501';
   END IF;
@@ -90,7 +93,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.aws_checkalt_production_config() IS
-  'Server-side CheckAlt merchant/FI/base_url. Blocked unless financial execution GUCs are set. No secrets.';
+  'Server-side CheckAlt merchant/FI/base_url. SECURITY DEFINER never returns a row unless financial GUCs are explicitly active. No secrets.';
 
 REVOKE ALL ON FUNCTION public.aws_checkalt_production_config() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.aws_checkalt_production_config() TO checksops;
@@ -100,7 +103,7 @@ CREATE POLICY aws_financial_insert_checkalt_deposits ON public.checkalt_deposits
   FOR INSERT TO authenticated
   WITH CHECK (
     public.aws_is_authenticated()
-    AND public.aws_financial_execution_active()
+    AND COALESCE(public.aws_financial_execution_active(), false)
     AND public.aws_can_access_tenant(tenant_id)
   );
 
@@ -109,12 +112,12 @@ CREATE POLICY aws_financial_update_checkalt_deposits ON public.checkalt_deposits
   FOR UPDATE TO authenticated
   USING (
     public.aws_is_authenticated()
-    AND public.aws_financial_execution_active()
+    AND COALESCE(public.aws_financial_execution_active(), false)
     AND public.aws_can_access_tenant(tenant_id)
   )
   WITH CHECK (
     public.aws_is_authenticated()
-    AND public.aws_financial_execution_active()
+    AND COALESCE(public.aws_financial_execution_active(), false)
     AND public.aws_can_access_tenant(tenant_id)
   );
 

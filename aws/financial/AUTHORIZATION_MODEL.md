@@ -56,9 +56,10 @@ Server-side only. React step-up is not authority.
 2. Membership of the **check** tenant (browser `tenant_id` / `user_id` ignored)
 3. Tenant role in `{owner, admin, manager}` — `operator` is denied
 4. Cognito TOTP step-up recorded in `financial_stepup_log` (`deposit.submit`) **or** dual-control from a **distinct** owner/admin/manager (`POST /financial/checkalt-dual-control`)
-5. `productionCheckAltExecutionAllowed()` — all of `AWS_PROVIDER_EXECUTION_ENABLED`, `AWS_CHECKALT_ENABLED`, `AWS_FINANCIAL_PERMISSIONS_ACTIVATED`, and sandbox flag **false**
+5. Both TOTP and dual-control are bound to the authenticated application user, the **server-derived check tenant**, `check_intake_item_id`, current server-derived `amount_cents`, and `operation = deposit.submit`. Browser `tenant_id` / `amount` are ignored. Changing the check or amount invalidates the step-up. There is **no tenant-wide TOTP fallback**.
+6. `productionCheckAltExecutionAllowed()` — all of `AWS_PROVIDER_EXECUTION_ENABLED`, `AWS_CHECKALT_ENABLED`, `AWS_FINANCIAL_PERMISSIONS_ACTIVATED`, and sandbox flag **false**
 
-The unenrolled Freedom operator tester cannot be the sole authority. Dual-control recording is not money movement and stays available with flags off.
+The unenrolled Freedom operator tester cannot be the sole authority. Dual-control recording is not money movement and stays available with flags off. Requester and approver must be distinct owner/admin/manager principals.
 | `canSimulate` | true when sandbox simulation is on and the caller is an authenticated member of the **resource** tenant. A financial role is recorded (`roleOk`) but is not required for simulation, because simulation is not money movement. Staging testers are `staff` / tenant members, not automatically `owner`/`admin`/`manager`. |
 | `activated` | always `false` |
 

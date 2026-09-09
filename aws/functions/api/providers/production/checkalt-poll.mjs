@@ -55,6 +55,47 @@ const parseJson = async (resp) => {
   return json;
 };
 
+/** Known history envelopes from Lovable poll + AWS parity. Do not invent item fields. */
+export const historyListOf = (json) => {
+  if (Array.isArray(json)) return json;
+  if (!json || typeof json !== 'object') return [];
+  if (Array.isArray(json.depositHistoryList)) return json.depositHistoryList;
+  if (Array.isArray(json.depositList)) return json.depositList;
+  if (Array.isArray(json.history)) return json.history;
+  if (Array.isArray(json.items)) return json.items;
+  if (Array.isArray(json.data)) return json.data;
+  if (Array.isArray(json.deposits)) return json.deposits;
+  return [];
+};
+
+export const matchHistoryByReference = (items, reference) => {
+  if (reference == null || reference === '') return null;
+  const want = String(reference);
+  const matches = (items || []).filter((item) => {
+    const value = item?.referenceNumber ?? item?.reference;
+    return value != null && String(value) === want;
+  });
+  return matches.length === 1 ? matches[0] : null;
+};
+
+export const reconciliationRequired = (row, extra = {}) => ({
+  ok: true,
+  statusCode: 200,
+  success: false,
+  error: 'reconciliation_required',
+  createdDeposit: false,
+  liveProviderCalled: extra.liveProviderCalled === true,
+  productionExecution: extra.productionExecution === true,
+  productionRecordsMutated: extra.productionRecordsMutated === true,
+  deposit_id: row?.id || null,
+  checkalt_reference: row?.checkalt_reference || null,
+  status: row?.status || null,
+  reconciled: false,
+  uncertain: true,
+  message: extra.message || 'CheckAlt history cannot be tied to this check without checkalt_reference. Amount is not unique. Do not POST again.',
+  applicationUserId: extra.applicationUserId || null,
+});
+
 export async function loadExistingProductionDeposit(client, { depositId, reference, tenantId }) {
   const params = [];
   const clauses = [];
@@ -94,64 +135,13 @@ export async function reconcileProductionCheckAltDeposit({
   const ssoKey = acct?.sso_key || acct?.sso_user_id || null;
   const reference = row.checkalt_reference;
   if (!reference) {
-    let historyJson = null;
-    if (ssoKey && cfg?.fi_key) {
-      const hist = await checkAltFetch({
-        cfg,
-        credentials,
-        path: '/fincapture/deposit/history',
-        body: { fiKey: cfg.fi_key, ssoKey },
-        fetchImpl,
-        jwtCache,
-      });
-      historyJson = await parseJson(hist);
-      const items = historyJson?.items || historyJson?.data || historyJson?.deposits || [];
-      const match = Array.isArray(items)
-        ? items.find((item) => String(item?.checkId || item?.check_id || '') === String(row.check_intake_item_id)
-          || Number(item?.userAmount) === Number(row.amount_cents))
-        : null;
-      if (match?.referenceNumber != null || match?.reference != null) {
-        const foundRef = String(match.referenceNumber ?? match.reference);
-        const status = resolvePollStatus(match) || 'submitted';
-        const saved = await persistPollOutcome(client, {
-          rowId: row.id,
-          status,
-          reference: foundRef,
-          providerPayload: match,
-        });
-        return {
-          ok: true,
-          statusCode: 200,
-          success: true,
-          liveProviderCalled: true,
-          createdDeposit: false,
-          productionExecution: true,
-          productionRecordsMutated: true,
-          deposit_id: saved.id,
-          checkalt_reference: saved.checkalt_reference,
-          status: saved.status,
-          reconciled: true,
-          message: 'Located the existing FinCapture transaction. A new deposit was not created.',
-          applicationUserId: mapping?.application_user_id,
-        };
-      }
-    }
-    return {
-      ok: true,
-      statusCode: 200,
-      success: false,
-      liveProviderCalled: Boolean(historyJson),
-      createdDeposit: false,
+    return reconciliationRequired(row, {
+      liveProviderCalled: false,
       productionExecution: true,
-      productionRecordsMutated: true,
-      deposit_id: row.id,
-      checkalt_reference: null,
-      status: row.status,
-      reconciled: true,
-      uncertain: true,
-      message: 'Provider HTTP was attempted without a stored reference. History did not match. Do not POST again.',
+      productionRecordsMutated: false,
       applicationUserId: mapping?.application_user_id,
-    };
+      message: 'No checkalt_reference is stored. FinCapture process does not send a ChecksOps check id, and history amount is not unique. Manual reconciliation required. A second process POST was not sent.',
+    });
   }
 
   const item = await getDepositItemStatus({
@@ -174,14 +164,18 @@ export async function reconcileProductionCheckAltDeposit({
       jwtCache,
     });
     const histJson = await parseJson(hist);
-    const items = histJson?.items || histJson?.data || histJson?.deposits || [];
-    const match = Array.isArray(items)
-      ? items.find((entry) => String(entry?.referenceNumber ?? entry?.reference) === String(reference))
-      : null;
-    if (match) {
-      json = { ...json, history: match };
-      status = resolvePollStatus(match);
+    const match = matchHistoryByReference(historyListOf(histJson), reference);
+    if (!match) {
+      return reconciliationRequired(row, {
+        liveProviderCalled: true,
+        productionExecution: true,
+        productionRecordsMutated: false,
+        applicationUserId: mapping?.application_user_id,
+        message: 'CheckAlt history has no unique referenceNumber match for this deposit. Amount is not a transaction id. Manual reconciliation required. A second process POST was not sent.',
+      });
     }
+    json = { ...json, history: match };
+    status = resolvePollStatus(match);
   }
   const saved = await persistPollOutcome(client, {
     rowId: row.id,

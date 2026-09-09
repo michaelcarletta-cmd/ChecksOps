@@ -51,6 +51,15 @@ export const rowHasProviderHttpAttempt = (row) => (
   || Boolean(row?.checkalt_reference)
 );
 
+const PROVIDER_MAY_HAVE_OCCURRED = new Set([
+  ...TERMINAL_REPLAY,
+  'submitting',
+  'pending',
+  'error',
+]);
+
+export const isLegacyDepositRow = (row) => Boolean(row) && (row.idempotency_key == null || row.idempotency_key === '');
+
 export const shouldReconcileInsteadOfPost = (row) => {
   if (!row) return false;
   if (row.checkalt_reference) return true;
@@ -60,6 +69,36 @@ export const shouldReconcileInsteadOfPost = (row) => {
   }
   return false;
 };
+
+export const shouldBlockNewProcessPost = (row) => {
+  if (!row) return false;
+  if (shouldReconcileInsteadOfPost(row)) return true;
+  if (PROVIDER_MAY_HAVE_OCCURRED.has(String(row.status || ''))) return true;
+  if (isLegacyDepositRow(row)) return true;
+  return false;
+};
+
+export const pickBlockingDeposit = (rows = []) => {
+  const list = (rows || []).filter(Boolean);
+  return list.find((row) => row.checkalt_reference)
+    || list.find((row) => rowHasProviderHttpAttempt(row))
+    || list.find((row) => shouldBlockNewProcessPost(row))
+    || null;
+};
+
+export async function loadDepositsForCheck(client, { tenantId, checkId } = {}) {
+  if (!tenantId || !checkId) return [];
+  return (await client.query(
+    `SELECT id, tenant_id, check_intake_item_id, checkalt_reference, status, amount, amount_cents,
+            idempotency_key, provider_http_attempted_at, failure_class, last_status_payload,
+            last_error, submitted_at, cleared_at, returned_at, last_polled_at, submitted_by,
+            created_at, updated_at
+     FROM public.checkalt_deposits
+     WHERE tenant_id = $1::uuid AND check_intake_item_id = $2::uuid
+     ORDER BY created_at ASC NULLS LAST, id ASC`,
+    [tenantId, checkId],
+  )).rows;
+}
 
 export const replayDepositResponse = (row, extra = {}) => replaySafeResponse({
   id: row.id,

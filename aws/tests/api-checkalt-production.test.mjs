@@ -14,9 +14,22 @@ import {
   loadProductionCheckAltSecrets,
   PRODUCTION_CHECKALT_SECRET_NAMES,
 } from '../functions/api/providers/production/checkalt-secrets.mjs';
-import { evaluateCheckAltProductionAuthorization } from '../functions/api/providers/production/checkalt-authz.mjs';
+import {
+  evaluateCheckAltProductionAuthorization,
+  stepUpMatchesCheck,
+} from '../functions/api/providers/production/checkalt-authz.mjs';
+import {
+  isLegacyDepositRow,
+  pickBlockingDeposit,
+  shouldBlockNewProcessPost,
+} from '../functions/api/providers/production/checkalt-idempotency.mjs';
 import { handleProductionCheckAltSubmit } from '../functions/api/providers/production/checkalt-submit.mjs';
-import { handleProductionCheckAltPoll } from '../functions/api/providers/production/checkalt-poll.mjs';
+import {
+  handleProductionCheckAltPoll,
+  historyListOf,
+  matchHistoryByReference,
+  reconcileProductionCheckAltDeposit,
+} from '../functions/api/providers/production/checkalt-poll.mjs';
 import { syntheticCheckRaster } from '../functions/api/providers/parity/checkalt-image.mjs';
 import { resetProviderSecretsCache } from '../functions/api/provider-secrets.mjs';
 
@@ -29,6 +42,8 @@ const COGNITO_SUB = 'c4386408-60e1-70e2-abb6-e6194e8e635f';
 const CHECK_ID = '44444444-4444-4444-8444-444444444444';
 const APPROVER_APP = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const DEPOSIT_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const OTHER_CHECK_ID = '55555555-5555-4555-8555-555555555555';
+const OTHER_DEPOSIT_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 
 const jwtEvent = (pathName, method, body, extra = {}) => ({
   rawPath: pathName,
@@ -123,8 +138,13 @@ const createStore = ({
     check,
     files,
     processPosts: 0,
+    historyPosts: 0,
+    itemPosts: 0,
+    itemPayload: null,
+    historyPayload: null,
     persistOutcomeFails: 0,
     role,
+    rolesByUser: {},
     memberships: memberships || [{ tenant_id: tenantId, role, tenant_name: 'Freedom', tenant_slug: 'freedom' }],
   };
 };
@@ -144,10 +164,16 @@ const identityClient = (store) => ({
       return { rows: store.memberships };
     }
     if (text.includes('FROM public.user_roles')) {
-      return { rows: store.role === 'operator' ? [{ role: 'staff' }] : [{ role: 'admin' }] };
+      const userId = params[0];
+      const role = store.rolesByUser?.[userId] || store.role;
+      return { rows: role === 'operator' ? [{ role: 'staff' }] : [{ role: 'admin' }] };
     }
     if (text.includes('FROM public.tenant_users WHERE user_id') && text.includes('AND tenant_id')) {
+      const userId = params[0];
       const tenantId = params[1];
+      if (store.rolesByUser?.[userId]) {
+        return { rows: [{ role: store.rolesByUser[userId] }] };
+      }
       const match = store.memberships.find((row) => row.tenant_id === tenantId);
       return { rows: match ? [{ role: match.role }] : [] };
     }
@@ -179,20 +205,32 @@ const identityClient = (store) => ({
       };
     }
     if (text.includes('FROM public.financial_stepup_log')) {
-      const userId = params[0];
-      const action = params[2] || params[1];
-      const rows = store.stepups.filter((row) => {
-        if (text.includes('exclude') ) return true;
-        if (text.includes("action_key = $2") && params[1] === 'checkalt.dual_control') {
-          return row.action_key === 'checkalt.dual_control'
-            && row.tenant_id === params[0]
-            && row.metadata?.check_id === params[3];
-        }
-        if (row.user_id !== userId) return false;
-        if (action && row.action_key !== action && row.action_key !== params[2]) return false;
-        return true;
-      });
-      return { rows };
+      const dual = text.includes('action_key = $2') && params[1] === 'checkalt.dual_control';
+      if (dual) {
+        const [tenantId, , since, checkId, amountCents] = params;
+        return {
+          rows: store.stepups.filter((row) => (
+            row.action_key === 'checkalt.dual_control'
+            && row.tenant_id === tenantId
+            && row.succeeded === true
+            && row.metadata?.check_id === checkId
+            && Number(row.metadata?.amount_cents) === Number(amountCents)
+            && new Date(row.created_at) >= new Date(since)
+          )),
+        };
+      }
+      const [userId, tenantId, actionKey, since, checkId, amountCents] = params;
+      return {
+        rows: store.stepups.filter((row) => (
+          row.user_id === userId
+          && row.tenant_id === tenantId
+          && row.action_key === actionKey
+          && row.succeeded === true
+          && row.metadata?.check_id === checkId
+          && Number(row.metadata?.amount_cents) === Number(amountCents)
+          && new Date(row.created_at) >= new Date(since)
+        )),
+      };
     }
     if (text.includes('INSERT INTO public.financial_stepup_log')) {
       const row = {
@@ -230,6 +268,14 @@ const identityClient = (store) => ({
       };
       store.deposits.push(row);
       return { rows: [row] };
+    }
+    if (text.includes('FROM public.checkalt_deposits') && text.includes('check_intake_item_id')
+      && text.includes('tenant_id') && text.includes('ORDER BY')) {
+      return {
+        rows: store.deposits.filter((row) => (
+          row.tenant_id === params[0] && row.check_intake_item_id === params[1]
+        )),
+      };
     }
     if (text.includes('FROM public.checkalt_deposits') && text.includes('idempotency_key =')) {
       const found = store.deposits.find((row) => row.tenant_id === params[0] && row.idempotency_key === params[1]);
@@ -295,17 +341,23 @@ const fetchImpl = (store) => async (url, options = {}) => {
     };
   }
   if (target.includes('/fincapture/deposit/item')) {
+    store.itemPosts += 1;
     return {
       ok: true,
       status: 200,
-      text: async () => JSON.stringify({ referenceNumber: 9001, status: 127, statusCode: 127 }),
+      text: async () => JSON.stringify(store.itemPayload || {
+        referenceNumber: 9001, status: 127, statusCode: 127,
+      }),
     };
   }
   if (target.includes('/fincapture/deposit/history')) {
+    store.historyPosts += 1;
     return {
       ok: true,
       status: 200,
-      text: async () => JSON.stringify({ items: [{ referenceNumber: 9001, status: 127, userAmount: 1234 }] }),
+      text: async () => JSON.stringify(store.historyPayload || {
+        depositHistoryList: [{ referenceNumber: 9001, status: 127, userAmount: 1234 }],
+      }),
     };
   }
   if (target.includes('/fincapture/useraccount/getUserAccountInformation')) {
@@ -330,17 +382,43 @@ const submitDeps = (store, extra = {}) => ({
   downloadClaimFile: extra.downloadClaimFile || (async (filePath) => store.files[filePath] || null),
 });
 
-const grantStepUp = (store, { userId = FREEDOM_APP, action = 'deposit.submit', checkId = CHECK_ID } = {}) => {
+const grantStepUp = (store, {
+  userId = FREEDOM_APP,
+  action = 'deposit.submit',
+  checkId = CHECK_ID,
+  tenantId = FREEDOM_TENANT,
+  amountCents = 1234,
+  createdAt = new Date().toISOString(),
+} = {}) => {
   store.stepups.push({
     id: crypto.randomUUID(),
     user_id: userId,
-    tenant_id: FREEDOM_TENANT,
+    tenant_id: tenantId,
     action_key: action,
     factor_type: action === 'checkalt.dual_control' ? 'dual_control' : 'totp',
     succeeded: true,
-    metadata: { check_id: checkId },
-    created_at: new Date().toISOString(),
+    metadata: { check_id: checkId, amount_cents: amountCents, operation: 'deposit.submit' },
+    created_at: createdAt,
   });
+};
+
+const pushLegacyDeposit = (store, extra = {}) => {
+  const row = {
+    id: extra.id || DEPOSIT_ID,
+    tenant_id: extra.tenant_id || FREEDOM_TENANT,
+    check_intake_item_id: extra.check_intake_item_id || CHECK_ID,
+    amount: extra.amount ?? 12.34,
+    amount_cents: extra.amount_cents ?? null,
+    status: extra.status || 'submitted',
+    submitted_by: FREEDOM_APP,
+    idempotency_key: extra.idempotency_key === undefined ? null : extra.idempotency_key,
+    checkalt_reference: extra.checkalt_reference === undefined ? null : extra.checkalt_reference,
+    provider_http_attempted_at: extra.provider_http_attempted_at || null,
+    last_status_payload: extra.last_status_payload || {},
+    created_at: extra.created_at || '2024-01-01T00:00:00.000Z',
+  };
+  store.deposits.push(row);
+  return row;
 };
 
 const submitOnce = (store, body = {}, extra = {}) => withEnv(productionFlags, () => handleProviderRequest(
@@ -379,6 +457,9 @@ test('SQL 65 and secret contract stay dark (not applied, names only)', () => {
   assert.match(sql65, /DO NOT APPLY/);
   assert.match(sql65, /NOT_APPLIED/);
   assert.match(sql65, /idempotency_key/);
+  assert.match(sql65, /COALESCE\(\s*public\.aws_financial_execution_active\(\),\s*false\s*\)/);
+  assert.match(sql65, /COALESCE\(\s*current_setting\('request\.financial_execution',\s*true\) = '1'/);
+  assert.doesNotMatch(sql65, /IF NOT public\.aws_financial_execution_active\(\)/);
   const contract = fs.readFileSync(path.join(ROOT, 'aws/financial/CHECKALT_PRODUCTION_SECRET_CONTRACT.md'), 'utf8');
   for (const name of PRODUCTION_CHECKALT_SECRET_NAMES) {
     assert.match(contract, new RegExp(name));
@@ -672,4 +753,313 @@ test('poll helper never inserts even when asked with a fabricated locator', asyn
   assert.equal(result.error, 'deposit_not_found');
   assert.equal(result.createdDeposit, false);
   assert.equal(store.deposits.length, 0);
+});
+
+test('legacy CheckAlt row with reference blocks a second process POST', async () => {
+  const store = createStore();
+  grantStepUp(store);
+  const legacy = pushLegacyDeposit(store, { checkalt_reference: 'LEGACY-REF', status: 'submitted' });
+  assert.equal(isLegacyDepositRow(legacy), true);
+  const result = await submitOnce(store);
+  assert.equal(result.duplicate, true);
+  assert.equal(result.liveProviderCalled, false);
+  assert.equal(result.checkalt_reference, 'LEGACY-REF');
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.deposits.length, 1);
+});
+
+test('legacy CheckAlt row with attempted_at blocks a second process POST', async () => {
+  const store = createStore();
+  grantStepUp(store);
+  pushLegacyDeposit(store, {
+    checkalt_reference: null,
+    status: 'submitting',
+    provider_http_attempted_at: '2024-06-01T00:00:00.000Z',
+  });
+  const result = await submitOnce(store);
+  assert.equal(result.error, 'reconciliation_required');
+  assert.equal(result.liveProviderCalled, false);
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.deposits[0].idempotency_key, null);
+});
+
+test('legacy submitted or pending state without a new key blocks process POST', async () => {
+  for (const status of ['submitted', 'pending_approval', 'pending']) {
+    const store = createStore();
+    grantStepUp(store);
+    pushLegacyDeposit(store, { status, checkalt_reference: status === 'pending' ? null : 'REF-' + status });
+    const result = await submitOnce(store);
+    assert.equal(store.processPosts, 0, status);
+    assert.equal(result.liveProviderCalled, false, status);
+    if (status === 'pending') {
+      assert.equal(result.error, 'reconciliation_required');
+    } else {
+      assert.equal(result.duplicate, true);
+    }
+  }
+});
+
+test('existing CheckAlt row for another tenant cannot be used or cross-read', async () => {
+  const store = createStore();
+  grantStepUp(store);
+  pushLegacyDeposit(store, {
+    id: OTHER_DEPOSIT_ID,
+    tenant_id: C1C_TENANT,
+    check_intake_item_id: CHECK_ID,
+    checkalt_reference: 'OTHER-TENANT',
+    status: 'submitted',
+  });
+  const accepted = await submitOnce(store);
+  assert.equal(accepted.statusCode, 200);
+  assert.equal(accepted.checkalt_reference, '9001');
+  assert.equal(store.processPosts, 1);
+  assert.equal(store.deposits.length, 2);
+  assert.equal(pickBlockingDeposit(store.deposits.filter((row) => row.tenant_id === FREEDOM_TENANT))?.checkalt_reference, '9001');
+
+  const cross = await withEnv(productionFlags, () => handleProviderRequest(
+    jwtEvent('/functions/v1/checkalt-poll-status', 'POST', { deposit_id: OTHER_DEPOSIT_ID, tenant_id: FREEDOM_TENANT }),
+    '/functions/v1/checkalt-poll-status',
+    'POST',
+    submitDeps(store),
+  ));
+  assert.equal(cross.statusCode, 403);
+  assert.equal(cross.error, 'cross_tenant_denied');
+  assert.equal(cross.createdDeposit, false);
+});
+
+test('TOTP is bound to check and amount; tenant-wide leftover does not authorize', async () => {
+  const leftover = createStore();
+  leftover.stepups.push({
+    id: crypto.randomUUID(),
+    user_id: FREEDOM_APP,
+    tenant_id: FREEDOM_TENANT,
+    action_key: 'deposit.submit',
+    factor_type: 'totp',
+    succeeded: true,
+    metadata: {},
+    created_at: new Date().toISOString(),
+  });
+  const leftoverResult = await submitOnce(leftover);
+  assert.equal(leftoverResult.error, 'step_up_required');
+  assert.equal(leftover.processPosts, 0);
+
+  const otherCheck = createStore();
+  grantStepUp(otherCheck, { checkId: OTHER_CHECK_ID, amountCents: 1234 });
+  const other = await submitOnce(otherCheck);
+  assert.equal(other.error, 'step_up_required');
+  assert.equal(otherCheck.processPosts, 0);
+
+  const amountChanged = createStore();
+  grantStepUp(amountChanged, { amountCents: 1234 });
+  amountChanged.check.amount = 56.78;
+  const changed = await submitOnce(amountChanged);
+  assert.equal(changed.error, 'step_up_required');
+  assert.equal(amountChanged.processPosts, 0);
+
+  const expired = createStore();
+  grantStepUp(expired, { createdAt: new Date(Date.now() - 31 * 60 * 1000).toISOString() });
+  const stale = await submitOnce(expired);
+  assert.equal(stale.error, 'step_up_required');
+  assert.equal(expired.processPosts, 0);
+
+  assert.equal(stepUpMatchesCheck({
+    tenant_id: FREEDOM_TENANT,
+    action_key: 'deposit.submit',
+    succeeded: true,
+    metadata: { check_id: CHECK_ID, amount_cents: 1234 },
+  }, { tenantId: FREEDOM_TENANT, checkId: CHECK_ID, amountCents: 1234, actionKey: 'deposit.submit' }), true);
+  assert.equal(stepUpMatchesCheck({
+    tenant_id: FREEDOM_TENANT,
+    action_key: 'deposit.submit',
+    succeeded: true,
+    metadata: { check_id: CHECK_ID, amount_cents: 1234 },
+  }, { tenantId: FREEDOM_TENANT, checkId: CHECK_ID, amountCents: 5678, actionKey: 'deposit.submit' }), false);
+});
+
+test('dual-control requires a distinct owner/admin/manager bound to check and amount', async () => {
+  const self = createStore();
+  grantStepUp(self, { userId: FREEDOM_APP, action: 'checkalt.dual_control' });
+  const selfDenied = await submitOnce(self);
+  assert.equal(selfDenied.error, 'step_up_required');
+  assert.equal(self.processPosts, 0);
+
+  const ok = createStore();
+  grantStepUp(ok, { userId: APPROVER_APP, action: 'checkalt.dual_control', amountCents: 1234 });
+  ok.rolesByUser = { [APPROVER_APP]: 'admin', [FREEDOM_APP]: 'admin' };
+  const accepted = await submitOnce(ok);
+  assert.equal(accepted.statusCode, 200);
+  assert.equal(accepted.checkalt_reference, '9001');
+  assert.equal(ok.processPosts, 1);
+
+  const amountMismatch = createStore();
+  grantStepUp(amountMismatch, { userId: APPROVER_APP, action: 'checkalt.dual_control', amountCents: 1234 });
+  amountMismatch.check.amount = 99.01;
+  const amountDenied = await submitOnce(amountMismatch);
+  assert.equal(amountDenied.error, 'step_up_required');
+  assert.equal(amountMismatch.processPosts, 0);
+
+  const checkMismatch = createStore();
+  grantStepUp(checkMismatch, { userId: APPROVER_APP, action: 'checkalt.dual_control', checkId: OTHER_CHECK_ID });
+  const checkDenied = await submitOnce(checkMismatch);
+  assert.equal(checkDenied.error, 'step_up_required');
+  assert.equal(checkMismatch.processPosts, 0);
+
+  const crossTenant = createStore();
+  grantStepUp(crossTenant, {
+    userId: APPROVER_APP,
+    action: 'checkalt.dual_control',
+    tenantId: C1C_TENANT,
+  });
+  const tenantDenied = await submitOnce(crossTenant);
+  assert.equal(tenantDenied.error, 'step_up_required');
+  assert.equal(crossTenant.processPosts, 0);
+
+  const operatorApprover = createStore();
+  grantStepUp(operatorApprover, { userId: APPROVER_APP, action: 'checkalt.dual_control' });
+  operatorApprover.rolesByUser = { [APPROVER_APP]: 'operator', [FREEDOM_APP]: 'admin' };
+  const operatorDenied = await submitOnce(operatorApprover);
+  assert.equal(operatorDenied.error, 'step_up_required');
+  assert.equal(operatorApprover.processPosts, 0);
+});
+
+test('dual-control record ignores browser tenant and amount', async () => {
+  const store = createStore();
+  const ok = await handleFinancialRequest(
+    jwtEvent('/financial/checkalt-dual-control', 'POST', {
+      check_intake_item_id: CHECK_ID,
+      tenant_id: C1C_TENANT,
+      amount: 0.01,
+      amount_cents: 1,
+    }),
+    '/financial/checkalt-dual-control',
+    'POST',
+    {
+      createClient: () => identityClient(store),
+      loadDatabaseCredentials: async () => ({
+        host: 'localhost', username: 'checksops', password: 'x', database: 'checksops',
+      }),
+    },
+  );
+  assert.equal(ok.statusCode, 200);
+  assert.equal(ok.tenant_id, FREEDOM_TENANT);
+  assert.equal(ok.amount_cents, 1234);
+  assert.equal(ok.check_id, CHECK_ID);
+  assert.equal(store.stepups[0].tenant_id, FREEDOM_TENANT);
+  assert.equal(store.stepups[0].metadata.amount_cents, 1234);
+  assert.equal(store.stepups[0].metadata.check_id, CHECK_ID);
+});
+
+test('history matching is reference-only; amount cannot cross-match two deposits', async () => {
+  const items = [
+    { referenceNumber: 'A', userAmount: 1234, status: 127 },
+    { referenceNumber: 'B', userAmount: 1234, status: 200 },
+  ];
+  assert.deepEqual(historyListOf({ depositHistoryList: items }), items);
+  assert.equal(matchHistoryByReference(items, 'A')?.referenceNumber, 'A');
+  assert.equal(matchHistoryByReference(items, 'B')?.referenceNumber, 'B');
+  assert.equal(matchHistoryByReference(items, 'missing'), null);
+  assert.equal(matchHistoryByReference([
+    { referenceNumber: 'A', userAmount: 1234 },
+    { referenceNumber: 'A', userAmount: 1234 },
+  ], 'A'), null);
+
+  const store = createStore();
+  store.itemPayload = { ruleDetails: [] };
+  store.historyPayload = { depositHistoryList: items };
+  const rowA = pushLegacyDeposit(store, {
+    checkalt_reference: 'A',
+    status: 'submitted',
+    idempotency_key: 'key-a',
+  });
+  const client = identityClient(store);
+  const matched = await reconcileProductionCheckAltDeposit({
+    client,
+    mapping,
+    row: rowA,
+    cfg: { fi_key: 'prod-fi-key', merchant: 'prod-merchant', base_url: 'https://api2.checkalt.com' },
+    credentials: productionSecrets().credentials,
+    acct: { sso_user_id: 'depositor-prod' },
+    fetchImpl: fetchImpl(store),
+  });
+  assert.equal(matched.reconciled, true);
+  assert.equal(matched.checkalt_reference, 'A');
+  assert.equal(store.deposits[0].status, 'submitted');
+  assert.equal(store.processPosts, 0);
+
+  const ambiguous = createStore();
+  ambiguous.itemPayload = { ruleDetails: [] };
+  ambiguous.historyPayload = {
+    depositHistoryList: [
+      { referenceNumber: 'X', userAmount: 1234, status: 127 },
+      { referenceNumber: 'Y', userAmount: 1234, status: 200 },
+    ],
+  };
+  const row = pushLegacyDeposit(ambiguous, {
+    checkalt_reference: 'Z',
+    status: 'submitting',
+    provider_http_attempted_at: '2024-06-01T00:00:00.000Z',
+    idempotency_key: 'key-z',
+  });
+  const required = await reconcileProductionCheckAltDeposit({
+    client: identityClient(ambiguous),
+    mapping,
+    row,
+    cfg: { fi_key: 'prod-fi-key', merchant: 'prod-merchant', base_url: 'https://api2.checkalt.com' },
+    credentials: productionSecrets().credentials,
+    acct: { sso_user_id: 'depositor-prod' },
+    fetchImpl: fetchImpl(ambiguous),
+  });
+  assert.equal(required.error, 'reconciliation_required');
+  assert.equal(required.reconciled, false);
+  assert.equal(required.liveProviderCalled, true);
+  assert.equal(ambiguous.processPosts, 0);
+  assert.equal(ambiguous.deposits[0].checkalt_reference, 'Z');
+  assert.equal(ambiguous.deposits[0].status, 'submitting');
+});
+
+test('ambiguous or reference-less history never issues a second process POST', async () => {
+  const store = createStore();
+  grantStepUp(store);
+  pushLegacyDeposit(store, {
+    checkalt_reference: null,
+    status: 'submitting',
+    provider_http_attempted_at: '2024-06-01T00:00:00.000Z',
+  });
+  const result = await submitOnce(store);
+  assert.equal(result.error, 'reconciliation_required');
+  assert.equal(result.liveProviderCalled, false);
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.historyPosts, 0);
+
+  const noRef = await reconcileProductionCheckAltDeposit({
+    client: identityClient(store),
+    mapping,
+    row: store.deposits[0],
+    cfg: { fi_key: 'prod-fi-key' },
+    credentials: productionSecrets().credentials,
+    acct: { sso_user_id: 'depositor-prod' },
+    fetchImpl: fetchImpl(store),
+  });
+  assert.equal(noRef.error, 'reconciliation_required');
+  assert.equal(noRef.liveProviderCalled, false);
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.historyPosts, 0);
+});
+
+test('legacy NULL key and provider-may-have-occurred states block new process posts', () => {
+  assert.equal(shouldBlockNewProcessPost({
+    idempotency_key: null,
+    status: 'queued',
+  }), true);
+  assert.equal(shouldBlockNewProcessPost({
+    idempotency_key: 'new-key',
+    status: 'queued',
+    provider_http_attempted_at: null,
+    checkalt_reference: null,
+  }), false);
+  assert.equal(shouldBlockNewProcessPost({
+    idempotency_key: 'new-key',
+    status: 'submitted',
+    checkalt_reference: 'R1',
+  }), true);
 });

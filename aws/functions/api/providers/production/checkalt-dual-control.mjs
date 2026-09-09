@@ -2,7 +2,7 @@ import { withIdentityWrite } from '../../data.mjs';
 import { TENANT_MEMBERSHIP_SQL } from '../../identity.mjs';
 import { roleAllowsFinancial } from '../../financial-authz.mjs';
 import { membershipForTenant } from '../../financial-ownership.mjs';
-import { CHECKALT_DUAL_CONTROL_ACTION, loadTenantRole } from './checkalt-authz.mjs';
+import { CHECKALT_DUAL_CONTROL_ACTION, CHECKALT_TOTP_ACTION, loadTenantRole, serverAmountCentsFromCheck } from './checkalt-authz.mjs';
 
 const fail = (error, statusCode, extra = {}) => ({
   ok: false,
@@ -37,6 +37,13 @@ export async function handleCheckAltDualControl(event, deps = {}) {
         spoofFieldsIgnored: spoof,
       });
     }
+    const amountCents = serverAmountCentsFromCheck(check);
+    if (!Number.isInteger(amountCents)) {
+      return fail('invalid_amount', 400, {
+        message: 'Server-derived check amount is required. Browser amount is ignored.',
+        spoofFieldsIgnored: spoof,
+      });
+    }
     const row = (await client.query(
       `INSERT INTO public.financial_stepup_log
         (user_id, tenant_id, action_key, factor_type, succeeded, metadata)
@@ -48,7 +55,9 @@ export async function handleCheckAltDualControl(event, deps = {}) {
         CHECKALT_DUAL_CONTROL_ACTION,
         JSON.stringify({
           check_id: check.id,
+          amount_cents: amountCents,
           amount_dollars: check.amount,
+          operation: CHECKALT_TOTP_ACTION,
           approver_role: membership.role,
         }),
       ],
@@ -62,6 +71,7 @@ export async function handleCheckAltDualControl(event, deps = {}) {
       approval_id: row.id,
       check_id: check.id,
       tenant_id: check.tenant_id,
+      amount_cents: amountCents,
       action_key: CHECKALT_DUAL_CONTROL_ACTION,
       message: 'Dual-control approval recorded. This does not submit a CheckAlt deposit.',
       spoofFieldsIgnored: spoof,

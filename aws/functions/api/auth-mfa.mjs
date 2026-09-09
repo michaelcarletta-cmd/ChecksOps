@@ -179,11 +179,51 @@ export const handleMfaSetPreference = async () => ({
 
 const recordStepUpLog = async (event, body, extra = {}) => {
   const { withIdentityWrite } = await import('./data.mjs');
-  const { CHECKALT_TOTP_ACTION } = await import('./providers/production/checkalt-authz.mjs');
+  const { TENANT_MEMBERSHIP_SQL } = await import('./identity.mjs');
+  const { membershipForTenant } = await import('./financial-ownership.mjs');
+  const {
+    CHECKALT_TOTP_ACTION,
+    serverAmountCentsFromCheck,
+  } = await import('./providers/production/checkalt-authz.mjs');
   return withIdentityWrite(event, async ({ client, mapping, spoof }) => {
     const actionKey = String(body.action_key || body.actionKey || CHECKALT_TOTP_ACTION);
-    const tenantId = body.tenant_id || body.tenantId || extra.tenantId || null;
-    const checkId = body.check_intake_item_id || body.check_id || extra.checkId || null;
+    const checkId = extra.checkId || body.check_intake_item_id || body.check_id || null;
+    if (!checkId) {
+      return {
+        ok: false,
+        statusCode: 400,
+        error: 'check_intake_item_id is required',
+        message: 'Financial TOTP must be bound to a server-side check. Browser tenant_id is ignored.',
+        spoofFieldsIgnored: spoof,
+      };
+    }
+    const check = (await client.query(
+      `SELECT id, tenant_id, amount, status FROM public.check_intake_items WHERE id = $1::uuid`,
+      [checkId],
+    )).rows[0];
+    if (!check) {
+      return { ok: false, statusCode: 404, error: 'Check not found', spoofFieldsIgnored: spoof };
+    }
+    const memberships = (await client.query(TENANT_MEMBERSHIP_SQL, [mapping.application_user_id])).rows;
+    if (!membershipForTenant(memberships, check.tenant_id)) {
+      return {
+        ok: false,
+        statusCode: 403,
+        error: 'cross_tenant_denied',
+        message: 'TOTP step-up tenant is taken from the check. Browser tenant_id is ignored.',
+        spoofFieldsIgnored: spoof,
+      };
+    }
+    const amountCents = serverAmountCentsFromCheck(check);
+    if (!Number.isInteger(amountCents)) {
+      return {
+        ok: false,
+        statusCode: 400,
+        error: 'invalid_amount',
+        message: 'Server-derived check amount is required. Browser amount is ignored.',
+        spoofFieldsIgnored: spoof,
+      };
+    }
     const row = (await client.query(
       `INSERT INTO public.financial_stepup_log
         (user_id, tenant_id, action_key, factor_type, succeeded, metadata)
@@ -191,10 +231,12 @@ const recordStepUpLog = async (event, body, extra = {}) => {
        RETURNING id, created_at`,
       [
         mapping.application_user_id,
-        tenantId,
+        check.tenant_id,
         actionKey,
         JSON.stringify({
-          check_id: checkId,
+          check_id: check.id,
+          amount_cents: amountCents,
+          operation: CHECKALT_TOTP_ACTION,
           source: 'cognito_totp_step_up',
         }),
       ],
@@ -204,6 +246,9 @@ const recordStepUpLog = async (event, body, extra = {}) => {
       statusCode: 200,
       recorded: true,
       stepup_id: row.id,
+      check_id: check.id,
+      tenant_id: check.tenant_id,
+      amount_cents: amountCents,
       applicationUserId: mapping.application_user_id,
       spoofFieldsIgnored: spoof,
     };
