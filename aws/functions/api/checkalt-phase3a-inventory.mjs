@@ -24,6 +24,8 @@ export const FREEDOM_ADMIN_USER_ID = '7dbb3009-f059-4767-b5dc-1c5c72379330';
 export const FREEDOM_ADMIN_EMAIL = 'mcarletta@freedomadj.com';
 export const EXPECTED_CHECKALT_DEPOSITS = 58;
 export const FIRST_TEST_MAX_CENTS = 500;
+export const AWS_CUTOVER_AT = '2026-09-06T20:00:00.000Z';
+export const PHASE27_DARK_DEPLOY_AT = '2026-09-09T17:37:01.000Z';
 export const PLANNED_WEBHOOK_CALLBACK = 'https://checksops.com/prep/webhooks/checkalt';
 export const PHASE3A_SECRET_CONTRACT = Object.freeze({
   secretId: 'checksops/production/providers',
@@ -713,6 +715,141 @@ export async function runPhase3aInventory({
     return result;
   } catch (error) {
     result.ok = false;
+    result.issues.push(sanitizePublicError(error));
+    return result;
+  } finally {
+    if (client) {
+      try { await client.end(); } catch { /* ignore */ }
+    }
+  }
+}
+
+const vsCutover = (iso) => {
+  if (!iso) return 'unknown';
+  const ms = new Date(iso).getTime();
+  if (!Number.isFinite(ms)) return 'unknown';
+  if (ms < new Date(AWS_CUTOVER_AT).getTime()) return 'before_aws_cutover';
+  if (ms < new Date(PHASE27_DARK_DEPLOY_AT).getTime()) return 'after_cutover_before_dark_deploy';
+  return 'on_or_after_phase27_dark_deploy';
+};
+
+export const summarizeCheckAltDrift = (rows = []) => {
+  const withRef = rows.filter((row) => row.referencePresent);
+  const additional = rows.filter((row) => !row.referencePresent);
+  const byCheck = new Map();
+  for (const row of rows) {
+    const key = row.checkIntakeItemId || 'null';
+    byCheck.set(key, (byCheck.get(key) || 0) + 1);
+  }
+  const duplicateCheckIds = [...byCheck.entries()]
+    .filter(([key, count]) => key !== 'null' && count > 1)
+    .map(([checkIntakeItemId, count]) => ({ checkIntakeItemId, count }));
+  const orphaned = additional.filter((row) => row.checkExists === false);
+  const createdByAwsWork = additional.filter((row) => vsCutover(row.createdAt) !== 'before_aws_cutover');
+  return {
+    total: rows.length,
+    withReference: withRef.length,
+    additionalWithoutReference: additional.length,
+    restoreExpectation: EXPECTED_CHECKALT_DEPOSITS,
+    restoreMatch: withRef.length === EXPECTED_CHECKALT_DEPOSITS,
+    duplicateCheckIds,
+    checksWithMultipleRows: duplicateCheckIds.length,
+    orphanedAdditional: orphaned.length,
+    additionalCreatedAfterCutover: createdByAwsWork.length,
+    additionalCreatedBeforeCutover: additional.filter((row) => vsCutover(row.createdAt) === 'before_aws_cutover').length,
+    verdict: (
+      withRef.length === EXPECTED_CHECKALT_DEPOSITS
+      && additional.length === rows.length - EXPECTED_CHECKALT_DEPOSITS
+      && createdByAwsWork.length === 0
+    ) ? 'COUNT_DRIFT_EXPLAINED' : 'COUNT_DRIFT_BLOCKER',
+  };
+};
+
+export async function runPhase3a1Drift({
+  loadCredentials = loadDatabaseCredentials,
+  createClient = (config) => new Client(config),
+} = {}) {
+  const result = {
+    ok: false,
+    readOnly: true,
+    writesAttempted: false,
+    liveProviderCalled: false,
+    phase: '3A.1',
+    cutoverAt: AWS_CUTOVER_AT,
+    phase27DarkDeployAt: PHASE27_DARK_DEPLOY_AT,
+    rows: [],
+    issues: [],
+  };
+  let client;
+  try {
+    const credentials = await loadCredentials();
+    client = createClient(buildClientConfig(credentials, { queryTimeoutMillis: 20000 }));
+    await client.connect();
+    await client.query('BEGIN READ ONLY');
+    await client.query('SELECT set_config($1, $2, true)', [APP_USER_ID_GUC, FREEDOM_ADMIN_USER_ID]);
+    await client.query('SELECT set_config($1, $2, true)', [APP_USER_EMAIL_GUC, FREEDOM_ADMIN_EMAIL]);
+    const rows = (await client.query(
+      `SELECT d.id::text AS id,
+              d.tenant_id::text AS tenant_id,
+              d.check_intake_item_id::text AS check_intake_item_id,
+              d.checkalt_reference IS NOT NULL AND btrim(d.checkalt_reference) <> '' AS reference_present,
+              d.status,
+              d.amount,
+              d.submitted_at,
+              d.created_at,
+              d.updated_at,
+              d.submitted_by IS NOT NULL AS submitted_by_present,
+              c.id IS NOT NULL AS check_exists,
+              c.status AS check_status,
+              c.check_stage::text AS check_stage
+       FROM public.checkalt_deposits d
+       LEFT JOIN public.check_intake_items c ON c.id = d.check_intake_item_id
+       WHERE d.tenant_id = $1::uuid
+       ORDER BY d.created_at ASC NULLS LAST, d.id ASC`,
+      [FREEDOM_TENANT_ID],
+    )).rows.map((row) => ({
+      id: row.id,
+      tenantId: row.tenant_id,
+      checkIntakeItemId: row.check_intake_item_id,
+      referencePresent: row.reference_present === true,
+      status: row.status || null,
+      amount: row.amount == null ? null : Number(row.amount),
+      submittedAt: row.submitted_at || null,
+      createdAt: row.created_at || null,
+      updatedAt: row.updated_at || null,
+      submittedByPresent: row.submitted_by_present === true,
+      checkExists: row.check_exists === true,
+      checkStatus: row.check_status || null,
+      checkStage: row.check_stage || null,
+      vsCutover: vsCutover(row.created_at),
+    }));
+    const sql65 = classifySql65Compatibility({
+      columns: (await client.query(
+        `SELECT column_name FROM information_schema.columns
+         WHERE table_schema='public' AND table_name='checkalt_deposits'`,
+      )).rows.map((row) => row.column_name),
+      indexes: (await client.query(
+        `SELECT indexname FROM pg_indexes
+         WHERE schemaname='public' AND tablename='checkalt_deposits'`,
+      )).rows.map((row) => row.indexname),
+      functions: [],
+      policies: [],
+      grants: {
+        canSelect: true,
+        canInsert: false,
+        canUpdate: false,
+        canDelete: false,
+        rlsEnabled: true,
+      },
+      rowCount: rows.length,
+    });
+    await client.query('ROLLBACK');
+    result.rows = rows;
+    result.summary = summarizeCheckAltDrift(rows);
+    result.sql65 = sql65;
+    result.ok = true;
+    return result;
+  } catch (error) {
     result.issues.push(sanitizePublicError(error));
     return result;
   } finally {

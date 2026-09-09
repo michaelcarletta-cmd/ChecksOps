@@ -10,6 +10,7 @@ import {
   PLANNED_WEBHOOK_CALLBACK,
   presence,
   runPhase3aInventory,
+  summarizeCheckAltDrift,
 } from '../functions/api/checkalt-phase3a-inventory.mjs';
 
 test('Phase 3A secret contract names only and is not created here', () => {
@@ -220,4 +221,26 @@ test('inventory invoke uses READ ONLY and never returns secret column values', a
   assert.equal(result.freedomTenantAccount.depositAccountLast4, '2333');
   assert.equal(result.sql65.compatibility.status, 'SAFE_NOT_APPLIED');
   assert.equal(result.authorization.dualControlImmediatelyUsable, false);
+});
+
+test('count drift is explained when 58 referenced rows predate cutover and 11 extras have no reference', () => {
+  const referenced = Array.from({ length: 58 }, (_, i) => ({
+    id: `ref-${i}`,
+    checkIntakeItemId: `check-ref-${i}`,
+    referencePresent: true,
+    createdAt: '2026-08-01T00:00:00.000Z',
+    checkExists: true,
+  }));
+  const extra = Array.from({ length: 11 }, (_, i) => ({
+    id: `extra-${i}`,
+    checkIntakeItemId: `check-extra-${i}`,
+    referencePresent: false,
+    createdAt: '2026-08-15T00:00:00.000Z',
+    checkExists: true,
+  }));
+  const summary = summarizeCheckAltDrift([...referenced, ...extra]);
+  assert.equal(summary.verdict, 'COUNT_DRIFT_EXPLAINED');
+  assert.equal(summary.withReference, 58);
+  assert.equal(summary.additionalWithoutReference, 11);
+  assert.equal(summary.additionalCreatedAfterCutover, 0);
 });

@@ -84,6 +84,15 @@ export const handler = async (event) => {
       ...inventory,
     });
   }
+  if (event?.phase3a1Drift === true && !event?.requestContext && !event?.rawPath && !event?.httpMethod) {
+    const { runPhase3a1Drift } = await import('./checkalt-phase3a-inventory.mjs');
+    const drift = await runPhase3a1Drift();
+    return json(drift.ok ? 200 : 503, {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      ...drift,
+    });
+  }
 
   const method = (event?.requestContext?.http?.method || event?.httpMethod || 'GET').toUpperCase();
   const path = requestPath(event);
