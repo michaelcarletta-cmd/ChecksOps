@@ -86,6 +86,7 @@ const wrapRead = (handler, persistOutcome = false) => async (event, deps = {}) =
           providerHttpStatus: Number.isFinite(status) ? status : null,
           message: redactMoovText(error.message),
           providerError: publicMoovErrorBody(error.body),
+          auth_diagnosis: error.diagnosis || error.oauth || null,
           spoofFieldsIgnored: spoof,
         };
       }

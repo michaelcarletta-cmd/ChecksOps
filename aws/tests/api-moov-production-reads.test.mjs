@@ -19,6 +19,8 @@ import {
 } from '../functions/api/providers/production/moov-secrets.mjs';
 import {
   assertReadOnlyMoovRequest,
+  fingerprintMoovId,
+  inspectAccessTokenMetadata,
   productionMoovFetch,
   redactMoovText,
 } from '../functions/api/providers/production/moov-client.mjs';
@@ -477,6 +479,23 @@ test('account GET failure continues remaining GETs and does not leak provider ac
 
 test('Moov HTTP error messages redact account ids', async () => {
   assert.equal(redactMoovText('Moov /accounts/60922058-7eca-4889-81dd-5720d7b9de96 failed'), 'Moov /accounts/{id} failed');
+  assert.equal(fingerprintMoovId('60922058-7eca-4889-81dd-5720d7b9de96'), '60922058…de96');
+  const jwt = [
+    Buffer.from(JSON.stringify({ alg: 'none' })).toString('base64url'),
+    Buffer.from(JSON.stringify({
+      scope: '/accounts/{id}/profile.read'.replace('{id}', '60922058-7eca-4889-81dd-5720d7b9de96'),
+      aud: 'https://api.moov.io',
+      origin: 'https://checksops.com',
+      accountID: '60922058-7eca-4889-81dd-5720d7b9de96',
+      exp: Math.floor(Date.now() / 1000) + 300,
+    })).toString('base64url'),
+    'sig',
+  ].join('.');
+  const tokenMeta = inspectAccessTokenMetadata(jwt);
+  assert.equal(tokenMeta.looks_like_jwt, true);
+  assert.equal(tokenMeta.account_fp, '60922058…de96');
+  assert.equal(tokenMeta.origin_claim, 'https://checksops.com');
+  assert.doesNotMatch(JSON.stringify(tokenMeta), /60922058-7eca/);
   let called = 0;
   await assert.rejects(
     () => productionMoovFetch({
@@ -486,16 +505,42 @@ test('Moov HTTP error messages redact account ids', async () => {
       credentials: clientCredentials,
       fetchImpl: async (url) => {
         if (String(url).includes('/oauth2/token')) {
-          return { ok: true, status: 200, text: async () => JSON.stringify({ access_token: 'tok', expires_in: 300 }) };
+          return {
+            ok: true,
+            status: 200,
+            headers: { get: () => null },
+            text: async () => JSON.stringify({
+              access_token: jwt,
+              token_type: 'Bearer',
+              expires_in: 300,
+              scope: '/accounts/{id}/profile.read',
+            }),
+          };
         }
         called += 1;
-        return { ok: false, status: 404, text: async () => '' };
+        return {
+          ok: false,
+          status: 401,
+          headers: {
+            get: (name) => ({
+              'www-authenticate': 'Bearer',
+              'x-request-id': 'req-test',
+              'content-type': 'application/json',
+            }[String(name).toLowerCase()] || null),
+          },
+          text: async () => JSON.stringify({ error: 'unauthorized' }),
+        };
       },
     }),
     (error) => (
-      error.status === 404
-      && error.message === 'Moov /accounts/{id} failed'
-      && !/60922058/.test(error.message)
+      error.status === 401
+      && error.message === 'unauthorized'
+      && error.diagnosis?.www_authenticate === 'Bearer'
+      && error.diagnosis?.request_id === 'req-test'
+      && error.diagnosis?.oauth?.token_type === 'Bearer'
+      && error.diagnosis?.authorization_scheme === 'Bearer'
+      && error.diagnosis?.origin_sent === 'https://checksops.com'
+      && !JSON.stringify(error.diagnosis).includes(jwt)
     ),
   );
   assert.equal(called, 1);

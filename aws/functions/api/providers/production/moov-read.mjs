@@ -9,7 +9,7 @@ import {
 import { authorizeMoovProductionRead } from './moov-authz.mjs';
 import { loadTransferById } from './moov-idempotency.mjs';
 import { persistPollOutcome } from './moov-idempotency.mjs';
-import { productionMoovFetch, normalizeProductionTransferStatus, redactMoovText } from './moov-client.mjs';
+import { productionMoovFetch, normalizeProductionTransferStatus, redactMoovText, publicMoovErrorBody } from './moov-client.mjs';
 
 const UNTRUSTED_MOOV_KEYS = [
   'moov_account_id', 'moovAccountId', 'MOOV_ACCOUNT_ID',
@@ -176,19 +176,35 @@ const getSummary = (got) => ({
   ok: got?.ok === true,
   status: got?.status ?? null,
   error: got?.error ? redactMoovText(got.error) : null,
+  www_authenticate: got?.www_authenticate || null,
+  request_id: got?.request_id || null,
+  body_keys: got?.body_keys || null,
+  provider_error: got?.provider_error || null,
 });
 
 const safeGet = async (args) => {
   try {
     const got = await productionMoovFetch({ ...args, mode: 'read', method: 'GET' });
-    return { ok: true, status: got.status, json: got.json, error: null };
+    return {
+      ok: true,
+      status: got.status,
+      json: got.json,
+      error: null,
+      diagnosis: got.diagnosis || null,
+    };
   } catch (error) {
     if (error?.code === 'read_only_method_denied' || error?.code === 'read_only_path_denied') throw error;
+    const diagnosis = error?.diagnosis || error?.oauth || null;
     return {
       ok: false,
       json: null,
       status: error?.status || null,
       error: redactMoovText(String(error.message || error)).slice(0, 200),
+      diagnosis,
+      www_authenticate: diagnosis?.www_authenticate || null,
+      request_id: diagnosis?.request_id || null,
+      body_keys: diagnosis?.body_keys || null,
+      provider_error: diagnosis?.provider_error || publicMoovErrorBody(error?.body),
     };
   }
 };
@@ -366,6 +382,13 @@ export async function handleProductionMoovReadiness({
     live_gets: liveGets,
     sender_readiness: sender,
     local_snapshot_not_live_truth: true,
+    auth_diagnosis: {
+      account_get: accountGet.diagnosis || null,
+      oauth: accountGet.diagnosis?.oauth || caps.diagnosis?.oauth || null,
+      platform_account_id_configured: Boolean(secrets.credentials?.platformAccountId),
+      origin_constant: 'https://checksops.com',
+      api_version: secrets.credentials?.apiVersion || null,
+    },
     spoofFieldsIgnored: spoof,
     applicationUserId: mapping.application_user_id,
   };
