@@ -1,5 +1,6 @@
 import { withIdentity, withIdentityWrite } from '../../data.mjs';
 import { isProviderNetworkError, providerEgressFailure } from '../../sandbox-credentials.mjs';
+import { ProductionMoovError, publicMoovErrorBody, redactMoovText } from './moov-client.mjs';
 import {
   denyAmbiguousMoovMode,
   denyProductionMoovHolds,
@@ -67,7 +68,24 @@ const wrapRead = (handler, persistOutcome = false) => async (event, deps = {}) =
           liveProviderCalled: false,
           productionExecution: false,
           productionRead: true,
-          message: error.message,
+          message: redactMoovText(error.message),
+          spoofFieldsIgnored: spoof,
+        };
+      }
+      if (error instanceof ProductionMoovError || error?.name === 'ProductionMoovError') {
+        const status = Number(error.status);
+        const statusCode = status >= 400 && status < 600 ? status : 502;
+        return {
+          ok: false,
+          statusCode,
+          error: 'moov_read_failed',
+          provider: 'moov',
+          liveProviderCalled: true,
+          productionExecution: false,
+          productionRead: true,
+          providerHttpStatus: Number.isFinite(status) ? status : null,
+          message: redactMoovText(error.message),
+          providerError: publicMoovErrorBody(error.body),
           spoofFieldsIgnored: spoof,
         };
       }

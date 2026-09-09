@@ -9,7 +9,7 @@ import {
 import { authorizeMoovProductionRead } from './moov-authz.mjs';
 import { loadTransferById } from './moov-idempotency.mjs';
 import { persistPollOutcome } from './moov-idempotency.mjs';
-import { productionMoovFetch, normalizeProductionTransferStatus } from './moov-client.mjs';
+import { productionMoovFetch, normalizeProductionTransferStatus, redactMoovText } from './moov-client.mjs';
 
 const UNTRUSTED_MOOV_KEYS = [
   'moov_account_id', 'moovAccountId', 'MOOV_ACCOUNT_ID',
@@ -103,9 +103,9 @@ export function summarizeMoovCapabilities(payload) {
     const id = capabilityId(row).toLowerCase();
     return names.some((name) => id === name || id.startsWith(`${name}.`) || id.startsWith(name));
   }) || null;
-  const send = find('send-funds');
-  const collect = find('collect-funds');
-  const wallet = find('wallet');
+  const send = find('send-funds.ach', 'send-funds');
+  const collect = find('collect-funds.ach', 'collect-funds');
+  const wallet = find('wallet.balance', 'wallet');
   const sameDay = list.find((row) => /same-day/.test(capabilityId(row).toLowerCase())) || null;
   return {
     send_funds: send ? { id: capabilityId(send), status: send.status || null, enabled: capabilityEnabled(send) } : null,
@@ -121,24 +121,113 @@ const publicBank = (bank) => ({
   holder_name_present: Boolean(bank?.holderName || bank?.bankAccount?.holderName),
 });
 
+const centsOf = (...candidates) => {
+  for (const candidate of candidates) {
+    if (candidate == null) continue;
+    if (typeof candidate === 'number' && Number.isFinite(candidate)) return candidate;
+    if (typeof candidate === 'string' && candidate.trim() !== '' && Number.isFinite(Number(candidate))) {
+      return Number(candidate);
+    }
+    if (typeof candidate === 'object') {
+      const nested = centsOf(candidate.value, candidate.amount, candidate.cents);
+      if (nested != null) return nested;
+    }
+  }
+  return null;
+};
+
 const publicWallet = (wallet) => {
   if (!wallet) return null;
+  const availableCents = centsOf(wallet.availableBalance, wallet.available, wallet.available_cents);
+  const pendingCents = centsOf(wallet.pendingBalance, wallet.pending, wallet.pending_cents);
   return {
-    walletID: wallet.walletID || wallet.id || null,
     status: wallet.status || null,
-    available_cents_present: wallet.availableBalance != null || wallet.available?.value != null || wallet.available_cents != null,
-    pending_cents_present: wallet.pendingBalance != null || wallet.pending?.value != null || wallet.pending_cents != null,
+    wallet_id_present: Boolean(wallet.walletID || wallet.id),
+    available_cents: availableCents,
+    pending_cents: pendingCents,
+    available_cents_present: availableCents != null,
+    pending_cents_present: pendingCents != null,
   };
 };
 
+const publicTos = (tos, localAcceptedAt) => {
+  if (!tos && !localAcceptedAt) return { accepted: null, accepted_at: null };
+  if (typeof tos === 'string') {
+    return { accepted: true, accepted_at: tos };
+  }
+  const acceptedAt = tos?.acceptedDate || tos?.acceptedOn || tos?.accepted_at || localAcceptedAt || null;
+  if (acceptedAt) return { accepted: true, accepted_at: acceptedAt };
+  if (tos?.accepted === false) return { accepted: false, accepted_at: null };
+  if (tos?.accepted === true) return { accepted: true, accepted_at: acceptedAt };
+  return { accepted: null, accepted_at: null };
+};
+
+const publicRequirements = (requirements) => {
+  if (!requirements) return { present: false, action_required: null };
+  const currentlyDue = requirements.currentlyDue || requirements.currently_due || requirements.actionRequired || requirements.action_required || null;
+  return {
+    present: true,
+    action_required: currentlyDue == null ? null : redactMoovText(JSON.stringify(currentlyDue)).slice(0, 400),
+    disabled_reason: requirements.disabledReason || requirements.disabled_reason || null,
+  };
+};
+
+const getSummary = (got) => ({
+  ok: got?.ok === true,
+  status: got?.status ?? null,
+  error: got?.error ? redactMoovText(got.error) : null,
+});
+
 const safeGet = async (args) => {
   try {
-    return await productionMoovFetch({ ...args, mode: 'read', method: 'GET' });
+    const got = await productionMoovFetch({ ...args, mode: 'read', method: 'GET' });
+    return { ok: true, status: got.status, json: got.json, error: null };
   } catch (error) {
     if (error?.code === 'read_only_method_denied' || error?.code === 'read_only_path_denied') throw error;
-    return { ok: false, json: null, error: String(error.message || error).slice(0, 200) };
+    return {
+      ok: false,
+      json: null,
+      status: error?.status || null,
+      error: redactMoovText(String(error.message || error)).slice(0, 200),
+    };
   }
 };
+
+export function classifySenderReadiness({
+  accountGetOk,
+  verification = {},
+  capabilities = {},
+  wallet = null,
+  banks = [],
+} = {}) {
+  const reasons = [];
+  if (!accountGetOk) reasons.push('live_account_get_failed');
+  const status = String(verification.account_status || '').toLowerCase();
+  if (accountGetOk && status && !['verified', 'active', 'approved', 'enabled'].includes(status)) {
+    reasons.push(`account_status_${status}`);
+  }
+  const kyc = String(verification.kyc || '').toLowerCase();
+  if (accountGetOk && kyc && !['verified', 'verified_with_changes', 'pending'].includes(kyc) && kyc !== 'unverified') {
+    reasons.push(`kyc_${kyc}`);
+  }
+  if (accountGetOk && kyc && ['unverified', 'failed', 'rejected', 'restricted'].includes(kyc)) {
+    reasons.push(`kyc_${kyc}`);
+  }
+  if (verification.tos && verification.tos.accepted === false) reasons.push('tos_not_accepted');
+  if (capabilities.send_funds && capabilities.send_funds.enabled !== true) reasons.push('send_funds_ach_not_enabled');
+  if (!capabilities.send_funds) reasons.push('send_funds_ach_unknown');
+  if (!wallet) reasons.push('wallet_missing');
+  const bankOk = (banks || []).some((row) => {
+    const statusValue = String(row.verification_status || row.status || '').toLowerCase();
+    return ['verified', 'connected', 'active'].includes(statusValue);
+  });
+  if ((banks || []).length === 0) reasons.push('bank_missing');
+  else if (!bankOk) reasons.push('bank_not_verified');
+  return {
+    verdict: reasons.length ? 'BLOCKED' : 'SENDER_READY',
+    reasons,
+  };
+}
 
 export async function handleProductionMoovReadiness({
   client,
@@ -181,10 +270,9 @@ export async function handleProductionMoovReadiness({
   )(deps.getSecrets);
   if (!secrets.ok) return { ...secrets, spoofFieldsIgnored: spoof, local: publicProductionMoovAccount(account) };
 
-  const accountGet = await productionMoovFetch({
+  const accountGet = await safeGet({
     credentials: secrets.credentials,
     path: `/accounts/${accountId}`,
-    mode: 'read',
     scopes: [`/accounts/${accountId}/profile.read`],
     fetchImpl,
   });
@@ -209,7 +297,7 @@ export async function handleProductionMoovReadiness({
       scopes: [`/accounts/${accountId}/wallets.read`],
       fetchImpl,
     })
-    : { json: null };
+    : { ok: false, json: null, status: null, error: 'wallet_id_unavailable' };
   const banks = await safeGet({
     credentials: secrets.credentials,
     path: `/accounts/${accountId}/bank-accounts`,
@@ -227,10 +315,36 @@ export async function handleProductionMoovReadiness({
   const capabilities = summarizeMoovCapabilities(caps.json);
   const bankRows = Array.isArray(banks.json) ? banks.json : (banks.json?.bankAccounts || []);
   const methodRows = Array.isArray(methods.json) ? methods.json : (methods.json?.paymentMethods || []);
+  const verification = {
+    account_status: remoteAccount.status || null,
+    account_type: remoteAccount.accountType || remoteAccount.account_type || null,
+    kyc: remoteAccount.verification?.status || remoteAccount.verificationStatus || null,
+    kyb: remoteAccount.profile?.business ? 'business_profile_present' : (remoteAccount.profile?.individual ? 'individual_profile_present' : null),
+    tos: publicTos(remoteAccount.termsOfService, null),
+    requirements: publicRequirements(remoteAccount.requirements || remoteAccount.capabilities?.requirements),
+  };
+  const wallet = publicWallet(walletGet.json) || (wallets.ok === true && walletList[0] ? publicWallet(walletList[0]) : null);
+  const bankSummaries = bankRows.map(publicBank);
+  const sender = classifySenderReadiness({
+    accountGetOk: accountGet.ok === true,
+    verification,
+    capabilities,
+    wallet,
+    banks: bankSummaries,
+  });
+  const liveGets = {
+    account: getSummary(accountGet),
+    capabilities: getSummary(caps),
+    wallets: getSummary(wallets),
+    wallet: getSummary(walletGet),
+    banks: getSummary(banks),
+    payment_methods: getSummary(methods),
+  };
 
   return {
-    ok: true,
-    statusCode: 200,
+    ok: accountGet.ok === true,
+    statusCode: accountGet.ok === true ? 200 : 502,
+    error: accountGet.ok === true ? undefined : 'moov_account_get_failed',
     provider: 'moov',
     liveProviderCalled: true,
     productionExecution: false,
@@ -241,26 +355,17 @@ export async function handleProductionMoovReadiness({
     tenant_id: derived.tenantId,
     server_derived_provider_account_id_present: true,
     account: publicProductionMoovAccount(account),
-    verification: {
-      account_status: remoteAccount.status || null,
-      account_type: remoteAccount.accountType || remoteAccount.account_type || account.account_type || null,
-      kyc: remoteAccount.verification?.status || remoteAccount.verificationStatus || account.verification_status || null,
-      kyb: remoteAccount.profile?.business || remoteAccount.foreignID ? 'present' : null,
-      tos: remoteAccount.termsOfService || remoteAccount.termsOfService?.acceptedDate || account.tos_accepted_at || null,
-      requirements: remoteAccount.requirements || remoteAccount.capabilities?.requirements || null,
-    },
+    verification,
     capabilities,
-    wallet: publicWallet(walletGet.json) || (localWallet ? {
-      id: localWallet.id,
-      status: localWallet.status,
-      available_cents_present: localWallet.available_cents != null,
-      pending_cents_present: localWallet.pending_cents != null,
-    } : null),
-    banks: bankRows.map(publicBank),
+    wallet,
+    banks: bankSummaries,
     payment_methods: methodRows.map((row) => ({
       status: row.status || null,
       paymentMethodType: row.paymentMethodType || row.type || null,
     })),
+    live_gets: liveGets,
+    sender_readiness: sender,
+    local_snapshot_not_live_truth: true,
     spoofFieldsIgnored: spoof,
     applicationUserId: mapping.application_user_id,
   };

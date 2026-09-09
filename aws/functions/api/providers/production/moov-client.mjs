@@ -5,9 +5,24 @@ import {
   PRODUCTION_MOOV_ORIGIN,
 } from './moov-secrets.mjs';
 
+const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+
+export const redactMoovText = (value) => String(value || '').replace(UUID_RE, '{id}');
+
+export const publicMoovErrorBody = (body) => {
+  if (body == null) return null;
+  if (typeof body !== 'object') {
+    return { error: redactMoovText(String(body)).slice(0, 160) };
+  }
+  const code = body.error || body.errorCode || body.error_code || body.code || null;
+  return {
+    error: code ? redactMoovText(String(code)).slice(0, 160) : null,
+  };
+};
+
 export class ProductionMoovError extends Error {
   constructor(message, status, body) {
-    super(message);
+    super(redactMoovText(message));
     this.name = 'ProductionMoovError';
     this.status = status;
     this.body = body;
@@ -151,7 +166,7 @@ export async function productionMoovFetch({
   try { json = text ? JSON.parse(text) : null; } catch { /* non-JSON */ }
   if (!response.ok) {
     throw new ProductionMoovError(
-      json?.error || json?.message || `Moov ${path} failed`,
+      json?.error || json?.message || `Moov ${redactMoovText(path)} failed`,
       response.status,
       json ?? text,
     );

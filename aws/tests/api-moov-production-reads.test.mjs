@@ -20,8 +20,10 @@ import {
 import {
   assertReadOnlyMoovRequest,
   productionMoovFetch,
+  redactMoovText,
 } from '../functions/api/providers/production/moov-client.mjs';
 import { applyProductionMoovWebhook } from '../functions/api/providers/production/moov-webhook-apply.mjs';
+import { classifySenderReadiness } from '../functions/api/providers/production/moov-read.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '../..');
@@ -334,6 +336,9 @@ test('live reads true + money flags false → GET account/wallet/bank/capabiliti
   assert.equal(result.capabilities.send_funds.enabled, true);
   assert.equal(result.capabilities.collect_funds.enabled, true);
   assert.equal(result.capabilities.wallet_balance.enabled, true);
+  assert.equal(result.sender_readiness.verdict, 'SENDER_READY');
+  assert.equal(result.wallet.available_cents, 0);
+  assert.equal(result.live_gets.account.ok, true);
 });
 
 test('GET account uses server-derived provider_account_id; spoofed account denied', async () => {
@@ -433,6 +438,79 @@ test('webhook cannot initiate transfer while live reads are on', async () => {
   assert.equal(dark.applied, false);
   assert.equal(store.processPosts, 0);
   delete process.env.AWS_MOOV_WEBHOOK_SECRET;
+});
+
+test('account GET failure continues remaining GETs and does not leak provider account ids', async () => {
+  const store = createStore();
+  const failingFetch = async (url, options = {}) => {
+    const target = String(url);
+    const path = target.replace('https://api.moov.io', '');
+    if (target.includes('/oauth2/token')) {
+      store.oauthPosts += 1;
+      return { ok: true, status: 200, text: async () => JSON.stringify({ access_token: 'tok', expires_in: 300 }) };
+    }
+    if (/^\/accounts\/[^/]+$/.test(path)) {
+      store.getGets += 1;
+      store.getPaths.push(path);
+      return { ok: false, status: 403, text: async () => JSON.stringify({ error: 'account read denied' }) };
+    }
+    return fetchImpl(store)(url, options);
+  };
+  const result = await withEnv(liveReadFlags, () => handleProviderRequest(
+    jwtEvent('/functions/v1/moov-readiness', 'POST', {}),
+    '/functions/v1/moov-readiness',
+    'POST',
+    { ...depsFor(store), fetchImpl: failingFetch },
+  ));
+  assert.equal(result.error, 'moov_account_get_failed');
+  assert.equal(result.statusCode, 502);
+  assert.equal(result.liveProviderCalled, true);
+  assert.equal(result.productionExecution, false);
+  assert.equal(result.live_gets.account.status, 403);
+  assert.equal(result.live_gets.capabilities.ok, true);
+  assert.equal(result.live_gets.banks.ok, true);
+  assert.ok(store.getGets >= 4);
+  assert.equal(store.processPosts, 0);
+  assert.doesNotMatch(String(result.live_gets.account.error || ''), /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+  assert.equal(result.sender_readiness.verdict, 'BLOCKED');
+});
+
+test('Moov HTTP error messages redact account ids', async () => {
+  assert.equal(redactMoovText('Moov /accounts/60922058-7eca-4889-81dd-5720d7b9de96 failed'), 'Moov /accounts/{id} failed');
+  let called = 0;
+  await assert.rejects(
+    () => productionMoovFetch({
+      mode: 'read',
+      method: 'GET',
+      path: '/accounts/60922058-7eca-4889-81dd-5720d7b9de96',
+      credentials: clientCredentials,
+      fetchImpl: async (url) => {
+        if (String(url).includes('/oauth2/token')) {
+          return { ok: true, status: 200, text: async () => JSON.stringify({ access_token: 'tok', expires_in: 300 }) };
+        }
+        called += 1;
+        return { ok: false, status: 404, text: async () => '' };
+      },
+    }),
+    (error) => (
+      error.status === 404
+      && error.message === 'Moov /accounts/{id} failed'
+      && !/60922058/.test(error.message)
+    ),
+  );
+  assert.equal(called, 1);
+});
+
+test('sender readiness stays blocked without send-funds.ach', () => {
+  const blocked = classifySenderReadiness({
+    accountGetOk: true,
+    verification: { account_status: 'active', kyc: 'verified', tos: { accepted: true } },
+    capabilities: { send_funds: { id: 'send-funds.ach', enabled: false } },
+    wallet: { status: 'active' },
+    banks: [{ status: 'verified', verification_status: 'verified' }],
+  });
+  assert.equal(blocked.verdict, 'BLOCKED');
+  assert.ok(blocked.reasons.includes('send_funds_ach_not_enabled'));
 });
 
 test('missing production read credentials fail closed; sandbox cannot satisfy', async () => {
