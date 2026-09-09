@@ -1,10 +1,15 @@
 {
-  "phase": "M3b-resume-environment-key-recheck",
-  "captured_at": "2026-09-09T22:57:00Z",
-  "moov_http_called": false,
-  "production_get_count": 0,
+  "phase": "M3b-freedom-get-after-secret-correction",
+  "captured_at": "2026-09-09T23:12:52Z",
+  "deployed_code_sha256": "9rYhhaT6qymQwUsKq8EGNrpPFc9ox4dFLHnLDhd3NTE=",
+  "deployed_git_sha": "fd194ea0",
+  "secret_id": "checksops/production/provider",
+  "awscurrent_created": "2026-09-09T23:01:28.208Z",
+  "moov_http_called": true,
+  "production_get_count": 6,
   "production_post_count": 0,
-  "oauth_token_requests": 0,
+  "oauth_token_requests": 5,
+  "oauth_token_ok": true,
   "money_moved": false,
   "secret_values_printed": false,
   "sql72_applied": false,
@@ -13,19 +18,24 @@
   "secret_contract": {
     "secret_id": "checksops/production/provider",
     "awscurrent": true,
-    "awscurrent_version_created": "2026-09-09T22:46:40.571Z",
-    "version_count": 1,
-    "key_names": ["MOOV_ALLOWED_ORIGIN", "MOOV_ENVIRO", "MOOV_PUBLIC_KEY", "MOOV_SECRET_KEY"],
+    "awscurrent_version_created": "2026-09-09T23:01:28.208Z",
+    "version_count": 2,
+    "key_names": ["MOOV_ALLOWED_ORIGIN", "MOOV_ENVIRONMENT", "MOOV_PUBLIC_KEY", "MOOV_SECRET_KEY"],
     "names_configured": {
       "MOOV_PUBLIC_KEY": true,
       "MOOV_SECRET_KEY": true,
-      "MOOV_ENVIRONMENT": false,
+      "MOOV_ENVIRONMENT": true,
       "MOOV_ALLOWED_ORIGIN": true
     },
-    "MOOV_ENVIRONMENT_is_production": false,
-    "typo_key_MOOV_ENVIRO_present": true,
-    "MOOV_ENVIRO_value_is_production": true,
-    "read_contract_complete": false
+    "MOOV_ENVIRONMENT_is_production": true,
+    "typo_key_MOOV_ENVIRO_present": false,
+    "origin_host_is_checksops_com": true,
+    "origin_has_trailing_slash": true,
+    "adapter_origin_approved_after_normalize": true,
+    "MOOV_PLATFORM_ACCOUNT_ID_present": false,
+    "MOOV_WEBHOOK_SECRET_present": false,
+    "read_contract_complete": true,
+    "full_execution_contract_complete": false
   },
   "flags": {
     "AWS_PROVIDER_LIVE_READS_ENABLED": true,
@@ -35,16 +45,68 @@
     "AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED": false
   },
   "probes": {
-    "moov-transfer-create": {"error": "production_execution_blocked", "liveProviderCalled": false},
-    "moov-disburse": {"error": "production_execution_blocked", "liveProviderCalled": false},
-    "freedom_readiness": {
-      "http": 503,
-      "error": "production_secret_missing",
-      "missingNames": ["MOOV_ENVIRONMENT"],
-      "liveProviderCalled": false,
-      "moov_get_performed": false
+    "moov-transfer-create": {
+      "lambda": {"http": 403, "error": "production_execution_blocked", "liveProviderCalled": false},
+      "cloudfront": {"http": 403, "error": "production_execution_blocked", "liveProviderCalled": false}
     },
-    "recipients": {"verdict": "RECIPIENT_NOT_CONFIRMED"},
+    "moov-disburse": {
+      "lambda": {"http": 403, "error": "production_execution_blocked", "liveProviderCalled": false},
+      "cloudfront": {"http": 403, "error": "production_execution_blocked", "liveProviderCalled": false}
+    },
+    "spoofed_account": {
+      "http": 400,
+      "error": "untrusted_provider_config",
+      "liveProviderCalled": false
+    },
+    "freedom_readiness": {
+      "http": 502,
+      "error": "moov_account_get_failed",
+      "liveProviderCalled": true,
+      "productionExecution": false,
+      "productionRead": true,
+      "created": false,
+      "mutated": false,
+      "browser_moov_account_id_supplied": false,
+      "live_gets": {
+        "account": {"ok": false, "status": 401},
+        "capabilities": {"ok": false, "status": 401},
+        "wallets": {"ok": false, "status": 401},
+        "wallet": {"ok": false, "status": 401},
+        "banks": {"ok": false, "status": 401},
+        "payment_methods": {"ok": false, "status": 401}
+      }
+    },
+    "live_verification": {
+      "account_status": null,
+      "account_type": null,
+      "kyc": null,
+      "kyb": null,
+      "tos": {"accepted": null, "accepted_at": null},
+      "requirements": {"present": false, "action_required": null},
+      "wallet": null,
+      "banks": [],
+      "payment_methods": [],
+      "send_funds_ach": null,
+      "collect_funds_ach": null,
+      "wallet_balance": null,
+      "same_day_ach": null
+    },
+    "sender_readiness": {
+      "verdict": "BLOCKED",
+      "reasons": [
+        "live_account_get_failed",
+        "send_funds_ach_unknown",
+        "wallet_missing",
+        "bank_missing"
+      ]
+    },
+    "recipients": {
+      "count": 4,
+      "onboarding_statuses": ["awaiting_bank"],
+      "environments": ["production", "sandbox"],
+      "verdict": "RECIPIENT_NOT_CONFIRMED",
+      "c1c_used": false
+    },
     "sql72": "NOT_APPLIED"
   }
 }
