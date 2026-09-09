@@ -151,6 +151,7 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
           const enrolled = await verifyAwsTotp(trimmed, {
             actionKey: request?.actionKey,
             tenantId: request?.tenantId,
+            checkId: request?.checkId,
           });
           if (!enrolled) throw new Error("That code wasn't accepted. Try the next one.");
         } else {
@@ -158,6 +159,7 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
             code: trimmed,
             actionKey: request?.actionKey,
             tenantId: request?.tenantId,
+            checkId: request?.checkId,
           });
           if (!stepped) throw new Error("That code wasn't accepted. Try the next one.");
         }
