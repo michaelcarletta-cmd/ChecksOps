@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AlertTriangle, Loader2, ShieldCheck } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -9,11 +9,13 @@ import { useAuth } from "@/hooks/useAuth";
 import { useStepUp } from "@/hooks/useStepUp";
 import { useToast } from "@/hooks/use-toast";
 import { awsMfaAvailable } from "@/lib/awsMfa";
+import { awsApiBaseUrl } from "@/lib/awsStaging";
+import { loadAwsIdentityFinancialRoles } from "@/lib/financialTotpOnlyIdentity";
 import {
   FINANCIAL_TOTP_ONLY_COPY,
   FINANCIAL_TOTP_ONLY_FORBIDDEN,
+  canShowFinancialTotpOnlyTestCard,
   isExistingCheckId,
-  roleMayRunFinancialTotpOnlyTest,
   runFinancialTotpOnlyVerification,
   type FinancialTotpOnlyOutcome,
 } from "@/lib/financialTotpOnlyTest";
@@ -29,8 +31,43 @@ export function FinancialTotpOnlyTestCard() {
   const [checkId, setCheckId] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<FinancialTotpOnlyOutcome | { error: string } | null>(null);
+  const [identityRoles, setIdentityRoles] = useState<unknown>(null);
+  const knownRoles = [userRole, user?.app_metadata, identityRoles];
+  const visible = canShowFinancialTotpOnlyTestCard({
+    awsMfaAvailable: awsMfaAvailable(),
+    userId: user?.id,
+    roles: knownRoles,
+  });
 
-  if (!awsMfaAvailable() || !user || !roleMayRunFinancialTotpOnlyTest(userRole)) {
+  useEffect(() => {
+    if (!awsMfaAvailable() || !user?.id) {
+      setIdentityRoles([]);
+      return;
+    }
+    if (
+      canShowFinancialTotpOnlyTestCard({
+        awsMfaAvailable: true,
+        userId: user.id,
+        roles: [userRole, user.app_metadata],
+      })
+    ) {
+      setIdentityRoles([]);
+      return;
+    }
+    let cancelled = false;
+    void loadAwsIdentityFinancialRoles({
+      awsMfaAvailable: true,
+      apiBaseUrl: awsApiBaseUrl(),
+    }).then((result) => {
+      if (cancelled) return;
+      setIdentityRoles(result.ok ? result.roles : []);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, user?.app_metadata, userRole]);
+
+  if (!visible) {
     return null;
   }
 
@@ -39,7 +76,7 @@ export function FinancialTotpOnlyTestCard() {
     setResult(null);
     try {
       const verified = await runFinancialTotpOnlyVerification({
-        roles: userRole,
+        roles: knownRoles,
         checkId,
         requireStepUp,
       });

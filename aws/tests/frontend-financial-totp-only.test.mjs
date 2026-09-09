@@ -7,14 +7,24 @@ import {
   FINANCIAL_TOTP_ONLY_COPY,
   FINANCIAL_TOTP_ONLY_FORBIDDEN,
   FINANCIAL_TOTP_ONLY_OPERATION,
+  canShowFinancialTotpOnlyTestCard,
+  collectFinancialTotpOnlyRoles,
+  identityMeFinancialRoles,
   isExistingCheckId,
   roleMayRunFinancialTotpOnlyTest,
   runFinancialTotpOnlyVerification,
 } from '../../src/lib/financialTotpOnlyTest.ts';
+import {
+  identityMeRequestUrl,
+  loadAwsIdentityFinancialRoles,
+} from '../../src/lib/financialTotpOnlyIdentity.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const CHECK = '623442f0-a408-4db5-85be-14bae231a722';
 const OTHER_TENANT = '4f172140-f57a-4744-8050-95f4f07b13b4';
+const FREEDOM_ADMIN = '7dbb3009-f059-4767-b5dc-1c5c72379330';
+const FREEDOM_TENANT = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
+const FREEDOM_TESTER = 'abd3c2a0-6dc0-4680-92dd-a013e1141c91';
 
 const sourceOf = (rel) => readFileSync(join(ROOT, rel), 'utf8');
 
@@ -43,6 +53,100 @@ test('only owner/admin/manager may start the TOTP-only path', () => {
   assert.equal(roleMayRunFinancialTotpOnlyTest('operator'), false);
   assert.equal(roleMayRunFinancialTotpOnlyTest(['operator', 'staff']), false);
   assert.equal(roleMayRunFinancialTotpOnlyTest(null), false);
+  assert.equal(roleMayRunFinancialTotpOnlyTest([{ role: 'admin' }]), true);
+  assert.deepEqual(
+    collectFinancialTotpOnlyRoles('staff', { roles: ['admin'], tenant_roles: ['admin'] }),
+    ['staff', 'admin'],
+  );
+});
+
+test('Freedom admin sees the Financial TOTP test card from user_roles or tenant membership', () => {
+  assert.equal(
+    canShowFinancialTotpOnlyTestCard({
+      awsMfaAvailable: true,
+      userId: FREEDOM_ADMIN,
+      roles: 'admin',
+    }),
+    true,
+  );
+  assert.equal(
+    canShowFinancialTotpOnlyTestCard({
+      awsMfaAvailable: true,
+      userId: FREEDOM_ADMIN,
+      roles: [{ role: 'admin', tenant_id: FREEDOM_TENANT }],
+    }),
+    true,
+  );
+  assert.equal(
+    canShowFinancialTotpOnlyTestCard({
+      awsMfaAvailable: true,
+      userId: FREEDOM_ADMIN,
+      roles: { roles: [], tenant_roles: ['admin'] },
+    }),
+    true,
+  );
+  assert.equal(
+    canShowFinancialTotpOnlyTestCard({
+      awsMfaAvailable: true,
+      userId: FREEDOM_ADMIN,
+      roles: identityMeFinancialRoles({
+        ok: true,
+        applicationUserId: FREEDOM_ADMIN,
+        roles: ['admin'],
+        tenants: [{ role: 'admin', tenant_id: FREEDOM_TENANT }],
+      }),
+    }),
+    true,
+  );
+});
+
+test('role lookup failure fails closed', () => {
+  assert.deepEqual(identityMeFinancialRoles(null), []);
+  assert.deepEqual(identityMeFinancialRoles({ ok: false, error: 'identity_not_linked' }), []);
+  assert.deepEqual(identityMeFinancialRoles({ roles: ['admin'] }), []);
+  assert.equal(
+    canShowFinancialTotpOnlyTestCard({
+      awsMfaAvailable: true,
+      userId: FREEDOM_ADMIN,
+      roles: identityMeFinancialRoles({ ok: false }),
+    }),
+    false,
+  );
+});
+
+test('operator/staff do not see the Financial TOTP test card', () => {
+  assert.equal(
+    canShowFinancialTotpOnlyTestCard({
+      awsMfaAvailable: true,
+      userId: FREEDOM_TESTER,
+      roles: ['operator', 'staff'],
+    }),
+    false,
+  );
+  assert.equal(
+    canShowFinancialTotpOnlyTestCard({
+      awsMfaAvailable: true,
+      userId: FREEDOM_TESTER,
+      roles: [{ role: 'operator' }, { role: 'staff' }],
+    }),
+    false,
+  );
+  assert.equal(
+    canShowFinancialTotpOnlyTestCard({
+      awsMfaAvailable: true,
+      userId: FREEDOM_ADMIN,
+      roles: null,
+    }),
+    false,
+  );
+  assert.equal(
+    canShowFinancialTotpOnlyTestCard({
+      awsMfaAvailable: false,
+      userId: FREEDOM_ADMIN,
+      roles: 'admin',
+    }),
+    false,
+  );
 });
 
 test('requires an existing check UUID and ignores browser tenant/amount', async () => {
@@ -138,11 +242,13 @@ test('TOTP-only UI and runner sources never invoke deposit or provider workflows
   const runner = sourceOf('src/lib/financialTotpOnlyTest.ts');
   const card = sourceOf('src/components/auth/FinancialTotpOnlyTestCard.tsx');
   const page = sourceOf('src/pages/AccountSecurity.tsx');
+  const settings = sourceOf('src/components/white-label/WhiteLabelSettings.tsx');
 
   for (const [name, source] of [
     ['runner', runner],
     ['card', card],
     ['page', page],
+    ['settings', settings],
   ]) {
     assert.equal(source.includes('supabase.functions.invoke'), false, `${name} must not invoke edge functions`);
     assert.doesNotMatch(source, /functions\.invoke\(/);
@@ -161,5 +267,117 @@ test('TOTP-only UI and runner sources never invoke deposit or provider workflows
   assert.match(runner, /Verify financial TOTP only — no deposit will be submitted\./);
   assert.match(card, /FINANCIAL_TOTP_ONLY_COPY/);
   assert.match(card, /runFinancialTotpOnlyVerification/);
-  assert.match(page, /FinancialTotpOnlyTestCard/);
+  assert.match(card, /canShowFinancialTotpOnlyTestCard/);
+  assert.match(card, /loadAwsIdentityFinancialRoles/);
+  assert.doesNotMatch(card, /@\/integrations\/supabase\/client/);
+  assert.doesNotMatch(card, /from\("tenant_users"\)/);
+});
+
+test('role fallback uses AWS identity/me and refuses legacy Supabase/Lovable', async () => {
+  const identity = sourceOf('src/lib/financialTotpOnlyIdentity.ts');
+  const card = sourceOf('src/components/auth/FinancialTotpOnlyTestCard.tsx');
+  const runner = sourceOf('src/lib/financialTotpOnlyTest.ts');
+
+  for (const [name, source] of [
+    ['identity', identity],
+    ['card', card],
+    ['runner', runner],
+  ]) {
+    assert.doesNotMatch(source, /@\/integrations\/supabase\/client/, `${name} must not import supabase client`);
+    assert.doesNotMatch(source, /import\.meta\.env\.VITE_SUPABASE_URL/);
+    assert.doesNotMatch(source, /createClient</);
+  }
+  for (const [name, source] of [
+    ['card', card],
+    ['runner', runner],
+  ]) {
+    assert.doesNotMatch(source, /nbcqwpysqgyxrrbgtmkw/, `${name} must not name the legacy project`);
+    assert.doesNotMatch(source, /supabase\.co/, `${name} must not target supabase.co`);
+  }
+
+  assert.equal(identityMeRequestUrl('https://checksops.com/prep'), 'https://checksops.com/prep/identity/me');
+  assert.equal(identityMeRequestUrl('https://nbcqwpysqgyxrrbgtmkw.supabase.co'), null);
+  assert.equal(identityMeRequestUrl('https://example.lovable.app'), null);
+
+  const calls = [];
+  const ok = await loadAwsIdentityFinancialRoles({
+    awsMfaAvailable: true,
+    apiBaseUrl: 'https://checksops.com/prep',
+    idToken: 'test-id-token',
+    fetchImpl: async (url, init) => {
+      calls.push({ url: String(url), method: init?.method, hasLegacy: String(url).includes('supabase') });
+      return {
+        ok: true,
+        json: async () => ({
+          ok: true,
+          applicationUserId: FREEDOM_ADMIN,
+          roles: ['admin'],
+          tenants: [{ role: 'admin', tenant_id: FREEDOM_TENANT }],
+        }),
+      };
+    },
+  });
+  assert.equal(ok.ok, true);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, 'https://checksops.com/prep/identity/me');
+  assert.equal(calls[0].hasLegacy, false);
+  assert.equal(
+    canShowFinancialTotpOnlyTestCard({
+      awsMfaAvailable: true,
+      userId: FREEDOM_ADMIN,
+      roles: ok.roles,
+    }),
+    true,
+  );
+
+  const failed = await loadAwsIdentityFinancialRoles({
+    awsMfaAvailable: true,
+    apiBaseUrl: 'https://checksops.com/prep',
+    idToken: 'test-id-token',
+    fetchImpl: async () => {
+      throw new Error('network');
+    },
+  });
+  assert.equal(failed.ok, false);
+  assert.equal(
+    canShowFinancialTotpOnlyTestCard({
+      awsMfaAvailable: true,
+      userId: FREEDOM_ADMIN,
+      roles: [],
+    }),
+    false,
+  );
+
+  const refused = await loadAwsIdentityFinancialRoles({
+    awsMfaAvailable: true,
+    apiBaseUrl: 'https://nbcqwpysqgyxrrbgtmkw.supabase.co',
+    idToken: 'test-id-token',
+    fetchImpl: async () => {
+      throw new Error('legacy must not be called');
+    },
+  });
+  assert.equal(refused.ok, false);
+  assert.equal(refused.error, 'identity_unavailable');
+
+  const missingGate = await loadAwsIdentityFinancialRoles({
+    apiBaseUrl: 'https://checksops.com/prep',
+    idToken: 'test-id-token',
+    fetchImpl: async () => {
+      throw new Error('ungated lookup must not run');
+    },
+  });
+  assert.equal(missingGate.ok, false);
+});
+
+test('FinancialTotpOnlyTestCard is actually mounted on Account Security and Settings', () => {
+  const page = sourceOf('src/pages/AccountSecurity.tsx');
+  const settings = sourceOf('src/components/white-label/WhiteLabelSettings.tsx');
+  const client = sourceOf('src/integrations/aws/client.ts');
+
+  assert.match(page, /<TotpManagerCard \/>\s*<FinancialTotpOnlyTestCard \/>/);
+  assert.match(settings, /<TotpManagerCard \/>\s*<FinancialTotpOnlyTestCard \/>/);
+  assert.match(page, /<FinancialTotpOnlyTestCard\s*\/>/);
+  assert.match(settings, /<FinancialTotpOnlyTestCard\s*\/>/);
+  assert.match(client, /tenant_roles/);
+  assert.match(client, /identity\.roles/);
 });
