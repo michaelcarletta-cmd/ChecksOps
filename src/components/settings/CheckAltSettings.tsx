@@ -12,7 +12,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { usePermissions } from "@/hooks/usePermissions";
 import { awsApiBaseUrl } from "@/lib/awsStaging";
-import { invokeAwsCheckAltMoneyFunction, requireAwsCheckAltMoneyPath } from "@/lib/awsCheckAltMoneyPath";
+import {
+  checkAltProviderUserMessage,
+  invokeAwsCheckAltProviderFunction,
+  requireAwsCheckAltProviderPath,
+} from "@/lib/awsCheckAltMoneyPath";
 import { useTenant } from "@/contexts/TenantContext";
 import { Loader2, Banknote, ShieldCheck, AlertTriangle, RefreshCw, UserPlus, UserCheck, Landmark } from "lucide-react";
 
@@ -108,8 +112,16 @@ export function CheckAltSettings() {
 
   const pollMutation = useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke("checkalt-poll-status");
-      if (error) throw error;
+      requireAwsCheckAltProviderPath({
+        apiBaseUrl: awsApiBaseUrl(),
+        functionName: "checkalt-poll-status",
+      });
+      const { data, error } = await invokeAwsCheckAltProviderFunction(
+        "checkalt-poll-status",
+        { body: {} },
+        { apiBaseUrl: awsApiBaseUrl() },
+      );
+      if (error) throw new Error(checkAltProviderUserMessage(error));
       return data as { polled: number; updated: number; errors: number };
     },
     onSuccess: (data) => {
@@ -129,9 +141,19 @@ export function CheckAltSettings() {
 
   const testMutation = useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke("checkalt-test-connection");
-      if (error) throw error;
-      if (data && data.success === false) throw new Error(data.error || "Test failed");
+      requireAwsCheckAltProviderPath({
+        apiBaseUrl: awsApiBaseUrl(),
+        functionName: "checkalt-test-connection",
+      });
+      const { data, error } = await invokeAwsCheckAltProviderFunction(
+        "checkalt-test-connection",
+        { body: {} },
+        { apiBaseUrl: awsApiBaseUrl() },
+      );
+      if (error) throw new Error(checkAltProviderUserMessage(error));
+      if (data && (data as { success?: boolean }).success === false) {
+        throw new Error(checkAltProviderUserMessage((data as { error?: string }).error || "Test failed"));
+      }
       return data as { success: boolean; message: string; token_preview?: string };
     },
     onSuccess: (data) => {
@@ -189,15 +211,17 @@ export function CheckAltSettings() {
   const registerMutation = useMutation({
     mutationFn: async () => {
       if (!tenant?.id) throw new Error("No tenant in context");
-      const { data, error } = await supabase.functions.invoke("checkalt-register-account", {
-        body: { tenant_id: tenant.id, ...reg },
+      requireAwsCheckAltProviderPath({
+        apiBaseUrl: awsApiBaseUrl(),
+        functionName: "checkalt-register-account",
       });
-      if (error) {
-        let msg = error.message ?? "Registration failed";
-        try { const b = await (error as any).context?.json?.(); if (b?.error) msg = typeof b.error === "string" ? b.error : JSON.stringify(b.error); } catch {}
-        throw new Error(msg);
-      }
-      if ((data as any)?.error) throw new Error((data as any).error);
+      const { data, error } = await invokeAwsCheckAltProviderFunction(
+        "checkalt-register-account",
+        { body: { tenant_id: tenant.id, ...reg } },
+        { apiBaseUrl: awsApiBaseUrl() },
+      );
+      if (error) throw new Error(checkAltProviderUserMessage(error));
+      if ((data as any)?.error) throw new Error(checkAltProviderUserMessage((data as any).error));
       return data;
     },
     onSuccess: () => {
@@ -217,10 +241,16 @@ export function CheckAltSettings() {
   const verifyMutation = useMutation({
     mutationFn: async (action: "user" | "account") => {
       if (!tenant?.id) throw new Error("No tenant in context");
-      const { data, error } = await supabase.functions.invoke("checkalt-verify-account", {
-        body: { tenant_id: tenant.id, action },
+      requireAwsCheckAltProviderPath({
+        apiBaseUrl: awsApiBaseUrl(),
+        functionName: "checkalt-verify-account",
       });
-      if (error) throw new Error(error.message ?? "Verification failed");
+      const { data, error } = await invokeAwsCheckAltProviderFunction(
+        "checkalt-verify-account",
+        { body: { tenant_id: tenant.id, action } },
+        { apiBaseUrl: awsApiBaseUrl() },
+      );
+      if (error) throw new Error(checkAltProviderUserMessage(error));
       if ((data as any)?.success === false) {
         // Keep the raw CheckAlt response visible so we can see what the vendor said.
         setVerifyResult({ action, payload: (data as any).details ?? data });
@@ -679,17 +709,17 @@ export function PendingApprovalDeposits() {
       if (args.action === "approve") {
         await guardFinancial("deposit.approve", { checkId: args.check_intake_item_id });
       }
-      requireAwsCheckAltMoneyPath({
+      requireAwsCheckAltProviderPath({
         apiBaseUrl: awsApiBaseUrl(),
         functionName: "checkalt-approve-deposit",
       });
-      const { data, error } = await invokeAwsCheckAltMoneyFunction(
+      const { data, error } = await invokeAwsCheckAltProviderFunction(
         "checkalt-approve-deposit",
         { body: args },
         { apiBaseUrl: awsApiBaseUrl() },
       );
-      if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).error);
+      if (error) throw new Error(checkAltProviderUserMessage(error));
+      if ((data as any)?.error) throw new Error(checkAltProviderUserMessage((data as any).error));
       return data;
     },
     onSuccess: (data: any) => {
@@ -723,9 +753,17 @@ export function PendingApprovalDeposits() {
   // waiting up to 10 minutes for the cron.
   const poll = useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke("checkalt-poll-status");
-      if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).error);
+      requireAwsCheckAltProviderPath({
+        apiBaseUrl: awsApiBaseUrl(),
+        functionName: "checkalt-poll-status",
+      });
+      const { data, error } = await invokeAwsCheckAltProviderFunction(
+        "checkalt-poll-status",
+        { body: {} },
+        { apiBaseUrl: awsApiBaseUrl() },
+      );
+      if (error) throw new Error(checkAltProviderUserMessage(error));
+      if ((data as any)?.error) throw new Error(checkAltProviderUserMessage((data as any).error));
       return data as { polled: number; updated: number; errors: number };
     },
     onSuccess: (data) => {
@@ -916,12 +954,17 @@ export function CheckAltDepositHistory() {
   const { data, isFetching, refetch, error } = useQuery({
     queryKey: ["checkalt-deposit-history", startDate, endDate],
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke(
+      requireAwsCheckAltProviderPath({
+        apiBaseUrl: awsApiBaseUrl(),
+        functionName: "checkalt-deposit-history",
+      });
+      const { data, error } = await invokeAwsCheckAltProviderFunction(
         "checkalt-deposit-history",
         { body: { start_date: startDate, end_date: endDate } },
+        { apiBaseUrl: awsApiBaseUrl() },
       );
-      if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).error);
+      if (error) throw new Error(checkAltProviderUserMessage(error));
+      if ((data as any)?.error) throw new Error(checkAltProviderUserMessage((data as any).error));
       return data as { items: any[]; count: number };
     },
     staleTime: 60_000,

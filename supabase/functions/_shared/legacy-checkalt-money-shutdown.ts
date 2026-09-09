@@ -1,12 +1,15 @@
 /**
- * Fail-closed shutdown for the legacy Lovable CheckAlt money path.
+ * Fail-closed shutdown for every legacy Lovable CheckAlt provider-HTTP function.
  * Must not import checkalt.ts, read CHECKALT_* secrets, or open HTTP.
  */
 
-export const LEGACY_CHECKALT_MONEY_DISABLED_ERROR = "legacy_checkalt_money_path_disabled";
+export const LEGACY_CHECKALT_PROVIDER_DISABLED_ERROR = "legacy_checkalt_provider_path_disabled";
 
-export const LEGACY_CHECKALT_MONEY_DISABLED_MESSAGE =
-  "Legacy CheckAlt money movement is shut down. Use the AWS controlled path.";
+export const LEGACY_CHECKALT_PROVIDER_DISABLED_MESSAGE =
+  "Legacy CheckAlt provider HTTP is shut down. Use the AWS controlled /prep path.";
+
+/** @deprecated Use LEGACY_CHECKALT_PROVIDER_DISABLED_ERROR */
+export const LEGACY_CHECKALT_MONEY_DISABLED_ERROR = LEGACY_CHECKALT_PROVIDER_DISABLED_ERROR;
 
 export const legacyCheckAltMoneyCorsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -36,8 +39,8 @@ export function legacyCheckAltMoneyShutdownResponse(req: { method?: string }): {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      error: LEGACY_CHECKALT_MONEY_DISABLED_ERROR,
-      message: LEGACY_CHECKALT_MONEY_DISABLED_MESSAGE,
+      error: LEGACY_CHECKALT_PROVIDER_DISABLED_ERROR,
+      message: LEGACY_CHECKALT_PROVIDER_DISABLED_MESSAGE,
       authenticated_to_checkalt: false,
       provider_http: false,
     }),

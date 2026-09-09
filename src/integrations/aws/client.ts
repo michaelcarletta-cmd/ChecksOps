@@ -5,8 +5,8 @@ import {
 } from "@/lib/awsStaging";
 import { createAwsStorageAdapter, rewriteStorageFields } from "./storage";
 import {
-  invokeAwsCheckAltMoneyFunction,
-  isLegacyCheckAltMoneyFunction,
+  invokeAwsCheckAltProviderFunction,
+  isLegacyCheckAltProviderFunction,
 } from "@/lib/awsCheckAltMoneyPath";
 
 export {
@@ -740,8 +740,8 @@ export function createAwsStagingClient(options: AwsStagingClientOptions = {}) {
 
   const functions = {
     invoke: async (name: string, options: { body?: Record<string, unknown> } = {}) => {
-      if (isLegacyCheckAltMoneyFunction(name)) {
-        return invokeAwsCheckAltMoneyFunction(name, options, {
+      if (isLegacyCheckAltProviderFunction(name)) {
+        return invokeAwsCheckAltProviderFunction(name, options, {
           authProvider: "cognito",
           apiBaseUrl: awsApiBaseUrl(),
         });
