@@ -8,9 +8,11 @@ import {
   applyFilters,
   belongsToEmbed,
   childFk,
+  classifyDataQueryFailure,
   fkColumnFromHint,
   handleDataQuery,
   handleDataRpc,
+  logDataQueryFailure,
   parseOrExpr,
   parseSelect,
   embedColumnSql,
@@ -104,6 +106,62 @@ test('parseSelect supports named FK hints and aliases used by partners/shared ch
   assert.equal(fkColumnFromHint('tenant_partnerships', partners.embeds[0].fkHint), 'inviter_tenant_id');
   assert.equal(partners.embeds[1].alias, 'invitee');
   assert.equal(fkColumnFromHint('tenant_partnerships', partners.embeds[1].fkHint), 'invitee_tenant_id');
+});
+
+const FUNDS_RELEASED_SELECT = `
+          id, amount, settled_at, recipient_name, method, external_check_number,
+          stakeholder_accounts (nickname, custname),
+          disbursement_batches (
+            id, check_intake_item_id,
+            check_intake_items:check_intake_item_id (
+              check_number, carrier_name, property_address, funds_type, amount,
+              claim_id, detected_claim_number, payee_line,
+              claims:claim_id ( claim_number, policyholder_name )
+            )
+          )
+        `;
+
+test('parseSelect keeps compact nested embeds and bang-inner hints', () => {
+  const parsed = parseSelect(
+    'id,tenants!inner(slug),disbursement_batches(id,check_intake_items:check_intake_item_id(check_number,claims:claim_id(claim_number)))',
+  );
+  assert.deepEqual(parsed.columns, ['id']);
+  assert.equal(parsed.embeds[0].table, 'tenants');
+  assert.equal(parsed.embeds[0].inner, true);
+  assert.equal(parsed.embeds[1].table, 'disbursement_batches');
+  assert.equal(parsed.embeds[1].embeds[0].table, 'check_intake_items');
+  assert.equal(parsed.embeds[1].embeds[0].fkHint, 'check_intake_item_id');
+  assert.equal(parsed.embeds[1].embeds[0].embeds[0].table, 'claims');
+  assert.equal(parsed.embeds[1].embeds[0].embeds[0].fkHint, 'claim_id');
+  assert.deepEqual(parsed.embeds[1].embeds[0].embeds[0].columns, ['claim_number']);
+});
+
+test('parseSelect accepts whitespace before nested embed parens and aliased FK embeds', () => {
+  const parsed = parseSelect(FUNDS_RELEASED_SELECT);
+  assert.deepEqual(parsed.columns, [
+    'id', 'amount', 'settled_at', 'recipient_name', 'method', 'external_check_number',
+  ]);
+  assert.equal(parsed.embeds[0].table, 'stakeholder_accounts');
+  assert.deepEqual(parsed.embeds[0].columns, ['nickname', 'custname']);
+  const batches = parsed.embeds[1];
+  assert.equal(batches.table, 'disbursement_batches');
+  assert.deepEqual(batches.columns, ['id', 'check_intake_item_id']);
+  const items = batches.embeds[0];
+  assert.equal(items.table, 'check_intake_items');
+  assert.equal(items.fkHint, 'check_intake_item_id');
+  assert.equal(items.alias, null);
+  assert.equal(items.columns.includes('check_number'), true);
+  assert.equal(items.columns.includes('claim_id'), true);
+  const claims = items.embeds[0];
+  assert.equal(claims.table, 'claims');
+  assert.equal(claims.fkHint, 'claim_id');
+  assert.deepEqual(claims.columns, ['claim_number', 'policyholder_name']);
+});
+
+test('parseSelect still rejects leftover malformed identifiers as invalid column', () => {
+  assert.throws(() => parseSelect('id, not a column'), /invalid column/);
+  assert.throws(() => parseSelect('id, disbursement_batches (id), 1bad'), /invalid column/);
+  assert.throws(() => parseSelect('id, foo-bar'), /invalid column/);
 });
 
 test('has-many star embeds do not pass * through ident', () => {
@@ -428,6 +486,132 @@ test('check queue has-many embeds do not select nonexistent parent FKs', async (
   assert.equal(Array.isArray(result.data[0].check_payees), true);
   assert.equal(result.data[0].check_payees[0].payee_name, 'Freedom Insured');
   assert.deepEqual(result.data[0].checkalt_deposits, []);
+});
+
+test('funds-released nested select returns 200 instead of invalid-column 503', async () => {
+  const splitId = '11111111-1111-4111-8111-111111111111';
+  const accountId = '22222222-2222-4222-8222-222222222222';
+  const batchId = '33333333-3333-4333-8333-333333333333';
+  const itemId = '44444444-4444-4444-8444-444444444444';
+  const claimId = '55555555-5555-4555-8555-555555555555';
+  const client = {
+    queries: [],
+    connect: async () => {},
+    query: async (sql, params) => {
+      client.queries.push({ sql, params });
+      if (sql === 'BEGIN' || sql === 'ROLLBACK') return { rows: [] };
+      if (sql.startsWith('SELECT set_config')) return { rows: [{ set_config: params[1] }] };
+      if (sql === LOOKUP_MAPPING_SQL) {
+        return { rows: params[0] === COGNITO_SUB ? [{
+          application_user_id: APP_ID,
+          cognito_sub: COGNITO_SUB,
+          email: 'checksops-tester@freedomadj.com',
+          status: 'active',
+        }] : [] };
+      }
+      if (sql.includes('count(*)')) return { rows: [{ n: 1 }] };
+      if (sql.includes('FROM public.disbursement_splits')) {
+        return { rows: [{
+          id: splitId,
+          amount: 100,
+          settled_at: '2026-09-01T00:00:00Z',
+          recipient_name: 'Freedom Adjustment',
+          method: 'ach',
+          external_check_number: '271682',
+          stakeholder_account_id: accountId,
+          disbursement_batch_id: batchId,
+        }] };
+      }
+      if (sql.includes('FROM public.stakeholder_accounts')) {
+        return { rows: [{ id: accountId, nickname: 'Operating', custname: 'Freedom' }] };
+      }
+      if (sql.includes('FROM public.disbursement_batches')) {
+        return { rows: [{ id: batchId, check_intake_item_id: itemId }] };
+      }
+      if (sql.includes('FROM public.check_intake_items')) {
+        return { rows: [{
+          id: itemId,
+          check_number: '271682',
+          carrier_name: 'Test Carrier',
+          property_address: '1 Main St',
+          funds_type: 'acv',
+          amount: 100,
+          claim_id: claimId,
+          detected_claim_number: '38-99V2-97X',
+          payee_line: 'Freedom Adjustment',
+        }] };
+      }
+      if (sql.includes('FROM public.claims')) {
+        return { rows: [{ id: claimId, claim_number: '38-99V2-97X', policyholder_name: 'Anissa Nassry' }] };
+      }
+      return { rows: [] };
+    },
+    end: async () => {},
+  };
+
+  const result = await handleDataQuery(jwtEvent('/data/query', 'POST', {
+    table: 'disbursement_splits',
+    select: FUNDS_RELEASED_SELECT,
+    filters: [
+      { column: 'tenant_id', op: 'eq', value: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a' },
+      { column: 'status', op: 'eq', value: 'settled' },
+    ],
+    order: { column: 'settled_at', ascending: false },
+    limit: 100,
+  }), depsFor(client));
+
+  assert.equal(result.ok, true);
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.error, undefined);
+  const parentSelect = client.queries.find((q) => String(q.sql).includes('FROM public.disbursement_splits') && !String(q.sql).includes('count(*)'));
+  assert.match(String(parentSelect.sql), /stakeholder_account_id/);
+  assert.match(String(parentSelect.sql), /disbursement_batch_id/);
+  assert.equal(String(parentSelect.sql).includes('not a col'), false);
+  assert.equal(result.data[0].stakeholder_accounts.nickname, 'Operating');
+  assert.equal(result.data[0].disbursement_batches.check_intake_items.check_number, '271682');
+  assert.equal(result.data[0].disbursement_batches.check_intake_items.claims.claim_number, '38-99V2-97X');
+});
+
+test('classifyDataQueryFailure logs shape only and redacts secrets, SQL URLs, and emails', () => {
+  const classified = classifyDataQueryFailure(
+    new Error('invalid column password=supersecret token=abc123 postgres://user:pass@db/checksops for checksops-tester@freedomadj.com'),
+    {
+      table: 'disbursement_splits',
+      select: FUNDS_RELEASED_SELECT.replace('settled_at', 'settled_at, 2eff5f1a-929d-4ce3-9a8b-cd96b98df42a'),
+      filters: [{ column: 'contact_email', op: 'eq', value: 'owner@example.com' }],
+    },
+  );
+  assert.equal(classified.errorClass, 'invalid_column');
+  assert.equal(classified.table, 'disbursement_splits');
+  assert.match(classified.selectShape, /disbursement_batches/);
+  assert.match(classified.selectShape, /\[id\]/);
+  assert.equal(classified.selectShape.includes('2eff5f1a-929d-4ce3-9a8b-cd96b98df42a'), false);
+  assert.equal(classified.message.includes('supersecret'), false);
+  assert.equal(classified.message.includes('abc123'), false);
+  assert.equal(classified.message.includes('postgres://'), false);
+  assert.equal(classified.message.includes('checksops-tester@freedomadj.com'), false);
+  assert.equal(classified.message.includes('owner@example.com'), false);
+  assert.equal(JSON.stringify(classified).includes('password='), false);
+
+  const logs = [];
+  const original = console.error;
+  console.error = (...args) => logs.push(args.join(' '));
+  try {
+    logDataQueryFailure(new Error('invalid column Bearer eyJhbGciOiJIUzI1NiJ9.payload'), {
+      table: 'disbursement_splits; drop table checks',
+      select: FUNDS_RELEASED_SELECT,
+    });
+  } finally {
+    console.error = original;
+  }
+  assert.equal(logs.length, 1);
+  const payload = JSON.parse(logs[0]);
+  assert.equal(payload.event, 'data_query_failed');
+  assert.equal(payload.table, '[rejected]');
+  assert.equal(payload.errorClass, 'invalid_column');
+  assert.equal(logs[0].includes('eyJhbGciOiJIUzI1NiJ9'), false);
+  assert.equal(logs[0].includes('DROP TABLE'), false);
+  assert.equal(logs[0].includes('contact_email'), false);
 });
 
 test('login challenge is returned without treating Cognito sub as the application UUID', async () => {
