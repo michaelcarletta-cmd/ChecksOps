@@ -9,7 +9,7 @@ import { Loader2, ShieldCheck, ShieldAlert } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useStepUp } from "@/hooks/useStepUp";
 import { isAwsStaging } from "@/lib/awsStaging";
-import { associateAwsTotp, awsMfaAvailable, getAwsMfaStatus, verifyAwsTotp } from "@/lib/awsMfa";
+import { associateAwsTotp, awsMfaAvailable, awsTotpEnrollmentDisplay, getAwsMfaStatus, verifyAwsTotp } from "@/lib/awsMfa";
 import { resolveTotpOtpauthUri, totpQrDataUrl } from "@/lib/totpQr";
 import { TotpQrDisplay } from "@/components/auth/TotpQrDisplay";
 import { useAuth } from "@/hooks/useAuth";
@@ -25,6 +25,7 @@ export function TotpManagerCard() {
   const { requireStepUp, refreshFactors, verified } = useStepUp();
   const [enrolled, setEnrolled] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
+  const [statusError, setStatusError] = useState<string | null>(null);
   const [awsSecret, setAwsSecret] = useState<string | null>(null);
   const [awsQr, setAwsQr] = useState<string | null>(null);
   const [awsCode, setAwsCode] = useState("");
@@ -35,9 +36,10 @@ export function TotpManagerCard() {
     if (awsMfaAvailable()) {
       try {
         const status = await getAwsMfaStatus();
-        setEnrolled(status.totpEnrolled);
-      } catch {
-        setEnrolled(false);
+        setStatusError(null);
+        setEnrolled(awsTotpEnrollmentDisplay(status) === "enrolled");
+      } catch (error) {
+        setStatusError(String((error as Error).message || error));
       }
       return;
     }
@@ -90,7 +92,13 @@ export function TotpManagerCard() {
         setAwsSecret(null);
         setAwsQr(null);
         setAwsCode("");
-        await load();
+        const status = await getAwsMfaStatus();
+        const nowEnrolled = awsTotpEnrollmentDisplay(status) === "enrolled";
+        setStatusError(null);
+        setEnrolled(nowEnrolled);
+        if (!nowEnrolled) {
+          throw new Error("Authenticator code was accepted but Cognito did not retain SOFTWARE_TOKEN_MFA. Preferred MFA was not set.");
+        }
         toast({ title: "Authenticator enrolled", description: "Login still uses email OTP, password, or passkey. This code is for privileged and future financial step-up." });
       } catch (error) {
         toast({ title: "Could not verify code", description: String((error as Error).message || error), variant: "destructive" });
@@ -105,7 +113,7 @@ export function TotpManagerCard() {
             {enrolled ? <ShieldCheck className="h-4 w-4 text-primary" /> : <ShieldAlert className="h-4 w-4 text-amber-500" />}
             Authenticator (TOTP)
             <Badge variant={enrolled ? "secondary" : "outline"} className="ml-1">
-              {enrolled ? "Enrolled" : "Optional at login"}
+              {enrolled === null ? (statusError ? "Status unavailable" : "Checking") : enrolled ? "Enrolled" : "Optional at login"}
             </Badge>
           </CardTitle>
           <CardDescription>
@@ -113,7 +121,14 @@ export function TotpManagerCard() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          {!enrolled && !awsQr && !awsSecret && (
+          {statusError && enrolled !== true && (
+            <Alert>
+              <AlertDescription className="text-xs">
+                Could not read authenticator enrollment from Cognito. Refresh to try again. This is not treated as unenrolled.
+              </AlertDescription>
+            </Alert>
+          )}
+          {enrolled === false && !awsQr && !awsSecret && (
             <Button onClick={() => void startAws()} disabled={busy}>
               {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Set up authenticator
