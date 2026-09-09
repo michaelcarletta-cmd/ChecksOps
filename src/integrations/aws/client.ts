@@ -254,6 +254,14 @@ export function createAwsSessionStore(sessionKey: string): SessionStore {
   };
 }
 
+/** Omit null/undefined paging so the API uses its default 200, not Number(null)===0 → LIMIT 1. */
+export function compactSelectPaging(limit: unknown, offset: unknown): { limit?: unknown; offset?: unknown } {
+  const paging: { limit?: unknown; offset?: unknown } = {};
+  if (limit !== null && limit !== undefined) paging.limit = limit;
+  if (offset !== null && offset !== undefined) paging.offset = offset;
+  return paging;
+}
+
 function createBuilder(table: string, store: SessionStore) {
   const state: QueryState = {
     table,
@@ -353,8 +361,7 @@ function createBuilder(table: string, store: SessionStore) {
         select: state.select,
         filters: state.filters,
         order: state.order,
-        limit: state.limit,
-        offset: state.offset,
+        ...compactSelectPaging(state.limit, state.offset),
         count: state.count,
         head: state.head,
         single: state.single,
