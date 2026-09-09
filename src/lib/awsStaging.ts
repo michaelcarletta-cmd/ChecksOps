@@ -1,12 +1,32 @@
 /**
- * AWS Cognito frontend switch. Production Vite builds use `.env.production`
- * and never set VITE_AUTH_PROVIDER=cognito, so this stays false for ChecksOps.com
- * until an approved production AWS frontend env is deployed.
+ * AWS Cognito frontend switch.
+ *
+ * `isAwsStaging()` / `isAwsCognitoSpa()` mean this Vite build uses the Cognito
+ * SPA client. That is true on both production (checksops.com) and staging
+ * (staging.checksops.com). Do not rename or invert this flag — auth, storage,
+ * and write-path code depend on it.
+ *
+ * Staging chrome (banner, master-UAT password toggle) uses
+ * `isAwsStagingEnvironment()`, which requires the staging hostname.
  */
 
 import { resolveAwsApiBaseUrl } from "@/lib/awsApiBase";
+import {
+  awsPasskeyOriginRequiredMessage,
+  detectAwsStagingEnvironment,
+  hostnameFromAppUrl,
+  isAwsCognitoAuthProvider,
+} from "@/lib/awsEnvDetect";
 
 export { resolveAwsApiBaseUrl } from "@/lib/awsApiBase";
+export {
+  awsPasskeyOriginRequiredMessage,
+  detectAwsStagingEnvironment,
+  hostnameFromAppUrl,
+  isAwsCognitoAuthProvider,
+  isAwsProductionPublicHostname,
+  isAwsStagingHostname,
+} from "@/lib/awsEnvDetect";
 
 const DEFAULT_ORIGIN = "https://staging.checksops.com";
 const DEFAULT_RP_ID = "staging.checksops.com";
@@ -33,8 +53,36 @@ export const AWS_STAGING_AUTH_SESSION_KEY = "checksops.aws.staging.auth";
 /** Mortgage Desk Cognito session — isolated from CheckOps (parity with sb-mortgage-ops-auth). */
 export const AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY = "checksops.aws.staging.auth.mortgage-ops";
 
+/** Cognito SPA client is active. Not a staging-hostname check. */
+export function isAwsCognitoSpa(): boolean {
+  return isAwsCognitoAuthProvider(import.meta.env.VITE_AUTH_PROVIDER);
+}
+
+/**
+ * Alias for `isAwsCognitoSpa()`. Keep this name: AWS-mode code paths depend on it.
+ * Do not invert. Use `isAwsStagingEnvironment()` for staging UI chrome.
+ */
 export function isAwsStaging(): boolean {
-  return String(import.meta.env.VITE_AUTH_PROVIDER || "").toLowerCase() === "cognito";
+  return isAwsCognitoSpa();
+}
+
+function runtimeHostname(): string {
+  if (typeof window !== "undefined" && window.location?.hostname) {
+    return window.location.hostname;
+  }
+  return hostnameFromAppUrl(import.meta.env.VITE_APP_URL);
+}
+
+/** Amber banner / master-UAT toggle. True only on staging.checksops.com Cognito SPA. */
+export function isAwsStagingEnvironment(): boolean {
+  return detectAwsStagingEnvironment({
+    authProvider: import.meta.env.VITE_AUTH_PROVIDER,
+    hostname: runtimeHostname(),
+  });
+}
+
+export function awsPasskeysRequireConfiguredOriginMessage(): string {
+  return awsPasskeyOriginRequiredMessage(AWS_STAGING_HTTPS_ORIGIN);
 }
 
 /**
@@ -53,9 +101,8 @@ export function awsApiBaseUrl(): string {
 /**
  * Fail-closed gate for Cognito native WebAuthn.
  * Enabled only when the browser HTTPS origin matches VITE_APP_URL
- * (default https://staging.checksops.com). HTTP S3 / localhost / unexpected
- * hosts fail closed. Production `.env.production` does not set Cognito, so
- * this stays false on ChecksOps.com until an approved AWS frontend env exists.
+ * (production: https://checksops.com; staging default: https://staging.checksops.com).
+ * HTTP S3 / localhost / unexpected hosts fail closed.
  */
 export function isAwsStagingHttpsPasskeysEnabled(): boolean {
   if (!isAwsStaging()) return false;

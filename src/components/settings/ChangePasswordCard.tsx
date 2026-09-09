@@ -23,10 +23,10 @@ export function ChangePasswordCard() {
         title="Change Password"
         icon={<KeyRound className="h-4 w-4 text-emerald-500" />}
         accent="bg-gradient-to-r from-emerald-500/60 to-emerald-500/10"
-        description="AWS staging password changes use Cognito confirmation codes via Forgot password — not an in-session password update."
+        description="Password changes use Cognito confirmation codes via Forgot password — not an in-session password update."
       >
         <p className="text-sm text-muted-foreground pt-2">
-          Use <a className="underline" href="/forgot-password">Forgot password</a> (Tester mailbox) or EMAIL_OTP / passkey sign-in on staging.
+          Use <a className="underline" href="/forgot-password">Forgot password</a> or EMAIL_OTP / passkey sign-in.
         </p>
       </SectionCard>
     );

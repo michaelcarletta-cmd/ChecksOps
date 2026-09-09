@@ -7,7 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { KeyRound, Loader2, Plus, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { deleteAwsPasskey, listAwsPasskeys, registerAwsPasskey } from "@/lib/awsPasskeys";
-import { isAwsStaging, isAwsStagingHttpsPasskeysEnabled } from "@/lib/awsStaging";
+import { isAwsStaging, isAwsStagingEnvironment, isAwsStagingHttpsPasskeysEnabled, AWS_STAGING_HTTPS_ORIGIN } from "@/lib/awsStaging";
 import {
   formatPasskeyMetaLine,
   passkeyCreatedAtIso,
@@ -29,6 +29,7 @@ export function PasskeyManagerCard({ onChanged }: { onChanged?: () => void }) {
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
   const awsStaging = isAwsStaging();
+  const awsStagingHost = isAwsStagingEnvironment();
   const awsHttpsPasskeys = isAwsStagingHttpsPasskeysEnabled();
   const supported = passkeysSupported();
   // AWS staging: Cognito WebAuthn only on the HTTPS staging origin. Production: Supabase table.
@@ -133,15 +134,15 @@ export function PasskeyManagerCard({ onChanged }: { onChanged?: () => void }) {
         <CardDescription>
           Sign in with Face ID, Touch ID, Windows Hello or a security key — the fastest and most
           secure option. Nothing to remember and nothing to phish.
-          {cognitoMode ? " AWS staging stores passkeys in Cognito (staging RP only)." : ""}
+          {cognitoMode ? (awsStagingHost ? " AWS staging stores passkeys in Cognito (staging RP only)." : " Passkeys are stored in Cognito for this origin.") : ""}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {blockedOnAwsHttp && (
           <Alert>
             <AlertDescription className="text-xs">
-              Passkey management is available only at https://staging.checksops.com. This origin
-              fails closed — production Supabase passkeys are not used or modified here.
+              Passkey management is available only at {AWS_STAGING_HTTPS_ORIGIN}. This origin
+              fails closed{awsStagingHost ? " — production Supabase passkeys are not used or modified here." : "."}
             </AlertDescription>
           </Alert>
         )}
