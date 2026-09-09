@@ -37,7 +37,7 @@ Authorizer log group `/aws/lambda/checksops-production-origin-verify` after Clou
 | CloudFront `https://checksops.com/prep/health` | `true` | `true` |
 | Raw `https://kiqojucc02.execute-api.us-east-1.amazonaws.com/prep/health` | `false` | `false` |
 
-Sample count this window: 10. No `HeaderValue`, `SecretString`, or JWT in authorizer log lines.
+Sample count this window: 10. Authorizer lines contain only `requestId` plus public booleans.
 
 ## Health
 
