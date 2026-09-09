@@ -1,0 +1,107 @@
+{
+  "phase": "M3b",
+  "captured_at": "2026-09-09T21:45:00Z",
+  "moov_http_called": false,
+  "production_get_count": 0,
+  "production_post_count": 0,
+  "money_moved": false,
+  "secrets_created": false,
+  "secret_values_printed": false,
+  "sql72_applied": false,
+  "flags_changed": false,
+  "live_reads_enabled": false,
+  "lovable_changed": false,
+  "webhook_changed": false,
+  "deployment": {
+    "git_sha": "feb813af8bc4deb05cca53bfc618e5f17e515fd0",
+    "m3_1_parent_sha": "974f98c6e96ae21d36114aecb758fb5da30dbb16",
+    "lambda_name": "checksops-production-prep-api",
+    "lambda_code_sha256": "nnTP3XZpEI+pfmKEAhgKI/s6nVNa9ZTCIGd9JGRSV94=",
+    "zip_sha256": "9e74cfdd7669108fa97e628402180a23fb3a9d535af594c220677d24645257de",
+    "s3": "s3://checksops-production-prep-artifacts-806168576068/checksops-production-prep-api.zip",
+    "last_modified": "2026-09-09T21:42:06.000+0000",
+    "source_hashes": {
+      "moov-dispatch.mjs": "237ebb6c14069388117d98c7e039f80df664f3c644e267e5230ca3409442cac6",
+      "moov-holds.mjs": "750e4e60c48eb4e2e0841041a02e9c07ca98f410cdfa7057652a8ae14281e7db",
+      "moov-client.mjs": "a6337e2b5375be616a039bdf9e0f601af307368b5726671ad2fb3965a54c9ede",
+      "moov-read.mjs": "a617196a66fbf5df4996a347888c821c8b1736d96316d1f6a5fb99aab31d5f66"
+    }
+  },
+  "secret_contract": {
+    "secret_id": "checksops/production/providers",
+    "exists": false,
+    "provider_secrets_arn_configured": false,
+    "read_contract_complete": false,
+    "full_execution_contract_complete": false,
+    "names_configured": {
+      "MOOV_PUBLIC_KEY": false,
+      "MOOV_SECRET_KEY": false,
+      "MOOV_PLATFORM_ACCOUNT_ID": false,
+      "MOOV_WEBHOOK_SECRET": false,
+      "MOOV_ENVIRONMENT": false,
+      "MOOV_ALLOWED_ORIGIN": false
+    }
+  },
+  "flags": {
+    "AWS_PROVIDER_LIVE_READS_ENABLED": false,
+    "AWS_MOOV_ENABLED": false,
+    "AWS_PROVIDER_EXECUTION_ENABLED": false,
+    "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": false,
+    "AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED": false,
+    "AWS_PROVIDER_WEBHOOK_DRY_RUN": true
+  },
+  "preexisting_non_money_write_flags_observed_not_changed": {
+    "AWS_WRITES_ENABLED": true,
+    "AWS_CHECK_WORKFLOW_WRITES_ENABLED": true,
+    "AWS_STORAGE_WRITES_ENABLED": true,
+    "AWS_APPLICATION_WORKFLOW_WRITES_ENABLED": true
+  },
+  "probes": {
+    "production_prep_health": {
+      "url": "https://checksops.com/prep/health",
+      "http_status": 200,
+      "environment": "production-prep",
+      "status": "ok",
+      "databaseSecretConfigured": true
+    },
+    "money_blocked_before_http": {
+      "moov-transfer-create": {
+        "http": 403,
+        "error": "production_execution_blocked",
+        "liveProviderCalled": false,
+        "productionExecution": false,
+        "sql72": "NOT_APPLIED"
+      },
+      "moov-disburse": {
+        "http": 403,
+        "error": "production_execution_blocked",
+        "liveProviderCalled": false,
+        "productionExecution": false,
+        "sql72": "NOT_APPLIED"
+      }
+    },
+    "sql72_column_probe": {
+      "column": "payment_transfers.provider_http_attempted_at",
+      "exists": false,
+      "error": "column \"provider_http_attempted_at\" does not exist",
+      "status": "NOT_APPLIED"
+    },
+    "rds_local_snapshot_not_live_moov": {
+      "freedom_production_account_present": true,
+      "account_type": "business",
+      "onboarding_status": "active",
+      "verification_status": "verified",
+      "tos_accepted_at_present": true,
+      "can_send_payments": true,
+      "can_receive_payments": true,
+      "can_ach_credit": true,
+      "can_ach_debit": false,
+      "wallet_present": true,
+      "wallet_type": "operating",
+      "wallet_status": "active",
+      "own_payment_method_verified_connected": true,
+      "distinct_verified_recipient": false,
+      "recipient_onboarding_statuses": ["awaiting_bank"]
+    }
+  }
+}
