@@ -5,7 +5,7 @@
 **DO NOT copy `MOOV_SANDBOX_*` into production names.**
 **DO NOT print secret values.**
 
-M2 design only. Production-prep Lambda currently has `PROVIDER_SECRETS_ARN` unset and every `MOOV_*` name **MISSING**. Staging has sandbox names only; production names **MISSING**.
+M3 inventory is **fixed in code**. Production-prep Lambda currently has `PROVIDER_SECRETS_ARN` unset and every `MOOV_*` name **MISSING**. Staging has sandbox names only; production names **MISSING**. **Do not create this secret in M3.**
 
 ## Location
 
@@ -30,15 +30,15 @@ These are the names current production Edge Functions actually read (`supabase/f
 | `MOOV_ENVIRONMENT` | Must be the string `production` for this contract | `moovEnvironment()` default; tenant row may still bind per-tenant |
 | `MOOV_ALLOWED_ORIGIN` | Origin header for OAuth + API (`https://checksops.com`) | `moovOrigin()` |
 
-## Required for fail-closed production AWS (not currently in `provider-secrets.mjs` inventory)
+## Required for fail-closed production AWS (M3 inventory)
 
-`aws/functions/api/provider-secrets.mjs` inventories `MOOV_ACCOUNT_ID` and does **not** inventory `MOOV_PLATFORM_ACCOUNT_ID` or `MOOV_ALLOWED_ORIGIN`. That is a contract bug to fix in M3.
+`aws/functions/api/provider-secrets.mjs` and `sandbox-credentials.mjs` now inventory `MOOV_PLATFORM_ACCOUNT_ID` and `MOOV_ALLOWED_ORIGIN`. `MOOV_ACCOUNT_ID` is **not** inventoried as a production facilitator.
 
 | Name | Status |
 | --- | --- |
 | `MOOV_PLATFORM_ACCOUNT_ID` | **Required.** Facilitator POST. Do not substitute a tenant connected-account id. |
 | `MOOV_ALLOWED_ORIGIN` | **Required.** Missing Origin → Moov 401. Production value must be `https://checksops.com`, not `https://staging.checksops.com`. |
-| `MOOV_ACCOUNT_ID` | **Do not use as facilitator.** Present only on the AWS inventory list / sandbox bootstrap guard. Tenant Moov ids live in `payment_provider_accounts.provider_account_id`, never from the browser. |
+| `MOOV_ACCOUNT_ID` | **Do not use as facilitator.** Tenant Moov ids live in `payment_provider_accounts.provider_account_id`, never from the browser. |
 
 ## Optional / not for first transfer
 
