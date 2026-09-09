@@ -266,6 +266,8 @@ export const relatedFk = (table, embedTable, fkHint = null) => {
     return 'tenant_id';
   }
   if (embedTable === 'profiles') return 'user_id';
+  // Live RDS: disbursement_splits.batch_id / deposit_items.batch_id, not *_batch_id.
+  if (embedTable === 'disbursement_batches' || embedTable === 'deposit_batches') return 'batch_id';
   if (embedTable.endsWith('batches')) return `${embedTable.replace(/batches$/, 'batch')}_id`;
   if (embedTable.endsWith('s')) {
     const singular = embedTable.slice(0, -1);

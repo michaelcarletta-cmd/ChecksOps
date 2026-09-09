@@ -97,6 +97,8 @@ test('parseSelect supports named FK hints and aliases used by partners/shared ch
   assert.equal(shared.embeds[0].inner, false);
   assert.equal(fkColumnFromHint('shared_checks', shared.embeds[0].fkHint), 'source_tenant_id');
   assert.equal(relatedFk('shared_checks', 'tenants', 'source_tenant_id'), 'source_tenant_id');
+  assert.equal(relatedFk('disbursement_splits', 'disbursement_batches'), 'batch_id');
+  assert.equal(relatedFk('deposit_items', 'deposit_batches'), 'batch_id');
 
   const partners = parseSelect(
     '*, inviter:tenants!tenant_partnerships_inviter_tenant_id_fkey(name), invitee:tenants!tenant_partnerships_invitee_tenant_id_fkey(name)',
@@ -519,7 +521,7 @@ test('funds-released nested select returns 200 instead of invalid-column 503', a
           method: 'ach',
           external_check_number: '271682',
           stakeholder_account_id: accountId,
-          disbursement_batch_id: batchId,
+          batch_id: batchId,
         }] };
       }
       if (sql.includes('FROM public.stakeholder_accounts')) {
@@ -565,7 +567,8 @@ test('funds-released nested select returns 200 instead of invalid-column 503', a
   assert.equal(result.error, undefined);
   const parentSelect = client.queries.find((q) => String(q.sql).includes('FROM public.disbursement_splits') && !String(q.sql).includes('count(*)'));
   assert.match(String(parentSelect.sql), /stakeholder_account_id/);
-  assert.match(String(parentSelect.sql), /disbursement_batch_id/);
+  assert.match(String(parentSelect.sql), /batch_id/);
+  assert.equal(String(parentSelect.sql).includes('disbursement_batch_id'), false);
   assert.equal(String(parentSelect.sql).includes('not a col'), false);
   assert.equal(result.data[0].stakeholder_accounts.nickname, 'Operating');
   assert.equal(result.data[0].disbursement_batches.check_intake_items.check_number, '271682');
