@@ -10,11 +10,14 @@ import { useToast } from "@/hooks/use-toast";
 import { useStepUp } from "@/hooks/useStepUp";
 import { isAwsStaging } from "@/lib/awsStaging";
 import { associateAwsTotp, awsMfaAvailable, getAwsMfaStatus, verifyAwsTotp } from "@/lib/awsMfa";
+import { resolveTotpOtpauthUri, totpQrDataUrl } from "@/lib/totpQr";
+import { TotpQrDisplay } from "@/components/auth/TotpQrDisplay";
 import { useAuth } from "@/hooks/useAuth";
 
 /**
- * Shows TOTP status and lets the user enrol. Enrolment reuses the same
- * step-up dialog that guards financial actions, so there is one code path.
+ * Shows TOTP status and enrolls Cognito SOFTWARE_TOKEN_MFA on AWS builds.
+ * QR is generated in-browser from the associate otpauth URI. Preferred MFA
+ * stays unset. Financial step-up still uses StepUpDialog after enrollment.
  */
 export function TotpManagerCard() {
   const { toast } = useToast();
@@ -23,6 +26,7 @@ export function TotpManagerCard() {
   const [enrolled, setEnrolled] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [awsSecret, setAwsSecret] = useState<string | null>(null);
+  const [awsQr, setAwsQr] = useState<string | null>(null);
   const [awsCode, setAwsCode] = useState("");
   const awsStaging = isAwsStaging();
   const awsMode = awsMfaAvailable();
@@ -58,9 +62,21 @@ export function TotpManagerCard() {
       setBusy(true);
       try {
         const associated = await associateAwsTotp(user?.email);
+        const uri = resolveTotpOtpauthUri({
+          otpauthUri: associated.otpauthUri,
+          secret: associated.secret,
+          email: user?.email,
+        });
+        const qr = await totpQrDataUrl(uri);
         setAwsSecret(associated.secret);
-        toast({ title: "Authenticator secret ready", description: "Add it to your authenticator app, then enter a 6-digit code." });
+        setAwsQr(qr);
+        toast({
+          title: "Scan the QR code",
+          description: "Add ChecksOps in your authenticator app, then enter the current 6-digit code.",
+        });
       } catch (error) {
+        setAwsSecret(null);
+        setAwsQr(null);
         toast({ title: "Could not start TOTP", description: String((error as Error).message || error), variant: "destructive" });
       } finally {
         setBusy(false);
@@ -72,6 +88,7 @@ export function TotpManagerCard() {
         const ok = await verifyAwsTotp(awsCode.trim());
         if (!ok) throw new Error("verify_failed");
         setAwsSecret(null);
+        setAwsQr(null);
         setAwsCode("");
         await load();
         toast({ title: "Authenticator enrolled", description: "Login still uses email OTP, password, or passkey. This code is for privileged and future financial step-up." });
@@ -96,21 +113,25 @@ export function TotpManagerCard() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          {!enrolled && (
+          {!enrolled && !awsQr && !awsSecret && (
             <Button onClick={() => void startAws()} disabled={busy}>
               {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Set up authenticator
             </Button>
           )}
-          {awsSecret && (
-            <div className="space-y-2 text-xs">
-              <p className="font-mono break-all">{awsSecret}</p>
+          {(awsQr || awsSecret) && (
+            <div className="space-y-3 text-xs">
+              <p className="text-muted-foreground">
+                Scan the QR code with Google Authenticator, Microsoft Authenticator, Authy, 1Password, or iPhone Passwords.
+              </p>
+              <TotpQrDisplay qr={awsQr} secret={awsSecret} />
               <Input
                 inputMode="numeric"
+                autoComplete="one-time-code"
                 maxLength={6}
                 placeholder="6-digit code"
                 value={awsCode}
-                onChange={(event) => setAwsCode(event.target.value)}
+                onChange={(event) => setAwsCode(event.target.value.replace(/\D/g, ""))}
               />
               <Button onClick={() => void confirmAws()} disabled={busy || awsCode.trim().length !== 6}>
                 Verify and enroll
