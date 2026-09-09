@@ -59,6 +59,15 @@ export function inspectAccessTokenMetadata(token) {
     info.origin_claim = claimValue(payload, ['origin', 'allowed_origin', 'allowedOrigin']) || null;
     info.token_type_claim = claimValue(payload, ['token_type', 'typ', 'tokenType']) || null;
     info.account_fp = fingerprintMoovId(account);
+    info.aid_fp = fingerprintMoovId(payload.aid);
+    info.caid_fp = fingerprintMoovId(payload.caid);
+    info.sid_fp = fingerprintMoovId(payload.sid);
+    if (payload.cam != null) info.cam = payload.cam;
+    if (payload.ct != null) info.ct = payload.ct;
+    info.aip_fp = fingerprintMoovId(payload.aip);
+    if (Array.isArray(payload.auds)) {
+      info.auds = payload.auds.map((value) => redactMoovText(String(value)));
+    }
     info.exp_seconds_remaining = payload.exp
       ? Number(payload.exp) - Math.floor(Date.now() / 1000)
       : null;
