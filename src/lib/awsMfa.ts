@@ -5,28 +5,38 @@ export type AwsMfaStatus = {
   preferredMfa: string | null;
 };
 
-const readAccessToken = (sessionKey = AWS_STAGING_AUTH_SESSION_KEY): string | null => {
+const readSession = (sessionKey = AWS_STAGING_AUTH_SESSION_KEY): {
+  accessToken: string | null;
+  idToken: string | null;
+  userId: string | null;
+} => {
   try {
     const raw = localStorage.getItem(sessionKey);
-    if (!raw) return null;
+    if (!raw) return { accessToken: null, idToken: null, userId: null };
     const parsed = JSON.parse(raw);
-    const token = parsed?.tokens?.accessToken;
-    return typeof token === "string" && token ? token : null;
+    const accessToken = parsed?.tokens?.accessToken;
+    const idToken = parsed?.tokens?.idToken;
+    const userId = parsed?.user?.id || null;
+    return {
+      accessToken: typeof accessToken === "string" && accessToken ? accessToken : null,
+      idToken: typeof idToken === "string" && idToken ? idToken : null,
+      userId: typeof userId === "string" && userId ? userId : null,
+    };
   } catch {
-    return null;
+    return { accessToken: null, idToken: null, userId: null };
   }
 };
 
 const post = async (path: string, body: Record<string, unknown> = {}) => {
-  const accessToken = readAccessToken();
-  if (!accessToken) throw new Error("missing_access_token");
+  const session = readSession();
+  if (!session.accessToken) throw new Error("missing_access_token");
   const response = await fetch(`${awsApiBaseUrl()}${path}`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      authorization: `Bearer ${accessToken}`,
+      authorization: `Bearer ${session.idToken || session.accessToken}`,
     },
-    body: JSON.stringify({ ...body, accessToken }),
+    body: JSON.stringify({ ...body, accessToken: session.accessToken }),
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload?.ok === false) {
@@ -53,7 +63,50 @@ export const associateAwsTotp = async (email?: string | null) => {
   };
 };
 
-export const verifyAwsTotp = async (code: string) => {
-  const payload = await post("/auth/mfa/verify", { code });
+export const verifyAwsTotp = async (
+  code: string,
+  extra: { actionKey?: string; tenantId?: string | null; checkId?: string | null } = {},
+) => {
+  const payload = await post("/auth/mfa/verify", {
+    code,
+    action_key: extra.actionKey,
+    tenant_id: extra.tenantId || undefined,
+    check_intake_item_id: extra.checkId || undefined,
+  });
   return Boolean(payload.verified || payload.ok);
 };
+
+export const stepUpAwsTotp = async (input: {
+  code: string;
+  actionKey?: string;
+  tenantId?: string | null;
+  checkId?: string | null;
+}) => {
+  const payload = await post("/auth/mfa/step-up", {
+    code: input.code,
+    action_key: input.actionKey || "deposit.submit",
+    tenant_id: input.tenantId || undefined,
+    check_intake_item_id: input.checkId || undefined,
+  });
+  return Boolean(payload.verified || payload.ok);
+};
+
+export const recordCheckAltDualControl = async (checkId: string) => {
+  const session = readSession();
+  if (!session.idToken && !session.accessToken) throw new Error("missing_access_token");
+  const response = await fetch(`${awsApiBaseUrl()}/financial/checkalt-dual-control`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${session.idToken || session.accessToken}`,
+    },
+    body: JSON.stringify({ check_intake_item_id: checkId }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload?.ok === false) {
+    throw new Error(String(payload?.message || payload?.error || "dual_control_failed"));
+  }
+  return payload;
+};
+
+export const awsAuthUserId = () => readSession().userId;

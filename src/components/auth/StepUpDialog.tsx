@@ -14,6 +14,13 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, ShieldCheck, Copy, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { StepUpRequest } from "@/hooks/useStepUp";
+import {
+  associateAwsTotp,
+  awsMfaAvailable,
+  getAwsMfaStatus,
+  stepUpAwsTotp,
+  verifyAwsTotp,
+} from "@/lib/awsMfa";
 
 interface Props {
   request: StepUpRequest | null;
@@ -56,6 +63,29 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
     let cancelled = false;
 
     (async () => {
+      if (awsMfaAvailable()) {
+        try {
+          const status = await getAwsMfaStatus();
+          if (cancelled) return;
+          if (status.totpEnrolled) {
+            setFactorId("software-token");
+            setMode("verify");
+            return;
+          }
+          const associated = await associateAwsTotp();
+          if (cancelled) return;
+          setFactorId("software-token");
+          setSecret(associated.secret);
+          setQr(null);
+          setMode("enroll");
+        } catch (err: unknown) {
+          if (cancelled) return;
+          setError(`Could not check your two-factor setup: ${err instanceof Error ? err.message : String(err)}`);
+          setMode("setup-error");
+        }
+        return;
+      }
+
       const { data, error: listError } = await supabase.auth.mfa.listFactors();
       if (cancelled) return;
       if (listError) {
@@ -116,6 +146,30 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
     setBusy(true);
     setError(null);
     try {
+      if (awsMfaAvailable()) {
+        if (mode === "enroll") {
+          const enrolled = await verifyAwsTotp(trimmed, {
+            actionKey: request?.actionKey,
+            tenantId: request?.tenantId,
+          });
+          if (!enrolled) throw new Error("That code wasn't accepted. Try the next one.");
+        } else {
+          const stepped = await stepUpAwsTotp({
+            code: trimmed,
+            actionKey: request?.actionKey,
+            tenantId: request?.tenantId,
+          });
+          if (!stepped) throw new Error("That code wasn't accepted. Try the next one.");
+        }
+        await onFactorsChanged();
+        toast({
+          title: "Verified",
+          description: "Two-factor confirmed for this session. Production CheckAlt still requires a financial role server-side.",
+        });
+        onResolved(true);
+        return;
+      }
+
       const { data: challenge, error: challengeError } =
         await supabase.auth.mfa.challenge({ factorId });
       if (challengeError || !challenge) throw challengeError ?? new Error("Challenge failed");

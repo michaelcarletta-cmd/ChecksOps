@@ -36,6 +36,7 @@ import { handleProviderWebhook } from './providers/webhooks.mjs';
 import { handleProviderEgress } from './providers/egress.mjs';
 import { providerSandboxExecutionEnabled } from './sandbox-flags.mjs';
 import { hasParityHandler, runParityHandler } from './providers/parity/dispatch.mjs';
+import { hasProductionCheckAltHandler, runProductionCheckAltHandler } from './providers/production/checkalt-dispatch.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isUuid = (value) => UUID_RE.test(String(value || ''));
@@ -351,6 +352,11 @@ export const handleFunctionInvoke = async (event, name, deps = {}) => {
     return denyProviderExecution(null, name, {
       message: 'Unknown or disabled provider function',
     });
+  }
+
+  if (hasProductionCheckAltHandler(name)) {
+    const production = await runProductionCheckAltHandler(name, event, deps);
+    if (production) return production;
   }
 
   if (executionAllowed(spec.provider) && spec.aws !== 'db_status' && spec.aws !== 'webhook') {
