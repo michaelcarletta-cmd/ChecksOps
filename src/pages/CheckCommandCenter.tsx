@@ -34,6 +34,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { toast as sonnerToast } from "sonner";
 import { Pencil, Check as CheckIcon, X, Plus } from "lucide-react";
 import { format } from "date-fns";
+import { formatIssueDateDisplay } from "@/lib/issueDate";
 
 // Eager: default tab and inline panels
 import { CheckReviewQueue, ReviewDecisionPanel } from "@/components/check-review/CheckReviewConsole";
@@ -4922,12 +4923,7 @@ function DetailRow({ label, value }: { label: string; value: string | null | und
     <div className="flex justify-between gap-3 text-sm">
       <span className="text-muted-foreground shrink-0">{label}</span>
       <span className="font-medium text-right break-words min-w-0 flex-1">
-        {label === "Issue Date" && value && /^\d{4}-\d{2}-\d{2}$/.test(value)
-          ? (() => {
-              const [y, m, d] = value.split("-").map(Number);
-              return format(new Date(y, m - 1, d), "MMM d, yyyy");
-            })()
-          : (value ?? "—")}
+        {label === "Issue Date" ? formatIssueDateDisplay(value) : (value ?? "—")}
       </span>
 
     </div>
