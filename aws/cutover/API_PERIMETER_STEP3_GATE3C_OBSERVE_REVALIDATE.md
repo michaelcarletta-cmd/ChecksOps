@@ -83,4 +83,4 @@ Authenticated Tester login / tenant-row isolation with a live ID token was **not
 
 ## STOP
 
-Gate 3C observe mode remains **PASS**. Do **not** start Gate 3D. Do **not** set `ORIGIN_VERIFY_REQUIRE=true`. Do **not** disable execute-api.
+Gate 3C observe mode remains **PASS**. Do **not** start Gate 3D. Do **not** set `ORIGIN_VERIFY_REQUIRE` to true. Do **not** disable execute-api.
