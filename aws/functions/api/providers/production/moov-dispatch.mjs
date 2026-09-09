@@ -96,12 +96,16 @@ const READ_HANDLERS = {
   'moov-transfer-status': wrapRead(handleProductionMoovTransferStatus, false),
 };
 
+const isProductionPrep = () => String(process.env.CHECKSOPS_ENV || '') === 'production-prep';
+
 export const runProductionMoovHandler = (name, event, deps = {}) => {
   if (productionMoovAmbiguousMode()) return denyAmbiguousMoovMode(name);
 
   if (PRODUCTION_MOOV_MONEY_FUNCTIONS.has(name)) {
     if (productionMoovExecutionAllowed()) return MONEY_HANDLERS[name](event, deps);
-    if (productionMoovReadsAllowed()) {
+    // Live-reads or production-prep: fail closed before identity/DB/provider HTTP.
+    // Staging still returns null so sandbox parity can own money routes.
+    if (productionMoovReadsAllowed() || isProductionPrep()) {
       return denyProductionMoovHolds(name, {
         error: 'production_execution_blocked',
         message: 'Live reads cannot create transfers, fund wallets, or mutate Moov. Money flags remain false.',

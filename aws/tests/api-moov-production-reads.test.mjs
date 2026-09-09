@@ -285,6 +285,38 @@ test('live reads flag false → no provider HTTP', async () => {
   assert.equal(store.processPosts, 0);
 });
 
+test('production-prep money routes blocked before HTTP even when live-reads is false', async () => {
+  const store = createStore();
+  const blocked = await withEnv({
+    CHECKSOPS_ENV: 'production-prep',
+    AWS_PROVIDER_LIVE_READS_ENABLED: 'false',
+    AWS_PROVIDER_EXECUTION_ENABLED: 'false',
+    AWS_MOOV_ENABLED: 'false',
+    AWS_FINANCIAL_PERMISSIONS_ACTIVATED: 'false',
+    AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'false',
+  }, async () => {
+    const create = await handleProviderRequest(
+      jwtEvent('/functions/v1/moov-transfer-create', 'POST', { payment_transfer_id: TRANSFER_ID }),
+      '/functions/v1/moov-transfer-create',
+      'POST',
+      depsFor(store),
+    );
+    const disburse = await handleProviderRequest(
+      jwtEvent('/functions/v1/moov-disburse', 'POST', { payment_transfer_id: TRANSFER_ID }),
+      '/functions/v1/moov-disburse',
+      'POST',
+      depsFor(store),
+    );
+    return { create, disburse };
+  });
+  assert.equal(blocked.create.error, 'production_execution_blocked');
+  assert.equal(blocked.create.liveProviderCalled, false);
+  assert.equal(blocked.disburse.error, 'production_execution_blocked');
+  assert.equal(blocked.disburse.liveProviderCalled, false);
+  assert.equal(store.getGets, 0);
+  assert.equal(store.processPosts, 0);
+});
+
 test('live reads true + money flags false → GET account/wallet/bank/capabilities allowed', async () => {
   const store = createStore();
   const result = await invoke(store, 'moov-readiness', {});
