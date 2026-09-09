@@ -142,7 +142,16 @@ export async function verifyAwsEmailOtp(
     phone: "",
     confirmed_at: now,
     last_sign_in_at: now,
-    app_metadata: { provider: "cognito", providers: ["cognito"] },
+    app_metadata: {
+      provider: "cognito",
+      providers: ["cognito"],
+      roles: Array.isArray(identity?.roles) ? identity.roles : [],
+      tenant_roles: Array.isArray(identity?.tenants)
+        ? identity.tenants
+            .map((row: { role?: unknown }) => row?.role)
+            .filter((role: unknown): role is string => typeof role === "string" && Boolean(role.trim()))
+        : [],
+    },
     user_metadata: {
       email: mappedEmail,
       full_name: identity?.profile?.fullName || null,

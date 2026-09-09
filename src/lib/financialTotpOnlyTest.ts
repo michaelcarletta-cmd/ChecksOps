@@ -36,16 +36,44 @@ const CHECK_UUID =
 export const isExistingCheckId = (value: unknown): boolean =>
   CHECK_UUID.test(String(value || "").trim());
 
-export const roleMayRunFinancialTotpOnlyTest = (roleOrRoles: unknown): boolean => {
-  const roles = Array.isArray(roleOrRoles)
-    ? roleOrRoles
-    : typeof roleOrRoles === "string" && roleOrRoles.trim()
-      ? [roleOrRoles]
-      : [];
-  return roles.some((role) =>
-    (FINANCIAL_TOTP_ONLY_ROLES as readonly string[]).includes(String(role || "").toLowerCase()),
-  );
+/** Flatten user_roles, tenant_users, and identity/me role payloads. */
+export const collectFinancialTotpOnlyRoles = (...groups: unknown[]): string[] => {
+  const roles: string[] = [];
+  const visit = (value: unknown) => {
+    if (value == null) return;
+    if (typeof value === "string") {
+      const role = value.trim().toLowerCase();
+      if (role) roles.push(role);
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item);
+      return;
+    }
+    if (typeof value === "object") {
+      const record = value as Record<string, unknown>;
+      if (typeof record.role === "string") visit(record.role);
+      visit(record.roles);
+      visit(record.tenant_roles);
+      visit(record.user_roles);
+    }
+  };
+  for (const group of groups) visit(group);
+  return [...new Set(roles)];
 };
+
+export const roleMayRunFinancialTotpOnlyTest = (roleOrRoles: unknown): boolean =>
+  collectFinancialTotpOnlyRoles(roleOrRoles).some((role) =>
+    (FINANCIAL_TOTP_ONLY_ROLES as readonly string[]).includes(role),
+  );
+
+/** Exact Account Security / Settings visibility predicate. */
+export const canShowFinancialTotpOnlyTestCard = (input: {
+  awsMfaAvailable: boolean;
+  userId?: string | null;
+  roles?: unknown;
+}): boolean =>
+  Boolean(input.awsMfaAvailable && input.userId && roleMayRunFinancialTotpOnlyTest(input.roles));
 
 export type FinancialTotpOnlyStop = {
   continued: false;

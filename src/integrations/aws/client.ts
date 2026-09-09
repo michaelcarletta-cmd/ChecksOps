@@ -95,7 +95,16 @@ const toUser = (identity: Record<string, unknown>, emailFallback?: string | null
     phone: "",
     confirmed_at: now,
     last_sign_in_at: now,
-    app_metadata: { provider: "cognito", providers: ["cognito"] },
+    app_metadata: {
+      provider: "cognito",
+      providers: ["cognito"],
+      roles: Array.isArray(identity.roles) ? identity.roles : [],
+      tenant_roles: Array.isArray(identity.tenants)
+        ? identity.tenants
+            .map((row) => (row as { role?: unknown })?.role)
+            .filter((role): role is string => typeof role === "string" && Boolean(role.trim()))
+        : [],
+    },
     user_metadata: {
       email,
       full_name: (identity.profile as Record<string, unknown> | undefined)?.fullName || null,

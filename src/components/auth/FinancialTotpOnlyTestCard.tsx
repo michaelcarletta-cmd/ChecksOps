@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AlertTriangle, Loader2, ShieldCheck } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -8,12 +8,13 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
 import { useStepUp } from "@/hooks/useStepUp";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import { awsMfaAvailable } from "@/lib/awsMfa";
 import {
   FINANCIAL_TOTP_ONLY_COPY,
   FINANCIAL_TOTP_ONLY_FORBIDDEN,
+  canShowFinancialTotpOnlyTestCard,
   isExistingCheckId,
-  roleMayRunFinancialTotpOnlyTest,
   runFinancialTotpOnlyVerification,
   type FinancialTotpOnlyOutcome,
 } from "@/lib/financialTotpOnlyTest";
@@ -29,8 +30,44 @@ export function FinancialTotpOnlyTestCard() {
   const [checkId, setCheckId] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<FinancialTotpOnlyOutcome | { error: string } | null>(null);
+  const [tenantRoles, setTenantRoles] = useState<unknown[] | null>(null);
+  const knownRoles = [userRole, user?.app_metadata, tenantRoles];
+  const visible = canShowFinancialTotpOnlyTestCard({
+    awsMfaAvailable: awsMfaAvailable(),
+    userId: user?.id,
+    roles: knownRoles,
+  });
 
-  if (!awsMfaAvailable() || !user || !roleMayRunFinancialTotpOnlyTest(userRole)) {
+  useEffect(() => {
+    if (!awsMfaAvailable() || !user?.id) {
+      setTenantRoles([]);
+      return;
+    }
+    if (
+      canShowFinancialTotpOnlyTestCard({
+        awsMfaAvailable: true,
+        userId: user.id,
+        roles: [userRole, user.app_metadata],
+      })
+    ) {
+      setTenantRoles([]);
+      return;
+    }
+    let cancelled = false;
+    void supabase
+      .from("tenant_users")
+      .select("role")
+      .eq("user_id", user.id)
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        setTenantRoles(error ? [] : ((data ?? []) as unknown[]));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, user?.app_metadata, userRole]);
+
+  if (!visible) {
     return null;
   }
 
@@ -39,7 +76,7 @@ export function FinancialTotpOnlyTestCard() {
     setResult(null);
     try {
       const verified = await runFinancialTotpOnlyVerification({
-        roles: userRole,
+        roles: knownRoles,
         checkId,
         requireStepUp,
       });
