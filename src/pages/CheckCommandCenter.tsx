@@ -4,7 +4,8 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { isAwsStaging } from "@/lib/awsStaging";
+import { isAwsStaging, awsApiBaseUrl } from "@/lib/awsStaging";
+import { checkAltProviderUserMessage, runCheckAltOneClickSubmit } from "@/lib/awsCheckAltMoneyPath";
 import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
 import { FunctionsHttpError, FunctionsRelayError, FunctionsFetchError } from "@supabase/supabase-js";
 import { useToast } from "@/hooks/use-toast";
@@ -82,7 +83,6 @@ const LossDraftDashboard = lazy(() =>
 // button responds instantly. Keeping it out of a lazy chunk avoids the
 // intermittent "click does nothing" behavior when the chunk was slow to fetch.
 import { EndorsementAdjuster } from "@/components/checks/EndorsementAdjuster";
-import { prepareCheckAltDeposit } from "@/lib/prepareCheckAltDeposit";
 import { SHOW_CHECKALT } from "@/lib/depositRails";
 const preloadEndorsementAdjuster = () => Promise.resolve();
 const EndorsementChecklist = lazy(() =>
@@ -3623,9 +3623,8 @@ function CheckDetailPanel({
     }
   };
 
-  // One-click CheckAlt deposit from the check's own Overview tab — ensures a
-  // deposit_items row exists and is assigned to CheckAlt, then submits the
-  // real FinCapture API call (mirrors DepositOperationsConsole's flow).
+  // One-click CheckAlt deposit: AWS /prep submit is the first money-path
+  // server action. No local prepare_deposit / assign_provider.
   const handleDepositWithCheckAlt = async () => {
     if (!user?.id || !check) return;
     try {
@@ -3636,49 +3635,10 @@ function CheckDetailPanel({
     }
     setDepositingWithCheckAlt(true);
     try {
-      const { data: existingItem } = await supabase
-        .from("deposit_items")
-        .select("id, status, provider")
-        .eq("check_id", checkId)
-        .maybeSingle();
-
-      let depositItemId = existingItem?.id ?? null;
-      let itemStatus = existingItem?.status ?? null;
-      const itemProvider = existingItem?.provider ?? null;
-
-      if (!depositItemId) {
-        const { data: prepData, error: prepErr } = await supabase.rpc("deposit_action", {
-          p_action: "prepare_deposit",
-          p_actor_id: user.id,
-          p_check_id: checkId,
-          p_notes: "Deposited from Check Command Center",
-        });
-        if (prepErr) throw prepErr;
-        depositItemId = (prepData as any)?.deposit_item_id ?? null;
-        if (!depositItemId) throw new Error("prepare_deposit did not return a deposit_item_id");
-        itemStatus = "pending_assignment";
-      }
-
-      if (itemStatus === "pending_assignment") {
-        const { error: assignErr } = await supabase.rpc("deposit_action", {
-          p_action: "assign_provider",
-          p_actor_id: user.id,
-          p_deposit_item_id: depositItemId,
-          p_provider: "checkalt",
-          p_notes: "Assigned deposit rail from Check Command Center",
-        });
-        if (assignErr) throw assignErr;
-      } else if (itemProvider !== "checkalt") {
-        throw new Error(`This check is already assigned to ${itemProvider ?? "another"} provider in the deposit pipeline.`);
-      }
-
-      // Pre-normalize each side in its own edge invocation so oversized
-      // legacy images never trip the deposit worker's CPU limit.
-      const prepared = await prepareCheckAltDeposit(checkId);
-      const { data: submitData, error: submitErr } = await supabase.functions.invoke("checkalt-submit-deposit", {
-        body: { check_intake_item_id: checkId, ...prepared },
+      const { error: submitErr } = await runCheckAltOneClickSubmit(checkId, {
+        apiBaseUrl: awsApiBaseUrl(),
       });
-      if (submitErr) throw new Error(await getFunctionErrorMessage(submitErr, "Deposit failed"));
+      if (submitErr) throw new Error(checkAltProviderUserMessage(submitErr));
 
       sonnerToast.success("Deposit queued", {
         description: `Check #${check.check_number ?? checkId.slice(0, 8)} — images are being compressed and submitted in the background. Status will update shortly.`,
