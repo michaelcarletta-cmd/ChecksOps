@@ -31,6 +31,8 @@ import { Eye } from "lucide-react";
 import { DisbursementConsole } from "@/components/disbursement/DisbursementConsole";
 import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
 import { prepareCheckAltDeposit } from "@/lib/prepareCheckAltDeposit";
+import { awsApiBaseUrl } from "@/lib/awsStaging";
+import { invokeAwsCheckAltMoneyFunction, requireAwsCheckAltMoneyPath } from "@/lib/awsCheckAltMoneyPath";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -251,12 +253,16 @@ export function DepositOperationsConsole({ searchQuery = "" }: DepositOperations
   const checkaltSubmitMutation = useMutation({
     mutationFn: async (checkId: string) => {
       await guardFinancial("deposit.submit", { checkId });
+      requireAwsCheckAltMoneyPath({
+        apiBaseUrl: awsApiBaseUrl(),
+        functionName: "checkalt-submit-deposit",
+      });
       // Pre-normalize each side (front + back) so the deposit worker never
       // has to re-encode oversized images inline (avoids CPU-exceeded).
       const prepared = await prepareCheckAltDeposit(checkId);
-      const { data, error } = await supabase.functions.invoke("checkalt-submit-deposit", {
+      const { data, error } = await invokeAwsCheckAltMoneyFunction("checkalt-submit-deposit", {
         body: { check_intake_item_id: checkId, ...prepared },
-      });
+      }, { apiBaseUrl: awsApiBaseUrl() });
       if (error) throw new Error(await getFunctionErrorMessage(error, "Deposit submission failed"));
       return data as { status: string; checkalt_reference: string | null };
     },

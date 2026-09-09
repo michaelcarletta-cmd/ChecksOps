@@ -11,6 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { usePermissions } from "@/hooks/usePermissions";
+import { awsApiBaseUrl } from "@/lib/awsStaging";
+import { invokeAwsCheckAltMoneyFunction, requireAwsCheckAltMoneyPath } from "@/lib/awsCheckAltMoneyPath";
 import { useTenant } from "@/contexts/TenantContext";
 import { Loader2, Banknote, ShieldCheck, AlertTriangle, RefreshCw, UserPlus, UserCheck, Landmark } from "lucide-react";
 
@@ -617,8 +619,8 @@ export function CheckAltSettings() {
 /**
  * Manager-side queue showing CheckAlt deposits parked at FinCapture for manual
  * review (status 40 / pending_approval). Approve/Reject calls the
- * `checkalt-approve-deposit` edge function which hits
- * `/fincapture/deposit/approve` upstream.
+ * AWS-only `checkalt-approve-deposit` path. Legacy Lovable/Supabase hosts
+ * are refused; FinCapture is not called from the browser.
  */
 export function PendingApprovalDeposits() {
   const qc = useQueryClient();
@@ -677,9 +679,14 @@ export function PendingApprovalDeposits() {
       if (args.action === "approve") {
         await guardFinancial("deposit.approve", { checkId: args.check_intake_item_id });
       }
-      const { data, error } = await supabase.functions.invoke(
+      requireAwsCheckAltMoneyPath({
+        apiBaseUrl: awsApiBaseUrl(),
+        functionName: "checkalt-approve-deposit",
+      });
+      const { data, error } = await invokeAwsCheckAltMoneyFunction(
         "checkalt-approve-deposit",
         { body: args },
+        { apiBaseUrl: awsApiBaseUrl() },
       );
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);

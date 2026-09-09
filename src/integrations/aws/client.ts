@@ -4,6 +4,10 @@ import {
   awsApiBaseUrl,
 } from "@/lib/awsStaging";
 import { createAwsStorageAdapter, rewriteStorageFields } from "./storage";
+import {
+  invokeAwsCheckAltMoneyFunction,
+  isLegacyCheckAltMoneyFunction,
+} from "@/lib/awsCheckAltMoneyPath";
 
 export {
   AWS_STAGING_AUTH_SESSION_KEY,
@@ -736,6 +740,12 @@ export function createAwsStagingClient(options: AwsStagingClientOptions = {}) {
 
   const functions = {
     invoke: async (name: string, options: { body?: Record<string, unknown> } = {}) => {
+      if (isLegacyCheckAltMoneyFunction(name)) {
+        return invokeAwsCheckAltMoneyFunction(name, options, {
+          authProvider: "cognito",
+          apiBaseUrl: awsApiBaseUrl(),
+        });
+      }
       const restored = await restoreSession();
       const token = restored.session?.access_token;
       const { response, body } = await apiFetch(`/functions/v1/${encodeURIComponent(name)}`, {

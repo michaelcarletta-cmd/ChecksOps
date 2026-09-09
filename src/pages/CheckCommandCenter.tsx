@@ -4,7 +4,8 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { isAwsStaging } from "@/lib/awsStaging";
+import { isAwsStaging, awsApiBaseUrl } from "@/lib/awsStaging";
+import { invokeAwsCheckAltMoneyFunction, requireAwsCheckAltMoneyPath } from "@/lib/awsCheckAltMoneyPath";
 import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
 import { FunctionsHttpError, FunctionsRelayError, FunctionsFetchError } from "@supabase/supabase-js";
 import { useToast } from "@/hooks/use-toast";
@@ -3636,6 +3637,10 @@ function CheckDetailPanel({
     }
     setDepositingWithCheckAlt(true);
     try {
+      requireAwsCheckAltMoneyPath({
+        apiBaseUrl: awsApiBaseUrl(),
+        functionName: "checkalt-submit-deposit",
+      });
       const { data: existingItem } = await supabase
         .from("deposit_items")
         .select("id, status, provider")
@@ -3675,9 +3680,9 @@ function CheckDetailPanel({
       // Pre-normalize each side in its own edge invocation so oversized
       // legacy images never trip the deposit worker's CPU limit.
       const prepared = await prepareCheckAltDeposit(checkId);
-      const { data: submitData, error: submitErr } = await supabase.functions.invoke("checkalt-submit-deposit", {
+      const { data: submitData, error: submitErr } = await invokeAwsCheckAltMoneyFunction("checkalt-submit-deposit", {
         body: { check_intake_item_id: checkId, ...prepared },
-      });
+      }, { apiBaseUrl: awsApiBaseUrl() });
       if (submitErr) throw new Error(await getFunctionErrorMessage(submitErr, "Deposit failed"));
 
       sonnerToast.success("Deposit queued", {
