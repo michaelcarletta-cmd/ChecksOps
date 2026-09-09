@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, ShieldCheck, Copy, RefreshCw } from "lucide-react";
+import { Loader2, ShieldCheck, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { StepUpRequest } from "@/hooks/useStepUp";
 import {
@@ -21,6 +21,8 @@ import {
   stepUpAwsTotp,
   verifyAwsTotp,
 } from "@/lib/awsMfa";
+import { resolveTotpOtpauthUri, totpQrDataUrl } from "@/lib/totpQr";
+import { TotpQrDisplay } from "@/components/auth/TotpQrDisplay";
 
 interface Props {
   request: StepUpRequest | null;
@@ -74,9 +76,15 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
           }
           const associated = await associateAwsTotp();
           if (cancelled) return;
+          const uri = resolveTotpOtpauthUri({
+            otpauthUri: associated.otpauthUri,
+            secret: associated.secret,
+          });
+          const qr = await totpQrDataUrl(uri);
+          if (cancelled) return;
           setFactorId("software-token");
           setSecret(associated.secret);
-          setQr(null);
+          setQr(qr);
           setMode("enroll");
         } catch (err: unknown) {
           if (cancelled) return;
@@ -253,29 +261,7 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
               </AlertDescription>
             </Alert>
 
-            {qr && (
-              <div className="flex justify-center rounded-md bg-background p-3 border border-border">
-                <img src={qr} alt="Two-factor setup QR code" className="h-44 w-44" />
-              </div>
-            )}
-            {secret && (
-              <div className="flex items-center gap-2">
-                <code className="flex-1 truncate rounded bg-muted px-2 py-1.5 text-xs">
-                  {secret}
-                </code>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  onClick={() => {
-                    navigator.clipboard.writeText(secret);
-                    toast({ title: "Setup key copied" });
-                  }}
-                >
-                  <Copy className="h-4 w-4" />
-                </Button>
-              </div>
-            )}
+            <TotpQrDisplay qr={qr} secret={secret} />
           </div>
         )}
 
