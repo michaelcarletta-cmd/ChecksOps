@@ -71,6 +71,48 @@ export const ident = (name, kind = 'identifier') => {
   return value;
 };
 
+const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/gi;
+const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
+const SECRETISH_RE = /\b(?:bearer|token|authorization|password|secret|api[_-]?key)\b(?:\s*[:=]\s*|\s+)\S+/gi;
+const CONN_RE = /(?:postgres(?:ql)?|mysql|mongodb):\/\/\S+/gi;
+
+const sanitizeLogText = (value, max = 200) => String(value || '')
+  .replace(CONN_RE, '[db-url]')
+  .replace(SECRETISH_RE, '[redacted]')
+  .replace(EMAIL_RE, '[email]')
+  .replace(UUID_RE, '[id]')
+  .replace(/\s+/g, ' ')
+  .trim()
+  .slice(0, max);
+
+export const classifyDataQueryFailure = (error, body = {}) => {
+  const message = sanitizeLogText(sanitizePublicError(error), 200);
+  let errorClass = 'data_query_failed';
+  if (/invalid column/i.test(message)) errorClass = 'invalid_column';
+  else if (/invalid table/i.test(message)) errorClass = 'invalid_table';
+  else if (/invalid rpc/i.test(message)) errorClass = 'invalid_rpc';
+  else if (/invalid identifier/i.test(message)) errorClass = 'invalid_identifier';
+  else if (error?.code === '57014' || /timeout/i.test(message)) errorClass = 'query_timeout';
+  else if (error?.code === '42501' || /row-level security/i.test(message)) errorClass = 'rls_denied';
+  const tableRaw = String(body.table || '');
+  const table = IDENT.test(tableRaw) ? tableRaw : '[rejected]';
+  const selectShape = sanitizeLogText(body.select, 180);
+  return { errorClass, table, selectShape, message };
+};
+
+export const logDataQueryFailure = (error, body = {}) => {
+  const classified = classifyDataQueryFailure(error, body);
+  console.error(JSON.stringify({
+    service: 'checksops-api',
+    event: 'data_query_failed',
+    errorClass: classified.errorClass,
+    table: classified.table,
+    selectShape: classified.selectShape,
+    message: classified.message,
+  }));
+  return classified;
+};
+
 export const parseBody = (event) => {
   if (!event?.body) return {};
   const raw = event.isBase64Encoded ? Buffer.from(event.body, 'base64').toString('utf8') : event.body;
@@ -153,6 +195,7 @@ export const withIdentity = async (event, fn, deps = {}) => {
     }
     const pgCode = error?.code || null;
     const rlsDenied = pgCode === '42501' || /row-level security/i.test(String(error?.message || ''));
+    logDataQueryFailure(error, body);
     return {
       ok: false,
       statusCode: rlsDenied ? 403 : 503,
@@ -173,34 +216,7 @@ export const withIdentityWrite = (event, fn, deps = {}) => (
 export const parseSelect = (select) => {
   const raw = String(select || '*').trim() || '*';
   if (raw === '*') return { columns: ['*'], embeds: [] };
-  const embeds = [];
-  const columns = [];
-  // Supports:
-  //   table(cols)
-  //   table!inner(cols)
-  //   table!<fk_or_hint>(cols)
-  //   alias:table!...(cols)
-  const re = /(?:([a-zA-Z_][a-zA-Z0-9_]*):)?([a-zA-Z_][a-zA-Z0-9_]*)(?:!([a-zA-Z_][a-zA-Z0-9_]*))?\(([^)]*)\)/g;
-  let remainder = raw;
-  let match;
-  while ((match = re.exec(raw))) {
-    const alias = match[1] || null;
-    const table = match[2];
-    const hint = match[3] || null;
-    const inner = hint === 'inner';
-    const fkHint = hint && hint !== 'inner' ? hint : null;
-    embeds.push({
-      table,
-      alias,
-      inner,
-      fkHint,
-      columns: match[4].split(',').map((c) => c.trim()).filter(Boolean),
-    });
-    remainder = remainder.replace(match[0], '');
-  }
-  remainder.split(',').map((c) => c.trim()).filter(Boolean).forEach((col) => columns.push(col === '*' ? '*' : ident(col, 'column')));
-  if (!columns.length) columns.push('*');
-  return { columns, embeds };
+  return parseSelectList(raw);
 };
 
 /**
@@ -229,6 +245,7 @@ export const relatedFk = (table, embedTable, fkHint = null) => {
     return 'tenant_id';
   }
   if (embedTable === 'profiles') return 'user_id';
+  if (embedTable.endsWith('batches')) return `${embedTable.replace(/batches$/, 'batch')}_id`;
   if (embedTable.endsWith('s')) {
     const singular = embedTable.slice(0, -1);
     return `${singular}_id`;
@@ -240,6 +257,9 @@ export const belongsToEmbed = (table, embedTable) => (
   embedTable === 'tenants'
   || embedTable === 'tenants_public'
   || embedTable === 'profiles'
+  || embedTable === 'disbursement_batches'
+  || embedTable === 'stakeholder_accounts'
+  || embedTable === 'claims'
 );
 
 const CHECK_ID_CHILDREN = new Set([
@@ -277,6 +297,54 @@ const splitTopLevel = (value, sep = ',') => {
   }
   if (current) parts.push(current);
   return parts.map((part) => part.trim()).filter(Boolean);
+};
+
+const EMBED_HEAD_RE = /^(?:([a-zA-Z_][a-zA-Z0-9_]*):)?([a-zA-Z_][a-zA-Z0-9_]*)(?:!([a-zA-Z_][a-zA-Z0-9_]*))?$/;
+
+const parseEmbedHead = (head) => {
+  const m = String(head || '').trim().match(EMBED_HEAD_RE);
+  if (!m) return null;
+  const first = m[1] || null;
+  const second = m[2];
+  const bang = m[3] || null;
+  // Supabase `relation:fk_column(...)` (e.g. check_intake_items:check_intake_item_id).
+  if (!bang && first && /_id$/.test(second)) {
+    return { alias: null, table: first, inner: false, fkHint: second };
+  }
+  return {
+    alias: first,
+    table: second,
+    inner: bang === 'inner',
+    fkHint: bang && bang !== 'inner' ? bang : null,
+  };
+};
+
+const parseSelectList = (raw) => {
+  const columns = [];
+  const embeds = [];
+  for (const part of splitTopLevel(raw)) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    const open = trimmed.indexOf('(');
+    if (open !== -1 && trimmed.endsWith(')')) {
+      const head = parseEmbedHead(trimmed.slice(0, open).trim());
+      if (head) {
+        const inner = parseSelectList(trimmed.slice(open + 1, -1).trim() || '*');
+        embeds.push({
+          table: head.table,
+          alias: head.alias,
+          inner: head.inner,
+          fkHint: head.fkHint,
+          columns: inner.columns,
+          embeds: inner.embeds,
+        });
+        continue;
+      }
+    }
+    columns.push(trimmed === '*' ? '*' : ident(trimmed, 'column'));
+  }
+  if (!columns.length) columns.push('*');
+  return { columns, embeds };
 };
 
 const applyAtomic = (column, op, rawValue, params) => {
@@ -405,6 +473,95 @@ export const applyFilters = (filters = []) => {
   return { clauses, params };
 };
 
+const columnsNeededForEmbeds = (parentTable, columns, embeds) => {
+  const needed = new Set(columns[0] === '*' ? ['*'] : columns);
+  if (needed.has('*')) return needed;
+  needed.add('id');
+  for (const embed of embeds || []) {
+    // Parent-side FKs for belongs-to embeds (tenants, profiles) and named-FK hints.
+    // Has-many embeds such as check_payees / checkalt_deposits live on the
+    // child row (check_intake_item_id). Guessing check_payee_id onto the
+    // parent SELECT makes PostgreSQL fail before the child-array path runs.
+    const namedFk = fkColumnFromHint(parentTable, embed.fkHint);
+    if (namedFk || belongsToEmbed(parentTable, embed.table)) {
+      needed.add(namedFk || relatedFk(parentTable, embed.table));
+    }
+  }
+  return needed;
+};
+
+const attachEmbeds = async (client, rows, parentTable, embeds) => {
+  if (!embeds?.length || !rows?.length) return rows;
+  let current = rows;
+  for (const embed of embeds) {
+    const relTable = ident(embed.table, 'table');
+    if (!ALLOWED.has(relTable) && relTable !== 'tenants') continue;
+    const namedFk = fkColumnFromHint(parentTable, embed.fkHint);
+    const fk = relatedFk(parentTable, relTable, namedFk);
+    const resultKey = embed.alias || relTable;
+    const parentHasFk = current.some((row) => Object.prototype.hasOwnProperty.call(row, fk));
+    const nestedNeeded = columnsNeededForEmbeds(relTable, embed.columns, embed.embeds);
+    if (parentHasFk) {
+      const ids = [...new Set(current.map((row) => row[fk]).filter(Boolean))];
+      if (!ids.length) {
+        const next = [];
+        for (const row of current) {
+          if (embed.inner) continue;
+          next.push({ ...row, [resultKey]: null });
+        }
+        current = next;
+        continue;
+      }
+      const embedCols = nestedNeeded.has('*')
+        ? '*'
+        : [...nestedNeeded].map((c) => ident(c, 'column')).join(', ');
+      const related = (await client.query(
+        `SELECT ${embedCols} FROM public.${relTable} WHERE id = ANY($1::uuid[])`,
+        [ids],
+      )).rows;
+      const nested = await attachEmbeds(client, related, relTable, embed.embeds || []);
+      const byId = new Map(nested.map((row) => [String(row.id), row]));
+      const next = [];
+      for (const row of current) {
+        const relatedRow = byId.get(String(row[fk]));
+        if (embed.inner && !relatedRow) continue;
+        next.push({ ...row, [resultKey]: relatedRow || null });
+      }
+      current = next;
+    } else {
+      const parentIds = [...new Set(current.map((row) => row.id).filter(Boolean))];
+      const childKey = childFk(parentTable, relTable);
+      if (!parentIds.length) {
+        for (const row of current) row[resultKey] = [];
+        continue;
+      }
+      if (!nestedNeeded.has('*')) nestedNeeded.add(childKey);
+      const embedCols = nestedNeeded.has('*')
+        ? '*'
+        : [...nestedNeeded].map((c) => ident(c, 'column')).join(', ');
+      const related = (await client.query(
+        `SELECT ${embedCols} FROM public.${relTable} WHERE ${ident(childKey, 'column')} = ANY($1::uuid[])`,
+        [parentIds],
+      )).rows;
+      const nested = await attachEmbeds(client, related, relTable, embed.embeds || []);
+      const byParent = new Map();
+      for (const item of nested) {
+        const key = String(item[childKey]);
+        if (!byParent.has(key)) byParent.set(key, []);
+        byParent.get(key).push(item);
+      }
+      const next = [];
+      for (const row of current) {
+        const children = byParent.get(String(row.id)) || [];
+        if (embed.inner && !children.length) continue;
+        next.push({ ...row, [resultKey]: children });
+      }
+      current = next;
+    }
+  }
+  return current;
+};
+
 const runSelect = async (client, body) => {
   const table = ident(body.table, 'table');
   if (!ALLOWED.has(table)) throw new Error(`table not allowlisted: ${table}`);
@@ -418,20 +575,7 @@ const runSelect = async (client, body) => {
   }
   const limit = Number.isFinite(Number(body.limit)) ? Math.min(Math.max(Number(body.limit), 1), 500) : 200;
   const offset = Number.isFinite(Number(body.offset)) ? Math.max(Number(body.offset), 0) : 0;
-  const needed = new Set(parsed.columns[0] === '*' ? ['*'] : parsed.columns);
-  if (needed.has('*') === false) {
-    needed.add('id');
-    for (const embed of parsed.embeds) {
-      // Parent-side FKs for belongs-to embeds (tenants, profiles) and named-FK hints.
-      // Has-many embeds such as check_payees / checkalt_deposits live on the
-      // child row (check_intake_item_id). Guessing check_payee_id onto the
-      // parent SELECT makes PostgreSQL fail before the child-array path runs.
-      const namedFk = fkColumnFromHint(table, embed.fkHint);
-      if (namedFk || belongsToEmbed(table, embed.table)) {
-        needed.add(namedFk || relatedFk(table, embed.table));
-      }
-    }
-  }
+  const needed = columnsNeededForEmbeds(table, parsed.columns, parsed.embeds);
   const cols = needed.has('*') ? '*' : [...needed].map((c) => ident(c, 'column')).join(', ');
   const countSql = `SELECT count(*)::int AS n FROM public.${table} ${where}`;
   const count = body.count ? Number((await client.query(countSql, params)).rows[0]?.n || 0) : null;
@@ -440,68 +584,8 @@ const runSelect = async (client, body) => {
   }
   const sql = `SELECT ${cols} FROM public.${table} ${where} ${order} LIMIT ${limit} OFFSET ${offset}`;
   const rows = (await client.query(sql, params)).rows;
-  if (!parsed.embeds.length) return { rows, count };
-  for (const embed of parsed.embeds) {
-    const relTable = ident(embed.table, 'table');
-    if (!ALLOWED.has(relTable) && relTable !== 'tenants') continue;
-    const namedFk = fkColumnFromHint(table, embed.fkHint);
-    const fk = relatedFk(table, relTable, namedFk);
-    const resultKey = embed.alias || relTable;
-    const parentHasFk = rows.some((row) => Object.prototype.hasOwnProperty.call(row, fk));
-    const embedCols = embedColumnSql(embed.columns);
-    if (parentHasFk) {
-      const ids = [...new Set(rows.map((row) => row[fk]).filter(Boolean))];
-      if (!ids.length) {
-        const next = [];
-        for (const row of rows) {
-          if (embed.inner) continue;
-          next.push({ ...row, [resultKey]: null });
-        }
-        rows.length = 0;
-        rows.push(...next);
-        continue;
-      }
-      const related = (await client.query(
-        `SELECT ${embedCols.includes('*') ? '*' : `${embedCols}, id`} FROM public.${relTable} WHERE id = ANY($1::uuid[])`,
-        [ids],
-      )).rows;
-      const byId = new Map(related.map((row) => [String(row.id), row]));
-      const next = [];
-      for (const row of rows) {
-        const relatedRow = byId.get(String(row[fk]));
-        if (embed.inner && !relatedRow) continue;
-        next.push({ ...row, [resultKey]: relatedRow || null });
-      }
-      rows.length = 0;
-      rows.push(...next);
-    } else {
-      const parentIds = [...new Set(rows.map((row) => row.id).filter(Boolean))];
-      const childKey = childFk(table, relTable);
-      if (!parentIds.length) {
-        for (const row of rows) row[resultKey] = [];
-        continue;
-      }
-      const related = (await client.query(
-        `SELECT ${embedCols.includes('*') ? '*' : `${embedCols}, ${ident(childKey, 'column')}`} FROM public.${relTable} WHERE ${ident(childKey, 'column')} = ANY($1::uuid[])`,
-        [parentIds],
-      )).rows;
-      const byParent = new Map();
-      for (const item of related) {
-        const key = String(item[childKey]);
-        if (!byParent.has(key)) byParent.set(key, []);
-        byParent.get(key).push(item);
-      }
-      const next = [];
-      for (const row of rows) {
-        const children = byParent.get(String(row.id)) || [];
-        if (embed.inner && !children.length) continue;
-        next.push({ ...row, [resultKey]: children });
-      }
-      rows.length = 0;
-      rows.push(...next);
-    }
-  }
-  return { rows, count };
+  const attached = await attachEmbeds(client, rows, table, parsed.embeds);
+  return { rows: attached, count };
 };
 
 const unwrapRpcData = (name, rows) => {
