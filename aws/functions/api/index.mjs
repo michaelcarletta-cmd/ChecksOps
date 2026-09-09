@@ -29,6 +29,31 @@ import { handleWorkflowRequest } from './workflow.mjs';
 import { handleFinancialRequest } from './financial.mjs';
 import { handleSandboxRequest } from './sandbox.mjs';
 
+/** Test seam so GET /health can run the real probe without hitting AWS in unit tests. */
+export const healthProbeDeps = {
+  probeDatabase,
+};
+
+/**
+ * Liveness payload for GET /health.
+ * `database` reflects probeIsHealthy() — the same predicate as GET /db-health.
+ * Does not weaken that predicate. HTTP 200 remains process liveness; /db-health
+ * still returns 503 when the probe is unhealthy.
+ */
+export const healthBodyFromProbe = (probe) => {
+  const healthy = probeIsHealthy(probe);
+  return {
+    service: 'checksops-api',
+    environment: process.env.CHECKSOPS_ENV || 'unknown',
+    status: 'ok',
+    database: healthy ? 'connected' : 'not-connected',
+    databaseHealthy: healthy,
+    databaseSecretConfigured: databaseSecretConfigured(),
+    databaseName: process.env.DATABASE_NAME || null,
+    productionSupabaseChanged: false,
+  };
+};
+
 const json = (statusCode, body) => ({
   statusCode,
   headers: {
@@ -90,15 +115,8 @@ export const handler = async (event) => {
   }
 
   if (method === 'GET' && (path === '/' || path === '/health')) {
-    return json(200, {
-      service: 'checksops-api',
-      environment: process.env.CHECKSOPS_ENV || 'unknown',
-      status: 'ok',
-      database: 'not-connected',
-      databaseSecretConfigured: databaseSecretConfigured(),
-      databaseName: process.env.DATABASE_NAME || null,
-      productionSupabaseChanged: false,
-    });
+    const probe = await healthProbeDeps.probeDatabase();
+    return json(200, healthBodyFromProbe(probe));
   }
 
   if (method === 'GET' && (path === '/ops/readiness' || path === '/cutover/readiness')) {

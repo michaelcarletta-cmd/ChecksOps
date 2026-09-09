@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test, beforeEach, afterEach } from 'node:test';
-import { handler, requestPath } from '../functions/api/index.mjs';
+import { handler, healthBodyFromProbe, healthProbeDeps, requestPath } from '../functions/api/index.mjs';
 import {
   loadDatabaseCredentials,
   parseDatabaseSecretString,
@@ -35,6 +35,30 @@ const setEnv = (key, value) => {
   }
 };
 
+const unhealthyProbe = {
+  secretsManager: 'failed',
+  networkTls: 'not-run',
+  authentication: 'not-run',
+  postgresqlVersion: null,
+  select1: 'not-run',
+  currentDatabase: null,
+  currentUser: null,
+};
+
+const healthyProbe = {
+  secretsManager: 'ok',
+  networkTls: 'ok',
+  authentication: 'ok',
+  postgresqlVersion: '18.3',
+  select1: 'ok',
+  currentDatabase: 'checksops',
+  currentUser: 'checksops',
+  transactionReadOnly: 'on',
+  defaultTransactionReadOnly: 'on',
+};
+
+let restoreHealthProbe;
+
 beforeEach(() => {
   setEnv('CHECKSOPS_ENV', 'staging');
   setEnv(
@@ -42,9 +66,13 @@ beforeEach(() => {
     'arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-staging/checksops/example',
   );
   setEnv('DATABASE_NAME', 'checksops');
+  restoreHealthProbe = healthProbeDeps.probeDatabase;
+  healthProbeDeps.probeDatabase = async () => unhealthyProbe;
 });
 
 afterEach(() => {
+  if (restoreHealthProbe) healthProbeDeps.probeDatabase = restoreHealthProbe;
+  restoreHealthProbe = undefined;
   for (const [key, value] of Object.entries(savedEnv)) {
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
@@ -105,11 +133,42 @@ test('GET /health returns staging ok without a database password', async () => {
   assert.equal(body.environment, 'staging');
   assert.equal(body.status, 'ok');
   assert.equal(body.database, 'not-connected');
+  assert.equal(body.databaseHealthy, false);
   assert.equal(body.databaseSecretConfigured, true);
   assert.equal(body.databaseName, 'checksops');
   assert.equal(body.productionSupabaseChanged, false);
   assert.equal(Object.hasOwn(body, 'password'), false);
   assert.doesNotMatch(response.body, /password/i);
+});
+
+test('GET /health reports connected when the DB health probe is healthy', async () => {
+  healthProbeDeps.probeDatabase = async () => healthyProbe;
+  const response = await invoke();
+  assert.equal(response.statusCode, 200);
+  const body = JSON.parse(response.body);
+  assert.equal(body.status, 'ok');
+  assert.equal(body.database, 'connected');
+  assert.equal(body.databaseHealthy, true);
+  assert.equal(body.productionSupabaseChanged, false);
+});
+
+test('GET /health stays 200 with database not-connected when the probe is unhealthy', async () => {
+  healthProbeDeps.probeDatabase = async () => ({
+    ...healthyProbe,
+    select1: 'failed',
+  });
+  const response = await invoke();
+  assert.equal(response.statusCode, 200);
+  const body = JSON.parse(response.body);
+  assert.equal(body.database, 'not-connected');
+  assert.equal(body.databaseHealthy, false);
+});
+
+test('healthBodyFromProbe uses the same probeIsHealthy predicate as /db-health', () => {
+  assert.equal(healthBodyFromProbe(healthyProbe).database, 'connected');
+  assert.equal(healthBodyFromProbe({ ...healthyProbe, currentUser: 'postgres' }).database, 'not-connected');
+  assert.equal(healthBodyFromProbe({ ...healthyProbe, currentDatabase: 'postgres' }).database, 'not-connected');
+  assert.equal(healthBodyFromProbe({ ...healthyProbe, authentication: 'failed' }).database, 'not-connected');
 });
 
 test('GET /staging/health succeeds when API Gateway includes the stage', async () => {
