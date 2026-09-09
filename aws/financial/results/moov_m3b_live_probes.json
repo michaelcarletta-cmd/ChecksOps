@@ -1,6 +1,6 @@
 {
-  "phase": "M3b-resume-singular-secret",
-  "captured_at": "2026-09-09T22:50:00Z",
+  "phase": "M3b-resume-environment-key-recheck",
+  "captured_at": "2026-09-09T22:57:00Z",
   "moov_http_called": false,
   "production_get_count": 0,
   "production_post_count": 0,
@@ -12,24 +12,20 @@
   "webhook_changed": false,
   "secret_contract": {
     "secret_id": "checksops/production/provider",
-    "arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:checksops/production/provider-At4ZFR",
-    "exists": true,
     "awscurrent": true,
-    "old_plural_providers": "deleted",
-    "provider_secrets_arn_points_at_singular": true,
-    "read_contract_complete": false,
-    "full_execution_contract_complete": false,
+    "awscurrent_version_created": "2026-09-09T22:46:40.571Z",
+    "version_count": 1,
+    "key_names": ["MOOV_ALLOWED_ORIGIN", "MOOV_ENVIRO", "MOOV_PUBLIC_KEY", "MOOV_SECRET_KEY"],
     "names_configured": {
       "MOOV_PUBLIC_KEY": true,
       "MOOV_SECRET_KEY": true,
       "MOOV_ENVIRONMENT": false,
-      "MOOV_ALLOWED_ORIGIN": true,
-      "MOOV_PLATFORM_ACCOUNT_ID": false,
-      "MOOV_WEBHOOK_SECRET": false
+      "MOOV_ALLOWED_ORIGIN": true
     },
+    "MOOV_ENVIRONMENT_is_production": false,
     "typo_key_MOOV_ENVIRO_present": true,
     "MOOV_ENVIRO_value_is_production": true,
-    "MOOV_ALLOWED_ORIGIN_approved": true
+    "read_contract_complete": false
   },
   "flags": {
     "AWS_PROVIDER_LIVE_READS_ENABLED": true,
@@ -39,12 +35,11 @@
     "AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED": false
   },
   "probes": {
-    "moov-transfer-create": {"http": 403, "error": "production_execution_blocked", "liveProviderCalled": false},
-    "moov-disburse": {"http": 403, "error": "production_execution_blocked", "liveProviderCalled": false},
+    "moov-transfer-create": {"error": "production_execution_blocked", "liveProviderCalled": false},
+    "moov-disburse": {"error": "production_execution_blocked", "liveProviderCalled": false},
     "freedom_readiness": {
       "http": 503,
       "error": "production_secret_missing",
-      "reason": "required_read_names_missing",
       "missingNames": ["MOOV_ENVIRONMENT"],
       "liveProviderCalled": false,
       "moov_get_performed": false
