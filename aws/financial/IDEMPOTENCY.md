@@ -10,7 +10,7 @@ sha256(tenant_id | operation_type | resource_id | amount_cents | USD)
 
 Unique on `aws_financial_operations (tenant_id, idempotency_key)`.
 
-Production Moov already uses `payment_transfers (tenant_id, idempotency_key)` plus `payment_idempotency_keys`. Production CheckAlt uses check + integer-cents amount + reference. Webhooks use unique `(provider, external_event_id)`.
+Production Moov already uses `payment_transfers (tenant_id, idempotency_key)` plus `payment_idempotency_keys`. Production CheckAlt (dark path, this phase) uses `checkalt_deposits (tenant_id, idempotency_key)` with key `sha256(tenant_id|checkalt_deposit|check_id|amount_cents|USD)`. The row is committed **before** `POST /fincapture/deposit/process`. `provider_http_attempted_at` is claimed with a compare-and-set so simultaneous Lambda/browser retries cannot POST twice. If HTTP was attempted and RDS update failed, status stays `submitting` and poll/history reconciles — never a second process POST. SQL `65_checkalt_production_writer.sql` is **NOT APPLIED**. Webhooks use unique `(provider, external_event_id)`.
 
 ## Tested cases
 
@@ -35,4 +35,4 @@ Provider accepted **and** internal update failed:
 - **Do not** create a second provider call
 - **Do not** auto-correct the ledger
 
-Future live execution must persist the idempotency key and any provider reference **before** the HTTP call, then reconcile.
+Future live execution must persist the idempotency key and any provider reference **before** the HTTP call, then reconcile. The dark production CheckAlt adapter does this in application code; live RDS unique enforcement waits for SQL 65.

@@ -10,6 +10,7 @@ import {
 } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { StepUpDialog } from "@/components/auth/StepUpDialog";
+import { awsAuthUserId, awsMfaAvailable, getAwsMfaStatus } from "@/lib/awsMfa";
 
 /**
  * Two-factor step-up gate for money movement.
@@ -59,6 +60,15 @@ export function StepUpProvider({ children }: { children: ReactNode }) {
   const resolverRef = useRef<((ok: boolean) => void) | null>(null);
 
   const refreshFactors = useCallback(async () => {
+    if (awsMfaAvailable()) {
+      try {
+        const status = await getAwsMfaStatus();
+        setTotpEnrolled(Boolean(status.totpEnrolled));
+      } catch {
+        setTotpEnrolled(false);
+      }
+      return;
+    }
     const { data, error } = await supabase.auth.mfa.listFactors();
     if (error) {
       setTotpEnrolled(null);
@@ -72,8 +82,9 @@ export function StepUpProvider({ children }: { children: ReactNode }) {
 
     const hydrate = async (uid: string | null) => {
       if (!active) return;
-      setUserId(uid);
-      if (!uid) {
+      const resolved = uid || (awsMfaAvailable() ? awsAuthUserId() : null);
+      setUserId(resolved);
+      if (!resolved) {
         setVerified(false);
         setTotpEnrolled(null);
         try {
@@ -83,18 +94,19 @@ export function StepUpProvider({ children }: { children: ReactNode }) {
         }
         return;
       }
-      setVerified(readVerified(uid));
+      setVerified(readVerified(resolved));
       await refreshFactors();
 
-      // A session already at aal2 (the user completed TOTP at login) counts.
-      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-      if (active && aal?.currentLevel === "aal2") {
-        try {
-          sessionStorage.setItem(VERIFIED_KEY, uid);
-        } catch {
-          /* ignore */
+      if (!awsMfaAvailable()) {
+        const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+        if (active && aal?.currentLevel === "aal2") {
+          try {
+            sessionStorage.setItem(VERIFIED_KEY, resolved);
+          } catch {
+            /* ignore */
+          }
+          setVerified(true);
         }
-        setVerified(true);
       }
     };
 

@@ -948,6 +948,7 @@ export const financialRoute = (path, method) => {
   if (method === 'POST' && path === '/financial/reconcile') return { kind: 'reconcile' };
   if (method === 'POST' && path === '/financial/simulate-failure') return { kind: 'failure' };
   if (method === 'POST' && path === '/financial/cleanup') return { kind: 'cleanup' };
+  if (method === 'POST' && path === '/financial/checkalt-dual-control') return { kind: 'checkalt-dual-control' };
   return null;
 };
 
@@ -961,6 +962,10 @@ export const handleFinancialRequest = async (event, path, method, deps = {}) => 
   if (route.kind === 'reconcile') return handleReconcile(event, deps);
   if (route.kind === 'failure') return handleSimulateFailure(event, deps);
   if (route.kind === 'cleanup') return handleCleanup(event, deps);
+  if (route.kind === 'checkalt-dual-control') {
+    const { handleCheckAltDualControl } = await import('./providers/production/checkalt-dual-control.mjs');
+    return handleCheckAltDualControl(event, deps);
+  }
   return null;
 };
 

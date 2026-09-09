@@ -143,11 +143,17 @@ export const handleMfaVerify = async (event) => {
       FriendlyDeviceName: body.friendlyName || 'ChecksOps authenticator',
     });
     const success = String(result.Status || '').toUpperCase() === 'SUCCESS';
+    let recorded = false;
+    if (success && (body.action_key || body.actionKey)) {
+      const log = await recordStepUpLog(event, body).catch(() => null);
+      recorded = Boolean(log?.ok);
+    }
     return {
       ok: success,
       statusCode: success ? 200 : 401,
       verified: success,
       enrollment: true,
+      recorded,
       preferredMfaEnabled: false,
       remaining: 'Preferred MFA is intentionally off so EMAIL_OTP login is unchanged. Financial flags stay false.',
       ...financialGate(),
@@ -171,10 +177,104 @@ export const handleMfaSetPreference = async () => ({
   ...financialGate(),
 });
 
+const recordStepUpLog = async (event, body, extra = {}) => {
+  const { withIdentityWrite } = await import('./data.mjs');
+  const { CHECKALT_TOTP_ACTION } = await import('./providers/production/checkalt-authz.mjs');
+  return withIdentityWrite(event, async ({ client, mapping, spoof }) => {
+    const actionKey = String(body.action_key || body.actionKey || CHECKALT_TOTP_ACTION);
+    const tenantId = body.tenant_id || body.tenantId || extra.tenantId || null;
+    const checkId = body.check_intake_item_id || body.check_id || extra.checkId || null;
+    const row = (await client.query(
+      `INSERT INTO public.financial_stepup_log
+        (user_id, tenant_id, action_key, factor_type, succeeded, metadata)
+       VALUES ($1::uuid, $2::uuid, $3, 'totp', true, $4::jsonb)
+       RETURNING id, created_at`,
+      [
+        mapping.application_user_id,
+        tenantId,
+        actionKey,
+        JSON.stringify({
+          check_id: checkId,
+          source: 'cognito_totp_step_up',
+        }),
+      ],
+    )).rows[0];
+    return {
+      ok: true,
+      statusCode: 200,
+      recorded: true,
+      stepup_id: row.id,
+      applicationUserId: mapping.application_user_id,
+      spoofFieldsIgnored: spoof,
+    };
+  });
+};
+
+export const handleMfaStepUp = async (event) => {
+  const accessToken = accessTokenOf(event);
+  const body = parseBody(event);
+  const code = String(body.code || body.userCode || '').replace(/\s+/g, '');
+  if (!accessToken || !/^\d{6}$/.test(code)) {
+    return { ok: false, statusCode: 400, error: 'missing_verify_fields', ...financialGate() };
+  }
+  try {
+    const user = await cognitoJson('GetUser', { AccessToken: accessToken });
+    const enrolled = (user.UserMFASettingList || []).includes('SOFTWARE_TOKEN_MFA');
+    if (!enrolled) {
+      return {
+        ok: false,
+        statusCode: 403,
+        error: 'totp_not_enrolled',
+        message: 'Cognito TOTP is not enrolled. Dual-control from a distinct owner/admin/manager is required.',
+        ...financialGate(),
+      };
+    }
+    const result = await cognitoJson('VerifySoftwareToken', {
+      AccessToken: accessToken,
+      UserCode: code,
+      FriendlyDeviceName: body.friendlyName || 'ChecksOps financial step-up',
+    });
+    const success = String(result.Status || '').toUpperCase() === 'SUCCESS';
+    if (!success) {
+      return { ok: false, statusCode: 401, error: 'mfa_step_up_failed', verified: false, ...financialGate() };
+    }
+    const recorded = await recordStepUpLog(event, body);
+    if (!recorded?.ok) {
+      return {
+        ok: false,
+        statusCode: recorded?.statusCode || 401,
+        error: recorded?.error || 'stepup_log_failed',
+        verified: true,
+        recorded: false,
+        message: 'TOTP was valid but the server-side step-up log was not recorded. Production CheckAlt will refuse.',
+        ...financialGate(),
+      };
+    }
+    return {
+      ok: true,
+      statusCode: 200,
+      verified: true,
+      recorded: true,
+      stepup_id: recorded.stepup_id,
+      factorType: 'totp',
+      ...financialGate(),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      statusCode: error.statusCode || 401,
+      error: 'mfa_step_up_failed',
+      message: String(error.message || error).slice(0, 200),
+      ...financialGate(),
+    };
+  }
+};
+
 export const MFA_AUTH_ROUTES = {
   '/auth/mfa/status': handleMfaStatus,
   '/auth/mfa/associate': handleMfaAssociate,
   '/auth/mfa/verify': handleMfaVerify,
+  '/auth/mfa/step-up': handleMfaStepUp,
   '/auth/mfa/set-preference': handleMfaSetPreference,
 };
 
