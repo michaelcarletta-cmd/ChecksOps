@@ -250,7 +250,7 @@ export function DepositOperationsConsole({ searchQuery = "" }: DepositOperations
   // manual record_submission dialog used by other providers.
   const checkaltSubmitMutation = useMutation({
     mutationFn: async (checkId: string) => {
-      await guardFinancial("deposit.submit");
+      await guardFinancial("deposit.submit", { checkId });
       // Pre-normalize each side (front + back) so the deposit worker never
       // has to re-encode oversized images inline (avoids CPU-exceeded).
       const prepared = await prepareCheckAltDeposit(checkId);

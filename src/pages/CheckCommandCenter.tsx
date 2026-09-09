@@ -3629,7 +3629,7 @@ function CheckDetailPanel({
   const handleDepositWithCheckAlt = async () => {
     if (!user?.id || !check) return;
     try {
-      await guardFinancial("deposit.submit");
+      await guardFinancial("deposit.submit", { checkId });
     } catch (err: any) {
       sonnerToast.error(err?.message ?? "Two-factor verification required");
       return;

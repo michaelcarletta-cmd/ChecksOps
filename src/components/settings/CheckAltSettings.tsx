@@ -672,8 +672,11 @@ export function PendingApprovalDeposits() {
       deposit_id: string;
       action: "approve" | "reject";
       reject_notes?: string;
+      check_intake_item_id?: string | null;
     }) => {
-      if (args.action === "approve") await guardFinancial("deposit.approve");
+      if (args.action === "approve") {
+        await guardFinancial("deposit.approve", { checkId: args.check_intake_item_id });
+      }
       const { data, error } = await supabase.functions.invoke(
         "checkalt-approve-deposit",
         { body: args },
@@ -823,7 +826,11 @@ export function PendingApprovalDeposits() {
                   <Button
                     size="sm"
                     onClick={() =>
-                      decide.mutate({ deposit_id: row.id, action: "approve" })
+                      decide.mutate({
+                        deposit_id: row.id,
+                        action: "approve",
+                        check_intake_item_id: row.check_intake_item_id,
+                      })
                     }
                     disabled={decide.isPending}
                   >
