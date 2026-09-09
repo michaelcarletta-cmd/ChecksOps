@@ -198,6 +198,7 @@ test('enroll path does not log or persist SecretCode', () => {
   const files = [
     'aws/functions/api/auth-mfa.mjs',
     'src/lib/awsMfa.ts',
+    'src/lib/totpEnrollment.ts',
     'src/lib/totpQr.ts',
     'src/components/auth/TotpManagerCard.tsx',
     'src/components/auth/StepUpDialog.tsx',

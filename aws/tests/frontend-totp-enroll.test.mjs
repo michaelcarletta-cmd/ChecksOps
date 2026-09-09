@@ -8,7 +8,7 @@ import {
   resolveTotpOtpauthUri,
   totpQrDataUrl,
 } from '../../src/lib/totpQr.ts';
-import { awsTotpEnrollmentDisplay } from '../../src/lib/awsMfa.ts';
+import { awsTotpEnrollmentDisplay } from '../../src/lib/totpEnrollment.ts';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const RFC_TEST_SECRET = 'GEZDGNBVGY3TQOJQ';
