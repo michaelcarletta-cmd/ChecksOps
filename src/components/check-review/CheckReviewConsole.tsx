@@ -1,5 +1,4 @@
 import { Fragment, useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { format } from "date-fns";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -27,6 +26,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
 import { assessCheckValidity, isAtRisk } from "@/lib/checkValidity";
 import { REVIEW_QUEUE_SELECT, isInReviewQueue, reviewQueuePayeeReasons } from "@/lib/reviewQueueQuery";
+import { formatIssueDateDisplay } from "@/lib/issueDate";
 import { ShareCheckDialog } from "@/components/check-review/ShareCheckDialog";
 import { ReuploadCheckImageButton } from "@/components/checks/ReuploadCheckImageButton";
 import { AdminDeleteCheckButton } from "@/components/checks/AdminDeleteCheckButton";
@@ -1161,10 +1161,7 @@ export function ReviewDecisionPanel({
                 <div>
                   <p className="text-xs text-muted-foreground">Issue Date</p>
                   <p className="font-medium">
-                    {(() => {
-                      const [y, m, d] = check.issue_date.split("-").map(Number);
-                      return format(new Date(y, m - 1, d), "MMM d, yyyy");
-                    })()}
+                    {formatIssueDateDisplay(check.issue_date)}
                   </p>
                 </div>
               )}

@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 
 import { format } from "date-fns";
+import { formatIssueDateDisplay } from "@/lib/issueDate";
 import { CheckImagesViewer } from "@/components/checks/CheckImagesViewer";
 import { Eye } from "lucide-react";
 import { DisbursementConsole } from "@/components/disbursement/DisbursementConsole";
@@ -803,12 +804,7 @@ function DepositItemDetail({
               <div>
                 <span className="text-muted-foreground">Issue Date</span>
                 <span className="ml-2">
-                  {checkData.issue_date 
-                    ? (() => {
-                        const [y, m, d] = checkData.issue_date.split("-").map(Number);
-                        return format(new Date(y, m - 1, d), "MMM d, yyyy");
-                      })() 
-                    : "—"}
+                  {formatIssueDateDisplay(checkData.issue_date)}
                 </span>
               </div>
 
