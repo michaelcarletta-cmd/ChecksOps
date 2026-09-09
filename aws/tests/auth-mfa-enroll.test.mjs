@@ -4,8 +4,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import {
+  evaluateCognitoTotpEnrollment,
   handleMfaAssociate,
   handleMfaSetPreference,
+  handleMfaStatus,
+  handleMfaStepUp,
   handleMfaVerify,
   MFA_AUTH_ROUTES,
 } from '../functions/api/auth-mfa.mjs';
@@ -77,10 +80,12 @@ test('associate calls AssociateSoftwareToken and returns otpauth_uri without a s
   assert.doesNotMatch(serialized, /SecretCode/);
 });
 
-test('verify calls VerifySoftwareToken and does not set preferred MFA', async () => {
-  const { result, calls } = await withCognito(handleMfaVerify, [{
-    body: { Status: 'SUCCESS' },
-  }], () => handleMfaVerify(eventOf({
+test('verify calls VerifySoftwareToken then enables SOFTWARE_TOKEN_MFA without preferring it', async () => {
+  const { result, calls } = await withCognito(handleMfaVerify, [
+    { body: { Status: 'SUCCESS' } },
+    { body: {} },
+    { body: { UserMFASettingList: ['SOFTWARE_TOKEN_MFA'] } },
+  ], () => handleMfaVerify(eventOf({
     accessToken: 'cognito-access-token',
     code: '123456',
   })));
@@ -88,18 +93,112 @@ test('verify calls VerifySoftwareToken and does not set preferred MFA', async ()
   assert.equal(result.verified, true);
   assert.equal(result.enrollment, true);
   assert.equal(result.preferredMfaEnabled, false);
+  assert.equal(result.preferredMfa, null);
   assert.equal(calls[0].target, 'AWSCognitoIdentityProviderService.VerifySoftwareToken');
   assert.equal(calls[0].hasAccessToken, true);
+  assert.equal(calls[1].target, 'AWSCognitoIdentityProviderService.SetUserMFAPreference');
+  assert.deepEqual(calls[1].keys, ['AccessToken', 'SoftwareTokenMfaSettings']);
   const preference = await handleMfaSetPreference();
   assert.equal(preference.ok, false);
   assert.equal(preference.statusCode, 403);
   assert.equal(preference.error, 'cognito_preferred_mfa_disabled');
 });
 
+test('verify enable-without-prefer sends Enabled true and PreferredMfa false', async () => {
+  const payloads = [];
+  const prev = globalThis.fetch;
+  globalThis.fetch = async (_url, init = {}) => {
+    const headers = init.headers || {};
+    const target = headers['x-amz-target'] || '';
+    const parsed = init.body ? JSON.parse(init.body) : {};
+    payloads.push({ target, parsed });
+    if (String(target).endsWith('VerifySoftwareToken')) {
+      return { ok: true, status: 200, text: async () => JSON.stringify({ Status: 'SUCCESS' }) };
+    }
+    if (String(target).endsWith('SetUserMFAPreference')) {
+      return { ok: true, status: 200, text: async () => JSON.stringify({}) };
+    }
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ UserMFASettingList: ['SOFTWARE_TOKEN_MFA'] }),
+    };
+  };
+  try {
+    const result = await handleMfaVerify(eventOf({ accessToken: 'cognito-access-token', code: '123456' }));
+    assert.equal(result.ok, true);
+    const enable = payloads.find((row) => String(row.target).endsWith('SetUserMFAPreference'));
+    assert.equal(enable.parsed.SoftwareTokenMfaSettings.Enabled, true);
+    assert.equal(enable.parsed.SoftwareTokenMfaSettings.PreferredMfa, false);
+    assert.equal(Object.prototype.hasOwnProperty.call(enable.parsed, 'SMSMfaSettings'), false);
+  } finally {
+    globalThis.fetch = prev;
+  }
+});
+
+test('status treats UserMFASettingList as enrollment and ignores PreferredMfaSetting', async () => {
+  const cases = [
+    { list: ['SOFTWARE_TOKEN_MFA'], preferred: null, enrolled: true },
+    { list: ['SOFTWARE_TOKEN_MFA'], preferred: 'SOFTWARE_TOKEN_MFA', enrolled: true },
+    { list: [], preferred: null, enrolled: false },
+    { list: [], preferred: 'SOFTWARE_TOKEN_MFA', enrolled: false },
+  ];
+  for (const row of cases) {
+    const { result } = await withCognito(handleMfaStatus, [
+      { body: { UserMFASettingList: row.list, PreferredMfaSetting: row.preferred } },
+      { body: { Credentials: [] } },
+    ], () => handleMfaStatus(eventOf({ accessToken: 'cognito-access-token' })));
+    assert.equal(result.ok, true, JSON.stringify(row));
+    assert.equal(result.totpEnrolled, row.enrolled, JSON.stringify(row));
+    assert.equal(result.preferredMfa, row.preferred);
+    assert.equal(result.cognitoMfaPreferred, false);
+  }
+});
+
+test('financial step-up recognizes SOFTWARE_TOKEN_MFA without preferred MFA', async () => {
+  const missing = evaluateCognitoTotpEnrollment({ UserMFASettingList: [], PreferredMfaSetting: null });
+  assert.equal(missing.totpEnrolled, false);
+  const enrolledUnset = evaluateCognitoTotpEnrollment({
+    UserMFASettingList: ['SOFTWARE_TOKEN_MFA'],
+    PreferredMfaSetting: null,
+  });
+  assert.equal(enrolledUnset.totpEnrolled, true);
+  assert.equal(enrolledUnset.preferredMfa, null);
+  const enrolledPreferred = evaluateCognitoTotpEnrollment({
+    UserMFASettingList: ['SOFTWARE_TOKEN_MFA'],
+    PreferredMfaSetting: 'SOFTWARE_TOKEN_MFA',
+  });
+  assert.equal(enrolledPreferred.totpEnrolled, true);
+
+  const unenrolled = await withCognito(handleMfaStepUp, [{
+    body: { UserMFASettingList: [], PreferredMfaSetting: null },
+  }], () => handleMfaStepUp(eventOf({
+    accessToken: 'cognito-access-token',
+    code: '123456',
+  })));
+  assert.equal(unenrolled.result.ok, false);
+  assert.equal(unenrolled.result.error, 'totp_not_enrolled');
+  assert.equal(unenrolled.calls.length, 1);
+  assert.equal(unenrolled.calls[0].target, 'AWSCognitoIdentityProviderService.GetUser');
+
+  const recognized = await withCognito(handleMfaStepUp, [
+    { body: { UserMFASettingList: ['SOFTWARE_TOKEN_MFA'] } },
+    { body: { Status: 'SUCCESS' } },
+  ], () => handleMfaStepUp(eventOf({
+    accessToken: 'cognito-access-token',
+    code: '654321',
+    check_intake_item_id: 'a3a4a153-46e1-4c28-a273-79a9bd04f3a6',
+  })));
+  assert.notEqual(recognized.result.error, 'totp_not_enrolled');
+  assert.equal(recognized.calls[0].target, 'AWSCognitoIdentityProviderService.GetUser');
+  assert.equal(recognized.calls[1].target, 'AWSCognitoIdentityProviderService.VerifySoftwareToken');
+});
+
 test('enroll path does not log or persist SecretCode', () => {
   const files = [
     'aws/functions/api/auth-mfa.mjs',
     'src/lib/awsMfa.ts',
+    'src/lib/totpEnrollment.ts',
     'src/lib/totpQr.ts',
     'src/components/auth/TotpManagerCard.tsx',
     'src/components/auth/StepUpDialog.tsx',

@@ -63,14 +63,37 @@ const otpauthUri = (secret, email) => {
   return `otpauth://totp/${issuer}:${label}?secret=${encodeURIComponent(secret)}&issuer=${issuer}&digits=6&period=30`;
 };
 
+/**
+ * Cognito enrollment is UserMFASettingList, not PreferredMfaSetting.
+ * VerifySoftwareToken SUCCESS associates a token; SOFTWARE_TOKEN_MFA is only
+ * listed after SetUserMFAPreference({ Enabled: true }). PreferredMfa may stay false.
+ */
+export const evaluateCognitoTotpEnrollment = (user = {}) => {
+  const list = user.UserMFASettingList || user.userMFASettingList || [];
+  const preferred = user.PreferredMfaSetting || user.preferredMfaSetting || null;
+  return {
+    totpEnrolled: Array.isArray(list) && list.includes('SOFTWARE_TOKEN_MFA'),
+    preferredMfa: preferred || null,
+    userMfaSettingList: Array.isArray(list) ? list : [],
+  };
+};
+
+const enableSoftwareTokenWithoutPreferred = async (accessToken) => {
+  await cognitoJson('SetUserMFAPreference', {
+    AccessToken: accessToken,
+    SoftwareTokenMfaSettings: {
+      Enabled: true,
+      PreferredMfa: false,
+    },
+  });
+};
+
 export const handleMfaStatus = async (event) => {
   const accessToken = accessTokenOf(event);
   if (!accessToken) return { ok: false, statusCode: 400, error: 'missing_access_token', ...financialGate() };
   try {
     const user = await cognitoJson('GetUser', { AccessToken: accessToken });
-    const list = user.UserMFASettingList || [];
-    const preferred = user.PreferredMfaSetting || null;
-    const software = list.includes('SOFTWARE_TOKEN_MFA');
+    const { totpEnrolled, preferredMfa } = evaluateCognitoTotpEnrollment(user);
     let passkeyCount = 0;
     try {
       const listed = await cognitoJson('ListWebAuthnCredentials', { AccessToken: accessToken });
@@ -81,12 +104,12 @@ export const handleMfaStatus = async (event) => {
     return {
       ok: true,
       statusCode: 200,
-      totpEnrolled: software,
+      totpEnrolled,
       passkeyCount,
-      preferredMfa: preferred,
-      factors: software ? [{ id: 'software-token', factorType: 'totp', status: 'verified' }] : [],
+      preferredMfa,
+      factors: totpEnrolled ? [{ id: 'software-token', factorType: 'totp', status: 'verified' }] : [],
       privilegedAuth: privilegedAuthPolicy(),
-      enrollment: evaluatePrivilegedEnrollment({ totpEnrolled: software, passkeyCount }),
+      enrollment: evaluatePrivilegedEnrollment({ totpEnrolled, passkeyCount }),
       ...financialGate(),
     };
   } catch (error) {
@@ -143,19 +166,46 @@ export const handleMfaVerify = async (event) => {
       FriendlyDeviceName: body.friendlyName || 'ChecksOps authenticator',
     });
     const success = String(result.Status || '').toUpperCase() === 'SUCCESS';
+    if (!success) {
+      return {
+        ok: false,
+        statusCode: 401,
+        verified: false,
+        enrollment: false,
+        preferredMfaEnabled: false,
+        ...financialGate(),
+      };
+    }
+    try {
+      await enableSoftwareTokenWithoutPreferred(accessToken);
+    } catch (error) {
+      return {
+        ok: false,
+        statusCode: error.statusCode || 400,
+        error: 'mfa_enable_without_preferred_failed',
+        verified: true,
+        enrollment: false,
+        preferredMfaEnabled: false,
+        message: 'Authenticator code was accepted but SOFTWARE_TOKEN_MFA was not enabled. Preferred MFA was not set.',
+        ...financialGate(),
+      };
+    }
+    const user = await cognitoJson('GetUser', { AccessToken: accessToken });
+    const enrollment = evaluateCognitoTotpEnrollment(user);
     let recorded = false;
-    if (success && (body.action_key || body.actionKey)) {
+    if (enrollment.totpEnrolled && (body.action_key || body.actionKey)) {
       const log = await recordStepUpLog(event, body).catch(() => null);
       recorded = Boolean(log?.ok);
     }
     return {
-      ok: success,
-      statusCode: success ? 200 : 401,
-      verified: success,
-      enrollment: true,
+      ok: enrollment.totpEnrolled,
+      statusCode: enrollment.totpEnrolled ? 200 : 409,
+      verified: true,
+      enrollment: enrollment.totpEnrolled,
       recorded,
       preferredMfaEnabled: false,
-      remaining: 'Preferred MFA is intentionally off so EMAIL_OTP login is unchanged. Financial flags stay false.',
+      preferredMfa: enrollment.preferredMfa,
+      remaining: 'SOFTWARE_TOKEN_MFA is enabled without preferring it so EMAIL_OTP login is unchanged. Financial flags stay false.',
       ...financialGate(),
     };
   } catch (error) {
@@ -264,7 +314,7 @@ export const handleMfaStepUp = async (event) => {
   }
   try {
     const user = await cognitoJson('GetUser', { AccessToken: accessToken });
-    const enrolled = (user.UserMFASettingList || []).includes('SOFTWARE_TOKEN_MFA');
+    const enrolled = evaluateCognitoTotpEnrollment(user).totpEnrolled;
     if (!enrolled) {
       return {
         ok: false,

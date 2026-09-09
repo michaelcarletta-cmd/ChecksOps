@@ -5,6 +5,8 @@ export type AwsMfaStatus = {
   preferredMfa: string | null;
 };
 
+export { awsTotpEnrollmentDisplay } from "@/lib/totpEnrollment";
+
 const readSession = (sessionKey = AWS_STAGING_AUTH_SESSION_KEY): {
   accessToken: string | null;
   idToken: string | null;
@@ -50,7 +52,7 @@ export const awsMfaAvailable = () => isAwsStaging() && Boolean(awsApiBaseUrl());
 export const getAwsMfaStatus = async (): Promise<AwsMfaStatus> => {
   const payload = await post("/auth/mfa/status");
   return {
-    totpEnrolled: Boolean(payload.totpEnrolled),
+    totpEnrolled: payload.totpEnrolled === true,
     preferredMfa: payload.preferredMfa ? String(payload.preferredMfa) : null,
   };
 };
