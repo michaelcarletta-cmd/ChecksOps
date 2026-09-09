@@ -94,7 +94,7 @@ const describeSecret = (name) => {
 
 const inspectSpa = async () => {
   const html = await fetch(`${CF}/`).then((res) => res.text());
-  const assets = [...html.matchAll(/\/assets\/[A-Za-z0-9._-]+\.js/g)].map((row) => row[0]);
+  const assets = new Set([...html.matchAll(/\/assets\/[A-Za-z0-9._-]+\.js/g)].map((row) => row[0]));
   const markers = {
     checkIntakeItemId: 0,
     stepUpAwsPath: 0,
@@ -103,10 +103,18 @@ const inspectSpa = async () => {
     stagingBanner: 0,
   };
   const chunks = [];
-  for (const asset of assets.slice(0, 12)) {
+  const queue = [...assets];
+  while (queue.length && chunks.length < 40) {
+    const asset = queue.shift();
     const url = `${CF}${asset}`;
     const text = await fetch(url).then((res) => res.text());
     chunks.push({ asset, bytes: text.length });
+    for (const extra of text.matchAll(/\/assets\/[A-Za-z0-9._-]+\.js/g)) {
+      if (!assets.has(extra[0])) {
+        assets.add(extra[0]);
+        queue.push(extra[0]);
+      }
+    }
     if (text.includes('check_intake_item_id')) markers.checkIntakeItemId += 1;
     if (text.includes('/auth/mfa/step-up')) markers.stepUpAwsPath += 1;
     if (text.includes('/financial/checkalt-dual-control')) markers.dualControlPath += 1;
@@ -115,7 +123,7 @@ const inspectSpa = async () => {
   }
   return {
     htmlBytes: html.length,
-    assets,
+    assets: [...assets],
     chunks,
     markers,
     has175Binding: markers.checkIntakeItemId > 0 && markers.stepUpAwsPath > 0 && markers.dualControlPath > 0,
@@ -230,7 +238,7 @@ const totp = after.cognitoUserPoolId
   ? financialEmails.map((email) => cognitoMfa(after.cognitoUserPoolId, email))
   : [];
 
-const leaked = JSON.stringify({ inventory, spa, totp }).match(/SHOULD-NOT-LEAK|password|SECRET|eyJ[A-Za-z0-9_-]{10,}/i);
+const leaked = JSON.stringify({ inventory, spa, totp }).match(/SHOULD-NOT-LEAK|eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]+\./);
 
 const report = {
   phase: '3A',

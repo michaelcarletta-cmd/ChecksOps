@@ -157,6 +157,16 @@ export const classifyCheckAltHost = (hostname, { liveReadable = true } = {}) => 
   };
 };
 
+const asRoleList = (value) => {
+  if (Array.isArray(value)) return value.map((role) => String(role || '').toLowerCase()).filter(Boolean);
+  if (value == null) return [];
+  return String(value)
+    .replace(/[{}"]/g, '')
+    .split(',')
+    .map((role) => role.trim().toLowerCase())
+    .filter(Boolean);
+};
+
 export const classifySql65Compatibility = ({
   columns = [],
   indexes = [],
@@ -176,20 +186,23 @@ export const classifySql65Compatibility = ({
     && grants.canUpdate === false
     && grants.canDelete === false
     && grants.rlsEnabled === true;
-  const noDrift = presentColumns.length === 0
+  const schemaUnchanged = presentColumns.length === 0
     && presentIndexes.length === 0
     && presentFunctions.length === 0
     && presentPolicies.length === 0;
-  const safe = noIdempotency && grantsSafe && legacyCountOk && noDrift;
+  const schemaSafe = noIdempotency && grantsSafe && schemaUnchanged;
+  const safe = schemaSafe && legacyCountOk;
   return {
-    status: safe ? 'SAFE_NOT_APPLIED' : 'DRIFT_OR_UNSAFE',
+    status: safe ? 'SAFE_NOT_APPLIED' : (schemaSafe ? 'SCHEMA_SAFE_COUNT_DRIFT' : 'DRIFT_OR_UNSAFE'),
+    schemaSafeToApplyLater: schemaSafe,
     safeToApplyLater: safe,
     applied: presentColumns.length > 0 || presentFunctions.length > 0 || presentPolicies.length > 0,
     expectedLegacyRows: EXPECTED_CHECKALT_DEPOSITS,
     liveRowCount: rowCount,
     legacyCountOk,
     noExistingIdempotencyColumnsOrIndexes: noIdempotency,
-    noDriftSincePhase26: noDrift,
+    noSchemaDriftSincePhase26: schemaUnchanged,
+    noDriftSincePhase26: schemaUnchanged && legacyCountOk,
     presentColumns,
     presentIndexes,
     presentFunctions,
@@ -453,6 +466,21 @@ export async function runPhase3aInventory({
       const count = Number((await client.query(
         'SELECT count(*)::bigint AS n FROM public.checkalt_deposits',
       )).rows[0]?.n ?? 0);
+      const byTenant = (await client.query(
+        `SELECT coalesce(t.slug, 'unknown') AS slug,
+                count(*)::int AS n,
+                count(*) FILTER (
+                  WHERE d.checkalt_reference IS NOT NULL AND btrim(d.checkalt_reference) <> ''
+                )::int AS with_reference
+         FROM public.checkalt_deposits d
+         LEFT JOIN public.tenants t ON t.id = d.tenant_id
+         GROUP BY 1
+         ORDER BY 1`,
+      )).rows.map((row) => ({
+        slug: row.slug,
+        count: Number(row.n),
+        withReference: Number(row.with_reference),
+      }));
       const compatibility = classifySql65Compatibility({
         columns: depositCols.names,
         indexes,
@@ -475,6 +503,7 @@ export async function runPhase3aInventory({
         currentIndexes: indexes,
         currentPolicies: policies.map((row) => ({ name: row.policyname, cmd: row.cmd })),
         currentFunctions: functions,
+        visibleByTenant: byTenant,
         compatibility,
       };
     }).catch((error) => ({
@@ -501,7 +530,7 @@ export async function runPhase3aInventory({
       )).rows.map((row) => {
         const roles = [...new Set([
           String(row.tenant_role || '').toLowerCase(),
-          ...((row.platform_roles || []).map((role) => String(role || '').toLowerCase())),
+          ...asRoleList(row.platform_roles),
         ])].filter(Boolean);
         const financial = roles.some((role) => ['owner', 'admin', 'manager'].includes(role));
         return {
@@ -599,15 +628,16 @@ export async function runPhase3aInventory({
           && result.freedomTenantAccount?.enabled !== false
           && result.freedomTenantAccount?.ssoUserIdPresent === true
           && result.freedomTenantAccount?.depositAccountLast4 != null;
-        const qualifiesWithoutImageBytes = fullyReviewed
-          && endorsementsComplete
-          && noDepositRow
-          && noReference
-          && frontPathOk
-          && rearPathOk
-          && tenantAccountPresent
-          && Number.isInteger(amountCents)
-          && amountCents > 0;
+        const fails = [];
+        if (!fullyReviewed) fails.push('not_fully_reviewed');
+        if (!endorsementsComplete) fails.push('endorsements_incomplete');
+        if (!noDepositRow) fails.push('existing_checkalt_deposits_row');
+        if (!noReference) fails.push('existing_checkalt_reference');
+        if (!frontPathOk) fails.push('front_deposit_jpeg_path_missing');
+        if (!rearPathOk) fails.push('rear_deposit_jpeg_path_missing');
+        if (!tenantAccountPresent) fails.push('freedom_tenant_account_incomplete');
+        if (!Number.isInteger(amountCents) || amountCents <= 0) fails.push('invalid_amount');
+        if (!(Number.isInteger(amountCents) && amountCents <= FIRST_TEST_MAX_CENTS)) fails.push('amount_above_5');
         return {
           id: row.id,
           amountCents,
@@ -623,7 +653,8 @@ export async function runPhase3aInventory({
           frontJpegPath: frontPathOk,
           rearDepositJpegPath: rearPathOk,
           tenantAccountPresent,
-          qualifiesWithoutImageBytes,
+          qualifiesWithoutImageBytes: fails.filter((name) => name !== 'amount_above_5').length === 0,
+          failReasons: fails,
           le5: Number.isInteger(amountCents) && amountCents <= FIRST_TEST_MAX_CENTS,
         };
       });
@@ -659,6 +690,15 @@ export async function runPhase3aInventory({
         qualifyingPathLe5Count: le5.length,
         qualifyingLe5: qualifyingLe5,
         otherwiseReadyAbove5Count: mapped.filter((row) => !row.le5 && row.qualifiesWithoutImageBytes).length,
+        readyChecks: mapped.map((row) => ({
+          id: row.id,
+          amountCents: row.amountCents,
+          amountDollars: row.amountDollars,
+          status: row.status,
+          checkStage: row.checkStage,
+          depositRecommendation: row.depositRecommendation,
+          failReasons: row.failReasons,
+        })),
         newLowValueCheckRequired: qualifyingLe5.length === 0,
         imageInspected: inspectImages,
       };

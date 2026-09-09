@@ -54,7 +54,25 @@ test('SQL 65 compatibility is safe only when dark and 58 legacy rows remain', ()
   });
   assert.equal(safe.status, 'SAFE_NOT_APPLIED');
   assert.equal(safe.safeToApplyLater, true);
+  assert.equal(safe.schemaSafeToApplyLater, true);
   assert.equal(safe.doNotApplyNow, true);
+  const countDrift = classifySql65Compatibility({
+    columns: ['id', 'check_intake_item_id', 'tenant_id', 'checkalt_reference', 'status', 'amount'],
+    indexes: ['idx_checkalt_deposits_check_intake'],
+    functions: [],
+    policies: ['Tenant members can view their checkalt deposits'],
+    grants: {
+      canSelect: true,
+      canInsert: false,
+      canUpdate: false,
+      canDelete: false,
+      rlsEnabled: true,
+    },
+    rowCount: 69,
+  });
+  assert.equal(countDrift.status, 'SCHEMA_SAFE_COUNT_DRIFT');
+  assert.equal(countDrift.schemaSafeToApplyLater, true);
+  assert.equal(countDrift.safeToApplyLater, false);
 
   const drifted = classifySql65Compatibility({
     columns: ['id', 'idempotency_key'],
