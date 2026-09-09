@@ -30,6 +30,7 @@ export async function reconcileProductionMoovTransfer({
       const got = await productionMoovFetch({
         credentials,
         path: `/accounts/${facilitator}/transfers/${row.provider_transfer_id}`,
+        mode: 'execute',
         scopes: [`/accounts/${facilitator}/transfers.read`],
         fetchImpl,
       });

@@ -16,7 +16,54 @@ export class ProductionMoovError extends Error {
 
 const tokenCache = new Map();
 
-const assertProductionCredentials = (credentials) => {
+const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
+/** GET paths allowed in read mode. OAuth token POST is handled separately. */
+export const PRODUCTION_MOOV_READ_PATH_RE = new RegExp(
+  '^/accounts/[^/?#]+'
+  + '(?:'
+    + '|/capabilities(?:/[A-Za-z0-9._-]+)?'
+    + '|/wallets(?:/[^/?#]+)?'
+    + '|/bank-accounts(?:/[^/?#]+)?'
+    + '|/payment-methods(?:/[^/?#]+)?'
+    + '|/transfers/[^/?#]+'
+  + ')?$',
+);
+
+export const isProductionMoovReadPath = (path) => PRODUCTION_MOOV_READ_PATH_RE.test(String(path || ''));
+
+export const assertReadOnlyMoovRequest = ({ method = 'GET', path } = {}) => {
+  const verb = String(method || 'GET').toUpperCase();
+  if (WRITE_METHODS.has(verb)) {
+    const error = new ProductionMoovError(
+      'Read-only Moov authorization cannot POST, PUT, PATCH, or DELETE',
+      403,
+      { error: 'read_only_method_denied', method: verb, path: path || null },
+    );
+    error.code = 'read_only_method_denied';
+    throw error;
+  }
+  if (verb !== 'GET') {
+    const error = new ProductionMoovError(
+      'Read-only Moov authorization allows GET only',
+      403,
+      { error: 'read_only_method_denied', method: verb, path: path || null },
+    );
+    error.code = 'read_only_method_denied';
+    throw error;
+  }
+  if (!isProductionMoovReadPath(path)) {
+    const error = new ProductionMoovError(
+      'Path is not on the production Moov GET allowlist',
+      403,
+      { error: 'read_only_path_denied', method: verb, path: path || null },
+    );
+    error.code = 'read_only_path_denied';
+    throw error;
+  }
+};
+
+const assertProductionCredentials = (credentials, { mode } = {}) => {
   if (!credentials || credentials.environment !== 'production') {
     throw new ProductionMoovError('Production Moov credentials are required', 503, { error: 'production_secret_missing' });
   }
@@ -26,8 +73,11 @@ const assertProductionCredentials = (credentials) => {
   if (credentials.origin !== PRODUCTION_MOOV_ORIGIN) {
     throw new ProductionMoovError('Unapproved Moov origin', 503, { error: 'production_origin_refused' });
   }
-  if (!credentials.publicKey || !credentials.secretKey || !credentials.platformAccountId) {
+  if (!credentials.publicKey || !credentials.secretKey) {
     throw new ProductionMoovError('Production Moov credentials incomplete', 503, { error: 'production_secret_missing' });
+  }
+  if (mode === 'execute' && !credentials.platformAccountId) {
+    throw new ProductionMoovError('Production Moov facilitator account is required', 503, { error: 'production_secret_missing' });
   }
   if (String(credentials.publicKey).startsWith('MOOV_SANDBOX')
     || String(credentials.secretKey).includes('SANDBOX')) {
@@ -35,8 +85,8 @@ const assertProductionCredentials = (credentials) => {
   }
 };
 
-export async function productionMoovToken({ credentials, scopes = ['/accounts.read'], fetchImpl = fetch } = {}) {
-  assertProductionCredentials(credentials);
+export async function productionMoovToken({ credentials, scopes = ['/accounts.read'], fetchImpl = fetch, mode } = {}) {
+  assertProductionCredentials(credentials, { mode });
   const scope = Array.isArray(scopes) ? scopes.join(' ') : String(scopes || '');
   const cacheKey = `${credentials.publicKey}|${credentials.origin}|${scope}`;
   const cached = tokenCache.get(cacheKey);
@@ -72,9 +122,17 @@ export async function productionMoovFetch({
   idempotencyKey = null,
   scopes,
   fetchImpl = fetch,
+  mode,
 } = {}) {
-  assertProductionCredentials(credentials);
-  const token = await productionMoovToken({ credentials, scopes, fetchImpl });
+  if (mode !== 'read' && mode !== 'execute') {
+    throw new ProductionMoovError('Moov HTTP mode must be read or execute', 500, { error: 'moov_mode_required' });
+  }
+  const verb = String(method || 'GET').toUpperCase();
+  if (mode === 'read') {
+    assertReadOnlyMoovRequest({ method: verb, path });
+  }
+  assertProductionCredentials(credentials, { mode });
+  const token = await productionMoovToken({ credentials, scopes, fetchImpl, mode });
   const headers = {
     Authorization: `Bearer ${token}`,
     'Content-Type': 'application/json',
@@ -84,7 +142,7 @@ export async function productionMoovFetch({
   };
   if (idempotencyKey) headers['X-Idempotency-Key'] = String(idempotencyKey);
   const response = await fetchImpl(`${PRODUCTION_MOOV_HOST}${path}`, {
-    method,
+    method: verb,
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),
   });

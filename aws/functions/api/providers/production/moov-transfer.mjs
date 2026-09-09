@@ -245,6 +245,7 @@ export async function handleProductionMoovTransferCreate({
       credentials: secrets.credentials,
       path: `/accounts/${facilitator}/transfers`,
       method: 'POST',
+      mode: 'execute',
       scopes: [`/accounts/${facilitator}/transfers.write`],
       idempotencyKey: providerKey,
       fetchImpl,

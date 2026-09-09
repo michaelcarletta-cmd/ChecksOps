@@ -436,7 +436,9 @@ export const handleProviderRequest = async (event, path, method, deps = {}) => {
 
 export const unusedLiveReadGuard = () => {
   if (providerLiveReadsEnabled()) {
-    return { warning: 'AWS_PROVIDER_LIVE_READS_ENABLED is unused in Tranche 4; adapters never call providers.' };
+    return {
+      warning: 'AWS_PROVIDER_LIVE_READS_ENABLED permits production Moov GET-only handlers. It does not authorize transfers, funding, onboarding, or other provider writes.',
+    };
   }
   return null;
 };

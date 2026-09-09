@@ -1,7 +1,7 @@
 import { FINANCIAL_ROLES, roleAllowsFinancial } from '../../financial-authz.mjs';
 import { membershipForTenant } from '../../financial-ownership.mjs';
 import { financialPermissionsActivated } from '../../financial-flags.mjs';
-import { productionMoovExecutionAllowed } from './moov-holds.mjs';
+import { productionMoovExecutionAllowed, productionMoovReadsAllowed } from './moov-holds.mjs';
 
 export const MOOV_TOTP_ACTION = 'disbursement.send';
 export const MOOV_DUAL_CONTROL_ACTION = 'moov.dual_control';
@@ -175,6 +175,68 @@ export const evaluateMoovProductionAuthorization = ({
               : 'Moov production authorization satisfied. Holds must still be lifted by a human.',
   };
 };
+
+export const evaluateMoovProductionReadAuthorization = ({
+  identityOk,
+  membershipOk,
+  roles = [],
+} = {}) => {
+  const roleOk = roleAllowsFinancial(roles);
+  const flagsOk = productionMoovReadsAllowed() || productionMoovExecutionAllowed();
+  const canRead = Boolean(identityOk && membershipOk && roleOk && flagsOk);
+  return {
+    identityOk: Boolean(identityOk),
+    membershipOk: Boolean(membershipOk),
+    roleOk,
+    flagsOk,
+    liveReadsEnabled: productionMoovReadsAllowed(),
+    canReadProductionMoov: canRead,
+    canExecuteProductionMoov: false,
+    canExecuteProduction: false,
+    message: !identityOk
+      ? 'Cognito identity is required.'
+      : !membershipOk
+        ? 'Tenant membership of the production Moov account is required. Browser Moov account ids are ignored.'
+        : !roleOk
+          ? 'Owner/admin/manager is required to inspect production Moov. Operator cannot read live provider state.'
+          : !flagsOk
+            ? 'Production Moov live reads remain off.'
+            : 'Moov production read authorization satisfied. Money execution remains blocked unless money flags are lifted separately.',
+  };
+};
+
+export async function authorizeMoovProductionRead({
+  client,
+  mapping,
+  memberships,
+  tenantId,
+} = {}) {
+  const userId = mapping?.application_user_id;
+  if (!userId) return denyMoovAuthz('identity_required', { statusCode: 401 });
+  const ownership = membershipForTenant(memberships, tenantId);
+  if (!tenantId || !ownership) {
+    return denyMoovAuthz('cross_tenant_denied', {
+      message: 'Authenticated user is not a member of the resource tenant. Browser tenant_id is not authority.',
+    });
+  }
+  const roles = await loadTenantRole(client, userId, tenantId);
+  const evaluation = evaluateMoovProductionReadAuthorization({
+    identityOk: true,
+    membershipOk: true,
+    roles,
+  });
+  if (!evaluation.canReadProductionMoov) {
+    const error = !evaluation.roleOk ? 'financial_unauthorized' : 'production_read_blocked';
+    return denyMoovAuthz(error, { evaluation, tenantRole: ownership.role });
+  }
+  return {
+    ok: true,
+    evaluation,
+    membership: ownership,
+    roles,
+    tenantId,
+  };
+}
 
 export async function authorizeMoovProduction({
   client,
