@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { handler } from '../functions/api/index.mjs';
 import {
@@ -12,6 +15,8 @@ import {
   parseSelect,
   embedColumnSql,
   relatedFk,
+  resolvePageLimit,
+  resolvePageOffset,
 } from '../functions/api/data.mjs';
 import { LOOKUP_MAPPING_SQL } from '../functions/api/identity.mjs';
 import {
@@ -108,6 +113,122 @@ test('has-many star embeds do not pass * through ident', () => {
   assert.deepEqual(parsed.embeds[0].columns, ['*']);
   assert.equal(embedColumnSql(parsed.embeds[0].columns), '*');
   assert.equal(embedColumnSql(parsed.embeds[1].columns), 'id, status, last_status_payload');
+});
+
+test('resolvePageLimit treats null/omitted/zero as default 200, not LIMIT 1', () => {
+  assert.equal(resolvePageLimit(undefined), 200);
+  assert.equal(resolvePageLimit(null), 200);
+  assert.equal(resolvePageLimit(''), 200);
+  assert.equal(resolvePageLimit(0), 200);
+  assert.equal(resolvePageLimit(-4), 200);
+  assert.equal(resolvePageLimit(Number.NaN), 200);
+  assert.equal(resolvePageLimit(1), 1);
+  assert.equal(resolvePageLimit(200), 200);
+  assert.equal(resolvePageLimit(500), 500);
+  assert.equal(resolvePageLimit(2000), 500);
+  assert.equal(resolvePageOffset(null), 0);
+  assert.equal(resolvePageOffset(undefined), 0);
+  assert.equal(resolvePageOffset(25), 25);
+});
+
+test('AWS client omits null limit and offset from the query body', () => {
+  const src = fs.readFileSync(
+    path.join(path.dirname(fileURLToPath(import.meta.url)), '../../src/integrations/aws/client.ts'),
+    'utf8',
+  );
+  assert.match(src, /export function compactSelectPaging/);
+  assert.match(src, /\.\.\.compactSelectPaging\(state\.limit, state\.offset\)/);
+  assert.match(src, /if \(limit !== null && limit !== undefined\) paging\.limit = limit/);
+  assert.match(src, /if \(offset !== null && offset !== undefined\) paging\.offset = offset/);
+  assert.equal(src.includes('limit: state.limit,\n        offset: state.offset,'), false);
+});
+
+test('review browser-equivalent null limit selects default 200 rows, not LIMIT 1', async () => {
+  const FREEDOM = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
+  const deposited = {
+    id: 'f62ce528-5566-4587-bf01-3d82d681b183',
+    check_number: '2000348108',
+    check_stage: 'deposited',
+    status: 'deposited',
+    tenant_id: FREEDOM,
+    created_at: '2026-09-08T00:00:00.000Z',
+  };
+  const reviewRows = Array.from({ length: 30 }, (_, i) => ({
+    id: `00000000-0000-4000-8000-${String(i + 1).padStart(12, '0')}`,
+    check_number: `R${1000 + i}`,
+    check_stage: 'review',
+    status: 'needs_review',
+    tenant_id: FREEDOM,
+    created_at: `2026-09-07T00:00:${String(i).padStart(2, '0')}.000Z`,
+  }));
+  const catalog = [deposited, ...reviewRows];
+  const isInReviewQueue = (check) => {
+    const stage = check.check_stage;
+    const s = check.status;
+    if (['loss_draft', 'reissue', 'branch', 'deposited', 'endorsing'].includes(stage)) return false;
+    if (['loss_draft_required', 'reissue_requested', 'branch_deposit_required', 'deposited', 'endorsements_in_progress', 'approved_for_deposit'].includes(s)) return false;
+    return stage === 'review' || ['needs_review', 'in_review', 'ocr_complete', 'manual_review_required', 'endorsements_complete', 'uploaded'].includes(s);
+  };
+
+  const run = async (limit) => {
+    const client = {
+      queries: [],
+      connect: async () => {},
+      query: async (sql, params) => {
+        client.queries.push({ sql, params });
+        if (sql === 'BEGIN' || sql === 'ROLLBACK') return { rows: [] };
+        if (sql.startsWith('SELECT set_config')) return { rows: [{ set_config: params[1] }] };
+        if (sql === LOOKUP_MAPPING_SQL) {
+          return { rows: [{
+            application_user_id: APP_ID,
+            cognito_sub: COGNITO_SUB,
+            email: 'checksops-tester@freedomadj.com',
+            status: 'active',
+          }] };
+        }
+        if (sql.includes('FROM public.check_intake_items') && sql.includes('LIMIT')) {
+          const limitN = Number((sql.match(/LIMIT (\d+)/) || [])[1]);
+          return { rows: catalog.slice(0, limitN) };
+        }
+        return { rows: [] };
+      },
+      end: async () => {},
+    };
+    const body = {
+      table: 'check_intake_items',
+      select: '*, check_payees(*)',
+      filters: [{ column: 'tenant_id', op: 'eq', value: FREEDOM }],
+      order: { column: 'created_at', ascending: false },
+    };
+    if (limit !== undefined) body.limit = limit;
+    const result = await handleDataQuery(jwtEvent('/data/query', 'POST', body), depsFor(client));
+    const selectSql = client.queries.find((q) => String(q.sql).includes('FROM public.check_intake_items') && String(q.sql).includes('LIMIT'))?.sql || '';
+    return { result, selectSql };
+  };
+
+  const omitted = await run(undefined);
+  assert.equal(omitted.result.ok, true);
+  assert.match(omitted.selectSql, /LIMIT 200/);
+  assert.equal(omitted.result.data.length, 31);
+  assert.equal(omitted.result.data.filter(isInReviewQueue).length, 30);
+
+  const nulled = await run(null);
+  assert.equal(nulled.result.ok, true);
+  assert.match(nulled.selectSql, /LIMIT 200/);
+  assert.doesNotMatch(nulled.selectSql, /LIMIT 1\b/);
+  assert.equal(nulled.result.data.length, 31);
+  assert.equal(nulled.result.data.filter(isInReviewQueue).length, 30);
+  assert.equal(nulled.result.data.some((row) => row.check_number === '2000348108'), true);
+
+  const explicitOne = await run(1);
+  assert.match(explicitOne.selectSql, /LIMIT 1/);
+  assert.equal(explicitOne.result.data.length, 1);
+  assert.equal(explicitOne.result.data[0].check_number, '2000348108');
+  assert.equal(explicitOne.result.data.filter(isInReviewQueue).length, 0);
+
+  const explicit200 = await run(200);
+  assert.match(explicit200.selectSql, /LIMIT 200/);
+  assert.equal(explicit200.result.data.filter(isInReviewQueue).length, 30);
 });
 
 test('or parser supports PostgREST login/search expressions', () => {
