@@ -61,5 +61,16 @@ verify_jwt = false
 [functions.aws-staging-storage-bridge]
 verify_jwt = false
 
+# Public recipient secure-link functions. Token-auth, not user JWT.
+# Must stay verify_jwt=false so /pay-setup/:token can invoke them.
+[functions.moov-recipient-session]
+verify_jwt = false
+
+[functions.moov-recipient-kyc-update]
+verify_jwt = false
+
+[functions.moov-recipient-tos-accept]
+verify_jwt = false
+
 [functions.moov-recipient-bank-verify]
 verify_jwt = false
