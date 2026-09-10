@@ -32,6 +32,53 @@ interface DnsRecord {
   purpose?: string;
 }
 
+interface EmailSettings {
+  fromName?: string | null;
+  from_name?: string | null;
+  replyTo?: string | null;
+  reply_to?: string | null;
+  sendingDomain?: string | null;
+  sending_domain?: string | null;
+  fromAddress?: string | null;
+  from_address?: string | null;
+  fromLocalPart?: string | null;
+  sendingMode?: string | null;
+  sending_mode?: string | null;
+  domainStatus?: string | null;
+  domain_status?: string | null;
+  domainStatusLabel?: string | null;
+  dnsRecords?: DnsRecord[] | null;
+  dns_records?: DnsRecord[] | null;
+  mailFromRecords?: DnsRecord[] | null;
+  logoUrl?: string | null;
+  primaryColor?: string | null;
+  tenantName?: string | null;
+  canConfigure?: boolean;
+  domainFeatureEnabled?: boolean;
+  lastVerificationError?: string | null;
+  last_verification_error?: string | null;
+}
+
+interface FunctionErrorBody {
+  error?: string;
+  status?: string;
+  domainStatus?: string;
+  verified?: boolean;
+}
+
+interface BrandingPayload extends FunctionErrorBody {
+  settings?: EmailSettings | null;
+  branding?: Record<string, unknown> | null;
+}
+
+interface EmailPreview extends FunctionErrorBody {
+  html?: string;
+  from?: string;
+  replyTo?: string;
+  usingCustomFrom?: boolean;
+  fallbackFrom?: string;
+}
+
 const PLATFORM_FROM_ADDRESS = "noreply@checksops.com";
 
 const STATUS_LABELS: Record<string, string> = {
@@ -44,8 +91,18 @@ const STATUS_LABELS: Record<string, string> = {
   disabled: "Disabled",
 };
 
-function invokeFunction<T = any>(name: string, body: Record<string, unknown>) {
-  return supabase.functions.invoke(name, { body }) as Promise<{ data: T; error: any }>;
+async function invokeFunction<T extends FunctionErrorBody>(name: string, body: Record<string, unknown>): Promise<T> {
+  const { data, error } = await supabase.functions.invoke(name, { body });
+  if (error) throw error;
+  const payload = (data || {}) as T;
+  if (payload.error && !payload.status && payload.verified !== true) {
+    throw new Error(payload.error);
+  }
+  return payload;
+}
+
+function errorMessage(err: unknown, fallback: string) {
+  return err instanceof Error ? err.message : fallback;
 }
 
 function copyText(value: string) {
@@ -91,18 +148,15 @@ export function EmailSenderSettings() {
     enabled: !!tenantId,
     queryFn: async () => {
       if (aws) {
-        const { data, error } = await invokeFunction("tenant-email-branding-get", { tenantId });
-        if (error) throw error;
-        if ((data as any)?.error) throw new Error((data as any).error);
-        return data as any;
+        return invokeFunction<BrandingPayload>("tenant-email-branding-get", { tenantId });
       }
       const { data, error } = await supabase
-        .from("tenant_email_settings" as any)
+        .from("tenant_email_settings")
         .select("*")
         .eq("tenant_id", tenantId!)
         .maybeSingle();
       if (error) throw error;
-      return { settings: data, branding: null };
+      return { settings: (data as EmailSettings | null), branding: null };
     },
   });
 
@@ -138,20 +192,18 @@ export function EmailSenderSettings() {
   const fallbackFrom = `${tenantName} via ChecksOps <${PLATFORM_FROM_ADDRESS}>`;
   const customFrom = `${fromName || tenantName} <${fromLocal || "noreply"}@${domain || "notify.yourdomain.com"}>`;
   const previewFrom = isVerified ? customFrom : fallbackFrom;
-  const dnsRecords: DnsRecord[] = settings?.dnsRecords || settings?.dns_records || [];
-  const mailFromRecords: DnsRecord[] = settings?.mailFromRecords || [];
+  const allDns = useMemo<DnsRecord[]>(() => {
+    const dkim = settings?.dnsRecords || settings?.dns_records || [];
+    const mailFrom = settings?.mailFromRecords || [];
+    return [...dkim, ...mailFrom];
+  }, [settings]);
   const logoUrl = settings?.logoUrl || tenant?.logo_url || null;
   const primaryColor = settings?.primaryColor || tenant?.primary_color || "#1a56db";
 
   const { data: preview } = useQuery({
     queryKey: ["tenant-email-preview", tenantId, aws, isVerified, fromName],
     enabled: aws && !!tenantId,
-    queryFn: async () => {
-      const { data, error } = await invokeFunction("tenant-email-preview", { tenantId });
-      if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).error);
-      return data as { html?: string; from?: string; replyTo?: string; usingCustomFrom?: boolean; fallbackFrom?: string };
-    },
+    queryFn: () => invokeFunction<EmailPreview>("tenant-email-preview", { tenantId }),
   });
 
   const save = useMutation({
@@ -159,18 +211,15 @@ export function EmailSenderSettings() {
       if (!tenantId) throw new Error("No tenant");
       if (!canConfigure) throw new Error("Not authorized");
       if (aws) {
-        const { data, error } = await invokeFunction("tenant-email-branding-save", {
+        return invokeFunction<BrandingPayload>("tenant-email-branding-save", {
           tenantId,
           fromName: fromName.trim(),
           replyTo: replyTo.trim(),
           fromLocalPart: fromLocal.trim().toLowerCase(),
         });
-        if (error) throw error;
-        if ((data as any)?.error) throw new Error((data as any).error);
-        return data;
       }
       const { error } = await supabase
-        .from("tenant_email_settings" as any)
+        .from("tenant_email_settings")
         .upsert(
           {
             tenant_id: tenantId,
@@ -186,37 +235,31 @@ export function EmailSenderSettings() {
       qc.invalidateQueries({ queryKey: ["tenant-email-settings", tenantId] });
       qc.invalidateQueries({ queryKey: ["tenant-email-preview", tenantId] });
     },
-    onError: (err: any) => toast.error(err?.message || "Failed to save email settings"),
+    onError: (err) => toast.error(errorMessage(err, "Failed to save email settings")),
   });
 
   const registerDomain = useMutation({
     mutationFn: async () => {
       if (!canConfigure) throw new Error("Not authorized");
-      const { data, error } = await invokeFunction("tenant-domain-verify", {
+      return invokeFunction<FunctionErrorBody>("tenant-domain-verify", {
         tenantId,
         domain: domain.trim().toLowerCase(),
         fromLocalPart: fromLocal.trim().toLowerCase(),
         fromName: fromName.trim(),
         replyTo: replyTo.trim(),
       });
-      if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).error);
-      return data;
     },
     onSuccess: () => {
       toast.success("Domain submitted. Add the DKIM CNAME records below. DNS can take time.");
       qc.invalidateQueries({ queryKey: ["tenant-email-settings", tenantId] });
     },
-    onError: (err: any) => toast.error(err?.message || "Failed to start domain verification"),
+    onError: (err) => toast.error(errorMessage(err, "Failed to start domain verification")),
   });
 
   const checkDomain = useMutation({
     mutationFn: async () => {
       if (!canConfigure) throw new Error("Not authorized");
-      const { data, error } = await invokeFunction("tenant-domain-check", { tenantId });
-      if (error) throw error;
-      if ((data as any)?.error && !(data as any)?.status) throw new Error((data as any).error);
-      return data as { status?: string; domainStatus?: string; error?: string | null; verified?: boolean };
+      return invokeFunction<FunctionErrorBody>("tenant-domain-check", { tenantId });
     },
     onSuccess: (data) => {
       const next = data?.status || data?.domainStatus;
@@ -226,7 +269,7 @@ export function EmailSenderSettings() {
       qc.invalidateQueries({ queryKey: ["tenant-email-settings", tenantId] });
       qc.invalidateQueries({ queryKey: ["tenant-email-preview", tenantId] });
     },
-    onError: (err: any) => toast.error(err?.message || "Check failed"),
+    onError: (err) => toast.error(errorMessage(err, "Check failed")),
   });
 
   const disableCustom = useMutation({
@@ -234,13 +277,10 @@ export function EmailSenderSettings() {
       if (!tenantId) throw new Error("No tenant");
       if (!canConfigure) throw new Error("Not authorized");
       if (aws) {
-        const { data, error } = await invokeFunction("tenant-domain-disable", { tenantId });
-        if (error) throw error;
-        if ((data as any)?.error) throw new Error((data as any).error);
-        return data;
+        return invokeFunction<FunctionErrorBody>("tenant-domain-disable", { tenantId });
       }
       const { error } = await supabase
-        .from("tenant_email_settings" as any)
+        .from("tenant_email_settings")
         .update({ sending_mode: "platform" })
         .eq("tenant_id", tenantId);
       if (error) throw error;
@@ -250,15 +290,11 @@ export function EmailSenderSettings() {
       qc.invalidateQueries({ queryKey: ["tenant-email-settings", tenantId] });
       qc.invalidateQueries({ queryKey: ["tenant-email-preview", tenantId] });
     },
-    onError: (err: any) => toast.error(err?.message || "Failed to disable custom sending"),
+    onError: (err) => toast.error(errorMessage(err, "Failed to disable custom sending")),
   });
 
   const statusLabel = settings?.domainStatusLabel || STATUS_LABELS[status] || "Not configured";
   const badgeVariant = status === "verified" ? "default" : status === "failed" ? "destructive" : "secondary";
-  const allDns = useMemo(
-    () => [...dnsRecords, ...mailFromRecords],
-    [dnsRecords, mailFromRecords],
-  );
 
   if (!tenantId) {
     return (

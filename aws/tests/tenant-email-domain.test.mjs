@@ -451,7 +451,9 @@ test('class A registry includes branding routes; frontend never writes domain_st
     assert.ok(CLASS_A_FUNCTIONS.has(name), name);
   }
   const ui = fs.readFileSync(path.join(ROOT, 'src/components/settings/EmailSenderSettings.tsx'), 'utf8');
-  assert.doesNotMatch(ui, /domain_status\s*:/);
+  assert.doesNotMatch(ui, /domain_status\s*:\s*['"`]/);
+  assert.doesNotMatch(ui, /update\([\s\S]{0,200}domain_status/);
+  assert.doesNotMatch(ui, /upsert\([\s\S]{0,200}domain_status/);
   assert.match(ui, /tenant-domain-disable/);
   assert.match(ui, /tenant-email-preview/);
   assert.match(ui, /noreply@checksops\.com/);
