@@ -3,12 +3,20 @@ import { CHECKALT_UAT_HOST, looksLikeSandboxHost } from '../../sandbox-credentia
 
 export const PRODUCTION_CHECKALT_SECRET_ID = 'checksops/production/providers';
 
-export const PRODUCTION_CHECKALT_SECRET_NAMES = Object.freeze([
+/** Names required before authenticate / deposit/process / poll. */
+export const PRODUCTION_CHECKALT_HTTP_SECRET_NAMES = Object.freeze([
   'CHECKALT_USERNAME',
   'CHECKALT_PASSWORD',
   'CHECKALT_FI_KEY',
   'CHECKALT_BASE_URL',
-  'CHECKALT_WEBHOOK_SECRET',
+]);
+
+/** Required only when live webhook signature verification is enabled. */
+export const PRODUCTION_CHECKALT_WEBHOOK_SECRET_NAME = 'CHECKALT_WEBHOOK_SECRET';
+
+export const PRODUCTION_CHECKALT_SECRET_NAMES = Object.freeze([
+  ...PRODUCTION_CHECKALT_HTTP_SECRET_NAMES,
+  PRODUCTION_CHECKALT_WEBHOOK_SECRET_NAME,
 ]);
 
 export const UAT_CHECKALT_SECRET_NAMES = Object.freeze([
@@ -61,13 +69,14 @@ export const productionSecretMissing = (extra = {}) => ({
   liveProviderCalled: false,
   productionExecution: false,
   secretId: PRODUCTION_CHECKALT_SECRET_ID,
-  requiredNames: [...PRODUCTION_CHECKALT_SECRET_NAMES],
+  requiredNames: [...PRODUCTION_CHECKALT_HTTP_SECRET_NAMES],
   message: 'Production CheckAlt secrets are absent. Fail closed. UAT keys cannot satisfy this path.',
   ...extra,
 });
 
 export const classifyProductionCheckAltSecrets = (secrets = {}) => {
-  const missing = PRODUCTION_CHECKALT_SECRET_NAMES.filter((key) => !present(secrets, key));
+  const missingHttp = PRODUCTION_CHECKALT_HTTP_SECRET_NAMES.filter((key) => !present(secrets, key));
+  const webhookConfigured = present(secrets, PRODUCTION_CHECKALT_WEBHOOK_SECRET_NAME);
   const uatPresent = UAT_CHECKALT_SECRET_NAMES.filter((key) => present(secrets, key));
   const baseUrl = secrets.CHECKALT_BASE_URL || null;
   const baseUrlOk = isApprovedCheckAltProductionUrl(baseUrl);
@@ -78,10 +87,12 @@ export const classifyProductionCheckAltSecrets = (secrets = {}) => {
     environment: 'production',
     secretId: PRODUCTION_CHECKALT_SECRET_ID,
     providerSecretsArnConfigured: Boolean(process.env.PROVIDER_SECRETS_ARN),
-    requiredNames: [...PRODUCTION_CHECKALT_SECRET_NAMES],
-    missingNames: missing,
+    requiredNames: [...PRODUCTION_CHECKALT_HTTP_SECRET_NAMES],
+    missingNames: missingHttp,
+    webhookSecretConfigured: webhookConfigured,
     uatNamesPresent: uatPresent,
-    productionKeysComplete: missing.length === 0,
+    productionKeysComplete: missingHttp.length === 0,
+    productionWebhookConfigured: webhookConfigured,
     baseUrlApproved: baseUrlOk,
     refusedUatHost: Boolean(uatHostUsed),
     uatCannotSatisfyProduction: true,
@@ -137,7 +148,7 @@ export const loadProductionCheckAltSecrets = async (getSecrets = loadProviderSec
       password: secrets.CHECKALT_PASSWORD,
       fiKey: secrets.CHECKALT_FI_KEY,
       baseUrl: normalizeProductionCheckAltUrl(secrets.CHECKALT_BASE_URL),
-      webhookSecretConfigured: present(secrets, 'CHECKALT_WEBHOOK_SECRET'),
+      webhookSecretConfigured: snapshot.webhookSecretConfigured,
     },
   };
 };

@@ -12,6 +12,7 @@ import { productionCheckAltExecutionAllowed } from '../functions/api/providers/p
 import {
   classifyProductionCheckAltSecrets,
   loadProductionCheckAltSecrets,
+  PRODUCTION_CHECKALT_HTTP_SECRET_NAMES,
   PRODUCTION_CHECKALT_SECRET_NAMES,
 } from '../functions/api/providers/production/checkalt-secrets.mjs';
 import {
@@ -542,6 +543,26 @@ test('missing production secret fails closed; UAT names cannot satisfy productio
   ));
   assert.equal(result.error, 'production_secret_missing');
   assert.equal(store.processPosts, 0);
+});
+
+test('webhook secret is optional for authenticate, process, and poll', async () => {
+  const httpOnly = {
+    CHECKALT_USERNAME: 'prod-user',
+    CHECKALT_PASSWORD: 'prod-pass',
+    CHECKALT_FI_KEY: 'prod-fi-key',
+    CHECKALT_BASE_URL: 'https://api2.checkalt.com',
+  };
+  const classified = classifyProductionCheckAltSecrets(httpOnly);
+  assert.equal(classified.productionKeysComplete, true);
+  assert.equal(classified.productionWebhookConfigured, false);
+  assert.deepEqual(classified.requiredNames, [...PRODUCTION_CHECKALT_HTTP_SECRET_NAMES]);
+  assert.equal(classified.missingNames.includes('CHECKALT_WEBHOOK_SECRET'), false);
+
+  resetProviderSecretsCache();
+  const loaded = await withEnv(productionFlags, () => loadProductionCheckAltSecrets(async () => httpOnly));
+  assert.equal(loaded.ok, true);
+  assert.equal(loaded.credentials.webhookSecretConfigured, false);
+  assert.equal(loaded.credentials.baseUrl, 'https://api2.checkalt.com');
 });
 
 test('missing front or rear deposit JPEG fails closed before provider HTTP', async () => {
