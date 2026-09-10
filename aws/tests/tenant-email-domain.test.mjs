@@ -316,7 +316,14 @@ test('valid subdomain normalization and invalid domain rejection', () => {
   assert.equal(normalizeSendingDomain('checksops.com').error, 'invalid_domain');
   assert.equal(normalizeSendingDomain('notify.checksops.com').error, 'protected_platform_domain');
   assert.equal(normalizeSendingDomain('staging.checksops.com').error, 'protected_platform_domain');
+  assert.equal(normalizeSendingDomain('mail.checksops.com').error, 'protected_platform_domain');
+  assert.equal(normalizeSendingDomain('ses-gate.checksops.com').error, 'protected_platform_domain');
+  assert.equal(normalizeSendingDomain('probe.staging.checksops.com').error, 'protected_platform_domain');
   assert.equal(isProtectedPlatformDomain('mail.checksops.com'), true);
+  assert.equal(isProtectedPlatformDomain('staging.checksops.com'), true);
+  assert.equal(isProtectedPlatformDomain('ses-gate.staging.checksops.com'), false);
+  assert.equal(normalizeSendingDomain('ses-gate.staging.checksops.com').domain, 'ses-gate.staging.checksops.com');
+  assert.equal(normalizeSendingDomain('SES-Gate.Staging.ChecksOps.com.').domain, 'ses-gate.staging.checksops.com');
   assert.equal(normalizeFromLocalPart('noreply').localPart, 'noreply');
   assert.equal(normalizeFromLocalPart('bad local').ok, false);
   assert.equal(displayNameIsUnsafe('Evil\r\nBcc: x@y.com'), true);

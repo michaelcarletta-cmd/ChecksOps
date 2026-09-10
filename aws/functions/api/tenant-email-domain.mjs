@@ -66,6 +66,14 @@ const PROTECTED_PLATFORM_DOMAINS = new Set([
   'checksops.invalid',
 ]);
 
+/**
+ * Exact staging SES-identity probe host only. Does not relax
+ * staging.checksops.com or any other *.checksops.com hostname.
+ */
+const STAGING_SES_IDENTITY_PROBE_DOMAINS = new Set([
+  'ses-gate.staging.checksops.com',
+]);
+
 const HOST_LABEL = /^(?!-)[a-z0-9-]{1,63}(?<!-)$/;
 
 export const tenantEmailDomainEnabled = () => (
@@ -85,6 +93,7 @@ export const sesConfigurationSet = () => String(process.env.AWS_SES_CONFIGURATIO
 export const isProtectedPlatformDomain = (domain) => {
   const host = String(domain || '').trim().toLowerCase().replace(/\.$/, '');
   if (!host) return false;
+  if (STAGING_SES_IDENTITY_PROBE_DOMAINS.has(host)) return false;
   if (PROTECTED_PLATFORM_DOMAINS.has(host)) return true;
   return host === PLATFORM_FROM_DOMAIN || host.endsWith(`.${PLATFORM_FROM_DOMAIN}`)
     || host === 'checksops.invalid' || host.endsWith('.checksops.invalid');
