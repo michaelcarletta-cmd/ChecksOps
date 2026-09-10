@@ -20,6 +20,10 @@ import {
   recipientOnboardingCompleteFromMoov,
   tosRequirementOutstanding,
 } from './providers/moov-recipient-tos-policy.mjs';
+import {
+  productionRecipientBridgeConfigured,
+  resolveProductionRecipientByToken,
+} from './production-recipient-token.mjs';
 
 const { Client } = pg;
 
@@ -155,74 +159,96 @@ export async function handlePublicMoovRecipientSession(event, deps = {}) {
 
   const loadCredentials = deps.loadDatabaseCredentials || loadDatabaseCredentials;
   const createClient = deps.createClient || ((config) => new Client(config));
+  const fetchImpl = deps.fetchImpl || fetch;
   let client;
   let owned = false;
+  let recipient;
+  let tenant = null;
   try {
-    if (deps.client) {
-      client = deps.client;
+    const useProductionLookup = !deps.client && (
+      typeof deps.resolveRecipientByToken === 'function'
+      || productionRecipientBridgeConfigured()
+    );
+    if (useProductionLookup) {
+      const resolved = await (deps.resolveRecipientByToken || resolveProductionRecipientByToken)({
+        token,
+        fetchImpl,
+      });
+      if (!resolved.ok) {
+        if (resolved.statusCode === 404) noteRecipientTokenFailure({ ip, nowMs });
+        return fail(resolved.error || 'This link is not valid.', resolved.statusCode || 404, {
+          message: resolved.message,
+          spoofFieldsIgnored: spoof,
+        });
+      }
+      recipient = resolved.recipient;
+      tenant = resolved.tenant || null;
     } else {
-      const credentials = await loadCredentials();
-      client = createClient(buildClientConfig(credentials, { queryTimeoutMillis: 12000 }));
-      await client.connect();
-      owned = true;
-    }
-    await client.query('BEGIN');
+      if (deps.client) {
+        client = deps.client;
+      } else {
+        const credentials = await loadCredentials();
+        client = createClient(buildClientConfig(credentials, { queryTimeoutMillis: 12000 }));
+        await client.connect();
+        owned = true;
+      }
+      await client.query('BEGIN');
 
-    const recipient = (await client.query(
-      `SELECT id, tenant_id, display_name, provider_account_id, token_expires_at, token_used_at,
-              onboarding_status, environment, bank_linked_at, provider_bank_name, provider_last_four
-       FROM public.external_payment_recipients
-       WHERE provider = 'moov' AND secure_token = $1
-       LIMIT 1`,
-      [token],
-    )).rows[0];
+      recipient = (await client.query(
+        `SELECT id, tenant_id, display_name, provider_account_id, token_expires_at, token_used_at,
+                onboarding_status, environment, bank_linked_at, provider_bank_name, provider_last_four
+         FROM public.external_payment_recipients
+         WHERE provider = 'moov' AND secure_token = $1
+         LIMIT 1`,
+        [token],
+      )).rows[0];
 
-    if (!recipient) {
-      noteRecipientTokenFailure({ ip, nowMs });
-      await client.query('ROLLBACK');
-      return fail('This link is not valid.', 404, { spoofFieldsIgnored: spoof });
+      if (!recipient) {
+        noteRecipientTokenFailure({ ip, nowMs });
+        await client.query('ROLLBACK');
+        return fail('This link is not valid.', 404, { spoofFieldsIgnored: spoof });
+      }
+      tenant = (await client.query(
+        `SELECT name, logo_url, primary_color, secondary_color
+         FROM public.tenants WHERE id = $1::uuid LIMIT 1`,
+        [recipient.tenant_id],
+      )).rows[0] || null;
     }
+
     if (recipient.token_used_at) {
       noteRecipientTokenFailure({ ip, nowMs });
-      await client.query('ROLLBACK');
+      if (client) await client.query('ROLLBACK');
       return fail('This link has already been used. Ask the sender for a new one.', 410, {
         spoofFieldsIgnored: spoof,
       });
     }
     if (recipient.token_expires_at && new Date(recipient.token_expires_at).getTime() < nowMs) {
       noteRecipientTokenFailure({ ip, nowMs });
-      await client.query('ROLLBACK');
+      if (client) await client.query('ROLLBACK');
       return fail('This link has expired. Ask the sender for a new one.', 410, {
         spoofFieldsIgnored: spoof,
       });
     }
     if (String(recipient.environment || '').toLowerCase() !== 'production') {
-      await client.query('ROLLBACK');
+      if (client) await client.query('ROLLBACK');
       return fail('This payment setup is not ready yet. Try again shortly.', 409, {
         spoofFieldsIgnored: spoof,
       });
     }
     if (!recipient.provider_account_id) {
-      await client.query('ROLLBACK');
+      if (client) await client.query('ROLLBACK');
       return fail('This payment setup is not ready yet. Try again shortly.', 409, {
         spoofFieldsIgnored: spoof,
       });
     }
 
-    const tenant = (await client.query(
-      `SELECT name, logo_url, primary_color, secondary_color
-       FROM public.tenants WHERE id = $1::uuid LIMIT 1`,
-      [recipient.tenant_id],
-    )).rows[0] || null;
-
     const secrets = await (deps.loadProductionReadSecrets || loadProductionMoovReadSecrets)(deps.getSecrets);
     if (!secrets.ok) {
-      await client.query('ROLLBACK');
+      if (client) await client.query('ROLLBACK');
       return { ...secrets, public_recipient: true, cognito_required: false, mutated: false, token_consumed: false, spoofFieldsIgnored: spoof };
     }
 
     const accountId = recipient.provider_account_id;
-    const fetchImpl = deps.fetchImpl || fetch;
     const accountGet = await safeGet({
       credentials: secrets.credentials,
       path: `/accounts/${accountId}`,
@@ -230,7 +256,7 @@ export async function handlePublicMoovRecipientSession(event, deps = {}) {
       fetchImpl,
     });
     if (!accountGet.ok) {
-      await client.query('ROLLBACK');
+      if (client) await client.query('ROLLBACK');
       return fail('moov_account_get_failed', accountGet.status && accountGet.status >= 400 ? accountGet.status : 502, {
         liveProviderCalled: true,
         productionRead: true,
@@ -281,7 +307,7 @@ export async function handlePublicMoovRecipientSession(event, deps = {}) {
         ? (verificationStatus === 'verified' ? 'awaiting_bank' : 'kyc_pending')
         : 'awaiting_kyc');
 
-    await client.query('ROLLBACK');
+    if (client) await client.query('ROLLBACK');
 
     return {
       ok: true,

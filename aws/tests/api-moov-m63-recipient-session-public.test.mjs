@@ -240,4 +240,46 @@ test('handler source stays GET-only and never writes token_used_at', () => {
   assert.doesNotMatch(HANDLER, /UPDATE public.external_payment_recipients/);
   assert.match(HANDLER, /mode: 'read'/);
   assert.match(HANDLER, /ROLLBACK/);
+  assert.match(HANDLER, /resolveProductionRecipientByToken/);
+});
+
+test('production token resolve is used when RDS is not passed', async () => {
+  await withLiveReads(async () => {
+    fetchImpl.calls = [];
+    const result = await handlePublicMoovRecipientSession(eventOf({ token: 'live-token' }), {
+      resolveRecipientByToken: async () => ({
+        ok: true,
+        recipient: productionRecipient,
+        tenant: { name: 'Freedom Adjustment', logo_url: null, primary_color: null, secondary_color: null },
+      }),
+      loadProductionReadSecrets: async () => secrets,
+      fetchImpl,
+    });
+    assert.equal(result.statusCode, 200);
+    assert.equal(result.success, true);
+    assert.equal(result.recipient.id, RECIPIENT_ID);
+    assert.equal(result.account_id, ACCOUNT_ID);
+    assert.equal(result.environment, 'production');
+    assert.equal(result.onboarding.verification_status, 'unverified');
+    assert.equal(result.token_consumed, false);
+    assert.equal(result.mutated, false);
+  });
+});
+
+test('invalid production token fails closed without Moov HTTP', async () => {
+  await withLiveReads(async () => {
+    fetchImpl.calls = [];
+    const result = await handlePublicMoovRecipientSession(eventOf({ token: 'x' }), {
+      resolveRecipientByToken: async () => ({
+        ok: false,
+        error: 'This link is not valid.',
+        statusCode: 404,
+      }),
+      fetchImpl,
+    });
+    assert.equal(result.statusCode, 404);
+    assert.equal(result.liveProviderCalled, false);
+    assert.equal(result.mutated, false);
+    assert.equal(fetchImpl.calls.length, 0);
+  });
 });

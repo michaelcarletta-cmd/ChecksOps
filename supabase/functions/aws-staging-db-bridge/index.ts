@@ -189,7 +189,7 @@ Deno.serve(async (req) => {
         deletes: false,
         rpc: false,
         rawSql: false,
-        actions: ["health", "tables", "schema", "counts", "rows", "identity_map"],
+        actions: ["health", "tables", "schema", "counts", "rows", "identity_map", "recipient_session_resolve"],
         maxPageSize: MAX_PAGE,
         defaultPageSize: DEFAULT_PAGE,
         schemas: ["public"],
@@ -309,6 +309,55 @@ Deno.serve(async (req) => {
         applicationRoles: roleRows,
         note: "auth schema is not exposed; application identity keys are profiles.id (UUID)",
       });
+    }
+
+    if (action === "recipient_session_resolve") {
+      const token = String(body.token || "").trim();
+      if (!token) return json({ error: "token_required" }, 400);
+      const { url, key } = env();
+      const select = [
+        "id",
+        "tenant_id",
+        "display_name",
+        "provider_account_id",
+        "token_expires_at",
+        "token_used_at",
+        "onboarding_status",
+        "environment",
+        "bank_linked_at",
+        "provider_bank_name",
+        "provider_last_four",
+        "provider",
+      ].join(",");
+      const params = new URLSearchParams();
+      params.set("select", select);
+      params.set("provider", "eq.moov");
+      params.set("secure_token", `eq.${token}`);
+      params.set("limit", "1");
+      const recRes = await fetch(`${url}/rest/v1/external_payment_recipients?${params.toString()}`, {
+        headers: restHeaders(key),
+      });
+      if (!recRes.ok) return json({ error: "recipient_lookup_failed", status: recRes.status }, 503);
+      const recRows = (await recRes.json()) as Record<string, unknown>[];
+      const recipient = recRows[0];
+      if (!recipient) return json({ error: "This link is not valid.", ok: false }, 404);
+      const redacted = redactRow(recipient);
+      delete redacted.secure_token;
+      let tenant = null;
+      if (recipient.tenant_id) {
+        const tenantParams = new URLSearchParams();
+        tenantParams.set("select", "name,logo_url,primary_color,secondary_color");
+        tenantParams.set("id", `eq.${recipient.tenant_id}`);
+        tenantParams.set("limit", "1");
+        const tenantRes = await fetch(`${url}/rest/v1/tenants?${tenantParams.toString()}`, {
+          headers: restHeaders(key),
+        });
+        if (tenantRes.ok) {
+          const tenantRows = (await tenantRes.json()) as Record<string, unknown>[];
+          tenant = tenantRows[0] || null;
+        }
+      }
+      return json({ ok: true, recipient: redacted, tenant });
     }
 
     return json({ error: "unknown_action" }, 400);
