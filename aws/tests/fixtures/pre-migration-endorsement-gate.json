@@ -1,0 +1,5046 @@
+{
+  "source": "pre-migration-signature-parity-audit",
+  "cutoff": "2026-09-01T20:36:44.000Z",
+  "mutated": false,
+  "endorsing_unsigned_required": [
+    {
+      "check": {
+        "id": "61444219-8b32-44b2-81af-2bded23be5d1",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "endorsing",
+        "status": "endorsements_in_progress",
+        "payee_n": 3,
+        "signed_n": 2,
+        "unsigned_n": 1,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": false,
+        "checkalt_deposit_count": 0
+      },
+      "payees": [
+        {
+          "id": "2e0d1ffa-2355-4379-8b30-c77a286723a6",
+          "check_id": "61444219-8b32-44b2-81af-2bded23be5d1",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        },
+        {
+          "id": "4cce3a55-b930-4168-8889-ccead25c5012",
+          "check_id": "61444219-8b32-44b2-81af-2bded23be5d1",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "mortgage_company",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-05-28T19:49:45.965Z"
+        },
+        {
+          "id": "7f0937a7-3871-4824-a53f-e234cb5f4d10",
+          "check_id": "61444219-8b32-44b2-81af-2bded23be5d1",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-05-28T21:18:59.284Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "10032c7a-087b-41a1-afdb-c9a316a865e7",
+          "check_id": "61444219-8b32-44b2-81af-2bded23be5d1",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "4cce3a55-b930-4168-8889-ccead25c5012",
+          "payee_type": "mortgage_company",
+          "status": "signed",
+          "signed_at": "2026-05-28T19:49:45.687Z"
+        },
+        {
+          "id": "39525886-ffc4-4a86-8835-f8551265dc3f",
+          "check_id": "61444219-8b32-44b2-81af-2bded23be5d1",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "7f0937a7-3871-4824-a53f-e234cb5f4d10",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-05-28T21:18:58.867Z"
+        },
+        {
+          "id": "988d3925-343e-4625-acda-04ee6ddf3be0",
+          "check_id": "61444219-8b32-44b2-81af-2bded23be5d1",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "2e0d1ffa-2355-4379-8b30-c77a286723a6",
+          "payee_type": "insured",
+          "status": "pending",
+          "signed_at": null
+        }
+      ]
+    },
+    {
+      "check": {
+        "id": "def50718-f154-48d4-9bb5-bd635c3f7636",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "endorsing",
+        "status": "endorsements_in_progress",
+        "payee_n": 2,
+        "signed_n": 1,
+        "unsigned_n": 1,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": false,
+        "checkalt_deposit_count": 0
+      },
+      "payees": [
+        {
+          "id": "1087aab1-b0dc-45f9-8a3c-622b06b6de6c",
+          "check_id": "def50718-f154-48d4-9bb5-bd635c3f7636",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-07-24T13:51:18.954Z"
+        },
+        {
+          "id": "b4f3883f-70e0-4dec-bfcd-4c0eb73354f4",
+          "check_id": "def50718-f154-48d4-9bb5-bd635c3f7636",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "6d94fc4d-caf2-4664-8359-a1400237d40e",
+          "check_id": "def50718-f154-48d4-9bb5-bd635c3f7636",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "1087aab1-b0dc-45f9-8a3c-622b06b6de6c",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-07-24T13:51:18.954Z"
+        },
+        {
+          "id": "9b0c69ed-650c-42b1-b697-b60d91cf802a",
+          "check_id": "def50718-f154-48d4-9bb5-bd635c3f7636",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "b4f3883f-70e0-4dec-bfcd-4c0eb73354f4",
+          "payee_type": "insured",
+          "status": "pending",
+          "signed_at": null
+        }
+      ]
+    },
+    {
+      "check": {
+        "id": "55c64368-5bf0-4976-8909-ed93fca120e5",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "endorsing",
+        "status": "endorsements_in_progress",
+        "payee_n": 3,
+        "signed_n": 0,
+        "unsigned_n": 3,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": false,
+        "checkalt_deposit_count": 0
+      },
+      "payees": [
+        {
+          "id": "06bde9a6-3825-46a1-ac6c-b70d1f0cfbe1",
+          "check_id": "55c64368-5bf0-4976-8909-ed93fca120e5",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        },
+        {
+          "id": "660e892f-0651-4e06-9e4a-ba9ca3f80ec6",
+          "check_id": "55c64368-5bf0-4976-8909-ed93fca120e5",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        },
+        {
+          "id": "87708cbf-0a3b-488e-81ca-093ce3500acb",
+          "check_id": "55c64368-5bf0-4976-8909-ed93fca120e5",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "0fad92aa-df46-4699-8b10-581fdff92e4d",
+          "check_id": "55c64368-5bf0-4976-8909-ed93fca120e5",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "87708cbf-0a3b-488e-81ca-093ce3500acb",
+          "payee_type": "insured",
+          "status": "pending",
+          "signed_at": null
+        },
+        {
+          "id": "8e388cc5-f322-4fd0-bc67-1cd29165cf33",
+          "check_id": "55c64368-5bf0-4976-8909-ed93fca120e5",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "06bde9a6-3825-46a1-ac6c-b70d1f0cfbe1",
+          "payee_type": "public_adjuster",
+          "status": "pending",
+          "signed_at": null
+        },
+        {
+          "id": "904fcc66-4089-4a99-a9dd-9c4c2f75f7e7",
+          "check_id": "55c64368-5bf0-4976-8909-ed93fca120e5",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "660e892f-0651-4e06-9e4a-ba9ca3f80ec6",
+          "payee_type": "insured",
+          "status": "pending",
+          "signed_at": null
+        }
+      ]
+    },
+    {
+      "check": {
+        "id": "e7a5da3f-a695-478c-8b92-657efbccaca0",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "endorsing",
+        "status": "endorsements_in_progress",
+        "payee_n": 3,
+        "signed_n": 1,
+        "unsigned_n": 2,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": false,
+        "checkalt_deposit_count": 0
+      },
+      "payees": [
+        {
+          "id": "4cba3819-961b-4caf-af59-7d4b474e3ee1",
+          "check_id": "e7a5da3f-a695-478c-8b92-657efbccaca0",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        },
+        {
+          "id": "836fe343-d160-4357-9375-90702eff0f13",
+          "check_id": "e7a5da3f-a695-478c-8b92-657efbccaca0",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        },
+        {
+          "id": "8aa59acf-d3f7-462f-a099-7a039d47bb82",
+          "check_id": "e7a5da3f-a695-478c-8b92-657efbccaca0",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-03T18:39:17.275Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "68838397-b5ec-4308-812f-a362513708c8",
+          "check_id": "e7a5da3f-a695-478c-8b92-657efbccaca0",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "4cba3819-961b-4caf-af59-7d4b474e3ee1",
+          "payee_type": "insured",
+          "status": "pending",
+          "signed_at": null
+        },
+        {
+          "id": "91ac76eb-c9db-4615-9796-01709a338dcd",
+          "check_id": "e7a5da3f-a695-478c-8b92-657efbccaca0",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "8aa59acf-d3f7-462f-a099-7a039d47bb82",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-08-03T18:39:17.275Z"
+        },
+        {
+          "id": "b9713a5d-867a-44ed-8a61-e7ca6cb0c22c",
+          "check_id": "e7a5da3f-a695-478c-8b92-657efbccaca0",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "836fe343-d160-4357-9375-90702eff0f13",
+          "payee_type": "insured",
+          "status": "pending",
+          "signed_at": null
+        }
+      ]
+    },
+    {
+      "check": {
+        "id": "4422da3d-4175-4c60-b03c-6ae0399d5963",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "endorsing",
+        "status": "endorsements_in_progress",
+        "payee_n": 3,
+        "signed_n": 1,
+        "unsigned_n": 2,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": false,
+        "checkalt_deposit_count": 0
+      },
+      "payees": [
+        {
+          "id": "5cf9ea80-08d6-4eee-b2cf-d8133ea9bee0",
+          "check_id": "4422da3d-4175-4c60-b03c-6ae0399d5963",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-03T18:38:53.282Z"
+        },
+        {
+          "id": "7dc4b1f4-191d-477f-86dc-0224138805e5",
+          "check_id": "4422da3d-4175-4c60-b03c-6ae0399d5963",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        },
+        {
+          "id": "ed5eb67b-3354-4f8f-b4c8-15582138954e",
+          "check_id": "4422da3d-4175-4c60-b03c-6ae0399d5963",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "15d38b78-a7b7-4f6a-a7fc-b252d4454c2d",
+          "check_id": "4422da3d-4175-4c60-b03c-6ae0399d5963",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "7dc4b1f4-191d-477f-86dc-0224138805e5",
+          "payee_type": "insured",
+          "status": "pending",
+          "signed_at": null
+        },
+        {
+          "id": "6347e11e-6497-4010-bf30-7f7aa34c3a67",
+          "check_id": "4422da3d-4175-4c60-b03c-6ae0399d5963",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "ed5eb67b-3354-4f8f-b4c8-15582138954e",
+          "payee_type": "insured",
+          "status": "pending",
+          "signed_at": null
+        },
+        {
+          "id": "aa549756-6964-4491-9c18-7f3992a975c5",
+          "check_id": "4422da3d-4175-4c60-b03c-6ae0399d5963",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "5cf9ea80-08d6-4eee-b2cf-d8133ea9bee0",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-08-03T18:38:53.282Z"
+        }
+      ]
+    },
+    {
+      "check": {
+        "id": "edcc6c69-9161-463d-acd2-eb70cfe41a38",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "endorsing",
+        "status": "endorsements_in_progress",
+        "payee_n": 3,
+        "signed_n": 1,
+        "unsigned_n": 2,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": false,
+        "checkalt_deposit_count": 0
+      },
+      "payees": [
+        {
+          "id": "240f9edc-9d57-4c4a-b75c-ae26d9c3714c",
+          "check_id": "edcc6c69-9161-463d-acd2-eb70cfe41a38",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        },
+        {
+          "id": "8635c5d7-6fa8-4e8b-a779-83555d8c9946",
+          "check_id": "edcc6c69-9161-463d-acd2-eb70cfe41a38",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        },
+        {
+          "id": "9549741c-e9d3-448f-9799-cc48658ff485",
+          "check_id": "edcc6c69-9161-463d-acd2-eb70cfe41a38",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-07-31T15:55:04.137Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "2cffe8f4-ae1f-4fc2-b889-264edd51d602",
+          "check_id": "edcc6c69-9161-463d-acd2-eb70cfe41a38",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "8635c5d7-6fa8-4e8b-a779-83555d8c9946",
+          "payee_type": "insured",
+          "status": "pending",
+          "signed_at": null
+        },
+        {
+          "id": "784b3e99-e668-459f-b357-50aab2cc9cd8",
+          "check_id": "edcc6c69-9161-463d-acd2-eb70cfe41a38",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "9549741c-e9d3-448f-9799-cc48658ff485",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-07-31T15:55:04.137Z"
+        },
+        {
+          "id": "78c3fc9a-378d-460b-9226-147bff0af36b",
+          "check_id": "edcc6c69-9161-463d-acd2-eb70cfe41a38",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "240f9edc-9d57-4c4a-b75c-ae26d9c3714c",
+          "payee_type": "insured",
+          "status": "pending",
+          "signed_at": null
+        }
+      ]
+    },
+    {
+      "check": {
+        "id": "5c30ffa9-2169-4d53-98b3-5dde06fcdc34",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "endorsing",
+        "status": "endorsements_in_progress",
+        "payee_n": 3,
+        "signed_n": 1,
+        "unsigned_n": 2,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": false,
+        "checkalt_deposit_count": 0
+      },
+      "payees": [
+        {
+          "id": "054634f6-b48a-49ef-8df6-bd6a400d85c4",
+          "check_id": "5c30ffa9-2169-4d53-98b3-5dde06fcdc34",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-14T13:37:09.767Z"
+        },
+        {
+          "id": "31138501-d2ec-46df-ada1-eed4436baed4",
+          "check_id": "5c30ffa9-2169-4d53-98b3-5dde06fcdc34",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        },
+        {
+          "id": "7eff0b2a-570c-41e6-a507-36ba993badc0",
+          "check_id": "5c30ffa9-2169-4d53-98b3-5dde06fcdc34",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "1a801eca-d881-4b40-b966-484d7bc7443e",
+          "check_id": "5c30ffa9-2169-4d53-98b3-5dde06fcdc34",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "054634f6-b48a-49ef-8df6-bd6a400d85c4",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-08-14T13:37:09.767Z"
+        },
+        {
+          "id": "44ab61ce-df06-4c5a-9fa2-c673d447b2ee",
+          "check_id": "5c30ffa9-2169-4d53-98b3-5dde06fcdc34",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "31138501-d2ec-46df-ada1-eed4436baed4",
+          "payee_type": "insured",
+          "status": "pending",
+          "signed_at": null
+        },
+        {
+          "id": "adf8fdd1-2245-4518-b544-297d3660aa59",
+          "check_id": "5c30ffa9-2169-4d53-98b3-5dde06fcdc34",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "7eff0b2a-570c-41e6-a507-36ba993badc0",
+          "payee_type": "insured",
+          "status": "pending",
+          "signed_at": null
+        }
+      ]
+    },
+    {
+      "check": {
+        "id": "7d62ea7c-2563-499d-97c1-8273f220a382",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "endorsing",
+        "status": "endorsements_in_progress",
+        "payee_n": 3,
+        "signed_n": 0,
+        "unsigned_n": 3,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": false,
+        "checkalt_deposit_count": 0
+      },
+      "payees": [
+        {
+          "id": "763446cf-ba2f-4c70-b3f4-387d30bc93d4",
+          "check_id": "7d62ea7c-2563-499d-97c1-8273f220a382",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        },
+        {
+          "id": "9322d3f8-1851-4df4-9da0-4e397e2cfca4",
+          "check_id": "7d62ea7c-2563-499d-97c1-8273f220a382",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        },
+        {
+          "id": "f20d9119-11c0-4d86-9167-4c4f3df1c102",
+          "check_id": "7d62ea7c-2563-499d-97c1-8273f220a382",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "102f747f-eb91-498f-8b7b-30c6cf1ab50b",
+          "check_id": "7d62ea7c-2563-499d-97c1-8273f220a382",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "763446cf-ba2f-4c70-b3f4-387d30bc93d4",
+          "payee_type": "insured",
+          "status": "pending",
+          "signed_at": null
+        },
+        {
+          "id": "3d1565b9-ac95-427e-a694-2e5034030a1d",
+          "check_id": "7d62ea7c-2563-499d-97c1-8273f220a382",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "f20d9119-11c0-4d86-9167-4c4f3df1c102",
+          "payee_type": "insured",
+          "status": "pending",
+          "signed_at": null
+        },
+        {
+          "id": "d24acc89-1c2c-406c-815d-66feea10bd3d",
+          "check_id": "7d62ea7c-2563-499d-97c1-8273f220a382",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "9322d3f8-1851-4df4-9da0-4e397e2cfca4",
+          "payee_type": "public_adjuster",
+          "status": "pending",
+          "signed_at": null
+        }
+      ]
+    },
+    {
+      "check": {
+        "id": "aa148d55-25be-4c3f-9fdd-833ba143593e",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "endorsing",
+        "status": "endorsements_in_progress",
+        "payee_n": 2,
+        "signed_n": 1,
+        "unsigned_n": 1,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": false,
+        "checkalt_deposit_count": 0
+      },
+      "payees": [
+        {
+          "id": "2592bb3a-6c55-4d01-b718-672207b41879",
+          "check_id": "aa148d55-25be-4c3f-9fdd-833ba143593e",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-14T20:30:51.803Z"
+        },
+        {
+          "id": "ec453085-7a7c-477f-b21f-d273d8ce3830",
+          "check_id": "aa148d55-25be-4c3f-9fdd-833ba143593e",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "6b77e42f-a1a5-4810-8733-eb743ba9654c",
+          "check_id": "aa148d55-25be-4c3f-9fdd-833ba143593e",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "2592bb3a-6c55-4d01-b718-672207b41879",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-08-14T20:30:51.803Z"
+        },
+        {
+          "id": "9202b5a3-c365-4938-943a-c8a3a1cf27f6",
+          "check_id": "aa148d55-25be-4c3f-9fdd-833ba143593e",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "ec453085-7a7c-477f-b21f-d273d8ce3830",
+          "payee_type": "insured",
+          "status": "pending",
+          "signed_at": null
+        }
+      ]
+    },
+    {
+      "check": {
+        "id": "4f2052e2-313f-4023-a3f2-0419718c753a",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "endorsing",
+        "status": "endorsements_in_progress",
+        "payee_n": 3,
+        "signed_n": 0,
+        "unsigned_n": 3,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": false,
+        "checkalt_deposit_count": 0
+      },
+      "payees": [
+        {
+          "id": "7176a74f-e0d0-44f6-9d76-17c6351b8bff",
+          "check_id": "4f2052e2-313f-4023-a3f2-0419718c753a",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        },
+        {
+          "id": "c872064b-6d76-439b-a9aa-b80fa312318d",
+          "check_id": "4f2052e2-313f-4023-a3f2-0419718c753a",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        },
+        {
+          "id": "e04df0a3-fa04-4618-901b-31603e7f6b27",
+          "check_id": "4f2052e2-313f-4023-a3f2-0419718c753a",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "2896c79c-7fdb-4d1a-9ecd-628bfa7593de",
+          "check_id": "4f2052e2-313f-4023-a3f2-0419718c753a",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "e04df0a3-fa04-4618-901b-31603e7f6b27",
+          "payee_type": "insured",
+          "status": "pending",
+          "signed_at": null
+        },
+        {
+          "id": "875d5cca-3db8-4671-82bc-9ec42680b5f0",
+          "check_id": "4f2052e2-313f-4023-a3f2-0419718c753a",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "c872064b-6d76-439b-a9aa-b80fa312318d",
+          "payee_type": "public_adjuster",
+          "status": "pending",
+          "signed_at": null
+        },
+        {
+          "id": "989492cb-e99e-4f41-83cc-736b797dfe75",
+          "check_id": "4f2052e2-313f-4023-a3f2-0419718c753a",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "7176a74f-e0d0-44f6-9d76-17c6351b8bff",
+          "payee_type": "insured",
+          "status": "pending",
+          "signed_at": null
+        }
+      ]
+    },
+    {
+      "check": {
+        "id": "b9081b26-7a2e-4e7e-82df-eea74d9041a0",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "endorsing",
+        "status": "endorsements_in_progress",
+        "payee_n": 3,
+        "signed_n": 0,
+        "unsigned_n": 3,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": false,
+        "checkalt_deposit_count": 0
+      },
+      "payees": [
+        {
+          "id": "3c4718cd-0c98-49e7-8fef-126ee560d1ef",
+          "check_id": "b9081b26-7a2e-4e7e-82df-eea74d9041a0",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        },
+        {
+          "id": "b92ee376-3db4-4872-adca-28dd8eec5ee5",
+          "check_id": "b9081b26-7a2e-4e7e-82df-eea74d9041a0",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        },
+        {
+          "id": "c837a999-b60f-4951-af58-e983333431e0",
+          "check_id": "b9081b26-7a2e-4e7e-82df-eea74d9041a0",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "380bd143-0c19-464d-8172-86906948a826",
+          "check_id": "b9081b26-7a2e-4e7e-82df-eea74d9041a0",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "c837a999-b60f-4951-af58-e983333431e0",
+          "payee_type": "insured",
+          "status": "pending",
+          "signed_at": null
+        },
+        {
+          "id": "58754771-92d9-4b2d-88d4-a9eb3769935b",
+          "check_id": "b9081b26-7a2e-4e7e-82df-eea74d9041a0",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "3c4718cd-0c98-49e7-8fef-126ee560d1ef",
+          "payee_type": "public_adjuster",
+          "status": "pending",
+          "signed_at": null
+        },
+        {
+          "id": "82313652-eb73-4155-8c21-fddbc16d47bd",
+          "check_id": "b9081b26-7a2e-4e7e-82df-eea74d9041a0",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "b92ee376-3db4-4872-adca-28dd8eec5ee5",
+          "payee_type": "insured",
+          "status": "pending",
+          "signed_at": null
+        }
+      ]
+    },
+    {
+      "check": {
+        "id": "3ebc2f0f-1cf7-47b5-9b0b-ac9ce6bdace9",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "endorsing",
+        "status": "endorsements_in_progress",
+        "payee_n": 2,
+        "signed_n": 0,
+        "unsigned_n": 2,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": false,
+        "checkalt_deposit_count": 0
+      },
+      "payees": [
+        {
+          "id": "1123c4ec-2d16-4a90-a77e-2d0eb3dfcdc6",
+          "check_id": "3ebc2f0f-1cf7-47b5-9b0b-ac9ce6bdace9",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "unknown",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        },
+        {
+          "id": "657d15cc-46a2-4e08-acee-9883593880b1",
+          "check_id": "3ebc2f0f-1cf7-47b5-9b0b-ac9ce6bdace9",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "8308a0ec-b01a-4d4a-83ec-7e1a18509aff",
+          "check_id": "3ebc2f0f-1cf7-47b5-9b0b-ac9ce6bdace9",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "1123c4ec-2d16-4a90-a77e-2d0eb3dfcdc6",
+          "payee_type": "other",
+          "status": "pending",
+          "signed_at": null
+        },
+        {
+          "id": "9d6b7c51-15fc-48b6-9187-3307816358bc",
+          "check_id": "3ebc2f0f-1cf7-47b5-9b0b-ac9ce6bdace9",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "657d15cc-46a2-4e08-acee-9883593880b1",
+          "payee_type": "insured",
+          "status": "pending",
+          "signed_at": null
+        }
+      ]
+    },
+    {
+      "check": {
+        "id": "2740dcee-af28-4511-8d27-35c716dc48f4",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "endorsing",
+        "status": "endorsements_in_progress",
+        "payee_n": 2,
+        "signed_n": 1,
+        "unsigned_n": 1,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": false,
+        "checkalt_deposit_count": 0
+      },
+      "payees": [
+        {
+          "id": "8e20eec7-163e-42f5-b112-a08d19c3f499",
+          "check_id": "2740dcee-af28-4511-8d27-35c716dc48f4",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        },
+        {
+          "id": "edc7b741-9ad2-4442-bc30-017851028bc9",
+          "check_id": "2740dcee-af28-4511-8d27-35c716dc48f4",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-13T19:39:34.506Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "bb054a0f-9de0-43c2-b01e-74d500e46d2e",
+          "check_id": "2740dcee-af28-4511-8d27-35c716dc48f4",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "edc7b741-9ad2-4442-bc30-017851028bc9",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-08-13T19:39:34.196Z"
+        },
+        {
+          "id": "eb259e14-d730-46b8-8f19-daf9a33aa492",
+          "check_id": "2740dcee-af28-4511-8d27-35c716dc48f4",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "8e20eec7-163e-42f5-b112-a08d19c3f499",
+          "payee_type": "insured",
+          "status": "pending",
+          "signed_at": null
+        }
+      ]
+    },
+    {
+      "check": {
+        "id": "00062a57-13b5-493d-a996-cf6e72d5cc89",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "endorsing",
+        "status": "endorsements_in_progress",
+        "payee_n": 2,
+        "signed_n": 0,
+        "unsigned_n": 2,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": false,
+        "checkalt_deposit_count": 0
+      },
+      "payees": [
+        {
+          "id": "2860d6e1-6ed3-4491-b40e-c876a03a8aba",
+          "check_id": "00062a57-13b5-493d-a996-cf6e72d5cc89",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        },
+        {
+          "id": "c1adc6c9-41c8-4a02-b405-f3134962a529",
+          "check_id": "00062a57-13b5-493d-a996-cf6e72d5cc89",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "unknown",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "0102467b-f851-4a3d-9fb1-faff64b00757",
+          "check_id": "00062a57-13b5-493d-a996-cf6e72d5cc89",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "2860d6e1-6ed3-4491-b40e-c876a03a8aba",
+          "payee_type": "insured",
+          "status": "pending",
+          "signed_at": null
+        },
+        {
+          "id": "bb0fa3c0-f32d-44ff-a87b-b4d6666308ee",
+          "check_id": "00062a57-13b5-493d-a996-cf6e72d5cc89",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "c1adc6c9-41c8-4a02-b405-f3134962a529",
+          "payee_type": "other",
+          "status": "pending",
+          "signed_at": null
+        }
+      ]
+    },
+    {
+      "check": {
+        "id": "de1c2388-bce9-402a-93bc-b52f3051d219",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "endorsing",
+        "status": "endorsements_in_progress",
+        "payee_n": 3,
+        "signed_n": 1,
+        "unsigned_n": 2,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": false,
+        "checkalt_deposit_count": 0
+      },
+      "payees": [
+        {
+          "id": "1d1bca7d-e902-4a0d-a853-fdc90e270b22",
+          "check_id": "de1c2388-bce9-402a-93bc-b52f3051d219",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        },
+        {
+          "id": "42da670e-e121-4baa-98ff-161a4eadb706",
+          "check_id": "de1c2388-bce9-402a-93bc-b52f3051d219",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        },
+        {
+          "id": "8197b896-c579-4b3a-8e3b-87facbd8dd7e",
+          "check_id": "de1c2388-bce9-402a-93bc-b52f3051d219",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-31T15:28:49.946Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "45fe1c26-ebc5-4c6b-8fd2-179401d98ce7",
+          "check_id": "de1c2388-bce9-402a-93bc-b52f3051d219",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "8197b896-c579-4b3a-8e3b-87facbd8dd7e",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-31T15:28:49.832Z"
+        },
+        {
+          "id": "5a86f9a4-45f8-4745-94de-4d02528a37e8",
+          "check_id": "de1c2388-bce9-402a-93bc-b52f3051d219",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "1d1bca7d-e902-4a0d-a853-fdc90e270b22",
+          "payee_type": "insured",
+          "status": "pending",
+          "signed_at": null
+        },
+        {
+          "id": "fc930e3b-58ab-4788-bbfe-a3bf63f8f525",
+          "check_id": "de1c2388-bce9-402a-93bc-b52f3051d219",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "42da670e-e121-4baa-98ff-161a4eadb706",
+          "payee_type": "public_adjuster",
+          "status": "pending",
+          "signed_at": null
+        }
+      ]
+    },
+    {
+      "check": {
+        "id": "7c321667-8074-47ec-9b92-883d77cf8940",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "endorsing",
+        "status": "endorsements_in_progress",
+        "payee_n": 2,
+        "signed_n": 0,
+        "unsigned_n": 2,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": false,
+        "checkalt_deposit_count": 0
+      },
+      "payees": [
+        {
+          "id": "0077026c-0caf-4d8b-b94f-285ac0e94254",
+          "check_id": "7c321667-8074-47ec-9b92-883d77cf8940",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        },
+        {
+          "id": "61ef2054-b193-49b0-8721-9f028f8c1194",
+          "check_id": "7c321667-8074-47ec-9b92-883d77cf8940",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "41fef742-4e46-4200-a843-4bb57a3618b0",
+          "check_id": "7c321667-8074-47ec-9b92-883d77cf8940",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "61ef2054-b193-49b0-8721-9f028f8c1194",
+          "payee_type": "insured",
+          "status": "pending",
+          "signed_at": null
+        },
+        {
+          "id": "d47bf618-8e25-4be7-a4f1-3cda5fa43ff5",
+          "check_id": "7c321667-8074-47ec-9b92-883d77cf8940",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "0077026c-0caf-4d8b-b94f-285ac0e94254",
+          "payee_type": "insured",
+          "status": "pending",
+          "signed_at": null
+        }
+      ]
+    },
+    {
+      "check": {
+        "id": "f618a3ea-e995-449f-b53f-329c81a6dcbc",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "endorsing",
+        "status": "endorsements_in_progress",
+        "payee_n": 2,
+        "signed_n": 1,
+        "unsigned_n": 1,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": false,
+        "checkalt_deposit_count": 0
+      },
+      "payees": [
+        {
+          "id": "2458e6b8-3da4-4483-998e-cc66bc7ed64b",
+          "check_id": "f618a3ea-e995-449f-b53f-329c81a6dcbc",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        },
+        {
+          "id": "cf98aa1b-6c7e-4ada-999d-fdfe515dcadd",
+          "check_id": "f618a3ea-e995-449f-b53f-329c81a6dcbc",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-21T15:06:52.486Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "76af9561-c1fa-41ec-8eec-7b294d8af265",
+          "check_id": "f618a3ea-e995-449f-b53f-329c81a6dcbc",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "2458e6b8-3da4-4483-998e-cc66bc7ed64b",
+          "payee_type": "insured",
+          "status": "pending",
+          "signed_at": null
+        },
+        {
+          "id": "bd35fb4a-b89e-4b97-b93d-db7cfa20e18e",
+          "check_id": "f618a3ea-e995-449f-b53f-329c81a6dcbc",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "cf98aa1b-6c7e-4ada-999d-fdfe515dcadd",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-08-21T15:06:52.486Z"
+        }
+      ]
+    },
+    {
+      "check": {
+        "id": "dc40c92d-7f84-4528-8452-c873ef8ac50b",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "endorsing",
+        "status": "endorsements_in_progress",
+        "payee_n": 3,
+        "signed_n": 1,
+        "unsigned_n": 2,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": false,
+        "checkalt_deposit_count": 0
+      },
+      "payees": [
+        {
+          "id": "06f4e412-93ce-4b06-abdd-8a17a25fe960",
+          "check_id": "dc40c92d-7f84-4528-8452-c873ef8ac50b",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-21T21:00:09.258Z"
+        },
+        {
+          "id": "9558875c-4e3a-43d5-8659-917063278efb",
+          "check_id": "dc40c92d-7f84-4528-8452-c873ef8ac50b",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        },
+        {
+          "id": "fdb136c2-1089-442d-9b1d-d5a144452f55",
+          "check_id": "dc40c92d-7f84-4528-8452-c873ef8ac50b",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "14fbce86-b29a-4422-b0f0-4a509f2f8bcc",
+          "check_id": "dc40c92d-7f84-4528-8452-c873ef8ac50b",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "9558875c-4e3a-43d5-8659-917063278efb",
+          "payee_type": "insured",
+          "status": "pending",
+          "signed_at": null
+        },
+        {
+          "id": "57daa8bb-8dac-4675-aa2e-afcaf2782002",
+          "check_id": "dc40c92d-7f84-4528-8452-c873ef8ac50b",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "06f4e412-93ce-4b06-abdd-8a17a25fe960",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-08-21T21:00:09.258Z"
+        },
+        {
+          "id": "95888fe8-2559-4220-b1e7-80359599dc15",
+          "check_id": "dc40c92d-7f84-4528-8452-c873ef8ac50b",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "fdb136c2-1089-442d-9b1d-d5a144452f55",
+          "payee_type": "insured",
+          "status": "pending",
+          "signed_at": null
+        }
+      ]
+    },
+    {
+      "check": {
+        "id": "e9bdd1a8-0f4c-4c5c-98db-84db2eee5512",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "endorsing",
+        "status": "endorsements_in_progress",
+        "payee_n": 2,
+        "signed_n": 1,
+        "unsigned_n": 1,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": false,
+        "checkalt_deposit_count": 0
+      },
+      "payees": [
+        {
+          "id": "66ee5b8c-1e2f-4e1c-be61-72576c92f8de",
+          "check_id": "e9bdd1a8-0f4c-4c5c-98db-84db2eee5512",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-21T15:05:43.213Z"
+        },
+        {
+          "id": "a43f73fe-8e60-4932-bbbd-1b45fb446fbc",
+          "check_id": "e9bdd1a8-0f4c-4c5c-98db-84db2eee5512",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "6225ba60-2761-4c83-bcbb-8d664047d5b0",
+          "check_id": "e9bdd1a8-0f4c-4c5c-98db-84db2eee5512",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "66ee5b8c-1e2f-4e1c-be61-72576c92f8de",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-08-21T15:05:43.213Z"
+        },
+        {
+          "id": "eab6a46d-9480-4b5d-9712-034b867b3cab",
+          "check_id": "e9bdd1a8-0f4c-4c5c-98db-84db2eee5512",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "a43f73fe-8e60-4932-bbbd-1b45fb446fbc",
+          "payee_type": "insured",
+          "status": "pending",
+          "signed_at": null
+        }
+      ]
+    },
+    {
+      "check": {
+        "id": "c5fa5852-768d-4c48-b0ea-b7f365e76b22",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "endorsing",
+        "status": "endorsements_in_progress",
+        "payee_n": 2,
+        "signed_n": 1,
+        "unsigned_n": 1,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": false,
+        "checkalt_deposit_count": 0
+      },
+      "payees": [
+        {
+          "id": "1a61eb3b-c574-4637-a771-094b37207d3c",
+          "check_id": "c5fa5852-768d-4c48-b0ea-b7f365e76b22",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        },
+        {
+          "id": "b2b225e4-975b-4506-9d8a-1deee20948d7",
+          "check_id": "c5fa5852-768d-4c48-b0ea-b7f365e76b22",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-21T14:11:23.610Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "cad83e60-14c4-44cf-bda3-0134bbc67eb4",
+          "check_id": "c5fa5852-768d-4c48-b0ea-b7f365e76b22",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "1a61eb3b-c574-4637-a771-094b37207d3c",
+          "payee_type": "insured",
+          "status": "pending",
+          "signed_at": null
+        },
+        {
+          "id": "d1298b89-dcd3-482a-a473-0da71dd8ee61",
+          "check_id": "c5fa5852-768d-4c48-b0ea-b7f365e76b22",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "b2b225e4-975b-4506-9d8a-1deee20948d7",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-08-21T14:11:23.610Z"
+        }
+      ]
+    }
+  ],
+  "ready_awaiting_signed_no_official_checkalt": [
+    {
+      "check": {
+        "id": "a3a4a153-46e1-4c28-a273-79a9bd04f3a6",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "ready_for_deposit",
+        "status": "approved_for_deposit",
+        "payee_n": 2,
+        "signed_n": 2,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": false,
+        "checkalt_deposit_count": 0
+      },
+      "payees": [
+        {
+          "id": "2b03ced5-b164-412c-be91-ada95ef635c1",
+          "check_id": "a3a4a153-46e1-4c28-a273-79a9bd04f3a6",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-31T13:06:04.326Z"
+        },
+        {
+          "id": "883355be-0c9a-4631-ac88-2bb0a01d0227",
+          "check_id": "a3a4a153-46e1-4c28-a273-79a9bd04f3a6",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-07-24T13:35:44.420Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "1c4e662f-5944-45e2-88a3-52401c2e33c5",
+          "check_id": "a3a4a153-46e1-4c28-a273-79a9bd04f3a6",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "883355be-0c9a-4631-ac88-2bb0a01d0227",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-07-24T13:35:44.420Z"
+        },
+        {
+          "id": "f52214ff-0419-4015-ad75-76c50daa4611",
+          "check_id": "a3a4a153-46e1-4c28-a273-79a9bd04f3a6",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "2b03ced5-b164-412c-be91-ada95ef635c1",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-08-31T13:06:04.326Z"
+        }
+      ]
+    },
+    {
+      "check": {
+        "id": "1db86248-ddae-46dd-a2fc-5694680834e3",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "ready_for_deposit",
+        "status": "approved_for_deposit",
+        "payee_n": 2,
+        "signed_n": 2,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "31235ea8-78cc-47d8-a864-d7758f105e29",
+          "check_id": "1db86248-ddae-46dd-a2fc-5694680834e3",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-19T19:32:17.475Z"
+        },
+        {
+          "id": "45bcb871-8429-4ae9-8176-953260ad6337",
+          "check_id": "1db86248-ddae-46dd-a2fc-5694680834e3",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-19T19:06:56.749Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "07d63747-6f1d-45b6-9261-4bbc41409cc9",
+          "check_id": "1db86248-ddae-46dd-a2fc-5694680834e3",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "31235ea8-78cc-47d8-a864-d7758f105e29",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-19T19:32:17.137Z"
+        },
+        {
+          "id": "b0a7e8bd-8fe4-4cc9-b059-b4ef9f017108",
+          "check_id": "1db86248-ddae-46dd-a2fc-5694680834e3",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "45bcb871-8429-4ae9-8176-953260ad6337",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-08-19T19:06:56.749Z"
+        }
+      ]
+    }
+  ],
+  "deposited_checkalt_controls": [
+    {
+      "check": {
+        "id": "00ae7bf9-c166-4d16-9871-9575fafc8e20",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "funds_released",
+        "status": "deposited",
+        "payee_n": 3,
+        "signed_n": 3,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "1463ae02-9691-4fef-b916-ecac575fe2c6",
+          "check_id": "00ae7bf9-c166-4d16-9871-9575fafc8e20",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-03T19:58:03.223Z"
+        },
+        {
+          "id": "215a110c-7acb-4bbe-b101-686836ccf61b",
+          "check_id": "00ae7bf9-c166-4d16-9871-9575fafc8e20",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-07-24T15:52:34.004Z"
+        },
+        {
+          "id": "3329743d-04ad-419a-81e7-d05797bc2dc5",
+          "check_id": "00ae7bf9-c166-4d16-9871-9575fafc8e20",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-07-23T14:16:22.322Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "1044faa9-7829-4f24-b10d-67bbca313564",
+          "check_id": "00ae7bf9-c166-4d16-9871-9575fafc8e20",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "215a110c-7acb-4bbe-b101-686836ccf61b",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-07-24T15:52:33.729Z"
+        },
+        {
+          "id": "7dd49ed8-2be9-47e5-b2e6-223ea3089b94",
+          "check_id": "00ae7bf9-c166-4d16-9871-9575fafc8e20",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "1463ae02-9691-4fef-b916-ecac575fe2c6",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-03T19:58:02.929Z"
+        },
+        {
+          "id": "f9bb0e22-6528-4efd-ac6f-41361915a3cf",
+          "check_id": "00ae7bf9-c166-4d16-9871-9575fafc8e20",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "3329743d-04ad-419a-81e7-d05797bc2dc5",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-07-23T14:16:21.977Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "00ae7bf9-c166-4d16-9871-9575fafc8e20",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "08968fbc-908d-4fa6-a2bc-b529c28cf602",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "funds_released",
+        "status": "deposited",
+        "payee_n": 4,
+        "signed_n": 3,
+        "unsigned_n": 1,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "47d9680c-38c9-4b4f-b57d-9ea35bc6fd9c",
+          "check_id": "08968fbc-908d-4fa6-a2bc-b529c28cf602",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-21T17:33:02.857Z"
+        },
+        {
+          "id": "9bdd6af9-1497-49ae-8397-fb286e1564f5",
+          "check_id": "08968fbc-908d-4fa6-a2bc-b529c28cf602",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-21T16:27:45.705Z"
+        },
+        {
+          "id": "b2edcb30-78af-4d8f-8704-fa92edc0d0d1",
+          "check_id": "08968fbc-908d-4fa6-a2bc-b529c28cf602",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-21T14:46:02.570Z"
+        },
+        {
+          "id": "d3e5233d-3fdb-4975-aecb-74cc9e1a45f7",
+          "check_id": "08968fbc-908d-4fa6-a2bc-b529c28cf602",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "mortgage_company",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "69eaf091-1d48-4235-aa19-cd6b4cb36fd1",
+          "check_id": "08968fbc-908d-4fa6-a2bc-b529c28cf602",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "d3e5233d-3fdb-4975-aecb-74cc9e1a45f7",
+          "payee_type": "mortgage_company",
+          "status": "waived",
+          "signed_at": null
+        },
+        {
+          "id": "8b2422d2-514c-4e8e-b51f-7c8ff0143e55",
+          "check_id": "08968fbc-908d-4fa6-a2bc-b529c28cf602",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "b2edcb30-78af-4d8f-8704-fa92edc0d0d1",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-08-21T14:46:02.570Z"
+        },
+        {
+          "id": "9c958eb6-0656-417c-863d-ca80d4b5d92b",
+          "check_id": "08968fbc-908d-4fa6-a2bc-b529c28cf602",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "9bdd6af9-1497-49ae-8397-fb286e1564f5",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-21T16:27:45.443Z"
+        },
+        {
+          "id": "de44edb0-6ef6-4a6d-a6d1-048030debde2",
+          "check_id": "08968fbc-908d-4fa6-a2bc-b529c28cf602",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "47d9680c-38c9-4b4f-b57d-9ea35bc6fd9c",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-21T17:33:02.603Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "08968fbc-908d-4fa6-a2bc-b529c28cf602",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "0ae029d3-c19e-4f0c-9dce-a4fda1638c26",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "funds_released",
+        "status": "deposited",
+        "payee_n": 3,
+        "signed_n": 3,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "88f9f161-c077-4c54-b985-dd70c2e7c511",
+          "check_id": "0ae029d3-c19e-4f0c-9dce-a4fda1638c26",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-11T17:45:59.583Z"
+        },
+        {
+          "id": "9e4321a2-d899-4519-9312-f8d48640a886",
+          "check_id": "0ae029d3-c19e-4f0c-9dce-a4fda1638c26",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-11T17:45:03.025Z"
+        },
+        {
+          "id": "f3e393d0-25cd-4a30-847e-b6a632e2d1e9",
+          "check_id": "0ae029d3-c19e-4f0c-9dce-a4fda1638c26",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-03T19:58:59.870Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "229991a1-6c7a-4b24-9d53-dac422ce7488",
+          "check_id": "0ae029d3-c19e-4f0c-9dce-a4fda1638c26",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "88f9f161-c077-4c54-b985-dd70c2e7c511",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-11T17:45:59.290Z"
+        },
+        {
+          "id": "beb06056-f0d8-49e6-b0dc-f15da90bfee8",
+          "check_id": "0ae029d3-c19e-4f0c-9dce-a4fda1638c26",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "f3e393d0-25cd-4a30-847e-b6a632e2d1e9",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-08-03T19:58:59.870Z"
+        },
+        {
+          "id": "f1598ed8-4e09-4905-bed8-ee3caebb2fce",
+          "check_id": "0ae029d3-c19e-4f0c-9dce-a4fda1638c26",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "9e4321a2-d899-4519-9312-f8d48640a886",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-11T17:45:02.694Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "0ae029d3-c19e-4f0c-9dce-a4fda1638c26",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "19142a0a-1655-4692-b65c-b3bff64529b0",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "funds_released",
+        "status": "deposited",
+        "payee_n": 4,
+        "signed_n": 3,
+        "unsigned_n": 1,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "3c40b5da-3895-4150-ad69-2a52774791b4",
+          "check_id": "19142a0a-1655-4692-b65c-b3bff64529b0",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-11T15:41:43.420Z"
+        },
+        {
+          "id": "7000e8d1-e3de-49bd-a819-b864479e4755",
+          "check_id": "19142a0a-1655-4692-b65c-b3bff64529b0",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-11T16:12:55.865Z"
+        },
+        {
+          "id": "95ea0750-0969-4195-ad9e-73b25521a41b",
+          "check_id": "19142a0a-1655-4692-b65c-b3bff64529b0",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "mortgage_company",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        },
+        {
+          "id": "f287ad84-efd4-45ef-8c1f-99212b813759",
+          "check_id": "19142a0a-1655-4692-b65c-b3bff64529b0",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-11T15:16:13.722Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "0bc13f16-c0b0-48fd-8a5e-405827b254aa",
+          "check_id": "19142a0a-1655-4692-b65c-b3bff64529b0",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "7000e8d1-e3de-49bd-a819-b864479e4755",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-11T16:12:55.502Z"
+        },
+        {
+          "id": "6c6ba612-f2cb-4eff-87af-cf34107f7ef3",
+          "check_id": "19142a0a-1655-4692-b65c-b3bff64529b0",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "f287ad84-efd4-45ef-8c1f-99212b813759",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-08-11T15:16:13.722Z"
+        },
+        {
+          "id": "7b4ac4d7-0aea-4003-b9ac-043409a55bf3",
+          "check_id": "19142a0a-1655-4692-b65c-b3bff64529b0",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "3c40b5da-3895-4150-ad69-2a52774791b4",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-11T15:41:43.152Z"
+        },
+        {
+          "id": "c99224e1-afbe-4dad-b7bd-711d95cfe6b4",
+          "check_id": "19142a0a-1655-4692-b65c-b3bff64529b0",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "95ea0750-0969-4195-ad9e-73b25521a41b",
+          "payee_type": "mortgage_company",
+          "status": "waived",
+          "signed_at": null
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "19142a0a-1655-4692-b65c-b3bff64529b0",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "1b40d7e5-a7f3-425e-8f95-0bac22dcbfa0",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "deposited",
+        "status": "deposited",
+        "payee_n": 3,
+        "signed_n": 3,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "332c7ed9-3ca2-43d1-b6f5-7c7dced3e254",
+          "check_id": "1b40d7e5-a7f3-425e-8f95-0bac22dcbfa0",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-14T14:19:23.509Z"
+        },
+        {
+          "id": "5734f2ac-5ae5-4790-8c9d-64f259f1d795",
+          "check_id": "1b40d7e5-a7f3-425e-8f95-0bac22dcbfa0",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-14T14:20:01.320Z"
+        },
+        {
+          "id": "84570747-9e8c-4239-84f3-a18aa109d0c4",
+          "check_id": "1b40d7e5-a7f3-425e-8f95-0bac22dcbfa0",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-31T13:04:26.403Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "306e22af-8146-4670-8126-ab437aeccdab",
+          "check_id": "1b40d7e5-a7f3-425e-8f95-0bac22dcbfa0",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "332c7ed9-3ca2-43d1-b6f5-7c7dced3e254",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-14T14:19:23.376Z"
+        },
+        {
+          "id": "8ef4d32a-f820-42cd-8ee4-6a44e487c99a",
+          "check_id": "1b40d7e5-a7f3-425e-8f95-0bac22dcbfa0",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "84570747-9e8c-4239-84f3-a18aa109d0c4",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-08-31T13:04:26.403Z"
+        },
+        {
+          "id": "e43500dd-08bd-4d70-8a9b-4e28d1960703",
+          "check_id": "1b40d7e5-a7f3-425e-8f95-0bac22dcbfa0",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "5734f2ac-5ae5-4790-8c9d-64f259f1d795",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-14T14:20:01.052Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "1b40d7e5-a7f3-425e-8f95-0bac22dcbfa0",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "1db86248-ddae-46dd-a2fc-5694680834e3",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "ready_for_deposit",
+        "status": "approved_for_deposit",
+        "payee_n": 2,
+        "signed_n": 2,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "31235ea8-78cc-47d8-a864-d7758f105e29",
+          "check_id": "1db86248-ddae-46dd-a2fc-5694680834e3",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-19T19:32:17.475Z"
+        },
+        {
+          "id": "45bcb871-8429-4ae9-8176-953260ad6337",
+          "check_id": "1db86248-ddae-46dd-a2fc-5694680834e3",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-19T19:06:56.749Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "07d63747-6f1d-45b6-9261-4bbc41409cc9",
+          "check_id": "1db86248-ddae-46dd-a2fc-5694680834e3",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "31235ea8-78cc-47d8-a864-d7758f105e29",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-19T19:32:17.137Z"
+        },
+        {
+          "id": "b0a7e8bd-8fe4-4cc9-b059-b4ef9f017108",
+          "check_id": "1db86248-ddae-46dd-a2fc-5694680834e3",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "45bcb871-8429-4ae9-8176-953260ad6337",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-08-19T19:06:56.749Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "1db86248-ddae-46dd-a2fc-5694680834e3",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "approved_for_deposit",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "1ff0a2e2-8432-4664-b969-44387488acb7",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "funds_released",
+        "status": "deposited",
+        "payee_n": 2,
+        "signed_n": 2,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 4
+      },
+      "payees": [
+        {
+          "id": "7b32cbcb-e00d-4a3a-a19f-c84b2dc97f2d",
+          "check_id": "1ff0a2e2-8432-4664-b969-44387488acb7",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-06-11T01:38:18.461Z"
+        },
+        {
+          "id": "940d559a-0165-4c39-8dc5-dd73fbcd53f0",
+          "check_id": "1ff0a2e2-8432-4664-b969-44387488acb7",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-05-28T16:45:05.611Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "0edc9856-cc7a-423e-adfd-f10be8f4047a",
+          "check_id": "1ff0a2e2-8432-4664-b969-44387488acb7",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "940d559a-0165-4c39-8dc5-dd73fbcd53f0",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-05-28T16:45:05.145Z"
+        },
+        {
+          "id": "8f207d6d-636b-4281-a044-af22062bfc38",
+          "check_id": "1ff0a2e2-8432-4664-b969-44387488acb7",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "7b32cbcb-e00d-4a3a-a19f-c84b2dc97f2d",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-06-11T01:38:17.990Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "1ff0a2e2-8432-4664-b969-44387488acb7",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "21f60b5a-70f0-44ed-a9b6-610132b373e5",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "funds_released",
+        "status": "deposited",
+        "payee_n": 4,
+        "signed_n": 3,
+        "unsigned_n": 1,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "6a152de9-74fe-4266-8872-2aaa4ab3fef3",
+          "check_id": "21f60b5a-70f0-44ed-a9b6-610132b373e5",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-10T15:15:41.416Z"
+        },
+        {
+          "id": "80b2c823-f09a-4236-b634-3d5282e69e1e",
+          "check_id": "21f60b5a-70f0-44ed-a9b6-610132b373e5",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-10T15:09:59.451Z"
+        },
+        {
+          "id": "97cde186-3f4e-4eb5-9eb0-ff500ce90f30",
+          "check_id": "21f60b5a-70f0-44ed-a9b6-610132b373e5",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "mortgage_company",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        },
+        {
+          "id": "991827d2-1a24-4c48-bc7e-e765e0db5ad6",
+          "check_id": "21f60b5a-70f0-44ed-a9b6-610132b373e5",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-10T17:27:52.729Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "073de77c-c8fe-4f06-b085-a8824ba16108",
+          "check_id": "21f60b5a-70f0-44ed-a9b6-610132b373e5",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "991827d2-1a24-4c48-bc7e-e765e0db5ad6",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-10T17:27:52.396Z"
+        },
+        {
+          "id": "96ba1b85-ca24-4161-95dd-980cd0e265a3",
+          "check_id": "21f60b5a-70f0-44ed-a9b6-610132b373e5",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "80b2c823-f09a-4236-b634-3d5282e69e1e",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-08-10T15:09:59.451Z"
+        },
+        {
+          "id": "be50e189-de83-43e0-8f39-deffe7a2d716",
+          "check_id": "21f60b5a-70f0-44ed-a9b6-610132b373e5",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "97cde186-3f4e-4eb5-9eb0-ff500ce90f30",
+          "payee_type": "mortgage_company",
+          "status": "waived",
+          "signed_at": null
+        },
+        {
+          "id": "ed7e4ce7-15f1-4ab4-a322-ebd12c81d6a2",
+          "check_id": "21f60b5a-70f0-44ed-a9b6-610132b373e5",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "6a152de9-74fe-4266-8872-2aaa4ab3fef3",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-10T15:15:41.040Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "21f60b5a-70f0-44ed-a9b6-610132b373e5",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "230eec8c-8087-45ec-bba4-151f79f0731d",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "deposited",
+        "status": "deposited",
+        "payee_n": 3,
+        "signed_n": 3,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "24896cd5-ef4c-4fd1-a875-0a14dd2fe6bf",
+          "check_id": "230eec8c-8087-45ec-bba4-151f79f0731d",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-31T23:26:27.083Z"
+        },
+        {
+          "id": "b380fbad-4bf6-40d3-893c-c301c66a5dbd",
+          "check_id": "230eec8c-8087-45ec-bba4-151f79f0731d",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-31T23:27:52.080Z"
+        },
+        {
+          "id": "ba9454b3-f79c-428b-8ff1-3156b3d08324",
+          "check_id": "230eec8c-8087-45ec-bba4-151f79f0731d",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-26T21:47:43.375Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "20a3eb1e-8a5a-4177-85a6-1ba2c0808e1d",
+          "check_id": "230eec8c-8087-45ec-bba4-151f79f0731d",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "ba9454b3-f79c-428b-8ff1-3156b3d08324",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-08-26T21:47:43.375Z"
+        },
+        {
+          "id": "5b19f90c-39cc-4b33-88ff-12f436211d4d",
+          "check_id": "230eec8c-8087-45ec-bba4-151f79f0731d",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "24896cd5-ef4c-4fd1-a875-0a14dd2fe6bf",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-31T23:26:26.928Z"
+        },
+        {
+          "id": "693a08ba-befe-4a65-985f-9b746ef12383",
+          "check_id": "230eec8c-8087-45ec-bba4-151f79f0731d",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "b380fbad-4bf6-40d3-893c-c301c66a5dbd",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-31T23:27:51.747Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "230eec8c-8087-45ec-bba4-151f79f0731d",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "24b36f6c-53a7-491f-a1d4-9ec824352483",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "funds_released",
+        "status": "deposited",
+        "payee_n": 3,
+        "signed_n": 3,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "4c8da155-b123-4ac6-8432-0a461e9fa96f",
+          "check_id": "24b36f6c-53a7-491f-a1d4-9ec824352483",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-06-19T16:01:30.278Z"
+        },
+        {
+          "id": "b561195a-1a28-4409-bb92-58b38de5adca",
+          "check_id": "24b36f6c-53a7-491f-a1d4-9ec824352483",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-06-21T10:15:24.523Z"
+        },
+        {
+          "id": "c91fb16e-e10e-4d2f-ae5a-e0f06716cebf",
+          "check_id": "24b36f6c-53a7-491f-a1d4-9ec824352483",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-06-19T15:49:40.408Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "11052249-911e-4fc8-986d-e34591a43e1d",
+          "check_id": "24b36f6c-53a7-491f-a1d4-9ec824352483",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "4c8da155-b123-4ac6-8432-0a461e9fa96f",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-06-19T16:01:29.965Z"
+        },
+        {
+          "id": "6398f11b-0592-4ab0-bcdf-8f945cc3442f",
+          "check_id": "24b36f6c-53a7-491f-a1d4-9ec824352483",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "b561195a-1a28-4409-bb92-58b38de5adca",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-06-21T10:15:24.189Z"
+        },
+        {
+          "id": "dccddfa3-3c9c-42b7-aa55-8914cd61aaf1",
+          "check_id": "24b36f6c-53a7-491f-a1d4-9ec824352483",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "c91fb16e-e10e-4d2f-ae5a-e0f06716cebf",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-06-19T15:49:39.804Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "24b36f6c-53a7-491f-a1d4-9ec824352483",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "264b89d2-fd7d-4763-948b-2b48779cc803",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "funds_released",
+        "status": "deposited",
+        "payee_n": 2,
+        "signed_n": 2,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "1ec7d6cc-3958-4982-85de-c6e4f96bd4c2",
+          "check_id": "264b89d2-fd7d-4763-948b-2b48779cc803",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-11T14:29:20.649Z"
+        },
+        {
+          "id": "a4a50133-24f2-4b16-ab0e-960c8267dc6f",
+          "check_id": "264b89d2-fd7d-4763-948b-2b48779cc803",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-11T15:13:24.727Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "7fbec6ba-ad1e-457e-900a-38a8c58bfc37",
+          "check_id": "264b89d2-fd7d-4763-948b-2b48779cc803",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "1ec7d6cc-3958-4982-85de-c6e4f96bd4c2",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-08-11T14:29:20.649Z"
+        },
+        {
+          "id": "b2ed40e4-ca1b-45cd-ba4b-148f6973ec8e",
+          "check_id": "264b89d2-fd7d-4763-948b-2b48779cc803",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "a4a50133-24f2-4b16-ab0e-960c8267dc6f",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-11T15:13:24.435Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "264b89d2-fd7d-4763-948b-2b48779cc803",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "2853aaa0-bf69-4700-989a-65d43c3e8b50",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "deposited",
+        "status": "deposited",
+        "payee_n": 3,
+        "signed_n": 3,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "3ac385e8-845f-4ad5-888e-f6e91efff7fe",
+          "check_id": "2853aaa0-bf69-4700-989a-65d43c3e8b50",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-14T14:16:40.413Z"
+        },
+        {
+          "id": "8eb3491b-c58b-4009-ba16-b0329c2f0a49",
+          "check_id": "2853aaa0-bf69-4700-989a-65d43c3e8b50",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-14T14:18:13.559Z"
+        },
+        {
+          "id": "9b598fcc-672b-42ef-bc98-b488611f912c",
+          "check_id": "2853aaa0-bf69-4700-989a-65d43c3e8b50",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "unknown",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-31T13:35:08.014Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "53a5f23d-0d4c-4e20-9301-d8b676b09f21",
+          "check_id": "2853aaa0-bf69-4700-989a-65d43c3e8b50",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "8eb3491b-c58b-4009-ba16-b0329c2f0a49",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-14T14:18:13.290Z"
+        },
+        {
+          "id": "913cb90d-68d2-40d6-af7e-e79e5cfc5e53",
+          "check_id": "2853aaa0-bf69-4700-989a-65d43c3e8b50",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "9b598fcc-672b-42ef-bc98-b488611f912c",
+          "payee_type": "other",
+          "status": "signed",
+          "signed_at": "2026-08-31T13:35:07.644Z"
+        },
+        {
+          "id": "ac44abf3-8078-4cef-9122-876e2b1df714",
+          "check_id": "2853aaa0-bf69-4700-989a-65d43c3e8b50",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "3ac385e8-845f-4ad5-888e-f6e91efff7fe",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-14T14:16:40.102Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "2853aaa0-bf69-4700-989a-65d43c3e8b50",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "287be428-b2f5-420f-9366-d051d171fbc9",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "funds_released",
+        "status": "deposited",
+        "payee_n": 2,
+        "signed_n": 2,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "11f71645-962d-4e3f-ae79-2d0be3081ccd",
+          "check_id": "287be428-b2f5-420f-9366-d051d171fbc9",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-06-05T16:20:32.146Z"
+        },
+        {
+          "id": "b70b6ca9-6ccb-4a60-848b-92fda53efdfc",
+          "check_id": "287be428-b2f5-420f-9366-d051d171fbc9",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-05-28T01:23:09.484Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "92d99838-9818-40e6-af7b-d4c4ebaf1b61",
+          "check_id": "287be428-b2f5-420f-9366-d051d171fbc9",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "11f71645-962d-4e3f-ae79-2d0be3081ccd",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-06-05T16:20:31.709Z"
+        },
+        {
+          "id": "f00912bc-ccab-453f-a40b-be9df02daa57",
+          "check_id": "287be428-b2f5-420f-9366-d051d171fbc9",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "b70b6ca9-6ccb-4a60-848b-92fda53efdfc",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-05-28T01:23:08.913Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "287be428-b2f5-420f-9366-d051d171fbc9",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "28f06187-3cc6-49c3-8b82-c717518398bc",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "funds_released",
+        "status": "deposited",
+        "payee_n": 2,
+        "signed_n": 1,
+        "unsigned_n": 1,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "e871a233-d4d6-433b-bf2b-7820ff3983ff",
+          "check_id": "28f06187-3cc6-49c3-8b82-c717518398bc",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-20T17:57:13.350Z"
+        },
+        {
+          "id": "f02b4064-bab0-42ac-a97c-44d1b1af03b4",
+          "check_id": "28f06187-3cc6-49c3-8b82-c717518398bc",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "34c80acf-304a-43e6-894b-a3ef06527ff9",
+          "check_id": "28f06187-3cc6-49c3-8b82-c717518398bc",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "e871a233-d4d6-433b-bf2b-7820ff3983ff",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-20T17:57:13.350Z"
+        },
+        {
+          "id": "537990d1-5f7c-45d1-a651-2c7b0418e2f2",
+          "check_id": "28f06187-3cc6-49c3-8b82-c717518398bc",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "f02b4064-bab0-42ac-a97c-44d1b1af03b4",
+          "payee_type": "insured",
+          "status": "waived",
+          "signed_at": null
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "28f06187-3cc6-49c3-8b82-c717518398bc",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "30b8c1b5-6cbb-4933-aa1c-5ede34081f0b",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "funds_released",
+        "status": "deposited",
+        "payee_n": 2,
+        "signed_n": 2,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "e2702af8-2d83-4916-ad23-a71344c585f3",
+          "check_id": "30b8c1b5-6cbb-4933-aa1c-5ede34081f0b",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-06-21T10:14:22.689Z"
+        },
+        {
+          "id": "e62e5932-37ec-4609-b9a4-324cea17883a",
+          "check_id": "30b8c1b5-6cbb-4933-aa1c-5ede34081f0b",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-06-24T14:49:36.733Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "88819287-84c9-41dc-a755-0d62201375bb",
+          "check_id": "30b8c1b5-6cbb-4933-aa1c-5ede34081f0b",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "e62e5932-37ec-4609-b9a4-324cea17883a",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-06-24T14:49:36.284Z"
+        },
+        {
+          "id": "d7eead16-df26-40bc-b765-a1856c2dd1ce",
+          "check_id": "30b8c1b5-6cbb-4933-aa1c-5ede34081f0b",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "e2702af8-2d83-4916-ad23-a71344c585f3",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-06-21T10:14:22.324Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "30b8c1b5-6cbb-4933-aa1c-5ede34081f0b",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "318a6a9a-6eb0-40a4-9997-e2caebc5ce09",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "funds_released",
+        "status": "deposited",
+        "payee_n": 2,
+        "signed_n": 2,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "10394bdd-a0f2-451a-a4b6-f38aa41421d2",
+          "check_id": "318a6a9a-6eb0-40a4-9997-e2caebc5ce09",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-11T13:31:44.747Z"
+        },
+        {
+          "id": "54a1a3ee-46ff-4d35-815d-34f0c49c50d7",
+          "check_id": "318a6a9a-6eb0-40a4-9997-e2caebc5ce09",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-11T14:06:41.674Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "0143034f-5f68-497a-996a-29cc9ec19111",
+          "check_id": "318a6a9a-6eb0-40a4-9997-e2caebc5ce09",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "54a1a3ee-46ff-4d35-815d-34f0c49c50d7",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-11T14:06:40.698Z"
+        },
+        {
+          "id": "e059850e-7994-4f6f-9b8f-5acca391a5da",
+          "check_id": "318a6a9a-6eb0-40a4-9997-e2caebc5ce09",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "10394bdd-a0f2-451a-a4b6-f38aa41421d2",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-08-11T13:31:44.747Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "318a6a9a-6eb0-40a4-9997-e2caebc5ce09",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "32895d43-bc20-42ef-9f26-64257b7137a2",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "funds_released",
+        "status": "deposited",
+        "payee_n": 4,
+        "signed_n": 4,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 2
+      },
+      "payees": [
+        {
+          "id": "16590825-26d6-4f1c-a524-3eff8064beea",
+          "check_id": "32895d43-bc20-42ef-9f26-64257b7137a2",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-07-04T12:28:40.823Z"
+        },
+        {
+          "id": "7dc924c5-a06b-4bd0-a381-c3a661d64c0f",
+          "check_id": "32895d43-bc20-42ef-9f26-64257b7137a2",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "mortgage_company",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-07-03T14:03:40.002Z"
+        },
+        {
+          "id": "ae88ebee-f3de-4e99-abb3-422b58e47630",
+          "check_id": "32895d43-bc20-42ef-9f26-64257b7137a2",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-07-04T16:18:24.151Z"
+        },
+        {
+          "id": "d4b4f8f0-0d98-406f-9a9a-ef93d92b6c99",
+          "check_id": "32895d43-bc20-42ef-9f26-64257b7137a2",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-07-16T18:17:45.817Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "36388eec-7c11-437f-80bd-6b27c3a1c306",
+          "check_id": "32895d43-bc20-42ef-9f26-64257b7137a2",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "7dc924c5-a06b-4bd0-a381-c3a661d64c0f",
+          "payee_type": "mortgage_company",
+          "status": "signed",
+          "signed_at": "2026-07-03T14:03:39.662Z"
+        },
+        {
+          "id": "739b65bf-5281-4436-960e-a965f735c60c",
+          "check_id": "32895d43-bc20-42ef-9f26-64257b7137a2",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "16590825-26d6-4f1c-a524-3eff8064beea",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-07-04T12:28:40.396Z"
+        },
+        {
+          "id": "d8ca6c62-2a2e-4048-844b-0129fae6f0af",
+          "check_id": "32895d43-bc20-42ef-9f26-64257b7137a2",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "d4b4f8f0-0d98-406f-9a9a-ef93d92b6c99",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-07-16T18:17:45.451Z"
+        },
+        {
+          "id": "eb702eeb-f929-4c01-9177-41dc967eef7d",
+          "check_id": "32895d43-bc20-42ef-9f26-64257b7137a2",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "ae88ebee-f3de-4e99-abb3-422b58e47630",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-07-04T16:18:23.766Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "32895d43-bc20-42ef-9f26-64257b7137a2",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "3d827111-5829-4131-86c2-59f261009e38",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "funds_released",
+        "status": "deposited",
+        "payee_n": 2,
+        "signed_n": 2,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "a7653973-ceb3-4747-9256-a4e0570ccb32",
+          "check_id": "3d827111-5829-4131-86c2-59f261009e38",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-13T02:40:24.812Z"
+        },
+        {
+          "id": "d35916b3-a6e3-41a3-ba2c-01aaab1198d3",
+          "check_id": "3d827111-5829-4131-86c2-59f261009e38",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-07-23T18:50:34.943Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "9c00c312-6272-42bc-9956-c8f333268da8",
+          "check_id": "3d827111-5829-4131-86c2-59f261009e38",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "d35916b3-a6e3-41a3-ba2c-01aaab1198d3",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-07-23T18:50:34.943Z"
+        },
+        {
+          "id": "cc363a6d-91dc-4d67-a94d-cd9a15bc6878",
+          "check_id": "3d827111-5829-4131-86c2-59f261009e38",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "a7653973-ceb3-4747-9256-a4e0570ccb32",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-13T02:40:24.700Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "3d827111-5829-4131-86c2-59f261009e38",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "400d7023-cac7-45c2-8310-60f6a07e974b",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "funds_released",
+        "status": "deposited",
+        "payee_n": 1,
+        "signed_n": 1,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 2
+      },
+      "payees": [
+        {
+          "id": "869dbb97-cd9e-4fd9-87f6-667c5e9bd164",
+          "check_id": "400d7023-cac7-45c2-8310-60f6a07e974b",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-21T17:41:10.542Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "5b84c5ac-2117-4d79-83a7-5ea07596f22a",
+          "check_id": "400d7023-cac7-45c2-8310-60f6a07e974b",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "869dbb97-cd9e-4fd9-87f6-667c5e9bd164",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-21T17:41:10.167Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "400d7023-cac7-45c2-8310-60f6a07e974b",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "43de3da4-44e2-45b4-b0c7-2467ed3c7148",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "funds_released",
+        "status": "deposited",
+        "payee_n": 3,
+        "signed_n": 3,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "2272447c-66b8-4ce5-affa-f26214e50ac7",
+          "check_id": "43de3da4-44e2-45b4-b0c7-2467ed3c7148",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-06-06T10:48:07.210Z"
+        },
+        {
+          "id": "b2806fcc-f56f-4481-bde9-389adc255c22",
+          "check_id": "43de3da4-44e2-45b4-b0c7-2467ed3c7148",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "mortgage_company",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-06-02T17:09:54.170Z"
+        },
+        {
+          "id": "ca73cd61-94da-4369-b624-2b8202766f86",
+          "check_id": "43de3da4-44e2-45b4-b0c7-2467ed3c7148",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-06-04T00:58:01.721Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "727f2881-1846-4b52-9c88-cbf8daa46cf1",
+          "check_id": "43de3da4-44e2-45b4-b0c7-2467ed3c7148",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "ca73cd61-94da-4369-b624-2b8202766f86",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-06-04T00:58:01.523Z"
+        },
+        {
+          "id": "d18335de-4e22-48f2-abc9-1635b00094a1",
+          "check_id": "43de3da4-44e2-45b4-b0c7-2467ed3c7148",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "2272447c-66b8-4ce5-affa-f26214e50ac7",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-06-06T10:48:06.903Z"
+        },
+        {
+          "id": "da52f129-b0d7-4bab-b1ec-2def5aca0141",
+          "check_id": "43de3da4-44e2-45b4-b0c7-2467ed3c7148",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "b2806fcc-f56f-4481-bde9-389adc255c22",
+          "payee_type": "mortgage_company",
+          "status": "signed",
+          "signed_at": "2026-06-02T17:09:53.837Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "43de3da4-44e2-45b4-b0c7-2467ed3c7148",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "4a552f28-f8b6-431a-8d12-27f60bf5180a",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "deposited",
+        "status": "deposited",
+        "payee_n": 2,
+        "signed_n": 2,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "02ce26e8-ea64-4c67-9119-3a027fb55807",
+          "check_id": "4a552f28-f8b6-431a-8d12-27f60bf5180a",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-21T13:14:39.884Z"
+        },
+        {
+          "id": "be006f67-e546-4ebf-88fc-b4c3b5a878f9",
+          "check_id": "4a552f28-f8b6-431a-8d12-27f60bf5180a",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-21T13:13:54.027Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "171d211f-beed-4533-aaa2-120401e60b48",
+          "check_id": "4a552f28-f8b6-431a-8d12-27f60bf5180a",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "be006f67-e546-4ebf-88fc-b4c3b5a878f9",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-21T13:13:54.027Z"
+        },
+        {
+          "id": "34ebafd6-8c66-4d24-acc3-1ea7e4840bb0",
+          "check_id": "4a552f28-f8b6-431a-8d12-27f60bf5180a",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "02ce26e8-ea64-4c67-9119-3a027fb55807",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-08-21T13:14:39.884Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "4a552f28-f8b6-431a-8d12-27f60bf5180a",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "50e64a19-0f94-48f4-b14e-858975308436",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "deposited",
+        "status": "deposited",
+        "payee_n": 2,
+        "signed_n": 2,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "535558ab-d941-4e25-aa1b-bad73e872e62",
+          "check_id": "50e64a19-0f94-48f4-b14e-858975308436",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-25T19:46:55.887Z"
+        },
+        {
+          "id": "5f56cc95-f39d-4ea9-8009-8e72f0cb4ae6",
+          "check_id": "50e64a19-0f94-48f4-b14e-858975308436",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-25T19:49:37.094Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "14e19b0e-f384-4061-b9f4-81400611bf2c",
+          "check_id": "50e64a19-0f94-48f4-b14e-858975308436",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "5f56cc95-f39d-4ea9-8009-8e72f0cb4ae6",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-25T19:49:36.749Z"
+        },
+        {
+          "id": "c2f5491f-7e85-4e2b-9cba-4b8310a7f6e4",
+          "check_id": "50e64a19-0f94-48f4-b14e-858975308436",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "535558ab-d941-4e25-aa1b-bad73e872e62",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-08-25T19:46:55.887Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "50e64a19-0f94-48f4-b14e-858975308436",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "62bde4d8-e0ac-487a-9d7b-b78970224318",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "funds_released",
+        "status": "deposited",
+        "payee_n": 3,
+        "signed_n": 0,
+        "unsigned_n": 3,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "64ae4221-01c1-4498-9579-42c49972ce48",
+          "check_id": "62bde4d8-e0ac-487a-9d7b-b78970224318",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        },
+        {
+          "id": "73de1f1c-0698-45aa-9cab-d4bbc5ad7a22",
+          "check_id": "62bde4d8-e0ac-487a-9d7b-b78970224318",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        },
+        {
+          "id": "938e2d5a-5255-4f4f-a892-d475bbec54d5",
+          "check_id": "62bde4d8-e0ac-487a-9d7b-b78970224318",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "6657e8b3-6759-4e26-9f3a-97967c73f966",
+          "check_id": "62bde4d8-e0ac-487a-9d7b-b78970224318",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "938e2d5a-5255-4f4f-a892-d475bbec54d5",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-06-03T03:59:22.740Z"
+        },
+        {
+          "id": "9e644c13-6cec-47e7-a68d-01dc1d640d7a",
+          "check_id": "62bde4d8-e0ac-487a-9d7b-b78970224318",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "64ae4221-01c1-4498-9579-42c49972ce48",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-06-03T01:07:06.034Z"
+        },
+        {
+          "id": "ae63facd-b3f8-4d33-a0d1-e322d7518342",
+          "check_id": "62bde4d8-e0ac-487a-9d7b-b78970224318",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "73de1f1c-0698-45aa-9cab-d4bbc5ad7a22",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-06-04T00:56:48.679Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "62bde4d8-e0ac-487a-9d7b-b78970224318",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "6836cf64-13da-4984-8b78-aed735bb2786",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "funds_released",
+        "status": "deposited",
+        "payee_n": 2,
+        "signed_n": 2,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "8dc7ed23-7ca3-4f08-8670-a6b67fa34e49",
+          "check_id": "6836cf64-13da-4984-8b78-aed735bb2786",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-11T14:05:46.843Z"
+        },
+        {
+          "id": "d1510e66-21a5-4e73-8b42-b48c3d5b425f",
+          "check_id": "6836cf64-13da-4984-8b78-aed735bb2786",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-11T13:32:02.192Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "56b81c85-607c-40b3-a72f-2a70ac753eb5",
+          "check_id": "6836cf64-13da-4984-8b78-aed735bb2786",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "8dc7ed23-7ca3-4f08-8670-a6b67fa34e49",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-11T14:05:46.540Z"
+        },
+        {
+          "id": "572e7439-67bf-439a-aec2-f357079c91f4",
+          "check_id": "6836cf64-13da-4984-8b78-aed735bb2786",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "d1510e66-21a5-4e73-8b42-b48c3d5b425f",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-08-11T13:32:02.192Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "6836cf64-13da-4984-8b78-aed735bb2786",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "73a324f5-2a17-47cc-9450-43805f788a2d",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "funds_released",
+        "status": "deposited",
+        "payee_n": 4,
+        "signed_n": 4,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 3
+      },
+      "payees": [
+        {
+          "id": "4f5799fc-0a70-46c1-a9b9-4bda9874f291",
+          "check_id": "73a324f5-2a17-47cc-9450-43805f788a2d",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-06-03T04:00:28.845Z"
+        },
+        {
+          "id": "699b9399-7009-4591-b89f-b44f9d9e3a08",
+          "check_id": "73a324f5-2a17-47cc-9450-43805f788a2d",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-06-04T00:56:23.318Z"
+        },
+        {
+          "id": "a28a8125-7f87-478f-a739-c44d3e6d7212",
+          "check_id": "73a324f5-2a17-47cc-9450-43805f788a2d",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-06-03T01:04:51.504Z"
+        },
+        {
+          "id": "d7278f07-91b4-4eda-ae3d-cf018f72dfac",
+          "check_id": "73a324f5-2a17-47cc-9450-43805f788a2d",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "mortgage_company",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-06-02T18:50:56.340Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "1da82181-8a1a-495e-a6b0-d938226849ac",
+          "check_id": "73a324f5-2a17-47cc-9450-43805f788a2d",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "d7278f07-91b4-4eda-ae3d-cf018f72dfac",
+          "payee_type": "mortgage_company",
+          "status": "signed",
+          "signed_at": "2026-06-02T18:50:56.340Z"
+        },
+        {
+          "id": "6bca2da2-b00e-4f77-abbd-36918787dad4",
+          "check_id": "73a324f5-2a17-47cc-9450-43805f788a2d",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "699b9399-7009-4591-b89f-b44f9d9e3a08",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-06-04T00:56:23.318Z"
+        },
+        {
+          "id": "a4e04e62-5dc0-447b-95c0-3e8c23c41e47",
+          "check_id": "73a324f5-2a17-47cc-9450-43805f788a2d",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "a28a8125-7f87-478f-a739-c44d3e6d7212",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-06-03T01:04:51.504Z"
+        },
+        {
+          "id": "e68d70ff-a617-44c1-8eb2-e1e41395dbe0",
+          "check_id": "73a324f5-2a17-47cc-9450-43805f788a2d",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "4f5799fc-0a70-46c1-a9b9-4bda9874f291",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-06-03T04:00:28.845Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "73a324f5-2a17-47cc-9450-43805f788a2d",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "76ead31d-25ec-436c-b1f4-1e86dc05fc42",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "deposited",
+        "status": "deposited",
+        "payee_n": 2,
+        "signed_n": 2,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "60073db1-bbd8-4032-9509-64e1d769594c",
+          "check_id": "76ead31d-25ec-436c-b1f4-1e86dc05fc42",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-31T12:41:25.814Z"
+        },
+        {
+          "id": "99ed3f52-6260-4a2a-95dd-1b1c8e178dd6",
+          "check_id": "76ead31d-25ec-436c-b1f4-1e86dc05fc42",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-31T12:43:15.237Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "14e9a440-5b7e-4f85-80ba-d48f5d895c9a",
+          "check_id": "76ead31d-25ec-436c-b1f4-1e86dc05fc42",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "60073db1-bbd8-4032-9509-64e1d769594c",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-08-31T12:41:25.814Z"
+        },
+        {
+          "id": "f58a1140-ce7a-4db3-8f33-d50820ced7de",
+          "check_id": "76ead31d-25ec-436c-b1f4-1e86dc05fc42",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "99ed3f52-6260-4a2a-95dd-1b1c8e178dd6",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-31T12:43:14.894Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "76ead31d-25ec-436c-b1f4-1e86dc05fc42",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "7f1924cb-c9dd-497f-9dc9-27dce2fae98e",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "funds_released",
+        "status": "deposited",
+        "payee_n": 3,
+        "signed_n": 3,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "4a9a1291-73fc-4568-a4f2-2a16a1216df5",
+          "check_id": "7f1924cb-c9dd-497f-9dc9-27dce2fae98e",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-07-27T14:04:14.043Z"
+        },
+        {
+          "id": "58b04588-bf33-43d7-92f9-594105362e0e",
+          "check_id": "7f1924cb-c9dd-497f-9dc9-27dce2fae98e",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-07-28T22:02:10.285Z"
+        },
+        {
+          "id": "91a2b7ee-ccf1-4695-8e16-bea7c26f3a22",
+          "check_id": "7f1924cb-c9dd-497f-9dc9-27dce2fae98e",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-11T15:35:59.046Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "4dde2146-5a69-4f62-b1ed-0fbe8d5e2343",
+          "check_id": "7f1924cb-c9dd-497f-9dc9-27dce2fae98e",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "4a9a1291-73fc-4568-a4f2-2a16a1216df5",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-07-27T14:04:14.043Z"
+        },
+        {
+          "id": "7e142aed-c702-4228-84d4-bbc680e02632",
+          "check_id": "7f1924cb-c9dd-497f-9dc9-27dce2fae98e",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "58b04588-bf33-43d7-92f9-594105362e0e",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-07-28T22:02:10.011Z"
+        },
+        {
+          "id": "d4b965c0-1542-4f6e-a6bc-a8cc22697a18",
+          "check_id": "7f1924cb-c9dd-497f-9dc9-27dce2fae98e",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "91a2b7ee-ccf1-4695-8e16-bea7c26f3a22",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-11T15:35:58.781Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "7f1924cb-c9dd-497f-9dc9-27dce2fae98e",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "8350f5fe-973e-479b-9c6a-31160ae25df5",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "funds_released",
+        "status": "deposited",
+        "payee_n": 3,
+        "signed_n": 3,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "9e48f512-b0bc-41f2-9f7c-520b0597ad4f",
+          "check_id": "8350f5fe-973e-479b-9c6a-31160ae25df5",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-07-07T19:13:32.896Z"
+        },
+        {
+          "id": "dda0a10b-83c9-45b4-8eaa-da71aaef3898",
+          "check_id": "8350f5fe-973e-479b-9c6a-31160ae25df5",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-07-07T19:12:23.696Z"
+        },
+        {
+          "id": "e35c1171-7f82-4cf5-aca4-74680ed34e52",
+          "check_id": "8350f5fe-973e-479b-9c6a-31160ae25df5",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-07-07T19:11:58.156Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "3c5bef11-b690-410a-8afb-4711b6b2644d",
+          "check_id": "8350f5fe-973e-479b-9c6a-31160ae25df5",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "e35c1171-7f82-4cf5-aca4-74680ed34e52",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-07-07T19:11:57.743Z"
+        },
+        {
+          "id": "7b08e36e-0d1c-4957-86e4-b8dcc79c311b",
+          "check_id": "8350f5fe-973e-479b-9c6a-31160ae25df5",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "9e48f512-b0bc-41f2-9f7c-520b0597ad4f",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-07-07T19:13:32.215Z"
+        },
+        {
+          "id": "d248a5dc-d20b-4089-8618-c3be8a3d8538",
+          "check_id": "8350f5fe-973e-479b-9c6a-31160ae25df5",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "dda0a10b-83c9-45b4-8eaa-da71aaef3898",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-07-07T19:12:23.382Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "8350f5fe-973e-479b-9c6a-31160ae25df5",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "8c77b3a7-e51b-4597-8897-d6ed7c12f78c",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "funds_released",
+        "status": "deposited",
+        "payee_n": 3,
+        "signed_n": 2,
+        "unsigned_n": 1,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "d1be2483-8dab-49b7-831e-403c5eb90cd6",
+          "check_id": "8c77b3a7-e51b-4597-8897-d6ed7c12f78c",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "mortgage_company",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        },
+        {
+          "id": "e1f122f3-5b9b-4757-9092-ff49b8a1cf67",
+          "check_id": "8c77b3a7-e51b-4597-8897-d6ed7c12f78c",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-11T15:08:37.377Z"
+        },
+        {
+          "id": "f513849a-c6fd-4dfa-8a07-99a5fe02f2e1",
+          "check_id": "8c77b3a7-e51b-4597-8897-d6ed7c12f78c",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-21T14:18:18.267Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "66d3d7d7-3e26-44ae-8eb0-0dac17d1b7cb",
+          "check_id": "8c77b3a7-e51b-4597-8897-d6ed7c12f78c",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "d1be2483-8dab-49b7-831e-403c5eb90cd6",
+          "payee_type": "mortgage_company",
+          "status": "waived",
+          "signed_at": null
+        },
+        {
+          "id": "8e8129e5-5d83-4f25-9a6d-c7d9d6be3fe6",
+          "check_id": "8c77b3a7-e51b-4597-8897-d6ed7c12f78c",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "e1f122f3-5b9b-4757-9092-ff49b8a1cf67",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-08-11T15:08:37.377Z"
+        },
+        {
+          "id": "a0fb16ad-d589-4b8b-bb98-d91a4b1e664e",
+          "check_id": "8c77b3a7-e51b-4597-8897-d6ed7c12f78c",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "f513849a-c6fd-4dfa-8a07-99a5fe02f2e1",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-21T14:18:18.267Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "8c77b3a7-e51b-4597-8897-d6ed7c12f78c",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "8cbf4b14-ff98-4271-b4d1-2ab526c7d32f",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "funds_released",
+        "status": "deposited",
+        "payee_n": 5,
+        "signed_n": 3,
+        "unsigned_n": 2,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "3561740d-f4c7-4b3c-9d72-bce27694ddab",
+          "check_id": "8cbf4b14-ff98-4271-b4d1-2ab526c7d32f",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "mortgage_company",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        },
+        {
+          "id": "3acc8a8e-afab-431d-8de1-ffdbddcb35c9",
+          "check_id": "8cbf4b14-ff98-4271-b4d1-2ab526c7d32f",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-11T15:22:25.314Z"
+        },
+        {
+          "id": "b4067cca-6b72-431f-b133-2d97f0e59d6d",
+          "check_id": "8cbf4b14-ff98-4271-b4d1-2ab526c7d32f",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "mortgage_company",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        },
+        {
+          "id": "c3554aef-d8f3-457f-99c8-07c60dfd719b",
+          "check_id": "8cbf4b14-ff98-4271-b4d1-2ab526c7d32f",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-11T16:01:07.284Z"
+        },
+        {
+          "id": "c6a61fc1-1e7b-4087-8f6d-c0b603bb7a6b",
+          "check_id": "8cbf4b14-ff98-4271-b4d1-2ab526c7d32f",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-11T16:01:53.903Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "1864a0dc-24d9-4c64-8381-f08239325c5b",
+          "check_id": "8cbf4b14-ff98-4271-b4d1-2ab526c7d32f",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "c6a61fc1-1e7b-4087-8f6d-c0b603bb7a6b",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-11T16:01:53.627Z"
+        },
+        {
+          "id": "2cec0b15-2219-409f-994a-bd24e126010e",
+          "check_id": "8cbf4b14-ff98-4271-b4d1-2ab526c7d32f",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "c3554aef-d8f3-457f-99c8-07c60dfd719b",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-11T16:01:07.007Z"
+        },
+        {
+          "id": "6e57fcb1-8374-4102-b8ee-1f571d7ab80b",
+          "check_id": "8cbf4b14-ff98-4271-b4d1-2ab526c7d32f",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "b4067cca-6b72-431f-b133-2d97f0e59d6d",
+          "payee_type": "mortgage_company",
+          "status": "waived",
+          "signed_at": null
+        },
+        {
+          "id": "a70625fc-aac2-4c85-936f-f273f431fff3",
+          "check_id": "8cbf4b14-ff98-4271-b4d1-2ab526c7d32f",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "3561740d-f4c7-4b3c-9d72-bce27694ddab",
+          "payee_type": "mortgage_company",
+          "status": "waived",
+          "signed_at": null
+        },
+        {
+          "id": "f87b6b50-1f90-417b-8242-fbd3769e00a5",
+          "check_id": "8cbf4b14-ff98-4271-b4d1-2ab526c7d32f",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "3acc8a8e-afab-431d-8de1-ffdbddcb35c9",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-11T15:22:25.314Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "8cbf4b14-ff98-4271-b4d1-2ab526c7d32f",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "8d0bc0e2-47bf-4d21-aebb-9fbca4861910",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "funds_released",
+        "status": "deposited",
+        "payee_n": 3,
+        "signed_n": 3,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "3861ee47-da96-47a4-9f0e-69a03c4b5587",
+          "check_id": "8d0bc0e2-47bf-4d21-aebb-9fbca4861910",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-07-24T19:24:21.220Z"
+        },
+        {
+          "id": "881ea2ff-8e5b-4ef8-8b3f-7a4ff192712e",
+          "check_id": "8d0bc0e2-47bf-4d21-aebb-9fbca4861910",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-03T22:56:15.133Z"
+        },
+        {
+          "id": "dd46acbf-e0f6-4cce-a037-07ad29242082",
+          "check_id": "8d0bc0e2-47bf-4d21-aebb-9fbca4861910",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-07-23T18:43:14.836Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "07b3ad5c-2e75-437b-b28c-b02137cc9194",
+          "check_id": "8d0bc0e2-47bf-4d21-aebb-9fbca4861910",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "881ea2ff-8e5b-4ef8-8b3f-7a4ff192712e",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-03T22:56:14.734Z"
+        },
+        {
+          "id": "7d057027-f426-47a4-b29d-67efc27e1809",
+          "check_id": "8d0bc0e2-47bf-4d21-aebb-9fbca4861910",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "dd46acbf-e0f6-4cce-a037-07ad29242082",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-07-23T18:43:14.836Z"
+        },
+        {
+          "id": "d5734e1e-7f18-4e0f-b07d-821fd9b0321e",
+          "check_id": "8d0bc0e2-47bf-4d21-aebb-9fbca4861910",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "3861ee47-da96-47a4-9f0e-69a03c4b5587",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-07-24T19:24:20.869Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "8d0bc0e2-47bf-4d21-aebb-9fbca4861910",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "93fa0063-3a1c-4f47-b679-26357b3ac163",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "deposited",
+        "status": "deposited",
+        "payee_n": 2,
+        "signed_n": 2,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "b0a6dc6a-76ad-40da-a6bf-18e735f61514",
+          "check_id": "93fa0063-3a1c-4f47-b679-26357b3ac163",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-07-24T14:04:55.653Z"
+        },
+        {
+          "id": "b8cf9dfe-232e-4c2a-9067-96c5390d765d",
+          "check_id": "93fa0063-3a1c-4f47-b679-26357b3ac163",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-27T20:37:27.980Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "f9db5293-4864-46c5-ad9c-81d77875ae80",
+          "check_id": "93fa0063-3a1c-4f47-b679-26357b3ac163",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "b8cf9dfe-232e-4c2a-9067-96c5390d765d",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-27T20:37:27.223Z"
+        },
+        {
+          "id": "fc74108b-b9f6-44be-92c1-a194b4f9c0b1",
+          "check_id": "93fa0063-3a1c-4f47-b679-26357b3ac163",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "b0a6dc6a-76ad-40da-a6bf-18e735f61514",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-07-24T14:04:55.653Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "93fa0063-3a1c-4f47-b679-26357b3ac163",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "969c3a7d-b17d-4130-aacd-b2ad9066300b",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "funds_released",
+        "status": "deposited",
+        "payee_n": 3,
+        "signed_n": 2,
+        "unsigned_n": 1,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 3
+      },
+      "payees": [
+        {
+          "id": "3db85fcf-3165-45e8-a9b7-077ae296066b",
+          "check_id": "969c3a7d-b17d-4130-aacd-b2ad9066300b",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-06-16T00:02:03.009Z"
+        },
+        {
+          "id": "5091c9fb-5935-40e3-b5ff-fbe6aae916e8",
+          "check_id": "969c3a7d-b17d-4130-aacd-b2ad9066300b",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        },
+        {
+          "id": "6c058850-4ec7-480c-88e2-6af0512cc476",
+          "check_id": "969c3a7d-b17d-4130-aacd-b2ad9066300b",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-06-19T15:51:31.106Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "21a7b8a6-d6b4-4c66-8ff4-64f59b68f712",
+          "check_id": "969c3a7d-b17d-4130-aacd-b2ad9066300b",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "6c058850-4ec7-480c-88e2-6af0512cc476",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-06-15T22:59:58.597Z"
+        },
+        {
+          "id": "2d99cb19-bd6c-4b4f-9d38-4f44fb80d76a",
+          "check_id": "969c3a7d-b17d-4130-aacd-b2ad9066300b",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "6c058850-4ec7-480c-88e2-6af0512cc476",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-06-19T15:51:30.706Z"
+        },
+        {
+          "id": "462ccf57-deee-4673-8e61-0cf64382ade1",
+          "check_id": "969c3a7d-b17d-4130-aacd-b2ad9066300b",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "3db85fcf-3165-45e8-a9b7-077ae296066b",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-06-16T00:02:02.818Z"
+        },
+        {
+          "id": "ce4c8e9d-fe23-478f-b10a-be31b484c0cf",
+          "check_id": "969c3a7d-b17d-4130-aacd-b2ad9066300b",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "5091c9fb-5935-40e3-b5ff-fbe6aae916e8",
+          "payee_type": "public_adjuster",
+          "status": "pending",
+          "signed_at": null
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "969c3a7d-b17d-4130-aacd-b2ad9066300b",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "a44deb77-3be0-46c6-9575-31c2b232a32b",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "funds_released",
+        "status": "deposited",
+        "payee_n": 2,
+        "signed_n": 2,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "0c8af85e-76a3-4f25-aac0-2d636fb2b5cc",
+          "check_id": "a44deb77-3be0-46c6-9575-31c2b232a32b",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-17T18:15:15.198Z"
+        },
+        {
+          "id": "1258971d-ff73-49a3-ae6b-91a7f1039d23",
+          "check_id": "a44deb77-3be0-46c6-9575-31c2b232a32b",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-18T19:05:48.493Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "6de1cdd2-a438-413f-bddc-dfaca3b27bc0",
+          "check_id": "a44deb77-3be0-46c6-9575-31c2b232a32b",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "0c8af85e-76a3-4f25-aac0-2d636fb2b5cc",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-08-17T18:15:15.198Z"
+        },
+        {
+          "id": "a46cb22d-2066-4768-8563-5bb164c0e557",
+          "check_id": "a44deb77-3be0-46c6-9575-31c2b232a32b",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "1258971d-ff73-49a3-ae6b-91a7f1039d23",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-18T19:05:47.984Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "a44deb77-3be0-46c6-9575-31c2b232a32b",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "a4cb77fa-4da6-4b61-b2ec-24de4f921d8a",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "deposited",
+        "status": "deposited",
+        "payee_n": 4,
+        "signed_n": 3,
+        "unsigned_n": 1,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "1ad9d568-ae25-4287-ad08-4a810c3c001d",
+          "check_id": "a4cb77fa-4da6-4b61-b2ec-24de4f921d8a",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-27T21:31:26.302Z"
+        },
+        {
+          "id": "61924f6d-aa38-4e4f-a9fc-fcd12b2c6f60",
+          "check_id": "a4cb77fa-4da6-4b61-b2ec-24de4f921d8a",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-11T15:19:13.517Z"
+        },
+        {
+          "id": "d7a4808f-1ba1-4ed8-949d-381d71ac6856",
+          "check_id": "a4cb77fa-4da6-4b61-b2ec-24de4f921d8a",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "mortgage_company",
+          "endorsement_status": "pending",
+          "endorsed_at": null
+        },
+        {
+          "id": "de2fcacb-1e17-4734-8f93-8ab05d5b46bb",
+          "check_id": "a4cb77fa-4da6-4b61-b2ec-24de4f921d8a",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-27T21:30:10.907Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "072edab0-c8ad-4d40-b3db-3bd822fadb78",
+          "check_id": "a4cb77fa-4da6-4b61-b2ec-24de4f921d8a",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "d7a4808f-1ba1-4ed8-949d-381d71ac6856",
+          "payee_type": "mortgage_company",
+          "status": "waived",
+          "signed_at": null
+        },
+        {
+          "id": "2729f344-4dec-47b3-a1a3-e1e697bf1ce9",
+          "check_id": "a4cb77fa-4da6-4b61-b2ec-24de4f921d8a",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "1ad9d568-ae25-4287-ad08-4a810c3c001d",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-27T21:31:26.144Z"
+        },
+        {
+          "id": "b702231c-cc04-4430-985e-cd96ef928a41",
+          "check_id": "a4cb77fa-4da6-4b61-b2ec-24de4f921d8a",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "61924f6d-aa38-4e4f-a9fc-fcd12b2c6f60",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-08-11T15:19:13.517Z"
+        },
+        {
+          "id": "df69449c-9e7f-4ff1-901a-6b93f1e33d9a",
+          "check_id": "a4cb77fa-4da6-4b61-b2ec-24de4f921d8a",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "de2fcacb-1e17-4734-8f93-8ab05d5b46bb",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-27T21:30:10.647Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "a4cb77fa-4da6-4b61-b2ec-24de4f921d8a",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "aad35598-d7b0-4ce5-84e0-a83ccb4e2146",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "funds_released",
+        "status": "deposited",
+        "payee_n": 1,
+        "signed_n": 1,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 6
+      },
+      "payees": [
+        {
+          "id": "083d81ee-6f86-46b1-a4b8-941ab13c6dfb",
+          "check_id": "aad35598-d7b0-4ce5-84e0-a83ccb4e2146",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-07-02T15:44:26.248Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "1e1fbf6c-8032-4964-8f22-df355e19b4cb",
+          "check_id": "aad35598-d7b0-4ce5-84e0-a83ccb4e2146",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "083d81ee-6f86-46b1-a4b8-941ab13c6dfb",
+          "payee_type": "other",
+          "status": "signed",
+          "signed_at": "2026-07-02T15:44:25.562Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "aad35598-d7b0-4ce5-84e0-a83ccb4e2146",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "b66e9a78-87ce-4911-8358-2a68243ff954",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "funds_released",
+        "status": "deposited",
+        "payee_n": 3,
+        "signed_n": 3,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "b178466c-c95e-4845-9056-f207c08181f3",
+          "check_id": "b66e9a78-87ce-4911-8358-2a68243ff954",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-07-31T22:00:06.584Z"
+        },
+        {
+          "id": "b4bd59f8-efc4-4fb7-add6-75c6189adabf",
+          "check_id": "b66e9a78-87ce-4911-8358-2a68243ff954",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-07-31T16:39:36.074Z"
+        },
+        {
+          "id": "f3e5567c-f7eb-4361-82a3-f9ee9bf8fc2d",
+          "check_id": "b66e9a78-87ce-4911-8358-2a68243ff954",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-04T11:33:40.681Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "47092e59-ee56-4dff-aea0-001acd50ede6",
+          "check_id": "b66e9a78-87ce-4911-8358-2a68243ff954",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "f3e5567c-f7eb-4361-82a3-f9ee9bf8fc2d",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-04T11:33:40.406Z"
+        },
+        {
+          "id": "6217fdba-b28a-4be7-903e-d68795d5ff86",
+          "check_id": "b66e9a78-87ce-4911-8358-2a68243ff954",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "b178466c-c95e-4845-9056-f207c08181f3",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-07-31T22:00:06.451Z"
+        },
+        {
+          "id": "94f4e4b9-2bb3-4f29-a55b-ce95ea3ccd0a",
+          "check_id": "b66e9a78-87ce-4911-8358-2a68243ff954",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "b4bd59f8-efc4-4fb7-add6-75c6189adabf",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-07-31T16:39:36.074Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "b66e9a78-87ce-4911-8358-2a68243ff954",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "b726592c-269e-4aeb-863d-87fcd87a00e4",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "deposited",
+        "status": "deposited",
+        "payee_n": 2,
+        "signed_n": 2,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "26023333-0d36-4cb6-b58b-61e15bed8945",
+          "check_id": "b726592c-269e-4aeb-863d-87fcd87a00e4",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-18T10:34:14.170Z"
+        },
+        {
+          "id": "5b9e58e0-d95b-469a-b10c-ae23b64720fa",
+          "check_id": "b726592c-269e-4aeb-863d-87fcd87a00e4",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-31T13:02:49.360Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "1e4adddf-4c87-4e51-bfb2-a692cf2f2b3b",
+          "check_id": "b726592c-269e-4aeb-863d-87fcd87a00e4",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "5b9e58e0-d95b-469a-b10c-ae23b64720fa",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-08-31T13:02:49.360Z"
+        },
+        {
+          "id": "b2ba93bd-a955-4798-8575-fa524bb713fa",
+          "check_id": "b726592c-269e-4aeb-863d-87fcd87a00e4",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "26023333-0d36-4cb6-b58b-61e15bed8945",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-18T10:34:13.804Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "b726592c-269e-4aeb-863d-87fcd87a00e4",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "bba5209a-1c48-4220-950a-af168f21ef63",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "funds_released",
+        "status": "deposited",
+        "payee_n": 2,
+        "signed_n": 2,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "6e8d8c30-0305-407d-a481-00e0245230d7",
+          "check_id": "bba5209a-1c48-4220-950a-af168f21ef63",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-18T19:02:19.052Z"
+        },
+        {
+          "id": "ddf14cb6-8605-40e7-b3e6-36a504f00c2f",
+          "check_id": "bba5209a-1c48-4220-950a-af168f21ef63",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-18T19:08:10.119Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "4309fe26-18ff-4b29-bb0d-e19f6edcbd98",
+          "check_id": "bba5209a-1c48-4220-950a-af168f21ef63",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "ddf14cb6-8605-40e7-b3e6-36a504f00c2f",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-18T19:08:09.931Z"
+        },
+        {
+          "id": "f9352b48-91c7-4991-8383-60b7f7a28a12",
+          "check_id": "bba5209a-1c48-4220-950a-af168f21ef63",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "6e8d8c30-0305-407d-a481-00e0245230d7",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-08-18T19:02:19.052Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "bba5209a-1c48-4220-950a-af168f21ef63",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "bf7c127e-3b0f-42ad-b52f-dd5ad89f5738",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "funds_released",
+        "status": "deposited",
+        "payee_n": 3,
+        "signed_n": 3,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "9cb87130-5e29-4fb1-803c-4f68a4e55393",
+          "check_id": "bf7c127e-3b0f-42ad-b52f-dd5ad89f5738",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-21T16:28:40.773Z"
+        },
+        {
+          "id": "b42041e6-37b2-4841-86ac-607bf753d657",
+          "check_id": "bf7c127e-3b0f-42ad-b52f-dd5ad89f5738",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-21T14:46:27.384Z"
+        },
+        {
+          "id": "eea8349b-ac63-4df8-9b4f-0b156cca6124",
+          "check_id": "bf7c127e-3b0f-42ad-b52f-dd5ad89f5738",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-21T17:33:48.374Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "00d7cdfd-8ced-4c60-a221-487bcbceb7d3",
+          "check_id": "bf7c127e-3b0f-42ad-b52f-dd5ad89f5738",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "b42041e6-37b2-4841-86ac-607bf753d657",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-08-21T14:46:27.384Z"
+        },
+        {
+          "id": "48ce7ace-bfa4-4bf2-ac53-bd207285f4f1",
+          "check_id": "bf7c127e-3b0f-42ad-b52f-dd5ad89f5738",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "9cb87130-5e29-4fb1-803c-4f68a4e55393",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-21T16:28:40.521Z"
+        },
+        {
+          "id": "c97ce1f7-ecaa-4c07-b133-130efdd8e405",
+          "check_id": "bf7c127e-3b0f-42ad-b52f-dd5ad89f5738",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "eea8349b-ac63-4df8-9b4f-0b156cca6124",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-21T17:33:48.231Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "bf7c127e-3b0f-42ad-b52f-dd5ad89f5738",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "d55f3ec6-35aa-4f88-a15e-8f2ea350d52c",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "deposited",
+        "status": "deposited",
+        "payee_n": 2,
+        "signed_n": 2,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "146e5166-0190-4a59-8a4f-69dc118b344c",
+          "check_id": "d55f3ec6-35aa-4f88-a15e-8f2ea350d52c",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-21T13:12:51.089Z"
+        },
+        {
+          "id": "88cd43e9-a89d-4850-8903-f5b8850d36db",
+          "check_id": "d55f3ec6-35aa-4f88-a15e-8f2ea350d52c",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-07-01T17:01:33.300Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "96bce852-40b2-4332-9813-940f8a451b69",
+          "check_id": "d55f3ec6-35aa-4f88-a15e-8f2ea350d52c",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "146e5166-0190-4a59-8a4f-69dc118b344c",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-21T13:12:51.089Z"
+        },
+        {
+          "id": "a708cf5a-48c7-455c-a1b7-935abd4a28c5",
+          "check_id": "d55f3ec6-35aa-4f88-a15e-8f2ea350d52c",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "88cd43e9-a89d-4850-8903-f5b8850d36db",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-07-01T17:01:32.621Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "d55f3ec6-35aa-4f88-a15e-8f2ea350d52c",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "d97cb98d-1d82-41d3-b829-b07e7bb825de",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "deposited",
+        "status": "deposited",
+        "payee_n": 1,
+        "signed_n": 1,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "52b673db-4a5b-462b-b368-86fe7fd322d4",
+          "check_id": "d97cb98d-1d82-41d3-b829-b07e7bb825de",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-21T20:53:14.070Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "732b39ef-6f69-44bd-ba5f-ab12864c2c9e",
+          "check_id": "d97cb98d-1d82-41d3-b829-b07e7bb825de",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "52b673db-4a5b-462b-b368-86fe7fd322d4",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-08-21T20:53:14.070Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "d97cb98d-1d82-41d3-b829-b07e7bb825de",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "e5b1598b-812d-45c9-b2ff-683613816ff3",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "funds_released",
+        "status": "deposited",
+        "payee_n": 2,
+        "signed_n": 2,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "4109b098-e4ad-42ea-82c7-25af7bd917ab",
+          "check_id": "e5b1598b-812d-45c9-b2ff-683613816ff3",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-06-21T10:14:56.784Z"
+        },
+        {
+          "id": "b2b4f097-63f1-4460-9400-b25f728dd7b5",
+          "check_id": "e5b1598b-812d-45c9-b2ff-683613816ff3",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-06-18T22:34:30.556Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "8aaf645f-b47d-42c1-bbb5-c35ad1681456",
+          "check_id": "e5b1598b-812d-45c9-b2ff-683613816ff3",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "b2b4f097-63f1-4460-9400-b25f728dd7b5",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-06-18T22:34:30.165Z"
+        },
+        {
+          "id": "b02ad93e-7330-43ed-97d5-5b415fdd1100",
+          "check_id": "e5b1598b-812d-45c9-b2ff-683613816ff3",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "4109b098-e4ad-42ea-82c7-25af7bd917ab",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-06-21T10:14:56.359Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "e5b1598b-812d-45c9-b2ff-683613816ff3",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "eaa65a21-f228-41f2-a6b0-1f656a528874",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "funds_released",
+        "status": "deposited",
+        "payee_n": 3,
+        "signed_n": 3,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "0b138612-8272-4c8e-a4ba-b8c874cc71ca",
+          "check_id": "eaa65a21-f228-41f2-a6b0-1f656a528874",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-19T14:17:14.158Z"
+        },
+        {
+          "id": "73e3ef00-4288-40dd-81f2-c5f3a05677dc",
+          "check_id": "eaa65a21-f228-41f2-a6b0-1f656a528874",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-19T14:57:22.672Z"
+        },
+        {
+          "id": "c683b370-5dca-4233-afdc-4faa6f1b105b",
+          "check_id": "eaa65a21-f228-41f2-a6b0-1f656a528874",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-26T13:36:51.661Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "38763b65-2a9d-40d3-8d6b-066d6cdd31c2",
+          "check_id": "eaa65a21-f228-41f2-a6b0-1f656a528874",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "73e3ef00-4288-40dd-81f2-c5f3a05677dc",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-19T14:57:22.394Z"
+        },
+        {
+          "id": "811a64d8-6a76-4e76-9d84-046382713441",
+          "check_id": "eaa65a21-f228-41f2-a6b0-1f656a528874",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "c683b370-5dca-4233-afdc-4faa6f1b105b",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-26T13:36:51.362Z"
+        },
+        {
+          "id": "90a3b1c4-75e5-4850-b032-6e38403635a8",
+          "check_id": "eaa65a21-f228-41f2-a6b0-1f656a528874",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "0b138612-8272-4c8e-a4ba-b8c874cc71ca",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-08-19T14:17:14.158Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "eaa65a21-f228-41f2-a6b0-1f656a528874",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "ec2f4d26-341f-4c79-b24a-75539a19990a",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "returned",
+        "status": "returned",
+        "payee_n": 2,
+        "signed_n": 2,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "36330cf2-f2ba-4113-b291-8b6e9f6c2c67",
+          "check_id": "ec2f4d26-341f-4c79-b24a-75539a19990a",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "mortgage_company",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-11T15:30:31.480Z"
+        },
+        {
+          "id": "6731004f-f9eb-48e8-8942-d8b5e2e6c58c",
+          "check_id": "ec2f4d26-341f-4c79-b24a-75539a19990a",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "unknown",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-11T15:30:31.480Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "15ff12b6-93d7-4def-9191-48cf5da2f770",
+          "check_id": "ec2f4d26-341f-4c79-b24a-75539a19990a",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "6731004f-f9eb-48e8-8942-d8b5e2e6c58c",
+          "payee_type": "other",
+          "status": "signed",
+          "signed_at": "2026-06-03T23:53:44.724Z"
+        },
+        {
+          "id": "4d46def4-90c6-429b-9705-c6114884dd4d",
+          "check_id": "ec2f4d26-341f-4c79-b24a-75539a19990a",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": null,
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-06-03T14:00:51.614Z"
+        },
+        {
+          "id": "9e51bc7a-a91e-4be5-8698-312ad2f8e8fd",
+          "check_id": "ec2f4d26-341f-4c79-b24a-75539a19990a",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "36330cf2-f2ba-4113-b291-8b6e9f6c2c67",
+          "payee_type": "mortgage_company",
+          "status": "waived",
+          "signed_at": "2026-08-11T15:30:31.480Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "ec2f4d26-341f-4c79-b24a-75539a19990a",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "returned",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "f0a625ab-5fe3-48a4-ade0-8596ad4566d8",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "funds_released",
+        "status": "deposited",
+        "payee_n": 2,
+        "signed_n": 2,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "8b776ef3-d538-4634-a9f6-304a4f2f75a5",
+          "check_id": "f0a625ab-5fe3-48a4-ade0-8596ad4566d8",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-06-21T10:13:26.383Z"
+        },
+        {
+          "id": "cfee4772-96c8-4cae-978f-dd5511b2d210",
+          "check_id": "f0a625ab-5fe3-48a4-ade0-8596ad4566d8",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-06-22T13:47:38.277Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "227d2c79-412f-4b2e-89d6-16011ddfd684",
+          "check_id": "f0a625ab-5fe3-48a4-ade0-8596ad4566d8",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "8b776ef3-d538-4634-a9f6-304a4f2f75a5",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-06-21T10:13:26.168Z"
+        },
+        {
+          "id": "8108c5f8-5ae8-4b76-8050-58ef47faf3f5",
+          "check_id": "f0a625ab-5fe3-48a4-ade0-8596ad4566d8",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "cfee4772-96c8-4cae-978f-dd5511b2d210",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-06-22T13:47:37.650Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "f0a625ab-5fe3-48a4-ade0-8596ad4566d8",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "f3b873b3-01f9-43a6-a4ca-536870058639",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "funds_released",
+        "status": "deposited",
+        "payee_n": 3,
+        "signed_n": 3,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "2b4d789b-7f8b-47d6-9657-6a1d5028986f",
+          "check_id": "f3b873b3-01f9-43a6-a4ca-536870058639",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-06-11T18:46:30.910Z"
+        },
+        {
+          "id": "5b16d1cc-2bc5-4f44-a114-57da48e47404",
+          "check_id": "f3b873b3-01f9-43a6-a4ca-536870058639",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-14T15:43:06.217Z"
+        },
+        {
+          "id": "832c56b0-cce9-4b96-9a26-4b4c367a841d",
+          "check_id": "f3b873b3-01f9-43a6-a4ca-536870058639",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-07-30T16:09:30.801Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "54893660-d91c-4ff5-9701-8b57ff281621",
+          "check_id": "f3b873b3-01f9-43a6-a4ca-536870058639",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "2b4d789b-7f8b-47d6-9657-6a1d5028986f",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-06-11T18:46:30.245Z"
+        },
+        {
+          "id": "92f87b03-e375-4331-87a9-7c813a7f7f0e",
+          "check_id": "f3b873b3-01f9-43a6-a4ca-536870058639",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "832c56b0-cce9-4b96-9a26-4b4c367a841d",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-07-30T16:09:30.394Z"
+        },
+        {
+          "id": "a0cf258e-bf1b-4648-a616-3a133a788a57",
+          "check_id": "f3b873b3-01f9-43a6-a4ca-536870058639",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "5b16d1cc-2bc5-4f44-a114-57da48e47404",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-14T15:43:05.912Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "f3b873b3-01f9-43a6-a4ca-536870058639",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "f4bf01dc-d1dc-481f-94e7-27c08bc18ec5",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "funds_released",
+        "status": "deposited",
+        "payee_n": 3,
+        "signed_n": 3,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 2
+      },
+      "payees": [
+        {
+          "id": "1250486f-259a-4ff2-80d6-f5b580410f39",
+          "check_id": "f4bf01dc-d1dc-481f-94e7-27c08bc18ec5",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-07-30T15:25:49.719Z"
+        },
+        {
+          "id": "9a60d837-1f40-444b-8b29-879ea2df5ab2",
+          "check_id": "f4bf01dc-d1dc-481f-94e7-27c08bc18ec5",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-15T22:27:44.099Z"
+        },
+        {
+          "id": "e6478d92-171a-4004-ac4b-adfbc17292e2",
+          "check_id": "f4bf01dc-d1dc-481f-94e7-27c08bc18ec5",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-07-24T13:54:08.861Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "27b139bb-93be-4f31-a659-c4af4c1f11dc",
+          "check_id": "f4bf01dc-d1dc-481f-94e7-27c08bc18ec5",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "e6478d92-171a-4004-ac4b-adfbc17292e2",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-07-24T13:54:08.861Z"
+        },
+        {
+          "id": "9027864c-7762-4919-a543-4ed9ad0b00b8",
+          "check_id": "f4bf01dc-d1dc-481f-94e7-27c08bc18ec5",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "1250486f-259a-4ff2-80d6-f5b580410f39",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-07-30T15:25:49.367Z"
+        },
+        {
+          "id": "b6473277-f697-4bad-a38e-a98ec78ac608",
+          "check_id": "f4bf01dc-d1dc-481f-94e7-27c08bc18ec5",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "9a60d837-1f40-444b-8b29-879ea2df5ab2",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-15T22:27:43.820Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "f4bf01dc-d1dc-481f-94e7-27c08bc18ec5",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "f942bed2-7774-4e40-b094-910ab1a1e10c",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "funds_released",
+        "status": "deposited",
+        "payee_n": 3,
+        "signed_n": 3,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "76cd41c1-3993-4d07-9189-afccc1df05db",
+          "check_id": "f942bed2-7774-4e40-b094-910ab1a1e10c",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-19T16:55:27.579Z"
+        },
+        {
+          "id": "b986b385-e588-4b58-84fc-32f2dc9fe21c",
+          "check_id": "f942bed2-7774-4e40-b094-910ab1a1e10c",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-19T16:56:29.762Z"
+        },
+        {
+          "id": "e2ec7371-7238-48dd-a8d2-b2dff5a3dffc",
+          "check_id": "f942bed2-7774-4e40-b094-910ab1a1e10c",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-19T16:10:00.341Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "42e3140a-6c02-4823-830b-73ee0682d55c",
+          "check_id": "f942bed2-7774-4e40-b094-910ab1a1e10c",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "e2ec7371-7238-48dd-a8d2-b2dff5a3dffc",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-08-19T16:10:00.341Z"
+        },
+        {
+          "id": "78bd8f8a-fad1-41dc-99be-6f582b77e77e",
+          "check_id": "f942bed2-7774-4e40-b094-910ab1a1e10c",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "76cd41c1-3993-4d07-9189-afccc1df05db",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-19T16:55:27.429Z"
+        },
+        {
+          "id": "962bacc8-47bc-477f-82a2-5d38dca642ad",
+          "check_id": "f942bed2-7774-4e40-b094-910ab1a1e10c",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "b986b385-e588-4b58-84fc-32f2dc9fe21c",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-19T16:56:29.440Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "f942bed2-7774-4e40-b094-910ab1a1e10c",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "f967effb-4ef8-4b5b-a625-01c4b1eef84e",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "deposited",
+        "status": "deposited",
+        "payee_n": 3,
+        "signed_n": 3,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "15e05e5e-bc84-40fb-906f-f00fd1805cdc",
+          "check_id": "f967effb-4ef8-4b5b-a625-01c4b1eef84e",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-09-02T15:23:33.284Z"
+        },
+        {
+          "id": "3142c3dd-8c61-43a5-9fa9-bd00511939be",
+          "check_id": "f967effb-4ef8-4b5b-a625-01c4b1eef84e",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-09-01T03:12:34.407Z"
+        },
+        {
+          "id": "9bb5bcd5-578c-48fd-827e-a950d27c7ae9",
+          "check_id": "f967effb-4ef8-4b5b-a625-01c4b1eef84e",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-09-01T03:13:21.775Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "48e535a8-bf8f-4418-bc23-a415a94b8900",
+          "check_id": "f967effb-4ef8-4b5b-a625-01c4b1eef84e",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "15e05e5e-bc84-40fb-906f-f00fd1805cdc",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-09-02T15:23:33.284Z"
+        },
+        {
+          "id": "8fdbe7db-0e31-4de5-ae12-94001d538ed3",
+          "check_id": "f967effb-4ef8-4b5b-a625-01c4b1eef84e",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "3142c3dd-8c61-43a5-9fa9-bd00511939be",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-09-01T03:12:34.079Z"
+        },
+        {
+          "id": "ce528ab9-23af-4fba-9a5b-94130da88adc",
+          "check_id": "f967effb-4ef8-4b5b-a625-01c4b1eef84e",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "9bb5bcd5-578c-48fd-827e-a950d27c7ae9",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-09-01T03:13:21.639Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "f967effb-4ef8-4b5b-a625-01c4b1eef84e",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "faa100c3-60b9-485d-bc09-8082ae5329ab",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "deposited",
+        "status": "deposited",
+        "payee_n": 2,
+        "signed_n": 2,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "501f5eb4-2315-4ee0-a20e-20438149ff2f",
+          "check_id": "faa100c3-60b9-485d-bc09-8082ae5329ab",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-31T21:49:46.543Z"
+        },
+        {
+          "id": "61b5fe54-799c-453d-82ab-4bd48e3ce9b1",
+          "check_id": "faa100c3-60b9-485d-bc09-8082ae5329ab",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-09-02T15:27:25.778Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "e64eb8e6-fc52-4440-942a-82ea0bb9ac67",
+          "check_id": "faa100c3-60b9-485d-bc09-8082ae5329ab",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "61b5fe54-799c-453d-82ab-4bd48e3ce9b1",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-09-02T15:23:09.273Z"
+        },
+        {
+          "id": "ece2cb48-7f66-4ce5-9855-3be7f0e72d71",
+          "check_id": "faa100c3-60b9-485d-bc09-8082ae5329ab",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "501f5eb4-2315-4ee0-a20e-20438149ff2f",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-31T21:49:46.198Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "faa100c3-60b9-485d-bc09-8082ae5329ab",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      "check": {
+        "id": "fc114936-3200-4915-b1e1-01f047987f39",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "check_stage": "deposited",
+        "status": "deposited",
+        "payee_n": 2,
+        "signed_n": 2,
+        "unsigned_n": 0,
+        "official_checkalt_front": false,
+        "official_checkalt_rear": false,
+        "has_checkalt_reference": true,
+        "checkalt_deposit_count": 1
+      },
+      "payees": [
+        {
+          "id": "54af5b22-c280-492d-b6bb-0fe14d10e8ea",
+          "check_id": "fc114936-3200-4915-b1e1-01f047987f39",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "public_adjuster",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-31T13:02:30.220Z"
+        },
+        {
+          "id": "5fffab60-f1ba-432b-bcfb-a3c03a086c4d",
+          "check_id": "fc114936-3200-4915-b1e1-01f047987f39",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_type": "insured",
+          "endorsement_status": "signed",
+          "endorsed_at": "2026-08-18T15:53:10.300Z"
+        }
+      ],
+      "endorsements": [
+        {
+          "id": "87333f4c-8954-4762-9063-621161ac4613",
+          "check_id": "fc114936-3200-4915-b1e1-01f047987f39",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "54af5b22-c280-492d-b6bb-0fe14d10e8ea",
+          "payee_type": "public_adjuster",
+          "status": "signed",
+          "signed_at": "2026-08-31T13:02:30.220Z"
+        },
+        {
+          "id": "b0a2b7bd-06cc-487a-883b-cc8163767f55",
+          "check_id": "fc114936-3200-4915-b1e1-01f047987f39",
+          "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+          "payee_id": "5fffab60-f1ba-432b-bcfb-a3c03a086c4d",
+          "payee_type": "insured",
+          "status": "signed",
+          "signed_at": "2026-08-18T15:53:10.171Z"
+        }
+      ],
+      "blocking_deposit": {
+        "check_intake_item_id": "fc114936-3200-4915-b1e1-01f047987f39",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "status": "submitted",
+        "checkalt_reference": "existing-reference",
+        "provider_http_attempted_at": "2026-01-01T00:00:00.000Z"
+      }
+    }
+  ]
+}

@@ -17,6 +17,13 @@ import {
   replayDepositResponse,
   shouldReconcileInsteadOfPost,
 } from './checkalt-idempotency.mjs';
+import {
+  CHECK_ELIGIBILITY_SELECT,
+  evaluateProductionDepositEligibility,
+  loadCheckEndorsements,
+  loadCheckPayees,
+  mapCheckAltImageGateError,
+} from './checkalt-eligibility.mjs';
 import { loadProductionDepositImages } from './checkalt-images.mjs';
 import { loadProductionCheckAltSecrets } from './checkalt-secrets.mjs';
 import { reconcileProductionCheckAltDeposit } from './checkalt-poll.mjs';
@@ -105,8 +112,7 @@ export async function handleProductionCheckAltSubmit({
   }
 
   const check = (await client.query(
-    `SELECT id, tenant_id, amount, check_number, front_image_path, back_image_path,
-            back_image_deposit_path, status, check_stage
+    `SELECT ${CHECK_ELIGIBILITY_SELECT}
      FROM public.check_intake_items WHERE id = $1::uuid`,
     [checkId],
   )).rows[0];
@@ -154,22 +160,6 @@ export async function handleProductionCheckAltSubmit({
   if (centsCheck.error) return fail(centsCheck.message || 'invalid_amount', 400);
   const userAmount = centsCheck.cents;
 
-  const images = await loadProductionDepositImages(check, body, deps);
-  if (!images.ok) return { ...images, spoofFieldsIgnored: spoof };
-
-  const secrets = await (deps.loadProductionSecrets || loadProductionCheckAltSecrets)(deps.getSecrets);
-  if (!secrets.ok) return { ...secrets, spoofFieldsIgnored: spoof };
-
-  const loadedCfg = await loadProductionCheckAltConfig(client, { credentials: secrets.credentials });
-  if (!loadedCfg.ok) return { ...loadedCfg, spoofFieldsIgnored: spoof };
-
-  const acct = await loadProductionTenantAccount(client, check.tenant_id);
-  if (!acct?.sso_user_id || !acct?.deposit_account_number || acct.enabled === false) {
-    return fail('account_unregistered', 409, {
-      message: 'No registered production CheckAlt depositor for this tenant. Browser cannot choose the destination account.',
-    });
-  }
-
   const idempotencyKey = checkAltIdempotencyKey({
     tenantId: check.tenant_id,
     checkId: check.id,
@@ -180,6 +170,23 @@ export async function handleProductionCheckAltSubmit({
     checkId: check.id,
   });
   const blocking = pickBlockingDeposit(existingForCheck);
+
+  const loadSecretsConfigAccount = async () => {
+    const secrets = await (deps.loadProductionSecrets || loadProductionCheckAltSecrets)(deps.getSecrets);
+    if (!secrets.ok) return { errorResult: { ...secrets, spoofFieldsIgnored: spoof } };
+    const loadedCfg = await loadProductionCheckAltConfig(client, { credentials: secrets.credentials });
+    if (!loadedCfg.ok) return { errorResult: { ...loadedCfg, spoofFieldsIgnored: spoof } };
+    const acct = await loadProductionTenantAccount(client, check.tenant_id);
+    if (!acct?.sso_user_id || !acct?.deposit_account_number || acct.enabled === false) {
+      return {
+        errorResult: fail('account_unregistered', 409, {
+          message: 'No registered production CheckAlt depositor for this tenant. Browser cannot choose the destination account.',
+        }),
+      };
+    }
+    return { secrets, loadedCfg, acct };
+  };
+
   if (blocking) {
     if (blocking.checkalt_reference && ['submitted', 'pending_approval', 'cleared'].includes(String(blocking.status || ''))) {
       return {
@@ -193,13 +200,15 @@ export async function handleProductionCheckAltSubmit({
       };
     }
     if (blocking.checkalt_reference) {
+      const loaded = await loadSecretsConfigAccount();
+      if (loaded.errorResult) return loaded.errorResult;
       const reconciled = await reconcileProductionCheckAltDeposit({
         client,
         mapping,
         row: blocking,
-        cfg: loadedCfg.cfg,
-        credentials: loadedCfg.credentials,
-        acct,
+        cfg: loaded.loadedCfg.cfg,
+        credentials: loaded.loadedCfg.credentials,
+        acct: loaded.acct,
         fetchImpl,
       });
       return {
@@ -228,6 +237,7 @@ export async function handleProductionCheckAltSubmit({
       applicationUserId: mapping.application_user_id,
     };
   }
+
   const existing = await loadDepositByIdempotency(client, {
     tenantId: check.tenant_id,
     idempotencyKey,
@@ -240,13 +250,15 @@ export async function handleProductionCheckAltSubmit({
         applicationUserId: mapping.application_user_id,
       };
     }
+    const loaded = await loadSecretsConfigAccount();
+    if (loaded.errorResult) return loaded.errorResult;
     const reconciled = await reconcileProductionCheckAltDeposit({
       client,
       mapping,
       row: existing,
-      cfg: loadedCfg.cfg,
-      credentials: loadedCfg.credentials,
-      acct,
+      cfg: loaded.loadedCfg.cfg,
+      credentials: loaded.loadedCfg.credentials,
+      acct: loaded.acct,
       fetchImpl,
     });
     return {
@@ -257,6 +269,33 @@ export async function handleProductionCheckAltSubmit({
       applicationUserId: mapping.application_user_id,
     };
   }
+
+  const payees = await loadCheckPayees(client, check.id, check.tenant_id);
+  const endorsements = await loadCheckEndorsements(client, check.id, check.tenant_id);
+  const eligibility = evaluateProductionDepositEligibility({ check, payees, endorsements });
+  if (!eligibility.ok) {
+    return fail(eligibility.error, 403, {
+      reason: eligibility.reason,
+      liveProviderCalled: false,
+      productionExecution: false,
+    });
+  }
+
+  const images = await loadProductionDepositImages(check, {}, deps);
+  if (!images.ok) {
+    const mapped = mapCheckAltImageGateError(images);
+    return {
+      ...images,
+      ...mapped,
+      spoofFieldsIgnored: spoof,
+      liveProviderCalled: false,
+      productionExecution: false,
+    };
+  }
+
+  const loaded = await loadSecretsConfigAccount();
+  if (loaded.errorResult) return loaded.errorResult;
+  const { loadedCfg, acct } = loaded;
 
   const queued = existing
     ? { ok: true, row: existing, inserted: false }

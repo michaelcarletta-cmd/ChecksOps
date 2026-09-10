@@ -32,6 +32,7 @@ import {
 } from '../functions/api/providers/production/checkalt-image-compliance.mjs';
 import { buildDepositProcessBody } from '../functions/api/providers/parity/checkalt-client.mjs';
 import { loadProductionDepositImages } from '../functions/api/providers/production/checkalt-images.mjs';
+import { buildCompletedEndorsementState } from '../functions/api/providers/production/checkalt-eligibility.mjs';
 import { handleProviderRequest } from '../functions/api/providers.mjs';
 import {
   CHECKALT_IMAGE_PREPARATION_REQUIRED,
@@ -111,6 +112,7 @@ const mapping = {
 const submitWithFiles = async (files, body = {}) => {
   const { LOOKUP_MAPPING_SQL, TENANT_MEMBERSHIP_SQL } = await import('../functions/api/identity.mjs');
   const deposits = [];
+  const eligible = buildCompletedEndorsementState({ checkId: CHECK_ID, tenantId: FREEDOM_TENANT });
   const check = {
     id: CHECK_ID,
     tenant_id: FREEDOM_TENANT,
@@ -121,6 +123,7 @@ const submitWithFiles = async (files, body = {}) => {
     back_image_deposit_path: `checks/${CHECK_ID}/back.jpg`,
     status: 'approved_for_deposit',
     check_stage: 'ready_for_deposit',
+    endorsement_render_meta: { checkalt_rear_fingerprint: eligible.fingerprint },
   };
   const store = {
     deposits,
@@ -129,6 +132,8 @@ const submitWithFiles = async (files, body = {}) => {
     processBodies: [],
     files,
     check,
+    payees: eligible.payees,
+    endorsements: eligible.endorsements,
     memberships: [{ tenant_id: FREEDOM_TENANT, role: 'admin', tenant_name: 'Freedom', tenant_slug: 'freedom' }],
     stepups: [{
       id: 'step',
@@ -158,6 +163,8 @@ const submitWithFiles = async (files, body = {}) => {
       if (text.includes('FROM public.user_roles') || (text.includes('FROM public.tenant_users WHERE user_id') && text.includes('AND tenant_id'))) {
         return { rows: [{ role: 'admin' }] };
       }
+      if (text.includes('FROM public.check_payees')) return { rows: store.payees };
+      if (text.includes('FROM public.check_endorsements')) return { rows: store.endorsements };
       if (text.includes('FROM public.check_intake_items')) return { rows: [store.check] };
       if (text.includes('aws_checkalt_production_config') || text.includes('FROM public.checkalt_config')) {
         return { rows: [{ merchant: 'prod-merchant', fi_key: 'fi', base_url: 'https://api2.checkalt.com', default_enabled: true }] };
@@ -279,12 +286,12 @@ test('1. front + rear 1920x1080 ~80KB PASS and share one process body', async ()
 test('2-3. missing front or rear fails with zero provider HTTP', async () => {
   const jpeg = compliant();
   const missingFront = await submitWithFiles({ [`checks/${CHECK_ID}/back.checkalt.jpg`]: jpeg });
-  assert.equal(missingFront.result.error, CHECKALT_IMAGE_ERROR);
+  assert.equal(missingFront.result.error, 'provider_front_image_missing');
   assert.equal(missingFront.result.reason, 'front_missing');
   assert.equal(missingFront.store.processPosts, 0);
 
   const missingRear = await submitWithFiles({ [`checks/${CHECK_ID}/front.checkalt.jpg`]: jpeg });
-  assert.equal(missingRear.result.error, CHECKALT_IMAGE_ERROR);
+  assert.equal(missingRear.result.error, 'provider_rear_image_missing');
   assert.equal(missingRear.result.reason, 'rear_missing');
   assert.equal(missingRear.store.processPosts, 0);
 });
@@ -297,7 +304,8 @@ test('4-6. 1600x900, 1200x550, and portrait cannot submit', async () => {
     ['portrait', syntheticCheckRaster({ width: 1080, height: 1920, flat: true })],
   ]) {
     const { result, store } = await submitWithFiles(pair(bad, good));
-    assert.equal(result.error, CHECKALT_IMAGE_ERROR, label);
+    assert.equal(result.error, 'checkalt_image_noncompliant', label);
+    assert.equal(result.complianceError, CHECKALT_IMAGE_ERROR, label);
     assert.equal(result.reason, 'front_dimensions', label);
     assert.equal(store.processPosts, 0, label);
   }
@@ -317,6 +325,7 @@ test('7-10. per-image size bands', async () => {
   assert.equal(evaluateCheckAltImageCompliance(overAbsolute, 'front').reason, 'front_too_large');
 
   const t = await submitWithFiles(pair(tiny, good));
+  assert.equal(t.result.error, 'checkalt_image_noncompliant');
   assert.equal(t.result.reason, 'front_too_small');
   assert.equal(t.store.processPosts, 0);
 
@@ -336,7 +345,8 @@ test('7-10. per-image size bands', async () => {
 test('11. invalid JPEG magic fails closed', async () => {
   const good = compliant();
   const { result, store } = await submitWithFiles(pair(Buffer.from('not-a-jpeg'), good));
-  assert.equal(result.error, CHECKALT_IMAGE_ERROR);
+  assert.equal(result.error, 'checkalt_image_noncompliant');
+  assert.equal(result.complianceError, CHECKALT_IMAGE_ERROR);
   assert.equal(result.reason, 'front_invalid_jpeg');
   assert.equal(store.processPosts, 0);
 });
@@ -540,14 +550,15 @@ test('renamed non-compliant .checkalt.jpg is rejected by actual S3 bytes', async
     [`checks/${CHECK_ID}/front.checkalt.jpg`]: fakeName,
     [`checks/${CHECK_ID}/back.checkalt.jpg`]: good,
   });
-  assert.equal(result.error, CHECKALT_IMAGE_ERROR);
+  assert.equal(result.error, 'checkalt_image_noncompliant');
+  assert.equal(result.complianceError, CHECKALT_IMAGE_ERROR);
   assert.equal(result.reason, 'front_dimensions');
   assert.equal(store.processPosts, 0);
   assert.equal(store.authenticatePosts, 0);
   assert.equal(store.deposits.length, 0);
 });
 
-test('cross-tenant and arbitrary .checkalt.jpg paths are denied before provider HTTP', async () => {
+test('cross-tenant and arbitrary .checkalt.jpg body paths cannot override server artifacts', async () => {
   const good = compliant();
   const files = {
     ...pair(good, good),
@@ -558,18 +569,20 @@ test('cross-tenant and arbitrary .checkalt.jpg paths are denied before provider 
     deposit_front_path: 'checks/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/front.checkalt.jpg',
     deposit_back_path: `checks/${CHECK_ID}/back.checkalt.jpg`,
   });
-  assert.equal(foreign.result.error, 'prepared_path_denied');
-  assert.equal(foreign.store.processPosts, 0);
-  assert.equal(foreign.store.authenticatePosts, 0);
-  assert.equal(foreign.store.deposits.length, 0);
+  assert.equal(foreign.result.error, undefined, JSON.stringify(foreign.result));
+  assert.equal(foreign.result.liveProviderCalled, true);
+  assert.equal(foreign.store.processPosts, 1);
+  assert.ok(foreign.store.processBodies[0].frontImage);
+  assert.equal(foreign.store.processBodies[0].frontImage, bytesToBase64(good));
 
   const arbitrary = await submitWithFiles(files, {
     deposit_front_path: 'secrets/other.checkalt.jpg',
     deposit_back_path: `checks/${CHECK_ID}/back.checkalt.jpg`,
   });
-  assert.equal(arbitrary.result.error, 'prepared_path_denied');
-  assert.equal(arbitrary.store.processPosts, 0);
-  assert.equal(arbitrary.store.authenticatePosts, 0);
+  assert.equal(arbitrary.result.error, undefined, JSON.stringify(arbitrary.result));
+  assert.equal(arbitrary.result.liveProviderCalled, true);
+  assert.equal(arbitrary.store.processPosts, 1);
+  assert.equal(arbitrary.store.processBodies[0].frontImage, bytesToBase64(good));
 });
 
 test('production body builder base64s exact stored S3 bytes with no later processing', async () => {
@@ -619,8 +632,16 @@ test('compliance failures never authenticate, mark attempted, or POST process', 
   ];
   for (const [files, body, reason] of failures) {
     const { result, store } = await submitWithFiles(files, body);
-    assert.equal(result.error, CHECKALT_IMAGE_ERROR, reason);
+    const expectedError = reason === 'front_missing'
+      ? 'provider_front_image_missing'
+      : reason === 'rear_missing'
+        ? 'provider_rear_image_missing'
+        : 'checkalt_image_noncompliant';
+    assert.equal(result.error, expectedError, reason);
     assert.equal(result.reason, reason);
+    if (reason !== 'front_missing' && reason !== 'rear_missing') {
+      assert.equal(result.complianceError, CHECKALT_IMAGE_ERROR, reason);
+    }
     assert.equal(store.authenticatePosts, 0, reason);
     assert.equal(store.processPosts, 0, reason);
     assert.equal(store.deposits.length, 0, reason);

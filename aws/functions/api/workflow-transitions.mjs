@@ -79,8 +79,8 @@ export const TRANSITIONS = {
     requiredRole: 'staff_or_tenant_admin',
     financialAuthorization: false,
     providerExecution: false,
-    requiredRecords: [],
-    notes: 'READY FOR PROVIDER EXECUTION. Stops here. Does not submit CheckAlt or move money.',
+    requiredRecords: ['endorsement_complete'],
+    notes: 'READY FOR PROVIDER EXECUTION. Requires completed endorsements. Does not submit CheckAlt or move money. Production CheckAlt submit re-checks endorsements independently.',
   },
   return_to_review: {
     action: 'return_to_review',
