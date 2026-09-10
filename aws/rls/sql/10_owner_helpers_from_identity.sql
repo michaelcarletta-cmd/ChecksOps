@@ -1,23 +1,7 @@
--- Rewrite platform-owner helpers to use preserved application identity.
--- auth.users is empty in staging (0 rows), so the original email lookups always
--- returned false. Do not treat user_roles.admin/staff as platform-wide.
---
--- is_master_owner keys off the stable ChecksOps application UUID, not email.
--- Inbox remaps (e.g. tester EMAIL_OTP delivery) must not grant cross-tenant reads.
-
-CREATE OR REPLACE FUNCTION public.is_master_owner()
-RETURNS boolean
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public
-SET row_security = off
-AS $$
-  SELECT auth.uid() = '7dbb3009-f059-4767-b5dc-1c5c72379330'::uuid;
-$$;
-
-COMMENT ON FUNCTION public.is_master_owner() IS
-  'Platform master owner by stable application_user_id 7dbb3009-…. Email is not used.';
+-- Platform-wide authorization follows the explicit platform-owner mailbox.
+-- Tenant roles and legacy application UUIDs never grant cross-tenant access.
+-- Identity is resolved server-side into request.app_user_id and preserved email
+-- records; Cognito's untrusted email hint is not used for authorization.
 
 CREATE OR REPLACE FUNCTION public.is_platform_owner()
 RETURNS boolean
@@ -31,6 +15,7 @@ AS $$
     SELECT 1
     FROM public.identity_accounts ia
     WHERE ia.application_user_id = auth.uid()
+      AND ia.status IN ('active', 'isolated_test')
       AND lower(ia.email) = 'checksopsadmin@gmail.com'
   )
   OR EXISTS (
@@ -42,4 +27,21 @@ AS $$
 $$;
 
 COMMENT ON FUNCTION public.is_platform_owner() IS
-  'Platform owner from restored application email. No restored user currently matches.';
+  'Platform owner only when the resolved application identity belongs to checksopsadmin@gmail.com.';
+
+-- Backward-compatible helper used by existing RLS policies. It intentionally
+-- delegates to the same explicit platform-owner check and no longer recognizes
+-- the legacy Freedom Adjustment application UUID.
+CREATE OR REPLACE FUNCTION public.is_master_owner()
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+SET row_security = off
+AS $$
+  SELECT public.is_platform_owner();
+$$;
+
+COMMENT ON FUNCTION public.is_master_owner() IS
+  'Compatibility alias for is_platform_owner(); no UUID-based bypass.';
