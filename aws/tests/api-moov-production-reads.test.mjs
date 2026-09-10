@@ -25,7 +25,12 @@ import {
   redactMoovText,
 } from '../functions/api/providers/production/moov-client.mjs';
 import { applyProductionMoovWebhook } from '../functions/api/providers/production/moov-webhook-apply.mjs';
-import { classifySenderReadiness } from '../functions/api/providers/production/moov-read.mjs';
+import {
+  classifyInventorySenderReadiness,
+  classifyRecipientInventory,
+  classifySenderReadiness,
+  summarizeMoovCapabilities,
+} from '../functions/api/providers/production/moov-read.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '../..');
@@ -192,6 +197,12 @@ const identityClient = (store) => ({
     if (text.includes('FROM public.payment_wallets')) {
       return { rows: [{ id: 'wallet-1', tenant_id: FREEDOM_TENANT, environment: 'production', status: 'active', provider_wallet_id: 'wallet-freedom' }] };
     }
+    if (text.includes('FROM public.external_payment_recipients')) {
+      return { rows: store.recipients || [] };
+    }
+    if (text.includes('FROM public.payment_provider_methods')) {
+      return { rows: store.methods || [] };
+    }
     if (text.includes('INSERT INTO public.aws_provider_webhook_receipts')) {
       const existing = store.receipts.find((row) => row.provider === params[0] && row.external_event_id === params[1]);
       if (existing) return { rows: [] };
@@ -222,7 +233,7 @@ const fetchImpl = (store) => async (url, options = {}) => {
   store.getGets += 1;
   store.getPaths.push(target.replace('https://api.moov.io', ''));
   if (target.includes('/wallets/') && !target.endsWith('/wallets')) {
-    return { ok: true, status: 200, text: async () => JSON.stringify({ walletID: 'wallet-freedom', status: 'active', availableBalance: { value: 0, currency: 'USD' } }) };
+    return { ok: true, status: 200, text: async () => JSON.stringify({ walletID: 'wallet-freedom', status: 'active', availableBalance: { value: 0, currency: 'USD' }, pendingBalance: { value: 0, currency: 'USD' } }) };
   }
   if (target.endsWith('/wallets')) {
     return { ok: true, status: 200, text: async () => JSON.stringify([{ walletID: 'wallet-freedom', status: 'active' }]) };
@@ -232,19 +243,49 @@ const fetchImpl = (store) => async (url, options = {}) => {
       ok: true,
       status: 200,
       text: async () => JSON.stringify([
+        { capability: 'send-funds', status: 'enabled' },
         { capability: 'send-funds.ach', status: 'enabled' },
         { capability: 'collect-funds.ach', status: 'enabled' },
         { capability: 'wallet.balance', status: 'enabled' },
+        { capability: 'transfers', status: 'enabled' },
       ]),
     };
   }
   if (target.includes('/bank-accounts')) {
-    return { ok: true, status: 200, text: async () => JSON.stringify([{ status: 'verified', verificationStatus: 'verified' }]) };
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify([{
+        status: 'verified',
+        verificationStatus: 'verified',
+        lastFourAccountNumber: '4321',
+        accountNumber: '9999994321',
+      }]),
+    };
   }
   if (target.includes('/payment-methods')) {
-    return { ok: true, status: 200, text: async () => JSON.stringify([{ status: 'verified', paymentMethodType: 'ach-credit-standard' }]) };
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify([
+        { status: 'verified', paymentMethodType: 'ach-credit-standard' },
+        { status: 'verified', paymentMethodType: 'ach-debit-fund' },
+      ]),
+    };
   }
-  return { ok: true, status: 200, text: async () => JSON.stringify({ accountID: 'moov-freedom', status: 'active', verification: { status: 'verified' } }) };
+  return {
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify({
+      accountID: '60922058-7eca-4889-81dd-5720d7b9de96',
+      accountType: 'business',
+      displayName: 'Freedom Adjustment LLC',
+      mode: 'production',
+      status: 'active',
+      verification: { status: 'verified' },
+      termsOfService: { acceptedDate: '2026-01-01T00:00:00Z' },
+    }),
+  };
 };
 
 const depsFor = (store) => ({
@@ -336,10 +377,20 @@ test('live reads true + money flags false → GET account/wallet/bank/capabiliti
   assert.ok(store.getPaths.some((p) => p.includes('/bank-accounts')));
   assert.ok(store.getPaths.some((p) => p.includes('/capabilities')));
   assert.equal(result.capabilities.send_funds.enabled, true);
+  assert.equal(result.capabilities.send_funds.id, 'send-funds.ach');
   assert.equal(result.capabilities.collect_funds.enabled, true);
   assert.equal(result.capabilities.wallet_balance.enabled, true);
+  assert.equal(result.capabilities.transfers.enabled, true);
   assert.equal(result.sender_readiness.verdict, 'SENDER_READY');
+  assert.equal(result.inventory.sender.verdict, 'READY_AS_SENDER');
+  assert.equal(result.inventory.recipients.verdict, 'RECIPIENT_NOT_CONFIRMED');
   assert.equal(result.wallet.available_cents, 0);
+  assert.equal(result.wallet.pending_cents, 0);
+  assert.equal(result.banks[0].last4, '4321');
+  assert.equal(result.payment_methods[0].ach_send_eligible, true);
+  assert.equal(result.payment_methods[1].ach_collect_eligible, true);
+  assert.equal(result.verification.mode, 'production');
+  assert.equal(result.verification.tos.accepted, true);
   assert.equal(result.live_gets.account.ok, true);
 });
 
@@ -354,8 +405,8 @@ test('account_get_only skips capability/wallet/bank/payment-method GETs', async 
   assert.equal(store.getGets, 1);
   assert.deepEqual(store.getPaths, ['/accounts/moov-freedom']);
   assert.equal(store.processPosts, 0);
-  assert.equal(result.live_account.mode, null);
-  assert.equal(result.live_account.display_name, null);
+  assert.equal(result.live_account.mode, 'production');
+  assert.equal(result.live_account.display_name, 'Freedom Adjustment LLC');
   assert.equal(result.live_gets.account.ok, true);
   assert.equal(result.live_gets.capabilities, undefined);
   assert.equal(result.capabilities, undefined);
@@ -574,6 +625,64 @@ test('sender readiness stays blocked without send-funds.ach', () => {
   });
   assert.equal(blocked.verdict, 'BLOCKED');
   assert.ok(blocked.reasons.includes('send_funds_ach_not_enabled'));
+});
+
+test('inventory prefers send-funds.ach over parent send-funds', () => {
+  const mixed = summarizeMoovCapabilities([
+    { capability: 'send-funds', status: 'enabled' },
+    { capability: 'send-funds.ach', status: 'in-review' },
+    { capability: 'collect-funds.ach', status: 'enabled' },
+    { capability: 'wallet.balance', status: 'enabled' },
+    { capability: 'transfers', status: 'enabled' },
+  ]);
+  assert.equal(mixed.send_funds.id, 'send-funds.ach');
+  assert.equal(mixed.send_funds.enabled, false);
+  assert.equal(mixed.send_funds.status, 'in-review');
+  assert.equal(mixed.pending[0].id, 'send-funds.ach');
+});
+
+test('inventory sender ACTION_REQUIRED when send-funds.ach is in-review', () => {
+  const result = classifyInventorySenderReadiness({
+    accountGetOk: true,
+    verification: {
+      account_status: 'active',
+      mode: 'production',
+      kyc: 'verified',
+      tos: { accepted: true },
+      disabled: false,
+      restricted: false,
+    },
+    capabilities: { send_funds: { id: 'send-funds.ach', status: 'in-review', enabled: false } },
+    wallet: { status: 'active' },
+    banks: [{ status: 'verified', verification_status: 'verified' }],
+    paymentMethods: [{ ach_send_eligible: true }],
+  });
+  assert.equal(result.verdict, 'ACTION_REQUIRED');
+  assert.ok(result.action.includes('send_funds_ach_in-review'));
+});
+
+test('inventory last4 never slices a full account number', async () => {
+  const store = createStore();
+  const result = await invoke(store, 'moov-readiness', {});
+  assert.equal(result.banks[0].last4, '4321');
+  assert.doesNotMatch(JSON.stringify(result.banks), /9999994321/);
+});
+
+test('Freedom-controlled recipients awaiting_bank are not confirmed; C1C unused', () => {
+  const awaiting = classifyRecipientInventory([
+    { environment: 'production', onboarding_status: 'awaiting_bank' },
+    { environment: 'production', onboarding_status: 'awaiting_bank' },
+    { environment: 'sandbox', onboarding_status: 'awaiting_bank' },
+  ]);
+  assert.equal(awaiting.verdict, 'RECIPIENT_NOT_CONFIRMED');
+  assert.equal(awaiting.production_count, 2);
+  assert.equal(awaiting.awaiting_bank_count, 2);
+  assert.equal(awaiting.c1c_used, false);
+  assert.equal(awaiting.onboarded, false);
+  const ready = classifyRecipientInventory([
+    { environment: 'production', onboarding_status: 'verified' },
+  ]);
+  assert.equal(ready.verdict, 'RECIPIENT_READY');
 });
 
 test('missing production read credentials fail closed; sandbox cannot satisfy', async () => {

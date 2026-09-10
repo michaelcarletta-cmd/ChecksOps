@@ -4,6 +4,8 @@ import { loadProductionMoovReadSecrets } from './moov-secrets.mjs';
 import {
   loadProductionTenantAccount,
   loadProductionWallet,
+  loadTenantMoovPaymentMethods,
+  loadTenantMoovRecipients,
   publicProductionMoovAccount,
 } from './moov-config.mjs';
 import { authorizeMoovProductionRead } from './moov-authz.mjs';
@@ -103,29 +105,104 @@ const capabilityEnabled = (row) => {
   return status === 'enabled' || status === 'ready';
 };
 
+export function listMoovCapabilities(payload) {
+  const list = Array.isArray(payload) ? payload : (payload?.capabilities || []);
+  return list
+    .map((row) => ({
+      id: capabilityId(row),
+      status: row?.status || null,
+      enabled: capabilityEnabled(row),
+    }))
+    .filter((row) => row.id);
+}
+
 export function summarizeMoovCapabilities(payload) {
   const list = Array.isArray(payload) ? payload : (payload?.capabilities || []);
-  const find = (...names) => list.find((row) => {
+  const exact = (name) => list.find((row) => capabilityId(row).toLowerCase() === name) || null;
+  const prefix = (name) => list.find((row) => {
     const id = capabilityId(row).toLowerCase();
-    return names.some((name) => id === name || id.startsWith(`${name}.`) || id.startsWith(name));
+    return id === name || id.startsWith(`${name}.`);
   }) || null;
-  const send = find('send-funds.ach', 'send-funds');
-  const collect = find('collect-funds.ach', 'collect-funds');
-  const wallet = find('wallet.balance', 'wallet');
+  const pick = (...names) => {
+    for (const name of names) {
+      const hit = exact(name);
+      if (hit) return hit;
+    }
+    for (const name of names) {
+      const hit = prefix(name);
+      if (hit) return hit;
+    }
+    return null;
+  };
+  const summaryOf = (row) => (row ? {
+    id: capabilityId(row),
+    status: row.status || null,
+    enabled: capabilityEnabled(row),
+  } : null);
+  const sendAch = pick('send-funds.ach', 'send-funds');
+  const collectAch = pick('collect-funds.ach', 'collect-funds');
+  const wallet = pick('wallet.balance', 'wallet');
+  const transfers = pick('transfers');
   const sameDay = list.find((row) => /same-day/.test(capabilityId(row).toLowerCase())) || null;
+  const all = listMoovCapabilities(payload);
   return {
-    send_funds: send ? { id: capabilityId(send), status: send.status || null, enabled: capabilityEnabled(send) } : null,
-    collect_funds: collect ? { id: capabilityId(collect), status: collect.status || null, enabled: capabilityEnabled(collect) } : null,
-    wallet_balance: wallet ? { id: capabilityId(wallet), status: wallet.status || null, enabled: capabilityEnabled(wallet) } : null,
-    same_day_ach: sameDay ? { id: capabilityId(sameDay), status: sameDay.status || null, enabled: capabilityEnabled(sameDay) } : null,
+    send_funds: summaryOf(sendAch),
+    collect_funds: summaryOf(collectAch),
+    wallet_balance: summaryOf(wallet),
+    transfers: summaryOf(transfers),
+    same_day_ach: summaryOf(sameDay),
+    all,
+    pending: all.filter((row) => ['pending', 'in-review', 'requested'].includes(String(row.status || '').toLowerCase())),
+    disabled: all.filter((row) => ['disabled', 'disconnected'].includes(String(row.status || '').toLowerCase())),
+    errored: all.filter((row) => ['errored', 'error', 'failed'].includes(String(row.status || '').toLowerCase())),
   };
 }
+
+const safeLast4 = (bank) => {
+  // Never derive last4 by slicing a full account number.
+  const raw = bank?.lastFourAccountNumber
+    || bank?.lastFour
+    || bank?.lastFourDigits
+    || bank?.bankAccount?.lastFourAccountNumber
+    || bank?.bankAccount?.lastFour
+    || null;
+  const digits = String(raw || '').replace(/\D/g, '');
+  return digits.length === 4 ? digits : null;
+};
+
+const ACH_SEND_TYPES = new Set(['ach-credit-standard', 'ach-credit-same-day']);
+const ACH_COLLECT_TYPES = new Set(['ach-debit-fund', 'ach-debit-collect']);
 
 const publicBank = (bank) => ({
   status: bank?.status || bank?.verificationStatus || null,
   verification_status: bank?.verificationStatus || bank?.status || null,
   holder_name_present: Boolean(bank?.holderName || bank?.bankAccount?.holderName),
+  last4: safeLast4(bank),
 });
+
+const publicPaymentMethod = (row) => {
+  const type = row?.paymentMethodType || row?.type || null;
+  const t = String(type || '').toLowerCase();
+  return {
+    status: row?.status || null,
+    paymentMethodType: type,
+    ach_send_eligible: ACH_SEND_TYPES.has(t),
+    ach_collect_eligible: ACH_COLLECT_TYPES.has(t),
+  };
+};
+
+const publicRecipient = (row) => {
+  const last4Digits = String(row?.provider_last_four || '').replace(/\D/g, '');
+  return {
+    environment: row?.environment || null,
+    onboarding_status: row?.onboarding_status || null,
+    recipient_type: row?.recipient_type || null,
+    bank_linked: Boolean(row?.bank_linked_at),
+    last4: last4Digits.length === 4 ? last4Digits : null,
+    provider_account_id_fp: fingerprintMoovId(row?.provider_account_id),
+    provider_account_id_present: Boolean(row?.provider_account_id),
+  };
+};
 
 const centsOf = (...candidates) => {
   for (const candidate of candidates) {
@@ -248,6 +325,74 @@ export function classifySenderReadiness({
   return {
     verdict: reasons.length ? 'BLOCKED' : 'SENDER_READY',
     reasons,
+  };
+}
+
+const capabilityStatusOf = (row) => String(row?.status || '').toLowerCase();
+const isCapabilityHardFail = (status) => ['disabled', 'errored', 'error', 'failed', 'disconnected'].includes(status);
+const RECIPIENT_READY_STATUSES = new Set(['ready', 'verified', 'connected', 'active', 'complete']);
+
+export function classifyInventorySenderReadiness({
+  accountGetOk,
+  verification = {},
+  capabilities = {},
+  wallet = null,
+  banks = [],
+  paymentMethods = [],
+} = {}) {
+  const blocked = [];
+  const action = [];
+  const partial = [];
+  if (!accountGetOk) blocked.push('live_account_get_failed');
+  const mode = String(verification.mode || '').toLowerCase();
+  if (accountGetOk && mode && mode !== 'production') blocked.push(`mode_${mode}`);
+  if (verification.disabled === true) blocked.push('account_disabled');
+  if (verification.restricted === true) blocked.push('account_restricted');
+  const status = String(verification.account_status || '').toLowerCase();
+  if (accountGetOk && ['disabled', 'disconnected', 'restricted'].includes(status)) {
+    blocked.push(`account_status_${status}`);
+  }
+  const kyc = String(verification.kyc || '').toLowerCase();
+  if (['failed', 'rejected', 'unverified', 'restricted'].includes(kyc)) blocked.push(`kyc_${kyc}`);
+  else if (kyc === 'pending') action.push('kyc_pending');
+  if (verification.tos && verification.tos.accepted === false) action.push('tos_not_accepted');
+  if (verification.requirements?.action_required) action.push('requirements_action_required');
+  const send = capabilities.send_funds;
+  if (!send) action.push('send_funds_ach_unknown');
+  else if (send.enabled !== true) {
+    const sendStatus = capabilityStatusOf(send);
+    if (isCapabilityHardFail(sendStatus)) blocked.push('send_funds_ach_not_enabled');
+    else action.push(`send_funds_ach_${sendStatus || 'not_enabled'}`);
+  }
+  if (!wallet) partial.push('wallet_missing');
+  const bankOk = (banks || []).some((row) => {
+    const statusValue = String(row.verification_status || row.status || '').toLowerCase();
+    return ['verified', 'connected', 'active'].includes(statusValue);
+  });
+  if ((banks || []).length === 0) partial.push('bank_missing');
+  else if (!bankOk) action.push('bank_not_verified');
+  const methods = paymentMethods || [];
+  if (!methods.length) partial.push('payment_methods_missing');
+  else if (!methods.some((row) => row.ach_send_eligible === true)) partial.push('ach_send_method_missing');
+  const reasons = [...blocked, ...action, ...partial];
+  if (blocked.length) return { verdict: 'BLOCKED', reasons, blocked, action, partial };
+  if (action.length) return { verdict: 'ACTION_REQUIRED', reasons, blocked, action, partial };
+  if (partial.length) return { verdict: 'PARTIAL', reasons, blocked, action, partial };
+  return { verdict: 'READY_AS_SENDER', reasons, blocked, action, partial };
+}
+
+export function classifyRecipientInventory(rows = []) {
+  const production = (rows || []).filter((row) => String(row.environment || '').toLowerCase() === 'production');
+  const ready = production.filter((row) => RECIPIENT_READY_STATUSES.has(String(row.onboarding_status || '').toLowerCase()));
+  const awaitingBank = production.filter((row) => String(row.onboarding_status || '').toLowerCase() === 'awaiting_bank');
+  return {
+    verdict: ready.length ? 'RECIPIENT_READY' : 'RECIPIENT_NOT_CONFIRMED',
+    production_count: production.length,
+    ready_count: ready.length,
+    awaiting_bank_count: awaitingBank.length,
+    sandbox_count: (rows || []).filter((row) => String(row.environment || '').toLowerCase() === 'sandbox').length,
+    c1c_used: false,
+    onboarded: false,
   };
 }
 
@@ -381,9 +526,24 @@ export async function handleProductionMoovReadiness({
   const capabilities = summarizeMoovCapabilities(caps.json);
   const bankRows = Array.isArray(banks.json) ? banks.json : (banks.json?.bankAccounts || []);
   const methodRows = Array.isArray(methods.json) ? methods.json : (methods.json?.paymentMethods || []);
+  let rdsRecipients = [];
+  let rdsMethods = [];
+  try {
+    rdsRecipients = await loadTenantMoovRecipients(client, derived.tenantId);
+  } catch {
+    rdsRecipients = [];
+  }
+  try {
+    rdsMethods = await loadTenantMoovPaymentMethods(client, derived.tenantId);
+  } catch {
+    rdsMethods = [];
+  }
   const verification = {
     account_status: remoteAccount.status || null,
     account_type: remoteAccount.accountType || remoteAccount.account_type || null,
+    mode: remoteAccount.mode || null,
+    disabled: Boolean(remoteAccount.disabled),
+    restricted: Boolean(remoteAccount.restricted),
     kyc: remoteAccount.verification?.status || remoteAccount.verificationStatus || null,
     kyb: remoteAccount.profile?.business ? 'business_profile_present' : (remoteAccount.profile?.individual ? 'individual_profile_present' : null),
     tos: publicTos(remoteAccount.termsOfService, null),
@@ -391,6 +551,8 @@ export async function handleProductionMoovReadiness({
   };
   const wallet = publicWallet(walletGet.json) || (wallets.ok === true && walletList[0] ? publicWallet(walletList[0]) : null);
   const bankSummaries = bankRows.map(publicBank);
+  const paymentMethodSummaries = methodRows.map(publicPaymentMethod);
+  const recipientSummaries = rdsRecipients.map(publicRecipient);
   const sender = classifySenderReadiness({
     accountGetOk: accountGet.ok === true,
     verification,
@@ -398,6 +560,15 @@ export async function handleProductionMoovReadiness({
     wallet,
     banks: bankSummaries,
   });
+  const inventorySender = classifyInventorySenderReadiness({
+    accountGetOk: accountGet.ok === true,
+    verification,
+    capabilities,
+    wallet,
+    banks: bankSummaries,
+    paymentMethods: paymentMethodSummaries,
+  });
+  const recipients = classifyRecipientInventory(recipientSummaries);
   const liveGets = {
     account: getSummary(accountGet),
     capabilities: getSummary(caps),
@@ -420,17 +591,41 @@ export async function handleProductionMoovReadiness({
     payment_transfer_required: false,
     tenant_id: derived.tenantId,
     server_derived_provider_account_id_present: true,
+    live_account: {
+      account_id_fp: fingerprintMoovId(remoteAccount.accountID || remoteAccount.accountId || accountId),
+      matches_expected_freedom_id: fingerprintMoovId(accountId) === '60922058…de96',
+      display_name: remoteAccount.displayName
+        || remoteAccount.profile?.business?.legalBusinessName
+        || null,
+      mode: remoteAccount.mode || null,
+      account_type: remoteAccount.accountType || remoteAccount.account_type || null,
+      verification_status: remoteAccount.verification?.status
+        || remoteAccount.verificationStatus
+        || null,
+      disabled: Boolean(remoteAccount.disabled),
+      restricted: Boolean(remoteAccount.restricted),
+    },
     account: publicProductionMoovAccount(account),
     verification,
     capabilities,
     wallet,
     banks: bankSummaries,
-    payment_methods: methodRows.map((row) => ({
-      status: row.status || null,
-      paymentMethodType: row.paymentMethodType || row.type || null,
+    payment_methods: paymentMethodSummaries,
+    local_recipients: recipientSummaries,
+    local_payment_methods: rdsMethods.map((row) => ({
+      environment: row.environment || null,
+      verification_status: row.verification_status || null,
+      connection_status: row.connection_status || null,
+      can_send: row.can_send === true,
+      can_receive: row.can_receive === true,
+      external_recipient_linked: Boolean(row.external_recipient_id),
     })),
     live_gets: liveGets,
     sender_readiness: sender,
+    inventory: {
+      sender: inventorySender,
+      recipients,
+    },
     local_snapshot_not_live_truth: true,
     auth_diagnosis: {
       account_get: accountGet.diagnosis || null,

@@ -73,6 +73,31 @@ export async function loadProductionRecipient(client, { recipientId, tenantId } 
   return row;
 }
 
+export async function loadTenantMoovRecipients(client, tenantId) {
+  if (!tenantId) return [];
+  return (await client.query(
+    `SELECT id, tenant_id, provider, environment, onboarding_status,
+            recipient_type, provider_account_id, bank_linked_at, provider_last_four
+     FROM public.external_payment_recipients
+     WHERE tenant_id = $1::uuid AND provider = 'moov'
+     ORDER BY environment, created_at
+     LIMIT 50`,
+    [tenantId],
+  )).rows;
+}
+
+export async function loadTenantMoovPaymentMethods(client, tenantId) {
+  if (!tenantId) return [];
+  return (await client.query(
+    `SELECT id, tenant_id, provider, environment, verification_status, connection_status,
+            can_send, can_receive, external_recipient_id
+     FROM public.payment_provider_methods
+     WHERE tenant_id = $1::uuid AND provider = 'moov'
+     LIMIT 50`,
+    [tenantId],
+  )).rows;
+}
+
 export async function loadProductionWallet(client, tenantId) {
   if (!tenantId) return null;
   return (await client.query(
