@@ -4,6 +4,7 @@ import {
   PRODUCTION_MOOV_HOST,
   PRODUCTION_MOOV_ORIGIN,
 } from './moov-secrets.mjs';
+import { productionMoovOnboardingWritesAllowed } from './moov-holds.mjs';
 
 const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 
@@ -143,8 +144,27 @@ export const PRODUCTION_MOOV_READ_PATH_RE = new RegExp(
     + '|/bank-accounts(?:/[^/?#]+)?'
     + '|/payment-methods(?:/[^/?#]+)?'
     + '|/transfers/[^/?#]+'
+    + '|/underwriting'
+    + '|/files(?:/[^/?#]+)?'
+    + '|/representatives(?:/[^/?#]+)?'
   + ')?$',
 );
+
+/** Paths production onboarding mode may POST/PATCH/PUT. Never transfers. */
+export const PRODUCTION_MOOV_ONBOARD_PATH_RE = new RegExp(
+  '^/accounts(?:'
+    + '|/[^/?#]+(?:'
+      + '|/capabilities'
+      + '|/underwriting'
+      + '|/representatives(?:/[^/?#]+)?'
+      + '|/files'
+      + '|/bank-accounts(?:/[^/?#]+(?:/micro-deposits)?)?'
+      + '|/tos-acceptances'
+    + ')'
+  + ')?$',
+);
+
+export const isProductionMoovOnboardPath = (path) => PRODUCTION_MOOV_ONBOARD_PATH_RE.test(String(path || ''));
 
 export const isProductionMoovReadPath = (path) => PRODUCTION_MOOV_READ_PATH_RE.test(String(path || ''));
 
@@ -260,6 +280,35 @@ export async function productionMoovToken({ credentials, scopes = ['/accounts.re
   return token;
 }
 
+export function assertOnboardMoovRequest({ method = 'GET', path } = {}) {
+  const verb = String(method || 'GET').toUpperCase();
+  if (verb === 'GET') {
+    assertReadOnlyMoovRequest({ method: verb, path });
+    return;
+  }
+  if (!WRITE_METHODS.has(verb)) {
+    const error = new ProductionMoovError('Onboard mode allows GET or write verbs only', 403, {
+      error: 'onboard_method_denied', method: verb, path: path || null,
+    });
+    error.code = 'onboard_method_denied';
+    throw error;
+  }
+  if (!isProductionMoovOnboardPath(path)) {
+    const error = new ProductionMoovError('Path is not on the production Moov onboarding allowlist', 403, {
+      error: 'onboard_path_denied', method: verb, path: path || null,
+    });
+    error.code = 'onboard_path_denied';
+    throw error;
+  }
+  if (/\/transfers(?:\/|$)/i.test(String(path || ''))) {
+    const error = new ProductionMoovError('Onboarding mode cannot create transfers', 403, {
+      error: 'onboard_transfer_denied', method: verb, path: path || null,
+    });
+    error.code = 'onboard_transfer_denied';
+    throw error;
+  }
+}
+
 export async function productionMoovFetch({
   credentials,
   path,
@@ -270,12 +319,20 @@ export async function productionMoovFetch({
   fetchImpl = fetch,
   mode,
 } = {}) {
-  if (mode !== 'read' && mode !== 'execute') {
-    throw new ProductionMoovError('Moov HTTP mode must be read or execute', 500, { error: 'moov_mode_required' });
+  if (mode !== 'read' && mode !== 'execute' && mode !== 'onboard') {
+    throw new ProductionMoovError('Moov HTTP mode must be read, onboard, or execute', 500, { error: 'moov_mode_required' });
   }
   const verb = String(method || 'GET').toUpperCase();
   if (mode === 'read') {
     assertReadOnlyMoovRequest({ method: verb, path });
+  }
+  if (mode === 'onboard') {
+    if (!productionMoovOnboardingWritesAllowed()) {
+      const error = new ProductionMoovError('Onboarding writes remain dark', 403, { error: 'production_onboarding_blocked' });
+      error.code = 'production_onboarding_blocked';
+      throw error;
+    }
+    assertOnboardMoovRequest({ method: verb, path });
   }
   assertProductionCredentials(credentials, { mode });
   const minted = await productionMoovTokenDetailed({ credentials, scopes, fetchImpl, mode });

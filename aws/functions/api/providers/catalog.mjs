@@ -33,14 +33,16 @@ const fn = (name, provider, opClass, aws, notes) => ({
 });
 
 export const PROVIDER_FUNCTIONS = [
-  fn('moov-account-create', 'moov', OP_CLASS.IDENTITY_KYC, 'sandbox_parity', 'Creates a real Moov account. Execution left disabled.'),
+  fn('moov-account-create', 'moov', OP_CLASS.IDENTITY_KYC, 'production_dark', 'M5 dark tenant account create. Held by AWS_MOOV_ONBOARDING_WRITES_ENABLED.'),
   fn('moov-account-discover', 'moov', OP_CLASS.READ_STATUS, 'sandbox_parity', 'Hits Moov to discover accounts. Live reads stay off.'),
   fn('moov-account-onboard', 'moov', OP_CLASS.IDENTITY_KYC, 'sandbox_parity', 'Creates/changes Moov account + capabilities.'),
   fn('moov-account-files', 'moov', OP_CLASS.IDENTITY_KYC, 'sandbox_parity', 'Lists/uploads KYC files at Moov.'),
   fn('moov-account-file-upload', 'moov', OP_CLASS.IDENTITY_KYC, 'sandbox_parity', 'Uploads KYC documents to Moov.'),
   fn('moov-account-file-view', 'moov', OP_CLASS.READ_STATUS, 'sandbox_parity', 'Fetches KYC file bytes from Moov.'),
   fn('moov-onboarding-link', 'moov', OP_CLASS.IDENTITY_KYC, 'sandbox_parity', 'Creates hosted onboarding session.'),
-  fn('moov-readiness', 'moov', OP_CLASS.READ_STATUS, 'sandbox_parity', 'Sandbox GET. Production: GET-only when AWS_PROVIDER_LIVE_READS_ENABLED. Never creates accounts. Unreachable while live-reads stay false.'),
+  fn('moov-readiness', 'moov', OP_CLASS.READ_STATUS, 'sandbox_parity', 'Sandbox GET. Production: GET-only when AWS_PROVIDER_LIVE_READS_ENABLED. Never creates accounts.'),
+  fn('moov-recipient-readiness', 'moov', OP_CLASS.READ_STATUS, 'production_dark', 'M5 GET-only live recipient READY predicate. Ignores last4/bank_linked_at. No mutation.'),
+  fn('moov-wallet-activity', 'moov', OP_CLASS.READ_STATUS, 'production_dark', 'M5 BALANCE_READ ledger. Funding/transfer/disburse/sweep remain held.'),
   fn('moov-selftest', 'moov', OP_CLASS.CONFIG_ADMIN, 'sandbox_parity', 'Calls Moov with sandbox platform credentials.'),
   fn('moov-sync', 'moov', OP_CLASS.IDENTITY_KYC, 'sandbox_parity', 'Pulls Moov state and writes sandbox payment_provider_accounts.'),
   fn('moov-wallet-sync', 'moov', OP_CLASS.MONEY_MOVEMENT, 'sandbox_parity', 'syncWallet port: provisions/refreshes payment_wallets + ledger.'),

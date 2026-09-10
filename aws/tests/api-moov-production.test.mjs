@@ -93,6 +93,7 @@ const productionFlags = {
   AWS_PROVIDER_EXECUTION_ENABLED: 'true',
   AWS_MOOV_ENABLED: 'true',
   AWS_FINANCIAL_PERMISSIONS_ACTIVATED: 'true',
+  AWS_LOVABLE_MONEY_NEUTRALIZED: 'true',
   AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: undefined,
   AWS_CHECKALT_ENABLED: 'false',
   PROVIDER_SECRETS_ARN: 'arn:aws:secretsmanager:us-east-1:806168576068:secret:checksops/production/providers',
