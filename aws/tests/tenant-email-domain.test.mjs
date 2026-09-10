@@ -13,6 +13,8 @@ import {
   fallbackFromHeader,
   sesIdentityVerified,
   consumeDurableRateLimit,
+  resolveSesV2,
+  createLiveSesV2Adapter,
   RATE_LIMITS,
   RATE_LIMIT_ACTIONS,
   assertSendingDomainUniquenessPreflight,
@@ -614,7 +616,56 @@ test('sink mode remains active and no live SES SDK is imported', async () => {
   ].join('\n');
   assert.match(src, /@aws-sdk\/client-sesv2/);
   assert.match(src, /tenantEmailDomainEnabled/);
+  assert.match(src, /createSinkSesV2Adapter/);
+  assert.match(src, /sink_mode_blocks_live_ses/);
   assert.doesNotMatch(src, /from '@aws-sdk\/client-sesv2'/);
+});
+
+test('domain flag in sink mode uses a local SES adapter and never constructs SESv2', async () => {
+  resetDomainRateLimits();
+  const prevMode = process.env.AWS_EMAIL_MODE;
+  const prevFlag = process.env.AWS_TENANT_EMAIL_DOMAIN_ENABLED;
+  process.env.AWS_EMAIL_MODE = 'sink';
+  process.env.AWS_TENANT_EMAIL_DOMAIN_ENABLED = 'true';
+  try {
+    const adapter = await resolveSesV2();
+    assert.equal(adapter.mode, 'sink');
+    const created = await adapter.createEmailIdentity({ EmailIdentity: DOMAIN });
+    assert.equal(created.sink, true);
+    assert.equal(created.VerificationStatus, 'PENDING');
+    assert.equal(created.DkimAttributes.Status, 'PENDING');
+    await assert.rejects(
+      () => createLiveSesV2Adapter(),
+      (error) => error?.code === 'sink_mode_blocks_live_ses' || String(error?.message) === 'sesv2_unavailable',
+    );
+
+    const client = memoryClient();
+    const started = await runStartDomainVerification({
+      client,
+      mapping,
+      body: { tenantId: TENANT, domain: DOMAIN, fromName: 'Freedom Adjustment', replyTo: 'claims@freedomadj.com' },
+      spoof,
+    });
+    assert.equal(started.statusCode, 200, started.error);
+    assert.equal(started.status, 'pending');
+    assert.equal(started.verified, false);
+    assert.ok(Array.isArray(started.dns) && started.dns.length >= 1);
+
+    const checked = await runCheckDomainVerification({
+      client,
+      mapping,
+      body: { tenantId: TENANT },
+      spoof,
+    });
+    assert.equal(checked.statusCode, 200, checked.error);
+    assert.equal(checked.verified, false);
+    assert.notEqual(checked.status, 'verified');
+    assert.equal(client.state.settings.get(TENANT).custom_sending_enabled, false);
+  } finally {
+    process.env.AWS_EMAIL_MODE = prevMode;
+    if (prevFlag === undefined) delete process.env.AWS_TENANT_EMAIL_DOMAIN_ENABLED;
+    else process.env.AWS_TENANT_EMAIL_DOMAIN_ENABLED = prevFlag;
+  }
 });
 
 test('SES tags omit PII and engagement interface stays inert', () => {
