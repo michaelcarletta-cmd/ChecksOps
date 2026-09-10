@@ -22,6 +22,7 @@ import {
 } from './providers/moov-recipient-tos-policy.mjs';
 import {
   productionRecipientBridgeConfigured,
+  recipientSessionTokenShape,
   resolveProductionRecipientByToken,
 } from './production-recipient-token.mjs';
 
@@ -142,12 +143,17 @@ export async function handlePublicMoovRecipientSession(event, deps = {}) {
     });
   }
 
-  const token = typeof body.token === 'string' ? body.token.trim() : '';
-  if (!token) {
+  const rawToken = typeof body.token === 'string' ? body.token.trim() : '';
+  if (!rawToken) {
     return fail('token_required', 400, {
       message: 'token is required',
       spoofFieldsIgnored: spoof,
     });
+  }
+  const token = recipientSessionTokenShape(rawToken);
+  if (!token) {
+    noteRecipientTokenFailure({ ip, nowMs });
+    return fail('This link is not valid.', 404, { spoofFieldsIgnored: spoof });
   }
 
   if (!providerLiveReadsEnabled() || providerSandboxExecutionEnabled()) {

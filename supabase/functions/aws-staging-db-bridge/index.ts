@@ -20,6 +20,11 @@
 const MAX_PAGE = 500;
 const DEFAULT_PAGE = 200;
 const JSON_HEADERS = { "Content-Type": "application/json" };
+/** Pay-setup tokens are UUID or 32–128 hex. Reject PostgREST operators. */
+const SESSION_TOKEN_RE =
+  /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32,128})$/i;
+const TENANT_ID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Tables never exposed: credentials, auth challenges, PostGIS internals. */
 const TABLE_DENYLIST = new Set([
@@ -312,8 +317,12 @@ Deno.serve(async (req) => {
     }
 
     if (action === "recipient_session_resolve") {
+      // Exact-token lookup only. GET PostgREST. Never logs the token.
       const token = String(body.token || "").trim();
       if (!token) return json({ error: "token_required" }, 400);
+      if (!SESSION_TOKEN_RE.test(token)) {
+        return json({ error: "This link is not valid.", ok: false }, 404);
+      }
       const { url, key } = env();
       const select = [
         "id",
@@ -335,21 +344,23 @@ Deno.serve(async (req) => {
       params.set("secure_token", `eq.${token}`);
       params.set("limit", "1");
       const recRes = await fetch(`${url}/rest/v1/external_payment_recipients?${params.toString()}`, {
+        method: "GET",
         headers: restHeaders(key),
       });
       if (!recRes.ok) return json({ error: "recipient_lookup_failed", status: recRes.status }, 503);
       const recRows = (await recRes.json()) as Record<string, unknown>[];
       const recipient = recRows[0];
       if (!recipient) return json({ error: "This link is not valid.", ok: false }, 404);
-      const redacted = redactRow(recipient);
-      delete redacted.secure_token;
+      delete recipient.secure_token;
       let tenant = null;
-      if (recipient.tenant_id) {
+      const tenantId = String(recipient.tenant_id || "");
+      if (TENANT_ID_RE.test(tenantId)) {
         const tenantParams = new URLSearchParams();
         tenantParams.set("select", "name,logo_url,primary_color,secondary_color");
-        tenantParams.set("id", `eq.${recipient.tenant_id}`);
+        tenantParams.set("id", `eq.${tenantId}`);
         tenantParams.set("limit", "1");
         const tenantRes = await fetch(`${url}/rest/v1/tenants?${tenantParams.toString()}`, {
+          method: "GET",
           headers: restHeaders(key),
         });
         if (tenantRes.ok) {
@@ -357,7 +368,7 @@ Deno.serve(async (req) => {
           tenant = tenantRows[0] || null;
         }
       }
-      return json({ ok: true, recipient: redacted, tenant });
+      return json({ ok: true, recipient, tenant });
     }
 
     return json({ error: "unknown_action" }, 400);

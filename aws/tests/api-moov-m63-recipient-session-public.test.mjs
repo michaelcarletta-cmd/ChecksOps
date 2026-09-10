@@ -7,6 +7,7 @@ import { requestPath } from '../functions/api/index.mjs';
 const RECIPIENT_ID = '62a858ff-ee6a-49d7-9898-1c8e4a44227b';
 const ACCOUNT_ID = 'ee8c608e-dc2d-45d3-95e9-3c992f3dfc5f';
 const TENANT_ID = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
+const SESSION_TOKEN = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
 const INDEX = readFileSync(new URL('../functions/api/index.mjs', import.meta.url), 'utf8');
 const UI = readFileSync(new URL('../../src/pages/RecipientPaymentSetup.tsx', import.meta.url), 'utf8');
 const API = readFileSync(new URL('../../src/lib/recipientSessionApi.ts', import.meta.url), 'utf8');
@@ -178,14 +179,14 @@ test('missing token is 400; browser Moov ids are rejected; mutations refused', a
 test('used and expired tokens fail closed without consuming or calling Moov', async () => {
   await withLiveReads(async () => {
     fetchImpl.calls = [];
-    const used = await handlePublicMoovRecipientSession(eventOf({ token: 'used-token' }), {
+    const used = await handlePublicMoovRecipientSession(eventOf({ token: SESSION_TOKEN }), {
       client: mockClient({ ...productionRecipient, token_used_at: '2026-09-10T00:00:00Z' }),
       loadProductionReadSecrets: async () => secrets,
       fetchImpl,
     });
     assert.equal(used.statusCode, 410);
     assert.equal(used.liveProviderCalled, false);
-    const expired = await handlePublicMoovRecipientSession(eventOf({ token: 'expired-token' }), {
+    const expired = await handlePublicMoovRecipientSession(eventOf({ token: SESSION_TOKEN }), {
       client: mockClient({ ...productionRecipient, token_expires_at: '2020-01-01T00:00:00Z' }),
       loadProductionReadSecrets: async () => secrets,
       fetchImpl,
@@ -199,7 +200,7 @@ test('used and expired tokens fail closed without consuming or calling Moov', as
 test('valid production token GETs account/capabilities/banks/methods and matches frontend contract', async () => {
   await withLiveReads(async () => {
     fetchImpl.calls = [];
-    const result = await handlePublicMoovRecipientSession(eventOf({ token: 'live-token' }), {
+    const result = await handlePublicMoovRecipientSession(eventOf({ token: SESSION_TOKEN }), {
       client: mockClient(productionRecipient),
       loadProductionReadSecrets: async () => secrets,
       fetchImpl,
@@ -246,7 +247,7 @@ test('handler source stays GET-only and never writes token_used_at', () => {
 test('production token resolve is used when RDS is not passed', async () => {
   await withLiveReads(async () => {
     fetchImpl.calls = [];
-    const result = await handlePublicMoovRecipientSession(eventOf({ token: 'live-token' }), {
+    const result = await handlePublicMoovRecipientSession(eventOf({ token: SESSION_TOKEN }), {
       resolveRecipientByToken: async () => ({
         ok: true,
         recipient: productionRecipient,
@@ -266,6 +267,25 @@ test('production token resolve is used when RDS is not passed', async () => {
   });
 });
 
+test('malformed and injection-shaped tokens fail closed without lookup or Moov HTTP', async () => {
+  await withLiveReads(async () => {
+    fetchImpl.calls = [];
+    const malformed = await handlePublicMoovRecipientSession(eventOf({
+      token: '*,id=eq.62a858ff-ee6a-49d7-9898-1c8e4a44227b',
+    }), {
+      resolveRecipientByToken: async () => {
+        throw new Error('lookup_must_not_run');
+      },
+      fetchImpl,
+    });
+    assert.equal(malformed.statusCode, 404);
+    assert.equal(malformed.liveProviderCalled, false);
+    assert.equal(malformed.mutated, false);
+    assert.equal(malformed.token_consumed, false);
+    assert.equal(fetchImpl.calls.length, 0);
+  });
+});
+
 test('invalid production token fails closed without Moov HTTP', async () => {
   await withLiveReads(async () => {
     fetchImpl.calls = [];
@@ -282,4 +302,11 @@ test('invalid production token fails closed without Moov HTTP', async () => {
     assert.equal(result.mutated, false);
     assert.equal(fetchImpl.calls.length, 0);
   });
+});
+
+test('handler rejects browser recipient/account ids and never returns a drop token', () => {
+  assert.match(HANDLER, /recipientSessionTokenShape/);
+  assert.match(HANDLER, /untrusted_provider_config/);
+  assert.match(HANDLER, /token: null/);
+  assert.doesNotMatch(HANDLER, /moovToken\(/);
 });
