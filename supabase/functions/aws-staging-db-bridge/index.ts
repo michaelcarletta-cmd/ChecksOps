@@ -189,7 +189,7 @@ Deno.serve(async (req) => {
         deletes: false,
         rpc: false,
         rawSql: false,
-        actions: ["health", "tables", "schema", "counts", "rows", "identity_map"],
+        actions: ["health", "tables", "schema", "counts", "rows", "identity_map", "recipient_session_resolve"],
         maxPageSize: MAX_PAGE,
         defaultPageSize: DEFAULT_PAGE,
         schemas: ["public"],
