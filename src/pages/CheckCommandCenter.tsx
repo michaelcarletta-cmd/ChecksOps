@@ -6,6 +6,7 @@ import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { isAwsStaging, awsApiBaseUrl } from "@/lib/awsStaging";
 import { checkAltProviderUserMessage, runCheckAltOneClickSubmit } from "@/lib/awsCheckAltMoneyPath";
+import { CheckAltImageComplianceCard } from "@/components/checks/CheckAltImageComplianceCard";
 import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
 import { FunctionsHttpError, FunctionsRelayError, FunctionsFetchError } from "@supabase/supabase-js";
 import { useToast } from "@/hooks/use-toast";
@@ -2964,6 +2965,7 @@ function CheckDetailPanel({
   const [depositViewerUrl, setDepositViewerUrl] = useState<string | null>(null);
   const [openingDepositView, setOpeningDepositView] = useState(false);
   const [depositingWithCheckAlt, setDepositingWithCheckAlt] = useState(false);
+  const [checkAltImagePass, setCheckAltImagePass] = useState(false);
   const [frontImageDimensions, setFrontImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const [backImageDimensions, setBackImageDimensions] = useState<{ width: number; height: number } | null>(null);
 
@@ -3641,7 +3643,7 @@ function CheckDetailPanel({
       if (submitErr) throw new Error(checkAltProviderUserMessage(submitErr));
 
       sonnerToast.success("Deposit queued", {
-        description: `Check #${check.check_number ?? checkId.slice(0, 8)} — images are being compressed and submitted in the background. Status will update shortly.`,
+        description: `Check #${check.check_number ?? checkId.slice(0, 8)} — official 1920×1080 CheckAlt artifacts were submitted. Status will update shortly.`,
       });
       qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
       qc.invalidateQueries({ queryKey: ["check-intake-items"] });
@@ -4260,16 +4262,24 @@ function CheckDetailPanel({
                         )}
                         {allEndorsementsComplete && !isDepositBlocked && check.check_stage !== "deposited" && check.status !== "deposited" && (
                           checkAltEnabled ? (
+                            <>
+                            <CheckAltImageComplianceCard
+                              checkId={check.id}
+                              frontImagePath={check.front_image_path}
+                              backImageDepositPath={check.back_image_deposit_path}
+                              onStatusChange={(status) => setCheckAltImagePass(status.overall === "PASS")}
+                            />
                             <Button
                               size="sm"
                               variant="success"
                               className="w-full mt-1"
-                              disabled={depositingWithCheckAlt}
+                              disabled={depositingWithCheckAlt || !checkAltImagePass}
                               onClick={handleDepositWithCheckAlt}
                             >
                               <Banknote className="h-4 w-4 mr-2" />
                               {depositingWithCheckAlt ? "Depositing..." : caRejected ? "Resubmit Deposit" : "Deposit Check"}
                             </Button>
+                            </>
                           ) : (
                        <Button
                          size="sm"

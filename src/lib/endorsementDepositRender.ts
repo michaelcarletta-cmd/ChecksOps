@@ -12,6 +12,7 @@ import {
   clampEndorsementOverride,
 } from "@/lib/endorsementLayout";
 import { fitEndorsementLayout } from "@/lib/endorsementFit";
+import { normalizeBlobToCheckAltCanvas } from "@/lib/checkaltImageCompliance";
 
 export const ENDORSEMENT_RENDERER_VERSION = "canvas-v2";
 
@@ -19,7 +20,8 @@ export const ENDORSEMENT_RENDERER_VERSION = "canvas-v2";
 export const ZONE_TOP_PCT = 0.15;
 export const ZONE_BOTTOM_PCT = 0.92;
 export const ENDORSEMENT_WIDTH_PCT = 0.22;
-const MAX_LONG_EDGE = 1200;
+/** Working render cap only. Official CheckAlt canvas is applied after flatten. */
+const MAX_LONG_EDGE = 2400;
 
 export interface SignatureAsset {
   id: string;
@@ -433,7 +435,7 @@ export async function renderDepositImage(
 
   ctx.restore();
 
-  const blob: Blob = await new Promise((resolve, reject) => {
+  const working: Blob = await new Promise((resolve, reject) => {
     canvas.toBlob(
       (b) => (b ? resolve(b) : reject(new Error("Canvas toBlob returned null"))),
       "image/jpeg",
@@ -441,12 +443,17 @@ export async function renderDepositImage(
     );
   });
 
+  const official = await normalizeBlobToCheckAltCanvas(working);
+  if (!official.ok) {
+    throw new Error(official.message);
+  }
+
   return {
-    blob,
+    blob: official.blob,
     mimeType: "image/jpeg",
-    width: outW,
-    height: outH,
-    bytes: blob.size,
+    width: official.width,
+    height: official.height,
+    bytes: official.blob.size,
     rendererVersion: ENDORSEMENT_RENDERER_VERSION,
   };
 }

@@ -504,10 +504,10 @@ export function EndorsementAdjuster({
         );
       }
 
-      // Derive a deposit path next to the original: <folder>/endorsed_v<n>.jpg
+      // Official CheckAlt artifact next to the original rear image. Original file is not overwritten.
       const folder = originalImagePath.replace(/\/[^/]+$/, "");
       const version = (Date.now() % 1_000_000).toString(36);
-      const depositPath = `${folder}/endorsed_deposit_${version}.jpg`;
+      const depositPath = `${folder}/endorsed_deposit_${version}.checkalt.jpg`;
 
       const { error: uploadErr } = await supabase.storage
         .from(CHECK_IMAGES_BUCKET)

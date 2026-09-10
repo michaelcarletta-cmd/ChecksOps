@@ -31,6 +31,7 @@ import {
   reconcileProductionCheckAltDeposit,
 } from '../functions/api/providers/production/checkalt-poll.mjs';
 import { syntheticCheckRaster } from '../functions/api/providers/parity/checkalt-image.mjs';
+import { syntheticCompliantCheckAltJpeg } from '../functions/api/providers/production/checkalt-image-compliance.mjs';
 import { resetProviderSecretsCache } from '../functions/api/provider-secrets.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -68,7 +69,7 @@ const mapping = {
   status: 'active',
 };
 
-const readyJpeg = () => syntheticCheckRaster({ width: 1400, height: 1000, flat: true });
+const readyJpeg = () => syntheticCompliantCheckAltJpeg();
 
 const withEnv = async (vars, fn) => {
   const previous = {};
@@ -121,16 +122,16 @@ const createStore = ({
     tenant_id: tenantId,
     amount: 12.34,
     check_number: '1001',
-    front_image_path: `checks/${CHECK_ID}/front.deposit2.jpg`,
+    front_image_path: `checks/${CHECK_ID}/front.jpg`,
     back_image_path: `checks/${CHECK_ID}/back.svg`,
-    back_image_deposit_path: `checks/${CHECK_ID}/back.deposit2.jpg`,
+    back_image_deposit_path: `checks/${CHECK_ID}/back.jpg`,
     status: 'approved_for_deposit',
     check_stage: 'ready_for_deposit',
     ...checkOverrides,
   };
   const files = {
-    [check.front_image_path]: readyJpeg(),
-    [check.back_image_deposit_path]: readyJpeg(),
+    [`checks/${CHECK_ID}/front.checkalt.jpg`]: readyJpeg(),
+    [`checks/${CHECK_ID}/back.checkalt.jpg`]: readyJpeg(),
   };
   return {
     deposits,
@@ -547,11 +548,12 @@ test('missing front or rear deposit JPEG fails closed before provider HTTP', asy
   const missingFront = createStore({
     checkOverrides: { front_image_path: `checks/${CHECK_ID}/front.svg` },
   });
-  delete missingFront.files[missingFront.check.front_image_path];
+  delete missingFront.files['checks/' + CHECK_ID + '/front.checkalt.jpg'];
   grantStepUp(missingFront);
   const front = await submitOnce(missingFront);
   assert.equal(front.ok, false);
-  assert.match(String(front.error), /front_image/);
+  assert.equal(front.error, 'CHECKALT_IMAGE_COMPLIANCE_FAILED');
+  assert.equal(front.reason, 'front_missing');
   assert.equal(missingFront.processPosts, 0);
 
   const missingRear = createStore({
@@ -560,7 +562,8 @@ test('missing front or rear deposit JPEG fails closed before provider HTTP', asy
   grantStepUp(missingRear);
   const rear = await submitOnce(missingRear);
   assert.equal(rear.ok, false);
-  assert.equal(rear.error, 'rear_image_missing');
+  assert.equal(rear.error, 'CHECKALT_IMAGE_COMPLIANCE_FAILED');
+  assert.equal(rear.reason, 'rear_missing');
   assert.equal(missingRear.processPosts, 0);
 });
 
@@ -734,7 +737,7 @@ test('direct submit helper uses check amount cents and refuses client image byte
       deps: submitDeps(store),
     });
     assert.equal(ok.userAmount, 1234);
-    assert.equal(ok.imagePipeline, 'browser_prepare_aws_base64');
+    assert.equal(ok.imagePipeline, 'checkalt_official_canvas_base64');
   });
 });
 
