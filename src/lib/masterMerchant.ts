@@ -1,55 +1,43 @@
 /**
- * Platform (master merchant) identity vs tenant identity.
+ * Platform-owner identity vs tenant identity.
  *
- * ChecksOps runs two separate logins on purpose:
- *  - PLATFORM_OWNER_EMAIL  -> the ChecksOps platform / master merchant.
- *    Owns Tenant Management, platform financials and the PLATFORM Moov
- *    facilitator account (MOOV_PLATFORM_ACCOUNT_ID). Not a member of any
- *    single organization.
- *  - Tenant logins (e.g. the Freedom Adjustment admin) -> own only their own
- *    organization and their own connected Moov account.
+ * ChecksOps runs two separate login scopes:
+ *  - PLATFORM_OWNER_EMAIL owns Tenant Management and platform financials.
+ *  - Tenant users are restricted to the organizations in tenant_users.
  *
- * Keeping these separate prevents platform-level actions from ever running
- * against a tenant's Moov account (and vice versa).
- *
- * Authorization prefers the stable application UUID (same key as
- * public.is_master_owner()). Email remains a secondary UI gate for production
- * magic-link flows. This does not change the SQL helper.
+ * Platform authorization is deliberately email-based here. An application UUID
+ * can belong to a tenant user (including a migrated legacy owner record), so it
+ * must never grant platform-wide UI access or redirect a tenant to /admin.
  */
-
-/** Stable ChecksOps application UUID for the platform master owner. */
-export const MASTER_OWNER_APPLICATION_USER_ID = "7dbb3009-f059-4767-b5dc-1c5c72379330";
 
 export const PLATFORM_OWNER_EMAIL = "checksopsadmin@gmail.com";
 
 /**
- * Staging-only Cognito login email for the existing master Cognito user
- * (sub 54a8b4c8-… → application UUID MASTER_OWNER_APPLICATION_USER_ID).
- * Not a production mailbox; password UAT only.
+ * Retained only for compatibility with staging tooling and historical imports.
+ * This UUID does not grant platform-owner access.
  */
+export const MASTER_OWNER_APPLICATION_USER_ID = "7dbb3009-f059-4767-b5dc-1c5c72379330";
+
+/** Staging test identity. It does not grant platform-owner access. */
 export const STAGING_MASTER_LOGIN_EMAIL = "staging-master@checksops.invalid";
 
 /** Legacy alias — kept so existing imports keep working. */
 export const MASTER_MERCHANT_EMAIL = PLATFORM_OWNER_EMAIL;
 
-export function isMasterOwnerUserId(userId?: string | null): boolean {
-  return String(userId || "").trim().toLowerCase() === MASTER_OWNER_APPLICATION_USER_ID;
-}
-
-export function isPlatformOwnerEmail(email?: string | null): boolean {
-  const emailLc = (email ?? "").trim().toLowerCase();
-  if (!emailLc) return false;
-  if (emailLc === PLATFORM_OWNER_EMAIL) return true;
-  if (emailLc === STAGING_MASTER_LOGIN_EMAIL) return true;
+/** @deprecated Stable UUIDs are not platform-authorization credentials. */
+export function isMasterOwnerUserId(_userId?: string | null): boolean {
   return false;
 }
 
+export function isPlatformOwnerEmail(email?: string | null): boolean {
+  return (email ?? "").trim().toLowerCase() === PLATFORM_OWNER_EMAIL;
+}
+
 /**
- * Platform-owner UI gate. Prefer application UUID (matches is_master_owner()).
- * Email is secondary for production inbox-based flows and staging master login.
+ * Platform-owner UI gate. The authenticated application email must match the
+ * explicit platform-owner mailbox. Tenant roles and legacy UUIDs never qualify.
  */
-export function isPlatformOwner(email?: string | null, userId?: string | null): boolean {
-  if (isMasterOwnerUserId(userId)) return true;
+export function isPlatformOwner(email?: string | null, _userId?: string | null): boolean {
   return isPlatformOwnerEmail(email);
 }
 
