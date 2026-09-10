@@ -734,6 +734,13 @@ test('class A registry includes branding routes; frontend never writes domain_st
   assert.match(proposed, /RETURNS TABLE\(allowed boolean, count integer, retry_after_seconds integer\)/);
   assert.doesNotMatch(proposed, /CREATE POLICY/);
   assert.doesNotMatch(proposed, /GRANT EXECUTE[\s\S]{0,200}TO (authenticated|anon|PUBLIC)/);
+  const settingsDml = fs.readFileSync(
+    path.join(ROOT, 'aws/migrations/proposed/APPLIED_STAGING_20260910_tenant_email_settings_checksops_dml.sql'),
+    'utf8',
+  );
+  assert.match(settingsDml, /GRANT SELECT, INSERT, UPDATE ON TABLE public\.tenant_email_settings TO checksops/);
+  assert.doesNotMatch(settingsDml, /GRANT DELETE ON/);
+  assert.doesNotMatch(settingsDml, /GRANT .+ ON TABLE public\.tenant_email_action_rate_limits/);
   assert.match(CONSUME_RATE_LIMIT_SQL, /consume_tenant_email_action_rate_limit/);
   assert.doesNotMatch(CONSUME_RATE_LIMIT_SQL, /INSERT INTO public\.tenant_email_action_rate_limits/);
   assert.doesNotMatch(CONSUME_RATE_LIMIT_SQL, /Date\.now|window_started_at/);
@@ -745,6 +752,7 @@ test('class A registry includes branding routes; frontend never writes domain_st
   assert.equal(allowedTables.includes('tenant_email_action_rate_limits'), false);
   const classAGrants = fs.readFileSync(path.join(ROOT, 'aws/workflows/sql/68_staging_class_a_grants.sql'), 'utf8');
   assert.match(classAGrants, /GRANT EXECUTE ON FUNCTION .+ TO checksops/);
+  assert.match(classAGrants, /GRANT SELECT, INSERT, UPDATE ON TABLE public\.tenant_email_settings TO checksops/);
   const writeAuth = fs.readFileSync(path.join(ROOT, 'aws/rls/WRITE_AUTHORIZATION.md'), 'utf8');
   assert.match(writeAuth, /API role is `checksops`, never `checksops_admin`/);
   assert.equal(sesIdentityVerified({
