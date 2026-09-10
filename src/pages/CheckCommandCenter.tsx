@@ -1,11 +1,15 @@
 import { Fragment, lazy, Suspense, useState, useMemo, useCallback, useEffect, useRef } from "react";
-import { useFinancialGuard } from "@/hooks/useFinancialGuard";
+import { useStepUp } from "@/hooks/useStepUp";
+import {
+  DEPOSIT_PHASE_LABEL,
+  runCheckAltDepositClick,
+  type DepositPhase,
+} from "@/lib/checkaltDepositOrchestrator";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { isAwsStaging, awsApiBaseUrl } from "@/lib/awsStaging";
-import { checkAltProviderUserMessage, runCheckAltOneClickSubmit } from "@/lib/awsCheckAltMoneyPath";
 import { CheckAltImageComplianceCard } from "@/components/checks/CheckAltImageComplianceCard";
 import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
 import { FunctionsHttpError, FunctionsRelayError, FunctionsFetchError } from "@supabase/supabase-js";
@@ -2944,7 +2948,7 @@ function CheckDetailPanel({
   checkId: string;
   onRefresh: () => void;
 }) {
-  const guardFinancial = useFinancialGuard();
+  const { requireStepUp } = useStepUp();
   const [detailTab, setDetailTab] = useState("overview");
   const [undoing, setUndoing] = useState(false);
   const [reuploadingBack, setReuploadingBack] = useState(false);
@@ -2965,7 +2969,7 @@ function CheckDetailPanel({
   const [depositViewerUrl, setDepositViewerUrl] = useState<string | null>(null);
   const [openingDepositView, setOpeningDepositView] = useState(false);
   const [depositingWithCheckAlt, setDepositingWithCheckAlt] = useState(false);
-  const [checkAltImagePass, setCheckAltImagePass] = useState(false);
+  const [depositPhase, setDepositPhase] = useState<DepositPhase>("idle");
   const [frontImageDimensions, setFrontImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const [backImageDimensions, setBackImageDimensions] = useState<{ width: number; height: number } | null>(null);
 
@@ -3625,35 +3629,46 @@ function CheckDetailPanel({
     }
   };
 
-  // One-click CheckAlt deposit: AWS /prep submit is the first money-path
-  // server action. No local prepare_deposit / assign_provider.
+  // One-click CheckAlt deposit: preflight + auto image prep, then TOTP, then submit.
+  // No separate compliance/prepare click. No local prepare_deposit / assign_provider.
   const handleDepositWithCheckAlt = async () => {
-    if (!user?.id || !check) return;
-    try {
-      await guardFinancial("deposit.submit", { checkId });
-    } catch (err: any) {
-      sonnerToast.error(err?.message ?? "Two-factor verification required");
-      return;
-    }
+    if (!user?.id || !check || depositingWithCheckAlt) return;
     setDepositingWithCheckAlt(true);
+    setDepositPhase("preparing");
     try {
-      const { error: submitErr } = await runCheckAltOneClickSubmit(checkId, {
+      const result = await runCheckAltDepositClick(checkId, {
         apiBaseUrl: awsApiBaseUrl(),
+        requireStepUp,
+        onPhase: setDepositPhase,
       });
-      if (submitErr) throw new Error(checkAltProviderUserMessage(submitErr));
-
-      sonnerToast.success("Deposit queued", {
-        description: `Check #${check.check_number ?? checkId.slice(0, 8)} — official 1920×1080 CheckAlt artifacts were submitted. Status will update shortly.`,
-      });
+      if (!result.ok) {
+        toast({
+          title: result.attention === "endorsement" ? "Endorsement required" : "Deposit stopped",
+          description: result.message,
+          variant: "destructive",
+        });
+        return;
+      }
+      if (result.held) {
+        sonnerToast.success("Verification complete", {
+          description: "This check is prepared. Provider deposit is still disabled.",
+        });
+      } else {
+        sonnerToast.success("Deposit queued", {
+          description: `Check #${check.check_number ?? checkId.slice(0, 8)} — status will update shortly.`,
+        });
+      }
       qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
       qc.invalidateQueries({ queryKey: ["check-intake-items"] });
       qc.invalidateQueries({ queryKey: ["deposit-items"] });
       qc.invalidateQueries({ queryKey: ["check-audit", checkId] });
+      qc.invalidateQueries({ queryKey: ["checkalt-image-compliance", checkId] });
       onRefresh();
     } catch (e: any) {
       toast({ title: "Deposit failed", description: e.message, variant: "destructive" });
     } finally {
       setDepositingWithCheckAlt(false);
+      setDepositPhase("idle");
     }
   };
 
@@ -4267,17 +4282,18 @@ function CheckDetailPanel({
                               checkId={check.id}
                               frontImagePath={check.front_image_path}
                               backImageDepositPath={check.back_image_deposit_path}
-                              onStatusChange={(status) => setCheckAltImagePass(status.overall === "PASS")}
                             />
                             <Button
                               size="sm"
                               variant="success"
                               className="w-full mt-1"
-                              disabled={depositingWithCheckAlt || !checkAltImagePass}
+                              disabled={depositingWithCheckAlt}
                               onClick={handleDepositWithCheckAlt}
                             >
                               <Banknote className="h-4 w-4 mr-2" />
-                              {depositingWithCheckAlt ? "Depositing..." : caRejected ? "Resubmit Deposit" : "Deposit Check"}
+                              {depositingWithCheckAlt
+                                ? DEPOSIT_PHASE_LABEL[depositPhase] || "Preparing check for deposit…"
+                                : caRejected ? "Resubmit Deposit" : "Deposit"}
                             </Button>
                             </>
                           ) : (

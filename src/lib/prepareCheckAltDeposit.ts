@@ -47,9 +47,11 @@ async function writeCheckAltArtifact(sourcePath: string, blob: Blob) {
   return preparedPath;
 }
 
-async function prepareRasterToCheckAlt(path: string, side: "front" | "rear") {
-  const existing = await reuseIfCompliant(toCheckAltPath(path));
-  if (existing) return existing;
+async function prepareRasterToCheckAlt(path: string, side: "front" | "rear", force = false) {
+  if (!force) {
+    const existing = await reuseIfCompliant(toCheckAltPath(path));
+    if (existing) return existing;
+  }
 
   const source = await downloadBlob(path);
   const prepared = await normalizeBlobToCheckAltCanvas(source);
@@ -63,7 +65,10 @@ async function prepareRasterToCheckAlt(path: string, side: "front" | "rear") {
  * Build official 1920x1080 CheckAlt artifacts for front + endorsed rear.
  * Does not modify the original claim images. AWS submit validates the artifacts.
  */
-export async function prepareCheckAltDeposit(checkIntakeItemId: string): Promise<{
+export async function prepareCheckAltDeposit(
+  checkIntakeItemId: string,
+  options: { forceFront?: boolean; forceRear?: boolean } = {},
+): Promise<{
   deposit_front_path: string;
   deposit_back_path: string;
 }> {
@@ -98,8 +103,8 @@ export async function prepareCheckAltDeposit(checkIntakeItemId: string): Promise
   }
 
   const [deposit_front_path, deposit_back_path] = await Promise.all([
-    prepareRasterToCheckAlt(frontSource, "front"),
-    prepareRasterToCheckAlt(backSource, "rear"),
+    prepareRasterToCheckAlt(frontSource, "front", options.forceFront === true),
+    prepareRasterToCheckAlt(backSource, "rear", options.forceRear === true),
   ]);
 
   if (!isCheckAltArtifactPath(deposit_front_path) || !isCheckAltArtifactPath(deposit_back_path)) {

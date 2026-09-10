@@ -21,6 +21,7 @@ import {
   stepUpAwsTotp,
   verifyAwsTotp,
 } from "@/lib/awsMfa";
+import { TOTP_BOUNDARY_MESSAGE, normalizeTotpCode, totpUserFailureMessage } from "@/lib/totpCode";
 import { resolveTotpOtpauthUri, totpQrDataUrl } from "@/lib/totpQr";
 import { TotpQrDisplay } from "@/components/auth/TotpQrDisplay";
 
@@ -145,8 +146,8 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
       setError("Two-factor is not ready yet. Close and try again.");
       return;
     }
-    const trimmed = code.replace(/\s/g, "");
-    if (trimmed.length !== 6) {
+    const normalized = normalizeTotpCode(code);
+    if (!normalized.ok) {
       setError("Enter the 6-digit code from your authenticator app.");
       return;
     }
@@ -155,21 +156,26 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
     setError(null);
     try {
       if (awsMfaAvailable()) {
+        try {
+          await supabase.auth.refreshSession();
+        } catch {
+          /* continue with the current access token */
+        }
         if (mode === "enroll") {
-          const enrolled = await verifyAwsTotp(trimmed, {
+          const enrolled = await verifyAwsTotp(normalized.code, {
             actionKey: request?.actionKey,
             tenantId: request?.tenantId,
             checkId: request?.checkId,
           });
-          if (!enrolled) throw new Error("That code wasn't accepted. Try the next one.");
+          if (!enrolled) throw new Error(TOTP_BOUNDARY_MESSAGE);
         } else {
           const stepped = await stepUpAwsTotp({
-            code: trimmed,
+            code: normalized.code,
             actionKey: request?.actionKey,
             tenantId: request?.tenantId,
             checkId: request?.checkId,
           });
-          if (!stepped) throw new Error("That code wasn't accepted. Try the next one.");
+          if (!stepped) throw new Error(TOTP_BOUNDARY_MESSAGE);
         }
         await onFactorsChanged();
         toast({
@@ -187,7 +193,7 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
       const { error: verifyError } = await supabase.auth.mfa.verify({
         factorId,
         challengeId: challenge.id,
-        code: trimmed,
+        code: normalized.code,
       });
       if (verifyError) throw verifyError;
 
@@ -215,8 +221,8 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
         description: "Two-factor confirmed for this session.",
       });
       onResolved(true);
-    } catch (err: any) {
-      setError(err?.message || "That code wasn't accepted. Try the next one.");
+    } catch (err: unknown) {
+      setError(totpUserFailureMessage(err));
     } finally {
       setBusy(false);
     }
@@ -228,11 +234,14 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ShieldCheck className="h-5 w-5 text-primary" />
-            {request?.title ?? "Confirm with two-factor"}
+            {request?.title
+              ?? (request?.actionKey === "deposit.submit" ? "Deposit Verification" : "Confirm with two-factor")}
           </DialogTitle>
           <DialogDescription>
-            {request?.description ??
-              "Money movement requires two-factor verification. Enter the 6-digit code from your authenticator app."}
+            {request?.description
+              ?? (request?.actionKey === "deposit.submit"
+                ? "Enter the current 6-digit code from your authenticator app to authorize this deposit."
+                : "Money movement requires two-factor verification. Enter the 6-digit code from your authenticator app.")}
           </DialogDescription>
         </DialogHeader>
 
@@ -291,6 +300,7 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
             <Label htmlFor="stepup-code">Authentication code</Label>
             <Input
               id="stepup-code"
+              type="text"
               inputMode="numeric"
               autoComplete="one-time-code"
               maxLength={6}

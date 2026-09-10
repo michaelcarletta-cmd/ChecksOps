@@ -225,7 +225,14 @@ test('Command Center CheckAlt click performs zero prepare/assign when AWS is dis
   assert.doesNotMatch(fn, /deposit_action/);
   assert.doesNotMatch(fn, /prepareCheckAltDeposit/);
   assert.doesNotMatch(fn, /from\("deposit_items"\)/);
-  assert.match(fn, /runCheckAltOneClickSubmit/);
+  assert.match(fn, /runCheckAltDepositClick/);
+
+  const orchestrator = sourceOf('src/lib/checkaltDepositOrchestrator.ts');
+  assert.match(orchestrator, /runCheckAltDepositClick/);
+  assert.doesNotMatch(orchestrator, /deposit_action/);
+  assert.doesNotMatch(orchestrator, /supabase\.rpc/);
+  assert.doesNotMatch(orchestrator, /p_action:\s*["']prepare_deposit["']/);
+  assert.doesNotMatch(orchestrator, /p_action:\s*["']assign_provider["']/);
 
   const oneClick = sourceOf('src/lib/awsCheckAltMoneyPath.ts');
   assert.match(oneClick, /runCheckAltOneClickSubmit/);

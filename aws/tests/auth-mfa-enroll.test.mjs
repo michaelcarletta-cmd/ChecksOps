@@ -194,10 +194,73 @@ test('financial step-up recognizes SOFTWARE_TOKEN_MFA without preferred MFA', as
   assert.equal(recognized.calls[1].target, 'AWSCognitoIdentityProviderService.VerifySoftwareToken');
 });
 
+test('step-up keeps TOTP as a 6-digit string and rejects numeric coercion', async () => {
+  const numeric = await handleMfaStepUp(eventOf({
+    accessToken: 'cognito-access-token',
+    code: 123456,
+  }));
+  assert.equal(numeric.ok, false);
+  assert.equal(numeric.error, 'totp_must_be_string');
+
+  const verifyNumeric = await handleMfaVerify(eventOf({
+    accessToken: 'cognito-access-token',
+    code: 654321,
+  }));
+  assert.equal(verifyNumeric.ok, false);
+  assert.equal(verifyNumeric.error, 'totp_must_be_string');
+});
+
+test('leading-zero TOTP string is forwarded to VerifySoftwareToken as UserCode', async () => {
+  const captured = [];
+  const prev = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => {
+    const headers = init.headers || {};
+    const target = headers['x-amz-target'] || headers['X-Amz-Target'] || '';
+    const parsed = init.body ? JSON.parse(init.body) : {};
+    captured.push({ target, userCode: parsed.UserCode, userCodeType: typeof parsed.UserCode });
+    if (target.endsWith('GetUser')) {
+      return { ok: true, status: 200, text: async () => JSON.stringify({ UserMFASettingList: ['SOFTWARE_TOKEN_MFA'] }) };
+    }
+    return { ok: true, status: 200, text: async () => JSON.stringify({ Status: 'SUCCESS' }) };
+  };
+  try {
+    await handleMfaStepUp(eventOf({
+      accessToken: 'cognito-access-token',
+      code: '012345',
+      check_intake_item_id: 'a3a4a153-46e1-4c28-a273-79a9bd04f3a6',
+    }));
+  } finally {
+    globalThis.fetch = prev;
+  }
+  const verify = captured.find((row) => row.target.endsWith('VerifySoftwareToken'));
+  assert.equal(verify.userCodeType, 'string');
+  assert.equal(verify.userCode, '012345');
+});
+
+test('Cognito code mismatch returns a safe wait-for-new-code message', async () => {
+  const { result } = await withCognito(handleMfaStepUp, [
+    { body: { UserMFASettingList: ['SOFTWARE_TOKEN_MFA'] } },
+    {
+      ok: false,
+      status: 400,
+      body: { __type: 'CodeMismatchException', message: 'Unable to verify secret code.' },
+    },
+  ], () => handleMfaStepUp(eventOf({
+    accessToken: 'cognito-access-token',
+    code: '111111',
+  })));
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'mfa_step_up_failed');
+  assert.match(result.message, /Wait for a new code in your authenticator app/i);
+  assert.doesNotMatch(result.message, /CodeMismatch|VerifySoftwareToken|Cognito/i);
+});
+
 test('enroll path does not log or persist SecretCode', () => {
   const files = [
     'aws/functions/api/auth-mfa.mjs',
+    'aws/functions/api/auth-totp-code.mjs',
     'src/lib/awsMfa.ts',
+    'src/lib/totpCode.ts',
     'src/lib/totpEnrollment.ts',
     'src/lib/totpQr.ts',
     'src/components/auth/TotpManagerCard.tsx',

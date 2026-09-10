@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useFinancialGuard } from "@/hooks/useFinancialGuard";
+import { useStepUp } from "@/hooks/useStepUp";
+import { runCheckAltDepositClick } from "@/lib/checkaltDepositOrchestrator";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { matchesAmountQuery } from "@/features/check-command/status";
@@ -30,13 +31,8 @@ import { CheckImagesViewer } from "@/components/checks/CheckImagesViewer";
 import { Eye } from "lucide-react";
 import { DisbursementConsole } from "@/components/disbursement/DisbursementConsole";
 import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
-import { prepareCheckAltDeposit } from "@/lib/prepareCheckAltDeposit";
 import { awsApiBaseUrl } from "@/lib/awsStaging";
-import {
-  checkAltProviderUserMessage,
-  invokeAwsCheckAltProviderFunction,
-  requireAwsCheckAltProviderPath,
-} from "@/lib/awsCheckAltMoneyPath";
+import { checkAltProviderUserMessage } from "@/lib/awsCheckAltMoneyPath";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -212,7 +208,7 @@ export function DepositOperationsConsole({ searchQuery = "" }: DepositOperations
     unsynced_count: 0,
   });
 
-  const guardFinancial = useFinancialGuard(tenantId);
+  const { requireStepUp } = useStepUp();
 
   // Deposit action mutation
   const actionMutation = useMutation({
@@ -256,22 +252,20 @@ export function DepositOperationsConsole({ searchQuery = "" }: DepositOperations
   // manual record_submission dialog used by other providers.
   const checkaltSubmitMutation = useMutation({
     mutationFn: async (checkId: string) => {
-      await guardFinancial("deposit.submit", { checkId });
-      requireAwsCheckAltProviderPath({
+      const result = await runCheckAltDepositClick(checkId, {
         apiBaseUrl: awsApiBaseUrl(),
-        functionName: "checkalt-submit-deposit",
+        requireStepUp,
       });
-      // Pre-normalize each side (front + back) so the deposit worker never
-      // has to re-encode oversized images inline (avoids CPU-exceeded).
-      const prepared = await prepareCheckAltDeposit(checkId);
-      const { data, error } = await invokeAwsCheckAltProviderFunction("checkalt-submit-deposit", {
-        body: { check_intake_item_id: checkId, ...prepared },
-      }, { apiBaseUrl: awsApiBaseUrl() });
-      if (error) throw new Error(checkAltProviderUserMessage(error));
-      return data as { status: string; checkalt_reference: string | null };
+      if (!result.ok) throw new Error(result.message || checkAltProviderUserMessage(result.error));
+      return result;
     },
-    onSuccess: (data) => {
-      toast({ title: "Deposit queued", description: "Images are being compressed and submitted in the background. Status will update shortly." });
+    onSuccess: (result) => {
+      toast({
+        title: result.held ? "Verification complete" : "Deposit queued",
+        description: result.held
+          ? "This check is prepared. Provider deposit is still disabled."
+          : "Status will update shortly.",
+      });
       qc.invalidateQueries({ queryKey: ["deposit-items"] });
       qc.invalidateQueries({ queryKey: ["check-intake-items"] });
     },

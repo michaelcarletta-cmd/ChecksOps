@@ -80,6 +80,7 @@ import { handleCheckReconciliation } from './check-reconciliation.mjs';
 import { handleSendPaymentDirectionRequest } from './payment-direction-email.mjs';
 import { handleAdminResetTotp } from './admin-reset-totp.mjs';
 import { handleBillMortgageHandling } from './bill-mortgage-handling.mjs';
+import { handleCheckAltDepositPreflight } from './providers/production/checkalt-preflight.mjs';
 
 export const CLASS_A_FUNCTIONS = new Set([
   // Email
@@ -126,6 +127,7 @@ export const CLASS_A_FUNCTIONS = new Set([
   'send-payment-direction-request',
   'admin-reset-totp',
   'bill-mortgage-handling',
+  'checkalt-deposit-preflight',
   'homeowner-upload-otp-start',
   'homeowner-upload-otp-verify',
   'homeowner-upload-session',
@@ -257,6 +259,8 @@ export const handleAppServiceRequest = async (event, path, method) => {
       return handleAdminResetTotp(event);
     case 'bill-mortgage-handling':
       return handleBillMortgageHandling(event);
+    case 'checkalt-deposit-preflight':
+      return handleCheckAltDepositPreflight(event);
     case 'homeowner-upload-check':
       return handleHomeownerUploadCheck(event);
     case 'homeowner-upload-otp-start':

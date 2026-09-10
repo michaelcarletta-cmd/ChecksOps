@@ -5,6 +5,7 @@
  */
 import { flagTrue } from './ops-readiness.mjs';
 import { evaluatePrivilegedEnrollment, privilegedAuthPolicy } from './privileged-auth.mjs';
+import { normalizeTotpCode, totpUserFailureMessage } from './auth-totp-code.mjs';
 
 const POOL_ID = () => process.env.COGNITO_USER_POOL_ID;
 const CLIENT_ID = () => process.env.COGNITO_CLIENT_ID;
@@ -155,10 +156,17 @@ export const handleMfaAssociate = async (event) => {
 export const handleMfaVerify = async (event) => {
   const accessToken = accessTokenOf(event);
   const body = parseBody(event);
-  const code = String(body.code || body.userCode || '').replace(/\s+/g, '');
-  if (!accessToken || !/^\d{6}$/.test(code)) {
-    return { ok: false, statusCode: 400, error: 'missing_verify_fields', ...financialGate() };
+  const normalized = normalizeTotpCode(body.code ?? body.userCode);
+  if (!accessToken || !normalized.ok) {
+    return {
+      ok: false,
+      statusCode: 400,
+      error: !accessToken ? 'missing_access_token' : normalized.error,
+      message: totpUserFailureMessage({ message: normalized.error || 'missing_verify_fields' }),
+      ...financialGate(),
+    };
   }
+  const code = normalized.code;
   try {
     const result = await cognitoJson('VerifySoftwareToken', {
       AccessToken: accessToken,
@@ -213,7 +221,7 @@ export const handleMfaVerify = async (event) => {
       ok: false,
       statusCode: error.statusCode || 401,
       error: 'mfa_verify_failed',
-      message: String(error.message || error).slice(0, 200),
+      message: totpUserFailureMessage(error),
       ...financialGate(),
     };
   }
@@ -308,10 +316,17 @@ const recordStepUpLog = async (event, body, extra = {}) => {
 export const handleMfaStepUp = async (event) => {
   const accessToken = accessTokenOf(event);
   const body = parseBody(event);
-  const code = String(body.code || body.userCode || '').replace(/\s+/g, '');
-  if (!accessToken || !/^\d{6}$/.test(code)) {
-    return { ok: false, statusCode: 400, error: 'missing_verify_fields', ...financialGate() };
+  const normalized = normalizeTotpCode(body.code ?? body.userCode);
+  if (!accessToken || !normalized.ok) {
+    return {
+      ok: false,
+      statusCode: 400,
+      error: !accessToken ? 'missing_access_token' : normalized.error,
+      message: totpUserFailureMessage({ message: normalized.error || 'missing_verify_fields' }),
+      ...financialGate(),
+    };
   }
+  const code = normalized.code;
   try {
     const user = await cognitoJson('GetUser', { AccessToken: accessToken });
     const enrolled = evaluateCognitoTotpEnrollment(user).totpEnrolled;
@@ -331,7 +346,14 @@ export const handleMfaStepUp = async (event) => {
     });
     const success = String(result.Status || '').toUpperCase() === 'SUCCESS';
     if (!success) {
-      return { ok: false, statusCode: 401, error: 'mfa_step_up_failed', verified: false, ...financialGate() };
+      return {
+        ok: false,
+        statusCode: 401,
+        error: 'mfa_step_up_failed',
+        verified: false,
+        message: totpUserFailureMessage({ name: 'CodeMismatchException' }),
+        ...financialGate(),
+      };
     }
     const recorded = await recordStepUpLog(event, body);
     if (!recorded?.ok) {
@@ -359,7 +381,7 @@ export const handleMfaStepUp = async (event) => {
       ok: false,
       statusCode: error.statusCode || 401,
       error: 'mfa_step_up_failed',
-      message: String(error.message || error).slice(0, 200),
+      message: totpUserFailureMessage(error),
       ...financialGate(),
     };
   }
