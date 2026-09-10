@@ -55,10 +55,13 @@ Adds:
 - `last_checked_at`, `ses_identity_name`, `custom_sending_enabled`,
   `mail_from_domain`, `mail_from_records`
 - `tenant_email_action_rate_limits` for atomic per-tenant/user/action counters
+- `public.consume_tenant_email_action_rate_limit(...)` SECURITY DEFINER function
+  (owned by `checksops_admin`, `EXECUTE` only for `checksops`)
 
 Runtime code degrades if SES metadata columns are missing. Mutating domain APIs
-**fail closed** if the rate-limit table is missing (they do not fall back to
-in-memory as the security control). Do not apply this file in this PR.
+**fail closed** if the consume function is missing (they do not fall back to
+in-memory as the security control, and they never DML the table directly). Do
+not apply this file in this PR.
 
 ### Read-only sending-domain preflight
 
@@ -80,11 +83,24 @@ decision. Do not auto-delete or merge.
 ## Durable rate limiting
 
 Mutating and SES-check actions (`domain_start`, `domain_check`, `domain_save`,
-`domain_disable`, `domain_delete`) consume `tenant_email_action_rate_limits`
-with `INSERT … ON CONFLICT` so concurrent Lambdas serialize on the primary key.
-The window uses Postgres `now()`, never a client timestamp. Denied responses
-include `retryAfterSec`. An in-memory Map is only a same-instance deny cache
-and cannot grant a request that the database would refuse.
+`domain_disable`, `domain_delete`) call
+`public.consume_tenant_email_action_rate_limit(tenant_id, user_id, action, limit, window_seconds)`.
+
+That function is `SECURITY DEFINER`, `SET search_path = public, pg_temp`, owned
+by the migration/admin role `checksops_admin`, revoked from `PUBLIC`, and
+`GRANT EXECUTE` only to the staging API database role `checksops` (the Lambda
+database user; never `checksops_admin`). It validates `p_user_id = auth.uid()`,
+the fixed action enum, and positive bounded limit/window values, then consumes
+the counter with `INSERT … ON CONFLICT` using Postgres `now()`. It returns only
+`allowed`, `count`, and `retry_after_seconds` (no tenant/user identifiers).
+`retry_after_seconds` is computed entirely from PostgreSQL timestamps.
+
+`tenant_email_action_rate_limits` keeps RLS enabled with **no** policy for
+`checksops` and **no** `SELECT`/`INSERT`/`UPDATE`/`DELETE` grants. It is **not**
+in `aws/functions/api/allowed-tables.json`. The generic data API cannot read or
+write it. An in-memory Map is only a same-instance deny cache and cannot grant a
+request that the database would refuse. Missing function, permission, or
+validation failures fail closed as `rate_limit_unavailable`.
 
 ## Fail-closed audit
 

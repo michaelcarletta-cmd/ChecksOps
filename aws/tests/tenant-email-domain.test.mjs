@@ -14,6 +14,7 @@ import {
   sesIdentityVerified,
   consumeDurableRateLimit,
   RATE_LIMITS,
+  RATE_LIMIT_ACTIONS,
   assertSendingDomainUniquenessPreflight,
   duplicateSendingDomainCounts,
   SENDING_DOMAIN_PREFLIGHT_SQL,
@@ -74,7 +75,15 @@ const mockSes = (overrides = {}) => {
   return adapter;
 };
 
-const createRateLimitStore = () => {
+const ALLOWED_RATE_LIMIT_ACTIONS = new Set(RATE_LIMIT_ACTIONS);
+
+const pgError = (code, message) => {
+  const error = new Error(message);
+  error.code = code;
+  return error;
+};
+
+const createRateLimitStore = (dbNowMs = 1_700_000_000_000) => {
   const rows = new Map();
   let chain = Promise.resolve();
   const locked = async (fn) => {
@@ -89,7 +98,7 @@ const createRateLimitStore = () => {
       release();
     }
   };
-  return { rows, locked };
+  return { rows, locked, dbNowMs };
 };
 
 const memoryClient = (opts = {}) => {
@@ -111,6 +120,9 @@ const memoryClient = (opts = {}) => {
     master: opts.master === true,
     otherDomain: opts.otherDomain || null,
     failAudit: opts.failAudit === true,
+    missingRateLimitFunction: opts.missingRateLimitFunction === true,
+    dbRole: opts.dbRole || 'checksops',
+    authUid: opts.authUid || USER,
     settings,
     audits,
     tenant,
@@ -161,29 +173,64 @@ const memoryClient = (opts = {}) => {
       if (compact.includes('is_master_owner')) {
         return { rows: [{ is_master: state.master }] };
       }
-      if (compact.includes('tenant_email_action_rate_limits')) {
-        const tenantId = params[0];
-        const userId = params[1];
-        const action = params[2];
-        const windowSecs = Number(params[3] || 900);
+      if (/set_config/i.test(compact) && params[0] === 'request.app_user_id') {
+        state.authUid = params[1];
+        return { rows: [{ set_config: params[1] }], rowCount: 1 };
+      }
+      if (compact.includes('consume_tenant_email_action_rate_limit')) {
+        if (state.missingRateLimitFunction) {
+          throw pgError(
+            '42883',
+            'function consume_tenant_email_action_rate_limit(uuid, uuid, text, integer, integer) does not exist',
+          );
+        }
+        if (state.dbRole !== 'checksops') {
+          throw pgError('42501', 'permission denied for function consume_tenant_email_action_rate_limit');
+        }
+        const [tenantId, userId, action, limit, windowSeconds] = params;
+        if (!tenantId || !userId) {
+          throw pgError('22023', 'invalid_rate_limit_identity');
+        }
+        if (String(userId) !== String(state.authUid)) {
+          throw pgError('42501', 'rate_limit_caller_mismatch');
+        }
+        if (!ALLOWED_RATE_LIMIT_ACTIONS.has(action)) {
+          throw pgError('22023', 'invalid_rate_limit_action');
+        }
+        const bound = Number(limit);
+        const windowSecs = Number(windowSeconds);
+        if (!Number.isInteger(bound) || bound < 1 || bound > 1000) {
+          throw pgError('22023', 'invalid_rate_limit_bound');
+        }
+        if (!Number.isInteger(windowSecs) || windowSecs < 1 || windowSecs > 86400) {
+          throw pgError('22023', 'invalid_rate_limit_window');
+        }
         return state.rateLimitStore.locked(() => {
+          const now = state.rateLimitStore.dbNowMs;
+          const windowMs = windowSecs * 1000;
           const key = `${tenantId}:${userId}:${action}`;
-          const now = Date.now();
           const prev = state.rateLimitStore.rows.get(key);
-          const expired = !prev || (now - prev.window_started_at) >= windowSecs * 1000;
+          const expired = !prev || (now - prev.window_started_at) >= windowMs;
           const next = expired
             ? { window_started_at: now, request_count: 1 }
             : { window_started_at: prev.window_started_at, request_count: prev.request_count + 1 };
           state.rateLimitStore.rows.set(key, next);
+          const allowed = next.request_count <= bound;
+          const retryAfterSeconds = allowed
+            ? 0
+            : Math.max(1, Math.ceil((next.window_started_at + windowMs - now) / 1000));
           return {
             rows: [{
-              request_count: next.request_count,
-              window_started_at: new Date(next.window_started_at).toISOString(),
-              server_now: new Date(now).toISOString(),
+              allowed,
+              count: next.request_count,
+              retry_after_seconds: retryAfterSeconds,
             }],
             rowCount: 1,
           };
         });
+      }
+      if (compact.includes('tenant_email_action_rate_limits')) {
+        throw pgError('42501', 'permission denied for table tenant_email_action_rate_limits');
       }
       if (compact.includes('lower(sending_domain)')) {
         const domain = params[0];
@@ -569,10 +616,35 @@ test('class A registry includes branding routes; frontend never writes domain_st
   assert.match(proposed, /^COMMIT;/m);
   assert.match(proposed, /RAISE EXCEPTION 'tenant_email_settings duplicate sending_domain values/);
   assert.match(proposed, /tenant_email_action_rate_limits/);
+  assert.match(proposed, /consume_tenant_email_action_rate_limit/);
+  assert.match(proposed, /SECURITY DEFINER/);
+  assert.match(proposed, /SET search_path = public, pg_temp/);
+  assert.match(proposed, /OWNER TO checksops_admin/);
+  assert.match(proposed, /GRANT EXECUTE ON FUNCTION public\.consume_tenant_email_action_rate_limit\(uuid, uuid, text, integer, integer\)\s+TO checksops/);
+  assert.match(proposed, /REVOKE ALL ON FUNCTION public\.consume_tenant_email_action_rate_limit\(uuid, uuid, text, integer, integer\)\s+FROM PUBLIC/);
+  assert.match(proposed, /REVOKE ALL ON TABLE public\.tenant_email_action_rate_limits FROM checksops/);
+  assert.match(proposed, /p_user_id IS DISTINCT FROM auth\.uid\(\)/);
+  assert.match(proposed, /INSERT INTO public\.tenant_email_action_rate_limits/);
+  assert.match(proposed, /ON CONFLICT \(tenant_id, user_id, action\)/);
   assert.match(proposed, /now\(\)/);
   assert.doesNotMatch(proposed, /client_timestamp|request_time|Date\.now/);
-  assert.match(CONSUME_RATE_LIMIT_SQL, /now\(\)/);
+  assert.doesNotMatch(proposed, /GRANT (SELECT|INSERT|UPDATE|DELETE) ON TABLE public\.tenant_email_action_rate_limits/);
+  assert.match(proposed, /RETURNS TABLE\(allowed boolean, count integer, retry_after_seconds integer\)/);
+  assert.doesNotMatch(proposed, /CREATE POLICY/);
+  assert.doesNotMatch(proposed, /GRANT EXECUTE[\s\S]{0,200}TO (authenticated|anon|PUBLIC)/);
+  assert.match(CONSUME_RATE_LIMIT_SQL, /consume_tenant_email_action_rate_limit/);
+  assert.doesNotMatch(CONSUME_RATE_LIMIT_SQL, /INSERT INTO public\.tenant_email_action_rate_limits/);
+  assert.doesNotMatch(CONSUME_RATE_LIMIT_SQL, /Date\.now|window_started_at/);
   assert.match(SENDING_DOMAIN_PREFLIGHT_SQL, /HAVING count\(\*\) > 1/);
+  const allowedTables = JSON.parse(fs.readFileSync(
+    path.join(ROOT, 'aws/functions/api/allowed-tables.json'),
+    'utf8',
+  ));
+  assert.equal(allowedTables.includes('tenant_email_action_rate_limits'), false);
+  const classAGrants = fs.readFileSync(path.join(ROOT, 'aws/workflows/sql/68_staging_class_a_grants.sql'), 'utf8');
+  assert.match(classAGrants, /GRANT EXECUTE ON FUNCTION .+ TO checksops/);
+  const writeAuth = fs.readFileSync(path.join(ROOT, 'aws/rls/WRITE_AUTHORIZATION.md'), 'utf8');
+  assert.match(writeAuth, /API role is `checksops`, never `checksops_admin`/);
   assert.equal(sesIdentityVerified({
     VerificationStatus: 'SUCCESS',
     DkimAttributes: { Status: 'SUCCESS', SigningEnabled: true },
@@ -610,12 +682,15 @@ test('durable rate limits persist across instances and isolate tenant/user/actio
     memory: new Map(),
   });
   assert.equal(otherTenant.ok, true);
+  const otherUserId = '66666666-6666-4666-8666-666666666666';
+  clientB.state.authUid = otherUserId;
   const otherUser = await consumeDurableRateLimit(clientB, {
     ...args,
-    userId: '66666666-6666-4666-8666-666666666666',
+    userId: otherUserId,
     memory: new Map(),
   });
   assert.equal(otherUser.ok, true);
+  clientB.state.authUid = USER;
   const otherAction = await consumeDurableRateLimit(clientB, {
     ...args,
     action: 'domain_check',
@@ -633,9 +708,207 @@ test('durable rate limits persist across instances and isolate tenant/user/actio
     return orig(sql, params);
   };
   await consumeDurableRateLimit(spy, { ...args, memory: new Map() });
-  assert.equal(queries[0].length, 4);
-  assert.equal(queries[0][3], 900);
+  assert.equal(queries[0].length, 5);
+  assert.equal(queries[0][3], RATE_LIMITS.domain_start.limit);
+  assert.equal(queries[0][4], 900);
   assert.equal(queries[0].some((value) => typeof value === 'string' && /\d{4}-\d{2}-\d{2}T/.test(value)), false);
+});
+
+test('restricted checksops role can execute the consume function; other roles cannot', async () => {
+  resetDomainRateLimits();
+  const allowed = await consumeDurableRateLimit(memoryClient({ dbRole: 'checksops' }), {
+    tenantId: TENANT,
+    userId: USER,
+    action: 'domain_start',
+    limit: 5,
+    windowMs: 15 * 60 * 1000,
+    memory: new Map(),
+  });
+  assert.equal(allowed.ok, true);
+  assert.equal(allowed.source, 'database');
+
+  const denied = await consumeDurableRateLimit(memoryClient({ dbRole: 'authenticated' }), {
+    tenantId: TENANT,
+    userId: USER,
+    action: 'domain_start',
+    limit: 5,
+    windowMs: 15 * 60 * 1000,
+    memory: new Map(),
+  });
+  assert.equal(denied.ok, false);
+  assert.equal(denied.error, 'rate_limit_unavailable');
+  assert.equal(denied.retryAfterSec, 60);
+});
+
+test('direct table operations remain denied to the API role', async () => {
+  const client = memoryClient({ dbRole: 'checksops' });
+  await assert.rejects(
+    () => client.query('SELECT * FROM public.tenant_email_action_rate_limits'),
+    (error) => error.code === '42501',
+  );
+  await assert.rejects(
+    () => client.query(
+      'INSERT INTO public.tenant_email_action_rate_limits (tenant_id, user_id, action, window_started_at, request_count) VALUES ($1,$2,$3,now(),1)',
+      [TENANT, USER, 'domain_start'],
+    ),
+    (error) => error.code === '42501',
+  );
+  await assert.rejects(
+    () => client.query('UPDATE public.tenant_email_action_rate_limits SET request_count = 0'),
+    (error) => error.code === '42501',
+  );
+  await assert.rejects(
+    () => client.query('DELETE FROM public.tenant_email_action_rate_limits'),
+    (error) => error.code === '42501',
+  );
+  const viaFunction = await consumeDurableRateLimit(client, {
+    tenantId: TENANT,
+    userId: USER,
+    action: 'domain_check',
+    limit: 20,
+    windowMs: 15 * 60 * 1000,
+    memory: new Map(),
+  });
+  assert.equal(viaFunction.ok, true);
+});
+
+test('another user cannot consume a rate-limit counter for someone else', async () => {
+  resetDomainRateLimits();
+  const store = createRateLimitStore();
+  const victim = memoryClient({ rateLimitStore: store, authUid: USER });
+  const attackerId = '66666666-6666-4666-8666-666666666666';
+  const attacker = memoryClient({ rateLimitStore: store, authUid: attackerId });
+  const consumed = await consumeDurableRateLimit(victim, {
+    tenantId: TENANT,
+    userId: USER,
+    action: 'domain_start',
+    limit: 5,
+    windowMs: 15 * 60 * 1000,
+    memory: new Map(),
+  });
+  assert.equal(consumed.ok, true);
+  assert.equal(store.rows.get(`${TENANT}:${USER}:domain_start`).request_count, 1);
+
+  await assert.rejects(
+    () => attacker.query(CONSUME_RATE_LIMIT_SQL, [TENANT, USER, 'domain_start', 5, 900]),
+    (error) => error.code === '42501' && /rate_limit_caller_mismatch/.test(error.message),
+  );
+  const spoofed = await consumeDurableRateLimit(attacker, {
+    tenantId: TENANT,
+    userId: USER,
+    action: 'domain_start',
+    limit: 5,
+    windowMs: 15 * 60 * 1000,
+    memory: new Map(),
+  });
+  assert.equal(spoofed.ok, false);
+  assert.equal(spoofed.error, 'rate_limit_unavailable');
+  assert.equal(store.rows.get(`${TENANT}:${USER}:domain_start`).request_count, 1);
+});
+
+test('invalid actions, limits, and windows are rejected', async () => {
+  const client = memoryClient();
+  await assert.rejects(
+    () => client.query(CONSUME_RATE_LIMIT_SQL, [TENANT, USER, 'domain_explode', 5, 900]),
+    (error) => error.code === '22023' && /invalid_rate_limit_action/.test(error.message),
+  );
+  await assert.rejects(
+    () => client.query(CONSUME_RATE_LIMIT_SQL, [TENANT, USER, 'domain_start', 0, 900]),
+    (error) => error.code === '22023' && /invalid_rate_limit_bound/.test(error.message),
+  );
+  await assert.rejects(
+    () => client.query(CONSUME_RATE_LIMIT_SQL, [TENANT, USER, 'domain_start', 1001, 900]),
+    (error) => error.code === '22023' && /invalid_rate_limit_bound/.test(error.message),
+  );
+  await assert.rejects(
+    () => client.query(CONSUME_RATE_LIMIT_SQL, [TENANT, USER, 'domain_start', 5, 0]),
+    (error) => error.code === '22023' && /invalid_rate_limit_window/.test(error.message),
+  );
+  await assert.rejects(
+    () => client.query(CONSUME_RATE_LIMIT_SQL, [TENANT, USER, 'domain_start', 5, 86401]),
+    (error) => error.code === '22023' && /invalid_rate_limit_window/.test(error.message),
+  );
+  const closed = await consumeDurableRateLimit(client, {
+    tenantId: TENANT,
+    userId: USER,
+    action: 'not_an_action',
+    limit: 5,
+    windowMs: 15 * 60 * 1000,
+    memory: new Map(),
+  });
+  assert.equal(closed.ok, false);
+  assert.equal(closed.error, 'rate_limit_unavailable');
+});
+
+test('retry_after_seconds is computed from PostgreSQL timestamps only', async () => {
+  resetDomainRateLimits();
+  const store = createRateLimitStore(1_700_000_000_000);
+  const client = memoryClient({ rateLimitStore: store });
+  const args = {
+    tenantId: TENANT,
+    userId: USER,
+    action: 'domain_start',
+    limit: 1,
+    windowMs: 900_000,
+    memory: new Map(),
+  };
+  const first = await consumeDurableRateLimit(client, args);
+  assert.equal(first.ok, true);
+  const denied = await consumeDurableRateLimit(client, { ...args, memory: new Map() });
+  assert.equal(denied.ok, false);
+  assert.equal(denied.retryAfterSec, 900);
+  assert.equal(denied.source, 'database');
+  store.dbNowMs += 100_000;
+  const later = await consumeDurableRateLimit(client, { ...args, memory: new Map() });
+  assert.equal(later.ok, false);
+  assert.equal(later.retryAfterSec, 800);
+  assert.doesNotMatch(CONSUME_RATE_LIMIT_SQL, /Date\.now/);
+  const consumeSrc = fs.readFileSync(
+    path.join(ROOT, 'aws/functions/api/tenant-email-domain.mjs'),
+    'utf8',
+  );
+  const consumeFn = consumeSrc.slice(consumeSrc.indexOf('export const consumeDurableRateLimit'));
+  assert.doesNotMatch(consumeFn, /window_started_at|server_now/);
+  assert.doesNotMatch(
+    consumeFn,
+    /retry_after_seconds[\s\S]{0,120}Date\.now\(\)|Date\.now\(\)[\s\S]{0,120}retry_after_seconds/,
+  );
+});
+
+test('missing consume function fails closed', async () => {
+  resetDomainRateLimits();
+  const client = memoryClient({ missingRateLimitFunction: true });
+  const limited = await consumeDurableRateLimit(client, {
+    tenantId: TENANT,
+    userId: USER,
+    action: 'domain_start',
+    limit: 5,
+    windowMs: 15 * 60 * 1000,
+    memory: new Map(),
+  });
+  assert.equal(limited.ok, false);
+  assert.equal(limited.error, 'rate_limit_unavailable');
+  assert.equal(limited.retryAfterSec, 60);
+
+  const started = await withTx(client, () => runStartDomainVerification({
+    client,
+    mapping,
+    body: { tenantId: TENANT, domain: DOMAIN },
+    spoof,
+    sesv2: mockSes(),
+  }));
+  assert.equal(started.statusCode, 503);
+  assert.equal(started.error, 'rate_limit_unavailable');
+  assert.equal(client.state.settings.get(TENANT), undefined);
+});
+
+test('consume function return row omits tenant and user identifiers', async () => {
+  const client = memoryClient();
+  const result = await client.query(CONSUME_RATE_LIMIT_SQL, [TENANT, USER, 'domain_save', 20, 900]);
+  assert.deepEqual(Object.keys(result.rows[0]).sort(), ['allowed', 'count', 'retry_after_seconds']);
+  assert.equal(result.rows[0].allowed, true);
+  assert.equal(result.rows[0].count, 1);
+  assert.equal(result.rows[0].retry_after_seconds, 0);
 });
 
 test('concurrent requests cannot exceed the configured rate limit', async () => {

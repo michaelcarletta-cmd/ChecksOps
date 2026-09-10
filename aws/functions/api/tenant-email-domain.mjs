@@ -442,6 +442,14 @@ export const assertSendingDomainUniquenessPreflight = (rows = []) => {
   throw error;
 };
 
+export const RATE_LIMIT_ACTIONS = Object.freeze([
+  'domain_start',
+  'domain_check',
+  'domain_save',
+  'domain_disable',
+  'domain_delete',
+]);
+
 export const RATE_LIMITS = {
   domain_start: { limit: 5, windowMs: 15 * 60 * 1000 },
   domain_check: { limit: 20, windowMs: 15 * 60 * 1000 },
@@ -451,23 +459,9 @@ export const RATE_LIMITS = {
 };
 
 export const CONSUME_RATE_LIMIT_SQL = `
-INSERT INTO public.tenant_email_action_rate_limits AS rl
-  (tenant_id, user_id, action, window_started_at, request_count)
-VALUES ($1::uuid, $2::uuid, $3::text, now(), 1)
-ON CONFLICT (tenant_id, user_id, action)
-DO UPDATE SET
-  window_started_at = CASE
-    WHEN rl.window_started_at <= (now() - make_interval(secs => $4::int))
-    THEN now()
-    ELSE rl.window_started_at
-  END,
-  request_count = CASE
-    WHEN rl.window_started_at <= (now() - make_interval(secs => $4::int))
-    THEN 1
-    ELSE rl.request_count + 1
-  END
-RETURNING request_count, window_started_at, now() AS server_now
-`;
+SELECT allowed, count, retry_after_seconds
+FROM public.consume_tenant_email_action_rate_limit($1::uuid, $2::uuid, $3::text, $4::integer, $5::integer)
+`.trim();
 
 const memoryBuckets = new Map();
 
@@ -495,9 +489,27 @@ const undefinedRelation = (error) => (
   || /relation .* does not exist/i.test(String(error?.message || ''))
 );
 
+const undefinedRoutine = (error) => (
+  error?.code === '42883'
+  || /function .* does not exist/i.test(String(error?.message || ''))
+);
+
+const rateLimitFailClosed = (error) => (
+  undefinedRelation(error)
+  || undefinedColumn(error)
+  || undefinedRoutine(error)
+  || error?.code === '42501'
+  || error?.code === '22023'
+  || /permission denied/i.test(String(error?.message || ''))
+  || /invalid_rate_limit/i.test(String(error?.message || ''))
+  || /rate_limit_caller_mismatch/i.test(String(error?.message || ''))
+);
+
 /**
- * Database-backed atomic rate limit. In-memory map is a first-pass deny
- * optimization only and never grants access. Server clock comes from Postgres now().
+ * Database-backed atomic rate limit via consume_tenant_email_action_rate_limit.
+ * In-memory map is a first-pass deny cache only and never grants access.
+ * retry_after_seconds is taken from the SQL function as an integer. Do not
+ * recompute it from a client clock mixed with database window timestamps.
  */
 export const consumeDurableRateLimit = async (client, {
   tenantId,
@@ -509,6 +521,7 @@ export const consumeDurableRateLimit = async (client, {
 } = {}) => {
   const key = memoryKey(tenantId, userId, action);
   const nowMs = Date.now();
+  const windowSeconds = Math.max(1, Math.floor(Number(windowMs || 0) / 1000));
   const local = peekMemoryRateLimit(memory, key, limit, windowMs, nowMs);
   if (!local.ok) return { ok: false, retryAfterSec: local.retryAfterSec, source: 'memory' };
 
@@ -518,27 +531,28 @@ export const consumeDurableRateLimit = async (client, {
       tenantId,
       userId,
       action,
-      Math.max(1, Math.floor(windowMs / 1000)),
+      limit,
+      windowSeconds,
     ]);
-    row = result.rows[0];
+    row = result.rows?.[0];
   } catch (error) {
-    if (undefinedRelation(error) || undefinedColumn(error)) {
+    if (rateLimitFailClosed(error)) {
       return { ok: false, retryAfterSec: 60, error: 'rate_limit_unavailable', source: 'database' };
     }
     throw error;
   }
-  if (!row) {
+  if (!row || typeof row.allowed !== 'boolean') {
     return { ok: false, retryAfterSec: 60, error: 'rate_limit_unavailable', source: 'database' };
   }
-  const count = Number(row.request_count || 0);
-  if (count > limit) {
-    const started = new Date(row.window_started_at || row.server_now || nowMs).getTime();
-    const retryAfterSec = Math.max(1, Math.ceil((started + windowMs - nowMs) / 1000));
+  const count = Number(row.count || 0);
+  if (!row.allowed) {
+    const parsedRetry = Number.parseInt(String(row.retry_after_seconds), 10);
+    const retryAfterSec = Number.isFinite(parsedRetry) && parsedRetry > 0 ? parsedRetry : 60;
     noteMemoryRateLimit(memory, key, nowMs);
-    return { ok: false, retryAfterSec, source: 'database' };
+    return { ok: false, retryAfterSec, count, source: 'database' };
   }
   noteMemoryRateLimit(memory, key, nowMs);
-  return { ok: true, count, source: 'database' };
+  return { ok: true, count, retryAfterSec: 0, source: 'database' };
 };
 
 /** @deprecated In-memory only — not the security control. Tests may still reset the cache. */
