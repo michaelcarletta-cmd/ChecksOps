@@ -2,6 +2,12 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { moovFetch, bindMoovEnvironment, moovConfigured, moovEnvironment, safeLastFour, scopes } from "../_shared/moovClient.ts";
 import { corsHeaders, json, sanitize } from "../_shared/moovGuard.ts";
+import {
+  identityRequirementsOutstanding,
+  liveBankVerified,
+  liveTosAccepted,
+  tosRequirementOutstanding,
+} from "../_shared/recipientTosPolicy.ts";
 
 /**
  * PUBLIC, token-authenticated bank collection for the branded recipient page
@@ -67,6 +73,48 @@ serve(async (req) => {
     const accountId = recipient.provider_account_id as string | null;
     if (!accountId) return json({ error: "This payment setup is not ready yet." }, 409);
 
+    const account = await moovFetch<any>(`/accounts/${accountId}`, { scopes: scopes.accountRead(accountId) });
+    let capabilities: any[] = [];
+    let capsOk = false;
+    try {
+      const caps = await moovFetch<any>(`/accounts/${accountId}/capabilities`, { scopes: scopes.capabilitiesRead(accountId) });
+      capabilities = Array.isArray(caps) ? caps : caps?.capabilities ?? [];
+      capsOk = true;
+    } catch { /* unread */ }
+    const tosAccepted = liveTosAccepted(account);
+    const tosOutstanding = capsOk ? tosRequirementOutstanding(capabilities) : true;
+    if (!tosAccepted && tosOutstanding) {
+      return json({ error: "tos_required", message: "Accept the payment provider terms before connecting a bank." }, 409);
+    }
+    const identityOutstanding = capsOk ? identityRequirementsOutstanding(capabilities) : [];
+    if (identityOutstanding.length) {
+      return json({
+        error: "kyc_incomplete",
+        message: "Finish identity verification before connecting a bank.",
+        identity_requirements_outstanding: identityOutstanding,
+      }, 409);
+    }
+
+    let existingBanks: any[] = [];
+    try {
+      const payload = await moovFetch<any>(`/accounts/${accountId}/bank-accounts`, { scopes: scopes.bankAccountsRead(accountId) });
+      existingBanks = Array.isArray(payload) ? payload : payload?.bankAccounts ?? [];
+    } catch { /* continue to create */ }
+    const replaceBank = body?.replace_bank === true || body?.replaceBank === true;
+    if (existingBanks.length && !replaceBank) {
+      const existing = existingBanks[0];
+      const status = String(existing?.status ?? existing?.verificationStatus ?? "new").toLowerCase();
+      return json({
+        success: true,
+        resumed: true,
+        bank_name: existing?.bankName ?? recipient.provider_bank_name ?? null,
+        last_four: existing?.lastFourAccountNumber ?? recipient.provider_last_four ?? null,
+        status,
+        complete: liveBankVerified(existingBanks),
+        account_id: accountId,
+      });
+    }
+
     // Receive-only stakeholders use the baseline transfers capability. They do
     // not initiate payments, hold a wallet, or collect funds, so requesting
     // send-funds would impose unrelated platform-agreement and KYC requirements.
@@ -127,7 +175,14 @@ serve(async (req) => {
       provider_metadata: { bankName, lastFour, recipient_id: recipient.id, source: "recipient_link" },
     }));
 
-    return json({ success: true, bank_name: bankName, last_four: lastFour, status });
+    return json({
+      success: true,
+      bank_name: bankName,
+      last_four: lastFour,
+      status,
+      complete: status === "verified",
+      account_id: accountId,
+    });
   } catch (e) {
     console.error("[moov-recipient-bank-add]", (e as Error).message);
     return json({ error: (e as Error).message }, 500);

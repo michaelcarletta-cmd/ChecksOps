@@ -150,7 +150,7 @@ serve(async (req) => {
       .from("external_payment_recipients")
       .update({
         provider_account_id: providerAccountId,
-        onboarding_status: providerAccountId ? "awaiting_bank" : "not_started",
+        onboarding_status: providerAccountId ? "awaiting_kyc" : "not_started",
       })
       .eq("id", recipient.id)
       .select()
@@ -160,7 +160,7 @@ serve(async (req) => {
       tenant_id,
       recipient_id: recipient.id,
       event_type: "recipient.created",
-      new_status: "awaiting_bank",
+      new_status: "awaiting_kyc",
       environment,
       provider_metadata: sanitize({ provider_account_id: providerAccountId, relationship }),
     });

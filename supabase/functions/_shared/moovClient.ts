@@ -204,6 +204,12 @@ export const scopes = {
     // accepted when patched server-side.
     `/accounts/${id}/profile.write`,
   ],
+  /** Browser ToS Drop only — do not grant bank-account write to the public page. */
+  dropTos: (id: string) => [
+    `/accounts/${id}/profile.write`,
+    `/accounts/${id}/profile.read`,
+    "/ping.read",
+  ],
 
 
 };

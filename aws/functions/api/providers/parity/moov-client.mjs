@@ -157,6 +157,11 @@ export const scopes = {
     `/accounts/${id}/profile.read`,
     `/accounts/${id}/profile.write`,
   ],
+  dropTos: (id) => [
+    `/accounts/${id}/profile.write`,
+    `/accounts/${id}/profile.read`,
+    '/ping.read',
+  ],
 };
 
 const facilitatorCache = new Map();

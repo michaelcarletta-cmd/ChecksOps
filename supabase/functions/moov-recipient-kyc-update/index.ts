@@ -2,6 +2,10 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { bindMoovEnvironment, moovConfigured, moovEnvironment, moovFetch, scopes } from "../_shared/moovClient.ts";
 import { corsHeaders, json, sanitize } from "../_shared/moovGuard.ts";
+import {
+  identityRequirementsOutstanding,
+  kycStatusFromMoov,
+} from "../_shared/recipientTosPolicy.ts";
 
 const digits = (value: unknown) => String(value ?? "").replace(/\D/g, "");
 
@@ -91,7 +95,13 @@ serve(async (req) => {
     });
 
     const refreshed = await moovFetch<any>(`/accounts/${accountId}`, { scopes: scopes.accountRead(accountId) });
-    const verification = String(refreshed?.profile?.individual?.verification?.status ?? refreshed?.verification?.status ?? "pending").toLowerCase();
+    const verification = kycStatusFromMoov(refreshed);
+    let identityOutstanding: string[] = [];
+    try {
+      const caps = await moovFetch<any>(`/accounts/${accountId}/capabilities`, { scopes: scopes.capabilitiesRead(accountId) });
+      const list = Array.isArray(caps) ? caps : caps?.capabilities ?? [];
+      identityOutstanding = identityRequirementsOutstanding(list);
+    } catch { /* unread */ }
 
     await supabase
       .from("external_payment_recipients")
@@ -113,7 +123,13 @@ serve(async (req) => {
       provider_metadata: { recipient_id: recipient.id, account_id: accountId },
     }));
 
-    return json({ success: true, verification_status: verification });
+    return json({
+      success: true,
+      verification_status: verification,
+      identity_requirements_outstanding: identityOutstanding,
+      account_id: accountId,
+      environment,
+    });
   } catch (e) {
     console.error("[moov-recipient-kyc-update]", (e as Error).message);
     return json({ error: (e as Error).message }, 500);

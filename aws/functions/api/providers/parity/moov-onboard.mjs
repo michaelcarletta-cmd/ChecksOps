@@ -25,6 +25,18 @@ import {
   secureToken,
 } from './db.mjs';
 import { syncWallet } from './moov-wallet.mjs';
+import {
+  dropTokenFromBody,
+  identityRequirementsOutstanding,
+  kycStatusFromMoov,
+  liveBankVerified,
+  liveTosAccepted,
+  recipientOnboardingCompleteFromMoov,
+  rejectForgedRecipientTos,
+  tosBoundToRecipientAccount,
+  tosConfirmedByMoov,
+  tosRequirementOutstanding,
+} from '../moov-recipient-tos-policy.mjs';
 
 const BUSINESS_TYPES = [
   'soleProprietorship', 'unincorporatedAssociation', 'trust', 'llc',
@@ -469,7 +481,7 @@ export const recipientCreate = {
     const saved = (await client.query(
       `UPDATE public.external_payment_recipients
        SET provider_account_id = $2, onboarding_status = $3 WHERE id = $1::uuid RETURNING *`,
-      [recipient.id, providerAccountId, providerAccountId ? 'awaiting_bank' : 'not_started'],
+      [recipient.id, providerAccountId, providerAccountId ? 'awaiting_kyc' : 'not_started'],
     )).rows[0];
     await logPaymentEvent(client, {
       tenant_id: ctx.tenantId, recipient_id: recipient.id, event_type: 'recipient.created', environment: 'sandbox',
@@ -496,8 +508,21 @@ export const recipientSession = {
     if (!recipient.provider_account_id) return fail('This payment setup is not ready yet. Try again shortly.', 409);
     const accountId = String(recipient.provider_account_id);
     const account = await moovFetch(`/accounts/${accountId}`, { scopes: scopes.accountRead(accountId), fetchImpl }).catch(() => null);
-    const verificationStatus = String(account?.profile?.individual?.verification?.status ?? account?.verification?.status ?? 'unverified').toLowerCase();
-    const tosAccepted = Boolean(account?.termsOfService?.acceptedDate ?? account?.termsOfService?.acceptedOn);
+    const verificationStatus = kycStatusFromMoov(account || {});
+    const tosAccepted = liveTosAccepted(account || {});
+    let capabilities = [];
+    let capabilitiesReadOk = false;
+    try {
+      const caps = await moovFetch(`/accounts/${accountId}/capabilities`, { scopes: scopes.capabilitiesRead(accountId), fetchImpl });
+      capabilities = Array.isArray(caps) ? caps : caps?.capabilities || [];
+      capabilitiesReadOk = true;
+    } catch { /* unread */ }
+    let banks = [];
+    try {
+      const bankPayload = await moovFetch(`/accounts/${accountId}/bank-accounts`, { scopes: scopes.bankAccountsRead(accountId), fetchImpl });
+      banks = Array.isArray(bankPayload) ? bankPayload : bankPayload?.bankAccounts || [];
+    } catch { /* unread */ }
+    const dropToken = await moovToken(scopes.dropTos(accountId), undefined, fetchImpl);
     const tenant = (await client.query(
       `SELECT name, logo_url, primary_color, secondary_color FROM public.tenants WHERE id = $1::uuid`,
       [recipient.tenant_id],
@@ -506,23 +531,36 @@ export const recipientSession = {
       success: true,
       recipient: {
         id: recipient.id, name: recipient.display_name, status: recipient.onboarding_status,
-        bank_linked: Boolean(recipient.bank_linked_at), bank_name: recipient.provider_bank_name ?? null,
+        bank_linked: banks.length > 0 || Boolean(recipient.bank_linked_at), bank_name: recipient.provider_bank_name ?? null,
         last_four: recipient.provider_last_four ?? null,
       },
-      onboarding: { terms_accepted: tosAccepted, verification_status: verificationStatus },
+      onboarding: {
+        terms_accepted: tosAccepted,
+        tos_requirement_outstanding: capabilitiesReadOk ? tosRequirementOutstanding(capabilities) : true,
+        verification_status: verificationStatus,
+        identity_requirements_outstanding: capabilitiesReadOk ? identityRequirementsOutstanding(capabilities) : [],
+        identity_requirements_known: capabilitiesReadOk,
+        bank_verified: liveBankVerified(banks),
+        complete: recipientOnboardingCompleteFromMoov({ account, banks, capabilities, capabilitiesReadOk }),
+        live: true,
+      },
       payer: {
         name: tenant?.name ?? 'ChecksOps', logo_url: tenant?.logo_url ?? null,
         primary_color: tenant?.primary_color ?? null, secondary_color: tenant?.secondary_color ?? null,
       },
-      account_id: accountId, environment: 'sandbox', liveProviderCalled: true,
+      account_id: accountId, environment: recipient.environment || 'sandbox', token: dropToken,
+      public_key: null, liveProviderCalled: true,
     });
   },
 };
 
 export const recipientTosAccept = {
-  run: async ({ client, body, fetchImpl, event }) => {
+  run: async ({ client, body, fetchImpl }) => {
     const token = String(body?.token ?? '');
-    if (!token || body?.accepted !== true) return fail('Terms must be explicitly accepted.', 400);
+    if (!token) return fail('token is required', 400);
+    const forged = rejectForgedRecipientTos(body);
+    if (forged) return fail(forged.error, forged.statusCode);
+    const dropToken = dropTokenFromBody(body);
     const recipient = (await client.query(
       `SELECT id, tenant_id, provider_account_id, token_expires_at, environment
        FROM public.external_payment_recipients WHERE secure_token = $1`,
@@ -533,30 +571,54 @@ export const recipientTosAccept = {
       return fail('This link has expired. Ask the sender for a new one.', 410);
     }
     if (!recipient.provider_account_id) return fail('This payment setup is not ready yet.', 409);
-    const accountId = String(recipient.provider_account_id);
+    const bound = tosBoundToRecipientAccount({
+      recipientAccountId: String(recipient.provider_account_id),
+      requestedAccountId: body.account_id ?? body.accountId ?? null,
+      environment: recipient.environment || 'sandbox',
+    });
+    if (!bound.ok) return fail(bound.error, 400);
+    const accountId = bound.account_id;
     const current = await moovFetch(`/accounts/${accountId}`, { scopes: scopes.accountRead(accountId), fetchImpl });
-    const alreadyAccepted = Boolean(current?.termsOfService?.acceptedDate ?? current?.termsOfService?.acceptedOn);
+    let capabilitiesBefore = [];
+    let capsReadOk = false;
+    try {
+      const caps = await moovFetch(`/accounts/${accountId}/capabilities`, { scopes: scopes.capabilitiesRead(accountId), fetchImpl });
+      capabilitiesBefore = Array.isArray(caps) ? caps : caps?.capabilities || [];
+      capsReadOk = true;
+    } catch { /* unread */ }
+    const outstandingBefore = capsReadOk ? tosRequirementOutstanding(capabilitiesBefore) : null;
+    const alreadyAccepted = tosConfirmedByMoov({
+      account: current, capabilities: capabilitiesBefore, capabilitiesReadOk: capsReadOk,
+    });
     if (!alreadyAccepted) {
-      const headers = event?.headers || {};
-      const lower = Object.fromEntries(Object.entries(headers).map(([k, v]) => [String(k).toLowerCase(), v]));
-      const ip = String(lower['x-forwarded-for'] || '').split(',')[0].trim() || lower['x-real-ip'] || '';
-      const extraHeaders = {
-        ...(ip ? { 'X-Forwarded-For': ip, 'X-Real-IP': ip } : {}),
-        'User-Agent': lower['user-agent'] || 'unknown',
-      };
-      const minted = await moovFetch('/tos-token', { scopes: ['/ping.read'], extraHeaders, fetchImpl });
-      const tosTok = minted?.token ?? minted?.tosToken;
-      if (!tosTok) return fail('Could not generate the terms acceptance token.', 502);
       await moovFetch(`/accounts/${accountId}`, {
         method: 'PATCH', scopes: scopes.accountWrite(accountId),
-        body: { termsOfService: { token: tosTok } }, extraHeaders, fetchImpl,
+        body: { termsOfService: { token: dropToken } }, fetchImpl,
       });
     }
+    const refreshed = await moovFetch(`/accounts/${accountId}`, { scopes: scopes.accountRead(accountId), fetchImpl });
+    let capabilitiesAfter = [];
+    let capsAfterOk = false;
+    try {
+      const caps = await moovFetch(`/accounts/${accountId}/capabilities`, { scopes: scopes.capabilitiesRead(accountId), fetchImpl });
+      capabilitiesAfter = Array.isArray(caps) ? caps : caps?.capabilities || [];
+      capsAfterOk = true;
+    } catch { /* unread */ }
+    const confirmed = tosConfirmedByMoov({
+      account: refreshed,
+      capabilities: capabilitiesAfter,
+      capabilitiesReadOk: capsAfterOk,
+      tosOutstandingBefore: outstandingBefore === true,
+    });
+    if (!confirmed) return fail('tos_not_recorded', 502);
     await client.query(
       `UPDATE public.external_payment_recipients SET tos_accepted_at = now() WHERE id = $1::uuid`,
       [recipient.id],
     );
-    return jsonResult({ success: true, already_accepted: alreadyAccepted, liveProviderCalled: true });
+    return jsonResult({
+      success: true, already_accepted: alreadyAccepted, terms_accepted: true,
+      account_id: accountId, environment: recipient.environment || 'sandbox', liveProviderCalled: true,
+    });
   },
 };
 
@@ -597,6 +659,35 @@ export const recipientBankAdd = {
     )).rows[0];
     if (!recipient?.provider_account_id) return fail('This payment setup is not ready yet.', 409);
     const accountId = recipient.provider_account_id;
+    const account = await moovFetch(`/accounts/${accountId}`, { scopes: scopes.accountRead(accountId), fetchImpl });
+    let capabilities = [];
+    let capsOk = false;
+    try {
+      const caps = await moovFetch(`/accounts/${accountId}/capabilities`, { scopes: scopes.capabilitiesRead(accountId), fetchImpl });
+      capabilities = Array.isArray(caps) ? caps : caps?.capabilities || [];
+      capsOk = true;
+    } catch { /* unread */ }
+    if (!liveTosAccepted(account) && (capsOk ? tosRequirementOutstanding(capabilities) : true)) {
+      return fail('tos_required', 409);
+    }
+    const identityOutstanding = capsOk ? identityRequirementsOutstanding(capabilities) : [];
+    if (identityOutstanding.length) return fail('kyc_incomplete', 409);
+    let existingBanks = [];
+    try {
+      const payload = await moovFetch(`/accounts/${accountId}/bank-accounts`, { scopes: scopes.bankAccountsRead(accountId), fetchImpl });
+      existingBanks = Array.isArray(payload) ? payload : payload?.bankAccounts || [];
+    } catch { /* continue */ }
+    if (existingBanks.length && body.replace_bank !== true && body.replaceBank !== true) {
+      const existing = existingBanks[0];
+      return jsonResult({
+        success: true, resumed: true,
+        bank_name: existing?.bankName ?? null,
+        last_four: existing?.lastFourAccountNumber ?? null,
+        status: String(existing?.status ?? 'new').toLowerCase(),
+        complete: liveBankVerified(existingBanks),
+        account_id: accountId, liveProviderCalled: true,
+      });
+    }
     const created = await moovFetch(`/accounts/${accountId}/bank-accounts`, {
       method: 'POST', scopes: scopes.bankAccountsWrite(accountId), fetchImpl,
       body: { account: { holderName, holderType, accountNumber, routingNumber, bankAccountType } },
