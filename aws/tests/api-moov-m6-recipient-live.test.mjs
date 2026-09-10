@@ -312,6 +312,21 @@ test('opt-in recipient_live_gets GETs production recipients only; skips sandbox;
   assert.ok(store.getGets > afterBaseline);
 });
 
+test('recipient_id live GET is tenant-scoped and ignores unknown ids', async () => {
+  const store = createStore();
+  const owned = await invoke(store, { recipient_live_gets: true, recipient_id: PROD_RECIPIENT });
+  assert.equal(owned.ok, true);
+  assert.equal(owned.mutated, false);
+  assert.equal(owned.live_recipients.length, 1);
+  assert.equal(owned.live_recipients[0].recipient_id, PROD_RECIPIENT);
+  const unknown = await invoke(createStore(), {
+    recipient_live_gets: true,
+    recipient_id: '00000000-0000-4000-8000-000000000000',
+  });
+  assert.equal(unknown.live_recipients[0].reason, 'recipient_not_owned');
+  assert.equal(unknown.live_recipients[0].liveProviderCalled, false);
+});
+
 test('browser Moov ids rejected; C1C denied; default readiness does not live-GET recipients', async () => {
   const store = createStore();
   const spoof = await invoke(store, { recipient_live_gets: true, moov_account_id: 'browser' });

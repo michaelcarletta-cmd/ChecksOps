@@ -741,12 +741,24 @@ export async function handleProductionMoovReadiness({
   const recipientLiveGets = body.recipient_live_gets === true || body.recipientLiveGets === true;
   let liveRecipientInventory = null;
   if (recipientLiveGets) {
-    liveRecipientInventory = await inventoryLiveProductionRecipients({
-      recipients: rdsRecipients,
-      secrets,
-      fetchImpl,
-      sandboxSkipped: true,
-    });
+    const claimedRecipient = body.recipient_id || body.recipientId || null;
+    let scoped = rdsRecipients;
+    if (claimedRecipient) {
+      scoped = rdsRecipients.filter((row) => String(row.id) === String(claimedRecipient));
+    }
+    liveRecipientInventory = claimedRecipient && !scoped.length
+      ? [{
+        skipped: true,
+        reason: 'recipient_not_owned',
+        liveProviderCalled: false,
+        mutated: false,
+      }]
+      : await inventoryLiveProductionRecipients({
+        recipients: scoped,
+        secrets,
+        fetchImpl,
+        sandboxSkipped: true,
+      });
   }
   const liveGets = {
     account: getSummary(accountGet),
