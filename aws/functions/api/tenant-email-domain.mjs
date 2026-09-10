@@ -1,12 +1,13 @@
 /**
  * Tenant sending-domain validation and SES v2 lifecycle helpers.
  * Live SESv2 is never constructed unless AWS_TENANT_EMAIL_DOMAIN_ENABLED=true,
- * AWS_EMAIL_MODE is not sink, and no mock adapter is injected.
- * In sink mode the domain APIs use a local adapter with zero AWS SES calls.
+ * AWS_EMAIL_MODE is ses or ses-identity, and no mock adapter is injected.
+ * sink keeps a local adapter (zero AWS SES calls). ses-identity allows identity
+ * APIs without outbound SendEmail. ses additionally permits SendEmail.
  */
 import { randomUUID } from 'node:crypto';
 import { isIPv4, isIPv6 } from 'node:net';
-import { emailMode, normalizeEmail } from './email-policy.mjs';
+import { normalizeEmail, sesIdentityApisEnabled } from './email-policy.mjs';
 import {
   PLATFORM_FROM_DOMAIN,
   addressDomain,
@@ -714,7 +715,7 @@ export const createSinkSesV2Adapter = (store = sinkIdentities) => ({
 
 export const createLiveSesV2Adapter = async () => {
   if (!tenantEmailDomainEnabled()) return null;
-  if (emailMode() === 'sink') {
+  if (!sesIdentityApisEnabled()) {
     const err = new Error('sesv2_unavailable');
     err.code = 'sink_mode_blocks_live_ses';
     throw err;
@@ -740,7 +741,7 @@ export const createLiveSesV2Adapter = async () => {
 export const resolveSesV2 = async (injected) => {
   if (injected) return injected;
   if (!tenantEmailDomainEnabled()) return null;
-  if (emailMode() === 'sink') return createSinkSesV2Adapter();
+  if (!sesIdentityApisEnabled()) return createSinkSesV2Adapter();
   return createLiveSesV2Adapter();
 };
 

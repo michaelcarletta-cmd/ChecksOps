@@ -18,9 +18,20 @@ const DEFAULT_ALLOWLIST_EXACT = [
 
 export const emailMode = () => {
   const mode = String(process.env.AWS_EMAIL_MODE || 'sink').trim().toLowerCase();
-  if (mode === 'ses' || mode === 'sink' || mode === 'log') return mode === 'log' ? 'sink' : mode;
+  if (mode === 'ses' || mode === 'ses-identity' || mode === 'sink' || mode === 'log') {
+    return mode === 'log' ? 'sink' : mode;
+  }
   return 'sink';
 };
+
+/** Live SESv2 identity APIs (Create/Get/Delete EmailIdentity). Does not send mail. */
+export const sesIdentityApisEnabled = () => {
+  const mode = emailMode();
+  return mode === 'ses' || mode === 'ses-identity';
+};
+
+/** Actual SES SendEmail / SendRawEmail. ses-identity never sends. */
+export const sesOutboundSendEnabled = () => emailMode() === 'ses';
 
 export const allowlistDomains = () => {
   const raw = String(process.env.AWS_EMAIL_ALLOWLIST_DOMAINS || '').trim();
@@ -62,7 +73,8 @@ export const isAllowlistedRecipient = (email) => {
 
 /**
  * Apply staging recipient policy.
- * - sink mode: always rewrite to sink (record original)
+ * - sink / ses-identity: always rewrite to sink (record original). ses-identity
+ *   permits domain identity APIs without outbound SendEmail.
  * - ses mode: only allow allowlisted; others rewritten to sink with blocked flag
  */
 export const applyRecipientPolicy = (recipients = []) => {
@@ -74,14 +86,14 @@ export const applyRecipientPolicy = (recipients = []) => {
   return list.map((r) => {
     const original = normalizeEmail(r.email);
     const allowed = isAllowlistedRecipient(original);
-    if (mode === 'sink') {
+    if (mode === 'sink' || mode === 'ses-identity') {
       return {
         ...r,
         email: sinkAddress(),
         originalEmail: original,
         delivery: 'sink',
         blocked: !allowed,
-        policy: 'staging_sink',
+        policy: mode === 'ses-identity' ? 'staging_ses_identity' : 'staging_sink',
       };
     }
     // ses mode

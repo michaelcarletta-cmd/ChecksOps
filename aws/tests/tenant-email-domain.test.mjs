@@ -417,6 +417,7 @@ test('authorization: member cannot configure, cross-tenant denied, platform owne
     client: memberClient, mapping, body: { tenantId: TENANT, domain: DOMAIN }, spoof, sesv2,
   });
   assert.equal(memberStart.statusCode, 403);
+  assert.equal(sesv2.calls.length, 0);
   const memberGet = await runGetEmailBranding({
     client: memberClient, mapping, body: { tenantId: TENANT }, spoof,
   });
@@ -666,6 +667,48 @@ test('domain flag in sink mode uses a local SES adapter and never constructs SES
     if (prevFlag === undefined) delete process.env.AWS_TENANT_EMAIL_DOMAIN_ENABLED;
     else process.env.AWS_TENANT_EMAIL_DOMAIN_ENABLED = prevFlag;
   }
+});
+
+test('ses-identity mode uses live identity APIs and never sends outbound mail', async () => {
+  const prevMode = process.env.AWS_EMAIL_MODE;
+  const prevFlag = process.env.AWS_TENANT_EMAIL_DOMAIN_ENABLED;
+  process.env.AWS_EMAIL_MODE = 'ses-identity';
+  process.env.AWS_TENANT_EMAIL_DOMAIN_ENABLED = 'true';
+  try {
+    const adapter = await resolveSesV2();
+    assert.notEqual(adapter.mode, 'sink');
+    assert.equal(typeof adapter.createEmailIdentity, 'function');
+    assert.equal(typeof adapter.getEmailIdentity, 'function');
+
+    const sunk = await sendViaSesOrSink({
+      to: 'mcarletta@freedomadj.com',
+      subject: 'x',
+      html: '<p>x</p>',
+      sesSend: async () => { throw new Error('live SendEmail must not run in ses-identity'); },
+    });
+    assert.equal(sunk.mode, 'ses-identity');
+    assert.equal(sunk.results[0].delivery, 'sink');
+    assert.equal(sunk.deliveredCount, 0);
+  } finally {
+    process.env.AWS_EMAIL_MODE = prevMode;
+    if (prevFlag === undefined) delete process.env.AWS_TENANT_EMAIL_DOMAIN_ENABLED;
+    else process.env.AWS_TENANT_EMAIL_DOMAIN_ENABLED = prevFlag;
+  }
+
+  const handlers = fs.readFileSync(
+    path.join(ROOT, 'aws/functions/api/tenant-email-domain-handlers.mjs'),
+    'utf8',
+  );
+  const startFn = handlers.slice(
+    handlers.indexOf('export const runStartDomainVerification'),
+    handlers.indexOf('export const runCheckDomainVerification'),
+  );
+  assert.ok(startFn.indexOf('requireActionRateLimit') < startFn.indexOf('createEmailIdentity'));
+  const checkFn = handlers.slice(
+    handlers.indexOf('export const runCheckDomainVerification'),
+    handlers.indexOf('export const runDisableCustomSending'),
+  );
+  assert.ok(checkFn.indexOf('requireActionRateLimit') < checkFn.indexOf('getEmailIdentity'));
 });
 
 test('SES tags omit PII and engagement interface stays inert', () => {
