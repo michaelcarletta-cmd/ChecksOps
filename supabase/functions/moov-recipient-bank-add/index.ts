@@ -2,6 +2,13 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { moovFetch, bindMoovEnvironment, moovConfigured, moovEnvironment, safeLastFour, scopes } from "../_shared/moovClient.ts";
 import { corsHeaders, json, sanitize } from "../_shared/moovGuard.ts";
+import {
+  identityRequirementsOutstanding,
+  liveBankVerified,
+  liveTosAccepted,
+  shouldResumeExistingBank,
+  tosRequirementOutstanding,
+} from "../_shared/recipientTosPolicy.ts";
 
 /**
  * PUBLIC, token-authenticated bank collection for the branded recipient page
@@ -25,23 +32,7 @@ serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const token = String(body?.token ?? "");
-    const holderName = String(body?.holder_name ?? "").trim();
-    const holderType = body?.holder_type === "business" ? "business" : "individual";
-    const bankAccountType = body?.bank_account_type === "savings" ? "savings" : "checking";
-    const routingNumber = String(body?.routing_number ?? "").replace(/\D/g, "");
-    const accountNumber = String(body?.account_number ?? "").replace(/\D/g, "");
-
     if (!token) return json({ error: "token is required" }, 400);
-    if (holderName.length < 2 || holderName.length > 128) {
-      return json({ error: "Enter the account holder name as it appears at the bank." }, 400);
-    }
-    if (!DIGITS.test(routingNumber) || routingNumber.length !== 9) {
-      return json({ error: "Routing number must be exactly 9 digits." }, 400);
-    }
-    if (!DIGITS.test(accountNumber) || accountNumber.length < 4 || accountNumber.length > 17) {
-      return json({ error: "Account number must be between 4 and 17 digits." }, 400);
-    }
-
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -50,7 +41,7 @@ serve(async (req) => {
 
     const { data: recipient } = await supabase
       .from("external_payment_recipients")
-      .select("id, tenant_id, provider_account_id, token_expires_at, environment, stakeholder_account_id")
+      .select("id, tenant_id, provider_account_id, token_expires_at, environment, stakeholder_account_id, provider_bank_name, provider_last_four")
       .eq("secure_token", token)
       .maybeSingle();
 
@@ -66,6 +57,68 @@ serve(async (req) => {
     }
     const accountId = recipient.provider_account_id as string | null;
     if (!accountId) return json({ error: "This payment setup is not ready yet." }, 409);
+
+    const account = await moovFetch<any>(`/accounts/${accountId}`, { scopes: scopes.accountRead(accountId) });
+    let capabilities: any[] = [];
+    let capsOk = false;
+    try {
+      const caps = await moovFetch<any>(`/accounts/${accountId}/capabilities`, { scopes: scopes.capabilitiesRead(accountId) });
+      capabilities = Array.isArray(caps) ? caps : caps?.capabilities ?? [];
+      capsOk = true;
+    } catch { /* unread */ }
+    const tosAccepted = liveTosAccepted(account);
+    const tosOutstanding = capsOk ? tosRequirementOutstanding(capabilities) : true;
+    if (!tosAccepted && tosOutstanding) {
+      return json({ error: "tos_required", message: "Accept the payment provider terms before connecting a bank." }, 409);
+    }
+    const identityOutstanding = capsOk ? identityRequirementsOutstanding(capabilities) : [];
+    if (identityOutstanding.length) {
+      return json({
+        error: "kyc_incomplete",
+        message: "Finish identity verification before connecting a bank.",
+        identity_requirements_outstanding: identityOutstanding,
+      }, 409);
+    }
+
+    let existingBanks: any[] = [];
+    try {
+      const payload = await moovFetch<any>(`/accounts/${accountId}/bank-accounts`, { scopes: scopes.bankAccountsRead(accountId) });
+      existingBanks = Array.isArray(payload) ? payload : payload?.bankAccounts ?? [];
+    } catch {
+      return json({
+        error: "moov_bank_list_failed",
+        message: "Could not load existing bank accounts. A new bank was not created.",
+      }, 502);
+    }
+    const replaceBank = body?.replace_bank === true || body?.replaceBank === true;
+    if (shouldResumeExistingBank({ banks: existingBanks, replaceBank })) {
+      const existing = existingBanks[0];
+      const status = String(existing?.status ?? existing?.verificationStatus ?? "new").toLowerCase();
+      return json({
+        success: true,
+        resumed: true,
+        bank_name: existing?.bankName ?? recipient.provider_bank_name ?? null,
+        last_four: existing?.lastFourAccountNumber ?? recipient.provider_last_four ?? null,
+        status,
+        complete: liveBankVerified(existingBanks),
+        account_id: accountId,
+      });
+    }
+
+    const holderName = String(body?.holder_name ?? "").trim();
+    const holderType = body?.holder_type === "business" ? "business" : "individual";
+    const bankAccountType = body?.bank_account_type === "savings" ? "savings" : "checking";
+    const routingNumber = String(body?.routing_number ?? "").replace(/\D/g, "");
+    const accountNumber = String(body?.account_number ?? "").replace(/\D/g, "");
+    if (holderName.length < 2 || holderName.length > 128) {
+      return json({ error: "Enter the account holder name as it appears at the bank." }, 400);
+    }
+    if (!DIGITS.test(routingNumber) || routingNumber.length !== 9) {
+      return json({ error: "Routing number must be exactly 9 digits." }, 400);
+    }
+    if (!DIGITS.test(accountNumber) || accountNumber.length < 4 || accountNumber.length > 17) {
+      return json({ error: "Account number must be between 4 and 17 digits." }, 400);
+    }
 
     // Receive-only stakeholders use the baseline transfers capability. They do
     // not initiate payments, hold a wallet, or collect funds, so requesting
@@ -127,7 +180,14 @@ serve(async (req) => {
       provider_metadata: { bankName, lastFour, recipient_id: recipient.id, source: "recipient_link" },
     }));
 
-    return json({ success: true, bank_name: bankName, last_four: lastFour, status });
+    return json({
+      success: true,
+      bank_name: bankName,
+      last_four: lastFour,
+      status,
+      complete: status === "verified",
+      account_id: accountId,
+    });
   } catch (e) {
     console.error("[moov-recipient-bank-add]", (e as Error).message);
     return json({ error: (e as Error).message }, 500);
