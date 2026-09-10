@@ -34,7 +34,7 @@ serve(async (req) => {
       attestationType: "none",
       excludeCredentials: (existing ?? []).map((c) => ({
         id: c.credential_id,
-        transports: (c.transports ?? []) as unknown as undefined,
+        transports: c.transports ?? [],
       })),
       authenticatorSelection: {
         residentKey: "preferred",
