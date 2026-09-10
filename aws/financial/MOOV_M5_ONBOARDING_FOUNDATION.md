@@ -151,4 +151,4 @@ GET-only Freedom **recipient** live inventory via `moov-recipient-readiness` aga
 
 ## Tests
 
-`aws/tests/api-moov-m5-onboarding.test.mjs` plus existing production Moov tests: **60/60 pass** (M5 + production + reads). Parity/providers still pass. No live Moov mutation tests.
+`aws/tests/api-moov-m5-onboarding.test.mjs`: **14/14 pass**. Combined with production + reads + parity + providers: **77/77 pass**, 0 fail. No live Moov mutation tests.
