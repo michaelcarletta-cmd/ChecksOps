@@ -1,0 +1,198 @@
+{
+  "phase": "M4",
+  "date": "2026-09-10",
+  "legacy_commit": "b53db94a2de69d68f22373669fbca1a4954847ee",
+  "post_legacy_edge_delta": ["moov-recipient-kyc-update"],
+  "stop_for_review": true,
+  "production_mutations": "none",
+  "classification": {
+    "A": "AWS production-ready",
+    "B": "AWS sandbox/staging only (flag currently false)",
+    "C": "Lovable/Supabase only — live checksops.com",
+    "D": "frontend only",
+    "E": "missing or not authoritative"
+  },
+  "do_not_treat_sandbox_parity_as_A": "aws/providers/LOVABLE_AWS_PROVIDER_PARITY.md",
+  "aws_production_ready_A": [
+    "POST /functions/v1/moov-readiness live GET (account, tos read, capabilities, wallets, banks, payment methods, RDS recipient classify)",
+    "POST /functions/v1/moov-transfer-status (live facilitator GET gated on MOOV_PLATFORM_ACCOUNT_ID; Freedom has 0 rows)",
+    "POST /webhooks/moov receipt + HMAC verify + persist + unique event id (secret not loaded; not registered)"
+  ],
+  "feature_parity_matrix": {
+    "onboarding": {
+      "create_connected_account": "B/C",
+      "business_account": "B/C",
+      "individual_account": "B/C",
+      "kyc": "B/C",
+      "kyb": "B/C",
+      "control_officers": "B/C",
+      "beneficial_owners": "B/C",
+      "representatives": "B/C",
+      "verification_requirements": "A_read/C_persist",
+      "document_upload": "B/C",
+      "document_view_signed_url": "E_on_AWS_sandbox_behavioral_diff",
+      "status_polling_sync": "A_live_GET/C_persist",
+      "disabled_restricted": "A_read/C_ui"
+    },
+    "tos": {
+      "server_side_status": "A",
+      "acceptance": "B/C",
+      "moov_js_tos_drop": "D+C",
+      "account_level": "A_read/C_accept",
+      "stakeholder_payee": "B/C",
+      "reacceptance_version": "E"
+    },
+    "capabilities": {
+      "reads": "A",
+      "requests": "C_embedded_in_onboard_sync",
+      "requirements": "A_read",
+      "underwriting_get_put": "B/C",
+      "send_funds": "A_read/C_request",
+      "collect_funds": "A_read/C_request",
+      "wallet": "A_read/C_request",
+      "transfers": "A_read/C_request",
+      "account_action_required": "A_read/D_ui",
+      "pending_errored_disconnected_apply": "E"
+    },
+    "bank": {
+      "bank_link_token": "B/C",
+      "moov_js_bank_drop": "D+C",
+      "manual_add": "B/C",
+      "micro_deposit_initiate": "B/C/D",
+      "micro_deposit_confirm": "B/C/D",
+      "plaid_bridge": "B/C",
+      "status_sync": "A_tenant_GET/C_persist",
+      "payment_method_generation": "A_observe/C_trigger",
+      "replacement_disconnect": "B/C",
+      "ownership_verification": "A_status/C_verify"
+    },
+    "wallet": {
+      "creation": "B/C",
+      "discovery": "A",
+      "wallet_balance_capability": "A_read",
+      "available_balance": "A",
+      "pending_balance": "A",
+      "activity_ledger": "B/C",
+      "bank_to_wallet_funding": "C_CRITICAL/B_sandbox/blocked_prod",
+      "wallet_to_bank": "B/C",
+      "wallet_to_recipient": "C_CRITICAL/blocked_prod",
+      "wallet_to_wallet": "C/blocked",
+      "funding_status": "A_api_unused/C",
+      "failures_returns": "E_aws_apply/C_lovable",
+      "sweep_config": "B/C",
+      "min_balance_sweep": "B/C",
+      "dashboard_sweep": "D+C"
+    },
+    "recipient": {
+      "invite": "D",
+      "create": "B/C",
+      "public_token_session": "C (AWS sandbox Cognito-gated = not public)",
+      "kyc": "B/C",
+      "tos": "B/C",
+      "bank": "B/C",
+      "live_recipient_moov_get": "E",
+      "rds_classify": "A",
+      "payment": "C_CRITICAL"
+    },
+    "ach": {
+      "credit_standard": "C/blocked_prod",
+      "credit_same_day": "C/blocked_prod",
+      "debit_fund": "C",
+      "debit_collect_observe": "A_observe/C_execute",
+      "transfer_create": "blocked_until_sql72_flags_platform_id",
+      "disbursement": "C",
+      "status": "A_gated/C",
+      "cancellation_moov_transfer": "E",
+      "cancel_wallet_funding": "B/C",
+      "return_reversal": "E_aws/C_lovable",
+      "reconciliation": "A_schema/E_apply",
+      "idempotency": "E_until_sql72"
+    },
+    "webhooks": {
+      "transfer.created": "A_receipt/E_apply",
+      "transfer.updated": "A_receipt/E_apply",
+      "account.updated": "A_receipt/E_apply",
+      "capability.updated": "A_receipt/E_apply",
+      "bankAccount.created": "A_receipt/E_apply",
+      "bankAccount.updated": "A_receipt/E_apply",
+      "paymentMethod.enabled": "A_receipt/E_apply (also thin on Lovable)",
+      "paymentMethod.disabled": "A_receipt/E_apply (also thin on Lovable)",
+      "secret_loaded": false,
+      "registered": false,
+      "apply_enabled": false
+    },
+    "sweeps": {
+      "min_balance": "B/C",
+      "destination": "B/C",
+      "frequency": "B/C",
+      "tenant_config": "C/D",
+      "dashboard": "C/D",
+      "disable_change": "C",
+      "reconciliation": "E"
+    }
+  },
+  "aws_can_request_capabilities": false,
+  "aws_can_read_capabilities": true,
+  "freedom_recipients": {
+    "confirmed_ready": false,
+    "verdict": "RECIPIENT_NOT_CONFIRMED",
+    "production": { "count": 3, "onboarding_status": "awaiting_bank", "bank_linked": true, "last4": "1506" },
+    "sandbox": { "count": 1, "onboarding_status": "awaiting_bank", "bank_linked": false },
+    "reason": "moov-recipient-bank-add and moov-webhook only set ready when Moov bank status is verified; last4 stored does not imply verified; AWS GET classifies RDS only and does not GET recipient Moov accounts"
+  },
+  "legacy_critical_money_movers": [
+    "moov-transfer-create",
+    "moov-transfer-group-create",
+    "moov-disburse",
+    "moov-wallet-fund",
+    "initiate-wallet-funding",
+    "process-funded-payment",
+    "wallet-fund-on-clear",
+    "platform-treasury",
+    "homeowner-deductible-pay",
+    "moov-tenant-fee-charge",
+    "moov-invoice (if send/pay)",
+    "moov-webhook (authoritative money state)"
+  ],
+  "p0": {
+    "ops": [
+      "human AWS webhook register (new, not Lovable)",
+      "MOOV_WEBHOOK_SECRET load",
+      "MOOV_PLATFORM_ACCOUNT_ID load",
+      "SQL72 apply (later GO)",
+      "eligible recipient confirmation (verified, not awaiting_bank)"
+    ],
+    "code_not_this_phase": [
+      "GET-only recipient live Moov inventory",
+      "holds-gated production initiate-wallet-funding / moov-wallet-fund if first transfer is wallet-sourced"
+    ]
+  },
+  "p1": [
+    "production onboarding writes (account-create, onboard, tos, underwriting, files, sync persist)",
+    "production bank writes",
+    "recipient pipeline including public session without Cognito",
+    "authoritative webhook apply behind flag",
+    "paymentMethod.enabled/disabled apply",
+    "SPA wiring to AWS GET"
+  ],
+  "p2": [
+    "sweeps",
+    "signed file-view URLs",
+    "transfer cancel",
+    "ToS reacceptance",
+    "awaiting_bank reconcile tooling",
+    "fees/invoices/treasury production ports",
+    "Lovable neutralization"
+  ],
+  "phases_remaining_after_m4": 8,
+  "first_p0_build_go_nogo": "NO-GO",
+  "money_flags": {
+    "AWS_MOOV_ENABLED": false,
+    "AWS_PROVIDER_EXECUTION_ENABLED": false,
+    "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": false,
+    "AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED": false,
+    "AWS_PROVIDER_LIVE_READS_ENABLED": true,
+    "AWS_PROVIDER_WEBHOOK_DRY_RUN": true,
+    "SQL72": "NOT_APPLIED"
+  }
+}
