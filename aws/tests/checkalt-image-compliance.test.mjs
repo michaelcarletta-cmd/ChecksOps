@@ -569,18 +569,20 @@ test('cross-tenant and arbitrary .checkalt.jpg body paths cannot override server
     deposit_front_path: 'checks/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/front.checkalt.jpg',
     deposit_back_path: `checks/${CHECK_ID}/back.checkalt.jpg`,
   });
-  assert.equal(foreign.result.error, undefined);
+  assert.equal(foreign.result.error, undefined, JSON.stringify(foreign.result));
   assert.equal(foreign.result.liveProviderCalled, true);
   assert.equal(foreign.store.processPosts, 1);
-  assert.equal(foreign.store.authenticatePosts, 1);
+  assert.ok(foreign.store.processBodies[0].frontImage);
+  assert.equal(foreign.store.processBodies[0].frontImage, bytesToBase64(good));
 
   const arbitrary = await submitWithFiles(files, {
     deposit_front_path: 'secrets/other.checkalt.jpg',
     deposit_back_path: `checks/${CHECK_ID}/back.checkalt.jpg`,
   });
-  assert.equal(arbitrary.result.error, undefined);
+  assert.equal(arbitrary.result.error, undefined, JSON.stringify(arbitrary.result));
   assert.equal(arbitrary.result.liveProviderCalled, true);
   assert.equal(arbitrary.store.processPosts, 1);
+  assert.equal(arbitrary.store.processBodies[0].frontImage, bytesToBase64(good));
 });
 
 test('production body builder base64s exact stored S3 bytes with no later processing', async () => {

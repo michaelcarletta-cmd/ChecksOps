@@ -412,7 +412,7 @@ test('official rear .checkalt.jpg presign stamps endorsement fingerprint', async
     upsert: true,
   }), depsFor(client, { forceStorageWrites: true }));
   assert.equal(result.ok, true, JSON.stringify(result));
-  const stamp = client.queries.find((q) => String(q.sql).includes('endorsement_render_meta'));
+  const stamp = client.queries.find((q) => String(q.sql).includes('jsonb_build_object'));
   assert.ok(stamp, 'rear presign must stamp endorsement_render_meta fingerprint');
   assert.equal(stamp.params[0], CHECK_ID);
   assert.equal(stamp.params[1], 'checkalt_rear_fingerprint');
