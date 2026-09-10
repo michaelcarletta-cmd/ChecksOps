@@ -162,7 +162,7 @@ export async function runFinancialTotpOnlyVerification(input: {
     description: FINANCIAL_TOTP_ONLY_COPY,
   });
   if (!built.ok) {
-    return financialTotpOnlyDenied(built.error);
+    return financialTotpOnlyDenied((built as { error?: string }).error ?? "step_up_unavailable");
   }
 
   const authorized = await input.requireStepUp(built.request);

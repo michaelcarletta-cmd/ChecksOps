@@ -81,11 +81,12 @@ export function FinancialTotpOnlyTestCard() {
         requireStepUp,
       });
       if (!verified.ok) {
-        setResult({ error: verified.error });
+        const stopError = (verified as { error?: string }).error ?? "financial_role_required";
+        setResult({ error: stopError });
         toast({
           title: "Verification did not start",
           description:
-            verified.error === "existing_check_required"
+            stopError === "existing_check_required"
               ? "Enter an existing check UUID. Tenant and amount are taken from that check on the server."
               : "Owner, admin, or manager is required. This control is not a deposit path.",
           variant: "destructive",

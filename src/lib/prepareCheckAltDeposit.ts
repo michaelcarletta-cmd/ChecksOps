@@ -54,7 +54,7 @@ async function prepareRasterToCheckAlt(path: string, side: "front" | "rear") {
   const source = await downloadBlob(path);
   const prepared = await normalizeBlobToCheckAltCanvas(source);
   if (!prepared.ok) {
-    throw new Error(`${side} ${prepared.message}`);
+    throw new Error(`${side} ${(prepared as { message?: string }).message ?? "image normalization failed"}`);
   }
   return writeCheckAltArtifact(path, prepared.blob);
 }
