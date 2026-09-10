@@ -1,6 +1,8 @@
 -- Staging-only identity mapping. Do not run against production or database postgres.
 -- application_user_id is the existing ChecksOps UUID (profiles.id / tenant_users.user_id /
 -- user_roles.user_id). cognito_sub is a login identifier only and must stay unique.
+-- One row per application user and one Cognito sub per row: PK(application_user_id),
+-- UNIQUE(cognito_sub), UNIQUE(lower(email)). Do not add a second sub for the same user.
 -- Do not FK application_user_id to profiles(id): one of the 9 restored users has roles
 -- and no profiles row. Logical parent is this table.
 
