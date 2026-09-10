@@ -1,6 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { CHECK_IMAGES_BUCKET } from "@/lib/storageBuckets";
+import { prepareCheckAltDeposit } from "@/lib/prepareCheckAltDeposit";
 import {
   combineCheckAltCompliance,
   emptySide,
@@ -15,6 +17,7 @@ type Props = {
   checkId: string;
   frontImagePath?: string | null;
   backImageDepositPath?: string | null;
+  onStatusChange?: (status: CheckAltComplianceStatus) => void;
 };
 
 const inspectPath = async (path: string | null | undefined, side: "front" | "rear"): Promise<CheckAltSideReport> => {
@@ -55,14 +58,35 @@ export function CheckAltImageComplianceCard({
   checkId,
   frontImagePath,
   backImageDepositPath,
+  onStatusChange,
 }: Props) {
+  const qc = useQueryClient();
+  const [preparing, setPreparing] = useState(false);
+  const [prepareError, setPrepareError] = useState<string | null>(null);
   const query = useQuery({
     queryKey: ["checkalt-image-compliance", checkId, frontImagePath, backImageDepositPath],
-    queryFn: () => loadCheckAltComplianceStatus({ frontImagePath, backImageDepositPath }),
+    queryFn: async () => {
+      const status = await loadCheckAltComplianceStatus({ frontImagePath, backImageDepositPath });
+      onStatusChange?.(status);
+      return status;
+    },
     enabled: Boolean(checkId),
   });
   const status = query.data;
   const overall = status?.overall ?? "FAIL";
+
+  const handlePrepare = async () => {
+    setPreparing(true);
+    setPrepareError(null);
+    try {
+      await prepareCheckAltDeposit(checkId);
+      await qc.invalidateQueries({ queryKey: ["checkalt-image-compliance", checkId] });
+    } catch (error) {
+      setPrepareError(error instanceof Error ? error.message : "Preparation failed");
+    } finally {
+      setPreparing(false);
+    }
+  };
 
   return (
     <div className="rounded-md border border-border/60 bg-background/40 p-2 mt-1 space-y-1">
@@ -73,9 +97,20 @@ export function CheckAltImageComplianceCard({
       <SideRow label="Front" report={status?.front ?? emptySide("front")} />
       <SideRow label="Rear" report={status?.rear ?? emptySide("rear")} />
       {overall !== "PASS" && (
-        <p className="text-[10px] text-muted-foreground">
-          Official 1920×1080 JPEGs (25–300 KB) are required on both sides before deposit.
-        </p>
+        <>
+          <p className="text-[10px] text-muted-foreground">
+            Official 1920×1080 JPEGs (25–300 KB) are required on both sides before deposit.
+          </p>
+          <button
+            type="button"
+            className="text-[10px] underline text-muted-foreground"
+            disabled={preparing}
+            onClick={handlePrepare}
+          >
+            {preparing ? "Preparing official images…" : "Prepare official 1920×1080 images"}
+          </button>
+          {prepareError && <p className="text-[10px] text-red-300">{prepareError}</p>}
+        </>
       )}
     </div>
   );

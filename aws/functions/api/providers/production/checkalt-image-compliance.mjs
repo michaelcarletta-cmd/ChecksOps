@@ -1,6 +1,10 @@
 /**
  * Authoritative CheckAlt FinCapture RDC API image-compliance contract.
  * JPEG API path only. Do not convert to TIFF / CCITT / ICL here.
+ *
+ * 1920x1080 is the official API JPEG *canvas*, not a command to stretch or
+ * upscale the check. Contain+pad keeps the entire check at source aspect.
+ * allowUpscale=false: a 1200-wide source is accepted but is NOT enlarged.
  */
 import { createHash } from 'node:crypto';
 import jpeg from 'jpeg-js';
@@ -16,6 +20,7 @@ export const CHECKALT_MAX_COMPLIANT_BYTES = 300 * 1024;
 export const CHECKALT_ABSOLUTE_MAX_BYTES = 1024 * 1024;
 export const CHECKALT_MIN_SOURCE_LONG_EDGE = 1200;
 export const CHECKALT_ARTIFACT_SUFFIX = '.checkalt.jpg';
+export const CHECKALT_MIN_JPEG_QUALITY = 50;
 
 /** Padding / canvas strategy. Change here if CheckAlt rejects contain+pad. */
 export const CHECKALT_PAD = Object.freeze({
@@ -36,7 +41,21 @@ export const CHECKALT_OUTPUT_METADATA = Object.freeze({
   preserveCameraExif: false,
 });
 
-export const CHECKALT_JPEG_QUALITY_LADDER = Object.freeze([82, 74, 66, 58, 50]);
+/**
+ * Vendor-pending switches. Conservative defaults stay in force until CheckAlt
+ * answers. Do not weaken these from call sites.
+ */
+export const CHECKALT_VENDOR_PENDING = Object.freeze({
+  canvasInterpretation: 'exact_api_jpeg_canvas',
+  padStrategy: CHECKALT_PAD.strategy,
+  allowUpscale: CHECKALT_PAD.allowUpscale,
+  maxBytesIsHardLimit: true,
+  writeJfifDpi: CHECKALT_OUTPUT_METADATA.writeJfifDpi,
+  iclConversionInApiPath: false,
+  objectiveReadabilityMetric: null,
+});
+
+export const CHECKALT_JPEG_QUALITY_LADDER = Object.freeze([82, 74, 66, 58, CHECKALT_MIN_JPEG_QUALITY]);
 
 const asBuffer = (bytes) => (Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes || []));
 
@@ -179,13 +198,35 @@ const resizeBilinear = (img, newW, newH) => {
   return { width: newW, height: newH, data: out };
 };
 
+/** Geometry-only plan. Does not enlarge pixels when allowUpscale is false. */
+export function planCheckAltContain({ width, height }, pad = CHECKALT_PAD) {
+  let scale = Math.min(pad.canvasWidth / width, pad.canvasHeight / height);
+  if (!pad.allowUpscale) scale = Math.min(1, scale);
+  const renderedWidth = Math.max(1, Math.round(width * scale));
+  const renderedHeight = Math.max(1, Math.round(height * scale));
+  const padLeft = Math.floor((pad.canvasWidth - renderedWidth) / 2);
+  const padTop = Math.floor((pad.canvasHeight - renderedHeight) / 2);
+  return {
+    scale,
+    renderedWidth,
+    renderedHeight,
+    canvasWidth: pad.canvasWidth,
+    canvasHeight: pad.canvasHeight,
+    sourcePixelsEnlarged: scale > 1 + 1e-9,
+    padLeft,
+    padRight: pad.canvasWidth - padLeft - renderedWidth,
+    padTop,
+    padBottom: pad.canvasHeight - padTop - renderedHeight,
+    sourceAspect: width / height,
+    renderedAspect: renderedWidth / renderedHeight,
+  };
+}
+
 const padContain = (img, pad = CHECKALT_PAD) => {
   const canvasW = pad.canvasWidth;
   const canvasH = pad.canvasHeight;
-  let scale = Math.min(canvasW / img.width, canvasH / img.height);
-  if (!pad.allowUpscale) scale = Math.min(1, scale);
-  const drawW = Math.max(1, Math.round(img.width * scale));
-  const drawH = Math.max(1, Math.round(img.height * scale));
+  const plan = planCheckAltContain(img, pad);
+  const { scale, renderedWidth: drawW, renderedHeight: drawH } = plan;
   const fitted = (drawW === img.width && drawH === img.height)
     ? img
     : resizeBilinear(img, drawW, drawH);
@@ -218,6 +259,41 @@ const encodeJpeg = (img, quality) => jpeg.encode({
   width: img.width,
   height: img.height,
 }, quality).data;
+
+/**
+ * Compress before storage/base64. There is no OCR/MICR readability metric.
+ * Stop at CHECKALT_MIN_JPEG_QUALITY rather than degrading indefinitely.
+ */
+export function encodeCheckAltJpeg(image) {
+  if (Math.min(...CHECKALT_JPEG_QUALITY_LADDER) < CHECKALT_MIN_JPEG_QUALITY) {
+    return { ok: false, error: 'quality_floor_violated' };
+  }
+  let last = null;
+  let lastQuality = null;
+  for (const quality of CHECKALT_JPEG_QUALITY_LADDER) {
+    last = Buffer.from(encodeJpeg(image, quality));
+    lastQuality = quality;
+    if (last.length < CHECKALT_MIN_BYTES) {
+      return {
+        ok: false,
+        error: 'too_small',
+        quality,
+        bytes: last.length,
+        message: 'JPEG is under 25KB at the current quality. Fail compliance rather than fabricating detail.',
+      };
+    }
+    if (last.length <= CHECKALT_MAX_COMPLIANT_BYTES) {
+      return { ok: true, bytes: last, quality, bytesLength: last.length };
+    }
+  }
+  return {
+    ok: false,
+    error: 'too_large',
+    quality: lastQuality,
+    bytes: last?.length || 0,
+    message: 'Minimum approved JPEG quality still exceeds 300KB. Fail compliance rather than degrading further.',
+  };
+}
 
 const findMarker = (buf, marker) => {
   let offset = 2;
@@ -368,27 +444,28 @@ export function normalizeToCheckAltCanvas(bytes, { pad = CHECKALT_PAD } = {}) {
   if (aspectDelta > 0.02) {
     return { ok: false, error: 'aspect_distorted', message: 'Contain+pad would distort the check. Fail closed.' };
   }
-  let last = null;
-  for (const quality of CHECKALT_JPEG_QUALITY_LADDER) {
-    last = Buffer.from(encodeJpeg(fitted.image, quality));
-    if (last.length >= CHECKALT_MIN_BYTES && last.length <= CHECKALT_MAX_COMPLIANT_BYTES) {
-      return {
-        ok: true,
-        bytes: last,
-        width: CHECKALT_CANVAS_WIDTH,
-        height: CHECKALT_CANVAS_HEIGHT,
-        contentRect: fitted.contentRect,
-        scale: fitted.scale,
-        quality,
-        metadata: auditJpegMetadata(last),
-      };
-    }
+  const encoded = encodeCheckAltJpeg(fitted.image);
+  if (!encoded.ok) {
+    return {
+      ok: false,
+      error: encoded.error,
+      message: encoded.message,
+      scale: fitted.scale,
+      contentRect: fitted.contentRect,
+      sourcePixelsEnlarged: fitted.scale > 1 + 1e-9,
+    };
   }
-  if (!last) return { ok: false, error: 'encode_failed' };
-  if (last.length < CHECKALT_MIN_BYTES) {
-    return { ok: false, error: 'too_small', message: 'Compressed JPEG is under 25KB. Fail compliance.' };
-  }
-  return { ok: false, error: 'too_large', message: 'Could not compress JPEG to 300KB without shrinking the check. Fail compliance.' };
+  return {
+    ok: true,
+    bytes: encoded.bytes,
+    width: CHECKALT_CANVAS_WIDTH,
+    height: CHECKALT_CANVAS_HEIGHT,
+    contentRect: fitted.contentRect,
+    scale: fitted.scale,
+    quality: encoded.quality,
+    sourcePixelsEnlarged: fitted.scale > 1 + 1e-9,
+    metadata: auditJpegMetadata(encoded.bytes),
+  };
 }
 
 export const bytesToBase64 = (bytes) => asBuffer(bytes).toString('base64');
@@ -441,6 +518,22 @@ export function syntheticCompliantCheckAltJpeg({ seed = 40, quality = 78 } = {})
   return Buffer.from(encodeJpeg({ width, height, data }, quality));
 }
 
+const fillRect = (data, width, x0, y0, x1, y1, rgb) => {
+  const left = Math.max(0, Math.floor(x0));
+  const top = Math.max(0, Math.floor(y0));
+  const right = Math.min(width - 1, Math.floor(x1));
+  const bottom = Math.min((data.length / 4 / width) - 1, Math.floor(y1));
+  for (let y = top; y <= bottom; y += 1) {
+    for (let x = left; x <= right; x += 1) {
+      const i = (y * width + x) * 4;
+      data[i] = rgb[0];
+      data[i + 1] = rgb[1];
+      data[i + 2] = rgb[2];
+      data[i + 3] = 255;
+    }
+  }
+};
+
 export function syntheticMarkedCheck({ width = 1600, height = 800 } = {}) {
   const data = Buffer.alloc(width * height * 4, 200);
   const paint = (x, y, rgb) => {
@@ -459,6 +552,41 @@ export function syntheticMarkedCheck({ width = 1600, height = 800 } = {}) {
     }
   }
   return Buffer.from(encodeJpeg({ width, height, data }, 95));
+}
+
+/** Personal (~2.18:1) or business (~2.43:1) check with MICR / signature / endorsement marks. */
+export function syntheticRegionCheck({
+  width,
+  height,
+  kind = 'front',
+} = {}) {
+  const data = Buffer.alloc(width * height * 4, 235);
+  fillRect(data, width, 0, 0, 7, 7, [255, 0, 0]);
+  fillRect(data, width, width - 8, 0, width - 1, 7, [0, 255, 0]);
+  fillRect(data, width, 0, height - 8, 7, height - 1, [0, 0, 255]);
+  fillRect(data, width, width - 8, height - 8, width - 1, height - 1, [255, 255, 0]);
+  fillRect(data, width, 0, height * 0.2, 10, height * 0.8, [180, 20, 20]);
+  fillRect(data, width, width - 11, height * 0.2, width - 1, height * 0.8, [20, 180, 20]);
+  fillRect(data, width, 0, height * 0.88, width - 1, height - 1, [20, 20, 180]);
+  if (kind === 'front') {
+    fillRect(data, width, width * 0.68, height * 0.55, width * 0.94, height * 0.82, [20, 20, 20]);
+  } else {
+    fillRect(data, width, width * 0.06, height * 0.16, width * 0.24, height * 0.84, [30, 0, 80]);
+  }
+  return {
+    bytes: Buffer.from(encodeJpeg({ width, height, data }, 92)),
+    regions: {
+      leftEdge: { x: 5, y: Math.round(height * 0.5), rgb: [180, 20, 20] },
+      rightEdge: { x: width - 6, y: Math.round(height * 0.5), rgb: [20, 180, 20] },
+      micr: { x: Math.round(width * 0.5), y: Math.round(height * 0.94), rgb: [20, 20, 180] },
+      signature: kind === 'front'
+        ? { x: Math.round(width * 0.8), y: Math.round(height * 0.68), rgb: [20, 20, 20] }
+        : null,
+      endorsement: kind === 'rear'
+        ? { x: Math.round(width * 0.15), y: Math.round(height * 0.5), rgb: [30, 0, 80] }
+        : null,
+    },
+  };
 }
 
 export function samplePixel(bytes, x, y) {

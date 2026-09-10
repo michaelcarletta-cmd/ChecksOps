@@ -12,6 +12,7 @@ export const CHECKALT_MAX_COMPLIANT_BYTES = 300 * 1024;
 export const CHECKALT_ABSOLUTE_MAX_BYTES = 1024 * 1024;
 export const CHECKALT_MIN_SOURCE_LONG_EDGE = 1200;
 export const CHECKALT_ARTIFACT_SUFFIX = ".checkalt.jpg";
+export const CHECKALT_MIN_JPEG_QUALITY = 0.5;
 
 export const CHECKALT_PAD = {
   strategy: "contain" as const,
@@ -27,7 +28,17 @@ export const CHECKALT_OUTPUT_METADATA = {
   preserveCameraExif: false,
 };
 
-const QUALITY_LADDER = [0.82, 0.74, 0.66, 0.58, 0.5];
+export const CHECKALT_VENDOR_PENDING = {
+  canvasInterpretation: "exact_api_jpeg_canvas" as const,
+  padStrategy: CHECKALT_PAD.strategy,
+  allowUpscale: CHECKALT_PAD.allowUpscale,
+  maxBytesIsHardLimit: true,
+  writeJfifDpi: CHECKALT_OUTPUT_METADATA.writeJfifDpi,
+  iclConversionInApiPath: false,
+  objectiveReadabilityMetric: null,
+};
+
+const QUALITY_LADDER = [0.82, 0.74, 0.66, 0.58, CHECKALT_MIN_JPEG_QUALITY];
 
 export const normalizeClaimRel = (path: string | null | undefined) =>
   String(path || "").split("?")[0].replace(/^\/+/, "").trim();
@@ -187,19 +198,30 @@ export async function normalizeBlobToCheckAltCanvas(
 
   let last: Blob | null = null;
   for (const quality of QUALITY_LADDER) {
+    if (quality < CHECKALT_MIN_JPEG_QUALITY) {
+      return {
+        ok: false,
+        error: "quality_floor",
+        message: "Minimum approved JPEG quality reached. Fail compliance rather than degrading further.",
+      };
+    }
     last = await canvasToJpeg(canvas, quality);
-    if (last.size >= CHECKALT_MIN_BYTES && last.size <= CHECKALT_MAX_COMPLIANT_BYTES) {
+    if (last.size < CHECKALT_MIN_BYTES) {
+      return {
+        ok: false,
+        error: "too_small",
+        message: "JPEG is under 25KB at the current quality. Fail compliance rather than fabricating detail.",
+      };
+    }
+    if (last.size <= CHECKALT_MAX_COMPLIANT_BYTES) {
       return { ok: true, blob: last, width: pad.canvasWidth, height: pad.canvasHeight };
     }
   }
   if (!last) return { ok: false, error: "encode_failed", message: "Could not encode the CheckAlt JPEG." };
-  if (last.size < CHECKALT_MIN_BYTES) {
-    return { ok: false, error: "too_small", message: "Compressed JPEG is under 25KB. Fail compliance." };
-  }
   return {
     ok: false,
     error: "too_large",
-    message: "Could not compress JPEG to 300KB without shrinking the check. Fail compliance.",
+    message: "Minimum approved JPEG quality still exceeds 300KB. Fail compliance rather than degrading further.",
   };
 }
 

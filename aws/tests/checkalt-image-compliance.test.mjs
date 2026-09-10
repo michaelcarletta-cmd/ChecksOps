@@ -9,22 +9,29 @@ import {
   CHECKALT_CANVAS_HEIGHT,
   CHECKALT_CANVAS_WIDTH,
   CHECKALT_IMAGE_ERROR,
+  CHECKALT_JPEG_QUALITY_LADDER,
   CHECKALT_MAX_COMPLIANT_BYTES,
   CHECKALT_MIN_BYTES,
+  CHECKALT_MIN_JPEG_QUALITY,
   CHECKALT_PAD,
+  CHECKALT_VENDOR_PENDING,
   auditJpegMetadata,
   base64ToBytes,
   bytesToBase64,
   evaluateCheckAltImageCompliance,
   isCheckAltArtifactPath,
   normalizeToCheckAltCanvas,
+  planCheckAltContain,
   samplePixel,
   sha256,
   syntheticCompliantCheckAltJpeg,
+  syntheticRegionCheck,
   syntheticUndersizedCheckAltJpeg,
   syntheticMarkedCheck,
   toCheckAltPath,
 } from '../functions/api/providers/production/checkalt-image-compliance.mjs';
+import { buildDepositProcessBody } from '../functions/api/providers/parity/checkalt-client.mjs';
+import { loadProductionDepositImages } from '../functions/api/providers/production/checkalt-images.mjs';
 import { handleProviderRequest } from '../functions/api/providers.mjs';
 import {
   CHECKALT_IMAGE_PREPARATION_REQUIRED,
@@ -118,6 +125,7 @@ const submitWithFiles = async (files, body = {}) => {
   const store = {
     deposits,
     processPosts: 0,
+    authenticatePosts: 0,
     processBodies: [],
     files,
     check,
@@ -190,6 +198,7 @@ const submitWithFiles = async (files, body = {}) => {
   const fetchImpl = async (url, options = {}) => {
     const target = String(url);
     if (target.includes('/authenticate')) {
+      store.authenticatePosts += 1;
       const token = `${Buffer.from('{"alg":"none"}').toString('base64url')}.${Buffer.from('{"exp":9999999999}').toString('base64url')}.sig`;
       return { ok: true, status: 200, text: async () => token };
     }
@@ -252,6 +261,8 @@ test('official constants and artifact suffix are the production contract', () =>
   assert.doesNotMatch(spa, /encodeTIFF|CCITT Group 4/);
   const server = fs.readFileSync(path.join(ROOT, 'aws/functions/api/providers/production/checkalt-image-compliance.mjs'), 'utf8');
   assert.doesNotMatch(server, /encodeTIFF|CCITT Group 4/);
+  assert.equal(CHECKALT_VENDOR_PENDING.iclConversionInApiPath, false);
+  assert.equal(CHECKALT_VENDOR_PENDING.writeJfifDpi, false);
 });
 
 test('1. front + rear 1920x1080 ~80KB PASS and share one process body', async () => {
@@ -426,4 +437,242 @@ test('normalized output does not fabricate camera EXIF', () => {
   assert.equal(out.metadata.hasExif, false);
   const audit = auditJpegMetadata(out.bytes);
   assert.equal(audit.cameraExifFabricated, false);
+});
+
+const near = (actual, expected, slack = 40) =>
+  Math.abs(actual[0] - expected[0]) < slack
+  && Math.abs(actual[1] - expected[1]) < slack
+  && Math.abs(actual[2] - expected[2]) < slack;
+
+const mapSourcePoint = (rect, scale, x, y) => ({
+  x: rect.x + Math.round(x * scale),
+  y: rect.y + Math.round(y * scale),
+});
+
+test('source-size contain+pad never upscales; 1920x1080 is the canvas only', () => {
+  const cases = [
+    [1200, 500],
+    [1300, 550],
+    [1600, 670],
+    [1919, 800],
+    [1920, 800],
+    [2400, 1000],
+    [4000, 1667],
+  ];
+  const table = [];
+  for (const [width, height] of cases) {
+    const plan = planCheckAltContain({ width, height });
+    const source = syntheticMarkedCheck({ width, height });
+    const out = normalizeToCheckAltCanvas(source);
+    const report = out.ok ? evaluateCheckAltImageCompliance(out.bytes, 'front') : { pass: false, reason: out.error };
+    assert.equal(plan.sourcePixelsEnlarged, false, `${width}x${height} enlarged`);
+    assert.ok(plan.scale <= 1, `${width}x${height} scale`);
+    assert.equal(plan.canvasWidth, 1920);
+    assert.equal(plan.canvasHeight, 1080);
+    assert.ok(Math.abs(plan.sourceAspect - plan.renderedAspect) < 0.01, `${width}x${height} stretch`);
+    table.push({
+      source: `${width}x${height}`,
+      scale: Number(plan.scale.toFixed(6)),
+      rendered: `${plan.renderedWidth}x${plan.renderedHeight}`,
+      canvas: `${plan.canvasWidth}x${plan.canvasHeight}`,
+      sourcePixelsEnlarged: plan.sourcePixelsEnlarged,
+      padding: {
+        left: plan.padLeft,
+        right: plan.padRight,
+        top: plan.padTop,
+        bottom: plan.padBottom,
+      },
+      normalizeOk: out.ok === true,
+      serverValidation: report.pass ? 'PASS' : report.reason,
+    });
+  }
+  fs.mkdirSync('/opt/cursor/artifacts', { recursive: true });
+  fs.writeFileSync('/opt/cursor/artifacts/phase3b3a_source_size_table.json', JSON.stringify(table, null, 2));
+  assert.equal(table.length, 7);
+  assert.equal(CHECKALT_PAD.allowUpscale, false);
+  assert.equal(CHECKALT_VENDOR_PENDING.canvasInterpretation, 'exact_api_jpeg_canvas');
+  assert.equal(CHECKALT_VENDOR_PENDING.allowUpscale, false);
+  assert.equal(CHECKALT_VENDOR_PENDING.objectiveReadabilityMetric, null);
+});
+
+test('quality ladder is fail-closed at min quality 50 with no readability metric', () => {
+  assert.equal(CHECKALT_MIN_JPEG_QUALITY, 50);
+  assert.equal(Math.min(...CHECKALT_JPEG_QUALITY_LADDER), 50);
+  assert.ok(CHECKALT_JPEG_QUALITY_LADDER.every((q) => q >= CHECKALT_MIN_JPEG_QUALITY));
+  assert.equal(CHECKALT_VENDOR_PENDING.objectiveReadabilityMetric, null);
+  assert.equal(CHECKALT_VENDOR_PENDING.maxBytesIsHardLimit, true);
+  const spa = fs.readFileSync(path.join(ROOT, 'src/lib/checkaltImageCompliance.ts'), 'utf8');
+  assert.match(spa, /CHECKALT_MIN_JPEG_QUALITY = 0\.5/);
+  assert.match(spa, /Minimum approved JPEG quality still exceeds 300KB/);
+});
+
+test('personal and business check aspect ratios keep MICR, edges, signature, endorsement', () => {
+  const samples = [
+    { label: 'personal-front', width: 1600, height: 733, kind: 'front' },
+    { label: 'personal-rear', width: 1600, height: 733, kind: 'rear' },
+    { label: 'business-front', width: 2400, height: 990, kind: 'front' },
+    { label: 'business-rear', width: 2400, height: 990, kind: 'rear' },
+  ];
+  for (const sample of samples) {
+    const { bytes, regions } = syntheticRegionCheck(sample);
+    const out = normalizeToCheckAltCanvas(bytes);
+    assert.equal(out.ok, true, sample.label);
+    assert.equal(out.sourcePixelsEnlarged, false, sample.label);
+    assert.ok(out.scale <= 1, sample.label);
+    assert.ok(Math.abs((sample.width / sample.height) - (out.contentRect.width / out.contentRect.height)) < 0.01, sample.label);
+    const pad = samplePixel(out.bytes, 2, 2);
+    assert.ok(pad[0] > 240 && pad[1] > 240 && pad[2] > 240, `${sample.label} pad`);
+    for (const [name, region] of Object.entries(regions)) {
+      if (!region) continue;
+      const mapped = mapSourcePoint(out.contentRect, out.scale, region.x, region.y);
+      assert.ok(mapped.x >= out.contentRect.x && mapped.x < out.contentRect.x + out.contentRect.width, `${sample.label} ${name} x`);
+      assert.ok(mapped.y >= out.contentRect.y && mapped.y < out.contentRect.y + out.contentRect.height, `${sample.label} ${name} y`);
+      const pixel = samplePixel(out.bytes, mapped.x, mapped.y);
+      assert.ok(near(pixel, region.rgb), `${sample.label} ${name} ${pixel} != ${region.rgb}`);
+    }
+  }
+});
+
+test('renamed non-compliant .checkalt.jpg is rejected by actual S3 bytes', async () => {
+  const good = compliant();
+  const fakeName = syntheticCheckRaster({ width: 1600, height: 900, flat: true });
+  const { result, store } = await submitWithFiles({
+    [`checks/${CHECK_ID}/front.checkalt.jpg`]: fakeName,
+    [`checks/${CHECK_ID}/back.checkalt.jpg`]: good,
+  });
+  assert.equal(result.error, CHECKALT_IMAGE_ERROR);
+  assert.equal(result.reason, 'front_dimensions');
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.authenticatePosts, 0);
+  assert.equal(store.deposits.length, 0);
+});
+
+test('cross-tenant and arbitrary .checkalt.jpg paths are denied before provider HTTP', async () => {
+  const good = compliant();
+  const files = {
+    ...pair(good, good),
+    'checks/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/front.checkalt.jpg': good,
+    'secrets/other.checkalt.jpg': good,
+  };
+  const foreign = await submitWithFiles(files, {
+    deposit_front_path: 'checks/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/front.checkalt.jpg',
+    deposit_back_path: `checks/${CHECK_ID}/back.checkalt.jpg`,
+  });
+  assert.equal(foreign.result.error, 'prepared_path_denied');
+  assert.equal(foreign.store.processPosts, 0);
+  assert.equal(foreign.store.authenticatePosts, 0);
+  assert.equal(foreign.store.deposits.length, 0);
+
+  const arbitrary = await submitWithFiles(files, {
+    deposit_front_path: 'secrets/other.checkalt.jpg',
+    deposit_back_path: `checks/${CHECK_ID}/back.checkalt.jpg`,
+  });
+  assert.equal(arbitrary.result.error, 'prepared_path_denied');
+  assert.equal(arbitrary.store.processPosts, 0);
+  assert.equal(arbitrary.store.authenticatePosts, 0);
+});
+
+test('production body builder base64s exact stored S3 bytes with no later processing', async () => {
+  const front = compliant();
+  const rear = syntheticCompliantCheckAltJpeg({ seed: 77, quality: 70 });
+  const check = {
+    id: CHECK_ID,
+    front_image_path: `checks/${CHECK_ID}/front.jpg`,
+    back_image_path: `checks/${CHECK_ID}/back.jpg`,
+    back_image_deposit_path: `checks/${CHECK_ID}/back.jpg`,
+  };
+  const files = pair(front, rear);
+  const images = await loadProductionDepositImages(check, {}, {
+    downloadClaimFile: async (filePath) => files[filePath] || null,
+  });
+  assert.equal(images.ok, true);
+  assert.equal(images.frontSha256, sha256(front));
+  assert.equal(images.rearSha256, sha256(rear));
+  const processBody = buildDepositProcessBody({
+    fiKey: 'fi',
+    ssoKey: 'sso',
+    depositAccountNumber: '1234567890',
+    captureDateTime: '2026-09-10T00:00:00.000Z',
+    userAmount: 4.5,
+    frontImage: images.frontImage,
+    rearImage: images.rearImage,
+  });
+  assert.equal(sha256(front), sha256(base64ToBytes(processBody.frontImage)));
+  assert.equal(sha256(rear), sha256(base64ToBytes(processBody.rearImage)));
+  assert.equal(processBody.frontImage, bytesToBase64(front));
+  assert.equal(processBody.rearImage, bytesToBase64(rear));
+
+  const { result, store } = await submitWithFiles(files);
+  assert.equal(store.processPosts, 1);
+  assert.equal(sha256(front), sha256(base64ToBytes(store.processBodies[0].frontImage)));
+  assert.equal(sha256(rear), sha256(base64ToBytes(store.processBodies[0].rearImage)));
+  assert.equal(result.imagePipeline, 'checkalt_official_canvas_base64');
+});
+
+test('compliance failures never authenticate, mark attempted, or POST process', async () => {
+  const good = compliant();
+  const failures = [
+    [{ [`checks/${CHECK_ID}/back.checkalt.jpg`]: good }, {}, 'front_missing'],
+    [{ [`checks/${CHECK_ID}/front.checkalt.jpg`]: good }, {}, 'rear_missing'],
+    [pair(syntheticCheckRaster({ width: 1600, height: 900 }), good), {}, 'front_dimensions'],
+    [pair(Buffer.from('not-a-jpeg'), good), {}, 'front_invalid_jpeg'],
+  ];
+  for (const [files, body, reason] of failures) {
+    const { result, store } = await submitWithFiles(files, body);
+    assert.equal(result.error, CHECKALT_IMAGE_ERROR, reason);
+    assert.equal(result.reason, reason);
+    assert.equal(store.authenticatePosts, 0, reason);
+    assert.equal(store.processPosts, 0, reason);
+    assert.equal(store.deposits.length, 0, reason);
+    assert.equal(result.liveProviderCalled, false, reason);
+  }
+});
+
+test('Command Center cannot bypass official artifacts or the compliance card', async () => {
+  let fetched = 0;
+  const blockedDeposit2 = await runCheckAltOneClickSubmit(CHECK_ID, {
+    authProvider: 'cognito',
+    apiBaseUrl: '/prep',
+    idToken: 'token',
+    prepareCheckAltDeposit: async () => ({
+      deposit_front_path: `checks/${CHECK_ID}/front.deposit2.jpg`,
+      deposit_back_path: `checks/${CHECK_ID}/back.deposit2.jpg`,
+    }),
+    fetchImpl: async () => {
+      fetched += 1;
+      return { ok: true, json: async () => ({ ok: true }) };
+    },
+  });
+  assert.equal(blockedDeposit2.error?.message, CHECKALT_IMAGE_PREPARATION_REQUIRED);
+  assert.equal(fetched, 0);
+
+  const blockedOld = await runCheckAltOneClickSubmit(CHECK_ID, {
+    authProvider: 'cognito',
+    apiBaseUrl: '/prep',
+    idToken: 'token',
+    prepareCheckAltDeposit: async () => ({
+      deposit_front_path: `checks/${CHECK_ID}/front.jpg`,
+      deposit_back_path: `checks/${CHECK_ID}/endorsed_1200.jpg`,
+    }),
+    fetchImpl: async () => {
+      fetched += 1;
+      return { ok: true, json: async () => ({ ok: true }) };
+    },
+  });
+  assert.equal(blockedOld.error?.message, CHECKALT_IMAGE_PREPARATION_REQUIRED);
+  assert.equal(fetched, 0);
+
+  const ccc = fs.readFileSync(path.join(ROOT, 'src/pages/CheckCommandCenter.tsx'), 'utf8');
+  assert.match(ccc, /checkAltImagePass/);
+  assert.match(ccc, /disabled=\{depositingWithCheckAlt \|\| !checkAltImagePass\}/);
+  assert.match(ccc, /CheckAltImageComplianceCard/);
+  const start = ccc.indexOf('const handleDepositWithCheckAlt');
+  const end = ccc.indexOf('const ensureDepositReadyBackImage', start);
+  const oneClickFn = end === -1 ? ccc.slice(start, start + 2500) : ccc.slice(start, end);
+  assert.doesNotMatch(oneClickFn, /prepare_deposit/);
+  assert.doesNotMatch(oneClickFn, /assign_provider/);
+  assert.match(oneClickFn, /runCheckAltOneClickSubmit/);
+  const card = fs.readFileSync(path.join(ROOT, 'src/components/checks/CheckAltImageComplianceCard.tsx'), 'utf8');
+  assert.match(card, /Prepare official 1920/);
+  assert.match(card, /prepareCheckAltDeposit/);
 });

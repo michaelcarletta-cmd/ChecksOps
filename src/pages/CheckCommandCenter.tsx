@@ -2965,6 +2965,7 @@ function CheckDetailPanel({
   const [depositViewerUrl, setDepositViewerUrl] = useState<string | null>(null);
   const [openingDepositView, setOpeningDepositView] = useState(false);
   const [depositingWithCheckAlt, setDepositingWithCheckAlt] = useState(false);
+  const [checkAltImagePass, setCheckAltImagePass] = useState(false);
   const [frontImageDimensions, setFrontImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const [backImageDimensions, setBackImageDimensions] = useState<{ width: number; height: number } | null>(null);
 
@@ -4266,12 +4267,13 @@ function CheckDetailPanel({
                               checkId={check.id}
                               frontImagePath={check.front_image_path}
                               backImageDepositPath={check.back_image_deposit_path}
+                              onStatusChange={(status) => setCheckAltImagePass(status.overall === "PASS")}
                             />
                             <Button
                               size="sm"
                               variant="success"
                               className="w-full mt-1"
-                              disabled={depositingWithCheckAlt}
+                              disabled={depositingWithCheckAlt || !checkAltImagePass}
                               onClick={handleDepositWithCheckAlt}
                             >
                               <Banknote className="h-4 w-4 mr-2" />
