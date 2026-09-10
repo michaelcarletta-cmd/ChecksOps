@@ -20,6 +20,7 @@ import {
 } from './storage.mjs';
 import { handlePublicEndorsement } from './check-endorsement.mjs';
 import { handlePublicSignatureSubmit } from './signature-submit.mjs';
+import { handlePublicMoovRecipientSession } from './public-moov-recipient-session.mjs';
 import {
   handleStorageUploadUrl,
   handleStorageDelete,
@@ -368,6 +369,18 @@ export const handler = async (event) => {
       service: 'checksops-api',
       environment: process.env.CHECKSOPS_ENV || 'unknown',
       productionSupabaseChanged: false,
+      ...result,
+    });
+  }
+
+  if (method === 'POST' && path === '/public/moov-recipient-session') {
+    const result = await handlePublicMoovRecipientSession(event);
+    return json(result.statusCode || (result.ok ? 200 : 400), {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      productionWebhooksRedirected: false,
+      liveProviderTransactions: false,
       ...result,
     });
   }
