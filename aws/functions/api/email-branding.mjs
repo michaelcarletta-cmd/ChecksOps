@@ -86,23 +86,32 @@ export const formatFromHeader = (name, address) => {
 /**
  * Custom From is allowed only when tenant_email_settings has:
  *   sending_mode = custom
- *   domain_status = verified
+ *   domain_status = verified (server-side SES check only — never from the frontend)
+ *   custom sending enabled
+ *   SES identity name matching stored sending_domain
  *   from_address belonging to sending_domain (exact host or a subdomain)
  *
- * domain_status must only be written by the future server-side SES
- * verification workflow — not directly trusted from tenant/frontend input.
+ * A verified subdomain does not authorize the parent domain.
  */
-export const isVerifiedCustomSender = (settings = {}) => {
+export const customFromFailureReason = (settings = {}) => {
   const mode = String(settings.sending_mode || '').trim().toLowerCase();
   const status = String(settings.domain_status || '').trim().toLowerCase();
   const from = normalizeEmail(settings.from_address);
   const domain = String(settings.sending_domain || '').trim().toLowerCase();
-  if (mode !== 'custom' || status !== 'verified' || !from.includes('@') || !domain) return false;
+  const identity = String(settings.ses_identity_name || settings.sending_domain || '').trim().toLowerCase();
+  const customEnabled = settings.custom_sending_enabled !== false && mode === 'custom';
+  if (status === 'disabled' || settings.custom_sending_enabled === false) return 'custom_sending_disabled';
+  if (mode !== 'custom') return 'sending_mode_not_custom';
+  if (status !== 'verified') return 'domain_not_verified';
+  if (!customEnabled) return 'custom_sending_disabled';
+  if (!domain || !identity || identity !== domain) return 'ses_identity_mismatch';
+  if (!from.includes('@')) return 'from_address_not_on_domain';
   const fromDomain = addressDomain(from);
-  // Intended policy: verified parent domain covers itself and subdomains;
-  // a verified subdomain does not authorize the parent domain.
-  return fromDomain === domain || fromDomain.endsWith(`.${domain}`);
+  if (!(fromDomain === domain || fromDomain.endsWith(`.${domain}`))) return 'from_address_not_on_domain';
+  return null;
 };
+
+export const isVerifiedCustomSender = (settings = {}) => customFromFailureReason(settings) === null;
 
 export const platformBranding = () => {
   const parsed = parseFromHeader(defaultFromAddress());
@@ -118,6 +127,7 @@ export const platformBranding = () => {
     usingCustomFrom: false,
     customFromBlocked: false,
     requestedCustomFrom: null,
+    customFromReason: null,
   };
 };
 
@@ -147,17 +157,27 @@ export const resolveEmailBranding = async (client, { tenantId = null, senderOver
     }
     try {
       settings = (await client.query(
-        `SELECT from_name, reply_to, sending_mode, sending_domain, from_address, domain_status
+        `SELECT from_name, reply_to, sending_mode, sending_domain, from_address, domain_status,
+                ses_identity_name, custom_sending_enabled
          FROM public.tenant_email_settings WHERE tenant_id = $1::uuid LIMIT 1`,
         [tenantId],
       )).rows[0] || {};
     } catch {
-      settings = {};
+      try {
+        settings = (await client.query(
+          `SELECT from_name, reply_to, sending_mode, sending_domain, from_address, domain_status
+           FROM public.tenant_email_settings WHERE tenant_id = $1::uuid LIMIT 1`,
+          [tenantId],
+        )).rows[0] || {};
+      } catch {
+        settings = {};
+      }
     }
   }
 
   const requestedCustomFrom = firstNonEmpty(settings.from_address, tenant.email_from_address);
-  const verified = isVerifiedCustomSender(settings);
+  const customFromReason = customFromFailureReason(settings);
+  const verified = customFromReason === null && Boolean(settings.from_address);
   const customFromBlocked = Boolean(requestedCustomFrom) && !verified
     && normalizeEmail(requestedCustomFrom) !== platform.fromAddress;
 
@@ -195,13 +215,18 @@ export const resolveEmailBranding = async (client, { tenantId = null, senderOver
       usingCustomFrom: true,
       customFromBlocked: false,
       requestedCustomFrom,
+      customFromReason: null,
     };
   }
 
+  const fallbackName = companySubtitle
+    ? `${displayName && displayName !== platform.fromName ? displayName : companySubtitle} via ChecksOps`
+    : platform.fromName;
+
   return {
     ...platform,
-    from: platform.from,
-    fromName: platform.fromName,
+    from: formatFromHeader(fallbackName, platform.fromAddress),
+    fromName: fallbackName,
     fromAddress: platform.fromAddress,
     replyTo,
     companyName: companySubtitle || platform.companyName,
@@ -211,6 +236,7 @@ export const resolveEmailBranding = async (client, { tenantId = null, senderOver
     usingCustomFrom: false,
     customFromBlocked,
     requestedCustomFrom,
+    customFromReason: customFromBlocked ? (customFromReason || 'domain_not_verified') : null,
   };
 };
 

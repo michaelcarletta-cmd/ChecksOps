@@ -16,7 +16,7 @@ import {
   AdminDisableUserCommand,
   AdminSetUserPasswordCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
-import { withIdentity, parseBody, ignoredSpoof } from './data.mjs';
+import { withIdentity } from './data.mjs';
 import { normalizeEmail } from './email-policy.mjs';
 import { sendViaSesOrSink } from './email.mjs';
 import { renderTransactionalTemplate } from './email-templates.mjs';
@@ -266,83 +266,11 @@ export const handleGetInstanceUsers = async (event) => withIdentity(event, async
   spoofFieldsIgnored: spoof,
 }));
 
-export const handleTenantDomainVerify = async (event) => withIdentity(event, async ({
-  client, mapping, body, spoof,
-}) => {
-  const tenantId = body.tenantId || body.tenant_id;
-  const domain = String(body.domain || '').trim().toLowerCase();
-  if (!tenantId || !domain) {
-    return { ok: false, statusCode: 400, error: 'missing_fields', spoofFieldsIgnored: spoof };
-  }
-  if (!(await assertTenantAdmin(client, mapping, tenantId))) {
-    return { ok: false, statusCode: 403, error: 'not_authorized', spoofFieldsIgnored: spoof };
-  }
-  const token = randomBytes(16).toString('hex');
-  await client.query(
-    `INSERT INTO public.tenant_email_settings (tenant_id, sending_domain, domain_status, updated_at)
-     VALUES ($1::uuid, $2, 'pending', now())
-     ON CONFLICT (tenant_id) DO UPDATE
-       SET sending_domain = EXCLUDED.sending_domain,
-           domain_status = 'pending',
-           updated_at = now()`,
-    [tenantId, domain],
-  ).catch(async () => {
-    await client.query(
-      `UPDATE public.tenant_email_settings
-       SET sending_domain = $2, domain_status = 'pending', updated_at = now()
-       WHERE tenant_id = $1::uuid`,
-      [tenantId, domain],
-    ).catch(() => {});
-  });
-  return {
-    ok: true,
-    statusCode: 200,
-    domain,
-    status: 'pending',
-    dns: [
-      { type: 'TXT', name: `_checksops-verify.${domain}`, value: `checksops-domain-verify=${token}` },
-    ],
-    spoofFieldsIgnored: spoof,
-  };
-}, { write: true, commit: true });
-
-export const handleTenantDomainCheck = async (event) => withIdentity(event, async ({
-  client, mapping, body, spoof,
-}) => {
-  const tenantId = body.tenantId || body.tenant_id;
-  if (!tenantId) return { ok: false, statusCode: 400, error: 'missing_tenant', spoofFieldsIgnored: spoof };
-  if (!(await assertTenantAdmin(client, mapping, tenantId))) {
-    return { ok: false, statusCode: 403, error: 'not_authorized', spoofFieldsIgnored: spoof };
-  }
-  const row = (await client.query(
-    `SELECT sending_domain, domain_status, verified_at, updated_at
-     FROM public.tenant_email_settings WHERE tenant_id = $1::uuid LIMIT 1`,
-    [tenantId],
-  )).rows[0];
-  return {
-    ok: true,
-    statusCode: 200,
-    domain: row?.sending_domain || null,
-    status: row?.domain_status || 'unset',
-    verified: row?.domain_status === 'verified',
-    verifiedAt: row?.verified_at || null,
-    stagingNote: 'AWS staging reads tenant_email_settings; ACM/Route53 attach remains ops-owned',
-    spoofFieldsIgnored: spoof,
-  };
-});
-
-export const handleTenantDomainRecheckCron = async (event) => {
-  const spoof = ignoredSpoof(event, parseBody(event));
-  // Non-financial scheduled job: mark stale pending domains for review only.
-  return {
-    ok: true,
-    statusCode: 200,
-    processed: 0,
-    staging: true,
-    message: 'tenant-domain-recheck-cron no-op until ACM DNS automation is wired',
-    spoofFieldsIgnored: spoof,
-  };
-};
+export {
+  handleTenantDomainVerify,
+  handleTenantDomainCheck,
+  handleTenantDomainRecheckCron,
+} from './tenant-email-domain-handlers.mjs';
 
 const openaiSecretName = (tenantId) => `checksops/staging/tenant-openai/${tenantId}`;
 

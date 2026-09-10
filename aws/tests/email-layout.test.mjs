@@ -184,6 +184,8 @@ test('custom From requires verified custom domain ownership', async () => {
   assert.equal(unverified.usingCustomFrom, false);
   assert.equal(unverified.customFromBlocked, true);
   assert.match(unverified.from, /noreply@checksops\.com/);
+  assert.match(unverified.from, /via ChecksOps/);
+  assert.equal(unverified.customFromReason, 'domain_not_verified');
 
   const exact = await resolveEmailBranding(sqlClient([
     {
@@ -239,6 +241,54 @@ test('custom From requires verified custom domain ownership', async () => {
   assert.equal(parentBlocked.usingCustomFrom, false);
   assert.equal(parentBlocked.customFromBlocked, true);
   assert.match(parentBlocked.from, /noreply@checksops\.com/);
+
+  assert.equal(isVerifiedCustomSender({
+    sending_mode: 'custom',
+    domain_status: 'verified',
+    from_address: 'noreply@notify.acme.test',
+    sending_domain: 'notify.acme.test',
+    ses_identity_name: 'other.acme.test',
+  }), false);
+
+  const identityMismatch = await resolveEmailBranding(sqlClient([
+    {
+      match: (sql) => sql.includes('FROM public.tenants'),
+      result: () => ({ rows: [{ name: 'Acme', is_system_tenant: false, logo_url: 'https://cdn.acme.test/brand.png', primary_color: '#112233' }] }),
+    },
+    {
+      match: (sql) => sql.includes('tenant_email_settings'),
+      result: () => ({ rows: [{
+        sending_mode: 'custom',
+        sending_domain: 'notify.acme.test',
+        from_address: 'noreply@notify.acme.test',
+        domain_status: 'verified',
+        ses_identity_name: 'other.acme.test',
+      }] }),
+    },
+  ]), { tenantId: '11111111-1111-4111-8111-111111111111' });
+  assert.equal(identityMismatch.usingCustomFrom, false);
+  assert.equal(identityMismatch.customFromReason, 'ses_identity_mismatch');
+  assert.equal(identityMismatch.logoUrl, 'https://cdn.acme.test/brand.png');
+  assert.equal(identityMismatch.primaryColor, '#112233');
+
+  const disabledCustom = await resolveEmailBranding(sqlClient([
+    {
+      match: (sql) => sql.includes('FROM public.tenants'),
+      result: () => ({ rows: [{ name: 'Acme', is_system_tenant: false }] }),
+    },
+    {
+      match: (sql) => sql.includes('tenant_email_settings'),
+      result: () => ({ rows: [{
+        sending_mode: 'custom',
+        sending_domain: 'notify.acme.test',
+        from_address: 'noreply@notify.acme.test',
+        domain_status: 'verified',
+        custom_sending_enabled: false,
+      }] }),
+    },
+  ]), { tenantId: '11111111-1111-4111-8111-111111111111' });
+  assert.equal(disabledCustom.usingCustomFrom, false);
+  assert.equal(disabledCustom.customFromReason, 'custom_sending_disabled');
 });
 
 test('platform branding never uses an unverified custom From', async () => {
@@ -279,9 +329,11 @@ test('platform branding never uses an unverified custom From', async () => {
   assert.equal(blocked.customFromBlocked, true);
   assert.equal(blocked.usingCustomFrom, false);
   assert.match(blocked.from, /noreply@checksops\.com/);
+  assert.match(blocked.from, /via ChecksOps/);
   assert.equal(blocked.replyTo, 'office@acme.test');
   assert.equal(blocked.companySubtitle, 'Acme');
   assert.equal(blocked.primaryColor, '#ff6600');
+  assert.match(blocked.logoUrl, /checksops-logo\.png/);
 
   const verified = await resolveEmailBranding(sqlClient([
     {
@@ -333,6 +385,27 @@ test('sink mode always sinks and SES errors keep sink_fallback', async () => {
   });
   assert.equal(fallback.results[0].delivery, 'sink_fallback');
   assert.equal(fallback.results[0].status, 'failed');
+
+  process.env.AWS_EMAIL_MODE = 'ses';
+  let captured = null;
+  const tagged = await sendViaSesOrSink({
+    to: 'mcarletta@freedomadj.com',
+    subject: 'Tagged',
+    html: '<p>hello</p>',
+    text: 'hello',
+    tenantId: '11111111-1111-4111-8111-111111111111',
+    messageCategory: 'tenant_invite',
+    headers: { 'X-Claim-Number': 'CL-999', recipient: 'victim@example.com' },
+    sesSend: async (cmd) => {
+      captured = cmd;
+      return { MessageId: 'mid-1' };
+    },
+  });
+  assert.equal(tagged.results[0].status, 'sent');
+  const tags = captured?.input?.Tags || captured?.Tags || [];
+  assert.equal(tags.some((t) => t.Name === 'tenant_id' && t.Value === '11111111-1111-4111-8111-111111111111'), true);
+  assert.equal(tags.some((t) => t.Name === 'message_category' && t.Value === 'tenant_invite'), true);
+  assert.equal(tags.some((t) => /claim|recipient|email/i.test(t.Name) || /CL-999|victim@/i.test(String(t.Value))), false);
   process.env.AWS_EMAIL_MODE = prev;
 });
 
@@ -368,6 +441,8 @@ test('staging template names AWS_EMAIL_MODE=sink and does not grant SES', () => 
   assert.match(yaml, /AWS_EMAIL_ALLOWLIST_DOMAINS:/);
   assert.match(yaml, /AWS_EMAIL_ALLOWLIST_EXACT:/);
   assert.match(yaml, /AWS_MORTGAGE_OPS_EMAIL:/);
+  assert.match(yaml, /AWS_TENANT_EMAIL_DOMAIN_ENABLED:\s*"false"/);
+  assert.match(yaml, /AWS_SES_CONFIGURATION_SET:\s*""/);
   assert.doesNotMatch(yaml, /ses:SendEmail|ses:SendRawEmail|ses:/);
   const production = fs.readFileSync(path.join(ROOT, 'aws/production/api-execution-role.yaml'), 'utf8');
   assert.doesNotMatch(production, /ses:SendEmail|ses:SendRawEmail|ses:/);
