@@ -42,15 +42,59 @@ rejects duplicates; the proposed unique index is **not applied**.
 
 File: `aws/migrations/proposed/NOT_APPLIED_20260910_tenant_email_ses_domain.sql`
 
+The file is a **single transaction** (`BEGIN` … `COMMIT`). If the preflight, unique
+index, CHECK constraint, new columns, or rate-limit table fails, Postgres rolls
+the whole change back. It does **not** delete, merge, or rewrite conflicting
+`tenant_email_settings` rows.
+
 Adds:
 
+- Duplicate-domain preflight that raises listing only `normalized-domain (count)`
 - Unique index on `lower(sending_domain)` where non-null
 - `domain_status` values `verifying` and `disabled`
 - `last_checked_at`, `ses_identity_name`, `custom_sending_enabled`,
   `mail_from_domain`, `mail_from_records`
+- `tenant_email_action_rate_limits` for atomic per-tenant/user/action counters
 
-Runtime code degrades if those columns are missing (CHECK / undefined_column
-fallbacks). Do not apply this file in this PR.
+Runtime code degrades if SES metadata columns are missing. Mutating domain APIs
+**fail closed** if the rate-limit table is missing (they do not fall back to
+in-memory as the security control). Do not apply this file in this PR.
+
+### Read-only sending-domain preflight
+
+Run this before applying the unique index. It returns only normalized domains
+and duplicate counts — no tenant names, emails, or other PII.
+
+```sql
+SELECT lower(btrim(sending_domain)) AS domain, count(*)::int AS count
+FROM public.tenant_email_settings
+WHERE sending_domain IS NOT NULL AND btrim(sending_domain) <> ''
+GROUP BY 1
+HAVING count(*) > 1
+ORDER BY 1;
+```
+
+If this returns any rows, stop. Resolve duplicates with an explicit operator
+decision. Do not auto-delete or merge.
+
+## Durable rate limiting
+
+Mutating and SES-check actions (`domain_start`, `domain_check`, `domain_save`,
+`domain_disable`, `domain_delete`) consume `tenant_email_action_rate_limits`
+with `INSERT … ON CONFLICT` so concurrent Lambdas serialize on the primary key.
+The window uses Postgres `now()`, never a client timestamp. Denied responses
+include `retryAfterSec`. An in-memory Map is only a same-instance deny cache
+and cannot grant a request that the database would refuse.
+
+## Fail-closed audit
+
+Start, replace, save, verification status transitions, disable, and operator
+SES identity deletion insert `audit_logs` in the **same database transaction**
+as the settings change. If that insert fails, the handler returns
+`audit_unavailable` and `withIdentity` rolls back. Get and preview do not
+require audit. Payloads are a whitelist: normalized `sending_domain`,
+`replaced`, and enum `result`. No DKIM tokens, From/Reply-To, recipients,
+ARNs, account IDs, claims, or secrets.
 
 ## Feature flags (disabled defaults)
 
@@ -119,8 +163,8 @@ Verified:
 
 ## Deployment prerequisites (future — not this PR)
 
-1. Apply the additive migration in a dedicated, reviewed change.
-2. Confirm no duplicate `sending_domain` rows exist.
+1. Run the read-only sending-domain preflight query above. Stop if any duplicates exist.
+2. Apply the additive migration in a dedicated, reviewed change (one transaction).
 3. Set `AWS_TENANT_EMAIL_DOMAIN_ENABLED=true` only in the intended environment.
 4. Attach the narrow SES identity IAM actions above.
 5. Keep `AWS_EMAIL_MODE=sink` until send-enablement is separately approved.

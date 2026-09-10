@@ -12,6 +12,13 @@ import {
   resetDomainRateLimits,
   fallbackFromHeader,
   sesIdentityVerified,
+  consumeDurableRateLimit,
+  RATE_LIMITS,
+  assertSendingDomainUniquenessPreflight,
+  duplicateSendingDomainCounts,
+  SENDING_DOMAIN_PREFLIGHT_SQL,
+  CONSUME_RATE_LIMIT_SQL,
+  safeAuditPayload,
 } from '../functions/api/tenant-email-domain.mjs';
 import {
   runStartDomainVerification,
@@ -67,9 +74,28 @@ const mockSes = (overrides = {}) => {
   return adapter;
 };
 
+const createRateLimitStore = () => {
+  const rows = new Map();
+  let chain = Promise.resolve();
+  const locked = async (fn) => {
+    let release;
+    const wait = new Promise((resolve) => { release = resolve; });
+    const prev = chain;
+    chain = prev.then(() => wait, () => wait);
+    await prev;
+    try {
+      return await fn();
+    } finally {
+      release();
+    }
+  };
+  return { rows, locked };
+};
+
 const memoryClient = (opts = {}) => {
   const settings = new Map(opts.settings || []);
   const audits = [];
+  const rateLimitStore = opts.rateLimitStore || createRateLimitStore();
   const tenant = {
     id: TENANT,
     name: 'Freedom Adjustment',
@@ -84,14 +110,44 @@ const memoryClient = (opts = {}) => {
     systemRole: opts.systemRole || null,
     master: opts.master === true,
     otherDomain: opts.otherDomain || null,
+    failAudit: opts.failAudit === true,
     settings,
     audits,
     tenant,
+    rateLimitStore,
   };
+  let snapshot = null;
+  const cloneMap = (map) => new Map([...map].map(([key, value]) => [key, value && typeof value === 'object' ? { ...value } : value]));
+  const takeSnapshot = () => ({
+    settings: cloneMap(state.settings),
+    audits: state.audits.map((row) => ({ ...row })),
+    rateLimits: cloneMap(state.rateLimitStore.rows),
+  });
+  const restoreSnapshot = (snap) => {
+    state.settings.clear();
+    for (const [key, value] of snap.settings) state.settings.set(key, { ...value });
+    state.audits.splice(0, state.audits.length, ...snap.audits.map((row) => ({ ...row })));
+    state.rateLimitStore.rows.clear();
+    for (const [key, value] of snap.rateLimits) state.rateLimitStore.rows.set(key, { ...value });
+  };
+
   return {
     state,
     query: async (sql, params = []) => {
-      const compact = String(sql).replace(/\s+/g, ' ');
+      const compact = String(sql).replace(/\s+/g, ' ').trim();
+      if (compact === 'BEGIN') {
+        snapshot = takeSnapshot();
+        return { rows: [], rowCount: 0 };
+      }
+      if (compact === 'ROLLBACK') {
+        if (snapshot) restoreSnapshot(snapshot);
+        snapshot = null;
+        return { rows: [], rowCount: 0 };
+      }
+      if (compact === 'COMMIT') {
+        snapshot = null;
+        return { rows: [], rowCount: 0 };
+      }
       if (compact.includes('FROM public.tenants')) {
         return { rows: params[0] === TENANT ? [state.tenant] : [] };
       }
@@ -104,6 +160,30 @@ const memoryClient = (opts = {}) => {
       }
       if (compact.includes('is_master_owner')) {
         return { rows: [{ is_master: state.master }] };
+      }
+      if (compact.includes('tenant_email_action_rate_limits')) {
+        const tenantId = params[0];
+        const userId = params[1];
+        const action = params[2];
+        const windowSecs = Number(params[3] || 900);
+        return state.rateLimitStore.locked(() => {
+          const key = `${tenantId}:${userId}:${action}`;
+          const now = Date.now();
+          const prev = state.rateLimitStore.rows.get(key);
+          const expired = !prev || (now - prev.window_started_at) >= windowSecs * 1000;
+          const next = expired
+            ? { window_started_at: now, request_count: 1 }
+            : { window_started_at: prev.window_started_at, request_count: prev.request_count + 1 };
+          state.rateLimitStore.rows.set(key, next);
+          return {
+            rows: [{
+              request_count: next.request_count,
+              window_started_at: new Date(next.window_started_at).toISOString(),
+              server_now: new Date(now).toISOString(),
+            }],
+            rowCount: 1,
+          };
+        });
       }
       if (compact.includes('lower(sending_domain)')) {
         const domain = params[0];
@@ -119,9 +199,14 @@ const memoryClient = (opts = {}) => {
         return { rows: [] };
       }
       if (compact.includes('INSERT INTO public.audit_logs')) {
+        if (state.failAudit) {
+          const error = new Error('audit insert failed');
+          error.code = '57014';
+          throw error;
+        }
         const payload = { action: params[1], record_type: params[2], record_id: params[3], new_values: params[5], metadata: params[6] };
         const blob = JSON.stringify(payload);
-        if (/otp|secret|password|arn:aws|access.key/i.test(blob) && /AKIA|otp-|token=/.test(blob)) {
+        if (/otp|secret|password|arn:aws|access.key|dkim|tokena|@/i.test(blob) && /AKIA|otp-|token=|noreply@|claims@/i.test(blob)) {
           throw new Error(`audit leaked secret: ${blob.slice(0, 200)}`);
         }
         state.audits.push(payload);
@@ -151,6 +236,20 @@ const memoryClient = (opts = {}) => {
       return { rows: [], rowCount: 0 };
     },
   };
+};
+
+const withTx = async (client, fn) => {
+  await client.query('BEGIN');
+  try {
+    const result = await fn();
+    const status = Number(result?.statusCode || (result?.ok === false ? 400 : 200));
+    if (result?.ok !== false && status < 400) await client.query('COMMIT');
+    else await client.query('ROLLBACK');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  }
 };
 
 test('valid subdomain normalization and invalid domain rejection', () => {
@@ -466,9 +565,212 @@ test('class A registry includes branding routes; frontend never writes domain_st
     'utf8',
   );
   assert.match(proposed, /NOT APPLIED/);
+  assert.match(proposed, /^BEGIN;/m);
+  assert.match(proposed, /^COMMIT;/m);
+  assert.match(proposed, /RAISE EXCEPTION 'tenant_email_settings duplicate sending_domain values/);
+  assert.match(proposed, /tenant_email_action_rate_limits/);
+  assert.match(proposed, /now\(\)/);
+  assert.doesNotMatch(proposed, /client_timestamp|request_time|Date\.now/);
+  assert.match(CONSUME_RATE_LIMIT_SQL, /now\(\)/);
+  assert.match(SENDING_DOMAIN_PREFLIGHT_SQL, /HAVING count\(\*\) > 1/);
   assert.equal(sesIdentityVerified({
     VerificationStatus: 'SUCCESS',
     DkimAttributes: { Status: 'SUCCESS', SigningEnabled: true },
   }), true);
   assert.equal(fallbackFromHeader('Freedom Adjustment').includes('noreply@checksops.com'), true);
 });
+
+test('durable rate limits persist across instances and isolate tenant/user/action', async () => {
+  resetDomainRateLimits();
+  const store = createRateLimitStore();
+  const clientA = memoryClient({ rateLimitStore: store });
+  const clientB = memoryClient({ rateLimitStore: store });
+  const args = {
+    tenantId: TENANT,
+    userId: USER,
+    action: 'domain_start',
+    limit: RATE_LIMITS.domain_start.limit,
+    windowMs: RATE_LIMITS.domain_start.windowMs,
+  };
+  for (let i = 0; i < 4; i += 1) {
+    const allowed = await consumeDurableRateLimit(clientA, { ...args, memory: new Map() });
+    assert.equal(allowed.ok, true, `instance A hit ${i + 1}`);
+  }
+  const fifth = await consumeDurableRateLimit(clientB, { ...args, memory: new Map() });
+  assert.equal(fifth.ok, true);
+  assert.equal(fifth.source, 'database');
+  const sixth = await consumeDurableRateLimit(clientA, { ...args, memory: new Map() });
+  assert.equal(sixth.ok, false);
+  assert.ok(sixth.retryAfterSec >= 1);
+  assert.equal(sixth.source, 'database');
+
+  const otherTenant = await consumeDurableRateLimit(clientB, {
+    ...args,
+    tenantId: OTHER,
+    memory: new Map(),
+  });
+  assert.equal(otherTenant.ok, true);
+  const otherUser = await consumeDurableRateLimit(clientB, {
+    ...args,
+    userId: '66666666-6666-4666-8666-666666666666',
+    memory: new Map(),
+  });
+  assert.equal(otherUser.ok, true);
+  const otherAction = await consumeDurableRateLimit(clientB, {
+    ...args,
+    action: 'domain_check',
+    limit: RATE_LIMITS.domain_check.limit,
+    windowMs: RATE_LIMITS.domain_check.windowMs,
+    memory: new Map(),
+  });
+  assert.equal(otherAction.ok, true);
+
+  const queries = [];
+  const spy = memoryClient({ rateLimitStore: createRateLimitStore() });
+  const orig = spy.query;
+  spy.query = async (sql, params) => {
+    queries.push(params);
+    return orig(sql, params);
+  };
+  await consumeDurableRateLimit(spy, { ...args, memory: new Map() });
+  assert.equal(queries[0].length, 4);
+  assert.equal(queries[0][3], 900);
+  assert.equal(queries[0].some((value) => typeof value === 'string' && /\d{4}-\d{2}-\d{2}T/.test(value)), false);
+});
+
+test('concurrent requests cannot exceed the configured rate limit', async () => {
+  resetDomainRateLimits();
+  const store = createRateLimitStore();
+  const client = memoryClient({ rateLimitStore: store });
+  const results = await Promise.all(Array.from({ length: 12 }, () => consumeDurableRateLimit(client, {
+    tenantId: TENANT,
+    userId: USER,
+    action: 'domain_start',
+    limit: 5,
+    windowMs: 15 * 60 * 1000,
+    memory: new Map(),
+  })));
+  assert.equal(results.filter((row) => row.ok).length, 5);
+  assert.equal(results.filter((row) => !row.ok).length, 7);
+  assert.ok(results.filter((row) => !row.ok).every((row) => row.retryAfterSec >= 1));
+});
+
+test('duplicate-domain migration preflight stops safely without PII or rewrites', () => {
+  const rows = [
+    { sending_domain: 'Notify.Acme.test', tenant_name: 'Acme Corp', email: 'owner@acme.test' },
+    { sending_domain: 'notify.acme.test', tenant_name: 'Other LLC', email: 'other@evil.test' },
+    { sending_domain: 'mail.unique.test', tenant_name: 'Solo' },
+  ];
+  const dupes = duplicateSendingDomainCounts(rows);
+  assert.deepEqual(dupes, [{ domain: 'notify.acme.test', count: 2 }]);
+  assert.throws(
+    () => assertSendingDomainUniquenessPreflight(rows),
+    (error) => {
+      assert.equal(error.code, 'duplicate_sending_domain');
+      assert.match(error.message, /notify\.acme\.test \(2\)/);
+      assert.doesNotMatch(error.message, /Acme Corp|Other LLC|owner@|evil\.test|Solo/);
+      return true;
+    },
+  );
+  assert.equal(assertSendingDomainUniquenessPreflight([{ sending_domain: 'mail.unique.test' }]).ok, true);
+  const sql = fs.readFileSync(
+    path.join(ROOT, 'aws/migrations/proposed/NOT_APPLIED_20260910_tenant_email_ses_domain.sql'),
+    'utf8',
+  );
+  assert.match(sql, /Do not delete, merge,\n-- or rewrite rows|Does not delete, merge,\n-- or rewrite rows/i);
+  assert.doesNotMatch(sql, /DELETE FROM public\.tenant_email_settings/);
+  assert.doesNotMatch(sql, /UPDATE public\.tenant_email_settings[\s\S]{0,80}sending_domain/);
+});
+
+test('mutating operations roll back when audit insertion fails', async () => {
+  resetDomainRateLimits();
+  const client = memoryClient({ failAudit: true });
+  client.state.settings.set(TENANT, {
+    tenant_id: TENANT,
+    sending_domain: DOMAIN,
+    domain_status: 'verified',
+    sending_mode: 'custom',
+    custom_sending_enabled: true,
+    from_address: `noreply@${DOMAIN}`,
+  });
+  const disabled = await withTx(client, () => runDisableCustomSending({
+    client, mapping, body: { tenantId: TENANT }, spoof,
+  }));
+  assert.equal(disabled.statusCode, 503);
+  assert.equal(disabled.error, 'audit_unavailable');
+  assert.equal(client.state.settings.get(TENANT).domain_status, 'verified');
+  assert.equal(client.state.settings.get(TENANT).sending_mode, 'custom');
+  assert.equal(client.state.audits.length, 0);
+
+  const startClient = memoryClient({ failAudit: true });
+  const started = await withTx(startClient, () => runStartDomainVerification({
+    client: startClient,
+    mapping,
+    body: { tenantId: TENANT, domain: DOMAIN },
+    spoof,
+    sesv2: mockSes(),
+  }));
+  assert.equal(started.statusCode, 503);
+  assert.equal(started.error, 'audit_unavailable');
+  assert.equal(startClient.state.settings.get(TENANT), undefined);
+});
+
+test('read-only preview and get work without an audit write', async () => {
+  const client = memoryClient({ failAudit: true });
+  client.state.settings.set(TENANT, {
+    tenant_id: TENANT,
+    sending_mode: 'custom',
+    sending_domain: DOMAIN,
+    from_address: `noreply@${DOMAIN}`,
+    domain_status: 'pending',
+    from_name: 'Freedom Adjustment',
+    reply_to: 'claims@freedomadj.com',
+  });
+  const preview = await runPreviewEmailBranding({
+    client, mapping, body: { tenantId: TENANT }, spoof,
+  });
+  assert.equal(preview.ok, true);
+  assert.match(preview.html, /Signature request/);
+  const got = await runGetEmailBranding({
+    client, mapping, body: { tenantId: TENANT }, spoof,
+  });
+  assert.equal(got.ok, true);
+  assert.equal(client.state.audits.length, 0);
+});
+
+test('audit payloads omit DKIM tokens, addresses, ARNs, and secrets', async () => {
+  resetDomainRateLimits();
+  const client = memoryClient();
+  const started = await runStartDomainVerification({
+    client,
+    mapping,
+    body: {
+      tenantId: TENANT,
+      domain: DOMAIN,
+      fromName: 'Freedom Adjustment',
+      replyTo: 'claims@freedomadj.com',
+    },
+    spoof,
+    sesv2: mockSes(),
+  });
+  assert.equal(started.ok, true);
+  assert.equal(client.state.audits.length, 1);
+  const blob = JSON.stringify(client.state.audits);
+  assert.doesNotMatch(blob, /tokena|tokenb|tokenc|dkim/i);
+  assert.doesNotMatch(blob, /claims@freedomadj\.com|noreply@/);
+  assert.doesNotMatch(blob, /arn:aws|AKIA|otp|password|account/i);
+  assert.match(blob, /notify\.freedomadj\.com/);
+  const sanitized = safeAuditPayload({
+    sending_domain: DOMAIN,
+    from_address: 'noreply@notify.freedomadj.com',
+    reply_to: 'claims@freedomadj.com',
+    dkim: 'tokena',
+    token: 'secret-token',
+    arn: 'arn:aws:ses:us-east-1:123:identity/x',
+    result: 'pending',
+    replaced: false,
+    claim: 'CL-1',
+  });
+  assert.deepEqual(sanitized, { sending_domain: DOMAIN, result: 'pending', replaced: false });
+});
+

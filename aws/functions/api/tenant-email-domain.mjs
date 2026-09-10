@@ -409,33 +409,179 @@ export const findDomainOwner = async (client, domain, exceptTenantId = null) => 
   return rows[0] || null;
 };
 
-const buckets = new Map();
+/** Read-only duplicate preflight. Returns { domain, count } only — no tenant/PII. */
+export const SENDING_DOMAIN_PREFLIGHT_SQL = `
+SELECT lower(btrim(sending_domain)) AS domain, count(*)::int AS count
+FROM public.tenant_email_settings
+WHERE sending_domain IS NOT NULL AND btrim(sending_domain) <> ''
+GROUP BY 1
+HAVING count(*) > 1
+ORDER BY 1
+`;
 
-export const resetDomainRateLimits = () => buckets.clear();
-
-export const consumeRateLimit = (key, limit, windowMs) => {
-  const now = Date.now();
-  const bucket = buckets.get(key) || [];
-  const fresh = bucket.filter((ts) => now - ts < windowMs);
-  if (fresh.length >= limit) {
-    buckets.set(key, fresh);
-    return { ok: false, retryAfterSec: Math.ceil((windowMs - (now - fresh[0])) / 1000) };
+export const duplicateSendingDomainCounts = (rows = []) => {
+  const counts = new Map();
+  for (const row of rows) {
+    const domain = String(row?.sending_domain || row?.domain || '').trim().toLowerCase();
+    if (!domain) continue;
+    counts.set(domain, (counts.get(domain) || 0) + 1);
   }
-  fresh.push(now);
+  return [...counts.entries()]
+    .filter(([, count]) => count > 1)
+    .map(([domain, count]) => ({ domain, count }))
+    .sort((a, b) => a.domain.localeCompare(b.domain));
+};
+
+export const assertSendingDomainUniquenessPreflight = (rows = []) => {
+  const duplicates = duplicateSendingDomainCounts(rows);
+  if (!duplicates.length) return { ok: true, duplicates };
+  const listing = duplicates.map((row) => `${row.domain} (${row.count})`).join(', ');
+  const error = new Error(`tenant_email_settings duplicate sending_domain values: ${listing}`);
+  error.code = 'duplicate_sending_domain';
+  error.duplicates = duplicates;
+  throw error;
+};
+
+export const RATE_LIMITS = {
+  domain_start: { limit: 5, windowMs: 15 * 60 * 1000 },
+  domain_check: { limit: 20, windowMs: 15 * 60 * 1000 },
+  domain_save: { limit: 20, windowMs: 15 * 60 * 1000 },
+  domain_disable: { limit: 10, windowMs: 15 * 60 * 1000 },
+  domain_delete: { limit: 5, windowMs: 15 * 60 * 1000 },
+};
+
+export const CONSUME_RATE_LIMIT_SQL = `
+INSERT INTO public.tenant_email_action_rate_limits AS rl
+  (tenant_id, user_id, action, window_started_at, request_count)
+VALUES ($1::uuid, $2::uuid, $3::text, now(), 1)
+ON CONFLICT (tenant_id, user_id, action)
+DO UPDATE SET
+  window_started_at = CASE
+    WHEN rl.window_started_at <= (now() - make_interval(secs => $4::int))
+    THEN now()
+    ELSE rl.window_started_at
+  END,
+  request_count = CASE
+    WHEN rl.window_started_at <= (now() - make_interval(secs => $4::int))
+    THEN 1
+    ELSE rl.request_count + 1
+  END
+RETURNING request_count, window_started_at, now() AS server_now
+`;
+
+const memoryBuckets = new Map();
+
+export const resetDomainRateLimits = () => memoryBuckets.clear();
+
+const memoryKey = (tenantId, userId, action) => `${tenantId}:${userId}:${action}`;
+
+const peekMemoryRateLimit = (buckets, key, limit, windowMs, nowMs) => {
+  const fresh = (buckets.get(key) || []).filter((ts) => nowMs - ts < windowMs);
   buckets.set(key, fresh);
+  if (fresh.length >= limit) {
+    return { ok: false, retryAfterSec: Math.max(1, Math.ceil((windowMs - (nowMs - fresh[0])) / 1000)) };
+  }
   return { ok: true };
 };
 
-const AUDIT_REDACT = /otp|token|secret|password|authorization|credential|arn:aws|account[_-]?id|access[_-]?key/i;
+const noteMemoryRateLimit = (buckets, key, nowMs) => {
+  const hits = buckets.get(key) || [];
+  hits.push(nowMs);
+  buckets.set(key, hits);
+};
+
+const undefinedRelation = (error) => (
+  error?.code === '42P01'
+  || /relation .* does not exist/i.test(String(error?.message || ''))
+);
+
+/**
+ * Database-backed atomic rate limit. In-memory map is a first-pass deny
+ * optimization only and never grants access. Server clock comes from Postgres now().
+ */
+export const consumeDurableRateLimit = async (client, {
+  tenantId,
+  userId,
+  action,
+  limit,
+  windowMs,
+  memory = memoryBuckets,
+} = {}) => {
+  const key = memoryKey(tenantId, userId, action);
+  const nowMs = Date.now();
+  const local = peekMemoryRateLimit(memory, key, limit, windowMs, nowMs);
+  if (!local.ok) return { ok: false, retryAfterSec: local.retryAfterSec, source: 'memory' };
+
+  let row;
+  try {
+    const result = await client.query(CONSUME_RATE_LIMIT_SQL, [
+      tenantId,
+      userId,
+      action,
+      Math.max(1, Math.floor(windowMs / 1000)),
+    ]);
+    row = result.rows[0];
+  } catch (error) {
+    if (undefinedRelation(error) || undefinedColumn(error)) {
+      return { ok: false, retryAfterSec: 60, error: 'rate_limit_unavailable', source: 'database' };
+    }
+    throw error;
+  }
+  if (!row) {
+    return { ok: false, retryAfterSec: 60, error: 'rate_limit_unavailable', source: 'database' };
+  }
+  const count = Number(row.request_count || 0);
+  if (count > limit) {
+    const started = new Date(row.window_started_at || row.server_now || nowMs).getTime();
+    const retryAfterSec = Math.max(1, Math.ceil((started + windowMs - nowMs) / 1000));
+    noteMemoryRateLimit(memory, key, nowMs);
+    return { ok: false, retryAfterSec, source: 'database' };
+  }
+  noteMemoryRateLimit(memory, key, nowMs);
+  return { ok: true, count, source: 'database' };
+};
+
+/** @deprecated In-memory only — not the security control. Tests may still reset the cache. */
+export const consumeRateLimit = (key, limit, windowMs) => {
+  const now = Date.now();
+  const peeked = peekMemoryRateLimit(memoryBuckets, key, limit, windowMs, now);
+  if (!peeked.ok) return peeked;
+  noteMemoryRateLimit(memoryBuckets, key, now);
+  return { ok: true };
+};
+
+const AUDIT_REDACT = /otp|token|secret|password|authorization|credential|arn:aws|account[_-]?id|access[_-]?key|dkim|reply-?to|from_address|recipient|claim/i;
+const AUDIT_ALLOWED_KEYS = new Set(['sending_domain', 'replaced', 'result']);
+const AUDIT_ALLOWED_RESULTS = new Set([
+  'pending',
+  'verifying',
+  'verified',
+  'failed',
+  'disabled',
+  'identity_mismatch',
+  'ses_create_failed',
+]);
+
+const isUuid = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || ''));
 
 export const safeAuditPayload = (payload = {}) => {
   const out = {};
-  for (const [key, value] of Object.entries(payload)) {
-    if (AUDIT_REDACT.test(key)) continue;
-    if (typeof value === 'string' && AUDIT_REDACT.test(value)) continue;
-    if (typeof value === 'string' && value.includes('@') && key.toLowerCase().includes('email')) continue;
-    if (typeof value === 'string' && /arn:aws|[A-Z0-9]{16,}/.test(value) && /secret|arn|key/i.test(key)) continue;
-    out[key] = value;
+  for (const key of AUDIT_ALLOWED_KEYS) {
+    if (!(key in payload) || payload[key] == null) continue;
+    const value = payload[key];
+    if (key === 'replaced' && typeof value === 'boolean') {
+      out.replaced = value;
+      continue;
+    }
+    if (key === 'result' && AUDIT_ALLOWED_RESULTS.has(String(value))) {
+      out.result = String(value);
+      continue;
+    }
+    if (key === 'sending_domain') {
+      const domain = String(value || '').trim().toLowerCase();
+      if (!domain || domain.includes('@') || AUDIT_REDACT.test(domain) || /[\s/]/.test(domain)) continue;
+      out.sending_domain = domain.slice(0, 253);
+    }
   }
   return out;
 };
@@ -446,7 +592,7 @@ export const writeDomainAudit = async (client, mapping, {
   payload = {},
 }) => {
   try {
-    await client.query(
+    const result = await client.query(
       `INSERT INTO public.audit_logs (
          user_id, action, record_type, record_id, old_values, new_values, metadata
        ) VALUES (
@@ -456,17 +602,26 @@ export const writeDomainAudit = async (client, mapping, {
         mapping?.application_user_id || null,
         String(action || '').slice(0, 120),
         'tenant_email_domain',
-        String(tenantId || '').slice(0, 200),
+        isUuid(tenantId) ? String(tenantId) : null,
         null,
         JSON.stringify(safeAuditPayload(payload)),
-        JSON.stringify(safeAuditPayload({
-          tenant_id: tenantId,
-          actor_user_id: mapping?.application_user_id || null,
-        })),
+        JSON.stringify({
+          ...(isUuid(tenantId) ? { tenant_id: tenantId } : {}),
+          ...(isUuid(mapping?.application_user_id) ? { actor_user_id: mapping.application_user_id } : {}),
+        }),
       ],
     );
-  } catch {
-    // Audit must not break the domain workflow.
+    if (!result || (result.rowCount !== undefined && result.rowCount < 1 && !(result.rows || []).length)) {
+      const err = new Error('audit_failed');
+      err.code = 'audit_failed';
+      throw err;
+    }
+  } catch (error) {
+    if (error?.code === 'audit_failed') throw error;
+    const err = new Error('audit_failed');
+    err.code = 'audit_failed';
+    err.cause = error;
+    throw err;
   }
 };
 

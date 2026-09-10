@@ -12,7 +12,8 @@ import { renderChecksOpsEmail } from './email-layout.mjs';
 import {
   DEFAULT_FROM_LOCAL_PART,
   DOMAIN_STATUS,
-  consumeRateLimit,
+  RATE_LIMITS,
+  consumeDurableRateLimit,
   dkimRecordsFromTokens,
   displayNameIsUnsafe,
   fallbackFromHeader,
@@ -35,9 +36,6 @@ import {
   writeDomainAudit,
 } from './tenant-email-domain.mjs';
 
-const START_LIMIT = { limit: 5, windowMs: 15 * 60 * 1000 };
-const CHECK_LIMIT = { limit: 20, windowMs: 15 * 60 * 1000 };
-
 const missingTenant = (spoof) => ({
   ok: false,
   statusCode: 400,
@@ -52,13 +50,43 @@ const denied = (spoof, error = 'not_authorized') => ({
   spoofFieldsIgnored: spoof,
 });
 
-const rateLimited = (spoof, retryAfterSec) => ({
+const rateLimited = (spoof, retryAfterSec, error = 'rate_limited') => ({
   ok: false,
-  statusCode: 429,
-  error: 'rate_limited',
+  statusCode: error === 'rate_limit_unavailable' ? 503 : 429,
+  error,
   retryAfterSec,
   spoofFieldsIgnored: spoof,
 });
+
+const auditUnavailable = (spoof) => ({
+  ok: false,
+  statusCode: 503,
+  error: 'audit_unavailable',
+  spoofFieldsIgnored: spoof,
+});
+
+const requireActionRateLimit = async (client, mapping, tenantId, action, spoof) => {
+  const cfg = RATE_LIMITS[action];
+  if (!cfg) return null;
+  const rate = await consumeDurableRateLimit(client, {
+    tenantId,
+    userId: mapping.application_user_id,
+    action,
+    limit: cfg.limit,
+    windowMs: cfg.windowMs,
+  });
+  if (rate.ok) return null;
+  return rateLimited(spoof, rate.retryAfterSec, rate.error || 'rate_limited');
+};
+
+const commitDomainAudit = async (client, mapping, args, spoof) => {
+  try {
+    await writeDomainAudit(client, mapping, args);
+    return null;
+  } catch {
+    return auditUnavailable(spoof);
+  }
+};
 
 const featureDisabled = (spoof) => ({
   ok: false,
@@ -185,16 +213,19 @@ export const runSaveEmailBranding = async ({ client, mapping, body, spoof }) => 
   const existing = await loadTenantEmailSettings(client, resolved.tenantId);
   const domain = existing?.sending_domain || null;
   const fromAddress = domain ? `${local.localPart}@${domain}` : null;
+  const limited = await requireActionRateLimit(client, mapping, resolved.tenantId, 'domain_save', spoof);
+  if (limited) return limited;
   await upsertTenantEmailSettings(client, resolved.tenantId, {
     from_name: fromName,
     reply_to: reply.replyTo,
     from_address: fromAddress,
   });
-  await writeDomainAudit(client, mapping, {
+  const auditError = await commitDomainAudit(client, mapping, {
     action: 'tenant_email_branding_save',
     tenantId: resolved.tenantId,
     payload: { sending_domain: domain || null },
-  });
+  }, spoof);
+  if (auditError) return auditError;
   const row = await loadTenantEmailSettings(client, resolved.tenantId);
   return {
     ok: true,
@@ -236,12 +267,8 @@ export const runStartDomainVerification = async ({
   if (!reply.ok) {
     return { ok: false, statusCode: 400, error: reply.error, reason: reply.reason || null, spoofFieldsIgnored: spoof };
   }
-  const rate = consumeRateLimit(
-    `start:${resolved.tenantId}:${mapping.application_user_id}`,
-    START_LIMIT.limit,
-    START_LIMIT.windowMs,
-  );
-  if (!rate.ok) return rateLimited(spoof, rate.retryAfterSec);
+  const limited = await requireActionRateLimit(client, mapping, resolved.tenantId, 'domain_start', spoof);
+  if (limited) return limited;
 
   const owner = await findDomainOwner(client, parsed.domain, resolved.tenantId);
   if (owner) {
@@ -278,11 +305,12 @@ export const runStartDomainVerification = async ({
   } catch (error) {
     const name = String(error?.name || error?.Code || '');
     if (!/AlreadyExists/i.test(name)) {
-      await writeDomainAudit(client, mapping, {
+      const auditError = await commitDomainAudit(client, mapping, {
         action: 'tenant_email_domain_start_failed',
         tenantId: resolved.tenantId,
-        payload: { sending_domain: parsed.domain, error: 'ses_create_failed' },
-      });
+        payload: { sending_domain: parsed.domain, result: 'ses_create_failed' },
+      }, spoof);
+      if (auditError) return auditError;
       return {
         ok: false,
         statusCode: 502,
@@ -334,11 +362,12 @@ export const runStartDomainVerification = async ({
     throw error;
   }
 
-  await writeDomainAudit(client, mapping, {
+  const auditError = await commitDomainAudit(client, mapping, {
     action: replacing ? 'tenant_email_domain_replace' : 'tenant_email_domain_start',
     tenantId: resolved.tenantId,
     payload: { sending_domain: parsed.domain, replaced: replacing },
-  });
+  }, spoof);
+  if (auditError) return auditError;
 
   const row = await loadTenantEmailSettings(client, resolved.tenantId);
   return {
@@ -360,12 +389,8 @@ export const runCheckDomainVerification = async ({
 }) => {
   const resolved = await requireTenant(client, mapping, body, spoof, { configure: true });
   if (resolved.error) return resolved.error;
-  const rate = consumeRateLimit(
-    `check:${resolved.tenantId}:${mapping.application_user_id}`,
-    CHECK_LIMIT.limit,
-    CHECK_LIMIT.windowMs,
-  );
-  if (!rate.ok) return rateLimited(spoof, rate.retryAfterSec);
+  const limited = await requireActionRateLimit(client, mapping, resolved.tenantId, 'domain_check', spoof);
+  if (limited) return limited;
 
   const row = await loadTenantEmailSettings(client, resolved.tenantId);
   const storedDomain = String(row?.sending_domain || '').trim().toLowerCase();
@@ -373,11 +398,6 @@ export const runCheckDomainVerification = async ({
     return { ok: false, statusCode: 400, error: 'domain_not_configured', spoofFieldsIgnored: spoof };
   }
   if (String(row.domain_status || '').toLowerCase() === DOMAIN_STATUS.disabled) {
-    await writeDomainAudit(client, mapping, {
-      action: 'tenant_email_domain_check',
-      tenantId: resolved.tenantId,
-      payload: { sending_domain: storedDomain, result: 'disabled' },
-    });
     return {
       ok: true,
       statusCode: 200,
@@ -410,11 +430,12 @@ export const runCheckDomainVerification = async ({
       last_verification_error: 'identity_lookup_failed',
       custom_sending_enabled: false,
     });
-    await writeDomainAudit(client, mapping, {
+    const auditError = await commitDomainAudit(client, mapping, {
       action: 'tenant_email_domain_check',
       tenantId: resolved.tenantId,
       payload: { sending_domain: storedDomain, result: 'failed' },
-    });
+    }, spoof);
+    if (auditError) return auditError;
     const failed = await loadTenantEmailSettings(client, resolved.tenantId);
     return {
       ok: true,
@@ -440,11 +461,12 @@ export const runCheckDomainVerification = async ({
       last_verification_error: 'identity_mismatch',
       custom_sending_enabled: false,
     });
-    await writeDomainAudit(client, mapping, {
+    const auditError = await commitDomainAudit(client, mapping, {
       action: 'tenant_email_domain_check',
       tenantId: resolved.tenantId,
       payload: { sending_domain: storedDomain, result: 'identity_mismatch' },
-    });
+    }, spoof);
+    if (auditError) return auditError;
     const failed = await loadTenantEmailSettings(client, resolved.tenantId);
     return {
       ok: true,
@@ -479,11 +501,12 @@ export const runCheckDomainVerification = async ({
     sending_mode: verified ? 'custom' : (row.sending_mode || 'custom'),
   });
 
-  await writeDomainAudit(client, mapping, {
+  const auditError = await commitDomainAudit(client, mapping, {
     action: verified ? 'tenant_email_domain_verify' : 'tenant_email_domain_check',
     tenantId: resolved.tenantId,
     payload: { sending_domain: storedDomain, result: nextStatus },
-  });
+  }, spoof);
+  if (auditError) return auditError;
 
   const updated = await loadTenantEmailSettings(client, resolved.tenantId);
   return {
@@ -501,17 +524,20 @@ export const runCheckDomainVerification = async ({
 export const runDisableCustomSending = async ({ client, mapping, body, spoof }) => {
   const resolved = await requireTenant(client, mapping, body, spoof, { configure: true });
   if (resolved.error) return resolved.error;
+  const limited = await requireActionRateLimit(client, mapping, resolved.tenantId, 'domain_disable', spoof);
+  if (limited) return limited;
   const existing = await loadTenantEmailSettings(client, resolved.tenantId);
   await upsertTenantEmailSettings(client, resolved.tenantId, {
     sending_mode: 'platform',
     domain_status: DOMAIN_STATUS.disabled,
     custom_sending_enabled: false,
   });
-  await writeDomainAudit(client, mapping, {
+  const auditError = await commitDomainAudit(client, mapping, {
     action: 'tenant_email_domain_disable',
     tenantId: resolved.tenantId,
     payload: { sending_domain: existing?.sending_domain || null },
-  });
+  }, spoof);
+  if (auditError) return auditError;
   const row = await loadTenantEmailSettings(client, resolved.tenantId);
   return {
     ok: true,
@@ -532,6 +558,8 @@ export const runDeleteSesIdentity = async ({
   if (!resolved.access.canDeleteIdentity || !tenantSesIdentityDeleteEnabled()) {
     return denied(spoof, 'operator_delete_required');
   }
+  const limited = await requireActionRateLimit(client, mapping, resolved.tenantId, 'domain_delete', spoof);
+  if (limited) return limited;
   const domain = String(body.domain || body.sending_domain || '').trim().toLowerCase();
   const parsed = normalizeSendingDomain(domain);
   if (!parsed.ok) {
@@ -550,11 +578,12 @@ export const runDeleteSesIdentity = async ({
   const adapter = await resolveSesV2(sesv2);
   if (!adapter?.deleteEmailIdentity) return featureDisabled(spoof);
   await adapter.deleteEmailIdentity({ EmailIdentity: parsed.domain });
-  await writeDomainAudit(client, mapping, {
+  const auditError = await commitDomainAudit(client, mapping, {
     action: 'tenant_ses_identity_delete',
     tenantId: resolved.tenantId,
     payload: { sending_domain: parsed.domain },
-  });
+  }, spoof);
+  if (auditError) return auditError;
   return {
     ok: true,
     statusCode: 200,
