@@ -6,7 +6,8 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { withIdentityWrite } from './data.mjs';
 import { sendViaSesOrSink } from './email.mjs';
-import { defaultFromAddress } from './email-policy.mjs';
+import { resolveEmailBranding } from './email-branding.mjs';
+import { escapeHtml, renderChecksOpsEmail } from './email-layout.mjs';
 
 const TOKEN_EXPIRY_HOURS = 72;
 
@@ -20,43 +21,57 @@ export const signBaseUrl = () => String(
   || 'https://staging.checksops.com',
 ).replace(/\/$/, '');
 
-export const replaceMergeFields = (text, signer, request, signUrl, branding = {}) => {
+export const replaceMergeFields = (text, signer, request, signUrl, branding = {}, { html = false } = {}) => {
   const claim = request.claims || {};
+  const wrap = (value) => (html ? escapeHtml(value) : String(value ?? ''));
   return String(text || '')
-    .replace(/\{signer\.name\}/g, signer.signer_name || '')
-    .replace(/\{signer\.email\}/g, signer.signer_email || '')
-    .replace(/\{document\.name\}/g, request.document_name || '')
-    .replace(/\{claim\.number\}/g, claim.claim_number || 'N/A')
-    .replace(/\{claim\.policyholder\}/g, claim.policyholder_name || 'N/A')
-    .replace(/\{claim\.policy_number\}/g, claim.policy_number || 'N/A')
-    .replace(/\{company\.name\}/g, branding.company_name || 'ChecksOps')
-    .replace(/\{company\.email\}/g, branding.company_email || '')
-    .replace(/\{company\.phone\}/g, branding.company_phone || '')
-    .replace(/\{sign\.url\}/g, signUrl)
-    .replace(/\{sign\.expiry_hours\}/g, String(TOKEN_EXPIRY_HOURS));
+    .replace(/\{signer\.name\}/g, wrap(signer.signer_name || ''))
+    .replace(/\{signer\.email\}/g, wrap(signer.signer_email || ''))
+    .replace(/\{document\.name\}/g, wrap(request.document_name || ''))
+    .replace(/\{claim\.number\}/g, wrap(claim.claim_number || 'N/A'))
+    .replace(/\{claim\.policyholder\}/g, wrap(claim.policyholder_name || 'N/A'))
+    .replace(/\{claim\.policy_number\}/g, wrap(claim.policy_number || 'N/A'))
+    .replace(/\{company\.name\}/g, wrap(branding.company_name || branding.companyName || 'ChecksOps'))
+    .replace(/\{company\.email\}/g, wrap(branding.company_email || branding.replyTo || ''))
+    .replace(/\{company\.phone\}/g, wrap(branding.company_phone || ''))
+    .replace(/\{sign\.url\}/g, wrap(signUrl))
+    .replace(/\{sign\.expiry_hours\}/g, wrap(String(TOKEN_EXPIRY_HOURS)));
 };
 
 export const emailHtml = (signer, request, signUrl, branding = {}) => {
-  const companyName = branding.company_name || 'ChecksOps';
-  const headerColor = branding.esign_email_header_color || '#1a56db';
-  const buttonColor = branding.esign_email_button_color || '#1a56db';
   const rawBody = branding.esign_email_body
     || 'You have been requested to electronically sign a document. Please review the details below and click the button to proceed.';
-  const processedBody = replaceMergeFields(rawBody, signer, request, signUrl, branding).replace(/\n/g, '<br>');
+  const processedBody = replaceMergeFields(rawBody, signer, request, signUrl, branding, { html: true }).replace(/\n/g, '<br>');
   const claim = request.claims || {};
-  return `<!DOCTYPE html><html><body style="font-family:sans-serif;background:#f0f2f5;padding:24px;">
-  <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;">
-    <div style="background:${headerColor};color:#fff;padding:20px;text-align:center;font-weight:700;">${companyName}</div>
-    <div style="padding:24px;">
-      <p>Hello ${signer.signer_name || ''},</p>
-      <p>${processedBody}</p>
-      <p><strong>Document:</strong> ${request.document_name || ''}<br>
-      <strong>Claim #:</strong> ${claim.claim_number || 'N/A'}</p>
-      <p style="text-align:center;"><a href="${signUrl}" style="background:${buttonColor};color:#fff;padding:12px 28px;text-decoration:none;border-radius:6px;">Review &amp; Sign Document</a></p>
-      <p style="font-size:12px;color:#6b7280;">This link expires in ${TOKEN_EXPIRY_HOURS} hours.<br>${signUrl}</p>
-    </div>
-  </div>
-  </body></html>`;
+  const layout = renderChecksOpsEmail({
+    title: `Sign ${request.document_name || 'document'}`,
+    greeting: signer.signer_name ? `Hello ${signer.signer_name},` : 'Hello,',
+    bodyHtml: `<p style="margin:0 0 12px;font-size:15px;line-height:1.55;color:#334155;">${processedBody}</p>
+      <p style="margin:0 0 12px;font-size:15px;line-height:1.55;color:#334155;"><strong>Document:</strong> ${escapeHtml(request.document_name || '')}<br>
+      <strong>Claim #:</strong> ${escapeHtml(claim.claim_number || 'N/A')}</p>`,
+    ctaLabel: 'Review & Sign Document',
+    ctaUrl: signUrl,
+    fallbackUrl: signUrl,
+    expiresText: `This link expires in ${TOKEN_EXPIRY_HOURS} hours.`,
+    companySubtitle: branding.companySubtitle || branding.company_name || branding.companyName,
+    primaryColor: branding.esign_email_button_color || branding.primaryColor,
+    logoUrl: branding.logoUrl,
+  });
+  return layout.html;
+};
+
+export const emailText = (signer, request, signUrl, branding = {}) => {
+  const layout = renderChecksOpsEmail({
+    title: `Sign ${request.document_name || 'document'}`,
+    greeting: signer.signer_name ? `Hello ${signer.signer_name},` : 'Hello,',
+    paragraphs: [`Sign ${request.document_name || 'document'}`],
+    ctaLabel: 'Review & Sign Document',
+    ctaUrl: signUrl,
+    fallbackUrl: signUrl,
+    expiresText: `This link expires in ${TOKEN_EXPIRY_HOURS} hours.`,
+    companySubtitle: branding.companySubtitle || branding.company_name,
+  });
+  return layout.text;
 };
 
 const logEvent = async (client, row) => {
@@ -102,8 +117,8 @@ const loadClaimsContext = async (client, request) => {
   return {};
 };
 
-export const handleSendSignatureRequest = async (event) => withIdentityWrite(event, async ({
-  client, mapping, body, spoof,
+export const runSendSignatureRequest = async ({
+  client, mapping, body, spoof, send,
 }) => {
   const requestId = body.requestId || body.request_id;
   const skipEmail = body.skipEmail === true;
@@ -151,36 +166,21 @@ export const handleSendSignatureRequest = async (event) => withIdentityWrite(eve
     }
   }
 
-  let tenantFromOverride = null;
-  let tenantReplyTo = null;
-  if (tenantId) {
-    const tenant = (await client.query(
-      `SELECT name, logo_url, primary_color, is_system_tenant,
-              email_from_name, email_from_address, email_reply_to
-       FROM public.tenants WHERE id = $1::uuid LIMIT 1`,
-      [tenantId],
-    )).rows[0];
-    if (tenant?.email_from_address) {
-      const name = tenant.email_from_name || tenant.name || 'Notifications';
-      tenantFromOverride = `${name} <${tenant.email_from_address}>`;
-    }
-    tenantReplyTo = tenant?.email_reply_to || null;
-    if (tenant && tenant.is_system_tenant === false) {
-      if (tenant.name) branding.company_name = tenant.name;
-      if (tenant.logo_url) branding.letterhead_url = tenant.logo_url;
-      if (tenant.primary_color) {
-        branding.esign_email_header_color = tenant.primary_color;
-        branding.esign_email_button_color = tenant.primary_color;
-      }
-      if (tenant.email_reply_to) branding.company_email = tenant.email_reply_to;
-    }
-  }
-  if (senderOverride === 'checksops') {
-    tenantFromOverride = `ChecksOps <${defaultFromAddress()}>`;
-    tenantReplyTo = 'notify@checksops.com';
-    branding.company_name = 'ChecksOps';
-    branding.company_email = 'notify@checksops.com';
-  }
+  const resolved = await resolveEmailBranding(client, {
+    tenantId,
+    senderOverride,
+  });
+  branding.company_name = resolved.companyName;
+  branding.companyName = resolved.companyName;
+  branding.companySubtitle = resolved.companySubtitle;
+  branding.company_email = resolved.replyTo;
+  branding.replyTo = resolved.replyTo;
+  branding.primaryColor = resolved.primaryColor;
+  branding.logoUrl = resolved.logoUrl;
+  branding.esign_email_header_color = resolved.primaryColor;
+  branding.esign_email_button_color = resolved.primaryColor;
+  const mailFrom = resolved.from;
+  const mailReplyTo = resolved.replyTo;
 
   const claimId = request.claim_id || null;
   await logEvent(client, {
@@ -281,16 +281,17 @@ export const handleSendSignatureRequest = async (event) => withIdentityWrite(eve
     const rawSubject = branding.esign_email_subject || 'Action Required: Sign {document.name}';
     const subject = replaceMergeFields(rawSubject, signer, request, signUrl, branding);
     try {
-      const send = await sendViaSesOrSink({
+      const mailer = send || sendViaSesOrSink;
+      const sendResult = await mailer({
         to: signer.signer_email,
         subject,
         html,
-        text: `Sign ${request.document_name || 'document'}: ${signUrl}`,
-        from: tenantFromOverride || defaultFromAddress(),
-        replyTo: tenantReplyTo,
+        text: emailText(signer, request, signUrl, branding),
+        from: mailFrom,
+        replyTo: mailReplyTo,
       });
-      const messageId = send.results?.[0]?.messageId || null;
-      const delivery = send.results?.[0]?.delivery || send.mode;
+      const messageId = sendResult.results?.[0]?.messageId || null;
+      const delivery = sendResult.results?.[0]?.delivery || sendResult.mode;
       await client.query(
         `UPDATE public.signature_signers
          SET access_token = NULL, delivery_status = 'sent', email_sent_at = now(),
@@ -347,4 +348,8 @@ export const handleSendSignatureRequest = async (event) => withIdentityWrite(eve
     lovableConnector: false,
     spoofFieldsIgnored: spoof,
   };
-});
+};
+
+export const handleSendSignatureRequest = (event, deps = {}) => withIdentityWrite(event, (ctx) => (
+  runSendSignatureRequest({ ...ctx, send: deps.sendViaSesOrSink })
+), deps);

@@ -17,6 +17,10 @@ import {
   scopes,
 } from './moov-client.mjs';
 import { fail, jsonResult } from './caller.mjs';
+import { sendViaSesOrSink } from '../../email.mjs';
+import { renderTransactionalTemplate } from '../../email-templates.mjs';
+import { emailAssetOrigin, resolveEmailBranding } from '../../email-branding.mjs';
+import { normalizeEmail } from '../../email-policy.mjs';
 import {
   loadConnectedMethod,
   loadMoovAccount,
@@ -1267,22 +1271,93 @@ export const homeownerDeductiblePay = {
 };
 
 export const stakeholderResendVerification = {
-  run: async ({ client, body, ctx }) => {
+  run: async ({ client, body, ctx, send }) => {
     const id = body.stakeholder_account_id;
     if (!id) return fail('stakeholder_account_id is required', 400);
     const account = (await client.query(
-      `SELECT id, tenant_id, nickname, verification_recipient_email FROM public.stakeholder_accounts
+      `SELECT id, tenant_id, nickname, custname, verification_status, verification_recipient_email
+       FROM public.stakeholder_accounts
        WHERE id = $1::uuid AND tenant_id = $2::uuid`,
       [id, ctx.tenantId],
     )).rows[0];
     if (!account) return fail('Account not found', 404);
+
+    let to = normalizeEmail(body.recipient_email) || normalizeEmail(account.verification_recipient_email);
+    if (!to) {
+      let recipientRow = null;
+      try {
+        recipientRow = (await client.query(
+          `SELECT email FROM public.external_payment_recipients
+           WHERE stakeholder_account_id = $1::uuid
+           ORDER BY updated_at DESC NULLS LAST LIMIT 1`,
+          [id],
+        )).rows[0];
+      } catch {
+        recipientRow = (await client.query(
+          `SELECT email FROM public.external_payment_recipients
+           WHERE stakeholder_account_id = $1::uuid LIMIT 1`,
+          [id],
+        )).rows[0];
+      }
+      to = normalizeEmail(recipientRow?.email);
+    }
+    if (!to) {
+      return fail('No recipient email on file — edit the stakeholder and add their email first.', 400);
+    }
+
+    const token = randomUUID();
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    await client.query(
+      `UPDATE public.stakeholder_accounts
+       SET verification_token = $2,
+           verification_token_expires_at = $3::timestamptz,
+           verification_recipient_email = $4
+       WHERE id = $1::uuid`,
+      [id, token, expiresAt, to],
+    );
+
+    const verifyUrl = `${emailAssetOrigin()}/verify-account/${token}`;
+    const branding = await resolveEmailBranding(client, { tenantId: account.tenant_id });
+    const rendered = renderTransactionalTemplate('stakeholder-verify-account', {
+      nickname: account.nickname,
+      custname: account.custname,
+      verifyUrl,
+      branding,
+    });
+    const mailer = send || sendViaSesOrSink;
+    let sendResult;
+    try {
+      sendResult = await mailer({
+        to,
+        subject: rendered.subject,
+        html: rendered.html,
+        text: rendered.text,
+        from: branding.from,
+        replyTo: branding.replyTo,
+      });
+    } catch (error) {
+      return fail(String(error?.message || 'Failed to send verification email').slice(0, 240), 502, {
+        emailed: false,
+        liveProviderCalled: false,
+      });
+    }
+    const invoked = Array.isArray(sendResult?.results) && sendResult.results.length > 0;
+    if (!invoked) {
+      return fail('Verification email was not sent', 502, {
+        emailed: false,
+        liveProviderCalled: false,
+      });
+    }
+
     await client.query(
       `UPDATE public.stakeholder_accounts SET verification_sent_at = now() WHERE id = $1::uuid`,
       [id],
     );
+
     return jsonResult({
-      success: true, liveProviderCalled: false,
-      message: 'Verification email enqueue is preserved as a local side effect. AWS SES send is a separate notification tranche.',
+      success: true,
+      liveProviderCalled: false,
+      emailed: true,
     });
   },
 };

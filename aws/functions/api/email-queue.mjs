@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { withIdentity, parseBody, ignoredSpoof } from './data.mjs';
 import { sendViaSesOrSink } from './email.mjs';
 import { emailMode, normalizeEmail } from './email-policy.mjs';
+import { resolveEmailBranding } from './email-branding.mjs';
 import { loadDatabaseCredentials } from './secrets.mjs';
 import { buildWriteClientConfig, sanitizePublicError } from './db-health.mjs';
 import pg from 'pg';
@@ -96,11 +97,16 @@ const processBatch = async (client, batchSize, spoof) => {
   let sunk = 0;
   let sent = 0;
   for (const row of rows) {
+    const branding = row.tenant_id
+      ? await resolveEmailBranding(client, { tenantId: row.tenant_id })
+      : null;
     const send = await sendViaSesOrSink({
       to: row.recipient_email,
       subject: row.subject || 'ChecksOps notification',
       html: row.html_body || `<pre>${row.text_body || ''}</pre>`,
       text: row.text_body || '',
+      from: branding?.from,
+      replyTo: branding?.replyTo,
     });
     const primary = send.results[0] || {};
     const status = primary.delivery === 'ses' ? 'sent' : 'sunk';

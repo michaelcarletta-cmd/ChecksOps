@@ -81,6 +81,7 @@ const wrap = (handler) => async (event, deps = {}) => {
       const fetchImpl = deps.fetchImpl || fetch;
       const result = await withMoovContext({ ...ctx.moovContext, fetchImpl }, () => handler.run({
         client, mapping, claims, body, spoof, ctx, fetchImpl, event,
+        send: deps.sendViaSesOrSink,
       }));
       return {
         ...result,

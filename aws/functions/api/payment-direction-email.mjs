@@ -7,6 +7,7 @@ import { withIdentityWrite } from './data.mjs';
 import { sendViaSesOrSink } from './email.mjs';
 import { defaultFromAddress } from './email-policy.mjs';
 import { renderTransactionalTemplate } from './email-templates.mjs';
+import { resolveEmailBranding } from './email-branding.mjs';
 
 const safeQuery = async (client, sql, params = []) => {
   try {
@@ -32,6 +33,7 @@ export const buildPaymentDirectionEmail = ({
   requestUrl,
   companyName = 'ChecksOps',
   subject,
+  branding,
 }) => {
   const rendered = renderTransactionalTemplate('payment-direction-request', {
     policyholderName: policyholderName || 'Policyholder',
@@ -40,6 +42,7 @@ export const buildPaymentDirectionEmail = ({
     requestUrl,
     companyName,
     subject: subject || 'Payment direction needed for your insurance check',
+    branding,
   });
   return rendered;
 };
@@ -77,7 +80,8 @@ export const runSendPaymentDirectionRequest = async ({
     client,
     `SELECT company_name, company_email FROM public.company_branding LIMIT 1`,
   )).rows[0] || {};
-  const companyName = branding.company_name || 'ChecksOps';
+  const resolved = await resolveEmailBranding(client, { tenantId: claim.tenant_id });
+  const companyName = resolved.companySubtitle || resolved.companyName || branding.company_name || 'ChecksOps';
   const mail = buildPaymentDirectionEmail({
     policyholderName: claim.policyholder_name,
     claimNumber: claim.claim_number,
@@ -85,6 +89,7 @@ export const runSendPaymentDirectionRequest = async ({
     requestUrl,
     companyName,
     subject: body.subject,
+    branding: resolved,
   });
 
   if (!claim.policyholder_email) {
@@ -102,7 +107,8 @@ export const runSendPaymentDirectionRequest = async ({
     subject: mail.subject,
     html: mail.html,
     text: mail.text,
-    from: defaultFromAddress(),
+    from: resolved.from || defaultFromAddress(),
+    replyTo: resolved.replyTo,
   });
 
   await safeQuery(

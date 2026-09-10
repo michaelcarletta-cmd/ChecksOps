@@ -96,6 +96,14 @@ Globals:
         COGNITO_WEBAUTHN_ORIGIN: "https://staging.checksops.com"
         COGNITO_WEBAUTHN_RP_ID: "staging.checksops.com"
         SIGN_BASE_URL: "https://staging.checksops.com"
+        # Staging-safe application mail. Default is sink; do not grant email-send IAM here.
+        AWS_EMAIL_MODE: "sink"
+        AWS_EMAIL_FROM: "ChecksOps Staging <noreply@checksops.com>"
+        AWS_EMAIL_REPLY_TO: "support@checksops.com"
+        AWS_EMAIL_SINK_ADDRESS: "staging-sink@checksops.invalid"
+        AWS_EMAIL_ALLOWLIST_DOMAINS: "checksops.invalid,checksops.com,freedomadj.com"
+        AWS_EMAIL_ALLOWLIST_EXACT: "staging-master@checksops.invalid,mcarletta@freedomadj.com,checksops-tester@freedomadj.com"
+        AWS_MORTGAGE_OPS_EMAIL: "staging-mortgage-ops@checksops.invalid"
         CROSS_APP_BRIDGE_SECRET: !Ref CrossAppBridgeSecret
         AWS_COGNITO_MFA_PREFERRED: "false"
         # Preserve live staging write/workflow overlay behavior.
