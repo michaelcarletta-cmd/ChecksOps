@@ -1,0 +1,33 @@
+{
+  "phase": "M3b.7",
+  "captured_at": "2026-09-10T10:33:53.592Z",
+  "oauth": "PASS",
+  "freedom_account_get": "PASS",
+  "production_account_confirmed": true,
+  "new_secret_version_loaded": true,
+  "secret_version_id": "99f01662-2eb6-4668-bee8-f88a058f6d00",
+  "public_key_sha256_12": "3ad0839428e5",
+  "secret_key_sha256_12": "d37911db8a31",
+  "oauth_http": 200,
+  "origin_sent": "https://checksops.com",
+  "aid_fp": "694a303b…3878",
+  "caid_fp": "41cb5d67…2208",
+  "aud_includes_apex": true,
+  "freedom_account_fp": "60922058…de96",
+  "mode": "production",
+  "display_name": "Freedom Adjustment LLC",
+  "verification_status": "verified",
+  "extra_moov_gets": 0,
+  "flags": {
+    "AWS_PROVIDER_LIVE_READS_ENABLED": true,
+    "AWS_MOOV_ENABLED": false,
+    "AWS_PROVIDER_EXECUTION_ENABLED": false,
+    "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": false,
+    "AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED": false
+  },
+  "sql72": "NOT_APPLIED",
+  "provider_mutations": 0,
+  "money_moved": 0,
+  "lovable_changed": false,
+  "webhook_changed": false
+}
