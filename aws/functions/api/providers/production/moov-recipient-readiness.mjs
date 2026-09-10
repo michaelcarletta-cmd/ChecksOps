@@ -106,6 +106,43 @@ export const evaluateRecipientReady = ({
   };
 };
 
+/**
+ * Single live class for M6 diagnosis. Local last4 / bank_linked_at never make READY.
+ * Priority: restricted → action_required → kyc → tos → bank → payment method.
+ */
+export const classifyLiveRecipientClass = ({
+  local = {},
+  evaluation = {},
+  banks = [],
+} = {}) => {
+  if (evaluation.ready === true) return 'READY';
+  const blocked = evaluation.blocked || [];
+  const action = evaluation.action || [];
+  const reasons = evaluation.reasons || [];
+  if (blocked.includes('disabled') || blocked.includes('restricted')) return 'RESTRICTED';
+  if (action.includes('requirements_present') || blocked.includes('capability_errored')) return 'ACTION_REQUIRED';
+  if (action.some((row) => String(row).startsWith('verification_') && row !== 'verification_verified')) {
+    return 'AWAITING_KYC';
+  }
+  if (action.includes('tos_not_accepted')) return 'AWAITING_TOS';
+  const localLast4 = String(local.provider_last_four || local.last4 || '').replace(/\D/g, '');
+  const localClaimsBank = Boolean(local.bank_linked_at) || localLast4.length === 4;
+  const liveBankCount = (banks || []).length;
+  if (reasons.includes('account_missing')) {
+    return localClaimsBank ? 'BROKEN_LOCAL_SYNC' : 'OTHER_BLOCKER';
+  }
+  if (action.includes('bank_not_verified')) {
+    if (liveBankCount === 0) {
+      if (localClaimsBank) return 'BROKEN_LOCAL_SYNC';
+      return 'AWAITING_BANK';
+    }
+    return 'BANK_UNVERIFIED';
+  }
+  if (action.includes('receive_payment_method_missing')) return 'NO_ELIGIBLE_PAYMENT_METHOD';
+  if (blocked.includes('not_production') || reasons.includes('account_missing')) return 'OTHER_BLOCKER';
+  return 'OTHER_BLOCKER';
+};
+
 export const explainAwaitingBank = ({ local = {}, live = {} } = {}) => {
   const localLast4 = String(local.provider_last_four || local.last4 || '').replace(/\D/g, '');
   const localLinked = Boolean(local.bank_linked_at);

@@ -18,6 +18,11 @@ import {
   publicMoovErrorBody,
   fingerprintMoovId,
 } from './moov-client.mjs';
+import {
+  classifyLiveRecipientClass,
+  evaluateRecipientReady,
+  explainAwaitingBank,
+} from './moov-recipient-readiness.mjs';
 
 const UNTRUSTED_MOOV_KEYS = [
   'moov_account_id', 'moovAccountId', 'MOOV_ACCOUNT_ID',
@@ -194,15 +199,179 @@ const publicPaymentMethod = (row) => {
 const publicRecipient = (row) => {
   const last4Digits = String(row?.provider_last_four || '').replace(/\D/g, '');
   return {
+    recipient_id: row?.id || null,
+    display_name: row?.display_name || null,
     environment: row?.environment || null,
     onboarding_status: row?.onboarding_status || null,
     recipient_type: row?.recipient_type || null,
     bank_linked: Boolean(row?.bank_linked_at),
+    bank_linked_at: row?.bank_linked_at || null,
     last4: last4Digits.length === 4 ? last4Digits : null,
     provider_account_id_fp: fingerprintMoovId(row?.provider_account_id),
     provider_account_id_present: Boolean(row?.provider_account_id),
   };
 };
+
+const listOf = (json) => {
+  if (Array.isArray(json)) return json;
+  if (Array.isArray(json?.banks)) return json.banks;
+  if (Array.isArray(json?.bankAccounts)) return json.bankAccounts;
+  if (Array.isArray(json?.paymentMethods)) return json.paymentMethods;
+  if (Array.isArray(json?.capabilities)) return json.capabilities;
+  return [];
+};
+
+const publicLiveRecipientAccount = (account, accountId) => {
+  if (!account) {
+    return {
+      exists: false,
+      mode: null,
+      account_type: null,
+      verification_status: null,
+      disabled: null,
+      restricted: null,
+      blocking_requirements: null,
+      tos_accepted: null,
+      tos_accepted_at: null,
+      provider_account_id_fp: fingerprintMoovId(accountId),
+    };
+  }
+  return {
+    exists: true,
+    mode: account.mode || account.environment || null,
+    account_type: account.accountType || account.account_type || null,
+    verification_status: account.verification?.status || account.verificationStatus || null,
+    disabled: Boolean(account.disabled),
+    restricted: Boolean(account.restricted),
+    blocking_requirements: publicRequirements(account.requirements),
+    tos_accepted: publicTos(account.termsOfService, null).accepted,
+    tos_accepted_at: publicTos(account.termsOfService, null).accepted_at,
+    display_name: account.displayName
+      || account.profile?.individual?.name?.firstName
+      || account.profile?.business?.legalBusinessName
+      || null,
+    provider_account_id_fp: fingerprintMoovId(account.accountID || account.accountId || accountId),
+  };
+};
+
+export async function inventoryLiveProductionRecipients({
+  recipients = [],
+  secrets,
+  fetchImpl,
+  sandboxSkipped = true,
+} = {}) {
+  const inventories = [];
+  for (const local of recipients || []) {
+    const environment = String(local.environment || '').toLowerCase();
+    if (sandboxSkipped && environment === 'sandbox') {
+      inventories.push({
+        skipped: true,
+        reason: 'sandbox_recipient_excluded',
+        local: publicRecipient(local),
+        liveProviderCalled: false,
+        mutated: false,
+      });
+      continue;
+    }
+    if (environment && environment !== 'production') {
+      inventories.push({
+        skipped: true,
+        reason: `environment_${environment}_excluded`,
+        local: publicRecipient(local),
+        liveProviderCalled: false,
+        mutated: false,
+      });
+      continue;
+    }
+    if (!local.provider_account_id) {
+      const evaluation = evaluateRecipientReady({});
+      inventories.push({
+        skipped: false,
+        recipient_id: local.id,
+        display_name: local.display_name || null,
+        environment: local.environment || null,
+        local: publicRecipient(local),
+        liveProviderCalled: false,
+        mutated: false,
+        class: classifyLiveRecipientClass({ local, evaluation, banks: [] }),
+        readiness: evaluation,
+        explanation: explainAwaitingBank({ local, live: {} }),
+        local_vs_live: 'local_has_no_moov_account_id',
+      });
+      continue;
+    }
+    const accountId = local.provider_account_id;
+    const accountGet = await safeGet({
+      credentials: secrets.credentials,
+      path: `/accounts/${accountId}`,
+      scopes: [`/accounts/${accountId}/profile.read`],
+      fetchImpl,
+    });
+    const banksGet = await safeGet({
+      credentials: secrets.credentials,
+      path: `/accounts/${accountId}/bank-accounts`,
+      scopes: [`/accounts/${accountId}/bank-accounts.read`],
+      fetchImpl,
+    });
+    const methodsGet = await safeGet({
+      credentials: secrets.credentials,
+      path: `/accounts/${accountId}/payment-methods`,
+      scopes: [`/accounts/${accountId}/payment-methods.read`],
+      fetchImpl,
+    });
+    const capsGet = await safeGet({
+      credentials: secrets.credentials,
+      path: `/accounts/${accountId}/capabilities`,
+      scopes: [`/accounts/${accountId}/capabilities.read`],
+      fetchImpl,
+    });
+    const banks = listOf(banksGet.json);
+    const paymentMethods = listOf(methodsGet.json);
+    const capabilities = listOf(capsGet.json);
+    const live = {
+      account: accountGet.ok === true ? accountGet.json : null,
+      banks,
+      paymentMethods,
+      capabilities,
+    };
+    const evaluation = evaluateRecipientReady(live);
+    const klass = classifyLiveRecipientClass({ local, evaluation, banks });
+    const localLast4 = String(local.provider_last_four || '').replace(/\D/g, '');
+    const localClaimsBank = Boolean(local.bank_linked_at) || localLast4.length === 4;
+    let localVsLive = 'live_matches_awaiting_bank';
+    if (evaluation.ready) localVsLive = local.onboarding_status === 'ready' ? 'accurate' : 'stale_local_state';
+    else if (klass === 'BROKEN_LOCAL_SYNC') localVsLive = 'local_last4_without_live_verified_bank';
+    else if (klass === 'BANK_UNVERIFIED') localVsLive = 'incomplete_bank_verification';
+    else if (klass === 'NO_ELIGIBLE_PAYMENT_METHOD') localVsLive = 'missing_payment_method';
+    else if (klass === 'AWAITING_KYC' || klass === 'AWAITING_TOS') localVsLive = 'awaiting_bank_is_stale_or_incomplete';
+    else if (!localClaimsBank && klass === 'AWAITING_BANK') localVsLive = 'accurate';
+    inventories.push({
+      skipped: false,
+      recipient_id: local.id,
+      display_name: local.display_name || publicLiveRecipientAccount(live.account, accountId).display_name || null,
+      environment: 'production',
+      local: publicRecipient(local),
+      liveProviderCalled: true,
+      mutated: false,
+      live_gets: {
+        account: getSummary(accountGet),
+        banks: getSummary(banksGet),
+        payment_methods: getSummary(methodsGet),
+        capabilities: getSummary(capsGet),
+      },
+      live_account: publicLiveRecipientAccount(live.account, accountId),
+      live_banks: banks.map(publicBank),
+      live_payment_methods: paymentMethods.map(publicPaymentMethod),
+      live_capabilities: summarizeMoovCapabilities(capabilities),
+      class: klass,
+      ready: evaluation.ready === true,
+      readiness: evaluation,
+      explanation: explainAwaitingBank({ local, live }),
+      local_vs_live: localVsLive,
+    });
+  }
+  return inventories;
+}
 
 const centsOf = (...candidates) => {
   for (const candidate of candidates) {
@@ -569,6 +738,16 @@ export async function handleProductionMoovReadiness({
     paymentMethods: paymentMethodSummaries,
   });
   const recipients = classifyRecipientInventory(recipientSummaries);
+  const recipientLiveGets = body.recipient_live_gets === true || body.recipientLiveGets === true;
+  let liveRecipientInventory = null;
+  if (recipientLiveGets) {
+    liveRecipientInventory = await inventoryLiveProductionRecipients({
+      recipients: rdsRecipients,
+      secrets,
+      fetchImpl,
+      sandboxSkipped: true,
+    });
+  }
   const liveGets = {
     account: getSummary(accountGet),
     capabilities: getSummary(caps),
@@ -612,6 +791,10 @@ export async function handleProductionMoovReadiness({
     banks: bankSummaries,
     payment_methods: paymentMethodSummaries,
     local_recipients: recipientSummaries,
+    live_recipients: liveRecipientInventory,
+    recipient_live_gets: recipientLiveGets,
+    sandbox_recipient_used: false,
+    c1c_used: false,
     local_payment_methods: rdsMethods.map((row) => ({
       environment: row.environment || null,
       verification_status: row.verification_status || null,

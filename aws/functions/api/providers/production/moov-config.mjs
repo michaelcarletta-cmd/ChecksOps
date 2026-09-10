@@ -77,7 +77,7 @@ export async function loadTenantMoovRecipients(client, tenantId) {
   if (!tenantId) return [];
   return (await client.query(
     `SELECT id, tenant_id, provider, environment, onboarding_status,
-            recipient_type, provider_account_id, bank_linked_at, provider_last_four
+            recipient_type, display_name, provider_account_id, bank_linked_at, provider_last_four
      FROM public.external_payment_recipients
      WHERE tenant_id = $1::uuid AND provider = 'moov'
      ORDER BY environment, created_at
