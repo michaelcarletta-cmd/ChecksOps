@@ -28,8 +28,9 @@ AWS session JSON returns `token: null`, so `js.moov.io` / ToS Drop does **not** 
 | Main bundle | `assets/index-B-TxXkkm.js` |
 | Pay-setup chunk | `assets/RecipientPaymentSetup-B5c2YwKv.js` |
 | Bucket | `checksops-production-frontend-806168576068` |
-| Invalidation | `I5BQ7HWHLU3RP372R3V15Z644A` `/*` |
+| Invalidation | `I5BQ7HWHLU3RP372R3V15Z644A` `/*`, then `IAIAQGVTW638FT71IL3QHCM938` after SW kill |
 | S3 sync | assets + `index.html` only; **no** `--delete` |
+| PWA leftover | M6.2L Workbox `sw.js` still precached Lovable `index-DfbNbCW-.js`. Replaced with kill-switch `aws/cutover/m63d-sw-kill.js` so browsers drop that cache. |
 | Rollback | previous `index-C4XNMerU.js` + `RecipientPaymentSetup-DJHOGOAV.js` left in the bucket |
 
 ## Proofs (dummy tokens only; real link not opened)
@@ -37,12 +38,13 @@ AWS session JSON returns `token: null`, so `js.moov.io` / ToS Drop does **not** 
 | Check | Result |
 |---|---|
 | Dummy UUID | HTTP 404, `liveProviderCalled=false`, `token_consumed=false` |
+| Browser dummy page | `POST https://checksops.com/prep/public/moov-recipient-session` 404; `index-B-TxXkkm.js`; no `api.moov.io` |
 | Malformed `x` / PostgREST filter | HTTP 404 fail-closed |
 | `provider_account_id` spoof | HTTP 400 `untrusted_provider_config` |
 | Mutation flag on session POST | HTTP 400 `read_only_operation` |
 | Money flags | all execution flags **false**; live reads **true**; webhook dry-run **true** |
 | SQL72 | **NOT_APPLIED** |
-| Lambda overlay | not changed this phase |
+| Lambda overlay | sha `kXmSz1WkLtAIkwq5tj1z5UmoYZnWQRPtD5ra8Xh8rCU=` unchanged |
 
 Real recipient `secure_token` was not retrieved, printed, rotated, or posted.
 
