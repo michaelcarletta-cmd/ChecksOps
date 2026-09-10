@@ -437,6 +437,7 @@ test('authorization: member cannot configure, cross-tenant denied, platform owne
 test('frontend cannot set verified status on save', async () => {
   resetDomainRateLimits();
   const client = memoryClient();
+  const sesv2 = mockSes();
   client.state.settings.set(TENANT, {
     tenant_id: TENANT,
     sending_domain: DOMAIN,
@@ -456,6 +457,7 @@ test('frontend cannot set verified status on save', async () => {
       verified: true,
     },
     spoof,
+    sesv2,
   });
   assert.equal(saved.ok, true);
   assert.deepEqual(saved.ignoredClientFields.sort(), ['domain_status', 'sending_mode', 'verified']);
@@ -470,6 +472,7 @@ test('unsafe From display names are rejected; from must belong to verified domai
     mapping,
     body: { tenantId: TENANT, fromName: 'X\r\nBcc: evil@x.com' },
     spoof,
+    sesv2: mockSes(),
   });
   assert.equal(unsafe.statusCode, 400);
   assert.equal(unsafe.error, 'unsafe_from_name');
@@ -503,7 +506,7 @@ test('disable custom sending does not delete SES identity', async () => {
     client, mapping, body: { tenantId: TENANT }, spoof, sesv2,
   });
   const disabled = await runDisableCustomSending({
-    client, mapping, body: { tenantId: TENANT }, spoof,
+    client, mapping, body: { tenantId: TENANT }, spoof, sesv2,
   });
   assert.equal(disabled.disabled, true);
   assert.equal(disabled.sesIdentityDeleted, false);
@@ -518,6 +521,54 @@ test('disable custom sending does not delete SES identity', async () => {
     sesv2,
   });
   assert.equal(operator.statusCode, 403);
+});
+
+test('tenant-email mutations fail closed when the domain flag is disabled', async () => {
+  resetDomainRateLimits();
+  const prevDomain = process.env.AWS_TENANT_EMAIL_DOMAIN_ENABLED;
+  const prevDelete = process.env.AWS_TENANT_SES_IDENTITY_DELETE_ENABLED;
+  delete process.env.AWS_TENANT_EMAIL_DOMAIN_ENABLED;
+  process.env.AWS_TENANT_SES_IDENTITY_DELETE_ENABLED = 'true';
+  try {
+    const existing = {
+      tenant_id: TENANT,
+      sending_domain: DOMAIN,
+      domain_status: 'pending',
+      sending_mode: 'custom',
+      custom_sending_enabled: false,
+      from_name: 'Freedom Adjustment',
+      from_address: `noreply@${DOMAIN}`,
+    };
+    const body = { tenantId: TENANT, domain: DOMAIN, fromName: 'Hijack', replyTo: 'claims@freedomadj.com' };
+    const cases = [
+      ['domain_start', (client) => runStartDomainVerification({ client, mapping, body, spoof })],
+      ['domain_check', (client) => runCheckDomainVerification({ client, mapping, body: { tenantId: TENANT }, spoof })],
+      ['domain_save', (client) => runSaveEmailBranding({ client, mapping, body, spoof })],
+      ['domain_disable', (client) => runDisableCustomSending({ client, mapping, body: { tenantId: TENANT }, spoof })],
+      ['domain_delete', (client) => runDeleteSesIdentity({
+        client,
+        mapping,
+        body: { tenantId: TENANT, domain: DOMAIN },
+        spoof,
+      })],
+    ];
+    for (const [action, run] of cases) {
+      const client = memoryClient({ master: true, systemRole: 'admin' });
+      client.state.settings.set(TENANT, { ...existing });
+      const result = await run(client);
+      assert.equal(result.statusCode, 503, action);
+      assert.equal(result.error, 'tenant_email_domain_disabled', action);
+      assert.equal(result.ok, false, action);
+      assert.deepEqual(client.state.settings.get(TENANT), existing, action);
+      assert.equal(client.state.rateLimitStore.rows.size, 0, action);
+      assert.equal(client.state.audits.length, 0, action);
+    }
+  } finally {
+    if (prevDomain === undefined) delete process.env.AWS_TENANT_EMAIL_DOMAIN_ENABLED;
+    else process.env.AWS_TENANT_EMAIL_DOMAIN_ENABLED = prevDomain;
+    if (prevDelete === undefined) delete process.env.AWS_TENANT_SES_IDENTITY_DELETE_ENABLED;
+    else process.env.AWS_TENANT_SES_IDENTITY_DELETE_ENABLED = prevDelete;
+  }
 });
 
 test('preview uses shared layout and fallback keeps tenant logo/color', async () => {
@@ -967,7 +1018,7 @@ test('mutating operations roll back when audit insertion fails', async () => {
     from_address: `noreply@${DOMAIN}`,
   });
   const disabled = await withTx(client, () => runDisableCustomSending({
-    client, mapping, body: { tenantId: TENANT }, spoof,
+    client, mapping, body: { tenantId: TENANT }, spoof, sesv2: mockSes(),
   }));
   assert.equal(disabled.statusCode, 503);
   assert.equal(disabled.error, 'audit_unavailable');
