@@ -15,7 +15,7 @@
 
 Production CheckAlt execution reads **only** these production names. `CHECKALT_UAT_*` and `CHECKALT_SANDBOX_*` cannot satisfy the production path.
 
-## Required names (never values)
+## Required names for authenticate / process / poll (never values)
 
 | Name | Purpose |
 | --- | --- |
@@ -23,7 +23,12 @@ Production CheckAlt execution reads **only** these production names. `CHECKALT_U
 | `CHECKALT_PASSWORD` | FinCapture API login password |
 | `CHECKALT_FI_KEY` | Financial institution key sent as `fiKey` |
 | `CHECKALT_BASE_URL` | Production FinCapture HTTPS origin. Must not be `https://uatapi.checkalt.com` |
-| `CHECKALT_WEBHOOK_SECRET` | HMAC for `/webhooks/checkalt` (webhooks remain dry-run for the first transaction) |
+
+## Optional until live webhook verification
+
+| Name | Purpose |
+| --- | --- |
+| `CHECKALT_WEBHOOK_SECRET` | HMAC for `/webhooks/checkalt`. Not required for authenticate, deposit/process, or poll while `AWS_PROVIDER_WEBHOOK_DRY_RUN=true`. Required only when live webhook signature verification is enabled. |
 
 ## Not selected by the browser
 
@@ -31,4 +36,4 @@ Merchant, FI, depositor `sso_user_id`, and destination deposit account number ar
 
 ## Fail closed
 
-If `PROVIDER_SECRETS_ARN` is unset, the secret is missing, or any required production name is absent, the production adapter refuses before HTTP. UAT keys in `checksops/staging/providers` are ignored.
+If `PROVIDER_SECRETS_ARN` is unset, the secret is missing, or any HTTP-required production name is absent, the production adapter refuses before HTTP. A missing `CHECKALT_WEBHOOK_SECRET` does not block authenticate / process / poll. UAT keys in `checksops/staging/providers` are ignored.
