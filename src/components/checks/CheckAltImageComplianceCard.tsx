@@ -1,8 +1,6 @@
-import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { CHECK_IMAGES_BUCKET } from "@/lib/storageBuckets";
-import { prepareCheckAltDeposit } from "@/lib/prepareCheckAltDeposit";
 import {
   combineCheckAltCompliance,
   emptySide,
@@ -60,9 +58,6 @@ export function CheckAltImageComplianceCard({
   backImageDepositPath,
   onStatusChange,
 }: Props) {
-  const qc = useQueryClient();
-  const [preparing, setPreparing] = useState(false);
-  const [prepareError, setPrepareError] = useState<string | null>(null);
   const query = useQuery({
     queryKey: ["checkalt-image-compliance", checkId, frontImagePath, backImageDepositPath],
     queryFn: async () => {
@@ -75,42 +70,20 @@ export function CheckAltImageComplianceCard({
   const status = query.data;
   const overall = status?.overall ?? "FAIL";
 
-  const handlePrepare = async () => {
-    setPreparing(true);
-    setPrepareError(null);
-    try {
-      await prepareCheckAltDeposit(checkId);
-      await qc.invalidateQueries({ queryKey: ["checkalt-image-compliance", checkId] });
-    } catch (error) {
-      setPrepareError(error instanceof Error ? error.message : "Preparation failed");
-    } finally {
-      setPreparing(false);
-    }
-  };
-
   return (
     <div className="rounded-md border border-border/60 bg-background/40 p-2 mt-1 space-y-1">
       <div className="flex items-center justify-between text-xs font-medium">
-        <span>CHECKALT IMAGE COMPLIANCE</span>
-        <span className={overall === "PASS" ? "text-emerald-400" : "text-red-300"}>{overall}</span>
+        <span>Deposit image check</span>
+        <span className={overall === "PASS" ? "text-emerald-400" : "text-red-300"}>
+          {overall === "PASS" ? "Ready" : "Needs attention"}
+        </span>
       </div>
       <SideRow label="Front" report={status?.front ?? emptySide("front")} />
-      <SideRow label="Rear" report={status?.rear ?? emptySide("rear")} />
+      <SideRow label="Back" report={status?.rear ?? emptySide("rear")} />
       {overall !== "PASS" && (
-        <>
-          <p className="text-[10px] text-muted-foreground">
-            Official 1920×1080 JPEGs (25–300 KB) are required on both sides before deposit.
-          </p>
-          <button
-            type="button"
-            className="text-[10px] underline text-muted-foreground"
-            disabled={preparing}
-            onClick={handlePrepare}
-          >
-            {preparing ? "Preparing official images…" : "Prepare official 1920×1080 images"}
-          </button>
-          {prepareError && <p className="text-[10px] text-red-300">{prepareError}</p>}
-        </>
+        <p className="text-[10px] text-muted-foreground">
+          Deposit will prepare the front and back images automatically.
+        </p>
       )}
     </div>
   );

@@ -403,7 +403,7 @@ test('16. Command Center one-click cannot bypass official preparation', async ()
   assert.match(oneClick, /isCheckAltArtifactPath/);
   const ccc = fs.readFileSync(path.join(ROOT, 'src/pages/CheckCommandCenter.tsx'), 'utf8');
   assert.match(ccc, /CheckAltImageComplianceCard/);
-  assert.match(ccc, /runCheckAltOneClickSubmit/);
+  assert.match(ccc, /runCheckAltDepositClick/);
 });
 
 test('17-19. same process body, stored SHA equals decoded outbound, failure is zero HTTP', async () => {
@@ -684,16 +684,19 @@ test('Command Center cannot bypass official artifacts or the compliance card', a
   assert.equal(fetched, 0);
 
   const ccc = fs.readFileSync(path.join(ROOT, 'src/pages/CheckCommandCenter.tsx'), 'utf8');
-  assert.match(ccc, /checkAltImagePass/);
-  assert.match(ccc, /disabled=\{depositingWithCheckAlt \|\| !checkAltImagePass\}/);
   assert.match(ccc, /CheckAltImageComplianceCard/);
+  assert.match(ccc, /runCheckAltDepositClick/);
+  assert.doesNotMatch(ccc, /checkAltImagePass/);
+  assert.doesNotMatch(ccc, /!checkAltImagePass/);
   const start = ccc.indexOf('const handleDepositWithCheckAlt');
   const end = ccc.indexOf('const ensureDepositReadyBackImage', start);
-  const oneClickFn = end === -1 ? ccc.slice(start, start + 2500) : ccc.slice(start, end);
+  const oneClickFn = end === -1 ? ccc.slice(start, start + 3500) : ccc.slice(start, end);
   assert.doesNotMatch(oneClickFn, /prepare_deposit/);
   assert.doesNotMatch(oneClickFn, /assign_provider/);
-  assert.match(oneClickFn, /runCheckAltOneClickSubmit/);
+  assert.match(oneClickFn, /runCheckAltDepositClick/);
+  assert.match(oneClickFn, /requireStepUp/);
   const card = fs.readFileSync(path.join(ROOT, 'src/components/checks/CheckAltImageComplianceCard.tsx'), 'utf8');
-  assert.match(card, /Prepare official 1920/);
-  assert.match(card, /prepareCheckAltDeposit/);
+  assert.doesNotMatch(card, /Prepare official 1920/);
+  assert.doesNotMatch(card, /prepareCheckAltDeposit/);
+  assert.match(card, /Deposit will prepare the front and back images automatically/);
 });

@@ -28,6 +28,7 @@ test('class A registry includes remaining non-financial workflows', () => {
     'send-payment-direction-request',
     'admin-reset-totp',
     'bill-mortgage-handling',
+    'checkalt-deposit-preflight',
   ]) {
     assert.ok(CLASS_A_FUNCTIONS.has(name), name);
   }

@@ -1,4 +1,5 @@
 import { AWS_STAGING_AUTH_SESSION_KEY, awsApiBaseUrl, isAwsStaging } from "@/lib/awsStaging";
+import { normalizeTotpCode, totpUserFailureMessage } from "@/lib/totpCode";
 
 export type AwsMfaStatus = {
   totpEnrolled: boolean;
@@ -65,16 +66,35 @@ export const associateAwsTotp = async (email?: string | null) => {
   };
 };
 
+const totpBody = (
+  code: unknown,
+  extra: { actionKey?: string; tenantId?: string | null; checkId?: string | null } = {},
+) => {
+  const normalized = normalizeTotpCode(code);
+  if (!normalized.ok) {
+    throw new Error(totpUserFailureMessage({ message: normalized.error }));
+  }
+  return {
+    code: normalized.code,
+    action_key: extra.actionKey,
+    tenant_id: extra.tenantId || undefined,
+    check_intake_item_id: extra.checkId || undefined,
+  };
+};
+
+const postTotp = async (path: string, body: Record<string, unknown>) => {
+  try {
+    return await post(path, body);
+  } catch (error) {
+    throw new Error(totpUserFailureMessage(error));
+  }
+};
+
 export const verifyAwsTotp = async (
   code: string,
   extra: { actionKey?: string; tenantId?: string | null; checkId?: string | null } = {},
 ) => {
-  const payload = await post("/auth/mfa/verify", {
-    code,
-    action_key: extra.actionKey,
-    tenant_id: extra.tenantId || undefined,
-    check_intake_item_id: extra.checkId || undefined,
-  });
+  const payload = await postTotp("/auth/mfa/verify", totpBody(code, extra));
   return Boolean(payload.verified || payload.ok);
 };
 
@@ -84,12 +104,11 @@ export const stepUpAwsTotp = async (input: {
   tenantId?: string | null;
   checkId?: string | null;
 }) => {
-  const payload = await post("/auth/mfa/step-up", {
-    code: input.code,
-    action_key: input.actionKey || "deposit.submit",
-    tenant_id: input.tenantId || undefined,
-    check_intake_item_id: input.checkId || undefined,
-  });
+  const payload = await postTotp("/auth/mfa/step-up", totpBody(input.code, {
+    actionKey: input.actionKey || "deposit.submit",
+    tenantId: input.tenantId,
+    checkId: input.checkId,
+  }));
   return Boolean(payload.verified || payload.ok);
 };
 
