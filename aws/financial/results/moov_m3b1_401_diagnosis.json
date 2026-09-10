@@ -1,0 +1,62 @@
+{
+  "phase": "M3b.1-diagnose-401",
+  "captured_at": "2026-09-09T23:59:00Z",
+  "lambda_code_sha256": "neeseSZmQhQf95bLUq7w9GTMMO0r8k3Ms2250pi65Zc=",
+  "secret_values_printed": false,
+  "access_token_printed": false,
+  "money_moved": false,
+  "sql72_applied": false,
+  "lovable_changed": false,
+  "webhook_changed": false,
+  "classification": {
+    "primary": "B. WRONG PRODUCTION CREDENTIALS",
+    "secondary": ["F. ORIGIN/DOMAIN RESTRICTION", "C. WRONG PLATFORM/ACCOUNT RELATIONSHIP"],
+    "not": ["A. CLIENT HEADER BUG", "D. MISSING MOOV SCOPE/PERMISSION", "E. WRONG/STALE Freedom provider_account_id as primary", "G. UNKNOWN"]
+  },
+  "flags": {
+    "AWS_PROVIDER_LIVE_READS_ENABLED": true,
+    "AWS_MOOV_ENABLED": false,
+    "AWS_PROVIDER_EXECUTION_ENABLED": false,
+    "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": false,
+    "AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED": false
+  },
+  "money_routes": {
+    "moov-transfer-create": {"http": 403, "error": "production_execution_blocked", "liveProviderCalled": false},
+    "moov-disburse": {"http": 403, "error": "production_execution_blocked", "liveProviderCalled": false}
+  },
+  "oauth": {
+    "http": 200,
+    "token_type": "Bearer",
+    "scope_returned": "/accounts/{id}/profile.read",
+    "origin_sent": "https://checksops.com",
+    "authorization_scheme": "Basic"
+  },
+  "jwt": {
+    "looks_like_jwt": true,
+    "aud": [
+      "https://staging.checksops.com",
+      "https://www.checksops.com",
+      "https://api.moov.io",
+      "https://cards.moov.io",
+      "https://api.moov.money"
+    ],
+    "apex_checksops_com_in_aud": false,
+    "iss": "https://api.moov.io#applications",
+    "aid_fp": "2a945f55…9e51",
+    "caid_fp": "36b79957…47bb",
+    "freedom_provider_account_id_fp": "60922058…de96",
+    "caid_is_sandbox_platform": true,
+    "caid_matches_freedom": false
+  },
+  "get_account": {
+    "http": 401,
+    "authorization_scheme": "Bearer",
+    "origin_sent": "https://checksops.com",
+    "api_version": "v2024.01.00",
+    "body_bytes": 0,
+    "www_authenticate": null
+  },
+  "retry_one_get": "NO-GO",
+  "code_change_required_for_401": false,
+  "dashboard_action_required": true
+}
