@@ -1,0 +1,24 @@
+{
+  "phase": "M3b.4",
+  "captured_at": "2026-09-10T09:31:20.752Z",
+  "secret_copy": "NOT_PERFORMED",
+  "reason": "HUMAN_SECRET_COPY_REQUIRED",
+  "moov_http": false,
+  "oauth": "not_attempted",
+  "account_get": "not_attempted",
+  "secret_values_printed": false,
+  "aws_secret_last_changed": "2026-09-10T01:22:23.422000+00:00",
+  "flags": {
+    "AWS_PROVIDER_LIVE_READS_ENABLED": true,
+    "AWS_MOOV_ENABLED": false,
+    "AWS_PROVIDER_EXECUTION_ENABLED": false,
+    "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": false,
+    "AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED": false
+  },
+  "sql72": "NOT_APPLIED",
+  "money_moved": false,
+  "lovable_changed": false,
+  "webhook_changed": false,
+  "go_nogo_oauth": "NO-GO",
+  "go_nogo_money": "NO-GO"
+}
