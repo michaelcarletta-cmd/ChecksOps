@@ -156,7 +156,7 @@ export function EmailSenderSettings() {
         .eq("tenant_id", tenantId!)
         .maybeSingle();
       if (error) throw error;
-      return { settings: (data as EmailSettings | null), branding: null };
+      return { settings: (data as unknown as EmailSettings | null), branding: null };
     },
   });
 

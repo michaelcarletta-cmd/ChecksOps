@@ -213,7 +213,10 @@ export async function runCheckAltDepositClick(
       title: "Deposit Verification",
       description: "Enter the current 6-digit code from your authenticator app to authorize this deposit.",
     });
-    if (!built.ok) return fail(built.message, { prepared: true, error: built.error });
+    if (!built.ok) {
+      const b = built as { message?: string; error?: string };
+      return fail(b.message ?? "Two-factor verification is required.", { prepared: true, error: b.error });
+    }
     const verified = await deps.requireStepUp(built.request);
     if (!verified) {
       return fail("Two-factor verification is required before money can move.", {
