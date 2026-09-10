@@ -1,0 +1,76 @@
+{
+  "phase": "M6.1",
+  "identity": {
+    "account": "806168576068",
+    "role_session": "ChecksOpsCursorCloudStaging/checksops-m61-live-get",
+    "region": "us-east-1"
+  },
+  "overlay": {
+    "before_sha": "ItJiyRVnWJZ2DIUce3ZhalFn3LrZrkKMSXdpP6MJo50=",
+    "before_revision": "4f691823-ea28-4407-b0d5-3bc2e34b247e",
+    "overlay_sha": "WEkx79XAKBbAbi9AeFWl2PG8hhqB6UIGg0ye5aSkESE=",
+    "restored_sha": "ItJiyRVnWJZ2DIUce3ZhalFn3LrZrkKMSXdpP6MJo50=",
+    "restored_revision": "0735f9a2-65e7-454c-9c6a-acf4f4d260ef",
+    "sha_restored": true,
+    "env_blob_sent": false,
+    "flags_before": {
+      "AWS_MOOV_ENABLED": "false",
+      "AWS_PROVIDER_EXECUTION_ENABLED": "false",
+      "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": "false",
+      "AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED": "false",
+      "AWS_PROVIDER_LIVE_READS_ENABLED": "true",
+      "AWS_PROVIDER_WEBHOOK_DRY_RUN": "true",
+      "AWS_MOOV_ONBOARDING_WRITES_ENABLED": null,
+      "AWS_MOOV_WEBHOOK_APPLY_ENABLED": null,
+      "AWS_LOVABLE_MONEY_NEUTRALIZED": null
+    },
+    "flags_after": {
+      "AWS_MOOV_ENABLED": "false",
+      "AWS_PROVIDER_EXECUTION_ENABLED": "false",
+      "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": "false",
+      "AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED": "false",
+      "AWS_PROVIDER_LIVE_READS_ENABLED": "true",
+      "AWS_PROVIDER_WEBHOOK_DRY_RUN": "true",
+      "AWS_MOOV_ONBOARDING_WRITES_ENABLED": null,
+      "AWS_MOOV_WEBHOOK_APPLY_ENABLED": null,
+      "AWS_LOVABLE_MONEY_NEUTRALIZED": null
+    },
+    "flags_unchanged": true,
+    "files": [
+      "moov-read.mjs",
+      "moov-recipient-readiness.mjs",
+      "moov-config.mjs"
+    ]
+  },
+  "readiness_http": 200,
+  "mutated": false,
+  "productionExecution": false,
+  "recipient_live_gets": true,
+  "sandbox_recipient_used": false,
+  "c1c_used": false,
+  "tenant_id_server_derived": true,
+  "error": null,
+  "spoof": {
+    "http": 400,
+    "error": "untrusted_provider_config",
+    "liveProviderCalled": false
+  },
+  "c1c": {
+    "http": 403,
+    "error": "cross_tenant_denied",
+    "liveProviderCalled": false
+  },
+  "money": {
+    "create": {
+      "http": 403,
+      "error": "production_execution_blocked",
+      "liveProviderCalled": false
+    },
+    "disburse": {
+      "http": 403,
+      "error": "production_execution_blocked",
+      "liveProviderCalled": false
+    }
+  },
+  "note": "Recipient payloads redacted. See aws/financial/moov_m6_1_live_readiness.json"
+}
