@@ -1,0 +1,26 @@
+{
+  "phase": "M6.2N-A",
+  "date": "2026-09-10",
+  "get_only": true,
+  "lambda_restored": true,
+  "sha_restored": "QeWQ4l/klRdo7IsfNTb1GYw0kWlLmxFu0DhGT0fHAvQ=",
+  "oauth": { "http": 200, "has_access_token": true, "aid_fp": "694a303b…3878", "public_key_fp12": "3ad0839428e5", "origin": "https://checksops.com" },
+  "account_get": { "sent": true, "http": 200, "ok": true },
+  "account_exists": true,
+  "aws_authorized": true,
+  "environment": "production",
+  "account_type": "individual",
+  "kyc_status": "unverified",
+  "tos_status": "empty",
+  "outstanding_requirements": {
+    "send_funds": "pending",
+    "transfers": "enabled",
+    "m62a_currently_due": ["account.tos-acceptance", "individual.address", "individual.birthdate", "individual.ssn"]
+  },
+  "provider_mutations": 0,
+  "db_mutations": 0,
+  "money_moved": "$0.00",
+  "lovable_edge_mismatch_proven": true,
+  "next_step": "Deploy M6.2N classifier (#209) or review Lovable Edge MOOV_* against AWS production app 694a303b / key fp 3ad0839428e5. Do not reopen the pay-setup link yet.",
+  "go_nogo": "NO-GO reopen link / NO-GO money. Diagnosis complete."
+}
