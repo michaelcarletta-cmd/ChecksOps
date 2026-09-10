@@ -209,7 +209,7 @@ export const renderTransactionalTemplate = (name, data = {}) => {
         title: `You're invited to ${data.tenantName || 'ChecksOps'}`,
         paragraphs: [
           `You have been invited as ${data.role || 'a member'}.`,
-          'Sign in with a passwordless email code — no temporary password is sent in this message.',
+          'Sign in with a passwordless email code.',
         ],
         ctaLabel: 'Sign in',
         ctaUrl: data.loginUrl,
@@ -223,7 +223,6 @@ export const renderTransactionalTemplate = (name, data = {}) => {
         greeting: data.fullName ? `Hi ${data.fullName},` : 'Hi,',
         paragraphs: [
           'Your Mortgage Ops account is ready. Sign in with a passwordless email code.',
-          'No temporary password is included in this message.',
         ],
         ctaLabel: 'Sign in to Mortgage Ops',
         ctaUrl: data.loginUrl,
@@ -251,7 +250,6 @@ export const renderTransactionalTemplate = (name, data = {}) => {
           data.userType
             ? `Your ${data.userType} portal account is ready. Sign in with a passwordless email code.`
             : 'Your portal account is ready. Sign in with a passwordless email code.',
-          'No temporary password is included in this message.',
         ],
         ctaLabel: 'Open portal',
         ctaUrl: data.loginUrl || data.portalUrl,

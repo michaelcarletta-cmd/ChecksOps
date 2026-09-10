@@ -548,7 +548,8 @@ test('hire-mortgage-agent and tenant invite stay SUPPRESS and never leak passwor
     assert.equal(JSON.stringify(hire).includes(issuedHire), false);
     assert.equal(JSON.stringify(sent).includes(issuedHire), false);
     assert.match(sent[0].html, /mortgage-ops\/login/);
-    assert.doesNotMatch(sent[0].html, /temporary password/i);
+    assert.equal(sent[0].html.toLowerCase().includes(issuedHire.toLowerCase()), false);
+    assert.doesNotMatch(sent[0].html, /TemporaryPassword|temp_password|tempPassword/);
 
     const invite = await runTenantInviteUser({
       mapping,
@@ -583,7 +584,7 @@ test('hire-mortgage-agent and tenant invite stay SUPPRESS and never leak passwor
     assert.ok(issuedInvite);
     assert.equal(JSON.stringify(invite).includes(issuedInvite), false);
     assert.equal(JSON.stringify(sent[1]).includes(issuedInvite), false);
-    assert.doesNotMatch(sent[1].html, /temporary password/i);
+    assert.doesNotMatch(sent[1].html, /TemporaryPassword|temp_password|tempPassword/);
     assert.equal(logs.some((line) => line.includes(issuedHire) || line.includes(issuedInvite)), false);
   } finally {
     console.log = origLog;
