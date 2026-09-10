@@ -233,11 +233,17 @@ test('Command Center CheckAlt click performs zero prepare/assign when AWS is dis
   assert.doesNotMatch(oneClick, /supabase\.rpc/);
   assert.doesNotMatch(oneClick, /p_action:\s*["']prepare_deposit["']/);
   assert.doesNotMatch(oneClick, /p_action:\s*["']assign_provider["']/);
+  assert.match(oneClick, /prepareCheckAltDeposit/);
+  assert.match(oneClick, /checkalt\\.jpe\?g/);
 
   const result = await runCheckAltOneClickSubmit('623442f0-a408-4db5-85be-14bae231a722', {
     authProvider: 'cognito',
     apiBaseUrl: '/prep',
     idToken: 'test-token',
+    prepareCheckAltDeposit: async () => ({
+      deposit_front_path: 'checks/x/front.checkalt.jpg',
+      deposit_back_path: 'checks/x/back.checkalt.jpg',
+    }),
     fetchImpl: async () => ({ ok: false, json: async () => ({ error: 'provider_disabled' }) }),
   });
   assert.equal(result.error?.message, 'provider_disabled');

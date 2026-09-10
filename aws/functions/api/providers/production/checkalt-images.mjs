@@ -1,19 +1,22 @@
+import { isJpegMagic } from '../parity/checkalt-image.mjs';
 import {
-  inspectOriented,
-  isAllowedPreparedPath,
-  isAlreadyDepositReady,
-  isJpegMagic,
-  isRasterPath,
-} from '../parity/checkalt-image.mjs';
+  CHECKALT_IMAGE_ERROR,
+  bytesToBase64,
+  evaluateCheckAltImageCompliance,
+  failCheckAltImageCompliance,
+  isAllowedCheckAltArtifactPath,
+  isCheckAltArtifactPath,
+  resolveCheckAltArtifactPaths,
+  sha256,
+} from './checkalt-image-compliance.mjs';
 
-const isSvgPath = (path) => /\.svg(\?|$)/i.test(String(path || ''));
+export const MAX_TOTAL_B64_CHARS = 1_600_000;
+
 const isSvgBytes = (bytes) => {
   if (!bytes || !bytes.length) return false;
   const head = Buffer.from(bytes).subarray(0, 64).toString('utf8').trim().toLowerCase();
   return head.startsWith('<svg') || head.includes('<svg');
 };
-
-export const MAX_TOTAL_B64_CHARS = 1_600_000;
 
 export const imageFail = (error, extra = {}) => ({
   ok: false,
@@ -41,33 +44,22 @@ export async function downloadClaimFileBytes(path, deps = {}) {
   return Buffer.concat(chunks);
 }
 
-const assertDepositJpeg = async (bytes, side) => {
+const assertCompliantJpeg = async (bytes, side) => {
   if (!bytes || !bytes.length) {
-    return imageFail(`${side}_image_missing`, {
-      side,
-      message: `${side} deposit JPEG is missing. Fail closed before CheckAlt HTTP.`,
+    return failCheckAltImageCompliance(side, `${side}_missing`);
+  }
+  if (isSvgBytes(bytes) || !isJpegMagic(bytes)) {
+    return failCheckAltImageCompliance(side, `${side}_invalid_jpeg`);
+  }
+  const report = evaluateCheckAltImageCompliance(bytes, side);
+  if (!report.pass) {
+    return failCheckAltImageCompliance(side, report.reason, {
+      width: report.width,
+      height: report.height,
+      bytes: report.bytes,
     });
   }
-  if (isSvgBytes(bytes)) {
-    return imageFail(`${side}_image_svg`, {
-      side,
-      message: `${side} image is SVG. CheckAlt requires a deposit-ready JPEG.`,
-    });
-  }
-  if (!isJpegMagic(bytes)) {
-    return imageFail(`${side}_image_not_jpeg`, {
-      side,
-      message: `${side} prepared image is not a JPEG.`,
-    });
-  }
-  const info = await inspectOriented(bytes);
-  if (!isAlreadyDepositReady(info)) {
-    return imageFail('browser_prepare_required', {
-      side,
-      message: `${side} check image must be a deposit-ready JPEG before submission.`,
-    });
-  }
-  return { ok: true, bytes, info };
+  return { ok: true, bytes, report };
 };
 
 export async function loadProductionDepositImages(check, body = {}, deps = {}) {
@@ -77,47 +69,52 @@ export async function loadProductionDepositImages(check, body = {}, deps = {}) {
       message: 'Browser-supplied image bytes are ignored. Server loads deposit JPEGs from S3.',
     });
   }
-  const depositFrontPath = body.deposit_front_path || null;
-  const depositBackPath = body.deposit_back_path || null;
-  if (depositFrontPath && !isAllowedPreparedPath(check, depositFrontPath)) {
+
+  const resolved = resolveCheckAltArtifactPaths(check, body);
+  if (!resolved.front || !isCheckAltArtifactPath(resolved.front)) {
+    return failCheckAltImageCompliance('front', 'front_missing');
+  }
+  if (!resolved.rear || !isCheckAltArtifactPath(resolved.rear)) {
+    return failCheckAltImageCompliance('rear', 'rear_missing');
+  }
+  if (!isAllowedCheckAltArtifactPath(check, resolved.front)) {
     return imageFail('prepared_path_denied', { statusCode: 403, side: 'front' });
   }
-  if (depositBackPath && !isAllowedPreparedPath(check, depositBackPath)) {
+  if (!isAllowedCheckAltArtifactPath(check, resolved.rear)) {
     return imageFail('prepared_path_denied', { statusCode: 403, side: 'back' });
   }
 
-  const frontPath = depositFrontPath || check.front_image_path;
-  if (!frontPath || isSvgPath(frontPath)) {
-    return imageFail('front_image_missing', { side: 'front' });
-  }
-  const frontBytes = await downloadClaimFileBytes(frontPath, deps);
-  const front = await assertDepositJpeg(frontBytes, 'front');
+  const frontBytes = await downloadClaimFileBytes(resolved.front, deps);
+  const front = await assertCompliantJpeg(frontBytes, 'front');
   if (!front.ok) return front;
 
-  const rearPath = depositBackPath || check.back_image_deposit_path || null;
-  if (!rearPath || isSvgPath(rearPath) || (!isRasterPath(rearPath) && !/\.jpe?g(\?|$)/i.test(rearPath))) {
-    return imageFail('rear_image_missing', {
-      side: 'back',
-      message: 'Rear deposit JPEG is missing, SVG-only, or not deposit-ready. Fail closed before CheckAlt HTTP.',
-    });
-  }
-  const rearBytes = await downloadClaimFileBytes(rearPath, deps);
-  const rear = await assertDepositJpeg(rearBytes, 'rear');
+  const rearBytes = await downloadClaimFileBytes(resolved.rear, deps);
+  const rear = await assertCompliantJpeg(rearBytes, 'rear');
   if (!rear.ok) return rear;
 
-  const frontImage = Buffer.from(front.bytes).toString('base64');
-  const rearImage = Buffer.from(rear.bytes).toString('base64');
+  const frontImage = bytesToBase64(front.bytes);
+  const rearImage = bytesToBase64(rear.bytes);
   if (frontImage.length + rearImage.length > MAX_TOTAL_B64_CHARS) {
     return imageFail('images_too_large', {
+      error: CHECKALT_IMAGE_ERROR,
       message: 'Combined check images exceed CheckAlt payload limit.',
     });
   }
+
   return {
     ok: true,
     frontImage,
     rearImage,
-    frontPath,
-    rearPath,
-    imagePipeline: 'browser_prepare_aws_base64',
+    frontPath: resolved.front,
+    rearPath: resolved.rear,
+    frontSha256: sha256(front.bytes),
+    rearSha256: sha256(rear.bytes),
+    imagePipeline: 'checkalt_official_canvas_base64',
+    compliance: {
+      error: null,
+      front: front.report,
+      rear: rear.report,
+      overall: 'PASS',
+    },
   };
 }

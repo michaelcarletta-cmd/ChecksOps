@@ -318,6 +318,7 @@ test('delete and move require server-side authorization', async () => {
 test('claim-files read auth includes endorsed deposit JPEGs and .deposit2.jpg siblings', () => {
   assert.match(CHECK_INTAKE_CLAIM_FILES_AUTH_SQL, /back_image_deposit_path/);
   assert.match(CHECK_INTAKE_CLAIM_FILES_AUTH_SQL, /deposit2\.jpg/);
+  assert.match(CHECK_INTAKE_CLAIM_FILES_AUTH_SQL, /checkalt\.jpg/);
   assert.equal(BUCKET_AUTH_SQL['claim-files'].includes(CHECK_INTAKE_CLAIM_FILES_AUTH_SQL), true);
 });
 
@@ -343,6 +344,38 @@ test('browser .deposit2.jpg sibling of a stored check image is writable', async 
 
 test('check-scoped .deposit2.jpg remains writable via the check UUID prefix', async () => {
   const path = `checks/${CHECK_ID}/front.deposit2.jpg`;
+  const result = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {
+    bucket: 'claim-files',
+    path,
+    contentType: 'image/jpeg',
+    upsert: true,
+  }), depsFor(mockClient({ writeCheck: true }), { forceStorageWrites: true }));
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(result.path, path);
+});
+
+test('browser .checkalt.jpg sibling of a stored check image is writable', async () => {
+  const sibling = 'checks/user-not-a-check-id/front.checkalt.jpg';
+  const denied = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {
+    bucket: 'claim-files',
+    path: sibling,
+    contentType: 'image/jpeg',
+    upsert: true,
+  }), depsFor(mockClient({ writeSibling: false }), { forceStorageWrites: true }));
+  assert.equal(denied.statusCode, 403);
+
+  const allowed = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {
+    bucket: 'claim-files',
+    path: sibling,
+    contentType: 'image/jpeg',
+    upsert: true,
+  }), depsFor(mockClient({ writeSibling: true }), { forceStorageWrites: true }));
+  assert.equal(allowed.ok, true, JSON.stringify(allowed));
+  assert.equal(allowed.path, sibling);
+});
+
+test('check-scoped .checkalt.jpg remains writable via the check UUID prefix', async () => {
+  const path = `checks/${CHECK_ID}/front.checkalt.jpg`;
   const result = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {
     bucket: 'claim-files',
     path,

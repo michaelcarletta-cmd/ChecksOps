@@ -37,15 +37,16 @@ const columnMatchSql = (table, columns) => {
   return `SELECT 1 FROM ${table} WHERE ${tests.join(' OR ')} LIMIT 1`;
 };
 
-const deposit2Sibling = (column) =>
-  `regexp_replace(split_part(COALESCE(${column}, ''), '?', 1), '\\.[^.]+$', '') || '.deposit2.jpg' = $2`;
+const depositSibling = (column, suffix) =>
+  `regexp_replace(split_part(COALESCE(${column}, ''), '?', 1), '\\.[^.]+$', '') || '${suffix}' = $2`;
 
-/** Read auth for check images, endorsed deposit JPEGs, and browser `.deposit2.jpg` siblings. */
+/** Read auth for check images, endorsed deposit JPEGs, `.deposit2.jpg`, and `.checkalt.jpg` siblings. */
 export const CHECK_INTAKE_CLAIM_FILES_AUTH_SQL = `SELECT 1 FROM check_intake_items WHERE ${[
   '(front_image_path = ANY($1::text[]) OR split_part(front_image_path, \'?\', 1) LIKE \'%\' || $2)',
   '(back_image_path = ANY($1::text[]) OR split_part(back_image_path, \'?\', 1) LIKE \'%\' || $2)',
   '(back_image_deposit_path = ANY($1::text[]) OR split_part(back_image_deposit_path, \'?\', 1) LIKE \'%\' || $2)',
-  `(${deposit2Sibling('front_image_path')} OR ${deposit2Sibling('back_image_path')} OR ${deposit2Sibling('back_image_deposit_path')})`,
+  `(${depositSibling('front_image_path', '.deposit2.jpg')} OR ${depositSibling('back_image_path', '.deposit2.jpg')} OR ${depositSibling('back_image_deposit_path', '.deposit2.jpg')})`,
+  `(${depositSibling('front_image_path', '.checkalt.jpg')} OR ${depositSibling('back_image_path', '.checkalt.jpg')} OR ${depositSibling('back_image_deposit_path', '.checkalt.jpg')})`,
 ].join(' OR ')} LIMIT 1`;
 
 export const BUCKET_AUTH_SQL = {

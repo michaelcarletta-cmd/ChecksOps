@@ -26,6 +26,9 @@ export const LEGACY_CHECKALT_MONEY_BLOCKED = LEGACY_CHECKALT_PROVIDER_BLOCKED;
 
 export const CHECKALT_PROVIDER_UNAVAILABLE = "Provider not enabled / unavailable";
 
+const isCheckAltArtifactPath = (value: unknown) =>
+  /\.checkalt\.jpe?g$/i.test(String(value || ""));
+
 const AWS_SESSION_KEY = "checksops.aws.staging.auth";
 
 export const isLegacyCheckAltProviderFunction = (name: unknown): boolean =>
@@ -163,9 +166,12 @@ export async function invokeAwsCheckAltProviderFunction(
 /** @deprecated Use invokeAwsCheckAltProviderFunction */
 export const invokeAwsCheckAltMoneyFunction = invokeAwsCheckAltProviderFunction;
 
+export const CHECKALT_IMAGE_PREPARATION_REQUIRED = "CHECKALT_IMAGE_PREPARATION_REQUIRED";
+
 /**
  * Command Center one-click CheckAlt submit.
- * First money-path server action is AWS submit. No prepare_deposit / assign_provider.
+ * Official 1920x1080 artifacts must exist before AWS submit.
+ * No prepare_deposit / assign_provider RPCs. No silent 1600/1200 submit.
  */
 export async function runCheckAltOneClickSubmit(
   checkId: string,
@@ -174,6 +180,10 @@ export async function runCheckAltOneClickSubmit(
     apiBaseUrl?: string;
     idToken?: string | null;
     fetchImpl?: typeof fetch;
+    prepareCheckAltDeposit?: (checkId: string) => Promise<{
+      deposit_front_path: string;
+      deposit_back_path: string;
+    }>;
   } = {},
 ): Promise<{ data: unknown; error: Error | null; providerHttp: false; mutated: {
   deposit_items: false;
@@ -187,9 +197,41 @@ export async function runCheckAltOneClickSubmit(
     apiBaseUrl: deps.apiBaseUrl,
     functionName: "checkalt-submit-deposit",
   });
+  const noSubmit = (message: string) => ({
+    data: null,
+    error: new Error(message),
+    providerHttp: false as const,
+    mutated: {
+      deposit_items: false as const,
+      deposit_batches: false as const,
+      assign_provider: false as const,
+      prepare_deposit: false as const,
+      check_stage: false as const,
+    },
+  });
+  let prepared: { deposit_front_path: string; deposit_back_path: string };
+  try {
+    const prepare = deps.prepareCheckAltDeposit
+      || (await import("./prepareCheckAltDeposit")).prepareCheckAltDeposit;
+    prepared = await prepare(checkId);
+  } catch (error) {
+    return noSubmit(error instanceof Error ? error.message : CHECKALT_IMAGE_PREPARATION_REQUIRED);
+  }
+  if (
+    !isCheckAltArtifactPath(prepared.deposit_front_path)
+    || !isCheckAltArtifactPath(prepared.deposit_back_path)
+  ) {
+    return noSubmit(CHECKALT_IMAGE_PREPARATION_REQUIRED);
+  }
   const result = await invokeAwsCheckAltProviderFunction(
     "checkalt-submit-deposit",
-    { body: { check_intake_item_id: checkId } },
+    {
+      body: {
+        check_intake_item_id: checkId,
+        deposit_front_path: prepared.deposit_front_path,
+        deposit_back_path: prepared.deposit_back_path,
+      },
+    },
     deps,
   );
   return {

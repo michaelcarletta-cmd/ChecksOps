@@ -38,7 +38,7 @@ const lookupWritableCheck = async (client, checkId) => {
   return { check: rows[0] };
 };
 
-/** Allow overwrite of stored check images and browser `.deposit2.jpg` siblings (architecture A). */
+/** Allow overwrite of stored check images, `.deposit2.jpg`, and official `.checkalt.jpg` siblings. */
 export const CHECK_IMAGE_OR_DEPOSIT2_WRITE_SQL = `
 SELECT id, tenant_id FROM public.check_intake_items
 WHERE split_part(front_image_path, '?', 1) = $1
@@ -47,6 +47,9 @@ WHERE split_part(front_image_path, '?', 1) = $1
    OR regexp_replace(split_part(COALESCE(front_image_path, ''), '?', 1), '\\.[^.]+$', '') || '.deposit2.jpg' = $1
    OR regexp_replace(split_part(COALESCE(back_image_path, ''), '?', 1), '\\.[^.]+$', '') || '.deposit2.jpg' = $1
    OR regexp_replace(split_part(COALESCE(back_image_deposit_path, ''), '?', 1), '\\.[^.]+$', '') || '.deposit2.jpg' = $1
+   OR regexp_replace(split_part(COALESCE(front_image_path, ''), '?', 1), '\\.[^.]+$', '') || '.checkalt.jpg' = $1
+   OR regexp_replace(split_part(COALESCE(back_image_path, ''), '?', 1), '\\.[^.]+$', '') || '.checkalt.jpg' = $1
+   OR regexp_replace(split_part(COALESCE(back_image_deposit_path, ''), '?', 1), '\\.[^.]+$', '') || '.checkalt.jpg' = $1
 LIMIT 1`;
 
 const lookupWritableCheckByImagePath = async (client, rel) => {
