@@ -5,6 +5,7 @@ import { corsHeaders, json } from "../_shared/moovGuard.ts";
 import {
   identityRequirementsOutstanding,
   kycStatusFromMoov,
+  liveAccountReadFailed,
   liveBankVerified,
   liveTosAccepted,
   recipientOnboardingCompleteFromMoov,
@@ -66,6 +67,9 @@ serve(async (req) => {
 
     const { data: tenant } = await supabase.from("tenants").select("name, logo_url, primary_color, secondary_color").eq("id", recipient.tenant_id).maybeSingle();
     const account = await moovFetch<any>(`/accounts/${accountId}`, { scopes: scopes.accountRead(accountId) }).catch(() => null);
+    if (liveAccountReadFailed(account)) {
+      return json({ error: "moov_account_get_failed", message: "Could not load the payment-provider account." }, 502);
+    }
     let capabilities: any[] = [];
     let capabilitiesReadOk = false;
     try {
@@ -90,7 +94,9 @@ serve(async (req) => {
       capabilities,
       capabilitiesReadOk,
     });
-    const dropToken = await moovToken(scopes.dropTos(accountId), approvedBrowserOrigin(req));
+    const dropToken = tosAccepted
+      ? null
+      : await moovToken(scopes.dropTos(accountId), approvedBrowserOrigin(req));
 
     return json({
       success: true,

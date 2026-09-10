@@ -26,13 +26,16 @@ import {
 } from './db.mjs';
 import { syncWallet } from './moov-wallet.mjs';
 import {
+  buildIndividualKycPatch,
   dropTokenFromBody,
   identityRequirementsOutstanding,
   kycStatusFromMoov,
+  liveAccountReadFailed,
   liveBankVerified,
   liveTosAccepted,
   recipientOnboardingCompleteFromMoov,
   rejectForgedRecipientTos,
+  shouldResumeExistingBank,
   tosBoundToRecipientAccount,
   tosConfirmedByMoov,
   tosRequirementOutstanding,
@@ -508,6 +511,7 @@ export const recipientSession = {
     if (!recipient.provider_account_id) return fail('This payment setup is not ready yet. Try again shortly.', 409);
     const accountId = String(recipient.provider_account_id);
     const account = await moovFetch(`/accounts/${accountId}`, { scopes: scopes.accountRead(accountId), fetchImpl }).catch(() => null);
+    if (liveAccountReadFailed(account)) return fail('moov_account_get_failed', 502);
     const verificationStatus = kycStatusFromMoov(account || {});
     const tosAccepted = liveTosAccepted(account || {});
     let capabilities = [];
@@ -522,7 +526,7 @@ export const recipientSession = {
       const bankPayload = await moovFetch(`/accounts/${accountId}/bank-accounts`, { scopes: scopes.bankAccountsRead(accountId), fetchImpl });
       banks = Array.isArray(bankPayload) ? bankPayload : bankPayload?.bankAccounts || [];
     } catch { /* unread */ }
-    const dropToken = await moovToken(scopes.dropTos(accountId), undefined, fetchImpl);
+    const dropToken = tosAccepted ? null : await moovToken(scopes.dropTos(accountId), undefined, fetchImpl);
     const tenant = (await client.query(
       `SELECT name, logo_url, primary_color, secondary_color FROM public.tenants WHERE id = $1::uuid`,
       [recipient.tenant_id],
@@ -531,7 +535,7 @@ export const recipientSession = {
       success: true,
       recipient: {
         id: recipient.id, name: recipient.display_name, status: recipient.onboarding_status,
-        bank_linked: banks.length > 0 || Boolean(recipient.bank_linked_at), bank_name: recipient.provider_bank_name ?? null,
+        bank_linked: banks.length > 0, bank_name: recipient.provider_bank_name ?? null,
         last_four: recipient.provider_last_four ?? null,
       },
       onboarding: {
@@ -626,33 +630,26 @@ export const recipientKycUpdate = {
   run: async ({ client, body, fetchImpl }) => {
     const token = String(body?.token ?? '');
     if (!token) return fail('token is required', 400);
+    const patch = buildIndividualKycPatch(body);
+    if (!patch.ok) return fail(patch.error, 400);
     const recipient = (await client.query(
       `SELECT * FROM public.external_payment_recipients WHERE secure_token = $1`,
       [token],
     )).rows[0];
     if (!recipient?.provider_account_id) return fail('This payment setup is not ready yet.', 409);
     const accountId = recipient.provider_account_id;
-    const profile = body.profile || body.individual || {};
     await moovFetch(`/accounts/${accountId}`, {
       method: 'PATCH', scopes: scopes.accountWrite(accountId),
-      body: { profile: { individual: profile } }, fetchImpl,
+      body: patch.body, fetchImpl,
     });
-    return jsonResult({ success: true, liveProviderCalled: true });
+    return jsonResult({ success: true, liveProviderCalled: true, account_id: accountId });
   },
 };
 
 export const recipientBankAdd = {
   run: async ({ client, mapping, body, fetchImpl }) => {
     const token = String(body?.token ?? '');
-    const holderName = String(body?.holder_name ?? '').trim();
-    const holderType = body?.holder_type === 'business' ? 'business' : 'individual';
-    const bankAccountType = body?.bank_account_type === 'savings' ? 'savings' : 'checking';
-    const routingNumber = String(body?.routing_number ?? '').replace(/\D/g, '');
-    const accountNumber = String(body?.account_number ?? '').replace(/\D/g, '');
     if (!token) return fail('token is required', 400);
-    if (holderName.length < 2) return fail('Enter the account holder name as it appears at the bank.', 400);
-    if (!/^\d{9}$/.test(routingNumber)) return fail('Routing number must be exactly 9 digits.', 400);
-    if (!/^\d{4,17}$/.test(accountNumber)) return fail('Account number must be between 4 and 17 digits.', 400);
     const recipient = (await client.query(
       `SELECT * FROM public.external_payment_recipients WHERE secure_token = $1`,
       [token],
@@ -676,8 +673,10 @@ export const recipientBankAdd = {
     try {
       const payload = await moovFetch(`/accounts/${accountId}/bank-accounts`, { scopes: scopes.bankAccountsRead(accountId), fetchImpl });
       existingBanks = Array.isArray(payload) ? payload : payload?.bankAccounts || [];
-    } catch { /* continue */ }
-    if (existingBanks.length && body.replace_bank !== true && body.replaceBank !== true) {
+    } catch {
+      return fail('moov_bank_list_failed', 502);
+    }
+    if (shouldResumeExistingBank({ banks: existingBanks, replaceBank: body.replace_bank === true || body.replaceBank === true })) {
       const existing = existingBanks[0];
       return jsonResult({
         success: true, resumed: true,
@@ -688,6 +687,14 @@ export const recipientBankAdd = {
         account_id: accountId, liveProviderCalled: true,
       });
     }
+    const holderName = String(body?.holder_name ?? '').trim();
+    const holderType = body?.holder_type === 'business' ? 'business' : 'individual';
+    const bankAccountType = body?.bank_account_type === 'savings' ? 'savings' : 'checking';
+    const routingNumber = String(body?.routing_number ?? '').replace(/\D/g, '');
+    const accountNumber = String(body?.account_number ?? '').replace(/\D/g, '');
+    if (holderName.length < 2) return fail('Enter the account holder name as it appears at the bank.', 400);
+    if (!/^\d{9}$/.test(routingNumber)) return fail('Routing number must be exactly 9 digits.', 400);
+    if (!/^\d{4,17}$/.test(accountNumber)) return fail('Account number must be between 4 and 17 digits.', 400);
     const created = await moovFetch(`/accounts/${accountId}/bank-accounts`, {
       method: 'POST', scopes: scopes.bankAccountsWrite(accountId), fetchImpl,
       body: { account: { holderName, holderType, accountNumber, routingNumber, bankAccountType } },

@@ -6,6 +6,7 @@ import {
   identityRequirementsOutstanding,
   liveBankVerified,
   liveTosAccepted,
+  shouldResumeExistingBank,
   tosRequirementOutstanding,
 } from "../_shared/recipientTosPolicy.ts";
 
@@ -31,23 +32,7 @@ serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const token = String(body?.token ?? "");
-    const holderName = String(body?.holder_name ?? "").trim();
-    const holderType = body?.holder_type === "business" ? "business" : "individual";
-    const bankAccountType = body?.bank_account_type === "savings" ? "savings" : "checking";
-    const routingNumber = String(body?.routing_number ?? "").replace(/\D/g, "");
-    const accountNumber = String(body?.account_number ?? "").replace(/\D/g, "");
-
     if (!token) return json({ error: "token is required" }, 400);
-    if (holderName.length < 2 || holderName.length > 128) {
-      return json({ error: "Enter the account holder name as it appears at the bank." }, 400);
-    }
-    if (!DIGITS.test(routingNumber) || routingNumber.length !== 9) {
-      return json({ error: "Routing number must be exactly 9 digits." }, 400);
-    }
-    if (!DIGITS.test(accountNumber) || accountNumber.length < 4 || accountNumber.length > 17) {
-      return json({ error: "Account number must be between 4 and 17 digits." }, 400);
-    }
-
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -56,7 +41,7 @@ serve(async (req) => {
 
     const { data: recipient } = await supabase
       .from("external_payment_recipients")
-      .select("id, tenant_id, provider_account_id, token_expires_at, environment, stakeholder_account_id")
+      .select("id, tenant_id, provider_account_id, token_expires_at, environment, stakeholder_account_id, provider_bank_name, provider_last_four")
       .eq("secure_token", token)
       .maybeSingle();
 
@@ -99,9 +84,14 @@ serve(async (req) => {
     try {
       const payload = await moovFetch<any>(`/accounts/${accountId}/bank-accounts`, { scopes: scopes.bankAccountsRead(accountId) });
       existingBanks = Array.isArray(payload) ? payload : payload?.bankAccounts ?? [];
-    } catch { /* continue to create */ }
+    } catch {
+      return json({
+        error: "moov_bank_list_failed",
+        message: "Could not load existing bank accounts. A new bank was not created.",
+      }, 502);
+    }
     const replaceBank = body?.replace_bank === true || body?.replaceBank === true;
-    if (existingBanks.length && !replaceBank) {
+    if (shouldResumeExistingBank({ banks: existingBanks, replaceBank })) {
       const existing = existingBanks[0];
       const status = String(existing?.status ?? existing?.verificationStatus ?? "new").toLowerCase();
       return json({
@@ -113,6 +103,21 @@ serve(async (req) => {
         complete: liveBankVerified(existingBanks),
         account_id: accountId,
       });
+    }
+
+    const holderName = String(body?.holder_name ?? "").trim();
+    const holderType = body?.holder_type === "business" ? "business" : "individual";
+    const bankAccountType = body?.bank_account_type === "savings" ? "savings" : "checking";
+    const routingNumber = String(body?.routing_number ?? "").replace(/\D/g, "");
+    const accountNumber = String(body?.account_number ?? "").replace(/\D/g, "");
+    if (holderName.length < 2 || holderName.length > 128) {
+      return json({ error: "Enter the account holder name as it appears at the bank." }, 400);
+    }
+    if (!DIGITS.test(routingNumber) || routingNumber.length !== 9) {
+      return json({ error: "Routing number must be exactly 9 digits." }, 400);
+    }
+    if (!DIGITS.test(accountNumber) || accountNumber.length < 4 || accountNumber.length > 17) {
+      return json({ error: "Account number must be between 4 and 17 digits." }, 400);
     }
 
     // Receive-only stakeholders use the baseline transfers capability. They do

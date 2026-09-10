@@ -140,3 +140,60 @@ const listOf = (payload: any) => {
 };
 
 export const listMoovList = listOf;
+
+const str = (value: unknown, max = 120) =>
+  (typeof value === "string" && value.trim() ? value.trim().slice(0, max) : "");
+const digitsOnly = (value: unknown, max = 20) => String(value ?? "").replace(/\D/g, "").slice(0, max);
+
+export const buildIndividualKycPatch = (input: Record<string, unknown> = {}) => {
+  const firstName = str(input.first_name ?? input.firstName, 60);
+  const lastName = str(input.last_name ?? input.lastName, 60);
+  const email = str(input.email, 120);
+  const phone = digitsOnly(input.phone, 10);
+  const address1 = str(input.address_line1 ?? input.addressLine1, 100);
+  const address2 = str(input.address_line2 ?? input.addressLine2, 100);
+  const city = str(input.city, 60);
+  const state = str(input.state ?? input.stateOrProvince, 2).toUpperCase();
+  const postalCode = digitsOnly(input.postal_code ?? input.postalCode, 5);
+  const birthDate = str(input.birth_date ?? input.birthDate, 10);
+  const ssn = digitsOnly(input.ssn, 9);
+  const dob = /^(\d{4})-(\d{2})-(\d{2})$/.exec(birthDate);
+  const missing: string[] = [];
+  if (firstName.length < 1 || lastName.length < 1) missing.push("name");
+  if (!email.includes("@")) missing.push("email");
+  if (phone.length !== 10) missing.push("phone");
+  if (!address1 || !city || state.length !== 2 || postalCode.length !== 5) missing.push("address");
+  if (!dob) missing.push("birthdate");
+  if (ssn.length !== 9) missing.push("ssn");
+  if (missing.length) return { ok: false as const, error: "kyc_fields_incomplete", missing };
+  return {
+    ok: true as const,
+    body: {
+      profile: {
+        individual: {
+          name: { firstName, lastName },
+          email,
+          phone: { number: phone, countryCode: "1" },
+          address: {
+            addressLine1: address1,
+            ...(address2 ? { addressLine2: address2 } : {}),
+            city,
+            stateOrProvince: state,
+            postalCode,
+            country: "US",
+          },
+          birthDate: { year: Number(dob[1]), month: Number(dob[2]), day: Number(dob[3]) },
+          governmentID: { ssn: { full: ssn } },
+        },
+      },
+    },
+  };
+};
+
+export const shouldResumeExistingBank = ({
+  banks = [],
+  replaceBank = false,
+}: { banks?: any[]; replaceBank?: boolean } = {}) =>
+  Array.isArray(banks) && banks.length > 0 && replaceBank !== true;
+
+export const liveAccountReadFailed = (account: unknown) => account == null;

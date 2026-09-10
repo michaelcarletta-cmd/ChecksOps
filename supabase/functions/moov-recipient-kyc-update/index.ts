@@ -3,11 +3,10 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { bindMoovEnvironment, moovConfigured, moovEnvironment, moovFetch, scopes } from "../_shared/moovClient.ts";
 import { corsHeaders, json, sanitize } from "../_shared/moovGuard.ts";
 import {
+  buildIndividualKycPatch,
   identityRequirementsOutstanding,
   kycStatusFromMoov,
 } from "../_shared/recipientTosPolicy.ts";
-
-const digits = (value: unknown) => String(value ?? "").replace(/\D/g, "");
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -21,27 +20,16 @@ serve(async (req) => {
     const token = String(body?.token ?? "");
     if (!token) return json({ error: "token is required" }, 400);
 
-    const firstName = String(body?.first_name ?? "").trim();
-    const lastName = String(body?.last_name ?? "").trim();
-    const email = String(body?.email ?? "").trim();
-    const phone = digits(body?.phone);
-    const address1 = String(body?.address_line1 ?? "").trim();
-    const address2 = String(body?.address_line2 ?? "").trim();
-    const city = String(body?.city ?? "").trim();
-    const state = String(body?.state ?? "").trim().toUpperCase();
-    const postalCode = digits(body?.postal_code);
-    const birthDate = String(body?.birth_date ?? "");
-    const ssn = digits(body?.ssn);
-
-    const dob = /^\d{4}-\d{2}-\d{2}$/.test(birthDate) ? birthDate.split("-").map(Number) : [];
-    if (firstName.length < 1 || lastName.length < 1) return json({ error: "First and last name are required." }, 400);
-    if (!email.includes("@")) return json({ error: "Enter a valid email address." }, 400);
-    if (phone.length !== 10) return json({ error: "Phone number must be 10 digits." }, 400);
-    if (!address1 || !city || state.length !== 2 || postalCode.length !== 5) {
-      return json({ error: "Enter a complete U.S. residential address." }, 400);
+    const patch = buildIndividualKycPatch(body);
+    if (!patch.ok) {
+      if (patch.missing.includes("name")) return json({ error: "First and last name are required." }, 400);
+      if (patch.missing.includes("email")) return json({ error: "Enter a valid email address." }, 400);
+      if (patch.missing.includes("phone")) return json({ error: "Phone number must be 10 digits." }, 400);
+      if (patch.missing.includes("address")) return json({ error: "Enter a complete U.S. residential address." }, 400);
+      if (patch.missing.includes("birthdate")) return json({ error: "Enter a valid date of birth." }, 400);
+      if (patch.missing.includes("ssn")) return json({ error: "SSN must be 9 digits." }, 400);
+      return json({ error: "kyc_fields_incomplete" }, 400);
     }
-    if (dob.length !== 3 || !dob.every(Number.isFinite)) return json({ error: "Enter a valid date of birth." }, 400);
-    if (ssn.length !== 9) return json({ error: "SSN must be 9 digits." }, 400);
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -73,25 +61,7 @@ serve(async (req) => {
     await moovFetch<any>(`/accounts/${accountId}`, {
       method: "PATCH",
       scopes: scopes.accountWrite(accountId),
-      body: {
-        profile: {
-          individual: {
-            name: { firstName, lastName },
-            email,
-            phone: { number: phone, countryCode: "1" },
-            address: {
-              addressLine1: address1,
-              ...(address2 ? { addressLine2: address2 } : {}),
-              city,
-              stateOrProvince: state,
-              postalCode,
-              country: "US",
-            },
-            birthDate: { year: dob[0], month: dob[1], day: dob[2] },
-            governmentID: { ssn: { full: ssn } },
-          },
-        },
-      },
+      body: patch.body,
     });
 
     const refreshed = await moovFetch<any>(`/accounts/${accountId}`, { scopes: scopes.accountRead(accountId) });

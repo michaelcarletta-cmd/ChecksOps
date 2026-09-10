@@ -39,7 +39,7 @@ async function invoke(fn: string, body: Record<string, unknown>) {
   return data as any;
 }
 
-function MoovTermsDrop({ oauthToken, onToken }: { oauthToken: string; onToken: (t: string) => void }) {
+function MoovTermsDrop({ oauthToken, accountId, onToken }: { oauthToken: string; accountId: string; onToken: (t: string) => void }) {
   const elRef = useRef<HTMLElement | null>(null);
   const onTokenRef = useRef(onToken);
   onTokenRef.current = onToken;
@@ -48,10 +48,12 @@ function MoovTermsDrop({ oauthToken, onToken }: { oauthToken: string; onToken: (
     const el = elRef.current as any;
     if (!el) return;
     el.oauthToken = oauthToken;
+    el.token = oauthToken;
+    el.accountID = accountId;
     el.onTermsOfServiceTokenReady = (acceptanceToken: string) => {
       if (acceptanceToken) onTokenRef.current(acceptanceToken);
     };
-  }, [oauthToken]);
+  }, [oauthToken, accountId]);
 
   return createElement("moov-terms-of-service", { ref: elRef });
 }
@@ -149,7 +151,6 @@ export default function RecipientPaymentSetup() {
       await invoke("moov-recipient-tos-accept", {
         token,
         terms_of_service_token: tosDropToken,
-        account_id: session?.account_id,
       });
       setTosDropToken(null);
       await load();
@@ -192,7 +193,7 @@ export default function RecipientPaymentSetup() {
           <div className="flex gap-2 rounded-md border border-emerald-500/30 p-3"><CheckCircle2 className="h-4 w-4 text-emerald-500"/><p className="text-xs">Identity details were submitted. Accept the payment provider's terms to continue.</p></div>
           <div className="rounded-md border border-border/60 bg-muted/30 p-3">
             {tosReady && session.token ? (
-              <MoovTermsDrop oauthToken={session.token} onToken={handleDropToken} />
+              <MoovTermsDrop oauthToken={session.token} accountId={session.account_id} onToken={handleDropToken} />
             ) : (
               <p className="text-[11px] text-muted-foreground">Loading the payment provider's Terms of Service…</p>
             )}
