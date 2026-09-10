@@ -189,7 +189,7 @@ Deno.serve(async (req) => {
         deletes: false,
         rpc: false,
         rawSql: false,
-        actions: ["health", "tables", "schema", "counts", "rows", "identity_map"],
+        actions: ["health", "tables", "schema", "counts", "rows", "identity_map", "recipient_session_resolve"],
         maxPageSize: MAX_PAGE,
         defaultPageSize: DEFAULT_PAGE,
         schemas: ["public"],
@@ -308,6 +308,64 @@ Deno.serve(async (req) => {
         tenantMemberships: tenantRows,
         applicationRoles: roleRows,
         note: "auth schema is not exposed; application identity keys are profiles.id (UUID)",
+      });
+    }
+
+    if (action === "recipient_session_resolve") {
+      // Strictly read-only: exact secure_token match, single row, no enumeration,
+      // no writes, no token rotation/consumption. secure_token is never returned.
+      const secureToken = typeof body.secure_token === "string" ? body.secure_token : "";
+      if (!secureToken || secureToken.length < 16) {
+        return json({ ok: false, resolved: false, reason: "invalid_token" }, 404);
+      }
+
+      const { url, key } = env();
+      const params = new URLSearchParams();
+      params.set(
+        "select",
+        [
+          "id",
+          "tenant_id",
+          "display_name",
+          "recipient_type",
+          "provider",
+          "provider_account_id",
+          "environment",
+          "onboarding_status",
+          "bank_linked_at",
+          "provider_bank_name",
+          "provider_last_four",
+          "token_expires_at",
+          "token_used_at",
+          "created_at",
+          "updated_at",
+        ].join(","),
+      );
+      params.set("secure_token", `eq.${secureToken}`);
+      params.set("limit", "1");
+
+      const res = await fetch(`${url}/rest/v1/external_payment_recipients?${params.toString()}`, {
+        headers: restHeaders(key),
+      });
+      if (!res.ok) return json({ error: "recipient_resolve_failed", status: res.status }, 503);
+      const rows = (await res.json()) as Record<string, unknown>[];
+      const recipient = rows[0];
+      if (!recipient) return json({ ok: false, resolved: false, reason: "invalid_token" }, 404);
+
+      const expiresAt = recipient.token_expires_at ? new Date(String(recipient.token_expires_at)) : null;
+      if (expiresAt && expiresAt.getTime() < Date.now()) {
+        return json({ ok: false, resolved: false, reason: "token_expired" }, 410);
+      }
+      if (recipient.token_used_at) {
+        return json({ ok: false, resolved: false, reason: "token_used" }, 410);
+      }
+
+      delete (recipient as Record<string, unknown>).secure_token;
+      return json({
+        ok: true,
+        resolved: true,
+        mode: "read_only",
+        recipient,
       });
     }
 
