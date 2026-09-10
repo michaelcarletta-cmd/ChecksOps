@@ -15,11 +15,12 @@ const verify = readFileSync(new URL('../../supabase/functions/moov-recipient-ban
 const template = readFileSync(new URL('../template.yaml', import.meta.url), 'utf8');
 const RECIPIENT_ACCOUNT = 'ee8c608e-0000-4000-8000-00000000fc5f';
 
-test('page load and refresh only invoke the session reader, never mutation functions', () => {
+test('page load and refresh only invoke the AWS public session reader, never mutation functions', () => {
   assert.match(ui, /useEffect\(\(\) => \{ void load\(\); \}, \[token\]\)/);
-  assert.match(ui, /invoke\("moov-recipient-session"/);
+  assert.match(ui, /loadRecipientSession\(token/);
   const loadBlock = ui.slice(ui.indexOf('async function load()'), ui.indexOf('useEffect(() => { void load(); }'));
-  assert.match(loadBlock, /moov-recipient-session/);
+  assert.match(loadBlock, /loadRecipientSession/);
+  assert.doesNotMatch(loadBlock, /invoke\("moov-recipient-session"/);
   assert.doesNotMatch(loadBlock, /moov-recipient-kyc-update/);
   assert.doesNotMatch(loadBlock, /moov-recipient-tos-accept/);
   assert.doesNotMatch(loadBlock, /moov-recipient-bank-add/);
