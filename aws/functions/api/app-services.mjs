@@ -66,6 +66,13 @@ import {
   handleTenantRemoveOpenaiKey,
   handleHireMortgageAgent,
 } from './tenant-admin.mjs';
+import {
+  handleTenantEmailBrandingGet,
+  handleTenantEmailBrandingSave,
+  handleTenantDomainDisable,
+  handleTenantSesIdentityDelete,
+  handleTenantEmailPreview,
+} from './tenant-email-domain-handlers.mjs';
 import { handleIngestSharedCheck } from './ingest-shared-check.mjs';
 import { handleSendSignatureRequest } from './esign.mjs';
 import { handleCheckEndorsement } from './check-endorsement.mjs';
@@ -130,6 +137,11 @@ export const CLASS_A_FUNCTIONS = new Set([
   'tenant-domain-verify',
   'tenant-domain-check',
   'tenant-domain-recheck-cron',
+  'tenant-domain-disable',
+  'tenant-email-branding-get',
+  'tenant-email-branding-save',
+  'tenant-email-preview',
+  'tenant-ses-identity-delete',
   'tenant-set-openai-key',
   'tenant-validate-openai-key',
   'tenant-remove-openai-key',
@@ -267,6 +279,16 @@ export const handleAppServiceRequest = async (event, path, method) => {
       return handleTenantDomainCheck(event);
     case 'tenant-domain-recheck-cron':
       return handleTenantDomainRecheckCron(event);
+    case 'tenant-domain-disable':
+      return handleTenantDomainDisable(event);
+    case 'tenant-email-branding-get':
+      return handleTenantEmailBrandingGet(event);
+    case 'tenant-email-branding-save':
+      return handleTenantEmailBrandingSave(event);
+    case 'tenant-email-preview':
+      return handleTenantEmailPreview(event);
+    case 'tenant-ses-identity-delete':
+      return handleTenantSesIdentityDelete(event);
     case 'tenant-set-openai-key':
       return handleTenantSetOpenaiKey(event);
     case 'tenant-validate-openai-key':

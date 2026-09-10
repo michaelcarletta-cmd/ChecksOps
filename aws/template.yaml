@@ -104,6 +104,11 @@ Globals:
         AWS_EMAIL_ALLOWLIST_DOMAINS: "checksops.invalid,checksops.com,freedomadj.com"
         AWS_EMAIL_ALLOWLIST_EXACT: "staging-master@checksops.invalid,mcarletta@freedomadj.com,checksops-tester@freedomadj.com"
         AWS_MORTGAGE_OPS_EMAIL: "staging-mortgage-ops@checksops.invalid"
+        # Tenant SES domain APIs stay off. Do not grant SES IAM in this stack.
+        AWS_TENANT_EMAIL_DOMAIN_ENABLED: "false"
+        AWS_SES_CONFIGURATION_SET: ""
+        AWS_TENANT_SES_IDENTITY_DELETE_ENABLED: "false"
+        AWS_TENANT_MAIL_FROM_ENABLED: "false"
         CROSS_APP_BRIDGE_SECRET: !Ref CrossAppBridgeSecret
         AWS_COGNITO_MFA_PREFERRED: "false"
         # Preserve live staging write/workflow overlay behavior.

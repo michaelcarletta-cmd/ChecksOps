@@ -5,7 +5,7 @@
  */
 import { parseBody, ignoredSpoof } from './data.mjs';
 import { handleProcessEmailQueue } from './email-queue.mjs';
-import { handleTenantDomainRecheckCron } from './tenant-admin.mjs';
+import { handleTenantDomainRecheckCron } from './tenant-email-domain-handlers.mjs';
 import { handleCheckOcrBacklog } from './ocr.mjs';
 
 const FINANCIAL_JOBS = new Set([

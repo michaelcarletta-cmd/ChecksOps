@@ -20,6 +20,7 @@ import {
 } from './email-policy.mjs';
 import { parseFromHeader, resolveEmailBranding } from './email-branding.mjs';
 import { renderTransactionalTemplate, TEMPLATE_NAMES } from './email-templates.mjs';
+import { sesConfigurationSetName, sesMessageTags } from './email-ses.mjs';
 
 const { Client } = pg;
 
@@ -34,6 +35,9 @@ export const sendViaSesOrSink = async ({
   replyTo = defaultReplyTo(),
   headers = {},
   sesSend = null,
+  tenantId = null,
+  messageCategory = null,
+  configurationSet = null,
 }) => {
   const policyRecipients = applyRecipientPolicy(Array.isArray(to) ? to : [to]);
   const mode = emailMode();
@@ -41,6 +45,8 @@ export const sendViaSesOrSink = async ({
   const delivered = [];
   const results = [];
   const replyList = replyTo ? [replyTo] : undefined;
+  const configSet = configurationSet || sesConfigurationSetName();
+  const tags = sesMessageTags({ tenantId, category: messageCategory });
 
   for (const recipient of policyRecipients) {
     const entry = {
@@ -57,6 +63,7 @@ export const sendViaSesOrSink = async ({
           Source: parsedFrom.name ? `${parsedFrom.name} <${parsedFrom.address}>` : parsedFrom.address,
           Destination: { ToAddresses: [recipient.email] },
           ReplyToAddresses: replyList,
+          ConfigurationSetName: configSet || undefined,
           Message: {
             Subject: { Data: subject, Charset: 'UTF-8' },
             Body: {
@@ -64,11 +71,9 @@ export const sendViaSesOrSink = async ({
               Text: text ? { Data: text, Charset: 'UTF-8' } : undefined,
             },
           },
-          Tags: Object.entries(headers || {}).slice(0, 5).map(([Name, Value]) => ({
-            Name: String(Name).slice(0, 50),
-            Value: String(Value).slice(0, 256),
-          })),
+          Tags: tags.length ? tags : undefined,
         });
+        void headers;
         const out = typeof sesSend === 'function'
           ? await sesSend(cmd)
           : await sesClient().send(cmd);
