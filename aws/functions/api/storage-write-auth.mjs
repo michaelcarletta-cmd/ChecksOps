@@ -31,7 +31,8 @@ const denyBucket = (bucket) => {
 const lookupWritableCheck = async (client, checkId) => {
   if (!UUID_RE.test(String(checkId || ''))) return { error: 'invalid_uuid', field: 'check_id' };
   const rows = (await client.query(
-    'SELECT id, tenant_id FROM public.check_intake_items WHERE id = $1::uuid',
+    `SELECT id, tenant_id, front_image_path, back_image_path, back_image_deposit_path, endorsement_render_meta
+       FROM public.check_intake_items WHERE id = $1::uuid`,
     [checkId],
   )).rows;
   if (!rows.length) return { error: 'rls_denied', message: 'check not found or not writable' };
@@ -40,7 +41,8 @@ const lookupWritableCheck = async (client, checkId) => {
 
 /** Allow overwrite of stored check images, `.deposit2.jpg`, and official `.checkalt.jpg` siblings. */
 export const CHECK_IMAGE_OR_DEPOSIT2_WRITE_SQL = `
-SELECT id, tenant_id FROM public.check_intake_items
+SELECT id, tenant_id, front_image_path, back_image_path, back_image_deposit_path, endorsement_render_meta
+FROM public.check_intake_items
 WHERE split_part(front_image_path, '?', 1) = $1
    OR split_part(back_image_path, '?', 1) = $1
    OR split_part(back_image_deposit_path, '?', 1) = $1

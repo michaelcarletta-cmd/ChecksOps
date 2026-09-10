@@ -12,6 +12,11 @@ import {
   mapReviewPath,
   TRANSITIONS,
 } from './workflow-transitions.mjs';
+import {
+  evaluateEndorsementEligibility,
+  loadCheckEndorsements,
+  loadCheckPayees,
+} from './providers/production/checkalt-eligibility.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -309,6 +314,19 @@ export const handleCheckTransition = async (event, deps = {}) => {
     }
     const notes = asText(body.review_notes || body.p_reviewer_notes, 2000);
     if (notes.error) return denied(spoof, { statusCode: 400, ...notes });
+    if (action === 'mark_ready_for_deposit') {
+      const payees = await loadCheckPayees(client, looked.check.id, looked.check.tenant_id);
+      const endorsements = await loadCheckEndorsements(client, looked.check.id, looked.check.tenant_id);
+      const endorsementGate = evaluateEndorsementEligibility(looked.check, payees, endorsements);
+      if (!endorsementGate.ok) {
+        return denied(spoof, {
+          statusCode: 403,
+          error: endorsementGate.error,
+          reason: endorsementGate.reason,
+          message: 'Ready for deposit requires a completed endorsement for every required payee.',
+        });
+      }
+    }
     const rows = (await client.query(
       `UPDATE public.check_intake_items
        SET status = $2::text,

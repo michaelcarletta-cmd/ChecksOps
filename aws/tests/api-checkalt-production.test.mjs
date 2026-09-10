@@ -33,6 +33,7 @@ import {
 } from '../functions/api/providers/production/checkalt-poll.mjs';
 import { syntheticCheckRaster } from '../functions/api/providers/parity/checkalt-image.mjs';
 import { syntheticCompliantCheckAltJpeg } from '../functions/api/providers/production/checkalt-image-compliance.mjs';
+import { buildCompletedEndorsementState } from '../functions/api/providers/production/checkalt-eligibility.mjs';
 import { resetProviderSecretsCache } from '../functions/api/provider-secrets.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -115,9 +116,12 @@ const createStore = ({
   tenantId = FREEDOM_TENANT,
   checkOverrides = {},
   memberships = null,
+  payees,
+  endorsements,
 } = {}) => {
   const deposits = [];
   const stepups = [];
+  const eligible = buildCompletedEndorsementState({ checkId: CHECK_ID, tenantId });
   const check = {
     id: CHECK_ID,
     tenant_id: tenantId,
@@ -128,6 +132,7 @@ const createStore = ({
     back_image_deposit_path: `checks/${CHECK_ID}/back.jpg`,
     status: 'approved_for_deposit',
     check_stage: 'ready_for_deposit',
+    endorsement_render_meta: { checkalt_rear_fingerprint: eligible.fingerprint },
     ...checkOverrides,
   };
   const files = {
@@ -139,6 +144,8 @@ const createStore = ({
     stepups,
     check,
     files,
+    payees: payees || eligible.payees,
+    endorsements: endorsements || eligible.endorsements,
     processPosts: 0,
     historyPosts: 0,
     itemPosts: 0,
@@ -178,6 +185,12 @@ const identityClient = (store) => ({
       }
       const match = store.memberships.find((row) => row.tenant_id === tenantId);
       return { rows: match ? [{ role: match.role }] : [] };
+    }
+    if (text.includes('FROM public.check_payees')) {
+      return { rows: store.payees || [] };
+    }
+    if (text.includes('FROM public.check_endorsements')) {
+      return { rows: store.endorsements || [] };
     }
     if (text.includes('FROM public.check_intake_items')) {
       return { rows: params[0] === store.check.id ? [store.check] : [] };
@@ -573,7 +586,7 @@ test('missing front or rear deposit JPEG fails closed before provider HTTP', asy
   grantStepUp(missingFront);
   const front = await submitOnce(missingFront);
   assert.equal(front.ok, false);
-  assert.equal(front.error, 'CHECKALT_IMAGE_COMPLIANCE_FAILED');
+  assert.equal(front.error, 'provider_front_image_missing');
   assert.equal(front.reason, 'front_missing');
   assert.equal(missingFront.processPosts, 0);
 
@@ -583,7 +596,7 @@ test('missing front or rear deposit JPEG fails closed before provider HTTP', asy
   grantStepUp(missingRear);
   const rear = await submitOnce(missingRear);
   assert.equal(rear.ok, false);
-  assert.equal(rear.error, 'CHECKALT_IMAGE_COMPLIANCE_FAILED');
+  assert.equal(rear.error, 'provider_rear_image_missing');
   assert.equal(rear.reason, 'rear_missing');
   assert.equal(missingRear.processPosts, 0);
 });

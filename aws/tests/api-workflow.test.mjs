@@ -65,8 +65,27 @@ const mockClient = ({
   roles = [{ role: 'admin' }],
   check = createdRow,
   rows = [createdRow],
+  payees,
+  endorsements,
 } = {}) => {
   const queries = [];
+  const defaultPayees = payees || [{
+    id: 'payee-ready-1',
+    check_id: check?.id || CHECK_ID,
+    tenant_id: check?.tenant_id || FREEDOM_TENANT,
+    payee_type: 'insured',
+    endorsement_status: 'signed',
+    endorsed_at: '2026-01-01T00:00:00.000Z',
+  }];
+  const defaultEndorsements = endorsements || [{
+    id: 'endo-ready-1',
+    check_id: check?.id || CHECK_ID,
+    tenant_id: check?.tenant_id || FREEDOM_TENANT,
+    payee_id: defaultPayees[0]?.id,
+    payee_type: 'insured',
+    status: 'signed',
+    signed_at: '2026-01-01T00:00:00.000Z',
+  }];
   return {
     queries,
     connect: async () => {},
@@ -82,6 +101,8 @@ const mockClient = ({
       if (sql === TENANT_MEMBERSHIP_SQL) return { rows: memberships };
       if (sql === USER_ROLES_SQL) return { rows: roles };
       if (/SELECT role FROM public.tenant_users/.test(sql)) return { rows: memberships };
+      if (/FROM public.check_payees/.test(sql)) return { rows: defaultPayees };
+      if (/FROM public.check_endorsements/.test(sql)) return { rows: defaultEndorsements };
       if (/FROM public.check_intake_items/.test(sql) && /SELECT id, tenant_id, uploaded_by/.test(sql)) {
         return { rows: check ? [check] : [] };
       }
@@ -137,6 +158,7 @@ test('state machine allows documented T5 transitions and denies skip / provider 
   assert.equal(mapReviewPath('approved_for_deposit').action, 'mark_ready_for_deposit');
   assert.equal(mapReviewPath('branch_deposit_required').error, 'financial_or_provider');
   assert.equal(TRANSITIONS.mark_ready_for_deposit.providerExecution, false);
+  assert.deepEqual(TRANSITIONS.mark_ready_for_deposit.requiredRecords, ['endorsement_complete']);
 });
 
 test('T5 flag defaults false and is independent of T1 writes', () => {
@@ -224,6 +246,33 @@ test('valid start_review then mark_ready; skip and deposited denied', async () =
   assert.equal(ready.ok, true);
   assert.equal(ready.readyForProviderExecution, true);
   assert.equal(ready.providerExecution, false);
+
+  const unsigned = await handleCheckTransition(jwtEvent('/workflow/transition', 'POST', {
+    check_id: CHECK_ID,
+    action: 'mark_ready_for_deposit',
+  }), depsFor(mockClient({
+    check: { ...createdRow, status: 'needs_review' },
+    payees: [{
+      id: 'payee-unsigned-1',
+      check_id: CHECK_ID,
+      tenant_id: FREEDOM_TENANT,
+      payee_type: 'insured',
+      endorsement_status: 'pending',
+      endorsed_at: null,
+    }],
+    endorsements: [{
+      id: 'endo-unsigned-1',
+      check_id: CHECK_ID,
+      tenant_id: FREEDOM_TENANT,
+      payee_id: 'payee-unsigned-1',
+      payee_type: 'insured',
+      status: 'pending',
+      signed_at: null,
+    }],
+  })));
+  assert.equal(unsigned.ok, false);
+  assert.equal(unsigned.error, 'endorsements_incomplete');
+  assert.equal(unsigned.providerExecution, undefined);
 
   const deposited = await handleCheckTransition(jwtEvent('/workflow/transition', 'POST', {
     check_id: CHECK_ID,

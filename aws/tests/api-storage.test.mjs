@@ -63,8 +63,24 @@ const mockClient = ({ authorize = false, writeCheck = false, writeSibling = fals
       if (sql === LOOKUP_MAPPING_SQL) {
         return { rows: params[0] === mapping.cognito_sub ? [mapping] : [] };
       }
-      if (sql === 'SELECT id, tenant_id FROM public.check_intake_items WHERE id = $1::uuid') {
-        return { rows: writeCheck && params[0] === CHECK_ID ? [{ id: CHECK_ID, tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a' }] : [] };
+      if (String(sql).replace(/\s+/g, ' ').includes('FROM public.check_intake_items WHERE id = $1::uuid')) {
+        return {
+          rows: writeCheck && params[0] === CHECK_ID
+            ? [{
+              id: CHECK_ID,
+              tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a',
+              front_image_path: `checks/${CHECK_ID}/front.jpg`,
+              back_image_path: `checks/${CHECK_ID}/back.jpg`,
+              back_image_deposit_path: `checks/${CHECK_ID}/back.jpg`,
+            }]
+            : [],
+        };
+      }
+      if (sql.includes('FROM public.check_payees') || sql.includes('FROM public.check_endorsements')) {
+        return { rows: [] };
+      }
+      if (sql.includes('endorsement_render_meta') && sql.includes('UPDATE')) {
+        return { rows: [] };
       }
       if (sql.includes("regexp_replace") && sql.includes("deposit2.jpg") && sql.includes('check_intake_items')) {
         return { rows: writeSibling ? [{ id: CHECK_ID, tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a' }] : [] };
@@ -384,5 +400,23 @@ test('check-scoped .checkalt.jpg remains writable via the check UUID prefix', as
   }), depsFor(mockClient({ writeCheck: true }), { forceStorageWrites: true }));
   assert.equal(result.ok, true, JSON.stringify(result));
   assert.equal(result.path, path);
+});
+
+test('official rear .checkalt.jpg presign stamps endorsement fingerprint', async () => {
+  const path = `checks/${CHECK_ID}/back.checkalt.jpg`;
+  const client = mockClient({ writeCheck: true });
+  const result = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {
+    bucket: 'claim-files',
+    path,
+    contentType: 'image/jpeg',
+    upsert: true,
+  }), depsFor(client, { forceStorageWrites: true }));
+  assert.equal(result.ok, true, JSON.stringify(result));
+  const stamp = client.queries.find((q) => String(q.sql).includes('endorsement_render_meta'));
+  assert.ok(stamp, 'rear presign must stamp endorsement_render_meta fingerprint');
+  assert.equal(stamp.params[0], CHECK_ID);
+  assert.equal(stamp.params[1], 'checkalt_rear_fingerprint');
+  assert.equal(typeof stamp.params[2], 'string');
+  assert.equal(stamp.params[2].length, 64);
 });
 
