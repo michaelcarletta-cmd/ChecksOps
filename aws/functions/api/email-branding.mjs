@@ -19,6 +19,35 @@ export const emailAssetOrigin = () => String(
 
 export const checksOpsLogoUrl = () => `${emailAssetOrigin()}/checksops-logo.png`;
 
+/**
+ * Allow only https URLs in email href/src attributes.
+ * http is permitted solely for loopback hosts (local test environments).
+ * javascript:, data:, file:, and protocol-relative URLs are rejected.
+ */
+export const isSafeHttpUrl = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw || raw.startsWith('//') || /[\u0000-\u001F\u007F]/.test(raw)) return false;
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return false;
+  }
+  if (parsed.username || parsed.password) return false;
+  if (!parsed.hostname) return false;
+  const protocol = parsed.protocol.toLowerCase();
+  if (protocol === 'https:') return true;
+  if (protocol === 'http:') {
+    const host = parsed.hostname.toLowerCase();
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  }
+  return false;
+};
+
+export const safeHttpUrl = (value, fallback = null) => (
+  isSafeHttpUrl(value) ? String(value).trim() : fallback
+);
+
 export { defaultReplyTo };
 
 export const parseFromHeader = (from) => {
@@ -54,6 +83,15 @@ export const formatFromHeader = (name, address) => {
   return `${quoted} <${addr}>`;
 };
 
+/**
+ * Custom From is allowed only when tenant_email_settings has:
+ *   sending_mode = custom
+ *   domain_status = verified
+ *   from_address belonging to sending_domain (exact host or a subdomain)
+ *
+ * domain_status must only be written by the future server-side SES
+ * verification workflow — not directly trusted from tenant/frontend input.
+ */
 export const isVerifiedCustomSender = (settings = {}) => {
   const mode = String(settings.sending_mode || '').trim().toLowerCase();
   const status = String(settings.domain_status || '').trim().toLowerCase();
@@ -61,6 +99,8 @@ export const isVerifiedCustomSender = (settings = {}) => {
   const domain = String(settings.sending_domain || '').trim().toLowerCase();
   if (mode !== 'custom' || status !== 'verified' || !from.includes('@') || !domain) return false;
   const fromDomain = addressDomain(from);
+  // Intended policy: verified parent domain covers itself and subdomains;
+  // a verified subdomain does not authorize the parent domain.
   return fromDomain === domain || fromDomain.endsWith(`.${domain}`);
 };
 
@@ -139,6 +179,7 @@ export const resolveEmailBranding = async (client, { tenantId = null, senderOver
   const primaryColor = isSafeHexColor(tenant.primary_color)
     ? String(tenant.primary_color).trim()
     : platform.primaryColor;
+  const logoUrl = safeHttpUrl(tenant.logo_url, platform.logoUrl);
 
   if (verified) {
     return {
@@ -150,6 +191,7 @@ export const resolveEmailBranding = async (client, { tenantId = null, senderOver
       companyName: displayName,
       companySubtitle,
       primaryColor,
+      logoUrl,
       usingCustomFrom: true,
       customFromBlocked: false,
       requestedCustomFrom,
@@ -165,6 +207,7 @@ export const resolveEmailBranding = async (client, { tenantId = null, senderOver
     companyName: companySubtitle || platform.companyName,
     companySubtitle,
     primaryColor,
+    logoUrl,
     usingCustomFrom: false,
     customFromBlocked,
     requestedCustomFrom,

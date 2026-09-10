@@ -3,7 +3,12 @@
  * Does not send mail. Callers still go through sendViaSesOrSink (sink by default).
  */
 
-import { checksOpsLogoUrl, PLATFORM_PRIMARY_COLOR, PLATFORM_SUPPORT_EMAIL } from './email-branding.mjs';
+import {
+  checksOpsLogoUrl,
+  PLATFORM_PRIMARY_COLOR,
+  PLATFORM_SUPPORT_EMAIL,
+  safeHttpUrl,
+} from './email-branding.mjs';
 
 export const escapeHtml = (value) => String(value ?? '')
   .replace(/&/g, '&amp;')
@@ -55,8 +60,9 @@ export const renderChecksOpsEmail = ({
     .filter((p) => p != null && String(p).trim() !== '')
     .map((p) => `<p style="margin:0 0 12px;font-size:15px;line-height:1.55;color:#334155;">${escapeHtml(p)}</p>`)
     .join('');
-  const ctaHref = ctaUrl ? escapeAttr(ctaUrl) : '';
-  const visibleUrl = fallbackUrl || ctaUrl || '';
+  const safeCtaUrl = safeHttpUrl(ctaUrl);
+  const visibleUrl = safeHttpUrl(fallbackUrl) || safeCtaUrl || '';
+  const ctaHref = safeCtaUrl ? escapeAttr(safeCtaUrl) : '';
   const ctaHtml = ctaLabel && ctaHref
     ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px 0 8px;">
         <tr><td align="center" bgcolor="${color}" style="border-radius:8px;">
@@ -73,10 +79,11 @@ export const renderChecksOpsEmail = ({
   const subtitleHtml = companySubtitle
     ? `<p style="margin:4px 0 0;font-size:13px;color:#64748b;">${escapeHtml(companySubtitle)}</p>`
     : '';
-  const unsubHtml = unsubscribeUrl
-    ? `<p style="margin:16px 0 0;font-size:11px;color:#94a3b8;">Don't want these emails? <a href="${escapeAttr(unsubscribeUrl)}" style="color:#64748b;">Unsubscribe</a></p>`
+  const safeUnsubUrl = safeHttpUrl(unsubscribeUrl);
+  const unsubHtml = safeUnsubUrl
+    ? `<p style="margin:16px 0 0;font-size:11px;color:#94a3b8;">Don't want these emails? <a href="${escapeAttr(safeUnsubUrl)}" style="color:#64748b;">Unsubscribe</a></p>`
     : '';
-  const logo = escapeAttr(logoUrl || checksOpsLogoUrl());
+  const logo = escapeAttr(safeHttpUrl(logoUrl) || safeHttpUrl(checksOpsLogoUrl()) || '');
   const safeSupport = escapeHtml(supportEmail);
 
   const html = `<!DOCTYPE html>
@@ -96,7 +103,7 @@ export const renderChecksOpsEmail = ({
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;">
           <tr>
             <td style="padding:20px 28px 16px;border-bottom:1px solid #e2e8f0;">
-              <img src="${logo}" alt="ChecksOps" width="220" style="display:block;width:220px;max-width:70%;height:auto;border:0;">
+              ${logo ? `<img src="${logo}" alt="ChecksOps" width="220" style="display:block;width:220px;max-width:70%;height:auto;border:0;">` : ''}
               ${subtitleHtml}
             </td>
           </tr>
@@ -135,12 +142,12 @@ export const renderChecksOpsEmail = ({
     greeting ? String(greeting) : null,
     ...(Array.isArray(paragraphs) ? paragraphs.map((p) => String(p)) : []),
     bodyHtml ? htmlToPlainText(bodyHtml) : null,
-    ctaLabel && ctaUrl ? `${ctaLabel}: ${ctaUrl}` : null,
-    visibleUrl && visibleUrl !== ctaUrl ? `Link: ${visibleUrl}` : (visibleUrl && !ctaLabel ? `Link: ${visibleUrl}` : null),
+    ctaLabel && safeCtaUrl ? `${ctaLabel}: ${safeCtaUrl}` : null,
+    visibleUrl && visibleUrl !== safeCtaUrl ? `Link: ${visibleUrl}` : (visibleUrl && !ctaLabel ? `Link: ${visibleUrl}` : null),
     expiresText ? String(expiresText) : null,
     '',
     `Questions? Contact ${supportEmail}`,
-    unsubscribeUrl ? `Unsubscribe: ${unsubscribeUrl}` : null,
+    safeUnsubUrl ? `Unsubscribe: ${safeUnsubUrl}` : null,
     'Sent by ChecksOps',
   ].filter((line) => line != null);
 
