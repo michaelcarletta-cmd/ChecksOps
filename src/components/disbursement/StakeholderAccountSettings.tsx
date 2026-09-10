@@ -13,11 +13,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { AlertTriangle, Building2, Plus, Trash2, Star, CreditCard, ShieldCheck, MailCheck, Lock, Loader2, Info, ShieldAlert } from "lucide-react";
-import { isValidRoutingNumber, VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus } from "@/lib/banking";
+import { VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus } from "@/lib/banking";
 import { AchAuthorizationForm } from "./AchAuthorizationForm";
 import { BankVerification } from "./BankVerification";
 import { usePermissions } from "@/hooks/usePermissions";
 import { usePaymentRail } from "@/hooks/usePaymentRail";
+import {
+  canResendSetupLink,
+  linkedRecipients,
+  resendConfirmCopy,
+  setupLinkEmail,
+  shouldListStakeholder,
+} from "@/lib/stakeholderResendTarget";
 
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
@@ -73,6 +80,11 @@ export function StakeholderAccountSettings() {
   const [capLimitDialog, setCapLimitDialog] = useState<null | "sales_rep" | "subcontractor" | "vendor">(null);
   const [deleteTarget, setDeleteTarget] = useState<null | { id: string; label: string }>(null);
   const [disconnectProvider, setDisconnectProvider] = useState(true);
+  const [resendTarget, setResendTarget] = useState<null | {
+    id: string;
+    termsOnly?: boolean;
+    copy: ReturnType<typeof resendConfirmCopy>;
+  }>(null);
 
   const { data: accounts = [], isLoading } = useQuery({
     queryKey: ["stakeholder-accounts", tenant?.id],
@@ -82,17 +94,29 @@ export function StakeholderAccountSettings() {
         .from("stakeholder_accounts")
         .select("id, nickname, account_type, chk_acct, acct_type, is_primary, is_active, custname, homeowner_name, verification_status, verified_at, verification_recipient_email, origin")
         .eq("tenant_id", tenant!.id)
-        .eq("is_active", true)
         .order("is_primary", { ascending: false })
         .order("created_at", { ascending: true });
       if (error) throw error;
-      // Tenant's own bank account (operating, or a provider-connected payment
-      // account like the Moov-linked "payment account") is shown separately at
-      // the top of the page in TenantBankAccountSettings. Exclude both here so
-      // stakeholders are strictly third parties identified by their account_type.
-      return (data ?? []).filter(
-        (a: any) => a.account_type !== "operating" && a.origin !== "provider_connected",
-      );
+      const { data: recips, error: recipErr } = await supabase
+        .from("external_payment_recipients")
+        .select("id, stakeholder_account_id, email, environment, provider_last_four, provider_bank_name, onboarding_status")
+        .eq("tenant_id", tenant!.id);
+      if (recipErr) throw recipErr;
+      const byStake = new Map<string, any[]>();
+      for (const r of recips ?? []) {
+        const sid = (r as { stakeholder_account_id?: string | null }).stakeholder_account_id;
+        if (!sid) continue;
+        const list = byStake.get(sid) ?? [];
+        list.push(r);
+        byStake.set(sid, list);
+      }
+      // Include inactive stakeholders that still have a payment recipient so a
+      // production setup link can be resent. Resend is keyed by stakeholder id,
+      // never display name. Tenant operating / provider-connected rows stay in
+      // TenantBankAccountSettings.
+      return (data ?? [])
+        .map((a: any) => ({ ...a, external_payment_recipients: byStake.get(a.id) ?? [] }))
+        .filter(shouldListStakeholder);
     },
   });
 
@@ -131,10 +155,11 @@ export function StakeholderAccountSettings() {
   const sharedCap = tenantCaps?.stakeholder_cap ?? 5;
   const capForType = (t: string): number | null =>
     CAPPED_TYPES.includes(t) ? sharedCap : null;
+  const activeAccounts = accounts.filter((a: any) => a.is_active);
   const countForType = (t: string) =>
     CAPPED_TYPES.includes(t)
-      ? accounts.filter((a: any) => CAPPED_TYPES.includes(a.account_type)).length
-      : accounts.filter((a: any) => a.account_type === t).length;
+      ? activeAccounts.filter((a: any) => CAPPED_TYPES.includes(a.account_type)).length
+      : activeAccounts.filter((a: any) => a.account_type === t).length;
   const isAtCap = (t: string) => {
     const max = capForType(t);
     return max !== null && countForType(t) >= max;
@@ -240,7 +265,11 @@ export function StakeholderAccountSettings() {
       }
       if ((data as any)?.error) throw new Error((data as any).error);
     },
-    onSuccess: () => toast({ title: "Setup link sent", description: "They can accept the provider's terms from the emailed link." }),
+    onSuccess: () => {
+      setResendTarget(null);
+      qc.invalidateQueries({ queryKey: ["stakeholder-accounts"] });
+      toast({ title: "Setup link sent", description: "They can accept the provider's terms from the emailed link." });
+    },
     onError: (e: any) => toast({ title: "Couldn't resend", description: e.message, variant: "destructive" }),
   });
 
@@ -306,7 +335,7 @@ export function StakeholderAccountSettings() {
 
   return (
     <div className="space-y-6">
-      <StakeholderCapsBar accounts={accounts} tenantId={tenant?.id} />
+      <StakeholderCapsBar accounts={activeAccounts} tenantId={tenant?.id} />
 
 
 
@@ -481,9 +510,17 @@ export function StakeholderAccountSettings() {
 
           {accounts.map((acct: any) => {
             const vStatus = (acct.verification_status ?? "unverified") as VerificationStatus;
+            const recipient = linkedRecipients(acct)[0];
+            const email = setupLinkEmail(acct);
+            const last4 = recipient?.provider_last_four || (acct.chk_acct ? acct.chk_acct.slice(-4) : "");
+            const env = recipient?.environment;
             return (
               <React.Fragment key={acct.id}>
-                <div className="flex items-center justify-between gap-2 p-2.5 rounded-md border bg-background">
+                <div
+                  className="flex items-center justify-between gap-2 p-2.5 rounded-md border bg-background"
+                  data-stakeholder-id={acct.id}
+                  data-recipient-id={recipient?.id ?? ""}
+                >
                 <div className="flex items-center gap-2 min-w-0 flex-1">
                   {acct.is_primary && <Star className="h-3 w-3 text-amber-400 flex-shrink-0" />}
                   <div className="min-w-0 flex-1">
@@ -492,6 +529,16 @@ export function StakeholderAccountSettings() {
                       <Badge variant="outline" className={`text-[10px] px-1.5 ${ACCOUNT_TYPE_COLORS[acct.account_type]}`}>
                         {ACCOUNT_TYPE_LABELS[acct.account_type]}
                       </Badge>
+                      {env && (
+                        <Badge variant="outline" className={`text-[10px] px-1.5 ${env === "production" ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/20" : "bg-amber-500/10 text-amber-700 border-amber-500/20"}`}>
+                          {env}
+                        </Badge>
+                      )}
+                      {!acct.is_active && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 text-muted-foreground">
+                          Inactive
+                        </Badge>
+                      )}
                       <Badge variant="outline" className={`text-[10px] px-1.5 ${VERIFICATION_BADGE_CLASS[vStatus]}`} title={VERIFICATION_LABEL[vStatus]}>
                         {vStatus === "verified" || vStatus === "admin_override" ? (
                           <><ShieldCheck className="h-2.5 w-2.5 mr-0.5 inline" /> Verified</>
@@ -507,17 +554,18 @@ export function StakeholderAccountSettings() {
                       </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground font-mono">
-                      {acct.nickname ? `${acct.nickname} · ` : ""}{acct.chk_acct ? `••••${acct.chk_acct.slice(-4)}` : "Account pending"} · {acct.acct_type === "C" ? "Checking" : "Savings"}
+                      {acct.nickname ? `${acct.nickname} · ` : ""}{email ? `${email} · ` : ""}{last4 ? `••••${last4}` : "Account pending"} · {acct.acct_type === "C" ? "Checking" : "Savings"}
+                      {recipient?.provider_bank_name ? ` · ${recipient.provider_bank_name}` : ""}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
-                  {acct.verification_recipient_email && ["unverified", "pending", "failed"].includes(vStatus) && (
+                  {canResendSetupLink(acct) && (
                     <Button
                       size="sm"
                       variant="ghost"
                       className="h-7 text-xs"
-                      onClick={() => resendVerification.mutate({ id: acct.id })}
+                      onClick={() => setResendTarget({ id: acct.id, copy: resendConfirmCopy(acct) })}
                       disabled={resendVerification.isPending}
                     >
                       <MailCheck className="h-3 w-3 mr-1" /> Resend
@@ -540,7 +588,7 @@ export function StakeholderAccountSettings() {
                       size="sm"
                       variant="ghost"
                       className="h-7 text-xs"
-                      onClick={() => resendVerification.mutate({ id: acct.id, termsOnly: true })}
+                      onClick={() => setResendTarget({ id: acct.id, termsOnly: true, copy: resendConfirmCopy(acct) })}
                       disabled={resendVerification.isPending}
                       title="Send a link so they can accept the payment provider's terms of service"
                     >
@@ -598,6 +646,46 @@ export function StakeholderAccountSettings() {
           </DialogHeader>
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" size="sm" onClick={() => setCapLimitDialog(null)}>Close</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!resendTarget} onOpenChange={(o) => !o && setResendTarget(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-base">
+              {resendTarget?.termsOnly ? "Send terms link?" : "Resend setup link?"}
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              This uses the stakeholder id, not the display name. Confirm the email and environment before sending.
+            </DialogDescription>
+          </DialogHeader>
+          {resendTarget && (
+            <div className="space-y-1 rounded-md border bg-muted/30 p-3 text-xs font-mono">
+              <p><span className="text-muted-foreground">Name:</span> {resendTarget.copy.displayName}</p>
+              <p><span className="text-muted-foreground">Type:</span> {resendTarget.copy.accountType ?? "—"}</p>
+              <p><span className="text-muted-foreground">Email:</span> {resendTarget.copy.email ?? "—"}</p>
+              <p><span className="text-muted-foreground">Environment:</span> {resendTarget.copy.environment ?? "—"}</p>
+              <p><span className="text-muted-foreground">Bank:</span> {resendTarget.copy.bankName ?? "—"}{resendTarget.copy.bankLast4 ? ` ••••${resendTarget.copy.bankLast4}` : ""}</p>
+              <p className="break-all"><span className="text-muted-foreground">Stakeholder:</span> {resendTarget.copy.stakeholderId}</p>
+              {resendTarget.copy.recipientId && (
+                <p className="break-all"><span className="text-muted-foreground">Recipient:</span> {resendTarget.copy.recipientId}</p>
+              )}
+              {!resendTarget.copy.isActive && (
+                <p className="text-amber-700">This stakeholder is inactive in payouts. Resend still rotates the existing recipient token only.</p>
+              )}
+            </div>
+          )}
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" size="sm" onClick={() => setResendTarget(null)}>Cancel</Button>
+            <Button
+              size="sm"
+              disabled={resendVerification.isPending || !resendTarget}
+              onClick={() => resendTarget && resendVerification.mutate({ id: resendTarget.id, termsOnly: resendTarget.termsOnly })}
+            >
+              {resendVerification.isPending && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+              Send to {resendTarget?.copy.email ?? "this email"}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
