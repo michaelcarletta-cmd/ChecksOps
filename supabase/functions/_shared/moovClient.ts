@@ -116,15 +116,65 @@ export function moovOrigin(): string {
   }
 }
 
+export type MoovErrorStage = "oauth_token" | "api";
+
+export type MoovErrorMeta = {
+  stage: MoovErrorStage;
+  requestId?: string | null;
+  cloudflareCode?: string | null;
+  cloudflareRay?: string | null;
+  rawText?: string;
+};
+
 export class MoovError extends Error {
   constructor(
     message: string,
     public readonly status: number,
     public readonly body: unknown,
+    public readonly meta: MoovErrorMeta = { stage: "api" },
   ) {
     super(message);
     this.name = "MoovError";
   }
+}
+
+function headerVal(res: Response, name: string): string | null {
+  return res.headers.get(name);
+}
+
+function moovResponseMeta(res: Response, text: string, stage: MoovErrorStage): MoovErrorMeta {
+  const cfRay = headerVal(res, "cf-ray");
+  const requestId = headerVal(res, "x-request-id")
+    || headerVal(res, "x-moov-request-id")
+    || cfRay;
+  const cfCodeMatch = String(text || "").match(/error code[:\s]+(\d{4})/i)
+    || String(text || "").match(/cf-error-code["'\s:=]+(\d+)/i);
+  const truncatedText = text && !/access_token|client_secret/i.test(text)
+    ? text.slice(0, 400)
+    : "";
+  return {
+    stage,
+    requestId,
+    cloudflareCode: cfCodeMatch?.[1] ?? null,
+    cloudflareRay: cfRay,
+    rawText: truncatedText,
+  };
+}
+
+function sanitizedMoovLogBody(body: unknown, text: string): unknown {
+  if (body && typeof body === "object") {
+    const rec = body as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const key of ["error", "errorCode", "error_code", "message"]) {
+      if (typeof rec[key] === "string") out[key] = String(rec[key]).slice(0, 80);
+    }
+    return out;
+  }
+  if (/<html|error code[:\s]+\d{4}/i.test(text)) {
+    const cf = text.match(/error code[:\s]+(\d{4})/i);
+    return { html: true, cloudflare_code: cf?.[1] ?? null };
+  }
+  return { non_json: true, length: text.length };
 }
 
 /* ---------------- OAuth ---------------- */
@@ -163,8 +213,9 @@ export async function moovToken(scopes: string[], requestOrigin?: string): Promi
   } catch { /* non-JSON handled below */ }
 
   if (!res.ok) {
-    console.error("[moov] token error", res.status, body ?? text);
-    throw new MoovError("Could not authenticate with the payment provider", res.status, body ?? text);
+    const meta = moovResponseMeta(res, text, "oauth_token");
+    console.error("[moov] token error", res.status, sanitizedMoovLogBody(body, text));
+    throw new MoovError("Could not authenticate with the payment provider", res.status, body ?? null, meta);
   }
 
   const token = body?.access_token as string;
@@ -331,7 +382,8 @@ export async function moovFetch<T = any>(
       msg = `${msg} (${details})`;
     }
 
-    console.error("[moov] error", opts.method ?? "GET", path, res.status, msg);
+    const meta = moovResponseMeta(res, text, "api");
+    console.error("[moov] error", opts.method ?? "GET", path, res.status, sanitizedMoovLogBody(json, text));
 
     // Provide helpful hints for common status codes.
     let userMessage = typeof msg === "string" ? msg : JSON.stringify(msg);
@@ -340,7 +392,7 @@ export async function moovFetch<T = any>(
     if (res.status === 404) userMessage = "Resource not found on the payment provider.";
     if (res.status === 429) userMessage = "Rate limit exceeded. Please try again in a moment.";
 
-    throw new MoovError(userMessage, res.status, json ?? text);
+    throw new MoovError(userMessage, res.status, json ?? null, meta);
   }
 
   return json as T;
@@ -448,8 +500,9 @@ export async function moovUpload<T = any>(path: string, opts: MoovUploadOptions)
 
   if (!res.ok) {
     const msg = json?.error ?? json?.message ?? text ?? `Moov ${path} failed`;
-    console.error("[moov] upload error", path, res.status, typeof msg === "string" ? msg : "");
-    throw new MoovError(typeof msg === "string" ? msg : JSON.stringify(msg), res.status, json ?? text);
+    const meta = moovResponseMeta(res, text, "api");
+    console.error("[moov] upload error", path, res.status, sanitizedMoovLogBody(json, text));
+    throw new MoovError(typeof msg === "string" ? msg : JSON.stringify(msg), res.status, json ?? null, meta);
   }
   return json as T;
 }

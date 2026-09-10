@@ -15,14 +15,14 @@ import { bindMoovEnvironment, moovConfigured, moovEnvironment } from "./moovClie
 export const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-moov-signature, x-moov-timestamp, webhook-id, webhook-timestamp, webhook-signature",
+    "authorization, x-client-info, apikey, content-type, x-moov-signature, x-moov-timestamp, webhook-id, webhook-timestamp, webhook-signature, x-checksops-operator-classify",
   "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
 };
 
-export const json = (body: unknown, status = 200) =>
+export const json = (body: unknown, status = 200, extraHeaders: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...corsHeaders, "Content-Type": "application/json", ...extraHeaders },
   });
 
 export function serviceClient(): SupabaseClient {
