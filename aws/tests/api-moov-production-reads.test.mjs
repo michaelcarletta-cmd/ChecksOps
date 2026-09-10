@@ -343,6 +343,24 @@ test('live reads true + money flags false → GET account/wallet/bank/capabiliti
   assert.equal(result.live_gets.account.ok, true);
 });
 
+test('account_get_only skips capability/wallet/bank/payment-method GETs', async () => {
+  const store = createStore();
+  const result = await invoke(store, 'moov-readiness', { account_get_only: true });
+  assert.equal(result.ok, true);
+  assert.equal(result.account_get_only, true);
+  assert.equal(result.extra_reads_skipped, true);
+  assert.equal(result.productionExecution, false);
+  assert.ok(store.oauthPosts <= 1);
+  assert.equal(store.getGets, 1);
+  assert.deepEqual(store.getPaths, ['/accounts/moov-freedom']);
+  assert.equal(store.processPosts, 0);
+  assert.equal(result.live_account.mode, null);
+  assert.equal(result.live_account.display_name, null);
+  assert.equal(result.live_gets.account.ok, true);
+  assert.equal(result.live_gets.capabilities, undefined);
+  assert.equal(result.capabilities, undefined);
+});
+
 test('GET account uses server-derived provider_account_id; spoofed account denied', async () => {
   const store = createStore();
   const ok = await invoke(store, 'moov-readiness', {});

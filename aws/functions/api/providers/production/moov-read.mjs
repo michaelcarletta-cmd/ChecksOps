@@ -9,7 +9,13 @@ import {
 import { authorizeMoovProductionRead } from './moov-authz.mjs';
 import { loadTransferById } from './moov-idempotency.mjs';
 import { persistPollOutcome } from './moov-idempotency.mjs';
-import { productionMoovFetch, normalizeProductionTransferStatus, redactMoovText, publicMoovErrorBody } from './moov-client.mjs';
+import {
+  productionMoovFetch,
+  normalizeProductionTransferStatus,
+  redactMoovText,
+  publicMoovErrorBody,
+  fingerprintMoovId,
+} from './moov-client.mjs';
 
 const UNTRUSTED_MOOV_KEYS = [
   'moov_account_id', 'moovAccountId', 'MOOV_ACCOUNT_ID',
@@ -278,7 +284,8 @@ export async function handleProductionMoovReadiness({
     });
   }
   const accountId = account.provider_account_id;
-  const localWallet = await loadProductionWallet(client, derived.tenantId);
+  const accountGetOnly = body.account_get_only === true;
+  const localWallet = accountGetOnly ? null : await loadProductionWallet(client, derived.tenantId);
   const secrets = await (
     deps.loadProductionReadSecrets
     || deps.loadProductionSecrets
@@ -292,6 +299,49 @@ export async function handleProductionMoovReadiness({
     scopes: [`/accounts/${accountId}/profile.read`],
     fetchImpl,
   });
+  if (accountGetOnly) {
+    const remoteAccount = accountGet.json || {};
+    const oauth = accountGet.diagnosis?.oauth || null;
+    const oauthHttp = oauth?.http ?? null;
+    const oauthOk = oauthHttp === 200 && oauth?.has_access_token === true;
+    return {
+      ok: accountGet.ok === true,
+      statusCode: accountGet.ok === true ? 200 : (oauthHttp && oauthHttp !== 200 ? oauthHttp : 502),
+      error: accountGet.ok === true ? undefined : (oauthOk ? 'moov_account_get_failed' : 'moov_oauth_failed'),
+      provider: 'moov',
+      liveProviderCalled: true,
+      productionExecution: false,
+      productionRead: true,
+      created: false,
+      mutated: false,
+      account_get_only: true,
+      extra_reads_skipped: true,
+      payment_transfer_required: false,
+      tenant_id: derived.tenantId,
+      server_derived_provider_account_id_present: true,
+      live_account: {
+        account_id_fp: fingerprintMoovId(remoteAccount.accountID || remoteAccount.accountId || accountId),
+        matches_expected_freedom_id: fingerprintMoovId(accountId) === '60922058…de96',
+        display_name: remoteAccount.displayName
+          || remoteAccount.profile?.business?.legalBusinessName
+          || null,
+        mode: remoteAccount.mode || null,
+        verification_status: remoteAccount.verification?.status
+          || remoteAccount.verificationStatus
+          || null,
+      },
+      live_gets: { account: getSummary(accountGet) },
+      auth_diagnosis: {
+        account_get: accountGet.diagnosis || null,
+        oauth,
+        origin_constant: 'https://checksops.com',
+        api_version: secrets.credentials?.apiVersion || null,
+        platform_account_id_configured: Boolean(secrets.credentials?.platformAccountId),
+      },
+      spoofFieldsIgnored: spoof,
+      applicationUserId: mapping.application_user_id,
+    };
+  }
   const caps = await safeGet({
     credentials: secrets.credentials,
     path: `/accounts/${accountId}/capabilities`,
