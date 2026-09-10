@@ -33,9 +33,16 @@ import {
   liveAccountReadFailed,
   liveBankVerified,
   liveTosAccepted,
+  moovInstantVerifyBody,
+  recipientBankVerifyBlocked,
   recipientOnboardingCompleteFromMoov,
+  rejectBrowserBankSubstitution,
   rejectForgedRecipientTos,
+  shouldInitiateInstantMicroDeposit,
   shouldResumeExistingBank,
+  interpretRecipientBankVerification,
+  initiateAlreadyOpenError,
+  providerVerifySuccessIsNotComplete,
   tosBoundToRecipientAccount,
   tosConfirmedByMoov,
   tosRequirementOutstanding,
@@ -722,6 +729,116 @@ export const recipientBankAdd = {
     );
     return jsonResult({
       success: true, bank_account_id: bankAccountId, bank_name: bankName, last_four: lastFour, liveProviderCalled: true,
+    });
+  },
+};
+
+export const recipientBankVerify = {
+  run: async ({ client, body, fetchImpl }) => {
+    const token = String(body?.token ?? '');
+    const action = String(body?.action ?? '').toLowerCase();
+    if (!token) return fail('token is required', 400);
+    if (action !== 'initiate' && action !== 'confirm') return fail('action must be initiate or confirm.', 400);
+    const recipient = (await client.query(
+      `SELECT * FROM public.external_payment_recipients WHERE secure_token = $1`,
+      [token],
+    )).rows[0];
+    if (!recipient) return fail('This link is not valid.', 404);
+    if (recipient.token_expires_at && new Date(recipient.token_expires_at) < new Date()) {
+      return fail('This link has expired. Ask the sender for a new one.', 410);
+    }
+    if (!recipient.provider_account_id) return fail('This payment setup is not ready yet.', 409);
+    const accountId = recipient.provider_account_id;
+    const account = await moovFetch(`/accounts/${accountId}`, { scopes: scopes.accountRead(accountId), fetchImpl });
+    let capabilities = [];
+    let capsOk = false;
+    try {
+      const caps = await moovFetch(`/accounts/${accountId}/capabilities`, { scopes: scopes.capabilitiesRead(accountId), fetchImpl });
+      capabilities = Array.isArray(caps) ? caps : caps?.capabilities || [];
+      capsOk = true;
+    } catch { /* unread */ }
+    const blocked = recipientBankVerifyBlocked({
+      tosAccepted: liveTosAccepted(account),
+      tosOutstanding: capsOk ? tosRequirementOutstanding(capabilities) : true,
+      identityOutstanding: capsOk ? identityRequirementsOutstanding(capabilities) : [],
+    });
+    if (blocked) return fail(blocked.error, blocked.statusCode);
+    let banks = [];
+    try {
+      const payload = await moovFetch(`/accounts/${accountId}/bank-accounts`, { scopes: scopes.bankAccountsRead(accountId), fetchImpl });
+      banks = Array.isArray(payload) ? payload : payload?.bankAccounts || [];
+    } catch {
+      return fail('moov_bank_list_failed', 502);
+    }
+    const liveBank = banks[0];
+    const liveBankId = String(liveBank?.bankAccountID ?? liveBank?.bankAccountId ?? '');
+    if (!liveBankId) return fail('bank_required', 409);
+    const swapped = rejectBrowserBankSubstitution({
+      recipientAccountId: accountId,
+      liveBankAccountId: liveBankId,
+      requestedAccountId: body.account_id ?? body.accountId ?? null,
+      requestedBankAccountId: body.bank_account_id ?? body.bankAccountId ?? null,
+    });
+    if (swapped) return fail(swapped.error, swapped.statusCode);
+    let liveVerify = null;
+    try {
+      liveVerify = await moovFetch(`/accounts/${accountId}/bank-accounts/${liveBankId}/verify`, {
+        scopes: scopes.bankAccountsRead(accountId), fetchImpl,
+      });
+    } catch { /* not initiated */ }
+    const interpreted = interpretRecipientBankVerification({ bank: liveBank, verification: liveVerify });
+    if (action === 'initiate') {
+      if (interpreted.verified) {
+        return jsonResult({
+          success: true, already_verified: true,
+          complete: recipientOnboardingCompleteFromMoov({
+            account, banks, capabilities, capabilitiesReadOk: capsOk,
+          }),
+          liveProviderCalled: true, account_id: accountId,
+        });
+      }
+      if (!shouldInitiateInstantMicroDeposit({ bank: liveBank, verification: liveVerify })) {
+        return jsonResult({
+          success: true, already_initiated: true, initiated: interpreted.initiated,
+          complete: false, liveProviderCalled: true, account_id: accountId,
+        });
+      }
+      try {
+        await moovFetch(`/accounts/${accountId}/bank-accounts/${liveBankId}/verify`, {
+          method: 'POST', scopes: scopes.bankAccountsWrite(accountId), fetchImpl,
+        });
+      } catch (e) {
+        if (!initiateAlreadyOpenError(e.message)) return fail('initiate_failed', 502);
+      }
+      return jsonResult({ success: true, initiated: true, complete: false, liveProviderCalled: true, account_id: accountId });
+    }
+    const verifyBody = moovInstantVerifyBody(body?.code);
+    if (!verifyBody) return fail('Enter the 4-digit verification code.', 400);
+    if (interpreted.verified) {
+      return jsonResult({ success: true, already_verified: true, complete: true, liveProviderCalled: true, account_id: accountId });
+    }
+    try {
+      await moovFetch(`/accounts/${accountId}/bank-accounts/${liveBankId}/verify`, {
+        method: 'PUT', scopes: scopes.bankAccountsWrite(accountId), body: verifyBody, fetchImpl,
+      });
+    } catch {
+      return fail('verification_failed', 409, { message: 'That code did not match. Check the $0.01 deposit descriptor and try again.' });
+    }
+    const refreshed = await moovFetch(`/accounts/${accountId}/bank-accounts/${liveBankId}`, {
+      scopes: scopes.bankAccountsRead(accountId), fetchImpl,
+    }).catch(() => null);
+    if (!refreshed) return fail('moov_bank_get_failed', 502);
+    if (providerVerifySuccessIsNotComplete({ httpOk: true, bank: refreshed }) || !liveBankVerified([refreshed])) {
+      return fail('bank_not_verified', 502);
+    }
+    return jsonResult({
+      success: true,
+      complete: recipientOnboardingCompleteFromMoov({
+        account, banks: [refreshed], capabilities, capabilitiesReadOk: capsOk,
+      }),
+      bank_status: 'verified',
+      liveProviderCalled: true,
+      account_id: accountId,
     });
   },
 };

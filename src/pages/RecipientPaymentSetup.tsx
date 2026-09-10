@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { applyMoovTheme } from "@/lib/payments/moovTheme";
-import { Loader2, ShieldCheck, Landmark, AlertCircle, CheckCircle2, UserRound } from "lucide-react";
+import { Loader2, ShieldCheck, Landmark, AlertCircle, CheckCircle2, UserRound, Clock } from "lucide-react";
 
 interface SessionData {
   recipient: { id: string; name: string; status: string; bank_linked?: boolean; bank_name?: string | null; last_four?: string | null };
@@ -19,6 +19,11 @@ interface SessionData {
     identity_requirements_known?: boolean;
     bank_verified?: boolean;
     bank_status?: string | null;
+    bank_verification_method?: string | null;
+    bank_verification_status?: string | null;
+    bank_micro_deposits_initiated?: boolean;
+    bank_can_confirm?: boolean;
+    bank_should_initiate?: boolean;
     complete?: boolean;
     live?: boolean;
   };
@@ -90,6 +95,7 @@ export default function RecipientPaymentSetup() {
   const [bank, setBank] = useState({
     holder_name: "", holder_type: "individual", bank_account_type: "checking", routing_number: "", account_number: "",
   });
+  const [verifyCode, setVerifyCode] = useState("");
 
   useEffect(
     () => applyMoovTheme({ primary: session?.payer.primary_color ?? null, secondary: session?.payer.secondary_color ?? null }),
@@ -126,6 +132,9 @@ export default function RecipientPaymentSetup() {
   const liveComplete = session?.onboarding?.complete === true;
   const bankVerified = Boolean(session?.onboarding?.bank_verified);
   const bankAlreadyLinked = Boolean(session?.recipient.bank_linked) && !replaceBank;
+  const bankShouldInitiate = Boolean(session?.onboarding?.bank_should_initiate);
+  const bankCanConfirm = Boolean(session?.onboarding?.bank_can_confirm) || Boolean(session?.onboarding?.bank_micro_deposits_initiated);
+  const isSandbox = session?.environment === "sandbox";
   const digits = (v: string, max: number) => v.replace(/\D/g, "").slice(0, max);
 
   const handleDropToken = useCallback((acceptanceToken: string) => {
@@ -161,13 +170,33 @@ export default function RecipientPaymentSetup() {
   async function submitBank(e: React.FormEvent) {
     e.preventDefault(); setSaving(true); setError(null);
     try {
-      const result = await invoke("moov-recipient-bank-add", { token, ...bank, replace_bank: replaceBank });
-      if (result?.complete === true) {
-        await load();
-      } else {
-        await load();
-      }
+      await invoke("moov-recipient-bank-add", { token, ...bank, replace_bank: replaceBank });
       setReplaceBank(false);
+      await load();
+    } catch (e: any) { setError(e.message); }
+    finally { setSaving(false); }
+  }
+
+  async function initiateBankVerify() {
+    setSaving(true); setError(null);
+    try {
+      await invoke("moov-recipient-bank-verify", { token, action: "initiate" });
+      await load();
+    } catch (e: any) { setError(e.message); }
+    finally { setSaving(false); }
+  }
+
+  async function confirmBankVerify(e: React.FormEvent) {
+    e.preventDefault();
+    if (verifyCode.length !== 4) {
+      setError("Enter the 4-digit verification code from the $0.01 deposit.");
+      return;
+    }
+    setSaving(true); setError(null);
+    try {
+      await invoke("moov-recipient-bank-verify", { token, action: "confirm", code: verifyCode });
+      setVerifyCode("");
+      await load();
     } catch (e: any) { setError(e.message); }
     finally { setSaving(false); }
   }
@@ -205,8 +234,25 @@ export default function RecipientPaymentSetup() {
       )}
       {!loading && session && !needsIdentity && termsAccepted && !liveComplete && bankAlreadyLinked && (
         <div className="space-y-3">
-          <div className="flex gap-2 rounded-md border border-emerald-500/30 p-3"><CheckCircle2 className="h-4 w-4 text-emerald-500"/><p className="text-xs">Identity and agreement are recorded. {session.recipient.bank_name ?? "Your bank"}{session.recipient.last_four ? ` ••••${session.recipient.last_four}` : ""} is connected{bankVerified ? " and verified." : ". Bank verification is still pending."}</p></div>
-          {!bankVerified && <p className="text-[11px] text-muted-foreground">Setup is not complete until the payment provider verifies this bank. You can close this page and return with the same link.</p>}
+          <div className="flex gap-2 rounded-md border border-emerald-500/30 p-3"><CheckCircle2 className="h-4 w-4 text-emerald-500"/><p className="text-xs">Identity and agreement are recorded. {session.recipient.bank_name ?? "Your bank"}{session.recipient.last_four ? ` ••••${session.recipient.last_four}` : ""} is connected{bankVerified ? " and verified." : "."}</p></div>
+          {!bankVerified && bankShouldInitiate && !bankCanConfirm && (
+            <div className="space-y-3">
+              <p className="text-[11px] text-muted-foreground">Confirm this bank with a $0.01 verification deposit. A 4-digit code will appear on the deposit as MV••••. You can return with this same link after it arrives.</p>
+              <Button className="w-full" disabled={saving} onClick={() => void initiateBankVerify()}>
+                {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Send verification deposit
+              </Button>
+            </div>
+          )}
+          {!bankVerified && bankCanConfirm && (
+            <form onSubmit={confirmBankVerify} className="space-y-3">
+              <div className="flex items-center gap-2 text-amber-600"><Clock className="h-4 w-4" /><span className="text-xs font-medium">Verification deposit sent</span></div>
+              <p className="text-[11px] text-muted-foreground">Enter the 4 digits shown after MV on the $0.01 deposit in this bank account.</p>
+              {isSandbox && <p className="text-[11px] text-muted-foreground">Test mode code: 0001</p>}
+              <div><Label>Verification code</Label><Input inputMode="numeric" required maxLength={4} value={verifyCode} onChange={e=>setVerifyCode(digits(e.target.value,4))} placeholder="4 digits" /></div>
+              <Button className="w-full" disabled={saving || verifyCode.length !== 4}>{saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Confirm bank verification</Button>
+              {bankShouldInitiate && <Button type="button" variant="outline" className="w-full" disabled={saving} onClick={() => void initiateBankVerify()}>Send a new verification deposit</Button>}
+            </form>
+          )}
           <Button variant="outline" className="w-full" onClick={()=>setReplaceBank(true)}>Use a different bank account</Button>
         </div>
       )}

@@ -221,3 +221,108 @@ export const shouldResumeExistingBank = ({ banks = [], replaceBank = false } = {
 );
 
 export const liveAccountReadFailed = (account) => account == null;
+
+export const RECIPIENT_BANK_VERIFY_METHOD = 'instant_micro_deposit';
+export const RECIPIENT_VERIFY_MAX_ATTEMPTS = 3;
+
+const normStatus = (value) => String(value ?? '').toLowerCase().replace(/_/g, '-');
+
+export const normalizeRecipientVerifyCode = (raw) => {
+  const digits = String(raw ?? '').replace(/\D/g, '').slice(0, 4);
+  return /^\d{4}$/.test(digits) ? digits : null;
+};
+
+export const moovInstantVerifyBody = (raw) => {
+  const digits = normalizeRecipientVerifyCode(raw);
+  return digits ? { code: `MV${digits}` } : null;
+};
+
+export const instantMicroDepositOpen = (verification = null) => {
+  const status = normStatus(verification?.status);
+  return status === 'new' || status === 'sent-credit' || status === 'pending';
+};
+
+export const instantMicroDepositNeedsRestart = (verification = null) => {
+  const status = normStatus(verification?.status);
+  return status === 'expired' || status === 'max-attempts-exceeded' || status === 'failed';
+};
+
+export const shouldInitiateInstantMicroDeposit = ({ bank = null, verification = null } = {}) => {
+  if (!bank) return false;
+  if (liveBankVerified([bank])) return false;
+  const bankStatus = normStatus(bank.status ?? bank.verificationStatus);
+  if (bankStatus === 'errored') return false;
+  if (bankStatus === 'pending') return false;
+  if (instantMicroDepositOpen(verification)) return false;
+  if (instantMicroDepositNeedsRestart(verification)) return true;
+  if (bankStatus === 'verificationfailed') return true;
+  return bankStatus === 'new' || bankStatus === '';
+};
+
+export const interpretRecipientBankVerification = ({ bank = null, verification = null } = {}) => {
+  const bankStatus = bank
+    ? normStatus(bank.status ?? bank.verificationStatus ?? 'new')
+    : null;
+  const verifyStatus = verification ? normStatus(verification.status) : '';
+  const verified = liveBankVerified(bank ? [bank] : []);
+  const initiated = !verified && (
+    bankStatus === 'pending' || instantMicroDepositOpen(verification)
+  );
+  const shouldInitiate = shouldInitiateInstantMicroDeposit({ bank, verification });
+  return {
+    method: verified ? null : (bank ? RECIPIENT_BANK_VERIFY_METHOD : null),
+    bank_status: bankStatus,
+    verification_status: verifyStatus || (verified ? 'successful' : (initiated ? 'pending' : 'not_started')),
+    initiated,
+    verified,
+    should_initiate: shouldInitiate,
+    can_confirm: initiated,
+    needs_restart: instantMicroDepositNeedsRestart(verification),
+  };
+};
+
+export const rejectBrowserBankSubstitution = ({
+  recipientAccountId,
+  liveBankAccountId,
+  requestedAccountId = null,
+  requestedBankAccountId = null,
+} = {}) => {
+  const expectedAccount = String(recipientAccountId || '').trim();
+  const liveBank = String(liveBankAccountId || '').trim();
+  const requestedAccount = requestedAccountId == null || requestedAccountId === ''
+    ? null
+    : String(requestedAccountId).trim();
+  const requestedBank = requestedBankAccountId == null || requestedBankAccountId === ''
+    ? null
+    : String(requestedBankAccountId).trim();
+  if (requestedAccount && requestedAccount !== expectedAccount) {
+    return { error: 'bank_account_mismatch', statusCode: 400 };
+  }
+  if (requestedBank && liveBank && requestedBank !== liveBank) {
+    return { error: 'bank_account_mismatch', statusCode: 400 };
+  }
+  return null;
+};
+
+export const recipientBankVerifyBlocked = ({
+  tosAccepted = false,
+  tosOutstanding = true,
+  identityOutstanding = [],
+} = {}) => {
+  if (!tosAccepted && tosOutstanding) {
+    return { error: 'tos_required', statusCode: 409, message: 'Accept the payment provider terms before verifying a bank.' };
+  }
+  if (Array.isArray(identityOutstanding) && identityOutstanding.length) {
+    return { error: 'kyc_incomplete', statusCode: 409, message: 'Finish identity verification before verifying a bank.' };
+  }
+  return null;
+};
+
+export const initiateAlreadyOpenError = (message = '') => {
+  const raw = String(message || '').toLowerCase();
+  return /already|in progress|pending|exists|open verification/.test(raw);
+};
+
+export const providerVerifySuccessIsNotComplete = ({ httpOk = false, bank = null } = {}) => (
+  httpOk === true && !liveBankVerified(bank ? [bank] : [])
+);

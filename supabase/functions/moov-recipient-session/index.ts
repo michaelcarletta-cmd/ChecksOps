@@ -4,6 +4,7 @@ import { bindMoovEnvironment, moovConfigured, moovEnvironment, moovFetch, moovTo
 import { corsHeaders, json } from "../_shared/moovGuard.ts";
 import {
   identityRequirementsOutstanding,
+  interpretRecipientBankVerification,
   kycStatusFromMoov,
   liveAccountReadFailed,
   liveBankVerified,
@@ -88,6 +89,29 @@ serve(async (req) => {
     const tosOutstanding = capabilitiesReadOk ? tosRequirementOutstanding(capabilities) : true;
     const identityOutstanding = capabilitiesReadOk ? identityRequirementsOutstanding(capabilities) : [];
     const bankVerified = liveBankVerified(banks);
+    let bankVerification: any = null;
+    if (banks[0]) {
+      const liveBankId = String(banks[0]?.bankAccountID ?? banks[0]?.bankAccountId ?? "");
+      if (liveBankId) {
+        try {
+          bankVerification = await moovFetch<any>(
+            `/accounts/${accountId}/bank-accounts/${liveBankId}/verify`,
+            { scopes: scopes.bankAccountsRead(accountId) },
+          );
+        } catch {
+          try {
+            bankVerification = await moovFetch<any>(
+              `/accounts/${accountId}/bank-accounts/${liveBankId}/verification`,
+              { scopes: scopes.bankAccountsRead(accountId) },
+            );
+          } catch { /* not initiated yet */ }
+        }
+      }
+    }
+    const bankState = interpretRecipientBankVerification({
+      bank: banks[0] ?? null,
+      verification: bankVerification,
+    });
     const complete = recipientOnboardingCompleteFromMoov({
       account,
       banks,
@@ -115,7 +139,12 @@ serve(async (req) => {
         identity_requirements_outstanding: identityOutstanding,
         identity_requirements_known: capabilitiesReadOk,
         bank_verified: bankVerified,
-        bank_status: banks[0] ? String(banks[0]?.status ?? banks[0]?.verificationStatus ?? "new").toLowerCase() : null,
+        bank_status: bankState.bank_status,
+        bank_verification_method: bankState.method,
+        bank_verification_status: bankState.verification_status,
+        bank_micro_deposits_initiated: bankState.initiated,
+        bank_can_confirm: bankState.can_confirm,
+        bank_should_initiate: bankState.should_initiate,
         complete,
         live: true,
       },
