@@ -32,7 +32,7 @@ export function useFinancialGuard(tenantId?: string | null) {
         amount_cents: extra?.amount_cents,
       });
       if (!built.ok) {
-        throw new Error(built.message);
+        throw new Error((built as { message?: string }).message ?? "Financial authorization failed");
       }
       const ok = await requireStepUp(built.request);
       if (!ok) {

@@ -445,7 +445,7 @@ export async function renderDepositImage(
 
   const official = await normalizeBlobToCheckAltCanvas(working);
   if (!official.ok) {
-    throw new Error(official.message);
+    throw new Error((official as { message?: string }).message ?? "Image normalization failed");
   }
 
   return {

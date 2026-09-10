@@ -82,7 +82,7 @@ export const requireAwsCheckAltProviderPath = (deps: {
   functionName: string;
 }): string => {
   const ready = awsCheckAltProviderPathReady(deps);
-  if (!ready.ok) throw new Error(ready.error);
+  if (!ready.ok) throw new Error((ready as { error?: string }).error ?? "provider path unavailable");
   return ready.url;
 };
 
@@ -127,7 +127,7 @@ export async function invokeAwsCheckAltProviderFunction(
     functionName: name,
   });
   if (!ready.ok) {
-    return { data: null, error: new Error(ready.error), providerHttp: false };
+    return { data: null, error: new Error((ready as { error?: string }).error ?? "provider path unavailable"), providerHttp: false };
   }
   const token = deps.idToken !== undefined ? deps.idToken : readIdToken();
   if (!token) {

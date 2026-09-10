@@ -30,6 +30,7 @@ export interface CheckItem {
   claim_id: string | null;
   front_image_path: string;
   back_image_path: string | null;
+  back_image_deposit_path?: string | null;
   carrier_name: string | null;
   check_number: string | null;
   amount: number | null;

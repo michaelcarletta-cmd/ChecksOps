@@ -176,6 +176,7 @@ export function TotpManagerCard() {
     setBusy(true);
     const ok = await requireStepUp({
       actionKey: "totp.enroll",
+      checkId: null,
       title: enrolled ? "Confirm your authenticator" : "Set up two-factor",
       description: enrolled
         ? "Enter a current code to confirm your authenticator still works."
@@ -195,6 +196,7 @@ export function TotpManagerCard() {
     // Removing a verified factor requires a fresh code first (AAL2).
     const ok = await requireStepUp({
       actionKey: "totp.unenroll",
+      checkId: null,
       title: "Confirm before removing",
       description: "Enter a current code from your authenticator app to remove it.",
     });
