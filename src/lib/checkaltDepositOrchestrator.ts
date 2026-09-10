@@ -10,13 +10,11 @@ import {
   checkAltProviderUserMessage,
   invokeAwsCheckAltProviderFunction,
   requireAwsCheckAltProviderPath,
-} from "./awsCheckAltMoneyPath";
-import { awsApiBaseUrl } from "./awsStaging";
+} from "./awsCheckAltMoneyPath.ts";
 import {
   buildFinancialStepUpRequest,
   type FinancialStepUpRequest,
-} from "./financialStepUp";
-import { prepareCheckAltDeposit } from "./prepareCheckAltDeposit";
+} from "./financialStepUp.ts";
 
 export type DepositPhase =
   | "idle"
@@ -96,6 +94,7 @@ export async function fetchCheckAltDepositPreflight(
   } = {},
 ): Promise<DepositPreflightResult> {
   if (deps.preflight) return deps.preflight(checkId);
+  const { awsApiBaseUrl } = await import("./awsStaging.ts");
   const base = String(deps.apiBaseUrl || awsApiBaseUrl() || "").replace(/\/$/, "");
   const token = deps.idToken !== undefined ? deps.idToken : readIdToken();
   if (!base || !token) {
@@ -133,7 +132,10 @@ export async function runCheckAltDepositClick(
     fetchImpl?: typeof fetch;
     onPhase?: (phase: DepositPhase) => void;
     requireStepUp: (request: FinancialStepUpRequest) => Promise<boolean>;
-    prepareCheckAltDeposit?: typeof prepareCheckAltDeposit;
+    prepareCheckAltDeposit?: (
+      checkId: string,
+      options?: { forceFront?: boolean; forceRear?: boolean },
+    ) => Promise<{ deposit_front_path: string; deposit_back_path: string }>;
     preflight?: (checkId: string) => Promise<DepositPreflightResult>;
     submit?: (checkId: string) => Promise<{ error: Error | null; data?: unknown }>;
   },
@@ -177,7 +179,8 @@ export async function runCheckAltDepositClick(
 
     if (!preflight.ok && (preflight.needFrontPrep || preflight.needRearPrep)) {
       try {
-        const prepare = deps.prepareCheckAltDeposit || prepareCheckAltDeposit;
+        const prepare = deps.prepareCheckAltDeposit
+          || (await import("./prepareCheckAltDeposit.ts")).prepareCheckAltDeposit;
         await prepare(checkId, {
           forceFront: preflight.needFrontPrep === true,
           forceRear: preflight.needRearPrep === true,
