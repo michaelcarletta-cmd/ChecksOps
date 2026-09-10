@@ -304,13 +304,15 @@ export const runStartDomainVerification = async ({
     identity = await adapter.createEmailIdentity({
       EmailIdentity: parsed.domain,
       DkimSigningAttributes: { NextSigningKeyLength: 'RSA_2048_BIT' },
-      Tags: [
-        { Key: 'service', Value: 'checksops-tenant-email' },
-        { Key: 'tenant_id', Value: String(resolved.tenantId) },
-      ],
     });
   } catch (error) {
     const name = String(error?.name || error?.Code || '');
+    console.error(JSON.stringify({
+      event: 'ses_create_failed',
+      name: name.slice(0, 80),
+      code: String(error?.code || '').slice(0, 80),
+      httpStatus: error?.$metadata?.httpStatusCode || null,
+    }));
     if (!/AlreadyExists/i.test(name)) {
       const auditError = await commitDomainAudit(client, mapping, {
         action: 'tenant_email_domain_start_failed',
