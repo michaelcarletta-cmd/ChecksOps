@@ -72,7 +72,7 @@ const totpBody = (
 ) => {
   const normalized = normalizeTotpCode(code);
   if (!normalized.ok) {
-    throw new Error(totpUserFailureMessage({ message: normalized.error }));
+    throw new Error(totpUserFailureMessage({ message: (normalized as { error?: string }).error }));
   }
   return {
     code: normalized.code,
