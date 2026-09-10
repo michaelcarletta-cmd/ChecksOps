@@ -1,0 +1,199 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { test } from 'node:test';
+import { escapeHtml, renderChecksOpsEmail } from '../functions/api/email-layout.mjs';
+import {
+  isVerifiedCustomSender,
+  platformBranding,
+  resolveEmailBranding,
+} from '../functions/api/email-branding.mjs';
+import { sendViaSesOrSink } from '../functions/api/email.mjs';
+import { renderTransactionalTemplate, TEMPLATE_NAMES } from '../functions/api/email-templates.mjs';
+
+const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
+
+const sqlClient = (handlers) => ({
+  query: async (sql, params = []) => {
+    const compact = String(sql).replace(/\s+/g, ' ');
+    for (const handler of handlers) {
+      if (handler.match(compact, params)) return handler.result(params, compact);
+    }
+    return { rows: [], rowCount: 0 };
+  },
+});
+
+test('layout escapes dynamic HTML and includes CTA, fallback URL, support, and text', () => {
+  const layout = renderChecksOpsEmail({
+    title: '<script>alert(1)</script>',
+    greeting: 'Hi <b>Ada</b>,',
+    paragraphs: ['Amount <img src=x onerror=alert(1)> owed'],
+    ctaLabel: 'Open portal',
+    ctaUrl: 'https://staging.checksops.com/h/ledger/abc',
+    fallbackUrl: 'https://staging.checksops.com/h/ledger/abc',
+    expiresText: 'Expires in 72 hours.',
+    companySubtitle: 'Acme <Adjusters>',
+    primaryColor: '#112233',
+    unsubscribeUrl: 'https://staging.checksops.com/unsubscribe?t=1',
+  });
+  assert.equal(layout.html.includes('<script>'), false);
+  assert.match(layout.html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  assert.match(layout.html, /Hi &lt;b&gt;Ada&lt;\/b&gt;,/);
+  assert.match(layout.html, /Amount &lt;img src=x onerror=alert\(1\)&gt; owed/);
+  assert.match(layout.html, /Acme &lt;Adjusters&gt;/);
+  assert.match(layout.html, /Open portal/);
+  assert.match(layout.html, /https:\/\/staging\.checksops\.com\/h\/ledger\/abc/);
+  assert.match(layout.html, /If the button does not work/);
+  assert.match(layout.html, /Expires in 72 hours/);
+  assert.match(layout.html, /support@checksops\.com/);
+  assert.match(layout.html, /Unsubscribe/);
+  assert.match(layout.html, /checksops-logo\.png/);
+  assert.match(layout.html, /name="viewport"/);
+  assert.match(layout.html, /#112233/);
+  assert.match(layout.text, /<script>alert\(1\)<\/script>/);
+  assert.match(layout.text, /Open portal: https:\/\/staging\.checksops\.com\/h\/ledger\/abc/);
+  assert.match(layout.text, /Questions\? Contact support@checksops\.com/);
+  assert.equal(escapeHtml('<x>'), '&lt;x&gt;');
+});
+
+test('unsafe tenant color is not injected into CSS', () => {
+  const layout = renderChecksOpsEmail({
+    title: 'Hello',
+    primaryColor: 'red;background:url(javascript:alert(1))',
+  });
+  assert.doesNotMatch(layout.html, /javascript:/);
+  assert.match(layout.html, /#1a56db/);
+});
+
+test('platform branding never uses an unverified custom From', async () => {
+  const platform = platformBranding();
+  assert.match(platform.from, /noreply@checksops\.com/);
+  assert.equal(platform.usingCustomFrom, false);
+  assert.equal(isVerifiedCustomSender({
+    sending_mode: 'custom',
+    domain_status: 'pending',
+    from_address: 'office@acme.test',
+    sending_domain: 'acme.test',
+  }), false);
+
+  const blocked = await resolveEmailBranding(sqlClient([
+    {
+      match: (sql) => sql.includes('FROM public.tenants'),
+      result: () => ({ rows: [{
+        name: 'Acme',
+        is_system_tenant: false,
+        primary_color: '#ff6600',
+        email_from_name: 'Acme Claims',
+        email_from_address: 'office@acme.test',
+        email_reply_to: 'office@acme.test',
+      }] }),
+    },
+    {
+      match: (sql) => sql.includes('tenant_email_settings'),
+      result: () => ({ rows: [{
+        from_name: 'Acme Claims',
+        reply_to: 'office@acme.test',
+        sending_mode: 'custom',
+        sending_domain: 'acme.test',
+        from_address: 'office@acme.test',
+        domain_status: 'pending',
+      }] }),
+    },
+  ]), { tenantId: '11111111-1111-4111-8111-111111111111' });
+  assert.equal(blocked.customFromBlocked, true);
+  assert.equal(blocked.usingCustomFrom, false);
+  assert.match(blocked.from, /noreply@checksops\.com/);
+  assert.equal(blocked.replyTo, 'office@acme.test');
+  assert.equal(blocked.companySubtitle, 'Acme');
+  assert.equal(blocked.primaryColor, '#ff6600');
+
+  const verified = await resolveEmailBranding(sqlClient([
+    {
+      match: (sql) => sql.includes('FROM public.tenants'),
+      result: () => ({ rows: [{ name: 'Acme', is_system_tenant: false, primary_color: '#00aa00' }] }),
+    },
+    {
+      match: (sql) => sql.includes('tenant_email_settings'),
+      result: () => ({ rows: [{
+        from_name: 'Acme Claims',
+        reply_to: 'help@acme.test',
+        sending_mode: 'custom',
+        sending_domain: 'acme.test',
+        from_address: 'office@acme.test',
+        domain_status: 'verified',
+      }] }),
+    },
+  ]), { tenantId: '11111111-1111-4111-8111-111111111111' });
+  assert.equal(verified.usingCustomFrom, true);
+  assert.equal(verified.customFromBlocked, false);
+  assert.match(verified.from, /office@acme\.test/);
+});
+
+test('sink mode always sinks and SES errors keep sink_fallback', async () => {
+  const prev = process.env.AWS_EMAIL_MODE;
+  process.env.AWS_EMAIL_MODE = 'sink';
+  const sunk = await sendViaSesOrSink({
+    to: 'mcarletta@freedomadj.com',
+    subject: 'Sink check',
+    html: '<p>hello</p>',
+    text: 'hello',
+    sesSend: async () => {
+      throw new Error('SES must not be called in sink mode');
+    },
+  });
+  assert.equal(sunk.mode, 'sink');
+  assert.equal(sunk.results[0].delivery, 'sink');
+  assert.equal(sunk.results[0].originalTo, 'mcarletta@freedomadj.com');
+
+  process.env.AWS_EMAIL_MODE = 'ses';
+  const fallback = await sendViaSesOrSink({
+    to: 'mcarletta@freedomadj.com',
+    subject: 'SES down',
+    html: '<p>hello</p>',
+    text: 'hello',
+    sesSend: async () => {
+      throw new Error('throttled');
+    },
+  });
+  assert.equal(fallback.results[0].delivery, 'sink_fallback');
+  assert.equal(fallback.results[0].status, 'failed');
+  process.env.AWS_EMAIL_MODE = prev;
+});
+
+test('shared templates keep ChecksOps layout and do not emit raw script tags', () => {
+  for (const name of TEMPLATE_NAMES) {
+    const rendered = renderTransactionalTemplate(name, {
+      homeownerName: '<script>x</script>',
+      portalUrl: 'https://staging.checksops.com/h/x',
+      ledgerUrl: 'https://staging.checksops.com/h/l',
+      loginUrl: 'https://staging.checksops.com/login',
+      verifyUrl: 'https://staging.checksops.com/verify-account/t',
+      endorseUrl: 'https://staging.checksops.com/endorse?token=t',
+      requestUrl: 'https://staging.checksops.com/payment-direction/x',
+      name: 'A',
+      email: 'a@b.com',
+      message: '<img src=x>',
+      code: '123456',
+    });
+    assert.ok(rendered.subject);
+    assert.match(rendered.html, /checksops-logo\.png/);
+    assert.match(rendered.html, /support@checksops\.com/);
+    assert.equal(rendered.html.includes('<script>'), false);
+    assert.ok(rendered.text);
+  }
+});
+
+test('staging template names AWS_EMAIL_MODE=sink and does not grant SES', () => {
+  const yaml = fs.readFileSync(path.join(ROOT, 'aws/template.yaml'), 'utf8');
+  assert.match(yaml, /AWS_EMAIL_MODE:\s*"sink"/);
+  assert.match(yaml, /AWS_EMAIL_FROM:/);
+  assert.match(yaml, /AWS_EMAIL_REPLY_TO:/);
+  assert.match(yaml, /AWS_EMAIL_SINK_ADDRESS:/);
+  assert.match(yaml, /AWS_EMAIL_ALLOWLIST_DOMAINS:/);
+  assert.match(yaml, /AWS_EMAIL_ALLOWLIST_EXACT:/);
+  assert.match(yaml, /AWS_MORTGAGE_OPS_EMAIL:/);
+  assert.doesNotMatch(yaml, /ses:SendEmail|ses:SendRawEmail|ses:/);
+  const production = fs.readFileSync(path.join(ROOT, 'aws/production/api-execution-role.yaml'), 'utf8');
+  assert.doesNotMatch(production, /ses:SendEmail|ses:SendRawEmail|ses:/);
+});

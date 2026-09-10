@@ -42,6 +42,14 @@ export const defaultFromAddress = () => String(
   process.env.AWS_EMAIL_FROM || 'ChecksOps Staging <noreply@checksops.com>',
 ).trim();
 
+export const defaultReplyTo = () => String(
+  process.env.AWS_EMAIL_REPLY_TO || 'support@checksops.com',
+).trim() || 'support@checksops.com';
+
+export const mortgageOpsEmail = () => String(
+  process.env.AWS_MORTGAGE_OPS_EMAIL || 'staging-mortgage-ops@checksops.invalid',
+).trim().toLowerCase();
+
 export const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
 
 export const isAllowlistedRecipient = (email) => {

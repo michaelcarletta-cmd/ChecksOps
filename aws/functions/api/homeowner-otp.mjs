@@ -11,6 +11,8 @@ import { buildWriteClientConfig, sanitizePublicError } from './db-health.mjs';
 import { normalizeEmail } from './email-policy.mjs';
 import { sendViaSesOrSink } from './email.mjs';
 import { emailMode } from './email-policy.mjs';
+import { renderTransactionalTemplate } from './email-templates.mjs';
+import { resolveEmailBranding } from './email-branding.mjs';
 
 const { Client } = pg;
 
@@ -25,9 +27,7 @@ const hashToken = (value) => createHash('sha256').update(String(value)).digest('
 
 const mintCode = () => String(randomInt(100000, 999999));
 
-export const handleHomeownerUploadOtpStart = async (event) => {
-  const body = parseBody(event);
-  const spoof = ignoredSpoof(event, body);
+export const runHomeownerUploadOtpStart = async ({ client, body, spoof, send }) => {
   const email = normalizeEmail(body.email);
   const leadId = body.lead_id || body.leadId || null;
   const contractorProfileId = body.contractor_profile_id || body.contractorId || null;
@@ -35,69 +35,90 @@ export const handleHomeownerUploadOtpStart = async (event) => {
     return { ok: false, statusCode: 400, error: 'invalid_email', spoofFieldsIgnored: spoof };
   }
 
+  // Bind to lead when provided
+  if (leadId) {
+    const lead = (await client.query(
+      `SELECT id, homeowner_email, contractor_profile_id
+       FROM public.homeowner_intro_requests WHERE id = $1::uuid LIMIT 1`,
+      [leadId],
+    )).rows[0];
+    void lead;
+  }
+
+  const code = mintCode();
+  const codeHash = hashToken(code);
+  const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+  const id = randomUUID();
+
+  const inserted = (await client.query(
+    `SELECT public.aws_public_homeowner_upload_otp_insert(
+       $1::uuid, $2, $3, $4::uuid, $5::uuid, $6::timestamptz
+     ) AS doc`,
+    [id, email, codeHash, leadId, contractorProfileId, expiresAt],
+  )).rows[0]?.doc;
+
+  if (!inserted?.ok) {
+    const err = inserted?.error || 'otp_create_failed';
+    const status = err === 'email_mismatch' || err === 'lead_not_found' ? 403 : 503;
+    return {
+      ok: false,
+      statusCode: status,
+      error: err,
+      spoofFieldsIgnored: spoof,
+    };
+  }
+
+  const branding = await resolveEmailBranding(client, { senderOverride: 'checksops' });
+  const rendered = renderTransactionalTemplate('homeowner-upload-otp', {
+    code,
+    branding,
+  });
+  const mailer = send || sendViaSesOrSink;
+  await mailer({
+    to: email,
+    subject: rendered.subject,
+    html: rendered.html,
+    text: rendered.text,
+    from: branding.from,
+    replyTo: branding.replyTo,
+  });
+
+  return {
+    ok: true,
+    statusCode: 200,
+    sent: true,
+    expiresAt,
+    stagingDebugCode: emailMode() === 'sink' ? code : undefined,
+    spoofFieldsIgnored: spoof,
+  };
+};
+
+export const handleHomeownerUploadOtpStart = async (event, deps = {}) => {
+  const body = parseBody(event);
+  const spoof = ignoredSpoof(event, body);
+  if (deps.client) {
+    return runHomeownerUploadOtpStart({
+      client: deps.client,
+      body,
+      spoof,
+      send: deps.sendViaSesOrSink,
+    });
+  }
+
   let client;
   try {
     client = await publicDb();
     await client.query('BEGIN');
     await client.query('SET TRANSACTION READ WRITE');
-
-    // Bind to lead when provided
-    if (leadId) {
-      const lead = (await client.query(
-        `SELECT id, homeowner_email, contractor_profile_id
-         FROM public.homeowner_intro_requests WHERE id = $1::uuid LIMIT 1`,
-        [leadId],
-      )).rows[0];
-      // Use SECURITY DEFINER when RLS blocks
-      const leadDoc = lead || (await client.query(
-        `SELECT id, homeowner_email, contractor_profile_id
-         FROM public.homeowner_intro_requests WHERE id = $1::uuid LIMIT 1`,
-        [leadId],
-      )).rows[0];
-      void leadDoc;
-    }
-
-    const code = mintCode();
-    const codeHash = hashToken(code);
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
-    const id = randomUUID();
-
-    const inserted = (await client.query(
-      `SELECT public.aws_public_homeowner_upload_otp_insert(
-         $1::uuid, $2, $3, $4::uuid, $5::uuid, $6::timestamptz
-       ) AS doc`,
-      [id, email, codeHash, leadId, contractorProfileId, expiresAt],
-    )).rows[0]?.doc;
-
-    if (!inserted?.ok) {
-      await client.query('ROLLBACK');
-      const err = inserted?.error || 'otp_create_failed';
-      const status = err === 'email_mismatch' || err === 'lead_not_found' ? 403 : 503;
-      return {
-        ok: false,
-        statusCode: status,
-        error: err,
-        spoofFieldsIgnored: spoof,
-      };
-    }
-
-    await sendViaSesOrSink({
-      to: email,
-      subject: 'Your ChecksOps upload code',
-      html: `<p>Your one-time upload code is <strong>${code}</strong>.</p><p>It expires in 15 minutes. This code only authorizes a document upload.</p>`,
-      text: `Your ChecksOps upload code is ${code}. Expires in 15 minutes.`,
+    const result = await runHomeownerUploadOtpStart({
+      client,
+      body,
+      spoof,
+      send: deps.sendViaSesOrSink,
     });
-
-    await client.query('COMMIT');
-    return {
-      ok: true,
-      statusCode: 200,
-      sent: true,
-      expiresAt,
-      // Staging sink only: expose code for automated UAT (never in production mode)
-      stagingDebugCode: emailMode() === 'sink' ? code : undefined,
-      spoofFieldsIgnored: spoof,
-    };
+    if (result.ok) await client.query('COMMIT');
+    else await client.query('ROLLBACK');
+    return result;
   } catch (error) {
     if (client) {
       try { await client.query('ROLLBACK'); } catch { /* ignore */ }

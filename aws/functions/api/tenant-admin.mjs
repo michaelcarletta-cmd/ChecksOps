@@ -19,6 +19,8 @@ import {
 import { withIdentity, parseBody, ignoredSpoof } from './data.mjs';
 import { normalizeEmail } from './email-policy.mjs';
 import { sendViaSesOrSink } from './email.mjs';
+import { renderTransactionalTemplate } from './email-templates.mjs';
+import { emailAssetOrigin, resolveEmailBranding } from './email-branding.mjs';
 
 const POOL_ID = () => process.env.COGNITO_USER_POOL_ID;
 const CLIENT_ID = () => process.env.COGNITO_CLIENT_ID;
@@ -69,9 +71,10 @@ const assertTenantAdmin = async (client, mapping, tenantId) => {
   return ok;
 };
 
-export const handleTenantInviteUser = async (event) => withIdentity(event, async ({
-  client, mapping, body, spoof,
+export const runTenantInviteUser = async ({
+  client, mapping, body, spoof, send, cognitoJson: cognitoFn,
 }) => {
+  const adminCognito = cognitoFn || cognitoJson;
   const tenantId = body.tenant_id || body.tenantId;
   const email = normalizeEmail(body.email);
   const role = body.role || 'member';
@@ -93,7 +96,7 @@ export const handleTenantInviteUser = async (event) => withIdentity(event, async
   let cognitoSub = null;
   let isNewUser = false;
   try {
-    const created = await cognitoJson('AdminCreateUser', {
+    const created = await adminCognito('AdminCreateUser', {
       UserPoolId: POOL_ID(),
       Username: email,
       TemporaryPassword: tempPassword,
@@ -105,14 +108,13 @@ export const handleTenantInviteUser = async (event) => withIdentity(event, async
       ],
     });
     cognitoSub = created.User?.Username || created.User?.Attributes?.find?.((a) => a.Name === 'sub')?.Value;
-    // Prefer sub attribute
     const attrs = created.User?.Attributes || [];
     const subAttr = attrs.find((a) => a.Name === 'sub');
     if (subAttr) cognitoSub = subAttr.Value;
     isNewUser = true;
   } catch (error) {
     if (String(error.name).includes('UsernameExistsException')) {
-      const listed = await cognitoJson('AdminGetUser', {
+      const listed = await adminCognito('AdminGetUser', {
         UserPoolId: POOL_ID(),
         Username: email,
       });
@@ -131,7 +133,6 @@ export const handleTenantInviteUser = async (event) => withIdentity(event, async
     }
   }
 
-  // Ensure application profile + mapping exist (UUID app id, not cognito sub)
   let appUserId = (await client.query(
     `SELECT id::text AS id FROM public.profiles WHERE lower(email) = $1 LIMIT 1`,
     [email],
@@ -179,15 +180,25 @@ export const handleTenantInviteUser = async (event) => withIdentity(event, async
     ).catch(() => {});
   });
 
+  const origin = emailAssetOrigin();
   const loginUrl = tenant.custom_domain
     ? `https://${tenant.custom_domain}/login`
-    : `https://staging.checksops.com/login`;
-
-  await sendViaSesOrSink({
+    : `${origin}/login`;
+  const branding = await resolveEmailBranding(client, { tenantId });
+  const rendered = renderTransactionalTemplate('tenant-user-invite', {
+    tenantName: tenant.name,
+    role,
+    loginUrl,
+    branding,
+  });
+  const mailer = send || sendViaSesOrSink;
+  await mailer({
     to: email,
-    subject: `You're invited to ${tenant.name || 'ChecksOps'}`,
-    html: `<p>You have been invited as <strong>${role}</strong>.</p><p><a href="${loginUrl}">Sign in</a></p><p>Staging invite — use the temporary password provided by your admin if prompted.</p>`,
-    text: `Invited as ${role}. Sign in: ${loginUrl}`,
+    subject: rendered.subject,
+    html: rendered.html,
+    text: rendered.text,
+    from: branding.from,
+    replyTo: branding.replyTo,
   });
 
   return {
@@ -200,11 +211,18 @@ export const handleTenantInviteUser = async (event) => withIdentity(event, async
     role,
     applicationUserId: appUserId,
     cognitoSub,
-    // Never return temp password in responses for safety
     tempPasswordIssued: isNewUser,
     spoofFieldsIgnored: spoof,
   };
-}, { write: true, commit: true });
+};
+
+export const handleTenantInviteUser = (event, deps = {}) => withIdentity(event, (ctx) => (
+  runTenantInviteUser({
+    ...ctx,
+    send: deps.sendViaSesOrSink,
+    cognitoJson: deps.cognitoJson,
+  })
+), { write: true, commit: true, ...deps });
 
 export const handleCreateTenantUser = async (event) => handleTenantInviteUser(event);
 
@@ -403,11 +421,14 @@ export const handleTenantRemoveOpenaiKey = async (event) => withIdentity(event, 
 /**
  * Hire mortgage desk agent (Class A Cognito bridge for hire-mortgage-agent).
  * Preserves production semantics: mortgage_agent-only accounts, identity mapping
- * Cognito sub → application UUID (never equal), optional temp password for new users.
+ * Cognito sub → application UUID (never equal). Cognito still needs a temp
+ * password internally with MessageAction SUPPRESS; it is never emailed, logged,
+ * or returned. The invite is passwordless login.
  */
-export const handleHireMortgageAgent = async (event) => withIdentity(event, async ({
-  client, mapping, body, spoof,
+export const runHireMortgageAgent = async ({
+  client, mapping, body, spoof, send, cognitoJson: cognitoFn,
 }) => {
+  const adminCognito = cognitoFn || cognitoJson;
   const system = (await client.query(
     `SELECT role FROM public.user_roles WHERE user_id = $1::uuid AND role = 'admin' LIMIT 1`,
     [mapping.application_user_id],
@@ -429,7 +450,6 @@ export const handleHireMortgageAgent = async (event) => withIdentity(event, asyn
   const tempPassword = providedPassword
     || `MortgageOps!${randomBytes(6).toString('base64url')}9a`;
 
-  // Existing profile by email → reuse ChecksOps application UUID
   let appUserId = (await client.query(
     `SELECT id::text AS id FROM public.profiles WHERE lower(email) = $1 LIMIT 1`,
     [email],
@@ -461,7 +481,7 @@ export const handleHireMortgageAgent = async (event) => withIdentity(event, asyn
   }
 
   try {
-    const createdUser = await cognitoJson('AdminCreateUser', {
+    const createdUser = await adminCognito('AdminCreateUser', {
       UserPoolId: POOL_ID(),
       Username: email,
       TemporaryPassword: tempPassword,
@@ -479,19 +499,19 @@ export const handleHireMortgageAgent = async (event) => withIdentity(event, asyn
     created = true;
     if (providedPassword) {
       try {
-        await cognitoJson('AdminSetUserPassword', {
+        await adminCognito('AdminSetUserPassword', {
           UserPoolId: POOL_ID(),
           Username: email,
           Password: providedPassword,
           Permanent: true,
         });
       } catch {
-        /* temp password remains usable via NEW_PASSWORD_REQUIRED / forgot */
+        /* Cognito still has a suppressed temp password; invite is passwordless. */
       }
     }
   } catch (error) {
     if (String(error.name).includes('UsernameExistsException')) {
-      const listed = await cognitoJson('AdminGetUser', {
+      const listed = await adminCognito('AdminGetUser', {
         UserPoolId: POOL_ID(),
         Username: email,
       });
@@ -530,8 +550,6 @@ export const handleHireMortgageAgent = async (event) => withIdentity(event, asyn
     };
   }
 
-  // identity_accounts must exist before profiles (FK profiles_id_identity_fkey).
-  // Schema has created_at/linked_at/status — no updated_at column.
   await client.query(
     `INSERT INTO public.identity_accounts (cognito_sub, application_user_id, email, status, linked_at, created_at)
      VALUES ($1, $2::uuid, $3, 'active', now(), now())
@@ -590,6 +608,23 @@ export const handleHireMortgageAgent = async (event) => withIdentity(event, asyn
     }
   }
 
+  const loginUrl = `${emailAssetOrigin()}/mortgage-ops/login`;
+  const branding = await resolveEmailBranding(client, { senderOverride: 'checksops' });
+  const rendered = renderTransactionalTemplate('mortgage-agent-invite', {
+    fullName,
+    loginUrl,
+    branding,
+  });
+  const mailer = send || sendViaSesOrSink;
+  await mailer({
+    to: email,
+    subject: rendered.subject,
+    html: rendered.html,
+    text: rendered.text,
+    from: branding.from,
+    replyTo: branding.replyTo,
+  });
+
   return {
     ok: true,
     statusCode: 200,
@@ -598,10 +633,18 @@ export const handleHireMortgageAgent = async (event) => withIdentity(event, asyn
     email,
     full_name: fullName,
     created,
-    temp_password: created ? tempPassword : null,
+    invitationSent: true,
     cognitoSub,
     applicationUserId: appUserId,
     spoofFieldsIgnored: spoof,
   };
-}, { write: true, commit: true });
+};
+
+export const handleHireMortgageAgent = (event, deps = {}) => withIdentity(event, (ctx) => (
+  runHireMortgageAgent({
+    ...ctx,
+    send: deps.sendViaSesOrSink,
+    cognitoJson: deps.cognitoJson,
+  })
+), { write: true, commit: true, ...deps });
 

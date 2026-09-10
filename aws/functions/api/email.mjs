@@ -12,24 +12,18 @@ import pg from 'pg';
 import {
   applyRecipientPolicy,
   defaultFromAddress,
+  defaultReplyTo,
   emailMode,
+  mortgageOpsEmail,
   normalizeEmail,
   sinkAddress,
 } from './email-policy.mjs';
+import { parseFromHeader, resolveEmailBranding } from './email-branding.mjs';
 import { renderTransactionalTemplate, TEMPLATE_NAMES } from './email-templates.mjs';
 
 const { Client } = pg;
 
 const sesClient = () => new SESClient({ region: process.env.AWS_REGION || 'us-east-1' });
-
-const parseFrom = (from) => {
-  const text = String(from || defaultFromAddress());
-  const match = text.match(/^(.*)<([^>]+)>$/);
-  if (match) {
-    return { name: match[1].trim().replace(/^"|"$/g, ''), address: match[2].trim() };
-  }
-  return { name: 'ChecksOps Staging', address: text.trim() };
-};
 
 export const sendViaSesOrSink = async ({
   to,
@@ -37,14 +31,16 @@ export const sendViaSesOrSink = async ({
   html,
   text,
   from = defaultFromAddress(),
-  replyTo = null,
+  replyTo = defaultReplyTo(),
   headers = {},
+  sesSend = null,
 }) => {
   const policyRecipients = applyRecipientPolicy(Array.isArray(to) ? to : [to]);
   const mode = emailMode();
-  const parsedFrom = parseFrom(from);
+  const parsedFrom = parseFromHeader(from);
   const delivered = [];
   const results = [];
+  const replyList = replyTo ? [replyTo] : undefined;
 
   for (const recipient of policyRecipients) {
     const entry = {
@@ -60,7 +56,7 @@ export const sendViaSesOrSink = async ({
         const cmd = new SendEmailCommand({
           Source: parsedFrom.name ? `${parsedFrom.name} <${parsedFrom.address}>` : parsedFrom.address,
           Destination: { ToAddresses: [recipient.email] },
-          ReplyToAddresses: replyTo ? [replyTo] : undefined,
+          ReplyToAddresses: replyList,
           Message: {
             Subject: { Data: subject, Charset: 'UTF-8' },
             Body: {
@@ -73,7 +69,9 @@ export const sendViaSesOrSink = async ({
             Value: String(Value).slice(0, 256),
           })),
         });
-        const out = await sesClient().send(cmd);
+        const out = typeof sesSend === 'function'
+          ? await sesSend(cmd)
+          : await sesClient().send(cmd);
         entry.messageId = out.MessageId || null;
         entry.status = 'sent';
         delivered.push(recipient.email);
@@ -182,12 +180,18 @@ export const handleSendTransactionalEmail = async (event) => withIdentity(event,
     };
   }
 
-  const rendered = renderTransactionalTemplate(templateName, templateData);
+  const branding = await resolveEmailBranding(client, {
+    tenantId,
+    senderOverride: body.senderOverride || body.sender_override || null,
+  });
+  const rendered = renderTransactionalTemplate(templateName, { ...templateData, branding });
   const send = await sendViaSesOrSink({
     to: recipientEmail,
     subject: rendered.subject,
     html: rendered.html,
     text: rendered.text,
+    from: branding.from,
+    replyTo: branding.replyTo,
   });
 
   const primary = send.results[0] || {};
@@ -244,12 +248,17 @@ export const handleSendEmail = async (event) => withIdentity(event, async ({
     };
   }
 
+  const branding = await resolveEmailBranding(client, {
+    tenantId: body.tenantId || body.tenant_id || null,
+    senderOverride: body.senderOverride || body.sender_override || null,
+  });
   const send = await sendViaSesOrSink({
     to: recipients,
     subject: String(body.subject),
     html: String(htmlBody),
     text: String(textBody),
-    replyTo: body.claimEmailCc || body.replyTo || null,
+    from: branding.from,
+    replyTo: body.claimEmailCc || body.replyTo || branding.replyTo,
     headers: body.headers || {},
   });
 
@@ -369,8 +378,8 @@ export const handlePreviewTransactionalEmail = async (event) => {
 };
 
 /** Staff notify wrappers that compose transactional mailer. */
-export const handleNotifyMortgageHandlingRequest = async (event) => withIdentity(event, async ({
-  client, mapping, body, spoof,
+export const runNotifyMortgageHandlingRequest = async ({
+  client, mapping, body, spoof, send,
 }) => {
   const requestId = body.request_id;
   if (!requestId) {
@@ -392,22 +401,37 @@ export const handleNotifyMortgageHandlingRequest = async (event) => withIdentity
     return { ok: false, statusCode: 403, error: 'cross_tenant_denied', spoofFieldsIgnored: spoof };
   }
 
-  // Ops desk notify — sink/allowlist only; never blast production ops inboxes blindly.
-  const opsTo = normalizeEmail(process.env.AWS_MORTGAGE_OPS_EMAIL || 'staging-mortgage-ops@checksops.invalid');
-  const send = await sendViaSesOrSink({
+  const opsTo = normalizeEmail(mortgageOpsEmail());
+  if (!opsTo) {
+    return { ok: false, statusCode: 400, error: 'missing_ops_recipient', spoofFieldsIgnored: spoof };
+  }
+  const branding = await resolveEmailBranding(client, {
+    tenantId: row.tenant_id,
+    senderOverride: 'checksops',
+  });
+  const rendered = renderTransactionalTemplate('mortgage-handling-request', {
+    mortgageCompany: row.mortgage_company,
+    status: row.status,
+    requestId: row.id,
+    branding,
+  });
+  const mailer = send || sendViaSesOrSink;
+  const sendResult = await mailer({
     to: opsTo,
-    subject: `Mortgage handling request ${row.id}`,
-    html: `<p>New/updated mortgage handling request.</p><p>Company: ${row.mortgage_company || ''}</p><p>Status: ${row.status}</p>`,
-    text: `Mortgage handling request ${row.id}`,
+    subject: rendered.subject,
+    html: rendered.html,
+    text: rendered.text,
+    from: branding.from,
+    replyTo: branding.replyTo,
   });
 
   await logEmail(client, {
     template_name: 'notify-mortgage-handling-request',
     recipient_email: opsTo,
     tenant_id: row.tenant_id,
-    status: send.results[0]?.delivery === 'ses' ? 'sent' : 'sunk',
+    status: sendResult.results[0]?.delivery === 'ses' ? 'sent' : 'sunk',
     provider: 'aws_staging',
-    provider_message_id: send.results[0]?.messageId || null,
+    provider_message_id: sendResult.results[0]?.messageId || null,
     metadata: { request_id: requestId, application_user_id: mapping.application_user_id },
   });
 
@@ -415,13 +439,17 @@ export const handleNotifyMortgageHandlingRequest = async (event) => withIdentity
     ok: true,
     statusCode: 200,
     emailed: true,
-    stagingMode: send.mode,
+    stagingMode: sendResult.mode,
     spoofFieldsIgnored: spoof,
   };
-}, { write: true, commit: true });
+};
 
-export const handleNotifyHomeownerLead = async (event) => withIdentity(event, async ({
-  client, mapping, body, spoof,
+export const handleNotifyMortgageHandlingRequest = (event, deps = {}) => withIdentity(event, (ctx) => (
+  runNotifyMortgageHandlingRequest({ ...ctx, send: deps.sendViaSesOrSink })
+), { write: true, commit: true, ...deps });
+
+export const runNotifyHomeownerLead = async ({
+  client, mapping, body, spoof, send,
 }) => {
   const leadId = body.lead_id;
   if (!leadId) return { ok: false, statusCode: 400, error: 'missing_lead_id', spoofFieldsIgnored: spoof };
@@ -438,32 +466,41 @@ export const handleNotifyHomeownerLead = async (event) => withIdentity(event, as
   )).rows[0];
   const to = normalizeEmail(contractor?.email);
   if (!to) {
-    return { ok: true, statusCode: 200, success: false, reason: 'no_contractor_email', spoofFieldsIgnored: spoof };
+    return { ok: false, statusCode: 400, error: 'missing_recipient', reason: 'no_contractor_email', spoofFieldsIgnored: spoof };
   }
 
+  const branding = await resolveEmailBranding(client, { senderOverride: 'checksops' });
   const rendered = renderTransactionalTemplate('new-homeowner-lead', {
     homeownerName: lead.homeowner_name,
     leadId: lead.id,
+    branding,
   });
-  const send = await sendViaSesOrSink({
+  const mailer = send || sendViaSesOrSink;
+  const sendResult = await mailer({
     to,
     subject: rendered.subject,
     html: rendered.html,
     text: rendered.text,
+    from: branding.from,
+    replyTo: branding.replyTo,
   });
   await logEmail(client, {
     template_name: 'new-homeowner-lead',
     recipient_email: to,
-    status: send.results[0]?.delivery === 'ses' ? 'sent' : 'sunk',
+    status: sendResult.results[0]?.delivery === 'ses' ? 'sent' : 'sunk',
     provider: 'aws_staging',
-    provider_message_id: send.results[0]?.messageId || null,
+    provider_message_id: sendResult.results[0]?.messageId || null,
     metadata: { lead_id: leadId, application_user_id: mapping.application_user_id },
   });
   return { ok: true, statusCode: 200, success: true, spoofFieldsIgnored: spoof };
-}, { write: true, commit: true });
+};
 
-export const handleNotifyHomeownerLeadAccepted = async (event) => withIdentity(event, async ({
-  client, mapping, body, spoof,
+export const handleNotifyHomeownerLead = (event, deps = {}) => withIdentity(event, (ctx) => (
+  runNotifyHomeownerLead({ ...ctx, send: deps.sendViaSesOrSink })
+), { write: true, commit: true, ...deps });
+
+export const runNotifyHomeownerLeadAccepted = async ({
+  client, mapping, body, spoof, send,
 }) => {
   const leadId = body.lead_id;
   if (!leadId) return { ok: false, statusCode: 400, error: 'missing_lead_id', spoofFieldsIgnored: spoof };
@@ -477,30 +514,41 @@ export const handleNotifyHomeownerLeadAccepted = async (event) => withIdentity(e
     return { ok: false, statusCode: 403, error: 'not_authorized', spoofFieldsIgnored: spoof };
   }
   const to = normalizeEmail(lead.homeowner_email);
-  if (!to) return { ok: true, statusCode: 200, success: false, reason: 'no_homeowner_email', spoofFieldsIgnored: spoof };
+  if (!to) {
+    return { ok: false, statusCode: 400, error: 'missing_recipient', reason: 'no_homeowner_email', spoofFieldsIgnored: spoof };
+  }
 
-  const origin = String(body.origin || process.env.VITE_APP_URL || 'https://staging.checksops.com').replace(/\/$/, '');
+  const origin = String(body.origin || process.env.VITE_APP_URL || process.env.SIGN_BASE_URL || 'https://staging.checksops.com').replace(/\/$/, '');
   const link = `${origin}/h/claim/${lead.access_token}`;
+  const branding = await resolveEmailBranding(client, { senderOverride: 'checksops' });
   const rendered = renderTransactionalTemplate('homeowner-claim-portal-link', {
     homeownerName: lead.homeowner_name,
     portalUrl: link,
+    branding,
   });
-  const send = await sendViaSesOrSink({
+  const mailer = send || sendViaSesOrSink;
+  const sendResult = await mailer({
     to,
     subject: rendered.subject,
     html: rendered.html,
     text: rendered.text,
+    from: branding.from,
+    replyTo: branding.replyTo,
   });
   await logEmail(client, {
     template_name: 'homeowner-claim-portal-link',
     recipient_email: to,
-    status: send.results[0]?.delivery === 'ses' ? 'sent' : 'sunk',
+    status: sendResult.results[0]?.delivery === 'ses' ? 'sent' : 'sunk',
     provider: 'aws_staging',
-    provider_message_id: send.results[0]?.messageId || null,
+    provider_message_id: sendResult.results[0]?.messageId || null,
     metadata: { lead_id: leadId },
   });
   return { ok: true, statusCode: 200, success: true, spoofFieldsIgnored: spoof };
-}, { write: true, commit: true });
+};
+
+export const handleNotifyHomeownerLeadAccepted = (event, deps = {}) => withIdentity(event, (ctx) => (
+  runNotifyHomeownerLeadAccepted({ ...ctx, send: deps.sendViaSesOrSink })
+), { write: true, commit: true, ...deps });
 
 export const createUnsubscribeToken = async (client, email) => {
   const token = randomBytes(24).toString('hex');

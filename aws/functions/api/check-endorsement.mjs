@@ -11,6 +11,7 @@ import { buildClientConfig, buildWriteClientConfig, sanitizePublicError } from '
 import { sendViaSesOrSink } from './email.mjs';
 import { defaultFromAddress } from './email-policy.mjs';
 import { renderTransactionalTemplate } from './email-templates.mjs';
+import { resolveEmailBranding } from './email-branding.mjs';
 
 const { Client } = pg;
 
@@ -515,6 +516,8 @@ const sendEndorsementEmail = async ({ endorsement, check, email, url, branding, 
     amount: check.amount,
     endorseUrl: url,
     companyName: branding.company_name || 'ChecksOps',
+    branding,
+    subject: branding.endorsement_email_subject || undefined,
   });
   const subjectBase = branding.endorsement_email_subject
     || `Endorsement Required — Check #${check.check_number || 'N/A'}`;
@@ -527,8 +530,8 @@ const sendEndorsementEmail = async ({ endorsement, check, email, url, branding, 
     subject,
     html: rendered.html,
     text: rendered.text,
-    from: defaultFromAddress(),
-    replyTo: branding.company_email || null,
+    from: branding.from || defaultFromAddress(),
+    replyTo: branding.replyTo || branding.company_email || null,
     headers: {
       'X-Entity-Ref-ID': String(endorsement.id),
       'X-Endorsement-Payee': String(endorsement.payee_name || ''),
@@ -620,10 +623,16 @@ export const runAuthenticatedEndorsement = async ({
       `SELECT company_name, company_email, company_phone, endorsement_email_subject
        FROM public.company_branding LIMIT 1`,
     )).rows[0] || {};
+    const resolved = await resolveEmailBranding(client, { tenantId });
     const branding = {
-      company_name: tenant?.email_from_name || tenant?.name || brandingRow.company_name,
-      company_email: tenant?.email_reply_to || brandingRow.company_email,
+      company_name: resolved.companySubtitle || resolved.companyName || tenant?.email_from_name || tenant?.name || brandingRow.company_name,
+      company_email: resolved.replyTo || tenant?.email_reply_to || brandingRow.company_email,
       endorsement_email_subject: brandingRow.endorsement_email_subject,
+      from: resolved.from,
+      replyTo: resolved.replyTo,
+      primaryColor: resolved.primaryColor,
+      logoUrl: resolved.logoUrl,
+      companySubtitle: resolved.companySubtitle,
     };
     const ccRaw = body.cc;
     const cc = Array.isArray(ccRaw)

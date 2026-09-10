@@ -1,4 +1,7 @@
-/** Lightweight HTML transactional templates (Class A staging). */
+/** ChecksOps transactional templates rendered through the shared layout. */
+
+import { renderChecksOpsEmail, escapeHtml } from './email-layout.mjs';
+import { PLATFORM_PRIMARY_COLOR } from './email-branding.mjs';
 
 export const TEMPLATE_NAMES = new Set([
   'demo-request',
@@ -9,110 +12,262 @@ export const TEMPLATE_NAMES = new Set([
   'homeowner-ledger-invite',
   'homeowner-upload-alert',
   'homeowner-document-shared',
-  // Aliases / generic internal notifications used by staff workflows
   'generic_notification',
   'generic-notification',
   'internal-notification',
   'mortgage-handling-request',
   'endorsement-request',
   'payment-direction-request',
+  'tenant-user-invite',
+  'mortgage-agent-invite',
+  'homeowner-upload-otp',
+  'portal-invite',
 ]);
 
-const esc = (value) => String(value ?? '')
-  .replace(/&/g, '&amp;')
-  .replace(/</g, '&lt;')
-  .replace(/>/g, '&gt;')
-  .replace(/"/g, '&quot;');
+const brandingOf = (data = {}) => data.branding || {};
 
-const shell = (title, bodyHtml) => `<!doctype html><html><body style="font-family:system-ui,sans-serif;line-height:1.45;color:#111">
-  <div style="max-width:560px;margin:0 auto;padding:24px">
-    <h1 style="font-size:18px;margin:0 0 12px">${esc(title)}</h1>
-    ${bodyHtml}
-    <p style="margin-top:24px;font-size:12px;color:#666">ChecksOps staging notification</p>
-  </div>
-</body></html>`;
+const layoutFrom = (data, fields) => renderChecksOpsEmail({
+  companySubtitle: brandingOf(data).companySubtitle || data.companyName || null,
+  primaryColor: brandingOf(data).primaryColor || PLATFORM_PRIMARY_COLOR,
+  logoUrl: brandingOf(data).logoUrl || null,
+  unsubscribeUrl: data.unsubscribeUrl || null,
+  ...fields,
+});
 
 export const renderTransactionalTemplate = (name, data = {}) => {
   switch (name) {
-    case 'demo-request':
+    case 'demo-request': {
+      const layout = layoutFrom(data, {
+        title: 'ChecksOps demo request',
+        preview: `Demo request from ${data.name || 'a prospect'}`,
+        paragraphs: [
+          `From: ${data.name || ''} <${data.email || ''}>`,
+          data.company ? `Company: ${data.company}` : null,
+          data.role ? `Role: ${data.role}` : null,
+          data.message || data.notes || null,
+        ].filter(Boolean),
+      });
+      return { subject: 'ChecksOps demo request', ...layout };
+    }
+    case 'stakeholder-verify-account': {
+      const layout = layoutFrom(data, {
+        title: 'Verify your ChecksOps payment account',
+        greeting: data.custname ? `Hi ${data.custname},` : 'Hi,',
+        paragraphs: [
+          data.nickname
+            ? `To receive ACH payments for ${data.nickname}, securely link your bank account.`
+            : 'To start receiving ACH payments, securely link your bank account.',
+          'Your details go to our regulated payments partner. ChecksOps never stores your full account number.',
+        ],
+        ctaLabel: 'Link bank account',
+        ctaUrl: data.verifyUrl,
+        fallbackUrl: data.verifyUrl,
+        expiresText: data.expiresText || 'This link expires in 30 days.',
+      });
+      return { subject: 'Verify your bank account with ChecksOps', ...layout };
+    }
+    case 'tenant-invoice': {
+      const layout = layoutFrom(data, {
+        title: 'ChecksOps invoice',
+        paragraphs: [
+          `Invoice for ${data.tenantName || 'tenant'}`,
+          data.amount != null ? `Amount: ${data.amount}` : null,
+        ].filter(Boolean),
+      });
+      return { subject: data.subject || 'ChecksOps invoice', ...layout };
+    }
+    case 'new-homeowner-lead': {
+      const layout = layoutFrom(data, {
+        title: 'New homeowner lead',
+        paragraphs: [
+          `Homeowner: ${data.homeownerName || ''}`,
+          data.leadId ? `Lead: ${data.leadId}` : null,
+        ].filter(Boolean),
+      });
+      return { subject: 'New homeowner lead', ...layout };
+    }
+    case 'homeowner-claim-portal-link': {
+      const layout = layoutFrom(data, {
+        title: 'Your claim portal is ready',
+        greeting: data.homeownerName ? `Hi ${data.homeownerName},` : 'Hi,',
+        paragraphs: ['Open your secure claim portal to continue.'],
+        ctaLabel: 'Open claim portal',
+        ctaUrl: data.portalUrl,
+        fallbackUrl: data.portalUrl,
+      });
+      return { subject: 'Your claim portal link', ...layout };
+    }
+    case 'homeowner-ledger-invite': {
+      const layout = layoutFrom(data, {
+        title: data.is_pre_claim ? 'Send us your insurance check' : 'Your claim timeline',
+        greeting: data.homeownerName || data.homeowner_name ? `Hi ${data.homeownerName || data.homeowner_name},` : 'Hi,',
+        paragraphs: [
+          data.is_pre_claim
+            ? 'Use the secure link below to upload the front and back of your insurance check.'
+            : 'View every check, endorsement, deposit, and dollar released — updated as work happens.',
+        ],
+        ctaLabel: data.is_pre_claim ? 'Upload my check' : 'View claim timeline',
+        ctaUrl: data.ledgerUrl || data.portal_url,
+        fallbackUrl: data.ledgerUrl || data.portal_url,
+      });
       return {
-        subject: 'ChecksOps demo request',
-        html: shell('Demo request', `<p>From: ${esc(data.name)} &lt;${esc(data.email)}&gt;</p><p>${esc(data.message)}</p>`),
-        text: `Demo request from ${data.name}: ${data.message}`,
+        subject: data.is_pre_claim ? 'Send us your insurance check' : 'Your claim timeline',
+        ...layout,
       };
-    case 'stakeholder-verify-account':
+    }
+    case 'homeowner-upload-alert': {
+      const layout = layoutFrom(data, {
+        title: 'Homeowner uploaded a document',
+        paragraphs: [
+          data.homeowner_name || data.homeownerName
+            ? `${data.homeowner_name || data.homeownerName} uploaded a document.`
+            : 'A homeowner uploaded a document.',
+          data.claimId ? `Claim: ${data.claimId}` : null,
+          data.homeowner_note ? `Note: ${data.homeowner_note}` : null,
+        ].filter(Boolean),
+        ctaLabel: data.inbox_url ? 'Open ChecksOps' : null,
+        ctaUrl: data.inbox_url || null,
+        fallbackUrl: data.inbox_url || null,
+      });
+      return { subject: 'Homeowner uploaded a document', ...layout };
+    }
+    case 'homeowner-document-shared': {
+      const layout = layoutFrom(data, {
+        title: 'A document was shared with you',
+        greeting: data.homeowner_name || data.homeownerName ? `Hi ${data.homeowner_name || data.homeownerName},` : 'Hi,',
+        paragraphs: [
+          data.note || data.document_name
+            ? (data.note || `Document: ${data.document_name}`)
+            : 'A document is ready for you.',
+        ],
+        ctaLabel: 'Open document',
+        ctaUrl: data.url || data.document_url || data.portal_url,
+        fallbackUrl: data.url || data.document_url || data.portal_url,
+      });
       return {
-        subject: 'Verify your ChecksOps stakeholder account',
-        html: shell('Verify account', `<p><a href="${esc(data.verifyUrl)}">Verify account</a></p>`),
-        text: `Verify: ${data.verifyUrl}`,
+        subject: data.document_name ? `New document: ${data.document_name}` : 'A document was shared with you',
+        ...layout,
       };
-    case 'tenant-invoice':
-      return {
-        subject: data.subject || 'ChecksOps invoice',
-        html: shell('Invoice', `<p>Invoice for ${esc(data.tenantName || 'tenant')}</p><p>Amount: ${esc(data.amount)}</p>`),
-        text: `Invoice ${data.amount}`,
-      };
-    case 'new-homeowner-lead':
-      return {
-        subject: 'New homeowner lead',
-        html: shell('New lead', `<p>Homeowner: ${esc(data.homeownerName)}</p><p>Lead: ${esc(data.leadId)}</p>`),
-        text: `New lead ${data.leadId}`,
-      };
-    case 'homeowner-claim-portal-link':
-      return {
-        subject: 'Your claim portal link',
-        html: shell('Claim portal', `<p>Hi ${esc(data.homeownerName || '')},</p><p><a href="${esc(data.portalUrl)}">Open your claim portal</a></p>`),
-        text: `Portal: ${data.portalUrl}`,
-      };
-    case 'homeowner-ledger-invite':
-      return {
-        subject: 'Your claim timeline',
-        html: shell('Claim timeline', `<p>Hi ${esc(data.homeownerName || '')},</p><p><a href="${esc(data.ledgerUrl)}">View your claim timeline</a></p>`),
-        text: `Timeline: ${data.ledgerUrl}`,
-      };
-    case 'homeowner-upload-alert':
-      return {
-        subject: 'Homeowner uploaded a document',
-        html: shell('Upload alert', `<p>A homeowner uploaded a document for claim ${esc(data.claimId || '')}.</p>`),
-        text: `Upload for ${data.claimId}`,
-      };
-    case 'homeowner-document-shared':
-      return {
-        subject: 'A document was shared with you',
-        html: shell('Document shared', `<p>${esc(data.note || 'A document is ready for you.')}</p><p><a href="${esc(data.url)}">Open document</a></p>`),
-        text: `Document: ${data.url}`,
-      };
+    }
     case 'generic_notification':
     case 'generic-notification':
-    case 'internal-notification':
-      return {
-        subject: data.subject || 'ChecksOps notification',
-        html: shell(data.subject || 'Notification', `<p>${esc(data.message || data.body || '')}</p>`),
-        text: String(data.message || data.body || data.subject || 'Notification'),
-      };
-    case 'mortgage-handling-request':
-      return {
-        subject: 'Mortgage handling request',
-        html: shell('Mortgage handling', `<p>Company: ${esc(data.mortgageCompany || data.mortgage_company)}</p><p>Status: ${esc(data.status)}</p><p>Request: ${esc(data.requestId || data.request_id)}</p>`),
-        text: `Mortgage request ${data.requestId || data.request_id}`,
-      };
-    case 'endorsement-request':
+    case 'internal-notification': {
+      const layout = layoutFrom(data, {
+        title: data.subject || 'ChecksOps notification',
+        paragraphs: [data.message || data.body || ''],
+      });
+      return { subject: data.subject || 'ChecksOps notification', ...layout };
+    }
+    case 'mortgage-handling-request': {
+      const layout = layoutFrom(data, {
+        title: 'Mortgage handling request',
+        paragraphs: [
+          data.mortgageCompany || data.mortgage_company ? `Company: ${data.mortgageCompany || data.mortgage_company}` : null,
+          data.status ? `Status: ${data.status}` : null,
+          `Request: ${data.requestId || data.request_id || ''}`,
+        ].filter(Boolean),
+      });
+      return { subject: `Mortgage handling request ${data.requestId || data.request_id || ''}`.trim(), ...layout };
+    }
+    case 'endorsement-request': {
+      const layout = layoutFrom(data, {
+        title: 'Endorsement required',
+        greeting: data.payeeName ? `Hello ${data.payeeName},` : 'Hello,',
+        paragraphs: [
+          `Check #${data.checkNumber || 'N/A'} from ${data.carrier || 'the carrier'} needs your endorsement.`,
+          data.amount != null && data.amount !== '' ? `Amount: ${data.amount}` : null,
+        ].filter(Boolean),
+        ctaLabel: 'Review and endorse',
+        ctaUrl: data.endorseUrl,
+        fallbackUrl: data.endorseUrl,
+      });
       return {
         subject: data.subject || `Endorsement required — Check #${data.checkNumber || 'N/A'}`,
-        html: shell('Endorsement required', `<p>Hello ${esc(data.payeeName || '')},</p><p>Check #${esc(data.checkNumber || 'N/A')} from ${esc(data.carrier || 'the carrier')} needs your endorsement.</p><p>Amount: ${esc(data.amount ?? 'N/A')}</p><p><a href="${esc(data.endorseUrl)}">Review and endorse</a></p>`),
-        text: `Endorse check ${data.checkNumber || ''}: ${data.endorseUrl}`,
+        ...layout,
       };
-    case 'payment-direction-request':
+    }
+    case 'payment-direction-request': {
+      const layout = layoutFrom(data, {
+        title: 'Payment direction needed',
+        greeting: data.policyholderName ? `Dear ${data.policyholderName},` : 'Dear Policyholder,',
+        paragraphs: [
+          'Please tell us how you want funds handled so we can move your claim forward.',
+          data.claimNumber ? `Claim: ${data.claimNumber}` : null,
+          data.carrier ? `Carrier: ${data.carrier}` : null,
+        ].filter(Boolean),
+        ctaLabel: 'Respond now',
+        ctaUrl: data.requestUrl,
+        fallbackUrl: data.requestUrl,
+      });
       return {
         subject: data.subject || 'Payment direction needed for your insurance check',
-        html: shell('Payment direction needed', `<p>Dear ${esc(data.policyholderName || 'Policyholder')},</p><p>Please tell us how you want funds handled so we can move your claim forward.</p>${data.claimNumber ? `<p>Claim: ${esc(data.claimNumber)}</p>` : ''}${data.carrier ? `<p>Carrier: ${esc(data.carrier)}</p>` : ''}<p><a href="${esc(data.requestUrl)}">Respond now</a></p>`),
-        text: `Payment direction needed: ${data.requestUrl}`,
+        ...layout,
       };
-    default:
+    }
+    case 'tenant-user-invite': {
+      const layout = layoutFrom(data, {
+        title: `You're invited to ${data.tenantName || 'ChecksOps'}`,
+        paragraphs: [
+          `You have been invited as ${data.role || 'a member'}.`,
+          'Sign in with a passwordless email code — no temporary password is sent in this message.',
+        ],
+        ctaLabel: 'Sign in',
+        ctaUrl: data.loginUrl,
+        fallbackUrl: data.loginUrl,
+      });
+      return { subject: `You're invited to ${data.tenantName || 'ChecksOps'}`, ...layout };
+    }
+    case 'mortgage-agent-invite': {
+      const layout = layoutFrom(data, {
+        title: 'You have access to ChecksOps Mortgage Ops',
+        greeting: data.fullName ? `Hi ${data.fullName},` : 'Hi,',
+        paragraphs: [
+          'Your Mortgage Ops account is ready. Sign in with a passwordless email code.',
+          'No temporary password is included in this message.',
+        ],
+        ctaLabel: 'Sign in to Mortgage Ops',
+        ctaUrl: data.loginUrl,
+        fallbackUrl: data.loginUrl,
+      });
+      return { subject: "You're invited to ChecksOps Mortgage Ops", ...layout };
+    }
+    case 'homeowner-upload-otp': {
+      const code = String(data.code || '');
+      const layout = layoutFrom(data, {
+        title: 'Your ChecksOps upload code',
+        paragraphs: [
+          'Use this one-time code to authorize a document upload. It does not create a ChecksOps login.',
+        ],
+        bodyHtml: `<p style="margin:16px 0;font-size:28px;letter-spacing:6px;font-weight:700;color:#0f172a;font-family:ui-monospace,Menlo,monospace;">${escapeHtml(code)}</p>`,
+        expiresText: 'This code expires in 15 minutes.',
+      });
+      return { subject: 'Your ChecksOps upload code', ...layout };
+    }
+    case 'portal-invite': {
+      const layout = layoutFrom(data, {
+        title: `Your ${data.tenantName || 'ChecksOps'} portal`,
+        greeting: data.userName ? `Hello ${data.userName},` : 'Hello,',
+        paragraphs: [
+          data.userType
+            ? `Your ${data.userType} portal account is ready. Sign in with a passwordless email code.`
+            : 'Your portal account is ready. Sign in with a passwordless email code.',
+          'No temporary password is included in this message.',
+        ],
+        ctaLabel: 'Open portal',
+        ctaUrl: data.loginUrl || data.portalUrl,
+        fallbackUrl: data.loginUrl || data.portalUrl,
+      });
       return {
-        subject: 'ChecksOps notification',
-        html: shell('Notification', `<pre>${esc(JSON.stringify(data))}</pre>`),
-        text: JSON.stringify(data),
+        subject: data.subject || `Your ${data.tenantName || 'ChecksOps'} portal invite`,
+        ...layout,
       };
+    }
+    default: {
+      const layout = layoutFrom(data, {
+        title: 'ChecksOps notification',
+        paragraphs: [JSON.stringify(data)],
+      });
+      return { subject: 'ChecksOps notification', ...layout };
+    }
   }
 };

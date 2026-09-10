@@ -13,6 +13,7 @@ import { normalizePath, s3KeyFor } from './storage-paths.mjs';
 import { sendViaSesOrSink } from './email.mjs';
 import { renderTransactionalTemplate } from './email-templates.mjs';
 import { normalizeEmail } from './email-policy.mjs';
+import { emailAssetOrigin, resolveEmailBranding } from './email-branding.mjs';
 
 const { Client } = pg;
 const s3 = () => new S3Client({ region: process.env.AWS_REGION || 'us-east-1' });
@@ -26,6 +27,75 @@ const publicDb = async (write = false) => {
   const client = new Client(config);
   await client.connect();
   return client;
+};
+
+const appOrigin = (override) => String(
+  override || process.env.VITE_APP_URL || emailAssetOrigin(),
+).replace(/\/$/, '');
+
+const loadLedgerTokenStaffRow = async (client, token) => {
+  try {
+    return (await client.query(
+      `SELECT id, tenant_id, claim_id, sent_by_user_id, created_by,
+              homeowner_email, homeowner_name, partner_code
+       FROM public.homeowner_ledger_tokens WHERE token = $1 LIMIT 1`,
+      [token],
+    )).rows[0] || null;
+  } catch {
+    return (await client.query(
+      `SELECT id, tenant_id, claim_id, created_by,
+              homeowner_email, homeowner_name, partner_code
+       FROM public.homeowner_ledger_tokens WHERE token = $1 LIMIT 1`,
+      [token],
+    )).rows[0] || null;
+  }
+};
+
+const profileEmail = async (client, userId) => {
+  if (!userId) return null;
+  const row = (await client.query(
+    `SELECT email, full_name FROM public.profiles WHERE id = $1::uuid LIMIT 1`,
+    [userId],
+  )).rows[0];
+  return {
+    email: normalizeEmail(row?.email),
+    fullName: row?.full_name || null,
+  };
+};
+
+export const notifyStaffOfHomeownerLedgerUpload = async ({
+  client, token, uploadId, origin, homeownerNote, amountEstimate, send,
+}) => {
+  const meta = await loadLedgerTokenStaffRow(client, token);
+  if (!meta) return { notified: false, reason: 'token_not_found' };
+  const staffUserId = meta.sent_by_user_id || meta.created_by || null;
+  const staff = await profileEmail(client, staffUserId);
+  const to = staff?.email;
+  if (!to) return { notified: false, reason: 'missing_staff_email' };
+
+  const branding = await resolveEmailBranding(client, { tenantId: meta.tenant_id });
+  const inboxUrl = `${appOrigin(origin)}/checks`;
+  const rendered = renderTransactionalTemplate('homeowner-upload-alert', {
+    staff_name: staff.fullName,
+    homeowner_name: meta.homeowner_name,
+    homeowner_email: meta.homeowner_email,
+    partner_code: meta.partner_code,
+    amount_estimate: amountEstimate ?? null,
+    homeowner_note: homeownerNote || null,
+    inbox_url: inboxUrl,
+    claimId: meta.claim_id,
+    branding,
+  });
+  const mailer = send || sendViaSesOrSink;
+  await mailer({
+    to,
+    subject: rendered.subject,
+    html: rendered.html,
+    text: rendered.text,
+    from: branding.from,
+    replyTo: branding.replyTo,
+  });
+  return { notified: true, recipient: to, uploadId: uploadId || null };
 };
 
 export const handleHomeownerLedgerView = async (event) => {
@@ -255,7 +325,7 @@ export const handleHomeownerClaimPortal = async (event) => {
   }
 };
 
-export const handleHomeownerLedgerUpload = async (event) => {
+export const handleHomeownerLedgerUpload = async (event, deps = {}) => {
   const body = parseBody(event);
   const spoof = ignoredSpoof(event, body);
   const token = String(body.token || '').trim();
@@ -263,33 +333,39 @@ export const handleHomeownerLedgerUpload = async (event) => {
 
   let client;
   try {
-    client = await publicDb(true);
-    await client.query('BEGIN');
-    await client.query('SET TRANSACTION READ WRITE');
+    client = deps.client || await publicDb(true);
+    if (!deps.client) {
+      await client.query('BEGIN');
+      await client.query('SET TRANSACTION READ WRITE');
+    }
     const doc = (await client.query(
       'SELECT public.aws_public_homeowner_ledger_by_token($1) AS doc',
       [token],
     )).rows[0]?.doc;
     if (!doc?.ok || !doc.token) {
-      await client.query('ROLLBACK');
+      if (!deps.client) await client.query('ROLLBACK');
       return { ok: false, statusCode: 404, error: doc?.error || 'not_found', spoofFieldsIgnored: spoof };
     }
 
     const frontB64 = String(body.front_base64 || body.file_base64 || '');
     if (frontB64.length < 100) {
-      await client.query('ROLLBACK');
+      if (!deps.client) await client.query('ROLLBACK');
       return { ok: false, statusCode: 400, error: 'missing_file', spoofFieldsIgnored: spoof };
     }
     const clean = frontB64.includes(',') ? frontB64.split(',').pop() : frontB64;
     const bytes = Buffer.from(clean, 'base64');
     const rel = `ledger/${doc.token.claim_id || doc.token.id}/${Date.now()}_front.jpg`;
     const key = s3KeyFor('homeowner-uploads', rel);
-    await s3().send(new PutObjectCommand({
-      Bucket: filesBucket(),
-      Key: key,
-      Body: bytes,
-      ContentType: 'image/jpeg',
-    }));
+    if (typeof deps.putObject === 'function') {
+      await deps.putObject({ Bucket: filesBucket(), Key: key, Body: bytes, ContentType: 'image/jpeg' });
+    } else {
+      await s3().send(new PutObjectCommand({
+        Bucket: filesBucket(),
+        Key: key,
+        Body: bytes,
+        ContentType: 'image/jpeg',
+      }));
+    }
     const row = (await client.query(
       `INSERT INTO public.homeowner_ledger_check_uploads (
          tenant_id, claim_id, front_path, status, created_at
@@ -297,10 +373,25 @@ export const handleHomeownerLedgerUpload = async (event) => {
        RETURNING id, front_path, status, created_at`,
       [doc.token.tenant_id, doc.token.claim_id, rel],
     )).rows[0];
-    await client.query('COMMIT');
-    return { ok: true, statusCode: 200, upload: row, spoofFieldsIgnored: spoof };
+    if (!deps.client) await client.query('COMMIT');
+    let notified = false;
+    try {
+      const notify = await notifyStaffOfHomeownerLedgerUpload({
+        client,
+        token,
+        uploadId: row?.id,
+        origin: body.origin,
+        homeownerNote: body.homeowner_note,
+        amountEstimate: body.amount_estimate,
+        send: deps.sendViaSesOrSink,
+      });
+      notified = notify.notified === true;
+    } catch {
+      notified = false;
+    }
+    return { ok: true, statusCode: 200, upload: row, notified, spoofFieldsIgnored: spoof };
   } catch (error) {
-    if (client) {
+    if (client && !deps.client) {
       try { await client.query('ROLLBACK'); } catch { /* ignore */ }
     }
     return {
@@ -311,7 +402,7 @@ export const handleHomeownerLedgerUpload = async (event) => {
       spoofFieldsIgnored: spoof,
     };
   } finally {
-    if (client) {
+    if (client && !deps.client) {
       try { await client.end(); } catch { /* ignore */ }
     }
   }
@@ -378,8 +469,8 @@ export const handleHomeownerLedgerSignLink = async (event) => {
   }
 };
 
-export const handleHomeownerLedgerSend = async (event) => withIdentity(event, async ({
-  client, mapping, body, spoof,
+export const runHomeownerLedgerSend = async ({
+  client, mapping, body, spoof, send,
 }) => {
   const homeownerEmail = normalizeEmail(body.homeowner_email);
   const homeownerPhone = body.homeowner_phone || null;
@@ -426,34 +517,59 @@ export const handleHomeownerLedgerSend = async (event) => withIdentity(event, as
   }
   if (!tokenRow) {
     const token = randomBytes(24).toString('hex');
-    tokenRow = (await client.query(
+    const insertWithSentBy = async () => client.query(
+      `INSERT INTO public.homeowner_ledger_tokens (
+         tenant_id, claim_id, token, homeowner_email, homeowner_name, created_by, sent_by_user_id, created_at
+       ) VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6::uuid, $6::uuid, now())
+       RETURNING id, token`,
+      [tenantId, claimId, token, homeownerEmail || null, body.homeowner_name || null, mapping.application_user_id],
+    );
+    const insertWithoutSentBy = async () => client.query(
       `INSERT INTO public.homeowner_ledger_tokens (
          tenant_id, claim_id, token, homeowner_email, homeowner_name, created_by, created_at
        ) VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6::uuid, now())
        RETURNING id, token`,
-      [
-        tenantId,
-        claimId,
-        token,
-        homeownerEmail || null,
-        body.homeowner_name || null,
-        mapping.application_user_id,
-      ],
-    )).rows[0];
+      [tenantId, claimId, token, homeownerEmail || null, body.homeowner_name || null, mapping.application_user_id],
+    );
+    try {
+      tokenRow = (await insertWithSentBy()).rows[0];
+    } catch {
+      tokenRow = (await insertWithoutSentBy()).rows[0];
+    }
+  } else {
+    try {
+      await client.query(
+        `UPDATE public.homeowner_ledger_tokens
+         SET sent_by_user_id = $2::uuid, homeowner_email = COALESCE($3, homeowner_email)
+         WHERE id = $1::uuid`,
+        [tokenRow.id, mapping.application_user_id, homeownerEmail || null],
+      );
+    } catch {
+      /* sent_by_user_id may be absent on older staging dumps */
+    }
   }
 
-  const origin = String(body.origin || process.env.VITE_APP_URL || 'https://staging.checksops.com').replace(/\/$/, '');
+  const origin = appOrigin(body.origin);
   const url = `${origin}/h/ledger/${tokenRow.token}`;
   if (homeownerEmail) {
+    const branding = await resolveEmailBranding(client, {
+      tenantId,
+      senderOverride: 'checksops',
+    });
     const rendered = renderTransactionalTemplate('homeowner-ledger-invite', {
       homeownerName: body.homeowner_name,
       ledgerUrl: url,
+      is_pre_claim: body.is_pre_claim === true,
+      branding,
     });
-    await sendViaSesOrSink({
+    const mailer = send || sendViaSesOrSink;
+    await mailer({
       to: homeownerEmail,
       subject: rendered.subject,
       html: rendered.html,
       text: rendered.text,
+      from: branding.from,
+      replyTo: branding.replyTo,
     });
   }
 
@@ -465,10 +581,14 @@ export const handleHomeownerLedgerSend = async (event) => withIdentity(event, as
     partner_code: body.partner_code || null,
     spoofFieldsIgnored: spoof,
   };
-}, { write: true, commit: true });
+};
 
-export const handleSendFileToHomeowner = async (event) => withIdentity(event, async ({
-  client, mapping, body, spoof,
+export const handleHomeownerLedgerSend = (event, deps = {}) => withIdentity(event, (ctx) => (
+  runHomeownerLedgerSend({ ...ctx, send: deps.sendViaSesOrSink })
+), { write: true, commit: true, ...deps });
+
+export const runSendFileToHomeowner = async ({
+  client, mapping, body, spoof, send,
 }) => {
   const checkFileId = body.check_file_id;
   if (!checkFileId) return { ok: false, statusCode: 400, error: 'missing_check_file_id', spoofFieldsIgnored: spoof };
@@ -484,19 +604,40 @@ export const handleSendFileToHomeowner = async (event) => withIdentity(event, as
   )).rows[0];
   if (!member) return { ok: false, statusCode: 403, error: 'cross_tenant_denied', spoofFieldsIgnored: spoof };
 
-  // Timeline note only (amount null)
   const claim = (await client.query(
     `SELECT claim_id FROM public.check_intake_items WHERE id = $1::uuid LIMIT 1`,
     [file.check_id],
   )).rows[0];
-  if (claim?.claim_id) {
+  const claimId = claim?.claim_id || null;
+  const tok = (await client.query(
+    `SELECT token, homeowner_email, homeowner_name
+     FROM public.homeowner_ledger_tokens
+     WHERE tenant_id = $1::uuid
+       AND ($2::uuid IS NULL OR claim_id = $2::uuid)
+       AND revoked_at IS NULL
+     ORDER BY created_at DESC LIMIT 1`,
+    [file.tenant_id, claimId],
+  )).rows[0];
+  const homeownerEmail = normalizeEmail(tok?.homeowner_email);
+  if (!homeownerEmail) {
+    return {
+      ok: false,
+      statusCode: 400,
+      error: 'missing_recipient',
+      reason: 'no_homeowner_link',
+      message: 'Send the homeowner their portal link first.',
+      spoofFieldsIgnored: spoof,
+    };
+  }
+
+  if (claimId) {
     await client.query(
       `INSERT INTO public.homeowner_ledger_events (
          tenant_id, claim_id, check_id, event_type, occurred_at, actor_label, payload_json, created_by, amount
        ) VALUES ($1::uuid, $2::uuid, $3::uuid, 'document_shared', now(), 'Document shared', $4::jsonb, $5::uuid, NULL)`,
       [
         file.tenant_id,
-        claim.claim_id,
+        claimId,
         file.check_id,
         JSON.stringify({ file_name: file.file_name, note: body.note || null }),
         mapping.application_user_id,
@@ -504,22 +645,70 @@ export const handleSendFileToHomeowner = async (event) => withIdentity(event, as
     );
   }
 
-  return { ok: true, statusCode: 200, shared: true, spoofFieldsIgnored: spoof };
-}, { write: true, commit: true });
+  const origin = appOrigin(body.origin);
+  const portalUrl = `${origin}/h/ledger/${tok.token}`;
+  const branding = await resolveEmailBranding(client, {
+    tenantId: file.tenant_id,
+    senderOverride: 'checksops',
+  });
+  const rendered = renderTransactionalTemplate('homeowner-document-shared', {
+    homeowner_name: tok.homeowner_name,
+    portal_url: portalUrl,
+    url: portalUrl,
+    document_name: file.file_name,
+    note: body.note || null,
+    branding,
+  });
+  const mailer = send || sendViaSesOrSink;
+  await mailer({
+    to: homeownerEmail,
+    subject: rendered.subject,
+    html: rendered.html,
+    text: rendered.text,
+    from: branding.from,
+    replyTo: branding.replyTo,
+  });
 
-export const handleSendPortalInvite = async (event) => withIdentity(event, async ({
-  mapping, body, spoof, client,
+  return {
+    ok: true,
+    statusCode: 200,
+    shared: true,
+    emailed: true,
+    portal_url: portalUrl,
+    spoofFieldsIgnored: spoof,
+  };
+};
+
+export const handleSendFileToHomeowner = (event, deps = {}) => withIdentity(event, (ctx) => (
+  runSendFileToHomeowner({ ...ctx, send: deps.sendViaSesOrSink })
+), { write: true, commit: true, ...deps });
+
+export const runSendPortalInvite = async ({
+  mapping, body, spoof, client, send,
 }) => {
   const email = normalizeEmail(body.email);
   if (!email) return { ok: false, statusCode: 400, error: 'missing_email', spoofFieldsIgnored: spoof };
-  const rendered = renderTransactionalTemplate('stakeholder-verify-account', {
-    verifyUrl: body.appUrl || 'https://staging.checksops.com/login',
+  const origin = appOrigin(body.appUrl || body.origin);
+  const loginUrl = /\/(portal|login)(\/|$)/i.test(origin) ? origin : `${origin}/login`;
+  const branding = await resolveEmailBranding(client, {
+    tenantId: body.tenant_id || body.tenantId || null,
+    senderOverride: body.senderOverride || body.sender_override || null,
   });
-  const send = await sendViaSesOrSink({
+  const rendered = renderTransactionalTemplate('portal-invite', {
+    tenantName: body.tenantName,
+    userName: body.userName,
+    userType: body.userType,
+    loginUrl,
+    branding,
+  });
+  const mailer = send || sendViaSesOrSink;
+  const sendResult = await mailer({
     to: email,
-    subject: `Your ${body.tenantName || 'ChecksOps'} portal invite`,
-    html: `${rendered.html}<p>User: ${body.userName || ''} (${body.userType || ''})</p>`,
-    text: `Portal invite for ${email}`,
+    subject: rendered.subject,
+    html: rendered.html,
+    text: rendered.text,
+    from: branding.from,
+    replyTo: branding.replyTo,
   });
   await client.query(
     `INSERT INTO public.email_send_log (
@@ -528,13 +717,23 @@ export const handleSendPortalInvite = async (event) => withIdentity(event, async
     [
       randomUUID(),
       email,
-      send.results[0]?.delivery === 'ses' ? 'sent' : 'sunk',
-      send.results[0]?.messageId || null,
+      sendResult.results?.[0]?.delivery === 'ses' ? 'sent' : 'sunk',
+      sendResult.results?.[0]?.messageId || null,
       JSON.stringify({ application_user_id: mapping.application_user_id, userType: body.userType || null }),
     ],
   ).catch(() => {});
-  return { ok: true, statusCode: 200, success: true, stagingMode: send.mode, spoofFieldsIgnored: spoof };
-}, { write: true, commit: true });
+  return {
+    ok: true,
+    statusCode: 200,
+    success: true,
+    stagingMode: sendResult.mode,
+    spoofFieldsIgnored: spoof,
+  };
+};
+
+export const handleSendPortalInvite = (event, deps = {}) => withIdentity(event, (ctx) => (
+  runSendPortalInvite({ ...ctx, send: deps.sendViaSesOrSink })
+), { write: true, commit: true, ...deps });
 
 export const handleHomeownerUploadCheck = async (event) => {
   const body = parseBody(event);
