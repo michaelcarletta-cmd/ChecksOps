@@ -1,0 +1,36 @@
+{
+  "phase": "M3b.3-forensic-lovable-vs-aws",
+  "captured_at": "2026-09-10T02:13:04.598Z",
+  "mutations": false,
+  "secret_values_printed": false,
+  "lovable_secret_values_readable": false,
+  "classification_primary": "A. AWS has different credentials",
+  "lovable_freedom_environment": "production",
+  "freedom_provider_account_id_fp": "60922058…de96",
+  "same_account_as_aws_readiness": true,
+  "http_oauth_contract_match": true,
+  "credential_shape_matches_working_sandbox": true,
+  "aws_public_key_sha256_12": "b4dd6a5880e7",
+  "sandbox_public_key_sha256_12": "2e3da5f53f6b",
+  "hashes_equal": false,
+  "smallest_fix": {
+    "CODE_CHANGE": false,
+    "CONFIG_CHANGE": false,
+    "SECRET_CHANGE": true,
+    "MOOV_DASHBOARD_CHANGE": false,
+    "DATABASE_ACCOUNT_ID_CHANGE": false
+  },
+  "go_nogo_apply_secret_copy": "GO",
+  "go_nogo_money": "NO-GO",
+  "flags": {
+    "AWS_PROVIDER_LIVE_READS_ENABLED": true,
+    "AWS_MOOV_ENABLED": false,
+    "AWS_PROVIDER_EXECUTION_ENABLED": false,
+    "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": false,
+    "AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED": false
+  },
+  "sql72": "NOT_APPLIED",
+  "money_moved": false,
+  "lovable_changed": false,
+  "webhook_changed": false
+}
