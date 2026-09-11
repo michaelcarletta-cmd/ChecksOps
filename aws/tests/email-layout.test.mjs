@@ -359,6 +359,8 @@ test('platform branding never uses an unverified custom From', async () => {
 
 test('sink mode always sinks and SES errors keep sink_fallback', async () => {
   const prev = process.env.AWS_EMAIL_MODE;
+  const prevEnv = process.env.CHECKSOPS_ENV;
+  const prevLock = process.env.AWS_EMAIL_SES_LOCK_RECIPIENT;
   process.env.AWS_EMAIL_MODE = 'sink';
   const sunk = await sendViaSesOrSink({
     to: 'mcarletta@freedomadj.com',
@@ -374,6 +376,8 @@ test('sink mode always sinks and SES errors keep sink_fallback', async () => {
   assert.equal(sunk.results[0].originalTo, 'mcarletta@freedomadj.com');
 
   process.env.AWS_EMAIL_MODE = 'ses';
+  process.env.CHECKSOPS_ENV = 'staging';
+  process.env.AWS_EMAIL_SES_LOCK_RECIPIENT = 'mcarletta@freedomadj.com';
   const fallback = await sendViaSesOrSink({
     to: 'mcarletta@freedomadj.com',
     subject: 'SES down',
@@ -407,6 +411,10 @@ test('sink mode always sinks and SES errors keep sink_fallback', async () => {
   assert.equal(tags.some((t) => t.Name === 'message_category' && t.Value === 'tenant_invite'), true);
   assert.equal(tags.some((t) => /claim|recipient|email/i.test(t.Name) || /CL-999|victim@/i.test(String(t.Value))), false);
   process.env.AWS_EMAIL_MODE = prev;
+  if (prevEnv === undefined) delete process.env.CHECKSOPS_ENV;
+  else process.env.CHECKSOPS_ENV = prevEnv;
+  if (prevLock === undefined) delete process.env.AWS_EMAIL_SES_LOCK_RECIPIENT;
+  else process.env.AWS_EMAIL_SES_LOCK_RECIPIENT = prevLock;
 });
 
 test('shared templates keep ChecksOps layout and do not emit raw script tags', () => {
@@ -440,6 +448,7 @@ test('staging template names AWS_EMAIL_MODE=sink and does not grant SES', () => 
   assert.match(yaml, /AWS_EMAIL_SINK_ADDRESS:/);
   assert.match(yaml, /AWS_EMAIL_ALLOWLIST_DOMAINS:/);
   assert.match(yaml, /AWS_EMAIL_ALLOWLIST_EXACT:/);
+  assert.match(yaml, /AWS_EMAIL_SES_LOCK_RECIPIENT:\s*""/);
   assert.match(yaml, /AWS_MORTGAGE_OPS_EMAIL:/);
   assert.match(yaml, /AWS_TENANT_EMAIL_DOMAIN_ENABLED:\s*"false"/);
   assert.match(yaml, /AWS_SES_CONFIGURATION_SET:\s*""/);

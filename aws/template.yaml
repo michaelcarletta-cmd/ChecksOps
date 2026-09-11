@@ -103,6 +103,7 @@ Globals:
         AWS_EMAIL_SINK_ADDRESS: "staging-sink@checksops.invalid"
         AWS_EMAIL_ALLOWLIST_DOMAINS: "checksops.invalid,checksops.com,freedomadj.com"
         AWS_EMAIL_ALLOWLIST_EXACT: "staging-master@checksops.invalid,mcarletta@freedomadj.com,checksops-tester@freedomadj.com"
+        AWS_EMAIL_SES_LOCK_RECIPIENT: ""
         AWS_MORTGAGE_OPS_EMAIL: "staging-mortgage-ops@checksops.invalid"
         # Tenant SES domain APIs stay off. Do not grant SES IAM in this stack.
         AWS_TENANT_EMAIL_DOMAIN_ENABLED: "false"

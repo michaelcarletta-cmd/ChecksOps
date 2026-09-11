@@ -18,7 +18,11 @@ test('staging email mode defaults to sink', () => {
 
 test('recipient policy sinks non-allowlisted addresses in ses mode', () => {
   const prev = process.env.AWS_EMAIL_MODE;
+  const prevEnv = process.env.CHECKSOPS_ENV;
+  const prevLock = process.env.AWS_EMAIL_SES_LOCK_RECIPIENT;
   process.env.AWS_EMAIL_MODE = 'ses';
+  process.env.CHECKSOPS_ENV = 'staging';
+  process.env.AWS_EMAIL_SES_LOCK_RECIPIENT = 'mcarletta@freedomadj.com';
   const [blocked] = applyRecipientPolicy(['victim@example.com']);
   assert.equal(blocked.blocked, true);
   assert.equal(blocked.delivery, 'sink');
@@ -27,6 +31,28 @@ test('recipient policy sinks non-allowlisted addresses in ses mode', () => {
   assert.equal(ok.blocked, false);
   assert.equal(ok.delivery, 'ses');
   process.env.AWS_EMAIL_MODE = prev;
+  if (prevEnv === undefined) delete process.env.CHECKSOPS_ENV;
+  else process.env.CHECKSOPS_ENV = prevEnv;
+  if (prevLock === undefined) delete process.env.AWS_EMAIL_SES_LOCK_RECIPIENT;
+  else process.env.AWS_EMAIL_SES_LOCK_RECIPIENT = prevLock;
+});
+
+test('staging ses mode without exact recipient lock is fail-closed to sink', () => {
+  const prev = process.env.AWS_EMAIL_MODE;
+  const prevEnv = process.env.CHECKSOPS_ENV;
+  const prevLock = process.env.AWS_EMAIL_SES_LOCK_RECIPIENT;
+  process.env.AWS_EMAIL_MODE = 'ses';
+  process.env.CHECKSOPS_ENV = 'staging';
+  delete process.env.AWS_EMAIL_SES_LOCK_RECIPIENT;
+  const [row] = applyRecipientPolicy(['mcarletta@freedomadj.com']);
+  assert.equal(row.blocked, true);
+  assert.equal(row.delivery, 'sink');
+  assert.equal(row.policy, 'staging_ses_lock_required');
+  process.env.AWS_EMAIL_MODE = prev;
+  if (prevEnv === undefined) delete process.env.CHECKSOPS_ENV;
+  else process.env.CHECKSOPS_ENV = prevEnv;
+  if (prevLock === undefined) delete process.env.AWS_EMAIL_SES_LOCK_RECIPIENT;
+  else process.env.AWS_EMAIL_SES_LOCK_RECIPIENT = prevLock;
 });
 
 test('ses-identity mode sinks allowlisted recipients', () => {

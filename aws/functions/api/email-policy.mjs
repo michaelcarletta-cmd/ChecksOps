@@ -30,8 +30,20 @@ export const sesIdentityApisEnabled = () => {
   return mode === 'ses' || mode === 'ses-identity';
 };
 
-/** Actual SES SendEmail / SendRawEmail. ses-identity never sends. */
+/** Actual SES SendEmail. ses-identity never sends. */
 export const sesOutboundSendEnabled = () => emailMode() === 'ses';
+
+/** Staging (or unset env) must set an exact SES lock recipient before SendEmail. */
+export const stagingSesLockApplies = () => {
+  const env = String(process.env.CHECKSOPS_ENV || 'staging').trim().toLowerCase();
+  return env === 'staging';
+};
+
+export const stagingSesLockRecipient = () => {
+  const raw = String(process.env.AWS_EMAIL_SES_LOCK_RECIPIENT || '').trim().toLowerCase();
+  if (!raw || raw.includes(',') || !raw.includes('@')) return null;
+  return normalizeEmail(raw);
+};
 
 export const allowlistDomains = () => {
   const raw = String(process.env.AWS_EMAIL_ALLOWLIST_DOMAINS || '').trim();
@@ -75,13 +87,17 @@ export const isAllowlistedRecipient = (email) => {
  * Apply staging recipient policy.
  * - sink / ses-identity: always rewrite to sink (record original). ses-identity
  *   permits domain identity APIs without outbound SendEmail.
- * - ses mode: only allow allowlisted; others rewritten to sink with blocked flag
+ * - ses mode: staging requires AWS_EMAIL_SES_LOCK_RECIPIENT (exactly one address).
+ *   Without the lock, SES delivery is fail-closed to sink. Domain allowlists are
+ *   not sufficient. Non-staging ses still uses allowlist + sink rewrite.
  */
 export const applyRecipientPolicy = (recipients = []) => {
   const mode = emailMode();
   const list = (Array.isArray(recipients) ? recipients : [recipients])
     .map((r) => (typeof r === 'string' ? { email: r } : r))
     .filter((r) => r && r.email);
+  const lock = stagingSesLockRecipient();
+  const lockApplies = stagingSesLockApplies();
 
   return list.map((r) => {
     const original = normalizeEmail(r.email);
@@ -96,7 +112,28 @@ export const applyRecipientPolicy = (recipients = []) => {
         policy: mode === 'ses-identity' ? 'staging_ses_identity' : 'staging_sink',
       };
     }
-    // ses mode
+    if (lockApplies) {
+      if (!lock) {
+        return {
+          ...r,
+          email: sinkAddress(),
+          originalEmail: original,
+          delivery: 'sink',
+          blocked: true,
+          policy: 'staging_ses_lock_required',
+        };
+      }
+      if (original !== lock) {
+        return {
+          ...r,
+          email: sinkAddress(),
+          originalEmail: original,
+          delivery: 'sink',
+          blocked: true,
+          policy: 'staging_ses_lock_mismatch',
+        };
+      }
+    }
     if (allowed) {
       return {
         ...r,
@@ -104,7 +141,7 @@ export const applyRecipientPolicy = (recipients = []) => {
         originalEmail: original,
         delivery: 'ses',
         blocked: false,
-        policy: 'staging_allowlist',
+        policy: lockApplies ? 'staging_ses_lock' : 'staging_allowlist',
       };
     }
     return {

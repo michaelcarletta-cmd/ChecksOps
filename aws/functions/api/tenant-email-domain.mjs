@@ -681,6 +681,40 @@ export const resolveTenantAccess = async (client, mapping, tenantId) => {
   };
 };
 
+export const loadTenantRow = async (client, tenantId) => (
+  (await client.query(
+    `SELECT id::text AS id, name, logo_url, primary_color, email_from_name,
+            email_from_address, email_reply_to, is_system_tenant
+     FROM public.tenants WHERE id = $1::uuid LIMIT 1`,
+    [tenantId],
+  )).rows[0] || null
+);
+
+export const requireAuthorizedTenant = async (
+  client,
+  mapping,
+  tenantId,
+  { configure = false } = {},
+) => {
+  if (!tenantId) return { ok: false, statusCode: 400, error: 'missing_tenant' };
+  let tenant;
+  try {
+    tenant = await loadTenantRow(client, tenantId);
+  } catch {
+    return { ok: false, statusCode: 503, error: 'tenant_lookup_failed' };
+  }
+  if (!tenant) return { ok: false, statusCode: 404, error: 'tenant_not_found' };
+  let access;
+  try {
+    access = await resolveTenantAccess(client, mapping, tenantId);
+  } catch {
+    return { ok: false, statusCode: 503, error: 'tenant_access_lookup_failed' };
+  }
+  if (configure && !access.canConfigure) return { ok: false, statusCode: 403, error: 'not_authorized' };
+  if (!configure && !access.canView) return { ok: false, statusCode: 403, error: 'cross_tenant_denied' };
+  return { ok: true, tenantId: String(tenant.id), tenant, access };
+};
+
 let liveSesV2Promise = null;
 const sinkIdentities = new Map();
 

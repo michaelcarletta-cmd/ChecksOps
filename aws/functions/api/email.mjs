@@ -18,10 +18,13 @@ import {
   normalizeEmail,
   sesOutboundSendEnabled,
   sinkAddress,
+  stagingSesLockApplies,
+  stagingSesLockRecipient,
 } from './email-policy.mjs';
 import { parseFromHeader, resolveEmailBranding } from './email-branding.mjs';
 import { renderTransactionalTemplate, TEMPLATE_NAMES } from './email-templates.mjs';
 import { sesConfigurationSetName, sesMessageTags } from './email-ses.mjs';
+import { normalizeReplyTo, requireAuthorizedTenant } from './tenant-email-domain.mjs';
 
 const { Client } = pg;
 
@@ -59,6 +62,17 @@ export const sendViaSesOrSink = async ({
       subject,
     };
     if (recipient.delivery === 'ses' && sesOutboundSendEnabled()) {
+      const lock = stagingSesLockRecipient();
+      if (stagingSesLockApplies() && lock !== recipient.originalEmail) {
+        entry.status = 'sunk';
+        entry.delivery = 'sink';
+        entry.blocked = true;
+        entry.policy = lock ? 'staging_ses_lock_mismatch' : 'staging_ses_lock_required';
+        entry.messageId = `sink-${randomUUID()}`;
+        entry.sink = sinkAddress();
+        results.push(entry);
+        continue;
+      }
       try {
         const cmd = new SendEmailCommand({
           Source: parsedFrom.name ? `${parsedFrom.name} <${parsedFrom.address}>` : parsedFrom.address,
@@ -142,70 +156,221 @@ const isSuppressed = async (client, email, tenantId) => {
   return rows.length > 0;
 };
 
-export const handleSendTransactionalEmail = async (event) => withIdentity(event, async ({
-  client, mapping, body, spoof,
+const withSpoof = (result, spoof) => ({ ...result, spoofFieldsIgnored: spoof });
+
+const findIdempotencyRow = async (client, key) => {
+  if (!key) return { ok: true, row: null };
+  try {
+    const { rows } = await client.query(
+      `SELECT id::text AS id, status, provider_message_id, recipient_email, tenant_id::text AS tenant_id,
+              metadata, error_message
+       FROM public.email_send_log
+       WHERE idempotency_key = $1
+       LIMIT 1`,
+      [key],
+    );
+    return { ok: true, row: rows[0] || null };
+  } catch {
+    return { ok: false, error: 'idempotency_unavailable' };
+  }
+};
+
+const isUniqueViolation = (error) => String(error?.code || '') === '23505';
+
+const claimIdempotencyKey = async (client, row) => {
+  if (!row?.idempotency_key) return { ok: true, claimed: false };
+  try {
+    await client.query(
+      `INSERT INTO public.email_send_log (
+         id, template_name, recipient_email, tenant_id, status, provider, provider_message_id,
+         idempotency_key, error_message, metadata, created_at
+       ) VALUES (
+         $1::uuid, $2, $3, $4::uuid, 'pending', $5, NULL, $6, NULL, $7::jsonb, now()
+       )`,
+      [
+        row.id,
+        row.template_name || null,
+        row.recipient_email,
+        row.tenant_id || null,
+        row.provider || 'aws_staging',
+        row.idempotency_key,
+        JSON.stringify({ ...(row.metadata || {}), claimed: true }),
+      ],
+    );
+    return { ok: true, claimed: true, id: row.id };
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      const prior = await findIdempotencyRow(client, row.idempotency_key);
+      if (prior.ok && prior.row) return { ok: true, duplicate: true, row: prior.row };
+      return { ok: false, error: 'idempotency_conflict' };
+    }
+    return { ok: false, error: 'idempotency_unavailable' };
+  }
+};
+
+const finalizeClaimedLog = async (client, row) => {
+  if (!row?.id) return;
+  try {
+    await client.query(
+      `UPDATE public.email_send_log
+       SET status = $2,
+           provider_message_id = $3,
+           error_message = $4,
+           metadata = $5::jsonb
+       WHERE id = $1::uuid`,
+      [
+        row.id,
+        row.status || 'failed',
+        row.provider_message_id || null,
+        row.error_message || null,
+        JSON.stringify(row.metadata || {}),
+      ],
+    );
+  } catch {
+    // Reservation still blocks duplicates even if finalize cannot persist status.
+  }
+};
+
+const replayIdempotentSend = (row, spoof) => {
+  const sent = row.status === 'sent';
+  return withSpoof({
+    ok: true,
+    statusCode: 200,
+    success: true,
+    sent,
+    queued: false,
+    sunk: !sent,
+    duplicate: true,
+    provider: 'aws_staging',
+    id: row.provider_message_id || row.id,
+    stagingPolicy: row.metadata?.policy || null,
+    reason: 'idempotent_replay',
+  }, spoof);
+};
+
+const resolveCallerReplyTo = (body, brandingReplyTo) => {
+  const override = body.claimEmailCc || body.claim_email_cc || body.replyTo || body.reply_to;
+  if (override == null || String(override).trim() === '') {
+    return { ok: true, replyTo: brandingReplyTo || defaultReplyTo() };
+  }
+  const parsed = normalizeReplyTo(override);
+  if (!parsed.ok) return parsed;
+  return { ok: true, replyTo: parsed.replyTo || brandingReplyTo || defaultReplyTo() };
+};
+
+export const runSendTransactionalEmail = async ({
+  client, mapping, body, spoof, send,
 }) => {
   const templateName = body.templateName || body.template_name;
   const recipientEmail = normalizeEmail(body.recipientEmail || body.recipient_email);
   const tenantId = body.tenantId || body.tenant_id || null;
   const templateData = body.templateData || body.template_data || {};
-  const idempotencyKey = body.idempotencyKey || body.idempotency_key || randomUUID();
+  const suppliedKey = body.idempotencyKey || body.idempotency_key || null;
+  const idempotencyKey = suppliedKey ? String(suppliedKey).trim() : randomUUID();
   const messageId = randomUUID();
+  const mailer = send || sendViaSesOrSink;
 
   if (!templateName || !TEMPLATE_NAMES.has(templateName)) {
-    return {
+    return withSpoof({
       ok: false,
       statusCode: 400,
       success: false,
       error: 'unknown_template',
       templateName: templateName || null,
-      spoofFieldsIgnored: spoof,
-    };
+    }, spoof);
   }
   if (!recipientEmail) {
-    return { ok: false, statusCode: 400, success: false, error: 'missing_recipient', spoofFieldsIgnored: spoof };
+    return withSpoof({ ok: false, statusCode: 400, success: false, error: 'missing_recipient' }, spoof);
   }
 
-  if (await isSuppressed(client, recipientEmail, tenantId)) {
+  const authorized = await requireAuthorizedTenant(client, mapping, tenantId, { configure: false });
+  if (!authorized.ok) return withSpoof(authorized, spoof);
+
+  const prior = await findIdempotencyRow(client, suppliedKey ? idempotencyKey : null);
+  if (!prior.ok) {
+    return withSpoof({
+      ok: false,
+      statusCode: 503,
+      success: false,
+      error: 'idempotency_unavailable',
+    }, spoof);
+  }
+  if (prior.row) return replayIdempotentSend(prior.row, spoof);
+
+  if (await isSuppressed(client, recipientEmail, authorized.tenantId)) {
     await logEmail(client, {
       id: messageId,
       template_name: templateName,
       recipient_email: recipientEmail,
-      tenant_id: tenantId,
+      tenant_id: authorized.tenantId,
       status: 'suppressed',
       provider: 'aws_staging',
       idempotency_key: idempotencyKey,
       metadata: { application_user_id: mapping.application_user_id },
     });
-    return {
+    return withSpoof({
       ok: true,
       statusCode: 200,
       success: false,
       reason: 'email_suppressed',
-      spoofFieldsIgnored: spoof,
-    };
+    }, spoof);
   }
 
   const branding = await resolveEmailBranding(client, {
-    tenantId,
+    tenantId: authorized.tenantId,
     senderOverride: body.senderOverride || body.sender_override || null,
   });
+  const reply = resolveCallerReplyTo(body, branding.replyTo);
+  if (!reply.ok) {
+    return withSpoof({
+      ok: false,
+      statusCode: 400,
+      success: false,
+      error: reply.error,
+      reason: reply.reason || null,
+    }, spoof);
+  }
+
+  let claimed = false;
+  if (suppliedKey) {
+    const claim = await claimIdempotencyKey(client, {
+      id: messageId,
+      template_name: templateName,
+      recipient_email: recipientEmail,
+      tenant_id: authorized.tenantId,
+      provider: 'aws_staging',
+      idempotency_key: idempotencyKey,
+      metadata: { application_user_id: mapping.application_user_id },
+    });
+    if (!claim.ok) {
+      return withSpoof({
+        ok: false,
+        statusCode: 503,
+        success: false,
+        error: claim.error || 'idempotency_unavailable',
+      }, spoof);
+    }
+    if (claim.duplicate) return replayIdempotentSend(claim.row, spoof);
+    claimed = claim.claimed === true;
+  }
+
   const rendered = renderTransactionalTemplate(templateName, { ...templateData, branding });
-  const send = await sendViaSesOrSink({
+  const result = await mailer({
     to: recipientEmail,
     subject: rendered.subject,
     html: rendered.html,
     text: rendered.text,
     from: branding.from,
-    replyTo: branding.replyTo,
+    replyTo: reply.replyTo,
+    tenantId: authorized.tenantId,
   });
 
-  const primary = send.results[0] || {};
-  await logEmail(client, {
+  const primary = result.results[0] || {};
+  const logRow = {
     id: messageId,
     template_name: templateName,
     recipient_email: recipientEmail,
-    tenant_id: tenantId,
+    tenant_id: authorized.tenantId,
     status: primary.status === 'failed' ? 'failed' : (primary.delivery === 'ses' ? 'sent' : 'sunk'),
     provider: 'aws_staging',
     provider_message_id: primary.messageId || null,
@@ -215,11 +380,13 @@ export const handleSendTransactionalEmail = async (event) => withIdentity(event,
       application_user_id: mapping.application_user_id,
       policy: primary.policy,
       originalTo: primary.originalTo,
-      mode: send.mode,
+      mode: result.mode,
     },
-  });
+  };
+  if (claimed) await finalizeClaimedLog(client, logRow);
+  else await logEmail(client, logRow);
 
-  return {
+  return withSpoof({
     ok: true,
     statusCode: 200,
     success: true,
@@ -229,12 +396,15 @@ export const handleSendTransactionalEmail = async (event) => withIdentity(event,
     provider: 'aws_staging',
     id: primary.messageId || messageId,
     stagingPolicy: primary.policy,
-    spoofFieldsIgnored: spoof,
-  };
-}, { write: true, commit: true });
+  }, spoof);
+};
 
-export const handleSendEmail = async (event) => withIdentity(event, async ({
-  client, mapping, body, spoof,
+export const handleSendTransactionalEmail = async (event, deps = {}) => withIdentity(event, (ctx) => (
+  runSendTransactionalEmail({ ...ctx, send: deps.sendViaSesOrSink })
+), { write: true, commit: true, ...deps });
+
+export const runSendEmail = async ({
+  client, mapping, body, spoof, send,
 }) => {
   const recipients = [];
   if (Array.isArray(body.recipients)) {
@@ -245,57 +415,77 @@ export const handleSendEmail = async (event) => withIdentity(event, async ({
   const htmlBody = body.body || body.html || body.htmlBody || body.message || '';
   const textBody = body.text || String(htmlBody).replace(/<[^>]+>/g, ' ');
   if (!recipients.length || !body.subject || !htmlBody) {
-    return {
+    return withSpoof({
       ok: false,
       statusCode: 400,
       success: false,
       error: 'missing_fields',
-      spoofFieldsIgnored: spoof,
-    };
+    }, spoof);
   }
 
+  const tenantId = body.tenantId || body.tenant_id || null;
+  const authorized = await requireAuthorizedTenant(client, mapping, tenantId, { configure: false });
+  if (!authorized.ok) return withSpoof(authorized, spoof);
+
+  const mailer = send || sendViaSesOrSink;
   const branding = await resolveEmailBranding(client, {
-    tenantId: body.tenantId || body.tenant_id || null,
+    tenantId: authorized.tenantId,
     senderOverride: body.senderOverride || body.sender_override || null,
   });
-  const send = await sendViaSesOrSink({
+  const reply = resolveCallerReplyTo(body, branding.replyTo);
+  if (!reply.ok) {
+    return withSpoof({
+      ok: false,
+      statusCode: 400,
+      success: false,
+      error: reply.error,
+      reason: reply.reason || null,
+    }, spoof);
+  }
+
+  const result = await mailer({
     to: recipients,
     subject: String(body.subject),
     html: String(htmlBody),
     text: String(textBody),
     from: branding.from,
-    replyTo: body.claimEmailCc || body.replyTo || branding.replyTo,
+    replyTo: reply.replyTo,
     headers: body.headers || {},
+    tenantId: authorized.tenantId,
   });
 
-  for (const result of send.results) {
+  for (const row of result.results) {
     await logEmail(client, {
       template_name: 'freeform-send-email',
-      recipient_email: result.originalTo || result.to,
-      tenant_id: body.tenantId || null,
-      status: result.status === 'failed' ? 'failed' : (result.delivery === 'ses' ? 'sent' : 'sunk'),
+      recipient_email: row.originalTo || row.to,
+      tenant_id: authorized.tenantId,
+      status: row.status === 'failed' ? 'failed' : (row.delivery === 'ses' ? 'sent' : 'sunk'),
       provider: 'aws_staging',
-      provider_message_id: result.messageId || null,
+      provider_message_id: row.messageId || null,
       metadata: {
         checkId: body.checkId || null,
         claimId: body.claimId || null,
         application_user_id: mapping.application_user_id,
-        policy: result.policy,
+        policy: row.policy,
       },
     });
   }
 
-  return {
+  return withSpoof({
     ok: true,
     statusCode: 200,
     success: true,
-    recipientCount: send.results.length,
+    recipientCount: result.results.length,
     attachmentCount: Array.isArray(body.attachments) ? body.attachments.length : 0,
-    messageId: send.results[0]?.messageId || null,
-    stagingMode: send.mode,
-    spoofFieldsIgnored: spoof,
-  };
-}, { write: true, commit: true });
+    messageId: result.results[0]?.messageId || null,
+    stagingMode: result.mode,
+    stagingPolicy: result.results[0]?.policy || null,
+  }, spoof);
+};
+
+export const handleSendEmail = async (event, deps = {}) => withIdentity(event, (ctx) => (
+  runSendEmail({ ...ctx, send: deps.sendViaSesOrSink })
+), { write: true, commit: true, ...deps });
 
 export const handleEmailUnsubscribe = async (event) => {
   const body = parseBody(event);
