@@ -16,7 +16,12 @@ const ROOT = dirname(fileURLToPath(import.meta.url));
 const WORK = process.env.COHERENT_WORK || '/tmp/coherent-package';
 const LIVE_ZIP = process.env.LIVE_ZIP || '/tmp/coherent/live.zip';
 const OUT_ZIP = process.env.OUT_ZIP || '/tmp/coherent-package/checksops-staging-api-coherent.zip';
-const SKIP = new Set(['node_modules', 'build-ledger-send-overlay.mjs', 'build-coherent-staging-zip.mjs']);
+const SKIP = new Set([
+  'node_modules',
+  'build-ledger-send-overlay.mjs',
+  'build-coherent-staging-zip.mjs',
+  'validate-coherent-staging-zip.mjs',
+]);
 
 const walk = (dir, acc = []) => {
   for (const name of readdirSync(dir)) {
