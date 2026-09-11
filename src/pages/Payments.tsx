@@ -8,8 +8,13 @@ import { PayrollTab } from "@/pages/payments/PayrollTab";
 import { InvoicesTab } from "@/pages/payments/InvoicesTab";
 
 import { useAuth } from "@/hooks/useAuth";
+import { useTenant } from "@/contexts/TenantContext";
 import { useSearchParams } from "react-router-dom";
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { canAccessTaxUi } from "@/lib/taxAccess";
+import { isPlatformOwner } from "@/lib/masterMerchant";
 import { 
   Receipt, 
   FileText, 
@@ -51,10 +56,32 @@ const SectionCard = ({
 );
 
 const Payments = () => {
-  const { user } = useAuth();
+  const { user, userRole } = useAuth();
+  const { tenant } = useTenant();
   const isAdmin = user?.role === 'admin';
+  const platformOwner = isPlatformOwner(user?.email, user?.id);
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "ledger");
+
+  const { data: tenantRole } = useQuery({
+    queryKey: ["tenant-user-role", tenant?.id, user?.id],
+    enabled: !!tenant?.id && !!user?.id && !platformOwner && userRole !== "admin",
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("tenant_users")
+        .select("role")
+        .eq("tenant_id", tenant!.id)
+        .eq("user_id", user!.id)
+        .maybeSingle();
+      return (data?.role ?? null) as string | null;
+    },
+  });
+
+  const canTax = canAccessTaxUi({
+    isPlatformOwner: platformOwner,
+    platformRole: userRole,
+    tenantRole: tenantRole ?? null,
+  });
 
   useEffect(() => {
     const tab = searchParams.get("tab");
@@ -103,10 +130,12 @@ const Payments = () => {
             <Users className="h-4 w-4" />
             By Recipient
           </TabsTrigger>
-          <TabsTrigger value="tax" className="gap-2 py-2">
-            <FileText className="h-4 w-4" />
-            Tax & 1099
-          </TabsTrigger>
+          {canTax && (
+            <TabsTrigger value="tax" className="gap-2 py-2">
+              <FileText className="h-4 w-4" />
+              Tax & 1099
+            </TabsTrigger>
+          )}
           {isAdmin && (
             <TabsTrigger value="payroll" className="gap-2 py-2">
               <Wallet className="h-4 w-4" />
@@ -155,15 +184,29 @@ const Payments = () => {
           </SectionCard>
         </TabsContent>
 
-        <TabsContent value="tax" className="mt-0">
-          <SectionCard 
-            title="Tax & 1099 Summary" 
-            icon={<FileText className="h-4 w-4 text-rose-500" />}
-            accent="bg-gradient-to-r from-rose-500/60 to-rose-500/10"
-          >
-            <TaxSummary />
-          </SectionCard>
-        </TabsContent>
+        {canTax ? (
+          <TabsContent value="tax" className="mt-0">
+            <SectionCard
+              title="Tax reporting (not IRS filing)"
+              icon={<FileText className="h-4 w-4 text-rose-500" />}
+              accent="bg-gradient-to-r from-rose-500/60 to-rose-500/10"
+            >
+              <TaxSummary />
+            </SectionCard>
+          </TabsContent>
+        ) : activeTab === "tax" ? (
+          <TabsContent value="tax" className="mt-0">
+            <SectionCard
+              title="Tax reporting unavailable"
+              icon={<FileText className="h-4 w-4 text-rose-500" />}
+              accent="bg-gradient-to-r from-rose-500/60 to-rose-500/10"
+            >
+              <p className="text-sm text-muted-foreground">
+                Tax profiles are limited to the platform owner, platform admins, and tenant owner/admin roles.
+              </p>
+            </SectionCard>
+          </TabsContent>
+        ) : null}
 
         {isAdmin && (
           <TabsContent value="payroll" className="mt-0">

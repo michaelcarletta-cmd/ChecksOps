@@ -13,6 +13,7 @@ import {
   verifyCognitoIdToken,
 } from './cognito.mjs';
 import { LOOKUP_MAPPING_SQL } from './identity.mjs';
+import { denyTaxSecretQuery } from './tax-secrets.mjs';
 
 const { Client } = pg;
 const IDENT = /^[a-z_][a-z0-9_]*$/;
@@ -73,12 +74,11 @@ export const ident = (name, kind = 'identifier') => {
 
 const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/gi;
 const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
-const SECRETISH_RE = /\b(?:bearer|token|authorization|password|secret|api[_-]?key)\b(?:\s*[:=]\s*|\s+)\S+/gi;
-const CONN_RE = /(?:postgres(?:ql)?|mysql|mongodb):\/\/\S+/gi;
-
-const sanitizeLogText = (value, max = 200) => String(value || '')
-  .replace(CONN_RE, '[db-url]')
-  .replace(SECRETISH_RE, '[redacted]')
+export const sanitizeLogText = (value, max = 200) => String(value || '')
+  .replace(/(?:postgres(?:ql)?|mysql|mongodb):\/\/\S+/gi, '[db-url]')
+  .replace(/\b(?:bearer|token|authorization|password|secret|api[_-]?key|tin|ein|ssn)\b(?:\s*[:=]\s*|\s+)\S+/gi, '[redacted]')
+  .replace(/\d{3}-\d{2}-\d{4}/g, '[redacted]')
+  .replace(/\d{2}-\d{7}/g, '[redacted]')
   .replace(EMAIL_RE, '[email]')
   .replace(UUID_RE, '[id]')
   .replace(/\s+/g, ' ')
@@ -221,7 +221,7 @@ export const withIdentity = async (event, fn, deps = {}) => {
       ok: false,
       statusCode: rlsDenied ? 403 : 503,
       error: rlsDenied ? 'rls_denied' : 'data_query_failed',
-      message: sanitizePublicError(error),
+      message: sanitizeLogText(sanitizePublicError(error), 200),
     };
   } finally {
     if (client) {
@@ -676,6 +676,23 @@ export const handleDataQuery = async (event, deps) => {
       statusCode: 403,
       error: 'writes_disabled',
       message: 'Staging application writes are disabled (default_transaction_read_only=on)',
+      spoofFieldsIgnored: spoof,
+    };
+  }
+  let parsedSelect = { columns: [], embeds: [] };
+  try {
+    parsedSelect = parseSelect(body.select);
+  } catch {
+    parsedSelect = { columns: [], embeds: [] };
+  }
+  const secretDeny = denyTaxSecretQuery(String(body.table || ''), parsedSelect);
+  if (secretDeny.denied) {
+    return {
+      ok: false,
+      statusCode: 403,
+      error: secretDeny.error,
+      message: secretDeny.message,
+      table: secretDeny.table,
       spoofFieldsIgnored: spoof,
     };
   }

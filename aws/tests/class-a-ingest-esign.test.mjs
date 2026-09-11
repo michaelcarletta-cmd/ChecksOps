@@ -32,6 +32,7 @@ test('class A registry includes remaining non-financial workflows', () => {
   ]) {
     assert.ok(CLASS_A_FUNCTIONS.has(name), name);
   }
+  assert.ok(CLASS_A_FUNCTIONS.has('tenant-tax-profiles'));
   assert.ok(!CLASS_A_FUNCTIONS.has('moov-disburse'));
 });
 

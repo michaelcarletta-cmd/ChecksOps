@@ -517,8 +517,8 @@ CREATE POLICY aws_write_profiles ON public.profiles
 DROP POLICY IF EXISTS aws_write_recipient_tax_profiles ON public.recipient_tax_profiles;
 CREATE POLICY aws_write_recipient_tax_profiles ON public.recipient_tax_profiles
   FOR ALL TO authenticated
-  USING (public.aws_can_write_tenant(tenant_id))
-  WITH CHECK (public.aws_can_write_tenant(tenant_id));
+  USING (public.aws_can_access_tax_profiles(tenant_id))
+  WITH CHECK (public.aws_can_access_tax_profiles(tenant_id));
 
 DROP POLICY IF EXISTS aws_write_referral_events ON public.referral_events;
 CREATE POLICY aws_write_referral_events ON public.referral_events

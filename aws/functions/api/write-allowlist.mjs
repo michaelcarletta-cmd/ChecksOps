@@ -732,6 +732,7 @@ export const FINANCIAL_OR_PROVIDER_TABLES = new Set([
   'payment_wallets',
   'payment_webhook_events',
   'payroll_runs',
+  'recipient_tax_profiles',
   'plaid_transfer_events',
   'plaid_webhook_cursors',
   'platform_fee_line_items',

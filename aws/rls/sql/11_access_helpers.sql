@@ -143,6 +143,36 @@ AS $$
   );
 $$;
 
+CREATE OR REPLACE FUNCTION public.aws_can_access_tax_profiles(_tenant_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+SET row_security = off
+AS $$
+  SELECT _tenant_id IS NOT NULL
+     AND (
+       public.is_platform_owner()
+       OR EXISTS (
+         SELECT 1
+         FROM public.user_roles ur
+         WHERE ur.user_id = auth.uid()
+           AND ur.role::text = 'admin'
+       )
+       OR EXISTS (
+         SELECT 1
+         FROM public.tenant_users tu
+         WHERE tu.tenant_id = _tenant_id
+           AND tu.user_id = auth.uid()
+           AND lower(tu.role) IN ('owner', 'admin')
+       )
+     );
+$$;
+
+COMMENT ON FUNCTION public.aws_can_access_tax_profiles(uuid) IS
+  'Tax-profile access: platform owner, platform user_roles.admin, or tenant owner/admin of _tenant_id. Ordinary members are denied.';
+
 REVOKE ALL ON FUNCTION public.aws_can_access_tenant(uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.aws_can_access_claim(uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.aws_can_access_check(uuid) FROM PUBLIC;
@@ -150,3 +180,5 @@ REVOKE ALL ON FUNCTION public.aws_can_access_same_tenant_user(uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.aws_can_access_deposit_item(uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.aws_can_access_loss_draft(uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.aws_can_access_signature_request(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.aws_can_access_tax_profiles(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.aws_can_access_tax_profiles(uuid) TO checksops, authenticated;

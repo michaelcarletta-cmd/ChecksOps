@@ -81,6 +81,7 @@ import { handleSendPaymentDirectionRequest } from './payment-direction-email.mjs
 import { handleAdminResetTotp } from './admin-reset-totp.mjs';
 import { handleBillMortgageHandling } from './bill-mortgage-handling.mjs';
 import { handleCheckAltDepositPreflight } from './providers/production/checkalt-preflight.mjs';
+import { handleTaxProfiles } from './tax-profiles.mjs';
 
 export const CLASS_A_FUNCTIONS = new Set([
   // Email
@@ -149,6 +150,7 @@ export const CLASS_A_FUNCTIONS = new Set([
   'tenant-remove-openai-key',
   // Mortgage desk hire (Cognito + identity_accounts)
   'hire-mortgage-agent',
+  'tenant-tax-profiles',
   // Public directory
   'public-contractor-directory',
   'lookup-partner-code-public',
@@ -301,6 +303,8 @@ export const handleAppServiceRequest = async (event, path, method) => {
       return handleTenantRemoveOpenaiKey(event);
     case 'hire-mortgage-agent':
       return handleHireMortgageAgent(event);
+    case 'tenant-tax-profiles':
+      return handleTaxProfiles(event);
     case 'public-contractor-directory':
     case 'contractor-directory-search':
       return handlePublicContractorDirectory(event);

@@ -12,12 +12,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { AlertTriangle, Download, FileText, CheckCircle2, Info, Search, Pencil } from "lucide-react";
 import { startOfYear, endOfYear, getYear } from "date-fns";
 import { toast } from "@/hooks/use-toast";
-import f1099necAsset from "@/assets/f1099nec.pdf.asset.json";
+import {
+  ACCOUNT_TYPE_LABELS,
+  LEGACY_INFORMATIONAL_THRESHOLD,
+  MONTH_LABELS,
+  aggregateRecipientRows,
+  buildPaymentReportingCsv,
+  type RecipientRow,
+} from "@/lib/taxYtdSummary";
 
 type TaxProfile = {
   recipient_key: string;
   recipient_name: string | null;
-  tin: string | null;
+  tin_on_file: boolean;
+  tin_last_4: string | null;
+  tin_type: string | null;
   address_street: string | null;
   address_city: string | null;
   address_state: string | null;
@@ -26,53 +35,43 @@ type TaxProfile = {
   notes: string | null;
 };
 
+type ProfileForm = {
+  recipient_key: string;
+  recipient_name: string;
+  tin_replace: string;
+  address_street: string;
+  address_city: string;
+  address_state: string;
+  address_zip: string;
+  account_number: string;
+  notes: string;
+};
 
-const THRESHOLD = 600;
 const CURRENT_YEAR = getYear(new Date());
 const YEARS = [CURRENT_YEAR, CURRENT_YEAR - 1, CURRENT_YEAR - 2];
 
-const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-const ACCOUNT_TYPE_LABELS: Record<string, string> = {
-  operating: "Operating",
-  vendor: "Vendor",
-  subcontractor: "Subcontractor",
-  overhead: "Overhead",
-  insured: "Insured",
-  contractor: "Contractor",
-  supplier: "Supplier",
-  sales_rep: "Sales Rep",
-  appraisal: "Appraisal",
-  adjuster: "Adjuster",
-  other: "Other",
-};
-
-// Businesses/individuals that may require a 1099-NEC at year end
-const REQUIRES_1099_TYPES = ["subcontractor", "vendor", "contractor", "supplier", "sales_rep", "appraisal", "adjuster", "other"];
-
-type RecipientRow = {
-  id: string;
-  nickname: string;
-  custname: string;
-  account_type: string;
-  chk_acct: string;
-  total: number;
-  payment_count: number;
-  requires_1099: boolean;
-  needs_1099: boolean;
-  monthly: number[]; // length 12
-};
+function invokeErrorMessage(error: { message?: string } | null, data: unknown): string {
+  const payload = data && typeof data === "object" ? data as { error?: string; message?: string } : null;
+  return String(payload?.error || payload?.message || error?.message || "request_failed");
+}
 
 export function TaxSummary() {
   const { tenant } = useTenant();
   const [year, setYear] = useState(CURRENT_YEAR);
-  const [monthFilter, setMonthFilter] = useState<string>("all"); // "all" or "0".."11"
+  const [monthFilter, setMonthFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [editing, setEditing] = useState<{ key: string; name: string } | null>(null);
-  const [form, setForm] = useState<TaxProfile>({
-    recipient_key: "", recipient_name: "", tin: "", address_street: "", address_city: "",
-    address_state: "", address_zip: "", account_number: "", notes: "",
+  const [form, setForm] = useState<ProfileForm>({
+    recipient_key: "",
+    recipient_name: "",
+    tin_replace: "",
+    address_street: "",
+    address_city: "",
+    address_state: "",
+    address_zip: "",
+    account_number: "",
+    notes: "",
   });
   const queryClient = useQueryClient();
 
@@ -80,12 +79,13 @@ export function TaxSummary() {
     queryKey: ["recipient-tax-profiles", tenant?.id],
     enabled: !!tenant?.id,
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
-        .from("recipient_tax_profiles")
-        .select("recipient_key, recipient_name, tin, address_street, address_city, address_state, address_zip, account_number, notes")
-        .eq("tenant_id", tenant!.id);
-      if (error) throw error;
-      return (data ?? []) as TaxProfile[];
+      const { data, error } = await supabase.functions.invoke("tenant-tax-profiles", {
+        body: { action: "list", tenant_id: tenant!.id },
+      });
+      if (error || data?.ok === false) {
+        throw new Error(invokeErrorMessage(error, data));
+      }
+      return (data?.profiles ?? []) as TaxProfile[];
     },
   });
 
@@ -96,19 +96,34 @@ export function TaxSummary() {
   }, [taxProfiles]);
 
   const saveProfile = useMutation({
-    mutationFn: async (p: TaxProfile) => {
-      const payload = { ...p, tenant_id: tenant!.id };
-      const { error } = await (supabase as any)
-        .from("recipient_tax_profiles")
-        .upsert(payload, { onConflict: "tenant_id,recipient_key" });
-      if (error) throw error;
+    mutationFn: async (p: ProfileForm) => {
+      const body: Record<string, unknown> = {
+        action: "upsert",
+        tenant_id: tenant!.id,
+        recipient_key: p.recipient_key,
+        recipient_name: p.recipient_name,
+        address_street: p.address_street,
+        address_city: p.address_city,
+        address_state: p.address_state,
+        address_zip: p.address_zip,
+        account_number: p.account_number,
+        notes: p.notes,
+      };
+      const replacement = p.tin_replace.trim();
+      if (replacement) body.tin = replacement;
+      const { data, error } = await supabase.functions.invoke("tenant-tax-profiles", { body });
+      if (error || data?.ok === false) {
+        throw new Error(invokeErrorMessage(error, data));
+      }
+      return data?.profile as TaxProfile;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["recipient-tax-profiles", tenant?.id] });
       toast({ title: "Recipient tax info saved" });
+      setForm((prev) => ({ ...prev, tin_replace: "" }));
       setEditing(null);
     },
-    onError: (e: any) => toast({ title: "Save failed", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: "Save failed", description: e.message, variant: "destructive" }),
   });
 
   const openEdit = (key: string, defaultName: string) => {
@@ -117,7 +132,7 @@ export function TaxSummary() {
     setForm({
       recipient_key: key,
       recipient_name: existing?.recipient_name ?? defaultName,
-      tin: existing?.tin ?? "",
+      tin_replace: "",
       address_street: existing?.address_street ?? "",
       address_city: existing?.address_city ?? "",
       address_state: existing?.address_state ?? "",
@@ -126,20 +141,6 @@ export function TaxSummary() {
       notes: existing?.notes ?? "",
     });
   };
-
-  const { data: tenantDetails } = useQuery({
-    queryKey: ["tax-summary-tenant-details", tenant?.id],
-    enabled: !!tenant?.id,
-    queryFn: async () => {
-      const { data, error } = await (supabase as any)
-        .from("tenants")
-        .select("legal_business_name, ein, business_address, business_phone")
-        .eq("id", tenant!.id)
-        .maybeSingle();
-      if (error) throw error;
-      return data as { legal_business_name: string | null; ein: string | null; business_address: string | null; business_phone: string | null } | null;
-    },
-  });
 
   const { data: payments = [], isLoading } = useQuery({
     queryKey: ["tax-summary", tenant?.id, year],
@@ -196,85 +197,10 @@ export function TaxSummary() {
     },
   });
 
-  const recipients: RecipientRow[] = useMemo(() => {
-    const map: Record<string, RecipientRow> = {};
-
-    const upsert = (key: string, base: Partial<RecipientRow>, amount: number, monthIdx: number) => {
-      if (!map[key]) {
-        map[key] = {
-          id: key,
-          nickname: base.nickname ?? "—",
-          custname: base.custname ?? "",
-          account_type: base.account_type ?? "other",
-          chk_acct: base.chk_acct ?? "",
-          total: 0,
-          payment_count: 0,
-          requires_1099: REQUIRES_1099_TYPES.includes(base.account_type ?? "other"),
-          needs_1099: false,
-          monthly: Array(12).fill(0),
-        };
-      }
-      map[key].total += amount;
-      map[key].payment_count += 1;
-      map[key].monthly[monthIdx] += amount;
-    };
-
-    for (const p of payments as any[]) {
-      const acct = p.stakeholder_accounts;
-      const dateStr = p.settled_at ?? p.created_at;
-      if (!dateStr) continue;
-      const d = new Date(dateStr);
-      if (d.getFullYear() !== year) continue;
-      const m = d.getMonth();
-      const amount = Number(p.amount ?? 0);
-      if (acct?.id) {
-        upsert(`acct:${acct.id}`, {
-          nickname: acct.nickname,
-          custname: acct.custname,
-          account_type: acct.account_type,
-          chk_acct: acct.chk_acct,
-        }, amount, m);
-      } else if (p.recipient_name) {
-        const t = p.recipient_type ?? "other";
-        upsert(`ext:${t}|${p.recipient_name.toLowerCase()}`, {
-          nickname: p.recipient_name,
-          custname: "External check",
-          account_type: t,
-          chk_acct: "",
-        }, amount, m);
-      }
-    }
-
-    for (const p of cashPayments as any[]) {
-      const acct = p.stakeholder_accounts;
-      if (!p.payment_date) continue;
-      const d = new Date(p.payment_date);
-      if (d.getFullYear() !== year) continue;
-      const m = d.getMonth();
-      const amount = Number(p.amount ?? 0);
-      if (acct?.id) {
-        upsert(`acct:${acct.id}`, {
-          nickname: acct.nickname,
-          custname: acct.custname,
-          account_type: acct.account_type,
-          chk_acct: acct.chk_acct,
-        }, amount, m);
-      } else if (p.payee_name) {
-        upsert(`cash:${p.payee_name.toLowerCase()}`, {
-          nickname: p.payee_name,
-          custname: "Cash job payee",
-          account_type: "other",
-          chk_acct: "",
-        }, amount, m);
-      }
-    }
-
-    for (const r of Object.values(map)) {
-      r.needs_1099 = r.requires_1099 && r.total >= THRESHOLD;
-    }
-
-    return Object.values(map).sort((a, b) => b.total - a.total);
-  }, [payments, cashPayments, year]);
+  const recipients: RecipientRow[] = useMemo(
+    () => aggregateRecipientRows({ payments: payments as any[], cashPayments: cashPayments as any[], year }),
+    [payments, cashPayments, year],
+  );
 
   const visibleRecipients = useMemo(() => {
     return recipients.filter((r) => {
@@ -295,13 +221,11 @@ export function TaxSummary() {
 
   const flag1099Count = recipients.filter(r => r.needs_1099).length;
   const totalPaid = recipients.reduce((s, r) => s + r.total, 0);
-  const totalSubsPaid = recipients.filter(r => r.account_type === "subcontractor").reduce((s, r) => s + r.total, 0);
   const totalIncome = (depositedChecks as any[]).reduce((s, c) => s + Number(c.amount ?? 0), 0);
   const depositedCount = (depositedChecks as any[]).length;
   const netRetained = totalIncome - totalPaid;
   const payoutRatio = totalIncome > 0 ? (totalPaid / totalIncome) * 100 : 0;
 
-  // Monthly totals across all recipients (for the strip)
   const monthlyTotals = useMemo(() => {
     const t = Array(12).fill(0);
     for (const r of recipients) for (let i = 0; i < 12; i++) t[i] += r.monthly[i];
@@ -309,170 +233,59 @@ export function TaxSummary() {
   }, [recipients]);
 
   const exportCSV = () => {
-    const headers = [
-      "Recipient",
-      "Account Holder Name",
-      "Type",
-      "Account (last 4)",
-      ...MONTH_LABELS.map(m => `${m} ${year}`),
-      `Total ${year}`,
-      "Payment Count",
-      "May Require 1099",
-    ];
-    const rows = visibleRecipients.map(r => [
-      r.nickname,
-      r.custname,
-      ACCOUNT_TYPE_LABELS[r.account_type] ?? r.account_type,
-      r.chk_acct ? `••••${r.chk_acct.slice(-4)}` : "",
-      ...r.monthly.map(v => v.toFixed(2)),
-      r.total.toFixed(2),
-      r.payment_count,
-      r.needs_1099 ? "YES" : "No",
-    ]);
-
-    const totalsRow = [
-      "TOTAL", "", "", "",
-      ...monthlyTotals.map(v => v.toFixed(2)),
-      totalPaid.toFixed(2), "", "",
-    ];
-
-    const csv = [headers, ...rows, totalsRow].map(row => row.map(v => `"${v}"`).join(",")).join("\n");
+    const csv = buildPaymentReportingCsv({
+      year,
+      recipients: visibleRecipients,
+      monthlyTotals,
+      totalPaid,
+    });
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `1099_summary_${year}.csv`;
+    a.download = `payment_reporting_summary_${year}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
-  const generate1099 = async (rows: RecipientRow[]) => {
-    if (rows.length === 0) return;
-    try {
-      const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
-      const srcBytes = await fetch(f1099necAsset.url).then((r) => {
-        if (!r.ok) throw new Error(`Couldn't load 1099-NEC form (${r.status})`);
-        return r.arrayBuffer();
-      });
-
-      const out = await PDFDocument.create();
-      const font = await out.embedFont(StandardFonts.Helvetica);
-      const fontBold = await out.embedFont(StandardFonts.HelveticaBold);
-      const black = rgb(0, 0, 0);
-
-      // Tenant / payer info
-      const payerName = tenantDetails?.legal_business_name || tenant?.name || "";
-      const payerAddress = tenantDetails?.business_address || "";
-      const payerPhone = tenantDetails?.business_phone || "";
-      const payerEin = tenantDetails?.ein || "";
-
-      // Split "123 Main St, City, ST 12345" into street / city / state / zip best-effort.
-      const parseAddr = (full: string) => {
-        const parts = full.split(",").map((s) => s.trim()).filter(Boolean);
-        const street = parts[0] || "";
-        const city = parts[1] || "";
-        let state = "";
-        let zip = "";
-        if (parts[2]) {
-          const m = parts[2].match(/^([A-Za-z .]+)\s+([\d-]+)$/);
-          if (m) { state = m[1].trim(); zip = m[2].trim(); }
-          else { state = parts[2]; }
-        }
-        return { street, city, state, zip };
-      };
-      const payer = parseAddr(payerAddress);
-
-      // Coordinates (PDF points, origin bottom-left, page 612x792). One form per page (Copy A/B/C).
-      const draw = (page: any, text: string, x: number, y: number, opts: { bold?: boolean; size?: number; maxWidth?: number } = {}) => {
-        if (!text) return;
-        const size = opts.size ?? 9;
-        const f = opts.bold ? fontBold : font;
-        let t = String(text);
-        if (opts.maxWidth) {
-          while (t.length > 3 && f.widthOfTextAtSize(t, size) > opts.maxWidth) t = t.slice(0, -1);
-        }
-        page.drawText(t, { x, y, size, font: f, color: black });
-      };
-
-      for (const r of rows) {
-        const src = await PDFDocument.load(srcBytes);
-        const pageCount = src.getPageCount();
-        const profile = profileByKey[r.id];
-        const recipientName = profile?.recipient_name
-          || (r.custname && r.custname !== "External check" && r.custname !== "Cash job payee" ? r.custname : r.nickname);
-        const amount = r.total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        const recipientStreet = profile?.address_street ?? "";
-        const recipientCityStateZip = [profile?.address_city, profile?.address_state].filter(Boolean).join(", ")
-          + (profile?.address_zip ? ` ${profile.address_zip}` : "");
-        const recipientTin = profile?.tin ?? "";
-        const accountNumber = profile?.account_number || r.nickname.slice(0, 20);
-
-        for (let pi = 0; pi < pageCount; pi++) {
-          const page = src.getPage(pi);
-
-          // ---- PAYER block (left column, top) ----
-          draw(page, payerName, 58, 732, { bold: true, maxWidth: 235 });
-          draw(page, payer.street, 58, 700, { maxWidth: 150 });
-          draw(page, payer.city, 58, 676, { maxWidth: 150 });
-          draw(page, payerPhone, 215, 676, { maxWidth: 80 });
-          draw(page, payer.state, 58, 652, { maxWidth: 115 });
-          draw(page, payer.zip, 258, 652, { maxWidth: 35 });
-
-          // ---- Calendar year ----
-          draw(page, String(year), 422, 690, { bold: true, size: 10 });
-
-          // ---- TINs ----
-          draw(page, payerEin, 58, 624, { maxWidth: 115 });
-          draw(page, recipientTin, 215, 624, { maxWidth: 115 });
-
-          // ---- RECIPIENT block ----
-          draw(page, recipientName, 58, 586, { bold: true, maxWidth: 235 });
-          draw(page, recipientStreet, 58, 562, { maxWidth: 235 });
-          draw(page, recipientCityStateZip, 58, 538, { maxWidth: 235 });
-
-          // ---- Box 1a: Nonemployee compensation ----
-          draw(page, amount, 315, 650, { bold: true, size: 10 });
-
-          // ---- Account number ----
-          draw(page, accountNumber.slice(0, 24), 58, 444, { size: 8, maxWidth: 190 });
-        }
-
-        const copied = await out.copyPages(src, src.getPageIndices());
-        copied.forEach((p) => out.addPage(p));
-      }
-
-
-      const pdfBytes = await out.save();
-      const blob = new Blob([pdfBytes as BlobPart], { type: "application/pdf" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = rows.length === 1
-        ? `1099-NEC_${(rows[0].custname || rows[0].nickname || "recipient").replace(/[^a-z0-9]+/gi, "_")}_${year}.pdf`
-        : `1099-NEC_${year}_${rows.length}_recipients.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      toast({
-        title: `1099-NEC PDF ready`,
-        description: `Filled ${rows.length} recipient${rows.length !== 1 ? "s" : ""}. Verify recipient TIN & address before filing.`,
-      });
-    } catch (e: any) {
-      toast({ title: "Couldn't generate 1099-NEC", description: e.message, variant: "destructive" });
-    }
+  const tinStatusLabel = (r: RecipientRow) => {
+    const profile = profileByKey[r.id];
+    if (profile?.tin_on_file && profile.tin_last_4) return `On file ••••${profile.tin_last_4}`;
+    if (profile?.tin_on_file) return "On file";
+    return "No TIN on file";
   };
-
-
-
-
 
   return (
     <div className="space-y-4">
+      <div className="rounded-md border border-border bg-muted/20 p-3 space-y-2">
+        <p className="text-sm font-medium">ChecksOps does not file tax forms with the IRS.</p>
+        <ul className="text-xs text-muted-foreground space-y-1 list-disc pl-4">
+          <li>
+            <span className="font-medium text-foreground">Payment reporting summary</span>
+            {" "}— year-to-date amounts paid to recipients. Informational only.
+          </li>
+          <li>
+            <span className="font-medium text-foreground">Recipient tax-profile collection</span>
+            {" "}— authorized finance users can store recipient contact details and a TIN. The TIN is never shown in full after save.
+          </li>
+          <li>
+            <span className="font-medium text-foreground">1099-NEC responsibility</span>
+            {" "}— the tenant and their accountant determine whether a 1099-NEC is required and file it. ChecksOps does not submit 1099-NEC forms.
+          </li>
+          <li>
+            <span className="font-medium text-foreground">1099-K / payment-processor responsibility</span>
+            {" "}— card or wallet processors (including Moov, when used) are responsible for any 1099-K they are required to file. ChecksOps does not file 1099-K.
+          </li>
+        </ul>
+      </div>
+
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
-          <h3 className="text-sm font-medium">Tax & 1099 Summary</h3>
-          <p className="text-xs text-muted-foreground">Recipients paid ${THRESHOLD}+ may require a 1099-NEC filing</p>
+          <h3 className="text-sm font-medium">Payment reporting summary</h3>
+          <p className="text-xs text-muted-foreground">
+            Recipients at or above the legacy ${LEGACY_INFORMATIONAL_THRESHOLD} informational flag are highlighted.
+            This is not a filing determination.
+          </p>
           <p className="text-[11px] text-muted-foreground mt-0.5">Includes insurance disbursements, external checks, and cash job payments</p>
         </div>
         <div className="flex items-center gap-2">
@@ -483,15 +296,15 @@ export function TaxSummary() {
             </SelectContent>
           </Select>
           <Button size="sm" variant="outline" className="h-8 text-xs" onClick={exportCSV}>
-            <Download className="h-3.5 w-3.5 mr-1" />Export for accountant
+            <Download className="h-3.5 w-3.5 mr-1" />Export payment summary
           </Button>
           <Button
             size="sm"
             className="h-8 text-xs"
-            onClick={() => generate1099(recipients.filter(r => r.needs_1099))}
-            disabled={flag1099Count === 0}
+            disabled
+            title="Secure tax-form generation coming soon"
           >
-            <FileText className="h-3.5 w-3.5 mr-1" />Generate {flag1099Count > 0 ? `${flag1099Count} ` : ""}1099{flag1099Count !== 1 ? "s" : ""}
+            <FileText className="h-3.5 w-3.5 mr-1" />Secure tax-form generation coming soon
           </Button>
         </div>
       </div>
@@ -501,10 +314,10 @@ export function TaxSummary() {
           <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
           <div>
             <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
-              {flag1099Count} recipient{flag1099Count !== 1 ? "s" : ""} may require a 1099-NEC for {year}
+              {flag1099Count} recipient{flag1099Count !== 1 ? "s" : ""} meet the legacy ${LEGACY_INFORMATIONAL_THRESHOLD} informational flag for {year}
             </p>
             <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
-              Any subcontractor, vendor, sales rep, appraiser, adjuster, or other unincorporated payee paid $600 or more during the tax year must receive a 1099-NEC by January 31. Share the export below with your accountant.
+              This flag is retained from the previous summary view. It is not a filing determination and does not mean ChecksOps will generate or submit a 1099. Share the payment summary with your accountant if they need it.
             </p>
           </div>
         </div>
@@ -540,7 +353,6 @@ export function TaxSummary() {
         </CardContent>
       </Card>
 
-      {/* Monthly strip — click to filter */}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm">Monthly disbursements — {year}</CardTitle>
@@ -605,7 +417,7 @@ export function TaxSummary() {
       <div className="rounded-md border bg-muted/30 p-2.5 flex items-start gap-2">
         <Info className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
         <p className="text-xs text-muted-foreground">
-          This summary is for reference only and is not tax advice. 1099 requirements vary based on business structure, payment method, and other factors. Consult your accountant or tax advisor before filing.
+          This summary is for reference only and is not tax advice. Filing obligations depend on facts your accountant must evaluate. ChecksOps does not generate IRS-ready 1099 PDFs in the browser.
         </p>
       </div>
 
@@ -636,7 +448,7 @@ export function TaxSummary() {
                       <th className="text-right p-2 font-medium">{MONTH_LABELS[Number(monthFilter)]}</th>
                     )}
                     <th className="text-right p-2 font-medium">Total</th>
-                    <th className="text-center p-2 font-medium">1099</th>
+                    <th className="text-center p-2 font-medium">Profile</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -667,55 +479,28 @@ export function TaxSummary() {
                         <p className={`font-semibold text-sm ${r.needs_1099 ? "text-amber-600" : ""}`}>
                           ${displayedTotal(r).toLocaleString("en-US", { minimumFractionDigits: 2 })}
                         </p>
-                        {r.total >= THRESHOLD * 0.8 && !r.needs_1099 && r.requires_1099 && (
-                          <p className="text-[10px] text-muted-foreground">${(THRESHOLD - r.total).toFixed(2)} to threshold</p>
+                        {r.total >= LEGACY_INFORMATIONAL_THRESHOLD * 0.8 && !r.needs_1099 && r.requires_1099 && (
+                          <p className="text-[10px] text-muted-foreground">${(LEGACY_INFORMATIONAL_THRESHOLD - r.total).toFixed(2)} to legacy flag</p>
                         )}
                       </td>
                       <td className="p-2 text-center">
-                        {r.needs_1099 ? (
+                        {r.requires_1099 ? (
                           <div className="flex flex-col items-center gap-1">
-                            <div className="flex items-center justify-center gap-1">
-                              <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                              <span className="text-xs text-amber-600 font-medium">
-                                {profileByKey[r.id]?.tin ? "Ready" : "Missing TIN"}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-6 text-[10px] px-2"
-                                onClick={() => openEdit(r.id, r.custname && r.custname !== "External check" && r.custname !== "Cash job payee" ? r.custname : r.nickname)}
-                              >
-                                <Pencil className="h-3 w-3 mr-1" />Edit
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-6 text-[10px] px-2"
-                                onClick={() => generate1099([r])}
-                              >
-                                <FileText className="h-3 w-3 mr-1" />Generate
-                              </Button>
-                            </div>
-                          </div>
-                        ) : r.requires_1099 ? (
-                          <div className="flex flex-col items-center gap-1">
-                            <span className="text-[10px] text-muted-foreground">Under $600</span>
+                            <span className="text-[10px] text-muted-foreground">{tinStatusLabel(r)}</span>
                             <Button
                               size="sm"
-                              variant="ghost"
+                              variant="outline"
                               className="h-6 text-[10px] px-2"
                               onClick={() => openEdit(r.id, r.custname && r.custname !== "External check" && r.custname !== "Cash job payee" ? r.custname : r.nickname)}
                             >
                               <Pencil className="h-3 w-3 mr-1" />Tax info
                             </Button>
+                            <span className="text-[10px] text-muted-foreground">Secure tax-form generation coming soon</span>
                           </div>
                         ) : (
                           <CheckCircle2 className="h-3.5 w-3.5 text-muted-foreground mx-auto" />
                         )}
                       </td>
-
                     </tr>
                   ))}
                 </tbody>
@@ -751,46 +536,57 @@ export function TaxSummary() {
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>1099 recipient info</DialogTitle>
+            <DialogTitle>Recipient tax profile</DialogTitle>
           </DialogHeader>
           <div className="grid gap-3">
             <div>
-              <Label className="text-xs">Recipient name (as shown on 1099)</Label>
-              <Input value={form.recipient_name ?? ""} onChange={(e) => setForm({ ...form, recipient_name: e.target.value })} />
+              <Label className="text-xs">Recipient name</Label>
+              <Input value={form.recipient_name} onChange={(e) => setForm({ ...form, recipient_name: e.target.value })} />
             </div>
             <div>
-              <Label className="text-xs">Recipient TIN / SSN / EIN</Label>
-              <Input value={form.tin ?? ""} placeholder="XX-XXXXXXX or XXX-XX-XXXX" onChange={(e) => setForm({ ...form, tin: e.target.value })} />
+              <Label className="text-xs">TIN / EIN (replace only)</Label>
+              <p className="text-[11px] text-muted-foreground mb-1">
+                {profileByKey[editing?.key ?? ""]?.tin_on_file
+                  ? `On file ••••${profileByKey[editing?.key ?? ""]?.tin_last_4 ?? "••••"}. Leave blank to keep the stored value.`
+                  : "No TIN on file. Enter a value only if you intend to store one."}
+              </p>
+              <Input
+                type="password"
+                autoComplete="off"
+                value={form.tin_replace}
+                placeholder="Leave blank to keep existing"
+                onChange={(e) => setForm({ ...form, tin_replace: e.target.value })}
+              />
             </div>
             <div>
               <Label className="text-xs">Street address</Label>
-              <Input value={form.address_street ?? ""} onChange={(e) => setForm({ ...form, address_street: e.target.value })} />
+              <Input value={form.address_street} onChange={(e) => setForm({ ...form, address_street: e.target.value })} />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <div className="col-span-1">
                 <Label className="text-xs">City</Label>
-                <Input value={form.address_city ?? ""} onChange={(e) => setForm({ ...form, address_city: e.target.value })} />
+                <Input value={form.address_city} onChange={(e) => setForm({ ...form, address_city: e.target.value })} />
               </div>
               <div>
                 <Label className="text-xs">State</Label>
-                <Input value={form.address_state ?? ""} maxLength={2} onChange={(e) => setForm({ ...form, address_state: e.target.value.toUpperCase() })} />
+                <Input value={form.address_state} maxLength={2} onChange={(e) => setForm({ ...form, address_state: e.target.value.toUpperCase() })} />
               </div>
               <div>
                 <Label className="text-xs">ZIP</Label>
-                <Input value={form.address_zip ?? ""} onChange={(e) => setForm({ ...form, address_zip: e.target.value })} />
+                <Input value={form.address_zip} onChange={(e) => setForm({ ...form, address_zip: e.target.value })} />
               </div>
             </div>
             <div>
               <Label className="text-xs">Account number (optional)</Label>
-              <Input value={form.account_number ?? ""} onChange={(e) => setForm({ ...form, account_number: e.target.value })} />
+              <Input value={form.account_number} onChange={(e) => setForm({ ...form, account_number: e.target.value })} />
             </div>
             <div>
               <Label className="text-xs">Notes (optional)</Label>
-              <Input value={form.notes ?? ""} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+              <Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setForm((prev) => ({ ...prev, tin_replace: "" })); setEditing(null); }}>Cancel</Button>
             <Button onClick={() => saveProfile.mutate(form)} disabled={saveProfile.isPending}>
               {saveProfile.isPending ? "Saving..." : "Save"}
             </Button>
