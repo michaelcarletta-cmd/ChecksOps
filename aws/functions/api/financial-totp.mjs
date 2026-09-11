@@ -78,10 +78,20 @@ export const encryptSecret = (secret, key, keyId = 'financial-totp-v1') => {
   return { ciphertext, nonce, keyId, alg: FINANCIAL_TOTP_WRAP_ALG };
 };
 
+export const asSecretBuffer = (value) => {
+  if (Buffer.isBuffer(value)) return value;
+  if (value instanceof Uint8Array) return Buffer.from(value);
+  if (typeof value === 'string') {
+    const hex = value.startsWith('\\x') ? value.slice(2) : value;
+    if (/^[0-9a-fA-F]+$/.test(hex) && hex.length % 2 === 0) return Buffer.from(hex, 'hex');
+  }
+  throw new Error('invalid_ciphertext');
+};
+
 export const decryptSecret = ({ ciphertext, nonce, key }) => {
   if (!Buffer.isBuffer(key) || key.length !== 32) throw new Error('invalid_wrap_key');
-  const buf = Buffer.isBuffer(ciphertext) ? ciphertext : Buffer.from(ciphertext);
-  const iv = Buffer.isBuffer(nonce) ? nonce : Buffer.from(nonce);
+  const buf = asSecretBuffer(ciphertext);
+  const iv = asSecretBuffer(nonce);
   const tag = buf.subarray(buf.length - 16);
   const body = buf.subarray(0, buf.length - 16);
   const decipher = createDecipheriv(FINANCIAL_TOTP_WRAP_ALG, key, iv);

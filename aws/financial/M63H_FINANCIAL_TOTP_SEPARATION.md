@@ -5,6 +5,22 @@ Do not change password or `PreferredMfaSetting`. Do not apply the proposed SQL.
 Do not deploy this as login recovery until the sequence below is approved.
 Do not touch Moov, recipient links, SQL72, or money flags.
 
+## M6.3I implementation status
+
+Application-level financial TOTP handlers live in
+`aws/functions/api/auth-financial-totp.mjs`. `auth-mfa.mjs` re-exports them.
+New enroll / verify / step-up paths do **not** call `AssociateSoftwareToken`,
+`VerifySoftwareToken`, `SetUserMFAPreference`, or `AdminSetUserMFAPreference`.
+
+Enrollment is `financial_totp_enrollments.verified_at` (AES-256-GCM ciphertext
+via a Secrets Manager wrap key). Authorization remains `financial_stepup_log`
+bound to application user, check tenant, `deposit.submit`, check id, and
+server-derived `amount_cents`. Browser tenant/amount are never authority.
+
+SQL file remains `NOT_APPLIED`. Do not create the wrap key in this phase.
+Do not change the production user's Cognito MFA.
+
+
 ## Conflict
 
 Cognito pool MFA is OPTIONAL. Enabling `SOFTWARE_TOKEN_MFA` on the user
@@ -16,10 +32,11 @@ Normal ChecksOps login must remain EMAIL_OTP / WebAuthn. Authenticator TOTP
 is intended only for financial step-up. Those two uses were collapsed onto
 the same Cognito software token.
 
-Current enroll path in `auth-mfa.mjs`: `AssociateSoftwareToken` →
+The previous enroll path in `auth-mfa.mjs` was `AssociateSoftwareToken` →
 `VerifySoftwareToken` → `SetUserMFAPreference({ Enabled: true, PreferredMfa: false })`.
-Enrollment is then read from `UserMFASettingList`, so **login MFA state is
-financial authorization enrollment**. That coupling is the bug.
+Enrollment was then read from `UserMFASettingList`, so **login MFA state was
+financial authorization enrollment**. That coupling is the bug. M6.3I replaces
+that path with app-level TOTP.
 
 ## Can the existing TOTP secret be reused?
 

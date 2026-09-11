@@ -236,7 +236,7 @@ BEGIN
   END IF;
   UPDATE public.financial_totp_enrollments
      SET verified_at = COALESCE(verified_at, now()),
-         last_used_timestep = p_timestep,
+         last_used_timestep = COALESCE(p_timestep, last_used_timestep),
          failed_attempts = 0,
          locked_until = NULL
    WHERE application_user_id = p_user_id;
@@ -246,5 +246,28 @@ $$;
 ALTER FUNCTION public.financial_totp_mark_verified(uuid, bigint) OWNER TO checksops_admin;
 REVOKE ALL ON FUNCTION public.financial_totp_mark_verified(uuid, bigint) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.financial_totp_mark_verified(uuid, bigint) TO checksops;
+
+CREATE OR REPLACE FUNCTION public.financial_totp_status(p_user_id uuid)
+RETURNS TABLE(enrolled_at timestamptz, verified_at timestamptz)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+BEGIN
+  IF p_user_id IS DISTINCT FROM auth.uid() THEN
+    RAISE EXCEPTION 'enrollment_caller_mismatch'
+      USING ERRCODE = '42501';
+  END IF;
+  RETURN QUERY
+    SELECT e.enrolled_at, e.verified_at
+    FROM public.financial_totp_enrollments e
+    WHERE e.application_user_id = p_user_id;
+END;
+$$;
+
+COMMENT ON FUNCTION public.financial_totp_status(uuid) IS
+  'Enrollment timestamps only. Never returns ciphertext, nonce, or key_id.';
+REVOKE ALL ON FUNCTION public.financial_totp_status(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.financial_totp_status(uuid) TO checksops;
 
 COMMIT;

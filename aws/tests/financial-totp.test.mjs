@@ -137,8 +137,11 @@ test('Cognito cannot export the software-token secret; app module never enables 
   const source = fs.readFileSync(path.join(ROOT, 'aws/functions/api/financial-totp.mjs'), 'utf8');
   assert.doesNotMatch(source, /AWSCognitoIdentityProviderService|cognitoJson\(|cognito-idp\.us-east-1/);
   const mfa = fs.readFileSync(path.join(ROOT, 'aws/functions/api/auth-mfa.mjs'), 'utf8');
-  assert.match(mfa, /Enabled: true/);
-  assert.match(mfa, /VerifySoftwareToken/);
+  const handlers = fs.readFileSync(path.join(ROOT, 'aws/functions/api/auth-financial-totp.mjs'), 'utf8');
+  assert.doesNotMatch(mfa, /SetUserMFAPreference|AdminSetUserMFAPreference|AssociateSoftwareToken|VerifySoftwareToken/);
+  assert.doesNotMatch(handlers, /SetUserMFAPreference|AdminSetUserMFAPreference|AssociateSoftwareToken|VerifySoftwareToken/);
+  assert.match(handlers, /FINANCIAL_TOTP_WRAP_KEY_ARN/);
+  assert.match(handlers, /encryptSecret/);
 });
 
 test('proposed financial TOTP SQL is not applied and keeps ciphertext off the generic data API', () => {
@@ -151,12 +154,18 @@ test('proposed financial TOTP SQL is not applied and keeps ciphertext off the ge
   assert.match(proposed, /^COMMIT;/m);
   assert.match(proposed, /financial_totp_enrollments/);
   assert.match(proposed, /consume_financial_totp_rate_limit/);
+  assert.match(proposed, /financial_totp_status/);
+  assert.match(proposed, /RETURNS TABLE\(enrolled_at timestamptz, verified_at timestamptz\)/);
   assert.match(proposed, /SECURITY DEFINER/);
   assert.match(proposed, /OWNER TO checksops_admin/);
   assert.match(proposed, /REVOKE ALL ON TABLE public\.financial_totp_enrollments FROM checksops/);
   assert.match(proposed, /REVOKE ALL ON TABLE public\.financial_totp_enrollments FROM authenticated/);
   assert.doesNotMatch(proposed, /GRANT (SELECT|INSERT|UPDATE|DELETE) ON TABLE public\.financial_totp_enrollments/);
+  assert.doesNotMatch(proposed, /GRANT ALL/);
+  assert.doesNotMatch(proposed, /DROP TABLE/);
+  assert.doesNotMatch(proposed, /DELETE FROM/);
   assert.doesNotMatch(proposed, /CREATE POLICY/);
+  assert.match(proposed, /Never returns ciphertext/);
   const allowedTables = JSON.parse(fs.readFileSync(
     path.join(ROOT, 'aws/functions/api/allowed-tables.json'),
     'utf8',
@@ -165,4 +174,9 @@ test('proposed financial TOTP SQL is not applied and keeps ciphertext off the ge
   assert.equal(allowedTables.includes('financial_totp_rate_limits'), false);
   const allowlist = fs.readFileSync(path.join(ROOT, 'aws/functions/api/write-allowlist.mjs'), 'utf8');
   assert.doesNotMatch(allowlist, /financial_totp_enrollments/);
+  assert.doesNotMatch(allowlist, /financial_totp_rate_limits/);
+  const dataApi = fs.readFileSync(path.join(ROOT, 'aws/functions/api/data.mjs'), 'utf8');
+  const workflowRpc = fs.readFileSync(path.join(ROOT, 'aws/functions/api/workflow-rpc.mjs'), 'utf8');
+  assert.doesNotMatch(dataApi, /financial_totp_/);
+  assert.doesNotMatch(workflowRpc, /financial_totp_/);
 });
