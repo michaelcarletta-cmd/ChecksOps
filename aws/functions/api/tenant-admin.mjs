@@ -514,16 +514,20 @@ export const runHireMortgageAgent = async ({
     };
   }
 
-  await client.query(
-    `INSERT INTO public.identity_accounts (cognito_sub, application_user_id, email, status, linked_at, created_at)
-     VALUES ($1, $2::uuid, $3, 'active', now(), now())
-     ON CONFLICT (cognito_sub) DO UPDATE
-       SET application_user_id = EXCLUDED.application_user_id,
-           email = EXCLUDED.email,
-           status = 'active',
-           linked_at = COALESCE(public.identity_accounts.linked_at, now())`,
-    [cognitoSub, appUserId, email],
-  );
+  const linked = await linkIdentityAccount(client, {
+    applicationUserId: appUserId,
+    cognitoSub,
+    email,
+    allowCreate: true,
+  });
+  if (!linked.ok) {
+    return {
+      ok: false,
+      statusCode: 500,
+      error: linked.error || 'identity_link_failed',
+      spoofFieldsIgnored: spoof,
+    };
+  }
 
   await client.query(
     `INSERT INTO public.profiles (id, email, full_name, created_at, updated_at)
