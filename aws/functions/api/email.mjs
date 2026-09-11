@@ -28,6 +28,23 @@ import { normalizeReplyTo, requireAuthorizedTenant } from './tenant-email-domain
 
 const { Client } = pg;
 
+export const EMAIL_SEND_LOG_STATUSES = Object.freeze([
+  'pending',
+  'sent',
+  'sunk',
+  'suppressed',
+  'failed',
+  'bounced',
+  'complained',
+  'dlq',
+]);
+
+export const emailSendLogStatusFromMailer = (primary = {}) => {
+  if (primary.status === 'failed' || primary.delivery === 'sink_fallback') return 'failed';
+  if (primary.delivery === 'ses' && primary.status === 'sent') return 'sent';
+  return 'sunk';
+};
+
 const sesClient = () => new SESClient({ region: process.env.AWS_REGION || 'us-east-1' });
 
 export const sendViaSesOrSink = async ({
@@ -119,7 +136,7 @@ export const sendViaSesOrSink = async ({
 
 const EMAIL_LOG_SAVEPOINT = 'email_send_log_write';
 
-const withEmailLogSavepoint = async (client, fn) => {
+export const withEmailLogSavepoint = async (client, fn) => {
   await client.query(`SAVEPOINT ${EMAIL_LOG_SAVEPOINT}`);
   try {
     const result = await fn();
@@ -357,7 +374,7 @@ export const runSendTransactionalEmail = async ({
       metadata: { application_user_id: mapping.application_user_id },
     });
     if (!claim.ok) {
-      if (sesOutboundSendEnabled()) {
+      if (sesOutboundSendEnabled() || claim.error === 'idempotency_conflict') {
         return withSpoof({
           ok: false,
           statusCode: 503,
@@ -389,7 +406,7 @@ export const runSendTransactionalEmail = async ({
     template_name: templateName,
     recipient_email: recipientEmail,
     tenant_id: authorized.tenantId,
-    status: primary.status === 'failed' ? 'failed' : (primary.delivery === 'ses' ? 'sent' : 'sunk'),
+    status: emailSendLogStatusFromMailer(primary),
     provider: 'aws_staging',
     provider_message_id: primary.messageId || null,
     idempotency_key: idempotencyKey,
@@ -477,7 +494,7 @@ export const runSendEmail = async ({
       template_name: 'freeform-send-email',
       recipient_email: row.originalTo || row.to,
       tenant_id: authorized.tenantId,
-      status: row.status === 'failed' ? 'failed' : (row.delivery === 'ses' ? 'sent' : 'sunk'),
+      status: emailSendLogStatusFromMailer(row),
       provider: 'aws_staging',
       provider_message_id: row.messageId || null,
       metadata: {
@@ -643,7 +660,7 @@ export const runNotifyMortgageHandlingRequest = async ({
     template_name: 'notify-mortgage-handling-request',
     recipient_email: opsTo,
     tenant_id: row.tenant_id,
-    status: sendResult.results[0]?.delivery === 'ses' ? 'sent' : 'sunk',
+    status: emailSendLogStatusFromMailer(sendResult.results[0]),
     provider: 'aws_staging',
     provider_message_id: sendResult.results[0]?.messageId || null,
     metadata: { request_id: requestId, application_user_id: mapping.application_user_id },
@@ -701,7 +718,7 @@ export const runNotifyHomeownerLead = async ({
   await logEmail(client, {
     template_name: 'new-homeowner-lead',
     recipient_email: to,
-    status: sendResult.results[0]?.delivery === 'ses' ? 'sent' : 'sunk',
+    status: emailSendLogStatusFromMailer(sendResult.results[0]),
     provider: 'aws_staging',
     provider_message_id: sendResult.results[0]?.messageId || null,
     metadata: { lead_id: leadId, application_user_id: mapping.application_user_id },
@@ -752,7 +769,7 @@ export const runNotifyHomeownerLeadAccepted = async ({
   await logEmail(client, {
     template_name: 'homeowner-claim-portal-link',
     recipient_email: to,
-    status: sendResult.results[0]?.delivery === 'ses' ? 'sent' : 'sunk',
+    status: emailSendLogStatusFromMailer(sendResult.results[0]),
     provider: 'aws_staging',
     provider_message_id: sendResult.results[0]?.messageId || null,
     metadata: { lead_id: leadId },

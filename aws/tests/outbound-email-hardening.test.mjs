@@ -8,6 +8,8 @@ import {
   runSendEmail,
   runSendTransactionalEmail,
   sendViaSesOrSink,
+  emailSendLogStatusFromMailer,
+  EMAIL_SEND_LOG_STATUSES,
 } from '../functions/api/email.mjs';
 import { requireAuthorizedTenant } from '../functions/api/tenant-email-domain.mjs';
 
@@ -41,6 +43,8 @@ const sendClient = ({
   logs = new Map(),
   uniqueOnKey = true,
   failIdempotencySelect = false,
+  failFinalize = false,
+  hideRowAfterUnique = false,
 } = {}) => {
   const calls = [];
   const client = {
@@ -102,12 +106,14 @@ const sendClient = ({
       }
       if (compact.includes('FROM public.email_send_log') && compact.includes('WHERE idempotency_key')) {
         const key = String(params[0] || '');
+        if (hideRowAfterUnique && client._uniqueHit) return { rows: [] };
         const row = logs.get(key);
         return { rows: row ? [row] : [] };
       }
       if (compact.startsWith('INSERT INTO public.email_send_log')) {
         const key = String(params[7] || params[5] || '');
         if (uniqueOnKey && key && logs.has(key)) {
+          client._uniqueHit = true;
           const error = new Error('duplicate key');
           error.code = '23505';
           throw error;
@@ -127,6 +133,11 @@ const sendClient = ({
         return { rows: [], rowCount: 1 };
       }
       if (compact.startsWith('UPDATE public.email_send_log')) {
+        if (failFinalize) {
+          const error = new Error('email_send_log_status_check');
+          error.code = '23514';
+          throw error;
+        }
         const id = String(params[0]);
         for (const row of logs.values()) {
           if (row.id === id) {
@@ -508,4 +519,110 @@ test('approved lock recipient is the only ses-mode delivery', () => {
     if (prev.lock === undefined) delete process.env.AWS_EMAIL_SES_LOCK_RECIPIENT;
     else process.env.AWS_EMAIL_SES_LOCK_RECIPIENT = prev.lock;
   }
+});
+
+test('mailer sink_fallback is logged as failed, never as sink_fallback', () => {
+  assert.equal(emailSendLogStatusFromMailer({ delivery: 'sink_fallback', status: 'failed' }), 'failed');
+  assert.equal(emailSendLogStatusFromMailer({ delivery: 'ses', status: 'sent' }), 'sent');
+  assert.equal(emailSendLogStatusFromMailer({ delivery: 'sink', status: 'sunk' }), 'sunk');
+  assert.ok(!EMAIL_SEND_LOG_STATUSES.includes('sink_fallback'));
+});
+
+test('unknown template with an idempotency key never writes a reservation', async () => {
+  const sent = [];
+  const client = sendClient();
+  const result = await runSendTransactionalEmail({
+    client,
+    mapping,
+    spoof,
+    send: capturingMailer(sent),
+    body: {
+      tenantId: TENANT,
+      templateName: 'not-a-template',
+      recipientEmail: LOCK,
+      idempotencyKey: 'no-strand-1',
+    },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'unknown_template');
+  assert.equal(sent.length, 0);
+  assert.equal(client.logs.size, 0);
+  assert.equal(client.calls.some((c) => c.sql.startsWith('INSERT INTO public.email_send_log')), false);
+});
+
+test('finalize failure keeps the pending reservation and replay does not send again', async () => {
+  const sent = [];
+  const logs = new Map();
+  const client = sendClient({ logs, failFinalize: true });
+  const body = {
+    tenantId: TENANT,
+    templateName: 'generic-notification',
+    recipientEmail: LOCK,
+    idempotencyKey: 'txn-finalize-fail',
+    templateData: { subject: 'Once', message: 'Only' },
+  };
+  const first = await runSendTransactionalEmail({
+    client,
+    mapping,
+    spoof,
+    send: capturingMailer(sent),
+    body,
+  });
+  assert.equal(first.ok, true);
+  assert.equal(logs.get('txn-finalize-fail')?.status, 'pending');
+  const second = await runSendTransactionalEmail({
+    client,
+    mapping,
+    spoof,
+    send: capturingMailer(sent),
+    body,
+  });
+  assert.equal(second.ok, true);
+  assert.equal(second.duplicate, true);
+  assert.equal(second.reason, 'idempotent_replay');
+  assert.equal(sent.length, 1);
+  assert.ok(client.calls.some((c) => c.sql.startsWith('ROLLBACK TO SAVEPOINT email_send_log_write')));
+});
+
+test('unique-key conflict without a visible row fails closed and does not send', async () => {
+  const sent = [];
+  const logs = new Map();
+  logs.set('txn-conflict-hidden', {
+    id: 'hidden-row',
+    status: 'pending',
+    provider_message_id: null,
+    recipient_email: LOCK,
+    tenant_id: TENANT,
+    metadata: {},
+    error_message: null,
+    idempotency_key: 'txn-conflict-hidden',
+  });
+  const client = sendClient({ logs, hideRowAfterUnique: true });
+  let selects = 0;
+  const originalQuery = client.query.bind(client);
+  client.query = async (sql, params = []) => {
+    const compact = String(sql).replace(/\s+/g, ' ').trim();
+    if (compact.includes('FROM public.email_send_log') && compact.includes('WHERE idempotency_key')) {
+      selects += 1;
+      if (selects === 1) return { rows: [] };
+    }
+    return originalQuery(sql, params);
+  };
+  const result = await runSendTransactionalEmail({
+    client,
+    mapping,
+    spoof,
+    send: capturingMailer(sent),
+    body: {
+      tenantId: TENANT,
+      templateName: 'generic-notification',
+      recipientEmail: LOCK,
+      idempotencyKey: 'txn-conflict-hidden',
+      templateData: { subject: 'Hidden', message: 'Conflict' },
+    },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.statusCode, 503);
+  assert.equal(result.error, 'idempotency_conflict');
+  assert.equal(sent.length, 0);
 });
