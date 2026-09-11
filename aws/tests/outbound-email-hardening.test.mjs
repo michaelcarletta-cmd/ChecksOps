@@ -49,6 +49,13 @@ const sendClient = ({
     query: async (sql, params = []) => {
       const compact = String(sql).replace(/\s+/g, ' ').trim();
       calls.push({ sql: compact, params });
+      if (
+        compact.startsWith('SAVEPOINT ')
+        || compact.startsWith('RELEASE SAVEPOINT ')
+        || compact.startsWith('ROLLBACK TO SAVEPOINT ')
+      ) {
+        return { rows: [], rowCount: 0 };
+      }
       if (failIdempotencySelect && compact.includes('FROM public.email_send_log') && compact.includes('idempotency_key')) {
         throw new Error('email_send_log unavailable');
       }
@@ -335,6 +342,50 @@ test('unapproved recipient cannot reach SES even in ses mode', async () => {
   });
 });
 
+test('unique-violation claim replays without a second send', async () => {
+  const sent = [];
+  const logs = new Map();
+  const client = sendClient({ logs, uniqueOnKey: true });
+  const originalQuery = client.query.bind(client);
+  let selects = 0;
+  client.query = async (sql, params = []) => {
+    const compact = String(sql).replace(/\s+/g, ' ').trim();
+    if (compact.includes('FROM public.email_send_log') && compact.includes('WHERE idempotency_key')) {
+      selects += 1;
+      if (selects === 1) return { rows: [] };
+    }
+    return originalQuery(sql, params);
+  };
+  logs.set('txn-race-1', {
+    id: 'already-claimed',
+    status: 'pending',
+    provider_message_id: null,
+    recipient_email: LOCK,
+    tenant_id: TENANT,
+    metadata: {},
+    error_message: null,
+    idempotency_key: 'txn-race-1',
+  });
+  const result = await runSendTransactionalEmail({
+    client,
+    mapping,
+    spoof,
+    send: capturingMailer(sent),
+    body: {
+      tenantId: TENANT,
+      templateName: 'generic-notification',
+      recipientEmail: LOCK,
+      idempotencyKey: 'txn-race-1',
+      templateData: { subject: 'Race', message: 'Once' },
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.duplicate, true);
+  assert.equal(result.reason, 'idempotent_replay');
+  assert.equal(sent.length, 0);
+  assert.ok(client.calls.some((c) => c.sql.startsWith('ROLLBACK TO SAVEPOINT email_send_log_write')));
+});
+
 test('duplicate idempotency key cannot send twice', async () => {
   const sent = [];
   const client = sendClient();
@@ -365,6 +416,7 @@ test('duplicate idempotency key cannot send twice', async () => {
   assert.equal(second.duplicate, true);
   assert.equal(second.reason, 'idempotent_replay');
   assert.equal(sent.length, 1);
+  assert.ok(client.calls.some((c) => c.sql.startsWith('SAVEPOINT email_send_log_write')));
 });
 
 test('idempotency lookup failure is fail-closed in ses mode and does not send', async () => {

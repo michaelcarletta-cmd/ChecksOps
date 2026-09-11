@@ -117,9 +117,23 @@ export const sendViaSesOrSink = async ({
   };
 };
 
+const EMAIL_LOG_SAVEPOINT = 'email_send_log_write';
+
+const withEmailLogSavepoint = async (client, fn) => {
+  await client.query(`SAVEPOINT ${EMAIL_LOG_SAVEPOINT}`);
+  try {
+    const result = await fn();
+    await client.query(`RELEASE SAVEPOINT ${EMAIL_LOG_SAVEPOINT}`);
+    return result;
+  } catch (error) {
+    try { await client.query(`ROLLBACK TO SAVEPOINT ${EMAIL_LOG_SAVEPOINT}`); } catch { /* ignore */ }
+    throw error;
+  }
+};
+
 const logEmail = async (client, row) => {
   try {
-    await client.query(
+    await withEmailLogSavepoint(client, () => client.query(
       `INSERT INTO public.email_send_log (
          id, template_name, recipient_email, tenant_id, status, provider, provider_message_id,
          idempotency_key, error_message, metadata, created_at
@@ -138,7 +152,7 @@ const logEmail = async (client, row) => {
         row.error_message || null,
         JSON.stringify(row.metadata || {}),
       ],
-    );
+    ));
   } catch {
     // Logging must not break send path; schema variants exist across dumps.
   }
@@ -180,7 +194,7 @@ const isUniqueViolation = (error) => String(error?.code || '') === '23505';
 const claimIdempotencyKey = async (client, row) => {
   if (!row?.idempotency_key) return { ok: true, claimed: false };
   try {
-    await client.query(
+    await withEmailLogSavepoint(client, () => client.query(
       `INSERT INTO public.email_send_log (
          id, template_name, recipient_email, tenant_id, status, provider, provider_message_id,
          idempotency_key, error_message, metadata, created_at
@@ -196,7 +210,7 @@ const claimIdempotencyKey = async (client, row) => {
         row.idempotency_key,
         JSON.stringify({ ...(row.metadata || {}), claimed: true }),
       ],
-    );
+    ));
     return { ok: true, claimed: true, id: row.id };
   } catch (error) {
     if (isUniqueViolation(error)) {
@@ -211,7 +225,7 @@ const claimIdempotencyKey = async (client, row) => {
 const finalizeClaimedLog = async (client, row) => {
   if (!row?.id) return;
   try {
-    await client.query(
+    await withEmailLogSavepoint(client, () => client.query(
       `UPDATE public.email_send_log
        SET status = $2,
            provider_message_id = $3,
@@ -225,7 +239,7 @@ const finalizeClaimedLog = async (client, row) => {
         row.error_message || null,
         JSON.stringify(row.metadata || {}),
       ],
-    );
+    ));
   } catch {
     // Reservation still blocks duplicates even if finalize cannot persist status.
   }

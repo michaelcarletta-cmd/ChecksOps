@@ -27,8 +27,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_email_send_log_idempotency_key
   ON public.email_send_log (idempotency_key)
   WHERE idempotency_key IS NOT NULL AND btrim(idempotency_key) <> '';
 
--- Optional: persist sink outcomes without violating the historical CHECK.
--- Skip this ALTER if the live constraint already includes 'sunk'.
+-- Required for PR #223 finalize: sink outcomes use status='sunk'. Without this
+-- value the UPDATE aborts the surrounding transaction and COMMIT rolls back the
+-- pending reservation (PostgreSQL 25P02). Do not rewrite historical rows.
 DO $$
 BEGIN
   ALTER TABLE public.email_send_log DROP CONSTRAINT IF EXISTS email_send_log_status_check;
