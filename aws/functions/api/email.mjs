@@ -170,8 +170,13 @@ export const logEmail = async (client, row) => {
         JSON.stringify(row.metadata || {}),
       ],
     ));
-  } catch {
-    // Logging must not break send path; schema variants exist across dumps.
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error: 'audit_unavailable',
+      message: String(error?.message || error).slice(0, 200),
+    };
   }
 };
 
@@ -240,7 +245,7 @@ export const claimIdempotencyKey = async (client, row) => {
 };
 
 export const finalizeClaimedLog = async (client, row) => {
-  if (!row?.id) return;
+  if (!row?.id) return { ok: false, error: 'audit_unavailable' };
   try {
     await withEmailLogSavepoint(client, () => client.query(
       `UPDATE public.email_send_log
@@ -257,8 +262,13 @@ export const finalizeClaimedLog = async (client, row) => {
         JSON.stringify(row.metadata || {}),
       ],
     ));
-  } catch {
-    // Reservation still blocks duplicates even if finalize cannot persist status.
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error: 'audit_unavailable',
+      message: String(error?.message || error).slice(0, 200),
+    };
   }
 };
 
@@ -281,6 +291,206 @@ export const replayIdempotentSend = (row, spoof) => {
   }, spoof);
 };
 
+export const stableEmailIdempotencyKey = (...parts) => parts
+  .map((part) => String(part ?? '').trim().toLowerCase())
+  .filter(Boolean)
+  .join(':');
+
+export const hashEmailPayload = (value) => createHash('sha256')
+  .update(typeof value === 'string' ? value : JSON.stringify(value ?? ''))
+  .digest('hex')
+  .slice(0, 16);
+
+export const validatedMailReplyTo = (value, fallback = defaultReplyTo()) => {
+  if (value == null || String(value).trim() === '') {
+    const parsedFallback = normalizeReplyTo(fallback);
+    if (parsedFallback.ok && parsedFallback.replyTo) return parsedFallback;
+    return { ok: true, replyTo: defaultReplyTo() };
+  }
+  return normalizeReplyTo(value);
+};
+
+const auditUnavailable = (error = 'idempotency_unavailable') => ({
+  ok: false,
+  statusCode: 503,
+  success: false,
+  error,
+});
+
+export const peekAuditedEmail = async (client, idempotencyKey) => {
+  const key = String(idempotencyKey || '').trim();
+  if (!key) return { ok: true, duplicate: false, row: null };
+  const prior = await findIdempotencyRow(client, key);
+  if (!prior.ok) {
+    if (sesOutboundSendEnabled()) return auditUnavailable();
+    return { ok: true, duplicate: false, row: null, lookupFailed: true };
+  }
+  if (prior.row) return { ok: true, duplicate: true, row: prior.row };
+  return { ok: true, duplicate: false, row: null };
+};
+
+/**
+ * Shared pre-send reservation + SES fail-closed audit for one recipient.
+ * Callers must authorize the tenant and validate Reply-To before invoking.
+ */
+export const deliverAuditedEmail = async (client, {
+  templateName,
+  recipientEmail,
+  tenantId = null,
+  idempotencyKey,
+  metadata = {},
+  applicationUserId = null,
+  provider = 'aws_staging',
+  spoof = null,
+  send,
+  mailerArgs = {},
+  messageId = null,
+} = {}) => {
+  const email = normalizeEmail(recipientEmail);
+  const key = String(idempotencyKey || '').trim();
+  const mailer = send || sendViaSesOrSink;
+  const logId = messageId || randomUUID();
+  if (!email) return { ok: false, statusCode: 400, success: false, error: 'missing_recipient' };
+  if (!key) return { ok: false, statusCode: 500, success: false, error: 'missing_idempotency_key' };
+
+  const prior = await findIdempotencyRow(client, key);
+  if (!prior.ok && sesOutboundSendEnabled()) return auditUnavailable();
+  if (prior.ok && prior.row) {
+    return {
+      ok: true,
+      duplicate: true,
+      row: prior.row,
+      replay: replayIdempotentSend(prior.row, spoof),
+      sendResult: null,
+      primary: null,
+      providerMessageId: prior.row.provider_message_id || null,
+    };
+  }
+
+  let claimed = false;
+  if (prior.ok && !prior.row) {
+    const claim = await claimIdempotencyKey(client, {
+      id: logId,
+      template_name: templateName,
+      recipient_email: email,
+      tenant_id: tenantId,
+      provider,
+      idempotency_key: key,
+      metadata: {
+        ...metadata,
+        application_user_id: applicationUserId,
+        originalTo: email,
+        original_recipient: email,
+      },
+    });
+    if (!claim.ok) {
+      if (sesOutboundSendEnabled() || claim.error === 'idempotency_conflict') {
+        return auditUnavailable(claim.error || 'idempotency_unavailable');
+      }
+    } else if (claim.duplicate) {
+      return {
+        ok: true,
+        duplicate: true,
+        row: claim.row,
+        replay: replayIdempotentSend(claim.row, spoof),
+        sendResult: null,
+        primary: null,
+        providerMessageId: claim.row?.provider_message_id || null,
+      };
+    } else {
+      claimed = claim.claimed === true;
+    }
+  }
+
+  if (sesOutboundSendEnabled() && !claimed) return auditUnavailable();
+
+  const sendResult = await mailer({
+    ...mailerArgs,
+    to: mailerArgs.to || email,
+    tenantId: mailerArgs.tenantId ?? tenantId,
+    messageCategory: mailerArgs.messageCategory || templateName,
+  });
+  const primary = sendResult?.results?.[0];
+  if (!primary) {
+    const failedRow = {
+      id: logId,
+      template_name: templateName,
+      recipient_email: email,
+      tenant_id: tenantId,
+      status: 'failed',
+      provider,
+      provider_message_id: null,
+      idempotency_key: key,
+      error_message: 'empty_mailer_result',
+      metadata: {
+        ...metadata,
+        application_user_id: applicationUserId,
+        originalTo: email,
+        original_recipient: email,
+        finalized_at: new Date().toISOString(),
+      },
+    };
+    if (claimed) await finalizeClaimedLog(client, failedRow);
+    else await logEmail(client, failedRow);
+    return {
+      ok: false,
+      statusCode: 502,
+      success: false,
+      error: 'send_failed',
+      sendResult,
+    };
+  }
+  const logRow = {
+    id: logId,
+    template_name: templateName,
+    recipient_email: email,
+    tenant_id: tenantId,
+    status: emailSendLogStatusFromMailer(primary),
+    provider,
+    provider_message_id: primary.messageId || null,
+    idempotency_key: key,
+    error_message: primary.error || null,
+    metadata: {
+      ...metadata,
+      application_user_id: applicationUserId,
+      policy: primary.policy || null,
+      originalTo: primary.originalTo || email,
+      original_recipient: primary.originalTo || email,
+      mode: sendResult?.mode || null,
+      finalized_at: new Date().toISOString(),
+    },
+  };
+  let persist = { ok: true };
+  if (claimed) persist = await finalizeClaimedLog(client, logRow);
+  else persist = await logEmail(client, logRow);
+
+  if (!persist.ok && sesOutboundSendEnabled() && !claimed) {
+    return {
+      ...auditUnavailable('audit_unavailable'),
+      persist,
+      sendResult,
+      primary,
+    };
+  }
+
+  const sent = primary.delivery === 'ses' && primary.status === 'sent';
+  return {
+    ok: true,
+    duplicate: false,
+    claimed,
+    persist,
+    persistError: persist.ok ? null : persist.error || null,
+    sendResult,
+    primary,
+    providerMessageId: primary.messageId || null,
+    sent,
+    sunk: primary.delivery !== 'ses' || primary.status === 'sunk',
+    stagingPolicy: primary.policy || null,
+    stagingMode: sendResult?.mode || null,
+    id: logId,
+  };
+};
+
 const resolveCallerReplyTo = (body, brandingReplyTo) => {
   const override = body.claimEmailCc || body.claim_email_cc || body.replyTo || body.reply_to;
   if (override == null || String(override).trim() === '') {
@@ -298,10 +508,7 @@ export const runSendTransactionalEmail = async ({
   const recipientEmail = normalizeEmail(body.recipientEmail || body.recipient_email);
   const tenantId = body.tenantId || body.tenant_id || null;
   const templateData = body.templateData || body.template_data || {};
-  const suppliedKey = body.idempotencyKey || body.idempotency_key || null;
-  const idempotencyKey = suppliedKey ? String(suppliedKey).trim() : randomUUID();
-  const messageId = randomUUID();
-  const mailer = send || sendViaSesOrSink;
+  const suppliedKey = String(body.idempotencyKey || body.idempotency_key || '').trim();
 
   if (!templateName || !TEMPLATE_NAMES.has(templateName)) {
     return withSpoof({
@@ -319,20 +526,16 @@ export const runSendTransactionalEmail = async ({
   const authorized = await requireAuthorizedTenant(client, mapping, tenantId, { configure: false });
   if (!authorized.ok) return withSpoof(authorized, spoof);
 
-  const prior = await findIdempotencyRow(client, suppliedKey ? idempotencyKey : null);
-  if (!prior.ok && sesOutboundSendEnabled()) {
-    return withSpoof({
-      ok: false,
-      statusCode: 503,
-      success: false,
-      error: 'idempotency_unavailable',
-    }, spoof);
-  }
-  if (prior.ok && prior.row) return replayIdempotentSend(prior.row, spoof);
+  const idempotencyKey = suppliedKey || stableEmailIdempotencyKey(
+    'transactional',
+    authorized.tenantId,
+    templateName,
+    recipientEmail,
+    hashEmailPayload(templateData),
+  );
 
   if (await isSuppressed(client, recipientEmail, authorized.tenantId)) {
-    await logEmail(client, {
-      id: messageId,
+    const suppressed = await logEmail(client, {
       template_name: templateName,
       recipient_email: recipientEmail,
       tenant_id: authorized.tenantId,
@@ -341,6 +544,9 @@ export const runSendTransactionalEmail = async ({
       idempotency_key: idempotencyKey,
       metadata: { application_user_id: mapping.application_user_id },
     });
+    if (!suppressed.ok && sesOutboundSendEnabled()) {
+      return withSpoof(auditUnavailable('audit_unavailable'), spoof);
+    }
     return withSpoof({
       ok: true,
       statusCode: 200,
@@ -364,76 +570,38 @@ export const runSendTransactionalEmail = async ({
     }, spoof);
   }
 
-  let claimed = false;
-  if (suppliedKey && prior.ok && !prior.row) {
-    const claim = await claimIdempotencyKey(client, {
-      id: messageId,
-      template_name: templateName,
-      recipient_email: recipientEmail,
-      tenant_id: authorized.tenantId,
-      provider: 'aws_staging',
-      idempotency_key: idempotencyKey,
-      metadata: { application_user_id: mapping.application_user_id },
-    });
-    if (!claim.ok) {
-      if (sesOutboundSendEnabled() || claim.error === 'idempotency_conflict') {
-        return withSpoof({
-          ok: false,
-          statusCode: 503,
-          success: false,
-          error: claim.error || 'idempotency_unavailable',
-        }, spoof);
-      }
-    } else if (claim.duplicate) {
-      return replayIdempotentSend(claim.row, spoof);
-    } else {
-      claimed = claim.claimed === true;
-    }
-  }
-
   const rendered = renderTransactionalTemplate(templateName, { ...templateData, branding });
-  const result = await mailer({
-    to: recipientEmail,
-    subject: rendered.subject,
-    html: rendered.html,
-    text: rendered.text,
-    from: branding.from,
-    replyTo: reply.replyTo,
+  const delivery = await deliverAuditedEmail(client, {
+    templateName,
+    recipientEmail,
     tenantId: authorized.tenantId,
-  });
-
-  const primary = result.results[0] || {};
-  const logRow = {
-    id: messageId,
-    template_name: templateName,
-    recipient_email: recipientEmail,
-    tenant_id: authorized.tenantId,
-    status: emailSendLogStatusFromMailer(primary),
-    provider: 'aws_staging',
-    provider_message_id: primary.messageId || null,
-    idempotency_key: idempotencyKey,
-    error_message: primary.error || null,
-    metadata: {
-      application_user_id: mapping.application_user_id,
-      policy: primary.policy,
-      originalTo: primary.originalTo,
-      mode: result.mode,
+    idempotencyKey,
+    applicationUserId: mapping.application_user_id,
+    spoof,
+    send,
+    mailerArgs: {
+      subject: rendered.subject,
+      html: rendered.html,
+      text: rendered.text,
+      from: branding.from,
+      replyTo: reply.replyTo,
     },
-  };
-  if (claimed) await finalizeClaimedLog(client, logRow);
-  else await logEmail(client, logRow);
-
+  });
+  if (!delivery.ok) return withSpoof(delivery, spoof);
+  if (delivery.duplicate) return delivery.replay;
   return withSpoof({
     ok: true,
     statusCode: 200,
     success: true,
-    sent: primary.delivery === 'ses' && primary.status === 'sent',
+    sent: delivery.sent,
     queued: false,
-    sunk: primary.delivery !== 'ses' || primary.status === 'sunk',
+    sunk: delivery.sunk,
     provider: 'aws_staging',
-    id: primary.messageId || messageId,
-    providerMessageId: primary.messageId || null,
-    stagingPolicy: primary.policy,
+    id: delivery.providerMessageId || delivery.id,
+    providerMessageId: delivery.providerMessageId,
+    stagingPolicy: delivery.stagingPolicy,
+    stagingMode: delivery.stagingMode,
+    persistError: delivery.persistError || null,
   }, spoof);
 };
 
@@ -450,9 +618,10 @@ export const runSendEmail = async ({
   }
   if (body.to) recipients.push(...(Array.isArray(body.to) ? body.to : [body.to]));
   if (body.email) recipients.push(body.email);
+  const uniqueRecipients = [...new Set(recipients.map((email) => normalizeEmail(email)).filter(Boolean))];
   const htmlBody = body.body || body.html || body.htmlBody || body.message || '';
   const textBody = body.text || String(htmlBody).replace(/<[^>]+>/g, ' ');
-  if (!recipients.length || !body.subject || !htmlBody) {
+  if (!uniqueRecipients.length || !body.subject || !htmlBody) {
     return withSpoof({
       ok: false,
       statusCode: 400,
@@ -465,7 +634,6 @@ export const runSendEmail = async ({
   const authorized = await requireAuthorizedTenant(client, mapping, tenantId, { configure: false });
   if (!authorized.ok) return withSpoof(authorized, spoof);
 
-  const mailer = send || sendViaSesOrSink;
   const branding = await resolveEmailBranding(client, {
     tenantId: authorized.tenantId,
     senderOverride: body.senderOverride || body.sender_override || null,
@@ -481,43 +649,58 @@ export const runSendEmail = async ({
     }, spoof);
   }
 
-  const result = await mailer({
-    to: recipients,
-    subject: String(body.subject),
-    html: String(htmlBody),
-    text: String(textBody),
-    from: branding.from,
-    replyTo: reply.replyTo,
-    headers: body.headers || {},
-    tenantId: authorized.tenantId,
-  });
-
-  for (const row of result.results) {
-    await logEmail(client, {
-      template_name: 'freeform-send-email',
-      recipient_email: row.originalTo || row.to,
-      tenant_id: authorized.tenantId,
-      status: emailSendLogStatusFromMailer(row),
-      provider: 'aws_staging',
-      provider_message_id: row.messageId || null,
+  const suppliedKey = String(body.idempotencyKey || body.idempotency_key || '').trim();
+  const contentHash = hashEmailPayload(`${body.subject}\n${htmlBody}`);
+  const deliveries = [];
+  for (const email of uniqueRecipients) {
+    const idempotencyKey = suppliedKey
+      ? stableEmailIdempotencyKey(suppliedKey, email)
+      : stableEmailIdempotencyKey('freeform', authorized.tenantId, email, contentHash);
+    const delivery = await deliverAuditedEmail(client, {
+      templateName: 'freeform-send-email',
+      recipientEmail: email,
+      tenantId: authorized.tenantId,
+      idempotencyKey,
+      applicationUserId: mapping.application_user_id,
       metadata: {
         checkId: body.checkId || null,
         claimId: body.claimId || null,
-        application_user_id: mapping.application_user_id,
-        policy: row.policy,
+      },
+      spoof,
+      send,
+      mailerArgs: {
+        subject: String(body.subject),
+        html: String(htmlBody),
+        text: String(textBody),
+        from: branding.from,
+        replyTo: reply.replyTo,
+        headers: body.headers || {},
       },
     });
+    if (!delivery.ok) return withSpoof(delivery, spoof);
+    deliveries.push(delivery);
   }
 
+  const firstSent = deliveries.find((row) => !row.duplicate) || deliveries[0];
+  const allDuplicate = deliveries.every((row) => row.duplicate);
+  if (allDuplicate && firstSent?.replay) {
+    return withSpoof({
+      ...firstSent.replay,
+      recipientCount: uniqueRecipients.length,
+      attachmentCount: Array.isArray(body.attachments) ? body.attachments.length : 0,
+    }, spoof);
+  }
   return withSpoof({
     ok: true,
     statusCode: 200,
     success: true,
-    recipientCount: result.results.length,
+    recipientCount: uniqueRecipients.length,
     attachmentCount: Array.isArray(body.attachments) ? body.attachments.length : 0,
-    messageId: result.results[0]?.messageId || null,
-    stagingMode: result.mode,
-    stagingPolicy: result.results[0]?.policy || null,
+    messageId: firstSent?.providerMessageId || null,
+    providerMessageId: firstSent?.providerMessageId || null,
+    stagingMode: firstSent?.stagingMode || firstSent?.replay?.stagingMode || null,
+    stagingPolicy: firstSent?.stagingPolicy || firstSent?.replay?.stagingPolicy || null,
+    duplicate: false,
   }, spoof);
 };
 
@@ -627,53 +810,55 @@ export const runNotifyMortgageHandlingRequest = async ({
   if (!row) {
     return { ok: false, statusCode: 404, error: 'not_found', spoofFieldsIgnored: spoof };
   }
-  const member = (await client.query(
-    `SELECT 1 FROM public.tenant_users WHERE user_id = $1::uuid AND tenant_id = $2::uuid LIMIT 1`,
-    [mapping.application_user_id, row.tenant_id],
-  )).rows[0];
-  if (!member) {
-    return { ok: false, statusCode: 403, error: 'cross_tenant_denied', spoofFieldsIgnored: spoof };
-  }
+  const authorized = await requireAuthorizedTenant(client, mapping, row.tenant_id, { configure: false });
+  if (!authorized.ok) return { ...authorized, spoofFieldsIgnored: spoof };
 
   const opsTo = normalizeEmail(mortgageOpsEmail());
   if (!opsTo) {
     return { ok: false, statusCode: 400, error: 'missing_ops_recipient', spoofFieldsIgnored: spoof };
   }
   const branding = await resolveEmailBranding(client, {
-    tenantId: row.tenant_id,
+    tenantId: authorized.tenantId,
     senderOverride: 'checksops',
   });
+  const reply = validatedMailReplyTo(branding.replyTo);
+  if (!reply.ok) {
+    return { ok: false, statusCode: 400, error: reply.error, spoofFieldsIgnored: spoof };
+  }
   const rendered = renderTransactionalTemplate('mortgage-handling-request', {
     mortgageCompany: row.mortgage_company,
     status: row.status,
     requestId: row.id,
     branding,
   });
-  const mailer = send || sendViaSesOrSink;
-  const sendResult = await mailer({
-    to: opsTo,
-    subject: rendered.subject,
-    html: rendered.html,
-    text: rendered.text,
-    from: branding.from,
-    replyTo: branding.replyTo,
+  const suppliedKey = String(body.idempotencyKey || body.idempotency_key || '').trim();
+  const delivery = await deliverAuditedEmail(client, {
+    templateName: 'notify-mortgage-handling-request',
+    recipientEmail: opsTo,
+    tenantId: authorized.tenantId,
+    idempotencyKey: suppliedKey || stableEmailIdempotencyKey('mortgage-desk', authorized.tenantId, requestId),
+    applicationUserId: mapping.application_user_id,
+    metadata: { request_id: requestId },
+    spoof,
+    send,
+    mailerArgs: {
+      subject: rendered.subject,
+      html: rendered.html,
+      text: rendered.text,
+      from: branding.from,
+      replyTo: reply.replyTo,
+    },
   });
-
-  await logEmail(client, {
-    template_name: 'notify-mortgage-handling-request',
-    recipient_email: opsTo,
-    tenant_id: row.tenant_id,
-    status: emailSendLogStatusFromMailer(sendResult.results[0]),
-    provider: 'aws_staging',
-    provider_message_id: sendResult.results[0]?.messageId || null,
-    metadata: { request_id: requestId, application_user_id: mapping.application_user_id },
-  });
-
+  if (!delivery.ok) return { ...delivery, spoofFieldsIgnored: spoof };
+  if (delivery.duplicate) {
+    return { ...delivery.replay, emailed: true, spoofFieldsIgnored: spoof };
+  }
   return {
     ok: true,
     statusCode: 200,
     emailed: true,
-    stagingMode: sendResult.mode,
+    stagingMode: delivery.stagingMode,
+    providerMessageId: delivery.providerMessageId,
     spoofFieldsIgnored: spoof,
   };
 };
@@ -681,6 +866,26 @@ export const runNotifyMortgageHandlingRequest = async ({
 export const handleNotifyMortgageHandlingRequest = (event, deps = {}) => withIdentity(event, (ctx) => (
   runNotifyMortgageHandlingRequest({ ...ctx, send: deps.sendViaSesOrSink })
 ), { write: true, commit: true, ...deps });
+
+const authorizeLeadCaller = async (client, mapping, lead) => {
+  if (lead.contractor_user_id === mapping.application_user_id) {
+    const tenant = (await client.query(
+      `SELECT tenant_id::text AS tenant_id FROM public.tenant_users WHERE user_id = $1::uuid LIMIT 1`,
+      [lead.contractor_user_id],
+    )).rows[0];
+    return { ok: true, tenantId: tenant?.tenant_id || null };
+  }
+  const shared = (await client.query(
+    `SELECT tu.tenant_id::text AS tenant_id
+     FROM public.tenant_users tu
+     WHERE tu.user_id = $1::uuid
+       AND tu.tenant_id IN (SELECT tenant_id FROM public.tenant_users WHERE user_id = $2::uuid)
+     LIMIT 1`,
+    [mapping.application_user_id, lead.contractor_user_id],
+  )).rows[0];
+  if (!shared) return { ok: false, statusCode: 403, error: 'not_authorized' };
+  return { ok: true, tenantId: shared.tenant_id };
+};
 
 export const runNotifyHomeownerLead = async ({
   client, mapping, body, spoof, send,
@@ -694,6 +899,9 @@ export const runNotifyHomeownerLead = async ({
   )).rows[0];
   if (!lead) return { ok: false, statusCode: 404, error: 'not_found', spoofFieldsIgnored: spoof };
 
+  const access = await authorizeLeadCaller(client, mapping, lead);
+  if (!access.ok) return { ...access, spoofFieldsIgnored: spoof };
+
   const contractor = (await client.query(
     `SELECT email FROM public.profiles WHERE id = $1::uuid LIMIT 1`,
     [lead.contractor_user_id],
@@ -704,29 +912,42 @@ export const runNotifyHomeownerLead = async ({
   }
 
   const branding = await resolveEmailBranding(client, { senderOverride: 'checksops' });
+  const reply = validatedMailReplyTo(branding.replyTo);
+  if (!reply.ok) {
+    return { ok: false, statusCode: 400, error: reply.error, spoofFieldsIgnored: spoof };
+  }
   const rendered = renderTransactionalTemplate('new-homeowner-lead', {
     homeownerName: lead.homeowner_name,
     leadId: lead.id,
     branding,
   });
-  const mailer = send || sendViaSesOrSink;
-  const sendResult = await mailer({
-    to,
-    subject: rendered.subject,
-    html: rendered.html,
-    text: rendered.text,
-    from: branding.from,
-    replyTo: branding.replyTo,
+  const suppliedKey = String(body.idempotencyKey || body.idempotency_key || '').trim();
+  const delivery = await deliverAuditedEmail(client, {
+    templateName: 'new-homeowner-lead',
+    recipientEmail: to,
+    tenantId: access.tenantId,
+    idempotencyKey: suppliedKey || stableEmailIdempotencyKey('homeowner-lead', leadId),
+    applicationUserId: mapping.application_user_id,
+    metadata: { lead_id: leadId },
+    spoof,
+    send,
+    mailerArgs: {
+      subject: rendered.subject,
+      html: rendered.html,
+      text: rendered.text,
+      from: branding.from,
+      replyTo: reply.replyTo,
+    },
   });
-  await logEmail(client, {
-    template_name: 'new-homeowner-lead',
-    recipient_email: to,
-    status: emailSendLogStatusFromMailer(sendResult.results[0]),
-    provider: 'aws_staging',
-    provider_message_id: sendResult.results[0]?.messageId || null,
-    metadata: { lead_id: leadId, application_user_id: mapping.application_user_id },
-  });
-  return { ok: true, statusCode: 200, success: true, spoofFieldsIgnored: spoof };
+  if (!delivery.ok) return { ...delivery, spoofFieldsIgnored: spoof };
+  if (delivery.duplicate) return delivery.replay;
+  return {
+    ok: true,
+    statusCode: 200,
+    success: true,
+    providerMessageId: delivery.providerMessageId,
+    spoofFieldsIgnored: spoof,
+  };
 };
 
 export const handleNotifyHomeownerLead = (event, deps = {}) => withIdentity(event, (ctx) => (
@@ -752,32 +973,46 @@ export const runNotifyHomeownerLeadAccepted = async ({
     return { ok: false, statusCode: 400, error: 'missing_recipient', reason: 'no_homeowner_email', spoofFieldsIgnored: spoof };
   }
 
+  const access = await authorizeLeadCaller(client, mapping, lead);
   const origin = String(body.origin || process.env.VITE_APP_URL || process.env.SIGN_BASE_URL || 'https://staging.checksops.com').replace(/\/$/, '');
   const link = `${origin}/h/claim/${lead.access_token}`;
   const branding = await resolveEmailBranding(client, { senderOverride: 'checksops' });
+  const reply = validatedMailReplyTo(branding.replyTo);
+  if (!reply.ok) {
+    return { ok: false, statusCode: 400, error: reply.error, spoofFieldsIgnored: spoof };
+  }
   const rendered = renderTransactionalTemplate('homeowner-claim-portal-link', {
     homeownerName: lead.homeowner_name,
     portalUrl: link,
     branding,
   });
-  const mailer = send || sendViaSesOrSink;
-  const sendResult = await mailer({
-    to,
-    subject: rendered.subject,
-    html: rendered.html,
-    text: rendered.text,
-    from: branding.from,
-    replyTo: branding.replyTo,
-  });
-  await logEmail(client, {
-    template_name: 'homeowner-claim-portal-link',
-    recipient_email: to,
-    status: emailSendLogStatusFromMailer(sendResult.results[0]),
-    provider: 'aws_staging',
-    provider_message_id: sendResult.results[0]?.messageId || null,
+  const suppliedKey = String(body.idempotencyKey || body.idempotency_key || '').trim();
+  const delivery = await deliverAuditedEmail(client, {
+    templateName: 'homeowner-claim-portal-link',
+    recipientEmail: to,
+    tenantId: access.tenantId || null,
+    idempotencyKey: suppliedKey || stableEmailIdempotencyKey('homeowner-lead-accepted', leadId),
+    applicationUserId: mapping.application_user_id,
     metadata: { lead_id: leadId },
+    spoof,
+    send,
+    mailerArgs: {
+      subject: rendered.subject,
+      html: rendered.html,
+      text: rendered.text,
+      from: branding.from,
+      replyTo: reply.replyTo,
+    },
   });
-  return { ok: true, statusCode: 200, success: true, spoofFieldsIgnored: spoof };
+  if (!delivery.ok) return { ...delivery, spoofFieldsIgnored: spoof };
+  if (delivery.duplicate) return delivery.replay;
+  return {
+    ok: true,
+    statusCode: 200,
+    success: true,
+    providerMessageId: delivery.providerMessageId,
+    spoofFieldsIgnored: spoof,
+  };
 };
 
 export const handleNotifyHomeownerLeadAccepted = (event, deps = {}) => withIdentity(event, (ctx) => (

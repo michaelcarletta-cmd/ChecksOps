@@ -11,16 +11,14 @@ import { loadDatabaseCredentials } from './secrets.mjs';
 import { buildClientConfig, buildWriteClientConfig, sanitizePublicError } from './db-health.mjs';
 import { normalizePath, s3KeyFor } from './storage-paths.mjs';
 import {
-  claimIdempotencyKey,
-  emailSendLogStatusFromMailer,
-  finalizeClaimedLog,
-  findIdempotencyRow,
-  logEmail,
+  deliverAuditedEmail,
+  peekAuditedEmail,
   replayIdempotentSend,
-  sendViaSesOrSink,
+  stableEmailIdempotencyKey,
+  validatedMailReplyTo,
 } from './email.mjs';
 import { renderTransactionalTemplate } from './email-templates.mjs';
-import { normalizeEmail, sesOutboundSendEnabled } from './email-policy.mjs';
+import { normalizeEmail } from './email-policy.mjs';
 import { emailAssetOrigin, resolveEmailBranding } from './email-branding.mjs';
 import { requireAuthorizedTenant } from './tenant-email-domain.mjs';
 
@@ -83,6 +81,8 @@ export const notifyStaffOfHomeownerLedgerUpload = async ({
   if (!to) return { notified: false, reason: 'missing_staff_email' };
 
   const branding = await resolveEmailBranding(client, { tenantId: meta.tenant_id });
+  const reply = validatedMailReplyTo(branding.replyTo);
+  if (!reply.ok) return { notified: false, reason: reply.error };
   const inboxUrl = `${appOrigin(origin)}/checks`;
   const rendered = renderTransactionalTemplate('homeowner-upload-alert', {
     staff_name: staff.fullName,
@@ -95,16 +95,29 @@ export const notifyStaffOfHomeownerLedgerUpload = async ({
     claimId: meta.claim_id,
     branding,
   });
-  const mailer = send || sendViaSesOrSink;
-  await mailer({
-    to,
-    subject: rendered.subject,
-    html: rendered.html,
-    text: rendered.text,
-    from: branding.from,
-    replyTo: branding.replyTo,
+  const delivery = await deliverAuditedEmail(client, {
+    templateName: 'homeowner-upload-alert',
+    recipientEmail: to,
+    tenantId: meta.tenant_id,
+    idempotencyKey: stableEmailIdempotencyKey('homeowner-upload-alert', meta.tenant_id, uploadId || meta.id, to),
+    metadata: { upload_id: uploadId || null, token_id: meta.id || null },
+    send,
+    mailerArgs: {
+      subject: rendered.subject,
+      html: rendered.html,
+      text: rendered.text,
+      from: branding.from,
+      replyTo: reply.replyTo,
+    },
   });
-  return { notified: true, recipient: to, uploadId: uploadId || null };
+  if (!delivery.ok) return { notified: false, reason: delivery.error };
+  return {
+    notified: true,
+    recipient: to,
+    uploadId: uploadId || null,
+    duplicate: delivery.duplicate === true,
+    providerMessageId: delivery.providerMessageId || delivery.replay?.providerMessageId || null,
+  };
 };
 
 export const handleHomeownerLedgerView = async (event) => {
@@ -565,21 +578,43 @@ export const runHomeownerLedgerSend = async ({
       tenantId,
       senderOverride: 'checksops',
     });
+    const reply = validatedMailReplyTo(branding.replyTo);
+    if (!reply.ok) {
+      return { ok: false, statusCode: 400, error: reply.error, spoofFieldsIgnored: spoof };
+    }
     const rendered = renderTransactionalTemplate('homeowner-ledger-invite', {
       homeownerName: body.homeowner_name,
       ledgerUrl: url,
       is_pre_claim: body.is_pre_claim === true,
       branding,
     });
-    const mailer = send || sendViaSesOrSink;
-    await mailer({
-      to: homeownerEmail,
-      subject: rendered.subject,
-      html: rendered.html,
-      text: rendered.text,
-      from: branding.from,
-      replyTo: branding.replyTo,
+    const suppliedKey = String(body.idempotencyKey || body.idempotency_key || '').trim();
+    const delivery = await deliverAuditedEmail(client, {
+      templateName: 'homeowner-ledger-invite',
+      recipientEmail: homeownerEmail,
+      tenantId,
+      idempotencyKey: suppliedKey || stableEmailIdempotencyKey('homeowner-ledger', tokenRow.id, homeownerEmail),
+      applicationUserId: mapping.application_user_id,
+      metadata: { token_id: tokenRow.id, claim_id: claimId || null },
+      spoof,
+      send,
+      mailerArgs: {
+        subject: rendered.subject,
+        html: rendered.html,
+        text: rendered.text,
+        from: branding.from,
+        replyTo: reply.replyTo,
+      },
     });
+    if (!delivery.ok) return { ...delivery, spoofFieldsIgnored: spoof };
+    if (delivery.duplicate) {
+      return {
+        ...delivery.replay,
+        token: tokenRow.token,
+        url,
+        partner_code: body.partner_code || null,
+      };
+    }
   }
 
   return {
@@ -639,6 +674,18 @@ export const runSendFileToHomeowner = async ({
     };
   }
 
+  const suppliedKey = String(body.idempotencyKey || body.idempotency_key || '').trim();
+  const idempotencyKey = suppliedKey || stableEmailIdempotencyKey('send-file', file.id, homeownerEmail);
+  const prior = await peekAuditedEmail(client, idempotencyKey);
+  if (!prior.ok) return { ...prior, spoofFieldsIgnored: spoof };
+  if (prior.duplicate) {
+    return {
+      ...replayIdempotentSend(prior.row, spoof),
+      shared: true,
+      emailed: true,
+    };
+  }
+
   if (claimId) {
     await client.query(
       `INSERT INTO public.homeowner_ledger_events (
@@ -660,6 +707,10 @@ export const runSendFileToHomeowner = async ({
     tenantId: file.tenant_id,
     senderOverride: 'checksops',
   });
+  const reply = validatedMailReplyTo(branding.replyTo);
+  if (!reply.ok) {
+    return { ok: false, statusCode: 400, error: reply.error, spoofFieldsIgnored: spoof };
+  }
   const rendered = renderTransactionalTemplate('homeowner-document-shared', {
     homeowner_name: tok.homeowner_name,
     portal_url: portalUrl,
@@ -668,15 +719,32 @@ export const runSendFileToHomeowner = async ({
     note: body.note || null,
     branding,
   });
-  const mailer = send || sendViaSesOrSink;
-  await mailer({
-    to: homeownerEmail,
-    subject: rendered.subject,
-    html: rendered.html,
-    text: rendered.text,
-    from: branding.from,
-    replyTo: branding.replyTo,
+  const delivery = await deliverAuditedEmail(client, {
+    templateName: 'homeowner-document-shared',
+    recipientEmail: homeownerEmail,
+    tenantId: file.tenant_id,
+    idempotencyKey,
+    applicationUserId: mapping.application_user_id,
+    metadata: { check_file_id: file.id, claim_id: claimId || null },
+    spoof,
+    send,
+    mailerArgs: {
+      subject: rendered.subject,
+      html: rendered.html,
+      text: rendered.text,
+      from: branding.from,
+      replyTo: reply.replyTo,
+    },
   });
+  if (!delivery.ok) return { ...delivery, spoofFieldsIgnored: spoof };
+  if (delivery.duplicate) {
+    return {
+      ...delivery.replay,
+      shared: true,
+      emailed: true,
+      portal_url: portalUrl,
+    };
+  }
 
   return {
     ok: true,
@@ -684,6 +752,7 @@ export const runSendFileToHomeowner = async ({
     shared: true,
     emailed: true,
     portal_url: portalUrl,
+    providerMessageId: delivery.providerMessageId,
     spoofFieldsIgnored: spoof,
   };
 };
@@ -703,22 +772,7 @@ export const runSendPortalInvite = async ({
   if (!authorized.ok) return { ...authorized, spoofFieldsIgnored: spoof };
 
   const suppliedKey = String(body.idempotencyKey || body.idempotency_key || '').trim();
-  // Same tenant+recipient invite retries share a key unless the caller supplies one.
-  const idempotencyKey = suppliedKey || `portal-invite:${authorized.tenantId}:${email}`;
-  const messageId = randomUUID();
-  const mailer = send || sendViaSesOrSink;
-
-  const prior = await findIdempotencyRow(client, idempotencyKey);
-  if (!prior.ok && sesOutboundSendEnabled()) {
-    return {
-      ok: false,
-      statusCode: 503,
-      success: false,
-      error: 'idempotency_unavailable',
-      spoofFieldsIgnored: spoof,
-    };
-  }
-  if (prior.ok && prior.row) return replayIdempotentSend(prior.row, spoof);
+  const idempotencyKey = suppliedKey || stableEmailIdempotencyKey('portal-invite', authorized.tenantId, email);
 
   const origin = appOrigin(body.appUrl || body.origin);
   const loginUrl = /\/(portal|login)(\/|$)/i.test(origin) ? origin : `${origin}/login`;
@@ -726,6 +780,10 @@ export const runSendPortalInvite = async ({
     tenantId: authorized.tenantId,
     senderOverride: body.senderOverride || body.sender_override || null,
   });
+  const reply = validatedMailReplyTo(branding.replyTo);
+  if (!reply.ok) {
+    return { ok: false, statusCode: 400, error: reply.error, spoofFieldsIgnored: spoof };
+  }
   const rendered = renderTransactionalTemplate('portal-invite', {
     tenantName: body.tenantName,
     userName: body.userName,
@@ -734,97 +792,38 @@ export const runSendPortalInvite = async ({
     branding,
   });
 
-  let claimed = false;
-  if (prior.ok && !prior.row) {
-    const claim = await claimIdempotencyKey(client, {
-      id: messageId,
-      template_name: 'portal-invite',
-      recipient_email: email,
-      tenant_id: authorized.tenantId,
-      provider: 'aws_staging',
-      idempotency_key: idempotencyKey,
-      metadata: {
-        application_user_id: mapping.application_user_id,
-        userType: body.userType || null,
-        originalTo: email,
-        original_recipient: email,
-      },
-    });
-    if (!claim.ok) {
-      if (sesOutboundSendEnabled() || claim.error === 'idempotency_conflict') {
-        return {
-          ok: false,
-          statusCode: 503,
-          success: false,
-          error: claim.error || 'idempotency_unavailable',
-          spoofFieldsIgnored: spoof,
-        };
-      }
-    } else if (claim.duplicate) {
-      return replayIdempotentSend(claim.row, spoof);
-    } else {
-      claimed = claim.claimed === true;
-    }
-  }
-
-  if (sesOutboundSendEnabled() && !claimed) {
-    return {
-      ok: false,
-      statusCode: 503,
-      success: false,
-      error: 'idempotency_unavailable',
-      spoofFieldsIgnored: spoof,
-    };
-  }
-
-  const sendResult = await mailer({
-    to: email,
-    subject: rendered.subject,
-    html: rendered.html,
-    text: rendered.text,
-    from: branding.from,
-    replyTo: branding.replyTo,
+  const delivery = await deliverAuditedEmail(client, {
+    templateName: 'portal-invite',
+    recipientEmail: email,
     tenantId: authorized.tenantId,
-    messageCategory: 'portal-invite',
-  });
-
-  const primary = sendResult.results?.[0] || {};
-  const logRow = {
-    id: messageId,
-    template_name: 'portal-invite',
-    recipient_email: email,
-    tenant_id: authorized.tenantId,
-    status: emailSendLogStatusFromMailer(primary),
-    provider: 'aws_staging',
-    provider_message_id: primary.messageId || null,
-    idempotency_key: idempotencyKey,
-    error_message: primary.error || null,
-    metadata: {
-      application_user_id: mapping.application_user_id,
-      policy: primary.policy || null,
-      originalTo: primary.originalTo || email,
-      original_recipient: primary.originalTo || email,
-      mode: sendResult.mode,
-      userType: body.userType || null,
-      finalized_at: new Date().toISOString(),
+    idempotencyKey,
+    applicationUserId: mapping.application_user_id,
+    metadata: { userType: body.userType || null },
+    spoof,
+    send,
+    mailerArgs: {
+      subject: rendered.subject,
+      html: rendered.html,
+      text: rendered.text,
+      from: branding.from,
+      replyTo: reply.replyTo,
     },
-  };
-  if (claimed) await finalizeClaimedLog(client, logRow);
-  else await logEmail(client, logRow);
-
-  const sent = primary.delivery === 'ses' && primary.status === 'sent';
+  });
+  if (!delivery.ok) return { ...delivery, spoofFieldsIgnored: spoof };
+  if (delivery.duplicate) return delivery.replay;
   return {
     ok: true,
     statusCode: 200,
     success: true,
-    sent,
+    sent: delivery.sent,
     queued: false,
-    sunk: primary.delivery !== 'ses' || primary.status === 'sunk',
+    sunk: delivery.sunk,
     provider: 'aws_staging',
-    id: primary.messageId || messageId,
-    providerMessageId: primary.messageId || null,
-    stagingPolicy: primary.policy || null,
-    stagingMode: sendResult.mode,
+    id: delivery.providerMessageId || delivery.id,
+    providerMessageId: delivery.providerMessageId,
+    stagingPolicy: delivery.stagingPolicy,
+    stagingMode: delivery.stagingMode,
+    persistError: delivery.persistError || null,
     spoofFieldsIgnored: spoof,
   };
 };

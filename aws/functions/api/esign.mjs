@@ -5,7 +5,7 @@
  */
 import { createHash, randomBytes } from 'node:crypto';
 import { withIdentityWrite } from './data.mjs';
-import { sendViaSesOrSink } from './email.mjs';
+import { deliverAuditedEmail, peekAuditedEmail, stableEmailIdempotencyKey, validatedMailReplyTo } from './email.mjs';
 import { resolveEmailBranding } from './email-branding.mjs';
 import { escapeHtml, renderChecksOpsEmail } from './email-layout.mjs';
 
@@ -180,7 +180,11 @@ export const runSendSignatureRequest = async ({
   branding.esign_email_header_color = resolved.primaryColor;
   branding.esign_email_button_color = resolved.primaryColor;
   const mailFrom = resolved.from;
-  const mailReplyTo = resolved.replyTo;
+  const reply = validatedMailReplyTo(resolved.replyTo);
+  if (!reply.ok && !skipEmail) {
+    return { ok: false, statusCode: 400, error: reply.error, spoofFieldsIgnored: spoof };
+  }
+  const mailReplyTo = reply.ok ? reply.replyTo : resolved.replyTo;
 
   const claimId = request.claim_id || null;
   await logEvent(client, {
@@ -194,6 +198,23 @@ export const runSendSignatureRequest = async ({
   const appUrl = signBaseUrl();
   const signerLinks = [];
   for (const signer of signers) {
+    const emailKey = stableEmailIdempotencyKey('esign', requestId, signer.id);
+    if (!skipEmail) {
+      const prior = await peekAuditedEmail(client, emailKey);
+      if (!prior.ok) return { ...prior, spoofFieldsIgnored: spoof };
+      if (prior.duplicate) {
+        signer._skipMailer = true;
+        signer._replayRow = prior.row;
+        signerLinks.push({
+          signer_id: signer.id,
+          signer_name: signer.signer_name,
+          signer_email: signer.signer_email,
+          sign_url: null,
+          duplicate: true,
+        });
+        continue;
+      }
+    }
     const rawToken = generateRawToken();
     const tokenHash = hashToken(rawToken);
     await client.query(
@@ -204,6 +225,7 @@ export const runSendSignatureRequest = async ({
     );
     signer._rawToken = rawToken;
     signer._signUrl = `${appUrl}/sign?token=${rawToken}`;
+    signer._emailKey = emailKey;
     signerLinks.push({
       signer_id: signer.id,
       signer_name: signer.signer_name,
@@ -276,32 +298,39 @@ export const runSendSignatureRequest = async ({
 
   const results = [];
   for (const signer of signers) {
+    if (signer._skipMailer) {
+      results.push({
+        signer_id: signer.id,
+        success: true,
+        delivery: 'idempotent_replay',
+        duplicate: true,
+        providerMessageId: signer._replayRow?.provider_message_id || null,
+      });
+      continue;
+    }
     const signUrl = signer._signUrl;
     const html = emailHtml(signer, request, signUrl, branding);
     const rawSubject = branding.esign_email_subject || 'Action Required: Sign {document.name}';
     const subject = replaceMergeFields(rawSubject, signer, request, signUrl, branding);
-    try {
-      const mailer = send || sendViaSesOrSink;
-      const sendResult = await mailer({
-        to: signer.signer_email,
+    const delivery = await deliverAuditedEmail(client, {
+      templateName: 'esign-signature-request',
+      recipientEmail: signer.signer_email,
+      tenantId,
+      idempotencyKey: signer._emailKey || stableEmailIdempotencyKey('esign', requestId, signer.id),
+      applicationUserId: mapping.application_user_id,
+      metadata: { request_id: requestId, signer_id: signer.id },
+      spoof,
+      send,
+      mailerArgs: {
         subject,
         html,
         text: emailText(signer, request, signUrl, branding),
         from: mailFrom,
         replyTo: mailReplyTo,
-      });
-      const messageId = sendResult.results?.[0]?.messageId || null;
-      const delivery = sendResult.results?.[0]?.delivery || sendResult.mode;
-      await client.query(
-        `UPDATE public.signature_signers
-         SET access_token = NULL, delivery_status = 'sent', email_sent_at = now(),
-             email_provider_message_id = $2
-         WHERE id = $1::uuid`,
-        [signer.id, messageId],
-      );
-      results.push({ signer_id: signer.id, success: true, delivery });
-    } catch (emailErr) {
-      const errMsg = String(emailErr?.message || emailErr).slice(0, 300);
+      },
+    });
+    if (!delivery.ok) {
+      const errMsg = String(delivery.error || 'audit_unavailable').slice(0, 300);
       await client.query(
         `UPDATE public.signature_signers
          SET access_token = NULL, delivery_status = 'failed', delivery_error = $2
@@ -309,7 +338,23 @@ export const runSendSignatureRequest = async ({
         [signer.id, errMsg],
       );
       results.push({ signer_id: signer.id, success: false, error: errMsg });
+      continue;
     }
+    const messageId = delivery.providerMessageId || delivery.replay?.providerMessageId || null;
+    await client.query(
+      `UPDATE public.signature_signers
+       SET access_token = NULL, delivery_status = 'sent', email_sent_at = now(),
+           email_provider_message_id = $2
+       WHERE id = $1::uuid`,
+      [signer.id, messageId],
+    );
+    results.push({
+      signer_id: signer.id,
+      success: true,
+      delivery: delivery.duplicate ? 'idempotent_replay' : (delivery.primary?.delivery || delivery.stagingMode),
+      duplicate: delivery.duplicate === true,
+      providerMessageId: messageId,
+    });
   }
 
   const allFailed = results.length > 0 && results.every((row) => !row.success);
