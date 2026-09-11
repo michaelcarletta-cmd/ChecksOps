@@ -15,13 +15,13 @@ export function TotpQrDisplay({ qr, secret }: Props) {
     <div className="space-y-2">
       {qr && (
         <div className="flex justify-center rounded-md bg-background p-3 border border-border">
-          <img src={qr} alt="Authenticator setup QR code" className="h-44 w-44" />
+          <img src={qr} alt="ChecksOps Financial authenticator setup QR code" className="h-44 w-44" />
         </div>
       )}
       {secret && (
         <div className="space-y-1">
           <p className="text-[11px] text-muted-foreground">
-            Can&apos;t scan? Enter this setup key in your authenticator app.
+            Can&apos;t scan? Enter this ChecksOps Financial setup key in your authenticator app.
           </p>
           <div className="flex items-center gap-2">
             <code className="flex-1 truncate rounded bg-muted px-2 py-1.5 text-xs">{secret}</code>
