@@ -284,7 +284,7 @@ test('AWS disabled path remains 403 provider_disabled and financial auth stays s
   });
 
   const authz = sourceOf('aws/functions/api/providers/production/checkalt-authz.mjs');
-  const mfa = sourceOf('aws/functions/api/auth-mfa.mjs');
+  const mfa = sourceOf('aws/functions/api/auth-financial-totp.mjs');
   assert.match(authz, /financial_stepup_log/);
   assert.match(mfa, /INSERT INTO public\.financial_stepup_log/);
   assert.doesNotMatch(mfa, /checkAltFetch/);

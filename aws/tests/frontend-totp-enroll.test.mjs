@@ -27,7 +27,9 @@ test('Account Security AWS enroll is wired to associate + local QR + verify', ()
   assert.match(card, /getAwsMfaStatus/);
   assert.match(card, /useEffect\(\(\) => \{\s*void load\(\);/);
   assert.match(card, /enrolled === false && !awsQr && !awsSecret/);
-  assert.doesNotMatch(card, /preferredMfa === ['"]SOFTWARE_TOKEN_MFA['"]/);
+  assert.doesNotMatch(card, /localStorage|sessionStorage/);
+  assert.doesNotMatch(mfa, /localStorage\.setItem/);
+  assert.doesNotMatch(card, /gtag|posthog|mixpanel|analytics/);
   assert.doesNotMatch(card, /catch \{[\s\S]{0,80}setEnrolled\(false\)/);
   const display = fs.readFileSync(path.join(ROOT, 'src/components/auth/TotpQrDisplay.tsx'), 'utf8');
   assert.match(display, /Authenticator setup QR code/);
