@@ -367,7 +367,29 @@ test('duplicate idempotency key cannot send twice', async () => {
   assert.equal(sent.length, 1);
 });
 
-test('idempotency lookup failure is fail-closed and does not send', async () => {
+test('idempotency lookup failure is fail-closed in ses mode and does not send', async () => {
+  await withEnv({ AWS_EMAIL_MODE: 'ses', CHECKSOPS_ENV: 'staging', AWS_EMAIL_SES_LOCK_RECIPIENT: LOCK }, async () => {
+    const sent = [];
+    const result = await runSendTransactionalEmail({
+      client: sendClient({ failIdempotencySelect: true }),
+      mapping,
+      spoof,
+      send: capturingMailer(sent),
+      body: {
+        tenantId: TENANT,
+        templateName: 'generic-notification',
+        recipientEmail: LOCK,
+        idempotencyKey: 'txn-lock-2',
+      },
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.statusCode, 503);
+    assert.equal(result.error, 'idempotency_unavailable');
+    assert.equal(sent.length, 0);
+  });
+});
+
+test('sink mode still sends when idempotency storage is unavailable', async () => {
   const sent = [];
   const result = await runSendTransactionalEmail({
     client: sendClient({ failIdempotencySelect: true }),
@@ -378,13 +400,11 @@ test('idempotency lookup failure is fail-closed and does not send', async () => 
       tenantId: TENANT,
       templateName: 'generic-notification',
       recipientEmail: LOCK,
-      idempotencyKey: 'txn-lock-2',
+      idempotencyKey: 'txn-lock-sink',
     },
   });
-  assert.equal(result.ok, false);
-  assert.equal(result.statusCode, 503);
-  assert.equal(result.error, 'idempotency_unavailable');
-  assert.equal(sent.length, 0);
+  assert.equal(result.ok, true);
+  assert.equal(sent.length, 1);
 });
 
 test('sink and ses-identity never call SES even with a lock configured', async () => {

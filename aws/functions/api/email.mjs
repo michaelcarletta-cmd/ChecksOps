@@ -287,7 +287,7 @@ export const runSendTransactionalEmail = async ({
   if (!authorized.ok) return withSpoof(authorized, spoof);
 
   const prior = await findIdempotencyRow(client, suppliedKey ? idempotencyKey : null);
-  if (!prior.ok) {
+  if (!prior.ok && sesOutboundSendEnabled()) {
     return withSpoof({
       ok: false,
       statusCode: 503,
@@ -295,7 +295,7 @@ export const runSendTransactionalEmail = async ({
       error: 'idempotency_unavailable',
     }, spoof);
   }
-  if (prior.row) return replayIdempotentSend(prior.row, spoof);
+  if (prior.ok && prior.row) return replayIdempotentSend(prior.row, spoof);
 
   if (await isSuppressed(client, recipientEmail, authorized.tenantId)) {
     await logEmail(client, {
@@ -332,7 +332,7 @@ export const runSendTransactionalEmail = async ({
   }
 
   let claimed = false;
-  if (suppliedKey) {
+  if (suppliedKey && prior.ok && !prior.row) {
     const claim = await claimIdempotencyKey(client, {
       id: messageId,
       template_name: templateName,
@@ -343,15 +343,19 @@ export const runSendTransactionalEmail = async ({
       metadata: { application_user_id: mapping.application_user_id },
     });
     if (!claim.ok) {
-      return withSpoof({
-        ok: false,
-        statusCode: 503,
-        success: false,
-        error: claim.error || 'idempotency_unavailable',
-      }, spoof);
+      if (sesOutboundSendEnabled()) {
+        return withSpoof({
+          ok: false,
+          statusCode: 503,
+          success: false,
+          error: claim.error || 'idempotency_unavailable',
+        }, spoof);
+      }
+    } else if (claim.duplicate) {
+      return replayIdempotentSend(claim.row, spoof);
+    } else {
+      claimed = claim.claimed === true;
     }
-    if (claim.duplicate) return replayIdempotentSend(claim.row, spoof);
-    claimed = claim.claimed === true;
   }
 
   const rendered = renderTransactionalTemplate(templateName, { ...templateData, branding });
