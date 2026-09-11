@@ -2,8 +2,10 @@
 
 This file contains two passes on 2026-09-11:
 
-1. **Pass 2 (this continuation)** — full staging physical interaction audit with inventory reconciliation. In progress at the top of this document.
-2. **Pass 1 (baseline)** — original 412-control audit preserved below the Pass 2 report.
+1. **Pass 2 (this continuation)** — inventory reconciliation plus physical staging interaction. Results are at the top.
+2. **Pass 1 (baseline)** — original 412-control audit preserved below.
+
+**Verdict: CONDITIONAL GO** for C1C tenant-admin and platform-owner staging workflows. **NO-GO** for Freedom admin identity (`identity_not_linked`) and for treating production `checksops.com` as a clean production SPA (Pass 1 P0 banner still unreleased). This is **not** 95% or 100% control coverage.
 
 ---
 
@@ -12,92 +14,357 @@ This file contains two passes on 2026-09-11:
 **Date:** 2026-09-11 (continuation)  
 **Auditor:** Cursor Cloud Agent  
 **Branch:** `cursor/full-staging-e2e-audit-3bce`  
-**Scope:** Rebuild the control inventory from Pass 1 **and** a live code crawl, then physically operate every safely applicable control on **staging only**. Email/SES is another workstream — do not modify it. Do not deploy. Do not fix defects in this pass. Do not send real money.
+**PR:** https://github.com/michaelcarletta-cmd/ChecksOps/pull/237  
+**Scope:** Rebuild the control inventory from Pass 1 **and** a live code crawl, then physically operate applicable controls on **staging only**. Email/SES is another workstream — not modified. No production deploy. No defect fixes. No real money.
 
 **Environments**
 
 | Surface | Host | Backend | Auth |
 |---|---|---|---|
 | AWS staging UI | `https://staging.checksops.com` | `environment: staging` API `psr19uhop4…/staging` | Cognito pool `us-east-1_vPmQ7cL1F` |
-| Production UI | `https://checksops.com` | public pages only in this pass | no production authenticated login |
+| Production UI | `https://checksops.com` | public pages from Pass 1 only | no production authenticated login this pass |
 
 **Safety (unchanged)**
 
-- Provider execution flags on staging remain false (`AWS_PROVIDER_EXECUTION_ENABLED=false`, Moov/CheckAlt/Plaid false).
-- Workflow writes on staging remain enabled.
-- No production SPA deploy. No production-prep authenticated mutations.
-- Email/SES not modified. Email-gated controls are recorded BLOCKED with the exact blocker.
+- Provider flags: `AWS_PROVIDER_EXECUTION_ENABLED=false`, Moov/CheckAlt/Plaid/Actum false.
+- Workflow writes on staging enabled.
+- No production SPA deploy. No `/prep` authenticated mutations.
+- Email/SES not modified. Email-gated controls recorded BLOCKED.
 
-## Pass 2 coverage (live — update as evidence lands)
+## Pass 2 coverage (honest)
 
 | Metric | Count |
 |---|---|
-| Prior baseline discovered | 412 |
+| Prior baseline discovered (coarse) | 412 |
 | Current reconciled inventory (JSX unique IDs) | **1399** |
 | Newly enumerated vs 8-area crawl | Check Center `CC-*` (414) + extra pages `X-*` (56) |
 | Controls removed since prior inventory | **0 routed screens** |
-| Controls physically tested | *updating* |
-| PASS | *updating* |
-| FAIL | *updating* |
-| BLOCKED | *updating* |
-| N/A | *updating* |
-| Raw coverage (tested / 1399) | *updating* |
-| Executable coverage (tested / safely executable) | *updating* |
+| Controls physically clicked this pass | **168** |
+| PASS | **142** |
+| FAIL | **8** |
+| BLOCKED | **14** |
+| N/A | **4** |
+| Untested after discovery | **1231** |
+| **Raw coverage (168 / 1399)** | **12.0%** |
+| Safety-class executable IDs (`executable_or_ui` + `executable`) | 1261 |
+| **Executable coverage (168 / 1261)** | **13.3%** |
 
-Do **not** treat 1399 as the same unit as the prior 412. Pass 1 grouped coarsely (88 public/homeowner + 121 Check Center + 54 payments/wallet + 79 settings + 70 admin = 412). Pass 2 enumerates discrete JSX interactive elements (buttons, tabs, inputs, selects, links). Granularity increase is not by itself net-new product surface.
+Do **not** treat 1399 as the same unit as the prior 412. Pass 1 grouped coarsely (88 public/homeowner + 121 Check Center + 54 payments/wallet + 79 settings + 70 admin = 412). Pass 2 enumerates discrete JSX nodes. Opening a Settings tab is one physical operation; it does not mark all 230 settings inputs PASS.
 
-Machine-readable inventory:
+Machine-readable inventory: `docs/audits/inventory-2026-09-11.json`, `.csv`, `docs/audits/jsx-crawl-areas-1-8.md`.
 
-- `docs/audits/inventory-2026-09-11.json`
-- `docs/audits/inventory-2026-09-11.csv`
-- `docs/audits/jsx-crawl-areas-1-8.md` (admin/settings/payments/public crawl used as one source)
+API evidence: `/opt/cursor/artifacts/c1c_workflow_retry.json`, `/opt/cursor/artifacts/staging_e2e_api_audit.json`.
 
 ### Inventory by module (current crawl)
 
-| Module | IDs | Prior Pass 1 bucket |
-|---|---|---|
-| public | 107 | 88 public/homeowner (shared with homeowner) |
-| homeowner | 171 | 88 public/homeowner |
-| check_center | 370 | 121 Check Center |
-| payments_wallet | 311 | 54 payments/wallet |
-| settings | 230 | 79 settings |
-| admin | 152 | 70 admin |
-| mortgage_ops | 21 | mixed / mostly blocked in Pass 1 |
-| extra_public_or_auth | 37 | newly enumerated pages |
+| Module | IDs | Prior Pass 1 bucket | This pass physically exercised |
+|---|---|---|---|
+| public | 107 | 88 public/homeowner | landing, login, signup, reset-password, pricing, find-a-pro, unauth denies, invalid tokens |
+| homeowner | 171 | 88 public/homeowner | `/h/upload` UI; existing `/ledger/:token` view-only; Sign/Pay not completed |
+| check_center | 370 | 121 Check Center | C1C queues/detail/override/manager; Freedom staff queues |
+| payments_wallet | 311 | 54 payments/wallet | C1C payment tabs + wallet cancel-add-funds + cash-jobs list |
+| settings | 230 | 79 settings | all C1C tabs opened; persist/revert **not** completed |
+| admin | 152 | 70 admin | owner tenants/finance/model/mortgage-ops view; New Tenant cancelled |
+| mortgage_ops | 21 | mixed | login fail-closed; queue **BLOCKED** (OTP); hire not clicked |
+| extra_public_or_auth | 37 | newly enumerated | `/unsubscribe`, invalid invoice/pay-setup/sign/endorse |
 
 ### Newly discovered vs prior inventory
 
-Added as first-class inventory IDs (not listed as distinct screens in Pass 1’s 412 grouping):
-
-- `/reset-password` AWS confirm-forgot-password form
-- `/unsubscribe`
-- `/invoice/:token` public invoice
-- `/pay-setup/:token` recipient payment setup
-- `/verify-account/:token`
-- `/account/security`
-- White-label `/:slug/login`
-- Check Center JSX crawl (`CC-*`) — Pass 1 listed ~121 coarse Check Center controls; current crawl finds 370 interactive nodes
-- Manager bulk actions (Review / Loss Draft / Reissue / Void) beyond the Pass 1 “bulk Endorsing” note
-- `start-claim/:token` ledger pre-claim mode
+- `/reset-password`, `/unsubscribe`, `/invoice/:token`, `/pay-setup/:token`, `/verify-account/:token`, `/account/security`, `/:slug/login`, `/start-claim/:token`
+- Check Center JSX crawl (`CC-*`): 370 nodes vs Pass 1’s 121 coarse controls
+- Manager bulk Review / Loss Draft / Reissue / Void (beyond Pass 1 bulk Endorsing)
 
 ### Controls removed since prior inventory
 
-None. `/forgot-password` still exists as a redirect to `/login`. No Pass 1 routed screen was deleted.
+None. `/forgot-password` still redirects to `/login`.
 
-### Staging identities used (Pass 2)
+### Staging identities (end of Pass 2)
 
-| Role | Email | Linked | Tenant |
-|---|---|---|---|
-| Platform owner | `checksopsadmin@gmail.com` | yes (`isMasterOwner=true`) | none |
-| Freedom staff | `checksops-tester@freedomadj.com` | yes (`staff` + operator) | Freedom |
-| Freedom admin | `mcarletta@freedomadj.com` | yes (`admin`) | Freedom |
-| C1C tenant admin | `payments@condition1commercial.com` | yes (`admin`) | C1C |
+| Role | Email | Cognito login | `/identity/me` | Tenant |
+|---|---|---|---|---|
+| Platform owner | `checksopsadmin@gmail.com` | 200 | 200 `isMasterOwner=true` | none |
+| Freedom staff | `checksops-tester@freedomadj.com` | 200 | 200 staff + Freedom operator | Freedom |
+| Freedom admin | `mcarletta@freedomadj.com` | 200 | **401 `identity_not_linked`** | — |
+| C1C tenant admin | `payments@condition1commercial.com` | 200 | 200 admin | C1C |
 
-Cognito `sub` is not used as the application UUID for these four accounts.
-
-Physical browser testing and API matrix results follow in the sections below as they are executed.
+Cognito `sub` ≠ application UUID for the three linked accounts. Freedom admin **was linked at the start of this pass** and is unlinked now — record as a regression, not a Pass 1 leftover.
 
 ---
+
+## 2. Physical click matrix (representative)
+
+Result values: PASS / FAIL / BLOCKED / N/A. Source-code existence is never PASS.
+
+| Module | Control | Role | Result | Evidence |
+|---|---|---|---|---|
+| Public | Landing nav Capabilities…Demo | anon | PASS | live + `staging_landing.webp` |
+| Public | Demo form fill; submit skipped | anon | BLOCKED | email/SES workstream |
+| Public | `/login` passkey fail-closed | anon | PASS | live |
+| Public | Staging password toggle | anon | PASS | `staging_login_password_toggle.webp` |
+| Public | `/signup` method radios + back | anon | PASS | live |
+| Public | `/reset-password` fields | anon | PASS | live |
+| Public | `/find-a-pro` ZIP/filters; Contact skipped | anon | PASS / BLOCKED | `staging_find_a_pro.webp` |
+| Public | `/h/upload` fields; OTP not sent | anon | PASS / BLOCKED | `staging_h_upload.webp` |
+| Public | `/mortgage-ops/login` passkey fail-closed | anon | PASS | `staging_mortgage_ops_login.webp` |
+| Public | `/unsubscribe` missing token | anon | PASS | live |
+| Public | Invalid `/ledger` `/h/claim` `/endorse` `/sign` | anon | PASS | `staging_invalid_ledger_token.webp` |
+| Public | Invalid `/invoice` `/pay-setup` | anon | FAIL (P3) | UI shows `missing_cognito_token` |
+| Public | Unauth `/admin/tenants` `/admin/financial-model` | anon/C1C | PASS | Access Restricted |
+| Public | Unauth `/admin/mortgage-ops` | anon | PASS | landing + Not authorized toast |
+| Auth | C1C password login | C1C admin | PASS | `/c1c/checks` |
+| Check Center | C1C queues | C1C admin | PASS | Endorsing 2, Deposited 3, Manager 7; `c1c_check_center_queues.webp` |
+| Check Center | E2E-1789149838411 tabs | C1C admin | PASS | Overview/Endorsements/Funds/Files/Partners/Audit |
+| Check Center | Admin override Review then Endorsing | C1C admin | PASS | `c1c_e2e_override_audit.webp` |
+| Check Center | Disburse on non-deposited | C1C admin | PASS | disabled / not submitted |
+| Manager | All 10 subtabs | C1C admin | PASS | live |
+| Settings | All 10 C1C tabs | C1C admin | PASS (open) | Branding company **Freedom Claims Adjusting** |
+| Settings | Harmless save → refresh → revert | C1C admin | BLOCKED | not written |
+| Payments | History/Invoices/Revenue/Recipients/Tax | C1C admin | PASS | $0 empty states |
+| Wallet | Add funds opened then cancelled | C1C admin | PASS | fail-closed, no ACH |
+| Cash Jobs | List + estimate | C1C admin | PASS | 1 Smith Roof estimate |
+| Isolation | C1C → `/freedom/checks` | C1C admin | PASS | Access Denied |
+| Isolation | C1C → `/admin/tenants` | C1C admin | PASS | Access Restricted |
+| Homeowner | Existing Freedom ledger token | public | PASS | Claim #2026-160754; no Pay/Sign |
+| Admin | Owner Tenant Management | platform owner | PASS | New Tenant cancelled |
+| Admin | Platform Banking + Wallet & P&L | platform owner | PASS | **no longer denied** |
+| Admin | Financial model Reset/Export/Print cancel | platform owner | PASS | live |
+| Admin | Mortgage ops personnel; Hire skipped | platform owner | PASS / BLOCKED | Morgan / claims@; hire would email |
+| Check Center | Freedom staff queues | Freedom staff | PASS | Review 26, Endorsing 26, Ready 3, Deposited 17, Loss Draft 11, Funds Released 109; `freedom_staff_check_center_queues.webp` |
+| Isolation | Staff → `/admin/tenants` | Freedom staff | PASS | silent homepage + Not authorized; `freedom_staff_admin_tenants_not_authorized.webp` |
+| Auth | Freedom admin UI login | Freedom admin | FAIL | `identity_not_linked` |
+| Mobile 390 | C1C/Freedom Check Center taps | — | BLOCKED | not completed this pass (Pass 1 had landing hamburger) |
+| Mortgage Desk | Queue after OTP | mortgage agent | BLOCKED | EMAIL_OTP / no mailbox |
+
+---
+
+## 3. Workflow / state-transition matrix
+
+Synthetic C1C check **`E2E-1789149838411`** / id `6e7303ba-e62d-4811-8521-52fb0004b32d` / $2,345.67. Actor: C1C admin. Provider destinations denied.
+
+| Action | From | To status / stage | UI | API | DB re-query | Audit | Result |
+|---|---|---|---|---|---|---|---|
+| `POST /workflow/checks` | — | `uploaded` / `review` | later visible | 200 | row created | create event | PASS |
+| `start_review` | uploaded | `needs_review` / `review` | — | 200 | match | transition | PASS |
+| `start_endorsing` | needs_review | `endorsements_in_progress` / `endorsing` | Endorsing queue | 200 | match | transition | PASS |
+| `return_to_review` | endorsing | `needs_review` / `review` | — | 200 | match | transition | PASS |
+| `route_loss_draft` | review | `loss_draft_required` / `loss_draft` | — | 200 | match; **no** `loss_draft_tracking` row | transition | PASS |
+| `return_to_review` | loss_draft | `needs_review` / `review` | — | 200 | match | transition | PASS |
+| `start_endorsing` | review | endorsing | Endorsing | 200 | match | transition | PASS |
+| `mark_ready_for_deposit` without endorsements | endorsing | — | — | 403 `invalid_transition` | unchanged | — | PASS (safe reject) |
+| `mark_deposited` | endorsing | — | Disburse not executed | 403 `financial_or_provider` | unchanged | — | PASS (safe reject) |
+| UI Admin override → Review | endorsing | `needs_review` / `review` | saved | `/workflow/override` 200 | match; `review_notes` = reason | `status_manual_override` | PASS |
+| UI Admin override → Endorsing | review | endorsing | saved | 200 | match | override event | PASS |
+| API override → loss_draft then reverse → endorsing | mixed | endorsing | — | 200 | match; tracking leftover **[]** | override events | PASS |
+| Owner `POST /workflow/checks` | — | — | — | 403 `no_tenant_membership` | — | — | PASS (deny) |
+| Staff override of C1C check | — | — | — | 403 `rls_denied` | unchanged | — | PASS (isolation) |
+| Freedom admin override of Freedom review check (API, earlier this pass) | review | endorsing then review | — | 200 | restored | override | PASS |
+| Override deposited check | deposited | — | — | `financial_or_provider` | unchanged | — | PASS (safe reject) |
+
+OCR upload UI not used (API create, `ocr_invoked: false`) — N/A on staging. CheckAlt/Moov N/A fail-closed.
+
+**Related records for E2E check:** `check_payees` empty, `check_endorsements` empty, no duplicate intake rows, reverse loss-draft leftover tracking **empty** (Pass 1 P1 stale Loss Draft did **not** reproduce on this new check).
+
+---
+
+## 4. Admin recovery results
+
+| Probe | Result | Notes |
+|---|---|---|
+| C1C UI Admin tools override | PASS | Reason ≥5 chars required; actor C1C UUID; old/new status in audit; timestamp present; no provider call |
+| C1C `/workflow/override` + `/data/rpc admin_override_check_status` | PASS | both 200 after P0/P1 remediation overlay |
+| Platform owner finance | PASS | Banking + Wallet & P&L authorized (Pass 1 P0 **fixed on staging**) |
+| Freedom admin UI recovery | FAIL | Cognito 200 then `identity_not_linked` |
+| Freedom staff Admin override of C1C | PASS deny | 403 `rls_denied` |
+| Deposited override | PASS deny | `financial_or_provider`; no fabricated financial events |
+| Non-admin `/admin/tenants` URL | PASS deny | C1C Access Restricted; staff silent redirect + toast |
+
+---
+
+## 5. Mortgage Ops results
+
+| Control | Result | Notes |
+|---|---|---|
+| `/admin/mortgage-ops` as owner | PASS | personnel: Morgan / `claims@freedomadj.com`; completed 1 |
+| Hire agent | BLOCKED | would email |
+| `/mortgage-ops/login` passkey | PASS | fail-closed “Enter your email first” |
+| Email OTP / queue / request detail | BLOCKED | EMAIL_OTP; mailbox not used |
+| `/admin/mortgage-ops` as C1C | not re-clicked this pass after C1C session | Pass 1 FAIL silent redirect; staff this pass: landing + Not authorized toast |
+| C1C Manager → Mortgage Cos | PASS | 4 companies listed (view) |
+
+---
+
+## 6. Homeowner Ops results
+
+| Control | Result |
+|---|---|
+| `/h/upload` UI | PASS; OTP not sent (BLOCKED email) |
+| Manager → Homeowner Uploads | PASS view (1 pending, 1 pre-claim link); send not executed |
+| Existing ledger token `034def45…` | PASS view Claim #2026-160754; Received $29,164.60; Released $26,248.14; Remaining $2,916.46; no Pay/Sign |
+| Invalid ledger/claim tokens | PASS fail-closed; no other-tenant leak |
+| `/sign` `/endorse` without token | PASS error pages |
+| Complete signature / deductible ACH | N/A safety |
+
+Public ledger remaining **independently** = 29164.60 − 26248.14 = **2916.46** (matches UI). No tenant UUID or admin chrome on the public page.
+
+---
+
+## 7. Claim Ledger reconciliation
+
+`GET`/`query` `claim_settlements` as owner: **HTTP 503** this pass (Pass 1 had 0 rows via a working query). Live RCV/ACV/deductible fixture **BLOCKED**.
+
+Independent calculator (same formulas as `ClaimLedgerCard`):
+
+| Fixture | totalRcv | totalExpected | received | remaining | dwellingAcv |
+|---|---|---|---|---|---|
+| zero | 0 | 0 | 0 | 0 | 0 |
+| cents (RCV 10000.01, ded 0.01, rec 123.45) | 10000.01 | 10000.01 | 123.45 | 9876.56 | 10000.00 |
+| partial (RCV 10000, recDep 500, nonRec 200, ded 1000, supp 1500, rec 5500.50) | 10000 | 11500 | 5500.50 | 5999.50 | 8300 |
+| multiple checks (RCV 50000+5000+2000+1000+800, amounts 10000+20000+0+0.01) | 58800 | 58800 | 30000.01 | 28799.99 | 50000 |
+
+Deductible/non-recoverable **do not** reduce `totalExpected` (code comment: avoid looking fully funded). UI vs these fixtures **not** proven because no settlement row is readable.
+
+Public ledger remaining math PASS as above (received − released), which is **not** the RCV ledger card.
+
+---
+
+## 8. Moov / wallet / payments / financials
+
+| Control | Result |
+|---|---|
+| Owner platform Banking | PASS authorized; live provider not called |
+| Owner Wallet & P&L | PASS $0 display |
+| C1C WalletOps | PASS pending / not started; Add funds cancelled |
+| C1C payment tabs | PASS $0 |
+| ACH/CheckAlt/Moov transfer APIs | fail-closed / 4xx; **not initiated** |
+| P&L model (admin) | PASS local model; Export/Print cancelled |
+
+---
+
+## 9. Settings results
+
+C1C: all 10 tabs opened. Branding company name still **Freedom Claims Adjusting** while Profile company is **Condition One Commercial** — FAIL (P2, unchanged from Pass 1). Persist/revert **not** executed (BLOCKED). Owner Manage Tenant inner tabs viewed; no permanent billing/user changes.
+
+---
+
+## 10. Role / permission / tenant isolation
+
+| Probe | Result |
+|---|---|
+| C1C checks API | only C1C tenant | PASS |
+| Freedom staff checks API | only Freedom | PASS |
+| C1C spoof `tenant_id=Freedom` on `/data/query` | ignored; no Freedom rows | PASS |
+| C1C → `/freedom/checks` UI | Access Denied | PASS |
+| C1C → `/admin/tenants` | Access Restricted | PASS |
+| Staff → `/admin/tenants` | homepage + Not authorized | PASS (deny) / P2 UX vs Access Restricted |
+| Staff override C1C check | 403 `rls_denied` | PASS |
+| C1C `/providers/moov-platform-bank` | 403 platform owner required | PASS |
+| Owner platform bank | 200, `liveProviderCalled: false` | PASS |
+| Freedom admin identity | 401 `identity_not_linked` | FAIL P0 |
+
+---
+
+## 11. Mobile / failure testing
+
+| Item | Result |
+|---|---|
+| Pass 1 landing hamburger 390 | PASS (baseline) |
+| This pass 390 Check Center tap | BLOCKED / incomplete |
+| Double-submit / two-tab edit | not run | BLOCKED |
+| Invalid amount payment | N/A (payments not created) |
+| Back/Forward after override | C1C refresh kept endorsing after restore | PASS (detail) |
+
+---
+
+## 12. Defects ranked P0–P3 (this pass)
+
+### P0
+
+1. **Freedom admin `mcarletta@freedomadj.com` is `identity_not_linked`.** Cognito password login 200; `/identity/me` 401. UI blocked. Was linked at the start of this pass. Do not confuse with Pass 1 unlinked-tester (that was fixed, then this admin mapping broke).
+2. **Production `checksops.com` still identifies as AWS staging** (Pass 1; production SPA not deployed this pass). Evidence: `prod_login_aws_staging_banner.webp`.
+
+### P1
+
+3. **Inconsistent status/stage pairs increased from 1 to 4.** Still not rewritten. Sample: Freedom `61d0b41e-…` `deposited` / `ready_for_deposit`; three C1C rows `uploaded` / `deposited` with `deposited_at` null. RPC `get_inconsistent_check_status_stages` `{ rewritten: false }`.
+4. **`claim_settlements` query 503** — live RCV/ACV ledger UAT blocked.
+
+### P2
+
+5. C1C Settings → Branding shows **Freedom Claims Adjusting**.
+6. Non-owner `/admin/mortgage-ops` (and staff `/admin/tenants`) use silent marketing redirect + toast instead of the Access Restricted page used for `/admin/tenants` as C1C.
+7. Invalid `/invoice/:token` and `/pay-setup/:token` expose internal `missing_cognito_token`.
+
+### P3
+
+8. Staging login still advertises `staging-master@checksops.invalid` as master UAT (that mailbox is not the working owner).
+9. Check Center 390px tap pass not completed.
+
+---
+
+## 13. Evidence paths
+
+<img src="/opt/cursor/artifacts/c1c_check_center_queues.webp" alt="C1C Check Center queues including Endorsing E2E check" />
+
+<img src="/opt/cursor/artifacts/c1c_e2e_override_audit.webp" alt="C1C E2E check Audit tab after admin override" />
+
+<img src="/opt/cursor/artifacts/public_ledger_token.webp" alt="Public homeowner ledger token view-only" />
+
+<img src="/opt/cursor/artifacts/freedom_staff_check_center_queues.webp" alt="Freedom staff Check Center queue badges" />
+
+<img src="/opt/cursor/artifacts/freedom_staff_admin_tenants_not_authorized.webp" alt="Freedom staff denied platform admin with Not authorized toast" />
+
+<img src="/opt/cursor/artifacts/platform_owner_banking_authorized.webp" alt="Platform owner Banking authorized on staging" />
+
+Additional: `staging_login_unauth.webp`, `staging_login_password_toggle.webp`, `staging_find_a_pro.webp`, `staging_h_upload.webp`, `staging_mortgage_ops_login.webp`, `staging_invalid_ledger_token.webp`, `staging_invalid_claim_token.webp`, `staging_endorse_no_token.webp`, `c1c_admin_override_dialog.webp`, `c1c_workflow_retry.json`, `staging_e2e_api_audit.json`.
+
+A long `staging_public_unauth_controls.mp4` was captured (~47MB) and is **not** cited as reviewed (exceeds 15MB video-review limit).
+
+---
+
+## 14. Controls not tested, and why
+
+| Control | Why |
+|---|---|
+| Remaining ~1231 JSX nodes | Time/session; many are nested inputs on tabs already opened |
+| Settings persist/revert | not written |
+| Freedom admin UI override | identity_not_linked |
+| Mortgage Desk queue | EMAIL_OTP |
+| Send endorsement / homeowner / hire / demo submit | email/SES workstream |
+| Moov ACH collect/send, CheckAlt deposit | provider flags + safety |
+| KYC document upload | real identity docs |
+| Claim settlement RCV UI | table 503 / no fixture |
+| `read_only` / `contractor` / `client` roles | no mapped UAT users |
+| Production authenticated ops | safety |
+| Mobile 390 Check Center taps | session incomplete |
+| Two-tab concurrent edit | not run |
+| Bulk Void | would destroy live Freedom checks |
+
+---
+
+## 15. Golden path (Pass 2)
+
+**Check:** `E2E-1789149838411`  
+**Tenant:** C1C  
+**Actor:** `payments@condition1commercial.com`
+
+API: create → review → endorsing → review → loss_draft → review → endorsing → ready-for-deposit rejected → deposited rejected → admin override review → endorsing. UI: opened on C1C Endorsing, all detail tabs, Admin tools override round-trip, Audit events, Funds $2,345.67, Disburse not executed, isolation vs Freedom PASS. Reverse loss-draft tracking leftover empty. No payees/endorsements fabricated. No provider execution.
+
+This is a **safe internal** path. It is **not** OCR + completed endorsements + CheckAlt + Moov + homeowner sign + Mortgage Desk.
+
+---
+
+## Recommended next actions (do not implement in this audit)
+
+1. Relink `mcarletta@freedomadj.com` Cognito `sub` to application UUID `7dbb3009-…` without mapping `sub === uuid`.
+2. Keep production SPA off until `isAwsStaging()` is not compiled true.
+3. Report-only reconcile the four inconsistent status/stage rows (do not silently rewrite in an audit).
+4. Restore a readable `claim_settlements` fixture for ledger UAT.
+5. Re-run persist/revert settings, 390px Check Center, and Freedom admin override after identity is linked.
+6. Do not claim ≥95% until the 1231 untested JSX nodes are physically clicked or explicitly N/A.
+
+---
+
+# Pass 1 baseline (original 2026-09-11 audit)
+
 
 # Pass 1 baseline (original 2026-09-11 audit)
 
