@@ -373,8 +373,8 @@ test('existing non-sensitive YTD calculations still work', () => {
       payee_name: 'Cash Pat',
     }],
   });
-  const pat = rows.find((r) => r.id === 'acct-1');
-  const cash = rows.find((r) => r.id.startsWith('cash:'));
+  const pat = rows.find((r) => r.id === "acct:acct-1");
+  const cash = rows.find((r) => r.id.startsWith("cash:"));
   assert.equal(pat.total, 650);
   assert.equal(pat.payment_count, 2);
   assert.equal(pat.needs_1099, true);
