@@ -6,6 +6,7 @@ import { evaluateAdminOverride } from '../functions/api/workflow-override.mjs';
 import { inconsistentPairReason, stageForStatus } from '../functions/api/check-status-stage.mjs';
 import { shouldCloseLossDraftTracking, describeReverseCleanup } from '../functions/api/workflow-cleanup.mjs';
 import { evaluateTransition } from '../functions/api/workflow-transitions.mjs';
+import { mapReviewDecisionResult } from '../../src/integrations/aws/reviewDecision.ts';
 
 test('production host is never staging even when Cognito is on', () => {
   assert.equal(isAwsAuthProvider('cognito'), true);
@@ -124,4 +125,13 @@ test('normal transitions still refuse financial destinations', () => {
     check_stage: 'ready_for_deposit',
   });
   assert.equal(denied.error, 'financial_or_provider');
+});
+
+test('review decision adapter exposes new_stage from AWS toStage', () => {
+  const mapped = mapReviewDecisionResult({
+    ok: true,
+    toStage: 'endorsing',
+    data: { id: '891dc6b3-10bc-4fdf-81cf-16697467804a', check_stage: 'endorsing' },
+  });
+  assert.equal(mapped.new_stage, 'endorsing');
 });

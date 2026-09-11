@@ -8,6 +8,7 @@ import {
   invokeAwsCheckAltProviderFunction,
   isLegacyCheckAltProviderFunction,
 } from "@/lib/awsCheckAltMoneyPath";
+import { mapReviewDecisionResult } from "./reviewDecision";
 
 export {
   AWS_STAGING_AUTH_SESSION_KEY,
@@ -804,7 +805,7 @@ export function createAwsStagingClient(options: AwsStagingClientOptions = {}) {
         if (!response.ok) {
           return { data: null, error: postgrestError(String(body.message || body.error || "rpc_failed"), String(body.error || "42501")) };
         }
-        return { data: body.data ?? body, error: null };
+        return { data: mapReviewDecisionResult(body), error: null };
       }
       if (name === "admin_delete_check") {
         const checkId = String(args.p_check_id || args.check_id || "");
