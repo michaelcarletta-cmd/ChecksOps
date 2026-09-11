@@ -12,6 +12,8 @@ import {
   mapReviewPath,
   TRANSITIONS,
 } from './workflow-transitions.mjs';
+import { applyReverseTransitionCleanup } from './workflow-cleanup.mjs';
+import { executeAdminOverride } from './workflow-override.mjs';
 import {
   evaluateEndorsementEligibility,
   loadCheckEndorsements,
@@ -343,6 +345,15 @@ export const handleCheckTransition = async (event, deps = {}) => {
       [looked.check.id, decided.nextStatus, decided.nextStage, mapping.application_user_id, notes.value],
     )).rows;
     if (!rows.length) return denied(spoof, { error: 'rls_denied', message: 'check not writable or no longer unlinked' });
+    await applyReverseTransitionCleanup(client, {
+      checkId: looked.check.id,
+      action,
+      fromStatus: looked.check.status,
+      fromStage: looked.check.check_stage,
+      toStatus: decided.nextStatus,
+      toStage: decided.nextStage,
+      actorId: mapping.application_user_id,
+    });
     await client.query(
       `INSERT INTO public.check_audit_log (
          check_id, tenant_id, actor_id, event_type, event_description, event_data
@@ -404,6 +415,36 @@ const deleteChildren = async (client, checkId) => {
   await client.query('DELETE FROM public.check_review_decisions WHERE check_id = $1::uuid', [checkId]);
 };
 
+export const handleAdminOverride = async (event, deps = {}) => {
+  const gate = requireWorkflowEnabled(event, deps);
+  if (gate.blocked) {
+    return withIdentity(event, async () => gate.blocked, deps);
+  }
+  return withIdentityWrite(event, async ({ client, mapping, claims, body, spoof }) => {
+    const checkId = body.check_id || body.checkId || body.p_check_id || body.id;
+    const looked = await lookupWorkflowCheck(client, checkId);
+    if (looked.error) {
+      return denied(spoof, { statusCode: looked.error === 'invalid_uuid' ? 400 : 403, ...looked });
+    }
+    const executed = await executeAdminOverride(client, {
+      check: looked.check,
+      mapping,
+      destinationStatus: body.new_status || body.p_new_status || body.status,
+      reason: body.reason || body.p_reason || body.review_notes,
+    });
+    if (!executed.ok) {
+      return denied(spoof, { statusCode: executed.statusCode || 403, ...executed });
+    }
+    return okResult({
+      mapping,
+      claims,
+      spoof,
+      data: executed.data,
+      extra: { providerExecution: false, financialAuthorization: false },
+    });
+  }, deps);
+};
+
 export const handleDeleteCheck = async (event, deps = {}) => {
   const gate = requireWorkflowEnabled(event, deps);
   if (gate.blocked) {
@@ -447,6 +488,7 @@ export const handleDeleteCheck = async (event, deps = {}) => {
 export const matchWorkflowRoute = (method, path) => {
   if (method === 'GET' && path === '/workflow/status') return 'status';
   if (method === 'POST' && path === '/workflow/checks') return 'create';
+  if (method === 'POST' && (path === '/workflow/override' || path === '/workflow/checks/override')) return 'override';
   if (method === 'POST' && (path === '/workflow/transition' || path === '/workflow/checks/transition')) return 'transition';
   const transition = path.match(/^\/workflow\/checks\/([^/]+)\/transition$/);
   if (method === 'POST' && transition) return { kind: 'transition', checkId: decodeURIComponent(transition[1]) };
@@ -460,6 +502,7 @@ export const handleWorkflowRequest = async (event, path, method, deps = {}) => {
   if (!match) return null;
   if (match === 'status') return handleWorkflowStatus(event);
   if (match === 'create') return handleCreateCheck(event, deps);
+  if (match === 'override') return handleAdminOverride(event, deps);
   if (match === 'transition') return handleCheckTransition(event, deps);
   if (match.kind === 'transition') {
     const body = parseBody(event);

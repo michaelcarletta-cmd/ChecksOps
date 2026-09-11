@@ -7,7 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { KeyRound, Loader2, Plus, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { deleteAwsPasskey, listAwsPasskeys, registerAwsPasskey } from "@/lib/awsPasskeys";
-import { isAwsStaging, isAwsStagingHttpsPasskeysEnabled } from "@/lib/awsStaging";
+import { isAwsAuth, isAwsHttpsPasskeysEnabled } from "@/lib/awsStaging";
 import {
   formatPasskeyMetaLine,
   passkeyCreatedAtIso,
@@ -28,12 +28,12 @@ export function PasskeyManagerCard({ onChanged }: { onChanged?: () => void }) {
   const [rows, setRows] = useState<PasskeyRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
-  const awsStaging = isAwsStaging();
-  const awsHttpsPasskeys = isAwsStagingHttpsPasskeysEnabled();
+  const awsAuth = isAwsAuth();
+  const awsHttpsPasskeys = isAwsHttpsPasskeysEnabled();
   const supported = passkeysSupported();
-  // AWS staging: Cognito WebAuthn only on the HTTPS staging origin. Production: Supabase table.
-  const cognitoMode = awsStaging && awsHttpsPasskeys;
-  const blockedOnAwsHttp = awsStaging && !awsHttpsPasskeys;
+  // Cognito WebAuthn on the HTTPS origin matching VITE_APP_URL. Production: Supabase table.
+  const cognitoMode = awsAuth && awsHttpsPasskeys;
+  const blockedOnAwsHttp = awsAuth && !awsHttpsPasskeys;
 
   const load = useCallback(async () => {
     setLoading(true);

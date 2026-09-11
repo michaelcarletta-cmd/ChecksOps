@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, KeyRound, Mail, CheckCircle2 } from "lucide-react";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 import { isPlatformOwner } from "@/lib/masterMerchant";
-import { isAwsStaging, isAwsStagingHttpsPasskeysEnabled } from "@/lib/awsStaging";
+import { isAwsAuth, isAwsStaging, isAwsHttpsPasskeysEnabled } from "@/lib/awsStaging";
 import { signInWithAwsPasskey } from "@/lib/awsPasskeys";
 import { passkeysSupported, sendMagicLink, signInWithPasskey } from "@/lib/passkeys";
 import { startAwsEmailOtp, verifyAwsEmailOtp } from "@/lib/awsPasswordless";
@@ -26,14 +26,15 @@ export function WhiteLabelLogin() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
+  const awsAuth = isAwsAuth();
   const awsStaging = isAwsStaging();
-  const awsHttpsPasskeys = isAwsStagingHttpsPasskeysEnabled();
+  const awsHttpsPasskeys = isAwsHttpsPasskeysEnabled();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [linkSent, setLinkSent] = useState(false);
   const [awsSession, setAwsSession] = useState("");
   const [code, setCode] = useState("");
-  const supportsPasskeys = awsStaging
+  const supportsPasskeys = awsAuth
     ? awsHttpsPasskeys && passkeysSupported()
     : passkeysSupported();
 
@@ -77,7 +78,7 @@ export function WhiteLabelLogin() {
   const handlePasskey = async () => {
     setLoading(true);
     try {
-      if (awsStaging) {
+      if (awsAuth) {
         if (!awsHttpsPasskeys) {
           throw new Error("Passkeys require https://staging.checksops.com. Use email verification on this origin.");
         }
@@ -108,7 +109,7 @@ export function WhiteLabelLogin() {
     }
     setLoading(true);
     try {
-      if (awsStaging) {
+      if (awsAuth) {
         const pending = await startAwsEmailOtp(email);
         setEmail(pending.email);
         setAwsSession(pending.session);
@@ -119,7 +120,7 @@ export function WhiteLabelLogin() {
       }
     } catch (err: any) {
       toast({
-        title: awsStaging ? "Could not send verification code" : "Could not send sign-in link",
+        title: awsAuth ? "Could not send verification code" : "Could not send sign-in link",
         description: err.message,
         variant: "destructive",
       });
@@ -171,7 +172,7 @@ export function WhiteLabelLogin() {
               <Alert>
                 <CheckCircle2 className="h-4 w-4" />
                 <AlertDescription className="text-sm">
-                  {awsStaging ? (
+                  {awsAuth ? (
                     <>Check <span className="font-medium">{email}</span> for your one-time verification code.</>
                   ) : (
                     <>
@@ -181,7 +182,7 @@ export function WhiteLabelLogin() {
                   )}
                 </AlertDescription>
               </Alert>
-              {awsStaging && (
+              {awsAuth && (
                 <form onSubmit={handleAwsVerify} className="space-y-3">
                   <div className="space-y-2">
                     <Label htmlFor="wl-email-code">Email verification code</Label>
@@ -261,15 +262,15 @@ export function WhiteLabelLogin() {
 
                 <Button type="submit" variant="outline" className="w-full" disabled={loading}>
                   {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
-                  {awsStaging ? "Email me a verification code" : "Email me a sign-in link"}
+                  {awsAuth ? "Email me a verification code" : "Email me a sign-in link"}
                 </Button>
               </form>
 
               <p className="text-center text-[11px] text-muted-foreground">
-                {awsStaging
+                {awsAuth
                   ? (awsHttpsPasskeys
-                    ? "AWS staging: Cognito passkeys and email verification."
-                    : "AWS staging passkeys require https://staging.checksops.com.")
+                    ? "Passkeys use Cognito WebAuthn; email verification remains available."
+                    : "Passkeys require the HTTPS origin configured for this environment.")
                   : "Two-factor verification is still required before any money moves."}
               </p>
             </>

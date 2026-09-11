@@ -71,8 +71,10 @@ test('Step 3 validation and rollback preserve holds and execute-api', () => {
   assert.match(design, /AuthorizationType=NONE/);
   assert.match(design, /GetDistributionConfig/);
   assert.match(design, /AwsStagingBanner/);
-  assert.match(design, /window\.location\.hostname/);
-  assert.match(design, /Do \*\*not\*\* rename or invert `isAwsStaging\(\)`/);
+  assert.match(design, /checksops\.com/);
+  assert.match(design, /isAwsAuth/);
+  assert.match(design, /isAwsStaging/);
+  assert.doesNotMatch(design, /Do \*\*not\*\* rename or invert `isAwsStaging\(\)`/);
 });
 
 test('reference authorizer never logs headers and supports dual-secret observe/require', () => {

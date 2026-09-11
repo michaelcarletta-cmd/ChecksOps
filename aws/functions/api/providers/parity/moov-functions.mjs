@@ -74,6 +74,8 @@ const wrap = (handler) => async (event, deps = {}) => {
       mapping,
       body,
       requireAdmin: handler.requireAdmin === true,
+      requirePlatformOwner: handler.requirePlatformOwner === true,
+      allowDisabledProvider: handler.allowDisabledProvider === true,
       loadSandbox: loader,
     });
     if (ctx.error) return { ...ctx, spoofFieldsIgnored: spoof, applicationUserId: mapping.application_user_id };

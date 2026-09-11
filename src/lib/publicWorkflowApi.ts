@@ -1,4 +1,4 @@
-import { awsApiBaseUrl, isAwsStaging } from "@/lib/awsStaging";
+import { awsApiBaseUrl, isAwsAuth } from "@/lib/awsStaging";
 
 const PRODUCTION_SUPABASE_URL = "https://nbcqwpysqgyxrrbgtmkw.supabase.co";
 const PRODUCTION_ANON_FALLBACK =
@@ -26,7 +26,7 @@ export type PublicWorkflowName = keyof typeof ROUTES;
  * AWS staging never falls back to production Storage or edge functions.
  */
 export function publicWorkflowRequest(name: PublicWorkflowName) {
-  if (isAwsStaging()) {
+  if (isAwsAuth()) {
     return {
       url: `${awsApiBaseUrl()}${ROUTES[name].aws}`,
       headers: { "Content-Type": "application/json" } as Record<string, string>,
