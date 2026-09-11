@@ -42,6 +42,11 @@ Resources:
                 Action:
                   - secretsmanager:GetSecretValue
                 Resource: !Ref AppDatabaseSecretArn
+              - Sid: FinancialTotpWrapKeyRead
+                Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: arn:aws:secretsmanager:us-east-1:806168576068:secret:checksops/production/financial-totp-wrap-key-81bFID
               - Sid: PrivateCheckImageBucket
                 Effect: Allow
                 Action:

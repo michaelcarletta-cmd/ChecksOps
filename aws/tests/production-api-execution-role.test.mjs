@@ -13,6 +13,8 @@ test('production API execution role template is least-privilege and omits stagin
   assert.match(yaml, /AWSXrayWriteOnlyAccess/);
   assert.match(yaml, /secretsmanager:GetSecretValue/);
   assert.match(yaml, /rds-db-credentials\/checksops-staging\/checksops\/1788286468693-b4U0Rn/);
+  assert.match(yaml, /checksops\/production\/financial-totp-wrap-key-81bFID/);
+  assert.match(yaml, /FinancialTotpWrapKeyRead/);
   assert.match(yaml, /checksops-staging-privatefilesbucket-erzqsolpucjp/);
   assert.match(yaml, /s3:GetObject/);
   assert.match(yaml, /s3:PutObject/);
