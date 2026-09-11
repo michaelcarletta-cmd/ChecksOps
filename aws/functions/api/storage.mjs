@@ -134,7 +134,9 @@ const denyBucket = (bucket) => {
 };
 
 export const authorizeObject = async (client, bucket, objectPath, { userId } = {}) => {
-  const rel = normalizePath(objectPath, bucket);
+  const relRaw = normalizePath(objectPath, bucket);
+  if (!relRaw) return { authorized: false, reason: 'invalid_path' };
+  const rel = relRaw.split('?')[0];
   if (!rel) return { authorized: false, reason: 'invalid_path' };
   const candidates = pathCandidates(bucket, objectPath);
   const queries = BUCKET_AUTH_SQL[bucket] || [];

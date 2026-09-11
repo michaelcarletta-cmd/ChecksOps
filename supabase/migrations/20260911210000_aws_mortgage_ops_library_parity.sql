@@ -1,7 +1,13 @@
 -- Idempotent Mortgage Ops library overlay.
 -- Do not apply from this PR.
--- On AWS RDS (aws_can_access_tenant present): installs agent SELECT + tenant-admin write helpers.
+-- On AWS RDS (aws_can_access_tenant present): installs agent SELECT + tenant-admin INSERT helpers.
 -- On Lovable/Supabase: only reaffirms the existing category-filtered auto-share trigger.
+--
+-- Function bodies, path equality, category checks, FOR INSERT, and immediate
+-- PUBLIC revocations match aws/rls/sql/29_mortgage_ops_library_parity.sql.
+-- Grant difference is intentional: this migration grants EXECUTE to authenticated
+-- only. On AWS RDS, checksops inherits that via GRANT authenticated TO checksops.
+-- The RDS overlay also grants checksops explicitly.
 
 CREATE OR REPLACE FUNCTION public.share_library_docs_to_mortgage_request()
 RETURNS trigger
@@ -21,6 +27,7 @@ BEGIN
   RETURN NEW;
 END;
 $$;
+REVOKE ALL ON FUNCTION public.share_library_docs_to_mortgage_request() FROM PUBLIC;
 
 DO $$
 BEGIN
@@ -42,13 +49,19 @@ BEGIN
     SET row_security = off
     AS $body$
       SELECT public.has_role(auth.uid(), 'mortgage_agent'::public.app_role)
+         AND _id IS NOT NULL
          AND EXISTS (
            SELECT 1
            FROM public.mortgage_request_library_documents d
            JOIN public.mortgage_handling_requests r
              ON r.id = d.request_id
             AND r.tenant_id = d.tenant_id
+           JOIN public.tenant_documents td
+             ON td.id = d.tenant_document_id
+            AND td.tenant_id = d.tenant_id
            WHERE d.id = _id
+             AND d.tenant_document_id IS NOT NULL
+             AND td.doc_type LIKE 'library:mortgage:%'
              AND (
                r.status IN ('requested', 'in_progress')
                OR r.assigned_employee_id = auth.uid()
@@ -56,6 +69,7 @@ BEGIN
          );
     $body$;
   $fn$;
+  EXECUTE 'REVOKE ALL ON FUNCTION public.aws_mortgage_agent_can_read_library_document(uuid) FROM PUBLIC';
 
   EXECUTE $fn$
     CREATE OR REPLACE FUNCTION public.aws_mortgage_agent_can_read_library_path(
@@ -73,15 +87,23 @@ BEGIN
       SELECT auth.uid() IS NOT NULL
          AND auth.uid() = _user_id
          AND public.has_role(_user_id, 'mortgage_agent'::public.app_role)
+         AND NULLIF(btrim(_rel), '') IS NOT NULL
+         AND position(CHR(0) in _rel) = 0
          AND EXISTS (
            SELECT 1
            FROM public.mortgage_request_library_documents d
            JOIN public.mortgage_handling_requests r
              ON r.id = d.request_id
             AND r.tenant_id = d.tenant_id
-           WHERE (
-                  d.file_path = ANY(_candidates)
-               OR split_part(d.file_path, '?', 1) LIKE '%' || COALESCE(_rel, '')
+           JOIN public.tenant_documents td
+             ON td.id = d.tenant_document_id
+            AND td.tenant_id = d.tenant_id
+           WHERE d.tenant_document_id IS NOT NULL
+             AND td.doc_type LIKE 'library:mortgage:%'
+             AND (
+                  split_part(d.file_path, '?', 1) = _rel
+               OR d.file_path = ANY(COALESCE(_candidates, ARRAY[]::text[]))
+               OR split_part(d.file_path, '?', 1) = ANY(COALESCE(_candidates, ARRAY[]::text[]))
                 )
              AND (
                   r.status IN ('requested', 'in_progress')
@@ -90,6 +112,7 @@ BEGIN
          );
     $body$;
   $fn$;
+  EXECUTE 'REVOKE ALL ON FUNCTION public.aws_mortgage_agent_can_read_library_path(text[], text, uuid) FROM PUBLIC';
 
   EXECUTE $fn$
     CREATE OR REPLACE FUNCTION public.aws_can_manage_mortgage_library(_tenant_id uuid)
@@ -114,14 +137,15 @@ BEGIN
          );
     $body$;
   $fn$;
-
-  EXECUTE 'REVOKE ALL ON FUNCTION public.aws_mortgage_agent_can_read_library_document(uuid) FROM PUBLIC';
-  EXECUTE 'REVOKE ALL ON FUNCTION public.aws_mortgage_agent_can_read_library_path(text[], text, uuid) FROM PUBLIC';
   EXECUTE 'REVOKE ALL ON FUNCTION public.aws_can_manage_mortgage_library(uuid) FROM PUBLIC';
+
   EXECUTE 'GRANT EXECUTE ON FUNCTION public.aws_mortgage_agent_can_read_library_document(uuid) TO authenticated';
   EXECUTE 'GRANT EXECUTE ON FUNCTION public.aws_mortgage_agent_can_read_library_path(text[], text, uuid) TO authenticated';
   EXECUTE 'GRANT EXECUTE ON FUNCTION public.aws_can_manage_mortgage_library(uuid) TO authenticated';
 
+  EXECUTE 'DROP POLICY IF EXISTS "read shared library docs" ON public.mortgage_request_library_documents';
+  EXECUTE 'DROP POLICY IF EXISTS "manage shared library docs" ON public.mortgage_request_library_documents';
+  EXECUTE 'DROP POLICY IF EXISTS "delete shared library docs" ON public.mortgage_request_library_documents';
   EXECUTE 'DROP POLICY IF EXISTS aws_select_mortgage_request_library_documents ON public.mortgage_request_library_documents';
   EXECUTE $pol$
     CREATE POLICY aws_select_mortgage_request_library_documents ON public.mortgage_request_library_documents
@@ -136,8 +160,7 @@ BEGIN
   EXECUTE 'DROP POLICY IF EXISTS aws_write_mortgage_request_library_documents ON public.mortgage_request_library_documents';
   EXECUTE $pol$
     CREATE POLICY aws_write_mortgage_request_library_documents ON public.mortgage_request_library_documents
-      FOR ALL TO authenticated
-      USING (public.aws_can_manage_mortgage_library(tenant_id))
+      FOR INSERT TO authenticated
       WITH CHECK (public.aws_can_manage_mortgage_library(tenant_id))
   $pol$;
 END $$;

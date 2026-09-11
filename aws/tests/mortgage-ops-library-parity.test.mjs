@@ -7,6 +7,7 @@ import { WRITE_ALLOWLIST } from '../functions/api/write-allowlist.mjs';
 import { executeAppMetadataWrite } from '../functions/api/write-app-metadata.mjs';
 import { executeAllowlistedWrite, handleWrite } from '../functions/api/write.mjs';
 import { authorizeObject, handleStorageSign } from '../functions/api/storage.mjs';
+import { normalizePath, pathCandidates } from '../functions/api/storage-paths.mjs';
 import {
   MORTGAGE_LIBRARY_DOC_PREFIX,
   MORTGAGE_LIBRARY_STORAGE_AUTH_SQL,
@@ -14,6 +15,10 @@ import {
   qualifyingMortgageLibraryDocsForTenant,
   executeMortgageRequestLibraryDocuments,
 } from '../functions/api/mortgage-library-docs.mjs';
+import {
+  MORTGAGE_OPS_LIBRARY_PARITY_SQL,
+  MORTGAGE_OPS_LIBRARY_PARITY_REQUIRED_BEFORE,
+} from '../rls/oneshot/mortgage-ops-library-parity-order.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ADMIN_ID = 'abd3c2a0-6dc0-4680-92dd-a013e1141c91';
@@ -26,6 +31,8 @@ const OTHER_DOC_ID = '44444444-4444-4444-8444-444444444444';
 const TEMPLATE_DOC_ID = '55555555-5555-4555-8555-555555555555';
 const OPEN_REQ = '66666666-6666-4666-8666-666666666666';
 const CLOSED_REQ = '77777777-7777-4777-8777-777777777777';
+const CANCELLED_REQ = '88888888-8888-4888-8888-888888888888';
+const MISSING_REQ = '99999999-9999-4999-8999-999999999999';
 const ATTACH_PATH = `${TENANT}/library/mortgage/w9.pdf`;
 const TEMPLATE_PATH = `${TENANT}/library/template/tpa.pdf`;
 const FORGED_KEY = `${TENANT}/verification/kyc-passport.pdf`;
@@ -57,8 +64,19 @@ const otherTenantDoc = {
 
 const openRequest = { id: OPEN_REQ, tenant_id: TENANT, status: 'requested', assigned_employee_id: null };
 const closedRequest = { id: CLOSED_REQ, tenant_id: TENANT, status: 'completed', assigned_employee_id: null };
+const cancelledRequest = { id: CANCELLED_REQ, tenant_id: TENANT, status: 'cancelled', assigned_employee_id: null };
 
 const readSql = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
+const overlaySql = () => readSql('rls/sql/29_mortgage_ops_library_parity.sql');
+const migrationSql = () => readSql('../supabase/migrations/20260911210000_aws_mortgage_ops_library_parity.sql');
+
+const functionBody = (sql, name) => {
+  const start = sql.indexOf(`CREATE OR REPLACE FUNCTION public.${name}`);
+  assert.ok(start >= 0, name);
+  const revoke = sql.indexOf(`REVOKE ALL ON FUNCTION public.${name}`, start);
+  assert.ok(revoke > start, `immediate revoke missing for ${name}`);
+  return sql.slice(start, revoke);
+};
 
 test('approved Mortgage Ops category is only library:mortgage:%', () => {
   assert.equal(MORTGAGE_LIBRARY_DOC_PREFIX, 'library:mortgage:');
@@ -70,12 +88,56 @@ test('approved Mortgage Ops category is only library:mortgage:%', () => {
   assert.equal(isApprovedMortgageLibraryDocType('library:catalog:roofing'), false);
   assert.equal(isApprovedMortgageLibraryDocType('library:letterhead:logo'), false);
   assert.equal(isApprovedMortgageLibraryDocType('verification'), false);
-  const overlay = readSql('rls/sql/29_mortgage_ops_library_parity.sql');
+  const overlay = overlaySql();
   const lovable = readSql('../supabase/migrations/20260830190318_06a7b3a3-9dcf-4298-9db7-fda095678bc5.sql');
   assert.match(overlay, /td\.doc_type LIKE 'library:mortgage:%'/);
   assert.match(lovable, /td\.doc_type LIKE 'library:mortgage:%'/);
   assert.equal(WRITE_ALLOWLIST.mortgage_request_library_documents.ops.has('upsert'), true);
+  assert.equal(WRITE_ALLOWLIST.mortgage_request_library_documents.ops.has('update'), false);
   assert.equal(WRITE_ALLOWLIST.mortgage_request_library_documents.ops.has('delete'), false);
+});
+
+test('oneshot applies 29 only after write helpers and complete write policies', () => {
+  const complete = fs.readFileSync(path.join(ROOT, 'rls/oneshot/completeAuth.mjs'), 'utf8');
+  const index = fs.readFileSync(path.join(ROOT, 'rls/oneshot/index.mjs'), 'utf8');
+  const writePlan = fs.readFileSync(path.join(ROOT, 'rls/oneshot/writePlan.mjs'), 'utf8');
+  const applied = [...complete.matchAll(/readSql\('([^']+\.sql)'\)/g)].map((match) => match[1]);
+  const idx29 = applied.indexOf(MORTGAGE_OPS_LIBRARY_PARITY_SQL);
+  assert.ok(idx29 > 0, 'completeAuth must apply 29');
+  for (const dep of MORTGAGE_OPS_LIBRARY_PARITY_REQUIRED_BEFORE) {
+    const idx = applied.indexOf(dep);
+    assert.ok(idx >= 0 && idx < idx29, `${dep} must precede ${MORTGAGE_OPS_LIBRARY_PARITY_SQL}`);
+  }
+  assert.doesNotMatch(index, /applySql\('29_mortgage_ops_library_parity\.sql'\)/);
+  assert.doesNotMatch(writePlan, /29_mortgage_ops_library_parity\.sql'\)/);
+  assert.match(writePlan, /Do not apply 29_mortgage_ops_library_parity/);
+  assert.match(index, /Do not apply 29 from ddl/);
+});
+
+test('SQL overlay revokes PUBLIC immediately, requires mortgage category, and uses exact paths', () => {
+  const overlay = overlaySql();
+  const migration = migrationSql();
+  for (const sql of [overlay, migration]) {
+    const docFn = functionBody(sql, 'aws_mortgage_agent_can_read_library_document');
+    const pathFn = functionBody(sql, 'aws_mortgage_agent_can_read_library_path');
+    const manageFn = functionBody(sql, 'aws_can_manage_mortgage_library');
+    assert.match(docFn, /td\.doc_type LIKE 'library:mortgage:%'/);
+    assert.match(pathFn, /td\.doc_type LIKE 'library:mortgage:%'/);
+    assert.match(docFn, /JOIN public\.tenant_documents td/);
+    assert.match(pathFn, /JOIN public\.tenant_documents td/);
+    assert.doesNotMatch(pathFn, /LIKE '%' \|\|/);
+    assert.doesNotMatch(pathFn, /LIKE '%'\s*\|\|/);
+    assert.match(pathFn, /split_part\(d\.file_path, '\?', 1\) = _rel/);
+    assert.match(pathFn, /d\.file_path = ANY/);
+    assert.match(sql, /FOR INSERT TO authenticated/);
+    assert.doesNotMatch(sql, /aws_write_mortgage_request_library_documents[\s\S]*FOR ALL TO authenticated/);
+    assert.match(manageFn, /aws_can_write_tenant/);
+    assert.match(sql, /DROP POLICY IF EXISTS "manage shared library docs"/);
+    assert.match(sql, /DROP POLICY IF EXISTS "delete shared library docs"/);
+  }
+  assert.match(overlay, /GRANT EXECUTE[\s\S]*TO checksops, authenticated/);
+  assert.doesNotMatch(migration, /TO checksops, authenticated/);
+  assert.match(migration, /Grant difference is intentional/);
 });
 
 test('new active request receives only qualifying auto-share documents', () => {
@@ -92,13 +154,23 @@ const libraryClient = ({
   actorRole = 'admin',
   tenantRole = 'admin',
   member = true,
+  memberships = null,
   documents = { [DOC_ID]: mortgageDoc },
-  requests = { [OPEN_REQ]: openRequest, [CLOSED_REQ]: closedRequest },
+  requests = {
+    [OPEN_REQ]: openRequest,
+    [CLOSED_REQ]: closedRequest,
+    [CANCELLED_REQ]: cancelledRequest,
+  },
   existing = [],
   insertConflict = false,
 } = {}) => {
   const queries = [];
   let inserts = 0;
+  const roleForTenant = (tenantId) => {
+    if (memberships) return memberships[tenantId] || null;
+    if (!member || tenantId !== TENANT) return null;
+    return tenantRole;
+  };
   return {
     queries,
     inserts: () => inserts,
@@ -108,8 +180,8 @@ const libraryClient = ({
         return { rows: documents[params[0]] ? [documents[params[0]]] : [] };
       }
       if (/FROM public.tenant_users/.test(sql)) {
-        if (!member || params[1] !== TENANT) return { rows: [] };
-        return { rows: [{ role: tenantRole }] };
+        const role = roleForTenant(params[1]);
+        return role ? { rows: [{ role }] } : { rows: [] };
       }
       if (/FROM public.user_roles/.test(sql)) {
         return actorRole ? { rows: [{ role: actorRole }] } : { rows: [] };
@@ -138,6 +210,14 @@ const libraryClient = ({
     },
   };
 };
+
+const allowlisted = (client, body) => executeAllowlistedWrite({
+  client,
+  mapping: { application_user_id: ADMIN_ID },
+  body,
+  checkWorkflowEnabled: true,
+  applicationWorkflowEnabled: true,
+});
 
 test('existing active request receives authorized backfill', async () => {
   const client = libraryClient();
@@ -250,6 +330,113 @@ test('write path is disabled without identity mapping via allowlist authz', asyn
   assert.equal(denied.error, 'not_authorized');
 });
 
+test('executeAllowlistedWrite denies update, delete, aliases, and batches', async () => {
+  const client = libraryClient();
+  const values = { request_id: OPEN_REQ, tenant_document_id: DOC_ID };
+  const update = await allowlisted(client, { table: 'mortgage_request_library_documents', op: 'update', values });
+  assert.equal(update.error, 'operation_not_allowlisted');
+  const del = await allowlisted(client, { table: 'mortgage_request_library_documents', op: 'delete', values });
+  assert.equal(del.error, 'operation_not_allowlisted');
+  const viaOperation = await allowlisted(client, {
+    table: 'mortgage_request_library_documents',
+    operation: 'delete',
+    values,
+  });
+  assert.equal(viaOperation.error, 'operation_not_allowlisted');
+  const viaUpdateAlias = await allowlisted(client, {
+    table: 'mortgage_request_library_documents',
+    operation: 'update',
+    values,
+  });
+  assert.equal(viaUpdateAlias.error, 'operation_not_allowlisted');
+  const batch = await allowlisted(client, {
+    table: 'mortgage_request_library_documents',
+    op: 'upsert',
+    values: [values, { request_id: CLOSED_REQ, tenant_document_id: DOC_ID }],
+  });
+  assert.equal(batch.error, 'batch_writes_disabled');
+  assert.equal(client.inserts(), 0);
+});
+
+test('executeAllowlistedWrite ignores forged tenant_id and file_path', async () => {
+  const client = libraryClient();
+  const result = await allowlisted(client, {
+    table: 'mortgage_request_library_documents',
+    op: 'upsert',
+    values: {
+      request_id: OPEN_REQ,
+      tenant_document_id: DOC_ID,
+      tenant_id: OTHER_TENANT,
+      file_path: FORGED_KEY,
+      doc_type: 'library:template:tpa',
+    },
+  });
+  assert.equal(result.rows[0].tenant_id, TENANT);
+  assert.equal(result.rows[0].file_path, ATTACH_PATH);
+  assert.equal(result.rows[0].doc_type, 'library:mortgage:w-9');
+});
+
+test('executeAllowlistedWrite denies forged request/document combinations', async () => {
+  const missingReq = await allowlisted(libraryClient(), {
+    table: 'mortgage_request_library_documents',
+    op: 'insert',
+    values: { request_id: MISSING_REQ, tenant_document_id: DOC_ID },
+  });
+  assert.equal(missingReq.error, 'rls_denied');
+
+  const missingDoc = await allowlisted(libraryClient(), {
+    table: 'mortgage_request_library_documents',
+    op: 'insert',
+    values: { request_id: OPEN_REQ, tenant_document_id: MISSING_REQ },
+  });
+  assert.equal(missingDoc.error, 'rls_denied');
+});
+
+test('dual-tenant administrator cannot attach across tenants', async () => {
+  const client = libraryClient({
+    memberships: { [TENANT]: 'admin', [OTHER_TENANT]: 'admin' },
+    documents: { [OTHER_DOC_ID]: otherTenantDoc },
+  });
+  const result = await allowlisted(client, {
+    table: 'mortgage_request_library_documents',
+    op: 'upsert',
+    values: { request_id: OPEN_REQ, tenant_document_id: OTHER_DOC_ID, tenant_id: TENANT },
+  });
+  assert.equal(result.error, 'tenant_mismatch');
+  assert.equal(client.inserts(), 0);
+});
+
+test('cancelled and completed requests reject backfill through the allowlist', async () => {
+  const cancelled = await allowlisted(libraryClient(), {
+    table: 'mortgage_request_library_documents',
+    op: 'upsert',
+    values: { request_id: CANCELLED_REQ, tenant_document_id: DOC_ID },
+  });
+  assert.equal(cancelled.error, 'request_not_open');
+  const completed = await allowlisted(libraryClient(), {
+    table: 'mortgage_request_library_documents',
+    op: 'insert',
+    values: { request_id: CLOSED_REQ, tenant_document_id: DOC_ID },
+  });
+  assert.equal(completed.error, 'request_not_open');
+});
+
+test('non-mortgage legacy attachment category is rejected through the allowlist', async () => {
+  const result = await allowlisted(libraryClient({ documents: { [TEMPLATE_DOC_ID]: templateDoc } }), {
+    table: 'mortgage_request_library_documents',
+    op: 'upsert',
+    values: { request_id: OPEN_REQ, tenant_document_id: TEMPLATE_DOC_ID },
+  });
+  assert.equal(result.error, 'category_not_allowlisted');
+});
+
+const pathIsExactAttachment = (params, attachmentPath) => {
+  const candidates = params[0] || [];
+  const rel = params[1];
+  if (rel === attachmentPath) return true;
+  return Array.isArray(candidates) && candidates.includes(attachmentPath);
+};
+
 const storageClient = ({ tenantDoc = false, attachment = null }) => ({
   query: async (sql, params) => {
     if (sql.includes('FROM tenant_documents') || sql.includes('FROM public.tenant_documents')) {
@@ -258,8 +445,7 @@ const storageClient = ({ tenantDoc = false, attachment = null }) => ({
     if (String(sql).includes('aws_mortgage_agent_can_read_library_path')) {
       if (!attachment) return { rows: [] };
       if (params[2] !== attachment.userId) return { rows: [] };
-      const rel = params[1];
-      if (rel !== attachment.path) return { rows: [] };
+      if (!pathIsExactAttachment(params, attachment.path)) return { rows: [] };
       return { rows: [{ '?column?': 1 }] };
     }
     return { rows: [] };
@@ -304,10 +490,51 @@ test('mortgage agent cannot read another tenant document through a forged object
   assert.equal(otherTenant.authorized, false);
 });
 
-test('storage auth SQL requires an attachment and open or assigned request', () => {
+test('wildcard, suffix, and traversal object paths are not authorized', async () => {
+  const client = storageClient({ attachment: { userId: AGENT_ID, path: ATTACH_PATH } });
+  const denied = async (objectPath) => {
+    const result = await authorizeObject(client, 'tenant-documents', objectPath, { userId: AGENT_ID });
+    assert.equal(result.authorized, false, objectPath);
+  };
+  await denied('%');
+  await denied('_');
+  await denied('w9.pdf');
+  await denied(`library/mortgage/w9.pdf`);
+  await denied(OTHER_PATH);
+  await denied(`${TENANT}/library/mortgage/%`);
+  await denied(`${TENANT}/library/mortgage/_9.pdf`);
+  await denied(`${TENANT}/library/mortgage/w9.pdf/../kyc-passport.pdf`);
+  const encodedUrl = 'https://example.invalid/storage/v1/object/sign/tenant-documents/%2e%2e/secret';
+  assert.equal(normalizePath(encodedUrl, 'tenant-documents'), null);
+  await denied(encodedUrl);
+});
+
+test('query-string variants of the exact attached key remain authorized', async () => {
+  const result = await authorizeObject(
+    storageClient({ attachment: { userId: AGENT_ID, path: ATTACH_PATH } }),
+    'tenant-documents',
+    `${ATTACH_PATH}?token=abc`,
+    { userId: AGENT_ID },
+  );
+  assert.equal(result.authorized, true);
+  assert.equal(result.rel, ATTACH_PATH);
+  assert.ok(pathCandidates('tenant-documents', `${ATTACH_PATH}?token=abc`).includes(ATTACH_PATH));
+});
+
+test('same filename in a different tenant folder is denied', async () => {
+  const result = await authorizeObject(
+    storageClient({ attachment: { userId: AGENT_ID, path: ATTACH_PATH } }),
+    'tenant-documents',
+    OTHER_PATH,
+    { userId: AGENT_ID },
+  );
+  assert.equal(result.authorized, false);
+});
+
+test('storage auth SQL requires an attachment, exact path, and open or assigned request', () => {
   assert.match(MORTGAGE_LIBRARY_STORAGE_AUTH_SQL, /aws_mortgage_agent_can_read_library_path\(\$1::text\[\], \$2::text, \$3::uuid\)/);
-  assert.doesNotMatch(MORTGAGE_LIBRARY_STORAGE_AUTH_SQL, /FROM public\.tenant_documents/);
-  const overlay = readSql('rls/sql/29_mortgage_ops_library_parity.sql');
+  assert.doesNotMatch(MORTGAGE_LIBRARY_STORAGE_AUTH_SQL, /LIKE/);
+  const overlay = overlaySql();
   assert.match(overlay, /CREATE OR REPLACE FUNCTION public\.aws_mortgage_agent_can_read_library_path/);
   assert.match(overlay, /SET row_security = off/);
   assert.match(overlay, /mortgage_request_library_documents d/);
@@ -315,9 +542,6 @@ test('storage auth SQL requires an attachment and open or assigned request', () 
   assert.match(overlay, /has_role\(_user_id, 'mortgage_agent'/);
   assert.match(overlay, /auth\.uid\(\) = _user_id/);
   assert.match(overlay, /status IN \('requested', 'in_progress'\)/);
-  const pathFn = overlay.slice(
-    overlay.indexOf('aws_mortgage_agent_can_read_library_path('),
-    overlay.indexOf('COMMENT ON FUNCTION public.aws_mortgage_agent_can_read_library_path'),
-  );
-  assert.doesNotMatch(pathFn, /tenant_documents/);
+  const pathFn = functionBody(overlay, 'aws_mortgage_agent_can_read_library_path');
+  assert.doesNotMatch(pathFn, /LIKE '%' \|\|/);
 });

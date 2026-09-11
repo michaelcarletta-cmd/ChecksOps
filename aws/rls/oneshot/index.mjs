@@ -725,7 +725,9 @@ export const handler = async (event = {}) => {
         `SELECT count(*)::int AS n FROM pg_policies
          WHERE schemaname = 'public' AND policyname NOT LIKE 'aws_%'`,
       )).rows[0].n);
-      await applySql('29_mortgage_ops_library_parity.sql');
+      // 29_mortgage_ops_library_parity.sql requires 20_write_helpers.sql and
+      // 24_complete_write_policies.sql. completeAuth applies that sequence.
+      // Do not apply 29 from ddl; write helpers are not installed here.
       out.ddlApplied = true;
       out.policiesPrepared = Number((await client.query(
         `SELECT count(*)::int AS n FROM pg_policies WHERE schemaname = 'public' AND policyname LIKE 'aws_select_%'`,

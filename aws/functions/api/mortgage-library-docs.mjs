@@ -77,7 +77,8 @@ export const canManageTenantDocumentLibrary = async (client, userId, tenantId) =
 /**
  * Storage sign for Mortgage Ops. Calls a SECURITY DEFINER helper so the
  * attachment + request join is not blocked by tenant-only RLS on
- * mortgage_handling_requests. Does not read tenant_documents.
+ * mortgage_handling_requests. Exact path equality only; joins tenant_documents
+ * to require library:mortgage:%.
  */
 export const MORTGAGE_LIBRARY_STORAGE_AUTH_SQL = `
 SELECT 1
