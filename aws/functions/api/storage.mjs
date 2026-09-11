@@ -13,6 +13,7 @@ import {
   pathCandidates,
   s3KeyFor,
 } from './storage-paths.mjs';
+import { MORTGAGE_LIBRARY_STORAGE_AUTH_SQL } from './mortgage-library-docs.mjs';
 
 const { Client } = pg;
 
@@ -89,6 +90,9 @@ export const BUCKET_AUTH_SQL = {
   'claim-files-backup': [],
 };
 
+/** Attachment-gated Mortgage Ops read. Not a general tenant_documents grant. */
+export { MORTGAGE_LIBRARY_STORAGE_AUTH_SQL };
+
 export const LIST_SQL = {
   'claim-files': [
     `SELECT file_path AS path, file_name AS name, file_type AS mimetype, file_size AS size, created_at FROM check_files WHERE split_part(file_path, '?', 1) LIKE '%' || $1 LIMIT 100`,
@@ -129,7 +133,7 @@ const denyBucket = (bucket) => {
   return null;
 };
 
-export const authorizeObject = async (client, bucket, objectPath) => {
+export const authorizeObject = async (client, bucket, objectPath, { userId } = {}) => {
   const rel = normalizePath(objectPath, bucket);
   if (!rel) return { authorized: false, reason: 'invalid_path' };
   const candidates = pathCandidates(bucket, objectPath);
@@ -137,6 +141,12 @@ export const authorizeObject = async (client, bucket, objectPath) => {
   for (const sql of queries) {
     const result = await client.query(sql, [candidates, rel]);
     if (result.rows.length) return { authorized: true, rel, candidates };
+  }
+  if (bucket === 'tenant-documents' && userId) {
+    const attached = await client.query(MORTGAGE_LIBRARY_STORAGE_AUTH_SQL, [candidates, rel, userId]);
+    if (attached.rows.length) {
+      return { authorized: true, rel, candidates, via: 'mortgage_request_library_documents' };
+    }
   }
   return { authorized: false, reason: 'not_authorized', rel, candidates };
 };
@@ -175,7 +185,7 @@ export const handleStorageSign = async (event, deps = {}) => withIdentity(event,
   const denied = denyBucket(bucket);
   if (denied) return { ...denied, spoofFieldsIgnored: spoof };
   const objectPath = body.path || body.paths?.[0];
-  const auth = await authorizeObject(client, bucket, objectPath);
+  const auth = await authorizeObject(client, bucket, objectPath, { userId: mapping.application_user_id });
   if (!auth.authorized) {
     return {
       ok: false,
@@ -226,7 +236,7 @@ export const handleStorageSignMany = async (event, deps = {}) => withIdentity(ev
   const expiresIn = clampExpires(body.expiresIn || body.expires_in, DEFAULT_EXPIRES);
   const data = [];
   for (const objectPath of paths) {
-    const auth = await authorizeObject(client, bucket, objectPath);
+    const auth = await authorizeObject(client, bucket, objectPath, { userId: mapping.application_user_id });
     if (!auth.authorized) {
       data.push({ path: objectPath, signedUrl: null, error: 'storage_forbidden' });
       continue;

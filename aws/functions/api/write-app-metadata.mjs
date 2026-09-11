@@ -810,6 +810,10 @@ export const executeAppMetadataWrite = async ({ client, mapping, table, op, valu
       return executeNotifications({ client, mapping, op, values, filters });
     case 'tenant_documents':
       return executeTenantDocuments({ client, mapping, op, values, filters });
+    case 'mortgage_request_library_documents': {
+      const { executeMortgageRequestLibraryDocuments } = await import('./mortgage-library-docs.mjs');
+      return executeMortgageRequestLibraryDocuments({ client, mapping, op, values, filters });
+    }
     case 'loss_draft_documents':
       return executeLossDraftDocuments({ client, mapping, op, values, filters });
     case 'mortgage_companies':

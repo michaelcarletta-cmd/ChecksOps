@@ -54,6 +54,9 @@ const HELPER_NAMES = [
   'aws_can_access_deposit_item',
   'aws_can_access_loss_draft',
   'aws_can_access_signature_request',
+  'aws_mortgage_agent_can_read_library_document',
+  'aws_mortgage_agent_can_read_library_path',
+  'aws_can_manage_mortgage_library',
   'aws_is_authenticated',
   'aws_can_write_tenant',
   'aws_can_write_check',
@@ -722,6 +725,7 @@ export const handler = async (event = {}) => {
         `SELECT count(*)::int AS n FROM pg_policies
          WHERE schemaname = 'public' AND policyname NOT LIKE 'aws_%'`,
       )).rows[0].n);
+      await applySql('29_mortgage_ops_library_parity.sql');
       out.ddlApplied = true;
       out.policiesPrepared = Number((await client.query(
         `SELECT count(*)::int AS n FROM pg_policies WHERE schemaname = 'public' AND policyname LIKE 'aws_select_%'`,
