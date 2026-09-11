@@ -35,8 +35,50 @@ const parseBody = (event) => {
   try { return JSON.parse(raw); } catch { return {}; }
 };
 
+const EMAIL_OTP = 'EMAIL_OTP';
+const SELECT_CHALLENGE = 'SELECT_CHALLENGE';
+
 const emailOf = (value) => String(value || '').trim().toLowerCase();
 const codeOf = (value) => String(value || '').trim().replace(/\s+/g, '');
+
+export const availableChallengesOf = (result) => (
+  Array.isArray(result?.AvailableChallenges) ? result.AvailableChallenges.map(String) : []
+);
+
+export const emailOtpIsListed = (result) => availableChallengesOf(result).includes(EMAIL_OTP);
+
+export const selectEmailOtpChallengeRequest = (email, session, clientId = CLIENT_ID()) => ({
+  ClientId: clientId,
+  ChallengeName: SELECT_CHALLENGE,
+  Session: session,
+  ChallengeResponses: {
+    USERNAME: email,
+    ANSWER: EMAIL_OTP,
+  },
+});
+
+const passwordlessEmailOtpIssued = (result, email) => ({
+  ok: true,
+  statusCode: 200,
+  completed: false,
+  challenge: EMAIL_OTP,
+  session: result.Session,
+  email,
+  delivery: {
+    destination: result.ChallengeParameters?.CODE_DELIVERY_DESTINATION || null,
+    deliveryMedium: 'EMAIL',
+  },
+  passwordUsed: false,
+});
+
+const emailOtpUnavailable = (result) => ({
+  ok: false,
+  statusCode: 409,
+  error: 'email_otp_unavailable',
+  challenge: result?.ChallengeName || null,
+  availableChallenges: availableChallengesOf(result),
+  message: 'This staging Cognito account is not currently eligible for passwordless email OTP.',
+});
 
 const authenticationOf = (result, refreshTokenFallback = null) => {
   const auth = result?.AuthenticationResult || {};
@@ -70,7 +112,7 @@ export const handleAuthPasswordlessStart = async (event) => {
       ClientId: CLIENT_ID(),
       AuthParameters: {
         USERNAME: email,
-        PREFERRED_CHALLENGE: 'EMAIL_OTP',
+        PREFERRED_CHALLENGE: EMAIL_OTP,
       },
     });
 
@@ -83,31 +125,33 @@ export const handleAuthPasswordlessStart = async (event) => {
       };
     }
 
-    const challenge = result.ChallengeName || null;
-    if (challenge !== 'EMAIL_OTP') {
-      return {
-        ok: false,
-        statusCode: 409,
-        error: 'email_otp_unavailable',
-        challenge,
-        availableChallenges: Array.isArray(result.AvailableChallenges) ? result.AvailableChallenges : [],
-        message: 'This staging Cognito account is not currently eligible for passwordless email OTP.',
-      };
+    if (result.ChallengeName === EMAIL_OTP) {
+      return passwordlessEmailOtpIssued(result, email);
     }
 
-    return {
-      ok: true,
-      statusCode: 200,
-      completed: false,
-      challenge: 'EMAIL_OTP',
-      session: result.Session,
-      email,
-      delivery: {
-        destination: result.ChallengeParameters?.CODE_DELIVERY_DESTINATION || null,
-        deliveryMedium: 'EMAIL',
-      },
-      passwordUsed: false,
-    };
+    // TOTP enrollment can make Cognito present SOFTWARE_TOKEN_MFA first even
+    // when PreferredMfaSetting is unset. EMAIL_OTP stays a first-factor choice.
+    // Select it server-side; do not complete TOTP or change MFA preferences.
+    if (!emailOtpIsListed(result) || !result.Session) {
+      return emailOtpUnavailable(result);
+    }
+
+    const selected = await cognitoJson(
+      'RespondToAuthChallenge',
+      selectEmailOtpChallengeRequest(email, result.Session),
+    );
+    if (selected.AuthenticationResult) {
+      return {
+        ok: true,
+        statusCode: 200,
+        completed: true,
+        authentication: authenticationOf(selected),
+      };
+    }
+    if (selected.ChallengeName === EMAIL_OTP) {
+      return passwordlessEmailOtpIssued(selected, email);
+    }
+    return emailOtpUnavailable(selected);
   } catch (error) {
     return {
       ok: false,
@@ -130,7 +174,7 @@ export const handleAuthPasswordlessVerify = async (event) => {
   try {
     const result = await cognitoJson('RespondToAuthChallenge', {
       ClientId: CLIENT_ID(),
-      ChallengeName: 'EMAIL_OTP',
+      ChallengeName: EMAIL_OTP,
       Session: session,
       ChallengeResponses: {
         USERNAME: email,
