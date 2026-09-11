@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { isAwsStaging, awsApiBaseUrl } from "@/lib/awsStaging";
+import { isAwsAuth, awsApiBaseUrl } from "@/lib/awsStaging";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -76,7 +76,7 @@ export default function HomeownerCheckUpload() {
   const [params] = useSearchParams();
   const leadId = params.get("lead");
   const contractorParam = params.get("contractor");
-  const aws = isAwsStaging();
+  const aws = isAwsAuth();
 
   const [session, setSession] = useState<UploadSession | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);

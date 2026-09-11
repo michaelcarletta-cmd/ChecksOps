@@ -18,6 +18,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Loader2,
   CheckCircle2,
@@ -54,6 +55,7 @@ type CheckRow = {
 const ROUTE_OPTIONS: Array<{ value: string; label: string; hint: string }> = [
   { value: "needs_review", label: "Review", hint: "Top box: Review" },
   { value: "endorsements_in_progress", label: "Endorsing", hint: "Top box: Endorsing" },
+  { value: "approved_for_deposit", label: "Ready for Deposit", hint: "Top box: Ready for Deposit" },
   { value: "loss_draft_required", label: "Loss Draft", hint: "Top box: Loss Draft" },
   { value: "reissue_requested", label: "Reissue", hint: "Top box: Reissue" },
   { value: "voided", label: "Void", hint: "Top box: Void" },
@@ -83,6 +85,8 @@ export function AdminCheckTracker({ searchQuery = "" }: { searchQuery?: string }
   const [routing, setRouting] = useState<string | null>(null); // check_intake_item_id currently being routed
   const [deleting, setDeleting] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CheckRow | null>(null);
+  const [routePending, setRoutePending] = useState<{ check: CheckRow; status: string } | null>(null);
+  const [routeReason, setRouteReason] = useState("");
 
   async function load() {
     setLoading(true);
@@ -251,21 +255,28 @@ export function AdminCheckTracker({ searchQuery = "" }: { searchQuery?: string }
 
   /** Reroute a check to a different status. Updates check_intake_items.status if linked,
    *  otherwise falls back to claim_checks.deposit_status mapping. */
-  async function routeTo(c: CheckRow, newStatus: string) {
+  async function routeTo(c: CheckRow, newStatus: string, reason: string) {
+    if (reason.trim().length < 5) {
+      toast.error("Enter a short reason for the override.");
+      return;
+    }
     setRouting(c.id);
     try {
       const intakeId = c.check_intake_item_id;
       console.log("[AdminCheckTracker] routeTo", { checkId: c.id, intakeId, newStatus });
       if (intakeId) {
-        // Route through the admin override RPC (SECURITY DEFINER) so stage,
-        // status, claim_checks mirror and audit stay in sync.
+        // Route through the admin override RPC so stage, status, cleanup, and audit stay in sync.
         const { data: ud } = await supabase.auth.getUser();
-        const { error } = await supabase.rpc("admin_override_check_status", {
+        const { data: rpcData, error } = await supabase.rpc("admin_override_check_status", {
           p_check_id: intakeId,
           p_new_status: newStatus,
           p_actor_id: ud.user?.id ?? null,
+          p_reason: reason.trim(),
         } as any);
         if (error) throw error;
+        if (rpcData && (rpcData as any).ok === false) {
+          throw new Error((rpcData as any).error ?? "Override rejected");
+        }
       } else {
         // No intake item linked — fall back to claim_checks only
         const depositStatus =
@@ -288,6 +299,8 @@ export function AdminCheckTracker({ searchQuery = "" }: { searchQuery?: string }
       qc.invalidateQueries({ queryKey: ["check-intake-items"] });
       qc.invalidateQueries({ queryKey: ["check-review-queue"] });
       qc.invalidateQueries({ queryKey: ["loss-draft-checks"] });
+      qc.invalidateQueries({ queryKey: ["loss-draft-dashboard"] });
+      qc.invalidateQueries({ queryKey: ["check-stage-totals"] });
       load();
     } catch (e: any) {
       console.error("[AdminCheckTracker] routeTo failed", e);
@@ -415,7 +428,10 @@ export function AdminCheckTracker({ searchQuery = "" }: { searchQuery?: string }
                             ? () => setEditingIntakeId(c.check_intake_item_id!)
                             : undefined
                         }
-                        onRoute={(s) => routeTo(c, s)}
+                        onRoute={(s) => {
+                          setRoutePending({ check: c, status: s });
+                          setRouteReason("");
+                        }}
                         routing={routing === c.id}
                         onDelete={() => setDeleteTarget(c)}
                         deleting={deleting === c.id}
@@ -475,6 +491,45 @@ export function AdminCheckTracker({ searchQuery = "" }: { searchQuery?: string }
             <Button onClick={submitDeposit} disabled={saving}>
               {saving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
               Mark Reconciled
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!routePending} onOpenChange={(o) => { if (!o) { setRoutePending(null); setRouteReason(""); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Override check status</DialogTitle>
+            <DialogDescription>
+              Move this check to {routePending?.status.replace(/_/g, " ") || "the selected stage"}.
+              This does not send payments or call deposit providers. A reason is required for the audit trail.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label htmlFor="override-reason">Reason</Label>
+            <Textarea
+              id="override-reason"
+              value={routeReason}
+              onChange={(e) => setRouteReason(e.target.value)}
+              placeholder="Why this override is needed"
+              className="min-h-[72px]"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => { setRoutePending(null); setRouteReason(""); }}>
+              Cancel
+            </Button>
+            <Button
+              disabled={routing !== null || routeReason.trim().length < 5}
+              onClick={async () => {
+                if (!routePending) return;
+                await routeTo(routePending.check, routePending.status, routeReason);
+                setRoutePending(null);
+                setRouteReason("");
+              }}
+            >
+              {routing ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : null}
+              Apply override
             </Button>
           </DialogFooter>
         </DialogContent>

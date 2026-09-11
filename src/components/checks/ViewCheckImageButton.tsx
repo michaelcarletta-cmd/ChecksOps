@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { CheckImagesViewer } from "./CheckImagesViewer";
 import { toStorageObjectPath } from "@/lib/storagePath";
-import { isAwsStaging } from "@/lib/awsStaging";
+import { isAwsAuth } from "@/lib/awsStaging";
 
 /**
  * Reusable "View Check Images" button.
@@ -45,7 +45,7 @@ export function ViewCheckImageButton({
     setLoading(true);
     try {
       // AWS staging has no get-check-image-urls Edge Function; sign via Storage API.
-      if (checkId && !isAwsStaging()) {
+      if (checkId && !isAwsAuth()) {
         const { data, error } = await supabase.functions.invoke("get-check-image-urls", {
           body: { checkId },
         });

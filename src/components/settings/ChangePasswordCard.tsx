@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { KeyRound, Loader2, Eye, EyeOff } from "lucide-react";
 import { SectionCard } from "./SectionCard";
-import { isAwsStaging } from "@/lib/awsStaging";
+import { isAwsAuth } from "@/lib/awsStaging";
 
 export function ChangePasswordCard() {
   const [currentPassword, setCurrentPassword] = useState("");
@@ -15,7 +15,7 @@ export function ChangePasswordCard() {
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [saving, setSaving] = useState(false);
-  const awsStaging = isAwsStaging();
+  const awsStaging = isAwsAuth();
 
   if (awsStaging) {
     return (

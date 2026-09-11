@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Fingerprint, Mail, CheckCircle2, Loader2 } from "lucide-react";
 import mortgageOpsLogo from "@/assets/mortgage-ops-logo.png";
-import { isAwsStaging, isAwsStagingHttpsPasskeysEnabled, AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY } from "@/lib/awsStaging";
+import { isAwsAuth, isAwsStaging, isAwsHttpsPasskeysEnabled, AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY } from "@/lib/awsStaging";
 import { signInWithAwsPasskey } from "@/lib/awsPasskeys";
 import { signInWithPasskey, sendMagicLink, passkeysSupported } from "@/lib/passkeys";
 import { startAwsEmailOtp, verifyAwsEmailOtp } from "@/lib/awsPasswordless";
@@ -20,9 +20,10 @@ export default function MortgageOpsLogin() {
   const [linkSent, setLinkSent] = useState(false);
   const [awsSession, setAwsSession] = useState("");
   const [code, setCode] = useState("");
+  const awsAuth = isAwsAuth();
   const awsStaging = isAwsStaging();
-  const awsHttpsPasskeys = isAwsStagingHttpsPasskeysEnabled();
-  const canUsePasskeys = awsStaging
+  const awsHttpsPasskeys = isAwsHttpsPasskeysEnabled();
+  const canUsePasskeys = awsAuth
     ? awsHttpsPasskeys && passkeysSupported()
     : passkeysSupported();
   const { user, userRole, loading: authLoading } = useMortgageAuth();
@@ -58,7 +59,7 @@ export default function MortgageOpsLogin() {
   const handlePasskey = async () => {
     setLoading(true);
     try {
-      if (awsStaging) {
+      if (awsAuth) {
         if (!awsHttpsPasskeys) {
           throw new Error("Passkeys require https://staging.checksops.com. Use email verification on this origin.");
         }
@@ -90,7 +91,7 @@ export default function MortgageOpsLogin() {
     }
     setLoading(true);
     try {
-      if (awsStaging) {
+      if (awsAuth) {
         const pending = await startAwsEmailOtp(email, { portal: "mortgage-ops" });
         setEmail(pending.email);
         setAwsSession(pending.session);
@@ -100,7 +101,7 @@ export default function MortgageOpsLogin() {
         setLinkSent(true);
       }
     } catch (err: any) {
-      toast.error(err.message || (awsStaging ? "Could not send verification code" : "Could not send sign-in link"));
+      toast.error(err.message || (awsAuth ? "Could not send verification code" : "Could not send sign-in link"));
     } finally {
       setLoading(false);
     }
@@ -144,11 +145,11 @@ export default function MortgageOpsLogin() {
               <CheckCircle2 className="h-10 w-10 mx-auto text-primary" />
               <p className="font-medium">Check your email</p>
               <p className="text-sm text-muted-foreground">
-                {awsStaging
+                {awsAuth
                   ? `We sent a one-time verification code to ${email}.`
                   : `We sent a one-time sign-in link to ${email}. It opens the Mortgage Desk directly.`}
               </p>
-              {awsStaging ? (
+              {awsAuth ? (
                 <form onSubmit={handleAwsVerify} className="space-y-3 text-left">
                   <div className="space-y-2">
                     <Label htmlFor="mops-code">Email verification code</Label>
@@ -213,7 +214,7 @@ export default function MortgageOpsLogin() {
                 </div>
                 <div className="relative flex justify-center text-xs uppercase">
                   <span className="bg-card px-2 text-muted-foreground">
-                    {awsStaging ? "or email code" : "or email link"}
+                    {awsAuth ? "or email code" : "or email link"}
                   </span>
                 </div>
               </div>
@@ -234,7 +235,7 @@ export default function MortgageOpsLogin() {
                 )}
                 <Button type="submit" variant="outline" className="w-full" disabled={loading}>
                   {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
-                  {loading ? "Sending…" : (awsStaging ? "Email me a verification code" : "Email me a sign-in link")}
+                  {loading ? "Sending…" : (awsAuth ? "Email me a verification code" : "Email me a sign-in link")}
                 </Button>
               </form>
 

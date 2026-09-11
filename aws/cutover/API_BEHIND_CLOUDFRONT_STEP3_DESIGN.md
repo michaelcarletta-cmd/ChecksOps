@@ -434,21 +434,13 @@ role. Do not add Step 3 permissions to staging.
 
 ## Amber AWS staging banner — later UI-only (not this phase)
 
-Live production Cognito SPA still renders the amber
-`AwsStagingBanner` because `isAwsStaging()` is
-`VITE_AUTH_PROVIDER === "cognito"` (`src/lib/awsStaging.ts`). That flag is
-the AWS-mode switch, not “this hostname is staging.” `src/App.tsx` mounts
-the banner globally. Login also appends `" AWS staging."` in
-`src/pages/checkops/CheckOpsLogin.tsx`.
+Live production Cognito SPA must **not** render the amber
+`AwsStagingBanner`. `isAwsAuth()` (`VITE_AUTH_PROVIDER === "cognito"`) selects
+the Cognito + AWS API client on both staging and production-prep. `isAwsStaging()`
+is hostname / `VITE_CHECKSOPS_ENVIRONMENT` gated and is false on
+`checksops.com` / `www.checksops.com`. Login UAT password copy stays staging-only.
 
-**Smallest later correction (do not change now):**
-
-In `src/components/AwsStagingBanner.tsx`, return `null` when
-`window.location.hostname` is `checksops.com` or `www.checksops.com`.
-Optional one-liner: the same host guard on the login subtitle.
-
-Do **not** rename or invert `isAwsStaging()` — many AWS-mode code paths
-depend on it. This is UI-only and is **out of Step 3**.
+Do **not** treat `isAwsAuth()` as staging. Production AWS SPAs keep Cognito.
 
 ---
 

@@ -150,3 +150,37 @@ export const handleIdentityMe = async (event) => {
     email: claims.email,
   });
 };
+
+export const handleIdentityLink = async (event, deps = {}) => {
+  const { withIdentityWrite } = await import('./data.mjs');
+  const { linkIdentityAccount } = await import('./identity-link.mjs');
+  const { isMasterOwner } = await import('./platform-authz.mjs');
+  return withIdentityWrite(event, async ({ client, mapping, claims, body, spoof }) => {
+    if (!(await isMasterOwner(client))) {
+      return {
+        ok: false,
+        statusCode: 403,
+        error: 'not_authorized',
+        message: 'Only the platform owner can create identity links',
+        spoofFieldsIgnored: spoof,
+      };
+    }
+    const linked = await linkIdentityAccount(client, {
+      applicationUserId: body.application_user_id || body.applicationUserId,
+      cognitoSub: body.cognito_sub || body.cognitoSub,
+      email: body.email,
+      allowCreate: body.allow_create === true,
+    });
+    if (!linked.ok) {
+      return { ok: false, statusCode: 400, spoofFieldsIgnored: spoof, ...linked };
+    }
+    return {
+      ok: true,
+      statusCode: 200,
+      spoofFieldsIgnored: spoof,
+      applicationUserId: mapping.application_user_id,
+      cognitoSub: claims.sub,
+      linked,
+    };
+  }, deps);
+};

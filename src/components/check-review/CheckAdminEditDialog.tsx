@@ -11,15 +11,17 @@ import {
 } from "@/components/ui/select";
 import { Loader2, Pencil, ShieldAlert, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { isAwsStaging } from "@/lib/awsStaging";
+import { isAwsAuth } from "@/lib/awsStaging";
 import { pickAwsSafeIntakeUpdates } from "@/integrations/aws/safeIntakeFields";
 import { pickAwsSafeClaimCheckUpdates } from "@/integrations/aws/safeClaimCheckFields";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Textarea } from "@/components/ui/textarea";
 
 const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "needs_review", label: "Review" },
   { value: "endorsements_in_progress", label: "Endorsing" },
+  { value: "approved_for_deposit", label: "Ready for Deposit" },
   { value: "loss_draft_required", label: "Loss Draft" },
   { value: "reissue_requested", label: "Reissue" },
   { value: "voided", label: "Void" },
@@ -56,6 +58,7 @@ const MORTGAGE_HEURISTIC = /\b(mortgage|loan\s*servicing|rocket|wells\s*fargo|ch
 export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: Props) {
   const qc = useQueryClient();
   const [saving, setSaving] = useState(false);
+  const [overrideReason, setOverrideReason] = useState("");
   const [form, setForm] = useState<FormState>({
     status: "needs_review",
     mortgage_flag: false,
@@ -147,8 +150,25 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
       }
 
       if (effectiveStatus !== data.intake.status) {
-        intakeUpdates.status = effectiveStatus;
-        changes.push(`status → ${effectiveStatus.replace(/_/g, " ")}`);
+        if (isAwsAuth()) {
+          if (overrideReason.trim().length < 5) {
+            throw new Error("Enter a short reason for the status override.");
+          }
+          const { data: rpcData, error: rpcError } = await supabase.rpc("admin_override_check_status", {
+            p_check_id: checkId,
+            p_new_status: effectiveStatus,
+            p_actor_id: user?.id ?? null,
+            p_reason: overrideReason.trim(),
+          } as any);
+          if (rpcError) throw rpcError;
+          if (rpcData && (rpcData as any).ok === false) {
+            throw new Error((rpcData as any).error ?? "Override rejected");
+          }
+          changes.push(`status → ${effectiveStatus.replace(/_/g, " ")}`);
+        } else {
+          intakeUpdates.status = effectiveStatus;
+          changes.push(`status → ${effectiveStatus.replace(/_/g, " ")}`);
+        }
       }
 
       // 2. Intake-level mortgage_monitoring_type — always persisted here so it
@@ -229,7 +249,7 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
       }
 
       if (Object.keys(intakeUpdates).length > 0) {
-        const persist = isAwsStaging()
+        const persist = isAwsAuth()
           ? pickAwsSafeIntakeUpdates(intakeUpdates)
           : { safe: intakeUpdates, skipped: [] };
         if (Object.keys(persist.safe).length === 0) {
@@ -257,7 +277,7 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
       // AWS staging persists only non-financial columns (no amount/mortgage/deposit/stage).
       if (data.claimCheck?.id) {
         const ccUpdates: Record<string, unknown> = {};
-        if (!isAwsStaging()) {
+        if (!isAwsAuth()) {
           if (form.mortgage_flag !== data.claimCheck.mortgage_flag) {
             ccUpdates.mortgage_flag = form.mortgage_flag;
           }
@@ -273,7 +293,7 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
         if (intakeUpdates.payee_line !== undefined) ccUpdates.payee_line = intakeUpdates.payee_line;
         if (intakeUpdates.carrier_name !== undefined) ccUpdates.carrier_name = intakeUpdates.carrier_name;
         if (intakeUpdates.issue_date !== undefined) ccUpdates.check_date = intakeUpdates.issue_date;
-        const persistCc = isAwsStaging()
+        const persistCc = isAwsAuth()
           ? pickAwsSafeClaimCheckUpdates(ccUpdates)
           : { safe: ccUpdates, skipped: [] };
         if (Object.keys(persistCc.safe).length > 0) {
@@ -475,8 +495,19 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
                 </SelectContent>
               </Select>
               <p className="text-[11px] text-muted-foreground">
-                Move from any status to any other (e.g. Loss Draft → Approved for Deposit).
+                Operational override only. Deposited / funds-released destinations are blocked.
               </p>
+              {form.status !== (data?.intake?.status ?? form.status) && (
+                <div className="space-y-1">
+                  <Label className="text-[11px]">Override reason</Label>
+                  <Textarea
+                    value={overrideReason}
+                    onChange={(e) => setOverrideReason(e.target.value)}
+                    placeholder="Required when changing status"
+                    className="min-h-[64px] text-sm"
+                  />
+                </div>
+              )}
             </div>
           </div>
         )}

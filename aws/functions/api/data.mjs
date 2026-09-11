@@ -13,6 +13,8 @@ import {
   verifyCognitoIdToken,
 } from './cognito.mjs';
 import { LOOKUP_MAPPING_SQL } from './identity.mjs';
+import { QUEUE_TOTALS_SQL } from './check-queue-totals.mjs';
+import { INCONSISTENT_STATUS_STAGE_SQL } from './check-status-stage.mjs';
 
 const { Client } = pg;
 const IDENT = /^[a-z_][a-z0-9_]*$/;
@@ -46,6 +48,7 @@ const READ_RPCS = new Set([
   'is_approval_required',
   'is_master_owner',
   'is_platform_owner',
+  'get_inconsistent_check_status_stages',
 ]);
 
 const RPC_UNWRAP_SINGLE_COLUMN = new Set([
@@ -734,6 +737,48 @@ export const handleDataRpc = async (event, deps) => {
     };
   }
   const args = body.args && typeof body.args === 'object' ? body.args : {};
+  if (name === 'get_check_stage_totals') {
+    const tenantId = args.p_tenant_id || args._tenant_id || args.tenant_id;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(tenantId || ''))) {
+      return {
+        ok: false,
+        statusCode: 400,
+        error: 'invalid_uuid',
+        field: 'p_tenant_id',
+        spoofFieldsIgnored: spoof,
+      };
+    }
+    const rows = (await client.query(QUEUE_TOTALS_SQL, [tenantId])).rows;
+    return {
+      ok: true,
+      statusCode: 200,
+      data: rows,
+      applicationUserId: mapping.application_user_id,
+      cognitoSub: claims.sub,
+      spoofFieldsIgnored: spoof,
+    };
+  }
+  if (name === 'get_inconsistent_check_status_stages') {
+    const { isMasterOwner } = await import('./platform-authz.mjs');
+    if (!(await isMasterOwner(client))) {
+      return {
+        ok: false,
+        statusCode: 403,
+        error: 'not_authorized',
+        message: 'Only the platform owner can report inconsistent status/stage pairs',
+        spoofFieldsIgnored: spoof,
+      };
+    }
+    const rows = (await client.query(INCONSISTENT_STATUS_STAGE_SQL)).rows;
+    return {
+      ok: true,
+      statusCode: 200,
+      data: { count: rows.length, rows, rewritten: false },
+      applicationUserId: mapping.application_user_id,
+      cognitoSub: claims.sub,
+      spoofFieldsIgnored: spoof,
+    };
+  }
   const keys = Object.keys(args);
   const params = [];
   const placeholders = keys.map((key, index) => {

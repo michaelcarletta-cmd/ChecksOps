@@ -9,7 +9,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { isAwsStaging, awsApiBaseUrl } from "@/lib/awsStaging";
+import { isAwsAuth, awsApiBaseUrl } from "@/lib/awsStaging";
 import { CheckAltImageComplianceCard } from "@/components/checks/CheckAltImageComplianceCard";
 import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
 import { FunctionsHttpError, FunctionsRelayError, FunctionsFetchError } from "@supabase/supabase-js";
@@ -1305,15 +1305,14 @@ export default function CheckCommandCenter() {
             { key: "endorsements", label: "Endorsing",         count: laneCount("endorsing", awaitingEndorsement), icon: Send,           gradient: "from-amber-500/20 to-orange-500/10",  accent: "text-amber-400",   ring: "ring-amber-500/30" },
             { key: "ready",        label: "Ready for Deposit", count: laneCount("ready", readyForDeposit),     icon: CheckCircle2,   gradient: "from-emerald-500/20 to-green-500/10", accent: "text-emerald-400", ring: "ring-emerald-500/30" },
             { key: "deposited",    label: "Deposited",         count: laneCount("deposited", depositedChecks),     icon: Banknote,       gradient: "from-primary/20 to-blue-500/10",      accent: "text-primary",     ring: "ring-primary/30" },
-            // Returned moved into Manager → Returned sub-tab.
-            { key: "lossdraft",    label: "Loss Draft",        count: useAggregate ? ((lossDraftCounts as any)?.total_active ?? lossDraftChecks.length) : lossDraftChecks.length, icon: Landmark,       gradient: "from-purple-500/20 to-violet-500/10", accent: "text-purple-400",  ring: "ring-purple-500/30" },
+            { key: "lossdraft",    label: "Loss Draft",        count: useAggregate ? (stageTotals!.get("lossdraft_active")?.count ?? stageTotals!.get("lossdraft")?.count ?? lossDraftChecks.length) : lossDraftChecks.length, icon: Landmark,       gradient: "from-purple-500/20 to-violet-500/10", accent: "text-purple-400",  ring: "ring-purple-500/30" },
 
             // Bank Deposit card intentionally removed — users are pushed to CheckAlt for RDC.
             // The branch_deposit_required status still exists in the pipeline as a fallback,
             // but is no longer surfaced as a top-level tab in the command center.
 
             // Reissue moved into Manager → Reissue sub-tab.
-            { key: "fundsreleased", label: "Funds Released",   count: filteredFundsReleased.length,       icon: Banknote,       gradient: "from-emerald-500/20 to-teal-500/10",  accent: "text-emerald-400", ring: "ring-emerald-500/30" },
+            { key: "fundsreleased", label: "Funds Released",   count: useAggregate ? (stageTotals!.get("funds_released")?.count ?? filteredFundsReleased.length) : filteredFundsReleased.length,       icon: Banknote,       gradient: "from-emerald-500/20 to-teal-500/10",  accent: "text-emerald-400", ring: "ring-emerald-500/30" },
             { key: "fundsreceived", label: "Funds Received",   count: filteredFundsReceived.length,       icon: Banknote,       gradient: "from-sky-500/20 to-blue-500/10",      accent: "text-sky-400",     ring: "ring-sky-500/30" },
             // Partners moved into Manager → Partners sub-tab (2026-07-07).
             ...(canAccessManager ? [{ key: "manager", label: "Manager", count: null as number | null, icon: Shield, gradient: "from-indigo-500/20 to-blue-500/10", accent: "text-indigo-400", ring: "ring-indigo-500/30" }] : []),
@@ -2564,7 +2563,7 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
       if (!user) throw new Error("Not authenticated");
 
       const { data: session } = await supabase.auth.getSession();
-      const aws = isAwsStaging();
+      const aws = isAwsAuth();
 
       // AWS staging creates the internal check first so images can use the
       // validated check-scoped S3 prefix (checks/{checkId}/). Production still
@@ -2838,6 +2837,7 @@ function StatusOverride({
   const { user } = useAuth();
   const [editing, setEditing] = useState(false);
   const [newStatus, setNewStatus] = useState(currentStatus);
+  const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
@@ -2845,21 +2845,23 @@ function StatusOverride({
       setEditing(false);
       return;
     }
+    if (reason.trim().length < 5) {
+      toast({ title: "Reason required", description: "Enter a short reason for the override.", variant: "destructive" });
+      return;
+    }
     setSaving(true);
     try {
-      // Route through the security-definer RPC: it validates the admin/staff
-      // permission server-side, updates status + stage + recommendation
-      // atomically, mirrors claim_checks, and writes the audit log — bypassing
-      // the RLS failures that blocked direct frontend updates.
       const { data, error } = await supabase.rpc("admin_override_check_status", {
         p_check_id: checkId,
         p_new_status: newStatus,
         p_actor_id: user?.id ?? null,
-      });
+        p_reason: reason.trim(),
+      } as any);
       if (error) throw error;
       if (data && (data as any).ok === false) throw new Error((data as any).error ?? "Override rejected");
       toast({ title: "Status updated", description: `Moved to ${newStatus.replace(/_/g, " ")}` });
       setEditing(false);
+      setReason("");
       onSuccess();
     } catch (e: any) {
       toast({ title: "Failed to update status", description: e.message, variant: "destructive" });
@@ -2887,6 +2889,12 @@ function StatusOverride({
           ))}
         </SelectContent>
       </Select>
+      <textarea
+        className="w-full min-h-[56px] rounded-md border border-input bg-background px-2 py-1 text-xs"
+        placeholder="Reason for override (required)"
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+      />
       <div className="flex gap-1">
         <Button size="sm" className="flex-1 h-7 text-xs" onClick={handleSave} disabled={saving}>
           {saving ? <Loader2Icon className="h-3 w-3 animate-spin mr-1" /> : <CheckIcon className="h-3 w-3 mr-1" />}
@@ -4223,7 +4231,7 @@ function CheckDetailPanel({
                                 back_image_path: newPath,
                                 back_image_original_path: newPath,
                               };
-                              if (!isAwsStaging()) {
+                              if (!isAwsAuth()) {
                                 backUpdate.back_image_deposit_path = null;
                                 backUpdate.endorsement_render_status = "idle";
                                 backUpdate.endorsement_render_meta = null;
