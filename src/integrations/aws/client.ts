@@ -529,7 +529,7 @@ export function createAwsStagingClient(options: AwsStagingClientOptions = {}) {
 
   const mfaUnavailable = async () => ({
     data: null,
-    error: authError("Supabase MFA/TOTP is not available on AWS staging Cognito. Step-up remains production-only until Cognito MFA is enabled."),
+    error: authError("Supabase MFA/TOTP is not used on AWS. Use the ChecksOps Financial authenticator for step-up. Login stays EMAIL_OTP or passkey."),
   });
 
   const auth = {
@@ -724,7 +724,7 @@ export function createAwsStagingClient(options: AwsStagingClientOptions = {}) {
       data: { user: null, session: null },
       error: authError("Supabase OTP verify is disabled on AWS staging"),
     }),
-    /** Staging stub — Cognito MFA not provisioned; production Supabase TOTP unchanged. */
+    /** Staging stub — app-level ChecksOps Financial TOTP is used; Cognito login MFA stays off. */
     mfa: {
       listFactors: async () => ({ data: { totp: [], all: [], phone: [] }, error: null }),
       enroll: mfaUnavailable,
