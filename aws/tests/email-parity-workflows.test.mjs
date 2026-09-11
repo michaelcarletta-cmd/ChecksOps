@@ -303,8 +303,21 @@ test('ledger send, portal invite, OTP, leads, and mortgage notify call mailer on
         result: () => ({ rows: [{ id: REQUEST, tenant_id: TENANT, mortgage_company: 'Bank', status: 'open' }] }),
       },
       {
+        match: (sql) => sql.includes('FROM public.tenants'),
+        result: () => ({ rows: [{
+          id: TENANT,
+          name: 'Acme',
+          logo_url: null,
+          primary_color: '#123456',
+          email_from_name: 'Acme',
+          email_from_address: 'noreply@notify.example.test',
+          email_reply_to: 'claims@notify.example.test',
+          is_system_tenant: false,
+        }] }),
+      },
+      {
         match: (sql) => sql.includes('FROM public.tenant_users'),
-        result: () => ({ rows: [{ '?column?': 1 }] }),
+        result: () => ({ rows: [{ role: 'admin' }] }),
       },
     ]),
   });

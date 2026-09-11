@@ -17,7 +17,7 @@ import {
   scopes,
 } from './moov-client.mjs';
 import { fail, jsonResult } from './caller.mjs';
-import { sendViaSesOrSink } from '../../email.mjs';
+import { deliverAuditedEmail, peekAuditedEmail, stableEmailIdempotencyKey, validatedMailReplyTo } from '../../email.mjs';
 import { renderTransactionalTemplate } from '../../email-templates.mjs';
 import { emailAssetOrigin, resolveEmailBranding } from '../../email-branding.mjs';
 import { normalizeEmail } from '../../email-policy.mjs';
@@ -1275,7 +1275,8 @@ export const stakeholderResendVerification = {
     const id = body.stakeholder_account_id;
     if (!id) return fail('stakeholder_account_id is required', 400);
     const account = (await client.query(
-      `SELECT id, tenant_id, nickname, custname, verification_status, verification_recipient_email
+      `SELECT id, tenant_id, nickname, custname, verification_status, verification_recipient_email,
+              verification_sent_at
        FROM public.stakeholder_accounts
        WHERE id = $1::uuid AND tenant_id = $2::uuid`,
       [id, ctx.tenantId],
@@ -1305,6 +1306,27 @@ export const stakeholderResendVerification = {
       return fail('No recipient email on file — edit the stakeholder and add their email first.', 400);
     }
 
+    const suppliedKey = String(body.idempotencyKey || body.idempotency_key || '').trim();
+    const generation = account.verification_sent_at || 'none';
+    const idempotencyKey = suppliedKey || stableEmailIdempotencyKey('stakeholder-verify', id, generation);
+    const prior = await peekAuditedEmail(client, idempotencyKey);
+    if (!prior.ok) {
+      return fail(prior.error || 'idempotency_unavailable', prior.statusCode || 503, {
+        emailed: false,
+        liveProviderCalled: false,
+      });
+    }
+    if (prior.duplicate) {
+      return jsonResult({
+        success: true,
+        liveProviderCalled: false,
+        emailed: true,
+        duplicate: true,
+        reason: 'idempotent_replay',
+        providerMessageId: prior.row?.provider_message_id || null,
+      });
+    }
+
     const token = randomUUID();
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
     await client.query(
@@ -1318,32 +1340,36 @@ export const stakeholderResendVerification = {
 
     const verifyUrl = `${emailAssetOrigin()}/verify-account/${token}`;
     const branding = await resolveEmailBranding(client, { tenantId: account.tenant_id });
+    const reply = validatedMailReplyTo(branding.replyTo);
+    if (!reply.ok) {
+      return fail(reply.error || 'invalid_reply_to', 400, {
+        emailed: false,
+        liveProviderCalled: false,
+      });
+    }
     const rendered = renderTransactionalTemplate('stakeholder-verify-account', {
       nickname: account.nickname,
       custname: account.custname,
       verifyUrl,
       branding,
     });
-    const mailer = send || sendViaSesOrSink;
-    let sendResult;
-    try {
-      sendResult = await mailer({
-        to,
+    const delivery = await deliverAuditedEmail(client, {
+      templateName: 'stakeholder-verify-account',
+      recipientEmail: to,
+      tenantId: account.tenant_id,
+      idempotencyKey,
+      metadata: { stakeholder_account_id: id },
+      send,
+      mailerArgs: {
         subject: rendered.subject,
         html: rendered.html,
         text: rendered.text,
         from: branding.from,
-        replyTo: branding.replyTo,
-      });
-    } catch (error) {
-      return fail(String(error?.message || 'Failed to send verification email').slice(0, 240), 502, {
-        emailed: false,
-        liveProviderCalled: false,
-      });
-    }
-    const invoked = Array.isArray(sendResult?.results) && sendResult.results.length > 0;
-    if (!invoked) {
-      return fail('Verification email was not sent', 502, {
+        replyTo: reply.replyTo,
+      },
+    });
+    if (!delivery.ok) {
+      return fail(delivery.error || 'Failed to send verification email', delivery.statusCode || 502, {
         emailed: false,
         liveProviderCalled: false,
       });
@@ -1358,6 +1384,8 @@ export const stakeholderResendVerification = {
       success: true,
       liveProviderCalled: false,
       emailed: true,
+      duplicate: delivery.duplicate === true,
+      providerMessageId: delivery.providerMessageId || delivery.replay?.providerMessageId || null,
     });
   },
 };

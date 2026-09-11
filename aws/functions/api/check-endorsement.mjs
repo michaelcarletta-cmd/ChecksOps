@@ -8,7 +8,7 @@ import pg from 'pg';
 import { parseBody, ignoredSpoof, withIdentityWrite } from './data.mjs';
 import { loadDatabaseCredentials } from './secrets.mjs';
 import { buildClientConfig, buildWriteClientConfig, sanitizePublicError } from './db-health.mjs';
-import { sendViaSesOrSink } from './email.mjs';
+import { deliverAuditedEmail, peekAuditedEmail, replayIdempotentSend, stableEmailIdempotencyKey, validatedMailReplyTo } from './email.mjs';
 import { defaultFromAddress } from './email-policy.mjs';
 import { renderTransactionalTemplate } from './email-templates.mjs';
 import { resolveEmailBranding } from './email-branding.mjs';
@@ -507,38 +507,6 @@ export const runPublicEndorsement = async (event, deps = {}) => {
 
 export const handlePublicEndorsement = (event, deps = {}) => runPublicEndorsement(event, deps);
 
-const sendEndorsementEmail = async ({ endorsement, check, email, url, branding, cc, send }) => {
-  const mailer = send || sendViaSesOrSink;
-  const rendered = renderTransactionalTemplate('endorsement-request', {
-    payeeName: endorsement.payee_name,
-    checkNumber: check.check_number || 'N/A',
-    carrier: check.carrier_name || 'Unknown',
-    amount: check.amount,
-    endorseUrl: url,
-    companyName: branding.company_name || 'ChecksOps',
-    branding,
-    subject: branding.endorsement_email_subject || undefined,
-  });
-  const subjectBase = branding.endorsement_email_subject
-    || `Endorsement Required — Check #${check.check_number || 'N/A'}`;
-  const subject = subjectBase.includes(endorsement.payee_name)
-    ? subjectBase
-    : `${subjectBase} — ${endorsement.payee_name}`;
-  const recipients = [email, ...(cc || [])].filter(Boolean);
-  return mailer({
-    to: recipients,
-    subject,
-    html: rendered.html,
-    text: rendered.text,
-    from: branding.from || defaultFromAddress(),
-    replyTo: branding.replyTo || branding.company_email || null,
-    headers: {
-      'X-Entity-Ref-ID': String(endorsement.id),
-      'X-Endorsement-Payee': String(endorsement.payee_name || ''),
-    },
-  });
-};
-
 export const runAuthenticatedEndorsement = async ({
   client, mapping, body, spoof, event, send,
 }) => {
@@ -590,6 +558,18 @@ export const runAuthenticatedEndorsement = async ({
     if (!email) {
       return { ok: false, statusCode: 502, success: false, error: 'Email delivery failed', details: { emailError: 'Missing payee email address' }, spoofFieldsIgnored: spoof };
     }
+    const suppliedKey = String(body.idempotencyKey || body.idempotency_key || '').trim();
+    const generation = endorsement.request_sent_at || 'none';
+    const idempotencyKey = suppliedKey || stableEmailIdempotencyKey('endorsement', endorsement.id, generation);
+    const prior = await peekAuditedEmail(client, idempotencyKey);
+    if (!prior.ok) return { ...prior, spoofFieldsIgnored: spoof };
+    if (prior.duplicate) {
+      return {
+        ...replayIdempotentSend(prior.row, spoof),
+        emailSent: true,
+        ...denyDepositAdvance(),
+      };
+    }
     let activeToken = endorsement.token || rotateToken();
     await client.query(
       `UPDATE public.check_endorsements
@@ -624,12 +604,16 @@ export const runAuthenticatedEndorsement = async ({
        FROM public.company_branding LIMIT 1`,
     )).rows[0] || {};
     const resolved = await resolveEmailBranding(client, { tenantId });
+    const reply = validatedMailReplyTo(resolved.replyTo);
+    if (!reply.ok) {
+      return { ok: false, statusCode: 400, error: reply.error, spoofFieldsIgnored: spoof };
+    }
     const branding = {
       company_name: resolved.companySubtitle || resolved.companyName || tenant?.email_from_name || tenant?.name || brandingRow.company_name,
-      company_email: resolved.replyTo || tenant?.email_reply_to || brandingRow.company_email,
+      company_email: reply.replyTo || tenant?.email_reply_to || brandingRow.company_email,
       endorsement_email_subject: brandingRow.endorsement_email_subject,
       from: resolved.from,
-      replyTo: resolved.replyTo,
+      replyTo: reply.replyTo,
       primaryColor: resolved.primaryColor,
       logoUrl: resolved.logoUrl,
       companySubtitle: resolved.companySubtitle,
@@ -652,19 +636,54 @@ export const runAuthenticatedEndorsement = async ({
     }
     let emailSent = false;
     let emailError = null;
-    try {
-      await sendEndorsementEmail({
-        endorsement: { ...endorsement, contact_email: email },
-        check,
-        email,
-        url: endorsementUrl,
-        branding,
-        cc,
+    let providerMessageId = null;
+    const rendered = renderTransactionalTemplate('endorsement-request', {
+      payeeName: endorsement.payee_name,
+      checkNumber: check.check_number || 'N/A',
+      carrier: check.carrier_name || 'Unknown',
+      amount: check.amount,
+      endorseUrl: endorsementUrl,
+      companyName: branding.company_name || 'ChecksOps',
+      branding,
+      subject: branding.endorsement_email_subject || undefined,
+    });
+    const subjectBase = branding.endorsement_email_subject
+      || `Endorsement Required — Check #${check.check_number || 'N/A'}`;
+    const subject = subjectBase.includes(endorsement.payee_name)
+      ? subjectBase
+      : `${subjectBase} — ${endorsement.payee_name}`;
+    const uniqueRecipients = [...new Set([email, ...cc].map((value) => String(value).trim().toLowerCase()).filter(Boolean))];
+    for (const recipient of uniqueRecipients) {
+      const recipientKey = recipient === email.toLowerCase()
+        ? idempotencyKey
+        : stableEmailIdempotencyKey(idempotencyKey, recipient);
+      const delivery = await deliverAuditedEmail(client, {
+        templateName: 'endorsement-request',
+        recipientEmail: recipient,
+        tenantId,
+        idempotencyKey: recipientKey,
+        applicationUserId: mapping.application_user_id,
+        metadata: { endorsement_id: endorsement.id, check_id: endorsement.check_id },
+        spoof,
         send,
+        mailerArgs: {
+          subject,
+          html: rendered.html,
+          text: rendered.text,
+          from: branding.from || defaultFromAddress(),
+          replyTo: branding.replyTo,
+        },
       });
+      if (!delivery.ok) {
+        if (delivery.statusCode === 503) return { ...delivery, spoofFieldsIgnored: spoof };
+        emailError = delivery.error || 'audit_unavailable';
+        emailSent = false;
+        break;
+      }
       emailSent = true;
-    } catch (error) {
-      emailError = String(error?.message || error).slice(0, 200);
+      if (recipient === email.toLowerCase()) {
+        providerMessageId = delivery.providerMessageId || delivery.replay?.providerMessageId || null;
+      }
     }
     if (!emailSent) {
       await auditEndorsement(client, {
@@ -722,6 +741,7 @@ export const runAuthenticatedEndorsement = async ({
       success: true,
       endorsementUrl,
       emailSent: true,
+      providerMessageId,
       ...denyDepositAdvance(),
       spoofFieldsIgnored: spoof,
     };

@@ -4,7 +4,7 @@
  * SMS is omitted. No provider money movement.
  */
 import { withIdentityWrite } from './data.mjs';
-import { sendViaSesOrSink } from './email.mjs';
+import { deliverAuditedEmail, stableEmailIdempotencyKey, validatedMailReplyTo } from './email.mjs';
 import { defaultFromAddress } from './email-policy.mjs';
 import { renderTransactionalTemplate } from './email-templates.mjs';
 import { resolveEmailBranding } from './email-branding.mjs';
@@ -81,6 +81,10 @@ export const runSendPaymentDirectionRequest = async ({
     `SELECT company_name, company_email FROM public.company_branding LIMIT 1`,
   )).rows[0] || {};
   const resolved = await resolveEmailBranding(client, { tenantId: claim.tenant_id });
+  const reply = validatedMailReplyTo(resolved.replyTo);
+  if (!reply.ok) {
+    return { ok: false, statusCode: 400, error: reply.error, spoofFieldsIgnored: spoof };
+  }
   const companyName = resolved.companySubtitle || resolved.companyName || branding.company_name || 'ChecksOps';
   const mail = buildPaymentDirectionEmail({
     policyholderName: claim.policyholder_name,
@@ -101,15 +105,24 @@ export const runSendPaymentDirectionRequest = async ({
     };
   }
 
-  const mailer = send || sendViaSesOrSink;
-  const result = await mailer({
-    to: claim.policyholder_email,
-    subject: mail.subject,
-    html: mail.html,
-    text: mail.text,
-    from: resolved.from || defaultFromAddress(),
-    replyTo: resolved.replyTo,
+  const suppliedKey = String(body.idempotencyKey || body.idempotency_key || '').trim();
+  const delivery = await deliverAuditedEmail(client, {
+    templateName: 'payment-direction-request',
+    recipientEmail: claim.policyholder_email,
+    tenantId: claim.tenant_id,
+    idempotencyKey: suppliedKey || stableEmailIdempotencyKey('payment-direction', claimId, checkId),
+    metadata: { claim_id: claimId, check_id: checkId },
+    spoof,
+    send,
+    mailerArgs: {
+      subject: mail.subject,
+      html: mail.html,
+      text: mail.text,
+      from: resolved.from || defaultFromAddress(),
+      replyTo: reply.replyTo,
+    },
   });
+  if (!delivery.ok) return { ...delivery, spoofFieldsIgnored: spoof };
 
   await safeQuery(
     client,
@@ -123,8 +136,10 @@ export const runSendPaymentDirectionRequest = async ({
     ok: true,
     statusCode: 200,
     success: true,
+    duplicate: delivery.duplicate === true,
+    providerMessageId: delivery.providerMessageId || delivery.replay?.providerMessageId || null,
     results: {
-      email: (result?.deliveredCount || 0) > 0 || (result?.sunkCount || 0) > 0,
+      email: true,
       sms: false,
       provider: 'aws_ses_or_sink',
     },

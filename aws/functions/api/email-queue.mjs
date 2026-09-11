@@ -2,9 +2,8 @@
  * Staging email queue worker + suppression/webhook stubs (Class A).
  * Drains pending rows using SES/sink policy — never production Resend.
  */
-import { randomUUID } from 'node:crypto';
 import { withIdentity, parseBody, ignoredSpoof } from './data.mjs';
-import { emailSendLogStatusFromMailer, sendViaSesOrSink, withEmailLogSavepoint } from './email.mjs';
+import { deliverAuditedEmail, stableEmailIdempotencyKey, validatedMailReplyTo } from './email.mjs';
 import { emailMode, normalizeEmail } from './email-policy.mjs';
 import { resolveEmailBranding } from './email-branding.mjs';
 import { loadDatabaseCredentials } from './secrets.mjs';
@@ -13,7 +12,7 @@ import pg from 'pg';
 
 const { Client } = pg;
 
-export const handleProcessEmailQueue = async (event) => {
+export const handleProcessEmailQueue = async (event, deps = {}) => {
   const body = parseBody(event);
   const spoof = ignoredSpoof(event, body);
   const batchSize = Math.min(Number(body.batchSize || body.batch_size || 10), 25);
@@ -24,7 +23,9 @@ export const handleProcessEmailQueue = async (event) => {
   const isScheduled = scheduledSecret && headerSecret && headerSecret === scheduledSecret;
 
   if (!isScheduled) {
-    return withIdentity(event, async ({ client, spoof: s }) => processBatch(client, batchSize, s), {
+    return withIdentity(event, async ({ client, spoof: s }) => (
+      processBatch(client, batchSize, s, deps.sendViaSesOrSink)
+    ), {
       write: true,
       commit: true,
     });
@@ -37,7 +38,7 @@ export const handleProcessEmailQueue = async (event) => {
     await client.connect();
     await client.query('BEGIN');
     await client.query('SET TRANSACTION READ WRITE');
-    const result = await processBatch(client, batchSize, spoof);
+    const result = await processBatch(client, batchSize, spoof, deps.sendViaSesOrSink);
     await client.query('COMMIT');
     return result;
   } catch (error) {
@@ -58,9 +59,10 @@ export const handleProcessEmailQueue = async (event) => {
   }
 };
 
-const processBatch = async (client, batchSize, spoof) => {
+const processBatch = async (client, batchSize, spoof, send) => {
   // Prefer email_outbox / email_queue if present; otherwise no-op success.
   let rows = [];
+  let table = 'email_outbox';
   try {
     rows = (await client.query(
       `SELECT id, recipient_email, subject, html_body, text_body, template_name, tenant_id, attempts
@@ -72,6 +74,7 @@ const processBatch = async (client, batchSize, spoof) => {
     )).rows;
   } catch {
     try {
+      table = 'email_queue';
       rows = (await client.query(
         `SELECT id, to_email AS recipient_email, subject, body_html AS html_body, body_text AS text_body,
                 template_name, tenant_id, retry_count AS attempts
@@ -96,45 +99,51 @@ const processBatch = async (client, batchSize, spoof) => {
 
   let sunk = 0;
   let sent = 0;
+  let skipped = 0;
   for (const row of rows) {
     const branding = row.tenant_id
       ? await resolveEmailBranding(client, { tenantId: row.tenant_id })
-      : null;
-    const send = await sendViaSesOrSink({
-      to: row.recipient_email,
-      subject: row.subject || 'ChecksOps notification',
-      html: row.html_body || `<pre>${row.text_body || ''}</pre>`,
-      text: row.text_body || '',
-      from: branding?.from,
-      replyTo: branding?.replyTo,
+      : await resolveEmailBranding(client, { senderOverride: 'checksops' });
+    const reply = validatedMailReplyTo(branding?.replyTo);
+    if (!reply.ok) {
+      skipped += 1;
+      continue;
+    }
+    const delivery = await deliverAuditedEmail(client, {
+      templateName: row.template_name || 'queue',
+      recipientEmail: row.recipient_email,
+      tenantId: row.tenant_id || null,
+      idempotencyKey: stableEmailIdempotencyKey('email-queue', row.id),
+      provider: 'aws_staging_queue',
+      metadata: { queueId: row.id, table },
+      spoof,
+      send,
+      mailerArgs: {
+        subject: row.subject || 'ChecksOps notification',
+        html: row.html_body || `<pre>${row.text_body || ''}</pre>`,
+        text: row.text_body || '',
+        from: branding?.from,
+        replyTo: reply.replyTo,
+      },
     });
-    const primary = send.results[0] || {};
-    const status = emailSendLogStatusFromMailer(primary);
+    if (!delivery.ok) {
+      skipped += 1;
+      continue;
+    }
+    const primary = delivery.primary || {};
+    const status = delivery.duplicate
+      ? (delivery.row?.status || 'sunk')
+      : (primary.delivery === 'ses' && primary.status === 'sent' ? 'sent' : (primary.status === 'failed' ? 'failed' : 'sunk'));
     if (status === 'sunk' || status === 'failed') sunk += 1;
     else sent += 1;
-    await client.query(
-      `UPDATE public.email_outbox SET status = $2, updated_at = now() WHERE id = $1`,
-      [row.id, status],
-    ).catch(async () => {
-      await client.query(
-        `UPDATE public.email_queue SET status = $2, updated_at = now() WHERE id = $1`,
-        [row.id, status],
-      ).catch(() => {});
-    });
-    await withEmailLogSavepoint(client, () => client.query(
-      `INSERT INTO public.email_send_log (
-         id, template_name, recipient_email, tenant_id, status, provider, provider_message_id, metadata, created_at
-       ) VALUES ($1::uuid, $2, $3, $4::uuid, $5, 'aws_staging_queue', $6, $7::jsonb, now())`,
-      [
-        randomUUID(),
-        row.template_name || 'queue',
-        normalizeEmail(row.recipient_email),
-        row.tenant_id || null,
-        status,
-        primary.messageId || null,
-        JSON.stringify({ queueId: row.id, mode: emailMode() }),
-      ],
-    )).catch(() => {});
+    const updateSql = table === 'email_outbox'
+      ? `UPDATE public.email_outbox SET status = $2, updated_at = now() WHERE id = $1`
+      : `UPDATE public.email_queue SET status = $2, updated_at = now() WHERE id = $1`;
+    try {
+      await client.query(updateSql, [row.id, status]);
+    } catch {
+      /* queue table variants */
+    }
   }
 
   return {
@@ -143,10 +152,13 @@ const processBatch = async (client, batchSize, spoof) => {
     processed: rows.length,
     sunk,
     sent,
+    skipped,
     mode: emailMode(),
     spoofFieldsIgnored: spoof,
   };
 };
+
+export const processEmailQueueBatch = processBatch;
 
 export const handleEmailSuppression = async (event) => {
   const body = parseBody(event);
