@@ -67,6 +67,7 @@ test('canonical status/stage pairs reject deposited + ready_for_deposit', () => 
   assert.equal(stageForStatus('deposited'), 'deposited');
   assert.match(inconsistentPairReason('deposited', 'ready_for_deposit'), /requires check_stage "deposited"/);
   assert.equal(inconsistentPairReason('endorsements_in_progress', 'endorsing'), null);
+  assert.equal(inconsistentPairReason('deposited', 'funds_released'), null);
 });
 
 test('admin override requires reason and refuses deposited destinations', () => {

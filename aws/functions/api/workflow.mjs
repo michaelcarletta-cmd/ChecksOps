@@ -13,7 +13,7 @@ import {
   TRANSITIONS,
 } from './workflow-transitions.mjs';
 import { applyReverseTransitionCleanup } from './workflow-cleanup.mjs';
-import { executeAdminOverride } from './workflow-override.mjs';
+import { executeAdminOverride, withSavepoint } from './workflow-override.mjs';
 import {
   evaluateEndorsementEligibility,
   loadCheckEndorsements,
@@ -345,14 +345,16 @@ export const handleCheckTransition = async (event, deps = {}) => {
       [looked.check.id, decided.nextStatus, decided.nextStage, mapping.application_user_id, notes.value],
     )).rows;
     if (!rows.length) return denied(spoof, { error: 'rls_denied', message: 'check not writable or no longer unlinked' });
-    await applyReverseTransitionCleanup(client, {
-      checkId: looked.check.id,
-      action,
-      fromStatus: looked.check.status,
-      fromStage: looked.check.check_stage,
-      toStatus: decided.nextStatus,
-      toStage: decided.nextStage,
-      actorId: mapping.application_user_id,
+    await withSavepoint(client, 'reverse_cleanup', async () => {
+      await applyReverseTransitionCleanup(client, {
+        checkId: looked.check.id,
+        action,
+        fromStatus: looked.check.status,
+        fromStage: looked.check.check_stage,
+        toStatus: decided.nextStatus,
+        toStage: decided.nextStage,
+        actorId: mapping.application_user_id,
+      });
     });
     await client.query(
       `INSERT INTO public.check_audit_log (

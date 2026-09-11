@@ -94,27 +94,31 @@ export const applyReverseTransitionCleanup = async (client, {
     ])).rows;
     closed.push(...rows.map((row) => row.id));
     if (rows.length) {
-      await client.query(
-        `INSERT INTO public.loss_draft_audit_log (loss_draft_id, action, actor_id, notes, old_values, new_values)
-         SELECT id, 'workflow_reverse_cleanup', $2::uuid, $3::text, $4::jsonb, $5::jsonb
-         FROM public.loss_draft_tracking
-         WHERE id = ANY($1::uuid[])`,
-        [
-          closed,
-          actorId || null,
-          note,
-          JSON.stringify({ escrow_status: fromStatus, check_stage: fromStage }),
-          JSON.stringify({
-            escrow_status: LOSS_DRAFT_OPERATIONAL_CLOSE_STATUS,
-            check_id: checkId,
-            to_status: toStatus,
-            to_stage: toStage,
-            historical_row_retained: true,
-          }),
-        ],
-      ).catch(() => {
-        /* operational close still applies if audit insert is denied */
-      });
+      await client.query('SAVEPOINT loss_draft_audit');
+      try {
+        await client.query(
+          `INSERT INTO public.loss_draft_audit_log (loss_draft_id, action, actor_id, notes, old_values, new_values)
+           SELECT id, 'workflow_reverse_cleanup', $2::uuid, $3::text, $4::jsonb, $5::jsonb
+           FROM public.loss_draft_tracking
+           WHERE id = ANY($1::uuid[])`,
+          [
+            closed,
+            actorId || null,
+            note,
+            JSON.stringify({ escrow_status: fromStatus, check_stage: fromStage }),
+            JSON.stringify({
+              escrow_status: LOSS_DRAFT_OPERATIONAL_CLOSE_STATUS,
+              check_id: checkId,
+              to_status: toStatus,
+              to_stage: toStage,
+              historical_row_retained: true,
+            }),
+          ],
+        );
+        await client.query('RELEASE SAVEPOINT loss_draft_audit');
+      } catch {
+        await client.query('ROLLBACK TO SAVEPOINT loss_draft_audit').catch(() => {});
+      }
     }
   }
   return { ...plan, closedTrackingIds: closed };

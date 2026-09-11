@@ -82,6 +82,19 @@ export const evaluateAdminOverride = ({ current = {}, destinationStatus, reason 
   };
 };
 
+export const withSavepoint = async (client, name, fn) => {
+  const sp = String(name || 'sp').replace(/[^a-z0-9_]/gi, '_');
+  await client.query(`SAVEPOINT ${sp}`);
+  try {
+    const result = await fn();
+    await client.query(`RELEASE SAVEPOINT ${sp}`);
+    return result;
+  } catch (error) {
+    try { await client.query(`ROLLBACK TO SAVEPOINT ${sp}`); } catch { /* ignore */ }
+    return { ok: false, error: String(error?.message || error).slice(0, 200) };
+  }
+};
+
 export const executeAdminOverride = async (client, {
   check,
   mapping,
@@ -118,22 +131,26 @@ export const executeAdminOverride = async (client, {
     return { ok: false, error: 'rls_denied', message: 'check not writable' };
   }
 
-  await applyReverseTransitionCleanup(client, {
-    checkId: check.id,
-    action: 'admin_override',
-    fromStatus: previousStatus,
-    fromStage: previousStage,
-    toStatus: decided.nextStatus,
-    toStage: decided.nextStage,
-    actorId: mapping.application_user_id,
+  await withSavepoint(client, 'reverse_cleanup', async () => {
+    await applyReverseTransitionCleanup(client, {
+      checkId: check.id,
+      action: 'admin_override',
+      fromStatus: previousStatus,
+      fromStage: previousStage,
+      toStatus: decided.nextStatus,
+      toStage: decided.nextStage,
+      actorId: mapping.application_user_id,
+    });
   });
 
-  await client.query(
-    `UPDATE public.claim_checks
-     SET check_stage = $2::check_stage, updated_at = now()
-     WHERE check_intake_item_id = $1::uuid`,
-    [check.id, decided.nextStage],
-  ).catch(() => {});
+  await withSavepoint(client, 'claim_checks_mirror', async () => {
+    await client.query(
+      `UPDATE public.claim_checks
+       SET check_stage = $2::check_stage, updated_at = now()
+       WHERE check_intake_item_id = $1::uuid`,
+      [check.id, decided.nextStage],
+    );
+  });
 
   const audit = (await client.query(
     `INSERT INTO public.check_audit_log (

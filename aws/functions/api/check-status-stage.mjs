@@ -42,6 +42,12 @@ export const STATUS_TO_STAGE = Object.freeze({
   disbursed_externally: 'disbursed_externally',
 });
 
+/** Extra stages that remain valid after a later operational progression. */
+export const STATUS_ALLOWED_EXTRA_STAGES = Object.freeze({
+  deposited: ['funds_released', 'disbursed_externally'],
+  funds_released: ['disbursed_externally'],
+});
+
 export const IMPOSSIBLE_STATUS_STAGE_PAIRS = Object.freeze([
   { status: 'deposited', check_stage: 'ready_for_deposit' },
   { status: 'deposited', check_stage: 'review' },
@@ -67,7 +73,10 @@ export const stageForStatus = (status) => {
 export const isAllowedStatusStagePair = (status, checkStage) => {
   const expected = stageForStatus(status);
   if (!expected) return false;
-  return String(checkStage || '') === expected;
+  const stage = String(checkStage || '');
+  if (stage === expected) return true;
+  const extra = STATUS_ALLOWED_EXTRA_STAGES[String(status || '').trim()] || [];
+  return extra.includes(stage);
 };
 
 export const inconsistentPairReason = (status, checkStage) => {
@@ -87,7 +96,11 @@ SELECT c.id::text AS id,
        c.deposited_at
 FROM public.check_intake_items c
 WHERE (
-  (c.status = 'deposited' AND c.check_stage IS DISTINCT FROM 'deposited')
+  (c.status = 'deposited' AND c.check_stage IS DISTINCT FROM 'deposited'
+      AND c.check_stage IS DISTINCT FROM 'funds_released'
+      AND c.check_stage IS DISTINCT FROM 'disbursed_externally')
+  OR (c.status = 'funds_released' AND c.check_stage IS DISTINCT FROM 'funds_released'
+      AND c.check_stage IS DISTINCT FROM 'disbursed_externally')
   OR (c.status = 'loss_draft_required' AND c.check_stage IS DISTINCT FROM 'loss_draft')
   OR (c.status = 'endorsements_in_progress' AND c.check_stage IS DISTINCT FROM 'endorsing')
   OR (c.status = 'approved_for_deposit' AND c.check_stage IS DISTINCT FROM 'ready_for_deposit')
