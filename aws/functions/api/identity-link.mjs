@@ -99,9 +99,9 @@ export const linkIdentityAccount = async (client, input = {}) => {
   const linked = (await client.query(LINK_BY_APP_SQL, [parsed.applicationUserId])).rows[0];
   return {
     ok: true,
-    applicationUserId: linked.application_user_id,
-    cognitoSub: linked.cognito_sub,
-    email: linked.email,
-    status: linked.status,
+    applicationUserId: linked?.application_user_id || parsed.applicationUserId,
+    cognitoSub: linked?.cognito_sub || parsed.cognitoSub,
+    email: linked?.email || parsed.email,
+    status: linked?.status || 'active',
   };
 };
