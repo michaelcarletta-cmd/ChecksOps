@@ -96,13 +96,6 @@ test('SOFTWARE_TOKEN_MFA with EMAIL_OTP available selects EMAIL_OTP via SELECT_C
     },
     {
       body: {
-        ChallengeName: 'SELECT_CHALLENGE',
-        Session: 'choice-session',
-        AvailableChallenges: ['EMAIL_OTP', 'PASSWORD', 'WEB_AUTHN'],
-      },
-    },
-    {
-      body: {
         ChallengeName: 'EMAIL_OTP',
         Session: 'email-otp-after-select',
         ChallengeParameters: { CODE_DELIVERY_DESTINATION: 'm***@f***' },
@@ -115,20 +108,17 @@ test('SOFTWARE_TOKEN_MFA with EMAIL_OTP available selects EMAIL_OTP via SELECT_C
   assert.equal(result.challenge, 'EMAIL_OTP');
   assert.equal(result.session, 'email-otp-after-select');
   assert.equal(result.passwordUsed, false);
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 2);
   assert.equal(calls[0].target, 'AWSCognitoIdentityProviderService.InitiateAuth');
   assert.equal(calls[0].parsed.AuthParameters.PREFERRED_CHALLENGE, 'EMAIL_OTP');
-  assert.equal(calls[1].target, 'AWSCognitoIdentityProviderService.InitiateAuth');
-  assert.equal(calls[1].parsed.AuthParameters.PREFERRED_CHALLENGE, undefined);
-  assert.equal(calls[1].parsed.AuthParameters.USERNAME, EMAIL);
-  assert.equal(calls[2].target, 'AWSCognitoIdentityProviderService.RespondToAuthChallenge');
-  assert.equal(calls[2].parsed.ChallengeName, 'SELECT_CHALLENGE');
-  assert.equal(calls[2].parsed.Session, 'choice-session');
-  assert.equal(calls[2].parsed.ChallengeResponses.ANSWER, 'EMAIL_OTP');
-  assert.equal(calls[2].parsed.ChallengeResponses.USERNAME, EMAIL);
-  assert.equal(calls[2].parsed.ChallengeResponses.SOFTWARE_TOKEN_MFA_CODE, undefined);
+  assert.equal(calls[1].target, 'AWSCognitoIdentityProviderService.RespondToAuthChallenge');
+  assert.equal(calls[1].parsed.ChallengeName, 'SELECT_CHALLENGE');
+  assert.equal(calls[1].parsed.Session, 'totp-session');
+  assert.equal(calls[1].parsed.ChallengeResponses.ANSWER, 'EMAIL_OTP');
+  assert.equal(calls[1].parsed.ChallengeResponses.USERNAME, EMAIL);
+  assert.equal(calls[1].parsed.ChallengeResponses.SOFTWARE_TOKEN_MFA_CODE, undefined);
   const serialized = JSON.stringify(calls);
-  assert.doesNotMatch(serialized, /SetUserMFAPreference|AdminSetUserMFAPreference|PreferredMfa/);
+  assert.doesNotMatch(serialized, /SetUserMFAPreference|AdminSetUserMFAPreference|PreferredMfa|AdminSetUserPassword/);
 });
 
 test('SELECT_CHALLENGE with EMAIL_OTP available selects EMAIL_OTP without a second InitiateAuth', async () => {
@@ -170,6 +160,52 @@ test('SOFTWARE_TOKEN_MFA without EMAIL_OTP fails closed and does not select a ch
   assert.equal(result.error, 'email_otp_unavailable');
   assert.equal(result.challenge, 'SOFTWARE_TOKEN_MFA');
   assert.deepEqual(result.availableChallenges, ['WEB_AUTHN']);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].target, 'AWSCognitoIdentityProviderService.InitiateAuth');
+});
+
+test('SELECT_CHALLENGE that does not yield EMAIL_OTP after selection fails closed', async () => {
+  const { result, calls } = await withCognito([
+    {
+      body: {
+        ChallengeName: 'SOFTWARE_TOKEN_MFA',
+        Session: 'totp-session',
+        AvailableChallenges: ['EMAIL_OTP', 'WEB_AUTHN'],
+      },
+    },
+    {
+      body: {
+        ChallengeName: 'SOFTWARE_TOKEN_MFA',
+        Session: 'still-totp-session',
+        AvailableChallenges: ['WEB_AUTHN'],
+      },
+    },
+  ], () => handleAuthPasswordlessStart(eventOf({ email: EMAIL })));
+
+  assert.equal(result.ok, false);
+  assert.equal(result.statusCode, 409);
+  assert.equal(result.error, 'email_otp_unavailable');
+  assert.equal(result.challenge, 'SOFTWARE_TOKEN_MFA');
+  assert.deepEqual(result.availableChallenges, ['WEB_AUTHN']);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].parsed.ChallengeName, 'SELECT_CHALLENGE');
+  assert.equal(calls[1].parsed.ChallengeResponses.ANSWER, 'EMAIL_OTP');
+});
+
+test('SELECT_CHALLENGE with only password factors fails closed without selecting EMAIL_OTP', async () => {
+  const { result, calls } = await withCognito([{
+    body: {
+      ChallengeName: 'SELECT_CHALLENGE',
+      Session: 'password-only-session',
+      AvailableChallenges: ['PASSWORD', 'PASSWORD_SRP'],
+    },
+  }], () => handleAuthPasswordlessStart(eventOf({ email: EMAIL })));
+
+  assert.equal(result.ok, false);
+  assert.equal(result.statusCode, 409);
+  assert.equal(result.error, 'email_otp_unavailable');
+  assert.equal(result.challenge, 'SELECT_CHALLENGE');
+  assert.deepEqual(result.availableChallenges, ['PASSWORD', 'PASSWORD_SRP']);
   assert.equal(calls.length, 1);
   assert.equal(calls[0].target, 'AWSCognitoIdentityProviderService.InitiateAuth');
 });

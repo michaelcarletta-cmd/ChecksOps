@@ -131,27 +131,16 @@ const finishPasswordlessResult = async (email, result) => {
  * not eligible for EMAIL_OTP.
  *
  * After TOTP enrollment Cognito may present SOFTWARE_TOKEN_MFA first.
- * If EMAIL_OTP remains in AvailableChallenges, request first-factor choices
- * (USERNAME-only USER_AUTH) and select EMAIL_OTP via SELECT_CHALLENGE.
- * Do not complete TOTP or change MFA preferences.
+ * If EMAIL_OTP remains in AvailableChallenges, select EMAIL_OTP on that
+ * session via SELECT_CHALLENGE. Do not complete TOTP or change MFA preferences.
+ * Fail closed when EMAIL_OTP is not listed.
  */
 export const handleAuthPasswordlessStart = async (event) => {
   const body = parseBody(event);
   const email = emailOf(body.email || body.username);
   if (!email) return { ok: false, statusCode: 400, error: 'missing_email' };
   try {
-    let result = await initiateUserAuth(email, true);
-    if (result.AuthenticationResult) return completedPasswordless(result);
-    if (result.ChallengeName === EMAIL_OTP) return passwordlessEmailOtpIssued(result, email);
-
-    if (result.ChallengeName === 'SOFTWARE_TOKEN_MFA' && emailOtpIsListed(result)) {
-      // SELECT_CHALLENGE on a SOFTWARE_TOKEN_MFA session drops EMAIL_OTP.
-      // Username-only USER_AUTH returns first-factor choices including EMAIL_OTP.
-      result = await initiateUserAuth(email, false);
-      if (result.AuthenticationResult) return completedPasswordless(result);
-      if (result.ChallengeName === EMAIL_OTP) return passwordlessEmailOtpIssued(result, email);
-    }
-
+    const result = await initiateUserAuth(email, true);
     return finishPasswordlessResult(email, result);
   } catch (error) {
     return {
