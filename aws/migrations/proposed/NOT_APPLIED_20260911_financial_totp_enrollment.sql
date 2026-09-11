@@ -180,7 +180,13 @@ BEGIN
     verified_at = NULL,
     last_used_timestep = NULL,
     failed_attempts = 0,
-    locked_until = NULL;
+    locked_until = NULL
+  WHERE public.financial_totp_enrollments.verified_at IS NULL;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'verified_enrollment_exists'
+      USING ERRCODE = 'P0001';
+  END IF;
 END;
 $$;
 
@@ -224,7 +230,7 @@ CREATE OR REPLACE FUNCTION public.financial_totp_mark_verified(
   p_user_id uuid,
   p_timestep bigint
 )
-RETURNS void
+RETURNS boolean
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public, pg_temp
@@ -234,12 +240,22 @@ BEGIN
     RAISE EXCEPTION 'enrollment_caller_mismatch'
       USING ERRCODE = '42501';
   END IF;
+  IF p_timestep IS NULL THEN
+    UPDATE public.financial_totp_enrollments
+       SET verified_at = COALESCE(verified_at, now()),
+           failed_attempts = 0,
+           locked_until = NULL
+     WHERE application_user_id = p_user_id;
+    RETURN FOUND;
+  END IF;
   UPDATE public.financial_totp_enrollments
      SET verified_at = COALESCE(verified_at, now()),
-         last_used_timestep = COALESCE(p_timestep, last_used_timestep),
+         last_used_timestep = p_timestep,
          failed_attempts = 0,
          locked_until = NULL
-   WHERE application_user_id = p_user_id;
+   WHERE application_user_id = p_user_id
+     AND last_used_timestep IS DISTINCT FROM p_timestep;
+  RETURN FOUND;
 END;
 $$;
 
@@ -265,6 +281,7 @@ BEGIN
 END;
 $$;
 
+ALTER FUNCTION public.financial_totp_status(uuid) OWNER TO checksops_admin;
 COMMENT ON FUNCTION public.financial_totp_status(uuid) IS
   'Enrollment timestamps only. Never returns ciphertext, nonce, or key_id.';
 REVOKE ALL ON FUNCTION public.financial_totp_status(uuid) FROM PUBLIC;

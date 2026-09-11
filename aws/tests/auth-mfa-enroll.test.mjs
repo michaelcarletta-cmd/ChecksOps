@@ -67,6 +67,12 @@ const createStore = ({
           error.code = '42501';
           throw error;
         }
+        const existing = enrollments.get(String(uid));
+        if (existing?.verified_at) {
+          const error = new Error('verified_enrollment_exists');
+          error.code = 'P0001';
+          throw error;
+        }
         enrollments.set(String(uid), {
           ciphertext,
           nonce,
@@ -94,13 +100,18 @@ const createStore = ({
       }
       if (text.includes('financial_totp_mark_verified')) {
         const row = enrollments.get(String(params[0]));
-        if (row) {
-          row.verified_at = row.verified_at || new Date(NOW).toISOString();
-          if (params[1] !== null && params[1] !== undefined) {
-            row.last_used_timestep = params[1];
-          }
+        const timestep = params[1];
+        if (!row) return { rows: [{ claimed: false }] };
+        if (timestep !== null && timestep !== undefined
+          && row.last_used_timestep !== null
+          && Number(row.last_used_timestep) === Number(timestep)) {
+          return { rows: [{ claimed: false }] };
         }
-        return { rows: [] };
+        row.verified_at = row.verified_at || new Date(NOW).toISOString();
+        if (timestep !== null && timestep !== undefined) {
+          row.last_used_timestep = timestep;
+        }
+        return { rows: [{ claimed: true }] };
       }
       if (text.includes('FROM public.check_intake_items')) {
         const check = checks.find((row) => row.id === params[0]);
@@ -441,4 +452,73 @@ test('financial_stepup_log is written only after successful app-TOTP step-up', a
   assert.equal(store.stepups[0].action_key, CHECKALT_TOTP_ACTION);
   assert.equal(store.stepups[0].metadata.check_id, CHECK);
   assert.equal(store.stepups[0].metadata.amount_cents, 1234);
+});
+
+test('verified enrollment cannot be overwritten without an explicit reset', async () => {
+  const store = createStore();
+  const { secret } = await enrollTester(store);
+  const again = await handleMfaAssociate(eventOf({ email: TESTER_EMAIL }), depsOf(store));
+  assert.equal(again.ok, false);
+  assert.equal(again.error, 'enrollment_reset_required');
+  assert.equal(JSON.stringify(again).includes(secret), false);
+  const row = store.enrollments.get(TESTER_APP);
+  const { decryptSecret, wrapKeyFromHex } = await import('../functions/api/financial-totp.mjs');
+  assert.equal(decryptSecret({ ciphertext: row.ciphertext, nonce: row.nonce, key: wrapKeyFromHex(WRAP_HEX) }), secret);
+  assert.ok(row.verified_at);
+});
+
+test('unverified enroll-start may retry and replace the pending secret', async () => {
+  const store = createStore();
+  const first = await handleMfaAssociate(eventOf({ email: TESTER_EMAIL }), depsOf(store));
+  const second = await handleMfaAssociate(eventOf({ email: TESTER_EMAIL }), depsOf(store));
+  assert.equal(first.ok, true);
+  assert.equal(second.ok, true);
+  assert.notEqual(second.totp.secret, first.totp.secret);
+});
+
+test('concurrent step-up cannot reuse the same timestep', async () => {
+  const store = createStore();
+  const { code } = await enrollTester(store);
+  const [first, second] = await Promise.all([
+    handleMfaStepUp(eventOf({ code, check_intake_item_id: CHECK }), depsOf(store)),
+    handleMfaStepUp(eventOf({ code, check_intake_item_id: CHECK }), depsOf(store)),
+  ]);
+  const outcomes = [first, second];
+  assert.equal(outcomes.filter((row) => row.ok === true).length, 1);
+  assert.equal(outcomes.filter((row) => row.ok === false).length, 1);
+  assert.equal(store.stepups.length, 1);
+});
+
+test('rate-limit storage returning no row fails closed', async () => {
+  const store = createStore();
+  await enrollTester(store);
+  const original = store.client.query;
+  store.client.query = async (sql, params) => {
+    if (String(sql).includes('consume_financial_totp_rate_limit')) {
+      return { rows: [] };
+    }
+    return original(sql, params);
+  };
+  const failed = await handleMfaStepUp(eventOf({
+    code: '123456',
+    check_intake_item_id: CHECK,
+  }), depsOf(store));
+  assert.equal(failed.error, 'rate_limit_unavailable');
+  assert.equal(failed.statusCode, 503);
+  assert.equal(store.stepups.length, 0);
+});
+
+test('enroll-confirm does not write financial_stepup_log or burn last_used_timestep', async () => {
+  const store = createStore();
+  const started = await handleMfaAssociate(eventOf({ email: TESTER_EMAIL }), depsOf(store));
+  const secret = started.totp.secret;
+  const code = totpAt(secret, timestepOf(NOW));
+  const verified = await handleMfaVerify(eventOf({ code }), depsOf(store));
+  assert.equal(verified.ok, true);
+  assert.equal(verified.recorded, false);
+  assert.equal(store.stepups.length, 0);
+  assert.equal(store.enrollments.get(TESTER_APP).last_used_timestep, null);
+  const stepped = await handleMfaStepUp(eventOf({ code, check_intake_item_id: CHECK }), depsOf(store));
+  assert.equal(stepped.ok, true, JSON.stringify(stepped));
+  assert.equal(store.stepups.length, 1);
 });

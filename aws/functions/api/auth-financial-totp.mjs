@@ -77,15 +77,20 @@ const schemaMissing = (error) => {
 const wrapFail = (error) => {
   const missingSchema = schemaMissing(error);
   const missingWrap = error.message === 'wrap_key_unconfigured';
+  const missingRate = error.message === 'rate_limit_unavailable';
   return {
     ok: false,
-    statusCode: error.statusCode || (missingSchema || missingWrap ? 503 : 401),
-    error: missingSchema ? 'financial_totp_schema_unapplied' : (missingWrap ? 'wrap_key_unconfigured' : 'financial_totp_failed'),
+    statusCode: error.statusCode || (missingSchema || missingWrap || missingRate ? 503 : 401),
+    error: missingSchema
+      ? 'financial_totp_schema_unapplied'
+      : (missingWrap ? 'wrap_key_unconfigured' : (missingRate ? 'rate_limit_unavailable' : 'financial_totp_failed')),
     message: missingWrap
       ? 'Financial TOTP wrap key is not configured.'
       : (missingSchema
         ? 'Financial TOTP schema is not applied.'
-        : totpUserFailureMessage(error)),
+        : (missingRate
+          ? 'Financial TOTP rate-limit storage is unavailable.'
+          : totpUserFailureMessage(error))),
     ...financialGate(),
   };
 };
@@ -96,7 +101,12 @@ const consumeRate = async (client, userId, action) => {
     [userId, action, 5, 300],
   );
   const row = result.rows[0];
-  if (row && row.allowed === false) {
+  if (!row) {
+    const error = new Error('rate_limit_unavailable');
+    error.statusCode = 503;
+    throw error;
+  }
+  if (row.allowed !== true) {
     return {
       ok: false,
       statusCode: 429,
@@ -189,6 +199,17 @@ export const handleMfaAssociate = async (event, deps = {}) => {
     try {
       const rate = await consumeRate(client, mapping.application_user_id, 'enroll_start');
       if (!rate.ok) return rate;
+      const existing = await statusRow(client, mapping.application_user_id);
+      if (existing?.verified_at) {
+        return {
+          ok: false,
+          statusCode: 409,
+          error: 'enrollment_reset_required',
+          message: 'Verified financial TOTP cannot be overwritten. An explicit reset is required.',
+          spoofFieldsIgnored: spoof,
+          ...financialGate(),
+        };
+      }
       const wrap = await (deps.loadWrapKey || loadFinancialTotpWrapKey)();
       const secret = generateTotpSecret();
       const wrapped = encryptSecret(secret, wrap.key, wrap.keyId);
@@ -211,6 +232,16 @@ export const handleMfaAssociate = async (event, deps = {}) => {
         ...financialGate(),
       };
     } catch (error) {
+      if (String(error?.message || '') === 'verified_enrollment_exists') {
+        return {
+          ok: false,
+          statusCode: 409,
+          error: 'enrollment_reset_required',
+          message: 'Verified financial TOTP cannot be overwritten. An explicit reset is required.',
+          spoofFieldsIgnored: spoof,
+          ...financialGate(),
+        };
+      }
       return wrapFail(error);
     }
   }, deps);
@@ -241,10 +272,20 @@ const verifyAgainstStore = async ({ client, mapping, code, wrap, nowMs, consumeT
       ...financialGate(),
     };
   }
-  await client.query(
-    'SELECT public.financial_totp_mark_verified($1::uuid, $2::bigint)',
+  const marked = await client.query(
+    'SELECT public.financial_totp_mark_verified($1::uuid, $2::bigint) AS claimed',
     [mapping.application_user_id, consumeTimestep ? verified.timestep : null],
   );
+  if (consumeTimestep && marked.rows[0]?.claimed !== true) {
+    return {
+      ok: false,
+      statusCode: 401,
+      error: 'mfa_step_up_failed',
+      verified: false,
+      message: totpUserFailureMessage({ name: 'CodeMismatchException' }),
+      ...financialGate(),
+    };
+  }
   return { ok: true, timestep: verified.timestep };
 };
 

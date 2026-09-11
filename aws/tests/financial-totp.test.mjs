@@ -33,6 +33,29 @@ test('RFC 6238 SHA-1 8-digit vector at T=59', () => {
   assert.equal(hotp(seed, 1, 8), '94287082');
 });
 
+test('AES-256-GCM uses a fresh nonce and rejects a tampered ciphertext', () => {
+  const secret = generateTotpSecret();
+  const key = wrapKeyFromHex('cd'.repeat(32));
+  const first = encryptSecret(secret, key);
+  const second = encryptSecret(secret, key);
+  assert.equal(first.alg, 'aes-256-gcm');
+  assert.equal(first.nonce.equals(second.nonce), false);
+  assert.equal(first.ciphertext.equals(second.ciphertext), false);
+  const tampered = Buffer.from(first.ciphertext);
+  tampered[0] ^= 0xff;
+  assert.throws(() => decryptSecret({ ciphertext: tampered, nonce: first.nonce, key }));
+});
+
+test('generated TOTP secrets are 160-bit base32 values', () => {
+  const seen = new Set();
+  for (let i = 0; i < 8; i += 1) {
+    const secret = generateTotpSecret();
+    assert.match(secret, /^[A-Z2-7]{32}$/);
+    seen.add(secret);
+  }
+  assert.equal(seen.size, 8);
+});
+
 test('app-level TOTP encrypts at rest and never returns the secret after enrollment', () => {
   const secret = generateTotpSecret();
   const key = wrapKeyFromHex('ab'.repeat(32));
@@ -166,6 +189,10 @@ test('proposed financial TOTP SQL is not applied and keeps ciphertext off the ge
   assert.doesNotMatch(proposed, /DELETE FROM/);
   assert.doesNotMatch(proposed, /CREATE POLICY/);
   assert.match(proposed, /Never returns ciphertext/);
+  assert.match(proposed, /verified_at IS NULL/);
+  assert.match(proposed, /last_used_timestep IS DISTINCT FROM p_timestep/);
+  assert.match(proposed, /SET search_path = public, pg_temp/);
+  assert.match(proposed, /ALTER FUNCTION public\.financial_totp_status\(uuid\) OWNER TO checksops_admin/);
   const allowedTables = JSON.parse(fs.readFileSync(
     path.join(ROOT, 'aws/functions/api/allowed-tables.json'),
     'utf8',
