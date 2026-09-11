@@ -1,5 +1,5 @@
 -- Staging email_send_log.status CHECK: complete legitimate set, not a sunk-only patch.
--- Staging-only. Do not apply to production or production-prep. Do not rewrite rows.
+-- Staging RDS applied 2026-09-11. Do not apply to production or production-prep.
 --
 -- Current AWS writers persist:
 --   pending (idempotency reservation)
