@@ -8,7 +8,7 @@
  */
 import { createCipheriv, createDecipheriv, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 
-export const FINANCIAL_TOTP_ISSUER = 'ChecksOps Financial';
+export const FINANCIAL_TOTP_ISSUER = 'ChecksOps-Financial';
 export const FINANCIAL_TOTP_DIGITS = 6;
 export const FINANCIAL_TOTP_PERIOD_SECONDS = 30;
 export const FINANCIAL_TOTP_WINDOW = 1;

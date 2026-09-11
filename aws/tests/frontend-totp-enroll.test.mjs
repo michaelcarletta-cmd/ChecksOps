@@ -71,10 +71,26 @@ test('AWS client does not require Cognito MFA for financial step-up', () => {
   assert.match(src, /Login stays EMAIL_OTP or passkey/);
 });
 
-test('otpauth issuer is ChecksOps Financial', () => {
+test('otpauth fallback issuer is ChecksOps-Financial without whitespace', () => {
   const uri = buildTotpOtpauthUri(RFC_TEST_SECRET, 'totp-test@example.com');
-  assert.match(uri, /ChecksOps%20Financial/);
-  assert.match(uri, /issuer=ChecksOps%20Financial/);
+  const helper = fs.readFileSync(path.join(ROOT, 'src/lib/totpQr.ts'), 'utf8');
+  assert.match(helper, /const ISSUER = "ChecksOps-Financial"/);
+  assert.doesNotMatch(helper, /const ISSUER = "ChecksOps Financial"/);
+  assert.match(uri, /otpauth:\/\/totp\/ChecksOps-Financial:/);
+  assert.match(uri, /issuer=ChecksOps-Financial/);
+  assert.doesNotMatch(uri, /ChecksOps%20Financial/);
+  assert.doesNotMatch(uri, /%20/);
+});
+
+test('UI copy still says ChecksOps Financial authenticator', () => {
+  const card = fs.readFileSync(path.join(ROOT, 'src/components/auth/TotpManagerCard.tsx'), 'utf8');
+  const dialog = fs.readFileSync(path.join(ROOT, 'src/components/auth/StepUpDialog.tsx'), 'utf8');
+  const display = fs.readFileSync(path.join(ROOT, 'src/components/auth/TotpQrDisplay.tsx'), 'utf8');
+  assert.match(card, /ChecksOps Financial authenticator/);
+  assert.match(dialog, /ChecksOps Financial authenticator/);
+  assert.match(display, /ChecksOps Financial authenticator setup QR code/);
+  assert.doesNotMatch(card, /ChecksOps-Financial authenticator/);
+  assert.doesNotMatch(dialog, /ChecksOps-Financial authenticator/);
 });
 
 test('local QR is generated from otpauth without printing the secret', async () => {
