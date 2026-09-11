@@ -16,7 +16,7 @@ import {
   replayIdempotentSend,
   stableEmailIdempotencyKey,
   validatedMailReplyTo,
-} from './email.mjs';
+} from './email-audited.mjs';
 import { renderTransactionalTemplate } from './email-templates.mjs';
 import { normalizeEmail } from './email-policy.mjs';
 import { emailAssetOrigin, resolveEmailBranding } from './email-branding.mjs';
@@ -543,12 +543,22 @@ export const runHomeownerLedgerSend = async ({
     try {
       await client.query(
         `UPDATE public.homeowner_ledger_tokens
-         SET sent_by_user_id = $2::uuid, homeowner_email = COALESCE($3, homeowner_email)
-         WHERE id = $1::uuid`,
+         SET sent_by_user_id = $2::uuid
+         WHERE id = $1::uuid
+           AND lower(trim(homeowner_email)) = lower(trim($3))`,
         [tokenRow.id, mapping.application_user_id, homeownerEmail || null],
       );
     } catch {
-      /* sent_by_user_id may be absent on older staging dumps */
+      try {
+        await client.query(
+          `UPDATE public.homeowner_ledger_tokens
+           SET sent_by_user_id = $2::uuid
+           WHERE id = $1::uuid`,
+          [tokenRow.id, mapping.application_user_id],
+        );
+      } catch {
+        /* sent_by_user_id may be absent on older staging dumps */
+      }
     }
   }
 
@@ -557,7 +567,6 @@ export const runHomeownerLedgerSend = async ({
   if (homeownerEmail) {
     const branding = await resolveEmailBranding(client, {
       tenantId,
-      senderOverride: 'checksops',
     });
     const reply = validatedMailReplyTo(branding.replyTo);
     if (!reply.ok) {
@@ -594,8 +603,25 @@ export const runHomeownerLedgerSend = async ({
         token: tokenRow.token,
         url,
         partner_code: body.partner_code || null,
+        from: branding.from,
+        replyTo: reply.replyTo,
       };
     }
+    return {
+      ok: true,
+      statusCode: 200,
+      token: tokenRow.token,
+      url,
+      partner_code: body.partner_code || null,
+      spoofFieldsIgnored: spoof,
+      from: branding.from,
+      replyTo: reply.replyTo,
+      duplicate: false,
+      providerMessageId: delivery.providerMessageId || null,
+      stagingPolicy: delivery.stagingPolicy || null,
+      stagingMode: delivery.stagingMode || null,
+      auditId: delivery.id || null,
+    };
   }
 
   return {

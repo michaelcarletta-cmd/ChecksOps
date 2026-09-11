@@ -4,6 +4,9 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { handleHomeownerLedgerUpload, runHomeownerLedgerSend } from '../functions/api/homeowner.mjs';
+import { applyRecipientPolicy, emailMode } from '../functions/api/email-policy.mjs';
+import { sendViaSesOrSink } from '../functions/api/email.mjs';
+import { deliverAuditedEmail } from '../functions/api/email-audited.mjs';
 import {
   canMintHomeownerSignLink,
   computeHomeownerLedgerTotals,
@@ -50,14 +53,175 @@ const sqlClient = (handlers) => ({
   },
 });
 
+const LOCK = 'mcarletta@freedomadj.com';
+const C1C_FROM = 'noreply@ses-gate.staging.checksops.com';
+const C1C_REPLY = 'payments@condition1commercial.com';
+const C1C_NAME = 'Condition One Commercial';
+const C1C_DOMAIN = 'ses-gate.staging.checksops.com';
+
 const capturingMailer = (sent) => async (payload) => {
   sent.push(payload);
   return {
     deliveredCount: 0,
     sunkCount: 1,
-    mode: 'sink',
-    results: [{ delivery: 'sink', messageId: `sink-${sent.length}` }],
+    mode: process.env.AWS_EMAIL_MODE || 'sink',
+    results: [{
+      delivery: 'sink',
+      status: 'sunk',
+      policy: 'staging_sink',
+      messageId: `sink-${sent.length}`,
+      originalTo: payload.to,
+    }],
   };
+};
+
+const withEnv = async (vars, fn) => {
+  const previous = {};
+  for (const [key, value] of Object.entries(vars)) {
+    previous[key] = process.env[key];
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+  try {
+    return await fn();
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+};
+
+const ledgerSendClient = ({
+  logs = new Map(),
+  failIdempotencySelect = false,
+  failInsert = false,
+  existingToken = null,
+  updates = [],
+  inserts = [],
+} = {}) => {
+  const calls = [];
+  const client = {
+    calls,
+    logs,
+    query: async (sql, params = []) => {
+      const compact = String(sql).replace(/\s+/g, ' ').trim();
+      calls.push({ sql: compact, params });
+      if (
+        compact.startsWith('SAVEPOINT ')
+        || compact.startsWith('RELEASE SAVEPOINT ')
+        || compact.startsWith('ROLLBACK TO SAVEPOINT ')
+      ) {
+        return { rows: [], rowCount: 0 };
+      }
+      if (compact.includes('FROM public.tenant_users')) {
+        return { rows: [{ tenant_id: TENANT_A }] };
+      }
+      if (compact.includes('FROM public.tenants')) {
+        return {
+          rows: [{
+            id: TENANT_A,
+            name: C1C_NAME,
+            logo_url: null,
+            primary_color: '#1a56db',
+            email_from_name: C1C_NAME,
+            email_from_address: C1C_FROM,
+            email_reply_to: C1C_REPLY,
+            is_system_tenant: false,
+          }],
+        };
+      }
+      if (compact.includes('FROM public.tenant_email_settings')) {
+        return {
+          rows: [{
+            from_name: C1C_NAME,
+            reply_to: C1C_REPLY,
+            sending_mode: 'custom',
+            sending_domain: C1C_DOMAIN,
+            from_address: C1C_FROM,
+            domain_status: 'verified',
+            ses_identity_name: C1C_DOMAIN,
+            custom_sending_enabled: true,
+          }],
+        };
+      }
+      if (failIdempotencySelect && compact.includes('FROM public.email_send_log') && compact.includes('idempotency_key')) {
+        throw new Error('email_send_log unavailable');
+      }
+      if (compact.includes('FROM public.email_send_log') && compact.includes('WHERE idempotency_key')) {
+        const key = String(params[0] || '');
+        const row = logs.get(key);
+        return { rows: row ? [row] : [] };
+      }
+      if (compact.startsWith('INSERT INTO public.email_send_log')) {
+        if (failInsert) throw new Error('email_send_log insert failed');
+        const pending = compact.includes("'pending'");
+        const key = String(params[pending ? 5 : 7] || '');
+        if (key && logs.has(key)) {
+          const error = new Error('duplicate key');
+          error.code = '23505';
+          throw error;
+        }
+        const id = String(params[0]);
+        const metadataRaw = pending ? params[6] : params[9];
+        let metadata = {};
+        try {
+          metadata = typeof metadataRaw === 'string' ? JSON.parse(metadataRaw) : (metadataRaw || {});
+        } catch {
+          metadata = {};
+        }
+        const row = {
+          id,
+          status: pending ? 'pending' : String(params[4] || 'sunk'),
+          provider_message_id: pending ? null : (params[6] || null),
+          recipient_email: params[2],
+          tenant_id: params[3],
+          template_name: params[1],
+          provider: pending ? params[4] : params[5],
+          metadata,
+          error_message: pending ? null : (params[8] || null),
+          idempotency_key: key,
+        };
+        if (key) logs.set(key, row);
+        return { rows: [], rowCount: 1 };
+      }
+      if (compact.startsWith('UPDATE public.email_send_log')) {
+        const id = String(params[0]);
+        for (const row of logs.values()) {
+          if (row.id === id) {
+            row.status = params[1];
+            row.provider_message_id = params[2];
+            row.error_message = params[3];
+            try {
+              row.metadata = typeof params[4] === 'string' ? JSON.parse(params[4]) : (params[4] || row.metadata);
+            } catch {
+              row.metadata = row.metadata || {};
+            }
+          }
+        }
+        return { rows: [], rowCount: 1 };
+      }
+      if (compact.includes('FROM public.homeowner_ledger_tokens') && compact.includes('lower(trim(homeowner_email))')) {
+        if (!existingToken) return { rows: [] };
+        if (String(params[2]).toLowerCase() === String(existingToken.email).toLowerCase()
+          && String(params[1]) === String(existingToken.claimId || CLAIM_A)) {
+          return { rows: [{ id: existingToken.id, token: existingToken.token }] };
+        }
+        return { rows: [] };
+      }
+      if (compact.startsWith('UPDATE public.homeowner_ledger_tokens')) {
+        updates.push({ sql: compact, params });
+        return { rows: [], rowCount: 1 };
+      }
+      if (compact.includes('INSERT INTO public.homeowner_ledger_tokens')) {
+        inserts.push({ sql: compact, params });
+        const token = String(params[2]);
+        return { rows: [{ id: TOKEN_ID_A, token }] };
+      }
+      return { rows: [], rowCount: 0 };
+    },
+  };
+  return client;
 };
 
 const claimBundle = ({
@@ -283,7 +447,10 @@ test('same claim + same email reuses token; different email and rotate do not', 
     },
     {
       match: (sql) => sql.includes('UPDATE public.homeowner_ledger_tokens'),
-      result: () => ({ rows: [], rowCount: 1 }),
+      result: (_params, sql) => {
+        assert.doesNotMatch(sql, /homeowner_email\s*=/);
+        return { rows: [], rowCount: 1 };
+      },
     },
     {
       match: (sql) => sql.includes('INSERT INTO public.homeowner_ledger_tokens'),
@@ -711,3 +878,316 @@ test('unshared project plan is omitted from the homeowner contract', async () =>
   assert.equal(presented.project_plan, null);
   assert.equal(presented.money, null);
 });
+
+test('ledger send uses tenant branding, audited helper, and never /h/ledger as primary CTA', () => {
+  const homeowner = sourceOf('aws/functions/api/homeowner.mjs');
+  const sendFn = homeowner.slice(
+    homeowner.indexOf('export const runHomeownerLedgerSend'),
+    homeowner.indexOf('export const handleHomeownerLedgerSend'),
+  );
+  assert.match(homeowner, /from '\.\/email-audited\.mjs'/);
+  assert.match(sendFn, /homeownerLedgerTrackingUrl\(origin, tokenRow\.token, claimId\)/);
+  assert.doesNotMatch(sendFn, /\/h\/ledger\//);
+  assert.doesNotMatch(sendFn, /senderOverride:\s*'checksops'/);
+  assert.match(sendFn, /lower\(trim\(homeowner_email\)\)/);
+  assert.match(sendFn, /templateName: 'homeowner-ledger-invite'/);
+  assert.match(sendFn, /deliverAuditedEmail/);
+});
+
+test('C1C tenant branding is used for claim-bound tracking email', async () => {
+  const sent = [];
+  const client = ledgerSendClient();
+  const result = await runHomeownerLedgerSend({
+    mapping,
+    spoof,
+    send: capturingMailer(sent),
+    body: {
+      homeowner_email: LOCK,
+      homeowner_name: 'Ada',
+      tenant_id: TENANT_A,
+      claim_id: CLAIM_A,
+      rotate: true,
+      origin: 'https://staging.checksops.com',
+    },
+    client,
+  });
+  assert.equal(result.ok, true);
+  assert.match(result.url, new RegExp(`/ledger/`));
+  assert.doesNotMatch(result.url, /\/h\/ledger\//);
+  assert.equal(result.from, `${C1C_NAME} <${C1C_FROM}>`);
+  assert.equal(result.replyTo, C1C_REPLY);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].from, `${C1C_NAME} <${C1C_FROM}>`);
+  assert.equal(sent[0].replyTo, C1C_REPLY);
+  assert.equal(sent[0].to, LOCK);
+  assert.match(sent[0].html, /\/ledger\//);
+  assert.doesNotMatch(sent[0].html, /\/h\/ledger\//);
+  assert.ok(client.calls.some((c) => c.sql.includes('FROM public.tenant_email_settings')));
+  assert.ok(client.calls.some((c) => c.sql.includes('INSERT INTO public.email_send_log') && c.sql.includes("'pending'")));
+});
+
+test('pre-claim send uses /start-claim and still audits before the mailer', async () => {
+  const sent = [];
+  const logs = new Map();
+  const client = ledgerSendClient({ logs });
+  let reservedBeforeMailer = false;
+  const result = await runHomeownerLedgerSend({
+    mapping,
+    spoof,
+    send: async (payload) => {
+      reservedBeforeMailer = [...logs.values()].some((row) => row.status === 'pending'
+        && row.template_name === 'homeowner-ledger-invite');
+      return capturingMailer(sent)(payload);
+    },
+    body: {
+      homeowner_email: LOCK,
+      tenant_id: TENANT_A,
+      rotate: true,
+      origin: 'https://staging.checksops.com',
+    },
+    client,
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.url, `https://staging.checksops.com/start-claim/${result.token}`);
+  assert.equal(reservedBeforeMailer, true);
+  assert.equal(sent.length, 1);
+  assert.equal([...logs.values()][0].provider_message_id, 'sink-1');
+  assert.equal([...logs.values()][0].status, 'sunk');
+});
+
+test('same-email reuse does not overwrite another homeowner email column', async () => {
+  const updates = [];
+  const inserts = [];
+  const client = ledgerSendClient({
+    existingToken: { id: TOKEN_ID_A, token: TOKEN_A, email: HOMEOWNER, claimId: CLAIM_A },
+    updates,
+    inserts,
+  });
+  const reused = await runHomeownerLedgerSend({
+    mapping,
+    spoof,
+    send: capturingMailer([]),
+    body: {
+      homeowner_email: HOMEOWNER,
+      tenant_id: TENANT_A,
+      claim_id: CLAIM_A,
+      origin: 'https://staging.checksops.com',
+    },
+    client,
+  });
+  assert.equal(reused.token, TOKEN_A);
+  assert.equal(inserts.length, 0);
+  assert.equal(updates.length, 1);
+  assert.doesNotMatch(updates[0].sql, /homeowner_email\s*=/);
+
+  const minted = await runHomeownerLedgerSend({
+    mapping,
+    spoof,
+    send: capturingMailer([]),
+    body: {
+      homeowner_email: OTHER_EMAIL,
+      tenant_id: TENANT_A,
+      claim_id: CLAIM_A,
+      origin: 'https://staging.checksops.com',
+    },
+    client: ledgerSendClient({
+      existingToken: { id: TOKEN_ID_A, token: TOKEN_A, email: HOMEOWNER, claimId: CLAIM_A },
+      updates,
+      inserts,
+    }),
+  });
+  assert.notEqual(minted.token, TOKEN_A);
+  assert.equal(inserts.length, 1);
+  assert.equal(inserts[0].params[3], OTHER_EMAIL);
+});
+
+test('staging lock mismatch and ses-identity never reach SES SendEmail', async () => {
+  await withEnv({
+    AWS_EMAIL_MODE: 'ses',
+    CHECKSOPS_ENV: 'staging',
+    AWS_EMAIL_SES_LOCK_RECIPIENT: LOCK,
+  }, async () => {
+    const mismatch = applyRecipientPolicy(['checksops-tester@freedomadj.com'])[0];
+    assert.equal(mismatch.delivery, 'sink');
+    assert.equal(mismatch.policy, 'staging_ses_lock_mismatch');
+    const allowed = applyRecipientPolicy([LOCK])[0];
+    assert.equal(allowed.delivery, 'ses');
+    assert.equal(allowed.policy, 'staging_ses_lock');
+
+    let sesCalls = 0;
+    const result = await runHomeownerLedgerSend({
+      mapping,
+      spoof,
+      send: (args) => sendViaSesOrSink({
+        ...args,
+        sesSend: async () => {
+          sesCalls += 1;
+          return { MessageId: 'should-not-send' };
+        },
+      }),
+      body: {
+        homeowner_email: 'checksops-tester@freedomadj.com',
+        tenant_id: TENANT_A,
+        claim_id: CLAIM_A,
+        rotate: true,
+        origin: 'https://staging.checksops.com',
+      },
+      client: ledgerSendClient(),
+    });
+    assert.equal(result.ok, true);
+    assert.equal(sesCalls, 0);
+    assert.equal(result.stagingPolicy, 'staging_ses_lock_mismatch');
+    assert.equal(result.sent, undefined);
+  });
+
+  await withEnv({
+    AWS_EMAIL_MODE: 'ses-identity',
+    CHECKSOPS_ENV: 'staging',
+    AWS_EMAIL_SES_LOCK_RECIPIENT: LOCK,
+  }, async () => {
+    assert.equal(emailMode(), 'ses-identity');
+    const policy = applyRecipientPolicy([LOCK])[0];
+    assert.equal(policy.delivery, 'sink');
+    assert.equal(policy.policy, 'staging_ses_identity');
+    let sesCalls = 0;
+    const result = await runHomeownerLedgerSend({
+      mapping,
+      spoof,
+      send: (args) => sendViaSesOrSink({
+        ...args,
+        sesSend: async () => {
+          sesCalls += 1;
+          return { MessageId: 'should-not-send' };
+        },
+      }),
+      body: {
+        homeowner_email: LOCK,
+        tenant_id: TENANT_A,
+        claim_id: CLAIM_A,
+        rotate: true,
+        origin: 'https://staging.checksops.com',
+      },
+      client: ledgerSendClient(),
+    });
+    assert.equal(result.ok, true);
+    assert.equal(sesCalls, 0);
+    assert.equal(result.stagingMode, 'ses-identity');
+    assert.equal(result.stagingPolicy, 'staging_ses_identity');
+  });
+});
+
+test('duplicate idempotency key replays without a second mailer call', async () => {
+  const logs = new Map();
+  const sent = [];
+  const client = ledgerSendClient({ logs });
+  const body = {
+    homeowner_email: LOCK,
+    tenant_id: TENANT_A,
+    claim_id: CLAIM_A,
+    rotate: true,
+    origin: 'https://staging.checksops.com',
+    idempotencyKey: 'homeowner-ledger-dup-1',
+  };
+  const first = await runHomeownerLedgerSend({
+    mapping,
+    spoof,
+    send: capturingMailer(sent),
+    body,
+    client,
+  });
+  assert.equal(first.ok, true);
+  assert.equal(first.duplicate, false);
+  assert.equal(sent.length, 1);
+  const second = await runHomeownerLedgerSend({
+    mapping,
+    spoof,
+    send: capturingMailer(sent),
+    body,
+    client,
+  });
+  assert.equal(second.ok, true);
+  assert.equal(second.duplicate, true);
+  assert.equal(second.reason, 'idempotent_replay');
+  assert.equal(sent.length, 1);
+  assert.equal(second.providerMessageId, 'sink-1');
+});
+
+test('missing audit storage in SES mode prevents send', async () => {
+  await withEnv({
+    AWS_EMAIL_MODE: 'ses',
+    CHECKSOPS_ENV: 'staging',
+    AWS_EMAIL_SES_LOCK_RECIPIENT: LOCK,
+  }, async () => {
+    const sent = [];
+    const lookupFail = await runHomeownerLedgerSend({
+      mapping,
+      spoof,
+      send: capturingMailer(sent),
+      body: {
+        homeowner_email: LOCK,
+        tenant_id: TENANT_A,
+        claim_id: CLAIM_A,
+        rotate: true,
+        origin: 'https://staging.checksops.com',
+      },
+      client: ledgerSendClient({ failIdempotencySelect: true }),
+    });
+    assert.equal(lookupFail.ok, false);
+    assert.equal(lookupFail.statusCode, 503);
+    assert.equal(lookupFail.error, 'idempotency_unavailable');
+    assert.equal(sent.length, 0);
+
+    const insertFail = await runHomeownerLedgerSend({
+      mapping,
+      spoof,
+      send: capturingMailer(sent),
+      body: {
+        homeowner_email: LOCK,
+        tenant_id: TENANT_A,
+        claim_id: CLAIM_A,
+        rotate: true,
+        origin: 'https://staging.checksops.com',
+      },
+      client: ledgerSendClient({ failInsert: true }),
+    });
+    assert.equal(insertFail.ok, false);
+    assert.equal(insertFail.statusCode, 503);
+    assert.equal(insertFail.error, 'idempotency_unavailable');
+    assert.equal(sent.length, 0);
+  });
+});
+
+test('audited helper finalizes provider MessageId on SES success', async () => {
+  await withEnv({
+    AWS_EMAIL_MODE: 'ses',
+    CHECKSOPS_ENV: 'staging',
+    AWS_EMAIL_SES_LOCK_RECIPIENT: LOCK,
+  }, async () => {
+    const logs = new Map();
+    const client = ledgerSendClient({ logs });
+    const delivery = await deliverAuditedEmail(client, {
+      templateName: 'homeowner-ledger-invite',
+      recipientEmail: LOCK,
+      tenantId: TENANT_A,
+      idempotencyKey: 'homeowner-ledger-ses-msgid',
+      send: async () => ({
+        mode: 'ses',
+        deliveredCount: 1,
+        sunkCount: 0,
+        results: [{
+          delivery: 'ses',
+          status: 'sent',
+          policy: 'staging_ses_lock',
+          messageId: 'ses-message-abc',
+          originalTo: LOCK,
+        }],
+      }),
+    });
+    assert.equal(delivery.ok, true);
+    assert.equal(delivery.providerMessageId, 'ses-message-abc');
+    assert.equal([...logs.values()][0].provider_message_id, 'ses-message-abc');
+    assert.equal([...logs.values()][0].status, 'sent');
+    assert.equal([...logs.values()][0].metadata.original_recipient, LOCK);
+  });
+});
+
