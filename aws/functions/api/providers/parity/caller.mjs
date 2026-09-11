@@ -9,6 +9,7 @@ import { providerSandboxExecutionEnabled } from '../../sandbox-flags.mjs';
 import { loadSandboxCredentials } from '../../sandbox-credentials.mjs';
 import { evaluateReadiness } from '../readiness.mjs';
 import { bindMoovEnvironment } from './moov-client.mjs';
+import { isMasterOwner } from '../../platform-authz.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -33,12 +34,8 @@ export async function membershipsOf(client, userId) {
   }));
 }
 
-export async function isPlatformAdmin(client, userId) {
-  const row = (await client.query(
-    `SELECT 1 FROM public.user_roles WHERE user_id = $1::uuid AND role = 'admin' LIMIT 1`,
-    [userId],
-  )).rows[0];
-  return Boolean(row);
+export async function isPlatformAdmin(client, _userId) {
+  return isMasterOwner(client);
 }
 
 export async function resolveTenant(client, { userId, body, memberships, requireAdmin = false }) {
@@ -101,10 +98,42 @@ export async function requireParityEnabled(provider) {
   return null;
 }
 
-export async function moovParityContext({ client, mapping, body, requireAdmin = false, loadSandbox = loadSandboxCredentials }) {
+export async function moovParityContext({
+  client,
+  mapping,
+  body,
+  requireAdmin = false,
+  requirePlatformOwner = false,
+  allowDisabledProvider = false,
+  loadSandbox = loadSandboxCredentials,
+}) {
+  if (requirePlatformOwner) {
+    const owner = await isMasterOwner(client);
+    if (!owner) return fail('Platform owner access required', 403);
+  }
   const gated = await requireParityEnabled('moov');
-  if (gated) return gated;
+  if (gated && !allowDisabledProvider) return gated;
   const memberships = await membershipsOf(client, mapping.application_user_id);
+  if (requirePlatformOwner) {
+    const loader = typeof loadSandbox === 'function' ? loadSandbox : loadSandboxCredentials;
+    const loaded = await loader().catch(() => ({ moov: null }));
+    return {
+      tenantId: null,
+      isAdmin: true,
+      isPlatformOwner: true,
+      providerDisabled: Boolean(gated),
+      environment: 'sandbox',
+      userId: mapping.application_user_id,
+      memberships,
+      moovContext: {
+        environment: 'sandbox',
+        sandboxPlatformAccountId: loaded?.moov?.platformAccountId || null,
+        sandboxPublicKey: loaded?.moov?.publicKey || null,
+        sandboxSecretKey: loaded?.moov?.secretKey || null,
+      },
+      loaded,
+    };
+  }
   const tenant = await resolveTenant(client, {
     userId: mapping.application_user_id,
     body,
