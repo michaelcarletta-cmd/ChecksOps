@@ -2,7 +2,7 @@
  * HomeownerOps Class A services (non-financial).
  * Public token routes + staff send/upload helpers.
  */
-import { randomBytes, createHash, randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { CopyObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -21,6 +21,14 @@ import { renderTransactionalTemplate } from './email-templates.mjs';
 import { normalizeEmail } from './email-policy.mjs';
 import { emailAssetOrigin, resolveEmailBranding } from './email-branding.mjs';
 import { requireAuthorizedTenant } from './tenant-email-domain.mjs';
+import {
+  homeownerLedgerTrackingUrl,
+  ledgerUploadInsertValues,
+  ledgerUploadToken,
+  loadLedgerTokenDoc,
+  runHomeownerLedgerSignLink,
+  runHomeownerLedgerView,
+} from './homeowner-ledger-public.mjs';
 
 const { Client } = pg;
 const s3 = () => new S3Client({ region: process.env.AWS_REGION || 'us-east-1' });
@@ -125,38 +133,20 @@ export const handleHomeownerLedgerView = async (event) => {
   const spoof = ignoredSpoof(event, body);
   const qs = event.queryStringParameters || {};
   const token = String(body.token || qs.token || '').trim();
-  if (!token || token.length < 8) {
-    return { ok: false, statusCode: 400, error: 'invalid_token', spoofFieldsIgnored: spoof };
-  }
   let client;
   try {
     client = await publicDb(true);
     await client.query('BEGIN');
     await client.query('SET TRANSACTION READ WRITE');
-    const doc = (await client.query(
-      'SELECT public.aws_public_homeowner_ledger_by_token($1) AS doc',
-      [token],
-    )).rows[0]?.doc;
-    if (!doc) {
-      await client.query('ROLLBACK');
-      return { ok: false, statusCode: 404, error: 'not_found', spoofFieldsIgnored: spoof };
-    }
-    if (doc.error) {
-      await client.query('ROLLBACK');
-      const status = doc.error === 'revoked' || doc.error === 'expired' ? 410 : 400;
-      return { ok: false, statusCode: status, error: doc.error, spoofFieldsIgnored: spoof };
-    }
-    await client.query('COMMIT');
-    return {
-      ok: true,
-      statusCode: 200,
-      ...doc,
-      // Keep money movement CTAs off
-      allow_deductible_payment: false,
-      money: null,
-      deductible_payments: [],
-      spoofFieldsIgnored: spoof,
-    };
+    const result = await runHomeownerLedgerView({
+      client,
+      token,
+      spoof,
+      s3Client: s3(),
+    });
+    if (result.ok) await client.query('COMMIT');
+    else await client.query('ROLLBACK');
+    return result;
   } catch (error) {
     if (client) {
       try { await client.query('ROLLBACK'); } catch { /* ignore */ }
@@ -360,13 +350,17 @@ export const handleHomeownerLedgerUpload = async (event, deps = {}) => {
       await client.query('BEGIN');
       await client.query('SET TRANSACTION READ WRITE');
     }
-    const doc = (await client.query(
-      'SELECT public.aws_public_homeowner_ledger_by_token($1) AS doc',
-      [token],
-    )).rows[0]?.doc;
-    if (!doc?.ok || !doc.token) {
+    const doc = await loadLedgerTokenDoc(client, token);
+    if (doc?.error || !doc?.ok) {
       if (!deps.client) await client.query('ROLLBACK');
-      return { ok: false, statusCode: 404, error: doc?.error || 'not_found', spoofFieldsIgnored: spoof };
+      const error = doc?.error || 'not_found';
+      const status = error === 'revoked' || error === 'expired' ? 410 : 404;
+      return { ok: false, statusCode: status, error, spoofFieldsIgnored: spoof };
+    }
+    const tok = ledgerUploadToken(doc);
+    if (!tok) {
+      if (!deps.client) await client.query('ROLLBACK');
+      return { ok: false, statusCode: 404, error: 'not_found', spoofFieldsIgnored: spoof };
     }
 
     const frontB64 = String(body.front_base64 || body.file_base64 || '');
@@ -376,7 +370,7 @@ export const handleHomeownerLedgerUpload = async (event, deps = {}) => {
     }
     const clean = frontB64.includes(',') ? frontB64.split(',').pop() : frontB64;
     const bytes = Buffer.from(clean, 'base64');
-    const rel = `ledger/${doc.token.claim_id || doc.token.id}/${Date.now()}_front.jpg`;
+    const rel = `ledger/${tok.tenant_id}/${tok.id}/${Date.now()}_front.jpg`;
     const key = s3KeyFor('homeowner-uploads', rel);
     if (typeof deps.putObject === 'function') {
       await deps.putObject({ Bucket: filesBucket(), Key: key, Body: bytes, ContentType: 'image/jpeg' });
@@ -390,10 +384,10 @@ export const handleHomeownerLedgerUpload = async (event, deps = {}) => {
     }
     const row = (await client.query(
       `INSERT INTO public.homeowner_ledger_check_uploads (
-         tenant_id, claim_id, front_path, status, created_at
-       ) VALUES ($1::uuid, $2::uuid, $3, 'uploaded', now())
-       RETURNING id, front_path, status, created_at`,
-      [doc.token.tenant_id, doc.token.claim_id, rel],
+         tenant_id, token_id, claim_id, front_path, status, amount_estimate, homeowner_note, created_at
+       ) VALUES ($1::uuid, $2::uuid, $3::uuid, $4, 'pending_review', $5, $6, now())
+       RETURNING id, token_id, claim_id, tenant_id, front_path, status, created_at`,
+      ledgerUploadInsertValues(tok, rel, body),
     )).rows[0];
     if (!deps.client) await client.query('COMMIT');
     let notified = false;
@@ -433,46 +427,20 @@ export const handleHomeownerLedgerUpload = async (event, deps = {}) => {
 export const handleHomeownerLedgerSignLink = async (event) => {
   const body = parseBody(event);
   const spoof = ignoredSpoof(event, body);
-  const token = String(body.token || '').trim();
-  const signerId = body.signer_id || body.signature_signer_id;
-  if (!token || !signerId) {
-    return { ok: false, statusCode: 400, error: 'missing_fields', spoofFieldsIgnored: spoof };
-  }
   let client;
   try {
     client = await publicDb(true);
     await client.query('BEGIN');
     await client.query('SET TRANSACTION READ WRITE');
-    const doc = (await client.query(
-      'SELECT public.aws_public_homeowner_ledger_by_token($1) AS doc',
-      [token],
-    )).rows[0]?.doc;
-    if (!doc?.ok) {
-      await client.query('ROLLBACK');
-      return { ok: false, statusCode: 404, error: doc?.error || 'not_found', spoofFieldsIgnored: spoof };
-    }
-    const raw = randomBytes(32).toString('hex');
-    const hash = createHash('sha256').update(raw).digest('hex');
-    const updated = (await client.query(
-      `UPDATE public.signature_signers
-       SET token_hash = $2, updated_at = now()
-       WHERE id = $1::uuid
-       RETURNING id`,
-      [signerId, hash],
-    )).rows[0];
-    if (!updated) {
-      await client.query('ROLLBACK');
-      return { ok: false, statusCode: 404, error: 'signer_not_found', spoofFieldsIgnored: spoof };
-    }
-    await client.query('COMMIT');
-    const origin = String(body.origin || process.env.VITE_APP_URL || 'https://staging.checksops.com').replace(/\/$/, '');
-    return {
-      ok: true,
-      statusCode: 200,
-      url: `${origin}/sign/${raw}`,
-      token: raw,
-      spoofFieldsIgnored: spoof,
-    };
+    const result = await runHomeownerLedgerSignLink({
+      client,
+      body,
+      spoof,
+      origin: body.origin,
+    });
+    if (result.ok) await client.query('COMMIT');
+    else await client.query('ROLLBACK');
+    return result;
   } catch (error) {
     if (client) {
       try { await client.query('ROLLBACK'); } catch { /* ignore */ }
@@ -526,15 +494,16 @@ export const runHomeownerLedgerSend = async ({
   if (!member) return { ok: false, statusCode: 403, error: 'cross_tenant_denied', spoofFieldsIgnored: spoof };
 
   let tokenRow = null;
-  if (!body.rotate) {
+  if (!body.rotate && claimId && homeownerEmail) {
     tokenRow = (await client.query(
       `SELECT id, token FROM public.homeowner_ledger_tokens
        WHERE tenant_id = $1::uuid
-         AND ($2::uuid IS NULL OR claim_id = $2::uuid)
+         AND claim_id = $2::uuid
+         AND lower(trim(homeowner_email)) = lower(trim($3))
          AND revoked_at IS NULL
          AND (expires_at IS NULL OR expires_at > now())
        ORDER BY created_at DESC LIMIT 1`,
-      [tenantId, claimId],
+      [tenantId, claimId, homeownerEmail],
     )).rows[0];
   }
   if (!tokenRow) {
@@ -572,7 +541,7 @@ export const runHomeownerLedgerSend = async ({
   }
 
   const origin = appOrigin(body.origin);
-  const url = `${origin}/h/ledger/${tokenRow.token}`;
+  const url = homeownerLedgerTrackingUrl(origin, tokenRow.token, claimId);
   if (homeownerEmail) {
     const branding = await resolveEmailBranding(client, {
       tenantId,
@@ -585,7 +554,7 @@ export const runHomeownerLedgerSend = async ({
     const rendered = renderTransactionalTemplate('homeowner-ledger-invite', {
       homeownerName: body.homeowner_name,
       ledgerUrl: url,
-      is_pre_claim: body.is_pre_claim === true,
+      is_pre_claim: !claimId,
       branding,
     });
     const suppliedKey = String(body.idempotencyKey || body.idempotency_key || '').trim();
@@ -702,7 +671,7 @@ export const runSendFileToHomeowner = async ({
   }
 
   const origin = appOrigin(body.origin);
-  const portalUrl = `${origin}/h/ledger/${tok.token}`;
+  const portalUrl = homeownerLedgerTrackingUrl(origin, tok.token, claimId);
   const branding = await resolveEmailBranding(client, {
     tenantId: file.tenant_id,
     senderOverride: 'checksops',
