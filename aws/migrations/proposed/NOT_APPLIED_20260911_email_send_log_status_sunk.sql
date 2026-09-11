@@ -1,4 +1,5 @@
 -- Staging follow-up after idempotency columns+index.
+-- Staging RDS applied 2026-09-11. Do not apply to production or production-prep.
 -- Allow email_send_log.status = 'sunk' so PR #223 finalizeClaimedLog can persist
 -- sink outcomes without aborting the request transaction.
 --

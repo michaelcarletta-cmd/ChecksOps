@@ -1,5 +1,6 @@
 -- Proposed additive columns + unique index for send-transactional-email idempotency.
--- NOT APPLIED. Do not run against staging or production in this PR.
+-- Staging RDS applied 2026-09-11 (columns + unique index + later status='sunk' CHECK).
+-- Do not apply to production or production-prep.
 --
 -- Staging email_send_log currently has:
 --   id, message_id, template_name, recipient_email, status, error_message,

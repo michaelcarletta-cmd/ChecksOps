@@ -1,5 +1,5 @@
 {
-  "comment": "Proposed least-privilege replacement for live Sid StagingSesSend on checksops-staging-ApiFunctionRole-7E7XRyLe3nyi. NOT ATTACHED. Do not PutRolePolicy in this PR. Code uses SES v1 SendEmailCommand only; SendRawEmail is unused.",
+  "comment": "Least-privilege replacement for live Sid StagingSesSend on checksops-staging-ApiFunctionRole-7E7XRyLe3nyi. Staging attached 2026-09-11 as Sid StagingSesSendLockedIdentity (ses:SendEmail on the ses-gate identity only). SendRawEmail and unused quota/status reads were omitted. Do not attach to production. Identity lifecycle remains on ApiFunctionRolePolicySesIdentity.",
   "current": {
     "Sid": "StagingSesSend",
     "Effect": "Allow",
