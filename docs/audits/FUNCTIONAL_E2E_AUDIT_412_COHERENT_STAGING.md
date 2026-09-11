@@ -33,16 +33,16 @@ Machine-readable inventory: `docs/audits/inventory-412-coherent-staging.json` an
 | --- | --- |
 | Total controls discovered | **412** |
 | Total evaluated | **412** |
-| PASS | **255** |
+| PASS | **277** |
 | FAIL | **9** |
-| BLOCKED | **138** |
+| BLOCKED | **116** |
 | NOT APPLICABLE | **10** |
-| Effective coverage `(PASS+FAIL)/(412−NA)` | **65.7%** |
+| Effective coverage `(PASS+FAIL)/(412−NA)` | **71.1%** |
 | Raw classified | **100%** |
 
 P0 failures: **none** against the coherent Lambda package.
 
-Interactive PASS rows were taken from staging browser sessions or live API calls. Nested dialogs, wallet inner rails, cash-jobs URL, and many settings persist controls that were not clicked remain **BLOCKED (missing data)** rather than PASS.
+Interactive PASS rows were taken from staging browser sessions or live API calls. Nested apply/persist dialogs, cash-job detail, and remaining settings mutations that were not clicked remain **BLOCKED (missing data)** rather than PASS. A follow-up staging browser session recast public invalid-token pages, C1C `/c1c/cash-jobs`, and C1C `/c1c/wallet-ops` (including Add funds $0.00 / Not set up) from missing-data BLOCKED to PASS.
 
 ## P0 / P1 failures
 
@@ -135,11 +135,11 @@ This is a homeowner-tracking routing defect, not a coherent-Lambda defect. Token
 
 ## BLOCKED controls
 
-**138 BLOCKED.** Kinds:
+**116 BLOCKED.** Kinds:
 
 | Kind | Count | Meaning |
 | --- | --- | --- |
-| missing data | 131 | Interactive control not clicked in this run (nested dialog, cash-jobs URL, wallet inner rails, extra public token, settings persist). |
+| missing data | 109 | Interactive control not clicked in this run (nested apply dialogs, cash-job detail, extra settings persist). |
 | identity | 6 | Freedom-admin Cognito `c4386408-60e1-70e2-abb6-e6194e8e635f` / `mcarletta@freedomadj.com` → `identity_not_linked`. |
 | unsafe action | 1 | Mortgage Desk OTP/queue would send email (`C386`). |
 
@@ -166,27 +166,26 @@ Live Moov / CheckAlt / ACH / RTP / wire / Plaid execution: **NOT APPLICABLE** (`
 
 Fail-closed API routes (`C235–C239`, `C245–C246`) **PASS** (`provider_disabled` / `liveProviderCalled=false`). Platform-owner `moov-platform-bank` **PASS** with `liveProviderCalled=false`.
 
-Wallet/Payments UI that only needs to load with provider disabled: C1C `/c1c/payments` tabs **PASS**. Cash Jobs page URL and nested Add-funds/KYC complete flows remain **BLOCKED (missing data)** or unsafe — not PASS from source.
+Wallet/Payments UI with provider disabled: C1C `/c1c/payments` tabs and `/c1c/wallet-ops` (Pending setup, Add funds $0.00 Not set up, ACH/ToS/KYC Not started) **PASS**. Cash Jobs list **PASS**; job-detail (`C230`) remains **BLOCKED (missing data)**. Live KYC complete / Add-funds-from-bank not executed.
 
 ### Unsafe / missing nested UI (representative)
 
-Not an exhaustive dump of all 131 missing-data IDs; full list is in the JSON `blocked` array.
+Not an exhaustive dump of all 109 missing-data IDs; full list is in the JSON `blocked` array.
 
 - `C386` Mortgage Desk request detail (unsafe: OTP email).
 - `C144` Send to Mortgage Desk, `C146` send endorsement emails, hire-agent submit: not executed.
-- `C228` `/c1c/cash-jobs` not opened (header icon not found in one session; direct URL not completed before computer-use image cap).
-- `C219–C226` wallet-ops inner Add funds / Sweeps / Open Payment Account dialogs not fully cancelled-through in a captured screenshot (payments page was).
-- Public `/invoice`, `/pay-setup`, `/verify-account`, `/payment-direction` invalid tokens: not captured in the second browser session (image-cap). Keep BLOCKED missing data rather than PASS.
+- `C230` cash-job detail frame not captured (list PASSed: Smith Roof Replacement $20,000).
+- Public invalid tokens `/invoice`, `/pay-setup`, `/verify-account`, `/payment-direction` now PASS (deny). `/sign/:uuid` still shows Organization Not Found (same slug-fallback family as C049; exact `/sign` without token PASSed).
 - Bulk Review/Void/Reissue apply, in-person signature, deposit packet generate, check image S3 object (`C175` staging S3 missing).
 
 ## Module-by-module
 
 | Module | PASS | FAIL | BLOCKED | NA | Total |
 | --- | --- | --- | --- | --- | --- |
-| public_homeowner | 80 | 3 | 4 | 1 | 88 |
-| check_center | 77 | 1 | 43 | 0 | 121 |
-| payments_wallet | 14 | 0 | 31 | 9 | 54 |
-| settings | 33 | 1 | 45 | 0 | 79 |
+| public_homeowner | 84 | 3 | 0 | 1 | 88 |
+| check_center | 78 | 1 | 42 | 0 | 121 |
+| payments_wallet | 28 | 0 | 17 | 9 | 54 |
+| settings | 36 | 1 | 42 | 0 | 79 |
 | admin_platform | 51 | 4 | 15 | 0 | 70 |
 
 ## Role-by-role
@@ -195,8 +194,8 @@ A control may list multiple roles; counts are multi-label.
 
 | Role | PASS | FAIL | BLOCKED | NA |
 | --- | --- | --- | --- | --- |
-| anon | 89 | 4 | 6 | 1 |
-| c1c_admin | 123 | 3 | 105 | 9 |
+| anon | 93 | 4 | 2 | 1 |
+| c1c_admin | 141 | 3 | 87 | 9 |
 | platform_owner | 37 | 2 | 21 | 0 |
 | freedom_staff | 13 | 0 | 1 | 0 |
 | freedom_admin | 3 | 0 | 7 | 0 |
@@ -297,6 +296,6 @@ Do **not** production-cutover until at least:
 4. Freedom Funds Released badge/list parity is understood or fixed (C111).
 5. Owner Preview Freedom slug/org (C356/C405).
 6. Production-prep SHA freeze is reconciled (C412) if prep is still a cutover dependency.
-7. Remaining BLOCKED nested payments/wallet/cash-jobs/settings dialogs are either exercised or explicitly accepted as out of the cutover gate.
+7. Remaining BLOCKED nested apply/persist dialogs (bulk void, hire, KYC complete, cash-job detail) are either exercised or explicitly accepted as out of the cutover gate.
 
 No product patches were applied during this audit.

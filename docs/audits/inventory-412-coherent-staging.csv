@@ -70,11 +70,11 @@ C068,public_homeowner,Ledger,Money/deductible CTA disabled,anon,ui,True,PASS,,,,
 C069,public_homeowner,Endorse,Open /endorse public,anon,ui,True,PASS,,,,/endorse without token: Endorsement Error — No endorsement token provided
 C070,public_homeowner,Sign,Open /sign public,anon,ui,True,PASS,,,,/sign without token: Invalid Link — No signing token provided
 C071,public_homeowner,ClaimPortal,Open /h/claim/:token,anon,ui,True,PASS,,,,/h/claim/<ledger-token> invalid/expired link (token is ledger not claim-portal)
-C072,public_homeowner,Invoice,Open /invoice/:token,anon,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-C073,public_homeowner,PaySetup,Open /pay-setup/:token,anon,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-C074,public_homeowner,VerifyAccount,Open /verify-account/:token,anon,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C072,public_homeowner,Invoice,Open /invoice/:token,anon,ui,True,PASS,,,,/invoice/not-a-real-token: Invoice unavailable (missing_cognito_token); no invoice data shown
+C073,public_homeowner,PaySetup,Open /pay-setup/:token,anon,ui,True,PASS,,,,/pay-setup/not-a-real-token: Secure payment setup recipient verification fail-closed missing_cognito_token
+C074,public_homeowner,VerifyAccount,Open /verify-account/:token,anon,ui,True,PASS,,,,/verify-account/not-a-real-token: This link is no longer active; points users to /pay-setup/
 C075,public_homeowner,Unsubscribe,Open /unsubscribe,anon,ui,True,PASS,,,,"/unsubscribe: Email preferences, Missing unsubscribe token"
-C076,public_homeowner,PaymentDirection,Open /payment-direction/:token,anon,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C076,public_homeowner,PaymentDirection,Open /payment-direction/:token,anon,ui,True,PASS,,,,/payment-direction/not-a-real-token: This link is no longer active; no payment-direction form
 C077,public_homeowner,NotFound,Unknown path,anon,ui,True,FAIL,P3,,,Unknown path /this-path-does-not-exist-412audit shows Organization Not Found (tenant-slug fallback) instead of a 404/not-found page
 C078,public_homeowner,AuthAlias,/auth redirects to /login,anon,ui,True,PASS,,,,/auth redirects to /login
 C079,public_homeowner,Health,GET /health staging,anon,api,False,PASS,,,,"{""status"": 200, ""environment"": ""staging""}"
@@ -93,7 +93,7 @@ C091,check_center,CheckCenter,Header WalletOps,c1c_admin,ui,True,PASS,,,,WalletO
 C092,check_center,CheckCenter,Header Payments,c1c_admin,ui,True,PASS,,,,Payments header icon present
 C093,check_center,CheckCenter,Header Settings,c1c_admin,ui,True,PASS,,,,Settings header → /c1c/settings
 C094,check_center,CheckCenter,Theme toggle,c1c_admin,ui,True,PASS,,,,Theme toggle present
-C095,check_center,CheckCenter,Sign out,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C095,check_center,CheckCenter,Sign out,c1c_admin,ui,True,PASS,,,,C1C session signed out after cash-jobs/wallet pass
 C096,check_center,CheckCenter,Upload check,c1c_admin,ui,True,PASS,,,,Upload Check button
 C097,check_center,Queue,Review card / badge,c1c_admin|freedom_staff,both,True,PASS,,,,C1C Review card 0 / empty
 C098,check_center,Queue,Endorsing card / badge,c1c_admin,both,True,PASS,,,,C1C Endorsing 2 matches two visible rows
@@ -217,20 +217,20 @@ C215,payments_wallet,Payments,Tax & 1099 tab,c1c_admin,ui,True,PASS,,,,Tax & 109
 C216,payments_wallet,Payments,Payroll tab if present,c1c_admin,ui,True,NOT APPLICABLE,,,,Payroll tab not present on C1C Payments (History/Invoices/Revenue/Recipient/1099 only)
 C217,payments_wallet,Payments,Back to checks,c1c_admin,ui,True,PASS,,,,Back/Home from payments
 C218,payments_wallet,Payments,Create payment not live-executed,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-C219,payments_wallet,Wallet,Open /{slug}/wallet-ops,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-C220,payments_wallet,Wallet,Pending setup display,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-C221,payments_wallet,Wallet,ToS status Not started,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-C222,payments_wallet,Wallet,KYC status Not started,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-C223,payments_wallet,Wallet,ACH capability display,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-C224,payments_wallet,Wallet,Add funds control,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-C225,payments_wallet,Wallet,Sweeps control,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-C226,payments_wallet,Wallet,Open Payment Account,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-C227,payments_wallet,Wallet,No false success with provider disabled,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-C228,payments_wallet,CashJobs,Open /{slug}/cash-jobs,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-C229,payments_wallet,CashJobs,Job list,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-C230,payments_wallet,CashJobs,Open existing job,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C219,payments_wallet,Wallet,Open /{slug}/wallet-ops,c1c_admin,ui,True,PASS,,,,Opened /c1c/wallet-ops WalletOps Pending setup
+C220,payments_wallet,Wallet,Pending setup display,c1c_admin,ui,True,PASS,,,,Available operating balance Pending setup / Setup in progress
+C221,payments_wallet,Wallet,ToS status Not started,c1c_admin,ui,True,PASS,,,,Payment Account Terms of service accepted: Not started
+C222,payments_wallet,Wallet,KYC status Not started,c1c_admin,ui,True,PASS,,,,Identity & business verification: Not started
+C223,payments_wallet,Wallet,ACH capability display,c1c_admin,ui,True,PASS,,,,Send/Collect funds via ACH: Not started; settlement bank not connected
+C224,payments_wallet,Wallet,Add funds control,c1c_admin,ui,True,PASS,,,,Add funds opened Operating balance $0.00 Not set up; Add funds from bank not executed
+C225,payments_wallet,Wallet,Sweeps control,c1c_admin,ui,True,PASS,,,,Manage sweeps control present; not executed
+C226,payments_wallet,Wallet,Open Payment Account,c1c_admin,ui,True,PASS,,,,Open Payment Account + Payment Account panel Not started; no live onboarding
+C227,payments_wallet,Wallet,No false success with provider disabled,c1c_admin,ui,True,PASS,,,,"No false success: balances $0.00, Pending setup, Add funds modal Not set up"
+C228,payments_wallet,CashJobs,Open /{slug}/cash-jobs,c1c_admin,ui,True,PASS,,,,Opened /c1c/cash-jobs Direct Pay Work Cash Jobs
+C229,payments_wallet,CashJobs,Job list,c1c_admin,ui,True,PASS,,,,"Job list shows Smith Roof Replacement $20,000 due (Estimate)"
+C230,payments_wallet,CashJobs,Open existing job,c1c_admin,ui,True,BLOCKED,,missing data,Job-detail frame not captured,Cash job listed (Smith Roof Replacement); job-detail screenshot not captured in this run
 C231,payments_wallet,Funds,Disburse disabled until deposited,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-C232,payments_wallet,Funds,Available balance display,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C232,payments_wallet,Funds,Available balance display,c1c_admin,ui,True,PASS,,,,Wallet available / pending in/out $0.00; cash-jobs outstanding $0 collected $0
 C233,payments_wallet,Funds,Claim ledger card,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
 C234,payments_wallet,Funds,Claim settlement editor,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
 C235,payments_wallet,Provider,moov-transfer fail-closed,c1c_admin,api,False,PASS,,,,"{""status"": 403, ""error"": ""provider_disabled"", ""name"": ""moov""}"
@@ -256,8 +256,8 @@ C254,payments_wallet,PaySetup,Recipient payment setup token,anon,ui,True,BLOCKED
 C255,payments_wallet,Disburse,Disbursement console,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
 C256,payments_wallet,Stakeholders,Check stakeholders manager,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
 C257,payments_wallet,Stakeholders,Add external stakeholder dialog,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-C258,payments_wallet,AutoFund,Auto funding panel,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-C259,payments_wallet,Readiness,Payment readiness panel,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C258,payments_wallet,AutoFund,Auto funding panel,c1c_admin,ui,True,PASS,,,,Automatic Funding panel visible; auto-funding off; Accept and save not clicked
+C259,payments_wallet,Readiness,Payment readiness panel,c1c_admin,ui,True,PASS,,,,Payment Account readiness rows all Not started
 C260,payments_wallet,Tax,Tax summary empty-safe,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
 C261,payments_wallet,Usage,Usage log tab,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
 C262,payments_wallet,Wallet,Platform fee schedule panel,c1c_admin|platform_owner,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
@@ -338,9 +338,9 @@ C336,settings,Settings,Mobile 390px settings tabs,c1c_admin,ui,True,BLOCKED,,mis
 C337,settings,Users,List tenant users,c1c_admin,ui,True,PASS,,,,"Users tab lists Michael Carletta, Lani Hogan, Austin Sukarick"
 C338,settings,Referrals,Referral code display,c1c_admin,ui,True,PASS,,,,Referral code CONDIT6399 displayed
 C339,settings,AI,AI key unconfigured empty-safe,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-C340,settings,Profile,Display name / email,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-C341,settings,Notifications,Toggle notification switch,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-C342,settings,Passkey,Add passkey UI fail-closed,c1c_admin,ui,True,BLOCKED,,missing data,"Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+C340,settings,Profile,Display name / email,c1c_admin,ui,True,PASS,,,,Profile Company Name Condition One Commercial / slug c1c
+C341,settings,Notifications,Toggle notification switch,c1c_admin,ui,True,PASS,,,,"Email Notifications toggle on, SMS off; Save Preferences not persisted in this audit"
+C342,settings,Passkey,Add passkey UI fail-closed,c1c_admin,ui,True,PASS,,,,Add a passkey visible; no passkeys registered; not completed
 C343,admin_platform,AdminTenants,Open /admin/tenants as platform owner,platform_owner,ui,True,PASS,,,,Owner /admin/tenants 6 of 6
 C344,admin_platform,AdminTenants,Tenant list,platform_owner,ui,True,PASS,,,,Tenant list
 C345,admin_platform,AdminTenants,Tenant search,platform_owner,ui,True,PASS,,,,Search tenants

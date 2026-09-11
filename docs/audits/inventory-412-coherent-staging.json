@@ -1,6 +1,6 @@
 {
   "title": "ChecksOps 412-control interaction audit \u2014 coherent staging",
-  "generated_at": "2026-09-11T21:10:00Z",
+  "generated_at": "2026-09-11T21:55:00Z",
   "verdict": "CONDITIONAL GO",
   "target": {
     "function": "checksops-staging-api",
@@ -27,35 +27,34 @@
     "this_audit_deployed_prep": false
   },
   "counts": {
-    "PASS": 255,
+    "PASS": 277,
     "NOT APPLICABLE": 10,
     "FAIL": 9,
-    "BLOCKED": 138
+    "BLOCKED": 116
   },
   "discovered": 412,
   "evaluated": 412,
-  "effective_coverage_pct": 65.7,
+  "effective_coverage_pct": 71.1,
   "raw_coverage_pct": 100.0,
   "by_module": {
     "public_homeowner": {
-      "PASS": 80,
+      "PASS": 84,
       "NOT APPLICABLE": 1,
-      "FAIL": 3,
-      "BLOCKED": 4
+      "FAIL": 3
     },
     "check_center": {
-      "PASS": 77,
-      "BLOCKED": 43,
-      "FAIL": 1
+      "PASS": 78,
+      "FAIL": 1,
+      "BLOCKED": 42
     },
     "payments_wallet": {
-      "PASS": 14,
+      "PASS": 28,
       "NOT APPLICABLE": 9,
-      "BLOCKED": 31
+      "BLOCKED": 17
     },
     "settings": {
-      "PASS": 33,
-      "BLOCKED": 45,
+      "PASS": 36,
+      "BLOCKED": 42,
       "FAIL": 1
     },
     "admin_platform": {
@@ -66,10 +65,10 @@
   },
   "by_role": {
     "anon": {
-      "PASS": 89,
+      "PASS": 93,
       "NOT APPLICABLE": 1,
       "FAIL": 4,
-      "BLOCKED": 6
+      "BLOCKED": 2
     },
     "platform_owner": {
       "PASS": 37,
@@ -77,9 +76,9 @@
       "FAIL": 2
     },
     "c1c_admin": {
-      "PASS": 123,
-      "BLOCKED": 105,
+      "PASS": 141,
       "FAIL": 3,
+      "BLOCKED": 87,
       "NOT APPLICABLE": 9
     },
     "freedom_staff": {
@@ -184,41 +183,6 @@
     }
   ],
   "blocked": [
-    {
-      "id": "C072",
-      "name": "Open /invoice/:token",
-      "module": "public_homeowner",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data"
-    },
-    {
-      "id": "C073",
-      "name": "Open /pay-setup/:token",
-      "module": "public_homeowner",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data"
-    },
-    {
-      "id": "C074",
-      "name": "Open /verify-account/:token",
-      "module": "public_homeowner",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data"
-    },
-    {
-      "id": "C076",
-      "name": "Open /payment-direction/:token",
-      "module": "public_homeowner",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data"
-    },
-    {
-      "id": "C095",
-      "name": "Sign out",
-      "module": "check_center",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data"
-    },
     {
       "id": "C116",
       "name": "Bulk Endorsing",
@@ -521,99 +485,15 @@
       "blocker_kind": "missing data"
     },
     {
-      "id": "C219",
-      "name": "Open /{slug}/wallet-ops",
-      "module": "payments_wallet",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data"
-    },
-    {
-      "id": "C220",
-      "name": "Pending setup display",
-      "module": "payments_wallet",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data"
-    },
-    {
-      "id": "C221",
-      "name": "ToS status Not started",
-      "module": "payments_wallet",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data"
-    },
-    {
-      "id": "C222",
-      "name": "KYC status Not started",
-      "module": "payments_wallet",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data"
-    },
-    {
-      "id": "C223",
-      "name": "ACH capability display",
-      "module": "payments_wallet",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data"
-    },
-    {
-      "id": "C224",
-      "name": "Add funds control",
-      "module": "payments_wallet",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data"
-    },
-    {
-      "id": "C225",
-      "name": "Sweeps control",
-      "module": "payments_wallet",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data"
-    },
-    {
-      "id": "C226",
-      "name": "Open Payment Account",
-      "module": "payments_wallet",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data"
-    },
-    {
-      "id": "C227",
-      "name": "No false success with provider disabled",
-      "module": "payments_wallet",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data"
-    },
-    {
-      "id": "C228",
-      "name": "Open /{slug}/cash-jobs",
-      "module": "payments_wallet",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data"
-    },
-    {
-      "id": "C229",
-      "name": "Job list",
-      "module": "payments_wallet",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data"
-    },
-    {
       "id": "C230",
       "name": "Open existing job",
       "module": "payments_wallet",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+      "blocker": "Job-detail frame not captured",
       "blocker_kind": "missing data"
     },
     {
       "id": "C231",
       "name": "Disburse disabled until deposited",
-      "module": "payments_wallet",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data"
-    },
-    {
-      "id": "C232",
-      "name": "Available balance display",
       "module": "payments_wallet",
       "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
       "blocker_kind": "missing data"
@@ -684,20 +564,6 @@
     {
       "id": "C257",
       "name": "Add external stakeholder dialog",
-      "module": "payments_wallet",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data"
-    },
-    {
-      "id": "C258",
-      "name": "Auto funding panel",
-      "module": "payments_wallet",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data"
-    },
-    {
-      "id": "C259",
-      "name": "Payment readiness panel",
       "module": "payments_wallet",
       "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
       "blocker_kind": "missing data"
@@ -1025,27 +891,6 @@
       "blocker_kind": "missing data"
     },
     {
-      "id": "C340",
-      "name": "Display name / email",
-      "module": "settings",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data"
-    },
-    {
-      "id": "C341",
-      "name": "Toggle notification switch",
-      "module": "settings",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data"
-    },
-    {
-      "id": "C342",
-      "name": "Add passkey UI fail-closed",
-      "module": "settings",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data"
-    },
-    {
       "id": "C354",
       "name": "Export CSV referrals",
       "module": "admin_platform",
@@ -1152,7 +997,7 @@
     }
   ],
   "blocked_kinds": {
-    "missing data": 131,
+    "missing data": 109,
     "identity": 6,
     "unsafe action": 1
   },
@@ -2774,14 +2619,16 @@
       "method": "ui",
       "interactive": true,
       "notes": "",
-      "result": "BLOCKED",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data",
+      "result": "PASS",
+      "blocker": null,
+      "blocker_kind": null,
       "severity": null,
       "expected": null,
-      "actual": null,
+      "actual": "/invoice/not-a-real-token: Invoice unavailable (missing_cognito_token); no invoice data shown",
       "repro": null,
-      "evidence": []
+      "evidence": [
+        "staging-ui"
+      ]
     },
     {
       "id": "C073",
@@ -2794,14 +2641,16 @@
       "method": "ui",
       "interactive": true,
       "notes": "",
-      "result": "BLOCKED",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data",
+      "result": "PASS",
+      "blocker": null,
+      "blocker_kind": null,
       "severity": null,
       "expected": null,
-      "actual": null,
+      "actual": "/pay-setup/not-a-real-token: Secure payment setup recipient verification fail-closed missing_cognito_token",
       "repro": null,
-      "evidence": []
+      "evidence": [
+        "staging-ui"
+      ]
     },
     {
       "id": "C074",
@@ -2814,14 +2663,16 @@
       "method": "ui",
       "interactive": true,
       "notes": "",
-      "result": "BLOCKED",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data",
+      "result": "PASS",
+      "blocker": null,
+      "blocker_kind": null,
       "severity": null,
       "expected": null,
-      "actual": null,
+      "actual": "/verify-account/not-a-real-token: This link is no longer active; points users to /pay-setup/",
       "repro": null,
-      "evidence": []
+      "evidence": [
+        "staging-ui"
+      ]
     },
     {
       "id": "C075",
@@ -2856,14 +2707,16 @@
       "method": "ui",
       "interactive": true,
       "notes": "",
-      "result": "BLOCKED",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data",
+      "result": "PASS",
+      "blocker": null,
+      "blocker_kind": null,
       "severity": null,
       "expected": null,
-      "actual": null,
+      "actual": "/payment-direction/not-a-real-token: This link is no longer active; no payment-direction form",
       "repro": null,
-      "evidence": []
+      "evidence": [
+        "staging-ui"
+      ]
     },
     {
       "id": "C077",
@@ -3275,14 +3128,16 @@
       "method": "ui",
       "interactive": true,
       "notes": "",
-      "result": "BLOCKED",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data",
+      "result": "PASS",
+      "blocker": null,
+      "blocker_kind": null,
       "severity": null,
       "expected": null,
-      "actual": null,
+      "actual": "C1C session signed out after cash-jobs/wallet pass",
       "repro": null,
-      "evidence": []
+      "evidence": [
+        "staging-ui"
+      ]
     },
     {
       "id": "C096",
@@ -5929,14 +5784,16 @@
       "method": "ui",
       "interactive": true,
       "notes": "",
-      "result": "BLOCKED",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data",
+      "result": "PASS",
+      "blocker": null,
+      "blocker_kind": null,
       "severity": null,
       "expected": null,
-      "actual": null,
+      "actual": "Opened /c1c/wallet-ops WalletOps Pending setup",
       "repro": null,
-      "evidence": []
+      "evidence": [
+        "staging-ui"
+      ]
     },
     {
       "id": "C220",
@@ -5949,14 +5806,16 @@
       "method": "ui",
       "interactive": true,
       "notes": "",
-      "result": "BLOCKED",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data",
+      "result": "PASS",
+      "blocker": null,
+      "blocker_kind": null,
       "severity": null,
       "expected": null,
-      "actual": null,
+      "actual": "Available operating balance Pending setup / Setup in progress",
       "repro": null,
-      "evidence": []
+      "evidence": [
+        "staging-ui"
+      ]
     },
     {
       "id": "C221",
@@ -5969,14 +5828,16 @@
       "method": "ui",
       "interactive": true,
       "notes": "",
-      "result": "BLOCKED",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data",
+      "result": "PASS",
+      "blocker": null,
+      "blocker_kind": null,
       "severity": null,
       "expected": null,
-      "actual": null,
+      "actual": "Payment Account Terms of service accepted: Not started",
       "repro": null,
-      "evidence": []
+      "evidence": [
+        "staging-ui"
+      ]
     },
     {
       "id": "C222",
@@ -5989,14 +5850,16 @@
       "method": "ui",
       "interactive": true,
       "notes": "",
-      "result": "BLOCKED",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data",
+      "result": "PASS",
+      "blocker": null,
+      "blocker_kind": null,
       "severity": null,
       "expected": null,
-      "actual": null,
+      "actual": "Identity & business verification: Not started",
       "repro": null,
-      "evidence": []
+      "evidence": [
+        "staging-ui"
+      ]
     },
     {
       "id": "C223",
@@ -6009,14 +5872,16 @@
       "method": "ui",
       "interactive": true,
       "notes": "",
-      "result": "BLOCKED",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data",
+      "result": "PASS",
+      "blocker": null,
+      "blocker_kind": null,
       "severity": null,
       "expected": null,
-      "actual": null,
+      "actual": "Send/Collect funds via ACH: Not started; settlement bank not connected",
       "repro": null,
-      "evidence": []
+      "evidence": [
+        "staging-ui"
+      ]
     },
     {
       "id": "C224",
@@ -6029,14 +5894,16 @@
       "method": "ui",
       "interactive": true,
       "notes": "",
-      "result": "BLOCKED",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data",
+      "result": "PASS",
+      "blocker": null,
+      "blocker_kind": null,
       "severity": null,
       "expected": null,
-      "actual": null,
+      "actual": "Add funds opened Operating balance $0.00 Not set up; Add funds from bank not executed",
       "repro": null,
-      "evidence": []
+      "evidence": [
+        "staging-ui"
+      ]
     },
     {
       "id": "C225",
@@ -6049,14 +5916,16 @@
       "method": "ui",
       "interactive": true,
       "notes": "",
-      "result": "BLOCKED",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data",
+      "result": "PASS",
+      "blocker": null,
+      "blocker_kind": null,
       "severity": null,
       "expected": null,
-      "actual": null,
+      "actual": "Manage sweeps control present; not executed",
       "repro": null,
-      "evidence": []
+      "evidence": [
+        "staging-ui"
+      ]
     },
     {
       "id": "C226",
@@ -6069,14 +5938,16 @@
       "method": "ui",
       "interactive": true,
       "notes": "",
-      "result": "BLOCKED",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data",
+      "result": "PASS",
+      "blocker": null,
+      "blocker_kind": null,
       "severity": null,
       "expected": null,
-      "actual": null,
+      "actual": "Open Payment Account + Payment Account panel Not started; no live onboarding",
       "repro": null,
-      "evidence": []
+      "evidence": [
+        "staging-ui"
+      ]
     },
     {
       "id": "C227",
@@ -6089,14 +5960,16 @@
       "method": "ui",
       "interactive": true,
       "notes": "",
-      "result": "BLOCKED",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data",
+      "result": "PASS",
+      "blocker": null,
+      "blocker_kind": null,
       "severity": null,
       "expected": null,
-      "actual": null,
+      "actual": "No false success: balances $0.00, Pending setup, Add funds modal Not set up",
       "repro": null,
-      "evidence": []
+      "evidence": [
+        "staging-ui"
+      ]
     },
     {
       "id": "C228",
@@ -6109,14 +5982,16 @@
       "method": "ui",
       "interactive": true,
       "notes": "",
-      "result": "BLOCKED",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data",
+      "result": "PASS",
+      "blocker": null,
+      "blocker_kind": null,
       "severity": null,
       "expected": null,
-      "actual": null,
+      "actual": "Opened /c1c/cash-jobs Direct Pay Work Cash Jobs",
       "repro": null,
-      "evidence": []
+      "evidence": [
+        "staging-ui"
+      ]
     },
     {
       "id": "C229",
@@ -6129,14 +6004,16 @@
       "method": "ui",
       "interactive": true,
       "notes": "",
-      "result": "BLOCKED",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data",
+      "result": "PASS",
+      "blocker": null,
+      "blocker_kind": null,
       "severity": null,
       "expected": null,
-      "actual": null,
+      "actual": "Job list shows Smith Roof Replacement $20,000 due (Estimate)",
       "repro": null,
-      "evidence": []
+      "evidence": [
+        "staging-ui"
+      ]
     },
     {
       "id": "C230",
@@ -6150,11 +6027,11 @@
       "interactive": true,
       "notes": "",
       "result": "BLOCKED",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
+      "blocker": "Job-detail frame not captured",
       "blocker_kind": "missing data",
       "severity": null,
       "expected": null,
-      "actual": null,
+      "actual": "Cash job listed (Smith Roof Replacement); job-detail screenshot not captured in this run",
       "repro": null,
       "evidence": []
     },
@@ -6189,14 +6066,16 @@
       "method": "ui",
       "interactive": true,
       "notes": "",
-      "result": "BLOCKED",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data",
+      "result": "PASS",
+      "blocker": null,
+      "blocker_kind": null,
       "severity": null,
       "expected": null,
-      "actual": null,
+      "actual": "Wallet available / pending in/out $0.00; cash-jobs outstanding $0 collected $0",
       "repro": null,
-      "evidence": []
+      "evidence": [
+        "staging-ui"
+      ]
     },
     {
       "id": "C233",
@@ -6732,14 +6611,16 @@
       "method": "ui",
       "interactive": true,
       "notes": "",
-      "result": "BLOCKED",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data",
+      "result": "PASS",
+      "blocker": null,
+      "blocker_kind": null,
       "severity": null,
       "expected": null,
-      "actual": null,
+      "actual": "Automatic Funding panel visible; auto-funding off; Accept and save not clicked",
       "repro": null,
-      "evidence": []
+      "evidence": [
+        "staging-ui"
+      ]
     },
     {
       "id": "C259",
@@ -6752,14 +6633,16 @@
       "method": "ui",
       "interactive": true,
       "notes": "",
-      "result": "BLOCKED",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data",
+      "result": "PASS",
+      "blocker": null,
+      "blocker_kind": null,
       "severity": null,
       "expected": null,
-      "actual": null,
+      "actual": "Payment Account readiness rows all Not started",
       "repro": null,
-      "evidence": []
+      "evidence": [
+        "staging-ui"
+      ]
     },
     {
       "id": "C260",
@@ -8449,14 +8332,16 @@
       "method": "ui",
       "interactive": true,
       "notes": "",
-      "result": "BLOCKED",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data",
+      "result": "PASS",
+      "blocker": null,
+      "blocker_kind": null,
       "severity": null,
       "expected": null,
-      "actual": null,
+      "actual": "Profile Company Name Condition One Commercial / slug c1c",
       "repro": null,
-      "evidence": []
+      "evidence": [
+        "staging-ui"
+      ]
     },
     {
       "id": "C341",
@@ -8469,14 +8354,16 @@
       "method": "ui",
       "interactive": true,
       "notes": "",
-      "result": "BLOCKED",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data",
+      "result": "PASS",
+      "blocker": null,
+      "blocker_kind": null,
       "severity": null,
       "expected": null,
-      "actual": null,
+      "actual": "Email Notifications toggle on, SMS off; Save Preferences not persisted in this audit",
       "repro": null,
-      "evidence": []
+      "evidence": [
+        "staging-ui"
+      ]
     },
     {
       "id": "C342",
@@ -8489,14 +8376,16 @@
       "method": "ui",
       "interactive": true,
       "notes": "",
-      "result": "BLOCKED",
-      "blocker": "Interactive control not clicked in this run (nested dialog, payments/wallet page, or extra public token)",
-      "blocker_kind": "missing data",
+      "result": "PASS",
+      "blocker": null,
+      "blocker_kind": null,
       "severity": null,
       "expected": null,
-      "actual": null,
+      "actual": "Add a passkey visible; no passkeys registered; not completed",
       "repro": null,
-      "evidence": []
+      "evidence": [
+        "staging-ui"
+      ]
     },
     {
       "id": "C343",
