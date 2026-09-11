@@ -10,10 +10,19 @@ import { withIdentity, withIdentityWrite, parseBody, ignoredSpoof } from './data
 import { loadDatabaseCredentials } from './secrets.mjs';
 import { buildClientConfig, buildWriteClientConfig, sanitizePublicError } from './db-health.mjs';
 import { normalizePath, s3KeyFor } from './storage-paths.mjs';
-import { emailSendLogStatusFromMailer, sendViaSesOrSink, withEmailLogSavepoint } from './email.mjs';
+import {
+  claimIdempotencyKey,
+  emailSendLogStatusFromMailer,
+  finalizeClaimedLog,
+  findIdempotencyRow,
+  logEmail,
+  replayIdempotentSend,
+  sendViaSesOrSink,
+} from './email.mjs';
 import { renderTransactionalTemplate } from './email-templates.mjs';
-import { normalizeEmail } from './email-policy.mjs';
+import { normalizeEmail, sesOutboundSendEnabled } from './email-policy.mjs';
 import { emailAssetOrigin, resolveEmailBranding } from './email-branding.mjs';
+import { requireAuthorizedTenant } from './tenant-email-domain.mjs';
 
 const { Client } = pg;
 const s3 = () => new S3Client({ region: process.env.AWS_REGION || 'us-east-1' });
@@ -688,10 +697,33 @@ export const runSendPortalInvite = async ({
 }) => {
   const email = normalizeEmail(body.email);
   if (!email) return { ok: false, statusCode: 400, error: 'missing_email', spoofFieldsIgnored: spoof };
+
+  const tenantId = body.tenant_id || body.tenantId || null;
+  const authorized = await requireAuthorizedTenant(client, mapping, tenantId, { configure: false });
+  if (!authorized.ok) return { ...authorized, spoofFieldsIgnored: spoof };
+
+  const suppliedKey = String(body.idempotencyKey || body.idempotency_key || '').trim();
+  // Same tenant+recipient invite retries share a key unless the caller supplies one.
+  const idempotencyKey = suppliedKey || `portal-invite:${authorized.tenantId}:${email}`;
+  const messageId = randomUUID();
+  const mailer = send || sendViaSesOrSink;
+
+  const prior = await findIdempotencyRow(client, idempotencyKey);
+  if (!prior.ok && sesOutboundSendEnabled()) {
+    return {
+      ok: false,
+      statusCode: 503,
+      success: false,
+      error: 'idempotency_unavailable',
+      spoofFieldsIgnored: spoof,
+    };
+  }
+  if (prior.ok && prior.row) return replayIdempotentSend(prior.row, spoof);
+
   const origin = appOrigin(body.appUrl || body.origin);
   const loginUrl = /\/(portal|login)(\/|$)/i.test(origin) ? origin : `${origin}/login`;
   const branding = await resolveEmailBranding(client, {
-    tenantId: body.tenant_id || body.tenantId || null,
+    tenantId: authorized.tenantId,
     senderOverride: body.senderOverride || body.sender_override || null,
   });
   const rendered = renderTransactionalTemplate('portal-invite', {
@@ -701,7 +733,50 @@ export const runSendPortalInvite = async ({
     loginUrl,
     branding,
   });
-  const mailer = send || sendViaSesOrSink;
+
+  let claimed = false;
+  if (prior.ok && !prior.row) {
+    const claim = await claimIdempotencyKey(client, {
+      id: messageId,
+      template_name: 'portal-invite',
+      recipient_email: email,
+      tenant_id: authorized.tenantId,
+      provider: 'aws_staging',
+      idempotency_key: idempotencyKey,
+      metadata: {
+        application_user_id: mapping.application_user_id,
+        userType: body.userType || null,
+        originalTo: email,
+        original_recipient: email,
+      },
+    });
+    if (!claim.ok) {
+      if (sesOutboundSendEnabled() || claim.error === 'idempotency_conflict') {
+        return {
+          ok: false,
+          statusCode: 503,
+          success: false,
+          error: claim.error || 'idempotency_unavailable',
+          spoofFieldsIgnored: spoof,
+        };
+      }
+    } else if (claim.duplicate) {
+      return replayIdempotentSend(claim.row, spoof);
+    } else {
+      claimed = claim.claimed === true;
+    }
+  }
+
+  if (sesOutboundSendEnabled() && !claimed) {
+    return {
+      ok: false,
+      statusCode: 503,
+      success: false,
+      error: 'idempotency_unavailable',
+      spoofFieldsIgnored: spoof,
+    };
+  }
+
   const sendResult = await mailer({
     to: email,
     subject: rendered.subject,
@@ -709,23 +784,46 @@ export const runSendPortalInvite = async ({
     text: rendered.text,
     from: branding.from,
     replyTo: branding.replyTo,
+    tenantId: authorized.tenantId,
+    messageCategory: 'portal-invite',
   });
-  await withEmailLogSavepoint(client, () => client.query(
-    `INSERT INTO public.email_send_log (
-       id, template_name, recipient_email, status, provider, provider_message_id, metadata, created_at
-     ) VALUES ($1::uuid, 'send-portal-invite', $2, $3, 'aws_staging', $4, $5::jsonb, now())`,
-    [
-      randomUUID(),
-      email,
-      emailSendLogStatusFromMailer(sendResult.results?.[0]),
-      sendResult.results?.[0]?.messageId || null,
-      JSON.stringify({ application_user_id: mapping.application_user_id, userType: body.userType || null }),
-    ],
-  )).catch(() => {});
+
+  const primary = sendResult.results?.[0] || {};
+  const logRow = {
+    id: messageId,
+    template_name: 'portal-invite',
+    recipient_email: email,
+    tenant_id: authorized.tenantId,
+    status: emailSendLogStatusFromMailer(primary),
+    provider: 'aws_staging',
+    provider_message_id: primary.messageId || null,
+    idempotency_key: idempotencyKey,
+    error_message: primary.error || null,
+    metadata: {
+      application_user_id: mapping.application_user_id,
+      policy: primary.policy || null,
+      originalTo: primary.originalTo || email,
+      original_recipient: primary.originalTo || email,
+      mode: sendResult.mode,
+      userType: body.userType || null,
+      finalized_at: new Date().toISOString(),
+    },
+  };
+  if (claimed) await finalizeClaimedLog(client, logRow);
+  else await logEmail(client, logRow);
+
+  const sent = primary.delivery === 'ses' && primary.status === 'sent';
   return {
     ok: true,
     statusCode: 200,
     success: true,
+    sent,
+    queued: false,
+    sunk: primary.delivery !== 'ses' || primary.status === 'sunk',
+    provider: 'aws_staging',
+    id: primary.messageId || messageId,
+    providerMessageId: primary.messageId || null,
+    stagingPolicy: primary.policy || null,
     stagingMode: sendResult.mode,
     spoofFieldsIgnored: spoof,
   };
