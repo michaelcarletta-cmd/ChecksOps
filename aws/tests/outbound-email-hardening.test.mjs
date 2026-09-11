@@ -11,6 +11,7 @@ import {
   emailSendLogStatusFromMailer,
   EMAIL_SEND_LOG_STATUSES,
 } from '../functions/api/email.mjs';
+import { runSendPortalInvite } from '../functions/api/homeowner.mjs';
 import { requireAuthorizedTenant } from '../functions/api/tenant-email-domain.mjs';
 
 const TENANT = '11111111-1111-4111-8111-111111111111';
@@ -43,6 +44,7 @@ const sendClient = ({
   logs = new Map(),
   uniqueOnKey = true,
   failIdempotencySelect = false,
+  failInsert = false,
   failFinalize = false,
   hideRowAfterUnique = false,
 } = {}) => {
@@ -111,6 +113,10 @@ const sendClient = ({
         return { rows: row ? [row] : [] };
       }
       if (compact.startsWith('INSERT INTO public.email_send_log')) {
+        if (failInsert) {
+          throw new Error('email_send_log insert failed');
+        }
+        const pending = compact.includes("'pending'");
         const key = String(params[7] || params[5] || '');
         if (uniqueOnKey && key && logs.has(key)) {
           client._uniqueHit = true;
@@ -119,14 +125,23 @@ const sendClient = ({
           throw error;
         }
         const id = String(params[0]);
+        const metadataRaw = pending ? params[6] : params[9];
+        let metadata = {};
+        try {
+          metadata = typeof metadataRaw === 'string' ? JSON.parse(metadataRaw) : (metadataRaw || {});
+        } catch {
+          metadata = {};
+        }
         const row = {
           id,
-          status: compact.includes("'pending'") ? 'pending' : 'sunk',
-          provider_message_id: null,
+          status: pending ? 'pending' : String(params[4] || 'sunk'),
+          provider_message_id: pending ? null : (params[6] || null),
           recipient_email: params[2],
           tenant_id: params[3],
-          metadata: {},
-          error_message: null,
+          template_name: params[1],
+          provider: pending ? params[4] : params[5],
+          metadata,
+          error_message: pending ? null : (params[8] || null),
           idempotency_key: key,
         };
         if (key) logs.set(key, row);
@@ -144,6 +159,11 @@ const sendClient = ({
             row.status = params[1];
             row.provider_message_id = params[2];
             row.error_message = params[3];
+            try {
+              row.metadata = typeof params[4] === 'string' ? JSON.parse(params[4]) : (params[4] || row.metadata);
+            } catch {
+              row.metadata = row.metadata || {};
+            }
           }
         }
         return { rows: [], rowCount: 1 };
@@ -625,4 +645,296 @@ test('unique-key conflict without a visible row fails closed and does not send',
   assert.equal(result.statusCode, 503);
   assert.equal(result.error, 'idempotency_conflict');
   assert.equal(sent.length, 0);
+});
+
+const portalInviteBody = (overrides = {}) => ({
+  tenantId: TENANT,
+  email: LOCK,
+  tenantName: 'Acme',
+  userName: 'Ada',
+  userType: 'homeowner',
+  ...overrides,
+});
+
+const sesSuccessMailer = (sent, messageId = '010001a0-portal-ses-message') => async (payload) => {
+  sent.push(payload);
+  return {
+    mode: 'ses',
+    deliveredCount: 1,
+    sunkCount: 0,
+    results: [{
+      delivery: 'ses',
+      status: 'sent',
+      policy: 'staging_ses_lock',
+      messageId,
+      originalTo: payload.to,
+      to: payload.to,
+    }],
+  };
+};
+
+test('same-tenant portal invite logs tenant, template, and policy metadata', async () => {
+  const sent = [];
+  const client = sendClient();
+  const result = await runSendPortalInvite({
+    client,
+    mapping,
+    spoof,
+    send: capturingMailer(sent),
+    body: portalInviteBody(),
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.sent, false);
+  assert.equal(result.sunk, true);
+  assert.equal(result.provider, 'aws_staging');
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].to, LOCK);
+  assert.equal(sent[0].tenantId, TENANT);
+  assert.ok(brandingQueries(client) >= 1);
+
+  const insert = client.calls.find((c) => c.sql.startsWith('INSERT INTO public.email_send_log'));
+  assert.ok(insert);
+  assert.equal(insert.params[1], 'portal-invite');
+  assert.equal(insert.params[2], LOCK);
+  assert.equal(insert.params[3], TENANT);
+  assert.equal(insert.params[4], 'aws_staging');
+  const claimMeta = JSON.parse(insert.params[6]);
+  assert.equal(claimMeta.originalTo, LOCK);
+  assert.equal(claimMeta.original_recipient, LOCK);
+
+  const logged = [...client.logs.values()][0];
+  assert.equal(logged.template_name, 'portal-invite');
+  assert.equal(logged.tenant_id, TENANT);
+  assert.equal(logged.recipient_email, LOCK);
+  assert.equal(logged.status, 'sunk');
+  assert.equal(logged.metadata.originalTo, LOCK);
+  assert.equal(logged.metadata.original_recipient, LOCK);
+  assert.equal(logged.metadata.mode, 'sink');
+  assert.equal(logged.metadata.policy, 'staging_sink');
+  assert.ok(logged.metadata.finalized_at);
+});
+
+test('portal invite denies missing tenant before branding or mailer', async () => {
+  const sent = [];
+  const client = sendClient();
+  const result = await runSendPortalInvite({
+    client,
+    mapping,
+    spoof,
+    send: capturingMailer(sent),
+    body: { email: LOCK, tenantName: 'Acme' },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.statusCode, 400);
+  assert.equal(result.error, 'missing_tenant');
+  assert.equal(sent.length, 0);
+  assert.equal(brandingQueries(client), 0);
+  assert.equal(client.calls.some((c) => c.sql.startsWith('INSERT INTO public.email_send_log')), false);
+});
+
+test('portal invite denies cross-tenant before branding or mailer', async () => {
+  const sent = [];
+  const hidden = sendClient({ visibleTenants: [] });
+  const hiddenResult = await runSendPortalInvite({
+    client: hidden,
+    mapping,
+    spoof,
+    send: capturingMailer(sent),
+    body: portalInviteBody({ tenantId: OTHER }),
+  });
+  assert.equal(hiddenResult.ok, false);
+  assert.equal(hiddenResult.statusCode, 404);
+  assert.equal(hiddenResult.error, 'tenant_not_found');
+  assert.equal(brandingQueries(hidden), 0);
+
+  const visibleOther = sendClient({ visibleTenants: [OTHER], memberTenant: TENANT });
+  const denied = await runSendPortalInvite({
+    client: visibleOther,
+    mapping,
+    spoof,
+    send: capturingMailer(sent),
+    body: portalInviteBody({ tenantId: OTHER }),
+  });
+  assert.equal(denied.ok, false);
+  assert.equal(denied.statusCode, 403);
+  assert.equal(denied.error, 'cross_tenant_denied');
+  assert.equal(sent.length, 0);
+  assert.equal(brandingQueries(visibleOther), 0);
+  assert.equal(visibleOther.calls.some((c) => c.sql.startsWith('INSERT INTO public.email_send_log')), false);
+});
+
+test('portal invite reservation failure in ses mode does not call SendEmail', async () => {
+  await withEnv({
+    AWS_EMAIL_MODE: 'ses',
+    CHECKSOPS_ENV: 'staging',
+    AWS_EMAIL_SES_LOCK_RECIPIENT: LOCK,
+  }, async () => {
+    const sent = [];
+    let sesCalls = 0;
+    const lookupFail = await runSendPortalInvite({
+      client: sendClient({ failIdempotencySelect: true }),
+      mapping,
+      spoof,
+      send: async (payload) => {
+        sent.push(payload);
+        sesCalls += 1;
+        return { MessageId: 'should-not-send' };
+      },
+      body: portalInviteBody({ idempotencyKey: 'portal-ses-lookup-fail' }),
+    });
+    assert.equal(lookupFail.ok, false);
+    assert.equal(lookupFail.statusCode, 503);
+    assert.equal(lookupFail.error, 'idempotency_unavailable');
+    assert.equal(sent.length, 0);
+    assert.equal(sesCalls, 0);
+
+    const insertFail = await runSendPortalInvite({
+      client: sendClient({ failInsert: true }),
+      mapping,
+      spoof,
+      send: async (payload) => {
+        sent.push(payload);
+        sesCalls += 1;
+        return { MessageId: 'should-not-send' };
+      },
+      body: portalInviteBody({ idempotencyKey: 'portal-ses-insert-fail' }),
+    });
+    assert.equal(insertFail.ok, false);
+    assert.equal(insertFail.statusCode, 503);
+    assert.equal(insertFail.error, 'idempotency_unavailable');
+    assert.equal(sent.length, 0);
+    assert.equal(sesCalls, 0);
+  });
+});
+
+test('portal invite duplicate idempotency key does not send twice', async () => {
+  const sent = [];
+  const client = sendClient();
+  const body = portalInviteBody({ idempotencyKey: 'portal-invite-lock-1' });
+  const first = await runSendPortalInvite({
+    client,
+    mapping,
+    spoof,
+    send: capturingMailer(sent),
+    body,
+  });
+  const second = await runSendPortalInvite({
+    client,
+    mapping,
+    spoof,
+    send: capturingMailer(sent),
+    body,
+  });
+  assert.equal(first.ok, true);
+  assert.equal(first.duplicate, undefined);
+  assert.equal(second.ok, true);
+  assert.equal(second.duplicate, true);
+  assert.equal(second.reason, 'idempotent_replay');
+  assert.equal(sent.length, 1);
+
+  const derived = sendClient();
+  const derivedBody = portalInviteBody();
+  const firstDerived = await runSendPortalInvite({
+    client: derived,
+    mapping,
+    spoof,
+    send: capturingMailer(sent),
+    body: derivedBody,
+  });
+  const secondDerived = await runSendPortalInvite({
+    client: derived,
+    mapping,
+    spoof,
+    send: capturingMailer(sent),
+    body: derivedBody,
+  });
+  assert.equal(firstDerived.ok, true);
+  assert.equal(secondDerived.duplicate, true);
+  assert.equal(secondDerived.reason, 'idempotent_replay');
+  assert.equal(sent.length, 2);
+});
+
+test('portal invite sink and ses-identity still sink without calling SES', async () => {
+  for (const mode of ['sink', 'ses-identity']) {
+    await withEnv({
+      AWS_EMAIL_MODE: mode,
+      CHECKSOPS_ENV: 'staging',
+      AWS_EMAIL_SES_LOCK_RECIPIENT: LOCK,
+    }, async () => {
+      let called = false;
+      const result = await runSendPortalInvite({
+        client: sendClient(),
+        mapping,
+        spoof,
+        send: (payload) => sendViaSesOrSink({
+          ...payload,
+          sesSend: async () => {
+            called = true;
+            return { MessageId: 'nope' };
+          },
+        }),
+        body: portalInviteBody({ idempotencyKey: `portal-${mode}-1` }),
+      });
+      assert.equal(result.ok, true);
+      assert.equal(result.sent, false);
+      assert.equal(result.sunk, true);
+      assert.equal(result.stagingMode, mode);
+      assert.equal(called, false);
+      assert.equal(result.provider, 'aws_staging');
+    });
+  }
+});
+
+test('portal invite persists SES provider MessageId on success', async () => {
+  await withEnv({
+    AWS_EMAIL_MODE: 'ses',
+    CHECKSOPS_ENV: 'staging',
+    AWS_EMAIL_SES_LOCK_RECIPIENT: LOCK,
+  }, async () => {
+    const sent = [];
+    const messageId = '010001a0-portal-ses-message';
+    let sesSendCalls = 0;
+    const client = sendClient();
+    const result = await runSendPortalInvite({
+      client,
+      mapping,
+      spoof,
+      send: (payload) => sendViaSesOrSink({
+        ...payload,
+        sesSend: async () => {
+          sesSendCalls += 1;
+          return { MessageId: messageId };
+        },
+      }),
+      body: portalInviteBody({ idempotencyKey: 'portal-ses-message-1' }),
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.sent, true);
+    assert.equal(result.sunk, false);
+    assert.equal(result.provider, 'aws_staging');
+    assert.equal(result.providerMessageId, messageId);
+    assert.equal(sesSendCalls, 1);
+    assert.equal(sent.length, 0);
+
+    const logged = client.logs.get('portal-ses-message-1');
+    assert.equal(logged.status, 'sent');
+    assert.equal(logged.provider_message_id, messageId);
+    assert.equal(logged.tenant_id, TENANT);
+    assert.equal(logged.template_name, 'portal-invite');
+    assert.equal(logged.metadata.originalTo, LOCK);
+    assert.equal(logged.metadata.mode, 'ses');
+
+    const injected = sendClient();
+    const injectedResult = await runSendPortalInvite({
+      client: injected,
+      mapping,
+      spoof,
+      send: sesSuccessMailer(sent, messageId),
+      body: portalInviteBody({ idempotencyKey: 'portal-ses-injected-1' }),
+    });
+    assert.equal(injectedResult.providerMessageId, messageId);
+    assert.equal(injected.logs.get('portal-ses-injected-1').provider_message_id, messageId);
+    assert.equal(injected.logs.get('portal-ses-injected-1').status, 'sent');
+  });
 });

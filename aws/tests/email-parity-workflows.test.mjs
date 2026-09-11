@@ -249,10 +249,35 @@ test('ledger send, portal invite, OTP, leads, and mortgage notify call mailer on
     mapping,
     spoof,
     send: mail,
-    body: { email: 'home@example.com', tenantName: 'Acme', userName: 'Ada', password: 'SecretPass1!' },
-    client: sqlClient([]),
+    body: {
+      email: 'home@example.com',
+      tenantId: TENANT,
+      tenantName: 'Acme',
+      userName: 'Ada',
+      password: 'SecretPass1!',
+    },
+    client: sqlClient([
+      {
+        match: (sql) => sql.includes('FROM public.tenants'),
+        result: () => ({ rows: [{
+          id: TENANT,
+          name: 'Acme',
+          logo_url: null,
+          primary_color: '#123456',
+          email_from_name: 'Acme',
+          email_from_address: 'noreply@notify.example.test',
+          email_reply_to: 'claims@notify.example.test',
+          is_system_tenant: false,
+        }] }),
+      },
+      {
+        match: (sql) => sql.includes('FROM public.tenant_users'),
+        result: () => ({ rows: [{ role: 'admin' }] }),
+      },
+    ]),
   });
   assert.equal(portal.ok, true);
+  assert.equal(portal.sunk, true);
   assert.doesNotMatch(sent.at(-1).html, /SecretPass1/);
 
   const otp = await runHomeownerUploadOtpStart({

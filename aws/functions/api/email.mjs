@@ -148,7 +148,7 @@ export const withEmailLogSavepoint = async (client, fn) => {
   }
 };
 
-const logEmail = async (client, row) => {
+export const logEmail = async (client, row) => {
   try {
     await withEmailLogSavepoint(client, () => client.query(
       `INSERT INTO public.email_send_log (
@@ -189,7 +189,7 @@ const isSuppressed = async (client, email, tenantId) => {
 
 const withSpoof = (result, spoof) => ({ ...result, spoofFieldsIgnored: spoof });
 
-const findIdempotencyRow = async (client, key) => {
+export const findIdempotencyRow = async (client, key) => {
   if (!key) return { ok: true, row: null };
   try {
     const { rows } = await client.query(
@@ -208,7 +208,7 @@ const findIdempotencyRow = async (client, key) => {
 
 const isUniqueViolation = (error) => String(error?.code || '') === '23505';
 
-const claimIdempotencyKey = async (client, row) => {
+export const claimIdempotencyKey = async (client, row) => {
   if (!row?.idempotency_key) return { ok: true, claimed: false };
   try {
     await withEmailLogSavepoint(client, () => client.query(
@@ -239,7 +239,7 @@ const claimIdempotencyKey = async (client, row) => {
   }
 };
 
-const finalizeClaimedLog = async (client, row) => {
+export const finalizeClaimedLog = async (client, row) => {
   if (!row?.id) return;
   try {
     await withEmailLogSavepoint(client, () => client.query(
@@ -262,7 +262,7 @@ const finalizeClaimedLog = async (client, row) => {
   }
 };
 
-const replayIdempotentSend = (row, spoof) => {
+export const replayIdempotentSend = (row, spoof) => {
   const sent = row.status === 'sent';
   return withSpoof({
     ok: true,
@@ -274,7 +274,9 @@ const replayIdempotentSend = (row, spoof) => {
     duplicate: true,
     provider: 'aws_staging',
     id: row.provider_message_id || row.id,
+    providerMessageId: row.provider_message_id || null,
     stagingPolicy: row.metadata?.policy || null,
+    stagingMode: row.metadata?.mode || null,
     reason: 'idempotent_replay',
   }, spoof);
 };
@@ -430,6 +432,7 @@ export const runSendTransactionalEmail = async ({
     sunk: primary.delivery !== 'ses' || primary.status === 'sunk',
     provider: 'aws_staging',
     id: primary.messageId || messageId,
+    providerMessageId: primary.messageId || null,
     stagingPolicy: primary.policy,
   }, spoof);
 };
