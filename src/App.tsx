@@ -16,6 +16,7 @@ import { AwsStagingBanner } from "./components/AwsStagingBanner";
 
 
 import { bootstrapEmbedContext } from "./lib/embedContext";
+import { isPublicTokenRoute } from "./lib/publicTokenRoutes";
 
 // Capture Freedom CRM embed params (?embed=1&partner=...&freedom_claim_id=...)
 // on first script execution, before any route or upload component reads them.
@@ -78,6 +79,7 @@ const PageLoader = () => (
  * - /endorse      → Check endorsement flow (public token-based)
  * - /payment-direction/:token → Payment direction flow (public token-based)
  * - /:slug/*      → Tenant Check Center (white-label)
+ * - /h/ledger/:token → Homeowner ledger alias (public token; do not treat `h` as a tenant slug)
  * - /wl/:slug/*   → Legacy redirect to /:slug/*
  */
 function CheckOpsRoutes() {
@@ -110,6 +112,8 @@ function CheckOpsRoutes() {
       <Route path="/pros" element={<Navigate to="/find-a-pro" replace />} />
       <Route path="/h/upload" element={<Suspense fallback={<PageLoader />}><HomeownerCheckUpload /></Suspense>} />
       <Route path="/h/claim/:token" element={<Suspense fallback={<PageLoader />}><HomeownerClaimPortal /></Suspense>} />
+      {/* Alias for previously emailed AWS /h/ledger/:token links. Must stay a public token route. */}
+      <Route path="/h/ledger/:token" element={<Suspense fallback={<PageLoader />}><HomeownerLedger /></Suspense>} />
       <Route path="/ledger/:token" element={<Suspense fallback={<PageLoader />}><HomeownerLedger /></Suspense>} />
       <Route path="/start-claim/:token" element={<Suspense fallback={<PageLoader />}><HomeownerLedger preClaim /></Suspense>} />
       <Route path="/mortgage-ops/login" element={<Suspense fallback={<PageLoader />}><MortgageOpsLogin /></Suspense>} />
@@ -185,21 +189,6 @@ function AppRoutes() {
   // Everything else (checkops.com, checksops.com, lovable previews, localhost)
   // serves the ChecksOps marketing + platform.
   return <CheckOpsRoutes />;
-}
-
-function isPublicTokenRoute(pathname: string): boolean {
-  return (
-    pathname === "/sign" ||
-    pathname === "/endorse" ||
-    pathname === "/unsubscribe" ||
-    pathname.startsWith("/ledger/") ||
-    pathname.startsWith("/start-claim/") ||
-    pathname.startsWith("/payment-direction/") ||
-    pathname.startsWith("/verify-account/") ||
-    pathname.startsWith("/h/upload") ||
-    pathname.startsWith("/h/claim/") ||
-    pathname.startsWith("/invoice/")
-  );
 }
 
 const App = () => (

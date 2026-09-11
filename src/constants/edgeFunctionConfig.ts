@@ -14,6 +14,7 @@
  * - /verify-account/:token  → account verification
  * - /pay-setup/:token       → recipient payment setup
  * - /ledger/:token          → homeowner ledger
+ * - /h/ledger/:token        → alias for previously emailed AWS tracking links
  * - /unsubscribe            → email unsubscribe
  *
  * When adding new edge functions, set verify_jwt = false in supabase/config.toml:

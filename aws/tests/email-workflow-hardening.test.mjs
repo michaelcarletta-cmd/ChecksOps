@@ -524,7 +524,12 @@ test('esign, endorsement, ledger, send-file, and stakeholder retries skip SES an
       },
     },
   });
-  const ledgerBody = { homeowner_email: LOCK, homeowner_name: 'Ada', tenant_id: TENANT };
+  const ledgerBody = {
+    homeowner_email: LOCK,
+    homeowner_name: 'Ada',
+    tenant_id: TENANT,
+    claim_id: CLAIM,
+  };
   const ledgerFirst = await runHomeownerLedgerSend({
     mapping, spoof, send: mail, body: ledgerBody, client: ledgerClient,
   });
