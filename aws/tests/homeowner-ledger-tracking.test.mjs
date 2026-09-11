@@ -595,17 +595,22 @@ test('uploads bind tenant, token_id, and claim from the ledger token, not the re
         result: () => ({ rows: [{ doc: claimBundle() }] }),
       },
       {
-        match: (sql) => sql.includes('INSERT INTO public.homeowner_ledger_check_uploads'),
+        match: (sql) => sql.includes('aws_public_homeowner_ledger_upload_insert'),
         result: (params) => {
           inserts.push(params);
-          return { rows: [{
-            id: 'up-1',
-            token_id: params[1],
-            claim_id: params[2],
-            tenant_id: params[0],
-            front_path: params[3],
-            status: 'pending_review',
-          }] };
+          return {
+            rows: [{
+              doc: {
+                ok: true,
+                id: 'up-1',
+                token_id: TOKEN_ID_A,
+                claim_id: CLAIM_A,
+                tenant_id: TENANT_A,
+                front_path: params[1],
+                status: 'pending_review',
+              },
+            }],
+          };
         },
       },
       {
@@ -618,10 +623,11 @@ test('uploads bind tenant, token_id, and claim from the ledger token, not the re
   });
   assert.equal(result.ok, true);
   assert.equal(inserts.length, 1);
-  assert.equal(inserts[0][0], TENANT_A);
-  assert.equal(inserts[0][1], TOKEN_ID_A);
-  assert.equal(inserts[0][2], CLAIM_A);
+  assert.equal(inserts[0][0], TOKEN_A);
+  assert.match(String(inserts[0][1]), new RegExp(`ledger/${TENANT_A}/${TOKEN_ID_A}/`));
   assert.equal(result.upload.token_id, TOKEN_ID_A);
+  assert.equal(result.upload.tenant_id, TENANT_A);
+  assert.equal(result.upload.claim_id, CLAIM_A);
   assert.match(result.upload.front_path, new RegExp(`ledger/${TENANT_A}/${TOKEN_ID_A}/`));
 });
 
@@ -664,6 +670,8 @@ test('SQL bundle is SECURITY DEFINER, checksops-only, and claim-scoped', () => {
   assert.match(sql, /tenant_id = tok\.tenant_id/);
   assert.match(sql, /lower\(trim\(tok\.homeowner_email\)\) <> lower\(trim\(coalesce\(signer_email/i);
   assert.match(sql, /request_claim IS DISTINCT FROM tok\.claim_id/);
+  assert.match(sql, /CREATE OR REPLACE FUNCTION public\.aws_public_homeowner_ledger_upload_insert/);
+  assert.match(sql, /REVOKE ALL ON FUNCTION public\.aws_public_homeowner_ledger_upload_insert\(text, text, numeric, text\) FROM PUBLIC/);
   assert.doesNotMatch(sql, /DISABLE ROW LEVEL SECURITY/);
   assert.doesNotMatch(sql, /ALTER TABLE .* ENABLE ROW LEVEL SECURITY/);
 });

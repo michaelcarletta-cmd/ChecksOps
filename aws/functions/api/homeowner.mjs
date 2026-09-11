@@ -382,13 +382,25 @@ export const handleHomeownerLedgerUpload = async (event, deps = {}) => {
         ContentType: 'image/jpeg',
       }));
     }
-    const row = (await client.query(
-      `INSERT INTO public.homeowner_ledger_check_uploads (
-         tenant_id, token_id, claim_id, front_path, status, amount_estimate, homeowner_note, created_at
-       ) VALUES ($1::uuid, $2::uuid, $3::uuid, $4, 'pending_review', $5, $6, now())
-       RETURNING id, token_id, claim_id, tenant_id, front_path, status, created_at`,
-      ledgerUploadInsertValues(tok, rel, body),
-    )).rows[0];
+    const inserted = (await client.query(
+      `SELECT public.aws_public_homeowner_ledger_upload_insert($1, $2, $3, $4) AS doc`,
+      [token, rel, body.amount_estimate ?? null, body.homeowner_note || body.note || null],
+    )).rows[0]?.doc;
+    if (!inserted?.ok) {
+      if (!deps.client) await client.query('ROLLBACK');
+      const error = inserted?.error || 'upload_insert_failed';
+      const status = inserted?.statusCode || (error === 'revoked' || error === 'expired' ? 410 : 404);
+      return { ok: false, statusCode: status, error, spoofFieldsIgnored: spoof };
+    }
+    const row = {
+      id: inserted.id,
+      token_id: inserted.token_id,
+      claim_id: inserted.claim_id,
+      tenant_id: inserted.tenant_id,
+      front_path: inserted.front_path,
+      status: inserted.status,
+      created_at: inserted.created_at,
+    };
     if (!deps.client) await client.query('COMMIT');
     let notified = false;
     try {

@@ -265,3 +265,59 @@ $$;
 
 REVOKE ALL ON FUNCTION public.aws_public_homeowner_ledger_mint_sign_link(text, uuid, text, timestamptz) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.aws_public_homeowner_ledger_mint_sign_link(text, uuid, text, timestamptz) TO checksops;
+
+CREATE OR REPLACE FUNCTION public.aws_public_homeowner_ledger_upload_insert(
+  p_token text,
+  p_front_path text,
+  p_amount numeric,
+  p_note text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  tok public.homeowner_ledger_tokens%ROWTYPE;
+  rec public.homeowner_ledger_check_uploads%ROWTYPE;
+BEGIN
+  IF p_token IS NULL OR length(trim(p_token)) < 8 OR p_front_path IS NULL OR length(trim(p_front_path)) = 0 THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'missing_fields');
+  END IF;
+
+  SELECT * INTO tok
+  FROM public.homeowner_ledger_tokens
+  WHERE token = trim(p_token)
+  LIMIT 1;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'not_found');
+  END IF;
+  IF tok.revoked_at IS NOT NULL THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'revoked', 'statusCode', 410);
+  END IF;
+  IF tok.expires_at IS NOT NULL AND tok.expires_at < now() THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'expired', 'statusCode', 410);
+  END IF;
+
+  INSERT INTO public.homeowner_ledger_check_uploads (
+    tenant_id, token_id, claim_id, front_path, status, amount_estimate, homeowner_note, created_at
+  ) VALUES (
+    tok.tenant_id, tok.id, tok.claim_id, p_front_path, 'pending_review', p_amount, p_note, now()
+  )
+  RETURNING * INTO rec;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'id', rec.id,
+    'token_id', rec.token_id,
+    'claim_id', rec.claim_id,
+    'tenant_id', rec.tenant_id,
+    'front_path', rec.front_path,
+    'status', rec.status,
+    'created_at', rec.created_at
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.aws_public_homeowner_ledger_upload_insert(text, text, numeric, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.aws_public_homeowner_ledger_upload_insert(text, text, numeric, text) TO checksops;
