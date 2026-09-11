@@ -1,9 +1,9 @@
 /**
  * Production-safe financial TOTP verification.
  *
- * Calls the real Cognito `/prep/auth/mfa/step-up` path (via requireStepUp /
- * StepUpDialog) bound to an existing check, then STOPS. This module must never
- * become a provider-execution or deposit-submit helper.
+ * Calls the app-level ChecksOps Financial TOTP `/prep/auth/mfa/step-up` path
+ * (via requireStepUp / StepUpDialog) bound to an existing check, then STOPS.
+ * This module must never become a provider-execution or deposit-submit helper.
  *
  * Server-derived tenant and amount_cents come from the check inside
  * handleMfaStepUp. Browser tenant / amount are ignored.
