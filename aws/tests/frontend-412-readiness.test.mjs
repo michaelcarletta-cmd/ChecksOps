@@ -228,6 +228,7 @@ test('internal Mortgage Ops admin deny UX matches other platform-only admin rout
   assert.match(mortgage, /isPlatformOwner/);
   assert.doesNotMatch(mortgage, /toast\.error\("Not authorized"\)/);
   assert.doesNotMatch(mortgage, /navigate\("\/"\)/);
+  assert.match(mortgage, /onAuthStateChange/);
   assert.match(mortgage, /Organization users submit and track mortgage-handling requests from Check Center/);
 });
 

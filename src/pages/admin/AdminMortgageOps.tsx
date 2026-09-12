@@ -49,15 +49,18 @@ export default function AdminMortgageOps() {
   const [requestsLoading, setRequestsLoading] = useState(false);
 
   useEffect(() => {
-    (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      const email = session?.user?.email;
-      const userId = session?.user?.id;
+    let cancelled = false;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (cancelled) return;
       // Platform-owner personnel console only. Tenant users (including tenant
       // admins) are denied here; they submit/track requests from Check Center.
-      setAuthorized(isPlatformOwner(email, userId));
+      setAuthorized(isPlatformOwner(session?.user?.email, session?.user?.id));
       setChecking(false);
-    })();
+    });
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const loadAgents = useCallback(async () => {
