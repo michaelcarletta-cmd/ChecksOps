@@ -18,6 +18,8 @@ const RUNBOOK = path.join(ROOT, 'supabase/security/revoke_postgrest_tax_profiles
 const PG_BIN = '/usr/lib/postgresql/16/bin';
 const SYNTHETIC = 'SYNTHETIC_PLACEHOLDER_NOT_A_TIN';
 const HOSTED_REF = 'nbcqwpysqgyxrrbgtmkw';
+const LOCAL_PREFLIGHT_NONCE = 'ab'.repeat(32);
+const LOCAL_APPLY_NONCE = 'cd'.repeat(32);
 
 const sql = fs.readFileSync(APPLY, 'utf8');
 const preflightSql = fs.readFileSync(PREFLIGHT, 'utf8');
@@ -59,8 +61,8 @@ function identityArgs(database, overrides = {}) {
     '-v', `expected_project_ref=${overrides.projectRef ?? HOSTED_REF}`,
     '-v', `expected_database=${overrides.database ?? database}`,
     '-v', `expected_owner=${overrides.owner ?? process.env.USER}`,
-    '-v', `checksops_preflight_nonce=${overrides.preflightNonce ?? 'localdisposablepreflightnonce'}`,
-    '-v', `checksops_apply_nonce=${overrides.applyNonce ?? 'localdisposableapplynonce'}`,
+    '-v', `checksops_preflight_nonce=${overrides.preflightNonce ?? LOCAL_PREFLIGHT_NONCE}`,
+    '-v', `checksops_apply_nonce=${overrides.applyNonce ?? LOCAL_APPLY_NONCE}`,
   ];
 }
 
@@ -298,12 +300,12 @@ test('local disposable database: revoke, deny Data API roles, preserve service_r
 
   const gated = runPreflight('rtp_legacy');
   assert.equal(gated.status, 0);
-  assert.match(gated.stdout, /CHECKSOPS_TAX_PREFLIGHT_V1\|localdisposablepreflightnonce\|EXACT_EXPECTED_LEGACY/);
+  assert.match(gated.stdout, new RegExp(`CHECKSOPS_TAX_PREFLIGHT_V1\\|${LOCAL_PREFLIGHT_NONCE}\\|EXACT_EXPECTED_LEGACY`));
   assert.doesNotMatch(gated.stderr + gated.stdout, new RegExp(SYNTHETIC));
 
   const first = applySql('rtp_legacy');
   assert.equal(first.status, 0);
-  assert.match(first.stdout, /CHECKSOPS_TAX_APPLY_V1\|localdisposableapplynonce\|ok/);
+  assert.match(first.stdout, new RegExp(`CHECKSOPS_TAX_APPLY_V1\\|${LOCAL_APPLY_NONCE}\\|ok`));
   assert.doesNotMatch(first.stderr + first.stdout, new RegExp(SYNTHETIC));
 
   const after = fingerprint('rtp_legacy');
@@ -419,11 +421,11 @@ test('local disposable database: revoke, deny Data API roles, preserve service_r
 
   const contained = runPreflight('rtp_legacy');
   assert.equal(contained.status, 0);
-  assert.match(contained.stdout, /CHECKSOPS_TAX_PREFLIGHT_V1\|localdisposablepreflightnonce\|ALREADY_CONTAINED/);
+  assert.match(contained.stdout, new RegExp(`CHECKSOPS_TAX_PREFLIGHT_V1\\|${LOCAL_PREFLIGHT_NONCE}\\|ALREADY_CONTAINED`));
 
   const second = applySql('rtp_legacy');
   assert.equal(second.status, 0);
-  assert.match(second.stdout, /CHECKSOPS_TAX_APPLY_V1\|localdisposableapplynonce\|ok/);
+  assert.match(second.stdout, new RegExp(`CHECKSOPS_TAX_APPLY_V1\\|${LOCAL_APPLY_NONCE}\\|ok`));
   assert.equal(fingerprint('rtp_legacy'), before);
 });
 
@@ -660,6 +662,23 @@ test('broader policy predicate is UNSAFE/AMBIGUOUS', () => {
   assert.equal(scalar('rtp_wide', `
     SELECT has_table_privilege('authenticated', 'public.recipient_tax_profiles', 'SELECT')::text
   `), 'true');
+});
+
+test('SQL rejects invalid nonce length, uppercase, and non-hex values', () => {
+  createdb('rtp_nonce');
+  loadLegacy('rtp_nonce');
+  for (const nonce of ['ab'.repeat(31), 'AB'.repeat(32), 'g'.repeat(64), `${'a'.repeat(63)}G`]) {
+    const pre = runPreflight('rtp_nonce', { allowFail: true, preflightNonce: nonce });
+    assert.notEqual(pre.status, 0);
+    assert.match(`${pre.stderr}\n${pre.stdout}`, /nonce is invalid/);
+    assert.doesNotMatch(pre.stdout || '', /CHECKSOPS_TAX_PREFLIGHT_V1/);
+  }
+  for (const nonce of ['cd'.repeat(31), 'CD'.repeat(32), 'z'.repeat(64)]) {
+    const apply = applySql('rtp_nonce', { allowFail: true, applyNonce: nonce });
+    assert.notEqual(apply.status, 0);
+    assert.match(`${apply.stderr}\n${apply.stdout}`, /nonce is invalid/);
+    assert.doesNotMatch(apply.stdout || '', /CHECKSOPS_TAX_APPLY_V1/);
+  }
 });
 
 after(() => {
