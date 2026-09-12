@@ -64,4 +64,46 @@ Money flags stay false: `AWS_MOOV_ENABLED`, `AWS_PROVIDER_EXECUTION_ENABLED`,
 `AWS_FINANCIAL_PERMISSIONS_ACTIVATED`, `AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED`,
 `AWS_CHECKALT_ENABLED`.
 
-SPA Send verification deposit remains gated on `bank_verify_available === true`.
+Lambda code SHA after dark overlay: `eMfH8wuH68Q7BW8aZhNQsZpkboMBKprruvnROixatJQ=`
+(`auth-cognito.mjs` unchanged, sha `d3c8178fd5fa9709da055e0fbed3ec41dc2243d8f4a729479257a6decb0cd199`).
+Live flag `AWS_PROVIDER_RECIPIENT_BANK_VERIFY_WRITES_ENABLED=false`.
+Live env `AWS_RECIPIENT_BANK_VERIFY_STATE_TABLE=checksops-recipient-bank-verify-state`.
+
+This Cursor IAM role cannot `dynamodb:CreateTable`. The table resource is in
+`aws/production/api-cfn.yaml` with a resource-based policy for the prep API role.
+It is **not applied** in this phase.
+
+Live probes (no Moov POST):
+- missing token → 400 `token_required`
+- invalid token → 404
+- dummy + real initiate/confirm → 403 `recipient_bank_verify_writes_blocked`, `liveProviderCalled=false`
+- session 200: recipient/account preserved, `bank_should_initiate=true`, `bank_verify_available=false`
+
+SPA was not redeployed. Production JS has no Send verification deposit string.
+
+## Return card
+
+```
+DURABLE INITIATION STORAGE: DynamoDB table checksops-recipient-bank-verify-state (CAS PutItem)
+CAS/UNIQUE CLAIM: attribute_not_exists(pk) OR state=not_started; one claimant
+CROSS-LAMBDA SAFE: yes in code; live table not created by this agent
+PROVIDER IDEMPOTENCY: checksops-recipient-bank-verify:{recipientId}:{bankId}
+UNKNOWN-OUTCOME HANDLING: persist uncertain / reconcile GET; never blind-retry POST
+DURABLE MV RATE LIMIT: DynamoDB UpdateItem 3 attempts / 15 min window; consume before PUT
+RATE LIMIT FAIL-CLOSED: 503 if store/table/credentials unavailable; no PUT
+STATE MACHINE: not_started → initiation_claimed → verification_pending | uncertain | verified (no verified regression)
+SQL/MIGRATION REQUIRED: NO
+SQL APPLIED: NO
+SPA DEPLOYED: NO (git prepared; live bundle has no Send-deposit button)
+BUTTON ACTIVE: NO
+BANK VERIFY FLAG: false
+TRANSFER FLAGS: all false
+TESTS: aws/tests/api-moov-m64d1-harden-bank-verify.test.mjs (plus M6.4D); npm run test:aws-api 677 pass / 0 fail / 3 skip
+MICRODEPOSIT INITIATED: NO
+MV CODE SUBMITTED: NO
+MONEY MOVED: NO
+SAFE TO ENABLE EXACTLY ONE HUMAN INITIATION: NO until the DynamoDB table exists and Lambda CAS is proven live
+GO/NO-GO: GO to review hardening. NO-GO to enable the flag or click Send verification deposit.
+
+STOP FOR REVIEW.
+```

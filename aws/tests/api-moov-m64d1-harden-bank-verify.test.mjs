@@ -27,6 +27,7 @@ const OTHER_RECIPIENT = 'cccccccc-0000-4000-8000-000000000003';
 const TENANT_ID = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
 const SESSION_TOKEN = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
 
+const CFN = readFileSync(new URL('../production/api-cfn.yaml', import.meta.url), 'utf8');
 const HANDLER = readFileSync(new URL('../functions/api/public-moov-recipient-bank-verify.mjs', import.meta.url), 'utf8');
 const INDEX = readFileSync(new URL('../functions/api/index.mjs', import.meta.url), 'utf8');
 const STATE = readFileSync(new URL('../functions/api/providers/recipient-bank-verify-state.mjs', import.meta.url), 'utf8');
@@ -237,6 +238,9 @@ const confirm = (code, extra = {}) => handlePublicMoovRecipientBankVerifyConfirm
 );
 
 test('state machine forbids regression from verified', () => {
+  assert.match(CFN, /RecipientBankVerifyStateTable/);
+  assert.match(CFN, /AWS_PROVIDER_RECIPIENT_BANK_VERIFY_WRITES_ENABLED: "false"/);
+  assert.match(CFN, /AWS_RECIPIENT_BANK_VERIFY_STATE_TABLE: "checksops-recipient-bank-verify-state"/);
   assert.equal(canTransitionBankVerifyState('verified', 'not_started'), false);
   assert.equal(canTransitionBankVerifyState('verified', 'initiation_claimed'), false);
   assert.equal(canTransitionBankVerifyState('verified', 'verification_pending'), false);
