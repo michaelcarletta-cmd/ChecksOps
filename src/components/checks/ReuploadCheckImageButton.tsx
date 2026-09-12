@@ -50,7 +50,10 @@ export function ReuploadCheckImageButton({
   // the action overwrites the existing one.
   const pathIsUsable =
     imagePath !== undefined
-      ? !!imagePath && !/^https?:\/\//i.test(imagePath)
+      ? !!imagePath
+        && !/^https?:\/\//i.test(imagePath)
+        && !/pending_front/i.test(imagePath)
+        && imagePath.trim() !== ""
       : !!hasImage;
 
   if (!isAdmin) return null;

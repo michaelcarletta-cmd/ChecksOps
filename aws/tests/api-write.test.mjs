@@ -559,6 +559,8 @@ test('Tranche 3 check_files insert requires a check-scoped path and mapped uploa
 });
 
 test('Tranche 3 intake image path must be scoped to the same check', async () => {
+  const previousBucket = process.env.FILES_BUCKET;
+  delete process.env.FILES_BUCKET;
   const client = mockClient({ rows: [{ id: CHECK_ID, front_image_path: `checks/${CHECK_ID}/front.jpg` }] });
   const ok = await handleWrite(jwtEvent('/data/write', 'POST', {
     table: 'check_intake_items',
@@ -566,6 +568,8 @@ test('Tranche 3 intake image path must be scoped to the same check', async () =>
     values: { front_image_path: `checks/${CHECK_ID}/front.jpg` },
     filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
   }), depsFor(client));
+  if (previousBucket == null) delete process.env.FILES_BUCKET;
+  else process.env.FILES_BUCKET = previousBucket;
   assert.equal(ok.ok, true);
 
   const denied = await handleWrite(jwtEvent('/data/write', 'POST', {

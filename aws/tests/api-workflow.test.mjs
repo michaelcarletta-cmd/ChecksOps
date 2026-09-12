@@ -208,6 +208,8 @@ test('create check derives tenant and uploaded_by and ignores spoofed identity',
   assert.equal(insert.params.includes(C1C_TENANT), false);
   assert.equal(insert.params.includes(SPOOF_ID), false);
   assert.equal(insert.params.includes('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'), false);
+  assert.equal(insert.params[5], '');
+  assert.equal(String(insert.params[5]).includes('pending_front'), false);
 });
 
 test('T5 kill switch disables create without a write transaction', async () => {

@@ -208,8 +208,9 @@ export const handleCreateCheck = async (event, deps = {}) => {
     const coerced = descriptiveFromBody(body);
     if (coerced.error) return denied(spoof, { statusCode: 400, ...coerced });
     const checkId = isUuid(body.id) ? String(body.id) : crypto.randomUUID();
-    const placeholder = `checks/${checkId}/pending_front.jpg`;
     const values = coerced.values || {};
+    // Do not persist a usable-looking image path until the object exists in S3.
+    // Empty string satisfies NOT NULL without looking like a signed/read object.
     const rows = (await client.query(
       `INSERT INTO public.check_intake_items (
          id, tenant_id, uploaded_by, status, check_stage, ocr_status,
@@ -230,7 +231,7 @@ export const handleCreateCheck = async (event, deps = {}) => {
         mapping.application_user_id,
         INTERNAL_CREATE_STATUS,
         INTERNAL_CREATE_STAGE,
-        placeholder,
+        '',
         values.carrier_name || null,
         values.check_number || null,
         values.payee_line || null,
