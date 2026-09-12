@@ -164,7 +164,7 @@ GRANT CONNECT ON DATABASE ${dbName} TO checksops;
   const sql24 = readRepoSql('24_complete_write_policies.sql');
   const stubTables = [...new Set(
     [...sql24.matchAll(/ON public\.([a-z0-9_]+);/g)].map((match) => match[1]),
-  )].filter((name) => ![
+  )  ].filter((name) => ![
     'mortgage_request_library_documents',
     'mortgage_handling_requests',
     'tenant_documents',
@@ -172,6 +172,11 @@ GRANT CONNECT ON DATABASE ${dbName} TO checksops;
     'user_roles',
     'profiles',
     'identity_accounts',
+    'claims',
+    'check_intake_items',
+    'deposit_items',
+    'loss_draft_tracking',
+    'signature_requests',
   ].includes(name));
 
   const bootstrap = `
@@ -250,6 +255,46 @@ $$;
 REVOKE ALL ON FUNCTION public.has_role(uuid, public.app_role) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.has_role(uuid, public.app_role) TO checksops, authenticated;
 
+CREATE TABLE IF NOT EXISTS public.claims (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id uuid,
+  tenant_id uuid
+);
+CREATE TABLE IF NOT EXISTS public.check_intake_items (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid
+);
+CREATE TABLE IF NOT EXISTS public.deposit_items (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  check_id uuid,
+  tenant_id uuid,
+  batch_id uuid
+);
+CREATE TABLE IF NOT EXISTS public.loss_draft_tracking (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  claim_id uuid,
+  tenant_id uuid
+);
+CREATE TABLE IF NOT EXISTS public.signature_requests (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  claim_id uuid,
+  check_intake_item_id uuid,
+  tenant_id uuid
+);
+
+CREATE OR REPLACE FUNCTION public.current_tenant_is_claim_funds_recipient(_claim_id uuid)
+RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT false $$;
+CREATE OR REPLACE FUNCTION public.current_tenant_is_check_funds_recipient(_check_id uuid)
+RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT false $$;
+CREATE OR REPLACE FUNCTION public.mortgage_agent_can_view_claim(_claim_id uuid)
+RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT false $$;
+CREATE OR REPLACE FUNCTION public.mortgage_agent_can_view_check(_check_id uuid)
+RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT false $$;
+GRANT EXECUTE ON FUNCTION public.current_tenant_is_claim_funds_recipient(uuid) TO checksops, authenticated;
+GRANT EXECUTE ON FUNCTION public.current_tenant_is_check_funds_recipient(uuid) TO checksops, authenticated;
+GRANT EXECUTE ON FUNCTION public.mortgage_agent_can_view_claim(uuid) TO checksops, authenticated;
+GRANT EXECUTE ON FUNCTION public.mortgage_agent_can_view_check(uuid) TO checksops, authenticated;
+
 CREATE OR REPLACE FUNCTION public.share_library_docs_to_mortgage_request()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -290,7 +335,15 @@ CREATE TABLE IF NOT EXISTS public.${table} (
   loss_draft_id uuid,
   deposit_item_id uuid,
   referrer_tenant_id uuid,
-  referred_tenant_id uuid
+  referred_tenant_id uuid,
+  batch_id uuid,
+  sender_tenant_id uuid,
+  recipient_tenant_id uuid,
+  assigned_employee_id uuid,
+  request_id uuid,
+  document_id uuid,
+  application_user_id uuid,
+  created_by uuid
 );
 ALTER TABLE public.${table} ENABLE ROW LEVEL SECURITY;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.${table} TO authenticated, checksops;
@@ -298,6 +351,35 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.${table} TO authenticated, 
 `;
 
   psql(['-d', dbName], bootstrap);
+  const policyColSkip = new Set([
+    'select', 'from', 'where', 'and', 'or', 'not', 'in', 'exists', 'true', 'false',
+    'null', 'on', 'join', 'as', 'public', 'auth', 'uid', 'authenticated', 'uuid',
+    'text', 'coalesce', 'lower', 'array', 'any', 'all', 'using', 'check', 'for',
+    'to', 'drop', 'policy', 'if', 'create', 'table', 'begin', 'end',
+  ]);
+  const policyColumns = new Set();
+  for (const block of sql24.matchAll(/USING \(([\s\S]*?)\)\n  WITH CHECK \(([\s\S]*?)\);/g)) {
+    for (const token of `${block[1]} ${block[2]}`.matchAll(/\b([a-z][a-z0-9_]*)\b/g)) {
+      const name = token[1];
+      if (policyColSkip.has(name)) continue;
+      if (/^(aws_|is_|has_|current_)/.test(name)) continue;
+      policyColumns.add(name);
+    }
+  }
+  const alterTargets = [
+    ...stubTables,
+    'deposit_items',
+    'claims',
+    'check_intake_items',
+    'loss_draft_tracking',
+    'signature_requests',
+    'profiles',
+  ];
+  const alterSql = alterTargets.flatMap((table) => [...policyColumns].sort().map((col) => {
+    const typ = col === 'id' || /_id$/.test(col) ? 'uuid' : 'text';
+    return `ALTER TABLE public.${table} ADD COLUMN IF NOT EXISTS ${col} ${typ};`;
+  })).join('\n');
+  psql(['-d', dbName], alterSql);
   psql(['-d', dbName, '-f', AUTH_UID_SQL]);
   for (const name of [
     '10_owner_helpers_from_identity.sql',
@@ -366,9 +448,6 @@ VALUES
 INSERT INTO public.mortgage_request_library_documents
   (request_id, tenant_id, tenant_document_id, doc_type, file_name, file_path)
 VALUES
-  ('${REQ_OPEN}', '${TENANT_A}', '${DOC_MORT}', 'library:mortgage:w-9', 'W-9', '${ATTACH_PATH}'),
-  ('${REQ_DONE}', '${TENANT_A}', '${DOC_MORT}', 'library:mortgage:w-9', 'W-9', '${ATTACH_PATH}'),
-  ('${REQ_CAN}', '${TENANT_A}', '${DOC_MORT}', 'library:mortgage:w-9', 'W-9', '${ATTACH_PATH}'),
   ('${REQ_DONE}', '${TENANT_A}', '${DOC_CLOSED}', 'library:mortgage:closing', 'Closed', '${CLOSED_PATH}');
 `;
   psql(['-d', dbName], seed);
@@ -380,10 +459,10 @@ CREATE TABLE public._hotfix_results (
   detail text
 );
 
-CREATE OR REPLACE FUNCTION public._hotfix_ok(test text, ok boolean, detail text DEFAULT '')
+CREATE OR REPLACE FUNCTION public._hotfix_ok(_test text, _ok boolean, _detail text DEFAULT '')
 RETURNS void LANGUAGE plpgsql AS $fn$
 BEGIN
-  INSERT INTO public._hotfix_results(test, ok, detail) VALUES (test, ok, detail)
+  INSERT INTO public._hotfix_results(test, ok, detail) VALUES (_test, _ok, _detail)
   ON CONFLICT (test) DO UPDATE SET ok = EXCLUDED.ok, detail = EXCLUDED.detail;
 END;
 $fn$;
@@ -775,9 +854,9 @@ BEGIN
   WHERE request_id = 'c1000000-0000-4000-8000-000000000010';
   PERFORM public._hotfix_ok('trigger_idempotent', n = 1, n::text);
 
+  UPDATE public.tenant_documents SET auto_share_mortgage_ops = false WHERE id = '${DOC_MORT}';
   INSERT INTO public.mortgage_handling_requests (id, tenant_id, status)
   VALUES ('c1000000-0000-4000-8000-000000000011', '${TENANT_A}', 'requested');
-  UPDATE public.tenant_documents SET auto_share_mortgage_ops = false WHERE id = '${DOC_MORT}';
   SELECT count(*) INTO n FROM public.mortgage_request_library_documents
   WHERE request_id = 'c1000000-0000-4000-8000-000000000011';
   PERFORM public._hotfix_ok(
