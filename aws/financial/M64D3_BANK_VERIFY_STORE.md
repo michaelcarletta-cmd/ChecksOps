@@ -107,8 +107,34 @@ SPA button. Do not send a Moov microdeposit.
 
 ## Live proofs from this agent (table still absent)
 
-See commit/PR handoff. Cursor identity
-`arn:aws:sts::806168576068:assumed-role/ChecksOpsCursorCloudStaging/checksops-t0-run`.
+Cursor identity: `arn:aws:sts::806168576068:assumed-role/ChecksOpsCursorCloudStaging/checksops-t0-run`.
+
+Prep Lambda `checksops-production-prep-api` (read-only inspect, no overlay):
+
+| Field | Value |
+|---|---|
+| Role | `arn:aws:iam::806168576068:role/checksops-production-api-execution` |
+| CodeSha256 | `Rph+8NYdZcqPXIQqJ2CtjGyba4BX9KzWj+00FCHZ7cI=` (M6.4D.2 overlay, unchanged) |
+| LastModified | `2026-09-12T19:05:25.000+0000` |
+| Bank-verify writes | `false` |
+| Money flags | all `false` |
+| Table env | `AWS_RECIPIENT_BANK_VERIFY_STATE_TABLE=checksops-recipient-bank-verify-state` |
+
+`checksops-staging-api` was **not** updated by this chat. Read-only LastModified `2026-09-12T19:42:03.000+0000` (other workstream). Drift was not “restored” by overlay.
+
+CloudFormation stack `checksops-recipient-bank-verify-state` **does not exist**.
+
+Direct-invoke prove (`probe_id=synth-table-proof-d3`, flag off, no Moov):
+
+- DescribeTable / CreateTable / PITR / TTL / PutResourcePolicy / DeleteItem → `AccessDeniedException` on the Lambda role
+- GetItem / PutItem CAS / UpdateItem MV → fail closed `bank_verify_state_unavailable`
+- No synthetic item written
+
+Dark HTTP (valid-shape dummy token sha12 `ffe054fe7ae0`; flag check is before recipient resolve):
+
+- initiate → 403 `recipient_bank_verify_writes_blocked`, `liveProviderCalled=false`
+- confirm → 403 `recipient_bank_verify_writes_blocked`, `liveProviderCalled=false`
+- missing token → 400 `token_required`, `liveProviderCalled=false`
 
 ## Dependencies / deploy order
 
@@ -120,3 +146,8 @@ See commit/PR handoff. Cursor identity
 5. Human review. Flag stays false until a later designated enablement chat.
 
 Do not merge this into a shared staging Lambda overlay independently.
+
+## Tests
+
+`npm run test:aws-api`: 685 pass / 0 fail / 3 skip (includes
+`aws/tests/api-moov-m64d3-operator-table.test.mjs`).
