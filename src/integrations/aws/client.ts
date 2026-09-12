@@ -754,6 +754,20 @@ export function createAwsStagingClient(options: AwsStagingClientOptions = {}) {
         body: JSON.stringify(options.body || {}),
       }, token);
       if (response.ok) {
+        if (body && typeof body === "object" && (body as { ok?: unknown }).ok === false) {
+          return {
+            data: body,
+            error: {
+              message: String(
+                (body as { error?: unknown; message?: unknown }).error
+                || (body as { message?: unknown }).message
+                || `FunctionsHttpError:${name}`,
+              ),
+              name: "FunctionsHttpError",
+              context: { status: Number((body as { statusCode?: unknown }).statusCode) || 409, body },
+            },
+          };
+        }
         return { data: body, error: null };
       }
       return {

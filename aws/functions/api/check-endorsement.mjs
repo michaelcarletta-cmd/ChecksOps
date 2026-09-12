@@ -95,10 +95,17 @@ const publicDb = async (write, deps = {}) => {
   return { client, owned: true };
 };
 
+let safeQuerySp = 0;
+
 const safeQuery = async (client, sql, params = []) => {
+  const sp = `sq_${(safeQuerySp += 1)}`;
   try {
-    return await client.query(sql, params);
+    await client.query(`SAVEPOINT ${sp}`);
+    const result = await client.query(sql, params);
+    try { await client.query(`RELEASE SAVEPOINT ${sp}`); } catch { /* ignore */ }
+    return result;
   } catch {
+    try { await client.query(`ROLLBACK TO SAVEPOINT ${sp}`); } catch { /* ignore */ }
     return { rows: [], rowCount: 0 };
   }
 };
@@ -185,34 +192,195 @@ const resolveEndorsementId = async (client, body) => {
 
 const rotateToken = () => randomUUID();
 
-const updatePayeeSigned = async (client, endorsement, { status, token, image, signedAt }) => {
-  if (endorsement.payee_id) {
-    await safeQuery(
-      client,
-      `UPDATE public.check_payees
-       SET endorsement_status = $2,
-           endorsed_at = COALESCE($3::timestamptz, endorsed_at),
-           endorsement_image_path = COALESCE($4, endorsement_image_path),
-           endorsement_token = COALESCE($5, endorsement_token),
-           endorsement_token_expires_at = NULL,
-           updated_at = now()
-       WHERE id = $1::uuid`,
-      [endorsement.payee_id, status, signedAt || null, image || null, token || null],
-    );
-    return;
+const COMPLETE_ENDORSEMENT = new Set(['signed', 'waived']);
+
+/**
+ * Durable payee endorsement write. Does not swallow errors.
+ * Token columns are only mutated when rotateToken is true so a failed
+ * companion endorsement write can roll back without consuming the public token.
+ */
+export const persistPayeeEndorsementState = async (client, endorsement, {
+  status,
+  token = null,
+  image = null,
+  signedAt = null,
+  rotateToken: shouldRotate = false,
+} = {}) => {
+  const nextStatus = String(status || '').trim();
+  if (!nextStatus) {
+    return { ok: false, error: 'payee_persist_failed', message: 'Payee endorsement status is required' };
   }
-  await safeQuery(
-    client,
-    `UPDATE public.check_payees
-     SET endorsement_status = $3,
-         endorsed_at = COALESCE($4::timestamptz, endorsed_at),
-         endorsement_image_path = COALESCE($5, endorsement_image_path),
-         endorsement_token = COALESCE($6, endorsement_token),
-         endorsement_token_expires_at = NULL,
-         updated_at = now()
-     WHERE check_id = $1::uuid AND payee_name = $2`,
-    [endorsement.check_id, endorsement.payee_name, status, signedAt || null, image || null, token || null],
-  );
+  let result;
+  if (endorsement.payee_id) {
+    result = shouldRotate
+      ? await client.query(
+        `UPDATE public.check_payees
+         SET endorsement_status = $2,
+             endorsed_at = COALESCE($3::timestamptz, endorsed_at, now()),
+             endorsement_image_path = COALESCE($4, endorsement_image_path),
+             endorsement_token = COALESCE($5, endorsement_token),
+             endorsement_token_expires_at = NULL,
+             updated_at = now()
+         WHERE id = $1::uuid
+         RETURNING id, endorsement_status, endorsement_token`,
+        [endorsement.payee_id, nextStatus, signedAt, image, token],
+      )
+      : await client.query(
+        `UPDATE public.check_payees
+         SET endorsement_status = $2,
+             endorsed_at = COALESCE($3::timestamptz, endorsed_at, now()),
+             endorsement_image_path = COALESCE($4, endorsement_image_path),
+             updated_at = now()
+         WHERE id = $1::uuid
+         RETURNING id, endorsement_status, endorsement_token`,
+        [endorsement.payee_id, nextStatus, signedAt, image],
+      );
+  } else if (endorsement.check_id && endorsement.payee_name) {
+    result = shouldRotate
+      ? await client.query(
+        `UPDATE public.check_payees
+         SET endorsement_status = $3,
+             endorsed_at = COALESCE($4::timestamptz, endorsed_at, now()),
+             endorsement_image_path = COALESCE($5, endorsement_image_path),
+             endorsement_token = COALESCE($6, endorsement_token),
+             endorsement_token_expires_at = NULL,
+             updated_at = now()
+         WHERE check_id = $1::uuid AND payee_name = $2
+         RETURNING id, endorsement_status, endorsement_token`,
+        [endorsement.check_id, endorsement.payee_name, nextStatus, signedAt, image, token],
+      )
+      : await client.query(
+        `UPDATE public.check_payees
+         SET endorsement_status = $3,
+             endorsed_at = COALESCE($4::timestamptz, endorsed_at, now()),
+             endorsement_image_path = COALESCE($5, endorsement_image_path),
+             updated_at = now()
+         WHERE check_id = $1::uuid AND payee_name = $2
+         RETURNING id, endorsement_status, endorsement_token`,
+        [endorsement.check_id, endorsement.payee_name, nextStatus, signedAt, image],
+      );
+  } else {
+    return { ok: false, error: 'payee_persist_failed', message: 'Payee endorsement target is missing' };
+  }
+  if (!result.rowCount) {
+    if (!endorsement.payee_id) {
+      return { ok: true, skipped: true, rowCount: 0 };
+    }
+    return {
+      ok: false,
+      error: 'payee_persist_failed',
+      message: 'Payee endorsement state was not updated',
+    };
+  }
+  return { ok: true, data: result.rows[0], rowCount: result.rowCount };
+};
+
+const updatePayeeSigned = async (client, endorsement, fields) => persistPayeeEndorsementState(client, endorsement, {
+  ...fields,
+  rotateToken: Boolean(fields?.token),
+});
+
+export const persistPhysicalEndorsementOnCheck = async (client, {
+  endorsement,
+  mapping,
+  notes,
+  spoof,
+  previousCheck = {},
+} = {}) => {
+  const note = notes || 'Physical endorsement confirmed on check';
+  const signedAt = new Date().toISOString();
+  let endorsementRow = endorsement;
+
+  if (!COMPLETE_ENDORSEMENT.has(String(endorsement?.status))) {
+    // Staging/prod check_endorsements_signature_method_check allows
+    // portal/sms/email/internal/manual (and later in_person). `physical_check`
+    // is used by some UI copy but is not a legal column value.
+    const updated = await client.query(
+      `UPDATE public.check_endorsements
+       SET status = 'signed',
+           signed_at = now(),
+           signature_method = 'manual',
+           notes = COALESCE($2, notes),
+           updated_at = now()
+       WHERE id = $1::uuid
+         AND status IS DISTINCT FROM 'signed'
+         AND status IS DISTINCT FROM 'waived'
+       RETURNING *`,
+      [endorsement.id, note],
+    );
+    if (!updated.rowCount) {
+      endorsementRow = await loadEndorsementById(client, endorsement.id);
+      if (!endorsementRow || !COMPLETE_ENDORSEMENT.has(String(endorsementRow.status))) {
+        return {
+          ok: false,
+          statusCode: 409,
+          error: 'endorsement_persist_failed',
+          message: 'Endorsement row was not updated',
+          spoofFieldsIgnored: spoof,
+        };
+      }
+    } else {
+      endorsementRow = updated.rows[0];
+    }
+  }
+
+  const payee = await persistPayeeEndorsementState(client, endorsementRow, {
+    status: 'signed',
+    signedAt,
+    rotateToken: false,
+  });
+  if (!payee.ok || payee.skipped) {
+    return {
+      ok: false,
+      statusCode: 409,
+      error: payee.error || 'payee_persist_failed',
+      message: payee.message || 'Payee endorsement state was not updated',
+      spoofFieldsIgnored: spoof,
+    };
+  }
+
+  await auditEndorsement(client, {
+    endorsement_id: endorsementRow.id,
+    check_id: endorsementRow.check_id,
+    tenant_id: endorsementRow.tenant_id,
+    event_type: 'endorsement_physical_on_check',
+    check_event_type: 'endorsement_completed',
+    event_description: `${endorsementRow.payee_name} endorsed on the physical check`,
+    event_data: { method: 'manual', physical_on_check: true, token_rotated: false },
+    actor_id: mapping?.application_user_id,
+  });
+  const verified = (await client.query(
+    `SELECT e.status AS endorsement_status,
+            e.signature_method,
+            p.endorsement_status AS payee_status,
+            p.endorsement_token
+     FROM public.check_endorsements e
+     JOIN public.check_payees p ON p.id = e.payee_id
+     WHERE e.id = $1::uuid
+     LIMIT 1`,
+    [endorsementRow.id],
+  )).rows[0];
+  if (verified?.endorsement_status !== 'signed' || verified?.payee_status !== 'signed') {
+    return {
+      ok: false,
+      statusCode: 409,
+      error: 'persist_verify_failed',
+      message: 'Endorsement action did not persist payee and endorsement state together',
+      spoofFieldsIgnored: spoof,
+    };
+  }
+  const completion = await completionWithoutAdvance(client, endorsementRow.check_id, previousCheck);
+  return {
+    ok: true,
+    statusCode: 200,
+    success: true,
+    endorsement_status: verified.endorsement_status,
+    payee_status: verified.payee_status,
+    signature_method: verified.signature_method,
+    token_rotated: false,
+    ...completion,
+    spoofFieldsIgnored: spoof,
+  };
 };
 
 const auditEndorsement = async (client, row) => {
@@ -248,7 +416,45 @@ const auditEndorsement = async (client, row) => {
   );
 };
 
-const completionWithoutAdvance = async (client, checkId) => {
+const revertUnauthorizedDepositAdvance = async (client, checkId, previous = {}) => {
+  if (!checkId) return;
+  const previousStatus = String(previous.status || '');
+  const previousStage = String(previous.check_stage || '');
+  if (['deposited', 'funds_released', 'disbursed_externally'].includes(previousStatus) || previousStage === 'deposited') {
+    return;
+  }
+  const current = (await client.query(
+    `SELECT status, check_stage, deposited_at
+     FROM public.check_intake_items WHERE id = $1::uuid LIMIT 1`,
+    [checkId],
+  )).rows[0];
+  if (!current || current.deposited_at) return;
+  const advanced = current.check_stage === 'ready_for_deposit' || current.status === 'approved_for_deposit';
+  if (!advanced) return;
+  const restoreStatus = previousStatus || 'endorsements_in_progress';
+  const restoreStage = previousStage || 'endorsing';
+  if (restoreStatus === 'approved_for_deposit' || restoreStage === 'ready_for_deposit') return;
+  await client.query(
+    `UPDATE public.check_intake_items
+     SET status = $2,
+         check_stage = $3::check_stage,
+         updated_at = now()
+     WHERE id = $1::uuid
+       AND deposited_at IS NULL
+       AND status IS DISTINCT FROM 'deposited'`,
+    [checkId, restoreStatus, restoreStage],
+  );
+  await safeQuery(
+    client,
+    `UPDATE public.claim_checks
+     SET check_stage = $2::check_stage, updated_at = now()
+     WHERE check_intake_item_id = $1::uuid
+       AND check_stage IS DISTINCT FROM 'deposited'`,
+    [checkId, restoreStage],
+  );
+};
+
+const completionWithoutAdvance = async (client, checkId, previousCheck = {}) => {
   const rows = (await safeQuery(
     client,
     `SELECT status, payee_type FROM public.check_endorsements WHERE check_id = $1::uuid`,
@@ -262,6 +468,7 @@ const completionWithoutAdvance = async (client, checkId) => {
       [checkId],
     );
   }
+  await revertUnauthorizedDepositAdvance(client, checkId, previousCheck);
   return result;
 };
 
@@ -370,12 +577,20 @@ export const runSubmitEndorsement = async (client, event, body, spoof) => {
      WHERE id = $1::uuid AND token = $7`,
     [endorsement.id, signatureImageUrl, ip, ua, consent, newToken, token],
   );
-  await updatePayeeSigned(client, endorsement, {
+  const payeeSigned = await updatePayeeSigned(client, endorsement, {
     status: 'signed',
     token: newToken,
     image: signatureImageUrl,
     signedAt: new Date().toISOString(),
   });
+  if (!payeeSigned.ok) {
+    return {
+      ok: false,
+      statusCode: 409,
+      error: payeeSigned.error,
+      message: payeeSigned.message,
+    };
+  }
   await auditEndorsement(client, {
     endorsement_id: endorsement.id,
     check_id: endorsement.check_id,
@@ -434,7 +649,15 @@ export const runRejectEndorsement = async (client, event, body, spoof) => {
      WHERE id = $1::uuid AND token = $6`,
     [endorsement.id, body.reason || null, ip, ua, newToken, token],
   );
-  await updatePayeeSigned(client, endorsement, { status: 'rejected', token: newToken });
+  const payeeRejected = await updatePayeeSigned(client, endorsement, { status: 'rejected', token: newToken });
+  if (!payeeRejected.ok) {
+    return {
+      ok: false,
+      statusCode: 409,
+      error: payeeRejected.error,
+      message: payeeRejected.message,
+    };
+  }
   await auditEndorsement(client, {
     endorsement_id: endorsement.id,
     check_id: endorsement.check_id,
@@ -757,12 +980,21 @@ export const runAuthenticatedEndorsement = async ({
        WHERE id = $1::uuid`,
       [endorsement.id, signatureData, ip, ua, consent, newToken, body.notes || 'Signed in person, captured by staff'],
     );
-    await updatePayeeSigned(client, endorsement, {
+    const payeeSigned = await updatePayeeSigned(client, endorsement, {
       status: 'signed',
       token: newToken,
       image: signatureData,
       signedAt: new Date().toISOString(),
     });
+    if (!payeeSigned.ok) {
+      return {
+        ok: false,
+        statusCode: 409,
+        error: payeeSigned.error,
+        message: payeeSigned.message,
+        spoofFieldsIgnored: spoof,
+      };
+    }
     await auditEndorsement(client, {
       endorsement_id: endorsement.id,
       check_id: endorsement.check_id,
@@ -791,7 +1023,16 @@ export const runAuthenticatedEndorsement = async ({
        WHERE id = $1::uuid`,
       [endorsement.id, body.notes || 'Internally endorsed by staff'],
     );
-    await updatePayeeSigned(client, endorsement, { status: 'signed', signedAt: new Date().toISOString() });
+    const payeeSigned = await updatePayeeSigned(client, endorsement, { status: 'signed', signedAt: new Date().toISOString() });
+    if (!payeeSigned.ok) {
+      return {
+        ok: false,
+        statusCode: 409,
+        error: payeeSigned.error,
+        message: payeeSigned.message,
+        spoofFieldsIgnored: spoof,
+      };
+    }
     await auditEndorsement(client, {
       endorsement_id: endorsement.id,
       check_id: endorsement.check_id,
@@ -804,24 +1045,16 @@ export const runAuthenticatedEndorsement = async ({
     return { ok: true, statusCode: 200, success: true, ...completion, spoofFieldsIgnored: spoof };
   }
 
-  await client.query(
-    `UPDATE public.check_endorsements
-     SET status = 'waived',
-         notes = COALESCE($2, notes),
-         updated_at = now()
-     WHERE id = $1::uuid`,
-    [endorsement.id, body.notes || 'Endorsement waived by staff'],
-  );
-  await auditEndorsement(client, {
-    endorsement_id: endorsement.id,
-    check_id: endorsement.check_id,
-    tenant_id: tenantId,
-    event_type: 'endorsement_waived',
-    event_description: `${endorsement.payee_name} endorsement waived`,
-    actor_id: mapping.application_user_id,
+  if (action !== 'waive_endorsement') {
+    return { ok: false, statusCode: 400, error: 'Unknown action', spoofFieldsIgnored: spoof };
+  }
+  return persistPhysicalEndorsementOnCheck(client, {
+    endorsement: { ...endorsement, tenant_id: tenantId },
+    mapping,
+    notes: body.notes || 'Physical endorsement confirmed on check',
+    spoof,
+    previousCheck: check,
   });
-  const completion = await completionWithoutAdvance(client, endorsement.check_id);
-  return { ok: true, statusCode: 200, success: true, ...completion, spoofFieldsIgnored: spoof };
 };
 
 export const handleCheckEndorsement = async (event, deps = {}) => {
