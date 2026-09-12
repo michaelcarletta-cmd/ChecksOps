@@ -1,0 +1,155 @@
+{
+  "phase": "M3",
+  "generated_at": "2026-09-09T21:00:00Z",
+  "mutations_executed": false,
+  "paths": [
+    {
+      "name": "moov-transfer-create",
+      "production_money_capable": true,
+      "requires_MOOV_ENABLED": true,
+      "internal_bypass": false,
+      "browser_reachable": true,
+      "webhook_reachable": false,
+      "provider_HTTP_possible": true,
+      "shutdown_prerequisite": "SPA Cognito cutover plus MOOV_ENABLED=false",
+      "severity": "HIGH"
+    },
+    {
+      "name": "moov-disburse",
+      "production_money_capable": true,
+      "requires_MOOV_ENABLED": true,
+      "internal_bypass": true,
+      "internal_bypass_detail": "x-checksops-internal matching SUPABASE_SERVICE_ROLE_KEY skips requireMoovCaller and MOOV_ENABLED",
+      "browser_reachable": true,
+      "webhook_reachable": true,
+      "provider_HTTP_possible": true,
+      "shutdown_prerequisite": "neutralize internal skip then MOOV_ENABLED=false then rotate keys",
+      "severity": "CRITICAL"
+    },
+    {
+      "name": "initiate-wallet-funding",
+      "production_money_capable": true,
+      "requires_MOOV_ENABLED": true,
+      "internal_bypass": false,
+      "browser_reachable": true,
+      "webhook_reachable": false,
+      "provider_HTTP_possible": true,
+      "shutdown_prerequisite": "SPA Cognito cutover plus MOOV_ENABLED=false",
+      "severity": "HIGH"
+    },
+    {
+      "name": "calculate-payment-funding",
+      "production_money_capable": false,
+      "requires_MOOV_ENABLED": false,
+      "internal_bypass": false,
+      "browser_reachable": true,
+      "webhook_reachable": false,
+      "provider_HTTP_possible": false,
+      "shutdown_prerequisite": "optional; no provider POST",
+      "severity": "LOW"
+    },
+    {
+      "name": "process-funded-payment",
+      "production_money_capable": true,
+      "requires_MOOV_ENABLED": false,
+      "internal_bypass": true,
+      "internal_bypass_detail": "invokes moov-disburse with x-checksops-internal service role",
+      "browser_reachable": false,
+      "webhook_reachable": true,
+      "provider_HTTP_possible": true,
+      "shutdown_prerequisite": "stop webhook from calling this after AWS owns apply",
+      "severity": "CRITICAL"
+    },
+    {
+      "name": "moov-webhook",
+      "production_money_capable": true,
+      "requires_MOOV_ENABLED": false,
+      "internal_bypass": false,
+      "browser_reachable": false,
+      "webhook_reachable": true,
+      "verify_jwt": false,
+      "provider_HTTP_possible": true,
+      "shutdown_prerequisite": "keep receiving until AWS dual-run proven; then fail-closed apply",
+      "severity": "HIGH"
+    },
+    {
+      "name": "moov-tenant-fee-charge",
+      "production_money_capable": true,
+      "requires_MOOV_ENABLED": true,
+      "internal_bypass": false,
+      "browser_reachable": true,
+      "webhook_reachable": false,
+      "provider_HTTP_possible": true,
+      "shutdown_prerequisite": "MOOV_ENABLED=false",
+      "severity": "MEDIUM"
+    },
+    {
+      "name": "moov-wallet-fund",
+      "production_money_capable": true,
+      "requires_MOOV_ENABLED": true,
+      "internal_bypass": false,
+      "browser_reachable": true,
+      "webhook_reachable": false,
+      "provider_HTTP_possible": true,
+      "shutdown_prerequisite": "MOOV_ENABLED=false",
+      "severity": "HIGH"
+    },
+    {
+      "name": "wallet-fund-on-clear",
+      "production_money_capable": true,
+      "requires_MOOV_ENABLED": true,
+      "internal_bypass": false,
+      "browser_reachable": false,
+      "webhook_reachable": true,
+      "provider_HTTP_possible": true,
+      "shutdown_prerequisite": "MOOV_ENABLED=false",
+      "severity": "HIGH"
+    },
+    {
+      "name": "homeowner-deductible-pay",
+      "production_money_capable": true,
+      "requires_MOOV_ENABLED": true,
+      "internal_bypass": false,
+      "browser_reachable": true,
+      "webhook_reachable": false,
+      "provider_HTTP_possible": true,
+      "shutdown_prerequisite": "MOOV_ENABLED=false",
+      "severity": "HIGH"
+    },
+    {
+      "name": "moov-sweep-config",
+      "production_money_capable": false,
+      "requires_MOOV_ENABLED": true,
+      "internal_bypass": false,
+      "browser_reachable": true,
+      "webhook_reachable": false,
+      "provider_HTTP_possible": false,
+      "shutdown_prerequisite": "later; config now, money later",
+      "severity": "LOW"
+    },
+    {
+      "name": "moov-recipient-create",
+      "production_money_capable": false,
+      "requires_MOOV_ENABLED": true,
+      "internal_bypass": false,
+      "browser_reachable": true,
+      "webhook_reachable": false,
+      "provider_HTTP_possible": true,
+      "onboarding": true,
+      "shutdown_prerequisite": "not first-transfer; keep until AWS public onboarding",
+      "severity": "MEDIUM"
+    },
+    {
+      "name": "moov-recipient-session",
+      "production_money_capable": false,
+      "requires_MOOV_ENABLED": true,
+      "internal_bypass": false,
+      "browser_reachable": true,
+      "webhook_reachable": false,
+      "provider_HTTP_possible": false,
+      "onboarding": true,
+      "shutdown_prerequisite": "AWS public token session without Cognito",
+      "severity": "MEDIUM"
+    }
+  ]
+}

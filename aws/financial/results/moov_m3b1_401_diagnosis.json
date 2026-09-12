@@ -1,0 +1,123 @@
+{
+  "phase": "M3b.1-diagnose-401",
+  "captured_at": "2026-09-10T00:41:03.382Z",
+  "lambda_function": "checksops-production-prep-api",
+  "lambda_code_sha256": "neeseSZmQhQf95bLUq7w9GTMMO0r8k3Ms2250pi65Zc=",
+  "secret_values_printed": false,
+  "access_token_printed": false,
+  "money_moved": false,
+  "sql72_applied": false,
+  "lovable_changed": false,
+  "webhook_changed": false,
+  "code_change_this_pass": false,
+  "fix_executed": false,
+  "classification": {
+    "primary": "C. WRONG PRODUCTION CREDENTIAL/APPLICATION",
+    "independently_sufficient_401_mechanism": "G. ORIGIN/DOMAIN RESTRICTION",
+    "related": ["D. WRONG PLATFORM/ACCOUNT RELATIONSHIP"],
+    "not": [
+      "A. CLIENT AUTH HEADER BUG",
+      "B. MISSING/WRONG API VERSION HEADER",
+      "E. MISSING MOOV SCOPE/PERMISSION",
+      "F. STALE/WRONG FREEDOM provider_account_id (not proven as primary)",
+      "H. OTHER IDENTIFIED CAUSE",
+      "I. UNKNOWN — MOOV SUPPORT REQUIRED"
+    ]
+  },
+  "flags": {
+    "AWS_PROVIDER_LIVE_READS_ENABLED": true,
+    "AWS_MOOV_ENABLED": false,
+    "AWS_PROVIDER_EXECUTION_ENABLED": false,
+    "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": false,
+    "AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED": false
+  },
+  "money_routes": {
+    "moov-transfer-create": {
+      "http": 403,
+      "error": "production_execution_blocked",
+      "liveProviderCalled": false
+    },
+    "moov-disburse": {
+      "http": 403,
+      "error": "production_execution_blocked",
+      "liveProviderCalled": false
+    }
+  },
+  "sql72": {
+    "status": "NOT_APPLIED",
+    "evidence": "column \"provider_http_attempted_at\" does not exist"
+  },
+  "oauth": {
+    "http": 200,
+    "token_type": "Bearer",
+    "expires_in": 1789004460,
+    "scope_returned": "/accounts/{id}/profile.read",
+    "audience": null,
+    "origin_sent": "https://checksops.com",
+    "authorization_scheme": "Basic",
+    "cache_hit": false
+  },
+  "jwt": {
+    "looks_like_jwt": true,
+    "length": 857,
+    "leading_whitespace": false,
+    "trailing_whitespace": false,
+    "scp": "/accounts/{id}/profile.read",
+    "iss": "https://api.moov.io#applications",
+    "aud": [
+      "https://staging.checksops.com",
+      "https://www.checksops.com",
+      "https://api.moov.io",
+      "https://cards.moov.io",
+      "https://api.moov.money"
+    ],
+    "apex_checksops_com_in_aud": false,
+    "aid_fp": "2a945f55…9e51",
+    "caid_fp": "36b79957…47bb",
+    "caid_is_sandbox_platform": true,
+    "freedom_provider_account_id_fp": "60922058…de96",
+    "rds_row_id_fp": "26c2dbb1…4005",
+    "caid_matches_freedom": false,
+    "exp_seconds_remaining": 3600
+  },
+  "get_account": {
+    "http": 401,
+    "authorization_scheme": "Bearer",
+    "origin_sent": "https://checksops.com",
+    "api_version": "v2024.01.00",
+    "get_headers": [
+      "Authorization",
+      "Content-Type",
+      "Accept",
+      "Origin",
+      "x-moov-version"
+    ],
+    "body_bytes": 0,
+    "www_authenticate": null,
+    "response_error_code": null,
+    "response_error_text": null,
+    "request_id_fp": "3c055c60…ac07"
+  },
+  "platform_account_id_configured": false,
+  "moov_platform_account_id_required_to_diagnose": false,
+  "retry_one_get": "NO-GO",
+  "code_change_required_for_401": false,
+  "dashboard_action_required": true,
+  "moov_support_required": false,
+  "smallest_corrective_action": {
+    "aws_code_change": false,
+    "aws_secret_config_change": true,
+    "add_MOOV_PLATFORM_ACCOUNT_ID": false,
+    "correct_freedom_provider_account_id": false,
+    "moov_dashboard_change": true,
+    "moov_support": false,
+    "rotate_current_credential_pair": false,
+    "change_lambda_origin_to_staging": false
+  },
+  "lovable": {
+    "productionSupabaseChanged": false
+  },
+  "webhook": {
+    "productionWebhooksRedirected": false
+  }
+}
