@@ -115,6 +115,9 @@ def write_clause(table: str, cols: list[str]) -> tuple[str, str]:
     raise SystemExit(f"no write clause for {table}: {cols[:20]}")
 
 
+FAIL_CLOSED_DROP_ONLY_TABLES = frozenset({"mortgage_request_library_documents"})
+
+
 def policy_sql(name: str, table: str, expr: str) -> list[str]:
     return [
         f"DROP POLICY IF EXISTS {name} ON public.{table};",
@@ -122,6 +125,15 @@ def policy_sql(name: str, table: str, expr: str) -> list[str]:
         "  FOR ALL TO authenticated",
         f"  USING ({expr})",
         f"  WITH CHECK ({expr});",
+        "",
+    ]
+
+
+def policy_sql_drop_only(name: str, table: str) -> list[str]:
+    return [
+        f"DROP POLICY IF EXISTS {name} ON public.{table};",
+        f"-- {table}: do not CREATE FOR ALL. Overlay 29 installs validated INSERT-only.",
+        f"-- Re-running 24 after 29 fail-closes writes until 29 is reapplied.",
         "",
     ]
 
@@ -230,7 +242,9 @@ def main() -> None:
 
     policies = []
     lines = [
-        "-- Remaining AWS staging write policies (108 tenant-scoped + 7 platform-owner).",
+        "-- Remaining AWS staging write policies (107 tenant-scoped CREATE + 7 platform-owner).",
+        "-- mortgage_request_library_documents is DROP-only here: do not CREATE FOR ALL.",
+        "-- Overlay 29 installs validated INSERT-only. Re-running 24 after 29 fail-closes writes.",
         "-- Does not ENABLE ROW LEVEL SECURITY. Does not replace aws_select_* (165).",
         "-- No USING(true)/WITH CHECK(true). No anon. No service_role.",
         "-- 13 server-side API tables and 2 obsolete tables have no write policy (default deny).",
@@ -247,8 +261,19 @@ def main() -> None:
     for table in remaining:
         if table in already:
             raise SystemExit(f"{table} classified remaining but already representative")
-        expr, kind = write_clause(table, cols[table])
         name = f"aws_write_{table}"
+        if table in FAIL_CLOSED_DROP_ONLY_TABLES:
+            policies.append({
+                "table": table,
+                "policy": name,
+                "kind": "fail_closed_drop_only",
+                "class": "fail_closed_until_overlay",
+                "using": None,
+            })
+            kinds["fail_closed_drop_only"] = kinds.get("fail_closed_drop_only", 0) + 1
+            lines.extend(policy_sql_drop_only(name, table))
+            continue
+        expr, kind = write_clause(table, cols[table])
         policies.append({"table": table, "policy": name, "kind": kind, "class": "tenant_scoped", "using": expr})
         kinds[kind] = kinds.get(kind, 0) + 1
         lines.extend(policy_sql(name, table, expr))

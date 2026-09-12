@@ -57,6 +57,7 @@ const HELPER_NAMES = [
   'aws_mortgage_agent_can_read_library_document',
   'aws_mortgage_agent_can_read_library_path',
   'aws_can_manage_mortgage_library',
+  'aws_can_insert_mortgage_library_document',
   'aws_is_authenticated',
   'aws_can_write_tenant',
   'aws_can_write_check',

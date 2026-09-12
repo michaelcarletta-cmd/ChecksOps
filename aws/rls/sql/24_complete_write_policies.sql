@@ -1,4 +1,6 @@
--- Remaining AWS staging write policies (108 tenant-scoped + 7 platform-owner).
+-- Remaining AWS staging write policies (107 tenant-scoped CREATE + 7 platform-owner).
+-- mortgage_request_library_documents is DROP-only here: do not CREATE FOR ALL.
+-- Overlay 29 installs validated INSERT-only. Re-running 24 after 29 fail-closes writes.
 -- Does not ENABLE ROW LEVEL SECURITY. Does not replace aws_select_* (165).
 -- No USING(true)/WITH CHECK(true). No anon. No service_role.
 -- 13 server-side API tables and 2 obsolete tables have no write policy (default deny).
@@ -419,10 +421,8 @@ CREATE POLICY aws_write_mortgage_handling_requests ON public.mortgage_handling_r
   WITH CHECK (public.aws_can_write_tenant(tenant_id));
 
 DROP POLICY IF EXISTS aws_write_mortgage_request_library_documents ON public.mortgage_request_library_documents;
-CREATE POLICY aws_write_mortgage_request_library_documents ON public.mortgage_request_library_documents
-  FOR ALL TO authenticated
-  USING (public.aws_can_write_tenant(tenant_id))
-  WITH CHECK (public.aws_can_write_tenant(tenant_id));
+-- mortgage_request_library_documents: do not CREATE FOR ALL. Overlay 29 installs
+-- validated INSERT-only. Re-running 24 after 29 fail-closes writes until 29.
 
 DROP POLICY IF EXISTS aws_write_notification_delivery_logs ON public.notification_delivery_logs;
 CREATE POLICY aws_write_notification_delivery_logs ON public.notification_delivery_logs

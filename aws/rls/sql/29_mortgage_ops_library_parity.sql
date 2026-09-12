@@ -5,10 +5,18 @@
 -- tenant_documents or tenant-documents storage access.
 -- Auto-share remains category-filtered to library:mortgage:%.
 --
--- Lifecycle (this PR): new attachments only for requested/in_progress.
+-- Lifecycle: new attachments only for requested/in_progress.
 -- Assigned agents retain read of already-attached rows after close.
 -- Turning auto_share_mortgage_ops off updates the flag only; existing join
 -- rows are not deleted (Lovable). Revocation is a follow-up.
+--
+-- Path helper: PostgreSQL text cannot contain NUL, and AWS normalizePath
+-- already rejects NUL before the database call. Do not evaluate CHR(0) or
+-- any other NUL literal here.
+--
+-- INSERT: aws_can_insert_mortgage_library_document reads authoritative
+-- mortgage_handling_requests and tenant_documents rows. Client category,
+-- bucket, tenant, path, or role cannot override those rows.
 --
 -- Apply only after 11_access_helpers.sql, 20_write_helpers.sql, and
 -- 24_complete_write_policies.sql (completeAuth). Immediate REVOKE ALL FROM
@@ -17,6 +25,8 @@
 --
 -- Grants: EXECUTE to checksops and authenticated. checksops is the AWS API
 -- login role. PUBLIC is never left granted.
+-- Table DML: SELECT + INSERT only for authenticated/checksops. UPDATE and
+-- DELETE remain table-owner/definer operations (trigger, CASCADE, SET NULL).
 
 CREATE OR REPLACE FUNCTION public.aws_mortgage_agent_can_read_library_document(_id uuid)
 RETURNS boolean
@@ -67,7 +77,6 @@ AS $$
      AND auth.uid() = _user_id
      AND public.has_role(_user_id, 'mortgage_agent'::public.app_role)
      AND NULLIF(btrim(_rel), '') IS NOT NULL
-     AND position(CHR(0) in _rel) = 0
      AND EXISTS (
        SELECT 1
        FROM public.mortgage_request_library_documents d
@@ -93,7 +102,7 @@ $$;
 REVOKE ALL ON FUNCTION public.aws_mortgage_agent_can_read_library_path(text[], text, uuid) FROM PUBLIC;
 
 COMMENT ON FUNCTION public.aws_mortgage_agent_can_read_library_path(text[], text, uuid) IS
-  'Mortgage Ops storage sign: exact attached library:mortgage file_path (or query-stripped equal) on an open or assigned request. % and _ are ordinary filename characters. Ignores client tenant_id.';
+  'Mortgage Ops storage sign: exact attached library:mortgage file_path (or query-stripped equal) on an open or assigned request. % and _ are ordinary filename characters. Ignores client tenant_id. PostgreSQL text cannot contain NUL; AWS normalizePath rejects NUL before this call.';
 
 CREATE OR REPLACE FUNCTION public.aws_can_manage_mortgage_library(_tenant_id uuid)
 RETURNS boolean
@@ -121,9 +130,94 @@ REVOKE ALL ON FUNCTION public.aws_can_manage_mortgage_library(uuid) FROM PUBLIC;
 COMMENT ON FUNCTION public.aws_can_manage_mortgage_library(uuid) IS
   'Tenant owner/admin (tenant_users) or aws_can_write_tenant. Mortgage agents cannot backfill.';
 
+CREATE OR REPLACE FUNCTION public.aws_can_insert_mortgage_library_document(
+  _tenant_id uuid,
+  _request_id uuid,
+  _tenant_document_id uuid,
+  _file_path text
+)
+RETURNS boolean
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+SET row_security = off
+AS $$
+DECLARE
+  _user_id uuid := auth.uid();
+  _request_tenant uuid;
+  _request_status text;
+  _doc_tenant uuid;
+  _doc_type text;
+  _doc_auto_share boolean;
+  _doc_file_path text;
+BEGIN
+  IF _user_id IS NULL THEN
+    RETURN false;
+  END IF;
+  IF _tenant_id IS NULL OR _request_id IS NULL OR _tenant_document_id IS NULL THEN
+    RETURN false;
+  END IF;
+  IF _file_path IS NULL OR btrim(_file_path) = '' THEN
+    RETURN false;
+  END IF;
+  IF position('/../' in _file_path) > 0
+     OR _file_path LIKE '../%'
+     OR _file_path LIKE '%/..'
+     OR _file_path = '..' THEN
+    RETURN false;
+  END IF;
+  IF NOT public.aws_can_manage_mortgage_library(_tenant_id) THEN
+    RETURN false;
+  END IF;
+
+  SELECT mr.tenant_id, mr.status
+    INTO _request_tenant, _request_status
+  FROM public.mortgage_handling_requests mr
+  WHERE mr.id = _request_id;
+  IF NOT FOUND THEN
+    RETURN false;
+  END IF;
+  IF _request_tenant IS DISTINCT FROM _tenant_id THEN
+    RETURN false;
+  END IF;
+  IF _request_status IS DISTINCT FROM 'requested'
+     AND _request_status IS DISTINCT FROM 'in_progress' THEN
+    RETURN false;
+  END IF;
+
+  SELECT td.tenant_id, td.doc_type, td.auto_share_mortgage_ops, td.file_path
+    INTO _doc_tenant, _doc_type, _doc_auto_share, _doc_file_path
+  FROM public.tenant_documents td
+  WHERE td.id = _tenant_document_id;
+  IF NOT FOUND THEN
+    RETURN false;
+  END IF;
+  IF _doc_tenant IS DISTINCT FROM _tenant_id THEN
+    RETURN false;
+  END IF;
+  IF _doc_auto_share IS DISTINCT FROM true THEN
+    RETURN false;
+  END IF;
+  IF _doc_type IS NULL OR _doc_type NOT LIKE 'library:mortgage:%' THEN
+    RETURN false;
+  END IF;
+  IF _file_path IS DISTINCT FROM _doc_file_path THEN
+    RETURN false;
+  END IF;
+
+  RETURN true;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.aws_can_insert_mortgage_library_document(uuid, uuid, uuid, text) FROM PUBLIC;
+
+COMMENT ON FUNCTION public.aws_can_insert_mortgage_library_document(uuid, uuid, uuid, text) IS
+  'INSERT WITH CHECK for mortgage_request_library_documents. Requires authenticated tenant owner/admin, an open same-tenant request, and an auto-shared library:mortgage:% tenant document whose file_path matches exactly. Does not trust client category, bucket, tenant, path, or JWT role.';
+
 GRANT EXECUTE ON FUNCTION public.aws_mortgage_agent_can_read_library_document(uuid) TO checksops, authenticated;
 GRANT EXECUTE ON FUNCTION public.aws_mortgage_agent_can_read_library_path(text[], text, uuid) TO checksops, authenticated;
 GRANT EXECUTE ON FUNCTION public.aws_can_manage_mortgage_library(uuid) TO checksops, authenticated;
+GRANT EXECUTE ON FUNCTION public.aws_can_insert_mortgage_library_document(uuid, uuid, uuid, text) TO checksops, authenticated;
 
 DROP POLICY IF EXISTS "read shared library docs" ON public.mortgage_request_library_documents;
 DROP POLICY IF EXISTS "manage shared library docs" ON public.mortgage_request_library_documents;
@@ -140,7 +234,20 @@ CREATE POLICY aws_select_mortgage_request_library_documents ON public.mortgage_r
 DROP POLICY IF EXISTS aws_write_mortgage_request_library_documents ON public.mortgage_request_library_documents;
 CREATE POLICY aws_write_mortgage_request_library_documents ON public.mortgage_request_library_documents
   FOR INSERT TO authenticated
-  WITH CHECK (public.aws_can_manage_mortgage_library(tenant_id));
+  WITH CHECK (
+    public.aws_can_insert_mortgage_library_document(
+      tenant_id,
+      request_id,
+      tenant_document_id,
+      file_path
+    )
+  );
+
+REVOKE ALL ON TABLE public.mortgage_request_library_documents FROM PUBLIC;
+REVOKE UPDATE, DELETE ON TABLE public.mortgage_request_library_documents FROM authenticated;
+REVOKE UPDATE, DELETE ON TABLE public.mortgage_request_library_documents FROM checksops;
+GRANT SELECT, INSERT ON TABLE public.mortgage_request_library_documents TO authenticated;
+GRANT SELECT, INSERT ON TABLE public.mortgage_request_library_documents TO checksops;
 
 -- Reaffirm category filter. Trigger body is unchanged from Lovable 2026-08-30.
 CREATE OR REPLACE FUNCTION public.share_library_docs_to_mortgage_request()
