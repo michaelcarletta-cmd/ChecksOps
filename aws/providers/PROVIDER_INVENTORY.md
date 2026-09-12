@@ -138,7 +138,7 @@ Secrets belong in AWS Secrets Manager (`PROVIDER_SECRETS_ARN`). Browser never re
 
 Expected secret keys (not all must be present in staging):
 
-- Moov: `MOOV_PUBLIC_KEY`, `MOOV_SECRET_KEY`, `MOOV_ACCOUNT_ID`, `MOOV_WEBHOOK_SECRET`, `MOOV_ENVIRONMENT`
+- Moov: `MOOV_PUBLIC_KEY`, `MOOV_SECRET_KEY`, `MOOV_PLATFORM_ACCOUNT_ID`, `MOOV_WEBHOOK_SECRET`, `MOOV_ENVIRONMENT`, `MOOV_ALLOWED_ORIGIN`. Do not use `MOOV_ACCOUNT_ID` as facilitator. Tenant ids live in `payment_provider_accounts.provider_account_id`.
 - CheckAlt: `CHECKALT_FI_KEY`, `CHECKALT_USERNAME`, `CHECKALT_PASSWORD`, `CHECKALT_WEBHOOK_SECRET`, `CHECKALT_BASE_URL`
 - Plaid: `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_WEBHOOK_SECRET`, `PLAID_ENV`
 - Actum: `ACTUM_USERNAME`, `ACTUM_PASSWORD`, `ACTUM_PARENT_ID`
