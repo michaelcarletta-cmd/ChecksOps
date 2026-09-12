@@ -821,6 +821,24 @@ export function createAwsStagingClient(options: AwsStagingClientOptions = {}) {
         }
         return { data: body.data ?? body, error: null };
       }
+      if (name === "admin_override_check_status") {
+        const { response, body } = await apiFetch("/workflow/override", {
+          method: "POST",
+          body: JSON.stringify({
+            check_id: args.p_check_id || args.check_id,
+            new_status: args.p_new_status || args.new_status,
+            reason: args.p_reason || args.reason || args.p_review_notes,
+          }),
+        }, token);
+        if (response.status === 401) {
+          writeStored(null);
+          emit("SIGNED_OUT", null);
+        }
+        if (!response.ok || (body && typeof body === "object" && (body as { ok?: unknown }).ok === false)) {
+          return { data: null, error: postgrestError(String(body.message || body.error || "rpc_failed"), String(body.error || "42501")) };
+        }
+        return { data: body.data ?? body, error: null };
+      }
       if (name === "admin_delete_check") {
         const checkId = String(args.p_check_id || args.check_id || "");
         const { response, body } = await apiFetch(`/workflow/checks/${encodeURIComponent(checkId)}`, {

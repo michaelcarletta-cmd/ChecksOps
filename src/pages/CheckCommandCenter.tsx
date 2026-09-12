@@ -2838,6 +2838,7 @@ function StatusOverride({
   const { user } = useAuth();
   const [editing, setEditing] = useState(false);
   const [newStatus, setNewStatus] = useState(currentStatus);
+  const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
@@ -2845,21 +2846,28 @@ function StatusOverride({
       setEditing(false);
       return;
     }
+    const trimmedReason = reason.trim();
+    if (trimmedReason.length < 5) {
+      toast({
+        title: "Reason required",
+        description: "Admin override needs a reason of at least 5 characters.",
+        variant: "destructive",
+      });
+      return;
+    }
     setSaving(true);
     try {
-      // Route through the security-definer RPC: it validates the admin/staff
-      // permission server-side, updates status + stage + recommendation
-      // atomically, mirrors claim_checks, and writes the audit log — bypassing
-      // the RLS failures that blocked direct frontend updates.
       const { data, error } = await supabase.rpc("admin_override_check_status", {
         p_check_id: checkId,
         p_new_status: newStatus,
+        p_reason: trimmedReason,
         p_actor_id: user?.id ?? null,
       });
       if (error) throw error;
       if (data && (data as any).ok === false) throw new Error((data as any).error ?? "Override rejected");
       toast({ title: "Status updated", description: `Moved to ${newStatus.replace(/_/g, " ")}` });
       setEditing(false);
+      setReason("");
       onSuccess();
     } catch (e: any) {
       toast({ title: "Failed to update status", description: e.message, variant: "destructive" });
@@ -2870,7 +2878,7 @@ function StatusOverride({
 
   if (!editing) {
     return (
-      <Button variant="ghost" size="sm" className="text-[10px] h-6 px-2 text-muted-foreground hover:text-foreground" onClick={() => { setNewStatus(currentStatus); setEditing(true); }}>
+      <Button variant="ghost" size="sm" className="text-[10px] h-6 px-2 text-muted-foreground hover:text-foreground" onClick={() => { setNewStatus(currentStatus); setReason(""); setEditing(true); }}>
         <Pencil className="h-3 w-3 mr-1" /> Override status
       </Button>
     );
@@ -2887,6 +2895,12 @@ function StatusOverride({
           ))}
         </SelectContent>
       </Select>
+      <Input
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        placeholder="Reason (required, 5+ characters)"
+        className="h-8 text-xs"
+      />
       <div className="flex gap-1">
         <Button size="sm" className="flex-1 h-7 text-xs" onClick={handleSave} disabled={saving}>
           {saving ? <Loader2Icon className="h-3 w-3 animate-spin mr-1" /> : <CheckIcon className="h-3 w-3 mr-1" />}
