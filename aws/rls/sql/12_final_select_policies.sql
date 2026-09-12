@@ -643,7 +643,7 @@ CREATE POLICY aws_select_profiles ON public.profiles
 DROP POLICY IF EXISTS aws_select_recipient_tax_profiles ON public.recipient_tax_profiles;
 CREATE POLICY aws_select_recipient_tax_profiles ON public.recipient_tax_profiles
   FOR SELECT TO authenticated
-  USING (public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id));
+  USING (public.aws_can_access_tax_profiles(tenant_id));
 
 DROP POLICY IF EXISTS aws_select_referral_alerts ON public.referral_alerts;
 CREATE POLICY aws_select_referral_alerts ON public.referral_alerts

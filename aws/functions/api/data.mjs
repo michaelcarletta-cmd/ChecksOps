@@ -13,6 +13,7 @@ import {
   verifyCognitoIdToken,
 } from './cognito.mjs';
 import { LOOKUP_MAPPING_SQL } from './identity.mjs';
+import { denyTaxSecretQuery, denyTaxSecretRpc } from './tax-secrets.mjs';
 
 const { Client } = pg;
 const IDENT = /^[a-z_][a-z0-9_]*$/;
@@ -73,20 +74,30 @@ export const ident = (name, kind = 'identifier') => {
 
 const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/gi;
 const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
-const SECRETISH_RE = /\b(?:bearer|token|authorization|password|secret|api[_-]?key)\b(?:\s*[:=]\s*|\s+)\S+/gi;
-const CONN_RE = /(?:postgres(?:ql)?|mysql|mongodb):\/\/\S+/gi;
-
-const sanitizeLogText = (value, max = 200) => String(value || '')
-  .replace(CONN_RE, '[db-url]')
-  .replace(SECRETISH_RE, '[redacted]')
+export const sanitizeLogText = (value, max = 200) => String(value || '')
+  .replace(/(?:postgres(?:ql)?|mysql|mongodb):\/\/\S+/gi, '[db-url]')
+  .replace(/\b(DETAIL|HINT|CONTEXT|WHERE|QUERY):\s*[^\n]*/gi, '[$1_redacted]')
+  .replace(/\b(?:bearer|token|authorization|password|secret|api[_-]?key|tin|ein|ssn)\b(?:\s*[:=]\s*|\s+)\S+/gi, '[redacted]')
+  .replace(/\d{3}-\d{2}-\d{4}/g, '[redacted]')
+  .replace(/\d{2}-\d{7}/g, '[redacted]')
+  .replace(/\b\d{9}\b/g, '[redacted]')
   .replace(EMAIL_RE, '[email]')
   .replace(UUID_RE, '[id]')
   .replace(/\s+/g, ' ')
   .trim()
   .slice(0, max);
 
+const safeQueryLogContext = (body = {}) => ({
+  table: typeof body?.table === 'string' ? body.table.slice(0, 120) : '',
+  select: typeof body?.select === 'string' ? body.select : '',
+  requestId: body?.requestId || null,
+  route: body?.route || null,
+});
+
 export const classifyDataQueryFailure = (error, body = {}) => {
-  const message = sanitizeLogText(sanitizePublicError(error), 200);
+  const ctx = safeQueryLogContext(body);
+  const publicMessage = sanitizePublicError(error);
+  const message = sanitizeLogText(publicMessage, 200);
   let errorClass = 'data_query_failed';
   if (/invalid column/i.test(message)) errorClass = 'invalid_column';
   else if (/invalid table/i.test(message)) errorClass = 'invalid_table';
@@ -94,14 +105,15 @@ export const classifyDataQueryFailure = (error, body = {}) => {
   else if (/invalid identifier/i.test(message)) errorClass = 'invalid_identifier';
   else if (error?.code === '57014' || /timeout/i.test(message)) errorClass = 'query_timeout';
   else if (error?.code === '42501' || /row-level security/i.test(message)) errorClass = 'rls_denied';
-  const tableRaw = String(body.table || '');
+  const tableRaw = String(ctx.table || '');
   const table = IDENT.test(tableRaw) ? tableRaw : '[rejected]';
-  const selectShape = sanitizeLogText(body.select, 180);
+  const selectShape = sanitizeLogText(ctx.select, 180);
   return { errorClass, table, selectShape, message };
 };
 
 export const logDataQueryFailure = (error, body = {}) => {
-  const classified = classifyDataQueryFailure(error, body);
+  const ctx = safeQueryLogContext(body);
+  const classified = classifyDataQueryFailure(error, ctx);
   console.error(JSON.stringify({
     service: 'checksops-api',
     event: 'data_query_failed',
@@ -109,6 +121,9 @@ export const logDataQueryFailure = (error, body = {}) => {
     table: classified.table,
     selectShape: classified.selectShape,
     message: classified.message,
+    requestId: ctx.requestId || null,
+    route: ctx.route || null,
+    status: classified.errorClass === 'rls_denied' ? 403 : 503,
   }));
   return classified;
 };
@@ -216,12 +231,20 @@ export const withIdentity = async (event, fn, deps = {}) => {
     }
     const pgCode = error?.code || null;
     const rlsDenied = pgCode === '42501' || /row-level security/i.test(String(error?.message || ''));
-    logDataQueryFailure(error, body);
+    const classified = logDataQueryFailure(error, {
+      table: typeof body?.table === 'string' ? body.table : undefined,
+      select: typeof body?.select === 'string' ? body.select : undefined,
+      requestId: event?.requestContext?.requestId
+        || event?.headers?.['x-amzn-requestid']
+        || event?.headers?.['x-request-id']
+        || null,
+      route: event?.rawPath || event?.requestContext?.http?.path || null,
+    });
     return {
       ok: false,
       statusCode: rlsDenied ? 403 : 503,
       error: rlsDenied ? 'rls_denied' : 'data_query_failed',
-      message: sanitizePublicError(error),
+      message: classified.message,
     };
   } finally {
     if (client) {
@@ -679,6 +702,36 @@ export const handleDataQuery = async (event, deps) => {
       spoofFieldsIgnored: spoof,
     };
   }
+  const rawTable = String(body.table || '');
+  const rawSelect = body.select == null ? '*' : String(body.select);
+  const earlyDeny = denyTaxSecretQuery(rawTable, null, rawSelect, body.filters);
+  if (earlyDeny.denied) {
+    return {
+      ok: false,
+      statusCode: 403,
+      error: earlyDeny.error,
+      message: earlyDeny.message,
+      table: earlyDeny.table,
+      spoofFieldsIgnored: spoof,
+    };
+  }
+  let parsedSelect = { columns: [], embeds: [] };
+  try {
+    parsedSelect = parseSelect(body.select);
+  } catch {
+    parsedSelect = { columns: [], embeds: [] };
+  }
+  const secretDeny = denyTaxSecretQuery(rawTable, parsedSelect, rawSelect, body.filters);
+  if (secretDeny.denied) {
+    return {
+      ok: false,
+      statusCode: 403,
+      error: secretDeny.error,
+      message: secretDeny.message,
+      table: secretDeny.table,
+      spoofFieldsIgnored: spoof,
+    };
+  }
   const { rows, count } = await runSelect(client, body);
   let data = rows;
   if (body.single) {
@@ -708,9 +761,20 @@ export const handleDataQuery = async (event, deps) => {
 
 export const handleDataRpc = async (event, deps) => {
   const earlyBody = parseBody(event);
+  const earlyRpcName = earlyBody.name || earlyBody.rpc;
+  const taxRpcDeny = denyTaxSecretRpc(earlyRpcName, earlyBody.args);
+  if (taxRpcDeny.denied) {
+    return withIdentity(event, async ({ spoof }) => ({
+      ok: false,
+      statusCode: 403,
+      error: taxRpcDeny.error,
+      message: taxRpcDeny.message,
+      spoofFieldsIgnored: spoof,
+    }), deps);
+  }
   let earlyName = '';
   try {
-    earlyName = ident(earlyBody.name || earlyBody.rpc, 'rpc');
+    earlyName = ident(earlyRpcName, 'rpc');
   } catch {
     earlyName = '';
   }
@@ -721,6 +785,16 @@ export const handleDataRpc = async (event, deps) => {
     }
   }
   return withIdentity(event, async ({ client, mapping, claims, body, spoof }) => {
+  const rpcDeny = denyTaxSecretRpc(body.name || body.rpc, body.args);
+  if (rpcDeny.denied) {
+    return {
+      ok: false,
+      statusCode: 403,
+      error: rpcDeny.error,
+      message: rpcDeny.message,
+      spoofFieldsIgnored: spoof,
+    };
+  }
   const name = ident(body.name || body.rpc, 'rpc');
   if (!READ_RPCS.has(name)) {
     return {
