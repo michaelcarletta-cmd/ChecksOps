@@ -1,8 +1,8 @@
 # SQL 30 — tenant_documents Mortgage Ops `doc_type` allowlist
 
-**This is an unapplied AWS operator package.** It is not a Supabase migration, is
-not referenced by `completeAuth`, and must not be applied by CI, deploy, package
-scripts, Supabase Preview, or application startup.
+**This is an unapplied AWS operator package.** It is not a Supabase migration.
+Do not apply from completeAuth, CI, deploy, package scripts, Supabase Preview,
+or application startup.
 
 SQL 29 (`29_mortgage_ops_library_parity.sql`) stays unchanged. Staging has
 already applied SQL 29. This package only replaces

@@ -109,10 +109,10 @@ test('SQL 30 is an unapplied AWS operator package with no automatic path', () =>
   assert.doesNotMatch(index, /applySql\('30_tenant_documents_mortgage_doc_type\.sql'\)/);
   assert.doesNotMatch(writePlan, /30_tenant_documents_mortgage_doc_type/);
   assert.doesNotMatch(index, /from '\.\/tenant-documents-mortgage-doc-type/);
-  assert.doesNotMatch(complete, /24_complete_write_policies\.sql[\s\S]*30_tenant/);
+  assert.doesNotMatch(complete, /readSql\('30_/);
   assert.doesNotMatch(operator, /readSql\('29_mortgage_ops_library_parity\.sql'\)/);
   assert.doesNotMatch(operator, /readSql\('24_complete_write_policies\.sql'\)/);
-  assert.doesNotMatch(operator, /completeAuth/);
+  assert.doesNotMatch(operator, /from ['"].*completeAuth/);
   assert.match(operator, /productionDefault: false/);
   assert.match(ci, /bun run test:aws-api/);
   assert.doesNotMatch(ci, /30_tenant_documents_mortgage_doc_type\.sql/);

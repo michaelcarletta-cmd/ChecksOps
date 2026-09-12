@@ -323,6 +323,7 @@ ${fs.readFileSync(APPLY_SQL, 'utf8')}
   assert.deepEqual(extracted(), LEGACY.slice().sort());
 
   const unexpected = psqlAllowFail(['-d', dbName], `
+DELETE FROM public.tenant_documents;
 ALTER TABLE public.tenant_documents DROP CONSTRAINT tenant_documents_doc_type_check;
 ALTER TABLE public.tenant_documents ADD CONSTRAINT tenant_documents_doc_type_check
   CHECK (doc_type IN ('w9', 'unexpected'));
