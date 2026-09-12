@@ -12,7 +12,7 @@ const loadBlock = UI.slice(
 
 test('M6.4A session load targets same-origin AWS public route, not Lovable invoke', () => {
   assert.match(API, /\/public\/moov-recipient-session/);
-  assert.match(API, /\$\{origin\}\/prep\$\{AWS_PUBLIC_SESSION\}/);
+  assert.match(API, /\$\{origin\}\/prep\$\{path\}/);
   assert.match(API, /host === "checksops.com"/);
   assert.match(loadBlock, /loadRecipientSession\(token/);
   assert.doesNotMatch(loadBlock, /invoke\(/);
@@ -20,17 +20,18 @@ test('M6.4A session load targets same-origin AWS public route, not Lovable invok
   assert.doesNotMatch(API, /functions\.invoke/);
   assert.doesNotMatch(API, /supabase\.co/);
   assert.doesNotMatch(API, /console\.(log|debug|info|warn|error)/);
-  assert.match(API, /JSON\.stringify\(\{ token \}\)/);
+  assert.match(API, /JSON\.stringify\(body\)/);
+  assert.match(API, /postRecipientPublic\(AWS_PUBLIC_SESSION, \{ token \}/);
   assert.match(API, /throw new Error\(message\)/);
 });
 
-test('M6.4A mutation handlers stay explicit invoke and are unchanged on load', () => {
-  assert.match(UI, /invoke\("moov-recipient-kyc-update"/);
-  assert.match(UI, /invoke\("moov-recipient-tos-accept"/);
-  assert.match(UI, /invoke\("moov-recipient-bank-add"/);
-  assert.match(UI, /invoke\("moov-recipient-bank-verify"/);
+test('M6.4A mutation handlers stay off the session load path', () => {
+  assert.match(UI, /submitRecipientKyc\(token/);
+  assert.match(UI, /submitRecipientTos\(token/);
+  assert.doesNotMatch(UI, /invoke\("moov-recipient-bank-add"/);
+  assert.doesNotMatch(UI, /invoke\("moov-recipient-bank-verify"/);
   assert.doesNotMatch(loadBlock, /moov-recipient-kyc-update/);
   assert.doesNotMatch(loadBlock, /moov-recipient-tos-accept/);
-  assert.doesNotMatch(loadBlock, /moov-recipient-bank-add/);
-  assert.doesNotMatch(loadBlock, /moov-recipient-bank-verify/);
+  assert.doesNotMatch(loadBlock, /submitRecipientKyc/);
+  assert.doesNotMatch(loadBlock, /submitRecipientTos/);
 });
