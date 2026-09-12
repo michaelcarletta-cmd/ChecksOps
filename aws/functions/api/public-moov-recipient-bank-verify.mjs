@@ -18,7 +18,6 @@ import { isProviderNetworkError } from './sandbox-credentials.mjs';
 import { loadProductionMoovReadSecrets } from './providers/production/moov-secrets.mjs';
 import { fingerprintMoovId, productionMoovFetch, redactMoovText } from './providers/production/moov-client.mjs';
 import {
-  RECIPIENT_VERIFY_MAX_ATTEMPTS,
   bindLiveRecipientBank,
   identityRequirementsOutstanding,
   initiateAlreadyOpenError,
@@ -39,10 +38,17 @@ import {
   recipientMvResponseHasSecrets,
 } from './providers/recipient-mv-redact.mjs';
 import {
+  BANK_VERIFY_STATES,
+  createMemoryBankVerifyStore,
+  openRecipientBankVerifyStore,
+  tokenFingerprint,
+} from './providers/recipient-bank-verify-state.mjs';
+import {
   productionRecipientBridgeConfigured,
   recipientSessionTokenShape,
   resolveProductionRecipientByToken,
 } from './production-recipient-token.mjs';
+import { randomUUID } from 'node:crypto';
 
 const UNTRUSTED_MOOV_KEYS = [
   'moov_account_id', 'moovAccountId', 'MOOV_ACCOUNT_ID',
@@ -59,14 +65,12 @@ const MONEY_MUTATION_KEYS = [
 ];
 
 const ipFailures = new Map();
-const mvAttempts = new Map();
-const initiateLocks = new Map();
 
 export const resetRecipientBankVerifyMemoryForTests = () => {
   ipFailures.clear();
-  mvAttempts.clear();
-  initiateLocks.clear();
 };
+
+export const newTestBankVerifyStore = (backing) => createMemoryBankVerifyStore(backing);
 
 const financialPermissionsActivated = () =>
   String(process.env.AWS_FINANCIAL_PERMISSIONS_ACTIVATED || '') === 'true';
@@ -92,41 +96,6 @@ export const noteRecipientBankVerifyFailure = ({ ip, nowMs = Date.now() } = {}) 
   const hits = ipFailures.get(key) || [];
   hits.push(nowMs);
   ipFailures.set(key, hits);
-};
-
-export const mvAttemptState = ({ recipientId, bankId, nowMs = Date.now(), windowMs = 15 * 60 * 1000 } = {}) => {
-  const key = `${String(recipientId || '')}:${String(bankId || '')}`;
-  const current = mvAttempts.get(key) || { count: 0, windowStart: nowMs, locked: false };
-  if (nowMs - current.windowStart >= windowMs) {
-    const reset = { count: 0, windowStart: nowMs, locked: false };
-    mvAttempts.set(key, reset);
-    return { key, ...reset };
-  }
-  return { key, ...current };
-};
-
-export const noteMvAttempt = ({ recipientId, bankId, nowMs = Date.now(), max = RECIPIENT_VERIFY_MAX_ATTEMPTS } = {}) => {
-  const state = mvAttemptState({ recipientId, bankId, nowMs });
-  const count = state.count + 1;
-  const locked = count >= max;
-  mvAttempts.set(state.key, { count, windowStart: state.windowStart, locked });
-  return { count, locked, remaining: Math.max(0, max - count) };
-};
-
-export const withRecipientBankInitiateLock = async (key, fn) => {
-  const lockKey = String(key || 'unknown');
-  const previous = initiateLocks.get(lockKey) || Promise.resolve();
-  let release;
-  const held = new Promise((resolve) => { release = resolve; });
-  const chained = previous.then(() => held);
-  initiateLocks.set(lockKey, chained);
-  await previous;
-  try {
-    return await fn();
-  } finally {
-    release();
-    if (initiateLocks.get(lockKey) === chained) initiateLocks.delete(lockKey);
-  }
 };
 
 const listOf = (payload) => {
@@ -312,6 +281,8 @@ async function authorizePublicRecipientBankVerify(event, deps = {}) {
     nowMs,
     log,
     recipient,
+    token,
+    tokenFp: tokenFingerprint(token),
     accountId: mismatch.account_id,
     credentials: secrets.credentials,
     fetchImpl: deps.fetchImpl || fetch,
@@ -429,6 +400,82 @@ const loadBoundBank = async ({ moovFetch, credentials, fetchImpl, recipient, acc
   };
 };
 
+const stateUnavailable = (extra = {}) => fail('bank_verify_state_unavailable', 503, {
+  message: 'Bank verification state is unavailable. No provider write was sent.',
+  liveProviderCalled: extra.liveProviderCalled === true,
+  productionRead: extra.productionRead === true,
+  spoofFieldsIgnored: extra.spoof,
+});
+
+const limiterUnavailable = (extra = {}) => fail('bank_verify_limiter_unavailable', 503, {
+  message: 'Verification attempt limiting is unavailable. The code was not submitted.',
+  liveProviderCalled: extra.liveProviderCalled === true,
+  productionRead: extra.productionRead === true,
+  recipientBankVerifyWrite: extra.recipientBankVerifyWrite === true,
+  spoofFieldsIgnored: extra.spoof,
+});
+
+const openStateStore = (deps = {}) => {
+  const opened = openRecipientBankVerifyStore(deps);
+  if (!opened.ok) {
+    return { ok: false, result: fail(opened.error, opened.statusCode || 503, {
+      message: 'Bank verification state is unavailable. No provider write was sent.',
+    }) };
+  }
+  return opened;
+};
+
+const persistProviderState = async (store, ids, interpreted, nowMs) => {
+  if (interpreted?.verified) {
+    await store.transitionClaim({ ...ids, to: BANK_VERIFY_STATES.VERIFIED, nowMs });
+    return BANK_VERIFY_STATES.VERIFIED;
+  }
+  if (interpreted?.initiated) {
+    await store.transitionClaim({ ...ids, to: BANK_VERIFY_STATES.VERIFICATION_PENDING, nowMs });
+    return BANK_VERIFY_STATES.VERIFICATION_PENDING;
+  }
+  return (await store.getClaim(ids)).state;
+};
+
+const publicBankVerifyResult = ({
+  spoof,
+  recipient,
+  accountId,
+  bankId,
+  interpreted = {},
+  extra = {},
+}) => ({
+  ok: extra.ok !== false,
+  success: extra.ok !== false,
+  statusCode: extra.statusCode || (extra.ok === false ? 400 : 200),
+  initiated: extra.initiated ?? interpreted.initiated ?? false,
+  can_confirm: extra.can_confirm ?? interpreted.can_confirm ?? false,
+  already_initiated: extra.already_initiated === true,
+  already_verified: extra.already_verified === true,
+  mutated: extra.mutated === true,
+  complete: extra.complete === true,
+  bank_status: extra.bank_status ?? interpreted.bank_status ?? null,
+  verification_status: extra.verification_status ?? interpreted.verification_status ?? null,
+  state: extra.state || null,
+  bank_id: bankId,
+  bank_id_fp: fingerprintMoovId(bankId),
+  account_id: accountId,
+  account_id_fp: fingerprintMoovId(accountId),
+  recipient_id: recipient.id,
+  provider: 'moov',
+  liveProviderCalled: true,
+  productionExecution: false,
+  productionRead: true,
+  recipientBankVerifyWrite: extra.recipientBankVerifyWrite !== false,
+  public_recipient: true,
+  token_consumed: false,
+  mv_code_returned: false,
+  mv_code_stored: false,
+  environment: 'production',
+  spoofFieldsIgnored: spoof,
+  ...extra,
+});
+
 const mapConfirmError = (error) => {
   const raw = `${error?.message ?? ''} ${JSON.stringify(error?.body ?? '')}`.toLowerCase();
   if (raw.includes('max') && raw.includes('attempt')) {
@@ -464,80 +511,121 @@ const mapConfirmError = (error) => {
 export async function handlePublicMoovRecipientBankVerifyInitiate(event, deps = {}) {
   const auth = await authorizePublicRecipientBankVerify(event, deps);
   if (!auth.ok) return safePublic(auth.result);
-  const { body, spoof, log, recipient, accountId, credentials, fetchImpl, moovFetch } = auth;
-  const lockFn = deps.withInitiateLock || withRecipientBankInitiateLock;
+  const { body, spoof, log, recipient, accountId, credentials, fetchImpl, moovFetch, tokenFp, nowMs } = auth;
+  const opened = openStateStore(deps);
+  if (!opened.ok) return safePublic(opened.result);
+  const store = opened.store;
 
   try {
-    return await lockFn(`${recipient.id}:${accountId}`, async () => {
-      const loaded = await loadBoundBank({ moovFetch, credentials, fetchImpl, recipient, accountId, body });
-      if (loaded.error) {
-        return safePublic(fail(loaded.error.error, loaded.error.statusCode, {
-          message: loaded.error.message,
-          liveProviderCalled: true,
-          productionRead: true,
-          spoofFieldsIgnored: spoof,
-        }));
-      }
-      const { account, banks, capabilities, capsOk, bank, bankId, liveVerify, interpreted } = loaded;
+    const loaded = await loadBoundBank({ moovFetch, credentials, fetchImpl, recipient, accountId, body });
+    if (loaded.error) {
+      return safePublic(fail(loaded.error.error, loaded.error.statusCode, {
+        message: loaded.error.message,
+        liveProviderCalled: true,
+        productionRead: true,
+        spoofFieldsIgnored: spoof,
+      }));
+    }
+    const { account, banks, capabilities, capsOk, bank, bankId, liveVerify, interpreted } = loaded;
+    const ids = { recipientId: recipient.id, accountId, bankId };
+    const idempotencyKey = recipientBankVerifyIdempotencyKey({ recipientId: recipient.id, bankId });
+    const bound = {
+      spoof, recipient, accountId, bankId, interpreted,
+    };
 
+    try {
       if (interpreted.verified) {
-        return safePublic({
-          ok: true,
-          success: true,
-          statusCode: 200,
-          already_verified: true,
-          initiated: false,
-          mutated: false,
-          complete: recipientOnboardingCompleteFromMoov({ account, banks, capabilities, capabilitiesReadOk: capsOk }),
-          bank_status: interpreted.bank_status,
-          bank_id: bankId,
-          bank_id_fp: fingerprintMoovId(bankId),
-          account_id: accountId,
-          account_id_fp: fingerprintMoovId(accountId),
-          recipient_id: recipient.id,
-          provider: 'moov',
-          liveProviderCalled: true,
-          productionExecution: false,
-          productionRead: true,
-          recipientBankVerifyWrite: true,
-          public_recipient: true,
-          token_consumed: false,
-          mv_code_returned: false,
-          mv_code_stored: false,
-          environment: 'production',
-          spoofFieldsIgnored: spoof,
-        });
+        const state = await persistProviderState(store, ids, interpreted, nowMs);
+        return safePublic(publicBankVerifyResult({
+          ...bound,
+          extra: {
+            already_verified: true,
+            initiated: false,
+            mutated: false,
+            complete: recipientOnboardingCompleteFromMoov({ account, banks, capabilities, capabilitiesReadOk: capsOk }),
+            state,
+          },
+        }));
       }
 
       if (!shouldInitiateInstantMicroDeposit({ bank, verification: liveVerify })) {
-        return safePublic({
-          ok: true,
-          success: true,
-          statusCode: 200,
-          already_initiated: true,
-          initiated: interpreted.initiated,
-          can_confirm: interpreted.can_confirm,
-          mutated: false,
-          bank_status: interpreted.bank_status,
-          verification_status: interpreted.verification_status,
-          complete: false,
-          bank_id: bankId,
-          bank_id_fp: fingerprintMoovId(bankId),
-          account_id: accountId,
-          account_id_fp: fingerprintMoovId(accountId),
-          recipient_id: recipient.id,
-          provider: 'moov',
+        const state = await persistProviderState(store, ids, interpreted, nowMs);
+        return safePublic(publicBankVerifyResult({
+          ...bound,
+          extra: {
+            already_initiated: true,
+            initiated: interpreted.initiated,
+            can_confirm: interpreted.can_confirm,
+            mutated: false,
+            complete: false,
+            state,
+          },
+        }));
+      }
+
+      const claim = await store.claimInitiation({
+        ...ids,
+        claimantId: randomUUID(),
+        idempotencyKey,
+        tokenFp,
+        nowMs,
+      });
+      if (!claim.claimed) {
+        let refreshedBank = bank;
+        let refreshedVerify = liveVerify;
+        try {
+          refreshedBank = await moovGet({
+            moovFetch, credentials, fetchImpl, accountId, bankId,
+            path: `/accounts/${accountId}/bank-accounts/${bankId}`,
+            scopes: [`/accounts/${accountId}/bank-accounts.read`],
+          }) || bank;
+          refreshedVerify = await readLiveVerification({
+            moovFetch, credentials, fetchImpl, accountId, bankId,
+          });
+        } catch {
+          refreshedBank = bank;
+          refreshedVerify = liveVerify;
+        }
+        const after = interpretRecipientBankVerification({ bank: refreshedBank, verification: refreshedVerify });
+        const state = await persistProviderState(store, ids, after, nowMs);
+        if (after.verified) {
+          return safePublic(publicBankVerifyResult({
+            ...bound,
+            interpreted: after,
+            extra: {
+              already_verified: true,
+              initiated: false,
+              mutated: false,
+              complete: recipientOnboardingCompleteFromMoov({ account, banks, capabilities, capabilitiesReadOk: capsOk }),
+              state,
+            },
+          }));
+        }
+        if (after.initiated) {
+          return safePublic(publicBankVerifyResult({
+            ...bound,
+            interpreted: after,
+            extra: {
+              already_initiated: true,
+              initiated: true,
+              mutated: false,
+              complete: false,
+              state,
+            },
+          }));
+        }
+        return safePublic(fail('initiate_uncertain', 502, {
           liveProviderCalled: true,
-          productionExecution: false,
           productionRead: true,
           recipientBankVerifyWrite: true,
-          public_recipient: true,
-          token_consumed: false,
-          mv_code_returned: false,
-          mv_code_stored: false,
-          environment: 'production',
+          mutated: false,
+          already_initiated: false,
+          state: state === BANK_VERIFY_STATES.NOT_STARTED
+            ? (claim.item?.state || BANK_VERIFY_STATES.INITIATION_CLAIMED)
+            : state,
+          message: 'Another initiation already claimed this bank. The payment provider was not posted again.',
           spoofFieldsIgnored: spoof,
-        });
+        }));
       }
 
       let uncertain = false;
@@ -549,7 +637,7 @@ export async function handlePublicMoovRecipientBankVerifyInitiate(event, deps = 
           mode: 'recipient_bank_verify',
           boundAccountId: accountId,
           boundBankId: bankId,
-          idempotencyKey: recipientBankVerifyIdempotencyKey({ recipientId: recipient.id, bankId }),
+          idempotencyKey,
           scopes: recipientBankVerifyWriteScopes(accountId),
           fetchImpl,
         });
@@ -558,14 +646,22 @@ export async function handlePublicMoovRecipientBankVerifyInitiate(event, deps = 
           uncertain = true;
         } else if (!initiateAlreadyOpenError(String(error?.message || '')) && error?.status !== 409) {
           log('recipient_bank_verify_initiate_failed', redactRecipientMvText(redactMoovText(String(error?.message || error))));
+          await store.transitionClaim({ ...ids, to: BANK_VERIFY_STATES.UNCERTAIN, nowMs });
           return safePublic(fail('initiate_failed', 502, {
             liveProviderCalled: true,
             productionRead: true,
             recipientBankVerifyWrite: true,
+            state: BANK_VERIFY_STATES.UNCERTAIN,
             message: 'Could not start bank verification with the payment provider.',
             spoofFieldsIgnored: spoof,
           }));
         }
+      }
+
+      if (deps.crashAfterPost) {
+        const killed = new Error('lambda_killed');
+        killed.code = 'lambda_killed';
+        throw killed;
       }
 
       let refreshedBank = bank;
@@ -579,63 +675,70 @@ export async function handlePublicMoovRecipientBankVerifyInitiate(event, deps = 
         refreshedVerify = await readLiveVerification({
           moovFetch, credentials, fetchImpl, accountId, bankId,
         });
-      } catch (error) {
-        if (uncertain) {
-          return safePublic(fail('initiate_uncertain', 502, {
-            liveProviderCalled: true,
-            productionRead: true,
-            recipientBankVerifyWrite: true,
-            mutated: false,
-            message: 'The payment provider did not confirm initiation. Verification was not retried.',
-            spoofFieldsIgnored: spoof,
-          }));
-        }
-        throw error;
-      }
-
-      const after = interpretRecipientBankVerification({ bank: refreshedBank, verification: refreshedVerify });
-      if (uncertain && !after.initiated && !after.verified) {
+      } catch {
+        await store.transitionClaim({ ...ids, to: BANK_VERIFY_STATES.UNCERTAIN, nowMs });
         return safePublic(fail('initiate_uncertain', 502, {
           liveProviderCalled: true,
           productionRead: true,
           recipientBankVerifyWrite: true,
           mutated: false,
+          state: BANK_VERIFY_STATES.UNCERTAIN,
           message: 'The payment provider did not confirm initiation. Verification was not retried.',
           spoofFieldsIgnored: spoof,
         }));
       }
 
-      return safePublic({
-        ok: true,
-        success: true,
-        statusCode: 200,
-        initiated: after.initiated || true,
-        can_confirm: after.can_confirm,
-        already_initiated: Boolean(uncertain && after.initiated),
-        mutated: !uncertain,
-        bank_status: after.bank_status,
-        verification_status: after.verification_status,
-        complete: false,
-        bank_id: bankId,
-        bank_id_fp: fingerprintMoovId(bankId),
-        account_id: accountId,
-        account_id_fp: fingerprintMoovId(accountId),
-        recipient_id: recipient.id,
-        provider: 'moov',
-        liveProviderCalled: true,
-        productionExecution: false,
-        productionRead: true,
-        recipientBankVerifyWrite: true,
-        public_recipient: true,
-        token_consumed: false,
-        mv_code_returned: false,
-        mv_code_stored: false,
-        environment: 'production',
-        spoofFieldsIgnored: spoof,
-      });
-    });
+      const after = interpretRecipientBankVerification({ bank: refreshedBank, verification: refreshedVerify });
+      if (uncertain && !after.initiated && !after.verified) {
+        await store.transitionClaim({ ...ids, to: BANK_VERIFY_STATES.UNCERTAIN, nowMs });
+        return safePublic(fail('initiate_uncertain', 502, {
+          liveProviderCalled: true,
+          productionRead: true,
+          recipientBankVerifyWrite: true,
+          mutated: false,
+          state: BANK_VERIFY_STATES.UNCERTAIN,
+          message: 'The payment provider did not confirm initiation. Verification was not retried.',
+          spoofFieldsIgnored: spoof,
+        }));
+      }
+
+      const state = await persistProviderState(store, ids, after.verified || after.initiated
+        ? after
+        : { ...after, initiated: true }, nowMs);
+      return safePublic(publicBankVerifyResult({
+        ...bound,
+        interpreted: after,
+        extra: {
+          initiated: after.initiated || true,
+          can_confirm: after.can_confirm,
+          already_initiated: Boolean(uncertain && after.initiated),
+          mutated: !uncertain,
+          complete: false,
+          state,
+        },
+      }));
+    } catch (error) {
+      if (error?.code === 'bank_verify_state_unavailable') {
+        return safePublic(stateUnavailable({ liveProviderCalled: true, productionRead: true, spoof }));
+      }
+      throw error;
+    }
   } catch (error) {
     log('recipient_bank_verify_initiate_failed', redactRecipientMvText(redactMoovText(String(error?.message || error))));
+    if (error?.code === 'lambda_killed') {
+      return safePublic(fail('initiate_uncertain', 502, {
+        liveProviderCalled: true,
+        productionRead: true,
+        recipientBankVerifyWrite: true,
+        mutated: false,
+        state: BANK_VERIFY_STATES.INITIATION_CLAIMED,
+        message: 'The payment provider did not confirm initiation. Verification was not retried.',
+        spoofFieldsIgnored: spoof,
+      }));
+    }
+    if (error?.code === 'bank_verify_state_unavailable') {
+      return safePublic(stateUnavailable({ liveProviderCalled: true, productionRead: true, spoof }));
+    }
     if (error?.code === 'recipient_bank_verify_method_denied' || error?.code === 'recipient_bank_verify_path_denied'
       || error?.code === 'read_only_method_denied' || error?.code === 'read_only_path_denied') {
       return safePublic(fail(error.code, 403, {
@@ -657,9 +760,10 @@ export async function handlePublicMoovRecipientBankVerifyInitiate(event, deps = 
 export async function handlePublicMoovRecipientBankVerifyConfirm(event, deps = {}) {
   const auth = await authorizePublicRecipientBankVerify(event, deps);
   if (!auth.ok) return safePublic(auth.result);
-  const { body, spoof, log, recipient, accountId, credentials, fetchImpl, moovFetch } = auth;
-  const noteAttempt = deps.noteMvAttempt || noteMvAttempt;
-  const attemptState = deps.mvAttemptState || mvAttemptState;
+  const { body, spoof, log, recipient, accountId, credentials, fetchImpl, moovFetch, tokenFp, nowMs } = auth;
+  const opened = openStateStore(deps);
+  if (!opened.ok) return safePublic(opened.result);
+  const store = opened.store;
 
   const verifyBody = moovInstantVerifyBody(body?.code ?? body?.verification_code);
   if (!verifyBody) {
@@ -679,18 +783,10 @@ export async function handlePublicMoovRecipientBankVerifyConfirm(event, deps = {
       }));
     }
     const { account, banks, capabilities, capsOk, bankId, interpreted } = loaded;
-    const prior = attemptState({ recipientId: recipient.id, bankId, nowMs: auth.nowMs });
-    if (prior.locked || prior.count >= RECIPIENT_VERIFY_MAX_ATTEMPTS) {
-      return safePublic(fail('max_attempts_exceeded', 409, {
-        requires_restart: true,
-        message: 'Too many incorrect attempts. Restart verification to receive a new deposit code.',
-        liveProviderCalled: true,
-        productionRead: true,
-        spoofFieldsIgnored: spoof,
-      }));
-    }
+    const ids = { recipientId: recipient.id, accountId, bankId };
 
     if (interpreted.verified) {
+      await persistProviderState(store, ids, interpreted, nowMs);
       return safePublic({
         ok: true,
         success: true,
@@ -698,6 +794,7 @@ export async function handlePublicMoovRecipientBankVerifyConfirm(event, deps = {
         already_verified: true,
         complete: recipientOnboardingCompleteFromMoov({ account, banks, capabilities, capabilitiesReadOk: capsOk }),
         bank_status: 'verified',
+        state: BANK_VERIFY_STATES.VERIFIED,
         bank_id: bankId,
         bank_id_fp: fingerprintMoovId(bankId),
         account_id: accountId,
@@ -727,6 +824,45 @@ export async function handlePublicMoovRecipientBankVerifyConfirm(event, deps = {
       }));
     }
 
+    let attempts;
+    try {
+      attempts = await store.consumeMvAttempt({
+        recipientId: recipient.id,
+        accountId,
+        bankId,
+        tokenFp,
+        nowMs,
+      });
+    } catch (error) {
+      if (error?.code === 'bank_verify_state_unavailable') {
+        return safePublic(limiterUnavailable({
+          liveProviderCalled: true,
+          productionRead: true,
+          recipientBankVerifyWrite: true,
+          spoof,
+        }));
+      }
+      throw error;
+    }
+    if (!attempts.ok) {
+      if (attempts.error === 'bank_verify_limiter_unavailable') {
+        return safePublic(limiterUnavailable({
+          liveProviderCalled: true,
+          productionRead: true,
+          recipientBankVerifyWrite: true,
+          spoof,
+        }));
+      }
+      return safePublic(fail('max_attempts_exceeded', 409, {
+        requires_restart: true,
+        message: 'Too many incorrect attempts. Restart verification to receive a new deposit code.',
+        attempts_remaining: 0,
+        liveProviderCalled: true,
+        productionRead: true,
+        spoofFieldsIgnored: spoof,
+      }));
+    }
+
     try {
       await moovFetch({
         credentials,
@@ -741,7 +877,6 @@ export async function handlePublicMoovRecipientBankVerifyConfirm(event, deps = {
       });
     } catch (error) {
       const mapped = mapConfirmError(error);
-      const attempts = noteAttempt({ recipientId: recipient.id, bankId, nowMs: auth.nowMs });
       log('recipient_bank_verify_confirm_failed', mapped.code);
       const exhausted = attempts.locked
         || mapped.code === 'max_attempts_exceeded'
@@ -782,6 +917,7 @@ export async function handlePublicMoovRecipientBankVerifyConfirm(event, deps = {
       }));
     }
 
+    await store.transitionClaim({ ...ids, to: BANK_VERIFY_STATES.VERIFIED, nowMs });
     const complete = recipientOnboardingCompleteFromMoov({
       account,
       banks: [refreshed, ...banks.slice(1)],
@@ -794,6 +930,7 @@ export async function handlePublicMoovRecipientBankVerifyConfirm(event, deps = {
       statusCode: 200,
       already_verified: false,
       bank_status: String(refreshed?.status ?? 'verified').toLowerCase(),
+      state: BANK_VERIFY_STATES.VERIFIED,
       complete,
       bank_id: bankId,
       bank_id_fp: fingerprintMoovId(bankId),
@@ -815,6 +952,14 @@ export async function handlePublicMoovRecipientBankVerifyConfirm(event, deps = {
     });
   } catch (error) {
     log('recipient_bank_verify_confirm_failed', redactRecipientMvText(redactMoovText(String(error?.message || error))));
+    if (error?.code === 'bank_verify_state_unavailable') {
+      return safePublic(limiterUnavailable({
+        liveProviderCalled: true,
+        productionRead: true,
+        recipientBankVerifyWrite: true,
+        spoof,
+      }));
+    }
     if (error?.code === 'recipient_bank_verify_method_denied' || error?.code === 'recipient_bank_verify_path_denied') {
       return safePublic(fail(error.code, 403, {
         productionRead: true,
