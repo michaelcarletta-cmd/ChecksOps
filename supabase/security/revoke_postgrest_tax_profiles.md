@@ -4,7 +4,7 @@ Draft database-security change. Separate from merged PR #247 (AWS application-la
 
 **This document is catalog/metadata only.** No production or staging SQL was run while writing it. No table rows were selected. Column `tin` was never read.
 
-Merging this PR **cannot apply SQL**. The revoke file is not under `supabase/migrations/`, so GitHub Supabase integration, `supabase db push`, Lovable merge deploys, oneshots, and `aws/db-copy` inventory cannot discover it.
+Merging this PR **cannot apply SQL**. The revoke file is not under `supabase/migrations/`, so GitHub Supabase integration, `supabase db push`, Lovable merge deploys, oneshots, and `aws/db-copy` inventory cannot discover it. Direct psql is forbidden. The only authorized execution method is `scripts/run-hosted-tax-profile-containment.mjs` after a later, separate authorization.
 
 ## Official guidance (authoritative)
 
@@ -24,13 +24,9 @@ Reviewed 2026-09-12:
 
 `supabase db push` applies **every pending file under `supabase/migrations/`**, not this revoke script. Using it would skip the unapplied file (it is outside that directory) **or**, if someone copied the file back into `migrations/`, would also apply unrelated pending migrations such as `20260911210000_aws_mortgage_ops_library_parity.sql`.
 
-`supabase db push` is **not** an authorized application method. It must not be used.
+`supabase db push` is **not** an authorized application method. It must not be used. Direct psql is also forbidden.
 
-The only documented future method is a controlled **single-file** `psql` of:
-
-`supabase/security/unapplied-do-not-run/NOT_APPLIED_revoke_postgrest_tax_profiles.sql`
-
-after explicit authorization and a successful fail-closed preflight.
+The only documented future method is `scripts/run-hosted-tax-profile-containment.mjs`, which independently validates the hosted connection, pins SQL file SHA-256 hashes, and runs a single-file apply after explicit authorization.
 
 ## Repo-only metadata inventory
 
@@ -48,7 +44,7 @@ Do not guess the production state. Target metadata must be checked before apply.
 | Columns | `id`, `tenant_id` (FK → `tenants`), `recipient_key`, `recipient_name`, `tin TEXT`, address fields, `account_number`, `notes`, `created_at`, `updated_at`. Unique `(tenant_id, recipient_key)`. |
 | RLS | `ENABLE ROW LEVEL SECURITY` in the create migration. `FORCE ROW LEVEL SECURITY` is **not** set. |
 | Trigger | `recipient_tax_profiles_set_updated_at` → `public.set_updated_at()` (timestamp only; source does not name this table). |
-| Later supabase migrations | No later file alters this table except the 2026-07-31 **blanket GRANT of all public tables to `authenticated`**. That file does not name `recipient_tax_profiles`; the CI guard therefore does not flag it. **Do not re-run it.** |
+| Later supabase migrations | No later file alters this table except the 2026-07-31 **blanket GRANT of all public tables to `authenticated`**. That file is **content-hash-pinned** in `hosted-tax-profile-containment.pins.json`; editing it fails CI until the new hash is reviewed. **Do not re-run it.** |
 
 ### Before (repo-known grants)
 
@@ -98,7 +94,7 @@ Direct REST `/rest/v1/recipient_tax_profiles` (any schema alias, embed, or `sele
 
 ### Preflight classifications and stop conditions
 
-Operator supplies non-secret identity via `psql -v`:
+The wrapper proves the connection target, then supplies non-secret identity vars (SQL checks remain defense in depth; PostgreSQL does not expose the Supabase project ref):
 
 - `expected_project_ref` must be exactly `nbcqwpysqgyxrrbgtmkw`
 - `expected_database` must equal `current_database()`
@@ -167,14 +163,16 @@ Revoking Data API table access is the security outcome. Do not weaken it to keep
 
 `scripts/check-recipient-tax-profile-migrations.mjs` fails CI if a **future** file under `supabase/migrations/`:
 
-- references `recipient_tax_profiles`; and
-- performs `GRANT`, `REVOKE`, `CREATE`/`DROP`/`ALTER POLICY`, `ALTER TABLE` RLS, or default-privilege changes
+- references `recipient_tax_profiles` and performs `GRANT`, `REVOKE`, `CREATE`/`DROP`/`ALTER POLICY`, `ALTER TABLE` RLS, or default-privilege changes; or
+- uses `GRANT ... ON ALL TABLES ... TO authenticated/anon/PUBLIC`; or
+- uses `ALTER DEFAULT PRIVILEGES ... GRANT ... TO authenticated/anon/PUBLIC`; or
+- conceals privilege SQL with `EXECUTE`, concatenation, psql `\\i`, or encoded generators.
 
-unless its basename is listed in `scripts/recipient-tax-profile-migration-allowlist.txt`.
+Historical exceptions are **content-hash-pinned** in `supabase/security/hosted-tax-profile-containment.pins.json` (exact basename + SHA-256 + review note). Editing a pinned file fails CI until the new hash is reviewed in the same PR. Filename-only allowlisting is not accepted.
 
-The historical create file `20260709195755_af0fb428-7cf4-4ac3-9fc6-d04ed189b490.sql` is allowlisted. Ordinary unrelated migrations are ignored.
+Static scanning cannot prove arbitrary SQL safe. The guard fails closed on suspicious constructs.
 
-**Authorized future migration:** put the SQL in the same PR as an allowlist addition, with an explicit security review of GRANT/RLS impact on this table. Do not use the allowlist to sneak the revoke file back under `supabase/migrations/`.
+**Authorized future migration:** put the SQL in the same PR as a pins.json hash exception (or avoid privilege changes), with an explicit security review. Do not move the revoke file back under `supabase/migrations/`.
 
 ## Local advisor results (disposable Postgres, not hosted)
 
@@ -194,37 +192,41 @@ The historical create file `20260709195755_af0fb428-7cf4-4ac3-9fc6-d04ed189b490.
 
 ## Authorized future sequence (do not run in this PR)
 
-`supabase db push` must not be used.
+The **only authorized execution method** is:
 
-1. Operator authorization recorded (change ticket + explicit approval to revoke Data API access, accepting Lovable Tax/1099 outage). Ship the UI unavailable/error banner PR first.
-2. Disposable clone or local DB: run `npm run test:postgrest-tax-containment`.
-3. On the **target** hosted database, run the fail-closed gate only:
+`scripts/run-hosted-tax-profile-containment.mjs`
 
-```
-psql -v ON_ERROR_STOP=1 \
-  -v expected_project_ref=nbcqwpysqgyxrrbgtmkw \
-  -v expected_database=postgres \
-  -v expected_owner=postgres \
-  -f supabase/security/preflight_gate_revoke_postgrest_tax_profiles.sql
-```
+Direct `psql`, `supabase db push`, and Git merge application are **forbidden**.
 
-Require `CLASSIFICATION=EXACT_EXPECTED_LEGACY` or `ALREADY_CONTAINED`. Stop on `UNSAFE/AMBIGUOUS`.
+PostgreSQL does **not** independently expose the Supabase project ref. The wrapper proves the connection target (direct `db.<ref>.supabase.co` hostname, or pooler hostname plus `postgres.<ref>` username, database `postgres`, and `sslmode=require|verify-ca|verify-full`). SQL `-v expected_project_ref` is defense in depth only.
 
-4. Apply **this exact file** as one transaction (the file contains `BEGIN`/`COMMIT`; `NOTIFY pgrst` runs only after a successful mutating commit):
+1. Review this wrapper and the pinned SHA-256 values in `supabase/security/hosted-tax-profile-containment.pins.json` at the exact git commit that will be used.
+2. Record operator authorization. Ship the Tax UI unavailable/error banner PR **before** hosted apply.
+3. Export `CHECKSOPS_TAX_CONTAINMENT_DATABASE_URL` (never argv). Run preflight only:
 
 ```
-psql -v ON_ERROR_STOP=1 \
-  -v expected_project_ref=nbcqwpysqgyxrrbgtmkw \
-  -v expected_database=postgres \
-  -v expected_owner=postgres \
-  -f supabase/security/unapplied-do-not-run/NOT_APPLIED_revoke_postgrest_tax_profiles.sql
+CHECKSOPS_TAX_CONTAINMENT_DATABASE_URL=... \
+  node scripts/run-hosted-tax-profile-containment.mjs preflight
 ```
 
-5. Re-run the gate. Expect `ALREADY_CONTAINED`.
-6. Probe with a **non-production** user JWT against `/rest/v1/recipient_tax_profiles?select=id` — expect `42501` / permission denied. Do not `select=tin` on production.
-7. Do not merge-apply from this draft PR without a later authorized change. This PR stops at draft.
+Require wrapper output `WRAPPER_CLASSIFICATION=EXACT_EXPECTED_LEGACY`. Stop on `ALREADY_CONTAINED`, `UNSAFE/AMBIGUOUS`, hash mismatch, or connection rejection.
+
+4. Remote apply still requires a **separate** authorization event. Then:
+
+```
+CHECKSOPS_TAX_CONTAINMENT_DATABASE_URL=... \
+  node scripts/run-hosted-tax-profile-containment.mjs apply \
+    --i-authorize-hosted-recipient-tax-profiles-revoke \
+    --confirm=REVOKE_POSTGREST_RECIPIENT_TAX_PROFILES
+```
+
+The wrapper re-validates the URL, verifies SQL file hashes, runs preflight on that same URL, and applies only `supabase/security/unapplied-do-not-run/NOT_APPLIED_revoke_postgrest_tax_profiles.sql` when classification is `EXACT_EXPECTED_LEGACY`.
+
+5. Probe with a **non-production** user JWT against `/rest/v1/recipient_tax_profiles?select=id` — expect `42501`. Do not `select=tin` on production.
+6. Do not merge-apply from this draft PR. This PR stops at draft.
 
 There is **no automatic unsafe rollback**. See `EMERGENCY_ROLLBACK_revoke_postgrest_tax_profiles.md`.
+`recipient_tax_profiles.tin` remains plaintext at rest.
 
 ## Confirmation (this agent run)
 

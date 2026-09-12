@@ -221,9 +221,12 @@ test('docs forbid db push and treat Oct 30 2026 as scheduled future behavior', (
   assert.match(runbook, /supabase db push/);
   assert.equal(runbook.includes(APPLY_REL), true);
   assert.match(runbook, /preflight_gate_revoke_postgrest_tax_profiles\.sql/);
+  assert.match(runbook, /run-hosted-tax-profile-containment/);
+  assert.match(runbook, /only authorized execution method/i);
   assert.match(runbook, /scheduled future behavior/i);
   assert.match(runbook, /No TIN on file/);
   assert.match(runbook, /separate small UI PR/i);
+  assert.match(runbook, /Direct psql/);
   assert.doesNotMatch(runbook, /psql -1 .*supabase\/migrations\/20260912114853/);
 });
 
@@ -258,7 +261,14 @@ test('no auto-run discovery of the unapplied revoke file', () => {
     const text = fs.readFileSync(file, 'utf8');
     assert.doesNotMatch(text, /db push/);
     assert.doesNotMatch(text, /psql[^\n]*NOT_APPLIED_revoke_postgrest_tax_profiles/);
+    assert.doesNotMatch(text, /REVOKE_POSTGREST_RECIPIENT_TAX_PROFILES/);
+    assert.doesNotMatch(text, /i-authorize-hosted-recipient-tax-profiles-revoke/);
   }
+  const wrapper = fs.readFileSync(path.join(ROOT, 'scripts/run-hosted-tax-profile-containment.mjs'), 'utf8');
+  assert.match(wrapper, /NOT_APPLIED_revoke_postgrest_tax_profiles/);
+  assert.match(wrapper, /CHECKSOPS_TAX_CONTAINMENT_DATABASE_URL/);
+  assert.doesNotMatch(wrapper, /db push/);
+  assert.match(wrapper, /must not live under supabase\/migrations/);
 });
 
 test('frontend still does not query the table directly', () => {
@@ -577,6 +587,78 @@ test('fail closed on partially applied state', () => {
     SELECT count(*)::text FROM pg_policy
     WHERE polrelid = 'public.recipient_tax_profiles'::regclass
   `), '3');
+});
+
+test('fail closed when a materialized view depends on the table', () => {
+  createdb('rtp_mv');
+  loadLegacy('rtp_mv');
+  psql('rtp_mv', ['-c', `
+    CREATE MATERIALIZED VIEW public.tax_profiles_mv AS
+      SELECT recipient_key FROM public.recipient_tax_profiles;
+  `]);
+  const result = applySql('rtp_mv', { allowFail: true });
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stderr}\n${result.stdout}`, /dependent object|matview|materialized/i);
+});
+
+test('fail closed on GraphQL object exposure', () => {
+  createdb('rtp_gql');
+  loadLegacy('rtp_gql');
+  psql('rtp_gql', ['-c', `
+    CREATE SCHEMA graphql;
+    CREATE VIEW graphql.recipient_tax_profiles AS
+      SELECT id FROM public.recipient_tax_profiles;
+  `]);
+  const result = applySql('rtp_gql', { allowFail: true });
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stderr}\n${result.stdout}`, /GraphQL|graphql/i);
+});
+
+test('fail closed on aws_* role', () => {
+  createdb('rtp_aws_role');
+  loadLegacy('rtp_aws_role');
+  psql('rtp_aws_role', ['-c', `CREATE ROLE aws_containment_probe NOLOGIN;`]);
+  try {
+    const result = applySql('rtp_aws_role', { allowFail: true });
+    assert.notEqual(result.status, 0);
+    assert.match(`${result.stderr}\n${result.stdout}`, /AWS\/RDS role pattern/);
+  } finally {
+    psql('rtp_aws_role', ['-c', `DROP ROLE IF EXISTS aws_containment_probe;`], { allowFail: true });
+  }
+});
+
+test('FORCE RLS is not EXACT_EXPECTED_LEGACY', () => {
+  createdb('rtp_force');
+  loadLegacy('rtp_force');
+  psql('rtp_force', ['-c', `
+    ALTER TABLE public.recipient_tax_profiles FORCE ROW LEVEL SECURITY;
+  `]);
+  const pre = runPreflight('rtp_force', { allowFail: true });
+  assert.notEqual(pre.status, 0);
+  assert.match(`${pre.stderr}\n${pre.stdout}`, /UNSAFE\/AMBIGUOUS|force_rls/);
+  const result = applySql('rtp_force', { allowFail: true });
+  assert.notEqual(result.status, 0);
+});
+
+test('broader policy predicate is UNSAFE/AMBIGUOUS', () => {
+  createdb('rtp_wide');
+  loadLegacy('rtp_wide');
+  psql('rtp_wide', ['-c', `
+    DROP POLICY "tenant members read recipient_tax_profiles" ON public.recipient_tax_profiles;
+    CREATE POLICY "tenant members read recipient_tax_profiles"
+      ON public.recipient_tax_profiles FOR SELECT
+      TO authenticated
+      USING (
+        EXISTS (SELECT 1 FROM public.tenant_users tu WHERE tu.tenant_id = recipient_tax_profiles.tenant_id AND tu.user_id = auth.uid())
+        OR true
+      );
+  `]);
+  const result = applySql('rtp_wide', { allowFail: true });
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stderr}\n${result.stdout}`, /UNSAFE\/AMBIGUOUS|policy_bodies/);
+  assert.equal(scalar('rtp_wide', `
+    SELECT has_table_privilege('authenticated', 'public.recipient_tax_profiles', 'SELECT')::text
+  `), 'true');
 });
 
 after(() => {
