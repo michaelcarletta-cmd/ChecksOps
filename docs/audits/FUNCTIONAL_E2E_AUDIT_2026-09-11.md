@@ -12,7 +12,7 @@ This file contains seven passes on 2026-09-11 / 2026-09-12:
 
 **Verdict: CONDITIONAL GO** for C1C tenant-admin and platform-owner staging workflows. **NO-GO** for Freedom admin identity (`identity_not_linked`) and for treating production `checksops.com` as a clean production SPA (Pass 1 P0 banner still unreleased).
 
-Inventory classification is **100%** (1,421 / 1,421). That is not an operational certification. The primary readiness metric is **proven operational: 626 / 1,136 live non-N/A = 55.1%**. Do not use the stale Pass 6 executable denominator (576 / 1,283 = 44.9%). Do not treat 100% classification as a go-live for SES, CheckAlt, ACH, Freedom identity, or money movement.
+Inventory classification is **100%** (1,421 / 1,421). That is not an operational certification. The primary readiness metric is **proven operational: 665 / 1,136 live non-N/A = 58.5%** (was 55.1% before this verification pass). Do not use the stale Pass 6 executable denominator (576 / 1,283 = 44.9%). Do not treat 100% classification as a go-live for SES, CheckAlt, ACH, Freedom identity, or money movement.
 
 ---
 
@@ -86,16 +86,170 @@ Top pre-test root causes (control count):
 
 Control-level blocked: **494**. Root-cause-level: these are not 494 unique problems.
 
-Physical verification follows this section. A control previously BLOCKED becomes PASS, FAIL, or remains BLOCKED with a narrower proven reason. PASS is never inferred from source inspection.
+---
+
+## Physical verification results
+
+No application code was patched. No SQL inserts. No provider flags. No Cognito identity linking. No SES. No production authenticated workflows. Branding Save was not clicked. Provider execution stayed OFF. No ACH / Moov transfer / wallet funding / CheckAlt execution. PASS is never inferred from source inspection.
+
+### Corrected operational metrics
+
+| Metric | Before (Pass 6, corrected) | After this pass |
+|---|---|---|
+| Inventory classified | 1,421 / 1,421 (100%) | **1,421 / 1,421 (100%)** |
+| Live / non-N/A | 1,136 | **1,136** |
+| PASS | 626 | **665** |
+| FAIL | 16 | **21** |
+| BLOCKED | 494 | **450** |
+| N/A | 285 | **285** |
+| Proven operational | 626 / 1,136 = **55.1%** | 665 / 1,136 = **58.5%** |
+| Known failing | 16 / 1,136 = 1.4% | 21 / 1,136 = **1.8%** |
+| Still unproven | 494 / 1,136 = 43.5% | 450 / 1,136 = **39.6%** |
+
+Stale Pass 6 `576 / 1,283 (44.9%)` is retired. Do not use it.
+
+### Blocked reduction
+
+| Conversion | Count |
+|---|---|
+| BLOCKED → PASS | **39** |
+| BLOCKED → FAIL | **5** |
+| Remaining BLOCKED | **450** |
+
+The 39 PASSes are almost entirely CheckReviewConsole children that were blocked as `empty_review_queue` even though Pass 6 already had a Review card. This pass created dedicated synthetic `BCV-1789231254420-REV` (`needs_review`) and physically operated the queue + decision panel.
+
+The 5 new FAILs:
+
+| ID | Defect | What happened |
+|---|---|---|
+| `CC-047` | `P2-review-claim-number-column-not-allowlisted` | Save claim # → `column_not_allowlisted`. `detected_claim_number` is not on the AWS intake write allowlist. DB stayed null. |
+| `CC-117` | `P1-endorsed-on-check-toast-without-persist` | **P1.** UI toasted “marked endorsed on the check”. `check_payees.endorsement_status` still `pending`. Public `/endorse?token=` then says the link was already used or replaced. |
+| `CC-361` | `P2-staging-s3-authorized-object-missing` | Supported upload / placeholder `pending_front.jpg` → `/storage/sign` **404 `object_not_in_s3`**. `back_image_path` stayed null. Not patched. |
+| `CC-367` | `P2-admin-override-rpc-not-enabled-ui` | UI RPC `admin_override_check_status` is `rpc_disabled`. **HTTP `POST /workflow/override` works** (200, `needs_review`, then restored to endorsing). UI does not call that path. |
+| `CC-368` | `P2-skip-endorsements-allowlist` | Skip Endorsements → `Move failed / column_not_allowlisted`. Writes `endorsement_status`, which is not allowlisted. |
+
+`A1-066` `A1-067` `A1-068` were already FAIL. Reproduced on Pipeline Test only. Not reclassified.
+
+### Blocker taxonomy after verification
+
+| Category | Controls | Distinct root causes (examples) |
+|---|---|---|
+| BLOCKED_FIXTURE | 128 | claim-portal token, pay-setup token, invoices, settlements, CRC payee row |
+| BLOCKED_PROVIDER | 110 | ACH/wallet/Moov/CheckAlt/Plaid; funds released/received lanes |
+| BLOCKED_UNSAFE_IRREVERSIBLE | 100 | remaining withheld persistence (config, Sign, returned-check, etc.) |
+| BLOCKED_EMAIL_EXTERNAL | 37 | SES send / invite / invoice / tracking |
+| BLOCKED_EMAIL_OTP | 24 | MortgageOps / Sign queue OTP |
+| BLOCKED_MISSING_FEATURE | 24 | custom domain, never-mounted live UI |
+| BLOCKED_AUTH_DEFECT | 19 | owner `isMasterOwner=true` but `roles=[]` / `isAdmin=false` |
+| BLOCKED_STATUS | 4 | CC-363–CC-366; Ready for Deposit still 0 |
+| BLOCKED_STAGING_INFRA | 2 | remaining S3 viewer/reupload children |
+| BLOCKED_IDENTITY | 2 | Freedom admin `identity_not_linked` (CheckAlt Manager) |
+| BLOCKED_OTHER | 0 | — |
+| **Total** | **450** | **95 distinct `blocker_root_cause` values** |
+
+Control-level blocked: **450**. Root-cause-level: **95** distinct blockers, not 450 unique problems. The largest clusters:
+
+| Controls | Root cause |
+|---|---|
+| 50 | `provider_execution` |
+| 45 | `payment_account_already_active` |
+| 28 | `accepted_claim_portal_token_unavailable` |
+| 24 | `email_otp_required` |
+| 19 | `owner_isAdmin_false` |
+| 19 | `valid_paysetup_token_unavailable` |
+| 16 | `unsafe_persist_checkcommandcenter` |
+| 14 | `ses_email` |
+| 14 | `control_not_in_live_ui` |
+| 13 | `empty_settled_payments` |
+
+`empty_review_queue` is **gone** (0 remaining). That was 57 controls → 1 root cause, and it was unlockable with a synthetic review check.
+
+### Proven operational rate
+
+**665 / 1,136 = 58.5%**
+
+### Remaining internal vs external blockers
+
+| Bucket | Count | Meaning |
+|---|---|---|
+| Externally blocked (provider / email / OTP / identity) | **173** | Legitimate to leave untested without real providers, SES, OTP, or Freedom identity linking |
+| Internally blocked (fixture / status / staging-infra / auth-defect / unsafe / missing-feature) | **277** | Next remediation candidates inside staging |
+
+Internal next (highest leverage):
+
+* CRC payee persist (`crc_payee_add_did_not_persist` / `no_crc_payee_row`) so merge/edit/remove and Submit Review Decision can be clicked enabled
+* Allowlist `detected_claim_number` and `endorsement_status` **or** point UI at `/workflow` + `/functions/v1/check-endorsement` that already exist
+* Point StatusOverride at `POST /workflow/override` (already 200 in staging)
+* Staging S3 objects for the supported upload path (do not patch during audit)
+* `claim_settlements` write allowlist + a C1C claim row so ledger math can be reconciled
+* Mint pay-setup / invoice / claim-portal tokens without SES
+
+External remainder is mostly wallet/ACH/CheckAlt/Plaid, SES sends, MortgageOps OTP, and Freedom admin identity.
+
+### Synthetic fixtures
+
+| Fixture | ID / number | How created | Disposition |
+|---|---|---|---|
+| Review check | `b6cfd8d3-…` `BCV-1789231254420-REV` | `POST /workflow/checks` + `start_review` | **Retained.** `needs_review`. Issue date `2026-09-01` persisted. Property address restored to `101 BCV Review Lane`. |
+| Endorsing check | `73c74836-…` `BCV-1789231254420-END` | create + `start_endorsing` + allowlisted payee insert | **Retained.** Payee `BCV Synthetic Insured` still `pending` after false endorsed toast. HTTP override probed then restored to endorsing. |
+| Ready-attempt check | `80c13d6f-…` `BCV-1789231254420-RDY` | create + endorsing; `mark_ready_for_deposit` 403 | **Retained.** Cannot reach Ready for Deposit without completed endorsements. |
+| Image check | `b714c247-…` `BCV-1789231254420-IMG` | `POST /workflow/checks` | **Retained.** Placeholder `pending_front.jpg` is **not** in S3. |
+| Persist check | `9782cb06-…` `BCV-1789231254420-SAV` | create + `start_endorsing` | **Retained.** Safe `property_address` write verified 200. |
+| PR235 ledger tokens | claim `266e1ae8-…` | pre-existing synthetic | **Retained / reused.** `/ledger/:token` valid. `/h/claim/:sameToken` invalid (different token type). |
+| Pipeline Test switches | tenant `/pipeline-test-68d1b910` | n/a | **Not mutated.** Allowlist rejected the write. |
+
+Cleaned: review property address restored after the persist probe. No SQL rows inserted. No real customer tokens used (Pam Daugherty Freedom tokens were not opened).
+
+### Public tokens
+
+* Valid endorsement token on the synthetic payee: `/endorse?token=` → “already been used or replaced” after the false CC-117 toast (token consumed without a signed row).
+* Invalid endorsement token: same error (not a clean “malformed” message).
+* Valid PR235 synthetic ledger token: homeowner ledger mounts. Received $1,500 / Deposited $1,500 / Released $0 / Remaining $1,500. No admin chrome. No `tenant_id` UUID leak.
+* Same token on `/h/claim/:token`: invalid/expired — claim-portal tokens are a different mint.
+* `/invoice/not-a-token`: still `missing_cognito_token` (existing P2).
+* `/pay-setup/not-a-token`: setup chrome still mounts (no valid token; not converted to PASS).
+* No supported SES-free mint for invoice, pay-setup, or claim-portal tokens. Those stay `BLOCKED_FIXTURE` + `BLOCKED_EMAIL_EXTERNAL`.
+
+### New defects
+
+| ID | Sev | Summary | Status |
+|---|---|---|---|
+| `P1-endorsed-on-check-toast-without-persist` | **P1** | Endorsed on Check toasts success; payee/endorsement rows stay pending; public token is spent | NEW |
+| `P2-review-claim-number-column-not-allowlisted` | P2 | CRC Save claim # writes a prohibited column | NEW |
+| `P2-skip-endorsements-allowlist` | P2 | Skip Endorsements writes non-allowlisted `endorsement_status` | NEW |
+| `P2-admin-override-rpc-not-enabled-ui` | P2 | UI RPC disabled; HTTP `/workflow/override` already works | NEW (narrowed from BLOCKED) |
+| `P2-claim-settlements-table-not-allowlisted` | P2 | Supported ClaimSettlementEditor save cannot insert; table not on write allowlist; C1C has 0 claims | NEW (observed via API; editor did not mount without `claim_id`) |
+
+### Existing defects
+
+| Defect | This pass |
+|---|---|
+| P0 production banner | NOT RETESTED |
+| P0 Freedom `identity_not_linked` | NOT RETESTED (controls kept `BLOCKED_IDENTITY`; not substituted with C1C) |
+| P1 four inconsistent status/stage rows (incl. PR235 UI uploaded vs API deposited) | NOT MODIFIED |
+| P2 C1C Freedom branding placeholders | NOT RETESTED (Save not clicked) |
+| P2 owner CheckAlt `isAdmin=false` | CONFIRMED via `/identity/me` (`isMasterOwner=true`, `roles=[]`) — kept `BLOCKED_AUTH_DEFECT` |
+| P2 invoice/pay-setup `missing_cognito_token` | REPRODUCED on `/invoice/not-a-token` |
+| P2 staging S3 authorized objects | REPRODUCED (`object_not_in_s3`) |
+| P2 dynamic import 404 | NOT RETESTED |
+| P2 `P2-tenant-switch-column-not-allowlisted` | **REPRODUCED** on Pipeline Test Active / Founding / Test |
+| P3 negative amounts | NOT RETESTED |
+
+### Answer to the phase question
+
+Of the original **494** blocked controls:
+
+* **173** are blocked by legitimate external boundaries (provider, SES, OTP, Freedom identity).
+* **277** are still internal (fixtures, allowlists, S3, UI-vs-HTTP mismatch, withheld persistence, missing live features).
+* **39** were safely proven PASS with synthetic fixtures and supported workflows.
+* **5** were proven FAIL rather than left as generic BLOCKED.
+
+The 494 were not 494 unique problems. `empty_review_queue` alone had been 57 controls → 1 root cause, and it unlocked once a review fixture existed.
 
 ---
 
 # Pass 6 — Coverage closure (physical interaction)
 
-
-No application code was patched. No SQL. No provider flags. No Cognito identity linking. No SES. No production authenticated workflows. Branding Save was not clicked. Provider execution stayed OFF. No ACH / Moov transfer / wallet funding / CheckAlt execution.
-
----
 
 # Pass 6 — Coverage closure (physical interaction)
 
