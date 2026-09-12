@@ -7,14 +7,14 @@ import { createClient } from "@supabase/supabase-js";
 import type { Database } from "./types";
 import {
   AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY,
-  isAwsStaging,
+  isAwsAuth,
 } from "@/lib/awsStaging";
 import { createAwsStagingClient } from "@/integrations/aws/client";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-export const mortgageSupabase = isAwsStaging()
+export const mortgageSupabase = isAwsAuth()
   ? (createAwsStagingClient({
       sessionKey: AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY,
     }) as unknown as ReturnType<typeof createClient<Database>>)

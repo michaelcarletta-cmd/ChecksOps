@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { isAwsStaging } from "@/lib/awsStaging";
+import { isAwsAuth } from "@/lib/awsStaging";
 
 /**
  * AWS staging has no Supabase Realtime websocket. When Cognito staging is active,
@@ -12,7 +12,7 @@ export function useAwsPollingFallback(
   intervalMs = 15_000,
 ) {
   useEffect(() => {
-    if (!enabled || !isAwsStaging()) return;
+    if (!enabled || !isAwsAuth()) return;
     const id = window.setInterval(() => {
       try {
         onTick();

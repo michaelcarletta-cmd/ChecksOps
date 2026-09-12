@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
+import { isPlatformOwner } from "@/lib/masterMerchant";
 
 export type Permission = 
   | "read"
@@ -73,6 +74,7 @@ export function usePermissions() {
   const isReadOnly = userRole === "read_only";
   const isAdmin = userRole === "admin";
   const isStaff = userRole === "staff";
+  const isPlatformOwnerUser = isPlatformOwner(user?.email, user?.id);
 
   return {
     permissions,
@@ -81,5 +83,6 @@ export function usePermissions() {
     isReadOnly,
     isAdmin,
     isStaff,
+    isPlatformOwner: isPlatformOwnerUser,
   };
 }

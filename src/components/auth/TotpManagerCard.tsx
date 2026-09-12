@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Loader2, ShieldCheck, ShieldAlert } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useStepUp } from "@/hooks/useStepUp";
-import { isAwsStaging } from "@/lib/awsStaging";
+import { isAwsAuth } from "@/lib/awsStaging";
 import { associateAwsTotp, awsMfaAvailable, awsTotpEnrollmentDisplay, getAwsMfaStatus, verifyAwsTotp } from "@/lib/awsMfa";
 import { resolveTotpOtpauthUri, totpQrDataUrl } from "@/lib/totpQr";
 import { TotpQrDisplay } from "@/components/auth/TotpQrDisplay";
@@ -29,7 +29,7 @@ export function TotpManagerCard() {
   const [awsSecret, setAwsSecret] = useState<string | null>(null);
   const [awsQr, setAwsQr] = useState<string | null>(null);
   const [awsCode, setAwsCode] = useState("");
-  const awsStaging = isAwsStaging();
+  const awsStaging = isAwsAuth();
   const awsMode = awsMfaAvailable();
 
   const load = useCallback(async () => {

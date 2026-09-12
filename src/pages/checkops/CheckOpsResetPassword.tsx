@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
-import { isAwsStaging } from "@/lib/awsStaging";
+import { isAwsAuth } from "@/lib/awsStaging";
 
 export default function CheckOpsResetPassword() {
   const navigate = useNavigate();
@@ -19,7 +19,7 @@ export default function CheckOpsResetPassword() {
   const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
   const [hasRecoverySession, setHasRecoverySession] = useState(false);
-  const aws = isAwsStaging();
+  const aws = isAwsAuth();
 
   useEffect(() => {
     if (aws) {

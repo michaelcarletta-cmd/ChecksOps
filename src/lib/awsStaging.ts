@@ -1,17 +1,30 @@
 /**
- * AWS Cognito frontend switch. Production Vite builds use `.env.production`
- * and never set VITE_AUTH_PROVIDER=cognito, so this stays false for ChecksOps.com
- * until an approved production AWS frontend env is deployed.
+ * AWS Cognito frontend switch vs staging-only UX.
+ *
+ * Production AWS SPAs set VITE_AUTH_PROVIDER=cognito and talk to /prep.
+ * That must NOT make isAwsStaging() true on checksops.com.
  */
 
 import { resolveAwsApiBaseUrl } from "@/lib/awsApiBase";
+import {
+  isAwsAuthProvider,
+  isAwsHttpsPasskeysOrigin,
+  isAwsStagingEnv,
+} from "@/lib/awsEnvironment";
 
 export { resolveAwsApiBaseUrl } from "@/lib/awsApiBase";
+export {
+  isAwsAuthProvider,
+  isAwsHttpsPasskeysOrigin,
+  isAwsStagingEnv,
+  PRODUCTION_HOSTS,
+  STAGING_HOSTS,
+} from "@/lib/awsEnvironment";
 
 const DEFAULT_ORIGIN = "https://staging.checksops.com";
 const DEFAULT_RP_ID = "staging.checksops.com";
 
-const originFromAppUrl = (appUrl) => {
+const originFromAppUrl = (appUrl: string | undefined) => {
   const raw = String(appUrl || DEFAULT_ORIGIN).trim().replace(/\/$/, "");
   try {
     const url = new URL(raw);
@@ -24,7 +37,7 @@ const originFromAppUrl = (appUrl) => {
 
 const configured = originFromAppUrl(import.meta.env.VITE_APP_URL);
 
-/** Cognito native WebAuthn RP ID / HTTPS origin (staging default). */
+/** Cognito native WebAuthn RP ID / HTTPS origin (from VITE_APP_URL). */
 export const AWS_STAGING_HTTPS_ORIGIN = configured.origin;
 export const AWS_STAGING_RP_ID = configured.rpId;
 
@@ -33,8 +46,31 @@ export const AWS_STAGING_AUTH_SESSION_KEY = "checksops.aws.staging.auth";
 /** Mortgage Desk Cognito session — isolated from CheckOps (parity with sb-mortgage-ops-auth). */
 export const AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY = "checksops.aws.staging.auth.mortgage-ops";
 
+const runtimeHostname = () => {
+  if (typeof window === "undefined") return "";
+  try {
+    return window.location.hostname;
+  } catch {
+    return "";
+  }
+};
+
+/** Cognito + AWS API adapter. True on staging and production-prep AWS SPAs. */
+export function isAwsAuth(): boolean {
+  return isAwsAuthProvider(import.meta.env.VITE_AUTH_PROVIDER);
+}
+
+/**
+ * Staging-only UX (banner, UAT password). False on checksops.com even when
+ * the production SPA uses Cognito.
+ */
 export function isAwsStaging(): boolean {
-  return String(import.meta.env.VITE_AUTH_PROVIDER || "").toLowerCase() === "cognito";
+  if (!isAwsAuth()) return false;
+  return isAwsStagingEnv({
+    checksopsEnv: import.meta.env.VITE_CHECKSOPS_ENVIRONMENT,
+    hostname: runtimeHostname(),
+    appUrl: import.meta.env.VITE_APP_URL,
+  });
 }
 
 /**
@@ -42,33 +78,37 @@ export function isAwsStaging(): boolean {
  * Production Step 2: VITE_CHECKSOPS_API_URL=/prep (or same-origin) resolves
  * against window.location.origin so www.checksops.com stays same-origin.
  * Staging continues to use an absolute execute-api URL.
- * Does not change Cognito IdP, JWT, or WebAuthn semantics.
  */
 export function awsApiBaseUrl(): string {
-  const configured = String(import.meta.env.VITE_CHECKSOPS_API_URL || "");
+  const configuredUrl = String(import.meta.env.VITE_CHECKSOPS_API_URL || "");
   const origin = typeof window !== "undefined" ? window.location.origin : "";
-  return resolveAwsApiBaseUrl(configured, origin);
+  return resolveAwsApiBaseUrl(configuredUrl, origin);
 }
 
 /**
  * Fail-closed gate for Cognito native WebAuthn.
- * Enabled only when the browser HTTPS origin matches VITE_APP_URL
- * (default https://staging.checksops.com). HTTP S3 / localhost / unexpected
- * hosts fail closed. Production `.env.production` does not set Cognito, so
- * this stays false on ChecksOps.com until an approved AWS frontend env exists.
+ * Enabled when the browser HTTPS origin matches VITE_APP_URL (staging or production RP).
  */
-export function isAwsStagingHttpsPasskeysEnabled(): boolean {
-  if (!isAwsStaging()) return false;
+export function isAwsHttpsPasskeysEnabled(): boolean {
+  if (!isAwsAuth()) return false;
   if (typeof window === "undefined") return false;
   try {
     const { protocol, hostname, origin } = window.location;
-    if (protocol !== "https:") return false;
-    if (hostname !== AWS_STAGING_RP_ID) return false;
-    if (origin.replace(/\/$/, "") !== AWS_STAGING_HTTPS_ORIGIN) return false;
-    return true;
+    return isAwsHttpsPasskeysOrigin({
+      protocol,
+      hostname,
+      origin,
+      requiredRpId: AWS_STAGING_RP_ID,
+      requiredOrigin: AWS_STAGING_HTTPS_ORIGIN,
+    });
   } catch {
     return false;
   }
+}
+
+/** @deprecated use isAwsHttpsPasskeysEnabled — kept so existing imports compile. */
+export function isAwsStagingHttpsPasskeysEnabled(): boolean {
+  return isAwsHttpsPasskeysEnabled();
 }
 
 export const AWS_STAGING_PUBLIC_CONFIG = {

@@ -1132,24 +1132,31 @@ export const invoice = {
 };
 
 export const platformBank = {
-  requireAdmin: true,
+  requirePlatformOwner: true,
+  allowDisabledProvider: true,
   run: async ({ client, body, ctx, fetchImpl }) => {
-    if (!ctx.isAdmin) return fail('Platform owner access required', 403);
-    const platformId = ctx.moovContext.sandboxPlatformAccountId;
-    if (!platformId) return fail('Facilitator account id is not configured.', 409);
-    const action = body.action || 'list';
-    if (action === 'list' || action === 'get') {
-      const banks = await moovFetch(`/accounts/${platformId}/bank-accounts`, {
-        scopes: scopes.bankAccountsRead(platformId), fetchImpl,
-      });
-      return jsonResult({ success: true, banks, liveProviderCalled: true });
-    }
-    if (action === 'add') {
-      return bankAccountAdd.run({
-        client, mapping: { application_user_id: ctx.userId }, body, ctx: { ...ctx, tenantId: ctx.tenantId }, fetchImpl,
+    const owner = ctx.isPlatformOwner || await (await import('../../platform-authz.mjs')).isMasterOwner(client);
+    if (!owner) return fail('Platform owner access required', 403);
+    const action = String(body.action || 'status');
+    if (['add', 'initiate_micro_deposit', 'confirm_micro_deposit'].includes(action)) {
+      return fail('provider_disabled', 403, {
+        message: 'This platform-bank action would call the payment provider. Not enabled in this remediation.',
       });
     }
-    return fail('Unknown platform-bank action', 400);
+    return jsonResult({
+      success: true,
+      environment: 'sandbox',
+      platform_account_id: ctx.moovContext?.sandboxPlatformAccountId || null,
+      profile: { displayName: 'ChecksOps platform', accountType: 'platform', verificationStatus: null },
+      capabilities: [],
+      provider_bank_accounts: [],
+      methods: [],
+      warnings: [
+        'Platform owner is authorized for Banking. Live Moov calls are not invoked in this remediation.',
+      ],
+      liveProviderCalled: false,
+      setup_required: true,
+    });
   },
 };
 
@@ -1222,14 +1229,40 @@ export const bulkImportPreview = {
 };
 
 export const platformTreasury = {
-  requireAdmin: true,
-  run: async ({ ctx, fetchImpl }) => {
-    const platformId = ctx.moovContext.sandboxPlatformAccountId;
-    if (!platformId) return fail('Facilitator account id is not configured.', 409);
-    const wallets = await moovFetch(`/accounts/${platformId}/wallets`, {
-      scopes: scopes.accountRead(platformId), fetchImpl,
-    }).catch((e) => ({ error: e.message }));
-    return jsonResult({ success: true, wallets, liveProviderCalled: true });
+  requirePlatformOwner: true,
+  allowDisabledProvider: true,
+  run: async ({ client, ctx }) => {
+    const owner = ctx.isPlatformOwner || await (await import('../../platform-authz.mjs')).isMasterOwner(client);
+    if (!owner) return fail('Platform owner access required', 403);
+    return jsonResult({
+      success: true,
+      environment: 'sandbox',
+      platform_account_id: ctx.moovContext?.sandboxPlatformAccountId || null,
+      wallet: {
+        wallet_id: null,
+        available_cents: 0,
+        pending_cents: 0,
+        setup_required: true,
+        warnings: ctx.providerDisabled
+          ? ['Provider execution is disabled. Platform owner is authorized; live wallet reads are not invoked.']
+          : ['Platform wallet overview is authorized without live provider calls in this remediation.'],
+        transactions: [],
+      },
+      pnl: {
+        totals: {
+          fees_cents: 0,
+          transfer_fees_cents: 0,
+          provider_cost_cents: 0,
+          volume_cents: 0,
+          transfer_count: 0,
+          revenue_cents: 0,
+          profit_cents: 0,
+        },
+        months: [],
+        tenants: [],
+      },
+      liveProviderCalled: false,
+    });
   },
 };
 

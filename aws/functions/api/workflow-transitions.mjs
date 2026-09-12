@@ -4,6 +4,7 @@
  * (supabase/migrations/20260527170437_*.sql). Does not invent new
  * business statuses. Provider/money destinations stay denied.
  */
+import { stageForStatus } from './check-status-stage.mjs';
 
 export const INTERNAL_CREATE_STATUS = 'uploaded';
 export const INTERNAL_CREATE_STAGE = 'review';
@@ -188,7 +189,7 @@ export const evaluateTransition = (action, check = {}) => {
     ok: true,
     spec,
     nextStatus: spec.toStatus,
-    nextStage: spec.toStage,
+    nextStage: stageForStatus(spec.toStatus) || spec.toStage,
     readyForProviderExecution: spec.toStatus === READY_STATUS,
     providerExecution: false,
     financialAuthorization: false,
