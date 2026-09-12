@@ -1,3 +1,30 @@
+# Phase 1 internal-blocker remediation — inventory update
+
+**Date:** 2026-09-12  
+**Application branches:** `cursor/p1-endorsed-on-check-3bce` … `cursor/p7-branding-isolation-3bce` plus `cursor/p3b-claim-number-grant-3bce`  
+**Inventory branch:** `cursor/phase1-inventory-update-3bce`  
+**Staging API SHA after overlay:** `ei+nNC2uAykoe4liskuXS5uZgzho/PERcyG1Cwc8X6Y=`  
+**Production:** unchanged (`checksops-production-prep-api` SHA `nkn7FhOZnRUHyzC6YwbyCEaZExtJDEM8YiRFczws+G0=` at 2026-09-12T18:09:50Z). Provider execution remained off. SES production sending was not involved.
+
+Converted FAIL → PASS only with physical browser + API/DB evidence:
+
+| ID | Defect | Evidence |
+|---|---|---|
+| CC-117 | Endorsed on Check false success | `/opt/cursor/artifacts/cc117_endorsed_on_check_success.mp4` |
+| CC-047 | Review claim number persist | `/opt/cursor/artifacts/cc047_claim_success_toast.webp` |
+| CC-367 | Status override dead RPC | `/opt/cursor/artifacts/cc367_override_public_links_c1c_branding.mp4` |
+| A4-043–046 | C1C branding Freedom placeholders | `/opt/cursor/artifacts/p7_c1c_branding_condition_one.webp` |
+| X-021 | Invoice token Cognito/SQL error | `/opt/cursor/artifacts/p5_invoice_invalid_link.webp` |
+| X-029 | Pay-setup missing_cognito_token | `/opt/cursor/artifacts/p5_pay_setup_invalid_link.webp` |
+
+Not converted (no physical UI evidence this phase, or out of scope): A1-066/067/068 (API toggle+restore only), CC-368 Skip Endorsements (API only), CC-219/CC-361 S3 image UI, A5-088/099/114/220 negatives UI, A8-035 Freedom identity, P3-MOB-006.
+
+Readiness after this inventory update: **674 PASS / 1136 live = 59.3%**. FAIL 12 (1.1%). BLOCKED 450 (39.6%) of which internal 277 and external 173. BLOCKED → PASS this phase: 0. Starting internal BLOCKED 277 remains 277.
+
+Do not begin Phase 2 automatically.
+
+---
+
 # ChecksOps complete functional audit
 
 This file contains seven passes on 2026-09-11 / 2026-09-12:
