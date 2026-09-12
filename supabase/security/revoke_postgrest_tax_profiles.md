@@ -200,13 +200,15 @@ Direct `psql`, `supabase db push`, and Git merge application are **forbidden**.
 
 PostgreSQL does **not** independently expose the Supabase project ref. The wrapper proves the connection target: **direct** `db.nbcqwpysqgyxrrbgtmkw.supabase.co:5432/postgres` with **`sslmode=verify-full`** and libpq `PGSSLROOTCERT=/etc/ssl/certs/ca-certificates.crt` (Debian/Ubuntu system CA bundle, opened no-follow as a root-owned regular file). The URL cannot set `sslrootcert` or any other libpq parameter. `sslmode=require` and `sslmode=verify-ca` are refused. Pooler URLs are refused. SQL `-v expected_project_ref` is defense in depth only.
 
-This wrapper **has not been executed against hosted Supabase**. Remote execution still requires a later authorization after reviewing, at the execution environment:
+This wrapper **has not been executed against hosted Supabase**. Hosted execution is still unauthorized. Remote execution still requires a later authorization after reviewing, at the execution environment:
 
-- the exact git commit and SQL SHA-256 pins
-- the absolute `psql` binary path, ownership, permissions, version, and SHA-256
+- the exact git commit (operator supplies `CHECKSOPS_TAX_CONTAINMENT_GIT_SHA`; it does **not** default to current `HEAD`; the wrapper requires a named branch whose `git rev-parse HEAD` equals that full SHA and a clean security-package worktree; this does **not** replace human review of that commit)
+- root-owned distro `psql` (`CHECKSOPS_TAX_CONTAINMENT_PSQL`) with every parent through `/` root-owned and not group/world writable, matching SHA-256, PostgreSQL 16–18; operator-owned binaries and sticky `/tmp` parent exceptions are refused in production execution mode; the wrapper re-stats device/inode/owner/mode/size/mtime/ctime/hash immediately before every spawn
 - that the system CA bundle plus `verify-full` verifies `db.nbcqwpysqgyxrrbgtmkw.supabase.co`
 
-No direct `psql` command is authorized. The Tax/1099 unavailable/error-banner PR must ship before apply. Plaintext-at-rest remains unresolved.
+Root compromise is outside this wrapper’s threat boundary. SIGINT and SIGTERM terminate the active child, unlink the `0600` passfile, `rmdir` the `0700` temp directory, and exit nonzero. SIGKILL, kernel crash, and power loss do not guarantee credential-file cleanup; inspect leftover `0700` directories named `checksops-tax-pg-*` in the process temp dir and delete only a directory that is owned by the execution user, mode `0700`, not a symlink, and contains only `pgpass` mode `0600`. Do not recursively delete unexpected paths. Preflight and apply SQL reject any nonce that is not exactly 64 lowercase hexadecimal characters and do not emit a success sentinel for an invalid nonce.
+
+No direct `psql` command is authorized. The Tax/1099 unavailable/error-banner PR must ship before apply. Plaintext-at-rest remains unresolved. Wrapper and SQL remain unapplied.
 
 1. Review this wrapper and `supabase/security/hosted-tax-profile-containment.pins.json` at the exact git commit that will be used. Ship the Tax UI unavailable/error banner PR **before** hosted apply.
 2. Export only:
@@ -214,10 +216,11 @@ No direct `psql` command is authorized. The Tax/1099 unavailable/error-banner PR
 ```
 CHECKSOPS_TAX_CONTAINMENT_DATABASE_URL=postgresql://postgres:...@db.nbcqwpysqgyxrrbgtmkw.supabase.co:5432/postgres?sslmode=verify-full
 CHECKSOPS_TAX_CONTAINMENT_PSQL=/usr/lib/postgresql/16/bin/psql
-CHECKSOPS_TAX_CONTAINMENT_PSQL_SHA256=<sha256 of that psql binary>
+CHECKSOPS_TAX_CONTAINMENT_PSQL_SHA256=<sha256 of that root-owned psql binary>
+CHECKSOPS_TAX_CONTAINMENT_GIT_SHA=<full 40-character SHA of the reviewed commit>
 ```
 
-Never pass the URL on argv. Then:
+Never pass the URL on argv. Check out a named branch at that exact commit with a clean worktree. Then:
 
 ```
 node scripts/run-hosted-tax-profile-containment.mjs preflight
