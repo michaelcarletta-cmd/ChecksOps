@@ -1,7 +1,8 @@
 /**
  * Production pay-setup public routes go to AWS, not Lovable Edge.
  * Same-origin `/prep/public/moov-recipient-*` on checksops.com.
- * No Cognito. Bank verification stays unavailable this phase.
+ * No Cognito. Bank-verify routes exist but stay dark until the narrow
+ * `bank_verify_available` session flag is true.
  */
 import { awsApiBaseUrl } from "@/lib/awsStaging";
 
@@ -9,6 +10,8 @@ const AWS_PUBLIC_SESSION = "/public/moov-recipient-session";
 const AWS_PUBLIC_KYC = "/public/moov-recipient-kyc-update";
 const AWS_PUBLIC_TOS_TOKEN = "/public/moov-recipient-tos-token";
 const AWS_PUBLIC_TOS_ACCEPT = "/public/moov-recipient-tos-accept";
+const AWS_PUBLIC_BANK_VERIFY_INITIATE = "/public/moov-recipient-bank-verify-initiate";
+const AWS_PUBLIC_BANK_VERIFY_CONFIRM = "/public/moov-recipient-bank-verify-confirm";
 
 export function recipientPublicUrl(path: string, windowOrigin?: string): string {
   const origin = String(windowOrigin || (typeof window !== "undefined" ? window.location.origin : "")).replace(/\/$/, "");
@@ -72,4 +75,16 @@ export async function submitRecipientTos(
     token,
     terms_of_service_token: termsOfServiceToken,
   }, fetchImpl);
+}
+
+export async function initiateRecipientBankVerify(token: string, fetchImpl: typeof fetch = fetch) {
+  return postRecipientPublic(AWS_PUBLIC_BANK_VERIFY_INITIATE, { token }, fetchImpl);
+}
+
+export async function confirmRecipientBankVerify(
+  token: string,
+  code: string,
+  fetchImpl: typeof fetch = fetch,
+) {
+  return postRecipientPublic(AWS_PUBLIC_BANK_VERIFY_CONFIRM, { token, code }, fetchImpl);
 }

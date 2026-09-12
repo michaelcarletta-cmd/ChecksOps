@@ -76,18 +76,20 @@ test('ToS Drop render does not accept terms; server PATCH requires Drop token an
 });
 
 test('micro-deposit POST /verify stays unavailable on the public pay-setup page this phase', () => {
-  assert.doesNotMatch(ui, /Send verification deposit/);
-  assert.doesNotMatch(ui, /initiateBankVerify/);
-  assert.doesNotMatch(ui, /moov-recipient-bank-verify/);
-  assert.match(ui, /Bank verification is not available yet/);
+  assert.match(ui, /Send verification deposit/);
+  assert.match(ui, /initiateBankVerify/);
+  assert.match(ui, /bank_verify_available === true/);
+  assert.doesNotMatch(loadBlockSafe(ui), /initiateRecipientBankVerify/);
   assert.doesNotMatch(loadBlockSafe(ui), /moov-recipient-bank-verify/);
+  assert.match(ui, /Bank verification is not available yet/);
   assert.match(verify, /method: "POST"/);
   assert.match(verify, /\/bank-accounts\/\$\{liveBankId\}\/verify/);
   assert.match(verify, /shouldInitiateInstantMicroDeposit/);
 });
 
 test('MV code PUT /verify is not reachable from the public pay-setup page this phase', () => {
-  assert.doesNotMatch(ui, /confirmBankVerify/);
+  assert.match(ui, /submitBankVerifyCode/);
+  assert.doesNotMatch(loadBlockSafe(ui), /confirmRecipientBankVerify/);
   assert.doesNotMatch(ui, /action: "confirm"/);
   assert.match(verify, /method: "PUT"/);
   assert.match(verify, /moovInstantVerifyBody/);

@@ -203,7 +203,7 @@ test('index routes public KYC, ToS token, and ToS accept', () => {
   assert.match(INDEX, /path === '\/public\/moov-recipient-kyc-update'/);
   assert.match(INDEX, /path === '\/public\/moov-recipient-tos-token'/);
   assert.match(INDEX, /path === '\/public\/moov-recipient-tos-accept'/);
-  assert.doesNotMatch(INDEX, /moov-recipient-bank-verify/);
+  assert.doesNotMatch(HANDLER, /mode: 'recipient_bank_verify'/);
   assert.equal(requestPath({
     rawPath: '/prep/public/moov-recipient-kyc-update',
     requestContext: { stage: 'prep' },
@@ -224,10 +224,10 @@ test('SPA KYC and ToS post to AWS public routes, not Lovable invoke', () => {
   assert.doesNotMatch(UI, /functions\.invoke/);
   assert.doesNotMatch(UI, /moov-recipient-kyc-update/);
   assert.doesNotMatch(UI, /invoke\("moov-recipient-tos-accept"/);
-  assert.doesNotMatch(UI, /Send verification deposit/);
-  assert.doesNotMatch(UI, /moov-recipient-bank-verify/);
+  assert.doesNotMatch(UI, /invoke\("moov-recipient-bank-verify"/);
   assert.doesNotMatch(UI, /moov-recipient-bank-add/);
   assert.match(UI, /Bank verification is not available yet/);
+  assert.match(UI, /bank_verify_available === true/);
 });
 
 test('valid recipient KYC PATCHes the bound account and never returns SSN', async () => {

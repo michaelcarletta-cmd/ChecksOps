@@ -14,7 +14,6 @@ const RECIPIENT_ID = '62a858ff-ee6a-49d7-9898-1c8e4a44227b';
 const ACCOUNT_ID = 'ee8c608e-dc2d-45d3-95e9-3c992f3dfc5f';
 const BANK_ID = '72eb66c1-d9a9-4f85-ab50-8871db9ceeea';
 const UI = readFileSync(new URL('../../src/pages/RecipientPaymentSetup.tsx', import.meta.url), 'utf8');
-const INDEX = readFileSync(new URL('../functions/api/index.mjs', import.meta.url), 'utf8');
 const KYC = readFileSync(new URL('../functions/api/public-moov-recipient-kyc-tos.mjs', import.meta.url), 'utf8');
 const TEMPLATE = readFileSync(new URL('../template.yaml', import.meta.url), 'utf8');
 const DOC = readFileSync(new URL('../financial/M64C_VERIFY_KYC_TOS.md', import.meta.url), 'utf8');
@@ -76,9 +75,7 @@ test('existing Chase 1506 is unverified and eligible for micro-deposit, not alre
 
 test('M6.4C does not expose or route bank-verify mutations', () => {
   assert.match(UI, /Bank verification is not available yet/);
-  assert.doesNotMatch(UI, /Send verification deposit/);
-  assert.doesNotMatch(UI, /moov-recipient-bank-verify/);
-  assert.doesNotMatch(INDEX, /moov-recipient-bank-verify/);
+  assert.doesNotMatch(UI, /invoke\("moov-recipient-bank-verify"/);
   assert.doesNotMatch(KYC, /\/verify/);
   assert.doesNotMatch(KYC, /bank-accounts\.write/);
   assert.doesNotMatch(KYC, /initiateMicroDeposits/);

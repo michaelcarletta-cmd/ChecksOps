@@ -140,10 +140,26 @@ export const PRODUCTION_MOOV_READ_PATH_RE = new RegExp(
   + '(?:'
     + '|/capabilities(?:/[A-Za-z0-9._-]+)?'
     + '|/wallets(?:/[^/?#]+)?'
-    + '|/bank-accounts(?:/[^/?#]+)?'
+    + '|/bank-accounts(?:/[^/?#]+(?:/(?:verify|verification))?)?'
     + '|/payment-methods(?:/[^/?#]+)?'
     + '|/transfers/[^/?#]+'
   + ')?$',
+);
+
+const ACCOUNT_UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+
+export const PRODUCTION_MOOV_BANK_VERIFY_GET_PATH_RE = new RegExp(
+  `^/accounts/(${ACCOUNT_UUID})`
+  + '(?:'
+    + '|/capabilities(?:/[A-Za-z0-9._-]+)?'
+    + `|\/bank-accounts(?:/(${ACCOUNT_UUID})(?:/(?:verify|verification))?)?`
+  + ')?$',
+  'i',
+);
+
+export const PRODUCTION_MOOV_BANK_VERIFY_WRITE_PATH_RE = new RegExp(
+  `^/accounts/(${ACCOUNT_UUID})/bank-accounts/(${ACCOUNT_UUID})/verify$`,
+  'i',
 );
 
 export const isProductionMoovReadPath = (path) => PRODUCTION_MOOV_READ_PATH_RE.test(String(path || ''));
@@ -207,6 +223,64 @@ export const assertRecipientOnboardingWrite = ({ method = 'PATCH', path, boundAc
       { error: 'recipient_onboarding_path_denied', method: verb, path: path || null },
     );
     error.code = 'recipient_onboarding_path_denied';
+    throw error;
+  }
+};
+
+const uuidEq = (left, right) => String(left || '').trim().toLowerCase() === String(right || '').trim().toLowerCase();
+
+export const isProductionMoovRecipientBankVerifyWritePath = (path, boundAccountId, boundBankId) => {
+  const match = String(path || '').match(PRODUCTION_MOOV_BANK_VERIFY_WRITE_PATH_RE);
+  if (!match) return false;
+  return uuidEq(match[1], boundAccountId) && uuidEq(match[2], boundBankId);
+};
+
+export const isProductionMoovRecipientBankVerifyGetPath = (path, boundAccountId) => {
+  const match = String(path || '').match(PRODUCTION_MOOV_BANK_VERIFY_GET_PATH_RE);
+  if (!match) return false;
+  return uuidEq(match[1], boundAccountId);
+};
+
+export const assertRecipientBankVerifyGet = ({ method = 'GET', path, boundAccountId } = {}) => {
+  const verb = String(method || 'GET').toUpperCase();
+  if (verb !== 'GET') {
+    const error = new ProductionMoovError(
+      'Recipient bank-verify reads allow GET of the bound account and bank only',
+      403,
+      { error: 'recipient_bank_verify_method_denied', method: verb, path: path || null },
+    );
+    error.code = 'recipient_bank_verify_method_denied';
+    throw error;
+  }
+  if (!isProductionMoovRecipientBankVerifyGetPath(path, boundAccountId)) {
+    const error = new ProductionMoovError(
+      'Recipient bank-verify cannot GET this Moov path',
+      403,
+      { error: 'recipient_bank_verify_path_denied', method: verb, path: path || null },
+    );
+    error.code = 'recipient_bank_verify_path_denied';
+    throw error;
+  }
+};
+
+export const assertRecipientBankVerifyWrite = ({ method = 'POST', path, boundAccountId, boundBankId } = {}) => {
+  const verb = String(method || '').toUpperCase();
+  if (verb !== 'POST' && verb !== 'PUT') {
+    const error = new ProductionMoovError(
+      'Recipient bank-verify writes allow POST/PUT of the bound bank /verify only',
+      403,
+      { error: 'recipient_bank_verify_method_denied', method: verb, path: path || null },
+    );
+    error.code = 'recipient_bank_verify_method_denied';
+    throw error;
+  }
+  if (!isProductionMoovRecipientBankVerifyWritePath(path, boundAccountId, boundBankId)) {
+    const error = new ProductionMoovError(
+      'Recipient bank-verify writes cannot target this Moov path',
+      403,
+      { error: 'recipient_bank_verify_path_denied', method: verb, path: path || null },
+    );
+    error.code = 'recipient_bank_verify_path_denied';
     throw error;
   }
 };
@@ -302,9 +376,10 @@ export async function productionMoovFetch({
   fetchImpl = fetch,
   mode,
   boundAccountId = null,
+  boundBankId = null,
 } = {}) {
-  if (mode !== 'read' && mode !== 'execute' && mode !== 'recipient_onboarding') {
-    throw new ProductionMoovError('Moov HTTP mode must be read, execute, or recipient_onboarding', 500, { error: 'moov_mode_required' });
+  if (mode !== 'read' && mode !== 'execute' && mode !== 'recipient_onboarding' && mode !== 'recipient_bank_verify') {
+    throw new ProductionMoovError('Moov HTTP mode must be read, execute, recipient_onboarding, or recipient_bank_verify', 500, { error: 'moov_mode_required' });
   }
   const verb = String(method || 'GET').toUpperCase();
   if (mode === 'read') {
@@ -315,6 +390,13 @@ export async function productionMoovFetch({
       assertReadOnlyMoovRequest({ method: verb, path });
     } else {
       assertRecipientOnboardingWrite({ method: verb, path, boundAccountId });
+    }
+  }
+  if (mode === 'recipient_bank_verify') {
+    if (verb === 'GET') {
+      assertRecipientBankVerifyGet({ method: verb, path, boundAccountId });
+    } else {
+      assertRecipientBankVerifyWrite({ method: verb, path, boundAccountId, boundBankId });
     }
   }
   assertProductionCredentials(credentials, { mode: mode === 'execute' ? 'execute' : 'read' });

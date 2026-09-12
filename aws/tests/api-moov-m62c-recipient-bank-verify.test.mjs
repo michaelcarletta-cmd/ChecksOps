@@ -158,9 +158,10 @@ test('public recipient verify implementation is provider-authoritative and scope
   assert.doesNotMatch(verifySrc, /\/transfers/);
   assert.match(session, /bank_micro_deposits_initiated/);
   assert.match(session, /bank_should_initiate/);
-  assert.doesNotMatch(ui, /moov-recipient-bank-verify/);
-  assert.doesNotMatch(ui, /Send verification deposit/);
+  assert.doesNotMatch(ui, /invoke\("moov-recipient-bank-verify"/);
+  assert.doesNotMatch(ui, /functions\.invoke/);
   assert.match(ui, /Bank verification is not available yet/);
+  assert.match(ui, /bank_verify_available === true/);
   assert.doesNotMatch(ui, /bank_account_id:/);
   assert.match(bankAdd, /shouldResumeExistingBank/);
   assert.match(bankAdd, /moov_bank_list_failed/);
