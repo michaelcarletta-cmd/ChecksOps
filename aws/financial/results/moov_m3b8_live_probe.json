@@ -1,0 +1,391 @@
+{
+  "captured_at": "2026-09-10T10:46:05.701Z",
+  "phase": "M3b.8",
+  "flags": {
+    "AWS_PROVIDER_LIVE_READS_ENABLED": "true",
+    "AWS_MOOV_ENABLED": "false",
+    "AWS_PROVIDER_EXECUTION_ENABLED": "false",
+    "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": "false",
+    "AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED": "false"
+  },
+  "lambda": {
+    "last_modified": "2026-09-10T10:45:47.000+0000",
+    "code_sha": "ItJiyRVnWJZ2DIUce3ZhalFn3LrZrkKMSXdpP6MJo50=",
+    "description": "m3b1-awscurrent-cachebust-20260910T0123Z"
+  },
+  "money_routes": {
+    "moov-transfer-create": {
+      "http": 403,
+      "error": "production_execution_blocked",
+      "liveProviderCalled": false
+    },
+    "moov-disburse": {
+      "http": 403,
+      "error": "production_execution_blocked",
+      "liveProviderCalled": false
+    },
+    "moov-wallet-fund": {
+      "http": 403,
+      "error": "provider_disabled"
+    }
+  },
+  "sql72": {
+    "status": "NOT_APPLIED",
+    "message": "column \"provider_http_attempted_at\" does not exist"
+  },
+  "lovable": {
+    "productionSupabaseChanged": false,
+    "productionWebhooksRedirected": false
+  },
+  "spoof": {
+    "http": 400,
+    "error": "untrusted_provider_config",
+    "liveProviderCalled": false
+  },
+  "c1c": {
+    "http": 403,
+    "error": "cross_tenant_denied",
+    "liveProviderCalled": false
+  },
+  "probe_http": 200,
+  "probe_error": null,
+  "liveProviderCalled": true,
+  "mutated": false,
+  "created": false,
+  "productionExecution": false,
+  "productionRead": true,
+  "extra_reads_skipped": false,
+  "account_get_only": false,
+  "live_gets": {
+    "account": {
+      "ok": true,
+      "status": 200,
+      "error": null,
+      "www_authenticate": null,
+      "request_id": null,
+      "body_keys": null,
+      "provider_error": null
+    },
+    "capabilities": {
+      "ok": true,
+      "status": 200,
+      "error": null,
+      "www_authenticate": null,
+      "request_id": null,
+      "body_keys": null,
+      "provider_error": null
+    },
+    "wallets": {
+      "ok": true,
+      "status": 200,
+      "error": null,
+      "www_authenticate": null,
+      "request_id": null,
+      "body_keys": null,
+      "provider_error": null
+    },
+    "wallet": {
+      "ok": true,
+      "status": 200,
+      "error": null,
+      "www_authenticate": null,
+      "request_id": null,
+      "body_keys": null,
+      "provider_error": null
+    },
+    "banks": {
+      "ok": true,
+      "status": 200,
+      "error": null,
+      "www_authenticate": null,
+      "request_id": null,
+      "body_keys": null,
+      "provider_error": null
+    },
+    "payment_methods": {
+      "ok": true,
+      "status": 200,
+      "error": null,
+      "www_authenticate": null,
+      "request_id": null,
+      "body_keys": null,
+      "provider_error": null
+    }
+  },
+  "live_account": {
+    "account_id_fp": "60922058…de96",
+    "matches_expected_freedom_id": true,
+    "display_name": "Freedom Adjustment LLC",
+    "mode": "production",
+    "account_type": "business",
+    "verification_status": "verified",
+    "disabled": false,
+    "restricted": false
+  },
+  "verification": {
+    "account_status": null,
+    "account_type": "business",
+    "mode": "production",
+    "disabled": false,
+    "restricted": false,
+    "kyc": "verified",
+    "kyb": "business_profile_present",
+    "tos": {
+      "accepted": true,
+      "accepted_at": "2026-08-28T18:36:52.907203Z"
+    },
+    "requirements": {
+      "present": false,
+      "action_required": null
+    }
+  },
+  "capabilities": {
+    "send_funds": {
+      "id": "send-funds",
+      "status": "enabled",
+      "enabled": true
+    },
+    "collect_funds": {
+      "id": "collect-funds",
+      "status": "enabled",
+      "enabled": true
+    },
+    "wallet_balance": {
+      "id": "wallet",
+      "status": "enabled",
+      "enabled": true
+    },
+    "transfers": {
+      "id": "transfers",
+      "status": "enabled",
+      "enabled": true
+    },
+    "same_day_ach": null,
+    "all": [
+      {
+        "id": "collect-funds",
+        "status": "enabled",
+        "enabled": true
+      },
+      {
+        "id": "send-funds",
+        "status": "enabled",
+        "enabled": true
+      },
+      {
+        "id": "transfers",
+        "status": "enabled",
+        "enabled": true
+      },
+      {
+        "id": "wallet",
+        "status": "enabled",
+        "enabled": true
+      }
+    ],
+    "pending": [],
+    "disabled": [],
+    "errored": []
+  },
+  "wallet": {
+    "status": "active",
+    "wallet_id_present": true,
+    "available_cents": 0,
+    "pending_cents": null,
+    "available_cents_present": true,
+    "pending_cents_present": false
+  },
+  "banks": [
+    {
+      "status": "verified",
+      "verification_status": "verified",
+      "holder_name_present": true,
+      "last4": "4573"
+    }
+  ],
+  "payment_methods": [
+    {
+      "status": null,
+      "paymentMethodType": "ach-debit-collect",
+      "ach_send_eligible": false,
+      "ach_collect_eligible": true
+    },
+    {
+      "status": null,
+      "paymentMethodType": "ach-credit-standard",
+      "ach_send_eligible": true,
+      "ach_collect_eligible": false
+    },
+    {
+      "status": null,
+      "paymentMethodType": "ach-credit-same-day",
+      "ach_send_eligible": true,
+      "ach_collect_eligible": false
+    },
+    {
+      "status": null,
+      "paymentMethodType": "moov-wallet",
+      "ach_send_eligible": false,
+      "ach_collect_eligible": false
+    },
+    {
+      "status": null,
+      "paymentMethodType": "ach-debit-fund",
+      "ach_send_eligible": false,
+      "ach_collect_eligible": true
+    }
+  ],
+  "sender_readiness": {
+    "verdict": "SENDER_READY",
+    "reasons": []
+  },
+  "inventory": {
+    "sender": {
+      "verdict": "READY_AS_SENDER",
+      "reasons": [],
+      "blocked": [],
+      "action": [],
+      "partial": []
+    },
+    "recipients": {
+      "verdict": "RECIPIENT_NOT_CONFIRMED",
+      "production_count": 3,
+      "ready_count": 0,
+      "awaiting_bank_count": 3,
+      "sandbox_count": 1,
+      "c1c_used": false,
+      "onboarded": false
+    }
+  },
+  "local_recipients": [
+    {
+      "environment": "production",
+      "onboarding_status": "awaiting_bank",
+      "recipient_type": "individual",
+      "bank_linked": true,
+      "last4": "1506",
+      "provider_account_id_fp": "d1adebb2…12db",
+      "provider_account_id_present": true
+    },
+    {
+      "environment": "production",
+      "onboarding_status": "awaiting_bank",
+      "recipient_type": "individual",
+      "bank_linked": true,
+      "last4": "1506",
+      "provider_account_id_fp": "bfeb279f…eecd",
+      "provider_account_id_present": true
+    },
+    {
+      "environment": "production",
+      "onboarding_status": "awaiting_bank",
+      "recipient_type": "individual",
+      "bank_linked": true,
+      "last4": "1506",
+      "provider_account_id_fp": "ee8c608e…fc5f",
+      "provider_account_id_present": true
+    },
+    {
+      "environment": "sandbox",
+      "onboarding_status": "awaiting_bank",
+      "recipient_type": "individual",
+      "bank_linked": false,
+      "last4": null,
+      "provider_account_id_fp": "f190ea55…6184",
+      "provider_account_id_present": true
+    }
+  ],
+  "local_payment_methods": [
+    {
+      "environment": "production",
+      "verification_status": "verified",
+      "connection_status": "connected",
+      "can_send": true,
+      "can_receive": true,
+      "external_recipient_linked": false
+    }
+  ],
+  "rds_recipients": {
+    "http": 200,
+    "error": null,
+    "rows": [
+      {
+        "id": "3269bd10…2562",
+        "tenant_id": "2eff5f1a…f42a",
+        "provider": "moov",
+        "environment": "sandbox",
+        "onboarding_status": "awaiting_bank",
+        "recipient_type": "individual",
+        "provider_account_id": "f190ea55…6184",
+        "bank_linked_at": null,
+        "provider_last_four": null
+      },
+      {
+        "id": "4c1ced8c…ab38",
+        "tenant_id": "2eff5f1a…f42a",
+        "provider": "moov",
+        "environment": "production",
+        "onboarding_status": "awaiting_bank",
+        "recipient_type": "individual",
+        "provider_account_id": "bfeb279f…eecd",
+        "bank_linked_at": "2026-08-31T20:44:55.828Z",
+        "provider_last_four": "1506"
+      },
+      {
+        "id": "53a2be7e…78c5",
+        "tenant_id": "2eff5f1a…f42a",
+        "provider": "moov",
+        "environment": "production",
+        "onboarding_status": "awaiting_bank",
+        "recipient_type": "individual",
+        "provider_account_id": "d1adebb2…12db",
+        "bank_linked_at": "2026-08-30T19:13:38.421Z",
+        "provider_last_four": "1506"
+      },
+      {
+        "id": "62a858ff…227b",
+        "tenant_id": "2eff5f1a…f42a",
+        "provider": "moov",
+        "environment": "production",
+        "onboarding_status": "awaiting_bank",
+        "recipient_type": "individual",
+        "provider_account_id": "ee8c608e…fc5f",
+        "bank_linked_at": "2026-09-02T15:05:35.512Z",
+        "provider_last_four": "1506"
+      }
+    ]
+  },
+  "rds_methods": {
+    "http": 200,
+    "error": null,
+    "rows": [
+      {
+        "id": "8eb5b26e…14dd",
+        "tenant_id": "2eff5f1a…f42a",
+        "provider": "moov",
+        "environment": "production",
+        "verification_status": "verified",
+        "connection_status": "connected",
+        "can_send": true,
+        "can_receive": true,
+        "external_recipient_id": null,
+        "last_four": "4573"
+      }
+    ]
+  },
+  "rds_transfers": {
+    "http": 200,
+    "error": null,
+    "count": 0,
+    "amount_cents_sum": 0
+  },
+  "oauth": {
+    "http": 200,
+    "has_access_token": true,
+    "origin_sent": "https://checksops.com",
+    "cache_hit": false,
+    "aid_fp": "694a303b…3878",
+    "caid_fp": "41cb5d67…2208",
+    "platform_account_id_configured": false
+  }
+}

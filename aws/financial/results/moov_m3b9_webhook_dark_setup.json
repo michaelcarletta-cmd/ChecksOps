@@ -1,0 +1,41 @@
+{
+  "phase": "M3b.9",
+  "captured_at": "2026-09-10T10:52:51.517Z",
+  "aws_webhook_endpoint": "https://checksops.com/prep/webhooks/moov",
+  "handler_readiness": "PASS",
+  "signature_verification": "PASS",
+  "dark_applied_false": "PASS",
+  "replay_protection": "PASS",
+  "multiple_webhooks_supported": "YES",
+  "registration_method": "BOTH",
+  "human_action_required": "Dashboard New webhook for the AWS URL; store MOOV_WEBHOOK_SECRET in checksops/production/provider; do not paste the secret into chat; do not edit the Lovable webhook",
+  "webhook_registered": false,
+  "lovable_changed": false,
+  "secrets_written": false,
+  "moov_changed": false,
+  "unsigned_cloudfront_post": 401,
+  "unsigned_execute_api_post": 403,
+  "origin_verify_require": true,
+  "MOOV_WEBHOOK_SECRET_present": false,
+  "MOOV_PLATFORM_ACCOUNT_ID_present": false,
+  "AWS_PROVIDER_WEBHOOK_DRY_RUN": true,
+  "flags": {
+    "AWS_PROVIDER_LIVE_READS_ENABLED": true,
+    "AWS_MOOV_ENABLED": false,
+    "AWS_PROVIDER_EXECUTION_ENABLED": false,
+    "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": false,
+    "AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED": false
+  },
+  "sql72": "NOT_APPLIED",
+  "money_moved": 0,
+  "minimum_event_subscriptions": [
+    "transfer.created",
+    "transfer.updated",
+    "account.updated",
+    "capability.updated",
+    "bankAccount.created",
+    "bankAccount.updated",
+    "paymentMethod.enabled",
+    "paymentMethod.disabled"
+  ]
+}
