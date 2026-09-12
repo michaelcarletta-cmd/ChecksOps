@@ -274,8 +274,8 @@ BEGIN
       WHERE p.polrelid = rel_oid
         AND p.polname = 'tenant members read recipient_tax_profiles'
         AND p.polcmd = 'r'
-        AND array_length(p.polroles, 1) = 1
-        AND p.polroles = ARRAY['authenticated'::regrole]
+        AND cardinality(p.polroles) = 1
+        AND pg_get_userbyid(p.polroles[1]) = 'authenticated'
         AND btrim(regexp_replace(regexp_replace(lower(replace(replace(coalesce(pg_get_expr(p.polqual, p.polrelid), ''), 'public.', ''), '"', '')), '[()]', '', 'g'), '[[:space:]]+', ' ', 'g'))
             = expected_using_norm
         AND pg_get_expr(p.polwithcheck, p.polrelid) IS NULL
@@ -285,8 +285,8 @@ BEGIN
       WHERE p.polrelid = rel_oid
         AND p.polname = 'tenant members insert recipient_tax_profiles'
         AND p.polcmd = 'a'
-        AND array_length(p.polroles, 1) = 1
-        AND p.polroles = ARRAY['authenticated'::regrole]
+        AND cardinality(p.polroles) = 1
+        AND pg_get_userbyid(p.polroles[1]) = 'authenticated'
         AND pg_get_expr(p.polqual, p.polrelid) IS NULL
         AND btrim(regexp_replace(regexp_replace(lower(replace(replace(coalesce(pg_get_expr(p.polwithcheck, p.polrelid), ''), 'public.', ''), '"', '')), '[()]', '', 'g'), '[[:space:]]+', ' ', 'g'))
             = expected_using_norm
@@ -296,8 +296,8 @@ BEGIN
       WHERE p.polrelid = rel_oid
         AND p.polname = 'tenant members update recipient_tax_profiles'
         AND p.polcmd = 'w'
-        AND array_length(p.polroles, 1) = 1
-        AND p.polroles = ARRAY['authenticated'::regrole]
+        AND cardinality(p.polroles) = 1
+        AND pg_get_userbyid(p.polroles[1]) = 'authenticated'
         AND btrim(regexp_replace(regexp_replace(lower(replace(replace(coalesce(pg_get_expr(p.polqual, p.polrelid), ''), 'public.', ''), '"', '')), '[()]', '', 'g'), '[[:space:]]+', ' ', 'g'))
             = expected_using_norm
         AND btrim(regexp_replace(regexp_replace(lower(replace(replace(coalesce(pg_get_expr(p.polwithcheck, p.polrelid), ''), 'public.', ''), '"', '')), '[()]', '', 'g'), '[[:space:]]+', ' ', 'g'))
@@ -308,8 +308,8 @@ BEGIN
       WHERE p.polrelid = rel_oid
         AND p.polname = 'tenant members delete recipient_tax_profiles'
         AND p.polcmd = 'd'
-        AND array_length(p.polroles, 1) = 1
-        AND p.polroles = ARRAY['authenticated'::regrole]
+        AND cardinality(p.polroles) = 1
+        AND pg_get_userbyid(p.polroles[1]) = 'authenticated'
         AND btrim(regexp_replace(regexp_replace(lower(replace(replace(coalesce(pg_get_expr(p.polqual, p.polrelid), ''), 'public.', ''), '"', '')), '[()]', '', 'g'), '[[:space:]]+', ' ', 'g'))
             = expected_using_norm
         AND pg_get_expr(p.polwithcheck, p.polrelid) IS NULL

@@ -6,11 +6,11 @@
   "files": {
     "preflight": {
       "path": "supabase/security/preflight_gate_revoke_postgrest_tax_profiles.sql",
-      "sha256": "d90b4af974878ee1bd471b0ec3ac3d9e4466f8ddf96b5e6580d00e4bbd14418f"
+      "sha256": "525c379ee50db9069dd712be40c9a71620f3fb422ffe950f53fae57072a03ba1"
     },
     "apply": {
       "path": "supabase/security/unapplied-do-not-run/NOT_APPLIED_revoke_postgrest_tax_profiles.sql",
-      "sha256": "96a7fd03f415d16db9630661211aaea92eafb8fb81dd8b733889e7c2a407f4c0"
+      "sha256": "f57af604aaa02519e51e2725a28700ea968636263c851cb2b17fdc2227a0af3e"
     }
   },
   "historical_migrations": [

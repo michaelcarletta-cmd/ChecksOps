@@ -61,6 +61,12 @@ export function verifyPinnedSqlFiles(repoRoot = ROOT, pins = loadPins(repoRoot))
     if (spec.path.includes('supabase/migrations')) {
       throw sanitizedError('pinned SQL must not live under supabase/migrations');
     }
+    if (key === 'preflight' && spec.path !== 'supabase/security/preflight_gate_revoke_postgrest_tax_profiles.sql') {
+      throw sanitizedError('pinned preflight path is not the reviewed preflight file');
+    }
+    if (key === 'apply' && spec.path !== 'supabase/security/unapplied-do-not-run/NOT_APPLIED_revoke_postgrest_tax_profiles.sql') {
+      throw sanitizedError('pinned apply path is not the reviewed NOT_APPLIED_revoke_postgrest_tax_profiles.sql file');
+    }
     const digest = sha256File(full);
     if (digest !== spec.sha256) {
       throw sanitizedError(`pinned ${key} SQL SHA-256 mismatch`);
