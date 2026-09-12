@@ -2600,7 +2600,9 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
         const { error: bErr } = await supabase.storage
           .from("claim-files")
           .upload(backPath, backFile);
-        if (bErr) throw new Error(`Back upload failed: ${bErr.message}`);
+        if (bErr) {
+          throw new Error(`Back upload failed: ${bErr.message}`);
+        }
       }
 
       if (aws && check) {
@@ -2611,7 +2613,11 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
             back_image_path: backPath,
           })
           .eq("id", check.id);
-        if (pathErr) throw new Error(pathErr.message);
+        if (pathErr) {
+          throw new Error(
+            pathErr.message || "Image uploaded but could not be attached to the check. Retry replace/reupload.",
+          );
+        }
       } else {
       // If loaded inside Freedom CRM (?embed=1&freedom_claim_id=...), tag the
       // check so Freedom can later list it via partner-checks-by-claim.

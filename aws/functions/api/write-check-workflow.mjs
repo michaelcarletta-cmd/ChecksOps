@@ -1,6 +1,27 @@
 import { ident } from './data.mjs';
 import { WRITE_ALLOWLIST } from './write-allowlist.mjs';
-import { isCheckScopedPathFor, normalizePath } from './storage-paths.mjs';
+import { isCheckScopedPathFor, normalizePath, s3KeyFor } from './storage-paths.mjs';
+
+const filesBucket = () => String(process.env.FILES_BUCKET || '').trim();
+
+const claimFileObjectExists = async (rel) => {
+  const bucket = filesBucket();
+  if (!bucket) return true;
+  const key = s3KeyFor('claim-files', rel);
+  if (!key) return false;
+  const { HeadObjectCommand, S3Client } = await import('@aws-sdk/client-s3');
+  const s3 = new S3Client({
+    region: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1',
+  });
+  try {
+    await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+    return true;
+  } catch (error) {
+    const status = error?.$metadata?.httpStatusCode || error?.statusCode;
+    if (status === 404 || error?.name === 'NotFound' || error?.Code === 'NotFound') return false;
+    throw error;
+  }
+};
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -296,6 +317,27 @@ const executeIntakeUpdate = async ({ client, values, filters }) => {
       if (path.error) return path;
       if (path.skip) delete nextValues[column];
       else nextValues[column] = path.value;
+    }
+  }
+  for (const column of IMAGE_PATH_COLUMNS) {
+    const rel = nextValues[column];
+    if (!rel) continue;
+    let exists;
+    try {
+      exists = await claimFileObjectExists(rel);
+    } catch {
+      return {
+        error: 'object_not_in_s3',
+        field: column,
+        message: 'Could not confirm the uploaded image is stored. Retry the upload.',
+      };
+    }
+    if (!exists) {
+      return {
+        error: 'object_not_in_s3',
+        field: column,
+        message: 'Image object is not available in storage. Upload the file before saving the path.',
+      };
     }
   }
   if (!Object.keys(nextValues).length) {

@@ -79,6 +79,9 @@ export function createAwsStorageAdapter(opts: { getToken?: TokenGetter } = {}) {
   const from = (bucket: string) => {
     const signOne = async (rawPath: string, expiresIn = 300, download?: string | boolean) => {
       const path = toStorageObjectPath(rawPath, bucket) || rawPath;
+      if (!path || !String(path).trim() || /pending_front/i.test(String(path))) {
+        return { data: null, error: storageError("object_not_in_s3", 404) };
+      }
       const token = await getToken();
       if (!token) {
         return { data: null, error: storageError("JWT expired", 401) };
