@@ -82,6 +82,35 @@ const appUrl = () => String(
   process.env.APP_PUBLIC_URL || process.env.SIGN_BASE_URL || 'https://staging.checksops.com',
 ).replace(/\/$/, '');
 
+const execPublicWriteRpc = async (requestClient, sql, params, deps = {}) => {
+  const run = async (client, commit) => {
+    if (commit) {
+      await client.query("SELECT set_config('default_transaction_read_only', 'off', false)");
+      await client.query('BEGIN');
+      await client.query('SET TRANSACTION READ WRITE');
+    }
+    try {
+      const result = await client.query(sql, params);
+      if (commit) await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      if (commit) {
+        try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+      }
+      throw error;
+    }
+  };
+  if (deps.client) return run(requestClient, false);
+  const opened = await publicDb(true, {});
+  try {
+    return await run(opened.client, true);
+  } finally {
+    if (opened.owned) {
+      try { await opened.client.end(); } catch { /* ignore */ }
+    }
+  }
+};
+
 const publicDb = async (write, deps = {}) => {
   if (deps.client) return { client: deps.client, owned: false };
   const loadCredentials = deps.loadDatabaseCredentials || loadDatabaseCredentials;
@@ -92,6 +121,9 @@ const publicDb = async (write, deps = {}) => {
     : buildClientConfig(credentials, { queryTimeoutMillis: 8000 });
   const client = createClient(config);
   await client.connect();
+  if (write) {
+    await client.query("SELECT set_config('default_transaction_read_only', 'off', false)");
+  }
   return { client, owned: true };
 };
 
@@ -379,7 +411,7 @@ export const runGetEndorsementData = async (client, token, spoof) => {
   };
 };
 
-export const runSubmitEndorsement = async (client, event, body, spoof) => {
+export const runSubmitEndorsement = async (client, event, body, spoof, deps = {}) => {
   const token = String(body.token || '').trim();
   if (!token) return { ok: false, statusCode: 400, error: 'Token required', spoofFieldsIgnored: spoof };
   if (body.eSignConsentAccepted !== true) {
@@ -400,11 +432,13 @@ export const runSubmitEndorsement = async (client, event, body, spoof) => {
   const payeeId = body.payeeId || body.payee_id || null;
   let doc;
   try {
-    doc = readRpcDoc(await client.query(
+    doc = readRpcDoc(await execPublicWriteRpc(
+      client,
       `SELECT public.aws_public_submit_endorsement(
          $1, $2, $3, $4, $5, $6, $7::uuid, $8::uuid
        ) AS doc`,
       [token, signatureImageUrl, consent, ip, ua, newToken, checkId, payeeId],
+      deps,
     ));
   } catch (error) {
     return {
@@ -474,7 +508,7 @@ export const runSubmitEndorsement = async (client, event, body, spoof) => {
   };
 };
 
-export const runRejectEndorsement = async (client, event, body, spoof) => {
+export const runRejectEndorsement = async (client, event, body, spoof, deps = {}) => {
   const token = String(body.token || '').trim();
   if (!token) return { ok: false, statusCode: 400, error: 'Token required', spoofFieldsIgnored: spoof };
   const newToken = rotateToken();
@@ -482,9 +516,11 @@ export const runRejectEndorsement = async (client, event, body, spoof) => {
   const ua = userAgentFromEvent(event);
   let doc;
   try {
-    doc = readRpcDoc(await client.query(
+    doc = readRpcDoc(await execPublicWriteRpc(
+      client,
       'SELECT public.aws_public_reject_endorsement($1, $2, $3, $4, $5) AS doc',
       [token, body.reason || null, ip, ua, newToken],
+      deps,
     ));
   } catch (error) {
     return {
@@ -544,9 +580,9 @@ export const runPublicEndorsement = async (event, deps = {}) => {
     if (action === 'get_endorsement_data') {
       result = await runGetEndorsementData(client, String(body.token || '').trim(), spoof);
     } else if (action === 'submit_endorsement') {
-      result = await runSubmitEndorsement(client, event, body, spoof);
+      result = await runSubmitEndorsement(client, event, body, spoof, { ...deps, _requestClient: client });
     } else if (action === 'reject_endorsement') {
-      result = await runRejectEndorsement(client, event, body, spoof);
+      result = await runRejectEndorsement(client, event, body, spoof, { ...deps, _requestClient: client });
     } else {
       result = { ok: false, statusCode: 400, error: 'Unknown action', spoofFieldsIgnored: spoof };
     }
