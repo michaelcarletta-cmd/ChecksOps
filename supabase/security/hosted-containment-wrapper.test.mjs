@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -9,22 +10,32 @@ import {
   APPLY_CONFIRM_PHRASE,
   AUTH_FLAG,
   EXEC_TIMEOUT_MS,
+  GIT_SHA_ENV,
   PREFLIGHT_SENTINEL_PREFIX,
   APPLY_SENTINEL_PREFIX,
   PSQL_PATH_ENV,
   PSQL_SHA_ENV,
+  PSQL_PRODUCTION_TRUST,
+  TEST_PSQL_TRUST,
   REQUIRED_SSLMODE,
   SYSTEM_CA_BUNDLE,
   URL_ENV,
   VERSION_TIMEOUT_MS,
+  STALE_PASSDIR_MIN_AGE_MS,
   buildChildEnv,
+  cleanupStalePassDirs,
+  handleExecutionSignal,
   parseCliArgs,
   parseExactSentinel,
+  removePassfile,
   runCli,
   sanitizeText,
   sha256Bytes,
   validateConnectionUrl,
+  validatePinsObject,
   verifyPinnedSqlFiles,
+  verifyPsqlBinary,
+  verifyRepoState,
 } from '../../scripts/run-hosted-tax-profile-containment.mjs';
 import { loadPins } from '../../scripts/check-recipient-tax-profile-migrations.mjs';
 
@@ -34,8 +45,10 @@ const REF = 'nbcqwpysqgyxrrbgtmkw';
 const UNUSED = 'sqyyvpaymashtdwjjmku';
 const PRE_NONCE = 'a'.repeat(64);
 const APPLY_NONCE = 'b'.repeat(64);
+const STUB_GIT_SHA = 'a'.repeat(40);
 
 const directUrl = `postgresql://postgres:${SECRET}@db.${REF}.supabase.co:5432/postgres?sslmode=verify-full`;
+const DISTRO_PSQL = '/usr/lib/postgresql/16/bin/psql';
 
 function dummyPsql() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rtp-psql-'));
@@ -47,6 +60,25 @@ function dummyPsql() {
   return { dir, bin, digest };
 }
 
+function stubGit(expectedSha = STUB_GIT_SHA, extra = {}) {
+  return (repoRoot, args) => {
+    if (typeof extra.gitRun === 'function') {
+      const override = extra.gitRun(repoRoot, args);
+      if (override) return override;
+    }
+    const cmd = args.join(' ');
+    if (cmd === 'rev-parse --is-inside-work-tree') return { status: 0, stdout: 'true\n', stderr: '' };
+    if (cmd === 'rev-parse --show-toplevel') return { status: 0, stdout: `${path.resolve(repoRoot)}\n`, stderr: '' };
+    if (cmd === 'symbolic-ref -q HEAD') {
+      if (extra.detached) return { status: 1, stdout: '', stderr: '' };
+      return { status: 0, stdout: 'refs/heads/review\n', stderr: '' };
+    }
+    if (cmd === 'rev-parse HEAD') return { status: 0, stdout: `${extra.headSha ?? expectedSha}\n`, stderr: '' };
+    if (cmd.startsWith('status ')) return { status: 0, stdout: extra.statusStdout ?? '', stderr: '' };
+    return { status: 1, stdout: '', stderr: 'unexpected git invocation' };
+  };
+}
+
 function operatorEnv(extra = {}) {
   const psql = extra.psql || dummyPsql();
   extra._psql = extra._psql || psql;
@@ -54,6 +86,7 @@ function operatorEnv(extra = {}) {
     [URL_ENV]: extra.url ?? directUrl,
     [PSQL_PATH_ENV]: extra.psqlPath ?? psql.bin,
     [PSQL_SHA_ENV]: extra.psqlSha ?? psql.digest,
+    [GIT_SHA_ENV]: extra.gitSha ?? STUB_GIT_SHA,
     ...extra.env,
   };
 }
@@ -70,6 +103,7 @@ function capturedRun(argv, extra = {}) {
   const psql = extra.psql || dummyPsql();
   const env = extra.env || operatorEnv({ psql, url: extra.url, env: extra.extraEnv });
   if (!env[URL_ENV]) env[URL_ENV] = extra.url ?? directUrl;
+  if (!env[GIT_SHA_ENV]) env[GIT_SHA_ENV] = STUB_GIT_SHA;
   let out = '';
   let err = '';
   const calls = [];
@@ -104,6 +138,15 @@ function capturedRun(argv, extra = {}) {
     stdout: { write: (s) => { out += s; } },
     stderr: { write: (s) => { err += s; } },
     randomNonce: extra.randomNonce || (() => (nonceGen++ === 0 ? PRE_NONCE : APPLY_NONCE)),
+    psqlTrust: extra.psqlTrust ?? TEST_PSQL_TRUST,
+    gitRun: extra.gitRun ?? stubGit(env[GIT_SHA_ENV] || STUB_GIT_SHA, extra),
+    installSignals: extra.installSignals ?? (() => () => {}),
+    exitImpl: extra.exitImpl || ((code) => {
+      const err = new Error('operator wrapper interrupted');
+      err.sanitized = true;
+      err.exitCode = code;
+      throw err;
+    }),
   });
   return { code, out, err, combined: `${out}\n${err}`, calls, env, psql };
 }
@@ -651,4 +694,296 @@ test('hash-then-replace during apply uses original hashed bytes for both phases'
   });
   assert.equal(result.code, 0);
   fs.rmSync(tmp, { recursive: true, force: true });
+});
+
+test('operator-owned psql is rejected in real execution mode', () => {
+  const result = capturedRun(['preflight'], { psqlTrust: PSQL_PRODUCTION_TRUST });
+  assert.equal(result.code, 1);
+  assert.match(result.err, /file owner is not root/);
+  assert.equal(result.calls.filter((c) => !(c.args || []).includes('--version')).length, 0);
+
+  const flagged = capturedRun(['preflight', '--psql-trust=test'], { psqlTrust: PSQL_PRODUCTION_TRUST });
+  assert.equal(flagged.code, 1);
+  assert.match(flagged.err, /unrecognized flag/);
+});
+
+test('root-owned distro psql with root-owned parents passes trust checks', () => {
+  const digest = createHash('sha256').update(fs.readFileSync(DISTRO_PSQL)).digest('hex');
+  const handle = verifyPsqlBinary({
+    [PSQL_PATH_ENV]: DISTRO_PSQL,
+    [PSQL_SHA_ENV]: digest,
+  }, spawnSync, { trust: PSQL_PRODUCTION_TRUST, useProcFd: false });
+  assert.equal(handle.path, DISTRO_PSQL);
+  assert.equal(handle.identity.uid, 0);
+  assert.equal(handle.identity.digest, digest);
+  fs.closeSync(handle.fd);
+});
+
+test('inode or hash change between validation and spawn aborts before apply', () => {
+  const psql = dummyPsql();
+  const result = capturedRun(['apply', AUTH_FLAG, `--confirm=${APPLY_CONFIRM_PHRASE}`], {
+    psql,
+    spawnImpl: (bin, args) => {
+      if (args.includes('--version')) {
+        fs.unlinkSync(psql.bin);
+        fs.writeFileSync(psql.bin, '#!/bin/sh\necho hijacked\n');
+        fs.chmodSync(psql.bin, 0o755);
+        return { status: 0, stdout: 'psql (PostgreSQL) 16.15\n', stderr: '' };
+      }
+      return { status: 0, stdout: 'should-not-run\n', stderr: '' };
+    },
+  });
+  assert.equal(result.code, 1);
+  assert.match(result.err, /identity changed after validation/);
+  assert.equal(result.calls.filter((c) => nonceFromArgs(c.args).kind === 'apply').length, 0);
+  assert.equal(result.calls.filter((c) => nonceFromArgs(c.args).kind === 'preflight').length, 0);
+});
+
+test('fake psql replacement cannot reach apply', () => {
+  const psql = dummyPsql();
+  const result = capturedRun(['apply', AUTH_FLAG, `--confirm=${APPLY_CONFIRM_PHRASE}`], {
+    psql,
+    spawnImpl: (bin, args) => {
+      if (args.includes('--version')) {
+        fs.appendFileSync(psql.bin, '# replaced\n');
+        return { status: 0, stdout: 'psql (PostgreSQL) 16.15\n', stderr: '' };
+      }
+      const parsed = nonceFromArgs(args);
+      return {
+        status: 0,
+        stdout: parsed.kind === 'preflight'
+          ? `${PREFLIGHT_SENTINEL_PREFIX}|${parsed.nonce}|EXACT_EXPECTED_LEGACY\n`
+          : `${APPLY_SENTINEL_PREFIX}|${parsed.nonce}|ok\n`,
+        stderr: '',
+      };
+    },
+  });
+  assert.equal(result.code, 1);
+  assert.match(result.err, /identity changed after validation/);
+  assert.equal(result.calls.filter((c) => nonceFromArgs(c.args).kind === 'apply').length, 0);
+});
+
+test('wrong or missing authorized Git SHA fails', () => {
+  const wrong = capturedRun(['preflight'], {
+    env: {
+      [URL_ENV]: directUrl,
+      [GIT_SHA_ENV]: '0'.repeat(40),
+      [PSQL_PATH_ENV]: dummyPsql().bin,
+      [PSQL_SHA_ENV]: '0'.repeat(64),
+    },
+    headSha: STUB_GIT_SHA,
+  });
+  assert.equal(wrong.code, 1);
+  assert.match(wrong.err, /HEAD does not match the authorized commit SHA/);
+
+  let err = '';
+  const psql = dummyPsql();
+  const code = runCli({
+    argv: ['preflight'],
+    env: {
+      [URL_ENV]: directUrl,
+      [PSQL_PATH_ENV]: psql.bin,
+      [PSQL_SHA_ENV]: psql.digest,
+    },
+    spawnImpl: () => ({ status: 0, stdout: '', stderr: '' }),
+    stdout: { write: () => {} },
+    stderr: { write: (s) => { err += s; } },
+    psqlTrust: TEST_PSQL_TRUST,
+    gitRun: stubGit(),
+    installSignals: () => () => {},
+    exitImpl: () => {},
+  });
+  assert.equal(code, 1);
+  assert.match(err, /must be the full 40-character commit SHA/);
+
+  const detached = capturedRun(['preflight'], { detached: true });
+  assert.equal(detached.code, 1);
+  assert.match(detached.err, /detached HEAD is refused/);
+});
+
+test('dirty security-package paths fail Git authorization', () => {
+  const dirtyTracked = capturedRun(['preflight'], {
+    statusStdout: ' M supabase/security/hosted-tax-profile-containment.pins.json\n',
+  });
+  assert.equal(dirtyTracked.code, 1);
+  assert.match(dirtyTracked.err, /dirty or staged tracked files/);
+
+  const untracked = capturedRun(['preflight'], {
+    statusStdout: '?? supabase/security/evil.sql\n',
+  });
+  assert.equal(untracked.code, 1);
+  assert.match(untracked.err, /untracked files are present in the security package/);
+});
+
+test('exact clean reviewed SHA on a named branch passes', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rtp-git-clean-'));
+  fs.cpSync(path.join(ROOT, 'supabase'), path.join(tmp, 'supabase'), { recursive: true });
+  const git = (args) => spawnSync('git', args, { cwd: tmp, encoding: 'utf8' });
+  git(['init', '-b', 'review']);
+  git(['config', 'user.email', 'review@example.test']);
+  git(['config', 'user.name', 'review']);
+  git(['add', '.']);
+  git(['commit', '-q', '-m', 'reviewed']);
+  const sha = git(['rev-parse', 'HEAD']).stdout.trim();
+  assert.match(sha, /^[0-9a-f]{40}$/);
+  assert.equal(verifyRepoState(tmp, sha), sha);
+  fs.rmSync(tmp, { recursive: true, force: true });
+});
+
+test('pins symlink, extra keys, traversal, and malformed hashes fail', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rtp-pins-'));
+  fs.cpSync(path.join(ROOT, 'supabase'), path.join(tmp, 'supabase'), { recursive: true });
+  const pinsPath = path.join(tmp, 'supabase/security/hosted-tax-profile-containment.pins.json');
+  const original = fs.readFileSync(pinsPath, 'utf8');
+
+  const pins = JSON.parse(original);
+  pins.extra = true;
+  fs.writeFileSync(pinsPath, JSON.stringify(pins));
+  const extra = capturedRun(['preflight'], { repoRoot: tmp });
+  assert.equal(extra.code, 1);
+  assert.match(extra.err, /missing or extra keys/);
+
+  fs.writeFileSync(pinsPath, original);
+  const bad = JSON.parse(original);
+  bad.files.preflight.sha256 = 'ZZ';
+  fs.writeFileSync(pinsPath, JSON.stringify(bad));
+  const malformed = capturedRun(['preflight'], { repoRoot: tmp });
+  assert.equal(malformed.code, 1);
+  assert.match(malformed.err, /hash is invalid/);
+
+  fs.writeFileSync(pinsPath, original);
+  const trav = JSON.parse(original);
+  trav.files.preflight.path = '../migrations/evil.sql';
+  fs.writeFileSync(pinsPath, JSON.stringify(trav));
+  const traversal = capturedRun(['preflight'], { repoRoot: tmp });
+  assert.equal(traversal.code, 1);
+  assert.match(traversal.err, /path is invalid|not the reviewed preflight file|pins schema/);
+
+  fs.writeFileSync(pinsPath, original);
+  const backup = `${pinsPath}.orig`;
+  fs.renameSync(pinsPath, backup);
+  fs.symlinkSync(backup, pinsPath);
+  const linked = capturedRun(['preflight'], { repoRoot: tmp });
+  assert.equal(linked.code, 1);
+  assert.match(linked.err, /symlink/);
+  fs.rmSync(tmp, { recursive: true, force: true });
+});
+
+test('SIGINT and SIGTERM clean the passfile and do not continue apply', () => {
+  const passfiles = [];
+  let handler = null;
+  const result = capturedRun(['apply', AUTH_FLAG, `--confirm=${APPLY_CONFIRM_PHRASE}`], {
+    installSignals: (h) => { handler = h; return () => {}; },
+    spawnImpl: (bin, args, opts = {}) => {
+      if (opts.env && opts.env.PGPASSFILE) passfiles.push(opts.env.PGPASSFILE);
+      if (args.includes('--version')) return { status: 0, stdout: 'psql (PostgreSQL) 16.15\n', stderr: '' };
+      handler();
+      return { status: 0, stdout: 'should-not-finish\n', stderr: '' };
+    },
+  });
+  assert.equal(result.code, 1);
+  assert.match(result.err, /interrupted/);
+  for (const p of passfiles) assert.equal(fs.existsSync(p), false);
+  assert.equal(result.calls.filter((c) => nonceFromArgs(c.args).kind === 'apply').length, 0);
+
+  const wrapperSrc = fs.readFileSync(path.join(ROOT, 'scripts/run-hosted-tax-profile-containment.mjs'), 'utf8');
+  assert.match(wrapperSrc, /process\.on\('SIGINT'/);
+  assert.match(wrapperSrc, /process\.on\('SIGTERM'/);
+});
+
+test('handleExecutionSignal kills the child and removes the passfile', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-tax-pg-'));
+  fs.chmodSync(dir, 0o700);
+  const passPath = path.join(dir, 'pgpass');
+  fs.writeFileSync(passPath, 'x', { mode: 0o600 });
+  let killed = false;
+  let exitCode = null;
+  handleExecutionSignal({
+    passHandle: { dir, passPath },
+    killChild: () => { killed = true; },
+    exit: (code) => { exitCode = code; },
+    exiting: false,
+  });
+  assert.equal(killed, true);
+  assert.equal(exitCode, 1);
+  assert.equal(fs.existsSync(passPath), false);
+});
+
+test('stale cleanup accepts only the exact safe fixture shape', () => {
+  const name = 'checksops-tax-pg-safex1';
+  const dir = path.join(os.tmpdir(), name);
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.mkdirSync(dir, { mode: 0o700 });
+  fs.chmodSync(dir, 0o700);
+  const passPath = path.join(dir, 'pgpass');
+  fs.writeFileSync(passPath, 'secret\n', { mode: 0o600 });
+  fs.chmodSync(passPath, 0o600);
+  const old = new Date(Date.now() - STALE_PASSDIR_MIN_AGE_MS - 1000);
+  fs.utimesSync(dir, old, old);
+  const result = cleanupStalePassDirs({ nowMs: Date.now(), minAgeMs: STALE_PASSDIR_MIN_AGE_MS });
+  assert.equal(result.removed.includes(name), true);
+  assert.equal(fs.existsSync(dir), false);
+});
+
+test('stale cleanup rejects symlinks, unexpected contents, wrong mode/owner, and recent directories', () => {
+  const tmp = os.tmpdir();
+  const recent = path.join(tmp, 'checksops-tax-pg-rcnt01');
+  const extra = path.join(tmp, 'checksops-tax-pg-extra1');
+  const modeDir = path.join(tmp, 'checksops-tax-pg-mode01');
+  const linked = path.join(tmp, 'checksops-tax-pg-link01');
+  const target = path.join(tmp, 'checksops-tax-pg-target');
+  const ownerDir = path.join(tmp, 'checksops-tax-pg-owner1');
+  for (const p of [recent, extra, modeDir, linked, target, ownerDir]) fs.rmSync(p, { recursive: true, force: true });
+
+  fs.mkdirSync(recent, { mode: 0o700 });
+  fs.chmodSync(recent, 0o700);
+  fs.writeFileSync(path.join(recent, 'pgpass'), 'x', { mode: 0o600 });
+  fs.chmodSync(path.join(recent, 'pgpass'), 0o600);
+
+  fs.mkdirSync(extra, { mode: 0o700 });
+  fs.chmodSync(extra, 0o700);
+  fs.writeFileSync(path.join(extra, 'pgpass'), 'x', { mode: 0o600 });
+  fs.writeFileSync(path.join(extra, 'other'), 'nope');
+  const old = new Date(Date.now() - STALE_PASSDIR_MIN_AGE_MS - 1000);
+  fs.utimesSync(extra, old, old);
+
+  fs.mkdirSync(modeDir, { mode: 0o700 });
+  fs.chmodSync(modeDir, 0o777);
+  fs.writeFileSync(path.join(modeDir, 'pgpass'), 'x', { mode: 0o600 });
+  fs.utimesSync(modeDir, old, old);
+
+  fs.mkdirSync(target, { mode: 0o700 });
+  fs.symlinkSync(target, linked);
+
+  fs.mkdirSync(ownerDir, { mode: 0o700 });
+  fs.chmodSync(ownerDir, 0o700);
+  fs.writeFileSync(path.join(ownerDir, 'pgpass'), 'x', { mode: 0o600 });
+  fs.chmodSync(path.join(ownerDir, 'pgpass'), 0o600);
+  fs.utimesSync(ownerDir, old, old);
+  const ownerSkip = cleanupStalePassDirs({
+    uid: process.getuid() + 1,
+    nowMs: Date.now(),
+    minAgeMs: STALE_PASSDIR_MIN_AGE_MS,
+  });
+  assert.equal(ownerSkip.removed.includes('checksops-tax-pg-owner1'), false);
+  assert.equal(ownerSkip.skipped.some((row) => row.name === 'checksops-tax-pg-owner1' && row.reason === 'owner'), true);
+  assert.equal(fs.existsSync(ownerDir), true);
+
+  const result = cleanupStalePassDirs({ nowMs: Date.now(), minAgeMs: STALE_PASSDIR_MIN_AGE_MS });
+  const skipped = new Set(result.skipped.map((row) => row.name));
+  assert.equal(skipped.has('checksops-tax-pg-rcnt01'), true);
+  assert.equal(skipped.has('checksops-tax-pg-extra1'), true);
+  assert.equal(skipped.has('checksops-tax-pg-mode01'), true);
+  assert.equal(skipped.has('checksops-tax-pg-link01'), true);
+  assert.equal(result.removed.includes('checksops-tax-pg-rcnt01'), false);
+  assert.equal(result.removed.includes('checksops-tax-pg-owner1'), true);
+  assert.equal(fs.existsSync(recent), true);
+  assert.equal(fs.existsSync(extra), true);
+  assert.equal(fs.existsSync(ownerDir), false);
+  fs.rmSync(recent, { recursive: true, force: true });
+  fs.rmSync(extra, { recursive: true, force: true });
+  fs.rmSync(modeDir, { recursive: true, force: true });
+  fs.rmSync(linked, { recursive: true, force: true });
+  fs.rmSync(target, { recursive: true, force: true });
+  fs.rmSync(ownerDir, { recursive: true, force: true });
 });
