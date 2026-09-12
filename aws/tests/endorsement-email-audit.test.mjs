@@ -6,6 +6,8 @@ import {
   peekAuditedEmail,
 } from '../functions/api/email.mjs';
 import { runAuthenticatedEndorsement, runPublicEndorsement } from '../functions/api/check-endorsement.mjs';
+import * as emailPolicy from '../functions/api/email-policy.mjs';
+import * as tenantEmailDomain from '../functions/api/tenant-email-domain.mjs';
 
 const TENANT = '11111111-1111-4111-8111-111111111111';
 const OTHER_TENANT = '22222222-2222-4222-8222-222222222222';
@@ -331,4 +333,14 @@ test('used public token cannot be reused', async () => {
   });
   assert.equal(used.statusCode, 404);
   assert.equal(used.code, 'invalid_or_used_token');
+});
+
+test('email.mjs overlay dependencies export required helpers', () => {
+  assert.equal(typeof emailPolicy.sesOutboundSendEnabled, 'function');
+  assert.equal(typeof emailPolicy.stagingSesLockApplies, 'function');
+  assert.equal(typeof emailPolicy.stagingSesLockRecipient, 'function');
+  assert.equal(typeof emailPolicy.emailMode, 'function');
+  assert.equal(typeof tenantEmailDomain.requireAuthorizedTenant, 'function');
+  assert.equal(typeof tenantEmailDomain.loadTenantRow, 'function');
+  assert.equal(typeof tenantEmailDomain.normalizeReplyTo, 'function');
 });
