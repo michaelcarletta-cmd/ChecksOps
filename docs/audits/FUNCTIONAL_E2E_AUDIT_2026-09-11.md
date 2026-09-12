@@ -1,18 +1,241 @@
 # ChecksOps complete functional audit
 
-This file contains five passes on 2026-09-11 / 2026-09-12:
+This file contains six passes on 2026-09-11 / 2026-09-12:
 
-1. **Pass 5 (this continuation)** — coverage expansion on remaining live unclicked controls. Results are at the top.
-2. **Pass 4** — field-level coverage expansion after Pass 3.
-3. **Pass 3** — coverage expansion after Pass 2.
-4. **Pass 2** — inventory reconciliation plus first physical staging interaction.
-5. **Pass 1 (baseline)** — original 412-control audit preserved below.
+1. **Pass 6 (this continuation)** — coverage closure on the exact remaining 76 unclicked IDs. Results are at the top.
+2. **Pass 5** — coverage expansion on remaining live unclicked controls.
+3. **Pass 4** — field-level coverage expansion after Pass 3.
+4. **Pass 3** — coverage expansion after Pass 2.
+5. **Pass 2** — inventory reconciliation plus first physical staging interaction.
+6. **Pass 1 (baseline)** — original 412-control audit preserved below.
 
-**Verdict: CONDITIONAL GO** for C1C tenant-admin and platform-owner staging workflows. **NO-GO** for Freedom admin identity (`identity_not_linked`) and for treating production `checksops.com` as a clean production SPA (Pass 1 P0 banner still unreleased). Executable coverage is **94.1%**, not 95%.
+**Verdict: CONDITIONAL GO** for C1C tenant-admin and platform-owner staging workflows. **NO-GO** for Freedom admin identity (`identity_not_linked`) and for treating production `checksops.com` as a clean production SPA (Pass 1 P0 banner still unreleased).
+
+Inventory classification is **100%** (1,421 / 1,421). That is not an operational certification. **494 BLOCKED** controls have a classification and have **not** been proven operational. Executable interaction coverage is **100% classified** (1,283 / 1,283) and **44.9% PASS** (576 / 1,283). Do not treat 100% classification as a go-live for SES, CheckAlt, ACH, Freedom identity, or money movement.
 
 No application code was patched. No SQL. No provider flags. No Cognito identity linking. No SES. No production authenticated workflows. Branding Save was not clicked. Provider execution stayed OFF. No ACH / Moov transfer / wallet funding / CheckAlt execution.
 
 ---
+
+# Pass 6 — Coverage closure (physical interaction)
+
+**Date:** 2026-09-12  
+**Auditor:** Cursor Cloud Agent  
+**Branch:** `cursor/full-staging-e2e-audit-3bce`  
+**PR:** https://github.com/michaelcarletta-cmd/ChecksOps/pull/237  
+**Scope:** Resolve the exact remaining 76 UNTESTED inventory IDs. Work from the Pass 5 remainder list, not a new crawl. Create synthetic staging fixtures through supported UI when required to mount child controls. Do not fix defects. Do not reopen the 475 already-classified BLOCKED controls except to mount one of these 76 IDs. Email/SES remains out of scope. Provider execution stays OFF.
+
+## Coverage
+
+| Metric | Pass 5 | Pass 6 |
+|---|---|---|
+| Discovered | 1421 | **1421** |
+| Previously classified | 1345 | **1345** |
+| Newly physically executed / classified this pass | — | **76** (every worklist ID) |
+| Newly PASS | — | **40** (`pass=6`) |
+| Newly FAIL | — | **3** (`A1-066` `A1-067` `A1-068`) |
+| Newly BLOCKED | — | **19** |
+| Newly N/A | — | **14** (dead `PayeeManager` / `EditablePayeeCard` / `PayeeCard` / `RerunOcrButton`) |
+| Cumulative classified | 1345 | **1421** |
+| PASS | 586 | **626** |
+| FAIL | 13 | **16** |
+| BLOCKED | 475 | **494** |
+| N/A | 271 | **285** |
+| Untested / unclicked | 76 | **0** |
+| Raw classification coverage | 94.7% | **100%** (1421 / 1421) |
+| Executable IDs | 1283 | **1283** |
+| Executable classified | 1207 | **1283** |
+| Executable classification coverage | 94.1% | **100%** (1283 / 1283) |
+| Executable operational PASS | — | **44.9%** (576 / 1283) |
+
+A BLOCKED control is classified, not proven operational. 100% inventory classification does **not** mean the product is operationally certified.
+
+Machine-readable inventory: `docs/audits/inventory-2026-09-11.json`, `.csv`.
+
+## Exact 76-ID disposition
+
+ID | Control | Action performed | Result | Evidence/Blocker
+---|---|---|---|---
+CC-315 | Back to funds released | Mobile 390px Funds Released lane; confirmed 0 checks | BLOCKED | `empty_fixture`
+CC-316 | Back to funds received | Mobile Funds Received lane; confirmed 0 checks | BLOCKED | `empty_fixture`
+CC-317 | Back to queue | Selected Review `#Pending` card on mobile; clicked Back to queue | PASS | `pass6_micro_mobile_review_detail.png`
+CC-333 | Share check with partner | List/detail share icon; Escape | PASS | `pass6_retry_e2e_detail.png`
+CC-334 | Mark check returned by bank | Deposited-list icon; Cancel; not confirmed | PASS | `pass6_retry_mark_returned.png`
+CC-337 | Back to checks | Mobile E2E detail | PASS | `pass6_retry_mobile_e2e.png`
+CC-351 | Re-run OCR | Admin tools mount-check; function never referenced in JSX | N/A | `function_not_rendered_in_live_route_tree`
+CC-361 | Upload Back of Check (Overview) | E2E + AUDIT Overview; prompt did not mount (View Check Images only) | BLOCKED | `staging_s3_or_image_urls_unavailable`
+CC-362 | CheckAlt Deposit | Not mounted on incomplete E2E | BLOCKED | `control_not_in_live_ui` (would be `provider_execution` if mounted)
+CC-363 | Open for Mobile Deposit | Requires complete endorsements + CheckAlt off | BLOCKED | `control_not_in_live_ui`
+CC-364 | Undo Decision | `canUndo` false | BLOCKED | `control_not_in_live_ui`
+CC-365 | Move to Deposited | Needs `branch_deposit_required` | BLOCKED | `control_not_in_live_ui`
+CC-366 | Force Move to Deposited | Needs stalled branch approval | BLOCKED | `control_not_in_live_ui`
+CC-367 | Mark as Deposited | Override to Ready for Deposit saved; AWS RPC rejected | BLOCKED | `staging_rpc_not_enabled`
+CC-368 | Skip Endorsements — Already Signed | Visible on E2E Payee Endorsements; not clicked | BLOCKED | `unsafe_persist`
+CC-369 | Adjust Received Endorsement | No `back_image_path` | BLOCKED | `missing_fixture`
+CC-370 | Add/Remove Pay to Order Text | Requires back image | BLOCKED | `missing_fixture`
+CC-371 | Retry Loading | Adjuster not opened | BLOCKED | `missing_fixture`
+CC-372 | Close adjuster | Adjuster not opened | BLOCKED | `missing_fixture`
+CC-373 | Generate Endorsement Packet | Audit tab Generate | PASS | `pass6_focus_audit.png`
+CC-374 | Preview packet | Preview clicked | PASS | packet chrome present
+CC-375 | Download packet | Not clicked | BLOCKED | `unsafe_persist`
+CC-380 | Multi-Payee SelectTrigger | Overview pencil → boolean select | PASS | `pass6_retry_overview.png`
+CC-381 | SelectItem Yes | Mounted in Multi-Payee editor | PASS | SelectContent opened
+CC-382 | SelectItem No | Mounted in Multi-Payee editor | PASS | SelectContent opened
+CC-383 | Edit Check # input | Opened; cancelled | PASS | edit=true
+CC-384 | Save field | Withheld | BLOCKED | `unsafe_persist`
+CC-385 | Cancel editing | Clicked | PASS | aria Cancel editing
+CC-386 | Edit ${label} pencil | Multi-Payee / Check # / Carrier | PASS | opacity forced
+CC-392 | PayeeManager SelectItem | No JSX consumer | N/A | dead source
+CC-393 | PayeeManager SelectItem | No JSX consumer | N/A | dead source
+CC-395 | PayeeManager Mortgage Company | No JSX consumer | N/A | dead source
+CC-396 | PayeeManager Contractor | No JSX consumer | N/A | dead source
+CC-400 | EditablePayeeCard name | No JSX consumer | N/A | dead source
+CC-401 | EditablePayeeCard type trigger | No JSX consumer | N/A | dead source
+CC-402 | EditablePayeeCard type item | No JSX consumer | N/A | dead source
+CC-403 | EditablePayeeCard type item | No JSX consumer | N/A | dead source
+CC-404 | EditablePayeeCard Insured | No JSX consumer | N/A | dead source
+CC-405 | EditablePayeeCard Mortgage Company | No JSX consumer | N/A | dead source
+CC-406 | EditablePayeeCard Contractor | No JSX consumer | N/A | dead source
+CC-407 | EditablePayeeCard Save | No JSX consumer | N/A | dead source
+CC-413 | PayeeCard Email | Never rendered; live Email is CC-113 | N/A | dead source
+CC-099 | Payee name | P6 Synthetic Payee | PASS | persisted then removed
+CC-100 | Email (optional) | p6-payee@example.test | PASS | form
+CC-101 | Payee type SelectTrigger | Opened | PASS | five type options
+CC-102 | Public Adjuster | Observed in type list | PASS | listed
+CC-103 | Other | Observed in type list | PASS | listed
+CC-104 | Insured | Observed in type list | PASS | listed
+CC-105 | Mortgage Company | Observed in type list | PASS | listed
+CC-106 | Contractor | Selected for synthetic payee | PASS | Contractor
+CC-107 | Add | Persisted P6 Synthetic Payee | PASS | later removed
+CC-109 | Add Payee | Opened dashed form | PASS | `pass6_focus_payee.png`
+CC-110 | Mark All Endorsements Received | Opened; Confirm not clicked | PASS | `pass6_focus_mark_all.png`
+CC-112 | Mortgage Upload Back of Check | P6 Synthetic Mortgage persisted; chooser; payee removed | PASS | `pass6_micro_mortgage.png`
+CC-113 | Endorsement Email | p6-endorse@example.test | PASS | filled
+CC-114 | CC contractor | Checkbox + contractor email | PASS | filled
+CC-115 | Send Endorsement Request | Withheld | BLOCKED | `ses_email`
+CC-116 | Sign in Person | Dialog opened | PASS | `pass6_focus_inperson.png`
+CC-117 | Endorsed on Check | Visible; not clicked | BLOCKED | `unsafe_persist`
+CC-118 | Clear | Canvas clear | PASS | in-person dialog
+CC-119 | Consent checkbox | Checked | PASS | then cancelled
+CC-120 | Cancel | Closed without capture | PASS | no e-sign
+CC-121 | Capture signature | Withheld | BLOCKED | `unsafe_persist`
+CC-148 | Auto-detect | Local `/tmp/pass6-front.png` | PASS | `pass6_cropper.png`
+CC-149 | Reset | Cropper Reset | PASS | cropper
+CC-150 | Use this crop | Local confirm; later upload Failed to fetch | PASS | no provider
+CC-151 | Cancel | Closed cropper | PASS | then re-selected file
+CC-218 | Replace Front | Admin tools; file not confirmed | PASS | `pass6_retry_admin_tools.png`
+A1-037 | Replace logo | C1C Branding & Email; chooser; no Save Branding | PASS | `pass6_micro_branding.png`
+A1-066 | Active switch | Pipeline Test toggle | FAIL | `column_not_allowlisted`
+A1-067 | Founding switch | Pipeline Test toggle | FAIL | `column_not_allowlisted`
+A1-068 | Test switch | Pipeline Test toggle | FAIL | `column_not_allowlisted`
+A7-117 | Homeowner name | `#hlink-name` P6 Homeowner; Cancel; Send not clicked | PASS | `pass6_micro_tracking.png`
+A7-118 | Email | `#hlink-email` | PASS | p6-ho@example.test
+A7-119 | Phone | `#hlink-phone` | PASS | 5550199
+A2-020 | Scenario name | Client Savings; P6-SCENARIO then restored Current Plan | PASS | `pass6_micro_savings.png`
+
+`CC-400`–`CC-407` are eight IDs, all N/A. Every original Pass 6 worklist ID appears above.
+
+## Module totals
+
+| Module | Discovered | PASS | FAIL | BLOCKED | N/A | Unclassified |
+|---|---|---|---|---|---|---|
+| admin | 152 | 116 | 3 | 25 | 8 | **0** |
+| settings | 231 | 47 | 4 | 45 | 135 | **0** |
+| payments_wallet | 312 | 147 | 4 | 148 | 13 | **0** |
+| mortgage_ops | 21 | 6 | 0 | 15 | 0 | **0** |
+| homeowner | 171 | 62 | 0 | 101 | 8 | **0** |
+| public | 107 | 83 | 1 | 9 | 14 | **0** |
+| check_center | 390 | 164 | 2 | 130 | 94 | **0** |
+| extra_public_or_auth | 37 | 1 | 2 | 21 | 13 | **0** |
+| **Total** | **1421** | **626** | **16** | **494** | **285** | **0** |
+
+Executable classification is 100% in every module (denominator unchanged at 1,283). Operational PASS among executable IDs is 576 / 1,283 (**44.9%**).
+
+## New defects
+
+### P0
+
+None this pass.
+
+### P1
+
+None newly opened. Four inconsistent status/stage rows were not modified. E2E was not left in Review: `admin_override_check_status` is not enabled for AWS staging writes (`This RPC is not enabled for AWS staging reads, or it is a write/provider operation`).
+
+### P2
+
+| ID | Summary | Status |
+|---|---|---|
+| `P2-tenant-switch-column-not-allowlisted` | Platform-owner Active / Founding / Test switches on `ChecksOps Pipeline Test` toast **Update failed / `column_not_allowlisted`**. Controls mounted and were trusted-clicked. C1C and Freedom were not toggled. Founding did not rewrite `monthly_rate_cents`. Test did not rewrite `moov_environment`. | **NEW this pass** (`A1-066` `A1-067` `A1-068` FAIL) |
+
+### P3
+
+None newly opened. Negative-amount FAILs were not retested this pass.
+
+## Existing defects
+
+| Defect | This pass |
+|---|---|
+| P0 production `checksops.com` staging-banner / environment presentation | **NOT RETESTED** |
+| P0 Freedom admin `identity_not_linked` (`A8-035`) | **NOT RETESTED** (not retried) |
+| P1 four inconsistent status/stage rows | **NOT RETESTED** / not modified |
+| P2 C1C Freedom branding placeholders | **NOT RETESTED** (Save still not clicked) |
+| P2 platform owner `isAdmin=false` CheckAlt | **NOT RETESTED** |
+| P2 invalid invoice route missing `payment_invoices` relation | **NOT RETESTED**; still **not marked resolved** |
+| P2 staging S3 “Authorized object is not present” | **REPRODUCED** as missing Overview back-upload chrome on E2E/AUDIT (`CC-361` BLOCKED) |
+| P2 intermittent dynamic import 404 | **NOT RETESTED** |
+| P3 New Invoice −1 / cash-job negatives | **NOT RETESTED** |
+| P3 mobile clipping / override reason | **NOT RETESTED** |
+| `claim_settlements` 200 empty | **NOT RETESTED**; no inserts |
+
+No existing defect was silently dropped. None **RESOLVED BY EXTERNAL CHANGE**. Override RPC rejection is a **different error** than a successful status move; it does not resolve the P1 status/stage rows.
+
+## Synthetic fixtures
+
+| Fixture | Purpose | Records modified | Cleanup | Retained |
+|---|---|---|---|---|
+| `/tmp/pass6-front.png` `/tmp/pass6-back.png` | Local cropper | None persisted (Upload for Manual Entry **Failed to fetch**) | Local files only | No DB row from this upload |
+| `P6 Synthetic Payee` (Contractor) on `#E2E-1789149838411` | Mount Add Payee / type list / in-person / email / CC | `check_payees` insert | Removed via Remove payee | Not present after cleanup |
+| `P6 Synthetic Mortgage` on E2E | Mount mortgage Upload Back of Check (`CC-112`) | `check_payees` insert | Removed (`P6 Synthetic Mortgage removed` toast) | Not present; E2E Test Payee intact (1 pending) |
+| Admin override E2E → Ready for Deposit | Mount Mark as Deposited | **No persist** (RPC not enabled) | N/A; E2E remained Endorsing | E2E `#E2E-1789149838411` still endorsing $2,345.67 |
+| Tracking dialog fills on `#PR235-1001` | A7-117–119 | Local dialog state only; Send not clicked | Cancel | PR235 unchanged |
+| PricingOptimizer Scenario name | A2-020 | Local only; restored to `Current Plan` | Restored | No DB write (page copy: nothing saved to DB) |
+| C1C Replace logo chooser | A1-037 | File chooser only | No upload / no Save Branding | C1C logo unchanged |
+| Pipeline Test Active/Founding/Test switches | A1-066–068 | Attempted update **rejected** | State unchanged | Pipeline Test still inactive / test account |
+| Review `#Pending` Unknown insured $0 | Used for `CC-317` only | None | Not deleted (may be leftover from failed manual-entry upload) | **Intentionally retained** — Review queue still shows 1 check Awaiting routing |
+
+C1C and Freedom Active/Founding/Test switches were never toggled. PR235 was not overridden. The four inconsistent status/stage rows were not touched.
+
+## Remaining blockers (grouped)
+
+Pass 6 added 19 BLOCKED IDs. Cumulative BLOCKED is **494**. Groups below are what would need to be unlocked to *test* them — not a request to unlock production money movement.
+
+| Dependency | What it unlocks | Pass 6 examples | Safe staging unlock? |
+|---|---|---|---|
+| SES/email | Send Endorsement Request; tracking **Send link**; remaining homeowner emails | `CC-115` | SES sandbox + synthetic recipients only |
+| EMAIL_OTP | Login OTP / verify-account | (prior; not reopened) | Staging OTP inbox for UAT users |
+| Freedom identity | Freedom admin Check Center | (prior `identity_not_linked`) | Link `mcarletta@freedomadj.com` in staging only |
+| Provider execution | CheckAlt Deposit, ACH, Moov send | `CC-362` if endorsements complete | Keep off for real money; optional sandbox CheckAlt on a synthetic check |
+| Missing fixture/data | Funds Released/Received back buttons; endorsement adjuster; packet download after generate | `CC-315` `CC-316` `CC-369`–`CC-372` | Seed synthetic deposited/released checks; upload a synthetic back image on E2E |
+| Authorization defect | Owner CheckAlt `isAdmin=false` | (prior) | Separate identity fix |
+| Staging infrastructure/data | S3 authorized objects; `admin_override_check_status` RPC; tenant update allowlist | `CC-361` `CC-367`; related `A1-066`–`068` FAIL | Allowlist synthetic-check RPC + test-tenant columns; fix staging S3 objects |
+| Unsafe configuration mutation | Save field, skip endorsements, waive, capture signature, packet download | `CC-368` `CC-117` `CC-121` `CC-375` `CC-384` | Allowed on synthetic checks with restore |
+| Other / unmounted in current state | Deposit/undo/force-move until status matches | `CC-363`–`CC-366` | Unlocked by staging RPC + synthetic status moves |
+
+## NEXT-PHASE RECOMMENDATION
+
+After classification closure, a **Blocked-Control Verification Pass** can safely unlock, **in staging only** and **without real production money movement**:
+
+1. Enable `admin_override_check_status` for synthetic C1C checks so Review / Ready for Deposit / branch-deposit children can be mounted and then restored.
+2. Allowlist tenant `subscription_status` / `is_founding_partner` / `is_test_account` updates **only** for `ChecksOps Pipeline Test` (already inactive + test).
+3. Put a synthetic back image on `#E2E-1789149838411` (or a new manual-entry check once upload fetch is fixed) to open Adjust Received Endorsement / Pay to Order / Retry Loading.
+4. Seed one synthetic Funds Released and one Funds Received check for the mobile back buttons.
+5. Point SES at a sandbox/sink for endorsement-request and tracking-link **Send** on synthetic payees/emails (`p6-*@example.test`).
+6. Do **not** enable live CheckAlt/ACH/Moov execution against real bank accounts. If a sandbox CheckAlt deposit is required, use only the synthetic E2E/AUDIT checks.
+
+Do **not** implement those changes in Pass 6. This pass is audit closure only.
+
+---
+
 
 # Pass 5 — Coverage expansion (physical interaction)
 

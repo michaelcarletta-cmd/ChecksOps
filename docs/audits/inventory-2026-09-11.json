@@ -50,11 +50,11 @@
     ],
     "pass3_applied_at": "2026-09-12T00:52:01.084Z",
     "result_counts": {
-      "UNTESTED": 76,
-      "PASS": 586,
-      "FAIL": 13,
-      "BLOCKED": 475,
-      "N_A": 271
+      "UNTESTED": 0,
+      "PASS": 626,
+      "FAIL": 16,
+      "BLOCKED": 494,
+      "N_A": 285
     },
     "pass3_by_module": {
       "admin": {
@@ -321,6 +321,94 @@
       "homeowner::SendCheckTrackingLinkButton": 3,
       "admin::PricingOptimizer": 1,
       "check_center::ReuploadCheckImageButton": 1
+    },
+    "pass6_applied_at": "2026-09-12T14:23:57.023Z",
+    "pass6_by_module": {
+      "admin": {
+        "n": 152,
+        "PASS": 116,
+        "FAIL": 3,
+        "BLOCKED": 25,
+        "N/A": 8,
+        "UNTESTED": 0
+      },
+      "settings": {
+        "n": 231,
+        "PASS": 47,
+        "FAIL": 4,
+        "BLOCKED": 45,
+        "N/A": 135,
+        "UNTESTED": 0
+      },
+      "payments_wallet": {
+        "n": 312,
+        "PASS": 147,
+        "FAIL": 4,
+        "BLOCKED": 148,
+        "N/A": 13,
+        "UNTESTED": 0
+      },
+      "mortgage_ops": {
+        "n": 21,
+        "PASS": 6,
+        "FAIL": 0,
+        "BLOCKED": 15,
+        "N/A": 0,
+        "UNTESTED": 0
+      },
+      "homeowner": {
+        "n": 171,
+        "PASS": 62,
+        "FAIL": 0,
+        "BLOCKED": 101,
+        "N/A": 8,
+        "UNTESTED": 0
+      },
+      "public": {
+        "n": 107,
+        "PASS": 83,
+        "FAIL": 1,
+        "BLOCKED": 9,
+        "N/A": 14,
+        "UNTESTED": 0
+      },
+      "check_center": {
+        "n": 390,
+        "PASS": 164,
+        "FAIL": 2,
+        "BLOCKED": 130,
+        "N/A": 94,
+        "UNTESTED": 0
+      },
+      "extra_public_or_auth": {
+        "n": 37,
+        "PASS": 1,
+        "FAIL": 2,
+        "BLOCKED": 21,
+        "N/A": 13,
+        "UNTESTED": 0
+      }
+    },
+    "pass6_coverage": {
+      "discovered": 1421,
+      "previously_classified": 1345,
+      "pass6_touched": 76,
+      "newly_pass": 40,
+      "newly_fail": 3,
+      "newly_blocked": 19,
+      "newly_na": 14,
+      "tested": 1421,
+      "pass": 626,
+      "fail": 16,
+      "blocked": 494,
+      "na": 285,
+      "untested": 0,
+      "raw_pct": 100,
+      "executable_ids": 1283,
+      "executable_tested": 1283,
+      "executable_pct": 100,
+      "executable_pass": 576,
+      "executable_operational_pct": 44.9
     }
   },
   "controls": [
@@ -1130,10 +1218,16 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass6_micro_branding.png",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Replace logo on Condition One Commercial Branding & Email; file chooser opened; no upload; Save Branding not clicked",
+      "actual_behavior": "branding=Branding & Email replace=Replace",
+      "role": "platform_owner",
+      "route": "/admin/tenants"
     },
     {
       "id": "A1-038",
@@ -1783,10 +1877,16 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "FAIL",
+      "evidence": "/opt/cursor/artifacts/pass6_owner_tenants_after.png",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 6,
+      "defect_id": "P2-tenant-switch-column-not-allowlisted",
+      "physical_action": "Active switch on ChecksOps Pipeline Test (non-C1C/Freedom) toggled",
+      "actual_behavior": "Update failed / column_not_allowlisted. Switch mounted and trusted-clicked; AWS staging tenant update allowlist rejected the write. Original inactive state retained.",
+      "role": "platform_owner",
+      "route": "/admin/tenants"
     },
     {
       "id": "A1-067",
@@ -1800,10 +1900,16 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "FAIL",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 6,
+      "defect_id": "P2-tenant-switch-column-not-allowlisted",
+      "physical_action": "Founding partner switch on Pipeline Test toggled",
+      "actual_behavior": "Same column_not_allowlisted toast. monthly_rate_cents was not rewritten.",
+      "role": "platform_owner",
+      "route": "/admin/tenants"
     },
     {
       "id": "A1-068",
@@ -1817,10 +1923,16 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "FAIL",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 6,
+      "defect_id": "P2-tenant-switch-column-not-allowlisted",
+      "physical_action": "Test account switch on Pipeline Test toggled",
+      "actual_behavior": "Same column_not_allowlisted toast. moov_environment was not rewritten. Pipeline Test remained is_test_account=true.",
+      "role": "platform_owner",
+      "route": "/admin/tenants"
     },
     {
       "id": "A1-069",
@@ -3315,10 +3427,16 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass6_micro_savings.png",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "PricingOptimizer Scenario name filled P6-SCENARIO then restored to Current Plan (Client Savings; not persisted)",
+      "actual_behavior": "n=3 orig=Current Plan after=P6-SCENARIO restored=Current Plan",
+      "role": "platform_owner",
+      "route": "/admin/financial-model"
     },
     {
       "id": "A3-001",
@@ -18643,10 +18761,16 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass6_micro_tracking.png",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "hlink-name filled P6 Homeowner on PR235 Funds → Send Homeowner Tracking Link; Cancel; Send not clicked",
+      "actual_behavior": "P6 Homeowner",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "A7-118",
@@ -18660,10 +18784,16 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "hlink-email filled",
+      "actual_behavior": "p6-ho@example.test",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "A7-119",
@@ -18677,10 +18807,16 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "hlink-phone filled",
+      "actual_behavior": "5550199",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "A7-120",
@@ -22970,10 +23106,16 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Payee name P6 Synthetic Payee",
+      "actual_behavior": "P6 Synthetic Payee",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-100",
@@ -22987,10 +23129,16 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Email (optional) p6-payee@example.test",
+      "actual_behavior": "p6-payee@example.test",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-101",
@@ -23004,10 +23152,16 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "payee type SelectTrigger opened",
+      "actual_behavior": "Insured, Mortgage Company, Contractor, Public Adjuster, Other",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-102",
@@ -23021,10 +23175,16 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Public Adjuster SelectItem observed in live EndorsementChecklist type list",
+      "actual_behavior": "listed",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-103",
@@ -23038,10 +23198,16 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Other SelectItem observed",
+      "actual_behavior": "listed",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-104",
@@ -23055,10 +23221,16 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Insured SelectItem observed",
+      "actual_behavior": "listed",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-105",
@@ -23072,10 +23244,16 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Mortgage Company SelectItem observed",
+      "actual_behavior": "listed",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-106",
@@ -23089,10 +23267,16 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Contractor selected for synthetic payee",
+      "actual_behavior": "Contractor",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-107",
@@ -23106,10 +23290,16 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Add payee persist",
+      "actual_behavior": "P6 Synthetic Payee persisted; later removed",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-108",
@@ -23145,10 +23335,16 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass6_focus_payee.png",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Add Payee opened dashed form",
+      "actual_behavior": "UI responded as expected",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-110",
@@ -23162,10 +23358,16 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass6_focus_mark_all.png",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Mark All Endorsements Received opened; Confirm not clicked",
+      "actual_behavior": "dialog opened; Cancel",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-111",
@@ -23201,10 +23403,16 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass6_micro_mortgage.png",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "mortgage EndorsementCard Upload Back of Check after persisting P6 Synthetic Mortgage; file not attached; payee removed",
+      "actual_behavior": "P6 Synthetic Mortgage / Routed to Loss Draft / Upload Back of Check",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-113",
@@ -23218,10 +23426,16 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "endorsement Email filled",
+      "actual_behavior": "p6-endorse@example.test",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-114",
@@ -23235,10 +23449,16 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "CC contractor on email checkbox + contractor@example.com",
+      "actual_behavior": "box=true fill=p6-contractor@example.test",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-115",
@@ -23252,10 +23472,16 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": true
+      "result": "BLOCKED",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
+      "blocker": "ses_email",
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Send Endorsement Request withheld",
+      "actual_behavior": "Would invoke check-endorsement email",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-116",
@@ -23269,10 +23495,16 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass6_focus_inperson.png",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Sign in Person opened InPersonSignatureDialog",
+      "actual_behavior": "UI responded as expected",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-117",
@@ -23286,10 +23518,16 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": true
+      "result": "BLOCKED",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
+      "blocker": "unsafe_persist",
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Endorsed on Check (waive) withheld",
+      "actual_behavior": "visible=true; would mark endorsement signed",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-118",
@@ -23303,10 +23541,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass6_focus_inperson.png",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Clear canvas",
+      "actual_behavior": "UI responded as expected",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-119",
@@ -23320,10 +23564,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "in-person consent checkbox",
+      "actual_behavior": "checked then cancelled",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-120",
@@ -23337,10 +23587,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "InPerson Cancel without capture",
+      "actual_behavior": "closed without capture",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-121",
@@ -23354,10 +23610,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": true
+      "result": "BLOCKED",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
+      "blocker": "unsafe_persist",
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Capture signature withheld",
+      "actual_behavior": "Would store a legally binding e-signature",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-122",
@@ -23944,10 +24206,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass6_cropper.png",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Auto-detect in CheckImageCropper after selecting /tmp/pass6-front.png",
+      "actual_behavior": "Auto-detect clicked; cropper mounted",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-149",
@@ -23961,10 +24229,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass6_cropper.png",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Reset crop",
+      "actual_behavior": "Reset clicked",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-150",
@@ -23978,10 +24252,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Use this crop (local file only; Upload for Manual Entry later Failed to fetch)",
+      "actual_behavior": "Use this crop clicked; no provider execution",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-151",
@@ -23995,10 +24275,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Cropper Cancel",
+      "actual_behavior": "Cancel closed cropper; file re-selected afterward",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-152",
@@ -25457,10 +25743,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass6_retry_admin_tools.png",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "ReuploadCheckImageButton Replace Front in Admin tools; file not confirmed",
+      "actual_behavior": "admin=true reup=Replace Front (Upload Back also present)",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-219",
@@ -27622,10 +27914,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": true
+      "result": "BLOCKED",
+      "evidence": "/opt/cursor/artifacts/pass6_retry_mobile_funds_released.png",
+      "blocker": "empty_fixture",
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "mobile Back to funds released — Funds Released lane confirmed 0 checks",
+      "actual_behavior": "Funds Released 0; control mounts only with a selected funds-released check",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-316",
@@ -27639,10 +27937,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": true
+      "result": "BLOCKED",
+      "evidence": "/opt/cursor/artifacts/pass6_retry_mobile_funds_received.png",
+      "blocker": "empty_fixture",
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "mobile Back to funds received — Funds Received lane confirmed 0 checks",
+      "actual_behavior": "Funds Received 0",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-317",
@@ -27656,10 +27960,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass6_micro_mobile_review_detail.png",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "mobile Back to queue after selecting Review #Pending card",
+      "actual_behavior": "revTab=Review1 picked=#Pending back=Back to queue",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-318",
@@ -28004,10 +28314,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass6_retry_e2e_detail.png",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Share check with partner icon (list + detail)",
+      "actual_behavior": "aria Share check with partner clicked; dialog escaped",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-334",
@@ -28021,10 +28337,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass6_retry_mark_returned.png",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Mark check returned by bank icon on Deposited list; Cancel; not confirmed",
+      "actual_behavior": "UI responded as expected",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-335",
@@ -28082,10 +28404,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass6_retry_mobile_e2e.png",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "mobile 390px Back to checks on E2E detail",
+      "actual_behavior": "opened=true back=Back to checks",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-338",
@@ -28401,10 +28729,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": true
+      "result": "N/A",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
+      "blocker": "function_not_rendered_in_live_route_tree",
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "RerunOcrButton mount-check in Admin tools",
+      "actual_behavior": "function RerunOcrButton is defined in CheckCommandCenter.tsx but never referenced in JSX. Admin tools shows Override / Replace Front / Upload Back / Delete only.",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-352",
@@ -28613,10 +28947,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": true
+      "result": "BLOCKED",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
+      "blocker": "staging_s3_or_image_urls_unavailable",
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Overview Upload Back of Check / Back — No image uploaded",
+      "actual_behavior": "E2E and AUDIT Overview show View Check Images; back-upload prompt did not mount (front/back signed URLs likely null — known S3 authorized-object defect). Admin tools Upload Back is CC-218, not this control.",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-362",
@@ -28630,10 +28970,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": true
+      "result": "BLOCKED",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
+      "blocker": "control_not_in_live_ui",
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "CheckAlt Deposit",
+      "actual_behavior": "Not mounted on endorsing E2E (endorsements incomplete). Would be provider_execution if allEndorsementsComplete && checkAltEnabled.",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-363",
@@ -28647,10 +28993,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": true
+      "result": "BLOCKED",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
+      "blocker": "control_not_in_live_ui",
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Open for Mobile Deposit",
+      "actual_behavior": "Requires allEndorsementsComplete && !checkAltEnabled",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-364",
@@ -28664,10 +29016,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": true
+      "result": "BLOCKED",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
+      "blocker": "control_not_in_live_ui",
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Undo Decision",
+      "actual_behavior": "canUndo false on current E2E status",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-365",
@@ -28681,10 +29039,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": true
+      "result": "BLOCKED",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
+      "blocker": "control_not_in_live_ui",
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Move to Deposited",
+      "actual_behavior": "Requires status branch_deposit_required",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-366",
@@ -28698,10 +29062,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": true
+      "result": "BLOCKED",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
+      "blocker": "control_not_in_live_ui",
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Force Move to Deposited",
+      "actual_behavior": "Requires showForceMove after stalled branch approval",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-367",
@@ -28715,10 +29085,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": true
+      "result": "BLOCKED",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
+      "blocker": "staging_rpc_not_enabled",
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Mark as Deposited",
+      "actual_behavior": "Requires approved_for_deposit. Synthetic override to Ready for Deposit: option+Save clicked; toast Failed to update status / This RPC is not enabled for AWS staging reads, or it is a write/provider operation. E2E left endorsing.",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-368",
@@ -28732,10 +29108,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": true
+      "result": "BLOCKED",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
+      "blocker": "unsafe_persist",
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Skip Endorsements — Already Signed visible on Payee Endorsements (deposit blocked + pending); persist not clicked",
+      "actual_behavior": "visible on E2E",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-369",
@@ -28749,10 +29131,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": true
+      "result": "BLOCKED",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
+      "blocker": "missing_fixture",
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Adjust Received Endorsement",
+      "actual_behavior": "requires back_image_path; not opened",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-370",
@@ -28766,10 +29154,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": true
+      "result": "BLOCKED",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
+      "blocker": "missing_fixture",
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Add/Remove Pay to Order Text",
+      "actual_behavior": "requires back_image_path",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-371",
@@ -28783,10 +29177,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": true
+      "result": "BLOCKED",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
+      "blocker": "missing_fixture",
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Retry Loading (endorsement adjuster error chrome)",
+      "actual_behavior": "adjuster not opened",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-372",
@@ -28800,10 +29200,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": true
+      "result": "BLOCKED",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
+      "blocker": "missing_fixture",
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Close endorsement adjuster",
+      "actual_behavior": "adjuster not opened",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-373",
@@ -28817,10 +29223,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass6_focus_audit.png",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Generate Endorsement Packet on Audit tab",
+      "actual_behavior": "Generate Endorsement Packet / Generate clicked",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-374",
@@ -28834,10 +29246,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Preview packet control clicked",
+      "actual_behavior": "Preview present next to Generate; clicked after generate",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-375",
@@ -28851,10 +29269,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": true
+      "result": "BLOCKED",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
+      "blocker": "unsafe_persist",
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Download packet not clicked",
+      "actual_behavior": "Would download bytes; Preview was available",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-376",
@@ -28959,10 +29383,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "boolean Multi-Payee SelectTrigger",
+      "actual_behavior": "trig=true",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-381",
@@ -28976,10 +29406,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "SelectItem Yes mounted in Multi-Payee editor",
+      "actual_behavior": "Yes/No SelectContent opened with trigger",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-382",
@@ -28993,10 +29429,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "SelectItem No mounted in Multi-Payee editor",
+      "actual_behavior": "Yes/No SelectContent opened with trigger",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-383",
@@ -29010,10 +29452,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "EditableField text Input via Edit Check #",
+      "actual_behavior": "edit=true input=true; cancelled",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-384",
@@ -29027,10 +29475,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": true
+      "result": "BLOCKED",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
+      "blocker": "unsafe_persist",
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Save field withheld",
+      "actual_behavior": "Would UPDATE check_intake_items",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-385",
@@ -29044,10 +29498,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Cancel editing",
+      "actual_behavior": "aria Cancel editing clicked",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-386",
@@ -29061,10 +29521,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass6_retry_overview.png",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "Edit Multi-Payee / Edit Check # pencil (opacity forced)",
+      "actual_behavior": "Edit Multi-Payee=true Edit Check #=true Edit Carrier=true",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-387",
@@ -29193,10 +29659,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": true
+      "result": "N/A",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
+      "blocker": "function_not_rendered_in_live_route_tree",
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "PayeeManager add-form SelectItems",
+      "actual_behavior": "PayeeManager has no JSX consumers. Live add-payee type list is EndorsementChecklist CC-102–106.",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-393",
@@ -29210,10 +29682,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": true
+      "result": "N/A",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
+      "blocker": "function_not_rendered_in_live_route_tree",
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "PayeeManager add-form SelectItems",
+      "actual_behavior": "PayeeManager has no JSX consumers. Live add-payee type list is EndorsementChecklist CC-102–106.",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-394",
@@ -29250,10 +29728,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": true
+      "result": "N/A",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
+      "blocker": "function_not_rendered_in_live_route_tree",
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "PayeeManager add-form SelectItems",
+      "actual_behavior": "PayeeManager has no JSX consumers. Live add-payee type list is EndorsementChecklist CC-102–106.",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-396",
@@ -29267,10 +29751,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": true
+      "result": "N/A",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
+      "blocker": "function_not_rendered_in_live_route_tree",
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "PayeeManager add-form SelectItems",
+      "actual_behavior": "PayeeManager has no JSX consumers. Live add-payee type list is EndorsementChecklist CC-102–106.",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-397",
@@ -29354,10 +29844,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": true
+      "result": "N/A",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
+      "blocker": "function_not_rendered_in_live_route_tree",
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "EditablePayeeCard controls",
+      "actual_behavior": "EditablePayeeCard is only rendered by unused PayeeManager.",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-401",
@@ -29371,10 +29867,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": true
+      "result": "N/A",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
+      "blocker": "function_not_rendered_in_live_route_tree",
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "EditablePayeeCard controls",
+      "actual_behavior": "EditablePayeeCard is only rendered by unused PayeeManager.",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-402",
@@ -29388,10 +29890,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": true
+      "result": "N/A",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
+      "blocker": "function_not_rendered_in_live_route_tree",
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "EditablePayeeCard controls",
+      "actual_behavior": "EditablePayeeCard is only rendered by unused PayeeManager.",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-403",
@@ -29405,10 +29913,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": true
+      "result": "N/A",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
+      "blocker": "function_not_rendered_in_live_route_tree",
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "EditablePayeeCard controls",
+      "actual_behavior": "EditablePayeeCard is only rendered by unused PayeeManager.",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-404",
@@ -29422,10 +29936,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": true
+      "result": "N/A",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
+      "blocker": "function_not_rendered_in_live_route_tree",
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "EditablePayeeCard controls",
+      "actual_behavior": "EditablePayeeCard is only rendered by unused PayeeManager.",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-405",
@@ -29439,10 +29959,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": true
+      "result": "N/A",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
+      "blocker": "function_not_rendered_in_live_route_tree",
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "EditablePayeeCard controls",
+      "actual_behavior": "EditablePayeeCard is only rendered by unused PayeeManager.",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-406",
@@ -29456,10 +29982,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": true
+      "result": "N/A",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
+      "blocker": "function_not_rendered_in_live_route_tree",
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "EditablePayeeCard controls",
+      "actual_behavior": "EditablePayeeCard is only rendered by unused PayeeManager.",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-407",
@@ -29473,10 +30005,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": true
+      "result": "N/A",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
+      "blocker": "function_not_rendered_in_live_route_tree",
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "EditablePayeeCard controls",
+      "actual_behavior": "EditablePayeeCard is only rendered by unused PayeeManager.",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-408",
@@ -29600,10 +30138,16 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": true
+      "result": "N/A",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 6",
+      "blocker": "function_not_rendered_in_live_route_tree",
+      "newly_discovered": true,
+      "pass": 6,
+      "defect_id": null,
+      "physical_action": "PayeeCard Email",
+      "actual_behavior": "PayeeCard never rendered; live Email is EndorsementChecklist CC-113.",
+      "role": "c1c_admin",
+      "route": "/c1c/checks"
     },
     {
       "id": "CC-414",
