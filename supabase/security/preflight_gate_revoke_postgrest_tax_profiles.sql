@@ -11,27 +11,31 @@
 -- The ONLY authorized execution method is:
 --   scripts/run-hosted-tax-profile-containment.mjs
 -- Direct psql is not an authorized method. The wrapper proves the
--- connection target (host / pooler username / TLS / database name) and
--- then supplies identity vars. PostgreSQL does NOT independently expose
--- the Supabase project ref; -v expected_project_ref is defense in depth.
--- Keep classification checks in sync with the unapplied apply file.
+-- connection target (direct host / TLS verify-full / database name) and
+-- then supplies identity vars and a one-time nonce. PostgreSQL does NOT
+-- independently expose the Supabase project ref; -v expected_project_ref
+-- is defense in depth. Keep classification checks in sync with the
+-- unapplied apply file.
 -- =============================================================================
 
 \if :{?expected_project_ref}
 \else
-\echo 'ERROR: set -v expected_project_ref=<non-secret project ref>'
-\quit 1
+DO $need_ref$ BEGIN RAISE EXCEPTION 'recipient_tax_profiles containment failed closed: expected_project_ref was not supplied'; END $need_ref$;
 \endif
 \if :{?expected_database}
 \else
-\echo 'ERROR: set -v expected_database=<current_database() value>'
-\quit 1
+DO $need_db$ BEGIN RAISE EXCEPTION 'recipient_tax_profiles containment failed closed: expected_database was not supplied'; END $need_db$;
 \endif
 \if :{?expected_owner}
 \else
-\echo 'ERROR: set -v expected_owner=<table owner role>'
-\quit 1
+DO $need_owner$ BEGIN RAISE EXCEPTION 'recipient_tax_profiles containment failed closed: expected_owner was not supplied'; END $need_owner$;
 \endif
+\if :{?checksops_preflight_nonce}
+\else
+DO $need_nonce$ BEGIN RAISE EXCEPTION 'recipient_tax_profiles containment failed closed: preflight nonce was not supplied'; END $need_nonce$;
+\endif
+
+\set QUIET on
 
 BEGIN;
 
@@ -404,15 +408,16 @@ BEGIN
     );
   END IF;
 
-  RAISE NOTICE 'CLASSIFICATION=%', classification;
-  RAISE NOTICE 'PREFLIGHT_METADATA owner=% relkind=% rls=% force_rls=% policy_count=% authenticated_dml=% service_role_dml=% data_api_table_priv=% data_api_column_priv=%',
-    owner_name, relkind, rls_on, force_rls, policy_count, has_auth_dml, has_service,
-    has_data_api_table_priv, has_data_api_column_priv;
+  PERFORM set_config('checksops.preflight_classification', classification, true);
+  PERFORM set_config('client_min_messages', 'error', true);
 
   IF classification = 'UNSAFE/AMBIGUOUS' THEN
     RAISE EXCEPTION 'recipient_tax_profiles containment failed closed: classification=UNSAFE/AMBIGUOUS (%)', unsafe_reason;
   END IF;
 END
 $preflight_gate$;
+
+\set QUIET off
+SELECT 'CHECKSOPS_TAX_PREFLIGHT_V1|' || :'checksops_preflight_nonce' || '|' || current_setting('checksops.preflight_classification');
 
 ROLLBACK;

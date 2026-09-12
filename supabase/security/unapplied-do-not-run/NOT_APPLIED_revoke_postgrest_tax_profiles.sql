@@ -20,9 +20,10 @@
 -- The ONLY authorized execution method is:
 --   scripts/run-hosted-tax-profile-containment.mjs
 -- Direct psql, supabase db push, and Git merge cannot apply this file.
--- The wrapper independently validates the connection host / pooler username /
--- TLS / database name. PostgreSQL does NOT expose the Supabase project ref;
--- -v expected_project_ref is defense in depth, not connection proof.
+-- The wrapper independently validates the direct connection host /
+-- TLS verify-full / database name. PostgreSQL does NOT expose the
+-- Supabase project ref; -v expected_project_ref is defense in depth,
+-- not connection proof.
 --
 -- This script never SELECTs table rows or column tin values.
 -- It does not create SECURITY DEFINER functions.
@@ -33,19 +34,22 @@
 
 \if :{?expected_project_ref}
 \else
-\echo 'ERROR: set -v expected_project_ref=<non-secret project ref>'
-\quit 1
+DO $need_ref$ BEGIN RAISE EXCEPTION 'recipient_tax_profiles containment failed closed: expected_project_ref was not supplied'; END $need_ref$;
 \endif
 \if :{?expected_database}
 \else
-\echo 'ERROR: set -v expected_database=<current_database() value>'
-\quit 1
+DO $need_db$ BEGIN RAISE EXCEPTION 'recipient_tax_profiles containment failed closed: expected_database was not supplied'; END $need_db$;
 \endif
 \if :{?expected_owner}
 \else
-\echo 'ERROR: set -v expected_owner=<table owner role>'
-\quit 1
+DO $need_owner$ BEGIN RAISE EXCEPTION 'recipient_tax_profiles containment failed closed: expected_owner was not supplied'; END $need_owner$;
 \endif
+\if :{?checksops_apply_nonce}
+\else
+DO $need_nonce$ BEGIN RAISE EXCEPTION 'recipient_tax_profiles containment failed closed: apply nonce was not supplied'; END $need_nonce$;
+\endif
+
+\set QUIET on
 
 SELECT set_config('checksops.expected_project_ref', :'expected_project_ref', false);
 SELECT set_config('checksops.expected_database', :'expected_database', false);
@@ -413,7 +417,7 @@ BEGIN
     );
   END IF;
 
-  RAISE NOTICE 'CLASSIFICATION=%', classification;
+  PERFORM set_config('client_min_messages', 'error', true);
 
   IF classification = 'UNSAFE/AMBIGUOUS' THEN
     RAISE EXCEPTION 'recipient_tax_profiles containment failed closed: classification=UNSAFE/AMBIGUOUS (%)', unsafe_reason;
@@ -421,7 +425,6 @@ BEGIN
 
   IF classification = 'ALREADY_CONTAINED' THEN
     PERFORM set_config('checksops.containment_mutated', 'false', false);
-    RAISE NOTICE 'recipient_tax_profiles containment: already applied, no-op';
     RETURN;
   END IF;
 
@@ -496,7 +499,6 @@ BEGIN
   $c$;
 
   PERFORM set_config('checksops.containment_mutated', 'true', false);
-  RAISE NOTICE 'recipient_tax_profiles containment: Data API privileges revoked; member policies dropped; service_role preserved';
 END
 $containment$;
 
@@ -506,3 +508,6 @@ SELECT CASE
   WHEN current_setting('checksops.containment_mutated', true) = 'true'
   THEN pg_notify('pgrst', 'reload schema')
 END;
+
+\set QUIET off
+SELECT 'CHECKSOPS_TAX_APPLY_V1|' || :'checksops_apply_nonce' || '|ok';
