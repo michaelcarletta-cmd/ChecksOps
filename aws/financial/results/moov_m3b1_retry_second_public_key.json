@@ -1,0 +1,54 @@
+{
+  "phase": "M3b.1-retry-second-public-key-character",
+  "captured_at": "2026-09-10T01:24:32.820Z",
+  "lambda_description_cachebust_only": true,
+  "money_flags_changed": false,
+  "secret_values_printed": false,
+  "access_token_printed": false,
+  "fix_executed": false,
+  "oauth": {
+    "http": 401,
+    "has_access_token": false,
+    "token_type": null,
+    "content_type": null,
+    "response_keys": [],
+    "origin_sent": "https://checksops.com",
+    "authorization_scheme": "Basic",
+    "cache_hit": false
+  },
+  "jwt_belongs_to_production_live_application": false,
+  "jwt_reason": "oauth_token_not_issued",
+  "account_get": { "resource_get_sent": false },
+  "sender_readiness": { "verdict": "BLOCKED", "live_moov_truth": false },
+  "recipient_readiness": {
+    "verdict": "RECIPIENT_NOT_CONFIRMED",
+    "source": "rds",
+    "count": 4,
+    "onboarding_statuses": ["awaiting_bank"]
+  },
+  "counts": {
+    "production_resource_get": 0,
+    "production_money_post": 0
+  },
+  "flags": {
+    "AWS_PROVIDER_LIVE_READS_ENABLED": true,
+    "AWS_MOOV_ENABLED": false,
+    "AWS_PROVIDER_EXECUTION_ENABLED": false,
+    "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": false,
+    "AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED": false
+  },
+  "sql72": "NOT_APPLIED",
+  "money_moved": false,
+  "lovable_changed": false,
+  "webhook_changed": false,
+  "go_nogo_next_phase": "NO-GO",
+  "secret": {
+    "awscurrent_created": "2026-09-10T01:22:23.418Z",
+    "awsprevious_created": "2026-09-10T01:10:55.509Z",
+    "public_key_sha256_12": "b4dd6a5880e7",
+    "public_key_hash_changed": true,
+    "public_key_length": 16,
+    "secret_key_length": 32,
+    "read_contract_complete": true
+  }
+}
