@@ -95,10 +95,17 @@ const publicDb = async (write, deps = {}) => {
   return { client, owned: true };
 };
 
+let safeQuerySp = 0;
+
 const safeQuery = async (client, sql, params = []) => {
+  const sp = `sq_${(safeQuerySp += 1)}`;
   try {
-    return await client.query(sql, params);
+    await client.query(`SAVEPOINT ${sp}`);
+    const result = await client.query(sql, params);
+    try { await client.query(`RELEASE SAVEPOINT ${sp}`); } catch { /* ignore */ }
+    return result;
   } catch {
+    try { await client.query(`ROLLBACK TO SAVEPOINT ${sp}`); } catch { /* ignore */ }
     return { rows: [], rowCount: 0 };
   }
 };
@@ -341,14 +348,34 @@ export const persistPhysicalEndorsementOnCheck = async (client, {
     event_data: { method: 'manual', physical_on_check: true, token_rotated: false },
     actor_id: mapping?.application_user_id,
   });
+  const verified = (await client.query(
+    `SELECT e.status AS endorsement_status,
+            e.signature_method,
+            p.endorsement_status AS payee_status,
+            p.endorsement_token
+     FROM public.check_endorsements e
+     JOIN public.check_payees p ON p.id = e.payee_id
+     WHERE e.id = $1::uuid
+     LIMIT 1`,
+    [endorsementRow.id],
+  )).rows[0];
+  if (verified?.endorsement_status !== 'signed' || verified?.payee_status !== 'signed') {
+    return {
+      ok: false,
+      statusCode: 409,
+      error: 'persist_verify_failed',
+      message: 'Endorsement action did not persist payee and endorsement state together',
+      spoofFieldsIgnored: spoof,
+    };
+  }
   const completion = await completionWithoutAdvance(client, endorsementRow.check_id);
   return {
     ok: true,
     statusCode: 200,
     success: true,
-    endorsement_status: 'signed',
-    payee_status: 'signed',
-    signature_method: 'manual',
+    endorsement_status: verified.endorsement_status,
+    payee_status: verified.payee_status,
+    signature_method: verified.signature_method,
     token_rotated: false,
     ...completion,
     spoofFieldsIgnored: spoof,

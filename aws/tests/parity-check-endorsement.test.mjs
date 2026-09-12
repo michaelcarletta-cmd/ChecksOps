@@ -35,7 +35,7 @@ const mockClient = (impl) => ({
 
 const sqlClient = (handlers) => mockClient((sql, params) => {
   const compact = sql.replace(/\s+/g, ' ');
-  if (/^BEGIN|COMMIT|ROLLBACK|SET TRANSACTION/i.test(compact.trim())) return { rows: [], rowCount: 0 };
+  if (/^BEGIN|COMMIT|ROLLBACK|SET TRANSACTION|SAVEPOINT|RELEASE SAVEPOINT/i.test(compact.trim())) return { rows: [], rowCount: 0 };
   for (const handler of handlers) {
     if (handler.match(compact, params)) return handler.result(params, compact);
   }
@@ -324,6 +324,18 @@ test('waive_endorsement persists endorsement and payee atomically as manual phys
         updates.push({ table: 'check_payees', sql });
         return { rows: [{ id: PAYEE_ID, endorsement_status: 'signed', endorsement_token: 'live-token' }], rowCount: 1 };
       },
+    },
+    {
+      match: (sql) => sql.includes('SELECT e.status AS endorsement_status'),
+      result: () => ({
+        rows: [{
+          endorsement_status: 'signed',
+          signature_method: 'manual',
+          payee_status: 'signed',
+          endorsement_token: 'live-token',
+        }],
+        rowCount: 1,
+      }),
     },
     {
       match: (sql) => sql.includes('SELECT status, payee_type'),
