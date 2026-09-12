@@ -1,0 +1,67 @@
+{
+  "phase": "M3b.8",
+  "captured_at": "2026-09-10T10:46:05.701Z",
+  "sender": "READY_AS_SENDER",
+  "recipient": "RECIPIENT_NOT_CONFIRMED",
+  "freedom_account_fp": "60922058…de96",
+  "display_name": "Freedom Adjustment LLC",
+  "account_type": "business",
+  "mode": "production",
+  "verification_status": "verified",
+  "disabled": false,
+  "restricted": false,
+  "requirements_action_required": null,
+  "tos_accepted": true,
+  "tos_accepted_at": "2026-08-28T18:36:52.907203Z",
+  "capabilities": {
+    "send_funds": { "id": "send-funds", "status": "enabled" },
+    "collect_funds": { "id": "collect-funds", "status": "enabled" },
+    "wallet": { "id": "wallet", "status": "enabled" },
+    "transfers": { "id": "transfers", "status": "enabled" },
+    "send_funds_ach_row": false,
+    "collect_funds_ach_row": false,
+    "wallet_balance_row": false,
+    "same_day_ach_capability": false,
+    "pending": [],
+    "disabled": [],
+    "errored": []
+  },
+  "wallet": {
+    "exists": true,
+    "status": "active",
+    "available_cents": 0,
+    "pending_cents": null
+  },
+  "bank": {
+    "exists": true,
+    "status": "verified",
+    "last4": "4573",
+    "ach_send": true,
+    "ach_collect": true,
+    "same_day_ach_payment_method": true
+  },
+  "recipients": {
+    "production_count": 3,
+    "sandbox_count": 1,
+    "awaiting_bank_count": 3,
+    "ready_count": 0,
+    "c1c_used": false,
+    "onboarded": false
+  },
+  "flags": {
+    "AWS_PROVIDER_LIVE_READS_ENABLED": true,
+    "AWS_MOOV_ENABLED": false,
+    "AWS_PROVIDER_EXECUTION_ENABLED": false,
+    "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": false,
+    "AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED": false
+  },
+  "sql72": "NOT_APPLIED",
+  "production_money_post_count": 0,
+  "provider_mutations": 0,
+  "database_financial_mutations": 0,
+  "money_moved": 0,
+  "lovable_changed": false,
+  "webhook_changed": false,
+  "platform_account_id_configured": false,
+  "lambda_code_sha": "ItJiyRVnWJZ2DIUce3ZhalFn3LrZrkKMSXdpP6MJo50="
+}
