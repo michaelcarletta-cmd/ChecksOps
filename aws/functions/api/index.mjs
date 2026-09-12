@@ -37,6 +37,10 @@ import {
 import { handleWorkflowRequest } from './workflow.mjs';
 import { handleFinancialRequest } from './financial.mjs';
 import { handleSandboxRequest } from './sandbox.mjs';
+import {
+  handleBankVerifyStateProbe,
+  isBankVerifyStateProbeEvent,
+} from './providers/recipient-bank-verify-state-probe.mjs';
 
 const json = (statusCode, body) => ({
   statusCode,
@@ -83,6 +87,10 @@ const READ_ONLY_PATHS = new Set([
 const tenantComplianceMatch = (path) => path.match(/^\/tenants\/([^/]+)\/security-compliance$/);
 
 export const handler = async (event) => {
+  if (isBankVerifyStateProbeEvent(event)) {
+    return handleBankVerifyStateProbe(event);
+  }
+
   const method = (event?.requestContext?.http?.method || event?.httpMethod || 'GET').toUpperCase();
   const path = requestPath(event);
 
