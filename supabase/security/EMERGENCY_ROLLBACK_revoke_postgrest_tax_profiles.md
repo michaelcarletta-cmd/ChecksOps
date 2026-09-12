@@ -1,6 +1,9 @@
 # Emergency rollback — `recipient_tax_profiles` Data API revoke
 
-**Not an automatic down migration.** There is no `*.down.sql` next to `20260912114853_revoke_postgrest_tax_profiles.sql`. `supabase migration down` must not be used to restore tenant-member TIN access.
+**Not an automatic down migration.** There is no `*.down.sql` next to
+`supabase/security/unapplied-do-not-run/NOT_APPLIED_revoke_postgrest_tax_profiles.sql`.
+There is **no automatic unsafe rollback**. `supabase migration down` and
+`supabase db push` must not be used to restore tenant-member TIN access.
 
 Rollback requires **explicit operator authorization** (named approver, ticket, and written acceptance of the warning below).
 

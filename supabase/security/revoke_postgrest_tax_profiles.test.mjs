@@ -7,16 +7,23 @@ import { after, before, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const MIGRATION_NAME = '20260912114853_revoke_postgrest_tax_profiles.sql';
-const MIGRATION = path.join(ROOT, 'supabase/migrations', MIGRATION_NAME);
+const OLD_MIGRATION = '20260912114853_revoke_postgrest_tax_profiles.sql';
+const APPLY_REL = 'supabase/security/unapplied-do-not-run/NOT_APPLIED_revoke_postgrest_tax_profiles.sql';
+const APPLY = path.join(ROOT, APPLY_REL);
+const PREFLIGHT = path.join(ROOT, 'supabase/security/preflight_gate_revoke_postgrest_tax_profiles.sql');
+const INVENTORY = path.join(ROOT, 'supabase/security/preflight_inventory.sql');
 const FIXTURE = path.join(ROOT, 'supabase/security/fixtures/legacy_recipient_tax_profiles.sql');
 const ROLLBACK_DOC = path.join(ROOT, 'supabase/security/EMERGENCY_ROLLBACK_revoke_postgrest_tax_profiles.md');
+const RUNBOOK = path.join(ROOT, 'supabase/security/revoke_postgrest_tax_profiles.md');
 const PG_BIN = '/usr/lib/postgresql/16/bin';
 const SYNTHETIC = 'SYNTHETIC_PLACEHOLDER_NOT_A_TIN';
+const HOSTED_REF = 'nbcqwpysqgyxrrbgtmkw';
 
-const sql = fs.readFileSync(MIGRATION, 'utf8');
-const fixture = fs.readFileSync(FIXTURE, 'utf8');
+const sql = fs.readFileSync(APPLY, 'utf8');
+const preflightSql = fs.readFileSync(PREFLIGHT, 'utf8');
+const inventorySql = fs.readFileSync(INVENTORY, 'utf8');
 const rollbackDoc = fs.readFileSync(ROLLBACK_DOC, 'utf8');
+const runbook = fs.readFileSync(RUNBOOK, 'utf8');
 
 let clusterDir = null;
 let pgPort = 0;
@@ -45,6 +52,26 @@ function psql(database, extraArgs = [], opts = {}) {
     '-U', opts.user || process.env.USER,
     ...extraArgs,
   ], opts);
+}
+
+function identityArgs(database, overrides = {}) {
+  return [
+    '-v', `expected_project_ref=${overrides.projectRef ?? HOSTED_REF}`,
+    '-v', `expected_database=${overrides.database ?? database}`,
+    '-v', `expected_owner=${overrides.owner ?? process.env.USER}`,
+  ];
+}
+
+function applySql(database, opts = {}) {
+  return psql(database, [...identityArgs(database, opts), '-f', APPLY], {
+    allowFail: opts.allowFail === true,
+  });
+}
+
+function runPreflight(database, opts = {}) {
+  return psql(database, [...identityArgs(database, opts), '-f', PREFLIGHT], {
+    allowFail: opts.allowFail === true,
+  });
 }
 
 function scalar(database, query) {
@@ -82,10 +109,6 @@ function createdb(name) {
 
 function loadLegacy(database) {
   psql(database, ['-f', FIXTURE]);
-}
-
-function applyMigration(database, opts = {}) {
-  return psql(database, ['-f', MIGRATION], { allowFail: opts.allowFail === true });
 }
 
 function seedSynthetic(database) {
@@ -126,9 +149,21 @@ function asRoleDenied(database, role, query) {
   assert.match(`${result.stderr}\n${result.stdout}`, /permission denied/i);
 }
 
-test('CLI-created migration filename is used and is a single transaction', () => {
-  assert.equal(fs.existsSync(MIGRATION), true);
-  assert.match(MIGRATION_NAME, /^\d+_revoke_postgrest_tax_profiles\.sql$/);
+function walkFiles(dir, acc = []) {
+  if (!fs.existsSync(dir)) return acc;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) walkFiles(full, acc);
+    else acc.push(full);
+  }
+  return acc;
+}
+
+test('apply SQL lives outside supabase/migrations and is a single transaction', () => {
+  assert.equal(fs.existsSync(APPLY), true);
+  assert.equal(fs.existsSync(path.join(ROOT, 'supabase/migrations', OLD_MIGRATION)), false);
+  assert.match(path.basename(APPLY), /^NOT_APPLIED_revoke_postgrest_tax_profiles\.sql$/);
+  assert.match(sql, /NOT SAFE TO APPLY WITHOUT AUTHORIZED PREFLIGHT/);
   assert.match(sql, /^BEGIN;/m);
   assert.match(sql, /^COMMIT;/m);
   assert.doesNotMatch(sql, /CREATE\s+(OR\s+REPLACE\s+)?FUNCTION[\s\S]{0,200}SECURITY\s+DEFINER/i);
@@ -143,12 +178,30 @@ test('CLI-created migration filename is used and is a single transaction', () =>
   assert.match(sql, /REVOKE ALL ON TABLE public\.recipient_tax_profiles FROM PUBLIC/);
   assert.match(sql, /REVOKE ALL ON TABLE public\.recipient_tax_profiles FROM anon/);
   assert.match(sql, /REVOKE ALL ON TABLE public\.recipient_tax_profiles FROM authenticated/);
+  assert.match(sql, /REVOKE ALL ON TABLE public\.recipient_tax_profiles FROM authenticator/);
   assert.match(sql, /DROP POLICY IF EXISTS "tenant members read recipient_tax_profiles"/);
   assert.match(sql, /failed closed/);
-  assert.equal(fs.existsSync(MIGRATION.replace(/\.sql$/, '.down.sql')), false);
+  assert.match(sql, /pg_notify\('pgrst', 'reload schema'\)/);
+  const notifyIdx = sql.indexOf("pg_notify('pgrst', 'reload schema')");
+  const commitIdx = sql.lastIndexOf('COMMIT;');
+  assert.ok(commitIdx > 0 && notifyIdx > commitIdx, 'NOTIFY must run after COMMIT');
+  assert.equal(fs.existsSync(APPLY.replace(/\.sql$/, '.down.sql')), false);
   const downFiles = fs.readdirSync(path.join(ROOT, 'supabase/migrations'))
     .filter((name) => name.includes('revoke_postgrest_tax_profiles') && name.includes('down'));
   assert.deepEqual(downFiles, []);
+});
+
+test('preflight gate cannot be mistaken for the apply file', () => {
+  assert.match(preflightSql, /PREFLIGHT GATE ONLY/);
+  assert.match(preflightSql, /SET TRANSACTION READ ONLY/);
+  assert.match(preflightSql, /^ROLLBACK;/m);
+  assert.doesNotMatch(preflightSql, /^COMMIT;/m);
+  assert.doesNotMatch(preflightSql, /^\s*REVOKE\b/mi);
+  assert.doesNotMatch(preflightSql, /^\s*DROP POLICY\b/mi);
+  assert.doesNotMatch(preflightSql, /pg_notify/);
+  assert.doesNotMatch(preflightSql, /SELECT\s+tin\b/i);
+  assert.match(inventorySql, /not the apply/i);
+  assert.doesNotMatch(inventorySql, /^\s*REVOKE\b/mi);
 });
 
 test('rollback is documentation-only and warns it reopens TIN exposure', () => {
@@ -157,20 +210,62 @@ test('rollback is documentation-only and warns it reopens TIN exposure', () => {
   assert.match(rollbackDoc, /Safer functional rollback/i);
   assert.match(rollbackDoc, /GRANT SELECT, INSERT, UPDATE, DELETE ON public\.recipient_tax_profiles TO authenticated/);
   assert.match(rollbackDoc, /tenant members read recipient_tax_profiles/);
-  assert.equal(fs.existsSync(path.join(ROOT, 'supabase/migrations/20260912114853_revoke_postgrest_tax_profiles.down.sql')), false);
+  assert.match(rollbackDoc, APPLY_REL);
+  assert.match(rollbackDoc, /supabase db push must not be used/);
+  assert.equal(fs.existsSync(path.join(ROOT, 'supabase/migrations', OLD_MIGRATION.replace(/\.sql$/, '.down.sql'))), false);
 });
 
-test('unapplied encryption design SQL is not this migration', () => {
+test('docs forbid db push and treat Oct 30 2026 as scheduled future behavior', () => {
+  assert.match(runbook, /must not be used/);
+  assert.match(runbook, /supabase db push/);
+  assert.match(runbook, APPLY_REL);
+  assert.match(runbook, /preflight_gate_revoke_postgrest_tax_profiles\.sql/);
+  assert.match(runbook, /scheduled future behavior/i);
+  assert.match(runbook, /No TIN on file/);
+  assert.match(runbook, /separate small UI PR/i);
+  assert.doesNotMatch(runbook, /psql -1 .*supabase\/migrations\/20260912114853/);
+});
+
+test('unapplied encryption design SQL is not this change, and revoke is not a migration', () => {
   const migrations = fs.readdirSync(path.join(ROOT, 'supabase/migrations'));
   assert.equal(migrations.some((name) => name.includes('recipient_tax_profiles_containment')), false);
-  assert.equal(migrations.includes(MIGRATION_NAME), true);
+  assert.equal(migrations.includes(OLD_MIGRATION), false);
   assert.doesNotMatch(sql, /tin_encrypted/);
+});
+
+test('no auto-run discovery of the unapplied revoke file', () => {
+  const scanners = [
+    'aws/db-copy/lib/inventory.mjs',
+    'aws/workflows/oneshot/index.mjs',
+    'aws/financial/oneshot/index.mjs',
+    'aws/rls/oneshot/index.mjs',
+    'aws/write-path/oneshot/index.mjs',
+    'aws/identity/oneshot/index.mjs',
+    '.github/workflows/aws-migration-ci.yml',
+    '.github/workflows/tax-profile-migration-guard.yml',
+    'supabase/config.toml',
+  ];
+  for (const rel of scanners) {
+    const text = fs.readFileSync(path.join(ROOT, rel), 'utf8');
+    assert.doesNotMatch(text, /NOT_APPLIED_revoke_postgrest_tax_profiles/);
+    assert.doesNotMatch(text, /unapplied-do-not-run/);
+  }
+  const inventory = fs.readFileSync(path.join(ROOT, 'aws/db-copy/lib/inventory.mjs'), 'utf8');
+  assert.match(inventory, /supabase\/migrations/);
+  const workflowFiles = walkFiles(path.join(ROOT, '.github/workflows'));
+  for (const file of workflowFiles) {
+    const text = fs.readFileSync(file, 'utf8');
+    assert.doesNotMatch(text, /db push/);
+    assert.doesNotMatch(text, /psql[^\n]*NOT_APPLIED_revoke_postgrest_tax_profiles/);
+  }
 });
 
 test('frontend still does not query the table directly', () => {
   const taxSummary = fs.readFileSync(path.join(ROOT, 'src/components/ledger/TaxSummary.tsx'), 'utf8');
   assert.doesNotMatch(taxSummary, /from\(['"]recipient_tax_profiles['"]\)/);
   assert.match(taxSummary, /tenant-tax-profiles/);
+  assert.match(taxSummary, /taxProfiles = \[\]/);
+  assert.match(taxSummary, /No TIN on file/);
   const client = fs.readFileSync(path.join(ROOT, 'src/integrations/supabase/client.ts'), 'utf8');
   assert.doesNotMatch(client, /SERVICE_ROLE/);
   assert.match(client, /VITE_SUPABASE_PUBLISHABLE_KEY/);
@@ -187,8 +282,14 @@ test('local disposable database: revoke, deny Data API roles, preserve service_r
   const before = fingerprint('rtp_legacy');
   assert.equal(before.length, 32);
 
-  const first = applyMigration('rtp_legacy');
+  const gated = runPreflight('rtp_legacy');
+  assert.equal(gated.status, 0);
+  assert.match(gated.stderr + gated.stdout, /CLASSIFICATION=EXACT_EXPECTED_LEGACY/);
+  assert.doesNotMatch(gated.stderr + gated.stdout, new RegExp(SYNTHETIC));
+
+  const first = applySql('rtp_legacy');
   assert.equal(first.status, 0);
+  assert.match(first.stderr + first.stdout, /CLASSIFICATION=EXACT_EXPECTED_LEGACY/);
   assert.match(first.stderr + first.stdout, /Data API privileges revoked/);
   assert.doesNotMatch(first.stderr + first.stdout, new RegExp(SYNTHETIC));
 
@@ -231,6 +332,7 @@ test('local disposable database: revoke, deny Data API roles, preserve service_r
 
   asRoleDenied('rtp_legacy', 'anon', 'SELECT tin FROM public.recipient_tax_profiles');
   asRoleDenied('rtp_legacy', 'anon', 'SELECT * FROM public.recipient_tax_profiles');
+  asRoleDenied('rtp_legacy', 'authenticated', 'SELECT id FROM public.recipient_tax_profiles');
   asRoleDenied('rtp_legacy', 'authenticated', 'SELECT tin FROM public.recipient_tax_profiles');
   asRoleDenied('rtp_legacy', 'authenticated', 'SELECT * FROM public.recipient_tax_profiles');
   asRoleDenied('rtp_legacy', 'authenticated', 'SELECT tin FROM recipient_tax_profiles');
@@ -302,8 +404,13 @@ test('local disposable database: revoke, deny Data API roles, preserve service_r
   `]);
   assert.equal(fingerprint('rtp_legacy'), before);
 
-  const second = applyMigration('rtp_legacy');
+  const contained = runPreflight('rtp_legacy');
+  assert.equal(contained.status, 0);
+  assert.match(contained.stderr + contained.stdout, /CLASSIFICATION=ALREADY_CONTAINED/);
+
+  const second = applySql('rtp_legacy');
   assert.equal(second.status, 0);
+  assert.match(second.stderr + second.stdout, /CLASSIFICATION=ALREADY_CONTAINED/);
   assert.match(second.stderr + second.stdout, /already applied, no-op/);
   assert.equal(fingerprint('rtp_legacy'), before);
 });
@@ -315,7 +422,7 @@ test('fail closed on unexpected extra policy', () => {
     CREATE POLICY unexpected_wide_read ON public.recipient_tax_profiles
       FOR SELECT TO authenticated USING (true);
   `]);
-  const result = applyMigration('rtp_extra_policy', { allowFail: true });
+  const result = applySql('rtp_extra_policy', { allowFail: true });
   assert.notEqual(result.status, 0);
   assert.match(`${result.stderr}\n${result.stdout}`, /failed closed/);
   assert.equal(scalar('rtp_extra_policy', `
@@ -330,9 +437,9 @@ test('fail closed when a view depends on the table', () => {
     CREATE VIEW public.tax_profiles_leak AS
       SELECT recipient_key FROM public.recipient_tax_profiles;
   `]);
-  const result = applyMigration('rtp_view', { allowFail: true });
+  const result = applySql('rtp_view', { allowFail: true });
   assert.notEqual(result.status, 0);
-  assert.match(`${result.stderr}\n${result.stdout}`, /dependent view/);
+  assert.match(`${result.stderr}\n${result.stdout}`, /dependent object/);
 });
 
 test('fail closed when a public function references the table', () => {
@@ -342,9 +449,9 @@ test('fail closed when a public function references the table', () => {
     CREATE FUNCTION public.leak_tax_profiles() RETURNS bigint
     LANGUAGE sql AS $$ SELECT count(*) FROM public.recipient_tax_profiles $$;
   `]);
-  const result = applyMigration('rtp_fn', { allowFail: true });
+  const result = applySql('rtp_fn', { allowFail: true });
   assert.notEqual(result.status, 0);
-  assert.match(`${result.stderr}\n${result.stdout}`, /function public.leak_tax_profiles/);
+  assert.match(`${result.stderr}\n${result.stdout}`, /leak_tax_profiles/);
 });
 
 test('column-level grants cannot restore authenticated access after revoke', () => {
@@ -353,7 +460,7 @@ test('column-level grants cannot restore authenticated access after revoke', () 
   psql('rtp_cols', ['-c', `
     GRANT SELECT (tin) ON public.recipient_tax_profiles TO authenticated;
   `]);
-  const applied = applyMigration('rtp_cols');
+  const applied = applySql('rtp_cols');
   assert.equal(applied.status, 0);
   asRoleDenied('rtp_cols', 'authenticated', 'SELECT tin FROM public.recipient_tax_profiles');
   assert.equal(scalar('rtp_cols', `
@@ -371,9 +478,104 @@ test('fail closed when the table is in a publication', () => {
   psql('rtp_pub', ['-c', `
     CREATE PUBLICATION rtp_unexpected FOR TABLE public.recipient_tax_profiles;
   `]);
-  const result = applyMigration('rtp_pub', { allowFail: true });
+  const result = applySql('rtp_pub', { allowFail: true });
   assert.notEqual(result.status, 0);
   assert.match(`${result.stderr}\n${result.stdout}`, /publication/);
+});
+
+test('fail closed when a foreign table name references recipient_tax_profiles', () => {
+  createdb('rtp_ft');
+  loadLegacy('rtp_ft');
+  psql('rtp_ft', ['-c', `
+    CREATE FOREIGN DATA WRAPPER rtp_dummy;
+    CREATE SERVER rtp_dummy_srv FOREIGN DATA WRAPPER rtp_dummy;
+    CREATE FOREIGN TABLE public.recipient_tax_profiles_remote (id uuid)
+      SERVER rtp_dummy_srv;
+  `]);
+  const result = applySql('rtp_ft', { allowFail: true });
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stderr}\n${result.stdout}`, /foreign table/i);
+});
+
+test('fail closed on role-membership ambiguity', () => {
+  createdb('rtp_membership');
+  loadLegacy('rtp_membership');
+  psql('rtp_membership', ['-c', `GRANT service_role TO authenticated;`]);
+  try {
+    const result = applySql('rtp_membership', { allowFail: true });
+    assert.notEqual(result.status, 0);
+    assert.match(`${result.stderr}\n${result.stdout}`, /role-membership ambiguity/);
+  } finally {
+    psql('rtp_membership', ['-c', `REVOKE service_role FROM authenticated;`], { allowFail: true });
+  }
+});
+
+test('fail closed on unexpected custom grantee', () => {
+  createdb('rtp_grantee');
+  loadLegacy('rtp_grantee');
+  psql('rtp_grantee', ['-c', `
+    CREATE ROLE unexpected_auditor NOLOGIN;
+    GRANT SELECT ON public.recipient_tax_profiles TO unexpected_auditor;
+  `]);
+  const result = applySql('rtp_grantee', { allowFail: true });
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stderr}\n${result.stdout}`, /unexpected custom grantee/);
+});
+
+test('fail closed on unexpected aws_* policy', () => {
+  createdb('rtp_aws_pol');
+  loadLegacy('rtp_aws_pol');
+  psql('rtp_aws_pol', ['-c', `
+    CREATE POLICY aws_select_recipient_tax_profiles ON public.recipient_tax_profiles
+      FOR SELECT TO authenticated USING (true);
+  `]);
+  const result = applySql('rtp_aws_pol', { allowFail: true });
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stderr}\n${result.stdout}`, /aws_\* policy/);
+});
+
+test('fail closed on wrong project or database identity', () => {
+  createdb('rtp_identity');
+  loadLegacy('rtp_identity');
+  const wrongRef = applySql('rtp_identity', {
+    allowFail: true,
+    projectRef: 'sqyyvpaymashtdwjjmku',
+  });
+  assert.notEqual(wrongRef.status, 0);
+  assert.match(`${wrongRef.stderr}\n${wrongRef.stdout}`, /authorized hosted ref|project identity/);
+
+  const wrongDb = applySql('rtp_identity', {
+    allowFail: true,
+    database: 'postgres',
+  });
+  assert.notEqual(wrongDb.status, 0);
+  assert.match(`${wrongDb.stderr}\n${wrongDb.stdout}`, /database identity mismatch/);
+});
+
+test('fail closed on RDS/AWS database name pattern', () => {
+  createdb('checksops_rtp');
+  loadLegacy('checksops_rtp');
+  const result = applySql('checksops_rtp', { allowFail: true });
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stderr}\n${result.stdout}`, /RDS\/AWS database name/);
+});
+
+test('fail closed on partially applied state', () => {
+  createdb('rtp_partial');
+  loadLegacy('rtp_partial');
+  psql('rtp_partial', ['-c', `
+    DROP POLICY "tenant members read recipient_tax_profiles" ON public.recipient_tax_profiles;
+  `]);
+  const result = applySql('rtp_partial', { allowFail: true });
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stderr}\n${result.stdout}`, /UNSAFE\/AMBIGUOUS/);
+  assert.equal(scalar('rtp_partial', `
+    SELECT has_table_privilege('authenticated', 'public.recipient_tax_profiles', 'SELECT')::text
+  `), 'true');
+  assert.equal(scalar('rtp_partial', `
+    SELECT count(*)::text FROM pg_policy
+    WHERE polrelid = 'public.recipient_tax_profiles'::regclass
+  `), '3');
 });
 
 after(() => {

@@ -457,6 +457,7 @@ test('unapplied containment SQL is transactional, fail-closed, and not on a runn
   assert.equal(fs.existsSync(path.join(ROOT, 'aws/tax/sql/80_recipient_tax_profiles_containment.sql')), false);
   const migrations = fs.readdirSync(path.join(ROOT, 'supabase/migrations'));
   assert.equal(migrations.some((name) => name.includes('recipient_tax_profiles_containment')), false);
+  assert.equal(migrations.some((name) => name.includes('revoke_postgrest_tax_profiles')), false);
   for (const rel of [
     'aws/db-copy/rehearsal/scripts/bridge-db-rehearsal.mjs',
     'aws/workflows/oneshot/index.mjs',
