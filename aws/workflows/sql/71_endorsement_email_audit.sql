@@ -381,9 +381,16 @@ BEGIN
     RETURN jsonb_build_object('ok', false, 'error', 'token_required', 'statusCode', 400);
   END IF;
 
+  PERFORM 1
+  FROM public.check_endorsements
+  WHERE token = trim(p_token)
+  FOR UPDATE;
+
   SELECT * INTO rec
   FROM public.check_endorsements
   WHERE token = trim(p_token)
+  ORDER BY CASE WHEN status IN ('pending', 'sent') THEN 0 WHEN status = 'signed' THEN 1 ELSE 2 END,
+           updated_at DESC NULLS LAST
   LIMIT 1;
 
   IF NOT FOUND THEN
@@ -398,6 +405,16 @@ BEGIN
   END IF;
 
   IF rec.status = 'signed' THEN
+    IF p_new_token IS NOT NULL AND length(trim(p_new_token)) > 0 THEN
+      UPDATE public.check_endorsements
+      SET token = CASE
+            WHEN id = rec.id THEN trim(p_new_token)
+            ELSE gen_random_uuid()::text
+          END,
+          token_expires_at = NULL,
+          updated_at = now()
+      WHERE token = trim(p_token);
+    END IF;
     RETURN jsonb_build_object(
       'ok', true,
       'already_signed', true,
@@ -443,6 +460,13 @@ BEGIN
   IF NOT FOUND THEN
     RETURN jsonb_build_object('ok', false, 'error', 'invalid_or_used_token', 'statusCode', 404);
   END IF;
+
+  UPDATE public.check_endorsements
+  SET token = gen_random_uuid()::text,
+      token_expires_at = NULL,
+      updated_at = now()
+  WHERE token = trim(p_token)
+    AND id <> rec.id;
 
   RETURN jsonb_build_object(
     'ok', true,
