@@ -81,7 +81,8 @@ const lookupCheck = async (client, checkId) => {
   const invalid = requireUuid('check_id', checkId);
   if (invalid) return invalid;
   const rows = (await client.query(
-    'SELECT id, tenant_id FROM public.check_intake_items WHERE id = $1::uuid',
+    `SELECT id, tenant_id, status, check_stage, deposited_at, amount, claim_id
+     FROM public.check_intake_items WHERE id = $1::uuid`,
     [checkId],
   )).rows;
   if (!rows.length) return { error: 'rls_denied', message: 'check not found or not writable' };
@@ -359,7 +360,46 @@ const executeIntakeUpdate = async ({ client, values, filters }) => {
     built.params,
   )).rows;
   if (!rows.length) return { error: 'rls_denied', message: 'check not writable' };
-  return { rows };
+  const restored = await restoreIntakeWorkflowInvariants(client, looked.check, rows[0]);
+  if (restored.error) return restored;
+  return { rows: [restored.row] };
+};
+
+const sameText = (left, right) => String(left ?? '') === String(right ?? '');
+
+const restoreIntakeWorkflowInvariants = async (client, before, after) => {
+  if (!before || !after) return { row: after };
+  const afterHas = (column) => Object.prototype.hasOwnProperty.call(after, column);
+  const unrestorable = [];
+  for (const column of ['deposited_at', 'amount', 'claim_id']) {
+    if (afterHas(column) && !sameText(before[column], after[column])) unrestorable.push(column);
+  }
+  if (unrestorable.length) {
+    return {
+      error: 'workflow_invariant',
+      columns: unrestorable,
+      message: 'Check metadata writes must not change financial, deposit, or claim-link state.',
+    };
+  }
+  const statusDrifted = afterHas('status') && !sameText(before.status, after.status);
+  const stageDrifted = afterHas('check_stage') && !sameText(before.check_stage, after.check_stage);
+  if (!statusDrifted && !stageDrifted) return { row: after };
+  const restored = (await client.query(
+    `UPDATE public.check_intake_items
+     SET status = $2, check_stage = $3, updated_at = now()
+     WHERE id = $1::uuid
+     RETURNING *`,
+    [before.id, before.status, before.check_stage],
+  )).rows[0];
+  if (!restored) return { error: 'rls_denied', message: 'check not writable' };
+  if (!sameText(restored.status, before.status) || !sameText(restored.check_stage, before.check_stage)) {
+    return {
+      error: 'workflow_invariant',
+      columns: ['status', 'check_stage'],
+      message: 'Check metadata writes must not advance deposit or workflow status.',
+    };
+  }
+  return { row: restored };
 };
 
 const executePayees = async ({ client, op, values, filters }) => {

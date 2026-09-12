@@ -60,8 +60,19 @@ const mockClient = ({ rows = [], mapping = mappingFor(), throwOn = null } = {}) 
       if (sql === LOOKUP_MAPPING_SQL) {
         return { rows: params[0] === mapping.cognito_sub ? [mapping] : [] };
       }
-      if (/SELECT id, tenant_id FROM public.check_intake_items/.test(sql)) {
-        return { rows: [{ id: params[0], tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a' }] };
+      if (/SELECT id, tenant_id, status, check_stage, deposited_at, amount, claim_id/.test(sql)
+        || /SELECT id, tenant_id FROM public.check_intake_items/.test(sql)) {
+        return {
+          rows: [{
+            id: params[0],
+            tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a',
+            status: 'needs_review',
+            check_stage: 'review',
+            deposited_at: null,
+            amount: 100,
+            claim_id: null,
+          }],
+        };
       }
       if (/FROM public.check_payees p/.test(sql)) {
         return {
@@ -356,6 +367,54 @@ test('Tranche 2 updates descriptive check fields and ignores spoofed tenant/user
   assert.ok(update);
   assert.equal(update.params.includes(SPOOF_ID), false);
   assert.equal(String(update.sql).includes('amount'), false);
+});
+
+test('claim-number persist reverts trigger-advanced deposit status', async () => {
+  const client = mockClient();
+  let intakeUpdates = 0;
+  const inner = client.query.bind(client);
+  client.query = async (sql, params) => {
+    if (String(sql).includes('UPDATE public.check_intake_items')) {
+      intakeUpdates += 1;
+      if (intakeUpdates === 1) {
+        return {
+          rows: [{
+            id: CHECK_ID,
+            detected_claim_number: 'CLM-47',
+            status: 'approved_for_deposit',
+            check_stage: 'ready_for_deposit',
+            deposited_at: null,
+            amount: 100,
+            claim_id: null,
+          }],
+        };
+      }
+      return {
+        rows: [{
+          id: CHECK_ID,
+          detected_claim_number: 'CLM-47',
+          status: params[1],
+          check_stage: params[2],
+          deposited_at: null,
+          amount: 100,
+          claim_id: null,
+        }],
+      };
+    }
+    return inner(sql, params);
+  };
+  const result = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_intake_items',
+    op: 'update',
+    values: { detected_claim_number: 'CLM-47' },
+    filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
+  }), depsFor(client));
+  assert.equal(result.ok, true);
+  assert.equal(result.data[0].detected_claim_number, 'CLM-47');
+  assert.equal(result.data[0].status, 'needs_review');
+  assert.equal(result.data[0].check_stage, 'review');
+  assert.equal(result.data[0].deposited_at, null);
+  assert.equal(intakeUpdates, 2);
 });
 
 test('Tranche 2 denies financial intake columns, status, insert, and endorsement signed status', async () => {
