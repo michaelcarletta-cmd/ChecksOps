@@ -11,6 +11,7 @@ import {
   persistPhysicalEndorsementOnCheck,
   persistPayeeEndorsementState,
   runAuthenticatedEndorsement,
+  runGetEndorsementData,
   runPublicEndorsement,
 } from '../functions/api/check-endorsement.mjs';
 
@@ -80,7 +81,28 @@ test('public get and abuse cases ignore spoofed tenant headers', async () => {
   }]);
   const bad = await runPublicEndorsement(eventOf({ action: 'get_endorsement_data', token: 'nope' }), { client });
   assert.equal(bad.statusCode, 404);
-  assert.equal(bad.code, 'token_consumed');
+  assert.equal(bad.code, 'invalid_link');
+
+  const unusedPayee = await runGetEndorsementData(sqlClient([
+    { match: (sql) => sql.includes('aws_public_endorsement_by_token'), result: () => ({ rows: [{ doc: null }] }) },
+    {
+      match: (sql) => sql.includes('FROM public.check_payees p'),
+      result: () => ({ rows: [{
+        id: PAYEE_ID,
+        check_id: CHECK_ID,
+        payee_name: 'Unused Payee',
+        endorsement_status: 'pending',
+        endorsement_token: 'unused-payee-token',
+        carrier_name: 'Acme',
+        check_number: '1001',
+        amount: 10,
+        tenant_id: TENANT_A,
+      }] }),
+    },
+  ]), 'unused-payee-token', {});
+  assert.equal(unusedPayee.ok, true);
+  assert.equal(unusedPayee.payee_name, 'Unused Payee');
+  assert.equal(unusedPayee.status, 'pending');
 });
 
 test('public submit requires consent and does not advance deposit', async () => {

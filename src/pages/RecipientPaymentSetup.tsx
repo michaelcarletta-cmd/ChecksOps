@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { applyMoovTheme } from "@/lib/payments/moovTheme";
 import { Loader2, ShieldCheck, Landmark, AlertCircle, CheckCircle2, UserRound, Clock } from "lucide-react";
+import { PublicInvalidLink, publicLinkUserMessage } from "@/components/public/PublicInvalidLink";
 
 interface SessionData {
   recipient: { id: string; name: string; status: string; bank_linked?: boolean; bank_name?: string | null; last_four?: string | null };
@@ -38,7 +39,12 @@ async function invoke(fn: string, body: Record<string, unknown>) {
   if (error) {
     let message = error.message ?? "Request failed";
     try { const parsed = await (error as any).context?.json?.(); if (parsed?.error) message = parsed.error; } catch { /* noop */ }
-    throw new Error(message);
+    try {
+      const body = (error as any).context?.body;
+      if (body?.message) message = String(body.message);
+      else if (body?.error) message = String(body.error);
+    } catch { /* noop */ }
+    throw new Error(publicLinkUserMessage(message, "This payment setup link is invalid or has expired."));
   }
   if ((data as any)?.error) throw new Error((data as any).error);
   return data as any;
@@ -103,6 +109,11 @@ export default function RecipientPaymentSetup() {
   );
 
   async function load() {
+    if (!token || !/^[A-Za-z0-9._~-]{8,200}$/.test(token)) {
+      setError("This payment setup link is invalid or has expired.");
+      setLoading(false);
+      return;
+    }
     setLoading(true); setError(null);
     try { setSession(await invoke("moov-recipient-session", { token })); }
     catch (e: any) { setError(e.message); }
@@ -199,6 +210,16 @@ export default function RecipientPaymentSetup() {
       await load();
     } catch (e: any) { setError(e.message); }
     finally { setSaving(false); }
+  }
+
+  const tokenLooksValid = typeof token === "string" && /^[A-Za-z0-9._~-]{8,200}$/.test(token);
+  if (!tokenLooksValid || (!loading && !session && error)) {
+    return (
+      <PublicInvalidLink
+        title="Payment setup unavailable"
+        description={publicLinkUserMessage(error, "This payment setup link is invalid or has expired.")}
+      />
+    );
   }
 
   return <main className="min-h-screen bg-background flex items-center justify-center p-4"><div className="w-full max-w-lg space-y-4">

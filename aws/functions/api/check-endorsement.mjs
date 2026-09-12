@@ -478,7 +478,7 @@ const lookupPublicEndorsement = async (client, token) => {
     'SELECT public.aws_public_endorsement_by_token($1) AS doc',
     [token],
   )).rows[0]?.doc;
-  if (doc) return doc;
+  if (doc) return { kind: 'endorsement', row: doc };
   const byToken = (await safeQuery(
     client,
     `SELECT e.*, ci.carrier_name, ci.check_number, ci.amount, ci.claim_id, ci.tenant_id
@@ -488,14 +488,19 @@ const lookupPublicEndorsement = async (client, token) => {
      LIMIT 1`,
     [token],
   )).rows[0];
-  if (byToken) return byToken;
+  if (byToken) return { kind: 'endorsement', row: byToken };
   const payee = (await safeQuery(
     client,
-    `SELECT id, check_id FROM public.check_payees WHERE endorsement_token = $1 LIMIT 1`,
+    `SELECT p.id, p.check_id, p.payee_name, p.endorsement_status, p.endorsement_token,
+            ci.carrier_name, ci.check_number, ci.amount, ci.claim_id, ci.tenant_id
+     FROM public.check_payees p
+     LEFT JOIN public.check_intake_items ci ON ci.id = p.check_id
+     WHERE p.endorsement_token = $1
+     LIMIT 1`,
     [token],
   )).rows[0];
-  if (!payee) return null;
-  return (await safeQuery(
+  if (!payee) return { kind: 'missing', row: null };
+  const endorsement = (await safeQuery(
     client,
     `SELECT e.*, ci.carrier_name, ci.check_number, ci.amount, ci.claim_id, ci.tenant_id
      FROM public.check_endorsements e
@@ -504,31 +509,34 @@ const lookupPublicEndorsement = async (client, token) => {
      ORDER BY e.updated_at DESC NULLS LAST
      LIMIT 1`,
     [payee.id],
-  )).rows[0] || null;
+  )).rows[0];
+  if (endorsement) return { kind: 'endorsement', row: endorsement };
+  return { kind: 'payee', row: payee };
 };
 
 export const runGetEndorsementData = async (client, token, spoof) => {
-  if (!token) return { ok: false, statusCode: 400, error: 'Token required', spoofFieldsIgnored: spoof };
-  const row = await lookupPublicEndorsement(client, token);
-  if (!row) {
+  if (!token) return { ok: false, statusCode: 400, error: 'This endorsement link is invalid.', code: 'invalid_link', spoofFieldsIgnored: spoof };
+  const found = await lookupPublicEndorsement(client, token);
+  if (found.kind === 'missing' || !found.row) {
     return {
       ok: false,
       statusCode: 404,
-      error: 'This endorsement link has already been used or replaced.',
-      code: 'token_consumed',
+      error: 'This endorsement link is invalid or has expired.',
+      code: 'invalid_link',
       spoofFieldsIgnored: spoof,
     };
   }
+  const row = found.row;
   return {
     ok: true,
     statusCode: 200,
     id: row.id,
     payee_name: row.payee_name,
-    status: row.status,
+    status: row.status || row.endorsement_status || 'pending',
     carrier_name: row.carrier_name || 'Unknown Carrier',
     check_number: row.check_number || 'N/A',
     amount: row.amount ?? null,
-    token: row.token,
+    token: row.token || row.endorsement_token || token,
     requires_payment_direction: false,
     spoofFieldsIgnored: spoof,
   };

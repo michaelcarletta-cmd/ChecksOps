@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { publicWorkflowRequest } from "@/lib/publicWorkflowApi";
+import { publicLinkUserMessage } from "@/components/public/PublicInvalidLink";
 
 interface EndorsementData {
   id: string;
@@ -55,7 +56,7 @@ export default function Endorse() {
         body: JSON.stringify({ action: "get_endorsement_data", token }),
       });
       const json = await resp.json();
-      if (!resp.ok) throw new Error(json.error || "Failed to load endorsement");
+      if (!resp.ok) throw new Error(json.message || json.error || "Failed to load endorsement");
       setData(json);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load");
@@ -251,8 +252,10 @@ export default function Endorse() {
     return (
       <div style={styles.body}>
         <div style={styles.card}>
-          <h1 style={styles.h1}>Endorsement Error</h1>
-          <p style={{ color: "#ef4444", textAlign: "center", marginTop: 16 }}>{error}</p>
+          <h1 style={styles.h1}>This link is invalid or has expired</h1>
+          <p style={{ color: "#64748b", textAlign: "center", marginTop: 16 }}>
+            {publicLinkUserMessage(error, "Ask the sender for a new endorsement link.")}
+          </p>
         </div>
       </div>
     );

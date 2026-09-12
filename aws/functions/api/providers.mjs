@@ -347,6 +347,11 @@ export const handleFunctionInvoke = async (event, name, deps = {}) => {
     /* app-services optional during early boot */
   }
 
+  if (name === 'moov-recipient-session') {
+    const { handlePublicRecipientSession } = await import('./public-tokens.mjs');
+    return handlePublicRecipientSession(event);
+  }
+
   const spec = classifyFunction(name) || (name === 'actum' ? ACTUM_BOUNDARY : null);
   if (!spec) {
     return denyProviderExecution(null, name, {

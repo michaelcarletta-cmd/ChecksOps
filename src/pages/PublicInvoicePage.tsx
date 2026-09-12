@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { AlertCircle, CheckCircle2, Clock, FileText, Lock, ExternalLink, Ban, Calendar } from "lucide-react";
+import { PublicInvalidLink, publicLinkUserMessage } from "@/components/public/PublicInvalidLink";
 
 interface InvoiceLineItem {
   name: string;
@@ -87,13 +88,16 @@ export default function PublicInvoicePage() {
       .invoke("public-invoice", { body: { token } })
       .then(({ data, error: fnErr }) => {
         if (fnErr || (data as any)?.error) {
-          setError((data as any)?.error || fnErr?.message || "Could not load invoice.");
+          setError(publicLinkUserMessage(
+            (data as any)?.message || (data as any)?.error || fnErr?.message,
+            "This invoice link is invalid or has expired.",
+          ));
         } else {
           setInvoice((data as any).invoice);
           setTenant((data as any).tenant);
         }
       })
-      .catch((e) => setError(e.message || "Could not load invoice."))
+      .catch((e) => setError(publicLinkUserMessage(e.message, "This invoice link is invalid or has expired.")))
       .finally(() => setLoading(false));
   }, [token]);
 
@@ -118,17 +122,10 @@ export default function PublicInvoicePage() {
 
   if (error || !invoice || !tenant) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
-          <CardContent className="pt-6 text-center space-y-4">
-            <AlertCircle className="h-10 w-10 text-destructive mx-auto" />
-            <h1 className="text-xl font-semibold">Invoice unavailable</h1>
-            <p className="text-muted-foreground text-sm">
-              {error || "We couldn't find that invoice. It may have been removed or the link may be incorrect."}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+      <PublicInvalidLink
+        title="Invoice unavailable"
+        description={error || "This invoice link is invalid or has expired."}
+      />
     );
   }
 
