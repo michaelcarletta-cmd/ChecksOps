@@ -528,6 +528,23 @@ export const WRITE_ALLOWLIST = {
     clientIgnored: new Set(['id', 'created_at']),
     frontend: { file: 'TenantDocumentLibrary', op: 'insert/update/delete', reason: 'Tenant library metadata only.' },
   },
+  mortgage_request_library_documents: {
+    tranche: 6,
+    ops: new Set(['insert', 'upsert']),
+    columns: new Set([
+      'request_id', 'tenant_id', 'tenant_document_id', 'doc_type',
+      'file_name', 'file_path', 'mime_type', 'file_size', 'bucket',
+    ]),
+    identityColumn: null,
+    requiredForWrite: { insert: ['request_id', 'tenant_document_id'], upsert: ['request_id', 'tenant_document_id'] },
+    filterColumns: new Set(['request_id', 'tenant_id', 'tenant_document_id', 'file_path']),
+    clientIgnored: new Set(['id', 'created_at', 'updated_at', 'bucket']),
+    frontend: {
+      file: 'TenantDocumentLibrary',
+      op: 'insert/upsert',
+      reason: 'Backfill qualifying library:mortgage:% docs onto open Mortgage Desk requests. Server re-reads document and request rows.',
+    },
+  },
   loss_draft_documents: {
     tranche: 6,
     ops: new Set(['update', 'delete']),

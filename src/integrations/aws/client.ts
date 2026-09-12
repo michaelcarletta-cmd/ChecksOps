@@ -55,6 +55,7 @@ const AWS_WRITE_TABLES = new Set([
   "contractor_profiles",
   "notifications",
   "tenant_documents",
+  "mortgage_request_library_documents",
   "loss_draft_documents",
   "mortgage_companies",
   "shared_check_messages",

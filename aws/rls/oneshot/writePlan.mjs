@@ -252,6 +252,9 @@ export const applyWriteDdl = async (client) => {
   await client.query(readSql('20_write_helpers.sql'));
   await client.query(readSql('22_write_probe_table.sql'));
   await client.query(readSql('21_proposed_write_policies.sql'));
+  // Do not apply 29_mortgage_ops_library_parity.sql here. It requires
+  // 24_complete_write_policies.sql, which writePlan does not install.
+  // completeAuth applies 20 → 24 → 29.
   const policies = Number((await client.query(
     `SELECT count(*)::int AS n FROM pg_policies
      WHERE schemaname='public' AND policyname LIKE 'aws_write_%'`,

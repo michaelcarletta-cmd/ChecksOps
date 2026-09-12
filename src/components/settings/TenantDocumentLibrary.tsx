@@ -343,19 +343,21 @@ function LibraryItem({ row, onChange }: { row: LibraryRow; onChange: () => void 
         .eq("tenant_id", row.tenant_id)
         .in("status", ["requested", "in_progress"]);
       if (openReqs?.length) {
-        await supabase.from("mortgage_request_library_documents" as any).upsert(
-          openReqs.map((r: any) => ({
-            request_id: r.id,
-            tenant_id: row.tenant_id,
-            tenant_document_id: row.id,
-            doc_type: row.doc_type,
-            file_name: row.file_name,
-            file_path: row.file_path,
-            mime_type: row.mime_type,
-            file_size: row.file_size,
-          })),
-          { onConflict: "request_id,file_path", ignoreDuplicates: true } as any
-        );
+        for (const r of openReqs as { id: string }[]) {
+          await supabase.from("mortgage_request_library_documents" as any).upsert(
+            {
+              request_id: r.id,
+              tenant_id: row.tenant_id,
+              tenant_document_id: row.id,
+              doc_type: row.doc_type,
+              file_name: row.file_name,
+              file_path: row.file_path,
+              mime_type: row.mime_type,
+              file_size: row.file_size,
+            },
+            { onConflict: "request_id,file_path", ignoreDuplicates: true } as any,
+          );
+        }
       }
     }
     setSaving(false);

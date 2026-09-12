@@ -60,8 +60,12 @@ export const toStorageObjectPath = (value, bucket = 'claim-files') => {
 };
 
 export const normalizePath = (value, bucket) => {
-  const rel = toStorageObjectPath(value, bucket) || String(value || '').trim();
-  if (!rel) return null;
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  const fromHttpUrl = /^https?:\/\//i.test(raw);
+  const extracted = toStorageObjectPath(raw, bucket);
+  if (fromHttpUrl && !extracted) return null;
+  const rel = extracted || raw;
   if (rel.includes('\0')) return null;
   const parts = rel.split('/').filter((p) => p && p !== '.');
   if (parts.some((p) => p === '..')) return null;
