@@ -38,6 +38,15 @@ In-memory max 3 attempts / 15 minutes plus Moov max-attempt mapping.
 These stay false: `AWS_MOOV_ENABLED`, `AWS_PROVIDER_EXECUTION_ENABLED`,
 `AWS_FINANCIAL_PERMISSIONS_ACTIVATED`, `AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED`.
 
+Lambda code SHA after dark deploy: `nkn7FhOZnRUHyzC6YwbyCEaZExtJDEM8YiRFczws+G0=`
+(`auth-cognito.mjs` unchanged). Live flag `AWS_PROVIDER_RECIPIENT_BANK_VERIFY_WRITES_ENABLED=false`.
+
+Live probes (no Moov POST):
+- missing token → 400 `token_required`
+- invalid token → 404
+- dummy + real initiate/confirm → 403 `recipient_bank_verify_writes_blocked`, `liveProviderCalled=false`
+- session 200: recipient/account preserved, `bank_should_initiate=true`, `bank_verify_available=false`
+
 ## Return card
 
 ```
