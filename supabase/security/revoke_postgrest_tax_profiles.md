@@ -198,32 +198,45 @@ The **only authorized execution method** is:
 
 Direct `psql`, `supabase db push`, and Git merge application are **forbidden**.
 
-PostgreSQL does **not** independently expose the Supabase project ref. The wrapper proves the connection target (direct `db.<ref>.supabase.co` hostname, or pooler hostname plus `postgres.<ref>` username, database `postgres`, and `sslmode=require|verify-ca|verify-full`). SQL `-v expected_project_ref` is defense in depth only.
+PostgreSQL does **not** independently expose the Supabase project ref. The wrapper proves the connection target: **direct** `db.nbcqwpysqgyxrrbgtmkw.supabase.co:5432/postgres` with **`sslmode=verify-full`** and libpq `PGSSLROOTCERT=/etc/ssl/certs/ca-certificates.crt` (Debian/Ubuntu system CA bundle, opened no-follow as a root-owned regular file). The URL cannot set `sslrootcert` or any other libpq parameter. `sslmode=require` and `sslmode=verify-ca` are refused. Pooler URLs are refused. SQL `-v expected_project_ref` is defense in depth only.
 
-1. Review this wrapper and the pinned SHA-256 values in `supabase/security/hosted-tax-profile-containment.pins.json` at the exact git commit that will be used.
-2. Record operator authorization. Ship the Tax UI unavailable/error banner PR **before** hosted apply.
-3. Export `CHECKSOPS_TAX_CONTAINMENT_DATABASE_URL` (never argv). Run preflight only:
+This wrapper **has not been executed against hosted Supabase**. Remote execution still requires a later authorization after reviewing, at the execution environment:
 
-```
-CHECKSOPS_TAX_CONTAINMENT_DATABASE_URL=... \
-  node scripts/run-hosted-tax-profile-containment.mjs preflight
-```
+- the exact git commit and SQL SHA-256 pins
+- the absolute `psql` binary path, ownership, permissions, version, and SHA-256
+- that the system CA bundle plus `verify-full` verifies `db.nbcqwpysqgyxrrbgtmkw.supabase.co`
 
-Require wrapper output `WRAPPER_CLASSIFICATION=EXACT_EXPECTED_LEGACY`. Stop on `ALREADY_CONTAINED`, `UNSAFE/AMBIGUOUS`, hash mismatch, or connection rejection.
+No direct `psql` command is authorized. The Tax/1099 unavailable/error-banner PR must ship before apply. Plaintext-at-rest remains unresolved.
 
-4. Remote apply still requires a **separate** authorization event. Then:
+1. Review this wrapper and `supabase/security/hosted-tax-profile-containment.pins.json` at the exact git commit that will be used. Ship the Tax UI unavailable/error banner PR **before** hosted apply.
+2. Export only:
 
 ```
-CHECKSOPS_TAX_CONTAINMENT_DATABASE_URL=... \
-  node scripts/run-hosted-tax-profile-containment.mjs apply \
-    --i-authorize-hosted-recipient-tax-profiles-revoke \
-    --confirm=REVOKE_POSTGREST_RECIPIENT_TAX_PROFILES
+CHECKSOPS_TAX_CONTAINMENT_DATABASE_URL=postgresql://postgres:...@db.nbcqwpysqgyxrrbgtmkw.supabase.co:5432/postgres?sslmode=verify-full
+CHECKSOPS_TAX_CONTAINMENT_PSQL=/usr/lib/postgresql/16/bin/psql
+CHECKSOPS_TAX_CONTAINMENT_PSQL_SHA256=<sha256 of that psql binary>
 ```
 
-The wrapper re-validates the URL, verifies SQL file hashes, runs preflight on that same URL, and applies only `supabase/security/unapplied-do-not-run/NOT_APPLIED_revoke_postgrest_tax_profiles.sql` when classification is `EXACT_EXPECTED_LEGACY`.
+Never pass the URL on argv. Then:
 
-5. Probe with a **non-production** user JWT against `/rest/v1/recipient_tax_profiles?select=id` — expect `42501`. Do not `select=tin` on production.
-6. Do not merge-apply from this draft PR. This PR stops at draft.
+```
+node scripts/run-hosted-tax-profile-containment.mjs preflight
+```
+
+Require wrapper output `WRAPPER_CLASSIFICATION=EXACT_EXPECTED_LEGACY` from the stdout sentinel protocol. Stop on `ALREADY_CONTAINED`, `UNSAFE/AMBIGUOUS`, hash mismatch, psql mismatch, or connection rejection.
+
+3. Remote apply still requires a **separate** authorization event. Then:
+
+```
+node scripts/run-hosted-tax-profile-containment.mjs apply \
+  --i-authorize-hosted-recipient-tax-profiles-revoke \
+  --confirm=REVOKE_POSTGREST_RECIPIENT_TAX_PROFILES
+```
+
+The wrapper uses one captured connection, verified TLS, a hashed SQL stdin, and a one-time nonce sentinel. It applies only `supabase/security/unapplied-do-not-run/NOT_APPLIED_revoke_postgrest_tax_profiles.sql` when preflight is `EXACT_EXPECTED_LEGACY`.
+
+4. Probe with a **non-production** user JWT against `/rest/v1/recipient_tax_profiles?select=id` — expect `42501`. Do not `select=tin` on production.
+5. Do not merge-apply from this draft PR. This PR stops at draft.
 
 There is **no automatic unsafe rollback**. See `EMERGENCY_ROLLBACK_revoke_postgrest_tax_profiles.md`.
 `recipient_tax_profiles.tin` remains plaintext at rest.

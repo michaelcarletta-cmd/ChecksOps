@@ -59,6 +59,8 @@ function identityArgs(database, overrides = {}) {
     '-v', `expected_project_ref=${overrides.projectRef ?? HOSTED_REF}`,
     '-v', `expected_database=${overrides.database ?? database}`,
     '-v', `expected_owner=${overrides.owner ?? process.env.USER}`,
+    '-v', `checksops_preflight_nonce=${overrides.preflightNonce ?? 'localdisposablepreflightnonce'}`,
+    '-v', `checksops_apply_nonce=${overrides.applyNonce ?? 'localdisposableapplynonce'}`,
   ];
 }
 
@@ -296,13 +298,12 @@ test('local disposable database: revoke, deny Data API roles, preserve service_r
 
   const gated = runPreflight('rtp_legacy');
   assert.equal(gated.status, 0);
-  assert.match(gated.stderr + gated.stdout, /CLASSIFICATION=EXACT_EXPECTED_LEGACY/);
+  assert.match(gated.stdout, /CHECKSOPS_TAX_PREFLIGHT_V1\|localdisposablepreflightnonce\|EXACT_EXPECTED_LEGACY/);
   assert.doesNotMatch(gated.stderr + gated.stdout, new RegExp(SYNTHETIC));
 
   const first = applySql('rtp_legacy');
   assert.equal(first.status, 0);
-  assert.match(first.stderr + first.stdout, /CLASSIFICATION=EXACT_EXPECTED_LEGACY/);
-  assert.match(first.stderr + first.stdout, /Data API privileges revoked/);
+  assert.match(first.stdout, /CHECKSOPS_TAX_APPLY_V1\|localdisposableapplynonce\|ok/);
   assert.doesNotMatch(first.stderr + first.stdout, new RegExp(SYNTHETIC));
 
   const after = fingerprint('rtp_legacy');
@@ -418,12 +419,11 @@ test('local disposable database: revoke, deny Data API roles, preserve service_r
 
   const contained = runPreflight('rtp_legacy');
   assert.equal(contained.status, 0);
-  assert.match(contained.stderr + contained.stdout, /CLASSIFICATION=ALREADY_CONTAINED/);
+  assert.match(contained.stdout, /CHECKSOPS_TAX_PREFLIGHT_V1\|localdisposablepreflightnonce\|ALREADY_CONTAINED/);
 
   const second = applySql('rtp_legacy');
   assert.equal(second.status, 0);
-  assert.match(second.stderr + second.stdout, /CLASSIFICATION=ALREADY_CONTAINED/);
-  assert.match(second.stderr + second.stdout, /already applied, no-op/);
+  assert.match(second.stdout, /CHECKSOPS_TAX_APPLY_V1\|localdisposableapplynonce\|ok/);
   assert.equal(fingerprint('rtp_legacy'), before);
 });
 
