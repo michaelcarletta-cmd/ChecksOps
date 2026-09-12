@@ -17,6 +17,23 @@ const clip = (value, max) => {
   return text.length ? text : null;
 };
 
+const asNonNegativeMoney = (value, field, { allowZero = true } = {}) => {
+  if (value === undefined || value === null || value === '') {
+    return allowZero ? 0 : { error: 'invalid_amount', field };
+  }
+  const amount = typeof value === 'number' ? value : Number(String(value).replace(/[$,\s]/g, ''));
+  if (!Number.isFinite(amount) || amount < 0) return { error: 'invalid_amount', field };
+  if (!allowZero && amount <= 0) return { error: 'invalid_amount', field };
+  if (Math.abs(amount) > 1e12) return { error: 'invalid_amount', field };
+  return amount;
+};
+
+const asPositiveQuantity = (value, field = 'quantity') => {
+  const qty = value === undefined || value === null || value === '' ? 1 : Number(value);
+  if (!Number.isFinite(qty) || qty <= 0) return { error: 'invalid_amount', field };
+  return qty;
+};
+
 const buildSet = (values, casts = {}) => {
   const sets = [];
   const params = [];
@@ -413,6 +430,9 @@ export const executeProfiles = async ({ client, mapping, values, filters }) => {
 };
 
 export const executeCompanyBranding = async ({ client, mapping, op, values, filters }) => {
+  if (!(await isMasterOwner(client))) {
+    return { error: 'not_authorized', message: 'Global company branding is not tenant-writable' };
+  }
   const out = {};
   for (const [col, max] of [
     ['company_name', 200], ['company_address', 500], ['company_email', 200], ['company_phone', 40],
@@ -492,6 +512,7 @@ export const executeTenantsNarrow = async ({ client, mapping, values, filters })
   for (const [col, max] of [
     ['name', 200], ['logo_url', 512], ['invoice_letterhead_url', 512],
     ['primary_color', 40], ['invoice_footer_note', 2000], ['invoice_default_terms', 4000],
+    ['business_address', 500], ['business_phone', 40],
   ]) {
     if (col in values) {
       const text = clip(values[col], max);
@@ -633,9 +654,10 @@ export const executeCashJobs = async ({ client, mapping, op, values, filters }) 
     if (status?.error) return status;
     const contractAmount = values.contract_amount == null || values.contract_amount === ''
       ? 0
-      : Number(values.contract_amount);
+      : asNonNegativeMoney(values.contract_amount, 'contract_amount', { allowZero: true });
+    if (contractAmount?.error) return contractAmount;
     if (!Number.isFinite(contractAmount) || contractAmount < 0) {
-      return { error: 'invalid_field', field: 'contract_amount' };
+      return { error: 'invalid_amount', field: 'contract_amount' };
     }
     const phone = clip(values.customer_phone, 40);
     if (phone?.error) return phone;
@@ -699,6 +721,12 @@ export const executeCashJobs = async ({ client, mapping, op, values, filters }) 
     return { rows };
   }
 
+  const nextValues = { ...values };
+  if ('contract_amount' in nextValues) {
+    const amount = asNonNegativeMoney(nextValues.contract_amount, 'contract_amount', { allowZero: true });
+    if (amount?.error) return amount;
+    nextValues.contract_amount = amount;
+  }
   const casts = {
     contract_amount: 'numeric',
     estimate_date: 'date',
@@ -707,7 +735,7 @@ export const executeCashJobs = async ({ client, mapping, op, values, filters }) 
     work_type: 'cash_job_work_type',
     status: 'cash_job_status',
   };
-  const built = buildSet(values, casts);
+  const built = buildSet(nextValues, casts);
   if (!built.sets.length) return { error: 'missing_required_field', field: 'values' };
   built.params.push(id);
   const rows = (await client.query(
@@ -732,12 +760,12 @@ export const executeCashJobLineItems = async ({ client, mapping, op, values, fil
     if (description?.error || !description) {
       return description?.error || { error: 'missing_required_field', field: 'description' };
     }
-    const quantity = Number(values.quantity ?? 1);
-    const unitPrice = Number(values.unit_price ?? 0);
-    if (!Number.isFinite(quantity) || !Number.isFinite(unitPrice)) {
-      return { error: 'invalid_field', field: 'quantity_or_unit_price' };
-    }
-    const total = values.total == null ? quantity * unitPrice : Number(values.total);
+    const quantity = asPositiveQuantity(values.quantity ?? 1, 'quantity');
+    if (quantity?.error) return quantity;
+    const unitPrice = asNonNegativeMoney(values.unit_price ?? 0, 'unit_price', { allowZero: true });
+    if (unitPrice?.error) return unitPrice;
+    const total = values.total == null ? quantity * unitPrice : asNonNegativeMoney(values.total, 'total', { allowZero: true });
+    if (total?.error) return total;
     const sortOrder = Number(values.sort_order ?? 0);
     const rows = (await client.query(
       `INSERT INTO public.cash_job_line_items (
@@ -773,8 +801,24 @@ export const executeCashJobLineItems = async ({ client, mapping, op, values, fil
 
   const id = eqFilter(filters, 'id');
   if (!isUuid(id)) return { error: 'invalid_uuid', field: 'id' };
+  const nextValues = { ...values };
+  if ('quantity' in nextValues) {
+    const qty = asPositiveQuantity(nextValues.quantity, 'quantity');
+    if (qty?.error) return qty;
+    nextValues.quantity = qty;
+  }
+  if ('unit_price' in nextValues) {
+    const price = asNonNegativeMoney(nextValues.unit_price, 'unit_price', { allowZero: true });
+    if (price?.error) return price;
+    nextValues.unit_price = price;
+  }
+  if ('total' in nextValues) {
+    const total = asNonNegativeMoney(nextValues.total, 'total', { allowZero: true });
+    if (total?.error) return total;
+    nextValues.total = total;
+  }
   const casts = { quantity: 'numeric', unit_price: 'numeric', total: 'numeric', sort_order: 'int' };
-  const built = buildSet(values, casts);
+  const built = buildSet(nextValues, casts);
   if (!built.sets.length) return { error: 'missing_required_field', field: 'values' };
   built.params.push(id);
   const rows = (await client.query(
