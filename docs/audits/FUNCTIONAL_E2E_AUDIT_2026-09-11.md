@@ -1,15 +1,296 @@
 # ChecksOps complete functional audit
 
-This file contains four passes on 2026-09-11 / 2026-09-12:
+This file contains five passes on 2026-09-11 / 2026-09-12:
 
-1. **Pass 4 (this continuation)** — field-level coverage expansion on remaining executable controls. Results are at the top.
-2. **Pass 3** — coverage expansion after Pass 2.
-3. **Pass 2** — inventory reconciliation plus first physical staging interaction.
-4. **Pass 1 (baseline)** — original 412-control audit preserved below.
+1. **Pass 5 (this continuation)** — coverage expansion on remaining live unclicked controls. Results are at the top.
+2. **Pass 4** — field-level coverage expansion after Pass 3.
+3. **Pass 3** — coverage expansion after Pass 2.
+4. **Pass 2** — inventory reconciliation plus first physical staging interaction.
+5. **Pass 1 (baseline)** — original 412-control audit preserved below.
 
-**Verdict: CONDITIONAL GO** for C1C tenant-admin and platform-owner staging workflows. **NO-GO** for Freedom admin identity (`identity_not_linked`) and for treating production `checksops.com` as a clean production SPA (Pass 1 P0 banner still unreleased). This is **not** 95% executable coverage.
+**Verdict: CONDITIONAL GO** for C1C tenant-admin and platform-owner staging workflows. **NO-GO** for Freedom admin identity (`identity_not_linked`) and for treating production `checksops.com` as a clean production SPA (Pass 1 P0 banner still unreleased). Executable coverage is **94.1%**, not 95%.
 
-No application code was patched. No SQL. No provider flags. No Cognito identity linking. No SES. No production authenticated workflows. Branding Save was not clicked. Provider execution stayed OFF.
+No application code was patched. No SQL. No provider flags. No Cognito identity linking. No SES. No production authenticated workflows. Branding Save was not clicked. Provider execution stayed OFF. No ACH / Moov transfer / wallet funding / CheckAlt execution.
+
+---
+
+# Pass 5 — Coverage expansion (physical interaction)
+
+**Date:** 2026-09-12  
+**Auditor:** Cursor Cloud Agent  
+**Branch:** `cursor/full-staging-e2e-audit-3bce`  
+**PR:** https://github.com/michaelcarletta-cmd/ChecksOps/pull/237  
+**Scope:** Continue Pass 4. Physically operate remaining live, mounted controls on `https://staging.checksops.com`. Do not restart the audit. Do not fix defects. Do not revisit the 258 unmounted N/A source screens except where the live tree proved they are now mounted (none were). Email/SES remains a separate workstream. Provider execution stays OFF.
+
+## Coverage
+
+| Metric | Pass 4 | Pass 5 |
+|---|---|---|
+| Discovered | 1421 | **1421** |
+| Previously classified | 270 | **692** |
+| Newly classified this pass | 422 | **653** (657 inventory rows touched, including force-updates of already-classified IDs) |
+| Newly PASS | — | **251** (`pass=5`) |
+| Newly FAIL | — | **7** (`pass=5`, includes 2 reclassifications) |
+| Newly BLOCKED | — | **387** (`pass=5`) |
+| Newly N/A | 258 unmounted | **12** (live tree: BrandingSettings never rendered; LossPreventionPanel imported but never mounted) |
+| Cumulative tested/classified | 692 | **1345** |
+| PASS | 337 | **586** |
+| FAIL | 8 | **13** |
+| BLOCKED | 88 | **475** |
+| N/A | 259 | **271** |
+| Untested / unclicked | 729 | **76** |
+| Raw coverage | 48.7% | **94.7%** (1345 / 1421) |
+| Executable IDs | 1283 | **1283** |
+| Executable tested | 643 | **1207** |
+| Executable coverage | 50.1% | **94.1%** (1207 / 1283) |
+
+Do **not** claim ≥95% executable coverage. 94.1% is the evidence-backed executable figure. The 76 remaining IDs are live unlabeled/conditional Check Center and EndorsementChecklist children that this pass could not mount without persisting payees, images, share threads, or an override-to-Review status change.
+
+Machine-readable inventory: `docs/audits/inventory-2026-09-11.json`, `.csv`.
+
+## Module matrix
+
+| Module | Discovered | Tested/Classified | PASS | FAIL | BLOCKED | N/A | Remaining | Executable Coverage |
+|---|---|---|---|---|---|---|---|---|
+| payments_wallet | 312 | 312 | 147 | 4 | 148 | 13 | **0** | **100%** (229/229) |
+| settings | 231 | 231 | 47 | 4 | 45 | 135 | **0** | **100%** (198/198) |
+| public | 107 | 107 | 83 | 1 | 9 | 14 | **0** | **100%** (102/102) |
+| extra_public_or_auth | 37 | 37 | 1 | 2 | 21 | 13 | **0** | **100%** (37/37) |
+| mortgage_ops | 21 | 21 | 6 | 0 | 15 | 0 | **0** | **100%** (20/20) |
+| admin | 152 | 147 | 114 | 0 | 25 | 8 | **5** | **96.6%** (140/145) |
+| homeowner | 171 | 151 | 44 | 0 | 99 | 8 | **20** | **87.7%** (143/163) |
+| check_center | 390 | 339 | 144 | 2 | 113 | 80 | **51** | **86.9%** (338/389) |
+| **Total** | **1421** | **1345** | **586** | **13** | **475** | **271** | **76** | **94.1%** (1207/1283) |
+
+N/A is included in Tested/Classified. Executable coverage uses only `safety` `executable` / `executable_or_ui` (1,283 IDs). Settings/public N/A rows from Pass 4 unmounted screens remain N/A.
+
+## Remaining unclicked (76)
+
+| Module / component | Remaining IDs |
+|---|---|
+| check_center / CheckCommandCenter | **42** — `CC-315` `CC-316` `CC-317` `CC-333` `CC-334` `CC-337` `CC-351` `CC-361`–`CC-375` `CC-380`–`CC-386` `CC-392` `CC-393` `CC-395` `CC-396` `CC-400`–`CC-407` `CC-413` (unlabeled detail chrome, image-viewer children, inline payee editor, packet Preview/Download/Generate) |
+| homeowner / EndorsementChecklist | **17** — `CC-099`–`CC-107` `CC-109` `CC-110` `CC-112`–`CC-117` (Add Payee form did not mount after clicking the E2E check row; Payee Endorsements tab click missed this pass) |
+| check_center / InPersonSignatureDialog | **4** — `CC-118`–`CC-121` |
+| check_center / CheckImageCropper | **4** — `CC-148`–`CC-151` (cropper mounts only after a local file is chosen; file was not chosen) |
+| admin / AdminTenants | **4** — `A1-037` Replace (logo Replace click missed; dashed upload shown when no logo), `A1-066` `A1-067` `A1-068` unlabeled billing switches (evaluate click did not change `aria-checked`) |
+| homeowner / SendCheckTrackingLinkButton | **3** — `A7-117` `A7-118` `A7-119` (dialog opened and Cancel `A7-120` PASS; label-based fill missed because name/phone have no placeholder) |
+| admin / PricingOptimizer | **1** — `A2-020` Scenario name (Client Savings tab did not mount the `aria-label` input in the owner session) |
+| check_center / ReuploadCheckImageButton | **1** — `CC-218` |
+
+Priority-bucket remainder vs Pass 4 target list: Settings **0** (was 42). Payments/Financials + Wallet/Moov **0** inventory remaining in `payments_wallet` (was ~242). Public/token **0** (was 52). Admin **5** (was 33). Check Center + Manager-integrated still hold most of the 76.
+
+## High-density components (final)
+
+| Component | n | PASS | FAIL | BLOCKED | N/A | Remaining |
+|---|---|---|---|---|---|---|
+| **PaymentOnboardingDialog** | 27 | 0 | 0 | **27** | 0 | 0 |
+| **FundsTab** | 18 | **13** | **1** (`A5-220` amount −1) | **4** | 0 | 0 |
+| **CheckReviewConsole** | 56 | 0 | 0 | **56** | 0 | 0 |
+| **CashJobForm** | 23 | **20** | **2** (`A5-099` `A5-114`) | **1** (`A5-117` Save) | 0 | 0 |
+| **RecipientPaymentSetup** | 20 | 0 | **1** (`X-029`) | **19** | 0 | 0 |
+| **HomeownerClaimPortal** | 30 | **2** | 0 | **28** | 0 | 0 |
+
+### PaymentOnboardingDialog
+
+C1C Compliance: Identity verified, **Set Up Payment Account `disabled=true`**. Re-entering KYC would mutate a live payment account. `A5-246`–`A5-272` **BLOCKED** `payment_account_already_active`. Connect Bank was clicked; native `MoovBankLink` holder/routing/account fields did **not** mount (`A5-228`–`A5-233` **BLOCKED** `connect_bank_hosted_or_form_not_native`, not FAILs). Integrations page was not collapsed into one blocker.
+
+### FundsTab
+
+Trusted Puppeteer click on the detail **Funds** tab (not the Funds Released queue tile) on `#PR235-1001`. Available for disbursement **$1,500.00**. UI shows uploaded / Not yet deposited / Deposit in Progress while API `check_stage` is `deposited` (related to the known P1 status/stage mismatch; row not rewritten).
+
+Physically operated: Send Homeowner Payment Link open + Cancel (`A5-153`–`A5-157`); Disburse Outside recipient/type/check#/notes; Disburse to Stakeholders opened; PA fee `%`/`$` local fill; ProjectPlanCard dates/status/note; tracking dialog chrome. Send / Record Payment / Save PA fee / Send $N **BLOCKED** at the irreversible boundary. Recurring recipient select not shown. ClaimSettlementEditor category grid did **not** mount after Enter amounts (`claim_settlements` 200 empty).
+
+### CheckReviewConsole
+
+`Review0` tile → **Manual Review Queue: No checks pending review**. Filter bar and CRC detail fields render only when `reviewChecks.length > 0`. Override status opened on `#E2E-1789149838411`; selecting the **Review** `SelectItem` still collides with the Review queue tile. Save withheld (`admin_override_check_status` would persist). All 56 CRC IDs **BLOCKED** `empty_review_queue` / persist. Child PASSes were **not** inferred.
+
+### CashJobForm
+
+New job opened. Synthetic fields filled. Add/remove line. Cancel PASS. Save **BLOCKED** `no_delete_cleanup` (Cash Jobs UI has no delete). **P3:** contract amount **−1** accepted; line Unit $ **−5** accepted. Existing Smith Roof: Record payment amount **−1** accepted; submit withheld.
+
+### RecipientPaymentSetup
+
+No valid public pay-setup token. `recipient_payment_setup_tokens` is not queryable. Minting a token is SES/provider. Bank-form IDs **BLOCKED** `valid_paysetup_token_unavailable`. Invalid `/pay-setup/not-a-real-token` **FAIL** `X-029` (see defects).
+
+### HomeownerClaimPortal
+
+Valid pending intro token (synthetic; PII not logged): status `new`. UI: Waiting for Condition One Commercial / nothing to sign or upload. Internals `A7-014`–`A7-041` **BLOCKED** `accepted_claim_portal_token_unavailable` — accepting would email the homeowner (SES). Invalid/malformed/missing tokens: “This link isn't valid.” No `tenant_id`, admin chrome, or other-claim leak. `A7-013` / `A7-042` PASS. Do not accept the pending token.
+
+## Priority results
+
+### 1. Payments / Financials
+
+Exhausted `payments_wallet` inventory (312/312 classified).
+
+- New Invoice: Amount **−1** → Invoice total **−$1.00** **REPRODUCED**. Native `min="0"` does not stop it. Save draft correctly disabled (`canSubmit` requires `unit_price > 0`). Save/send **BLOCKED**. Do not save/send a negative invoice.
+- Same missing positive-amount validation also exists on: CashJobForm contract amount, CashJobForm line Unit $, Cash job Record payment Amount, FundsTab Disburse Outside Amount. None of those persist actions were clicked.
+- Recipients search/filter/export PASS; edit dialog **BLOCKED** empty rows. Tax year/type/month PASS; 1099 editor **BLOCKED** “No settled payments found.” Ledger remaining filter PASS. New Payroll **BLOCKED** provider.
+- Invoice action menu `A5-030`–`A5-036` **BLOCKED** (`moov_invoices` empty). No valid public invoice token without the `moov-invoice` provider. Do not create DB schema to make that test pass.
+
+### 2. Check Center
+
+- Class filter All classes / Unclassified / Clear PASS on the endorsing queue.
+- Upload Check dialog + 1st/2nd mortgagee add/remove PASS; Upload & Analyze **BLOCKED**.
+- `#E2E-1789149838411` detail mounted. Edit amount opened + Cancel (Save withheld). Share opened; company select empty. Files tab opened.
+- View Check Images on `#PR235-1001` (DB path `checks/pr235/front.jpg`): **Authorized object is not present in staging S3**. Not limited to the synthetic E2E check. `CC-219` FAIL **REPRODUCED**. Not fixed.
+- Manager → Mortgage Cos → Add Company: all editor fields filled locally, Cancel PASS, Save withheld.
+- `LossPreventionPanel` is lazy-imported in `CheckCommandCenter` and **never rendered**. Live Manager subtabs have no Loss Prevention Center. `CC-122`–`CC-126` **N/A** `function_not_rendered_in_live_route_tree`.
+- WhiteLabel header Cash Jobs / WalletOps / Payments / Settings PASS. Sign Out **BLOCKED** `session_needed`.
+
+### 3. Homeowner Ops
+
+Pending claim portal internals unreachable without Accept (SES). Valid ledger token `/ledger/f2947f6588b20eaa…`: Received/Deposited/Remaining **$1,500.00**. `claim_settlements` still empty. ACH pay **BLOCKED** provider. Numeric formula review stays **BLOCKED**. Tracking dialog opened on PR235 Funds tab; Cancel PASS; Preview is post-send (**BLOCKED** SES).
+
+### 4. Cash Job Form
+
+See high-density. Lifecycle create+delete not performed: no supported delete/cleanup. Synthetic clutter not left.
+
+### 5. Settings
+
+Remaining 42 finished. `A4-055` Save Company Settings stays **BLOCKED** (Freedom address/phone placeholders). BrandingSettings color controls in `WhiteLabelSettings.tsx` (`CC-291`–`CC-296`, `CC-288`) **N/A** — never rendered; live tab is `CompanyBrandingSettings` + `EmailSenderSettings`. Unrelated Branding controls were not blanket-blocked.
+
+Platform owner `isMasterOwner=true` / `usePermissions().isAdmin=false`: CheckAlt `A4-013`–`A4-031` remain **BLOCKED** `owner_isAdmin_false`. C1C admin `isAdmin` Poll/Refresh on Pending Approvals / Deposit History PASS. Approve/Reject **BLOCKED** provider. Integrations page was not turned into one blocker.
+
+### 6. Admin
+
+Owner leftovers: Referral Dashboard search `c1c` PASS; P&L slider PASS; Platform Finance Add bank + Cancel PASS. Replace logo and unlabeled billing switches remain unclicked (5 admin IDs). Freedom-admin-specific controls remain BLOCKED. Cognito identity mappings not modified.
+
+### 7. Manager
+
+C1C Bank Deposits empty state not retested as empty-only. Freedom date-with-deposits still **BLOCKED** on Freedom admin identity. Mortgage Cos editor exhausted (safe path). CheckAlt Approve/Reject **BLOCKED** provider. Loss Prevention unmounted (N/A).
+
+### 8. Wallet / Moov
+
+`/c1c/wallet-ops`: Automatic Funding switch toggle+restore PASS; bank/strategy/max single/max day local fill PASS; Target wallet not in this UI **BLOCKED**; Accept and save / Open Payment Account / daily payouts **BLOCKED** provider. Microdeposit UI not in this state.
+
+### 9. Public / token
+
+| Route | Pass 4 | Pass 5 |
+|---|---|---|
+| `/invoice/not-a-real-token` | FAIL relation `public.payment_invoices` does not exist | **Invoice unavailable / `missing_cognito_token`**. Relation leak **NOT REPRODUCED**. Keep P2. Do not mark resolved. No valid public invoice token (`moov_invoices` empty). |
+| `/pay-setup/not-a-real-token` | PASS “This link is not valid” | **FAIL** Secure payment setup shell + `missing_cognito_token` (regression) |
+| `/unsubscribe` | missing token copy | PASS; no tenant leak |
+| `/terms` `/security` `/find-a-pro` | — | Workflow/Pricing/Security/About ChecksOps PASS. Browse verified pros submit **BLOCKED**. |
+| `/h/claim/:token` invalid | PASS invalid copy | PASS; no `tenant_id` leak |
+| `/h/claim/:token` valid pending | — | pending waiting copy; internals not mounted |
+| `/ledger/:token` valid | $1,500 UI | REPRODUCED; settlements empty |
+
+## New defects
+
+### P0
+
+None this pass. Production banner and Freedom `identity_not_linked` are carried, not newly opened.
+
+### P1
+
+None newly opened. Four inconsistent status/stage rows were not modified. PR235 UI uploaded-vs-API deposited is the same class of mismatch; no fifth row was rewritten.
+
+### P2
+
+| ID | Summary | Status |
+|---|---|---|
+| `P2-pay-setup-missing-cognito-token` | Invalid `/pay-setup/:token` now shows `missing_cognito_token` instead of Pass 4’s clean “This link is not valid” (`X-029` PASS→FAIL) | **NEW this pass** (regression vs Pass 4) |
+| `P2-invoice-token-error-changed` | Invalid `/invoice/:token` no longer exposes `relation "public.payment_invoices" does not exist`; now `missing_cognito_token` / Invoice unavailable | Observation on existing P2; **not resolved** |
+
+### P3
+
+| ID | Summary |
+|---|---|
+| `P3-invoice-negative-amount` | New Invoice accepts −1 and shows total −$1.00 (carried; **REPRODUCED**) |
+| `P3-cashjob-negative-amount` | CashJobForm contract amount accepts −1 |
+| `P3-cashjob-negative-line` | CashJobForm line Unit $ accepts −5 |
+| `P3-cash-payment-negative` | Record payment Amount accepts −1 |
+| `P3-external-disburse-negative` | Disburse Outside Amount accepts −1 |
+
+None of the negative values were saved/sent/recorded.
+
+## Existing defects
+
+| Defect | This pass |
+|---|---|
+| P0 production `checksops.com` staging-banner / environment presentation | **NOT RETESTED** (no production authenticated session) |
+| P0 Freedom admin `identity_not_linked` (`A8-035`) | **NOT RETESTED** (not retried, per instructions) |
+| P1 four inconsistent status/stage rows | **NOT RETESTED** / not modified |
+| P2 C1C Freedom branding placeholders (`A4-043`–`A4-046`) | **REPRODUCED** (Pass 4 + earlier Pass 5 branding dumps: 123 Main Street / (555) 123-4567). Save not clicked |
+| P2 platform owner `isMasterOwner` / `isAdmin=false` CheckAlt | **NOT RETESTED** (already classified `A4-013`–`A4-031`) |
+| P2 invalid invoice route missing `payment_invoices` relation | **NOT REPRODUCED** (error text changed to `missing_cognito_token`). **Not marked resolved** |
+| P2 staging S3 “Authorized object is not present” | **REPRODUCED** on `#PR235-1001` and previously on E2E |
+| P2 intermittent `Failed to fetch dynamically imported module` | **REPRODUCED** as 404 on `/c1c/checks` at `2026-09-12T12:21:03Z` (console). Earlier Pass 5 branding tab 404. Hard-refresh recovery remains the operational response. Not fixed |
+| P3 New Invoice −1 / −$1.00 | **REPRODUCED** |
+| P3 mobile clipping | **NOT RETESTED** |
+| P3 override reason positioning | **NOT RETESTED** |
+| `claim_settlements` 200 empty | **REPRODUCED**; numeric ledger math stays BLOCKED. No DB inserts |
+
+No existing defect was silently dropped. None **RESOLVED BY EXTERNAL CHANGE**.
+
+## Blockers (inventory IDs)
+
+Grouped by dependency. Exact IDs are in `docs/audits/inventory-2026-09-11.json` (`result=BLOCKED`). High-count buckets:
+
+**Freedom admin identity**
+
+`P3-BD-001` (C1C empty Bank Deposits day-expand; Freedom days exist but Manager is admin-only and Freedom admin is `identity_not_linked`). `A8-035` remains FAIL, not BLOCKED.
+
+**SES / email**
+
+`A1-049` `A1-051` `A1-057` `A1-058` `A1-059` `A1-064` `A1-112` `A3-004` `A3-006` `A3-016` `A4-060` `A4-063` `A4-065` `A4-136` `A4-216` `A5-029` `A5-134` `A5-158` `A5-166` `A5-168` `A5-170` `A5-211` `A7-051` `A7-101` `A7-114` `A7-115` `A7-121` `A7-125` `A8-021` `A8-084` `CC-240` `CC-242` `CC-244` `CC-411` `CC-412` `CC-414`
+
+**EMAIL_OTP**
+
+`A3-015` `A6-001`–`A6-014` `A6-021` `A7-001` `A7-005` `A7-011` `A8-028` `A8-029` `A8-030` `X-042` `X-043`
+
+**Provider execution**
+
+Includes CheckAlt Approve/Reject, payroll, invoice create/send, ACH / Open Payment Account / daily payouts / microdeposits, Send $N, PaymentOnboardingDialog (account already active), hosted Connect Bank fields, wallet funding: `A4-035`–`A4-039` `A5-013` `A5-014` `A5-028` `A5-030`–`A5-036` `A5-124` `A5-141` `A5-146`–`A5-148` `A5-185` `A5-223`–`A5-234` `A5-239`–`A5-243` `A5-246`–`A5-277` `A5-286`–`A5-293` plus owner CheckAlt `A4-013`–`A4-031` (`owner_isAdmin_false`).
+
+**Empty fixture / data**
+
+`empty_review_queue` CRC `CC-041`–`CC-096` `CC-098`; `empty_moov_invoices` `A5-030`–`A5-036`; `empty_payment_recipients` `A5-048`–`A5-052`; `empty_settled_payments` `A5-061`–`A5-073`; `empty_claim_settlements` `A5-201`–`A5-204`; `accepted_claim_portal_token_unavailable` `A7-014`–`A7-041`; `valid_paysetup_token_unavailable` `X-022`–`X-041`; share-thread children `CC-128` `CC-129` `CC-131`–`CC-145`; `empty_class_option` `CC-299` `CC-330`.
+
+**Unsafe configuration mutation / persist**
+
+`A4-055` Save Company Settings (placeholders). `A4-137` `A4-150` `A4-194` `A4-195` `A4-198`–`A4-203` `A5-012` `A5-123` `A5-169` `A5-173`–`A5-175` `A5-278`–`A5-285` `A7-128` `CC-225` `CC-227` plus CashJobForm save `A5-117` (`no_delete_cleanup`), amount/packet/payee/check deletes, upload submit.
+
+**Other**
+
+`session_needed` Sign Out `CC-254` `CC-260` `CC-265`. `connect_bank_hosted_or_form_not_native` `A5-228`–`A5-233`. `control_not_in_live_ui` EndorsementAdjuster `CC-178`–`CC-189`, Autofunding target wallet `A5-188`. `custom_domain_host_not_in_session` `CC-220`–`CC-223`. `function_not_rendered_in_live_route_tree` / settings tree: Pass 4 258 N/A plus Pass 5 `CC-122`–`CC-126` `CC-288` `CC-291`–`CC-296`.
+
+## Browser failure monitoring
+
+`Failed to fetch dynamically imported module` / 404:
+
+| Route | Timestamp | Notes |
+|---|---|---|
+| `/c1c/checks` | 2026-09-12T12:21:03Z | Console: Failed to load resource 404. Session continued after navigation. Not fixed. |
+| `/c1c/settings?tab=branding` | earlier Pass 5 | Dynamic-import 404; hard-refresh recovered. Not fixed. |
+
+Failed asset URL was not always present in the console line (generic 404). Repeat navigation did not always reproduce. Do not treat as a hard blocker of coverage.
+
+## Evidence (Pass 5)
+
+<img src="/opt/cursor/artifacts/pass5_inv_unit_neg.png" alt="New invoice unit price -1 totals -$1.00; Save draft disabled" />
+
+<img src="/opt/cursor/artifacts/pass5_cash_amount_neg.png" alt="CashJobForm contract amount accepted -1" />
+
+<img src="/opt/cursor/artifacts/pass5_ext_children.png" alt="Disburse Outside ChecksOps amount accepted -1" />
+
+<img src="/opt/cursor/artifacts/pass5_pr235_images.png" alt="PR235-1001 View Check Images: Authorized object is not present in staging S3" />
+
+<img src="/opt/cursor/artifacts/pass5_pub_invoice2.png" alt="Invalid invoice token: Invoice unavailable / missing_cognito_token" />
+
+<img src="/opt/cursor/artifacts/pass5_pub_paysetup2.png" alt="Invalid pay-setup token: missing_cognito_token regression" />
+
+<img src="/opt/cursor/artifacts/pass5_pub_claim_pending.png" alt="Valid pending homeowner claim token: waiting, nothing to sign or upload" />
+
+<img src="/opt/cursor/artifacts/pass5_focus2_review.png" alt="Manual Review Queue: No checks pending review" />
+
+<img src="/opt/cursor/artifacts/pass5_focus2_upload.png" alt="Upload Check dialog with 1st/2nd mortgagee fields" />
+
+<img src="/opt/cursor/artifacts/pass5_wallet_ops_filled.png" alt="Wallet-ops Automatic Funding local fill; save withheld" />
+
+<img src="/opt/cursor/artifacts/pass5_platform_disburse.png" alt="PR235 Funds tab Disburse to Stakeholders opened; Send withheld" />
+
+<img src="/opt/cursor/artifacts/pass5_remain_mortgage_filled.png" alt="Manager Mortgage Cos Add Company filled then cancelled" />
 
 ---
 
