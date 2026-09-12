@@ -1,8 +1,9 @@
 /**
  * Mortgage Ops document-library parity helpers.
  *
- * Approved auto-share / backfill category (Lovable 2026-08-30):
- *   doc_type LIKE 'library:mortgage:%'
+ * Application / CHECK constraint allowlist is the exact canonical set in
+ * mortgage-library-doc-types.mjs. SQL 29 keeps a broader
+ * `doc_type LIKE 'library:mortgage:%'` prefix check as defense in depth.
  *
  * Other library categories stay tenant-internal:
  *   library:template:%  library:shingle:%  library:siding:%
@@ -10,17 +11,19 @@
  *
  * Does not touch KYC/Moov verification paths, check images, or claim files.
  */
+import {
+  MORTGAGE_LIBRARY_DOC_PREFIX,
+  MORTGAGE_LIBRARY_DOC_TYPES,
+  isApprovedMortgageLibraryDocType,
+} from './mortgage-library-doc-types.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export const MORTGAGE_LIBRARY_DOC_PREFIX = 'library:mortgage:';
+export { MORTGAGE_LIBRARY_DOC_PREFIX, MORTGAGE_LIBRARY_DOC_TYPES, isApprovedMortgageLibraryDocType };
 export const MORTGAGE_OPS_OPEN_STATUSES = Object.freeze(['requested', 'in_progress']);
 export const MORTGAGE_LIBRARY_MANAGE_ROLES = Object.freeze(['admin', 'owner']);
 
 export const isUuid = (value) => UUID_RE.test(String(value || ''));
-
-export const isApprovedMortgageLibraryDocType = (docType) =>
-  String(docType || '').startsWith(MORTGAGE_LIBRARY_DOC_PREFIX);
 
 export const isOpenMortgageRequestStatus = (status) =>
   MORTGAGE_OPS_OPEN_STATUSES.includes(String(status || '').toLowerCase());
@@ -116,7 +119,12 @@ export const executeMortgageRequestLibraryDocuments = async ({
   }
 
   if (!isApprovedMortgageLibraryDocType(document.doc_type)) {
-    return { error: 'category_not_allowlisted', field: 'doc_type', allowed_prefix: MORTGAGE_LIBRARY_DOC_PREFIX };
+    return {
+      error: 'category_not_allowlisted',
+      field: 'doc_type',
+      allowed_prefix: MORTGAGE_LIBRARY_DOC_PREFIX,
+      allowed: MORTGAGE_LIBRARY_DOC_TYPES,
+    };
   }
   if (document.auto_share_mortgage_ops !== true) {
     return { error: 'auto_share_required', message: 'auto_share_mortgage_ops must be enabled' };
