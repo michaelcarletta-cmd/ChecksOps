@@ -244,7 +244,6 @@ export const handler = async (event) => {
       const after = await intakeUpdateColumns(client);
       const financialStillBlocked = !after.includes('amount')
         && !after.includes('claim_id')
-        && !after.includes('status')
         && !after.includes('routing_number')
         && !after.includes('deposited_at');
       return {
