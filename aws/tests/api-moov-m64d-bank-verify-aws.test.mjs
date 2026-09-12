@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import {
   handlePublicMoovRecipientBankVerifyConfirm,
   handlePublicMoovRecipientBankVerifyInitiate,
+  newTestBankVerifyStore,
   resetRecipientBankVerifyMemoryForTests,
 } from '../functions/api/public-moov-recipient-bank-verify.mjs';
 import {
@@ -147,6 +148,11 @@ const fetchImpl = async (url, init = {}) => {
     }
     if (method === 'PUT') {
       moovState.putCount += 1;
+      if (moovState.putFail === 'timeout') {
+        const error = new Error('fetch failed');
+        error.cause = { code: 'ETIMEDOUT' };
+        throw error;
+      }
       if (moovState.putFail === 'wrong') return jsonResponse(409, { error: 'incorrect code' });
       moovState.bankStatus = 'verified';
       moovState.verifyStatus = 'successful';
@@ -169,11 +175,15 @@ const resolveOk = async ({ token } = {}) => {
   return { ok: true, recipient: { ...productionRecipient } };
 };
 
-const deps = () => ({
+let testStore = newTestBankVerifyStore();
+
+const deps = (extra = {}) => ({
   resolveRecipientByToken: resolveOk,
   loadProductionReadSecrets: async () => secrets,
   fetchImpl,
   nowMs: Date.now(),
+  bankVerifyStore: extra.bankVerifyStore || testStore,
+  crashAfterPost: extra.crashAfterPost === true,
   log: (...args) => { deps.logs.push(args); },
 });
 deps.logs = [];
@@ -199,6 +209,7 @@ const withFlags = async (fn, extra = {}) => {
   fetchImpl.calls = [];
   deps.logs = [];
   resetRecipientBankVerifyMemoryForTests();
+  testStore = extra.store || newTestBankVerifyStore();
   moovState.bankStatus = extra.bankStatus || 'new';
   moovState.verifyStatus = extra.verifyStatus === undefined ? null : extra.verifyStatus;
   moovState.postCount = 0;
@@ -237,7 +248,12 @@ test('index routes AWS initiate and confirm, not Lovable invoke', () => {
   assert.match(TEMPLATE, /AWS_MOOV_ENABLED: "false"/);
   assert.match(TEMPLATE, /AWS_PROVIDER_EXECUTION_ENABLED: "false"/);
   assert.match(TEMPLATE, /AWS_FINANCIAL_PERMISSIONS_ACTIVATED: "false"/);
-  assert.match(HANDLER, /mode: 'recipient_bank_verify'/);
+  assert.match(TEMPLATE, /AWS_RECIPIENT_BANK_VERIFY_STATE_TABLE: "checksops-recipient-bank-verify-state"/);
+  assert.match(PROD_TEMPLATE, /AWS_RECIPIENT_BANK_VERIFY_STATE_TABLE: "checksops-recipient-bank-verify-state"/);
+  assert.match(HANDLER, /claimInitiation/);
+  assert.match(HANDLER, /consumeMvAttempt/);
+  assert.doesNotMatch(HANDLER, /initiateLocks/);
+  assert.doesNotMatch(HANDLER, /mvAttempts/);
   assert.doesNotMatch(HANDLER, /mode: 'execute'/);
   assert.doesNotMatch(HANDLER, /INSERT INTO/);
   assert.doesNotMatch(HANDLER, /transfers\.write/);
@@ -349,10 +365,10 @@ test('concurrent initiation shares one provider POST', async () => {
         deps(),
       ),
     ]);
-    assert.equal(left.ok, true);
-    assert.equal(right.ok, true);
     assert.equal(moovState.postCount, 1);
-    assert.equal([left.mutated, right.mutated].filter(Boolean).length, 1);
+    assert.equal(fetchImpl.calls.filter((call) => call.method === 'POST' && call.path.includes('/verify')).length, 1);
+    assert.equal([left, right].filter((result) => result.ok === true).length >= 1, true);
+    assert.equal([left, right].some((result) => result.mutated === true || result.error === 'initiate_uncertain'), true);
   });
 });
 
