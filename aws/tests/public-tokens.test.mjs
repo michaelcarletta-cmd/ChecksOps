@@ -4,6 +4,7 @@ import { CLASS_A_FUNCTIONS, handleAppServiceRequest } from '../functions/api/app
 import {
   handlePublicRecipientSession,
   isPlausiblePublicToken,
+  loadInvoiceByToken,
 } from '../functions/api/public-tokens.mjs';
 
 test('public-invoice is Class A and does not require Cognito', async () => {
@@ -45,4 +46,34 @@ test('public invoice does not look up by raw id', async () => {
   );
   assert.equal(src.includes('OR id::text'), false);
   assert.match(src, /public_token = \$1/);
+});
+
+test('unknown invoice token is not found when invoice tables are missing', async () => {
+  const client = {
+    query: async () => {
+      throw new Error('permission denied for table moov_invoices');
+    },
+  };
+  assert.equal(await loadInvoiceByToken(client, 'not-a-real-invoice-token-xyz'), null);
+});
+
+test('invoice lookup uses public_token only and continues after a missing table', async () => {
+  const queries = [];
+  const client = {
+    query: async (sql, params) => {
+      queries.push({ sql, params });
+      if (String(sql).includes('moov_invoices')) throw new Error('relation does not exist');
+      return {
+        rows: [{
+          id: 'inv-1',
+          public_token: params[0],
+          tenant_id: '4f172140-f57a-4744-8050-95f4f07b13b4',
+        }],
+      };
+    },
+  };
+  const row = await loadInvoiceByToken(client, 'valid-token-value');
+  assert.equal(row.public_token, 'valid-token-value');
+  assert.equal(queries.length, 2);
+  assert.equal(queries.some((q) => String(q.sql).includes('id::text')), false);
 });

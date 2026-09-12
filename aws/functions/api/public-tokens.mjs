@@ -61,20 +61,18 @@ const withPublicClient = async (event, fn) => {
   }
 };
 
-const loadInvoiceByToken = async (client, token) => {
-  const fromMoov = (await client.query(
-    `SELECT ${INVOICE_PUBLIC_COLUMNS} FROM public.moov_invoices WHERE public_token = $1 LIMIT 1`,
-    [token],
-  )).rows[0];
-  if (fromMoov) return fromMoov;
-  try {
-    return (await client.query(
-      `SELECT ${INVOICE_PUBLIC_COLUMNS} FROM public.payment_invoices WHERE public_token = $1 LIMIT 1`,
-      [token],
-    )).rows[0] || null;
-  } catch {
-    return null;
-  }
+export const loadInvoiceByToken = async (client, token) => {
+  const lookup = async (table) => {
+    try {
+      return (await client.query(
+        `SELECT ${INVOICE_PUBLIC_COLUMNS} FROM public.${table} WHERE public_token = $1 LIMIT 1`,
+        [token],
+      )).rows[0] || null;
+    } catch {
+      return null;
+    }
+  };
+  return (await lookup('moov_invoices')) || (await lookup('payment_invoices'));
 };
 
 const publicInvoiceShape = (row) => ({
