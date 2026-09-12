@@ -107,11 +107,12 @@ const ensureLambda = async (zipPath, adminSecretArn) => {
 
 const invokeLambda = (payload) => {
   const outFile = path.join(os.tmpdir(), `cc047-grant-${Date.now()}.json`);
+  const payloadFile = path.join(os.tmpdir(), `cc047-grant-payload-${Date.now()}.json`);
+  fs.writeFileSync(payloadFile, JSON.stringify(payload));
   run(AWS, [
     '--region', REGION, 'lambda', 'invoke',
     '--function-name', LAMBDA_NAME,
-    '--cli-binary-format', 'raw-in-base64-out',
-    '--payload', JSON.stringify(payload),
+    '--payload', `file://${payloadFile}`,
     outFile,
   ]);
   return JSON.parse(fs.readFileSync(outFile, 'utf8'));
