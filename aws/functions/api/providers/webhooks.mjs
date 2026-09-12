@@ -6,6 +6,7 @@ import { loadProviderSecrets, webhookSecret } from '../provider-secrets.mjs';
 import { providerWebhookDryRun } from '../provider-flags.mjs';
 import { rawEventBody, verifyHmacBodySignature, verifyMoovSignature } from './hmac.mjs';
 import { applyCheckAltWebhook, applyMoovWebhook, sandboxWebhookApplyEnabled } from './webhook-apply.mjs';
+import { applyProductionMoovWebhook } from './production/moov-webhook-apply.mjs';
 
 const { Client } = pg;
 
@@ -204,6 +205,22 @@ export const handleProviderWebhook = async (event, provider, deps = {}) => {
       }
     } else if (stored.duplicate) {
       applyResult = { applied: false, skipped: 'duplicate', financialTablesMutated: false };
+    }
+
+    if (provider === 'moov') {
+      const incomingStatus = parsed.payload?.data?.status || parsed.payload?.status || null;
+      const productionDark = await applyProductionMoovWebhook(client, parsed.payload, {
+        mappedTenantId: mapped.mapped_tenant_id,
+        incomingStatus,
+      });
+      if (productionDark.productionEvent) {
+        applyResult = {
+          ...applyResult,
+          ...productionDark,
+          applied: false,
+          financialTablesMutated: false,
+        };
+      }
     }
 
     await client.query('COMMIT');

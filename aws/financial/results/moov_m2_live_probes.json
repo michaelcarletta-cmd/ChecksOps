@@ -1,0 +1,126 @@
+{
+  "phase": "M2",
+  "captured_at": "2026-09-09T20:29:53Z",
+  "moov_http_called": false,
+  "production_changed": false,
+  "money_moved": false,
+  "secret_values_printed": false,
+  "probes": {
+    "staging_sandbox_status": {
+      "url": "https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging/sandbox/status",
+      "flags": {
+        "AWS_PROVIDER_EXECUTION_ENABLED": false,
+        "AWS_MOOV_ENABLED": false,
+        "AWS_CHECKALT_ENABLED": false,
+        "AWS_PLAID_ENABLED": false,
+        "AWS_ACTUM_ENABLED": false,
+        "AWS_QUICKBOOKS_ENABLED": false,
+        "AWS_PROVIDER_LIVE_READS_ENABLED": false,
+        "AWS_PROVIDER_WEBHOOK_DRY_RUN": true,
+        "AWS_FINANCIAL_SANDBOX_SIMULATION_ENABLED": true,
+        "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": false,
+        "AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED": true
+      },
+      "moov_capability": {
+        "provider": "moov",
+        "available": true,
+        "reason": "sandbox_keys_configured",
+        "host": "https://api.moov.io",
+        "environmentDeterminedBy": "credential_set",
+        "sameHostAsProduction": true,
+        "productionKeysPresent": false,
+        "platformAccountConfigured": true,
+        "webhookSecretConfigured": true,
+        "allowedOriginConfigured": true,
+        "refuseProductionKeys": true,
+        "safeOperationsWithoutMoney": [
+          "oauth_token",
+          "account_read",
+          "wallet_lookup",
+          "payment_method_lookup",
+          "capability_lookup"
+        ],
+        "moneyOperationsIfMapped": [
+          "create_test_transfer",
+          "retrieve_transfer",
+          "idempotent_retry",
+          "cancel_if_supported"
+        ],
+        "note": "Moov sandbox and production share https://api.moov.io. Only MOOV_SANDBOX_* keys may be used. Production payment_provider_accounts must not be used as sandbox account IDs."
+      },
+      "productionKeyNamesPresent": [],
+      "sandboxMinCents": 1,
+      "cutover": {
+        "authorized": false,
+        "executed": false
+      }
+    },
+    "staging_providers_status": {
+      "url": "https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging/providers/status",
+      "environment": "staging",
+      "flags": {
+        "AWS_PROVIDER_EXECUTION_ENABLED": false,
+        "AWS_MOOV_ENABLED": false,
+        "AWS_CHECKALT_ENABLED": false,
+        "AWS_PLAID_ENABLED": false,
+        "AWS_ACTUM_ENABLED": false,
+        "AWS_QUICKBOOKS_ENABLED": false,
+        "AWS_PROVIDER_LIVE_READS_ENABLED": false,
+        "AWS_PROVIDER_WEBHOOK_DRY_RUN": true
+      },
+      "secrets_configured_booleans_only": {
+        "MOOV_PUBLIC_KEY_configured": false,
+        "MOOV_SECRET_KEY_configured": false,
+        "MOOV_ACCOUNT_ID_configured": false,
+        "MOOV_WEBHOOK_SECRET_configured": false,
+        "MOOV_ENVIRONMENT_configured": false,
+        "MOOV_SANDBOX_PUBLIC_KEY_configured": true,
+        "MOOV_SANDBOX_SECRET_KEY_configured": true,
+        "MOOV_SANDBOX_PLATFORM_ACCOUNT_ID_configured": true,
+        "MOOV_SANDBOX_ALLOWED_ORIGIN_configured": true,
+        "MOOV_SANDBOX_WEBHOOK_SECRET_configured": true,
+        "providerSecretsArnConfigured": true,
+        "moovWebhookSecretConfigured": true
+      }
+    },
+    "production_prep_providers_status": {
+      "url": "https://checksops.com/prep/providers/status",
+      "environment": "production-prep",
+      "flags": {
+        "AWS_PROVIDER_EXECUTION_ENABLED": false,
+        "AWS_MOOV_ENABLED": false,
+        "AWS_CHECKALT_ENABLED": false,
+        "AWS_PLAID_ENABLED": false,
+        "AWS_ACTUM_ENABLED": false,
+        "AWS_QUICKBOOKS_ENABLED": false,
+        "AWS_PROVIDER_LIVE_READS_ENABLED": false,
+        "AWS_PROVIDER_WEBHOOK_DRY_RUN": true
+      },
+      "secrets_configured_booleans_only": {
+        "MOOV_PUBLIC_KEY_configured": false,
+        "MOOV_SECRET_KEY_configured": false,
+        "MOOV_ACCOUNT_ID_configured": false,
+        "MOOV_WEBHOOK_SECRET_configured": false,
+        "MOOV_ENVIRONMENT_configured": false,
+        "MOOV_SANDBOX_PUBLIC_KEY_configured": false,
+        "MOOV_SANDBOX_SECRET_KEY_configured": false,
+        "MOOV_SANDBOX_PLATFORM_ACCOUNT_ID_configured": false,
+        "MOOV_SANDBOX_ALLOWED_ORIGIN_configured": false,
+        "MOOV_SANDBOX_WEBHOOK_SECRET_configured": false,
+        "providerSecretsArnConfigured": false,
+        "moovWebhookSecretConfigured": false
+      }
+    }
+  },
+  "classification": "PROVIDER_CREDENTIAL_BLOCKER",
+  "inventory_gap": {
+    "inventoried": [
+      "MOOV_ACCOUNT_ID"
+    ],
+    "not_inventoried_but_required_by_current_code": [
+      "MOOV_PLATFORM_ACCOUNT_ID",
+      "MOOV_ALLOWED_ORIGIN"
+    ],
+    "do_not_use_as_facilitator": "MOOV_ACCOUNT_ID"
+  }
+}
