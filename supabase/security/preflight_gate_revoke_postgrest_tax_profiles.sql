@@ -1,40 +1,25 @@
 -- =============================================================================
--- NOT SAFE TO APPLY WITHOUT AUTHORIZED PREFLIGHT
--- NOT SAFE TO APPLY / NOT A SUPABASE CLI MIGRATION / NOT FOR db push
+-- PREFLIGHT GATE ONLY — NOT THE APPLY / MUTATION FILE
 -- =============================================================================
+-- Catalog metadata only. Never SELECT rows from public.recipient_tax_profiles.
+-- Never prints TIN values. Never mutates privileges, policies, or table DDL.
 --
--- This file is intentionally outside supabase/migrations/ so GitHub Supabase
--- integration, `supabase db push`, Lovable merge deploys, oneshots, and
--- wildcard runners cannot discover it.
+-- This file is the fail-closed gate. Do not treat it as the apply script.
 --
--- Created originally with: supabase migration new revoke_postgrest_tax_profiles
--- Then moved to supabase/security/unapplied-do-not-run/ to prevent auto-apply.
+-- This file is the fail-closed gate. Do not treat it as the apply script.
+-- Apply file (unapplied; not under supabase/migrations/):
+--   supabase/security/unapplied-do-not-run/NOT_APPLIED_revoke_postgrest_tax_profiles.sql
 --
--- DO NOT:
---   - supabase db push
---   - supabase migration up
---   - copy this file into supabase/migrations/
---   - apply without the fail-closed preflight gate succeeding
---   - apply to RDS / AWS (checksops) databases
+-- Usage (disposable or authorized hosted session; read-only transaction):
+--   psql -v ON_ERROR_STOP=1 \
+--     -v expected_project_ref=nbcqwpysqgyxrrbgtmkw \
+--     -v expected_database=postgres \
+--     -v expected_owner=postgres \
+--     -f supabase/security/preflight_gate_revoke_postgrest_tax_profiles.sql
 --
--- Authorized future method (this exact file, one transaction, after authorization):
---   1. Record operator authorization.
---   2. Run supabase/security/preflight_gate_revoke_postgrest_tax_profiles.sql
---      on the target (catalog only). Require CLASSIFICATION=EXACT_EXPECTED_LEGACY
---      or ALREADY_CONTAINED.
---   3. Apply THIS file only with:
---
--- psql -v ON_ERROR_STOP=1 \
---   -v expected_project_ref=nbcqwpysqgyxrrbgtmkw \
---   -v expected_database=postgres \
---   -v expected_owner=postgres \
---   -f supabase/security/unapplied-do-not-run/NOT_APPLIED_revoke_postgrest_tax_profiles.sql
---
--- This script never SELECTs table rows or column tin values.
--- It does not create SECURITY DEFINER functions.
--- PostgREST NOTIFY runs only after a successful COMMIT of a mutating apply.
--- Keep classification checks in sync with
--- supabase/security/preflight_gate_revoke_postgrest_tax_profiles.sql
+-- Identity vars are non-secret. Production Lovable project_ref is
+-- nbcqwpysqgyxrrbgtmkw only. Do not pass sqyyvpaymashtdwjjmku.
+-- Keep classification checks in sync with the unapplied apply file.
 -- =============================================================================
 
 \if :{?expected_project_ref}
@@ -53,14 +38,15 @@
 \quit 1
 \endif
 
-SELECT set_config('checksops.expected_project_ref', :'expected_project_ref', false);
-SELECT set_config('checksops.expected_database', :'expected_database', false);
-SELECT set_config('checksops.expected_owner', :'expected_owner', false);
-SELECT set_config('checksops.containment_mutated', 'false', false);
-
 BEGIN;
 
-DO $containment$
+SET TRANSACTION READ ONLY;
+
+SELECT set_config('checksops.expected_project_ref', :'expected_project_ref', true);
+SELECT set_config('checksops.expected_database', :'expected_database', true);
+SELECT set_config('checksops.expected_owner', :'expected_owner', true);
+
+DO $preflight_gate$
 DECLARE
   expected_project text := current_setting('checksops.expected_project_ref', true);
   expected_db      text := current_setting('checksops.expected_database', true);
@@ -84,7 +70,6 @@ DECLARE
   ];
   extra_pol        text[];
   classification   text;
-  col              record;
   dep              record;
   fn               record;
   pub              record;
@@ -106,6 +91,7 @@ DECLARE
   rls_ok           boolean;
   unsafe_reason    text;
   graphql_comment  text;
+  policy_count     int;
 BEGIN
   IF expected_project IS NULL OR expected_project = '' OR expected_project = 'expected_project_ref' THEN
     RAISE EXCEPTION 'recipient_tax_profiles containment failed closed: expected_project_ref was not supplied';
@@ -280,6 +266,7 @@ BEGIN
     WHERE NOT (p = ANY (expected_pol))
   );
   has_member_pols := (pol_names @> expected_pol) AND (expected_pol @> pol_names);
+  policy_count := coalesce(array_length(pol_names, 1), 0);
 
   has_expected_policy_bodies :=
     EXISTS (
@@ -413,95 +400,14 @@ BEGIN
   END IF;
 
   RAISE NOTICE 'CLASSIFICATION=%', classification;
+  RAISE NOTICE 'PREFLIGHT_METADATA owner=% relkind=% rls=% force_rls=% policy_count=% authenticated_dml=% service_role_dml=% data_api_table_priv=% data_api_column_priv=%',
+    owner_name, relkind, rls_on, force_rls, policy_count, has_auth_dml, has_service,
+    has_data_api_table_priv, has_data_api_column_priv;
 
   IF classification = 'UNSAFE/AMBIGUOUS' THEN
     RAISE EXCEPTION 'recipient_tax_profiles containment failed closed: classification=UNSAFE/AMBIGUOUS (%)', unsafe_reason;
   END IF;
-
-  IF classification = 'ALREADY_CONTAINED' THEN
-    PERFORM set_config('checksops.containment_mutated', 'false', false);
-    RAISE NOTICE 'recipient_tax_profiles containment: already applied, no-op';
-    RETURN;
-  END IF;
-
-  IF NOT rls_ok THEN
-    EXECUTE 'ALTER TABLE public.recipient_tax_profiles ENABLE ROW LEVEL SECURITY';
-  END IF;
-
-  REVOKE ALL ON TABLE public.recipient_tax_profiles FROM PUBLIC;
-  REVOKE ALL ON TABLE public.recipient_tax_profiles FROM anon;
-  REVOKE ALL ON TABLE public.recipient_tax_profiles FROM authenticated;
-  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticator') THEN
-    EXECUTE 'REVOKE ALL ON TABLE public.recipient_tax_profiles FROM authenticator';
-  END IF;
-
-  FOR col IN
-    SELECT a.attname
-    FROM pg_attribute a
-    WHERE a.attrelid = rel_oid AND a.attnum > 0 AND NOT a.attisdropped
-  LOOP
-    EXECUTE format('REVOKE ALL (%I) ON TABLE public.recipient_tax_profiles FROM PUBLIC', col.attname);
-    EXECUTE format('REVOKE ALL (%I) ON TABLE public.recipient_tax_profiles FROM anon', col.attname);
-    EXECUTE format('REVOKE ALL (%I) ON TABLE public.recipient_tax_profiles FROM authenticated', col.attname);
-    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticator') THEN
-      EXECUTE format('REVOKE ALL (%I) ON TABLE public.recipient_tax_profiles FROM authenticator', col.attname);
-    END IF;
-  END LOOP;
-
-  DROP POLICY IF EXISTS "tenant members read recipient_tax_profiles" ON public.recipient_tax_profiles;
-  DROP POLICY IF EXISTS "tenant members insert recipient_tax_profiles" ON public.recipient_tax_profiles;
-  DROP POLICY IF EXISTS "tenant members update recipient_tax_profiles" ON public.recipient_tax_profiles;
-  DROP POLICY IF EXISTS "tenant members delete recipient_tax_profiles" ON public.recipient_tax_profiles;
-
-  IF NOT has_table_privilege('service_role', 'public.recipient_tax_profiles'::regclass, 'SELECT')
-     OR NOT has_table_privilege('service_role', 'public.recipient_tax_profiles'::regclass, 'INSERT')
-     OR NOT has_table_privilege('service_role', 'public.recipient_tax_profiles'::regclass, 'UPDATE')
-     OR NOT has_table_privilege('service_role', 'public.recipient_tax_profiles'::regclass, 'DELETE') THEN
-    RAISE EXCEPTION 'recipient_tax_profiles containment failed closed: service_role lost required table privileges';
-  END IF;
-
-  IF has_table_privilege('anon', 'public.recipient_tax_profiles'::regclass, 'SELECT')
-     OR has_table_privilege('authenticated', 'public.recipient_tax_profiles'::regclass, 'SELECT')
-     OR has_table_privilege('authenticated', 'public.recipient_tax_profiles'::regclass, 'INSERT')
-     OR has_table_privilege('authenticated', 'public.recipient_tax_profiles'::regclass, 'UPDATE')
-     OR has_table_privilege('authenticated', 'public.recipient_tax_profiles'::regclass, 'DELETE')
-     OR has_table_privilege('authenticated', 'public.recipient_tax_profiles'::regclass, 'TRUNCATE')
-     OR EXISTS (
-       SELECT 1 FROM pg_class c
-       CROSS JOIN LATERAL aclexplode(c.relacl) AS a
-       WHERE c.oid = 'public.recipient_tax_profiles'::regclass
-         AND c.relacl IS NOT NULL AND a.grantee = 0
-     ) THEN
-    RAISE EXCEPTION 'recipient_tax_profiles containment failed closed: Data API privileges remain after revoke';
-  END IF;
-
-  IF EXISTS (
-    SELECT 1 FROM pg_policy p WHERE p.polrelid = 'public.recipient_tax_profiles'::regclass
-  ) THEN
-    RAISE EXCEPTION 'recipient_tax_profiles containment failed closed: policies remain after drop';
-  END IF;
-
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_class c
-    JOIN pg_namespace n ON n.oid = c.relnamespace
-    WHERE n.nspname = 'public' AND c.relname = 'recipient_tax_profiles' AND c.relrowsecurity
-  ) THEN
-    RAISE EXCEPTION 'recipient_tax_profiles containment failed closed: RLS is not enabled';
-  END IF;
-
-  EXECUTE $c$
-    COMMENT ON TABLE public.recipient_tax_profiles IS
-      'Direct Data API grants to PUBLIC/anon/authenticated are revoked. Use the dedicated server Tax/1099 handler. Do not grant browser roles back.';
-  $c$;
-
-  PERFORM set_config('checksops.containment_mutated', 'true', false);
-  RAISE NOTICE 'recipient_tax_profiles containment: Data API privileges revoked; member policies dropped; service_role preserved';
 END
-$containment$;
+$preflight_gate$;
 
-COMMIT;
-
-SELECT CASE
-  WHEN current_setting('checksops.containment_mutated', true) = 'true'
-  THEN pg_notify('pgrst', 'reload schema')
-END;
+ROLLBACK;

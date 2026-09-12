@@ -1,0 +1,9 @@
+# Historical recipient_tax_profiles privilege/policy SQL under supabase/migrations/.
+#
+# Only filenames listed here may both mention recipient_tax_profiles AND
+# perform GRANT, REVOKE, CREATE/DROP POLICY, ALTER TABLE RLS, or TIN privilege
+# changes. Adding a name is an explicit security review in the SAME PR as the
+# migration. Do not add the unapplied revoke file; it must stay outside
+# supabase/migrations/.
+#
+20260709195755_af0fb428-7cf4-4ac3-9fc6-d04ed189b490.sql

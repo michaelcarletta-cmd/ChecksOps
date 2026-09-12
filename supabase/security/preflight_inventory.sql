@@ -1,11 +1,17 @@
 -- Catalog-only inventory for public.recipient_tax_profiles.
+-- NOT THE APPLY FILE. NOT THE FAIL-CLOSED PREFLIGHT GATE.
+-- The gate is supabase/security/preflight_gate_revoke_postgrest_tax_profiles.sql
+-- The unapplied mutation is
+--   supabase/security/unapplied-do-not-run/NOT_APPLIED_revoke_postgrest_tax_profiles.sql
+--
 -- Run against a target database by an authorized operator during preflight.
 -- Do not SELECT from the table. Do not mention or return column tin values.
--- This file is not applied by this PR.
+-- This file never mutates privileges or policies. It is not applied by this PR.
 
 SELECT n.nspname AS schema_name,
        c.relname AS table_name,
        pg_get_userbyid(c.relowner) AS table_owner,
+       c.relkind AS relkind,
        c.relrowsecurity AS rls_enabled,
        c.relforcerowsecurity AS force_rls
 FROM pg_class c
@@ -39,7 +45,7 @@ SELECT grantee, privilege_type, column_name
 FROM information_schema.column_privileges
 WHERE table_schema = 'public'
   AND table_name = 'recipient_tax_profiles'
-  AND grantee IN ('PUBLIC', 'anon', 'authenticated', 'authenticator', 'service_role')
+  AND grantee IN ('PUBLIC', 'anon', 'authenticated', 'authenticator', 'service_role', 'postgres')
 ORDER BY grantee, column_name, privilege_type;
 
 SELECT polname, polcmd, polroles::regrole[], pg_get_expr(polqual, polrelid) AS using_expr,
@@ -47,6 +53,18 @@ SELECT polname, polcmd, polroles::regrole[], pg_get_expr(polqual, polrelid) AS u
 FROM pg_policy
 WHERE polrelid = 'public.recipient_tax_profiles'::regclass
 ORDER BY polname;
+
+SELECT m.rolname AS member_role, g.rolname AS granted_role
+FROM pg_auth_members am
+JOIN pg_roles m ON m.oid = am.member
+JOIN pg_roles g ON g.oid = am.roleid
+WHERE m.rolname IN ('anon', 'authenticated', 'authenticator', 'service_role', 'postgres')
+   OR g.rolname IN ('anon', 'authenticated', 'authenticator', 'service_role', 'postgres')
+   OR m.rolname ILIKE 'aws_%'
+   OR g.rolname ILIKE 'aws_%'
+   OR m.rolname ILIKE 'checksops%'
+   OR g.rolname ILIKE 'checksops%'
+ORDER BY 1, 2;
 
 SELECT n.nspname, c.relname, c.relkind
 FROM pg_depend d
@@ -56,7 +74,13 @@ JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE d.refobjid = 'public.recipient_tax_profiles'::regclass
   AND c.relkind IN ('v', 'm');
 
-SELECT n.nspname, p.proname, p.prosecdef
+SELECT n.nspname, c.relname, c.relkind
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE c.relkind = 'f'
+  AND c.relname ILIKE '%recipient_tax_profiles%';
+
+SELECT n.nspname, p.proname, p.prosecdef, p.prokind
 FROM pg_proc p
 JOIN pg_namespace n ON n.oid = p.pronamespace
 WHERE p.prosrc ILIKE '%recipient_tax_profiles%';
