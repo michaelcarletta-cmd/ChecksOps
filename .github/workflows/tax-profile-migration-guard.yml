@@ -6,6 +6,7 @@ on:
       - 'supabase/migrations/**'
       - 'supabase/security/**'
       - 'scripts/check-recipient-tax-profile-migrations.mjs'
+      - 'scripts/run-hosted-tax-profile-containment.mjs'
       - 'scripts/recipient-tax-profile-migration-allowlist.txt'
       - '.github/workflows/tax-profile-migration-guard.yml'
       - 'package.json'
@@ -16,6 +17,7 @@ on:
       - 'supabase/migrations/**'
       - 'supabase/security/**'
       - 'scripts/check-recipient-tax-profile-migrations.mjs'
+      - 'scripts/run-hosted-tax-profile-containment.mjs'
       - 'scripts/recipient-tax-profile-migration-allowlist.txt'
       - '.github/workflows/tax-profile-migration-guard.yml'
       - 'package.json'
@@ -45,3 +47,6 @@ jobs:
 
       - name: Run migration-guard unit tests
         run: node --test supabase/security/migration-guard.test.mjs
+
+      - name: Run operator-wrapper unit tests (no remote connections)
+        run: node --test supabase/security/hosted-containment-wrapper.test.mjs
