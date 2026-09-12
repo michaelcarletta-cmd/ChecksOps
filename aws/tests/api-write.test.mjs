@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { test } from 'node:test';
 import { handler } from '../functions/api/index.mjs';
 import { LOOKUP_MAPPING_SQL } from '../functions/api/identity.mjs';
@@ -149,6 +150,10 @@ test('allowlist rejects financial tables and unknown columns; ignores spoof iden
   });
   assert.equal(claimNumber.error, undefined);
   assert.equal(claimNumber.values.detected_claim_number, 'CLM-47');
+  const claimNumberGrant = fs.readFileSync(new URL('../write-path/sql/39_detected_claim_number_grant.sql', import.meta.url), 'utf8');
+  assert.match(claimNumberGrant, /GRANT UPDATE \(detected_claim_number\)/);
+  assert.equal(/GRANT UPDATE \([^)]*claim_id/.test(claimNumberGrant), false);
+  assert.equal(/GRANT UPDATE \([^)]*amount/.test(claimNumberGrant), false);
   assert.ok(!WRITE_ALLOWLIST.check_intake_items.columns.has('amount'));
   assert.ok(WRITE_ALLOWLIST.tenants.columns.has('subscription_status'));
   assert.ok(WRITE_ALLOWLIST.tenants.clientIgnored.has('moov_environment'));

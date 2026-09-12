@@ -238,6 +238,24 @@ export const handler = async (event) => {
       await client.query(readSql(SQL_DIR, '34_tranche2_revoke_write_grants.sql'));
       return { ok: true, revoked: true, privileges: await tablePrivileges(client) };
     }
+    if (step === 'grant-detected-claim-number') {
+      const before = await intakeUpdateColumns(client);
+      await client.query(readSql(SQL_DIR, '39_detected_claim_number_grant.sql'));
+      const after = await intakeUpdateColumns(client);
+      const financialStillBlocked = !after.includes('amount')
+        && !after.includes('claim_id')
+        && !after.includes('status')
+        && !after.includes('routing_number')
+        && !after.includes('deposited_at');
+      return {
+        ok: after.includes('detected_claim_number') && financialStillBlocked,
+        step,
+        before,
+        after,
+        granted: after.includes('detected_claim_number'),
+        financialStillBlocked,
+      };
+    }
     const before = await financialAggregates(client);
     await client.query(readSql(SQL_DIR, '33_tranche2_write_grants.sql'));
     await client.query(readSql(SQL_DIR, '35_tranche3_write_grants.sql'));
