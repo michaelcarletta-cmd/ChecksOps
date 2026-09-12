@@ -1,17 +1,97 @@
 # ChecksOps complete functional audit
 
-This file contains six passes on 2026-09-11 / 2026-09-12:
+This file contains seven passes on 2026-09-11 / 2026-09-12:
 
-1. **Pass 6 (this continuation)** — coverage closure on the exact remaining 76 unclicked IDs. Results are at the top.
-2. **Pass 5** — coverage expansion on remaining live unclicked controls.
-3. **Pass 4** — field-level coverage expansion after Pass 3.
-4. **Pass 3** — coverage expansion after Pass 2.
-5. **Pass 2** — inventory reconciliation plus first physical staging interaction.
-6. **Pass 1 (baseline)** — original 412-control audit preserved below.
+1. **Blocked-Control Verification Pass (Pass 7, this continuation)** — reduce the 494 BLOCKED controls using staging fixtures and supported workflows. Results are at the top.
+2. **Pass 6** — coverage closure on the exact remaining 76 unclicked IDs.
+3. **Pass 5** — coverage expansion on remaining live unclicked controls.
+4. **Pass 4** — field-level coverage expansion after Pass 3.
+5. **Pass 3** — coverage expansion after Pass 2.
+6. **Pass 2** — inventory reconciliation plus first physical staging interaction.
+7. **Pass 1 (baseline)** — original 412-control audit preserved below.
 
 **Verdict: CONDITIONAL GO** for C1C tenant-admin and platform-owner staging workflows. **NO-GO** for Freedom admin identity (`identity_not_linked`) and for treating production `checksops.com` as a clean production SPA (Pass 1 P0 banner still unreleased).
 
-Inventory classification is **100%** (1,421 / 1,421). That is not an operational certification. **494 BLOCKED** controls have a classification and have **not** been proven operational. Executable interaction coverage is **100% classified** (1,283 / 1,283) and **44.9% PASS** (576 / 1,283). Do not treat 100% classification as a go-live for SES, CheckAlt, ACH, Freedom identity, or money movement.
+Inventory classification is **100%** (1,421 / 1,421). That is not an operational certification. The primary readiness metric is **proven operational: 626 / 1,136 live non-N/A = 55.1%**. Do not use the stale Pass 6 executable denominator (576 / 1,283 = 44.9%). Do not treat 100% classification as a go-live for SES, CheckAlt, ACH, Freedom identity, or money movement.
+
+---
+
+# Blocked-Control Verification Pass — metric reconciliation and taxonomy
+
+**Date:** 2026-09-12  
+**Auditor:** Cursor Cloud Agent  
+**Branch:** `cursor/blocked-control-verification-3bce`  
+**Scope:** Do not recrawl. Do not change production or application code. Do not enable real ACH, Moov, CheckAlt, Plaid, or other provider execution. Do not modify SES. Unlock BLOCKED controls only with synthetic staging fixtures and supported workflows.
+
+## Coverage-math reconciliation (do this before testing)
+
+Pass 6 module totals reconcile:
+
+| Bucket | Count |
+|---|---|
+| PASS | 626 |
+| FAIL | 16 |
+| BLOCKED | 494 |
+| N/A | 285 |
+| **Total** | **1,421** |
+
+Pass 6 also reported `executable IDs = 1,283` and `executable operational PASS = 576 / 1,283 (44.9%)`. That denominator is **stale/misleading**. It is `safety ∈ {executable, executable_or_ui}` from the original crawl, not live/non-N/A controls.
+
+Why 576 / 1,283 is wrong as an operational rate:
+
+* 1,283 safety-executable rows include **271 N/A** controls (dead JSX / never-mounted). Those inflate the denominator.
+* **50 PASS** rows have `safety=provider_blocked` (48) or `safety=email_blocked` (2). Those were excluded from 576 even though `result=PASS`.
+* Operational readiness is PASS among controls that still matter, i.e. live/non-N/A.
+
+Correct Pass 6 / pre-verification metrics (authoritative going forward):
+
+| # | Metric | Formula | Value |
+|---|---|---|---|
+| 1 | Total live/non-N/A controls | 1,421 − 285 | **1,136** |
+| 2 | PASS rate among live | 626 / 1,136 | **55.1%** |
+| 3 | FAIL rate among live | 16 / 1,136 | **1.4%** |
+| 4 | BLOCKED rate among live | 494 / 1,136 | **43.5%** |
+| 5 | Proven-operational rate | PASS / live non-N/A | **55.1%** |
+
+Classification coverage remains **1,421 / 1,421 = 100%**. It is no longer the primary readiness metric.
+
+## Pre-verification blocker taxonomy (all 494 tagged)
+
+Every BLOCKED control now has exactly one PRIMARY `blocker_category` and a `blocker_root_cause`. Optional `blocker_secondary` records a second dependency.
+
+| Category | Controls | Distinct root causes (pre-test) |
+|---|---|---|
+| BLOCKED_FIXTURE | 170 | empty review queue, tokens, invoices, settlements, share-thread, class options |
+| BLOCKED_PROVIDER | 110 | provider_execution, payment_account_already_active, funds lanes, CheckAlt deposit |
+| BLOCKED_UNSAFE_IRREVERSIBLE | 102 | previously withheld persistence (re-evaluate on synthetics) |
+| BLOCKED_EMAIL_EXTERNAL | 37 | SES send / invite / invoice / tracking email |
+| BLOCKED_EMAIL_OTP | 24 | MortgageOps / Sign queue OTP |
+| BLOCKED_MISSING_FEATURE | 24 | custom domain, never-mounted live UI |
+| BLOCKED_AUTH_DEFECT | 19 | owner `isAdmin=false` |
+| BLOCKED_STATUS | 4 | CC-363–CC-366 deposit/undo/force-move |
+| BLOCKED_IDENTITY | 2 | Freedom admin `identity_not_linked` (CheckAlt Manager) |
+| BLOCKED_STAGING_INFRA | 2 | S3 authorized object missing; admin override RPC |
+| BLOCKED_OTHER | 0 | — |
+| **Total** | **494** | **see JSON `pass7_blocker_taxonomy_pre_verification`** |
+
+Top pre-test root causes (control count):
+
+* 57 `empty_review_queue` (56 CheckReviewConsole + DepositPacketGenerator)
+* 50 `provider_execution`
+* 45 `payment_account_already_active`
+* 28 `accepted_claim_portal_token_unavailable`
+* 24 `email_otp_required`
+* 19 `owner_isAdmin_false`
+* 19 `valid_paysetup_token_unavailable`
+
+Control-level blocked: **494**. Root-cause-level: these are not 494 unique problems.
+
+Physical verification follows this section. A control previously BLOCKED becomes PASS, FAIL, or remains BLOCKED with a narrower proven reason. PASS is never inferred from source inspection.
+
+---
+
+# Pass 6 — Coverage closure (physical interaction)
+
 
 No application code was patched. No SQL. No provider flags. No Cognito identity linking. No SES. No production authenticated workflows. Branding Save was not clicked. Provider execution stayed OFF. No ACH / Moov transfer / wallet funding / CheckAlt execution.
 
