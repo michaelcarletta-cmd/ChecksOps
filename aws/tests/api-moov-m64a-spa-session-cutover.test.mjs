@@ -22,7 +22,8 @@ test('M6.4A session load targets same-origin AWS public route, not Lovable invok
   assert.doesNotMatch(API, /console\.(log|debug|info|warn|error)/);
   assert.match(API, /JSON\.stringify\(body\)/);
   assert.match(API, /postRecipientPublic\(AWS_PUBLIC_SESSION, \{ token \}/);
-  assert.match(API, /throw new Error\(message\)/);
+  assert.match(API, /throw err/);
+  assert.match(API, /mapRecipientPublicError/);
 });
 
 test('M6.4A mutation handlers stay off the session load path', () => {

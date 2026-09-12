@@ -5,6 +5,7 @@
  * `bank_verify_available` session flag is true.
  */
 import { awsApiBaseUrl } from "@/lib/awsStaging";
+import { mapRecipientPublicError } from "@/lib/recipientBankVerifyUi";
 
 const AWS_PUBLIC_SESSION = "/public/moov-recipient-session";
 const AWS_PUBLIC_KYC = "/public/moov-recipient-kyc-update";
@@ -42,10 +43,12 @@ async function postRecipientPublic(
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || (data as { error?: string })?.error) {
-    const message = String((data as { error?: string; message?: string })?.message
-      || (data as { error?: string })?.error
-      || "Request failed");
-    throw new Error(message);
+    const err = new Error(mapRecipientPublicError(
+      (data as { error?: string })?.error,
+      (data as { message?: string })?.message,
+    ));
+    (err as Error & { code?: string }).code = String((data as { error?: string })?.error || '');
+    throw err;
   }
   return data;
 }

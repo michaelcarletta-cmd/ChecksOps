@@ -41,6 +41,7 @@ import {
   BANK_VERIFY_STATES,
   createMemoryBankVerifyStore,
   openRecipientBankVerifyStore,
+  redactBankVerifyAudit,
   tokenFingerprint,
 } from './providers/recipient-bank-verify-state.mjs';
 import {
@@ -62,6 +63,7 @@ const MONEY_MUTATION_KEYS = [
   'create_account', 'add_bank', 'request_capability',
   'fund_wallet', 'create_recipient', 'create_transfer', 'disburse',
   'onboard', 'consume_token', 'send_transfer',
+  'ach', 'rtp', 'wire', 'create_ach', 'create_rtp', 'create_wire',
 ];
 
 const ipFailures = new Map();
@@ -105,7 +107,25 @@ const listOf = (payload) => {
   return [];
 };
 
-const fail = (error, statusCode, extra = {}) => ({
+const PUBLIC_DROP_KEYS = /^(routing_number|account_number|secure_token|ssn|code|verification_code|mv_code)$/i;
+
+const sanitizePublicBankVerify = (result) => {
+  if (!result || typeof result !== 'object') return result;
+  const out = { ...result };
+  for (const key of Object.keys(out)) {
+    if (PUBLIC_DROP_KEYS.test(key) && key !== 'statusCode') {
+      if (key === 'mv_code_returned' || key === 'mv_code_stored') continue;
+      delete out[key];
+    }
+  }
+  if (out.account_number || out.routing_number) {
+    delete out.account_number;
+    delete out.routing_number;
+  }
+  return out;
+};
+
+const fail = (error, statusCode, extra = {}) => sanitizePublicBankVerify({
   ok: false,
   statusCode,
   error,
@@ -143,7 +163,9 @@ async function authorizePublicRecipientBankVerify(event, deps = {}) {
   const spoof = ignoredSpoof(event, body);
   const ip = clientIp(event);
   const nowMs = deps.nowMs || Date.now();
-  const log = deps.log || (() => {});
+  const log = (...args) => (deps.log || (() => {}))(...args.map((arg) => (
+    typeof arg === 'string' ? arg : redactBankVerifyAudit(arg)
+  )));
 
   if (recipientBankVerifyRateLimited({ ip, nowMs })) {
     return { ok: false, result: fail('recipient_token_rate_limited', 429, {
@@ -291,12 +313,13 @@ async function authorizePublicRecipientBankVerify(event, deps = {}) {
 }
 
 const safePublic = (result) => {
-  if (recipientMvResponseHasSecrets(result)) {
+  const sanitized = sanitizePublicBankVerify(result);
+  if (recipientMvResponseHasSecrets(sanitized)) {
     return fail('mv_secret_leak_blocked', 500, {
       message: 'Verification codes cannot be returned.',
     });
   }
-  return result;
+  return sanitized;
 };
 
 const moovGet = async ({ moovFetch, credentials, fetchImpl, accountId, bankId, path, scopes }) => {
@@ -341,6 +364,9 @@ const loadBoundBank = async ({ moovFetch, credentials, fetchImpl, recipient, acc
     path: `/accounts/${accountId}`,
     scopes: [`/accounts/${accountId}/profile.read`],
   });
+  if (!account || typeof account !== 'object' || Array.isArray(account)) {
+    return { error: { error: 'moov_account_malformed', statusCode: 502, message: 'The payment provider returned an unreadable account. Verification was not started.' } };
+  }
   let capabilities = [];
   let capsOk = false;
   try {
@@ -527,7 +553,7 @@ export async function handlePublicMoovRecipientBankVerifyInitiate(event, deps = 
       }));
     }
     const { account, banks, capabilities, capsOk, bank, bankId, liveVerify, interpreted } = loaded;
-    const ids = { recipientId: recipient.id, accountId, bankId };
+    const ids = { recipientId: recipient.id, accountId, bankId, tenantId: recipient.tenant_id };
     const idempotencyKey = recipientBankVerifyIdempotencyKey({ recipientId: recipient.id, bankId });
     const bound = {
       spoof, recipient, accountId, bankId, interpreted,
@@ -783,7 +809,7 @@ export async function handlePublicMoovRecipientBankVerifyConfirm(event, deps = {
       }));
     }
     const { account, banks, capabilities, capsOk, bankId, interpreted } = loaded;
-    const ids = { recipientId: recipient.id, accountId, bankId };
+    const ids = { recipientId: recipient.id, accountId, bankId, tenantId: recipient.tenant_id };
 
     if (interpreted.verified) {
       await persistProviderState(store, ids, interpreted, nowMs);
@@ -830,6 +856,7 @@ export async function handlePublicMoovRecipientBankVerifyConfirm(event, deps = {
         recipientId: recipient.id,
         accountId,
         bankId,
+        tenantId: recipient.tenant_id,
         tokenFp,
         nowMs,
       });

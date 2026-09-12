@@ -13,6 +13,12 @@ import {
   submitRecipientKyc,
   submitRecipientTos,
 } from "@/lib/recipientSessionApi";
+import {
+  bankVerifyConfirmEnabled,
+  bankVerifyInitiateEnabled,
+  bankVerifyView,
+  mapRecipientPublicError,
+} from "@/lib/recipientBankVerifyUi";
 import { Loader2, ShieldCheck, AlertCircle, CheckCircle2, UserRound } from "lucide-react";
 
 interface SessionData {
@@ -83,6 +89,7 @@ export default function RecipientPaymentSetup() {
   const [saving, setSaving] = useState(false);
   const [tosReady, setTosReady] = useState(false);
   const [tosOauth, setTosOauth] = useState<string | null>(null);
+  const [tosDropToken, setTosDropToken] = useState<string | null>(null);
   const [mvCode, setMvCode] = useState("");
   const [identity, setIdentity] = useState({
     first_name: "", last_name: "", email: "", phone: "", address_line1: "", address_line2: "",
@@ -97,7 +104,7 @@ export default function RecipientPaymentSetup() {
   async function load() {
     setLoading(true); setError(null);
     try { setSession(await loadRecipientSession(token || "")); }
-    catch (e: any) { setError(e.message); }
+    catch (e: any) { setError(mapRecipientPublicError(e.code, e.message)); }
     finally { setLoading(false); }
   }
   useEffect(() => { void load(); }, [token]);
@@ -108,11 +115,12 @@ export default function RecipientPaymentSetup() {
   const identityKnown = session?.onboarding?.identity_requirements_known === true;
   const needsIdentity = identityKnown ? identityOutstanding.length > 0 : !verified;
   const liveComplete = session?.onboarding?.complete === true;
-  const bankVerifyAvailable = session?.onboarding?.bank_verify_available === true;
+  const bankView = bankVerifyView(session, { loading });
   const shouldInitiateBank = session?.onboarding?.bank_should_initiate === true;
   const canConfirmBank = session?.onboarding?.bank_can_confirm === true
     || session?.onboarding?.bank_micro_deposits_initiated === true;
   const bankVerified = session?.onboarding?.bank_verified === true;
+  const bankVerifyAvailable = session?.onboarding?.bank_verify_available === true;
   const digits = (v: string, max: number) => v.replace(/\D/g, "").slice(0, max);
 
   useEffect(() => {
@@ -166,7 +174,7 @@ export default function RecipientPaymentSetup() {
       await initiateRecipientBankVerify(token || "");
       setMvCode("");
       await load();
-    } catch (e: any) { setError(e.message); }
+    } catch (e: any) { setError(mapRecipientPublicError(e.code, e.message)); }
     finally { setSaving(false); }
   }
 
@@ -183,7 +191,7 @@ export default function RecipientPaymentSetup() {
       await confirmRecipientBankVerify(token || "", code);
       setMvCode("");
       await load();
-    } catch (e: any) { setError(e.message); }
+    } catch (e: any) { setError(mapRecipientPublicError(e.code, e.message)); }
     finally { setSaving(false); }
   }
 
@@ -224,17 +232,20 @@ export default function RecipientPaymentSetup() {
           {bankVerifyAvailable && shouldInitiateBank && !canConfirmBank && !bankVerified && (
             <div className="space-y-2">
               <p className="text-[11px] text-muted-foreground">A $0.01 deposit will appear in this bank. Use the four-digit code from that deposit to finish verification.</p>
-              <Button className="w-full" disabled={saving} onClick={() => void initiateBankVerify()}>
+              <Button className="w-full" disabled={!bankVerifyInitiateEnabled(bankView, saving)} onClick={() => void initiateBankVerify()}>
                 {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Send verification deposit
               </Button>
             </div>
           )}
           {bankVerifyAvailable && canConfirmBank && !bankVerified && (
             <form onSubmit={submitBankVerifyCode} className="space-y-3">
-              <p className="text-[11px] text-muted-foreground">Enter the 4-digit code from the $0.01 deposit. Do not share this code.</p>
+              <p className="text-[11px] text-muted-foreground">Enter the 4-digit code from the $0.01 deposit. Do not share this code. Too many incorrect tries will lock this step.</p>
               <div><Label>Verification code</Label><Input type="password" inputMode="numeric" autoComplete="one-time-code" required value={mvCode} onChange={e=>setMvCode(digits(e.target.value,4))} /></div>
-              <Button className="w-full" disabled={saving || mvCode.length !== 4}>{saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Confirm bank</Button>
+              <Button className="w-full" disabled={!bankVerifyConfirmEnabled(bankView, saving, mvCode.length)}>{saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Confirm bank</Button>
             </form>
+          )}
+          {bankView === 'verified' && !liveComplete && (
+            <p className="text-[11px] text-muted-foreground">This bank is verified. Setup will complete when remaining provider checks finish.</p>
           )}
           {!bankVerifyAvailable && (
             <p className="text-[11px] text-muted-foreground">You can close this page. The next step (verification deposit) will be enabled in a later phase. Do not send a verification deposit from this link yet.</p>

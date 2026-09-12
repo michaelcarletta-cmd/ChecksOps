@@ -21,7 +21,39 @@ export const BANK_VERIFY_STATES = Object.freeze({
 });
 
 export const MV_ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
+export const BANK_VERIFY_CLAIM_TTL_SECONDS = 90 * 24 * 60 * 60;
+export const BANK_VERIFY_MV_TTL_SECONDS = Math.floor(MV_ATTEMPT_WINDOW_MS / 1000) + 3600;
 export const BANK_VERIFY_STATE_TABLE_ENV = 'AWS_RECIPIENT_BANK_VERIFY_STATE_TABLE';
+
+const AUDIT_DROP_KEYS = /account_number|routing_number|secret|password|token|authorization|ssn|code|mv_|secure_token|iban/i;
+
+export const ttlEpochSeconds = (nowMs, ttlSeconds) => (
+  Math.floor(Number(nowMs) / 1000) + Number(ttlSeconds)
+);
+
+export const isBankVerifyClaimExpired = (item, nowMs = Date.now()) => {
+  const ttl = Number(item?.ttl);
+  if (!Number.isFinite(ttl) || ttl <= 0) return false;
+  return ttl <= Math.floor(Number(nowMs) / 1000);
+};
+
+export const tenantScopeMismatch = (item, tenantId) => {
+  const stored = String(item?.tenant_id || '').trim();
+  const incoming = String(tenantId || '').trim();
+  return Boolean(stored && incoming && stored !== incoming);
+};
+
+export const redactBankVerifyAudit = (value) => {
+  if (value === undefined || value === null) return null;
+  if (typeof value === 'string') return value.length > 240 ? `${value.slice(0, 240)}…` : value;
+  if (typeof value !== 'object') return value;
+  if (Array.isArray(value)) return value.slice(0, 20).map((item) => redactBankVerifyAudit(item));
+  const out = {};
+  for (const [key, nested] of Object.entries(value)) {
+    out[key] = AUDIT_DROP_KEYS.test(key) ? '[redacted]' : redactBankVerifyAudit(nested);
+  }
+  return out;
+};
 
 const ALLOWED_TRANSITIONS = Object.freeze({
   [BANK_VERIFY_STATES.NOT_STARTED]: [
@@ -81,6 +113,11 @@ const emptyClaim = (ids = {}) => ({
   claimant_id: null,
   idempotency_key: null,
   token_fp: null,
+  tenant_id: ids.tenantId || null,
+  recipient_id: ids.recipientId || null,
+  account_id: ids.accountId || null,
+  bank_id: ids.bankId || null,
+  ttl: null,
 });
 
 const unavailable = (operation) => {
@@ -90,8 +127,11 @@ const unavailable = (operation) => {
   return error;
 };
 
-const asClaim = (item, ids) => {
+const asClaim = (item, ids, nowMs = Date.now()) => {
   if (!item) return emptyClaim(ids);
+  if (item.state !== BANK_VERIFY_STATES.VERIFIED && isBankVerifyClaimExpired(item, nowMs)) {
+    return emptyClaim(ids);
+  }
   return {
     pk: item.pk || claimPartitionKey(ids),
     sk: item.sk || 'STATE',
@@ -102,26 +142,36 @@ const asClaim = (item, ids) => {
     token_fp: item.token_fp || null,
     updated_at: item.updated_at || null,
     verified_at: item.verified_at || null,
+    tenant_id: item.tenant_id || ids.tenantId || null,
+    recipient_id: item.recipient_id || ids.recipientId || null,
+    account_id: item.account_id || ids.accountId || null,
+    bank_id: item.bank_id || ids.bankId || null,
+    ttl: item.ttl ?? null,
   };
 };
 
 export function createMemoryBankVerifyStore(backing = new Map()) {
   const map = backing;
 
-  const getClaim = async (ids) => asClaim(map.get(claimPartitionKey(ids)), ids);
+  const getClaim = async (ids) => asClaim(map.get(claimPartitionKey(ids)), ids, ids.nowMs);
 
   const claimInitiation = async ({
     recipientId,
     accountId,
     bankId,
+    tenantId,
     claimantId = randomUUID(),
     idempotencyKey,
     tokenFp,
     nowMs = Date.now(),
   } = {}) => {
-    const ids = { recipientId, accountId, bankId };
+    const ids = { recipientId, accountId, bankId, tenantId, nowMs };
     const key = claimPartitionKey(ids);
-    const existing = asClaim(map.get(key), ids);
+    const raw = map.get(key);
+    if (raw && tenantScopeMismatch(raw, tenantId)) {
+      return { ok: false, claimed: false, error: 'tenant_scope_mismatch', reason: 'tenant_scope_mismatch', item: asClaim(raw, ids, nowMs) };
+    }
+    const existing = asClaim(raw, ids, nowMs);
     if (existing.state === BANK_VERIFY_STATES.VERIFIED) {
       return { ok: true, claimed: false, reason: 'verified', item: existing };
     }
@@ -137,6 +187,11 @@ export function createMemoryBankVerifyStore(backing = new Map()) {
       idempotency_key: idempotencyKey || null,
       token_fp: tokenFp || null,
       updated_at: Number(nowMs),
+      tenant_id: tenantId || null,
+      recipient_id: recipientId || null,
+      account_id: accountId || null,
+      bank_id: bankId || null,
+      ttl: ttlEpochSeconds(nowMs, BANK_VERIFY_CLAIM_TTL_SECONDS),
     };
     map.set(key, item);
     return { ok: true, claimed: true, reason: 'claimed', item };
@@ -146,13 +201,18 @@ export function createMemoryBankVerifyStore(backing = new Map()) {
     recipientId,
     accountId,
     bankId,
+    tenantId,
     to,
     nowMs = Date.now(),
     extra = {},
   } = {}) => {
-    const ids = { recipientId, accountId, bankId };
+    const ids = { recipientId, accountId, bankId, tenantId, nowMs };
     const key = claimPartitionKey(ids);
-    const existing = asClaim(map.get(key), ids);
+    const raw = map.get(key);
+    if (raw && tenantScopeMismatch(raw, tenantId)) {
+      return { ok: false, error: 'tenant_scope_mismatch', item: asClaim(raw, ids, nowMs) };
+    }
+    const existing = asClaim(raw, ids, nowMs);
     if (!canTransitionBankVerifyState(existing.state, to)) {
       return {
         ok: false,
@@ -169,9 +229,16 @@ export function createMemoryBankVerifyStore(backing = new Map()) {
       sk: 'STATE',
       state: to,
       updated_at: Number(nowMs),
+      tenant_id: existing.tenant_id || tenantId || null,
+      recipient_id: existing.recipient_id || recipientId || null,
+      account_id: existing.account_id || accountId || null,
+      bank_id: existing.bank_id || bankId || null,
       verified_at: to === BANK_VERIFY_STATES.VERIFIED
         ? (existing.verified_at || Number(nowMs))
         : existing.verified_at || extra.verified_at || null,
+      ttl: to === BANK_VERIFY_STATES.VERIFIED
+        ? null
+        : (extra.ttl || ttlEpochSeconds(nowMs, BANK_VERIFY_CLAIM_TTL_SECONDS)),
     };
     map.set(key, item);
     return { ok: true, item };
@@ -181,6 +248,7 @@ export function createMemoryBankVerifyStore(backing = new Map()) {
     recipientId,
     accountId,
     bankId,
+    tenantId,
     tokenFp,
     nowMs = Date.now(),
     windowMs = MV_ATTEMPT_WINDOW_MS,
@@ -192,6 +260,9 @@ export function createMemoryBankVerifyStore(backing = new Map()) {
     const windowStart = Math.floor(Number(nowMs) / windowMs) * windowMs;
     const key = `${mvPartitionKey({ recipientId, accountId, bankId, tokenFp })}#${mvWindowSortKey(nowMs, windowMs)}`;
     const current = map.get(key) || { attempts: 0, window_start: windowStart };
+    if (current.tenant_id && tenantScopeMismatch(current, tenantId)) {
+      return { ok: false, error: 'tenant_scope_mismatch', remaining: 0, locked: true };
+    }
     if (Number(current.attempts || 0) >= max) {
       return {
         ok: false,
@@ -207,7 +278,9 @@ export function createMemoryBankVerifyStore(backing = new Map()) {
       attempts: count,
       window_start: windowStart,
       token_fp: tokenFp,
+      tenant_id: tenantId || current.tenant_id || null,
       updated_at: Number(nowMs),
+      ttl: ttlEpochSeconds(nowMs, BANK_VERIFY_MV_TTL_SECONDS),
     });
     return {
       ok: true,
@@ -259,8 +332,13 @@ export function createDynamoBankVerifyStore({
           Key: { pk: dynamoS(claimPartitionKey(ids)), sk: dynamoS('STATE') },
         },
       });
-      return asClaim(fromDynamo(got.Item), ids);
+      const item = asClaim(fromDynamo(got.Item), ids, ids.nowMs || nowMsFn());
+      if (tenantScopeMismatch(item, ids.tenantId)) {
+        throw unavailable('tenant_scope_mismatch');
+      }
+      return item;
     } catch (error) {
+      if (error?.code === 'bank_verify_state_unavailable') throw error;
       throw unavailable(error?.code || error?.message);
     }
   };
@@ -269,13 +347,15 @@ export function createDynamoBankVerifyStore({
     recipientId,
     accountId,
     bankId,
+    tenantId,
     claimantId = randomUUID(),
     idempotencyKey,
     tokenFp,
     nowMs = nowMsFn(),
   } = {}) => {
-    const ids = { recipientId, accountId, bankId };
+    const ids = { recipientId, accountId, bankId, tenantId, nowMs };
     const key = claimPartitionKey(ids);
+    const ttl = ttlEpochSeconds(nowMs, BANK_VERIFY_CLAIM_TTL_SECONDS);
     const item = {
       pk: dynamoS(key),
       sk: dynamoS('STATE'),
@@ -285,6 +365,11 @@ export function createDynamoBankVerifyStore({
       updated_at: dynamoN(nowMs),
       idempotency_key: dynamoS(idempotencyKey || ''),
       token_fp: dynamoS(tokenFp || ''),
+      tenant_id: dynamoS(tenantId || ''),
+      recipient_id: dynamoS(recipientId || ''),
+      account_id: dynamoS(accountId || ''),
+      bank_id: dynamoS(bankId || ''),
+      ttl: dynamoN(ttl),
     };
     try {
       await dynamoRequest({
@@ -292,20 +377,27 @@ export function createDynamoBankVerifyStore({
         body: {
           TableName: table,
           Item: item,
-          ConditionExpression: 'attribute_not_exists(pk) OR #s = :not_started',
-          ExpressionAttributeNames: { '#s': 'state' },
-          ExpressionAttributeValues: { ':not_started': dynamoS(BANK_VERIFY_STATES.NOT_STARTED) },
+          ConditionExpression: 'attribute_not_exists(pk) OR #s = :not_started OR (attribute_exists(#ttl) AND #ttl <= :nowEpoch AND #s <> :verified)',
+          ExpressionAttributeNames: { '#s': 'state', '#ttl': 'ttl' },
+          ExpressionAttributeValues: {
+            ':not_started': dynamoS(BANK_VERIFY_STATES.NOT_STARTED),
+            ':verified': dynamoS(BANK_VERIFY_STATES.VERIFIED),
+            ':nowEpoch': dynamoN(Math.floor(Number(nowMs) / 1000)),
+          },
         },
       });
       return {
         ok: true,
         claimed: true,
         reason: 'claimed',
-        item: asClaim(fromDynamo(item), ids),
+        item: asClaim(fromDynamo(item), ids, nowMs),
       };
     } catch (error) {
       if (error?.code === 'ConditionalCheckFailedException') {
         const existing = await getClaim(ids);
+        if (tenantScopeMismatch(existing, tenantId)) {
+          return { ok: false, claimed: false, error: 'tenant_scope_mismatch', reason: 'tenant_scope_mismatch', item: existing };
+        }
         return {
           ok: true,
           claimed: false,
@@ -321,11 +413,12 @@ export function createDynamoBankVerifyStore({
     recipientId,
     accountId,
     bankId,
+    tenantId,
     to,
     nowMs = nowMsFn(),
     extra = {},
   } = {}) => {
-    const ids = { recipientId, accountId, bankId };
+    const ids = { recipientId, accountId, bankId, tenantId, nowMs };
     if (to === BANK_VERIFY_STATES.VERIFIED) {
       try {
         const updated = await dynamoRequest({
@@ -333,17 +426,23 @@ export function createDynamoBankVerifyStore({
           body: {
             TableName: table,
             Key: { pk: dynamoS(claimPartitionKey(ids)), sk: dynamoS('STATE') },
-            UpdateExpression: 'SET #s = :verified, updated_at = :now, verified_at = if_not_exists(verified_at, :now)',
-            ExpressionAttributeNames: { '#s': 'state' },
+            UpdateExpression: 'SET #s = :verified, updated_at = :now, verified_at = if_not_exists(verified_at, :now) REMOVE #ttl',
+            ConditionExpression: 'attribute_not_exists(tenant_id) OR tenant_id = :empty OR tenant_id = :tenant',
+            ExpressionAttributeNames: { '#s': 'state', '#ttl': 'ttl' },
             ExpressionAttributeValues: {
               ':verified': dynamoS(BANK_VERIFY_STATES.VERIFIED),
               ':now': dynamoN(nowMs),
+              ':empty': dynamoS(''),
+              ':tenant': dynamoS(tenantId || ''),
             },
             ReturnValues: 'ALL_NEW',
           },
         });
-        return { ok: true, item: asClaim(fromDynamo(updated.Attributes), ids) };
+        return { ok: true, item: asClaim(fromDynamo(updated.Attributes), ids, nowMs) };
       } catch (error) {
+        if (error?.code === 'ConditionalCheckFailedException') {
+          return { ok: false, error: 'tenant_scope_mismatch', item: await getClaim(ids) };
+        }
         throw unavailable(error?.code || error?.message);
       }
     }
@@ -354,7 +453,7 @@ export function createDynamoBankVerifyStore({
       return { ok: false, error: 'invalid_transition', item: await getClaim(ids) };
     }
     try {
-      const names = { '#s': 'state' };
+      const names = { '#s': 'state', '#ttl': 'ttl' };
       const values = {
         ':to': dynamoS(to),
         ':now': dynamoN(nowMs),
@@ -363,8 +462,11 @@ export function createDynamoBankVerifyStore({
         ':claimed': dynamoS(BANK_VERIFY_STATES.INITIATION_CLAIMED),
         ':pending': dynamoS(BANK_VERIFY_STATES.VERIFICATION_PENDING),
         ':uncertain': dynamoS(BANK_VERIFY_STATES.UNCERTAIN),
+        ':ttl': dynamoN(ttlEpochSeconds(nowMs, BANK_VERIFY_CLAIM_TTL_SECONDS)),
+        ':empty': dynamoS(''),
+        ':tenant': dynamoS(tenantId || ''),
       };
-      const extraSet = [];
+      const extraSet = ['#ttl = :ttl'];
       if (extra.idempotency_key) {
         extraSet.push('idempotency_key = :idem');
         values[':idem'] = dynamoS(extra.idempotency_key);
@@ -378,14 +480,14 @@ export function createDynamoBankVerifyStore({
         body: {
           TableName: table,
           Key: { pk: dynamoS(claimPartitionKey(ids)), sk: dynamoS('STATE') },
-          UpdateExpression: `SET #s = :to, updated_at = :now${extraSet.length ? `, ${extraSet.join(', ')}` : ''}`,
-          ConditionExpression: 'attribute_not_exists(#s) OR (#s <> :verified AND (#s = :not_started OR #s = :claimed OR #s = :pending OR #s = :uncertain))',
+          UpdateExpression: `SET #s = :to, updated_at = :now, ${extraSet.join(', ')}`,
+          ConditionExpression: '(attribute_not_exists(tenant_id) OR tenant_id = :empty OR tenant_id = :tenant) AND (attribute_not_exists(#s) OR (#s <> :verified AND (#s = :not_started OR #s = :claimed OR #s = :pending OR #s = :uncertain)))',
           ExpressionAttributeNames: names,
           ExpressionAttributeValues: values,
           ReturnValues: 'ALL_NEW',
         },
       });
-      const item = asClaim(fromDynamo(updated.Attributes), ids);
+      const item = asClaim(fromDynamo(updated.Attributes), ids, nowMs);
       if (item.state === BANK_VERIFY_STATES.VERIFIED && to !== BANK_VERIFY_STATES.VERIFIED) {
         return { ok: false, error: 'verified_no_regression', item };
       }
@@ -397,7 +499,7 @@ export function createDynamoBankVerifyStore({
           ok: false,
           error: existing.state === BANK_VERIFY_STATES.VERIFIED
             ? 'verified_no_regression'
-            : 'invalid_transition',
+            : (tenantScopeMismatch(existing, tenantId) ? 'tenant_scope_mismatch' : 'invalid_transition'),
           item: existing,
         };
       }
@@ -409,6 +511,7 @@ export function createDynamoBankVerifyStore({
     recipientId,
     accountId,
     bankId,
+    tenantId,
     tokenFp,
     nowMs = nowMsFn(),
     windowMs = MV_ATTEMPT_WINDOW_MS,
@@ -427,8 +530,9 @@ export function createDynamoBankVerifyStore({
             pk: dynamoS(mvPartitionKey({ recipientId, accountId, bankId, tokenFp })),
             sk: dynamoS(mvWindowSortKey(nowMs, windowMs)),
           },
-          UpdateExpression: 'SET attempts = if_not_exists(attempts, :zero) + :one, window_start = :ws, updated_at = :now, token_fp = :tfp',
-          ConditionExpression: 'attribute_not_exists(attempts) OR attempts < :max',
+          UpdateExpression: 'SET attempts = if_not_exists(attempts, :zero) + :one, window_start = :ws, updated_at = :now, token_fp = :tfp, #ttl = :ttl, tenant_id = if_not_exists(tenant_id, :tenant)',
+          ConditionExpression: '(attribute_not_exists(attempts) OR attempts < :max) AND (attribute_not_exists(tenant_id) OR tenant_id = :empty OR tenant_id = :tenant)',
+          ExpressionAttributeNames: { '#ttl': 'ttl' },
           ExpressionAttributeValues: {
             ':zero': dynamoN(0),
             ':one': dynamoN(1),
@@ -436,6 +540,9 @@ export function createDynamoBankVerifyStore({
             ':ws': dynamoN(windowStart),
             ':now': dynamoN(nowMs),
             ':tfp': dynamoS(tokenFp),
+            ':ttl': dynamoN(ttlEpochSeconds(nowMs, BANK_VERIFY_MV_TTL_SECONDS)),
+            ':tenant': dynamoS(tenantId || ''),
+            ':empty': dynamoS(''),
           },
           ReturnValues: 'ALL_NEW',
         },
