@@ -414,7 +414,10 @@ export const handleAdminOverride = async (event, deps = {}) => {
       reason: body.reason || body.p_reason || body.review_notes,
     });
     if (!executed.ok) {
-      return denied(spoof, { statusCode: executed.statusCode || 403, ...executed });
+      const validation = ['invalid_destination', 'reason_required', 'invalid_uuid', 'invalid_status_stage_pair', 'invalid_field'];
+      const status = executed.statusCode
+        || (validation.includes(executed.error) ? 400 : 403);
+      return denied(spoof, { statusCode: status, ...executed });
     }
     return okResult({
       mapping,
