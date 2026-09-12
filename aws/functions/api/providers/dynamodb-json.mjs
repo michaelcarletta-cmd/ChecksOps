@@ -42,20 +42,15 @@ export async function dynamoJsonRequest({
   const date = amzDate(now);
   const dateStamp = date.slice(0, 8);
   const payloadHash = sha256Hex(payload);
-  const canonicalHeaders = [
-    `content-type:application/x-amz-json-1.0`,
-    `host:${host}`,
-    `x-amz-date:${date}`,
-    `x-amz-target:${target}`,
-    credentials.sessionToken ? `x-amz-security-token:${credentials.sessionToken}` : null,
-  ].filter(Boolean).join('\n') + '\n';
-  const signedHeaders = [
-    'content-type',
-    'host',
-    'x-amz-date',
-    'x-amz-target',
-    credentials.sessionToken ? 'x-amz-security-token' : null,
-  ].filter(Boolean).join(';');
+  const headerMap = {
+    host,
+    'x-amz-date': date,
+    'x-amz-target': target,
+  };
+  if (credentials.sessionToken) headerMap['x-amz-security-token'] = credentials.sessionToken;
+  const signedHeaderNames = Object.keys(headerMap).sort();
+  const canonicalHeaders = `${signedHeaderNames.map((name) => `${name}:${headerMap[name]}`).join('\n')}\n`;
+  const signedHeaders = signedHeaderNames.join(';');
   const canonicalRequest = [
     'POST',
     '/',

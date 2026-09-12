@@ -167,8 +167,8 @@ export async function handleBankVerifyStateProbe(event = {}, deps = {}) {
     report.resourcePolicy = await capture('PutResourcePolicy', () => request({
       target: 'DynamoDB_20120810.PutResourcePolicy',
       body: {
-        TableName: table,
-        ResourcePolicy: JSON.stringify(resourcePolicy()),
+        ResourceArn: BANK_VERIFY_STATE_TABLE_ARN,
+        Policy: JSON.stringify(resourcePolicy()),
       },
     }));
   }
