@@ -617,7 +617,7 @@ export const runAuthenticatedEndorsement = async ({
       const marked = await markEndorsementRequestSent(client, {
         endorsementId: endorsement.id,
         email,
-        token: endorsement.token,
+        token: prior.row?.metadata?.endorsement_token || endorsement.token,
         durableAudit,
         openAuditClient,
       });
@@ -634,36 +634,10 @@ export const runAuthenticatedEndorsement = async ({
     if (endorsementRateLimited(endorsement.request_sent_at)) {
       return { ok: false, statusCode: 429, error: 'Request was sent recently. Please wait before resending.', spoofFieldsIgnored: spoof };
     }
-    if (body.email || body.phone) {
-      await safeQuery(
-        client,
-        `UPDATE public.check_endorsements
-         SET contact_email = COALESCE($2, contact_email),
-             contact_phone = COALESCE($3, contact_phone),
-             updated_at = now()
-         WHERE id = $1::uuid`,
-        [endorsement.id, email || null, phone],
-      );
-    }
-    let activeToken = endorsement.token || rotateToken();
-    await client.query(
-      `UPDATE public.check_endorsements
-       SET token = $2, token_expires_at = NULL, updated_at = now()
-       WHERE id = $1::uuid`,
-      [endorsement.id, activeToken],
-    );
-    if (endorsement.payee_id) {
-      await safeQuery(
-        client,
-        `UPDATE public.check_payees
-         SET endorsement_token = $2, endorsement_token_expires_at = NULL,
-             contact_email = COALESCE($3, contact_email),
-             contact_phone = COALESCE($4, contact_phone),
-             updated_at = now()
-         WHERE id = $1::uuid`,
-        [endorsement.payee_id, activeToken, email, phone],
-      );
-    }
+    // Do not UPDATE check_endorsements in this request transaction before the
+    // mailer. That row lock blocked aws_mark_endorsement_request_sent on the
+    // independent audit connection (Query read timeout after sink/SES accept).
+    const activeToken = endorsement.token || rotateToken();
     const endorsementUrl = `${appUrl()}/endorse?token=${activeToken}`;
     const tenant = tenantId
       ? (await safeQuery(
@@ -742,6 +716,7 @@ export const runAuthenticatedEndorsement = async ({
           endorsement_id: endorsement.id,
           check_id: endorsement.check_id,
           workflow: 'endorsement-request',
+          endorsement_token: activeToken,
         },
         spoof,
         send,
@@ -801,6 +776,18 @@ export const runAuthenticatedEndorsement = async ({
         ...denyDepositAdvance(),
         spoofFieldsIgnored: spoof,
       };
+    }
+    if (endorsement.payee_id) {
+      await safeQuery(
+        client,
+        `UPDATE public.check_payees
+         SET endorsement_token = $2, endorsement_token_expires_at = NULL,
+             contact_email = COALESCE($3, contact_email),
+             contact_phone = COALESCE($4, contact_phone),
+             updated_at = now()
+         WHERE id = $1::uuid`,
+        [endorsement.payee_id, activeToken, email, phone],
+      );
     }
     await safeQuery(
       client,

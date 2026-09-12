@@ -335,6 +335,87 @@ test('used public token cannot be reused', async () => {
   assert.equal(used.code, 'invalid_or_used_token');
 });
 
+test('endorsement send does not lock the row before the mailer', async () => {
+  const sent = [];
+  const sql = [];
+  const reserved = new Map();
+  const client = sqlClient([
+    {
+      match: (text) => {
+        sql.push(text);
+        return false;
+      },
+      result: () => ({ rows: [] }),
+    },
+    {
+      match: (text) => text.includes('FROM public.check_endorsements WHERE id'),
+      result: () => ({ rows: [endorsementRow] }),
+    },
+    {
+      match: (text) => text.includes('FROM public.check_intake_items'),
+      result: () => ({ rows: [{ id: CHECK, tenant_id: TENANT, check_number: '1001', carrier_name: 'Acme' }] }),
+    },
+    {
+      match: (text) => text.includes('aws_can_write_tenant'),
+      result: () => ({ rows: [{ ok: true }] }),
+    },
+    {
+      match: (text) => text.includes('aws_email_send_log_peek'),
+      result: (params) => ({
+        rows: [{ doc: { ok: true, row: reserved.get(String(params[0] || '')) || null } }],
+      }),
+    },
+    {
+      match: (text) => text.includes('aws_email_send_log_reserve'),
+      result: (params) => {
+        const key = String(params[5] || '');
+        const row = {
+          id: params[0],
+          status: 'pending',
+          provider_message_id: null,
+          idempotency_key: key,
+          metadata: { endorsement_token: 'abc' },
+        };
+        reserved.set(key, row);
+        return { rows: [{ doc: { ok: true, claimed: true, duplicate: false, id: params[0], row } }] };
+      },
+    },
+    {
+      match: (text) => text.includes('aws_email_send_log_finalize'),
+      result: (params) => {
+        const row = {
+          id: params[0],
+          status: 'sunk',
+          provider_message_id: 'sink-1',
+          metadata: { endorsement_token: 'abc' },
+        };
+        for (const key of reserved.keys()) reserved.set(key, { ...reserved.get(key), ...row });
+        return { rows: [{ doc: { ok: true, row } }] };
+      },
+    },
+    {
+      match: (text) => text.includes('aws_mark_endorsement_request_sent'),
+      result: () => ({
+        rows: [{ doc: { ok: true, status: 'sent', request_sent_at: '2026-09-12T17:00:00.000Z', token: 'abc' } }],
+      }),
+    },
+  ]);
+  const first = await runAuthenticatedEndorsement({
+    mapping: { application_user_id: USER },
+    spoof: { ignored: true },
+    event: { headers: {} },
+    send: capturingMailer(sent),
+    body: { action: 'send_endorsement_request', endorsementId: ENDORSE, email: 'jane@example.com' },
+    client,
+  });
+  assert.equal(first.ok, true);
+  assert.equal(sent.length, 1);
+  const mailerIndex = sql.findIndex((text) => text.includes('aws_email_send_log_reserve'));
+  const preMailer = sql.slice(0, mailerIndex);
+  assert.equal(preMailer.some((text) => /UPDATE public.check_endorsements/.test(text)), false);
+  assert.equal(sql.some((text) => text.includes('aws_mark_endorsement_request_sent')), true);
+});
+
 test('email.mjs overlay dependencies export required helpers', () => {
   assert.equal(typeof emailPolicy.sesOutboundSendEnabled, 'function');
   assert.equal(typeof emailPolicy.stagingSesLockApplies, 'function');
@@ -344,3 +425,4 @@ test('email.mjs overlay dependencies export required helpers', () => {
   assert.equal(typeof tenantEmailDomain.loadTenantRow, 'function');
   assert.equal(typeof tenantEmailDomain.normalizeReplyTo, 'function');
 });
+
