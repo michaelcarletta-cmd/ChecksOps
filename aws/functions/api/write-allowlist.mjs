@@ -629,13 +629,14 @@ export const WRITE_ALLOWLIST = {
     columns: new Set([
       'name', 'logo_url', 'invoice_letterhead_url', 'primary_color',
       'invoice_footer_note', 'invoice_default_terms',
+      'business_address', 'business_phone',
       'subscription_status', 'is_founding_partner', 'is_test_account',
     ]),
     identityColumn: null,
     requiredForWrite: { update: [] },
     filterColumns: new Set(['id']),
     clientIgnored: new Set(['id', 'slug', 'created_at', 'moov_environment', 'monthly_rate_cents']),
-    frontend: { file: 'TenantManagement / CompanyBranding', op: 'update', reason: 'Branding/name plus platform-owner ops flags. Provider env and rates ignored.' },
+    frontend: { file: 'TenantManagement / CompanyBranding', op: 'update', reason: 'Tenant-scoped branding/name plus platform-owner ops flags. Provider env and rates ignored. Global company_branding is not tenant-writable.' },
   },
   privacy_notice_acknowledgments: {
     tranche: 6,

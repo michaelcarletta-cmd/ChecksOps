@@ -268,7 +268,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
   const recordExternal = async () => {
     const amt = toCents(parseFloat(extAmount));
     if (!extRecipient.trim() || !extCheckNum.trim() || !amt || amt <= 0) {
-      return toast({ title: "Fill recipient, check #, and amount", variant: "destructive" });
+      return toast({ title: "Amount must be greater than zero", description: "Enter recipient, check #, and a positive amount.", variant: "destructive" });
     }
     if (amt > availableForDisbursement + 0.005) {
       return toast({ title: "Amount exceeds available funds", variant: "destructive" });
@@ -609,7 +609,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
                 </div>
                 <div>
                   <Label className="text-[11px]">Amount</Label>
-                  <Input type="number" inputMode="decimal" step="0.01" className="h-8 text-sm" placeholder="0.00" value={extAmount} onChange={(e) => setExtAmount(e.target.value)} />
+                  <Input type="number" inputMode="decimal" min="0.01" step="0.01" className="h-8 text-sm" placeholder="0.00" value={extAmount} onChange={(e) => setExtAmount(e.target.value)} />
                 </div>
               </div>
               <div>

@@ -82,9 +82,23 @@ export function CashJobForm({ onSave, onCancel, initialData }: Props) {
       if (!form.job_name.trim()) throw new Error("Job name is required");
       if (!form.customer_name.trim()) throw new Error("Customer name is required");
 
+      const parseMoney = (raw: string, field: string, { allowZero = true } = {}) => {
+        const amount = Number(String(raw || "0").replace(/[$,\s]/g, ""));
+        if (!Number.isFinite(amount) || amount < 0 || (!allowZero && amount <= 0)) {
+          throw new Error(`${field} must be ${allowZero ? "zero or greater" : "greater than zero"}`);
+        }
+        return amount;
+      };
+
+      for (const item of lineItems.filter((row) => row.description.trim())) {
+        parseMoney(item.quantity || "1", "Quantity", { allowZero: false });
+        parseMoney(item.unit_price || "0", "Unit price", { allowZero: true });
+      }
+
       const contractAmount = lineTotal > 0
         ? lineTotal
-        : parseFloat(form.contract_amount || "0");
+        : parseMoney(form.contract_amount || "0", "Contract amount", { allowZero: true });
+      if (contractAmount < 0) throw new Error("Contract amount cannot be negative");
 
       if (initialData?.id) {
         const { error } = await supabase
@@ -171,7 +185,7 @@ export function CashJobForm({ onSave, onCancel, initialData }: Props) {
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Contract amount ($)</Label>
-              <Input className="h-8 text-sm" type="number" placeholder="0.00" value={form.contract_amount} onChange={(e) => setForm({ ...form, contract_amount: e.target.value })} />
+              <Input className="h-8 text-sm" type="number" min="0" step="0.01" placeholder="0.00" value={form.contract_amount} onChange={(e) => setForm({ ...form, contract_amount: e.target.value })} />
               {lineTotal > 0 && <p className="text-[10px] text-muted-foreground">Line item total: ${lineTotal.toFixed(2)}</p>}
             </div>
           </div>
@@ -261,6 +275,8 @@ export function CashJobForm({ onSave, onCancel, initialData }: Props) {
                 className="h-8 text-sm w-16"
                 placeholder="Qty"
                 type="number"
+                min="0.01"
+                step="0.01"
                 value={item.quantity}
                 onChange={(e) => updateLineItem(i, "quantity", e.target.value)}
               />
@@ -268,6 +284,8 @@ export function CashJobForm({ onSave, onCancel, initialData }: Props) {
                 className="h-8 text-sm w-24"
                 placeholder="Unit $"
                 type="number"
+                min="0"
+                step="0.01"
                 value={item.unit_price}
                 onChange={(e) => updateLineItem(i, "unit_price", e.target.value)}
               />

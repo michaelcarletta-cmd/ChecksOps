@@ -145,6 +145,10 @@ export function InvoicesTab() {
   };
 
   const submit = async (send: boolean) => {
+    if (items.some((i) => !(Number(i.unit_price) > 0) || !(Number(i.quantity) > 0))) {
+      toast({ title: "Amounts must be greater than zero", variant: "destructive" });
+      return;
+    }
     try {
       await createInvoice.mutateAsync({
         customer_name: customerName,
@@ -307,7 +311,7 @@ export function InvoicesTab() {
                         />
                         <Input
                           className="col-span-3"
-                          type="number" min="0" step="0.01" placeholder="0.00"
+                          type="number" min="0.01" step="0.01" placeholder="0.00"
                           value={item.unit_price || ""}
                           onChange={(e) => setItems((prev) => prev.map((p, i) => i === idx ? { ...p, unit_price: Number(e.target.value) } : p))}
                         />
