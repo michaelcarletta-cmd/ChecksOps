@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/contexts/TenantContext";
@@ -20,6 +20,10 @@ import {
   buildPaymentReportingCsv,
   type RecipientRow,
 } from "@/lib/taxYtdSummary";
+import {
+  taxProfileMutationVariables,
+  type TaxProfileMutationVariables,
+} from "@/lib/taxProfileMutation";
 
 type TaxProfile = {
   recipient_key: string;
@@ -35,16 +39,17 @@ type TaxProfile = {
   notes: string | null;
 };
 
-type ProfileForm = {
-  recipient_key: string;
-  recipient_name: string;
-  tin_replace: string;
-  address_street: string;
-  address_city: string;
-  address_state: string;
-  address_zip: string;
-  account_number: string;
-  notes: string;
+type ProfileForm = TaxProfileMutationVariables;
+
+const EMPTY_FORM: ProfileForm = {
+  recipient_key: "",
+  recipient_name: "",
+  address_street: "",
+  address_city: "",
+  address_state: "",
+  address_zip: "",
+  account_number: "",
+  notes: "",
 };
 
 const CURRENT_YEAR = getYear(new Date());
@@ -62,17 +67,9 @@ export function TaxSummary() {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [editing, setEditing] = useState<{ key: string; name: string } | null>(null);
-  const [form, setForm] = useState<ProfileForm>({
-    recipient_key: "",
-    recipient_name: "",
-    tin_replace: "",
-    address_street: "",
-    address_city: "",
-    address_state: "",
-    address_zip: "",
-    account_number: "",
-    notes: "",
-  });
+  const [form, setForm] = useState<ProfileForm>(EMPTY_FORM);
+  const tinInputRef = useRef<HTMLInputElement>(null);
+  const pendingTinRef = useRef("");
   const queryClient = useQueryClient();
 
   const { data: taxProfiles = [] } = useQuery({
@@ -95,44 +92,61 @@ export function TaxSummary() {
     return m;
   }, [taxProfiles]);
 
+  const clearTinInput = () => {
+    pendingTinRef.current = "";
+    if (tinInputRef.current) tinInputRef.current.value = "";
+  };
+
   const saveProfile = useMutation({
-    mutationFn: async (p: ProfileForm) => {
+    mutationFn: async (p: TaxProfileMutationVariables) => {
+      const tin = pendingTinRef.current;
+      pendingTinRef.current = "";
       const body: Record<string, unknown> = {
         action: "upsert",
         tenant_id: tenant!.id,
-        recipient_key: p.recipient_key,
-        recipient_name: p.recipient_name,
-        address_street: p.address_street,
-        address_city: p.address_city,
-        address_state: p.address_state,
-        address_zip: p.address_zip,
-        account_number: p.account_number,
-        notes: p.notes,
+        ...taxProfileMutationVariables(p),
       };
-      const replacement = p.tin_replace.trim();
-      if (replacement) body.tin = replacement;
-      const { data, error } = await supabase.functions.invoke("tenant-tax-profiles", { body });
-      if (error || data?.ok === false) {
-        throw new Error(invokeErrorMessage(error, data));
+      if (tin) body.tin = tin;
+      try {
+        const { data, error } = await supabase.functions.invoke("tenant-tax-profiles", { body });
+        if (error || data?.ok === false) {
+          throw new Error(invokeErrorMessage(error, data));
+        }
+        return data?.profile as TaxProfile;
+      } finally {
+        clearTinInput();
       }
-      return data?.profile as TaxProfile;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["recipient-tax-profiles", tenant?.id] });
       toast({ title: "Recipient tax info saved" });
-      setForm((prev) => ({ ...prev, tin_replace: "" }));
+      clearTinInput();
       setEditing(null);
     },
-    onError: (e: Error) => toast({ title: "Save failed", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => {
+      clearTinInput();
+      toast({ title: "Save failed", description: e.message, variant: "destructive" });
+    },
   });
+
+  const closeEditor = () => {
+    clearTinInput();
+    setEditing(null);
+  };
+
+  const submitProfile = () => {
+    pendingTinRef.current = tinInputRef.current?.value?.trim() ?? "";
+    if (tinInputRef.current) tinInputRef.current.value = "";
+    saveProfile.mutate(taxProfileMutationVariables(form));
+  };
 
   const openEdit = (key: string, defaultName: string) => {
     const existing = profileByKey[key];
+    clearTinInput();
     setEditing({ key, name: defaultName });
     setForm({
       recipient_key: key,
       recipient_name: existing?.recipient_name ?? defaultName,
-      tin_replace: "",
       address_street: existing?.address_street ?? "",
       address_city: existing?.address_city ?? "",
       address_state: existing?.address_state ?? "",
@@ -533,7 +547,7 @@ export function TaxSummary() {
         </CardContent>
       </Card>
 
-      <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
+      <Dialog open={!!editing} onOpenChange={(o) => !o && closeEditor()}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Recipient tax profile</DialogTitle>
@@ -551,11 +565,12 @@ export function TaxSummary() {
                   : "No TIN on file. Enter a value only if you intend to store one."}
               </p>
               <Input
+                ref={tinInputRef}
                 type="password"
                 autoComplete="off"
-                value={form.tin_replace}
+                name="tax-tin-replace"
+                defaultValue=""
                 placeholder="Leave blank to keep existing"
-                onChange={(e) => setForm({ ...form, tin_replace: e.target.value })}
               />
             </div>
             <div>
@@ -586,8 +601,8 @@ export function TaxSummary() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setForm((prev) => ({ ...prev, tin_replace: "" })); setEditing(null); }}>Cancel</Button>
-            <Button onClick={() => saveProfile.mutate(form)} disabled={saveProfile.isPending}>
+            <Button variant="outline" onClick={closeEditor}>Cancel</Button>
+            <Button onClick={submitProfile} disabled={saveProfile.isPending}>
               {saveProfile.isPending ? "Saving..." : "Save"}
             </Button>
           </DialogFooter>

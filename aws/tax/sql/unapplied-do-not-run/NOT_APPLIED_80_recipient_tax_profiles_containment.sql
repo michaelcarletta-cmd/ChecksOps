@@ -1,3 +1,14 @@
+-- ============================================================================
+-- NOT SAFE TO APPLY / DESIGN ONLY
+-- Do not run this file. It is not a migration, not a oneshot, and not
+-- authorized for production, staging, or any live database.
+-- Intentionally stored outside supabase/migrations and outside every
+-- automatic runner glob (aws/write-path/sql, aws/workflows/sql,
+-- aws/financial/sql, aws/rls/sql, aws/migrations/proposed).
+-- Filename prefix NOT_APPLIED_ is required. Do not copy this file into
+-- those directories. Production PostgREST GRANT/RLS containment is a
+-- separately reviewed PR — do not add it here.
+-- ============================================================================
 -- TAX/1099 TIN CONTAINMENT — DO NOT APPLY IN THIS PR.
 --
 -- Unapplied by design. Do not run against production, staging, or any live
@@ -12,7 +23,7 @@
 --   4. Fail closed: abort the transaction on error; do not leave a half-applied
 --      policy set that is more open than before.
 --
--- Reversible (see 80_recipient_tax_profiles_containment.down.sql):
+-- Reversible (see NOT_APPLIED_80_recipient_tax_profiles_containment.down.sql):
 --   DROP the additive columns; restore the previous policies.
 --   Plaintext tin is left untouched in both directions.
 --

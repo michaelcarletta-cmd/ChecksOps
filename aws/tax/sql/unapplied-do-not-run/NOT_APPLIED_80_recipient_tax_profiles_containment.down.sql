@@ -1,4 +1,11 @@
--- Reversal for 80_recipient_tax_profiles_containment.sql — DO NOT APPLY
+-- ============================================================================
+-- NOT SAFE TO APPLY / DESIGN ONLY
+-- Do not run this file. It is a design-only reversal of the unapplied
+-- containment SQL. It is not a migration and must not be picked up by any
+-- automatic runner. Do not weaken this script or restore broad member
+-- access in live databases.
+-- ============================================================================
+-- Reversal for NOT_APPLIED_80_recipient_tax_profiles_containment.sql — DO NOT APPLY
 -- unless separately authorized to roll back the unapplied containment design.
 --
 -- Restores the previous (over-broad) AWS policies. Does not recreate Lovable

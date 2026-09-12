@@ -6,6 +6,69 @@
 export const TAX_SECRET_TABLES = new Set(['recipient_tax_profiles']);
 export const TAX_SECRET_COLUMNS = new Set(['tin', 'tin_encrypted']);
 export const PERMITTED_TENANT_TAX_ROLES = new Set(['owner', 'admin']);
+const SAFE_TIN_METADATA_COLUMNS = new Set(['tin_on_file', 'tin_last_4', 'tin_type']);
+const TAX_SECRET_RPC_NAMES = new Set([
+  'get_recipient_tin',
+  'get_recipient_tax_profile',
+  'upsert_recipient_tax_profile',
+  'list_recipient_tax_profiles',
+  'recipient_tax_profiles',
+]);
+
+const unwrapQuoted = (value) => {
+  let s = String(value ?? '').trim();
+  while (
+    s.length >= 2
+    && (
+      (s.startsWith('"') && s.endsWith('"'))
+      || (s.startsWith("'") && s.endsWith("'"))
+      || (s.startsWith('`') && s.endsWith('`'))
+    )
+  ) {
+    s = s.slice(1, -1).trim();
+  }
+  return s;
+};
+
+/**
+ * Normalize schema-qualified, quoted, case-varied, and whitespace-varied
+ * SQL identifiers before tax-secret checks. Always deny on the last segment
+ * so `public.recipient_tax_profiles` and `"Recipient_Tax_Profiles"` match.
+ */
+export const normalizeSqlName = (value) => {
+  let s = unwrapQuoted(value);
+  if (s.includes('.')) {
+    const parts = s.split('.');
+    s = unwrapQuoted(parts[parts.length - 1]);
+  }
+  const ident = s.match(/^[A-Za-z_][A-Za-z0-9_]*/);
+  return (ident ? ident[0] : s).toLowerCase();
+};
+
+export const sqlIdentifierTokens = (value) => String(value || '')
+  .split(/[^A-Za-z0-9_]+/)
+  .filter(Boolean)
+  .map((token) => token.toLowerCase());
+
+export const isTaxSecretTable = (table) => {
+  if (TAX_SECRET_TABLES.has(normalizeSqlName(table))) return true;
+  return sqlIdentifierTokens(table).some((token) => TAX_SECRET_TABLES.has(token));
+};
+
+export const isTaxSecretColumn = (column) => {
+  const name = normalizeSqlName(column);
+  if (SAFE_TIN_METADATA_COLUMNS.has(name)) return false;
+  return TAX_SECRET_COLUMNS.has(name);
+};
+
+export const isTaxSecretRpc = (fn) => {
+  const name = normalizeSqlName(fn);
+  if (!name) return false;
+  if (TAX_SECRET_RPC_NAMES.has(name)) return true;
+  if (name.includes('recipient_tax_profile')) return true;
+  if (name.includes('tax_secret')) return true;
+  return isTaxSecretTable(fn);
+};
 
 export const maskTinMetadata = (tin) => {
   const raw = tin == null ? '' : String(tin);
@@ -70,51 +133,102 @@ export const evaluateTaxAccess = ({
 };
 
 export const sanitizeTaxError = (value, max = 200) => String(value || '')
+  .replace(/\b(DETAIL|HINT|CONTEXT|WHERE|QUERY):\s*[^\n]*/gi, '[$1_redacted]')
   .replace(/\d{3}-?\d{2}-?\d{4}|\d{2}-?\d{7}|\d{9}/g, '[redacted]')
   .replace(/\b(?:tin|ein|ssn)\b\s*[:=]\s*\S+/gi, '[redacted]')
   .replace(/\s+/g, ' ')
   .trim()
   .slice(0, max);
 
+const denied = (message, table) => ({
+  denied: true,
+  error: 'tax_secret_denied',
+  statusCode: 403,
+  message,
+  table: table ? normalizeSqlName(table) || String(table) : null,
+});
+
 const walkEmbedsForSecrets = (embeds = []) => {
   for (const embed of embeds) {
-    if (TAX_SECRET_TABLES.has(String(embed?.table || ''))) return true;
+    if (isTaxSecretTable(embed?.table) || isTaxSecretTable(embed?.alias)) return true;
     const cols = embed?.columns || [];
-    if (cols.some((col) => TAX_SECRET_COLUMNS.has(String(col)))) return true;
+    if (cols.some((col) => isTaxSecretColumn(col))) return true;
     if (walkEmbedsForSecrets(embed?.embeds || [])) return true;
   }
   return false;
 };
 
-export const denyTaxSecretQuery = (table, parsed = {}) => {
-  const name = String(table || '');
-  if (TAX_SECRET_TABLES.has(name)) {
-    return {
-      denied: true,
-      error: 'tax_secret_denied',
-      statusCode: 403,
-      message: 'Tax identifier tables are not available via generic data routes',
-      table: name,
-    };
+export const rawMentionsTaxSecret = (raw) => {
+  for (const token of sqlIdentifierTokens(raw)) {
+    if (SAFE_TIN_METADATA_COLUMNS.has(token)) continue;
+    if (TAX_SECRET_COLUMNS.has(token) || TAX_SECRET_TABLES.has(token)) return true;
   }
-  const cols = parsed.columns || [];
-  if (cols.some((col) => TAX_SECRET_COLUMNS.has(String(col)))) {
-    return {
-      denied: true,
-      error: 'tax_secret_denied',
-      statusCode: 403,
-      message: 'Tax identifier columns are not available via generic data routes',
-      table: name,
-    };
+  return false;
+};
+
+/**
+ * Fail-closed tax denial for generic query routes.
+ * Must be evaluated on the raw table/select *before* allowlist or ident()
+ * so a later accidental re-allowlist cannot return TIN, and so schema/case/
+ * whitespace/alias forms return 403 tax_secret_denied instead of a parser 503.
+ */
+export const denyTaxSecretQuery = (table, parsed = {}, rawSelect = '', filters = []) => {
+  if (isTaxSecretTable(table)) {
+    return denied('Tax identifier tables are not available via generic data routes', table);
   }
-  if (walkEmbedsForSecrets(parsed.embeds || [])) {
-    return {
-      denied: true,
-      error: 'tax_secret_denied',
-      statusCode: 403,
-      message: 'Tax identifier tables are not available via generic data routes',
-      table: name,
-    };
+  const cols = parsed?.columns || [];
+  if (cols.some((col) => isTaxSecretColumn(col))) {
+    return denied('Tax identifier columns are not available via generic data routes', table);
+  }
+  if (walkEmbedsForSecrets(parsed?.embeds || [])) {
+    return denied('Tax identifier tables are not available via generic data routes', table);
+  }
+  if (rawMentionsTaxSecret(rawSelect)) {
+    return denied('Tax identifier columns are not available via generic data routes', table);
+  }
+  if (rawMentionsTaxSecret(table)) {
+    return denied('Tax identifier tables are not available via generic data routes', table);
+  }
+  for (const filter of filters || []) {
+    if (isTaxSecretColumn(filter?.column) || rawMentionsTaxSecret(filter?.column)) {
+      return denied('Tax identifier columns are not available via generic data routes', table);
+    }
+  }
+  return { denied: false };
+};
+
+const collectWriteRows = (body) => {
+  const values = body?.values ?? body?.payload ?? body?.row ?? body;
+  if (Array.isArray(values)) return values;
+  if (values && typeof values === 'object') return [values];
+  return [];
+};
+
+export const denyTaxSecretWrite = (table, body = {}) => {
+  if (isTaxSecretTable(table) || rawMentionsTaxSecret(table)) {
+    return denied('Tax identifier tables are not available via generic data routes', table);
+  }
+  for (const row of collectWriteRows(body)) {
+    for (const key of Object.keys(row || {})) {
+      if (isTaxSecretColumn(key)) {
+        return denied('Tax identifier columns are not available via generic data routes', table);
+      }
+    }
+  }
+  return { denied: false };
+};
+
+export const rpcArgsHaveTaxSecret = (args) => {
+  if (!args || typeof args !== 'object') return false;
+  for (const key of Object.keys(args)) {
+    if (isTaxSecretColumn(key) || isTaxSecretTable(key) || isTaxSecretRpc(key)) return true;
+  }
+  return false;
+};
+
+export const denyTaxSecretRpc = (fn, args) => {
+  if (isTaxSecretRpc(fn) || isTaxSecretTable(fn) || rpcArgsHaveTaxSecret(args)) {
+    return denied('Tax identifier RPCs are not available via generic data routes', fn);
   }
   return { denied: false };
 };

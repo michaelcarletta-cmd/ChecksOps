@@ -1,5 +1,5 @@
 import { ident, ignoredSpoof, parseBody, withIdentity, withIdentityWrite } from './data.mjs';
-import { TAX_SECRET_TABLES } from './tax-secrets.mjs';
+import { TAX_SECRET_TABLES, denyTaxSecretWrite } from './tax-secrets.mjs';
 import {
   CLIENT_IDENTITY_KEYS,
   T5_INTAKE_COLUMNS,
@@ -167,6 +167,15 @@ export const executeAllowlistedWrite = async ({
   checkWorkflowEnabled = true,
   applicationWorkflowEnabled = false,
 }) => {
+  const secretWrite = denyTaxSecretWrite(body.table, body);
+  if (secretWrite.denied) {
+    return {
+      error: secretWrite.error,
+      reason: 'financial_or_provider',
+      table: secretWrite.table,
+      message: secretWrite.message,
+    };
+  }
   let table;
   try {
     table = ident(body.table, 'table');
@@ -174,7 +183,7 @@ export const executeAllowlistedWrite = async ({
     return { error: 'table_not_allowlisted', reason: denyTableReason(String(body.table || '')), table: body.table || null };
   }
   const op = String(body.op || body.operation || '').toLowerCase();
-  if (TAX_SECRET_TABLES.has(table)) {
+  if (TAX_SECRET_TABLES.has(table) || denyTaxSecretWrite(table, body).denied) {
     return {
       error: 'tax_secret_denied',
       reason: 'financial_or_provider',
