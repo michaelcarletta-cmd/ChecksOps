@@ -243,7 +243,7 @@ const executeInvalidateSession = async ({ client, mapping, args }) => {
 };
 
 const executeAcceptMortgage = async ({ client, mapping, args }) => {
-  const gated = await requireRole(client, mapping.application_user_id, ['admin', 'mortgage_agent']);
+  const gated = await requireRole(client, mapping.application_user_id, ['mortgage_agent']);
   if (gated.error) return gated;
   const requestId = arg(args, '_request_id', 'request_id');
   if (!isUuid(requestId)) return { error: 'invalid_uuid', field: '_request_id' };
@@ -264,7 +264,7 @@ const executeAcceptMortgage = async ({ client, mapping, args }) => {
 };
 
 const executeUpdateMortgageStatus = async ({ client, mapping, args }) => {
-  const gated = await requireRole(client, mapping.application_user_id, ['admin', 'mortgage_agent']);
+  const gated = await requireRole(client, mapping.application_user_id, ['mortgage_agent']);
   if (gated.error) return gated;
   const requestId = arg(args, '_request_id', 'request_id');
   const status = String(arg(args, '_status', 'status') || '').trim();
@@ -273,11 +273,11 @@ const executeUpdateMortgageStatus = async ({ client, mapping, args }) => {
   if (!['in_progress', 'completed', 'cancelled'].includes(status)) {
     return { error: 'invalid_status', message: 'invalid_status' };
   }
-  const isAdmin = gated.roles.has('admin');
   const rows = (await client.query(
     `UPDATE public.mortgage_handling_requests
      SET status = $2::text,
          completed_at = CASE WHEN $2::text = 'completed' THEN now() ELSE completed_at END,
+         cancelled_at = CASE WHEN $2::text = 'cancelled' THEN now() ELSE cancelled_at END,
          work_notes = CASE
            WHEN $3::text IS NULL OR length(trim($3::text)) = 0 THEN work_notes
            ELSE COALESCE(work_notes || E'\n\n', '') ||
@@ -285,9 +285,9 @@ const executeUpdateMortgageStatus = async ({ client, mapping, args }) => {
          END,
          updated_at = now()
      WHERE id = $1::uuid
-       AND (assigned_employee_id = $4::uuid OR $5::boolean)
+       AND assigned_employee_id = $4::uuid
      RETURNING *`,
-    [requestId, status, notes == null ? null : String(notes).slice(0, 4000), mapping.application_user_id, isAdmin],
+    [requestId, status, notes == null ? null : String(notes).slice(0, 4000), mapping.application_user_id],
   )).rows;
   if (!rows.length) return { error: 'not_assigned_to_you', message: 'not_assigned_to_you' };
   return { data: rows[0] };
