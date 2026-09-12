@@ -355,6 +355,15 @@ export const runGetEndorsementData = async (client, token, spoof) => {
       spoofFieldsIgnored: spoof,
     };
   }
+  if (['signed', 'rejected', 'waived', 'expired'].includes(String(row.status || ''))) {
+    return {
+      ok: false,
+      statusCode: 404,
+      error: 'This endorsement link has already been used or replaced.',
+      code: 'token_consumed',
+      spoofFieldsIgnored: spoof,
+    };
+  }
   return {
     ok: true,
     statusCode: 200,

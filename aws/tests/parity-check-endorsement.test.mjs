@@ -77,6 +77,24 @@ test('public get and abuse cases ignore spoofed tenant headers', async () => {
   const bad = await runPublicEndorsement(eventOf({ action: 'get_endorsement_data', token: 'nope' }), { client });
   assert.equal(bad.statusCode, 404);
   assert.equal(bad.code, 'token_consumed');
+
+  const signedGet = await runPublicEndorsement(eventOf({ action: 'get_endorsement_data', token: 'used' }), {
+    client: sqlClient([{
+      match: (sql) => sql.includes('aws_public_endorsement_by_token'),
+      result: () => ({
+        rows: [{
+          doc: {
+            id: ENDORSE_ID,
+            status: 'signed',
+            token: 'used',
+            payee_name: 'Jane',
+          },
+        }],
+      }),
+    }]),
+  });
+  assert.equal(signedGet.statusCode, 404);
+  assert.equal(signedGet.code, 'token_consumed');
 });
 
 test('public submit requires consent and does not advance deposit', async () => {
