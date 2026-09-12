@@ -17,18 +17,12 @@
 --   - apply without the fail-closed preflight gate succeeding
 --   - apply to RDS / AWS (checksops) databases
 --
--- Authorized future method (this exact file, one transaction, after authorization):
---   1. Record operator authorization.
---   2. Run supabase/security/preflight_gate_revoke_postgrest_tax_profiles.sql
---      on the target (catalog only). Require CLASSIFICATION=EXACT_EXPECTED_LEGACY
---      or ALREADY_CONTAINED.
---   3. Apply THIS file only with:
---
--- psql -v ON_ERROR_STOP=1 \
---   -v expected_project_ref=nbcqwpysqgyxrrbgtmkw \
---   -v expected_database=postgres \
---   -v expected_owner=postgres \
---   -f supabase/security/unapplied-do-not-run/NOT_APPLIED_revoke_postgrest_tax_profiles.sql
+-- The ONLY authorized execution method is:
+--   scripts/run-hosted-tax-profile-containment.mjs
+-- Direct psql, supabase db push, and Git merge cannot apply this file.
+-- The wrapper independently validates the connection host / pooler username /
+-- TLS / database name. PostgreSQL does NOT expose the Supabase project ref;
+-- -v expected_project_ref is defense in depth, not connection proof.
 --
 -- This script never SELECTs table rows or column tin values.
 -- It does not create SECURITY DEFINER functions.
@@ -101,6 +95,8 @@ DECLARE
   has_service      boolean;
   has_member_pols  boolean;
   has_expected_policy_bodies boolean;
+  expected_using_norm constant text :=
+    'exists select 1 from tenant_users tu where tu.tenant_id = recipient_tax_profiles.tenant_id and tu.user_id = auth.uid';
   has_data_api_table_priv boolean;
   has_data_api_column_priv boolean;
   rls_ok           boolean;
@@ -287,9 +283,10 @@ BEGIN
       WHERE p.polrelid = rel_oid
         AND p.polname = 'tenant members read recipient_tax_profiles'
         AND p.polcmd = 'r'
-        AND 'authenticated'::regrole = ANY (p.polroles)
-        AND pg_get_expr(p.polqual, p.polrelid) ILIKE '%tenant_users%'
-        AND pg_get_expr(p.polqual, p.polrelid) ILIKE '%auth.uid()%'
+        AND array_length(p.polroles, 1) = 1
+        AND p.polroles = ARRAY['authenticated'::regrole]
+        AND btrim(regexp_replace(regexp_replace(lower(replace(replace(coalesce(pg_get_expr(p.polqual, p.polrelid), ''), 'public.', ''), '"', '')), '[()]', '', 'g'), '[[:space:]]+', ' ', 'g'))
+            = expected_using_norm
         AND pg_get_expr(p.polwithcheck, p.polrelid) IS NULL
     )
     AND EXISTS (
@@ -297,30 +294,33 @@ BEGIN
       WHERE p.polrelid = rel_oid
         AND p.polname = 'tenant members insert recipient_tax_profiles'
         AND p.polcmd = 'a'
-        AND 'authenticated'::regrole = ANY (p.polroles)
+        AND array_length(p.polroles, 1) = 1
+        AND p.polroles = ARRAY['authenticated'::regrole]
         AND pg_get_expr(p.polqual, p.polrelid) IS NULL
-        AND pg_get_expr(p.polwithcheck, p.polrelid) ILIKE '%tenant_users%'
-        AND pg_get_expr(p.polwithcheck, p.polrelid) ILIKE '%auth.uid()%'
+        AND btrim(regexp_replace(regexp_replace(lower(replace(replace(coalesce(pg_get_expr(p.polwithcheck, p.polrelid), ''), 'public.', ''), '"', '')), '[()]', '', 'g'), '[[:space:]]+', ' ', 'g'))
+            = expected_using_norm
     )
     AND EXISTS (
       SELECT 1 FROM pg_policy p
       WHERE p.polrelid = rel_oid
         AND p.polname = 'tenant members update recipient_tax_profiles'
         AND p.polcmd = 'w'
-        AND 'authenticated'::regrole = ANY (p.polroles)
-        AND pg_get_expr(p.polqual, p.polrelid) ILIKE '%tenant_users%'
-        AND pg_get_expr(p.polqual, p.polrelid) ILIKE '%auth.uid()%'
-        AND pg_get_expr(p.polwithcheck, p.polrelid) ILIKE '%tenant_users%'
-        AND pg_get_expr(p.polwithcheck, p.polrelid) ILIKE '%auth.uid()%'
+        AND array_length(p.polroles, 1) = 1
+        AND p.polroles = ARRAY['authenticated'::regrole]
+        AND btrim(regexp_replace(regexp_replace(lower(replace(replace(coalesce(pg_get_expr(p.polqual, p.polrelid), ''), 'public.', ''), '"', '')), '[()]', '', 'g'), '[[:space:]]+', ' ', 'g'))
+            = expected_using_norm
+        AND btrim(regexp_replace(regexp_replace(lower(replace(replace(coalesce(pg_get_expr(p.polwithcheck, p.polrelid), ''), 'public.', ''), '"', '')), '[()]', '', 'g'), '[[:space:]]+', ' ', 'g'))
+            = expected_using_norm
     )
     AND EXISTS (
       SELECT 1 FROM pg_policy p
       WHERE p.polrelid = rel_oid
         AND p.polname = 'tenant members delete recipient_tax_profiles'
         AND p.polcmd = 'd'
-        AND 'authenticated'::regrole = ANY (p.polroles)
-        AND pg_get_expr(p.polqual, p.polrelid) ILIKE '%tenant_users%'
-        AND pg_get_expr(p.polqual, p.polrelid) ILIKE '%auth.uid()%'
+        AND array_length(p.polroles, 1) = 1
+        AND p.polroles = ARRAY['authenticated'::regrole]
+        AND btrim(regexp_replace(regexp_replace(lower(replace(replace(coalesce(pg_get_expr(p.polqual, p.polrelid), ''), 'public.', ''), '"', '')), '[()]', '', 'g'), '[[:space:]]+', ' ', 'g'))
+            = expected_using_norm
         AND pg_get_expr(p.polwithcheck, p.polrelid) IS NULL
     );
 
@@ -391,6 +391,7 @@ BEGIN
 
   IF has_service
      AND rls_ok
+     AND force_rls IS NOT TRUE
      AND (array_length(pol_names, 1) IS NULL)
      AND NOT has_data_api_table_priv
      AND NOT has_data_api_column_priv THEN
