@@ -117,6 +117,15 @@ const mockClient = ({
       if (/INSERT INTO public.mortgage_handling_requests/.test(sql)) {
         return { rows: [{ id: 'req-1', check_intake_item_id: params[1], requested_by: params[5] }] };
       }
+      if (/FROM public.mortgage_handling_requests r/.test(sql)) {
+        return { rows: [{ id: params[0], check_intake_item_id: CHECK_ID, tenant_id: FREEDOM_TENANT }] };
+      }
+      if (/is_master_owner/.test(sql)) {
+        return { rows: [{ is_master: false }] };
+      }
+      if (/UPDATE public.mortgage_handling_requests/.test(sql)) {
+        return { rows: [{ id: params[params.length - 1], status: 'requested' }] };
+      }
       if (/INSERT INTO public.loss_draft_tracking/.test(sql)) {
         return { rows: [{ id: 'ld-1', check_intake_item_id: params[0] }] };
       }
@@ -344,6 +353,35 @@ test('mortgage request insert uses mapped actor and check tenant', async () => {
   const insert = client.queries.find((q) => String(q.sql).includes('INSERT INTO public.mortgage_handling_requests'));
   assert.equal(insert.params[0], FREEDOM_TENANT);
   assert.equal(insert.params[5], APP_ID);
+});
+
+test('tenant mortgage request status update is denied', async () => {
+  const client = mockClient();
+  const result = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'mortgage_handling_requests',
+    op: 'update',
+    values: { status: 'in_progress' },
+    filters: [{ column: 'id', op: 'eq', value: '7f549fcb-1d1c-4ef7-9168-33f22a56be39' }],
+  }), depsFor(client));
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'not_authorized');
+  assert.equal(result.statusCode, 403);
+  assert.equal(
+    client.queries.some((q) => String(q.sql).includes('UPDATE public.mortgage_handling_requests')),
+    false,
+  );
+});
+
+test('tenant mortgage request work_notes is not allowlisted', async () => {
+  const client = mockClient();
+  const result = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'mortgage_handling_requests',
+    op: 'update',
+    values: { work_notes: 'staff only' },
+    filters: [{ column: 'id', op: 'eq', value: '7f549fcb-1d1c-4ef7-9168-33f22a56be39' }],
+  }), depsFor(client));
+  assert.equal(result.error, 'column_not_allowlisted');
+  assert.deepEqual(result.columns, ['work_notes']);
 });
 
 test('unauthenticated workflow create is 401', async () => {
