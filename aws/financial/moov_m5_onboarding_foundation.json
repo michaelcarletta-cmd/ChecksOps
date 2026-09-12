@@ -1,0 +1,27 @@
+{
+  "phase": "M5",
+  "date": "2026-09-10",
+  "dark_code_only": true,
+  "onboarding_foundation": "PASS",
+  "kyc_kyb_foundation": "PASS",
+  "tos_foundation": "PASS",
+  "bank_foundation": "PASS",
+  "capabilities_foundation": "PASS",
+  "recipient_foundation": "PASS",
+  "public_recipient_session": "PASS",
+  "recipient_readiness": "PASS",
+  "wallet_foundation": "PASS",
+  "webhook_apply_dark_code": "PASS",
+  "production_writes_enabled": false,
+  "spa_cutover": false,
+  "webhook_registered": false,
+  "sql72": "NOT_APPLIED",
+  "money_flags": false,
+  "money_moved": "$0.00",
+  "go_nogo": "NO-GO",
+  "new_flags_default_false": [
+    "AWS_MOOV_ONBOARDING_WRITES_ENABLED",
+    "AWS_MOOV_WEBHOOK_APPLY_ENABLED",
+    "AWS_LOVABLE_MONEY_NEUTRALIZED"
+  ]
+}

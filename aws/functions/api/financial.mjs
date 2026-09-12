@@ -949,6 +949,7 @@ export const financialRoute = (path, method) => {
   if (method === 'POST' && path === '/financial/simulate-failure') return { kind: 'failure' };
   if (method === 'POST' && path === '/financial/cleanup') return { kind: 'cleanup' };
   if (method === 'POST' && path === '/financial/checkalt-dual-control') return { kind: 'checkalt-dual-control' };
+  if (method === 'POST' && path === '/financial/moov-dual-control') return { kind: 'moov-dual-control' };
   return null;
 };
 
@@ -965,6 +966,10 @@ export const handleFinancialRequest = async (event, path, method, deps = {}) => 
   if (route.kind === 'checkalt-dual-control') {
     const { handleCheckAltDualControl } = await import('./providers/production/checkalt-dual-control.mjs');
     return handleCheckAltDualControl(event, deps);
+  }
+  if (route.kind === 'moov-dual-control') {
+    const { handleMoovDualControl } = await import('./providers/production/moov-dual-control.mjs');
+    return handleMoovDualControl(event, deps);
   }
   return null;
 };

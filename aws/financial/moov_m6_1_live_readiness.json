@@ -1,0 +1,136 @@
+{
+  "phase": "M6.1",
+  "date": "2026-09-10",
+  "get_only": true,
+  "aws_identity": {
+    "account": "806168576068",
+    "role": "ChecksOpsCursorCloudStaging",
+    "session": "checksops-m61-live-get",
+    "region": "us-east-1"
+  },
+  "lambda": {
+    "function": "checksops-production-prep-api",
+    "before_sha": "ItJiyRVnWJZ2DIUce3ZhalFn3LrZrkKMSXdpP6MJo50=",
+    "overlay_sha": "WEkx79XAKBbAbi9AeFWl2PG8hhqB6UIGg0ye5aSkESE=",
+    "restored_sha": "ItJiyRVnWJZ2DIUce3ZhalFn3LrZrkKMSXdpP6MJo50=",
+    "sha_restored": true,
+    "env_blob_sent": false,
+    "flags_unchanged": true
+  },
+  "recipients_checked": 3,
+  "sandbox_excluded": 1,
+  "ready": 0,
+  "not_ready": 3,
+  "first_test_recipient_available": false,
+  "safest_candidate": null,
+  "minimum_human_action": "Complete KYC/identity verification for one existing Freedom production recipient through the legitimate Moov flow. Do not forge ToS. Do not create a new recipient.",
+  "minimum_human_action_target_fp": "62a858ff…227b",
+  "provider_mutations": 0,
+  "db_financial_mutations": 0,
+  "money_moved": "$0.00",
+  "sql72": "NOT_APPLIED",
+  "flags": {
+    "AWS_MOOV_ENABLED": false,
+    "AWS_PROVIDER_EXECUTION_ENABLED": false,
+    "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": false,
+    "AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED": false,
+    "AWS_PROVIDER_LIVE_READS_ENABLED": true,
+    "AWS_PROVIDER_WEBHOOK_DRY_RUN": true,
+    "AWS_MOOV_ONBOARDING_WRITES_ENABLED": null,
+    "AWS_MOOV_WEBHOOK_APPLY_ENABLED": null,
+    "AWS_LOVABLE_MONEY_NEUTRALIZED": null
+  },
+  "webhook_registered": false,
+  "m5_pr": { "number": 201, "state": "OPEN", "draft": true, "merged": false },
+  "m6_pr": { "number": 202, "state": "OPEN", "draft": true, "merged": false },
+  "spoof": "400 untrusted_provider_config",
+  "c1c": "403 cross_tenant_denied",
+  "money_blocked": {
+    "moov-transfer-create": "403 production_execution_blocked",
+    "moov-disburse": "403 production_execution_blocked"
+  },
+  "go_nogo_first_controlled_transfer_preparation": "NO-GO",
+  "production_recipients": [
+    {
+      "recipient_id_fp": "53a2be7e…78c5",
+      "moov_account_fp": "d1adebb2…12db",
+      "ready": false,
+      "first_failing_class": "AWAITING_KYC",
+      "local_accuracy": "CONTRADICTORY",
+      "live": {
+        "account_get": 200,
+        "mode": "production",
+        "account_type": "individual",
+        "verification": "unverified",
+        "tos_accepted": false,
+        "disabled": false,
+        "restricted": false,
+        "bank_get": 403,
+        "banks": [],
+        "payment_methods_get": 403,
+        "capabilities_get": 403
+      },
+      "local": {
+        "onboarding_status": "awaiting_bank",
+        "last4": "1506",
+        "bank_linked_at": "2026-08-30T19:13:38.421Z"
+      }
+    },
+    {
+      "recipient_id_fp": "4c1ced8c…ab38",
+      "moov_account_fp": "bfeb279f…eecd",
+      "ready": false,
+      "first_failing_class": "AWAITING_KYC",
+      "local_accuracy": "INCOMPLETE",
+      "live": {
+        "account_get": 200,
+        "mode": "production",
+        "account_type": "individual",
+        "verification": "unverified",
+        "tos_accepted": false,
+        "disabled": false,
+        "restricted": false,
+        "bank_status": "new",
+        "bank_verification_status": "new",
+        "bank_last4": "1506",
+        "ach_credit_standard": true,
+        "ach_credit_same_day": true,
+        "send_funds": "pending",
+        "transfers": "enabled"
+      },
+      "local": {
+        "onboarding_status": "awaiting_bank",
+        "last4": "1506",
+        "bank_linked_at": "2026-08-31T20:44:55.828Z"
+      }
+    },
+    {
+      "recipient_id_fp": "62a858ff…227b",
+      "moov_account_fp": "ee8c608e…fc5f",
+      "ready": false,
+      "first_failing_class": "AWAITING_KYC",
+      "local_accuracy": "INCOMPLETE",
+      "live": {
+        "account_get": 200,
+        "mode": "production",
+        "account_type": "individual",
+        "verification": "unverified",
+        "tos_accepted": false,
+        "disabled": false,
+        "restricted": false,
+        "bank_status": "new",
+        "bank_verification_status": "new",
+        "bank_last4": "1506",
+        "ach_credit_standard": true,
+        "ach_credit_same_day": true,
+        "send_funds": "pending",
+        "transfers": "enabled"
+      },
+      "local": {
+        "onboarding_status": "awaiting_bank",
+        "last4": "1506",
+        "bank_linked_at": "2026-09-02T15:05:35.512Z"
+      }
+    }
+  ]
+}

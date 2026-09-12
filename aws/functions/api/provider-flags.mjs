@@ -18,7 +18,7 @@ export const providerEnabled = (provider) => {
   return isTrue(process.env[envName]);
 };
 
-/** Live HTTP GET/POST to a provider API. Independent of execution. Default false. */
+/** Live HTTP GET to a provider API. Independent of money execution. Default false. Never authorizes POST. */
 export const providerLiveReadsEnabled = () => isTrue(process.env.AWS_PROVIDER_LIVE_READS_ENABLED);
 
 /**

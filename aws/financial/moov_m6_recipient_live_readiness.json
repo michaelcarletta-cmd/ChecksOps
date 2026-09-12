@@ -1,0 +1,33 @@
+{
+  "phase": "M6",
+  "date": "2026-09-10",
+  "get_only": true,
+  "m5_merge_required_for_diagnosis": false,
+  "m5_activated": false,
+  "live_probe_executed": false,
+  "live_probe_blocker": "aws_session_expired",
+  "recipients_checked_live": 0,
+  "ready": null,
+  "not_ready": null,
+  "first_test_recipient_available": false,
+  "local_state_accurate": "PARTIAL",
+  "provider_mutations": 0,
+  "db_financial_mutations": 0,
+  "money_moved": "$0.00",
+  "sql72": "NOT_APPLIED",
+  "money_flags": false,
+  "onboarding_flag": false,
+  "webhook_apply_flag": false,
+  "lovable_neutralized_flag": false,
+  "webhook_registered": false,
+  "spa_cutover": false,
+  "go_nogo": "NO-GO",
+  "safest_path": "existing POST /functions/v1/moov-readiness with recipient_live_gets=true after surgical GET-only overlay",
+  "rds_snapshot": "M3b.8 2026-09-10T10:46:05Z",
+  "production_recipient_fps": [
+    "53a2be7e…78c5",
+    "4c1ced8c…ab38",
+    "62a858ff…227b"
+  ],
+  "sandbox_excluded_fp": "3269bd10…2562"
+}
