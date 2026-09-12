@@ -217,3 +217,31 @@ test('C1C branding form reads tenants.name, never the global company_branding ro
   assert.match(email, /FROM public\.tenants WHERE id = \$1/);
   assert.doesNotMatch(email, /company_branding/);
 });
+
+test('internal Mortgage Ops admin deny UX matches other platform-only admin routes', () => {
+  const mortgage = sourceOf('src/pages/admin/AdminMortgageOps.tsx');
+  const tenants = sourceOf('src/pages/admin/AdminTenants.tsx');
+  const financial = sourceOf('src/pages/admin/AdminFinancialModel.tsx');
+  assert.match(mortgage, /Access Restricted/);
+  assert.match(tenants, /Access Restricted/);
+  assert.match(financial, /Access Restricted/);
+  assert.match(mortgage, /isPlatformOwner/);
+  assert.doesNotMatch(mortgage, /toast\.error\("Not authorized"\)/);
+  assert.doesNotMatch(mortgage, /navigate\("\/"\)/);
+  assert.match(mortgage, /Organization users submit and track mortgage-handling requests from Check Center/);
+});
+
+test('Mortgage Desk staff gate is mortgage_agent only, not tenant admin', async () => {
+  const { isMortgageDeskStaff } = await import('../../src/lib/mortgageDeskAuth.ts');
+  assert.equal(isMortgageDeskStaff(['mortgage_agent']), true);
+  assert.equal(isMortgageDeskStaff(['admin', 'mortgage_agent']), true);
+  assert.equal(isMortgageDeskStaff(['admin']), false);
+  assert.equal(isMortgageDeskStaff(['staff']), false);
+  assert.equal(isMortgageDeskStaff([]), false);
+  const login = sourceOf('src/pages/mortgage-ops/MortgageOpsLogin.tsx');
+  const queue = sourceOf('src/pages/mortgage-ops/MortgageOpsQueue.tsx');
+  assert.match(login, /isMortgageDeskStaff/);
+  assert.match(queue, /isMortgageDeskStaff/);
+  assert.doesNotMatch(login, /userRole === "mortgage_agent" \|\| userRole === "admin"/);
+  assert.doesNotMatch(queue, /userRole !== "mortgage_agent" && userRole !== "admin"/);
+});
