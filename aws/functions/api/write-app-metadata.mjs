@@ -2,6 +2,7 @@
  * Tranche-6 application metadata writes (non-financial, non-provider).
  */
 import { ident } from './data.mjs';
+import { isMasterOwner } from './platform-authz.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isUuid = (value) => UUID_RE.test(String(value || ''));
@@ -481,10 +482,13 @@ export const executeReferralAlerts = async ({ client, values, filters }) => {
 export const executeTenantsNarrow = async ({ client, mapping, values, filters }) => {
   const id = eqFilter(filters, 'id');
   if (!isUuid(id)) return { error: 'invalid_uuid', field: 'id' };
-  if (!(await memberOfTenant(client, mapping.application_user_id, id))) {
+  const platformOwner = await isMasterOwner(client);
+  const member = await memberOfTenant(client, mapping.application_user_id, id);
+  if (!platformOwner && !member) {
     return { error: 'not_authorized', message: 'Not a member of tenant' };
   }
   const out = {};
+  const casts = {};
   for (const [col, max] of [
     ['name', 200], ['logo_url', 512], ['invoice_letterhead_url', 512],
     ['primary_color', 40], ['invoice_footer_note', 2000], ['invoice_default_terms', 4000],
@@ -495,8 +499,27 @@ export const executeTenantsNarrow = async ({ client, mapping, values, filters })
       out[col] = text;
     }
   }
+  if (platformOwner) {
+    if ('subscription_status' in values) {
+      const status = String(values.subscription_status || '').trim().toLowerCase();
+      if (!['active', 'inactive'].includes(status)) {
+        return { error: 'invalid_field', field: 'subscription_status' };
+      }
+      out.subscription_status = status;
+    }
+    if ('is_founding_partner' in values) {
+      out.is_founding_partner = values.is_founding_partner === true || values.is_founding_partner === 'true';
+      casts.is_founding_partner = 'boolean';
+    }
+    if ('is_test_account' in values) {
+      out.is_test_account = values.is_test_account === true || values.is_test_account === 'true';
+      casts.is_test_account = 'boolean';
+    }
+  } else if ('subscription_status' in values || 'is_founding_partner' in values || 'is_test_account' in values) {
+    return { error: 'not_authorized', message: 'Platform owner required for tenant ops flags' };
+  }
   if (!Object.keys(out).length) return { error: 'missing_required_field', field: 'values' };
-  const built = buildSet(out);
+  const built = buildSet(out, casts);
   built.params.push(id);
   const rows = (await client.query(
     `UPDATE public.tenants SET ${built.sets.join(', ')} WHERE id = $${built.next}::uuid RETURNING *`,

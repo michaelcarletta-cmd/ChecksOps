@@ -146,6 +146,15 @@ const intakeCoerce = (values) => {
     if (text.error) return text;
     out.funds_type = text.value;
   }
+  if ('detected_claim_number' in values) {
+    if (values.detected_claim_number === null || values.detected_claim_number === '') {
+      out.detected_claim_number = null;
+    } else {
+      const text = asText(values.detected_claim_number, 80);
+      if (text.error) return text;
+      out.detected_claim_number = text.value;
+    }
+  }
   if ('issue_date' in values) {
     if (values.issue_date === null || values.issue_date === '') out.issue_date = null;
     else if (!DATE_RE.test(String(values.issue_date))) return { error: 'invalid_field', field: 'issue_date' };

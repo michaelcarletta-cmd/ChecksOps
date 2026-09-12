@@ -3455,52 +3455,42 @@ function CheckDetailPanel({
   const handleBypassEndorsements = async () => {
     if (!user?.id || !check) return;
     setBypassingEndorsements(true);
-    // Phase 4: reflect the stage move in the queue instantly.
-    const rollbackStage = optimisticStage(qc, [checkId], "branch_deposit_required");
     try {
+      const { data: session } = await supabase.auth.getSession();
+      if (!session.session?.access_token) throw new Error("Not authenticated");
 
-      const now = new Date().toISOString();
-
-      const { error: endorsementErr } = await supabase
+      const { data: pending, error: loadErr } = await supabase
         .from("check_endorsements")
-        .update({
-          status: "signed",
-          signed_at: now,
-          signature_method: "physical_check",
-          notes: "Physical endorsements already received on check",
-          updated_at: now,
-        })
-        .eq("check_id", checkId)
-        .not("status", "in", '("signed","waived")');
-      if (endorsementErr) throw endorsementErr;
+        .select("id,status")
+        .eq("check_id", checkId);
+      if (loadErr) throw loadErr;
 
-      const { error: payeeErr } = await supabase
-        .from("check_payees")
-        .update({
-          endorsement_status: "signed",
-          endorsed_at: now,
-          updated_at: now,
-        })
-        .eq("check_id", checkId)
-        .not("endorsement_status", "eq", "signed");
-      if (payeeErr) throw payeeErr;
-
-      const { error: decisionErr } = await supabase.rpc("submit_check_review_decision_safe", {
-        p_check_id: checkId,
-        p_reviewer_id: user.id,
-        p_deposit_path: "branch_deposit_required",
-        p_reviewer_notes: "Physical endorsements already received; moved directly to branch deposit.",
-      });
-      if (decisionErr) throw decisionErr;
+      const toWaive = (pending || []).filter((row: { status?: string }) =>
+        row.status !== "signed" && row.status !== "waived",
+      );
+      for (const row of toWaive) {
+        const { data, error } = await supabase.functions.invoke("check-endorsement", {
+          body: { action: "waive_endorsement", endorsementId: row.id },
+          headers: { Authorization: `Bearer ${session.session.access_token}` },
+        });
+        if (error) throw new Error(error.message || "Endorsement was not saved");
+        const body = data && typeof data === "object" ? data as { ok?: boolean; success?: boolean; error?: string; message?: string } : null;
+        if (!body || body.ok === false || body.success === false) {
+          throw new Error(String(body?.error || body?.message || "Endorsement was not saved"));
+        }
+      }
 
       await supabase.from("check_audit_log").insert({
         check_id: checkId,
         event_type: "endorsement_bypass",
         actor_id: user.id,
-        event_description: "Physical endorsements confirmed on check. Moved directly to branch deposit.",
+        event_description: "Physical endorsements confirmed on check. Check remains in endorsing; deposit and providers were not advanced.",
       });
 
-      toast({ title: "Moved to Branch Deposit", description: "Endorsements were marked received from the physical check." });
+      toast({
+        title: "Endorsements marked on check",
+        description: "Payees marked endorsed. Deposit was not advanced.",
+      });
       qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
       qc.invalidateQueries({ queryKey: ["review-check-detail", checkId] });
       qc.invalidateQueries({ queryKey: ["check-endorsements-summary", checkId] });
@@ -3509,8 +3499,7 @@ function CheckDetailPanel({
       qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
       onRefresh();
     } catch (e: any) {
-      rollbackStage();
-      toast({ title: "Move failed", description: e.message, variant: "destructive" });
+      toast({ title: "Skip endorsements failed", description: e.message, variant: "destructive" });
     } finally {
       setBypassingEndorsements(false);
     }

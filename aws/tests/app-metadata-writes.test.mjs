@@ -164,3 +164,47 @@ test('homeowner ledger insert forces null amount and membership check', async ()
   assert.equal(result.rows[0].amount, null);
   assert.match(queries.at(-1).sql, /amount/);
 });
+
+test('platform owner can set tenant ops flags; members cannot; moov env ignored', async () => {
+  const PIPELINE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const queries = [];
+  const client = {
+    query: async (sql, params) => {
+      queries.push({ sql, params });
+      if (/is_master_owner/.test(sql)) return { rows: [{ is_master_owner: true }] };
+      if (/FROM public.tenant_users/.test(sql)) return { rows: [] };
+      if (/UPDATE public.tenants/.test(sql)) {
+        return { rows: [{ id: PIPELINE, subscription_status: params[0], is_test_account: params[1] }] };
+      }
+      return { rows: [] };
+    },
+  };
+  const ok = await executeAppMetadataWrite({
+    client,
+    mapping: { application_user_id: '233c588f-dc33-4307-8c3f-3da49c9fd2b3' },
+    table: 'tenants',
+    op: 'update',
+    values: { subscription_status: 'inactive', is_test_account: true, moov_environment: 'production' },
+    filters: [{ column: 'id', op: 'eq', value: PIPELINE }],
+  });
+  assert.equal(ok.error, undefined);
+  assert.equal(ok.rows[0].subscription_status, 'inactive');
+  assert.equal(String(queries.at(-1).sql).includes('moov_environment'), false);
+
+  const memberClient = {
+    query: async (sql) => {
+      if (/is_master_owner/.test(sql)) return { rows: [{ is_master_owner: false }] };
+      if (/FROM public.tenant_users/.test(sql)) return { rows: [{ '?column?': 1 }] };
+      return { rows: [] };
+    },
+  };
+  const denied = await executeAppMetadataWrite({
+    client: memberClient,
+    mapping,
+    table: 'tenants',
+    op: 'update',
+    values: { subscription_status: 'inactive' },
+    filters: [{ column: 'id', op: 'eq', value: PIPELINE }],
+  });
+  assert.equal(denied.error, 'not_authorized');
+});
