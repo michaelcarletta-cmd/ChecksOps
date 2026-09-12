@@ -89,7 +89,7 @@ export const sanitizeLogText = (value, max = 200) => String(value || '')
 
 const safeQueryLogContext = (body = {}) => ({
   table: typeof body?.table === 'string' ? body.table.slice(0, 120) : '',
-  select: typeof body?.select === 'string' ? body.select.slice(0, 200) : '',
+  select: typeof body?.select === 'string' ? body.select : '',
   requestId: body?.requestId || null,
   route: body?.route || null,
 });
