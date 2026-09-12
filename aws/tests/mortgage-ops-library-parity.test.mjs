@@ -117,10 +117,13 @@ test('oneshot applies 29 only after write helpers and complete write policies', 
 test('SQL overlay revokes PUBLIC immediately, requires mortgage category, and uses exact paths', () => {
   const overlay = overlaySql();
   const migration = migrationSql();
+  const sql24 = readSql('rls/sql/24_complete_write_policies.sql');
+  const generator = readSql('rls/scripts/generate_complete_write_policies.py');
   for (const sql of [overlay, migration]) {
     const docFn = functionBody(sql, 'aws_mortgage_agent_can_read_library_document');
     const pathFn = functionBody(sql, 'aws_mortgage_agent_can_read_library_path');
     const manageFn = functionBody(sql, 'aws_can_manage_mortgage_library');
+    const insertFn = functionBody(sql, 'aws_can_insert_mortgage_library_document');
     assert.match(docFn, /td\.doc_type LIKE 'library:mortgage:%'/);
     assert.match(pathFn, /td\.doc_type LIKE 'library:mortgage:%'/);
     assert.match(docFn, /JOIN public\.tenant_documents td/);
@@ -129,15 +132,51 @@ test('SQL overlay revokes PUBLIC immediately, requires mortgage category, and us
     assert.doesNotMatch(pathFn, /LIKE '%'\s*\|\|/);
     assert.match(pathFn, /split_part\(d\.file_path, '\?', 1\) = _rel/);
     assert.match(pathFn, /d\.file_path = ANY/);
+    assert.match(pathFn, /auth\.uid\(\) = _user_id/);
+    assert.match(pathFn, /has_role\(_user_id, 'mortgage_agent'/);
+    assert.match(pathFn, /status IN \('requested', 'in_progress'\)/);
+    assert.doesNotMatch(pathFn, /CHR\s*\(\s*0\s*\)/i);
+    assert.doesNotMatch(pathFn, /E'\\0/);
+    assert.doesNotMatch(pathFn, /U&'\\0000'/);
+    assert.doesNotMatch(sql, /position\s*\(\s*CHR\s*\(\s*0\s*\)/i);
     assert.match(sql, /FOR INSERT TO authenticated/);
-    assert.doesNotMatch(sql, /aws_write_mortgage_request_library_documents[\s\S]*FOR ALL TO authenticated/);
+    assert.match(
+      sql,
+      /WITH CHECK \(\s*public\.aws_can_insert_mortgage_library_document\(\s*tenant_id,\s*request_id,\s*tenant_document_id,\s*file_path\s*\)\s*\)/,
+    );
+    assert.doesNotMatch(sql, /WITH CHECK \(public\.aws_can_manage_mortgage_library\(tenant_id\)\)/);
+    assert.doesNotMatch(sql, /CREATE POLICY aws_write_mortgage_request_library_documents[\s\S]{0,400}FOR ALL TO authenticated/);
     assert.match(manageFn, /aws_can_write_tenant/);
+    assert.match(manageFn, /auth\.uid\(\)/);
+    assert.match(insertFn, /SECURITY DEFINER/);
+    assert.match(insertFn, /SET search_path = public/);
+    assert.match(insertFn, /SET row_security = off/);
+    assert.match(insertFn, /aws_can_manage_mortgage_library/);
+    assert.match(insertFn, /FROM public\.mortgage_handling_requests mr/);
+    assert.match(insertFn, /FROM public\.tenant_documents td/);
+    assert.match(insertFn, /_request_status IS DISTINCT FROM 'requested'/);
+    assert.match(insertFn, /_request_status IS DISTINCT FROM 'in_progress'/);
+    assert.match(insertFn, /_doc_auto_share IS DISTINCT FROM true/);
+    assert.match(insertFn, /_doc_type NOT LIKE 'library:mortgage:%'/);
+    assert.match(insertFn, /_file_path IS DISTINCT FROM _doc_file_path/);
+    assert.match(insertFn, /_tenant_document_id IS NULL/);
+    assert.doesNotMatch(insertFn, /user_metadata/);
+    assert.doesNotMatch(insertFn, /request\.jwt\.claim\.role/);
     assert.match(sql, /DROP POLICY IF EXISTS "manage shared library docs"/);
     assert.match(sql, /DROP POLICY IF EXISTS "delete shared library docs"/);
+    assert.match(sql, /REVOKE UPDATE, DELETE ON TABLE public\.mortgage_request_library_documents FROM authenticated/);
+    assert.match(sql, /GRANT SELECT, INSERT ON TABLE public\.mortgage_request_library_documents TO authenticated/);
   }
   assert.match(overlay, /GRANT EXECUTE[\s\S]*TO checksops, authenticated/);
+  assert.match(overlay, /REVOKE UPDATE, DELETE ON TABLE public\.mortgage_request_library_documents FROM checksops/);
   assert.doesNotMatch(migration, /TO checksops, authenticated/);
   assert.match(migration, /Grant difference is intentional/);
+  assert.match(sql24, /DROP POLICY IF EXISTS aws_write_mortgage_request_library_documents ON public.mortgage_request_library_documents;/);
+  assert.doesNotMatch(sql24, /CREATE POLICY aws_write_mortgage_request_library_documents/);
+  assert.match(sql24, /CREATE POLICY aws_write_mortgage_handling_requests ON public.mortgage_handling_requests\s+FOR ALL TO authenticated/);
+  assert.match(generator, /FAIL_CLOSED_DROP_ONLY_TABLES = frozenset\(\{"mortgage_request_library_documents"\}\)/);
+  const oneshot = readSql('rls/oneshot/index.mjs');
+  assert.match(oneshot, /'aws_can_insert_mortgage_library_document'/);
 });
 
 test('new active request receives only qualifying auto-share documents', () => {
@@ -544,4 +583,5 @@ test('storage auth SQL requires an attachment, exact path, and open or assigned 
   assert.match(overlay, /status IN \('requested', 'in_progress'\)/);
   const pathFn = functionBody(overlay, 'aws_mortgage_agent_can_read_library_path');
   assert.doesNotMatch(pathFn, /LIKE '%' \|\|/);
+  assert.doesNotMatch(pathFn, /CHR\s*\(\s*0\s*\)/i);
 });
