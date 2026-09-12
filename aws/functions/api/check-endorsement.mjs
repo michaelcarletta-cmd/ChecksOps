@@ -284,11 +284,14 @@ export const persistPhysicalEndorsementOnCheck = async (client, {
   let endorsementRow = endorsement;
 
   if (!COMPLETE_ENDORSEMENT.has(String(endorsement?.status))) {
+    // Staging/prod check_endorsements_signature_method_check allows
+    // portal/sms/email/internal/manual (and later in_person). `physical_check`
+    // is used by some UI copy but is not a legal column value.
     const updated = await client.query(
       `UPDATE public.check_endorsements
        SET status = 'signed',
            signed_at = now(),
-           signature_method = 'physical_check',
+           signature_method = 'manual',
            notes = COALESCE($2, notes),
            updated_at = now()
        WHERE id = $1::uuid
@@ -335,7 +338,7 @@ export const persistPhysicalEndorsementOnCheck = async (client, {
     event_type: 'endorsement_physical_on_check',
     check_event_type: 'endorsement_completed',
     event_description: `${endorsementRow.payee_name} endorsed on the physical check`,
-    event_data: { method: 'physical_check', token_rotated: false },
+    event_data: { method: 'manual', physical_on_check: true, token_rotated: false },
     actor_id: mapping?.application_user_id,
   });
   const completion = await completionWithoutAdvance(client, endorsementRow.check_id);
@@ -345,7 +348,7 @@ export const persistPhysicalEndorsementOnCheck = async (client, {
     success: true,
     endorsement_status: 'signed',
     payee_status: 'signed',
-    signature_method: 'physical_check',
+    signature_method: 'manual',
     token_rotated: false,
     ...completion,
     spoofFieldsIgnored: spoof,

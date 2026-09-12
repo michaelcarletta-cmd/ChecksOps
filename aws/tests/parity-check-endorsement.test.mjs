@@ -307,15 +307,15 @@ const physicalAuthzHandlers = [
   },
 ];
 
-test('waive_endorsement persists endorsement and payee atomically as physical_check', async () => {
+test('waive_endorsement persists endorsement and payee atomically as manual physical-on-check', async () => {
   const updates = [];
   const client = sqlClient([
     ...physicalAuthzHandlers,
     {
-      match: (sql) => sql.includes("signature_method = 'physical_check'"),
+      match: (sql) => sql.includes("signature_method = 'manual'"),
       result: (_params, sql) => {
         updates.push({ table: 'check_endorsements', sql });
-        return { rows: [{ ...physicalEndorsement, status: 'signed', signature_method: 'physical_check' }], rowCount: 1 };
+        return { rows: [{ ...physicalEndorsement, status: 'signed', signature_method: 'manual' }], rowCount: 1 };
       },
     },
     {
@@ -341,7 +341,7 @@ test('waive_endorsement persists endorsement and payee atomically as physical_ch
   assert.equal(result.success, true);
   assert.equal(result.endorsement_status, 'signed');
   assert.equal(result.payee_status, 'signed');
-  assert.equal(result.signature_method, 'physical_check');
+  assert.equal(result.signature_method, 'manual');
   assert.equal(result.token_rotated, false);
   assert.equal(result.depositAdvanceDenied, true);
   assert.equal(updates.some((row) => row.table === 'check_endorsements'), true);
@@ -353,9 +353,9 @@ test('waive_endorsement fails closed when payee persist misses and does not repo
   const client = sqlClient([
     ...physicalAuthzHandlers,
     {
-      match: (sql) => sql.includes("signature_method = 'physical_check'"),
+      match: (sql) => sql.includes("signature_method = 'manual'"),
       result: () => ({
-        rows: [{ ...physicalEndorsement, status: 'signed', signature_method: 'physical_check' }],
+        rows: [{ ...physicalEndorsement, status: 'signed', signature_method: 'manual' }],
         rowCount: 1,
       }),
     },
@@ -394,7 +394,7 @@ test('persistPhysicalEndorsementOnCheck does not rotate a live public token', as
 
   const failed = await persistPhysicalEndorsementOnCheck(sqlClient([
     {
-      match: (sql) => sql.includes("signature_method = 'physical_check'"),
+      match: (sql) => sql.includes("signature_method = 'manual'"),
       result: () => ({ rows: [{ ...physicalEndorsement, status: 'signed' }], rowCount: 1 }),
     },
     {
