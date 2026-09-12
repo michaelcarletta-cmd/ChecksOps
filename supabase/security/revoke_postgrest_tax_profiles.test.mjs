@@ -267,7 +267,8 @@ test('no auto-run discovery of the unapplied revoke file', () => {
   const wrapper = fs.readFileSync(path.join(ROOT, 'scripts/run-hosted-tax-profile-containment.mjs'), 'utf8');
   assert.match(wrapper, /NOT_APPLIED_revoke_postgrest_tax_profiles/);
   assert.match(wrapper, /CHECKSOPS_TAX_CONTAINMENT_DATABASE_URL/);
-  assert.doesNotMatch(wrapper, /db push/);
+  assert.match(wrapper, /Do not use supabase db push/);
+  assert.doesNotMatch(wrapper, /spawn(?:Sync)?\([\s\S]{0,120}db push/);
   assert.match(wrapper, /must not live under supabase\/migrations/);
 });
 
