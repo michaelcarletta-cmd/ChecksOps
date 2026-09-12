@@ -106,12 +106,26 @@ const mockClient = ({
       if (/FROM public.check_intake_items/.test(sql) && /SELECT id, tenant_id, uploaded_by/.test(sql)) {
         return { rows: check ? [check] : [] };
       }
-      if (/SELECT id, tenant_id FROM public.check_intake_items/.test(sql)) {
-        return { rows: [{ id: params[0], tenant_id: FREEDOM_TENANT }] };
+      if (/SELECT id, tenant_id, status, check_stage, deposited_at, amount, claim_id/.test(sql)
+        || /SELECT id, tenant_id FROM public.check_intake_items/.test(sql)) {
+        return {
+          rows: [{
+            id: params[0],
+            tenant_id: check?.tenant_id || FREEDOM_TENANT,
+            status: check?.status || 'uploaded',
+            check_stage: check?.check_stage || 'review',
+            deposited_at: check?.deposited_at ?? null,
+            amount: check?.amount ?? null,
+            claim_id: check?.claim_id ?? null,
+          }],
+        };
       }
       if (/INSERT INTO public.check_intake_items/.test(sql)) return { rows };
       if (/UPDATE public.check_intake_items/.test(sql)) {
-        return { rows: [{ ...check, status: params?.[1] || check.status, check_stage: params?.[2] || check.check_stage }] };
+        if (String(sql).includes('SET status = $2')) {
+          return { rows: [{ ...check, status: params[1], check_stage: params[2] }] };
+        }
+        return { rows: [{ ...check }] };
       }
       if (/INSERT INTO public.check_audit_log/.test(sql)) return { rows: [{ id: 'audit' }] };
       if (/INSERT INTO public.mortgage_handling_requests/.test(sql)) {
