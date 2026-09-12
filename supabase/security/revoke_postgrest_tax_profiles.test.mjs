@@ -210,15 +210,16 @@ test('rollback is documentation-only and warns it reopens TIN exposure', () => {
   assert.match(rollbackDoc, /Safer functional rollback/i);
   assert.match(rollbackDoc, /GRANT SELECT, INSERT, UPDATE, DELETE ON public\.recipient_tax_profiles TO authenticated/);
   assert.match(rollbackDoc, /tenant members read recipient_tax_profiles/);
-  assert.match(rollbackDoc, APPLY_REL);
-  assert.match(rollbackDoc, /supabase db push must not be used/);
+  assert.equal(rollbackDoc.includes(APPLY_REL), true);
+  assert.match(rollbackDoc, /supabase db push/);
+  assert.match(rollbackDoc, /must not be used/);
   assert.equal(fs.existsSync(path.join(ROOT, 'supabase/migrations', OLD_MIGRATION.replace(/\.sql$/, '.down.sql'))), false);
 });
 
 test('docs forbid db push and treat Oct 30 2026 as scheduled future behavior', () => {
   assert.match(runbook, /must not be used/);
   assert.match(runbook, /supabase db push/);
-  assert.match(runbook, APPLY_REL);
+  assert.equal(runbook.includes(APPLY_REL), true);
   assert.match(runbook, /preflight_gate_revoke_postgrest_tax_profiles\.sql/);
   assert.match(runbook, /scheduled future behavior/i);
   assert.match(runbook, /No TIN on file/);
