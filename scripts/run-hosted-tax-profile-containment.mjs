@@ -3,8 +3,7 @@
  * ONLY authorized way to run hosted recipient_tax_profiles preflight or apply.
  *
  * The database URL MUST come from CHECKSOPS_TAX_CONTAINMENT_DATABASE_URL.
- * Never pass the URL on the command line. This process never prints the URL,
- * password, token, or username.
+ * Never pass the URL or password on the command line or in child argv.
  *
  * Modes:
  *   node scripts/run-hosted-tax-profile-containment.mjs preflight
@@ -12,49 +11,182 @@
  *     --i-authorize-hosted-recipient-tax-profiles-revoke \
  *     --confirm=REVOKE_POSTGREST_RECIPIENT_TAX_PROFILES
  *
- * Default mode is preflight. Apply is refused without the flag and phrase.
- * Apply always runs preflight first on the same validated URL and requires
- * CLASSIFICATION=EXACT_EXPECTED_LEGACY. ALREADY_CONTAINED is not applied.
+ * Direct connections only: db.nbcqwpysqgyxrrbgtmkw.supabase.co:5432/postgres
+ * with sslmode=verify-full and a reviewed system CA bundle
+ * (/etc/ssl/certs/ca-certificates.crt). Pooler is not supported.
+ * Do not use supabase db push. Do not execute supabase/migrations.
  *
  * PostgreSQL does not expose the Supabase project ref. This wrapper proves
  * the connection target. SQL -v expected_project_ref is defense in depth.
- *
- * Do not use supabase db push. Do not execute supabase/migrations.
  */
 import { spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { randomBytes, createHash } from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const URL_ENV = 'CHECKSOPS_TAX_CONTAINMENT_DATABASE_URL';
+const PSQL_PATH_ENV = 'CHECKSOPS_TAX_CONTAINMENT_PSQL';
+const PSQL_SHA_ENV = 'CHECKSOPS_TAX_CONTAINMENT_PSQL_SHA256';
 const AUTH_FLAG = '--i-authorize-hosted-recipient-tax-profiles-revoke';
 const CONFIRM_PREFIX = '--confirm=';
 export const APPLY_CONFIRM_PHRASE = 'REVOKE_POSTGREST_RECIPIENT_TAX_PROFILES';
-export { URL_ENV, AUTH_FLAG };
+export {
+  URL_ENV,
+  AUTH_FLAG,
+  PSQL_PATH_ENV,
+  PSQL_SHA_ENV,
+};
+
+export const PREFLIGHT_SENTINEL_PREFIX = 'CHECKSOPS_TAX_PREFLIGHT_V1';
+export const APPLY_SENTINEL_PREFIX = 'CHECKSOPS_TAX_APPLY_V1';
+export const REQUIRED_SSLMODE = 'verify-full';
+export const SYSTEM_CA_BUNDLE = '/etc/ssl/certs/ca-certificates.crt';
+export const REQUIRED_SSLROOTCERT = SYSTEM_CA_BUNDLE;
+export const DIRECT_PORT = '5432';
+export const EXEC_TIMEOUT_MS = 60_000;
+export const VERSION_TIMEOUT_MS = 5_000;
+export const CONNECT_TIMEOUT_SEC = '10';
+export const PSQL_VERSION_RE = /^psql \(PostgreSQL\) (16|17|18)\./;
 
 const IPV4_RE = /^(?:\d{1,3}\.){3}\d{1,3}$/;
-const POOLER_HOST_RE = /^aws-\d+-[a-z0-9-]+\.pooler\.supabase\.com$/i;
-const ALLOWED_SSL = new Set(['require', 'verify-ca', 'verify-full']);
-const WEAK_SSL = new Set(['', 'disable', 'allow', 'prefer', 'allow-off', 'off', 'false', '0']);
+const FORBIDDEN_CHILD_ENV = [
+  'PGHOST', 'PGHOSTADDR', 'PGPORT', 'PGDATABASE', 'PGUSER', 'PGPASSWORD',
+  'PGPASSFILE', 'PGSERVICE', 'PGSERVICEFILE', 'PGOPTIONS', 'PGAPPNAME',
+  'PGSSLMODE', 'PGSSLROOTCERT', 'PGSSLCERT', 'PGSSLKEY', 'PGSSLCRL',
+  'PGREQUIRESSL', 'PGSSLCOMPRESSION', 'PGCHANNELBINDING', 'PGGSSENCMODE',
+  'PGKRBSRVNAME', 'PGCONNECT_TIMEOUT', 'PGREQUIREPEER', 'PGSSLPASSWORD',
+  'PGSSLSNI', 'PGSSLNEGOTIATION', 'PGTARGETSESSIONATTRS', 'PGREALM',
+  'PGDATA', 'PGDATABASEURL', 'DATABASE_URL', 'PSQLRC', 'PSQL_EDITOR',
+  'PGSYSCONFDIR', 'PGLOCALEDIR',
+];
 
 export function loadPins(repoRoot = ROOT) {
   const pinsPath = path.join(repoRoot, 'supabase/security/hosted-tax-profile-containment.pins.json');
   return JSON.parse(fs.readFileSync(pinsPath, 'utf8'));
 }
 
-export function sha256File(filePath) {
-  return createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+export function sha256Bytes(buf) {
+  return createHash('sha256').update(buf).digest('hex');
+}
+
+function sanitizedError(message) {
+  const err = new Error(message);
+  err.sanitized = true;
+  return err;
+}
+
+export function sanitizeText(text, secrets = []) {
+  let out = String(text || '');
+  for (const secret of secrets) {
+    if (secret) out = out.split(String(secret)).join('[redacted]');
+  }
+  out = out.replace(/postgresql:\/\/[^\s'"]+/gi, '[redacted-connection]');
+  out = out.replace(/postgres:\/\/[^\s'"]+/gi, '[redacted-connection]');
+  out = out.replace(/:[^/@\s]{4,}@/g, ':[redacted]@');
+  return out;
+}
+
+export function escapePgPassField(value) {
+  return String(value).replaceAll('\\', '\\\\').replaceAll(':', '\\:');
+}
+
+function isIpHostname(host) {
+  if (!host) return true;
+  if (host === 'localhost' || host === '::1' || host === '[::1]') return true;
+  if (IPV4_RE.test(host)) return true;
+  if (host.includes(':')) return true;
+  return false;
+}
+
+function assertSafeParents(absPath) {
+  let dir = path.dirname(absPath);
+  const seen = new Set();
+  while (!seen.has(dir)) {
+    seen.add(dir);
+    let st;
+    try {
+      st = fs.lstatSync(dir);
+    } catch {
+      throw sanitizedError('psql parent directory is missing');
+    }
+    if (st.isSymbolicLink()) {
+      throw sanitizedError('psql parent directory must not be a symlink');
+    }
+    const worldOrGroupWrite = (st.mode & 0o022) !== 0;
+    const sticky = (st.mode & 0o1000) !== 0;
+    if (worldOrGroupWrite && !sticky) {
+      throw sanitizedError('psql parent directory is group or world writable');
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+}
+
+export function readTrustedFile(filePath, { executable = false } = {}) {
+  if (!path.isAbsolute(filePath)) {
+    throw sanitizedError('path must be absolute');
+  }
+  const resolved = path.resolve(filePath);
+  if (resolved !== filePath) {
+    throw sanitizedError('path must be already absolute and normalized');
+  }
+  let lst;
+  try {
+    lst = fs.lstatSync(filePath);
+  } catch {
+    throw sanitizedError('required file is missing');
+  }
+  if (lst.isSymbolicLink()) {
+    throw sanitizedError('symlinks are rejected');
+  }
+  if (!lst.isFile()) {
+    throw sanitizedError('path must be a regular file');
+  }
+  const real = fs.realpathSync(filePath);
+  if (real !== filePath) {
+    throw sanitizedError('path must not contain symlink components');
+  }
+  if ((lst.mode & 0o022) !== 0) {
+    throw sanitizedError('file is group or world writable');
+  }
+  if (executable && (lst.mode & 0o111) === 0) {
+    throw sanitizedError('file is not executable');
+  }
+  const uid = process.getuid();
+  if (lst.uid !== 0 && lst.uid !== uid) {
+    throw sanitizedError('file owner is not trusted');
+  }
+  assertSafeParents(filePath);
+  const fd = fs.openSync(filePath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+  try {
+    const st = fs.fstatSync(fd);
+    if (!st.isFile() || st.ino !== lst.ino || st.dev !== lst.dev) {
+      throw sanitizedError('file identity changed during open');
+    }
+    const bytes = Buffer.alloc(st.size);
+    let off = 0;
+    while (off < st.size) {
+      const n = fs.readSync(fd, bytes, off, st.size - off, off);
+      if (n <= 0) break;
+      off += n;
+    }
+    if (off !== st.size) {
+      throw sanitizedError('short read of trusted file');
+    }
+    return { bytes, digest: sha256Bytes(bytes), stat: st };
+  } finally {
+    fs.closeSync(fd);
+  }
 }
 
 export function verifyPinnedSqlFiles(repoRoot = ROOT, pins = loadPins(repoRoot)) {
+  const out = {};
   for (const key of ['preflight', 'apply']) {
     const spec = pins.files[key];
-    const full = path.join(repoRoot, spec.path);
-    if (!fs.existsSync(full)) {
-      throw sanitizedError(`pinned ${key} SQL file is missing`);
-    }
     if (path.normalize(spec.path).includes('..') || spec.path.startsWith('/')) {
       throw sanitizedError(`pinned ${key} path is not a repository-relative SQL file`);
     }
@@ -67,44 +199,14 @@ export function verifyPinnedSqlFiles(repoRoot = ROOT, pins = loadPins(repoRoot))
     if (key === 'apply' && spec.path !== 'supabase/security/unapplied-do-not-run/NOT_APPLIED_revoke_postgrest_tax_profiles.sql') {
       throw sanitizedError('pinned apply path is not the reviewed NOT_APPLIED_revoke_postgrest_tax_profiles.sql file');
     }
-    const digest = sha256File(full);
-    if (digest !== spec.sha256) {
+    const full = path.join(repoRoot, spec.path);
+    const trusted = readTrustedFile(full);
+    if (trusted.digest !== spec.sha256) {
       throw sanitizedError(`pinned ${key} SQL SHA-256 mismatch`);
     }
+    out[key] = { ...spec, bytes: trusted.bytes, full };
   }
-}
-
-export function sanitizeText(text, secretUrl) {
-  let out = String(text || '');
-  if (secretUrl) {
-    out = out.split(secretUrl).join('[redacted-connection]');
-  }
-  out = out.replace(/postgresql:\/\/[^\s'"]+/gi, '[redacted-connection]');
-  out = out.replace(/postgres:\/\/[^\s'"]+/gi, '[redacted-connection]');
-  out = out.replace(/:[^/@\s]{4,}@/g, ':[redacted]@');
   return out;
-}
-
-function sanitizedError(message) {
-  const err = new Error(message);
-  err.sanitized = true;
-  return err;
-}
-
-function isIpHostname(host) {
-  if (!host) return true;
-  if (host === 'localhost' || host === '::1' || host === '[::1]') return true;
-  if (IPV4_RE.test(host)) return true;
-  if (host.includes(':')) return true;
-  return false;
-}
-
-function isRdsOrGenericHost(host) {
-  const h = host.toLowerCase();
-  if (h.includes('rds.amazonaws.com') || h.includes('amazonaws.com')) return true;
-  if (h.includes('checksops')) return true;
-  if (h.endsWith('.neon.tech') || h.endsWith('.azure.com') || h.endsWith('.googleapis.com')) return true;
-  return false;
 }
 
 export function validateConnectionUrl(rawUrl, pins = loadPins()) {
@@ -112,6 +214,12 @@ export function validateConnectionUrl(rawUrl, pins = loadPins()) {
     throw sanitizedError(`${URL_ENV} is required`);
   }
   const original = String(rawUrl);
+  if (/[\u0000-\u001f\u007f]/.test(original)) {
+    throw sanitizedError('connection URL contains control characters');
+  }
+  if (original.includes('#')) {
+    throw sanitizedError('connection URL must not contain a fragment');
+  }
   let parsed;
   try {
     parsed = new URL(original);
@@ -122,76 +230,90 @@ export function validateConnectionUrl(rawUrl, pins = loadPins()) {
   if (protocol !== 'postgres' && protocol !== 'postgresql') {
     throw sanitizedError('connection URL protocol must be postgresql');
   }
+  if (parsed.search !== '?sslmode=verify-full') {
+    throw sanitizedError('connection URL must have exactly sslmode=verify-full and no other query parameters');
+  }
+  const sslValues = parsed.searchParams.getAll('sslmode');
+  if (sslValues.length !== 1 || sslValues[0] !== REQUIRED_SSLMODE) {
+    throw sanitizedError('connection URL TLS must be exactly verify-full');
+  }
+  const forbiddenKeys = [
+    'port', 'service', 'passfile', 'options', 'host', 'hostaddr', 'user', 'password',
+    'dbname', 'target_session_attrs', 'replication', 'gssencmode', 'krbsrvname',
+    'requirepeer', 'sslrootcert', 'sslcert', 'sslkey', 'sslcrl', 'sslpassword',
+    'sslnegotiation', 'sslmode', 'sslcompression', 'ssl_min_protocol_version',
+    'channel_binding', 'connect_timeout', 'keepalives', 'application_name',
+    'fallback_application_name', 'client_encoding', 'tty', 'require_auth',
+  ];
+  for (const key of parsed.searchParams.keys()) {
+    if (key !== 'sslmode') {
+      throw sanitizedError('connection URL has a forbidden query parameter');
+    }
+    if (forbiddenKeys.includes(key) && key !== 'sslmode') {
+      throw sanitizedError('connection URL has a forbidden query parameter');
+    }
+  }
+
   const host = (parsed.hostname || '').toLowerCase();
   const database = decodeURIComponent((parsed.pathname || '/').replace(/^\//, ''));
   const username = decodeURIComponent(parsed.username || '');
-  const sslmode = (parsed.searchParams.get('sslmode') || '').toLowerCase();
+  const password = decodeURIComponent(parsed.password || '');
   const expectedRef = pins.expected_project_ref;
   const forbiddenRef = pins.forbidden_project_ref;
+  const directHost = `db.${expectedRef}.supabase.co`;
 
-  for (const key of ['host', 'hostaddr', 'options', 'user', 'password', 'dbname']) {
-    if (parsed.searchParams.has(key)) {
-      throw sanitizedError('connection URL has ambiguous target overrides');
-    }
+  if (!parsed.port || parsed.port !== DIRECT_PORT) {
+    throw sanitizedError('direct connection port must be 5432');
   }
-  const sslValues = parsed.searchParams.getAll('sslmode').map((v) => v.toLowerCase());
-  if (sslValues.length !== 1) {
-    throw sanitizedError('connection URL must include exactly one sslmode');
+  if (!password) {
+    throw sanitizedError('connection password is required');
   }
-  if (WEAK_SSL.has(sslmode) || !ALLOWED_SSL.has(sslmode)) {
-    throw sanitizedError('connection URL TLS is missing or too weak');
+  if (/[\u0000-\u001f\u007f]/.test(password)) {
+    throw sanitizedError('connection password contains invalid characters');
   }
   if (!database || database !== pins.expected_database) {
     throw sanitizedError('connection database name is not postgres');
   }
+  if (parsed.pathname !== '/postgres') {
+    throw sanitizedError('connection database path is invalid');
+  }
   if (isIpHostname(host)) {
     throw sanitizedError('connection host must not be localhost or an IP literal');
-  }
-  if (isRdsOrGenericHost(host)) {
-    throw sanitizedError('connection host is RDS or a non-Supabase PostgreSQL host');
   }
   if (host.includes(forbiddenRef) || username.includes(forbiddenRef)) {
     throw sanitizedError('connection targets the unused Supabase project');
   }
-  if (username.includes('.') && !username.endsWith(`.${expectedRef}`) && username !== expectedRef) {
-    const maybeRef = username.split('.').pop();
-    if (maybeRef && maybeRef !== expectedRef && /^[a-z0-9]{20}$/.test(maybeRef)) {
-      throw sanitizedError('connection username project ref is not production');
-    }
+  if (host !== directHost) {
+    throw sanitizedError('connection host is not the production Supabase direct hostname');
+  }
+  if (username !== 'postgres') {
+    throw sanitizedError('direct connection username shape is invalid');
+  }
+  if (parsed.username !== 'postgres') {
+    throw sanitizedError('direct connection username encoding is invalid');
   }
 
-  let kind;
-  const directHost = `db.${expectedRef}.supabase.co`;
-  if (host === directHost) {
-    kind = 'direct';
-    if (username !== 'postgres') {
-      throw sanitizedError('direct connection username shape is invalid');
-    }
-  } else if (POOLER_HOST_RE.test(host)) {
-    kind = 'pooler';
-    if (username !== `postgres.${expectedRef}`) {
-      throw sanitizedError('pooler connection username does not bind the production project ref');
-    }
-  } else {
-    throw sanitizedError('connection host is not a documented Supabase direct or pooler hostname');
-  }
-
-  const fingerprint = [
-    kind,
+  const fingerprint = ['direct', host, DIRECT_PORT, 'postgres', database, REQUIRED_SSLMODE].join('|');
+  const conn = {
+    kind: 'direct',
     host,
-    parsed.port || '',
-    kind === 'direct' ? 'postgres' : 'postgres.<project_ref>',
+    port: DIRECT_PORT,
     database,
-    sslmode,
-  ].join('|');
-
-  return {
-    kind,
+    user: 'postgres',
+    sslmode: REQUIRED_SSLMODE,
+    sslrootcert: REQUIRED_SSLROOTCERT,
     fingerprint,
     expectedProjectRef: expectedRef,
     expectedDatabase: pins.expected_database,
     expectedOwner: pins.expected_owner,
   };
+  Object.defineProperty(conn, 'password', {
+    value: password,
+    enumerable: false,
+    writable: false,
+    configurable: false,
+  });
+  return Object.freeze(conn);
 }
 
 export function parseCliArgs(argv) {
@@ -222,48 +344,224 @@ export function parseCliArgs(argv) {
   return { mode, authorized, confirm };
 }
 
-export function classifyPreflightOutput(combined) {
-  const text = String(combined || '');
-  const matches = [...text.matchAll(/CLASSIFICATION=([A-Z_/]+)/g)].map((m) => m[1]);
-  if (matches.length !== 1) return 'PARSE_FAILURE';
-  if (matches[0] === 'EXACT_EXPECTED_LEGACY') return 'EXACT_EXPECTED_LEGACY';
-  if (matches[0] === 'ALREADY_CONTAINED') return 'ALREADY_CONTAINED';
-  if (matches[0] === 'UNSAFE/AMBIGUOUS') return 'UNSAFE/AMBIGUOUS';
-  return 'PARSE_FAILURE';
-}
-
-function findPsql(env, spawnImpl) {
-  const override = env.CHECKSOPS_TAX_CONTAINMENT_PSQL;
-  const bin = override || 'psql';
-  const probe = spawnImpl(bin, ['--version'], { encoding: 'utf8' });
-  if (probe.status !== 0) {
-    throw sanitizedError('psql is missing');
+export function parseExactSentinel(stdout, prefix, nonce, allowedResults) {
+  const raw = String(stdout || '');
+  if (raw.includes('\r')) {
+    throw sanitizedError('preflight stdout contains carriage returns');
   }
-  return bin;
+  const lines = raw.split('\n').filter((line) => line.length > 0);
+  if (lines.length !== 1) {
+    throw sanitizedError('expected exactly one sentinel stdout line');
+  }
+  const allowed = new Set(allowedResults);
+  for (const result of allowed) {
+    const expected = `${prefix}|${nonce}|${result}`;
+    if (lines[0] === expected) {
+      return result;
+    }
+  }
+  throw sanitizedError('sentinel line did not match nonce and allowed results');
 }
 
-function runPsqlFile({ spawnImpl, psqlBin, url, filePath, pins }) {
-  const args = [
+export function buildChildEnv(conn, passfile) {
+  const allowed = {
+    LC_ALL: 'C',
+    LANG: 'C',
+    PATH: '',
+    PGHOST: conn.host,
+    PGPORT: conn.port,
+    PGDATABASE: conn.database,
+    PGUSER: conn.user,
+    PGSSLMODE: REQUIRED_SSLMODE,
+    PGSSLROOTCERT: REQUIRED_SSLROOTCERT,
+    PGPASSFILE: passfile,
+    PGCONNECT_TIMEOUT: CONNECT_TIMEOUT_SEC,
+    PGCLIENTENCODING: 'UTF8',
+  };
+  for (const key of FORBIDDEN_CHILD_ENV) {
+    if (Object.hasOwn(allowed, key) && (
+      key === 'PGHOST' || key === 'PGPORT' || key === 'PGDATABASE' || key === 'PGUSER'
+      || key === 'PGSSLMODE' || key === 'PGSSLROOTCERT' || key === 'PGPASSFILE'
+      || key === 'PGCONNECT_TIMEOUT'
+    )) {
+      continue;
+    }
+    if (Object.hasOwn(allowed, key)) {
+      throw sanitizedError('child environment contains a forbidden PostgreSQL variable');
+    }
+  }
+  return allowed;
+}
+
+export function verifyTrustedCaBundle(caPath = SYSTEM_CA_BUNDLE) {
+  if (caPath !== SYSTEM_CA_BUNDLE) {
+    throw sanitizedError('TLS CA bundle path is not the reviewed system store');
+  }
+  readTrustedFile(caPath);
+  return caPath;
+}
+
+export function verifyPsqlBinary(env, spawnImpl = spawnSync) {
+  const rawPath = env[PSQL_PATH_ENV];
+  if (!rawPath) {
+    throw sanitizedError(`${PSQL_PATH_ENV} must be an absolute psql path`);
+  }
+  if (!path.isAbsolute(rawPath) || rawPath !== path.resolve(rawPath)) {
+    throw sanitizedError('psql path must be absolute and normalized');
+  }
+  const expectedSha = String(env[PSQL_SHA_ENV] || '').toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(expectedSha)) {
+    throw sanitizedError(`${PSQL_SHA_ENV} must be the SHA-256 of the psql binary`);
+  }
+  const trusted = readTrustedFile(rawPath, { executable: true });
+  if (trusted.digest !== expectedSha) {
+    throw sanitizedError('psql SHA-256 mismatch');
+  }
+  const probe = spawnImpl(rawPath, ['--version'], {
+    encoding: 'utf8',
+    timeout: VERSION_TIMEOUT_MS,
+    env: { LC_ALL: 'C', LANG: 'C', PATH: '' },
+    input: Buffer.alloc(0),
+    shell: false,
+  });
+  if (probe.error) {
+    throw sanitizedError(probe.error.code === 'ETIMEDOUT' ? 'psql version probe timed out' : 'psql version probe failed');
+  }
+  if (probe.signal) {
+    throw sanitizedError('psql version probe was signaled');
+  }
+  if (probe.status !== 0) {
+    throw sanitizedError('psql version probe failed');
+  }
+  const version = String(probe.stdout || '').trim().split('\n')[0] || '';
+  if (!PSQL_VERSION_RE.test(version)) {
+    throw sanitizedError('psql version is not an approved PostgreSQL 16+ client');
+  }
+  return rawPath;
+}
+
+function createPassfile(conn) {
+  const tmpRoot = os.tmpdir();
+  const home = os.homedir();
+  if (!tmpRoot || tmpRoot === '/' || tmpRoot === home || tmpRoot.startsWith(`${home}${path.sep}`)) {
+    throw sanitizedError('temporary directory is not usable for credentials');
+  }
+  const dir = fs.mkdtempSync(path.join(tmpRoot, 'checksops-tax-pg-'));
+  if (dir === home || dir.startsWith(`${home}${path.sep}`) || dir.includes('~')) {
+    fs.rmSync(dir, { recursive: true, force: true });
+    throw sanitizedError('credential directory must not use HOME');
+  }
+  fs.chmodSync(dir, 0o700);
+  const passPath = path.join(dir, 'pgpass');
+  const line = [
+    escapePgPassField(conn.host),
+    escapePgPassField(conn.port),
+    escapePgPassField(conn.database),
+    escapePgPassField(conn.user),
+    escapePgPassField(conn.password),
+  ].join(':');
+  const fd = fs.openSync(passPath, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_NOFOLLOW, 0o600);
+  try {
+    fs.writeSync(fd, `${line}\n`);
+    fs.fchmodSync(fd, 0o600);
+  } finally {
+    fs.closeSync(fd);
+  }
+  return { dir, passPath };
+}
+
+function removePassfile(handle) {
+  if (!handle) return;
+  try {
+    if (handle.passPath) fs.unlinkSync(handle.passPath);
+  } catch {
+    // still try rmdir
+  }
+  try {
+    if (handle.dir) fs.rmdirSync(handle.dir);
+  } catch {
+    try {
+      if (handle.dir) fs.rmSync(handle.dir, { recursive: true, force: true });
+    } catch {
+      // credential cleanup best effort; do not throw secrets
+    }
+  }
+}
+
+function psqlArgs(pins, nonceName, nonce) {
+  return [
     '-X',
+    '-w',
+    '-q',
+    '-t',
+    '-A',
     '-v', 'ON_ERROR_STOP=1',
     '-v', `expected_project_ref=${pins.expected_project_ref}`,
     '-v', `expected_database=${pins.expected_database}`,
     '-v', `expected_owner=${pins.expected_owner}`,
-    '-d', url,
-    '-f', filePath,
+    '-v', `${nonceName}=${nonce}`,
   ];
+}
+
+function assertSafeChildArgs(args, conn, passPath) {
+  const joined = args.join('\u0000');
+  if (joined.includes(conn.password) || (passPath && joined.includes(passPath))) {
+    throw sanitizedError('child argv leaked a secret');
+  }
+  if (args.includes('-d') || args.includes('-f') || args.includes('--file')) {
+    throw sanitizedError('psql must not receive a URI, -d, or -f path');
+  }
+  for (const arg of args) {
+    if (/^postgres(ql)?:\/\//i.test(arg)) {
+      throw sanitizedError('psql must not receive a URI argument');
+    }
+  }
+}
+
+function runPsqlStdin({
+  spawnImpl,
+  psqlBin,
+  conn,
+  passPath,
+  pins,
+  sqlBytes,
+  nonceName,
+  nonce,
+  timeout = EXEC_TIMEOUT_MS,
+}) {
+  const args = psqlArgs(pins, nonceName, nonce);
+  assertSafeChildArgs(args, conn, passPath);
   const result = spawnImpl(psqlBin, args, {
     encoding: 'utf8',
-    env: { ...process.env, [URL_ENV]: url },
+    timeout,
+    env: buildChildEnv(conn, passPath),
+    input: sqlBytes,
+    shell: false,
   });
-  const stdout = sanitizeText(result.stdout, url);
-  const stderr = sanitizeText(result.stderr, url);
+  const secrets = [conn.password, passPath];
   return {
     status: result.status,
-    stdout,
-    stderr,
-    combined: `${stdout}\n${stderr}`,
+    signal: result.signal,
+    error: result.error,
+    stdout: sanitizeText(result.stdout, secrets),
+    stderr: sanitizeText(result.stderr, secrets),
+    rawArgs: args,
   };
+}
+
+function failClosedFromSpawn(result, label) {
+  if (result.error && result.error.code === 'ETIMEDOUT') {
+    throw sanitizedError(`${label} timed out`);
+  }
+  if (result.error) {
+    throw sanitizedError(`${label} failed to start`);
+  }
+  if (result.signal) {
+    throw sanitizedError(`${label} was signaled`);
+  }
+  if (result.status !== 0) {
+    throw sanitizedError(`${label} failed closed`);
+  }
 }
 
 export function runCli({
@@ -273,32 +571,61 @@ export function runCli({
   repoRoot = ROOT,
   stdout = process.stdout,
   stderr = process.stderr,
+  randomNonce = () => randomBytes(32).toString('hex'),
 } = {}) {
   const writeOut = (msg) => stdout.write(`${msg}\n`);
   const writeErr = (msg) => stderr.write(`${msg}\n`);
+  let passHandle = null;
   try {
     const pins = loadPins(repoRoot);
     const parsedArgs = parseCliArgs(argv);
-    const url = env[URL_ENV];
-    const validated = validateConnectionUrl(url, pins);
-    verifyPinnedSqlFiles(repoRoot, pins);
-    const psqlBin = findPsql(env, spawnImpl);
-    const preflightPath = path.join(repoRoot, pins.files.preflight.path);
-    const applyPath = path.join(repoRoot, pins.files.apply.path);
+    const capturedUrl = env[URL_ENV];
+    const conn = validateConnectionUrl(capturedUrl, pins);
+    verifyTrustedCaBundle(SYSTEM_CA_BUNDLE);
+    const sqlFiles = verifyPinnedSqlFiles(repoRoot, pins);
+    const psqlBin = verifyPsqlBinary(env, spawnImpl);
+    passHandle = createPassfile(conn);
+
+    const runPhase = (kind) => {
+      if (env[URL_ENV] !== capturedUrl) {
+        throw sanitizedError('connection value changed after capture');
+      }
+      const nonce = randomNonce();
+      if (!/^[0-9a-f]{64}$/.test(nonce)) {
+        throw sanitizedError('preflight nonce is invalid');
+      }
+      const nonceName = kind === 'preflight' ? 'checksops_preflight_nonce' : 'checksops_apply_nonce';
+      const result = runPsqlStdin({
+        spawnImpl,
+        psqlBin,
+        conn,
+        passPath: passHandle.passPath,
+        pins,
+        sqlBytes: sqlFiles[kind].bytes,
+        nonceName,
+        nonce,
+      });
+      failClosedFromSpawn(result, kind);
+      if (String(result.stderr || '').trim() !== '') {
+        throw sanitizedError(`${kind} produced unexpected stderr`);
+      }
+      if (kind === 'preflight') {
+        const classification = parseExactSentinel(
+          result.stdout,
+          PREFLIGHT_SENTINEL_PREFIX,
+          nonce,
+          ['EXACT_EXPECTED_LEGACY', 'ALREADY_CONTAINED', 'UNSAFE/AMBIGUOUS'],
+        );
+        return { classification, result, nonce };
+      }
+      parseExactSentinel(result.stdout, APPLY_SENTINEL_PREFIX, nonce, ['ok']);
+      return { result, nonce };
+    };
 
     if (parsedArgs.mode === 'preflight') {
-      const pre = runPsqlFile({
-        spawnImpl, psqlBin, url, filePath: preflightPath, pins,
-      });
-      writeOut(pre.stdout.trimEnd());
-      if (pre.stderr.trim()) writeErr(pre.stderr.trimEnd());
-      if (pre.status !== 0) {
-        writeErr('preflight failed closed');
-        return 1;
-      }
-      const classification = classifyPreflightOutput(pre.combined);
-      writeOut(`WRAPPER_CLASSIFICATION=${classification}`);
-      return classification === 'PARSE_FAILURE' ? 1 : 0;
+      const pre = runPhase('preflight');
+      writeOut(`WRAPPER_CLASSIFICATION=${pre.classification}`);
+      return pre.classification === 'UNSAFE/AMBIGUOUS' ? 1 : 0;
     }
 
     if (parsedArgs.mode !== 'apply') {
@@ -307,46 +634,19 @@ export function runCli({
     if (!parsedArgs.authorized || parsedArgs.confirm !== APPLY_CONFIRM_PHRASE) {
       throw sanitizedError('apply requires the authorization flag and exact confirmation phrase');
     }
-
-    const urlAfterAuth = env[URL_ENV];
-    const revalidated = validateConnectionUrl(urlAfterAuth, pins);
-    if (revalidated.fingerprint !== validated.fingerprint || urlAfterAuth !== url) {
-      throw sanitizedError('connection value changed between validation and apply');
-    }
-
-    const pre = runPsqlFile({
-      spawnImpl, psqlBin, url: urlAfterAuth, filePath: preflightPath, pins,
-    });
-    if (pre.status !== 0) {
-      writeErr('preflight failed closed; apply refused');
+    const pre = runPhase('preflight');
+    if (pre.classification !== 'EXACT_EXPECTED_LEGACY') {
+      writeErr(`apply refused: preflight classification is ${pre.classification}`);
       return 1;
     }
-    const classification = classifyPreflightOutput(pre.combined);
-    if (classification !== 'EXACT_EXPECTED_LEGACY') {
-      writeErr(`apply refused: preflight classification is ${classification}`);
-      return 1;
-    }
-    const urlBeforeApply = env[URL_ENV];
-    const third = validateConnectionUrl(urlBeforeApply, pins);
-    if (third.fingerprint !== validated.fingerprint || urlBeforeApply !== url) {
-      throw sanitizedError('connection value changed between preflight and apply');
-    }
-    verifyPinnedSqlFiles(repoRoot, pins);
-
-    const applied = runPsqlFile({
-      spawnImpl, psqlBin, url: urlBeforeApply, filePath: applyPath, pins,
-    });
-    writeOut(applied.stdout.trimEnd());
-    if (applied.stderr.trim()) writeErr(applied.stderr.trimEnd());
-    if (applied.status !== 0) {
-      writeErr('apply failed closed');
-      return 1;
-    }
+    runPhase('apply');
     writeOut('WRAPPER_APPLY=ok');
     return 0;
   } catch (err) {
     writeErr(err && err.sanitized ? err.message : 'operator wrapper failed closed');
     return 1;
+  } finally {
+    removePassfile(passHandle);
   }
 }
 
