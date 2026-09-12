@@ -49,6 +49,26 @@ DO $need_owner$ BEGIN RAISE EXCEPTION 'recipient_tax_profiles containment failed
 DO $need_nonce$ BEGIN RAISE EXCEPTION 'recipient_tax_profiles containment failed closed: apply nonce was not supplied'; END $need_nonce$;
 \endif
 
+-- Nonce format: interpolate outside PL/pgSQL (psql does not expand
+-- :'var' inside DO), then reject anything that is not exactly 64
+-- lowercase hexadecimal characters. Invalid values fail closed here
+-- and never emit the success sentinel.
+SELECT set_config(
+  'checksops.apply_nonce',
+  :'checksops_apply_nonce',
+  false
+);
+
+DO $nonce_fmt$
+DECLARE
+  n text := current_setting('checksops.apply_nonce', true);
+BEGIN
+  IF n IS NULL OR n !~ '^[0-9a-f]{64}$' THEN
+    RAISE EXCEPTION 'recipient_tax_profiles containment failed closed: apply nonce is invalid';
+  END IF;
+END
+$nonce_fmt$;
+
 \set QUIET on
 
 SELECT set_config('checksops.expected_project_ref', :'expected_project_ref', false);
