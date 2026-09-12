@@ -285,6 +285,7 @@ export const persistPhysicalEndorsementOnCheck = async (client, {
   mapping,
   notes,
   spoof,
+  previousCheck = {},
 } = {}) => {
   const note = notes || 'Physical endorsement confirmed on check';
   const signedAt = new Date().toISOString();
@@ -368,7 +369,7 @@ export const persistPhysicalEndorsementOnCheck = async (client, {
       spoofFieldsIgnored: spoof,
     };
   }
-  const completion = await completionWithoutAdvance(client, endorsementRow.check_id);
+  const completion = await completionWithoutAdvance(client, endorsementRow.check_id, previousCheck);
   return {
     ok: true,
     statusCode: 200,
@@ -415,7 +416,44 @@ const auditEndorsement = async (client, row) => {
   );
 };
 
-const completionWithoutAdvance = async (client, checkId) => {
+const revertUnauthorizedDepositAdvance = async (client, checkId, previous = {}) => {
+  if (!checkId) return;
+  const previousStatus = String(previous.status || '');
+  const previousStage = String(previous.check_stage || '');
+  if (['deposited', 'funds_released', 'disbursed_externally'].includes(previousStatus) || previousStage === 'deposited') {
+    return;
+  }
+  const current = (await client.query(
+    `SELECT status, check_stage, deposited_at
+     FROM public.check_intake_items WHERE id = $1::uuid LIMIT 1`,
+    [checkId],
+  )).rows[0];
+  if (!current || current.deposited_at) return;
+  const advanced = current.check_stage === 'ready_for_deposit' || current.status === 'approved_for_deposit';
+  if (!advanced) return;
+  const restoreStatus = previousStatus || 'endorsements_in_progress';
+  const restoreStage = previousStage || 'endorsing';
+  if (restoreStatus === 'approved_for_deposit' || restoreStage === 'ready_for_deposit') return;
+  await client.query(
+    `UPDATE public.check_intake_items
+     SET status = $2,
+         check_stage = $3::check_stage,
+         updated_at = now()
+     WHERE id = $1::uuid
+       AND deposited_at IS NULL
+       AND status IS DISTINCT FROM 'deposited'`,
+    [checkId, restoreStatus, restoreStage],
+  );
+  await client.query(
+    `UPDATE public.claim_checks
+     SET check_stage = $2::check_stage, updated_at = now()
+     WHERE check_intake_item_id = $1::uuid
+       AND check_stage IS DISTINCT FROM 'deposited'`,
+    [checkId, restoreStage],
+  );
+};
+
+const completionWithoutAdvance = async (client, checkId, previousCheck = {}) => {
   const rows = (await safeQuery(
     client,
     `SELECT status, payee_type FROM public.check_endorsements WHERE check_id = $1::uuid`,
@@ -429,6 +467,7 @@ const completionWithoutAdvance = async (client, checkId) => {
       [checkId],
     );
   }
+  await revertUnauthorizedDepositAdvance(client, checkId, previousCheck);
   return result;
 };
 
@@ -1013,6 +1052,7 @@ export const runAuthenticatedEndorsement = async ({
     mapping,
     notes: body.notes || 'Physical endorsement confirmed on check',
     spoof,
+    previousCheck: check,
   });
 };
 
