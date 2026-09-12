@@ -21,15 +21,15 @@
       "jsx_areas_1_to_8": 929,
       "check_center": 414,
       "extra_pages": 56,
-      "total_unique_ids": 1399,
+      "total_unique_ids": 1421,
       "by_module": {
         "admin": 152,
-        "settings": 230,
-        "payments_wallet": 311,
+        "settings": 231,
+        "payments_wallet": 312,
         "mortgage_ops": 21,
         "homeowner": 171,
         "public": 107,
-        "check_center": 370,
+        "check_center": 390,
         "extra_public_or_auth": 37
       }
     },
@@ -39,14 +39,102 @@
       "Check Center was omitted from the 932-row admin/settings/payments/public crawl and is added as CC-* IDs.",
       "Extra pages (reset-password, unsubscribe, public invoice, pay-setup, verify-account, Auth, NotFound) added as X-* IDs.",
       "No prior control IDs were found as deleted routes; /forgot-password still redirects to /login.",
-      "Granularity increase is not the same as net-new product surfaces. newly_discovered=true marks IDs absent from the 932-area file or extra pages."
+      "Granularity increase is not the same as net-new product surfaces. newly_discovered=true marks IDs absent from the 932-area file or extra pages.",
+      "Pass 3 added 22 IDs omitted from the JSX crawl: Manager subtabs (P3-MGR-*), BankDepositReconciliation inner (P3-BD-*), and 390px shells (P3-MOB-*). Denominator 1399 → 1421."
     ],
     "removed_since_prior": [
       {
         "note": "No routed screens from the 2026-09-11 inventory were deleted. /forgot-password remains a Navigate to /login.",
         "controls": []
       }
-    ]
+    ],
+    "pass3_applied_at": "2026-09-12T00:52:01.084Z",
+    "result_counts": {
+      "UNTESTED": 1151,
+      "PASS": 231,
+      "FAIL": 8,
+      "BLOCKED": 30,
+      "N_A": 1
+    },
+    "pass3_by_module": {
+      "admin": {
+        "n": 152,
+        "PASS": 36,
+        "FAIL": 0,
+        "BLOCKED": 0,
+        "N_A": 0,
+        "UNTESTED": 116
+      },
+      "settings": {
+        "n": 231,
+        "PASS": 16,
+        "FAIL": 4,
+        "BLOCKED": 4,
+        "N_A": 0,
+        "UNTESTED": 207
+      },
+      "payments_wallet": {
+        "n": 312,
+        "PASS": 30,
+        "FAIL": 0,
+        "BLOCKED": 5,
+        "N_A": 0,
+        "UNTESTED": 277
+      },
+      "mortgage_ops": {
+        "n": 21,
+        "PASS": 4,
+        "FAIL": 0,
+        "BLOCKED": 13,
+        "N_A": 0,
+        "UNTESTED": 4
+      },
+      "homeowner": {
+        "n": 171,
+        "PASS": 19,
+        "FAIL": 0,
+        "BLOCKED": 4,
+        "N_A": 0,
+        "UNTESTED": 148
+      },
+      "public": {
+        "n": 107,
+        "PASS": 60,
+        "FAIL": 1,
+        "BLOCKED": 2,
+        "N_A": 0,
+        "UNTESTED": 44
+      },
+      "check_center": {
+        "n": 390,
+        "PASS": 66,
+        "FAIL": 1,
+        "BLOCKED": 2,
+        "N_A": 1,
+        "UNTESTED": 320
+      },
+      "extra_public_or_auth": {
+        "n": 37,
+        "PASS": 0,
+        "FAIL": 2,
+        "BLOCKED": 0,
+        "N_A": 0,
+        "UNTESTED": 35
+      }
+    },
+    "pass3_remaining_untested": {
+      "settings": 207,
+      "check_center": 283,
+      "manager": 44,
+      "mortgage_ops": 4,
+      "homeowner": 148,
+      "payments_financials": 244,
+      "wallet_moov": 25,
+      "admin": 116,
+      "public_token": 79,
+      "mobile": 1,
+      "other": 0
+    }
   },
   "controls": [
     {
@@ -61,10 +149,14 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "unauth privileged URL",
+      "role": "anon",
+      "actual_behavior": "Access Restricted or Not authorized toast"
     },
     {
       "id": "A1-002",
@@ -146,10 +238,14 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked tabs / refresh / new tenant cancelled / logout later",
+      "role": "platform_owner",
+      "route": "/admin/tenants"
     },
     {
       "id": "A1-007",
@@ -163,10 +259,14 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked tabs / refresh / new tenant cancelled / logout later",
+      "role": "platform_owner",
+      "route": "/admin/tenants"
     },
     {
       "id": "A1-008",
@@ -180,10 +280,14 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked tabs / refresh / new tenant cancelled / logout later",
+      "role": "platform_owner",
+      "route": "/admin/tenants"
     },
     {
       "id": "A1-009",
@@ -197,10 +301,14 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked tabs / refresh / new tenant cancelled / logout later",
+      "role": "platform_owner",
+      "route": "/admin/tenants"
     },
     {
       "id": "A1-010",
@@ -214,10 +322,14 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked tabs / refresh / new tenant cancelled / logout later",
+      "role": "platform_owner",
+      "route": "/admin/tenants"
     },
     {
       "id": "A1-011",
@@ -231,10 +343,14 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked tabs / refresh / new tenant cancelled / logout later",
+      "role": "platform_owner",
+      "route": "/admin/tenants"
     },
     {
       "id": "A1-012",
@@ -248,10 +364,14 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked tabs / refresh / new tenant cancelled / logout later",
+      "role": "platform_owner",
+      "route": "/admin/tenants"
     },
     {
       "id": "A1-013",
@@ -265,10 +385,14 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked tabs / refresh / new tenant cancelled / logout later",
+      "role": "platform_owner",
+      "route": "/admin/tenants"
     },
     {
       "id": "A1-014",
@@ -282,10 +406,14 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked tabs / refresh / new tenant cancelled / logout later",
+      "role": "platform_owner",
+      "route": "/admin/tenants"
     },
     {
       "id": "A1-015",
@@ -367,10 +495,14 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "Freedom manage tenant inner tabs viewed",
+      "role": "platform_owner",
+      "route": "/admin/tenants"
     },
     {
       "id": "A1-020",
@@ -384,10 +516,14 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "Freedom manage tenant inner tabs viewed",
+      "role": "platform_owner",
+      "route": "/admin/tenants"
     },
     {
       "id": "A1-021",
@@ -401,10 +537,14 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "Freedom manage tenant inner tabs viewed",
+      "role": "platform_owner",
+      "route": "/admin/tenants"
     },
     {
       "id": "A1-022",
@@ -418,10 +558,14 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "Freedom manage tenant inner tabs viewed",
+      "role": "platform_owner",
+      "route": "/admin/tenants"
     },
     {
       "id": "A1-023",
@@ -435,10 +579,14 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "Freedom manage tenant inner tabs viewed",
+      "role": "platform_owner",
+      "route": "/admin/tenants"
     },
     {
       "id": "A1-024",
@@ -469,10 +617,14 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "Freedom manage tenant inner tabs viewed",
+      "role": "platform_owner",
+      "route": "/admin/tenants"
     },
     {
       "id": "A1-026",
@@ -1251,10 +1403,14 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "Freedom manage tenant inner tabs viewed",
+      "role": "platform_owner",
+      "route": "/admin/tenants"
     },
     {
       "id": "A1-072",
@@ -1268,10 +1424,14 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "Freedom manage tenant inner tabs viewed",
+      "role": "platform_owner",
+      "route": "/admin/tenants"
     },
     {
       "id": "A1-073",
@@ -1285,10 +1445,14 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "Freedom manage tenant inner tabs viewed",
+      "role": "platform_owner",
+      "route": "/admin/tenants"
     },
     {
       "id": "A1-074",
@@ -1302,10 +1466,14 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "Freedom manage tenant inner tabs viewed",
+      "role": "platform_owner",
+      "route": "/admin/tenants"
     },
     {
       "id": "A1-075",
@@ -1455,10 +1623,13 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "Banking/Wallet panels loaded authorized",
+      "role": "platform_owner"
     },
     {
       "id": "A1-084",
@@ -1812,10 +1983,13 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "Banking/Wallet panels loaded authorized",
+      "role": "platform_owner"
     },
     {
       "id": "A1-105",
@@ -1999,10 +2173,13 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "Export CSV",
+      "role": "platform_owner"
     },
     {
       "id": "A1-116",
@@ -2033,10 +2210,14 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "unauth privileged URL",
+      "role": "anon",
+      "actual_behavior": "Access Restricted or Not authorized toast"
     },
     {
       "id": "A2-002",
@@ -2050,10 +2231,14 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "platform_owner",
+      "route": "/admin/financial-model"
     },
     {
       "id": "A2-003",
@@ -2067,10 +2252,14 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "platform_owner",
+      "route": "/admin/financial-model"
     },
     {
       "id": "A2-004",
@@ -2084,10 +2273,14 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "platform_owner",
+      "route": "/admin/financial-model"
     },
     {
       "id": "A2-005",
@@ -2118,10 +2311,14 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "platform_owner",
+      "route": "/admin/financial-model"
     },
     {
       "id": "A2-007",
@@ -2135,10 +2332,14 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "platform_owner",
+      "route": "/admin/financial-model"
     },
     {
       "id": "A2-008",
@@ -2152,10 +2353,14 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "platform_owner",
+      "route": "/admin/financial-model"
     },
     {
       "id": "A2-009",
@@ -2186,10 +2391,14 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "platform_owner",
+      "route": "/admin/financial-model"
     },
     {
       "id": "A2-011",
@@ -2203,10 +2412,14 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "platform_owner",
+      "route": "/admin/financial-model"
     },
     {
       "id": "A2-012",
@@ -2237,10 +2450,14 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "platform_owner",
+      "route": "/admin/financial-model"
     },
     {
       "id": "A2-014",
@@ -2373,10 +2590,14 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "unauth privileged URL",
+      "role": "anon",
+      "actual_behavior": "Access Restricted or Not authorized toast"
     },
     {
       "id": "A3-002",
@@ -2390,10 +2611,14 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "personnel viewed; Hire not clicked",
+      "role": "platform_owner",
+      "route": "/admin/mortgage-ops"
     },
     {
       "id": "A3-003",
@@ -2407,10 +2632,14 @@
       "module": "admin",
       "prior_bucket": "prior_admin_70",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "personnel viewed; Hire not clicked",
+      "role": "platform_owner",
+      "route": "/admin/mortgage-ops"
     },
     {
       "id": "A3-004",
@@ -3359,10 +3588,17 @@
       "module": "settings",
       "prior_bucket": "prior_settings_79",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "FAIL",
+      "evidence": "/opt/cursor/artifacts/pass3_c1c_branding_freedom_name.webp",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "physical_action": "opened Branding & Email; compared UI vs company_branding table and tenants.name",
+      "defect_id": "P2-c1c-branding-freedom-placeholders",
+      "role": "c1c_admin",
+      "route": "/c1c/settings",
+      "actual_behavior": "UI shows Freedom Claims Adjusting / 123 Main St Suite 100 Philadelphia / (555) 123-4567 / claims@freedomclaims.com matching hardcoded placeholders in CompanyBrandingSettings.tsx. company_branding returns 0 rows for C1C and Freedom. tenants.name remains Condition One Commercial. NOT stored C1C tenant configuration.",
+      "expected_behavior": "C1C branding empty or Condition One Commercial"
     },
     {
       "id": "A4-044",
@@ -3376,10 +3612,17 @@
       "module": "settings",
       "prior_bucket": "prior_settings_79",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "FAIL",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/settings",
+      "physical_action": "observed Address/Phone/Email branding fields",
+      "expected_behavior": "C1C-neutral placeholders or stored C1C values",
+      "actual_behavior": "empty values with Freedom-specific placeholders; Save not clicked",
+      "defect_id": "P2-c1c-branding-freedom-placeholders"
     },
     {
       "id": "A4-045",
@@ -3393,10 +3636,17 @@
       "module": "settings",
       "prior_bucket": "prior_settings_79",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "FAIL",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/settings",
+      "physical_action": "observed Address/Phone/Email branding fields",
+      "expected_behavior": "C1C-neutral placeholders or stored C1C values",
+      "actual_behavior": "empty values with Freedom-specific placeholders; Save not clicked",
+      "defect_id": "P2-c1c-branding-freedom-placeholders"
     },
     {
       "id": "A4-046",
@@ -3410,10 +3660,17 @@
       "module": "settings",
       "prior_bucket": "prior_settings_79",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "FAIL",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/settings",
+      "physical_action": "observed Address/Phone/Email branding fields",
+      "expected_behavior": "C1C-neutral placeholders or stored C1C values",
+      "actual_behavior": "empty values with Freedom-specific placeholders; Save not clicked",
+      "defect_id": "P2-c1c-branding-freedom-placeholders"
     },
     {
       "id": "A4-047",
@@ -3427,10 +3684,17 @@
       "module": "settings",
       "prior_bucket": "prior_settings_79",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "PASS",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/settings",
+      "physical_action": "viewed logo/letterhead uploads, invoice footer/terms/accent/theme; no upload no save",
+      "expected_behavior": "controls visible",
+      "actual_behavior": "visible; uploads not performed",
+      "defect_id": null
     },
     {
       "id": "A4-048",
@@ -3444,10 +3708,17 @@
       "module": "settings",
       "prior_bucket": "prior_settings_79",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "PASS",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/settings",
+      "physical_action": "viewed logo/letterhead uploads, invoice footer/terms/accent/theme; no upload no save",
+      "expected_behavior": "controls visible",
+      "actual_behavior": "visible; uploads not performed",
+      "defect_id": null
     },
     {
       "id": "A4-049",
@@ -3461,10 +3732,17 @@
       "module": "settings",
       "prior_bucket": "prior_settings_79",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "PASS",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/settings",
+      "physical_action": "viewed logo/letterhead uploads, invoice footer/terms/accent/theme; no upload no save",
+      "expected_behavior": "controls visible",
+      "actual_behavior": "visible; uploads not performed",
+      "defect_id": null
     },
     {
       "id": "A4-050",
@@ -3478,10 +3756,17 @@
       "module": "settings",
       "prior_bucket": "prior_settings_79",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "PASS",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/settings",
+      "physical_action": "viewed logo/letterhead uploads, invoice footer/terms/accent/theme; no upload no save",
+      "expected_behavior": "controls visible",
+      "actual_behavior": "visible; uploads not performed",
+      "defect_id": null
     },
     {
       "id": "A4-051",
@@ -3495,10 +3780,17 @@
       "module": "settings",
       "prior_bucket": "prior_settings_79",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "PASS",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/settings",
+      "physical_action": "viewed logo/letterhead uploads, invoice footer/terms/accent/theme; no upload no save",
+      "expected_behavior": "controls visible",
+      "actual_behavior": "visible; uploads not performed",
+      "defect_id": null
     },
     {
       "id": "A4-052",
@@ -3512,10 +3804,17 @@
       "module": "settings",
       "prior_bucket": "prior_settings_79",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "PASS",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/settings",
+      "physical_action": "viewed logo/letterhead uploads, invoice footer/terms/accent/theme; no upload no save",
+      "expected_behavior": "controls visible",
+      "actual_behavior": "visible; uploads not performed",
+      "defect_id": null
     },
     {
       "id": "A4-053",
@@ -3529,10 +3828,17 @@
       "module": "settings",
       "prior_bucket": "prior_settings_79",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "PASS",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/settings",
+      "physical_action": "viewed logo/letterhead uploads, invoice footer/terms/accent/theme; no upload no save",
+      "expected_behavior": "controls visible",
+      "actual_behavior": "visible; uploads not performed",
+      "defect_id": null
     },
     {
       "id": "A4-054",
@@ -3546,10 +3852,17 @@
       "module": "settings",
       "prior_bucket": "prior_settings_79",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "PASS",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/settings",
+      "physical_action": "viewed logo/letterhead uploads, invoice footer/terms/accent/theme; no upload no save",
+      "expected_behavior": "controls visible",
+      "actual_behavior": "visible; uploads not performed",
+      "defect_id": null
     },
     {
       "id": "A4-055",
@@ -3563,10 +3876,17 @@
       "module": "settings",
       "prior_bucket": "prior_settings_79",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "BLOCKED",
       "evidence": null,
-      "blocker": null,
-      "newly_discovered": false
+      "blocker": "Save Company Settings would insert company_branding while Freedom placeholders are displayed; skipped",
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/settings",
+      "physical_action": "did not click Save Company Settings",
+      "expected_behavior": null,
+      "actual_behavior": null,
+      "defect_id": null
     },
     {
       "id": "A4-056",
@@ -3580,10 +3900,17 @@
       "module": "settings",
       "prior_bucket": "prior_settings_79",
       "safety": "provider_blocked",
-      "result": "UNTESTED",
+      "result": "BLOCKED",
       "evidence": null,
-      "blocker": null,
-      "newly_discovered": false
+      "blocker": "Save KYC would persist identity documents/fields",
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/settings",
+      "physical_action": "Compliance tab viewed Identity verified; Save KYC not clicked",
+      "expected_behavior": null,
+      "actual_behavior": null,
+      "defect_id": null
     },
     {
       "id": "A4-057",
@@ -4056,10 +4383,17 @@
       "module": "settings",
       "prior_bucket": "prior_settings_79",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "PASS",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/settings",
+      "physical_action": "In-App Notifications toggle off → Save Preferences → refresh → restore on → Save",
+      "expected_behavior": "preference persists and restores",
+      "actual_behavior": "toggle saved and restored without error",
+      "defect_id": null
     },
     {
       "id": "A4-085",
@@ -4073,10 +4407,17 @@
       "module": "settings",
       "prior_bucket": "prior_settings_79",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "PASS",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/settings",
+      "physical_action": "observed Email Notifications switch; not mutated (email workstream)",
+      "expected_behavior": "visible switch",
+      "actual_behavior": "visible; left unchanged",
+      "defect_id": null
     },
     {
       "id": "A4-086",
@@ -4090,10 +4431,17 @@
       "module": "settings",
       "prior_bucket": "prior_settings_79",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "PASS",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/settings",
+      "physical_action": "observed SMS Notifications switch; not mutated",
+      "expected_behavior": "visible switch",
+      "actual_behavior": "visible; left unchanged",
+      "defect_id": null
     },
     {
       "id": "A4-087",
@@ -4107,10 +4455,17 @@
       "module": "settings",
       "prior_bucket": "prior_settings_79",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "PASS",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/settings",
+      "physical_action": "In-App Notifications toggle off → Save Preferences → refresh → restore on → Save",
+      "expected_behavior": "preference persists and restores",
+      "actual_behavior": "toggle saved and restored without error",
+      "defect_id": null
     },
     {
       "id": "A4-088",
@@ -4498,10 +4853,17 @@
       "module": "settings",
       "prior_bucket": "prior_settings_79",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "PASS",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/settings",
+      "physical_action": "Referrals copy code",
+      "expected_behavior": "copies referral code",
+      "actual_behavior": "Copied toast; code CONDIT0399 (Profile also showed CONDIT6399 on tenant row — display vs copy)",
+      "defect_id": null
     },
     {
       "id": "A4-111",
@@ -4515,10 +4877,17 @@
       "module": "settings",
       "prior_bucket": "prior_settings_79",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "PASS",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/settings",
+      "physical_action": "Referrals copy code",
+      "expected_behavior": "copies referral code",
+      "actual_behavior": "Copied toast; code CONDIT0399 (Profile also showed CONDIT6399 on tenant row — display vs copy)",
+      "defect_id": null
     },
     {
       "id": "A4-112",
@@ -4532,10 +4901,17 @@
       "module": "settings",
       "prior_bucket": "prior_settings_79",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "PASS",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/settings",
+      "physical_action": "observed Apply Discount input; did not apply",
+      "expected_behavior": "visible",
+      "actual_behavior": "Referral Applied CODE REDEEMED already; input left unchanged",
+      "defect_id": null
     },
     {
       "id": "A4-113",
@@ -4549,10 +4925,17 @@
       "module": "settings",
       "prior_bucket": "prior_settings_79",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "BLOCKED",
       "evidence": null,
-      "blocker": null,
-      "newly_discovered": false
+      "blocker": "Apply Discount would mutate billing; already redeemed",
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/settings",
+      "physical_action": "not clicked",
+      "expected_behavior": null,
+      "actual_behavior": null,
+      "defect_id": null
     },
     {
       "id": "A4-114",
@@ -6300,10 +6683,17 @@
       "module": "settings",
       "prior_bucket": "prior_settings_79",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "BLOCKED",
       "evidence": null,
-      "blocker": null,
-      "newly_discovered": false
+      "blocker": "Create & Send Invite would email; email/SES workstream",
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/settings",
+      "physical_action": "opened Users Add dialog; did not send",
+      "expected_behavior": null,
+      "actual_behavior": null,
+      "defect_id": null
     },
     {
       "id": "A4-217",
@@ -6555,10 +6945,14 @@
       "module": "payments_wallet",
       "prior_bucket": "prior_payments_wallet_54",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "c1c_admin",
+      "route": "/c1c/payments"
     },
     {
       "id": "A5-002",
@@ -6572,10 +6966,14 @@
       "module": "payments_wallet",
       "prior_bucket": "prior_payments_wallet_54",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "c1c_admin",
+      "route": "/c1c/payments"
     },
     {
       "id": "A5-003",
@@ -6589,10 +6987,14 @@
       "module": "payments_wallet",
       "prior_bucket": "prior_payments_wallet_54",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "c1c_admin",
+      "route": "/c1c/payments"
     },
     {
       "id": "A5-004",
@@ -6606,10 +7008,14 @@
       "module": "payments_wallet",
       "prior_bucket": "prior_payments_wallet_54",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "c1c_admin",
+      "route": "/c1c/payments"
     },
     {
       "id": "A5-005",
@@ -6623,10 +7029,14 @@
       "module": "payments_wallet",
       "prior_bucket": "prior_payments_wallet_54",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "c1c_admin",
+      "route": "/c1c/payments"
     },
     {
       "id": "A5-006",
@@ -6640,10 +7050,14 @@
       "module": "payments_wallet",
       "prior_bucket": "prior_payments_wallet_54",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "c1c_admin",
+      "route": "/c1c/payments"
     },
     {
       "id": "A5-007",
@@ -6657,10 +7071,14 @@
       "module": "payments_wallet",
       "prior_bucket": "prior_payments_wallet_54",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "page + add funds cancelled",
+      "role": "c1c_admin",
+      "route": "/c1c/wallet-ops"
     },
     {
       "id": "A5-008",
@@ -6674,10 +7092,14 @@
       "module": "payments_wallet",
       "prior_bucket": "prior_payments_wallet_54",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "page + add funds cancelled",
+      "role": "c1c_admin",
+      "route": "/c1c/wallet-ops"
     },
     {
       "id": "A5-009",
@@ -6691,10 +7113,14 @@
       "module": "payments_wallet",
       "prior_bucket": "prior_payments_wallet_54",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "page + add funds cancelled",
+      "role": "c1c_admin",
+      "route": "/c1c/wallet-ops"
     },
     {
       "id": "A5-010",
@@ -6708,10 +7134,17 @@
       "module": "payments_wallet",
       "prior_bucket": "prior_payments_wallet_54",
       "safety": "provider_blocked",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass3_c1c_wallet_add_funds_cancel.webp",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/wallet-ops",
+      "physical_action": "Add funds dialog; typed 0, 0.01, 999999.99; Cancel/X",
+      "expected_behavior": "validation; no ACH",
+      "actual_behavior": "Operating balance dialog $0.00 Not set up; amount field validation error on invalid/empty; closed without Add funds from bank",
+      "defect_id": null
     },
     {
       "id": "A5-011",
@@ -6810,10 +7243,17 @@
       "module": "payments_wallet",
       "prior_bucket": "prior_payments_wallet_54",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "PASS",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/payments",
+      "physical_action": "Invoices Refresh",
+      "expected_behavior": "refresh control works or fail-closes",
+      "actual_behavior": "toast Invoice error - Set up your payment account first",
+      "defect_id": null
     },
     {
       "id": "A5-017",
@@ -6827,10 +7267,17 @@
       "module": "payments_wallet",
       "prior_bucket": "prior_payments_wallet_54",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "PASS",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/payments",
+      "physical_action": "New Invoice fill E2E Invoice / e2e-invoice@example.invalid; amounts 0, 0.01, 999999.99; not Send",
+      "expected_behavior": "form accepts values; cancel discards",
+      "actual_behavior": "0 accepted; 0.01 displayed; 999999.99 total $999,999.99; dialog closed without send",
+      "defect_id": null
     },
     {
       "id": "A5-018",
@@ -6844,10 +7291,17 @@
       "module": "payments_wallet",
       "prior_bucket": "prior_payments_wallet_54",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "PASS",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/payments",
+      "physical_action": "invoice customer/amount fields filled then discarded",
+      "expected_behavior": "editable",
+      "actual_behavior": "editable; not persisted",
+      "defect_id": null
     },
     {
       "id": "A5-019",
@@ -6861,10 +7315,17 @@
       "module": "payments_wallet",
       "prior_bucket": "prior_payments_wallet_54",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "PASS",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/payments",
+      "physical_action": "invoice customer/amount fields filled then discarded",
+      "expected_behavior": "editable",
+      "actual_behavior": "editable; not persisted",
+      "defect_id": null
     },
     {
       "id": "A5-020",
@@ -6929,10 +7390,17 @@
       "module": "payments_wallet",
       "prior_bucket": "prior_payments_wallet_54",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "PASS",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/payments",
+      "physical_action": "invoice customer/amount fields filled then discarded",
+      "expected_behavior": "editable",
+      "actual_behavior": "editable; not persisted",
+      "defect_id": null
     },
     {
       "id": "A5-024",
@@ -6946,10 +7414,17 @@
       "module": "payments_wallet",
       "prior_bucket": "prior_payments_wallet_54",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "PASS",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/payments",
+      "physical_action": "invoice customer/amount fields filled then discarded",
+      "expected_behavior": "editable",
+      "actual_behavior": "editable; not persisted",
+      "defect_id": null
     },
     {
       "id": "A5-025",
@@ -6963,10 +7438,17 @@
       "module": "payments_wallet",
       "prior_bucket": "prior_payments_wallet_54",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "PASS",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/payments",
+      "physical_action": "invoice customer/amount fields filled then discarded",
+      "expected_behavior": "editable",
+      "actual_behavior": "editable; not persisted",
+      "defect_id": null
     },
     {
       "id": "A5-026",
@@ -7031,10 +7513,17 @@
       "module": "payments_wallet",
       "prior_bucket": "prior_payments_wallet_54",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "BLOCKED",
       "evidence": null,
-      "blocker": null,
-      "newly_discovered": false
+      "blocker": "Send invoice would email/create live invoice",
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/payments",
+      "physical_action": "not clicked",
+      "expected_behavior": null,
+      "actual_behavior": null,
+      "defect_id": null
     },
     {
       "id": "A5-030",
@@ -7167,10 +7656,17 @@
       "module": "payments_wallet",
       "prior_bucket": "prior_payments_wallet_54",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass3_mobile_390_payments.webp",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/payments",
+      "physical_action": "Payment History search visible at desktop and 390px",
+      "expected_behavior": "search present",
+      "actual_behavior": "Search recipient, check #, carrier visible; $0 history",
+      "defect_id": null
     },
     {
       "id": "A5-038",
@@ -7184,10 +7680,17 @@
       "module": "payments_wallet",
       "prior_bucket": "prior_payments_wallet_54",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "PASS",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/payments",
+      "physical_action": "year/type/status filters visible (This year / All types / All status)",
+      "expected_behavior": "selects present",
+      "actual_behavior": "visible at 390px; not all opened",
+      "defect_id": null
     },
     {
       "id": "A5-039",
@@ -7201,10 +7704,17 @@
       "module": "payments_wallet",
       "prior_bucket": "prior_payments_wallet_54",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "PASS",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/payments",
+      "physical_action": "year/type/status filters visible (This year / All types / All status)",
+      "expected_behavior": "selects present",
+      "actual_behavior": "visible at 390px; not all opened",
+      "defect_id": null
     },
     {
       "id": "A5-040",
@@ -7218,10 +7728,17 @@
       "module": "payments_wallet",
       "prior_bucket": "prior_payments_wallet_54",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "PASS",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/payments",
+      "physical_action": "year/type/status filters visible (This year / All types / All status)",
+      "expected_behavior": "selects present",
+      "actual_behavior": "visible at 390px; not all opened",
+      "defect_id": null
     },
     {
       "id": "A5-041",
@@ -7235,10 +7752,17 @@
       "module": "payments_wallet",
       "prior_bucket": "prior_payments_wallet_54",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "PASS",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/payments",
+      "physical_action": "Export CSV control visible on Payment History",
+      "expected_behavior": "export present",
+      "actual_behavior": "visible; not used to dump production data",
+      "defect_id": null
     },
     {
       "id": "A5-042",
@@ -7439,10 +7963,17 @@
       "module": "payments_wallet",
       "prior_bucket": "prior_payments_wallet_54",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "PASS",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/payments",
+      "physical_action": "Tax & 1099 year 2026",
+      "expected_behavior": "year selector visible",
+      "actual_behavior": "year 2026 shown; Generate not submitted",
+      "defect_id": null
     },
     {
       "id": "A5-054",
@@ -7473,10 +8004,17 @@
       "module": "payments_wallet",
       "prior_bucket": "prior_payments_wallet_54",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "BLOCKED",
       "evidence": null,
-      "blocker": null,
-      "newly_discovered": false
+      "blocker": "Generate 1099 would be external/tax submission",
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/payments",
+      "physical_action": "not clicked",
+      "expected_behavior": null,
+      "actual_behavior": null,
+      "defect_id": null
     },
     {
       "id": "A5-056",
@@ -8561,10 +9099,14 @@
       "module": "payments_wallet",
       "prior_bucket": "prior_payments_wallet_54",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "list opened",
+      "role": "c1c_admin",
+      "route": "/c1c/cash-jobs"
     },
     {
       "id": "A5-120",
@@ -8578,10 +9120,14 @@
       "module": "payments_wallet",
       "prior_bucket": "prior_payments_wallet_54",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "list opened",
+      "role": "c1c_admin",
+      "route": "/c1c/cash-jobs"
     },
     {
       "id": "A5-121",
@@ -8595,10 +9141,14 @@
       "module": "payments_wallet",
       "prior_bucket": "prior_payments_wallet_54",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "list opened",
+      "role": "c1c_admin",
+      "route": "/c1c/cash-jobs"
     },
     {
       "id": "A5-122",
@@ -8612,10 +9162,14 @@
       "module": "payments_wallet",
       "prior_bucket": "prior_payments_wallet_54",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "list opened",
+      "role": "c1c_admin",
+      "route": "/c1c/cash-jobs"
     },
     {
       "id": "A5-123",
@@ -9751,10 +10305,17 @@
       "module": "payments_wallet",
       "prior_bucket": "prior_payments_wallet_54",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "BLOCKED",
       "evidence": null,
-      "blocker": null,
-      "newly_discovered": false
+      "blocker": "Save funding settings would persist banking config",
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/wallet-ops",
+      "physical_action": "visible behind dialog; not clicked",
+      "expected_behavior": null,
+      "actual_behavior": null,
+      "defect_id": null
     },
     {
       "id": "A5-192",
@@ -9785,10 +10346,17 @@
       "module": "payments_wallet",
       "prior_bucket": "prior_payments_wallet_54",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "BLOCKED",
       "evidence": null,
-      "blocker": null,
-      "newly_discovered": false
+      "blocker": "Transfer to wallet would move money",
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/wallet-ops",
+      "physical_action": "not clicked",
+      "expected_behavior": null,
+      "actual_behavior": null,
+      "defect_id": null
     },
     {
       "id": "A5-194",
@@ -11791,10 +12359,17 @@
       "module": "payments_wallet",
       "prior_bucket": "prior_payments_wallet_54",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "PASS",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/wallet-ops",
+      "physical_action": "Refresh in add-funds dialog and Refresh balances",
+      "expected_behavior": "refresh does not move money",
+      "actual_behavior": "refresh clicked; still Pending setup $0.00",
+      "defect_id": null
     },
     {
       "id": "A5-312",
@@ -11808,10 +12383,17 @@
       "module": "payments_wallet",
       "prior_bucket": "prior_payments_wallet_54",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass3_c1c_wallet_add_funds_cancel.webp",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/wallet-ops",
+      "physical_action": "Add funds dialog; typed 0, 0.01, 999999.99; Cancel/X",
+      "expected_behavior": "validation; no ACH",
+      "actual_behavior": "Operating balance dialog $0.00 Not set up; amount field validation error on invalid/empty; closed without Add funds from bank",
+      "defect_id": null
     },
     {
       "id": "A5-313",
@@ -11825,10 +12407,17 @@
       "module": "payments_wallet",
       "prior_bucket": "prior_payments_wallet_54",
       "safety": "provider_blocked",
-      "result": "UNTESTED",
+      "result": "BLOCKED",
       "evidence": null,
-      "blocker": null,
-      "newly_discovered": false
+      "blocker": "Add funds from bank would initiate provider/ACH; provider execution off",
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/wallet-ops",
+      "physical_action": "visible; not clicked",
+      "expected_behavior": null,
+      "actual_behavior": null,
+      "defect_id": null
     },
     {
       "id": "A6-001",
@@ -11842,10 +12431,14 @@
       "module": "mortgage_ops",
       "prior_bucket": "prior_mortgage_mixed",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": false
+      "result": "BLOCKED",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
+      "blocker": "EMAIL_OTP required for queue",
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "mortgage_agent",
+      "route": "/mortgage-ops/queue"
     },
     {
       "id": "A6-002",
@@ -11859,10 +12452,14 @@
       "module": "mortgage_ops",
       "prior_bucket": "prior_mortgage_mixed",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": false
+      "result": "BLOCKED",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
+      "blocker": "EMAIL_OTP required for queue",
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "mortgage_agent",
+      "route": "/mortgage-ops/queue"
     },
     {
       "id": "A6-003",
@@ -11876,10 +12473,14 @@
       "module": "mortgage_ops",
       "prior_bucket": "prior_mortgage_mixed",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": false
+      "result": "BLOCKED",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
+      "blocker": "EMAIL_OTP required for queue",
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "mortgage_agent",
+      "route": "/mortgage-ops/queue"
     },
     {
       "id": "A6-004",
@@ -11893,10 +12494,14 @@
       "module": "mortgage_ops",
       "prior_bucket": "prior_mortgage_mixed",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": false
+      "result": "BLOCKED",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
+      "blocker": "EMAIL_OTP required for queue",
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "mortgage_agent",
+      "route": "/mortgage-ops/queue"
     },
     {
       "id": "A6-005",
@@ -11910,10 +12515,14 @@
       "module": "mortgage_ops",
       "prior_bucket": "prior_mortgage_mixed",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": false
+      "result": "BLOCKED",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
+      "blocker": "EMAIL_OTP required for queue",
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "mortgage_agent",
+      "route": "/mortgage-ops/queue"
     },
     {
       "id": "A6-006",
@@ -11927,10 +12536,14 @@
       "module": "mortgage_ops",
       "prior_bucket": "prior_mortgage_mixed",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": false
+      "result": "BLOCKED",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
+      "blocker": "EMAIL_OTP required for queue",
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "mortgage_agent",
+      "route": "/mortgage-ops/queue"
     },
     {
       "id": "A6-007",
@@ -11944,10 +12557,14 @@
       "module": "mortgage_ops",
       "prior_bucket": "prior_mortgage_mixed",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": false
+      "result": "BLOCKED",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
+      "blocker": "EMAIL_OTP required for queue",
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "mortgage_agent",
+      "route": "/mortgage-ops/queue"
     },
     {
       "id": "A6-008",
@@ -11961,10 +12578,14 @@
       "module": "mortgage_ops",
       "prior_bucket": "prior_mortgage_mixed",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": false
+      "result": "BLOCKED",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
+      "blocker": "EMAIL_OTP required for queue",
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "mortgage_agent",
+      "route": "/mortgage-ops/queue"
     },
     {
       "id": "A6-009",
@@ -11978,10 +12599,14 @@
       "module": "mortgage_ops",
       "prior_bucket": "prior_mortgage_mixed",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": false
+      "result": "BLOCKED",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
+      "blocker": "EMAIL_OTP required for queue",
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "mortgage_agent",
+      "route": "/mortgage-ops/queue"
     },
     {
       "id": "A6-010",
@@ -11995,10 +12620,14 @@
       "module": "mortgage_ops",
       "prior_bucket": "prior_mortgage_mixed",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": false
+      "result": "BLOCKED",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
+      "blocker": "EMAIL_OTP required for queue",
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "mortgage_agent",
+      "route": "/mortgage-ops/queue"
     },
     {
       "id": "A6-011",
@@ -12012,10 +12641,14 @@
       "module": "mortgage_ops",
       "prior_bucket": "prior_mortgage_mixed",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": false
+      "result": "BLOCKED",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
+      "blocker": "EMAIL_OTP required for queue",
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "mortgage_agent",
+      "route": "/mortgage-ops/queue"
     },
     {
       "id": "A6-012",
@@ -12029,10 +12662,14 @@
       "module": "mortgage_ops",
       "prior_bucket": "prior_mortgage_mixed",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": false
+      "result": "BLOCKED",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
+      "blocker": "EMAIL_OTP required for queue",
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "mortgage_agent",
+      "route": "/mortgage-ops/queue"
     },
     {
       "id": "A6-013",
@@ -12046,10 +12683,14 @@
       "module": "mortgage_ops",
       "prior_bucket": "prior_mortgage_mixed",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": false
+      "result": "BLOCKED",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
+      "blocker": "EMAIL_OTP required for queue",
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "mortgage_agent",
+      "route": "/mortgage-ops/queue"
     },
     {
       "id": "A6-014",
@@ -12080,10 +12721,14 @@
       "module": "mortgage_ops",
       "prior_bucket": "prior_mortgage_mixed",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "passkey fail-closed",
+      "role": "anon",
+      "route": "/mortgage-ops/login"
     },
     {
       "id": "A6-016",
@@ -12097,10 +12742,14 @@
       "module": "mortgage_ops",
       "prior_bucket": "prior_mortgage_mixed",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "passkey fail-closed",
+      "role": "anon",
+      "route": "/mortgage-ops/login"
     },
     {
       "id": "A6-017",
@@ -12114,10 +12763,14 @@
       "module": "mortgage_ops",
       "prior_bucket": "prior_mortgage_mixed",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "passkey fail-closed",
+      "role": "anon",
+      "route": "/mortgage-ops/login"
     },
     {
       "id": "A6-018",
@@ -12148,10 +12801,14 @@
       "module": "mortgage_ops",
       "prior_bucket": "prior_mortgage_mixed",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "passkey fail-closed",
+      "role": "anon",
+      "route": "/mortgage-ops/login"
     },
     {
       "id": "A6-020",
@@ -12199,10 +12856,14 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": false
+      "result": "BLOCKED",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
+      "blocker": "EMAIL_OTP / would email",
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "anon",
+      "route": "/h/upload"
     },
     {
       "id": "A7-002",
@@ -12216,10 +12877,14 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "fields visible; OTP not sent",
+      "role": "anon",
+      "route": "/h/upload"
     },
     {
       "id": "A7-003",
@@ -12233,10 +12898,14 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "fields visible; OTP not sent",
+      "role": "anon",
+      "route": "/h/upload"
     },
     {
       "id": "A7-004",
@@ -12250,10 +12919,14 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "fields visible; OTP not sent",
+      "role": "anon",
+      "route": "/h/upload"
     },
     {
       "id": "A7-005",
@@ -12267,10 +12940,14 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": false
+      "result": "BLOCKED",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
+      "blocker": "EMAIL_OTP / would email",
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "anon",
+      "route": "/h/upload"
     },
     {
       "id": "A7-006",
@@ -12284,10 +12961,14 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "fields visible; OTP not sent",
+      "role": "anon",
+      "route": "/h/upload"
     },
     {
       "id": "A7-007",
@@ -12301,10 +12982,14 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "fields visible; OTP not sent",
+      "role": "anon",
+      "route": "/h/upload"
     },
     {
       "id": "A7-008",
@@ -12318,10 +13003,14 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "fields visible; OTP not sent",
+      "role": "anon",
+      "route": "/h/upload"
     },
     {
       "id": "A7-009",
@@ -12369,10 +13058,14 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": false
+      "result": "BLOCKED",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
+      "blocker": "EMAIL_OTP / would email",
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "anon",
+      "route": "/h/upload"
     },
     {
       "id": "A7-012",
@@ -12913,10 +13606,14 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "view-only existing token",
+      "role": "public_token",
+      "route": "/ledger/:token"
     },
     {
       "id": "A7-044",
@@ -12964,10 +13661,14 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "view-only existing token",
+      "role": "public_token",
+      "route": "/ledger/:token"
     },
     {
       "id": "A7-047",
@@ -13236,10 +13937,14 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "no-token error",
+      "route": "/sign",
+      "role": "anon"
     },
     {
       "id": "A7-063",
@@ -13253,10 +13958,14 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "no-token error",
+      "route": "/sign",
+      "role": "anon"
     },
     {
       "id": "A7-064",
@@ -13270,10 +13979,14 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "no-token error",
+      "route": "/sign",
+      "role": "anon"
     },
     {
       "id": "A7-065",
@@ -13440,10 +14153,14 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "no-token error page",
+      "route": "/endorse",
+      "role": "anon"
     },
     {
       "id": "A7-076",
@@ -13525,10 +14242,14 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "no-token error page",
+      "route": "/endorse",
+      "role": "anon"
     },
     {
       "id": "A7-081",
@@ -13542,10 +14263,14 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "no-token error page",
+      "route": "/endorse",
+      "role": "anon"
     },
     {
       "id": "A7-082",
@@ -14239,10 +14964,17 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass3_c1c_homeowner_uploads.webp",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/checks",
+      "physical_action": "Homeowner Uploads filled name/email (phone empty)",
+      "expected_behavior": "fields accept synthetic values",
+      "actual_behavior": "E2E Homeowner / e2e-homeowner@example.invalid accepted",
+      "defect_id": null
     },
     {
       "id": "A7-123",
@@ -14256,10 +14988,17 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass3_c1c_homeowner_uploads.webp",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/checks",
+      "physical_action": "Homeowner Uploads filled name/email (phone empty)",
+      "expected_behavior": "fields accept synthetic values",
+      "actual_behavior": "E2E Homeowner / e2e-homeowner@example.invalid accepted",
+      "defect_id": null
     },
     {
       "id": "A7-124",
@@ -14273,10 +15012,17 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass3_c1c_homeowner_uploads.webp",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/checks",
+      "physical_action": "Homeowner Uploads filled name/email (phone empty)",
+      "expected_behavior": "fields accept synthetic values",
+      "actual_behavior": "E2E Homeowner / e2e-homeowner@example.invalid accepted",
+      "defect_id": null
     },
     {
       "id": "A7-125",
@@ -14290,10 +15036,17 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "email_blocked",
-      "result": "UNTESTED",
+      "result": "BLOCKED",
       "evidence": null,
-      "blocker": null,
-      "newly_discovered": false
+      "blocker": "Send upload link would email; email/SES workstream",
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/checks",
+      "physical_action": "not clicked",
+      "expected_behavior": null,
+      "actual_behavior": null,
+      "defect_id": null
     },
     {
       "id": "A7-126",
@@ -14307,10 +15060,17 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass3_homeowner_upload_preview.webp",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/checks",
+      "physical_action": "Homeowner Uploads Copy and Preview",
+      "expected_behavior": "copy/preview work up to email boundary",
+      "actual_behavior": "Copy worked; Preview opened public upload form; Send skipped",
+      "defect_id": null
     },
     {
       "id": "A7-127",
@@ -14324,10 +15084,17 @@
       "module": "homeowner",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass3_homeowner_upload_preview.webp",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/checks",
+      "physical_action": "Homeowner Uploads Copy and Preview",
+      "expected_behavior": "copy/preview work up to email boundary",
+      "actual_behavior": "Copy worked; Preview opened public upload form; Send skipped",
+      "defect_id": null
     },
     {
       "id": "A7-128",
@@ -14392,10 +15159,16 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "route": "/",
+      "role": "anon",
+      "expected_behavior": "navigate or scroll",
+      "actual_behavior": "worked"
     },
     {
       "id": "A8-004",
@@ -14409,10 +15182,16 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "route": "/",
+      "role": "anon",
+      "expected_behavior": "navigate or scroll",
+      "actual_behavior": "worked"
     },
     {
       "id": "A8-005",
@@ -14426,10 +15205,16 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "route": "/",
+      "role": "anon",
+      "expected_behavior": "navigate or scroll",
+      "actual_behavior": "worked"
     },
     {
       "id": "A8-006",
@@ -14443,10 +15228,16 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "route": "/",
+      "role": "anon",
+      "expected_behavior": "navigate or scroll",
+      "actual_behavior": "worked"
     },
     {
       "id": "A8-007",
@@ -14460,10 +15251,16 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "route": "/",
+      "role": "anon",
+      "expected_behavior": "navigate or scroll",
+      "actual_behavior": "worked"
     },
     {
       "id": "A8-008",
@@ -14477,10 +15274,16 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "route": "/",
+      "role": "anon",
+      "expected_behavior": "navigate or scroll",
+      "actual_behavior": "worked"
     },
     {
       "id": "A8-009",
@@ -14494,10 +15297,16 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "route": "/",
+      "role": "anon",
+      "expected_behavior": "navigate or scroll",
+      "actual_behavior": "worked"
     },
     {
       "id": "A8-010",
@@ -14511,10 +15320,16 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "route": "/",
+      "role": "anon",
+      "expected_behavior": "navigate or scroll",
+      "actual_behavior": "worked"
     },
     {
       "id": "A8-011",
@@ -14545,10 +15360,16 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "route": "/",
+      "role": "anon",
+      "expected_behavior": "navigate or scroll",
+      "actual_behavior": "worked"
     },
     {
       "id": "A8-013",
@@ -14562,10 +15383,16 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "email_blocked",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "route": "/",
+      "role": "anon",
+      "expected_behavior": "navigate or scroll",
+      "actual_behavior": "worked"
     },
     {
       "id": "A8-014",
@@ -14579,10 +15406,16 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "route": "/",
+      "role": "anon",
+      "expected_behavior": "navigate or scroll",
+      "actual_behavior": "worked"
     },
     {
       "id": "A8-015",
@@ -14613,10 +15446,16 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "route": "/",
+      "role": "anon",
+      "expected_behavior": "navigate or scroll",
+      "actual_behavior": "worked"
     },
     {
       "id": "A8-017",
@@ -14630,10 +15469,16 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "route": "/",
+      "role": "anon",
+      "expected_behavior": "navigate or scroll",
+      "actual_behavior": "worked"
     },
     {
       "id": "A8-018",
@@ -14647,10 +15492,16 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "route": "/",
+      "role": "anon",
+      "expected_behavior": "navigate or scroll",
+      "actual_behavior": "worked"
     },
     {
       "id": "A8-019",
@@ -14698,10 +15549,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "email_blocked",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": false
+      "result": "BLOCKED",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
+      "blocker": "email/SES workstream — Request demo not submitted",
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "anon",
+      "route": "/"
     },
     {
       "id": "A8-022",
@@ -14732,10 +15587,16 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "route": "/",
+      "role": "anon",
+      "expected_behavior": "navigate or scroll",
+      "actual_behavior": "worked"
     },
     {
       "id": "A8-024",
@@ -14749,10 +15610,16 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "route": "/",
+      "role": "anon",
+      "expected_behavior": "navigate or scroll",
+      "actual_behavior": "worked"
     },
     {
       "id": "A8-025",
@@ -14766,10 +15633,16 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "route": "/",
+      "role": "anon",
+      "expected_behavior": "navigate or scroll",
+      "actual_behavior": "worked"
     },
     {
       "id": "A8-026",
@@ -14783,10 +15656,16 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "route": "/",
+      "role": "anon",
+      "expected_behavior": "navigate or scroll",
+      "actual_behavior": "worked"
     },
     {
       "id": "A8-027",
@@ -14800,10 +15679,16 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "route": "/",
+      "role": "anon",
+      "expected_behavior": "navigate or scroll",
+      "actual_behavior": "worked"
     },
     {
       "id": "A8-028",
@@ -14868,10 +15753,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked login methods; password not submitted in unauth session then later used",
+      "route": "/login",
+      "role": "anon"
     },
     {
       "id": "A8-032",
@@ -14885,10 +15774,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked login methods; password not submitted in unauth session then later used",
+      "route": "/login",
+      "role": "anon"
     },
     {
       "id": "A8-033",
@@ -14902,10 +15795,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked login methods; password not submitted in unauth session then later used",
+      "route": "/login",
+      "role": "anon"
     },
     {
       "id": "A8-034",
@@ -14919,10 +15816,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "email_blocked",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked login methods; password not submitted in unauth session then later used",
+      "route": "/login",
+      "role": "anon"
     },
     {
       "id": "A8-035",
@@ -14936,10 +15837,16 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "FAIL",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "route": "/login",
+      "role": "freedom_admin",
+      "defect_id": "P0-freedom-admin-identity",
+      "actual_behavior": "identity_not_linked after Cognito 200"
     },
     {
       "id": "A8-036",
@@ -14953,10 +15860,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked login methods; password not submitted in unauth session then later used",
+      "route": "/login",
+      "role": "anon"
     },
     {
       "id": "A8-037",
@@ -14970,10 +15881,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked login methods; password not submitted in unauth session then later used",
+      "route": "/login",
+      "role": "anon"
     },
     {
       "id": "A8-038",
@@ -14987,10 +15902,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked login methods; password not submitted in unauth session then later used",
+      "route": "/login",
+      "role": "anon"
     },
     {
       "id": "A8-039",
@@ -15004,10 +15923,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked methods; account not created",
+      "route": "/signup",
+      "role": "anon"
     },
     {
       "id": "A8-040",
@@ -15021,10 +15944,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked methods; account not created",
+      "route": "/signup",
+      "role": "anon"
     },
     {
       "id": "A8-041",
@@ -15038,10 +15965,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked methods; account not created",
+      "route": "/signup",
+      "role": "anon"
     },
     {
       "id": "A8-042",
@@ -15055,10 +15986,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked methods; account not created",
+      "route": "/signup",
+      "role": "anon"
     },
     {
       "id": "A8-043",
@@ -15072,10 +16007,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "provider_blocked",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked methods; account not created",
+      "route": "/signup",
+      "role": "anon"
     },
     {
       "id": "A8-044",
@@ -15106,10 +16045,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked methods; account not created",
+      "route": "/signup",
+      "role": "anon"
     },
     {
       "id": "A8-046",
@@ -15123,10 +16066,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "route": "/pricing",
+      "role": "anon"
     },
     {
       "id": "A8-047",
@@ -15140,10 +16087,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "route": "/pricing",
+      "role": "anon"
     },
     {
       "id": "A8-048",
@@ -15157,10 +16108,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "route": "/pricing",
+      "role": "anon"
     },
     {
       "id": "A8-049",
@@ -15174,10 +16129,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "route": "/pricing",
+      "role": "anon"
     },
     {
       "id": "A8-050",
@@ -15191,10 +16150,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "route": "/pricing",
+      "role": "anon"
     },
     {
       "id": "A8-051",
@@ -15208,10 +16171,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "route": "/pricing",
+      "role": "anon"
     },
     {
       "id": "A8-052",
@@ -15259,10 +16226,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "route": "/security",
+      "role": "anon"
     },
     {
       "id": "A8-055",
@@ -15327,10 +16298,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "route": "/security",
+      "role": "anon"
     },
     {
       "id": "A8-059",
@@ -15412,10 +16387,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "route": "/security",
+      "role": "anon"
     },
     {
       "id": "A8-064",
@@ -15463,10 +16442,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "page loaded; acknowledgment not submitted with real email",
+      "route": "/privacy-notice",
+      "role": "anon"
     },
     {
       "id": "A8-067",
@@ -15480,10 +16463,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "page loaded; acknowledgment not submitted with real email",
+      "route": "/privacy-notice",
+      "role": "anon"
     },
     {
       "id": "A8-068",
@@ -15497,10 +16484,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "page loaded; acknowledgment not submitted with real email",
+      "route": "/privacy-notice",
+      "role": "anon"
     },
     {
       "id": "A8-069",
@@ -15514,10 +16505,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "route": "/terms",
+      "role": "anon"
     },
     {
       "id": "A8-070",
@@ -15531,10 +16526,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "route": "/terms",
+      "role": "anon"
     },
     {
       "id": "A8-071",
@@ -15565,10 +16564,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "route": "/terms",
+      "role": "anon"
     },
     {
       "id": "A8-073",
@@ -15582,10 +16585,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "route": "/terms",
+      "role": "anon"
     },
     {
       "id": "A8-074",
@@ -15616,10 +16623,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "ZIP/filters; Contact this Pro not clicked",
+      "route": "/find-a-pro",
+      "role": "anon"
     },
     {
       "id": "A8-076",
@@ -15633,10 +16644,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "ZIP/filters; Contact this Pro not clicked",
+      "route": "/find-a-pro",
+      "role": "anon"
     },
     {
       "id": "A8-077",
@@ -15684,10 +16699,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "ZIP/filters; Contact this Pro not clicked",
+      "route": "/find-a-pro",
+      "role": "anon"
     },
     {
       "id": "A8-080",
@@ -15701,10 +16720,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "ZIP/filters; Contact this Pro not clicked",
+      "route": "/find-a-pro",
+      "role": "anon"
     },
     {
       "id": "A8-081",
@@ -15718,10 +16741,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "ZIP/filters; Contact this Pro not clicked",
+      "route": "/find-a-pro",
+      "role": "anon"
     },
     {
       "id": "A8-082",
@@ -15735,10 +16762,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "ZIP/filters; Contact this Pro not clicked",
+      "route": "/find-a-pro",
+      "role": "anon"
     },
     {
       "id": "A8-083",
@@ -15752,10 +16783,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": false
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "ZIP/filters; Contact this Pro not clicked",
+      "route": "/find-a-pro",
+      "role": "anon"
     },
     {
       "id": "A8-084",
@@ -15769,10 +16804,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
-      "blocker": null,
-      "newly_discovered": false
+      "result": "BLOCKED",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
+      "blocker": "would email a real contractor",
+      "newly_discovered": false,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "route": "/find-a-pro",
+      "role": "anon"
     },
     {
       "id": "A8-085",
@@ -19169,10 +20208,17 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "PASS",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/checks",
+      "physical_action": "Mortgage Cos Add Company opened then Cancel",
+      "expected_behavior": "dialog cancel discards",
+      "actual_behavior": "cancelled",
+      "defect_id": null
     },
     {
       "id": "CC-197",
@@ -19186,10 +20232,17 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "PASS",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/checks",
+      "physical_action": "Mortgage Cos search field used/visible",
+      "expected_behavior": "search present",
+      "actual_behavior": "directory loaded with BoA/PNC/Rocket from Pass 3 Manager pass",
+      "defect_id": null
     },
     {
       "id": "CC-198",
@@ -19220,10 +20273,17 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "PASS",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/checks",
+      "physical_action": "Mortgage Cos Add Company opened then Cancel",
+      "expected_behavior": "dialog cancel discards",
+      "actual_behavior": "cancelled",
+      "defect_id": null
     },
     {
       "id": "CC-200",
@@ -19645,10 +20705,17 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "PASS",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/settings",
+      "physical_action": "AI Key tab viewed; secret not saved",
+      "expected_behavior": "key field masked; no key configured",
+      "actual_behavior": "No API key configured; sk-... placeholder; not saved",
+      "defect_id": null
     },
     {
       "id": "CC-225",
@@ -19679,10 +20746,17 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "PASS",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/settings",
+      "physical_action": "AI Key tab viewed; secret not saved",
+      "expected_behavior": "key field masked; no key configured",
+      "actual_behavior": "No API key configured; sk-... placeholder; not saved",
+      "defect_id": null
     },
     {
       "id": "CC-227",
@@ -19798,10 +20872,17 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "PASS",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/settings",
+      "physical_action": "Partners Copy partner code",
+      "expected_behavior": "copies tenant partner code",
+      "actual_behavior": "41A7C8AB copied",
+      "defect_id": null
     },
     {
       "id": "CC-234",
@@ -20172,10 +21253,17 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass3_freedom_login_branding.webp",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 3,
+      "role": "anon",
+      "route": "/c1c/login and /freedom/login",
+      "physical_action": "opened tenant WhiteLabelLogin; password toggle absent",
+      "expected_behavior": "passkey/OTP only on tenant login",
+      "actual_behavior": "no staging password toggle; /login is the password path",
+      "defect_id": null
     },
     {
       "id": "CC-256",
@@ -20189,10 +21277,17 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass3_freedom_login_branding.webp",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 3,
+      "role": "anon",
+      "route": "/c1c/login and /freedom/login",
+      "physical_action": "opened tenant WhiteLabelLogin; password toggle absent",
+      "expected_behavior": "passkey/OTP only on tenant login",
+      "actual_behavior": "no staging password toggle; /login is the password path",
+      "defect_id": null
     },
     {
       "id": "CC-257",
@@ -20206,10 +21301,17 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass3_freedom_login_branding.webp",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 3,
+      "role": "anon",
+      "route": "/c1c/login and /freedom/login",
+      "physical_action": "opened tenant WhiteLabelLogin; password toggle absent",
+      "expected_behavior": "passkey/OTP only on tenant login",
+      "actual_behavior": "no staging password toggle; /login is the password path",
+      "defect_id": null
     },
     {
       "id": "CC-258",
@@ -20223,10 +21325,17 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass3_freedom_login_branding.webp",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 3,
+      "role": "anon",
+      "route": "/c1c/login and /freedom/login",
+      "physical_action": "opened tenant WhiteLabelLogin; password toggle absent",
+      "expected_behavior": "passkey/OTP only on tenant login",
+      "actual_behavior": "no staging password toggle; /login is the password path",
+      "defect_id": null
     },
     {
       "id": "CC-259",
@@ -20240,10 +21349,17 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass3_freedom_login_branding.webp",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 3,
+      "role": "anon",
+      "route": "/c1c/login and /freedom/login",
+      "physical_action": "opened tenant WhiteLabelLogin; password toggle absent",
+      "expected_behavior": "passkey/OTP only on tenant login",
+      "actual_behavior": "no staging password toggle; /login is the password path",
+      "defect_id": null
     },
     {
       "id": "CC-260",
@@ -20359,10 +21475,14 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "c1c_admin",
+      "route": "/c1c/checks|/c1c/settings"
     },
     {
       "id": "CC-267",
@@ -20376,10 +21496,14 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "c1c_admin",
+      "route": "/c1c/checks|/c1c/settings"
     },
     {
       "id": "CC-268",
@@ -20393,10 +21517,14 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "c1c_admin",
+      "route": "/c1c/checks|/c1c/settings"
     },
     {
       "id": "CC-269",
@@ -20410,10 +21538,14 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "c1c_admin",
+      "route": "/c1c/checks|/c1c/settings"
     },
     {
       "id": "CC-270",
@@ -20427,10 +21559,14 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "c1c_admin",
+      "route": "/c1c/checks|/c1c/settings"
     },
     {
       "id": "CC-271",
@@ -20444,10 +21580,14 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "c1c_admin",
+      "route": "/c1c/checks|/c1c/settings"
     },
     {
       "id": "CC-272",
@@ -20461,10 +21601,14 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "c1c_admin",
+      "route": "/c1c/checks|/c1c/settings"
     },
     {
       "id": "CC-273",
@@ -20478,10 +21622,14 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "c1c_admin",
+      "route": "/c1c/checks|/c1c/settings"
     },
     {
       "id": "CC-274",
@@ -20495,10 +21643,14 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "c1c_admin",
+      "route": "/c1c/checks|/c1c/settings"
     },
     {
       "id": "CC-275",
@@ -20512,10 +21664,14 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "c1c_admin",
+      "route": "/c1c/checks|/c1c/settings"
     },
     {
       "id": "CC-276",
@@ -20529,10 +21685,17 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass3_c1c_profile_temp_name.webp,/opt/cursor/artifacts/pass3_profile_name_restored.webp,/opt/cursor/artifacts/pass3_mobile_390_settings.webp",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 3,
+      "physical_action": "Profile Company Name persist/revert: Condition One Commercial → E2E-AUDIT-TEMP → Save → refresh persist → restore Condition One Commercial → Save → refresh",
+      "role": "c1c_admin",
+      "route": "/c1c/settings",
+      "expected_behavior": "tenant name persists then restores",
+      "actual_behavior": "API tenants.name=Condition One Commercial after restore (updated_at 2026-09-11T23:00:58Z). Mobile 390 still shows Condition One Commercial.",
+      "defect_id": null
     },
     {
       "id": "CC-277",
@@ -20563,10 +21726,17 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass3_c1c_profile_temp_name.webp,/opt/cursor/artifacts/pass3_profile_name_restored.webp,/opt/cursor/artifacts/pass3_mobile_390_settings.webp",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/settings",
+      "physical_action": "Profile Company Name persist/revert: Condition One Commercial → E2E-AUDIT-TEMP → Save → refresh persist → restore Condition One Commercial → Save → refresh",
+      "expected_behavior": "tenant name persists then restores",
+      "actual_behavior": "API tenants.name=Condition One Commercial after restore (updated_at 2026-09-11T23:00:58Z). Mobile 390 still shows Condition One Commercial.",
+      "defect_id": null
     },
     {
       "id": "CC-279",
@@ -20580,10 +21750,17 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "PASS",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/settings",
+      "physical_action": "observed partner code display",
+      "expected_behavior": "shows tenant partner code",
+      "actual_behavior": "41A7C8AB",
+      "defect_id": null
     },
     {
       "id": "CC-280",
@@ -20886,10 +22063,17 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "PASS",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/checks",
+      "physical_action": "Class filter All/Unclassified",
+      "expected_behavior": "filter changes queue",
+      "actual_behavior": "filter applied",
+      "defect_id": null
     },
     {
       "id": "CC-298",
@@ -21005,10 +22189,17 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass3_c1c_search_e2e.webp",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 3,
+      "physical_action": "search E2E and later search while Bank Deposits open then clear",
+      "role": "c1c_admin",
+      "route": "/c1c/checks",
+      "expected_behavior": "filters and clears",
+      "actual_behavior": "E2E found; Bank Deposits search test then clear",
+      "defect_id": null
     },
     {
       "id": "CC-305",
@@ -21022,10 +22213,14 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "c1c_admin",
+      "route": "/c1c/checks|/c1c/settings"
     },
     {
       "id": "CC-306",
@@ -21039,10 +22234,14 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "c1c_admin",
+      "route": "/c1c/checks|/c1c/settings"
     },
     {
       "id": "CC-307",
@@ -21056,10 +22255,14 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "c1c_admin",
+      "route": "/c1c/checks|/c1c/settings"
     },
     {
       "id": "CC-308",
@@ -21073,10 +22276,14 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "c1c_admin",
+      "route": "/c1c/checks|/c1c/settings"
     },
     {
       "id": "CC-309",
@@ -21090,10 +22297,14 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "c1c_admin",
+      "route": "/c1c/checks|/c1c/settings"
     },
     {
       "id": "CC-310",
@@ -21107,10 +22318,14 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "c1c_admin",
+      "route": "/c1c/checks|/c1c/settings"
     },
     {
       "id": "CC-311",
@@ -21124,10 +22339,14 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "c1c_admin",
+      "route": "/c1c/checks|/c1c/settings"
     },
     {
       "id": "CC-312",
@@ -21141,10 +22360,14 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "c1c_admin",
+      "route": "/c1c/checks|/c1c/settings"
     },
     {
       "id": "CC-313",
@@ -21158,10 +22381,14 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "c1c_admin",
+      "route": "/c1c/checks|/c1c/settings"
     },
     {
       "id": "CC-314",
@@ -21175,10 +22402,14 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "c1c_admin",
+      "route": "/c1c/checks|/c1c/settings"
     },
     {
       "id": "CC-315",
@@ -21243,10 +22474,14 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "c1c_admin",
+      "route": "/c1c/checks|/c1c/settings"
     },
     {
       "id": "CC-319",
@@ -21260,10 +22495,14 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "c1c_admin",
+      "route": "/c1c/checks|/c1c/settings"
     },
     {
       "id": "CC-320",
@@ -21277,10 +22516,14 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "c1c_admin",
+      "route": "/c1c/checks|/c1c/settings"
     },
     {
       "id": "CC-321",
@@ -21736,10 +22979,17 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass3_override_destinations.webp",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 3,
+      "physical_action": "Override status dropdown on E2E-1789149838411; Save without reason; Cancel",
+      "role": "c1c_admin",
+      "route": "/c1c/checks",
+      "expected_behavior": "Review/Endorsing/Ready for Deposit/Loss Draft/Reissue/Void; no deposited/payment/ACH/CheckAlt-complete; reason required",
+      "actual_behavior": "those six destinations only. Save without reason: Override requires a reason. Cancelled. Left Endorsing.",
+      "defect_id": null
     },
     {
       "id": "CC-348",
@@ -21753,10 +23003,17 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass3_override_destinations.webp",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/checks",
+      "physical_action": "Override status dropdown on E2E-1789149838411; Save without reason; Cancel",
+      "expected_behavior": "Review/Endorsing/Ready for Deposit/Loss Draft/Reissue/Void; no deposited/payment/ACH/CheckAlt-complete; reason required",
+      "actual_behavior": "those six destinations only. Save without reason: Override requires a reason. Cancelled. Left Endorsing.",
+      "defect_id": null
     },
     {
       "id": "CC-349",
@@ -21770,10 +23027,17 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass3_override_destinations.webp",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 3,
+      "physical_action": "Override status dropdown on E2E-1789149838411; Save without reason; Cancel",
+      "role": "c1c_admin",
+      "route": "/c1c/checks",
+      "expected_behavior": "Review/Endorsing/Ready for Deposit/Loss Draft/Reissue/Void; no deposited/payment/ACH/CheckAlt-complete; reason required",
+      "actual_behavior": "those six destinations only. Save without reason: Override requires a reason. Cancelled. Left Endorsing.",
+      "defect_id": null
     },
     {
       "id": "CC-350",
@@ -21787,10 +23051,17 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass3_override_destinations.webp",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 3,
+      "physical_action": "Override status dropdown on E2E-1789149838411; Save without reason; Cancel",
+      "role": "c1c_admin",
+      "route": "/c1c/checks",
+      "expected_behavior": "Review/Endorsing/Ready for Deposit/Loss Draft/Reissue/Void; no deposited/payment/ACH/CheckAlt-complete; reason required",
+      "actual_behavior": "those six destinations only. Save without reason: Override requires a reason. Cancelled. Left Endorsing.",
+      "defect_id": null
     },
     {
       "id": "CC-351",
@@ -21872,10 +23143,14 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "c1c_admin",
+      "route": "/c1c/checks|/c1c/settings"
     },
     {
       "id": "CC-356",
@@ -21889,10 +23164,14 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "c1c_admin",
+      "route": "/c1c/checks|/c1c/settings"
     },
     {
       "id": "CC-357",
@@ -21906,10 +23185,14 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "c1c_admin",
+      "route": "/c1c/checks|/c1c/settings"
     },
     {
       "id": "CC-358",
@@ -21923,10 +23206,14 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "c1c_admin",
+      "route": "/c1c/checks|/c1c/settings"
     },
     {
       "id": "CC-359",
@@ -21940,10 +23227,14 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "c1c_admin",
+      "route": "/c1c/checks|/c1c/settings"
     },
     {
       "id": "CC-360",
@@ -21957,10 +23248,14 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "role": "c1c_admin",
+      "route": "/c1c/checks|/c1c/settings"
     },
     {
       "id": "CC-361",
@@ -22603,10 +23898,17 @@
       "module": "check_center",
       "prior_bucket": "prior_check_center_121",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
+      "result": "PASS",
       "evidence": null,
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/checks",
+      "physical_action": "Payee Add then Cancel",
+      "expected_behavior": "dialog opens and cancel discards",
+      "actual_behavior": "cancelled without persist",
+      "defect_id": null
     },
     {
       "id": "CC-399",
@@ -22892,10 +24194,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 2,
+      "physical_action": "fields viewed; not submitted",
+      "route": "/reset-password",
+      "role": "anon"
     },
     {
       "id": "X-002",
@@ -22909,10 +24215,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 2,
+      "physical_action": "fields viewed; not submitted",
+      "route": "/reset-password",
+      "role": "anon"
     },
     {
       "id": "X-003",
@@ -22926,10 +24236,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 2,
+      "physical_action": "fields viewed; not submitted",
+      "route": "/reset-password",
+      "role": "anon"
     },
     {
       "id": "X-004",
@@ -22943,10 +24257,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 2,
+      "physical_action": "fields viewed; not submitted",
+      "route": "/reset-password",
+      "role": "anon"
     },
     {
       "id": "X-005",
@@ -22960,10 +24278,14 @@
       "module": "public",
       "prior_bucket": "prior_public_homeowner_88",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "PASS",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 2,
+      "physical_action": "fields viewed; not submitted",
+      "route": "/reset-password",
+      "role": "anon"
     },
     {
       "id": "X-006",
@@ -23232,10 +24554,16 @@
       "module": "extra_public_or_auth",
       "prior_bucket": "newly_discovered",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "FAIL",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "defect_id": "P2-missing-cognito-token",
+      "route": "/invoice/:token",
+      "actual_behavior": "missing_cognito_token",
+      "role": "anon"
     },
     {
       "id": "X-022",
@@ -23368,10 +24696,15 @@
       "module": "extra_public_or_auth",
       "prior_bucket": "newly_discovered",
       "safety": "executable_or_ui",
-      "result": "UNTESTED",
-      "evidence": null,
+      "result": "FAIL",
+      "evidence": "FUNCTIONAL_E2E_AUDIT_2026-09-11.md Pass 2",
       "blocker": null,
-      "newly_discovered": true
+      "newly_discovered": true,
+      "pass": 2,
+      "physical_action": "clicked in Pass 2",
+      "defect_id": "P2-missing-cognito-token",
+      "route": "/pay-setup/:token",
+      "role": "anon"
     },
     {
       "id": "X-030",
@@ -23831,6 +25164,534 @@
       "evidence": null,
       "blocker": null,
       "newly_discovered": true
+    },
+    {
+      "notes": "pass3 reconciliation — physically present in staging UI; omitted from 2026-09-11 JSX crawl",
+      "source": "pass3_reconciliation",
+      "prior_bucket": "none",
+      "safety": "executable_or_ui",
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass3_c1c_bank_deposits_manager.webp,/opt/cursor/artifacts/pass3_freedom_staff_no_manager.webp",
+      "blocker": null,
+      "newly_discovered": true,
+      "id": "P3-MGR-001",
+      "screen": "CheckCommandCenter",
+      "label": "Deposit Ops",
+      "type": "TabsTrigger",
+      "file": "src/pages/CheckCommandCenter.tsx",
+      "line": 1365,
+      "module": "check_center",
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/checks",
+      "physical_action": "clicked all Manager subtabs including inner retry of Returned",
+      "expected_behavior": "each subtab renders",
+      "actual_behavior": "Deposit Ops, Pending Approvals, Bank Deposits, Deposit History, Returned (empty No returned checks; earlier chunk-load recovered), Reports Daily Deposit Log, Mortgage Cos Add+Cancel, Partners ecosystem, Homeowner Uploads, Reissue empty. Freedom staff cannot see Manager card.",
+      "defect_id": null
+    },
+    {
+      "notes": "pass3 reconciliation — physically present in staging UI; omitted from 2026-09-11 JSX crawl",
+      "source": "pass3_reconciliation",
+      "prior_bucket": "none",
+      "safety": "executable_or_ui",
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass3_c1c_bank_deposits_manager.webp,/opt/cursor/artifacts/pass3_freedom_staff_no_manager.webp",
+      "blocker": null,
+      "newly_discovered": true,
+      "id": "P3-MGR-002",
+      "screen": "CheckCommandCenter",
+      "label": "Pending Approvals",
+      "type": "TabsTrigger",
+      "file": "src/pages/CheckCommandCenter.tsx",
+      "line": 1365,
+      "module": "check_center",
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/checks",
+      "physical_action": "clicked all Manager subtabs including inner retry of Returned",
+      "expected_behavior": "each subtab renders",
+      "actual_behavior": "Deposit Ops, Pending Approvals, Bank Deposits, Deposit History, Returned (empty No returned checks; earlier chunk-load recovered), Reports Daily Deposit Log, Mortgage Cos Add+Cancel, Partners ecosystem, Homeowner Uploads, Reissue empty. Freedom staff cannot see Manager card.",
+      "defect_id": null
+    },
+    {
+      "notes": "pass3 reconciliation — physically present in staging UI; omitted from 2026-09-11 JSX crawl",
+      "source": "pass3_reconciliation",
+      "prior_bucket": "none",
+      "safety": "executable_or_ui",
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass3_c1c_bank_deposits_manager.webp,/opt/cursor/artifacts/pass3_freedom_staff_no_manager.webp",
+      "blocker": null,
+      "newly_discovered": true,
+      "id": "P3-MGR-003",
+      "screen": "CheckCommandCenter",
+      "label": "Bank Deposits",
+      "type": "TabsTrigger",
+      "file": "src/pages/CheckCommandCenter.tsx",
+      "line": 1365,
+      "module": "check_center",
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/checks",
+      "physical_action": "clicked all Manager subtabs including inner retry of Returned",
+      "expected_behavior": "each subtab renders",
+      "actual_behavior": "Deposit Ops, Pending Approvals, Bank Deposits, Deposit History, Returned (empty No returned checks; earlier chunk-load recovered), Reports Daily Deposit Log, Mortgage Cos Add+Cancel, Partners ecosystem, Homeowner Uploads, Reissue empty. Freedom staff cannot see Manager card.",
+      "defect_id": null
+    },
+    {
+      "notes": "pass3 reconciliation — physically present in staging UI; omitted from 2026-09-11 JSX crawl",
+      "source": "pass3_reconciliation",
+      "prior_bucket": "none",
+      "safety": "executable_or_ui",
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass3_c1c_bank_deposits_manager.webp,/opt/cursor/artifacts/pass3_freedom_staff_no_manager.webp",
+      "blocker": null,
+      "newly_discovered": true,
+      "id": "P3-MGR-004",
+      "screen": "CheckCommandCenter",
+      "label": "Deposit History",
+      "type": "TabsTrigger",
+      "file": "src/pages/CheckCommandCenter.tsx",
+      "line": 1365,
+      "module": "check_center",
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/checks",
+      "physical_action": "clicked all Manager subtabs including inner retry of Returned",
+      "expected_behavior": "each subtab renders",
+      "actual_behavior": "Deposit Ops, Pending Approvals, Bank Deposits, Deposit History, Returned (empty No returned checks; earlier chunk-load recovered), Reports Daily Deposit Log, Mortgage Cos Add+Cancel, Partners ecosystem, Homeowner Uploads, Reissue empty. Freedom staff cannot see Manager card.",
+      "defect_id": null
+    },
+    {
+      "notes": "pass3 reconciliation — physically present in staging UI; omitted from 2026-09-11 JSX crawl",
+      "source": "pass3_reconciliation",
+      "prior_bucket": "none",
+      "safety": "executable_or_ui",
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass3_c1c_bank_deposits_manager.webp,/opt/cursor/artifacts/pass3_freedom_staff_no_manager.webp",
+      "blocker": null,
+      "newly_discovered": true,
+      "id": "P3-MGR-005",
+      "screen": "CheckCommandCenter",
+      "label": "Returned",
+      "type": "TabsTrigger",
+      "file": "src/pages/CheckCommandCenter.tsx",
+      "line": 1365,
+      "module": "check_center",
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/checks",
+      "physical_action": "clicked all Manager subtabs including inner retry of Returned",
+      "expected_behavior": "each subtab renders",
+      "actual_behavior": "Deposit Ops, Pending Approvals, Bank Deposits, Deposit History, Returned (empty No returned checks; earlier chunk-load recovered), Reports Daily Deposit Log, Mortgage Cos Add+Cancel, Partners ecosystem, Homeowner Uploads, Reissue empty. Freedom staff cannot see Manager card.",
+      "defect_id": null
+    },
+    {
+      "notes": "pass3 reconciliation — physically present in staging UI; omitted from 2026-09-11 JSX crawl",
+      "source": "pass3_reconciliation",
+      "prior_bucket": "none",
+      "safety": "executable_or_ui",
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass3_c1c_bank_deposits_manager.webp,/opt/cursor/artifacts/pass3_freedom_staff_no_manager.webp",
+      "blocker": null,
+      "newly_discovered": true,
+      "id": "P3-MGR-006",
+      "screen": "CheckCommandCenter",
+      "label": "Reports",
+      "type": "TabsTrigger",
+      "file": "src/pages/CheckCommandCenter.tsx",
+      "line": 1365,
+      "module": "check_center",
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/checks",
+      "physical_action": "clicked all Manager subtabs including inner retry of Returned",
+      "expected_behavior": "each subtab renders",
+      "actual_behavior": "Deposit Ops, Pending Approvals, Bank Deposits, Deposit History, Returned (empty No returned checks; earlier chunk-load recovered), Reports Daily Deposit Log, Mortgage Cos Add+Cancel, Partners ecosystem, Homeowner Uploads, Reissue empty. Freedom staff cannot see Manager card.",
+      "defect_id": null
+    },
+    {
+      "notes": "pass3 reconciliation — physically present in staging UI; omitted from 2026-09-11 JSX crawl",
+      "source": "pass3_reconciliation",
+      "prior_bucket": "none",
+      "safety": "executable_or_ui",
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass3_c1c_bank_deposits_manager.webp,/opt/cursor/artifacts/pass3_freedom_staff_no_manager.webp",
+      "blocker": null,
+      "newly_discovered": true,
+      "id": "P3-MGR-007",
+      "screen": "CheckCommandCenter",
+      "label": "Mortgage Cos",
+      "type": "TabsTrigger",
+      "file": "src/pages/CheckCommandCenter.tsx",
+      "line": 1365,
+      "module": "check_center",
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/checks",
+      "physical_action": "clicked all Manager subtabs including inner retry of Returned",
+      "expected_behavior": "each subtab renders",
+      "actual_behavior": "Deposit Ops, Pending Approvals, Bank Deposits, Deposit History, Returned (empty No returned checks; earlier chunk-load recovered), Reports Daily Deposit Log, Mortgage Cos Add+Cancel, Partners ecosystem, Homeowner Uploads, Reissue empty. Freedom staff cannot see Manager card.",
+      "defect_id": null
+    },
+    {
+      "notes": "pass3 reconciliation — physically present in staging UI; omitted from 2026-09-11 JSX crawl",
+      "source": "pass3_reconciliation",
+      "prior_bucket": "none",
+      "safety": "executable_or_ui",
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass3_c1c_bank_deposits_manager.webp,/opt/cursor/artifacts/pass3_freedom_staff_no_manager.webp",
+      "blocker": null,
+      "newly_discovered": true,
+      "id": "P3-MGR-008",
+      "screen": "CheckCommandCenter",
+      "label": "Partners",
+      "type": "TabsTrigger",
+      "file": "src/pages/CheckCommandCenter.tsx",
+      "line": 1365,
+      "module": "check_center",
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/checks",
+      "physical_action": "clicked all Manager subtabs including inner retry of Returned",
+      "expected_behavior": "each subtab renders",
+      "actual_behavior": "Deposit Ops, Pending Approvals, Bank Deposits, Deposit History, Returned (empty No returned checks; earlier chunk-load recovered), Reports Daily Deposit Log, Mortgage Cos Add+Cancel, Partners ecosystem, Homeowner Uploads, Reissue empty. Freedom staff cannot see Manager card.",
+      "defect_id": null
+    },
+    {
+      "notes": "pass3 reconciliation — physically present in staging UI; omitted from 2026-09-11 JSX crawl",
+      "source": "pass3_reconciliation",
+      "prior_bucket": "none",
+      "safety": "executable_or_ui",
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass3_c1c_bank_deposits_manager.webp,/opt/cursor/artifacts/pass3_freedom_staff_no_manager.webp",
+      "blocker": null,
+      "newly_discovered": true,
+      "id": "P3-MGR-009",
+      "screen": "CheckCommandCenter",
+      "label": "Homeowner Uploads",
+      "type": "TabsTrigger",
+      "file": "src/pages/CheckCommandCenter.tsx",
+      "line": 1365,
+      "module": "check_center",
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/checks",
+      "physical_action": "clicked all Manager subtabs including inner retry of Returned",
+      "expected_behavior": "each subtab renders",
+      "actual_behavior": "Deposit Ops, Pending Approvals, Bank Deposits, Deposit History, Returned (empty No returned checks; earlier chunk-load recovered), Reports Daily Deposit Log, Mortgage Cos Add+Cancel, Partners ecosystem, Homeowner Uploads, Reissue empty. Freedom staff cannot see Manager card.",
+      "defect_id": null
+    },
+    {
+      "notes": "pass3 reconciliation — physically present in staging UI; omitted from 2026-09-11 JSX crawl",
+      "source": "pass3_reconciliation",
+      "prior_bucket": "none",
+      "safety": "executable_or_ui",
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass3_c1c_bank_deposits_manager.webp,/opt/cursor/artifacts/pass3_freedom_staff_no_manager.webp",
+      "blocker": null,
+      "newly_discovered": true,
+      "id": "P3-MGR-010",
+      "screen": "CheckCommandCenter",
+      "label": "Reissue",
+      "type": "TabsTrigger",
+      "file": "src/pages/CheckCommandCenter.tsx",
+      "line": 1365,
+      "module": "check_center",
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/checks",
+      "physical_action": "clicked all Manager subtabs including inner retry of Returned",
+      "expected_behavior": "each subtab renders",
+      "actual_behavior": "Deposit Ops, Pending Approvals, Bank Deposits, Deposit History, Returned (empty No returned checks; earlier chunk-load recovered), Reports Daily Deposit Log, Mortgage Cos Add+Cancel, Partners ecosystem, Homeowner Uploads, Reissue empty. Freedom staff cannot see Manager card.",
+      "defect_id": null
+    },
+    {
+      "notes": "pass3 reconciliation — physically present in staging UI; omitted from 2026-09-11 JSX crawl",
+      "source": "pass3_reconciliation",
+      "prior_bucket": "none",
+      "safety": "executable_or_ui",
+      "result": "BLOCKED",
+      "evidence": "/opt/cursor/artifacts/pass3_c1c_bank_deposits_manager.webp",
+      "blocker": "C1C has 0 checkalt_deposits so no day row to expand. Freedom has deposit days but Manager is admin-only; Freedom admin identity_not_linked; staff operator has no Manager card. Owner preview does not impersonate tenant admin.",
+      "newly_discovered": true,
+      "id": "P3-BD-001",
+      "screen": "BankDepositReconciliation",
+      "label": "Expand deposit day",
+      "type": "Button",
+      "file": "src/components/deposit-ops/BankDepositReconciliation.tsx",
+      "line": 167,
+      "module": "check_center",
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/checks",
+      "physical_action": "C1C Bank Deposits open; no day rows",
+      "expected_behavior": null,
+      "actual_behavior": null,
+      "defect_id": null
+    },
+    {
+      "notes": "pass3 reconciliation — physically present in staging UI; omitted from 2026-09-11 JSX crawl",
+      "source": "pass3_reconciliation",
+      "prior_bucket": "none",
+      "safety": "executable_or_ui",
+      "result": "BLOCKED",
+      "evidence": null,
+      "blocker": "Export CSV only renders after a day is expanded; no C1C days",
+      "newly_discovered": true,
+      "id": "P3-BD-002",
+      "screen": "BankDepositReconciliation",
+      "label": "Export CSV",
+      "type": "Button",
+      "file": "src/components/deposit-ops/BankDepositReconciliation.tsx",
+      "line": 245,
+      "module": "check_center",
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/checks",
+      "physical_action": "not available",
+      "expected_behavior": null,
+      "actual_behavior": null,
+      "defect_id": null
+    },
+    {
+      "notes": "pass3 reconciliation — physically present in staging UI; omitted from 2026-09-11 JSX crawl",
+      "source": "pass3_reconciliation",
+      "prior_bucket": "none",
+      "safety": "executable_or_ui",
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass3_c1c_bank_deposits_manager.webp",
+      "blocker": null,
+      "newly_discovered": true,
+      "id": "P3-BD-003",
+      "screen": "BankDepositReconciliation",
+      "label": "Settled into your bank total",
+      "type": "Display",
+      "file": "src/components/deposit-ops/BankDepositReconciliation.tsx",
+      "line": 136,
+      "module": "check_center",
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/checks",
+      "physical_action": "Bank Deposits empty-state totals",
+      "expected_behavior": "$0 settled and in transit; empty copy",
+      "actual_behavior": "Settled $0.00; In transit $0.00; No deposits found yet. Copy: Expand a day to see exactly which checks make up that amount. No independent date picker.",
+      "defect_id": null
+    },
+    {
+      "notes": "pass3 reconciliation — physically present in staging UI; omitted from 2026-09-11 JSX crawl",
+      "source": "pass3_reconciliation",
+      "prior_bucket": "none",
+      "safety": "executable_or_ui",
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass3_c1c_bank_deposits_manager.webp",
+      "blocker": null,
+      "newly_discovered": true,
+      "id": "P3-BD-004",
+      "screen": "BankDepositReconciliation",
+      "label": "In transit / not yet cleared total",
+      "type": "Display",
+      "file": "src/components/deposit-ops/BankDepositReconciliation.tsx",
+      "line": 146,
+      "module": "check_center",
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/checks",
+      "physical_action": "Bank Deposits empty-state totals",
+      "expected_behavior": "$0 settled and in transit; empty copy",
+      "actual_behavior": "Settled $0.00; In transit $0.00; No deposits found yet. Copy: Expand a day to see exactly which checks make up that amount. No independent date picker.",
+      "defect_id": null
+    },
+    {
+      "notes": "pass3 reconciliation — physically present in staging UI; omitted from 2026-09-11 JSX crawl",
+      "source": "pass3_reconciliation",
+      "prior_bucket": "none",
+      "safety": "executable_or_ui",
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass3_c1c_bank_deposits_manager.webp",
+      "blocker": null,
+      "newly_discovered": true,
+      "id": "P3-BD-005",
+      "screen": "BankDepositReconciliation",
+      "label": "No deposits found yet",
+      "type": "EmptyState",
+      "file": "src/components/deposit-ops/BankDepositReconciliation.tsx",
+      "line": 155,
+      "module": "check_center",
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/checks",
+      "physical_action": "Bank Deposits empty-state totals",
+      "expected_behavior": "$0 settled and in transit; empty copy",
+      "actual_behavior": "Settled $0.00; In transit $0.00; No deposits found yet. Copy: Expand a day to see exactly which checks make up that amount. No independent date picker.",
+      "defect_id": null
+    },
+    {
+      "notes": "pass3 reconciliation — physically present in staging UI; omitted from 2026-09-11 JSX crawl",
+      "source": "pass3_reconciliation",
+      "prior_bucket": "none",
+      "safety": "executable_or_ui",
+      "result": "N/A",
+      "evidence": null,
+      "blocker": null,
+      "newly_discovered": true,
+      "id": "P3-BD-006",
+      "screen": "BankDepositReconciliation",
+      "label": "Independent date picker",
+      "type": "Input(date)",
+      "file": "src/components/deposit-ops/BankDepositReconciliation.tsx",
+      "line": 48,
+      "module": "check_center",
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/checks",
+      "physical_action": "looked for date picker",
+      "expected_behavior": "date selection if present",
+      "actual_behavior": "no date picker; days are expand rows from CheckAlt submitted/cleared dates",
+      "defect_id": null
+    },
+    {
+      "notes": "pass3 reconciliation — physically present in staging UI; omitted from 2026-09-11 JSX crawl",
+      "source": "pass3_reconciliation",
+      "prior_bucket": "none",
+      "safety": "executable_or_ui",
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass3_mobile_390_check_center.webp",
+      "blocker": null,
+      "newly_discovered": true,
+      "id": "P3-MOB-001",
+      "screen": "CheckCommandCenter",
+      "label": "390px queue tiles",
+      "type": "Button",
+      "file": "src/pages/CheckCommandCenter.tsx",
+      "line": 1324,
+      "module": "check_center",
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/checks",
+      "physical_action": "390px TAP Review/Endorsing/Manager queue tiles",
+      "expected_behavior": "tappable",
+      "actual_behavior": "2-column wrap; tiles tappable",
+      "defect_id": null
+    },
+    {
+      "notes": "pass3 reconciliation — physically present in staging UI; omitted from 2026-09-11 JSX crawl",
+      "source": "pass3_reconciliation",
+      "prior_bucket": "none",
+      "safety": "executable_or_ui",
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass3_mobile_390_check_detail.webp",
+      "blocker": null,
+      "newly_discovered": true,
+      "id": "P3-MOB-002",
+      "screen": "CheckCommandCenter",
+      "label": "390px check detail tabs",
+      "type": "TabsTrigger",
+      "file": "src/pages/CheckCommandCenter.tsx",
+      "line": 4063,
+      "module": "check_center",
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/checks",
+      "physical_action": "390px TAP open E2E-1789149838411; Overview/Payee Endorsements/Funds/Files",
+      "expected_behavior": "detail tabs tappable",
+      "actual_behavior": "check opened $2345.67 Endorsing; Overview through Files tappable. Partners clipped; Audit off-screen behind overflow-x-auto (not FAIL — scroll exists in source). Share and View Check Images visible.",
+      "defect_id": null
+    },
+    {
+      "notes": "pass3 reconciliation — physically present in staging UI; omitted from 2026-09-11 JSX crawl",
+      "source": "pass3_reconciliation",
+      "prior_bucket": "none",
+      "safety": "executable_or_ui",
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass3_mobile_390_manager.webp",
+      "blocker": null,
+      "newly_discovered": true,
+      "id": "P3-MOB-003",
+      "screen": "CheckCommandCenter",
+      "label": "390px Manager subtabs",
+      "type": "TabsTrigger",
+      "file": "src/pages/CheckCommandCenter.tsx",
+      "line": 1364,
+      "module": "check_center",
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/checks",
+      "physical_action": "390px TAP Manager subtabs",
+      "expected_behavior": "subtabs tappable",
+      "actual_behavior": "subtabs wrap; Homeowner Uploads/Reissue at fold but present",
+      "defect_id": null
+    },
+    {
+      "notes": "pass3 reconciliation — physically present in staging UI; omitted from 2026-09-11 JSX crawl",
+      "source": "pass3_reconciliation",
+      "prior_bucket": "none",
+      "safety": "executable_or_ui",
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass3_mobile_390_settings.webp",
+      "blocker": null,
+      "newly_discovered": true,
+      "id": "P3-MOB-004",
+      "screen": "WhiteLabelSettings",
+      "label": "390px Settings Profile",
+      "type": "TabsTrigger",
+      "file": "src/components/white-label/WhiteLabelSettings.tsx",
+      "line": 173,
+      "module": "settings",
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/settings",
+      "physical_action": "390px TAP Settings Profile",
+      "expected_behavior": "tappable; restored name",
+      "actual_behavior": "Company Name Condition One Commercial; tabs wrap",
+      "defect_id": null
+    },
+    {
+      "notes": "pass3 reconciliation — physically present in staging UI; omitted from 2026-09-11 JSX crawl",
+      "source": "pass3_reconciliation",
+      "prior_bucket": "none",
+      "safety": "executable_or_ui",
+      "result": "PASS",
+      "evidence": "/opt/cursor/artifacts/pass3_mobile_390_payments.webp",
+      "blocker": null,
+      "newly_discovered": true,
+      "id": "P3-MOB-005",
+      "screen": "Payments",
+      "label": "390px Payments tabs",
+      "type": "Tab",
+      "file": "src/pages/Payments.tsx",
+      "line": 89,
+      "module": "payments_wallet",
+      "pass": 3,
+      "physical_action": "390px TAP Payments History/Invoices",
+      "role": "c1c_admin",
+      "route": "/c1c/payments",
+      "expected_behavior": "tappable",
+      "actual_behavior": "History/Invoices/Revenue visible. By Recipient and Tax & 1099 require horizontal scroll (overflow-x-auto); not FAIL of missing controls. Search placeholder/table clip on Check Center is cosmetic.",
+      "defect_id": null
+    },
+    {
+      "notes": "pass3 reconciliation — physically present in staging UI; omitted from 2026-09-11 JSX crawl",
+      "source": "pass3_reconciliation",
+      "prior_bucket": "none",
+      "safety": "executable_or_ui",
+      "result": "FAIL",
+      "evidence": "/opt/cursor/artifacts/pass3_mobile_390_check_center.webp",
+      "blocker": null,
+      "newly_discovered": true,
+      "id": "P3-MOB-006",
+      "screen": "CheckCommandCenter",
+      "label": "390px search/table clip",
+      "type": "Input",
+      "file": "src/pages/CheckCommandCenter.tsx",
+      "line": 0,
+      "module": "check_center",
+      "pass": 3,
+      "role": "c1c_admin",
+      "route": "/c1c/checks",
+      "physical_action": "390px Check Center search and table",
+      "expected_behavior": "full search placeholder and amount column usable",
+      "actual_behavior": "search text clips (payee, car…); table Amount column clipped at viewport. Search still tappable (cosmetic/layout P3). Amount column clip is layout defect; filter still works via remaining visible field.",
+      "defect_id": "P3-mobile-search-clip"
     }
   ]
 }

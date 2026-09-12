@@ -1,11 +1,277 @@
 # ChecksOps complete functional audit
 
-This file contains two passes on 2026-09-11:
+This file contains three passes on 2026-09-11 / 2026-09-12:
 
-1. **Pass 2 (this continuation)** — inventory reconciliation plus physical staging interaction. Results are at the top.
-2. **Pass 1 (baseline)** — original 412-control audit preserved below.
+1. **Pass 3 (this continuation)** — coverage expansion. Physical clicks on remaining executable controls. Results are at the top.
+2. **Pass 2** — inventory reconciliation plus first physical staging interaction.
+3. **Pass 1 (baseline)** — original 412-control audit preserved below.
 
-**Verdict: CONDITIONAL GO** for C1C tenant-admin and platform-owner staging workflows. **NO-GO** for Freedom admin identity (`identity_not_linked`) and for treating production `checksops.com` as a clean production SPA (Pass 1 P0 banner still unreleased). This is **not** 95% or 100% control coverage.
+**Verdict: CONDITIONAL GO** for C1C tenant-admin and platform-owner staging workflows. **NO-GO** for Freedom admin identity (`identity_not_linked`) and for treating production `checksops.com` as a clean production SPA (Pass 1 P0 banner still unreleased). This is **not** 95% executable coverage.
+
+No application code was patched. No SQL. No provider flags. No Cognito identity linking. No SES. No production authenticated workflows.
+
+---
+
+# Pass 3 — Coverage expansion (physical interaction)
+
+**Date:** 2026-09-11 → 2026-09-12  
+**Auditor:** Cursor Cloud Agent  
+**Branch:** `cursor/full-staging-e2e-audit-3bce`  
+**PR:** https://github.com/michaelcarletta-cmd/ChecksOps/pull/237  
+**Scope:** Physically operate remaining executable controls on `https://staging.checksops.com` using the Pass 2 inventory as the working checklist. Email/SES another workstream. Provider execution stays OFF.
+
+**Environments (unchanged)**
+
+| Surface | Host | Backend | Auth |
+|---|---|---|---|
+| AWS staging UI | `https://staging.checksops.com` | `environment: staging` API `psr19uhop4…/staging` | Cognito pool `us-east-1_vPmQ7cL1F` |
+| Production UI | `https://checksops.com` | not authenticated this pass | Pass 1 P0 banner remains recorded |
+
+## Coverage
+
+| Metric | Count |
+|---|---|
+| Pass 2 reconciled JSX inventory | 1399 |
+| Pass 3 newly enumerated (Manager subtabs + Bank Deposit inner + 390px shells) | **+22** |
+| **Reconciled controls discovered** | **1421** |
+| Previously tested (Pass 2 published) | 168 |
+| Previously tested (after Pass 2 IDs seeded onto inventory) | 183 |
+| **Newly physically tested in Pass 3** (inventory `pass=3`) | **93** |
+| First-time IDs (UNTESTED after seed → tested this pass) | **~87** |
+| **Cumulative physically tested** | **270** |
+| PASS | **231** |
+| FAIL | **8** |
+| BLOCKED | **30** |
+| N/A | **1** |
+| Untested | **1151** |
+| **Raw coverage (270 / 1421)** | **19.0%** |
+| Safety-class executable IDs | 1283 |
+| Executable IDs tested | 262 |
+| **Executable coverage (262 / 1283)** | **20.4%** |
+
+Do **not** claim ≥95% executable coverage. Pass 3 raised raw coverage from 12.0% to 19.0% and executable coverage from 13.3% to 20.4%. Source inspection is never PASS.
+
+Machine-readable inventory: `docs/audits/inventory-2026-09-11.json`, `.csv`.
+
+## By module
+
+| Module | Discovered | Tested | PASS | FAIL | BLOCKED | Coverage |
+|---|---|---|---|---|---|---|
+| check_center | 390 | 70 | 66 | 1 | 2 | 17.9% |
+| settings | 231 | 24 | 16 | 4 | 4 | 10.4% |
+| payments_wallet | 312 | 35 | 30 | 0 | 5 | 11.2% |
+| homeowner | 171 | 23 | 19 | 0 | 4 | 13.5% |
+| admin | 152 | 36 | 36 | 0 | 0 | 23.7% |
+| public | 107 | 63 | 60 | 1 | 2 | 58.9% |
+| extra_public_or_auth | 37 | 2 | 0 | 2 | 0 | 5.4% |
+| mortgage_ops | 21 | 17 | 4 | 0 | 13 | 81.0% |
+| **Total** | **1421** | **270** | **231** | **8** | **30** | **19.0%** |
+
+N/A (1) is `P3-BD-006` (no independent Bank Deposits date picker). Coverage column is tested/discovered including FAIL+BLOCKED+N/A.
+
+## Freedom identity (do not retry)
+
+`mcarletta@freedomadj.com` remains **NO-GO** (`identity_not_linked`). Not retried this pass. Freedom-admin coverage is **not** transferred from C1C-admin.
+
+Freedom **staff** (`checksops-tester@freedomadj.com`, operator) logged in via `/login` + staging password (not `/freedom/login`). Check Center queues work. **Manager card is correctly absent** for operator (`canAccessManager` requires tenant admin/owner). Screenshot: `pass3_freedom_staff_no_manager.webp`.
+
+`/c1c/login` and `/freedom/login` are `WhiteLabelLogin` (passkey/OTP). Staging password toggle exists only on `/login` (`CheckOpsLogin`). Not a missing A8-036 regression.
+
+## Settings — deep pass
+
+| Control | Result | Notes |
+|---|---|---|
+| Profile Company Name persist/revert | **PASS** | Condition One Commercial → `E2E-AUDIT-TEMP` → restore. API `tenants.name` still Condition One Commercial. Mobile 390 still shows restored name. |
+| In-App Notifications off/save/restore | **PASS** | |
+| Email/SMS notification switches | **PASS** | viewed; not mutated |
+| Branding Company Name / Address / Phone / Email | **FAIL** | Freedom Claims Adjusting placeholders. See defect. |
+| Branding uploads / invoice theme | **PASS** | viewed; no upload |
+| Save Company Settings | **BLOCKED** | would write `company_branding` while Freedom placeholders are displayed |
+| Partners copy | **PASS** | `41A7C8AB` |
+| Users invite | **BLOCKED** | would email |
+| AI Key | **PASS** | view-only; no key configured; not saved |
+| Referrals copy | **PASS** | copy toast; Apply Discount not clicked |
+| Compliance | **BLOCKED** (save) | Identity verified viewed; Save KYC not clicked |
+| Banking | view-only | verified C1C payment account; Connect/ACH not used |
+| Directory | **PASS** (open) | publish toggle off; trades listed; not saved |
+
+### C1C “Freedom Claims Adjusting” — stored vs display
+
+**Display contamination, not stored C1C tenant configuration.**
+
+- Profile / `tenants.name` = **Condition One Commercial** (confirmed after persist/revert).
+- `POST /data/query` `company_branding` returns **0 rows** for C1C and for Freedom staff.
+- Branding form `value` state is empty (`useState("")`). The visible strings match hardcoded **placeholders** in `CompanyBrandingSettings.tsx`: `Freedom Claims Adjusting`, `123 Main Street / Suite 100 / Philadelphia, PA 19103`, `(555) 123-4567`, `claims@freedomclaims.com`.
+- Sidebar chrome shows CONDITION ONE, not Freedom.
+- Save was **not** clicked (would insert a `company_branding` row).
+
+Do not treat this as C1C’s stored company name. It is still a tenant-isolation FAIL: Freedom-specific placeholders render on C1C.
+
+## Manager — inner controls
+
+C1C admin **can** open Manager. All 10 subtabs physically clicked this pass (Pass 2 only opened them):
+
+Deposit Ops, Pending Approvals, Bank Deposits, Deposit History, Returned (“No returned checks”; one earlier chunk-load recovered on retry), Reports (Daily Deposit Log), Mortgage Cos (Add Company → Cancel), Partners, Homeowner Uploads, Reissue (empty).
+
+Freedom staff **cannot** open Manager. That is authorization, not a missing C1C bug.
+
+### Bank Deposit
+
+UI groups `checkalt_deposits` (excluding rejected/error) by settled/pending day. Copy: “Expand a day to see exactly which checks make up that amount.” **No independent date picker** (`P3-BD-006` N/A).
+
+| Path | Result |
+|---|---|
+| C1C empty state | **PASS** — Settled $0.00, In transit $0.00, “No deposits found yet.” |
+| C1C expand a day / Export CSV | **BLOCKED** — C1C has 0 `checkalt_deposits` rows |
+| Freedom date-with-deposits | **BLOCKED** — Freedom has submitted days (API: 2026-08-12, 2026-07-21, 2026-09-02, …) but the only UI is Manager → Bank Deposits, which requires Freedom **admin**. Freedom admin identity is NO-GO. Staff operator has no Manager card. Platform-owner “Preview portal” opens `/{slug}/checks` as the **current user**, it does not impersonate tenant admin. |
+
+Provider execution stayed OFF. No CheckAlt submit.
+
+### Homeowner Uploads
+
+Filled synthetic name/email, **Copy** PASS, **Preview** opened public upload form, **Send** not clicked (email/SES). Workflow for a claim that has not already been created exists up to the external-send boundary.
+
+### Partner codes
+
+C1C copy `41A7C8AB` PASS. Cross-tenant resolve not executed as a mutation. Freedom staff profile partner code `0FXCE985` (different from C1C).
+
+### Tax / 1099
+
+Year 2026 selector PASS. Generate 1099 **BLOCKED** (external). Later `/c1c/payments` sometimes failed with `Failed to fetch dynamically imported module` (intermittent staging chunk load).
+
+## Check Center remaining
+
+Physically this pass (C1C unless noted):
+
+- Search `E2E-1789149838411`, class filter, payee Add→Cancel
+- Admin override destinations: Review, Endorsing (current), Ready for Deposit, Loss Draft, Reissue, Void. **No** deposited / payment sent / ACH complete / CheckAlt complete. Save without reason → “Override requires a reason.” Cancelled. Check left Endorsing.
+- Freedom staff: Review/Endorsing/Ready/Deposited/Loss Draft/Funds Released opened; one Endorsing check read-only (Overview/Endorsements/Funds/Files/Audit). No Void.
+- Golden-path transition sequence **not** repeated.
+
+Bulk Void/Reissue of live Freedom checks not executed.
+
+## Admin override
+
+Pass 2 already proved Review ↔ Endorsing with actor/reason/old/new/timestamp. Pass 3 re-opened destinations and cancel. Four known inconsistent status/stage rows **not** modified.
+
+## Mortgage Ops / Homeowner Ops
+
+Freedom staff nav has **no** Mortgage Ops / Homeowner Ops entries. Queue remains EMAIL_OTP **BLOCKED** (not the whole page). Hire not clicked. Public ledger / invalid token from Pass 2 not re-run. Revoked-token ledger not newly opened.
+
+## Payments / Wallet / Moov
+
+- Invoices: Refresh fail-closes (“Set up your payment account first”). New Invoice fill 0 / 0.01 / 999999.99 then close without Send.
+- Wallet: Pending setup $0.00. Add funds dialog; amount validation; **Add funds from bank not clicked**. Refresh balances PASS.
+- Moov/CheckAlt/Plaid not enabled. No money movement.
+
+## Claim Ledger
+
+Pass 2 `claim_settlements` **503 did not reproduce**. C1C `POST /data/query` table `claim_settlements` now **200 with `data: []`**. Numeric settlement-backed UI reconciliation stays **BLOCKED** on empty data, not on 503. Independent fixture math remains supporting evidence only — not upgraded to PASS.
+
+## Mobile 390px (required this pass)
+
+Chrome DevTools device mode **390 × 924**. Physical TAPs as C1C admin.
+
+| Surface | Result | Functional vs cosmetic |
+|---|---|---|
+| Queue tiles Review / Endorsing / Manager | **PASS** | 2-column wrap; tappable |
+| Open E2E-1789149838411; Overview / Endorsements / Funds / Files | **PASS** | |
+| Partners / Audit tabs | **PASS with caveat** | `overflow-x-auto`; Partners clipped; Audit off-screen until scroll — not classified FAIL because scroll exists |
+| Manager subtabs | **PASS** | wrap; Homeowner Uploads/Reissue at fold |
+| Settings Profile | **PASS** | restored Condition One Commercial |
+| Payments History / Invoices | **PASS** | Recipients / Tax need horizontal scroll |
+| Search + amount column | **FAIL (P3 layout)** | placeholder clips; Amount column clipped. Search field still tappable |
+
+No hamburger; icon nav remains. Wallet / Mortgage Ops / Homeowner Ops / owner admin **not** re-tapped at 390 this pass.
+
+Evidence: `pass3_mobile_390_check_center.webp`, `pass3_mobile_390_check_detail.webp`, `pass3_mobile_390_manager.webp`, `pass3_mobile_390_settings.webp`, `pass3_mobile_390_payments.webp`.
+
+## Defects
+
+### Newly discovered P0
+
+None.
+
+### Newly discovered P1
+
+None. (Bank Deposits date-with-deposits is a **coverage blocker**, not a new product P1: the UI exists and C1C empty state works.)
+
+### Newly discovered P2
+
+- **P2-c1c-branding-freedom-placeholders** (classification upgrade): C1C Branding shows Freedom placeholders while `company_branding` is empty and `tenants.name` is Condition One Commercial. Not stored C1C config; still wrong tenant-facing copy.
+- **P2-staging-dynamic-import (intermittent):** `Failed to fetch dynamically imported module` on Manager → Returned (recovered) and later `/c1c/payments` / `/c1c/checks` (Chrome “Aw, Snap” / Loading). Does not always reproduce. Chrome also showed “Relaunch to update”.
+
+### Newly discovered P3
+
+- **P3-mobile-search-clip:** 390px Check Center search placeholder and Amount column clip.
+- Inline override Save requires a reason while the reason field can sit below the fold.
+- Tenant `/c1c/login` and `/freedom/login` have no staging-password toggle (by design; use `/login`).
+
+### Previously known that reproduced
+
+- Freedom admin `identity_not_linked` (not retried; still NO-GO).
+- C1C Branding Freedom strings (now explained as placeholders).
+- Production `checksops.com` AWS staging banner (not re-authenticated; still recorded P0).
+- Four inconsistent status/stage rows (not rewritten; not re-queried as a mutation).
+
+### Previously known that did not reproduce
+
+- **`claim_settlements` 503** — now 200 empty for C1C.
+- Platform owner Banking / Wallet deny (already PASS in Pass 2; not re-broken).
+
+## Remaining unclicked (UNTESTED = 1151)
+
+| Group | Remaining UNTESTED |
+|---|---|
+| Settings | **207** |
+| Check Center (non-Manager) | **283** |
+| Manager | **44** |
+| Mortgage Ops | **4** |
+| Homeowner Ops | **148** |
+| Payments / Financials | **244** |
+| Wallet / Moov | **25** |
+| Admin | **116** |
+| public / token routes | **79** |
+| mobile (additional 390 IDs) | **1** |
+| other | **0** |
+
+### BLOCKED dependency map (exact)
+
+| Dependency | What stays BLOCKED |
+|---|---|
+| Freedom admin `identity_not_linked` | Freedom Manager, Freedom Bank Deposits **day expand / check list / totals for a deposit day / Export CSV**, Freedom-admin override, Freedom-admin Settings branding save |
+| Email / SES workstream | Send upload link, user invite, Generate/send invoice, Contact a Pro, Mortgage Hire / password-reset email, homeowner OTP send, 1099 generate if it emails |
+| EMAIL_OTP / no mailbox | Mortgage Ops **queue** (personnel view still testable for owner) |
+| Provider execution OFF | Add funds from bank, Transfer to wallet, CheckAlt submit, Moov ACH, Disburse, Enable payouts |
+| Empty C1C `checkalt_deposits` | C1C expand-day / Export CSV / date-with-deposits |
+| Empty `claim_settlements` | Numeric ledger reconciliation (read path is 200 empty, not 503) |
+| Save Company Settings while placeholders show Freedom | Branding persist on C1C |
+
+## Evidence (Pass 3)
+
+<img src="/opt/cursor/artifacts/pass3_c1c_branding_freedom_name.webp" alt="C1C Branding tab showing Freedom Claims Adjusting placeholders" />
+
+<img src="/opt/cursor/artifacts/pass3_profile_name_restored.webp" alt="C1C Profile company name restored to Condition One Commercial" />
+
+<img src="/opt/cursor/artifacts/pass3_c1c_bank_deposits_manager.webp" alt="C1C Manager Bank Deposits empty state $0.00 settled and in transit" />
+
+<img src="/opt/cursor/artifacts/pass3_freedom_staff_no_manager.webp" alt="Freedom staff Check Center with no Manager card" />
+
+<img src="/opt/cursor/artifacts/pass3_override_destinations.webp" alt="C1C override destinations without deposited or ACH complete" />
+
+<img src="/opt/cursor/artifacts/pass3_c1c_wallet_add_funds_cancel.webp" alt="C1C wallet add-funds dialog cancelled at Pending setup" />
+
+<img src="/opt/cursor/artifacts/pass3_c1c_homeowner_uploads.webp" alt="C1C Homeowner Uploads form up to email boundary" />
+
+<img src="/opt/cursor/artifacts/pass3_mobile_390_check_center.webp" alt="390px C1C Check Center queue tiles" />
+
+<img src="/opt/cursor/artifacts/pass3_mobile_390_check_detail.webp" alt="390px C1C check detail E2E-1789149838411" />
+
+<img src="/opt/cursor/artifacts/pass3_mobile_390_manager.webp" alt="390px C1C Manager subtabs" />
+
+<img src="/opt/cursor/artifacts/pass3_mobile_390_settings.webp" alt="390px C1C Settings Profile Condition One Commercial" />
+
+<img src="/opt/cursor/artifacts/pass3_mobile_390_payments.webp" alt="390px C1C Payments History" />
 
 ---
 
