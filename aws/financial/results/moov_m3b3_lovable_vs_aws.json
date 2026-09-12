@@ -1,0 +1,41 @@
+{
+  "phase": "M3b.3-forensic-lovable-vs-aws",
+  "captured_at": "2026-09-10T02:19:18.781Z",
+  "mutations": false,
+  "moov_http": false,
+  "secret_values_printed": false,
+  "lovable_secret_values_readable": false,
+  "classification_primary": "A. AWS has different credentials",
+  "lovable_freedom_environment": "production",
+  "freedom_moov_mode": "production",
+  "c1c_moov_mode": "production",
+  "freedom_provider_account_id_fp": "60922058…de96",
+  "same_account_as_aws_readiness": true,
+  "http_oauth_contract_match": true,
+  "credential_shape_matches_working_sandbox": true,
+  "aws_public_key_sha256_12": "b4dd6a5880e7",
+  "sandbox_public_key_sha256_12": "2e3da5f53f6b",
+  "hashes_equal": false,
+  "production_transfer_ids_fp": ["8a23259b…c0da", "dacaf768…fb78"],
+  "recipients_moov": { "count": 4, "awaiting_bank": 4, "production": 3, "sandbox": 1 },
+  "smallest_fix": {
+    "CODE_CHANGE": false,
+    "CONFIG_CHANGE": false,
+    "SECRET_CHANGE": true,
+    "MOOV_DASHBOARD_CHANGE": false,
+    "DATABASE_ACCOUNT_ID_CHANGE": false
+  },
+  "go_nogo_apply_secret_copy": "GO",
+  "go_nogo_money": "NO-GO",
+  "flags": {
+    "AWS_PROVIDER_LIVE_READS_ENABLED": true,
+    "AWS_MOOV_ENABLED": false,
+    "AWS_PROVIDER_EXECUTION_ENABLED": false,
+    "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": false,
+    "AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED": false
+  },
+  "sql72": "NOT_APPLIED",
+  "money_moved": false,
+  "lovable_changed": false,
+  "webhook_changed": false
+}

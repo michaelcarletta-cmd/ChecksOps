@@ -1,0 +1,164 @@
+{
+  "captured_at": "2026-09-10T10:52:51.517Z",
+  "phase": "M3b.9",
+  "mutations": false,
+  "moov_changed": false,
+  "webhook_registered": false,
+  "secrets_written": false,
+  "flags": {
+    "AWS_PROVIDER_LIVE_READS_ENABLED": "true",
+    "AWS_MOOV_ENABLED": "false",
+    "AWS_PROVIDER_EXECUTION_ENABLED": "false",
+    "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": "false",
+    "AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED": "false",
+    "AWS_PROVIDER_WEBHOOK_DRY_RUN": "true",
+    "AWS_MOOV_WEBHOOK_SECRET": null,
+    "ORIGIN_VERIFY_REQUIRE": null,
+    "CHECKSOPS_ENV": "production-prep"
+  },
+  "lambda": {
+    "last_modified": "2026-09-10T10:45:47.000+0000",
+    "code_sha": "ItJiyRVnWJZ2DIUce3ZhalFn3LrZrkKMSXdpP6MJo50="
+  },
+  "secret_meta": {
+    "last_changed": "2026-09-10T10:31:10.233000+00:00",
+    "version_id": "99f01662-2eb6-4668-bee8-f88a058f6d00",
+    "MOOV_WEBHOOK_SECRET_present": false,
+    "MOOV_WEBHOOK_SECRET_length": 0,
+    "MOOV_PLATFORM_ACCOUNT_ID_present": false,
+    "MOOV_ENVIRONMENT": "production"
+  },
+  "origin_verify": {
+    "last_modified": "2026-09-09T02:07:14.000+0000",
+    "ORIGIN_VERIFY_REQUIRE": "true",
+    "mode": "require"
+  },
+  "api": {
+    "route_count": 2,
+    "routes": [
+      {
+        "key": "OPTIONS /{proxy+}",
+        "authorization_type": "NONE",
+        "authorizer_id": null
+      },
+      {
+        "key": "$default",
+        "authorization_type": "CUSTOM",
+        "authorizer_id": "0dwrwx"
+      }
+    ],
+    "authorizers": [
+      {
+        "name": "checksops-production-origin-verify",
+        "type": "REQUEST",
+        "identity_sources": [
+          "$context.httpMethod"
+        ]
+      }
+    ]
+  },
+  "cloudfront": {
+    "domain": "dmgs35lzv89ms.cloudfront.net",
+    "aliases": [
+      "www.checksops.com",
+      "checksops.com"
+    ],
+    "status": "Deployed",
+    "behaviors": [
+      {
+        "path": "/prep",
+        "allowed_methods": [
+          "HEAD",
+          "DELETE",
+          "POST",
+          "GET",
+          "OPTIONS",
+          "PUT",
+          "PATCH"
+        ],
+        "origin": "ProductionPrepHttpApi"
+      },
+      {
+        "path": "/prep/*",
+        "allowed_methods": [
+          "HEAD",
+          "DELETE",
+          "POST",
+          "GET",
+          "OPTIONS",
+          "PUT",
+          "PATCH"
+        ],
+        "origin": "ProductionPrepHttpApi"
+      },
+      {
+        "path": "default",
+        "allowed_methods": [
+          "HEAD",
+          "GET",
+          "OPTIONS"
+        ],
+        "origin": "ProductionSpaS3"
+      }
+    ]
+  },
+  "money_routes": {
+    "moov-transfer-create": {
+      "http": 403,
+      "error": "production_execution_blocked",
+      "liveProviderCalled": false
+    }
+  },
+  "sql72": {
+    "status": "NOT_APPLIED",
+    "message": "column \"provider_http_attempted_at\" does not exist"
+  },
+  "providers_status": {
+    "productionSupabaseChanged": false,
+    "productionWebhooksRedirected": false,
+    "AWS_PROVIDER_WEBHOOK_DRY_RUN": true,
+    "MOOV_WEBHOOK_SECRET_configured": null
+  },
+  "unsigned_lambda": {
+    "http": 401,
+    "error": "invalid_signature"
+  },
+  "http_probes": {
+    "health_cf": {
+      "url": "https://checksops.com/prep/health",
+      "method": "GET",
+      "status": 200,
+      "cloudfront": true,
+      "body_preview": "{\"service\":\"checksops-api\",\"environment\":\"production-prep\",\"status\":\"ok\",\"database\":\"not-connected\",\"databaseSecretConfigured\":true,\"databaseName\":\"checksops\",\"productionSupabaseChanged\":false}",
+      "origin_verify_hint": false,
+      "content_type": "application/json"
+    },
+    "webhook_get_cf": {
+      "url": "https://checksops.com/prep/webhooks/moov",
+      "method": "GET",
+      "status": 404,
+      "cloudfront": true,
+      "body_preview": "{\"error\":\"not_found\",\"message\":\"AWS migration API route is not implemented yet.\"}",
+      "origin_verify_hint": false,
+      "content_type": "application/json"
+    },
+    "webhook_unsigned_cf": {
+      "url": "https://checksops.com/prep/webhooks/moov",
+      "method": "POST",
+      "status": 401,
+      "cloudfront": true,
+      "body_preview": "{\"service\":\"checksops-api\",\"environment\":\"production-prep\",\"productionSupabaseChanged\":false,\"productionWebhooksRedirected\":false,\"ok\":false,\"statusCode\":401,\"error\":\"invalid_signature\",\"message\":\"Webhook rejected\",\"provider\":\"moov\"}",
+      "origin_verify_hint": false,
+      "content_type": "application/json"
+    },
+    "webhook_unsigned_execute_api": {
+      "url": "https://kiqojucc02.execute-api.us-east-1.amazonaws.com/prep/webhooks/moov",
+      "method": "POST",
+      "status": 403,
+      "cloudfront": false,
+      "body_preview": "{\"message\":\"Forbidden\"}",
+      "origin_verify_hint": true,
+      "content_type": "application/json"
+    }
+  }
+}
