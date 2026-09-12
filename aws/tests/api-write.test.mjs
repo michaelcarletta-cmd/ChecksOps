@@ -143,6 +143,15 @@ test('allowlist rejects financial tables and unknown columns; ignores spoof iden
   assert.equal(ok.error, undefined);
   assert.equal(ok.values.user_id, undefined);
   assert.equal(ok.ignored.includes('user_id'), true);
+  const claimNumber = pickAllowlistedValues('check_intake_items', {
+    detected_claim_number: 'CLM-47',
+    carrier_name: 'Test',
+  });
+  assert.equal(claimNumber.error, undefined);
+  assert.equal(claimNumber.values.detected_claim_number, 'CLM-47');
+  assert.ok(!WRITE_ALLOWLIST.check_intake_items.columns.has('amount'));
+  assert.ok(WRITE_ALLOWLIST.tenants.columns.has('subscription_status'));
+  assert.ok(WRITE_ALLOWLIST.tenants.clientIgnored.has('moov_environment'));
   assert.equal(CLIENT_IDENTITY_KEYS.has('tenant_id'), true);
   assert.equal(WRITE_ALLOWLIST.financial_stepup_log.ops.has('insert'), true);
   assert.equal(WRITE_ALLOWLIST.financial_stepup_log.ops.has('update'), false);
