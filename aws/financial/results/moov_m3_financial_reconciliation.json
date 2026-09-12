@@ -1,0 +1,31 @@
+{
+  "phase": "M3",
+  "captured_at": "2026-09-09T20:54:29Z",
+  "live_rds_written": false,
+  "sql64_applied": false,
+  "sql72_applied": false,
+  "legitimate_financial_rows_modified": false,
+  "test_rows_isolated": true,
+  "note": "M3 tests use in-process SQL mocks only. This agent did not connect to live RDS or Supabase. Before = after from Tranche 4 / first-copy inventory.",
+  "source": [
+    "aws/providers/TRANCHE_4_RESULTS.md",
+    "aws/db-copy/FIRST_COPY_STATUS.json"
+  ],
+  "counts": {
+    "payment_transfers": { "before": 0, "after": 0 },
+    "payment_transfers_amount_cents": { "before": 0, "after": 0 },
+    "disbursement_splits": { "before": 108, "after": 108 },
+    "disbursement_splits_amount": { "before": 822212.97, "after": 822212.97 },
+    "disbursement_batches": { "before": 109, "after": 109 },
+    "disbursement_batches_check_amount": { "before": 829768.914, "after": 829768.914 },
+    "disbursement_batches_amount_reserved_cents": { "before": 0, "after": 0 },
+    "check_intake_items": { "before": 182, "after": 182 },
+    "check_intake_amount": { "before": 1317000.53, "after": 1317000.53 },
+    "checkalt_deposits": { "before": 58, "after": 58 },
+    "checkalt_deposits_amount": { "before": 380333.17, "after": 380333.17 },
+    "deposit_items_amount": { "before": 963972.98, "after": 963972.98 },
+    "homeowner_ledger_events": { "before": 657, "after": 657 },
+    "homeowner_ledger_amount": { "before": 2977337.23, "after": 2977337.23 }
+  },
+  "delta": 0
+}
