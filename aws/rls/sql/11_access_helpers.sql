@@ -48,6 +48,27 @@ AS $$
       );
 $$;
 
+CREATE OR REPLACE FUNCTION public.aws_is_active_shared_check_target(_check_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+SET row_security = off
+AS $$
+  SELECT _check_id IS NOT NULL
+     AND EXISTS (
+       SELECT 1
+       FROM public.shared_checks sc
+       WHERE sc.check_id = _check_id
+         AND sc.revoked_at IS NULL
+         AND public.aws_can_access_tenant(sc.target_tenant_id)
+     );
+$$;
+
+COMMENT ON FUNCTION public.aws_is_active_shared_check_target(uuid) IS
+  'True when auth.uid() can act as target_tenant_id of an unrevoked shared_checks row for _check_id. Knowledge of UUIDs or Partner Codes is not sufficient. Source/owner access is not granted here.';
+
 CREATE OR REPLACE FUNCTION public.aws_can_access_check(_check_id uuid)
 RETURNS boolean
 LANGUAGE sql
@@ -63,12 +84,16 @@ AS $$
         WHERE ci.id = _check_id
           AND public.aws_can_access_tenant(ci.tenant_id)
       )
+      OR public.aws_is_active_shared_check_target(_check_id)
       OR public.current_tenant_is_check_funds_recipient(_check_id)
       OR (
         public.has_role(auth.uid(), 'mortgage_agent'::public.app_role)
         AND public.mortgage_agent_can_view_check(_check_id)
       );
 $$;
+
+COMMENT ON FUNCTION public.aws_can_access_check(uuid) IS
+  'SELECT/read helper only. Active shared_checks target membership grants READ. Writes must use aws_can_write_check, which does not include partner shares.';
 
 CREATE OR REPLACE FUNCTION public.aws_can_access_same_tenant_user(_user_id uuid)
 RETURNS boolean
@@ -175,6 +200,7 @@ COMMENT ON FUNCTION public.aws_can_access_tax_profiles(uuid) IS
 
 REVOKE ALL ON FUNCTION public.aws_can_access_tenant(uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.aws_can_access_claim(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.aws_is_active_shared_check_target(uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.aws_can_access_check(uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.aws_can_access_same_tenant_user(uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.aws_can_access_deposit_item(uuid) FROM PUBLIC;

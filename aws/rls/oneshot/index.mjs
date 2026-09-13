@@ -49,6 +49,7 @@ const HELPER_NAMES = [
   'aws_is_cross_tenant_reader',
   'aws_can_access_tenant',
   'aws_can_access_claim',
+  'aws_is_active_shared_check_target',
   'aws_can_access_check',
   'aws_can_access_same_tenant_user',
   'aws_can_access_deposit_item',
