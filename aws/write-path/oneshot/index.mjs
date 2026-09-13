@@ -304,6 +304,35 @@ export const handler = async (event) => {
     if (step === 'inspect-integration-grants') {
       return { ok: true, step, ...(await inspectIntegrationGrants(client)) };
     }
+    if (step === 'inspect-claim-fixtures') {
+      const { rows } = await client.query(`
+        SELECT
+          ci.id::text AS check_id,
+          ci.check_number,
+          ci.tenant_id::text AS tenant_id,
+          ci.claim_id::text AS claim_id,
+          ci.status,
+          ci.check_stage,
+          (c.id IS NOT NULL) AS claim_row_exists,
+          c.org_id::text AS claim_org_id
+        FROM public.check_intake_items ci
+        LEFT JOIN public.claims c ON c.id = ci.claim_id
+        WHERE ci.claim_id IS NOT NULL
+        ORDER BY (c.id IS NOT NULL) DESC, ci.updated_at DESC NULLS LAST
+        LIMIT 40
+      `);
+      const { rows: claimCounts } = await client.query(`
+        SELECT count(*)::int AS claims FROM public.claims
+      `);
+      return {
+        ok: true,
+        step,
+        claimCount: claimCounts[0]?.claims ?? 0,
+        withClaimId: rows.length,
+        withExistingClaimRow: rows.filter((row) => row.claim_row_exists).length,
+        rows,
+      };
+    }
     if (step === 'grant-claim-settlements') {
       const before = await inspectIntegrationGrants(client);
       await client.query(readSql(SQL_DIR, '40_claim_settlements_grant.sql'));
