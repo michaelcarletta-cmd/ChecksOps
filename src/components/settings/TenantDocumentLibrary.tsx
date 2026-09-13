@@ -13,21 +13,16 @@ import {
   FileText, Upload, Loader2, Trash2, Download, Palette, Home as HomeIcon,
   FileSignature, Image as ImageIcon, Headset, Eye, Landmark,
 } from "lucide-react";
+import {
+  MORTGAGE_LIBRARY_DOC_KINDS,
+  isApprovedMortgageLibraryDocType,
+  mortgageLibraryDocTypeForLabel,
+} from "@/lib/mortgageLibraryDocTypes";
 
 // Categories stored as doc_type = `library:<category>:<slug>`
 type LibraryCategory = "mortgage" | "template" | "shingle" | "siding" | "letterhead" | "catalog";
 
-// Mortgage companies almost always ask for the same packet up front.
-const MORTGAGE_DOC_KINDS = [
-  "W-9",
-  "Contractor license",
-  "General liability insurance",
-  "Workers comp insurance",
-  "Certificate of insurance",
-  "Signed contract",
-  "Adjuster / TPA letter",
-  "Other",
-];
+const MORTGAGE_DOC_KIND_LABELS = MORTGAGE_LIBRARY_DOC_KINDS.map((kind) => kind.label);
 
 const CATEGORIES: {
   key: LibraryCategory;
@@ -153,7 +148,7 @@ export function TenantDocumentLibrary({ tenantId }: { tenantId: string }) {
                   tenantId={tenantId}
                   category={c.key}
                   accept={c.accept}
-                  kinds={c.key === "mortgage" ? MORTGAGE_DOC_KINDS : undefined}
+                  kinds={c.key === "mortgage" ? MORTGAGE_DOC_KIND_LABELS : undefined}
                   defaultAutoShare={c.key === "mortgage"}
                   onDone={load}
                 />
@@ -204,6 +199,28 @@ function UploadBar({
       toast({ title: "File too large", description: "Maximum 25MB.", variant: "destructive" });
       return;
     }
+    const label = displayName || (kinds && kind ? kind : "") || file.name;
+    let docType: string;
+    if (category === "mortgage") {
+      const canonical = mortgageLibraryDocTypeForLabel(kind);
+      if (!canonical || !isApprovedMortgageLibraryDocType(canonical)) {
+        toast({
+          title: "Unsupported document type",
+          description: "Choose one of the Mortgage Ops packet types.",
+          variant: "destructive",
+        });
+        return;
+      }
+      docType = canonical;
+    } else {
+      const slug = label
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "")
+        .slice(0, 60) || crypto.randomUUID().slice(0, 8);
+      docType = `${PREFIX}${category}:${slug}`;
+    }
+
     setUploading(true);
     try {
       const ext = file.name.split(".").pop() || "bin";
@@ -213,19 +230,12 @@ function UploadBar({
         .upload(path, file, { upsert: false, contentType: file.type });
       if (upErr) throw upErr;
 
-      const label = displayName || (kinds && kind && kind !== "Other" ? kind : "") || file.name;
-      const slug = label
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-|-$/g, "")
-        .slice(0, 60) || crypto.randomUUID().slice(0, 8);
-
       // Only Mortgage docs can auto-share with the Mortgage Desk; templates,
       // catalogs and letterhead stay internal to the tenant.
       const shareWithOps = category === "mortgage" && autoShare;
       const { error: insErr } = await supabase.from("tenant_documents" as any).insert({
         tenant_id: tenantId,
-        doc_type: `${PREFIX}${category}:${slug}`,
+        doc_type: docType,
         file_path: path,
         file_name: label,
         mime_type: file.type,

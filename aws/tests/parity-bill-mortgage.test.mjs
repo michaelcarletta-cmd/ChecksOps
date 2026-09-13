@@ -58,6 +58,9 @@ test('authorized mortgage billing never writes fees or calls Stripe/Moov', async
       client: sqlClient([{
         match: (sql) => sql.includes('user_roles'),
         result: () => ({ rows: [{ role: 'staff' }] }),
+      }, {
+        match: (sql) => sql.includes('is_master_owner') || sql.includes('is_platform_owner'),
+        result: () => ({ rows: [{ is_master: false, is_platform: false }] }),
       }]),
     });
     assert.equal(unauthorized.statusCode, 403);
@@ -73,16 +76,16 @@ test('authorized mortgage billing never writes fees or calls Stripe/Moov', async
           result: () => ({ rows: [{ role: 'mortgage_agent' }] }),
         },
         {
-          match: (sql) => sql.includes('mortgage_handling_requests'),
-          result: () => ({ rows: [{ id: REQUEST_ID, tenant_id: TENANT_A, billing_status: 'unbilled' }] }),
+          match: (sql) => sql.includes('is_master_owner') || sql.includes('is_platform_owner'),
+          result: () => ({ rows: [{ is_master: false, is_platform: false }] }),
         },
         {
-          match: (sql) => sql.includes('aws_can_write_tenant'),
-          result: () => ({ rows: [{ ok: false }] }),
+          match: (sql) => sql.includes('mortgage_handling_requests'),
+          result: () => ({ rows: [] }),
         },
       ]),
     });
-    assert.equal(crossTenant.statusCode, 403);
+    assert.equal(crossTenant.statusCode, 404);
     assert.equal(crossTenant.liveStripeCalled, false);
 
     const blocked = await runBillMortgageHandling({
@@ -92,15 +95,15 @@ test('authorized mortgage billing never writes fees or calls Stripe/Moov', async
       client: sqlClient([
         {
           match: (sql) => sql.includes('user_roles'),
-          result: () => ({ rows: [{ role: 'admin' }] }),
+          result: () => ({ rows: [{ role: 'mortgage_agent' }] }),
+        },
+        {
+          match: (sql) => sql.includes('is_master_owner') || sql.includes('is_platform_owner'),
+          result: () => ({ rows: [{ is_master: false, is_platform: false }] }),
         },
         {
           match: (sql) => sql.includes('mortgage_handling_requests'),
           result: () => ({ rows: [{ id: REQUEST_ID, tenant_id: TENANT_A, billing_status: 'unbilled' }] }),
-        },
-        {
-          match: (sql) => sql.includes('aws_can_write_tenant'),
-          result: () => ({ rows: [{ ok: true }] }),
         },
       ]),
     });

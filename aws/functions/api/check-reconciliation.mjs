@@ -4,7 +4,9 @@
  * Skips S3 orphan walks. Does not move money.
  */
 import { withIdentityWrite } from './data.mjs';
-import { USER_ROLES_SQL, TENANT_MEMBERSHIP_SQL } from './identity.mjs';
+import { TENANT_MEMBERSHIP_SQL } from './identity.mjs';
+
+const PLATFORM_OWNER_SQL = `SELECT public.is_master_owner() AS is_master, public.is_platform_owner() AS is_platform`;
 
 const DASHBOARD_BUCKETS = [
   'uploaded',
@@ -25,10 +27,7 @@ const safeQuery = async (client, sql, params = []) => {
   }
 };
 
-const isStaff = (roles = []) => {
-  const set = new Set(roles.map((role) => String(role || '').toLowerCase()));
-  return set.has('admin') || set.has('owner') || set.has('manager') || set.has('staff') || set.has('mortgage_agent');
-};
+const isPlatformOwner = (owner = {}) => owner?.is_master === true || owner?.is_platform === true;
 
 export const buildReconciliationAlerts = ({
   stuck = [],
@@ -73,18 +72,18 @@ export const buildReconciliationAlerts = ({
 };
 
 export const filterAlertsForTenants = (alerts, tenantIds, isAdmin) => {
-  if (isAdmin || !tenantIds?.length) return alerts;
+  if (isAdmin) return alerts;
+  if (!tenantIds?.length) return [];
   const allowed = new Set(tenantIds);
   return alerts.filter((alert) => !alert.tenant_id || allowed.has(alert.tenant_id));
 };
 
 export const runCheckReconciliation = async ({ client, mapping, spoof }) => {
-  const roles = (await safeQuery(client, USER_ROLES_SQL, [mapping.application_user_id])).rows
-    .map((row) => row.role);
   const memberships = (await safeQuery(client, TENANT_MEMBERSHIP_SQL, [mapping.application_user_id])).rows;
   const tenantIds = memberships.map((row) => row.tenant_id).filter(Boolean);
-  const admin = roles.map((role) => String(role).toLowerCase()).includes('admin');
-  if (!admin && !isStaff(roles) && !tenantIds.length) {
+  const owner = (await safeQuery(client, PLATFORM_OWNER_SQL)).rows[0] || {};
+  const admin = isPlatformOwner(owner);
+  if (!admin && !tenantIds.length) {
     return { ok: false, statusCode: 403, error: 'forbidden', spoofFieldsIgnored: spoof };
   }
 
