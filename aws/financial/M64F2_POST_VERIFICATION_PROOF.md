@@ -60,6 +60,9 @@ Do **not** flip it in this phase. Do **not** enable transfer flags.
 Recipient onboarding is complete. Controlled Moov transfer is a **later**
 reviewed phase. Money execution flags stay false.
 
+Browser (observation only): “Setup is complete. You can close this page.”
+No Send/Confirm. Session POST 200. No confirm/initiate POST on this visit.
+
 ## Holds
 
 Do not change any flags here.
