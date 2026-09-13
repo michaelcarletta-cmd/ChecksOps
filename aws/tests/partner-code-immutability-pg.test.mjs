@@ -144,7 +144,7 @@ CREATE TABLE public.tenants (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text NOT NULL,
   slug text NOT NULL UNIQUE,
-  partner_code text UNIQUE,
+  partner_code text NOT NULL UNIQUE,
   notes text
 );
 ${generatorMatch[0]}
@@ -174,7 +174,7 @@ VALUES ('Existing Tenant', 'existing-tenant', '${EXISTING_SYNTHETIC}');
   psql([], fs.readFileSync(MIGRATION, 'utf8'));
   const afterHash = redacted(query("SELECT partner_code FROM public.tenants WHERE slug = 'existing-tenant'"));
   note(`post-migration existing code sha256-12=${afterHash}`);
-  assert.equal(afterHash, beforeHash, '9 existing Partner Codes remain unchanged');
+  assert.equal(afterHash, beforeHash, '13 existing tenant rows unchanged by the migration');
   assert.equal(
     query("SELECT partner_code FROM public.tenants WHERE slug = 'existing-tenant'"),
     EXISTING_SYNTHETIC,
@@ -205,19 +205,35 @@ RETURNING partner_code;
   assert.match(nullErr, /partner_code is immutable once assigned/, '5 UPDATE A -> NULL DENY');
 
   const blankErr = expectFail("UPDATE public.tenants SET partner_code = '' WHERE slug = 'existing-tenant';");
-  assert.match(blankErr, /partner_code is immutable once assigned/, '6 UPDATE A -> blank DENY');
+  assert.match(blankErr, /partner_code is immutable once assigned/, '6 UPDATE A -> empty string DENY');
+
+  const wsErr = expectFail("UPDATE public.tenants SET partner_code = '   ' WHERE slug = 'existing-tenant';");
+  assert.match(wsErr, /partner_code is immutable once assigned/, '7 UPDATE A -> whitespace DENY');
+  assert.match(wsErr, /23001/);
+
+  assert.equal(
+    query("SELECT partner_code FROM public.tenants WHERE slug = 'existing-tenant'"),
+    EXISTING_SYNTHETIC,
+    '10 failed change does not alter the original code',
+  );
+
+  const recycleErr = expectFail(`
+INSERT INTO public.tenants (name, slug, partner_code)
+VALUES ('Recycle Probe', 'recycle-probe', '${EXISTING_SYNTHETIC}');
+`);
+  assert.match(recycleErr, /duplicate key|unique/i, '11 original code remains unavailable after failed mutation');
 
   const sameCount = query(`
 UPDATE public.tenants SET partner_code = '${EXISTING_SYNTHETIC}' WHERE slug = 'existing-tenant';
 SELECT partner_code FROM public.tenants WHERE slug = 'existing-tenant';
 `);
-  assert.equal(sameCount, EXISTING_SYNTHETIC, '7 UPDATE A -> same A PASS');
+  assert.equal(sameCount, EXISTING_SYNTHETIC, '8 UPDATE A -> identical A PASS');
 
   query("UPDATE public.tenants SET notes = 'ordinary update' WHERE slug = 'existing-tenant';");
   assert.equal(
     query("SELECT notes || ':' || partner_code FROM public.tenants WHERE slug = 'existing-tenant'"),
     `ordinary update:${EXISTING_SYNTHETIC}`,
-    '8 ordinary unrelated tenant UPDATE PASS',
+    '9 unrelated tenant field UPDATE PASS',
   );
 
   query(`
@@ -228,11 +244,11 @@ VALUES ('Duplicate Probe', 'duplicate-probe', '${DUPLICATE_SYNTHETIC}');
 INSERT INTO public.tenants (name, slug, partner_code)
 VALUES ('Duplicate Probe Two', 'duplicate-probe-two', '${DUPLICATE_SYNTHETIC}');
 `);
-  assert.match(uniqueErr, /duplicate key|unique/i, '10 uniqueness remains enforced');
+  assert.match(uniqueErr, /duplicate key|unique/i, '12 uniqueness remains enforced');
 
   const stillExisting = query("SELECT partner_code FROM public.tenants WHERE slug = 'existing-tenant'");
   const stillGenerated = query("SELECT partner_code FROM public.tenants WHERE slug = 'generated-tenant'");
   assert.equal(stillExisting, EXISTING_SYNTHETIC);
   assert.equal(stillGenerated, generated);
-  note('matrix PASS 1-10; no production rows modified');
+  note('matrix PASS 1-13; no production rows modified');
 });
