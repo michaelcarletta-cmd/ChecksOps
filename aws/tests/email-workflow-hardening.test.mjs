@@ -14,6 +14,7 @@ import { runSendSignatureRequest } from '../functions/api/esign.mjs';
 import { runHomeownerLedgerSend, runSendFileToHomeowner } from '../functions/api/homeowner.mjs';
 import { runAuthenticatedEndorsement } from '../functions/api/check-endorsement.mjs';
 import { stakeholderResendVerification } from '../functions/api/providers/parity/moov-onboard.mjs';
+import { sql71EmailAuditHandle } from './sql71-email-audit-mock.mjs';
 import { EMAIL_WORKFLOW_HARDENING_MATRIX } from './email-workflow-hardening-matrix.mjs';
 
 const TENANT = '11111111-1111-4111-8111-111111111111';
@@ -59,6 +60,8 @@ const sendClient = ({
     query: async (sql, params = []) => {
       const compact = String(sql).replace(/\s+/g, ' ').trim();
       calls.push({ sql: compact, params });
+      const audit = sql71EmailAuditHandle({ logs })(compact, params);
+      if (audit) return audit;
       if (
         compact.startsWith('SAVEPOINT ')
         || compact.startsWith('RELEASE SAVEPOINT ')
@@ -220,7 +223,11 @@ test('SES mode fail-closes send-email when audit storage is down', async () => {
     const original = client.query.bind(client);
     client.query = async (sql, params = []) => {
       const compact = String(sql).replace(/\s+/g, ' ').trim();
-      if (compact.includes('FROM public.email_send_log') && compact.includes('idempotency_key')) {
+      if (
+        compact.includes('aws_email_send_log_peek')
+        || compact.includes('aws_email_send_log_reserve')
+        || (compact.includes('FROM public.email_send_log') && compact.includes('idempotency_key'))
+      ) {
         throw new Error('email_send_log unavailable');
       }
       return original(sql, params);
@@ -470,7 +477,6 @@ test('esign, endorsement, ledger, send-file, and stakeholder retries skip SES an
   assert.equal(esignSecond.results?.[0]?.duplicate, true);
   assert.equal(tokenRotates, 1);
 
-  let endorsementTokens = 0;
   const endorseClient = sendClient({
     extra: {
       query: async (compact) => {
@@ -490,10 +496,6 @@ test('esign, endorsement, ledger, send-file, and stakeholder retries skip SES an
           return { rows: [{ id: CHECK, tenant_id: TENANT, check_number: '1001', carrier_name: 'Acme' }] };
         }
         if (compact.includes('aws_can_write_tenant')) return { rows: [{ ok: true }] };
-        if (compact.includes('UPDATE public.check_endorsements') && compact.includes('token = $2')) {
-          endorsementTokens += 1;
-          return { rows: [], rowCount: 1 };
-        }
         return null;
       },
     },
@@ -507,7 +509,10 @@ test('esign, endorsement, ledger, send-file, and stakeholder retries skip SES an
   });
   assert.equal(endorseFirst.ok, true);
   assert.equal(endorseSecond.duplicate, true);
-  assert.equal(endorsementTokens, 1);
+  assert.ok(endorseClient.calls.some((c) => c.sql.includes('aws_mark_endorsement_request_sent')));
+  assert.ok(!endorseClient.calls.some((c) => (
+    c.sql.includes('UPDATE public.check_endorsements') && c.sql.includes('token = $2')
+  )));
 
   let ledgerInserts = 0;
   const ledgerClient = sendClient({

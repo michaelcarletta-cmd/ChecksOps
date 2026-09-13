@@ -30,15 +30,19 @@ const STAKE = '99999999-9999-4999-8999-999999999999';
 const ENDORSE = '88888888-8888-4888-8888-888888888888';
 const COGNITO_SUB = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
 
-const sqlClient = (handlers) => ({
-  query: async (sql, params = []) => {
-    const compact = String(sql).replace(/\s+/g, ' ');
-    for (const handler of handlers) {
-      if (handler.match(compact, params)) return handler.result(params, compact);
-    }
-    return { rows: [], rowCount: 0 };
-  },
-});
+const sqlClient = (handlers) => {
+  const reserved = new Map();
+  const audit = auditEmailHandlers({ reserved });
+  return {
+    query: async (sql, params = []) => {
+      const compact = String(sql).replace(/\s+/g, ' ');
+      for (const handler of [...audit, ...handlers]) {
+        if (handler.match(compact, params)) return handler.result(params, compact);
+      }
+      return { rows: [], rowCount: 0 };
+    },
+  };
+};
 
 const auditEmailHandlers = ({ reserved = new Map() } = {}) => ([
   {
@@ -102,7 +106,7 @@ const auditEmailHandlers = ({ reserved = new Map() } = {}) => ([
 
 const capturingMailer = (sent) => async (payload) => {
   sent.push(payload);
-  return { deliveredCount: 0, sunkCount: 1, mode: 'sink', results: [{ delivery: 'sink', messageId: 'sink-1' }] };
+  return { deliveredCount: 0, sunkCount: 1, mode: 'sink', results: [{ delivery: 'sink', status: 'sunk', messageId: 'sink-1' }] };
 };
 
 const tenantAuthHandlers = () => ([
@@ -320,8 +324,14 @@ test('ledger send, portal invite, OTP, leads, and mortgage notify call mailer on
     mapping,
     spoof,
     send: mail,
-    body: { email: 'home@example.com', tenantName: 'Acme', userName: 'Ada', password: 'SecretPass1!' },
-    client: sqlClient([]),
+    body: {
+      email: 'home@example.com',
+      tenant_id: TENANT,
+      tenantName: 'Acme',
+      userName: 'Ada',
+      password: 'SecretPass1!',
+    },
+    client: sqlClient(tenantAuthHandlers()),
   });
   assert.equal(portal.ok, true);
   assert.doesNotMatch(sent.at(-1).html, /SecretPass1/);

@@ -16,6 +16,7 @@ import {
   runHomeownerLedgerSignLink,
   runHomeownerLedgerView,
 } from '../functions/api/homeowner-ledger-public.mjs';
+import { sql71EmailAuditHandle } from './sql71-email-audit-mock.mjs';
 import { isPublicTokenRoute } from '../../src/lib/publicTokenRoutes.ts';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -43,21 +44,54 @@ const OTHER_EMAIL = 'other@example.com';
 const mapping = { application_user_id: USER };
 const spoof = { ignored: true };
 
-const sqlClient = (handlers) => ({
-  query: async (sql, params = []) => {
-    const compact = String(sql).replace(/\s+/g, ' ');
-    for (const handler of handlers) {
-      if (handler.match(compact, params)) return handler.result(params, compact);
-    }
-    return { rows: [], rowCount: 0 };
-  },
-});
-
 const LOCK = 'mcarletta@freedomadj.com';
 const C1C_FROM = 'noreply@ses-gate.staging.checksops.com';
 const C1C_REPLY = 'payments@condition1commercial.com';
 const C1C_NAME = 'Condition One Commercial';
 const C1C_DOMAIN = 'ses-gate.staging.checksops.com';
+
+const sqlClient = (handlers) => {
+  const logs = new Map();
+  return {
+    query: async (sql, params = []) => {
+      const compact = String(sql).replace(/\s+/g, ' ');
+      const audit = sql71EmailAuditHandle({ logs })(compact, params);
+      if (audit) return audit;
+      for (const handler of handlers) {
+        if (handler.match(compact, params)) return handler.result(params, compact);
+      }
+      if (compact.includes('FROM public.tenants')) {
+        return {
+          rows: [{
+            id: TENANT_A,
+            name: C1C_NAME,
+            logo_url: null,
+            primary_color: '#1a56db',
+            email_from_name: C1C_NAME,
+            email_from_address: C1C_FROM,
+            email_reply_to: C1C_REPLY,
+            is_system_tenant: false,
+          }],
+        };
+      }
+      if (compact.includes('FROM public.tenant_email_settings')) {
+        return {
+          rows: [{
+            from_name: C1C_NAME,
+            reply_to: C1C_REPLY,
+            sending_mode: 'custom',
+            sending_domain: C1C_DOMAIN,
+            from_address: C1C_FROM,
+            domain_status: 'verified',
+            ses_identity_name: C1C_DOMAIN,
+            custom_sending_enabled: true,
+          }],
+        };
+      }
+      return { rows: [], rowCount: 0 };
+    },
+  };
+};
 
 const capturingMailer = (sent) => async (payload) => {
   sent.push(payload);
@@ -107,6 +141,12 @@ const ledgerSendClient = ({
     query: async (sql, params = []) => {
       const compact = String(sql).replace(/\s+/g, ' ').trim();
       calls.push({ sql: compact, params });
+      const audit = sql71EmailAuditHandle({
+        logs,
+        failPeek: failIdempotencySelect,
+        failReserve: failInsert,
+      })(compact, params);
+      if (audit) return audit;
       if (
         compact.startsWith('SAVEPOINT ')
         || compact.startsWith('RELEASE SAVEPOINT ')
@@ -353,8 +393,9 @@ test('public frontend routes for /ledger and /h/ledger never require login', () 
   assert.match(app, /if \(isPublicTokenRoute\(pathname\)\)/);
   assert.match(app, /return <CheckOpsRoutes \/>/);
 
-  assert.match(routes, /pathname\.startsWith\("\/ledger\/"\)/);
-  assert.match(routes, /pathname\.startsWith\("\/h\/ledger\/"\)/);
+  assert.match(routes, /"\/ledger\/"/);
+  assert.match(routes, /"\/h\/ledger\/"/);
+  assert.match(routes, /PUBLIC_TOKEN_PATH_PREFIXES/);
   assert.match(whiteLabel, /Navigate to=\{user && isMember \? "checks" : "login"\}/);
   assert.doesNotMatch(ledgerPage, /useAuth|Cognito|navigate\("\/login"/);
   assert.match(ledgerPage, /homeowner-ledger-view/);
@@ -923,7 +964,8 @@ test('C1C tenant branding is used for claim-bound tracking email', async () => {
   assert.match(sent[0].html, /\/ledger\//);
   assert.doesNotMatch(sent[0].html, /\/h\/ledger\//);
   assert.ok(client.calls.some((c) => c.sql.includes('FROM public.tenant_email_settings')));
-  assert.ok(client.calls.some((c) => c.sql.includes('INSERT INTO public.email_send_log') && c.sql.includes("'pending'")));
+  assert.ok(client.calls.some((c) => c.sql.includes('aws_email_send_log_reserve')));
+  assert.ok(!client.calls.some((c) => c.sql.includes('INSERT INTO public.email_send_log')));
 });
 
 test('pre-claim send uses /start-claim and still audits before the mailer', async () => {
