@@ -264,6 +264,13 @@ CREATE TABLE IF NOT EXISTS public.check_intake_items (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid
 );
+CREATE TABLE IF NOT EXISTS public.shared_checks (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  check_id uuid,
+  source_tenant_id uuid,
+  target_tenant_id uuid,
+  revoked_at timestamptz
+);
 CREATE TABLE IF NOT EXISTS public.deposit_items (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   check_id uuid,

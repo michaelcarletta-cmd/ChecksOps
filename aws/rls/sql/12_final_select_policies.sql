@@ -93,7 +93,10 @@ CREATE POLICY aws_select_check_endorsement_events ON public.check_endorsement_ev
 DROP POLICY IF EXISTS aws_select_check_endorsements ON public.check_endorsements;
 CREATE POLICY aws_select_check_endorsements ON public.check_endorsements
   FOR SELECT TO authenticated
-  USING (public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id));
+  USING (
+    public.aws_is_cross_tenant_reader()
+    OR public.aws_can_access_tenant(tenant_id)
+  );
 
 DROP POLICY IF EXISTS aws_select_check_files ON public.check_files;
 CREATE POLICY aws_select_check_files ON public.check_files
@@ -103,7 +106,11 @@ CREATE POLICY aws_select_check_files ON public.check_files
 DROP POLICY IF EXISTS aws_select_check_intake_items ON public.check_intake_items;
 CREATE POLICY aws_select_check_intake_items ON public.check_intake_items
   FOR SELECT TO authenticated
-  USING (public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id));
+  USING (
+    public.aws_is_cross_tenant_reader()
+    OR public.aws_can_access_tenant(tenant_id)
+    OR public.aws_is_active_shared_check_target(id)
+  );
 
 DROP POLICY IF EXISTS aws_select_check_intake_mortgage_draws ON public.check_intake_mortgage_draws;
 CREATE POLICY aws_select_check_intake_mortgage_draws ON public.check_intake_mortgage_draws
@@ -123,12 +130,23 @@ CREATE POLICY aws_select_check_messages ON public.check_messages
 DROP POLICY IF EXISTS aws_select_check_payees ON public.check_payees;
 CREATE POLICY aws_select_check_payees ON public.check_payees
   FOR SELECT TO authenticated
-  USING (public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id));
+  USING (
+    public.aws_is_cross_tenant_reader()
+    OR public.aws_can_access_tenant(tenant_id)
+  );
 
 DROP POLICY IF EXISTS aws_select_check_payment_directions ON public.check_payment_directions;
 CREATE POLICY aws_select_check_payment_directions ON public.check_payment_directions
   FOR SELECT TO authenticated
-  USING (public.aws_can_access_check(check_id));
+  USING (
+    public.aws_can_access_check_non_partner(check_id)
+    OR EXISTS (
+      SELECT 1
+      FROM public.claim_checks cc
+      WHERE cc.id = check_payment_directions.check_id
+        AND public.aws_can_access_check_non_partner(cc.check_intake_item_id)
+    )
+  );
 
 DROP POLICY IF EXISTS aws_select_check_reconciliation_alerts ON public.check_reconciliation_alerts;
 CREATE POLICY aws_select_check_reconciliation_alerts ON public.check_reconciliation_alerts
@@ -298,7 +316,7 @@ CREATE POLICY aws_select_deposit_exceptions ON public.deposit_exceptions
 DROP POLICY IF EXISTS aws_select_deposit_items ON public.deposit_items;
 CREATE POLICY aws_select_deposit_items ON public.deposit_items
   FOR SELECT TO authenticated
-  USING (public.aws_can_access_check(check_id));
+  USING (public.aws_can_access_check_non_partner(check_id));
 
 DROP POLICY IF EXISTS aws_select_deposit_manager_snapshots ON public.deposit_manager_snapshots;
 CREATE POLICY aws_select_deposit_manager_snapshots ON public.deposit_manager_snapshots

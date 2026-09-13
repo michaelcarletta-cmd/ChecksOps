@@ -52,6 +52,9 @@ AS $$
       );
 $$;
 
+COMMENT ON FUNCTION public.aws_can_write_check(uuid) IS
+  'Owner-tenant write only. Do not add shared_checks or aws_can_access_check here; partner read must not become write.';
+
 CREATE OR REPLACE FUNCTION public.aws_can_write_claim(_claim_id uuid)
 RETURNS boolean
 LANGUAGE sql

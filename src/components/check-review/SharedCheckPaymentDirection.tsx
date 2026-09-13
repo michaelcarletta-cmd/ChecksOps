@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
+import { fillPartnerSigners } from "@/lib/partnerSafeReads";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -145,7 +146,7 @@ export function SharedCheckPaymentDirection({
         .ilike("document_name", "Direction to Pay%")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data ?? [];
+      return fillPartnerSigners(data ?? []);
     },
   });
 

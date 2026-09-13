@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { PARTNER_CHECK_ENDORSEMENTS, selectOwnerThenPartner } from "@/lib/partnerSafeReads";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -60,10 +61,11 @@ export function CheckStatusTimeline({ checkId }: CheckStatusTimelineProps) {
           .select("status, created_at, updated_at")
           .eq("id", checkId)
           .maybeSingle(),
-        supabase
-          .from("check_endorsements")
-          .select("status, request_sent_at, signed_at, payee_name, created_at")
-          .eq("check_id", checkId),
+        selectOwnerThenPartner("check_endorsements", PARTNER_CHECK_ENDORSEMENTS, (from) =>
+          from
+            .select("status, request_sent_at, signed_at, payee_name, created_at")
+            .eq("check_id", checkId),
+        ),
       ]);
       if (checkRes.error) throw checkRes.error;
       if (endRes.error) throw endRes.error;

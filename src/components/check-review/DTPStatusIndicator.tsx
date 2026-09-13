@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { fillPartnerSigners } from "@/lib/partnerSafeReads";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { FileSignature, Loader2 } from "lucide-react";
@@ -71,7 +72,7 @@ export function DTPStatusIndicator({ checkIntakeItemId, className }: DTPStatusIn
         .ilike("document_name", "Direction to Pay%")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []) as DTPRecord[];
+      return fillPartnerSigners((data ?? []) as DTPRecord[]);
     },
     refetchInterval: (q) => {
       const rows = (q.state.data ?? []) as DTPRecord[];
