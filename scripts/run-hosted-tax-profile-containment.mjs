@@ -23,12 +23,13 @@
  *
  * Exact-commit Git authorization does not replace human review of that commit.
  * Hosted execution remains unauthorized until a separate event and the
- * Tax/1099 error-banner PR. SIGINT/SIGTERM clean the 0700 temp dir and 0600
- * passfile when the process can still run; SIGKILL/crash/power-loss cleanup
- * is not guaranteed. Relaxed psql trust exists only as a test-injected
- * runCli({ psqlTrust }) harness and cannot be enabled by env or CLI flags.
+ * Tax/1099 error-banner PR. psql is spawned asynchronously so SIGINT/SIGTERM
+ * can terminate the active child, unlink the 0600 passfile, and rmdir the
+ * 0700 temp directory. SIGKILL/crash/power-loss cleanup is not guaranteed.
+ * Relaxed psql trust exists only as a test-injected runCli({ psqlTrust })
+ * harness and cannot be enabled by env or CLI flags.
  */
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { randomBytes, createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -68,6 +69,7 @@ export const PREFLIGHT_REL = 'supabase/security/preflight_gate_revoke_postgrest_
 export const APPLY_REL = 'supabase/security/unapplied-do-not-run/NOT_APPLIED_revoke_postgrest_tax_profiles.sql';
 export const PASSFILE_DIR_RE = /^checksops-tax-pg-[A-Za-z0-9]{6,12}$/;
 export const STALE_PASSDIR_MIN_AGE_MS = 24 * 60 * 60 * 1000;
+export const SPAWN_OUTPUT_LIMIT = 1_000_000;
 
 export const PSQL_PRODUCTION_TRUST = Object.freeze({
   requireRootOwner: true,
@@ -662,18 +664,100 @@ export function revalidatePsqlHandle(handle, trust) {
 }
 
 function productionExecPath(handle) {
-  // Best-effort inode execution. Node spawn cannot fexecve/execveat(AT_EMPTY_PATH).
-  // /proc/self/fd/N is still a symlink that execve may re-open by path, so this
-  // is paired with root ownership and re-stat immediately before every spawn.
+  // Linux: exec the already-opened inode via /proc/self/fd/N. Node cannot
+  // fexecve. The fd is CLOEXEC, so argv0 MUST be the reviewed absolute path
+  // or psql prints "invalid binary /proc/self/fd/N" on stderr and the
+  // empty-stderr protocol fail-closes. Combined with root-owned non-writable
+  // parents and re-stat immediately before spawn.
   if (process.platform === 'linux' && handle && handle.fd != null) {
     return `/proc/self/fd/${handle.fd}`;
   }
   return handle.path;
 }
 
-export function verifyPsqlBinary(env, spawnImpl = spawnSync, {
+export function usesVerifiedFdExec(spawnImpl, handle) {
+  return spawnImpl === defaultAsyncSpawn
+    && process.platform === 'linux'
+    && handle
+    && handle.fd != null;
+}
+
+export function defaultAsyncSpawn(bin, args, opts = {}) {
+  return new Promise((resolve) => {
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+    let timedOut = false;
+    let child;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      resolve(result);
+    };
+    try {
+      child = spawn(bin, args, {
+        env: opts.env,
+        argv0: opts.argv0,
+        shell: false,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+    } catch (error) {
+      finish({ status: null, signal: null, error, stdout: '', stderr: '' });
+      return;
+    }
+    if (typeof opts.onChild === 'function') {
+      try { opts.onChild(child); } catch { /* still wait for close */ }
+    }
+    const timer = opts.timeout
+      ? setTimeout(() => {
+        timedOut = true;
+        try { child.kill('SIGTERM'); } catch { /* ignore */ }
+      }, opts.timeout)
+      : null;
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    const append = (kind, chunk) => {
+      if (kind === 'stdout') stdout += chunk;
+      else stderr += chunk;
+      if (stdout.length + stderr.length > SPAWN_OUTPUT_LIMIT) {
+        timedOut = true;
+        try { child.kill('SIGTERM'); } catch { /* ignore */ }
+      }
+    };
+    child.stdout.on('data', (chunk) => append('stdout', chunk));
+    child.stderr.on('data', (chunk) => append('stderr', chunk));
+    child.on('error', (error) => {
+      finish({ status: null, signal: null, error, stdout, stderr });
+    });
+    child.on('close', (status, signal) => {
+      finish({
+        status,
+        signal,
+        error: timedOut ? Object.assign(new Error('timeout'), { code: 'ETIMEDOUT' }) : null,
+        stdout,
+        stderr,
+      });
+    });
+    try {
+      if (opts.input != null) child.stdin.write(opts.input);
+      child.stdin.end();
+    } catch {
+      // stdin may already be closed
+    }
+  });
+}
+
+export async function invokeSpawn(spawnImpl, bin, args, opts = {}) {
+  const result = spawnImpl(bin, args, opts);
+  if (result && typeof result.then === 'function') return result;
+  return result;
+}
+
+export async function verifyPsqlBinary(env, spawnImpl = defaultAsyncSpawn, {
   trust = PSQL_PRODUCTION_TRUST,
-  useProcFd = spawnImpl === spawnSync,
+  useFdExec,
+  onChild,
 } = {}) {
   const rawPath = env[PSQL_PATH_ENV];
   if (!rawPath) {
@@ -699,13 +783,16 @@ export function verifyPsqlBinary(env, spawnImpl = spawnSync, {
   };
   try {
     revalidatePsqlHandle(handle, trust);
-    const execBin = useProcFd ? productionExecPath(handle) : rawPath;
-    const probe = spawnImpl(execBin, ['--version'], {
+    const fdExec = useFdExec === undefined ? usesVerifiedFdExec(spawnImpl, handle) : useFdExec;
+    const execBin = fdExec ? productionExecPath(handle) : rawPath;
+    const probe = await invokeSpawn(spawnImpl, execBin, ['--version'], {
       encoding: 'utf8',
       timeout: VERSION_TIMEOUT_MS,
       env: { LC_ALL: 'C', LANG: 'C', PATH: '' },
       input: Buffer.alloc(0),
       shell: false,
+      argv0: rawPath,
+      onChild,
     });
     if (probe.error) {
       throw sanitizedError(probe.error.code === 'ETIMEDOUT' ? 'psql version probe timed out' : 'psql version probe failed');
@@ -717,8 +804,11 @@ export function verifyPsqlBinary(env, spawnImpl = spawnSync, {
       throw sanitizedError('psql version probe failed');
     }
     const version = String(probe.stdout || '').trim().split('\n')[0] || '';
-    if (!PSQL_VERSION_RE.test(version)) {
+    if (PSQL_VERSION_RE.test(version) === false) {
       throw sanitizedError('psql version is not an approved PostgreSQL 16+ client');
+    }
+    if (String(probe.stderr || '').trim() !== '') {
+      throw sanitizedError('psql version probe produced unexpected stderr');
     }
     return handle;
   } catch (err) {
@@ -894,7 +984,7 @@ function assertSafeChildArgs(args, conn, passPath) {
   }
 }
 
-function runPsqlStdin({
+async function runPsqlStdin({
   spawnImpl,
   psqlHandle,
   conn,
@@ -904,20 +994,27 @@ function runPsqlStdin({
   nonceName,
   nonce,
   timeout = EXEC_TIMEOUT_MS,
-  useProcFd,
+  useFdExec,
+  onChild,
 }) {
   revalidatePsqlHandle(psqlHandle, psqlHandle.trust);
   const args = psqlArgs(pins, nonceName, nonce);
   assertSafeChildArgs(args, conn, passPath);
-  const execBin = useProcFd ? productionExecPath(psqlHandle) : psqlHandle.path;
-  const result = spawnImpl(execBin, args, {
+  const fdExec = useFdExec && psqlHandle.fd != null;
+  const execBin = fdExec ? productionExecPath(psqlHandle) : psqlHandle.path;
+  if (execBin !== psqlHandle.path && !String(execBin).startsWith('/proc/self/fd/')) {
+    throw sanitizedError('psql executable path is invalid');
+  }
+  const result = await invokeSpawn(spawnImpl, execBin, args, {
     encoding: 'utf8',
     timeout,
     env: buildChildEnv(conn, passPath),
     input: sqlBytes,
     shell: false,
+    argv0: psqlHandle.path,
+    onChild,
   });
-  const secrets = [conn.password, passPath];
+  const secrets = [conn.password, passPath, execBin];
   return {
     status: result.status,
     signal: result.signal,
@@ -925,6 +1022,8 @@ function runPsqlStdin({
     stdout: sanitizeText(result.stdout, secrets),
     stderr: sanitizeText(result.stderr, secrets),
     rawArgs: args,
+    execBin,
+    argv0: psqlHandle.path,
   };
 }
 
@@ -967,10 +1066,10 @@ function defaultInstallSignals(handler) {
   };
 }
 
-export function runCli({
+export async function runCli({
   argv = process.argv.slice(2),
   env = process.env,
-  spawnImpl = spawnSync,
+  spawnImpl = defaultAsyncSpawn,
   repoRoot = ROOT,
   stdout = process.stdout,
   stderr = process.stderr,
@@ -984,16 +1083,23 @@ export function runCli({
 } = {}) {
   const writeOut = (msg) => stdout.write(`${msg}\n`);
   const writeErr = (msg) => stderr.write(`${msg}\n`);
-  const useProcFd = spawnImpl === spawnSync && process.platform === 'linux';
+  const useFdExec = spawnImpl === defaultAsyncSpawn && process.platform === 'linux';
   const state = {
     passHandle: null,
     psqlHandle: null,
+    child: null,
     killChild: null,
     exiting: false,
     exit: exitImpl || ((code) => {
       process.exitCode = code;
       process.exit(code);
     }),
+  };
+  state.killChild = () => {
+    const child = state.child;
+    if (!child || child.killed) return;
+    if (child.exitCode != null || child.signalCode != null) return;
+    try { child.kill('SIGTERM'); } catch { /* still clean credentials */ }
   };
   const uninstallSignals = installSignals(() => {
     handleExecutionSignal(state);
@@ -1007,11 +1113,15 @@ export function runCli({
     const conn = validateConnectionUrl(capturedUrl, pins);
     verifyTrustedCaBundle(SYSTEM_CA_BUNDLE);
     const sqlFiles = verifyPinnedSqlFiles(repoRoot, pins);
-    state.psqlHandle = verifyPsqlBinary(env, spawnImpl, { trust: psqlTrust, useProcFd });
+    state.psqlHandle = await verifyPsqlBinary(env, spawnImpl, {
+      trust: psqlTrust,
+      useFdExec,
+      onChild: (child) => { state.child = child; },
+    });
     cleanupStalePassDirs({ nowMs, minAgeMs: staleMinAgeMs });
     state.passHandle = createPassfile(conn);
 
-    const runPhase = (kind) => {
+    const runPhase = async (kind) => {
       if (env[URL_ENV] !== capturedUrl) {
         throw sanitizedError('connection value changed after capture');
       }
@@ -1020,7 +1130,7 @@ export function runCli({
         throw sanitizedError('preflight nonce is invalid');
       }
       const nonceName = kind === 'preflight' ? 'checksops_preflight_nonce' : 'checksops_apply_nonce';
-      const result = runPsqlStdin({
+      const result = await runPsqlStdin({
         spawnImpl,
         psqlHandle: state.psqlHandle,
         conn,
@@ -1029,7 +1139,8 @@ export function runCli({
         sqlBytes: sqlFiles[kind].bytes,
         nonceName,
         nonce,
-        useProcFd,
+        useFdExec,
+        onChild: (child) => { state.child = child; },
       });
       failClosedFromSpawn(result, kind);
       if (String(result.stderr || '').trim() !== '') {
@@ -1049,7 +1160,7 @@ export function runCli({
     };
 
     if (parsedArgs.mode === 'preflight') {
-      const pre = runPhase('preflight');
+      const pre = await runPhase('preflight');
       writeOut(`WRAPPER_CLASSIFICATION=${pre.classification}`);
       return pre.classification === 'UNSAFE/AMBIGUOUS' ? 1 : 0;
     }
@@ -1060,12 +1171,12 @@ export function runCli({
     if (!parsedArgs.authorized || parsedArgs.confirm !== APPLY_CONFIRM_PHRASE) {
       throw sanitizedError('apply requires the authorization flag and exact confirmation phrase');
     }
-    const pre = runPhase('preflight');
+    const pre = await runPhase('preflight');
     if (pre.classification !== 'EXACT_EXPECTED_LEGACY') {
       writeErr(`apply refused: preflight classification is ${pre.classification}`);
       return 1;
     }
-    runPhase('apply');
+    await runPhase('apply');
     writeOut('WRAPPER_APPLY=ok');
     return 0;
   } catch (err) {
@@ -1076,6 +1187,7 @@ export function runCli({
     writeErr(err && err.sanitized ? err.message : 'operator wrapper failed closed');
     return 1;
   } finally {
+    state.child = null;
     try { uninstallSignals(); } catch { /* ignore */ }
     closeKeptFd(state.psqlHandle);
     removePassfile(state.passHandle);
@@ -1084,5 +1196,9 @@ export function runCli({
 
 const isDirect = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isDirect) {
-  process.exitCode = runCli();
+  runCli().then((code) => {
+    process.exitCode = code;
+  }, () => {
+    process.exitCode = 1;
+  });
 }
