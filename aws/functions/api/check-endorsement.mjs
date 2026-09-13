@@ -788,9 +788,14 @@ export const runPublicEndorsement = async (event, deps = {}) => {
   try {
     opened = await publicDb(write, deps);
     const { client } = opened;
+    // GET also needs a transaction: safeQuery wraps the SQL 72 RPC in SAVEPOINT,
+    // and PostgreSQL rejects SAVEPOINT outside a transaction block. That swallow
+    // made unused tokens look consumed/invalid even with the RPC present.
+    await client.query('BEGIN');
     if (write) {
-      await client.query('BEGIN');
       await client.query('SET TRANSACTION READ WRITE');
+    } else {
+      await client.query('SET TRANSACTION READ ONLY');
     }
     let result;
     if (action === 'get_endorsement_data') {
@@ -802,16 +807,14 @@ export const runPublicEndorsement = async (event, deps = {}) => {
     } else {
       result = { ok: false, statusCode: 400, error: 'Unknown action', spoofFieldsIgnored: spoof };
     }
-    if (write) {
-      if (result.ok !== false && (result.statusCode || 200) < 400) {
-        await client.query('COMMIT');
-      } else {
-        await client.query('ROLLBACK');
-      }
+    if (result.ok !== false && (result.statusCode || 200) < 400) {
+      await client.query('COMMIT');
+    } else {
+      await client.query('ROLLBACK');
     }
     return result;
   } catch (error) {
-    if (opened?.client && write) {
+    if (opened?.client) {
       try { await opened.client.query('ROLLBACK'); } catch { /* ignore */ }
     }
     return {
