@@ -340,6 +340,22 @@ export const handler = async (event) => {
         rows,
       };
     }
+    if (step === 'grant-sign-dtp') {
+      await client.query(readSql(SQL_DIR, '42_public_homeowner_claim_sign_dtp.sql'));
+      const { rows } = await client.query(`
+        SELECT p.proname, pg_get_function_identity_arguments(p.oid) AS args,
+               has_function_privilege('checksops', p.oid, 'EXECUTE') AS checksops_execute,
+               has_function_privilege('public', p.oid, 'EXECUTE') AS public_execute
+        FROM pg_proc p
+        JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public' AND p.proname = 'aws_public_homeowner_claim_sign_dtp'
+      `);
+      return {
+        ok: rows.length === 1 && rows[0].checksops_execute === true,
+        step,
+        fn: rows[0] || null,
+      };
+    }
     if (step === 'grant-claim-settlements') {
       const before = await inspectIntegrationGrants(client);
       await client.query(readSql(SQL_DIR, '40_claim_settlements_grant.sql'));

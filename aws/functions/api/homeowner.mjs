@@ -153,7 +153,7 @@ export const handleHomeownerLedgerView = async (event) => {
   }
 };
 
-export const handleHomeownerClaimPortal = async (event) => {
+export const handleHomeownerClaimPortal = async (event, deps = {}) => {
   const body = parseBody(event);
   const spoof = ignoredSpoof(event, body);
   const token = String(body.token || '').trim();
@@ -164,7 +164,8 @@ export const handleHomeownerClaimPortal = async (event) => {
 
   let client;
   try {
-    client = await publicDb(true);
+    const connect = deps.connect || publicDb;
+    client = await connect(true);
     await client.query('BEGIN');
     await client.query('SET TRANSACTION READ WRITE');
     const doc = (await client.query(
@@ -252,16 +253,38 @@ export const handleHomeownerClaimPortal = async (event) => {
         ContentType: mime,
       }));
       const inserted = (await client.query(
-        `INSERT INTO public.homeowner_check_uploads (lead_id, file_path, status, note, created_at)
-         VALUES ($1::uuid, $2, 'uploaded', $3, now())
-         RETURNING id, file_path, status, created_at`,
-        [doc.lead.id, rel, body.note || null],
-      )).rows[0];
+        `SELECT public.aws_public_homeowner_check_upload_insert(
+           $1::uuid, $2::uuid, $3::uuid, $4, $5::uuid, $6, $7, $8
+         ) AS doc`,
+        [
+          doc.lead.id,
+          doc.lead.contractor_profile_id || doc.contractor?.id || null,
+          doc.lead.contractor_user_id || doc.contractor?.user_id || null,
+          doc.lead.homeowner_email || null,
+          null,
+          rel,
+          mime,
+          body.note || null,
+        ],
+      )).rows[0]?.doc;
+      if (!inserted?.ok || !inserted.id) {
+        await client.query('ROLLBACK');
+        return {
+          ok: false,
+          statusCode: 503,
+          error: inserted?.error || 'persist_failed',
+          spoofFieldsIgnored: spoof,
+        };
+      }
       await client.query('COMMIT');
       return {
         ok: true,
         statusCode: 200,
-        upload: inserted,
+        upload: {
+          id: inserted.id,
+          file_path: rel,
+          status: 'uploaded',
+        },
         spoofFieldsIgnored: spoof,
       };
     }
@@ -274,26 +297,32 @@ export const handleHomeownerClaimPortal = async (event) => {
           await client.query('ROLLBACK');
           return { ok: false, statusCode: 400, error: 'missing_signature_name', spoofFieldsIgnored: spoof };
         }
-        await client.query(
-          `UPDATE public.homeowner_intro_requests SET
-             dtp_signed_at = now(),
-             dtp_signature_name = $2,
-             dtp_insurance_carrier = COALESCE($3, dtp_insurance_carrier),
-             dtp_claim_number = COALESCE($4, dtp_claim_number),
-             dtp_policy_number = COALESCE($5, dtp_policy_number),
-             dtp_property_address = COALESCE($6, dtp_property_address)
-           WHERE id = $1::uuid`,
+        const persisted = (await client.query(
+          `SELECT public.aws_public_homeowner_claim_sign_dtp($1, $2, $3, $4, $5, $6) AS doc`,
           [
-            doc.lead.id,
+            token,
             name,
             body.insurance_carrier || null,
             body.claim_number || null,
             body.policy_number || null,
             body.property_address || null,
           ],
-        );
+        )).rows[0]?.doc;
+        if (!persisted?.ok || persisted.signed !== true || !persisted.dtp_signed_at) {
+          await client.query('ROLLBACK');
+          const err = persisted?.error || 'persist_failed';
+          const status = err === 'missing_signature_name' ? 400 : err === 'invalid_token' ? 400 : 503;
+          return { ok: false, statusCode: status, error: err, spoofFieldsIgnored: spoof };
+        }
         await client.query('COMMIT');
-        return { ok: true, statusCode: 200, signed: true, spoofFieldsIgnored: spoof };
+        return {
+          ok: true,
+          statusCode: 200,
+          signed: true,
+          dtp_signed_at: persisted.dtp_signed_at,
+          dtp_signature_name: persisted.dtp_signature_name,
+          spoofFieldsIgnored: spoof,
+        };
       }
       await client.query('ROLLBACK');
       return {
