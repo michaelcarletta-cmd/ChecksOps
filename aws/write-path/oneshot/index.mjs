@@ -366,6 +366,195 @@ export const handler = async (event) => {
         insertGrant,
       };
     }
+    if (step === 'probe-c1c-settlement') {
+      const claimId = '266e1ae8-ec20-4ed5-9243-3e1424304ec6';
+      const figures = {
+        rcv: 10000, rec: 2000, non: 500, ded: 1000, notes: 'P2-ORG-ID-SAFE-TEST',
+      };
+      const { rows: claim } = await client.query(
+        `SELECT id::text, claim_number, org_id::text, status FROM public.claims WHERE id = $1::uuid`,
+        [claimId],
+      );
+      const runAs = async (userId, fn) => {
+        await client.query('BEGIN');
+        try {
+          await client.query('SET LOCAL ROLE checksops');
+          await client.query("SELECT set_config('request.app_user_id', $1, true)", [userId]);
+          const result = await fn();
+          await client.query('COMMIT');
+          return { ok: true, ...result };
+        } catch (error) {
+          try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+          return {
+            ok: false,
+            denied: /row-level security|permission denied|not found or not writable/i.test(String(error?.message || '')),
+            error: String(error?.message || error).slice(0, 240),
+          };
+        }
+      };
+      const c1cWrite = await runAs(C1C_ADMIN_ID, async () => {
+        const existing = (await client.query(
+          'SELECT id::text FROM public.claim_settlements WHERE claim_id = $1::uuid LIMIT 1',
+          [claimId],
+        )).rows[0];
+        if (existing) {
+          const rows = (await client.query(
+            `UPDATE public.claim_settlements
+             SET replacement_cost_value = $2::numeric,
+                 recoverable_depreciation = $3::numeric,
+                 non_recoverable_depreciation = $4::numeric,
+                 deductible = $5::numeric,
+                 notes = $6::text,
+                 updated_at = now()
+             WHERE id = $1::uuid AND claim_id = $7::uuid
+             RETURNING id::text, claim_id::text, replacement_cost_value::text,
+                       recoverable_depreciation::text, non_recoverable_depreciation::text,
+                       deductible::text, notes`,
+            [existing.id, figures.rcv, figures.rec, figures.non, figures.ded, figures.notes, claimId],
+          )).rows;
+          return { op: 'update', rows };
+        }
+        const rows = (await client.query(
+          `INSERT INTO public.claim_settlements (
+             claim_id, created_by, replacement_cost_value, recoverable_depreciation,
+             non_recoverable_depreciation, deductible, notes
+           ) VALUES (
+             $1::uuid, $2::uuid, $3::numeric, $4::numeric, $5::numeric, $6::numeric, $7::text
+           ) RETURNING id::text, claim_id::text, replacement_cost_value::text,
+                     recoverable_depreciation::text, non_recoverable_depreciation::text,
+                     deductible::text, notes`,
+          [claimId, C1C_ADMIN_ID, figures.rcv, figures.rec, figures.non, figures.ded, figures.notes],
+        )).rows;
+        return { op: 'insert', rows };
+      });
+      const freedomWrite = await runAs(TESTER_ID, async () => {
+        const rows = (await client.query(
+          `INSERT INTO public.claim_settlements (
+             claim_id, created_by, replacement_cost_value, notes
+           ) VALUES ($1::uuid, $2::uuid, 1, 'P2-SHOULD-DENY')
+           RETURNING id::text`,
+          [claimId, TESTER_ID],
+        )).rows;
+        return { rows };
+      });
+      const ninthWrite = await runAs(NINTH_ID, async () => {
+        const rows = (await client.query(
+          `INSERT INTO public.claim_settlements (
+             claim_id, created_by, replacement_cost_value, notes
+           ) VALUES ($1::uuid, $2::uuid, 1, 'P2-SHOULD-DENY')
+           RETURNING id::text`,
+          [claimId, NINTH_ID],
+        )).rows;
+        return { rows };
+      });
+      const stored = (await client.query(
+        `SELECT replacement_cost_value::text AS rcv, recoverable_depreciation::text AS rec,
+                non_recoverable_depreciation::text AS non, deductible::text AS ded, notes
+         FROM public.claim_settlements WHERE claim_id = $1::uuid LIMIT 1`,
+        [claimId],
+      )).rows[0] || null;
+      const acv = stored
+        ? Math.max(0, Number(stored.rcv) - Number(stored.rec) - Number(stored.non) - Number(stored.ded))
+        : null;
+      return {
+        ok: Boolean(c1cWrite.ok && c1cWrite.rows?.length)
+          && (freedomWrite.denied === true || (freedomWrite.ok && !freedomWrite.rows?.length))
+          && (ninthWrite.denied === true || (ninthWrite.ok && !ninthWrite.rows?.length)),
+        step,
+        claim: claim[0] || null,
+        c1cWrite,
+        freedomWrite,
+        ninthWrite,
+        stored,
+        acv,
+        expectedAcv: 6500,
+      };
+    }
+    if (step === 'mint-portal-fixture') {
+      const profileId = '3b57edc6-8e37-4445-9fff-8439516630e1';
+      const contractorUser = C1C_ADMIN_ID;
+      const inserted = (await client.query(
+        `INSERT INTO public.homeowner_intro_requests (
+           contractor_profile_id, contractor_user_id,
+           homeowner_name, homeowner_email, property_zip, loss_type, message, status
+         ) VALUES (
+           $1::uuid, $2::uuid, 'P2 Portal Fixture', 'p2-portal@example.invalid',
+           '33101', 'wind', 'phase2 synthetic SES-free token', 'new'
+         ) RETURNING id::text, access_token, status`,
+        [profileId, contractorUser],
+      )).rows[0];
+      const accepted = (await client.query(
+        `UPDATE public.homeowner_intro_requests
+         SET status = 'accepted', accepted_at = now(), updated_at = now()
+         WHERE id = $1::uuid
+         RETURNING id::text, access_token, status, accepted_at`,
+        [inserted.id],
+      )).rows[0];
+      return {
+        ok: Boolean(accepted?.access_token) && accepted.status === 'accepted',
+        step,
+        leadId: accepted.id,
+        tokenLen: accepted.access_token?.length || 0,
+        tokenPrefix: String(accepted.access_token || '').slice(0, 8),
+        status: accepted.status,
+        access_token: accepted.access_token,
+      };
+    }
+    if (step === 'inspect-phase2-extras') {
+      const { rows: orgAfter } = await client.query(`
+        SELECT count(*)::int AS claims, count(org_id)::int AS with_org_id,
+               count(*) FILTER (WHERE org_id IS NULL)::int AS org_id_null
+        FROM public.claims
+      `);
+      const { rows: providerAccounts } = await client.query(`
+        SELECT t.id::text AS tenant_id, t.name,
+               count(ppa.id)::int AS accounts,
+               bool_or(ppa.status IN ('active','verified','approved')) AS any_active
+        FROM public.tenants t
+        LEFT JOIN public.payment_provider_accounts ppa ON ppa.tenant_id = t.id
+        GROUP BY t.id, t.name
+        ORDER BY t.name
+      `).catch(async (error) => ({
+        rows: [{ error: String(error.message || error).slice(0, 200) }],
+      }));
+      const { rows: contractors } = await client.query(`
+        SELECT id::text, display_name, is_directory_listed, directory_opt_in, user_id::text
+        FROM public.contractor_profiles
+        WHERE is_directory_listed = true AND directory_opt_in = true
+        LIMIT 10
+      `);
+      const { rows: leads } = await client.query(`
+        SELECT id::text, status, (access_token IS NOT NULL) AS has_token,
+               length(access_token) AS token_len, accepted_at IS NOT NULL AS accepted
+        FROM public.homeowner_intro_requests
+        ORDER BY created_at DESC NULLS LAST
+        LIMIT 10
+      `);
+      const { rows: settlement } = await client.query(`
+        SELECT id::text, claim_id::text, replacement_cost_value::text AS rcv,
+               recoverable_depreciation::text AS rec, non_recoverable_depreciation::text AS non,
+               deductible::text AS ded, notes
+        FROM public.claim_settlements
+        WHERE claim_id = '266e1ae8-ec20-4ed5-9243-3e1424304ec6'::uuid
+      `);
+      const { rows: pipelineUsers } = await client.query(`
+        SELECT tu.user_id::text, tu.role, p.email
+        FROM public.tenant_users tu
+        LEFT JOIN public.profiles p ON p.id = tu.user_id
+        WHERE tu.tenant_id = '3bef00a5-0bf4-41ba-abf8-5fb4e2b73d43'::uuid
+        LIMIT 10
+      `);
+      return {
+        ok: true,
+        step,
+        orgAfter: orgAfter[0],
+        providerAccounts,
+        contractors,
+        leads,
+        settlement,
+        pipelineUsers,
+      };
+    }
     if (step === 'inspect-org-id-distribution') {
       const { rows: totals } = await client.query(`
         SELECT

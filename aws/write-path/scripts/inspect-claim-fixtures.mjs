@@ -84,10 +84,17 @@ const main = async () => {
     run(AWS, ['--region', REGION, 'lambda', 'invoke', '--function-name', LAMBDA_NAME, '--payload', `file://${payloadFile}`, outFile]);
     const raw = fs.readFileSync(outFile, 'utf8');
     const parsed = JSON.parse(raw);
-    const artifact = step === 'inspect-org-id-distribution'
-      ? '/opt/cursor/artifacts/phase2_org_id_distribution.json'
-      : '/opt/cursor/artifacts/integration_claim_row_inspect.json';
-    fs.writeFileSync(artifact, JSON.stringify(parsed, null, 2));
+    const artifact = {
+      'inspect-org-id-distribution': '/opt/cursor/artifacts/phase2_org_id_distribution.json',
+      'repair-one-synthetic-claim-org-id': '/opt/cursor/artifacts/phase2_org_id_one_row_repair.json',
+      'probe-c1c-settlement': '/opt/cursor/artifacts/phase2_p1_settlement_probe.json',
+      'inspect-phase2-extras': '/opt/cursor/artifacts/phase2_extras.json',
+      'mint-portal-fixture': '/opt/cursor/artifacts/phase2_claim_portal_mint.json',
+    }[step] || '/opt/cursor/artifacts/integration_claim_row_inspect.json';
+    const redacted = parsed && typeof parsed === 'object'
+      ? { ...parsed, access_token: undefined, tokenRedacted: Boolean(parsed.access_token) }
+      : parsed;
+    fs.writeFileSync(artifact, JSON.stringify(redacted, null, 2));
     console.log(JSON.stringify(parsed, null, 2));
   } finally {
     try { awsJson(['lambda', 'delete-function', '--function-name', LAMBDA_NAME]); } catch { /* keep going */ }
