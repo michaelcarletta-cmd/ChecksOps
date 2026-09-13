@@ -1,0 +1,334 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'path';
+import { spawnSync } from 'node:child_process';
+import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+const PG_BIN = '/usr/lib/postgresql/16/bin';
+const ARTIFACT_DIR = '/opt/cursor/artifacts';
+
+const FILES = {
+  sql29: path.join(ROOT, 'rls/sql/29_mortgage_ops_agent_access.sql'),
+  sql52: path.join(ROOT, 'workflows/sql/52_mortgage_ops_staff_grants.sql'),
+  sql39: path.join(ROOT, 'write-path/sql/39_detected_claim_number_grant.sql'),
+  sql69: path.join(ROOT, 'workflows/sql/69_staging_homeowner_ledger_view.sql'),
+  sql71: path.join(ROOT, 'workflows/sql/71_endorsement_email_audit.sql'),
+  sql30: path.join(ROOT, 'rls/sql/30_tenant_documents_mortgage_doc_type.sql'),
+};
+
+const run = (bin, args, opts = {}) => spawnSync(bin, args, {
+  encoding: 'utf8',
+  maxBuffer: 20 * 1024 * 1024,
+  ...opts,
+});
+
+const mustRun = (bin, args, opts = {}) => {
+  const result = run(bin, args, opts);
+  if (result.status !== 0) {
+    throw new Error(`${bin} ${args.join(' ')} failed (${result.status}): ${result.stderr || result.stdout}`);
+  }
+  return result;
+};
+
+const bootstrap = `
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+CREATE OR REPLACE FUNCTION public.has_role(_uid uuid, _role public.app_role)
+RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT false $$;
+
+CREATE OR REPLACE FUNCTION public.aws_is_cross_tenant_reader()
+RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT false $$;
+
+CREATE OR REPLACE FUNCTION public.aws_can_access_tenant(_tenant uuid)
+RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT false $$;
+
+CREATE OR REPLACE FUNCTION public.aws_can_write_tenant(_tenant uuid)
+RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT false $$;
+
+CREATE OR REPLACE FUNCTION public.aws_is_authenticated()
+RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT true $$;
+
+CREATE OR REPLACE FUNCTION public.mortgage_agent_can_view_check(_check_id uuid)
+RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT false $$;
+
+CREATE OR REPLACE FUNCTION public.mortgage_agent_can_view_claim(_claim_id uuid)
+RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT false $$;
+
+CREATE TABLE public.tenants (
+  id uuid PRIMARY KEY,
+  name text
+);
+CREATE TABLE public.check_intake_items (
+  id uuid PRIMARY KEY,
+  tenant_id uuid,
+  claim_id uuid,
+  detected_claim_number text,
+  amount numeric,
+  status text,
+  check_stage text,
+  check_number text
+);
+CREATE TABLE public.mortgage_handling_requests (
+  id uuid PRIMARY KEY,
+  tenant_id uuid,
+  status text,
+  assigned_employee_id uuid,
+  accepted_at timestamptz,
+  completed_at timestamptz,
+  cancelled_at timestamptz,
+  check_intake_item_id uuid
+);
+CREATE TABLE public.email_send_log (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  template_name text,
+  recipient_email text,
+  tenant_id uuid,
+  status text DEFAULT 'pending',
+  provider text,
+  provider_message_id text,
+  idempotency_key text,
+  error_message text,
+  metadata jsonb,
+  message_id text,
+  created_at timestamptz DEFAULT now()
+);
+CREATE TABLE public.check_endorsements (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  check_id uuid,
+  tenant_id uuid,
+  payee_id uuid,
+  payee_name text,
+  contact_email text,
+  status text DEFAULT 'pending',
+  token text,
+  token_expires_at timestamptz,
+  request_sent_at timestamptz,
+  reminder_count integer DEFAULT 0,
+  last_reminder_at timestamptz,
+  updated_at timestamptz DEFAULT now()
+);
+CREATE TABLE public.homeowner_ledger_tokens (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid,
+  claim_id uuid,
+  token text UNIQUE,
+  homeowner_email text,
+  homeowner_name text,
+  revoked_at timestamptz,
+  expires_at timestamptz,
+  last_viewed_at timestamptz,
+  created_at timestamptz DEFAULT now()
+);
+CREATE TABLE public.homeowner_ledger_check_uploads (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid,
+  token_id uuid,
+  claim_id uuid,
+  front_path text,
+  status text,
+  amount_estimate numeric,
+  homeowner_note text,
+  created_at timestamptz DEFAULT now()
+);
+CREATE TABLE public.claims (
+  id uuid PRIMARY KEY,
+  claim_number text,
+  policyholder_address text,
+  loss_type text,
+  status text,
+  created_at timestamptz
+);
+CREATE TABLE public.homeowner_ledger_events (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid,
+  claim_id uuid,
+  check_id uuid,
+  event_type text,
+  occurred_at timestamptz,
+  amount numeric,
+  actor_label text,
+  payload_json jsonb
+);
+
+ALTER TABLE public.tenants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.check_intake_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.mortgage_handling_requests ENABLE ROW LEVEL SECURITY;
+`;
+
+test('SQL 29/52/39/69/71 apply twice on disposable PG16 and keep SQL 30 unapplied', {
+  timeout: 180000,
+}, async (t) => {
+  if (!fs.existsSync(path.join(PG_BIN, 'initdb'))) {
+    t.skip('PostgreSQL 16 initdb is not installed in this environment');
+    return;
+  }
+  for (const [name, file] of Object.entries(FILES)) {
+    if (name === 'sql30') continue;
+    assert.equal(fs.existsSync(file), true, name);
+  }
+
+  const sql29 = fs.readFileSync(FILES.sql29, 'utf8');
+  const sql52 = fs.readFileSync(FILES.sql52, 'utf8');
+  const sql39 = fs.readFileSync(FILES.sql39, 'utf8');
+  const sql71 = fs.readFileSync(FILES.sql71, 'utf8');
+  assert.match(sql29, /CREATE OR REPLACE FUNCTION public\.aws_mortgage_agent_queue_visible/);
+  assert.match(sql29, /DROP POLICY IF EXISTS aws_select_mortgage_handling_requests/);
+  assert.match(sql52, /GRANT UPDATE \(\s*assigned_employee_id/);
+  assert.match(sql39, /GRANT UPDATE \(detected_claim_number\)/);
+  assert.match(sql71, /aws_email_send_log_peek/);
+  assert.match(sql71, /aws_email_send_log_reserve/);
+  assert.match(sql71, /aws_email_send_log_finalize/);
+  assert.doesNotMatch(sql29, /DROP FUNCTION public\.aws_can_access_tenant/);
+  assert.doesNotMatch(sql52, /claim_payments|payment_transfers/);
+  assert.doesNotMatch(sql39, /GRANT UPDATE \(amount\)|GRANT UPDATE \(claim_id\)/);
+
+  const stamp = `${new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14)}_${process.pid}`;
+  const pgData = fs.mkdtempSync(path.join(os.tmpdir(), `pg-coherent-sql-${stamp}-`));
+  const port = 55200 + (process.pid % 1000);
+  const dbName = `coherent_sql_${stamp}`;
+  const logPath = path.join(pgData, 'pg.log');
+  const artifactLog = path.join(ARTIFACT_DIR, `coherent_sql_preflight_pg_${stamp}.log`);
+  let started = false;
+  const logChunks = [];
+  const note = (line) => { logChunks.push(line); };
+
+  const stopCluster = () => {
+    if (started) {
+      run(path.join(PG_BIN, 'pg_ctl'), ['-D', pgData, '-m', 'immediate', 'stop']);
+      started = false;
+    }
+    fs.rmSync(pgData, { recursive: true, force: true });
+  };
+  t.after(() => {
+    try {
+      fs.mkdirSync(ARTIFACT_DIR, { recursive: true });
+      fs.writeFileSync(artifactLog, logChunks.join('\n'), 'utf8');
+    } catch { /* ignore */ }
+    stopCluster();
+  });
+
+  mustRun(path.join(PG_BIN, 'initdb'), [
+    '-D', pgData, '--auth=trust', '--no-sync', '--username=ubuntu', '--encoding=UTF8',
+  ]);
+  fs.appendFileSync(path.join(pgData, 'postgresql.conf'), `
+listen_addresses = ''
+port = ${port}
+unix_socket_directories = '${pgData}'
+logging_collector = off
+shared_buffers = 32MB
+max_connections = 20
+`);
+  mustRun(path.join(PG_BIN, 'pg_ctl'), ['-D', pgData, '-l', logPath, '-w', 'start']);
+  started = true;
+
+  const psqlArgs = ['-h', pgData, '-p', String(port), '-U', 'ubuntu', '-v', 'ON_ERROR_STOP=1'];
+  const psql = (extra, input) => {
+    const result = run(path.join(PG_BIN, 'psql'), [...psqlArgs, ...extra], input ? { input } : {});
+    if (result.status !== 0) {
+      throw new Error(`psql failed: ${result.stderr || result.stdout}`);
+    }
+    return result;
+  };
+  const scalar = (sql) => psql(['-d', dbName, '-A', '-t', '-c', sql]).stdout.trim();
+
+  psql(['-d', 'postgres', '-c', `CREATE DATABASE ${dbName}`]);
+  psql(['-d', dbName, '-c', 'CREATE ROLE checksops NOLOGIN']);
+  psql(['-d', dbName, '-f', path.join(ROOT, 'rls/sql/01_role_shim.sql')]);
+  psql(['-d', dbName, '-f', path.join(ROOT, 'identity/sql/02_auth_uid_guc.sql')]);
+  psql(['-d', dbName, '-c', "CREATE TYPE public.app_role AS ENUM ('admin','owner','member','mortgage_agent')"]);
+  psql(['-d', dbName], bootstrap);
+
+  const applyTwice = (label, file) => {
+    note(`apply ${label}`);
+    psql(['-d', dbName, '-f', file]);
+    psql(['-d', dbName, '-f', file]);
+  };
+
+  applyTwice('29_mortgage_ops_agent_access', FILES.sql29);
+  applyTwice('52_mortgage_ops_staff_grants', FILES.sql52);
+  applyTwice('39_detected_claim_number_grant', FILES.sql39);
+  applyTwice('69_staging_homeowner_ledger_view', FILES.sql69);
+  applyTwice('71_endorsement_email_audit', FILES.sql71);
+
+  const functions = scalar(`
+SELECT string_agg(p.proname, ',' ORDER BY p.proname)
+FROM pg_proc p
+JOIN pg_namespace n ON n.oid = p.pronamespace
+WHERE n.nspname = 'public'
+  AND p.proname IN (
+    'aws_mortgage_agent_queue_visible',
+    'aws_mortgage_agent_can_see_tenant',
+    'aws_mortgage_agent_can_see_check',
+    'aws_public_homeowner_ledger_bundle',
+    'aws_public_homeowner_ledger_mint_sign_link',
+    'aws_public_homeowner_ledger_upload_insert',
+    'aws_email_send_log_peek',
+    'aws_email_send_log_reserve',
+    'aws_email_send_log_finalize',
+    'aws_mark_endorsement_request_sent',
+    'aws_public_submit_endorsement',
+    'aws_public_reject_endorsement'
+  )
+`);
+  note(`functions ${functions}`);
+  for (const name of [
+    'aws_mortgage_agent_queue_visible',
+    'aws_email_send_log_peek',
+    'aws_email_send_log_reserve',
+    'aws_email_send_log_finalize',
+    'aws_public_submit_endorsement',
+    'aws_public_homeowner_ledger_bundle',
+  ]) {
+    assert.match(functions, new RegExp(name));
+  }
+
+  const claimGrant = scalar(`
+SELECT count(*)::text
+FROM information_schema.column_privileges
+WHERE table_schema = 'public'
+  AND table_name = 'check_intake_items'
+  AND column_name = 'detected_claim_number'
+  AND grantee = 'checksops'
+  AND privilege_type = 'UPDATE'
+`);
+  assert.equal(claimGrant, '1');
+
+  const amountGrant = scalar(`
+SELECT count(*)::text
+FROM information_schema.column_privileges
+WHERE table_schema = 'public'
+  AND table_name = 'check_intake_items'
+  AND column_name = 'amount'
+  AND grantee = 'checksops'
+  AND privilege_type = 'UPDATE'
+`);
+  assert.equal(amountGrant, '0');
+
+  const sql30Applied = scalar(`
+SELECT count(*)::text
+FROM pg_constraint c
+JOIN pg_class t ON t.oid = c.conrelid
+WHERE t.relname = 'tenant_documents'
+  AND c.conname = 'tenant_documents_doc_type_check'
+`);
+  assert.equal(sql30Applied, '0');
+
+  const policies = scalar(`
+SELECT string_agg(policyname, ',' ORDER BY policyname)
+FROM pg_policies
+WHERE schemaname = 'public'
+  AND (
+    policyname LIKE 'aws_%mortgage%'
+    OR policyname LIKE 'aws_select_%'
+    OR policyname LIKE 'aws_insert_mortgage%'
+    OR policyname LIKE 'aws_update_mortgage%'
+    OR policyname LIKE 'aws_delete_mortgage%'
+  )
+`);
+  note(`policies ${policies}`);
+  assert.match(policies || '', /aws_select_mortgage_handling_requests/);
+  assert.match(policies || '', /aws_update_mortgage_handling_requests/);
+});
