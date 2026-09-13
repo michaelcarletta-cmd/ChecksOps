@@ -22,12 +22,17 @@
  * the connection target. SQL -v expected_project_ref is defense in depth.
  *
  * Exact-commit Git authorization does not replace human review of that commit.
- * Hosted execution remains unauthorized until a separate event and the
- * Tax/1099 error-banner PR. psql is spawned asynchronously so SIGINT/SIGTERM
- * can terminate the active child, unlink the 0600 passfile, and rmdir the
- * 0700 temp directory. SIGKILL/crash/power-loss cleanup is not guaranteed.
- * Relaxed psql trust exists only as a test-injected runCli({ psqlTrust })
- * harness and cannot be enabled by env or CLI flags.
+ * Git itself is the allowlisted absolute binary /usr/bin/git or /bin/git
+ * after the same root-owned parent validation as production psql. The wrapper
+ * does not search PATH and refuses GIT_EXEC_PATH / git-binary override env.
+ * Git SHA-256 is rechecked in-process; it is not fleet-pinned (distro git
+ * hashes differ). SQL bytes remain hash-pinned. Hosted execution remains
+ * unauthorized until a separate event and the Tax/1099 error-banner PR.
+ * psql is spawned asynchronously so SIGINT/SIGTERM can terminate the active
+ * child, unlink the 0600 passfile, and rmdir the 0700 temp directory.
+ * SIGKILL/crash/power-loss cleanup is not guaranteed. Relaxed psql/git trust
+ * exists only as a test-injected runCli({ psqlTrust, gitTrust }) harness and
+ * cannot be enabled by env or CLI flags.
  */
 import { spawn, spawnSync } from 'node:child_process';
 import { randomBytes, createHash } from 'node:crypto';
@@ -83,6 +88,29 @@ export const TEST_PSQL_TRUST = Object.freeze({
   requireRootOwnedParents: false,
   allowStickyWorldWritableParents: true,
 });
+
+export const ALLOWED_GIT_BINS = Object.freeze(['/usr/bin/git', '/bin/git']);
+
+export const GIT_PRODUCTION_TRUST = Object.freeze({
+  requireRootOwner: true,
+  requireRootOwnedParents: true,
+  allowStickyWorldWritableParents: false,
+});
+
+// Test-only. Pass via runCli({ gitTrust }). Never read from env or argv.
+export const TEST_GIT_TRUST = Object.freeze({
+  requireRootOwner: false,
+  requireRootOwnedParents: false,
+  allowStickyWorldWritableParents: true,
+});
+
+const GIT_OVERRIDE_ENV = Object.freeze([
+  'CHECKSOPS_TAX_CONTAINMENT_GIT',
+  'CHECKSOPS_TAX_CONTAINMENT_GIT_PATH',
+  'CHECKSOPS_TAX_CONTAINMENT_GIT_BIN',
+  'GIT_EXEC_PATH',
+  'GIT_TEMPLATE_DIR',
+]);
 
 const REPO_FILE_TRUST = Object.freeze({
   requireRootOwner: false,
@@ -581,25 +609,83 @@ export function verifyTrustedCaBundle(caPath = SYSTEM_CA_BUNDLE) {
   return caPath;
 }
 
-function defaultGitRun(repoRoot, gitArgs) {
-  return spawnSync('git', ['-C', repoRoot, ...gitArgs], {
-    encoding: 'utf8',
-    timeout: 5_000,
-    env: { PATH: '/usr/bin:/bin', LANG: 'C' },
-    shell: false,
-  });
+export function resolveAllowedGitPath() {
+  const allowed = new Set(ALLOWED_GIT_BINS);
+  for (const candidate of ALLOWED_GIT_BINS) {
+    let lst;
+    try {
+      lst = fs.lstatSync(candidate);
+    } catch {
+      continue;
+    }
+    if (lst.isSymbolicLink() || !lst.isFile()) continue;
+    let real;
+    try {
+      real = fs.realpathSync(candidate);
+    } catch {
+      continue;
+    }
+    if (!allowed.has(real)) {
+      throw sanitizedError('git binary real path is not in the reviewed allowlist');
+    }
+    if (real !== candidate) continue;
+    return candidate;
+  }
+  throw sanitizedError('reviewed git binary is missing');
 }
 
-export function verifyRepoState(repoRoot, expectedSha, gitRun = defaultGitRun) {
+export function resolveTrustedGit(trust = GIT_PRODUCTION_TRUST) {
+  const gitPath = resolveAllowedGitPath();
+  const trusted = readTrustedFile(gitPath, { executable: true, trust });
+  return { path: gitPath, identity: trusted.identity };
+}
+
+export function revalidateGitHandle(handle, trust = GIT_PRODUCTION_TRUST) {
+  if (!handle || !handle.path || !handle.identity) {
+    throw sanitizedError('git identity is missing');
+  }
+  if (!ALLOWED_GIT_BINS.includes(handle.path)) {
+    throw sanitizedError('git binary path is not in the reviewed allowlist');
+  }
+  const again = readTrustedFile(handle.path, { executable: true, trust });
+  if (!identitiesMatch(handle.identity, again.identity)) {
+    throw sanitizedError('git identity changed after validation');
+  }
+  return { path: handle.path, identity: again.identity };
+}
+
+export function makeDefaultGitRun(trust = GIT_PRODUCTION_TRUST) {
+  let handle = resolveTrustedGit(trust);
+  return (repoRoot, gitArgs) => {
+    handle = revalidateGitHandle(handle, trust);
+    return spawnSync(handle.path, ['-C', repoRoot, ...gitArgs], {
+      encoding: 'utf8',
+      timeout: 5_000,
+      env: { LC_ALL: 'C', LANG: 'C' },
+      shell: false,
+    });
+  };
+}
+
+function refuseGitOverrideEnv(env) {
+  for (const key of GIT_OVERRIDE_ENV) {
+    if (env[key] != null && String(env[key]).length > 0) {
+      throw sanitizedError('git binary override is refused');
+    }
+  }
+}
+
+export function verifyRepoState(repoRoot, expectedSha, gitRun, gitTrust = GIT_PRODUCTION_TRUST) {
+  const run = typeof gitRun === 'function' ? gitRun : makeDefaultGitRun(gitTrust);
   if (!GIT_SHA_RE.test(String(expectedSha || ''))) {
     throw sanitizedError(`${GIT_SHA_ENV} must be the full 40-character commit SHA`);
   }
   const root = path.resolve(repoRoot);
-  const inside = gitRun(root, ['rev-parse', '--is-inside-work-tree']);
+  const inside = run(root, ['rev-parse', '--is-inside-work-tree']);
   if (inside.status !== 0 || String(inside.stdout || '').trim() !== 'true') {
     throw sanitizedError('repository root is unrecognized');
   }
-  const toplevel = gitRun(root, ['rev-parse', '--show-toplevel']);
+  const toplevel = run(root, ['rev-parse', '--show-toplevel']);
   if (toplevel.status !== 0) {
     throw sanitizedError('repository root is unrecognized');
   }
@@ -607,11 +693,11 @@ export function verifyRepoState(repoRoot, expectedSha, gitRun = defaultGitRun) {
   if (shown !== root) {
     throw sanitizedError('repository root does not match the wrapper checkout');
   }
-  const symbolic = gitRun(root, ['symbolic-ref', '-q', 'HEAD']);
+  const symbolic = run(root, ['symbolic-ref', '-q', 'HEAD']);
   if (symbolic.status !== 0) {
     throw sanitizedError('detached HEAD is refused');
   }
-  const head = gitRun(root, ['rev-parse', 'HEAD']);
+  const head = run(root, ['rev-parse', 'HEAD']);
   if (head.status !== 0) {
     throw sanitizedError('HEAD cannot be resolved');
   }
@@ -619,7 +705,7 @@ export function verifyRepoState(repoRoot, expectedSha, gitRun = defaultGitRun) {
   if (actual !== expectedSha) {
     throw sanitizedError('HEAD does not match the authorized commit SHA');
   }
-  const status = gitRun(root, ['status', '--porcelain=v1', '-uall']);
+  const status = run(root, ['status', '--porcelain=v1', '-uall']);
   if (status.status !== 0) {
     throw sanitizedError('git status failed');
   }
@@ -1075,6 +1161,7 @@ export async function runCli({
   stderr = process.stderr,
   randomNonce = () => randomBytes(32).toString('hex'),
   psqlTrust = PSQL_PRODUCTION_TRUST,
+  gitTrust = GIT_PRODUCTION_TRUST,
   gitRun,
   installSignals = defaultInstallSignals,
   exitImpl,
@@ -1105,8 +1192,14 @@ export async function runCli({
     handleExecutionSignal(state);
   });
   try {
+    refuseGitOverrideEnv(env);
     const expectedSha = env[GIT_SHA_ENV];
-    verifyRepoState(path.resolve(repoRoot), expectedSha, gitRun || defaultGitRun);
+    verifyRepoState(
+      path.resolve(repoRoot),
+      expectedSha,
+      typeof gitRun === 'function' ? gitRun : makeDefaultGitRun(gitTrust),
+      gitTrust,
+    );
     const pins = loadPins(repoRoot);
     const parsedArgs = parseCliArgs(argv);
     const capturedUrl = env[URL_ENV];

@@ -17,6 +17,9 @@ import {
   PSQL_SHA_ENV,
   PSQL_PRODUCTION_TRUST,
   TEST_PSQL_TRUST,
+  ALLOWED_GIT_BINS,
+  GIT_PRODUCTION_TRUST,
+  TEST_GIT_TRUST,
   REQUIRED_SSLMODE,
   SYSTEM_CA_BUNDLE,
   URL_ENV,
@@ -37,6 +40,9 @@ import {
   verifyPinnedSqlFiles,
   verifyPsqlBinary,
   verifyRepoState,
+  resolveTrustedGit,
+  revalidateGitHandle,
+  makeDefaultGitRun,
 } from '../../scripts/run-hosted-tax-profile-containment.mjs';
 import { loadPins } from '../../scripts/check-recipient-tax-profile-migrations.mjs';
 
@@ -803,6 +809,20 @@ test('wrong or missing authorized Git SHA fails', async () => {
   assert.match(detached.err, /detached HEAD is refused/);
 });
 
+test('git binary override env is refused', async () => {
+  const execPath = await capturedRun(['preflight'], {
+    extraEnv: { GIT_EXEC_PATH: '/tmp/evil-git-exec' },
+  });
+  assert.equal(execPath.code, 1);
+  assert.match(execPath.err, /git binary override is refused/);
+
+  const wrapperGit = await capturedRun(['preflight'], {
+    extraEnv: { CHECKSOPS_TAX_CONTAINMENT_GIT: '/tmp/evil-git' },
+  });
+  assert.equal(wrapperGit.code, 1);
+  assert.match(wrapperGit.err, /git binary override is refused/);
+});
+
 test('dirty security-package paths fail Git authorization', async () => {
   const dirtyTracked = await capturedRun(['preflight'], {
     statusStdout: ' M supabase/security/hosted-tax-profile-containment.pins.json\n',
@@ -830,6 +850,45 @@ test('exact clean reviewed SHA on a named branch passes', () => {
   assert.match(sha, /^[0-9a-f]{40}$/);
   assert.equal(verifyRepoState(tmp, sha), sha);
   fs.rmSync(tmp, { recursive: true, force: true });
+});
+
+test('git authorization uses allowlisted absolute binary and ignores PATH', () => {
+  const trusted = resolveTrustedGit(GIT_PRODUCTION_TRUST);
+  assert.equal(ALLOWED_GIT_BINS.includes(trusted.path), true);
+  assert.match(trusted.identity.digest, /^[0-9a-f]{64}$/);
+  const again = revalidateGitHandle(trusted, GIT_PRODUCTION_TRUST);
+  assert.equal(again.path, trusted.path);
+  assert.throws(
+    () => revalidateGitHandle({ path: '/tmp/git', identity: trusted.identity }, TEST_GIT_TRUST),
+    /not in the reviewed allowlist/,
+  );
+
+  const hijack = fs.mkdtempSync(path.join(os.tmpdir(), 'rtp-git-hijack-'));
+  fs.writeFileSync(path.join(hijack, 'git'), '#!/bin/sh\necho hijacked >&2\nexit 42\n');
+  fs.chmodSync(path.join(hijack, 'git'), 0o755);
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rtp-git-path-'));
+  fs.cpSync(path.join(ROOT, 'supabase'), path.join(tmp, 'supabase'), { recursive: true });
+  const git = (args) => spawnSync('git', args, { cwd: tmp, encoding: 'utf8' });
+  git(['init', '-b', 'review']);
+  git(['config', 'user.email', 'review@example.test']);
+  git(['config', 'user.name', 'review']);
+  git(['add', '.']);
+  git(['commit', '-q', '-m', 'reviewed']);
+  const sha = git(['rev-parse', 'HEAD']).stdout.trim();
+  const prevPath = process.env.PATH;
+  process.env.PATH = `${hijack}:/no/such/git:${prevPath || ''}`;
+  try {
+    assert.equal(verifyRepoState(tmp, sha), sha);
+    const runner = makeDefaultGitRun(GIT_PRODUCTION_TRUST);
+    const inside = runner(tmp, ['rev-parse', '--is-inside-work-tree']);
+    assert.equal(inside.status, 0);
+    assert.equal(String(inside.stdout).trim(), 'true');
+    assert.doesNotMatch(String(inside.stderr || ''), /hijacked/);
+  } finally {
+    process.env.PATH = prevPath;
+    fs.rmSync(hijack, { recursive: true, force: true });
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
 });
 
 test('pins symlink, extra keys, traversal, and malformed hashes fail', async () => {
