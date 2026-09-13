@@ -9,7 +9,7 @@ import { parseBody, ignoredSpoof } from './data.mjs';
 import { loadDatabaseCredentials } from './secrets.mjs';
 import { buildWriteClientConfig, sanitizePublicError } from './db-health.mjs';
 import { normalizeEmail } from './email-policy.mjs';
-import { sendViaSesOrSink } from './email.mjs';
+import { deliverAuditedEmail, peekAuditedEmail, replayIdempotentSend, stableEmailIdempotencyKey, validatedMailReplyTo } from './email.mjs';
 import { emailMode } from './email-policy.mjs';
 import { renderTransactionalTemplate } from './email-templates.mjs';
 import { resolveEmailBranding } from './email-branding.mjs';
@@ -33,6 +33,19 @@ export const runHomeownerUploadOtpStart = async ({ client, body, spoof, send }) 
   const contractorProfileId = body.contractor_profile_id || body.contractorId || null;
   if (!email || !email.includes('@')) {
     return { ok: false, statusCode: 400, error: 'invalid_email', spoofFieldsIgnored: spoof };
+  }
+
+  const suppliedKey = String(body.idempotencyKey || body.idempotency_key || '').trim();
+  if (suppliedKey) {
+    const prior = await peekAuditedEmail(client, suppliedKey);
+    if (!prior.ok) return { ...prior, spoofFieldsIgnored: spoof };
+    if (prior.duplicate) {
+      return {
+        ...replayIdempotentSend(prior.row, spoof),
+        sent: true,
+        expiresAt: prior.row?.metadata?.expires_at || null,
+      };
+    }
   }
 
   // Bind to lead when provided
@@ -69,25 +82,39 @@ export const runHomeownerUploadOtpStart = async ({ client, body, spoof, send }) 
   }
 
   const branding = await resolveEmailBranding(client, { senderOverride: 'checksops' });
+  const reply = validatedMailReplyTo(branding.replyTo);
+  if (!reply.ok) {
+    return { ok: false, statusCode: 400, error: reply.error, spoofFieldsIgnored: spoof };
+  }
   const rendered = renderTransactionalTemplate('homeowner-upload-otp', {
     code,
     branding,
   });
-  const mailer = send || sendViaSesOrSink;
-  await mailer({
-    to: email,
-    subject: rendered.subject,
-    html: rendered.html,
-    text: rendered.text,
-    from: branding.from,
-    replyTo: branding.replyTo,
+  const delivery = await deliverAuditedEmail(client, {
+    templateName: 'homeowner-upload-otp',
+    recipientEmail: email,
+    tenantId: null,
+    idempotencyKey: suppliedKey || stableEmailIdempotencyKey('homeowner-otp', id),
+    metadata: { otp_id: id, expires_at: expiresAt, lead_id: leadId },
+    spoof,
+    send,
+    mailerArgs: {
+      subject: rendered.subject,
+      html: rendered.html,
+      text: rendered.text,
+      from: branding.from,
+      replyTo: reply.replyTo,
+    },
   });
+  if (!delivery.ok) return { ...delivery, spoofFieldsIgnored: spoof };
 
   return {
     ok: true,
     statusCode: 200,
     sent: true,
+    duplicate: delivery.duplicate === true,
     expiresAt,
+    providerMessageId: delivery.providerMessageId || delivery.replay?.providerMessageId || null,
     stagingDebugCode: emailMode() === 'sink' ? code : undefined,
     spoofFieldsIgnored: spoof,
   };
