@@ -709,6 +709,20 @@ export const WRITE_ALLOWLIST = {
       reason: 'Timeline notes only. amount is ignored/denied; no payment movement.',
     },
   },
+  claims: {
+    tranche: 6,
+    ops: new Set(['insert']),
+    columns: new Set(['claim_number', 'status', 'org_id']),
+    identityColumn: null,
+    requiredForWrite: { insert: ['claim_number'] },
+    filterColumns: new Set([]),
+    clientIgnored: new Set(['id', 'created_at', 'updated_at', 'tenant_id']),
+    frontend: {
+      file: 'ClaimLedgerCard',
+      op: 'insert',
+      reason: 'Tracking-claim create only. org_id is server-assigned from caller tenant membership; client org_id is used only when it matches a writable membership.',
+    },
+  },
   claim_settlements: {
     tranche: 6,
     ops: new Set(['insert', 'update']),
