@@ -823,6 +823,51 @@ test('git binary override env is refused', async () => {
   assert.match(wrapperGit.err, /git binary override is refused/);
 });
 
+test('wrapper refuses to run as root', async () => {
+  let err = '';
+  const psql = dummyPsql();
+  const code = await runCli({
+    argv: ['preflight'],
+    env: operatorEnv({ psql }),
+    spawnImpl: () => ({ status: 0, stdout: '', stderr: '' }),
+    stdout: { write: () => {} },
+    stderr: { write: (s) => { err += s; } },
+    psqlTrust: TEST_PSQL_TRUST,
+    gitRun: stubGit(),
+    getUid: () => 0,
+    getEuid: () => 0,
+    installSignals: () => () => {},
+    exitImpl: () => {},
+  });
+  assert.equal(code, 1);
+  assert.match(err, /must not run as root/);
+});
+
+test('git status is re-checked after SQL bytes are hashed', async () => {
+  let statusCalls = 0;
+  const dirtyAfterHash = await capturedRun(['preflight'], {
+    gitRun: stubGit(STUB_GIT_SHA, {
+      gitRun: (_repoRoot, args) => {
+        if (args[0] === 'status') {
+          statusCalls += 1;
+          if (statusCalls >= 2) {
+            return {
+              status: 0,
+              stdout: ' M supabase/security/hosted-tax-profile-containment.pins.json\n',
+              stderr: '',
+            };
+          }
+        }
+        return null;
+      },
+    }),
+  });
+  assert.equal(dirtyAfterHash.code, 1);
+  assert.match(dirtyAfterHash.err, /dirty or staged tracked files/);
+  assert.ok(statusCalls >= 2);
+  assert.equal(dirtyAfterHash.calls.filter((c) => nonceFromArgs(c.args).kind === 'preflight').length, 0);
+});
+
 test('dirty security-package paths fail Git authorization', async () => {
   const dirtyTracked = await capturedRun(['preflight'], {
     statusStdout: ' M supabase/security/hosted-tax-profile-containment.pins.json\n',
