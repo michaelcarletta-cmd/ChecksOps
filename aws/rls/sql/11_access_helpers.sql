@@ -69,7 +69,7 @@ $$;
 COMMENT ON FUNCTION public.aws_is_active_shared_check_target(uuid) IS
   'True when auth.uid() can act as target_tenant_id of an unrevoked shared_checks row for _check_id. Knowledge of UUIDs or Partner Codes is not sufficient. Source/owner access is not granted here.';
 
-CREATE OR REPLACE FUNCTION public.aws_can_access_check(_check_id uuid)
+CREATE OR REPLACE FUNCTION public.aws_can_access_check_non_partner(_check_id uuid)
 RETURNS boolean
 LANGUAGE sql
 STABLE
@@ -84,7 +84,6 @@ AS $$
         WHERE ci.id = _check_id
           AND public.aws_can_access_tenant(ci.tenant_id)
       )
-      OR public.aws_is_active_shared_check_target(_check_id)
       OR public.current_tenant_is_check_funds_recipient(_check_id)
       OR (
         public.has_role(auth.uid(), 'mortgage_agent'::public.app_role)
@@ -92,8 +91,23 @@ AS $$
       );
 $$;
 
+COMMENT ON FUNCTION public.aws_can_access_check_non_partner(uuid) IS
+  'Owner-tenant / funds-recipient / mortgage-agent / platform SELECT. Does not include shared_checks partners. Use this for tables that carry bearer tokens or provider payloads.';
+
+CREATE OR REPLACE FUNCTION public.aws_can_access_check(_check_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+SET row_security = off
+AS $$
+  SELECT public.aws_can_access_check_non_partner(_check_id)
+      OR public.aws_is_active_shared_check_target(_check_id);
+$$;
+
 COMMENT ON FUNCTION public.aws_can_access_check(uuid) IS
-  'SELECT/read helper only. Active shared_checks target membership grants READ. Writes must use aws_can_write_check, which does not include partner shares.';
+  'SELECT/read helper only. Active shared_checks target membership grants READ of non-secret check children. Do not use this helper for endorsement/payee/payment-direction/signer token columns or deposit provider JSON. Writes must use aws_can_write_check.';
 
 CREATE OR REPLACE FUNCTION public.aws_can_access_same_tenant_user(_user_id uuid)
 RETURNS boolean
@@ -129,7 +143,7 @@ AS $$
     SELECT 1
     FROM public.deposit_items di
     WHERE di.id = _item_id
-      AND public.aws_can_access_check(di.check_id)
+      AND public.aws_can_access_check_non_partner(di.check_id)
   );
 $$;
 
@@ -163,7 +177,7 @@ AS $$
     WHERE sr.id = _request_id
       AND (
         public.aws_can_access_claim(sr.claim_id)
-        OR public.aws_can_access_check(sr.check_intake_item_id)
+        OR public.aws_can_access_check_non_partner(sr.check_intake_item_id)
       )
   );
 $$;
@@ -201,6 +215,7 @@ COMMENT ON FUNCTION public.aws_can_access_tax_profiles(uuid) IS
 REVOKE ALL ON FUNCTION public.aws_can_access_tenant(uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.aws_can_access_claim(uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.aws_is_active_shared_check_target(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.aws_can_access_check_non_partner(uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.aws_can_access_check(uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.aws_can_access_same_tenant_user(uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.aws_can_access_deposit_item(uuid) FROM PUBLIC;

@@ -96,7 +96,6 @@ CREATE POLICY aws_select_check_endorsements ON public.check_endorsements
   USING (
     public.aws_is_cross_tenant_reader()
     OR public.aws_can_access_tenant(tenant_id)
-    OR public.aws_is_active_shared_check_target(check_id)
   );
 
 DROP POLICY IF EXISTS aws_select_check_files ON public.check_files;
@@ -134,13 +133,20 @@ CREATE POLICY aws_select_check_payees ON public.check_payees
   USING (
     public.aws_is_cross_tenant_reader()
     OR public.aws_can_access_tenant(tenant_id)
-    OR public.aws_is_active_shared_check_target(check_id)
   );
 
 DROP POLICY IF EXISTS aws_select_check_payment_directions ON public.check_payment_directions;
 CREATE POLICY aws_select_check_payment_directions ON public.check_payment_directions
   FOR SELECT TO authenticated
-  USING (public.aws_can_access_check(check_id));
+  USING (
+    public.aws_can_access_check_non_partner(check_id)
+    OR EXISTS (
+      SELECT 1
+      FROM public.claim_checks cc
+      WHERE cc.id = check_payment_directions.check_id
+        AND public.aws_can_access_check_non_partner(cc.check_intake_item_id)
+    )
+  );
 
 DROP POLICY IF EXISTS aws_select_check_reconciliation_alerts ON public.check_reconciliation_alerts;
 CREATE POLICY aws_select_check_reconciliation_alerts ON public.check_reconciliation_alerts
@@ -310,7 +316,7 @@ CREATE POLICY aws_select_deposit_exceptions ON public.deposit_exceptions
 DROP POLICY IF EXISTS aws_select_deposit_items ON public.deposit_items;
 CREATE POLICY aws_select_deposit_items ON public.deposit_items
   FOR SELECT TO authenticated
-  USING (public.aws_can_access_check(check_id));
+  USING (public.aws_can_access_check_non_partner(check_id));
 
 DROP POLICY IF EXISTS aws_select_deposit_manager_snapshots ON public.deposit_manager_snapshots;
 CREATE POLICY aws_select_deposit_manager_snapshots ON public.deposit_manager_snapshots

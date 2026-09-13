@@ -17,10 +17,10 @@ const SHARED_CHECK = 'c1000000-0000-4000-8000-000000000001';
 const readSql = (name) => fs.readFileSync(path.join(SQL_DIR, name), 'utf8');
 
 const functionBody = (sql, name) => {
-  const start = sql.indexOf(`CREATE OR REPLACE FUNCTION public.${name}`);
+  const start = sql.indexOf(`CREATE OR REPLACE FUNCTION public.${name}(`);
   assert.ok(start >= 0, `missing ${name}`);
   const next = sql.indexOf('CREATE OR REPLACE FUNCTION public.', start + 1);
-  const revoke = sql.indexOf(`REVOKE ALL ON FUNCTION public.${name}`, start);
+  const revoke = sql.indexOf(`REVOKE ALL ON FUNCTION public.${name}(`, start);
   const end = Math.min(
     next === -1 ? sql.length : next,
     revoke === -1 ? sql.length : revoke,
@@ -67,7 +67,7 @@ test('aws_can_access_check is SELECT-only and write helpers stay owner-tenant', 
   assert.match(grants, /GRANT EXECUTE ON FUNCTION public\.aws_is_active_shared_check_target\(uuid\)/);
   assert.match(oneshot, /aws_is_active_shared_check_target/);
 
-  const helperSelect = selectPoliciesUsing(selectSql, 'aws_can_access_check');
+  const helperSelect = selectPoliciesUsing(selectSql, 'aws_can_access_check(');
   assert.ok(helperSelect.length >= 20, `expected helper SELECT policies, got ${helperSelect.length}`);
   for (const row of helperSelect) {
     assert.match(row.policy, /^aws_select_/);
@@ -78,14 +78,32 @@ test('aws_can_access_check is SELECT-only and write helpers stay owner-tenant', 
     || /aws_can_access_check/.test(workflow);
   assert.equal(writeUsesAccess, false);
 
-  assert.match(selectSql, /aws_select_check_intake_items[\s\S]*aws_is_active_shared_check_target\(id\)/);
-  assert.match(selectSql, /aws_select_check_payees[\s\S]*aws_is_active_shared_check_target\(check_id\)/);
-  assert.match(selectSql, /aws_select_check_endorsements[\s\S]*aws_is_active_shared_check_target\(check_id\)/);
+  const policyByTable = {};
+  const re = /CREATE POLICY (aws_select_[a-z0-9_]+) ON public\.([a-z0-9_]+)\n\s+FOR SELECT TO authenticated\n\s+USING \(([\s\S]*?)\);/g;
+  let match;
+  while ((match = re.exec(selectSql))) {
+    policyByTable[match[2]] = match[3].replace(/\s+/g, ' ').trim();
+  }
+  assert.match(policyByTable.check_intake_items, /aws_is_active_shared_check_target\(id\)/);
+  assert.equal(/aws_is_active_shared_check_target/.test(policyByTable.check_payees || ''), false);
+  assert.equal(/aws_is_active_shared_check_target/.test(policyByTable.check_endorsements || ''), false);
+  assert.match(policyByTable.check_payment_directions, /aws_can_access_check_non_partner/);
+  assert.equal(/aws_can_access_check\(check_id\)/.test(policyByTable.check_payment_directions || ''), false);
+  assert.match(policyByTable.deposit_items, /aws_can_access_check_non_partner/);
+
+  const signatureAccess = functionBody(helpers, 'aws_can_access_signature_request');
+  const depositAccess = functionBody(helpers, 'aws_can_access_deposit_item');
+  assert.match(signatureAccess, /aws_can_access_check_non_partner/);
+  assert.equal(/aws_can_access_check\(sr\.check_intake_item_id\)/.test(signatureAccess), false);
+  assert.match(depositAccess, /aws_can_access_check_non_partner/);
+  assert.match(grants, /GRANT EXECUTE ON FUNCTION public\.aws_can_access_check_non_partner\(uuid\)/);
+  assert.match(oneshot, /aws_can_access_check_non_partner/);
+  assert.match(oneshot, /31_partner_safe_read\.sql/);
 });
 
 test('child SELECT inventory via aws_can_access_check is check-scoped and excludes tenant secrets', () => {
   const selectSql = readSql('12_final_select_policies.sql');
-  const viaHelper = selectPoliciesUsing(selectSql, 'aws_can_access_check').map((row) => row.table).sort();
+  const viaHelper = selectPoliciesUsing(selectSql, 'aws_can_access_check(').map((row) => row.table).sort();
   const expected = [
     'check_deletion_log',
     'check_deposit_image_backfill_queue',
@@ -95,14 +113,12 @@ test('child SELECT inventory via aws_can_access_check is check-scoped and exclud
     'check_intake_mortgage_draws',
     'check_message_reads',
     'check_messages',
-    'check_payment_directions',
     'check_reconciliation_alerts',
     'check_status_audit',
     'claim_check_mortgage_draws',
     'claim_checks',
     'claim_disbursements',
     'claim_payments',
-    'deposit_items',
     'endorsement_audit_log',
     'endorsement_requests',
     'loss_draft_tracking',
@@ -178,3 +194,45 @@ test('API money movement still requires owner-tenant membership, not shared-chec
   assert.equal(checkalt.error, 'cross_tenant_denied');
   assert.equal(checkalt.liveProviderCalled, false);
 });
+
+const FORBIDDEN_PARTNER_COLUMNS = [
+  'token',
+  'token_expires_at',
+  'endorsement_token',
+  'endorsement_token_expires_at',
+  'secure_token',
+  'access_token',
+  'token_hash',
+  'signature_data',
+  'provider_payload',
+  'provider_response',
+  'provider_status_raw',
+  'increase_raw_response',
+];
+
+test('partner-safe views omit capability secrets and are allowlisted for /data', () => {
+  const views = readSql('31_partner_safe_read.sql');
+  const allowed = JSON.parse(fs.readFileSync(
+    path.join(ROOT, 'functions/api/allowed-tables.json'),
+    'utf8',
+  ));
+  for (const name of [
+    'aws_partner_check_endorsements',
+    'aws_partner_check_payees',
+    'aws_partner_signature_signers',
+  ]) {
+    assert.match(views, new RegExp(`CREATE VIEW public\\.${name}`));
+    assert.equal(allowed.includes(name), true, name);
+    assert.match(views, /aws_is_active_shared_check_target/);
+  }
+  for (const col of FORBIDDEN_PARTNER_COLUMNS) {
+    assert.equal(
+      new RegExp(`\\b${col}\\b`).test(views.replace(/COMMENT ON VIEW[\s\S]*?;/g, '')),
+      false,
+      col,
+    );
+  }
+  assert.match(views, /security_invoker = false/);
+  assert.match(views, /GRANT SELECT ON TABLE public\.aws_partner_check_endorsements TO checksops, authenticated/);
+});
+

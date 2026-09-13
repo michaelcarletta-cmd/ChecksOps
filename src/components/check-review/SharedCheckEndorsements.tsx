@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { fillPartnerSigners } from "@/lib/partnerSafeReads";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,7 +43,7 @@ export function SharedCheckEndorsements({
         .eq("check_intake_item_id", checkIntakeItemId)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data ?? [];
+      return fillPartnerSigners(data ?? []);
     },
   });
 

@@ -1,6 +1,11 @@
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  PARTNER_CHECK_ENDORSEMENTS,
+  PARTNER_CHECK_PAYEES,
+  selectOwnerThenPartner,
+} from "@/lib/partnerSafeReads";
 import { compressCheckImage } from "@/lib/compressCheckImage";
 import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
 import { useToast } from "@/hooks/use-toast";
@@ -208,17 +213,19 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
   const { data: endorsements = [], isLoading } = useQuery({
     queryKey: ["check-endorsements", checkId],
     queryFn: async () => {
-      const [{ data: endorsementData, error: endorsementError }, { data: payeeData, error: payeeError }] = await Promise.all([
-        supabase
-          .from("check_endorsements")
-          .select("*")
-          .eq("check_id", checkId)
-          .order("created_at", { ascending: true }),
-        supabase
-          .from("check_payees")
-          .select("id, payee_name, payee_type, endorsement_status, endorsed_at, contact_email, contact_phone, created_at")
-          .eq("check_id", checkId)
-          .order("created_at", { ascending: true }),
+        const [{ data: endorsementData, error: endorsementError }, { data: payeeData, error: payeeError }] = await Promise.all([
+        selectOwnerThenPartner("check_endorsements", PARTNER_CHECK_ENDORSEMENTS, (from) =>
+          from
+            .select("*")
+            .eq("check_id", checkId)
+            .order("created_at", { ascending: true }),
+        ),
+        selectOwnerThenPartner("check_payees", PARTNER_CHECK_PAYEES, (from) =>
+          from
+            .select("id, payee_name, payee_type, endorsement_status, endorsed_at, contact_email, contact_phone, created_at")
+            .eq("check_id", checkId)
+            .order("created_at", { ascending: true }),
+        ),
       ]);
 
       if (endorsementError) throw endorsementError;

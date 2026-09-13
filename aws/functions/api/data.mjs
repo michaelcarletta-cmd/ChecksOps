@@ -317,9 +317,14 @@ const CHECK_ID_CHILDREN = new Set([
   'check_payment_directions',
   'check_endorsements',
   'shared_checks',
+  'aws_partner_check_payees',
+  'aws_partner_check_endorsements',
 ]);
 
 export const childFk = (parentTable, childTable) => {
+  if (childTable === 'aws_partner_signature_signers' || childTable === 'signature_signers') {
+    return 'signature_request_id';
+  }
   if (parentTable === 'check_intake_items') {
     return CHECK_ID_CHILDREN.has(childTable) ? 'check_id' : 'check_intake_item_id';
   }

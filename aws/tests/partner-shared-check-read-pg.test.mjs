@@ -34,6 +34,13 @@ const FILE_UNRELATED = 'f1000000-0000-4000-8000-000000000002';
 const DEPOSIT_SHARED = 'b1000000-0000-4000-8000-000000000001';
 const WALLET_SOURCE = 'aa100000-0000-4000-8000-000000000001';
 const CHECKALT_ACCT = 'ab100000-0000-4000-8000-000000000001';
+const PD_SHARED = 'f1000000-0000-4000-8000-000000000011';
+const SIG_REQ = 'f1000000-0000-4000-8000-000000000012';
+const SIGNER_SHARED = 'f1000000-0000-4000-8000-000000000013';
+const TOKEN_ENDORSE = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+const TOKEN_PAYEE = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const TOKEN_PD = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const TOKEN_SIGNER = 'raw-signer-access-token-32b-value';
 
 const readRepoSql = (rel) => fs.readFileSync(path.join(SQL_DIR, rel), 'utf8');
 
@@ -187,24 +194,45 @@ CREATE TABLE public.loss_draft_tracking (
   claim_id uuid,
   check_intake_item_id uuid
 );
-CREATE TABLE public.signature_requests (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  claim_id uuid,
-  check_intake_item_id uuid
-);
 CREATE TABLE public.check_payees (
   id uuid PRIMARY KEY,
   check_id uuid NOT NULL,
   tenant_id uuid,
-  payee_name text NOT NULL
+  payee_name text NOT NULL,
+  payee_type text,
+  endorsement_status text,
+  endorsed_at timestamptz,
+  contact_email text,
+  contact_phone text,
+  notification_sent_via text,
+  notification_sent_at timestamptz,
+  endorsement_token text,
+  endorsement_token_expires_at timestamptz,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
 );
 CREATE TABLE public.check_endorsements (
   id uuid PRIMARY KEY,
   check_id uuid NOT NULL,
   tenant_id uuid,
+  payee_id uuid,
   payee_name text NOT NULL,
   payee_type text NOT NULL DEFAULT 'contractor',
-  status text NOT NULL DEFAULT 'pending'
+  status text NOT NULL DEFAULT 'pending',
+  signature_method text,
+  signed_at timestamptz,
+  request_sent_at timestamptz,
+  last_reminder_at timestamptz,
+  reminder_count int DEFAULT 0,
+  contact_email text,
+  contact_phone text,
+  notes text,
+  loss_draft_task_created boolean DEFAULT false,
+  signature_image_url text,
+  token text,
+  token_expires_at timestamptz,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
 );
 CREATE TABLE public.check_files (
   id uuid PRIMARY KEY,
@@ -221,7 +249,56 @@ CREATE TABLE public.shared_checks (
 );
 CREATE TABLE public.deposit_items (
   id uuid PRIMARY KEY,
-  check_id uuid
+  check_id uuid,
+  provider_payload jsonb,
+  provider_response jsonb,
+  provider_status_raw jsonb,
+  increase_raw_response jsonb
+);
+CREATE TABLE public.claim_checks (
+  id uuid PRIMARY KEY,
+  check_intake_item_id uuid
+);
+CREATE TABLE public.check_payment_directions (
+  id uuid PRIMARY KEY,
+  check_id uuid NOT NULL,
+  claim_id uuid,
+  contractor_name text,
+  request_status text NOT NULL DEFAULT 'pending',
+  decision text,
+  expires_at timestamptz,
+  secure_token uuid NOT NULL,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+CREATE TABLE public.signature_requests (
+  id uuid PRIMARY KEY,
+  check_intake_item_id uuid,
+  claim_id uuid,
+  document_name text NOT NULL DEFAULT 'doc',
+  document_path text NOT NULL DEFAULT '',
+  status text NOT NULL DEFAULT 'draft',
+  last_provider_response text,
+  created_at timestamptz DEFAULT now()
+);
+CREATE TABLE public.signature_signers (
+  id uuid PRIMARY KEY,
+  signature_request_id uuid NOT NULL,
+  signer_name text NOT NULL,
+  signer_email text NOT NULL,
+  signer_type text NOT NULL DEFAULT 'payee',
+  signing_order int NOT NULL DEFAULT 1,
+  status text NOT NULL DEFAULT 'pending',
+  access_token text,
+  token_hash text,
+  expires_at timestamptz,
+  signed_at timestamptz,
+  viewed_at timestamptz,
+  delivery_status text,
+  delivery_error text,
+  email_sent_at timestamptz,
+  signature_data text,
+  created_at timestamptz DEFAULT now()
 );
 CREATE TABLE public.checkalt_tenant_accounts (
   id uuid PRIMARY KEY,
@@ -282,8 +359,11 @@ GRANT EXECUTE ON FUNCTION public.mortgage_agent_can_view_check(uuid) TO checksop
     extractStmt(selectSql, 'aws_select_check_payees'),
     extractStmt(selectSql, 'aws_select_check_endorsements'),
     extractStmt(selectSql, 'aws_select_check_files'),
+    extractStmt(selectSql, 'aws_select_check_payment_directions'),
     extractStmt(selectSql, 'aws_select_deposit_items'),
     extractStmt(selectSql, 'aws_select_shared_checks'),
+    extractStmt(selectSql, 'aws_select_signature_requests'),
+    extractStmt(selectSql, 'aws_select_signature_signers'),
     extractStmt(selectSql, 'aws_select_checkalt_tenant_accounts'),
     extractStmt(selectSql, 'aws_select_payment_wallets'),
     extractStmt(writeProposed, 'aws_write_check_intake_items'),
@@ -301,6 +381,9 @@ ALTER TABLE public.shared_checks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.deposit_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.checkalt_tenant_accounts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.payment_wallets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.check_payment_directions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.signature_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.signature_signers ENABLE ROW LEVEL SECURITY;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
   public.check_intake_items,
   public.check_payees,
@@ -309,7 +392,11 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
   public.shared_checks,
   public.deposit_items,
   public.checkalt_tenant_accounts,
-  public.payment_wallets
+  public.payment_wallets,
+  public.check_payment_directions,
+  public.signature_requests,
+  public.signature_signers,
+  public.claim_checks
 TO authenticated, checksops;
 GRANT SELECT ON TABLE public.tenant_users, public.user_roles, public.identity_accounts, public.profiles TO authenticated, checksops;
 ${policies}
@@ -334,15 +421,21 @@ INSERT INTO public.check_intake_items (id, tenant_id, status) VALUES
   ('${CHECK_OTHER}', '${SOURCE}', 'received'),
   ('${CHECK_REVOKED}', '${SOURCE}', 'received'),
   ('${CHECK_FOREIGN}', '${UNRELATED}', 'received');
-INSERT INTO public.check_payees (id, check_id, tenant_id, payee_name) VALUES
-  ('${PAYEE_SHARED}', '${CHECK_SHARED}', '${SOURCE}', 'Shared Payee');
-INSERT INTO public.check_endorsements (id, check_id, tenant_id, payee_name, status) VALUES
-  ('${ENDORSE_SHARED}', '${CHECK_SHARED}', '${SOURCE}', 'Shared Payee', 'pending');
+INSERT INTO public.check_payees (id, check_id, tenant_id, payee_name, endorsement_status, endorsement_token) VALUES
+  ('${PAYEE_SHARED}', '${CHECK_SHARED}', '${SOURCE}', 'Shared Payee', 'pending', '${TOKEN_PAYEE}');
+INSERT INTO public.check_endorsements (id, check_id, tenant_id, payee_name, status, token) VALUES
+  ('${ENDORSE_SHARED}', '${CHECK_SHARED}', '${SOURCE}', 'Shared Payee', 'pending', '${TOKEN_ENDORSE}');
 INSERT INTO public.check_files (id, check_intake_item_id) VALUES
   ('${FILE_SHARED}', '${CHECK_SHARED}'),
   ('${FILE_UNRELATED}', '${CHECK_UNRELATED}');
-INSERT INTO public.deposit_items (id, check_id) VALUES
-  ('${DEPOSIT_SHARED}', '${CHECK_SHARED}');
+INSERT INTO public.deposit_items (id, check_id, provider_payload) VALUES
+  ('${DEPOSIT_SHARED}', '${CHECK_SHARED}', '{"secret":"deposit-provider-json"}'::jsonb);
+INSERT INTO public.check_payment_directions (id, check_id, request_status, secure_token) VALUES
+  ('${PD_SHARED}', '${CHECK_SHARED}', 'pending', '${TOKEN_PD}'::uuid);
+INSERT INTO public.signature_requests (id, check_intake_item_id, document_name, document_path, status) VALUES
+  ('${SIG_REQ}', '${CHECK_SHARED}', 'Direction to Pay', 'check-intake/shared/dtp.pdf', 'sent');
+INSERT INTO public.signature_signers (id, signature_request_id, signer_name, signer_email, status, access_token, token_hash) VALUES
+  ('${SIGNER_SHARED}', '${SIG_REQ}', 'Insured', 'insured@example.test', 'pending', '${TOKEN_SIGNER}', 'hash-of-raw-token');
 INSERT INTO public.checkalt_tenant_accounts (id, tenant_id) VALUES
   ('${CHECKALT_ACCT}', '${SOURCE}');
 INSERT INTO public.payment_wallets (id, tenant_id) VALUES
@@ -352,6 +445,8 @@ INSERT INTO public.shared_checks (check_id, source_tenant_id, target_tenant_id, 
   ('${CHECK_OTHER}', '${SOURCE}', '${OTHER_PARTNER}', '${OWNER}', NULL),
   ('${CHECK_REVOKED}', '${SOURCE}', '${PARTNER}', '${OWNER}', now());
 `);
+  psql(['-d', dbName, '-f', path.join(SQL_DIR, '31_partner_safe_read.sql')]);
+  note('applied 31_partner_safe_read.sql');
 
   const matrixSql = `
 CREATE TABLE public._share_results (
@@ -434,6 +529,28 @@ BEGIN
 END;
 $fn$;
 
+CREATE OR REPLACE FUNCTION public._as_scalar(_user uuid, _sql text)
+RETURNS jsonb LANGUAGE plpgsql AS $fn$
+DECLARE
+  _err text;
+  _val text;
+BEGIN
+  PERFORM set_config('request.app_user_id', _user::text, false);
+  BEGIN
+    EXECUTE 'SET ROLE checksops';
+    EXECUTE _sql INTO _val;
+    EXECUTE 'RESET ROLE';
+    PERFORM set_config('request.app_user_id', '', false);
+    RETURN jsonb_build_object('ok', true, 'val', _val, 'error', NULL);
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS _err = MESSAGE_TEXT;
+    EXECUTE 'RESET ROLE';
+    PERFORM set_config('request.app_user_id', '', false);
+    RETURN jsonb_build_object('ok', false, 'val', NULL, 'error', _err);
+  END;
+END;
+$fn$;
+
 DO $$
 DECLARE
   r jsonb;
@@ -492,20 +609,65 @@ BEGIN
   r := public._as_count('${PLATFORM}'::uuid, $q$SELECT count(*) FROM public.check_intake_items$q$);
   PERFORM public._share_ok('15b_platform_owner_read_all', (r->>'n')::int = 5, r::text);
 
-  r := public._as_count('${PARTNER_USER}'::uuid, $q$SELECT count(*) FROM public.check_payees WHERE id = '${PAYEE_SHARED}'::uuid$q$);
-  PERFORM public._share_ok('child_payee_read', (r->>'n')::int = 1, r::text);
+  r := public._as_count('${OWNER}'::uuid, $q$SELECT count(*) FROM public.check_endorsements WHERE id = '${ENDORSE_SHARED}'::uuid AND token = '${TOKEN_ENDORSE}'$q$);
+  PERFORM public._share_ok('owner_endorsement_token_read', (r->>'n')::int = 1, r::text);
 
   r := public._as_count('${PARTNER_USER}'::uuid, $q$SELECT count(*) FROM public.check_endorsements WHERE id = '${ENDORSE_SHARED}'::uuid$q$);
-  PERFORM public._share_ok('child_endorsement_read', (r->>'n')::int = 1, r::text);
+  PERFORM public._share_ok('partner_base_endorsement_deny', (r->>'n')::int = 0, r::text);
+
+  r := public._as_count('${PARTNER_USER}'::uuid, $q$SELECT count(*) FROM public.aws_partner_check_endorsements WHERE id = '${ENDORSE_SHARED}'::uuid$q$);
+  PERFORM public._share_ok('partner_safe_endorsement_read', (r->>'n')::int = 1, r::text);
+
+  r := public._as_scalar('${PARTNER_USER}'::uuid, $q$SELECT COALESCE(to_jsonb(t)::text, '') FROM public.aws_partner_check_endorsements t WHERE id = '${ENDORSE_SHARED}'::uuid$q$);
+  PERFORM public._share_ok('partner_safe_endorsement_no_token', (r->>'ok')::boolean AND (r->>'val') NOT LIKE '%${TOKEN_ENDORSE}%' AND (r->>'val') LIKE '%pending%', r::text);
+
+  r := public._as_count('${PARTNER_USER}'::uuid, $q$SELECT count(*) FROM public.check_payees WHERE id = '${PAYEE_SHARED}'::uuid$q$);
+  PERFORM public._share_ok('partner_base_payee_deny', (r->>'n')::int = 0, r::text);
+
+  r := public._as_count('${PARTNER_USER}'::uuid, $q$SELECT count(*) FROM public.aws_partner_check_payees WHERE id = '${PAYEE_SHARED}'::uuid$q$);
+  PERFORM public._share_ok('partner_safe_payee_read', (r->>'n')::int = 1, r::text);
+
+  r := public._as_scalar('${PARTNER_USER}'::uuid, $q$SELECT COALESCE(to_jsonb(t)::text, '') FROM public.aws_partner_check_payees t WHERE id = '${PAYEE_SHARED}'::uuid$q$);
+  PERFORM public._share_ok('partner_safe_payee_no_token', (r->>'ok')::boolean AND (r->>'val') NOT LIKE '%${TOKEN_PAYEE}%', r::text);
+
+  r := public._as_count('${PARTNER_USER}'::uuid, $q$SELECT count(*) FROM public.check_payment_directions WHERE id = '${PD_SHARED}'::uuid$q$);
+  PERFORM public._share_ok('partner_payment_direction_base_deny', (r->>'n')::int = 0, r::text);
+
+  r := public._as_count('${OWNER}'::uuid, $q$SELECT count(*) FROM public.check_payment_directions WHERE id = '${PD_SHARED}'::uuid AND secure_token = '${TOKEN_PD}'::uuid$q$);
+  PERFORM public._share_ok('owner_payment_direction_token_read', (r->>'n')::int = 1, r::text);
+
+  r := public._as_count('${PARTNER_USER}'::uuid, $q$SELECT count(*) FROM public.signature_signers WHERE id = '${SIGNER_SHARED}'::uuid$q$);
+  PERFORM public._share_ok('partner_base_signer_deny', (r->>'n')::int = 0, r::text);
+
+  r := public._as_count('${PARTNER_USER}'::uuid, $q$SELECT count(*) FROM public.aws_partner_signature_signers WHERE id = '${SIGNER_SHARED}'::uuid$q$);
+  PERFORM public._share_ok('partner_safe_signer_read', (r->>'n')::int = 1, r::text);
+
+  r := public._as_scalar('${PARTNER_USER}'::uuid, $q$SELECT COALESCE(to_jsonb(t)::text, '') FROM public.aws_partner_signature_signers t WHERE id = '${SIGNER_SHARED}'::uuid$q$);
+  PERFORM public._share_ok('partner_safe_signer_no_token', (r->>'ok')::boolean AND (r->>'val') NOT LIKE '%${TOKEN_SIGNER}%' AND (r->>'val') LIKE '%Insured%', r::text);
+
+  r := public._as_count('${OWNER}'::uuid, $q$SELECT count(*) FROM public.signature_signers WHERE id = '${SIGNER_SHARED}'::uuid AND access_token = '${TOKEN_SIGNER}'$q$);
+  PERFORM public._share_ok('owner_signer_token_read', (r->>'n')::int = 1, r::text);
+
+  r := public._as_count('${PARTNER_USER}'::uuid, $q$SELECT count(*) FROM public.deposit_items WHERE id = '${DEPOSIT_SHARED}'::uuid$q$);
+  PERFORM public._share_ok('partner_deposit_item_deny', (r->>'n')::int = 0, r::text);
+
+  r := public._as_count('${UNRELATED_USER}'::uuid, $q$SELECT count(*) FROM public.aws_partner_check_endorsements$q$);
+  PERFORM public._share_ok('unrelated_partner_view_deny', (r->>'n')::int = 0, r::text);
+
+  r := public._as_count('${PARTNER_USER}'::uuid, $q$SELECT count(*) FROM public.aws_partner_check_endorsements WHERE check_id = '${CHECK_OTHER}'::uuid$q$);
+  PERFORM public._share_ok('partner_safe_other_check_deny', (r->>'n')::int = 0, r::text);
+
+  r := public._as_count('${PARTNER_USER}'::uuid, $q$SELECT count(*) FROM public.aws_partner_check_endorsements WHERE check_id = '${CHECK_REVOKED}'::uuid$q$);
+  PERFORM public._share_ok('revoked_partner_safe_deny', (r->>'n')::int = 0, r::text);
+
+  r := public._as_exec('${PARTNER_USER}'::uuid, $q$UPDATE public.aws_partner_check_endorsements SET status = 'signed' WHERE id = '${ENDORSE_SHARED}'::uuid$q$);
+  PERFORM public._share_ok('partner_safe_view_write_deny', (r->>'ok')::boolean IS FALSE OR (r->>'n')::int = 0, r::text);
 
   r := public._as_count('${PARTNER_USER}'::uuid, $q$SELECT count(*) FROM public.check_files WHERE id = '${FILE_SHARED}'::uuid$q$);
   PERFORM public._share_ok('child_file_shared_read', (r->>'n')::int = 1, r::text);
 
   r := public._as_count('${PARTNER_USER}'::uuid, $q$SELECT count(*) FROM public.check_files WHERE id = '${FILE_UNRELATED}'::uuid$q$);
   PERFORM public._share_ok('child_file_unrelated_deny', (r->>'n')::int = 0, r::text);
-
-  r := public._as_count('${PARTNER_USER}'::uuid, $q$SELECT count(*) FROM public.deposit_items WHERE id = '${DEPOSIT_SHARED}'::uuid$q$);
-  PERFORM public._share_ok('child_deposit_item_read', (r->>'n')::int = 1, r::text);
 
   r := public._as_bool('${PARTNER_USER}'::uuid, $q$SELECT public.aws_can_access_check('${CHECK_SHARED}'::uuid)$q$);
   PERFORM public._share_ok('helper_partner_shared_true', (r->>'val')::boolean IS TRUE, r::text);

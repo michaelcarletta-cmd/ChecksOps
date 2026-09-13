@@ -1,5 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  PARTNER_CHECK_ENDORSEMENTS,
+  PARTNER_CHECK_PAYEES,
+  selectOwnerThenPartner,
+} from "@/lib/partnerSafeReads";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CheckCircle2, Hourglass } from "lucide-react";
 import { format } from "date-fns";
@@ -53,16 +58,18 @@ export function SignatureStatusPanel({ checkId }: SignatureStatusPanelProps) {
     queryKey: ["check-endorsement-signatures", checkId],
     queryFn: async () => {
       const [{ data: endorsements, error: endorsementError }, { data: payees, error: payeeError }] = await Promise.all([
-        supabase
-          .from("check_endorsements")
-          .select("id, payee_name, payee_type, status, signed_at")
-          .eq("check_id", checkId)
-          .order("created_at", { ascending: true }),
-        supabase
-          .from("check_payees")
-          .select("id, payee_name, payee_type, endorsement_status, endorsed_at")
-          .eq("check_id", checkId)
-          .order("created_at", { ascending: true }),
+        selectOwnerThenPartner("check_endorsements", PARTNER_CHECK_ENDORSEMENTS, (from) =>
+          from
+            .select("id, payee_name, payee_type, status, signed_at")
+            .eq("check_id", checkId)
+            .order("created_at", { ascending: true }),
+        ),
+        selectOwnerThenPartner("check_payees", PARTNER_CHECK_PAYEES, (from) =>
+          from
+            .select("id, payee_name, payee_type, endorsement_status, endorsed_at")
+            .eq("check_id", checkId)
+            .order("created_at", { ascending: true }),
+        ),
       ]);
 
       if (endorsementError) throw endorsementError;

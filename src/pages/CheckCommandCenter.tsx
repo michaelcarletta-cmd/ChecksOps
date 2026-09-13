@@ -17,6 +17,12 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenantFilter } from "@/hooks/useTenantFilter";
 import { useAwsPollingFallback } from "@/hooks/useAwsPollingFallback";
+import {
+  PARTNER_CHECK_ENDORSEMENTS,
+  PARTNER_CHECK_PAYEES,
+  attachPartnerPayees,
+  selectOwnerThenPartner,
+} from "@/lib/partnerSafeReads";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -334,7 +340,7 @@ export default function CheckCommandCenter() {
           .eq("id", id)
           .single();
         if (error) throw error;
-        return data;
+        return attachPartnerPayees(data, tenantId);
       },
       staleTime: 15_000,
     });
@@ -344,14 +350,16 @@ export default function CheckCommandCenter() {
       queryKey: ["check-endorsements-summary", id],
       queryFn: async () => {
         const [{ data: endorsementData, error: endorsementError }, { data: payeeData, error: payeeError }] = await Promise.all([
-          supabase
-            .from("check_endorsements")
-            .select("id, payee_name, payee_type, status, signature_image_url, signature_method, signed_at, created_at")
-            .eq("check_id", id),
-          supabase
-            .from("check_payees")
-            .select("id, payee_name, payee_type, endorsement_status, endorsed_at, contact_email, contact_phone, notification_sent_via, notification_sent_at")
-            .eq("check_id", id),
+          selectOwnerThenPartner("check_endorsements", PARTNER_CHECK_ENDORSEMENTS, (from) =>
+            from
+              .select("id, payee_name, payee_type, status, signature_image_url, signature_method, signed_at, created_at")
+              .eq("check_id", id),
+          ),
+          selectOwnerThenPartner("check_payees", PARTNER_CHECK_PAYEES, (from) =>
+            from
+              .select("id, payee_name, payee_type, endorsement_status, endorsed_at, contact_email, contact_phone, notification_sent_via, notification_sent_at")
+              .eq("check_id", id),
+          ),
         ]);
         if (endorsementError) throw endorsementError;
         if (payeeError) throw payeeError;
@@ -2999,12 +3007,18 @@ function CheckDetailPanel({
   const { data: payeesCount = 0 } = useQuery({
     queryKey: ["check-payees-count", checkId],
     queryFn: async () => {
-      const { count, error } = await supabase
+      const owner = await supabase
         .from("check_payees")
         .select("id", { count: "exact", head: true })
         .eq("check_id", checkId);
-      if (error) throw error;
-      return count ?? 0;
+      if (owner.error) throw owner.error;
+      if ((owner.count ?? 0) > 0) return owner.count ?? 0;
+      const partner = await (supabase as any)
+        .from(PARTNER_CHECK_PAYEES)
+        .select("id", { count: "exact", head: true })
+        .eq("check_id", checkId);
+      if (partner.error) throw partner.error;
+      return partner.count ?? 0;
     },
   });
   const [movingToDeposited, setMovingToDeposited] = useState(false);
@@ -3030,7 +3044,7 @@ function CheckDetailPanel({
       if (import.meta.env.DEV) {
         console.log(`[perf] check-detail ${checkId.slice(0, 8)} in ${(performance.now() - t0).toFixed(0)}ms`);
       }
-      return data as CheckItem;
+      return await attachPartnerPayees(data as CheckItem, tenantId);
     },
   });
 
@@ -3334,15 +3348,17 @@ function CheckDetailPanel({
   const { data: endorsements = [] } = useQuery({
     queryKey: ["check-endorsements-summary", checkId],
     queryFn: async () => {
-      const [{ data: endorsementData, error: endorsementError }, { data: payeeData, error: payeeError }] = await Promise.all([
-        supabase
-          .from("check_endorsements")
-          .select("id, payee_name, payee_type, status, signature_image_url, signature_method, signed_at, created_at")
-          .eq("check_id", checkId),
-        supabase
-          .from("check_payees")
-          .select("id, payee_name, payee_type, endorsement_status, endorsed_at, contact_email, contact_phone, notification_sent_via, notification_sent_at")
-          .eq("check_id", checkId),
+        const [{ data: endorsementData, error: endorsementError }, { data: payeeData, error: payeeError }] = await Promise.all([
+        selectOwnerThenPartner("check_endorsements", PARTNER_CHECK_ENDORSEMENTS, (from) =>
+          from
+            .select("id, payee_name, payee_type, status, signature_image_url, signature_method, signed_at, created_at")
+            .eq("check_id", checkId),
+        ),
+        selectOwnerThenPartner("check_payees", PARTNER_CHECK_PAYEES, (from) =>
+          from
+            .select("id, payee_name, payee_type, endorsement_status, endorsed_at, contact_email, contact_phone, notification_sent_via, notification_sent_at")
+            .eq("check_id", checkId),
+        ),
       ]);
 
       if (endorsementError) throw endorsementError;

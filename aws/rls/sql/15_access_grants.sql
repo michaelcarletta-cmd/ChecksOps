@@ -1,6 +1,7 @@
 GRANT EXECUTE ON FUNCTION public.aws_can_access_tenant(uuid) TO checksops, authenticated;
 GRANT EXECUTE ON FUNCTION public.aws_can_access_claim(uuid) TO checksops, authenticated;
 GRANT EXECUTE ON FUNCTION public.aws_is_active_shared_check_target(uuid) TO checksops, authenticated;
+GRANT EXECUTE ON FUNCTION public.aws_can_access_check_non_partner(uuid) TO checksops, authenticated;
 GRANT EXECUTE ON FUNCTION public.aws_can_access_check(uuid) TO checksops, authenticated;
 GRANT EXECUTE ON FUNCTION public.aws_can_access_same_tenant_user(uuid) TO checksops, authenticated;
 GRANT EXECUTE ON FUNCTION public.aws_can_access_deposit_item(uuid) TO checksops, authenticated;
