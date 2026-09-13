@@ -13,6 +13,7 @@ import {
   normalizePath,
   s3KeyFor,
 } from './storage-paths.mjs';
+import { canManageTenantDocumentLibrary } from './mortgage-library-docs.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -130,8 +131,13 @@ export const authorizeStorageWritePath = async (client, bucket, objectPath, user
         message: 'tenant-documents uploads must use {tenantId}/library/...',
       };
     }
-    if (!(await hasTenantMembership(client, userId, tenantId))) {
-      return { ok: false, statusCode: 403, error: 'rls_denied', message: 'Not a member of this tenant' };
+    if (!(await canManageTenantDocumentLibrary(client, userId, tenantId))) {
+      return {
+        ok: false,
+        statusCode: 403,
+        error: 'rls_denied',
+        message: 'Tenant owner or admin required to write library documents',
+      };
     }
     return { ok: true, rel, tenantId, key: s3KeyFor(bucket, rel), strategy: 'tenant' };
   }
