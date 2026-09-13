@@ -16,6 +16,7 @@ const FILES = {
   sql39: path.join(ROOT, 'write-path/sql/39_detected_claim_number_grant.sql'),
   sql69: path.join(ROOT, 'workflows/sql/69_staging_homeowner_ledger_view.sql'),
   sql71: path.join(ROOT, 'workflows/sql/71_endorsement_email_audit.sql'),
+  sql72: path.join(ROOT, 'workflows/sql/72_public_endorsement_token_lookup.sql'),
   sql30: path.join(ROOT, 'rls/sql/30_tenant_documents_mortgage_doc_type.sql'),
 };
 
@@ -158,7 +159,7 @@ ALTER TABLE public.check_intake_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mortgage_handling_requests ENABLE ROW LEVEL SECURITY;
 `;
 
-test('SQL 29/52/39/69/71 apply twice on disposable PG16 and keep SQL 30 unapplied', {
+test('SQL 29/52/39/69/71/72 apply twice on disposable PG16 and keep SQL 30 unapplied', {
   timeout: 180000,
 }, async (t) => {
   if (!fs.existsSync(path.join(PG_BIN, 'initdb'))) {
@@ -252,6 +253,7 @@ max_connections = 20
   applyTwice('39_detected_claim_number_grant', FILES.sql39);
   applyTwice('69_staging_homeowner_ledger_view', FILES.sql69);
   applyTwice('71_endorsement_email_audit', FILES.sql71);
+  applyTwice('72_public_endorsement_token_lookup', FILES.sql72);
 
   const functions = scalar(`
 SELECT string_agg(p.proname, ',' ORDER BY p.proname)
@@ -270,7 +272,9 @@ WHERE n.nspname = 'public'
     'aws_email_send_log_finalize',
     'aws_mark_endorsement_request_sent',
     'aws_public_submit_endorsement',
-    'aws_public_reject_endorsement'
+    'aws_public_reject_endorsement',
+    'aws_public_endorsement_by_token',
+    'aws_public_signature_by_token_hash'
   )
 `);
   note(`functions ${functions}`);
@@ -281,9 +285,13 @@ WHERE n.nspname = 'public'
     'aws_email_send_log_finalize',
     'aws_public_submit_endorsement',
     'aws_public_homeowner_ledger_bundle',
+    'aws_public_endorsement_by_token',
   ]) {
     assert.match(functions, new RegExp(name));
   }
+  assert.doesNotMatch(functions || '', /aws_public_signature_by_token_hash/);
+  assert.equal(scalar(`SELECT has_function_privilege('checksops', 'public.aws_public_endorsement_by_token(text)', 'EXECUTE')::text`), 'true');
+  assert.equal(scalar(`SELECT has_function_privilege('public', 'public.aws_public_endorsement_by_token(text)', 'EXECUTE')::text`), 'false');
 
   const claimGrant = scalar(`
 SELECT count(*)::text
