@@ -88,6 +88,9 @@ test('approved Mortgage Ops category is only library:mortgage:%', () => {
   assert.equal(isApprovedMortgageLibraryDocType('library:catalog:roofing'), false);
   assert.equal(isApprovedMortgageLibraryDocType('library:letterhead:logo'), false);
   assert.equal(isApprovedMortgageLibraryDocType('verification'), false);
+  assert.equal(isApprovedMortgageLibraryDocType('library:mortgage:evil'), false);
+  assert.equal(isApprovedMortgageLibraryDocType('library:mortgage:license'), false);
+  assert.equal(isApprovedMortgageLibraryDocType('library:mortgage:closing'), false);
   const overlay = overlaySql();
   const lovable = readSql('../supabase/migrations/20260830190318_06a7b3a3-9dcf-4298-9db7-fda095678bc5.sql');
   assert.match(overlay, /td\.doc_type LIKE 'library:mortgage:%'/);
@@ -112,6 +115,10 @@ test('oneshot applies 29 only after write helpers and complete write policies', 
   assert.doesNotMatch(writePlan, /29_mortgage_ops_library_parity\.sql'\)/);
   assert.match(writePlan, /Do not apply 29_mortgage_ops_library_parity/);
   assert.match(index, /Do not apply 29 from ddl/);
+  assert.equal(applied.includes('30_tenant_documents_mortgage_doc_type.sql'), false);
+  assert.doesNotMatch(complete, /readSql\('30_tenant_documents_mortgage_doc_type\.sql'\)/);
+  assert.match(index, /Do not apply 30_tenant_documents_mortgage_doc_type/);
+  assert.match(complete, /Do not apply it from completeAuth/);
 });
 
 test('SQL overlay revokes PUBLIC immediately, requires mortgage category, and uses exact paths', () => {
