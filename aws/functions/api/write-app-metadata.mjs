@@ -3,6 +3,7 @@
  */
 import { ident } from './data.mjs';
 import { isAllowedTenantDocumentDocType } from './mortgage-library-doc-types.mjs';
+import { canManageTenantDocumentLibrary, mortgageAgentCanWriteTenantLossDraft } from './mortgage-library-docs.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isUuid = (value) => UUID_RE.test(String(value || ''));
@@ -81,8 +82,8 @@ export const executeTenantDocuments = async ({ client, mapping, op, values, filt
   if (op === 'insert') {
     const tenantId = values.tenant_id;
     if (!isUuid(tenantId)) return { error: 'invalid_uuid', field: 'tenant_id' };
-    if (!(await memberOfTenant(client, mapping.application_user_id, tenantId))) {
-      return { error: 'not_authorized', message: 'Not a member of tenant' };
+    if (!(await canManageTenantDocumentLibrary(client, mapping.application_user_id, tenantId))) {
+      return { error: 'not_authorized', message: 'Tenant owner or admin required to manage library documents' };
     }
     const docType = clip(values.doc_type, 120);
     if (docType?.error || !docType) return docType?.error || { error: 'missing_required_field', field: 'doc_type' };
@@ -122,6 +123,14 @@ export const executeTenantDocuments = async ({ client, mapping, op, values, filt
   }
   const id = eqFilter(filters, 'id');
   if (!isUuid(id)) return { error: 'invalid_uuid', field: 'id' };
+  const existing = (await client.query(
+    `SELECT id, tenant_id FROM public.tenant_documents WHERE id = $1::uuid`,
+    [id],
+  )).rows[0];
+  if (!existing) return { error: 'rls_denied', message: 'document not writable' };
+  if (!(await canManageTenantDocumentLibrary(client, mapping.application_user_id, existing.tenant_id))) {
+    return { error: 'not_authorized', message: 'Tenant owner or admin required to manage library documents' };
+  }
   if (op === 'delete') {
     const rows = (await client.query(
       'DELETE FROM public.tenant_documents WHERE id = $1::uuid RETURNING *',
@@ -159,6 +168,25 @@ export const executeTenantDocuments = async ({ client, mapping, op, values, filt
 export const executeLossDraftDocuments = async ({ client, mapping, op, values, filters }) => {
   const id = eqFilter(filters, 'id');
   if (!isUuid(id)) return { error: 'invalid_uuid', field: 'id' };
+  const existing = (await client.query(
+    `SELECT d.id, d.loss_draft_id, ld.check_intake_item_id, ci.tenant_id
+     FROM public.loss_draft_documents d
+     JOIN public.loss_draft_tracking ld ON ld.id = d.loss_draft_id
+     LEFT JOIN public.check_intake_items ci ON ci.id = ld.check_intake_item_id
+     WHERE d.id = $1::uuid`,
+    [id],
+  )).rows[0];
+  if (!existing) return { error: 'rls_denied', message: 'document not writable' };
+  const member = existing.tenant_id
+    ? await memberOfTenant(client, mapping.application_user_id, existing.tenant_id)
+    : false;
+  const agent = await mortgageAgentCanWriteTenantLossDraft(client, mapping.application_user_id, {
+    tenantId: existing.tenant_id,
+    checkId: existing.check_intake_item_id,
+  });
+  if (!member && !agent) {
+    return { error: 'not_authorized', message: 'Not authorized for this loss draft document' };
+  }
   if (op === 'delete') {
     const rows = (await client.query(
       'DELETE FROM public.loss_draft_documents WHERE id = $1::uuid RETURNING *',

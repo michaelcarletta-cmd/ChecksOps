@@ -49,14 +49,6 @@ const clip = (value, max) => {
   return text.length ? text : null;
 };
 
-const loadRoles = async (client, userId) => {
-  const rows = (await client.query(
-    `SELECT role::text AS role FROM public.user_roles WHERE user_id = $1::uuid`,
-    [userId],
-  )).rows;
-  return rows.map((row) => String(row.role || '').toLowerCase());
-};
-
 const loadTenantMembership = async (client, userId, tenantId) => {
   const row = (await client.query(
     `SELECT role::text AS role FROM public.tenant_users
@@ -67,14 +59,43 @@ const loadTenantMembership = async (client, userId, tenantId) => {
   return row || null;
 };
 
+/**
+ * Tenant document library writes are tenant owner/admin only.
+ * `user_roles.admin` / `staff` / `mortgage_agent` are not tenant library managers:
+ * a platform or Desk role plus ordinary membership must not mutate another
+ * tenant's packet. Platform owner oversight is not a library-write grant.
+ */
 export const canManageTenantDocumentLibrary = async (client, userId, tenantId) => {
   if (!isUuid(userId) || !isUuid(tenantId)) return false;
   const membership = await loadTenantMembership(client, userId, tenantId);
   if (!membership) return false;
   const tenantRole = String(membership.role || '').toLowerCase();
-  if (MORTGAGE_LIBRARY_MANAGE_ROLES.includes(tenantRole)) return true;
-  const roles = await loadRoles(client, userId);
-  return roles.includes('admin') || roles.includes('staff');
+  return MORTGAGE_LIBRARY_MANAGE_ROLES.includes(tenantRole);
+};
+
+/**
+ * Mortgage agents may write loss-draft files only for a check they can work:
+ * an open Desk request, or a closed request assigned to them. Tenant
+ * `user_roles.admin` / `staff` are not a cross-tenant write grant.
+ */
+export const mortgageAgentCanWriteTenantLossDraft = async (client, userId, { tenantId, checkId } = {}) => {
+  if (!isUuid(userId) || !isUuid(checkId)) return false;
+  const roles = (await client.query(
+    `SELECT role::text AS role FROM public.user_roles WHERE user_id = $1::uuid`,
+    [userId],
+  )).rows.map((row) => String(row.role || '').toLowerCase());
+  if (!roles.includes('mortgage_agent')) return false;
+  const rows = (await client.query(
+    `SELECT status, assigned_employee_id
+     FROM public.mortgage_handling_requests
+     WHERE check_intake_item_id = $1::uuid
+       AND ($2::uuid IS NULL OR tenant_id = $2::uuid)`,
+    [checkId, isUuid(tenantId) ? tenantId : null],
+  )).rows;
+  return rows.some((row) => (
+    isOpenMortgageRequestStatus(row.status)
+    || String(row.assigned_employee_id || '') === String(userId)
+  ));
 };
 
 /**

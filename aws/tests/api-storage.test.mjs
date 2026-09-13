@@ -88,6 +88,9 @@ const mockClient = ({ authorize = false, writeCheck = false, writeSibling = fals
       if (String(sql).includes('tenants_public')) {
         return { rows: publicLogo ? [{ logo_url: 'https://example.supabase.co/storage/v1/object/public/tenant-logos/freedom/logo.png' }] : [] };
       }
+      if (String(sql).includes('FROM public.tenant_users')) {
+        return { rows: authorize ? [{ role: 'admin' }] : [] };
+      }
       if (String(sql).startsWith('SELECT 1 FROM')) {
         return { rows: authorize ? [{ '?column?': 1 }] : [] };
       }
@@ -279,7 +282,7 @@ test('malformed deposit-attachment paths stay denied; check-scoped endorsement p
   assert.equal(packet.path, WRITE_PATH);
 });
 
-test('tenant-documents require membership-scoped library paths', async () => {
+test('tenant-documents library writes require tenant owner or admin, not mere membership', async () => {
   const TENANT = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
   const path = `${TENANT}/library/mortgage/doc.pdf`;
   const memberClient = mockClient({ authorize: true });
