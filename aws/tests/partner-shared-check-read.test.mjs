@@ -53,13 +53,15 @@ test('aws_can_access_check is SELECT-only and write helpers stay owner-tenant', 
   const access = functionBody(helpers, 'aws_can_access_check');
   const shareTarget = functionBody(helpers, 'aws_is_active_shared_check_target');
   const writeCheck = functionBody(writeHelpers, 'aws_can_write_check');
+  const writeExpr = writeCheck.match(/AS \$\$([\s\S]*?)\$\$;/)?.[1] || '';
 
   assert.match(shareTarget, /revoked_at IS NULL/);
   assert.match(shareTarget, /aws_can_access_tenant\(sc\.target_tenant_id\)/);
   assert.match(access, /aws_is_active_shared_check_target\(_check_id\)/);
-  assert.equal(/shared_checks/.test(writeCheck), false);
-  assert.equal(/aws_can_access_check/.test(writeCheck), false);
-  assert.equal(/aws_is_active_shared_check_target/.test(writeCheck), false);
+  assert.ok(writeExpr);
+  assert.equal(/shared_checks/.test(writeExpr), false);
+  assert.equal(/aws_can_access_check/.test(writeExpr), false);
+  assert.equal(/aws_is_active_shared_check_target/.test(writeExpr), false);
   assert.match(writeHelpers, /Do not add shared_checks/);
 
   assert.match(grants, /GRANT EXECUTE ON FUNCTION public\.aws_is_active_shared_check_target\(uuid\)/);

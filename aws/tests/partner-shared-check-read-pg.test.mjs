@@ -32,8 +32,8 @@ const ENDORSE_SHARED = 'e1000000-0000-4000-8000-000000000001';
 const FILE_SHARED = 'f1000000-0000-4000-8000-000000000001';
 const FILE_UNRELATED = 'f1000000-0000-4000-8000-000000000002';
 const DEPOSIT_SHARED = 'b1000000-0000-4000-8000-000000000001';
-const WALLET_SOURCE = 'w1000000-0000-4000-8000-000000000001';
-const CHECKALT_ACCT = 'k1000000-0000-4000-8000-000000000001';
+const WALLET_SOURCE = 'aa100000-0000-4000-8000-000000000001';
+const CHECKALT_ACCT = 'ab100000-0000-4000-8000-000000000001';
 
 const readRepoSql = (rel) => fs.readFileSync(path.join(SQL_DIR, rel), 'utf8');
 
@@ -176,6 +176,21 @@ CREATE TABLE public.check_intake_items (
   id uuid PRIMARY KEY,
   tenant_id uuid,
   status text
+);
+CREATE TABLE public.claims (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id uuid,
+  tenant_id uuid
+);
+CREATE TABLE public.loss_draft_tracking (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  claim_id uuid,
+  check_intake_item_id uuid
+);
+CREATE TABLE public.signature_requests (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  claim_id uuid,
+  check_intake_item_id uuid
 );
 CREATE TABLE public.check_payees (
   id uuid PRIMARY KEY,
