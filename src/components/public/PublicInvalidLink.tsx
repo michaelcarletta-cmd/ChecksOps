@@ -29,6 +29,8 @@ export function isCleanPublicLinkError(message: string | null | undefined) {
     || value.includes("expired")
     || value.includes("not valid")
     || value.includes("not available")
+    || value.includes("already been used")
+    || value.includes("already-used")
   );
 }
 
@@ -36,6 +38,11 @@ export function publicLinkUserMessage(raw: string | null | undefined, fallback: 
   const value = String(raw || "").trim();
   if (!value) return fallback;
   if (/missing_cognito_token|invalid_cognito_token|jwt|stack|sql|relation |column /i.test(value)) {
+    return fallback;
+  }
+  // Unknown/malformed tokens must not say the link "already been used".
+  // Rotated or never-issued tokens are indistinguishable once the row is gone.
+  if (/already been used or replaced|already-used token|token_consumed/i.test(value)) {
     return fallback;
   }
   return value;

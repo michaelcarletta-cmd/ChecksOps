@@ -589,17 +589,19 @@ const lookupPublicEndorsement = async (client, token) => {
   return { kind: 'payee', row: payee };
 };
 
+const unknownPublicEndorsementToken = (spoof, { statusCode = 404 } = {}) => ({
+  ok: false,
+  statusCode,
+  error: 'This endorsement link is invalid or has expired.',
+  code: 'invalid_link',
+  spoofFieldsIgnored: spoof,
+});
+
 export const runGetEndorsementData = async (client, token, spoof) => {
-  if (!token) return { ok: false, statusCode: 400, error: 'This endorsement link is invalid.', code: 'invalid_link', spoofFieldsIgnored: spoof };
+  if (!token) return unknownPublicEndorsementToken(spoof, { statusCode: 400 });
   const found = await lookupPublicEndorsement(client, token);
   if (found.kind === 'missing' || !found.row) {
-    return {
-      ok: false,
-      statusCode: 404,
-      error: 'This endorsement link has already been used or replaced.',
-      code: 'token_consumed',
-      spoofFieldsIgnored: spoof,
-    };
+    return unknownPublicEndorsementToken(spoof);
   }
   const row = found.row;
   const status = row.status || row.endorsement_status || 'pending';
@@ -632,6 +634,10 @@ export const runSubmitEndorsement = async (client, event, body, spoof, deps = {}
   if (!token) return { ok: false, statusCode: 400, error: 'Token required', spoofFieldsIgnored: spoof };
   if (body.eSignConsentAccepted !== true) {
     return { ok: false, statusCode: 400, error: 'Electronic signature consent is required', spoofFieldsIgnored: spoof };
+  }
+  const found = await lookupPublicEndorsement(client, token);
+  if (found.kind === 'missing' || !found.row) {
+    return unknownPublicEndorsementToken(spoof);
   }
   const signatureData = body.signatureData;
   let signatureImageUrl = null;
@@ -727,6 +733,10 @@ export const runSubmitEndorsement = async (client, event, body, spoof, deps = {}
 export const runRejectEndorsement = async (client, event, body, spoof, deps = {}) => {
   const token = String(body.token || '').trim();
   if (!token) return { ok: false, statusCode: 400, error: 'Token required', spoofFieldsIgnored: spoof };
+  const found = await lookupPublicEndorsement(client, token);
+  if (found.kind === 'missing' || !found.row) {
+    return unknownPublicEndorsementToken(spoof);
+  }
   const newToken = rotateToken();
   const ip = clientIpFromEvent(event);
   const ua = userAgentFromEvent(event);
