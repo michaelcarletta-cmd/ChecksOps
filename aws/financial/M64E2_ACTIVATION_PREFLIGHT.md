@@ -68,6 +68,12 @@ POSTs `https://checksops.com/prep/public/moov-recipient-session` and returns
 404 `This link is not valid.`, `liveProviderCalled=false`,
 `token_consumed=false`. The real token was never opened.
 
+Browser (dummy URL only): page title “Secure payment setup”, error
+“This link is not valid.”, no Send/Confirm controls. DevTools Network:
+POST `https://checksops.com/prep/public/moov-recipient-session` 404;
+assets `index-ByTwb1fQ.js` and `RecipientPaymentSetup-Bizl4i1o.js`; no
+`lovable.app` / supabase functions requests.
+
 ## GET-only live preflight (real target, not mutated)
 
 - recipient `62a858ff-ee6a-49d7-9898-1c8e4a44227b`
