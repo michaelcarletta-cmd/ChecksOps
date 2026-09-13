@@ -16,11 +16,11 @@
 6. `cursor/p6-negative-amounts-3bce` — PR #263 — base P5
 7. `cursor/p7-branding-isolation-3bce` — PR #261 — base P6
 8. `cursor/p3b-claim-number-grant-3bce` — PR #264 — base P7
-9. `cursor/p8-endorsement-invalid-link-3bce` — stacked on P3b
-10. `cursor/p9-owner-checkalt-settings-3bce` — stacked on P8
-11. `cursor/p10-claim-settlement-write-3bce` — stacked on P9
-12. `cursor/p11-mobile-check-center-clip-3bce` — stacked on P10 (app tip)
-13. Inventory lineage is separate: `cursor/blocked-control-verification-3bce` → PR #268 `cursor/phase1-inventory-update-3bce` → `cursor/phase2-inventory-awaiting-3bce`
+9. `cursor/p8-endorsement-invalid-link-3bce` — PR #276 — stacked on P3b
+10. `cursor/p9-owner-checkalt-settings-3bce` — PR #280 — stacked on P8
+11. `cursor/p10-claim-settlement-write-3bce` — PR #277 — stacked on P9
+12. `cursor/p11-mobile-check-center-clip-3bce` — PR #278 — stacked on P10 (app tip)
+13. Inventory lineage is separate: `cursor/blocked-control-verification-3bce` → PR #268 `cursor/phase1-inventory-update-3bce` → PR #279 `cursor/phase2-inventory-awaiting-3bce`
 
 P3b supersedes P5 unknown-invoice 503 behavior and P3 CC-047 (GRANT SQL + workflow invariant restore). Do not merge inventory docs into the app stack.
 
@@ -60,7 +60,7 @@ Git-fixed without physical UI on current staging (AWAITING, not FAIL): A1-066/06
 
 ### P8 unknown endorsement token copy — READY_FOR_INTEGRATION
 
-- Branch / commit: `cursor/p8-endorsement-invalid-link-3bce` @ `de96534d42a2c17ff4dec98b1334de7ed2ffa5d2`
+- Branch / commit / PR: `cursor/p8-endorsement-invalid-link-3bce` @ `de96534d42a2c17ff4dec98b1334de7ed2ffa5d2` — PR #276
 - Base: `cursor/p3b-claim-number-grant-3bce`
 - Before: GET already `invalid_link`; submit/reject said already-used
 - After: missing tokens return `invalid_link` / invalid or has expired; UI remaps leftover already-used copy
@@ -71,7 +71,7 @@ Git-fixed without physical UI on current staging (AWAITING, not FAIL): A1-066/06
 
 ### P9 platform-owner CheckAlt view — READY_FOR_INTEGRATION
 
-- Branch / commit: `cursor/p9-owner-checkalt-settings-3bce` @ `8fd7bca8f82050cc9e38c4fe77abe0b50a262c8e`
+- Branch / commit / PR: `cursor/p9-owner-checkalt-settings-3bce` @ `8fd7bca8f82050cc9e38c4fe77abe0b50a262c8e` — PR #280
 - Base: P8
 - Controls: A4-013–A4-031 (was `owner_isAdmin_false`)
 - After: platform owner email can view/load the form. `isAdmin` is unchanged. Test/Register/Poll remain fail-closed. Save of `checkalt_config` is still `financial_or_provider`.
@@ -81,7 +81,7 @@ Git-fixed without physical UI on current staging (AWAITING, not FAIL): A1-066/06
 
 ### P10 claim settlement writes — READY_FOR_INTEGRATION
 
-- Branch / commit: `cursor/p10-claim-settlement-write-3bce` @ `d21b0476ea8b3ce7d7d5de59455dfe91d74d797e`
+- Branch / commit / PR: `cursor/p10-claim-settlement-write-3bce` @ `d21b0476ea8b3ce7d7d5de59455dfe91d74d797e` — PR #277
 - Base: P9
 - Controls: A5-201–A5-204
 - After: dedicated tranche-6 handler, tenant-linked claim, non-negative amounts, no claim_id retarget, no payments
@@ -93,7 +93,7 @@ Git-fixed without physical UI on current staging (AWAITING, not FAIL): A1-066/06
 
 ### P11 mobile Check Center clip — READY_FOR_INTEGRATION
 
-- Branch / commit: `cursor/p11-mobile-check-center-clip-3bce` @ `eb988a209b8a203dff8de61780c24fa75632ef74`
+- Branch / commit / PR: `cursor/p11-mobile-check-center-clip-3bce` @ `eb988a209b8a203dff8de61780c24fa75632ef74` — PR #278
 - Base: P10
 - Controls: P3-MOB-006
 - Files: `src/pages/CheckCommandCenter.tsx`
@@ -102,7 +102,7 @@ Git-fixed without physical UI on current staging (AWAITING, not FAIL): A1-066/06
 
 ### Inventory — READY_FOR_INTEGRATION (docs only)
 
-- Branch: `cursor/phase2-inventory-awaiting-3bce`
+- Branch / PR: `cursor/phase2-inventory-awaiting-3bce` — PR #279
 - Base: `cursor/phase1-inventory-update-3bce` / PR #268
 - Do not merge into the app stack
 

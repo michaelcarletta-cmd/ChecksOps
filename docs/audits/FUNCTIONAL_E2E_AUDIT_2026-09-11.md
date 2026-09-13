@@ -1,8 +1,9 @@
 # Phase 2 continuation — no shared-staging deploy
 
 **Date:** 2026-09-13
-**Inventory branch:** `cursor/phase2-inventory-awaiting-3bce`
-**App tip:** `cursor/p11-mobile-check-center-clip-3bce`
+**Inventory branch:** `cursor/phase2-inventory-awaiting-3bce` (PR #279)
+**App tip:** `cursor/p11-mobile-check-center-clip-3bce` (PR #278)
+**New app PRs:** #276 (P8), #280 (P9), #277 (P10), #278 (P11)
 **Handoff:** `docs/audits/INTEGRATION_HANDOFF_2026-09-13.md`
 
 Shared staging deployments are owned by Integration & Release. This workstream did not overlay, restore, or reconfigure `checksops-staging-api` or the shared SPA. Controls that need those Git fixes on staging are `AWAITING_INTEGRATION_DEPLOYMENT`, not product FAIL.
