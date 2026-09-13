@@ -1,3 +1,9 @@
+# Phase 2 internal-blocker reduction (in progress)
+
+See `docs/audits/PHASE2_INTERNAL_BLOCKER_REDUCTION_2026-09-13.md` for the 258-control internal root-cause map (71 unique causes). Do not begin Phase 3 automatically.
+
+---
+
 # Integration & Release — shared-staging deploy and 34-control reconciliation
 
 **Date:** 2026-09-13
