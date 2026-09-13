@@ -13789,7 +13789,7 @@ export type Database = {
         Returns: Json
       }
       admin_override_check_status: {
-        Args: { p_actor_id: string; p_check_id: string; p_new_status: string }
+        Args: { p_actor_id?: string; p_check_id: string; p_new_status: string; p_reason?: string }
         Returns: Json
       }
       admin_set_contractor_pro: {
