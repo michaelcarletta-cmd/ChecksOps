@@ -1,0 +1,76 @@
+{
+  "workstream": "ChecksOps Integration & Release",
+  "phase": "1-2 inventory and proposed integration (no deploy)",
+  "generatedAt": "2026-09-13T00:10:00Z",
+  "deployedThisTurn": false,
+  "realSesThisTurn": false,
+  "providerExecution": false,
+  "baseline": {
+    "originMain": "4fc1166d8206cd7b70b13423b73c2b0b96ba8b5b",
+    "originMainNote": "Merge PR #251 mortgage library path helper hotfix",
+    "endorsementEmailHead": "186dc3fb89e774290294eb7ec67daf971d8b0c10",
+    "endorsementEmailPr": 255,
+    "knownGoodStagingOverlaySha256": "ZepKxoHP9PgTaeR0F+o2TpJcE6ot4/NxO2GvLVStjlo=",
+    "knownGoodOverlayIsNotAGitSha": true,
+    "sql71AppliedOnStaging": true,
+    "sinkRegressionPassedAfterRestore": true,
+    "realSesRetestPending": true,
+    "liveShaReconfirmedThisTurn": false,
+    "liveShaReconfirmNote": "GetFunctionConfiguration failed ExpiredTokenException; last known restore 2026-09-12T19:16:00Z RevisionId cde1db99-6c77-420d-be54-66206aaaf15a"
+  },
+  "commonMergeBasesVsOriginMain": {
+    "cursor/412-readiness-remediate-ec26": { "mergeBase": "8dfdebdb53cd", "behind": 12, "ahead": 3 },
+    "cursor/mortgage-ops-agent-access-ec26": { "mergeBase": "8dfdebdb53cd", "behind": 12, "ahead": 4 },
+    "cursor/endorsement-email-audit-ec26": { "mergeBase": "8dfdebdb53cd", "behind": 12, "ahead": 10 },
+    "cursor/p1-endorsed-on-check-3bce": { "mergeBase": "4fc1166d8206", "behind": 0, "ahead": 5 },
+    "cursor/p3b-claim-number-grant-3bce": { "mergeBase": "4fc1166d8206", "behind": 0, "ahead": 17 },
+    "cursor/tenant-documents-mortgage-doc-type-d93c": { "mergeBase": "4fc1166d8206", "behind": 0, "ahead": 2 },
+    "cursor/tenant-email-outbound-harden-ec26": { "mergeBase": "26cf3222830f", "behind": 23, "ahead": 12 },
+    "cursor/homeowner-ledger-tracking-ec26": { "mergeBase": "26cf3222830f", "behind": 23, "ahead": 18 },
+    "cursor/staging-coherent-lambda-ec26": { "mergeBase": "26cf3222830f", "behind": 23, "ahead": 23 },
+    "cursor/p0-p1-audit-remediation-3bce": { "mergeBase": "8dfdebdb53cd", "behind": 12, "ahead": 3 },
+    "cursor/postgrest-tax-profiles-containment-73d2": { "mergeBase": "a11bc2fc5940", "behind": 4, "ahead": 16 }
+  },
+  "dryRunMerges": {
+    "worktree": "throwaway /tmp/checksops-integration-dryrun*",
+    "results": [
+      { "onto": "origin/main", "merge": "origin/cursor/endorsement-email-audit-ec26", "result": "CLEAN" },
+      { "onto": "main+255", "merge": "origin/cursor/p3b-claim-number-grant-3bce", "result": "CONFLICT", "files": ["aws/functions/api/check-endorsement.mjs", "aws/tests/parity-check-endorsement.test.mjs", "src/components/settings/CompanyBrandingSettings.tsx"] },
+      { "onto": "main+255", "merge": "origin/cursor/tenant-documents-mortgage-doc-type-d93c", "result": "CLEAN" },
+      { "onto": "origin/main", "merge": "origin/cursor/p3b-claim-number-grant-3bce", "result": "CLEAN" },
+      { "onto": "main+p3b", "merge": "origin/cursor/endorsement-email-audit-ec26", "result": "CONFLICT", "files": ["aws/functions/api/check-endorsement.mjs", "aws/tests/parity-check-endorsement.test.mjs", "src/components/settings/CompanyBrandingSettings.tsx"] },
+      { "onto": "p3b", "merge": "267", "result": "CONFLICT", "files": ["aws/functions/api/write-app-metadata.mjs"] },
+      { "onto": "main+255", "merge": "235 homeowner", "result": "CONFLICT", "files": ["aws/functions/api/check-endorsement.mjs", "aws/functions/api/email-audited.mjs", "aws/functions/api/email.mjs", "aws/tests/email-parity-workflows.test.mjs", "src/App.tsx", "src/lib/publicTokenRoutes.ts"] },
+      { "onto": "main+255", "merge": "254 p1 only", "result": "CONFLICT", "files": ["aws/functions/api/check-endorsement.mjs"] },
+      { "onto": "main+255", "merge": "234 p0-p1", "result": "CONFLICT", "files": ["aws/functions/api/data.mjs", "src/pages/CheckCommandCenter.tsx"] },
+      { "onto": "main+255", "merge": "250 tax containment", "result": "CLEAN_BUT_DO_NOT_MERGE" }
+    ]
+  },
+  "proposedIntegrationBranch": "cursor/integration-coherent-ec26",
+  "proposedBase": "origin/main",
+  "mergeOrderNotExecuted": [
+    "branch from origin/main 4fc1166d8",
+    "merge origin/cursor/endorsement-email-audit-ec26 (#255 includes #248+#249) — CLEAN",
+    "merge origin/cursor/p3b-claim-number-grant-3bce — resolve 3 conflicts keeping 255 public SQL-71 path + p3b CC-117 persist + union branding",
+    "merge origin/cursor/tenant-documents-mortgage-doc-type-d93c — resolve write-app-metadata both-sides; SQL 30 unapplied",
+    "file-select identity.mjs + identity-link.mjs from #239",
+    "file-select homeowner/portal callers from #231/#233/#235 onto 255 deliverAuditedEmail; take SQL 69 and homeowner-ledger-public.mjs; skip overlay builders",
+    "skip #250 #234-wholesale #239-wholesale Moov/bank docs-from-Lambda"
+  ],
+  "readyToIntegrateGitNow": ["#248", "#249", "#255", "#254", "#257", "#258", "#260", "#262", "#263", "#261", "#264", "#267-code", "lineage-A-file-select-homeowner-portal", "#239-identity-file-select"],
+  "notReadyStayDark": ["#250", "#259", "#265", "#266", "#269", "#270", "#239-wholesale", "#234-wholesale", "lineage-A-email.mjs", "real-SES", "provider-execution", "DynamoDB", "tax-containment-SQL", "production", "production-prep"],
+  "operatorRequiredLater": ["SQL-29-agent-access", "SQL-52-staff-grants", "SQL-39-claim-number-grant", "SQL-30-mortgage-doc-type", "SQL-preflight", "Git-SHA-UpdateFunctionCode", "SPA-deploy", "real-SES-retest-after-SHA-confirm"],
+  "flagsMustRemain": {
+    "AWS_PROVIDER_EXECUTION_ENABLED": "false",
+    "realProviderExecution": false,
+    "bankVerification": false,
+    "taxContainmentUnapplied": true,
+    "realSesDuringIntegration": false
+  },
+  "conflictResolutionRules": {
+    "check-endorsement.mjs": "Keep #255 public RPC consume-token + durable audit; take p3b CC-117 staff persist; reject p3b raw UPDATE public submit",
+    "email.mjs": "Keep #255 exclusively",
+    "write-app-metadata.mjs": "Union p3b negative-amount/master-owner branding with #267 doc_type allowlist",
+    "CompanyBrandingSettings.tsx": "Union p7 tenant isolation with 412 tenantBranding helpers"
+  }
+}
