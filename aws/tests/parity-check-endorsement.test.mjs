@@ -82,6 +82,27 @@ test('public get and abuse cases ignore spoofed tenant headers', async () => {
   const bad = await runPublicEndorsement(eventOf({ action: 'get_endorsement_data', token: 'nope' }), { client });
   assert.equal(bad.statusCode, 404);
   assert.equal(bad.code, 'invalid_link');
+  assert.match(bad.error, /invalid or has expired/i);
+  assert.equal(/already been used/i.test(bad.error), false);
+
+  const submitUnknown = await runPublicEndorsement(eventOf({
+    action: 'submit_endorsement',
+    token: 'nope',
+    eSignConsentAccepted: true,
+    signatureData: 'typed:X',
+  }), { client: sqlClient([]) });
+  assert.equal(submitUnknown.statusCode, 404);
+  assert.equal(submitUnknown.code, 'invalid_link');
+  assert.match(submitUnknown.error, /invalid or has expired/i);
+  assert.equal(/already-used|already been used/i.test(submitUnknown.error), false);
+
+  const rejectUnknown = await runPublicEndorsement(eventOf({
+    action: 'reject_endorsement',
+    token: 'nope',
+  }), { client: sqlClient([]) });
+  assert.equal(rejectUnknown.statusCode, 404);
+  assert.equal(rejectUnknown.code, 'invalid_link');
+  assert.equal(/already-used|already been used/i.test(rejectUnknown.error), false);
 
   const unusedPayee = await runGetEndorsementData(sqlClient([
     { match: (sql) => sql.includes('aws_public_endorsement_by_token'), result: () => ({ rows: [{ doc: null }] }) },
