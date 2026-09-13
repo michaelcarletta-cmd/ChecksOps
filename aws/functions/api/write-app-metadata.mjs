@@ -2,6 +2,7 @@
  * Tranche-6 application metadata writes (non-financial, non-provider).
  */
 import { ident } from './data.mjs';
+import { isMasterOwner } from './platform-authz.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isUuid = (value) => UUID_RE.test(String(value || ''));
@@ -14,6 +15,23 @@ const clip = (value, max) => {
   const text = String(value).trim();
   if (text.length > max) return { error: 'invalid_field', field: 'length' };
   return text.length ? text : null;
+};
+
+const asNonNegativeMoney = (value, field, { allowZero = true } = {}) => {
+  if (value === undefined || value === null || value === '') {
+    return allowZero ? 0 : { error: 'invalid_amount', field };
+  }
+  const amount = typeof value === 'number' ? value : Number(String(value).replace(/[$,\s]/g, ''));
+  if (!Number.isFinite(amount) || amount < 0) return { error: 'invalid_amount', field };
+  if (!allowZero && amount <= 0) return { error: 'invalid_amount', field };
+  if (Math.abs(amount) > 1e12) return { error: 'invalid_amount', field };
+  return amount;
+};
+
+const asPositiveQuantity = (value, field = 'quantity') => {
+  const qty = value === undefined || value === null || value === '' ? 1 : Number(value);
+  if (!Number.isFinite(qty) || qty <= 0) return { error: 'invalid_amount', field };
+  return qty;
 };
 
 const buildSet = (values, casts = {}) => {
@@ -412,6 +430,9 @@ export const executeProfiles = async ({ client, mapping, values, filters }) => {
 };
 
 export const executeCompanyBranding = async ({ client, mapping, op, values, filters }) => {
+  if (!(await isMasterOwner(client))) {
+    return { error: 'not_authorized', message: 'Global company branding is not tenant-writable' };
+  }
   const out = {};
   for (const [col, max] of [
     ['company_name', 200], ['company_address', 500], ['company_email', 200], ['company_phone', 40],
@@ -481,13 +502,17 @@ export const executeReferralAlerts = async ({ client, values, filters }) => {
 export const executeTenantsNarrow = async ({ client, mapping, values, filters }) => {
   const id = eqFilter(filters, 'id');
   if (!isUuid(id)) return { error: 'invalid_uuid', field: 'id' };
-  if (!(await memberOfTenant(client, mapping.application_user_id, id))) {
+  const platformOwner = await isMasterOwner(client);
+  const member = await memberOfTenant(client, mapping.application_user_id, id);
+  if (!platformOwner && !member) {
     return { error: 'not_authorized', message: 'Not a member of tenant' };
   }
   const out = {};
+  const casts = {};
   for (const [col, max] of [
     ['name', 200], ['logo_url', 512], ['invoice_letterhead_url', 512],
     ['primary_color', 40], ['invoice_footer_note', 2000], ['invoice_default_terms', 4000],
+    ['business_address', 500], ['business_phone', 40],
   ]) {
     if (col in values) {
       const text = clip(values[col], max);
@@ -495,8 +520,27 @@ export const executeTenantsNarrow = async ({ client, mapping, values, filters })
       out[col] = text;
     }
   }
+  if (platformOwner) {
+    if ('subscription_status' in values) {
+      const status = String(values.subscription_status || '').trim().toLowerCase();
+      if (!['active', 'inactive'].includes(status)) {
+        return { error: 'invalid_field', field: 'subscription_status' };
+      }
+      out.subscription_status = status;
+    }
+    if ('is_founding_partner' in values) {
+      out.is_founding_partner = values.is_founding_partner === true || values.is_founding_partner === 'true';
+      casts.is_founding_partner = 'boolean';
+    }
+    if ('is_test_account' in values) {
+      out.is_test_account = values.is_test_account === true || values.is_test_account === 'true';
+      casts.is_test_account = 'boolean';
+    }
+  } else if ('subscription_status' in values || 'is_founding_partner' in values || 'is_test_account' in values) {
+    return { error: 'not_authorized', message: 'Platform owner required for tenant ops flags' };
+  }
   if (!Object.keys(out).length) return { error: 'missing_required_field', field: 'values' };
-  const built = buildSet(out);
+  const built = buildSet(out, casts);
   built.params.push(id);
   const rows = (await client.query(
     `UPDATE public.tenants SET ${built.sets.join(', ')} WHERE id = $${built.next}::uuid RETURNING *`,
@@ -610,9 +654,10 @@ export const executeCashJobs = async ({ client, mapping, op, values, filters }) 
     if (status?.error) return status;
     const contractAmount = values.contract_amount == null || values.contract_amount === ''
       ? 0
-      : Number(values.contract_amount);
+      : asNonNegativeMoney(values.contract_amount, 'contract_amount', { allowZero: true });
+    if (contractAmount?.error) return contractAmount;
     if (!Number.isFinite(contractAmount) || contractAmount < 0) {
-      return { error: 'invalid_field', field: 'contract_amount' };
+      return { error: 'invalid_amount', field: 'contract_amount' };
     }
     const phone = clip(values.customer_phone, 40);
     if (phone?.error) return phone;
@@ -676,6 +721,12 @@ export const executeCashJobs = async ({ client, mapping, op, values, filters }) 
     return { rows };
   }
 
+  const nextValues = { ...values };
+  if ('contract_amount' in nextValues) {
+    const amount = asNonNegativeMoney(nextValues.contract_amount, 'contract_amount', { allowZero: true });
+    if (amount?.error) return amount;
+    nextValues.contract_amount = amount;
+  }
   const casts = {
     contract_amount: 'numeric',
     estimate_date: 'date',
@@ -684,7 +735,7 @@ export const executeCashJobs = async ({ client, mapping, op, values, filters }) 
     work_type: 'cash_job_work_type',
     status: 'cash_job_status',
   };
-  const built = buildSet(values, casts);
+  const built = buildSet(nextValues, casts);
   if (!built.sets.length) return { error: 'missing_required_field', field: 'values' };
   built.params.push(id);
   const rows = (await client.query(
@@ -709,12 +760,12 @@ export const executeCashJobLineItems = async ({ client, mapping, op, values, fil
     if (description?.error || !description) {
       return description?.error || { error: 'missing_required_field', field: 'description' };
     }
-    const quantity = Number(values.quantity ?? 1);
-    const unitPrice = Number(values.unit_price ?? 0);
-    if (!Number.isFinite(quantity) || !Number.isFinite(unitPrice)) {
-      return { error: 'invalid_field', field: 'quantity_or_unit_price' };
-    }
-    const total = values.total == null ? quantity * unitPrice : Number(values.total);
+    const quantity = asPositiveQuantity(values.quantity ?? 1, 'quantity');
+    if (quantity?.error) return quantity;
+    const unitPrice = asNonNegativeMoney(values.unit_price ?? 0, 'unit_price', { allowZero: true });
+    if (unitPrice?.error) return unitPrice;
+    const total = values.total == null ? quantity * unitPrice : asNonNegativeMoney(values.total, 'total', { allowZero: true });
+    if (total?.error) return total;
     const sortOrder = Number(values.sort_order ?? 0);
     const rows = (await client.query(
       `INSERT INTO public.cash_job_line_items (
@@ -750,8 +801,24 @@ export const executeCashJobLineItems = async ({ client, mapping, op, values, fil
 
   const id = eqFilter(filters, 'id');
   if (!isUuid(id)) return { error: 'invalid_uuid', field: 'id' };
+  const nextValues = { ...values };
+  if ('quantity' in nextValues) {
+    const qty = asPositiveQuantity(nextValues.quantity, 'quantity');
+    if (qty?.error) return qty;
+    nextValues.quantity = qty;
+  }
+  if ('unit_price' in nextValues) {
+    const price = asNonNegativeMoney(nextValues.unit_price, 'unit_price', { allowZero: true });
+    if (price?.error) return price;
+    nextValues.unit_price = price;
+  }
+  if ('total' in nextValues) {
+    const total = asNonNegativeMoney(nextValues.total, 'total', { allowZero: true });
+    if (total?.error) return total;
+    nextValues.total = total;
+  }
   const casts = { quantity: 'numeric', unit_price: 'numeric', total: 'numeric', sort_order: 'int' };
-  const built = buildSet(values, casts);
+  const built = buildSet(nextValues, casts);
   if (!built.sets.length) return { error: 'missing_required_field', field: 'values' };
   built.params.push(id);
   const rows = (await client.query(
@@ -804,6 +871,135 @@ export const executeCashJobAttachments = async ({ client, mapping, op, values, f
   return { error: 'operation_not_allowlisted', op };
 };
 
+const SETTLEMENT_MONEY_COLUMNS = [
+  'replacement_cost_value', 'recoverable_depreciation', 'non_recoverable_depreciation', 'deductible',
+  'other_structures_rcv', 'other_structures_recoverable_depreciation',
+  'other_structures_non_recoverable_depreciation', 'other_structures_deductible',
+  'pwi_rcv', 'pwi_recoverable_depreciation', 'pwi_non_recoverable_depreciation',
+  'personal_property_rcv', 'personal_property_recoverable_depreciation',
+  'personal_property_non_recoverable_depreciation',
+  'ale_rcv', 'ale_recoverable_depreciation', 'ale_non_recoverable_depreciation',
+  'estimate_amount', 'pa_estimate_amount', 'prior_offer',
+];
+
+const lookupWritableClaim = async (client, mapping, claimId) => {
+  if (!isUuid(claimId)) return { error: 'invalid_uuid', field: 'claim_id' };
+  const rows = (await client.query(
+    `SELECT c.id, c.org_id
+     FROM public.claims c
+     WHERE c.id = $1::uuid
+       AND (
+         EXISTS (
+           SELECT 1 FROM public.tenant_users tu
+           WHERE tu.user_id = $2::uuid AND tu.tenant_id = c.org_id
+         )
+         OR EXISTS (
+           SELECT 1
+           FROM public.check_intake_items ci
+           JOIN public.tenant_users tu ON tu.tenant_id = ci.tenant_id
+           WHERE ci.claim_id = c.id AND tu.user_id = $2::uuid
+         )
+       )
+     LIMIT 1`,
+    [claimId, mapping.application_user_id],
+  )).rows;
+  if (!rows.length) return { error: 'rls_denied', message: 'claim not found or not writable' };
+  return { claim: rows[0] };
+};
+
+const coerceSettlementValues = (values) => {
+  const out = {};
+  for (const column of SETTLEMENT_MONEY_COLUMNS) {
+    if (!(column in values)) continue;
+    const amount = asNonNegativeMoney(values[column], column, { allowZero: true });
+    if (amount?.error) return amount;
+    out[column] = amount;
+  }
+  if ('notes' in values) {
+    const notes = clip(values.notes, 4000);
+    if (notes?.error) return notes;
+    out.notes = notes;
+  }
+  return { values: out };
+};
+
+export const executeClaimSettlements = async ({ client, mapping, op, values, filters }) => {
+  if (op !== 'insert' && op !== 'update') return { error: 'operation_not_allowlisted', op };
+  const coerced = coerceSettlementValues(values);
+  if (coerced.error) return coerced;
+  const out = coerced.values;
+
+  if (op === 'insert') {
+    const claimId = values.claim_id;
+    const looked = await lookupWritableClaim(client, mapping, claimId);
+    if (looked.error) return looked;
+    if (!Object.keys(out).length) {
+      return { error: 'missing_required_field', field: 'values', table: 'claim_settlements', op };
+    }
+    const columns = ['claim_id', 'created_by', ...Object.keys(out)];
+    const params = [looked.claim.id, mapping.application_user_id, ...Object.values(out)];
+    const placeholders = columns.map((column, index) => {
+      if (column === 'claim_id' || column === 'created_by') return `$${index + 1}::uuid`;
+      if (column === 'notes') return `$${index + 1}::text`;
+      return `$${index + 1}::numeric`;
+    });
+    const rows = (await client.query(
+      `INSERT INTO public.claim_settlements (${columns.map((column) => ident(column, 'column')).join(', ')})
+       VALUES (${placeholders.join(', ')})
+       RETURNING *`,
+      params,
+    )).rows;
+    return { rows };
+  }
+
+  const id = eqFilter(filters, 'id');
+  const filterClaimId = eqFilter(filters, 'claim_id');
+  let claimId = values.claim_id || filterClaimId;
+  if (id) {
+    if (!isUuid(id)) return { error: 'invalid_uuid', field: 'id' };
+    const existing = (await client.query(
+      'SELECT id, claim_id FROM public.claim_settlements WHERE id = $1::uuid LIMIT 1',
+      [id],
+    )).rows[0];
+    if (!existing) return { error: 'rls_denied', message: 'settlement not found or not writable' };
+    if (claimId && String(claimId) !== String(existing.claim_id)) {
+      return { error: 'rls_denied', message: 'claim_id cannot be retargeted' };
+    }
+    claimId = existing.claim_id;
+  }
+  const looked = await lookupWritableClaim(client, mapping, claimId);
+  if (looked.error) return looked;
+  if (!Object.keys(out).length) {
+    return { error: 'missing_required_field', field: 'values', table: 'claim_settlements', op };
+  }
+  const built = buildSet(out, Object.fromEntries(
+    Object.keys(out).map((column) => [column, column === 'notes' ? 'text' : 'numeric']),
+  ));
+  built.sets.push('updated_at = now()');
+  if (id) {
+    built.params.push(id, looked.claim.id);
+    const rows = (await client.query(
+      `UPDATE public.claim_settlements
+       SET ${built.sets.join(', ')}
+       WHERE id = $${built.params.length - 1}::uuid AND claim_id = $${built.params.length}::uuid
+       RETURNING *`,
+      built.params,
+    )).rows;
+    if (!rows.length) return { error: 'rls_denied', message: 'settlement not writable' };
+    return { rows };
+  }
+  built.params.push(looked.claim.id);
+  const rows = (await client.query(
+    `UPDATE public.claim_settlements
+     SET ${built.sets.join(', ')}
+     WHERE claim_id = $${built.params.length}::uuid
+     RETURNING *`,
+    built.params,
+  )).rows;
+  if (!rows.length) return { error: 'rls_denied', message: 'settlement not writable' };
+  return { rows };
+};
+
 export const executeAppMetadataWrite = async ({ client, mapping, table, op, values, filters }) => {
   switch (table) {
     case 'notifications':
@@ -840,6 +1036,8 @@ export const executeAppMetadataWrite = async ({ client, mapping, table, op, valu
       return executeCashJobAttachments({ client, mapping, op, values, filters });
     case 'homeowner_ledger_events':
       return executeHomeownerLedgerEvents({ client, mapping, values });
+    case 'claim_settlements':
+      return executeClaimSettlements({ client, mapping, op, values, filters });
     default:
       return { error: 'table_not_allowlisted', table };
   }

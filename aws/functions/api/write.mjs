@@ -317,7 +317,7 @@ export const handleWrite = async (event, deps = {}) => {
       applicationWorkflowEnabled,
     });
     if (executed.error) {
-      const status = ['invalid_uuid', 'missing_required_field', 'invalid_field'].includes(executed.error)
+      const status = ['invalid_uuid', 'missing_required_field', 'invalid_field', 'invalid_amount'].includes(executed.error)
         ? 400
         : 403;
       return denied(spoof, { statusCode: status, ...executed });

@@ -82,6 +82,7 @@ import { handleAdminResetTotp } from './admin-reset-totp.mjs';
 import { handleBillMortgageHandling } from './bill-mortgage-handling.mjs';
 import { handleCheckAltDepositPreflight } from './providers/production/checkalt-preflight.mjs';
 import { handleTaxProfiles } from './tax-profiles.mjs';
+import { handlePublicInvoice } from './public-tokens.mjs';
 
 export const CLASS_A_FUNCTIONS = new Set([
   // Email
@@ -155,6 +156,7 @@ export const CLASS_A_FUNCTIONS = new Set([
   'public-contractor-directory',
   'lookup-partner-code-public',
   'contractor-directory-search',
+  'public-invoice',
 ]);
 
 export const functionNameFromPath = (path) => {
@@ -310,6 +312,8 @@ export const handleAppServiceRequest = async (event, path, method) => {
       return handlePublicContractorDirectory(event);
     case 'lookup-partner-code-public':
       return handleLookupPartnerCodePublic(event);
+    case 'public-invoice':
+      return handlePublicInvoice(event);
     default: {
       const spoof = ignoredSpoof(event, parseBody(event));
       return notYet(name, spoof);

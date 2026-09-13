@@ -40,6 +40,7 @@ interface Props {
 
 interface FormState {
   status: string;
+  overrideReason: string;
   mortgage_flag: boolean;
   mortgage_monitoring_type: string; // 'not_set' | 'monitor' | 'skip'
   carrier_name: string;
@@ -58,6 +59,7 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<FormState>({
     status: "needs_review",
+    overrideReason: "",
     mortgage_flag: false,
     mortgage_monitoring_type: "not_set",
     carrier_name: "",
@@ -108,6 +110,7 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
 
     setForm({
       status: data.intake.status ?? "needs_review",
+      overrideReason: "",
       mortgage_flag: flag,
       mortgage_monitoring_type: monitoring,
       carrier_name: data.intake.carrier_name ?? "",
@@ -147,7 +150,19 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
       }
 
       if (effectiveStatus !== data.intake.status) {
-        intakeUpdates.status = effectiveStatus;
+        const reason = form.overrideReason.trim();
+        if (reason.length < 5) {
+          throw new Error("Status override requires a reason of at least 5 characters");
+        }
+        const { data: ov, error: ovErr } = await supabase.rpc("admin_override_check_status", {
+          p_check_id: checkId,
+          p_new_status: effectiveStatus,
+          p_reason: reason,
+        });
+        if (ovErr) throw ovErr;
+        if (ov && (ov as { ok?: boolean; error?: string }).ok === false) {
+          throw new Error((ov as { error?: string }).error ?? "Override rejected");
+        }
         changes.push(`status → ${effectiveStatus.replace(/_/g, " ")}`);
       }
 
@@ -474,8 +489,14 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
                   ))}
                 </SelectContent>
               </Select>
+              <Input
+                value={form.overrideReason}
+                onChange={(e) => setForm((f) => ({ ...f, overrideReason: e.target.value }))}
+                placeholder="Reason (required when status changes)"
+                className="h-8 text-sm"
+              />
               <p className="text-[11px] text-muted-foreground">
-                Move from any status to any other (e.g. Loss Draft → Approved for Deposit).
+                Operational override only. Does not deposit, pay, or call providers.
               </p>
             </div>
           </div>

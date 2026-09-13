@@ -256,33 +256,20 @@ export function AdminCheckTracker({ searchQuery = "" }: { searchQuery?: string }
     try {
       const intakeId = c.check_intake_item_id;
       console.log("[AdminCheckTracker] routeTo", { checkId: c.id, intakeId, newStatus });
-      if (intakeId) {
-        // Route through the admin override RPC (SECURITY DEFINER) so stage,
-        // status, claim_checks mirror and audit stay in sync.
-        const { data: ud } = await supabase.auth.getUser();
-        const { error } = await supabase.rpc("admin_override_check_status", {
-          p_check_id: intakeId,
-          p_new_status: newStatus,
-          p_actor_id: ud.user?.id ?? null,
-        } as any);
-        if (error) throw error;
-      } else {
-        // No intake item linked — fall back to claim_checks only
-        const depositStatus =
-          newStatus === "approved_for_deposit" ? "ready"
-          : newStatus === "deposited" ? "deposited"
-          : newStatus === "voided" ? "voided"
-          : "pending";
-        const { error, data } = await supabase
-          .from("claim_checks")
-          .update({ deposit_status: depositStatus })
-          .eq("id", c.id)
-          .select("id");
-        if (error) throw error;
-        if (!data || data.length === 0) {
-          throw new Error("Update returned no rows — likely blocked by row-level security.");
-        }
+      if (!intakeId) {
+        throw new Error("This check has no intake item. Admin override cannot fabricate claim_checks deposit status.");
       }
+      const reason = window.prompt(`Reason for routing to ${newStatus.replace(/_/g, " ")} (required):`);
+      if (!reason || reason.trim().length < 5) {
+        throw new Error("Override requires a reason of at least 5 characters.");
+      }
+      const { data, error } = await supabase.rpc("admin_override_check_status", {
+        p_check_id: intakeId,
+        p_new_status: newStatus,
+        p_reason: reason.trim(),
+      } as any);
+      if (error) throw error;
+      if (data && (data as any).ok === false) throw new Error((data as any).error ?? "Override rejected");
       toast.success(`Routed to "${newStatus.replace(/_/g, " ")}"`);
       // Invalidate parent caches so the Review/Endorsements/Ready tabs refresh too
       qc.invalidateQueries({ queryKey: ["check-intake-items"] });

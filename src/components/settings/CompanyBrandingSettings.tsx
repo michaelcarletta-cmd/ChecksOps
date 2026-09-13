@@ -7,11 +7,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Upload, Building2, Loader2, Sparkles, Image as ImageIcon, Layout } from "lucide-react";
+import { useTenant } from "@/contexts/TenantContext";
+import { useTenantFilter } from "@/hooks/useTenantFilter";
 
 import { SectionCard } from "./SectionCard";
 import { SettingsHero } from "./SettingsHero";
 
 export function CompanyBrandingSettings() {
+  const { tenant } = useTenant();
+  const { tenantId } = useTenantFilter();
+  const activeTenantId = tenant?.id || tenantId || null;
   const [companyName, setCompanyName] = useState("");
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
@@ -28,58 +33,42 @@ export function CompanyBrandingSettings() {
   const [uploading, setUploading] = useState(false);
   const [uploadingInvoice, setUploadingInvoice] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [brandingId, setBrandingId] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
-    loadSettings();
-  }, []);
+    void loadSettings();
+  }, [activeTenantId]);
 
   const loadSettings = async () => {
-    // 1. Get branding details from company_branding
-    const { data: brandingData } = await supabase
-      .from("company_branding" as any)
-      .select("*")
-      .limit(1)
+    if (!activeTenantId) {
+      setCompanyName("");
+      setAddress("");
+      setPhone("");
+      setEmail("");
+      setLogoUrl(null);
+      setLetterheadUrl(null);
+      return;
+    }
+
+    const { data: tenantRow } = await supabase
+      .from("tenants")
+      .select("name, business_address, business_phone, email_from_address, logo_url, invoice_letterhead_url, invoice_footer_note, invoice_default_terms, invoice_accent_color, invoice_theme, primary_color")
+      .eq("id", activeTenantId)
       .maybeSingle();
-    
-    if (brandingData) {
-      const branding = brandingData as any;
-      setBrandingId(branding.id);
-      setCompanyName(branding.company_name || "");
-      setAddress(branding.company_address || "");
-      setPhone(branding.company_phone || "");
-      setEmail(branding.company_email || "");
-      setLogoUrl(branding.logo_url || null);
-      setLetterheadUrl(branding.letterhead_url || null);
-    }
 
-    // 2. Get invoice-specific settings from the current tenant
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      const { data: tenantUser } = await supabase
-        .from("tenant_users")
-        .select("tenant_id")
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      if (tenantUser) {
-        const { data: tenant } = await supabase
-          .from("tenants")
-          .select("invoice_letterhead_url, invoice_footer_note, invoice_default_terms, invoice_accent_color, invoice_theme, primary_color")
-          .eq("id", tenantUser.tenant_id)
-          .maybeSingle();
-        
-        if (tenant) {
-          const t = tenant as any;
-          setInvoiceLetterheadUrl(t.invoice_letterhead_url || null);
-          setInvoiceFooterNote(t.invoice_footer_note || "");
-          setInvoiceDefaultTerms(t.invoice_default_terms || "");
-          setInvoiceAccentColor(t.invoice_accent_color || t.primary_color || "#3B82F6");
-          setInvoiceTheme(t.invoice_theme === "dark" ? "dark" : "light");
-        }
-      }
-    }
+    if (!tenantRow) return;
+    const t = tenantRow as any;
+    setCompanyName(t.name || "");
+    setAddress(t.business_address || "");
+    setPhone(t.business_phone || "");
+    setEmail(t.email_from_address || "");
+    setLogoUrl(t.logo_url || null);
+    setLetterheadUrl(t.invoice_letterhead_url || null);
+    setInvoiceLetterheadUrl(t.invoice_letterhead_url || null);
+    setInvoiceFooterNote(t.invoice_footer_note || "");
+    setInvoiceDefaultTerms(t.invoice_default_terms || "");
+    setInvoiceAccentColor(t.invoice_accent_color || t.primary_color || "#3B82F6");
+    setInvoiceTheme(t.invoice_theme === "dark" ? "dark" : "light");
   };
 
   const handleInvoiceLetterheadUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -164,53 +153,25 @@ export function CompanyBrandingSettings() {
   };
 
   const saveSettings = async () => {
+    if (!activeTenantId) {
+      toast({ title: "No tenant selected", variant: "destructive" });
+      return;
+    }
     setSaving(true);
     try {
-      const brandingData = {
-        company_name: companyName,
-        company_address: address,
-        company_phone: phone,
-        company_email: email,
-        logo_url: logoUrl,
-        letterhead_url: letterheadUrl,
-        updated_at: new Date().toISOString()
-      };
-
-      if (brandingId) {
-        await supabase
-          .from("company_branding" as any)
-          .update(brandingData)
-          .eq("id", brandingId);
-      } else {
-        const { data } = await supabase
-          .from("company_branding" as any)
-          .insert(brandingData)
-          .select()
-          .single();
-        if (data) setBrandingId((data as any).id);
-      }
-
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: tenantUser } = await supabase
-          .from("tenant_users")
-          .select("tenant_id")
-          .eq("user_id", user.id)
-          .maybeSingle();
-        
-        if (tenantUser) {
-          await supabase
-            .from("tenants")
-            .update({
-              invoice_letterhead_url: invoiceLetterheadUrl,
-              invoice_footer_note: invoiceFooterNote,
-              invoice_default_terms: invoiceDefaultTerms,
-              invoice_accent_color: invoiceAccentColor,
-              invoice_theme: invoiceTheme,
-            })
-            .eq("id", tenantUser.tenant_id);
-        }
-      }
+      const { error } = await supabase
+        .from("tenants")
+        .update({
+          name: companyName,
+          business_address: address,
+          business_phone: phone,
+          logo_url: logoUrl,
+          invoice_letterhead_url: invoiceLetterheadUrl || letterheadUrl,
+          invoice_footer_note: invoiceFooterNote,
+          invoice_default_terms: invoiceDefaultTerms,
+        })
+        .eq("id", activeTenantId);
+      if (error) throw error;
 
       toast({ title: "Company settings saved" });
     } catch (error: any) {
@@ -242,7 +203,7 @@ export function CompanyBrandingSettings() {
               <Input
                 value={companyName}
                 onChange={(e) => setCompanyName(e.target.value)}
-                placeholder="Freedom Claims Adjusting"
+                placeholder="Company name"
               />
             </div>
 
@@ -251,7 +212,7 @@ export function CompanyBrandingSettings() {
               <Textarea
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
-                placeholder="123 Main Street&#10;Suite 100&#10;Philadelphia, PA 19103"
+                placeholder="Street address"
                 rows={3}
               />
             </div>
@@ -262,7 +223,7 @@ export function CompanyBrandingSettings() {
                 <Input
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  placeholder="(555) 123-4567"
+                  placeholder="Phone"
                 />
               </div>
               <div>
@@ -270,7 +231,8 @@ export function CompanyBrandingSettings() {
                 <Input
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="claims@freedomclaims.com"
+                  placeholder="Email"
+                  readOnly
                 />
               </div>
             </div>

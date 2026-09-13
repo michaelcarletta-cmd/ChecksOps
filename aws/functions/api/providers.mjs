@@ -347,6 +347,35 @@ export const handleFunctionInvoke = async (event, name, deps = {}) => {
     /* app-services optional during early boot */
   }
 
+  if (name === 'moov-recipient-session') {
+    const { handlePublicRecipientSession } = await import('./public-tokens.mjs');
+    return handlePublicRecipientSession(event);
+  }
+
+  if (name === 'moov-invoice') {
+    const body = parseBody(event);
+    const spoof = ignoredSpoof(event, body);
+    const action = String(body.action || 'create');
+    if (['create', 'create_and_send'].includes(action)) {
+      const items = Array.isArray(body.line_items) ? body.line_items : [];
+      const invalid = items.length === 0 || items.some((item) => {
+        const unit = Number(item?.unit_price);
+        const qty = Number(item?.quantity ?? 1);
+        return !Number.isFinite(unit) || unit <= 0 || !Number.isFinite(qty) || qty <= 0;
+      });
+      if (invalid) {
+        return {
+          ok: false,
+          statusCode: 400,
+          error: 'invalid_amount',
+          field: 'line_items',
+          message: 'Invoice amounts must be greater than zero.',
+          spoofFieldsIgnored: spoof,
+        };
+      }
+    }
+  }
+
   const spec = classifyFunction(name) || (name === 'actum' ? ACTUM_BOUNDARY : null);
   if (!spec) {
     return denyProviderExecution(null, name, {
