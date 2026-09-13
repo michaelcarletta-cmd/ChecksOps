@@ -64,6 +64,10 @@ Session HTTP 200, `token_consumed=false`:
 `bank_can_confirm=true`, `bank_should_initiate=false`, `complete=false`.
 UI should show Confirm / MV code, not Send.
 
+Browser (observation only): empty **Verification code** field, **Confirm bank**
+disabled, Send not shown as the next action. Session POST 200. No confirm
+POST. No code typed.
+
 db-bridge still `read_only`. `payment_transfers=0`. Target
 `awaiting_bank`, `token_used_at=null`. Binding unchanged.
 
