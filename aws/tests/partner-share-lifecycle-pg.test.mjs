@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -359,6 +359,9 @@ BEGIN
 
   r := public._call('${PARTNER_USER}'::uuid, $q$SELECT public.aws_can_write_check('${CHECK_A}'::uuid)$q$);
   PERFORM public._ok('30_partner_write_check_false', (r->>'ok')::boolean AND (r->>'val')::boolean IS NOT TRUE, r::text);
+
+  r := public._call('${OWNER}'::uuid, $q$SELECT public.aws_share_check_with_partner('${CHECK_A}'::uuid, '${PARTNER}'::uuid)$q$);
+  PERFORM public._ok('31_share_after_partnership_revoke_deny', (r->>'ok')::boolean IS FALSE AND (r->>'error') ILIKE '%not_a_partner%', r::text);
 END $$;
 `;
   psql(['-d', dbName], matrix);
@@ -380,4 +383,111 @@ SELECT count(*) FROM pg_constraint
 WHERE conrelid = 'public.tenant_partnerships'::regclass AND conname = 'tenant_partnerships_invite_code_key'
 `);
   assert.equal(oldUnique, '0');
+
+  const spawnPsql = (sql) => new Promise((resolve) => {
+    const child = spawn(path.join(PG_BIN, 'psql'), [...psqlArgs, '-d', dbName, '-v', 'ON_ERROR_STOP=1', '-t', '-A', '-c', sql]);
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (d) => { stdout += d; });
+    child.stderr.on('data', (d) => { stderr += d; });
+    child.on('close', (status) => resolve({ status, stdout: stdout.trim(), stderr: stderr.trim() }));
+  });
+  const asOwnerSql = (sql) => [
+    `SELECT set_config('request.app_user_id', '${OWNER}', false)`,
+    'SET ROLE checksops',
+    sql,
+    'RESET ROLE',
+  ].join('; ');
+
+  psql(['-d', dbName, '-c', 'DELETE FROM public.shared_checks; DELETE FROM public.tenant_partnerships;']);
+  const [connectA, connectB] = await Promise.all([
+    spawnPsql(asOwnerSql(`SELECT public.aws_connect_partner_by_code('${PARTNER_CODE}', '${SOURCE}'::uuid)`)),
+    spawnPsql(asOwnerSql(`SELECT public.aws_connect_partner_by_code('${PARTNER_CODE}', '${SOURCE}'::uuid)`)),
+  ]);
+  note(`concurrent_same_pair_connect ${JSON.stringify({ connectA, connectB })}`);
+  assert.equal(connectA.status, 0, connectA.stderr || connectA.stdout);
+  assert.equal(connectB.status, 0, connectB.stderr || connectB.stdout);
+  assert.equal(/unique|duplicate/i.test(`${connectA.stderr}${connectA.stdout}${connectB.stderr}${connectB.stdout}`), false);
+  const pairCount = scalar(`
+SELECT count(*) FROM public.tenant_partnerships
+WHERE (inviter_tenant_id = '${SOURCE}'::uuid AND invitee_tenant_id = '${PARTNER}'::uuid)
+   OR (inviter_tenant_id = '${PARTNER}'::uuid AND invitee_tenant_id = '${SOURCE}'::uuid)
+`);
+  assert.equal(pairCount, '1');
+  const pidLock = scalar('SELECT id FROM public.tenant_partnerships LIMIT 1');
+
+  psql(['-d', dbName], `
+CREATE OR REPLACE FUNCTION public._t_delay_active_share() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.revoked_at IS NULL THEN PERFORM pg_sleep(1.2); END IF;
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS _t_delay_active_share ON public.shared_checks;
+CREATE TRIGGER _t_delay_active_share BEFORE INSERT ON public.shared_checks
+FOR EACH ROW EXECUTE FUNCTION public._t_delay_active_share();
+`);
+  const shareStarted = spawnPsql(asOwnerSql(`SELECT public.aws_share_check_with_partner('${CHECK_A}'::uuid, '${PARTNER}'::uuid)`));
+  await new Promise((r) => setTimeout(r, 300));
+  const revokeDuringShare = await spawnPsql(asOwnerSql(`SELECT public.aws_revoke_tenant_partnership('${pidLock}'::uuid)`));
+  const shareFinished = await shareStarted;
+  note(`share_vs_partnership_revoke ${JSON.stringify({ shareFinished, revokeDuringShare })}`);
+  assert.equal(shareFinished.status, 0, shareFinished.stderr || shareFinished.stdout);
+  assert.equal(revokeDuringShare.status, 0, revokeDuringShare.stderr || revokeDuringShare.stdout);
+  const forbiddenInsert = scalar(`
+SELECT count(*)::text
+FROM public.tenant_partnerships p
+JOIN public.shared_checks s
+  ON (
+    (s.source_tenant_id = p.inviter_tenant_id AND s.target_tenant_id = p.invitee_tenant_id)
+    OR (s.source_tenant_id = p.invitee_tenant_id AND s.target_tenant_id = p.inviter_tenant_id)
+  )
+WHERE p.status = 'revoked' AND s.revoked_at IS NULL
+`);
+  assert.equal(forbiddenInsert, '0');
+  psql(['-d', dbName, '-c', 'DROP TRIGGER IF EXISTS _t_delay_active_share ON public.shared_checks; DROP FUNCTION IF EXISTS public._t_delay_active_share();']);
+
+  psql(['-d', dbName, '-c', 'DELETE FROM public.shared_checks; DELETE FROM public.tenant_partnerships;']);
+  psql(['-d', dbName], `
+SELECT set_config('request.app_user_id', '${OWNER}', false);
+SET ROLE checksops;
+SELECT public.aws_connect_partner_by_code('${PARTNER_CODE}', '${SOURCE}'::uuid);
+SELECT public.aws_share_check_with_partner('${CHECK_A}'::uuid, '${PARTNER}'::uuid);
+RESET ROLE;
+`);
+  const pid2 = scalar('SELECT id FROM public.tenant_partnerships LIMIT 1');
+  const sid2 = scalar('SELECT id FROM public.shared_checks LIMIT 1');
+  psql(['-d', dbName, '-c', `UPDATE public.shared_checks SET revoked_at = now() WHERE id = '${sid2}'`]);
+  psql(['-d', dbName], `
+CREATE OR REPLACE FUNCTION public._t_delay_reshare() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.revoked_at IS NULL AND OLD.revoked_at IS NOT NULL THEN PERFORM pg_sleep(1.2); END IF;
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS _t_delay_reshare ON public.shared_checks;
+CREATE TRIGGER _t_delay_reshare BEFORE UPDATE ON public.shared_checks
+FOR EACH ROW EXECUTE FUNCTION public._t_delay_reshare();
+`);
+  const reshareStarted = spawnPsql(asOwnerSql(`SELECT public.aws_share_check_with_partner('${CHECK_A}'::uuid, '${PARTNER}'::uuid)`));
+  await new Promise((r) => setTimeout(r, 300));
+  const revokeDuringReshare = await spawnPsql(asOwnerSql(`SELECT public.aws_revoke_tenant_partnership('${pid2}'::uuid)`));
+  const reshareFinished = await reshareStarted;
+  note(`reshare_vs_partnership_revoke ${JSON.stringify({ reshareFinished, revokeDuringReshare })}`);
+  assert.equal(reshareFinished.status, 0, reshareFinished.stderr || reshareFinished.stdout);
+  assert.equal(revokeDuringReshare.status, 0, revokeDuringReshare.stderr || revokeDuringReshare.stdout);
+  const forbiddenUpdate = scalar(`
+SELECT count(*)::text
+FROM public.tenant_partnerships p
+JOIN public.shared_checks s
+  ON (
+    (s.source_tenant_id = p.inviter_tenant_id AND s.target_tenant_id = p.invitee_tenant_id)
+    OR (s.source_tenant_id = p.invitee_tenant_id AND s.target_tenant_id = p.inviter_tenant_id)
+  )
+WHERE p.status = 'revoked' AND s.revoked_at IS NULL
+`);
+  assert.equal(forbiddenUpdate, '0');
+  psql(['-d', dbName, '-c', 'DROP TRIGGER IF EXISTS _t_delay_reshare ON public.shared_checks; DROP FUNCTION IF EXISTS public._t_delay_reshare();']);
 });

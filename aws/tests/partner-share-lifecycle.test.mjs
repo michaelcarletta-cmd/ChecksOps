@@ -27,6 +27,13 @@ test('Phase 3 SQL drops global invite_code uniqueness and creates pair unique + 
   assert.equal(/GRANT INSERT ON TABLE public\.shared_checks/.test(sql32), false);
   assert.equal(/GRANT UPDATE ON TABLE public\.tenant_partnerships/.test(sql32), false);
   assert.match(sql32, /GRANT EXECUTE ON FUNCTION public\.aws_connect_partner_by_code/);
+  assert.match(sql32, /FOR UPDATE/);
+  assert.match(sql32, /WHEN unique_violation/);
+  const shareFn = sql32.match(/CREATE OR REPLACE FUNCTION public\.aws_share_check_with_partner[\s\S]*?COMMENT ON FUNCTION public\.aws_share_check_with_partner/)?.[0] || '';
+  assert.match(shareFn, /FOR UPDATE/);
+  assert.equal(/lookup_tenant_by_partner_code/.test(shareFn), false);
+  const revokePairFn = sql32.match(/CREATE OR REPLACE FUNCTION public\.aws_revoke_tenant_partnership[\s\S]*?COMMENT ON FUNCTION public\.aws_revoke_tenant_partnership/)?.[0] || '';
+  assert.match(revokePairFn, /FOR UPDATE/);
 });
 
 test('aws_can_write_check remains owner-only and share tables stay off the generic write allowlist', () => {
@@ -78,4 +85,27 @@ test('dedicated RPCs ignore client ownership overrides', async () => {
   assert.equal(calls[1].params.length, 2);
   assert.equal(PARTNER_SHARE_RPCS.has('connect_partner_by_code'), true);
   assert.equal(PARTNER_SHARE_RPCS.has('lookup_tenant_by_partner_code'), false);
+});
+
+test('Settings holds Partner Code entry; check Share uses active-partner dropdown only', () => {
+  const spaRoot = path.join(ROOT, '..', 'src', 'components');
+  const settings = fs.readFileSync(path.join(spaRoot, 'white-label/TenantPartnerManager.tsx'), 'utf8');
+  const share = fs.readFileSync(path.join(spaRoot, 'check-review/ShareCheckDialog.tsx'), 'utf8');
+
+  assert.match(settings, /connect_partner_by_code/);
+  assert.match(settings, /redeemCode/);
+  assert.match(settings, /placeholder="e\.g\. AB3K7X9P"/);
+  assert.match(settings, /revoke_tenant_partnership/);
+  assert.match(settings, /\.eq\("status", "active"\)/);
+
+  assert.match(share, /share_check_with_partner/);
+  assert.match(share, /_target_tenant_id: targetTenantId/);
+  assert.match(share, /Select a company/);
+  assert.match(share, /\.eq\("status", "active"\)/);
+  assert.match(share, /partnered-tenants/);
+  assert.equal(/connect_partner_by_code/.test(share), false);
+  assert.equal(/lookup_tenant_by_partner_code/.test(share), false);
+  assert.equal(/partner_code/.test(share), false);
+  assert.equal(/placeholder="e\.g\. AB3K7X9P"/.test(share), false);
+  assert.equal(/redeemCode/.test(share), false);
 });
