@@ -754,6 +754,20 @@ export function createAwsStagingClient(options: AwsStagingClientOptions = {}) {
         body: JSON.stringify(options.body || {}),
       }, token);
       if (response.ok) {
+        if (body && typeof body === "object" && (body as { ok?: unknown }).ok === false) {
+          return {
+            data: body,
+            error: {
+              message: String(
+                (body as { error?: unknown; message?: unknown }).error
+                || (body as { message?: unknown }).message
+                || `FunctionsHttpError:${name}`,
+              ),
+              name: "FunctionsHttpError",
+              context: { status: Number((body as { statusCode?: unknown }).statusCode) || 409, body },
+            },
+          };
+        }
         return { data: body, error: null };
       }
       return {
@@ -803,6 +817,24 @@ export function createAwsStagingClient(options: AwsStagingClientOptions = {}) {
           emit("SIGNED_OUT", null);
         }
         if (!response.ok) {
+          return { data: null, error: postgrestError(String(body.message || body.error || "rpc_failed"), String(body.error || "42501")) };
+        }
+        return { data: body.data ?? body, error: null };
+      }
+      if (name === "admin_override_check_status") {
+        const { response, body } = await apiFetch("/workflow/override", {
+          method: "POST",
+          body: JSON.stringify({
+            check_id: args.p_check_id || args.check_id,
+            new_status: args.p_new_status || args.new_status,
+            reason: args.p_reason || args.reason || args.p_review_notes,
+          }),
+        }, token);
+        if (response.status === 401) {
+          writeStored(null);
+          emit("SIGNED_OUT", null);
+        }
+        if (!response.ok || (body && typeof body === "object" && (body as { ok?: unknown }).ok === false)) {
           return { data: null, error: postgrestError(String(body.message || body.error || "rpc_failed"), String(body.error || "42501")) };
         }
         return { data: body.data ?? body, error: null };

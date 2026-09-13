@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Upload, Building2, Loader2, Sparkles, Image as ImageIcon, Layout } from "lucide-react";
 import { useTenant } from "@/contexts/TenantContext";
+import { useTenantFilter } from "@/hooks/useTenantFilter";
 import {
   TENANT_BRANDING_READ_COLUMNS,
   tenantBrandingFromRow,
@@ -20,6 +21,8 @@ import { SettingsHero } from "./SettingsHero";
 
 export function CompanyBrandingSettings() {
   const { tenant } = useTenant();
+  const { tenantId } = useTenantFilter();
+  const activeTenantId = tenant?.id || tenantId || null;
   const [companyName, setCompanyName] = useState("");
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
@@ -39,17 +42,26 @@ export function CompanyBrandingSettings() {
   const { toast } = useToast();
 
   useEffect(() => {
-    loadSettings();
-    // Reload when the white-label tenant changes (owner preview / slug switch).
+    void loadSettings();
+    // Reload when the white-label tenant or isolated tenant filter changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tenant?.id]);
+  }, [activeTenantId]);
 
   const loadSettings = async () => {
-    if (!tenant?.id) return;
+    if (!activeTenantId) {
+      setCompanyName("");
+      setAddress("");
+      setPhone("");
+      setEmail("");
+      setLogoUrl(null);
+      setLetterheadUrl(null);
+      setInvoiceLetterheadUrl(null);
+      return;
+    }
     const { data, error } = await supabase
       .from("tenants")
       .select(TENANT_BRANDING_READ_COLUMNS)
-      .eq("id", tenant.id)
+      .eq("id", activeTenantId)
       .maybeSingle();
     if (error) {
       toast({ title: "Could not load branding", description: error.message, variant: "destructive" });
@@ -150,8 +162,8 @@ export function CompanyBrandingSettings() {
   };
 
   const saveSettings = async () => {
-    if (!tenant?.id) {
-      toast({ title: "No organization in context", variant: "destructive" });
+    if (!activeTenantId) {
+      toast({ title: "No tenant selected", variant: "destructive" });
       return;
     }
     setSaving(true);
@@ -171,7 +183,7 @@ export function CompanyBrandingSettings() {
       const { error } = await supabase
         .from("tenants")
         .update(payload)
-        .eq("id", tenant.id);
+        .eq("id", activeTenantId);
       if (error) throw error;
       toast({ title: "Company settings saved" });
     } catch (error: any) {
@@ -203,7 +215,7 @@ export function CompanyBrandingSettings() {
               <Input
                 value={companyName}
                 onChange={(e) => setCompanyName(e.target.value)}
-                placeholder="Your company name"
+                placeholder="Company name"
               />
             </div>
 
@@ -212,7 +224,7 @@ export function CompanyBrandingSettings() {
               <Textarea
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
-                placeholder="123 Main Street&#10;Suite 100&#10;Philadelphia, PA 19103"
+                placeholder="Street address"
                 rows={3}
               />
             </div>
@@ -223,7 +235,7 @@ export function CompanyBrandingSettings() {
                 <Input
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  placeholder="(555) 123-4567"
+                  placeholder="Phone"
                 />
               </div>
               <div>
@@ -231,7 +243,8 @@ export function CompanyBrandingSettings() {
                 <Input
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="hello@yourcompany.com"
+                  placeholder="Email"
+                  readOnly
                 />
               </div>
             </div>

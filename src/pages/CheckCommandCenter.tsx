@@ -2593,7 +2593,9 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
         const { error: bErr } = await supabase.storage
           .from("claim-files")
           .upload(backPath, backFile);
-        if (bErr) throw new Error(`Back upload failed: ${bErr.message}`);
+        if (bErr) {
+          throw new Error(`Back upload failed: ${bErr.message}`);
+        }
       }
 
       if (aws && check) {
@@ -2604,7 +2606,11 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
             back_image_path: backPath,
           })
           .eq("id", check.id);
-        if (pathErr) throw new Error(pathErr.message);
+        if (pathErr) {
+          throw new Error(
+            pathErr.message || "Image uploaded but could not be attached to the check. Retry replace/reupload.",
+          );
+        }
       } else {
       // If loaded inside Freedom CRM (?embed=1&freedom_claim_id=...), tag the
       // check so Freedom can later list it via partner-checks-by-claim.
@@ -2831,6 +2837,7 @@ function StatusOverride({
   const { user } = useAuth();
   const [editing, setEditing] = useState(false);
   const [newStatus, setNewStatus] = useState(currentStatus);
+  const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
@@ -2838,21 +2845,28 @@ function StatusOverride({
       setEditing(false);
       return;
     }
+    const trimmedReason = reason.trim();
+    if (trimmedReason.length < 5) {
+      toast({
+        title: "Reason required",
+        description: "Admin override needs a reason of at least 5 characters.",
+        variant: "destructive",
+      });
+      return;
+    }
     setSaving(true);
     try {
-      // Route through the security-definer RPC: it validates the admin/staff
-      // permission server-side, updates status + stage + recommendation
-      // atomically, mirrors claim_checks, and writes the audit log — bypassing
-      // the RLS failures that blocked direct frontend updates.
       const { data, error } = await supabase.rpc("admin_override_check_status", {
         p_check_id: checkId,
         p_new_status: newStatus,
+        p_reason: trimmedReason,
         p_actor_id: user?.id ?? null,
       });
       if (error) throw error;
       if (data && (data as any).ok === false) throw new Error((data as any).error ?? "Override rejected");
       toast({ title: "Status updated", description: `Moved to ${newStatus.replace(/_/g, " ")}` });
       setEditing(false);
+      setReason("");
       onSuccess();
     } catch (e: any) {
       toast({ title: "Failed to update status", description: e.message, variant: "destructive" });
@@ -2863,7 +2877,7 @@ function StatusOverride({
 
   if (!editing) {
     return (
-      <Button variant="ghost" size="sm" className="text-[10px] h-6 px-2 text-muted-foreground hover:text-foreground" onClick={() => { setNewStatus(currentStatus); setEditing(true); }}>
+      <Button variant="ghost" size="sm" className="text-[10px] h-6 px-2 text-muted-foreground hover:text-foreground" onClick={() => { setNewStatus(currentStatus); setReason(""); setEditing(true); }}>
         <Pencil className="h-3 w-3 mr-1" /> Override status
       </Button>
     );
@@ -2880,6 +2894,12 @@ function StatusOverride({
           ))}
         </SelectContent>
       </Select>
+      <Input
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        placeholder="Reason (required, 5+ characters)"
+        className="h-8 text-xs"
+      />
       <div className="flex gap-1">
         <Button size="sm" className="flex-1 h-7 text-xs" onClick={handleSave} disabled={saving}>
           {saving ? <Loader2Icon className="h-3 w-3 animate-spin mr-1" /> : <CheckIcon className="h-3 w-3 mr-1" />}
@@ -3434,52 +3454,42 @@ function CheckDetailPanel({
   const handleBypassEndorsements = async () => {
     if (!user?.id || !check) return;
     setBypassingEndorsements(true);
-    // Phase 4: reflect the stage move in the queue instantly.
-    const rollbackStage = optimisticStage(qc, [checkId], "branch_deposit_required");
     try {
+      const { data: session } = await supabase.auth.getSession();
+      if (!session.session?.access_token) throw new Error("Not authenticated");
 
-      const now = new Date().toISOString();
-
-      const { error: endorsementErr } = await supabase
+      const { data: pending, error: loadErr } = await supabase
         .from("check_endorsements")
-        .update({
-          status: "signed",
-          signed_at: now,
-          signature_method: "physical_check",
-          notes: "Physical endorsements already received on check",
-          updated_at: now,
-        })
-        .eq("check_id", checkId)
-        .not("status", "in", '("signed","waived")');
-      if (endorsementErr) throw endorsementErr;
+        .select("id,status")
+        .eq("check_id", checkId);
+      if (loadErr) throw loadErr;
 
-      const { error: payeeErr } = await supabase
-        .from("check_payees")
-        .update({
-          endorsement_status: "signed",
-          endorsed_at: now,
-          updated_at: now,
-        })
-        .eq("check_id", checkId)
-        .not("endorsement_status", "eq", "signed");
-      if (payeeErr) throw payeeErr;
-
-      const { error: decisionErr } = await supabase.rpc("submit_check_review_decision_safe", {
-        p_check_id: checkId,
-        p_reviewer_id: user.id,
-        p_deposit_path: "branch_deposit_required",
-        p_reviewer_notes: "Physical endorsements already received; moved directly to branch deposit.",
-      });
-      if (decisionErr) throw decisionErr;
+      const toWaive = (pending || []).filter((row: { status?: string }) =>
+        row.status !== "signed" && row.status !== "waived",
+      );
+      for (const row of toWaive) {
+        const { data, error } = await supabase.functions.invoke("check-endorsement", {
+          body: { action: "waive_endorsement", endorsementId: row.id },
+          headers: { Authorization: `Bearer ${session.session.access_token}` },
+        });
+        if (error) throw new Error(error.message || "Endorsement was not saved");
+        const body = data && typeof data === "object" ? data as { ok?: boolean; success?: boolean; error?: string; message?: string } : null;
+        if (!body || body.ok === false || body.success === false) {
+          throw new Error(String(body?.error || body?.message || "Endorsement was not saved"));
+        }
+      }
 
       await supabase.from("check_audit_log").insert({
         check_id: checkId,
         event_type: "endorsement_bypass",
         actor_id: user.id,
-        event_description: "Physical endorsements confirmed on check. Moved directly to branch deposit.",
+        event_description: "Physical endorsements confirmed on check. Check remains in endorsing; deposit and providers were not advanced.",
       });
 
-      toast({ title: "Moved to Branch Deposit", description: "Endorsements were marked received from the physical check." });
+      toast({
+        title: "Endorsements marked on check",
+        description: "Payees marked endorsed. Deposit was not advanced.",
+      });
       qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
       qc.invalidateQueries({ queryKey: ["review-check-detail", checkId] });
       qc.invalidateQueries({ queryKey: ["check-endorsements-summary", checkId] });
@@ -3488,8 +3498,7 @@ function CheckDetailPanel({
       qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
       onRefresh();
     } catch (e: any) {
-      rollbackStage();
-      toast({ title: "Move failed", description: e.message, variant: "destructive" });
+      toast({ title: "Skip endorsements failed", description: e.message, variant: "destructive" });
     } finally {
       setBypassingEndorsements(false);
     }

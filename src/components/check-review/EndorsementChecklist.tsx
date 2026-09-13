@@ -81,6 +81,18 @@ const payeeTypeIcons: Record<string, typeof Users> = {
   other: AlertTriangle,
 };
 
+const requireDurableEndorsementSuccess = (
+  error: { message?: string } | null | undefined,
+  data: unknown,
+  fallback: string,
+) => {
+  if (error) throw new Error(error.message || fallback);
+  const body = data && typeof data === "object" ? data as Record<string, unknown> : null;
+  if (!body || body.ok === false || body.success === false) {
+    throw new Error(String(body?.error || body?.message || fallback));
+  }
+};
+
 const normalizeName = (value?: string | null) => (value ?? "").trim().toLowerCase();
 const normalizeType = (value?: string | null) => (value ?? "other").trim().toLowerCase();
 
@@ -736,7 +748,7 @@ function EndorsementCard({
       {
         const { data: session } = await supabase.auth.getSession();
         if (!session.session?.access_token) throw new Error("Not authenticated");
-        const { error } = await supabase.functions.invoke("check-endorsement", {
+        const { data, error } = await supabase.functions.invoke("check-endorsement", {
           body: { 
             action: "mark_internal_signed", 
             endorsementId: endorsement.id.startsWith("payee-") ? undefined : endorsement.id,
@@ -744,7 +756,7 @@ function EndorsementCard({
           },
           headers: { Authorization: `Bearer ${session.session.access_token}` },
         });
-        if (error) throw new Error(error.message);
+        requireDurableEndorsementSuccess(error, data, "Endorsement was not saved");
       }
       toast({ title: `${endorsement.payee_name} marked as endorsed` });
       onRefresh();
@@ -764,7 +776,7 @@ function EndorsementCard({
       {
         const { data: session } = await supabase.auth.getSession();
         if (!session.session?.access_token) throw new Error("Not authenticated");
-        const { error } = await supabase.functions.invoke("check-endorsement", {
+        const { data, error } = await supabase.functions.invoke("check-endorsement", {
           body: { 
             action: "waive_endorsement", 
             endorsementId: endorsement.id.startsWith("payee-") ? undefined : endorsement.id,
@@ -772,13 +784,13 @@ function EndorsementCard({
           },
           headers: { Authorization: `Bearer ${session.session.access_token}` },
         });
-        if (error) throw new Error(error.message);
+        requireDurableEndorsementSuccess(error, data, "Endorsement was not saved to the payee record");
       }
       toast({ title: `${endorsement.payee_name} marked endorsed on the check` });
       onRefresh();
     } catch (e: unknown) {
       toast({
-        title: "Failed to waive",
+        title: "Failed to mark endorsed on check",
         description: e instanceof Error ? e.message : "Unknown error",
         variant: "destructive",
       });

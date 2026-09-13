@@ -20,6 +20,8 @@ test('tranche-6 tables are allowlisted with narrow columns', () => {
   }
   assert.ok(!WRITE_ALLOWLIST.tenants.columns.has('moov_allowlisted'));
   assert.ok(!WRITE_ALLOWLIST.tenants.columns.has('checkalt_enabled'));
+  assert.ok(WRITE_ALLOWLIST.tenants.columns.has('business_address'));
+  assert.ok(WRITE_ALLOWLIST.tenants.columns.has('business_phone'));
   assert.ok(WRITE_ALLOWLIST.shared_check_messages.clientIgnored.has('sender_user_id'));
   assert.deepEqual([...WRITE_ALLOWLIST.tenant_users.columns], ['role']);
 });
@@ -164,3 +166,126 @@ test('homeowner ledger insert forces null amount and membership check', async ()
   assert.equal(result.rows[0].amount, null);
   assert.match(queries.at(-1).sql, /amount/);
 });
+
+test('platform owner can set tenant ops flags; members cannot; moov env ignored', async () => {
+  const PIPELINE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const queries = [];
+  const client = {
+    query: async (sql, params) => {
+      queries.push({ sql, params });
+      if (/is_master_owner/.test(sql)) return { rows: [{ is_master_owner: true }] };
+      if (/FROM public.tenant_users/.test(sql)) return { rows: [] };
+      if (/UPDATE public.tenants/.test(sql)) {
+        return { rows: [{ id: PIPELINE, subscription_status: params[0], is_test_account: params[1] }] };
+      }
+      return { rows: [] };
+    },
+  };
+  const ok = await executeAppMetadataWrite({
+    client,
+    mapping: { application_user_id: '233c588f-dc33-4307-8c3f-3da49c9fd2b3' },
+    table: 'tenants',
+    op: 'update',
+    values: { subscription_status: 'inactive', is_test_account: true, moov_environment: 'production' },
+    filters: [{ column: 'id', op: 'eq', value: PIPELINE }],
+  });
+  assert.equal(ok.error, undefined);
+  assert.equal(ok.rows[0].subscription_status, 'inactive');
+  assert.equal(String(queries.at(-1).sql).includes('moov_environment'), false);
+
+  const memberClient = {
+    query: async (sql) => {
+      if (/is_master_owner/.test(sql)) return { rows: [{ is_master_owner: false }] };
+      if (/FROM public.tenant_users/.test(sql)) return { rows: [{ '?column?': 1 }] };
+      return { rows: [] };
+    },
+  };
+  const denied = await executeAppMetadataWrite({
+    client: memberClient,
+    mapping,
+    table: 'tenants',
+    op: 'update',
+    values: { subscription_status: 'inactive' },
+    filters: [{ column: 'id', op: 'eq', value: PIPELINE }],
+  });
+  assert.equal(denied.error, 'not_authorized');
+});
+
+test('cash job contract and line amounts reject negatives', async () => {
+  const client = {
+    query: async (sql) => {
+      if (/FROM public.tenant_users/.test(sql)) return { rows: [{ '?column?': 1 }] };
+      if (/INSERT INTO public.cash_jobs/.test(sql)) return { rows: [{ id: 'job-1' }] };
+      if (/INSERT INTO public.cash_job_line_items/.test(sql)) return { rows: [{ id: 'line-1' }] };
+      return { rows: [] };
+    },
+  };
+  const job = await executeAppMetadataWrite({
+    client,
+    mapping,
+    table: 'cash_jobs',
+    op: 'insert',
+    values: { tenant_id: TENANT, job_name: 'Roof', customer_name: 'Pat', contract_amount: -5 },
+    filters: [],
+  });
+  assert.equal(job.error, 'invalid_amount');
+  assert.equal(job.field, 'contract_amount');
+
+  const line = await executeAppMetadataWrite({
+    client,
+    mapping,
+    table: 'cash_job_line_items',
+    op: 'insert',
+    values: { tenant_id: TENANT, cash_job_id: CHECK_ID, description: 'shingles', quantity: 1, unit_price: -12.5 },
+    filters: [],
+  });
+  assert.equal(line.error, 'invalid_amount');
+  assert.equal(line.field, 'unit_price');
+});
+
+test('tenant branding writes stay on the caller tenant; global branding is owner-only', async () => {
+  const other = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const memberClient = {
+    query: async (sql, params) => {
+      if (/is_master_owner/.test(sql)) return { rows: [{ is_master_owner: false }] };
+      if (/FROM public.tenant_users/.test(sql)) {
+        return params?.[1] === TENANT ? { rows: [{ '?column?': 1 }] } : { rows: [] };
+      }
+      if (/UPDATE public.tenants/.test(sql)) {
+        return { rows: [{ id: TENANT, name: params[0], business_address: params[1] }] };
+      }
+      return { rows: [] };
+    },
+  };
+  const ok = await executeAppMetadataWrite({
+    client: memberClient,
+    mapping,
+    table: 'tenants',
+    op: 'update',
+    values: { name: 'Condition One Commercial', business_address: '1 Harbor' },
+    filters: [{ column: 'id', op: 'eq', value: TENANT }],
+  });
+  assert.equal(ok.error, undefined);
+  assert.equal(ok.rows[0].name, 'Condition One Commercial');
+
+  const crossed = await executeAppMetadataWrite({
+    client: memberClient,
+    mapping,
+    table: 'tenants',
+    op: 'update',
+    values: { business_address: 'spoof' },
+    filters: [{ column: 'id', op: 'eq', value: other }],
+  });
+  assert.equal(crossed.error, 'not_authorized');
+
+  const branding = await executeAppMetadataWrite({
+    client: memberClient,
+    mapping,
+    table: 'company_branding',
+    op: 'update',
+    values: { company_name: 'Freedom Claims Adjusting' },
+    filters: [],
+  });
+  assert.equal(branding.error, 'not_authorized');
+});
+

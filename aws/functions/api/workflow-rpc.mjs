@@ -10,6 +10,7 @@ import { ignoredSpoof, parseBody, withIdentity, withIdentityWrite } from './data
 import { USER_ROLES_SQL } from './identity.mjs';
 import { applicationWorkflowWritesEnabled } from './workflow-flags.mjs';
 import { writesEnabled } from './write-allowlist.mjs';
+import { executeAdminOverride } from './workflow-override.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isUuid = (value) => UUID_RE.test(String(value || ''));
@@ -59,7 +60,7 @@ export const SAFE_WRITE_RPC_CLASSIFICATION = {
   record_check_return: 'safe_now',
   resolve_check_return: 'safe_now',
   get_payment_direction_by_token: 'financial_sensitive',
-  admin_override_check_status: 'financial_sensitive',
+  admin_override_check_status: 'safe_now',
   admin_delete_check: 'already_bridged', // client → DELETE /workflow/checks
   deposit_action: 'financial_sensitive',
   assign_deposit_owner: 'financial_sensitive',
@@ -98,6 +99,7 @@ export const SAFE_WRITE_RPCS = new Set([
   'invalidate_session',
   'resolve_check_case',
   'admin_set_contractor_pro',
+  'admin_override_check_status',
   'record_check_return',
   'resolve_check_return',
 ]);
@@ -780,6 +782,24 @@ const executeResolveCheckReturn = async ({ client, mapping, args }) => {
   return { data: { ok: true, check_id: checkId, restored_stage: restoreStage } };
 };
 
+const executeAdminOverrideRpc = async ({ client, mapping, args }) => {
+  const checkId = arg(args, 'p_check_id', 'check_id');
+  if (!isUuid(checkId)) return { error: 'invalid_uuid', field: 'p_check_id' };
+  const check = (await client.query(
+    `SELECT id, tenant_id, uploaded_by, status, check_stage, claim_id, deposited_at,
+            external_origin, partner_status, carrier_name, review_notes, amount
+     FROM public.check_intake_items WHERE id = $1::uuid`,
+    [checkId],
+  )).rows[0];
+  if (!check) return { error: 'rls_denied', message: 'Check not found' };
+  return executeAdminOverride(client, {
+    check,
+    mapping,
+    destinationStatus: arg(args, 'p_new_status', 'new_status'),
+    reason: arg(args, 'p_reason', 'reason', 'p_review_notes'),
+  }).then((executed) => (executed?.ok ? { data: executed.data } : executed));
+};
+
 export const executeSafeWriteRpc = async ({ client, mapping, name, args }) => {
   switch (name) {
     case 'log_audit':
@@ -806,6 +826,8 @@ export const executeSafeWriteRpc = async ({ client, mapping, name, args }) => {
       return executeResolveCheckCase({ client, mapping, args });
     case 'admin_set_contractor_pro':
       return executeAdminSetContractorPro({ client, mapping, args });
+    case 'admin_override_check_status':
+      return executeAdminOverrideRpc({ client, mapping, args });
     case 'record_check_return':
       return executeRecordCheckReturn({ client, mapping, args });
     case 'resolve_check_return':
@@ -852,6 +874,8 @@ export const handleSafeWriteRpc = async (event, deps = {}) => {
         || executed.error === 'invalid_field'
         || executed.error === 'missing_required_field'
         || executed.error === 'invalid_status'
+        || executed.error === 'invalid_destination'
+        || executed.error === 'reason_required'
         ? 400
         : 403;
       return denied(spoof, { statusCode: status, name, ...executed });
