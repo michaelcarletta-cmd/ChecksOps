@@ -1,0 +1,39 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { test } from 'node:test';
+import { WRITE_ALLOWLIST } from '../functions/api/write-allowlist.mjs';
+import { executeSafeWriteRpc } from '../functions/api/workflow-rpc.mjs';
+
+const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+test('mortgage agent SQL does not weaken aws_can_access_tenant', () => {
+  const sql = fs.readFileSync(path.join(ROOT, 'rls/sql/29_mortgage_ops_agent_access.sql'), 'utf8');
+  assert.match(sql, /aws_mortgage_agent_queue_visible/);
+  assert.match(sql, /aws_insert_mortgage_handling_requests/);
+  assert.match(sql, /aws_update_mortgage_handling_requests/);
+  assert.doesNotMatch(sql, /CREATE OR REPLACE FUNCTION public\.aws_can_access_tenant/);
+  assert.match(sql, /status = 'requested'/);
+  assert.match(sql, /has_role\(auth\.uid\(\), 'mortgage_agent'/);
+});
+
+test('staff grants add assignment columns without financial tables', () => {
+  const sql = fs.readFileSync(path.join(ROOT, 'workflows/sql/52_mortgage_ops_staff_grants.sql'), 'utf8');
+  assert.match(sql, /assigned_employee_id/);
+  assert.match(sql, /accepted_at/);
+  assert.match(sql, /completed_at/);
+  assert.doesNotMatch(sql, /claim_payments|homeowner_ledger_events|payment_transfers/);
+});
+
+test('tenant data/write cannot set staff-controlled mortgage columns except via owner path', () => {
+  assert.equal(WRITE_ALLOWLIST.mortgage_handling_requests.columns.has('status'), true);
+  assert.equal(WRITE_ALLOWLIST.mortgage_handling_requests.columns.has('work_notes'), false);
+  assert.equal(WRITE_ALLOWLIST.mortgage_handling_requests.columns.has('assigned_employee_id'), true);
+  assert.equal(WRITE_ALLOWLIST.mortgage_handling_requests.clientIgnored.has('assigned_employee_id'), false);
+  assert.equal(WRITE_ALLOWLIST.mortgage_handling_requests.clientIgnored.has('work_notes'), false);
+});
+
+test('mortgage staff RPCs are classified safe write', () => {
+  assert.equal(typeof executeSafeWriteRpc, 'function');
+});

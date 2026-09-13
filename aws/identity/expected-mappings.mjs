@@ -27,7 +27,7 @@ export const EXPECTED_EIGHT = [
   {
     email: 'checksops-tester@freedomadj.com',
     applicationUserId: TESTER_ID,
-    cognitoSub: 'c4386408-60e1-70e2-abb6-e6194e8e635f',
+    cognitoSub: '04d85458-1041-7017-a8e8-b2f3f0a5b75b',
     appRole: 'staff',
     tenantSlug: 'freedom',
   },
@@ -48,7 +48,7 @@ export const EXPECTED_EIGHT = [
   {
     email: 'mcarletta@freedomadj.com',
     applicationUserId: '7dbb3009-f059-4767-b5dc-1c5c72379330',
-    cognitoSub: '54a8b4c8-60d1-7028-cfbb-0eb2baee5592',
+    cognitoSub: 'c4386408-60e1-70e2-abb6-e6194e8e635f',
     appRole: 'admin',
     tenantSlug: 'freedom',
   },

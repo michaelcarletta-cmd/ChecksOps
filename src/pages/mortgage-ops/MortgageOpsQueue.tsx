@@ -41,7 +41,7 @@ interface Request {
 }
 
 export default function MortgageOpsQueue() {
-  const { user, userRole, signOut, loading: authLoading } = useMortgageAuth();
+  const { user, isMortgageDeskStaff, signOut, loading: authLoading } = useMortgageAuth();
   const navigate = useNavigate();
   const [available, setAvailable] = useState<Request[]>([]);
   const [mine, setMine] = useState<Request[]>([]);
@@ -57,10 +57,10 @@ export default function MortgageOpsQueue() {
       navigate("/mortgage-ops/login", { replace: true });
       return;
     }
-    if (userRole !== "mortgage_agent" && userRole !== "admin") {
+    if (!isMortgageDeskStaff) {
       navigate("/mortgage-ops/login", { replace: true });
     }
-  }, [user, userRole, authLoading, navigate]);
+  }, [user, isMortgageDeskStaff, authLoading, navigate]);
 
   const fetchQueues = useCallback(async () => {
     const { data, error } = await supabase
