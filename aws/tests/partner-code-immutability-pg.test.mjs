@@ -118,12 +118,18 @@ max_connections = 20
     return result;
   };
   const query = (sql) => {
-    const result = psql(['-At', '-F', '\t'], sql.endsWith('\n') ? sql : `${sql}\n`);
-    return result.stdout.trim();
+    const result = psql(['-Atq', '-F', '\t'], sql.endsWith('\n') ? sql : `${sql}\n`);
+    const lines = result.stdout.split('\n').map((line) => line.trim()).filter(Boolean)
+      .filter((line) => !/^(INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|COMMENT)\b/.test(line));
+    return lines.join('\n');
   };
   const expectFail = (sql) => {
-    const result = run(path.join(PG_BIN, 'psql'), [...psqlArgs, '-v', 'ON_ERROR_STOP=1'], { input: `${sql}\n` });
-    assert.notEqual(result.status, 0, `expected failure for: ${sql}`);
+    const result = run(
+      path.join(PG_BIN, 'psql'),
+      [...psqlArgs],
+      { input: `\\set VERBOSITY verbose\n${sql}\n` },
+    );
+    assert.notEqual(result.status, 0, 'expected failure for Partner Code mutation');
     return `${result.stderr || ''}\n${result.stdout || ''}`;
   };
 
