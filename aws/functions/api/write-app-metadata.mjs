@@ -55,6 +55,83 @@ const memberOfTenant = async (client, userId, tenantId) => {
   return rows.length > 0;
 };
 
+const callerTenantIds = async (client, userId) => {
+  const rows = (await client.query(
+    'SELECT DISTINCT tenant_id FROM public.tenant_users WHERE user_id = $1::uuid',
+    [userId],
+  )).rows;
+  return rows.map((row) => row.tenant_id).filter(Boolean);
+};
+
+const hasStaffWriteRole = async (client, userId) => {
+  const rows = (await client.query(
+    `SELECT 1 FROM public.user_roles
+     WHERE user_id = $1::uuid AND role IN ('admin'::public.app_role, 'staff'::public.app_role)
+     LIMIT 1`,
+    [userId],
+  )).rows;
+  return rows.length > 0;
+};
+
+const canWriteClaimOrg = async (client, mapping, tenantId) => {
+  if (!isUuid(tenantId)) return false;
+  const tenant = (await client.query(
+    'SELECT 1 FROM public.tenants WHERE id = $1::uuid LIMIT 1',
+    [tenantId],
+  )).rows;
+  if (!tenant.length) return false;
+  if (await isMasterOwner(client)) return true;
+  if (!(await memberOfTenant(client, mapping.application_user_id, tenantId))) return false;
+  return hasStaffWriteRole(client, mapping.application_user_id);
+};
+
+const CLAIM_CREATE_STATUSES = new Set(['tracking', 'open']);
+
+const resolveClaimOrgId = async (client, mapping, values) => {
+  const requested = values.org_id || values.tenant_id || null;
+  if (requested && !isUuid(requested)) return { error: 'invalid_uuid', field: 'org_id' };
+  const memberships = await callerTenantIds(client, mapping.application_user_id);
+  if (requested) {
+    if (!(await canWriteClaimOrg(client, mapping, requested))) {
+      return { error: 'rls_denied', message: 'org_id not writable for caller' };
+    }
+    return { orgId: requested };
+  }
+  if (memberships.length === 1) {
+    if (!(await canWriteClaimOrg(client, mapping, memberships[0]))) {
+      return { error: 'not_authorized', message: 'caller cannot write claims for tenant' };
+    }
+    return { orgId: memberships[0] };
+  }
+  return {
+    error: 'ambiguous_tenant',
+    message: 'org_id required when caller has zero or multiple tenant memberships',
+  };
+};
+
+export const executeClaims = async ({ client, mapping, op, values }) => {
+  if (op !== 'insert') return { error: 'operation_not_allowlisted', op };
+  const resolved = await resolveClaimOrgId(client, mapping, values);
+  if (resolved.error) return resolved;
+  const claimNumber = clip(values.claim_number, 80);
+  if (claimNumber?.error || !claimNumber) {
+    return claimNumber?.error || { error: 'missing_required_field', field: 'claim_number' };
+  }
+  const statusRaw = clip(values.status || 'tracking', 40);
+  if (statusRaw?.error) return statusRaw;
+  const status = String(statusRaw || 'tracking').toLowerCase();
+  if (!CLAIM_CREATE_STATUSES.has(status)) {
+    return { error: 'column_not_allowlisted', columns: ['status'] };
+  }
+  const rows = (await client.query(
+    `INSERT INTO public.claims (claim_number, status, org_id)
+     VALUES ($1::text, $2::text, $3::uuid)
+     RETURNING id, claim_number, status, org_id, policyholder_name`,
+    [claimNumber, status, resolved.orgId],
+  )).rows;
+  return { rows };
+};
+
 export const executeNotifications = async ({ client, mapping, op, values, filters }) => {
   if (op !== 'update') return { error: 'operation_not_allowlisted', op };
   if (!('is_read' in values)) return { error: 'missing_required_field', field: 'is_read' };
@@ -1038,6 +1115,8 @@ export const executeAppMetadataWrite = async ({ client, mapping, table, op, valu
       return executeHomeownerLedgerEvents({ client, mapping, values });
     case 'claim_settlements':
       return executeClaimSettlements({ client, mapping, op, values, filters });
+    case 'claims':
+      return executeClaims({ client, mapping, op, values, filters });
     default:
       return { error: 'table_not_allowlisted', table };
   }

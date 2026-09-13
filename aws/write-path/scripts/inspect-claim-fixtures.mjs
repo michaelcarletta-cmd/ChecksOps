@@ -33,6 +33,10 @@ const packOneshot = async () => {
   for (const file of ['index.mjs', 'package.json']) {
     await copyFile(path.join(ONESHOT_DIR, file), path.join(staging, file));
   }
+  const sqlSrc = path.join(ROOT, 'aws/write-path/sql');
+  for (const file of fs.readdirSync(sqlSrc).filter((name) => name.endsWith('.sql'))) {
+    await copyFile(path.join(sqlSrc, file), path.join(staging, 'sql', file));
+  }
   const pem = path.join(ROOT, 'aws/functions/api/rds-global-bundle.pem');
   if (fs.existsSync(pem)) await copyFile(pem, path.join(staging, 'rds-global-bundle.pem'));
   execFileSync('npm', ['install', '--omit=dev'], { cwd: staging, stdio: 'ignore' });
@@ -65,7 +69,7 @@ const main = async () => {
     '--runtime', 'nodejs20.x',
     '--role', roleArn,
     '--handler', 'index.handler',
-    '--timeout', '60',
+    '--timeout', '120',
     '--memory-size', '512',
     '--zip-file', `fileb://${zip}`,
     '--environment', JSON.stringify(env),
@@ -74,12 +78,23 @@ const main = async () => {
   try { run(AWS, ['--region', REGION, 'lambda', 'wait', 'function-active', '--function-name', LAMBDA_NAME]); } catch { /* ok */ }
   const outFile = path.join(os.tmpdir(), 'inspect-claim-fixtures.json');
   const payloadFile = path.join(os.tmpdir(), 'inspect-claim-payload.json');
-  fs.writeFileSync(payloadFile, JSON.stringify({ step: 'inspect-claim-fixtures' }));
+  const step = process.argv[2] || 'inspect-claim-fixtures';
+  fs.writeFileSync(payloadFile, JSON.stringify({ step }));
   try {
     run(AWS, ['--region', REGION, 'lambda', 'invoke', '--function-name', LAMBDA_NAME, '--payload', `file://${payloadFile}`, outFile]);
     const raw = fs.readFileSync(outFile, 'utf8');
     const parsed = JSON.parse(raw);
-    fs.writeFileSync('/opt/cursor/artifacts/integration_claim_row_inspect.json', JSON.stringify(parsed, null, 2));
+    const artifact = {
+      'inspect-org-id-distribution': '/opt/cursor/artifacts/phase2_org_id_distribution.json',
+      'repair-one-synthetic-claim-org-id': '/opt/cursor/artifacts/phase2_org_id_one_row_repair.json',
+      'probe-c1c-settlement': '/opt/cursor/artifacts/phase2_p1_settlement_probe.json',
+      'inspect-phase2-extras': '/opt/cursor/artifacts/phase2_extras.json',
+      'mint-portal-fixture': '/opt/cursor/artifacts/phase2_claim_portal_mint.json',
+    }[step] || '/opt/cursor/artifacts/integration_claim_row_inspect.json';
+    const redacted = parsed && typeof parsed === 'object'
+      ? { ...parsed, access_token: undefined, tokenRedacted: Boolean(parsed.access_token) }
+      : parsed;
+    fs.writeFileSync(artifact, JSON.stringify(redacted, null, 2));
     console.log(JSON.stringify(parsed, null, 2));
   } finally {
     try { awsJson(['lambda', 'delete-function', '--function-name', LAMBDA_NAME]); } catch { /* keep going */ }

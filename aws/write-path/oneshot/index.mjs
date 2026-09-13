@@ -304,6 +304,397 @@ export const handler = async (event) => {
     if (step === 'inspect-integration-grants') {
       return { ok: true, step, ...(await inspectIntegrationGrants(client)) };
     }
+    if (step === 'repair-one-synthetic-claim-org-id') {
+      const claimId = event?.claim_id || event?.queryStringParameters?.claim_id
+        || '266e1ae8-ec20-4ed5-9243-3e1424304ec6';
+      const { rows: before } = await client.query(`
+        SELECT
+          c.id::text AS claim_id,
+          c.claim_number,
+          c.org_id::text AS org_id,
+          count(ci.id)::int AS check_n,
+          count(DISTINCT ci.tenant_id)::int AS tenant_n,
+          array_remove(array_agg(DISTINCT ci.tenant_id::text), NULL) AS tenants,
+          array_remove(array_agg(DISTINCT ci.check_number), NULL) AS check_numbers
+        FROM public.claims c
+        LEFT JOIN public.check_intake_items ci ON ci.claim_id = c.id
+        WHERE c.id = $1::uuid
+        GROUP BY c.id, c.claim_number, c.org_id
+      `, [claimId]);
+      const row = before[0];
+      if (!row) return { ok: false, step, error: 'claim_not_found', claimId };
+      if (row.org_id) {
+        return { ok: true, step, applied: false, reason: 'already_has_org_id', before: row };
+      }
+      if (row.tenant_n !== 1 || !row.tenants?.[0]) {
+        return { ok: false, step, applied: false, reason: 'ownership_not_unique', before: row };
+      }
+      const orgId = row.tenants[0];
+      const { rows: after } = await client.query(`
+        UPDATE public.claims
+        SET org_id = $2::uuid
+        WHERE id = $1::uuid AND org_id IS NULL
+        RETURNING id::text AS claim_id, claim_number, org_id::text AS org_id
+      `, [claimId, orgId]);
+      return {
+        ok: after.length === 1 && after[0].org_id === orgId,
+        step,
+        applied: after.length === 1,
+        before: row,
+        after: after[0] || null,
+      };
+    }
+    if (step === 'grant-claims-org-id-insert') {
+      const before = await inspectIntegrationGrants(client);
+      await client.query(readSql(SQL_DIR, '41_claims_org_id_insert_grant.sql'));
+      await client.query(readSql(SQL_DIR, '41_create_claim_for_staff_org_id.sql'));
+      const { rows: insertGrant } = await client.query(`
+        SELECT column_name, privilege_type
+        FROM information_schema.column_privileges
+        WHERE table_schema = 'public'
+          AND table_name = 'claims'
+          AND grantee = 'checksops'
+          AND privilege_type = 'INSERT'
+        ORDER BY 1
+      `);
+      return {
+        ok: insertGrant.some((row) => row.column_name === 'org_id')
+          && insertGrant.some((row) => row.column_name === 'claim_number')
+          && !insertGrant.some((row) => ['claim_amount', 'deductible'].includes(row.column_name)),
+        step,
+        before,
+        insertGrant,
+      };
+    }
+    if (step === 'probe-c1c-settlement') {
+      const claimId = '266e1ae8-ec20-4ed5-9243-3e1424304ec6';
+      const figures = {
+        rcv: 10000, rec: 2000, non: 500, ded: 1000, notes: 'P2-ORG-ID-SAFE-TEST',
+      };
+      const { rows: claim } = await client.query(
+        `SELECT id::text, claim_number, org_id::text, status FROM public.claims WHERE id = $1::uuid`,
+        [claimId],
+      );
+      const runAs = async (userId, fn) => {
+        await client.query('BEGIN');
+        try {
+          await client.query('SET LOCAL ROLE checksops');
+          await client.query("SELECT set_config('request.app_user_id', $1, true)", [userId]);
+          const result = await fn();
+          await client.query('COMMIT');
+          return { ok: true, ...result };
+        } catch (error) {
+          try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+          return {
+            ok: false,
+            denied: /row-level security|permission denied|not found or not writable/i.test(String(error?.message || '')),
+            error: String(error?.message || error).slice(0, 240),
+          };
+        }
+      };
+      const c1cWrite = await runAs(C1C_ADMIN_ID, async () => {
+        const existing = (await client.query(
+          'SELECT id::text FROM public.claim_settlements WHERE claim_id = $1::uuid LIMIT 1',
+          [claimId],
+        )).rows[0];
+        if (existing) {
+          const rows = (await client.query(
+            `UPDATE public.claim_settlements
+             SET replacement_cost_value = $2::numeric,
+                 recoverable_depreciation = $3::numeric,
+                 non_recoverable_depreciation = $4::numeric,
+                 deductible = $5::numeric,
+                 notes = $6::text,
+                 updated_at = now()
+             WHERE id = $1::uuid AND claim_id = $7::uuid
+             RETURNING id::text, claim_id::text, replacement_cost_value::text,
+                       recoverable_depreciation::text, non_recoverable_depreciation::text,
+                       deductible::text, notes`,
+            [existing.id, figures.rcv, figures.rec, figures.non, figures.ded, figures.notes, claimId],
+          )).rows;
+          return { op: 'update', rows };
+        }
+        const rows = (await client.query(
+          `INSERT INTO public.claim_settlements (
+             claim_id, created_by, replacement_cost_value, recoverable_depreciation,
+             non_recoverable_depreciation, deductible, notes
+           ) VALUES (
+             $1::uuid, $2::uuid, $3::numeric, $4::numeric, $5::numeric, $6::numeric, $7::text
+           ) RETURNING id::text, claim_id::text, replacement_cost_value::text,
+                     recoverable_depreciation::text, non_recoverable_depreciation::text,
+                     deductible::text, notes`,
+          [claimId, C1C_ADMIN_ID, figures.rcv, figures.rec, figures.non, figures.ded, figures.notes],
+        )).rows;
+        return { op: 'insert', rows };
+      });
+      const freedomWrite = await runAs(TESTER_ID, async () => {
+        const rows = (await client.query(
+          `INSERT INTO public.claim_settlements (
+             claim_id, created_by, replacement_cost_value, notes
+           ) VALUES ($1::uuid, $2::uuid, 1, 'P2-SHOULD-DENY')
+           RETURNING id::text`,
+          [claimId, TESTER_ID],
+        )).rows;
+        return { rows };
+      });
+      const ninthWrite = await runAs(NINTH_ID, async () => {
+        const rows = (await client.query(
+          `INSERT INTO public.claim_settlements (
+             claim_id, created_by, replacement_cost_value, notes
+           ) VALUES ($1::uuid, $2::uuid, 1, 'P2-SHOULD-DENY')
+           RETURNING id::text`,
+          [claimId, NINTH_ID],
+        )).rows;
+        return { rows };
+      });
+      const stored = (await client.query(
+        `SELECT replacement_cost_value::text AS rcv, recoverable_depreciation::text AS rec,
+                non_recoverable_depreciation::text AS non, deductible::text AS ded, notes
+         FROM public.claim_settlements WHERE claim_id = $1::uuid LIMIT 1`,
+        [claimId],
+      )).rows[0] || null;
+      const acv = stored
+        ? Math.max(0, Number(stored.rcv) - Number(stored.rec) - Number(stored.non) - Number(stored.ded))
+        : null;
+      return {
+        ok: Boolean(c1cWrite.ok && c1cWrite.rows?.length)
+          && (freedomWrite.denied === true || (freedomWrite.ok && !freedomWrite.rows?.length))
+          && (ninthWrite.denied === true || (ninthWrite.ok && !ninthWrite.rows?.length)),
+        step,
+        claim: claim[0] || null,
+        c1cWrite,
+        freedomWrite,
+        ninthWrite,
+        stored,
+        acv,
+        expectedAcv: 6500,
+      };
+    }
+    if (step === 'mint-portal-fixture') {
+      const profileId = '3b57edc6-8e37-4445-9fff-8439516630e1';
+      const contractorUser = C1C_ADMIN_ID;
+      const inserted = (await client.query(
+        `INSERT INTO public.homeowner_intro_requests (
+           contractor_profile_id, contractor_user_id,
+           homeowner_name, homeowner_email, property_zip, loss_type, message, status
+         ) VALUES (
+           $1::uuid, $2::uuid, 'P2 Portal Fixture', 'p2-portal@example.invalid',
+           '33101', 'wind', 'phase2 synthetic SES-free token', 'new'
+         ) RETURNING id::text, access_token, status`,
+        [profileId, contractorUser],
+      )).rows[0];
+      const accepted = (await client.query(
+        `UPDATE public.homeowner_intro_requests
+         SET status = 'accepted', accepted_at = now(), updated_at = now()
+         WHERE id = $1::uuid
+         RETURNING id::text, access_token, status, accepted_at`,
+        [inserted.id],
+      )).rows[0];
+      return {
+        ok: Boolean(accepted?.access_token) && accepted.status === 'accepted',
+        step,
+        leadId: accepted.id,
+        tokenLen: accepted.access_token?.length || 0,
+        tokenPrefix: String(accepted.access_token || '').slice(0, 8),
+        status: accepted.status,
+        access_token: accepted.access_token,
+      };
+    }
+    if (step === 'inspect-phase2-extras') {
+      const { rows: orgAfter } = await client.query(`
+        SELECT count(*)::int AS claims, count(org_id)::int AS with_org_id,
+               count(*) FILTER (WHERE org_id IS NULL)::int AS org_id_null
+        FROM public.claims
+      `);
+      const { rows: providerAccounts } = await client.query(`
+        SELECT t.id::text AS tenant_id, t.name,
+               count(ppa.id)::int AS accounts,
+               bool_or(ppa.status IN ('active','verified','approved')) AS any_active
+        FROM public.tenants t
+        LEFT JOIN public.payment_provider_accounts ppa ON ppa.tenant_id = t.id
+        GROUP BY t.id, t.name
+        ORDER BY t.name
+      `).catch(async (error) => ({
+        rows: [{ error: String(error.message || error).slice(0, 200) }],
+      }));
+      const { rows: contractors } = await client.query(`
+        SELECT id::text, display_name, is_directory_listed, directory_opt_in, user_id::text
+        FROM public.contractor_profiles
+        WHERE is_directory_listed = true AND directory_opt_in = true
+        LIMIT 10
+      `);
+      const { rows: leads } = await client.query(`
+        SELECT id::text, status, (access_token IS NOT NULL) AS has_token,
+               length(access_token) AS token_len, accepted_at IS NOT NULL AS accepted
+        FROM public.homeowner_intro_requests
+        ORDER BY created_at DESC NULLS LAST
+        LIMIT 10
+      `);
+      const { rows: settlement } = await client.query(`
+        SELECT id::text, claim_id::text, replacement_cost_value::text AS rcv,
+               recoverable_depreciation::text AS rec, non_recoverable_depreciation::text AS non,
+               deductible::text AS ded, notes
+        FROM public.claim_settlements
+        WHERE claim_id = '266e1ae8-ec20-4ed5-9243-3e1424304ec6'::uuid
+      `);
+      const { rows: pipelineUsers } = await client.query(`
+        SELECT tu.user_id::text, tu.role, p.email
+        FROM public.tenant_users tu
+        LEFT JOIN public.profiles p ON p.id = tu.user_id
+        WHERE tu.tenant_id = '3bef00a5-0bf4-41ba-abf8-5fb4e2b73d43'::uuid
+        LIMIT 10
+      `);
+      return {
+        ok: true,
+        step,
+        orgAfter: orgAfter[0],
+        providerAccounts,
+        contractors,
+        leads,
+        settlement,
+        pipelineUsers,
+      };
+    }
+    if (step === 'inspect-org-id-distribution') {
+      const { rows: totals } = await client.query(`
+        SELECT
+          count(*)::int AS claims,
+          count(org_id)::int AS with_org_id,
+          count(*) FILTER (WHERE org_id IS NULL)::int AS org_id_null
+        FROM public.claims
+      `);
+      const { rows: byOrg } = await client.query(`
+        SELECT COALESCE(org_id::text, 'NULL') AS org_id, count(*)::int AS n
+        FROM public.claims
+        GROUP BY 1
+        ORDER BY 2 DESC
+      `);
+      const { rows: ownership } = await client.query(`
+        WITH linked AS (
+          SELECT
+            c.id,
+            c.org_id,
+            count(DISTINCT ci.tenant_id) FILTER (WHERE ci.tenant_id IS NOT NULL)::int AS tenant_n,
+            array_remove(array_agg(DISTINCT ci.tenant_id::text), NULL) AS tenants
+          FROM public.claims c
+          LEFT JOIN public.check_intake_items ci ON ci.claim_id = c.id
+          GROUP BY c.id, c.org_id
+        )
+        SELECT
+          count(*)::int AS claims,
+          count(*) FILTER (WHERE tenant_n = 1)::int AS single_tenant_linked,
+          count(*) FILTER (WHERE tenant_n > 1)::int AS multi_tenant_linked,
+          count(*) FILTER (WHERE tenant_n = 0)::int AS unlinked,
+          count(*) FILTER (WHERE tenant_n = 1 AND org_id IS NULL)::int AS single_tenant_null_org,
+          count(*) FILTER (WHERE tenant_n = 1 AND org_id IS NOT NULL)::int AS single_tenant_with_org,
+          count(*) FILTER (
+            WHERE tenant_n = 1 AND org_id IS NOT NULL AND org_id::text <> tenants[1]
+          )::int AS single_tenant_org_mismatch,
+          count(*) FILTER (WHERE tenant_n = 1 AND org_id IS NULL AND tenants[1] = $1)::int AS c1c_single_null,
+          count(*) FILTER (WHERE tenant_n = 1 AND org_id IS NULL AND tenants[1] = $2)::int AS freedom_single_null
+        FROM linked
+      `, [C1C_TENANT, FREEDOM_TENANT]);
+      const { rows: c1cSynthetic } = await client.query(`
+        SELECT
+          c.id::text AS claim_id,
+          c.claim_number,
+          c.org_id::text AS org_id,
+          c.status,
+          count(ci.id)::int AS check_n,
+          count(DISTINCT ci.tenant_id)::int AS tenant_n,
+          array_remove(array_agg(DISTINCT ci.tenant_id::text), NULL) AS tenants,
+          array_remove(array_agg(DISTINCT ci.check_number), NULL) AS check_numbers
+        FROM public.claims c
+        LEFT JOIN public.check_intake_items ci ON ci.claim_id = c.id
+        WHERE c.id = $1::uuid
+        GROUP BY c.id, c.claim_number, c.org_id, c.status
+      `, ['266e1ae8-ec20-4ed5-9243-3e1424304ec6']);
+      const { rows: triggers } = await client.query(`
+        SELECT t.tgname, p.proname
+        FROM pg_trigger t
+        JOIN pg_class c ON c.oid = t.tgrelid
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        JOIN pg_proc p ON p.oid = t.tgfoid
+        WHERE n.nspname = 'public' AND c.relname = 'claims' AND NOT t.tgisinternal
+        ORDER BY 1
+      `);
+      const { rows: fns } = await client.query(`
+        SELECT p.proname
+        FROM pg_proc p
+        JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public'
+          AND p.proname IN ('create_claim_for_staff', 'set_claim_org_id')
+        ORDER BY 1
+      `);
+      let createClaimSrc = null;
+      if (fns.some((row) => row.proname === 'create_claim_for_staff')) {
+        const { rows } = await client.query(
+          `SELECT pg_get_functiondef(p.oid) AS def
+           FROM pg_proc p
+           JOIN pg_namespace n ON n.oid = p.pronamespace
+           WHERE n.nspname = 'public' AND p.proname = 'create_claim_for_staff'
+           LIMIT 1`,
+        );
+        createClaimSrc = String(rows[0]?.def || '');
+      }
+      const { rows: leadTokens } = await client.query(`
+        SELECT
+          count(*)::int AS leads,
+          count(access_token)::int AS with_token,
+          count(*) FILTER (WHERE status = 'accepted')::int AS accepted,
+          count(*) FILTER (WHERE status = 'accepted' AND access_token IS NOT NULL)::int AS accepted_with_token
+        FROM public.homeowner_intro_requests
+      `);
+      const { rows: paySetup } = await client.query(`
+        SELECT
+          count(*)::int AS recipients,
+          count(secure_token)::int AS with_token,
+          count(*) FILTER (WHERE token_expires_at IS NULL OR token_expires_at > now())::int AS unexpired
+        FROM public.external_payment_recipients
+      `).catch(() => ({ rows: [{ recipients: null }] }));
+      const { rows: invoices } = await client.query(`
+        SELECT
+          (SELECT count(*)::int FROM public.moov_invoices) AS moov_invoices,
+          (SELECT count(*) FILTER (WHERE public_token IS NOT NULL)::int FROM public.moov_invoices) AS moov_with_token,
+          (SELECT count(*)::int FROM public.payment_invoices) AS payment_invoices,
+          (SELECT count(*) FILTER (WHERE public_token IS NOT NULL)::int FROM public.payment_invoices) AS payment_with_token
+      `).catch(() => ({ rows: [{}] }));
+      const { rows: paymentAccounts } = await client.query(`
+        SELECT t.id::text AS tenant_id, t.name, (pa.id IS NOT NULL) AS has_payment_account
+        FROM public.tenants t
+        LEFT JOIN public.payment_accounts pa ON pa.tenant_id = t.id
+        ORDER BY t.name
+      `).catch(async () => {
+        const fallback = await client.query(`
+          SELECT t.id::text AS tenant_id, t.name, false AS has_payment_account
+          FROM public.tenants t
+          ORDER BY t.name
+        `);
+        return { rows: fallback.rows, error: 'payment_accounts_unreadable' };
+      });
+      const { rows: listedContractors } = await client.query(`
+        SELECT count(*)::int AS n
+        FROM public.contractor_profiles
+        WHERE is_directory_listed = true AND directory_opt_in = true
+      `);
+      return {
+        ok: true,
+        step,
+        totals: totals[0],
+        byOrg,
+        ownership: ownership[0],
+        c1cSynthetic: c1cSynthetic[0] || null,
+        claimTriggers: triggers,
+        claimFunctions: fns.map((row) => row.proname),
+        createClaimSetsOrgId: /org_id/.test(createClaimSrc || '') && /INSERT INTO public.claims/i.test(createClaimSrc || ''),
+        createClaimInsertOmitsOrgId: /INSERT INTO public.claims/i.test(createClaimSrc || '') && !/\borg_id\b/.test((createClaimSrc || '').split('INSERT INTO public.claims')[1]?.slice(0, 800) || ''),
+        leadTokens: leadTokens[0],
+        paySetup: paySetup[0],
+        invoices: invoices[0],
+        paymentAccounts,
+        listedContractors: listedContractors[0]?.n ?? 0,
+      };
+    }
     if (step === 'inspect-claim-fixtures') {
       const { rows } = await client.query(`
         SELECT
