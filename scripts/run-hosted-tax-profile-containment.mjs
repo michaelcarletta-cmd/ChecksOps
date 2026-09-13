@@ -32,7 +32,10 @@
  * child, unlink the 0600 passfile, and rmdir the 0700 temp directory.
  * SIGKILL/crash/power-loss cleanup is not guaranteed. Relaxed psql/git trust
  * exists only as a test-injected runCli({ psqlTrust, gitTrust }) harness and
- * cannot be enabled by env or CLI flags.
+ * cannot be enabled by env or CLI flags. The wrapper refuses uid/euid 0 so
+ * the non-root distro-binary threat model is not collapsed. Git status is
+ * re-checked after SQL bytes are hashed so a dirty worktree cannot sneak in
+ * between authorization and stdin capture.
  */
 import { spawn, spawnSync } from 'node:child_process';
 import { randomBytes, createHash } from 'node:crypto';
@@ -1163,6 +1166,8 @@ export async function runCli({
   psqlTrust = PSQL_PRODUCTION_TRUST,
   gitTrust = GIT_PRODUCTION_TRUST,
   gitRun,
+  getUid = () => process.getuid(),
+  getEuid = () => (typeof process.geteuid === 'function' ? process.geteuid() : process.getuid()),
   installSignals = defaultInstallSignals,
   exitImpl,
   nowMs = Date.now(),
@@ -1192,20 +1197,20 @@ export async function runCli({
     handleExecutionSignal(state);
   });
   try {
+    if (getUid() === 0 || getEuid() === 0) {
+      throw sanitizedError('wrapper must not run as root');
+    }
     refuseGitOverrideEnv(env);
     const expectedSha = env[GIT_SHA_ENV];
-    verifyRepoState(
-      path.resolve(repoRoot),
-      expectedSha,
-      typeof gitRun === 'function' ? gitRun : makeDefaultGitRun(gitTrust),
-      gitTrust,
-    );
+    const resolvedGitRun = typeof gitRun === 'function' ? gitRun : makeDefaultGitRun(gitTrust);
+    verifyRepoState(path.resolve(repoRoot), expectedSha, resolvedGitRun, gitTrust);
     const pins = loadPins(repoRoot);
     const parsedArgs = parseCliArgs(argv);
     const capturedUrl = env[URL_ENV];
     const conn = validateConnectionUrl(capturedUrl, pins);
     verifyTrustedCaBundle(SYSTEM_CA_BUNDLE);
     const sqlFiles = verifyPinnedSqlFiles(repoRoot, pins);
+    verifyRepoState(path.resolve(repoRoot), expectedSha, resolvedGitRun, gitTrust);
     state.psqlHandle = await verifyPsqlBinary(env, spawnImpl, {
       trust: psqlTrust,
       useFdExec,
