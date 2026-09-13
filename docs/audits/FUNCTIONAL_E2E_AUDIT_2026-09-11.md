@@ -1,3 +1,17 @@
+# Phase 2 internal-blocker reduction — preparation complete
+
+See `docs/audits/PHASE2_INTERNAL_BLOCKER_REDUCTION_2026-09-13.md`.
+
+Starting 704 PASS / 1 FAIL / 258 internal BLOCKED / 173 external BLOCKED.
+
+Ending **712 PASS / 1 FAIL / 248 internal BLOCKED / 173 external BLOCKED / 2 AWAITING**. Live/non-N/A still **1,136**. Operational PASS **62.7%**. N/A unchanged at 285.
+
+App PRs for Integration (do not deploy from this workstream): #286 SQL 41 (future `claims.org_id`), #287 SQL 42 (claim-portal DTP persist). One synthetic C1C `org_id` repaired. SES-free accepted portal token retained. Production / SES / Cognito / provider execution unchanged.
+
+Do not begin Phase 3 automatically.
+
+---
+
 # Integration & Release — shared-staging deploy and 34-control reconciliation
 
 **Date:** 2026-09-13

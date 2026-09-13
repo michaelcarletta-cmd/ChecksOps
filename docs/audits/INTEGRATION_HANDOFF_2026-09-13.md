@@ -20,7 +20,8 @@
 10. `cursor/p9-owner-checkalt-settings-3bce` — PR #280 — stacked on P8
 11. `cursor/p10-claim-settlement-write-3bce` — PR #277 — stacked on P9
 12. `cursor/p11-mobile-check-center-clip-3bce` — PR #278 — stacked on P10 (app tip)
-13. Inventory lineage is separate: `cursor/blocked-control-verification-3bce` → PR #268 `cursor/phase1-inventory-update-3bce` → PR #279 `cursor/phase2-inventory-awaiting-3bce`
+13. Inventory lineage is separate: `cursor/blocked-control-verification-3bce` → PR #268 `cursor/phase1-inventory-update-3bce` → PR #279 `cursor/phase2-inventory-awaiting-3bce` → PR #285 `cursor/phase2-internal-blocker-reduction-3bce`
+14. Phase 2 app (independent of each other, both base `cursor/integration-awaiting-deploy-3bce`): PR #286 `cursor/phase2-claim-org-id-3bce` (SQL 41), PR #287 `cursor/phase2-dtp-sign-3bce` (SQL 42)
 
 P3b supersedes P5 unknown-invoice 503 behavior and P3 CC-047 (GRANT SQL + workflow invariant restore). Do not merge inventory docs into the app stack.
 
@@ -29,7 +30,9 @@ P3b supersedes P5 unknown-invoice 503 behavior and P3 CC-047 (GRANT SQL + workfl
 | Artifact | Purpose | Apply on shared staging? |
 |---|---|---|
 | `aws/write-path/sql/39_detected_claim_number_grant.sql` | `GRANT UPDATE (detected_claim_number)` on `check_intake_items` | Yes, with API deploy of P3b |
-| `aws/write-path/sql/40_claim_settlements_grant.sql` | Narrow INSERT/UPDATE on settlement figure columns | Yes, with API deploy of P10 |
+| `aws/write-path/sql/40_claim_settlements_grant.sql` | Narrow INSERT/UPDATE on settlement figure columns | Yes, with API deploy of P10 (already applied) |
+| `aws/write-path/sql/41_claims_org_id_insert_grant.sql` + `41_create_claim_for_staff_org_id.sql` | Future tracking-claim INSERT includes `org_id`; staff RPC fail-closed without unique membership | Yes, with API deploy of PR #286. Do **not** run `23_claims_org_backfill.sql`. |
+| `aws/write-path/sql/42_public_homeowner_claim_sign_dtp.sql` | Public token DTP persist (SECURITY DEFINER, checksops EXECUTE only) | Yes, with API+SPA deploy of PR #287 |
 | `AWS_APPLICATION_WORKFLOW_WRITES_ENABLED=true` | Tranche 5/6 application writes | Staging only; keep production unset/false |
 | `AWS_WRITES_ENABLED=true` / check-workflow / storage writes | Existing T2/T3 | Staging only |
 | `AWS_PROVIDER_EXECUTION_ENABLED=false` | Moov / CheckAlt / Plaid / ACH stay off | Required |
@@ -117,6 +120,13 @@ Git-fixed without physical UI on current staging (AWAITING, not FAIL): A1-066/06
 | N/A | 285 | 285 |
 
 AWAITING is not PASS. Do not treat 59.3% as higher because FAILs moved to AWAITING.
+
+## Phase 2 — Functional Audit (SQL 41 / 42, no deploy)
+
+- PR #286 `cursor/phase2-claim-org-id-3bce` @ `dd7ef0214` — future `claims.org_id` on tracking-claim create. Apply SQL 41. Do not mass-backfill. One C1C synthetic row already repaired.
+- PR #287 `cursor/phase2-dtp-sign-3bce` @ `3dd9bb6c4` — `aws_public_homeowner_claim_sign_dtp`. Apply SQL 42 with API+SPA. Live `sign_dtp` currently false-succeeds.
+- After deploy, retest: synthetic settlement UI if a C1C session exists (do not reset Cognito); portal DTP sign → GET `dtp_signed_at`; malformed/unknown tokens still 400/404.
+- Inventory PR #285 records 8 portal field PASSes and 2 AWAITING. A5-201–204 stay BLOCKED on C1C login.
 
 ## Still out of scope / do not execute
 
