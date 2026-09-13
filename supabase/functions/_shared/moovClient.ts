@@ -26,6 +26,7 @@ const MOOV_HOSTS: Record<string, string> = {
  * module reads it through `moovEnvironment()`.
  */
 import { AsyncLocalStorage } from "node:async_hooks";
+import { capabilityEnabled } from "./moovReadiness.ts";
 
 const envStore = new AsyncLocalStorage<string>();
 
@@ -394,8 +395,7 @@ export function normalizeOnboardingStatus(input: {
 export function capabilityFlags(
   caps: Array<{ capability: string; status: string }> | null | undefined,
 ) {
-  const byName = new Map((caps ?? []).map((c) => [c.capability, c.status]));
-  const on = (name: string) => byName.get(name) === "enabled";
+  const on = (name: string) => capabilityEnabled(caps, name);
   return {
     can_receive_payments: on("transfers") || on("collect-funds"),
     can_send_payments: on("transfers") || on("send-funds"),

@@ -59,6 +59,33 @@ export function findCapability(
   );
 }
 
+/** True when Moov already has this family or dotted id — never re-request (KYC/underwriting is billed). */
+export function capabilityAlreadyPresent(
+  caps: CapabilityLike[] | null | undefined,
+  wanted: string,
+): boolean {
+  return Boolean(findCapability(caps, wanted));
+}
+
+export function capabilityEnabled(
+  caps: CapabilityLike[] | null | undefined,
+  wanted: string,
+): boolean {
+  return String(findCapability(caps, wanted)?.status ?? "").toLowerCase() === "enabled";
+}
+
+/**
+ * Capabilities that are truly absent. Family match (`send-funds` satisfies
+ * `send-funds.ach`) means do not POST. Presence in any status is enough — a
+ * pending/errored family is still an underwriting record; re-POST charges again.
+ */
+export function capabilitiesStillNeeded(
+  caps: CapabilityLike[] | null | undefined,
+  wantedList: string[] | null | undefined,
+): string[] {
+  return (wantedList ?? []).filter((wanted) => !capabilityAlreadyPresent(caps, wanted));
+}
+
 export function capabilityState(cap: CapabilityLike | null): ReadinessState {
   if (!cap) return "not_started";
   switch (String(cap.status ?? "").toLowerCase()) {

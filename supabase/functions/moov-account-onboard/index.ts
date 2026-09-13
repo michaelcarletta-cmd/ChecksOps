@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { moovFetch, scopes } from "../_shared/moovClient.ts";
 import { corsHeaders, json, isResponse, logPaymentEvent, requireMoovCaller } from "../_shared/moovGuard.ts";
+import { capabilitiesStillNeeded } from "../_shared/moovReadiness.ts";
 
 // In-app onboarding for a tenant's own connected payment account.
 //
@@ -219,12 +220,27 @@ serve(async (req) => {
       }
     }
 
-    /* ---------- request the capabilities we need ---------- */
-    await moovFetch(`/accounts/${accountId}/capabilities`, {
-      method: "POST",
-      scopes: scopes.capabilitiesWrite(accountId),
-      body: { capabilities: ["transfers", "send-funds", "wallet", "send-funds.ach"] },
-    }).catch((e) => console.error("[moov-account-onboard] capabilities", (e as Error).message));
+    /* ---------- request only capabilities that are truly absent ---------- */
+    // Family match (`send-funds` satisfies `send-funds.ach`) must never re-POST.
+    // Re-requesting an already-approved family re-opens billed KYC/KYB.
+    const existingCaps = await moovFetch<any[]>(`/accounts/${accountId}/capabilities`, {
+      scopes: scopes.capabilitiesRead(accountId),
+    }).catch(() => null);
+    if (!existingCaps) {
+      console.warn("[moov-account-onboard] skip capability POST; capability GET failed (fail closed, no re-KYC)");
+    } else {
+      const wantedCaps = ["transfers", "send-funds", "wallet", "send-funds.ach"];
+      const missingCaps = capabilitiesStillNeeded(existingCaps, wantedCaps);
+      if (missingCaps.length > 0) {
+        await moovFetch(`/accounts/${accountId}/capabilities`, {
+          method: "POST",
+          scopes: scopes.capabilitiesWrite(accountId),
+          body: { capabilities: missingCaps },
+        }).catch((e) => console.error("[moov-account-onboard] capabilities", (e as Error).message));
+      } else {
+        console.log("[moov-account-onboard] skip capability POST; families already present");
+      }
+    }
 
     await supabase
       .from("payment_provider_accounts")

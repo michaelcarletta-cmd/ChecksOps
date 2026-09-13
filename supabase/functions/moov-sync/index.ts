@@ -6,6 +6,7 @@ import {
   safeLastFour,
   scopes,
 } from "../_shared/moovClient.ts";
+import { capabilitiesStillNeeded } from "../_shared/moovReadiness.ts";
 import { fetchRailMethodIds, saveMethodRails } from "../_shared/moovRails.ts";
 import { corsHeaders, json, isResponse, logPaymentEvent, requireMoovCaller, sanitize } from "../_shared/moovGuard.ts";
 
@@ -137,7 +138,8 @@ serve(async (req) => {
     // 2. Capabilities.
     const caps = await moovFetch<any[]>(`/accounts/${accountId}/capabilities`, {
       scopes: scopes.capabilitiesRead(accountId),
-    }).catch(() => [] as any[]);
+    }).catch(() => null);
+    const capsReadOk = Array.isArray(caps);
 
     const capList = (caps ?? []).map((c: any) => ({
       capability: c.capability,
@@ -263,9 +265,11 @@ serve(async (req) => {
       requiredCaps.push("collect-funds.ach");
     }
 
-    const missing = requiredCaps.filter(req => !capList.some(c => c.capability === req || c.capability === req.split(".")[0]));
+    const missing = capsReadOk ? capabilitiesStillNeeded(capList, requiredCaps) : [];
     
-    if (missing.length > 0 && verificationStatus !== "failed") {
+    if (!capsReadOk) {
+      console.warn("[moov-sync] skip capability POST; capability GET failed (fail closed, no re-KYC)");
+    } else if (missing.length > 0 && verificationStatus !== "failed") {
       try {
         await moovFetch(`/accounts/${accountId}/capabilities`, {
           method: "POST",

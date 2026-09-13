@@ -272,8 +272,15 @@ export function normalizeOnboardingStatus(input) {
 }
 
 export function capabilityFlags(caps) {
-  const byName = new Map((caps ?? []).map((c) => [c.capability, c.status]));
-  const on = (name) => byName.get(name) === 'enabled';
+  const on = (name) => {
+    const family = String(name || '').split('.')[0].toLowerCase();
+    return (caps ?? []).some((item) => {
+      const raw = String(item.capability || '').toLowerCase();
+      const itemFamily = raw.split('.')[0];
+      return (raw === String(name).toLowerCase() || itemFamily === family)
+        && String(item.status || '').toLowerCase() === 'enabled';
+    });
+  };
   return {
     can_receive_payments: on('transfers') || on('collect-funds'),
     can_send_payments: on('transfers') || on('send-funds'),
