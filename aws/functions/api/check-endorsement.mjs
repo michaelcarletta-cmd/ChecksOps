@@ -514,17 +514,19 @@ const lookupPublicEndorsement = async (client, token) => {
   return { kind: 'payee', row: payee };
 };
 
+const unknownPublicEndorsementToken = (spoof, { statusCode = 404 } = {}) => ({
+  ok: false,
+  statusCode,
+  error: 'This endorsement link is invalid or has expired.',
+  code: 'invalid_link',
+  spoofFieldsIgnored: spoof,
+});
+
 export const runGetEndorsementData = async (client, token, spoof) => {
-  if (!token) return { ok: false, statusCode: 400, error: 'This endorsement link is invalid.', code: 'invalid_link', spoofFieldsIgnored: spoof };
+  if (!token) return unknownPublicEndorsementToken(spoof, { statusCode: 400 });
   const found = await lookupPublicEndorsement(client, token);
   if (found.kind === 'missing' || !found.row) {
-    return {
-      ok: false,
-      statusCode: 404,
-      error: 'This endorsement link is invalid or has expired.',
-      code: 'invalid_link',
-      spoofFieldsIgnored: spoof,
-    };
+    return unknownPublicEndorsementToken(spoof);
   }
   const row = found.row;
   return {
@@ -554,7 +556,7 @@ export const runSubmitEndorsement = async (client, event, body, spoof) => {
     [token],
   )).rows[0];
   if (!endorsement) {
-    return { ok: false, statusCode: 404, error: 'Invalid or already-used token', spoofFieldsIgnored: spoof };
+    return unknownPublicEndorsementToken(spoof);
   }
   if (endorsement.status === 'signed') {
     return { ok: true, statusCode: 200, success: true, message: 'Already endorsed', ...denyDepositAdvance(), spoofFieldsIgnored: spoof };
@@ -640,7 +642,7 @@ export const runRejectEndorsement = async (client, event, body, spoof) => {
     [token],
   )).rows[0];
   if (!endorsement) {
-    return { ok: false, statusCode: 404, error: 'Invalid or already-used token', spoofFieldsIgnored: spoof };
+    return unknownPublicEndorsementToken(spoof);
   }
   const newToken = rotateToken();
   const ip = clientIpFromEvent(event);
