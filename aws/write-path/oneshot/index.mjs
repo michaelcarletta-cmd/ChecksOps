@@ -87,6 +87,52 @@ const intakeUpdateColumns = async (client) => {
   return rows.map((row) => row.column_name);
 };
 
+const inspectIntegrationGrants = async (client) => {
+  const intake = await intakeUpdateColumns(client);
+  const { rows: settlement } = await client.query(`
+    SELECT grantee, privilege_type, column_name
+    FROM information_schema.column_privileges
+    WHERE table_schema = 'public'
+      AND table_name = 'claim_settlements'
+      AND grantee IN ('checksops', 'authenticated')
+      AND privilege_type IN ('SELECT', 'INSERT', 'UPDATE', 'DELETE')
+    ORDER BY grantee, privilege_type, column_name
+  `);
+  const { rows: sensitive } = await client.query(`
+    SELECT table_name, grantee, privilege_type
+    FROM information_schema.role_table_grants
+    WHERE table_schema = 'public'
+      AND table_name IN (
+        'claim_payments', 'claim_disbursements', 'payment_wallets',
+        'payment_wallet_ledger', 'disbursement_splits', 'actum_transactions'
+      )
+      AND grantee IN ('checksops', 'authenticated')
+      AND privilege_type IN ('INSERT', 'UPDATE', 'DELETE')
+    ORDER BY 1, 2, 3
+  `);
+  const settlementInsertGranted = settlement.some((row) => (
+    row.grantee === 'checksops' && row.privilege_type === 'INSERT' && row.column_name === 'replacement_cost_value'
+  ));
+  const settlementUpdateGranted = settlement.some((row) => (
+    row.grantee === 'checksops' && row.privilege_type === 'UPDATE' && row.column_name === 'replacement_cost_value'
+  ));
+  const settlementDeleteGranted = settlement.some((row) => row.privilege_type === 'DELETE');
+  return {
+    intakeUpdateColumns: intake,
+    detectedClaimNumberGranted: intake.includes('detected_claim_number'),
+    intakeClaimIdStillDenied: !intake.includes('claim_id'),
+    intakeAmountStillDenied: !intake.includes('amount'),
+    intakeStatusStillDenied: !intake.includes('status'),
+    settlementInsertGranted,
+    settlementUpdateGranted,
+    settlementDeleteGranted: settlementDeleteGranted === true,
+    paymentWritesStillDenied: !sensitive.some((row) => ['claim_payments', 'claim_disbursements', 'disbursement_splits', 'actum_transactions'].includes(row.table_name)),
+    walletWritesStillDenied: !sensitive.some((row) => ['payment_wallets', 'payment_wallet_ledger'].includes(row.table_name)),
+    settlementColumns: settlement,
+    sensitiveWrites: sensitive,
+  };
+};
+
 const financialAggregates = async (client) => {
   const sql = readSql(RLS_SQL_DIR, '28_financial_aggregates.sql');
   const { rows } = await client.query(sql);
@@ -254,6 +300,20 @@ export const handler = async (event) => {
         granted: after.includes('detected_claim_number'),
         financialStillBlocked,
       };
+    }
+    if (step === 'inspect-integration-grants') {
+      return { ok: true, step, ...(await inspectIntegrationGrants(client)) };
+    }
+    if (step === 'grant-claim-settlements') {
+      const before = await inspectIntegrationGrants(client);
+      await client.query(readSql(SQL_DIR, '40_claim_settlements_grant.sql'));
+      const after = await inspectIntegrationGrants(client);
+      const ok = after.settlementInsertGranted
+        && after.settlementUpdateGranted
+        && after.intakeClaimIdStillDenied
+        && after.paymentWritesStillDenied
+        && after.walletWritesStillDenied;
+      return { ok, step, before, after };
     }
     const before = await financialAggregates(client);
     await client.query(readSql(SQL_DIR, '33_tranche2_write_grants.sql'));
