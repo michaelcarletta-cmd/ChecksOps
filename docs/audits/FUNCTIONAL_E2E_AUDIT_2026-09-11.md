@@ -1,3 +1,26 @@
+# Phase 2 continuation — no shared-staging deploy
+
+**Date:** 2026-09-13
+**Inventory branch:** `cursor/phase2-inventory-awaiting-3bce`
+**App tip:** `cursor/p11-mobile-check-center-clip-3bce`
+**Handoff:** `docs/audits/INTEGRATION_HANDOFF_2026-09-13.md`
+
+Shared staging deployments are owned by Integration & Release. This workstream did not overlay, restore, or reconfigure `checksops-staging-api` or the shared SPA. Controls that need those Git fixes on staging are `AWAITING_INTEGRATION_DEPLOYMENT`, not product FAIL.
+
+Git-fixed FAIL → AWAITING (11): A1-066, A1-067, A1-068, A5-088, A5-099, A5-114, A5-220, CC-219, CC-361, CC-368, P3-MOB-006.
+
+Git-fixed BLOCKED → AWAITING (23): A4-013–A4-031 (`owner_isAdmin_false` view gate), A5-201–A5-204 (claim settlement write path).
+
+Still FAIL (1): A8-035 Freedom identity (out of scope).
+
+Phase 1 PASSes (CC-117, CC-047, CC-367, A4-043–046, X-021, X-029) are unchanged. Overlay-time physical evidence stands; Integration owns redeploy.
+
+Readiness: **674 PASS / 1,136 live = 59.3%**. FAIL 1 (0.1%). AWAITING 34. BLOCKED 427 (254 internal + 173 external). BLOCKED → PASS this continuation: 0.
+
+New app PRs stacked on P3b: P8 endorsement invalid-link, P9 owner CheckAlt view, P10 claim settlement writes, P11 mobile clip.
+
+---
+
 # Phase 1 internal-blocker remediation — inventory update
 
 **Date:** 2026-09-12  
