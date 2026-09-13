@@ -1,0 +1,29 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Operator-only identity policy for checksops-production-api-execution on the
+  bank-verify state table. Do not apply from Cursor. Do not attach CreateTable,
+  DeleteItem, Scan, or Resource *. Do not update the prep API stack.
+
+Parameters:
+  ExecutionRoleName:
+    Type: String
+    Default: checksops-production-api-execution
+
+Resources:
+  RecipientBankVerifyStateLambdaPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: RecipientBankVerifyStateLeastPrivilege
+      Roles:
+        - !Ref ExecutionRoleName
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: RecipientBankVerifyStateLeastPrivilege
+            Effect: Allow
+            Action:
+              - dynamodb:GetItem
+              - dynamodb:PutItem
+              - dynamodb:UpdateItem
+              - dynamodb:DescribeTable
+            Resource: arn:aws:dynamodb:us-east-1:806168576068:table/checksops-recipient-bank-verify-state

@@ -128,6 +128,9 @@ Globals:
         AWS_PROVIDER_WEBHOOK_DRY_RUN: "true"
         AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: "true"
         AWS_FINANCIAL_PERMISSIONS_ACTIVATED: "false"
+        AWS_PROVIDER_RECIPIENT_KYC_TOS_WRITES_ENABLED: "false"
+        AWS_PROVIDER_RECIPIENT_BANK_VERIFY_WRITES_ENABLED: "false"
+        AWS_RECIPIENT_BANK_VERIFY_STATE_TABLE: "checksops-recipient-bank-verify-state"
         # Webhook HMAC / sandbox epoch preserved via NoEcho parameters (not stored in git).
         AWS_MOOV_WEBHOOK_SECRET: !Ref MoovWebhookSecret
         AWS_CHECKALT_WEBHOOK_SECRET: !Ref CheckAltWebhookSecret
