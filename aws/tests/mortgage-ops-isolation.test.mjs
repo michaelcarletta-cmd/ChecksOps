@@ -9,7 +9,7 @@ import {
   mortgageAgentCanWriteTenantLossDraft,
 } from '../functions/api/mortgage-library-docs.mjs';
 import { authorizeStorageWritePath } from '../functions/api/storage-write-auth.mjs';
-import { executeTenantDocuments } from '../functions/api/write-app-metadata.mjs';
+import { executeTenantDocuments, executeLossDraftDocuments } from '../functions/api/write-app-metadata.mjs';
 
 const TENANT_A = '11111111-1111-4111-8111-111111111111';
 const TENANT_B = '22222222-2222-4222-8222-222222222222';
@@ -27,7 +27,7 @@ const PATH_A = `${TENANT_A}/library/mortgage/w9.pdf`;
 const PATH_B = `${TENANT_B}/library/mortgage/w9.pdf`;
 const LOSS_PATH_A = `${CLAIM_A}/${DRAFT_A}/${DRAFT_DOC}/packet.pdf`;
 
-const sqlClient = ({ memberships = {}, roles = {}, documents = {}, drafts = {}, requestsByCheck = {} } = {}) => ({
+const sqlClient = ({ memberships = {}, roles = {}, documents = {}, drafts = {}, requestsByCheck = {}, lossDraftDocuments = {} } = {}) => ({
   query: async (sql, params = []) => {
     if (/FROM public\.tenant_users/.test(sql) && /tenant_id = \$2/.test(sql)) {
       const userId = params[0];
@@ -53,6 +53,17 @@ const sqlClient = ({ memberships = {}, roles = {}, documents = {}, drafts = {}, 
       return { rows: documents[params[0]] ? [documents[params[0]]] : [] };
     }
     if (/UPDATE public\.tenant_documents/.test(sql)) {
+      return { rows: [{ id: params[params.length - 1] }] };
+    }
+    if (/FROM public\.loss_draft_documents/.test(sql) && /JOIN public\.loss_draft_tracking/.test(sql)) {
+      const row = lossDraftDocuments[params[0]];
+      return { rows: row ? [row] : [] };
+    }
+    if (/DELETE FROM public\.loss_draft_documents/.test(sql)) {
+      const row = lossDraftDocuments[params[0]];
+      return { rows: row ? [row] : [] };
+    }
+    if (/UPDATE public\.loss_draft_documents/.test(sql)) {
       return { rows: [{ id: params[params.length - 1] }] };
     }
     if (/FROM public\.loss_draft_tracking/.test(sql)) {
@@ -241,4 +252,62 @@ test('loss-draft uploads require tenant membership or a workable Desk request', 
   }), false);
   const assigned = await authorizeStorageWritePath(assignedAgent, 'loss-draft-documents', LOSS_PATH_A, AGENT);
   assert.equal(assigned.ok, true);
+
+  const lossDoc = {
+    id: DRAFT_DOC,
+    loss_draft_id: DRAFT_A,
+    check_intake_item_id: CHECK_A,
+    tenant_id: TENANT_A,
+  };
+  const ownerMeta = sqlClient({
+    memberships: { [`${OWNER_A}:${TENANT_A}`]: 'owner' },
+    lossDraftDocuments: { [DRAFT_DOC]: lossDoc },
+  });
+  const adminMeta = sqlClient({
+    roles: { [ADMIN_A]: ['admin'] },
+    lossDraftDocuments: { [DRAFT_DOC]: lossDoc },
+  });
+  const unattachedMeta = sqlClient({
+    roles: { [AGENT]: ['mortgage_agent'] },
+    lossDraftDocuments: { [DRAFT_DOC]: lossDoc },
+  });
+  const assignedMeta = sqlClient({
+    roles: { [AGENT]: ['mortgage_agent'] },
+    lossDraftDocuments: { [DRAFT_DOC]: lossDoc },
+    requestsByCheck: {
+      [CHECK_A]: [{ status: 'in_progress', assigned_employee_id: AGENT, tenant_id: TENANT_A }],
+    },
+  });
+  const ownerUpdate = await executeLossDraftDocuments({
+    client: ownerMeta,
+    mapping: { application_user_id: OWNER_A },
+    op: 'update',
+    values: { file_name: 'packet.pdf' },
+    filters: [{ column: 'id', op: 'eq', value: DRAFT_DOC }],
+  });
+  assert.equal(ownerUpdate.rows[0].id, DRAFT_DOC);
+  const adminUpdate = await executeLossDraftDocuments({
+    client: adminMeta,
+    mapping: { application_user_id: ADMIN_A },
+    op: 'update',
+    values: { file_name: 'packet.pdf' },
+    filters: [{ column: 'id', op: 'eq', value: DRAFT_DOC }],
+  });
+  assert.equal(adminUpdate.error, 'not_authorized');
+  const unattachedUpdate = await executeLossDraftDocuments({
+    client: unattachedMeta,
+    mapping: { application_user_id: AGENT },
+    op: 'delete',
+    values: {},
+    filters: [{ column: 'id', op: 'eq', value: DRAFT_DOC }],
+  });
+  assert.equal(unattachedUpdate.error, 'not_authorized');
+  const assignedDelete = await executeLossDraftDocuments({
+    client: assignedMeta,
+    mapping: { application_user_id: AGENT },
+    op: 'delete',
+    values: {},
+    filters: [{ column: 'id', op: 'eq', value: DRAFT_DOC }],
+  });
+  assert.equal(assignedDelete.rows[0].id, DRAFT_DOC);
 });
