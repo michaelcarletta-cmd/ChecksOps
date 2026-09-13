@@ -1,0 +1,5 @@
+# Hash-pinned historical exceptions live in:
+#   supabase/security/hosted-tax-profile-containment.pins.json
+#
+# This file is not an allowlist. Filename-only exceptions are rejected.
+# The guard reads the pins JSON (basename + SHA-256 + review note).
