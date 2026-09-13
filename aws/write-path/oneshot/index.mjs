@@ -769,6 +769,73 @@ export const handler = async (event) => {
         rows,
       };
     }
+    if (step === 'inspect-c1c-identity') {
+      const { rows: c1cUsers } = await client.query(`
+        SELECT tu.user_id::text, tu.role, p.email AS profile_email,
+               ia.cognito_sub, ia.status AS identity_status, ia.email AS identity_email
+        FROM public.tenant_users tu
+        LEFT JOIN public.profiles p ON p.id = tu.user_id
+        LEFT JOIN public.identity_accounts ia ON ia.application_user_id = tu.user_id
+        WHERE tu.tenant_id = $1::uuid
+        ORDER BY coalesce(p.email, ia.email)
+      `, [C1C_TENANT]);
+      const { rows: adminMap } = await client.query(`
+        SELECT application_user_id::text, cognito_sub, email, status
+        FROM public.identity_accounts
+        WHERE application_user_id = $1::uuid
+           OR application_user_id = $2::uuid
+           OR lower(coalesce(email, '')) IN (
+             'payments@condition1commercial.com',
+             'staging-master@checksops.invalid'
+           )
+      `, [C1C_ADMIN_ID, '7dbb3009-f059-4767-b5dc-1c5c72379330']);
+      const { rows: fixture } = await client.query(`
+        SELECT id::text, claim_number, org_id::text, status
+        FROM public.claims
+        WHERE id = '266e1ae8-ec20-4ed5-9243-3e1424304ec6'::uuid
+      `);
+      const { rows: orgCounts } = await client.query(`
+        SELECT count(*)::int AS claims, count(org_id)::int AS with_org_id,
+               count(*) FILTER (WHERE org_id IS NULL)::int AS org_id_null
+        FROM public.claims
+      `);
+      return { ok: true, step, c1cUsers, adminMap, fixture: fixture[0] || null, orgCounts: orgCounts[0] };
+    }
+    if (step === 'inspect-portal-dtp') {
+      const leadId = event.leadId || 'ccee4d05-835e-4015-a9bf-7f29c07945f6';
+      const { rows: lead } = await client.query(`
+        SELECT id::text, status,
+               accepted_at IS NOT NULL AS accepted,
+               dtp_signed_at IS NOT NULL AS dtp_signed,
+               dtp_signed_at,
+               dtp_signature_name,
+               length(access_token) AS token_len
+        FROM public.homeowner_intro_requests
+        WHERE id = $1::uuid
+      `, [leadId]);
+      const { rows: uploads } = await client.query(`
+        SELECT id::text, file_path, file_mime, status, created_at
+        FROM public.homeowner_check_uploads
+        WHERE lead_id = $1::uuid
+        ORDER BY created_at DESC NULLS LAST
+        LIMIT 5
+      `).catch((error) => ({ rows: [{ error: String(error.message || error).slice(0, 200) }] }));
+      const { rows: uploadFn } = await client.query(`
+        SELECT p.proname,
+               has_function_privilege('checksops', p.oid, 'EXECUTE') AS checksops_execute
+        FROM pg_proc p
+        JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public' AND p.proname = 'aws_public_homeowner_check_upload_insert'
+      `);
+      return {
+        ok: true,
+        step,
+        leadId,
+        lead: lead[0] || null,
+        uploads,
+        uploadFn: uploadFn[0] || null,
+      };
+    }
     if (step === 'inspect-phase2-grants') {
       return { ok: true, step, ...(await inspectIntegrationGrants(client)) };
     }

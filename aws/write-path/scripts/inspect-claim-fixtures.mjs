@@ -79,7 +79,11 @@ const main = async () => {
   const outFile = path.join(os.tmpdir(), 'inspect-claim-fixtures.json');
   const payloadFile = path.join(os.tmpdir(), 'inspect-claim-payload.json');
   const step = process.argv[2] || 'inspect-claim-fixtures';
-  fs.writeFileSync(payloadFile, JSON.stringify({ step }));
+  let extra = {};
+  if (process.argv[3]) {
+    extra = process.argv[3].startsWith('{') ? JSON.parse(process.argv[3]) : { leadId: process.argv[3] };
+  }
+  fs.writeFileSync(payloadFile, JSON.stringify({ step, ...extra }));
   try {
     run(AWS, ['--region', REGION, 'lambda', 'invoke', '--function-name', LAMBDA_NAME, '--payload', `file://${payloadFile}`, outFile]);
     const raw = fs.readFileSync(outFile, 'utf8');
@@ -90,12 +94,19 @@ const main = async () => {
       'probe-c1c-settlement': '/opt/cursor/artifacts/phase2_p1_settlement_probe.json',
       'inspect-phase2-extras': '/opt/cursor/artifacts/phase2_extras.json',
       'mint-portal-fixture': '/opt/cursor/artifacts/phase2_claim_portal_mint.json',
+      'inspect-portal-dtp': '/opt/cursor/artifacts/phase2_portal_dtp_inspect.json',
+      'inspect-c1c-identity': '/opt/cursor/artifacts/phase2_c1c_db_identity.json',
     }[step] || '/opt/cursor/artifacts/integration_claim_row_inspect.json';
     const redacted = parsed && typeof parsed === 'object'
       ? { ...parsed, access_token: undefined, tokenRedacted: Boolean(parsed.access_token) }
       : parsed;
+    if (parsed?.access_token) {
+      fs.writeFileSync('/tmp/phase2-portal-token.txt', String(parsed.access_token));
+      fs.chmodSync('/tmp/phase2-portal-token.txt', 0o600);
+      if (parsed.leadId) fs.writeFileSync('/tmp/phase2-portal-lead.txt', String(parsed.leadId));
+    }
     fs.writeFileSync(artifact, JSON.stringify(redacted, null, 2));
-    console.log(JSON.stringify(parsed, null, 2));
+    console.log(JSON.stringify(redacted, null, 2));
   } finally {
     try { awsJson(['lambda', 'delete-function', '--function-name', LAMBDA_NAME]); } catch { /* keep going */ }
   }
