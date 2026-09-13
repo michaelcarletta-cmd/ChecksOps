@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
 import { useTenantFilter } from "@/hooks/useTenantFilter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -18,7 +17,6 @@ interface ShareCheckDialogProps {
 }
 
 export function ShareCheckDialog({ checkId, open, onOpenChange }: ShareCheckDialogProps) {
-  const { user } = useAuth();
   const { tenantId } = useTenantFilter();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -74,11 +72,9 @@ export function ShareCheckDialog({ checkId, open, onOpenChange }: ShareCheckDial
 
   const shareMutation = useMutation({
     mutationFn: async (targetTenantId: string) => {
-      const { error } = await supabase.from("shared_checks").insert({
-        check_id: checkId,
-        source_tenant_id: tenantId!,
-        target_tenant_id: targetTenantId,
-        shared_by: user!.id,
+      const { error } = await supabase.rpc("share_check_with_partner", {
+        _check_id: checkId,
+        _target_tenant_id: targetTenantId,
       });
       if (error) throw error;
     },
@@ -94,10 +90,9 @@ export function ShareCheckDialog({ checkId, open, onOpenChange }: ShareCheckDial
 
   const revokeMutation = useMutation({
     mutationFn: async (shareId: string) => {
-      const { error } = await supabase
-        .from("shared_checks")
-        .update({ revoked_at: new Date().toISOString() })
-        .eq("id", shareId);
+      const { error } = await supabase.rpc("revoke_shared_check", {
+        _share_id: shareId,
+      });
       if (error) throw error;
     },
     onSuccess: () => {
