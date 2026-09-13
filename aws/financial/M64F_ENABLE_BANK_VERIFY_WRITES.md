@@ -78,8 +78,11 @@ Probe `ok` is `false` after enablement because that report requires writes
 ## SPA
 
 Live chunk still `RecipientPaymentSetup-Bizl4i1o.js`. Send renders when
-session `bank_verify_available === true` and `bank_should_initiate`. The button
-is **visible and not clicked**.
+session `bank_verify_available === true` and `bank_should_initiate`. Browser
+proof on the real pay-setup link: **Send verification deposit** is visible next
+to Chase ••••1506; session POST `/prep/public/moov-recipient-session` is 200;
+the button was **not** clicked. After that page load, GET-only preflight still
+shows bank `new`, verification `not_started`, and no real-target DDB claim.
 
 ## Holds that remain
 
