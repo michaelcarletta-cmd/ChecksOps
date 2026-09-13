@@ -24,6 +24,7 @@ import {
   STALE_PASSDIR_MIN_AGE_MS,
   buildChildEnv,
   cleanupStalePassDirs,
+  defaultAsyncSpawn,
   handleExecutionSignal,
   parseCliArgs,
   parseExactSentinel,
@@ -99,7 +100,7 @@ function nonceFromArgs(args) {
   return { kind: 'none', nonce: '' };
 }
 
-function capturedRun(argv, extra = {}) {
+async function capturedRun(argv, extra = {}) {
   const psql = extra.psql || dummyPsql();
   const env = extra.env || operatorEnv({ psql, url: extra.url, env: extra.extraEnv });
   if (!env[URL_ENV]) env[URL_ENV] = extra.url ?? directUrl;
@@ -130,7 +131,7 @@ function capturedRun(argv, extra = {}) {
     calls.push({ bin, args, opts });
     return innerSpawn(bin, args, opts);
   };
-  const code = runCli({
+  const code = await runCli({
     argv,
     env,
     spawnImpl,
@@ -214,17 +215,17 @@ test('forbidden query parameters, duplicate sslmode, empty password, and wrong p
   }
 });
 
-test('apply without authorization or with the wrong phrase is refused', () => {
-  const missing = capturedRun(['apply']);
+test('apply without authorization or with the wrong phrase is refused', async () => {
+  const missing = await capturedRun(['apply']);
   assert.equal(missing.code, 1);
   assert.match(missing.err, /authorization flag and exact confirmation phrase/);
   assert.equal(missing.combined.includes(SECRET), false);
-  const wrong = capturedRun(['apply', AUTH_FLAG, `--confirm=NOPE`]);
+  const wrong = await capturedRun(['apply', AUTH_FLAG, `--confirm=NOPE`]);
   assert.equal(wrong.code, 1);
 });
 
-test('no URI or password in child argv; PG* injection is not inherited', () => {
-  const result = capturedRun(['preflight']);
+test('no URI or password in child argv; PG* injection is not inherited', async () => {
+  const result = await capturedRun(['preflight']);
   assert.equal(result.code, 0);
   assert.equal(result.calls.length >= 2, true);
   for (const call of result.calls) {
@@ -251,43 +252,44 @@ test('no URI or password in child argv; PG* injection is not inherited', () => {
     assert.equal(Object.hasOwn(call.opts.env, 'PGSERVICE'), false);
     assert.equal(call.opts.env.PATH, '');
     assert.equal(call.opts.shell, false);
+    assert.equal(call.opts.argv0, result.psql.bin);
   }
 });
 
-test('PATH psql and relative override are rejected', () => {
+test('PATH psql and relative override are rejected', async () => {
   const psql = dummyPsql();
-  const missing = capturedRun(['preflight'], {
+  const missing = await capturedRun(['preflight'], {
     env: { [URL_ENV]: directUrl, [PSQL_SHA_ENV]: psql.digest },
   });
   assert.equal(missing.code, 1);
   assert.match(missing.err, /absolute psql path/);
 
-  const relative = capturedRun(['preflight'], {
+  const relative = await capturedRun(['preflight'], {
     env: { [URL_ENV]: directUrl, [PSQL_PATH_ENV]: 'psql', [PSQL_SHA_ENV]: psql.digest },
   });
   assert.equal(relative.code, 1);
   assert.match(relative.err, /absolute/);
 });
 
-test('symlink, writable, and wrong-hash psql binaries are rejected', () => {
+test('symlink, writable, and wrong-hash psql binaries are rejected', async () => {
   const psql = dummyPsql();
   const link = path.join(psql.dir, 'link-psql');
   fs.symlinkSync(psql.bin, link);
-  const sym = capturedRun(['preflight'], {
+  const sym = await capturedRun(['preflight'], {
     env: { [URL_ENV]: directUrl, [PSQL_PATH_ENV]: link, [PSQL_SHA_ENV]: psql.digest },
   });
   assert.equal(sym.code, 1);
   assert.match(sym.err, /symlink/);
 
   fs.chmodSync(psql.bin, 0o777);
-  const writable = capturedRun(['preflight'], {
+  const writable = await capturedRun(['preflight'], {
     env: { [URL_ENV]: directUrl, [PSQL_PATH_ENV]: psql.bin, [PSQL_SHA_ENV]: psql.digest },
   });
   assert.equal(writable.code, 1);
   assert.match(writable.err, /writable/);
   fs.chmodSync(psql.bin, 0o755);
 
-  const wrong = capturedRun(['preflight'], {
+  const wrong = await capturedRun(['preflight'], {
     env: { [URL_ENV]: directUrl, [PSQL_PATH_ENV]: psql.bin, [PSQL_SHA_ENV]: '0'.repeat(64) },
   });
   assert.equal(wrong.code, 1);
@@ -295,8 +297,8 @@ test('symlink, writable, and wrong-hash psql binaries are rejected', () => {
   assert.equal(wrong.calls.some((c) => c.args && !c.args.includes('--version')), false);
 });
 
-test('timeout and password prompt flags are enforced', () => {
-  const timed = capturedRun(['preflight'], {
+test('timeout and password prompt flags are enforced', async () => {
+  const timed = await capturedRun(['preflight'], {
     spawnImpl: (bin, args, opts = {}) => {
       if (args.includes('--version')) {
         return { status: 0, stdout: 'psql (PostgreSQL) 16.15\n', stderr: '' };
@@ -344,8 +346,8 @@ test('NOTICE/HINT/prefix/suffix sentinel spoofing is rejected', () => {
   );
 });
 
-test('wrong nonce, multiple sentinel rows, and extra stdout are rejected', () => {
-  const wrongNonce = capturedRun(['preflight'], {
+test('wrong nonce, multiple sentinel rows, and extra stdout are rejected', async () => {
+  const wrongNonce = await capturedRun(['preflight'], {
     spawnImpl: (bin, args) => {
       if (args.includes('--version')) return { status: 0, stdout: 'psql (PostgreSQL) 16.15\n', stderr: '' };
       return { status: 0, stdout: `${PREFLIGHT_SENTINEL_PREFIX}|${'c'.repeat(64)}|EXACT_EXPECTED_LEGACY\n`, stderr: '' };
@@ -354,7 +356,7 @@ test('wrong nonce, multiple sentinel rows, and extra stdout are rejected', () =>
   assert.equal(wrongNonce.code, 1);
   assert.match(wrongNonce.err, /sentinel/);
 
-  const multi = capturedRun(['preflight'], {
+  const multi = await capturedRun(['preflight'], {
     spawnImpl: (bin, args) => {
       if (args.includes('--version')) return { status: 0, stdout: 'psql (PostgreSQL) 16.15\n', stderr: '' };
       const n = nonceFromArgs(args).nonce;
@@ -367,7 +369,7 @@ test('wrong nonce, multiple sentinel rows, and extra stdout are rejected', () =>
   });
   assert.equal(multi.code, 1);
 
-  const extra = capturedRun(['preflight'], {
+  const extra = await capturedRun(['preflight'], {
     spawnImpl: (bin, args) => {
       if (args.includes('--version')) return { status: 0, stdout: 'psql (PostgreSQL) 16.15\n', stderr: '' };
       const n = nonceFromArgs(args).nonce;
@@ -377,25 +379,25 @@ test('wrong nonce, multiple sentinel rows, and extra stdout are rejected', () =>
   assert.equal(extra.code, 1);
 });
 
-test('SQL symlink is rejected', () => {
+test('SQL symlink is rejected', async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rtp-sql-link-'));
   fs.cpSync(path.join(ROOT, 'supabase'), path.join(tmp, 'supabase'), { recursive: true });
   const real = path.join(tmp, 'supabase/security/preflight_gate_revoke_postgrest_tax_profiles.sql');
   const backup = `${real}.orig`;
   fs.renameSync(real, backup);
   fs.symlinkSync(backup, real);
-  const result = capturedRun(['preflight'], { repoRoot: tmp });
+  const result = await capturedRun(['preflight'], { repoRoot: tmp });
   assert.equal(result.code, 1);
   assert.match(result.err, /symlink/);
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
-test('hash-then-replace uses the already hashed stdin bytes and never -f', () => {
+test('hash-then-replace uses the already hashed stdin bytes and never -f', async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rtp-sql-toctou-'));
   fs.cpSync(path.join(ROOT, 'supabase'), path.join(tmp, 'supabase'), { recursive: true });
   const prePath = path.join(tmp, 'supabase/security/preflight_gate_revoke_postgrest_tax_profiles.sql');
   const original = fs.readFileSync(prePath);
-  const result = capturedRun(['preflight'], {
+  const result = await capturedRun(['preflight'], {
     repoRoot: tmp,
     spawnImpl: (bin, args, opts = {}) => {
       if (args.includes('--version')) return { status: 0, stdout: 'psql (PostgreSQL) 16.15\n', stderr: '' };
@@ -412,19 +414,19 @@ test('hash-then-replace uses the already hashed stdin bytes and never -f', () =>
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
-test('file hash mismatch is refused before psql stdin', () => {
+test('file hash mismatch is refused before psql stdin', async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rtp-wrap-'));
   fs.cpSync(path.join(ROOT, 'supabase'), path.join(tmp, 'supabase'), { recursive: true });
   fs.appendFileSync(path.join(tmp, 'supabase/security/preflight_gate_revoke_postgrest_tax_profiles.sql'), '\n-- tamper\n');
-  const result = capturedRun(['preflight'], { repoRoot: tmp });
+  const result = await capturedRun(['preflight'], { repoRoot: tmp });
   assert.equal(result.code, 1);
   assert.match(result.err, /SHA-256 mismatch/);
   assert.equal(result.calls.some((c) => c.args && !c.args.includes('--version') && c.opts && c.opts.input), false);
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
-test('ALREADY_CONTAINED and nonzero preflight refuse apply', () => {
-  const contained = capturedRun(['apply', AUTH_FLAG, `--confirm=${APPLY_CONFIRM_PHRASE}`], {
+test('ALREADY_CONTAINED and nonzero preflight refuse apply', async () => {
+  const contained = await capturedRun(['apply', AUTH_FLAG, `--confirm=${APPLY_CONFIRM_PHRASE}`], {
     spawnImpl: (bin, args) => {
       if (args.includes('--version')) return { status: 0, stdout: 'psql (PostgreSQL) 16.15\n', stderr: '' };
       const parsed = nonceFromArgs(args);
@@ -438,7 +440,7 @@ test('ALREADY_CONTAINED and nonzero preflight refuse apply', () => {
   assert.match(contained.err, /ALREADY_CONTAINED/);
   assert.equal(contained.calls.filter((c) => nonceFromArgs(c.args).kind === 'apply').length, 0);
 
-  const nonzero = capturedRun(['apply', AUTH_FLAG, `--confirm=${APPLY_CONFIRM_PHRASE}`], {
+  const nonzero = await capturedRun(['apply', AUTH_FLAG, `--confirm=${APPLY_CONFIRM_PHRASE}`], {
     spawnImpl: (bin, args) => {
       if (args.includes('--version')) return { status: 0, stdout: 'psql (PostgreSQL) 16.15\n', stderr: '' };
       return { status: 3, stdout: '', stderr: 'ERROR: boom\n' };
@@ -448,10 +450,10 @@ test('ALREADY_CONTAINED and nonzero preflight refuse apply', () => {
   assert.match(nonzero.err, /preflight failed closed/);
 });
 
-test('connection capture is immutable across preflight and apply', () => {
+test('connection capture is immutable across preflight and apply', async () => {
   const env = operatorEnv();
   const hosts = [];
-  const result = capturedRun(['apply', AUTH_FLAG, `--confirm=${APPLY_CONFIRM_PHRASE}`], {
+  const result = await capturedRun(['apply', AUTH_FLAG, `--confirm=${APPLY_CONFIRM_PHRASE}`], {
     env,
     spawnImpl: (bin, args, opts = {}) => {
       if (args.includes('--version')) return { status: 0, stdout: 'psql (PostgreSQL) 16.15\n', stderr: '' };
@@ -468,9 +470,9 @@ test('connection capture is immutable across preflight and apply', () => {
   assert.deepEqual(hosts, [`db.${REF}.supabase.co`, `db.${REF}.supabase.co`]);
 });
 
-test('temp credential file is removed on success and failure', () => {
+test('temp credential file is removed on success and failure', async () => {
   const passfiles = [];
-  const ok = capturedRun(['preflight'], {
+  const ok = await capturedRun(['preflight'], {
     spawnImpl: (bin, args, opts = {}) => {
       if (opts.env && opts.env.PGPASSFILE) passfiles.push(opts.env.PGPASSFILE);
       if (args.includes('--version')) return { status: 0, stdout: 'psql (PostgreSQL) 16.15\n', stderr: '' };
@@ -482,7 +484,7 @@ test('temp credential file is removed on success and failure', () => {
   assert.equal(passfiles.length > 0, true);
   for (const p of passfiles) assert.equal(fs.existsSync(p), false);
 
-  const fail = capturedRun(['preflight'], {
+  const fail = await capturedRun(['preflight'], {
     spawnImpl: (bin, args, opts = {}) => {
       if (opts.env && opts.env.PGPASSFILE) passfiles.push(opts.env.PGPASSFILE);
       if (args.includes('--version')) return { status: 0, stdout: 'psql (PostgreSQL) 16.15\n', stderr: '' };
@@ -493,10 +495,10 @@ test('temp credential file is removed on success and failure', () => {
   for (const p of passfiles) assert.equal(fs.existsSync(p), false);
 });
 
-test('authorized apply hashes stdin for both phases and prints WRAPPER_APPLY=ok', () => {
+test('authorized apply hashes stdin for both phases and prints WRAPPER_APPLY=ok', async () => {
   const pins = loadPins();
   const inputs = [];
-  const result = capturedRun(['apply', AUTH_FLAG, `--confirm=${APPLY_CONFIRM_PHRASE}`], {
+  const result = await capturedRun(['apply', AUTH_FLAG, `--confirm=${APPLY_CONFIRM_PHRASE}`], {
     spawnImpl: (bin, args, opts = {}) => {
       if (args.includes('--version')) return { status: 0, stdout: 'psql (PostgreSQL) 16.15\n', stderr: '' };
       inputs.push(opts.input);
@@ -542,8 +544,8 @@ test('repository pinned SQL hashes currently match', () => {
   verifyPinnedSqlFiles(ROOT);
 });
 
-test('operator PG* and PSQLRC values are not inherited by the child', () => {
-  const result = capturedRun(['preflight'], {
+test('operator PG* and PSQLRC values are not inherited by the child', async () => {
+  const result = await capturedRun(['preflight'], {
     extraEnv: {
       PATH: '/tmp/evil-bin',
       PGHOST: 'evil.example',
@@ -579,14 +581,14 @@ test('operator PG* and PSQLRC values are not inherited by the child', () => {
   assert.equal(Object.hasOwn(child, 'PGHOSTADDR'), false);
 });
 
-test('PATH-discovered psql is not used even when a fake binary exists', () => {
+test('PATH-discovered psql is not used even when a fake binary exists', async () => {
   const fakeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rtp-path-psql-'));
   fs.chmodSync(fakeDir, 0o700);
   const fakeBin = path.join(fakeDir, 'psql');
   fs.writeFileSync(fakeBin, '#!/bin/sh\necho hijacked\n');
   fs.chmodSync(fakeBin, 0o755);
   const digest = createHash('sha256').update(fs.readFileSync(fakeBin)).digest('hex');
-  const result = capturedRun(['preflight'], {
+  const result = await capturedRun(['preflight'], {
     env: {
       [URL_ENV]: directUrl,
       [PSQL_SHA_ENV]: digest,
@@ -599,10 +601,10 @@ test('PATH-discovered psql is not used even when a fake binary exists', () => {
   fs.rmSync(fakeDir, { recursive: true, force: true });
 });
 
-test('arbitrary executable override is rejected unless it is pinned psql', () => {
+test('arbitrary executable override is rejected unless it is pinned psql', async () => {
   const bin = '/usr/bin/true';
   const digest = createHash('sha256').update(fs.readFileSync(bin)).digest('hex');
-  const result = capturedRun(['preflight'], {
+  const result = await capturedRun(['preflight'], {
     env: {
       [URL_ENV]: directUrl,
       [PSQL_PATH_ENV]: bin,
@@ -620,8 +622,8 @@ test('arbitrary executable override is rejected unless it is pinned psql', () =>
   assert.equal(result.calls.filter((c) => !(c.args || []).includes('--version')).length, 0);
 });
 
-test('stderr NOTICE/HINT cannot satisfy the sentinel parser', () => {
-  const result = capturedRun(['preflight'], {
+test('stderr NOTICE/HINT cannot satisfy the sentinel parser', async () => {
+  const result = await capturedRun(['preflight'], {
     spawnImpl: (bin, args) => {
       if (args.includes('--version')) return { status: 0, stdout: 'psql (PostgreSQL) 16.15\n', stderr: '' };
       const n = nonceFromArgs(args).nonce;
@@ -636,9 +638,9 @@ test('stderr NOTICE/HINT cannot satisfy the sentinel parser', () => {
   assert.match(result.err, /unexpected stderr|sentinel/);
 });
 
-test('child signal aborts and removes the credential file', () => {
+test('child signal aborts and removes the credential file', async () => {
   const passfiles = [];
-  const result = capturedRun(['preflight'], {
+  const result = await capturedRun(['preflight'], {
     spawnImpl: (bin, args, opts = {}) => {
       if (opts.env && opts.env.PGPASSFILE) passfiles.push(opts.env.PGPASSFILE);
       if (args.includes('--version')) return { status: 0, stdout: 'psql (PostgreSQL) 16.15\n', stderr: '' };
@@ -650,10 +652,10 @@ test('child signal aborts and removes the credential file', () => {
   for (const p of passfiles) assert.equal(fs.existsSync(p), false);
 });
 
-test('apply refuses if the captured URL mutates before the second phase', () => {
+test('apply refuses if the captured URL mutates before the second phase', async () => {
   const env = operatorEnv();
   const captured = env[URL_ENV];
-  const result = capturedRun(['apply', AUTH_FLAG, `--confirm=${APPLY_CONFIRM_PHRASE}`], {
+  const result = await capturedRun(['apply', AUTH_FLAG, `--confirm=${APPLY_CONFIRM_PHRASE}`], {
     env,
     spawnImpl: (bin, args) => {
       if (args.includes('--version')) return { status: 0, stdout: 'psql (PostgreSQL) 16.15\n', stderr: '' };
@@ -670,13 +672,13 @@ test('apply refuses if the captured URL mutates before the second phase', () => 
   assert.equal(result.calls.filter((c) => nonceFromArgs(c.args).kind === 'apply').length, 0);
 });
 
-test('hash-then-replace during apply uses original hashed bytes for both phases', () => {
+test('hash-then-replace during apply uses original hashed bytes for both phases', async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rtp-sql-apply-toctou-'));
   fs.cpSync(path.join(ROOT, 'supabase'), path.join(tmp, 'supabase'), { recursive: true });
   const applyPath = path.join(tmp, 'supabase/security/unapplied-do-not-run/NOT_APPLIED_revoke_postgrest_tax_profiles.sql');
   const original = fs.readFileSync(applyPath);
   const pins = loadPins();
-  const result = capturedRun(['apply', AUTH_FLAG, `--confirm=${APPLY_CONFIRM_PHRASE}`], {
+  const result = await capturedRun(['apply', AUTH_FLAG, `--confirm=${APPLY_CONFIRM_PHRASE}`], {
     repoRoot: tmp,
     spawnImpl: (bin, args, opts = {}) => {
       if (args.includes('--version')) return { status: 0, stdout: 'psql (PostgreSQL) 16.15\n', stderr: '' };
@@ -696,32 +698,32 @@ test('hash-then-replace during apply uses original hashed bytes for both phases'
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
-test('operator-owned psql is rejected in real execution mode', () => {
-  const result = capturedRun(['preflight'], { psqlTrust: PSQL_PRODUCTION_TRUST });
+test('operator-owned psql is rejected in real execution mode', async () => {
+  const result = await capturedRun(['preflight'], { psqlTrust: PSQL_PRODUCTION_TRUST });
   assert.equal(result.code, 1);
   assert.match(result.err, /file owner is not root/);
   assert.equal(result.calls.filter((c) => !(c.args || []).includes('--version')).length, 0);
 
-  const flagged = capturedRun(['preflight', '--psql-trust=test'], { psqlTrust: PSQL_PRODUCTION_TRUST });
+  const flagged = await capturedRun(['preflight', '--psql-trust=test'], { psqlTrust: PSQL_PRODUCTION_TRUST });
   assert.equal(flagged.code, 1);
   assert.match(flagged.err, /unrecognized flag/);
 });
 
-test('root-owned distro psql with root-owned parents passes trust checks', () => {
+test('root-owned distro psql with root-owned parents passes trust checks', async () => {
   const digest = createHash('sha256').update(fs.readFileSync(DISTRO_PSQL)).digest('hex');
-  const handle = verifyPsqlBinary({
+  const handle = await verifyPsqlBinary({
     [PSQL_PATH_ENV]: DISTRO_PSQL,
     [PSQL_SHA_ENV]: digest,
-  }, spawnSync, { trust: PSQL_PRODUCTION_TRUST, useProcFd: false });
+  }, spawnSync, { trust: PSQL_PRODUCTION_TRUST, useFdExec: false });
   assert.equal(handle.path, DISTRO_PSQL);
   assert.equal(handle.identity.uid, 0);
   assert.equal(handle.identity.digest, digest);
   fs.closeSync(handle.fd);
 });
 
-test('inode or hash change between validation and spawn aborts before apply', () => {
+test('inode or hash change between validation and spawn aborts before apply', async () => {
   const psql = dummyPsql();
-  const result = capturedRun(['apply', AUTH_FLAG, `--confirm=${APPLY_CONFIRM_PHRASE}`], {
+  const result = await capturedRun(['apply', AUTH_FLAG, `--confirm=${APPLY_CONFIRM_PHRASE}`], {
     psql,
     spawnImpl: (bin, args) => {
       if (args.includes('--version')) {
@@ -739,9 +741,9 @@ test('inode or hash change between validation and spawn aborts before apply', ()
   assert.equal(result.calls.filter((c) => nonceFromArgs(c.args).kind === 'preflight').length, 0);
 });
 
-test('fake psql replacement cannot reach apply', () => {
+test('fake psql replacement cannot reach apply', async () => {
   const psql = dummyPsql();
-  const result = capturedRun(['apply', AUTH_FLAG, `--confirm=${APPLY_CONFIRM_PHRASE}`], {
+  const result = await capturedRun(['apply', AUTH_FLAG, `--confirm=${APPLY_CONFIRM_PHRASE}`], {
     psql,
     spawnImpl: (bin, args) => {
       if (args.includes('--version')) {
@@ -763,8 +765,8 @@ test('fake psql replacement cannot reach apply', () => {
   assert.equal(result.calls.filter((c) => nonceFromArgs(c.args).kind === 'apply').length, 0);
 });
 
-test('wrong or missing authorized Git SHA fails', () => {
-  const wrong = capturedRun(['preflight'], {
+test('wrong or missing authorized Git SHA fails', async () => {
+  const wrong = await capturedRun(['preflight'], {
     env: {
       [URL_ENV]: directUrl,
       [GIT_SHA_ENV]: '0'.repeat(40),
@@ -778,7 +780,7 @@ test('wrong or missing authorized Git SHA fails', () => {
 
   let err = '';
   const psql = dummyPsql();
-  const code = runCli({
+  const code = await runCli({
     argv: ['preflight'],
     env: {
       [URL_ENV]: directUrl,
@@ -796,19 +798,19 @@ test('wrong or missing authorized Git SHA fails', () => {
   assert.equal(code, 1);
   assert.match(err, /must be the full 40-character commit SHA/);
 
-  const detached = capturedRun(['preflight'], { detached: true });
+  const detached = await capturedRun(['preflight'], { detached: true });
   assert.equal(detached.code, 1);
   assert.match(detached.err, /detached HEAD is refused/);
 });
 
-test('dirty security-package paths fail Git authorization', () => {
-  const dirtyTracked = capturedRun(['preflight'], {
+test('dirty security-package paths fail Git authorization', async () => {
+  const dirtyTracked = await capturedRun(['preflight'], {
     statusStdout: ' M supabase/security/hosted-tax-profile-containment.pins.json\n',
   });
   assert.equal(dirtyTracked.code, 1);
   assert.match(dirtyTracked.err, /dirty or staged tracked files/);
 
-  const untracked = capturedRun(['preflight'], {
+  const untracked = await capturedRun(['preflight'], {
     statusStdout: '?? supabase/security/evil.sql\n',
   });
   assert.equal(untracked.code, 1);
@@ -830,7 +832,7 @@ test('exact clean reviewed SHA on a named branch passes', () => {
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
-test('pins symlink, extra keys, traversal, and malformed hashes fail', () => {
+test('pins symlink, extra keys, traversal, and malformed hashes fail', async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rtp-pins-'));
   fs.cpSync(path.join(ROOT, 'supabase'), path.join(tmp, 'supabase'), { recursive: true });
   const pinsPath = path.join(tmp, 'supabase/security/hosted-tax-profile-containment.pins.json');
@@ -839,7 +841,7 @@ test('pins symlink, extra keys, traversal, and malformed hashes fail', () => {
   const pins = JSON.parse(original);
   pins.extra = true;
   fs.writeFileSync(pinsPath, JSON.stringify(pins));
-  const extra = capturedRun(['preflight'], { repoRoot: tmp });
+  const extra = await capturedRun(['preflight'], { repoRoot: tmp });
   assert.equal(extra.code, 1);
   assert.match(extra.err, /missing or extra keys/);
 
@@ -847,7 +849,7 @@ test('pins symlink, extra keys, traversal, and malformed hashes fail', () => {
   const bad = JSON.parse(original);
   bad.files.preflight.sha256 = 'ZZ';
   fs.writeFileSync(pinsPath, JSON.stringify(bad));
-  const malformed = capturedRun(['preflight'], { repoRoot: tmp });
+  const malformed = await capturedRun(['preflight'], { repoRoot: tmp });
   assert.equal(malformed.code, 1);
   assert.match(malformed.err, /hash is invalid/);
 
@@ -855,7 +857,7 @@ test('pins symlink, extra keys, traversal, and malformed hashes fail', () => {
   const trav = JSON.parse(original);
   trav.files.preflight.path = '../migrations/evil.sql';
   fs.writeFileSync(pinsPath, JSON.stringify(trav));
-  const traversal = capturedRun(['preflight'], { repoRoot: tmp });
+  const traversal = await capturedRun(['preflight'], { repoRoot: tmp });
   assert.equal(traversal.code, 1);
   assert.match(traversal.err, /path is invalid|not the reviewed preflight file|pins schema/);
 
@@ -863,16 +865,16 @@ test('pins symlink, extra keys, traversal, and malformed hashes fail', () => {
   const backup = `${pinsPath}.orig`;
   fs.renameSync(pinsPath, backup);
   fs.symlinkSync(backup, pinsPath);
-  const linked = capturedRun(['preflight'], { repoRoot: tmp });
+  const linked = await capturedRun(['preflight'], { repoRoot: tmp });
   assert.equal(linked.code, 1);
   assert.match(linked.err, /symlink/);
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
-test('SIGINT and SIGTERM clean the passfile and do not continue apply', () => {
+test('SIGINT and SIGTERM clean the passfile and do not continue apply', async () => {
   const passfiles = [];
   let handler = null;
-  const result = capturedRun(['apply', AUTH_FLAG, `--confirm=${APPLY_CONFIRM_PHRASE}`], {
+  const result = await capturedRun(['apply', AUTH_FLAG, `--confirm=${APPLY_CONFIRM_PHRASE}`], {
     installSignals: (h) => { handler = h; return () => {}; },
     spawnImpl: (bin, args, opts = {}) => {
       if (opts.env && opts.env.PGPASSFILE) passfiles.push(opts.env.PGPASSFILE);
@@ -986,4 +988,65 @@ test('stale cleanup rejects symlinks, unexpected contents, wrong mode/owner, and
   fs.rmSync(linked, { recursive: true, force: true });
   fs.rmSync(target, { recursive: true, force: true });
   fs.rmSync(ownerDir, { recursive: true, force: true });
+});
+
+test('production fd exec with argv0 yields empty stderr for distro psql --version', async () => {
+  const digest = createHash('sha256').update(fs.readFileSync(DISTRO_PSQL)).digest('hex');
+  const handle = await verifyPsqlBinary({
+    [PSQL_PATH_ENV]: DISTRO_PSQL,
+    [PSQL_SHA_ENV]: digest,
+  }, defaultAsyncSpawn, { trust: PSQL_PRODUCTION_TRUST, useFdExec: true });
+  assert.equal(handle.identity.uid, 0);
+  const probe = await defaultAsyncSpawn(`/proc/self/fd/${handle.fd}`, ['--version'], {
+    env: { LC_ALL: 'C', LANG: 'C', PATH: '' },
+    timeout: VERSION_TIMEOUT_MS,
+    argv0: DISTRO_PSQL,
+    input: Buffer.alloc(0),
+  });
+  assert.equal(probe.status, 0);
+  assert.equal(String(probe.stderr || '').trim(), '');
+  assert.match(String(probe.stdout), /psql \(PostgreSQL\) (16|17|18)\./);
+  const broken = await defaultAsyncSpawn(`/proc/self/fd/${handle.fd}`, ['--version'], {
+    env: { LC_ALL: 'C', LANG: 'C', PATH: '' },
+    timeout: VERSION_TIMEOUT_MS,
+    input: Buffer.alloc(0),
+  });
+  assert.match(String(broken.stderr || ''), /invalid binary/);
+  fs.closeSync(handle.fd);
+});
+
+test('async spawn SIGTERM kills the child and removes the passfile', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-tax-pg-'));
+  fs.chmodSync(dir, 0o700);
+  const passPath = path.join(dir, 'pgpass');
+  fs.writeFileSync(passPath, 'x', { mode: 0o600 });
+  fs.chmodSync(passPath, 0o600);
+  let child = null;
+  const spawned = defaultAsyncSpawn('/bin/sleep', ['30'], {
+    env: { PATH: '/usr/bin:/bin', LC_ALL: 'C' },
+    timeout: 8_000,
+    onChild: (c) => { child = c; },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  assert.equal(child != null, true);
+  handleExecutionSignal({
+    passHandle: { dir, passPath },
+    killChild: () => { if (child) child.kill('SIGTERM'); },
+    exit: () => {},
+    exiting: false,
+  });
+  const result = await spawned;
+  assert.equal(result.signal, 'SIGTERM');
+  assert.equal(fs.existsSync(passPath), false);
+});
+
+test('async spawn timeout sends SIGTERM to the child', async () => {
+  const start = Date.now();
+  const result = await defaultAsyncSpawn('/bin/sleep', ['30'], {
+    env: { PATH: '/usr/bin:/bin', LC_ALL: 'C' },
+    timeout: 400,
+  });
+  assert.equal(result.error && result.error.code, 'ETIMEDOUT');
+  assert.equal(result.signal, 'SIGTERM');
+  assert.equal(Date.now() - start < 3000, true);
 });
