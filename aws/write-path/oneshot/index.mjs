@@ -322,14 +322,21 @@ export const handler = async (event) => {
         LIMIT 40
       `);
       const { rows: claimCounts } = await client.query(`
-        SELECT count(*)::int AS claims FROM public.claims
+        SELECT
+          count(*)::int AS claims,
+          count(org_id)::int AS claims_with_org_id,
+          count(*) FILTER (WHERE org_id IS NULL)::int AS claims_org_id_null
+        FROM public.claims
       `);
       return {
         ok: true,
         step,
         claimCount: claimCounts[0]?.claims ?? 0,
+        claimsWithOrgId: claimCounts[0]?.claims_with_org_id ?? 0,
+        claimsOrgIdNull: claimCounts[0]?.claims_org_id_null ?? 0,
         withClaimId: rows.length,
         withExistingClaimRow: rows.filter((row) => row.claim_row_exists).length,
+        withClaimAndOrg: rows.filter((row) => row.claim_row_exists && row.claim_org_id).length,
         rows,
       };
     }
