@@ -117,6 +117,35 @@ const inspectIntegrationGrants = async (client) => {
     row.grantee === 'checksops' && row.privilege_type === 'UPDATE' && row.column_name === 'replacement_cost_value'
   ));
   const settlementDeleteGranted = settlement.some((row) => row.privilege_type === 'DELETE');
+  const { rows: claimsInsert } = await client.query(`
+    SELECT column_name
+    FROM information_schema.column_privileges
+    WHERE table_schema = 'public'
+      AND table_name = 'claims'
+      AND grantee = 'checksops'
+      AND privilege_type = 'INSERT'
+    ORDER BY 1
+  `);
+  const claimsInsertColumns = claimsInsert.map((row) => row.column_name);
+  const { rows: dtpFn } = await client.query(`
+    SELECT p.proname,
+           has_function_privilege('checksops', p.oid, 'EXECUTE') AS checksops_execute,
+           has_function_privilege('public', p.oid, 'EXECUTE') AS public_execute
+    FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.proname = 'aws_public_homeowner_claim_sign_dtp'
+  `);
+  const { rows: orgCounts } = await client.query(`
+    SELECT count(*)::int AS claims,
+           count(org_id)::int AS with_org_id,
+           count(*) FILTER (WHERE org_id IS NULL)::int AS org_id_null
+    FROM public.claims
+  `);
+  const { rows: fixture } = await client.query(`
+    SELECT id::text, claim_number, org_id::text, status
+    FROM public.claims
+    WHERE id = '266e1ae8-ec20-4ed5-9243-3e1424304ec6'::uuid
+  `);
   return {
     intakeUpdateColumns: intake,
     detectedClaimNumberGranted: intake.includes('detected_claim_number'),
@@ -128,6 +157,15 @@ const inspectIntegrationGrants = async (client) => {
     settlementDeleteGranted: settlementDeleteGranted === true,
     paymentWritesStillDenied: !sensitive.some((row) => ['claim_payments', 'claim_disbursements', 'disbursement_splits', 'actum_transactions'].includes(row.table_name)),
     walletWritesStillDenied: !sensitive.some((row) => ['payment_wallets', 'payment_wallet_ledger'].includes(row.table_name)),
+    claimsInsertColumns,
+    claimsOrgIdInsertGranted: claimsInsertColumns.includes('org_id')
+      && claimsInsertColumns.includes('claim_number')
+      && claimsInsertColumns.includes('status')
+      && !claimsInsertColumns.some((col) => ['claim_amount', 'deductible'].includes(col)),
+    dtpSignFn: dtpFn[0] || null,
+    dtpSignGranted: dtpFn.length === 1 && dtpFn[0].checksops_execute === true,
+    orgCounts: orgCounts[0] || null,
+    c1cFixture: fixture[0] || null,
     settlementColumns: settlement,
     sensitiveWrites: sensitive,
   };
@@ -729,6 +767,75 @@ export const handler = async (event) => {
         withExistingClaimRow: rows.filter((row) => row.claim_row_exists).length,
         withClaimAndOrg: rows.filter((row) => row.claim_row_exists && row.claim_org_id).length,
         rows,
+      };
+    }
+    if (step === 'inspect-phase2-grants') {
+      return { ok: true, step, ...(await inspectIntegrationGrants(client)) };
+    }
+    if (step === 'probe-phase2-claim-create') {
+      const claimNumber = `P2-INT-ORG-${Date.now()}`;
+      const runAs = async (userId, fn) => {
+        await client.query('BEGIN');
+        try {
+          await client.query('SET LOCAL ROLE checksops');
+          await client.query("SELECT set_config('request.app_user_id', $1, true)", [userId]);
+          const result = await fn();
+          await client.query('COMMIT');
+          return { ok: true, ...result };
+        } catch (error) {
+          try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+          return {
+            ok: false,
+            denied: /row-level security|permission denied|not allowed|not authorized|org_id/i.test(String(error?.message || '')),
+            error: String(error?.message || error).slice(0, 240),
+          };
+        }
+      };
+      const c1cInsert = await runAs(C1C_ADMIN_ID, async () => {
+        const rows = (await client.query(
+          `INSERT INTO public.claims (claim_number, status, org_id)
+           VALUES ($1, 'tracking', $2::uuid)
+           RETURNING id::text, claim_number, status, org_id::text`,
+          [claimNumber, C1C_TENANT],
+        )).rows;
+        return { rows };
+      });
+      const freedomSpoof = await runAs(TESTER_ID, async () => {
+        const rows = (await client.query(
+          `INSERT INTO public.claims (claim_number, status, org_id)
+           VALUES ($1, 'tracking', $2::uuid)
+           RETURNING id::text, org_id::text`,
+          [`${claimNumber}-FREEDOM`, C1C_TENANT],
+        )).rows;
+        return { rows };
+      });
+      const ninthInsert = await runAs(NINTH_ID, async () => {
+        const rows = (await client.query(
+          `INSERT INTO public.claims (claim_number, status, org_id)
+           VALUES ($1, 'tracking', $2::uuid)
+           RETURNING id::text`,
+          [`${claimNumber}-NINTH`, C1C_TENANT],
+        )).rows;
+        return { rows };
+      });
+      if (c1cInsert.rows?.[0]?.id) {
+        await client.query('DELETE FROM public.claims WHERE id = $1::uuid', [c1cInsert.rows[0].id]);
+      }
+      const { rows: leftover } = await client.query(
+        'SELECT id::text FROM public.claims WHERE claim_number LIKE $1',
+        [`${claimNumber}%`],
+      );
+      return {
+        ok: Boolean(c1cInsert.ok && c1cInsert.rows?.[0]?.org_id === C1C_TENANT)
+          && (freedomSpoof.denied === true || (freedomSpoof.ok && !freedomSpoof.rows?.length))
+          && (ninthInsert.denied === true || (ninthInsert.ok && !ninthInsert.rows?.length))
+          && leftover.length === 0,
+        step,
+        claimNumber,
+        c1cInsert,
+        freedomSpoof,
+        ninthInsert,
+        leftover,
       };
     }
     if (step === 'grant-sign-dtp') {
