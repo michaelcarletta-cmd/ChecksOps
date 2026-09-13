@@ -183,7 +183,11 @@ function Field({ label, value, onChange }: { label: string; value: string; onCha
         step="0.01"
         min="0"
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => {
+          const next = e.target.value;
+          if (next !== "" && Number(next) < 0) return;
+          onChange(next);
+        }}
         className="h-8 text-sm"
       />
     </div>
