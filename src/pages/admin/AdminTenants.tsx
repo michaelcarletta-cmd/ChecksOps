@@ -1399,10 +1399,7 @@ function TenantManagementTable({
   // Test accounts also move to the payment provider's sandbox ledger, so
   // nothing they do moves real money.
   const toggleTestAccount = (t: Tenant, on: boolean) =>
-    updateTenant(t.id, {
-      is_test_account: on,
-      moov_environment: on ? "sandbox" : "production",
-    } as any);
+    updateTenant(t.id, { is_test_account: on } as any);
 
   const fmtMoney = (cents?: number | null) =>
     cents == null ? "—" : `$${(cents / 100).toFixed(2)}`;

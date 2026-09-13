@@ -106,16 +106,39 @@ const mockClient = ({
       if (/FROM public.check_intake_items/.test(sql) && /SELECT id, tenant_id, uploaded_by/.test(sql)) {
         return { rows: check ? [check] : [] };
       }
-      if (/SELECT id, tenant_id FROM public.check_intake_items/.test(sql)) {
-        return { rows: [{ id: params[0], tenant_id: FREEDOM_TENANT }] };
+      if (/SELECT id, tenant_id, status, check_stage, deposited_at, amount, claim_id/.test(sql)
+        || /SELECT id, tenant_id FROM public.check_intake_items/.test(sql)) {
+        return {
+          rows: [{
+            id: params[0],
+            tenant_id: check?.tenant_id || FREEDOM_TENANT,
+            status: check?.status || 'uploaded',
+            check_stage: check?.check_stage || 'review',
+            deposited_at: check?.deposited_at ?? null,
+            amount: check?.amount ?? null,
+            claim_id: check?.claim_id ?? null,
+          }],
+        };
       }
       if (/INSERT INTO public.check_intake_items/.test(sql)) return { rows };
       if (/UPDATE public.check_intake_items/.test(sql)) {
-        return { rows: [{ ...check, status: params?.[1] || check.status, check_stage: params?.[2] || check.check_stage }] };
+        if (String(sql).includes('SET status = $2')) {
+          return { rows: [{ ...check, status: params[1], check_stage: params[2] }] };
+        }
+        return { rows: [{ ...check }] };
       }
       if (/INSERT INTO public.check_audit_log/.test(sql)) return { rows: [{ id: 'audit' }] };
       if (/INSERT INTO public.mortgage_handling_requests/.test(sql)) {
         return { rows: [{ id: 'req-1', check_intake_item_id: params[1], requested_by: params[5] }] };
+      }
+      if (/FROM public.mortgage_handling_requests r/.test(sql)) {
+        return { rows: [{ id: params[0], check_intake_item_id: CHECK_ID, tenant_id: FREEDOM_TENANT }] };
+      }
+      if (/is_master_owner/.test(sql)) {
+        return { rows: [{ is_master: false }] };
+      }
+      if (/UPDATE public.mortgage_handling_requests/.test(sql)) {
+        return { rows: [{ id: params[params.length - 1], status: 'requested' }] };
       }
       if (/INSERT INTO public.loss_draft_tracking/.test(sql)) {
         return { rows: [{ id: 'ld-1', check_intake_item_id: params[0] }] };
@@ -208,6 +231,8 @@ test('create check derives tenant and uploaded_by and ignores spoofed identity',
   assert.equal(insert.params.includes(C1C_TENANT), false);
   assert.equal(insert.params.includes(SPOOF_ID), false);
   assert.equal(insert.params.includes('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'), false);
+  assert.equal(insert.params[5], '');
+  assert.equal(String(insert.params[5]).includes('pending_front'), false);
 });
 
 test('T5 kill switch disables create without a write transaction', async () => {
@@ -344,6 +369,35 @@ test('mortgage request insert uses mapped actor and check tenant', async () => {
   const insert = client.queries.find((q) => String(q.sql).includes('INSERT INTO public.mortgage_handling_requests'));
   assert.equal(insert.params[0], FREEDOM_TENANT);
   assert.equal(insert.params[5], APP_ID);
+});
+
+test('tenant mortgage request status update is denied', async () => {
+  const client = mockClient();
+  const result = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'mortgage_handling_requests',
+    op: 'update',
+    values: { status: 'in_progress' },
+    filters: [{ column: 'id', op: 'eq', value: '7f549fcb-1d1c-4ef7-9168-33f22a56be39' }],
+  }), depsFor(client));
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'not_authorized');
+  assert.equal(result.statusCode, 403);
+  assert.equal(
+    client.queries.some((q) => String(q.sql).includes('UPDATE public.mortgage_handling_requests')),
+    false,
+  );
+});
+
+test('tenant mortgage request work_notes is not allowlisted', async () => {
+  const client = mockClient();
+  const result = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'mortgage_handling_requests',
+    op: 'update',
+    values: { work_notes: 'staff only' },
+    filters: [{ column: 'id', op: 'eq', value: '7f549fcb-1d1c-4ef7-9168-33f22a56be39' }],
+  }), depsFor(client));
+  assert.equal(result.error, 'column_not_allowlisted');
+  assert.deepEqual(result.columns, ['work_notes']);
 });
 
 test('unauthenticated workflow create is 401', async () => {

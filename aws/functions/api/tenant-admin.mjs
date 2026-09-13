@@ -18,7 +18,7 @@ import {
 } from '@aws-sdk/client-cognito-identity-provider';
 import { withIdentity } from './data.mjs';
 import { normalizeEmail } from './email-policy.mjs';
-import { sendViaSesOrSink } from './email.mjs';
+import { deliverAuditedEmail, peekAuditedEmail, replayIdempotentSend, stableEmailIdempotencyKey, validatedMailReplyTo } from './email.mjs';
 import { renderTransactionalTemplate } from './email-templates.mjs';
 import { emailAssetOrigin, resolveEmailBranding } from './email-branding.mjs';
 
@@ -185,21 +185,47 @@ export const runTenantInviteUser = async ({
     ? `https://${tenant.custom_domain}/login`
     : `${origin}/login`;
   const branding = await resolveEmailBranding(client, { tenantId });
+  const reply = validatedMailReplyTo(branding.replyTo);
+  if (!reply.ok) {
+    return { ok: false, statusCode: 400, error: reply.error, spoofFieldsIgnored: spoof };
+  }
   const rendered = renderTransactionalTemplate('tenant-user-invite', {
     tenantName: tenant.name,
     role,
     loginUrl,
     branding,
   });
-  const mailer = send || sendViaSesOrSink;
-  await mailer({
-    to: email,
-    subject: rendered.subject,
-    html: rendered.html,
-    text: rendered.text,
-    from: branding.from,
-    replyTo: branding.replyTo,
+  const suppliedKey = String(body.idempotencyKey || body.idempotency_key || '').trim();
+  const delivery = await deliverAuditedEmail(client, {
+    templateName: 'tenant-user-invite',
+    recipientEmail: email,
+    tenantId,
+    idempotencyKey: suppliedKey || stableEmailIdempotencyKey('tenant-invite', tenantId, email),
+    applicationUserId: mapping.application_user_id,
+    metadata: { role, application_user_id_invited: appUserId },
+    spoof,
+    send,
+    mailerArgs: {
+      subject: rendered.subject,
+      html: rendered.html,
+      text: rendered.text,
+      from: branding.from,
+      replyTo: reply.replyTo,
+    },
   });
+  if (!delivery.ok) return { ...delivery, invited: true, isNewUser, email, role, applicationUserId: appUserId, cognitoSub, spoofFieldsIgnored: spoof };
+  if (delivery.duplicate) {
+    return {
+      ...delivery.replay,
+      invited: true,
+      isNewUser,
+      email,
+      role,
+      applicationUserId: appUserId,
+      cognitoSub,
+      tempPasswordIssued: isNewUser,
+    };
+  }
 
   return {
     ok: true,
@@ -212,6 +238,7 @@ export const runTenantInviteUser = async ({
     applicationUserId: appUserId,
     cognitoSub,
     tempPasswordIssued: isNewUser,
+    providerMessageId: delivery.providerMessageId,
     spoofFieldsIgnored: spoof,
   };
 };
@@ -370,6 +397,18 @@ export const runHireMortgageAgent = async ({
   const fullName = String(body.full_name || body.fullName || '').trim();
   if (!email || !fullName) {
     return { ok: false, statusCode: 400, error: 'Name and email are required', spoofFieldsIgnored: spoof };
+  }
+  const suppliedKey = String(body.idempotencyKey || body.idempotency_key || '').trim();
+  const idempotencyKey = suppliedKey || stableEmailIdempotencyKey('hire-mortgage-agent', email);
+  const prior = await peekAuditedEmail(client, idempotencyKey);
+  if (!prior.ok) return { ...prior, spoofFieldsIgnored: spoof };
+  if (prior.duplicate) {
+    return {
+      ...replayIdempotentSend(prior.row, spoof),
+      email,
+      full_name: fullName,
+      invitationSent: true,
+    };
   }
 
   const providedPassword = body.password && String(body.password).length >= 8
@@ -538,20 +577,52 @@ export const runHireMortgageAgent = async ({
 
   const loginUrl = `${emailAssetOrigin()}/mortgage-ops/login`;
   const branding = await resolveEmailBranding(client, { senderOverride: 'checksops' });
+  const reply = validatedMailReplyTo(branding.replyTo);
+  if (!reply.ok) {
+    return { ok: false, statusCode: 400, error: reply.error, spoofFieldsIgnored: spoof };
+  }
   const rendered = renderTransactionalTemplate('mortgage-agent-invite', {
     fullName,
     loginUrl,
     branding,
   });
-  const mailer = send || sendViaSesOrSink;
-  await mailer({
-    to: email,
-    subject: rendered.subject,
-    html: rendered.html,
-    text: rendered.text,
-    from: branding.from,
-    replyTo: branding.replyTo,
+  const delivery = await deliverAuditedEmail(client, {
+    templateName: 'mortgage-agent-invite',
+    recipientEmail: email,
+    tenantId: null,
+    idempotencyKey,
+    applicationUserId: mapping.application_user_id,
+    metadata: { hired_user_id: appUserId },
+    spoof,
+    send,
+    mailerArgs: {
+      subject: rendered.subject,
+      html: rendered.html,
+      text: rendered.text,
+      from: branding.from,
+      replyTo: reply.replyTo,
+    },
   });
+  if (!delivery.ok) {
+    return {
+      ...delivery,
+      user_id: appUserId,
+      email,
+      spoofFieldsIgnored: spoof,
+    };
+  }
+  if (delivery.duplicate) {
+    return {
+      ...delivery.replay,
+      user_id: appUserId,
+      email,
+      full_name: fullName,
+      created,
+      invitationSent: true,
+      cognitoSub,
+      applicationUserId: appUserId,
+    };
+  }
 
   return {
     ok: true,
@@ -564,6 +635,7 @@ export const runHireMortgageAgent = async ({
     invitationSent: true,
     cognitoSub,
     applicationUserId: appUserId,
+    providerMessageId: delivery.providerMessageId,
     spoofFieldsIgnored: spoof,
   };
 };

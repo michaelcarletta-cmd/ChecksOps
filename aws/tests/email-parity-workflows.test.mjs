@@ -30,20 +30,95 @@ const STAKE = '99999999-9999-4999-8999-999999999999';
 const ENDORSE = '88888888-8888-4888-8888-888888888888';
 const COGNITO_SUB = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
 
-const sqlClient = (handlers) => ({
-  query: async (sql, params = []) => {
-    const compact = String(sql).replace(/\s+/g, ' ');
-    for (const handler of handlers) {
-      if (handler.match(compact, params)) return handler.result(params, compact);
-    }
-    return { rows: [], rowCount: 0 };
+const sqlClient = (handlers) => {
+  const reserved = new Map();
+  const audit = auditEmailHandlers({ reserved });
+  return {
+    query: async (sql, params = []) => {
+      const compact = String(sql).replace(/\s+/g, ' ');
+      for (const handler of [...audit, ...handlers]) {
+        if (handler.match(compact, params)) return handler.result(params, compact);
+      }
+      return { rows: [], rowCount: 0 };
+    },
+  };
+};
+
+const auditEmailHandlers = ({ reserved = new Map() } = {}) => ([
+  {
+    match: (sql) => sql.includes('aws_email_send_log_peek'),
+    result: (params) => ({
+      rows: [{ doc: { ok: true, row: reserved.get(String(params[0] || '')) || null } }],
+    }),
   },
-});
+  {
+    match: (sql) => sql.includes('aws_email_send_log_reserve'),
+    result: (params) => {
+      const key = String(params[5] || '');
+      if (reserved.has(key)) {
+        return { rows: [{ doc: { ok: true, claimed: false, duplicate: true, row: reserved.get(key) } }] };
+      }
+      const row = {
+        id: params[0],
+        status: 'pending',
+        provider_message_id: null,
+        recipient_email: params[2],
+        tenant_id: params[3],
+        template_name: params[1],
+        idempotency_key: key,
+        metadata: { claimed: true },
+      };
+      reserved.set(key, row);
+      return { rows: [{ doc: { ok: true, claimed: true, duplicate: false, id: params[0], row } }] };
+    },
+  },
+  {
+    match: (sql) => sql.includes('aws_email_send_log_finalize'),
+    result: (params) => {
+      const row = {
+        id: params[0],
+        status: params[1],
+        provider_message_id: params[2],
+        metadata: { mode: 'sink' },
+      };
+      for (const [key, prior] of reserved.entries()) {
+        if (String(prior.id) === String(params[0])) {
+          reserved.set(key, { ...prior, ...row });
+        }
+      }
+      return { rows: [{ doc: { ok: true, row } }] };
+    },
+  },
+  {
+    match: (sql) => sql.includes('aws_mark_endorsement_request_sent'),
+    result: () => ({
+      rows: [{
+        doc: {
+          ok: true,
+          status: 'sent',
+          request_sent_at: '2026-09-12T17:00:00.000Z',
+          token: 'abc',
+        },
+      }],
+    }),
+  },
+]);
 
 const capturingMailer = (sent) => async (payload) => {
   sent.push(payload);
-  return { deliveredCount: 0, sunkCount: 1, mode: 'sink', results: [{ delivery: 'sink', messageId: 'sink-1' }] };
+  return { deliveredCount: 0, sunkCount: 1, mode: 'sink', results: [{ delivery: 'sink', status: 'sunk', messageId: 'sink-1' }] };
 };
+
+const tenantAuthHandlers = () => ([
+  {
+    match: (sql) => sql.includes('FROM public.tenants WHERE id'),
+    result: () => ({ rows: [{ id: TENANT, name: 'C1C', is_system_tenant: false }] }),
+  },
+  {
+    match: (sql) => sql.includes('FROM public.tenant_users'),
+    result: () => ({ rows: [{ tenant_id: TENANT, role: 'admin' }] }),
+  },
+]);
 
 const mapping = { application_user_id: USER };
 const spoof = { ignored: true };
@@ -249,8 +324,14 @@ test('ledger send, portal invite, OTP, leads, and mortgage notify call mailer on
     mapping,
     spoof,
     send: mail,
-    body: { email: 'home@example.com', tenantName: 'Acme', userName: 'Ada', password: 'SecretPass1!' },
-    client: sqlClient([]),
+    body: {
+      email: 'home@example.com',
+      tenant_id: TENANT,
+      tenantName: 'Acme',
+      userName: 'Ada',
+      password: 'SecretPass1!',
+    },
+    client: sqlClient(tenantAuthHandlers()),
   });
   assert.equal(portal.ok, true);
   assert.doesNotMatch(sent.at(-1).html, /SecretPass1/);
@@ -277,10 +358,8 @@ test('ledger send, portal invite, OTP, leads, and mortgage notify call mailer on
         match: (sql) => sql.includes('FROM public.mortgage_handling_requests'),
         result: () => ({ rows: [{ id: REQUEST, tenant_id: TENANT, mortgage_company: 'Bank', status: 'open' }] }),
       },
-      {
-        match: (sql) => sql.includes('FROM public.tenant_users'),
-        result: () => ({ rows: [{ '?column?': 1 }] }),
-      },
+      ...tenantAuthHandlers(),
+      ...auditEmailHandlers(),
     ]),
   });
   assert.equal(mortgage.ok, true);
@@ -299,6 +378,8 @@ test('ledger send, portal invite, OTP, leads, and mortgage notify call mailer on
         match: (sql) => sql.includes('FROM public.profiles'),
         result: () => ({ rows: [{ email: 'contractor@example.com' }] }),
       },
+      ...tenantAuthHandlers(),
+      ...auditEmailHandlers(),
     ]),
   });
   assert.equal(lead.ok, true);
@@ -308,16 +389,20 @@ test('ledger send, portal invite, OTP, leads, and mortgage notify call mailer on
     spoof,
     send: mail,
     body: { lead_id: LEAD },
-    client: sqlClient([{
-      match: (sql) => sql.includes('FROM public.homeowner_intro_requests'),
-      result: () => ({ rows: [{
-        id: LEAD,
-        homeowner_name: 'Ada',
-        homeowner_email: 'home@example.com',
-        access_token: 'claimtok',
-        contractor_user_id: USER,
-      }] }),
-    }]),
+    client: sqlClient([
+      {
+        match: (sql) => sql.includes('FROM public.homeowner_intro_requests'),
+        result: () => ({ rows: [{
+          id: LEAD,
+          homeowner_name: 'Ada',
+          homeowner_email: 'home@example.com',
+          access_token: 'claimtok',
+          contractor_user_id: USER,
+        }] }),
+      },
+      ...tenantAuthHandlers(),
+      ...auditEmailHandlers(),
+    ]),
   });
   assert.equal(accepted.ok, true);
   assert.equal(sent.length, 6);
@@ -387,6 +472,7 @@ test('endorsement and payment-direction use branding From and call mailer once',
         match: (sql) => sql.includes('aws_can_write_tenant'),
         result: () => ({ rows: [{ ok: true }] }),
       },
+      ...auditEmailHandlers(),
     ]),
   });
   assert.equal(endorse.ok, true);

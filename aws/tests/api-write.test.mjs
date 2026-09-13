@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { test } from 'node:test';
 import { handler } from '../functions/api/index.mjs';
 import { LOOKUP_MAPPING_SQL } from '../functions/api/identity.mjs';
@@ -59,8 +60,19 @@ const mockClient = ({ rows = [], mapping = mappingFor(), throwOn = null } = {}) 
       if (sql === LOOKUP_MAPPING_SQL) {
         return { rows: params[0] === mapping.cognito_sub ? [mapping] : [] };
       }
-      if (/SELECT id, tenant_id FROM public.check_intake_items/.test(sql)) {
-        return { rows: [{ id: params[0], tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a' }] };
+      if (/SELECT id, tenant_id, status, check_stage, deposited_at, amount, claim_id/.test(sql)
+        || /SELECT id, tenant_id FROM public.check_intake_items/.test(sql)) {
+        return {
+          rows: [{
+            id: params[0],
+            tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a',
+            status: 'needs_review',
+            check_stage: 'review',
+            deposited_at: null,
+            amount: 100,
+            claim_id: null,
+          }],
+        };
       }
       if (/FROM public.check_payees p/.test(sql)) {
         return {
@@ -115,6 +127,9 @@ test('allowlist rejects financial tables and unknown columns; ignores spoof iden
   assert.equal(denyTableReason('claim_payments'), 'financial_or_provider');
   assert.equal(denyTableReason('check_intake_items'), null);
   assert.equal(WRITE_ALLOWLIST.check_intake_items.ops.has('insert'), false);
+  assert.equal(WRITE_ALLOWLIST.mortgage_handling_requests.columns.has('work_notes'), false);
+  assert.equal(WRITE_ALLOWLIST.mortgage_handling_requests.columns.has('assigned_employee_id'), true);
+  assert.equal(WRITE_ALLOWLIST.mortgage_handling_requests.clientIgnored.has('work_notes'), false);
   assert.equal(denyTableReason('moov_unknown'), 'unknown_table');
   const financialIntake = pickAllowlistedValues('check_intake_items', {
     carrier_name: 'Test',
@@ -143,6 +158,19 @@ test('allowlist rejects financial tables and unknown columns; ignores spoof iden
   assert.equal(ok.error, undefined);
   assert.equal(ok.values.user_id, undefined);
   assert.equal(ok.ignored.includes('user_id'), true);
+  const claimNumber = pickAllowlistedValues('check_intake_items', {
+    detected_claim_number: 'CLM-47',
+    carrier_name: 'Test',
+  });
+  assert.equal(claimNumber.error, undefined);
+  assert.equal(claimNumber.values.detected_claim_number, 'CLM-47');
+  const claimNumberGrant = fs.readFileSync(new URL('../write-path/sql/39_detected_claim_number_grant.sql', import.meta.url), 'utf8');
+  assert.match(claimNumberGrant, /GRANT UPDATE \(detected_claim_number\)/);
+  assert.equal(/GRANT UPDATE \([^)]*claim_id/.test(claimNumberGrant), false);
+  assert.equal(/GRANT UPDATE \([^)]*amount/.test(claimNumberGrant), false);
+  assert.ok(!WRITE_ALLOWLIST.check_intake_items.columns.has('amount'));
+  assert.ok(WRITE_ALLOWLIST.tenants.columns.has('subscription_status'));
+  assert.ok(WRITE_ALLOWLIST.tenants.clientIgnored.has('moov_environment'));
   assert.equal(CLIENT_IDENTITY_KEYS.has('tenant_id'), true);
   assert.equal(WRITE_ALLOWLIST.financial_stepup_log.ops.has('insert'), true);
   assert.equal(WRITE_ALLOWLIST.financial_stepup_log.ops.has('update'), false);
@@ -342,6 +370,54 @@ test('Tranche 2 updates descriptive check fields and ignores spoofed tenant/user
   assert.ok(update);
   assert.equal(update.params.includes(SPOOF_ID), false);
   assert.equal(String(update.sql).includes('amount'), false);
+});
+
+test('claim-number persist reverts trigger-advanced deposit status', async () => {
+  const client = mockClient();
+  let intakeUpdates = 0;
+  const inner = client.query.bind(client);
+  client.query = async (sql, params) => {
+    if (String(sql).includes('UPDATE public.check_intake_items')) {
+      intakeUpdates += 1;
+      if (intakeUpdates === 1) {
+        return {
+          rows: [{
+            id: CHECK_ID,
+            detected_claim_number: 'CLM-47',
+            status: 'approved_for_deposit',
+            check_stage: 'ready_for_deposit',
+            deposited_at: null,
+            amount: 100,
+            claim_id: null,
+          }],
+        };
+      }
+      return {
+        rows: [{
+          id: CHECK_ID,
+          detected_claim_number: 'CLM-47',
+          status: params[1],
+          check_stage: params[2],
+          deposited_at: null,
+          amount: 100,
+          claim_id: null,
+        }],
+      };
+    }
+    return inner(sql, params);
+  };
+  const result = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_intake_items',
+    op: 'update',
+    values: { detected_claim_number: 'CLM-47' },
+    filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
+  }), depsFor(client));
+  assert.equal(result.ok, true);
+  assert.equal(result.data[0].detected_claim_number, 'CLM-47');
+  assert.equal(result.data[0].status, 'needs_review');
+  assert.equal(result.data[0].check_stage, 'review');
+  assert.equal(result.data[0].deposited_at, null);
+  assert.equal(intakeUpdates, 2);
 });
 
 test('Tranche 2 denies financial intake columns, status, insert, and endorsement signed status', async () => {
@@ -550,6 +626,8 @@ test('Tranche 3 check_files insert requires a check-scoped path and mapped uploa
 });
 
 test('Tranche 3 intake image path must be scoped to the same check', async () => {
+  const previousBucket = process.env.FILES_BUCKET;
+  delete process.env.FILES_BUCKET;
   const client = mockClient({ rows: [{ id: CHECK_ID, front_image_path: `checks/${CHECK_ID}/front.jpg` }] });
   const ok = await handleWrite(jwtEvent('/data/write', 'POST', {
     table: 'check_intake_items',
@@ -557,6 +635,8 @@ test('Tranche 3 intake image path must be scoped to the same check', async () =>
     values: { front_image_path: `checks/${CHECK_ID}/front.jpg` },
     filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
   }), depsFor(client));
+  if (previousBucket == null) delete process.env.FILES_BUCKET;
+  else process.env.FILES_BUCKET = previousBucket;
   assert.equal(ok.ok, true);
 
   const denied = await handleWrite(jwtEvent('/data/write', 'POST', {

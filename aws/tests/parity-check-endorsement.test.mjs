@@ -8,7 +8,10 @@ import {
   endorsementRateLimited,
   handlePublicEndorsement,
   isContractorPayee,
+  persistPhysicalEndorsementOnCheck,
+  persistPayeeEndorsementState,
   runAuthenticatedEndorsement,
+  runGetEndorsementData,
   runPublicEndorsement,
 } from '../functions/api/check-endorsement.mjs';
 
@@ -16,6 +19,8 @@ const TENANT_A = '11111111-1111-4111-8111-111111111111';
 const TENANT_B = '22222222-2222-4222-8222-222222222222';
 const CHECK_ID = '33333333-3333-4333-8333-333333333333';
 const ENDORSE_ID = '44444444-4444-4444-8444-444444444444';
+const PAYEE_ID = '55555555-5555-4555-8555-555555555555';
+const ACTOR_ID = '66666666-6666-4666-8666-666666666666';
 
 const eventOf = (body = {}, headers = {}) => ({
   headers,
@@ -31,7 +36,7 @@ const mockClient = (impl) => ({
 
 const sqlClient = (handlers) => mockClient((sql, params) => {
   const compact = sql.replace(/\s+/g, ' ');
-  if (/^BEGIN|COMMIT|ROLLBACK|SET TRANSACTION/i.test(compact.trim())) return { rows: [], rowCount: 0 };
+  if (/^BEGIN|COMMIT|ROLLBACK|SET TRANSACTION|SAVEPOINT|RELEASE SAVEPOINT/i.test(compact.trim())) return { rows: [], rowCount: 0 };
   for (const handler of handlers) {
     if (handler.match(compact, params)) return handler.result(params, compact);
   }
@@ -77,6 +82,45 @@ test('public get and abuse cases ignore spoofed tenant headers', async () => {
   const bad = await runPublicEndorsement(eventOf({ action: 'get_endorsement_data', token: 'nope' }), { client });
   assert.equal(bad.statusCode, 404);
   assert.equal(bad.code, 'token_consumed');
+
+  const signedGet = await runPublicEndorsement(eventOf({ action: 'get_endorsement_data', token: 'used' }), {
+    client: sqlClient([{
+      match: (sql) => sql.includes('aws_public_endorsement_by_token'),
+      result: () => ({
+        rows: [{
+          doc: {
+            id: ENDORSE_ID,
+            status: 'signed',
+            token: 'used',
+            payee_name: 'Jane',
+          },
+        }],
+      }),
+    }]),
+  });
+  assert.equal(signedGet.statusCode, 404);
+  assert.equal(signedGet.code, 'token_consumed');
+
+  const unusedPayee = await runGetEndorsementData(sqlClient([
+    { match: (sql) => sql.includes('aws_public_endorsement_by_token'), result: () => ({ rows: [{ doc: null }] }) },
+    {
+      match: (sql) => sql.includes('FROM public.check_payees p'),
+      result: () => ({ rows: [{
+        id: PAYEE_ID,
+        check_id: CHECK_ID,
+        payee_name: 'Unused Payee',
+        endorsement_status: 'pending',
+        endorsement_token: 'unused-payee-token',
+        carrier_name: 'Acme',
+        check_number: '1001',
+        amount: 10,
+        tenant_id: TENANT_A,
+      }] }),
+    },
+  ]), 'unused-payee-token', {});
+  assert.equal(unusedPayee.ok, true);
+  assert.equal(unusedPayee.payee_name, 'Unused Payee');
+  assert.equal(unusedPayee.status, 'pending');
 });
 
 test('public submit requires consent and does not advance deposit', async () => {
@@ -103,11 +147,26 @@ test('public submit requires consent and does not advance deposit', async () => 
   const updates = [];
   const client = sqlClient([
     {
-      match: (sql) => sql.includes('FROM public.check_endorsements WHERE token'),
-      result: () => ({ rows: [endorsement] }),
+      match: (sql) => sql.includes('aws_public_submit_endorsement'),
+      result: () => ({
+        rows: [{
+          doc: {
+            ok: true,
+            already_signed: false,
+            id: ENDORSE_ID,
+            check_id: CHECK_ID,
+            tenant_id: TENANT_A,
+            payee_id: null,
+            payee_name: 'Jane Doe',
+            contact_email: 'jane@example.com',
+            status: 'signed',
+            token: 'rotated',
+          },
+        }],
+      }),
     },
     {
-      match: (sql) => sql.includes("SET status = 'signed'"),
+      match: (sql) => sql.includes("SET status = 'signed'") || sql.includes('UPDATE public.check_payees'),
       result: (_params, sql) => {
         updates.push(sql);
         return { rows: [], rowCount: 1 };
@@ -132,10 +191,52 @@ test('public submit requires consent and does not advance deposit', async () => 
   assert.equal(updates.some((sql) => /ready_for_deposit|approved_for_deposit/.test(sql)), false);
 });
 
+test('public submit denies invalid tokens and check mismatch', async () => {
+  const missing = await runPublicEndorsement(eventOf({
+    action: 'submit_endorsement',
+    token: 'nope',
+    eSignConsentAccepted: true,
+    signatureData: 'data:image/png;base64,aaa',
+  }), {
+    client: sqlClient([{
+      match: (sql) => sql.includes('aws_public_submit_endorsement'),
+      result: () => ({ rows: [{ doc: { ok: false, error: 'invalid_or_used_token', statusCode: 404 } }] }),
+    }]),
+  });
+  assert.equal(missing.statusCode, 404);
+  assert.match(missing.error, /already-used token/i);
+
+  const mismatch = await runPublicEndorsement(eventOf({
+    action: 'submit_endorsement',
+    token: 'tok',
+    checkId: CHECK_ID,
+    eSignConsentAccepted: true,
+    signatureData: 'data:image/png;base64,aaa',
+  }), {
+    client: sqlClient([{
+      match: (sql) => sql.includes('aws_public_submit_endorsement'),
+      result: () => ({ rows: [{ doc: { ok: false, error: 'check_mismatch', statusCode: 403 } }] }),
+    }]),
+  });
+  assert.equal(mismatch.statusCode, 403);
+  assert.equal(mismatch.code, 'check_mismatch');
+});
+
 test('already-signed public submit is idempotent', async () => {
   const client = sqlClient([{
-    match: (sql) => sql.includes('FROM public.check_endorsements WHERE token'),
-    result: () => ({ rows: [{ id: ENDORSE_ID, status: 'signed', token: 'tok', check_id: CHECK_ID }] }),
+    match: (sql) => sql.includes('aws_public_submit_endorsement'),
+    result: () => ({
+      rows: [{
+        doc: {
+          ok: true,
+          already_signed: true,
+          id: ENDORSE_ID,
+          status: 'signed',
+          token: 'tok',
+          check_id: CHECK_ID,
+        },
+      }],
+    }),
   }]);
   const result = await runPublicEndorsement(eventOf({
     action: 'submit_endorsement',
@@ -275,4 +376,145 @@ test('public endorsement route is no longer writes_disabled', async () => {
   assert.notEqual(result.statusCode, 403);
   const body = JSON.parse(result.body);
   assert.notEqual(body.error, 'writes_disabled');
+});
+
+const physicalEndorsement = {
+  id: ENDORSE_ID,
+  check_id: CHECK_ID,
+  tenant_id: TENANT_A,
+  payee_id: PAYEE_ID,
+  payee_name: 'BCV Synthetic Insured',
+  payee_type: 'insured',
+  status: 'pending',
+  token: 'live-token',
+};
+
+const physicalAuthzHandlers = [
+  {
+    match: (sql) => sql.includes('FROM public.check_endorsements WHERE id'),
+    result: () => ({ rows: [physicalEndorsement] }),
+  },
+  {
+    match: (sql) => sql.includes('FROM public.check_intake_items'),
+    result: () => ({ rows: [{ id: CHECK_ID, tenant_id: TENANT_A }] }),
+  },
+  {
+    match: (sql) => sql.includes('aws_can_write_tenant'),
+    result: () => ({ rows: [{ ok: true }] }),
+  },
+];
+
+test('waive_endorsement persists endorsement and payee atomically as manual physical-on-check', async () => {
+  const updates = [];
+  const client = sqlClient([
+    ...physicalAuthzHandlers,
+    {
+      match: (sql) => sql.includes("signature_method = 'manual'"),
+      result: (_params, sql) => {
+        updates.push({ table: 'check_endorsements', sql });
+        return { rows: [{ ...physicalEndorsement, status: 'signed', signature_method: 'manual' }], rowCount: 1 };
+      },
+    },
+    {
+      match: (sql) => sql.includes('SET endorsement_status') && sql.includes('WHERE id'),
+      result: (_params, sql) => {
+        updates.push({ table: 'check_payees', sql });
+        return { rows: [{ id: PAYEE_ID, endorsement_status: 'signed', endorsement_token: 'live-token' }], rowCount: 1 };
+      },
+    },
+    {
+      match: (sql) => sql.includes('SELECT e.status AS endorsement_status'),
+      result: () => ({
+        rows: [{
+          endorsement_status: 'signed',
+          signature_method: 'manual',
+          payee_status: 'signed',
+          endorsement_token: 'live-token',
+        }],
+        rowCount: 1,
+      }),
+    },
+    {
+      match: (sql) => sql.includes('SELECT status, payee_type'),
+      result: () => ({ rows: [{ status: 'signed', payee_type: 'insured' }] }),
+    },
+  ]);
+  const result = await runAuthenticatedEndorsement({
+    client,
+    mapping: { application_user_id: ACTOR_ID },
+    body: { action: 'waive_endorsement', endorsementId: ENDORSE_ID },
+    spoof: { ignored: true },
+    event: eventOf({}),
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.success, true);
+  assert.equal(result.endorsement_status, 'signed');
+  assert.equal(result.payee_status, 'signed');
+  assert.equal(result.signature_method, 'manual');
+  assert.equal(result.token_rotated, false);
+  assert.equal(result.depositAdvanceDenied, true);
+  assert.equal(updates.some((row) => row.table === 'check_endorsements'), true);
+  assert.equal(updates.some((row) => row.table === 'check_payees'), true);
+  assert.equal(updates.some((row) => /endorsement_token\s*=/.test(row.sql)), false);
+});
+
+test('waive_endorsement fails closed when payee persist misses and does not report success', async () => {
+  const client = sqlClient([
+    ...physicalAuthzHandlers,
+    {
+      match: (sql) => sql.includes("signature_method = 'manual'"),
+      result: () => ({
+        rows: [{ ...physicalEndorsement, status: 'signed', signature_method: 'manual' }],
+        rowCount: 1,
+      }),
+    },
+    {
+      match: (sql) => sql.includes('SET endorsement_status') && sql.includes('WHERE id'),
+      result: () => ({ rows: [], rowCount: 0 }),
+    },
+  ]);
+  const result = await runAuthenticatedEndorsement({
+    client,
+    mapping: { application_user_id: ACTOR_ID },
+    body: { action: 'waive_endorsement', endorsementId: ENDORSE_ID },
+    spoof: { ignored: true },
+    event: eventOf({}),
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.statusCode, 409);
+  assert.equal(result.error, 'payee_persist_failed');
+  assert.notEqual(result.success, true);
+});
+
+test('persistPhysicalEndorsementOnCheck does not rotate a live public token', async () => {
+  const payee = await persistPayeeEndorsementState(
+    sqlClient([{
+      match: (sql) => sql.includes('SET endorsement_status'),
+      result: (_params, sql) => {
+        assert.equal(/endorsement_token\s*=/.test(sql), false);
+        return { rows: [{ id: PAYEE_ID, endorsement_status: 'signed', endorsement_token: 'live-token' }], rowCount: 1 };
+      },
+    }]),
+    physicalEndorsement,
+    { status: 'signed', signedAt: new Date().toISOString(), rotateToken: false },
+  );
+  assert.equal(payee.ok, true);
+  assert.equal(payee.data.endorsement_token, 'live-token');
+
+  const failed = await persistPhysicalEndorsementOnCheck(sqlClient([
+    {
+      match: (sql) => sql.includes("signature_method = 'manual'"),
+      result: () => ({ rows: [{ ...physicalEndorsement, status: 'signed' }], rowCount: 1 }),
+    },
+    {
+      match: (sql) => sql.includes('SET endorsement_status'),
+      result: () => ({ rows: [], rowCount: 0 }),
+    },
+  ]), {
+    endorsement: physicalEndorsement,
+    mapping: { application_user_id: ACTOR_ID },
+    spoof: { ignored: true },
+  });
+  assert.equal(failed.ok, false);
+  assert.equal(failed.statusCode, 409);
 });

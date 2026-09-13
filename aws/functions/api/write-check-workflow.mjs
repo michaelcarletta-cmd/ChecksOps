@@ -1,6 +1,27 @@
 import { ident } from './data.mjs';
 import { WRITE_ALLOWLIST } from './write-allowlist.mjs';
-import { isCheckScopedPathFor, normalizePath } from './storage-paths.mjs';
+import { isCheckScopedPathFor, normalizePath, s3KeyFor } from './storage-paths.mjs';
+
+const filesBucket = () => String(process.env.FILES_BUCKET || '').trim();
+
+const claimFileObjectExists = async (rel) => {
+  const bucket = filesBucket();
+  if (!bucket) return true;
+  const key = s3KeyFor('claim-files', rel);
+  if (!key) return false;
+  const { HeadObjectCommand, S3Client } = await import('@aws-sdk/client-s3');
+  const s3 = new S3Client({
+    region: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1',
+  });
+  try {
+    await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+    return true;
+  } catch (error) {
+    const status = error?.$metadata?.httpStatusCode || error?.statusCode;
+    if (status === 404 || error?.name === 'NotFound' || error?.Code === 'NotFound') return false;
+    throw error;
+  }
+};
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -60,7 +81,8 @@ const lookupCheck = async (client, checkId) => {
   const invalid = requireUuid('check_id', checkId);
   if (invalid) return invalid;
   const rows = (await client.query(
-    'SELECT id, tenant_id FROM public.check_intake_items WHERE id = $1::uuid',
+    `SELECT id, tenant_id, status, check_stage, deposited_at, amount, claim_id
+     FROM public.check_intake_items WHERE id = $1::uuid`,
     [checkId],
   )).rows;
   if (!rows.length) return { error: 'rls_denied', message: 'check not found or not writable' };
@@ -145,6 +167,15 @@ const intakeCoerce = (values) => {
     const text = asText(values.funds_type, 80);
     if (text.error) return text;
     out.funds_type = text.value;
+  }
+  if ('detected_claim_number' in values) {
+    if (values.detected_claim_number === null || values.detected_claim_number === '') {
+      out.detected_claim_number = null;
+    } else {
+      const text = asText(values.detected_claim_number, 80);
+      if (text.error) return text;
+      out.detected_claim_number = text.value;
+    }
   }
   if ('issue_date' in values) {
     if (values.issue_date === null || values.issue_date === '') out.issue_date = null;
@@ -289,6 +320,27 @@ const executeIntakeUpdate = async ({ client, values, filters }) => {
       else nextValues[column] = path.value;
     }
   }
+  for (const column of IMAGE_PATH_COLUMNS) {
+    const rel = nextValues[column];
+    if (!rel) continue;
+    let exists;
+    try {
+      exists = await claimFileObjectExists(rel);
+    } catch {
+      return {
+        error: 'object_not_in_s3',
+        field: column,
+        message: 'Could not confirm the uploaded image is stored. Retry the upload.',
+      };
+    }
+    if (!exists) {
+      return {
+        error: 'object_not_in_s3',
+        field: column,
+        message: 'Image object is not available in storage. Upload the file before saving the path.',
+      };
+    }
+  }
   if (!Object.keys(nextValues).length) {
     return { error: 'missing_required_field', field: 'values', table: 'check_intake_items', op: 'update' };
   }
@@ -308,7 +360,46 @@ const executeIntakeUpdate = async ({ client, values, filters }) => {
     built.params,
   )).rows;
   if (!rows.length) return { error: 'rls_denied', message: 'check not writable' };
-  return { rows };
+  const restored = await restoreIntakeWorkflowInvariants(client, looked.check, rows[0]);
+  if (restored.error) return restored;
+  return { rows: [restored.row] };
+};
+
+const sameText = (left, right) => String(left ?? '') === String(right ?? '');
+
+const restoreIntakeWorkflowInvariants = async (client, before, after) => {
+  if (!before || !after) return { row: after };
+  const afterHas = (column) => Object.prototype.hasOwnProperty.call(after, column);
+  const unrestorable = [];
+  for (const column of ['deposited_at', 'amount', 'claim_id']) {
+    if (afterHas(column) && !sameText(before[column], after[column])) unrestorable.push(column);
+  }
+  if (unrestorable.length) {
+    return {
+      error: 'workflow_invariant',
+      columns: unrestorable,
+      message: 'Check metadata writes must not change financial, deposit, or claim-link state.',
+    };
+  }
+  const statusDrifted = afterHas('status') && !sameText(before.status, after.status);
+  const stageDrifted = afterHas('check_stage') && !sameText(before.check_stage, after.check_stage);
+  if (!statusDrifted && !stageDrifted) return { row: after };
+  const restored = (await client.query(
+    `UPDATE public.check_intake_items
+     SET status = $2, check_stage = $3, updated_at = now()
+     WHERE id = $1::uuid
+     RETURNING *`,
+    [before.id, before.status, before.check_stage],
+  )).rows[0];
+  if (!restored) return { error: 'rls_denied', message: 'check not writable' };
+  if (!sameText(restored.status, before.status) || !sameText(restored.check_stage, before.check_stage)) {
+    return {
+      error: 'workflow_invariant',
+      columns: ['status', 'check_stage'],
+      message: 'Check metadata writes must not advance deposit or workflow status.',
+    };
+  }
+  return { row: restored };
 };
 
 const executePayees = async ({ client, op, values, filters }) => {
@@ -894,13 +985,29 @@ const executeMortgageRequests = async ({ client, mapping, op, values, filters })
     [id],
   )).rows;
   if (!existing.length) return { error: 'rls_denied', message: 'mortgage request not found or not writable' };
+
+  const staffColumns = ['status', 'assigned_employee_id', 'accepted_at']
+    .filter((column) => column in values);
+  if (staffColumns.length) {
+    const owner = (await client.query(
+      'SELECT public.is_master_owner() AS is_master',
+    )).rows[0]?.is_master === true;
+    if (!owner) {
+      return {
+        error: 'not_authorized',
+        message: 'Mortgage Ops staff transitions require the authorized Mortgage Ops workflow',
+        columns: staffColumns,
+      };
+    }
+  }
+
   const out = {};
+  const typeMap = {};
   for (const [column, max] of [
     ['mortgage_company', 200],
     ['mortgage_servicer', 200],
     ['loan_number', 80],
     ['note', 2000],
-    ['work_notes', 2000],
     ['property_address', 2000],
     ['claim_number', 80],
     ['insurance_company', 200],
@@ -923,10 +1030,27 @@ const executeMortgageRequests = async ({ client, mapping, op, values, filters })
     }
     out.status = status;
   }
+  if ('assigned_employee_id' in values) {
+    if (values.assigned_employee_id == null || values.assigned_employee_id === '') {
+      out.assigned_employee_id = null;
+      typeMap.assigned_employee_id = 'uuid';
+    } else {
+      const assignedInvalid = requireUuid('assigned_employee_id', values.assigned_employee_id);
+      if (assignedInvalid) return assignedInvalid;
+      out.assigned_employee_id = values.assigned_employee_id;
+      typeMap.assigned_employee_id = 'uuid';
+    }
+  }
+  if ('accepted_at' in values) {
+    out.accepted_at = values.accepted_at == null || values.accepted_at === ''
+      ? null
+      : values.accepted_at;
+    typeMap.accepted_at = 'timestamptz';
+  }
   if (!Object.keys(out).length) {
     return { error: 'missing_required_field', field: 'values', table: 'mortgage_handling_requests', op: 'update' };
   }
-  const built = buildSet(out, {});
+  const built = buildSet(out, typeMap);
   built.params.push(id);
   const rows = (await client.query(
     `UPDATE public.mortgage_handling_requests
