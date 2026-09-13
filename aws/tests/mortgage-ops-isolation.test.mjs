@@ -110,8 +110,8 @@ test('library manage requires tenant owner/admin membership; agents and other te
     },
     roles: {
       [AGENT]: ['mortgage_agent'],
-      [MEMBER_A]: [],
-      [OWNER_A]: [],
+      [MEMBER_A]: ['admin'],
+      [OWNER_A]: ['staff'],
       [ADMIN_A]: ['admin'],
     },
   });
@@ -129,6 +129,7 @@ test('tenant-documents upload and metadata writes stay tenant-manage scoped', as
   });
   const memberClient = sqlClient({
     memberships: { [`${MEMBER_A}:${TENANT_A}`]: 'operator' },
+    roles: { [MEMBER_A]: ['admin', 'staff'] },
     documents: { [DOC_A]: { id: DOC_A, tenant_id: TENANT_A } },
   });
   const agentClient = sqlClient({

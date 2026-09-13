@@ -306,6 +306,17 @@ test('ordinary tenant member cannot perform an admin backfill', async () => {
   assert.equal(result.error, 'not_authorized');
 });
 
+test('user_roles.admin plus ordinary membership cannot backfill tenant library docs', async () => {
+  const client = libraryClient({ actorRole: 'admin', tenantRole: 'operator', member: true });
+  const result = await executeMortgageRequestLibraryDocuments({
+    client,
+    mapping: { application_user_id: MEMBER_ID },
+    op: 'upsert',
+    values: { request_id: OPEN_REQ, tenant_document_id: DOC_ID },
+  });
+  assert.equal(result.error, 'not_authorized');
+});
+
 test('non-mortgage categories are rejected', async () => {
   const client = libraryClient({ documents: { [TEMPLATE_DOC_ID]: templateDoc } });
   const result = await executeMortgageRequestLibraryDocuments({

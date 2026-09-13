@@ -49,14 +49,6 @@ const clip = (value, max) => {
   return text.length ? text : null;
 };
 
-const loadRoles = async (client, userId) => {
-  const rows = (await client.query(
-    `SELECT role::text AS role FROM public.user_roles WHERE user_id = $1::uuid`,
-    [userId],
-  )).rows;
-  return rows.map((row) => String(row.role || '').toLowerCase());
-};
-
 const loadTenantMembership = async (client, userId, tenantId) => {
   const row = (await client.query(
     `SELECT role::text AS role FROM public.tenant_users
@@ -67,14 +59,18 @@ const loadTenantMembership = async (client, userId, tenantId) => {
   return row || null;
 };
 
+/**
+ * Tenant document library writes are tenant owner/admin only.
+ * `user_roles.admin` / `staff` / `mortgage_agent` are not tenant library managers:
+ * a platform or Desk role plus ordinary membership must not mutate another
+ * tenant's packet. Platform owner oversight is not a library-write grant.
+ */
 export const canManageTenantDocumentLibrary = async (client, userId, tenantId) => {
   if (!isUuid(userId) || !isUuid(tenantId)) return false;
   const membership = await loadTenantMembership(client, userId, tenantId);
   if (!membership) return false;
   const tenantRole = String(membership.role || '').toLowerCase();
-  if (MORTGAGE_LIBRARY_MANAGE_ROLES.includes(tenantRole)) return true;
-  const roles = await loadRoles(client, userId);
-  return roles.includes('admin') || roles.includes('staff');
+  return MORTGAGE_LIBRARY_MANAGE_ROLES.includes(tenantRole);
 };
 
 /**
