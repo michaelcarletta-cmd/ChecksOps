@@ -1,5 +1,7 @@
 # Phase 3 Functional Audit — STOP at staging mismatch
 
+**Superseded for resume:** Integration declared the live overlay as the audit pin. See `docs/audits/PHASE3_FUNCTIONAL_AUDIT_RESUME_2026-09-13.md`. Do not restore `W3oWlWtM…` / `index-Bo0IO5sc.js`.
+
 **Date:** 2026-09-13  
 **Workstream:** Functional Audit (`bc-c48d261b-22b3-481c-a28f-ddf0189e3bce`)  
 **Inventory baseline:** #291 `cursor/phase2-integration-inventory-3bce` @ `b941ba9b4`  
