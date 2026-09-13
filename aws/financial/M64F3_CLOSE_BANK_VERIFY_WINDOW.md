@@ -40,6 +40,20 @@ GET-only `preflight_target` (`provider_http_write=false`, `dynamo_write=false`):
 Session HTTP 200: `complete=true`, `bank_verified=true`,
 `bank_verify_available=false`, recipient `ready`, `token_consumed=false`.
 
+Re-query after the browser pass: DDB `claimed_at` / `updated_at` still
+`1789322986616` / `1789323914631` (unchanged vs F.2). Dummy initiate still
+403 `recipient_bank_verify_writes_blocked`, `liveProviderCalled=false`.
+db-bridge `payment_transfers=0`, recipient `onboarding_status=ready`,
+`token_used_at=null`.
+
+## Live UI after close
+
+Completed pay-setup page: **Setup is complete. You can close this page.**
+No Send, no Confirm, no verification-code field. Tester did not click
+mutating bank-verify controls. Network: no `initiate` / `confirm` requests;
+POSTs observed are session (`moov-recipient-session`) plus unrelated
+`platform_announcements`.
+
 ## Holds
 
 Do not enable Moov / CheckAlt / provider execution / financial-permissions /
