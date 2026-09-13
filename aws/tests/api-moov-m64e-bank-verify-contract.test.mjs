@@ -277,6 +277,92 @@ test('probe refuses table-admin and never DeleteItem/CreateTable', async () => {
   assert.equal(blocked.provider_http, false);
 });
 
+test('preflight_target is GET-only and does not write Dynamo or POST /verify', async () => {
+  const dynamoTargets = [];
+  const moovCalls = [];
+  const dynamoRequest = async ({ target, body }) => {
+    dynamoTargets.push(target);
+    assert.equal(target.endsWith('PutItem'), false);
+    assert.equal(target.endsWith('UpdateItem'), false);
+    assert.equal(target.endsWith('DeleteItem'), false);
+    if (target.endsWith('GetItem')) {
+      assert.equal(body.Key.pk.S, `CLAIM#${RECIPIENT_ID}#${ACCOUNT_ID}#${BANK_ID}`);
+      return {};
+    }
+    throw new Error(`unexpected ${target}`);
+  };
+  const fetchImpl = async (url, init) => {
+    moovCalls.push({ url: String(url), method: String(init?.method || 'GET').toUpperCase() });
+    const path = String(url).replace('https://api.moov.io', '');
+    if (String(url).includes('/oauth2/token')) {
+      return {
+        ok: true, status: 200, text: async () => JSON.stringify({ access_token: 'tok', expires_in: 300 }),
+        headers: { get: () => 'application/json' },
+      };
+    }
+    let json = {};
+    if (path === `/accounts/${ACCOUNT_ID}`) {
+      json = {
+        accountID: ACCOUNT_ID, accountType: 'individual', mode: 'production',
+        verification: { status: 'verified' },
+        termsOfService: { acceptedDate: '2026-09-12T17:37:31.697535Z' },
+      };
+    } else if (path.endsWith('/bank-accounts') && !path.includes(BANK_ID)) {
+      json = { bankAccounts: [{
+        bankAccountID: BANK_ID, bankName: 'JPMORGAN CHASE BANK, NA',
+        lastFourAccountNumber: '1506', status: 'new',
+      }] };
+    } else if (path.endsWith(`/bank-accounts/${BANK_ID}`)) {
+      json = {
+        bankAccountID: BANK_ID, bankName: 'JPMORGAN CHASE BANK, NA',
+        lastFourAccountNumber: '1506', status: 'new',
+      };
+    } else if (path.endsWith('/verify')) {
+      return { ok: false, status: 404, text: async () => '{}', headers: { get: () => 'application/json' } };
+    } else if (path.endsWith('/capabilities')) {
+      json = { capabilities: [{ capability: 'send-funds', status: 'enabled', requirements: [] }] };
+    } else if (path.endsWith('/payment-methods')) {
+      json = { paymentMethods: [] };
+    }
+    return {
+      ok: true, status: 200, text: async () => JSON.stringify(json),
+      headers: { get: () => 'application/json' },
+    };
+  };
+  const result = await handleBankVerifyStateProbe({
+    checksops_bank_verify_state_probe: true,
+    action: 'preflight_target',
+  }, {
+    dynamoRequest,
+    fetchImpl,
+    loadProductionReadSecrets: async () => ({
+      ok: true,
+      credentials: {
+        environment: 'production',
+        host: 'https://api.moov.io',
+        publicKey: 'pk',
+        secretKey: 'sk',
+        origin: 'https://checksops.com',
+        apiVersion: 'v2024.01.00',
+      },
+    }),
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.real_target_claim.exists, false);
+  assert.equal(result.kyc_status, 'verified');
+  assert.equal(result.tos_accepted, true);
+  assert.equal(result.live_bank.lastFourAccountNumber, '1506');
+  assert.equal(result.bank_state.should_initiate, true);
+  assert.equal(result.bank_state.initiated, false);
+  assert.equal(result.verification_get.missing, true);
+  assert.equal(result.provider_http_write, false);
+  assert.equal(result.dynamo_write, false);
+  assert.equal(result.microdeposit_initiated, false);
+  assert.equal(dynamoTargets.every((target) => target.endsWith('GetItem')), true);
+  assert.equal(moovCalls.filter((call) => call.method !== 'GET' && !call.url.includes('/oauth2/token')).length, 0);
+  assert.equal(moovCalls.some((call) => call.method === 'POST' && call.url.includes('/verify')), false);
+});
+
 test('malformed provider account JSON fails closed without POST', async () => {
   await withFlags(async () => {
     const result = await handlePublicMoovRecipientBankVerifyInitiate(
