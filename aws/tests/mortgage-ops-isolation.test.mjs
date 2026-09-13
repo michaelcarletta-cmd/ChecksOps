@@ -4,7 +4,10 @@ import {
   authorizedForMortgageBilling,
   runBillMortgageHandling,
 } from '../functions/api/bill-mortgage-handling.mjs';
-import { canManageTenantDocumentLibrary } from '../functions/api/mortgage-library-docs.mjs';
+import {
+  canManageTenantDocumentLibrary,
+  mortgageAgentCanWriteTenantLossDraft,
+} from '../functions/api/mortgage-library-docs.mjs';
 import { authorizeStorageWritePath } from '../functions/api/storage-write-auth.mjs';
 import { executeTenantDocuments } from '../functions/api/write-app-metadata.mjs';
 
@@ -16,10 +19,15 @@ const AGENT = 'a1000000-0000-4000-8000-000000000004';
 const ADMIN_A = 'a1000000-0000-4000-8000-000000000009';
 const DOC_A = 'b1000000-0000-4000-8000-000000000001';
 const REQUEST_A = 'c1000000-0000-4000-8000-000000000001';
+const CHECK_A = 'c2000000-0000-4000-8000-000000000001';
+const DRAFT_A = 'd1000000-0000-4000-8000-000000000001';
+const CLAIM_A = 'e1000000-0000-4000-8000-000000000001';
+const DRAFT_DOC = 'f1000000-0000-4000-8000-000000000001';
 const PATH_A = `${TENANT_A}/library/mortgage/w9.pdf`;
 const PATH_B = `${TENANT_B}/library/mortgage/w9.pdf`;
+const LOSS_PATH_A = `${CLAIM_A}/${DRAFT_A}/${DRAFT_DOC}/packet.pdf`;
 
-const sqlClient = ({ memberships = {}, roles = {}, documents = {} } = {}) => ({
+const sqlClient = ({ memberships = {}, roles = {}, documents = {}, drafts = {}, requestsByCheck = {} } = {}) => ({
   query: async (sql, params = []) => {
     if (/FROM public\.tenant_users/.test(sql) && /tenant_id = \$2/.test(sql)) {
       const userId = params[0];
@@ -46,6 +54,13 @@ const sqlClient = ({ memberships = {}, roles = {}, documents = {} } = {}) => ({
     }
     if (/UPDATE public\.tenant_documents/.test(sql)) {
       return { rows: [{ id: params[params.length - 1] }] };
+    }
+    if (/FROM public\.loss_draft_tracking/.test(sql)) {
+      const row = drafts[params[0]];
+      return { rows: row ? [row] : [] };
+    }
+    if (/FROM public\.mortgage_handling_requests/.test(sql) && /check_intake_item_id/.test(sql)) {
+      return { rows: requestsByCheck[params[0]] || [] };
     }
     if (/FROM public\.mortgage_handling_requests/.test(sql)) {
       return { rows: params[0] === REQUEST_A ? [{ id: REQUEST_A, tenant_id: TENANT_A, billing_status: 'unbilled' }] : [] };
@@ -190,4 +205,40 @@ test('tenant-documents upload and metadata writes stay tenant-manage scoped', as
     filters: [{ column: 'id', op: 'eq', value: DOC_A }],
   });
   assert.equal(agentDelete.error, 'not_authorized');
+});
+
+test('loss-draft uploads require tenant membership or a workable Desk request', async () => {
+  const draft = { id: DRAFT_A, check_intake_item_id: CHECK_A, tenant_id: TENANT_A };
+  const ownerClient = sqlClient({
+    memberships: { [`${OWNER_A}:${TENANT_A}`]: 'owner' },
+    drafts: { [DRAFT_A]: draft },
+  });
+  const adminClient = sqlClient({
+    roles: { [ADMIN_A]: ['admin'] },
+    drafts: { [DRAFT_A]: draft },
+  });
+  const unattachedAgent = sqlClient({
+    roles: { [AGENT]: ['mortgage_agent'] },
+    drafts: { [DRAFT_A]: draft },
+  });
+  const assignedAgent = sqlClient({
+    roles: { [AGENT]: ['mortgage_agent'] },
+    drafts: { [DRAFT_A]: draft },
+    requestsByCheck: {
+      [CHECK_A]: [{ status: 'in_progress', assigned_employee_id: AGENT, tenant_id: TENANT_A }],
+    },
+  });
+
+  const ownerUpload = await authorizeStorageWritePath(ownerClient, 'loss-draft-documents', LOSS_PATH_A, OWNER_A);
+  assert.equal(ownerUpload.ok, true);
+  const adminUpload = await authorizeStorageWritePath(adminClient, 'loss-draft-documents', LOSS_PATH_A, ADMIN_A);
+  assert.equal(adminUpload.ok, false);
+  const unattached = await authorizeStorageWritePath(unattachedAgent, 'loss-draft-documents', LOSS_PATH_A, AGENT);
+  assert.equal(unattached.ok, false);
+  assert.equal(await mortgageAgentCanWriteTenantLossDraft(unattachedAgent, AGENT, {
+    tenantId: TENANT_A,
+    checkId: CHECK_A,
+  }), false);
+  const assigned = await authorizeStorageWritePath(assignedAgent, 'loss-draft-documents', LOSS_PATH_A, AGENT);
+  assert.equal(assigned.ok, true);
 });

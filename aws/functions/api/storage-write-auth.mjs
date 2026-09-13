@@ -13,7 +13,7 @@ import {
   normalizePath,
   s3KeyFor,
 } from './storage-paths.mjs';
-import { canManageTenantDocumentLibrary } from './mortgage-library-docs.mjs';
+import { canManageTenantDocumentLibrary, mortgageAgentCanWriteTenantLossDraft } from './mortgage-library-docs.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -162,16 +162,16 @@ export const authorizeStorageWritePath = async (client, bucket, objectPath, user
     if (!draft) {
       return { ok: false, statusCode: 403, error: 'rls_denied', message: 'loss draft not found or not writable' };
     }
-    if (draft.tenant_id && !(await hasTenantMembership(client, userId, draft.tenant_id))) {
-      const roles = (await client.query(
-        `SELECT role FROM public.user_roles WHERE user_id = $1::uuid`,
-        [userId],
-      )).rows.map((row) => String(row.role || '').toLowerCase());
-      if (!roles.includes('admin') && !roles.includes('staff') && !roles.includes('mortgage_agent')) {
-        return { ok: false, statusCode: 403, error: 'rls_denied', message: 'Not authorized for this loss draft' };
-      }
+    if (draft.tenant_id && (await hasTenantMembership(client, userId, draft.tenant_id))) {
+      return { ok: true, rel, draftId, key: s3KeyFor(bucket, rel), strategy: 'loss_draft' };
     }
-    return { ok: true, rel, draftId, key: s3KeyFor(bucket, rel), strategy: 'loss_draft' };
+    if (await mortgageAgentCanWriteTenantLossDraft(client, userId, {
+      tenantId: draft.tenant_id,
+      checkId: draft.check_intake_item_id,
+    })) {
+      return { ok: true, rel, draftId, key: s3KeyFor(bucket, rel), strategy: 'loss_draft' };
+    }
+    return { ok: false, statusCode: 403, error: 'rls_denied', message: 'Not authorized for this loss draft' };
   }
 
   if (bucket === 'tenant-logos' || bucket === 'company-branding') {
