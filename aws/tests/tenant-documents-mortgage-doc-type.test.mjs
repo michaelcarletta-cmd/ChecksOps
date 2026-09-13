@@ -223,7 +223,10 @@ test('executeTenantDocuments validates the exact allowlist before write', async 
   const client = {
     query: async (sql, params) => {
       queries.push({ sql, params });
-      if (/FROM public.tenant_users/.test(sql)) return { rows: [{ ok: 1 }] };
+      if (/FROM public.tenant_users/.test(sql)) return { rows: [{ role: 'admin' }] };
+      if (/SELECT id, tenant_id FROM public.tenant_documents/.test(sql)) {
+        return { rows: [{ id: params[0], tenant_id: TENANT }] };
+      }
       if (/INSERT INTO public.tenant_documents/.test(sql)) {
         return { rows: [{ id: 'doc-1', doc_type: params[1] }] };
       }
