@@ -79,11 +79,15 @@ test('public get and abuse cases ignore spoofed tenant headers', async () => {
     match: (sql) => sql.includes('aws_public_endorsement_by_token'),
     result: () => ({ rows: [{ doc: null }] }),
   }]);
+  const emptyGet = await runGetEndorsementData(sqlClient([]), '', {});
+  assert.equal(emptyGet.statusCode, 400);
+  assert.equal(emptyGet.code, 'invalid_link');
+  assert.match(emptyGet.error, /invalid or has expired/i);
+
   const bad = await runPublicEndorsement(eventOf({ action: 'get_endorsement_data', token: 'nope' }), { client });
   assert.equal(bad.statusCode, 404);
-  assert.equal(bad.code, 'invalid_link');
-  assert.match(bad.error, /invalid or has expired/i);
-  assert.equal(/already been used/i.test(bad.error), false);
+  assert.equal(bad.code, 'token_consumed');
+  assert.match(bad.error, /already been used or replaced/i);
 
   const signedGet = await runPublicEndorsement(eventOf({ action: 'get_endorsement_data', token: 'used' }), {
     client: sqlClient([{

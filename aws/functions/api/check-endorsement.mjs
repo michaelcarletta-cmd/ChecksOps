@@ -598,10 +598,19 @@ const unknownPublicEndorsementToken = (spoof, { statusCode = 404 } = {}) => ({
 });
 
 export const runGetEndorsementData = async (client, token, spoof) => {
+  // Empty bearer: Phase 2 P8 invalid_link. SQL 72 returns NULL for both
+  // never-issued tokens and SQL 71 rotated/consumed tokens (table fallback is
+  // RLS-denied for checksops), so a missing row must stay live token_consumed.
   if (!token) return unknownPublicEndorsementToken(spoof, { statusCode: 400 });
   const found = await lookupPublicEndorsement(client, token);
   if (found.kind === 'missing' || !found.row) {
-    return unknownPublicEndorsementToken(spoof);
+    return {
+      ok: false,
+      statusCode: 404,
+      error: 'This endorsement link has already been used or replaced.',
+      code: 'token_consumed',
+      spoofFieldsIgnored: spoof,
+    };
   }
   const row = found.row;
   const status = row.status || row.endorsement_status || 'pending';
