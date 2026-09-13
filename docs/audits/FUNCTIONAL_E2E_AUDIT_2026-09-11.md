@@ -1,3 +1,39 @@
+# Integration & Release — shared-staging deploy and 34-control reconciliation
+
+**Date:** 2026-09-13
+**App PR:** #283 `cursor/integration-awaiting-deploy-3bce`
+**Inventory branch:** `cursor/phase3-inventory-integration-3bce`
+**Starting main:** `4fc1166d8`
+**Integrated HEAD:** `fd82b5f6a` (app stack tip `eb988a209` plus SQL/inspect helpers)
+**Merge order:** #254 → #257 → #258 → #260 → #262 → #263 → #261 → #264 → #276 → #280 → #277 → #278 (all fast-forward, no conflicts). Inventory #268/#279 stayed off this stack.
+
+**Staging API:** `checksops-staging-api` CodeSha256 `oCIMSmHLoNDGI3ia4OnJPeZt0cb5+8otJK4SHV0vccw=` (replaced Functional Audit overlay `ei+nNC2uAykoe4liskuXS5uZgzho/PERcyG1Cwc8X6Y=`).
+**Staging SPA:** `staging.checksops.com` `index-fpM1ObsA.js` / `CheckCommandCenter-yLkG9RPu.js`.
+**SQL 39:** already granted (`detected_claim_number`). **SQL 40:** applied. Intake `claim_id` still denied. Payments/wallets still denied.
+**Flags:** `AWS_APPLICATION_WORKFLOW_WRITES_ENABLED=true`. `AWS_PROVIDER_EXECUTION_ENABLED=false`.
+**Production / SES / Cognito:** unchanged. production-prep SHA `Rph+8NYdZcqPXIQqJ2CtjGyba4BX9KzWj+00FCHZ7cI=` untouched.
+
+AWAITING is not PASS. After physical shared-staging retests:
+
+| From | To | IDs |
+|---|---|---|
+| AWAITING → PASS | 30 | A1-066, A1-067, A1-068, A5-088, A5-099, A5-114, A5-220, CC-219, CC-361, CC-368, P3-MOB-006, A4-013, A4-014, A4-015, A4-016, A4-017, A4-018, A4-019, A4-020, A4-021, A4-022, A4-023, A4-024, A4-025, A4-026, A4-027, A4-028, A4-029, A4-030, A4-031 |
+| AWAITING → BLOCKED_FIXTURE | 4 | A5-201, A5-202, A5-203, A5-204 |
+| AWAITING → FAIL | 0 | — |
+| remaining AWAITING | 0 | — |
+
+Still FAIL (1): A8-035 Freedom identity (out of scope; Cognito not modified).
+
+P8 unknown endorsement (not in the 34-row AWAITING set): GET/SUBMIT/REJECT `/public/endorsement` all `invalid_link` 404; browser `/endorse?token=not-a-real-endorsement-token` shows invalid/expired with no already-used copy. Evidence: `/opt/cursor/artifacts/p8_unknown_endorsement_invalid_link.mp4`.
+
+P10 settlement save remains BLOCKED_FIXTURE: existing `claim_id` values point at `claims` rows whose `org_id` is null, so tenant-scoped lookup returns `rls_denied`. Intake `claim_id` was not GRANTed.
+
+Readiness using 1,136 live/non-N/A: **704 PASS (62.0%)**. FAIL 1. BLOCKED 431 (internal 258 + external 173). AWAITING 0.
+
+Do not begin another remediation phase automatically.
+
+---
+
 # Phase 2 continuation — no shared-staging deploy
 
 **Date:** 2026-09-13
