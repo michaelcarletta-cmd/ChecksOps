@@ -1,11 +1,19 @@
-# Phase 3 STOP — shared staging no longer matches the coherent Integration stack
+# Phase 3 STOP — wait for Integration & Release to declare the staging pin stable
 
 **Date:** 2026-09-13  
 **Workstream:** Functional Audit  
 **Agent:** `bc-0789979c-9a64-42a8-a015-4446f4b9d82c`  
-**Decision:** STOP before Phase 3 physical testing. Do not overlay. Do not begin Phase 4.
+**Decision:** STOP Phase 3 physical testing until Integration & Release **explicitly declares** the current Git-derived release candidate **stable** as the Functional Audit baseline. Do not overlay. Do not begin Phase 4.
 
-This is a read-only preflight stop, not an inventory conversion and not a product FAIL.
+This is a read-only coordination stop, not an inventory conversion and not a product FAIL.
+
+**Baseline correction (2026-09-13, later same day):** Do **not** treat live API SHA `OSiyHTQqSq5J3QRZCKdDrQ7PRW5qPWeJS71LZ46LIOE=` as unauthorized drift, and do **not** ask Integration to restore historical Functional Audit artifacts:
+
+- API `W3oWlWtMhILouJRPezrrsJOQJQP8VnWDZYo1Ljy/tqE=`
+- SPA `index-Bo0IO5sc.js`
+- PR #288 / `cursor/phase2-integration-deploy-3bce` overlay
+
+Those were the prior Phase 2 workstream baseline. Integration intentionally moved staging forward. The live SHA is part of the newer coherent lineage (integrated release plus public-endorsement GET fix). Functional Audit will rebase its expected test baseline onto the **Integration-declared** pin when it is published, then verify Phase 2 *behavior* is contained in that release. Missing behavior is reported to Integration; old artifacts are not restored.
 
 ## 1. Baseline
 
@@ -35,23 +43,32 @@ Staging identity (Identity/Cognito workstream, previous turn of this agent; Cogn
 
 Phase 3 did **not** reset or otherwise mutate this Cognito user.
 
-Expected coherent stack (Phase 2 Integration PR #288):
+Historical Phase 2 workstream artifacts (**not** the current Integration pin; **do not restore**):
 
-| Item | Expected |
+| Item | Historical (superseded) |
 |---|---|
-| Branch | `cursor/phase2-integration-deploy-3bce` |
+| Branch | `cursor/phase2-integration-deploy-3bce` (PR #288) |
 | Integrated HEAD | `8ee90ac7b` |
-| API | `checksops-staging-api` |
-| CodeSha256 | `W3oWlWtMhILouJRPezrrsJOQJQP8VnWDZYo1Ljy/tqE=` |
-| API LastModified (documented) | `2026-09-13T10:57:00.000+0000` |
+| API CodeSha256 | `W3oWlWtMhILouJRPezrrsJOQJQP8VnWDZYo1Ljy/tqE=` |
 | SPA assets | `index-Bo0IO5sc.js` |
-| SQL | 41 + 42 applied; `23_claims_org_backfill.sql` not run |
+
+Live staging observed at Phase 3 preflight (**Integration lineage, not yet declared stable for audit resume**):
+
+| Item | Live |
+|---|---|
+| API | `checksops-staging-api` |
+| CodeSha256 | `OSiyHTQqSq5J3QRZCKdDrQ7PRW5qPWeJS71LZ46LIOE=` |
+| API LastModified | `2026-09-13T11:15:47.000+0000` |
+| SPA | `index-a512Q1W0.js` + `index-67D8chGr.css` (bucket `2026-09-13T12:32:09Z`) |
+| Provider execution | OFF |
+
+SQL 41 + 42 were applied in Phase 2; `23_claims_org_backfill.sql` was not run. Do not re-apply. Do not deploy PR #288.
 
 ## 2. Root-cause ranking (unchanged inventory; not physically retested)
 
 Rank remaining INTERNAL root causes by controls unlocked × operational importance ÷ change risk. Physical verification did not run.
 
-| Rank | Attack first when stack is restored | n | Importance | Risk | Why this rank |
+| Rank | Attack first after Integration declares the pin stable | n | Importance | Risk | Why this rank |
 |---|---|---:|---|---|---|
 | 1 | `c1c_authenticated_session_unavailable` → A5-201–204 settlement/ledger UI | 4 | critical financial workflow | low once C1C session exists | Previous blocker was auth only; fixture `AWS-PR235-LEDGER-TEST-B` already exists |
 | 2 | Category A `unsafe_persist` on synthetic Check Command Center (not Delete, not funds/provider) | 16 of 56 `unsafe_persist` historically CCC | high operator workflow | medium | Converts conservative BLOCKED to PASS/FAIL |
@@ -74,12 +91,12 @@ Do **not** batch shared `PlatformFeeSchedulePanel`, tenant security config, crea
 
 | ID | Control | Disposition |
 |---|---|---|
-| A5-201 | ClaimSettlementEditor category tab | remains BLOCKED (`c1c_authenticated_session_unavailable` in inventory; C1C auth is restored, but stack is not the coherent Integration SHA) |
+| A5-201 | ClaimSettlementEditor category tab | remains BLOCKED (`c1c_authenticated_session_unavailable` in inventory). C1C auth is restored; physical UI wait is on Integration **stable pin**, not on restoring a historical SHA. |
 | A5-202 | Cancel | same |
 | A5-203 | Save All Categories | same |
 | A5-204 | settlement amount input | same |
 
-Inventory rows were **not** converted to PASS. Auth restoration is necessary but not sufficient once shared staging diverged.
+Inventory rows were **not** converted to PASS. C1C auth is restored, but physical UI wait is on the Integration-declared stable pin, not on a historical workstream SHA.
 
 Fixture (retained from Phase 2; not modified here):
 
@@ -142,14 +159,14 @@ Still **248** internal BLOCKED across the Phase 2 clusters. Highest-count invent
 
 | Issue | Owning workstream | Evidence | Blocked Phase 3? | Action here |
 |---|---|---|---|---|
-| Live API CodeSha256 ≠ PR #288 expected SHA | Integration & Release | Live `OSiyHTQqSq5J3QRZCKdDrQ7PRW5qPWeJS71LZ46LIOE=` LastModified `2026-09-13T11:15:47Z`; expected `W3oWlWtMhILouJRPezrrsJOQJQP8VnWDZYo1Ljy/tqE=` at `10:57:00Z` | **yes** | NONE (do not overlay) |
-| Live SPA replaced; expected JS 404 | Integration & Release | Live `index-a512Q1W0.js` + `index-67D8chGr.css` (S3 LastModified `2026-09-13T12:32:09Z`). Expected `index-Bo0IO5sc.js` **404** in `checksops-staging-frontend-c48b` | **yes** | NONE |
+| Authoritative API+SPA pin not yet declared stable | Integration & Release | Live SHA `OSiyHTQqSq5J3QRZCKdDrQ7PRW5qPWeJS71LZ46LIOE=` is newer Integration lineage (includes public-endorsement GET fix). Historical FA SHA `W3oWlWtMhI…` / SPA `index-Bo0IO5sc.js` are **not** to be restored | **yes — wait for declared pin** | NONE (do not restore, do not overlay, do not deploy #288) |
+| Historical SPA `index-Bo0IO5sc.js` absent from bucket | Integration & Release | Expected: Integration publishes the pin (SHA + SPA asset). Absence of the old JS is not a defect | no (not a restore request) | NONE |
 | A8-035 Freedom identity FAIL | Identity/Cognito | unchanged | no | NONE |
 | staging-master mapping discrepancy | Identity/Cognito | Phase 2 `identity_not_linked` on master `/data/*` | no | NONE |
 | Pay-setup mint Moov-coupled | Email/SES is not owner; provider mint is Integration/provider boundary | Phase 2 map | would be later | NONE — do not enable Moov |
 | SES / email | Email/SES | not touched | no | NONE |
 
-Handoff to Integration & Release: restore or explicitly re-pin the coherent Phase 2 stack (API SHA `W3oWlWtMhI…` + SPA `index-Bo0IO5sc.js`), **or** publish a new coherent SHA/SPA pair Functional Audit should treat as baseline. Until then Phase 3 physical testing stays stopped.
+Handoff to Integration & Release: publish the authoritative **pinned** API CodeSha256 + SPA hashed filename and explicitly declare it **stable**. Functional Audit will then rebase its expected test baseline onto that pin and verify Phase 2 *behavior* is contained in the integrated release. Do **not** restore API `W3oWlWtMhI…` or SPA `index-Bo0IO5sc.js`, and do **not** deploy PR #288. Until the pin is declared stable, Phase 3 physical testing stays stopped.
 
 ## 18. Safety confirmation
 
