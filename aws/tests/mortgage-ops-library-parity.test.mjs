@@ -119,6 +119,11 @@ test('oneshot applies 29 only after write helpers and complete write policies', 
   assert.doesNotMatch(complete, /readSql\('30_tenant_documents_mortgage_doc_type\.sql'\)/);
   assert.match(index, /Do not apply 30_tenant_documents_mortgage_doc_type/);
   assert.match(complete, /Do not apply it from completeAuth/);
+  assert.equal(applied.includes('31_mortgage_ops_agent_access.sql'), false);
+  assert.doesNotMatch(complete, /readSql\('31_mortgage_ops_agent_access\.sql'\)/);
+  assert.match(complete, /Do not apply 31_mortgage_ops_agent_access/);
+  assert.match(index, /Do not apply 31_mortgage_ops_agent_access/);
+  assert.match(writePlan, /Do not apply 31_mortgage_ops_agent_access/);
 });
 
 test('SQL overlay revokes PUBLIC immediately, requires mortgage category, and uses exact paths', () => {

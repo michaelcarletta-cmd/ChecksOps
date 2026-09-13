@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveTenantByRouteSlug } from "@/lib/tenantRoute";
 
 export interface Tenant {
   id: string;
@@ -51,14 +52,7 @@ export function TenantProvider({ children, slug }: { children: ReactNode; slug?:
     setLoading(true);
     setError(null);
     try {
-      const { data, error: fetchError } = await supabase
-        .from("tenants_public" as any)
-        .select("*")
-        .eq("slug", tenantSlug)
-        .maybeSingle();
-
-
-      if (fetchError) throw fetchError;
+      const { tenant: data } = await resolveTenantByRouteSlug(supabase as any, tenantSlug);
       if (!data) {
         setError("Organization not found");
         setTenant(null);

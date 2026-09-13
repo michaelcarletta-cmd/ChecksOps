@@ -374,6 +374,8 @@ test('sink mode always sinks and SES errors keep sink_fallback', async () => {
   assert.equal(sunk.results[0].originalTo, 'mcarletta@freedomadj.com');
 
   process.env.AWS_EMAIL_MODE = 'ses';
+  process.env.CHECKSOPS_ENV = 'staging';
+  process.env.AWS_EMAIL_SES_LOCK_RECIPIENT = 'mcarletta@freedomadj.com';
   const fallback = await sendViaSesOrSink({
     to: 'mcarletta@freedomadj.com',
     subject: 'SES down',

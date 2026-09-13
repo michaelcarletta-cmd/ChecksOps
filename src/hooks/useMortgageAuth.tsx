@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import type { User, Session } from "@supabase/supabase-js";
 import { mortgageSupabase } from "@/integrations/supabase/mortgageClient";
+import { isMortgageDeskStaff } from "@/lib/mortgageDeskAuth";
 
 const ROLE_PRIORITY = ["admin", "staff", "mortgage_agent", "read_only", "guided", "contractor", "client"] as const;
 
@@ -19,6 +20,7 @@ export function useMortgageAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [roles, setRoles] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchRole = useCallback(async (userId: string) => {
@@ -26,8 +28,9 @@ export function useMortgageAuth() {
       .from("user_roles")
       .select("role")
       .eq("user_id", userId);
-    const roles = Array.from(new Set((data ?? []).map((r) => r.role).filter(Boolean)));
-    setUserRole(resolveHighestRole(roles));
+    const nextRoles = Array.from(new Set((data ?? []).map((r) => r.role).filter(Boolean)));
+    setRoles(nextRoles);
+    setUserRole(resolveHighestRole(nextRoles));
   }, []);
 
   useEffect(() => {
@@ -45,7 +48,10 @@ export function useMortgageAuth() {
       setSession(next);
       setUser(next?.user ?? null);
       if (next?.user) fetchRole(next.user.id);
-      else setUserRole(null);
+      else {
+        setUserRole(null);
+        setRoles([]);
+      }
     });
 
     return () => {
@@ -57,7 +63,16 @@ export function useMortgageAuth() {
   const signOut = useCallback(async () => {
     await mortgageSupabase.auth.signOut();
     setUserRole(null);
+    setRoles([]);
   }, []);
 
-  return { user, session, userRole, loading, signOut };
+  return {
+    user,
+    session,
+    userRole,
+    roles,
+    isMortgageDeskStaff: isMortgageDeskStaff(roles),
+    loading,
+    signOut,
+  };
 }

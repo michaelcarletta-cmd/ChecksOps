@@ -255,6 +255,7 @@ export const applyWriteDdl = async (client) => {
   // Do not apply 29_mortgage_ops_library_parity.sql here. It requires
   // 24_complete_write_policies.sql, which writePlan does not install.
   // completeAuth applies 20 → 24 → 29.
+  // Do not apply 31_mortgage_ops_agent_access.sql from writePlan.
   const policies = Number((await client.query(
     `SELECT count(*)::int AS n FROM pg_policies
      WHERE schemaname='public' AND policyname LIKE 'aws_write_%'`,

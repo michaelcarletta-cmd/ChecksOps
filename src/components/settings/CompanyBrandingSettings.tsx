@@ -9,6 +9,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { Upload, Building2, Loader2, Sparkles, Image as ImageIcon, Layout } from "lucide-react";
 import { useTenant } from "@/contexts/TenantContext";
 import { useTenantFilter } from "@/hooks/useTenantFilter";
+import {
+  TENANT_BRANDING_READ_COLUMNS,
+  tenantBrandingFromRow,
+  tenantBrandingWritePayload,
+  type TenantBrandingRow,
+} from "@/lib/tenantBranding";
 
 import { SectionCard } from "./SectionCard";
 import { SettingsHero } from "./SettingsHero";
@@ -37,6 +43,8 @@ export function CompanyBrandingSettings() {
 
   useEffect(() => {
     void loadSettings();
+    // Reload when the white-label tenant or isolated tenant filter changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTenantId]);
 
   const loadSettings = async () => {
@@ -47,28 +55,29 @@ export function CompanyBrandingSettings() {
       setEmail("");
       setLogoUrl(null);
       setLetterheadUrl(null);
+      setInvoiceLetterheadUrl(null);
       return;
     }
-
-    const { data: tenantRow } = await supabase
+    const { data, error } = await supabase
       .from("tenants")
-      .select("name, business_address, business_phone, email_from_address, logo_url, invoice_letterhead_url, invoice_footer_note, invoice_default_terms, invoice_accent_color, invoice_theme, primary_color")
+      .select(TENANT_BRANDING_READ_COLUMNS)
       .eq("id", activeTenantId)
       .maybeSingle();
-
-    if (!tenantRow) return;
-    const t = tenantRow as any;
-    setCompanyName(t.name || "");
-    setAddress(t.business_address || "");
-    setPhone(t.business_phone || "");
-    setEmail(t.email_from_address || "");
-    setLogoUrl(t.logo_url || null);
-    setLetterheadUrl(t.invoice_letterhead_url || null);
-    setInvoiceLetterheadUrl(t.invoice_letterhead_url || null);
-    setInvoiceFooterNote(t.invoice_footer_note || "");
-    setInvoiceDefaultTerms(t.invoice_default_terms || "");
-    setInvoiceAccentColor(t.invoice_accent_color || t.primary_color || "#3B82F6");
-    setInvoiceTheme(t.invoice_theme === "dark" ? "dark" : "light");
+    if (error) {
+      toast({ title: "Could not load branding", description: error.message, variant: "destructive" });
+      return;
+    }
+    const branding = tenantBrandingFromRow(data as TenantBrandingRow | null);
+    setCompanyName(branding.companyName);
+    setAddress(branding.address);
+    setPhone(branding.phone);
+    setEmail(branding.email);
+    setLogoUrl(branding.logoUrl);
+    setInvoiceLetterheadUrl(branding.invoiceLetterheadUrl);
+    setInvoiceFooterNote(branding.invoiceFooterNote);
+    setInvoiceDefaultTerms(branding.invoiceDefaultTerms);
+    setInvoiceAccentColor(branding.invoiceAccentColor);
+    setInvoiceTheme(branding.invoiceTheme);
   };
 
   const handleInvoiceLetterheadUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -159,20 +168,23 @@ export function CompanyBrandingSettings() {
     }
     setSaving(true);
     try {
+      const payload = tenantBrandingWritePayload({
+        companyName,
+        address,
+        phone,
+        email,
+        logoUrl,
+        invoiceLetterheadUrl,
+        invoiceFooterNote,
+        invoiceDefaultTerms,
+        invoiceAccentColor,
+        invoiceTheme,
+      });
       const { error } = await supabase
         .from("tenants")
-        .update({
-          name: companyName,
-          business_address: address,
-          business_phone: phone,
-          logo_url: logoUrl,
-          invoice_letterhead_url: invoiceLetterheadUrl || letterheadUrl,
-          invoice_footer_note: invoiceFooterNote,
-          invoice_default_terms: invoiceDefaultTerms,
-        })
+        .update(payload)
         .eq("id", activeTenantId);
       if (error) throw error;
-
       toast({ title: "Company settings saved" });
     } catch (error: any) {
       toast({ title: "Error saving settings", description: error.message, variant: "destructive" });

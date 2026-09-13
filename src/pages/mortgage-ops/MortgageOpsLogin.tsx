@@ -13,6 +13,7 @@ import { isAwsStaging, isAwsStagingHttpsPasskeysEnabled, AWS_STAGING_MORTGAGE_AU
 import { signInWithAwsPasskey } from "@/lib/awsPasskeys";
 import { signInWithPasskey, sendMagicLink, passkeysSupported } from "@/lib/passkeys";
 import { startAwsEmailOtp, verifyAwsEmailOtp } from "@/lib/awsPasswordless";
+import { isMortgageDeskStaff } from "@/lib/mortgageDeskAuth";
 
 export default function MortgageOpsLogin() {
   const [email, setEmail] = useState("");
@@ -25,29 +26,29 @@ export default function MortgageOpsLogin() {
   const canUsePasskeys = awsStaging
     ? awsHttpsPasskeys && passkeysSupported()
     : passkeysSupported();
-  const { user, userRole, loading: authLoading } = useMortgageAuth();
+  const { user, userRole, roles, loading: authLoading } = useMortgageAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
     if (authLoading) return;
     if (!user) return;
-    if (userRole === "mortgage_agent" || userRole === "admin") {
+    if (isMortgageDeskStaff(roles)) {
       navigate("/mortgage-ops/queue", { replace: true });
     } else if (userRole) {
-      // Signed in but not authorized for the Mortgage Desk — kick them out
-      // of this portal's isolated session so they can't reach queue routes.
+      // Tenant CheckOps admins are not Mortgage Ops staff. Kick them out of
+      // this isolated session so they cannot reach the internal queue.
       supabase.auth.signOut();
       toast.error("This portal is for ChecksOps mortgage agents only.");
     }
-  }, [user, userRole, authLoading, navigate]);
+  }, [user, userRole, roles, authLoading, navigate]);
 
   const enforceRole = async (userId: string) => {
-    const { data: roles } = await supabase
+    const { data: roleRows } = await supabase
       .from("user_roles")
       .select("role")
       .eq("user_id", userId);
-    const roleSet = new Set((roles ?? []).map((r) => r.role));
-    if (!roleSet.has("mortgage_agent") && !roleSet.has("admin")) {
+    const nextRoles = (roleRows ?? []).map((r) => r.role);
+    if (!isMortgageDeskStaff(nextRoles)) {
       await supabase.auth.signOut();
       toast.error("This account doesn't have access to the Mortgage Desk.");
       return false;
@@ -238,7 +239,7 @@ export default function MortgageOpsLogin() {
                 </Button>
               </form>
 
-              {user && userRole && userRole !== "mortgage_agent" && userRole !== "admin" && (
+              {user && userRole && !isMortgageDeskStaff(roles) && (
                 <p className="text-sm text-destructive text-center">
                   This portal is for ChecksOps mortgage agents only.
                 </p>

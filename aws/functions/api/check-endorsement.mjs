@@ -8,7 +8,7 @@ import pg from 'pg';
 import { parseBody, ignoredSpoof, withIdentityWrite } from './data.mjs';
 import { loadDatabaseCredentials } from './secrets.mjs';
 import { buildClientConfig, buildWriteClientConfig, sanitizePublicError } from './db-health.mjs';
-import { sendViaSesOrSink } from './email.mjs';
+import { deliverAuditedEmail, peekAuditedEmail, replayIdempotentSend, stableEmailIdempotencyKey, validatedMailReplyTo, withDurableAuditClient } from './email.mjs';
 import { defaultFromAddress } from './email-policy.mjs';
 import { renderTransactionalTemplate } from './email-templates.mjs';
 import { resolveEmailBranding } from './email-branding.mjs';
@@ -82,6 +82,35 @@ const appUrl = () => String(
   process.env.APP_PUBLIC_URL || process.env.SIGN_BASE_URL || 'https://staging.checksops.com',
 ).replace(/\/$/, '');
 
+const execPublicWriteRpc = async (requestClient, sql, params, deps = {}) => {
+  const run = async (client, commit) => {
+    if (commit) {
+      await client.query("SELECT set_config('default_transaction_read_only', 'off', false)");
+      await client.query('BEGIN');
+      await client.query('SET TRANSACTION READ WRITE');
+    }
+    try {
+      const result = await client.query(sql, params);
+      if (commit) await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      if (commit) {
+        try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+      }
+      throw error;
+    }
+  };
+  if (deps.client) return run(requestClient, false);
+  const opened = await publicDb(true, {});
+  try {
+    return await run(opened.client, true);
+  } finally {
+    if (opened.owned) {
+      try { await opened.client.end(); } catch { /* ignore */ }
+    }
+  }
+};
+
 const publicDb = async (write, deps = {}) => {
   if (deps.client) return { client: deps.client, owned: false };
   const loadCredentials = deps.loadDatabaseCredentials || loadDatabaseCredentials;
@@ -92,6 +121,9 @@ const publicDb = async (write, deps = {}) => {
     : buildClientConfig(credentials, { queryTimeoutMillis: 8000 });
   const client = createClient(config);
   await client.connect();
+  if (write) {
+    await client.query("SELECT set_config('default_transaction_read_only', 'off', false)");
+  }
   return { client, owned: true };
 };
 
@@ -110,15 +142,58 @@ const safeQuery = async (client, sql, params = []) => {
   }
 };
 
+const readRpcDoc = (result) => {
+  const raw = result?.rows?.[0]?.doc;
+  if (raw == null) return null;
+  if (typeof raw === 'string') {
+    try { return JSON.parse(raw); } catch { return null; }
+  }
+  return raw;
+};
+
 const canWriteTenant = async (client, tenantId) => {
   if (!tenantId) return false;
-  const ok = (await safeQuery(
-    client,
+  const ok = (await client.query(
     'SELECT public.aws_can_write_tenant($1::uuid) AS ok',
     [tenantId],
   )).rows[0]?.ok;
   return ok === true;
 };
+
+const markEndorsementRequestSent = async (requestClient, {
+  endorsementId, email, token, durableAudit = false, openAuditClient = null,
+}) => withDurableAuditClient(requestClient, async (auditClient, { independent } = {}) => {
+  const exec = async () => {
+    const result = await auditClient.query(
+      'SELECT public.aws_mark_endorsement_request_sent($1::uuid, $2, $3) AS doc',
+      [endorsementId, email || null, token || null],
+    );
+    const doc = readRpcDoc(result);
+    if (!doc || doc.ok === false) {
+      return {
+        ok: false,
+        error: doc?.error || 'endorsement_update_failed',
+        statusCode: doc?.statusCode || 503,
+      };
+    }
+    return { ok: true, doc };
+  };
+  if (!independent) return exec();
+  await auditClient.query('BEGIN');
+  await auditClient.query('SET TRANSACTION READ WRITE');
+  try {
+    const result = await exec();
+    if (result.ok === false) {
+      await auditClient.query('ROLLBACK');
+      return result;
+    }
+    await auditClient.query('COMMIT');
+    return result;
+  } catch (error) {
+    try { await auditClient.query('ROLLBACK'); } catch { /* ignore */ }
+    throw error;
+  }
+}, { durableAudit, openAuditClient });
 
 const loadCheckForEndorsement = async (client, endorsement) => {
   if (!endorsement?.check_id) return {};
@@ -529,12 +604,22 @@ export const runGetEndorsementData = async (client, token, spoof) => {
     return unknownPublicEndorsementToken(spoof);
   }
   const row = found.row;
+  const status = row.status || row.endorsement_status || 'pending';
+  if (['signed', 'rejected', 'waived', 'expired'].includes(String(status))) {
+    return {
+      ok: false,
+      statusCode: 404,
+      error: 'This endorsement link has already been used or replaced.',
+      code: 'token_consumed',
+      spoofFieldsIgnored: spoof,
+    };
+  }
   return {
     ok: true,
     statusCode: 200,
     id: row.id,
     payee_name: row.payee_name,
-    status: row.status || row.endorsement_status || 'pending',
+    status,
     carrier_name: row.carrier_name || 'Unknown Carrier',
     check_number: row.check_number || 'N/A',
     amount: row.amount ?? null,
@@ -544,22 +629,11 @@ export const runGetEndorsementData = async (client, token, spoof) => {
   };
 };
 
-export const runSubmitEndorsement = async (client, event, body, spoof) => {
+export const runSubmitEndorsement = async (client, event, body, spoof, deps = {}) => {
   const token = String(body.token || '').trim();
   if (!token) return { ok: false, statusCode: 400, error: 'Token required', spoofFieldsIgnored: spoof };
   if (body.eSignConsentAccepted !== true) {
     return { ok: false, statusCode: 400, error: 'Electronic signature consent is required', spoofFieldsIgnored: spoof };
-  }
-  const endorsement = (await safeQuery(
-    client,
-    `SELECT * FROM public.check_endorsements WHERE token = $1 LIMIT 1`,
-    [token],
-  )).rows[0];
-  if (!endorsement) {
-    return unknownPublicEndorsementToken(spoof);
-  }
-  if (endorsement.status === 'signed') {
-    return { ok: true, statusCode: 200, success: true, message: 'Already endorsed', ...denyDepositAdvance(), spoofFieldsIgnored: spoof };
   }
   const signatureData = body.signatureData;
   let signatureImageUrl = null;
@@ -572,35 +646,54 @@ export const runSubmitEndorsement = async (client, event, body, spoof) => {
   const consent = typeof body.consentText === 'string' && body.consentText.trim()
     ? body.consentText
     : DEFAULT_CONSENT_TEXT;
-  await client.query(
-    `UPDATE public.check_endorsements
-     SET status = 'signed',
-         signed_at = now(),
-         signature_image_url = $2,
-         signature_method = 'portal',
-         ip_address = $3,
-         user_agent = $4,
-         consent_text = $5,
-         token = $6,
-         token_expires_at = NULL,
-         updated_at = now()
-     WHERE id = $1::uuid AND token = $7`,
-    [endorsement.id, signatureImageUrl, ip, ua, consent, newToken, token],
-  );
-  const payeeSigned = await updatePayeeSigned(client, endorsement, {
+  const checkId = body.checkId || body.check_id || null;
+  const payeeId = body.payeeId || body.payee_id || null;
+  let doc;
+  try {
+    doc = readRpcDoc(await execPublicWriteRpc(
+      client,
+      `SELECT public.aws_public_submit_endorsement(
+         $1, $2, $3, $4, $5, $6, $7::uuid, $8::uuid
+       ) AS doc`,
+      [token, signatureImageUrl, consent, ip, ua, newToken, checkId, payeeId],
+      deps,
+    ));
+  } catch (error) {
+    return {
+      ok: false,
+      statusCode: 503,
+      error: 'endorsement_failed',
+      message: sanitizePublicError(error),
+      spoofFieldsIgnored: spoof,
+    };
+  }
+  if (!doc) {
+    return { ok: false, statusCode: 503, error: 'endorsement_failed', spoofFieldsIgnored: spoof };
+  }
+  if (doc.ok === false) {
+    const statusCode = Number(doc.statusCode || 404);
+    const error = doc.error === 'check_mismatch' || doc.error === 'payee_mismatch'
+      ? 'Token does not match this check'
+      : 'Invalid or already-used token';
+    return { ok: false, statusCode, error, code: doc.error, spoofFieldsIgnored: spoof };
+  }
+  const endorsement = doc;
+  if (doc.already_signed) {
+    return {
+      ok: true,
+      statusCode: 200,
+      success: true,
+      message: 'Already endorsed',
+      ...denyDepositAdvance(),
+      spoofFieldsIgnored: spoof,
+    };
+  }
+  await updatePayeeSigned(client, endorsement, {
     status: 'signed',
     token: newToken,
     image: signatureImageUrl,
     signedAt: new Date().toISOString(),
   });
-  if (!payeeSigned.ok) {
-    return {
-      ok: false,
-      statusCode: 409,
-      error: payeeSigned.error,
-      message: payeeSigned.message,
-    };
-  }
   await auditEndorsement(client, {
     endorsement_id: endorsement.id,
     check_id: endorsement.check_id,
@@ -633,41 +726,40 @@ export const runSubmitEndorsement = async (client, event, body, spoof) => {
   };
 };
 
-export const runRejectEndorsement = async (client, event, body, spoof) => {
+export const runRejectEndorsement = async (client, event, body, spoof, deps = {}) => {
   const token = String(body.token || '').trim();
   if (!token) return { ok: false, statusCode: 400, error: 'Token required', spoofFieldsIgnored: spoof };
-  const endorsement = (await safeQuery(
-    client,
-    `SELECT * FROM public.check_endorsements WHERE token = $1 LIMIT 1`,
-    [token],
-  )).rows[0];
-  if (!endorsement) {
-    return unknownPublicEndorsementToken(spoof);
-  }
   const newToken = rotateToken();
   const ip = clientIpFromEvent(event);
   const ua = userAgentFromEvent(event);
-  await client.query(
-    `UPDATE public.check_endorsements
-     SET status = 'rejected',
-         notes = $2,
-         ip_address = $3,
-         user_agent = $4,
-         token = $5,
-         token_expires_at = NULL,
-         updated_at = now()
-     WHERE id = $1::uuid AND token = $6`,
-    [endorsement.id, body.reason || null, ip, ua, newToken, token],
-  );
-  const payeeRejected = await updatePayeeSigned(client, endorsement, { status: 'rejected', token: newToken });
-  if (!payeeRejected.ok) {
+  let doc;
+  try {
+    doc = readRpcDoc(await execPublicWriteRpc(
+      client,
+      'SELECT public.aws_public_reject_endorsement($1, $2, $3, $4, $5) AS doc',
+      [token, body.reason || null, ip, ua, newToken],
+      deps,
+    ));
+  } catch (error) {
     return {
       ok: false,
-      statusCode: 409,
-      error: payeeRejected.error,
-      message: payeeRejected.message,
+      statusCode: 503,
+      error: 'endorsement_failed',
+      message: sanitizePublicError(error),
+      spoofFieldsIgnored: spoof,
     };
   }
+  if (!doc || doc.ok === false) {
+    return {
+      ok: false,
+      statusCode: Number(doc?.statusCode || 404),
+      error: 'Invalid or already-used token',
+      code: doc?.error || 'invalid_or_used_token',
+      spoofFieldsIgnored: spoof,
+    };
+  }
+  const endorsement = doc;
+  await updatePayeeSigned(client, endorsement, { status: 'rejected', token: newToken });
   await auditEndorsement(client, {
     endorsement_id: endorsement.id,
     check_id: endorsement.check_id,
@@ -698,30 +790,33 @@ export const runPublicEndorsement = async (event, deps = {}) => {
   try {
     opened = await publicDb(write, deps);
     const { client } = opened;
+    // GET also needs a transaction: safeQuery wraps the SQL 72 RPC in SAVEPOINT,
+    // and PostgreSQL rejects SAVEPOINT outside a transaction block. That swallow
+    // made unused tokens look consumed/invalid even with the RPC present.
+    await client.query('BEGIN');
     if (write) {
-      await client.query('BEGIN');
       await client.query('SET TRANSACTION READ WRITE');
+    } else {
+      await client.query('SET TRANSACTION READ ONLY');
     }
     let result;
     if (action === 'get_endorsement_data') {
       result = await runGetEndorsementData(client, String(body.token || '').trim(), spoof);
     } else if (action === 'submit_endorsement') {
-      result = await runSubmitEndorsement(client, event, body, spoof);
+      result = await runSubmitEndorsement(client, event, body, spoof, { ...deps, _requestClient: client });
     } else if (action === 'reject_endorsement') {
-      result = await runRejectEndorsement(client, event, body, spoof);
+      result = await runRejectEndorsement(client, event, body, spoof, { ...deps, _requestClient: client });
     } else {
       result = { ok: false, statusCode: 400, error: 'Unknown action', spoofFieldsIgnored: spoof };
     }
-    if (write) {
-      if (result.ok !== false && (result.statusCode || 200) < 400) {
-        await client.query('COMMIT');
-      } else {
-        await client.query('ROLLBACK');
-      }
+    if (result.ok !== false && (result.statusCode || 200) < 400) {
+      await client.query('COMMIT');
+    } else {
+      await client.query('ROLLBACK');
     }
     return result;
   } catch (error) {
-    if (opened?.client && write) {
+    if (opened?.client) {
       try { await opened.client.query('ROLLBACK'); } catch { /* ignore */ }
     }
     return {
@@ -740,40 +835,10 @@ export const runPublicEndorsement = async (event, deps = {}) => {
 
 export const handlePublicEndorsement = (event, deps = {}) => runPublicEndorsement(event, deps);
 
-const sendEndorsementEmail = async ({ endorsement, check, email, url, branding, cc, send }) => {
-  const mailer = send || sendViaSesOrSink;
-  const rendered = renderTransactionalTemplate('endorsement-request', {
-    payeeName: endorsement.payee_name,
-    checkNumber: check.check_number || 'N/A',
-    carrier: check.carrier_name || 'Unknown',
-    amount: check.amount,
-    endorseUrl: url,
-    companyName: branding.company_name || 'ChecksOps',
-    branding,
-    subject: branding.endorsement_email_subject || undefined,
-  });
-  const subjectBase = branding.endorsement_email_subject
-    || `Endorsement Required — Check #${check.check_number || 'N/A'}`;
-  const subject = subjectBase.includes(endorsement.payee_name)
-    ? subjectBase
-    : `${subjectBase} — ${endorsement.payee_name}`;
-  const recipients = [email, ...(cc || [])].filter(Boolean);
-  return mailer({
-    to: recipients,
-    subject,
-    html: rendered.html,
-    text: rendered.text,
-    from: branding.from || defaultFromAddress(),
-    replyTo: branding.replyTo || branding.company_email || null,
-    headers: {
-      'X-Entity-Ref-ID': String(endorsement.id),
-      'X-Endorsement-Payee': String(endorsement.payee_name || ''),
-    },
-  });
-};
-
 export const runAuthenticatedEndorsement = async ({
   client, mapping, body, spoof, event, send,
+  durableAudit = false,
+  openAuditClient = null,
 }) => {
   const action = body.action;
   if (!AUTH_ENDORSEMENT_ACTIONS.has(action)) {
@@ -804,44 +869,41 @@ export const runAuthenticatedEndorsement = async ({
         spoofFieldsIgnored: spoof,
       };
     }
-    if (endorsementRateLimited(endorsement.request_sent_at)) {
-      return { ok: false, statusCode: 429, error: 'Request was sent recently. Please wait before resending.', spoofFieldsIgnored: spoof };
-    }
     const email = String(body.email || endorsement.contact_email || '').trim();
     const phone = String(body.phone || endorsement.contact_phone || '').trim() || null;
-    if (body.email || body.phone) {
-      await safeQuery(
-        client,
-        `UPDATE public.check_endorsements
-         SET contact_email = COALESCE($2, contact_email),
-             contact_phone = COALESCE($3, contact_phone),
-             updated_at = now()
-         WHERE id = $1::uuid`,
-        [endorsement.id, email || null, phone],
-      );
-    }
     if (!email) {
       return { ok: false, statusCode: 502, success: false, error: 'Email delivery failed', details: { emailError: 'Missing payee email address' }, spoofFieldsIgnored: spoof };
     }
-    let activeToken = endorsement.token || rotateToken();
-    await client.query(
-      `UPDATE public.check_endorsements
-       SET token = $2, token_expires_at = NULL, updated_at = now()
-       WHERE id = $1::uuid`,
-      [endorsement.id, activeToken],
-    );
-    if (endorsement.payee_id) {
-      await safeQuery(
-        client,
-        `UPDATE public.check_payees
-         SET endorsement_token = $2, endorsement_token_expires_at = NULL,
-             contact_email = COALESCE($3, contact_email),
-             contact_phone = COALESCE($4, contact_phone),
-             updated_at = now()
-         WHERE id = $1::uuid`,
-        [endorsement.payee_id, activeToken, email, phone],
-      );
+    const suppliedKey = String(body.idempotencyKey || body.idempotency_key || '').trim();
+    const generation = endorsement.request_sent_at || 'none';
+    const idempotencyKey = suppliedKey || stableEmailIdempotencyKey('endorsement', endorsement.id, generation);
+    const prior = await peekAuditedEmail(client, idempotencyKey);
+    if (!prior.ok) return { ...prior, spoofFieldsIgnored: spoof };
+    if (prior.duplicate) {
+      const marked = await markEndorsementRequestSent(client, {
+        endorsementId: endorsement.id,
+        email,
+        token: prior.row?.metadata?.endorsement_token || endorsement.token,
+        durableAudit,
+        openAuditClient,
+      });
+      if (!marked.ok && marked.statusCode === 403) {
+        return { ok: false, statusCode: 403, error: 'forbidden', spoofFieldsIgnored: spoof };
+      }
+      return {
+        ...replayIdempotentSend(prior.row, spoof),
+        emailSent: true,
+        requestSentAt: marked.doc?.request_sent_at || endorsement.request_sent_at || null,
+        ...denyDepositAdvance(),
+      };
     }
+    if (endorsementRateLimited(endorsement.request_sent_at)) {
+      return { ok: false, statusCode: 429, error: 'Request was sent recently. Please wait before resending.', spoofFieldsIgnored: spoof };
+    }
+    // Do not UPDATE check_endorsements in this request transaction before the
+    // mailer. That row lock blocked aws_mark_endorsement_request_sent on the
+    // independent audit connection (Query read timeout after sink/SES accept).
+    const activeToken = endorsement.token || rotateToken();
     const endorsementUrl = `${appUrl()}/endorse?token=${activeToken}`;
     const tenant = tenantId
       ? (await safeQuery(
@@ -857,12 +919,16 @@ export const runAuthenticatedEndorsement = async ({
        FROM public.company_branding LIMIT 1`,
     )).rows[0] || {};
     const resolved = await resolveEmailBranding(client, { tenantId });
+    const reply = validatedMailReplyTo(resolved.replyTo);
+    if (!reply.ok) {
+      return { ok: false, statusCode: 400, error: reply.error, spoofFieldsIgnored: spoof };
+    }
     const branding = {
       company_name: resolved.companySubtitle || resolved.companyName || tenant?.email_from_name || tenant?.name || brandingRow.company_name,
-      company_email: resolved.replyTo || tenant?.email_reply_to || brandingRow.company_email,
+      company_email: reply.replyTo || tenant?.email_reply_to || brandingRow.company_email,
       endorsement_email_subject: brandingRow.endorsement_email_subject,
       from: resolved.from,
-      replyTo: resolved.replyTo,
+      replyTo: reply.replyTo,
       primaryColor: resolved.primaryColor,
       logoUrl: resolved.logoUrl,
       companySubtitle: resolved.companySubtitle,
@@ -885,19 +951,61 @@ export const runAuthenticatedEndorsement = async ({
     }
     let emailSent = false;
     let emailError = null;
-    try {
-      await sendEndorsementEmail({
-        endorsement: { ...endorsement, contact_email: email },
-        check,
-        email,
-        url: endorsementUrl,
-        branding,
-        cc,
+    let providerMessageId = null;
+    const rendered = renderTransactionalTemplate('endorsement-request', {
+      payeeName: endorsement.payee_name,
+      checkNumber: check.check_number || 'N/A',
+      carrier: check.carrier_name || 'Unknown',
+      amount: check.amount,
+      endorseUrl: endorsementUrl,
+      companyName: branding.company_name || 'ChecksOps',
+      branding,
+      subject: branding.endorsement_email_subject || undefined,
+    });
+    const subjectBase = branding.endorsement_email_subject
+      || `Endorsement Required — Check #${check.check_number || 'N/A'}`;
+    const subject = subjectBase.includes(endorsement.payee_name)
+      ? subjectBase
+      : `${subjectBase} — ${endorsement.payee_name}`;
+    const uniqueRecipients = [...new Set([email, ...cc].map((value) => String(value).trim().toLowerCase()).filter(Boolean))];
+    for (const recipient of uniqueRecipients) {
+      const recipientKey = recipient === email.toLowerCase()
+        ? idempotencyKey
+        : stableEmailIdempotencyKey(idempotencyKey, recipient);
+      const delivery = await deliverAuditedEmail(client, {
+        templateName: 'endorsement-request',
+        recipientEmail: recipient,
+        tenantId,
+        idempotencyKey: recipientKey,
+        applicationUserId: mapping.application_user_id,
+        metadata: {
+          endorsement_id: endorsement.id,
+          check_id: endorsement.check_id,
+          workflow: 'endorsement-request',
+          endorsement_token: activeToken,
+        },
+        spoof,
         send,
+        durableAudit,
+        openAuditClient,
+        mailerArgs: {
+          subject,
+          html: rendered.html,
+          text: rendered.text,
+          from: branding.from || defaultFromAddress(),
+          replyTo: branding.replyTo,
+        },
       });
+      if (!delivery.ok) {
+        if (delivery.statusCode === 503) return { ...delivery, spoofFieldsIgnored: spoof };
+        emailError = delivery.error || 'audit_unavailable';
+        emailSent = false;
+        break;
+      }
       emailSent = true;
-    } catch (error) {
-      emailError = String(error?.message || error).slice(0, 200);
+      if (recipient === email.toLowerCase()) {
+        providerMessageId = delivery.providerMessageId || delivery.replay?.providerMessageId || null;
+      }
     }
     if (!emailSent) {
       await auditEndorsement(client, {
@@ -912,17 +1020,41 @@ export const runAuthenticatedEndorsement = async ({
       });
       return { ok: false, statusCode: 502, success: false, error: 'Email delivery failed', details: { emailError }, spoofFieldsIgnored: spoof };
     }
-    await client.query(
-      `UPDATE public.check_endorsements
-       SET status = 'sent',
-           request_sent_at = now(),
-           last_reminder_at = now(),
-           reminder_count = COALESCE(reminder_count, 0) + 1,
-           contact_email = $2,
-           updated_at = now()
-       WHERE id = $1::uuid`,
-      [endorsement.id, email],
-    );
+    const marked = await markEndorsementRequestSent(client, {
+      endorsementId: endorsement.id,
+      email,
+      token: activeToken,
+      durableAudit,
+      openAuditClient,
+    });
+    if (!marked.ok) {
+      return {
+        ok: false,
+        statusCode: marked.statusCode || 503,
+        success: false,
+        error: 'request_sent_unfinalized',
+        details: {
+          emailError: marked.error || 'endorsement_update_failed',
+          providerMessageId,
+        },
+        providerMessageId,
+        emailSent: true,
+        ...denyDepositAdvance(),
+        spoofFieldsIgnored: spoof,
+      };
+    }
+    if (endorsement.payee_id) {
+      await safeQuery(
+        client,
+        `UPDATE public.check_payees
+         SET endorsement_token = $2, endorsement_token_expires_at = NULL,
+             contact_email = COALESCE($3, contact_email),
+             contact_phone = COALESCE($4, contact_phone),
+             updated_at = now()
+         WHERE id = $1::uuid`,
+        [endorsement.payee_id, activeToken, email, phone],
+      );
+    }
     await safeQuery(
       client,
       `INSERT INTO public.endorsement_requests (
@@ -955,6 +1087,8 @@ export const runAuthenticatedEndorsement = async ({
       success: true,
       endorsementUrl,
       emailSent: true,
+      providerMessageId,
+      requestSentAt: marked.doc?.request_sent_at || null,
       ...denyDepositAdvance(),
       spoofFieldsIgnored: spoof,
     };
@@ -1076,5 +1210,7 @@ export const handleCheckEndorsement = async (event, deps = {}) => {
     ...ctx,
     event,
     send: deps.sendViaSesOrSink,
+    durableAudit: deps.durableAudit !== false,
+    openAuditClient: deps.openAuditClient,
   }), deps);
 };

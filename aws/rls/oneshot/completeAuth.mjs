@@ -86,6 +86,7 @@ export const applyCompleteDdl = async (client) => {
   await client.query(readSql('29_mortgage_ops_library_parity.sql'));
   // 30_tenant_documents_mortgage_doc_type.sql is a separate unapplied operator
   // package. Do not apply it from completeAuth.
+  // Do not apply 31_mortgage_ops_agent_access.sql from completeAuth.
   const selectPolicies = Number((await client.query(
     `SELECT count(*)::int AS n FROM pg_policies
      WHERE schemaname='public' AND policyname LIKE 'aws_select_%'`,

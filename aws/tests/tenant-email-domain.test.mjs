@@ -456,6 +456,7 @@ test('frontend cannot set verified status on save', async () => {
       verified: true,
     },
     spoof,
+    sesv2: mockSes(),
   });
   assert.equal(saved.ok, true);
   assert.deepEqual(saved.ignoredClientFields.sort(), ['domain_status', 'sending_mode', 'verified']);
@@ -470,6 +471,7 @@ test('unsafe From display names are rejected; from must belong to verified domai
     mapping,
     body: { tenantId: TENANT, fromName: 'X\r\nBcc: evil@x.com' },
     spoof,
+    sesv2: mockSes(),
   });
   assert.equal(unsafe.statusCode, 400);
   assert.equal(unsafe.error, 'unsafe_from_name');
@@ -503,7 +505,7 @@ test('disable custom sending does not delete SES identity', async () => {
     client, mapping, body: { tenantId: TENANT }, spoof, sesv2,
   });
   const disabled = await runDisableCustomSending({
-    client, mapping, body: { tenantId: TENANT }, spoof,
+    client, mapping, body: { tenantId: TENANT }, spoof, sesv2,
   });
   assert.equal(disabled.disabled, true);
   assert.equal(disabled.sesIdentityDeleted, false);
@@ -967,7 +969,7 @@ test('mutating operations roll back when audit insertion fails', async () => {
     from_address: `noreply@${DOMAIN}`,
   });
   const disabled = await withTx(client, () => runDisableCustomSending({
-    client, mapping, body: { tenantId: TENANT }, spoof,
+    client, mapping, body: { tenantId: TENANT }, spoof, sesv2: mockSes(),
   }));
   assert.equal(disabled.statusCode, 503);
   assert.equal(disabled.error, 'audit_unavailable');

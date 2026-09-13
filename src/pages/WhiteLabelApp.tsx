@@ -14,6 +14,8 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 import { isMasterMerchant } from "@/lib/masterMerchant";
+import { isReservedTenantSlug } from "@/lib/tenantRoute";
+import NotFound from "@/pages/NotFound";
 
 const Payments = lazy(() => import("@/pages/Payments"));
 const CashJobs = lazy(() => import("@/pages/CashJobs"));
@@ -87,16 +89,7 @@ function WhiteLabelRoutes() {
   }
 
   if (error || !tenant) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center space-y-2">
-          <h1 className="text-2xl font-bold">Organization Not Found</h1>
-          <p className="text-muted-foreground">
-            The organization you're looking for doesn't exist or is no longer active.
-          </p>
-        </div>
-      </div>
-    );
+    return <NotFound />;
   }
 
   if (tenant.subscription_status !== "active") {
@@ -215,6 +208,10 @@ function WhiteLabelRoutes() {
 
 export default function WhiteLabelApp() {
   const { slug } = useParams<{ slug: string }>();
+
+  if (isReservedTenantSlug(slug)) {
+    return <NotFound />;
+  }
 
   return (
     <TenantProvider slug={slug}>
