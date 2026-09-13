@@ -17,6 +17,7 @@ const FILES = {
   sql69: path.join(ROOT, 'workflows/sql/69_staging_homeowner_ledger_view.sql'),
   sql71: path.join(ROOT, 'workflows/sql/71_endorsement_email_audit.sql'),
   sql72: path.join(ROOT, 'workflows/sql/72_public_endorsement_token_lookup.sql'),
+  sql73: path.join(ROOT, 'workflows/sql/73_public_endorsement_submit_payee.sql'),
   sql30: path.join(ROOT, 'rls/sql/30_tenant_documents_mortgage_doc_type.sql'),
 };
 
@@ -111,6 +112,18 @@ CREATE TABLE public.check_endorsements (
   last_reminder_at timestamptz,
   updated_at timestamptz DEFAULT now()
 );
+CREATE TABLE public.check_payees (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  check_id uuid,
+  tenant_id uuid,
+  payee_name text,
+  endorsement_status text,
+  endorsed_at timestamptz,
+  endorsement_token text,
+  endorsement_token_expires_at timestamptz,
+  endorsement_image_path text,
+  updated_at timestamptz DEFAULT now()
+);
 CREATE TABLE public.homeowner_ledger_tokens (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid,
@@ -159,7 +172,7 @@ ALTER TABLE public.check_intake_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mortgage_handling_requests ENABLE ROW LEVEL SECURITY;
 `;
 
-test('SQL 29/52/39/69/71/72 apply twice on disposable PG16 and keep SQL 30 unapplied', {
+test('SQL 29/52/39/69/71/72/73 apply twice on disposable PG16 and keep SQL 30 unapplied', {
   timeout: 180000,
 }, async (t) => {
   if (!fs.existsSync(path.join(PG_BIN, 'initdb'))) {
@@ -254,6 +267,7 @@ max_connections = 20
   applyTwice('69_staging_homeowner_ledger_view', FILES.sql69);
   applyTwice('71_endorsement_email_audit', FILES.sql71);
   applyTwice('72_public_endorsement_token_lookup', FILES.sql72);
+  applyTwice('73_public_endorsement_submit_payee', FILES.sql73);
 
   const functions = scalar(`
 SELECT string_agg(p.proname, ',' ORDER BY p.proname)
@@ -292,6 +306,13 @@ WHERE n.nspname = 'public'
   assert.doesNotMatch(functions || '', /aws_public_signature_by_token_hash/);
   assert.equal(scalar(`SELECT has_function_privilege('checksops', 'public.aws_public_endorsement_by_token(text)', 'EXECUTE')::text`), 'true');
   assert.equal(scalar(`SELECT has_function_privilege('public', 'public.aws_public_endorsement_by_token(text)', 'EXECUTE')::text`), 'false');
+  assert.equal(scalar(`SELECT has_function_privilege('checksops', 'public.aws_public_submit_endorsement(text,text,text,text,text,text,uuid,uuid)', 'EXECUTE')::text`), 'true');
+  assert.equal(scalar(`SELECT has_function_privilege('public', 'public.aws_public_submit_endorsement(text,text,text,text,text,text,uuid,uuid)', 'EXECUTE')::text`), 'false');
+  assert.equal(scalar(`
+SELECT (p.prosrc ILIKE '%UPDATE public.check_payees%')::text
+FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+WHERE n.nspname = 'public' AND p.proname = 'aws_public_submit_endorsement'
+`), 'true');
 
   const claimGrant = scalar(`
 SELECT count(*)::text
