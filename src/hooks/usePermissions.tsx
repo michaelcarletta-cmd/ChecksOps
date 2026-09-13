@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
+import { isPlatformOwner } from "@/lib/masterMerchant";
 
 export type Permission = 
   | "read"
@@ -73,6 +74,10 @@ export function usePermissions() {
   const isReadOnly = userRole === "read_only";
   const isAdmin = userRole === "admin";
   const isStaff = userRole === "staff";
+  const platformOwner = isPlatformOwner(user?.email, user?.id);
+  // Platform owner is not a tenant `admin` role. Do not collapse the two:
+  // isAdmin still gates tenant-destructive actions (delete check, payment override).
+  const canViewPlatformSettings = isAdmin || platformOwner;
 
   return {
     permissions,
@@ -81,5 +86,7 @@ export function usePermissions() {
     isReadOnly,
     isAdmin,
     isStaff,
+    isPlatformOwner: platformOwner,
+    canViewPlatformSettings,
   };
 }
