@@ -2,6 +2,7 @@
  * Tranche-6 application metadata writes (non-financial, non-provider).
  */
 import { ident } from './data.mjs';
+import { isAllowedTenantDocumentDocType } from './mortgage-library-doc-types.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isUuid = (value) => UUID_RE.test(String(value || ''));
@@ -85,6 +86,9 @@ export const executeTenantDocuments = async ({ client, mapping, op, values, filt
     }
     const docType = clip(values.doc_type, 120);
     if (docType?.error || !docType) return docType?.error || { error: 'missing_required_field', field: 'doc_type' };
+    if (!isAllowedTenantDocumentDocType(docType)) {
+      return { error: 'category_not_allowlisted', field: 'doc_type' };
+    }
     const filePath = clip(values.file_path, 512);
     if (filePath?.error || !filePath) return filePath?.error || { error: 'missing_required_field', field: 'file_path' };
     const fileName = clip(values.file_name, 255);
@@ -131,6 +135,9 @@ export const executeTenantDocuments = async ({ client, mapping, op, values, filt
     if (col in values) {
       const text = clip(values[col], max);
       if (text?.error) return text;
+      if (col === 'doc_type' && !isAllowedTenantDocumentDocType(text)) {
+        return { error: 'category_not_allowlisted', field: 'doc_type' };
+      }
       out[col] = text;
     }
   }
