@@ -508,6 +508,29 @@ export const handler = async (event) => {
         expectedAcv: 6500,
       };
     }
+    if (step === 'mint-pending-portal') {
+      const profileId = '3b57edc6-8e37-4445-9fff-8439516630e1';
+      const contractorUser = C1C_ADMIN_ID;
+      const inserted = (await client.query(
+        `INSERT INTO public.homeowner_intro_requests (
+           contractor_profile_id, contractor_user_id,
+           homeowner_name, homeowner_email, property_zip, loss_type, message, status
+         ) VALUES (
+           $1::uuid, $2::uuid, 'P2 Pending Fixture', 'p2-pending@example.invalid',
+           '33101', 'wind', 'phase2 synthetic SES-free pending token', 'new'
+         ) RETURNING id::text, access_token, status, accepted_at`,
+        [profileId, contractorUser],
+      )).rows[0];
+      return {
+        ok: Boolean(inserted?.access_token) && inserted.status === 'new' && !inserted.accepted_at,
+        step,
+        leadId: inserted.id,
+        tokenLen: inserted.access_token?.length || 0,
+        tokenPrefix: String(inserted.access_token || '').slice(0, 8),
+        status: inserted.status,
+        access_token: inserted.access_token,
+      };
+    }
     if (step === 'mint-portal-fixture') {
       const profileId = '3b57edc6-8e37-4445-9fff-8439516630e1';
       const contractorUser = C1C_ADMIN_ID;

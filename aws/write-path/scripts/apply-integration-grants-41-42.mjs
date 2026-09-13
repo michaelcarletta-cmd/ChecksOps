@@ -98,7 +98,7 @@ const invokeLambda = (payload) => {
 };
 
 const main = async () => {
-  if (!['inspect', 'sql41', 'sql42', 'probe-claim', 'inspect-c1c', 'inspect-portal', 'mint-portal'].includes(MODE)) {
+  if (!['inspect', 'sql41', 'sql42', 'probe-claim', 'inspect-c1c', 'inspect-portal', 'mint-portal', 'mint-pending'].includes(MODE)) {
     throw new Error(`unsupported mode ${MODE}`);
   }
   const secrets = awsJson(['secretsmanager', 'list-secrets']);
@@ -151,6 +151,15 @@ const main = async () => {
         report.mint = { ...report.mint, access_token: undefined, tokenRedacted: true };
       }
       report.post = report.pre;
+    } else if (MODE === 'mint-pending') {
+      report.mint = invokeLambda({ step: 'mint-pending-portal' });
+      if (report.mint?.access_token) {
+        fs.writeFileSync('/tmp/phase2-pending-token.txt', String(report.mint.access_token));
+        fs.chmodSync('/tmp/phase2-pending-token.txt', 0o600);
+        if (report.mint.leadId) fs.writeFileSync('/tmp/phase2-pending-lead.txt', String(report.mint.leadId));
+        report.mint = { ...report.mint, access_token: undefined, tokenRedacted: true };
+      }
+      report.post = report.pre;
     }
   } finally {
     try { awsJson(['lambda', 'delete-function', '--function-name', LAMBDA_NAME]); } catch { /* keep going */ }
@@ -164,7 +173,7 @@ const main = async () => {
     report.ok = report.identity?.ok === true;
   } else if (MODE === 'inspect-portal') {
     report.ok = report.portal?.ok === true;
-  } else if (MODE === 'mint-portal') {
+  } else if (MODE === 'mint-portal' || MODE === 'mint-pending') {
     report.ok = report.mint?.ok === true && report.mint?.tokenRedacted === true;
   } else {
     report.ok = inspectOnly
