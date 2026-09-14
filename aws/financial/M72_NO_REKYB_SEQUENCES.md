@@ -1,8 +1,9 @@
 # M7.2 — Remaining Moov sequences without re-KYB/KYC
 
-**STOP FOR REVIEW.** Do not enable money flags. Do not POST a transfer. Do
-not PATCH the Freedom Sweep. Do not apply SQL72. Do not deploy the prep
-Lambda. Do not re-request capabilities, KYC, KYB, or ToS.
+**STOP FOR REVIEW on remaining holds.** Do not POST a transfer without
+Freedom-member TOTP. Do not PATCH the Freedom Sweep. Do not apply SQL72.
+Do not re-request capabilities, KYC, KYB, or ToS. CheckAlt and Plaid
+stay false. First transfer remains **1 cent**.
 
 Freedom Adjustment, Condition One Commercial, and the ChecksOps
 facilitator are **already authorized at Moov**. Re-requesting capabilities
@@ -147,19 +148,36 @@ minimum **`$0.00`**. That means auto-push **empties** the wallet to the
 settlement bank. It is a valid treasury setting, not a product prerequisite
 to use Moov. BANK→WALLET still pulls into the wallet; WALLET→RECIPIENT
 needs available wallet balance (pause auto-push or keep a retain if you
-want funds to sit there). **This phase does not PATCH** the live Freedom
-sweep.
+want funds to sit there). **The live Freedom sweep was not PATCHed.**
 
-## Holds (unchanged)
+## Live lift (2026-09-14)
 
-Money flags stay false. No wallet fund. No Sweep create/update. No transfer.
-No SQL72. No Lambda overlay. No re-KYC.
+Human ordered flag lift. Prep Lambda `checksops-production-prep-api`:
+
+- CodeSha256 `fX9KOQi7vLmwPgOzig5EqvU1Ii+YeNYmIT6FNIAxuMQ=`
+- `AWS_MOOV_ENABLED=true`
+- `AWS_PROVIDER_EXECUTION_ENABLED=true`
+- `AWS_FINANCIAL_PERMISSIONS_ACTIVATED=true`
+- `AWS_CHECKALT_ENABLED=false`
+- `AWS_PLAID_ENABLED=false`
+- `AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED=false`
+- `AWS_PROVIDER_LIVE_READS_ENABLED=true`
+- `AWS_PROVIDER_WEBHOOK_DRY_RUN=true`
+- SQL64 / SQL72 **not** applied
+- No Sweep PATCH, no KYC POST, no transfer POST yet
+
+Unauthenticated `moov-wallet-fund` now returns `401 missing_cognito_token`
+(not `provider_disabled`). First 1¢ still requires a Freedom tenant-member
+Cognito JWT plus Financial TOTP bound to `wallet.fund` / `wallet.disburse`.
+
+`checksops.com` still uses Supabase functions (`MOOV_ENABLED`). Lifting AWS
+flags does not switch the Lovable UI onto these writers.
 
 ## GO / NO-GO
 
-**GO** for the no-re-KYC sequences, Tenant Management fee/refund (not send-on-behalf),
-bank-funded wallet send (CheckAlt only for ChecksOps deposits), live-read
-wallet visibility, and dark AWS writers.
+**GO** for AWS prep writers (1¢ cap, TOTP, no re-KYC). BANK→WALLET and
+WALLET→ named payee are reachable on the prep Lambda once a Freedom member
+completes TOTP.
 
-**NO-GO** to enable money, PATCH Sweep, overlay the prep Lambda, or run
-Test 1 1¢ until a human explicitly orders those steps.
+**NO-GO** to PATCH Sweep, enable CheckAlt/Plaid, apply SQL64/SQL72, raise
+the 1¢ cap, or POST a transfer from Tenant Management.
