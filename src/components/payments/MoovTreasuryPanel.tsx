@@ -93,10 +93,10 @@ export function MoovTreasuryPanel() {
       toast({ title: "Check the minimum balance", description: (e as Error).message, variant: "destructive" });
       return;
     }
-    if (cents <= 0) {
+    if (cents < 0) {
       toast({
-        title: "Choose a retain minimum first",
-        description: "Automatic payouts cannot be enabled at $0.00. Enter a dollar amount to keep in the wallet.",
+        title: "Check the minimum balance",
+        description: "Enter zero or a positive dollar amount to keep in the wallet.",
         variant: "destructive",
       });
       return;
@@ -111,7 +111,9 @@ export function MoovTreasuryPanel() {
       });
       toast({
         title: "Daily payouts are on",
-        description: `Anything above ${money(cents)} is paid out automatically each day.`,
+        description: cents === 0
+          ? "Retain is $0.00 — the full wallet is paid out to the settlement bank each day. To send through ChecksOps, pause automatic payouts or keep a retain so funds stay in the wallet."
+          : `Anything above ${money(cents)} is paid out automatically each day.`,
       });
     } catch (e) {
       toast({ title: "Could not save", description: (e as Error).message, variant: "destructive" });
@@ -136,8 +138,10 @@ export function MoovTreasuryPanel() {
             Treasury &amp; daily payouts
           </CardTitle>
           <CardDescription>
-            Your provider automatically pays out available balance to your settlement bank once a
-            day, keeping the minimum balance you set in the account.
+            Your provider can automatically pay out available balance to your settlement bank once a
+            day. A $0.00 retain means keep nothing — the full wallet is pushed to the bank. To send
+            payees through ChecksOps, pause automatic payouts or keep a retain so funds sit in the
+            wallet.
           </CardDescription>
         </div>
         <Button variant="outline" size="sm" onClick={() => refetch()}>
@@ -188,7 +192,9 @@ export function MoovTreasuryPanel() {
               <Info className="h-4 w-4" />
               <AlertDescription className="text-sm">
                 Payouts run automatically once a day. Everything above the minimum balance you keep
-                in the account is sent to your settlement bank.
+                in the account is sent to your settlement bank. $0.00 retain empties the wallet, which
+                is valid if you want the bank to hold the funds; it is not a required operating
+                setting to use Moov.
                 {pullAvailable
                   ? " If the balance ever goes negative, funds are pulled back from that same bank account by ACH debit to bring it to zero."
                   : " Connect a bank funding method to also let negative balances be corrected automatically."}
@@ -236,7 +242,7 @@ export function MoovTreasuryPanel() {
                     disabled={!isAdmin}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Held back in the account on every payout — not a payout trigger.
+                    Held back in the account on every payout. $0.00 means push the full wallet.
                   </p>
                 </div>
 

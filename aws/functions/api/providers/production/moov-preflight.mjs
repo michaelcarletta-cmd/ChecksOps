@@ -15,6 +15,7 @@ export const liveTosAccepted = (account = {}) => Boolean(
   || account?.termsOfService?.accepted === true,
 );
 
+/** True when an enabled sweep retains $0 (auto-push empties the wallet). Informational; does not block BANK→WALLET. */
 export const sweepBlocksFirstCent = (sweeps = []) => {
   const list = Array.isArray(sweeps) ? sweeps : listOf(sweeps);
   return list.some((row) => {

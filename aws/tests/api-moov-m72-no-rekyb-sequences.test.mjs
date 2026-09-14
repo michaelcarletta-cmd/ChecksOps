@@ -593,7 +593,7 @@ test('production HTTP allowlist allows GET including sweep-configs, transfer POS
   );
 });
 
-test('enabled sweep with $0 minimum blocks Test 1', () => {
+test('enabled sweep with $0 minimum is detected as auto-push-all', () => {
   assert.equal(sweepBlocksFirstCent([{ status: 'enabled', minimumBalance: { value: 0 } }]), true);
   assert.equal(sweepBlocksFirstCent([{ status: 'enabled', minimumBalance: { value: '0.00' } }]), true);
   assert.equal(sweepBlocksFirstCent([{ status: 'disabled', minimumBalance: { value: 0 } }]), false);
@@ -649,7 +649,7 @@ test('BANK→WALLET refuses amounts above the 1 cent first-transfer cap', async 
   assert.equal(FIRST_PRODUCTION_TRANSFER_CENTS, 1);
 });
 
-test('BANK→WALLET refuses when Sweep minimum is $0; no transfer POST', async () => {
+test('BANK→WALLET posts when Sweep minimum is $0; no capability POST', async () => {
   resetProductionMoovTokenCache();
   const store = createStore();
   grantStepUp(store);
@@ -657,17 +657,20 @@ test('BANK→WALLET refuses when Sweep minimum is $0; no transfer POST', async (
     client: identityClient(store),
     mapping,
     claims: { sub: COGNITO_SUB },
-    body: { tenant_id: FREEDOM_TENANT, amount_cents: 1 },
+    body: { tenant_id: FREEDOM_TENANT, amount_cents: 1, idempotency_key: 'fund-sweep-zero-1' },
     spoof: {},
     fetchImpl: mockMoovFetch(store, { sweepMin: '0.00', sweepStatus: 'enabled' }),
     deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
   }));
-  assert.equal(result.error, 'sweep_minimum_blocks_test');
+  assert.equal(result.ok, true, result.error || JSON.stringify(result));
+  assert.equal(result.operation, 'wallet.fund');
+  assert.equal(result.sweepAutoPushesAll, true);
   assert.equal(result.kycRequested, false);
   assert.equal(result.capabilitiesPosted, false);
-  assert.equal(store.transferPosts || 0, 0);
+  assert.equal(store.transferPosts, 1);
   assert.equal(store.capabilityPosts || 0, 0);
-  assert.ok(store.moovCalls.every((call) => call.method === 'GET' || call.url.includes('/oauth2/token')));
+  assert.ok(store.moovCalls.some((call) => call.method === 'POST' && /\/transfers$/.test(call.url)));
+  assert.ok(!store.moovCalls.some((call) => /capabilities/.test(call.url) && call.method === 'POST'));
 });
 
 test('BANK→WALLET requires Financial TOTP bound to wallet.fund', async () => {
@@ -803,19 +806,8 @@ test('WALLET→RECIPIENT refuses an unverified payee without KYC', async () => {
   assert.equal(store.capabilityPosts || 0, 0);
 });
 
-test('WALLET→RECIPIENT refuses before CheckAlt has cleared', async () => {
+test('WALLET→RECIPIENT refuses a named CheckAlt deposit that has not cleared', async () => {
   const store = createStore();
-  const missing = await withEnv(productionFlags, () => handleProductionMoovWalletDisburse({
-    client: identityClient(store),
-    mapping,
-    claims: { sub: COGNITO_SUB },
-    body: { tenant_id: FREEDOM_TENANT, amount_cents: 1, external_recipient_id: VENDOR_RECIPIENT_ID },
-    spoof: {},
-    fetchImpl: mockMoovFetch(store),
-    deps: {},
-  }));
-  assert.equal(missing.error, 'check_not_cleared');
-
   const pending = await withEnv(productionFlags, () => handleProductionMoovWalletDisburse({
     client: identityClient(store),
     mapping,
@@ -832,6 +824,74 @@ test('WALLET→RECIPIENT refuses before CheckAlt has cleared', async () => {
   }));
   assert.equal(pending.error, 'check_not_cleared');
   assert.equal(store.transferPosts || 0, 0);
+});
+
+test('WALLET→RECIPIENT posts from wallet funds without a ChecksOps CheckAlt row', async () => {
+  resetProductionMoovTokenCache();
+  const store = createStore();
+  grantStepUp(store, {
+    actionKey: 'wallet.disburse',
+    sourcePm: KNOWN_APPROVED_MOOV.freedom.walletPm,
+    destPm: KNOWN_APPROVED_MOOV.recipient.achCreditStandardPm,
+  });
+  const result = await withEnv(productionFlags, () => handleProductionMoovWalletDisburse({
+    client: identityClient(store),
+    mapping,
+    claims: { sub: COGNITO_SUB },
+    body: {
+      tenant_id: FREEDOM_TENANT,
+      amount_cents: 1,
+      source_kind: 'wallet',
+      external_recipient_id: VENDOR_RECIPIENT_ID,
+      idempotency_key: 'disburse-bank-funded-1',
+    },
+    spoof: {},
+    fetchImpl: mockMoovFetch(store, { walletAvailable: 1, sweepStatus: 'enabled', sweepMin: '0.00' }),
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
+  }));
+  assert.equal(result.ok, true, result.error || JSON.stringify(result));
+  assert.equal(result.operation, 'wallet.disburse');
+  assert.equal(result.kycRequested, false);
+  assert.equal(result.capabilitiesPosted, false);
+  assert.equal(result.bankFallback, false);
+  assert.equal(store.transferPosts, 1);
+  assert.equal(store.capabilityPosts || 0, 0);
+  const transferPost = store.moovCalls.find((call) => call.method === 'POST' && /\/transfers$/.test(call.url));
+  assert.ok(transferPost);
+  const posted = JSON.parse(transferPost.body);
+  assert.equal(posted.metadata.checksops_checkalt_deposit_id, '');
+  assert.ok(!store.moovCalls.some((call) => /capabilities/.test(call.url) && call.method === 'POST'));
+});
+
+test('WALLET→RECIPIENT posts after a named CheckAlt deposit has cleared', async () => {
+  resetProductionMoovTokenCache();
+  const store = createStore();
+  grantStepUp(store, {
+    actionKey: 'wallet.disburse',
+    sourcePm: KNOWN_APPROVED_MOOV.freedom.walletPm,
+    destPm: KNOWN_APPROVED_MOOV.recipient.achCreditStandardPm,
+  });
+  const result = await withEnv(productionFlags, () => handleProductionMoovWalletDisburse({
+    client: identityClient(store),
+    mapping,
+    claims: { sub: COGNITO_SUB },
+    body: {
+      tenant_id: FREEDOM_TENANT,
+      amount_cents: 1,
+      source_kind: 'wallet',
+      external_recipient_id: VENDOR_RECIPIENT_ID,
+      checkalt_deposit_id: CLEARED_DEPOSIT_ID,
+      idempotency_key: 'disburse-checkalt-1',
+    },
+    spoof: {},
+    fetchImpl: mockMoovFetch(store, { walletAvailable: 1, sweepStatus: 'disabled' }),
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
+  }));
+  assert.equal(result.ok, true, result.error || JSON.stringify(result));
+  assert.equal(store.transferPosts, 1);
+  const transferPost = store.moovCalls.find((call) => call.method === 'POST' && /\/transfers$/.test(call.url));
+  const posted = JSON.parse(transferPost.body);
+  assert.equal(posted.metadata.checksops_checkalt_deposit_id, CLEARED_DEPOSIT_ID);
 });
 
 test('Tenant Management cannot send payouts for a tenant they are not a member of', async () => {
@@ -970,6 +1030,23 @@ test('C1C BANK→WALLET and fee-collect refuse without collect-funds and never P
   assert.equal(fee.error, 'collect_funds_not_enabled');
   assert.equal(store.transferPosts || 0, 0);
   assert.equal(store.capabilityPosts || 0, 0);
+});
+
+test('wallet-fund-on-clear still requires a cleared CheckAlt row', async () => {
+  const store = createStore();
+  store.queue[0].checkalt_deposit_id = PENDING_DEPOSIT_ID;
+  grantStepUp(store);
+  const result = await withEnv(productionFlags, () => handleProductionMoovWalletFundOnClear({
+    client: identityClient(store),
+    mapping,
+    claims: { sub: COGNITO_SUB },
+    body: { queue_id: QUEUE_ID },
+    spoof: {},
+    fetchImpl: mockMoovFetch(store, { sweepStatus: 'disabled' }),
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
+  }));
+  assert.equal(result.error, 'check_not_cleared');
+  assert.equal(store.transferPosts || 0, 0);
 });
 
 test('wallet-fund-on-clear funds after CheckAlt clear and does not auto-disburse', async () => {
@@ -1155,7 +1232,7 @@ test('C1C live readiness is send-ready without collect-funds and never requests 
   assert.equal(store.capabilityPosts || 0, 0);
 });
 
-test('sweep GET is live-read; enabling at $0 is refused even when money flags are on', async () => {
+test('sweep GET is live-read; writes stay dark until money flags; $0 retain is valid', async () => {
   resetProductionMoovTokenCache();
   const store = createStore();
   const liveGet = await withEnv({
@@ -1197,6 +1274,24 @@ test('sweep GET is live-read; enabling at $0 is refused even when money flags ar
   assert.equal(blockedWrite.error, 'production_execution_blocked');
   assert.equal(store.sweepWrites || 0, 0);
 
+  const negativeMin = await withEnv(productionFlags, () => handleProductionMoovSweepConfig({
+    client: identityClient(store),
+    mapping,
+    claims: { sub: COGNITO_SUB },
+    body: {
+      tenant_id: FREEDOM_TENANT,
+      action: 'create',
+      minimum_balance_cents: -1,
+      status: 'enabled',
+      push_rail: 'ach-credit-standard',
+    },
+    spoof: {},
+    fetchImpl: mockMoovFetch(store),
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
+  }));
+  assert.equal(negativeMin.error, 'invalid_sweep_minimum');
+  assert.equal(store.sweepWrites || 0, 0);
+
   const zeroMin = await withEnv(productionFlags, () => handleProductionMoovSweepConfig({
     client: identityClient(store),
     mapping,
@@ -1209,11 +1304,13 @@ test('sweep GET is live-read; enabling at $0 is refused even when money flags ar
       push_rail: 'ach-credit-standard',
     },
     spoof: {},
-    fetchImpl: mockMoovFetch(store),
+    fetchImpl: mockMoovFetch(store, { sweepStatus: 'enabled', sweepMin: '0.00' }),
     deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
   }));
-  assert.equal(zeroMin.error, 'sweep_minimum_blocks_test');
-  assert.equal(store.sweepWrites || 0, 0);
+  assert.equal(zeroMin.ok, true, zeroMin.error || JSON.stringify(zeroMin));
+  assert.equal(zeroMin.error, undefined);
+  assert.equal(store.sweepWrites, 1);
+  assert.equal(store.transferPosts || 0, 0);
 });
 
 test('handleProviderRequest serves wallet-status when live reads are on and money flags are off', async () => {

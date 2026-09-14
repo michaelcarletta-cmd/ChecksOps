@@ -173,6 +173,29 @@ const depositIsCleared = (row) => {
   return CHECKALT_CLEARED_STATUSES.has(String(row.status || '').toLowerCase());
 };
 
+const namedId = (value) => {
+  const text = value == null ? '' : String(value).trim();
+  return text.length > 0 ? text : null;
+};
+
+/** True when this send is against a ChecksOps-deposited check (not an outside deposit). */
+export function namedChecksOpsCheckContext({
+  checkaltDepositId,
+  checkIntakeItemId,
+  batchId,
+} = {}) {
+  return Boolean(namedId(checkaltDepositId) || namedId(checkIntakeItemId) || namedId(batchId));
+}
+
+export async function requireCheckAltIfNamed(client, ctx = {}) {
+  if (!namedChecksOpsCheckContext(ctx)) {
+    return { ok: true, deposit: null, checkContextNamed: false };
+  }
+  const cleared = await assertCheckAltCleared(client, ctx);
+  if (!cleared.ok) return cleared;
+  return { ...cleared, checkContextNamed: true };
+}
+
 export async function assertCheckAltCleared(client, {
   tenantId,
   checkaltDepositId,
@@ -224,7 +247,7 @@ export async function assertCheckAltCleared(client, {
 
   if (!deposit) {
     return failParty('check_not_cleared', {
-      message: 'Once a check clears through CheckAlt, the tenant (or Tenant Management) sends Moov to the partner, sub-contractor, vendor, or homeowner. Name a cleared CheckAlt deposit or its check.',
+      message: 'This payout names a ChecksOps check that has no cleared CheckAlt deposit yet. Bank-funded wallet sends do not need CheckAlt — omit checkalt_deposit_id, check_intake_item_id, and batch_id.',
     });
   }
   if (deposit.returned_at) {

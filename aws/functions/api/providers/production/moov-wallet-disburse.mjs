@@ -17,6 +17,7 @@ import {
 import { ProductionMoovError, listOf, productionMoovFetch } from './moov-http.mjs';
 import {
   assertCheckAltCleared,
+  requireCheckAltIfNamed,
   resolveProductionMerchant,
   resolveProductionRecipient,
 } from './moov-parties.mjs';
@@ -96,7 +97,7 @@ export async function handleProductionMoovWalletDisburse({
   const recipient = await resolveProductionRecipient(client, tenantId, recipientId);
   if (!recipient.ok) return { ...recipient, spoofFieldsIgnored: spoof, operation: 'wallet.disburse' };
 
-  const cleared = await assertCheckAltCleared(client, {
+  const cleared = await requireCheckAltIfNamed(client, {
     tenantId,
     checkaltDepositId: body?.checkalt_deposit_id || body?.deposit_id || null,
     checkIntakeItemId: body?.check_intake_item_id || body?.check_id || null,
@@ -335,7 +336,7 @@ export async function handleProductionMoovInitiateWalletFunding(ctx) {
     productionExecution: false,
     kycRequested: false,
     capabilitiesPosted: false,
-    message: 'initiate-wallet-funding couples BANK→WALLET and auto-send. Use moov-wallet-fund then a separate WALLET→RECIPIENT disbursement after CheckAlt clears.',
+    message: 'initiate-wallet-funding couples BANK→WALLET and auto-send. Use moov-wallet-fund then a separate WALLET→RECIPIENT disbursement from wallet available balance.',
     spoofFieldsIgnored: ctx.spoof,
   };
 }
@@ -344,7 +345,7 @@ export async function handleProductionMoovProcessFundedPayment({ body, spoof, de
   if (deps.internalBypass === true || body?.internal === true) {
     return fail('internal_bypass_refused', 403, {
       operation: 'process-funded-payment',
-      message: 'The legacy x-checksops-internal auto-send is refused. After CheckAlt clear, a human must send WALLET→RECIPIENT.',
+      message: 'The legacy x-checksops-internal auto-send is refused. A tenant member must send WALLET→RECIPIENT from wallet available balance.',
     });
   }
   return {
@@ -359,7 +360,7 @@ export async function handleProductionMoovProcessFundedPayment({ body, spoof, de
     kycRequested: false,
     capabilitiesPosted: false,
     autoSend: false,
-    message: 'After CheckAlt clears, the tenant sends WALLET→RECIPIENT. Tenant Management does not send on their behalf. Auto-send is refused.',
+    message: 'The tenant sends WALLET→RECIPIENT from wallet available balance. CheckAlt is required only when a ChecksOps deposit is named. Tenant Management does not send on their behalf. Auto-send is refused.',
     spoofFieldsIgnored: spoof,
   };
 }

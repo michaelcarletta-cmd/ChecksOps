@@ -82,7 +82,7 @@ Tenant users stay limited to `tenant_users` membership. Platform-owner access is
 | Submit CheckAlt deposit | `deposit.submit` | tenant owner/admin/manager + step-up | no |
 | Approve CheckAlt deposit | `deposit.approve` | same + step-up | no |
 | Fund wallet | `wallet.fund` | tenant owner/admin/manager (not Tenant Management) | no |
-| Initiate disbursement | `disbursement.send` | tenant owner/admin/manager + step-up, after CheckAlt clear, to an already-verified partner/sub/vendor/homeowner | no |
+| Initiate disbursement | `disbursement.send` | tenant owner/admin/manager + step-up, from wallet available balance, to an already-verified partner/sub/vendor/homeowner. CheckAlt required only when a ChecksOps deposit/check/batch is named | no |
 | Platform fee pull | `platform.fee_collect` | Tenant Management (`checksopsadmin@gmail.com`) only + step-up | no |
 | Platform refund | `platform.refund` | Tenant Management only + step-up; platform → tenant wallet | no |
 | Initiate ACH | `payments.ach` | disbursement + `send-funds.ach` | no |

@@ -21,16 +21,23 @@ ChecksOps sequences so they **reuse those accounts**.
 
 Tenant Management does **not** send partner, sub-contractor, vendor, or
 homeowner payouts on a tenant's behalf. Those WALLET→RECIPIENT sends are
-tenant-member only, after CheckAlt clear.
+tenant-member only, from wallet available balance. CheckAlt is required
+**only** when the payout names a ChecksOps deposit, check, or batch.
 
 Every tenant can **see** their Moov wallet: available balance, pending in,
-pending out, sweeps (and configure sweeps once money flags are on, with a
-retain minimum **> $0**), whether the account is verified and **what** is
-verified, and which bank is linked to the Moov wallet.
+pending out, sweeps (and configure sweeps once money flags are on; **$0
+retain is valid** and means auto-push the full wallet to the bank), whether
+the account is verified and **what** is verified, and which bank is linked
+to the Moov wallet.
 
 ```
-CheckAlt clear
-  → optional TENANT BANK→WALLET (collect-funds tenants only)
+Outside ChecksOps deposit (bank already Moov-linked)
+  → TENANT BANK→WALLET (collect-funds tenants only)
+  → TENANT WALLET → named payee (manual send; never auto-send)
+
+ChecksOps-deposited check
+  → CheckAlt clear (required)
+  → optional TENANT BANK→WALLET
   → TENANT WALLET → named payee (manual send; never auto-send)
 ```
 
@@ -47,8 +54,8 @@ already-funded wallet.
 | Capability family match | `send-funds` satisfies `send-funds.ach`; **never re-POST** |
 | Discover/link vs create | Known merchants **409** `known_approved_account_must_be_linked` |
 | Tenant Management authz | Mapped email `checksopsadmin@gmail.com` may pull fees and issue refunds; **cannot** send tenant payouts |
-| AWS BANK→WALLET writer | Dark, fail-closed; tenant members only; 1¢ cap; Sweep `$0` min **blocks Test 1** |
-| AWS WALLET→RECIPIENT writer | Named already-verified payee; CheckAlt must be cleared; no bank fallback; **no internal bypass**; **not Tenant Management** |
+| AWS BANK→WALLET writer | Dark, fail-closed; tenant members only; 1¢ cap; **$0 Sweep retain does not block** the pull |
+| AWS WALLET→RECIPIENT writer | Named already-verified payee; CheckAlt **only if** a ChecksOps deposit/check/batch is named; no bank fallback; **no internal bypass**; **not Tenant Management** |
 | AWS fee pull | Dark, platform-owner only; 1¢ cap; C1C **409** `collect_funds_not_enabled` |
 | AWS refund | Dark, platform-owner only; platform → tenant wallet; 1¢ cap |
 | Tenant wallet visibility | Live GET `moov-wallet-status` / readiness / sweep-config when `AWS_PROVIDER_LIVE_READS_ENABLED`; never POSTs transfers or capabilities |
@@ -123,22 +130,25 @@ Additional holds inside the writer (even if flags were lifted):
 2. First transfer **1 cent** (`first_transfer_cap`)
 3. Financial TOTP bound to `wallet.fund`, `wallet.disburse`,
    `platform.fee_collect`, or `platform.refund` + tenant + amount + payment-method ids
-4. Enabled Sweep with `minimumBalance <= 0` → `sweep_minimum_blocks_test`
+4. Enabled Sweep with `minimumBalance <= 0` is **informational** (`sweepAutoPushesAll`); it does **not** block BANK→WALLET. If auto-push empties the wallet before send, WALLET→RECIPIENT fails with `wallet_balance_insufficient`.
 5. WALLET→RECIPIENT refuses `x-checksops-internal` and `source_kind=bank`
-6. WALLET→RECIPIENT requires a **named** already-verified payee of that tenant
-   and a **cleared CheckAlt** deposit
+6. WALLET→RECIPIENT requires a **named** already-verified payee of that tenant.
+   CheckAlt is required **only** when `checkalt_deposit_id` / `check_intake_item_id` / `batch_id` is named; otherwise send from wallet available balance. `wallet-fund-on-clear` still requires a cleared CheckAlt row.
 7. Fee pull and refunds require Tenant Management (`checksopsadmin@gmail.com`)
 8. Fund/disburse refuse Tenant Management (`tenant_management_send_refused`)
 9. Persist `payment_transfers` (`environment=production`) **before** HTTP; CAS
    `ready` → `submitting`; unknown/timeout → reconcile, never a second POST
 10. Leftover duplicate account ids are denied (`denied_duplicate_account_do_not_kyc`)
 
-## Sweep (unchanged live)
+## Sweep (live $0 retain is valid)
 
 Freedom Sweep `2d2c900d-6efb-43a2-ba90-2fd77e22afdd` remains **enabled** with
-minimum **`$0.00`**. Test 1 is **blocked in code** until a later reviewed
-step pauses it or sets a retain minimum (Moov example is `$150` — **not
-guessed here**).
+minimum **`$0.00`**. That means auto-push **empties** the wallet to the
+settlement bank. It is a valid treasury setting, not a product prerequisite
+to use Moov. BANK→WALLET still pulls into the wallet; WALLET→RECIPIENT
+needs available wallet balance (pause auto-push or keep a retain if you
+want funds to sit there). **This phase does not PATCH** the live Freedom
+sweep.
 
 ## Holds (unchanged)
 
@@ -148,7 +158,8 @@ No SQL72. No Lambda overlay. No re-KYC.
 ## GO / NO-GO
 
 **GO** for the no-re-KYC sequences, Tenant Management fee/refund (not send-on-behalf),
-CheckAlt-then-Moov payout by the tenant, live-read wallet visibility, and dark AWS writers.
+bank-funded wallet send (CheckAlt only for ChecksOps deposits), live-read
+wallet visibility, and dark AWS writers.
 
-**NO-GO** to enable money, PATCH Sweep, or run Test 1 1¢ until a human
-chooses a Sweep minimum (or pause) and explicitly orders the cent tests.
+**NO-GO** to enable money, PATCH Sweep, overlay the prep Lambda, or run
+Test 1 1¢ until a human explicitly orders those steps.

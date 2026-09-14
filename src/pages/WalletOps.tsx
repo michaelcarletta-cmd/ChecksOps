@@ -198,14 +198,6 @@ export default function WalletOps() {
 
   async function handleSavePayoutSpeed() {
     if (!effectiveRail) return;
-    if (sweepsOn && minimumCents <= 0) {
-      toast({
-        title: "Choose a retain minimum first",
-        description: "Automatic payouts cannot be enabled at $0.00.",
-        variant: "destructive",
-      });
-      return;
-    }
     try {
       await save.mutateAsync({
         pushRail: effectiveRail,
@@ -214,7 +206,12 @@ export default function WalletOps() {
         status: sweepsOn ? "enabled" : "disabled",
         enablePull: true,
       });
-      toast({ title: "Payout speed updated" });
+      toast({
+        title: "Payout speed updated",
+        description: sweepsOn && minimumCents <= 0
+          ? "Automatic payouts are on at $0.00 retain — the full wallet is pushed to the bank. Pause them or keep a retain to send through ChecksOps."
+          : undefined,
+      });
     } catch (e) {
       toast({
         title: "Could not update payout speed",
@@ -346,6 +343,11 @@ export default function WalletOps() {
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Minimum retained</p>
               <p className="mt-0.5 font-medium">{money(minimumCents)}</p>
+              {sweepsOn && minimumCents <= 0 && (
+                <p className="text-xs text-muted-foreground">
+                  $0 retain auto-pays the full wallet to the bank. Pause automatic payouts or keep a retain to send from the wallet.
+                </p>
+              )}
             </div>
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Payout speed</p>

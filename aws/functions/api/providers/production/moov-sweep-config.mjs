@@ -113,9 +113,9 @@ export async function handleProductionMoovSweepConfig({
 
   const minimumCents = Number(body?.minimum_balance_cents);
   const enabling = action !== 'disable' && String(body?.status || 'enabled') !== 'disabled';
-  if (enabling && (!Number.isInteger(minimumCents) || minimumCents <= 0)) {
-    return fail('sweep_minimum_blocks_test', 409, {
-      message: 'Enabling a sweep requires a retain minimum greater than $0.00. Do not PATCH the live $0 Freedom sweep until a dollar amount is chosen.',
+  if (enabling && (!Number.isInteger(minimumCents) || minimumCents < 0)) {
+    return fail('invalid_sweep_minimum', 400, {
+      message: 'minimum_balance_cents must be a non-negative integer. $0.00 keeps nothing in the wallet and auto-pushes the full available balance to the settlement bank.',
     });
   }
 

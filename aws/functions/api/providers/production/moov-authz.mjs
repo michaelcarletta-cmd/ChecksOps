@@ -10,7 +10,7 @@ export const MOOV_FEE_COLLECT_TOTP_ACTION = 'platform.fee_collect';
 export const MOOV_REFUND_TOTP_ACTION = 'platform.refund';
 export const TOTP_STEPUP_TTL_MS = 30 * 60 * 1000;
 
-export const TENANT_MANAGEMENT_SEND_MESSAGE = 'Tenant Management does not send payouts on a tenant\'s behalf. Tenants send partner, sub, vendor, and homeowner payouts after CheckAlt clears. Tenant Management only pulls monthly/usage fees and issues refunds.';
+export const TENANT_MANAGEMENT_SEND_MESSAGE = 'Tenant Management does not send payouts on a tenant\'s behalf. Tenants send partner, sub, vendor, and homeowner payouts from the wallet. CheckAlt is required only when a ChecksOps deposit is named. Tenant Management only pulls monthly/usage fees and issues refunds.';
 
 export const denyMoovAuthz = (error, extra = {}) => ({
   ok: false,

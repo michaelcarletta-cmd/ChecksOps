@@ -100,13 +100,6 @@ export async function handleProductionMoovWalletFund({
       message: 'Live collect-funds is not enabled. Do not re-request the capability.',
     });
   }
-  if (snapshot.sweepEnabledMinZero) {
-    return fail('sweep_minimum_blocks_test', 409, {
-      liveProviderCalled: true,
-      message: 'Freedom Sweep is enabled with a $0 minimum. Pause or raise minimumBalance in a later reviewed step before Test 1, or 1¢ is pushed back to the settlement bank.',
-    });
-  }
-
   const walletId = merchant.walletId || snapshot.resolvedWalletId;
   const methods = await productionMoovFetch({
     credentials: loaded.credentials,
@@ -268,6 +261,7 @@ export async function handleProductionMoovWalletFund({
     kycRequested: false,
     capabilitiesPosted: false,
     autoSendAfterFunding: false,
+    sweepAutoPushesAll: snapshot.sweepEnabledMinZero === true,
     transfer: finalTransfer,
     spoofFieldsIgnored: spoof,
   };
