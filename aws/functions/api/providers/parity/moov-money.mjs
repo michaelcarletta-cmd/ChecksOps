@@ -34,6 +34,8 @@ import {
   pulledTodayCents,
 } from './wallet-funding.mjs';
 
+const envOf = (ctx) => (ctx?.environment === 'production' ? 'production' : 'sandbox');
+
 const postFacilitatorTransfer = async ({ facilitatorHint, sourceMethodId, destMethodId, amount, description, metadata, idempotencyKey, fetchImpl }) => {
   const facilitatorId = await facilitatorAccountId(facilitatorHint, fetchImpl);
   const created = await moovFetch(`/accounts/${facilitatorId}/transfers`, {
@@ -64,7 +66,8 @@ export const transferCreate = {
     if (!(await canSendPayments(client, mapping.application_user_id, tenantId, ctx.memberships))) {
       return fail('You do not have permission to send payments.', 403);
     }
-    const payer = await loadMoovAccount(client, tenantId, 'sandbox');
+    const environment = envOf(ctx);
+    const payer = await loadMoovAccount(client, tenantId, environment);
     if (!payer?.provider_account_id) return fail('Set up your payment account first.', 409);
     if (payer.onboarding_status !== 'active') {
       return fail(`Your payment account is not active yet (${payer.onboarding_status}).`, 409);
@@ -73,7 +76,7 @@ export const transferCreate = {
       return fail('Your payment account cannot send payments yet.', 409);
     }
     const source = await loadConnectedMethod(client, {
-      tenantId, providerAccountId: payer.provider_account_id,
+      tenantId, providerAccountId: payer.provider_account_id, environment,
     });
     if (!source) return fail('Connect an eligible business bank account first.', 409);
 
@@ -81,7 +84,7 @@ export const transferCreate = {
     let destinationMethod = null;
     let destinationLabel = '';
     if (recipientTenantId) {
-      const payee = await loadMoovAccount(client, recipientTenantId, 'sandbox');
+      const payee = await loadMoovAccount(client, recipientTenantId, environment);
       if (!payee?.provider_account_id) return fail('That organization has not finished payment setup.', 409);
       if (!payee.can_receive_payments) return fail('That organization cannot receive payments yet.', 409);
       destinationAccountId = payee.provider_account_id;
@@ -151,6 +154,7 @@ export const transferCreate = {
         claim_id: body.claim_id ?? null,
         check_id: body.check_id ?? null,
         created_by: mapping.application_user_id,
+        environment,
       });
     } catch (e) {
       if (/duplicate/i.test(e.message)) return fail('A matching payment was already submitted.', 409);
@@ -187,7 +191,7 @@ export const transferCreate = {
       await updateTransferAfterMoov(client, draft.id, { status: 'failed', failure_reason: e.message });
       await logPaymentEvent(client, {
         tenant_id: tenantId, transfer_id: draft.id, event_type: 'transfer.failed',
-        previous_status: 'ready', new_status: 'failed', environment: 'sandbox',
+        previous_status: 'ready', new_status: 'failed', environment,
         provider_metadata: { reason: e.message },
       });
       return fail(e.message, 502, { liveProviderCalled: true });
@@ -206,7 +210,7 @@ export const transferCreate = {
     await logPaymentEvent(client, {
       tenant_id: tenantId, recipient_id: externalRecipientId, transfer_id: draft.id,
       provider_transfer_id: providerTransferId, event_type: 'transfer.created',
-      previous_status: 'ready', new_status: status, environment: 'sandbox',
+      previous_status: 'ready', new_status: status, environment,
       provider_metadata: { provider_status: providerStatus, ...railMeta },
     });
     return jsonResult({ success: true, duplicate: false, transfer: finalTransfer, liveProviderCalled: true });
@@ -223,18 +227,19 @@ export const walletFund = {
     if (!(await canSendPayments(client, mapping.application_user_id, tenantId, ctx.memberships))) {
       return fail('You do not have permission to move funds.', 403);
     }
-    const account = await loadMoovAccount(client, tenantId, 'sandbox');
+    const environment = envOf(ctx);
+    const account = await loadMoovAccount(client, tenantId, environment);
     if (!account?.provider_account_id) return fail('Set up your payment account first.', 409);
     if (account.onboarding_status !== 'active') {
       return fail(`Your payment account is not active yet (${account.onboarding_status}).`, 409);
     }
     if (!account.can_ach_debit) return fail('Your payment account cannot pull funds from your bank yet.', 409);
     const source = await loadConnectedMethod(client, {
-      tenantId, providerAccountId: account.provider_account_id,
+      tenantId, providerAccountId: account.provider_account_id, environment,
     });
     if (!source) return fail('Connect an eligible business bank account first.', 409);
     const wallet = await syncWallet(client, {
-      tenantId, accountId: account.provider_account_id, environment: 'sandbox', walletType, fetchImpl,
+      tenantId, accountId: account.provider_account_id, environment, walletType, fetchImpl,
     });
     if (!wallet.provider_payment_method_id) {
       return fail('Your balance account is not ready to receive funds yet.', 409);
@@ -251,6 +256,7 @@ export const walletFund = {
       wallet_id: wallet.id,
       leg_role: 'wallet_funding',
       created_by: mapping.application_user_id,
+      environment,
     });
     const sourceMethodId = await resolveDebitSourceMethodId(client, source, account.provider_account_id, fetchImpl);
     if (!sourceMethodId) {
@@ -293,10 +299,10 @@ export const walletFund = {
     }
     await logPaymentEvent(client, {
       tenant_id: tenantId, transfer_id: draft.id, provider_transfer_id: providerTransferId,
-      event_type: 'wallet.funding.created', new_status: status, environment: 'sandbox',
+      event_type: 'wallet.funding.created', new_status: status, environment,
     });
     const refreshed = await syncWallet(client, {
-      tenantId, accountId: account.provider_account_id, environment: 'sandbox', walletType, fetchImpl,
+      tenantId, accountId: account.provider_account_id, environment, walletType, fetchImpl,
     }).catch(() => wallet);
     return jsonResult({ success: true, duplicate: false, transfer: finalTransfer, wallet: refreshed, liveProviderCalled: true });
   },
@@ -314,6 +320,7 @@ export const disburse = {
     if (!batch) return fail('Disbursement batch not found.', 404);
     if (batch.tenant_id !== ctx.tenantId && !ctx.isAdmin) return fail('Forbidden', 403);
     const tenantId = batch.tenant_id;
+    const environment = envOf(ctx);
     if (!(await canSendPayments(client, mapping.application_user_id, tenantId, ctx.memberships))) {
       return fail('You do not have permission to send payments.', 403);
     }
@@ -331,7 +338,7 @@ export const disburse = {
       (s) => !s.moov_transfer_id && !['failed', 'cancelled', 'returned'].includes(String(s.status)),
     );
     if (payable.length === 0) return fail('This batch has nothing left to pay out.', 409);
-    const payer = await loadMoovAccount(client, tenantId, 'sandbox');
+    const payer = await loadMoovAccount(client, tenantId, environment);
     if (!payer?.provider_account_id) {
       return fail('payer_setup_required', 409, { message: 'Set up your payment account first.' });
     }
@@ -345,11 +352,11 @@ export const disburse = {
     let sourcePaymentMethodId = null;
     if (sourceKind === 'wallet') {
       const wallet = await syncWallet(client, {
-        tenantId, accountId, environment: 'sandbox', walletType: 'operating', fetchImpl,
+        tenantId, accountId, environment, walletType: 'operating', fetchImpl,
       });
       sourcePaymentMethodId = wallet.provider_payment_method_id;
     } else {
-      const source = await loadConnectedMethod(client, { tenantId, providerAccountId: accountId });
+      const source = await loadConnectedMethod(client, { tenantId, providerAccountId: accountId, environment });
       if (!source) return fail('Connect an eligible business bank account first.', 409);
       sourcePaymentMethodId = await resolveDebitSourceMethodId(client, source, accountId, fetchImpl);
     }
@@ -361,7 +368,7 @@ export const disburse = {
     for (const split of payable) {
       const label = split.nickname ?? split.custname ?? split.recipient_name ?? 'recipient';
       const isMoovLinked = split.provider === 'moov'
-        && (!split.provider_environment || split.provider_environment === 'sandbox')
+        && (!split.provider_environment || split.provider_environment === environment)
         && (split.provider_bank_account_id || split.provider_account_id);
       if (!isMoovLinked) { unready.push(label); continue; }
       const cents = Math.round(Number(split.amount) * 100);
@@ -452,7 +459,7 @@ export const disburse = {
       }
     }
     await logPaymentEvent(client, {
-      tenant_id: tenantId, event_type: 'disbursement.submitted', environment: 'sandbox',
+      tenant_id: tenantId, event_type: 'disbursement.submitted', environment,
       provider_metadata: { batch_id: batchId, sent, failed },
     });
     return jsonResult({ success: failed === 0, sent, failed, results, liveProviderCalled: true });
@@ -484,14 +491,15 @@ export const calculatePaymentFunding = {
     const payCtx = await loadPaymentContext(client, body.payment_id);
     if (!payCtx) return fail('Payment not found.', 404);
     if (payCtx.batch.tenant_id !== ctx.tenantId) return fail('Forbidden', 403);
-    const account = await loadMoovAccount(client, ctx.tenantId, 'sandbox');
+    const environment = envOf(ctx);
+    const account = await loadMoovAccount(client, ctx.tenantId, environment);
     if (!account?.provider_account_id) return fail('Set up your payment account first.', 409);
     const settings = await loadFundingSettings(client, ctx.tenantId);
     const wallet = (await client.query(
       `SELECT * FROM public.payment_wallets
-       WHERE tenant_id = $1::uuid AND provider = 'moov' AND environment = 'sandbox' AND wallet_type = 'operating'
+       WHERE tenant_id = $1::uuid AND provider = 'moov' AND environment = $2 AND wallet_type = 'operating'
        LIMIT 1`,
-      [ctx.tenantId],
+      [ctx.tenantId, environment],
     )).rows[0];
     const funding = calculateFunding({
       paymentCents: payCtx.paymentCents,
@@ -513,7 +521,8 @@ export const initiateWalletFunding = {
     if (body.manual && (!Number.isFinite(amount) || amount <= 0)) {
       return fail('Amount must be greater than zero.', 400);
     }
-    const account = await loadMoovAccount(client, tenantId, 'sandbox');
+    const environment = envOf(ctx);
+    const account = await loadMoovAccount(client, tenantId, environment);
     if (!account?.provider_account_id) return fail('Set up your payment account first.', 409);
     if (!account.can_ach_debit) return fail('Your payment account cannot pull funds from your bank yet.', 409);
     let shortage = amount;
@@ -522,7 +531,7 @@ export const initiateWalletFunding = {
       if (!payCtx) return fail('Payment not found.', 404);
       const settings = await loadFundingSettings(client, tenantId);
       const wallet = await syncWallet(client, {
-        tenantId, accountId: account.provider_account_id, environment: 'sandbox', fetchImpl,
+        tenantId, accountId: account.provider_account_id, environment, fetchImpl,
       });
       const funding = calculateFunding({
         paymentCents: payCtx.paymentCents,
@@ -640,9 +649,10 @@ export const tenantFeeCharge = {
     const lines = Array.isArray(body.line_items) ? body.line_items : [];
     const amount = lines.reduce((s, l) => s + Math.max(0, Number(l.amount_cents) || 0), 0) || Number(body.amount_cents);
     if (!Number.isFinite(amount) || amount <= 0) return fail('Amount must be greater than zero.', 400);
-    const account = await loadMoovAccount(client, tenantId, 'sandbox');
+    const environment = envOf(ctx);
+    const account = await loadMoovAccount(client, tenantId, environment);
     if (!account?.provider_account_id) return fail('Set up your payment account first.', 409);
-    const source = await loadConnectedMethod(client, { tenantId, providerAccountId: account.provider_account_id });
+    const source = await loadConnectedMethod(client, { tenantId, providerAccountId: account.provider_account_id, environment });
     if (!source) return fail('Connect an eligible business bank account first.', 409);
     const sourceMethodId = await resolveDebitSourceMethodId(client, source, account.provider_account_id, fetchImpl);
     const facilitatorId = await facilitatorAccountId(account.provider_account_id, fetchImpl);
@@ -662,6 +672,7 @@ export const tenantFeeCharge = {
       source_payment_method_id: source.id,
       leg_role: 'platform_fee',
       created_by: mapping.application_user_id,
+      environment,
     });
     let created;
     try {

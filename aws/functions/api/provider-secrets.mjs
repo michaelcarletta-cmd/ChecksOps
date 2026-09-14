@@ -106,6 +106,20 @@ export const assertNoSecrets = (value, path = 'payload') => {
   }
 };
 
+const nonemptySecret = (value) => typeof value === 'string' && value.trim().length > 0;
+
+const loadDedicatedMoovWebhookSecret = async (getSecretString) => {
+  const arn = process.env.MOOV_WEBHOOK_SECRET_ARN;
+  if (!arn) return {};
+  try {
+    const parsed = parseSecretObject(await getSecretString(arn));
+    const dedicated = parsed.MOOV_WEBHOOK_SECRET || parsed.webhook_secret || parsed.secret;
+    return nonemptySecret(dedicated) ? { MOOV_WEBHOOK_SECRET: dedicated } : {};
+  } catch {
+    return {};
+  }
+};
+
 export const loadProviderSecrets = async (getSecretString = getSecretStringFromAws) => {
   if (cached) return cached;
   const arn = process.env.PROVIDER_SECRETS_ARN;
@@ -117,7 +131,8 @@ export const loadProviderSecrets = async (getSecretString = getSecretStringFromA
       fromManager = {};
     }
   }
-  const merged = { ...fromManager };
+  const dedicatedWebhook = await loadDedicatedMoovWebhookSecret(getSecretString);
+  const merged = { ...fromManager, ...dedicatedWebhook };
   for (const key of SECRET_KEYS) {
     if (!merged[key] && process.env[key]) merged[key] = process.env[key];
   }
@@ -131,9 +146,9 @@ export const resetProviderSecretsCache = () => {
 
 export const webhookSecret = (secrets, provider) => {
   const key = SECRET_KEY_BY_PROVIDER[provider];
-  if (key && secrets?.[key]) return secrets[key];
+  if (key && nonemptySecret(secrets?.[key])) return secrets[key];
   const envName = ENV_WEBHOOK_FALLBACK[provider];
-  if (envName && process.env[envName]) return process.env[envName];
+  if (envName && nonemptySecret(process.env[envName])) return process.env[envName];
   return null;
 };
 
@@ -141,6 +156,7 @@ export const providerSecretsConfigured = async () => {
   const secrets = await loadProviderSecrets();
   return {
     providerSecretsArnConfigured: Boolean(process.env.PROVIDER_SECRETS_ARN),
+    moovWebhookSecretArnConfigured: Boolean(process.env.MOOV_WEBHOOK_SECRET_ARN),
     ...configuredFlags(secrets),
     moovWebhookSecretConfigured: Boolean(webhookSecret(secrets, 'moov')),
     checkaltWebhookSecretConfigured: Boolean(webhookSecret(secrets, 'checkalt')),

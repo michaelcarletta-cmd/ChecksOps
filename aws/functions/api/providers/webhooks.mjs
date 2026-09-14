@@ -5,7 +5,7 @@ import { buildWriteClientConfig } from '../db-health.mjs';
 import { loadProviderSecrets, webhookSecret } from '../provider-secrets.mjs';
 import { providerWebhookDryRun } from '../provider-flags.mjs';
 import { rawEventBody, verifyHmacBodySignature, verifyMoovSignature } from './hmac.mjs';
-import { applyCheckAltWebhook, applyMoovWebhook, sandboxWebhookApplyEnabled } from './webhook-apply.mjs';
+import { applyCheckAltWebhook, applyMoovWebhook, productionWebhookApplyEnabled, sandboxWebhookApplyEnabled } from './webhook-apply.mjs';
 
 const { Client } = pg;
 
@@ -192,22 +192,49 @@ export const handleProviderWebhook = async (event, provider, deps = {}) => {
     let applyResult = {
       applied: false,
       financialTablesMutated: false,
-      skipped: 'sandbox_apply_disabled',
+      productionRecordsMutated: false,
+      skipped: dryRun ? 'dry_run' : 'apply_disabled',
     };
-    if (!stored.duplicate && sandboxWebhookApplyEnabled()) {
+    const productionApply = provider === 'moov' && productionWebhookApplyEnabled();
+    const sandboxApply = sandboxWebhookApplyEnabled();
+    if (!stored.duplicate && (productionApply || sandboxApply)) {
       if (provider === 'moov') {
         applyResult = await applyMoovWebhook(client, parsed.payload, {
           mappedTenantId: mapped.mapped_tenant_id,
+          environment: productionApply ? 'production' : 'sandbox',
+          eventId: String(externalEventId),
         });
-      } else if (provider === 'checkalt') {
+      } else if (provider === 'checkalt' && sandboxApply) {
         applyResult = await applyCheckAltWebhook(client, parsed.payload);
       }
     } else if (stored.duplicate) {
-      applyResult = { applied: false, skipped: 'duplicate', financialTablesMutated: false };
+      applyResult = {
+        applied: false,
+        skipped: 'duplicate',
+        financialTablesMutated: false,
+        productionRecordsMutated: false,
+      };
     }
 
     await client.query('COMMIT');
     didCommit = true;
+
+    if (applyResult.queueProcessFundedPayment && productionApply) {
+      try {
+        const { invokeProcessFundedPaymentFromWebhook } = await import('./production/moov-webhook-funded.mjs');
+        await client.query('BEGIN');
+        await client.query('SET TRANSACTION READ WRITE');
+        await invokeProcessFundedPaymentFromWebhook({
+          client,
+          tenantId: applyResult.queueProcessFundedPayment.tenant_id,
+          fundingRequestId: applyResult.queueProcessFundedPayment.funding_request_id,
+          fetchImpl: deps.fetchImpl || fetch,
+        });
+        await client.query('COMMIT');
+      } catch {
+        try { await client.query('ROLLBACK'); } catch { /* fail-soft like Supabase */ }
+      }
+    }
 
     return {
       ok: true,
@@ -226,8 +253,9 @@ export const handleProviderWebhook = async (event, provider, deps = {}) => {
       lookup: mapped.lookup,
       payload: sanitized,
       financialTablesMutated: Boolean(applyResult.financialTablesMutated),
-      productionRecordsMutated: false,
+      productionRecordsMutated: Boolean(applyResult.productionRecordsMutated),
       liveProviderCalled: false,
+      existingLovableWebhookUntouched: true,
     };
   } catch (error) {
     if (client && !didCommit) {

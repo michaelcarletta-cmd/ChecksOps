@@ -54,7 +54,13 @@ export const canSendPayments = async (client, userId, tenantId, memberships) => 
   return ['owner', 'admin', 'manager'].includes(membershipRole(memberships, tenantId));
 };
 
-export const loadConnectedMethod = async (client, { tenantId, providerAccountId, externalRecipientId = null }) => {
+export const loadConnectedMethod = async (client, {
+  tenantId,
+  providerAccountId,
+  externalRecipientId = null,
+  environment = 'sandbox',
+}) => {
+  const env = environment === 'production' ? 'production' : 'sandbox';
   if (externalRecipientId) {
     return (await client.query(
       `SELECT * FROM public.payment_provider_methods
@@ -65,15 +71,16 @@ export const loadConnectedMethod = async (client, { tenantId, providerAccountId,
   }
   return (await client.query(
     `SELECT * FROM public.payment_provider_methods
-     WHERE tenant_id = $1::uuid AND provider = 'moov' AND environment = 'sandbox'
+     WHERE tenant_id = $1::uuid AND provider = 'moov' AND environment = $3
        AND provider_account_id = $2 AND connection_status = 'connected'
      ORDER BY is_default DESC NULLS LAST, created_at DESC NULLS LAST
      LIMIT 1`,
-    [tenantId, providerAccountId],
+    [tenantId, providerAccountId, env],
   )).rows[0] || null;
 };
 
 export const insertTransferDraft = async (client, row) => {
+  const environment = row.environment === 'production' ? 'production' : 'sandbox';
   const saved = (await client.query(
     `INSERT INTO public.payment_transfers
       (tenant_id, provider, environment, status, idempotency_key, amount_cents,
@@ -81,7 +88,7 @@ export const insertTransferDraft = async (client, row) => {
        rail_downgrade_reason, description, source_tenant_account_id, source_payment_method_id,
        destination_tenant_id, destination_recipient_id, destination_payment_method_id,
        claim_id, check_id, wallet_id, leg_role, created_by)
-     VALUES ($1::uuid, 'moov', 'sandbox', 'ready', $2, $3, $4, $5, $6, $7, $8, $9, $10,
+     VALUES ($1::uuid, 'moov', $21, 'ready', $2, $3, $4, $5, $6, $7, $8, $9, $10,
              $11, $12, $13, $14, $15, $16, $17, $18, $19, $20::uuid)
      RETURNING *`,
     [
@@ -93,6 +100,7 @@ export const insertTransferDraft = async (client, row) => {
       row.destination_tenant_id ?? null, row.destination_recipient_id ?? null,
       row.destination_payment_method_id ?? null, row.claim_id ?? null, row.check_id ?? null,
       row.wallet_id ?? null, row.leg_role ?? null, row.created_by ?? null,
+      environment,
     ],
   )).rows[0];
   return saved;

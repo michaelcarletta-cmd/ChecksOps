@@ -1,7 +1,8 @@
 /**
- * Staging-safe port of supabase/functions/moov-webhook handleEvent.
- * Applies ONLY to environment='sandbox' rows (and CheckAlt isolated sandbox ops).
- * Production-environment payment_* / checkalt_* rows are never updated here.
+ * Port of supabase/functions/moov-webhook handleEvent.
+ * Sandbox apply mutates environment='sandbox' rows only.
+ * Production apply mutates environment='production' rows when money-path
+ * gates are lifted. Wallet/balance events are recorded, not invented.
  */
 import { normalizeTransferStatus } from './parity/moov-client.mjs';
 import { postTransferLedger } from './parity/moov-wallet.mjs';
@@ -9,8 +10,11 @@ import { sanitize } from './parity/db.mjs';
 import { providerSandboxExecutionEnabled } from '../sandbox-flags.mjs';
 import { financialPermissionsActivated } from '../financial-flags.mjs';
 import { providerExecutionEnabled } from '../provider-flags.mjs';
+import { productionWebhookApplyEnabled } from './production/moov-holds.mjs';
 
 const FUNDING_TERMINAL = ['completed', 'failed', 'returned', 'canceled'];
+
+export { productionWebhookApplyEnabled };
 
 export const sandboxWebhookApplyEnabled = () => (
   providerSandboxExecutionEnabled()
@@ -29,42 +33,143 @@ export const eventTypeToStatus = (eventType) => {
 
 const dataOf = (payload) => payload?.data ?? payload;
 
-export async function applyMoovWebhook(client, payload, { mappedTenantId = null } = {}) {
+const bindApplyGucs = async (client, environment) => {
+  await client.query("SELECT set_config('request.provider_webhook_apply', '1', true)");
+  await client.query(
+    "SELECT set_config('request.aws_financial_permissions_activated', $1, true)",
+    [environment === 'production' ? '1' : '0'],
+  );
+  if (environment === 'production') {
+    await client.query("SELECT set_config('request.financial_execution', '1', true)");
+  }
+};
+
+const recordWebhookEvent = async (client, {
+  environment,
+  eventId,
+  eventType,
+  providerAccountId,
+  resourceId,
+  payload,
+}) => {
+  if (environment !== 'production' || !eventId) return { recorded: false, duplicate: false };
+  try {
+    const inserted = (await client.query(
+      `INSERT INTO public.payment_webhook_events
+         (provider, environment, external_event_id, event_type, provider_account_id, resource_id, payload)
+       VALUES ('moov', $1, $2, $3, $4, $5, $6::jsonb)
+       ON CONFLICT (provider, external_event_id) DO NOTHING
+       RETURNING id`,
+      [
+        environment,
+        String(eventId),
+        String(eventType || 'unknown').slice(0, 120),
+        providerAccountId,
+        resourceId,
+        JSON.stringify(sanitize(payload || {})),
+      ],
+    )).rows[0];
+    if (!inserted) return { recorded: false, duplicate: true };
+    return { recorded: true, duplicate: false, id: inserted.id };
+  } catch {
+    return { recorded: false, duplicate: false, unavailable: true };
+  }
+};
+
+const markWebhookEventProcessed = async (client, eventId, error = null) => {
+  if (!eventId) return;
+  try {
+    if (error) {
+      await client.query(
+        `UPDATE public.payment_webhook_events
+         SET processing_error = $2
+         WHERE provider = 'moov' AND external_event_id = $1`,
+        [String(eventId), String(error).slice(0, 500)],
+      );
+      return;
+    }
+    await client.query(
+      `UPDATE public.payment_webhook_events
+       SET processed_at = now(), processing_error = NULL
+       WHERE provider = 'moov' AND external_event_id = $1`,
+      [String(eventId)],
+    );
+  } catch { /* event log must not fail apply */ }
+};
+
+export async function applyMoovWebhook(client, payload, {
+  mappedTenantId = null,
+  environment = 'sandbox',
+  eventId = null,
+} = {}) {
+  const env = environment === 'production' ? 'production' : 'sandbox';
   const eventType = String(payload?.type ?? payload?.eventType ?? 'unknown');
   const providerAccountId = payload?.accountID ?? payload?.data?.accountID ?? payload?.accountId ?? null;
   const data = dataOf(payload);
   const mutations = [];
+  const production = env === 'production';
 
-  await client.query("SELECT set_config('request.provider_webhook_apply', '1', true)");
-  await client.query("SELECT set_config('request.aws_financial_permissions_activated', '0', true)");
+  if (production && !productionWebhookApplyEnabled()) {
+    return {
+      applied: false,
+      skipped: 'production_apply_disabled',
+      financialTablesMutated: false,
+      productionRecordsMutated: false,
+      mutations,
+    };
+  }
+
+  await bindApplyGucs(client, env);
+
+  const resourceId = data?.transferID ?? data?.transferId ?? data?.bankAccountID ?? null;
+  const recorded = await recordWebhookEvent(client, {
+    environment: env,
+    eventId,
+    eventType,
+    providerAccountId,
+    resourceId,
+    payload,
+  });
+  if (recorded.duplicate) {
+    return {
+      applied: false,
+      skipped: 'duplicate_event',
+      financialTablesMutated: false,
+      productionRecordsMutated: false,
+      mutations,
+    };
+  }
 
   let tenantId = mappedTenantId;
-  let sandboxAccount = null;
+  let account = null;
   if (providerAccountId) {
-    sandboxAccount = (await client.query(
+    account = (await client.query(
       `SELECT id, tenant_id, environment, onboarding_status
        FROM public.payment_provider_accounts
-       WHERE provider = 'moov' AND provider_account_id = $1 AND environment = 'sandbox'
+       WHERE provider = 'moov' AND provider_account_id = $1 AND environment = $2
        LIMIT 1`,
-      [String(providerAccountId)],
+      [String(providerAccountId), env],
     )).rows[0];
-    if (!sandboxAccount) {
-      const prod = (await client.query(
-        `SELECT id, environment FROM public.payment_provider_accounts
-         WHERE provider = 'moov' AND provider_account_id = $1 AND environment = 'production'
-         LIMIT 1`,
-        [String(providerAccountId)],
-      )).rows[0];
-      if (prod) {
-        return {
-          applied: false,
-          skipped: 'production_environment_row',
-          financialTablesMutated: false,
-          mutations,
-        };
+    if (!account) {
+      if (!production) {
+        const prod = (await client.query(
+          `SELECT id, environment FROM public.payment_provider_accounts
+           WHERE provider = 'moov' AND provider_account_id = $1 AND environment = 'production'
+           LIMIT 1`,
+          [String(providerAccountId)],
+        )).rows[0];
+        if (prod) {
+          return {
+            applied: false,
+            skipped: 'production_environment_row',
+            financialTablesMutated: false,
+            productionRecordsMutated: false,
+            mutations,
+          };
+        }
       }
     } else {
-      tenantId = sandboxAccount.tenant_id;
+      tenantId = account.tenant_id;
       if (
         eventType.startsWith('account')
         || eventType.startsWith('capability')
@@ -74,8 +179,8 @@ export async function applyMoovWebhook(client, payload, { mappedTenantId = null 
         await client.query(
           `UPDATE public.payment_provider_accounts
            SET last_webhook_event_at = now(), last_webhook_event_type = $2
-           WHERE id = $1::uuid AND environment = 'sandbox'`,
-          [sandboxAccount.id, eventType],
+           WHERE id = $1::uuid AND environment = $3`,
+          [account.id, eventType, env],
         );
         mutations.push('payment_provider_accounts');
       }
@@ -95,12 +200,13 @@ export async function applyMoovWebhook(client, payload, { mappedTenantId = null 
         `UPDATE public.payment_provider_methods
          SET verification_status = $2,
              connection_status = $3
-         WHERE provider_bank_account_id = $1 AND environment = 'sandbox'
+         WHERE provider_bank_account_id = $1 AND environment = $4
          RETURNING id`,
         [
           data.bankAccountID,
           status,
           status === 'verified' ? 'connected' : (status === 'errored' ? 'failed' : 'pending'),
+          env,
         ],
       )).rows[0];
       if (method) mutations.push('payment_provider_methods');
@@ -108,8 +214,8 @@ export async function applyMoovWebhook(client, payload, { mappedTenantId = null 
         await client.query(
           `UPDATE public.external_payment_recipients
            SET onboarding_status = $2
-           WHERE provider_account_id = $1 AND environment = 'sandbox'`,
-          [providerAccountId, status === 'verified' ? 'ready' : 'awaiting_bank'],
+           WHERE provider_account_id = $1 AND environment = $3`,
+          [providerAccountId, status === 'verified' ? 'ready' : 'awaiting_bank', env],
         );
         mutations.push('external_payment_recipients');
         await client.query(
@@ -124,13 +230,14 @@ export async function applyMoovWebhook(client, payload, { mappedTenantId = null 
              AND sa.provider = 'moov'
              AND ppa.provider_account_id = sa.provider_account_id
              AND ppa.provider = 'moov'
-             AND ppa.environment = 'sandbox'`,
+             AND ppa.environment = $6`,
           [
             providerAccountId,
             data.bankAccountID,
             data.bankName ?? data.bankAccount?.bankName ?? null,
             data.lastFourAccountNumber ?? data.bankAccount?.lastFourAccountNumber ?? null,
             status === 'verified' ? 'verified' : 'pending',
+            env,
           ],
         );
         mutations.push('stakeholder_accounts');
@@ -139,28 +246,43 @@ export async function applyMoovWebhook(client, payload, { mappedTenantId = null 
     await client.query(
       `INSERT INTO public.payment_event_log
         (provider, environment, tenant_id, event_type, new_status, provider_metadata)
-       VALUES ('moov', 'sandbox', $1::uuid, $2, $3, $4::jsonb)`,
-      [tenantId, eventType, data?.status ?? null, JSON.stringify(sanitize({
+       VALUES ('moov', $1, $2::uuid, $3, $4, $5::jsonb)`,
+      [env, tenantId, eventType, data?.status ?? null, JSON.stringify(sanitize({
         account_id: providerAccountId,
         resource: data?.bankAccountID ?? null,
       }))],
     ).catch(() => {});
     mutations.push('payment_event_log');
-    return { applied: true, environment: 'sandbox', financialTablesMutated: mutations.length > 0, mutations };
+    await markWebhookEventProcessed(client, eventId);
+    return {
+      applied: true,
+      environment: env,
+      financialTablesMutated: mutations.length > 0,
+      productionRecordsMutated: production && mutations.length > 0,
+      mutations,
+    };
   }
 
   const transferId = data?.transferID ?? data?.transferId ?? null;
   const disputeId = data?.disputeID ?? data?.disputeId ?? null;
   if (!transferId && !disputeId) {
-    return { applied: true, environment: 'sandbox', financialTablesMutated: mutations.length > 0, mutations };
+    await markWebhookEventProcessed(client, eventId);
+    return {
+      applied: true,
+      environment: env,
+      financialTablesMutated: mutations.length > 0,
+      productionRecordsMutated: production && mutations.length > 0,
+      mutations,
+      note: 'event_recorded_no_financial_mutation',
+    };
   }
 
   if (disputeId) {
     await client.query(
       `INSERT INTO public.payment_event_log
         (provider, environment, tenant_id, event_type, provider_metadata)
-       VALUES ('moov', 'sandbox', $1::uuid, $2, $3::jsonb)`,
-      [tenantId, eventType, JSON.stringify(sanitize({
+       VALUES ('moov', $1, $2::uuid, $3, $4::jsonb)`,
+      [env, tenantId, eventType, JSON.stringify(sanitize({
         dispute_id: disputeId, transfer_id: transferId, amount: data?.amount, phase: data?.phase, status: data?.status,
       }))],
     ).catch(() => {});
@@ -168,21 +290,28 @@ export async function applyMoovWebhook(client, payload, { mappedTenantId = null 
       await client.query(
         `UPDATE public.payment_transfers
          SET failure_reason = $2
-         WHERE provider_transfer_id = $1 AND environment = 'sandbox'`,
-        [transferId, `Dispute ${disputeId}: ${data?.phase || eventType}`],
+         WHERE provider_transfer_id = $1 AND environment = $3`,
+        [transferId, `Dispute ${disputeId}: ${data?.phase || eventType}`, env],
       );
       mutations.push('payment_transfers');
     }
-    return { applied: true, environment: 'sandbox', financialTablesMutated: true, mutations };
+    await markWebhookEventProcessed(client, eventId);
+    return {
+      applied: true,
+      environment: env,
+      financialTablesMutated: true,
+      productionRecordsMutated: production,
+      mutations,
+    };
   }
 
   const transfer = (await client.query(
     `SELECT id, tenant_id, status, destination_recipient_id, amount_cents, wallet_id, leg_role,
             transfer_group_id, claim_id, check_id, description
      FROM public.payment_transfers
-     WHERE provider_transfer_id = $1 AND environment = 'sandbox'
+     WHERE provider_transfer_id = $1 AND environment = $2
      LIMIT 1`,
-    [transferId],
+    [transferId, env],
   )).rows[0];
 
   const providerStatus = data?.status ?? eventTypeToStatus(eventType);
@@ -192,10 +321,18 @@ export async function applyMoovWebhook(client, payload, { mappedTenantId = null 
     await client.query(
       `INSERT INTO public.payment_event_log
         (provider, environment, tenant_id, provider_transfer_id, event_type, new_status, provider_metadata)
-       VALUES ('moov', 'sandbox', $1::uuid, $2, $3, $4, $5::jsonb)`,
-      [tenantId, transferId, eventType, newStatus, JSON.stringify(sanitize({ provider_status: providerStatus }))],
+       VALUES ('moov', $1, $2::uuid, $3, $4, $5, $6::jsonb)`,
+      [env, tenantId, transferId, eventType, newStatus, JSON.stringify(sanitize({ provider_status: providerStatus }))],
     ).catch(() => {});
-    return { applied: true, environment: 'sandbox', financialTablesMutated: false, mutations, note: 'unknown_sandbox_transfer' };
+    await markWebhookEventProcessed(client, eventId);
+    return {
+      applied: true,
+      environment: env,
+      financialTablesMutated: false,
+      productionRecordsMutated: false,
+      mutations,
+      note: production ? 'unknown_production_transfer' : 'unknown_sandbox_transfer',
+    };
   }
 
   const previous = transfer.status;
@@ -207,8 +344,8 @@ export async function applyMoovWebhook(client, payload, { mappedTenantId = null 
     `UPDATE public.payment_transfers
      SET status = $2, provider_status = $3, completed_at = COALESCE($4::timestamptz, completed_at),
          failure_reason = COALESCE($5, failure_reason)
-     WHERE id = $1::uuid AND environment = 'sandbox'`,
-    [transfer.id, newStatus, providerStatus, completedAt, failureReason],
+     WHERE id = $1::uuid AND environment = $6`,
+    [transfer.id, newStatus, providerStatus, completedAt, failureReason, env],
   );
   mutations.push('payment_transfers');
   await postTransferLedger(client, transfer, newStatus, transferId);
@@ -216,8 +353,8 @@ export async function applyMoovWebhook(client, payload, { mappedTenantId = null 
   if (transfer.transfer_group_id) {
     const legs = (await client.query(
       `SELECT status, leg_role FROM public.payment_transfers
-       WHERE transfer_group_id = $1::uuid AND environment = 'sandbox'`,
-      [transfer.transfer_group_id],
+       WHERE transfer_group_id = $1::uuid AND environment = $2`,
+      [transfer.transfer_group_id, env],
     )).rows;
     const children = legs.filter((l) => l.leg_role !== 'parent');
     const failed = children.filter((l) => ['failed', 'returned', 'canceled', 'cancelled'].includes(l.status)).length;
@@ -240,33 +377,42 @@ export async function applyMoovWebhook(client, payload, { mappedTenantId = null 
     mutations.push('payment_transfer_groups');
   }
 
-  await syncFundingRequest(client, transferId, newStatus, failureReason);
+  const funding = await syncFundingRequest(client, transferId, newStatus, failureReason, env);
+  if (funding?.queueProcessFundedPayment) mutations.push('process_funded_payment_queued');
   await client.query(
     `INSERT INTO public.payment_event_log
       (provider, environment, tenant_id, recipient_id, transfer_id, provider_transfer_id,
        event_type, previous_status, new_status, provider_metadata)
-     VALUES ('moov', 'sandbox', $1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7, $8::jsonb)`,
+     VALUES ('moov', $1, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7, $8, $9::jsonb)`,
     [
-      transfer.tenant_id, transfer.destination_recipient_id, transfer.id, transferId,
+      env, transfer.tenant_id, transfer.destination_recipient_id, transfer.id, transferId,
       eventType, previous, newStatus, JSON.stringify(sanitize({ provider_status: providerStatus })),
     ],
   ).catch(() => {});
   mutations.push('payment_event_log');
-  return { applied: true, environment: 'sandbox', financialTablesMutated: true, mutations };
+  await markWebhookEventProcessed(client, eventId);
+  return {
+    applied: true,
+    environment: env,
+    financialTablesMutated: true,
+    productionRecordsMutated: production,
+    mutations,
+    queueProcessFundedPayment: funding?.queueProcessFundedPayment || null,
+  };
 }
 
-async function syncFundingRequest(client, providerTransferId, newStatus, failureReason) {
+async function syncFundingRequest(client, providerTransferId, newStatus, failureReason, environment = 'sandbox') {
   const request = (await client.query(
     `SELECT wfr.id, wfr.tenant_id, wfr.status, wfr.related_payment_id
      FROM public.wallet_funding_requests wfr
      JOIN public.payment_transfers pt
-       ON pt.provider_transfer_id = wfr.moov_transfer_id AND pt.environment = 'sandbox'
+       ON pt.provider_transfer_id = wfr.moov_transfer_id AND pt.environment = $2
      WHERE wfr.moov_transfer_id = $1
      LIMIT 1`,
-    [providerTransferId],
+    [providerTransferId, environment],
   )).rows[0];
-  if (!request) return;
-  if (FUNDING_TERMINAL.includes(String(request.status))) return;
+  if (!request) return null;
+  if (FUNDING_TERMINAL.includes(String(request.status))) return null;
   const map = {
     completed: 'completed', failed: 'failed', returned: 'returned',
     reversed: 'returned', canceled: 'canceled', cancelled: 'canceled',
@@ -290,6 +436,16 @@ async function syncFundingRequest(client, providerTransferId, newStatus, failure
       [request.related_payment_id, fundingStatus === 'returned' ? 'action_required' : 'funding_failed'],
     );
   }
+  if (fundingStatus === 'completed') {
+    return {
+      queueProcessFundedPayment: {
+        funding_request_id: request.id,
+        tenant_id: request.tenant_id,
+        related_payment_id: request.related_payment_id,
+      },
+    };
+  }
+  return null;
 }
 
 export async function applyCheckAltWebhook(client, payload) {
