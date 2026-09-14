@@ -29,6 +29,12 @@ import {
   handleProductionMoovWalletFundOnClear,
 } from '../functions/api/providers/production/moov-wallet-disburse.mjs';
 import { handleProductionMoovTenantFeeCharge } from '../functions/api/providers/production/moov-fee-collect.mjs';
+import { handleProductionMoovRefund } from '../functions/api/providers/production/moov-refund.mjs';
+import {
+  handleProductionMoovReadiness,
+  handleProductionMoovWalletStatus,
+} from '../functions/api/providers/production/moov-live-read.mjs';
+import { handleProductionMoovSweepConfig } from '../functions/api/providers/production/moov-sweep-config.mjs';
 import { isDeniedDuplicateMoovAccount } from '../functions/api/providers/production/moov-accounts.mjs';
 import { isPlatformOwnerCaller } from '../functions/api/providers/production/moov-roles.mjs';
 
@@ -301,6 +307,9 @@ const identityClient = (store, session = mapping) => ({
       row.submitted_at = new Date().toISOString();
       return { rows: [row] };
     }
+    if (text.includes('FROM public.payment_transfers') && text.includes('leg_role')) {
+      return { rows: (store.transfers || []).filter((row) => row.tenant_id === params[0]) };
+    }
     if (text.includes('FROM public.payment_transfers')) {
       return { rows: store.transfers.filter((row) => row.tenant_id === params[0] && row.idempotency_key === params[1]) };
     }
@@ -314,7 +323,7 @@ const jsonResponse = (body, status = 200) => ({
   text: async () => JSON.stringify(body),
 });
 
-const mockMoovFetch = (store, { sweepMin = '0.00', sweepStatus = 'enabled', walletAvailable = 0 } = {}) => {
+const mockMoovFetch = (store, { sweepMin = '0.00', sweepStatus = 'enabled', walletAvailable = 0, extraPending = 0 } = {}) => {
   store.moovCalls = [];
   return async (url, options = {}) => {
     const target = String(url);
@@ -330,6 +339,24 @@ const mockMoovFetch = (store, { sweepMin = '0.00', sweepStatus = 'enabled', wall
     if (method === 'POST' && /\/accounts\/[^/]+\/transfers$/.test(target)) {
       store.transferPosts = (store.transferPosts || 0) + 1;
       return jsonResponse({ transferID: 'tr_test_1', status: 'pending' });
+    }
+    if ((method === 'POST' || method === 'PATCH') && target.includes('/sweep-configs')) {
+      store.sweepWrites = (store.sweepWrites || 0) + 1;
+      return jsonResponse({
+        sweepConfigID: '2d2c900d-6efb-43a2-ba90-2fd77e22afdd',
+        walletID: KNOWN_APPROVED_MOOV.freedom.walletId,
+        status: 'enabled',
+        minimumBalance: { value: '150.00', currency: 'USD' },
+      });
+    }
+    if (target.includes('/sweep-configs')) {
+      return jsonResponse([{
+        sweepConfigID: '2d2c900d-6efb-43a2-ba90-2fd77e22afdd',
+        walletID: KNOWN_APPROVED_MOOV.freedom.walletId,
+        status: sweepStatus,
+        minimumBalance: { value: sweepMin, currency: 'USD' },
+        pushPaymentMethodID: KNOWN_APPROVED_MOOV.freedom.achCreditStandardPm,
+      }]);
     }
     if (target.includes('/capabilities')) {
       const accountId = target.match(/accounts\/([^/]+)/)?.[1];
@@ -407,6 +434,11 @@ const mockMoovFetch = (store, { sweepMin = '0.00', sweepStatus = 'enabled', wall
           wallet: { walletID: KNOWN_APPROVED_MOOV.freedom.walletId, partnerAccountID: KNOWN_APPROVED_MOOV.platform.moovAccountId },
           partnerAccountID: KNOWN_APPROVED_MOOV.platform.moovAccountId,
         },
+        {
+          paymentMethodID: KNOWN_APPROVED_MOOV.freedom.achCreditStandardPm,
+          paymentMethodType: 'ach-credit-standard',
+          bankAccountID: KNOWN_APPROVED_MOOV.freedom.bankId,
+        },
       ]);
     }
     if (target.includes('/sweeps')) {
@@ -425,6 +457,7 @@ const mockMoovFetch = (store, { sweepMin = '0.00', sweepStatus = 'enabled', wall
         walletID: walletId,
         status: 'active',
         availableBalance: { value: walletAvailable, currency: 'USD' },
+        pendingBalance: { value: extraPending, currency: 'USD' },
       });
     }
     if (/\/wallets$/.test(target)) {
@@ -482,10 +515,14 @@ test('KYC, capability POST, and account create are blocked', () => {
   assert.equal(refuseKycOrCapabilityWrite({ method: 'GET', path: '/accounts/abc/capabilities' }), null);
 });
 
-test('production HTTP allowlist allows GET and transfer POST only', () => {
+test('production HTTP allowlist allows GET including sweep-configs, transfer POST, and sweep PATCH', () => {
   assert.doesNotThrow(() => assertProductionMoovGet({
     method: 'GET',
     path: `/accounts/${KNOWN_APPROVED_MOOV.freedom.moovAccountId}/capabilities`,
+  }));
+  assert.doesNotThrow(() => assertProductionMoovGet({
+    method: 'GET',
+    path: `/accounts/${KNOWN_APPROVED_MOOV.freedom.moovAccountId}/sweep-configs`,
   }));
   assert.doesNotThrow(() => assertProductionMoovTransferPost({
     method: 'POST',
@@ -748,7 +785,7 @@ test('WALLET→RECIPIENT refuses before CheckAlt has cleared', async () => {
   assert.equal(store.transferPosts || 0, 0);
 });
 
-test('Tenant Management can send for a tenant they are not a member of', async () => {
+test('Tenant Management cannot send payouts for a tenant they are not a member of', async () => {
   resetProductionMoovTokenCache();
   const store = createStore();
   store.memberships = [];
@@ -774,10 +811,9 @@ test('Tenant Management can send for a tenant they are not a member of', async (
     fetchImpl: mockMoovFetch(store, { walletAvailable: 1, sweepStatus: 'disabled' }),
     deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
   }));
-  assert.equal(result.ok, true, result.error || JSON.stringify(result));
-  assert.equal(result.operation, 'wallet.disburse');
-  assert.equal(result.kycRequested, false);
-  assert.equal(store.transferPosts, 1);
+  assert.equal(result.error, 'tenant_management_send_refused');
+  assert.equal(result.ok, false);
+  assert.equal(store.transferPosts || 0, 0);
 });
 
 test('process-funded-payment requires a manual send and refuses internal auto-send', async () => {
@@ -904,5 +940,213 @@ test('wallet-fund-on-clear funds after CheckAlt clear and does not auto-disburse
   assert.equal(result.operation, 'wallet.fund');
   assert.equal(result.autoSendAfterFunding, false);
   assert.equal(store.transferPosts, 1);
+});
+
+test('Tenant Management can refund; tenant members cannot; TM cannot fund', async () => {
+  resetProductionMoovTokenCache();
+  const store = createStore();
+  store.memberships = [];
+  grantStepUp(store, {
+    actionKey: 'platform.refund',
+    sourcePm: PLATFORM_WALLET_PM,
+    destPm: KNOWN_APPROVED_MOOV.freedom.walletPm,
+  });
+  store.stepups[0].user_id = PLATFORM_APP;
+
+  const tenantDenied = await withEnv(productionFlags, () => handleProductionMoovRefund({
+    client: identityClient(store),
+    mapping,
+    claims: { sub: COGNITO_SUB, email: 'checksopsadmin@gmail.com' },
+    body: { tenant_id: FREEDOM_TENANT, amount_cents: 1 },
+    spoof: {},
+    fetchImpl: mockMoovFetch(store, { sweepStatus: 'disabled' }),
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
+  }));
+  assert.equal(tenantDenied.error, 'platform_owner_required');
+
+  const refunded = await withEnv(productionFlags, () => handleProductionMoovRefund({
+    client: identityClient(store, platformMapping),
+    mapping: platformMapping,
+    claims: { sub: PLATFORM_SUB, email: 'spoof@example.com' },
+    body: { tenant_id: FREEDOM_TENANT, amount_cents: 1, idempotency_key: 'refund-test-1' },
+    spoof: {},
+    fetchImpl: mockMoovFetch(store, { sweepStatus: 'disabled' }),
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
+  }));
+  assert.equal(refunded.ok, true, refunded.error || JSON.stringify(refunded));
+  assert.equal(refunded.operation, 'platform.refund');
+  assert.equal(refunded.kycRequested, false);
+  assert.equal(refunded.capabilitiesPosted, false);
+  assert.equal(store.transferPosts, 1);
+
+  grantStepUp(store, { actionKey: 'wallet.fund' });
+  store.stepups.at(-1).user_id = PLATFORM_APP;
+  const fund = await withEnv(productionFlags, () => handleProductionMoovWalletFund({
+    client: identityClient(store, platformMapping),
+    mapping: platformMapping,
+    claims: { sub: PLATFORM_SUB },
+    body: { tenant_id: FREEDOM_TENANT, amount_cents: 1 },
+    spoof: {},
+    fetchImpl: mockMoovFetch(store, { sweepStatus: 'disabled' }),
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
+  }));
+  assert.equal(fund.error, 'tenant_management_send_refused');
+  assert.equal(store.transferPosts, 1);
+});
+
+test('live-read wallet snapshot works with money flags false and never POSTs transfers or capabilities', async () => {
+  resetProductionMoovTokenCache();
+  const store = createStore();
+  store.transfers.push({
+    tenant_id: FREEDOM_TENANT,
+    amount_cents: 250,
+    status: 'pending',
+    leg_role: 'funding',
+  });
+  store.transfers.push({
+    tenant_id: FREEDOM_TENANT,
+    amount_cents: 75,
+    status: 'submitted',
+    leg_role: 'payout',
+  });
+  const liveReads = {
+    AWS_PROVIDER_LIVE_READS_ENABLED: 'true',
+    AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: undefined,
+    AWS_PROVIDER_EXECUTION_ENABLED: undefined,
+    AWS_MOOV_ENABLED: undefined,
+    AWS_FINANCIAL_PERMISSIONS_ACTIVATED: undefined,
+    PROVIDER_SECRETS_ARN: productionFlags.PROVIDER_SECRETS_ARN,
+  };
+  const result = await withEnv(liveReads, () => handleProductionMoovWalletStatus({
+    client: identityClient(store),
+    mapping,
+    claims: { sub: COGNITO_SUB },
+    body: { tenant_id: FREEDOM_TENANT },
+    spoof: {},
+    fetchImpl: mockMoovFetch(store, { walletAvailable: 1234, extraPending: 50, sweepStatus: 'enabled', sweepMin: '0.00' }),
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
+  }));
+  assert.equal(result.ok, true, result.error || JSON.stringify(result));
+  assert.equal(result.productionExecution, false);
+  assert.equal(result.kycRequested, false);
+  assert.equal(result.capabilitiesPosted, false);
+  assert.equal(store.transferPosts || 0, 0);
+  assert.equal(store.capabilityPosts || 0, 0);
+  assert.equal(result.wallet.available_cents, 1234);
+  assert.equal(result.pending_in_cents, 250);
+  assert.equal(result.pending_out_cents, 75);
+  assert.equal(result.verification.account_verified, true);
+  assert.ok(result.verification.what_is_verified.some((item) => /identity/i.test(item)));
+  assert.equal(result.settlement_method.last_four, '4573');
+  assert.equal(result.sweep_config.status, 'enabled');
+  assert.equal(result.sweep_config.minimum_balance_cents, 0);
+  assert.ok((result.readiness?.checks || []).some((check) => check.id === 'identity_verification'));
+  assert.ok(store.moovCalls.every((call) => call.method === 'GET' || call.url.includes('/oauth2/token')));
+});
+
+test('moov-readiness live GET never POSTs capabilities', async () => {
+  resetProductionMoovTokenCache();
+  const store = createStore();
+  const result = await withEnv({
+    AWS_PROVIDER_LIVE_READS_ENABLED: 'true',
+    AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: undefined,
+    PROVIDER_SECRETS_ARN: productionFlags.PROVIDER_SECRETS_ARN,
+  }, () => handleProductionMoovReadiness({
+    client: identityClient(store),
+    mapping,
+    claims: { sub: COGNITO_SUB },
+    body: { tenant_id: FREEDOM_TENANT },
+    spoof: {},
+    fetchImpl: mockMoovFetch(store),
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
+  }));
+  assert.equal(result.ok, true, result.error || JSON.stringify(result));
+  assert.equal(result.readiness.liveProviderCalled, true);
+  assert.equal(store.capabilityPosts || 0, 0);
+  assert.equal(store.transferPosts || 0, 0);
+});
+
+test('sweep GET is live-read; enabling at $0 is refused even when money flags are on', async () => {
+  resetProductionMoovTokenCache();
+  const store = createStore();
+  const liveGet = await withEnv({
+    AWS_PROVIDER_LIVE_READS_ENABLED: 'true',
+    AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: undefined,
+    PROVIDER_SECRETS_ARN: productionFlags.PROVIDER_SECRETS_ARN,
+  }, () => handleProductionMoovSweepConfig({
+    client: identityClient(store),
+    mapping,
+    claims: { sub: COGNITO_SUB },
+    body: { tenant_id: FREEDOM_TENANT, action: 'get' },
+    spoof: {},
+    fetchImpl: mockMoovFetch(store, { sweepStatus: 'enabled', sweepMin: '0.00' }),
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
+  }));
+  assert.equal(liveGet.ok, true, liveGet.error || JSON.stringify(liveGet));
+  assert.equal(liveGet.sweep_config.status, 'enabled');
+  assert.equal(store.sweepWrites || 0, 0);
+  assert.equal(store.transferPosts || 0, 0);
+
+  const blockedWrite = await withEnv({
+    AWS_PROVIDER_LIVE_READS_ENABLED: 'true',
+    AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: undefined,
+    PROVIDER_SECRETS_ARN: productionFlags.PROVIDER_SECRETS_ARN,
+  }, () => handleProductionMoovSweepConfig({
+    client: identityClient(store),
+    mapping,
+    claims: { sub: COGNITO_SUB },
+    body: {
+      tenant_id: FREEDOM_TENANT,
+      action: 'create',
+      minimum_balance_cents: 15000,
+      push_rail: 'ach-credit-standard',
+    },
+    spoof: {},
+    fetchImpl: mockMoovFetch(store),
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
+  }));
+  assert.equal(blockedWrite.error, 'production_execution_blocked');
+  assert.equal(store.sweepWrites || 0, 0);
+
+  const zeroMin = await withEnv(productionFlags, () => handleProductionMoovSweepConfig({
+    client: identityClient(store),
+    mapping,
+    claims: { sub: COGNITO_SUB },
+    body: {
+      tenant_id: FREEDOM_TENANT,
+      action: 'create',
+      minimum_balance_cents: 0,
+      status: 'enabled',
+      push_rail: 'ach-credit-standard',
+    },
+    spoof: {},
+    fetchImpl: mockMoovFetch(store),
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
+  }));
+  assert.equal(zeroMin.error, 'sweep_minimum_blocks_test');
+  assert.equal(store.sweepWrites || 0, 0);
+});
+
+test('handleProviderRequest serves wallet-status when live reads are on and money flags are off', async () => {
+  resetProductionMoovTokenCache();
+  const store = createStore();
+  const result = await withEnv({
+    AWS_PROVIDER_LIVE_READS_ENABLED: 'true',
+    AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: undefined,
+    AWS_PROVIDER_EXECUTION_ENABLED: undefined,
+    AWS_MOOV_ENABLED: undefined,
+    AWS_FINANCIAL_PERMISSIONS_ACTIVATED: undefined,
+    PROVIDER_SECRETS_ARN: productionFlags.PROVIDER_SECRETS_ARN,
+  }, () => handleProviderRequest(
+    jwtEvent('/functions/v1/moov-wallet-status', 'POST', { tenant_id: FREEDOM_TENANT }),
+    '/functions/v1/moov-wallet-status',
+    'POST',
+    fundDeps(store, { walletAvailable: 50, extraPending: 10, sweepStatus: 'disabled' }),
+  ));
+  assert.equal(result.ok, true, result.error || JSON.stringify(result));
+  assert.equal(result.operation, 'wallet.status');
+  assert.equal(result.productionExecution, false);
+  assert.equal(store.transferPosts || 0, 0);
+  assert.ok(result.wallet);
 });
 });

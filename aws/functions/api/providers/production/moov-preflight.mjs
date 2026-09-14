@@ -143,7 +143,13 @@ export async function getApprovedAccountSnapshot({
     }).catch(() => []));
   }
   const walletId = known.walletId || knownWalletIdFrom(wallets);
-  if (includeSweeps && walletId) {
+  let sweepConfigs = [];
+  if (includeSweeps) {
+    sweepConfigs = listOf(await productionMoovFetch({
+      credentials, path: `/accounts/${accountId}/sweep-configs`, fetchImpl,
+    }).catch(() => []));
+  }
+  if (includeSweeps && walletId && !sweepConfigs.length) {
     sweeps = await productionMoovFetch({
       credentials, path: `/accounts/${accountId}/wallets/${walletId}/sweeps`, fetchImpl,
     }).catch(() => []);
@@ -161,9 +167,10 @@ export async function getApprovedAccountSnapshot({
       banks,
       paymentMethods,
       wallets,
-      sweeps,
+      sweeps: sweepConfigs.length ? sweepConfigs : sweeps,
       requiredCapabilities: caps,
     }),
     resolvedWalletId: walletId,
+    sweepConfigs,
   };
 }

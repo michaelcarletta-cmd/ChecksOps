@@ -16,10 +16,17 @@ ChecksOps sequences so they **reuse those accounts**.
 
 1. **Pull fees** from other tenants for monthly and usage charges
    (`moov-tenant-fee-charge` → tenant `ach-debit-fund` → platform wallet)
-2. **Send money** on a tenant's behalf
+2. **Issue refunds** from the platform balance back to a tenant wallet
+   (`moov-refund`)
 
-Every tenant sends, after a **CheckAlt clear**, to an already-verified
-**partner, sub-contractor, vendor, or homeowner** linked to that tenant.
+Tenant Management does **not** send partner, sub-contractor, vendor, or
+homeowner payouts on a tenant's behalf. Those WALLET→RECIPIENT sends are
+tenant-member only, after CheckAlt clear.
+
+Every tenant can **see** their Moov wallet: available balance, pending in,
+pending out, sweeps (and configure sweeps once money flags are on, with a
+retain minimum **> $0**), whether the account is verified and **what** is
+verified, and which bank is linked to the Moov wallet.
 
 ```
 CheckAlt clear
@@ -39,10 +46,12 @@ already-funded wallet.
 | GET confirm Freedom / C1C / platform | GET only — no KYC POST |
 | Capability family match | `send-funds` satisfies `send-funds.ach`; **never re-POST** |
 | Discover/link vs create | Known merchants **409** `known_approved_account_must_be_linked` |
-| Tenant Management authz | Mapped email `checksopsadmin@gmail.com` may act across tenants |
-| AWS BANK→WALLET writer | Dark, fail-closed; 1¢ cap; Sweep `$0` min **blocks Test 1** |
-| AWS WALLET→RECIPIENT writer | Named already-verified payee; CheckAlt must be cleared; no bank fallback; **no internal bypass** |
+| Tenant Management authz | Mapped email `checksopsadmin@gmail.com` may pull fees and issue refunds; **cannot** send tenant payouts |
+| AWS BANK→WALLET writer | Dark, fail-closed; tenant members only; 1¢ cap; Sweep `$0` min **blocks Test 1** |
+| AWS WALLET→RECIPIENT writer | Named already-verified payee; CheckAlt must be cleared; no bank fallback; **no internal bypass**; **not Tenant Management** |
 | AWS fee pull | Dark, platform-owner only; 1¢ cap; C1C **409** `collect_funds_not_enabled` |
+| AWS refund | Dark, platform-owner only; platform → tenant wallet; 1¢ cap |
+| Tenant wallet visibility | Live GET `moov-wallet-status` / readiness / sweep-config when `AWS_PROVIDER_LIVE_READS_ENABLED`; never POSTs transfers or capabilities |
 | `initiate-wallet-funding` | Refused (`use_separate_fund_and_disburse`) |
 | `process-funded-payment` | `manual_send_required` — no auto-send |
 | `wallet-fund-on-clear` | BANK→WALLET only after a cleared CheckAlt row |
@@ -98,16 +107,17 @@ Additional holds inside the writer (even if flags were lifted):
 
 1. **No capability / KYC / account-create POST** (`moov_kyc_rerequest_blocked`)
 2. First transfer **1 cent** (`first_transfer_cap`)
-3. Financial TOTP bound to `wallet.fund`, `wallet.disburse`, or
-   `platform.fee_collect` + tenant + amount + payment-method ids
+3. Financial TOTP bound to `wallet.fund`, `wallet.disburse`,
+   `platform.fee_collect`, or `platform.refund` + tenant + amount + payment-method ids
 4. Enabled Sweep with `minimumBalance <= 0` → `sweep_minimum_blocks_test`
 5. WALLET→RECIPIENT refuses `x-checksops-internal` and `source_kind=bank`
 6. WALLET→RECIPIENT requires a **named** already-verified payee of that tenant
    and a **cleared CheckAlt** deposit
-7. Fee pull requires Tenant Management (`checksopsadmin@gmail.com`)
-8. Persist `payment_transfers` (`environment=production`) **before** HTTP; CAS
+7. Fee pull and refunds require Tenant Management (`checksopsadmin@gmail.com`)
+8. Fund/disburse refuse Tenant Management (`tenant_management_send_refused`)
+9. Persist `payment_transfers` (`environment=production`) **before** HTTP; CAS
    `ready` → `submitting`; unknown/timeout → reconcile, never a second POST
-9. Leftover duplicate account ids are denied (`denied_duplicate_account_do_not_kyc`)
+10. Leftover duplicate account ids are denied (`denied_duplicate_account_do_not_kyc`)
 
 ## Sweep (unchanged live)
 
@@ -123,8 +133,8 @@ No SQL72. No Lambda overlay. No re-KYC.
 
 ## GO / NO-GO
 
-**GO** for the no-re-KYC sequences, Tenant Management fee/send, CheckAlt-then-Moov
-payout, and dark AWS writers.
+**GO** for the no-re-KYC sequences, Tenant Management fee/refund (not send-on-behalf),
+CheckAlt-then-Moov payout by the tenant, live-read wallet visibility, and dark AWS writers.
 
 **NO-GO** to enable money, PATCH Sweep, or run Test 1 1¢ until a human
 chooses a Sweep minimum (or pause) and explicitly orders the cent tests.

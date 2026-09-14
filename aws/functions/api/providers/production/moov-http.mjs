@@ -17,17 +17,32 @@ export class ProductionMoovError extends Error {
   }
 }
 
-/** GET allowlist: account, capabilities, banks, wallets, payment methods, sweeps. No KYC files. */
+/** Strip `?walletID=` etc. before allowlist matching. */
+export const productionMoovPathOnly = (path) => String(path || '').split('?')[0];
+
+/** GET allowlist: account, capabilities, banks, wallets, payment methods, sweeps, sweep-configs. No KYC files. */
 export const PRODUCTION_MOOV_GET_PATH_RE = new RegExp(
   `^/accounts/${ACCOUNT_UUID}`
   + '(?:'
     + '|/capabilities'
     + '|/wallets(?:/' + ACCOUNT_UUID + ')?'
     + '|/wallets/' + ACCOUNT_UUID + '/sweeps(?:/' + ACCOUNT_UUID + ')?'
+    + '|/sweep-configs(?:/' + ACCOUNT_UUID + ')?'
+    + '|/sweeps(?:/' + ACCOUNT_UUID + ')?'
     + '|/bank-accounts(?:/' + ACCOUNT_UUID + ')?'
     + '|/payment-methods(?:/' + ACCOUNT_UUID + ')?'
     + '|/transfers/' + ACCOUNT_UUID
   + ')?$',
+  'i',
+);
+
+export const PRODUCTION_MOOV_SWEEP_POST_RE = new RegExp(
+  `^/accounts/${ACCOUNT_UUID}/sweep-configs$`,
+  'i',
+);
+
+export const PRODUCTION_MOOV_SWEEP_PATCH_RE = new RegExp(
+  `^/accounts/${ACCOUNT_UUID}/sweep-configs/${ACCOUNT_UUID}$`,
   'i',
 );
 
@@ -40,24 +55,45 @@ const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 export const assertProductionMoovGet = ({ method = 'GET', path } = {}) => {
   const verb = String(method || 'GET').toUpperCase();
+  const pathOnly = productionMoovPathOnly(path);
   if (WRITE_METHODS.has(verb) || verb !== 'GET') {
     const error = new ProductionMoovError('Production Moov GET allowlist is GET only', 403, {
       error: 'read_only_method_denied',
       method: verb,
-      path: path || null,
+      path: pathOnly || null,
     });
     error.code = 'read_only_method_denied';
     throw error;
   }
-  if (!PRODUCTION_MOOV_GET_PATH_RE.test(String(path || ''))) {
+  if (!PRODUCTION_MOOV_GET_PATH_RE.test(pathOnly)) {
     const error = new ProductionMoovError('Path is not on the production Moov GET allowlist', 403, {
       error: 'read_only_path_denied',
       method: verb,
-      path: path || null,
+      path: pathOnly || null,
     });
     error.code = 'read_only_path_denied';
     throw error;
   }
+};
+
+export const assertProductionMoovSweepWrite = ({ method = 'POST', path } = {}) => {
+  const kyc = refuseKycOrCapabilityWrite({ method, path });
+  if (kyc) {
+    const error = new ProductionMoovError(kyc.message, 403, kyc);
+    error.code = kyc.error;
+    throw error;
+  }
+  const verb = String(method || '').toUpperCase();
+  const pathOnly = productionMoovPathOnly(path);
+  if (verb === 'POST' && PRODUCTION_MOOV_SWEEP_POST_RE.test(pathOnly)) return;
+  if (verb === 'PATCH' && PRODUCTION_MOOV_SWEEP_PATCH_RE.test(pathOnly)) return;
+  const error = new ProductionMoovError('Production Moov sweep writes allow POST/PATCH sweep-configs only', 403, {
+    error: 'sweep_write_path_denied',
+    method: verb,
+    path: pathOnly || null,
+  });
+  error.code = 'sweep_write_path_denied';
+  throw error;
 };
 
 export const assertProductionMoovTransferPost = ({ method = 'POST', path } = {}) => {
@@ -128,6 +164,10 @@ const scopesForPath = (path, method) => {
     return [`/accounts/${id}/transfers.write`];
   }
   if (/\/capabilities/i.test(path)) return [`/accounts/${id}/capabilities.read`];
+  if (/\/sweep-configs/i.test(path) || /\/sweeps/i.test(path)) {
+    const write = String(method).toUpperCase() === 'POST' || String(method).toUpperCase() === 'PATCH';
+    return [`/accounts/${id}/wallets.${write ? 'write' : 'read'}`];
+  }
   if (/\/wallets/i.test(path)) return [`/accounts/${id}/wallets.read`];
   if (/\/bank-accounts/i.test(path)) return [`/accounts/${id}/bank-accounts.read`];
   if (/\/payment-methods/i.test(path)) return [`/accounts/${id}/payment-methods.read`];
@@ -143,9 +183,12 @@ export async function productionMoovFetch({
   idempotencyKey,
   fetchImpl = fetch,
   allowTransferPost = false,
+  allowSweepWrite = false,
 }) {
   const verb = String(method || 'GET').toUpperCase();
-  if (allowTransferPost && verb === 'POST') {
+  if (allowSweepWrite && (verb === 'POST' || verb === 'PATCH')) {
+    assertProductionMoovSweepWrite({ method: verb, path });
+  } else if (allowTransferPost && verb === 'POST') {
     assertProductionMoovTransferPost({ method: verb, path });
   } else {
     assertProductionMoovGet({ method: verb, path });
@@ -199,5 +242,7 @@ export const listOf = (value) => {
   if (Array.isArray(value?.paymentMethods)) return value.paymentMethods;
   if (Array.isArray(value?.wallets)) return value.wallets;
   if (Array.isArray(value?.bankAccounts)) return value.bankAccounts;
+  if (Array.isArray(value?.sweepConfigs)) return value.sweepConfigs;
+  if (Array.isArray(value?.sweeps)) return value.sweeps;
   return [];
 };

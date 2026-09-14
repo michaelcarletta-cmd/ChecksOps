@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { isUuid } from '../../financial-ownership.mjs';
 import { KNOWN_APPROVED_MOOV } from './moov-accounts.mjs';
-import { MOOV_DISBURSE_TOTP_ACTION, assertMoovTenantAccess, authorizeMoovProduction } from './moov-authz.mjs';
+import { MOOV_DISBURSE_TOTP_ACTION, assertMoovTenantAccess, authorizeMoovProduction, tenantManagementSendDenied } from './moov-authz.mjs';
 import { capabilityEnabled } from './moov-capability-policy.mjs';
 import { FIRST_PRODUCTION_TRANSFER_CENTS } from './moov-holds.mjs';
 import {
@@ -66,6 +66,8 @@ export async function handleProductionMoovWalletDisburse({
   if (!tenantId || !isUuid(tenantId)) {
     return fail('invalid_uuid', 400, { field: 'tenant_id', spoofFieldsIgnored: spoof });
   }
+  const tmDenied = tenantManagementSendDenied(mapping);
+  if (tmDenied) return { ...tmDenied, spoofFieldsIgnored: spoof, kycRequested: false, capabilitiesPosted: false, operation: 'wallet.disburse' };
   const access = await assertMoovTenantAccess(client, mapping, tenantId);
   if (!access.ok) return { ...access, spoofFieldsIgnored: spoof, kycRequested: false, capabilitiesPosted: false };
 
@@ -357,7 +359,7 @@ export async function handleProductionMoovProcessFundedPayment({ body, spoof, de
     kycRequested: false,
     capabilitiesPosted: false,
     autoSend: false,
-    message: 'After CheckAlt clears, Tenant Management or the tenant sends WALLET→RECIPIENT. Auto-send is refused.',
+    message: 'After CheckAlt clears, the tenant sends WALLET→RECIPIENT. Tenant Management does not send on their behalf. Auto-send is refused.',
     spoofFieldsIgnored: spoof,
   };
 }
@@ -381,6 +383,8 @@ export async function handleProductionMoovWalletFundOnClear(ctx) {
   if (!row) {
     return fail('not_found', 404, { operation: 'wallet-fund-on-clear', message: 'Funding queue row not found.' });
   }
+  const tmDenied = tenantManagementSendDenied(mapping);
+  if (tmDenied) return { ...tmDenied, spoofFieldsIgnored: spoof, operation: 'wallet-fund-on-clear' };
   const access = await assertMoovTenantAccess(client, mapping, row.tenant_id);
   if (!access.ok) return { ...access, spoofFieldsIgnored: spoof, operation: 'wallet-fund-on-clear' };
   const cleared = await assertCheckAltCleared(client, {

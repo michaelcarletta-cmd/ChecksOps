@@ -68,7 +68,10 @@ The unenrolled Freedom operator tester cannot be the sole authority. Dual-contro
 `checksopsadmin@gmail.com` is Tenant Management. Mapped application email (not JWT, not UUID) may:
 
 - Pull monthly and usage fees from other tenants (`platform.fee_collect`)
-- Send Moov on a tenant's behalf after CheckAlt clears
+- Issue refunds from the platform balance to a tenant wallet (`platform.refund`)
+
+Tenant Management does **not** fund wallets or send partner/sub/vendor/homeowner
+payouts on a tenant's behalf (`tenant_management_send_refused`).
 
 Tenant users stay limited to `tenant_users` membership. Platform-owner access is never granted by `MASTER_OWNER_APPLICATION_USER_ID`.
 
@@ -78,14 +81,15 @@ Tenant users stay limited to `tenant_users` membership. Platform-owner access is
 | --- | --- | --- | --- |
 | Submit CheckAlt deposit | `deposit.submit` | tenant owner/admin/manager + step-up | no |
 | Approve CheckAlt deposit | `deposit.approve` | same + step-up | no |
-| Fund wallet | `wallet.fund` | tenant owner/admin/manager or Tenant Management | no |
-| Initiate disbursement | `disbursement.send` | same + step-up, after CheckAlt clear, to an already-verified partner/sub/vendor/homeowner | no |
+| Fund wallet | `wallet.fund` | tenant owner/admin/manager (not Tenant Management) | no |
+| Initiate disbursement | `disbursement.send` | tenant owner/admin/manager + step-up, after CheckAlt clear, to an already-verified partner/sub/vendor/homeowner | no |
 | Platform fee pull | `platform.fee_collect` | Tenant Management (`checksopsadmin@gmail.com`) only + step-up | no |
+| Platform refund | `platform.refund` | Tenant Management only + step-up; platform → tenant wallet | no |
 | Initiate ACH | `payments.ach` | disbursement + `send-funds.ach` | no |
 | Initiate RTP | `payments.rtp` | ACH + RTP capability + explicit instant | no |
 | Initiate wire | `payments.wire` | documented; not a current primary rail | no |
-| Pay homeowner | `stakeholder.pay` | tenant owner/admin/manager or Tenant Management | no |
-| Pay contractor/vendor | `contractor.pay` | tenant owner/admin/manager or Tenant Management | no |
+| Pay homeowner | `stakeholder.pay` | tenant owner/admin/manager | no |
+| Pay contractor/vendor | `contractor.pay` | tenant owner/admin/manager | no |
 | Retry failed transaction | same as original | same as original | no |
 | Cancel (where supported) | same as original | wallet funding cancel only in production | no |
 

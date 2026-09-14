@@ -1,5 +1,5 @@
 import { financialPermissionsActivated } from '../../financial-flags.mjs';
-import { executionAllowed, providerEnabled, providerExecutionEnabled } from '../../provider-flags.mjs';
+import { executionAllowed, providerEnabled, providerExecutionEnabled, providerLiveReadsEnabled } from '../../provider-flags.mjs';
 import { providerSandboxExecutionEnabled } from '../../sandbox-flags.mjs';
 
 const isTrue = (value) => String(value || '') === 'true';
@@ -8,9 +8,18 @@ export const PRODUCTION_MOOV_FUNCTIONS = new Set([
   'moov-wallet-fund',
   'moov-disburse',
   'moov-tenant-fee-charge',
+  'moov-refund',
   'initiate-wallet-funding',
   'process-funded-payment',
   'wallet-fund-on-clear',
+]);
+
+/** Live GET snapshot + dark sweep config. Runs when live reads are on, even if money flags stay false. */
+export const PRODUCTION_MOOV_LIVE_READ_FUNCTIONS = new Set([
+  'moov-wallet-status',
+  'moov-readiness',
+  'moov-wallet-sync',
+  'moov-sweep-config',
 ]);
 
 export const FIRST_PRODUCTION_TRANSFER_CENTS = 1;
@@ -23,6 +32,11 @@ export const FIRST_PRODUCTION_TRANSFER_CENTS = 1;
 export const productionMoovExecutionAllowed = () => (
   executionAllowed('moov')
   && financialPermissionsActivated()
+  && !providerSandboxExecutionEnabled()
+);
+
+export const productionMoovLiveReadsAllowed = () => (
+  providerLiveReadsEnabled()
   && !providerSandboxExecutionEnabled()
 );
 
@@ -43,6 +57,8 @@ export const moovProductionHoldSnapshot = () => ({
     || process.env.AWS_PROVIDER_WEBHOOK_DRY_RUN === ''
     || String(process.env.AWS_PROVIDER_WEBHOOK_DRY_RUN) !== 'false',
   AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED_production: isTrue(process.env.AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED),
+  AWS_PROVIDER_LIVE_READS_ENABLED: providerLiveReadsEnabled(),
+  productionMoovLiveReadsAllowed: productionMoovLiveReadsAllowed(),
   productionMoovExecutionAllowed: productionMoovExecutionAllowed(),
   firstTransferCapCents: FIRST_PRODUCTION_TRANSFER_CENTS,
   neverReKyc: true,

@@ -7,7 +7,10 @@ import { productionMoovExecutionAllowed } from './moov-holds.mjs';
 export const MOOV_FUND_TOTP_ACTION = 'wallet.fund';
 export const MOOV_DISBURSE_TOTP_ACTION = 'wallet.disburse';
 export const MOOV_FEE_COLLECT_TOTP_ACTION = 'platform.fee_collect';
+export const MOOV_REFUND_TOTP_ACTION = 'platform.refund';
 export const TOTP_STEPUP_TTL_MS = 30 * 60 * 1000;
+
+export const TENANT_MANAGEMENT_SEND_MESSAGE = 'Tenant Management does not send payouts on a tenant\'s behalf. Tenants send partner, sub, vendor, and homeowner payouts after CheckAlt clears. Tenant Management only pulls monthly/usage fees and issues refunds.';
 
 export const denyMoovAuthz = (error, extra = {}) => ({
   ok: false,
@@ -92,7 +95,28 @@ export async function loadTenantMemberships(client, userId) {
   return (await client.query(TENANT_MEMBERSHIP_SQL, [userId])).rows;
 }
 
+export const tenantManagementSendDenied = (mapping) => {
+  if (!isPlatformOwnerCaller(mapping)) return null;
+  return denyMoovAuthz('tenant_management_send_refused', {
+    message: TENANT_MANAGEMENT_SEND_MESSAGE,
+  });
+};
+
+/** Tenant membership required. Tenant Management cannot send on a tenant's behalf. */
 export async function assertMoovTenantAccess(client, mapping, tenantId) {
+  const refused = tenantManagementSendDenied(mapping);
+  if (refused) return refused;
+  const memberships = await loadTenantMemberships(client, mapping.application_user_id);
+  if (!memberships.some((row) => row.tenant_id === tenantId)) {
+    return denyMoovAuthz('cross_tenant_denied', {
+      message: 'Requested tenant_id is not a membership of the authenticated user.',
+    });
+  }
+  return { ok: true, platformOwner: false, memberships };
+}
+
+/** Tenant members see their wallet. Tenant Management may view any tenant (read-only). */
+export async function assertMoovTenantView(client, mapping, tenantId) {
   const platformOwner = isPlatformOwnerCaller(mapping);
   if (platformOwner) {
     return { ok: true, platformOwner: true, memberships: [] };
@@ -100,7 +124,7 @@ export async function assertMoovTenantAccess(client, mapping, tenantId) {
   const memberships = await loadTenantMemberships(client, mapping.application_user_id);
   if (!memberships.some((row) => row.tenant_id === tenantId)) {
     return denyMoovAuthz('cross_tenant_denied', {
-      message: 'Requested tenant_id is not a membership of the authenticated user. Tenant Management (checksopsadmin@gmail.com) may act across tenants.',
+      message: 'Requested tenant_id is not a membership of the authenticated user.',
     });
   }
   return { ok: true, platformOwner: false, memberships };
@@ -122,19 +146,27 @@ export async function authorizeMoovProduction({
     });
   }
   const platformOwner = isPlatformOwnerCaller(mapping);
-  if (requirePlatformOwner && !platformOwner) {
-    return denyMoovAuthz('platform_owner_required', {
-      message: 'Only Tenant Management (checksopsadmin@gmail.com) can pull monthly and usage fees from other tenants.',
+  if (requirePlatformOwner) {
+    if (!platformOwner) {
+      return denyMoovAuthz('platform_owner_required', {
+        message: 'Only Tenant Management (checksopsadmin@gmail.com) can pull monthly/usage fees or issue refunds.',
+      });
+    }
+  } else if (platformOwner) {
+    return denyMoovAuthz('tenant_management_send_refused', {
+      message: TENANT_MANAGEMENT_SEND_MESSAGE,
     });
   }
-  const access = await assertMoovTenantAccess(client, mapping, tenantId);
+  const access = requirePlatformOwner
+    ? { ok: true, platformOwner: true, memberships: [] }
+    : await assertMoovTenantAccess(client, mapping, tenantId);
   if (!access.ok) return access;
   let roles = [];
   if (!platformOwner) {
     roles = await loadTenantRole(client, mapping.application_user_id, tenantId);
     if (!roleAllowsFinancial(roles) && !roles.some((role) => FINANCIAL_ROLES.has(role))) {
       return denyMoovAuthz('financial_role_required', {
-        message: 'Wallet funding and disbursement require owner, admin, or manager, or Tenant Management.',
+        message: 'Wallet funding and disbursement require owner, admin, or manager of this tenant.',
       });
     }
   }
