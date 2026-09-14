@@ -33,7 +33,10 @@ import {
 } from '../functions/api/providers/production/checkalt-poll.mjs';
 import { syntheticCheckRaster } from '../functions/api/providers/parity/checkalt-image.mjs';
 import { syntheticCompliantCheckAltJpeg } from '../functions/api/providers/production/checkalt-image-compliance.mjs';
-import { buildCompletedEndorsementState } from '../functions/api/providers/production/checkalt-eligibility.mjs';
+import {
+  buildCompletedEndorsementState,
+  CHECK_ELIGIBILITY_SELECT,
+} from '../functions/api/providers/production/checkalt-eligibility.mjs';
 import { resetProviderSecretsCache } from '../functions/api/provider-secrets.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -283,6 +286,10 @@ const identityClient = (store) => ({
       };
       store.deposits.push(row);
       return { rows: [row] };
+    }
+    if (text.includes('FROM public.checkalt_deposits') && text.includes('ANY($1::uuid[])')) {
+      const tenantIds = params[0] || [];
+      return { rows: store.deposits.filter((row) => tenantIds.includes(row.tenant_id)) };
     }
     if (text.includes('FROM public.checkalt_deposits') && text.includes('check_intake_item_id')
       && text.includes('tenant_id') && text.includes('ORDER BY')) {
@@ -1081,6 +1088,55 @@ test('ambiguous or reference-less history never issues a second process POST', a
   assert.equal(noRef.liveProviderCalled, false);
   assert.equal(store.processPosts, 0);
   assert.equal(store.historyPosts, 0);
+});
+
+test('eligibility SELECT matches production RDS (no front_image_deposit_path)', () => {
+  assert.match(CHECK_ELIGIBILITY_SELECT, /front_image_path/);
+  assert.match(CHECK_ELIGIBILITY_SELECT, /back_image_deposit_path/);
+  assert.doesNotMatch(CHECK_ELIGIBILITY_SELECT, /front_image_deposit_path/);
+});
+
+test('empty poll body batch-reconciles existing rows and never process-POSTs', async () => {
+  const store = createStore();
+  store.deposits.push({
+    id: DEPOSIT_ID,
+    tenant_id: FREEDOM_TENANT,
+    check_intake_item_id: CHECK_ID,
+    checkalt_reference: '9001',
+    status: 'submitted',
+    amount: 12.34,
+    amount_cents: 1234,
+  });
+  const result = await withEnv(productionFlags, () => handleProviderRequest(
+    jwtEvent('/functions/v1/checkalt-poll-status', 'POST', {}),
+    '/functions/v1/checkalt-poll-status',
+    'POST',
+    submitDeps(store),
+  ));
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.createdDeposit, false);
+  assert.equal(result.polled, 1);
+  assert.equal(result.updated, 1);
+  assert.equal(result.errors, 0);
+  assert.equal(store.processPosts, 0);
+  assert.ok(store.itemPosts + store.historyPosts >= 1);
+});
+
+test('empty poll body with no deposits returns zeros and does not call CheckAlt', async () => {
+  const store = createStore();
+  const result = await withEnv(productionFlags, () => handleProviderRequest(
+    jwtEvent('/functions/v1/checkalt-poll-status', 'POST', {}),
+    '/functions/v1/checkalt-poll-status',
+    'POST',
+    submitDeps(store),
+  ));
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.polled, 0);
+  assert.equal(result.updated, 0);
+  assert.equal(result.errors, 0);
+  assert.equal(result.liveProviderCalled, false);
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.itemPosts, 0);
 });
 
 test('legacy NULL key and provider-may-have-occurred states block new process posts', () => {
