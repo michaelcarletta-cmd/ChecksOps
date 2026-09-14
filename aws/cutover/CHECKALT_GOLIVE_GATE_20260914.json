@@ -1,0 +1,150 @@
+{
+  "verdict": "CHECKALT GO-LIVE GATE PASS — READY FOR FIRST CONTROLLED REAL CHECK",
+  "validatedAt": "2026-09-14T18:51:19Z",
+  "realDepositInitiated": false,
+  "moovFundsMoved": false,
+  "spaUnlocked": false,
+  "spaRedeployed": false,
+  "check9562Submitted": false,
+  "live": {
+    "spaBundle": "index-CiOVNYWh.js",
+    "spaGitCommit": "868e69387d63af511f4c185775b611dea2c8fc47",
+    "authProvider": "cognito",
+    "cognitoPoolId": "us-east-1_h00WorYMT",
+    "cognitoClientId": "3ja9fqaq2fjkv3i6up2varcqpe",
+    "apiTarget": "/prep",
+    "function": "checksops-production-prep-api",
+    "codeSha256AfterOverlay": "CPX5+x40KEddZrgk364o6D1yQ3pXS8e8wtqKImyjFy4=",
+    "cloudFrontHealth": "https://checksops.com/prep/health → production-prep ok"
+  },
+  "flags": {
+    "AWS_CHECKALT_ENABLED": "true",
+    "AWS_PROVIDER_EXECUTION_ENABLED": "true",
+    "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": "true",
+    "AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED": "false",
+    "AWS_PROVIDER_WEBHOOK_DRY_RUN": "false",
+    "AWS_SCHEDULED_JOB_SECRET": null
+  },
+  "credentials": {
+    "secretId": "checksops/production/provider",
+    "requiredNamesPresent": ["CHECKALT_USERNAME", "CHECKALT_PASSWORD", "CHECKALT_FI_KEY", "CHECKALT_BASE_URL"],
+    "baseUrlHost": "api2.checkalt.com",
+    "approvedProductionHost": true,
+    "uatHostRefused": true,
+    "authenticateHttpStatus": 200,
+    "authenticateTokenPresent": true,
+    "depositProcessCalled": false
+  },
+  "config": {
+    "merchant": "lockbox5",
+    "defaultEnabled": true,
+    "baseUrlHost": "api2.checkalt.com",
+    "fiKeyPresent": true,
+    "depositorAccountPresent": true,
+    "freedomTenantEnabled": true,
+    "freedomSsoUserIdPresent": true,
+    "freedomDepositAccountPresent": true
+  },
+  "referenceCheck9562": {
+    "id": "623442f0-a408-4db5-85be-14bae231a722",
+    "checkNumber": "9562",
+    "amount": 9984.11,
+    "userAmountCents": 998411,
+    "status": "approved_for_deposit",
+    "checkStage": "ready_for_deposit",
+    "depositRecommendation": "ready_for_deposit",
+    "payeesSigned": 3,
+    "checkaltDeposits": [],
+    "usedAsReadOnlyReference": true,
+    "submitted": false,
+    "images": {
+      "bucket": "checksops-staging-privatefilesbucket-erzqsolpucjp",
+      "source": "AWS S3 files/claim-files/...",
+      "supabaseStorageUsed": false,
+      "frontSourceBytes": 1802087,
+      "frontOfficialCheckaltBytes": 278787,
+      "rearOfficialCheckaltBytes": 247060,
+      "preflightAfterFix": {
+        "statusCode": 409,
+        "error": "provider_rear_image_stale",
+        "reason": "rear_fingerprint_missing",
+        "needFrontPrep": false,
+        "needRearPrep": true,
+        "liveProviderCalled": false,
+        "note": "Official front and rear JPEGs loaded from S3 and passed CheckAlt compliance. Deposit click will re-bind rear fingerprint via AWS storage write. Do not submit this check unless a later message explicitly authorizes it."
+      }
+    }
+  },
+  "routing": {
+    "depositButton": "runCheckAltDepositClick → /prep/functions/v1/checkalt-deposit-preflight then checkalt-submit-deposit",
+    "legacySupabaseHostBlocked": true,
+    "browserImageBytesRejected": true,
+    "amountFromRds": true,
+    "idempotency": "stable key tenant+check+cents; existing reference replays and never process-POSTs again"
+  },
+  "polling": {
+    "productionCronWired": false,
+    "awsScheduledJobSecret": false,
+    "lambdaEventSourceMappings": [],
+    "pgCronExtension": false,
+    "cronRequiredForUserStatus": false,
+    "submitPersistsProviderIdToRds": true,
+    "commandCenterReadsCheckaltDeposits": true,
+    "manualPoll": {
+      "settingsPollNowEmptyBody": "batch-reconciles existing rows for owner/admin/manager; never process-POSTs",
+      "operatorEmptyPoll": {
+        "statusCode": 403,
+        "error": "financial_unauthorized",
+        "polled": 0,
+        "liveProviderCalled": false
+      },
+      "missingDepositId": {
+        "statusCode": 404,
+        "error": "deposit_not_found",
+        "createdDeposit": false
+      }
+    }
+  },
+  "fixesAppliedThisGate": [
+    "Removed nonexistent front_image_deposit_path from CHECK_ELIGIBILITY_SELECT",
+    "Empty-body checkalt-poll-status batch-reconciles existing deposits for financial roles"
+  ],
+  "operatorSteps": {
+    "who": "Freedom tenant admin or manager (not operator/staff). Tester abd3c2a0-… is operator and is correctly refused.",
+    "doNotSubmit": "623442f0-a408-4db5-85be-14bae231a722 / #9562 unless a later message explicitly authorizes it.",
+    "beforeClick": [
+      "Sign in at https://checksops.com with Cognito as Freedom admin/manager",
+      "Confirm authenticator TOTP is enrolled (Deposit Verification)",
+      "Open Command Center on one Ready-for-Deposit check that is not #9562",
+      "Confirm amount, payee line, and endorsed rear image look correct",
+      "Confirm the green Deposit button is visible (is_checkalt_enabled_for_tenant is true)",
+      "Have CloudWatch /prep logs and CheckAlt FinCapture history open in another tab"
+    ],
+    "click": [
+      "Click Deposit",
+      "Wait for Preparing check for deposit… (AWS S3 official JPEG prep + rear fingerprint bind)",
+      "Enter the current 6-digit TOTP on Deposit Verification",
+      "Wait for Deposit queued"
+    ],
+    "afterClick": [
+      "Command Center should show a checkalt_deposits row: status submitted or pending_approval, with checkalt_reference",
+      "If rejected/error, the red banner is visible; do not blindly click Resubmit — reconcile first",
+      "Refresh status with Settings → CheckAlt → Poll Now (admin) or POST /prep/functions/v1/checkalt-poll-status { deposit_id }",
+      "Do not move Moov funds. Do not unlock/redeploy the SPA."
+    ],
+    "monitor": [
+      "Lambda checksops-production-prep-api logs for checkalt-submit-deposit and checkalt-poll-status",
+      "RDS checkalt_deposits.checkalt_reference, status, last_error, failure_class",
+      "CheckAlt FinCapture item/history for the new referenceNumber",
+      "Confirm process POST count is 1 for that check (idempotency)"
+    ]
+  },
+  "supabaseRequired": {
+    "auth": false,
+    "db": false,
+    "storage": false,
+    "edgeFunction": false,
+    "rpc": false,
+    "pgCron": false
+  }
+}
