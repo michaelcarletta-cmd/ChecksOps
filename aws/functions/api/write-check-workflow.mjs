@@ -985,13 +985,29 @@ const executeMortgageRequests = async ({ client, mapping, op, values, filters })
     [id],
   )).rows;
   if (!existing.length) return { error: 'rls_denied', message: 'mortgage request not found or not writable' };
+
+  const staffColumns = ['status', 'assigned_employee_id', 'accepted_at']
+    .filter((column) => column in values);
+  if (staffColumns.length) {
+    const owner = (await client.query(
+      'SELECT public.is_master_owner() AS is_master',
+    )).rows[0]?.is_master === true;
+    if (!owner) {
+      return {
+        error: 'not_authorized',
+        message: 'Mortgage Ops staff transitions require the authorized Mortgage Ops workflow',
+        columns: staffColumns,
+      };
+    }
+  }
+
   const out = {};
+  const typeMap = {};
   for (const [column, max] of [
     ['mortgage_company', 200],
     ['mortgage_servicer', 200],
     ['loan_number', 80],
     ['note', 2000],
-    ['work_notes', 2000],
     ['property_address', 2000],
     ['claim_number', 80],
     ['insurance_company', 200],
@@ -1014,10 +1030,27 @@ const executeMortgageRequests = async ({ client, mapping, op, values, filters })
     }
     out.status = status;
   }
+  if ('assigned_employee_id' in values) {
+    if (values.assigned_employee_id == null || values.assigned_employee_id === '') {
+      out.assigned_employee_id = null;
+      typeMap.assigned_employee_id = 'uuid';
+    } else {
+      const assignedInvalid = requireUuid('assigned_employee_id', values.assigned_employee_id);
+      if (assignedInvalid) return assignedInvalid;
+      out.assigned_employee_id = values.assigned_employee_id;
+      typeMap.assigned_employee_id = 'uuid';
+    }
+  }
+  if ('accepted_at' in values) {
+    out.accepted_at = values.accepted_at == null || values.accepted_at === ''
+      ? null
+      : values.accepted_at;
+    typeMap.accepted_at = 'timestamptz';
+  }
   if (!Object.keys(out).length) {
     return { error: 'missing_required_field', field: 'values', table: 'mortgage_handling_requests', op: 'update' };
   }
-  const built = buildSet(out, {});
+  const built = buildSet(out, typeMap);
   built.params.push(id);
   const rows = (await client.query(
     `UPDATE public.mortgage_handling_requests
@@ -1432,7 +1465,7 @@ export const executeCheckWorkflowWrite = async ({ client, mapping, table, op, va
     'shared_check_messages', 'profiles', 'company_branding', 'referral_alerts',
     'tenants', 'privacy_notice_acknowledgments', 'tenant_users',
     'cash_jobs', 'cash_job_line_items', 'cash_job_attachments', 'homeowner_ledger_events',
-    'mortgage_request_library_documents', 'claim_settlements',
+    'mortgage_request_library_documents', 'claim_settlements', 'claims',
   ].includes(table)) {
     const { executeAppMetadataWrite } = await import('./write-app-metadata.mjs');
     return executeAppMetadataWrite({ client, mapping, table, op, values, filters });

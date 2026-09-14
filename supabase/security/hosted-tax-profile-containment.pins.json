@@ -1,0 +1,28 @@
+{
+  "expected_project_ref": "nbcqwpysqgyxrrbgtmkw",
+  "forbidden_project_ref": "sqyyvpaymashtdwjjmku",
+  "expected_database": "postgres",
+  "expected_owner": "postgres",
+  "files": {
+    "preflight": {
+      "path": "supabase/security/preflight_gate_revoke_postgrest_tax_profiles.sql",
+      "sha256": "04a8dd5a5bec41af81eaa8542108008ef2606f3d0917904b26fde1b16401b4b7"
+    },
+    "apply": {
+      "path": "supabase/security/unapplied-do-not-run/NOT_APPLIED_revoke_postgrest_tax_profiles.sql",
+      "sha256": "09def371dcb0ee074320e621750603077806363af1bc664d5d99b73649d73dc8"
+    }
+  },
+  "historical_migrations": [
+    {
+      "basename": "20260709195755_af0fb428-7cf4-4ac3-9fc6-d04ed189b490.sql",
+      "sha256": "61b739b27d9ca386cd764fcd412b85de9476878439c00198330737289a3328d4",
+      "review": "Historical recipient_tax_profiles CREATE plus authenticated DML and tenant-member policies. Hash-pinned; any edit fails CI until repinned in the same PR."
+    },
+    {
+      "basename": "20260731144913_f26320f9-6473-4cc7-bda1-b4e2a0d71d97.sql",
+      "sha256": "ace3132c3c271860da6757186c9c4a812ef1a22007f6022e60005e137b98a619",
+      "review": "Historical blanket GRANT ON ALL public tables and ALTER DEFAULT PRIVILEGES to authenticated. Landmine; do not re-run. Hash-pinned so the file cannot change without explicit review."
+    }
+  ]
+}

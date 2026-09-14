@@ -1,6 +1,11 @@
 /**
  * Named bill-mortgage-handling handler. Always fail-closed.
  * Does not write platform_fee_line_items, call Stripe, or enable money movement.
+ *
+ * Authorization: Mortgage Desk staff (`mortgage_agent`) or platform owner.
+ * Tenant `user_roles.admin` is not a mortgage agent and cannot bill.
+ * Do not use aws_can_write_tenant here — that is a tenant-writer check and
+ * would either admit tenant admins or deny centralized agents.
  */
 import { withIdentityWrite } from './data.mjs';
 import { USER_ROLES_SQL } from './identity.mjs';
@@ -15,9 +20,12 @@ const safeQuery = async (client, sql, params = []) => {
   }
 };
 
-const authorizedForBilling = (roles = []) => {
-  const set = new Set(roles.map((role) => String(role || '').toLowerCase()));
-  return set.has('admin') || set.has('mortgage_agent');
+const PLATFORM_OWNER_SQL = `SELECT public.is_master_owner() AS is_master, public.is_platform_owner() AS is_platform`;
+
+export const authorizedForMortgageBilling = (roles = [], owner = {}) => {
+  const set = new Set((roles || []).map((role) => String(role || '').toLowerCase()));
+  if (set.has('mortgage_agent')) return true;
+  return owner?.is_master === true || owner?.is_platform === true;
 };
 
 export const denyBillMortgageExecution = (spoof, requestId) => ({
@@ -42,11 +50,12 @@ export const denyBillMortgageExecution = (spoof, requestId) => ({
 export const runBillMortgageHandling = async ({ client, mapping, body, spoof }) => {
   const requestId = typeof body.request_id === 'string' ? body.request_id : null;
   if (!requestId) {
-    return { ok: false, statusCode: 400, error: 'request_id required', spoofFieldsIgnored: spoof };
+    return { ok: false, statusCode: 400, error: 'request_id required', spoofFieldsIgnored: spoof, liveStripeCalled: false, billed: false };
   }
   const roles = (await safeQuery(client, USER_ROLES_SQL, [mapping.application_user_id])).rows
     .map((row) => row.role);
-  if (!authorizedForBilling(roles)) {
+  const owner = (await safeQuery(client, PLATFORM_OWNER_SQL)).rows[0] || {};
+  if (!authorizedForMortgageBilling(roles, owner)) {
     return {
       ok: false,
       statusCode: 403,
@@ -65,23 +74,15 @@ export const runBillMortgageHandling = async ({ client, mapping, body, spoof }) 
     [requestId],
   )).rows[0];
   if (!request) {
-    return { ok: false, statusCode: 404, error: 'request_not_found', spoofFieldsIgnored: spoof };
-  }
-  const canWrite = (await safeQuery(
-    client,
-    'SELECT public.aws_can_write_tenant($1::uuid) AS ok',
-    [request.tenant_id],
-  )).rows[0]?.ok;
-  if (canWrite !== true) {
     return {
       ok: false,
-      statusCode: 403,
-      error: 'forbidden',
+      statusCode: 404,
+      error: 'request_not_found',
+      spoofFieldsIgnored: spoof,
       liveStripeCalled: false,
       liveMoovCalled: false,
       billed: false,
       platformFeeLineItemsWritten: false,
-      spoofFieldsIgnored: spoof,
     };
   }
   return denyBillMortgageExecution(spoof, requestId);

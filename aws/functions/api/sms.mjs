@@ -4,6 +4,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { withIdentity, parseBody, ignoredSpoof } from './data.mjs';
+import { withEmailLogSavepoint } from './email.mjs';
 import {
   applySmsRecipientPolicy,
   normalizePhone,
@@ -40,7 +41,7 @@ export const handleSendSms = async (event) => withIdentity(event, async ({
   const status = policy.delivery === 'live' ? 'sent' : 'sunk';
 
   // Best-effort audit row (schema variants tolerated)
-  await client.query(
+  await withEmailLogSavepoint(client, () => client.query(
     `INSERT INTO public.sms_messages (
        id, claim_id, to_number, body, status, provider, provider_message_id,
        created_by, created_at, metadata
@@ -63,8 +64,8 @@ export const handleSendSms = async (event) => withIdentity(event, async ({
         mode: smsMode(),
       }),
     ],
-  ).catch(async () => {
-    await client.query(
+  )).catch(async () => {
+    await withEmailLogSavepoint(client, () => client.query(
       `INSERT INTO public.email_send_log (
          id, template_name, recipient_email, status, provider, provider_message_id,
          metadata, created_at
@@ -76,7 +77,7 @@ export const handleSendSms = async (event) => withIdentity(event, async ({
         messageId,
         JSON.stringify({ channel: 'sms', claimId, policy }),
       ],
-    ).catch(() => {});
+    )).catch(() => {});
   });
 
   return {

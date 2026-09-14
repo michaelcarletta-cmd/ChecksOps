@@ -88,6 +88,9 @@ test('approved Mortgage Ops category is only library:mortgage:%', () => {
   assert.equal(isApprovedMortgageLibraryDocType('library:catalog:roofing'), false);
   assert.equal(isApprovedMortgageLibraryDocType('library:letterhead:logo'), false);
   assert.equal(isApprovedMortgageLibraryDocType('verification'), false);
+  assert.equal(isApprovedMortgageLibraryDocType('library:mortgage:evil'), false);
+  assert.equal(isApprovedMortgageLibraryDocType('library:mortgage:license'), false);
+  assert.equal(isApprovedMortgageLibraryDocType('library:mortgage:closing'), false);
   const overlay = overlaySql();
   const lovable = readSql('../supabase/migrations/20260830190318_06a7b3a3-9dcf-4298-9db7-fda095678bc5.sql');
   assert.match(overlay, /td\.doc_type LIKE 'library:mortgage:%'/);
@@ -112,6 +115,29 @@ test('oneshot applies 29 only after write helpers and complete write policies', 
   assert.doesNotMatch(writePlan, /29_mortgage_ops_library_parity\.sql'\)/);
   assert.match(writePlan, /Do not apply 29_mortgage_ops_library_parity/);
   assert.match(index, /Do not apply 29 from ddl/);
+  assert.equal(applied.includes('30_tenant_documents_mortgage_doc_type.sql'), false);
+  assert.doesNotMatch(complete, /readSql\('30_tenant_documents_mortgage_doc_type\.sql'\)/);
+  assert.match(index, /Do not apply 30_tenant_documents_mortgage_doc_type/);
+  assert.match(complete, /Do not apply it from completeAuth/);
+  assert.equal(applied.includes('31_mortgage_ops_agent_access.sql'), false);
+  assert.doesNotMatch(complete, /readSql\('31_mortgage_ops_agent_access\.sql'\)/);
+  assert.match(complete, /Do not apply 31_mortgage_ops_agent_access/);
+  assert.match(index, /Do not apply 31_mortgage_ops_agent_access/);
+  assert.match(writePlan, /Do not apply 31_mortgage_ops_agent_access/);
+  for (const name of [
+    '69_staging_homeowner_ledger_view.sql',
+    '71_endorsement_email_audit.sql',
+    '72_public_endorsement_token_lookup.sql',
+    '73_public_endorsement_submit_payee.sql',
+  ]) {
+    assert.equal(applied.includes(name), false, `completeAuth must not apply ${name}`);
+    assert.doesNotMatch(complete, new RegExp(`readSql\\('${name.replace('.', '\\.')}'\\)`));
+    assert.doesNotMatch(index, new RegExp(`applySql\\('${name.replace('.', '\\.')}'\\)`));
+    assert.doesNotMatch(writePlan, new RegExp(`readSql\\('${name.replace('.', '\\.')}'\\)`));
+  }
+  assert.match(complete, /Do not apply 69\/71\/72\/73/);
+  assert.match(index, /Do not apply 69\/71\/72\/73/);
+  assert.match(writePlan, /Do not apply 69\/71\/72\/73/);
 });
 
 test('SQL overlay revokes PUBLIC immediately, requires mortgage category, and uses exact paths', () => {
@@ -290,6 +316,17 @@ test('duplicate backfill is idempotent', async () => {
 
 test('ordinary tenant member cannot perform an admin backfill', async () => {
   const client = libraryClient({ actorRole: null, tenantRole: 'operator', member: true });
+  const result = await executeMortgageRequestLibraryDocuments({
+    client,
+    mapping: { application_user_id: MEMBER_ID },
+    op: 'upsert',
+    values: { request_id: OPEN_REQ, tenant_document_id: DOC_ID },
+  });
+  assert.equal(result.error, 'not_authorized');
+});
+
+test('user_roles.admin plus ordinary membership cannot backfill tenant library docs', async () => {
+  const client = libraryClient({ actorRole: 'admin', tenantRole: 'operator', member: true });
   const result = await executeMortgageRequestLibraryDocuments({
     client,
     mapping: { application_user_id: MEMBER_ID },

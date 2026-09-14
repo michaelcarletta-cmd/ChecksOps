@@ -3,6 +3,8 @@
  */
 import { ident } from './data.mjs';
 import { isMasterOwner } from './platform-authz.mjs';
+import { isAllowedTenantDocumentDocType } from './mortgage-library-doc-types.mjs';
+import { canManageTenantDocumentLibrary, mortgageAgentCanWriteTenantLossDraft } from './mortgage-library-docs.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isUuid = (value) => UUID_RE.test(String(value || ''));
@@ -55,6 +57,83 @@ const memberOfTenant = async (client, userId, tenantId) => {
   return rows.length > 0;
 };
 
+const callerTenantIds = async (client, userId) => {
+  const rows = (await client.query(
+    'SELECT DISTINCT tenant_id FROM public.tenant_users WHERE user_id = $1::uuid',
+    [userId],
+  )).rows;
+  return rows.map((row) => row.tenant_id).filter(Boolean);
+};
+
+const hasStaffWriteRole = async (client, userId) => {
+  const rows = (await client.query(
+    `SELECT 1 FROM public.user_roles
+     WHERE user_id = $1::uuid AND role IN ('admin'::public.app_role, 'staff'::public.app_role)
+     LIMIT 1`,
+    [userId],
+  )).rows;
+  return rows.length > 0;
+};
+
+const canWriteClaimOrg = async (client, mapping, tenantId) => {
+  if (!isUuid(tenantId)) return false;
+  const tenant = (await client.query(
+    'SELECT 1 FROM public.tenants WHERE id = $1::uuid LIMIT 1',
+    [tenantId],
+  )).rows;
+  if (!tenant.length) return false;
+  if (await isMasterOwner(client)) return true;
+  if (!(await memberOfTenant(client, mapping.application_user_id, tenantId))) return false;
+  return hasStaffWriteRole(client, mapping.application_user_id);
+};
+
+const CLAIM_CREATE_STATUSES = new Set(['tracking', 'open']);
+
+const resolveClaimOrgId = async (client, mapping, values) => {
+  const requested = values.org_id || values.tenant_id || null;
+  if (requested && !isUuid(requested)) return { error: 'invalid_uuid', field: 'org_id' };
+  const memberships = await callerTenantIds(client, mapping.application_user_id);
+  if (requested) {
+    if (!(await canWriteClaimOrg(client, mapping, requested))) {
+      return { error: 'rls_denied', message: 'org_id not writable for caller' };
+    }
+    return { orgId: requested };
+  }
+  if (memberships.length === 1) {
+    if (!(await canWriteClaimOrg(client, mapping, memberships[0]))) {
+      return { error: 'not_authorized', message: 'caller cannot write claims for tenant' };
+    }
+    return { orgId: memberships[0] };
+  }
+  return {
+    error: 'ambiguous_tenant',
+    message: 'org_id required when caller has zero or multiple tenant memberships',
+  };
+};
+
+export const executeClaims = async ({ client, mapping, op, values }) => {
+  if (op !== 'insert') return { error: 'operation_not_allowlisted', op };
+  const resolved = await resolveClaimOrgId(client, mapping, values);
+  if (resolved.error) return resolved;
+  const claimNumber = clip(values.claim_number, 80);
+  if (claimNumber?.error || !claimNumber) {
+    return claimNumber?.error || { error: 'missing_required_field', field: 'claim_number' };
+  }
+  const statusRaw = clip(values.status || 'tracking', 40);
+  if (statusRaw?.error) return statusRaw;
+  const status = String(statusRaw || 'tracking').toLowerCase();
+  if (!CLAIM_CREATE_STATUSES.has(status)) {
+    return { error: 'column_not_allowlisted', columns: ['status'] };
+  }
+  const rows = (await client.query(
+    `INSERT INTO public.claims (claim_number, status, org_id)
+     VALUES ($1::text, $2::text, $3::uuid)
+     RETURNING id, claim_number, status, org_id, policyholder_name`,
+    [claimNumber, status, resolved.orgId],
+  )).rows;
+  return { rows };
+};
+
 export const executeNotifications = async ({ client, mapping, op, values, filters }) => {
   if (op !== 'update') return { error: 'operation_not_allowlisted', op };
   if (!('is_read' in values)) return { error: 'missing_required_field', field: 'is_read' };
@@ -98,11 +177,14 @@ export const executeTenantDocuments = async ({ client, mapping, op, values, filt
   if (op === 'insert') {
     const tenantId = values.tenant_id;
     if (!isUuid(tenantId)) return { error: 'invalid_uuid', field: 'tenant_id' };
-    if (!(await memberOfTenant(client, mapping.application_user_id, tenantId))) {
-      return { error: 'not_authorized', message: 'Not a member of tenant' };
+    if (!(await canManageTenantDocumentLibrary(client, mapping.application_user_id, tenantId))) {
+      return { error: 'not_authorized', message: 'Tenant owner or admin required to manage library documents' };
     }
     const docType = clip(values.doc_type, 120);
     if (docType?.error || !docType) return docType?.error || { error: 'missing_required_field', field: 'doc_type' };
+    if (!isAllowedTenantDocumentDocType(docType)) {
+      return { error: 'category_not_allowlisted', field: 'doc_type' };
+    }
     const filePath = clip(values.file_path, 512);
     if (filePath?.error || !filePath) return filePath?.error || { error: 'missing_required_field', field: 'file_path' };
     const fileName = clip(values.file_name, 255);
@@ -136,6 +218,14 @@ export const executeTenantDocuments = async ({ client, mapping, op, values, filt
   }
   const id = eqFilter(filters, 'id');
   if (!isUuid(id)) return { error: 'invalid_uuid', field: 'id' };
+  const existing = (await client.query(
+    `SELECT id, tenant_id FROM public.tenant_documents WHERE id = $1::uuid`,
+    [id],
+  )).rows[0];
+  if (!existing) return { error: 'rls_denied', message: 'document not writable' };
+  if (!(await canManageTenantDocumentLibrary(client, mapping.application_user_id, existing.tenant_id))) {
+    return { error: 'not_authorized', message: 'Tenant owner or admin required to manage library documents' };
+  }
   if (op === 'delete') {
     const rows = (await client.query(
       'DELETE FROM public.tenant_documents WHERE id = $1::uuid RETURNING *',
@@ -149,6 +239,9 @@ export const executeTenantDocuments = async ({ client, mapping, op, values, filt
     if (col in values) {
       const text = clip(values[col], max);
       if (text?.error) return text;
+      if (col === 'doc_type' && !isAllowedTenantDocumentDocType(text)) {
+        return { error: 'category_not_allowlisted', field: 'doc_type' };
+      }
       out[col] = text;
     }
   }
@@ -170,6 +263,25 @@ export const executeTenantDocuments = async ({ client, mapping, op, values, filt
 export const executeLossDraftDocuments = async ({ client, mapping, op, values, filters }) => {
   const id = eqFilter(filters, 'id');
   if (!isUuid(id)) return { error: 'invalid_uuid', field: 'id' };
+  const existing = (await client.query(
+    `SELECT d.id, d.loss_draft_id, ld.check_intake_item_id, ci.tenant_id
+     FROM public.loss_draft_documents d
+     JOIN public.loss_draft_tracking ld ON ld.id = d.loss_draft_id
+     LEFT JOIN public.check_intake_items ci ON ci.id = ld.check_intake_item_id
+     WHERE d.id = $1::uuid`,
+    [id],
+  )).rows[0];
+  if (!existing) return { error: 'rls_denied', message: 'document not writable' };
+  const member = existing.tenant_id
+    ? await memberOfTenant(client, mapping.application_user_id, existing.tenant_id)
+    : false;
+  const agent = await mortgageAgentCanWriteTenantLossDraft(client, mapping.application_user_id, {
+    tenantId: existing.tenant_id,
+    checkId: existing.check_intake_item_id,
+  });
+  if (!member && !agent) {
+    return { error: 'not_authorized', message: 'Not authorized for this loss draft document' };
+  }
   if (op === 'delete') {
     const rows = (await client.query(
       'DELETE FROM public.loss_draft_documents WHERE id = $1::uuid RETURNING *',
@@ -1038,6 +1150,8 @@ export const executeAppMetadataWrite = async ({ client, mapping, table, op, valu
       return executeHomeownerLedgerEvents({ client, mapping, values });
     case 'claim_settlements':
       return executeClaimSettlements({ client, mapping, op, values, filters });
+    case 'claims':
+      return executeClaims({ client, mapping, op, values, filters });
     default:
       return { error: 'table_not_allowlisted', table };
   }

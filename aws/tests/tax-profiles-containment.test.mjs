@@ -32,6 +32,15 @@ import {
   taxProfileMutationHasTin,
   taxProfileMutationVariables,
 } from '../../src/lib/taxProfileMutation.ts';
+import {
+  TAX_PROFILES_UNAVAILABLE_HEADING,
+  TAX_PROFILES_UNAVAILABLE_MESSAGE,
+  TAX_PROFILE_STATUS_MISSING,
+  TAX_PROFILE_STATUS_UNAVAILABLE,
+  sanitizeBrowserTaxError,
+  taxProfileEditorEnabled,
+  taxProfileTinStatusLabel,
+} from '../../src/lib/taxProfileStatus.ts';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const APP_ID = 'abd3c2a0-6dc0-4680-92dd-a013e1141c91';
@@ -346,6 +355,40 @@ test('PDF/CSV output contains no TIN', () => {
   assert.doesNotMatch(taxSummary, /value=\{form\.tin/);
   assert.match(taxSummary, /Secure tax-form generation coming soon/);
   assert.match(taxSummary, /tenant-tax-profiles/);
+  assert.match(taxSummary, /data: taxProfiles = \[\]/);
+  assert.match(taxSummary, /No TIN on file/);
+  assert.match(taxSummary, /taxProfilesIsError/);
+  assert.match(taxSummary, /canEditTaxProfile/);
+  assert.match(taxSummary, /sanitizeBrowserTaxError/);
+  assert.match(taxSummary, /TAX_PROFILES_UNAVAILABLE_HEADING/);
+  assert.match(taxSummary, /TAX_PROFILES_UNAVAILABLE_MESSAGE/);
+});
+
+test('failed tax-profile list is not treated as no TIN on file', () => {
+  const onFile = { tin_on_file: true, tin_last_4: '6789' };
+  assert.equal(taxProfileTinStatusLabel(undefined, {}), TAX_PROFILE_STATUS_MISSING);
+  assert.equal(taxProfileTinStatusLabel(undefined, { isError: true }), TAX_PROFILE_STATUS_UNAVAILABLE);
+  assert.equal(taxProfileTinStatusLabel(onFile, { isError: true }), TAX_PROFILE_STATUS_UNAVAILABLE);
+  assert.equal(taxProfileTinStatusLabel(undefined, { isLoading: true }), 'Checking TIN status');
+  assert.equal(taxProfileTinStatusLabel(onFile, {}), 'On file ••••6789');
+  assert.equal(taxProfileTinStatusLabel({ tin_on_file: true, tin_last_4: null }, {}), 'On file');
+  assert.equal(taxProfileEditorEnabled({ tenantId: TENANT_A }), true);
+  assert.equal(taxProfileEditorEnabled({ tenantId: TENANT_A, isError: true }), false);
+  assert.equal(taxProfileEditorEnabled({ tenantId: TENANT_A, isLoading: true }), false);
+  assert.equal(taxProfileEditorEnabled({ tenantId: null }), false);
+  assert.match(TAX_PROFILES_UNAVAILABLE_HEADING, /Tax\/1099 recipient profiles unavailable/);
+  assert.match(TAX_PROFILES_UNAVAILABLE_MESSAGE, /Do not assume no TIN is on file/);
+  const leaked = sanitizeBrowserTaxError(`upsert failed tin=${SAMPLE_TIN} ssn=${SAMPLE_SSN} ${SAMPLE_UNFORMATTED}`);
+  assert.equal(leaked.includes(SAMPLE_TIN), false);
+  assert.equal(leaked.includes(SAMPLE_SSN), false);
+  assert.equal(leaked.includes(SAMPLE_UNFORMATTED), false);
+  assert.equal(sanitizeBrowserTaxError(''), 'request_failed');
+  const taxSummary = sourceOf('src/components/ledger/TaxSummary.tsx');
+  assert.doesNotMatch(taxSummary, /from\(["']recipient_tax_profiles["']\)/);
+  const bannerStart = taxSummary.indexOf('taxProfilesIsError &&');
+  const banner = taxSummary.slice(bannerStart, bannerStart + 1200);
+  assert.match(banner, /TAX_PROFILES_UNAVAILABLE_HEADING/);
+  assert.doesNotMatch(banner, /error\.message|e\.message/);
 });
 
 test('logs and error responses redact TIN values', () => {
@@ -457,6 +500,7 @@ test('unapplied containment SQL is transactional, fail-closed, and not on a runn
   assert.equal(fs.existsSync(path.join(ROOT, 'aws/tax/sql/80_recipient_tax_profiles_containment.sql')), false);
   const migrations = fs.readdirSync(path.join(ROOT, 'supabase/migrations'));
   assert.equal(migrations.some((name) => name.includes('recipient_tax_profiles_containment')), false);
+  assert.equal(migrations.some((name) => name.includes('revoke_postgrest_tax_profiles')), false);
   for (const rel of [
     'aws/db-copy/rehearsal/scripts/bridge-db-rehearsal.mjs',
     'aws/workflows/oneshot/index.mjs',

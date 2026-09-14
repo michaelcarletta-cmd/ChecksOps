@@ -17,7 +17,14 @@ import {
   scopes,
 } from './moov-client.mjs';
 import { fail, jsonResult } from './caller.mjs';
-import { sendViaSesOrSink } from '../../email.mjs';
+import {
+  deliverAuditedEmail,
+  peekAuditedEmail,
+  replayIdempotentSend,
+  sendViaSesOrSink,
+  stableEmailIdempotencyKey,
+  validatedMailReplyTo,
+} from '../../email.mjs';
 import { renderTransactionalTemplate } from '../../email-templates.mjs';
 import { emailAssetOrigin, resolveEmailBranding } from '../../email-branding.mjs';
 import { normalizeEmail } from '../../email-policy.mjs';
@@ -1305,6 +1312,27 @@ export const stakeholderResendVerification = {
       return fail('No recipient email on file — edit the stakeholder and add their email first.', 400);
     }
 
+    const suppliedKey = String(body.idempotencyKey || body.idempotency_key || '').trim();
+    const idempotencyKey = suppliedKey || stableEmailIdempotencyKey(
+      'stakeholder-verify',
+      account.id,
+      account.verification_sent_at || 'none',
+    );
+    const prior = await peekAuditedEmail(client, idempotencyKey);
+    if (!prior.ok) {
+      return fail(prior.error || 'idempotency_unavailable', prior.statusCode || 503, {
+        emailed: false,
+        liveProviderCalled: false,
+      });
+    }
+    if (prior.duplicate) {
+      return jsonResult({
+        ...replayIdempotentSend(prior.row, null),
+        liveProviderCalled: false,
+        emailed: true,
+      });
+    }
+
     const token = randomUUID();
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
     await client.query(
@@ -1318,34 +1346,43 @@ export const stakeholderResendVerification = {
 
     const verifyUrl = `${emailAssetOrigin()}/verify-account/${token}`;
     const branding = await resolveEmailBranding(client, { tenantId: account.tenant_id });
+    const reply = validatedMailReplyTo(branding.replyTo);
+    if (!reply.ok) {
+      return fail(reply.error, 400, { emailed: false, liveProviderCalled: false });
+    }
     const rendered = renderTransactionalTemplate('stakeholder-verify-account', {
       nickname: account.nickname,
       custname: account.custname,
       verifyUrl,
       branding,
     });
-    const mailer = send || sendViaSesOrSink;
-    let sendResult;
-    try {
-      sendResult = await mailer({
-        to,
+    const delivery = await deliverAuditedEmail(client, {
+      templateName: 'stakeholder-verify-account',
+      recipientEmail: to,
+      tenantId: account.tenant_id,
+      idempotencyKey,
+      applicationUserId: ctx.applicationUserId || ctx.application_user_id || null,
+      metadata: { stakeholder_account_id: account.id, workflow: 'stakeholder-resend-verification' },
+      send: send || sendViaSesOrSink,
+      mailerArgs: {
         subject: rendered.subject,
         html: rendered.html,
         text: rendered.text,
         from: branding.from,
-        replyTo: branding.replyTo,
-      });
-    } catch (error) {
-      return fail(String(error?.message || 'Failed to send verification email').slice(0, 240), 502, {
+        replyTo: reply.replyTo,
+      },
+    });
+    if (!delivery.ok) {
+      return fail(delivery.error || 'Verification email was not sent', delivery.statusCode || 502, {
         emailed: false,
         liveProviderCalled: false,
       });
     }
-    const invoked = Array.isArray(sendResult?.results) && sendResult.results.length > 0;
-    if (!invoked) {
-      return fail('Verification email was not sent', 502, {
-        emailed: false,
+    if (delivery.duplicate) {
+      return jsonResult({
+        ...delivery.replay,
         liveProviderCalled: false,
+        emailed: true,
       });
     }
 
@@ -1358,6 +1395,8 @@ export const stakeholderResendVerification = {
       success: true,
       liveProviderCalled: false,
       emailed: true,
+      duplicate: false,
+      providerMessageId: delivery.providerMessageId || null,
     });
   },
 };

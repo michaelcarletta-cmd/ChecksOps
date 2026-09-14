@@ -192,6 +192,24 @@ test('accept_mortgage_handling_request assigns caller', async () => {
   assert.equal(result.data.assigned_employee_id, APP_ID);
 });
 
+test('tenant admin cannot accept or update mortgage request via RPC', async () => {
+  const client = mockClient({ roles: [{ role: 'admin' }] });
+  const accept = await executeSafeWriteRpc({
+    client,
+    mapping: { application_user_id: APP_ID },
+    name: 'accept_mortgage_handling_request',
+    args: { _request_id: REQUEST_ID },
+  });
+  assert.equal(accept.error, 'not_authorized');
+  const update = await executeSafeWriteRpc({
+    client,
+    mapping: { application_user_id: APP_ID },
+    name: 'update_mortgage_handling_request_status',
+    args: { _request_id: REQUEST_ID, _status: 'completed' },
+  });
+  assert.equal(update.error, 'not_authorized');
+});
+
 test('loss_draft_action blocks financial amount actions', async () => {
   const client = mockClient();
   const result = await executeSafeWriteRpc({

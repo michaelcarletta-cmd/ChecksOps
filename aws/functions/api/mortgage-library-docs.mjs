@@ -1,8 +1,9 @@
 /**
  * Mortgage Ops document-library parity helpers.
  *
- * Approved auto-share / backfill category (Lovable 2026-08-30):
- *   doc_type LIKE 'library:mortgage:%'
+ * Application / CHECK constraint allowlist is the exact canonical set in
+ * mortgage-library-doc-types.mjs. SQL 29 keeps a broader
+ * `doc_type LIKE 'library:mortgage:%'` prefix check as defense in depth.
  *
  * Other library categories stay tenant-internal:
  *   library:template:%  library:shingle:%  library:siding:%
@@ -10,17 +11,19 @@
  *
  * Does not touch KYC/Moov verification paths, check images, or claim files.
  */
+import {
+  MORTGAGE_LIBRARY_DOC_PREFIX,
+  MORTGAGE_LIBRARY_DOC_TYPES,
+  isApprovedMortgageLibraryDocType,
+} from './mortgage-library-doc-types.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export const MORTGAGE_LIBRARY_DOC_PREFIX = 'library:mortgage:';
+export { MORTGAGE_LIBRARY_DOC_PREFIX, MORTGAGE_LIBRARY_DOC_TYPES, isApprovedMortgageLibraryDocType };
 export const MORTGAGE_OPS_OPEN_STATUSES = Object.freeze(['requested', 'in_progress']);
 export const MORTGAGE_LIBRARY_MANAGE_ROLES = Object.freeze(['admin', 'owner']);
 
 export const isUuid = (value) => UUID_RE.test(String(value || ''));
-
-export const isApprovedMortgageLibraryDocType = (docType) =>
-  String(docType || '').startsWith(MORTGAGE_LIBRARY_DOC_PREFIX);
 
 export const isOpenMortgageRequestStatus = (status) =>
   MORTGAGE_OPS_OPEN_STATUSES.includes(String(status || '').toLowerCase());
@@ -46,14 +49,6 @@ const clip = (value, max) => {
   return text.length ? text : null;
 };
 
-const loadRoles = async (client, userId) => {
-  const rows = (await client.query(
-    `SELECT role::text AS role FROM public.user_roles WHERE user_id = $1::uuid`,
-    [userId],
-  )).rows;
-  return rows.map((row) => String(row.role || '').toLowerCase());
-};
-
 const loadTenantMembership = async (client, userId, tenantId) => {
   const row = (await client.query(
     `SELECT role::text AS role FROM public.tenant_users
@@ -64,14 +59,43 @@ const loadTenantMembership = async (client, userId, tenantId) => {
   return row || null;
 };
 
+/**
+ * Tenant document library writes are tenant owner/admin only.
+ * `user_roles.admin` / `staff` / `mortgage_agent` are not tenant library managers:
+ * a platform or Desk role plus ordinary membership must not mutate another
+ * tenant's packet. Platform owner oversight is not a library-write grant.
+ */
 export const canManageTenantDocumentLibrary = async (client, userId, tenantId) => {
   if (!isUuid(userId) || !isUuid(tenantId)) return false;
   const membership = await loadTenantMembership(client, userId, tenantId);
   if (!membership) return false;
   const tenantRole = String(membership.role || '').toLowerCase();
-  if (MORTGAGE_LIBRARY_MANAGE_ROLES.includes(tenantRole)) return true;
-  const roles = await loadRoles(client, userId);
-  return roles.includes('admin') || roles.includes('staff');
+  return MORTGAGE_LIBRARY_MANAGE_ROLES.includes(tenantRole);
+};
+
+/**
+ * Mortgage agents may write loss-draft files only for a check they can work:
+ * an open Desk request, or a closed request assigned to them. Tenant
+ * `user_roles.admin` / `staff` are not a cross-tenant write grant.
+ */
+export const mortgageAgentCanWriteTenantLossDraft = async (client, userId, { tenantId, checkId } = {}) => {
+  if (!isUuid(userId) || !isUuid(checkId)) return false;
+  const roles = (await client.query(
+    `SELECT role::text AS role FROM public.user_roles WHERE user_id = $1::uuid`,
+    [userId],
+  )).rows.map((row) => String(row.role || '').toLowerCase());
+  if (!roles.includes('mortgage_agent')) return false;
+  const rows = (await client.query(
+    `SELECT status, assigned_employee_id
+     FROM public.mortgage_handling_requests
+     WHERE check_intake_item_id = $1::uuid
+       AND ($2::uuid IS NULL OR tenant_id = $2::uuid)`,
+    [checkId, isUuid(tenantId) ? tenantId : null],
+  )).rows;
+  return rows.some((row) => (
+    isOpenMortgageRequestStatus(row.status)
+    || String(row.assigned_employee_id || '') === String(userId)
+  ));
 };
 
 /**
@@ -116,7 +140,12 @@ export const executeMortgageRequestLibraryDocuments = async ({
   }
 
   if (!isApprovedMortgageLibraryDocType(document.doc_type)) {
-    return { error: 'category_not_allowlisted', field: 'doc_type', allowed_prefix: MORTGAGE_LIBRARY_DOC_PREFIX };
+    return {
+      error: 'category_not_allowlisted',
+      field: 'doc_type',
+      allowed_prefix: MORTGAGE_LIBRARY_DOC_PREFIX,
+      allowed: MORTGAGE_LIBRARY_DOC_TYPES,
+    };
   }
   if (document.auto_share_mortgage_ops !== true) {
     return { error: 'auto_share_required', message: 'auto_share_mortgage_ops must be enabled' };

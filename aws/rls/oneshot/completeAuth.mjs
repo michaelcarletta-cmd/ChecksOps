@@ -84,6 +84,10 @@ export const applyCompleteDdl = async (client) => {
   await client.query(readSql('24_complete_write_policies.sql'));
   // 29 requires 11 + 20 + 24. Immediate PUBLIC revokes live inside 29 itself.
   await client.query(readSql('29_mortgage_ops_library_parity.sql'));
+  // 30_tenant_documents_mortgage_doc_type.sql is a separate unapplied operator
+  // package. Do not apply it from completeAuth.
+  // Do not apply 31_mortgage_ops_agent_access.sql from completeAuth.
+  // Do not apply 69/71/72/73 endorsement or ledger SQL from completeAuth.
   const selectPolicies = Number((await client.query(
     `SELECT count(*)::int AS n FROM pg_policies
      WHERE schemaname='public' AND policyname LIKE 'aws_select_%'`,

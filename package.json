@@ -20,7 +20,11 @@
     "test:darwin-merge": "node scripts/test-merge-missing-doc-requests.mjs",
     "test:darwin-duplicate-doc": "node scripts/test-duplicate-doc-name.mjs",
     "test:rail-router": "bun scripts/test-rail-router.mjs",
-    "test:sweep-rules": "bun scripts/test-sweep-rules.mjs"
+    "test:sweep-rules": "bun scripts/test-sweep-rules.mjs",
+    "test:postgrest-tax-containment": "node --test supabase/security/revoke_postgrest_tax_profiles.test.mjs",
+    "test:tax-profile-migration-guard": "node --test supabase/security/migration-guard.test.mjs",
+    "test:hosted-tax-containment-wrapper": "node --test supabase/security/hosted-containment-wrapper.test.mjs",
+    "check:tax-profile-migrations": "node scripts/check-recipient-tax-profile-migrations.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "6.3.1",

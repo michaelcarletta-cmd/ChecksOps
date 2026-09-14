@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/contexts/TenantContext";
@@ -24,6 +24,13 @@ import {
   taxProfileMutationVariables,
   type TaxProfileMutationVariables,
 } from "@/lib/taxProfileMutation";
+import {
+  TAX_PROFILES_UNAVAILABLE_HEADING,
+  TAX_PROFILES_UNAVAILABLE_MESSAGE,
+  taxProfileEditorEnabled,
+  taxProfileTinStatusLabel,
+  sanitizeBrowserTaxError,
+} from "@/lib/taxProfileStatus";
 
 type TaxProfile = {
   recipient_key: string;
@@ -57,7 +64,7 @@ const YEARS = [CURRENT_YEAR, CURRENT_YEAR - 1, CURRENT_YEAR - 2];
 
 function invokeErrorMessage(error: { message?: string } | null, data: unknown): string {
   const payload = data && typeof data === "object" ? data as { error?: string; message?: string } : null;
-  return String(payload?.error || payload?.message || error?.message || "request_failed");
+  return sanitizeBrowserTaxError(payload?.error || payload?.message || error?.message || "request_failed");
 }
 
 export function TaxSummary() {
@@ -72,7 +79,13 @@ export function TaxSummary() {
   const pendingTinRef = useRef("");
   const queryClient = useQueryClient();
 
-  const { data: taxProfiles = [] } = useQuery({
+  const {
+    data: taxProfiles = [],
+    isError: taxProfilesIsError,
+    isLoading: taxProfilesIsLoading,
+    isFetching: taxProfilesIsFetching,
+    refetch: refetchTaxProfiles,
+  } = useQuery({
     queryKey: ["recipient-tax-profiles", tenant?.id],
     enabled: !!tenant?.id,
     queryFn: async () => {
@@ -84,6 +97,15 @@ export function TaxSummary() {
       }
       return (data?.profiles ?? []) as TaxProfile[];
     },
+  });
+
+  const profilesQueryState = {
+    isError: taxProfilesIsError,
+    isLoading: taxProfilesIsLoading,
+  };
+  const canEditTaxProfile = taxProfileEditorEnabled({
+    tenantId: tenant?.id,
+    ...profilesQueryState,
   });
 
   const profileByKey = useMemo(() => {
@@ -125,9 +147,20 @@ export function TaxSummary() {
     },
     onError: (e: Error) => {
       clearTinInput();
-      toast({ title: "Save failed", description: e.message, variant: "destructive" });
+      toast({
+        title: "Save failed",
+        description: sanitizeBrowserTaxError(e.message),
+        variant: "destructive",
+      });
     },
   });
+
+  useEffect(() => {
+    if (!taxProfilesIsError) return;
+    pendingTinRef.current = "";
+    if (tinInputRef.current) tinInputRef.current.value = "";
+    setEditing(null);
+  }, [taxProfilesIsError]);
 
   const closeEditor = () => {
     clearTinInput();
@@ -135,12 +168,14 @@ export function TaxSummary() {
   };
 
   const submitProfile = () => {
+    if (!canEditTaxProfile) return;
     pendingTinRef.current = tinInputRef.current?.value?.trim() ?? "";
     if (tinInputRef.current) tinInputRef.current.value = "";
     saveProfile.mutate(taxProfileMutationVariables(form));
   };
 
   const openEdit = (key: string, defaultName: string) => {
+    if (!canEditTaxProfile) return;
     const existing = profileByKey[key];
     clearTinInput();
     setEditing({ key, name: defaultName });
@@ -262,12 +297,8 @@ export function TaxSummary() {
     URL.revokeObjectURL(url);
   };
 
-  const tinStatusLabel = (r: RecipientRow) => {
-    const profile = profileByKey[r.id];
-    if (profile?.tin_on_file && profile.tin_last_4) return `On file ••••${profile.tin_last_4}`;
-    if (profile?.tin_on_file) return "On file";
-    return "No TIN on file";
-  };
+  const tinStatusLabel = (r: RecipientRow) =>
+    taxProfileTinStatusLabel(profileByKey[r.id], profilesQueryState);
 
   return (
     <div className="space-y-4">
@@ -322,6 +353,34 @@ export function TaxSummary() {
           </Button>
         </div>
       </div>
+
+      {taxProfilesIsError && (
+        <div
+          role="alert"
+          className="rounded-md border border-destructive/30 bg-destructive/10 p-3 flex items-start gap-2"
+        >
+          <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-destructive">
+              {TAX_PROFILES_UNAVAILABLE_HEADING}
+            </p>
+            <p className="text-xs text-destructive/90">
+              {TAX_PROFILES_UNAVAILABLE_MESSAGE}
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs"
+              disabled={taxProfilesIsFetching}
+              onClick={() => {
+                void refetchTaxProfiles();
+              }}
+            >
+              {taxProfilesIsFetching ? "Retrying..." : "Retry"}
+            </Button>
+          </div>
+        </div>
+      )}
 
       {flag1099Count > 0 && (
         <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 flex items-start gap-2">
@@ -505,7 +564,12 @@ export function TaxSummary() {
                               size="sm"
                               variant="outline"
                               className="h-6 text-[10px] px-2"
-                              onClick={() => openEdit(r.id, r.custname && r.custname !== "External check" && r.custname !== "Cash job payee" ? r.custname : r.nickname)}
+                              disabled={!canEditTaxProfile}
+                              title={canEditTaxProfile ? undefined : TAX_PROFILES_UNAVAILABLE_HEADING}
+                              onClick={() => {
+                                if (!canEditTaxProfile) return;
+                                openEdit(r.id, r.custname && r.custname !== "External check" && r.custname !== "Cash job payee" ? r.custname : r.nickname);
+                              }}
                             >
                               <Pencil className="h-3 w-3 mr-1" />Tax info
                             </Button>
@@ -560,7 +624,9 @@ export function TaxSummary() {
             <div>
               <Label className="text-xs">TIN / EIN (replace only)</Label>
               <p className="text-[11px] text-muted-foreground mb-1">
-                {profileByKey[editing?.key ?? ""]?.tin_on_file
+                {taxProfilesIsError
+                  ? TAX_PROFILES_UNAVAILABLE_MESSAGE
+                  : profileByKey[editing?.key ?? ""]?.tin_on_file
                   ? `On file ••••${profileByKey[editing?.key ?? ""]?.tin_last_4 ?? "••••"}. Leave blank to keep the stored value.`
                   : "No TIN on file. Enter a value only if you intend to store one."}
               </p>
@@ -602,7 +668,7 @@ export function TaxSummary() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={closeEditor}>Cancel</Button>
-            <Button onClick={submitProfile} disabled={saveProfile.isPending}>
+            <Button onClick={submitProfile} disabled={saveProfile.isPending || !canEditTaxProfile}>
               {saveProfile.isPending ? "Saving..." : "Save"}
             </Button>
           </DialogFooter>

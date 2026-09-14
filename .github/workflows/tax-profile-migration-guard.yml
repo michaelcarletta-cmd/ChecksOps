@@ -1,0 +1,52 @@
+name: Tax profile migration guard
+
+on:
+  pull_request:
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/security/**'
+      - 'scripts/check-recipient-tax-profile-migrations.mjs'
+      - 'scripts/run-hosted-tax-profile-containment.mjs'
+      - 'scripts/recipient-tax-profile-migration-allowlist.txt'
+      - '.github/workflows/tax-profile-migration-guard.yml'
+      - 'package.json'
+  push:
+    branches:
+      - main
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/security/**'
+      - 'scripts/check-recipient-tax-profile-migrations.mjs'
+      - 'scripts/run-hosted-tax-profile-containment.mjs'
+      - 'scripts/recipient-tax-profile-migration-allowlist.txt'
+      - '.github/workflows/tax-profile-migration-guard.yml'
+      - 'package.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tax-profile-migration-guard-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Fail closed on unauthorized tax-profile privilege migrations
+        run: node scripts/check-recipient-tax-profile-migrations.mjs
+
+      - name: Run migration-guard unit tests
+        run: node --test supabase/security/migration-guard.test.mjs
+
+      - name: Run operator-wrapper unit tests (no remote connections)
+        run: node --test supabase/security/hosted-containment-wrapper.test.mjs
