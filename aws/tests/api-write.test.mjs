@@ -168,6 +168,24 @@ test('allowlist rejects financial tables and unknown columns; ignores spoof iden
   assert.match(claimNumberGrant, /GRANT UPDATE \(detected_claim_number\)/);
   assert.equal(/GRANT UPDATE \([^)]*claim_id/.test(claimNumberGrant), false);
   assert.equal(/GRANT UPDATE \([^)]*amount/.test(claimNumberGrant), false);
+  const claimsInsertGrant = fs.readFileSync(new URL('../write-path/sql/41_claims_org_id_insert_grant.sql', import.meta.url), 'utf8');
+  assert.match(claimsInsertGrant, /GRANT INSERT \(/);
+  assert.match(claimsInsertGrant, /org_id/);
+  assert.equal(/GRANT UPDATE/.test(claimsInsertGrant), false);
+  assert.equal(/GRANT INSERT \([^)]*claim_id/.test(claimsInsertGrant), false);
+  assert.equal(/GRANT INSERT \([^)]*claim_amount/.test(claimsInsertGrant), false);
+  const createClaimOrg = fs.readFileSync(new URL('../write-path/sql/41_create_claim_for_staff_org_id.sql', import.meta.url), 'utf8');
+  assert.match(createClaimOrg, /org_id/);
+  assert.match(createClaimOrg, /exactly one tenant membership/);
+  assert.ok(WRITE_ALLOWLIST.claims.ops.has('insert'));
+  assert.ok(!WRITE_ALLOWLIST.claims.ops.has('update'));
+  const spoofClaim = pickAllowlistedValues('claims', {
+    claim_number: 'P2-1',
+    status: 'tracking',
+    deductible: 12,
+  });
+  assert.equal(spoofClaim.error, 'column_not_allowlisted');
+  assert.deepEqual(spoofClaim.columns, ['deductible']);
   assert.ok(!WRITE_ALLOWLIST.check_intake_items.columns.has('amount'));
   assert.ok(WRITE_ALLOWLIST.tenants.columns.has('subscription_status'));
   assert.ok(WRITE_ALLOWLIST.tenants.clientIgnored.has('moov_environment'));

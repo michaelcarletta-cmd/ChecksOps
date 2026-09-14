@@ -3,10 +3,12 @@
 -- check_intake_items. Application allowlist still rejects negatives and
 -- requires tenant membership via claims.org_id or a linked check.
 --
--- Functional Audit / Phase 3: Git artifact only. Do NOT apply on shared
--- staging from this workstream. Integration & Release owns SQL apply.
--- Staging apply inventory remains 29 → 52 → 39 → 69 → 71 → 72 → 73
--- with SQL 30 intentionally unapplied.
+-- Integration RC 2026-09-14: Git artifact. Do NOT apply in the RC turn.
+-- Before a later authorized deploy, read-only-check information_schema
+-- column_privileges for claim_settlements INSERT/UPDATE to checksops.
+-- Apply this file only if those GRANTs are missing. Do not re-apply if
+-- present. Staging apply inventory remains 29 → 52 → 39 → 69 → 71 → 72 → 73
+-- plus already-applied 41/42. SQL 30 stays unapplied. Do not run SQL 23.
 
 GRANT SELECT ON TABLE public.claim_settlements TO checksops, authenticated;
 

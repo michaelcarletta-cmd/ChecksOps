@@ -14,7 +14,7 @@ test('tranche-6 tables are allowlisted with narrow columns', () => {
     'shared_check_messages', 'profiles', 'company_branding', 'referral_alerts',
     'tenants', 'privacy_notice_acknowledgments', 'tenant_users',
     'cash_jobs', 'cash_job_line_items', 'cash_job_attachments', 'homeowner_ledger_events',
-    'mortgage_request_library_documents', 'claim_settlements',
+    'mortgage_request_library_documents', 'claim_settlements', 'claims',
   ]) {
     assert.equal(WRITE_ALLOWLIST[table].tranche, 6, table);
   }
@@ -368,5 +368,71 @@ test('claim_settlements writes require tenant-linked claims and reject negatives
   assert.equal(updated.error, undefined);
   assert.ok(WRITE_ALLOWLIST.claim_settlements.clientIgnored.has('total_settlement'));
   assert.equal(WRITE_ALLOWLIST.claim_settlements.ops.has('delete'), false);
+});
+
+test('claims insert assigns org_id from membership and rejects spoofed orgs', async () => {
+  const OTHER = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const memberClient = {
+    query: async (sql, params) => {
+      if (/SELECT DISTINCT tenant_id FROM public.tenant_users/.test(sql)) {
+        return { rows: [{ tenant_id: TENANT }] };
+      }
+      if (/FROM public.tenants WHERE id/.test(sql)) {
+        return params[0] === TENANT ? { rows: [{ '?column?': 1 }] } : { rows: [] };
+      }
+      if (/is_master_owner/.test(sql)) return { rows: [{ is_master_owner: false }] };
+      if (/FROM public.tenant_users WHERE user_id = \$1::uuid AND tenant_id/.test(sql)) {
+        return params[1] === TENANT ? { rows: [{ '?column?': 1 }] } : { rows: [] };
+      }
+      if (/FROM public.user_roles/.test(sql)) return { rows: [{ '?column?': 1 }] };
+      if (/INSERT INTO public.claims/.test(sql)) {
+        if (params[2] !== TENANT) throw new Error(`unexpected org_id ${params[2]}`);
+        return { rows: [{ id: CHECK_ID, claim_number: params[0], status: params[1], org_id: params[2] }] };
+      }
+      return { rows: [] };
+    },
+  };
+
+  const created = await executeAppMetadataWrite({
+    client: memberClient,
+    mapping,
+    table: 'claims',
+    op: 'insert',
+    values: { claim_number: 'P2-ORG-1', status: 'tracking', org_id: OTHER },
+    filters: [],
+  });
+  assert.equal(created.error, 'rls_denied');
+
+  const ok = await executeAppMetadataWrite({
+    client: memberClient,
+    mapping,
+    table: 'claims',
+    op: 'insert',
+    values: { claim_number: 'P2-ORG-1', status: 'tracking' },
+    filters: [],
+  });
+  assert.equal(ok.error, undefined);
+  assert.equal(ok.rows[0].org_id, TENANT);
+
+  const unauthorized = await executeAppMetadataWrite({
+    client: {
+      query: async (sql) => {
+        if (/SELECT DISTINCT tenant_id/.test(sql)) return { rows: [{ tenant_id: TENANT }] };
+        if (/FROM public.tenants/.test(sql)) return { rows: [{ '?column?': 1 }] };
+        if (/is_master_owner/.test(sql)) return { rows: [{ is_master_owner: false }] };
+        if (/FROM public.tenant_users WHERE user_id/.test(sql)) return { rows: [{ '?column?': 1 }] };
+        if (/FROM public.user_roles/.test(sql)) return { rows: [] };
+        return { rows: [] };
+      },
+    },
+    mapping,
+    table: 'claims',
+    op: 'insert',
+    values: { claim_number: 'P2-ORG-2' },
+    filters: [],
+  });
+  assert.equal(unauthorized.error, 'not_authorized');
+  assert.equal(WRITE_ALLOWLIST.claims.ops.has('update'), false);
+  assert.equal(WRITE_ALLOWLIST.claims.ops.has('delete'), false);
 });
 
