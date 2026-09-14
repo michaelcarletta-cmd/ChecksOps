@@ -1,7 +1,8 @@
 /**
- * Staging-safe SMS recipient policy (Class A).
- * Default mode = sink (log only). Never Telnyx-deliver to production phones
- * unless AWS_SMS_MODE=live AND number is allowlisted.
+ * Class A SMS recipient policy.
+ * Telnyx live delivery is LEGACY_UNUSED (owner-retired). Default mode = sink
+ * (audit only). AWS_SMS_MODE=live|telnyx still means "allowlisted sink/live
+ * policy" for the generic SMS handler — it does not call Telnyx.
  */
 const DEFAULT_ALLOWLIST = [
   '+15555550100', // staging sink sentinel
