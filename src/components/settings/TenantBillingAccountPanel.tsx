@@ -12,6 +12,11 @@ import { toast } from "sonner";
 import { Landmark, ShieldCheck, AlertTriangle, Info } from "lucide-react";
 import { useTenantFilter } from "@/hooks/useTenantFilter";
 
+const last4 = (value: string | null | undefined) => {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  return digits.length >= 4 ? digits.slice(-4) : null;
+};
+
 /**
  * Maintenance-fee billing: pick which of your already-verified bank accounts
  * (added via Moov in the Bank Account panel) should be
@@ -23,7 +28,6 @@ export function TenantBillingAccountPanel() {
   const [selectedId, setSelectedId] = useState<string>("");
   const [authorized, setAuthorized] = useState(false);
 
-  // Currently-linked billing account
   const { data: billing, isLoading: loadingBilling } = useQuery({
     queryKey: ["tenant-billing-account", tenantId],
     enabled: !!tenantId,
@@ -38,7 +42,6 @@ export function TenantBillingAccountPanel() {
     },
   });
 
-  // Verified bank accounts available to bill from
   const { data: accounts = [], isLoading: loadingAccounts } = useQuery({
     queryKey: ["tenant-verified-bank-accounts", tenantId],
     enabled: !!tenantId,
@@ -77,6 +80,7 @@ export function TenantBillingAccountPanel() {
         account_type: acct.acct_type === "C" ? "checking" : "savings",
         entity_type: "business",
         verification_status: acct.verification_status,
+        account_number_last4: last4(acct.chk_acct),
         ach_authorized_at: new Date().toISOString(),
         auto_debit_enabled: true,
       };
@@ -114,6 +118,7 @@ export function TenantBillingAccountPanel() {
       toast.success("Auto-debit preference updated");
       qc.invalidateQueries({ queryKey: ["tenant-billing-account", tenantId] });
     },
+    onError: (e: any) => toast.error(e?.message ?? "Failed to update auto-debit"),
   });
 
   const isLoading = loadingBilling || loadingAccounts;
