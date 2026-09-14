@@ -1,7 +1,8 @@
-import { isAwsStaging } from "@/lib/awsStaging";
+import { isAwsStagingEnvironment } from "@/lib/awsStaging";
 
+/** Staging hostname chrome only. Hidden on checksops.com / www.checksops.com. */
 export function AwsStagingBanner() {
-  if (!isAwsStaging()) return null;
+  if (!isAwsStagingEnvironment()) return null;
   return (
     <div
       data-testid="aws-staging-banner"

@@ -12,7 +12,13 @@ import { Loader2, ArrowLeft, KeyRound, Mail, CheckCircle2 } from "lucide-react";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
 import { useAuth } from "@/hooks/useAuth";
 import { isPlatformOwner, STAGING_MASTER_LOGIN_EMAIL } from "@/lib/masterMerchant";
-import { isAwsStaging, isAwsStagingHttpsPasskeysEnabled } from "@/lib/awsStaging";
+import {
+  AWS_STAGING_HTTPS_ORIGIN,
+  awsPasskeysRequireConfiguredOriginMessage,
+  isAwsStaging,
+  isAwsStagingEnvironment,
+  isAwsStagingHttpsPasskeysEnabled,
+} from "@/lib/awsStaging";
 import { signInWithAwsPasskey } from "@/lib/awsPasskeys";
 import { passkeysSupported, sendMagicLink, signInWithPasskey } from "@/lib/passkeys";
 import { readPendingAwsEmailOtp, startAwsEmailOtp, verifyAwsEmailOtp } from "@/lib/awsPasswordless";
@@ -24,6 +30,7 @@ export default function CheckOpsLogin() {
   const { toast } = useToast();
   const { user, loading: authLoading } = useAuth();
   const awsStaging = isAwsStaging();
+  const awsStagingHost = isAwsStagingEnvironment();
   const awsHttpsPasskeys = isAwsStagingHttpsPasskeysEnabled();
   const pendingAws = awsStaging ? readPendingAwsEmailOtp() : null;
   const [email, setEmail] = useState(pendingAws?.email || "");
@@ -33,7 +40,8 @@ export default function CheckOpsLogin() {
   const [linkSent, setLinkSent] = useState(Boolean(pendingAws));
   const [awsSession, setAwsSession] = useState(pendingAws?.session || "");
   const [code, setCode] = useState("");
-  // Production: Supabase SimpleWebAuthn. AWS staging: Cognito WebAuthn only on https://staging.checksops.com.
+  // Production Cognito: WebAuthn when origin matches VITE_APP_URL (checksops.com).
+  // Staging Cognito: WebAuthn only on https://staging.checksops.com.
   const supportsPasskeys = awsStaging
     ? awsHttpsPasskeys && passkeysSupported()
     : passkeysSupported();
@@ -79,7 +87,7 @@ export default function CheckOpsLogin() {
     try {
       if (awsStaging) {
         if (!awsHttpsPasskeys) {
-          throw new Error("Passkeys require https://staging.checksops.com. Use email verification on this origin.");
+          throw new Error(awsPasskeysRequireConfiguredOriginMessage());
         }
         // Persist Cognito tokens + emit SIGNED_IN, then full reload so useAuth()
         // hydrates before route guards run (same pattern as EMAIL_OTP verify).
@@ -130,7 +138,7 @@ export default function CheckOpsLogin() {
 
   const handlePasswordLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!awsStaging) return;
+    if (!awsStagingHost) return;
     if (!email.trim() || !password) {
       toast({ title: "Enter email and password", variant: "destructive" });
       return;
@@ -170,7 +178,7 @@ export default function CheckOpsLogin() {
         <CardHeader className="text-center space-y-3 pb-2">
           <div className="mx-auto"><CheckOpsLogo className="h-16 md:h-20" /></div>
           <CardTitle className="text-xl md:text-2xl">Sign in to ChecksOps</CardTitle>
-          <p className="text-xs text-muted-foreground">Access your organization's check workflows.{awsStaging ? " AWS staging." : ""}</p>
+          <p className="text-xs text-muted-foreground">Access your organization's check workflows.{awsStagingHost ? " AWS staging." : ""}</p>
         </CardHeader>
         <CardContent className="pt-2 space-y-4">
           {linkSent ? (
@@ -193,9 +201,9 @@ export default function CheckOpsLogin() {
               )}
             </>
           ) : (
-            <form onSubmit={awsStaging && showPassword ? handlePasswordLogin : handleMagicLink} className="space-y-4">
+            <form onSubmit={awsStagingHost && showPassword ? handlePasswordLogin : handleMagicLink} className="space-y-4">
               <div className="space-y-2"><Label htmlFor="email">Email</Label><Input id="email" type="email" autoComplete="username webauthn" value={email} onChange={(e) => setEmail(e.target.value)} required /></div>
-              {awsStaging && showPassword && (
+              {awsStagingHost && showPassword && (
                 <div className="space-y-2">
                   <Label htmlFor="password">Password</Label>
                   <Input id="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
@@ -212,15 +220,19 @@ export default function CheckOpsLogin() {
               {showPassword && (
                 <Button type="submit" className="w-full" disabled={loading}>{loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Sign in with password</Button>
               )}
-              {awsStaging && (
+              {awsStagingHost && (
                 <Button type="button" variant="ghost" className="w-full text-xs" disabled={loading} onClick={() => setShowPassword((v) => !v)}>
                   {showPassword ? "Use email verification / passkey instead" : "Use staging password (master UAT)"}
                 </Button>
               )}
               <p className="text-center text-[11px] text-muted-foreground">{awsStaging
                 ? (awsHttpsPasskeys
-                  ? "AWS staging: passkeys use Cognito WebAuthn; email verification remains available."
-                  : "AWS staging passkeys require https://staging.checksops.com. Use email verification on this origin.")
+                  ? (awsStagingHost
+                    ? "AWS staging: passkeys use Cognito WebAuthn; email verification remains available."
+                    : "Passkeys use Cognito WebAuthn; email verification remains available.")
+                  : (awsStagingHost
+                    ? `AWS staging passkeys require ${AWS_STAGING_HTTPS_ORIGIN}. Use email verification on this origin.`
+                    : awsPasskeysRequireConfiguredOriginMessage()))
                 : "Two-factor verification is still required before any money moves."}</p>
             </form>
           )}

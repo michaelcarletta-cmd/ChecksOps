@@ -155,9 +155,9 @@ test('Step 3 role template is gated and least-privilege', () => {
   assert.ok(denyText.length < 6144, denyText.length);
 });
 
-test('amber banner is unchanged in this phase and financial SQL stays unapplied', () => {
+test('amber banner is gated on staging hostname and financial SQL stays unapplied', () => {
   assert.match(banner, /AWS staging — Cognito \+ RDS/);
-  assert.doesNotMatch(banner, /checksops\.com/);
-  assert.doesNotMatch(banner, /window\.location\.hostname/);
+  assert.match(banner, /isAwsStagingEnvironment/);
+  assert.doesNotMatch(banner, /if \(!isAwsStaging\(\)\)/);
   assert.match(financialSql, /DO NOT APPLY THIS FILE/);
 });

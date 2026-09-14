@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, KeyRound, Mail, CheckCircle2 } from "lucide-react";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 import { isPlatformOwner } from "@/lib/masterMerchant";
-import { isAwsStaging, isAwsStagingHttpsPasskeysEnabled } from "@/lib/awsStaging";
+import { isAwsStaging, isAwsStagingEnvironment, isAwsStagingHttpsPasskeysEnabled, awsPasskeysRequireConfiguredOriginMessage, AWS_STAGING_HTTPS_ORIGIN } from "@/lib/awsStaging";
 import { signInWithAwsPasskey } from "@/lib/awsPasskeys";
 import { passkeysSupported, sendMagicLink, signInWithPasskey } from "@/lib/passkeys";
 import { startAwsEmailOtp, verifyAwsEmailOtp } from "@/lib/awsPasswordless";
@@ -27,6 +27,7 @@ export function WhiteLabelLogin() {
   const navigate = useNavigate();
   const location = useLocation();
   const awsStaging = isAwsStaging();
+  const awsStagingHost = isAwsStagingEnvironment();
   const awsHttpsPasskeys = isAwsStagingHttpsPasskeysEnabled();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
@@ -79,7 +80,7 @@ export function WhiteLabelLogin() {
     try {
       if (awsStaging) {
         if (!awsHttpsPasskeys) {
-          throw new Error("Passkeys require https://staging.checksops.com. Use email verification on this origin.");
+          throw new Error(awsPasskeysRequireConfiguredOriginMessage());
         }
         await signInWithAwsPasskey(email);
         window.location.assign(loginReturnPath());
@@ -162,7 +163,7 @@ export function WhiteLabelLogin() {
           )}
           <div>
             <CardTitle className="text-xl md:text-2xl">{tenant.name}</CardTitle>
-            <p className="text-xs text-muted-foreground mt-1">ChecksOps{awsStaging ? " · AWS staging" : ""}</p>
+            <p className="text-xs text-muted-foreground mt-1">ChecksOps{awsStagingHost ? " · AWS staging" : ""}</p>
           </div>
         </CardHeader>
         <CardContent className="pt-2 space-y-4">
@@ -268,8 +269,12 @@ export function WhiteLabelLogin() {
               <p className="text-center text-[11px] text-muted-foreground">
                 {awsStaging
                   ? (awsHttpsPasskeys
-                    ? "AWS staging: Cognito passkeys and email verification."
-                    : "AWS staging passkeys require https://staging.checksops.com.")
+                    ? (awsStagingHost
+                      ? "AWS staging: Cognito passkeys and email verification."
+                      : "Cognito passkeys and email verification.")
+                    : (awsStagingHost
+                      ? `AWS staging passkeys require ${AWS_STAGING_HTTPS_ORIGIN}.`
+                      : awsPasskeysRequireConfiguredOriginMessage()))
                   : "Two-factor verification is still required before any money moves."}
               </p>
             </>
