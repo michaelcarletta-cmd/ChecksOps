@@ -1,0 +1,24 @@
+{
+  "ok": true,
+  "mode": "financial",
+  "writes": false,
+  "connectedDatabase": "checksops",
+  "connectedAs": "checksops_admin",
+  "values": {
+    "check_intake_amount": "1428955.65",
+    "check_intake_pa_fee_amount": "5393.27",
+    "deposit_items_amount": "1037630.29",
+    "deposit_batches_total_amount": "1038410.29",
+    "checkalt_deposits_amount": "453990.48",
+    "disbursement_splits_amount": "880702.79",
+    "disbursement_batches_check_amount": "888258.734",
+    "disbursement_batches_amount_reserved_cents": "0",
+    "claim_check_payments_check_amount": "0",
+    "claim_check_payments_payment_amount": "0",
+    "endorsed_check_intake_amount": "4200710.24",
+    "payment_transfers_amount_cents": "0",
+    "payment_wallet_ledger_amount_cents": "0",
+    "claim_payments_amount": "114621.50",
+    "homeowner_ledger_amount": "3169779.99"
+  }
+}

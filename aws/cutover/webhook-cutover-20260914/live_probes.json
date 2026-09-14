@@ -1,0 +1,43 @@
+{
+  "cf_webhooks_moov_unsigned": {
+    "url": "https://checksops.com/prep/webhooks/moov",
+    "status": 401,
+    "error": "invalid_signature",
+    "via": "cloudfront"
+  },
+  "cf_webhooks_checkalt_unsigned": {
+    "url": "https://checksops.com/prep/webhooks/checkalt",
+    "status": 401,
+    "error": "invalid_signature",
+    "via": "cloudfront"
+  },
+  "raw_execute_api_health": {
+    "url": "https://kiqojucc02.execute-api.us-east-1.amazonaws.com/prep/health",
+    "status": 403,
+    "via": "execute-api",
+    "note": "ORIGIN_VERIFY_REQUIRE=true"
+  },
+  "raw_execute_api_webhooks_moov": {
+    "url": "https://kiqojucc02.execute-api.us-east-1.amazonaws.com/prep/webhooks/moov",
+    "status": 403,
+    "via": "execute-api"
+  },
+  "sb_checkalt_submit": {
+    "status": 403,
+    "error": "legacy_checkalt_provider_path_disabled"
+  },
+  "sb_checkalt_poll": {
+    "status": 403,
+    "error": "legacy_checkalt_provider_path_disabled"
+  },
+  "sb_moov_webhook_unsigned": {
+    "status": 401,
+    "error": "Invalid signature",
+    "note": "live signature verification still active"
+  },
+  "moov_api_list_webhooks": {
+    "status": 403,
+    "error": "cloudflare_1010",
+    "note": "egress blocked; no destination listed or changed"
+  }
+}

@@ -1,0 +1,177 @@
+{
+  "service": "checksops-api",
+  "environment": "production-prep",
+  "productionSupabaseChanged": false,
+  "productionWebhooksRedirected": false,
+  "ok": true,
+  "statusCode": 200,
+  "liveProviderTransactions": false,
+  "flags": {
+    "AWS_PROVIDER_EXECUTION_ENABLED": true,
+    "AWS_MOOV_ENABLED": true,
+    "AWS_CHECKALT_ENABLED": false,
+    "AWS_PLAID_ENABLED": false,
+    "AWS_ACTUM_ENABLED": false,
+    "AWS_QUICKBOOKS_ENABLED": false,
+    "AWS_PROVIDER_LIVE_READS_ENABLED": true,
+    "AWS_PROVIDER_RECIPIENT_KYC_TOS_WRITES_ENABLED": true,
+    "AWS_PROVIDER_RECIPIENT_BANK_VERIFY_WRITES_ENABLED": false,
+    "AWS_PROVIDER_WEBHOOK_DRY_RUN": true
+  },
+  "permissions": {
+    "deposit_submission": {
+      "operation": "deposit_submission",
+      "providers": [
+        "checkalt"
+      ],
+      "required": [
+        "Authenticated tenant member (Cognito \u2192 identity_accounts \u2192 auth.uid())",
+        "Tenant owns the check_intake_item (RLS)",
+        "has_permission(deposit.submit) or tenant admin \u2014 NOT ACTIVATED",
+        "AWS_PROVIDER_EXECUTION_ENABLED=true AND AWS_CHECKALT_ENABLED=true",
+        "CheckAlt tenant account registered and enabled",
+        "Idempotency key unique per check + amount_cents"
+      ],
+      "activated": false
+    },
+    "disbursement": {
+      "operation": "disbursement",
+      "providers": [
+        "moov",
+        "plaid"
+      ],
+      "required": [
+        "Authenticated tenant member",
+        "Tenant owns the disbursement batch/splits",
+        "has_permission(disbursement.execute) or tenant admin \u2014 NOT ACTIVATED",
+        "Moov readiness canMoveMoney from provider (not local cache alone)",
+        "AWS_PROVIDER_EXECUTION_ENABLED=true AND matching provider flag",
+        "Idempotency key on payment_idempotency_keys / payment_transfers"
+      ],
+      "activated": false
+    },
+    "ach": {
+      "operation": "ach",
+      "providers": [
+        "moov"
+      ],
+      "required": [
+        "Same as disbursement",
+        "send-funds.ach capability enabled on the tenant Moov account",
+        "Verified bank or wallet source owned by the tenant",
+        "AWS_MOOV_ENABLED=true"
+      ],
+      "activated": false
+    },
+    "rtp": {
+      "operation": "rtp",
+      "providers": [
+        "moov"
+      ],
+      "required": [
+        "Same as ACH",
+        "RTP capability enabled",
+        "Amount within RTP limit",
+        "Explicit requested_speed=instant \u2014 NOT ACTIVATED"
+      ],
+      "activated": false
+    },
+    "wallet_transfer": {
+      "operation": "wallet_transfer",
+      "providers": [
+        "moov"
+      ],
+      "required": [
+        "Authenticated tenant member",
+        "Tenant owns source and destination wallet/provider_wallet_id",
+        "has_permission(wallet.transfer) \u2014 NOT ACTIVATED",
+        "AWS_PROVIDER_EXECUTION_ENABLED=true AND AWS_MOOV_ENABLED=true"
+      ],
+      "activated": false
+    },
+    "stakeholder_payment": {
+      "operation": "stakeholder_payment",
+      "providers": [
+        "moov"
+      ],
+      "required": [
+        "Authenticated tenant member",
+        "Recipient/stakeholder provider_account_id mapped to this tenant",
+        "Recipient KYC/TOS/bank gates satisfied",
+        "has_permission(stakeholder.pay) \u2014 NOT ACTIVATED",
+        "AWS_PROVIDER_EXECUTION_ENABLED=true AND AWS_MOOV_ENABLED=true"
+      ],
+      "activated": false
+    },
+    "provider_configuration": {
+      "operation": "provider_configuration",
+      "providers": [
+        "moov",
+        "checkalt",
+        "plaid",
+        "actum",
+        "quickbooks"
+      ],
+      "required": [
+        "Platform admin (user_roles.admin) or tenant admin \u2014 NOT ACTIVATED on AWS",
+        "AWS_PROVIDER_EXECUTION_ENABLED=true AND matching provider flag",
+        "Never accept provider credentials from the browser"
+      ],
+      "activated": false
+    }
+  },
+  "secrets": {
+    "providerSecretsArnConfigured": true,
+    "MOOV_PUBLIC_KEY_configured": true,
+    "MOOV_SECRET_KEY_configured": true,
+    "MOOV_PLATFORM_ACCOUNT_ID_configured": false,
+    "MOOV_WEBHOOK_SECRET_configured": false,
+    "MOOV_ENVIRONMENT_configured": true,
+    "MOOV_ALLOWED_ORIGIN_configured": true,
+    "MOOV_SANDBOX_PUBLIC_KEY_configured": false,
+    "MOOV_SANDBOX_SECRET_KEY_configured": false,
+    "MOOV_SANDBOX_PLATFORM_ACCOUNT_ID_configured": false,
+    "MOOV_SANDBOX_ALLOWED_ORIGIN_configured": false,
+    "MOOV_SANDBOX_WEBHOOK_SECRET_configured": false,
+    "CHECKALT_FI_KEY_configured": true,
+    "CHECKALT_USERNAME_configured": true,
+    "CHECKALT_PASSWORD_configured": true,
+    "CHECKALT_WEBHOOK_SECRET_configured": false,
+    "CHECKALT_BASE_URL_configured": true,
+    "CHECKALT_UAT_BASE_URL_configured": false,
+    "CHECKALT_UAT_USER_ID_configured": false,
+    "CHECKALT_UAT_PASSWORD_configured": false,
+    "CHECKALT_UAT_FI_KEY_configured": false,
+    "CHECKALT_UAT_MERCHANT_configured": false,
+    "CHECKALT_SANDBOX_USERNAME_configured": false,
+    "CHECKALT_SANDBOX_PASSWORD_configured": false,
+    "CHECKALT_SANDBOX_FI_KEY_configured": false,
+    "CHECKALT_SANDBOX_BASE_URL_configured": false,
+    "CHECKALT_SANDBOX_MERCHANT_configured": false,
+    "CHECKALT_SANDBOX_WEBHOOK_SECRET_configured": false,
+    "PLAID_CLIENT_ID_configured": false,
+    "PLAID_SECRET_configured": false,
+    "PLAID_WEBHOOK_SECRET_configured": false,
+    "PLAID_ENV_configured": false,
+    "PLAID_SANDBOX_CLIENT_ID_configured": false,
+    "PLAID_SANDBOX_SECRET_configured": false,
+    "PLAID_SANDBOX_WEBHOOK_SECRET_configured": false,
+    "ACTUM_USERNAME_configured": false,
+    "ACTUM_PASSWORD_configured": false,
+    "ACTUM_PARENT_ID_configured": false,
+    "QUICKBOOKS_CLIENT_ID_configured": false,
+    "QUICKBOOKS_CLIENT_SECRET_configured": false,
+    "QUICKBOOKS_REDIRECT_URI_configured": false,
+    "moovWebhookSecretConfigured": false,
+    "checkaltWebhookSecretConfigured": false,
+    "plaidWebhookSecretConfigured": false
+  },
+  "inventoryCount": 66,
+  "actum": {
+    "name": "actum",
+    "provider": "actum",
+    "class": 6,
+    "aws": "interface_only",
+    "notes": "No dedicated supabase/functions/actum-* on current main. actum_transactions table + frontend remnants only. AWS exposes config/health boundary. No live charges."
+  }
+}

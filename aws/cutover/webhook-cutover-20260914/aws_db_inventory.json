@@ -1,0 +1,173 @@
+{
+  "ok": true,
+  "mode": "cutover_inventory",
+  "writes": false,
+  "connectedDatabase": "checksops",
+  "connectedAs": "checksops_admin",
+  "fingerprint": {
+    "identityRowCount": 11,
+    "tenantUsers": 7,
+    "userRoles": 10,
+    "cognitoSubsMatch": true,
+    "c1cIntake": 37
+  },
+  "identity": [
+    {
+      "application_user_id": "0160a5f3-30a4-4aba-8e54-6529f1ceb0d4",
+      "status": "active",
+      "cognito_sub": "d418a4f8-80f1-70d6-36c9-fe490220bf4a",
+      "linked_at": "2026-09-14T10:07:27.787Z"
+    },
+    {
+      "application_user_id": "233c588f-dc33-4307-8c3f-3da49c9fd2b3",
+      "status": "active",
+      "cognito_sub": "84e85408-b091-7058-a111-1d9a84e78da0",
+      "linked_at": "2026-09-10T14:15:42.726Z"
+    },
+    {
+      "application_user_id": "30d0505c-bcfa-4732-81fd-869dc46da5dd",
+      "status": "active",
+      "cognito_sub": "34388468-a021-7036-c34d-2ff14a20ed40",
+      "linked_at": "2026-09-14T10:07:27.787Z"
+    },
+    {
+      "application_user_id": "3af0234c-de1b-4819-938d-fa4f9390811b",
+      "status": "active",
+      "cognito_sub": "24d874d8-80d1-7092-7f34-48b8704702f8",
+      "linked_at": "2026-09-14T10:07:27.787Z"
+    },
+    {
+      "application_user_id": "7dbb3009-f059-4767-b5dc-1c5c72379330",
+      "status": "active",
+      "cognito_sub": "a45884b8-d051-70b3-b19d-ca704964c6e8",
+      "linked_at": "2026-09-14T10:07:27.787Z"
+    },
+    {
+      "application_user_id": "abd3c2a0-6dc0-4680-92dd-a013e1141c91",
+      "status": "active",
+      "cognito_sub": "f468b438-4081-7004-d865-a1b86eb19beb",
+      "linked_at": "2026-09-14T10:07:27.787Z"
+    },
+    {
+      "application_user_id": "b100f05d-9e81-4a7b-b9cc-9baf173131d9",
+      "status": "active",
+      "cognito_sub": "34c8a478-e0d1-70f3-3c49-02225e7404b6",
+      "linked_at": "2026-09-14T10:07:27.787Z"
+    },
+    {
+      "application_user_id": "c7729c3e-d87b-46c6-973e-9c04fbdcc961",
+      "status": "active",
+      "cognito_sub": "b4d8d428-2081-706b-04b0-e4694e568059",
+      "linked_at": "2026-09-04T20:20:33.211Z"
+    },
+    {
+      "application_user_id": "dd24eea5-5d12-47d1-999e-d5930c278b7d",
+      "status": "pending",
+      "cognito_sub": null,
+      "linked_at": null
+    },
+    {
+      "application_user_id": "e2ad0849-c6b6-4f4a-a68a-8c52f563c6fd",
+      "status": "active",
+      "cognito_sub": "647894c8-2011-70d4-e874-efd4b080700e",
+      "linked_at": "2026-09-14T10:07:27.787Z"
+    },
+    {
+      "application_user_id": "fd857564-9534-4b0f-95ac-624ed1273725",
+      "status": "active",
+      "cognito_sub": "74286478-c0c1-7068-9fea-9deea6f61627",
+      "linked_at": "2026-09-14T10:07:27.787Z"
+    }
+  ],
+  "checkalt": {
+    "sql65ColumnsPresent": {
+      "idempotency_key": true,
+      "amount_cents": true,
+      "provider_http_attempted_at": true,
+      "failure_class": true
+    },
+    "sql65Applied": true,
+    "check998411": {
+      "id": "623442f0-a408-4db5-85be-14bae231a722",
+      "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "status": "approved_for_deposit",
+      "amount": "9984.11",
+      "check_stage": "ready_for_deposit",
+      "updated_at": "2026-09-14T11:10:52.225Z",
+      "front_image_path": "checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1788459141955_front_IMG_1183_cropped.jpg",
+      "back_image_path": "checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/endorsed_deposit_18vd.checkalt.jpg",
+      "back_image_deposit_path": "checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/endorsed_deposit_18vd.checkalt.jpg"
+    },
+    "depositsForCheckOrAmount": [],
+    "tenantAccounts": [
+      {
+        "id": "f65727f0-723b-4351-8e30-d2ace0f99d30",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "has_sso_user_id": true,
+        "has_deposit_account": true,
+        "enabled": true
+      }
+    ]
+  },
+  "webhooks": {
+    "receiptsTableExists": true,
+    "receipts": [
+      {
+        "provider": "moov",
+        "n": 7,
+        "dry_run": 7,
+        "latest": "2026-09-03T10:55:46.625Z"
+      }
+    ],
+    "paymentWebhookEvents": {
+      "n": 276,
+      "since_sep12": 19,
+      "latest": "2026-09-13T18:25:18.120Z"
+    },
+    "recentTypes": [
+      {
+        "event_type": "account.updated",
+        "n": 4
+      },
+      {
+        "event_type": "capability.updated",
+        "n": 4
+      },
+      {
+        "event_type": "paymentMethod.enabled",
+        "n": 3
+      },
+      {
+        "event_type": "bankAccount.updated",
+        "n": 2
+      },
+      {
+        "event_type": "walletTransaction.updated",
+        "n": 2
+      },
+      {
+        "event_type": "balance.updated",
+        "n": 2
+      },
+      {
+        "event_type": "capability.requested",
+        "n": 1
+      },
+      {
+        "event_type": "wallet.created",
+        "n": 1
+      }
+    ],
+    "providerAccounts": [
+      {
+        "id": "26c2dbb1-360e-4631-84f5-24aa934c4005",
+        "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "provider": "moov",
+        "environment": "production",
+        "provider_account_id": "60922058-7eca-4889-81dd-5720d7b9de96",
+        "onboarding_status": "active",
+        "updated_at": "2026-09-03T17:37:27.701Z"
+      }
+    ]
+  }
+}
