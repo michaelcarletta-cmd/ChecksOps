@@ -1,0 +1,59 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowCloudFrontOAC",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "cloudfront.amazonaws.com"
+      },
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::checksops-production-frontend-806168576068/*",
+      "Condition": {
+        "StringEquals": {
+          "AWS:SourceArn": "arn:aws:cloudfront::806168576068:distribution/E1B0ZWWO5559U5"
+        }
+      }
+    },
+    {
+      "Sid": "DenyProductionSpaWritesExceptApprovedDeployRole",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": [
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:DeleteObjectVersion",
+        "s3:AbortMultipartUpload",
+        "s3:PutObjectAcl",
+        "s3:RestoreObject"
+      ],
+      "Resource": "arn:aws:s3:::checksops-production-frontend-806168576068/*",
+      "Condition": {
+        "ArnNotLike": {
+          "aws:PrincipalArn": [
+            "arn:aws:iam::806168576068:root",
+            "arn:aws:iam::806168576068:role/ChecksOpsProductionSpaDeploy",
+            "arn:aws:sts::806168576068:assumed-role/ChecksOpsProductionSpaDeploy/*"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "DenyProductionSpaBucketPolicyChangesExceptRoot",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": [
+        "s3:PutBucketPolicy",
+        "s3:DeleteBucketPolicy"
+      ],
+      "Resource": "arn:aws:s3:::checksops-production-frontend-806168576068",
+      "Condition": {
+        "ArnNotLike": {
+          "aws:PrincipalArn": [
+            "arn:aws:iam::806168576068:root"
+          ]
+        }
+      }
+    }
+  ]
+}

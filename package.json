@@ -16,6 +16,8 @@
     "validate:production-spa": "node scripts/validate-production-spa-artifact.mjs",
     "fingerprint:production-spa": "node scripts/record-production-spa-fingerprint.mjs",
     "deploy:production-spa": "node scripts/deploy-production-spa.mjs",
+    "rollback:production-spa": "node scripts/rollback-production-spa.mjs",
+    "verify:production-spa-lock": "node scripts/verify-production-cutover-lock.mjs --offline",
     "preview:aws": "vite preview --mode aws --host 0.0.0.0 --port 4173",
     "dev:aws": "vite --mode aws --host 0.0.0.0 --port 8080",
     "test:aws-api": "node --experimental-strip-types --test aws/tests/*.test.mjs",

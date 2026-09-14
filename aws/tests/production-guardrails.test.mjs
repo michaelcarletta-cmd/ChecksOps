@@ -228,6 +228,7 @@ test('compiled Supabase-mode artifact fails; Cognito /prep artifact passes', () 
   const supabase = scanProductionSpaArtifact(supabaseDir);
   assert.equal(supabase.ok, false);
   assert.ok(supabase.missing.includes('production_cognito_pool'));
+  assert.ok(supabase.forbidden.includes('supabase_host'));
 
   fs.writeFileSync(path.join(cognitoDir, 'index.html'), '<html>cognito</html>');
   fs.writeFileSync(
@@ -260,16 +261,25 @@ test('production-aws vite config fingerprints Cognito pool and client in the com
   assert.match(client, /cognitoPublicConfig/);
 });
 
-test('deploy-production-spa --apply is the guarded S3/CloudFront path and webhook files stay untouched', () => {
+test('deploy-production-spa --apply is locked after cutover and still guards the artifact before any upload', () => {
   const source = read('scripts/deploy-production-spa.mjs');
+  const lock = read('aws/cutover/PRODUCTION_SPA_LOCK.json');
   assert.match(source, /--mode', 'production-aws'/);
   assert.match(source, /scanProductionSpaArtifact/);
-  assert.match(source, /checksops-production-frontend-806168576068/);
-  assert.match(source, /E1B0ZWWO5559U5/);
+  assert.match(source, /assertProductionSpaApplyAllowed/);
+  assert.match(lock, /checksops-production-frontend-806168576068/);
+  assert.match(lock, /E1B0ZWWO5559U5/);
+  assert.match(source, /PRODUCTION_SPA_LOCK\.knownGood\.s3Bucket/);
+  assert.match(source, /PRODUCTION_SPA_LOCK\.knownGood\.cloudfrontDistributionId/);
   assert.match(source, /s3',\s*'sync'/);
   assert.match(source, /--delete/);
   assert.match(source, /create-invalidation/);
-  assert.doesNotMatch(source, /production_spa_deploy_refused_this_phase/);
+  assert.match(source, /production_spa_cutover_locked|assertProductionSpaApplyAllowed/);
+  assert.ok(
+    source.indexOf('assertProductionSpaApplyAllowed') < source.indexOf("s3',\n    'sync'")
+      || source.indexOf('if (APPLY)') < source.indexOf("s3'"),
+    'cutover lock must run before S3 upload',
+  );
   assert.ok(
     source.indexOf('scanProductionSpaArtifact') < source.indexOf("s3',\n    'sync'")
       || source.indexOf('scanProductionSpaArtifact') < source.indexOf('s3 sync')

@@ -6,13 +6,8 @@ Git commit → SPA bundle hashes → Cognito pool/client → API target → time
 
 `latest.json` is written locally by that script and is gitignored.
 
-`--apply` is the only approved production upload path. It:
+`--apply` is **locked** after the successful 2026-09-14 cutover. See `aws/cutover/PRODUCTION_SPA_LOCK.json`.
 
-1. builds `production-aws`
-2. refuses any artifact that fails `scripts/validate-production-spa-artifact.mjs`
-3. syncs `dist/` to `s3://checksops-production-frontend-806168576068` with `--delete`
-4. uploads `index.html` with `no-cache, no-store, must-revalidate`
-5. invalidates CloudFront `E1B0ZWWO5559U5` `/*`
-6. records a timestamped fingerprint under this directory
+Unlocked apply is refused (`production_spa_cutover_locked`). Rollback may restore **only** a previously validated AWS/Cognito fingerprint (`868e69387d63…` / `index-CiOVNYWh.js`) and only with `CHECKSOPS_PRODUCTION_SPA_UNLOCK=RELEASE_CUTOVER_LOCK --from-fingerprint <file>`. Supabase-mode artifacts are rejected.
 
-Do not use `npm run build` or raw `aws s3 sync`.
+Do not use `npm run build`, `vite build`, Lovable Publish, or raw `aws s3 sync` for production.
