@@ -17,6 +17,7 @@ const FILES = {
   sql69: path.join(ROOT, 'workflows/sql/69_staging_homeowner_ledger_view.sql'),
   sql71: path.join(ROOT, 'workflows/sql/71_endorsement_email_audit.sql'),
   sql72: path.join(ROOT, 'workflows/sql/72_public_endorsement_token_lookup.sql'),
+  sql73: path.join(ROOT, 'workflows/sql/73_public_endorsement_submit_payee.sql'),
   sql30: path.join(ROOT, 'rls/sql/30_tenant_documents_mortgage_doc_type.sql'),
 };
 
@@ -111,6 +112,18 @@ CREATE TABLE public.check_endorsements (
   last_reminder_at timestamptz,
   updated_at timestamptz DEFAULT now()
 );
+CREATE TABLE public.check_payees (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  check_id uuid,
+  tenant_id uuid,
+  payee_name text,
+  endorsement_status text,
+  endorsed_at timestamptz,
+  endorsement_token text,
+  endorsement_token_expires_at timestamptz,
+  endorsement_image_path text,
+  updated_at timestamptz DEFAULT now()
+);
 CREATE TABLE public.homeowner_ledger_tokens (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid,
@@ -159,7 +172,91 @@ ALTER TABLE public.check_intake_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mortgage_handling_requests ENABLE ROW LEVEL SECURITY;
 `;
 
-test('SQL 31/52/39/69/71/72 apply twice on disposable PG16 and keep SQL 30 unapplied', {
+const REPO = path.join(ROOT, '..');
+const UNAPPLIED_SQL = [
+  '69_staging_homeowner_ledger_view.sql',
+  '71_endorsement_email_audit.sql',
+  '72_public_endorsement_token_lookup.sql',
+  '73_public_endorsement_submit_payee.sql',
+];
+
+const applyPattern = (name) => new RegExp(
+  String.raw`(?:readSql|applySql)\(\s*['"]${name.replace('.', '\\.')}['"]\s*\)`,
+);
+
+test('SQL 71 stays historical, SQL 73 is the final public-submit body, and 69/71/72/73 stay unapplied', () => {
+  const sql71 = fs.readFileSync(FILES.sql71, 'utf8');
+  const sql72 = fs.readFileSync(FILES.sql72, 'utf8');
+  const sql73 = fs.readFileSync(FILES.sql73, 'utf8');
+  const down = fs.readFileSync(path.join(ROOT, 'workflows/sql/73_public_endorsement_submit_payee_rollback.sql'), 'utf8');
+
+  assert.match(sql71, /CREATE OR REPLACE FUNCTION public\.aws_public_submit_endorsement\(/);
+  assert.doesNotMatch(sql71, /UPDATE public\.check_payees/);
+  assert.doesNotMatch(sql71, /sql73_payee_persist_failed/);
+  assert.match(sql72, /CREATE OR REPLACE FUNCTION public\.aws_public_endorsement_by_token\(p_token text\)/);
+  assert.doesNotMatch(sql72, /CREATE OR REPLACE FUNCTION public\.aws_public_submit_endorsement/);
+  assert.doesNotMatch(sql72, /check_payees/);
+  assert.match(sql73, /CREATE OR REPLACE FUNCTION public\.aws_public_submit_endorsement\(/);
+  assert.match(sql73, /UPDATE public\.check_payees/);
+  assert.match(sql73, /sql73_payee_persist_failed/);
+  assert.match(down, /CREATE OR REPLACE FUNCTION public\.aws_public_submit_endorsement\(/);
+  assert.doesNotMatch(down, /UPDATE public\.check_payees/);
+
+  const thisFile = fs.readFileSync(fileURLToPath(import.meta.url), 'utf8');
+  const idx71 = thisFile.indexOf("applyTwice('71_endorsement_email_audit'");
+  const idx72 = thisFile.indexOf("applyTwice('72_public_endorsement_token_lookup'");
+  const idx73 = thisFile.indexOf("applyTwice('73_public_endorsement_submit_payee'");
+  assert.ok(idx71 > 0 && idx72 > idx71 && idx73 > idx72, 'coherent preflight must apply 71 → 72 → 73');
+
+  const applyRoots = [
+    path.join(ROOT, 'rls/oneshot/completeAuth.mjs'),
+    path.join(ROOT, 'rls/oneshot/index.mjs'),
+    path.join(ROOT, 'rls/oneshot/writePlan.mjs'),
+    path.join(ROOT, 'rls/oneshot/enableRls.mjs'),
+    path.join(REPO, 'package.json'),
+    path.join(REPO, '.github/workflows/aws-migration-ci.yml'),
+  ];
+  for (const file of applyRoots) {
+    const text = fs.readFileSync(file, 'utf8');
+    for (const name of UNAPPLIED_SQL) {
+      assert.equal(applyPattern(name).test(text), false, `${path.basename(file)} must not apply ${name}`);
+      assert.doesNotMatch(text, new RegExp(String.raw`psql[^\n]*-f[^\n]*${name.replace('.', '\\.')}`));
+    }
+  }
+
+  const walk = (dir, acc = []) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === 'tests') continue;
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(full, acc);
+      else if (/\.(mjs|js|yml|yaml|sh|json)$/.test(entry.name)) acc.push(full);
+    }
+    return acc;
+  };
+  const autoApplyHits = [];
+  for (const file of [
+    ...walk(path.join(REPO, 'scripts')),
+    ...walk(path.join(ROOT, 'rls/oneshot')),
+    ...walk(path.join(ROOT, 'cutover/scripts')),
+    path.join(REPO, '.github/workflows/aws-migration-ci.yml'),
+    path.join(REPO, 'package.json'),
+  ]) {
+    const text = fs.readFileSync(file, 'utf8');
+    const idx71Apply = text.search(/71_endorsement_email_audit\.sql/);
+    const idx73Apply = text.search(/73_public_endorsement_submit_payee\.sql/);
+    if (idx71Apply >= 0 && idx73Apply >= 0 && idx71Apply > idx73Apply) {
+      autoApplyHits.push(`${path.relative(REPO, file)} reapplies SQL 71 after SQL 73`);
+    }
+    for (const name of UNAPPLIED_SQL) {
+      if (applyPattern(name).test(text) || new RegExp(String.raw`psql[^\n]*-f[^\n]*${name.replace('.', '\\.')}`).test(text)) {
+        autoApplyHits.push(`${path.relative(REPO, file)} auto-applies ${name}`);
+      }
+    }
+  }
+  assert.deepEqual(autoApplyHits, []);
+});
+
+test('SQL 31/52/39/69/71/72/73 apply twice on disposable PG16 and keep SQL 30 unapplied', {
   timeout: 180000,
 }, async (t) => {
   if (!fs.existsSync(path.join(PG_BIN, 'initdb'))) {
@@ -254,6 +351,7 @@ max_connections = 20
   applyTwice('69_staging_homeowner_ledger_view', FILES.sql69);
   applyTwice('71_endorsement_email_audit', FILES.sql71);
   applyTwice('72_public_endorsement_token_lookup', FILES.sql72);
+  applyTwice('73_public_endorsement_submit_payee', FILES.sql73);
 
   const functions = scalar(`
 SELECT string_agg(p.proname, ',' ORDER BY p.proname)
@@ -292,6 +390,15 @@ WHERE n.nspname = 'public'
   assert.doesNotMatch(functions || '', /aws_public_signature_by_token_hash/);
   assert.equal(scalar(`SELECT has_function_privilege('checksops', 'public.aws_public_endorsement_by_token(text)', 'EXECUTE')::text`), 'true');
   assert.equal(scalar(`SELECT has_function_privilege('public', 'public.aws_public_endorsement_by_token(text)', 'EXECUTE')::text`), 'false');
+  assert.equal(scalar(`SELECT has_function_privilege('checksops', 'public.aws_public_submit_endorsement(text,text,text,text,text,text,uuid,uuid)', 'EXECUTE')::text`), 'true');
+  assert.equal(scalar(`SELECT has_function_privilege('public', 'public.aws_public_submit_endorsement(text,text,text,text,text,text,uuid,uuid)', 'EXECUTE')::text`), 'false');
+  assert.equal(scalar(`
+SELECT (p.prosrc ILIKE '%UPDATE public.check_payees%'
+        AND p.prosrc ILIKE '%sql73_payee_persist_failed%')::text
+FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+WHERE n.nspname = 'public' AND p.proname = 'aws_public_submit_endorsement'
+`), 'true');
+  note('SQL 73 is the live aws_public_submit_endorsement body after 71→72→73');
 
   const claimGrant = scalar(`
 SELECT count(*)::text
