@@ -28,6 +28,15 @@ fingerprint.
 - Production Cognito mapping locks remain in `aws/functions/api/production-cognito-locks.mjs`
 - AWS Moov `https://checksops.com/prep/webhooks/moov` remains the only enabled production Moov webhook; do not re-enable the Supabase hook
 
+## Remaining privileged-only paths (not accidental CI/dev)
+
+These require account-root or an AWS/DNS administrator. They are not opened by `npm run build`, CI, Cursor staging, or Lovable Publish:
+
+- AWS account root can still write the bucket or replace the bucket policy
+- Creating and assuming `ChecksOpsProductionSpaDeploy` (template stays `DeployRole=false`)
+- An IAM principal that already has `cloudfront:UpdateDistribution` on `E1B0ZWWO5559U5` (Cursor staging does not; `apply-step1.mjs` is locked)
+- Changing Cloudflare/DNS away from CloudFront
+
 ## Human unlock (do not do this accidentally)
 
 1. Create/assume `ChecksOpsProductionSpaDeploy` (or use account root).
