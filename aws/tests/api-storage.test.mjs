@@ -25,6 +25,10 @@ const SPOOF_ID = '00000000-0000-0000-0000-000000000099';
 const FREEDOM_PATH = 'checks/abc/front.jpg';
 const CHECK_ID = '8d2b1c3e-4f5a-4678-9abc-def012345678';
 const WRITE_PATH = `check-intake/${CHECK_ID}/files/aws-t3-test.pdf`;
+const FREEDOM_TENANT = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
+const REAR_PAYEE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1';
+const REAR_ENDO = 'cccccccc-cccc-4ccc-8ccc-ccccccccccc1';
+const CLAIM_FOLDER_ID = '7dbb3009-f059-4767-b5dc-1c5c72379330';
 
 process.env.FILES_BUCKET = 'checksops-staging-privatefilesbucket-erzqsolpucjp';
 
@@ -51,45 +55,76 @@ const mockClient = ({ authorize = false, writeCheck = false, writeSibling = fals
   cognito_sub: COGNITO_SUB,
   email: 'checksops-tester@freedomadj.com',
   status: 'active',
-} } = {}) => {
+}, siblingCheck = null } = {}) => {
   const queries = [];
+  const signedPayee = {
+    id: REAR_PAYEE,
+    check_id: CHECK_ID,
+    tenant_id: FREEDOM_TENANT,
+    payee_type: 'insured',
+    endorsement_status: 'signed',
+    endorsed_at: '2026-01-01T00:00:00.000Z',
+  };
+  const signedEndorsement = {
+    id: REAR_ENDO,
+    check_id: CHECK_ID,
+    tenant_id: FREEDOM_TENANT,
+    payee_id: REAR_PAYEE,
+    payee_type: 'insured',
+    status: 'signed',
+    signed_at: '2026-01-01T00:00:00.000Z',
+  };
+  const checkRow = (overrides = {}) => ({
+    id: CHECK_ID,
+    tenant_id: FREEDOM_TENANT,
+    front_image_path: `checks/${CHECK_ID}/front.jpg`,
+    back_image_path: `checks/${CHECK_ID}/back.jpg`,
+    back_image_deposit_path: `checks/${CHECK_ID}/back.jpg`,
+    endorsement_render_meta: {},
+    ...overrides,
+  });
   return {
     queries,
     connect: async () => {},
     query: async (sql, params) => {
       queries.push({ sql, params });
-      if (sql === 'BEGIN' || sql === 'ROLLBACK') return { rows: [] };
+      if (sql === 'BEGIN' || sql === 'ROLLBACK' || sql === 'COMMIT' || sql === 'SET TRANSACTION READ WRITE') {
+        return { rows: [] };
+      }
       if (sql.startsWith('SELECT set_config')) return { rows: [{ set_config: params[1] }] };
       if (sql === LOOKUP_MAPPING_SQL) {
         return { rows: params[0] === mapping.cognito_sub ? [mapping] : [] };
       }
       if (String(sql).replace(/\s+/g, ' ').includes('FROM public.check_intake_items WHERE id = $1::uuid')) {
         return {
-          rows: writeCheck && params[0] === CHECK_ID
-            ? [{
-              id: CHECK_ID,
-              tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a',
-              front_image_path: `checks/${CHECK_ID}/front.jpg`,
-              back_image_path: `checks/${CHECK_ID}/back.jpg`,
-              back_image_deposit_path: `checks/${CHECK_ID}/back.jpg`,
-            }]
-            : [],
+          rows: writeCheck && params[0] === CHECK_ID ? [checkRow()] : [],
         };
       }
-      if (sql.includes('FROM public.check_payees') || sql.includes('FROM public.check_endorsements')) {
-        return { rows: [] };
+      if (sql.includes('FROM public.check_payees')) {
+        return { rows: (writeCheck || writeSibling) ? [signedPayee] : [] };
+      }
+      if (sql.includes('FROM public.check_endorsements')) {
+        return { rows: (writeCheck || writeSibling) ? [signedEndorsement] : [] };
       }
       if (sql.includes('endorsement_render_meta') && sql.includes('UPDATE')) {
         return { rows: [] };
       }
       if (sql.includes("regexp_replace") && sql.includes("deposit2.jpg") && sql.includes('check_intake_items')) {
-        return { rows: writeSibling ? [{ id: CHECK_ID, tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a' }] : [] };
+        return {
+          rows: writeSibling
+            ? [siblingCheck || checkRow({
+              back_image_deposit_path: String(params?.[0] || '').includes('endorsed_deposit')
+                ? params[0]
+                : `checks/${CHECK_ID}/back.jpg`,
+            })]
+            : [],
+        };
       }
       if (String(sql).includes('tenants_public')) {
         return { rows: publicLogo ? [{ logo_url: 'https://example.supabase.co/storage/v1/object/public/tenant-logos/freedom/logo.png' }] : [] };
       }
       if (String(sql).includes('FROM public.tenant_users')) {
-        return { rows: authorize ? [{ role: 'admin' }] : [] };
+        return { rows: authorize ? [{ role: 'admin', tenant_id: FREEDOM_TENANT }] : [] };
       }
       if (String(sql).startsWith('SELECT 1 FROM')) {
         return { rows: authorize ? [{ '?column?': 1 }] : [] };
@@ -225,7 +260,7 @@ test('check-scoped write prefixes encode the parent check id', () => {
 });
 
 test('authorized upload-url succeeds and ignores spoofed identity', async () => {
-  const client = mockClient({ writeCheck: true });
+  const client = mockClient({ writeCheck: true, authorize: true });
   const deps = depsFor(client, { forceStorageWrites: true });
   const result = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {
     bucket: 'claim-files',
@@ -242,7 +277,7 @@ test('authorized upload-url succeeds and ignores spoofed identity', async () => 
 });
 
 test('upload-url conflicts when the object exists and upsert is false', async () => {
-  const client = mockClient({ writeCheck: true });
+  const client = mockClient({ writeCheck: true, authorize: true });
   const key = `files/claim-files/${WRITE_PATH}`;
   const result = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {
     bucket: 'claim-files',
@@ -310,7 +345,7 @@ test('company-branding public bucket is allowlisted for signed public reads', as
 });
 
 test('delete and move require server-side authorization', async () => {
-  const client = mockClient({ writeCheck: true });
+  const client = mockClient({ writeCheck: true, authorize: true });
   const deps = depsFor(client, { forceStorageWrites: true });
   const deleted = await handleStorageDelete(jwtEvent('/storage/delete', 'POST', {
     bucket: 'claim-files',
@@ -356,7 +391,7 @@ test('browser .deposit2.jpg sibling of a stored check image is writable', async 
     path: sibling,
     contentType: 'image/jpeg',
     upsert: true,
-  }), depsFor(mockClient({ writeSibling: true }), { forceStorageWrites: true }));
+  }), depsFor(mockClient({ writeSibling: true, authorize: true }), { forceStorageWrites: true }));
   assert.equal(allowed.ok, true, JSON.stringify(allowed));
   assert.equal(allowed.path, sibling);
 });
@@ -368,7 +403,7 @@ test('check-scoped .deposit2.jpg remains writable via the check UUID prefix', as
     path,
     contentType: 'image/jpeg',
     upsert: true,
-  }), depsFor(mockClient({ writeCheck: true }), { forceStorageWrites: true }));
+  }), depsFor(mockClient({ writeCheck: true, authorize: true }), { forceStorageWrites: true }));
   assert.equal(result.ok, true, JSON.stringify(result));
   assert.equal(result.path, path);
 });
@@ -388,7 +423,7 @@ test('browser .checkalt.jpg sibling of a stored check image is writable', async 
     path: sibling,
     contentType: 'image/jpeg',
     upsert: true,
-  }), depsFor(mockClient({ writeSibling: true }), { forceStorageWrites: true }));
+  }), depsFor(mockClient({ writeSibling: true, authorize: true }), { forceStorageWrites: true }));
   assert.equal(allowed.ok, true, JSON.stringify(allowed));
   assert.equal(allowed.path, sibling);
 });
@@ -400,14 +435,14 @@ test('check-scoped .checkalt.jpg remains writable via the check UUID prefix', as
     path,
     contentType: 'image/jpeg',
     upsert: true,
-  }), depsFor(mockClient({ writeCheck: true }), { forceStorageWrites: true }));
+  }), depsFor(mockClient({ writeCheck: true, authorize: true }), { forceStorageWrites: true }));
   assert.equal(result.ok, true, JSON.stringify(result));
   assert.equal(result.path, path);
 });
 
 test('official rear .checkalt.jpg presign stamps endorsement fingerprint', async () => {
   const path = `checks/${CHECK_ID}/back.checkalt.jpg`;
-  const client = mockClient({ writeCheck: true });
+  const client = mockClient({ writeCheck: true, authorize: true });
   const result = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {
     bucket: 'claim-files',
     path,
@@ -421,5 +456,51 @@ test('official rear .checkalt.jpg presign stamps endorsement fingerprint', async
   assert.equal(stamp.params[1], 'checkalt_rear_fingerprint');
   assert.equal(typeof stamp.params[2], 'string');
   assert.equal(stamp.params[2].length, 64);
+  assert.ok(client.queries.some((q) => q.sql === 'COMMIT'), 'fingerprint stamp must commit on the write transaction');
+  assert.equal(client.queries.some((q) => q.sql === 'ROLLBACK' && client.queries.findIndex((x) => x.sql === 'COMMIT') < 0), false);
+});
+
+test('claim-folder official rear is authorized by image-column ownership, not path UUID', async () => {
+  const path = `checks/${CLAIM_FOLDER_ID}/unclaimed/endorsed_deposit_18vd.checkalt.jpg`;
+  const siblingCheck = {
+    id: CHECK_ID,
+    tenant_id: FREEDOM_TENANT,
+    front_image_path: `checks/${CLAIM_FOLDER_ID}/unclaimed/front.jpg`,
+    back_image_path: path,
+    back_image_deposit_path: path,
+    endorsement_render_meta: {},
+  };
+  const client = mockClient({ writeSibling: true, authorize: true, siblingCheck });
+  const deps = depsFor(client, { forceStorageWrites: true, keys: new Set([`files/claim-files/${path}`]) });
+  const result = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {
+    bucket: 'claim-files',
+    path,
+    contentType: 'image/jpeg',
+    upsert: true,
+  }), deps);
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(result.path, path);
+  const stamp = client.queries.find((q) => String(q.sql).includes('jsonb_build_object'));
+  assert.ok(stamp, 'claim-folder official rear must stamp via image-column check');
+  assert.equal(stamp.params[0], CHECK_ID);
+  assert.ok(client.queries.some((q) => q.sql === 'COMMIT'));
+  assert.equal(deps.sent.some((item) => item.name === 'PutObjectCommand'), false);
+});
+
+test('outsider cannot rebind another tenant check image via a claim-folder path', async () => {
+  const path = `checks/${CLAIM_FOLDER_ID}/unclaimed/endorsed_deposit_18vd.checkalt.jpg`;
+  const siblingCheck = {
+    id: CHECK_ID,
+    tenant_id: FREEDOM_TENANT,
+    back_image_deposit_path: path,
+  };
+  const result = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {
+    bucket: 'claim-files',
+    path,
+    contentType: 'image/jpeg',
+    upsert: true,
+  }), depsFor(mockClient({ writeSibling: true, authorize: false, siblingCheck }), { forceStorageWrites: true }));
+  assert.equal(result.statusCode, 403);
+  assert.equal(result.error, 'rls_denied');
 });
 
