@@ -7,6 +7,7 @@
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { parseBody, ignoredSpoof, withIdentityWrite } from './data.mjs';
+import { APP_USER_ID_GUC } from './cognito.mjs';
 import { loadDatabaseCredentials } from './secrets.mjs';
 import { buildClientConfig, buildWriteClientConfig, sanitizePublicError } from './db-health.mjs';
 import { sendViaSesOrSink } from './email.mjs';
@@ -371,20 +372,23 @@ const completionWithoutAdvance = async (client, checkId) => {
   return { ...result, ...allowDepositAdvance('approved_for_deposit') };
 };
 
+const bindPublicWriter = async (client, endorsement) => {
+  const actorId = endorsement?.uploaded_by || endorsement?.actor_id || null;
+  if (!actorId) return false;
+  await client.query('SELECT set_config($1, $2, true)', [APP_USER_ID_GUC, String(actorId)]);
+  return true;
+};
+
 const lookupPublicEndorsement = async (client, token) => {
   const doc = (await safeQuery(
     client,
     'SELECT public.aws_public_endorsement_by_token($1) AS doc',
     [token],
   )).rows[0]?.doc;
-  if (doc) return doc;
+  if (doc?.id) return doc;
   const byToken = (await safeQuery(
     client,
-    `SELECT e.*, ci.carrier_name, ci.check_number, ci.amount, ci.claim_id, ci.tenant_id
-     FROM public.check_endorsements e
-     LEFT JOIN public.check_intake_items ci ON ci.id = e.check_id
-     WHERE e.token = $1
-     LIMIT 1`,
+    `SELECT * FROM public.check_endorsements WHERE token = $1 LIMIT 1`,
     [token],
   )).rows[0];
   if (byToken) return byToken;
@@ -439,14 +443,11 @@ export const runSubmitEndorsement = async (client, event, body, spoof) => {
   if (body.eSignConsentAccepted !== true) {
     return { ok: false, statusCode: 400, error: 'Electronic signature consent is required', spoofFieldsIgnored: spoof };
   }
-  const endorsement = (await safeQuery(
-    client,
-    `SELECT * FROM public.check_endorsements WHERE token = $1 LIMIT 1`,
-    [token],
-  )).rows[0];
+  const endorsement = await lookupPublicEndorsement(client, token);
   if (!endorsement) {
     return { ok: false, statusCode: 404, error: 'Invalid or already-used token', spoofFieldsIgnored: spoof };
   }
+  await bindPublicWriter(client, endorsement);
   if (endorsement.status === 'signed') {
     return { ok: true, statusCode: 200, success: true, message: 'Already endorsed', ...denyDepositAdvance(), spoofFieldsIgnored: spoof };
   }
@@ -517,14 +518,11 @@ export const runSubmitEndorsement = async (client, event, body, spoof) => {
 export const runRejectEndorsement = async (client, event, body, spoof) => {
   const token = String(body.token || '').trim();
   if (!token) return { ok: false, statusCode: 400, error: 'Token required', spoofFieldsIgnored: spoof };
-  const endorsement = (await safeQuery(
-    client,
-    `SELECT * FROM public.check_endorsements WHERE token = $1 LIMIT 1`,
-    [token],
-  )).rows[0];
+  const endorsement = await lookupPublicEndorsement(client, token);
   if (!endorsement) {
     return { ok: false, statusCode: 404, error: 'Invalid or already-used token', spoofFieldsIgnored: spoof };
   }
+  await bindPublicWriter(client, endorsement);
   const newToken = rotateToken();
   const ip = clientIpFromEvent(event);
   const ua = userAgentFromEvent(event);
@@ -816,7 +814,7 @@ export const runAuthenticatedEndorsement = async ({
         spoofFieldsIgnored: spoof,
       };
     }
-    await client.query(
+    const markedSent = await client.query(
       `UPDATE public.check_endorsements
        SET status = 'sent',
            request_sent_at = now(),
@@ -824,9 +822,22 @@ export const runAuthenticatedEndorsement = async ({
            reminder_count = COALESCE(reminder_count, 0) + 1,
            contact_email = $2,
            updated_at = now()
-       WHERE id = $1::uuid`,
+       WHERE id = $1::uuid
+       RETURNING id, status, request_sent_at`,
       [endorsement.id, email],
     );
+    if (!markedSent.rowCount) {
+      return {
+        ok: false,
+        statusCode: 503,
+        success: false,
+        error: 'endorsement_update_not_applied',
+        endorsementId: endorsement.id,
+        emailSent: true,
+        delivery_status: deliveryStatus,
+        spoofFieldsIgnored: spoof,
+      };
+    }
     await safeQuery(
       client,
       `INSERT INTO public.endorsement_requests (
@@ -919,7 +930,7 @@ export const runAuthenticatedEndorsement = async ({
   }
 
   if (action === 'mark_internal_signed') {
-    await client.query(
+    const marked = await client.query(
       `UPDATE public.check_endorsements
        SET status = 'signed',
            signed_at = now(),
@@ -927,9 +938,19 @@ export const runAuthenticatedEndorsement = async ({
            signature_image_url = NULL,
            notes = COALESCE($2, notes),
            updated_at = now()
-       WHERE id = $1::uuid`,
+       WHERE id = $1::uuid
+       RETURNING id, status, signed_at`,
       [endorsement.id, body.notes || 'Internally endorsed by staff'],
     );
+    if (!marked.rowCount) {
+      return {
+        ok: false,
+        statusCode: 503,
+        error: 'endorsement_update_not_applied',
+        endorsementId: endorsement.id,
+        spoofFieldsIgnored: spoof,
+      };
+    }
     await updatePayeeSigned(client, endorsement, { status: 'signed', signedAt: new Date().toISOString() });
     await auditEndorsement(client, {
       endorsement_id: endorsement.id,
