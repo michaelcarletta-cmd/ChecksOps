@@ -34,6 +34,7 @@ export const recordProductionSpaFingerprint = ({
   distDir = 'dist',
   outPath = null,
   deployed = false,
+  deployMeta = null,
 } = {}) => {
   const resolved = path.isAbsolute(distDir) ? distDir : path.join(ROOT, distDir);
   const validation = scanProductionSpaArtifact(resolved);
@@ -48,7 +49,8 @@ export const recordProductionSpaFingerprint = ({
     gitCommit: git.status === 0 ? git.stdout.trim() : null,
     recordedAt: new Date().toISOString(),
     deployed,
-    deployRefusedThisPhase: !deployed,
+    deployRefusedThisPhase: false,
+    deployTarget: deployMeta,
     authProvider: validation.authProvider,
     cognito: {
       userPoolId: validation.userPoolId,
