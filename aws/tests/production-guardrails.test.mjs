@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import {
@@ -261,13 +260,22 @@ test('production-aws vite config fingerprints Cognito pool and client in the com
   assert.match(client, /cognitoPublicConfig/);
 });
 
-test('deploy-production-spa --apply is refused and webhook files stay untouched', () => {
-  const apply = spawnSync(process.execPath, [
-    path.join(ROOT, 'scripts/deploy-production-spa.mjs'),
-    '--apply',
-  ], { encoding: 'utf8' });
-  assert.equal(apply.status, 2);
-  assert.match(apply.stderr, /production_spa_deploy_refused_this_phase/);
+test('deploy-production-spa --apply is the guarded S3/CloudFront path and webhook files stay untouched', () => {
+  const source = read('scripts/deploy-production-spa.mjs');
+  assert.match(source, /--mode', 'production-aws'/);
+  assert.match(source, /scanProductionSpaArtifact/);
+  assert.match(source, /checksops-production-frontend-806168576068/);
+  assert.match(source, /E1B0ZWWO5559U5/);
+  assert.match(source, /s3',\s*'sync'/);
+  assert.match(source, /--delete/);
+  assert.match(source, /create-invalidation/);
+  assert.doesNotMatch(source, /production_spa_deploy_refused_this_phase/);
+  assert.ok(
+    source.indexOf('scanProductionSpaArtifact') < source.indexOf("s3',\n    'sync'")
+      || source.indexOf('scanProductionSpaArtifact') < source.indexOf('s3 sync')
+      || source.indexOf('if (!validation.ok)') < source.indexOf("s3'"),
+    'artifact guard must run before S3 upload',
+  );
 
   const hmac = read('aws/functions/api/providers/hmac.mjs');
   assert.match(hmac, /verifyMoovSignature/);
