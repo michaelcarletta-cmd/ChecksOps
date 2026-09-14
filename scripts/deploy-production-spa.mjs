@@ -10,10 +10,11 @@
  *   2. validate the compiled artifact (not source .env)
  *   3. record Git commit → bundle → Cognito pool/client → API target → timestamp
  *
- * `--apply` is the only approved production upload path. It syncs `dist/` to
- * s3://checksops-production-frontend-806168576068 (with --delete) and
- * invalidates CloudFront E1B0ZWWO5559U5 `/*`. Do not use `npm run build`
- * or a raw `aws s3 sync` for production.
+ * `--apply` is refused after the successful cutover lock.
+ * Rollback of the locked artifact is the only apply path, and it requires
+ * CHECKSOPS_PRODUCTION_SPA_UNLOCK=RELEASE_CUTOVER_LOCK plus
+ * --from-fingerprint pointing at a previously validated AWS/Cognito
+ * fingerprint. Do not use `npm run build` or a raw `aws s3 sync`.
  */
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -21,18 +22,36 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { scanProductionSpaArtifact } from './validate-production-spa-artifact.mjs';
 import { recordProductionSpaFingerprint } from './record-production-spa-fingerprint.mjs';
+import {
+  PRODUCTION_SPA_LOCK,
+  assertNotSupabaseArtifact,
+  assertProductionSpaApplyAllowed,
+} from './production-spa-lock.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const APPLY = process.argv.includes('--apply');
 const DIST = path.join(ROOT, 'dist');
-const PRODUCTION_SPA_S3_BUCKET = 'checksops-production-frontend-806168576068';
-const PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID = 'E1B0ZWWO5559U5';
+const PRODUCTION_SPA_S3_BUCKET = PRODUCTION_SPA_LOCK.knownGood.s3Bucket;
+const PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID = PRODUCTION_SPA_LOCK.knownGood.cloudfrontDistributionId;
 const AWS = process.env.AWS_CLI || 'aws';
 
 const fail = (payload, status = 1) => {
   console.error(JSON.stringify(payload, null, 2));
   process.exit(status);
 };
+
+if (APPLY) {
+  try {
+    assertProductionSpaApplyAllowed({ argv: process.argv, env: process.env });
+  } catch (error) {
+    fail({
+      error: error.code || error.message,
+      productionSpaLocked: true,
+      knownGood: PRODUCTION_SPA_LOCK.knownGood,
+      ...(error.extra || {}),
+    }, 2);
+  }
+}
 
 const runAws = (args, label) => {
   const result = spawnSync(AWS, args, {
@@ -72,6 +91,15 @@ if (!validation.ok) {
     ...validation,
   });
 }
+try {
+  assertNotSupabaseArtifact(validation);
+} catch (error) {
+  fail({
+    error: error.code || error.message,
+    ...validation,
+    ...(error.extra || {}),
+  });
+}
 
 const indexHtml = path.join(DIST, 'index.html');
 if (!fs.existsSync(indexHtml)) {
@@ -80,6 +108,15 @@ if (!fs.existsSync(indexHtml)) {
 
 let invalidationId = null;
 if (APPLY) {
+  try {
+    assertProductionSpaApplyAllowed({ argv: process.argv, env: process.env, validation });
+  } catch (error) {
+    fail({
+      error: error.code || error.message,
+      productionSpaLocked: true,
+      ...(error.extra || {}),
+    }, 2);
+  }
   const bucketUri = `s3://${PRODUCTION_SPA_S3_BUCKET}`;
   runAws([
     's3',

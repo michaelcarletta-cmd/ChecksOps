@@ -21,6 +21,12 @@ if (process.env.CHECKSOPS_APPLY_CF_STEP1 !== 'APPLY_GATE1') {
   process.exit(2);
 }
 
+console.error(JSON.stringify({
+  error: 'production_cloudfront_cutover_locked',
+  hint: 'Successful cutover lock: do not UpdateDistribution or repoint E1B0ZWWO5559U5 away from ProductionSpaS3.',
+}));
+process.exit(2);
+
 const awsJson = (args, input) => {
   const r = spawnSync(AWS, ['--region', 'us-east-1', '--output', 'json', ...args], {
     encoding: 'utf8',

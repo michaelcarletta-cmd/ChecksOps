@@ -1,0 +1,30 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Dedicated production SPA deploy role. DO NOT DEPLOY FROM THIS PR.
+  Staging/Cursor/CI/rehearsal roles must not assume it. The production
+  frontend bucket policy denies object writes except this role and account root.
+
+Parameters:
+  DeployRole:
+    Type: String
+    Default: "false"
+    AllowedValues: ["false", "true"]
+    Description: Leave false. Creating this role is a human operator action.
+
+Conditions:
+  ShouldDeployRole: !Equals [!Ref DeployRole, "true"]
+
+Resources:
+  ProductionSpaDeployRole:
+    Type: AWS::IAM::Role
+    Condition: ShouldDeployRole
+    Properties:
+      RoleName: ChecksOpsProductionSpaDeploy
+      Description: Sole IAM principal allowed to write the locked production SPA bucket.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Deny
+            Principal: "*"
+            Action: sts:AssumeRole
+      Policies: []

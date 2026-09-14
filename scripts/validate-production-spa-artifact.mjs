@@ -63,6 +63,9 @@ export const scanProductionSpaArtifact = (distDir) => {
   if (text.includes(FORBIDDEN_PRODUCTION_MARKERS.stagingClientId)) forbidden.push('staging_cognito_client');
   if (text.includes(FORBIDDEN_PRODUCTION_MARKERS.stagingApiId)) forbidden.push('staging_api');
   if (text.includes(FORBIDDEN_PRODUCTION_MARKERS.rawExecuteApi)) forbidden.push('raw_execute_api');
+  if (/nbcqwpysqgyxrrbgtmkw\.supabase\.co/.test(text) || /https:\/\/[a-z0-9]+\.supabase\.co/.test(text)) {
+    forbidden.push('supabase_host');
+  }
   const supabaseSelected = /nbcqwpysqgyxrrbgtmkw\.supabase\.co/.test(text)
     && !text.includes(REQUIRED_PRODUCTION_MARKERS.userPoolId);
   if (supabaseSelected) missing.push('supabase_mode_selected');

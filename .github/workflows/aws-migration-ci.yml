@@ -80,6 +80,16 @@ jobs:
           bun run build:production-spa
           bun run validate:production-spa
 
+      - name: Prove production SPA --apply stays locked
+        run: |
+          set -euo pipefail
+          node --test aws/tests/production-spa-cutover-lock.test.mjs
+          node scripts/verify-production-cutover-lock.mjs --offline
+          if node scripts/deploy-production-spa.mjs --apply; then
+            echo 'deploy-production-spa --apply must stay locked'
+            exit 1
+          fi
+
       - name: Assert production activation remains disabled in template
         shell: bash
         run: |
