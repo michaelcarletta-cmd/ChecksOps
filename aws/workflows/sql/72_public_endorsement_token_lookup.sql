@@ -18,6 +18,12 @@
 -- Security: SECURITY DEFINER, row_security=off, search_path pinned.
 -- EXECUTE: checksops only. No PUBLIC. No authenticated.
 -- No DML. Does not change SQL 71 consume/rotate/mark-sent behavior.
+--
+-- Expected function fingerprint (PG16 / staging Integration baseline 2026-09-14):
+--   proname     aws_public_endorsement_by_token
+--   signature   (text)
+--   prosecdef   true
+--   md5(pg_get_functiondef)  445994fc428e76a872899c37701cb590
 
 CREATE OR REPLACE FUNCTION public.aws_public_endorsement_by_token(p_token text)
 RETURNS jsonb

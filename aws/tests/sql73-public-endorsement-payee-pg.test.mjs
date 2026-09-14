@@ -40,6 +40,8 @@ const TOKEN_CONC = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
 const WRONG = '00000000-0000-4000-8000-000000000000';
 
 const SUBMIT_REGPROC = 'public.aws_public_submit_endorsement(text,text,text,text,text,text,uuid,uuid)';
+const SQL73_STAGING_MD5 = 'd388bb4ec4a9cd6ee83d7e02e193b47c';
+const SQL71_SUBMIT_ROLLBACK_MD5 = '89d7c65888ee551fc2488fefdf6d287c';
 
 const run = (bin, args, opts = {}) => spawnSync(bin, args, {
   encoding: 'utf8',
@@ -290,6 +292,7 @@ WHERE n.nspname = 'public' AND p.proname = 'aws_public_submit_endorsement'
   assert.equal(fp1.prosecdef, true);
   assert.equal(fp1.pronargs, 8);
   assert.equal(fp1.has_payee_update, true);
+  assert.equal(fp1.md5, SQL73_STAGING_MD5);
   assert.equal(fp1.md5, fp2.md5);
   assert.ok(Array.isArray(fp1.proconfig));
   assert.ok(fp1.proconfig.some((item) => String(item).includes('search_path')));
@@ -518,6 +521,7 @@ WHERE n.nspname='public' AND p.proname='aws_public_submit_endorsement'
   psql(['-d', dbName, '-f', SQL73_DOWN]);
   const afterDown = fingerprint('fingerprint-after-rollback');
   assert.equal(afterDown.has_payee_update, false);
+  assert.equal(afterDown.md5, SQL71_SUBMIT_ROLLBACK_MD5);
   assert.equal(scalar(`SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
     WHERE n.nspname='public' AND p.proname='aws_public_submit_endorsement'`), '1');
   assert.equal(scalar(`SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace

@@ -10,6 +10,11 @@ const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PG_BIN = '/usr/lib/postgresql/16/bin';
 const ARTIFACT_DIR = '/opt/cursor/artifacts';
 
+// Authoritative staging SQL apply lineage (Integration validated 2026-09-14):
+// 29, 52, 39, 69, 71, 72, 73 applied; SQL 30 intentionally unapplied.
+const SQL72_STAGING_MD5 = '445994fc428e76a872899c37701cb590';
+const SQL73_STAGING_MD5 = 'd388bb4ec4a9cd6ee83d7e02e193b47c';
+
 const FILES = {
   sql29: path.join(ROOT, 'rls/sql/29_mortgage_ops_agent_access.sql'),
   sql52: path.join(ROOT, 'workflows/sql/52_mortgage_ops_staff_grants.sql'),
@@ -188,6 +193,8 @@ test('SQL 29/52/39/69/71/72/73 apply twice on disposable PG16 and keep SQL 30 un
   const sql52 = fs.readFileSync(FILES.sql52, 'utf8');
   const sql39 = fs.readFileSync(FILES.sql39, 'utf8');
   const sql71 = fs.readFileSync(FILES.sql71, 'utf8');
+  const sql72 = fs.readFileSync(FILES.sql72, 'utf8');
+  const sql73 = fs.readFileSync(FILES.sql73, 'utf8');
   assert.match(sql29, /CREATE OR REPLACE FUNCTION public\.aws_mortgage_agent_queue_visible/);
   assert.match(sql29, /DROP POLICY IF EXISTS aws_select_mortgage_handling_requests/);
   assert.match(sql52, /GRANT UPDATE \(\s*assigned_employee_id/);
@@ -195,6 +202,9 @@ test('SQL 29/52/39/69/71/72/73 apply twice on disposable PG16 and keep SQL 30 un
   assert.match(sql71, /aws_email_send_log_peek/);
   assert.match(sql71, /aws_email_send_log_reserve/);
   assert.match(sql71, /aws_email_send_log_finalize/);
+  assert.match(sql72, /CREATE OR REPLACE FUNCTION public\.aws_public_endorsement_by_token/);
+  assert.match(sql73, /CREATE OR REPLACE FUNCTION public\.aws_public_submit_endorsement/);
+  assert.match(sql73, /UPDATE public\.check_payees/);
   assert.doesNotMatch(sql29, /DROP FUNCTION public\.aws_can_access_tenant/);
   assert.doesNotMatch(sql52, /claim_payments|payment_transfers/);
   assert.doesNotMatch(sql39, /GRANT UPDATE \(amount\)|GRANT UPDATE \(claim_id\)/);
@@ -313,6 +323,16 @@ SELECT (p.prosrc ILIKE '%UPDATE public.check_payees%')::text
 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
 WHERE n.nspname = 'public' AND p.proname = 'aws_public_submit_endorsement'
 `), 'true');
+  assert.equal(scalar(`
+SELECT md5(pg_get_functiondef(p.oid))
+FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+WHERE n.nspname = 'public' AND p.proname = 'aws_public_endorsement_by_token'
+`), SQL72_STAGING_MD5);
+  assert.equal(scalar(`
+SELECT md5(pg_get_functiondef(p.oid))
+FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+WHERE n.nspname = 'public' AND p.proname = 'aws_public_submit_endorsement'
+`), SQL73_STAGING_MD5);
 
   const claimGrant = scalar(`
 SELECT count(*)::text

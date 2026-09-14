@@ -243,6 +243,11 @@ max_connections = 20
   assert.equal(scalar(`SELECT has_function_privilege('checksops', 'public.aws_public_endorsement_by_token(text)', 'EXECUTE')::text`), 'true');
   assert.equal(scalar(`SELECT has_function_privilege('public', 'public.aws_public_endorsement_by_token(text)', 'EXECUTE')::text`), 'false');
   assert.equal(scalar(`SELECT has_function_privilege('authenticated', 'public.aws_public_endorsement_by_token(text)', 'EXECUTE')::text`), 'false');
+  assert.equal(scalar(`
+SELECT md5(pg_get_functiondef(p.oid))
+FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+WHERE n.nspname='public' AND p.proname='aws_public_endorsement_by_token'
+`), '445994fc428e76a872899c37701cb590');
 
   psql(['-d', dbName], `
 INSERT INTO public.check_intake_items (id, tenant_id, carrier_name, check_number, amount, status)
