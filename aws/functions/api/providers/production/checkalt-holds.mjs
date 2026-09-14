@@ -39,7 +39,7 @@ export const checkAltProductionHoldSnapshot = () => ({
   AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED_production: isTrue(process.env.AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED),
   productionCheckAltExecutionAllowed: productionCheckAltExecutionAllowed(),
   sql64: 'NOT_APPLIED',
-  sql65: 'NOT_APPLIED',
+  sql65: 'COLUMNS_PRESENT',
 });
 
 export const denyAmbiguousCheckAltMode = (operation) => ({

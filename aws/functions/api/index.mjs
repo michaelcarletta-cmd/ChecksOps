@@ -69,6 +69,7 @@ const READ_ONLY_PATHS = new Set([
   '/identity/session',
   '/ops/readiness',
   '/cutover/readiness',
+  '/ops/money-path-readiness',
 ]);
 
 const tenantComplianceMatch = (path) => path.match(/^\/tenants\/([^/]+)\/security-compliance$/);
@@ -108,6 +109,11 @@ export const handler = async (event) => {
       ...snapshot,
       holds,
     });
+  }
+
+  if (method === 'GET' && path === '/ops/money-path-readiness') {
+    const { moneyPathReadinessSnapshot } = await import('./money-path-readiness.mjs');
+    return json(200, await moneyPathReadinessSnapshot());
   }
 
   if (method === 'GET' && path === '/db-health') {

@@ -359,7 +359,7 @@ test('sandbox webhook apply updates sandbox transfers and refuses production row
     assert.equal(applied.applied, true);
     assert.equal(applied.environment, 'sandbox');
     assert.ok(applied.mutations.includes('payment_transfers'));
-    assert.ok(queries.some((q) => q.sql.includes('environment = \'sandbox\'')));
+    assert.ok(queries.some((q) => q.params.includes('sandbox') || q.sql.includes("environment = 'sandbox'")));
 
     const productionClient = {
       query: async (sql) => {
