@@ -1,4 +1,5 @@
 import { TENANT_MEMBERSHIP_SQL } from '../../identity.mjs';
+import { roleAllowsFinancial } from '../../financial-authz.mjs';
 import { membershipForTenant } from '../../financial-ownership.mjs';
 import { mapCheckAltStatus } from '../amounts.mjs';
 import { checkAltFetch, getDepositItemStatus } from '../parity/checkalt-client.mjs';
@@ -200,6 +201,140 @@ export async function reconcileProductionCheckAltDeposit({
   };
 }
 
+const BATCH_POLL_STATUSES = Object.freeze([
+  'submitted',
+  'pending_approval',
+  'submitting',
+  'pending',
+  'error',
+]);
+
+export async function loadBatchPollDeposits(client, tenantIds) {
+  if (!tenantIds?.length) return [];
+  return (await client.query(
+    `SELECT id, tenant_id, check_intake_item_id, checkalt_reference, status, amount, amount_cents,
+            idempotency_key, provider_http_attempted_at, failure_class, last_status_payload,
+            last_error, submitted_at, cleared_at, returned_at, last_polled_at, submitted_by
+     FROM public.checkalt_deposits
+     WHERE tenant_id = ANY($1::uuid[])
+       AND (
+         checkalt_reference IS NOT NULL
+         OR status = ANY($2::text[])
+       )
+     ORDER BY last_polled_at ASC NULLS FIRST, updated_at ASC NULLS LAST, id ASC
+     LIMIT 50`,
+    [tenantIds, [...BATCH_POLL_STATUSES]],
+  )).rows;
+}
+
+/**
+ * Locked SPA Settings "Poll Now" posts {}. Reconcile existing rows only.
+ * Never INSERTs. Never POSTs /fincapture/deposit/process.
+ */
+export async function handleProductionCheckAltBatchPoll({
+  client,
+  mapping,
+  claims,
+  spoof,
+  fetchImpl = fetch,
+  deps = {},
+} = {}) {
+  const memberships = await membershipsOf(client, mapping.application_user_id);
+  const platformRoles = (await client.query(
+    'SELECT role FROM public.user_roles WHERE user_id = $1::uuid',
+    [mapping.application_user_id],
+  )).rows.map((row) => String(row.role || '').toLowerCase());
+  const tenantIds = [...new Set(
+    memberships
+      .filter((row) => roleAllowsFinancial([row.role, ...platformRoles]))
+      .map((row) => row.tenant_id)
+      .filter(Boolean),
+  )];
+  if (!tenantIds.length) {
+    return fail('financial_unauthorized', 403, {
+      createdDeposit: false,
+      polled: 0,
+      updated: 0,
+      errors: 0,
+      message: 'Owner/admin/manager is required to poll production CheckAlt. Operator cannot refresh provider status.',
+      spoofFieldsIgnored: spoof,
+    });
+  }
+
+  const rows = await loadBatchPollDeposits(client, tenantIds);
+  if (!rows.length) {
+    return {
+      ok: true,
+      statusCode: 200,
+      success: true,
+      polled: 0,
+      updated: 0,
+      errors: 0,
+      liveProviderCalled: false,
+      createdDeposit: false,
+      productionExecution: true,
+      productionRecordsMutated: false,
+      message: 'No existing CheckAlt deposits to reconcile. A FinCapture process POST was not sent.',
+      spoofFieldsIgnored: spoof,
+      applicationUserId: mapping.application_user_id,
+      authUid: mapping.application_user_id,
+      cognitoSub: claims.sub,
+    };
+  }
+
+  const secrets = await (deps.loadProductionSecrets || loadProductionCheckAltSecrets)(deps.getSecrets);
+  if (!secrets.ok) return { ...secrets, createdDeposit: false, polled: 0, updated: 0, errors: 0, spoofFieldsIgnored: spoof };
+  const loadedCfg = await loadProductionCheckAltConfig(client, { credentials: secrets.credentials });
+  if (!loadedCfg.ok) return { ...loadedCfg, createdDeposit: false, polled: 0, updated: 0, errors: 0, spoofFieldsIgnored: spoof };
+
+  let polled = 0;
+  let updated = 0;
+  let errors = 0;
+  let liveProviderCalled = false;
+  for (const row of rows) {
+    polled += 1;
+    if (!row.checkalt_reference) {
+      errors += 1;
+      continue;
+    }
+    const acct = await loadProductionTenantAccount(client, row.tenant_id);
+    try {
+      const result = await reconcileProductionCheckAltDeposit({
+        client,
+        mapping,
+        row,
+        cfg: loadedCfg.cfg,
+        credentials: loadedCfg.credentials,
+        acct,
+        fetchImpl,
+      });
+      if (result.liveProviderCalled) liveProviderCalled = true;
+      if (result.reconciled === true) updated += 1;
+      else errors += 1;
+    } catch {
+      errors += 1;
+    }
+  }
+
+  return {
+    ok: true,
+    statusCode: 200,
+    success: true,
+    polled,
+    updated,
+    errors,
+    liveProviderCalled,
+    createdDeposit: false,
+    productionExecution: true,
+    productionRecordsMutated: updated > 0,
+    message: 'Existing CheckAlt deposits reconciled. A FinCapture process POST was not sent.',
+    spoofFieldsIgnored: spoof,
+    applicationUserId: mapping.application_user_id,
+    authUid: mapping.application_user_id,
+    cognitoSub: claims.sub,
+  };
+}
+
 export async function handleProductionCheckAltPoll({
   client,
   mapping,
@@ -212,8 +347,13 @@ export async function handleProductionCheckAltPoll({
   const depositId = body.deposit_id || body.checkalt_deposit_id || null;
   const reference = body.checkalt_reference || body.referenceNumber || null;
   if (!depositId && !reference) {
-    return fail('deposit_locator_required', 400, {
-      message: 'Production poll requires deposit_id or checkalt_reference. It never creates a deposit.',
+    return handleProductionCheckAltBatchPoll({
+      client,
+      mapping,
+      claims,
+      spoof,
+      fetchImpl,
+      deps,
     });
   }
 
