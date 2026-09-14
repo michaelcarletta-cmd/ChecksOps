@@ -21,6 +21,7 @@ import { normalizeEmail } from './email-policy.mjs';
 import { sendViaSesOrSink } from './email.mjs';
 import { renderTransactionalTemplate } from './email-templates.mjs';
 import { emailAssetOrigin, resolveEmailBranding } from './email-branding.mjs';
+import { assertProductionCognitoWriteAllowed } from './production-cognito-locks.mjs';
 
 const POOL_ID = () => process.env.COGNITO_USER_POOL_ID;
 const CLIENT_ID = () => process.env.COGNITO_CLIENT_ID;
@@ -154,16 +155,38 @@ export const runTenantInviteUser = async ({
   }
 
   if (cognitoSub && appUserId && String(cognitoSub) !== String(appUserId)) {
-    await client.query(
-      `INSERT INTO public.identity_accounts (cognito_sub, application_user_id, email, status, linked_at, created_at)
-       VALUES ($1, $2::uuid, $3, 'active', now(), now())
-       ON CONFLICT (cognito_sub) DO UPDATE
-         SET application_user_id = EXCLUDED.application_user_id,
-             email = EXCLUDED.email,
-             status = 'active',
-             linked_at = COALESCE(public.identity_accounts.linked_at, now())`,
-      [cognitoSub, appUserId, email],
-    ).catch(() => {});
+    try {
+      assertProductionCognitoWriteAllowed({ applicationUserId: appUserId, cognitoSub });
+    } catch (error) {
+      return {
+        ok: false,
+        statusCode: 403,
+        error: 'production_cognito_mapping_locked',
+        message: String(error.message || error).slice(0, 240),
+        spoofFieldsIgnored: spoof,
+      };
+    }
+    try {
+      await client.query(
+        `INSERT INTO public.identity_accounts (cognito_sub, application_user_id, email, status, linked_at, created_at)
+         VALUES ($1, $2::uuid, $3, 'active', now(), now())
+         ON CONFLICT (cognito_sub) DO UPDATE
+           SET application_user_id = EXCLUDED.application_user_id,
+               email = EXCLUDED.email,
+               status = 'active',
+               linked_at = COALESCE(public.identity_accounts.linked_at, now())`,
+        [cognitoSub, appUserId, email],
+      );
+    } catch (error) {
+      if (String(error.message || '').includes('production_cognito_mapping_locked')) {
+        return {
+          ok: false,
+          statusCode: 403,
+          error: 'production_cognito_mapping_locked',
+          spoofFieldsIgnored: spoof,
+        };
+      }
+    }
   }
 
   await client.query(
@@ -478,16 +501,40 @@ export const runHireMortgageAgent = async ({
     };
   }
 
-  await client.query(
-    `INSERT INTO public.identity_accounts (cognito_sub, application_user_id, email, status, linked_at, created_at)
-     VALUES ($1, $2::uuid, $3, 'active', now(), now())
-     ON CONFLICT (cognito_sub) DO UPDATE
-       SET application_user_id = EXCLUDED.application_user_id,
-           email = EXCLUDED.email,
-           status = 'active',
-           linked_at = COALESCE(public.identity_accounts.linked_at, now())`,
-    [cognitoSub, appUserId, email],
-  );
+  try {
+    assertProductionCognitoWriteAllowed({ applicationUserId: appUserId, cognitoSub });
+  } catch (error) {
+    return {
+      ok: false,
+      statusCode: 403,
+      error: 'production_cognito_mapping_locked',
+      message: String(error.message || error).slice(0, 240),
+      spoofFieldsIgnored: spoof,
+    };
+  }
+
+  try {
+    await client.query(
+      `INSERT INTO public.identity_accounts (cognito_sub, application_user_id, email, status, linked_at, created_at)
+       VALUES ($1, $2::uuid, $3, 'active', now(), now())
+       ON CONFLICT (cognito_sub) DO UPDATE
+         SET application_user_id = EXCLUDED.application_user_id,
+             email = EXCLUDED.email,
+             status = 'active',
+             linked_at = COALESCE(public.identity_accounts.linked_at, now())`,
+      [cognitoSub, appUserId, email],
+    );
+  } catch (error) {
+    if (String(error.message || '').includes('production_cognito_mapping_locked')) {
+      return {
+        ok: false,
+        statusCode: 403,
+        error: 'production_cognito_mapping_locked',
+        spoofFieldsIgnored: spoof,
+      };
+    }
+    throw error;
+  }
 
   await client.query(
     `INSERT INTO public.profiles (id, email, full_name, created_at, updated_at)
