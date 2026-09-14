@@ -1,0 +1,225 @@
+{
+  "service": "checksops-api",
+  "environment": "production-prep",
+  "productionSupabaseChanged": false,
+  "productionWebhooksRedirected": false,
+  "productionDnsChanged": false,
+  "liveProviderTransactions": false,
+  "ok": true,
+  "statusCode": 200,
+  "productionExecution": false,
+  "flags": {
+    "AWS_PROVIDER_EXECUTION_ENABLED": true,
+    "AWS_MOOV_ENABLED": true,
+    "AWS_CHECKALT_ENABLED": false,
+    "AWS_PLAID_ENABLED": false,
+    "AWS_ACTUM_ENABLED": false,
+    "AWS_QUICKBOOKS_ENABLED": false,
+    "AWS_PROVIDER_LIVE_READS_ENABLED": true,
+    "AWS_PROVIDER_RECIPIENT_KYC_TOS_WRITES_ENABLED": true,
+    "AWS_PROVIDER_RECIPIENT_BANK_VERIFY_WRITES_ENABLED": false,
+    "AWS_PROVIDER_WEBHOOK_DRY_RUN": true,
+    "AWS_FINANCIAL_SANDBOX_SIMULATION_ENABLED": false,
+    "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": true,
+    "AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED": false
+  },
+  "permissions": {
+    "checkalt_deposit": {
+      "operation": "checkalt_deposit",
+      "permission": "deposit.submit",
+      "providers": [
+        "checkalt"
+      ],
+      "who": "Tenant owner/admin/manager + deposit.submit + step-up. NOT activated.",
+      "canRetry": true,
+      "canCancel": false,
+      "activated": false
+    },
+    "checkalt_approve": {
+      "operation": "checkalt_approve",
+      "permission": "deposit.approve",
+      "providers": [
+        "checkalt"
+      ],
+      "who": "Tenant owner/admin/manager + deposit.approve + step-up. NOT activated.",
+      "canRetry": false,
+      "canCancel": false,
+      "activated": false
+    },
+    "wallet_fund": {
+      "operation": "wallet_fund",
+      "permission": "wallet.fund",
+      "providers": [
+        "moov"
+      ],
+      "who": "Tenant owner/admin/manager + wallet.fund. NOT activated.",
+      "canRetry": true,
+      "canCancel": true,
+      "activated": false
+    },
+    "disbursement": {
+      "operation": "disbursement",
+      "permission": "disbursement.send",
+      "providers": [
+        "moov",
+        "plaid"
+      ],
+      "who": "Tenant owner/admin/manager + disbursement.send + step-up. NOT activated.",
+      "canRetry": true,
+      "canCancel": true,
+      "activated": false
+    },
+    "ach": {
+      "operation": "ach",
+      "permission": "payments.ach",
+      "providers": [
+        "moov"
+      ],
+      "who": "Same as disbursement plus send-funds.ach capability. NOT activated.",
+      "canRetry": true,
+      "canCancel": false,
+      "activated": false
+    },
+    "rtp": {
+      "operation": "rtp",
+      "permission": "payments.rtp",
+      "providers": [
+        "moov"
+      ],
+      "who": "Same as ACH plus RTP capability and requested_speed=instant. NOT activated.",
+      "canRetry": true,
+      "canCancel": false,
+      "activated": false
+    },
+    "wire": {
+      "operation": "wire",
+      "permission": "payments.wire",
+      "providers": [
+        "moov"
+      ],
+      "who": "Not a current production Moov primary rail. Documented, blocked. NOT activated.",
+      "canRetry": false,
+      "canCancel": false,
+      "activated": false
+    },
+    "pay_homeowner": {
+      "operation": "pay_homeowner",
+      "permission": "stakeholder.pay",
+      "providers": [
+        "moov"
+      ],
+      "who": "Tenant owner/admin/manager + stakeholder.pay. NOT activated.",
+      "canRetry": true,
+      "canCancel": true,
+      "activated": false
+    },
+    "pay_contractor": {
+      "operation": "pay_contractor",
+      "permission": "contractor.pay",
+      "providers": [
+        "moov",
+        "plaid"
+      ],
+      "who": "Tenant owner/admin/manager + contractor.pay / disbursement.send. NOT activated.",
+      "canRetry": true,
+      "canCancel": true,
+      "activated": false
+    },
+    "pay_vendor": {
+      "operation": "pay_vendor",
+      "permission": "contractor.pay",
+      "providers": [
+        "moov"
+      ],
+      "who": "Same as pay_contractor. NOT activated.",
+      "canRetry": true,
+      "canCancel": true,
+      "activated": false
+    },
+    "retry_failed": {
+      "operation": "retry_failed",
+      "permission": "(same as original operation)",
+      "providers": [
+        "checkalt",
+        "moov",
+        "plaid"
+      ],
+      "who": "Requires the original operation permission. NOT activated.",
+      "canRetry": false,
+      "canCancel": false,
+      "activated": false
+    },
+    "cancel": {
+      "operation": "cancel",
+      "permission": "(same as original operation, where supported)",
+      "providers": [
+        "moov"
+      ],
+      "who": "Wallet funding cancel is the only production-supported cancel. NOT activated.",
+      "canRetry": false,
+      "canCancel": false,
+      "activated": false
+    }
+  },
+  "amountUnits": {
+    "checkalt": {
+      "scale": "integer_cents",
+      "example": {
+        "dollars": 123.45,
+        "userAmount": 12345
+      }
+    },
+    "moov": {
+      "provider": "moov",
+      "apiVersions": [
+        "v2026.04.00",
+        "v2026.07.00"
+      ],
+      "field": "amount.value",
+      "scale": "integer_cents",
+      "currency": "USD",
+      "example": {
+        "dollars": 123.45,
+        "value": 12345
+      },
+      "notes": "Do not send dollar floats. Do not use amount.valueDecimal for ChecksOps execution."
+    }
+  },
+  "operations": [
+    "checkalt_deposit",
+    "checkalt_approve",
+    "wallet_fund",
+    "disbursement",
+    "ach",
+    "rtp",
+    "wire",
+    "pay_homeowner",
+    "pay_contractor",
+    "pay_vendor",
+    "retry_failed",
+    "cancel"
+  ],
+  "certificationFixtureCents": 12345,
+  "privilegedAuth": {
+    "policy": "totp_or_webauthn_before_privileged_and_financial",
+    "privilegedRoles": [
+      "admin",
+      "staff",
+      "owner",
+      "manager"
+    ],
+    "loginFirstFactorsUnchanged": [
+      "EMAIL_OTP",
+      "PASSWORD",
+      "WEB_AUTHN"
+    ],
+    "preferredMfaAtLogin": false,
+    "poolMfaIntended": "OPTIONAL",
+    "recovery": "verified_email",
+    "financialPermissionsActivated": true,
+    "providerExecutionEnabled": true,
+    "moneyMovementUnlocked": false,
+    "apiBehindCloudFrontRequiredBeforeFinancial": true
+  },
+  "financialOperatorStepUp": "totp_or_webauthn_required_before_activation"
+}

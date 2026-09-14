@@ -1,0 +1,48 @@
+{
+  "service": "checksops-api",
+  "environment": "production-prep",
+  "productionCutoverForbidden": true,
+  "productionSupabaseChanged": false,
+  "productionDnsChanged": false,
+  "productionAuthSwitched": false,
+  "productionWebhooksRedirected": false,
+  "financialActivationSqlApplied": false,
+  "plaidRequired": false,
+  "bridgesMustRemainDeployed": true,
+  "checkAltHandledSeparately": true,
+  "classA": {
+    "ingestSharedCheck": true,
+    "homeownerLedgerAttachUpload": true,
+    "sendSignatureRequest": true,
+    "stripeFailClosed": true,
+    "quickbooksFailClosed": true
+  },
+  "cognitoMfaPreferred": false,
+  "flags": {
+    "AWS_PROVIDER_EXECUTION_ENABLED": true,
+    "AWS_MOOV_ENABLED": true,
+    "AWS_CHECKALT_ENABLED": false,
+    "AWS_PLAID_ENABLED": false,
+    "AWS_ACTUM_ENABLED": false,
+    "AWS_QUICKBOOKS_ENABLED": false,
+    "AWS_PROVIDER_LIVE_READS_ENABLED": true,
+    "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": true
+  },
+  "webauthn": {
+    "origin": "https://checksops.com",
+    "rpId": "checksops.com"
+  },
+  "emailOtp": {
+    "authFlow": "USER_AUTH",
+    "preferredChallenge": "EMAIL_OTP"
+  },
+  "holds": {
+    "ok": false,
+    "failures": [
+      "AWS_PROVIDER_EXECUTION_ENABLED=true",
+      "AWS_MOOV_ENABLED=true",
+      "AWS_PROVIDER_LIVE_READS_ENABLED=true",
+      "AWS_FINANCIAL_PERMISSIONS_ACTIVATED=true"
+    ]
+  }
+}
