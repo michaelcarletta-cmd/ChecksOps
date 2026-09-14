@@ -30,8 +30,8 @@ const LEGACY_NOTE = {
 };
 
 const REPAIR_NOTES = {
-  'X-020': 'Source repaired to GET/POST ${awsApiBaseUrl()}/functions/v1/handle-email-unsubscribe (no VITE_SUPABASE_URL, no session invoke). Live locked SPA index-CiOVNYWh.js still concatenates blanked Supabase URL. Controlled production SPA release required. Class A handler already on /prep.',
-  'A5-305': 'Source repaired: uploadVerificationFile XHR posts to ${awsApiBaseUrl()}/functions/v1/moov-account-file-upload with Cognito bearer only. Live locked SPA still posts origin /functions/v1/moov-account-file-upload. Controlled production SPA release required. No KYC file uploaded for this audit.',
+  'X-020': 'Source repaired to GET/POST ${awsApiBaseUrl()}/functions/v1/handle-email-unsubscribe (no VITE_SUPABASE_URL, no session invoke). Live /prep GET ?token=test returns 404 JSON invalid_token (handler live; dummy token; no row writes). Live locked Unsubscribe-BdTAOTIR.js still fetch(`${blank}/functions/v1/handle-email-unsubscribe`)+apikey and origin GET returns SPA HTML. Controlled production SPA release required.',
+  'A5-305': 'Source repaired: uploadVerificationFile XHR posts to ${awsApiBaseUrl()}/functions/v1/moov-account-file-upload with Cognito bearer only. Live /prep OPTIONS 204. Live locked index-CiOVNYWh.js still POSTs /functions/v1/moov-account-file-upload (CloudFront 403). Controlled production SPA release required. No KYC file uploaded.',
   'A5-306': 'Document-type control for the repaired Moov KYC upload path. Live locked SPA still uses the leftover origin URL until a controlled SPA release.',
   'A5-307': 'Representative selector for the repaired Moov KYC upload path. Live locked SPA still uses the leftover origin URL until a controlled SPA release.',
   'A5-308': 'File input for the repaired Moov KYC upload path. Live locked SPA still uses the leftover origin URL until a controlled SPA release.',

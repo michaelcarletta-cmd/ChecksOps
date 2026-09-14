@@ -3,7 +3,7 @@
   "inventory_source": {
     "path": "docs/audits/inventory-2026-09-11.json",
     "existing_inventory": 1421,
-    "note": "Same 1,421 IDs. Prior result frozen except explicit N/A — LEGACY_UNUSED reclass of unused Zapier/Stripe UI."
+    "note": "Same 1,421 IDs. Prior result frozen except explicit N/A \u2014 LEGACY_UNUSED reclass of unused Zapier/Stripe UI."
   },
   "totals": {
     "existing_inventory": 1421,
@@ -100,5 +100,14 @@
     }
   },
   "controlled_spa_release_required": true,
-  "production_spa_still_locked": true
+  "production_spa_still_locked": true,
+  "live_probes": {
+    "prep_health": "200 production-prep",
+    "unsubscribe_prep_get_dummy_token": "404 invalid_token",
+    "unsubscribe_origin_get": "200 text/html SPA",
+    "moov_upload_prep_options": "204",
+    "moov_upload_origin_post": "403 CloudFront",
+    "locked_spa_bundle": "index-CiOVNYWh.js",
+    "money_movement": false
+  }
 }

@@ -19553,7 +19553,7 @@
       "blocker_secondary": null,
       "taxonomy_pass": 7,
       "post_cutover_status": "SUPABASE_DEPENDENCY",
-      "post_cutover_note": "Source repaired: uploadVerificationFile XHR posts to ${awsApiBaseUrl()}/functions/v1/moov-account-file-upload with Cognito bearer only. Live locked SPA still posts origin /functions/v1/moov-account-file-upload. Controlled production SPA release required. No KYC file uploaded for this audit.",
+      "post_cutover_note": "Source repaired: uploadVerificationFile XHR posts to ${awsApiBaseUrl()}/functions/v1/moov-account-file-upload with Cognito bearer only. Live /prep OPTIONS 204. Live locked index-CiOVNYWh.js still POSTs /functions/v1/moov-account-file-upload (CloudFront 403). Controlled production SPA release required. No KYC file uploaded.",
       "post_cutover_classified_at": "2026-09-14T18:30:00.000Z",
       "repair_candidate": "PREPARED_SPA_RELEASE_REQUIRED"
     },
@@ -37834,7 +37834,7 @@
       "defect_id": null,
       "pass": 5,
       "post_cutover_status": "SUPABASE_DEPENDENCY",
-      "post_cutover_note": "Source repaired to GET/POST ${awsApiBaseUrl()}/functions/v1/handle-email-unsubscribe (no VITE_SUPABASE_URL, no session invoke). Live locked SPA index-CiOVNYWh.js still concatenates blanked Supabase URL. Controlled production SPA release required. Class A handler already on /prep.",
+      "post_cutover_note": "Source repaired to GET/POST ${awsApiBaseUrl()}/functions/v1/handle-email-unsubscribe (no VITE_SUPABASE_URL, no session invoke). Live /prep GET ?token=test returns 404 JSON invalid_token (handler live; dummy token; no row writes). Live locked Unsubscribe-BdTAOTIR.js still fetch(`${blank}/functions/v1/handle-email-unsubscribe`)+apikey and origin GET returns SPA HTML. Controlled production SPA release required.",
       "post_cutover_classified_at": "2026-09-14T18:30:00.000Z",
       "repair_candidate": "PREPARED_SPA_RELEASE_REQUIRED"
     },

@@ -37,12 +37,14 @@ See `UNUSED_INTEGRATIONS_REMOVAL_2026-09-14.md`.
 
 ## Repairs prepared (not released)
 
-| ID | Repair in this branch | Live locked SPA |
-|---|---|---|
-| X-020 | `Unsubscribe.tsx` GET/POST → `/prep/functions/v1/handle-email-unsubscribe` | Still blanked `VITE_SUPABASE_URL` → origin `/functions/v1/...` |
-| A5-305–A5-310 | `verificationFiles.ts` XHR → `/prep/functions/v1/moov-account-file-upload` + Cognito bearer | Still origin `/functions/v1/moov-account-file-upload` |
+| ID | Repair in this branch | Live locked SPA | Live `/prep` probe |
+|---|---|---|---|
+| X-020 | `Unsubscribe.tsx` GET/POST → `/prep/functions/v1/handle-email-unsubscribe` | `Unsubscribe-BdTAOTIR.js` still `fetch(${blank}/functions/v1/handle-email-unsubscribe)` + apikey; origin GET returns SPA HTML | GET `?token=test` → **404 JSON `invalid_token`**. OPTIONS 204. Dummy token only. |
+| A5-305–A5-310 | `verificationFiles.ts` XHR → `/prep/functions/v1/moov-account-file-upload` + Cognito bearer | `index-CiOVNYWh.js` compiles `POST /functions/v1/moov-account-file-upload` | OPTIONS **204**. No file uploaded. Origin POST is CloudFront 403. |
 
 **Controlled production SPA release is required** for these two repairs to take effect. This branch does not unlock or `--apply` the SPA.
+
+Public AWS paths also responded without money movement: `POST /prep/public/signature-document` 400 `validate_token`; `POST /prep/public/endorsement` 404 `token_consumed`. Those UI IDs stay NOT_RETESTED_POST_CUTOVER (API probe ≠ button retest).
 
 Resend is unchanged. SES was not started.
 
