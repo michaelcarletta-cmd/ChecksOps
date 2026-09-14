@@ -66,7 +66,7 @@ Live production browser (`VITE_AUTH_PROVIDER=cognito`, `index-CiOVNYWh.js`) uses
 |---|---|---|
 | `VITE_SUPABASE_URL` on production-aws | LEGACY_UNUSED — REMOVE | Blanked in that Vite mode; leftover concatenations were the X-020 / A5-305 bugs |
 | `.env.production` Supabase URL/key | TEMPORARY_ROLLBACK/RECONCILIATION — RETIRE LATER | Wrong mode; guarded deploy uses `.env.production-aws` |
-| Hardcoded `PRODUCTION_SUPABASE_URL` in `publicWorkflowApi.ts` | LEGACY_UNUSED — REMOVE | Dead on Cognito (`isAwsStaging()` uses `/prep/public/*`) |
+| Hardcoded `PRODUCTION_SUPABASE_URL` in `publicWorkflowApi.ts` | LEGACY_UNUSED — REMOVE | Removed so production-aws artifacts pass the `supabase_host` guard. Cognito uses `/prep/public/*`. |
 
 ## Webhooks / bridges
 

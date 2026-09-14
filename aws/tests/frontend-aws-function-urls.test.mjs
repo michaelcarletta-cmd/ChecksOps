@@ -60,6 +60,14 @@ test('unsubscribe GET/POST interpreters accept AWS handler shapes', () => {
   assert.equal(interpretUnsubscribeConfirm(503, { error: 'unsubscribe_failed' }).kind, 'error');
 });
 
+test('public sign/endorse helper never embeds a supabase.co host', () => {
+  const source = sourceOf('src/lib/publicWorkflowApi.ts');
+  assert.doesNotMatch(source, /nbcqwpysqgyxrrbgtmkw\.supabase\.co/);
+  assert.doesNotMatch(source, /https:\/\/[a-z0-9]+\.supabase\.co/);
+  assert.match(source, /\/public\/signature-document/);
+  assert.match(source, /\/public\/endorsement/);
+});
+
 test('Unsubscribe and verification upload no longer concatenate VITE_SUPABASE_URL', () => {
   const unsubscribe = sourceOf('src/pages/Unsubscribe.tsx');
   const upload = sourceOf('src/lib/payments/verificationFiles.ts');
