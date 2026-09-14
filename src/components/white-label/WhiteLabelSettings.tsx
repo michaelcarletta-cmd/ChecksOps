@@ -65,7 +65,10 @@ const MortgageCompaniesDirectory = lazy(() =>
 function resolveTenantBase(slug?: string | null): string {
   if (!slug) return "";
   if (isCheckOpsHost()) return `/${slug}`;
-  return `/wl/${slug}`;
+  if (typeof window !== "undefined" && window.location.pathname.startsWith("/wl/")) {
+    return `/wl/${slug}`;
+  }
+  return "";
 }
 
 const TabLoader = () => (

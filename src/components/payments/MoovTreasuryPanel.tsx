@@ -68,7 +68,7 @@ export function MoovTreasuryPanel() {
   } = useSweepConfig("operating");
 
   const [rail, setRail] = useState<SweepPushRail | "">("");
-  const [minimum, setMinimum] = useState("0.00");
+  const [minimum, setMinimum] = useState("");
   const [descriptor, setDescriptor] = useState("");
 
   useEffect(() => {
@@ -91,6 +91,14 @@ export function MoovTreasuryPanel() {
       cents = dollarsToCents(minimum);
     } catch (e) {
       toast({ title: "Check the minimum balance", description: (e as Error).message, variant: "destructive" });
+      return;
+    }
+    if (cents <= 0) {
+      toast({
+        title: "Choose a retain minimum first",
+        description: "Automatic payouts cannot be enabled at $0.00. Enter a dollar amount to keep in the wallet.",
+        variant: "destructive",
+      });
       return;
     }
     try {

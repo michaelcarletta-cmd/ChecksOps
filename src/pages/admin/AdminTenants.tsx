@@ -842,6 +842,7 @@ function TenantBillingBankPanel({ tenantId, tenantName }: { tenantId: string; te
   const [billing, setBilling] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [charging, setCharging] = useState(false);
+  const [refunding, setRefunding] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -908,6 +909,22 @@ function TenantBillingBankPanel({ tenantId, tenantName }: { tenantId: string; te
     else sonnerToast.info(JSON.stringify(r ?? data));
   };
 
+  const refundNow = async () => {
+    setRefunding(true);
+    const { data, error } = await supabase.functions.invoke("moov-refund", {
+      body: {
+        tenant_id: tenantId,
+        amount_cents: 1,
+        kind: "refund",
+        description: "ChecksOps Tenant Management refund",
+      },
+    });
+    setRefunding(false);
+    const failure = (data as any)?.error ?? (error ? await readFnError(error) : null);
+    if (failure) return sonnerToast.error(failure);
+    sonnerToast.success("Refund submitted to the organization's wallet.");
+  };
+
   const linkForBilling = async () => {
     if (!bank?.id) return;
     const payload = {
@@ -929,9 +946,13 @@ function TenantBillingBankPanel({ tenantId, tenantName }: { tenantId: string; te
       title="Billing Bank Account"
       icon={<ShieldCheck className="h-4 w-4 text-sky-500" />}
       accent="bg-gradient-to-r from-sky-500 to-sky-500/30"
-      description={`Moov-verified account we pull maintenance fees from for ${tenantName}.`}
+      description={`Moov-verified account we pull maintenance fees from for ${tenantName}. Refunds return platform funds to that organization's wallet — Tenant Management does not send partner or vendor payouts on their behalf.`}
     >
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <Button size="sm" variant="outline" onClick={refundNow} disabled={refunding}>
+          {refunding ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
+          Refund to tenant wallet
+        </Button>
         <Button size="sm" onClick={pullNow} disabled={charging}>
           {charging ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
           Pull maintenance fee now
