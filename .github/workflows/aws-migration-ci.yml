@@ -9,6 +9,7 @@ on:
       - 'package.json'
       - 'bun.lock'
       - '.env.aws.example'
+      - '.env.production-aws'
       - '.env.production.aws.example'
       - '.github/workflows/aws-migration-ci.yml'
   push:
@@ -21,6 +22,7 @@ on:
       - 'package.json'
       - 'bun.lock'
       - '.env.aws.example'
+      - '.env.production-aws'
       - '.env.production.aws.example'
       - '.github/workflows/aws-migration-ci.yml'
 
@@ -62,6 +64,21 @@ jobs:
 
       - name: Build AWS staging frontend
         run: bun run build:aws
+
+      - name: Prove leftover Supabase production build fails the production artifact guard
+        run: |
+          set -euo pipefail
+          bun run build
+          if bun run validate:production-spa; then
+            echo 'Supabase-mode dist must fail validate:production-spa'
+            exit 1
+          fi
+
+      - name: Build and validate canonical production AWS SPA (no deploy)
+        run: |
+          set -euo pipefail
+          bun run build:production-spa
+          bun run validate:production-spa
 
       - name: Assert production activation remains disabled in template
         shell: bash

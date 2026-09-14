@@ -31,15 +31,23 @@ test('financial activation SQL remains a NOT_APPLIED stub and is not auto-applie
   assert.match(ci, /64_financial_activation_grants/);
 });
 
-test('live production frontend env stays Supabase-only', () => {
+test('leftover Lovable production env stays Supabase-only; AWS production uses production-aws', () => {
   const prod = read('.env.production');
   assert.match(prod, /VITE_SUPABASE_URL=/);
   assert.doesNotMatch(prod, /VITE_AUTH_PROVIDER=cognito/);
   assert.doesNotMatch(prod, /VITE_COGNITO_USER_POOL_ID=/);
+  const canonical = read('.env.production-aws');
+  assert.match(canonical, /VITE_AUTH_PROVIDER=cognito/);
+  assert.match(canonical, /VITE_COGNITO_USER_POOL_ID=us-east-1_h00WorYMT/);
+  assert.match(canonical, /VITE_COGNITO_USER_POOL_CLIENT_ID=3ja9fqaq2fjkv3i6up2varcqpe/);
+  assert.match(canonical, /VITE_CHECKSOPS_API_URL=\/prep/);
+  assert.doesNotMatch(canonical, /us-east-1_vPmQ7cL1F/);
+  assert.doesNotMatch(canonical, /psr19uhop4/);
   const example = read('.env.production.aws.example');
-  assert.match(example, /DO NOT USE YET/);
+  assert.match(example, /deploy-production-spa/);
   assert.match(example, /us-east-1_vPmQ7cL1F/);
   assert.match(example, /Plaid is not required/);
+  assert.doesNotMatch(example, /DO NOT USE YET/);
 });
 
 test('cutover runbook is STOP / BLOCKED and keeps bridges; Plaid is not required', () => {

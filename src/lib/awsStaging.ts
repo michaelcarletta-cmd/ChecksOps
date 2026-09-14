@@ -1,7 +1,7 @@
 /**
- * AWS Cognito frontend switch. Production Vite builds use `.env.production`
- * and never set VITE_AUTH_PROVIDER=cognito, so this stays false for ChecksOps.com
- * until an approved production AWS frontend env is deployed.
+ * AWS Cognito frontend switch. Leftover Lovable `.env.production` stays
+ * Supabase-only. Canonical production builds use `--mode production-aws`
+ * (`node scripts/deploy-production-spa.mjs`) which sets VITE_AUTH_PROVIDER=cognito.
  */
 
 import { resolveAwsApiBaseUrl } from "@/lib/awsApiBase";

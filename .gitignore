@@ -13,6 +13,7 @@ dist-ssr
 *.local
 .env
 .env.aws
+aws/cutover/production-spa-fingerprints/latest.json
 
 # AWS SAM build artifacts
 .aws-sam/

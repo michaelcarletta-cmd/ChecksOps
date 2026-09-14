@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { EXPECTED_EIGHT, NINTH_ID as MAPPED_NINTH, PROBE_SUB as MAPPED_PROBE } from '../expected-mappings.mjs';
+import { assertOneshotCognitoWriteAllowed } from '../production-cognito-locks.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const SQL_DIR = path.join(ROOT, '..', 'sql');
@@ -152,6 +153,20 @@ export const reconcileKnownUsers = async (client) => {
 };
 
 export const clearIsolatedTest = async (client) => {
+  try {
+    assertOneshotCognitoWriteAllowed(TESTER_ID);
+  } catch (error) {
+    return {
+      cleared: [],
+      remainingIsolatedTest: null,
+      probeSubRows: [],
+      tester: null,
+      testerProfilePreserved: true,
+      applicationUuidUnchanged: true,
+      pass: false,
+      error: error.code || error.message,
+    };
+  }
   const returned = (await client.query(readSql('09_clear_isolated_test.sql'))).rows;
   const remaining = Number((await client.query(
     `SELECT count(*)::int AS n FROM public.identity_accounts WHERE status = 'isolated_test'`,
@@ -207,6 +222,11 @@ export const applyLinks = async (client, links) => {
     }
     if (String(applicationUserId) === String(cognitoSub)) {
       return { applied: false, error: 'refusing application_user_id equal to cognito_sub' };
+    }
+    try {
+      assertOneshotCognitoWriteAllowed(applicationUserId);
+    } catch (error) {
+      return { applied: false, error: error.code || error.message };
     }
     if (seenSubs.has(cognitoSub) || seenIds.has(applicationUserId)) {
       return { applied: false, error: 'duplicate application UUID or cognito_sub in payload' };

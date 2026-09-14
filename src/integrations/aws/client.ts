@@ -1,6 +1,7 @@
 import type { Session, User } from "@supabase/supabase-js";
 import {
   AWS_STAGING_AUTH_SESSION_KEY,
+  AWS_STAGING_PUBLIC_CONFIG,
   awsApiBaseUrl,
 } from "@/lib/awsStaging";
 import { createAwsStorageAdapter, rewriteStorageFields } from "./storage";
@@ -863,6 +864,11 @@ export function createAwsStagingClient(options: AwsStagingClientOptions = {}) {
     removeChannel() {},
     getChannels() {
       return [];
+    },
+    cognitoPublicConfig: {
+      userPoolId: AWS_STAGING_PUBLIC_CONFIG.userPoolId,
+      userPoolClientId: AWS_STAGING_PUBLIC_CONFIG.userPoolClientId,
+      region: AWS_STAGING_PUBLIC_CONFIG.region,
     },
   };
 }
