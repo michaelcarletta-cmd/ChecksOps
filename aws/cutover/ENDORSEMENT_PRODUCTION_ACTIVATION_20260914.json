@@ -1,0 +1,61 @@
+{
+  "verdict": "NO GO — ENDORSEMENT PRODUCTION ACTIVATION FAILED",
+  "stoppedAt": "step_1_configure_production_provider_secret",
+  "reason": "The authorized Resend API key is not available to this agent and is not present in checksops/production/provider. Activation did not invent a key, did not copy from Supabase Edge, and did not mutate production.",
+  "authorizedKeySource": {
+    "system": "production_supabase_edge_secrets",
+    "projectRef": "nbcqwpysqgyxrrbgtmkw",
+    "secretName": "RESEND_API_KEY",
+    "readableThisRun": false,
+    "notes": [
+      "No SUPABASE_ACCESS_TOKEN in this environment",
+      "AWS Secrets Manager has no Resend secret",
+      "SSM has no Resend parameter",
+      "Production Lambda env has no RESEND_*",
+      "Cursor injected secrets are only CURSOR_AWS_ASSUME_IAM_ROLE_ARN"
+    ]
+  },
+  "verifiedSenderThatWouldBeUsed": {
+    "from": "Freedom Claims <claims@freedomclaims.work>",
+    "domain": "freedomclaims.work",
+    "notes": "Historical production Resend default. Apex checksops.com / noreply@checksops.com are not Resend-verified and must not be used until verified."
+  },
+  "productionMutationsThisRun": {
+    "providerSecretUpdated": false,
+    "lambdaCodeDeployed": false,
+    "lambdaEnvUpdated": false,
+    "spaUnlocked": false,
+    "spaRedeployed": false,
+    "cognitoMappingsChanged": false,
+    "moovWebhookChanged": false,
+    "checkaltConfigChanged": false,
+    "financialFingerprintChanged": false,
+    "realDepositInitiated": false,
+    "realPayeeEmailSent": false,
+    "autoAdvanceEnabled": false,
+    "broadRecipientDeliveryEnabled": false,
+    "check9562Mutated": false
+  },
+  "preserved": {
+    "spaBundle": "index-CiOVNYWh.js",
+    "spaGitCommit": "868e69387d63af511f4c185775b611dea2c8fc47",
+    "spaLocked": true,
+    "cognitoPoolId": "us-east-1_h00WorYMT",
+    "cognitoClientId": "3ja9fqaq2fjkv3i6up2varcqpe",
+    "prepLambdaCodeSha256": "B8cQg1FnQzUSx7B/nANevkWrTCV/UPgX+e4GtXzlqvk=",
+    "prepLambdaLastModified": "2026-09-14T13:39:41.000+0000",
+    "financialFingerprintSha256": "ccb9a1144d46f607f542aa61e765098177eb8a15d318e0a081d6b762ccd021b3",
+    "moneyFlagsUnchanged": {
+      "AWS_MOOV_ENABLED": "true",
+      "AWS_CHECKALT_ENABLED": "true",
+      "AWS_PROVIDER_EXECUTION_ENABLED": "true",
+      "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": "true",
+      "AWS_PROVIDER_WEBHOOK_DRY_RUN": "false"
+    }
+  },
+  "resumeWhen": [
+    "A human copies production Edge RESEND_API_KEY into checksops/production/provider (never paste into chat/logs)",
+    "Set RESEND_FROM_EMAIL to Freedom Claims <claims@freedomclaims.work>",
+    "Re-run controlled activation from step 3 (Lambda deploy) after confirming RESEND_API_KEY_configured=true without printing the value"
+  ]
+}
