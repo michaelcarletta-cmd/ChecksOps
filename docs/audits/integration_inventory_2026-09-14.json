@@ -1,0 +1,81 @@
+{
+  "workstream": "ChecksOps Integration & Release",
+  "phase": "validated baseline inventory (no deploy)",
+  "generatedAt": "2026-09-14T01:20:00Z",
+  "supersedes": "docs/audits/INTEGRATION_INVENTORY_2026-09-13.md",
+  "liveIdentity": "docs/audits/INTEGRATION_VALIDATED_BASELINE_2026-09-14.md",
+  "deployedThisTurn": false,
+  "realSesThisTurn": false,
+  "endorsementEmailE2E": "PASS_AND_CLOSED",
+  "sharedStagingFreezeNonIntegration": true,
+  "authoritativeReleaseLineage": {
+    "coherentBranch": "cursor/integration-coherent-ec26",
+    "coherentHead": "3d0235c31994493468c7aed732dc1125e501b617",
+    "coherentPr": 282,
+    "sql72Sql73Branch": "cursor/public-endorsement-rpc-ec26",
+    "sql72Sql73Pr": 289,
+    "sql72Sql73Head": "e7c7bfde3fc352e9d320a4570178cae27785a2c0",
+    "commitsRequiredInNextCoherentArtifact": [
+      "e34f6878cfed4ca422f6c0c2b073a0b35e3bb0d3",
+      "320685542f070ba23ed8970d870f3eded590fd9a",
+      "e7c7bfde3fc352e9d320a4570178cae27785a2c0"
+    ]
+  },
+  "liveStagingPins": {
+    "lambdaCodeSha256": "OSiyHTQqSq5J3QRZCKdDrQ7PRW5qPWeJS71LZ46LIOE=",
+    "spaIndexHtmlEtag": "113dfd26211290d0be78377d4b8e1ee2",
+    "sql73Fingerprint": "d388bb4ec4a9cd6ee83d7e02e193b47c",
+    "sql72Fingerprint": "445994fc428e76a872899c37701cb590"
+  },
+  "sql": {
+    "appliedOnStaging": ["29", "39", "52", "69", "71", "72", "73"],
+    "intentionallyUnapplied": ["30"],
+    "nextPreflightOrder": ["29", "52", "39", "69", "71", "72", "73"],
+    "files": {
+      "29": "aws/rls/sql/29_mortgage_ops_agent_access.sql",
+      "39": "aws/write-path/sql/39_detected_claim_number_grant.sql",
+      "52": "aws/workflows/sql/52_mortgage_ops_staff_grants.sql",
+      "69": "aws/workflows/sql/69_staging_homeowner_ledger_view.sql",
+      "71": "aws/workflows/sql/71_endorsement_email_audit.sql",
+      "72": "aws/workflows/sql/72_public_endorsement_token_lookup.sql",
+      "73": "aws/workflows/sql/73_public_endorsement_submit_payee.sql",
+      "30": "aws/rls/sql/30_tenant_documents_mortgage_doc_type.sql"
+    }
+  },
+  "environment": {
+    "AWS_EMAIL_MODE": "ses-identity",
+    "AWS_EMAIL_SES_LOCK_RECIPIENT": "mcarletta@freedomadj.com",
+    "AWS_PROVIDER_EXECUTION_ENABLED": "false",
+    "checkAlt": false,
+    "moov": false
+  },
+  "ready": [
+    "live-staging-validated-baseline",
+    "sql-72-73-in-git-pr-289",
+    "sql-72-73-applied-on-staging",
+    "endorsement-email-e2e-closed"
+  ],
+  "notThisTurn": [
+    "deploy-lambda",
+    "deploy-spa",
+    "apply-sql",
+    "real-ses",
+    "merge-to-main",
+    "touch-production",
+    "touch-production-prep"
+  ],
+  "notReadyStayDark": [
+    "#250",
+    "#259",
+    "#265",
+    "#266",
+    "#269",
+    "#270",
+    "#239-wholesale",
+    "#234-wholesale",
+    "lineage-A-email.mjs",
+    "provider-execution",
+    "DynamoDB",
+    "SQL-30"
+  ]
+}

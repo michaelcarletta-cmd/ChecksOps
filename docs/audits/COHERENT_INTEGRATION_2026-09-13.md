@@ -6,6 +6,8 @@
 **Provider execution:** remains fail-closed (`AWS_PROVIDER_EXECUTION_ENABLED=false`)  
 **SQL apply this turn:** none (including SQL 30)
 
+**Successor (2026-09-14):** live staging is the validated Integration baseline in `docs/audits/INTEGRATION_VALIDATED_BASELINE_2026-09-14.md` and `docs/audits/INTEGRATION_INVENTORY_2026-09-14.md`. SQL **29/39/52/69/71/72/73** are applied; SQL **30** remains unapplied. Lambda pin `OSiyHTQqSq5J3QRZCKdDrQ7PRW5qPWeJS71LZ46LIOE=`; SPA ETag `113dfd26211290d0be78377d4b8e1ee2`. Endorsement email E2E is **PASS and CLOSED**. This 2026-09-13 report remains the Git-merge record for `3d0235c31`. The next coherent artifact **must include PR #289** (SQL 72/73 + GET txn). Do not deploy from this file.
+
 ## Verdict
 
 | Gate | Result |
@@ -145,7 +147,7 @@ SQL 30 remains **KEEP UNAPPLIED**.
 
 ### Local disposable PG16 (does not touch staging)
 
-`aws/tests/coherent-sql-preflight-pg.test.mjs` applies SQL **29, 52, 39, 69, 71 twice** after stubs + role shim + auth UID GUC.
+`aws/tests/coherent-sql-preflight-pg.test.mjs` applies SQL **29, 52, 39, 69, 71, 72, 73 twice** after stubs + role shim + auth UID GUC. SQL 72/73 were added after this 2026-09-13 merge record; they are required in the next coherent artifact (PR #289).
 
 | File | Local result | Live last-known | Live this turn | Notes |
 |---|---|---|---|---|
@@ -322,4 +324,6 @@ J. Only after I PASS + human authorization: one real endorsement SES test, then 
 ## Stop line
 
 **PASS** Git integration, SESv2 pin, clean Lambda/SPA build, and 781/781 automated tests on `cursor/integration-coherent-ec26`.  
-**NOT READY** for one authorized coherent staging deployment until live SQL preflight succeeds and operator SQL 29/52/39 are applied.
+**NOT READY** (as of 2026-09-13) for one authorized coherent staging deployment until live SQL preflight succeeds and operator SQL 29/52/39 are applied.
+
+**2026-09-14 successor:** those SQL files are now applied on staging, plus SQL 72 and SQL 73 from PR #289. See `docs/audits/INTEGRATION_VALIDATED_BASELINE_2026-09-14.md`. The next Git-built coherent zip must include `e34f6878c`, `320685542`, and `e7c7bfde3`. Do not deploy in the documentation turn.

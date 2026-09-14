@@ -686,12 +686,35 @@ export const runSubmitEndorsement = async (client, event, body, spoof, deps = {}
       spoofFieldsIgnored: spoof,
     };
   }
-  await updatePayeeSigned(client, endorsement, {
-    status: 'signed',
-    token: newToken,
-    image: signatureImageUrl,
-    signedAt: new Date().toISOString(),
-  });
+  // SQL 73 persists the matching payee in the same SECURITY DEFINER
+  // transaction as the endorsement sign. Do not depend on a second
+  // public-path UPDATE that RLS can zero-row / roll back independently.
+  if (String(doc.payee_status || '') !== 'signed') {
+    if (endorsement.payee_id) {
+      return {
+        ok: false,
+        statusCode: 409,
+        error: 'payee_persist_failed',
+        message: 'Public submit did not persist the matching payee as signed',
+        spoofFieldsIgnored: spoof,
+      };
+    }
+    const payeeWrite = await updatePayeeSigned(client, endorsement, {
+      status: 'signed',
+      token: newToken,
+      image: signatureImageUrl,
+      signedAt: new Date().toISOString(),
+    });
+    if (!payeeWrite?.ok && !payeeWrite?.skipped) {
+      return {
+        ok: false,
+        statusCode: 409,
+        error: payeeWrite?.error || 'payee_persist_failed',
+        message: payeeWrite?.message || 'Payee endorsement state was not updated',
+        spoofFieldsIgnored: spoof,
+      };
+    }
+  }
   await auditEndorsement(client, {
     endorsement_id: endorsement.id,
     check_id: endorsement.check_id,
@@ -788,9 +811,14 @@ export const runPublicEndorsement = async (event, deps = {}) => {
   try {
     opened = await publicDb(write, deps);
     const { client } = opened;
+    // GET also needs a transaction: safeQuery wraps the SQL 72 RPC in SAVEPOINT,
+    // and PostgreSQL rejects SAVEPOINT outside a transaction block. That swallow
+    // made unused tokens look consumed/invalid even with the RPC present.
+    await client.query('BEGIN');
     if (write) {
-      await client.query('BEGIN');
       await client.query('SET TRANSACTION READ WRITE');
+    } else {
+      await client.query('SET TRANSACTION READ ONLY');
     }
     let result;
     if (action === 'get_endorsement_data') {
@@ -802,16 +830,14 @@ export const runPublicEndorsement = async (event, deps = {}) => {
     } else {
       result = { ok: false, statusCode: 400, error: 'Unknown action', spoofFieldsIgnored: spoof };
     }
-    if (write) {
-      if (result.ok !== false && (result.statusCode || 200) < 400) {
-        await client.query('COMMIT');
-      } else {
-        await client.query('ROLLBACK');
-      }
+    if (result.ok !== false && (result.statusCode || 200) < 400) {
+      await client.query('COMMIT');
+    } else {
+      await client.query('ROLLBACK');
     }
     return result;
   } catch (error) {
-    if (opened?.client && write) {
+    if (opened?.client) {
       try { await opened.client.query('ROLLBACK'); } catch { /* ignore */ }
     }
     return {

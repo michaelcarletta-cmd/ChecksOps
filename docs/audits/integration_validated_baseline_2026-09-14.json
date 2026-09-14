@@ -1,0 +1,96 @@
+{
+  "workstream": "ChecksOps Integration & Release",
+  "document": "validated Integration baseline",
+  "generatedAt": "2026-09-14T01:20:00Z",
+  "deployedThisTurn": false,
+  "realSesThisTurn": false,
+  "endorsementEmailE2E": "PASS_AND_CLOSED",
+  "sharedStagingFreezeNonIntegration": true,
+  "authoritative": true,
+  "pin": {
+    "lambdaFunction": "checksops-staging-api",
+    "lambdaCodeSha256": "OSiyHTQqSq5J3QRZCKdDrQ7PRW5qPWeJS71LZ46LIOE=",
+    "pinOnShaNotRevisionId": true,
+    "lambdaRevisionIdAfterSesRestore": "dc0dc597-e8b7-435b-aff4-6906001b9dcf",
+    "lambdaLastModified": "2026-09-14T00:54:33.000+0000",
+    "spaIndexHtmlEtag": "113dfd26211290d0be78377d4b8e1ee2",
+    "spaIndexJs": "index-a512Q1W0.js",
+    "spaEndorseJs": "Endorse-CUIf-fxB.js",
+    "spaLastRestored": "2026-09-13T12:32:10Z",
+    "spaBucket": "checksops-staging-frontend-c48b",
+    "cloudfrontDistributionId": "E1CG52WRQZI7X1",
+    "sql73Fingerprint": "d388bb4ec4a9cd6ee83d7e02e193b47c",
+    "sql72Fingerprint": "445994fc428e76a872899c37701cb590"
+  },
+  "lambdaComposition": {
+    "coherentGitZipSha256": "Wk5V+GVPry6FUpty7Jn21YZeQ62TMBXo4oDM0bj2IBI=",
+    "coherentGitSha": "3d0235c31994493468c7aed732dc1125e501b617",
+    "plusSurgicalGetTxnPatch": "320685542f070ba23ed8970d870f3eded590fd9a",
+    "isPlainGitArchiveOfHead": false,
+    "jsFailClosedPayeeSkipDeployed": false
+  },
+  "environment": {
+    "AWS_EMAIL_MODE": "ses-identity",
+    "AWS_EMAIL_SES_LOCK_RECIPIENT": "mcarletta@freedomadj.com",
+    "AWS_PROVIDER_EXECUTION_ENABLED": "false",
+    "checkAlt": false,
+    "moov": false
+  },
+  "database": {
+    "applied": ["29", "39", "52", "69", "71", "72", "73"],
+    "intentionallyUnapplied": ["30"],
+    "sql73": {
+      "file": "aws/workflows/sql/73_public_endorsement_submit_payee.sql",
+      "function": "aws_public_submit_endorsement(text, text, text, text, text, text, uuid, uuid)",
+      "owner": "checksops_admin",
+      "securityDefiner": true,
+      "searchPath": "public, pg_temp",
+      "rowSecurity": "off",
+      "md5": "d388bb4ec4a9cd6ee83d7e02e193b47c",
+      "execute": ["checksops", "checksops_admin"],
+      "publicExecute": false,
+      "checksopsTableUpdateCheckPayees": false
+    },
+    "stableSiblings": {
+      "aws_public_endorsement_by_token": "445994fc428e76a872899c37701cb590",
+      "aws_public_reject_endorsement": "ab7190e3d7b9c092d436fc59fac45d07",
+      "aws_mark_endorsement_request_sent": "a69ab02bcc8432c8c1edc7021888d3b6",
+      "sql71SubmitRollback": "89d7c65888ee551fc2488fefdf6d287c"
+    }
+  },
+  "gitLineageRequiredInNextCoherentArtifact": {
+    "coherentBranch": "cursor/integration-coherent-ec26",
+    "coherentHead": "3d0235c31994493468c7aed732dc1125e501b617",
+    "coherentPr": 282,
+    "sql72Sql73Branch": "cursor/public-endorsement-rpc-ec26",
+    "sql72Sql73Pr": 289,
+    "commits": [
+      {
+        "sha": "e34f6878cfed4ca422f6c0c2b073a0b35e3bb0d3",
+        "role": "SQL 72 public endorsement token lookup"
+      },
+      {
+        "sha": "320685542f070ba23ed8970d870f3eded590fd9a",
+        "role": "public GET read-only txn so SQL 72 SAVEPOINT runs"
+      },
+      {
+        "sha": "e7c7bfde3fc352e9d320a4570178cae27785a2c0",
+        "role": "SQL 73 submit-payee RPC + JS skip of second public payee UPDATE"
+      }
+    ],
+    "nextBuildMustMergePr289": true,
+    "sqlApplyOrder": ["29", "52", "39", "69", "71", "72", "73"],
+    "sql30": "KEEP UNAPPLIED"
+  },
+  "productionPrep": {
+    "doNotTouch": true,
+    "lastRecordedSha": "ZJsY9c2HBHmBLsri4U8Yq0mbUg/j/eupd0YlbBJ1AmM=",
+    "lastModified": "2026-09-13T18:34:36Z",
+    "driftFromThisWorkstream": false
+  },
+  "deferred": {
+    "p2UnknownTokenGetMapsToTokenConsumed": true,
+    "sql30": "intentionally unapplied",
+    "mailboxOutlook": "EXTERNAL_VERIFICATION_LIMITATION"
+  }
+}
