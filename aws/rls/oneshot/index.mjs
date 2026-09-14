@@ -65,6 +65,10 @@ const HELPER_NAMES = [
   'aws_can_write_check',
   'aws_can_write_claim',
   'aws_can_write_same_tenant_user',
+  'aws_connect_partner_by_code',
+  'aws_share_check_with_partner',
+  'aws_revoke_shared_check',
+  'aws_revoke_tenant_partnership',
 ];
 
 const readSql = (name) => fs.readFileSync(path.join(SQL_DIR, name), 'utf8');
@@ -725,6 +729,7 @@ export const handler = async (event = {}) => {
       )).rows[0].n);
       await client.query(readSql('13_drop_dump_policies.sql'));
       await applySql('31_partner_safe_read.sql');
+      await applySql('32_partner_share_lifecycle.sql');
       out.dumpPoliciesAfterDrop = Number((await client.query(
         `SELECT count(*)::int AS n FROM pg_policies
          WHERE schemaname = 'public' AND policyname NOT LIKE 'aws_%'`,

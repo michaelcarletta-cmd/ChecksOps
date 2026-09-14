@@ -82,35 +82,18 @@ export function TenantPartnerManager() {
         }
       }
 
-      // Look up the tenant by their permanent partner_code via SECURITY DEFINER RPC
-      // (bypasses RLS so cross-tenant lookup works for any signed-in user)
-      const { data: lookupRows, error: lookupErr } = await supabase
-        .rpc("lookup_tenant_by_partner_code", { _code: normalizedCode });
-      if (lookupErr) throw lookupErr;
-      const partnerTenant = Array.isArray(lookupRows) ? lookupRows[0] : null;
-      if (!partnerTenant) throw new Error(`Partner code "${normalizedCode}" not found. Double-check the 8-character code with your partner — note that 0/O and 1/I look similar.`);
-      if (partnerTenant.id === tenantId) throw new Error("That's your own partner code!");
-
-      // Check if partnership already exists
-      const { data: existing } = await supabase
-        .from("tenant_partnerships")
-        .select("id, status")
-        .or(`and(inviter_tenant_id.eq.${tenantId},invitee_tenant_id.eq.${partnerTenant.id}),and(inviter_tenant_id.eq.${partnerTenant.id},invitee_tenant_id.eq.${tenantId})`)
-        .eq("status", "active")
-        .maybeSingle();
-      if (existing) throw new Error(`Already partnered with ${partnerTenant.name}`);
-
-      // Create the partnership
-      const { error: insertErr } = await supabase.from("tenant_partnerships").insert({
-        inviter_tenant_id: tenantId!,
-        invitee_tenant_id: partnerTenant.id,
-        invite_code: normalizedCode,
-        status: "active",
-        created_by: user!.id,
-        accepted_at: new Date().toISOString(),
+      const { data, error } = await supabase.rpc("connect_partner_by_code", {
+        _code: normalizedCode,
+        _source_tenant_id: tenantId,
       });
-      if (insertErr) throw insertErr;
-      return partnerTenant.name;
+      if (error) throw error;
+      const payload = (data && typeof data === "object" ? data : {}) as {
+        ok?: boolean;
+        error?: string;
+        partner_name?: string;
+      };
+      if (payload.ok === false) throw new Error(String(payload.error || "Connection failed"));
+      return String(payload.partner_name || "partner");
     },
     onSuccess: (partnerName) => {
       toast({ title: `Connected with ${partnerName}!` });
@@ -125,15 +108,17 @@ export function TenantPartnerManager() {
   // Revoke partnership
   const revokeMutation = useMutation({
     mutationFn: async (partnershipId: string) => {
-      const { error } = await supabase
-        .from("tenant_partnerships")
-        .update({ status: "revoked", revoked_at: new Date().toISOString() })
-        .eq("id", partnershipId);
+      const { error } = await supabase.rpc("revoke_tenant_partnership", {
+        _partnership_id: partnershipId,
+      });
       if (error) throw error;
     },
     onSuccess: () => {
       toast({ title: "Partnership revoked" });
       qc.invalidateQueries({ queryKey: ["tenant-partnerships", tenantId] });
+      qc.invalidateQueries({ queryKey: ["shared-checks"] });
+      qc.invalidateQueries({ queryKey: ["shared-with-me-checks"] });
+      qc.invalidateQueries({ queryKey: ["partnered-tenants", tenantId] });
     },
   });
 

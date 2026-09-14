@@ -80,6 +80,7 @@ export const applyCompleteDdl = async (client) => {
   await client.query(readSql('20_write_helpers.sql'));
   await client.query(readSql('15_access_grants.sql'));
   await client.query(readSql('31_partner_safe_read.sql'));
+  await client.query(readSql('32_partner_share_lifecycle.sql'));
   await client.query(readSql('22_write_probe_table.sql'));
   await client.query(readSql('21_proposed_write_policies.sql'));
   await client.query(readSql('24_complete_write_policies.sql'));

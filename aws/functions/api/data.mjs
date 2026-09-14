@@ -784,6 +784,10 @@ export const handleDataRpc = async (event, deps) => {
     earlyName = '';
   }
   if (earlyName) {
+    const { PARTNER_SHARE_RPCS, handlePartnerShareRpc } = await import('./partner-share-lifecycle.mjs');
+    if (PARTNER_SHARE_RPCS.has(earlyName)) {
+      return handlePartnerShareRpc(event, deps);
+    }
     const { SAFE_WRITE_RPCS, handleSafeWriteRpc } = await import('./workflow-rpc.mjs');
     if (SAFE_WRITE_RPCS.has(earlyName)) {
       return handleSafeWriteRpc(event, deps);
