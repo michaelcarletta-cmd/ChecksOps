@@ -16,9 +16,8 @@
     ]
   },
   "verifiedSenderThatWouldBeUsed": {
-    "from": "Freedom Claims <claims@freedomclaims.work>",
-    "domain": "freedomclaims.work",
-    "notes": "Historical production Resend default. Apex checksops.com / noreply@checksops.com are not Resend-verified and must not be used until verified."
+    "from": "tenant resolveEmailBranding() custom From when usingCustomFrom, else ChecksOps <notify@checksops.com>",
+    "notes": "Do not hard-code freedomclaims.work. Controlled test uses the ChecksOps fallback when tenant-domain cannot be safely exercised."
   },
   "productionMutationsThisRun": {
     "providerSecretUpdated": false,
@@ -55,7 +54,7 @@
   },
   "resumeWhen": [
     "A human copies production Edge RESEND_API_KEY into checksops/production/provider (never paste into chat/logs)",
-    "Set RESEND_FROM_EMAIL to Freedom Claims <claims@freedomclaims.work>",
+    "Do not set a global Freedom RESEND_FROM_EMAIL. Endorsement From is tenant-aware via resolveEmailBranding, else ChecksOps <notify@checksops.com>",
     "Re-run controlled activation from step 3 (Lambda deploy) after confirming RESEND_API_KEY_configured=true without printing the value"
   ]
 }

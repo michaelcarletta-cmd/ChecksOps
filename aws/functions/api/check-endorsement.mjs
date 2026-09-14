@@ -10,12 +10,12 @@ import { parseBody, ignoredSpoof, withIdentityWrite } from './data.mjs';
 import { loadDatabaseCredentials } from './secrets.mjs';
 import { buildClientConfig, buildWriteClientConfig, sanitizePublicError } from './db-health.mjs';
 import { sendViaSesOrSink } from './email.mjs';
-import { defaultFromAddress } from './email-policy.mjs';
 import { renderTransactionalTemplate } from './email-templates.mjs';
 import { resolveEmailBranding } from './email-branding.mjs';
 import {
   allowDepositAdvance,
   endorsementAutoAdvanceEnabled,
+  endorsementFromAddress,
   endorsementResendEnabled,
   INELIGIBLE_AUTO_ADVANCE_STATUSES,
   isSuccessfulEndorsementDelivery,
@@ -637,7 +637,7 @@ const sendEndorsementEmail = async ({ endorsement, check, email, url, branding, 
     subject,
     html: rendered.html,
     text: rendered.text,
-    from: branding.from || defaultFromAddress(),
+    from: endorsementFromAddress(branding),
     replyTo: branding.replyTo || branding.company_email || null,
     headers: {
       'X-Entity-Ref-ID': String(endorsement.id),
@@ -741,6 +741,7 @@ export const runAuthenticatedEndorsement = async ({
       company_email: resolved.replyTo || tenant?.email_reply_to || brandingRow.company_email,
       endorsement_email_subject: brandingRow.endorsement_email_subject,
       from: resolved.from,
+      usingCustomFrom: resolved.usingCustomFrom === true,
       replyTo: resolved.replyTo,
       primaryColor: resolved.primaryColor,
       logoUrl: resolved.logoUrl,

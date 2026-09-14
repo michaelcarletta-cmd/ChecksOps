@@ -50,11 +50,24 @@ export const loadResendApiKey = async (loadSecrets = loadProviderSecrets) => {
   }
 };
 
+/** Approved platform fallback when the tenant has no verified sending domain. */
+export const PLATFORM_ENDORSEMENT_FROM = 'ChecksOps <notify@checksops.com>';
+
+/**
+ * Reuse resolveEmailBranding() output. Verified tenant custom From wins.
+ * Unverified / unconfigured tenants use the ChecksOps platform fallback.
+ * Does not apply a global Freedom or RESEND_FROM_EMAIL override.
+ */
+export const endorsementFromAddress = (resolved = {}) => {
+  if (resolved.usingCustomFrom && String(resolved.from || '').trim()) {
+    return String(resolved.from).trim();
+  }
+  return PLATFORM_ENDORSEMENT_FROM;
+};
+
 export const resendFromAddress = (brandingFrom) => {
-  const fromSecret = String(process.env.RESEND_FROM_EMAIL || '').trim();
-  if (fromSecret) return fromSecret;
-  if (brandingFrom) return brandingFrom;
-  return 'ChecksOps <noreply@checksops.com>';
+  if (String(brandingFrom || '').trim()) return String(brandingFrom).trim();
+  return PLATFORM_ENDORSEMENT_FROM;
 };
 
 export const isSuccessfulEndorsementDelivery = (result, { injected = false } = {}) => {

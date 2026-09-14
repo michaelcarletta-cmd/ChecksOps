@@ -7,9 +7,12 @@ import {
 } from '../functions/api/check-endorsement.mjs';
 import {
   endorsementAutoAdvanceEnabled,
+  endorsementFromAddress,
   endorsementResendEnabled,
   isSuccessfulEndorsementDelivery,
   loadResendApiKey,
+  PLATFORM_ENDORSEMENT_FROM,
+  resendFromAddress,
   sendViaResend,
 } from '../functions/api/endorsement-parity.mjs';
 import { evaluateTransition, TRANSITIONS } from '../functions/api/workflow-transitions.mjs';
@@ -103,7 +106,7 @@ test('Resend mailer fail-closes and never treats sink as delivered', async () =>
       subject: 'Endorsement Required — Check #PARITY-1 — Insured A',
       html: '<a href="https://checksops.com/endorse?token=tok-a">endorse</a>',
       text: 'https://checksops.com/endorse?token=tok-a',
-      from: 'ChecksOps <noreply@checksops.com>',
+      from: PLATFORM_ENDORSEMENT_FROM,
       headers: { 'X-Entity-Ref-ID': ENDORSE_A },
       fetchImpl: async (url, init) => {
         assert.equal(url, 'https://api.resend.com/emails');
@@ -120,6 +123,22 @@ test('Resend mailer fail-closes and never treats sink as delivered', async () =>
     assert.equal(isSuccessfulEndorsementDelivery(sent), true);
     assert.equal(isSuccessfulEndorsementDelivery({ mode: 'sink', deliveredCount: 0 }), false);
     assert.equal(isSuccessfulEndorsementDelivery({ mode: 'resend', deliveredCount: 0 }), false);
+  });
+});
+
+test('endorsement sender reuses tenant branding and ChecksOps fallback', async () => {
+  assert.equal(PLATFORM_ENDORSEMENT_FROM, 'ChecksOps <notify@checksops.com>');
+  assert.equal(endorsementFromAddress({}), PLATFORM_ENDORSEMENT_FROM);
+  assert.equal(endorsementFromAddress({ usingCustomFrom: false, from: 'Acme <office@acme.test>' }), PLATFORM_ENDORSEMENT_FROM);
+  assert.equal(
+    endorsementFromAddress({ usingCustomFrom: true, from: 'Freedom Adjustment <notify@freedomadj.com>' }),
+    'Freedom Adjustment <notify@freedomadj.com>',
+  );
+  await withEnv({ RESEND_FROM_EMAIL: 'Freedom Claims <claims@freedomclaims.work>' }, () => {
+    assert.equal(endorsementFromAddress({ usingCustomFrom: false }), PLATFORM_ENDORSEMENT_FROM);
+    assert.doesNotMatch(endorsementFromAddress({}), /freedomclaims\.work/i);
+    assert.equal(resendFromAddress(''), PLATFORM_ENDORSEMENT_FROM);
+    assert.equal(resendFromAddress('Freedom Adjustment <notify@freedomadj.com>'), 'Freedom Adjustment <notify@freedomadj.com>');
   });
 });
 
@@ -316,6 +335,8 @@ test('isolated lifecycle: Resend URL, partial stays Endorsing, final becomes Rea
     assert.match(send.endorsementUrl, /^https:\/\/checksops\.com\/endorse\?token=/);
     assert.equal(resendCalls.length, 1);
     assert.equal(resendCalls[0].url, 'https://api.resend.com/emails');
+    assert.equal(resendCalls[0].body.from, PLATFORM_ENDORSEMENT_FROM);
+    assert.doesNotMatch(resendCalls[0].body.from, /freedomclaims\.work/i);
     assert.match(resendCalls[0].body.html, /https:\/\/checksops\.com\/endorse\?token=/);
     assert.doesNotMatch(resendCalls[0].url, /supabase|lovable/i);
 
