@@ -4,21 +4,48 @@
 not PATCH the Freedom Sweep. Do not apply SQL72. Do not deploy the prep
 Lambda. Do not re-request capabilities, KYC, KYB, or ToS.
 
-Freedom Adjustment, Condition One Commercial, and
-`checksopsadmin@gmail.com` are **already authorized at Moov**. Re-requesting
-capabilities or identity re-opens billed underwriting. This phase wires the
-remaining ChecksOps sequences so they **reuse those accounts**.
+Freedom Adjustment, Condition One Commercial, and the ChecksOps
+facilitator are **already authorized at Moov**. Re-requesting capabilities
+or identity re-opens billed underwriting. This phase wires the remaining
+ChecksOps sequences so they **reuse those accounts**.
+
+## Operating model
+
+`checksopsadmin@gmail.com` is **Tenant Management**. Mapped application email
+(never JWT, never UUID) may:
+
+1. **Pull fees** from other tenants for monthly and usage charges
+   (`moov-tenant-fee-charge` → tenant `ach-debit-fund` → platform wallet)
+2. **Send money** on a tenant's behalf
+
+Every tenant sends, after a **CheckAlt clear**, to an already-verified
+**partner, sub-contractor, vendor, or homeowner** linked to that tenant.
+
+```
+CheckAlt clear
+  → optional TENANT BANK→WALLET (collect-funds tenants only)
+  → TENANT WALLET → named payee (manual send; never auto-send)
+```
+
+C1C has `send-funds` / `wallet` / `transfers` and **no** `collect-funds`.
+Do **not** request `collect-funds`. C1C cannot be bank-debited or
+fee-pulled until a human reviews that gap. They can still send from an
+already-funded wallet.
 
 ## What this phase executed
 
 | Sequence | Result |
 |---|---|
-| GET confirm Freedom / C1C / platform (checksopsadmin) | GET only — no KYC POST |
+| GET confirm Freedom / C1C / platform | GET only — no KYC POST |
 | Capability family match | `send-funds` satisfies `send-funds.ach`; **never re-POST** |
 | Discover/link vs create | Known merchants **409** `known_approved_account_must_be_linked` |
+| Tenant Management authz | Mapped email `checksopsadmin@gmail.com` may act across tenants |
 | AWS BANK→WALLET writer | Dark, fail-closed; 1¢ cap; Sweep `$0` min **blocks Test 1** |
-| AWS WALLET→RECIPIENT writer | Dark, fail-closed; no bank fallback; **no internal bypass** |
+| AWS WALLET→RECIPIENT writer | Named already-verified payee; CheckAlt must be cleared; no bank fallback; **no internal bypass** |
+| AWS fee pull | Dark, platform-owner only; 1¢ cap; C1C **409** `collect_funds_not_enabled` |
 | `initiate-wallet-funding` | Refused (`use_separate_fund_and_disburse`) |
+| `process-funded-payment` | `manual_send_required` — no auto-send |
+| `wallet-fund-on-clear` | BANK→WALLET only after a cleared CheckAlt row |
 | Sweep PATCH | **Not done** — no chosen retain minimum |
 | Money flags / SQL72 / transfers | **Unchanged / not executed** |
 
@@ -37,13 +64,14 @@ no transfer.
 
 `checksopsadmin@gmail.com` is **not** the email on those connected-account
 profiles (Freedom is `claims@freedomadj.com`, platform is
-`support@checksops.com`). The facilitator account itself is already
-KYB-verified. Do not create a new account or re-KYC to attach that mailbox.
+`support@checksops.com`). Tenant Management is a ChecksOps login, not a
+new Moov account. Do not create a Moov account or re-KYC to attach that
+mailbox.
 
 Platform list (`GET /accounts`, 7 connected accounts) also contains leftover
-unverified duplicates (second Freedom `7c50c273-…`, extra individual
-accounts, pipeline-test LLC). **Do not KYC or capability-request those.**
-AWS writers allowlist only the known approved ids above.
+unverified duplicates (second Freedom `7c50c273-89ec-4651-addc-f27330fd4360`,
+pipeline-test `7597a1f1-79c8-4c80-bbfd-fd5906c2bb73`). **Do not KYC or
+capability-request those.** Writers refuse those ids.
 
 Live prep Lambda CodeSha256
 `ZJsY9c2HBHmBLsri4U8Yq0mbUg/j/eupd0YlbBJ1AmM=` (unchanged). Money flags all
@@ -52,6 +80,10 @@ Live prep Lambda CodeSha256
 `capabilityFlags` now treats family names as enabling `can_ach_debit` /
 `can_ach_credit`. The stale RDS `can_ach_debit=false` snapshot is **not**
 authority for the AWS writers — they GET live capabilities.
+
+Required capabilities are **per operation**. Missing `collect-funds`
+does not block WALLET→RECIPIENT. It does block BANK→WALLET and fee pull,
+with `collect_funds_not_enabled` — never a capability POST.
 
 ## Fail-closed AWS writers
 
@@ -66,13 +98,16 @@ Additional holds inside the writer (even if flags were lifted):
 
 1. **No capability / KYC / account-create POST** (`moov_kyc_rerequest_blocked`)
 2. First transfer **1 cent** (`first_transfer_cap`)
-3. Financial TOTP bound to `wallet.fund` or `wallet.disburse` + tenant +
-   amount + payment-method ids (`financial_totp_required`)
+3. Financial TOTP bound to `wallet.fund`, `wallet.disburse`, or
+   `platform.fee_collect` + tenant + amount + payment-method ids
 4. Enabled Sweep with `minimumBalance <= 0` → `sweep_minimum_blocks_test`
 5. WALLET→RECIPIENT refuses `x-checksops-internal` and `source_kind=bank`
-6. Persist `payment_transfers` (`environment=production`) **before** HTTP; CAS
+6. WALLET→RECIPIENT requires a **named** already-verified payee of that tenant
+   and a **cleared CheckAlt** deposit
+7. Fee pull requires Tenant Management (`checksopsadmin@gmail.com`)
+8. Persist `payment_transfers` (`environment=production`) **before** HTTP; CAS
    `ready` → `submitting`; unknown/timeout → reconcile, never a second POST
-7. Known merchant/recipient allowlist — unknown parties are not created
+9. Leftover duplicate account ids are denied (`denied_duplicate_account_do_not_kyc`)
 
 ## Sweep (unchanged live)
 
@@ -88,7 +123,8 @@ No SQL72. No Lambda overlay. No re-KYC.
 
 ## GO / NO-GO
 
-**GO** for the no-re-KYC sequences and dark AWS writers.
+**GO** for the no-re-KYC sequences, Tenant Management fee/send, CheckAlt-then-Moov
+payout, and dark AWS writers.
 
 **NO-GO** to enable money, PATCH Sweep, or run Test 1 1¢ until a human
 chooses a Sweep minimum (or pause) and explicitly orders the cent tests.

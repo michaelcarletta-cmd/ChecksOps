@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { TENANT_MEMBERSHIP_SQL } from '../../identity.mjs';
-import { KNOWN_APPROVED_MOOV, knownApprovedForTenant } from './moov-accounts.mjs';
-import { MOOV_DISBURSE_TOTP_ACTION, authorizeMoovProduction } from './moov-authz.mjs';
+import { isUuid } from '../../financial-ownership.mjs';
+import { KNOWN_APPROVED_MOOV } from './moov-accounts.mjs';
+import { MOOV_DISBURSE_TOTP_ACTION, assertMoovTenantAccess, authorizeMoovProduction } from './moov-authz.mjs';
 import { capabilityEnabled } from './moov-capability-policy.mjs';
 import { FIRST_PRODUCTION_TRANSFER_CENTS } from './moov-holds.mjs';
 import {
@@ -15,10 +15,18 @@ import {
   updateProductionTransfer,
 } from './moov-idempotency.mjs';
 import { ProductionMoovError, listOf, productionMoovFetch } from './moov-http.mjs';
-import { assertNoReKyc, getApprovedAccountSnapshot } from './moov-preflight.mjs';
+import {
+  assertCheckAltCleared,
+  resolveProductionMerchant,
+  resolveProductionRecipient,
+} from './moov-parties.mjs';
+import {
+  REQUIRED_CAPS_RECIPIENT,
+  REQUIRED_CAPS_SEND,
+  assertNoReKyc,
+  getApprovedAccountSnapshot,
+} from './moov-preflight.mjs';
 import { loadProductionMoovReadSecrets } from './moov-secrets.mjs';
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const fail = (error, statusCode, extra = {}) => ({
   ok: false,
@@ -55,13 +63,11 @@ export async function handleProductionMoovWalletDisburse({
   }
 
   const tenantId = claimedTenant(body);
-  if (!tenantId || !UUID_RE.test(String(tenantId))) {
+  if (!tenantId || !isUuid(tenantId)) {
     return fail('invalid_uuid', 400, { field: 'tenant_id', spoofFieldsIgnored: spoof });
   }
-  const memberships = (await client.query(TENANT_MEMBERSHIP_SQL, [mapping.application_user_id])).rows;
-  if (!memberships.some((row) => row.tenant_id === tenantId)) {
-    return fail('cross_tenant_denied', 403, { spoofFieldsIgnored: spoof });
-  }
+  const access = await assertMoovTenantAccess(client, mapping, tenantId);
+  if (!access.ok) return { ...access, spoofFieldsIgnored: spoof, kycRequested: false, capabilitiesPosted: false };
 
   if (body?.source_kind && body.source_kind !== 'wallet') {
     return fail('bank_to_recipient_refused', 403, {
@@ -81,22 +87,20 @@ export async function handleProductionMoovWalletDisburse({
     });
   }
 
-  const knownPayer = knownApprovedForTenant(tenantId);
-  if (!knownPayer?.walletId) {
-    return fail('unknown_merchant_do_not_create', 409, {
-      message: 'This tenant is not a known approved Moov merchant. Do not create a Moov account or request KYC.',
-    });
-  }
+  const merchant = await resolveProductionMerchant(client, tenantId);
+  if (!merchant.ok) return { ...merchant, spoofFieldsIgnored: spoof, operation: 'wallet.disburse' };
 
-  const recipientId = body?.external_recipient_id || body?.recipient_id || KNOWN_APPROVED_MOOV.recipient.recipientId;
-  if (!UUID_RE.test(String(recipientId))) {
-    return fail('invalid_uuid', 400, { field: 'external_recipient_id' });
-  }
-  if (String(recipientId) !== KNOWN_APPROVED_MOOV.recipient.recipientId) {
-    return fail('unknown_recipient_do_not_kyc', 409, {
-      message: 'Only the already-verified pay-setup recipient is allowed on this sequence. Do not create or KYC another recipient.',
-    });
-  }
+  const recipientId = body?.external_recipient_id || body?.recipient_id || null;
+  const recipient = await resolveProductionRecipient(client, tenantId, recipientId);
+  if (!recipient.ok) return { ...recipient, spoofFieldsIgnored: spoof, operation: 'wallet.disburse' };
+
+  const cleared = await assertCheckAltCleared(client, {
+    tenantId,
+    checkaltDepositId: body?.checkalt_deposit_id || body?.deposit_id || null,
+    checkIntakeItemId: body?.check_intake_item_id || body?.check_id || null,
+    batchId: body?.batch_id || null,
+  });
+  if (!cleared.ok) return { ...cleared, spoofFieldsIgnored: spoof, operation: 'wallet.disburse' };
 
   const loaded = await (deps.loadProductionSecrets || loadProductionMoovReadSecrets)(deps.getSecrets);
   if (!loaded.ok) return { ...loaded, spoofFieldsIgnored: spoof, kycRequested: false, capabilitiesPosted: false };
@@ -106,15 +110,17 @@ export async function handleProductionMoovWalletDisburse({
   try {
     payerSnap = await getApprovedAccountSnapshot({
       credentials: loaded.credentials,
-      known: knownPayer,
+      known: merchant,
       fetchImpl,
       includeSweeps: false,
+      requiredCapabilities: REQUIRED_CAPS_SEND,
     });
     recipientSnap = await getApprovedAccountSnapshot({
       credentials: loaded.credentials,
-      known: KNOWN_APPROVED_MOOV.recipient,
+      known: recipient.known,
       fetchImpl,
       includeSweeps: false,
+      requiredCapabilities: REQUIRED_CAPS_RECIPIENT,
     });
   } catch (error) {
     return fail('moov_preflight_failed', error.status || 502, {
@@ -125,21 +131,26 @@ export async function handleProductionMoovWalletDisburse({
 
   const payerKyc = assertNoReKyc(payerSnap);
   if (!payerKyc.ok) return { ...payerKyc, spoofFieldsIgnored: spoof };
-  const recipKyc = assertNoReKyc({
-    ...recipientSnap,
-    reKycRequired: capabilitiesMissingRecipient(recipientSnap),
-    capabilitiesStillNeeded: capabilitiesMissingRecipient(recipientSnap) ? ['transfers'] : [],
-  });
-  if (!recipKyc.ok && !capabilityEnabled(recipientSnap.capabilities, 'transfers')) {
+  const recipKyc = assertNoReKyc(recipientSnap);
+  if (!recipKyc.ok) return { ...recipKyc, spoofFieldsIgnored: spoof };
+  if (!capabilityEnabled(recipientSnap.capabilities, 'transfers')) {
     return fail('recipient_transfers_not_enabled', 409, {
       liveProviderCalled: true,
       message: 'Recipient transfers capability is not enabled. Do not re-request KYC.',
     });
   }
 
+  const walletId = merchant.walletId || payerSnap.resolvedWalletId;
+  if (!walletId) {
+    return fail('wallet_payment_method_missing', 409, {
+      liveProviderCalled: true,
+      message: 'No Moov wallet to reuse. Do not create a new wallet account.',
+    });
+  }
+
   const wallet = await productionMoovFetch({
     credentials: loaded.credentials,
-    path: `/accounts/${knownPayer.moovAccountId}/wallets/${knownPayer.walletId}`,
+    path: `/accounts/${merchant.moovAccountId}/wallets/${walletId}`,
     fetchImpl,
   });
   const available = Number(wallet?.availableBalance?.value ?? wallet?.available?.value ?? 0);
@@ -155,22 +166,22 @@ export async function handleProductionMoovWalletDisburse({
 
   const payerMethods = await productionMoovFetch({
     credentials: loaded.credentials,
-    path: `/accounts/${knownPayer.moovAccountId}/payment-methods`,
+    path: `/accounts/${merchant.moovAccountId}/payment-methods`,
     fetchImpl,
   }).catch(() => []);
   const destMethods = await productionMoovFetch({
     credentials: loaded.credentials,
-    path: `/accounts/${KNOWN_APPROVED_MOOV.recipient.moovAccountId}/payment-methods`,
+    path: `/accounts/${recipient.moovAccountId}/payment-methods`,
     fetchImpl,
   }).catch(() => []);
 
   const sourcePmRow = listOf(payerMethods).find((row) => (
     String(row.paymentMethodType) === 'moov-wallet'
-    && String(row.walletID || row.wallet?.walletID || '') === knownPayer.walletId
-  ));
+    && String(row.walletID || row.wallet?.walletID || '') === walletId
+  )) || listOf(payerMethods).find((row) => String(row.paymentMethodType) === 'moov-wallet');
   const destPmRow = listOf(destMethods).find((row) => (
     String(row.paymentMethodType) === 'ach-credit-standard'
-    && String(row.bankAccountID || row.bankAccount?.bankAccountID || '') === KNOWN_APPROVED_MOOV.recipient.bankId
+    && (!recipient.bankId || String(row.bankAccountID || row.bankAccount?.bankAccountID || '') === recipient.bankId)
   )) || listOf(destMethods).find((row) => String(row.paymentMethodType) === 'ach-credit-standard');
 
   if (!sourcePmRow) {
@@ -229,12 +240,12 @@ export async function handleProductionMoovWalletDisburse({
     tenant_id: tenantId,
     idempotency_key: key,
     amount_cents: amount,
-    description: 'ChecksOps WALLET→RECIPIENT Test 2',
-    source_tenant_account_id: knownPayer.moovAccountId,
+    description: `ChecksOps WALLET→${recipient.label || 'RECIPIENT'}`,
+    source_tenant_account_id: merchant.moovAccountId,
     source_payment_method_id: sourcePm,
-    destination_recipient_id: recipientId,
+    destination_recipient_id: recipient.recipientId,
     destination_payment_method_id: destPm,
-    wallet_id: knownPayer.walletId,
+    wallet_id: walletId,
     leg_role: 'wallet_disbursement',
     created_by: mapping.application_user_id,
   });
@@ -262,11 +273,12 @@ export async function handleProductionMoovWalletDisburse({
         source: { paymentMethodID: sourcePm },
         destination: { paymentMethodID: destPm },
         amount: { currency: 'USD', value: amount },
-        description: 'ChecksOps WALLET to recipient Test 2',
+        description: `ChecksOps WALLET to ${recipient.label || 'recipient'}`,
         metadata: {
           checksops_transfer_id: draft.id,
           checksops_tenant_id: tenantId,
-          checksops_recipient_id: recipientId,
+          checksops_recipient_id: recipient.recipientId,
+          checksops_checkalt_deposit_id: cleared.deposit?.id || '',
           checksops_leg: 'wallet_disbursement',
         },
       },
@@ -310,10 +322,6 @@ export async function handleProductionMoovWalletDisburse({
   };
 }
 
-function capabilitiesMissingRecipient(snapshot) {
-  return !capabilityEnabled(snapshot.capabilities, 'transfers');
-}
-
 export async function handleProductionMoovInitiateWalletFunding(ctx) {
   return {
     ok: false,
@@ -325,7 +333,71 @@ export async function handleProductionMoovInitiateWalletFunding(ctx) {
     productionExecution: false,
     kycRequested: false,
     capabilitiesPosted: false,
-    message: 'initiate-wallet-funding couples BANK→WALLET and auto-send. Use moov-wallet-fund then a separate WALLET→RECIPIENT disbursement.',
+    message: 'initiate-wallet-funding couples BANK→WALLET and auto-send. Use moov-wallet-fund then a separate WALLET→RECIPIENT disbursement after CheckAlt clears.',
     spoofFieldsIgnored: ctx.spoof,
   };
+}
+
+export async function handleProductionMoovProcessFundedPayment({ body, spoof, deps = {} }) {
+  if (deps.internalBypass === true || body?.internal === true) {
+    return fail('internal_bypass_refused', 403, {
+      operation: 'process-funded-payment',
+      message: 'The legacy x-checksops-internal auto-send is refused. After CheckAlt clear, a human must send WALLET→RECIPIENT.',
+    });
+  }
+  return {
+    ok: true,
+    statusCode: 200,
+    success: true,
+    reason: 'manual_send_required',
+    provider: 'moov',
+    operation: 'process-funded-payment',
+    liveProviderCalled: false,
+    productionExecution: false,
+    kycRequested: false,
+    capabilitiesPosted: false,
+    autoSend: false,
+    message: 'After CheckAlt clears, Tenant Management or the tenant sends WALLET→RECIPIENT. Auto-send is refused.',
+    spoofFieldsIgnored: spoof,
+  };
+}
+
+export async function handleProductionMoovWalletFundOnClear(ctx) {
+  const { client, mapping, claims, body, spoof } = ctx;
+  await bindMoovProductionGucs(client, mapping, claims);
+  const queueId = body?.queue_id;
+  if (!queueId || !isUuid(queueId)) {
+    return fail('invalid_uuid', 400, {
+      field: 'queue_id',
+      operation: 'wallet-fund-on-clear',
+      message: 'queue_id is required. Production fund-on-clear is not a cron auto-send.',
+    });
+  }
+  const row = (await client.query(
+    `SELECT id, tenant_id, fund_cents, checkalt_deposit_id, check_intake_item_id, status
+     FROM public.wallet_funding_queue WHERE id = $1::uuid`,
+    [queueId],
+  )).rows[0];
+  if (!row) {
+    return fail('not_found', 404, { operation: 'wallet-fund-on-clear', message: 'Funding queue row not found.' });
+  }
+  const access = await assertMoovTenantAccess(client, mapping, row.tenant_id);
+  if (!access.ok) return { ...access, spoofFieldsIgnored: spoof, operation: 'wallet-fund-on-clear' };
+  const cleared = await assertCheckAltCleared(client, {
+    tenantId: row.tenant_id,
+    checkaltDepositId: row.checkalt_deposit_id,
+    checkIntakeItemId: row.check_intake_item_id,
+  });
+  if (!cleared.ok) return { ...cleared, spoofFieldsIgnored: spoof, operation: 'wallet-fund-on-clear' };
+
+  const { handleProductionMoovWalletFund } = await import('./moov-wallet-fund.mjs');
+  return handleProductionMoovWalletFund({
+    ...ctx,
+    body: {
+      tenant_id: row.tenant_id,
+      amount_cents: Number(row.fund_cents),
+      idempotency_key: `fund-on-clear:${row.id}`,
+      auto_send_after_funding: false,
+    },
+  });
 }

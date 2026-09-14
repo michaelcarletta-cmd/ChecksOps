@@ -7,7 +7,10 @@ const isTrue = (value) => String(value || '') === 'true';
 export const PRODUCTION_MOOV_FUNCTIONS = new Set([
   'moov-wallet-fund',
   'moov-disburse',
+  'moov-tenant-fee-charge',
   'initiate-wallet-funding',
+  'process-funded-payment',
+  'wallet-fund-on-clear',
 ]);
 
 export const FIRST_PRODUCTION_TRANSFER_CENTS = 1;

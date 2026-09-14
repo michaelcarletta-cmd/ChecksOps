@@ -23,11 +23,28 @@ import {
 import { sweepBlocksFirstCent } from '../functions/api/providers/production/moov-preflight.mjs';
 import { loadProductionMoovReadSecrets } from '../functions/api/providers/production/moov-secrets.mjs';
 import { handleProductionMoovWalletFund } from '../functions/api/providers/production/moov-wallet-fund.mjs';
-import { handleProductionMoovWalletDisburse } from '../functions/api/providers/production/moov-wallet-disburse.mjs';
+import {
+  handleProductionMoovProcessFundedPayment,
+  handleProductionMoovWalletDisburse,
+  handleProductionMoovWalletFundOnClear,
+} from '../functions/api/providers/production/moov-wallet-disburse.mjs';
+import { handleProductionMoovTenantFeeCharge } from '../functions/api/providers/production/moov-fee-collect.mjs';
+import { isDeniedDuplicateMoovAccount } from '../functions/api/providers/production/moov-accounts.mjs';
+import { isPlatformOwnerCaller } from '../functions/api/providers/production/moov-roles.mjs';
 
 const FREEDOM_APP = 'abd3c2a0-6dc0-4680-92dd-a013e1141c91';
 const FREEDOM_TENANT = KNOWN_APPROVED_MOOV.freedom.tenantId;
+const C1C_TENANT = KNOWN_APPROVED_MOOV.c1c.tenantId;
 const COGNITO_SUB = 'c4386408-60e1-70e2-abb6-e6194e8e635f';
+const PLATFORM_APP = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+const PLATFORM_SUB = '11111111-2222-4333-8333-555555555555';
+const VENDOR_RECIPIENT_ID = KNOWN_APPROVED_MOOV.recipient.recipientId;
+const UNVERIFIED_RECIPIENT_ID = 'aaaaaaaa-1111-4bbb-8ccc-dddddddddddd';
+const CLEARED_DEPOSIT_ID = '11111111-2222-4333-8333-444444444444';
+const PENDING_DEPOSIT_ID = '11111111-2222-4333-8333-444444444445';
+const QUEUE_ID = '22222222-3333-4444-8555-666666666666';
+const C1C_WALLET_ID = '33333333-4444-4555-8666-777777777777';
+const PLATFORM_WALLET_PM = '44444444-5555-4666-8777-888888888888';
 
 const jwtEvent = (pathName, method, body, extra = {}) => ({
   rawPath: pathName,
@@ -49,6 +66,13 @@ const mapping = {
   application_user_id: FREEDOM_APP,
   cognito_sub: COGNITO_SUB,
   email: 'owner@freedomadj.com',
+  status: 'active',
+};
+
+const platformMapping = {
+  application_user_id: PLATFORM_APP,
+  cognito_sub: PLATFORM_SUB,
+  email: 'checksopsadmin@gmail.com',
   status: 'active',
 };
 
@@ -107,9 +131,66 @@ const createStore = () => ({
   stepups: [],
   transfers: [],
   role: 'admin',
+  accounts: [
+    { tenant_id: FREEDOM_TENANT, provider_account_id: KNOWN_APPROVED_MOOV.freedom.moovAccountId, onboarding_status: 'active', verification_status: 'verified', disabled: false },
+    { tenant_id: C1C_TENANT, provider_account_id: KNOWN_APPROVED_MOOV.c1c.moovAccountId, onboarding_status: 'active', verification_status: 'verified', disabled: false },
+  ],
+  wallets: [
+    { tenant_id: FREEDOM_TENANT, provider_wallet_id: KNOWN_APPROVED_MOOV.freedom.walletId, wallet_type: 'operating' },
+  ],
+  recipients: [
+    {
+      id: VENDOR_RECIPIENT_ID,
+      tenant_id: FREEDOM_TENANT,
+      recipient_type: 'vendor',
+      relationship: 'shared_vendor',
+      provider_account_id: KNOWN_APPROVED_MOOV.recipient.moovAccountId,
+      onboarding_status: 'active',
+      stakeholder_account_id: null,
+    },
+    {
+      id: UNVERIFIED_RECIPIENT_ID,
+      tenant_id: FREEDOM_TENANT,
+      recipient_type: 'homeowner',
+      relationship: 'homeowner',
+      provider_account_id: null,
+      onboarding_status: 'pending',
+      stakeholder_account_id: null,
+    },
+  ],
+  stakeholders: [],
+  deposits: [
+    {
+      id: CLEARED_DEPOSIT_ID,
+      tenant_id: FREEDOM_TENANT,
+      status: 'cleared',
+      cleared_at: '2026-09-13T00:00:00Z',
+      check_intake_item_id: null,
+      returned_at: null,
+    },
+    {
+      id: PENDING_DEPOSIT_ID,
+      tenant_id: FREEDOM_TENANT,
+      status: 'submitted',
+      cleared_at: null,
+      check_intake_item_id: null,
+      returned_at: null,
+    },
+  ],
+  batches: [],
+  queue: [
+    {
+      id: QUEUE_ID,
+      tenant_id: FREEDOM_TENANT,
+      fund_cents: 1,
+      checkalt_deposit_id: CLEARED_DEPOSIT_ID,
+      check_intake_item_id: null,
+      status: 'queued',
+    },
+  ],
 });
 
-const identityClient = (store) => ({
+const identityClient = (store, session = mapping) => ({
   connect: async () => {},
   end: async () => {},
   query: async (sql, params = []) => {
@@ -119,16 +200,53 @@ const identityClient = (store) => ({
       return { rows: [] };
     }
     if (text.startsWith('SELECT set_config')) return { rows: [{ set_config: params[1] }] };
-    if (text === LOOKUP_MAPPING_SQL) return { rows: params[0] === mapping.cognito_sub ? [mapping] : [] };
+    if (text === LOOKUP_MAPPING_SQL) {
+      if (params[0] === session.cognito_sub) return { rows: [session] };
+      if (params[0] === mapping.cognito_sub) return { rows: [mapping] };
+      if (params[0] === platformMapping.cognito_sub) return { rows: [platformMapping] };
+      return { rows: [] };
+    }
     if (text === TENANT_MEMBERSHIP_SQL || text.includes('FROM public.tenant_users tu')) {
       return { rows: store.memberships };
     }
     if (text.includes('FROM public.user_roles')) {
-      return { rows: [{ role: 'admin' }] };
+      return { rows: [{ role: store.role || 'admin' }] };
     }
     if (text.includes('FROM public.tenant_users WHERE user_id') && text.includes('AND tenant_id')) {
       const match = store.memberships.find((row) => row.tenant_id === params[1]);
       return { rows: match ? [{ role: match.role }] : [] };
+    }
+    if (text.includes('FROM public.payment_provider_accounts')) {
+      return { rows: (store.accounts || []).filter((row) => row.tenant_id === params[0]) };
+    }
+    if (text.includes('FROM public.payment_wallets')) {
+      return { rows: (store.wallets || []).filter((row) => row.tenant_id === params[0]) };
+    }
+    if (text.includes('FROM public.external_payment_recipients')) {
+      return {
+        rows: (store.recipients || []).filter((row) => row.id === params[0] && row.tenant_id === params[1]),
+      };
+    }
+    if (text.includes('FROM public.stakeholder_accounts')) {
+      return {
+        rows: (store.stakeholders || []).filter((row) => row.id === params[0] && row.tenant_id === params[1]),
+      };
+    }
+    if (text.includes('FROM public.checkalt_deposits') && text.includes('WHERE id =')) {
+      return {
+        rows: (store.deposits || []).filter((row) => row.id === params[0] && row.tenant_id === params[1]),
+      };
+    }
+    if (text.includes('FROM public.checkalt_deposits')) {
+      return {
+        rows: (store.deposits || []).filter((row) => row.check_intake_item_id === params[0] && row.tenant_id === params[1]),
+      };
+    }
+    if (text.includes('FROM public.disbursement_batches')) {
+      return { rows: (store.batches || []).filter((row) => row.id === params[0]) };
+    }
+    if (text.includes('FROM public.wallet_funding_queue')) {
+      return { rows: (store.queue || []).filter((row) => row.id === params[0]) };
     }
     if (text.includes('FROM public.financial_stepup_log')) {
       const [userId, tenantId, actionKey, since, amountCents] = params;
@@ -214,6 +332,17 @@ const mockMoovFetch = (store, { sweepMin = '0.00', sweepStatus = 'enabled', wall
       return jsonResponse({ transferID: 'tr_test_1', status: 'pending' });
     }
     if (target.includes('/capabilities')) {
+      const accountId = target.match(/accounts\/([^/]+)/)?.[1];
+      if (accountId === KNOWN_APPROVED_MOOV.platform.moovAccountId) {
+        return jsonResponse([{ capability: 'transfers', status: 'enabled' }]);
+      }
+      if (accountId === KNOWN_APPROVED_MOOV.c1c.moovAccountId) {
+        return jsonResponse([
+          { capability: 'send-funds', status: 'enabled' },
+          { capability: 'transfers', status: 'enabled' },
+          { capability: 'wallet', status: 'enabled' },
+        ]);
+      }
       return jsonResponse([
         { capability: 'collect-funds', status: 'enabled' },
         { capability: 'send-funds', status: 'enabled' },
@@ -222,6 +351,18 @@ const mockMoovFetch = (store, { sweepMin = '0.00', sweepStatus = 'enabled', wall
       ]);
     }
     if (target.includes('/bank-accounts')) {
+      const accountId = target.match(/accounts\/([^/]+)/)?.[1];
+      if (accountId === KNOWN_APPROVED_MOOV.recipient.moovAccountId) {
+        return jsonResponse([{
+          bankAccountID: KNOWN_APPROVED_MOOV.recipient.bankId,
+          bankName: 'CHASE',
+          lastFourAccountNumber: '1506',
+          status: 'verified',
+        }]);
+      }
+      if (accountId === KNOWN_APPROVED_MOOV.c1c.moovAccountId) {
+        return jsonResponse([]);
+      }
       return jsonResponse([{
         bankAccountID: KNOWN_APPROVED_MOOV.freedom.bankId,
         bankName: 'WELLS FARGO BANK',
@@ -236,6 +377,21 @@ const mockMoovFetch = (store, { sweepMin = '0.00', sweepStatus = 'enabled', wall
           paymentMethodID: KNOWN_APPROVED_MOOV.recipient.achCreditStandardPm,
           paymentMethodType: 'ach-credit-standard',
           bankAccountID: KNOWN_APPROVED_MOOV.recipient.bankId,
+        }]);
+      }
+      if (accountId === KNOWN_APPROVED_MOOV.platform.moovAccountId) {
+        return jsonResponse([{
+          paymentMethodID: PLATFORM_WALLET_PM,
+          paymentMethodType: 'moov-wallet',
+          walletID: 'platform-wallet',
+        }]);
+      }
+      if (accountId === KNOWN_APPROVED_MOOV.c1c.moovAccountId) {
+        return jsonResponse([{
+          paymentMethodID: 'c1c-wallet-pm',
+          paymentMethodType: 'moov-wallet',
+          walletID: C1C_WALLET_ID,
+          wallet: { walletID: C1C_WALLET_ID, partnerAccountID: KNOWN_APPROVED_MOOV.platform.moovAccountId },
         }]);
       }
       return jsonResponse([
@@ -260,24 +416,37 @@ const mockMoovFetch = (store, { sweepMin = '0.00', sweepStatus = 'enabled', wall
         minimumBalance: { value: sweepMin, currency: 'USD' },
       }]);
     }
-    if (target.includes('/wallets/')) {
+    if (/\/wallets\/[^/]+$/.test(target) || target.includes('/wallets/')) {
+      const accountId = target.match(/accounts\/([^/]+)/)?.[1];
+      const walletId = accountId === KNOWN_APPROVED_MOOV.c1c.moovAccountId
+        ? C1C_WALLET_ID
+        : KNOWN_APPROVED_MOOV.freedom.walletId;
       return jsonResponse({
-        walletID: KNOWN_APPROVED_MOOV.freedom.walletId,
+        walletID: walletId,
         status: 'active',
         availableBalance: { value: walletAvailable, currency: 'USD' },
       });
     }
+    if (/\/wallets$/.test(target)) {
+      const accountId = target.match(/accounts\/([^/]+)/)?.[1];
+      if (accountId === KNOWN_APPROVED_MOOV.c1c.moovAccountId) {
+        return jsonResponse([{ walletID: C1C_WALLET_ID, name: 'Operating' }]);
+      }
+      if (accountId === KNOWN_APPROVED_MOOV.platform.moovAccountId) {
+        return jsonResponse([{ walletID: 'platform-wallet', name: 'Platform' }]);
+      }
+      return jsonResponse([{ walletID: KNOWN_APPROVED_MOOV.freedom.walletId, name: 'Operating' }]);
+    }
     if (/\/accounts\/[^/]+$/.test(target)) {
       const accountId = target.split('/').pop();
-      const business = accountId === KNOWN_APPROVED_MOOV.recipient.moovAccountId
-        ? null
-        : { legalBusinessName: 'Freedom Adjustment', verification: { status: 'verified' } };
+      const verified = { verification: { status: 'verified' } };
+      const profile = accountId === KNOWN_APPROVED_MOOV.recipient.moovAccountId
+        ? { individual: { ...verified, name: { firstName: 'Vendor' } } }
+        : { business: { legalBusinessName: 'Tenant', ...verified } };
       return jsonResponse({
         accountID: accountId,
         termsOfService: { acceptedDate: '2026-01-01T00:00:00Z' },
-        profile: business
-          ? { business }
-          : { individual: { verification: { status: 'verified' }, name: { firstName: 'Recipient' } } },
+        profile,
       });
     }
     return jsonResponse({ error: 'unexpected' }, 404);
@@ -496,7 +665,13 @@ test('WALLET→RECIPIENT refuses when wallet available is below 1 cent', async (
     client: identityClient(store),
     mapping,
     claims: { sub: COGNITO_SUB },
-    body: { tenant_id: FREEDOM_TENANT, amount_cents: 1, source_kind: 'wallet' },
+    body: {
+      tenant_id: FREEDOM_TENANT,
+      amount_cents: 1,
+      source_kind: 'wallet',
+      external_recipient_id: VENDOR_RECIPIENT_ID,
+      checkalt_deposit_id: CLEARED_DEPOSIT_ID,
+    },
     spoof: {},
     fetchImpl: mockMoovFetch(store, { walletAvailable: 0 }),
     deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
@@ -504,5 +679,230 @@ test('WALLET→RECIPIENT refuses when wallet available is below 1 cent', async (
   assert.equal(result.error, 'wallet_balance_insufficient');
   assert.equal(result.bankFallback, false);
   assert.equal(store.transferPosts || 0, 0);
+});
+
+test('WALLET→RECIPIENT requires a named already-verified payee', async () => {
+  const store = createStore();
+  const result = await withEnv(productionFlags, () => handleProductionMoovWalletDisburse({
+    client: identityClient(store),
+    mapping,
+    claims: { sub: COGNITO_SUB },
+    body: { tenant_id: FREEDOM_TENANT, amount_cents: 1, checkalt_deposit_id: CLEARED_DEPOSIT_ID },
+    spoof: {},
+    fetchImpl: mockMoovFetch(store),
+    deps: {},
+  }));
+  assert.equal(result.error, 'recipient_required');
+  assert.equal(store.transferPosts || 0, 0);
+});
+
+test('WALLET→RECIPIENT refuses an unverified payee without KYC', async () => {
+  const store = createStore();
+  const result = await withEnv(productionFlags, () => handleProductionMoovWalletDisburse({
+    client: identityClient(store),
+    mapping,
+    claims: { sub: COGNITO_SUB },
+    body: {
+      tenant_id: FREEDOM_TENANT,
+      amount_cents: 1,
+      external_recipient_id: UNVERIFIED_RECIPIENT_ID,
+      checkalt_deposit_id: CLEARED_DEPOSIT_ID,
+    },
+    spoof: {},
+    fetchImpl: mockMoovFetch(store),
+    deps: {},
+  }));
+  assert.equal(result.error, 'unknown_recipient_do_not_kyc');
+  assert.equal(store.transferPosts || 0, 0);
+  assert.equal(store.capabilityPosts || 0, 0);
+});
+
+test('WALLET→RECIPIENT refuses before CheckAlt has cleared', async () => {
+  const store = createStore();
+  const missing = await withEnv(productionFlags, () => handleProductionMoovWalletDisburse({
+    client: identityClient(store),
+    mapping,
+    claims: { sub: COGNITO_SUB },
+    body: { tenant_id: FREEDOM_TENANT, amount_cents: 1, external_recipient_id: VENDOR_RECIPIENT_ID },
+    spoof: {},
+    fetchImpl: mockMoovFetch(store),
+    deps: {},
+  }));
+  assert.equal(missing.error, 'check_not_cleared');
+
+  const pending = await withEnv(productionFlags, () => handleProductionMoovWalletDisburse({
+    client: identityClient(store),
+    mapping,
+    claims: { sub: COGNITO_SUB },
+    body: {
+      tenant_id: FREEDOM_TENANT,
+      amount_cents: 1,
+      external_recipient_id: VENDOR_RECIPIENT_ID,
+      checkalt_deposit_id: PENDING_DEPOSIT_ID,
+    },
+    spoof: {},
+    fetchImpl: mockMoovFetch(store),
+    deps: {},
+  }));
+  assert.equal(pending.error, 'check_not_cleared');
+  assert.equal(store.transferPosts || 0, 0);
+});
+
+test('Tenant Management can send for a tenant they are not a member of', async () => {
+  resetProductionMoovTokenCache();
+  const store = createStore();
+  store.memberships = [];
+  grantStepUp(store, {
+    actionKey: 'wallet.disburse',
+    sourcePm: KNOWN_APPROVED_MOOV.freedom.walletPm,
+    destPm: KNOWN_APPROVED_MOOV.recipient.achCreditStandardPm,
+  });
+  store.stepups[0].user_id = PLATFORM_APP;
+  const result = await withEnv(productionFlags, () => handleProductionMoovWalletDisburse({
+    client: identityClient(store, platformMapping),
+    mapping: platformMapping,
+    claims: { sub: PLATFORM_SUB, email: 'spoof@example.com' },
+    body: {
+      tenant_id: FREEDOM_TENANT,
+      amount_cents: 1,
+      source_kind: 'wallet',
+      external_recipient_id: VENDOR_RECIPIENT_ID,
+      checkalt_deposit_id: CLEARED_DEPOSIT_ID,
+      idempotency_key: 'disburse-admin-1',
+    },
+    spoof: {},
+    fetchImpl: mockMoovFetch(store, { walletAvailable: 1, sweepStatus: 'disabled' }),
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
+  }));
+  assert.equal(result.ok, true, result.error || JSON.stringify(result));
+  assert.equal(result.operation, 'wallet.disburse');
+  assert.equal(result.kycRequested, false);
+  assert.equal(store.transferPosts, 1);
+});
+
+test('process-funded-payment requires a manual send and refuses internal auto-send', async () => {
+  const store = createStore();
+  const bypass = await withEnv(productionFlags, () => handleProductionMoovProcessFundedPayment({
+    client: identityClient(store),
+    mapping,
+    claims: { sub: COGNITO_SUB },
+    body: { payment_id: QUEUE_ID, internal: true },
+    spoof: {},
+    deps: { internalBypass: true },
+  }));
+  assert.equal(bypass.error, 'internal_bypass_refused');
+
+  const manual = await withEnv(productionFlags, () => handleProductionMoovProcessFundedPayment({
+    client: identityClient(store),
+    mapping,
+    claims: { sub: COGNITO_SUB },
+    body: { payment_id: QUEUE_ID },
+    spoof: {},
+    deps: {},
+  }));
+  assert.equal(manual.reason, 'manual_send_required');
+  assert.equal(manual.autoSend, false);
+  assert.equal(store.transferPosts || 0, 0);
+});
+
+test('Tenant Management can fee-collect without tenant membership; tenant members cannot', async () => {
+  resetProductionMoovTokenCache();
+  const store = createStore();
+  store.memberships = [];
+  grantStepUp(store, {
+    actionKey: 'platform.fee_collect',
+    sourcePm: KNOWN_APPROVED_MOOV.freedom.achDebitFundPm,
+    destPm: PLATFORM_WALLET_PM,
+  });
+  store.stepups[0].user_id = PLATFORM_APP;
+
+  const tenantDenied = await withEnv(productionFlags, () => handleProductionMoovTenantFeeCharge({
+    client: identityClient(store),
+    mapping,
+    claims: { sub: COGNITO_SUB, email: 'checksopsadmin@gmail.com' },
+    body: { tenant_id: FREEDOM_TENANT, amount_cents: 1 },
+    spoof: {},
+    fetchImpl: mockMoovFetch(store, { sweepStatus: 'disabled' }),
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
+  }));
+  assert.equal(tenantDenied.error, 'platform_owner_required');
+  assert.equal(isPlatformOwnerCaller(mapping), false);
+  assert.equal(isPlatformOwnerCaller({ ...mapping, email: 'checksopsadmin@gmail.com', application_user_id: PLATFORM_APP }), true);
+
+  const pulled = await withEnv(productionFlags, () => handleProductionMoovTenantFeeCharge({
+    client: identityClient(store, platformMapping),
+    mapping: platformMapping,
+    claims: { sub: PLATFORM_SUB, email: 'spoof@example.com' },
+    body: { tenant_id: FREEDOM_TENANT, amount_cents: 1, idempotency_key: 'fee-test-1' },
+    spoof: {},
+    fetchImpl: mockMoovFetch(store, { sweepStatus: 'disabled' }),
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
+  }));
+  assert.equal(pulled.ok, true, pulled.error || JSON.stringify(pulled));
+  assert.equal(pulled.operation, 'platform.fee_collect');
+  assert.equal(pulled.kycRequested, false);
+  assert.equal(pulled.capabilitiesPosted, false);
+  assert.equal(store.transferPosts, 1);
+  assert.equal(store.capabilityPosts || 0, 0);
+});
+
+test('C1C BANK→WALLET and fee-collect refuse without collect-funds and never POST capabilities', async () => {
+  resetProductionMoovTokenCache();
+  const store = createStore();
+  store.memberships = [{ tenant_id: C1C_TENANT, role: 'admin', tenant_name: 'C1C', tenant_slug: 'c1c' }];
+  grantStepUp(store, { amountCents: 1 });
+  store.stepups[0].tenant_id = C1C_TENANT;
+  const fund = await withEnv(productionFlags, () => handleProductionMoovWalletFund({
+    client: identityClient(store),
+    mapping,
+    claims: { sub: COGNITO_SUB },
+    body: { tenant_id: C1C_TENANT, amount_cents: 1 },
+    spoof: {},
+    fetchImpl: mockMoovFetch(store, { sweepStatus: 'disabled' }),
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
+  }));
+  assert.equal(fund.error, 'collect_funds_not_enabled');
+  assert.equal(store.transferPosts || 0, 0);
+  assert.equal(store.capabilityPosts || 0, 0);
+  assert.ok(isDeniedDuplicateMoovAccount('7c50c273-89ec-4651-addc-f27330fd4360'));
+
+  grantStepUp(store, {
+    actionKey: 'platform.fee_collect',
+    sourcePm: KNOWN_APPROVED_MOOV.freedom.achDebitFundPm,
+    destPm: PLATFORM_WALLET_PM,
+  });
+  store.stepups.at(-1).user_id = PLATFORM_APP;
+  store.stepups.at(-1).tenant_id = C1C_TENANT;
+  const fee = await withEnv(productionFlags, () => handleProductionMoovTenantFeeCharge({
+    client: identityClient(store, platformMapping),
+    mapping: platformMapping,
+    claims: { sub: PLATFORM_SUB },
+    body: { tenant_id: C1C_TENANT, amount_cents: 1 },
+    spoof: {},
+    fetchImpl: mockMoovFetch(store),
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
+  }));
+  assert.equal(fee.error, 'collect_funds_not_enabled');
+  assert.equal(store.transferPosts || 0, 0);
+  assert.equal(store.capabilityPosts || 0, 0);
+});
+
+test('wallet-fund-on-clear funds after CheckAlt clear and does not auto-disburse', async () => {
+  resetProductionMoovTokenCache();
+  const store = createStore();
+  grantStepUp(store);
+  const result = await withEnv(productionFlags, () => handleProductionMoovWalletFundOnClear({
+    client: identityClient(store),
+    mapping,
+    claims: { sub: COGNITO_SUB },
+    body: { queue_id: QUEUE_ID },
+    spoof: {},
+    fetchImpl: mockMoovFetch(store, { sweepStatus: 'disabled' }),
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
+  }));
+  assert.equal(result.ok, true, result.error || JSON.stringify(result));
+  assert.equal(result.operation, 'wallet.fund');
+  assert.equal(result.autoSendAfterFunding, false);
+  assert.equal(store.transferPosts, 1);
 });
 });

@@ -25,6 +25,10 @@ export const sweepBlocksFirstCent = (sweeps = []) => {
   });
 };
 
+export const REQUIRED_CAPS_SEND = Object.freeze(['send-funds', 'transfers', 'wallet']);
+export const REQUIRED_CAPS_RECIPIENT = Object.freeze(['transfers']);
+export const REQUIRED_CAPS_PLATFORM = Object.freeze(['transfers']);
+
 export const summarizeApprovedAccount = ({
   label,
   account,
@@ -33,7 +37,7 @@ export const summarizeApprovedAccount = ({
   paymentMethods,
   wallets,
   sweeps,
-  requiredCapabilities = ['send-funds.ach', 'wallet.balance', 'collect-funds.ach', 'transfers'],
+  requiredCapabilities = REQUIRED_CAPS_SEND,
 } = {}) => {
   const caps = listOf(capabilities);
   const bankList = listOf(banks);
@@ -69,8 +73,15 @@ export const summarizeApprovedAccount = ({
     verifiedBank: bankList.some((row) => String(row.status || '').toLowerCase() === 'verified'),
     paymentMethodTypes: methods.map((row) => row.paymentMethodType).filter(Boolean),
     walletCount: walletList.length,
+    resolvedWalletId: knownWalletIdFrom(walletList),
     sweepEnabledMinZero: sweepBlocksFirstCent(sweepList),
   };
+};
+
+const knownWalletIdFrom = (wallets = []) => {
+  const list = Array.isArray(wallets) ? wallets : [];
+  const first = list[0];
+  return first?.walletID || first?.walletId || null;
 };
 
 export const assertNoReKyc = (summary) => {
@@ -105,6 +116,7 @@ export async function getApprovedAccountSnapshot({
   known = KNOWN_APPROVED_MOOV.freedom,
   fetchImpl,
   includeSweeps = true,
+  requiredCapabilities,
 } = {}) {
   const accountId = known.moovAccountId;
   const account = await productionMoovFetch({
@@ -125,22 +137,33 @@ export async function getApprovedAccountSnapshot({
     wallets = [await productionMoovFetch({
       credentials, path: `/accounts/${accountId}/wallets/${known.walletId}`, fetchImpl,
     }).catch(() => null)].filter(Boolean);
-    if (includeSweeps) {
-      sweeps = await productionMoovFetch({
-        credentials, path: `/accounts/${accountId}/wallets/${known.walletId}/sweeps`, fetchImpl,
-      }).catch(() => []);
-    }
+  } else {
+    wallets = listOf(await productionMoovFetch({
+      credentials, path: `/accounts/${accountId}/wallets`, fetchImpl,
+    }).catch(() => []));
   }
-  return summarizeApprovedAccount({
-    label: known.label,
-    account,
-    capabilities,
-    banks,
-    paymentMethods,
-    wallets,
-    sweeps,
-    requiredCapabilities: known.walletId
-      ? ['send-funds.ach', 'wallet.balance', 'collect-funds.ach', 'transfers']
-      : ['transfers'],
-  });
+  const walletId = known.walletId || knownWalletIdFrom(wallets);
+  if (includeSweeps && walletId) {
+    sweeps = await productionMoovFetch({
+      credentials, path: `/accounts/${accountId}/wallets/${walletId}/sweeps`, fetchImpl,
+    }).catch(() => []);
+  }
+  const caps = requiredCapabilities || (
+    known.moovAccountId === KNOWN_APPROVED_MOOV.platform.moovAccountId
+      ? REQUIRED_CAPS_PLATFORM
+      : REQUIRED_CAPS_SEND
+  );
+  return {
+    ...summarizeApprovedAccount({
+      label: known.label,
+      account,
+      capabilities,
+      banks,
+      paymentMethods,
+      wallets,
+      sweeps,
+      requiredCapabilities: caps,
+    }),
+    resolvedWalletId: walletId,
+  };
 }

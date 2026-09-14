@@ -1,10 +1,12 @@
 import { TENANT_MEMBERSHIP_SQL } from '../../identity.mjs';
 import { FINANCIAL_ROLES, roleAllowsFinancial } from '../../financial-authz.mjs';
 import { financialPermissionsActivated } from '../../financial-flags.mjs';
+import { isPlatformOwnerCaller } from './moov-roles.mjs';
 import { productionMoovExecutionAllowed } from './moov-holds.mjs';
 
 export const MOOV_FUND_TOTP_ACTION = 'wallet.fund';
 export const MOOV_DISBURSE_TOTP_ACTION = 'wallet.disburse';
+export const MOOV_FEE_COLLECT_TOTP_ACTION = 'platform.fee_collect';
 export const TOTP_STEPUP_TTL_MS = 30 * 60 * 1000;
 
 export const denyMoovAuthz = (error, extra = {}) => ({
@@ -85,6 +87,25 @@ export async function loadRecentMoovStepUp(client, {
   }));
 }
 
+export async function loadTenantMemberships(client, userId) {
+  if (!userId) return [];
+  return (await client.query(TENANT_MEMBERSHIP_SQL, [userId])).rows;
+}
+
+export async function assertMoovTenantAccess(client, mapping, tenantId) {
+  const platformOwner = isPlatformOwnerCaller(mapping);
+  if (platformOwner) {
+    return { ok: true, platformOwner: true, memberships: [] };
+  }
+  const memberships = await loadTenantMemberships(client, mapping.application_user_id);
+  if (!memberships.some((row) => row.tenant_id === tenantId)) {
+    return denyMoovAuthz('cross_tenant_denied', {
+      message: 'Requested tenant_id is not a membership of the authenticated user. Tenant Management (checksopsadmin@gmail.com) may act across tenants.',
+    });
+  }
+  return { ok: true, platformOwner: false, memberships };
+}
+
 export async function authorizeMoovProduction({
   client,
   mapping,
@@ -93,23 +114,29 @@ export async function authorizeMoovProduction({
   amountCents,
   sourcePaymentMethodId,
   destinationPaymentMethodId,
+  requirePlatformOwner = false,
 } = {}) {
   if (!productionMoovExecutionAllowed() || !financialPermissionsActivated()) {
     return denyMoovAuthz('production_execution_blocked', {
       message: 'Production Moov money flags stay false.',
     });
   }
-  const memberships = (await client.query(TENANT_MEMBERSHIP_SQL, [mapping.application_user_id])).rows;
-  if (!memberships.some((row) => row.tenant_id === tenantId)) {
-    return denyMoovAuthz('cross_tenant_denied', {
-      message: 'Requested tenant_id is not a membership of the authenticated user',
+  const platformOwner = isPlatformOwnerCaller(mapping);
+  if (requirePlatformOwner && !platformOwner) {
+    return denyMoovAuthz('platform_owner_required', {
+      message: 'Only Tenant Management (checksopsadmin@gmail.com) can pull monthly and usage fees from other tenants.',
     });
   }
-  const roles = await loadTenantRole(client, mapping.application_user_id, tenantId);
-  if (!roleAllowsFinancial(roles) && !roles.some((role) => FINANCIAL_ROLES.has(role))) {
-    return denyMoovAuthz('financial_role_required', {
-      message: 'Wallet funding and disbursement require owner, admin, or manager.',
-    });
+  const access = await assertMoovTenantAccess(client, mapping, tenantId);
+  if (!access.ok) return access;
+  let roles = [];
+  if (!platformOwner) {
+    roles = await loadTenantRole(client, mapping.application_user_id, tenantId);
+    if (!roleAllowsFinancial(roles) && !roles.some((role) => FINANCIAL_ROLES.has(role))) {
+      return denyMoovAuthz('financial_role_required', {
+        message: 'Wallet funding and disbursement require owner, admin, or manager, or Tenant Management.',
+      });
+    }
   }
   const totpRows = await loadRecentMoovStepUp(client, {
     userId: mapping.application_user_id,
@@ -130,6 +157,7 @@ export async function authorizeMoovProduction({
     ok: true,
     totpRow: totpRows[0],
     roles,
-    memberships,
+    memberships: access.memberships,
+    platformOwner,
   };
 }

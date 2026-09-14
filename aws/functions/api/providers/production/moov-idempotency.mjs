@@ -20,6 +20,15 @@ export const moovDisburseIdempotencyKey = ({ tenantId, intentId, amountCents }) 
     currency: 'USD',
   });
 
+export const moovFeeCollectIdempotencyKey = ({ tenantId, intentId, amountCents }) =>
+  stableIdempotencyKey({
+    tenantId,
+    operationType: 'moov_platform_fee_collect',
+    resourceId: intentId,
+    amountCents,
+    currency: 'USD',
+  });
+
 export async function bindMoovProductionGucs(client, mapping, claims) {
   await client.query('SELECT set_config($1, $2, true)', [APP_USER_ID_GUC, mapping.application_user_id]);
   await client.query('SELECT set_config($1, $2, true)', [

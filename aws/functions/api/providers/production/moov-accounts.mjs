@@ -38,10 +38,22 @@ export const APPROVED_MOOV_ACCOUNT_IDS = Object.freeze(new Set([
   KNOWN_APPROVED_MOOV.recipient.moovAccountId,
 ]));
 
-export const isKnownApprovedMoovAccount = (accountId) => (
-  APPROVED_MOOV_ACCOUNT_IDS.has(String(accountId || '').trim().toLowerCase())
-  || APPROVED_MOOV_ACCOUNT_IDS.has(String(accountId || '').trim())
-);
+/**
+ * Leftover connected accounts from earlier pipelines. Verified or not, do
+ * not KYC, capability-request, or send through these ids.
+ */
+export const DENIED_DUPLICATE_MOOV_ACCOUNT_IDS = Object.freeze(new Set([
+  '7c50c273-89ec-4651-addc-f27330fd4360',
+  '7597a1f1-79c8-4c80-bbfd-fd5906c2bb73',
+]));
+
+const normalizeAccountId = (accountId) => String(accountId || '').trim().toLowerCase();
+
+export const isKnownApprovedMoovAccount = (accountId) =>
+  APPROVED_MOOV_ACCOUNT_IDS.has(normalizeAccountId(accountId));
+
+export const isDeniedDuplicateMoovAccount = (accountId) =>
+  DENIED_DUPLICATE_MOOV_ACCOUNT_IDS.has(normalizeAccountId(accountId));
 
 export const knownApprovedForTenant = (tenantId) => {
   const id = String(tenantId || '').trim().toLowerCase();
