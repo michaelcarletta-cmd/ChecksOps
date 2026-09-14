@@ -24,7 +24,13 @@ Resources:
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
-          - Effect: Deny
-            Principal: "*"
-            Action: sts:AssumeRole
+          - Sid: CursorCloudOidcLiveApiCursorCom
+            Effect: Allow
+            Principal:
+              Federated: arn:aws:iam::806168576068:oidc-provider/api.cursor.com
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                api.cursor.com:aud: sts.amazonaws.com
+                api.cursor.com:sub: user:325724407
       Policies: []

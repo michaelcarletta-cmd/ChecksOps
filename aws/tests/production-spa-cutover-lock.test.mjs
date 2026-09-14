@@ -104,6 +104,9 @@ test('bucket policy denies staging/rehearsal writes and keeps CloudFront OAC rea
   const role = read('aws/production/production-spa-deploy-role.yaml');
   assert.match(role, /Default: "false"/);
   assert.match(role, /ChecksOpsProductionSpaDeploy/);
+  assert.match(role, /api\.cursor\.com:sub: user:325724407/);
+  const trust = JSON.parse(read('aws/production/production-spa-deploy-role-trust.json'));
+  assert.equal(trust.Statement[0].Condition.StringEquals['api.cursor.com:sub'], 'user:325724407');
 });
 
 test('CloudFront Step 1 apply stays refused after cutover lock', () => {

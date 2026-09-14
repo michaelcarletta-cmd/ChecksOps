@@ -1,0 +1,74 @@
+{
+  "verdict": "NO GO — DEPLOY ROLE TRUST STILL BLOCKED",
+  "recordedAt": "2026-09-14T21:43:30Z",
+  "objective": "Make existing ChecksOpsProductionSpaDeploy assumable by Cursor OIDC user:325724407 without broadening production write access.",
+  "applyRan": false,
+  "spaChanged": false,
+  "bucketPolicyChanged": false,
+  "cloudfrontDistributionChanged": false,
+  "secondDeployRoleCreated": false,
+  "authorizedIdentity": {
+    "oidcIssuer": "https://api.cursor.com",
+    "oidcProviderArn": "arn:aws:iam::806168576068:oidc-provider/api.cursor.com",
+    "audience": "sts.amazonaws.com",
+    "subject": "user:325724407",
+    "ownerUserId": "325724407"
+  },
+  "workingAssume": {
+    "role": "ChecksOpsCursorCloudStaging",
+    "action": "sts:AssumeRoleWithWebIdentity",
+    "result": "Allow"
+  },
+  "blocker": {
+    "kind": "cursor_staging_cannot_mutate_deploy_role_trust",
+    "approvedDeployRole": "ChecksOpsProductionSpaDeploy",
+    "liveTrustInspected": false,
+    "reason": "ChecksOpsCursorCloudStaging has no iam:GetRole, iam:UpdateAssumeRolePolicy, or iam:CreateRole on ChecksOpsProductionSpaDeploy. Dedicated Cursor IAM operator roles (SecurityHardeningTemp, CloudTrailCwLogsTemp, ApiPerimeter*) also fail AssumeRoleWithWebIdentity. AWS returns AccessDenied for both missing-role and mistrusted-role assume, so live existence/trust was not proven.",
+    "intendedTrust": "aws/production/production-spa-deploy-role-trust.json",
+    "operatorAction": "As a privileged IAM principal (not ChecksOpsCursorCloudStaging), apply the intended trust with iam:UpdateAssumeRolePolicy if the role exists, or create only ChecksOpsProductionSpaDeploy with that trust if it does not. Do not create a second general-purpose production deploy role. Do not remove the S3 explicit deny."
+  },
+  "proofs": {
+    "1_authorizedCursorCanAssumeDeployRole": {
+      "result": "FAIL",
+      "action": "sts:AssumeRoleWithWebIdentity",
+      "roleArn": "arn:aws:iam::806168576068:role/ChecksOpsProductionSpaDeploy",
+      "error": "AccessDenied Not authorized to perform sts:AssumeRoleWithWebIdentity"
+    },
+    "2_stagingStillCannotWriteProductionBucket": {
+      "result": "PASS",
+      "bucket": "checksops-production-frontend-806168576068",
+      "putObject": "AccessDenied explicit deny in resource-based policy DenyProductionSpaWritesExceptApprovedDeployRole",
+      "deleteObject": "AccessDenied explicit deny in resource-based policy",
+      "putBucketPolicy": "AccessDenied explicit deny DenyProductionSpaBucketPolicyChangesExceptRoot"
+    },
+    "3_deployRoleGuardedActionsOnly": {
+      "result": "NOT_PROVEN",
+      "reason": "Could not assume ChecksOpsProductionSpaDeploy, so its identity-based permissions were not inspected or exercised. Role permissions policy was not changed."
+    },
+    "4_publicProductionUnchanged": {
+      "result": "PASS",
+      "url": "https://checksops.com/",
+      "httpStatus": 200,
+      "lastModified": "2026-09-14T15:13:43Z",
+      "etag": "eb72535f64ce52c3bf3c8780dd3ccc25",
+      "spaBundle": "index-CiOVNYWh.js",
+      "cognitoPoolId": "us-east-1_h00WorYMT",
+      "cognitoClientId": "3ja9fqaq2fjkv3i6up2varcqpe",
+      "apiTarget": "/prep",
+      "s3IndexLastModified": "2026-09-14T15:13:43+00:00",
+      "s3IndexVersionId": "ckmTzCZvWNSeKn4Ky7lo9LYltvoSNqiQ"
+    }
+  },
+  "holdsHonored": {
+    "noDeployProductionSpaApply": true,
+    "noBucketPolicyChange": true,
+    "noS3ExplicitDenyRemoved": true,
+    "noSecondDeployRole": true,
+    "noAppCodeChange": true,
+    "noCognitoMappingChange": true,
+    "noMoovChange": true,
+    "noCheckAltChange": true,
+    "noFinancialDataChange": true
+  },
+  "note": "A CloudFront invalidation was accidentally created for the nonexistent path /__iam_probe_do_not_invalidate (id IF0LW2KZAZZQ19YF6XFRT7BM25). Distribution config and the live SPA object were not changed."
+}
