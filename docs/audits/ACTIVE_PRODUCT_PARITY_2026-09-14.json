@@ -1,0 +1,104 @@
+{
+  "generated_at": "2026-09-14T18:30:00.000Z",
+  "inventory_source": {
+    "path": "docs/audits/inventory-2026-09-11.json",
+    "existing_inventory": 1421,
+    "note": "Same 1,421 IDs. Prior result frozen except explicit N/A — LEGACY_UNUSED reclass of unused Zapier/Stripe UI."
+  },
+  "totals": {
+    "existing_inventory": 1421,
+    "live_non_na": 1136,
+    "n_a": 285,
+    "legacy_unused": 8,
+    "active_required": 1136,
+    "AWS_PASS": 7,
+    "AWS_FAIL": 0,
+    "SUPABASE_DEPENDENCY": 7,
+    "INTERNAL_BLOCKED": 248,
+    "EXTERNAL_BLOCKED": 167,
+    "NOT_RETESTED_POST_CUTOVER": 707
+  },
+  "prior_result_unchanged": {
+    "PASS": 714,
+    "FAIL": 1,
+    "BLOCKED": 421,
+    "N_A": 285
+  },
+  "aws_pass_ids": [
+    "A5-001",
+    "A8-031",
+    "A8-032",
+    "A8-035",
+    "CC-268",
+    "CC-304",
+    "CC-320"
+  ],
+  "aws_fail_ids": [],
+  "supabase_dependency_ids": [
+    "A5-305",
+    "A5-306",
+    "A5-307",
+    "A5-308",
+    "A5-309",
+    "A5-310",
+    "X-020"
+  ],
+  "legacy_unused_ids": [
+    "A4-225",
+    "A4-226",
+    "A4-227",
+    "CC-228",
+    "CC-229",
+    "CC-230",
+    "CC-231",
+    "CC-232"
+  ],
+  "by_module_live": {
+    "admin": {
+      "NOT_RETESTED_POST_CUTOVER": 119,
+      "INTERNAL_BLOCKED": 9,
+      "EXTERNAL_BLOCKED": 16
+    },
+    "settings": {
+      "NOT_RETESTED_POST_CUTOVER": 70,
+      "EXTERNAL_BLOCKED": 11,
+      "INTERNAL_BLOCKED": 15
+    },
+    "payments_wallet": {
+      "AWS_PASS": 1,
+      "NOT_RETESTED_POST_CUTOVER": 150,
+      "INTERNAL_BLOCKED": 56,
+      "EXTERNAL_BLOCKED": 86,
+      "SUPABASE_DEPENDENCY": 6
+    },
+    "mortgage_ops": {
+      "EXTERNAL_BLOCKED": 15,
+      "NOT_RETESTED_POST_CUTOVER": 6
+    },
+    "homeowner": {
+      "EXTERNAL_BLOCKED": 19,
+      "NOT_RETESTED_POST_CUTOVER": 73,
+      "INTERNAL_BLOCKED": 71
+    },
+    "public": {
+      "NOT_RETESTED_POST_CUTOVER": 81,
+      "EXTERNAL_BLOCKED": 6,
+      "AWS_PASS": 3,
+      "INTERNAL_BLOCKED": 3
+    },
+    "check_center": {
+      "NOT_RETESTED_POST_CUTOVER": 206,
+      "INTERNAL_BLOCKED": 75,
+      "EXTERNAL_BLOCKED": 12,
+      "AWS_PASS": 3
+    },
+    "extra_public_or_auth": {
+      "SUPABASE_DEPENDENCY": 1,
+      "NOT_RETESTED_POST_CUTOVER": 2,
+      "INTERNAL_BLOCKED": 19,
+      "EXTERNAL_BLOCKED": 2
+    }
+  },
+  "controlled_spa_release_required": true,
+  "production_spa_still_locked": true
+}
