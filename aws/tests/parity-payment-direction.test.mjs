@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { CLASS_A_FUNCTIONS, handleAppServiceRequest } from '../functions/api/app-services.mjs';
+import { sql71EmailAuditHandle } from './sql71-email-audit-mock.mjs';
 import {
   buildPaymentDirectionEmail,
   runSendPaymentDirectionRequest,
@@ -10,15 +11,21 @@ const TENANT_A = '11111111-1111-4111-8111-111111111111';
 const CLAIM_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const CHECK_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 
-const sqlClient = (handlers) => ({
-  query: async (sql, params = []) => {
-    const compact = String(sql).replace(/\s+/g, ' ');
-    for (const handler of handlers) {
-      if (handler.match(compact, params)) return handler.result(params, compact);
-    }
-    return { rows: [], rowCount: 0 };
-  },
-});
+const sqlClient = (handlers) => {
+  const logs = new Map();
+  const audit = sql71EmailAuditHandle({ logs });
+  return {
+    query: async (sql, params = []) => {
+      const compact = String(sql).replace(/\s+/g, ' ');
+      const hit = audit(compact, params);
+      if (hit) return hit;
+      for (const handler of handlers) {
+        if (handler.match(compact, params)) return handler.result(params, compact);
+      }
+      return { rows: [], rowCount: 0 };
+    },
+  };
+};
 
 test('send-payment-direction-request is Class A SES/sink not Resend', async () => {
   assert.ok(CLASS_A_FUNCTIONS.has('send-payment-direction-request'));
@@ -62,7 +69,7 @@ test('payment direction send is tenant-isolated and uses injected SES/sink', asy
     body: { claimId: CLAIM_ID, checkId: CHECK_ID, requestUrl: 'https://example.test/pd' },
     send: async (payload) => {
       sent.push(payload);
-      return { deliveredCount: 0, sunkCount: 1, results: [{ delivery: 'sink' }] };
+      return { deliveredCount: 0, sunkCount: 1, results: [{ delivery: 'sink', status: 'sunk', messageId: 'sink-pd' }] };
     },
     client: sqlClient([
       {

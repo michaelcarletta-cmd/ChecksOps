@@ -1,7 +1,7 @@
 import { databaseSecretConfigured } from './secrets.mjs';
 import { probeDatabase, probeIsHealthy } from './db-health.mjs';
 import { validateReadonlyCoreTables } from './db-readonly-validate.mjs';
-import { handleIdentityMe } from './identity.mjs';
+import { handleIdentityMe, handleIdentityLink } from './identity.mjs';
 import { handleAuthorizationProbe, handleJwksCheck } from './authorization.mjs';
 import { AUTH_ROUTES } from './auth-cognito.mjs';
 import { readinessSnapshot, stagingSafetyHolds } from './ops-readiness.mjs';
@@ -127,6 +127,16 @@ export const handler = async (event) => {
       environment: process.env.CHECKSOPS_ENV || 'unknown',
       productionSupabaseChanged: false,
       ...validation,
+    });
+  }
+
+  if (method === 'POST' && path === '/identity/link') {
+    const identity = await handleIdentityLink(event);
+    return json(identity.statusCode || (identity.ok ? 200 : 401), {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      ...identity,
     });
   }
 

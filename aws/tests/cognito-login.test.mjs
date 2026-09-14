@@ -9,6 +9,7 @@ import {
   NINTH_ID,
   PROBE_EMAIL,
   PROBE_SUB,
+  TESTER_ID,
   jwtClaimsSafe,
   redactSecrets,
 } from '../identity/expected-mappings.mjs';
@@ -25,10 +26,18 @@ test('activation targets only Freedom tester and C1C payments admin', () => {
   assert.ok(!Object.values(LIFECYCLE_EMAILS).includes(PROBE_EMAIL));
 });
 
-test('no expected mapping uses Cognito sub as the application UUID', () => {
-  for (const row of EXPECTED_EIGHT) {
-    assert.notEqual(row.applicationUserId, row.cognitoSub);
-  }
+test('Freedom admin and tester Cognito subs stay distinct application UUIDs', () => {
+  const admin = EXPECTED_EIGHT.find((row) => row.applicationUserId === '7dbb3009-f059-4767-b5dc-1c5c72379330');
+  const tester = EXPECTED_EIGHT.find((row) => row.applicationUserId === TESTER_ID);
+  assert.equal(admin.email, 'mcarletta@freedomadj.com');
+  assert.equal(admin.cognitoSub, 'c4386408-60e1-70e2-abb6-e6194e8e635f');
+  assert.equal(admin.appRole, 'admin');
+  assert.equal(admin.tenantSlug, 'freedom');
+  assert.equal(tester.email, 'checksops-tester@freedomadj.com');
+  assert.equal(tester.cognitoSub, '04d85458-1041-7017-a8e8-b2f3f0a5b75b');
+  assert.notEqual(admin.cognitoSub, tester.cognitoSub);
+  assert.notEqual(admin.applicationUserId, tester.applicationUserId);
+  assert.notEqual(admin.applicationUserId, admin.cognitoSub);
 });
 
 test('oneshot ninth and probe constants stay aligned', () => {

@@ -127,6 +127,9 @@ test('allowlist rejects financial tables and unknown columns; ignores spoof iden
   assert.equal(denyTableReason('claim_payments'), 'financial_or_provider');
   assert.equal(denyTableReason('check_intake_items'), null);
   assert.equal(WRITE_ALLOWLIST.check_intake_items.ops.has('insert'), false);
+  assert.equal(WRITE_ALLOWLIST.mortgage_handling_requests.columns.has('work_notes'), false);
+  assert.equal(WRITE_ALLOWLIST.mortgage_handling_requests.columns.has('assigned_employee_id'), true);
+  assert.equal(WRITE_ALLOWLIST.mortgage_handling_requests.clientIgnored.has('work_notes'), false);
   assert.equal(denyTableReason('moov_unknown'), 'unknown_table');
   const financialIntake = pickAllowlistedValues('check_intake_items', {
     carrier_name: 'Test',
