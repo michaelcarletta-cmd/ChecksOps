@@ -250,6 +250,17 @@ test('compiled Supabase-mode artifact fails; Cognito /prep artifact passes', () 
   assert.ok(stagingLeak.forbidden.includes('staging_api'));
 });
 
+test('production-aws vite config fingerprints Cognito pool and client in the compiled HTML', () => {
+  const vite = read('vite.config.ts');
+  assert.match(vite, /mode === "production-aws"/);
+  assert.match(vite, /checksops-cognito-artifact-fingerprint/);
+  assert.match(vite, /checksops-cognito-pool/);
+  assert.match(vite, /VITE_COGNITO_USER_POOL_ID/);
+  const client = read('src/integrations/aws/client.ts');
+  assert.match(client, /AWS_STAGING_PUBLIC_CONFIG/);
+  assert.match(client, /cognitoPublicConfig/);
+});
+
 test('deploy-production-spa --apply is refused and webhook files stay untouched', () => {
   const apply = spawnSync(process.execPath, [
     path.join(ROOT, 'scripts/deploy-production-spa.mjs'),
