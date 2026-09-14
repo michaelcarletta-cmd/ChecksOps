@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { isPlatformOwner } from "@/lib/masterMerchant";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,7 +8,6 @@ import { Receipt, ChevronDown, ChevronUp, RefreshCw, AlertCircle } from "lucide-
 import { useState } from "react";
 import { useTenantFilter } from "@/hooks/useTenantFilter";
 import { format } from "date-fns";
-import { toast } from "sonner";
 
 interface UsageEvent {
   id: string;
@@ -35,7 +34,6 @@ const formatCents = (cents: number, currency = "usd") =>
 export function CheckUsageCard() {
   const { tenantId } = useTenantFilter();
   const [open, setOpen] = useState(false);
-  const qc = useQueryClient();
 
   const { data: tenant } = useQuery({
     queryKey: ["tenant-billing-status", tenantId],
@@ -72,19 +70,6 @@ export function CheckUsageCard() {
     },
     enabled: !!tenantId,
     refetchInterval: 60_000,
-  });
-
-  const reportMutation = useMutation({
-    mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke("report-check-usage-to-stripe");
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: (res) => {
-      toast.success(`Usage reported: ${res?.succeeded ?? 0} events sent`);
-      qc.invalidateQueries({ queryKey: ["check-usage-current-month"] });
-    },
-    onError: (e: any) => toast.error(e?.message ?? "Failed to report usage"),
   });
 
   if (!tenantId) return null;

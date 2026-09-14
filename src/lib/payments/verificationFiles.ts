@@ -1,4 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
+import { awsApiBaseUrl } from "@/lib/awsStaging";
+import { moovAccountFileUploadUrl } from "@/lib/awsFunctionUrls";
 
 /**
  * Frontend access to verification-document metadata.
@@ -106,13 +108,12 @@ export async function uploadVerificationFile(args: UploadArgs): Promise<Verifica
   if (args.representativeId) form.append("representative_id", args.representativeId);
   if (args.requirementId) form.append("requirement_id", args.requirementId);
 
-  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/moov-account-file-upload`;
+  const url = moovAccountFileUploadUrl(awsApiBaseUrl());
 
   return new Promise<VerificationFile>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", url);
     xhr.setRequestHeader("Authorization", `Bearer ${token}`);
-    xhr.setRequestHeader("apikey", import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) args.onProgress?.(Math.round((e.loaded / e.total) * 100));
     };

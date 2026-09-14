@@ -1,6 +1,6 @@
 /**
- * AWS staging SMS service (Class A). Staging-safe sink by default.
- * Does not call Telnyx unless AWS_SMS_MODE=live AND allowlisted.
+ * AWS SMS service (Class A). Audit/sink by default.
+ * Telnyx HTTP delivery is LEGACY_UNUSED — this handler never calls Telnyx.
  */
 import { randomUUID } from 'node:crypto';
 import { withIdentity, parseBody, ignoredSpoof } from './data.mjs';
