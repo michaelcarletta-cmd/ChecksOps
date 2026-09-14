@@ -124,6 +124,20 @@ test('oneshot applies 29 only after write helpers and complete write policies', 
   assert.match(complete, /Do not apply 31_mortgage_ops_agent_access/);
   assert.match(index, /Do not apply 31_mortgage_ops_agent_access/);
   assert.match(writePlan, /Do not apply 31_mortgage_ops_agent_access/);
+  for (const name of [
+    '69_staging_homeowner_ledger_view.sql',
+    '71_endorsement_email_audit.sql',
+    '72_public_endorsement_token_lookup.sql',
+    '73_public_endorsement_submit_payee.sql',
+  ]) {
+    assert.equal(applied.includes(name), false, `completeAuth must not apply ${name}`);
+    assert.doesNotMatch(complete, new RegExp(`readSql\\('${name.replace('.', '\\.')}'\\)`));
+    assert.doesNotMatch(index, new RegExp(`applySql\\('${name.replace('.', '\\.')}'\\)`));
+    assert.doesNotMatch(writePlan, new RegExp(`readSql\\('${name.replace('.', '\\.')}'\\)`));
+  }
+  assert.match(complete, /Do not apply 69\/71\/72\/73/);
+  assert.match(index, /Do not apply 69\/71\/72\/73/);
+  assert.match(writePlan, /Do not apply 69\/71\/72\/73/);
 });
 
 test('SQL overlay revokes PUBLIC immediately, requires mortgage category, and uses exact paths', () => {
