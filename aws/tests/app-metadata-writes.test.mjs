@@ -14,7 +14,7 @@ test('tranche-6 tables are allowlisted with narrow columns', () => {
     'shared_check_messages', 'profiles', 'company_branding', 'referral_alerts',
     'tenants', 'privacy_notice_acknowledgments', 'tenant_users',
     'cash_jobs', 'cash_job_line_items', 'cash_job_attachments', 'homeowner_ledger_events',
-    'mortgage_request_library_documents',
+    'mortgage_request_library_documents', 'claim_settlements',
   ]) {
     assert.equal(WRITE_ALLOWLIST[table].tranche, 6, table);
   }
@@ -287,5 +287,86 @@ test('tenant branding writes stay on the caller tenant; global branding is owner
     filters: [],
   });
   assert.equal(branding.error, 'not_authorized');
+});
+
+test('claim_settlements writes require tenant-linked claims and reject negatives', async () => {
+  const CLAIM_ID = '77777777-7777-4777-8777-777777777777';
+  const OTHER_CLAIM = '88888888-8888-4888-8888-888888888888';
+  const SETTLEMENT_ID = '99999999-9999-4999-8999-999999999999';
+  const client = {
+    query: async (sql, params) => {
+      if (/FROM public.claims c/.test(sql)) {
+        return params[0] === CLAIM_ID
+          ? { rows: [{ id: CLAIM_ID, org_id: TENANT }] }
+          : { rows: [] };
+      }
+      if (/INSERT INTO public.claim_settlements/.test(sql)) {
+        assert.equal(params[0], CLAIM_ID);
+        assert.equal(params[1], APP_ID);
+        return { rows: [{ id: SETTLEMENT_ID, claim_id: CLAIM_ID, replacement_cost_value: params[2] }] };
+      }
+      if (/FROM public.claim_settlements WHERE id/.test(sql)) {
+        return { rows: [{ id: SETTLEMENT_ID, claim_id: CLAIM_ID }] };
+      }
+      if (/UPDATE public.claim_settlements/.test(sql)) {
+        return { rows: [{ id: SETTLEMENT_ID, claim_id: CLAIM_ID, deductible: params[0] }] };
+      }
+      return { rows: [] };
+    },
+  };
+
+  const inserted = await executeAppMetadataWrite({
+    client,
+    mapping,
+    table: 'claim_settlements',
+    op: 'insert',
+    values: { claim_id: CLAIM_ID, replacement_cost_value: 1000, created_by: '00000000-0000-0000-0000-000000000099' },
+    filters: [],
+  });
+  assert.equal(inserted.error, undefined);
+  assert.equal(inserted.rows[0].claim_id, CLAIM_ID);
+
+  const outsider = await executeAppMetadataWrite({
+    client,
+    mapping,
+    table: 'claim_settlements',
+    op: 'insert',
+    values: { claim_id: OTHER_CLAIM, replacement_cost_value: 10 },
+    filters: [],
+  });
+  assert.equal(outsider.error, 'rls_denied');
+
+  const negative = await executeAppMetadataWrite({
+    client,
+    mapping,
+    table: 'claim_settlements',
+    op: 'insert',
+    values: { claim_id: CLAIM_ID, deductible: -1 },
+    filters: [],
+  });
+  assert.equal(negative.error, 'invalid_amount');
+  assert.equal(negative.field, 'deductible');
+
+  const retarget = await executeAppMetadataWrite({
+    client,
+    mapping,
+    table: 'claim_settlements',
+    op: 'update',
+    values: { claim_id: OTHER_CLAIM, deductible: 50 },
+    filters: [{ column: 'id', op: 'eq', value: SETTLEMENT_ID }],
+  });
+  assert.equal(retarget.error, 'rls_denied');
+
+  const updated = await executeAppMetadataWrite({
+    client,
+    mapping,
+    table: 'claim_settlements',
+    op: 'update',
+    values: { deductible: 50 },
+    filters: [{ column: 'id', op: 'eq', value: SETTLEMENT_ID }],
+  });
+  assert.equal(updated.error, undefined);
+  assert.ok(WRITE_ALLOWLIST.claim_settlements.clientIgnored.has('total_settlement'));
+  assert.equal(WRITE_ALLOWLIST.claim_settlements.ops.has('delete'), false);
 });
 
