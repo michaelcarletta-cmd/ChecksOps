@@ -64,7 +64,7 @@ already-funded wallet.
 | `process-funded-payment` | `manual_send_required` — no auto-send |
 | `wallet-fund-on-clear` | BANK→WALLET only after a cleared CheckAlt row |
 | Sweep PATCH | **Not done** — no chosen retain minimum |
-| Money flags / SQL72 / transfers | **Unchanged / not executed** |
+| Money flags / SQL72 / transfers | **Flags lifted 2026-09-14 on prep Lambda.** SQL72 not applied. No transfer POST yet (TOTP required) |
 
 ## Live GET confirmation (no KYC)
 
