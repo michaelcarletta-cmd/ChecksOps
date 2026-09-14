@@ -351,3 +351,16 @@ test('Command Center and deposit ops no longer require a separate Prepare click'
   const preflight = fs.readFileSync(path.join(ROOT, 'aws/functions/api/providers/production/checkalt-preflight.mjs'), 'utf8');
   assert.doesNotMatch(preflight, /markHttpAttempted|deposit\/process|authenticate/);
 });
+
+test('Poll Now is a status read and does not prompt TOTP', () => {
+  const settings = fs.readFileSync(path.join(ROOT, 'src/components/settings/CheckAltSettings.tsx'), 'utf8');
+  const poll = settings.split('Bulk "Poll Now"')[1]?.split('if (isLoading)')[0] || '';
+  assert.match(poll, /checkalt-poll-status/);
+  assert.doesNotMatch(poll, /guardFinancial|requireStepUp/);
+  const handler = fs.readFileSync(
+    path.join(ROOT, 'aws/functions/api/providers/production/checkalt-poll.mjs'),
+    'utf8',
+  );
+  assert.match(handler, /requireStepUp:\s*false/);
+  assert.doesNotMatch(handler, /deposit\/process/);
+});

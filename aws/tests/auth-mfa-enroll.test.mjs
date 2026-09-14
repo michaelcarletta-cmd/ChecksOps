@@ -27,11 +27,23 @@ const OTHER_CHECK = '55555555-5555-4555-8555-555555555555';
 const NOW = Date.UTC(2026, 8, 11, 1, 0, 0);
 const WRAP_HEX = 'ab'.repeat(32);
 
+const AUTH_TIME = '1780000000';
+const LOGIN_SESSION_ID = `auth_time:${TESTER_SUB}:${AUTH_TIME}`;
+
 const eventOf = (body) => ({
   headers: { authorization: 'Bearer test-id-token' },
   body: JSON.stringify(body),
   requestContext: {
-    authorizer: { jwt: { claims: { sub: TESTER_SUB, email: TESTER_EMAIL, token_use: 'id' } } },
+    authorizer: {
+      jwt: {
+        claims: {
+          sub: TESTER_SUB,
+          email: TESTER_EMAIL,
+          token_use: 'id',
+          auth_time: AUTH_TIME,
+        },
+      },
+    },
   },
 });
 
@@ -120,13 +132,27 @@ const createStore = ({
       if (text.includes('FROM public.tenant_users')) {
         return { rows: memberships };
       }
+      if (text.includes("metadata->>'login_session_id'")) {
+        const [uid, since, sessionId] = params;
+        return {
+          rows: stepups.filter((row) => (
+            String(row.user_id) === String(uid)
+            && row.succeeded === true
+            && String(row.factor_type || 'totp') === 'totp'
+            && String(row.metadata?.login_session_id || '') === String(sessionId)
+            && new Date(row.created_at) >= new Date(since)
+          )),
+        };
+      }
       if (text.includes('INSERT INTO public.financial_stepup_log')) {
         const row = {
           id: `stepup-${stepups.length + 1}`,
-          created_at: new Date(NOW).toISOString(),
+          created_at: new Date().toISOString(),
           user_id: params[0],
           tenant_id: params[1],
           action_key: params[2],
+          factor_type: 'totp',
+          succeeded: true,
           metadata: JSON.parse(params[3]),
         };
         stepups.push(row);
@@ -156,7 +182,7 @@ const depsOf = (store, extra = {}) => ({
     return fn({
       client: store.client,
       mapping: store.mapping,
-      claims: { sub: TESTER_SUB, email: TESTER_EMAIL },
+      claims: { sub: TESTER_SUB, email: TESTER_EMAIL, authTime: AUTH_TIME },
       body,
       spoof: { ignored: true, bodyUserId: body.user_id || null, bodyTenantId: body.tenant_id || null },
     });
@@ -225,6 +251,8 @@ test('correct TOTP step-up writes financial_stepup_log bound to server check amo
   assert.equal(store.stepups.length, 1);
   assert.equal(store.stepups[0].metadata.amount_cents, 1234);
   assert.equal(store.stepups[0].metadata.source, 'app_financial_totp');
+  assert.equal(store.stepups[0].metadata.login_session_id, LOGIN_SESSION_ID);
+  assert.equal(store.stepups[0].metadata.session_scope, true);
   assert.equal(store.stepups[0].user_id, TESTER_APP);
 });
 
@@ -252,12 +280,40 @@ test('expired timestep fails closed', async () => {
   assert.equal(store.stepups.length, 0);
 });
 
-test('replayed timestep is rejected', async () => {
+test('replayed timestep reuses the login-session step-up instead of rejecting', async () => {
   const store = createStore();
   const { code } = await enrollTester(store);
   const first = await handleMfaStepUp(eventOf({ code, check_intake_item_id: CHECK }), depsOf(store));
   assert.equal(first.ok, true);
-  const replay = await handleMfaStepUp(eventOf({ code, check_intake_item_id: CHECK }), depsOf(store));
+  const replay = await handleMfaStepUp(eventOf({
+    code,
+    action_key: 'deposit.approve',
+    check_intake_item_id: CHECK,
+  }), depsOf(store));
+  assert.equal(replay.ok, true, JSON.stringify(replay));
+  assert.equal(replay.reused, true);
+  assert.equal(store.stepups.length, 1);
+});
+
+test('a new login session cannot reuse the previous TOTP', async () => {
+  const store = createStore();
+  const { code } = await enrollTester(store);
+  const first = await handleMfaStepUp(eventOf({ code, check_intake_item_id: CHECK }), depsOf(store));
+  assert.equal(first.ok, true);
+  const nextLogin = {
+    ...depsOf(store),
+    withIdentityWrite: async (event, fn) => {
+      const body = event?.body ? JSON.parse(event.body) : {};
+      return fn({
+        client: store.client,
+        mapping: store.mapping,
+        claims: { sub: TESTER_SUB, email: TESTER_EMAIL, authTime: '1780000999' },
+        body,
+        spoof: { ignored: true, bodyUserId: body.user_id || null, bodyTenantId: body.tenant_id || null },
+      });
+    },
+  };
+  const replay = await handleMfaStepUp(eventOf({ code, check_intake_item_id: CHECK }), nextLogin);
   assert.equal(replay.ok, false);
   assert.equal(store.stepups.length, 1);
 });

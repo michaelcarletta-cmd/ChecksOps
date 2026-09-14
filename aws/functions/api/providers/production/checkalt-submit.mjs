@@ -150,6 +150,7 @@ export async function handleProductionCheckAltSubmit({
     mapping,
     memberships,
     check,
+    claims,
     requireStepUp: true,
   });
   if (!authz.ok) return { ...authz, spoofFieldsIgnored: spoof };

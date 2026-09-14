@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { handler } from '../functions/api/index.mjs';
-import { cognitoClaimsFromEvent, refuseSubAsApplicationId } from '../functions/api/cognito.mjs';
+import { cognitoClaimsFromEvent, loginSessionIdFromClaims, refuseSubAsApplicationId } from '../functions/api/cognito.mjs';
 import {
   LOOKUP_MAPPING_SQL,
   PROFILE_SQL,
@@ -23,6 +23,30 @@ test('extracts Cognito sub from HTTP API JWT authorizer claims', () => {
   });
   assert.equal(claims.sub, COGNITO_SUB);
   assert.equal(claims.email, 'probe@example.com');
+});
+
+test('login session id uses origin_jti or sub+auth_time, never Cognito MFA claims', () => {
+  assert.equal(loginSessionIdFromClaims({
+    sub: COGNITO_SUB,
+    originJti: 'origin-1',
+    authTime: '9',
+  }), 'origin_jti:origin-1');
+  assert.equal(loginSessionIdFromClaims({
+    sub: COGNITO_SUB,
+    authTime: '1000',
+  }), `auth_time:${COGNITO_SUB}:1000`);
+  assert.equal(loginSessionIdFromClaims({
+    sub: COGNITO_SUB,
+    amr: ['SOFTWARE_TOKEN_MFA'],
+  }), null);
+  const fromEvent = cognitoClaimsFromEvent({
+    requestContext: {
+      authorizer: {
+        jwt: { claims: { sub: COGNITO_SUB, auth_time: '42', token_use: 'id' } },
+      },
+    },
+  });
+  assert.equal(loginSessionIdFromClaims(fromEvent), `auth_time:${COGNITO_SUB}:42`);
 });
 
 test('refuses mapping an application UUID equal to the Cognito sub', () => {

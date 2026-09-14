@@ -49,15 +49,18 @@ test('missing check fails closed and non-deposit actions stay unbound', () => {
   assert.equal(payroll.request.checkId, null);
 });
 
-test('changing check requires new authorization; stale cache cannot authorize another check', () => {
+test('changing check still changes identity, but session cache reuses TOTP UX', () => {
   const keyA = stepUpCacheKey(USER, 'deposit.submit', CHECK_A);
   const keyB = stepUpCacheKey(USER, 'deposit.submit', CHECK_B);
+  const keyApprove = stepUpCacheKey(USER, 'deposit.approve', CHECK_A);
   assert.equal(changingCheckRequiresNewAuth(CHECK_A, CHECK_B), true);
   assert.equal(changingCheckRequiresNewAuth(CHECK_A, CHECK_A), false);
+  assert.equal(keyA, `${USER}|session`);
   assert.equal(cacheAllowsReuse(keyA, keyA), true);
-  assert.equal(cacheAllowsReuse(keyA, keyB), false);
-  assert.equal(cacheAllowsReuse(stepUpCacheKey(USER, 'deposit.submit', null), keyA), false);
-  assert.equal(cacheAllowsReuse(`${USER}|unbound|session`, keyA), false);
+  assert.equal(cacheAllowsReuse(keyA, keyB), true);
+  assert.equal(cacheAllowsReuse(keyA, keyApprove), true);
+  assert.equal(cacheAllowsReuse(`${USER}|deposit.submit|${CHECK_A}`, keyB), true);
+  assert.equal(cacheAllowsReuse(stepUpCacheKey('other-user', 'deposit.submit', CHECK_A), keyA), false);
 });
 
 test('browser amount cannot alter authorization amount', () => {
