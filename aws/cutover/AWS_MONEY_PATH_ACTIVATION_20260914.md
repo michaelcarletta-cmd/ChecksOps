@@ -12,13 +12,14 @@ deposit solely for testing. Stripe, Telnyx, and Resend are excluded.**
 
 ## Verdict
 
-**OPERATOR ACTION REQUIRED — CREATE NEW MOOV WEBHOOK**
+**WAITING FOR GENUINE MOOV EVENT**
 
-AWS production is now capable of owning the money path once the operator
-creates a **new** Moov production webhook and places the **new** signing
-secret in AWS Secrets Manager. The existing Lovable/Supabase webhook must
-stay untouched until the new AWS webhook is created, configured, validated,
-and proven.
+The operator created the new production Moov webhook and stored its signing
+secret. AWS can load that secret and fail-closes unsigned/forged requests.
+No genuinely Moov-signed event has arrived at
+`https://checksops.com/prep/webhooks/moov` yet. Keep the existing
+Lovable/Supabase webhook in place. See
+`aws/cutover/money-path-20260914/AWS_MOOV_WEBHOOK_VALIDATION_20260914.md`.
 
 ## What this phase changed
 
@@ -89,9 +90,11 @@ polish, Plaid, unrelated audit holds.
 `/prep/ops/readiness` `holds.ok=false` because live execution flags are true.
 Those holds are **classified separately** and do not fail this phase.
 
-## OPERATOR ACTION REQUIRED — CREATE NEW MOOV WEBHOOK
+## Operator webhook (created; waiting for a signed event)
 
-Keep the existing Lovable/Supabase destination:
+The new production webhook and Secrets Manager value are in place. Keep the
+existing Lovable/Supabase destination until a Moov-signed event is proven on
+AWS:
 
 `https://nbcqwpysqgyxrrbgtmkw.supabase.co/functions/v1/moov-webhook`
 
@@ -139,9 +142,11 @@ were not changed.
 | `AWS_CHECKALT_ENABLED` | true |
 | `AWS_PROVIDER_WEBHOOK_DRY_RUN` | false |
 | `MOOV_WEBHOOK_SECRET_ARN` | set (`checksops/production/moov-webhook`) |
-| Secret value | empty / fail-closed |
-| `GET /prep/ops/money-path-readiness` | 200, verdict OPERATOR ACTION REQUIRED |
-| Unsigned `POST /prep/webhooks/moov` | 401 `invalid_signature` |
+| Secret value | nonempty `MOOV_WEBHOOK_SECRET` (never printed); resource policy grants Lambda `GetSecretValue` |
+| `GET /prep/ops/money-path-readiness` | 200, `moovWebhookSecretConfigured=true` |
+| Unsigned `POST /prep/webhooks/moov` | 401 `missing_signature_headers` |
+| Forged signature | 401 `invalid_signature` |
+| Genuine Moov-signed event on AWS | **none yet** |
 | Lovable webhook unsigned | still 401 `Invalid signature` (untouched) |
 | Identity | 11 rows; 8 repaired production Cognito subs unchanged |
 | Financial aggregates | match fingerprint exactly |

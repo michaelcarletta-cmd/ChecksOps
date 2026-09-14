@@ -1,0 +1,95 @@
+{
+  "validatedAt": "2026-09-14T12:36:00Z",
+  "verdict": "WAITING FOR GENUINE MOOV EVENT",
+  "spaDeployed": false,
+  "productionSupabaseChanged": false,
+  "existingLovableMoovWebhookUntouched": true,
+  "oldSupabaseWebhookUrl": "https://nbcqwpysqgyxrrbgtmkw.supabase.co/functions/v1/moov-webhook",
+  "awsWebhookUrl": "https://checksops.com/prep/webhooks/moov",
+  "secret": {
+    "name": "checksops/production/moov-webhook",
+    "arnSuffix": "moov-webhook-H1ZFVH",
+    "lambdaEnvArnMatches": true,
+    "lastChangedAt": "2026-09-14T12:15:30.042Z",
+    "currentVersionCreatedAt": "2026-09-14T12:15:30.037Z",
+    "jsonObject": true,
+    "knownKeyNonempty": { "MOOV_WEBHOOK_SECRET": true },
+    "usableByCurrentLoader": true,
+    "valueNeverPrinted": true
+  },
+  "lambda": {
+    "name": "checksops-production-prep-api",
+    "codeSha256": "7Jzn63Xc1TUfQhTtn7Vn+b2oSbvhd53vstqUiVkct7s=",
+    "codeSha256UnchangedFromActivation": true,
+    "secretEpochAfterReload": "20260914T123236Z",
+    "resourcePolicyAttached": true,
+    "moovWebhookSecretConfigured": true,
+    "dryRun": false,
+    "productionApplyEnabled": true
+  },
+  "failClosed": {
+    "unsignedAws": { "status": 401, "error": "missing_signature_headers" },
+    "forgedAws": { "status": 401, "error": "invalid_signature" },
+    "unsignedLovable": { "status": 401, "error": "Invalid signature" }
+  },
+  "genuineMoovSignedEvent": {
+    "found": false,
+    "awsLiveReceiptsSinceCutover": 0,
+    "awsLiveReceiptsTotal": 0,
+    "awsDryRunReceiptsHistorical": 7,
+    "latestAwsReceiptAt": "2026-09-03T10:55:46.625Z",
+    "paymentWebhookEventsSinceCutover": 0,
+    "latestPaymentWebhookEventAt": "2026-09-13T18:25:18.120Z",
+    "latestPaymentWebhookEventType": "paymentMethod.enabled",
+    "apigwPostMoov200": 0,
+    "moovPingApi": {
+      "attempted": true,
+      "fundsMovement": false,
+      "fromCursorHost": { "oauthStatus": 403, "cloudflare": "1010" },
+      "fromVpcLambda": { "oauthStatus": 403, "cloudflare": "1010" }
+    }
+  },
+  "dualDelivery": {
+    "sameEventOnBothEndpointsSinceCutover": false,
+    "duplicateFinancialState": false,
+    "note": "No new Moov event has been delivered to AWS since the new webhook/secret. Latest Supabase-applied event remains 2026-09-13T18:25:18.120Z."
+  },
+  "financial": {
+    "aggregatesMatchFingerprint": true,
+    "check_intake_amount": "1428955.65",
+    "deposit_items_amount": "1037630.29",
+    "checkalt_deposits_amount": "453990.48",
+    "disbursement_splits_amount": "880702.79",
+    "claim_payments_amount": "114621.50",
+    "homeowner_ledger_amount": "3169779.99",
+    "productionTransfersUpdatedSinceCutover": 0,
+    "walletLedgerRowsSinceCutover": 0,
+    "fundingUpdatedSinceCutover": 0,
+    "check9984StillNotSubmitted": true,
+    "uatIntakeCount": 37
+  },
+  "identity": {
+    "rowCount": 11,
+    "repairedProductionCognitoSubsUnchanged": true,
+    "repaired": [
+      {"application_user_id": "0160a5f3-30a4-4aba-8e54-6529f1ceb0d4", "cognito_sub": "d418a4f8-80f1-70d6-36c9-fe490220bf4a", "linked_at": "2026-09-14T10:07:27.787Z"},
+      {"application_user_id": "30d0505c-bcfa-4732-81fd-869dc46da5dd", "cognito_sub": "34388468-a021-7036-c34d-2ff14a20ed40", "linked_at": "2026-09-14T10:07:27.787Z"},
+      {"application_user_id": "3af0234c-de1b-4819-938d-fa4f9390811b", "cognito_sub": "24d874d8-80f1-7092-7f34-48b8704702f8", "linked_at": "2026-09-14T10:07:27.787Z"},
+      {"application_user_id": "7dbb3009-f059-4767-b5dc-1c5c72379330", "cognito_sub": "a45884b8-d051-70b3-b19d-ca704964c6e8", "linked_at": "2026-09-14T10:07:27.787Z"},
+      {"application_user_id": "abd3c2a0-6dc0-4680-92dd-a013e1141c91", "cognito_sub": "f468b438-4081-7004-d865-a1b86eb19beb", "linked_at": "2026-09-14T10:07:27.787Z"},
+      {"application_user_id": "b100f05d-9e81-4a7b-b9cc-9baf173131d9", "cognito_sub": "34c8a478-e0d1-70f3-3c49-02225e7404b6", "linked_at": "2026-09-14T10:07:27.787Z"},
+      {"application_user_id": "e2ad0849-c6b6-4f4a-a68a-8c52f563c6fd", "cognito_sub": "647894c8-2011-70d4-e874-efd4b080700e", "linked_at": "2026-09-14T10:07:27.787Z"},
+      {"application_user_id": "fd857564-9534-4b0f-95ac-624ed1273725", "cognito_sub": "74286478-c0c1-7068-9fea-9deea6f61627", "linked_at": "2026-09-14T10:07:27.787Z"}
+    ]
+  },
+  "fingerprint": {
+    "file": "aws/db-copy/reconciliation-20260914/apply/POST_RECONCILIATION_AWS_FINGERPRINT.json",
+    "sha256": "ccb9a1144d46f607f542aa61e765098177eb8a15d318e0a081d6b762ccd021b3",
+    "unchanged": true
+  },
+  "rehearsalOneshotUntouched": true,
+  "tempLambdasDeleted": [
+    "checksops-cursor-moov-webhook-ro-temp",
+    "checksops-cursor-moov-ping-temp"
+  ]
+}
