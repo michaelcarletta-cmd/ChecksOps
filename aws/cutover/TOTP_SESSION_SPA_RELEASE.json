@@ -1,5 +1,7 @@
 {
   "verdict": "NO GO — TOTP SPA RELEASE FAILED",
+  "retriedAt": "2026-09-14T21:16:24Z",
+  "retryNote": "Second controlled-release approval. Guarded production-aws rebuild still validates. OIDC assume of ChecksOpsProductionSpaDeploy still AccessDenied. Live SPA unchanged.",
   "unlockNow": false,
   "spaUnlocked": false,
   "productionLockBundle": "index-CiOVNYWh.js",
