@@ -13,7 +13,7 @@ Live `aws/template.yaml` still allows **`Environment=staging` only**. `aws/samco
 | `https-cloudfront.production.example.yaml` | Future apex/www CloudFront — **not** the live staging distribution |
 | `cloudwatch-alarms.example.yaml` | Future Lambda/API alarms — **not deployed** |
 
-Production frontend env remains `.env.production.aws.example` — **DO NOT USE YET**.
+Production SPA builds must use `node scripts/deploy-production-spa.mjs` (`.env.production-aws`). Do not deploy the SPA from this directory.
 
 Staging Cognito pool `us-east-1_vPmQ7cL1F` **must not** be reused as production.
 
