@@ -165,7 +165,7 @@ export const handleHomeownerLedgerView = async (event) => {
   }
 };
 
-export const handleHomeownerClaimPortal = async (event) => {
+export const handleHomeownerClaimPortal = async (event, deps = {}) => {
   const body = parseBody(event);
   const spoof = ignoredSpoof(event, body);
   const token = String(body.token || '').trim();
@@ -176,7 +176,8 @@ export const handleHomeownerClaimPortal = async (event) => {
 
   let client;
   try {
-    client = await publicDb(true);
+    const connect = deps.connect || publicDb;
+    client = deps.client || await connect(true);
     await client.query('BEGIN');
     await client.query('SET TRANSACTION READ WRITE');
     const doc = (await client.query(
@@ -286,26 +287,32 @@ export const handleHomeownerClaimPortal = async (event) => {
           await client.query('ROLLBACK');
           return { ok: false, statusCode: 400, error: 'missing_signature_name', spoofFieldsIgnored: spoof };
         }
-        await client.query(
-          `UPDATE public.homeowner_intro_requests SET
-             dtp_signed_at = now(),
-             dtp_signature_name = $2,
-             dtp_insurance_carrier = COALESCE($3, dtp_insurance_carrier),
-             dtp_claim_number = COALESCE($4, dtp_claim_number),
-             dtp_policy_number = COALESCE($5, dtp_policy_number),
-             dtp_property_address = COALESCE($6, dtp_property_address)
-           WHERE id = $1::uuid`,
+        const persisted = (await client.query(
+          `SELECT public.aws_public_homeowner_claim_sign_dtp($1, $2, $3, $4, $5, $6) AS doc`,
           [
-            doc.lead.id,
+            token,
             name,
             body.insurance_carrier || null,
             body.claim_number || null,
             body.policy_number || null,
             body.property_address || null,
           ],
-        );
+        )).rows[0]?.doc;
+        if (!persisted?.ok || persisted.signed !== true || !persisted.dtp_signed_at) {
+          await client.query('ROLLBACK');
+          const err = persisted?.error || 'persist_failed';
+          const status = err === 'missing_signature_name' ? 400 : err === 'invalid_token' ? 400 : 503;
+          return { ok: false, statusCode: status, error: err, spoofFieldsIgnored: spoof };
+        }
         await client.query('COMMIT');
-        return { ok: true, statusCode: 200, signed: true, spoofFieldsIgnored: spoof };
+        return {
+          ok: true,
+          statusCode: 200,
+          signed: true,
+          dtp_signed_at: persisted.dtp_signed_at,
+          dtp_signature_name: persisted.dtp_signature_name,
+          spoofFieldsIgnored: spoof,
+        };
       }
       await client.query('ROLLBACK');
       return {

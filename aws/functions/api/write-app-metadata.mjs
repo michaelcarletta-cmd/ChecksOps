@@ -56,6 +56,83 @@ const memberOfTenant = async (client, userId, tenantId) => {
   return rows.length > 0;
 };
 
+const callerTenantIds = async (client, userId) => {
+  const rows = (await client.query(
+    'SELECT DISTINCT tenant_id FROM public.tenant_users WHERE user_id = $1::uuid',
+    [userId],
+  )).rows;
+  return rows.map((row) => row.tenant_id).filter(Boolean);
+};
+
+const hasStaffWriteRole = async (client, userId) => {
+  const rows = (await client.query(
+    `SELECT 1 FROM public.user_roles
+     WHERE user_id = $1::uuid AND role IN ('admin'::public.app_role, 'staff'::public.app_role)
+     LIMIT 1`,
+    [userId],
+  )).rows;
+  return rows.length > 0;
+};
+
+const canWriteClaimOrg = async (client, mapping, tenantId) => {
+  if (!isUuid(tenantId)) return false;
+  const tenant = (await client.query(
+    'SELECT 1 FROM public.tenants WHERE id = $1::uuid LIMIT 1',
+    [tenantId],
+  )).rows;
+  if (!tenant.length) return false;
+  if (await isMasterOwner(client)) return true;
+  if (!(await memberOfTenant(client, mapping.application_user_id, tenantId))) return false;
+  return hasStaffWriteRole(client, mapping.application_user_id);
+};
+
+const CLAIM_CREATE_STATUSES = new Set(['tracking', 'open']);
+
+const resolveClaimOrgId = async (client, mapping, values) => {
+  const requested = values.org_id || values.tenant_id || null;
+  if (requested && !isUuid(requested)) return { error: 'invalid_uuid', field: 'org_id' };
+  const memberships = await callerTenantIds(client, mapping.application_user_id);
+  if (requested) {
+    if (!(await canWriteClaimOrg(client, mapping, requested))) {
+      return { error: 'rls_denied', message: 'org_id not writable for caller' };
+    }
+    return { orgId: requested };
+  }
+  if (memberships.length === 1) {
+    if (!(await canWriteClaimOrg(client, mapping, memberships[0]))) {
+      return { error: 'not_authorized', message: 'caller cannot write claims for tenant' };
+    }
+    return { orgId: memberships[0] };
+  }
+  return {
+    error: 'ambiguous_tenant',
+    message: 'org_id required when caller has zero or multiple tenant memberships',
+  };
+};
+
+export const executeClaims = async ({ client, mapping, op, values }) => {
+  if (op !== 'insert') return { error: 'operation_not_allowlisted', op };
+  const resolved = await resolveClaimOrgId(client, mapping, values);
+  if (resolved.error) return resolved;
+  const claimNumber = clip(values.claim_number, 80);
+  if (claimNumber?.error || !claimNumber) {
+    return claimNumber?.error || { error: 'missing_required_field', field: 'claim_number' };
+  }
+  const statusRaw = clip(values.status || 'tracking', 40);
+  if (statusRaw?.error) return statusRaw;
+  const status = String(statusRaw || 'tracking').toLowerCase();
+  if (!CLAIM_CREATE_STATUSES.has(status)) {
+    return { error: 'column_not_allowlisted', columns: ['status'] };
+  }
+  const rows = (await client.query(
+    `INSERT INTO public.claims (claim_number, status, org_id)
+     VALUES ($1::text, $2::text, $3::uuid)
+     RETURNING id, claim_number, status, org_id, policyholder_name`,
+    [claimNumber, status, resolved.orgId],
+  )).rows;
+  return { rows };
+};
+
 export const executeNotifications = async ({ client, mapping, op, values, filters }) => {
   if (op !== 'update') return { error: 'operation_not_allowlisted', op };
   if (!('is_read' in values)) return { error: 'missing_required_field', field: 'is_read' };
@@ -878,6 +955,135 @@ export const executeCashJobAttachments = async ({ client, mapping, op, values, f
   return { error: 'operation_not_allowlisted', op };
 };
 
+const SETTLEMENT_MONEY_COLUMNS = [
+  'replacement_cost_value', 'recoverable_depreciation', 'non_recoverable_depreciation', 'deductible',
+  'other_structures_rcv', 'other_structures_recoverable_depreciation',
+  'other_structures_non_recoverable_depreciation', 'other_structures_deductible',
+  'pwi_rcv', 'pwi_recoverable_depreciation', 'pwi_non_recoverable_depreciation',
+  'personal_property_rcv', 'personal_property_recoverable_depreciation',
+  'personal_property_non_recoverable_depreciation',
+  'ale_rcv', 'ale_recoverable_depreciation', 'ale_non_recoverable_depreciation',
+  'estimate_amount', 'pa_estimate_amount', 'prior_offer',
+];
+
+const lookupWritableClaim = async (client, mapping, claimId) => {
+  if (!isUuid(claimId)) return { error: 'invalid_uuid', field: 'claim_id' };
+  const rows = (await client.query(
+    `SELECT c.id, c.org_id
+     FROM public.claims c
+     WHERE c.id = $1::uuid
+       AND (
+         EXISTS (
+           SELECT 1 FROM public.tenant_users tu
+           WHERE tu.user_id = $2::uuid AND tu.tenant_id = c.org_id
+         )
+         OR EXISTS (
+           SELECT 1
+           FROM public.check_intake_items ci
+           JOIN public.tenant_users tu ON tu.tenant_id = ci.tenant_id
+           WHERE ci.claim_id = c.id AND tu.user_id = $2::uuid
+         )
+       )
+     LIMIT 1`,
+    [claimId, mapping.application_user_id],
+  )).rows;
+  if (!rows.length) return { error: 'rls_denied', message: 'claim not found or not writable' };
+  return { claim: rows[0] };
+};
+
+const coerceSettlementValues = (values) => {
+  const out = {};
+  for (const column of SETTLEMENT_MONEY_COLUMNS) {
+    if (!(column in values)) continue;
+    const amount = asNonNegativeMoney(values[column], column, { allowZero: true });
+    if (amount?.error) return amount;
+    out[column] = amount;
+  }
+  if ('notes' in values) {
+    const notes = clip(values.notes, 4000);
+    if (notes?.error) return notes;
+    out.notes = notes;
+  }
+  return { values: out };
+};
+
+export const executeClaimSettlements = async ({ client, mapping, op, values, filters }) => {
+  if (op !== 'insert' && op !== 'update') return { error: 'operation_not_allowlisted', op };
+  const coerced = coerceSettlementValues(values);
+  if (coerced.error) return coerced;
+  const out = coerced.values;
+
+  if (op === 'insert') {
+    const claimId = values.claim_id;
+    const looked = await lookupWritableClaim(client, mapping, claimId);
+    if (looked.error) return looked;
+    if (!Object.keys(out).length) {
+      return { error: 'missing_required_field', field: 'values', table: 'claim_settlements', op };
+    }
+    const columns = ['claim_id', 'created_by', ...Object.keys(out)];
+    const params = [looked.claim.id, mapping.application_user_id, ...Object.values(out)];
+    const placeholders = columns.map((column, index) => {
+      if (column === 'claim_id' || column === 'created_by') return `$${index + 1}::uuid`;
+      if (column === 'notes') return `$${index + 1}::text`;
+      return `$${index + 1}::numeric`;
+    });
+    const rows = (await client.query(
+      `INSERT INTO public.claim_settlements (${columns.map((column) => ident(column, 'column')).join(', ')})
+       VALUES (${placeholders.join(', ')})
+       RETURNING *`,
+      params,
+    )).rows;
+    return { rows };
+  }
+
+  const id = eqFilter(filters, 'id');
+  const filterClaimId = eqFilter(filters, 'claim_id');
+  let claimId = values.claim_id || filterClaimId;
+  if (id) {
+    if (!isUuid(id)) return { error: 'invalid_uuid', field: 'id' };
+    const existing = (await client.query(
+      'SELECT id, claim_id FROM public.claim_settlements WHERE id = $1::uuid LIMIT 1',
+      [id],
+    )).rows[0];
+    if (!existing) return { error: 'rls_denied', message: 'settlement not found or not writable' };
+    if (claimId && String(claimId) !== String(existing.claim_id)) {
+      return { error: 'rls_denied', message: 'claim_id cannot be retargeted' };
+    }
+    claimId = existing.claim_id;
+  }
+  const looked = await lookupWritableClaim(client, mapping, claimId);
+  if (looked.error) return looked;
+  if (!Object.keys(out).length) {
+    return { error: 'missing_required_field', field: 'values', table: 'claim_settlements', op };
+  }
+  const built = buildSet(out, Object.fromEntries(
+    Object.keys(out).map((column) => [column, column === 'notes' ? 'text' : 'numeric']),
+  ));
+  built.sets.push('updated_at = now()');
+  if (id) {
+    built.params.push(id, looked.claim.id);
+    const rows = (await client.query(
+      `UPDATE public.claim_settlements
+       SET ${built.sets.join(', ')}
+       WHERE id = $${built.params.length - 1}::uuid AND claim_id = $${built.params.length}::uuid
+       RETURNING *`,
+      built.params,
+    )).rows;
+    if (!rows.length) return { error: 'rls_denied', message: 'settlement not writable' };
+    return { rows };
+  }
+  built.params.push(looked.claim.id);
+  const rows = (await client.query(
+    `UPDATE public.claim_settlements
+     SET ${built.sets.join(', ')}
+     WHERE claim_id = $${built.params.length}::uuid
+     RETURNING *`,
+    built.params,
+  )).rows;
+  if (!rows.length) return { error: 'rls_denied', message: 'settlement not writable' };
+  return { rows };
+};
+
 export const executeAppMetadataWrite = async ({ client, mapping, table, op, values, filters }) => {
   switch (table) {
     case 'notifications':
@@ -914,6 +1120,10 @@ export const executeAppMetadataWrite = async ({ client, mapping, table, op, valu
       return executeCashJobAttachments({ client, mapping, op, values, filters });
     case 'homeowner_ledger_events':
       return executeHomeownerLedgerEvents({ client, mapping, values });
+    case 'claim_settlements':
+      return executeClaimSettlements({ client, mapping, op, values, filters });
+    case 'claims':
+      return executeClaims({ client, mapping, op, values, filters });
     default:
       return { error: 'table_not_allowlisted', table };
   }

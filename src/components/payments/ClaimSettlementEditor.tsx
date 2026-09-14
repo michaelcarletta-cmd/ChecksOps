@@ -81,7 +81,10 @@ export function ClaimSettlementEditor({ open, onOpenChange, claimId, settlement 
     setForm(init);
   }, [open, settlement]);
 
-  const set = (k: string, v: string) => setForm((prev) => ({ ...prev, [k]: v }));
+  const set = (k: string, v: string) => {
+    if (v !== "" && Number.isFinite(Number(v)) && Number(v) < 0) return;
+    setForm((prev) => ({ ...prev, [k]: v }));
+  };
 
   const save = useMutation({
     mutationFn: async () => {

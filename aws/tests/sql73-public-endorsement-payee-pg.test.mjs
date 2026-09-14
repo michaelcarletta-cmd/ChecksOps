@@ -374,8 +374,8 @@ SELECT public.aws_public_submit_endorsement(
   assert.equal(asChecksops(`SELECT public.aws_public_endorsement_by_token('${TOKEN_A}') IS NULL::text`), 'true');
   const afterSubmitGet = await jsGet(TOKEN_A);
   assert.equal(afterSubmitGet.ok, false);
-  assert.equal(afterSubmitGet.code, 'token_consumed');
-  note('fresh submit signed endorsement+payee, unrelated payee unchanged, token consumed');
+  assert.equal(afterSubmitGet.code, 'invalid_link');
+  note('fresh submit signed endorsement+payee, unrelated payee unchanged, rotated token GET is invalid_link');
 
   const secondSubmit = submit(TOKEN_A);
   assert.equal(secondSubmit.ok, false);
@@ -384,8 +384,8 @@ SELECT public.aws_public_submit_endorsement(
 
   const unknownGet = await jsGet(WRONG);
   assert.equal(unknownGet.ok, false);
-  assert.equal(unknownGet.code, 'token_consumed');
-  note('P2: never-valid UUID GET currently maps to token_consumed because SQL 72 returns NULL for both missing and rotated tokens');
+  assert.equal(unknownGet.code, 'invalid_link');
+  note('P8: never-valid UUID GET is invalid_link; signed/rejected/waived/expired rows with a still-present token remain token_consumed');
 
   const beforeWrong = scalar(`
 SELECT json_build_object(

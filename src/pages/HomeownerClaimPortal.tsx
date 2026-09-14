@@ -229,6 +229,17 @@ export default function HomeownerClaimPortal() {
       });
       if (err) throw new Error(err.message);
       if ((data as any)?.error) throw new Error((data as any).error);
+      if (!(data as any)?.signed || !(data as any)?.dtp_signed_at) {
+        throw new Error("Could not save signature");
+      }
+      const { data: verify, error: verifyErr } = await supabase.functions.invoke("homeowner-claim-portal", {
+        body: { token, action: "get" },
+      });
+      if (verifyErr) throw new Error(verifyErr.message);
+      if ((verify as any)?.error) throw new Error((verify as any).error);
+      if (!(verify as any)?.lead?.dtp_signed_at) {
+        throw new Error("Signature did not persist");
+      }
       toast.success("Direction to Pay signed");
       await load();
     } catch (e: any) {

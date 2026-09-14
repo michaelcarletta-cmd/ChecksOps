@@ -21,13 +21,13 @@ import { useTenant } from "@/contexts/TenantContext";
 import { Loader2, Banknote, ShieldCheck, AlertTriangle, RefreshCw, UserPlus, UserCheck, Landmark } from "lucide-react";
 
 /**
- * Admin-only configuration panel for the CheckAlt (FinCapture) RDC integration.
+ * Admin or platform-owner configuration panel for the CheckAlt (FinCapture) RDC integration.
  * Single ChecksOps-wide account model:
  *   - Username/password live in backend secrets (CHECKALT_USERNAME / CHECKALT_PASSWORD)
  *   - Per-deployment values (base URL, depositor account, business unit, enable flag) live here
  */
 export function CheckAltSettings() {
-  const { isAdmin } = usePermissions();
+  const { canViewPlatformSettings } = usePermissions();
   const { tenant } = useTenant();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -43,7 +43,7 @@ export function CheckAltSettings() {
       if (error) throw error;
       return data;
     },
-    enabled: isAdmin,
+    enabled: canViewPlatformSettings,
   });
 
   const [form, setForm] = useState({
@@ -174,7 +174,7 @@ export function CheckAltSettings() {
   // ---- Tenant account registration ----
   const { data: regAccount, isLoading: regLoading } = useQuery({
     queryKey: ["checkalt-tenant-account", tenant?.id],
-    enabled: isAdmin && !!tenant?.id,
+    enabled: canViewPlatformSettings && !!tenant?.id,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("checkalt_tenant_accounts")
@@ -276,7 +276,7 @@ export function CheckAltSettings() {
 
 
 
-  if (!isAdmin) {
+  if (!canViewPlatformSettings) {
     return (
       <Card>
         <CardContent className="py-8 text-center text-sm text-muted-foreground">

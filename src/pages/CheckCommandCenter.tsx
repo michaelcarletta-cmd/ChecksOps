@@ -1252,10 +1252,10 @@ export default function CheckCommandCenter() {
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
         <Input
-          placeholder="Search by name, claim #, check #, payee, carrier, or amount..."
+          placeholder={isMobile ? "Search name, claim, check #" : "Search by name, claim #, check #, payee, carrier, or amount..."}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-9 h-10"
+          className="pl-9 h-10 min-w-0"
         />
         {searchQuery && (
           <Button
@@ -2143,7 +2143,7 @@ export default function CheckCommandCenter() {
                                 )}
                               </div>
                             </TableCell>
-                            <TableCell className="text-right font-semibold tabular-nums">
+                            <TableCell className="text-right font-semibold tabular-nums whitespace-nowrap min-w-[5.5rem]">
                               {check.amount != null
                                 ? `$${check.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
                                 : "—"}
@@ -2252,7 +2252,7 @@ export default function CheckCommandCenter() {
                             <TableHead className="w-8"></TableHead>
                             <TableHead>Check</TableHead>
                             <TableHead>Carrier / Property</TableHead>
-                            <TableHead className="text-right">Amount</TableHead>
+                            <TableHead className="text-right whitespace-nowrap min-w-[5.5rem]">Amount</TableHead>
                             <TableHead>Class</TableHead>
                             <TableHead>Payees</TableHead>
                             <TableHead>Status</TableHead>
@@ -2269,7 +2269,7 @@ export default function CheckCommandCenter() {
                         const paddingBottom = virtualItems.length > 0 ? totalSize - virtualItems[virtualItems.length - 1].end : 0;
                         return (
                           <div ref={queueScrollRef} className="overflow-auto h-[calc(100vh-460px)] min-h-[300px]">
-                            <Table>
+                            <Table className="min-w-[720px]">
                               {headerRow}
                               <TableBody>
                                 {paddingTop > 0 && (
@@ -2297,7 +2297,7 @@ export default function CheckCommandCenter() {
                       return (
                         <ScrollArea className="h-[calc(100vh-460px)] min-h-[300px]">
                         <ScrollArea className="h-[calc(100vh-460px)] min-h-[300px]">
-                          <Table className="border-separate border-spacing-y-0 border-spacing-x-0">
+                          <Table className="border-separate border-spacing-y-0 border-spacing-x-0 min-w-[720px]">
                             {headerRow}
                             <TableBody>
                               {groupedFilteredChecks.map((group) => (

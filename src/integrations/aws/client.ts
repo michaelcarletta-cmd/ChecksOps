@@ -65,6 +65,8 @@ const AWS_WRITE_TABLES = new Set([
   "tenants",
   "privacy_notice_acknowledgments",
   "tenant_users",
+  "claim_settlements",
+  "claims",
 ]);
 
 const REVIEW_DECISION_RPCS = new Set([

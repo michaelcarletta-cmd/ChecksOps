@@ -327,12 +327,13 @@ test('used public token cannot be reused', async () => {
     }),
   }, {
     client: sqlClient([{
-      match: (sql) => sql.includes('aws_public_submit_endorsement'),
-      result: () => ({ rows: [{ doc: { ok: false, error: 'invalid_or_used_token', statusCode: 404 } }] }),
+      match: (sql) => sql.includes('aws_public_endorsement_by_token'),
+      result: () => ({ rows: [{ doc: null }] }),
     }]),
   });
   assert.equal(used.statusCode, 404);
-  assert.equal(used.code, 'invalid_or_used_token');
+  assert.equal(used.code, 'invalid_link');
+  assert.match(used.error, /invalid or has expired/i);
 });
 
 test('endorsement send does not lock the row before the mailer', async () => {

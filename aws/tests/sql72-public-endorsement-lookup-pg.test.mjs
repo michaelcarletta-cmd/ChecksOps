@@ -338,7 +338,7 @@ SELECT public.aws_public_submit_endorsement(
     },
   }, TOKEN_A, {});
   assert.equal(afterSubmitGet.ok, false);
-  assert.equal(afterSubmitGet.code, 'token_consumed');
+  assert.equal(afterSubmitGet.code, 'invalid_link');
 
   const secondSubmit = JSON.parse(scalar(`
 SELECT public.aws_public_submit_endorsement(
