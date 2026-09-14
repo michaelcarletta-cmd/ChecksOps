@@ -71,7 +71,7 @@ test('containment SQL never grants auth.users and stays off other workstreams', 
   assert.match(panel, /account_number_last4/);
   assert.match(panel, /stakeholder_account_id/);
   assert.equal(/33_tenant_billing_auth_users_containment/.test(oneshot), false);
-  assert.equal(/tenant_billing_accounts/.test(allowlist), false);
+  assert.match(allowlist, /tenant_billing_accounts:\s*\{/);
 });
 
 test('disposable PostgreSQL monthly-fee billing no longer reads auth.users', { timeout: 180000 }, async (t) => {
