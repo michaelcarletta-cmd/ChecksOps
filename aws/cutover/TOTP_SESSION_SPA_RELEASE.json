@@ -1,0 +1,39 @@
+{
+  "verdict": "TOTP SESSION REPAIR PASS — READY FOR CONTROLLED SPA RELEASE",
+  "unlockNow": false,
+  "productionLockBundle": "index-CiOVNYWh.js",
+  "lazyLockChunk": "CheckAltSettings-CAMcsqg6.js",
+  "backendDeployed": {
+    "function": "checksops-production-prep-api",
+    "codeSha256": "XZ8rzA9VpbTIh71vNFI4aBqqsoiEBtT2p7vQkCOW21Q=",
+    "overlayOnly": [
+      "cognito.mjs",
+      "auth-financial-totp.mjs",
+      "providers/production/checkalt-authz.mjs",
+      "providers/production/checkalt-submit.mjs"
+    ],
+    "liveBatchPollPreserved": true,
+    "flagsUnchanged": true,
+    "vpcUnchanged": true
+  },
+  "spaFilesOnly": [
+    "src/hooks/useStepUp.tsx",
+    "src/lib/financialStepUp.ts",
+    "src/lib/awsMfa.ts",
+    "src/components/settings/CheckAltSettings.tsx"
+  ],
+  "spaPurpose": [
+    "Replace action-scoped step-up cache with session-scoped client state",
+    "Hydrate step-up state from /auth/mfa/status.stepUpSession",
+    "Stop a second TOTP dialog during the same valid step-up session",
+    "Keep Poll Now no-step-up / read-only"
+  ],
+  "doNotInclude": [
+    "unsubscribe UI",
+    "KYC UI",
+    "CheckAlt submission logic",
+    "Moov",
+    "Cognito mappings",
+    "financial data changes"
+  ]
+}

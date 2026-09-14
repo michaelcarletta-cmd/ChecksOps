@@ -293,6 +293,27 @@ test('replayed timestep reuses the login-session step-up instead of rejecting', 
   assert.equal(replay.ok, true, JSON.stringify(replay));
   assert.equal(replay.reused, true);
   assert.equal(store.stepups.length, 1);
+  const wallet = await handleMfaStepUp(eventOf({
+    code: '000000',
+    action_key: 'wallet.fund',
+    check_intake_item_id: CHECK,
+  }), depsOf(store));
+  assert.equal(wallet.error, 'action_mismatch');
+  assert.equal(wallet.reused, undefined);
+});
+
+test('session reuse does not skip totp enroll or unenroll', async () => {
+  const store = createStore();
+  const { code } = await enrollTester(store);
+  const first = await handleMfaStepUp(eventOf({ code, check_intake_item_id: CHECK }), depsOf(store));
+  assert.equal(first.ok, true);
+  const unenroll = await handleMfaStepUp(eventOf({
+    code: '000000',
+    action_key: 'totp.unenroll',
+  }), depsOf(store));
+  assert.equal(unenroll.ok, false);
+  assert.notEqual(unenroll.reused, true);
+  assert.equal(unenroll.error, 'mfa_step_up_failed');
 });
 
 test('a new login session cannot reuse the previous TOTP', async () => {

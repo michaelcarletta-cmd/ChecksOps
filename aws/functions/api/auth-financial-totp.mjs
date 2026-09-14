@@ -495,16 +495,30 @@ export const handleMfaStepUp = async (event, deps = {}) => {
   return identity(event, async (ctx) => {
     try {
       const {
+        CHECKALT_TOTP_ACTION,
+        isFinancialSessionTotpAction,
         loadRecentSessionStepUp,
         TOTP_STEPUP_TTL_MS,
       } = await import('./providers/production/checkalt-authz.mjs');
+      const actionKey = String(body.action_key || body.actionKey || CHECKALT_TOTP_ACTION);
+      if (!isFinancialSessionTotpAction(actionKey)) {
+        return {
+          ok: false,
+          statusCode: 409,
+          error: 'action_mismatch',
+          message: 'Financial TOTP step-up action is server-controlled.',
+          spoofFieldsIgnored: ctx.spoof,
+          ...financialGate(),
+        };
+      }
       const loginSessionId = loginSessionIdFromClaims(ctx.claims);
       const existing = await loadRecentSessionStepUp(ctx.client, {
         userId: ctx.mapping.application_user_id,
         loginSessionId,
         sinceMs: TOTP_STEPUP_TTL_MS,
       });
-      if (existing[0]) return sessionStepUpResponse(existing[0], ctx.spoof);
+      const sessionReuseBlocked = actionKey === 'totp.enroll' || actionKey === 'totp.unenroll';
+      if (existing[0] && !sessionReuseBlocked) return sessionStepUpResponse(existing[0], ctx.spoof);
 
       const rate = await consumeRate(ctx.client, ctx.mapping.application_user_id, 'step_up');
       if (!rate.ok) return rate;
