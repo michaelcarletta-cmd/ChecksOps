@@ -1,0 +1,55 @@
+{
+  "validatedAt": "2026-09-14T12:58:30Z",
+  "verdict": "NO GO — AWS MOOV WEBHOOK FAILED",
+  "spaDeployed": false,
+  "existingLovableMoovWebhookUntouched": true,
+  "oldSupabaseWebhookUrl": "https://nbcqwpysqgyxrrbgtmkw.supabase.co/functions/v1/moov-webhook",
+  "awsWebhookUrl": "https://checksops.com/prep/webhooks/moov",
+  "dashboardTest": {
+    "receivedAtEdge": true,
+    "at": "2026-09-14T12:55:28.910Z",
+    "sourceIp": "8.34.212.4",
+    "sourcePtr": "4.212.34.8.bc.googleusercontent.com",
+    "method": "POST",
+    "path": "/prep/webhooks/moov",
+    "apigwStatus": 401,
+    "integrationStatus": "200",
+    "responseLength": 233,
+    "errorMatches": "invalid_signature",
+    "lambdaErrors": 0,
+    "receiptRecorded": false,
+    "paymentWebhookEventRecorded": false
+  },
+  "checks": {
+    "genuinelyMoovSignedEventReceivedAndAccepted": false,
+    "signatureValidationPassed": false,
+    "dry_run": false,
+    "eventIdRecorded": false,
+    "applied": false,
+    "tenantResolution": "not_evaluated_rejected_before_persist",
+    "duplicateFinancialEffect": false,
+    "financialAggregatesCorrect": true,
+    "repairedCognitoMappingsUnchanged": true
+  },
+  "financial": {
+    "check_intake_amount": "1428955.65",
+    "deposit_items_amount": "1037630.29",
+    "checkalt_deposits_amount": "453990.48",
+    "disbursement_splits_amount": "880702.79",
+    "claim_payments_amount": "114621.50",
+    "homeowner_ledger_amount": "3169779.99",
+    "awsLiveReceiptsSinceCutover": 0,
+    "paymentWebhookEventsSinceCutover": 0
+  },
+  "identity": {
+    "rowCount": 11,
+    "repairedProductionCognitoSubsUnchanged": true
+  },
+  "fingerprintSha256": "ccb9a1144d46f607f542aa61e765098177eb8a15d318e0a081d6b762ccd021b3",
+  "secretStillConfigured": true,
+  "unsignedStillFailClosed": { "status": 401, "error": "missing_signature_headers" },
+  "likelyCauses": [
+    "HMAC of X-Timestamp|X-Nonce|X-Webhook-ID did not match X-Signature using the dedicated secret (wrong/old secret stored, or extra quotes)",
+    "timestamp_outside_window is also mapped to HTTP 401 invalid_signature"
+  ]
+}

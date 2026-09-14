@@ -12,14 +12,13 @@ deposit solely for testing. Stripe, Telnyx, and Resend are excluded.**
 
 ## Verdict
 
-**WAITING FOR GENUINE MOOV EVENT**
+**NO GO — AWS MOOV WEBHOOK FAILED**
 
-The operator created the new production Moov webhook and stored its signing
-secret. AWS can load that secret and fail-closes unsigned/forged requests.
-No genuinely Moov-signed event has arrived at
-`https://checksops.com/prep/webhooks/moov` yet. Keep the existing
-Lovable/Supabase webhook in place. See
-`aws/cutover/money-path-20260914/AWS_MOOV_WEBHOOK_VALIDATION_20260914.md`.
+A Moov Dashboard test POST reached
+`https://checksops.com/prep/webhooks/moov` at `2026-09-14T12:55:28.910Z`
+and was rejected (`401 invalid_signature`). Nothing was recorded. Keep the
+existing Lovable/Supabase webhook. See
+`aws/cutover/money-path-20260914/AWS_MOOV_WEBHOOK_DASHBOARD_TEST_20260914.md`.
 
 ## What this phase changed
 
@@ -146,7 +145,7 @@ were not changed.
 | `GET /prep/ops/money-path-readiness` | 200, `moovWebhookSecretConfigured=true` |
 | Unsigned `POST /prep/webhooks/moov` | 401 `missing_signature_headers` |
 | Forged signature | 401 `invalid_signature` |
-| Genuine Moov-signed event on AWS | **none yet** |
+| Genuine Moov-signed event on AWS | Dashboard test `401 invalid_signature` at 12:55:28Z; not persisted |
 | Lovable webhook unsigned | still 401 `Invalid signature` (untouched) |
 | Identity | 11 rows; 8 repaired production Cognito subs unchanged |
 | Financial aggregates | match fingerprint exactly |
