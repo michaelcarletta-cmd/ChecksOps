@@ -1,0 +1,49 @@
+{
+  "newestRequestOnly": true,
+  "arrivalAt": "2026-09-14T13:43:46.952Z",
+  "apigwRequestId": "DsQDCiZUIAMEZ0w=",
+  "lambdaRequestId": "752962c7-d0f6-41b3-935c-01998baa46d3",
+  "sourceIp": "34.133.111.85",
+  "sourcePtr": "85.111.133.34.bc.googleusercontent.com",
+  "http": {
+    "status": 200,
+    "integrationStatus": 200,
+    "responseLength": 704,
+    "lambdaDurationMs": 243.94
+  },
+  "signatureValidation": "PASS",
+  "eventType": "event.test",
+  "externalEventId": "ili6tybt6vhdzd2dzu7luxdjxq_evt",
+  "receipt": {
+    "id": "c26e0b73-3bb6-4d4b-8a23-40d8b5b516f6",
+    "dry_run": false,
+    "received_at": "2026-09-14T13:43:47.439Z"
+  },
+  "paymentWebhookEvent": {
+    "id": "368c2b99-d191-48ee-a172-c361c1a9d604",
+    "environment": "production",
+    "received_at": "2026-09-14T13:43:47.439Z",
+    "processed_at": "2026-09-14T13:43:47.439Z",
+    "processing_error": null
+  },
+  "receiptsTotal": 8,
+  "idempotency": {
+    "uniqueKey": "(provider, external_event_id)",
+    "duplicateReceiptGroups": 0,
+    "duplicateEventGroupsSince1300Z": 0
+  },
+  "financialWritesSince132210Z": {
+    "transfers": 0,
+    "ledger": 0,
+    "eventLog": 0,
+    "funding": 0
+  },
+  "fingerprintUnchanged": true,
+  "cognitoMappingsUnchanged": true,
+  "codeSqlSecretsUnchangedThisValidation": true,
+  "spaDeployed": false,
+  "existingLovableMoovWebhookUntouched": true,
+  "persistenceBugResolved": true,
+  "remainingProof": "genuine subscribed Moov production event",
+  "verdict": "MOOV DASHBOARD TEST PASS — WAITING FOR GENUINE PRODUCTION EVENT"
+}

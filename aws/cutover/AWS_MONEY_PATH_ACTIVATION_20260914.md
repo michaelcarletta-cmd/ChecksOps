@@ -12,15 +12,15 @@ deposit solely for testing. Stripe, Telnyx, and Resend are excluded.**
 
 ## Verdict
 
-**READY TO RETEST MOOV DASHBOARD EVENT**
+**MOOV DASHBOARD TEST PASS — WAITING FOR GENUINE PRODUCTION EVENT**
 
-Signature verification is proven (13:22 HTTP 200). Persistence failed
-because SQL 66 GRANTed `payment_webhook_events` DML without an RLS write
-policy; the swallowed `42501` aborted the transaction and rolled back
-the receipt. SQL 67 + apply savepoints are the fix. HMAC and the
-webhook secret were not changed. Keep the Lovable webhook. Do not
-deploy the SPA. See
-`aws/cutover/money-path-20260914/AWS_MOOV_WEBHOOK_PERSIST_AFTER_VERIFY_20260914.md`.
+Newest Dashboard test at `2026-09-14T13:43:46.952Z` passed signature
+verification, persisted `event.test` into `aws_provider_webhook_receipts`
+(`dry_run=false`) and `payment_webhook_events`, and mutated no money
+tables. The AWS persistence bug is resolved. The only remaining webhook
+proof is a real subscribed Moov production event. Keep the Lovable
+webhook. Do not deploy the SPA. See
+`aws/cutover/money-path-20260914/AWS_MOOV_WEBHOOK_DASHBOARD_RETEST_20260914.md`.
 
 ## What this phase changed
 
