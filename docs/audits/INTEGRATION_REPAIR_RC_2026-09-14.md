@@ -22,7 +22,7 @@ This RC is a **true superset** of live Integration behavior (GET txn + SQL 72/73
 - SQL 72 GET read-only transaction from `320685542` is unchanged.
 - SQL 73 payee persist + JS skip of the second public payee UPDATE remain.
 
-Residual: SQL 72 returns NULL for both never-valid and rotated consumed tokens. P8 therefore maps rotated emailed tokens to `invalid_link`. Distinguishing those two still needs token history (deferred P2). Not blocking this RC.
+Residual: SQL 72 returns NULL for both never-valid and rotated consumed tokens. P8 therefore maps both to `invalid_link`. GET of a still-present row with status `signed|rejected|waived|expired` remains `token_consumed`. Distinguishing rotated vs never-valid still needs token history (deferred). Not blocking this RC.
 
 ## Incorporated from PR #309
 

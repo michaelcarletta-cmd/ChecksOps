@@ -265,6 +265,22 @@ test('public submit does not depend on a second payee UPDATE when SQL 73 signed 
   const updates = [];
   const client = sqlClient([
     {
+      match: (sql) => sql.includes('aws_public_endorsement_by_token'),
+      result: () => ({
+        rows: [{
+          doc: {
+            id: ENDORSE_ID,
+            status: 'sent',
+            token: 'tok',
+            payee_name: 'Jane Doe',
+            check_id: CHECK_ID,
+            tenant_id: TENANT_A,
+            payee_id: PAYEE_ID,
+          },
+        }],
+      }),
+    },
+    {
       match: (sql) => sql.includes('aws_public_submit_endorsement'),
       result: () => ({
         rows: [{
@@ -313,8 +329,25 @@ test('public submit fails closed when payee_id is present and RPC did not sign t
     eSignConsentAccepted: true,
     signatureData: 'data:image/png;base64,aaa',
   }), {
-    client: sqlClient([{
-      match: (sql) => sql.includes('aws_public_submit_endorsement'),
+    client: sqlClient([
+      {
+        match: (sql) => sql.includes('aws_public_endorsement_by_token'),
+        result: () => ({
+          rows: [{
+            doc: {
+              id: ENDORSE_ID,
+              status: 'sent',
+              token: 'tok',
+              payee_name: 'Jane Doe',
+              check_id: CHECK_ID,
+              tenant_id: TENANT_A,
+              payee_id: PAYEE_ID,
+            },
+          }],
+        }),
+      },
+      {
+        match: (sql) => sql.includes('aws_public_submit_endorsement'),
       result: () => ({
         rows: [{
           doc: {
