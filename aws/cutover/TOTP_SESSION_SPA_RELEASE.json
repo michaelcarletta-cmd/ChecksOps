@@ -1,11 +1,14 @@
 {
-  "verdict": "TOTP SESSION REPAIR PASS — READY FOR CONTROLLED SPA RELEASE",
+  "verdict": "NO GO — TOTP SPA RELEASE FAILED",
   "unlockNow": false,
+  "spaUnlocked": false,
   "productionLockBundle": "index-CiOVNYWh.js",
   "lazyLockChunk": "CheckAltSettings-CAMcsqg6.js",
+  "liveIndexLastModified": "2026-09-14T15:13:43Z",
   "backendDeployed": {
     "function": "checksops-production-prep-api",
     "codeSha256": "XZ8rzA9VpbTIh71vNFI4aBqqsoiEBtT2p7vQkCOW21Q=",
+    "lastModified": "2026-09-14T20:47:25.000+0000",
     "overlayOnly": [
       "cognito.mjs",
       "auth-financial-totp.mjs",
@@ -14,7 +17,8 @@
     ],
     "liveBatchPollPreserved": true,
     "flagsUnchanged": true,
-    "vpcUnchanged": true
+    "vpcUnchanged": true,
+    "mfaStatusRoute": "POST /prep/auth/mfa/status returns 401 missing_cognito_token when unauthenticated"
   },
   "spaFilesOnly": [
     "src/hooks/useStepUp.tsx",
@@ -22,12 +26,30 @@
     "src/lib/awsMfa.ts",
     "src/components/settings/CheckAltSettings.tsx"
   ],
-  "spaPurpose": [
-    "Replace action-scoped step-up cache with session-scoped client state",
-    "Hydrate step-up state from /auth/mfa/status.stepUpSession",
-    "Stop a second TOTP dialog during the same valid step-up session",
-    "Keep Poll Now no-step-up / read-only"
-  ],
+  "preparedNotApplied": {
+    "commit": "92e835fc44840acbc8f4a25f2b9bc424049c6e91",
+    "lockBase": "868e69387d63af511f4c185775b611dea2c8fc47",
+    "mechanism": "node scripts/deploy-production-spa.mjs",
+    "mode": "production-aws",
+    "artifactValidation": "ok cognito pool us-east-1_h00WorYMT client 3ja9fqaq2fjkv3i6up2varcqpe api /prep",
+    "builtIndex": "index-Dz_lz0c6.js",
+    "builtLazyChunk": "CheckAltSettings-DumGewh_.js"
+  },
+  "blocker": {
+    "kind": "production_spa_cutover_lock_iam",
+    "approvedDeployRole": "ChecksOpsProductionSpaDeploy",
+    "oidcAssume": "AccessDenied",
+    "stagingPutObject": "AccessDenied by DenyProductionSpaWritesExceptApprovedDeployRole",
+    "rawS3SyncUsed": false,
+    "manualUploadUsed": false
+  },
+  "holdsHonored": {
+    "check9562": true,
+    "checkAltProcessPost": false,
+    "moov": false,
+    "cognitoMappings": false,
+    "unsubscribeKycOtherUi": false
+  },
   "doNotInclude": [
     "unsubscribe UI",
     "KYC UI",
