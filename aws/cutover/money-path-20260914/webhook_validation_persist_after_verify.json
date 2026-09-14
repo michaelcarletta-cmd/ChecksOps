@@ -15,12 +15,21 @@
   "paymentWebhookEventsSince1300Z": 0,
   "probe": {
     "receiptInsertAsChecksopsWithGuc": "success_in_transaction_rolled_back",
-    "eventsInsertAsChecksopsWithApplyGucs": "42501_rls_deny"
+    "eventsInsertAsChecksopsWithApplyGucsBeforeSql67": "42501_rls_deny",
+    "eventsInsertAsChecksopsWithApplyGucsAfterSql67": "success_in_transaction_rolled_back",
+    "eventsInsertWithoutApplyGucAfterSql67": "42501_rls_deny"
   },
   "fix": {
     "sql": "aws/financial/sql/67_payment_webhook_events_apply_rls.sql",
-    "code": "savepoints around swallowed apply statements"
+    "sqlAppliedLive": true,
+    "code": "savepoints around swallowed apply statements",
+    "lambdaCodeSha256": "B8cQg1FnQzUSx7B/nANevkWrTCV/UPgX+e4GtXzlqvk=",
+    "hmacUnchanged": true,
+    "secretEpochUnchanged": "20260914T123236Z"
   },
+  "fingerprintUnchanged": true,
+  "unsignedStill401": { "status": 401, "error": "missing_signature_headers", "bytes": 241 },
+  "rehearsalOneshotCodeSha256": "Uuqs/fRkCulPrdKUj72FJTlHdTkfhVXc+mttZljUzwk=",
   "spaDeployed": false,
   "existingLovableMoovWebhookUntouched": true,
   "financialTransactionInitiated": false,

@@ -90,6 +90,23 @@ wrong database (`postgres` has no receipts table).
 
 HMAC / secret / tenant isolation / idempotency keys were not weakened.
 
+SQL 67 is applied on production RDS. A `checksops` rollback probe then
+inserted both a receipt and an `event.test` `payment_webhook_events` row
+and marked it processed. The same INSERT without apply GUCs is still
+`42501`. Probe rows were rolled back (receipts remain 7).
+
+`checksops-production-prep-api` overlay updated to
+`CodeSha256=B8cQg1FnQzUSx7B/nANevkWrTCV/UPgX+e4GtXzlqvk=` (savepoints).
+`providers/hmac.mjs` was not changed. Secret epoch
+`20260914T123236Z` was not recycled. Unsigned POST still
+`401 missing_signature_headers` (241 bytes). Rehearsal oneshot
+`CodeSha256=Uuqs/fRkCulPrdKUj72FJTlHdTkfhVXc+mttZljUzwk=` unchanged.
+
+Fingerprint aggregates and the 8 repaired Cognito mappings match
+`POST_RECONCILIATION_AWS_FINGERPRINT.json`
+(`ccb9a1144d46f607f542aa61e765098177eb8a15d318e0a081d6b762ccd021b3`).
+$9,984.11 check still `approved_for_deposit`. C1C UAT intake still 37.
+
 ## Remaining validation
 
 A new Dashboard **Send test webhook** to
