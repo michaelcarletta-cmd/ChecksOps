@@ -1,0 +1,87 @@
+{
+  "title": "AWS endorsement parity repair candidate",
+  "status": "production_activated_20260914",
+  "spa_change_required": false,
+  "production_spa_lock_preserved": true,
+  "unsubscribe_kyc_spa_candidate_untouched": true,
+  "check_9562_mutated": false,
+  "supabase_edge_used": false,
+  "ses_used": false,
+  "checkalt_used": false,
+  "moov_used": false,
+  "authorized_secret_source": "checksops/production/provider",
+  "resend_api_key_present_in_authorized_source": true,
+  "live_resend_send_this_run": false,
+  "live_resend_blocked_reason": "RESEND_API_KEY is not present in checksops/production/provider or Lambda env. Do not print or invent a key. Place it in the authorized secret before enabling production email.",
+  "gates_default": {
+    "AWS_ENDORSEMENT_RESEND_ENABLED": false,
+    "AWS_ENDORSEMENT_AUTO_ADVANCE": false,
+    "AWS_ENDORSEMENT_RESEND_ALLOW_ANY_RECIPIENT": false
+  },
+  "activation_components": [
+    {
+      "component": "checksops-production-prep-api",
+      "change": "Deploy this branch's Lambda code. No SPA deploy.",
+      "required": true
+    },
+    {
+      "component": "checksops/production/provider",
+      "change": "Add RESEND_API_KEY (and optional RESEND_FROM_EMAIL). Never log the value. SECRET_KEYS already loads these names.",
+      "required": true
+    },
+    {
+      "component": "Lambda env AWS_ENDORSEMENT_RESEND_ENABLED",
+      "change": "Set true after the secret is present. Keep AWS_EMAIL_MODE unset/sink so other mailers stay sink. Do not enable SES.",
+      "required": true
+    },
+    {
+      "component": "Lambda env AWS_ENDORSEMENT_AUTO_ADVANCE",
+      "change": "Set true to restore final-endorsement → approved_for_deposit / ready_for_deposit.",
+      "required": true
+    },
+    {
+      "component": "Lambda env AWS_ENDORSEMENT_RESEND_ALLOW_ANY_RECIPIENT",
+      "change": "Leave unset for the first allowlisted live send (checksops-tester@freedomadj.com / mcarletta@freedomadj.com / checksops.com / freedomadj.com). Set true only after that send is confirmed, so real payee addresses can be delivered.",
+      "required": false
+    },
+    {
+      "component": "endorsement sender selection",
+      "change": "Reuse existing resolveEmailBranding(). Verified tenant custom From (tenant_email_settings sending_mode=custom + domain_status=verified) is used as-is. Otherwise ChecksOps <notify@checksops.com>. Do not set a global Freedom/RESEND_FROM_EMAIL override.",
+      "required": false
+    }
+  ],
+  "do_not_change": [
+    "production SPA / CloudFront lock",
+    "unsubscribe/KYC SPA candidate",
+    "Cognito mappings",
+    "Moov webhook configuration",
+    "CheckAlt configuration",
+    "financial history",
+    "payee CRUD / token generation / /endorse / public endorsement / CheckAlt / Moov logic"
+  ],
+  "sender_selection": {
+    "reused": [
+      "aws/functions/api/email-branding.mjs resolveEmailBranding",
+      "historical supabase/functions/_shared/tenantEmailSender.ts Phase 2 rule: custom + verified + sending_domain + from_address"
+    ],
+    "endorsement_fallback": "ChecksOps <notify@checksops.com>",
+    "not_used": [
+      "freedomclaims.work",
+      "global RESEND_FROM_EMAIL override",
+      "ChecksOps Staging <noreply@checksops.com> on the Resend endorsement envelope"
+    ]
+  },
+  "missing_aws_parity": [
+    {
+      "area": "tenant custom From verification",
+      "historical": "resolveTenantSender uses sending_mode=custom AND domain_status=verified AND sending_domain AND from_address. No SES identity required.",
+      "aws": "resolveEmailBranding additionally requires ses_identity_name === sending_domain (SES-era tenant-domain work).",
+      "endorsement_effect": "A Resend-only verified tenant domain without an SES identity falls back to ChecksOps <notify@checksops.com>. Do not rewrite tenant-domain/SES here."
+    }
+  ],
+  "manual_review_backup": {
+    "change": "mark_ready_for_deposit.fromStatus now includes endorsements_in_progress",
+    "reason": "AWS send sets that status; historical Review backup could not advance from Endorsing",
+    "provider_execution": false
+  }
+}

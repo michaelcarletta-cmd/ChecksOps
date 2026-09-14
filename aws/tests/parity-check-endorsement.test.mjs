@@ -46,7 +46,7 @@ test('class A registry includes check-endorsement before provider_disabled', asy
   assert.equal(result.error, 'Token required');
 });
 
-test('completion evaluation never advances deposit', () => {
+test('completion evaluation stays denied while auto-advance is inactive', () => {
   const done = evaluateEndorsementCompletion([
     { status: 'signed', payee_type: 'insured' },
     { status: 'waived', payee_type: 'mortgage_company' },
@@ -79,7 +79,7 @@ test('public get and abuse cases ignore spoofed tenant headers', async () => {
   assert.equal(bad.code, 'token_consumed');
 });
 
-test('public submit requires consent and does not advance deposit', async () => {
+test('public submit requires consent and does not advance deposit while gated off', async () => {
   const noConsent = await runPublicEndorsement(eventOf({
     action: 'submit_endorsement',
     token: 'tok',
