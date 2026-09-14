@@ -75,6 +75,11 @@ No SQL was applied in this turn.
 
 ---
 
-## Explicit stop
+## Tests (this turn)
+
+`npm run test:aws-api`: **798 pass / 0 fail / 0 skipped**.  
+`npx tsc -b`: **EXIT 0**.
+
+No Functional Audit retest. No staging mutation.
 
 Nothing was merged, deployed, or applied. Shared-staging freeze for non-Integration workstreams remains. C1C identity is unchanged.
