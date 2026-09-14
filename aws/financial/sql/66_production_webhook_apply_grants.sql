@@ -14,5 +14,19 @@
 GRANT INSERT, UPDATE ON TABLE public.payment_webhook_events TO checksops;
 GRANT INSERT ON TABLE public.payment_event_log TO checksops;
 
+-- Production webhook apply and money-path dispatch write these tables as
+-- checksops. Grants are role-scoped, not PUBLIC. Browser roles stay denied.
+GRANT INSERT, UPDATE ON TABLE public.payment_transfers TO checksops;
+GRANT UPDATE ON TABLE public.payment_provider_accounts TO checksops;
+GRANT UPDATE ON TABLE public.payment_provider_methods TO checksops;
+GRANT UPDATE ON TABLE public.external_payment_recipients TO checksops;
+GRANT UPDATE ON TABLE public.stakeholder_accounts TO checksops;
+GRANT UPDATE ON TABLE public.payment_transfer_groups TO checksops;
+GRANT INSERT, UPDATE ON TABLE public.wallet_funding_requests TO checksops;
+GRANT UPDATE ON TABLE public.disbursement_batches TO checksops;
+GRANT UPDATE ON TABLE public.disbursement_splits TO checksops;
+GRANT INSERT, UPDATE ON TABLE public.payment_wallets TO checksops;
+GRANT INSERT ON TABLE public.payment_wallet_ledger TO checksops;
+
 COMMENT ON TABLE public.payment_webhook_events IS
   'Moov/CheckAlt webhook idempotency. AWS production apply inserts here before mutating payment_* rows. UNIQUE (provider, external_event_id).';

@@ -127,3 +127,29 @@ Lovable/Supabase webhook until the operator creates the new AWS webhook and
 stores the new secret. Outbound check intake, images/OCR, endorsement,
 deposit approval, CheckAlt submit/poll, and Moov wallet/payment/disburse are
 implemented on AWS. Nothing was deployed to answer this question.
+
+## Live production-prep activation (this run)
+
+Lambda `checksops-production-prep-api` code + env updated. Staging templates
+were not changed.
+
+| Item | Live |
+|---|---|
+| CodeSha256 | `7Jzn63Xc1TUfQhTtn7Vn+b2oSbvhd53vstqUiVkct7s=` |
+| `AWS_CHECKALT_ENABLED` | true |
+| `AWS_PROVIDER_WEBHOOK_DRY_RUN` | false |
+| `MOOV_WEBHOOK_SECRET_ARN` | set (`checksops/production/moov-webhook`) |
+| Secret value | empty / fail-closed |
+| `GET /prep/ops/money-path-readiness` | 200, verdict OPERATOR ACTION REQUIRED |
+| Unsigned `POST /prep/webhooks/moov` | 401 `invalid_signature` |
+| Lovable webhook unsigned | still 401 `Invalid signature` (untouched) |
+| Identity | 11 rows; 8 repaired production Cognito subs unchanged |
+| Financial aggregates | match fingerprint exactly |
+| $9,984.11 check | still `approved_for_deposit`, 0 CheckAlt deposit rows |
+| C1C UAT intake | 37 (intact) |
+| SQL 66 | applied: webhook + money-path grants to `checksops` |
+| Fingerprint file | unchanged `ccb9a1144d46f607f542aa61e765098177eb8a15d318e0a081d6b762ccd021b3` |
+| SPA | not deployed |
+
+Unrelated `/prep/ops/readiness` holds remain (`flags=true`). They do not fail
+this phase.

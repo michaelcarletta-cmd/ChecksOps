@@ -1,0 +1,34 @@
+{
+  "ok": true,
+  "identity": {
+    "rowCount": 11,
+    "repairedSubsUnchanged": true,
+    "expected": 11
+  },
+  "aggregates": {
+    "check_intake_amount": { "expected": "1428955.65", "actual": "1428955.65", "ok": true },
+    "deposit_items_amount": { "expected": "1037630.29", "actual": "1037630.29", "ok": true },
+    "checkalt_deposits_amount": { "expected": "453990.48", "actual": "453990.48", "ok": true },
+    "disbursement_splits_amount": { "expected": "880702.79", "actual": "880702.79", "ok": true },
+    "claim_payments_amount": { "expected": "114621.50", "actual": "114621.50", "ok": true },
+    "homeowner_ledger_amount": { "expected": "3169779.99", "actual": "3169779.99", "ok": true }
+  },
+  "checkaltColumns": ["amount_cents", "failure_class", "idempotency_key", "provider_http_attempted_at"],
+  "check9984": {
+    "status": "approved_for_deposit",
+    "amount": "9984.11",
+    "depositRows": 0,
+    "notSubmitted": true
+  },
+  "faCheckalt": { "enabled": true, "hasSso": true, "hasDepositAccount": true },
+  "faMoov": {
+    "environment": "production",
+    "onboardingStatus": "active",
+    "canSendPayments": true,
+    "providerAccountConfigured": true
+  },
+  "uatIntakeCount": 37,
+  "fingerprintSha256": "ccb9a1144d46f607f542aa61e765098177eb8a15d318e0a081d6b762ccd021b3",
+  "sql66Applied": true,
+  "tempLambdaDeleted": true
+}
