@@ -44,6 +44,27 @@ const bindApplyGucs = async (client, environment) => {
   }
 };
 
+const savepointName = (name) => String(name || 'aws_webhook').replace(/[^a-z0-9_]/gi, '_') || 'aws_webhook';
+
+/**
+ * Swallow a statement without aborting the outer webhook transaction.
+ * PostgreSQL leaves the txn aborted after a caught query error; a later
+ * COMMIT then rolls back the already-inserted receipt while the handler
+ * still returns HTTP 200.
+ */
+const withSavepoint = async (client, name, fn) => {
+  const ident = savepointName(name);
+  await client.query(`SAVEPOINT ${ident}`);
+  try {
+    const result = await fn();
+    await client.query(`RELEASE SAVEPOINT ${ident}`);
+    return result;
+  } catch (error) {
+    try { await client.query(`ROLLBACK TO SAVEPOINT ${ident}`); } catch { /* ignore */ }
+    throw error;
+  }
+};
+
 const recordWebhookEvent = async (client, {
   environment,
   eventId,
@@ -54,7 +75,7 @@ const recordWebhookEvent = async (client, {
 }) => {
   if (environment !== 'production' || !eventId) return { recorded: false, duplicate: false };
   try {
-    const inserted = (await client.query(
+    const inserted = (await withSavepoint(client, 'aws_record_webhook_event', () => client.query(
       `INSERT INTO public.payment_webhook_events
          (provider, environment, external_event_id, event_type, provider_account_id, resource_id, payload)
        VALUES ('moov', $1, $2, $3, $4, $5, $6::jsonb)
@@ -68,7 +89,7 @@ const recordWebhookEvent = async (client, {
         resourceId,
         JSON.stringify(sanitize(payload || {})),
       ],
-    )).rows[0];
+    ))).rows[0];
     if (!inserted) return { recorded: false, duplicate: true };
     return { recorded: true, duplicate: false, id: inserted.id };
   } catch {
@@ -80,20 +101,20 @@ const markWebhookEventProcessed = async (client, eventId, error = null) => {
   if (!eventId) return;
   try {
     if (error) {
-      await client.query(
+      await withSavepoint(client, 'aws_mark_webhook_event', () => client.query(
         `UPDATE public.payment_webhook_events
          SET processing_error = $2
          WHERE provider = 'moov' AND external_event_id = $1`,
         [String(eventId), String(error).slice(0, 500)],
-      );
+      ));
       return;
     }
-    await client.query(
+    await withSavepoint(client, 'aws_mark_webhook_event', () => client.query(
       `UPDATE public.payment_webhook_events
        SET processed_at = now(), processing_error = NULL
        WHERE provider = 'moov' AND external_event_id = $1`,
       [String(eventId)],
-    );
+    ));
   } catch { /* event log must not fail apply */ }
 };
 
@@ -243,7 +264,7 @@ export async function applyMoovWebhook(client, payload, {
         mutations.push('stakeholder_accounts');
       }
     }
-    await client.query(
+    await withSavepoint(client, 'aws_payment_event_log', () => client.query(
       `INSERT INTO public.payment_event_log
         (provider, environment, tenant_id, event_type, new_status, provider_metadata)
        VALUES ('moov', $1, $2::uuid, $3, $4, $5::jsonb)`,
@@ -251,7 +272,7 @@ export async function applyMoovWebhook(client, payload, {
         account_id: providerAccountId,
         resource: data?.bankAccountID ?? null,
       }))],
-    ).catch(() => {});
+    )).catch(() => {});
     mutations.push('payment_event_log');
     await markWebhookEventProcessed(client, eventId);
     return {
@@ -278,14 +299,14 @@ export async function applyMoovWebhook(client, payload, {
   }
 
   if (disputeId) {
-    await client.query(
+    await withSavepoint(client, 'aws_payment_event_log', () => client.query(
       `INSERT INTO public.payment_event_log
         (provider, environment, tenant_id, event_type, provider_metadata)
        VALUES ('moov', $1, $2::uuid, $3, $4::jsonb)`,
       [env, tenantId, eventType, JSON.stringify(sanitize({
         dispute_id: disputeId, transfer_id: transferId, amount: data?.amount, phase: data?.phase, status: data?.status,
       }))],
-    ).catch(() => {});
+    )).catch(() => {});
     if (transferId) {
       await client.query(
         `UPDATE public.payment_transfers
@@ -318,12 +339,12 @@ export async function applyMoovWebhook(client, payload, {
   const newStatus = normalizeTransferStatus(providerStatus);
 
   if (!transfer) {
-    await client.query(
+    await withSavepoint(client, 'aws_payment_event_log', () => client.query(
       `INSERT INTO public.payment_event_log
         (provider, environment, tenant_id, provider_transfer_id, event_type, new_status, provider_metadata)
        VALUES ('moov', $1, $2::uuid, $3, $4, $5, $6::jsonb)`,
       [env, tenantId, transferId, eventType, newStatus, JSON.stringify(sanitize({ provider_status: providerStatus }))],
-    ).catch(() => {});
+    )).catch(() => {});
     await markWebhookEventProcessed(client, eventId);
     return {
       applied: true,
@@ -379,7 +400,7 @@ export async function applyMoovWebhook(client, payload, {
 
   const funding = await syncFundingRequest(client, transferId, newStatus, failureReason, env);
   if (funding?.queueProcessFundedPayment) mutations.push('process_funded_payment_queued');
-  await client.query(
+  await withSavepoint(client, 'aws_payment_event_log', () => client.query(
     `INSERT INTO public.payment_event_log
       (provider, environment, tenant_id, recipient_id, transfer_id, provider_transfer_id,
        event_type, previous_status, new_status, provider_metadata)
@@ -388,7 +409,7 @@ export async function applyMoovWebhook(client, payload, {
       env, transfer.tenant_id, transfer.destination_recipient_id, transfer.id, transferId,
       eventType, previous, newStatus, JSON.stringify(sanitize({ provider_status: providerStatus })),
     ],
-  ).catch(() => {});
+  )).catch(() => {});
   mutations.push('payment_event_log');
   await markWebhookEventProcessed(client, eventId);
   return {

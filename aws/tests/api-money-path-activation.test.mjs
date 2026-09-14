@@ -258,6 +258,55 @@ test('production Moov dispatch is registered and still blocked without financial
   });
 });
 
+test('SQL 67 gates payment_webhook_events writes to checksops + apply GUCs only', () => {
+  const sql67 = fs.readFileSync(path.join(ROOT, 'aws/financial/sql/67_payment_webhook_events_apply_rls.sql'), 'utf8');
+  assert.match(sql67, /TO checksops/);
+  assert.match(sql67, /request\.provider_webhook_apply/);
+  assert.match(sql67, /request\.aws_financial_permissions_activated/);
+  assert.doesNotMatch(sql67, /TO authenticated/);
+  assert.doesNotMatch(sql67, /TO PUBLIC/);
+  assert.doesNotMatch(sql67, /TO anon/);
+  assert.match(sql67, /environment = 'production'/);
+});
+
+test('Dashboard event.test is persistable and a swallowed events insert does not abort the receipt transaction', async () => {
+  const ping = {
+    eventID: 'd9d18a42-d1ea-4e4c-b671-0fa93e24d584',
+    type: 'event.test',
+    data: { ping: true },
+    createdOn: '2026-09-14T13:22:04Z',
+  };
+  const queries = [];
+  const client = {
+    query: async (sql, params = []) => {
+      queries.push({ sql, params });
+      if (sql.startsWith('SAVEPOINT') || sql.startsWith('RELEASE') || sql.startsWith('ROLLBACK TO')) {
+        return { rows: [] };
+      }
+      if (sql.includes('INSERT INTO public.payment_webhook_events')) {
+        const err = new Error('new row violates row-level security policy for table "payment_webhook_events"');
+        err.code = '42501';
+        throw err;
+      }
+      return { rows: [] };
+    },
+  };
+  await withEnv(productionMoneyFlags, async () => {
+    const applied = await applyMoovWebhook(client, ping, {
+      environment: 'production',
+      eventId: ping.eventID,
+    });
+    assert.equal(applied.applied, true);
+    assert.equal(applied.note, 'event_recorded_no_financial_mutation');
+    assert.equal(applied.financialTablesMutated, false);
+    assert.ok(queries.some((q) => q.sql.startsWith('SAVEPOINT aws_record_webhook_event')));
+    assert.ok(queries.some((q) => q.sql.startsWith('ROLLBACK TO SAVEPOINT aws_record_webhook_event')));
+    const afterRollback = queries.findIndex((q) => q.sql.startsWith('ROLLBACK TO SAVEPOINT aws_record_webhook_event'));
+    assert.ok(afterRollback >= 0);
+    assert.ok(queries.slice(afterRollback + 1).some((q) => q.sql.startsWith('SAVEPOINT') || q.sql.includes('UPDATE public.payment_webhook_events')));
+  });
+});
+
 test('money-path Class A equivalents exist for OCR and endorsement', () => {
   assert.equal(CLASS_A_FUNCTIONS.has('check-ocr-intake'), true);
   assert.equal(CLASS_A_FUNCTIONS.has('check-endorsement'), true);

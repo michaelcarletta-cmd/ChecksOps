@@ -12,13 +12,15 @@ deposit solely for testing. Stripe, Telnyx, and Resend are excluded.**
 
 ## Verdict
 
-**NO GO — AWS MOOV WEBHOOK FAILED**
+**READY TO RETEST MOOV DASHBOARD EVENT**
 
-A Moov Dashboard test POST reached
-`https://checksops.com/prep/webhooks/moov` at `2026-09-14T12:55:28.910Z`
-and was rejected (`401 invalid_signature`). Nothing was recorded. Keep the
-existing Lovable/Supabase webhook. See
-`aws/cutover/money-path-20260914/AWS_MOOV_WEBHOOK_DASHBOARD_TEST_20260914.md`.
+Signature verification is proven (13:22 HTTP 200). Persistence failed
+because SQL 66 GRANTed `payment_webhook_events` DML without an RLS write
+policy; the swallowed `42501` aborted the transaction and rolled back
+the receipt. SQL 67 + apply savepoints are the fix. HMAC and the
+webhook secret were not changed. Keep the Lovable webhook. Do not
+deploy the SPA. See
+`aws/cutover/money-path-20260914/AWS_MOOV_WEBHOOK_PERSIST_AFTER_VERIFY_20260914.md`.
 
 ## What this phase changed
 

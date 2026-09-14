@@ -1,0 +1,28 @@
+{
+  "investigatedAt": "2026-09-14T13:35:00Z",
+  "newestRequestOnly": true,
+  "arrivalAt": "2026-09-14T13:22:04.062Z",
+  "apigwRequestId": "DsM3dgnIIAMEMzw=",
+  "lambdaRequestId": "58ff1ea3-bc6d-4d4a-9989-a54241996c57",
+  "http": { "status": 200, "responseLength": 704, "lambdaDurationMs": 443.28 },
+  "signatureValidation": "PASS",
+  "hmacImplementationChanged": false,
+  "webhookSecretChanged": false,
+  "eventClass": "event.test",
+  "intentionallyAckWithoutPersist": false,
+  "firstStopBranch": "recordWebhookEvent INSERT payment_webhook_events RLS 42501 swallowed; COMMIT rolls back receipt",
+  "receiptsTotalAfter": 7,
+  "paymentWebhookEventsSince1300Z": 0,
+  "probe": {
+    "receiptInsertAsChecksopsWithGuc": "success_in_transaction_rolled_back",
+    "eventsInsertAsChecksopsWithApplyGucs": "42501_rls_deny"
+  },
+  "fix": {
+    "sql": "aws/financial/sql/67_payment_webhook_events_apply_rls.sql",
+    "code": "savepoints around swallowed apply statements"
+  },
+  "spaDeployed": false,
+  "existingLovableMoovWebhookUntouched": true,
+  "financialTransactionInitiated": false,
+  "verdict": "READY TO RETEST MOOV DASHBOARD EVENT"
+}
