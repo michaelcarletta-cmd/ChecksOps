@@ -1,9 +1,14 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Loader2, MailCheck, MailX } from "lucide-react";
+import { awsApiBaseUrl } from "@/lib/awsStaging";
+import {
+  emailUnsubscribeUrl,
+  interpretUnsubscribeConfirm,
+  interpretUnsubscribeGet,
+} from "@/lib/awsFunctionUrls";
 
 type State =
   | { kind: "loading" }
@@ -19,9 +24,6 @@ export default function Unsubscribe() {
   const token = params.get("token") ?? "";
   const [state, setState] = useState<State>({ kind: "loading" });
 
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
-  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
-
   useEffect(() => {
     if (!token) {
       setState({ kind: "invalid", message: "Missing unsubscribe token." });
@@ -29,37 +31,30 @@ export default function Unsubscribe() {
     }
     (async () => {
       try {
-        const resp = await fetch(
-          `${supabaseUrl}/functions/v1/handle-email-unsubscribe?token=${encodeURIComponent(token)}`,
-          { headers: { apikey: supabaseAnonKey } },
-        );
+        const resp = await fetch(emailUnsubscribeUrl(awsApiBaseUrl(), token));
         const json = await resp.json().catch(() => ({}));
-        if (!resp.ok) {
-          setState({ kind: "invalid", message: json?.error || "Invalid or expired link." });
-          return;
-        }
-        if (json?.alreadyUnsubscribed) {
-          setState({ kind: "already" });
-          return;
-        }
-        setState({ kind: "valid", email: json?.email ?? "" });
+        setState(interpretUnsubscribeGet(resp.status, json));
       } catch {
         setState({ kind: "invalid", message: "Could not validate this link." });
       }
     })();
-  }, [token, supabaseUrl, supabaseAnonKey]);
+  }, [token]);
 
   const confirm = async () => {
     if (state.kind !== "valid") return;
+    const email = state.email;
     setState({ kind: "confirming" });
-    const { data, error } = await supabase.functions.invoke("handle-email-unsubscribe", {
-      body: { token },
-    });
-    if (error) {
-      setState({ kind: "error", message: error.message });
-      return;
+    try {
+      const resp = await fetch(emailUnsubscribeUrl(awsApiBaseUrl(), token), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      });
+      const json = await resp.json().catch(() => ({}));
+      setState(interpretUnsubscribeConfirm(resp.status, json, email));
+    } catch {
+      setState({ kind: "error", message: "Could not confirm unsubscribe." });
     }
-    setState({ kind: "done", email: (data as any)?.email ?? state.email });
   };
 
   return (
