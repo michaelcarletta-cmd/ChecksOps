@@ -1,7 +1,8 @@
 /**
  * Check Command Center / public Endorse workflow (Class A).
- * Ports Lovable check-endorsement actions onto Cognito + SES/sink.
- * Does NOT advance deposit stage or trigger payment-direction disbursement.
+ * Ports Lovable check-endorsement actions onto Cognito + Resend (gated) / sink.
+ * Auto-advance to Ready for Deposit is gated by AWS_ENDORSEMENT_AUTO_ADVANCE.
+ * Does not trigger payment-direction disbursement, CheckAlt, or Moov.
  */
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
@@ -12,6 +13,14 @@ import { sendViaSesOrSink } from './email.mjs';
 import { defaultFromAddress } from './email-policy.mjs';
 import { renderTransactionalTemplate } from './email-templates.mjs';
 import { resolveEmailBranding } from './email-branding.mjs';
+import {
+  allowDepositAdvance,
+  endorsementAutoAdvanceEnabled,
+  endorsementResendEnabled,
+  INELIGIBLE_AUTO_ADVANCE_STATUSES,
+  isSuccessfulEndorsementDelivery,
+  sendViaResend,
+} from './endorsement-parity.mjs';
 
 const { Client } = pg;
 
@@ -255,14 +264,111 @@ const completionWithoutAdvance = async (client, checkId) => {
     [checkId],
   )).rows;
   const result = evaluateEndorsementCompletion(rows);
+  const check = await loadCheckForEndorsement(client, { check_id: checkId });
+  const ineligible = INELIGIBLE_AUTO_ADVANCE_STATUSES.has(String(check.status || ''))
+    || Boolean(check.deposited_at);
+
   if (result.anyRejected) {
+    if (!ineligible) {
+      await safeQuery(
+        client,
+        `UPDATE public.check_intake_items
+         SET status = 'needs_review', updated_at = now()
+         WHERE id = $1::uuid
+           AND deposited_at IS NULL
+           AND status IS DISTINCT FROM 'deposited'`,
+        [checkId],
+      );
+    }
+    return { ...result, newStatus: ineligible ? check.status || null : 'needs_review' };
+  }
+
+  if (!result.allSigned || !endorsementAutoAdvanceEnabled()) {
+    return result;
+  }
+  if (ineligible) {
+    return {
+      ...result,
+      depositAdvanceDenied: true,
+      advance_check_on_endorsement_complete: 'skipped_ineligible',
+      newStatus: check.status || null,
+    };
+  }
+
+  if (String(check.deposit_recommendation || '') === 'branch_deposit_recommended') {
+    if (check.status === 'branch_deposit_required') {
+      return {
+        ...result,
+        ...allowDepositAdvance('branch_deposit_required'),
+        advance_check_on_endorsement_complete: 'already_ready',
+      };
+    }
     await safeQuery(
       client,
-      `UPDATE public.check_intake_items SET status = 'needs_review', updated_at = now() WHERE id = $1::uuid`,
+      `UPDATE public.check_intake_items
+       SET status = 'branch_deposit_required', updated_at = now()
+       WHERE id = $1::uuid
+         AND deposited_at IS NULL
+         AND status IS DISTINCT FROM 'deposited'`,
       [checkId],
     );
+    await safeQuery(
+      client,
+      `INSERT INTO public.check_audit_log (
+         check_id, event_type, event_description, event_data, tenant_id
+       ) VALUES (
+         $1::uuid, 'all_endorsements_complete',
+         'All endorsements complete — routed to branch deposit workflow',
+         $2::jsonb, $3::uuid
+       )`,
+      [checkId, JSON.stringify({ deposit_path: 'branch_deposit_required' }), check.tenant_id || null],
+    );
+    return { ...result, ...allowDepositAdvance('branch_deposit_required') };
   }
-  return result;
+
+  const alreadyReady = check.status === 'approved_for_deposit'
+    && String(check.deposit_recommendation || '') === 'ready_for_deposit';
+  if (alreadyReady) {
+    return {
+      ...result,
+      ...allowDepositAdvance('approved_for_deposit'),
+      advance_check_on_endorsement_complete: 'already_ready',
+    };
+  }
+
+  await safeQuery(
+    client,
+    `UPDATE public.check_intake_items
+     SET status = 'approved_for_deposit',
+         deposit_recommendation = 'ready_for_deposit',
+         check_stage = 'ready_for_deposit',
+         updated_at = now()
+     WHERE id = $1::uuid
+       AND deposited_at IS NULL
+       AND status IS DISTINCT FROM 'deposited'
+       AND status IS DISTINCT FROM 'voided'`,
+    [checkId],
+  );
+  await safeQuery(
+    client,
+    `INSERT INTO public.check_audit_log (
+       check_id, event_type, event_description, event_data, tenant_id
+     ) VALUES (
+       $1::uuid, 'all_endorsements_complete',
+       'All endorsements complete — ready for deposit',
+       $2::jsonb, $3::uuid
+     )`,
+    [
+      checkId,
+      JSON.stringify({
+        status: 'approved_for_deposit',
+        deposit_recommendation: 'ready_for_deposit',
+        check_stage: 'ready_for_deposit',
+      }),
+      check.tenant_id || null,
+    ],
+  );
+  return { ...result, ...allowDepositAdvance('approved_for_deposit') };
 };
 
 const lookupPublicEndorsement = async (client, token) => {
@@ -507,8 +613,9 @@ export const runPublicEndorsement = async (event, deps = {}) => {
 
 export const handlePublicEndorsement = (event, deps = {}) => runPublicEndorsement(event, deps);
 
-const sendEndorsementEmail = async ({ endorsement, check, email, url, branding, cc, send }) => {
-  const mailer = send || sendViaSesOrSink;
+const sendEndorsementEmail = async ({ endorsement, check, email, url, branding, cc, send, fetchImpl }) => {
+  const useResend = !send && endorsementResendEnabled();
+  const mailer = send || (useResend ? sendViaResend : sendViaSesOrSink);
   const rendered = renderTransactionalTemplate('endorsement-request', {
     payeeName: endorsement.payee_name,
     checkNumber: check.check_number || 'N/A',
@@ -524,9 +631,9 @@ const sendEndorsementEmail = async ({ endorsement, check, email, url, branding, 
   const subject = subjectBase.includes(endorsement.payee_name)
     ? subjectBase
     : `${subjectBase} — ${endorsement.payee_name}`;
-  const recipients = [email, ...(cc || [])].filter(Boolean);
-  return mailer({
-    to: recipients,
+  const result = await mailer({
+    to: useResend ? email : [email, ...(cc || [])].filter(Boolean),
+    cc: useResend ? (cc || []).filter(Boolean) : undefined,
     subject,
     html: rendered.html,
     text: rendered.text,
@@ -536,11 +643,16 @@ const sendEndorsementEmail = async ({ endorsement, check, email, url, branding, 
       'X-Entity-Ref-ID': String(endorsement.id),
       'X-Endorsement-Payee': String(endorsement.payee_name || ''),
     },
+    fetchImpl,
   });
+  if (!isSuccessfulEndorsementDelivery(result, { injected: Boolean(send) })) {
+    throw new Error(result?.error || 'Email delivery failed');
+  }
+  return result;
 };
 
 export const runAuthenticatedEndorsement = async ({
-  client, mapping, body, spoof, event, send,
+  client, mapping, body, spoof, event, send, fetchImpl,
 }) => {
   const action = body.action;
   if (!AUTH_ENDORSEMENT_ACTIONS.has(action)) {
@@ -652,8 +764,9 @@ export const runAuthenticatedEndorsement = async ({
     }
     let emailSent = false;
     let emailError = null;
+    let sendResult = null;
     try {
-      await sendEndorsementEmail({
+      sendResult = await sendEndorsementEmail({
         endorsement: { ...endorsement, contact_email: email },
         check,
         email,
@@ -661,12 +774,26 @@ export const runAuthenticatedEndorsement = async ({
         branding,
         cc,
         send,
+        fetchImpl,
       });
       emailSent = true;
     } catch (error) {
       emailError = String(error?.message || error).slice(0, 200);
     }
+    const deliveryStatus = emailSent
+      ? (sendResult?.mode === 'resend' ? 'delivered' : (sendResult?.mode === 'sink' ? 'sunk' : 'delivered'))
+      : 'failed';
+    const persistedDeliveryStatus = emailSent
+      ? (sendResult?.mode === 'sink' ? 'pending' : 'delivered')
+      : 'failed';
     if (!emailSent) {
+      await safeQuery(
+        client,
+        `INSERT INTO public.endorsement_requests (
+           endorsement_id, check_id, method, sent_by, delivery_status, email_address
+         ) VALUES ($1::uuid, $2::uuid, 'email', $3::uuid, 'failed', $4)`,
+        [endorsement.id, endorsement.check_id, mapping.application_user_id, email],
+      );
       await auditEndorsement(client, {
         endorsement_id: endorsement.id,
         check_id: endorsement.check_id,
@@ -674,10 +801,19 @@ export const runAuthenticatedEndorsement = async ({
         event_type: 'request_failed',
         check_event_type: 'endorsement_request_failed',
         event_description: `Delivery failed: ${emailError}`,
-        event_data: { emailError },
+        event_data: { emailError, delivery_status: 'failed' },
         actor_id: mapping.application_user_id,
       });
-      return { ok: false, statusCode: 502, success: false, error: 'Email delivery failed', details: { emailError }, spoofFieldsIgnored: spoof };
+      return {
+        ok: false,
+        statusCode: 502,
+        success: false,
+        error: 'Email delivery failed',
+        emailSent: false,
+        delivery_status: 'failed',
+        details: { emailError },
+        spoofFieldsIgnored: spoof,
+      };
     }
     await client.query(
       `UPDATE public.check_endorsements
@@ -694,8 +830,8 @@ export const runAuthenticatedEndorsement = async ({
       client,
       `INSERT INTO public.endorsement_requests (
          endorsement_id, check_id, method, sent_by, delivery_status, email_address
-       ) VALUES ($1::uuid, $2::uuid, 'email', $3::uuid, 'delivered', $4)`,
-      [endorsement.id, endorsement.check_id, mapping.application_user_id, email],
+       ) VALUES ($1::uuid, $2::uuid, 'email', $3::uuid, $5, $4)`,
+      [endorsement.id, endorsement.check_id, mapping.application_user_id, email, persistedDeliveryStatus],
     );
     await safeQuery(
       client,
@@ -722,6 +858,8 @@ export const runAuthenticatedEndorsement = async ({
       success: true,
       endorsementUrl,
       emailSent: true,
+      delivery_status: deliveryStatus,
+      emailProvider: sendResult?.provider || sendResult?.mode || (endorsementResendEnabled() ? 'resend' : 'sink'),
       ...denyDepositAdvance(),
       spoofFieldsIgnored: spoof,
     };
@@ -832,6 +970,7 @@ export const handleCheckEndorsement = async (event, deps = {}) => {
   return withIdentityWrite(event, (ctx) => runAuthenticatedEndorsement({
     ...ctx,
     event,
-    send: deps.sendViaSesOrSink,
+    send: deps.sendViaSesOrSink || deps.send,
+    fetchImpl: deps.fetchImpl || deps.fetch,
   }), deps);
 };

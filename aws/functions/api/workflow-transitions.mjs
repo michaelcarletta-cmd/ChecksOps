@@ -71,6 +71,7 @@ export const TRANSITIONS = {
       'needs_review',
       'manual_review_required',
       'endorsements_complete',
+      'endorsements_in_progress',
       'loss_draft_required',
       'branch_deposit_required',
     ],
@@ -80,7 +81,7 @@ export const TRANSITIONS = {
     financialAuthorization: false,
     providerExecution: false,
     requiredRecords: ['endorsement_complete'],
-    notes: 'READY FOR PROVIDER EXECUTION. Requires completed endorsements. Does not submit CheckAlt or move money. Production CheckAlt submit re-checks endorsements independently.',
+    notes: 'READY FOR PROVIDER EXECUTION. Requires completed endorsements. endorsements_in_progress is allowed as a manual Review backup after AWS send sets that status. Does not submit CheckAlt or move money. Production CheckAlt submit re-checks endorsements independently.',
   },
   return_to_review: {
     action: 'return_to_review',
