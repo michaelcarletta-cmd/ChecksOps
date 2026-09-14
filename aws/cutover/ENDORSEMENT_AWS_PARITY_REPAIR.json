@@ -1,6 +1,6 @@
 {
   "title": "AWS endorsement parity repair candidate",
-  "status": "validated_gated_off_ready_for_controlled_activation",
+  "status": "production_activated_20260914",
   "spa_change_required": false,
   "production_spa_lock_preserved": true,
   "unsubscribe_kyc_spa_candidate_untouched": true,
@@ -10,7 +10,7 @@
   "checkalt_used": false,
   "moov_used": false,
   "authorized_secret_source": "checksops/production/provider",
-  "resend_api_key_present_in_authorized_source": false,
+  "resend_api_key_present_in_authorized_source": true,
   "live_resend_send_this_run": false,
   "live_resend_blocked_reason": "RESEND_API_KEY is not present in checksops/production/provider or Lambda env. Do not print or invent a key. Place it in the authorized secret before enabling production email.",
   "gates_default": {

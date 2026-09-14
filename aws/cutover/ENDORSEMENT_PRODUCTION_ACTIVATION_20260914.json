@@ -1,60 +1,83 @@
 {
-  "verdict": "NO GO — ENDORSEMENT PRODUCTION ACTIVATION FAILED",
-  "stoppedAt": "step_1_configure_production_provider_secret",
-  "reason": "The authorized Resend API key is not available to this agent and is not present in checksops/production/provider. Activation did not invent a key, did not copy from Supabase Edge, and did not mutate production.",
-  "authorizedKeySource": {
-    "system": "production_supabase_edge_secrets",
-    "projectRef": "nbcqwpysqgyxrrbgtmkw",
-    "secretName": "RESEND_API_KEY",
-    "readableThisRun": false,
-    "notes": [
-      "No SUPABASE_ACCESS_TOKEN in this environment",
-      "AWS Secrets Manager has no Resend secret",
-      "SSM has no Resend parameter",
-      "Production Lambda env has no RESEND_*",
-      "Cursor injected secrets are only CURSOR_AWS_ASSUME_IAM_ROLE_ARN"
-    ]
+  "verdict": "ENDORSEMENT PRODUCTION ACTIVATION PASS — REAL PAYEE FLOW READY",
+  "activatedAt": "2026-09-14T18:26:22Z",
+  "function": "checksops-production-prep-api",
+  "codeSha256": "hxFYx5rAijr52XxISdXh5oc14l9iRwMRDcxyoKtI9gw=",
+  "resend": {
+    "secretSource": "checksops/production/provider",
+    "RESEND_API_KEY_configured": true,
+    "RESEND_FROM_EMAIL_configured": false,
+    "firstDeliveredMessageId": "60f5dc67-12b0-4c5e-99c7-0e12f7c2cd8f",
+    "from": "ChecksOps <notify@checksops.com>",
+    "to": "checksops-tester@freedomadj.com",
+    "subject": "Endorsement Required — Check #AWS-ENDORS-ACT-20260914 — Activation Tester Insured",
+    "lastEvent": "delivered",
+    "endorseLink": "https://checksops.com/endorse?token=2eb78eaa-829d-4ad3-81ee-278a1720ec6e",
+    "provider": "resend",
+    "supabaseEdgeUsed": false,
+    "sesUsed": false,
+    "tenantCustomFromUsed": false,
+    "tenantCustomFromReason": "Freedom sending_mode=custom and domain_status=verified on notify.freedomadj.com, but ses_identity_name is null so AWS resolveEmailBranding falls back to ChecksOps <notify@checksops.com>"
   },
-  "verifiedSenderThatWouldBeUsed": {
-    "from": "tenant resolveEmailBranding() custom From when usingCustomFrom, else ChecksOps <notify@checksops.com>",
-    "notes": "Do not hard-code freedomclaims.work. Controlled test uses the ChecksOps fallback when tenant-domain cannot be safely exercised."
+  "emailFixture": {
+    "checkId": "8e102d5d-81c7-43ff-bce6-cf58215e1c9a",
+    "checkNumber": "AWS-ENDORS-ACT-20260914",
+    "requestDeliveryStatus": "delivered",
+    "endorsementStatusAfterSend": "sent"
   },
-  "productionMutationsThisRun": {
-    "providerSecretUpdated": false,
-    "lambdaCodeDeployed": false,
-    "lambdaEnvUpdated": false,
-    "spaUnlocked": false,
-    "spaRedeployed": false,
-    "cognitoMappingsChanged": false,
-    "moovWebhookChanged": false,
-    "checkaltConfigChanged": false,
-    "financialFingerprintChanged": false,
-    "realDepositInitiated": false,
-    "realPayeeEmailSent": false,
-    "autoAdvanceEnabled": false,
-    "broadRecipientDeliveryEnabled": false,
-    "check9562Mutated": false
+  "lifecycleFixture": {
+    "checkId": "8e102d5d-81c7-43ff-bce6-cf58215e1c9a",
+    "beforeFinal": {
+      "status": "endorsements_in_progress",
+      "check_stage": "endorsing",
+      "deposit_recommendation": null
+    },
+    "afterFinal": {
+      "status": "approved_for_deposit",
+      "check_stage": "ready_for_deposit",
+      "deposit_recommendation": "ready_for_deposit",
+      "deposited_at": null
+    },
+    "duplicateAdvance": "already_ready",
+    "paymentDirectionTriggered": false,
+    "checkAltSubmitted": false,
+    "moovInitiated": false
   },
-  "preserved": {
-    "spaBundle": "index-CiOVNYWh.js",
-    "spaGitCommit": "868e69387d63af511f4c185775b611dea2c8fc47",
-    "spaLocked": true,
-    "cognitoPoolId": "us-east-1_h00WorYMT",
-    "cognitoClientId": "3ja9fqaq2fjkv3i6up2varcqpe",
-    "prepLambdaCodeSha256": "B8cQg1FnQzUSx7B/nANevkWrTCV/UPgX+e4GtXzlqvk=",
-    "prepLambdaLastModified": "2026-09-14T13:39:41.000+0000",
-    "financialFingerprintSha256": "ccb9a1144d46f607f542aa61e765098177eb8a15d318e0a081d6b762ccd021b3",
-    "moneyFlagsUnchanged": {
-      "AWS_MOOV_ENABLED": "true",
-      "AWS_CHECKALT_ENABLED": "true",
-      "AWS_PROVIDER_EXECUTION_ENABLED": "true",
-      "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": "true",
-      "AWS_PROVIDER_WEBHOOK_DRY_RUN": "false"
+  "publicSubmitFixture": {
+    "checkId": "a0b94dd1-934e-4c26-b9b2-29f151e294e2",
+    "checkNumber": "AWS-ENDORS-PUB-20260914",
+    "signature_method": "portal",
+    "after": {
+      "status": "approved_for_deposit",
+      "check_stage": "ready_for_deposit",
+      "deposit_recommendation": "ready_for_deposit"
     }
   },
-  "resumeWhen": [
-    "A human copies production Edge RESEND_API_KEY into checksops/production/provider (never paste into chat/logs)",
-    "Do not set a global Freedom RESEND_FROM_EMAIL. Endorsement From is tenant-aware via resolveEmailBranding, else ChecksOps <notify@checksops.com>",
-    "Re-run controlled activation from step 3 (Lambda deploy) after confirming RESEND_API_KEY_configured=true without printing the value"
+  "flags": {
+    "AWS_ENDORSEMENT_RESEND_ENABLED": "true",
+    "AWS_ENDORSEMENT_AUTO_ADVANCE": "true",
+    "AWS_ENDORSEMENT_RESEND_ALLOW_ANY_RECIPIENT": "true",
+    "AWS_EMAIL_MODE": null,
+    "RESEND_FROM_EMAIL": null
+  },
+  "moneyFlagsUnchanged": {
+    "AWS_MOOV_ENABLED": "true",
+    "AWS_CHECKALT_ENABLED": "true",
+    "AWS_PROVIDER_EXECUTION_ENABLED": "true",
+    "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": "true",
+    "AWS_PROVIDER_WEBHOOK_DRY_RUN": "false"
+  },
+  "preserved": {
+    "spaUnlocked": false,
+    "spaRedeployed": false,
+    "spaBundle": "index-CiOVNYWh.js",
+    "spaGitCommit": "868e69387d63af511f4c185775b611dea2c8fc47",
+    "cognitoPoolId": "us-east-1_h00WorYMT",
+    "cognitoClientId": "3ja9fqaq2fjkv3i6up2varcqpe",
+    "check9562Mutated": false
+  },
+  "appliedSchema": [
+    "GRANT UPDATE (deposit_recommendation) ON check_intake_items",
+    "aws_public_endorsement_by_token now returns uploaded_by so public submit can bind RLS"
   ]
 }
