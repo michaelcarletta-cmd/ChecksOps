@@ -1,0 +1,31 @@
+{
+  "generatedAt": "2026-09-14T11:10:47.711Z",
+  "bucket": "checksops-staging-privatefilesbucket-erzqsolpucjp",
+  "bridgeMode": "sign_only",
+  "results": [
+    {
+      "key": "files/claim-files/checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1785161226836_back_IMG_0978_cropped_endorsed_1789057905238.svg",
+      "action": "copied",
+      "size": 791058,
+      "sha256": "a3a4da2bd41d138a3369bea1c5807380858cd04d1bf64405ea77bc04a33ca7f1",
+      "etag": "\"f864e9ef480a09eb9190b86e4aaa7d0a\"",
+      "contentType": "image/svg+xml"
+    },
+    {
+      "key": "files/claim-files/checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1788459141955_front_IMG_1183_cropped.checkalt.jpg",
+      "action": "copied",
+      "size": 278787,
+      "sha256": "5975d95d9632d952045035c526ef824238eaf862727479c3565f87ac105d9dfb",
+      "etag": "\"0928decb506c1c9383c303fced0a95bc\"",
+      "contentType": "image/jpeg"
+    },
+    {
+      "key": "files/claim-files/checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/endorsed_deposit_18vd.checkalt.jpg",
+      "action": "copied",
+      "size": 247060,
+      "sha256": "24007949bd8af25248f7ce162f70c32377c9bc2749a852c3ecb821d84a1e6cb2",
+      "etag": "\"867b8b3576a85e46fe5cc65ef896f842\"",
+      "contentType": "image/jpeg"
+    }
+  ]
+}

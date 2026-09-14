@@ -1,0 +1,74 @@
+{
+  "verdict": "RECONCILIATION PASS — READY FOR PROVIDER/WEBHOOK CUTOVER",
+  "appliedAt": "2026-09-14T11:10:52.225Z",
+  "postverifyAt": "2026-09-14T11:11:52.254Z",
+  "database": "checksops",
+  "targetTenant": {
+    "id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+    "name": "Freedom Adjustment"
+  },
+  "excludedTenant": {
+    "id": "4f172140-f57a-4744-8050-95f4f07b13b4",
+    "name": "Condition One Commercial"
+  },
+  "identity": {
+    "rowCount": 11,
+    "tenantUsers": 7,
+    "userRoles": 10,
+    "cognitoSubsUnchangedFromRepair": true,
+    "productionCognitoSubs": [
+      {"application_user_id": "0160a5f3-30a4-4aba-8e54-6529f1ceb0d4", "cognito_sub": "d418a4f8-80f1-70d6-36c9-fe490220bf4a", "linked_at": "2026-09-14T10:07:27.787Z"},
+      {"application_user_id": "30d0505c-bcfa-4732-81fd-869dc46da5dd", "cognito_sub": "34388468-a021-7036-c34d-2ff14a20ed40", "linked_at": "2026-09-14T10:07:27.787Z"},
+      {"application_user_id": "3af0234c-de1b-4819-938d-fa4f9390811b", "cognito_sub": "24d874d8-80d1-7092-7f34-48b8704702f8", "linked_at": "2026-09-14T10:07:27.787Z"},
+      {"application_user_id": "7dbb3009-f059-4767-b5dc-1c5c72379330", "cognito_sub": "a45884b8-d051-70b3-b19d-ca704964c6e8", "linked_at": "2026-09-14T10:07:27.787Z"},
+      {"application_user_id": "abd3c2a0-6dc0-4680-92dd-a013e1141c91", "cognito_sub": "f468b438-4081-7004-d865-a1b86eb19beb", "linked_at": "2026-09-14T10:07:27.787Z"},
+      {"application_user_id": "b100f05d-9e81-4a7b-b9cc-9baf173131d9", "cognito_sub": "34c8a478-e0d1-70f3-3c49-02225e7404b6", "linked_at": "2026-09-14T10:07:27.787Z"},
+      {"application_user_id": "e2ad0849-c6b6-4f4a-a68a-8c52f563c6fd", "cognito_sub": "647894c8-2011-70d4-e874-efd4b080700e", "linked_at": "2026-09-14T10:07:27.787Z"},
+      {"application_user_id": "fd857564-9534-4b0f-95ac-624ed1273725", "cognito_sub": "74286478-c0c1-7068-9fea-9deea6f61627", "linked_at": "2026-09-14T10:07:27.787Z"}
+    ]
+  },
+  "freedomAdjustment": {
+    "moovPaymentAccount": {
+      "id": "26c2dbb1-360e-4631-84f5-24aa934c4005",
+      "providerAccountId": "60922058-7eca-4889-81dd-5720d7b9de96",
+      "note": "Immutable Moov id preserved. AWS readiness cache intentionally NOT overwritten (AWS more complete than Supabase)."
+    },
+    "moovRecipient": {
+      "id": "62a858ff-ee6a-49d7-9898-1c8e4a44227b",
+      "providerAccountId": "ee8c608e-dc2d-45d3-95e9-3c992f3dfc5f",
+      "onboardingStatus": "ready"
+    },
+    "checks": [
+      {"id": "7d62ea7c-2563-499d-97c1-8273f220a382", "status": "endorsements_in_progress", "amount": "413.03", "endorsementId": "3d1565b9-ac95-427e-a694-2e5034030a1d", "endorsementStatus": "signed"},
+      {"id": "623442f0-a408-4db5-85be-14bae231a722", "status": "approved_for_deposit", "amount": "9984.11", "note": "CheckAlt paths reconciled"}
+    ],
+    "webhookEventRows": 19,
+    "paymentEventLogRows": 11
+  },
+  "financialAggregates": {
+    "check_intake_amount": "1428955.65",
+    "check_intake_pa_fee_amount": "5393.27",
+    "deposit_items_amount": "1037630.29",
+    "deposit_batches_total_amount": "1038410.29",
+    "checkalt_deposits_amount": "453990.48",
+    "disbursement_splits_amount": "880702.79",
+    "disbursement_batches_check_amount": "888258.734",
+    "claim_payments_amount": "114621.50",
+    "homeowner_ledger_amount": "3169779.99",
+    "unchangedFromReadonlyReport": true
+  },
+  "uat": {
+    "conditionOneCommercialCheckIntakeCount": 37,
+    "intact": true
+  },
+  "storage": [
+    {"key": "files/claim-files/checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1785161226836_back_IMG_0978_cropped_endorsed_1789057905238.svg", "bytes": 791058, "sha256": "a3a4da2bd41d138a3369bea1c5807380858cd04d1bf64405ea77bc04a33ca7f1"},
+    {"key": "files/claim-files/checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1788459141955_front_IMG_1183_cropped.checkalt.jpg", "bytes": 278787, "sha256": "5975d95d9632d952045035c526ef824238eaf862727479c3565f87ac105d9dfb"},
+    {"key": "files/claim-files/checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/endorsed_deposit_18vd.checkalt.jpg", "bytes": 247060, "sha256": "24007949bd8af25248f7ce162f70c32377c9bc2749a852c3ecb821d84a1e6cb2"}
+  ],
+  "stop": {
+    "webhookDestinationCutover": false,
+    "spaDeploy": false,
+    "moovOrCheckAltApiCalls": false
+  }
+}
