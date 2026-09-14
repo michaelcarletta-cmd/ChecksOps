@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Switch } from "@/components/ui/switch";
 import { AlertTriangle, Building2, Plus, Trash2, Star, CreditCard, ShieldCheck, MailCheck, Lock, Loader2, Info, ShieldAlert } from "lucide-react";
 import { isValidRoutingNumber, VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus } from "@/lib/banking";
+import { overlayLivePayeeVerification } from "@/lib/payments/overlayLivePayeeVerification";
 import { AchAuthorizationForm } from "./AchAuthorizationForm";
 import { BankVerification } from "./BankVerification";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -80,18 +81,24 @@ export function StakeholderAccountSettings() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("stakeholder_accounts")
-        .select("id, nickname, account_type, chk_acct, acct_type, is_primary, is_active, custname, homeowner_name, verification_status, verified_at, verification_recipient_email, origin")
+        .select("id, nickname, account_type, chk_acct, acct_type, is_primary, is_active, custname, homeowner_name, verification_status, verified_at, verification_recipient_email, origin, provider_account_id")
         .eq("tenant_id", tenant!.id)
         .eq("is_active", true)
         .order("is_primary", { ascending: false })
         .order("created_at", { ascending: true });
       if (error) throw error;
-      // Tenant's own bank account (operating, or a provider-connected payment
-      // account like the Moov-linked "payment account") is shown separately at
-      // the top of the page in TenantBankAccountSettings. Exclude both here so
-      // stakeholders are strictly third parties identified by their account_type.
-      return (data ?? []).filter(
-        (a: any) => a.account_type !== "operating" && a.origin !== "provider_connected",
+      let payees: any[] = [];
+      try {
+        const live = await supabase.functions.invoke("moov-readiness", {
+          body: { tenant_id: tenant!.id },
+        });
+        payees = (live.data as any)?.payees ?? [];
+      } catch { /* live overlay is optional */ }
+      return overlayLivePayeeVerification(
+        (data ?? []).filter(
+          (a: any) => a.account_type !== "operating" && a.origin !== "provider_connected",
+        ),
+        payees,
       );
     },
   });

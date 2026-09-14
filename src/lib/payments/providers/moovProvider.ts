@@ -58,8 +58,13 @@ export const moovProvider: PaymentProvider = {
   },
 
   async verifyAccount(tenantId: string): Promise<PaymentAccount> {
-    // Server-side sync: pulls the live account, capabilities and bank list.
-    await invoke("moov-sync", { tenant_id: tenantId });
+    // Live GET first (production when the tenant already has an approved Moov
+    // merchant). Fall back to sandbox sync only if live-read is unavailable.
+    try {
+      await invoke("moov-readiness", { tenant_id: tenantId });
+    } catch {
+      await invoke("moov-sync", { tenant_id: tenantId });
+    }
     return readTenantPaymentAccount(tenantId, "moov");
   },
 

@@ -265,6 +265,22 @@ test('Moov readiness is local-only and does not claim live provider state', () =
   assert.equal(ready.canMoveMoney, true);
   assert.equal(ready.liveProviderCalled, false);
   assert.equal(ready.source, 'local_snapshot');
+  const sendOnly = evaluateReadiness({
+    environment: 'production',
+    accountId: 'acct',
+    capabilities: [
+      { capability: 'send-funds', status: 'enabled' },
+      { capability: 'wallet', status: 'enabled' },
+      { capability: 'transfers', status: 'enabled' },
+    ],
+    banks: [{ status: 'verified' }],
+    verificationStatus: 'verified',
+    termsAccepted: true,
+    feePlanUnavailable: true,
+  });
+  assert.equal(sendOnly.canMoveMoney, true);
+  assert.equal(sendOnly.checks.find((check) => check.id === 'fee_plan')?.state, 'ready');
+  assert.equal(sendOnly.checks.find((check) => check.id === 'collect_funds_ach')?.state, 'not_started');
   const empty = evaluateReadiness({
     environment: 'sandbox',
     accountId: null,

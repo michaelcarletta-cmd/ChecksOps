@@ -34,6 +34,7 @@ async function ensureProviderWallet(
   walletType: WalletType,
   name: string,
   knownWalletId?: string | null,
+  allowCreate = true,
 ): Promise<{ walletID: string; availableCents: number; pendingCents: number }> {
   let list: any[] = [];
   try {
@@ -63,6 +64,9 @@ async function ensureProviderWallet(
 
   let wallet = wanted;
   if (!wallet) {
+    if (!allowCreate) {
+      throw new Error("Wallet is missing. Do not create a new Moov wallet for this already-approved account.");
+    }
     try {
       wallet = await moovFetch<any>(`/accounts/${accountId}/wallets`, {
         method: "POST",
@@ -115,6 +119,8 @@ export async function syncWallet(
     environment: string;
     walletType?: WalletType;
     skipProviderFetch?: boolean;
+    knownWalletId?: string | null;
+    allowCreate?: boolean;
   },
 ): Promise<WalletRow> {
   const walletType: WalletType = args.walletType ?? "operating";
@@ -123,12 +129,18 @@ export async function syncWallet(
   // Check if we already have a wallet record with a provider ID
   const existing = await readWallet(supabase, args.tenantId, args.environment, walletType);
   
-  let providerWalletId = existing?.provider_wallet_id;
+  let providerWalletId = existing?.provider_wallet_id || args.knownWalletId || null;
   let availableCents = existing?.available_cents ?? 0;
   let pendingCents = existing?.pending_cents ?? 0;
 
   if (!args.skipProviderFetch || !providerWalletId) {
-    const provider = await ensureProviderWallet(args.accountId, walletType, name, providerWalletId);
+    const provider = await ensureProviderWallet(
+      args.accountId,
+      walletType,
+      name,
+      providerWalletId,
+      args.allowCreate !== false,
+    );
     providerWalletId = provider.walletID;
     availableCents = provider.availableCents;
     pendingCents = provider.pendingCents;

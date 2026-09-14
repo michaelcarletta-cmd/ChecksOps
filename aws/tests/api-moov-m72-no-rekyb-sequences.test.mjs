@@ -152,7 +152,7 @@ const createStore = () => ({
       relationship: 'shared_vendor',
       provider_account_id: KNOWN_APPROVED_MOOV.recipient.moovAccountId,
       onboarding_status: 'active',
-      stakeholder_account_id: null,
+      stakeholder_account_id: 'bbbbbbbb-2222-4ccc-8ddd-eeeeeeeeeeee',
     },
     {
       id: UNVERIFIED_RECIPIENT_ID,
@@ -164,7 +164,16 @@ const createStore = () => ({
       stakeholder_account_id: null,
     },
   ],
-  stakeholders: [],
+  stakeholders: [
+    {
+      id: 'bbbbbbbb-2222-4ccc-8ddd-eeeeeeeeeeee',
+      tenant_id: FREEDOM_TENANT,
+      account_type: 'vendor',
+      provider_account_id: KNOWN_APPROVED_MOOV.recipient.moovAccountId,
+      verification_status: 'pending',
+      is_active: true,
+    },
+  ],
   deposits: [
     {
       id: CLEARED_DEPOSIT_ID,
@@ -221,6 +230,46 @@ const identityClient = (store, session = mapping) => ({
     if (text.includes('FROM public.tenant_users WHERE user_id') && text.includes('AND tenant_id')) {
       const match = store.memberships.find((row) => row.tenant_id === params[1]);
       return { rows: match ? [{ role: match.role }] : [] };
+    }
+    if (text.includes('UPDATE public.payment_provider_accounts')) {
+      const row = (store.accounts || []).find((item) => item.tenant_id === params[0]);
+      if (row) {
+        row.onboarding_status = params[1];
+        row.verification_status = params[2];
+        row.can_send_payments = params[4];
+        row.can_receive_payments = params[5];
+        row.can_ach_credit = params[6];
+        row.can_ach_debit = params[7];
+        store.accountPersists = (store.accountPersists || 0) + 1;
+      }
+      return { rows: [] };
+    }
+    if (text.includes('UPDATE public.stakeholder_accounts')) {
+      for (const row of store.stakeholders || []) {
+        if (row.tenant_id === params[0] && row.provider_account_id === params[1]) {
+          row.verification_status = 'verified';
+          store.stakeholderPersists = (store.stakeholderPersists || 0) + 1;
+        }
+      }
+      return { rows: [] };
+    }
+    if (text.includes('UPDATE public.external_payment_recipients')) {
+      for (const row of store.recipients || []) {
+        if (row.tenant_id === params[0] && row.provider_account_id === params[1]) {
+          row.onboarding_status = 'verified';
+        }
+      }
+      return { rows: [] };
+    }
+    if (text.includes('FROM public.external_payment_recipients') && text.includes('provider_account_id IS NOT NULL')) {
+      return {
+        rows: (store.recipients || []).filter((row) => row.tenant_id === params[0] && row.provider_account_id),
+      };
+    }
+    if (text.includes('FROM public.stakeholder_accounts') && text.includes('provider_account_id IS NOT NULL')) {
+      return {
+        rows: (store.stakeholders || []).filter((row) => row.tenant_id === params[0] && row.provider_account_id),
+      };
     }
     if (text.includes('FROM public.payment_provider_accounts')) {
       return { rows: (store.accounts || []).filter((row) => row.tenant_id === params[0]) };
@@ -1062,8 +1111,48 @@ test('moov-readiness live GET never POSTs capabilities', async () => {
   }));
   assert.equal(result.ok, true, result.error || JSON.stringify(result));
   assert.equal(result.readiness.liveProviderCalled, true);
+  assert.equal(result.readiness.overall, 'ready');
+  assert.equal(result.readiness.canMoveMoney, true);
+  assert.equal(result.readiness.isSandbox, false);
+  const feePlan = (result.readiness.checks || []).find((check) => check.id === 'fee_plan');
+  assert.equal(feePlan?.state, 'ready');
+  const collect = (result.readiness.checks || []).find((check) => check.id === 'collect_funds_ach');
+  assert.equal(collect?.state, 'ready');
   assert.equal(store.capabilityPosts || 0, 0);
   assert.equal(store.transferPosts || 0, 0);
+  assert.equal(store.accounts[0].can_ach_debit, true);
+  assert.equal(store.accounts[0].can_ach_credit, true);
+  assert.equal(store.stakeholders[0].verification_status, 'verified');
+  assert.ok((result.payees || []).some((payee) => (
+    payee.moov_account_id === KNOWN_APPROVED_MOOV.recipient.moovAccountId
+    && payee.verification_status === 'verified'
+    && payee.bank_verified === true
+  )));
+  assert.ok(store.moovCalls.every((call) => call.method === 'GET' || call.url.includes('/oauth2/token')));
+});
+
+test('C1C live readiness is send-ready without collect-funds and never requests it', async () => {
+  resetProductionMoovTokenCache();
+  const store = createStore();
+  store.memberships.push({ tenant_id: C1C_TENANT, role: 'admin', tenant_name: 'C1C', tenant_slug: 'c1c' });
+  const result = await withEnv({
+    AWS_PROVIDER_LIVE_READS_ENABLED: 'true',
+    AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: undefined,
+    PROVIDER_SECRETS_ARN: productionFlags.PROVIDER_SECRETS_ARN,
+  }, () => handleProductionMoovReadiness({
+    client: identityClient(store),
+    mapping,
+    claims: { sub: COGNITO_SUB },
+    body: { tenant_id: C1C_TENANT },
+    spoof: {},
+    fetchImpl: mockMoovFetch(store),
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
+  }));
+  assert.equal(result.ok, true, result.error || JSON.stringify(result));
+  const collect = (result.readiness.checks || []).find((check) => check.id === 'collect_funds_ach');
+  assert.equal(collect?.state, 'not_started');
+  assert.equal(result.readiness.canMoveMoney, false, 'C1C has no settlement bank in the fixture');
+  assert.equal(store.capabilityPosts || 0, 0);
 });
 
 test('sweep GET is live-read; enabling at $0 is refused even when money flags are on', async () => {

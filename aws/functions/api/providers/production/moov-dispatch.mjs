@@ -66,9 +66,10 @@ const HANDLERS = {
 };
 
 const LIVE_READ_HANDLERS = {
-  'moov-wallet-status': wrapRead(handleProductionMoovWalletStatus),
-  'moov-readiness': wrapRead(handleProductionMoovReadiness),
-  'moov-wallet-sync': wrapRead(handleProductionMoovWalletSync),
+  // wrapWrite commits the local status cache from live GET. Moov stays GET-only.
+  'moov-wallet-status': wrapWrite(handleProductionMoovWalletStatus),
+  'moov-readiness': wrapWrite(handleProductionMoovReadiness),
+  'moov-wallet-sync': wrapWrite(handleProductionMoovWalletSync),
   'moov-sweep-config': wrapRead(handleProductionMoovSweepConfig),
 };
 

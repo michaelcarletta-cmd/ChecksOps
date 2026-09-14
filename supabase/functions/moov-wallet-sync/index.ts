@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders, json, isResponse, requireMoovCaller } from "../_shared/moovGuard.ts";
 import { readWallet, syncWallet } from "../_shared/moovWallet.ts";
+import { resolveLiveReadAccount } from "../_shared/preferProductionMoov.ts";
 
 // Provisions (if needed) and refreshes a tenant's wallet balance from the
 // provider, then returns the wallet with its recent ledger.
@@ -22,15 +23,13 @@ serve(async (req) => {
 
     const caller = await requireMoovCaller(req, tenant_id);
     if (isResponse(caller)) return caller;
-    const { supabase, environment } = caller;
+    const { supabase } = caller;
+    const resolved = await resolveLiveReadAccount(supabase, tenant_id, caller.environment);
+    const environment = resolved.environment;
 
-    const { data: account } = await supabase
-      .from("payment_provider_accounts")
-      .select("provider_account_id, onboarding_status")
-      .eq("tenant_id", tenant_id)
-      .eq("provider", "moov")
-      .eq("environment", environment)
-      .maybeSingle();
+    const account = resolved.account
+      ? { provider_account_id: resolved.accountId, onboarding_status: resolved.account.onboarding_status }
+      : { provider_account_id: resolved.accountId, onboarding_status: "active" };
 
     if (!account?.provider_account_id) {
       return json({ error: "Set up your payment account first." }, 409);
@@ -47,7 +46,9 @@ serve(async (req) => {
         accountId: account.provider_account_id,
         environment,
         walletType: wallet_type,
-        skipProviderFetch: !isVerified
+        skipProviderFetch: environment === "production" ? false : !isVerified,
+        knownWalletId: (resolved as any).known?.walletId ?? null,
+        allowCreate: environment !== "production",
       });
     } catch (e) {
       // Fall back to the last known local state so the UI still renders.

@@ -3,6 +3,7 @@ import { evaluateReadiness } from '../readiness.mjs';
 import { assertMoovTenantView } from './moov-authz.mjs';
 import { listOf, productionMoovFetch } from './moov-http.mjs';
 import { resolveProductionMerchant } from './moov-parties.mjs';
+import { persistMerchantCache, persistTenantPayeeCache } from './persist-live-status.mjs';
 import { getApprovedAccountSnapshot } from './moov-preflight.mjs';
 import { loadProductionMoovReadSecrets } from './moov-secrets.mjs';
 
@@ -253,6 +254,25 @@ export async function buildLiveSnapshot({ client, mapping, body, spoof, fetchImp
     provider_wallet_id: merchant.walletId || snapshot.resolvedWalletId,
   };
 
+  let payees = [];
+  try {
+    await persistMerchantCache(client, {
+      tenantId,
+      moovAccountId: merchant.moovAccountId,
+      snapshot,
+      readiness,
+      wallet,
+    });
+    const cached = await persistTenantPayeeCache(client, {
+      tenantId,
+      credentials: loaded.credentials,
+      fetchImpl,
+    });
+    payees = cached.payees || [];
+  } catch {
+    payees = [];
+  }
+
   return {
     ok: true,
     statusCode: 200,
@@ -303,6 +323,8 @@ export async function buildLiveSnapshot({ client, mapping, body, spoof, fetchImp
       ].filter(Boolean),
     },
     readiness,
+    payees,
+    local_cache_updated: true,
     spoofFieldsIgnored: spoof,
   };
 }
@@ -329,6 +351,8 @@ export async function handleProductionMoovReadiness(ctx) {
     readiness: snapshot.readiness,
     verification: snapshot.verification,
     settlement_method: snapshot.settlement_method,
+    payees: snapshot.payees || [],
+    local_cache_updated: snapshot.local_cache_updated === true,
     spoofFieldsIgnored: snapshot.spoofFieldsIgnored,
   };
 }
@@ -350,6 +374,8 @@ export async function handleProductionMoovWalletSync(ctx) {
     ledger: snapshot.ledger,
     sub_ledgers: snapshot.sub_ledgers,
     setup_required: snapshot.setup_required === true,
+    payees: snapshot.payees || [],
+    local_cache_updated: snapshot.local_cache_updated === true,
     spoofFieldsIgnored: snapshot.spoofFieldsIgnored,
   };
 }

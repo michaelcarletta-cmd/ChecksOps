@@ -88,7 +88,21 @@ Live prep Lambda CodeSha256
 
 `capabilityFlags` now treats family names as enabling `can_ach_debit` /
 `can_ach_credit`. The stale RDS `can_ach_debit=false` snapshot is **not**
-authority for the AWS writers — they GET live capabilities.
+authority for the AWS writers — they GET live capabilities. Live-read
+handlers now **cache** that GET into `payment_provider_accounts` and
+`stakeholder_accounts.verification_status` so the UI matches Moov.
+
+Payment readiness uses the **production** merchant for known approved
+tenants (Freedom / C1C) even if a sandbox row still exists. Fee-plan GET is
+not on the live-read allowlist; a missing code is **ready / provider-managed**,
+not a missing onboarding step. Collect-funds is required only when Moov
+already has that family — C1C without collect-funds is not treated as
+incomplete, and ChecksOps still **never POSTs** it.
+
+Michael Carletta's pay-setup recipient (`ee8c608e-…`, Chase ••••1506) is
+verified at Moov. Live-read now writes `verification_status=verified` onto the
+linked `stakeholder_accounts` / `external_payment_recipients` rows and the
+stakeholder UI overlays that live GET so the badge matches Moov.
 
 Required capabilities are **per operation**. Missing `collect-funds`
 does not block WALLET→RECIPIENT. It does block BANK→WALLET and fee pull,

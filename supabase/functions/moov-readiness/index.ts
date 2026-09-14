@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { moovFetch, scopes } from "../_shared/moovClient.ts";
 import { evaluateReadiness, type CapabilityLike } from "../_shared/moovReadiness.ts";
 import { corsHeaders, json, isResponse, requireMoovCaller, sanitize } from "../_shared/moovGuard.ts";
+import { persistVerifiedPayees, resolveLiveReadAccount } from "../_shared/preferProductionMoov.ts";
 
 /**
  * Server-side money-movement readiness check.
@@ -21,17 +22,11 @@ serve(async (req) => {
 
     const caller = await requireMoovCaller(req, tenant_id);
     if (isResponse(caller)) return caller;
-    const { supabase, environment } = caller;
-
-    const { data: account } = await supabase
-      .from("payment_provider_accounts")
-      .select("*")
-      .eq("tenant_id", tenant_id)
-      .eq("provider", "moov")
-      .eq("environment", environment)
-      .maybeSingle();
-
-    const accountId = (account?.provider_account_id as string | null) ?? null;
+    const { supabase } = caller;
+    const resolved = await resolveLiveReadAccount(supabase, tenant_id, caller.environment);
+    const environment = resolved.environment;
+    const account = resolved.account;
+    const accountId = resolved.accountId;
 
     if (!accountId) {
       const result = evaluateReadiness({
@@ -87,7 +82,10 @@ serve(async (req) => {
     const termsAccepted = !!(account?.tos_accepted_at || remoteTos);
 
     const verificationStatus =
-      remote?.profile?.business?.verification?.status ?? remote?.verification?.status ?? null;
+      remote?.profile?.business?.verification?.status
+      ?? remote?.profile?.individual?.verification?.status
+      ?? remote?.verification?.status
+      ?? null;
 
     const readiness = evaluateReadiness({
       environment,
@@ -100,21 +98,32 @@ serve(async (req) => {
       feePlanCode,
       feePlanUnavailable,
     });
+    (readiness as any).source = "live_provider";
+    (readiness as any).liveProviderCalled = true;
+    (readiness as any).isSandbox = environment !== "production";
 
-    await supabase
-      .from("payment_provider_accounts")
-      .update({
-        readiness: sanitize(readiness) as unknown as Record<string, unknown>,
-        readiness_checked_at: new Date().toISOString(),
-        fee_plan_code: feePlanCode,
-        fee_plan_status: feePlanCode ? "assigned" : feePlanUnavailable ? "provider_managed" : "unknown",
-        ...(remoteTos && !account?.tos_accepted_at
-          ? { tos_accepted_at: remoteTos, tos_source: "hosted_onboarding" }
-          : {}),
-      })
-      .eq("id", account!.id);
+    if (account?.id) {
+      await supabase
+        .from("payment_provider_accounts")
+        .update({
+          readiness: sanitize(readiness) as unknown as Record<string, unknown>,
+          readiness_checked_at: new Date().toISOString(),
+          fee_plan_code: feePlanCode,
+          fee_plan_status: feePlanCode ? "assigned" : feePlanUnavailable ? "provider_managed" : "unknown",
+          verification_status: verificationStatus || account.verification_status,
+          onboarding_status: verificationStatus === "verified" ? "active" : account.onboarding_status,
+          ...(remoteTos && !account?.tos_accepted_at
+            ? { tos_accepted_at: remoteTos, tos_source: "hosted_onboarding" }
+            : {}),
+        })
+        .eq("id", account.id);
+    }
 
-    return json({ success: true, readiness });
+    const payees = environment === "production"
+      ? await persistVerifiedPayees(supabase, tenant_id).catch(() => [])
+      : [];
+
+    return json({ success: true, readiness, payees, liveProviderCalled: true });
   } catch (e) {
     console.error("[moov-readiness]", (e as Error).message);
     return json({ error: (e as Error).message }, 500);

@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Plus, X, Users, Handshake, ShieldCheck, MailCheck, Lock, Home, Link2, Loader2, Search, UserPlus } from "lucide-react";
 import { VERIFICATION_BADGE_CLASS, VERIFICATION_LABEL, type VerificationStatus } from "@/lib/banking";
+import { overlayLivePayeeVerification } from "@/lib/payments/overlayLivePayeeVerification";
 import { isMoovAllowedForTenant } from "@/lib/payments/featureFlags";
 import { SendHomeownerBankLinkDialog } from "./SendHomeownerBankLinkDialog";
 import { AddExternalStakeholderDialog } from "./AddExternalStakeholderDialog";
@@ -59,7 +60,7 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
   });
 
   const { data: checkStakeholders = [] } = useQuery({
-    queryKey: ["check-stakeholders", checkIntakeItemId],
+    queryKey: ["check-stakeholders", checkIntakeItemId, tenant?.id],
     enabled: !!checkIntakeItemId,
     queryFn: async () => {
       const { data, error } = await supabase
@@ -71,7 +72,21 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
         `)
         .eq("check_intake_item_id", checkIntakeItemId);
       if (error) throw error;
-      return data ?? [];
+      let payees: any[] = [];
+      if (tenant?.id) {
+        try {
+          const live = await supabase.functions.invoke("moov-readiness", {
+            body: { tenant_id: tenant.id },
+          });
+          payees = (live.data as any)?.payees ?? [];
+        } catch { /* live overlay is optional */ }
+      }
+      return (data ?? []).map((row: any) => ({
+        ...row,
+        stakeholder_accounts: row.stakeholder_accounts
+          ? overlayLivePayeeVerification([row.stakeholder_accounts], payees)[0]
+          : row.stakeholder_accounts,
+      }));
     },
   });
 

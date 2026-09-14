@@ -9,6 +9,8 @@ import {
 import { capabilitiesStillNeeded } from "../_shared/moovReadiness.ts";
 import { fetchRailMethodIds, saveMethodRails } from "../_shared/moovRails.ts";
 import { corsHeaders, json, isResponse, logPaymentEvent, requireMoovCaller, sanitize } from "../_shared/moovGuard.ts";
+import { knownApprovedForTenant } from "../_shared/knownApprovedMoov.ts";
+import { persistVerifiedPayees, resolveLiveReadAccount } from "../_shared/preferProductionMoov.ts";
 
 // Server-side capability + account + bank synchronization.
 //
@@ -25,22 +27,19 @@ serve(async (req) => {
 
     const caller = await requireMoovCaller(req, tenant_id);
     if (isResponse(caller)) return caller;
-    const { supabase, environment } = caller;
+    const { supabase } = caller;
+    const resolved = await resolveLiveReadAccount(supabase, tenant_id, caller.environment);
+    const environment = resolved.environment;
+    const account = resolved.account;
 
-    const { data: account } = await supabase
-      .from("payment_provider_accounts")
-      .select("*")
-      .eq("tenant_id", tenant_id)
-      .eq("provider", "moov")
-      .eq("environment", environment)
-      .maybeSingle();
-
-    if (!account?.provider_account_id) {
+    if (!account?.provider_account_id && !resolved.accountId) {
       return json({ success: true, status: "not_started", account: account ?? null });
     }
-    let accountId = account.provider_account_id as string;
-    const previousStatus = account.onboarding_status as string;
+    let accountId = (account?.provider_account_id || resolved.accountId) as string;
+    const previousStatus = account?.onboarding_status as string;
     let adoptedAccountId: string | null = null;
+    const knownMerchant = knownApprovedForTenant(tenant_id);
+    const neverReKyc = environment === "production" || Boolean(knownMerchant);
 
     /* ------------------------------------------------------------------
      * Auto-adopt: onboarding is sometimes completed on a different provider
@@ -59,9 +58,9 @@ serve(async (req) => {
       const currentVerified =
         (current?.profile?.business?.verification?.status ?? current?.verification?.status) ===
         "verified";
-      const currentTos = !!(current?.termsOfService?.acceptedOn || account.tos_accepted_at);
+      const currentTos = !!(current?.termsOfService?.acceptedOn || account?.tos_accepted_at);
 
-      if (!currentVerified || !currentTos) {
+      if ((!currentVerified || !currentTos) && !neverReKyc) {
         const { data: tenantRow } = await supabase
           .from("tenants")
           .select("name, company_name, email, contact_email")
@@ -111,7 +110,7 @@ serve(async (req) => {
         });
 
         const candidateId = candidate?.accountID ?? candidate?.accountId ?? null;
-        if (candidateId) {
+        if (candidateId && account?.id) {
           await supabase
             .from("payment_provider_accounts")
             .update({ provider_account_id: candidateId })
@@ -261,7 +260,7 @@ serve(async (req) => {
     
     // Check if we actually need collection capabilities (e.g. for fee collection or fund pulls)
     // For now, we keep it explicit: unless the platform configuration demands it, we don't request it.
-    if (account.provider_metadata?.checksops_requires_collection) {
+    if (account?.provider_metadata?.checksops_requires_collection) {
       requiredCaps.push("collect-funds.ach");
     }
 
@@ -269,6 +268,8 @@ serve(async (req) => {
     
     if (!capsReadOk) {
       console.warn("[moov-sync] skip capability POST; capability GET failed (fail closed, no re-KYC)");
+    } else if (neverReKyc) {
+      console.log("[moov-sync] skip capability POST; production/known-approved accounts must not re-KYC");
     } else if (missing.length > 0 && verificationStatus !== "failed") {
       try {
         await moovFetch(`/accounts/${accountId}/capabilities`, {
@@ -284,25 +285,29 @@ serve(async (req) => {
 
     const nowIso = new Date().toISOString();
 
-    const { data: updated } = await supabase
-      .from("payment_provider_accounts")
-      .update({
-        onboarding_status: onboardingStatus,
-        verification_status: verificationStatus,
-        capabilities: capList,
-        requirements,
-        restricted: flags.restricted,
-        disabled: !!remote?.disabledOn,
-        can_receive_payments: flags.can_receive_payments,
-        can_send_payments: flags.can_send_payments,
-        can_ach_debit: flags.can_ach_debit,
-        can_ach_credit: flags.can_ach_credit,
-        provider_metadata: sanitize(remote ?? {}),
-        last_synced_at: nowIso,
-      })
-      .eq("id", account.id)
-      .select()
-      .single();
+    let updated = account ?? null;
+    if (account?.id) {
+      const written = await supabase
+        .from("payment_provider_accounts")
+        .update({
+          onboarding_status: onboardingStatus,
+          verification_status: verificationStatus,
+          capabilities: capList,
+          requirements,
+          restricted: flags.restricted,
+          disabled: !!remote?.disabledOn,
+          can_receive_payments: flags.can_receive_payments,
+          can_send_payments: flags.can_send_payments,
+          can_ach_debit: flags.can_ach_debit,
+          can_ach_credit: flags.can_ach_credit,
+          provider_metadata: sanitize(remote ?? {}),
+          last_synced_at: nowIso,
+        })
+        .eq("id", account.id)
+        .select()
+        .single();
+      updated = written.data ?? account;
+    }
 
     // Mirror onto the provider-neutral tenant columns the UI already reads.
     await supabase
@@ -335,7 +340,7 @@ serve(async (req) => {
 
     // Alert tenant admins when the provider adds NEW outstanding requirements.
     try {
-      const previousReqs: string[] = Array.isArray(account.requirements)
+      const previousReqs: string[] = Array.isArray(account?.requirements)
         ? (account.requirements as string[]).map(String)
         : [];
       const newlyDue = [...new Set(requirements.map(String))].filter((r) => !previousReqs.includes(r));
@@ -354,12 +359,17 @@ serve(async (req) => {
     }
 
 
+    const payees = neverReKyc
+      ? await persistVerifiedPayees(supabase, tenant_id).catch(() => [])
+      : [];
+
     return json({
       success: true,
       status: onboardingStatus,
       account: updated,
       bank_count: (banks ?? []).length,
       adopted_account_id: adoptedAccountId,
+      payees,
     });
 
   } catch (e) {

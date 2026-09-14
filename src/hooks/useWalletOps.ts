@@ -113,6 +113,12 @@ export interface TenantWalletStatus {
     payment_methods: { type: string | null }[];
     what_is_verified: string[];
   } | null;
+  payees?: {
+    moov_account_id: string;
+    verification_status: string;
+    bank_verified: boolean;
+    stakeholder_account_ids: string[];
+  }[];
   readiness: WalletOpsReadiness | null;
   setup_required: boolean;
 }
@@ -142,6 +148,7 @@ export function useTenantWalletStatus() {
         settlement_method: row.settlement_method ?? null,
         available_push_rails: row.available_push_rails ?? [],
         verification: row.verification ?? null,
+        payees: row.payees ?? [],
         readiness: row.readiness
           ? {
               overall: row.readiness.overall,
