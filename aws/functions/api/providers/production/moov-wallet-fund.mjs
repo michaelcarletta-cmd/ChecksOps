@@ -69,6 +69,17 @@ export async function handleProductionMoovWalletFund({
     });
   }
 
+  const authz = await authorizeMoovProduction({
+    client,
+    mapping,
+    tenantId,
+    actionKey: MOOV_FUND_TOTP_ACTION,
+    amountCents: amount,
+    sourcePaymentMethodId: binding.sourcePaymentMethodId,
+    destinationPaymentMethodId: binding.destinationPaymentMethodId,
+  });
+  if (!authz.ok) return { ...authz, spoofFieldsIgnored: spoof, kycRequested: false, capabilitiesPosted: false };
+
   const merchant = await resolveProductionMerchant(client, tenantId);
   if (!merchant.ok) return { ...merchant, spoofFieldsIgnored: spoof, operation: 'wallet.fund' };
 
@@ -145,17 +156,6 @@ export async function handleProductionMoovWalletFund({
     || walletPm.partnerAccountID
     || loaded.credentials.platformAccountId
     || KNOWN_APPROVED_MOOV.platform.moovAccountId;
-
-  const authz = await authorizeMoovProduction({
-    client,
-    mapping,
-    tenantId,
-    actionKey: MOOV_FUND_TOTP_ACTION,
-    amountCents: amount,
-    sourcePaymentMethodId: sourcePm,
-    destinationPaymentMethodId: destPm,
-  });
-  if (!authz.ok) return { ...authz, spoofFieldsIgnored: spoof, kycRequested: false, capabilitiesPosted: false };
 
   const intentId = randomUUID();
   const key = body?.idempotency_key && String(body.idempotency_key).length >= 8

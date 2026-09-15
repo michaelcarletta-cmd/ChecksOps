@@ -47,6 +47,9 @@ export const productionMoovLiveReadsAllowed = () => (
   && !providerSandboxExecutionEnabled()
 );
 
+/** Alias for live overlay modules that still import the M6.4 read-gate name. */
+export const productionMoovReadsAllowed = productionMoovLiveReadsAllowed;
+
 /** Transfer POST stays held until a later reviewed Test A arming. Default false. */
 export const productionMoovTransferPostAllowed = () => (
   productionMoovExecutionAllowed()

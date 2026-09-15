@@ -773,6 +773,23 @@ test('WALLET→RECIPIENT refuses when wallet available is below 1 cent', async (
 
 test('WALLET→RECIPIENT omits recipient id and still binds the approved payee server-side', async () => {
   const store = createStore();
+  const denied = await withEnv(productionFlags, () => handleProductionMoovWalletDisburse({
+    client: identityClient(store),
+    mapping,
+    claims: { sub: COGNITO_SUB },
+    body: { tenant_id: FREEDOM_TENANT, amount_cents: 1, checkalt_deposit_id: CLEARED_DEPOSIT_ID },
+    spoof: {},
+    fetchImpl: mockMoovFetch(store),
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
+  }));
+  assert.equal(denied.error, 'financial_totp_required');
+  assert.equal(store.transferPosts || 0, 0);
+
+  grantStepUp(store, {
+    actionKey: 'wallet.disburse',
+    sourcePm: KNOWN_APPROVED_MOOV.freedom.walletPm,
+    destPm: KNOWN_APPROVED_MOOV.recipient.achCreditStandardPm,
+  });
   const result = await withEnv(productionFlags, () => handleProductionMoovWalletDisburse({
     client: identityClient(store),
     mapping,
@@ -809,6 +826,11 @@ test('WALLET→RECIPIENT refuses an unverified payee without KYC', async () => {
 
 test('WALLET→RECIPIENT refuses a named CheckAlt deposit that has not cleared', async () => {
   const store = createStore();
+  grantStepUp(store, {
+    actionKey: 'wallet.disburse',
+    sourcePm: KNOWN_APPROVED_MOOV.freedom.walletPm,
+    destPm: KNOWN_APPROVED_MOOV.recipient.achCreditStandardPm,
+  });
   const pending = await withEnv(productionFlags, () => handleProductionMoovWalletDisburse({
     client: identityClient(store),
     mapping,

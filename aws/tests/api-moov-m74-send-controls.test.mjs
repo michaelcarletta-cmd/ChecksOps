@@ -138,4 +138,46 @@ describe('M7.4 prepare production Moov send controls', { concurrency: 1 }, () =>
     ));
     assert.equal(denied.error, 'production_execution_blocked');
   });
+
+  test('TOTP is required before any Moov HTTP on fund and disburse', () => {
+    const fund = read('aws/functions/api/providers/production/moov-wallet-fund.mjs');
+    const disburse = read('aws/functions/api/providers/production/moov-wallet-disburse.mjs');
+    const fundAuthz = fund.indexOf('authorizeMoovProduction');
+    const fundFetch = fund.indexOf('productionMoovFetch');
+    const disburseAuthz = disburse.indexOf('authorizeMoovProduction');
+    const disburseFetch = disburse.indexOf('productionMoovFetch');
+    assert.ok(fundAuthz > 0 && fundAuthz < fundFetch);
+    assert.ok(disburseAuthz > 0 && disburseAuthz < disburseFetch);
+    assert.doesNotMatch(fund, /checkalt-submit|plaid/i);
+    assert.doesNotMatch(disburse, /from '\.\.\/parity\/moov-money/);
+  });
+
+  test('wallet TOTP never reuses CheckAlt session TOTP', () => {
+    const totp = read('aws/functions/api/auth-financial-totp.mjs');
+    assert.match(totp, /walletAction/);
+    assert.match(totp, /isFinancialSessionTotpAction/);
+    assert.match(totp, /wallet\.fund \/ wallet\.disburse never reuse/);
+  });
+
+  test('legacy Supabase money writers fail closed without Moov HTTP', () => {
+    const names = [
+      'moov-transfer-create',
+      'moov-disburse',
+      'moov-wallet-fund',
+      'initiate-wallet-funding',
+      'process-funded-payment',
+      'wallet-fund-on-clear',
+      'moov-transfer-group-create',
+      'cancel-wallet-funding',
+    ];
+    for (const name of names) {
+      const source = read(`supabase/functions/${name}/index.ts`);
+      assert.match(source, /legacyMoovMoneyShutdownResponse/);
+      assert.doesNotMatch(source, /moovFetch/);
+      assert.doesNotMatch(source, /\/transfers/);
+    }
+    const webhook = read('supabase/functions/moov-webhook/index.ts');
+    assert.match(webhook, /process-funded-payment/);
+    assert.doesNotMatch(webhook, /legacyMoovMoneyShutdownResponse/);
+  });
 });
