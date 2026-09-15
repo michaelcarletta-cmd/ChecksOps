@@ -77,7 +77,7 @@ export const moovProvider: PaymentProvider = {
       input.recipient.kind === "business" ? input.recipient.tenantId ?? null : null;
 
     const res = await invoke<{ transfer: Record<string, any>; duplicate: boolean }>(
-      "moov-transfer-create",
+      "moov-disburse",
       {
         tenant_id: input.tenantId,
         amount_cents: input.amountCents,
@@ -87,6 +87,7 @@ export const moovProvider: PaymentProvider = {
         check_id: input.checkId ?? null,
         recipient_tenant_id: recipientTenantId,
         external_recipient_id: recipientTenantId ? null : input.recipient.id,
+        source_kind: "wallet",
         idempotency_key: input.idempotencyKey,
       },
     );

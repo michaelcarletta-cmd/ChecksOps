@@ -62,7 +62,7 @@ export const PROVIDER_FUNCTIONS = [
   fn('moov-recipient-bank-add', 'moov', OP_CLASS.BANK_CONNECTION, 'sandbox_parity', 'Adds recipient bank.'),
   fn('moov-recipient-bank-verify', 'moov', OP_CLASS.BANK_CONNECTION, 'sandbox_parity', 'Recipient instant micro-deposit verify. Not a transfer.'),
   fn('moov-recipient-disconnect', 'moov', OP_CLASS.IDENTITY_KYC, 'sandbox_parity', 'Disconnects recipient account.'),
-  fn('moov-transfer-create', 'moov', OP_CLASS.MONEY_MOVEMENT, 'sandbox_parity', 'Creates ACH/RTP/wallet transfer.'),
+  fn('moov-transfer-create', 'moov', OP_CLASS.MONEY_MOVEMENT, 'sandbox_parity', 'Legacy combined transfer. Production AWS refuses this name (production_execution_blocked). Use moov-wallet-fund then moov-disburse.'),
   fn('moov-transfer-status', 'moov', OP_CLASS.READ_STATUS, 'sandbox_parity', 'Live GET facilitator transfer + payment_transfers write-back for sandbox rows.'),
   fn('moov-transfer-group-create', 'moov', OP_CLASS.MONEY_MOVEMENT, 'sandbox_parity', 'Creates grouped transfers.'),
   fn('moov-disburse', 'moov', OP_CLASS.DISBURSEMENT, 'sandbox_parity', 'WALLET→RECIPIENT from wallet available balance. CheckAlt is required only when a ChecksOps deposit/check/batch is named. Tenant members only. Tenant Management cannot send on a tenant\'s behalf. Already-verified partner/sub/vendor/homeowner only. Bank fallback and internal bypass refused. Unreachable while money holds remain on.'),

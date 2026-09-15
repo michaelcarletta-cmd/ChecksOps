@@ -319,10 +319,62 @@ test('amount change and action mismatch are rejected', async () => {
   const action = await handleMfaStepUp(eventOf({
     code,
     check_intake_item_id: CHECK,
-    action_key: 'wallet.fund',
+    action_key: 'not.a.real.action',
   }), depsOf(store));
   assert.equal(action.error, 'action_mismatch');
   assert.equal(store.stepups.length, 0);
+});
+
+test('wallet.fund step-up binds Freedom bank/wallet and 1 cent; deposit.submit is not reused', async () => {
+  const store = createStore();
+  const { code } = await enrollTester(store);
+  const wrongTenant = await handleMfaStepUp(eventOf({
+    code,
+    action_key: 'wallet.fund',
+    tenant_id: OTHER_TENANT,
+    amount_cents: 1,
+  }), depsOf(store));
+  assert.equal(wrongTenant.error, 'first_test_party_mismatch');
+
+  const cap = await handleMfaStepUp(eventOf({
+    code,
+    action_key: 'wallet.fund',
+    tenant_id: TENANT,
+    amount_cents: 2,
+  }), depsOf(store));
+  assert.equal(cap.error, 'first_transfer_cap');
+
+  const bound = await handleMfaStepUp(eventOf({
+    code,
+    action_key: 'wallet.fund',
+  }), depsOf(store));
+  assert.equal(bound.ok, true, JSON.stringify(bound));
+  assert.equal(bound.action_key, 'wallet.fund');
+  assert.equal(bound.amount_cents, 1);
+  assert.equal(bound.tenant_id, TENANT);
+  assert.equal(bound.check_id, null);
+  assert.equal(store.stepups[0].action_key, 'wallet.fund');
+  assert.equal(store.stepups[0].metadata.amount_cents, 1);
+  assert.equal(store.stepups[0].metadata.browser_ids_ignored, true);
+  assert.equal(store.stepups[0].metadata.operation, 'wallet.fund');
+});
+
+test('wallet.disburse step-up is distinct from wallet.fund and rejects replay', async () => {
+  const store = createStore();
+  const { code } = await enrollTester(store);
+  const first = await handleMfaStepUp(eventOf({
+    code,
+    action_key: 'wallet.disburse',
+  }), depsOf(store));
+  assert.equal(first.ok, true, JSON.stringify(first));
+  assert.equal(first.action_key, 'wallet.disburse');
+  assert.equal(first.amount_cents, 1);
+  const replay = await handleMfaStepUp(eventOf({
+    code,
+    action_key: 'wallet.disburse',
+  }), depsOf(store));
+  assert.equal(replay.ok, false);
+  assert.equal(store.stepups.length, 1);
 });
 
 test('Cognito MFA state is ignored for financial enrollment', async () => {

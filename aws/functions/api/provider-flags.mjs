@@ -21,6 +21,9 @@ export const providerEnabled = (provider) => {
 /** Live HTTP GET/POST to a provider API. Independent of execution. Default false. */
 export const providerLiveReadsEnabled = () => isTrue(process.env.AWS_PROVIDER_LIVE_READS_ENABLED);
 
+/** Actual Moov transfer POST. Independent of writer/TOTP readiness. Default false. */
+export const moovTransferPostEnabled = () => isTrue(process.env.AWS_MOOV_TRANSFER_POST_ENABLED);
+
 /**
  * Staging default is dry-run (unset or any value other than `false`).
  * Dry-run verifies signatures and records receipts. It never applies payment mutations.
@@ -55,4 +58,5 @@ export const flagSnapshot = () => ({
   AWS_QUICKBOOKS_ENABLED: providerEnabled('quickbooks'),
   AWS_PROVIDER_LIVE_READS_ENABLED: providerLiveReadsEnabled(),
   AWS_PROVIDER_WEBHOOK_DRY_RUN: providerWebhookDryRun(),
+  AWS_MOOV_TRANSFER_POST_ENABLED: moovTransferPostEnabled(),
 });

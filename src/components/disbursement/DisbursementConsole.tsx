@@ -234,7 +234,12 @@ export function DisbursementConsole({
 
   const submitBatch = useMutation({
     mutationFn: async () => {
-      await guardFinancial("disbursement.send");
+      await guardFinancial(
+        checkIntakeItemId ? "disbursement.send" : "wallet.disburse",
+        checkIntakeItemId
+          ? { checkId: checkIntakeItemId }
+          : { description: "Enter the current 6-digit code from your authenticator app to authorize WALLET→RECIPIENT." },
+      );
       if (!user || !tenant) throw new Error("Not authenticated");
       if (fundsHoldActive) {
         throw new Error(
@@ -355,23 +360,10 @@ export function DisbursementConsole({
           body: { tenant_id: tenant.id, payment_id: batch.id },
         });
 
-        if ((fundingCalc as any)?.fundingRequired && (fundingCalc as any)?.auto_funding_enabled) {
-          const { data: fundData, error: fundErr } = await supabase.functions.invoke(
-            "initiate-wallet-funding",
-            { body: { tenant_id: tenant.id, payment_id: batch.id } },
+        if ((fundingCalc as any)?.fundingRequired) {
+          throw new Error(
+            "Wallet available balance is insufficient. Fund the wallet separately with wallet.fund before sending. Coupled initiate-wallet-funding is refused.",
           );
-          if (fundErr) {
-            let reason: any = null;
-            try { reason = await (fundErr as any).context?.json?.(); } catch { reason = null; }
-            throw new Error(reason?.error ?? fundErr.message ?? "Could not start wallet funding.");
-          }
-          if ((fundData as any)?.funding_required !== false) {
-            return {
-              batchId: batch.id,
-              rail: "moov" as const,
-              note: `Awaiting funding — ${(Number((fundData as any)?.amount_cents ?? 0) / 100).toLocaleString("en-US", { style: "currency", currency: "USD" })} is transferring from your bank. The payment sends automatically once the funds are available.`,
-            };
-          }
         }
 
         const { data: moovData, error: moovErr } = await supabase.functions.invoke("moov-disburse", {

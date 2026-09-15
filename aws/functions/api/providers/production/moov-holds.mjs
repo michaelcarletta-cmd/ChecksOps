@@ -1,5 +1,12 @@
 import { financialPermissionsActivated } from '../../financial-flags.mjs';
-import { executionAllowed, providerEnabled, providerExecutionEnabled, providerLiveReadsEnabled } from '../../provider-flags.mjs';
+import {
+  executionAllowed,
+  moovTransferPostEnabled,
+  providerEnabled,
+  providerExecutionEnabled,
+  providerLiveReadsEnabled,
+  providerWebhookDryRun,
+} from '../../provider-flags.mjs';
 import { providerSandboxExecutionEnabled } from '../../sandbox-flags.mjs';
 
 const isTrue = (value) => String(value || '') === 'true';
@@ -40,6 +47,20 @@ export const productionMoovLiveReadsAllowed = () => (
   && !providerSandboxExecutionEnabled()
 );
 
+/** Transfer POST stays held until a later reviewed Test A arming. Default false. */
+export const productionMoovTransferPostAllowed = () => (
+  productionMoovExecutionAllowed()
+  && moovTransferPostEnabled()
+);
+
+/** Live webhook apply helper. Dry-run remains the default; this phase does not cut AWS webhooks. */
+export const productionWebhookApplyEnabled = () => (
+  !providerWebhookDryRun()
+  && executionAllowed('moov')
+  && financialPermissionsActivated()
+  && !providerSandboxExecutionEnabled()
+);
+
 export const productionMoovAmbiguousMode = () => (
   executionAllowed('moov')
   && financialPermissionsActivated()
@@ -53,13 +74,14 @@ export const moovProductionHoldSnapshot = () => ({
   AWS_CHECKALT_ENABLED: providerEnabled('checkalt'),
   AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: providerSandboxExecutionEnabled(),
   AWS_FINANCIAL_PERMISSIONS_ACTIVATED: financialPermissionsActivated(),
-  AWS_PROVIDER_WEBHOOK_DRY_RUN: process.env.AWS_PROVIDER_WEBHOOK_DRY_RUN === undefined
-    || process.env.AWS_PROVIDER_WEBHOOK_DRY_RUN === ''
-    || String(process.env.AWS_PROVIDER_WEBHOOK_DRY_RUN) !== 'false',
+  AWS_PROVIDER_WEBHOOK_DRY_RUN: providerWebhookDryRun(),
+  AWS_MOOV_TRANSFER_POST_ENABLED: moovTransferPostEnabled(),
   AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED_production: isTrue(process.env.AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED),
   AWS_PROVIDER_LIVE_READS_ENABLED: providerLiveReadsEnabled(),
   productionMoovLiveReadsAllowed: productionMoovLiveReadsAllowed(),
   productionMoovExecutionAllowed: productionMoovExecutionAllowed(),
+  productionMoovTransferPostAllowed: productionMoovTransferPostAllowed(),
+  productionWebhookApplyEnabled: productionWebhookApplyEnabled(),
   firstTransferCapCents: FIRST_PRODUCTION_TRANSFER_CENTS,
   neverReKyc: true,
   neverReRequestCapabilities: true,

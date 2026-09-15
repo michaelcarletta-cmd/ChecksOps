@@ -105,6 +105,7 @@ const productionFlags = {
   AWS_FINANCIAL_PERMISSIONS_ACTIVATED: 'true',
   AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: undefined,
   AWS_CHECKALT_ENABLED: 'false',
+  AWS_MOOV_TRANSFER_POST_ENABLED: 'true',
   PROVIDER_SECRETS_ARN: 'arn:aws:secretsmanager:us-east-1:806168576068:secret:checksops/production/providers',
 };
 
@@ -770,7 +771,7 @@ test('WALLET→RECIPIENT refuses when wallet available is below 1 cent', async (
   assert.equal(store.transferPosts || 0, 0);
 });
 
-test('WALLET→RECIPIENT requires a named already-verified payee', async () => {
+test('WALLET→RECIPIENT omits recipient id and still binds the approved payee server-side', async () => {
   const store = createStore();
   const result = await withEnv(productionFlags, () => handleProductionMoovWalletDisburse({
     client: identityClient(store),
@@ -779,9 +780,9 @@ test('WALLET→RECIPIENT requires a named already-verified payee', async () => {
     body: { tenant_id: FREEDOM_TENANT, amount_cents: 1, checkalt_deposit_id: CLEARED_DEPOSIT_ID },
     spoof: {},
     fetchImpl: mockMoovFetch(store),
-    deps: {},
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
   }));
-  assert.equal(result.error, 'recipient_required');
+  assert.equal(result.error, 'wallet_balance_insufficient');
   assert.equal(store.transferPosts || 0, 0);
 });
 
@@ -801,7 +802,7 @@ test('WALLET→RECIPIENT refuses an unverified payee without KYC', async () => {
     fetchImpl: mockMoovFetch(store),
     deps: {},
   }));
-  assert.equal(result.error, 'unknown_recipient_do_not_kyc');
+  assert.equal(result.error, 'first_test_party_mismatch');
   assert.equal(store.transferPosts || 0, 0);
   assert.equal(store.capabilityPosts || 0, 0);
 });
@@ -1006,7 +1007,7 @@ test('C1C BANK→WALLET and fee-collect refuse without collect-funds and never P
     fetchImpl: mockMoovFetch(store, { sweepStatus: 'disabled' }),
     deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
   }));
-  assert.equal(fund.error, 'collect_funds_not_enabled');
+  assert.equal(fund.error, 'first_test_party_mismatch');
   assert.equal(store.transferPosts || 0, 0);
   assert.equal(store.capabilityPosts || 0, 0);
   assert.ok(isDeniedDuplicateMoovAccount('7c50c273-89ec-4651-addc-f27330fd4360'));
@@ -1334,5 +1335,178 @@ test('handleProviderRequest serves wallet-status when live reads are on and mone
   assert.equal(result.productionExecution, false);
   assert.equal(store.transferPosts || 0, 0);
   assert.ok(result.wallet);
+});
+
+test('M7.4 dark mode records BANK→WALLET intent and never POSTs a transfer', async () => {
+  resetProductionMoovTokenCache();
+  const store = createStore();
+  grantStepUp(store);
+  const darkFlags = { ...productionFlags, AWS_MOOV_TRANSFER_POST_ENABLED: undefined };
+  const result = await withEnv(darkFlags, () => handleProductionMoovWalletFund({
+    client: identityClient(store),
+    mapping,
+    claims: { sub: COGNITO_SUB },
+    body: { tenant_id: FREEDOM_TENANT, amount_cents: 1, idempotency_key: 'm74-dark-fund-1' },
+    spoof: {},
+    fetchImpl: mockMoovFetch(store, { sweepStatus: 'disabled' }),
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
+  }));
+  assert.equal(result.error, 'transfer_post_held');
+  assert.equal(result.darkMode, true);
+  assert.equal(result.liveProviderCalled, false);
+  assert.equal(store.transfers.length, 1);
+  assert.equal(store.transfers[0].status, 'ready');
+  assert.equal(store.transferPosts || 0, 0);
+  assert.ok(!store.moovCalls.some((call) => call.method === 'POST' && /\/transfers$/.test(call.url)));
+  assert.equal(store.capabilityPosts || 0, 0);
+});
+
+test('M7.4 dark mode records WALLET→RECIPIENT intent and never POSTs a transfer', async () => {
+  resetProductionMoovTokenCache();
+  const store = createStore();
+  grantStepUp(store, {
+    actionKey: 'wallet.disburse',
+    sourcePm: KNOWN_APPROVED_MOOV.freedom.walletPm,
+    destPm: KNOWN_APPROVED_MOOV.recipient.achCreditStandardPm,
+  });
+  const darkFlags = { ...productionFlags, AWS_MOOV_TRANSFER_POST_ENABLED: undefined };
+  const result = await withEnv(darkFlags, () => handleProductionMoovWalletDisburse({
+    client: identityClient(store),
+    mapping,
+    claims: { sub: COGNITO_SUB },
+    body: {
+      tenant_id: FREEDOM_TENANT,
+      amount_cents: 1,
+      source_kind: 'wallet',
+      external_recipient_id: VENDOR_RECIPIENT_ID,
+      idempotency_key: 'm74-dark-disburse-1',
+    },
+    spoof: {},
+    fetchImpl: mockMoovFetch(store, { walletAvailable: 1, sweepStatus: 'disabled' }),
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
+  }));
+  assert.equal(result.error, 'transfer_post_held');
+  assert.equal(result.darkMode, true);
+  assert.equal(store.transfers.length, 1);
+  assert.equal(store.transferPosts || 0, 0);
+});
+
+test('M7.4 duplicate intent does not POST again', async () => {
+  resetProductionMoovTokenCache();
+  const store = createStore();
+  grantStepUp(store);
+  store.transfers.push({
+    id: crypto.randomUUID(),
+    tenant_id: FREEDOM_TENANT,
+    idempotency_key: 'm74-dup-fund-key',
+    status: 'ready',
+    amount_cents: 1,
+    provider_transfer_id: null,
+  });
+  const result = await withEnv(productionFlags, () => handleProductionMoovWalletFund({
+    client: identityClient(store),
+    mapping,
+    claims: { sub: COGNITO_SUB },
+    body: { tenant_id: FREEDOM_TENANT, amount_cents: 1, idempotency_key: 'm74-dup-fund-key' },
+    spoof: {},
+    fetchImpl: mockMoovFetch(store, { sweepStatus: 'disabled' }),
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
+  }));
+  assert.equal(result.duplicate, true);
+  assert.equal(result.liveProviderCalled, false);
+  assert.equal(store.transferPosts || 0, 0);
+});
+
+test('M7.4 concurrent CAS yields one winner and no extra POST', async () => {
+  resetProductionMoovTokenCache();
+  const store = createStore();
+  grantStepUp(store);
+  const client = identityClient(store);
+  const origQuery = client.query;
+  let submittingUpdates = 0;
+  client.query = async (sql, params = []) => {
+    const text = String(sql);
+    if (text.includes("status = 'submitting'")) {
+      submittingUpdates += 1;
+      if (submittingUpdates > 1) return { rows: [] };
+    }
+    return origQuery(sql, params);
+  };
+  const first = await withEnv(productionFlags, () => handleProductionMoovWalletFund({
+    client,
+    mapping,
+    claims: { sub: COGNITO_SUB },
+    body: { tenant_id: FREEDOM_TENANT, amount_cents: 1, idempotency_key: 'm74-cas-fund-1' },
+    spoof: {},
+    fetchImpl: mockMoovFetch(store, { sweepStatus: 'disabled' }),
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
+  }));
+  const second = await withEnv(productionFlags, () => handleProductionMoovWalletFund({
+    client,
+    mapping,
+    claims: { sub: COGNITO_SUB },
+    body: { tenant_id: FREEDOM_TENANT, amount_cents: 1, idempotency_key: 'm74-cas-fund-1' },
+    spoof: {},
+    fetchImpl: mockMoovFetch(store, { sweepStatus: 'disabled' }),
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
+  }));
+  assert.equal(first.ok, true, first.error || JSON.stringify(first));
+  assert.equal(second.duplicate, true);
+  assert.equal(store.transferPosts, 1);
+});
+
+test('M7.4 timeout / unknown outcome does not retry POST', async () => {
+  resetProductionMoovTokenCache();
+  const store = createStore();
+  grantStepUp(store);
+  let transferAttempts = 0;
+  const fetchImpl = mockMoovFetch(store, { sweepStatus: 'disabled' });
+  const wrapped = async (url, options = {}) => {
+    const method = String(options.method || 'GET').toUpperCase();
+    if (method === 'POST' && /\/transfers$/.test(String(url))) {
+      transferAttempts += 1;
+      const err = new Error('fetch failed');
+      err.cause = { code: 'UND_ERR_CONNECT_TIMEOUT' };
+      throw err;
+    }
+    return fetchImpl(url, options);
+  };
+  const result = await withEnv(productionFlags, () => handleProductionMoovWalletFund({
+    client: identityClient(store),
+    mapping,
+    claims: { sub: COGNITO_SUB },
+    body: { tenant_id: FREEDOM_TENANT, amount_cents: 1, idempotency_key: 'm74-timeout-fund-1' },
+    spoof: {},
+    fetchImpl: wrapped,
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
+  }));
+  assert.equal(result.error, 'provider_outcome_unknown');
+  assert.equal(transferAttempts, 1);
+  const retry = await withEnv(productionFlags, () => handleProductionMoovWalletFund({
+    client: identityClient(store),
+    mapping,
+    claims: { sub: COGNITO_SUB },
+    body: { tenant_id: FREEDOM_TENANT, amount_cents: 1, idempotency_key: 'm74-timeout-fund-1' },
+    spoof: {},
+    fetchImpl: wrapped,
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
+  }));
+  assert.ok(retry.duplicate || retry.error === 'reconcile_existing_intent' || retry.error === 'cas_lost');
+  assert.equal(transferAttempts, 1);
+});
+
+test('M7.4 legacy moov-transfer-create cannot originate production money', async () => {
+  const store = createStore();
+  const result = await withEnv(productionFlags, () => handleProviderRequest(
+    jwtEvent('/functions/v1/moov-transfer-create', 'POST', {
+      tenant_id: FREEDOM_TENANT,
+      amount_cents: 1,
+    }),
+    '/functions/v1/moov-transfer-create',
+    'POST',
+    fundDeps(store),
+  ));
+  assert.equal(result.error, 'production_execution_blocked');
+  assert.equal(store.transferPosts || 0, 0);
 });
 });
