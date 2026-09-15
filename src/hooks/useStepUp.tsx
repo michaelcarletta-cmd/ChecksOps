@@ -15,15 +15,16 @@ import {
   cacheAllowsReuse,
   isCheckBoundAction,
   stepUpCacheKey,
+  STEP_UP_CACHE_TTL_MS,
   type FinancialStepUpRequest,
 } from "@/lib/financialStepUp";
 
 /**
  * Two-factor step-up gate for money movement.
  *
- * Deposit submit/approve are bound to a server-side check id. A successful
- * TOTP for one check cannot authorize a different check. Tenant and amount
- * are not taken from the browser as authority.
+ * A successful TOTP is cached for this login session (30 minutes or until
+ * logout). Deposit submit still sends the check id to the server for audit.
+ * The browser cache is not authorization.
  */
 
 const VERIFIED_KEY = "checksops_stepup_verified_scope";
@@ -50,6 +51,10 @@ function readVerifiedScope(userId: string | null): string | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (parsed?.userId !== userId || typeof parsed?.key !== "string") return null;
+    if (typeof parsed.expiresAt === "number" && parsed.expiresAt < Date.now()) {
+      sessionStorage.removeItem(VERIFIED_KEY);
+      return null;
+    }
     return parsed.key;
   } catch {
     return null;
@@ -58,7 +63,11 @@ function readVerifiedScope(userId: string | null): string | null {
 
 function writeVerifiedScope(userId: string, key: string) {
   try {
-    sessionStorage.setItem(VERIFIED_KEY, JSON.stringify({ userId, key }));
+    sessionStorage.setItem(VERIFIED_KEY, JSON.stringify({
+      userId,
+      key,
+      expiresAt: Date.now() + STEP_UP_CACHE_TTL_MS,
+    }));
     sessionStorage.removeItem(LEGACY_VERIFIED_KEY);
   } catch {
     /* ignore */
@@ -87,6 +96,14 @@ export function StepUpProvider({ children }: { children: ReactNode }) {
       try {
         const status = await getAwsMfaStatus();
         setTotpEnrolled(Boolean(status.totpEnrolled));
+        const uid = awsAuthUserId();
+        if (status.stepUpSession?.verified && uid) {
+          const key = stepUpCacheKey(uid);
+          if (key) {
+            writeVerifiedScope(uid, key);
+            setVerifiedKey(key);
+          }
+        }
       } catch {
         setTotpEnrolled(false);
       }

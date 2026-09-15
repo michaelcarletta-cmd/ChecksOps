@@ -250,6 +250,20 @@ test('compiled Supabase-mode artifact fails; Cognito /prep artifact passes', () 
   assert.ok(stagingLeak.forbidden.includes('staging_api'));
 });
 
+test('publicWorkflowApi has no hardcoded Supabase host or anon-key fallback', () => {
+  const source = read('src/lib/publicWorkflowApi.ts');
+  assert.doesNotMatch(source, /nbcqwpysqgyxrrbgtmkw\.supabase\.co/);
+  assert.doesNotMatch(source, /https:\/\/[a-z0-9]+\.supabase\.co/);
+  assert.doesNotMatch(source, /nbcqwpysqgyxrrbgtmkw/);
+  assert.doesNotMatch(source, /eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9/);
+  assert.doesNotMatch(source, /PRODUCTION_SUPABASE_URL|PRODUCTION_ANON_FALLBACK/);
+  assert.match(source, /\/public\/signature-document/);
+  assert.match(source, /\/public\/signature-submit/);
+  assert.match(source, /\/public\/endorsement/);
+  assert.match(source, /isAwsStaging\(\)/);
+  assert.match(source, /awsApiBaseUrl\(\)/);
+});
+
 test('production-aws vite config fingerprints Cognito pool and client in the compiled HTML', () => {
   const vite = read('vite.config.ts');
   assert.match(vite, /mode === "production-aws"/);

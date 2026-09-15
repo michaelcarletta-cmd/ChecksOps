@@ -4,6 +4,12 @@ import { normalizeTotpCode, totpUserFailureMessage } from "@/lib/totpCode";
 export type AwsMfaStatus = {
   totpEnrolled: boolean;
   preferredMfa: string | null;
+  stepUpSession?: {
+    verified: boolean;
+    ttlMs: number;
+    boundToLoginSession: boolean;
+    cognitoMfaIgnored: boolean;
+  } | null;
 };
 
 export { awsTotpEnrollmentDisplay } from "@/lib/totpEnrollment";
@@ -52,9 +58,20 @@ export const awsMfaAvailable = () => isAwsStaging() && Boolean(awsApiBaseUrl());
 
 export const getAwsMfaStatus = async (): Promise<AwsMfaStatus> => {
   const payload = await post("/auth/mfa/status");
+  const session = payload.stepUpSession && typeof payload.stepUpSession === "object"
+    ? payload.stepUpSession
+    : null;
   return {
     totpEnrolled: payload.totpEnrolled === true,
     preferredMfa: payload.preferredMfa ? String(payload.preferredMfa) : null,
+    stepUpSession: session
+      ? {
+        verified: session.verified === true,
+        ttlMs: Number(session.ttlMs) || 0,
+        boundToLoginSession: session.boundToLoginSession === true,
+        cognitoMfaIgnored: session.cognitoMfaIgnored === true,
+      }
+      : null,
   };
 };
 

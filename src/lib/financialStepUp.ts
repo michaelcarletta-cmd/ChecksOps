@@ -1,15 +1,17 @@
 /**
- * Client-side CheckAlt / money-movement step-up binding.
+ * Client-side CheckAlt / money-movement step-up UX.
  *
- * The browser may carry a check id to the Cognito step-up route. Tenant,
- * amount, and financial eligibility are derived server-side from that check.
- * Browser tenant_id / amount / amount_cents are never authorization.
+ * A successful TOTP establishes a login-session cache so the dialog is not
+ * shown again until expiry or logout. This cache is not authorization.
+ * Tenant, amount, role, and MFA completion are enforced server-side.
  */
 
 export const CHECK_BOUND_ACTIONS = Object.freeze([
   "deposit.submit",
   "deposit.approve",
 ] as const);
+
+export const STEP_UP_CACHE_TTL_MS = 30 * 60 * 1000;
 
 export type CheckBoundAction = (typeof CHECK_BOUND_ACTIONS)[number];
 
@@ -85,19 +87,29 @@ export const buildFinancialStepUpRequest = (input: {
 
 export const stepUpCacheKey = (
   userId: string | null | undefined,
-  actionKey: string,
-  checkId: string | null,
+  _actionKey?: string,
+  _checkId?: string | null,
 ): string | null => {
   if (!userId) return null;
-  if (isCheckBoundAction(actionKey)) {
-    if (!checkId) return null;
-    return `${userId}|${actionKey}|${checkId}`;
-  }
-  return `${userId}|unbound|session`;
+  return `${userId}|session`;
 };
 
-export const cacheAllowsReuse = (cachedKey: string | null | undefined, nextKey: string | null | undefined): boolean =>
-  Boolean(cachedKey && nextKey && cachedKey === nextKey);
+const userIdFromCacheKey = (key: string | null | undefined): string | null => {
+  const value = String(key || "");
+  const userId = value.split("|")[0];
+  return userId || null;
+};
+
+export const cacheAllowsReuse = (
+  cachedKey: string | null | undefined,
+  nextKey: string | null | undefined,
+): boolean => {
+  if (!cachedKey || !nextKey) return false;
+  if (cachedKey === nextKey) return true;
+  const cachedUser = userIdFromCacheKey(cachedKey);
+  const nextUser = userIdFromCacheKey(nextKey);
+  return Boolean(cachedUser && nextUser && cachedUser === nextUser);
+};
 
 export const changingCheckRequiresNewAuth = (
   previousCheckId: string | null | undefined,

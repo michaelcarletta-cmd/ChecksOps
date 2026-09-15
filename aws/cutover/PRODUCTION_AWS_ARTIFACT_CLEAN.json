@@ -1,0 +1,40 @@
+{
+  "verdict": "PRODUCTION-AWS ARTIFACT CLEAN — READY TO RERUN GUARDED TOTP RELEASE",
+  "recordedAt": "2026-09-15T02:12:56Z",
+  "deployed": false,
+  "s3Upload": false,
+  "cloudfrontInvalidation": false,
+  "trace": {
+    "historicalUse": "Public /sign and /endorse called Supabase Edge Functions via hardcoded https://nbcqwpysqgyxrrbgtmkw.supabase.co plus an anon JWT when VITE_AUTH_PROVIDER was not cognito.",
+    "productionAwsReliesOnFallback": false,
+    "reason": "production-aws sets VITE_AUTH_PROVIDER=cognito so isAwsStaging() is true and publicWorkflowRequest already used awsApiBaseUrl() + /public/*.",
+    "liveAwsReplacements": [
+      "POST /prep/public/signature-document",
+      "POST /prep/public/signature-submit",
+      "POST /prep/public/endorsement"
+    ],
+    "separateAuthenticatedPath": "In-app supabase.functions.invoke(check-endorsement) uses the Cognito AWS adapter, not this helper."
+  },
+  "scan": {
+    "ok": true,
+    "distDir": "/workspace/dist",
+    "fileCount": 104,
+    "missing": [],
+    "forbidden": [],
+    "authProvider": "cognito",
+    "userPoolId": "us-east-1_h00WorYMT",
+    "clientId": "3ja9fqaq2fjkv3i6up2varcqpe",
+    "apiTarget": "/prep",
+    "supabaseHostMatches": 0,
+    "rawExecuteApiMatches": 0,
+    "stagingPoolOrClientMatches": 0
+  },
+  "compiledPublicWorkflowChunk": "dist/assets/publicWorkflowApi-C48ohVUc.js",
+  "spaSourceScope": [
+    "src/hooks/useStepUp.tsx",
+    "src/lib/financialStepUp.ts",
+    "src/lib/awsMfa.ts",
+    "src/components/settings/CheckAltSettings.tsx",
+    "src/lib/publicWorkflowApi.ts"
+  ]
+}

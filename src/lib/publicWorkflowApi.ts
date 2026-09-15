@@ -1,9 +1,5 @@
 import { awsApiBaseUrl, isAwsStaging } from "@/lib/awsStaging";
 
-const PRODUCTION_SUPABASE_URL = "https://nbcqwpysqgyxrrbgtmkw.supabase.co";
-const PRODUCTION_ANON_FALLBACK =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5iY3F3cHlzcWd5eHJyYmd0bWt3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxNDQ2NTgsImV4cCI6MjA5MjcyMDY1OH0.9GNh6OK6l6vSIBgkDY-bJuqNtfHJsLNW-dc7jfRUwgw";
-
 const ROUTES = {
   "get-signature-document": {
     aws: "/public/signature-document",
@@ -22,8 +18,9 @@ const ROUTES = {
 export type PublicWorkflowName = keyof typeof ROUTES;
 
 /**
- * Production Sign/Endorse keep the same Supabase URL + anon fallback.
- * AWS staging never falls back to production Storage or edge functions.
+ * Cognito / production-aws Sign/Endorse call same-origin /prep/public/...
+ * Leftover Lovable builds may still use env-configured Edge Function paths.
+ * No hardcoded *.supabase.co host or anon-key fallback is compiled in.
  */
 export function publicWorkflowRequest(name: PublicWorkflowName) {
   if (isAwsStaging()) {
@@ -32,13 +29,13 @@ export function publicWorkflowRequest(name: PublicWorkflowName) {
       headers: { "Content-Type": "application/json" } as Record<string, string>,
     };
   }
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || PRODUCTION_SUPABASE_URL;
-  const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || PRODUCTION_ANON_FALLBACK;
+  const supabaseUrl = String(import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
+  const anonKey = String(import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "");
   return {
     url: `${supabaseUrl}${ROUTES[name].supabase}`,
     headers: {
       "Content-Type": "application/json",
-      apikey: anonKey,
+      ...(anonKey ? { apikey: anonKey } : {}),
     } as Record<string, string>,
   };
 }
