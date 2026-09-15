@@ -1,0 +1,56 @@
+{
+  "verdict": "STS DENIAL ROOT CAUSE FOUND — ROLE NAME MISMATCH ChecksOpsProductionSpaDeployApply",
+  "recordedAt": "2026-09-15T02:00:30Z",
+  "iamModified": false,
+  "bucketPolicyModified": false,
+  "spaDeployed": false,
+  "rootCause": {
+    "kind": "role_name_mismatch",
+    "createdRole": "ChecksOpsProductionSpaDeployApply",
+    "requestedRole": "ChecksOpsProductionSpaDeploy",
+    "detail": "The approved Cursor OIDC trust and inline policy were applied to a role named ChecksOpsProductionSpaDeployApply (the intended inline policy name). Cursor OIDC can assume that role. sts:AssumeRoleWithWebIdentity against the bucket-lock name ChecksOpsProductionSpaDeploy remains AccessDenied."
+  },
+  "cloudTrail": {
+    "createRole": {
+      "eventTime": "2026-09-15T01:44:42Z",
+      "eventName": "CreateRole",
+      "roleName": "ChecksOpsProductionSpaDeployApply"
+    },
+    "putRolePolicy": {
+      "eventTime": "2026-09-15T01:48:12Z",
+      "roleName": "ChecksOpsProductionSpaDeployApply"
+    },
+    "updateAssumeRolePolicy": {
+      "eventTime": "2026-09-15T01:54:01Z",
+      "roleName": "ChecksOpsProductionSpaDeployApply"
+    },
+    "failedAssume": {
+      "eventTime": "2026-09-15T01:57:10Z",
+      "eventName": "AssumeRoleWithWebIdentity",
+      "errorCode": "AccessDenied",
+      "errorMessage": "Not authorized to perform sts:AssumeRoleWithWebIdentity",
+      "resourceRoleArn": "arn:aws:iam::806168576068:role/ChecksOpsProductionSpaDeploy",
+      "oidcProvider": "arn:aws:iam::806168576068:oidc-provider/api.cursor.com",
+      "webIdentity": "arn:aws:iam::806168576068:oidc-provider/api.cursor.com:sts.amazonaws.com:user:325724407"
+    }
+  },
+  "liveAssume": {
+    "ChecksOpsProductionSpaDeployApply": "Allow arn:aws:sts::806168576068:assumed-role/ChecksOpsProductionSpaDeployApply/checksops-diag-applyname",
+    "ChecksOpsProductionSpaDeploy": "AccessDenied",
+    "ChecksOpsCursorCloudStaging": "Allow"
+  },
+  "ruledOut": {
+    "oidcProvider": "Same api.cursor.com provider and user:325724407 token assume staging and the Apply-named role",
+    "sessionDuration": "900s and 3600s fail on the requested name; success on the Apply-named role with 900s",
+    "rolePath": "Working ARN is arn:aws:iam::806168576068:role/ChecksOpsProductionSpaDeployApply (path /)",
+    "permissionsBoundary": "Not implicated; assume of the Apply-named role succeeded",
+    "scp": "Not required to explain the split: one role in-account is assumable, the requested name is not"
+  },
+  "smallestCorrection": [
+    "Create IAM role exactly named ChecksOpsProductionSpaDeploy (IAM cannot rename).",
+    "Copy the same approved trust JSON and the same inline policy ChecksOpsProductionSpaDeployApply onto that exact role name.",
+    "Do not change the production S3 deny-except-ChecksOpsProductionSpaDeploy bucket policy.",
+    "Do not deploy using ChecksOpsProductionSpaDeployApply; the bucket lock will deny it.",
+    "After the correctly named role assumes, delete ChecksOpsProductionSpaDeployApply so there is not a second production deploy role."
+  ]
+}
