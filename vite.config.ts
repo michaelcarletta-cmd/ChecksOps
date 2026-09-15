@@ -7,7 +7,9 @@ import { VitePWA } from "vite-plugin-pwa";
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const awsMode = mode === "aws" || String(env.VITE_AUTH_PROVIDER || "").toLowerCase() === "cognito";
+  const awsMode = mode === "aws"
+    || mode === "production-aws"
+    || String(env.VITE_AUTH_PROVIDER || "").toLowerCase() === "cognito";
   const supabaseUrl = env.VITE_SUPABASE_URL || env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
   const supabasePublishableKey =
     env.VITE_SUPABASE_PUBLISHABLE_KEY ||
@@ -27,6 +29,23 @@ export default defineConfig(({ mode }) => {
     port: 4173,
   },
   plugins: [
+    {
+      name: "checksops-cognito-artifact-fingerprint",
+      transformIndexHtml(html: string) {
+        if (!awsMode) return html;
+        const pool = String(env.VITE_COGNITO_USER_POOL_ID || "");
+        const client = String(env.VITE_COGNITO_USER_POOL_CLIENT_ID || "");
+        const api = String(env.VITE_CHECKSOPS_API_URL || "");
+        if (!pool || !client) return html;
+        const meta = [
+          `<meta name="checksops-auth-provider" content="cognito" />`,
+          `<meta name="checksops-cognito-pool" content="${pool}" />`,
+          `<meta name="checksops-cognito-client" content="${client}" />`,
+          `<meta name="checksops-api-target" content="${api}" />`,
+        ].join("");
+        return html.replace("</head>", `${meta}</head>`);
+      },
+    },
     react(),
     !awsMode && mode === "development" && componentTagger(),
     !awsMode && VitePWA({
