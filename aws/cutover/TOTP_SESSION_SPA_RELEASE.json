@@ -1,0 +1,50 @@
+{
+  "verdict": "NO GO — STOPPED BEFORE/AFTER DEPLOY",
+  "stopped": "BEFORE_SUCCESSFUL_DEPLOY",
+  "recordedAt": "2026-09-15T02:08:30Z",
+  "phase1": {
+    "assumeChecksOpsProductionSpaDeploy": "PASS",
+    "assumedArn": "arn:aws:sts::806168576068:assumed-role/ChecksOpsProductionSpaDeploy/checksops-spa-release",
+    "getCallerIdentity": "arn:aws:sts::806168576068:assumed-role/ChecksOpsProductionSpaDeploy/checksops-spa-release",
+    "stagingPutObject": "AccessDenied explicit deny",
+    "stagingDeleteObject": "AccessDenied explicit deny",
+    "publicSpaBeforeApply": {
+      "bundle": "index-CiOVNYWh.js",
+      "lastModified": "2026-09-14T15:13:43Z",
+      "etag": "eb72535f64ce52c3bf3c8780dd3ccc25",
+      "cognitoPoolId": "us-east-1_h00WorYMT",
+      "cognitoClientId": "3ja9fqaq2fjkv3i6up2varcqpe",
+      "apiTarget": "/prep"
+    }
+  },
+  "phase2": {
+    "mechanism": "node scripts/deploy-production-spa.mjs --apply --from-fingerprint aws/cutover/production-spa-fingerprints/production-spa-868e69387d63-2026-09-14T15-13-43-687Z.json",
+    "caller": "ChecksOpsProductionSpaDeploy",
+    "unlock": "CHECKSOPS_PRODUCTION_SPA_UNLOCK=RELEASE_CUTOVER_LOCK",
+    "rawS3Used": false,
+    "uploaded": false,
+    "error": "production_spa_artifact_rejected",
+    "forbidden": ["supabase_host"],
+    "builtIndex": "index-Dz_lz0c6.js",
+    "scanNote": "Compiled leftover src/lib/publicWorkflowApi.ts still embeds https://nbcqwpysqgyxrrbgtmkw.supabase.co in a lazy chunk. That file is outside the approved four-file TOTP release scope. Live locked index-CiOVNYWh.js does not contain .supabase.co. Guarded apply refused before S3/CloudFront mutation."
+  },
+  "publicSpaAfterRejectedApply": {
+    "bundle": "index-CiOVNYWh.js",
+    "lastModified": "2026-09-14T15:13:43Z",
+    "etag": "eb72535f64ce52c3bf3c8780dd3ccc25"
+  },
+  "holdsHonored": {
+    "noIamChange": true,
+    "noBucketPolicyChange": true,
+    "noDeleteMisnamedRole": true,
+    "noCheck9562Mutation": true,
+    "noCheckAltSubmit": true,
+    "noMoov": true,
+    "releaseFilesOnly": [
+      "src/hooks/useStepUp.tsx",
+      "src/lib/financialStepUp.ts",
+      "src/lib/awsMfa.ts",
+      "src/components/settings/CheckAltSettings.tsx"
+    ]
+  }
+}
