@@ -33,7 +33,7 @@ fingerprint.
 These require account-root or an AWS/DNS administrator. They are not opened by `npm run build`, CI, Cursor staging, or Lovable Publish:
 
 - AWS account root can still write the bucket or replace the bucket policy
-- Creating and assuming `ChecksOpsProductionSpaDeploy` (template stays `DeployRole=false`)
+- Creating and assuming `ChecksOpsProductionSpaDeploy` (template stays `DeployRole=false`; intended Cursor OIDC trust is `aws/production/production-spa-deploy-role-trust.json`. `ChecksOpsCursorCloudStaging` cannot `iam:UpdateAssumeRolePolicy` / `iam:CreateRole` on that role.)
 - An IAM principal that already has `cloudfront:UpdateDistribution` on `E1B0ZWWO5559U5` (Cursor staging does not; `apply-step1.mjs` is locked)
 - Changing Cloudflare/DNS away from CloudFront
 
