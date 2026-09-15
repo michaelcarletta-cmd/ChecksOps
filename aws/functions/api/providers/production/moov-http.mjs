@@ -1,5 +1,6 @@
 import { isProviderNetworkError, providerEgressFailure } from '../../sandbox-credentials.mjs';
 import { refuseKycOrCapabilityWrite } from './moov-capability-policy.mjs';
+import { productionMoovTransferPostAllowed } from './moov-holds.mjs';
 import {
   PRODUCTION_MOOV_API_VERSION,
   PRODUCTION_MOOV_HOST,
@@ -189,6 +190,14 @@ export async function productionMoovFetch({
   if (allowSweepWrite && (verb === 'POST' || verb === 'PATCH')) {
     assertProductionMoovSweepWrite({ method: verb, path });
   } else if (allowTransferPost && verb === 'POST') {
+    if (!productionMoovTransferPostAllowed()) {
+      const error = new ProductionMoovError('Moov transfer POST is held until a later reviewed Test A arming', 403, {
+        error: 'transfer_post_held',
+        path: productionMoovPathOnly(path),
+      });
+      error.code = 'transfer_post_held';
+      throw error;
+    }
     assertProductionMoovTransferPost({ method: verb, path });
   } else {
     assertProductionMoovGet({ method: verb, path });

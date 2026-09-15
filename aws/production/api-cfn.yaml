@@ -74,6 +74,7 @@ Resources:
           AWS_PROVIDER_WEBHOOK_DRY_RUN: "true"
           AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: "false"
           AWS_FINANCIAL_PERMISSIONS_ACTIVATED: "false"
+          AWS_MOOV_TRANSFER_POST_ENABLED: "false"
           AWS_COGNITO_MFA_PREFERRED: "false"
       Tags:
         - Key: Environment

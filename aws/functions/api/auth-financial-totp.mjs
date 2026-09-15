@@ -338,12 +338,37 @@ export const handleMfaVerify = async (event, deps = {}) => {
 export const resolveFinancialStepUpBinding = async ({ client, mapping, body, spoof }) => {
   const { TENANT_MEMBERSHIP_SQL } = await import('./identity.mjs');
   const { membershipForTenant } = await import('./financial-ownership.mjs');
+  const checkalt = await import('./providers/production/checkalt-authz.mjs');
   const {
     CHECKALT_TOTP_ACTION,
     serverAmountCentsFromCheck,
-  } = await import('./providers/production/checkalt-authz.mjs');
+  } = checkalt;
+  const { isMoovWalletTotpAction, resolveMoovWalletStepUpBinding } = await import('./providers/production/moov-authz.mjs');
   const actionKey = String(body.action_key || body.actionKey || CHECKALT_TOTP_ACTION);
-  if (actionKey !== CHECKALT_TOTP_ACTION) {
+  if (isMoovWalletTotpAction(actionKey)) {
+    return resolveMoovWalletStepUpBinding({
+      client,
+      mapping,
+      body,
+      spoof,
+      actionKey,
+    });
+  }
+  if (typeof checkalt.isFinancialSessionTotpAction === 'function') {
+    if (!checkalt.isFinancialSessionTotpAction(actionKey)) {
+      return {
+        ok: false,
+        statusCode: 409,
+        error: 'action_mismatch',
+        message: 'Financial TOTP step-up action is server-controlled.',
+        spoofFieldsIgnored: spoof,
+        ...financialGate(),
+      };
+    }
+    if (typeof checkalt.isCheckBoundTotpAction === 'function' && !checkalt.isCheckBoundTotpAction(actionKey)) {
+      return { ok: true, check: null, amountCents: null, actionKey, tenantId: null };
+    }
+  } else if (actionKey !== CHECKALT_TOTP_ACTION) {
     return {
       ok: false,
       statusCode: 409,
@@ -408,6 +433,31 @@ export const resolveFinancialStepUpBinding = async ({ client, mapping, body, spo
 
 export const insertAppStepUpLog = async (client, mapping, bound) => {
   const { CHECKALT_TOTP_ACTION } = await import('./providers/production/checkalt-authz.mjs');
+  const { isMoovWalletTotpAction } = await import('./providers/production/moov-authz.mjs');
+  const moovBound = isMoovWalletTotpAction(bound.actionKey);
+  const tenantId = bound.tenantId || bound.check?.tenant_id || null;
+  const metadata = moovBound
+    ? {
+      amount_cents: bound.amountCents,
+      source_payment_method_id: bound.sourcePaymentMethodId,
+      destination_payment_method_id: bound.destinationPaymentMethodId,
+      bank_id: bound.bankId,
+      wallet_id: bound.walletId,
+      recipient_id: bound.recipientId,
+      recipient_bank_id: bound.recipientBankId,
+      operation: bound.actionKey,
+      source: 'app_financial_totp',
+      browser_ids_ignored: true,
+    }
+    : {
+      check_id: bound.check?.id || null,
+      amount_cents: bound.amountCents,
+      operation: bound.actionKey || CHECKALT_TOTP_ACTION,
+      source: 'app_financial_totp',
+      ...(bound.loginSessionId
+        ? { session_scope: true, login_session_id: bound.loginSessionId }
+        : {}),
+    };
   const row = (await client.query(
     `INSERT INTO public.financial_stepup_log
       (user_id, tenant_id, action_key, factor_type, succeeded, metadata)
@@ -415,14 +465,9 @@ export const insertAppStepUpLog = async (client, mapping, bound) => {
      RETURNING id, created_at`,
     [
       mapping.application_user_id,
-      bound.check.tenant_id,
+      tenantId,
       bound.actionKey,
-      JSON.stringify({
-        check_id: bound.check.id,
-        amount_cents: bound.amountCents,
-        operation: CHECKALT_TOTP_ACTION,
-        source: 'app_financial_totp',
-      }),
+      JSON.stringify(metadata),
     ],
   )).rows[0];
   return {
@@ -430,12 +475,33 @@ export const insertAppStepUpLog = async (client, mapping, bound) => {
     statusCode: 200,
     recorded: true,
     stepup_id: row.id,
-    check_id: bound.check.id,
-    tenant_id: bound.check.tenant_id,
+    check_id: bound.check?.id || null,
+    tenant_id: tenantId,
     amount_cents: bound.amountCents,
+    action_key: bound.actionKey,
+    source_payment_method_id: bound.sourcePaymentMethodId || null,
+    destination_payment_method_id: bound.destinationPaymentMethodId || null,
     applicationUserId: mapping.application_user_id,
+    session_scope: Boolean(bound.loginSessionId) && !moovBound,
   };
 };
+
+const sessionStepUpResponse = (row, spoof) => ({
+  ok: true,
+  statusCode: 200,
+  verified: true,
+  recorded: true,
+  reused: true,
+  stepup_id: row.id,
+  factorType: 'totp',
+  source: 'app_financial_totp',
+  session_scope: true,
+  check_id: row.metadata?.check_id || null,
+  tenant_id: row.tenant_id || null,
+  amount_cents: row.metadata?.amount_cents ?? null,
+  spoofFieldsIgnored: spoof,
+  ...financialGate(),
+});
 
 export const handleMfaStepUp = async (event, deps = {}) => {
   const body = parseBody(event);
@@ -452,6 +518,30 @@ export const handleMfaStepUp = async (event, deps = {}) => {
   const identity = deps.withIdentityWrite || withIdentityWrite;
   return identity(event, async (ctx) => {
     try {
+      const checkalt = await import('./providers/production/checkalt-authz.mjs');
+      const { isMoovWalletTotpAction } = await import('./providers/production/moov-authz.mjs');
+      const { loginSessionIdFromClaims = null } = await import('./cognito.mjs').catch(() => ({}));
+      const actionKey = String(body.action_key || body.actionKey || checkalt.CHECKALT_TOTP_ACTION);
+      const walletAction = isMoovWalletTotpAction(actionKey);
+      const readLoginSessionId = typeof loginSessionIdFromClaims === 'function'
+        ? () => loginSessionIdFromClaims(ctx.claims)
+        : () => null;
+      // CheckAlt session TOTP may be reused. wallet.fund / wallet.disburse never reuse it.
+      if (
+        !walletAction
+        && typeof checkalt.isFinancialSessionTotpAction === 'function'
+        && checkalt.isFinancialSessionTotpAction(actionKey)
+        && typeof checkalt.loadRecentSessionStepUp === 'function'
+      ) {
+        const loginSessionId = readLoginSessionId();
+        const existing = await checkalt.loadRecentSessionStepUp(ctx.client, {
+          userId: ctx.mapping.application_user_id,
+          loginSessionId,
+          sinceMs: checkalt.TOTP_STEPUP_TTL_MS,
+        });
+        const sessionReuseBlocked = actionKey === 'totp.enroll' || actionKey === 'totp.unenroll';
+        if (existing[0] && !sessionReuseBlocked) return sessionStepUpResponse(existing[0], ctx.spoof);
+      }
       const rate = await consumeRate(ctx.client, ctx.mapping.application_user_id, 'step_up');
       if (!rate.ok) return rate;
       const bound = await resolveFinancialStepUpBinding({
@@ -461,6 +551,7 @@ export const handleMfaStepUp = async (event, deps = {}) => {
         spoof: ctx.spoof,
       });
       if (!bound.ok) return bound;
+      if (!walletAction) bound.loginSessionId = readLoginSessionId();
       const wrap = await (deps.loadWrapKey || loadFinancialTotpWrapKey)();
       const verified = await verifyAgainstStore({
         client: ctx.client,
@@ -495,6 +586,9 @@ export const handleMfaStepUp = async (event, deps = {}) => {
         check_id: recorded.check_id,
         tenant_id: recorded.tenant_id,
         amount_cents: recorded.amount_cents,
+        action_key: recorded.action_key,
+        source_payment_method_id: recorded.source_payment_method_id,
+        destination_payment_method_id: recorded.destination_payment_method_id,
         spoofFieldsIgnored: ctx.spoof,
         ...financialGate(),
       };

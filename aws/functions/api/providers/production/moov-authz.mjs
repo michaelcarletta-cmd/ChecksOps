@@ -1,11 +1,22 @@
 import { TENANT_MEMBERSHIP_SQL } from '../../identity.mjs';
 import { FINANCIAL_ROLES, roleAllowsFinancial } from '../../financial-authz.mjs';
+import { membershipForTenant } from '../../financial-ownership.mjs';
 import { financialPermissionsActivated } from '../../financial-flags.mjs';
 import { isPlatformOwnerCaller } from './moov-roles.mjs';
 import { productionMoovExecutionAllowed } from './moov-holds.mjs';
+import {
+  bindingForMoovWalletAction,
+  isMoovWalletTotpAction,
+  mismatchFirstTestBody,
+  MOOV_DISBURSE_TOTP_ACTION,
+  MOOV_FUND_TOTP_ACTION,
+} from './moov-first-test.mjs';
 
-export const MOOV_FUND_TOTP_ACTION = 'wallet.fund';
-export const MOOV_DISBURSE_TOTP_ACTION = 'wallet.disburse';
+export {
+  isMoovWalletTotpAction,
+  MOOV_DISBURSE_TOTP_ACTION,
+  MOOV_FUND_TOTP_ACTION,
+};
 export const MOOV_FEE_COLLECT_TOTP_ACTION = 'platform.fee_collect';
 export const MOOV_REFUND_TOTP_ACTION = 'platform.refund';
 export const TOTP_STEPUP_TTL_MS = 30 * 60 * 1000;
@@ -191,5 +202,68 @@ export async function authorizeMoovProduction({
     roles,
     memberships: access.memberships,
     platformOwner,
+  };
+}
+
+/**
+ * Financial TOTP for wallet.fund / wallet.disburse.
+ * Server-binds Freedom tenant, exact bank/wallet or wallet/recipient PMs, and 1¢.
+ * Browser tenant/amount/IDs are never authority.
+ */
+export async function resolveMoovWalletStepUpBinding({
+  client,
+  mapping,
+  body,
+  spoof,
+  actionKey,
+} = {}) {
+  if (!isMoovWalletTotpAction(actionKey)) {
+    return denyMoovAuthz('action_mismatch', {
+      statusCode: 409,
+      spoofFieldsIgnored: spoof,
+      message: 'Financial TOTP step-up action is server-controlled.',
+    });
+  }
+  const binding = bindingForMoovWalletAction(actionKey);
+  const mismatch = mismatchFirstTestBody(body, binding);
+  if (mismatch) {
+    return denyMoovAuthz(mismatch.error, {
+      statusCode: mismatch.statusCode,
+      field: mismatch.field,
+      amountCents: mismatch.amountCents,
+      capCents: mismatch.capCents,
+      message: mismatch.message,
+      spoofFieldsIgnored: spoof,
+    });
+  }
+  const refused = tenantManagementSendDenied(mapping);
+  if (refused) return { ...refused, spoofFieldsIgnored: spoof };
+  const memberships = await loadTenantMemberships(client, mapping.application_user_id);
+  if (!membershipForTenant(memberships, binding.tenantId)) {
+    return denyMoovAuthz('cross_tenant_denied', {
+      spoofFieldsIgnored: spoof,
+      message: 'wallet.fund / wallet.disburse TOTP is bound to Freedom membership. Browser tenant_id is ignored.',
+    });
+  }
+  const roles = await loadTenantRole(client, mapping.application_user_id, binding.tenantId);
+  if (!roleAllowsFinancial(roles) && !roles.some((role) => FINANCIAL_ROLES.has(role))) {
+    return denyMoovAuthz('financial_role_required', {
+      spoofFieldsIgnored: spoof,
+      message: 'Wallet funding and disbursement require owner, admin, or manager of Freedom.',
+    });
+  }
+  return {
+    ok: true,
+    check: null,
+    tenantId: binding.tenantId,
+    actionKey: binding.actionKey,
+    amountCents: binding.amountCents,
+    sourcePaymentMethodId: binding.sourcePaymentMethodId,
+    destinationPaymentMethodId: binding.destinationPaymentMethodId,
+    bankId: binding.bankId,
+    walletId: binding.walletId,
+    recipientId: binding.recipientId,
+    recipientBankId: binding.recipientBankId,
+    spoofFieldsIgnored: spoof,
   };
 }

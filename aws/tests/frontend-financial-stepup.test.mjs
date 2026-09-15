@@ -40,13 +40,19 @@ test('deposit.submit requires a check id and passes that check through', () => {
   assert.equal(ok.ignored.browserTenantNotAuthoritative, true);
 });
 
-test('missing check fails closed and non-deposit actions stay unbound', () => {
+test('non-deposit actions stay unbound; wallet.fund is a distinct Moov action', () => {
   assert.equal(isCheckBoundAction('deposit.submit'), true);
   assert.equal(isCheckBoundAction('deposit.approve'), true);
   assert.equal(isCheckBoundAction('disbursement.send'), false);
+  assert.equal(isCheckBoundAction('wallet.fund'), false);
   const payroll = buildFinancialStepUpRequest({ actionKey: 'payroll.run' });
   assert.equal(payroll.ok, true);
   assert.equal(payroll.request.checkId, null);
+  const fund = buildFinancialStepUpRequest({ actionKey: 'wallet.fund', tenantId: TENANT_B, amount_cents: 99 });
+  assert.equal(fund.ok, true);
+  assert.equal(fund.request.actionKey, 'wallet.fund');
+  assert.equal(fund.ignored.browserAmountCents, true);
+  assert.equal(Object.prototype.hasOwnProperty.call(awsStepUpBody(fund.request), 'check_intake_item_id'), false);
 });
 
 test('changing check requires new authorization; stale cache cannot authorize another check', () => {
@@ -58,6 +64,18 @@ test('changing check requires new authorization; stale cache cannot authorize an
   assert.equal(cacheAllowsReuse(keyA, keyB), false);
   assert.equal(cacheAllowsReuse(stepUpCacheKey(USER, 'deposit.submit', null), keyA), false);
   assert.equal(cacheAllowsReuse(`${USER}|unbound|session`, keyA), false);
+});
+
+test('wallet.fund TOTP is never reused from a deposit or session cache', () => {
+  const deposit = stepUpCacheKey(USER, 'deposit.submit', CHECK_A);
+  const fund = stepUpCacheKey(USER, 'wallet.fund', null);
+  const disburse = stepUpCacheKey(USER, 'wallet.disburse', null);
+  const session = `${USER}|unbound|session`;
+  assert.match(fund, /wallet\.fund\|first-test/);
+  assert.equal(cacheAllowsReuse(deposit, fund), false);
+  assert.equal(cacheAllowsReuse(session, fund), false);
+  assert.equal(cacheAllowsReuse(fund, fund), false);
+  assert.equal(cacheAllowsReuse(fund, disburse), false);
 });
 
 test('browser amount cannot alter authorization amount', () => {

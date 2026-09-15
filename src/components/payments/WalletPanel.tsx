@@ -7,6 +7,7 @@ import { Separator } from "@/components/ui/separator";
 import { Loader2, RefreshCw, Wallet } from "lucide-react";
 import { useWallet } from "@/hooks/useWallet";
 import { useToast } from "@/hooks/use-toast";
+import { useFinancialGuard } from "@/hooks/useFinancialGuard";
 
 const money = (cents: number) =>
   (Number(cents || 0) / 100).toLocaleString("en-US", {
@@ -29,11 +30,12 @@ const ENTRY_LABEL: Record<string, string> = {
  * pulling from the bank on every payout.
  */
 export function WalletPanel() {
-  const { enabled, wallet, ledger, isLoading, error, refetch, fund, setupRequired } =
+  const { enabled, tenantId, wallet, ledger, isLoading, error, refetch, fund, setupRequired } =
     useWallet("operating");
 
   const { toast } = useToast();
   const [amount, setAmount] = useState("");
+  const guardFinancial = useFinancialGuard(tenantId);
 
   if (!enabled) return null;
 
@@ -48,6 +50,9 @@ export function WalletPanel() {
       return;
     }
     try {
+      await guardFinancial("wallet.fund", {
+        description: "Enter the current 6-digit code from your authenticator app to authorize BANK→WALLET funding.",
+      });
       await fund.mutateAsync({ amountCents: Math.round(dollars * 100), description: "Balance funding" });
       setAmount("");
       toast({ title: "Funding started", description: "Your balance updates once the transfer settles." });

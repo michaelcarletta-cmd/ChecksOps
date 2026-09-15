@@ -1,6 +1,17 @@
 export const APP_USER_ID_GUC = 'request.app_user_id';
 export const APP_USER_EMAIL_GUC = 'request.jwt.claim.email';
 
+export const loginSessionIdFromClaims = (claims) => {
+  if (!claims?.sub) return null;
+  const origin = claims.originJti || claims.origin_jti;
+  if (origin) return `origin_jti:${origin}`;
+  const authTime = claims.authTime || claims.auth_time;
+  if (authTime !== undefined && authTime !== null && String(authTime) !== '') {
+    return `auth_time:${claims.sub}:${authTime}`;
+  }
+  return null;
+};
+
 export const cognitoClaimsFromEvent = (event) => {
   const jwt = event?.requestContext?.authorizer?.jwt?.claims
     || event?.requestContext?.authorizer?.claims

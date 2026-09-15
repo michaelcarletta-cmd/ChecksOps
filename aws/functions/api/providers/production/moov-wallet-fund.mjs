@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { KNOWN_APPROVED_MOOV } from './moov-accounts.mjs';
 import { MOOV_FUND_TOTP_ACTION, assertMoovTenantAccess, authorizeMoovProduction, tenantManagementSendDenied } from './moov-authz.mjs';
 import { capabilityEnabled } from './moov-capability-policy.mjs';
-import { FIRST_PRODUCTION_TRANSFER_CENTS } from './moov-holds.mjs';
+import { firstTestFundBinding, mismatchFirstTestBody } from './moov-first-test.mjs';
+import { FIRST_PRODUCTION_TRANSFER_CENTS, productionMoovTransferPostAllowed } from './moov-holds.mjs';
 import {
   bindMoovProductionGucs,
   casMarkSubmitting,
@@ -44,31 +45,40 @@ export async function handleProductionMoovWalletFund({
   deps = {},
 }) {
   await bindMoovProductionGucs(client, mapping, claims);
-  const tenantId = claimedTenant(body);
-  if (!tenantId || !isUuid(tenantId)) {
-    return fail('invalid_uuid', 400, { field: 'tenant_id', spoofFieldsIgnored: spoof });
+  const binding = firstTestFundBinding();
+  const mismatch = mismatchFirstTestBody(body, binding);
+  if (mismatch) {
+    return fail(mismatch.error, mismatch.statusCode, {
+      field: mismatch.field,
+      amountCents: mismatch.amountCents,
+      capCents: mismatch.capCents,
+      message: mismatch.message,
+      spoofFieldsIgnored: spoof,
+    });
   }
+  const tenantId = binding.tenantId;
   const tmDenied = tenantManagementSendDenied(mapping);
   if (tmDenied) return { ...tmDenied, spoofFieldsIgnored: spoof, kycRequested: false, capabilitiesPosted: false, operation: 'wallet.fund' };
   const access = await assertMoovTenantAccess(client, mapping, tenantId);
   if (!access.ok) return { ...access, spoofFieldsIgnored: spoof, kycRequested: false, capabilitiesPosted: false };
 
-  const amount = Number(body?.amount_cents);
-  if (!Number.isInteger(amount) || amount <= 0) {
-    return fail('invalid_amount', 400, { message: 'amount_cents must be a positive integer.' });
-  }
-  if (amount !== FIRST_PRODUCTION_TRANSFER_CENTS) {
-    return fail('first_transfer_cap', 403, {
-      amountCents: amount,
-      capCents: FIRST_PRODUCTION_TRANSFER_CENTS,
-      message: 'The first production Moov transfer is capped at 1 cent until a later reviewed raise.',
-    });
-  }
+  const amount = binding.amountCents;
   if (body?.auto_send_after_funding === true) {
     return fail('auto_send_after_funding_refused', 403, {
       message: 'Funding must not auto-disburse. Run WALLET→RECIPIENT as a separate sequence.',
     });
   }
+
+  const authz = await authorizeMoovProduction({
+    client,
+    mapping,
+    tenantId,
+    actionKey: MOOV_FUND_TOTP_ACTION,
+    amountCents: amount,
+    sourcePaymentMethodId: binding.sourcePaymentMethodId,
+    destinationPaymentMethodId: binding.destinationPaymentMethodId,
+  });
+  if (!authz.ok) return { ...authz, spoofFieldsIgnored: spoof, kycRequested: false, capabilitiesPosted: false };
 
   const merchant = await resolveProductionMerchant(client, tenantId);
   if (!merchant.ok) return { ...merchant, spoofFieldsIgnored: spoof, operation: 'wallet.fund' };
@@ -129,22 +139,23 @@ export async function handleProductionMoovWalletFund({
 
   const sourcePm = debit.paymentMethodID || debit.paymentMethodId;
   const destPm = walletPm.paymentMethodID || walletPm.paymentMethodId;
+  if (
+    String(merchant.moovAccountId) !== KNOWN_APPROVED_MOOV.freedom.moovAccountId
+    || String(merchant.bankId || '') !== binding.bankId
+    || String(walletId || '') !== binding.walletId
+    || String(sourcePm) !== binding.sourcePaymentMethodId
+    || String(destPm) !== binding.destinationPaymentMethodId
+  ) {
+    return fail('approved_payment_method_mismatch', 409, {
+      liveProviderCalled: true,
+      message: 'Live payment methods must match the server-bound Freedom bank and wallet. Browser IDs are not authority.',
+    });
+  }
   const facilitatorId = walletPm.wallet?.partnerAccountID
     || walletPm.wallet?.partnerAccountId
     || walletPm.partnerAccountID
     || loaded.credentials.platformAccountId
     || KNOWN_APPROVED_MOOV.platform.moovAccountId;
-
-  const authz = await authorizeMoovProduction({
-    client,
-    mapping,
-    tenantId,
-    actionKey: MOOV_FUND_TOTP_ACTION,
-    amountCents: amount,
-    sourcePaymentMethodId: sourcePm,
-    destinationPaymentMethodId: destPm,
-  });
-  if (!authz.ok) return { ...authz, spoofFieldsIgnored: spoof, kycRequested: false, capabilitiesPosted: false };
 
   const intentId = randomUUID();
   const key = body?.idempotency_key && String(body.idempotency_key).length >= 8
@@ -191,6 +202,18 @@ export async function handleProductionMoovWalletFund({
   }
 
   await commitDurableAttempt(client, mapping, claims);
+  if (!productionMoovTransferPostAllowed()) {
+    return fail('transfer_post_held', 403, {
+      darkMode: true,
+      liveProviderCalled: false,
+      productionExecution: false,
+      transfer: draft,
+      amountCents: amount,
+      capCents: FIRST_PRODUCTION_TRANSFER_CENTS,
+      message: 'Durable funding intent was recorded. Moov transfer POST stays held until a later reviewed Test A arming.',
+    });
+  }
+
   const claimed = await casMarkSubmitting(client, draft.id);
   if (!claimed) {
     const raced = await existingProductionTransferByKey(client, tenantId, key);

@@ -11,7 +11,13 @@ export const CHECK_BOUND_ACTIONS = Object.freeze([
   "deposit.approve",
 ] as const);
 
+export const MOOV_WALLET_ACTIONS = Object.freeze([
+  "wallet.fund",
+  "wallet.disburse",
+] as const);
+
 export type CheckBoundAction = (typeof CHECK_BOUND_ACTIONS)[number];
+export type MoovWalletAction = (typeof MOOV_WALLET_ACTIONS)[number];
 
 export type FinancialStepUpRequest = {
   actionKey: string;
@@ -45,6 +51,9 @@ const trimId = (value: unknown): string | null => {
 
 export const isCheckBoundAction = (actionKey: string | null | undefined): boolean =>
   CHECK_BOUND_ACTIONS.includes(String(actionKey || "") as CheckBoundAction);
+
+export const isMoovWalletAction = (actionKey: string | null | undefined): boolean =>
+  MOOV_WALLET_ACTIONS.includes(String(actionKey || "") as MoovWalletAction);
 
 export const buildFinancialStepUpRequest = (input: {
   actionKey: string;
@@ -89,6 +98,10 @@ export const stepUpCacheKey = (
   checkId: string | null,
 ): string | null => {
   if (!userId) return null;
+  if (isMoovWalletAction(actionKey)) {
+    // Never reuse deposit/session TOTP for wallet.fund / wallet.disburse.
+    return `${userId}|${actionKey}|first-test`;
+  }
   if (isCheckBoundAction(actionKey)) {
     if (!checkId) return null;
     return `${userId}|${actionKey}|${checkId}`;
@@ -96,8 +109,11 @@ export const stepUpCacheKey = (
   return `${userId}|unbound|session`;
 };
 
-export const cacheAllowsReuse = (cachedKey: string | null | undefined, nextKey: string | null | undefined): boolean =>
-  Boolean(cachedKey && nextKey && cachedKey === nextKey);
+export const cacheAllowsReuse = (cachedKey: string | null | undefined, nextKey: string | null | undefined): boolean => {
+  if (!cachedKey || !nextKey || cachedKey !== nextKey) return false;
+  if (nextKey.includes("|wallet.fund|") || nextKey.includes("|wallet.disburse|")) return false;
+  return true;
+};
 
 export const changingCheckRequiresNewAuth = (
   previousCheckId: string | null | undefined,
@@ -106,7 +122,7 @@ export const changingCheckRequiresNewAuth = (
 
 export const awsStepUpBody = (request: FinancialStepUpRequest) => ({
   action_key: request.actionKey,
-  check_intake_item_id: request.checkId || undefined,
-  // tenant_id is a non-authoritative hint; the server uses the check tenant.
+  ...(request.checkId ? { check_intake_item_id: request.checkId } : {}),
+  // tenant_id is a non-authoritative hint; the server binds Freedom / check tenant.
   tenant_id: request.tenantId || undefined,
 });
