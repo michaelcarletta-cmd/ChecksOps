@@ -1,50 +1,77 @@
 {
-  "verdict": "NO GO — STOPPED BEFORE/AFTER DEPLOY",
-  "stopped": "BEFORE_SUCCESSFUL_DEPLOY",
-  "recordedAt": "2026-09-15T02:08:30Z",
-  "phase1": {
-    "assumeChecksOpsProductionSpaDeploy": "PASS",
-    "assumedArn": "arn:aws:sts::806168576068:assumed-role/ChecksOpsProductionSpaDeploy/checksops-spa-release",
-    "getCallerIdentity": "arn:aws:sts::806168576068:assumed-role/ChecksOpsProductionSpaDeploy/checksops-spa-release",
-    "stagingPutObject": "AccessDenied explicit deny",
-    "stagingDeleteObject": "AccessDenied explicit deny",
-    "publicSpaBeforeApply": {
-      "bundle": "index-CiOVNYWh.js",
-      "lastModified": "2026-09-14T15:13:43Z",
-      "etag": "eb72535f64ce52c3bf3c8780dd3ccc25",
-      "cognitoPoolId": "us-east-1_h00WorYMT",
-      "cognitoClientId": "3ja9fqaq2fjkv3i6up2varcqpe",
-      "apiTarget": "/prep"
+  "verdict": "TOTP SESSION SPA RELEASE PASS — PRODUCTION LIVE",
+  "recordedAt": "2026-09-15T02:54:46Z",
+  "mechanism": "node scripts/deploy-production-spa.mjs --apply --from-fingerprint aws/cutover/production-spa-fingerprints/production-spa-868e69387d63-2026-09-14T15-13-43-687Z.json",
+  "caller": "arn:aws:sts::806168576068:assumed-role/ChecksOpsProductionSpaDeploy/checksops-spa-release",
+  "unlock": "CHECKSOPS_PRODUCTION_SPA_UNLOCK=RELEASE_CUTOVER_LOCK",
+  "rawS3Used": false,
+  "uploaded": true,
+  "invalidationId": "IEVDFGNKWES2XQSW49XF9GO7UR",
+  "preUploadScan": {
+    "ok": true,
+    "forbidden": [],
+    "missing": [],
+    "supabaseHostMatches": 0,
+    "rawExecuteApiMatches": 0,
+    "userPoolId": "us-east-1_h00WorYMT",
+    "clientId": "3ja9fqaq2fjkv3i6up2varcqpe",
+    "apiTarget": "/prep"
+  },
+  "publicSpaAfterApply": {
+    "bundle": "index-D9lDqJ9b.js",
+    "previousBundle": "index-CiOVNYWh.js",
+    "lastModified": "2026-09-15T02:16:15Z",
+    "etag": "43df537f22434bc74cf130de091289e8",
+    "cognitoPoolId": "us-east-1_h00WorYMT",
+    "cognitoClientId": "3ja9fqaq2fjkv3i6up2varcqpe",
+    "apiTarget": "/prep",
+    "gitCommit": "49159e72f8ac0e0cdd763686e89f3c92bd9375f6"
+  },
+  "liveValidation": {
+    "newFingerprintLive": true,
+    "firstProtectedActionPromptsTotp": true,
+    "method": "Financial TOTP test card bound to 623442f0-a408-4db5-85be-14bae231a722; dialog opened; cancelled; nothing submitted",
+    "successfulTotpSessionReuse": {
+      "interactiveCompleted": false,
+      "reason": "Cancelled rather than entering a production authenticator code. Cognito passwords were not reset.",
+      "liveBundleProof": "index-D9lDqJ9b.js contains Mc=(e,t,n)=>e?`${e}|session`:null, 30-minute TTL, SIGNED_OUT clears cache, same-user reuse",
+      "unitTests": "aws/tests/frontend-financial-stepup.test.mjs pass"
+    },
+    "pollNowDoesNotPromptTotp": {
+      "clickedInUi": false,
+      "compiledProof": "assets/CheckAltSettings-BuGY0T1k.js contains Poll Now and checkalt-poll-status and does not contain requireStepUp"
+    },
+    "crossUserReuseBlocked": true,
+    "check9562": {
+      "id": "623442f0-a408-4db5-85be-14bae231a722",
+      "checkNumber": "9562",
+      "amount": 9984.11,
+      "uiStatus": "Ready for Deposit",
+      "historicalCheckAltReference": "122678838",
+      "checkaltSubmitSinceFirstSubmit": 1,
+      "checkaltSubmitSinceThisDeploy": 0,
+      "mutatedThisRelease": false
+    },
+    "noDuplicateCheckAltSubmit": true,
+    "noMoov": true,
+    "publicRoutes": {
+      "signatureDocument": "POST /prep/public/signature-document JSON 400 validate_token",
+      "endorsement": "POST /prep/public/endorsement JSON 404 token_consumed",
+      "signatureSubmit": "POST /prep/public/signature-submit JSON 400 esign_consent"
     }
   },
-  "phase2": {
-    "mechanism": "node scripts/deploy-production-spa.mjs --apply --from-fingerprint aws/cutover/production-spa-fingerprints/production-spa-868e69387d63-2026-09-14T15-13-43-687Z.json",
-    "caller": "ChecksOpsProductionSpaDeploy",
-    "unlock": "CHECKSOPS_PRODUCTION_SPA_UNLOCK=RELEASE_CUTOVER_LOCK",
-    "rawS3Used": false,
-    "uploaded": false,
-    "error": "production_spa_artifact_rejected",
-    "forbidden": ["supabase_host"],
-    "builtIndex": "index-Dz_lz0c6.js",
-    "scanNote": "Compiled leftover src/lib/publicWorkflowApi.ts still embeds https://nbcqwpysqgyxrrbgtmkw.supabase.co in a lazy chunk. That file is outside the approved four-file TOTP release scope. Live locked index-CiOVNYWh.js does not contain .supabase.co. Guarded apply refused before S3/CloudFront mutation."
-  },
-  "publicSpaAfterRejectedApply": {
-    "bundle": "index-CiOVNYWh.js",
-    "lastModified": "2026-09-14T15:13:43Z",
-    "etag": "eb72535f64ce52c3bf3c8780dd3ccc25"
-  },
+  "spaSourceScope": [
+    "src/hooks/useStepUp.tsx",
+    "src/lib/financialStepUp.ts",
+    "src/lib/awsMfa.ts",
+    "src/components/settings/CheckAltSettings.tsx",
+    "src/lib/publicWorkflowApi.ts"
+  ],
   "holdsHonored": {
-    "noIamChange": true,
-    "noBucketPolicyChange": true,
-    "noDeleteMisnamedRole": true,
+    "noCognitoMappingChange": true,
     "noCheck9562Mutation": true,
     "noCheckAltSubmit": true,
     "noMoov": true,
-    "releaseFilesOnly": [
-      "src/hooks/useStepUp.tsx",
-      "src/lib/financialStepUp.ts",
-      "src/lib/awsMfa.ts",
-      "src/components/settings/CheckAltSettings.tsx"
-    ]
+    "noPasswordReset": true
   }
 }
