@@ -11,6 +11,12 @@ import {
   type SendPaymentInput,
 } from "../types";
 import { readTenantPaymentAccount } from "./tenantAccount";
+import {
+  FIRST_TEST_DISBURSE_FN,
+  assertFirstTestAmountCents,
+  firstTestDisburseBody,
+  nextFirstTestIdempotencyKey,
+} from "../firstTestMoney";
 
 /**
  * Moov adapter.
@@ -73,23 +79,13 @@ export const moovProvider: PaymentProvider = {
   },
 
   async sendPayment(input: SendPaymentInput): Promise<PaymentResult> {
-    const recipientTenantId =
-      input.recipient.kind === "business" ? input.recipient.tenantId ?? null : null;
-
+    assertFirstTestAmountCents(input.amountCents);
     const res = await invoke<{ transfer: Record<string, any>; duplicate: boolean }>(
-      "moov-disburse",
-      {
-        tenant_id: input.tenantId,
-        amount_cents: input.amountCents,
-        speed: input.speed,
-        description: input.description ?? null,
-        claim_id: input.claimId ?? null,
-        check_id: input.checkId ?? null,
-        recipient_tenant_id: recipientTenantId,
-        external_recipient_id: recipientTenantId ? null : input.recipient.id,
-        source_kind: "wallet",
-        idempotency_key: input.idempotencyKey,
-      },
+      FIRST_TEST_DISBURSE_FN,
+      firstTestDisburseBody({
+        tenantId: input.tenantId,
+        idempotencyKey: nextFirstTestIdempotencyKey(input.idempotencyKey),
+      }),
     );
 
     const t = res.transfer ?? {};

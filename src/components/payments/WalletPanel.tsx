@@ -1,13 +1,28 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, RefreshCw, Wallet } from "lucide-react";
+import { Loader2, RefreshCw, Send, Wallet } from "lucide-react";
 import { useWallet } from "@/hooks/useWallet";
 import { useToast } from "@/hooks/use-toast";
 import { useFinancialGuard } from "@/hooks/useFinancialGuard";
+import { disburseWalletFirstTest } from "@/lib/payments/wallets";
+import {
+  FIRST_TEST_CAP_MESSAGE,
+  FIRST_TEST_DISBURSE_COPY,
+  FIRST_TEST_DISBURSE_TOTP,
+  FIRST_TEST_FUND_COPY,
+  FIRST_TEST_FUND_TOTP,
+  FIRST_TEST_HELD_MESSAGE,
+  FIRST_TEST_TRANSFER_CENTS,
+  FIRST_TEST_TRANSFER_DOLLARS,
+  FIRST_TEST_TRANSFER_LABEL,
+  isTransferPostHeld,
+  nextFirstTestIdempotencyKey,
+  parseFirstTestAmountCents,
+} from "@/lib/payments/firstTestMoney";
 
 const money = (cents: number) =>
   (Number(cents || 0) / 100).toLocaleString("en-US", {
@@ -26,16 +41,19 @@ const ENTRY_LABEL: Record<string, string> = {
 };
 
 /**
- * Organization balance: fund once, then pay out of the balance instead of
- * pulling from the bank on every payout.
+ * Organization balance: first-test BANK→WALLET then WALLET→RECIPIENT.
+ * Amount is locked at $0.01. Server binds Freedom bank, wallet, and recipient.
  */
 export function WalletPanel() {
   const { enabled, tenantId, wallet, ledger, isLoading, error, refetch, fund, setupRequired } =
     useWallet("operating");
 
   const { toast } = useToast();
-  const [amount, setAmount] = useState("");
+  const [amount, setAmount] = useState(FIRST_TEST_TRANSFER_DOLLARS);
+  const [disbursePending, setDisbursePending] = useState(false);
   const guardFinancial = useFinancialGuard(tenantId);
+  const fundIdempotencyRef = useRef<string | null>(null);
+  const disburseIdempotencyRef = useRef<string | null>(null);
 
   if (!enabled) return null;
 
@@ -44,20 +62,59 @@ export function WalletPanel() {
   }
 
   async function handleFund() {
-    const dollars = Number(amount);
-    if (!Number.isFinite(dollars) || dollars <= 0) {
-      toast({ title: "Enter an amount greater than zero.", variant: "destructive" });
+    const amountCents = parseFirstTestAmountCents(amount);
+    if (amountCents !== FIRST_TEST_TRANSFER_CENTS) {
+      toast({ title: FIRST_TEST_CAP_MESSAGE, variant: "destructive" });
       return;
     }
     try {
-      await guardFinancial("wallet.fund", {
+      await guardFinancial(FIRST_TEST_FUND_TOTP, {
         description: "Enter the current 6-digit code from your authenticator app to authorize BANK→WALLET funding.",
       });
-      await fund.mutateAsync({ amountCents: Math.round(dollars * 100), description: "Balance funding" });
-      setAmount("");
+      fundIdempotencyRef.current = nextFirstTestIdempotencyKey(fundIdempotencyRef.current);
+      await fund.mutateAsync({
+        amountCents,
+        description: "Balance funding",
+        idempotencyKey: fundIdempotencyRef.current,
+      });
+      fundIdempotencyRef.current = null;
+      setAmount(FIRST_TEST_TRANSFER_DOLLARS);
       toast({ title: "Funding started", description: "Your balance updates once the transfer settles." });
     } catch (e) {
+      if (isTransferPostHeld(e)) {
+        fundIdempotencyRef.current = null;
+        toast({ title: "Dark funding intent recorded", description: FIRST_TEST_HELD_MESSAGE });
+        return;
+      }
       toast({ title: "Could not fund balance", description: (e as Error).message, variant: "destructive" });
+    }
+  }
+
+  async function handleDisburse() {
+    try {
+      setDisbursePending(true);
+      await guardFinancial(FIRST_TEST_DISBURSE_TOTP, {
+        description: "Enter the current 6-digit code from your authenticator app to authorize WALLET→RECIPIENT.",
+      });
+      disburseIdempotencyRef.current = nextFirstTestIdempotencyKey(disburseIdempotencyRef.current);
+      await disburseWalletFirstTest({
+        tenantId,
+        idempotencyKey: disburseIdempotencyRef.current,
+      });
+      disburseIdempotencyRef.current = null;
+      toast({
+        title: "Wallet send submitted",
+        description: "Server-bound $0.01 WALLET→RECIPIENT. Moov POST stays held until Test A is armed.",
+      });
+    } catch (e) {
+      if (isTransferPostHeld(e)) {
+        disburseIdempotencyRef.current = null;
+        toast({ title: "Dark wallet send intent recorded", description: FIRST_TEST_HELD_MESSAGE });
+        return;
+      }
+      toast({ title: "Could not send from wallet", description: (e as Error).message, variant: "destructive" });
+    } finally {
+      setDisbursePending(false);
     }
   }
 
@@ -70,7 +127,7 @@ export function WalletPanel() {
             Organization balance
           </CardTitle>
           <CardDescription>
-            Pre-fund your balance and pay every party out of it — no bank pull per payout.
+            First-test Moov send is locked at {FIRST_TEST_TRANSFER_LABEL}. Server binds Freedom bank, wallet, and recipient.
           </CardDescription>
         </div>
         <Button variant="outline" size="sm" onClick={() => refetch()}>
@@ -113,34 +170,47 @@ export function WalletPanel() {
                 : "border-muted-foreground/30 text-muted-foreground"
             }
           >
-            {wallet?.status === "active" 
-              ? "Active" 
-              : wallet?.status === "sync_failed" 
-              ? "Pending Sync" 
+            {wallet?.status === "active"
+              ? "Active"
+              : wallet?.status === "sync_failed"
+              ? "Pending Sync"
               : wallet?.status ?? "Not set up"}
           </Badge>
         </div>
 
         <Separator />
 
+        <p className="text-xs text-muted-foreground">{FIRST_TEST_FUND_COPY}</p>
         <div className="flex flex-wrap items-center gap-2">
           <Input
             type="number"
             inputMode="decimal"
-            min="0"
-            step="0.01"
-            placeholder="Amount to add"
+            min={FIRST_TEST_TRANSFER_DOLLARS}
+            max={FIRST_TEST_TRANSFER_DOLLARS}
+            step={FIRST_TEST_TRANSFER_DOLLARS}
+            placeholder={FIRST_TEST_TRANSFER_DOLLARS}
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             className="w-44"
             disabled={setupRequired}
+            aria-label="First-test fund amount"
           />
-          <Button onClick={handleFund} disabled={fund.isPending || setupRequired}>
+          <Button onClick={handleFund} disabled={fund.isPending || setupRequired || disbursePending}>
             {fund.isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
-
-            Add funds from bank
+            Add {FIRST_TEST_TRANSFER_LABEL} from bank
           </Button>
         </div>
+
+        <p className="text-xs text-muted-foreground">{FIRST_TEST_DISBURSE_COPY}</p>
+        <Button
+          variant="outline"
+          onClick={handleDisburse}
+          disabled={fund.isPending || setupRequired || disbursePending}
+        >
+          {disbursePending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+          <Send className="mr-2 h-3.5 w-3.5" />
+          Send {FIRST_TEST_TRANSFER_LABEL} from wallet
+        </Button>
 
         {ledger.length > 0 && (
           <div className="space-y-1">

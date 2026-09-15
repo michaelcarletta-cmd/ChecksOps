@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/contexts/TenantContext";
+import { fundWallet } from "@/lib/payments/wallets";
+import { assertFirstTestAmountCents, nextFirstTestIdempotencyKey } from "@/lib/payments/firstTestMoney";
 
 /**
  * Automatic wallet funding: settings, recent funding transfers, and the
@@ -140,10 +142,12 @@ export function useAutoFunding() {
   const fundManually = useMutation({
     mutationFn: async (amountCents: number) => {
       if (!tenantId) throw new Error("No organization selected.");
-      return invoke("initiate-wallet-funding", {
-        tenant_id: tenantId,
-        manual: true,
-        amount_cents: amountCents,
+      assertFirstTestAmountCents(amountCents);
+      return fundWallet({
+        tenantId,
+        amountCents,
+        description: "Balance funding",
+        idempotencyKey: nextFirstTestIdempotencyKey(),
       });
     },
     onSuccess: () => {
@@ -184,20 +188,11 @@ export function usePaymentFunding(paymentId: string | null) {
 
 /** Starts the bank pull for an approved payment and holds it until funded. */
 export function useInitiatePaymentFunding() {
-  const { tenant } = useTenant();
-  const qc = useQueryClient();
-
   return useMutation({
-    mutationFn: async (paymentId: string) => {
-      if (!tenant?.id) throw new Error("No organization selected.");
-      return invoke("initiate-wallet-funding", {
-        tenant_id: tenant.id,
-        payment_id: paymentId,
-      });
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["wallet-funding-requests", tenant?.id] });
-      qc.invalidateQueries({ queryKey: ["payment-funding"] });
+    mutationFn: async (_paymentId: string) => {
+      throw new Error(
+        "initiate-wallet-funding is refused. Fund the wallet with wallet.fund, then send separately with wallet.disburse.",
+      );
     },
   });
 }

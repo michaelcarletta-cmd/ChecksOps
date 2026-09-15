@@ -41,13 +41,19 @@ export function useWallet(walletType: WalletType = "operating") {
   });
 
   const fund = useMutation({
-    mutationFn: (input: { amountCents: number; description?: string; subLedgerId?: string | null }) =>
+    mutationFn: (input: {
+      amountCents: number;
+      description?: string;
+      subLedgerId?: string | null;
+      idempotencyKey?: string;
+    }) =>
       fundWallet({
         tenantId: tenantId!,
         amountCents: input.amountCents,
         walletType,
         description: input.description,
         subLedgerId: input.subLedgerId ?? null,
+        idempotencyKey: input.idempotencyKey,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: key });

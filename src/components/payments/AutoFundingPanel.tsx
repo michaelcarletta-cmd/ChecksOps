@@ -15,11 +15,21 @@ import {
 import { AlertTriangle, Loader2, ShieldCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useWallet } from "@/hooks/useWallet";
+import { useFinancialGuard } from "@/hooks/useFinancialGuard";
 import {
   AUTHORIZATION_VERSION,
   useAutoFunding,
   type FundingStrategy,
 } from "@/hooks/useAutoFunding";
+import {
+  FIRST_TEST_CAP_MESSAGE,
+  FIRST_TEST_FUND_COPY,
+  FIRST_TEST_FUND_TOTP,
+  FIRST_TEST_TRANSFER_CENTS,
+  FIRST_TEST_TRANSFER_DOLLARS,
+  FIRST_TEST_TRANSFER_LABEL,
+  parseFirstTestAmountCents,
+} from "@/lib/payments/firstTestMoney";
 
 const money = (cents: number) =>
   (Number(cents || 0) / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -55,9 +65,10 @@ const FUNDING_STATUS_LABEL: Record<string, string> = {
 
 /** Automatic funding controls: on/off, bank, strategy, limits and history. */
 export function AutoFundingPanel({ canEdit = true }: { canEdit?: boolean }) {
-  const { settings, requests, banks, saveSettings, fundManually, cancelFunding } = useAutoFunding();
+  const { settings, requests, banks, saveSettings, fundManually, cancelFunding, tenantId } = useAutoFunding();
   const { wallet } = useWallet("operating");
   const { toast } = useToast();
+  const guardFinancial = useFinancialGuard(tenantId);
 
   const s = settings.data;
   const [strategy, setStrategy] = useState<FundingStrategy>("payment_shortage");
@@ -65,7 +76,7 @@ export function AutoFundingPanel({ canEdit = true }: { canEdit?: boolean }) {
   const [target, setTarget] = useState("0.00");
   const [maxSingle, setMaxSingle] = useState("25000.00");
   const [maxDaily, setMaxDaily] = useState("50000.00");
-  const [manualAmount, setManualAmount] = useState("");
+  const [manualAmount, setManualAmount] = useState(FIRST_TEST_TRANSFER_DOLLARS);
 
   useEffect(() => {
     if (!s) return;
@@ -112,14 +123,17 @@ export function AutoFundingPanel({ canEdit = true }: { canEdit?: boolean }) {
   }
 
   async function handleManualFund() {
-    const cents = toCents(manualAmount);
-    if (cents <= 0) {
-      toast({ title: "Enter an amount greater than zero.", variant: "destructive" });
+    const cents = parseFirstTestAmountCents(manualAmount);
+    if (cents !== FIRST_TEST_TRANSFER_CENTS) {
+      toast({ title: FIRST_TEST_CAP_MESSAGE, variant: "destructive" });
       return;
     }
     try {
+      await guardFinancial(FIRST_TEST_FUND_TOTP, {
+        description: "Enter the current 6-digit code from your authenticator app to authorize BANK→WALLET funding.",
+      });
       await fundManually.mutateAsync(cents);
-      setManualAmount("");
+      setManualAmount(FIRST_TEST_TRANSFER_DOLLARS);
       toast({ title: "Transfer started", description: "Funds post once the bank transfer settles." });
     } catch (e) {
       toast({ title: "Could not start transfer", description: (e as Error).message, variant: "destructive" });
@@ -276,18 +290,24 @@ export function AutoFundingPanel({ canEdit = true }: { canEdit?: boolean }) {
       {/* Manual funding */}
       <div className="space-y-2">
         <Label>One-time transfer from your bank</Label>
+        <p className="text-xs text-muted-foreground">{FIRST_TEST_FUND_COPY}</p>
         <div className="flex flex-wrap items-center gap-2">
           <Input
             className="w-44"
+            type="number"
             inputMode="decimal"
-            placeholder="Amount"
+            min={FIRST_TEST_TRANSFER_DOLLARS}
+            max={FIRST_TEST_TRANSFER_DOLLARS}
+            step={FIRST_TEST_TRANSFER_DOLLARS}
+            placeholder={FIRST_TEST_TRANSFER_DOLLARS}
             value={manualAmount}
             onChange={(e) => setManualAmount(e.target.value)}
             disabled={!canEdit || !authorized}
+            aria-label="First-test fund amount"
           />
           <Button onClick={handleManualFund} disabled={!canEdit || !authorized || fundManually.isPending}>
             {fundManually.isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
-            Transfer to wallet
+            Transfer {FIRST_TEST_TRANSFER_LABEL} to wallet
           </Button>
         </div>
       </div>

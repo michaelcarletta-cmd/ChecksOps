@@ -1,4 +1,13 @@
 import { supabase } from "@/integrations/supabase/client";
+import {
+  FIRST_TEST_DISBURSE_FN,
+  FIRST_TEST_FUND_FN,
+  FIRST_TEST_TRANSFER_CENTS,
+  assertFirstTestAmountCents,
+  firstTestDisburseBody,
+  firstTestFundBody,
+  nextFirstTestIdempotencyKey,
+} from "./firstTestMoney";
 
 /**
  * Provider-agnostic access to organization balances (wallets).
@@ -90,15 +99,25 @@ export async function fundWallet(input: {
   description?: string;
   idempotencyKey?: string;
 }): Promise<{ transfer: Record<string, unknown>; wallet: Wallet; duplicate: boolean }> {
-  return invoke("moov-wallet-fund", {
-    tenant_id: input.tenantId,
-    amount_cents: input.amountCents,
-    wallet_type: input.walletType ?? "operating",
-    sub_ledger_id: input.subLedgerId ?? null,
-    description: input.description ?? null,
-    idempotency_key: input.idempotencyKey,
-  });
+  assertFirstTestAmountCents(input.amountCents);
+  return invoke(FIRST_TEST_FUND_FN, firstTestFundBody({
+    tenantId: input.tenantId,
+    idempotencyKey: nextFirstTestIdempotencyKey(input.idempotencyKey),
+  }));
 }
+
+/** Sends $0.01 from the Freedom wallet to the server-bound first-test recipient. */
+export async function disburseWalletFirstTest(input: {
+  tenantId?: string | null;
+  idempotencyKey?: string;
+}): Promise<{ transfer: Record<string, unknown>; duplicate: boolean; error?: string }> {
+  return invoke(FIRST_TEST_DISBURSE_FN, firstTestDisburseBody({
+    tenantId: input.tenantId ?? null,
+    idempotencyKey: nextFirstTestIdempotencyKey(input.idempotencyKey),
+  }));
+}
+
+export const FIRST_TEST_WALLET_AMOUNT_CENTS = FIRST_TEST_TRANSFER_CENTS;
 
 /** Reads the locally stored balance without calling the provider. */
 export async function readWallet(

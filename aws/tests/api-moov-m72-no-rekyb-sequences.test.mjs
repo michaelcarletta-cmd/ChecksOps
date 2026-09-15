@@ -1531,4 +1531,155 @@ test('M7.4 legacy moov-transfer-create cannot originate production money', async
   assert.equal(result.error, 'production_execution_blocked');
   assert.equal(store.transferPosts || 0, 0);
 });
+
+const darkFlags = { ...productionFlags, AWS_MOOV_TRANSFER_POST_ENABLED: undefined };
+
+test('M7.5 unauthenticated wallet.fund / wallet.disburse are rejected', async () => {
+  const store = createStore();
+  for (const name of ['moov-wallet-fund', 'moov-disburse']) {
+    const result = await withEnv(darkFlags, () => handleProviderRequest(
+      jwtEvent(`/functions/v1/${name}`, 'POST', { amount_cents: 1 }, { auth: null }),
+      `/functions/v1/${name}`,
+      'POST',
+      fundDeps(store),
+    ));
+    assert.equal(result.error, 'missing_cognito_token', name);
+    assert.equal(store.transferPosts || 0, 0);
+  }
+});
+
+test('M7.5 wrong tenant, unauthorized role, and wrong TOTP action are rejected', async () => {
+  resetProductionMoovTokenCache();
+  const store = createStore();
+  const wrongTenant = await withEnv(darkFlags, () => handleProductionMoovWalletFund({
+    client: identityClient(store),
+    mapping,
+    claims: { sub: COGNITO_SUB },
+    body: { tenant_id: C1C_TENANT, amount_cents: 1 },
+    spoof: {},
+    fetchImpl: mockMoovFetch(store),
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
+  }));
+  assert.equal(wrongTenant.error, 'first_test_party_mismatch');
+
+  store.role = 'staff';
+  store.memberships = [{ tenant_id: FREEDOM_TENANT, role: 'staff', tenant_name: 'Freedom', tenant_slug: 'freedom' }];
+  grantStepUp(store);
+  const staff = await withEnv(darkFlags, () => handleProductionMoovWalletFund({
+    client: identityClient(store),
+    mapping,
+    claims: { sub: COGNITO_SUB },
+    body: { tenant_id: FREEDOM_TENANT, amount_cents: 1 },
+    spoof: {},
+    fetchImpl: mockMoovFetch(store),
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
+  }));
+  assert.equal(staff.error, 'financial_role_required');
+
+  store.role = 'admin';
+  store.memberships = [{ tenant_id: FREEDOM_TENANT, role: 'admin', tenant_name: 'Freedom', tenant_slug: 'freedom' }];
+  store.stepups = [];
+  grantStepUp(store, { actionKey: 'deposit.submit' });
+  const wrongAction = await withEnv(darkFlags, () => handleProductionMoovWalletFund({
+    client: identityClient(store),
+    mapping,
+    claims: { sub: COGNITO_SUB },
+    body: { tenant_id: FREEDOM_TENANT, amount_cents: 1 },
+    spoof: {},
+    fetchImpl: mockMoovFetch(store),
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
+  }));
+  assert.equal(wrongAction.error, 'financial_totp_required');
+  assert.equal(store.transferPosts || 0, 0);
+});
+
+test('M7.5 missing TOTP, stale TOTP, wrong source, and wrong recipient are rejected', async () => {
+  resetProductionMoovTokenCache();
+  const store = createStore();
+  const missing = await withEnv(darkFlags, () => handleProductionMoovWalletFund({
+    client: identityClient(store),
+    mapping,
+    claims: { sub: COGNITO_SUB },
+    body: { tenant_id: FREEDOM_TENANT, amount_cents: 1 },
+    spoof: {},
+    fetchImpl: mockMoovFetch(store),
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
+  }));
+  assert.equal(missing.error, 'financial_totp_required');
+
+  grantStepUp(store);
+  store.stepups[0].created_at = new Date(Date.now() - (31 * 60 * 1000)).toISOString();
+  const stale = await withEnv(darkFlags, () => handleProductionMoovWalletFund({
+    client: identityClient(store),
+    mapping,
+    claims: { sub: COGNITO_SUB },
+    body: { tenant_id: FREEDOM_TENANT, amount_cents: 1 },
+    spoof: {},
+    fetchImpl: mockMoovFetch(store),
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
+  }));
+  assert.equal(stale.error, 'financial_totp_required');
+
+  store.stepups = [];
+  grantStepUp(store);
+  const wrongBank = await withEnv(darkFlags, () => handleProductionMoovWalletFund({
+    client: identityClient(store),
+    mapping,
+    claims: { sub: COGNITO_SUB },
+    body: {
+      tenant_id: FREEDOM_TENANT,
+      amount_cents: 1,
+      bank_id: KNOWN_APPROVED_MOOV.recipient.bankId,
+    },
+    spoof: {},
+    fetchImpl: mockMoovFetch(store),
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
+  }));
+  assert.equal(wrongBank.error, 'first_test_party_mismatch');
+
+  const wrongRecipient = await withEnv(darkFlags, () => handleProductionMoovWalletDisburse({
+    client: identityClient(store),
+    mapping,
+    claims: { sub: COGNITO_SUB },
+    body: {
+      tenant_id: FREEDOM_TENANT,
+      amount_cents: 1,
+      external_recipient_id: UNVERIFIED_RECIPIENT_ID,
+    },
+    spoof: {},
+    fetchImpl: mockMoovFetch(store),
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
+  }));
+  assert.equal(wrongRecipient.error, 'first_test_party_mismatch');
+  assert.equal(store.transferPosts || 0, 0);
+});
+
+test('M7.5 double click records one dark intent and never POSTs twice', async () => {
+  resetProductionMoovTokenCache();
+  const store = createStore();
+  grantStepUp(store);
+  const body = { tenant_id: FREEDOM_TENANT, amount_cents: 1, idempotency_key: 'm75-double-click' };
+  const first = await withEnv(darkFlags, () => handleProductionMoovWalletFund({
+    client: identityClient(store),
+    mapping,
+    claims: { sub: COGNITO_SUB },
+    body,
+    spoof: {},
+    fetchImpl: mockMoovFetch(store, { sweepStatus: 'disabled' }),
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
+  }));
+  const second = await withEnv(darkFlags, () => handleProductionMoovWalletFund({
+    client: identityClient(store),
+    mapping,
+    claims: { sub: COGNITO_SUB },
+    body,
+    spoof: {},
+    fetchImpl: mockMoovFetch(store, { sweepStatus: 'disabled' }),
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
+  }));
+  assert.equal(first.error, 'transfer_post_held');
+  assert.equal(second.duplicate, true);
+  assert.equal(store.transfers.length, 1);
+  assert.equal(store.transferPosts || 0, 0);
+});
 });

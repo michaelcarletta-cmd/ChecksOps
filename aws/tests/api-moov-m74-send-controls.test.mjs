@@ -90,10 +90,12 @@ describe('M7.4 prepare production Moov send controls', { concurrency: 1 }, () =>
     const wallets = read('src/lib/payments/wallets.ts');
     const panel = read('src/components/payments/WalletPanel.tsx');
     const consoleSource = read('src/components/disbursement/DisbursementConsole.tsx');
-    assert.match(provider, /"moov-disburse"/);
+    assert.match(provider, /FIRST_TEST_DISBURSE_FN/);
     assert.doesNotMatch(provider, /moov-transfer-create/);
-    assert.match(wallets, /moov-wallet-fund/);
-    assert.match(panel, /wallet\.fund/);
+    assert.match(wallets, /FIRST_TEST_FUND_FN/);
+    assert.match(wallets, /FIRST_TEST_DISBURSE_FN/);
+    assert.match(panel, /FIRST_TEST_FUND_TOTP/);
+    assert.match(panel, /FIRST_TEST_DISBURSE_TOTP/);
     assert.doesNotMatch(consoleSource, /invoke\(\s*"initiate-wallet-funding"/);
     assert.match(consoleSource, /wallet\.disburse/);
   });
