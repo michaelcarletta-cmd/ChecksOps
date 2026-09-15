@@ -60,7 +60,7 @@ const lookupCheck = async (client, checkId) => {
   const invalid = requireUuid('check_id', checkId);
   if (invalid) return invalid;
   const rows = (await client.query(
-    'SELECT id, tenant_id FROM public.check_intake_items WHERE id = $1::uuid',
+    'SELECT id, tenant_id, front_image_path, back_image_path, back_image_original_path, back_image_deposit_path FROM public.check_intake_items WHERE id = $1::uuid',
     [checkId],
   )).rows;
   if (!rows.length) return { error: 'rls_denied', message: 'check not found or not writable' };
@@ -82,6 +82,13 @@ const lookupPayee = async (client, payeeId) => {
 };
 
 const IMAGE_PATH_COLUMNS = new Set(['front_image_path', 'back_image_path', 'back_image_original_path']);
+const OFFICIAL_DEPOSIT_REAR_RE = /(?:^|\/)endorsed_deposit_[^/]+\.checkalt\.jpe?g$/i;
+
+const folderOf = (path) => {
+  const rel = String(path || '').split('?')[0].replace(/^\/+/, '').trim();
+  if (!rel || !rel.includes('/')) return '';
+  return rel.replace(/\/[^/]+$/, '');
+};
 
 const asImagePath = (checkId, value) => {
   if (value === undefined) return { skip: true };
@@ -93,6 +100,30 @@ const asImagePath = (checkId, value) => {
   }
   if (rel.length > 512) return { error: 'invalid_field', field: 'file_path' };
   return { value: rel };
+};
+
+const asOfficialDepositPath = (check, value) => {
+  if (value === undefined) return { skip: true };
+  if (value === null || value === '') return { value: null };
+  const rel = normalizePath(value, 'claim-files');
+  if (!rel || !OFFICIAL_DEPOSIT_REAR_RE.test(rel)) {
+    return {
+      error: 'invalid_field',
+      field: 'back_image_deposit_path',
+      message: 'Deposit rear must be an official endorsed_deposit_*.checkalt.jpg path',
+    };
+  }
+  if (rel.length > 512) return { error: 'invalid_field', field: 'back_image_deposit_path' };
+  if (isCheckScopedPathFor(rel, check.id)) return { value: rel };
+  const depositFolder = folderOf(rel);
+  const existingFolders = [
+    check.front_image_path,
+    check.back_image_path,
+    check.back_image_original_path,
+    check.back_image_deposit_path,
+  ].map(folderOf).filter(Boolean);
+  if (depositFolder && existingFolders.includes(depositFolder)) return { value: rel };
+  return { error: 'rls_denied', message: 'deposit image path is not scoped to this check' };
 };
 
 const lookupEndorsement = async (client, endorsementId) => {
@@ -190,6 +221,20 @@ const intakeCoerce = (values) => {
     const text = asText(values.mortgage_tracking_number, 80);
     if (text.error) return text;
     out.mortgage_tracking_number = text.value;
+  }
+  if ('back_image_deposit_path' in values) out.back_image_deposit_path = values.back_image_deposit_path;
+  if ('endorsement_render_status' in values) {
+    const text = asText(values.endorsement_render_status, 40);
+    if (text.error) return text;
+    out.endorsement_render_status = text.value;
+  }
+  if ('endorsement_render_meta' in values) {
+    const meta = values.endorsement_render_meta;
+    out.endorsement_render_meta = meta == null ? null : JSON.stringify(meta);
+  }
+  if ('endorsement_override' in values) {
+    const override = values.endorsement_override;
+    out.endorsement_override = override == null ? null : JSON.stringify(override);
   }
   return { values: out };
 };
@@ -289,6 +334,12 @@ const executeIntakeUpdate = async ({ client, values, filters }) => {
       else nextValues[column] = path.value;
     }
   }
+  if ('back_image_deposit_path' in nextValues) {
+    const path = asOfficialDepositPath(looked.check, nextValues.back_image_deposit_path);
+    if (path.error) return path;
+    if (path.skip) delete nextValues.back_image_deposit_path;
+    else nextValues.back_image_deposit_path = path.value;
+  }
   if (!Object.keys(nextValues).length) {
     return { error: 'missing_required_field', field: 'values', table: 'check_intake_items', op: 'update' };
   }
@@ -298,6 +349,8 @@ const executeIntakeUpdate = async ({ client, values, filters }) => {
     issue_date: 'date',
     mortgage_sent_at: 'timestamptz',
     mortgage_received_at: 'timestamptz',
+    endorsement_render_meta: 'jsonb',
+    endorsement_override: 'jsonb',
   });
   built.params.push(checkId);
   const rows = (await client.query(

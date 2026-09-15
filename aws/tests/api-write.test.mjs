@@ -7,6 +7,7 @@ import {
   CLIENT_IDENTITY_KEYS,
   denyTableReason,
   pickAllowlistedValues,
+  sanitizeEndorsementDepositValues,
   WRITE_ALLOWLIST,
 } from '../functions/api/write-allowlist.mjs';
 
@@ -58,6 +59,16 @@ const mockClient = ({ rows = [], mapping = mappingFor(), throwOn = null } = {}) 
       if (sql.startsWith('SELECT set_config')) return { rows: [{ set_config: params[1] }] };
       if (sql === LOOKUP_MAPPING_SQL) {
         return { rows: params[0] === mapping.cognito_sub ? [mapping] : [] };
+      }
+      if (sql.includes('front_image_path, back_image_path, back_image_original_path, back_image_deposit_path FROM public.check_intake_items')) {
+        return { rows: [{
+          id: params[0],
+          tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a',
+          front_image_path: null,
+          back_image_path: null,
+          back_image_original_path: null,
+          back_image_deposit_path: null,
+        }] };
       }
       if (/SELECT id, tenant_id FROM public.check_intake_items/.test(sql)) {
         return { rows: [{ id: params[0], tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a' }] };
@@ -379,6 +390,52 @@ test('Tranche 2 denies financial intake columns, status, insert, and endorsement
   assert.equal(endorseStatus.statusCode, 403);
   assert.equal(endorseStatus.error, 'column_not_allowlisted');
   assert.ok(endorseStatus.columns.includes('status'));
+});
+
+test('Endorsement Adjuster may persist official deposit rear path and strips client fingerprints', async () => {
+  const official = `checks/${CHECK_ID}/endorsed_deposit_abc.checkalt.jpg`;
+  const picked = pickAllowlistedValues('check_intake_items', {
+    back_image_deposit_path: official,
+    endorsement_render_status: 'completed',
+    endorsement_render_meta: {
+      renderer_version: 'canvas-v2',
+      checkalt_rear_fingerprint: 'forged',
+    },
+    endorsement_override: { xPct: 0.4, yPct: 0.5, scale: 1 },
+  });
+  assert.equal(picked.error, undefined);
+  const sanitized = sanitizeEndorsementDepositValues(picked.values);
+  assert.equal(sanitized.error, undefined);
+  assert.equal(sanitized.values.back_image_deposit_path, official);
+  assert.equal(sanitized.values.endorsement_render_meta.checkalt_rear_fingerprint, undefined);
+  assert.equal(sanitized.values.endorsement_render_meta.renderer_version, 'canvas-v2');
+
+  const legacy = sanitizeEndorsementDepositValues({
+    back_image_deposit_path: `checks/${CHECK_ID}/back.deposit.jpg`,
+  });
+  assert.equal(legacy.error, 'invalid_field');
+
+  const client = mockClient({
+    rows: [{ id: CHECK_ID, back_image_deposit_path: official, endorsement_render_status: 'completed' }],
+  });
+  const result = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_intake_items',
+    op: 'update',
+    values: {
+      back_image_deposit_path: official,
+      endorsement_render_status: 'completed',
+      endorsement_render_meta: {
+        renderer_version: 'canvas-v2',
+        checkalt_rear_fingerprint: 'forged',
+      },
+    },
+    filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
+  }), depsFor(client));
+  assert.equal(result.ok, true);
+  const update = client.queries.find((q) => String(q.sql).includes('UPDATE public.check_intake_items'));
+  assert.ok(update);
+  assert.equal(String(update.sql).includes('checkalt_rear_fingerprint'), false);
+  assert.equal(JSON.stringify(update.params).includes('forged'), false);
 });
 
 test('Tranche 2 payee insert derives tenant from parent check and ignores client tenant', async () => {

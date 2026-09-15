@@ -3182,7 +3182,7 @@ function CheckDetailPanel({
         const { data } = await supabase.storage
           .from("claim-files")
           .createSignedUrl(explicitOriginal, 3600);
-        if (data?.signedUrl) return { url: `${data.signedUrl}&v=${version}`, path: explicitOriginal };
+        if (data?.signedUrl) return { url: `${data.signedUrl}#v=${version}`, path: explicitOriginal };
       }
 
 
@@ -3232,9 +3232,9 @@ function CheckDetailPanel({
       
       const version2 = new Date(check?.updated_at || Date.now()).getTime();
       return data?.signedUrl
-        ? { url: `${data.signedUrl}&v=${version2}`, path: sourcePath }
+        ? { url: `${data.signedUrl}#v=${version2}`, path: sourcePath }
         : backImageUrl
-          ? { url: `${backImageUrl}&v=${version2}`, path: currentPath }
+          ? { url: `${backImageUrl}#v=${version2}`, path: currentPath }
           : null;
     },
   });

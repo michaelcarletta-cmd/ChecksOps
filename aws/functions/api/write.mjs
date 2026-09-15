@@ -8,6 +8,7 @@ import {
   checkWorkflowWritesEnabled,
   denyTableReason,
   pickAllowlistedValues,
+  sanitizeEndorsementDepositValues,
   writesEnabled,
 } from './write-allowlist.mjs';
 import { executeCheckWorkflowWrite } from './write-check-workflow.mjs';
@@ -225,6 +226,11 @@ export const executeAllowlistedWrite = async ({
   if (raw.error) return raw;
   const picked = pickAllowlistedValues(table, raw.row);
   if (picked.error) return picked;
+  if (table === 'check_intake_items') {
+    const sanitized = sanitizeEndorsementDepositValues(picked.values);
+    if (sanitized.error) return sanitized;
+    picked.values = sanitized.values;
+  }
 
   const required = spec.requiredForWrite[op] || [];
   for (const col of required) {

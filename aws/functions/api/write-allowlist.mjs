@@ -24,6 +24,80 @@ export const T5_INTAKE_COLUMNS = new Set([
   'mortgage_received_at',
 ]);
 
+/** Official Endorsement Adjuster persist fields. Not money/status. */
+export const ENDORSEMENT_DEPOSIT_INTAKE_COLUMNS = new Set([
+  'back_image_deposit_path',
+  'endorsement_render_status',
+  'endorsement_render_meta',
+  'endorsement_override',
+]);
+
+const ENDORSEMENT_RENDER_STATUSES = new Set([
+  'idle',
+  'saving_position',
+  'position_saved',
+  'rendering',
+  'completed',
+  'failed',
+]);
+
+const OFFICIAL_DEPOSIT_REAR_RE = /(?:^|\/)endorsed_deposit_[^/]+\.checkalt\.jpe?g$/i;
+const LEGACY_DEPOSIT_RE = /\.deposit\.jpe?g$/i;
+const CLIENT_FINGERPRINT_KEYS = new Set([
+  'checkalt_rear_fingerprint',
+  'checkaltRearFingerprint',
+]);
+
+export const sanitizeEndorsementDepositValues = (values = {}) => {
+  const out = { ...values };
+  if (Object.prototype.hasOwnProperty.call(out, 'back_image_deposit_path')) {
+    const path = out.back_image_deposit_path;
+    if (path != null && path !== '') {
+      const rel = String(path).split('?')[0].replace(/^\/+/, '').trim();
+      if (LEGACY_DEPOSIT_RE.test(rel) || !OFFICIAL_DEPOSIT_REAR_RE.test(rel)) {
+        return {
+          error: 'invalid_field',
+          field: 'back_image_deposit_path',
+          message: 'Deposit rear must be an official endorsed_deposit_*.checkalt.jpg path',
+        };
+      }
+      out.back_image_deposit_path = rel;
+    } else {
+      out.back_image_deposit_path = null;
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(out, 'endorsement_render_status')) {
+    const status = String(out.endorsement_render_status || '').trim();
+    if (!ENDORSEMENT_RENDER_STATUSES.has(status)) {
+      return {
+        error: 'invalid_field',
+        field: 'endorsement_render_status',
+        message: 'Unsupported endorsement render status',
+      };
+    }
+    out.endorsement_render_status = status;
+  }
+  if (Object.prototype.hasOwnProperty.call(out, 'endorsement_render_meta')) {
+    const meta = out.endorsement_render_meta;
+    if (meta == null) {
+      out.endorsement_render_meta = null;
+    } else if (typeof meta !== 'object' || Array.isArray(meta)) {
+      return { error: 'invalid_field', field: 'endorsement_render_meta' };
+    } else {
+      const cleaned = { ...meta };
+      for (const key of CLIENT_FINGERPRINT_KEYS) delete cleaned[key];
+      out.endorsement_render_meta = cleaned;
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(out, 'endorsement_override')) {
+    const override = out.endorsement_override;
+    if (override != null && (typeof override !== 'object' || Array.isArray(override))) {
+      return { error: 'invalid_field', field: 'endorsement_override' };
+    }
+  }
+  return { values: out };
+};
+
 export const WRITE_OPS = new Set(['insert', 'update', 'upsert', 'delete', 'get_or_create']);
 
 const IGNORED = new Set([
@@ -74,10 +148,6 @@ export const INTAKE_PROHIBITED_COLUMNS = new Set([
   'deposited_by_tenant_id',
   'mortgage_final_released_at',
   'endorsement_packet_path',
-  'back_image_deposit_path',
-  'endorsement_render_status',
-  'endorsement_render_meta',
-  'endorsement_override',
   'partner_status',
   'partner_status_label',
   'check_source',
@@ -119,7 +189,7 @@ export const WRITE_ALLOWLIST = {
   check_intake_items: {
     tranche: 2,
     ops: new Set(['update']),
-    columns: new Set([...INTAKE_SAFE_COLUMNS, ...T5_INTAKE_COLUMNS]),
+    columns: new Set([...INTAKE_SAFE_COLUMNS, ...T5_INTAKE_COLUMNS, ...ENDORSEMENT_DEPOSIT_INTAKE_COLUMNS]),
     t5Columns: T5_INTAKE_COLUMNS,
     identityColumn: null,
     requiredForWrite: { update: [] },
@@ -129,7 +199,7 @@ export const WRITE_ALLOWLIST = {
     frontend: {
       file: 'CheckCommandCenter EditableField / ReviewDecisionPanel persistMeta / CheckAdminEditDialog / CheckMortgageMonitoring',
       op: 'update',
-      reason: 'T2 descriptive + image paths. T5 adds mortgage monitoring timestamps (not final release, not status/amount).',
+      reason: 'T2 descriptive + image paths. T5 adds mortgage monitoring timestamps. Endorsement Adjuster may persist official endorsed_deposit_*.checkalt.jpg + render status/meta/override (not status/amount/fingerprint).',
     },
   },
   check_payees: {
