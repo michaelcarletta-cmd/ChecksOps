@@ -128,37 +128,9 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
         .single();
       if (runErr) throw runErr;
 
-      // Primary rail: Moov. Falls back to the legacy rail only when the
-      // recipient/payer still needs payment setup.
       if (moovEnabled) {
-        const { data: moovData, error: moovErr } = await supabase.functions.invoke("moov-disburse", {
-          body: { batch_id: batch.id, source_kind: "bank" },
-        });
-
-        if (!moovErr && (moovData as any)?.success) {
-          await supabase.from("payroll_runs").update({ status: "submitted" }).eq("id", runRow.id);
-          return runRow.id;
-        }
-
-        let reason: any = (moovData as any) ?? null;
-        if (moovErr) {
-          try {
-            reason = await (moovErr as any).context?.json?.();
-          } catch {
-            reason = null;
-          }
-        }
-        const code = reason?.error ?? "";
-        const recoverable = ["recipient_setup_required", "payer_setup_required", "insufficient_balance"].includes(code);
-
-        if (!recoverable) {
-          const msg = reason?.message ?? reason?.error ?? moovErr?.message ?? "Payment failed";
-          await supabase.from("payroll_runs").update({ status: "failed", error: msg }).eq("id", runRow.id);
-          throw new Error(msg);
-        }
-        
-        // Fallback rail logic removed — Actum is disabled globally.
-        const msg = reason?.message ?? "Recipient not ready for Moov payroll. Please connect their bank account via Moov first.";
+        const msg =
+          "First-test Moov send is the $0.01 WALLET→RECIPIENT action on Payment Settings. Payroll does not originate moov-disburse during this controlled activation.";
         await supabase.from("payroll_runs").update({ status: "failed", error: msg }).eq("id", runRow.id);
         throw new Error(msg);
       }
