@@ -12,6 +12,11 @@ import { sendViaSesOrSink } from './email.mjs';
 import { defaultFromAddress } from './email-policy.mjs';
 import { renderTransactionalTemplate } from './email-templates.mjs';
 import { resolveEmailBranding } from './email-branding.mjs';
+import {
+  afterGenuineEndorsementSigned,
+  invalidateOfficialRearImage,
+  requireDrawnSignature,
+} from './endorsement-composite.mjs';
 
 const { Client } = pg;
 
@@ -344,11 +349,10 @@ export const runSubmitEndorsement = async (client, event, body, spoof) => {
   if (endorsement.status === 'signed') {
     return { ok: true, statusCode: 200, success: true, message: 'Already endorsed', ...denyDepositAdvance(), spoofFieldsIgnored: spoof };
   }
+  const required = requireDrawnSignature(body.signatureData);
+  if (!required.ok) return { ...required, spoofFieldsIgnored: spoof };
   const signatureData = body.signatureData;
-  let signatureImageUrl = null;
-  if (typeof signatureData === 'string' && (signatureData.startsWith('data:image/') || signatureData.startsWith('typed:'))) {
-    signatureImageUrl = signatureData;
-  }
+  const signatureImageUrl = signatureData;
   const newToken = rotateToken();
   const ip = clientIpFromEvent(event);
   const ua = userAgentFromEvent(event);
@@ -388,6 +392,9 @@ export const runSubmitEndorsement = async (client, event, body, spoof) => {
     user_agent: ua,
   });
   const completion = await completionWithoutAdvance(client, endorsement.check_id);
+  await afterGenuineEndorsementSigned(client, endorsement.check_id, {
+    skipComposite: !completion.allSigned,
+  });
   const next = (await safeQuery(
     client,
     `SELECT token, payee_name FROM public.check_endorsements
@@ -776,6 +783,9 @@ export const runAuthenticatedEndorsement = async ({
       user_agent: ua,
     });
     const completion = await completionWithoutAdvance(client, endorsement.check_id);
+    await afterGenuineEndorsementSigned(client, endorsement.check_id, {
+      skipComposite: !completion.allSigned,
+    });
     return { ok: true, statusCode: 200, success: true, ...completion, spoofFieldsIgnored: spoof };
   }
 
@@ -801,6 +811,7 @@ export const runAuthenticatedEndorsement = async ({
       actor_id: mapping.application_user_id,
     });
     const completion = await completionWithoutAdvance(client, endorsement.check_id);
+    await invalidateOfficialRearImage(client, endorsement.check_id);
     return { ok: true, statusCode: 200, success: true, ...completion, spoofFieldsIgnored: spoof };
   }
 
@@ -821,6 +832,7 @@ export const runAuthenticatedEndorsement = async ({
     actor_id: mapping.application_user_id,
   });
   const completion = await completionWithoutAdvance(client, endorsement.check_id);
+  await invalidateOfficialRearImage(client, endorsement.check_id);
   return { ok: true, statusCode: 200, success: true, ...completion, spoofFieldsIgnored: spoof };
 };
 

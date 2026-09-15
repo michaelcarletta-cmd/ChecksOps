@@ -274,28 +274,12 @@ export const handleGenerateEndorsementPacket = async (event) => withIdentity(eve
 export const handleCompositeEndorsementSignatures = async (event) => withIdentity(event, async ({
   client, body, spoof,
 }) => {
+  const { compositeEndorsementSignatures } = await import('./endorsement-composite.mjs');
   const checkId = body.checkId || body.check_id;
-  if (!checkId) return { ok: false, statusCode: 400, error: 'missing_check_id', spoofFieldsIgnored: spoof };
-  const row = (await client.query(
-    `SELECT id, tenant_id, back_image_path FROM public.check_intake_items WHERE id = $1::uuid LIMIT 1`,
-    [checkId],
-  )).rows[0];
-  if (!row) return { ok: false, statusCode: 404, error: 'check_not_found', spoofFieldsIgnored: spoof };
-  // Staging: mark composite complete without mutating money state; keep original back image.
-  await client.query(
-    `UPDATE public.check_intake_items
-     SET endorsement_render_status = 'composited_staging',
-         endorsement_render_meta = COALESCE(endorsement_render_meta, '{}'::jsonb) || $2::jsonb,
-         updated_at = now()
-     WHERE id = $1::uuid`,
-    [checkId, JSON.stringify({ engine: 'aws_staging_composite', at: new Date().toISOString(), override: Boolean(body.overrideData) })],
-  ).catch(() => {});
-  return {
-    ok: true,
-    statusCode: 200,
-    composited: true,
-    staging: true,
-    backImagePath: row.back_image_path,
-    spoofFieldsIgnored: spoof,
-  };
+  const result = await compositeEndorsementSignatures({
+    client,
+    checkId,
+    overrideData: body.overrideData || body.override || null,
+  });
+  return { ...result, spoofFieldsIgnored: spoof };
 }, { write: true, commit: true });
