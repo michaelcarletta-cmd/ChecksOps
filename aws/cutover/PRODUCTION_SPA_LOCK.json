@@ -1,0 +1,38 @@
+{
+  "locked": true,
+  "lockedAt": "2026-09-15T22:20:00.000Z",
+  "reason": "M7.5 money-test hold. Restore and keep the reviewed dark wallet.fund / wallet.disburse SPA until the authenticated 1-cent dark UI test completes. Do not overwrite with CheckAlt or other workstream builds.",
+  "hold": "m75_money_test",
+  "knownGood": {
+    "gitCommit": "32fd3256e572cd52df1842a7566914fb090cea74",
+    "reviewedSource": "cursor/moov-m75-connect-live-ui-b844",
+    "reviewedPhase": "M7.5A",
+    "spaBundle": "index-Cn8LRzLU.js",
+    "cognitoPoolId": "us-east-1_h00WorYMT",
+    "cognitoClientId": "3ja9fqaq2fjkv3i6up2varcqpe",
+    "apiTarget": "/prep",
+    "s3Bucket": "checksops-production-frontend-806168576068",
+    "cloudfrontDistributionId": "E1B0ZWWO5559U5",
+    "spaOriginId": "ProductionSpaS3",
+    "spaOriginDomain": "checksops-production-frontend-806168576068.s3.us-east-1.amazonaws.com",
+    "aliases": ["checksops.com", "www.checksops.com"]
+  },
+  "moneyUi": {
+    "fundFn": "moov-wallet-fund",
+    "disburseFn": "moov-disburse",
+    "fundTotp": "wallet.fund",
+    "disburseTotp": "wallet.disburse",
+    "forbiddenLiveFn": "moov-transfer-create"
+  },
+  "approvedDeployRole": "ChecksOpsProductionSpaDeploy",
+  "deniedWriteRoles": [
+    "ChecksOpsCursorCloudStaging",
+    "ChecksOpsCursorApiPerimeterSteps12Temp",
+    "checksops-staging-rehearsal-oneshot"
+  ],
+  "unlockEnv": "CHECKSOPS_PRODUCTION_SPA_UNLOCK",
+  "unlockValue": "M75_MONEY_TEST_HOLD_RELEASE",
+  "cutoverUnlockValueNoLongerHonored": "RELEASE_CUTOVER_LOCK",
+  "applyRefusedError": "production_spa_money_test_locked",
+  "s3HoldObject": "m75-money-test-hold.json"
+}
