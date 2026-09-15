@@ -22,13 +22,12 @@ import {
   type FundingStrategy,
 } from "@/hooks/useAutoFunding";
 import {
-  FIRST_TEST_CAP_MESSAGE,
   FIRST_TEST_FUND_COPY,
   FIRST_TEST_FUND_TOTP,
+  FIRST_TEST_HELD_MESSAGE,
   FIRST_TEST_TRANSFER_CENTS,
-  FIRST_TEST_TRANSFER_DOLLARS,
   FIRST_TEST_TRANSFER_LABEL,
-  parseFirstTestAmountCents,
+  isTransferPostHeld,
 } from "@/lib/payments/firstTestMoney";
 
 const money = (cents: number) =>
@@ -76,7 +75,6 @@ export function AutoFundingPanel({ canEdit = true }: { canEdit?: boolean }) {
   const [target, setTarget] = useState("0.00");
   const [maxSingle, setMaxSingle] = useState("25000.00");
   const [maxDaily, setMaxDaily] = useState("50000.00");
-  const [manualAmount, setManualAmount] = useState(FIRST_TEST_TRANSFER_DOLLARS);
 
   useEffect(() => {
     if (!s) return;
@@ -123,19 +121,17 @@ export function AutoFundingPanel({ canEdit = true }: { canEdit?: boolean }) {
   }
 
   async function handleManualFund() {
-    const cents = parseFirstTestAmountCents(manualAmount);
-    if (cents !== FIRST_TEST_TRANSFER_CENTS) {
-      toast({ title: FIRST_TEST_CAP_MESSAGE, variant: "destructive" });
-      return;
-    }
     try {
       await guardFinancial(FIRST_TEST_FUND_TOTP, {
         description: "Enter the current 6-digit code from your authenticator app to authorize BANK→WALLET funding.",
       });
-      await fundManually.mutateAsync(cents);
-      setManualAmount(FIRST_TEST_TRANSFER_DOLLARS);
+      await fundManually.mutateAsync(FIRST_TEST_TRANSFER_CENTS);
       toast({ title: "Transfer started", description: "Funds post once the bank transfer settles." });
     } catch (e) {
+      if (isTransferPostHeld(e)) {
+        toast({ title: "Dark funding intent recorded", description: FIRST_TEST_HELD_MESSAGE });
+        return;
+      }
       toast({ title: "Could not start transfer", description: (e as Error).message, variant: "destructive" });
     }
   }
@@ -294,16 +290,12 @@ export function AutoFundingPanel({ canEdit = true }: { canEdit?: boolean }) {
         <div className="flex flex-wrap items-center gap-2">
           <Input
             className="w-44"
-            type="number"
+            type="text"
             inputMode="decimal"
-            min={FIRST_TEST_TRANSFER_DOLLARS}
-            max={FIRST_TEST_TRANSFER_DOLLARS}
-            step={FIRST_TEST_TRANSFER_DOLLARS}
-            placeholder={FIRST_TEST_TRANSFER_DOLLARS}
-            value={manualAmount}
-            onChange={(e) => setManualAmount(e.target.value)}
+            readOnly
+            value={FIRST_TEST_TRANSFER_LABEL}
             disabled={!canEdit || !authorized}
-            aria-label="First-test fund amount"
+            aria-label="First-test fund amount locked at $0.01"
           />
           <Button onClick={handleManualFund} disabled={!canEdit || !authorized || fundManually.isPending}>
             {fundManually.isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}

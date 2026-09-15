@@ -68,6 +68,9 @@ describe('M7.5 live SPA first-test money routing', () => {
     assert.match(panel, /FIRST_TEST_DISBURSE_TOTP/);
     assert.match(panel, /Add \{FIRST_TEST_TRANSFER_LABEL\} from bank/);
     assert.match(panel, /Send \{FIRST_TEST_TRANSFER_LABEL\} from wallet/);
+    assert.match(panel, /aria-label="First-test fund amount locked at \$0\.01"/);
+    assert.match(autoPanel, /aria-label="First-test fund amount locked at \$0\.01"/);
+    assert.match(autoPanel, /isTransferPostHeld/);
     assert.doesNotMatch(panel, /deposit\.submit/);
     assert.doesNotMatch(panel, /moov-transfer-create/);
 
@@ -84,7 +87,7 @@ describe('M7.5 live SPA first-test money routing', () => {
     assert.match(auto, /fundWallet/);
     assert.doesNotMatch(auto, /invoke\("initiate-wallet-funding"/);
     assert.match(autoPanel, /FIRST_TEST_FUND_TOTP/);
-    assert.match(autoPanel, /FIRST_TEST_TRANSFER_DOLLARS/);
+    assert.match(autoPanel, /FIRST_TEST_TRANSFER_LABEL/);
 
     assert.doesNotMatch(payroll, /functions\.invoke\("moov-disburse"/);
     assert.match(payroll, /does not originate moov-disburse/);
