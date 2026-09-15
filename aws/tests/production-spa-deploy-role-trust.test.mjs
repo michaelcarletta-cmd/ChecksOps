@@ -12,6 +12,9 @@ const yaml = fs.readFileSync(path.join(ROOT, 'aws/production/production-spa-depl
 const lockPolicy = JSON.parse(
   fs.readFileSync(path.join(ROOT, 'aws/production/production-frontend-bucket-lock-policy.json'), 'utf8'),
 );
+const permissions = JSON.parse(
+  fs.readFileSync(path.join(ROOT, 'aws/production/production-spa-deploy-role-permissions.json'), 'utf8'),
+);
 
 test('intended SPA deploy trust is scoped to the approved Cursor OIDC identity', () => {
   assert.equal(trust.Statement.length, 1);
@@ -40,6 +43,34 @@ test('deploy-role template keeps DeployRole=false and uses the intended OIDC tru
   assert.match(yaml, /sts:AssumeRoleWithWebIdentity/);
   assert.doesNotMatch(yaml, /Principal: "\*"/);
   assert.doesNotMatch(yaml, /ChecksOpsCursorCloudStaging/);
+});
+
+test('intended SPA deploy permissions cover only the guarded apply S3 and CloudFront actions', () => {
+  const text = JSON.stringify(permissions);
+  assert.equal(permissions.Statement.length, 3);
+  assert.deepEqual(permissions.Statement[0].Resource, 'arn:aws:s3:::checksops-production-frontend-806168576068');
+  assert.deepEqual(permissions.Statement[1].Resource, 'arn:aws:s3:::checksops-production-frontend-806168576068/*');
+  assert.deepEqual(
+    permissions.Statement[2],
+    {
+      Sid: 'InvalidateProductionSpaDistribution',
+      Effect: 'Allow',
+      Action: 'cloudfront:CreateInvalidation',
+      Resource: 'arn:aws:cloudfront::806168576068:distribution/E1B0ZWWO5559U5',
+    },
+  );
+  assert.ok(permissions.Statement[1].Action.includes('s3:PutObject'));
+  assert.ok(permissions.Statement[1].Action.includes('s3:DeleteObject'));
+  assert.ok(permissions.Statement[0].Action.includes('s3:ListBucket'));
+  assert.ok(!text.includes('PutBucketPolicy'));
+  assert.ok(!text.includes('UpdateDistribution'));
+  assert.ok(!text.includes('lambda:'));
+  assert.ok(!text.includes('rds'));
+  assert.ok(!text.includes('secretsmanager'));
+  assert.ok(!text.includes('cognito'));
+  assert.ok(!text.includes('iam:'));
+  assert.ok(!text.includes('Administrator'));
+  assert.doesNotMatch(text, /arn:aws:s3:::checksops-staging/);
 });
 
 test('production frontend explicit deny still excludes staging and names only the deploy role', () => {
