@@ -1,0 +1,43 @@
+{
+  "verdict": "NO GO — ROLE ASSUME STILL FAILED",
+  "recordedAt": "2026-09-15T01:56:20Z",
+  "applyRan": false,
+  "iamModified": false,
+  "productionResourcesModified": false,
+  "authorizedOidc": {
+    "iss": "https://api.cursor.com",
+    "aud": "sts.amazonaws.com",
+    "sub": "user:325724407"
+  },
+  "proofs": {
+    "1_assumeChecksOpsProductionSpaDeploy": {
+      "result": "FAIL",
+      "error": "AccessDenied Not authorized to perform sts:AssumeRoleWithWebIdentity",
+      "retries": "immediate and 45s IAM-propagation retry at 3600s and 900s"
+    },
+    "2_getCallerIdentityAsDeployRole": {
+      "result": "NOT_PROVEN",
+      "reason": "Assume failed; no deploy-role credentials issued."
+    },
+    "3_stagingDeniedProductionS3Writes": {
+      "result": "PASS",
+      "identity": "arn:aws:sts::806168576068:assumed-role/ChecksOpsCursorCloudStaging/checksops-endorsement-act",
+      "putObject": "AccessDenied explicit deny in a resource-based policy",
+      "deleteObject": "AccessDenied explicit deny in a resource-based policy"
+    },
+    "4_publicProductionUnchanged": {
+      "result": "PASS",
+      "url": "https://checksops.com/",
+      "httpStatus": 200,
+      "lastModified": "2026-09-14T15:13:43Z",
+      "etag": "eb72535f64ce52c3bf3c8780dd3ccc25",
+      "spaBundle": "index-CiOVNYWh.js",
+      "cognitoPoolId": "us-east-1_h00WorYMT",
+      "cognitoClientId": "3ja9fqaq2fjkv3i6up2varcqpe",
+      "apiTarget": "/prep"
+    }
+  },
+  "control": {
+    "sameTokenAssumesChecksOpsCursorCloudStaging": true
+  }
+}
