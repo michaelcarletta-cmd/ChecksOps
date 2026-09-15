@@ -90,16 +90,22 @@ const folderOf = (path) => {
   return rel.replace(/\/[^/]+$/, '');
 };
 
-const asImagePath = (checkId, value) => {
+const asImagePath = (check, value) => {
   if (value === undefined) return { skip: true };
   if (value === null || value === '') return { value: null };
   const rel = normalizePath(value, 'claim-files');
   if (!rel) return { error: 'invalid_field', field: 'file_path', message: 'invalid storage path' };
-  if (!isCheckScopedPathFor(rel, checkId)) {
-    return { error: 'rls_denied', message: 'image path is not scoped to this check' };
-  }
   if (rel.length > 512) return { error: 'invalid_field', field: 'file_path' };
-  return { value: rel };
+  if (isCheckScopedPathFor(rel, check.id)) return { value: rel };
+  const imageFolder = folderOf(rel);
+  const existingFolders = [
+    check.front_image_path,
+    check.back_image_path,
+    check.back_image_original_path,
+    check.back_image_deposit_path,
+  ].map(folderOf).filter(Boolean);
+  if (imageFolder && existingFolders.includes(imageFolder)) return { value: rel };
+  return { error: 'rls_denied', message: 'image path is not scoped to this check' };
 };
 
 const asOfficialDepositPath = (check, value) => {
@@ -328,7 +334,7 @@ const executeIntakeUpdate = async ({ client, values, filters }) => {
   const nextValues = { ...coerced.values };
   for (const column of IMAGE_PATH_COLUMNS) {
     if (column in nextValues) {
-      const path = asImagePath(checkId, nextValues[column]);
+      const path = asImagePath(looked.check, nextValues[column]);
       if (path.error) return path;
       if (path.skip) delete nextValues[column];
       else nextValues[column] = path.value;
@@ -604,7 +610,7 @@ const executeCheckFiles = async ({ client, mapping, op, values, filters }) => {
     const name = asText(values.file_name, 240);
     if (name.error) return name;
     if (!name.value) return { error: 'missing_required_field', field: 'file_name' };
-    const path = asImagePath(checkId, values.file_path);
+    const path = asImagePath(looked.check, values.file_path);
     if (path.error) return path;
     if (!path.value) return { error: 'missing_required_field', field: 'file_path' };
     const fileType = asText(values.file_type, 120);

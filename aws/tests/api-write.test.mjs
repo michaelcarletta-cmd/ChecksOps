@@ -44,7 +44,7 @@ const mappingFor = (sub = COGNITO_SUB) => ({
 const FOREIGN_CHECK_ID = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
 const UNKNOWN_CHECK_ID = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
 
-const mockClient = ({ rows = [], mapping = mappingFor(), throwOn = null, missingCheckIds = [] } = {}) => {
+const mockClient = ({ rows = [], mapping = mappingFor(), throwOn = null, missingCheckIds = [], lookupRows = null } = {}) => {
   const queries = [];
   return {
     queries,
@@ -65,6 +65,7 @@ const mockClient = ({ rows = [], mapping = mappingFor(), throwOn = null, missing
       }
       if (sql.includes('front_image_path, back_image_path, back_image_original_path, back_image_deposit_path FROM public.check_intake_items')) {
         if (missingCheckIds.includes(params[0])) return { rows: [] };
+        if (lookupRows) return { rows: lookupRows };
         return { rows: [{
           id: params[0],
           tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a',
@@ -494,6 +495,37 @@ test('Endorsement deposit persist denies invalid check, missing check, and forei
   assert.equal(foreignPath.error, 'rls_denied');
   assert.match(String(foreignPath.message || ''), /not scoped to this check/);
   assert.equal(scopedClient.queries.some((q) => String(q.sql).includes('UPDATE public.check_intake_items')), false);
+});
+
+test('Approve may persist official deposit rear onto back_image_path in the check existing folder', async () => {
+  const folder = 'checks/shared/86471cb6-d944-475a-938a-ddfca9ec9ec1';
+  const official = `${folder}/endorsed_deposit_ahzg.checkalt.jpg`;
+  const original = `${folder}/back-1784138087917.jpg`;
+  const client = mockClient({
+    lookupRows: [{
+      id: CHECK_ID,
+      tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a',
+      front_image_path: `${folder}/front-1784138084905.jpg`,
+      back_image_path: `${folder}/back-1784138087917_endorsed.svg`,
+      back_image_original_path: original,
+      back_image_deposit_path: official,
+    }],
+    rows: [{ id: CHECK_ID, back_image_path: official, back_image_original_path: original }],
+  });
+  const result = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_intake_items',
+    op: 'update',
+    values: {
+      back_image_path: official,
+      back_image_original_path: original,
+    },
+    filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
+  }), depsFor(client));
+  assert.equal(result.ok, true);
+  const update = client.queries.find((q) => String(q.sql).includes('UPDATE public.check_intake_items'));
+  assert.ok(update);
+  assert.equal(update.params.includes(official), true);
+  assert.equal(update.params.includes(original), true);
 });
 
 test('Tranche 2 payee insert derives tenant from parent check and ignores client tenant', async () => {
