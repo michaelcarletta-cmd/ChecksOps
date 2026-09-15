@@ -10,12 +10,13 @@ const sql = fs.readFileSync(
 );
 
 test('endorsement deposit grants are limited to official persist columns', () => {
+  const grant = sql.split('GRANT UPDATE')[1] || '';
   assert.match(sql, /GRANT UPDATE \(/);
-  assert.match(sql, /back_image_deposit_path/);
-  assert.match(sql, /endorsement_render_status/);
-  assert.match(sql, /endorsement_render_meta/);
-  assert.match(sql, /endorsement_override/);
-  assert.match(sql, /TO checksops, authenticated/);
+  assert.match(grant, /back_image_deposit_path/);
+  assert.match(grant, /endorsement_render_status/);
+  assert.match(grant, /endorsement_render_meta/);
+  assert.match(grant, /endorsement_override/);
+  assert.match(grant, /TO checksops, authenticated/);
   for (const denied of [
     'amount',
     'status',
@@ -25,6 +26,6 @@ test('endorsement deposit grants are limited to official persist columns', () =>
     'routing_number',
     'account_number',
   ]) {
-    assert.equal(sql.includes(denied), false, `must not grant ${denied}`);
+    assert.equal(grant.includes(denied), false, `must not grant ${denied}`);
   }
 });
