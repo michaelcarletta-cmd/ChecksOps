@@ -281,6 +281,15 @@ test('valid start_review then mark_ready; skip and deposited denied', async () =
   assert.equal(deposited.error, 'financial_or_provider');
 });
 
+test('manual Review backup allows mark_ready_for_deposit from endorsements_in_progress', () => {
+  const check = { id: CHECK_ID, status: 'endorsements_in_progress', claim_id: null };
+  const decided = evaluateTransition('mark_ready_for_deposit', check);
+  assert.equal(decided.ok, true);
+  assert.equal(decided.nextStatus, 'approved_for_deposit');
+  assert.equal(decided.nextStage, 'ready_for_deposit');
+  assert.equal(decided.providerExecution, false);
+});
+
 test('review RPC path branch_deposit_required is denied as financial', async () => {
   const result = await handleCheckTransition(jwtEvent('/workflow/transition', 'POST', {
     check_id: CHECK_ID,
