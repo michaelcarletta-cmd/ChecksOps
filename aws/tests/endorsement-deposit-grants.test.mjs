@@ -19,7 +19,6 @@ test('endorsement deposit grants are limited to official persist columns', () =>
   assert.match(grant, /TO checksops, authenticated/);
   for (const denied of [
     'amount',
-    'status',
     'check_stage',
     'deposited_at',
     'checkalt_deposits',
@@ -28,4 +27,5 @@ test('endorsement deposit grants are limited to official persist columns', () =>
   ]) {
     assert.equal(grant.includes(denied), false, `must not grant ${denied}`);
   }
+  assert.doesNotMatch(grant, /(?<![a-z_])status(?![a-z_])/);
 });
