@@ -1,0 +1,63 @@
+{
+  "verdict": "NO GO — STOPPED BEFORE/AFTER DEPLOY",
+  "stopped": "BEFORE_DEPLOY",
+  "recordedAt": "2026-09-15T01:52:20Z",
+  "applyRan": false,
+  "rawS3DeployUsed": false,
+  "iamModified": false,
+  "bucketPolicyModified": false,
+  "spaChanged": false,
+  "authorizedOidc": {
+    "iss": "https://api.cursor.com",
+    "aud": "sts.amazonaws.com",
+    "sub": "user:325724407"
+  },
+  "proofs": {
+    "1_assumeChecksOpsProductionSpaDeploy": {
+      "result": "FAIL",
+      "action": "sts:AssumeRoleWithWebIdentity",
+      "roleArn": "arn:aws:iam::806168576068:role/ChecksOpsProductionSpaDeploy",
+      "error": "AccessDenied Not authorized to perform sts:AssumeRoleWithWebIdentity",
+      "retries": "immediate plus 4-backoff plus 90s IAM-propagation retry at duration 900 and 3600",
+      "sameTokenAssumesStaging": true
+    },
+    "2_getCallerIdentityAsDeployRole": {
+      "result": "NOT_PROVEN",
+      "reason": "Assume failed; no deploy-role credentials were issued."
+    },
+    "3_stagingCannotWriteProductionFrontend": {
+      "result": "PASS",
+      "identity": "arn:aws:sts::806168576068:assumed-role/ChecksOpsCursorCloudStaging/checksops-endorsement-act",
+      "putObject": "AccessDenied explicit deny in a resource-based policy",
+      "deleteObject": "AccessDenied explicit deny in a resource-based policy",
+      "bucket": "checksops-production-frontend-806168576068"
+    },
+    "4_deployRolePermissionsScope": {
+      "result": "NOT_PROVEN",
+      "reason": "Could not assume the role, so inline policy ChecksOpsProductionSpaDeployApply was not readable or action-probed as that principal."
+    },
+    "5_publicProductionStillLocked": {
+      "result": "PASS",
+      "url": "https://checksops.com/",
+      "httpStatus": 200,
+      "lastModified": "2026-09-14T15:13:43Z",
+      "etag": "eb72535f64ce52c3bf3c8780dd3ccc25",
+      "spaBundle": "index-CiOVNYWh.js",
+      "cognitoPoolId": "us-east-1_h00WorYMT",
+      "cognitoClientId": "3ja9fqaq2fjkv3i6up2varcqpe",
+      "apiTarget": "/prep",
+      "s3IndexVersionId": "ckmTzCZvWNSeKn4Ky7lo9LYltvoSNqiQ"
+    }
+  },
+  "operatorCheck": [
+    "IAM → Roles → ChecksOpsProductionSpaDeploy (exact name, account 806168576068)",
+    "Trust relationships must be exactly aws/production/production-spa-deploy-role-trust.json",
+    "Federated principal arn:aws:iam::806168576068:oidc-provider/api.cursor.com",
+    "Action sts:AssumeRoleWithWebIdentity only",
+    "StringEquals api.cursor.com:aud = sts.amazonaws.com",
+    "StringEquals api.cursor.com:sub = user:325724407",
+    "No extra StringEquals/StringLike repo/branch/session conditions",
+    "No Deny * assume statement",
+    "No oidc.cursor.sh provider"
+  ]
+}
