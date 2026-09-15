@@ -110,19 +110,30 @@ export const CHECKALT_STATUS_MAP = {
     submitted: 'submitted',
     pending: 'submitted',
     pending_approval: 'pending_approval',
+    processing: 'processing',
     approved: 'cleared',
     cleared: 'cleared',
     settled: 'cleared',
+    deposited: 'cleared',
     returned: 'returned',
     rejected: 'rejected',
     declined: 'rejected',
+    submitting: 'submitting',
+    duplicate: 'duplicate',
+    error: 'error',
   },
 };
 
+export const canonicalizeCheckAltStatusToken = (value) => String(value ?? '')
+  .trim()
+  .toLowerCase()
+  .replace(/[\s-]+/g, '_');
+
 export const mapCheckAltStatus = (payload = {}) => {
-  const rawStatus = String(payload.status ?? '').toLowerCase();
   const numericStatus = Number(payload.statusCode ?? payload.status);
-  return CHECKALT_STATUS_MAP.numeric[numericStatus]
-    || CHECKALT_STATUS_MAP.string[rawStatus]
-    || null;
+  if (Number.isFinite(numericStatus) && CHECKALT_STATUS_MAP.numeric[numericStatus]) {
+    return CHECKALT_STATUS_MAP.numeric[numericStatus];
+  }
+  const rawStatus = canonicalizeCheckAltStatusToken(payload.status);
+  return CHECKALT_STATUS_MAP.string[rawStatus] || null;
 };

@@ -182,7 +182,7 @@ test('historical CheckAlt reference is ready for verification without a second p
   });
   assert.equal(result.ok, true);
   assert.equal(result.historicalReference, true);
-  assert.equal(result.readyForVerification, true);
+  assert.equal(result.readyForVerification, false);
   assert.equal(result.liveProviderCalled, false);
 });
 

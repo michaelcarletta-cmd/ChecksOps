@@ -246,6 +246,9 @@ test('CheckAlt integer-cents formatting', () => {
   assert.equal(formatCheckAltUserAmount('780.00').userAmount, 78000);
   assert.equal(dollarsToIntegerCents(0.1).cents, 10);
   assert.equal(mapCheckAltStatus({ statusCode: 40 }), 'pending_approval');
+  assert.equal(mapCheckAltStatus({ status: 'Pending Approval' }), 'pending_approval');
+  assert.equal(mapCheckAltStatus({ status: 'pending-approval' }), 'pending_approval');
+  assert.equal(mapCheckAltStatus({ status: 40 }), 'pending_approval');
   assert.equal(mapCheckAltStatus({ status: 'cleared' }), 'cleared');
 });
 
