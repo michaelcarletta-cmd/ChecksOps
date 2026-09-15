@@ -41,7 +41,10 @@ const mappingFor = (sub = COGNITO_SUB) => ({
   status: 'active',
 });
 
-const mockClient = ({ rows = [], mapping = mappingFor(), throwOn = null } = {}) => {
+const FOREIGN_CHECK_ID = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+const UNKNOWN_CHECK_ID = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+
+const mockClient = ({ rows = [], mapping = mappingFor(), throwOn = null, missingCheckIds = [] } = {}) => {
   const queries = [];
   return {
     queries,
@@ -61,6 +64,7 @@ const mockClient = ({ rows = [], mapping = mappingFor(), throwOn = null } = {}) 
         return { rows: params[0] === mapping.cognito_sub ? [mapping] : [] };
       }
       if (sql.includes('front_image_path, back_image_path, back_image_original_path, back_image_deposit_path FROM public.check_intake_items')) {
+        if (missingCheckIds.includes(params[0])) return { rows: [] };
         return { rows: [{
           id: params[0],
           tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a',
@@ -436,6 +440,60 @@ test('Endorsement Adjuster may persist official deposit rear path and strips cli
   assert.ok(update);
   assert.equal(String(update.sql).includes('checkalt_rear_fingerprint'), false);
   assert.equal(JSON.stringify(update.params).includes('forged'), false);
+});
+
+test('Endorsement deposit persist denies invalid check, missing check, and foreign-scoped path', async () => {
+  const official = `checks/${CHECK_ID}/endorsed_deposit_abc.checkalt.jpg`;
+
+  const invalid = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_intake_items',
+    op: 'update',
+    values: { back_image_deposit_path: official, endorsement_render_status: 'completed' },
+    filters: [{ column: 'id', op: 'eq', value: 'not-a-check-id' }],
+  }), depsFor(mockClient()));
+  assert.equal(invalid.ok, false);
+  assert.equal(invalid.error, 'invalid_uuid');
+  assert.equal(invalid.field, 'id');
+
+  const missingClient = mockClient({ missingCheckIds: [UNKNOWN_CHECK_ID] });
+  const missing = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_intake_items',
+    op: 'update',
+    values: { back_image_deposit_path: official, endorsement_render_status: 'completed' },
+    filters: [{ column: 'id', op: 'eq', value: UNKNOWN_CHECK_ID }],
+  }), depsFor(missingClient));
+  assert.equal(missing.ok, false);
+  assert.equal(missing.error, 'rls_denied');
+  assert.equal(missingClient.queries.some((q) => String(q.sql).includes('UPDATE public.check_intake_items')), false);
+
+  const foreignClient = mockClient({ missingCheckIds: [FOREIGN_CHECK_ID] });
+  const crossTenant = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_intake_items',
+    op: 'update',
+    values: {
+      back_image_deposit_path: `checks/${FOREIGN_CHECK_ID}/endorsed_deposit_abc.checkalt.jpg`,
+      endorsement_render_status: 'completed',
+    },
+    filters: [{ column: 'id', op: 'eq', value: FOREIGN_CHECK_ID }],
+  }), depsFor(foreignClient));
+  assert.equal(crossTenant.ok, false);
+  assert.equal(crossTenant.error, 'rls_denied');
+  assert.equal(foreignClient.queries.some((q) => String(q.sql).includes('UPDATE public.check_intake_items')), false);
+
+  const scopedClient = mockClient();
+  const foreignPath = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_intake_items',
+    op: 'update',
+    values: {
+      back_image_deposit_path: `checks/${FOREIGN_CHECK_ID}/endorsed_deposit_abc.checkalt.jpg`,
+      endorsement_render_status: 'completed',
+    },
+    filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
+  }), depsFor(scopedClient));
+  assert.equal(foreignPath.ok, false);
+  assert.equal(foreignPath.error, 'rls_denied');
+  assert.match(String(foreignPath.message || ''), /not scoped to this check/);
+  assert.equal(scopedClient.queries.some((q) => String(q.sql).includes('UPDATE public.check_intake_items')), false);
 });
 
 test('Tranche 2 payee insert derives tenant from parent check and ignores client tenant', async () => {
