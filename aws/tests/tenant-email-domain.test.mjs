@@ -989,7 +989,8 @@ test('audit payloads omit DKIM tokens, addresses, ARNs, and secrets', async () =
   assert.doesNotMatch(blob, /tokena|tokenb|tokenc|dkim/i);
   assert.doesNotMatch(blob, /claims@freedomadj\.com|noreply@/);
   assert.doesNotMatch(blob, /arn:aws|AKIA|otp|password|account/i);
-  assert.match(blob, /"result":"saved"/);
+  assert.deepEqual(JSON.parse(client.state.audits[0].new_values), { result: 'saved' });
+  assert.equal(client.state.audits[0].action, 'tenant_email_branding_save');
   const sanitized = safeAuditPayload({
     sending_domain: DOMAIN,
     from_address: 'noreply@notify.freedomadj.com',
