@@ -3,6 +3,13 @@ import { financialPermissionsActivated } from '../../financial-flags.mjs';
 import { stableIdempotencyKey } from '../../financial-idempotency.mjs';
 import { isUuid } from '../../financial-ownership.mjs';
 
+export {
+  MOOV_PROVIDER_IDEMPOTENCY_NAMESPACE,
+  moovProviderIdempotencyName,
+  providerFundIdempotencyKey,
+  uuidv5FromNamespace,
+} from './moov-provider-idempotency-uuid.mjs';
+
 export const moovFundingIdempotencyKey = ({ tenantId, intentId, amountCents }) =>
   stableIdempotencyKey({
     tenantId,
@@ -38,10 +45,6 @@ export const moovRefundIdempotencyKey = ({ tenantId, intentId, amountCents }) =>
     amountCents,
     currency: 'USD',
   });
-
-/** Provider X-Idempotency-Key is derived only from the existing payment_transfers.id. Browser cannot override. */
-export const providerFundIdempotencyKey = (paymentTransferId) =>
-  `checksops-wallet-fund-${paymentTransferId}`;
 
 export async function loadProductionTransferById(client, id) {
   if (!isUuid(id)) return null;

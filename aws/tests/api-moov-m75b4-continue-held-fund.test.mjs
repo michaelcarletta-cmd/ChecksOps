@@ -11,6 +11,7 @@ import {
   loadProductionTransferById,
   providerFundIdempotencyKey,
 } from '../functions/api/providers/production/moov-idempotency.mjs';
+import { isUuid } from '../functions/api/financial-ownership.mjs';
 import { hasProductionMoovHandler } from '../functions/api/providers/production/moov-dispatch.mjs';
 import { PRODUCTION_MOOV_FUNCTIONS } from '../functions/api/providers/production/moov-holds.mjs';
 import { FUNCTION_BY_NAME } from '../functions/api/providers/catalog.mjs';
@@ -31,7 +32,7 @@ const LOCAL_WALLET_ROW_ID = '473ceaca-3534-467b-8d92-49baa53f6c68';
 const OTHER_BANK_METHOD_ID = '11111111-2222-4333-8444-555555555501';
 const OTHER_WALLET_ROW_ID = '11111111-2222-4333-8444-555555555502';
 const MOOV_IDS = KNOWN_APPROVED_MOOV.freedom;
-const EXPECTED_PROVIDER_KEY = `checksops-wallet-fund-${HELD_INTENT_ID}`;
+const EXPECTED_PROVIDER_KEY = '6dac013b-d4c1-50a5-8863-5bbfa881cc6f';
 
 const mapping = {
   application_user_id: FREEDOM_APP,
@@ -423,6 +424,11 @@ describe('M7.5B.4 continue existing wallet.fund intent', { concurrency: 1 }, () 
     assert.equal(PRODUCTION_MOOV_FUNCTIONS.has('moov-wallet-fund-continue'), true);
     assert.equal(FUNCTION_BY_NAME['moov-wallet-fund-continue']?.name, 'moov-wallet-fund-continue');
     assert.equal(providerFundIdempotencyKey(HELD_INTENT_ID), EXPECTED_PROVIDER_KEY);
+    assert.equal(providerFundIdempotencyKey(HELD_INTENT_ID), providerFundIdempotencyKey(HELD_INTENT_ID));
+    assert.equal(isUuid(EXPECTED_PROVIDER_KEY), true);
+    assert.match(EXPECTED_PROVIDER_KEY, /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+    assert.notEqual(EXPECTED_PROVIDER_KEY, HELD_INTENT_ID);
+    assert.doesNotMatch(EXPECTED_PROVIDER_KEY, /checksops-wallet-fund-/);
     assert.equal(typeof loadProductionTransferById, 'function');
   });
 
@@ -440,6 +446,8 @@ describe('M7.5B.4 continue existing wallet.fund intent', { concurrency: 1 }, () 
     assert.equal(result.liveProviderCalled, false);
     assert.equal(result.productionExecution, false);
     assert.equal(result.providerIdempotencyKey, EXPECTED_PROVIDER_KEY);
+    assert.notEqual(result.providerIdempotencyKey, 'browser-must-not-win');
+    assert.notEqual(result.providerIdempotencyKey, HELD_INTENT_ID);
     assert.equal(result.transfer.id, HELD_INTENT_ID);
     assert.equal(store.transfers.length, 1);
     assert.equal(store.transfers[0].status, 'ready');
@@ -559,6 +567,7 @@ describe('M7.5B.4 continue existing wallet.fund intent', { concurrency: 1 }, () 
     const result = await runContinue(store, continueBody(), armedFlags);
     assert.equal(result.duplicate, true);
     assert.equal(result.reconcile, true);
+    assert.equal(result.providerIdempotencyKey, EXPECTED_PROVIDER_KEY);
     assert.equal(store.transferPosts, 0);
     assert.equal(store.submittingUpdates, 0);
     assert.equal(store.inserts, 0);
@@ -582,6 +591,9 @@ describe('M7.5B.4 continue existing wallet.fund intent', { concurrency: 1 }, () 
     const second = await runContinue(store, continueBody());
     assert.equal(first.error, 'transfer_post_held');
     assert.equal(second.error, 'transfer_post_held');
+    assert.equal(first.providerIdempotencyKey, EXPECTED_PROVIDER_KEY);
+    assert.equal(second.providerIdempotencyKey, EXPECTED_PROVIDER_KEY);
+    assert.equal(first.providerIdempotencyKey, second.providerIdempotencyKey);
     assert.equal(store.transfers.length, 1);
     assert.equal(store.transfers[0].status, 'ready');
     assert.equal(store.submittingUpdates, 0);
@@ -640,6 +652,8 @@ describe('M7.5B.4 continue existing wallet.fund intent', { concurrency: 1 }, () 
     assert.equal(first.ok, true);
     assert.equal(second.duplicate, true);
     assert.equal(second.reconcile, true);
+    assert.equal(first.providerIdempotencyKey, EXPECTED_PROVIDER_KEY);
+    assert.equal(second.providerIdempotencyKey, EXPECTED_PROVIDER_KEY);
     assert.equal(store.transferPosts, 1);
     assert.equal(store.inserts, 0);
   });
@@ -651,12 +665,14 @@ describe('M7.5B.4 continue existing wallet.fund intent', { concurrency: 1 }, () 
     store.transferPostMode = 'timeout';
     const first = await runContinue(store, continueBody(), armedFlags);
     assert.equal(first.error, 'provider_outcome_unknown');
+    assert.equal(first.providerIdempotencyKey, EXPECTED_PROVIDER_KEY);
     assert.equal(store.transfers[0].status, 'unknown');
     assert.equal(store.transferPosts, 1);
     store.transferPostMode = 'ok';
     const second = await runContinue(store, continueBody(), armedFlags);
     assert.equal(second.duplicate, true);
     assert.equal(second.reconcile, true);
+    assert.equal(second.providerIdempotencyKey, EXPECTED_PROVIDER_KEY);
     assert.equal(store.transferPosts, 1);
     assert.equal(store.inserts, 0);
   });
@@ -668,12 +684,14 @@ describe('M7.5B.4 continue existing wallet.fund intent', { concurrency: 1 }, () 
     store.transferPostMode = 'lost_response';
     const first = await runContinue(store, continueBody(), armedFlags);
     assert.equal(first.error, 'provider_outcome_unknown');
+    assert.equal(first.providerIdempotencyKey, EXPECTED_PROVIDER_KEY);
     assert.equal(store.moovAcceptedTransfers.length, 1);
     assert.equal(store.moovAcceptedTransfers[0].idempotencyKey, EXPECTED_PROVIDER_KEY);
     assert.equal(store.transfers[0].status, 'unknown');
     store.transferPostMode = 'ok';
     const second = await runContinue(store, continueBody(), armedFlags);
     assert.equal(second.duplicate, true);
+    assert.equal(second.providerIdempotencyKey, EXPECTED_PROVIDER_KEY);
     assert.equal(store.transferPosts, 1);
     assert.equal(store.inserts, 0);
   });
