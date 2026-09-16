@@ -1,6 +1,7 @@
 /**
- * Tenant email-domain HTTP actions (Class A).
- * Domain verification status is written only from SES GetEmailIdentity results.
+ * Tenant email HTTP actions (Class A).
+ * Sending-domain / SES identity APIs are retired (410).
+ * Branding get/save/preview remain: display name, Reply-To, logo/color.
  */
 import { withIdentity } from './data.mjs';
 import { defaultFromAddress } from './email-policy.mjs';
@@ -10,27 +11,17 @@ import {
 } from './email-branding.mjs';
 import { renderChecksOpsEmail } from './email-layout.mjs';
 import {
-  DEFAULT_FROM_LOCAL_PART,
   DOMAIN_STATUS,
   RATE_LIMITS,
   consumeDurableRateLimit,
-  dkimRecordsFromTokens,
   displayNameIsUnsafe,
   fallbackFromHeader,
-  findDomainOwner,
-  fromAddressOnVerifiedDomain,
   loadTenantEmailSettings,
-  mailFromRecordsFor,
-  normalizeFromLocalPart,
   normalizeReplyTo,
-  normalizeSendingDomain,
   publicStatusLabel,
-  resolveSesV2,
   resolveTenantAccess,
   sanitizeDisplayName,
-  sesIdentityVerified,
   tenantEmailDomainEnabled,
-  tenantSesIdentityDeleteEnabled,
   uiDomainStatus,
   upsertTenantEmailSettings,
   writeDomainAudit,
@@ -88,19 +79,13 @@ const commitDomainAudit = async (client, mapping, args, spoof) => {
   }
 };
 
-const featureDisabled = (spoof) => ({
+const sendingDomainRetired = (spoof) => ({
   ok: false,
-  statusCode: 503,
-  error: 'tenant_email_domain_disabled',
-  message: 'Tenant SES domain APIs are disabled in this environment.',
+  statusCode: 410,
+  error: 'tenant_sending_domain_retired',
+  message: 'Tenant sending domains are retired. ChecksOps SES is the sending identity. Configure display name and Reply-To only.',
   spoofFieldsIgnored: spoof,
 });
-
-/** Flag check first: no rate-limit consume, SES, or tenant_email_settings writes. */
-const requireDomainFeature = (spoof, sesv2) => {
-  if (tenantEmailDomainEnabled() || sesv2) return null;
-  return featureDisabled(spoof);
-};
 
 const publicDns = (records) => (Array.isArray(records) ? records : [])
   .filter((row) => row && row.type && row.name && row.value)
@@ -125,7 +110,7 @@ const publicSettings = (row, tenant = {}, access = {}) => {
     replyTo: row?.reply_to || tenant.email_reply_to || null,
     sendingDomain: domain,
     fromAddress,
-    fromLocalPart: fromAddress ? String(fromAddress).split('@')[0] : DEFAULT_FROM_LOCAL_PART,
+    fromLocalPart: fromAddress ? String(fromAddress).split('@')[0] : 'noreply',
     sendingMode: row?.sending_mode || 'platform',
     domainStatus: status,
     domainStatusLabel: publicStatusLabel(status),
@@ -166,14 +151,6 @@ const requireTenant = async (client, mapping, body, spoof, { configure = false }
   return { tenantId, tenant, access };
 };
 
-const dkimTokensFromIdentity = (identity = {}) => (
-  identity.DkimAttributes?.Tokens
-  || identity.DkimAttributes?.tokens
-  || identity.DkimTokens
-  || identity.tokens
-  || []
-);
-
 export const runGetEmailBranding = async ({ client, mapping, body, spoof }) => {
   const resolved = await requireTenant(client, mapping, body, spoof, { configure: false });
   if (resolved.error) return resolved.error;
@@ -198,11 +175,9 @@ export const runGetEmailBranding = async ({ client, mapping, body, spoof }) => {
   };
 };
 
-export const runSaveEmailBranding = async ({ client, mapping, body, spoof, sesv2 }) => {
+export const runSaveEmailBranding = async ({ client, mapping, body, spoof }) => {
   const resolved = await requireTenant(client, mapping, body, spoof, { configure: true });
   if (resolved.error) return resolved.error;
-  const disabled = requireDomainFeature(spoof, sesv2);
-  if (disabled) return disabled;
   if (displayNameIsUnsafe(body.fromName || body.from_name)) {
     return { ok: false, statusCode: 400, error: 'unsafe_from_name', spoofFieldsIgnored: spoof };
   }
@@ -214,24 +189,16 @@ export const runSaveEmailBranding = async ({ client, mapping, body, spoof, sesv2
   if (!reply.ok) {
     return { ok: false, statusCode: 400, error: reply.error, reason: reply.reason || null, spoofFieldsIgnored: spoof };
   }
-  const local = normalizeFromLocalPart(body.fromLocalPart || body.from_local_part || DEFAULT_FROM_LOCAL_PART);
-  if (!local.ok) {
-    return { ok: false, statusCode: 400, error: local.error, spoofFieldsIgnored: spoof };
-  }
-  const existing = await loadTenantEmailSettings(client, resolved.tenantId);
-  const domain = existing?.sending_domain || null;
-  const fromAddress = domain ? `${local.localPart}@${domain}` : null;
   const limited = await requireActionRateLimit(client, mapping, resolved.tenantId, 'domain_save', spoof);
   if (limited) return limited;
   await upsertTenantEmailSettings(client, resolved.tenantId, {
     from_name: fromName,
     reply_to: reply.replyTo,
-    from_address: fromAddress,
   });
   const auditError = await commitDomainAudit(client, mapping, {
     action: 'tenant_email_branding_save',
     tenantId: resolved.tenantId,
-    payload: { sending_domain: domain || null },
+    payload: { result: 'saved' },
   }, spoof);
   if (auditError) return auditError;
   const row = await loadTenantEmailSettings(client, resolved.tenantId);
@@ -240,368 +207,48 @@ export const runSaveEmailBranding = async ({ client, mapping, body, spoof, sesv2
     statusCode: 200,
     saved: true,
     settings: publicSettings(row, resolved.tenant, resolved.access),
-    ignoredClientFields: ['domain_status', 'sending_mode', 'verified', 'ses_identity_name'].filter((k) => k in body),
+    ignoredClientFields: [
+      'domain_status',
+      'sending_mode',
+      'verified',
+      'ses_identity_name',
+      'domain',
+      'sending_domain',
+      'fromLocalPart',
+      'from_local_part',
+    ].filter((k) => k in body),
     spoofFieldsIgnored: spoof,
   };
 };
 
 export const runStartDomainVerification = async ({
-  client, mapping, body, spoof, sesv2,
+  client, mapping, body, spoof,
 }) => {
   const resolved = await requireTenant(client, mapping, body, spoof, { configure: true });
   if (resolved.error) return resolved.error;
-  const disabled = requireDomainFeature(spoof, sesv2);
-  if (disabled) return disabled;
-  const parsed = normalizeSendingDomain(body.domain || body.sending_domain);
-  if (!parsed.ok) {
-    return {
-      ok: false,
-      statusCode: 400,
-      error: parsed.error,
-      reason: parsed.reason || null,
-      spoofFieldsIgnored: spoof,
-    };
-  }
-  const local = normalizeFromLocalPart(body.fromLocalPart || body.from_local_part || DEFAULT_FROM_LOCAL_PART);
-  if (!local.ok) {
-    return { ok: false, statusCode: 400, error: local.error, spoofFieldsIgnored: spoof };
-  }
-  if (displayNameIsUnsafe(body.fromName || body.from_name)) {
-    return { ok: false, statusCode: 400, error: 'unsafe_from_name', spoofFieldsIgnored: spoof };
-  }
-  const fromName = sanitizeDisplayName(
-    body.fromName || body.from_name,
-    resolved.tenant.name || 'ChecksOps',
-  );
-  const reply = normalizeReplyTo(body.replyTo || body.reply_to);
-  if (!reply.ok) {
-    return { ok: false, statusCode: 400, error: reply.error, reason: reply.reason || null, spoofFieldsIgnored: spoof };
-  }
-  const limited = await requireActionRateLimit(client, mapping, resolved.tenantId, 'domain_start', spoof);
-  if (limited) return limited;
-
-  const owner = await findDomainOwner(client, parsed.domain, resolved.tenantId);
-  if (owner) {
-    return { ok: false, statusCode: 409, error: 'domain_already_assigned', spoofFieldsIgnored: spoof };
-  }
-
-  let adapter;
-  try {
-    adapter = await resolveSesV2(sesv2);
-  } catch {
-    return { ok: false, statusCode: 503, error: 'sesv2_unavailable', spoofFieldsIgnored: spoof };
-  }
-  if (!adapter?.createEmailIdentity) {
-    return featureDisabled(spoof);
-  }
-
-  const existing = await loadTenantEmailSettings(client, resolved.tenantId);
-  const replacing = Boolean(existing?.sending_domain && existing.sending_domain !== parsed.domain);
-  const fromAddress = `${local.localPart}@${parsed.domain}`;
-
-  let identity;
-  try {
-    identity = await adapter.createEmailIdentity({
-      EmailIdentity: parsed.domain,
-      DkimSigningAttributes: { NextSigningKeyLength: 'RSA_2048_BIT' },
-    });
-  } catch (error) {
-    const name = String(error?.name || error?.Code || '');
-    console.error(JSON.stringify({
-      event: 'ses_create_failed',
-      name: name.slice(0, 80),
-      code: String(error?.code || '').slice(0, 80),
-      httpStatus: error?.$metadata?.httpStatusCode || null,
-    }));
-    if (!/AlreadyExists/i.test(name)) {
-      const auditError = await commitDomainAudit(client, mapping, {
-        action: 'tenant_email_domain_start_failed',
-        tenantId: resolved.tenantId,
-        payload: { sending_domain: parsed.domain, result: 'ses_create_failed' },
-      }, spoof);
-      if (auditError) return auditError;
-      return {
-        ok: false,
-        statusCode: 502,
-        error: 'ses_create_failed',
-        spoofFieldsIgnored: spoof,
-      };
-    }
-    try {
-      identity = await adapter.getEmailIdentity({ EmailIdentity: parsed.domain });
-    } catch {
-      return { ok: false, statusCode: 502, error: 'ses_create_failed', spoofFieldsIgnored: spoof };
-    }
-  }
-
-  const tokens = dkimTokensFromIdentity(identity);
-  const dnsRecords = dkimRecordsFromTokens(parsed.domain, tokens);
-  const mailFromInput = String(body.mailFromDomain || body.mail_from_domain || '').trim().toLowerCase();
-  let mailFromDomain = null;
-  let mailFromRecords = [];
-  if (mailFromInput) {
-    const mailFrom = normalizeSendingDomain(mailFromInput);
-    if (!mailFrom.ok || mailFrom.domain === parsed.domain || !mailFrom.domain.endsWith(`.${parsed.domain}`)) {
-      return { ok: false, statusCode: 400, error: 'invalid_mail_from_domain', spoofFieldsIgnored: spoof };
-    }
-    mailFromDomain = mailFrom.domain;
-    mailFromRecords = mailFromRecordsFor(mailFromDomain);
-  }
-
-  try {
-    await upsertTenantEmailSettings(client, resolved.tenantId, {
-      sending_domain: parsed.domain,
-      ses_identity_name: parsed.domain,
-      from_address: fromAddress,
-      from_name: fromName,
-      reply_to: reply.replyTo,
-      sending_mode: 'custom',
-      domain_status: DOMAIN_STATUS.pending,
-      custom_sending_enabled: false,
-      dns_records: dnsRecords,
-      verified_at: null,
-      last_verification_error: null,
-      mail_from_domain: mailFromDomain,
-      mail_from_records: mailFromRecords,
-    });
-  } catch (error) {
-    if (error?.code === 'domain_already_assigned') {
-      return { ok: false, statusCode: 409, error: 'domain_already_assigned', spoofFieldsIgnored: spoof };
-    }
-    throw error;
-  }
-
-  const auditError = await commitDomainAudit(client, mapping, {
-    action: replacing ? 'tenant_email_domain_replace' : 'tenant_email_domain_start',
-    tenantId: resolved.tenantId,
-    payload: { sending_domain: parsed.domain, replaced: replacing },
-  }, spoof);
-  if (auditError) return auditError;
-
-  const row = await loadTenantEmailSettings(client, resolved.tenantId);
-  return {
-    ok: true,
-    statusCode: 200,
-    domain: parsed.domain,
-    status: DOMAIN_STATUS.pending,
-    verified: false,
-    dns: publicDns(dnsRecords),
-    mailFromRecords: publicDns(mailFromRecords),
-    fallbackFrom: fallbackFromHeader(resolved.tenant.name),
-    settings: publicSettings(row, resolved.tenant, resolved.access),
-    spoofFieldsIgnored: spoof,
-  };
+  return sendingDomainRetired(spoof);
 };
 
 export const runCheckDomainVerification = async ({
-  client, mapping, body, spoof, sesv2,
+  client, mapping, body, spoof,
 }) => {
   const resolved = await requireTenant(client, mapping, body, spoof, { configure: true });
   if (resolved.error) return resolved.error;
-  const disabled = requireDomainFeature(spoof, sesv2);
-  if (disabled) return disabled;
-  const limited = await requireActionRateLimit(client, mapping, resolved.tenantId, 'domain_check', spoof);
-  if (limited) return limited;
-
-  const row = await loadTenantEmailSettings(client, resolved.tenantId);
-  const storedDomain = String(row?.sending_domain || '').trim().toLowerCase();
-  if (!storedDomain) {
-    return { ok: false, statusCode: 400, error: 'domain_not_configured', spoofFieldsIgnored: spoof };
-  }
-  if (String(row.domain_status || '').toLowerCase() === DOMAIN_STATUS.disabled) {
-    return {
-      ok: true,
-      statusCode: 200,
-      domain: storedDomain,
-      status: DOMAIN_STATUS.disabled,
-      verified: false,
-      settings: publicSettings(row, resolved.tenant, resolved.access),
-      spoofFieldsIgnored: spoof,
-    };
-  }
-
-  let adapter;
-  try {
-    adapter = await resolveSesV2(sesv2);
-  } catch {
-    return { ok: false, statusCode: 503, error: 'sesv2_unavailable', spoofFieldsIgnored: spoof };
-  }
-  if (!adapter?.getEmailIdentity) return featureDisabled(spoof);
-
-  let identity;
-  try {
-    identity = await adapter.getEmailIdentity({ EmailIdentity: storedDomain });
-  } catch {
-    await upsertTenantEmailSettings(client, resolved.tenantId, {
-      domain_status: DOMAIN_STATUS.failed,
-      last_checked_at: new Date().toISOString(),
-      last_verification_error: 'identity_lookup_failed',
-      custom_sending_enabled: false,
-    });
-    const auditError = await commitDomainAudit(client, mapping, {
-      action: 'tenant_email_domain_check',
-      tenantId: resolved.tenantId,
-      payload: { sending_domain: storedDomain, result: 'failed' },
-    }, spoof);
-    if (auditError) return auditError;
-    const failed = await loadTenantEmailSettings(client, resolved.tenantId);
-    return {
-      ok: true,
-      statusCode: 200,
-      domain: storedDomain,
-      status: DOMAIN_STATUS.failed,
-      verified: false,
-      settings: publicSettings(failed, resolved.tenant, resolved.access),
-      spoofFieldsIgnored: spoof,
-    };
-  }
-
-  const identityName = String(
-    identity.EmailIdentity
-    || identity.IdentityName
-    || identity.identityName
-    || storedDomain,
-  ).trim().toLowerCase();
-  if (identityName !== storedDomain) {
-    await upsertTenantEmailSettings(client, resolved.tenantId, {
-      domain_status: DOMAIN_STATUS.failed,
-      last_checked_at: new Date().toISOString(),
-      last_verification_error: 'identity_mismatch',
-      custom_sending_enabled: false,
-    });
-    const auditError = await commitDomainAudit(client, mapping, {
-      action: 'tenant_email_domain_check',
-      tenantId: resolved.tenantId,
-      payload: { sending_domain: storedDomain, result: 'identity_mismatch' },
-    }, spoof);
-    if (auditError) return auditError;
-    const failed = await loadTenantEmailSettings(client, resolved.tenantId);
-    return {
-      ok: true,
-      statusCode: 200,
-      domain: storedDomain,
-      status: DOMAIN_STATUS.failed,
-      verified: false,
-      settings: publicSettings(failed, resolved.tenant, resolved.access),
-      spoofFieldsIgnored: spoof,
-    };
-  }
-
-  const tokens = dkimTokensFromIdentity(identity);
-  const dnsRecords = tokens.length ? dkimRecordsFromTokens(storedDomain, tokens) : publicDns(row.dns_records);
-  const verified = sesIdentityVerified(identity)
-    && fromAddressOnVerifiedDomain(row.from_address, storedDomain);
-  const nextStatus = verified
-    ? DOMAIN_STATUS.verified
-    : (String(identity.VerificationStatus || '').toUpperCase() === 'FAILED'
-      || String(identity.DkimAttributes?.Status || '').toUpperCase() === 'FAILED'
-      ? DOMAIN_STATUS.failed
-      : DOMAIN_STATUS.verifying);
-
-  await upsertTenantEmailSettings(client, resolved.tenantId, {
-    domain_status: nextStatus,
-    ses_identity_name: storedDomain,
-    dns_records: dnsRecords,
-    last_checked_at: new Date().toISOString(),
-    last_verification_error: verified ? null : (nextStatus === DOMAIN_STATUS.failed ? 'ses_not_verified' : null),
-    verified_at: verified ? (row.verified_at || new Date().toISOString()) : null,
-    custom_sending_enabled: verified,
-    sending_mode: verified ? 'custom' : (row.sending_mode || 'custom'),
-  });
-
-  const auditError = await commitDomainAudit(client, mapping, {
-    action: verified ? 'tenant_email_domain_verify' : 'tenant_email_domain_check',
-    tenantId: resolved.tenantId,
-    payload: { sending_domain: storedDomain, result: nextStatus },
-  }, spoof);
-  if (auditError) return auditError;
-
-  const updated = await loadTenantEmailSettings(client, resolved.tenantId);
-  return {
-    ok: true,
-    statusCode: 200,
-    domain: storedDomain,
-    status: uiDomainStatus(updated),
-    verified,
-    dns: publicDns(updated?.dns_records || dnsRecords),
-    settings: publicSettings(updated, resolved.tenant, resolved.access),
-    spoofFieldsIgnored: spoof,
-  };
+  return sendingDomainRetired(spoof);
 };
 
-export const runDisableCustomSending = async ({ client, mapping, body, spoof, sesv2 }) => {
+export const runDisableCustomSending = async ({ client, mapping, body, spoof }) => {
   const resolved = await requireTenant(client, mapping, body, spoof, { configure: true });
   if (resolved.error) return resolved.error;
-  const disabled = requireDomainFeature(spoof, sesv2);
-  if (disabled) return disabled;
-  const limited = await requireActionRateLimit(client, mapping, resolved.tenantId, 'domain_disable', spoof);
-  if (limited) return limited;
-  const existing = await loadTenantEmailSettings(client, resolved.tenantId);
-  await upsertTenantEmailSettings(client, resolved.tenantId, {
-    sending_mode: 'platform',
-    domain_status: DOMAIN_STATUS.disabled,
-    custom_sending_enabled: false,
-  });
-  const auditError = await commitDomainAudit(client, mapping, {
-    action: 'tenant_email_domain_disable',
-    tenantId: resolved.tenantId,
-    payload: { sending_domain: existing?.sending_domain || null },
-  }, spoof);
-  if (auditError) return auditError;
-  const row = await loadTenantEmailSettings(client, resolved.tenantId);
-  return {
-    ok: true,
-    statusCode: 200,
-    disabled: true,
-    sesIdentityDeleted: false,
-    settings: publicSettings(row, resolved.tenant, resolved.access),
-    fallbackFrom: fallbackFromHeader(resolved.tenant.name),
-    spoofFieldsIgnored: spoof,
-  };
+  return sendingDomainRetired(spoof);
 };
 
 export const runDeleteSesIdentity = async ({
-  client, mapping, body, spoof, sesv2,
+  client, mapping, body, spoof,
 }) => {
   const resolved = await requireTenant(client, mapping, body, spoof, { configure: true });
   if (resolved.error) return resolved.error;
-  if (!resolved.access.canDeleteIdentity || !tenantSesIdentityDeleteEnabled()) {
-    return denied(spoof, 'operator_delete_required');
-  }
-  const disabled = requireDomainFeature(spoof, sesv2);
-  if (disabled) return disabled;
-  const limited = await requireActionRateLimit(client, mapping, resolved.tenantId, 'domain_delete', spoof);
-  if (limited) return limited;
-  const domain = String(body.domain || body.sending_domain || '').trim().toLowerCase();
-  const parsed = normalizeSendingDomain(domain);
-  if (!parsed.ok) {
-    return { ok: false, statusCode: 400, error: parsed.error, spoofFieldsIgnored: spoof };
-  }
-  const others = await findDomainOwner(client, parsed.domain, null);
-  if (others) {
-    return {
-      ok: false,
-      statusCode: 409,
-      error: 'identity_still_mapped',
-      spoofFieldsIgnored: spoof,
-    };
-  }
-  const adapter = await resolveSesV2(sesv2);
-  if (!adapter?.deleteEmailIdentity) return featureDisabled(spoof);
-  await adapter.deleteEmailIdentity({ EmailIdentity: parsed.domain });
-  const auditError = await commitDomainAudit(client, mapping, {
-    action: 'tenant_ses_identity_delete',
-    tenantId: resolved.tenantId,
-    payload: { sending_domain: parsed.domain },
-  }, spoof);
-  if (auditError) return auditError;
-  return {
-    ok: true,
-    statusCode: 200,
-    deleted: true,
-    domain: parsed.domain,
-    spoofFieldsIgnored: spoof,
-  };
+  return sendingDomainRetired(spoof);
 };
 
 export const runPreviewEmailBranding = async ({ client, mapping, body, spoof }) => {
@@ -650,13 +297,10 @@ export const handleTenantEmailPreview = withDomainDeps(runPreviewEmailBranding, 
 export const handleTenantDomainRecheckCron = async (event) => {
   const spoof = { ignored: true };
   return {
-    ok: true,
-    statusCode: 200,
+    ...sendingDomainRetired(spoof),
     processed: 0,
     staging: true,
     sesCalled: false,
-    message: 'tenant-domain-recheck-cron remains a no-op; SES polling is not activated in this PR',
-    spoofFieldsIgnored: spoof,
     path: event?.path || null,
   };
 };

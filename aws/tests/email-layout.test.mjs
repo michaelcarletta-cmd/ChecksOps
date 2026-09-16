@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { escapeHtml, renderChecksOpsEmail } from '../functions/api/email-layout.mjs';
 import {
+  customFromFailureReason,
   isSafeHttpUrl,
   isVerifiedCustomSender,
   platformBranding,
@@ -134,173 +135,141 @@ test('unsafe URL schemes are rejected or omitted from href and src', () => {
   assert.doesNotMatch(layout.text, /Unsubscribe:/);
 });
 
-test('custom From requires verified custom domain ownership', async () => {
+test('legacy custom-domain rows cannot change ChecksOps From', async () => {
+  const verifiedShape = {
+    sending_mode: 'custom',
+    domain_status: 'verified',
+    from_address: 'office@acme.test',
+    sending_domain: 'acme.test',
+    ses_identity_name: 'acme.test',
+    custom_sending_enabled: true,
+  };
+  assert.equal(isVerifiedCustomSender(verifiedShape), false);
+  assert.equal(customFromFailureReason(verifiedShape), 'custom_from_retired');
   assert.equal(isVerifiedCustomSender({
     sending_mode: 'custom',
     domain_status: 'pending',
     from_address: 'office@acme.test',
     sending_domain: 'acme.test',
   }), false);
-  assert.equal(isVerifiedCustomSender({
-    sending_mode: 'custom',
-    domain_status: 'verified',
-    from_address: 'office@acme.test',
-    sending_domain: 'acme.test',
-  }), true);
-  assert.equal(isVerifiedCustomSender({
-    sending_mode: 'custom',
-    domain_status: 'verified',
-    from_address: 'hello@mail.acme.test',
-    sending_domain: 'acme.test',
-  }), true);
-  assert.equal(isVerifiedCustomSender({
-    sending_mode: 'custom',
-    domain_status: 'verified',
-    from_address: 'office@acme.test',
-    sending_domain: 'mail.acme.test',
-  }), false);
-  assert.equal(isVerifiedCustomSender({
-    sending_mode: 'platform',
-    domain_status: 'verified',
-    from_address: 'office@acme.test',
-    sending_domain: 'acme.test',
-  }), false);
 
-  const unverified = await resolveEmailBranding(sqlClient([
+  const verified = await resolveEmailBranding(sqlClient([
     {
       match: (sql) => sql.includes('FROM public.tenants'),
-      result: () => ({ rows: [{ name: 'Acme', is_system_tenant: false }] }),
-    },
-    {
-      match: (sql) => sql.includes('tenant_email_settings'),
       result: () => ({ rows: [{
-        sending_mode: 'custom',
-        sending_domain: 'acme.test',
-        from_address: 'office@acme.test',
-        domain_status: 'pending',
+        name: 'Acme',
+        is_system_tenant: false,
+        logo_url: 'https://cdn.acme.test/brand.png',
+        primary_color: '#112233',
+        email_from_name: 'Acme Claims',
+        email_from_address: 'office@acme.test',
+        email_reply_to: 'help@acme.test',
       }] }),
     },
-  ]), { tenantId: '11111111-1111-4111-8111-111111111111' });
-  assert.equal(unverified.usingCustomFrom, false);
-  assert.equal(unverified.customFromBlocked, true);
-  assert.match(unverified.from, /noreply@checksops\.com/);
-  assert.match(unverified.from, /via ChecksOps/);
-  assert.equal(unverified.customFromReason, 'domain_not_verified');
-
-  const exact = await resolveEmailBranding(sqlClient([
-    {
-      match: (sql) => sql.includes('FROM public.tenants'),
-      result: () => ({ rows: [{ name: 'Acme', is_system_tenant: false }] }),
-    },
     {
       match: (sql) => sql.includes('tenant_email_settings'),
       result: () => ({ rows: [{
+        from_name: 'Acme Claims',
+        reply_to: 'claims@acme.test',
         sending_mode: 'custom',
         sending_domain: 'acme.test',
         from_address: 'office@acme.test',
         domain_status: 'verified',
+        ses_identity_name: 'acme.test',
+        custom_sending_enabled: true,
       }] }),
     },
   ]), { tenantId: '11111111-1111-4111-8111-111111111111' });
-  assert.equal(exact.usingCustomFrom, true);
-  assert.match(exact.from, /office@acme\.test/);
-
-  const subdomain = await resolveEmailBranding(sqlClient([
-    {
-      match: (sql) => sql.includes('FROM public.tenants'),
-      result: () => ({ rows: [{ name: 'Acme', is_system_tenant: false }] }),
-    },
-    {
-      match: (sql) => sql.includes('tenant_email_settings'),
-      result: () => ({ rows: [{
-        sending_mode: 'custom',
-        sending_domain: 'acme.test',
-        from_address: 'hello@mail.acme.test',
-        domain_status: 'verified',
-      }] }),
-    },
-  ]), { tenantId: '11111111-1111-4111-8111-111111111111' });
-  assert.equal(subdomain.usingCustomFrom, true);
-  assert.match(subdomain.from, /hello@mail\.acme\.test/);
-
-  const parentBlocked = await resolveEmailBranding(sqlClient([
-    {
-      match: (sql) => sql.includes('FROM public.tenants'),
-      result: () => ({ rows: [{ name: 'Acme', is_system_tenant: false }] }),
-    },
-    {
-      match: (sql) => sql.includes('tenant_email_settings'),
-      result: () => ({ rows: [{
-        sending_mode: 'custom',
-        sending_domain: 'mail.acme.test',
-        from_address: 'office@acme.test',
-        domain_status: 'verified',
-      }] }),
-    },
-  ]), { tenantId: '11111111-1111-4111-8111-111111111111' });
-  assert.equal(parentBlocked.usingCustomFrom, false);
-  assert.equal(parentBlocked.customFromBlocked, true);
-  assert.match(parentBlocked.from, /noreply@checksops\.com/);
-
-  assert.equal(isVerifiedCustomSender({
-    sending_mode: 'custom',
-    domain_status: 'verified',
-    from_address: 'noreply@notify.acme.test',
-    sending_domain: 'notify.acme.test',
-    ses_identity_name: 'other.acme.test',
-  }), false);
-
-  const identityMismatch = await resolveEmailBranding(sqlClient([
-    {
-      match: (sql) => sql.includes('FROM public.tenants'),
-      result: () => ({ rows: [{ name: 'Acme', is_system_tenant: false, logo_url: 'https://cdn.acme.test/brand.png', primary_color: '#112233' }] }),
-    },
-    {
-      match: (sql) => sql.includes('tenant_email_settings'),
-      result: () => ({ rows: [{
-        sending_mode: 'custom',
-        sending_domain: 'notify.acme.test',
-        from_address: 'noreply@notify.acme.test',
-        domain_status: 'verified',
-        ses_identity_name: 'other.acme.test',
-      }] }),
-    },
-  ]), { tenantId: '11111111-1111-4111-8111-111111111111' });
-  assert.equal(identityMismatch.usingCustomFrom, false);
-  assert.equal(identityMismatch.customFromReason, 'ses_identity_mismatch');
-  assert.equal(identityMismatch.logoUrl, 'https://cdn.acme.test/brand.png');
-  assert.equal(identityMismatch.primaryColor, '#112233');
-
-  const disabledCustom = await resolveEmailBranding(sqlClient([
-    {
-      match: (sql) => sql.includes('FROM public.tenants'),
-      result: () => ({ rows: [{ name: 'Acme', is_system_tenant: false }] }),
-    },
-    {
-      match: (sql) => sql.includes('tenant_email_settings'),
-      result: () => ({ rows: [{
-        sending_mode: 'custom',
-        sending_domain: 'notify.acme.test',
-        from_address: 'noreply@notify.acme.test',
-        domain_status: 'verified',
-        custom_sending_enabled: false,
-      }] }),
-    },
-  ]), { tenantId: '11111111-1111-4111-8111-111111111111' });
-  assert.equal(disabledCustom.usingCustomFrom, false);
-  assert.equal(disabledCustom.customFromReason, 'custom_sending_disabled');
+  assert.equal(verified.usingCustomFrom, false);
+  assert.equal(verified.customFromBlocked, true);
+  assert.equal(verified.customFromReason, 'custom_from_retired');
+  assert.match(verified.from, /noreply@checksops\.com/);
+  assert.match(verified.from, /via ChecksOps/);
+  assert.doesNotMatch(verified.from, /office@acme\.test/);
+  assert.equal(verified.replyTo, 'claims@acme.test');
+  assert.equal(verified.logoUrl, 'https://cdn.acme.test/brand.png');
+  assert.equal(verified.primaryColor, '#112233');
+  assert.equal(verified.companySubtitle, 'Acme');
 });
 
-test('platform branding never uses an unverified custom From', async () => {
+test('Reply-To uses settings then tenant mailbox then ChecksOps fallback', async () => {
+  const fromSettings = await resolveEmailBranding(sqlClient([
+    {
+      match: (sql) => sql.includes('FROM public.tenants'),
+      result: () => ({ rows: [{
+        name: 'Acme',
+        is_system_tenant: false,
+        email_from_address: 'office@acme.test',
+        email_reply_to: 'ops@acme.test',
+      }] }),
+    },
+    {
+      match: (sql) => sql.includes('tenant_email_settings'),
+      result: () => ({ rows: [{
+        reply_to: 'claims@acme.test',
+        from_address: 'noreply@notify.acme.test',
+      }] }),
+    },
+  ]), { tenantId: '11111111-1111-4111-8111-111111111111' });
+  assert.equal(fromSettings.replyTo, 'claims@acme.test');
+  assert.match(fromSettings.from, /noreply@checksops\.com/);
+
+  const fromTenant = await resolveEmailBranding(sqlClient([
+    {
+      match: (sql) => sql.includes('FROM public.tenants'),
+      result: () => ({ rows: [{
+        name: 'Acme',
+        is_system_tenant: false,
+        email_from_address: 'office@acme.test',
+        email_reply_to: 'ops@acme.test',
+      }] }),
+    },
+    {
+      match: (sql) => sql.includes('tenant_email_settings'),
+      result: () => ({ rows: [{ from_address: 'office@acme.test' }] }),
+    },
+  ]), { tenantId: '11111111-1111-4111-8111-111111111111' });
+  assert.equal(fromTenant.replyTo, 'ops@acme.test');
+  assert.doesNotMatch(fromTenant.replyTo, /office@acme\.test/);
+
+  const fallback = await resolveEmailBranding(sqlClient([
+    {
+      match: (sql) => sql.includes('FROM public.tenants'),
+      result: () => ({ rows: [{
+        name: 'Acme',
+        is_system_tenant: false,
+        email_from_address: 'office@acme.test',
+      }] }),
+    },
+    {
+      match: (sql) => sql.includes('tenant_email_settings'),
+      result: () => ({ rows: [{ from_address: 'office@acme.test' }] }),
+    },
+  ]), { tenantId: '11111111-1111-4111-8111-111111111111' });
+  assert.equal(fallback.replyTo, 'support@checksops.com');
+
+  const platform = await resolveEmailBranding(sqlClient([
+    {
+      match: (sql) => sql.includes('FROM public.tenants'),
+      result: () => ({ rows: [{
+        name: 'Acme',
+        is_system_tenant: false,
+        email_reply_to: 'claims@acme.test',
+      }] }),
+    },
+    {
+      match: (sql) => sql.includes('tenant_email_settings'),
+      result: () => ({ rows: [{ reply_to: 'claims@acme.test' }] }),
+    },
+  ]), { tenantId: '11111111-1111-4111-8111-111111111111', senderOverride: 'checksops' });
+  assert.equal(platform.replyTo, 'support@checksops.com');
+  assert.equal(platform.usingCustomFrom, false);
+});
+
+test('platform branding never uses a tenant custom From', async () => {
   const platform = platformBranding();
   assert.match(platform.from, /noreply@checksops\.com/);
   assert.equal(platform.usingCustomFrom, false);
-  assert.equal(isVerifiedCustomSender({
-    sending_mode: 'custom',
-    domain_status: 'pending',
-    from_address: 'office@acme.test',
-    sending_domain: 'acme.test',
-  }), false);
 
   const blocked = await resolveEmailBranding(sqlClient([
     {
@@ -334,27 +303,6 @@ test('platform branding never uses an unverified custom From', async () => {
   assert.equal(blocked.companySubtitle, 'Acme');
   assert.equal(blocked.primaryColor, '#ff6600');
   assert.match(blocked.logoUrl, /checksops-logo\.png/);
-
-  const verified = await resolveEmailBranding(sqlClient([
-    {
-      match: (sql) => sql.includes('FROM public.tenants'),
-      result: () => ({ rows: [{ name: 'Acme', is_system_tenant: false, primary_color: '#00aa00' }] }),
-    },
-    {
-      match: (sql) => sql.includes('tenant_email_settings'),
-      result: () => ({ rows: [{
-        from_name: 'Acme Claims',
-        reply_to: 'help@acme.test',
-        sending_mode: 'custom',
-        sending_domain: 'acme.test',
-        from_address: 'office@acme.test',
-        domain_status: 'verified',
-      }] }),
-    },
-  ]), { tenantId: '11111111-1111-4111-8111-111111111111' });
-  assert.equal(verified.usingCustomFrom, true);
-  assert.equal(verified.customFromBlocked, false);
-  assert.match(verified.from, /office@acme\.test/);
 });
 
 test('sink mode always sinks and SES errors keep sink_fallback', async () => {
@@ -395,6 +343,7 @@ test('sink mode always sinks and SES errors keep sink_fallback', async () => {
     subject: 'Tagged',
     html: '<p>hello</p>',
     text: 'hello',
+    replyTo: 'claims@acme.test',
     tenantId: '11111111-1111-4111-8111-111111111111',
     messageCategory: 'tenant_invite',
     headers: { 'X-Claim-Number': 'CL-999', recipient: 'victim@example.com' },
@@ -404,6 +353,10 @@ test('sink mode always sinks and SES errors keep sink_fallback', async () => {
     },
   });
   assert.equal(tagged.results[0].status, 'sent');
+  const source = captured?.input?.Source || captured?.Source;
+  assert.match(String(source || ''), /noreply@checksops\.com/);
+  const replyTo = captured?.input?.ReplyToAddresses || captured?.ReplyToAddresses;
+  assert.deepEqual(replyTo, ['claims@acme.test']);
   const tags = captured?.input?.Tags || captured?.Tags || [];
   assert.equal(tags.some((t) => t.Name === 'tenant_id' && t.Value === '11111111-1111-4111-8111-111111111111'), true);
   assert.equal(tags.some((t) => t.Name === 'message_category' && t.Value === 'tenant_invite'), true);

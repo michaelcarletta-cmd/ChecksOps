@@ -102,6 +102,50 @@ const auditEmailHandlers = ({ reserved = new Map() } = {}) => ([
       }],
     }),
   },
+  {
+    // Main-line persist contract. Integration uses aws_mark_endorsement_request_sent.
+    // Keep both so the fixture matches either implementation without changing production.
+    match: (sql) => sql.includes('UPDATE public.check_endorsements')
+      && sql.includes("status = 'sent'")
+      && sql.includes('RETURNING'),
+    result: (params) => ({
+      rows: [{
+        id: params[0],
+        status: 'sent',
+        request_sent_at: '2026-09-12T17:00:00.000Z',
+      }],
+      rowCount: 1,
+    }),
+  },
+]);
+
+const tenantBrandingHandlers = () => ([
+  {
+    match: (sql) => sql.includes('FROM public.tenants'),
+    result: () => ({ rows: [{
+      id: TENANT,
+      name: 'Acme',
+      is_system_tenant: false,
+      logo_url: 'https://cdn.acme.test/brand.png',
+      primary_color: '#112233',
+      email_from_name: 'Acme Claims',
+      email_from_address: 'office@acme.test',
+      email_reply_to: 'ops@acme.test',
+    }] }),
+  },
+  {
+    match: (sql) => sql.includes('FROM public.tenant_email_settings'),
+    result: () => ({ rows: [{
+      from_name: 'Acme Claims',
+      reply_to: 'claims@acme.test',
+      sending_mode: 'custom',
+      sending_domain: 'acme.test',
+      from_address: 'office@acme.test',
+      domain_status: 'verified',
+      ses_identity_name: 'acme.test',
+      custom_sending_enabled: true,
+    }] }),
+  },
 ]);
 
 const capturingMailer = (sent) => async (payload) => {
@@ -472,12 +516,16 @@ test('endorsement and payment-direction use branding From and call mailer once',
         match: (sql) => sql.includes('aws_can_write_tenant'),
         result: () => ({ rows: [{ ok: true }] }),
       },
-      ...auditEmailHandlers(),
+      ...tenantBrandingHandlers(),
     ]),
   });
   assert.equal(endorse.ok, true);
   assert.equal(sent.length, 1);
   assert.match(sent[0].from || '', /noreply@checksops\.com/);
+  assert.match(sent[0].from || '', /via ChecksOps/);
+  assert.doesNotMatch(sent[0].from || '', /office@acme\.test/);
+  assert.equal(sent[0].replyTo, 'claims@acme.test');
+  assert.match(sent[0].html, /cdn\.acme\.test\/brand\.png|#112233/);
 
   const pd = await runSendPaymentDirectionRequest({
     spoof,
@@ -498,10 +546,14 @@ test('endorsement and payment-direction use branding From and call mailer once',
         match: (sql) => sql.includes('aws_can_write_tenant'),
         result: () => ({ rows: [{ ok: true }] }),
       },
+      ...tenantBrandingHandlers(),
     ]),
   });
   assert.equal(pd.ok, true);
   assert.equal(sent.length, 2);
+  assert.match(sent[1].from || '', /noreply@checksops\.com/);
+  assert.doesNotMatch(sent[1].from || '', /office@acme\.test/);
+  assert.equal(sent[1].replyTo, 'claims@acme.test');
 });
 
 test('stakeholder resend calls the mailer and never reports sent otherwise', async () => {
@@ -634,6 +686,8 @@ test('hire-mortgage-agent and tenant invite stay SUPPRESS and never leak passwor
     assert.equal(JSON.stringify(hire).includes(issuedHire), false);
     assert.equal(JSON.stringify(sent).includes(issuedHire), false);
     assert.match(sent[0].html, /mortgage-ops\/login/);
+    assert.match(sent[0].from || '', /noreply@checksops\.com/);
+    assert.equal(sent[0].replyTo, 'support@checksops.com');
     assert.equal(sent[0].html.toLowerCase().includes(issuedHire.toLowerCase()), false);
     assert.doesNotMatch(sent[0].html, /TemporaryPassword|temp_password|tempPassword/);
 
@@ -689,16 +743,22 @@ test('OTP codes are emailed once and are not written to logs', async () => {
       spoof,
       send: capturingMailer(sent),
       body: { email: 'home@example.com' },
-      client: sqlClient([{
-        match: (sql) => sql.includes('aws_public_homeowner_upload_otp_insert'),
-        result: () => ({ rows: [{ doc: { ok: true } }] }),
-      }]),
+      client: sqlClient([
+        {
+          match: (sql) => sql.includes('aws_public_homeowner_upload_otp_insert'),
+          result: () => ({ rows: [{ doc: { ok: true } }] }),
+        },
+        ...tenantBrandingHandlers(),
+      ]),
     });
     assert.equal(otp.ok, true);
     assert.equal(sent.length, 1);
     const code = otp.stagingDebugCode;
     assert.match(String(code), /^\d{6}$/);
     assert.match(sent[0].html, new RegExp(code));
+    assert.match(sent[0].from || '', /noreply@checksops\.com/);
+    assert.equal(sent[0].replyTo, 'support@checksops.com');
+    assert.doesNotMatch(sent[0].replyTo || '', /claims@acme\.test|ops@acme\.test/);
     assert.equal(logs.some((line) => line.includes(code)), false);
   } finally {
     console.log = origLog;
