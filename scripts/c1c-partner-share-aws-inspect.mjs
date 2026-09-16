@@ -258,6 +258,7 @@ const main = async () => {
     livePolicies: inspected.livePolicies,
     c1cVisible: inspected.c1cVisible,
     freedomVisible: inspected.freedomVisible,
+    fundsReceived: inspected.fundsReceived || null,
     classification: {
       ALREADY_ACTIVE_IN_AWS: classified.ALREADY_ACTIVE_IN_AWS,
       MISSING_FROM_AWS: classified.MISSING_FROM_AWS,
@@ -281,13 +282,30 @@ const main = async () => {
     conflictCheckIds: classified.conflict.map((r) => r.check_id).sort(),
   };
   await writeFile(path.join(OUT, 'phase1-aws-inspect.json'), JSON.stringify({ ...report, shares: inspected.shares }, null, 2));
+  if (inspected.fundsReceived) {
+    await writeFile(path.join(OUT, 'funds-received-inspect.json'), JSON.stringify({
+      generatedAt: report.generatedAt,
+      readOnly: true,
+      writesAttempted: false,
+      ...inspected.fundsReceived,
+    }, null, 2));
+  }
   console.log(JSON.stringify({
     wrote: `${OUT}/phase1-aws-inspect.json`,
+    fundsReceivedWrote: inspected.fundsReceived ? `${OUT}/funds-received-inspect.json` : null,
     classification: report.classification,
     expectedMutation: report.expectedMutation,
     c1cVisible: report.c1cVisible,
     freedomVisible: report.freedomVisible,
     totalsIncludesSharedChecks: report.totalsIncludesSharedChecks,
+    fundsReceived: inspected.fundsReceived ? {
+      functionsPresent: inspected.fundsReceived.functionsPresent,
+      missingFunctions: inspected.fundsReceived.missingFunctions,
+      physical: inspected.fundsReceived.physical,
+      sample: inspected.fundsReceived.sample,
+      freedomSession: inspected.fundsReceived.freedomSession,
+      c1cSession: inspected.fundsReceived.c1cSession,
+    } : null,
   }, null, 2));
 };
 

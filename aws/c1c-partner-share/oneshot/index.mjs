@@ -289,6 +289,261 @@ const inspect = async (client) => {
     })),
     c1cVisible,
     freedomVisible,
+    fundsReceived: await fundsInspect(client),
+  };
+};
+
+const callMaybe = async (fn) => {
+  try {
+    return await fn();
+  } catch (error) {
+    return { error: String(error?.message || error).slice(0, 220) };
+  }
+};
+
+const fundsInspect = async (client) => {
+  const functionRows = (await client.query(`
+    SELECT p.proname
+    FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public'
+      AND p.proname IN (
+        'get_tenant_funds_received',
+        'get_check_claim_settlement',
+        'current_tenant_is_check_funds_recipient'
+      )
+    ORDER BY p.proname
+  `)).rows.map((r) => r.proname);
+
+  const policies = (await client.query(`
+    SELECT tablename, policyname, cmd, qual
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename IN (
+        'disbursement_splits',
+        'disbursement_batches',
+        'claim_check_payments',
+        'claim_settlements',
+        'claims'
+      )
+    ORDER BY tablename, policyname
+  `)).rows.map((p) => ({
+    table: p.tablename,
+    policy: p.policyname,
+    cmd: p.cmd,
+    usesShareTarget: /aws_is_active_shared_check_target|shared_checks/i.test(String(p.qual || '')),
+    usesCanAccessCheck: /aws_can_access_check/i.test(String(p.qual || '')),
+    usesRecipient: /recipient_tenant_id|current_tenant_is_check_funds_recipient|stakeholder_account/i.test(String(p.qual || '')),
+    usesTenantOwner: /aws_can_access_tenant\(tenant_id\)|user_belongs_to_tenant/i.test(String(p.qual || '')),
+  }));
+
+  const physical = (await client.query(`
+    WITH shared AS (
+      SELECT sc.check_id
+      FROM public.shared_checks sc
+      WHERE sc.source_tenant_id = $1::uuid
+        AND sc.target_tenant_id = $2::uuid
+        AND sc.revoked_at IS NULL
+    )
+    SELECT
+      (SELECT count(*) FROM shared)::int AS shared_active,
+      (
+        SELECT count(*)::int
+        FROM public.disbursement_splits ds
+        JOIN public.disbursement_batches db ON db.id = ds.batch_id
+        JOIN shared s ON s.check_id = db.check_intake_item_id
+        WHERE ds.status = 'settled'
+      ) AS settled_splits_on_shared_checks,
+      (
+        SELECT count(DISTINCT db.check_intake_item_id)::int
+        FROM public.disbursement_splits ds
+        JOIN public.disbursement_batches db ON db.id = ds.batch_id
+        JOIN shared s ON s.check_id = db.check_intake_item_id
+        WHERE ds.status = 'settled'
+      ) AS shared_checks_with_settled_splits,
+      (
+        SELECT count(*)::int
+        FROM public.disbursement_splits ds
+        JOIN public.disbursement_batches db ON db.id = ds.batch_id
+        JOIN shared s ON s.check_id = db.check_intake_item_id
+        WHERE ds.status = 'settled'
+          AND ds.tenant_id = $1::uuid
+          AND ds.recipient_tenant_id = $2::uuid
+      ) AS freedom_to_c1c_recipient_splits,
+      (
+        SELECT count(DISTINCT db.check_intake_item_id)::int
+        FROM public.disbursement_splits ds
+        JOIN public.disbursement_batches db ON db.id = ds.batch_id
+        JOIN shared s ON s.check_id = db.check_intake_item_id
+        WHERE ds.status = 'settled'
+          AND ds.tenant_id = $1::uuid
+          AND ds.recipient_tenant_id = $2::uuid
+      ) AS shared_checks_with_c1c_recipient_splits,
+      (
+        SELECT count(*)::int
+        FROM public.disbursement_splits ds
+        JOIN public.disbursement_batches db ON db.id = ds.batch_id
+        JOIN shared s ON s.check_id = db.check_intake_item_id
+        WHERE ds.status = 'settled' AND ds.recipient_tenant_id IS NULL
+      ) AS settled_splits_null_recipient_on_shared,
+      (
+        SELECT count(*)::int
+        FROM public.claim_check_payments ccp
+        JOIN shared s ON s.check_id = ccp.check_intake_item_id
+        WHERE ccp.recipient_tenant_id = $2::uuid
+      ) AS claim_check_payments_to_c1c_on_shared,
+      (
+        SELECT count(*)::int
+        FROM public.disbursement_splits ds
+        WHERE ds.status = 'settled'
+          AND ds.recipient_tenant_id = $2::uuid
+          AND ds.tenant_id IS DISTINCT FROM $2::uuid
+      ) AS all_c1c_recipient_settled_splits,
+      (
+        SELECT count(DISTINCT sc.target_tenant_id)::int
+        FROM public.shared_checks sc
+        JOIN public.disbursement_batches db ON db.check_intake_item_id = sc.check_id
+        JOIN public.disbursement_splits ds ON ds.batch_id = db.id AND ds.status = 'settled'
+        WHERE sc.revoked_at IS NULL AND sc.target_tenant_id <> $1::uuid
+      ) AS other_partner_tenants_with_settled_splits_on_shared_checks
+  `, [FREEDOM, C1C])).rows[0];
+
+  const sample = (await client.query(`
+    WITH shared AS (
+      SELECT sc.check_id
+      FROM public.shared_checks sc
+      WHERE sc.source_tenant_id = $1::uuid
+        AND sc.target_tenant_id = $2::uuid
+        AND sc.revoked_at IS NULL
+    )
+    SELECT
+      db.check_intake_item_id AS check_id,
+      cii.tenant_id AS owner_tenant_id,
+      count(*)::int AS settled_split_count,
+      coalesce(sum(ds.amount), 0)::numeric AS settled_amount,
+      count(*) FILTER (WHERE ds.recipient_tenant_id = $2::uuid)::int AS c1c_recipient_count,
+      count(*) FILTER (WHERE ds.recipient_tenant_id IS NULL)::int AS null_recipient_count,
+      array_agg(ds.id ORDER BY ds.settled_at DESC NULLS LAST) AS split_ids
+    FROM public.disbursement_splits ds
+    JOIN public.disbursement_batches db ON db.id = ds.batch_id
+    JOIN shared s ON s.check_id = db.check_intake_item_id
+    JOIN public.check_intake_items cii ON cii.id = db.check_intake_item_id
+    WHERE ds.status = 'settled'
+    GROUP BY db.check_intake_item_id, cii.tenant_id
+    ORDER BY count(*) FILTER (WHERE ds.recipient_tenant_id = $2::uuid) DESC, count(*) DESC
+    LIMIT 1
+  `, [FREEDOM, C1C])).rows[0] || null;
+
+  const sampleCheckId = sample?.check_id || null;
+  const sessionFor = async (appUserId) => asAppUser(client, appUserId, async () => {
+    const checkVisible = sampleCheckId
+      ? Number((await client.query(
+        'SELECT count(*)::int AS n FROM public.check_intake_items WHERE id = $1::uuid',
+        [sampleCheckId],
+      )).rows[0].n)
+      : 0;
+    const splitsOnSample = sampleCheckId
+      ? await callMaybe(async () => {
+        const rows = (await client.query(`
+          SELECT ds.id, ds.amount, ds.status, ds.tenant_id, ds.recipient_tenant_id
+          FROM public.disbursement_splits ds
+          JOIN public.disbursement_batches db ON db.id = ds.batch_id
+          WHERE db.check_intake_item_id = $1::uuid AND ds.status = 'settled'
+        `, [sampleCheckId])).rows;
+        return {
+          count: rows.length,
+          amountSum: rows.reduce((n, r) => n + Number(r.amount || 0), 0),
+          ids: rows.map((r) => r.id),
+          recipientMatchesC1c: rows.filter((r) => r.recipient_tenant_id === C1C).length,
+        };
+      })
+      : { count: 0, amountSum: 0, ids: [], recipientMatchesC1c: 0 };
+    const incomingFilter = sampleCheckId
+      ? await callMaybe(async () => {
+        const rows = (await client.query(`
+          SELECT ds.id, ds.amount
+          FROM public.disbursement_splits ds
+          JOIN public.disbursement_batches db ON db.id = ds.batch_id
+          WHERE db.check_intake_item_id = $1::uuid
+            AND ds.recipient_tenant_id = $2::uuid
+            AND ds.tenant_id IS DISTINCT FROM $2::uuid
+        `, [sampleCheckId, C1C])).rows;
+        return { count: rows.length, amountSum: rows.reduce((n, r) => n + Number(r.amount || 0), 0), ids: rows.map((r) => r.id) };
+      })
+      : { count: 0 };
+    const paymentsFilter = sampleCheckId
+      ? await callMaybe(async () => {
+        const rows = (await client.query(`
+          SELECT id, payment_amount
+          FROM public.claim_check_payments
+          WHERE check_intake_item_id = $1::uuid AND recipient_tenant_id = $2::uuid
+        `, [sampleCheckId, C1C])).rows;
+        return { count: rows.length, amountSum: rows.reduce((n, r) => n + Number(r.payment_amount || 0), 0), ids: rows.map((r) => r.id) };
+      })
+      : { count: 0 };
+    const rpcLane = await callMaybe(async () => {
+      const rows = (await client.query(
+        'SELECT id, amount, check_intake_item_id FROM public.get_tenant_funds_received($1::uuid)',
+        [appUserId === C1C_ADMIN ? C1C : FREEDOM],
+      )).rows;
+      const onSample = sampleCheckId
+        ? rows.filter((r) => r.check_intake_item_id === sampleCheckId)
+        : [];
+      return {
+        totalCount: rows.length,
+        totalAmount: rows.reduce((n, r) => n + Number(r.amount || 0), 0),
+        sampleCount: onSample.length,
+        sampleAmount: onSample.reduce((n, r) => n + Number(r.amount || 0), 0),
+        sampleIds: onSample.map((r) => r.id),
+      };
+    });
+    const settlement = sampleCheckId
+      ? await callMaybe(async () => {
+        const row = (await client.query(
+          'SELECT public.get_check_claim_settlement($1::uuid) AS payload',
+          [sampleCheckId],
+        )).rows[0]?.payload;
+        return {
+          present: row != null,
+          hasClaim: Boolean(row?.claim),
+          hasSettlement: Boolean(row?.settlement),
+          siblingCheckCount: Array.isArray(row?.sibling_checks) ? row.sibling_checks.length : 0,
+        };
+      })
+      : null;
+    return {
+      checkVisible: checkVisible > 0,
+      splitsOnSample,
+      incomingRecipientFilter: incomingFilter,
+      claimCheckPaymentsFilter: paymentsFilter,
+      getTenantFundsReceived: rpcLane,
+      getCheckClaimSettlement: settlement,
+    };
+  });
+
+  return {
+    ok: true,
+    readOnly: true,
+    functionsPresent: functionRows,
+    missingFunctions: [
+      'get_tenant_funds_received',
+      'get_check_claim_settlement',
+      'current_tenant_is_check_funds_recipient',
+    ].filter((name) => !functionRows.includes(name)),
+    policies,
+    physical,
+    sample: sample ? {
+      check_id: sample.check_id,
+      owner_tenant_id: sample.owner_tenant_id,
+      ownerIsFreedom: sample.owner_tenant_id === FREEDOM,
+      settled_split_count: Number(sample.settled_split_count),
+      settled_amount: Number(sample.settled_amount),
+      c1c_recipient_count: Number(sample.c1c_recipient_count),
+      null_recipient_count: Number(sample.null_recipient_count),
+      split_ids: sample.split_ids,
+    } : null,
+    freedomSession: await sessionFor(FREEDOM_TESTER),
+    c1cSession: await sessionFor(C1C_ADMIN),
   };
 };
 
