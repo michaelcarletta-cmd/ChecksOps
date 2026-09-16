@@ -46,6 +46,7 @@ export const PROVIDER_FUNCTIONS = [
   fn('moov-wallet-sync', 'moov', OP_CLASS.READ_STATUS, 'sandbox_parity', 'GET-only wallet refresh. Production never POSTs /wallets.'),
   fn('moov-wallet-status', 'moov', OP_CLASS.READ_STATUS, 'sandbox_parity', 'Tenant wallet snapshot: available, pending in/out, sweeps, verification, linked bank. Live GET when AWS_PROVIDER_LIVE_READS_ENABLED. Never transfers.'),
   fn('moov-wallet-fund', 'moov', OP_CLASS.MONEY_MOVEMENT, 'sandbox_parity', 'BANK→WALLET. Production (dark): fail-closed AWS writer; never re-KYC. A $0 Sweep retain does not block the pull. Unreachable while money holds remain on.'),
+  fn('moov-wallet-fund-continue', 'moov', OP_CLASS.MONEY_MOVEMENT, 'sandbox_parity', 'Continue an existing ready BANK→WALLET payment_transfers row by payment_transfer_id only. Never inserts a new intent. Dark: validate + prove CAS/idempotency in tests; no Moov POST and no production CAS. Provider key is checksops-wallet-fund-{id}.'),
   fn('moov-bank-account-add', 'moov', OP_CLASS.BANK_CONNECTION, 'sandbox_parity', 'Adds a bank account at Moov.'),
   fn('moov-bank-link-token', 'moov', OP_CLASS.BANK_CONNECTION, 'sandbox_parity', 'Creates a bank-link token.'),
   fn('moov-micro-deposit-initiate', 'moov', OP_CLASS.BANK_CONNECTION, 'sandbox_parity', 'Initiates micro-deposits (money movement).'),

@@ -13,6 +13,7 @@ const isTrue = (value) => String(value || '') === 'true';
 
 export const PRODUCTION_MOOV_FUNCTIONS = new Set([
   'moov-wallet-fund',
+  'moov-wallet-fund-continue',
   'moov-disburse',
   'moov-tenant-fee-charge',
   'moov-refund',

@@ -1,6 +1,7 @@
 import { APP_USER_EMAIL_GUC, APP_USER_ID_GUC } from '../../cognito.mjs';
 import { financialPermissionsActivated } from '../../financial-flags.mjs';
 import { stableIdempotencyKey } from '../../financial-idempotency.mjs';
+import { isUuid } from '../../financial-ownership.mjs';
 
 export const moovFundingIdempotencyKey = ({ tenantId, intentId, amountCents }) =>
   stableIdempotencyKey({
@@ -37,6 +38,18 @@ export const moovRefundIdempotencyKey = ({ tenantId, intentId, amountCents }) =>
     amountCents,
     currency: 'USD',
   });
+
+/** Provider X-Idempotency-Key is derived only from the existing payment_transfers.id. Browser cannot override. */
+export const providerFundIdempotencyKey = (paymentTransferId) =>
+  `checksops-wallet-fund-${paymentTransferId}`;
+
+export async function loadProductionTransferById(client, id) {
+  if (!isUuid(id)) return null;
+  return (await client.query(
+    `SELECT * FROM public.payment_transfers WHERE id = $1::uuid LIMIT 1`,
+    [id],
+  )).rows[0] || null;
+}
 
 export async function bindMoovProductionGucs(client, mapping, claims) {
   await client.query('SELECT set_config($1, $2, true)', [APP_USER_ID_GUC, mapping.application_user_id]);

@@ -13,6 +13,7 @@ import { handleProductionMoovTenantFeeCharge } from './moov-fee-collect.mjs';
 import { handleProductionMoovRefund } from './moov-refund.mjs';
 import { handleProductionMoovInitiateWalletFunding, handleProductionMoovProcessFundedPayment, handleProductionMoovWalletDisburse, handleProductionMoovWalletFundOnClear } from './moov-wallet-disburse.mjs';
 import { handleProductionMoovWalletFund } from './moov-wallet-fund.mjs';
+import { handleProductionMoovWalletFundContinue } from './moov-wallet-fund-continue.mjs';
 import {
   handleProductionMoovReadiness,
   handleProductionMoovWalletStatus,
@@ -57,6 +58,7 @@ const wrapRead = (handler) => wrapNetwork(handler, withIdentity);
 
 const HANDLERS = {
   'moov-wallet-fund': wrapWrite(handleProductionMoovWalletFund),
+  'moov-wallet-fund-continue': wrapWrite(handleProductionMoovWalletFundContinue),
   'moov-disburse': wrapWrite(handleProductionMoovWalletDisburse),
   'moov-tenant-fee-charge': wrapWrite(handleProductionMoovTenantFeeCharge),
   'moov-refund': wrapWrite(handleProductionMoovRefund),
