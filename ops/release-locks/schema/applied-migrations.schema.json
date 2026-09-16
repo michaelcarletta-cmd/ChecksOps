@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "$id": "https://checksops.local/ops/release-locks/applied-migrations.schema.json",
+  "title": "ChecksOps append-only applied-migration ledger",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "append_only",
+    "fail_closed",
+    "baseline_git_sha",
+    "entries"
+  ],
+  "properties": {
+    "version": { "type": "integer", "const": 1 },
+    "append_only": { "type": "boolean", "const": true },
+    "fail_closed": { "type": "boolean", "const": true },
+    "genesis": { "type": "boolean" },
+    "immutable_starting_point": { "type": "boolean" },
+    "baseline_git_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "notes": { "type": "string" },
+    "entries": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/entry" }
+    }
+  },
+  "definitions": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "gitSha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "record_kind",
+        "path",
+        "source_sha256",
+        "applied",
+        "mutation"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "record_kind": {
+          "type": "string",
+          "enum": ["source", "apply_evidence"]
+        },
+        "path": { "type": "string", "minLength": 1 },
+        "source_sha256": { "$ref": "#/definitions/sha256" },
+        "applied": { "type": "boolean" },
+        "applied_environment": {
+          "type": ["string", "null"],
+          "enum": ["production", "staging", null]
+        },
+        "applied_sha256": {
+          "anyOf": [{ "$ref": "#/definitions/sha256" }, { "type": "null" }]
+        },
+        "status": { "type": "string", "minLength": 1 },
+        "mutation": { "type": "string", "const": "append" },
+        "recorded_git_sha": { "$ref": "#/definitions/gitSha" },
+        "recorded_at": { "type": ["string", "null"] },
+        "source_record_id": { "type": ["string", "null"] },
+        "proof_path": { "type": ["string", "null"] },
+        "environment": { "type": ["string", "null"] },
+        "component": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

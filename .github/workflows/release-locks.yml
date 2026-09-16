@@ -1,0 +1,60 @@
+name: Release locks
+
+on:
+  pull_request:
+  merge_group:
+  push:
+    branches:
+      - main
+
+# Intentionally unfiltered: protected configuration, validator, and
+# control-plane edits must always run this check. Do not add path filters
+# that would skip validator or lock-file changes.
+#
+# pull_request_target is forbidden. GitHub Actions still executes the workflow
+# file from the PR/merge snapshot on pull_request, so a required base-owned
+# status check plus disabled admin bypass is a blocking GitHub enforcement
+# requirement. This repository check cannot independently provide that.
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: release-locks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-locks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+
+      - name: Validate locked-component manifest
+        env:
+          RELEASE_LOCK_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}
+        run: node scripts/validate-release-locks.mjs
+
+      - name: Run release-lock unit tests
+        run: node --test ops/release-locks/tests/*.test.mjs
+
+      - name: Production deploy guard (CI, no AWS)
+        run: node scripts/production-deploy-guard.mjs
+
+      - name: Protected-path overlap against other open PRs
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_PR_NUMBER: ${{ github.event.pull_request.number }}
+          RELEASE_LOCK_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          RELEASE_LOCK_REQUIRE_OVERLAP: '1'
+        run: node scripts/check-pr-path-overlap.mjs --require

@@ -1,0 +1,181 @@
+{
+  "baseline_git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+  "generated_at": "2026-09-16",
+  "fail_closed": true,
+  "historical_audit_baseline_unverified": {
+    "discovered_controls": 1421,
+    "live_non_na": 1136,
+    "pass": 713,
+    "fail": 2,
+    "internal_blocked": 247,
+    "external_blocked": 173,
+    "awaiting_integration_deployment": 1,
+    "status": "historical_only_not_used_for_lock"
+  },
+  "repo_discovery": {
+    "origin_main_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+    "isolated_branch": "cursor/production-release-locks-bb27",
+    "dirty_worktree_at_discovery": false,
+    "codeowners_on_main": false,
+    "github_environment_protection_in_repo": false,
+    "workflows_on_main": [
+      ".github/workflows/aws-migration-ci.yml",
+      ".github/workflows/tax-profile-migration-guard.yml"
+    ],
+    "lambda_aliases_in_repo": "none",
+    "spa_lock_files_on_main": "absent; present only in open PRs"
+  },
+  "github_enforcement": {
+    "status": "REVISION_REQUIRED_UNTIL_ENFORCED",
+    "release_locks_required_status_check": false,
+    "codeowners_reviews_required": false,
+    "admin_bypass_disabled": false,
+    "direct_pushes_disabled": false,
+    "base_owned_workflow_enforced": false,
+    "repository_evidence_proves_live_aws": false,
+    "notes": "Repository validation protects the release process but cannot independently prove live AWS truth. pull_request_target is forbidden. GitHub must require the release-locks check, require code-owner review, and disable direct pushes/admin bypass. The pre-existing aws-migration-guards failure is unrelated and must not be hidden or renamed."
+  },
+  "conflicts": [
+    "aws/production/LIVE_RESOURCES.md (2026-09-05) says Cognito production pool has 0 users and CloudFront aliases 0; later cutover docs claim apex/www on E1B0ZWWO5559U5.",
+    "Background claims production SPA Cognito cutover, Moov webhook live, CheckAlt execution enabled; origin/main template flags remain false and webhook docs still say production URLs remain on Supabase.",
+    "Open PRs #316/#317/#319/#326/#333 record SPA bundle names (including index-CiOVNYWh.js) that are not on origin/main."
+  ],
+  "components": {
+    "identity-cognito": {
+      "classification": "UNVERIFIED",
+      "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+      "deployed_artifact": "not provable from origin/main",
+      "applied_migrations": "source hashes recorded; apply not proven",
+      "environment": "unknown",
+      "missing_evidence": [
+        "live Cognito user count",
+        "deployed SPA Cognito client id fingerprint",
+        "production identity_accounts apply proof"
+      ],
+      "open_pr_overlap": ["#316", "#317", "#319", "#313", "#240"]
+    },
+    "moov-webhooks": {
+      "classification": "UNVERIFIED",
+      "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+      "deployed_artifact": "Lambda alias/version not in repo",
+      "applied_migrations": "40_tranche4_webhook_receipts.sql source-only",
+      "environment": "unknown",
+      "missing_evidence": [
+        "production Lambda version",
+        "independent signed webhook receipt",
+        "confirmation Supabase webhook remains disabled"
+      ],
+      "open_pr_overlap": ["#314", "#315", "#308"]
+    },
+    "checkalt-submission": {
+      "classification": "UNVERIFIED",
+      "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+      "deployed_artifact": "not provable",
+      "applied_migrations": "65_checkalt_production_writer.sql is NOT_APPLIED in git",
+      "environment": "unknown",
+      "missing_evidence": [
+        "production AWS_CHECKALT_ENABLED live value",
+        "writer SQL apply hash",
+        "deployed Lambda version"
+      ],
+      "open_pr_overlap": ["#327", "#332", "#339", "#322", "#323"]
+    },
+    "financial-ledger": {
+      "classification": "UNVERIFIED",
+      "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+      "deployed_artifact": "not provable",
+      "applied_migrations": "64_financial_activation_grants.sql NOT_APPLIED",
+      "environment": "unknown",
+      "missing_evidence": [
+        "production financial permission flag",
+        "reconciliation apply proof"
+      ],
+      "open_pr_overlap": ["#315", "#310", "#309"]
+    },
+    "tenant-email": {
+      "classification": "SOURCE_LOCKED_NOT_ACTIVE",
+      "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+      "deployed_artifact": "AWS_TENANT_EMAIL_DOMAIN_ENABLED false in template.yaml",
+      "applied_migrations": "NOT_APPLIED_20260910_tenant_email_ses_domain.sql",
+      "environment": "source-only",
+      "missing_evidence": [
+        "production SES enablement proof",
+        "SQL apply hash"
+      ],
+      "open_pr_overlap": ["#233", "#231", "#255"]
+    },
+    "partner-sharing": {
+      "classification": "SOURCE_LOCKED_NOT_ACTIVE",
+      "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+      "merged_pr": 302,
+      "merge_commit": "faf9b82e728bd7ef42009e4c96ace05c7bd7232f",
+      "deployed_artifact": "deployment/application status independently unverified",
+      "applied_migrations": "31/32 SQL in git; production apply unproven",
+      "environment": "source-only",
+      "missing_evidence": [
+        "staging or production apply hash",
+        "Lambda version serving partner-share-lifecycle.mjs"
+      ],
+      "open_pr_overlap": []
+    },
+    "mortgage-ops": {
+      "classification": "SOURCE_LOCKED_NOT_ACTIVE",
+      "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+      "deployed_artifact": "SQL header says do not apply from the commit-only PR",
+      "applied_migrations": "29/30 and supabase 20260911210000 source-only",
+      "environment": "source-only",
+      "missing_evidence": [
+        "production/staging apply proof for SQL 29/30"
+      ],
+      "open_pr_overlap": ["#249", "#248", "#282"]
+    },
+    "auto-deposit": {
+      "classification": "UNVERIFIED",
+      "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+      "deployed_artifact": "tenant auto-deposit PR #339 not merged; not deployed",
+      "applied_migrations": "none proven",
+      "environment": "source-only",
+      "missing_evidence": [
+        "merged auto-deposit source",
+        "production activation flag proof"
+      ],
+      "open_pr_overlap": ["#342", "#339", "#327", "#332"]
+    },
+    "database-rls": {
+      "classification": "UNVERIFIED",
+      "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+      "deployed_artifact": "staging oneshot apply docs exist; production unproven",
+      "applied_migrations": "aws/rls/sql tree hashed; live DB hash unknown",
+      "environment": "unknown",
+      "missing_evidence": [
+        "production RLS catalog hash"
+      ],
+      "open_pr_overlap": ["#289", "#249", "#288"]
+    },
+    "provider-secrets": {
+      "classification": "UNVERIFIED",
+      "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+      "deployed_artifact": "secret names only; values never recorded",
+      "applied_migrations": "n/a",
+      "environment": "unknown",
+      "missing_evidence": [
+        "Secrets Manager version IDs (not secret values)"
+      ],
+      "open_pr_overlap": ["#316", "#314"]
+    },
+    "production-release": {
+      "classification": "UNVERIFIED",
+      "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+      "deployed_artifact": "conflicting SPA/CloudFront fingerprints across docs and open PRs",
+      "applied_migrations": "n/a",
+      "environment": "unknown",
+      "missing_evidence": [
+        "single approved production fingerprint on main",
+        "GitHub branch protection requiring this workflow as a required status check",
+        "code-owner review required",
+        "direct pushes and administrator bypasses disabled"
+      ],
+      "open_pr_overlap": ["#316", "#317", "#319", "#325", "#333", "#326", "#328"]
+    }
+  }
+}
