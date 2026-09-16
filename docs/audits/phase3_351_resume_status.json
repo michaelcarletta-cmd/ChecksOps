@@ -1,0 +1,33 @@
+{
+  "workstream": "ChecksOps Functional Audit Phase 3",
+  "baseline": {
+    "pr": 351,
+    "branch": "cursor/integration-email-rc-ec26",
+    "sha": "16239c0f838f6e06009bc8de87841f12bed20a9e",
+    "lambda_codesha256": "2QMW73nT7wjmynB/N2BC4jg18rhvdyd4xpateLPo4R0=",
+    "spa_index_etag": "87342b69bcb1e98800ab49bf2c6b0511",
+    "spa_js": "assets/index-D3ryZhBt.js",
+    "spa_css": "assets/index-BveYUpt4.css",
+    "ccc_chunk": "assets/CheckCommandCenter-CDSvFJ-d.js",
+    "findapro_chunk": "assets/FindAPro-Iv9wb-cX.js"
+  },
+  "starting_inventory": {
+    "discovered": 1421,
+    "PASS": 714,
+    "FAIL": 1,
+    "INTERNAL_BLOCKED": 248,
+    "EXTERNAL_BLOCKED": 173,
+    "AWAITING_INTEGRATION_DEPLOYMENT": 0,
+    "N_A": 285
+  },
+  "ending_inventory": {
+    "discovered": 1421,
+    "PASS": 714,
+    "FAIL": 1,
+    "INTERNAL_BLOCKED": 248,
+    "EXTERNAL_BLOCKED": 173,
+    "AWAITING_INTEGRATION_DEPLOYMENT": 0,
+    "N_A": 285,
+    "note": "Updated after physical pass if any controls move."
+  }
+}
