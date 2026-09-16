@@ -4,17 +4,23 @@
  *
  *   node scripts/deploy-production-spa.mjs
  *   CHECKSOPS_PRODUCTION_SPA_UNLOCK=M75_MONEY_TEST_HOLD_RELEASE node scripts/deploy-production-spa.mjs --apply
+ *   CHECKSOPS_PRODUCTION_SPA_UNLOCK=M75_MONEY_TEST_HOLD_RELEASE node scripts/deploy-production-spa.mjs --rollback-known-good --apply
  *
- * Always:
+ * Build path:
  *   1. `vite build --mode aws` (Cognito + same-origin /prep)
  *   2. validate Cognito /prep markers AND M7.5 money UI markers
  *   3. record Git commit → bundle fingerprint
+ *
+ * `--rollback-known-good` does not rebuild. It restores the lock's
+ * `index-C_NPDCdc.js` index.html already present in the production bucket
+ * and uploads only that file. Do not raw-sync unrelated files.
  *
  * `--apply` is refused unless unlocked with M75_MONEY_TEST_HOLD_RELEASE.
  * RELEASE_CUTOVER_LOCK is no longer accepted (that is how CheckAlt #332
  * overwrote the reviewed M7.5A SPA).
  * Do not use `npm run build` or a raw `aws s3 sync`.
  */
+import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -31,10 +37,15 @@ import {
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const APPLY = process.argv.includes('--apply');
+const ROLLBACK_KNOWN_GOOD = process.argv.includes('--rollback-known-good');
 const DIST = path.join(ROOT, 'dist');
 const PRODUCTION_SPA_S3_BUCKET = PRODUCTION_SPA_LOCK.knownGood.s3Bucket;
 const PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID = PRODUCTION_SPA_LOCK.knownGood.cloudfrontDistributionId;
 const AWS = process.env.AWS_CLI || 'aws';
+const KNOWN_GOOD_FINGERPRINT_PATH = path.join(
+  ROOT,
+  'aws/cutover/production-spa-fingerprints/production-spa-a49069322624-2026-09-16T13-01-51-876Z.json',
+);
 
 const fail = (payload, status = 1) => {
   console.error(JSON.stringify(payload, null, 2));
@@ -71,22 +82,60 @@ const runAws = (args, label) => {
   return result;
 };
 
-const viteBin = path.join(ROOT, 'node_modules', '.bin', 'vite');
-const build = spawnSync(viteBin, ['build', '--mode', 'aws'], {
-  cwd: ROOT,
-  encoding: 'utf8',
-  env: { ...process.env },
-  stdio: ['ignore', 'pipe', 'pipe'],
-});
-if (build.status !== 0) {
-  fail({
-    error: 'production_spa_build_failed',
-    status: build.status,
-    stderr: (build.stderr || '').slice(-2000),
-  }, build.status || 1);
+const sha256File = (file) => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+const knownGoodBundle = PRODUCTION_SPA_LOCK.knownGood.spaBundle;
+const knownGoodFingerprint = JSON.parse(fs.readFileSync(KNOWN_GOOD_FINGERPRINT_PATH, 'utf8'));
+const expectedHtmlSha = knownGoodFingerprint.bundle.assets['index.html'];
+const expectedJsSha = knownGoodFingerprint.bundle.assets[`assets/${knownGoodBundle}`];
+const expectedCssSha = knownGoodFingerprint.bundle.assets['assets/index-CWVpcCxc.css'];
+
+let restoreDir = null;
+if (ROLLBACK_KNOWN_GOOD) {
+  restoreDir = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-spa-known-good-'));
+  fs.mkdirSync(path.join(restoreDir, 'assets'), { recursive: true });
+  const bucketUri = `s3://${PRODUCTION_SPA_S3_BUCKET}`;
+  runAws(['s3', 'cp', `${bucketUri}/index.html`, path.join(restoreDir, 'current-index.html')], 'production_spa_current_index_download_failed');
+  runAws(['s3', 'cp', `${bucketUri}/assets/${knownGoodBundle}`, path.join(restoreDir, 'assets', knownGoodBundle)], 'production_spa_known_good_js_download_failed');
+  runAws(['s3', 'cp', `${bucketUri}/assets/index-CWVpcCxc.css`, path.join(restoreDir, 'assets/index-CWVpcCxc.css')], 'production_spa_known_good_css_download_failed');
+  const currentHtml = fs.readFileSync(path.join(restoreDir, 'current-index.html'), 'utf8');
+  const restoredHtml = currentHtml.replace(/\/assets\/index-[A-Za-z0-9_-]+\.js/, `/assets/${knownGoodBundle}`);
+  if (!restoredHtml.includes(`/assets/${knownGoodBundle}`)) {
+    fail({ error: 'production_spa_rollback_index_missing_known_good_bundle', knownGoodBundle });
+  }
+  fs.writeFileSync(path.join(restoreDir, 'index.html'), restoredHtml);
+  const hashes = {
+    indexHtml: sha256File(path.join(restoreDir, 'index.html')),
+    js: sha256File(path.join(restoreDir, 'assets', knownGoodBundle)),
+    css: sha256File(path.join(restoreDir, 'assets/index-CWVpcCxc.css')),
+  };
+  if (hashes.indexHtml !== expectedHtmlSha || hashes.js !== expectedJsSha || hashes.css !== expectedCssSha) {
+    fail({
+      error: 'production_spa_rollback_fingerprint_mismatch',
+      hashes,
+      expected: { indexHtml: expectedHtmlSha, js: expectedJsSha, css: expectedCssSha },
+    });
+  }
 }
 
-const validation = scanProductionSpaArtifact(DIST);
+if (!ROLLBACK_KNOWN_GOOD) {
+  const viteBin = path.join(ROOT, 'node_modules', '.bin', 'vite');
+  const build = spawnSync(viteBin, ['build', '--mode', 'aws'], {
+    cwd: ROOT,
+    encoding: 'utf8',
+    env: { ...process.env },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  if (build.status !== 0) {
+    fail({
+      error: 'production_spa_build_failed',
+      status: build.status,
+      stderr: (build.stderr || '').slice(-2000),
+    }, build.status || 1);
+  }
+}
+
+const artifactDir = ROLLBACK_KNOWN_GOOD ? restoreDir : DIST;
+const validation = scanProductionSpaArtifact(artifactDir);
 if (!validation.ok) {
   fail({
     error: 'production_spa_artifact_rejected',
@@ -104,9 +153,12 @@ try {
   });
 }
 
-const indexHtml = path.join(DIST, 'index.html');
+const indexHtml = path.join(artifactDir, 'index.html');
 if (!fs.existsSync(indexHtml)) {
   fail({ error: 'production_spa_index_missing', path: indexHtml });
+}
+if (ROLLBACK_KNOWN_GOOD && !fs.readFileSync(indexHtml, 'utf8').includes(knownGoodBundle)) {
+  fail({ error: 'production_spa_rollback_index_not_known_good', knownGoodBundle });
 }
 
 let invalidationId = null;
@@ -133,12 +185,14 @@ if (APPLY) {
     }, 2);
   }
   const bucketUri = `s3://${PRODUCTION_SPA_S3_BUCKET}`;
-  runAws([
-    's3', 'sync', `${DIST}/`, `${bucketUri}/`,
-    '--exclude', '.DS_Store',
-    '--exclude', 'm75-money-test-hold.json',
-    '--cache-control', 'public,max-age=31536000,immutable',
-  ], 'production_spa_s3_sync_failed');
+  if (!ROLLBACK_KNOWN_GOOD) {
+    runAws([
+      's3', 'sync', `${DIST}/`, `${bucketUri}/`,
+      '--exclude', '.DS_Store',
+      '--exclude', 'm75-money-test-hold.json',
+      '--cache-control', 'public,max-age=31536000,immutable',
+    ], 'production_spa_s3_sync_failed');
+  }
   runAws([
     's3', 'cp', indexHtml, `${bucketUri}/index.html`,
     '--cache-control', 'no-cache, no-store, must-revalidate',
@@ -181,20 +235,25 @@ if (APPLY) {
 
 const fingerprintDir = path.join(ROOT, 'aws/cutover/production-spa-fingerprints');
 const fingerprint = recordProductionSpaFingerprint({
-  distDir: DIST,
-  outPath: path.join(fingerprintDir, 'latest.json'),
+  distDir: artifactDir,
+  outPath: ROLLBACK_KNOWN_GOOD ? null : path.join(fingerprintDir, 'latest.json'),
   deployed: APPLY,
   deployMeta: {
     s3Bucket: PRODUCTION_SPA_S3_BUCKET,
     cloudfrontDistributionId: PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID,
     invalidationId,
+    rollbackKnownGood: ROLLBACK_KNOWN_GOOD,
+    restoredBundle: ROLLBACK_KNOWN_GOOD ? knownGoodBundle : null,
   },
 });
 
 if (APPLY && fingerprint.gitCommit) {
   const stamp = `${fingerprint.recordedAt.replace(/[:.]/g, '-')}`;
+  const name = ROLLBACK_KNOWN_GOOD
+    ? `production-spa-rollback-${knownGoodBundle.replace('.js', '')}-${stamp}.json`
+    : `production-spa-${fingerprint.gitCommit.slice(0, 12)}-${stamp}.json`;
   fs.writeFileSync(
-    path.join(fingerprintDir, `production-spa-${fingerprint.gitCommit.slice(0, 12)}-${stamp}.json`),
+    path.join(fingerprintDir, name),
     `${JSON.stringify(fingerprint, null, 2)}\n`,
   );
 }
@@ -202,8 +261,12 @@ if (APPLY && fingerprint.gitCommit) {
 console.log(JSON.stringify({
   ok: true,
   deployed: APPLY,
-  mechanism: 'node scripts/deploy-production-spa.mjs',
-  mode: 'aws',
+  rollbackKnownGood: ROLLBACK_KNOWN_GOOD,
+  restoredBundle: ROLLBACK_KNOWN_GOOD ? knownGoodBundle : null,
+  mechanism: ROLLBACK_KNOWN_GOOD
+    ? 'node scripts/deploy-production-spa.mjs --rollback-known-good'
+    : 'node scripts/deploy-production-spa.mjs',
+  mode: ROLLBACK_KNOWN_GOOD ? 'restore-known-good' : 'aws',
   validation: {
     ok: validation.ok,
     moneyCounts: validation.moneyCounts,

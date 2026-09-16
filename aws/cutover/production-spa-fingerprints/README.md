@@ -12,4 +12,11 @@ Required apply path (role ChecksOpsProductionSpaDeploy only):
   CHECKSOPS_PRODUCTION_SPA_UNLOCK=M75_MONEY_TEST_HOLD_RELEASE \
     node scripts/deploy-production-spa.mjs --apply
 
+Emergency restore of the last known-good Cognito SPA already in the
+production bucket (`index-C_NPDCdc.js`). Does not rebuild. Uploads only
+the matching `index.html`. Do not raw-sync unrelated files.
+
+  CHECKSOPS_PRODUCTION_SPA_UNLOCK=M75_MONEY_TEST_HOLD_RELEASE \
+    node scripts/deploy-production-spa.mjs --rollback-known-good --apply
+
 The compiled dist must contain wallet.fund / moov-wallet-fund / wallet.disburse / moov-disburse / Authorize held $0.01 fund and zero moov-transfer-create.
