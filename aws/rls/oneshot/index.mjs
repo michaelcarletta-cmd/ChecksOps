@@ -731,6 +731,7 @@ export const handler = async (event = {}) => {
       await applySql('31_partner_safe_read.sql');
       await applySql('32_partner_share_lifecycle.sql');
       await applySql('33_partner_stage_totals.sql');
+      await applySql('34_c1c_partner_visibility.sql');
       out.dumpPoliciesAfterDrop = Number((await client.query(
         `SELECT count(*)::int AS n FROM pg_policies
          WHERE schemaname = 'public' AND policyname NOT LIKE 'aws_%'`,

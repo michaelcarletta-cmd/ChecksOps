@@ -78,6 +78,10 @@ const packOneshot = async () => {
   await copyFile(path.join(ONESHOT_DIR, 'package.json'), path.join(staging, 'package.json'));
   await mkdir(path.join(staging, 'sql'), { recursive: true });
   await copyFile(
+    path.join(ROOT, 'aws/rls/sql/34_c1c_partner_visibility.sql'),
+    path.join(staging, 'sql/34_c1c_partner_visibility.sql'),
+  );
+  await copyFile(
     path.join(ROOT, 'aws/rls/sql/31_partner_safe_read.sql'),
     path.join(staging, 'sql/31_partner_safe_read.sql'),
   );
@@ -232,6 +236,8 @@ const main = async () => {
     views: inspected.views,
     partnership: inspected.partnership,
     totalsIncludesSharedChecks: inspected.totalsIncludesSharedChecks,
+    helperExists: inspected.helperExists,
+    livePolicies: inspected.livePolicies,
     c1cVisible: inspected.c1cVisible,
     freedomVisible: inspected.freedomVisible,
     classification: {

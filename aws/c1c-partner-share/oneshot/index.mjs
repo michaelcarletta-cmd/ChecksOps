@@ -126,7 +126,6 @@ const inspect = async (client) => {
   const sampleShared = shares.find((r) => !r.revoked_at)?.check_id || null;
   const helperExists = (await client.query(`
     SELECT
-      to_regclass('public.aws_is_active_shared_check_target') IS NOT NULL AS target_fn,
       EXISTS (
         SELECT 1 FROM pg_proc p
         JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -136,8 +135,25 @@ const inspect = async (client) => {
         SELECT 1 FROM pg_proc p
         JOIN pg_namespace n ON n.oid = p.pronamespace
         WHERE n.nspname = 'public' AND p.proname = 'aws_can_access_check'
-      ) AS access_proc
+      ) AS access_proc,
+      EXISTS (
+        SELECT 1 FROM pg_proc p
+        JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public' AND p.proname = 'aws_can_access_tenant'
+      ) AS tenant_proc,
+      EXISTS (
+        SELECT 1 FROM pg_proc p
+        JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public' AND p.proname = 'user_belongs_to_tenant'
+      ) AS lovable_belongs_proc
   `)).rows[0];
+  const livePolicies = (await client.query(`
+    SELECT tablename, policyname, cmd, qual
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename IN ('check_intake_items', 'shared_checks', 'check_payees', 'check_endorsements')
+    ORDER BY tablename, policyname
+  `)).rows;
 
   const c1cVisible = await asAppUser(client, C1C_ADMIN, async () => {
     const uid = await client.query('SELECT auth.uid()::text AS uid');
@@ -156,12 +172,20 @@ const inspect = async (client) => {
       FROM public.shared_checks
       WHERE target_tenant_id = $1::uuid AND revoked_at IS NULL
     `, [C1C]);
-    const helper = sampleShared
-      ? await client.query('SELECT public.aws_is_active_shared_check_target($1::uuid) AS ok', [sampleShared])
-      : { rows: [{ ok: null }] };
-    const canAccess = sampleShared
-      ? await client.query('SELECT public.aws_can_access_check($1::uuid) AS ok', [sampleShared])
-      : { rows: [{ ok: null }] };
+    let sampleIsActiveTarget = null;
+    let sampleCanAccessCheck = null;
+    if (sampleShared && helperExists.target_proc) {
+      sampleIsActiveTarget = (await client.query(
+        'SELECT public.aws_is_active_shared_check_target($1::uuid) AS ok',
+        [sampleShared],
+      )).rows[0]?.ok ?? null;
+    }
+    if (sampleShared && helperExists.access_proc) {
+      sampleCanAccessCheck = (await client.query(
+        'SELECT public.aws_can_access_check($1::uuid) AS ok',
+        [sampleShared],
+      )).rows[0]?.ok ?? null;
+    }
     const payees = views.payees
       ? await client.query('SELECT count(*)::int AS n FROM public.aws_partner_check_payees')
       : { rows: [{ n: null }] };
@@ -182,8 +206,8 @@ const inspect = async (client) => {
       ownedVisible: Number(owned.rows[0].n),
       freedomOwnedVisible: Number(sharedParents.rows[0].n),
       sharedActiveVisible: Number(shared.rows[0].n),
-      sampleIsActiveTarget: helper.rows[0]?.ok ?? null,
-      sampleCanAccessCheck: canAccess.rows[0]?.ok ?? null,
+      sampleIsActiveTarget,
+      sampleCanAccessCheck,
       partnerPayeesVisible: payees.rows[0].n,
       partnerEndorsementsVisible: endorsements.rows[0].n,
       tenantsPublicVisible: tenants.rows[0].n,
@@ -231,6 +255,14 @@ const inspect = async (client) => {
     partnership,
     totalsIncludesSharedChecks: /shared_checks/i.test(totalsDef),
     helperExists,
+    livePolicies: livePolicies.map((p) => ({
+      table: p.tablename,
+      policy: p.policyname,
+      cmd: p.cmd,
+      usesShareTarget: /aws_is_active_shared_check_target|shared_checks/i.test(String(p.qual || '')),
+      usesCanAccessCheck: /aws_can_access_check/i.test(String(p.qual || '')),
+      usesTenant: /aws_can_access_tenant|user_belongs_to_tenant|tenant_id/i.test(String(p.qual || '')),
+    })),
     shares: shares.map((r) => ({
       id: r.id,
       check_id: r.check_id,
@@ -387,7 +419,7 @@ const applyPartnerDdl = async (client, event) => {
   }
   const db = (await client.query('SELECT current_database() AS d')).rows[0];
   if (db.d !== 'checksops') throw new Error(`connected to ${db.d}, expected checksops`);
-  const files = ['31_partner_safe_read.sql', '33_partner_stage_totals.sql'];
+  const files = ['34_c1c_partner_visibility.sql', '31_partner_safe_read.sql', '33_partner_stage_totals.sql'];
   const applied = [];
   for (const name of files) {
     const sqlPath = [

@@ -7,11 +7,22 @@ import { CHECKS_BY_TENANT_SQL } from '../functions/api/authorization.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sql33 = fs.readFileSync(path.join(ROOT, 'rls/sql/33_partner_stage_totals.sql'), 'utf8');
+const sql34 = fs.readFileSync(path.join(ROOT, 'rls/sql/34_c1c_partner_visibility.sql'), 'utf8');
 const oneshot = fs.readFileSync(path.join(ROOT, 'rls/oneshot/index.mjs'), 'utf8');
 const completeAuth = fs.readFileSync(path.join(ROOT, 'rls/oneshot/completeAuth.mjs'), 'utf8');
 const inspectOneshot = fs.readFileSync(path.join(ROOT, 'c1c-partner-share/oneshot/index.mjs'), 'utf8');
 const shareDialog = fs.readFileSync(path.join(ROOT, '../src/components/check-review/ShareCheckDialog.tsx'), 'utf8');
 const commandCenter = fs.readFileSync(path.join(ROOT, '../src/pages/CheckCommandCenter.tsx'), 'utf8');
+
+test('34 restores share-target read without changing ownership or write policies', () => {
+  assert.match(sql34, /aws_is_active_shared_check_target/);
+  assert.match(sql34, /aws_select_check_intake_items/);
+  assert.match(sql34, /aws_is_active_shared_check_target\(id\)/);
+  assert.equal(/aws_write_check_intake_items/.test(sql34), false);
+  assert.equal(/UPDATE public\.check_intake_items/.test(sql34), false);
+  assert.match(oneshot, /34_c1c_partner_visibility\.sql/);
+  assert.match(completeAuth, /34_c1c_partner_visibility\.sql/);
+});
 
 test('get_check_stage_totals includes active shared_checks without changing ownership', () => {
   assert.match(sql33, /CREATE OR REPLACE FUNCTION public\.get_check_stage_totals/);
