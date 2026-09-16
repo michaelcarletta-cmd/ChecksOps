@@ -76,6 +76,15 @@ const packOneshot = async () => {
   await mkdir(staging, { recursive: true });
   await copyFile(path.join(ONESHOT_DIR, 'index.mjs'), path.join(staging, 'index.mjs'));
   await copyFile(path.join(ONESHOT_DIR, 'package.json'), path.join(staging, 'package.json'));
+  await mkdir(path.join(staging, 'sql'), { recursive: true });
+  await copyFile(
+    path.join(ROOT, 'aws/rls/sql/31_partner_safe_read.sql'),
+    path.join(staging, 'sql/31_partner_safe_read.sql'),
+  );
+  await copyFile(
+    path.join(ROOT, 'aws/rls/sql/33_partner_stage_totals.sql'),
+    path.join(staging, 'sql/33_partner_stage_totals.sql'),
+  );
   await copyFile(
     path.join(ROOT, 'aws/functions/api/rds-global-bundle.pem'),
     path.join(staging, 'rds-global-bundle.pem'),

@@ -35,6 +35,8 @@ test('isolation SQL distinguishes owned vs shared accessible checks', () => {
 test('inspect oneshot is read-only by default and restore is fail-closed', () => {
   assert.match(inspectOneshot, /step === 'inspect'/);
   assert.match(inspectOneshot, /RESTORE_MISSING_ACTIVE_SHARES/);
+  assert.match(inspectOneshot, /APPLY_PARTNER_SAFE_DDL/);
+  assert.match(inspectOneshot, /31_partner_safe_read\.sql/);
   assert.match(inspectOneshot, /ownership_not_freedom/);
   assert.equal(/UPDATE public\.check_intake_items/.test(inspectOneshot), false);
   assert.match(inspectOneshot, /deleted: 0/);

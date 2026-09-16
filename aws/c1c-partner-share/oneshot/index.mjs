@@ -123,17 +123,45 @@ const inspect = async (client) => {
     )
   `, [C1C, FREEDOM])).rows;
 
+  const sampleShared = shares.find((r) => !r.revoked_at)?.check_id || null;
+  const helperExists = (await client.query(`
+    SELECT
+      to_regclass('public.aws_is_active_shared_check_target') IS NOT NULL AS target_fn,
+      EXISTS (
+        SELECT 1 FROM pg_proc p
+        JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public' AND p.proname = 'aws_is_active_shared_check_target'
+      ) AS target_proc,
+      EXISTS (
+        SELECT 1 FROM pg_proc p
+        JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public' AND p.proname = 'aws_can_access_check'
+      ) AS access_proc
+  `)).rows[0];
+
   const c1cVisible = await asAppUser(client, C1C_ADMIN, async () => {
+    const uid = await client.query('SELECT auth.uid()::text AS uid');
+    const tenantsOfUser = await client.query('SELECT public.aws_user_tenant_ids()::text AS tenant_id');
     const intake = await client.query('SELECT count(*)::int AS n FROM public.check_intake_items');
     const owned = await client.query(
       'SELECT count(*)::int AS n FROM public.check_intake_items WHERE tenant_id = $1::uuid',
       [C1C],
+    );
+    const sharedParents = await client.query(
+      'SELECT count(*)::int AS n FROM public.check_intake_items WHERE tenant_id = $1::uuid',
+      [FREEDOM],
     );
     const shared = await client.query(`
       SELECT count(*)::int AS n
       FROM public.shared_checks
       WHERE target_tenant_id = $1::uuid AND revoked_at IS NULL
     `, [C1C]);
+    const helper = sampleShared
+      ? await client.query('SELECT public.aws_is_active_shared_check_target($1::uuid) AS ok', [sampleShared])
+      : { rows: [{ ok: null }] };
+    const canAccess = sampleShared
+      ? await client.query('SELECT public.aws_can_access_check($1::uuid) AS ok', [sampleShared])
+      : { rows: [{ ok: null }] };
     const payees = views.payees
       ? await client.query('SELECT count(*)::int AS n FROM public.aws_partner_check_payees')
       : { rows: [{ n: null }] };
@@ -148,9 +176,14 @@ const inspect = async (client) => {
       [FREEDOM],
     );
     return {
+      authUid: uid.rows[0]?.uid || null,
+      tenantIds: tenantsOfUser.rows.map((r) => r.tenant_id),
       intakeVisible: Number(intake.rows[0].n),
       ownedVisible: Number(owned.rows[0].n),
+      freedomOwnedVisible: Number(sharedParents.rows[0].n),
       sharedActiveVisible: Number(shared.rows[0].n),
+      sampleIsActiveTarget: helper.rows[0]?.ok ?? null,
+      sampleCanAccessCheck: canAccess.rows[0]?.ok ?? null,
       partnerPayeesVisible: payees.rows[0].n,
       partnerEndorsementsVisible: endorsements.rows[0].n,
       tenantsPublicVisible: tenants.rows[0].n,
@@ -197,6 +230,7 @@ const inspect = async (client) => {
     views,
     partnership,
     totalsIncludesSharedChecks: /shared_checks/i.test(totalsDef),
+    helperExists,
     shares: shares.map((r) => ({
       id: r.id,
       check_id: r.check_id,
@@ -347,6 +381,49 @@ const restore = async (client, event) => {
   }
 };
 
+const applyPartnerDdl = async (client, event) => {
+  if (event.confirm !== 'APPLY_PARTNER_SAFE_DDL') {
+    throw new Error('apply_partner_ddl refused: confirm token missing');
+  }
+  const db = (await client.query('SELECT current_database() AS d')).rows[0];
+  if (db.d !== 'checksops') throw new Error(`connected to ${db.d}, expected checksops`);
+  const files = ['31_partner_safe_read.sql', '33_partner_stage_totals.sql'];
+  const applied = [];
+  for (const name of files) {
+    const sqlPath = [
+      path.join(ROOT, 'sql', name),
+      `/var/task/sql/${name}`,
+    ].find((p) => fs.existsSync(p));
+    if (!sqlPath) throw new Error(`${name} missing from Lambda package`);
+    await client.query(fs.readFileSync(sqlPath, 'utf8'));
+    applied.push(name);
+  }
+  const views = (await client.query(`
+    SELECT
+      to_regclass('public.aws_partner_check_payees') IS NOT NULL AS payees,
+      to_regclass('public.aws_partner_check_endorsements') IS NOT NULL AS endorsements
+  `)).rows[0];
+  const totalsDef = (await client.query(`
+    SELECT pg_get_functiondef(p.oid) AS def
+    FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.proname = 'get_check_stage_totals'
+    LIMIT 1
+  `)).rows[0]?.def || '';
+  return {
+    ok: views.payees === true && views.endorsements === true && /shared_checks/i.test(totalsDef),
+    ddlOnly: true,
+    applied,
+    views,
+    totalsIncludesSharedChecks: /shared_checks/i.test(totalsDef),
+    liveChecksopsMutated: false,
+    checksopsDdl: true,
+    productionSupabaseChanged: false,
+    ownershipChanges: 0,
+    deleted: 0,
+  };
+};
+
 export const handler = async (event = {}) => {
   const step = event.step || 'inspect';
   const out = {
@@ -360,6 +437,7 @@ export const handler = async (event = {}) => {
   try {
     client = await adminClient();
     if (step === 'inspect') return { ...out, ...(await inspect(client)) };
+    if (step === 'apply_partner_ddl') return { ...out, ...(await applyPartnerDdl(client, event)) };
     if (step === 'restore') return { ...out, ...(await restore(client, event)) };
     throw new Error(`unknown step ${step}`);
   } catch (error) {
