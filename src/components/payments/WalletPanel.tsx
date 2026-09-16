@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useFinancialGuard } from "@/hooks/useFinancialGuard";
 import { disburseWalletFirstTest } from "@/lib/payments/wallets";
 import {
+  FIRST_TEST_AUTHORIZE_HELD_FUND_COPY,
   FIRST_TEST_DISBURSE_COPY,
   FIRST_TEST_DISBURSE_TOTP,
   FIRST_TEST_FUND_COPY,
@@ -47,6 +48,7 @@ export function WalletPanel() {
 
   const { toast } = useToast();
   const [disbursePending, setDisbursePending] = useState(false);
+  const [authorizeHeldPending, setAuthorizeHeldPending] = useState(false);
   const guardFinancial = useFinancialGuard(tenantId);
   const fundIdempotencyRef = useRef<string | null>(null);
   const disburseIdempotencyRef = useRef<string | null>(null);
@@ -77,6 +79,27 @@ export function WalletPanel() {
         return;
       }
       toast({ title: "Could not fund balance", description: (e as Error).message, variant: "destructive" });
+    }
+  }
+
+  async function handleAuthorizeHeldFund() {
+    try {
+      setAuthorizeHeldPending(true);
+      await guardFinancial(FIRST_TEST_FUND_TOTP, {
+        description: "Enter the current 6-digit code from your authenticator app to authorize the held $0.01 BANK→WALLET intent. This does not move money and does not create a new intent.",
+      });
+      toast({
+        title: "Held $0.01 fund authorized",
+        description: "wallet.fund Financial TOTP was recorded. Do not click Add $0.01 from bank.",
+      });
+    } catch (e) {
+      toast({
+        title: "Could not authorize held fund",
+        description: (e as Error).message,
+        variant: "destructive",
+      });
+    } finally {
+      setAuthorizeHeldPending(false);
     }
   }
 
@@ -181,17 +204,27 @@ export function WalletPanel() {
             disabled={setupRequired}
             aria-label="First-test fund amount locked at $0.01"
           />
-          <Button onClick={handleFund} disabled={fund.isPending || setupRequired || disbursePending}>
+          <Button onClick={handleFund} disabled={fund.isPending || setupRequired || disbursePending || authorizeHeldPending}>
             {fund.isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
             Add {FIRST_TEST_TRANSFER_LABEL} from bank
           </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={handleAuthorizeHeldFund}
+            disabled={fund.isPending || setupRequired || disbursePending || authorizeHeldPending}
+          >
+            {authorizeHeldPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+            Authorize held {FIRST_TEST_TRANSFER_LABEL} fund
+          </Button>
         </div>
+        <p className="text-xs text-muted-foreground">{FIRST_TEST_AUTHORIZE_HELD_FUND_COPY}</p>
 
         <p className="text-xs text-muted-foreground">{FIRST_TEST_DISBURSE_COPY}</p>
         <Button
           variant="outline"
           onClick={handleDisburse}
-          disabled={fund.isPending || setupRequired || disbursePending}
+          disabled={fund.isPending || setupRequired || disbursePending || authorizeHeldPending}
         >
           {disbursePending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
           <Send className="mr-2 h-3.5 w-3.5" />

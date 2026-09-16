@@ -11,6 +11,7 @@ export const FIRST_TEST_TRANSFER_DOLLARS = "0.01";
 export const FIRST_TEST_TRANSFER_LABEL = "$0.01";
 
 export const FIRST_TEST_FUND_FN = "moov-wallet-fund";
+export const FIRST_TEST_FUND_CONTINUE_FN = "moov-wallet-fund-continue";
 export const FIRST_TEST_DISBURSE_FN = "moov-disburse";
 export const LEGACY_COMBINED_TRANSFER_FN = "moov-transfer-create";
 export const COUPLED_FUNDING_FN = "initiate-wallet-funding";
@@ -24,6 +25,9 @@ export const FIRST_TEST_CAP_MESSAGE =
 
 export const FIRST_TEST_FUND_COPY =
   "BANK→WALLET first test: Financial TOTP for wallet.fund, then $0.01 from Freedom Wells Fargo ••••4573 into the Freedom wallet. Server binds bank, wallet, and amount.";
+
+export const FIRST_TEST_AUTHORIZE_HELD_FUND_COPY =
+  "Authorize the existing held $0.01 BANK→WALLET intent with Financial TOTP for wallet.fund. This does not create a new transfer and does not click Add $0.01 from bank.";
 
 export const FIRST_TEST_DISBURSE_COPY =
   "WALLET→RECIPIENT first test: Financial TOTP for wallet.disburse, then $0.01 from the Freedom wallet to Michael / Chase ••••1506. Server binds wallet, recipient, bank, and amount.";
