@@ -29,6 +29,8 @@ export const FIRST_TEST_FUND_COPY =
 export const FIRST_TEST_AUTHORIZE_HELD_FUND_COPY =
   "Authorize the existing held $0.01 BANK→WALLET intent with Financial TOTP for wallet.fund. This does not create a new transfer and does not click Add $0.01 from bank.";
 
+export const FIRST_TEST_AUTHORIZE_HELD_BUTTON = "Authorize held $0.01 fund";
+
 export const FIRST_TEST_DISBURSE_COPY =
   "WALLET→RECIPIENT first test: Financial TOTP for wallet.disburse, then $0.01 from the Freedom wallet to Michael / Chase ••••1506. Server binds wallet, recipient, bank, and amount.";
 

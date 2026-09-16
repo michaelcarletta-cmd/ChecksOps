@@ -15,8 +15,9 @@ const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 describe('M7.5C production SPA money-test hold', () => {
   test('lock refuses the CheckAlt cutover unlock token', () => {
     const lock = loadProductionSpaLock();
-    assert.equal(lock.hold, 'm75_money_test');
-    assert.equal(lock.knownGood.gitCommit, '32fd3256e572cd52df1842a7566914fb090cea74');
+    assert.equal(lock.hold, 'm75b7_money_test');
+    assert.equal(lock.knownGood.gitCommit, 'a49069322624e88fe57ace2d0dedc245407a7919');
+    assert.equal(lock.knownGood.spaBundle, 'index-C_NPDCdc.js');
     assert.equal(lock.unlockValue, 'M75_MONEY_TEST_HOLD_RELEASE');
     assert.equal(lock.cutoverUnlockValueNoLongerHonored, 'RELEASE_CUTOVER_LOCK');
     assert.throws(
@@ -32,7 +33,7 @@ describe('M7.5C production SPA money-test hold', () => {
     const allowed = assertProductionSpaApplyAllowed({
       env: { CHECKSOPS_PRODUCTION_SPA_UNLOCK: 'M75_MONEY_TEST_HOLD_RELEASE' },
     });
-    assert.equal(allowed.hold, 'm75_money_test');
+    assert.equal(allowed.hold, 'm75b7_money_test');
   });
 
   test('money-path scan rejects moov-transfer-create and requires wallet.fund', () => {
@@ -60,11 +61,13 @@ describe('M7.5C production SPA money-test hold', () => {
       'wallet.disburse',
       'moov-wallet-fund',
       'moov-disburse',
+      'Authorize held $0.01 fund',
     ].join('\n'));
     const ok = scanProductionSpaArtifact(dir);
     assert.equal(ok.ok, true);
     assert.equal(ok.moneyCounts['moov-transfer-create'], 0);
     assert.ok(ok.moneyCounts['moov-wallet-fund'] >= 1);
+    assert.ok(ok.moneyCounts['Authorize held $0.01 fund'] >= 1);
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
@@ -73,6 +76,7 @@ describe('M7.5C production SPA money-test hold', () => {
     assert.match(deploy, /vite build --mode aws/);
     assert.match(deploy, /M75_MONEY_TEST_HOLD_RELEASE/);
     assert.match(deploy, /RELEASE_CUTOVER_LOCK is no longer accepted/);
+    assert.match(deploy, /ChecksOpsProductionSpaDeploy/);
     assert.doesNotMatch(deploy, /--delete/);
   });
 });

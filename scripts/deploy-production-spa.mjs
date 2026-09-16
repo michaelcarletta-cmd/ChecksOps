@@ -111,6 +111,18 @@ if (!fs.existsSync(indexHtml)) {
 
 let invalidationId = null;
 if (APPLY) {
+  const identityRaw = runAws(['sts', 'get-caller-identity', '--output', 'json'], 'production_spa_identity_failed');
+  let identity = {};
+  try { identity = JSON.parse(identityRaw.stdout || '{}'); } catch { identity = {}; }
+  const callerArn = String(identity.Arn || '');
+  if (!callerArn.includes('ChecksOpsProductionSpaDeploy')) {
+    fail({
+      error: 'production_spa_deploy_role_denied',
+      approvedDeployRole: PRODUCTION_SPA_LOCK.approvedDeployRole,
+      callerArn,
+      hint: 'Apply must use ChecksOpsProductionSpaDeploy. ChecksOpsCursorCloudStaging and other workstream roles are refused.',
+    }, 2);
+  }
   try {
     assertProductionSpaApplyAllowed({ env: process.env, validation });
   } catch (error) {
@@ -133,11 +145,19 @@ if (APPLY) {
     '--content-type', 'text/html; charset=utf-8',
   ], 'production_spa_index_upload_failed');
   const hold = {
-    hold: 'm75_money_test',
+    hold: 'm75b7_money_test',
     locked: true,
+    until: 'M7.5B.7 complete',
     reason: PRODUCTION_SPA_LOCK.reason,
     reviewedCommit: PRODUCTION_SPA_LOCK.knownGood.gitCommit,
     moneyUi: PRODUCTION_SPA_LOCK.moneyUi,
+    refuse: [
+      'CheckAlt SPA deploy',
+      'raw aws s3 sync',
+      'unrelated frontend deploy',
+      'RELEASE_CUTOVER_LOCK fingerprint restore',
+      'index-DjRdsF7Y.js',
+    ],
     writtenAt: new Date().toISOString(),
   };
   const holdPath = path.join(os.tmpdir(), 'm75-money-test-hold.json');

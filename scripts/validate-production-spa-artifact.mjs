@@ -32,6 +32,7 @@ export const MONEY_UI_MARKERS = Object.freeze({
   disburseFn: 'moov-disburse',
   fundTotp: 'wallet.fund',
   disburseTotp: 'wallet.disburse',
+  authorizeHeld: 'Authorize held $0.01 fund',
   forbiddenLiveFn: 'moov-transfer-create',
 });
 
@@ -73,6 +74,7 @@ export const scanProductionSpaArtifact = (distDir) => {
     'moov-disburse': countNeedle(text, MONEY_UI_MARKERS.disburseFn),
     'wallet.fund': countNeedle(text, MONEY_UI_MARKERS.fundTotp),
     'wallet.disburse': countNeedle(text, MONEY_UI_MARKERS.disburseTotp),
+    'Authorize held $0.01 fund': countNeedle(text, MONEY_UI_MARKERS.authorizeHeld),
     'moov-transfer-create': countNeedle(text, MONEY_UI_MARKERS.forbiddenLiveFn),
     'supabase.co/functions': countNeedle(text, 'supabase.co/functions'),
   };
@@ -80,6 +82,7 @@ export const scanProductionSpaArtifact = (distDir) => {
   if (moneyCounts['moov-disburse'] < 1) missing.push('moov-disburse');
   if (moneyCounts['wallet.fund'] < 1) missing.push('wallet.fund');
   if (moneyCounts['wallet.disburse'] < 1) missing.push('wallet.disburse');
+  if (moneyCounts['Authorize held $0.01 fund'] < 1) missing.push('Authorize held $0.01 fund');
   if (moneyCounts['moov-transfer-create'] > 0) forbidden.push('moov-transfer-create');
   if (moneyCounts['supabase.co/functions'] > 0) forbidden.push('supabase_functions_host');
 
