@@ -56,16 +56,16 @@ const adminClient = async () => {
 };
 
 const asAppUser = async (client, appUserId, fn) => {
-  await client.query('SAVEPOINT share_probe');
+  await client.query('BEGIN');
   try {
     await client.query('SET LOCAL ROLE checksops');
     await client.query('SET LOCAL row_security = on');
     await client.query("SELECT set_config('request.app_user_id', $1, true)", [appUserId]);
     const result = await fn();
-    await client.query('ROLLBACK TO SAVEPOINT share_probe');
+    await client.query('ROLLBACK');
     return result;
   } catch (error) {
-    try { await client.query('ROLLBACK TO SAVEPOINT share_probe'); } catch { /* ignore */ }
+    try { await client.query('ROLLBACK'); } catch { /* ignore */ }
     return { error: String(error?.message || error).slice(0, 240) };
   }
 };
