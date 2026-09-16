@@ -87,13 +87,24 @@
     },
     "partner-sharing": {
       "owners": ["@michaelcarletta-cmd"],
-      "description": "Partner share/revoke lifecycle (merged source; deployment unproven)",
+      "description": "Partner share/revoke lifecycle and C1C visibility contract. SQL 31/32/33/34 are APPLIED IN PRODUCTION; do not reapply. Ownership and visibility are separate.",
       "paths": [
         "aws/functions/api/partner-share-lifecycle.mjs",
+        "aws/functions/api/authorization.mjs",
         "aws/rls/sql/31_partner_safe_read.sql",
         "aws/rls/sql/32_partner_share_lifecycle.sql",
+        "aws/rls/sql/33_partner_stage_totals.sql",
+        "aws/rls/sql/34_c1c_partner_visibility.sql",
+        "aws/rls/PARTNER_SHARING_INVARIANT.md",
         "aws/tests/partner-share-lifecycle.test.mjs",
-        "aws/tests/partner-share-lifecycle-pg.test.mjs"
+        "aws/tests/partner-share-lifecycle-pg.test.mjs",
+        "aws/tests/partner-stage-totals.test.mjs",
+        "aws/tests/partner-shared-check-read-pg.test.mjs",
+        "aws/tests/partner-sharing-invariants.test.mjs",
+        "aws/tests/partner-sharing-invariants-pg.test.mjs",
+        "src/components/check-review/ShareCheckDialog.tsx",
+        "src/lib/partnerSafeReads.ts",
+        "src/pages/CheckCommandCenter.tsx"
       ]
     },
     "mortgage-ops": {
