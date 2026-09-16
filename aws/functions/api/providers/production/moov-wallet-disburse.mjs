@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { isUuid } from '../../financial-ownership.mjs';
 import { KNOWN_APPROVED_MOOV } from './moov-accounts.mjs';
-import { MOOV_DISBURSE_TOTP_ACTION, assertMoovTenantAccess, authorizeMoovProduction, tenantManagementSendDenied } from './moov-authz.mjs';
+import { MOOV_DISBURSE_TOTP_ACTION, assertMoovTenantAccess, authorizeMoovProduction, tenantManagementSendDenied } from './moov-sequence-authz.mjs';
 import { capabilityEnabled } from './moov-capability-policy.mjs';
 import { firstTestDisburseBinding, mismatchFirstTestBody } from './moov-first-test.mjs';
 import { FIRST_PRODUCTION_TRANSFER_CENTS, productionMoovTransferPostAllowed } from './moov-holds.mjs';
