@@ -294,9 +294,9 @@
       "production_active": false,
       "environment": "source-only",
       "source": {
-        "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
-        "tree_hash": "5e94c2cc84ee97c1a7d9a99889e8f70128dc353ac457490d824874cd0f658861",
-        "merged": true,
+        "git_sha": "9aac7bb5b1ed0a8d03e305552797a9acfacc7f64",
+        "tree_hash": "d44937a54427261c52bf516230637d59093a91c3299a9ebd1b8ff39cb4729122",
+        "merged": false,
         "merged_pr": 302
       },
       "required_sql": [
@@ -306,7 +306,7 @@
           "applied": false,
           "applied_environment": null,
           "applied_sha256": null,
-          "proof": null
+          "proof": "ops/release-locks/proof/c1c-partner-share-production-apply.md"
         },
         {
           "path": "aws/rls/sql/32_partner_share_lifecycle.sql",
@@ -314,7 +314,23 @@
           "applied": false,
           "applied_environment": null,
           "applied_sha256": null,
-          "proof": null
+          "proof": "ops/release-locks/proof/c1c-partner-share-production-apply.md"
+        },
+        {
+          "path": "aws/rls/sql/33_partner_stage_totals.sql",
+          "source_sha256": "d4e12f1b6a35fcf37730f57fbfa116e24bf8f6ab69a7001182a9f2687ff7ab17",
+          "applied": false,
+          "applied_environment": null,
+          "applied_sha256": null,
+          "proof": "ops/release-locks/proof/c1c-partner-share-production-apply.md"
+        },
+        {
+          "path": "aws/rls/sql/34_c1c_partner_visibility.sql",
+          "source_sha256": "131792eef8cfca02d4cf837b3afc8f4e4bda76b281d9db8c4e825c428d65f0bd",
+          "applied": false,
+          "applied_environment": null,
+          "applied_sha256": null,
+          "proof": "ops/release-locks/proof/c1c-partner-share-production-apply.md"
         }
       ],
       "artifact": {
@@ -336,14 +352,15 @@
       "rollback": {
         "git_sha": "faf9b82e728bd7ef42009e4c96ace05c7bd7232f",
         "artifact": null,
-        "notes": "PR #302 merge commit is the source pin. Deployment/application status is independently unverified."
+        "notes": "PR #302 remains the merged 31/32 source pin. 33/34 and the C1C UI/API repair are unmerged on PR #350 HEAD 9aac7bb5b1ed0a8d03e305552797a9acfacc7f64. Do not revert production SQL."
       },
       "missing_evidence": [
-        "staging or production apply hash",
-        "Lambda version serving partner-share-lifecycle.mjs"
+        "merged git SHA for 33/34 plus authorization/UI repair (#350 still open)",
+        "Lambda version serving partner-share-lifecycle.mjs / authorization.mjs",
+        "SPA bundle fingerprint for ShareCheckDialog and CheckCommandCenter partner queue"
       ],
-      "open_pr_overlap": [],
-      "notes": "Merged code-only. Do not treat merged as production-active."
+      "open_pr_overlap": ["#350", "#347", "#342", "#339", "#332", "#327", "#312"],
+      "notes": "SQL 31/32/33/34 are APPLIED IN PRODUCTION (ledger apply_evidence + ops/release-locks/proof/c1c-partner-share-production-apply.md). Do not reapply. required_sql.applied stays false because SOURCE_LOCKED_NOT_ACTIVE cannot claim production-applied SQL and the application/API/UI tree is not on main. Ownership and visibility are separate; never transfer check tenant_id to repair partner access."
     },
     "mortgage-ops": {
       "id": "mortgage-ops",
@@ -450,9 +467,9 @@
       "production_active": false,
       "environment": "unknown",
       "source": {
-        "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
-        "tree_hash": "8325942717e7b5f06558a1b6369ef2f3075914fc0c9229a10536f17268e1c92c",
-        "merged": true,
+        "git_sha": "9aac7bb5b1ed0a8d03e305552797a9acfacc7f64",
+        "tree_hash": "8351637e1022963d53f0581eed13140f8a46167c86252dce084a64038cb14a7d",
+        "merged": false,
         "merged_pr": null
       },
       "required_sql": [
@@ -489,8 +506,8 @@
       "missing_evidence": [
         "production RLS catalog hash"
       ],
-      "open_pr_overlap": ["#289", "#249", "#288"],
-      "notes": "Path-hashed only. Do not treat staging RLS enable docs as production lock."
+      "open_pr_overlap": ["#289", "#249", "#288", "#350", "#310"],
+      "notes": "Path-hashed only. Adding 33_partner_stage_totals.sql and 34_c1c_partner_visibility.sql changes this tree. Those two files plus 31/32 are APPLIED IN PRODUCTION for partner sharing; do not reapply. PR #310 adds a different 33_ tenant-billing file and must not overwrite the partner-share 33/34 contract."
     },
     "provider-secrets": {
       "id": "provider-secrets",
@@ -540,7 +557,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "0792e849bbc063f20708b78bdd1ba5c66d9ed776",
-        "tree_hash": "83f871a6045572701a775788965e46d827f49d183f9e5e9a18c71aaf0b2403d7",
+        "tree_hash": "0f77e1692c7edd5ab33c25565ecfb0863fc26f778c2ec1ce18a7cf2f4b6100b2",
         "merged": true,
         "merged_pr": 343
       },
