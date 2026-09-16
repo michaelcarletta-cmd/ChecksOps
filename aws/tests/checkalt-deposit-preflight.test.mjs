@@ -163,7 +163,7 @@ test('missing official S3 artifacts request both-side prep without provider HTTP
   assert.equal(result.providerHttpAttempted, false);
 });
 
-test('historical CheckAlt reference is ready for verification without a second process POST', async () => {
+test('historical CheckAlt reference blocks verification and never process-POSTs', async () => {
   const result = await evaluateCheckAltDepositPreflight({
     client: mockClient({
       check: { id: CHECK_ID, tenant_id: TENANT, amount: 12.34 },
@@ -182,7 +182,7 @@ test('historical CheckAlt reference is ready for verification without a second p
   });
   assert.equal(result.ok, true);
   assert.equal(result.historicalReference, true);
-  assert.equal(result.readyForVerification, true);
+  assert.equal(result.readyForVerification, false);
   assert.equal(result.liveProviderCalled, false);
 });
 

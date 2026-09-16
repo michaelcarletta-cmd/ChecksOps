@@ -1,4 +1,4 @@
-import { formatCheckAltUserAmount, rejectUntrustedAmountFields, validateProviderCents } from '../amounts.mjs';
+import { formatCheckAltUserAmount, mapCheckAltStatus, rejectUntrustedAmountFields, validateProviderCents } from '../amounts.mjs';
 import { ignoredOwnershipSpoof, verifyOwnershipChain } from '../../financial-ownership.mjs';
 import { TENANT_MEMBERSHIP_SQL } from '../../identity.mjs';
 import { isProviderNetworkError } from '../../sandbox-credentials.mjs';
@@ -379,13 +379,11 @@ export async function handleProductionCheckAltSubmit({
     });
     const { json } = await parseProviderJson(resp);
     const reference = referenceOf(json);
-    const apiStatus = Number(json?.status ?? json?.statusCode);
-    const isRejected = apiStatus === 120 || /^\s*rejected/i.test(String(json?.status ?? ''));
+    const mapped = mapCheckAltStatus(json);
+    const isRejected = mapped === 'rejected';
     const status = !resp.ok
-      ? 'error'
-      : isRejected
-        ? 'rejected'
-        : (apiStatus === 40 ? 'pending_approval' : 'submitted');
+      ? (isRejected ? 'rejected' : 'error')
+      : (isRejected ? 'rejected' : (mapped || 'submitted'));
     let saved;
     try {
       saved = await persistProviderOutcome(client, {

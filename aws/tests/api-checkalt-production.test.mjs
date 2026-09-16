@@ -284,6 +284,17 @@ const identityClient = (store) => ({
       store.deposits.push(row);
       return { rows: [row] };
     }
+    if (text.includes('FROM public.checkalt_deposits') && text.includes('ANY($1')) {
+      const tenantIds = params[0] || [];
+      const depositIds = text.includes('id = ANY($2') ? (params[1] || []) : null;
+      return {
+        rows: store.deposits.filter((row) => (
+          tenantIds.includes(row.tenant_id)
+          && (row.checkalt_reference || row.provider_http_attempted_at)
+          && (!depositIds || depositIds.includes(row.id))
+        )),
+      };
+    }
     if (text.includes('FROM public.checkalt_deposits') && text.includes('check_intake_item_id')
       && text.includes('tenant_id') && text.includes('ORDER BY')) {
       return {
@@ -1099,4 +1110,60 @@ test('legacy NULL key and provider-may-have-occurred states block new process po
     status: 'submitted',
     checkalt_reference: 'R1',
   }), true);
+});
+
+const pollOnce = (store, body = {}) => handleProductionCheckAltPoll({
+  client: identityClient(store),
+  mapping,
+  claims: { sub: COGNITO_SUB },
+  body,
+  spoof: {},
+  fetchImpl: fetchImpl(store),
+  deps: submitDeps(store),
+});
+
+test('empty-body Poll Now batch-polls existing locators and never process-POSTs', async () => {
+  const store = createStore();
+  pushLegacyDeposit(store, {
+    checkalt_reference: '122678838',
+    status: 'pending_approval',
+    check_intake_item_id: '623442f0-a408-4db5-85be-14bae231a722',
+    amount: 9984.11,
+  });
+  store.itemPayload = { status: 'Pending Approval', referenceNumber: 122678838 };
+  const result = await pollOnce(store, {});
+  assert.equal(result.createdDeposit, false);
+  assert.equal(result.polled, 1);
+  assert.equal(result.updated, 1);
+  assert.equal(result.errors, 0);
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.deposits.length, 1);
+  assert.equal(store.deposits[0].checkalt_reference, '122678838');
+  assert.equal(store.deposits[0].status, 'pending_approval');
+  assert.equal(store.stepups.length, 0);
+});
+
+test('empty-body Poll Now with no locatable rows inserts nothing', async () => {
+  const store = createStore();
+  const result = await pollOnce(store, {});
+  assert.equal(result.createdDeposit, false);
+  assert.equal(result.polled, 0);
+  assert.equal(result.updated, 0);
+  assert.equal(result.errors, 0);
+  assert.equal(store.deposits.length, 0);
+  assert.equal(store.processPosts, 0);
+});
+
+test('queued deposit without locator is not batch-polled or inserted', async () => {
+  const store = createStore();
+  pushLegacyDeposit(store, {
+    checkalt_reference: null,
+    status: 'queued',
+    provider_http_attempted_at: null,
+  });
+  const result = await pollOnce(store, {});
+  assert.equal(result.polled, 0);
+  assert.equal(store.deposits.length, 1);
+  assert.equal(store.deposits[0].checkalt_reference, null);
+  assert.equal(store.processPosts, 0);
 });

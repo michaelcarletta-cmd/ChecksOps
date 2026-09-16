@@ -286,14 +286,19 @@ test('double Deposit click cannot produce duplicate provider execution', async (
   assert.equal(done.ok, true);
 });
 
-test('historical CheckAlt reference does not regenerate images and still requires verification', async () => {
+test('historical CheckAlt reference does not regenerate images and never reaches TOTP or submit', async () => {
   resetDepositInFlightForTests();
   let prepared = 0;
   let verified = false;
+  let submitted = 0;
   const result = await runCheckAltDepositClick(CHECK, {
     authProvider: 'cognito',
     apiBaseUrl: '/prep',
-    preflight: async () => ready({ historicalReference: true }),
+    preflight: async () => ready({
+      historicalReference: true,
+      readyForVerification: false,
+      message: 'An existing CheckAlt deposit for this check already exists.',
+    }),
     prepareCheckAltDeposit: async () => {
       prepared += 1;
       return { deposit_front_path: 'f.checkalt.jpg', deposit_back_path: 'b.checkalt.jpg' };
@@ -302,10 +307,15 @@ test('historical CheckAlt reference does not regenerate images and still require
       verified = true;
       return true;
     },
-    submit: async () => ({ error: null, data: {} }),
+    submit: async () => {
+      submitted += 1;
+      return { error: null, data: {} };
+    },
   });
   assert.equal(prepared, 0);
-  assert.equal(verified, true);
+  assert.equal(verified, false);
+  assert.equal(submitted, 0);
+  assert.equal(result.ok, false);
   assert.equal(result.historicalReference, true);
 });
 

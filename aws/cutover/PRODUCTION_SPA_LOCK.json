@@ -1,0 +1,28 @@
+{
+  "locked": true,
+  "lockedAt": "2026-09-14T16:20:00.000Z",
+  "reason": "Successful AWS/Cognito production cutover. Accidental overwrite paths closed.",
+  "knownGood": {
+    "gitCommit": "868e69387d63af511f4c185775b611dea2c8fc47",
+    "spaBundle": "index-CiOVNYWh.js",
+    "cognitoPoolId": "us-east-1_h00WorYMT",
+    "cognitoClientId": "3ja9fqaq2fjkv3i6up2varcqpe",
+    "apiTarget": "/prep",
+    "s3Bucket": "checksops-production-frontend-806168576068",
+    "cloudfrontDistributionId": "E1B0ZWWO5559U5",
+    "spaOriginId": "ProductionSpaS3",
+    "spaOriginDomain": "checksops-production-frontend-806168576068.s3.us-east-1.amazonaws.com",
+    "apiOriginId": "ProductionPrepHttpApi",
+    "aliases": ["checksops.com", "www.checksops.com"],
+    "fingerprint": "aws/cutover/production-spa-fingerprints/production-spa-868e69387d63-2026-09-14T15-13-43-687Z.json"
+  },
+  "approvedDeployRole": "ChecksOpsProductionSpaDeploy",
+  "deniedWriteRoles": [
+    "ChecksOpsCursorCloudStaging",
+    "ChecksOpsCursorApiPerimeterSteps12Temp",
+    "checksops-staging-rehearsal-oneshot"
+  ],
+  "unlockEnv": "CHECKSOPS_PRODUCTION_SPA_UNLOCK",
+  "unlockValue": "RELEASE_CUTOVER_LOCK",
+  "applyRefusedError": "production_spa_cutover_locked"
+}

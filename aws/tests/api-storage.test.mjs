@@ -16,6 +16,7 @@ import {
   handleStorageDelete,
   handleStorageMove,
 } from '../functions/api/storage-write.mjs';
+import { CHECK_IMAGE_OR_DEPOSIT2_WRITE_SQL } from '../functions/api/storage-write-auth.mjs';
 import { LOOKUP_MAPPING_SQL } from '../functions/api/identity.mjs';
 import { matchCheckScopedPath, s3KeyFor, normalizePath, pathCandidates } from '../functions/api/storage-paths.mjs';
 
@@ -336,9 +337,15 @@ test('delete and move require server-side authorization', async () => {
 
 test('claim-files read auth includes endorsed deposit JPEGs and .deposit2.jpg siblings', () => {
   assert.match(CHECK_INTAKE_CLAIM_FILES_AUTH_SQL, /back_image_deposit_path/);
+  assert.match(CHECK_INTAKE_CLAIM_FILES_AUTH_SQL, /back_image_original_path/);
   assert.match(CHECK_INTAKE_CLAIM_FILES_AUTH_SQL, /deposit2\.jpg/);
   assert.match(CHECK_INTAKE_CLAIM_FILES_AUTH_SQL, /checkalt\.jpg/);
   assert.equal(BUCKET_AUTH_SQL['claim-files'].includes(CHECK_INTAKE_CLAIM_FILES_AUTH_SQL), true);
+});
+
+test('claim-files write auth includes original rear path and same-folder endorsed_deposit artifacts', () => {
+  assert.match(CHECK_IMAGE_OR_DEPOSIT2_WRITE_SQL, /back_image_original_path/);
+  assert.match(CHECK_IMAGE_OR_DEPOSIT2_WRITE_SQL, /endorsed_deposit_/);
 });
 
 test('browser .deposit2.jpg sibling of a stored check image is writable', async () => {

@@ -188,7 +188,11 @@ import {
   prettifyStatus,
   getEffectiveStatusLabel,
   getLatestCheckAltDeposit,
-  getCheckAltStatus,
+  CHECKALT_DEPOSITS_EMBED,
+  checkAltLifecycleLabelForCheck,
+  hasAuthoritativeCheckAltSubmission,
+  isUncertainCheckAltDeposit,
+  normalCheckAltDepositAllowed,
   getTabStatusLabel,
   getTabStatusClass,
   extractInsuredName,
@@ -336,7 +340,7 @@ export default function CheckCommandCenter() {
       queryFn: async () => {
         const { data, error } = await supabase
           .from("check_intake_items")
-          .select("*, check_payees(*), checkalt_deposits(id, status, submitted_at, approved_at, updated_at, last_status_payload)")
+          .select(`*, check_payees(*), ${CHECKALT_DEPOSITS_EMBED}`)
           .eq("id", id)
           .single();
         if (error) throw error;
@@ -600,7 +604,7 @@ export default function CheckCommandCenter() {
       const { data, error } = await supabase
         .from("check_intake_items")
         .select(
-          `${queueColumns}, check_payees(payee_name, payee_type, endorsement_status), checkalt_deposits(id, status, submitted_at, approved_at, updated_at)`,
+          `${queueColumns}, check_payees(payee_name, payee_type, endorsement_status), ${CHECKALT_DEPOSITS_EMBED}`,
         )
         .eq("tenant_id", tenantId!)
         // Phase 9: exclude deposited from active queue; loaded separately below.
@@ -660,7 +664,7 @@ export default function CheckCommandCenter() {
       const { data, error } = await supabase
         .from("check_intake_items")
         .select(
-          `${queueColumns}, check_payees(payee_name, payee_type, endorsement_status), checkalt_deposits(id, status, submitted_at, approved_at, updated_at)`,
+          `${queueColumns}, check_payees(payee_name, payee_type, endorsement_status), ${CHECKALT_DEPOSITS_EMBED}`,
         )
         .eq("tenant_id", tenantId!)
         .eq("check_stage", "deposited")
@@ -710,7 +714,7 @@ export default function CheckCommandCenter() {
       const { data: checkData, error: checkErr } = await supabase
         .from("check_intake_items")
         .select(
-          "*, check_payees(payee_name, payee_type, endorsement_status), checkalt_deposits(id, status, submitted_at, approved_at, updated_at)",
+          `*, check_payees(payee_name, payee_type, endorsement_status), ${CHECKALT_DEPOSITS_EMBED}`,
         )
         .in("id", checkIds)
         .order("created_at", { ascending: false });
@@ -837,7 +841,7 @@ export default function CheckCommandCenter() {
     (c) => {
       const s = getEffectiveStatus(c);
       const stage = c.check_stage;
-      if (stage === "deposited" || getCheckAltStatus(c) === "pending_approval") return false;
+      if (stage === "deposited" || hasAuthoritativeCheckAltSubmission(c)) return false;
       return (s === "approved_for_deposit" ||
         (c.deposit_recommendation === "ready_for_deposit" && s !== "deposited")) &&
         matchesSearch(c);
@@ -882,11 +886,10 @@ export default function CheckCommandCenter() {
   const depositedFromAll = allChecks.filter((c) => {
     const s = getEffectiveStatus(c);
     const stage = c.check_stage;
-    const checkAltStatus = getCheckAltStatus(c);
     // Once funds have been disbursed, the check belongs in the Funds Released
     // tab — do NOT show it in Deposited anymore.
     if (stage === "funds_released" || stage === "disbursed_externally") return false;
-    return (s === "deposited" || stage === "deposited" || checkAltStatus === "pending_approval") && matchesSearch(c);
+    return (s === "deposited" || stage === "deposited" || hasAuthoritativeCheckAltSubmission(c)) && matchesSearch(c);
   });
   // On the Deposited tab, merge the paginated owned deposited rows with any
   // shared/pending-approval checks so the visible list matches the badge count.
@@ -3037,7 +3040,7 @@ function CheckDetailPanel({
       const t0 = performance.now();
       const { data, error } = await supabase
         .from("check_intake_items")
-        .select("*, check_payees(*), checkalt_deposits(id, status, submitted_at, approved_at, updated_at, last_status_payload)")
+        .select(`*, check_payees(*), ${CHECKALT_DEPOSITS_EMBED}`)
         .eq("id", checkId)
         .single();
       if (error) throw error;
@@ -3649,6 +3652,15 @@ function CheckDetailPanel({
   // No separate compliance/prepare click. No local prepare_deposit / assign_provider.
   const handleDepositWithCheckAlt = async () => {
     if (!user?.id || !check || depositingWithCheckAlt) return;
+    if (!normalCheckAltDepositAllowed(check)) {
+      toast({
+        title: "Deposit unavailable",
+        description: checkAltLifecycleLabelForCheck(check)
+          || "This check already has a CheckAlt submission. Reconcile the existing reference.",
+        variant: "destructive",
+      });
+      return;
+    }
     setDepositingWithCheckAlt(true);
     setDepositPhase("preparing");
     try {
@@ -3931,7 +3943,9 @@ function CheckDetailPanel({
           <CardTitle className="text-base">Check #{check.check_number ?? "Pending"}</CardTitle>
           <div className="flex items-center gap-2">
             <Badge className={statusColors[check.status] ?? ""}>
-              {prettifyStatus(check.status)}
+              {hasAuthoritativeCheckAltSubmission(check)
+                ? (checkAltLifecycleLabelForCheck(check) || prettifyStatus(check.status))
+                : prettifyStatus(check.status)}
             </Badge>
           </div>
         </div>
@@ -4271,27 +4285,35 @@ function CheckDetailPanel({
                       </label>
                     </div>
                   )}
-                  {/* Ready-for-deposit CTA — only visible once all endorsements are complete.
-                      When CheckAlt is enabled this is the one-click "Deposit Check"
-                      button; otherwise it falls back to manual mobile deposit. */}
+                  {/* Ready-for-deposit CTA — only for unsubmitted checks.
+                      Authoritative CheckAlt rows hide Deposit and any one-click resubmit. */}
                   {(() => {
-                    const latestCA = (check.checkalt_deposits ?? [])
-                      .slice()
-                      .sort((a, b) => (b.updated_at ?? "").localeCompare(a.updated_at ?? ""))[0];
-                    const caRejected = latestCA && ["rejected", "returned", "error"].includes(String(latestCA.status));
-                    const rejPayload = (latestCA?.last_status_payload as any) ?? null;
-                    const rejCode = rejPayload?.status ?? rejPayload?.statusCode ?? null;
-                    const rejDesc = rejPayload?.statusDescription ?? rejPayload?.description ?? null;
+                    const latestCA = getLatestCheckAltDeposit(check);
+                    const submitted = hasAuthoritativeCheckAltSubmission(check);
+                    const lifecycleLabel = checkAltLifecycleLabelForCheck(check);
+                    const canShowNormalDeposit =
+                      allEndorsementsComplete
+                      && !isDepositBlocked
+                      && check.check_stage !== "deposited"
+                      && check.status !== "deposited"
+                      && normalCheckAltDepositAllowed(check);
                     return (
                       <>
-                        {caRejected && check.check_stage !== "deposited" && check.status !== "deposited" && (
-                          <div className="rounded-md border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-300 mt-1">
-                            <div className="font-medium">Deposit {latestCA?.status} {rejCode ? `(code ${rejCode})` : ""}</div>
-                            {rejDesc && <div className="text-red-200/80 mt-0.5">{String(rejDesc)}</div>}
-                            <div className="text-red-200/60 mt-1">Click below to resubmit deposit.</div>
+                        {submitted && (
+                          <div className={`rounded-md border p-2 text-xs mt-1 ${
+                            isUncertainCheckAltDeposit(latestCA)
+                              ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
+                              : "border-primary/30 bg-primary/10 text-primary"
+                          }`}>
+                            <div className="font-medium">{lifecycleLabel}</div>
+                            {isUncertainCheckAltDeposit(latestCA) && (
+                              <div className="text-amber-200/80 mt-0.5">
+                                Provider result is uncertain. Reconcile with Poll Now. Do not submit again.
+                              </div>
+                            )}
                           </div>
                         )}
-                        {allEndorsementsComplete && !isDepositBlocked && check.check_stage !== "deposited" && check.status !== "deposited" && (
+                        {canShowNormalDeposit && (
                           checkAltEnabled ? (
                             <>
                             <CheckAltImageComplianceCard
@@ -4309,7 +4331,7 @@ function CheckDetailPanel({
                               <Banknote className="h-4 w-4 mr-2" />
                               {depositingWithCheckAlt
                                 ? DEPOSIT_PHASE_LABEL[depositPhase] || "Preparing check for deposit…"
-                                : caRejected ? "Resubmit Deposit" : "Deposit"}
+                                : "Deposit"}
                             </Button>
                             </>
                           ) : (
@@ -4370,7 +4392,7 @@ function CheckDetailPanel({
                   </div>
                 </>
                )}
-              {canUndo && !isSharedView && (
+              {canUndo && !isSharedView && !hasAuthoritativeCheckAltSubmission(check) && (
                 <Button
                   size="sm"
                   variant="outline"
@@ -4424,7 +4446,7 @@ function CheckDetailPanel({
                 </div>
               )}
               {/* Approved → Deposited transition */}
-              {check.status === "approved_for_deposit" && !isSharedView && (
+              {check.status === "approved_for_deposit" && !isSharedView && !hasAuthoritativeCheckAltSubmission(check) && (
                 <Button
                   size="sm"
                   variant="outline"

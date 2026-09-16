@@ -14,11 +14,30 @@ import {
   Users,
 } from "lucide-react";
 import type {
-  CheckAltDepositSummary,
   CheckEndorsementSummary,
   CheckItem,
   CheckPayee,
 } from "./types";
+import {
+  formatCheckAltStatusLabel,
+  getLatestCheckAltDeposit,
+  hasAuthoritativeCheckAltSubmission,
+  isUncertainCheckAltDeposit,
+  normalizedCheckAltDepositStatus,
+} from "./checkAltLifecycle";
+
+export {
+  CHECKALT_DEPOSITS_EMBED,
+  checkAltLifecycleLabelForCheck,
+  formatCheckAltLifecycleLabel,
+  formatCheckAltStatusLabel,
+  getLatestCheckAltDeposit,
+  hasAuthoritativeCheckAltSubmission,
+  isUncertainCheckAltDeposit,
+  normalCheckAltDepositAllowed,
+  normalizeCheckAltStatus,
+  normalizedCheckAltDepositStatus,
+} from "./checkAltLifecycle";
 
 export const normalizeEndorsementName = (value?: string | null) => (value ?? "").trim().toLowerCase();
 export const normalizeEndorsementType = (value?: string | null) => (value ?? "other").trim().toLowerCase();
@@ -200,18 +219,8 @@ export const getEffectiveStatusLabel = (c: CheckItem): string => {
   return prettifyStatus(c.status);
 };
 
-export const getLatestCheckAltDeposit = (c: CheckItem): CheckAltDepositSummary | null => {
-  const deposits = c.checkalt_deposits ?? [];
-  if (deposits.length === 0) return null;
-  return [...deposits].sort((a, b) => {
-    const aTime = new Date(a.updated_at ?? a.approved_at ?? a.submitted_at ?? 0).getTime();
-    const bTime = new Date(b.updated_at ?? b.approved_at ?? b.submitted_at ?? 0).getTime();
-    return bTime - aTime;
-  })[0] ?? null;
-};
-
 export const getCheckAltStatus = (c: CheckItem): string | null =>
-  getLatestCheckAltDeposit(c)?.status ?? null;
+  normalizedCheckAltDepositStatus(getLatestCheckAltDeposit(c));
 
 export const statusColors: Record<string, string> = {
   uploaded: "bg-muted text-muted-foreground",
@@ -236,17 +245,26 @@ export const getTabStatusLabel = (c: CheckItem, tab: string): string => {
   if (tab === "endorsements") return "Endorsements in Progress";
   if (tab === "ready") return "Endorsed - Ready for Deposit";
   if (tab === "deposited") {
-    if (getCheckAltStatus(c) === "pending_approval") return "Pending Approval";
+    const deposit = getLatestCheckAltDeposit(c);
+    if (isUncertainCheckAltDeposit(deposit)) return "Reconciliation required";
+    const checkAltStatus = getCheckAltStatus(c);
+    if (checkAltStatus) return formatCheckAltStatusLabel(checkAltStatus);
     const depositedAt = c.deposited_at;
     if (!depositedAt) return "Deposit in Progress";
     const hours = (Date.now() - new Date(depositedAt).getTime()) / 36e5;
     return hours >= 48 ? "Ready for Release" : "Deposit in Progress";
   }
+  if (hasAuthoritativeCheckAltSubmission(c)) {
+    const checkAltStatus = getCheckAltStatus(c);
+    if (isUncertainCheckAltDeposit(getLatestCheckAltDeposit(c))) return "Reconciliation required";
+    if (checkAltStatus) return formatCheckAltStatusLabel(checkAltStatus);
+  }
   return getEffectiveStatusLabel(c);
 };
 
 export const getTabStatusClass = (c: CheckItem, tab: string): string => {
-  if (tab === "deposited") {
+  if (tab === "deposited" || hasAuthoritativeCheckAltSubmission(c)) {
+    if (isUncertainCheckAltDeposit(getLatestCheckAltDeposit(c))) return "bg-amber-500/20 text-amber-400";
     if (getCheckAltStatus(c) === "pending_approval") return "bg-amber-500/20 text-amber-400";
     const depositedAt = c.deposited_at;
     if (depositedAt) {
