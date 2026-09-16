@@ -1,0 +1,42 @@
+{
+  "gitCommit": "587d4e71e8d6d4404d5a05ed4df8272be7c807e8",
+  "recordedAt": "2026-09-16T17:31:57.625Z",
+  "deployed": true,
+  "deployTarget": {
+    "s3Bucket": "checksops-production-frontend-806168576068",
+    "cloudfrontDistributionId": "E1B0ZWWO5559U5",
+    "invalidationId": "I792Z4FHA1NW4V95M2T5JUKGBL",
+    "rollbackKnownGood": true,
+    "restoredBundle": "index-C_NPDCdc.js"
+  },
+  "authProvider": "cognito",
+  "cognito": {
+    "userPoolId": null,
+    "clientId": null
+  },
+  "apiTarget": "/prep",
+  "moneyCounts": {
+    "moov-wallet-fund": 1,
+    "moov-disburse": 1,
+    "wallet.fund": 5,
+    "wallet.disburse": 4,
+    "Authorize held $0.01 fund": 1,
+    "moov-transfer-create": 0,
+    "supabase.co/functions": 0
+  },
+  "spaBundle": "index-C_NPDCdc.js",
+  "bundle": {
+    "fileCount": 4,
+    "assets": {
+      "assets/index-CWVpcCxc.css": "7c5d32fe45853e93b735d0bcd814e8373b7131ae931139d1961fa822ba5ca6cc",
+      "assets/index-C_NPDCdc.js": "5e1259dd92d1204062750b87b61a7b61c74bc6e9712966f6be4a79508c14169d",
+      "current-index.html": "682e79db14f619dda74cb2a012b05ee03aa7282c59cc72460618b73a63b7e67f",
+      "index.html": "b43849b22b9c976bdf60b744fea8b51eba01f21e41875d7ae039fe71a9ae816f"
+    }
+  },
+  "artifactValidation": {
+    "ok": true,
+    "missing": [],
+    "forbidden": []
+  }
+}

@@ -77,6 +77,9 @@ describe('M7.5C production SPA money-test hold', () => {
     assert.match(deploy, /M75_MONEY_TEST_HOLD_RELEASE/);
     assert.match(deploy, /RELEASE_CUTOVER_LOCK is no longer accepted/);
     assert.match(deploy, /ChecksOpsProductionSpaDeploy/);
+    assert.match(deploy, /--rollback-known-good/);
+    assert.match(deploy, /index-C_NPDCdc\.js/);
     assert.doesNotMatch(deploy, /--delete/);
+    assert.match(deploy, /if \(!ROLLBACK_KNOWN_GOOD\)/);
   });
 });
