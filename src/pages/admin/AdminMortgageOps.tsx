@@ -49,17 +49,19 @@ export default function AdminMortgageOps() {
   const [requestsLoading, setRequestsLoading] = useState(false);
 
   useEffect(() => {
-    (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user || !isPlatformOwner(user.email, user.id)) {
-        toast.error("Not authorized");
-        navigate("/");
-        return;
-      }
-      setAuthorized(true);
+    let cancelled = false;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (cancelled) return;
+      // Platform-owner personnel console only. Tenant users (including tenant
+      // admins) are denied here; they submit/track requests from Check Center.
+      setAuthorized(isPlatformOwner(session?.user?.email, session?.user?.id));
       setChecking(false);
-    })();
-  }, [navigate]);
+    });
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
+  }, []);
 
   const loadAgents = useCallback(async () => {
     setLoading(true);
@@ -180,7 +182,24 @@ export default function AdminMortgageOps() {
       </div>
     );
   }
-  if (!authorized) return null;
+  if (!authorized) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-6">
+        <Card className="max-w-md w-full">
+          <CardHeader>
+            <CardTitle>Access Restricted</CardTitle>
+            <CardDescription>
+              The Mortgage Ops admin workspace is only accessible to ChecksOps platform operators.
+              Organization users submit and track mortgage-handling requests from Check Center.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={() => navigate("/login")} className="w-full">Back to Login</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">

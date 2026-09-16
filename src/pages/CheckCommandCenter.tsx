@@ -47,6 +47,10 @@ import { toast as sonnerToast } from "sonner";
 import { Pencil, Check as CheckIcon, X, Plus } from "lucide-react";
 import { format } from "date-fns";
 import { formatIssueDateDisplay } from "@/lib/issueDate";
+import {
+  fetchFundsReleasedPopulation,
+  fundsReleasedDisplayCount,
+} from "@/lib/fundsReleasedQuery";
 
 // Eager: default tab and inline panels
 import { CheckReviewQueue, ReviewDecisionPanel } from "@/components/check-review/CheckReviewConsole";
@@ -1027,35 +1031,19 @@ export default function CheckCommandCenter() {
     refetchInterval: 30_000,
   });
 
-  // Funds released — disbursement splits that have settled (funds delivered to recipient)
-  const { data: fundsReleased = [] } = useQuery({
+  // Funds released — settled disbursement splits for this tenant (exact total,
+  // not the check_stage funds_released count and not a silent 100-row cap).
+  const { data: fundsReleasedPopulation } = useQuery({
     queryKey: ["funds-released", tenantId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("disbursement_splits")
-        .select(`
-          id, amount, settled_at, recipient_name, method, external_check_number,
-          stakeholder_accounts (nickname, custname),
-          disbursement_batches (
-            id, check_intake_item_id,
-            check_intake_items:check_intake_item_id (
-              check_number, carrier_name, property_address, funds_type, amount,
-              claim_id, detected_claim_number, payee_line,
-              claims:claim_id ( claim_number, policyholder_name )
-            )
-          )
-        `)
-
-        .eq("tenant_id", tenantId!)
-        .eq("status", "settled")
-        .order("settled_at", { ascending: false })
-        .limit(100);
-      if (error) throw error;
-      return data ?? [];
-    },
+    queryFn: async () => fetchFundsReleasedPopulation(
+      () => supabase.from("disbursement_splits") as any,
+      tenantId!,
+    ),
     enabled: !!tenantId,
     refetchInterval: 60_000,
   });
+  const fundsReleased = fundsReleasedPopulation?.rows ?? [];
+  const fundsReleasedTotal = fundsReleasedPopulation?.total ?? fundsReleased.length;
 
   // Funds received — settled disbursement splits paid TO this tenant by another
   // tenant. Uses a backend helper so recipient tenants can see the same check
@@ -1140,6 +1128,11 @@ export default function CheckCommandCenter() {
     },
     [fundsReleased, matchesSplitSearch],
   );
+  const fundsReleasedCount = fundsReleasedDisplayCount({
+    total: fundsReleasedTotal,
+    filteredLength: filteredFundsReleased.length,
+    hasSearch: Boolean(searchQuery.trim()),
+  });
   const filteredFundsReceived = useMemo(
     () => (fundsReceived as any[]).filter(matchesSplitSearch),
     [fundsReceived, matchesSplitSearch],
@@ -1171,7 +1164,7 @@ export default function CheckCommandCenter() {
       { tab: "branch", count: branchDeposit.length },
       { tab: "reissue", count: reissueRequested.length },
       { tab: "deposited", count: depositedChecks.length },
-      { tab: "fundsreleased", count: filteredFundsReleased.length },
+      { tab: "fundsreleased", count: fundsReleasedCount },
       { tab: "fundsreceived", count: filteredFundsReceived.length },
     ];
     const currentCount = buckets.find((b) => b.tab === activeTab)?.count ?? 0;
@@ -1183,7 +1176,7 @@ export default function CheckCommandCenter() {
       setReviewCheckId(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery, needsReview.length, awaitingEndorsement.length, readyForDeposit.length, lossDraftChecks.length, branchDeposit.length, reissueRequested.length, depositedChecks.length, filteredFundsReleased.length, filteredFundsReceived.length]);
+  }, [searchQuery, needsReview.length, awaitingEndorsement.length, readyForDeposit.length, lossDraftChecks.length, branchDeposit.length, reissueRequested.length, depositedChecks.length, fundsReleasedCount, filteredFundsReceived.length]);
 
 
 
@@ -1321,7 +1314,7 @@ export default function CheckCommandCenter() {
             // but is no longer surfaced as a top-level tab in the command center.
 
             // Reissue moved into Manager → Reissue sub-tab.
-            { key: "fundsreleased", label: "Funds Released",   count: filteredFundsReleased.length,       icon: Banknote,       gradient: "from-emerald-500/20 to-teal-500/10",  accent: "text-emerald-400", ring: "ring-emerald-500/30" },
+            { key: "fundsreleased", label: "Funds Released",   count: fundsReleasedCount,       icon: Banknote,       gradient: "from-emerald-500/20 to-teal-500/10",  accent: "text-emerald-400", ring: "ring-emerald-500/30" },
             { key: "fundsreceived", label: "Funds Received",   count: filteredFundsReceived.length,       icon: Banknote,       gradient: "from-sky-500/20 to-blue-500/10",      accent: "text-sky-400",     ring: "ring-sky-500/30" },
             // Partners moved into Manager → Partners sub-tab (2026-07-07).
             ...(canAccessManager ? [{ key: "manager", label: "Manager", count: null as number | null, icon: Shield, gradient: "from-indigo-500/20 to-blue-500/10", accent: "text-indigo-400", ring: "ring-indigo-500/30" }] : []),
@@ -1547,7 +1540,7 @@ export default function CheckCommandCenter() {
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <Banknote className="h-4 w-4 text-emerald-400" />
-                  Funds Released ({filteredFundsReleased.length})
+                  Funds Released ({fundsReleasedCount})
                 </CardTitle>
               </CardHeader>
               <ClassFilterBar
