@@ -11,6 +11,8 @@ import {
   existingProductionTransferByKey,
   insertProductionTransferDraft,
   moovFundingIdempotencyKey,
+  productionTransferInsertFkError,
+  resolveLocalFundIntentRefs,
   shouldReconcileInsteadOfPost,
   updateProductionTransfer,
 } from './moov-idempotency.mjs';
@@ -180,6 +182,19 @@ export async function handleProductionMoovWalletFund({
     };
   }
 
+  const localRefs = await resolveLocalFundIntentRefs(client, {
+    tenantId,
+    bankId: binding.bankId,
+    walletId,
+    sourceMoovPaymentMethodId: sourcePm,
+  });
+  if (!localRefs.ok) {
+    return fail(localRefs.error, localRefs.statusCode, {
+      message: localRefs.message,
+      spoofFieldsIgnored: spoof,
+    });
+  }
+
   let draft;
   try {
     draft = await insertProductionTransferDraft(client, {
@@ -188,15 +203,21 @@ export async function handleProductionMoovWalletFund({
       amount_cents: amount,
       description: 'ChecksOps BANK→WALLET Test 1',
       source_tenant_account_id: merchant.moovAccountId,
-      source_payment_method_id: sourcePm,
+      source_payment_method_id: localRefs.sourcePaymentMethodId,
       destination_tenant_id: tenantId,
-      wallet_id: walletId,
+      destination_payment_method_id: localRefs.destinationPaymentMethodId,
+      wallet_id: localRefs.walletId,
       leg_role: 'wallet_funding',
       created_by: mapping.application_user_id,
     });
   } catch (error) {
     if (/duplicate/i.test(String(error.message))) {
       return fail('A matching payment was already submitted.', 409);
+    }
+    if (productionTransferInsertFkError(error)) {
+      return fail('local_payment_ref_fk', 409, {
+        message: 'Durable intent must reference local payment_provider_methods / payment_wallets rows, not Moov payment-method IDs.',
+      });
     }
     throw error;
   }

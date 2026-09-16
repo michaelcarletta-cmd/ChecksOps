@@ -51,6 +51,9 @@ const PENDING_DEPOSIT_ID = '11111111-2222-4333-8333-444444444445';
 const QUEUE_ID = '22222222-3333-4444-8555-666666666666';
 const C1C_WALLET_ID = '33333333-4444-4555-8666-777777777777';
 const PLATFORM_WALLET_PM = '44444444-5555-4666-8777-888888888888';
+const LOCAL_BANK_METHOD_ID = '55555555-6666-4777-8888-999999999901';
+const LOCAL_WALLET_ROW_ID = '55555555-6666-4777-8888-999999999902';
+const LOCAL_RECIPIENT_METHOD_ID = '55555555-6666-4777-8888-999999999903';
 
 const jwtEvent = (pathName, method, body, extra = {}) => ({
   rawPath: pathName,
@@ -143,7 +146,37 @@ const createStore = () => ({
     { tenant_id: C1C_TENANT, provider_account_id: KNOWN_APPROVED_MOOV.c1c.moovAccountId, onboarding_status: 'active', verification_status: 'verified', disabled: false },
   ],
   wallets: [
-    { tenant_id: FREEDOM_TENANT, provider_wallet_id: KNOWN_APPROVED_MOOV.freedom.walletId, wallet_type: 'operating' },
+    {
+      id: LOCAL_WALLET_ROW_ID,
+      tenant_id: FREEDOM_TENANT,
+      provider: 'moov',
+      environment: 'production',
+      provider_wallet_id: KNOWN_APPROVED_MOOV.freedom.walletId,
+      wallet_type: 'operating',
+    },
+  ],
+  methods: [
+    {
+      id: LOCAL_BANK_METHOD_ID,
+      tenant_id: FREEDOM_TENANT,
+      provider: 'moov',
+      environment: 'production',
+      provider_bank_account_id: KNOWN_APPROVED_MOOV.freedom.bankId,
+      provider_payment_method_id: KNOWN_APPROVED_MOOV.freedom.achDebitFundPm,
+      connection_status: 'connected',
+      is_default: true,
+    },
+    {
+      id: LOCAL_RECIPIENT_METHOD_ID,
+      tenant_id: FREEDOM_TENANT,
+      provider: 'moov',
+      environment: 'production',
+      external_recipient_id: VENDOR_RECIPIENT_ID,
+      provider_bank_account_id: KNOWN_APPROVED_MOOV.recipient.bankId,
+      provider_payment_method_id: KNOWN_APPROVED_MOOV.recipient.achCreditStandardPm,
+      connection_status: 'connected',
+      is_default: true,
+    },
   ],
   recipients: [
     {
@@ -275,8 +308,47 @@ const identityClient = (store, session = mapping) => ({
     if (text.includes('FROM public.payment_provider_accounts')) {
       return { rows: (store.accounts || []).filter((row) => row.tenant_id === params[0]) };
     }
+    if (text.includes('FROM public.payment_wallets') && text.includes('provider_wallet_id = $2')) {
+      return {
+        rows: (store.wallets || []).filter((row) => (
+          row.tenant_id === params[0] && row.provider_wallet_id === params[1]
+        )),
+      };
+    }
     if (text.includes('FROM public.payment_wallets')) {
       return { rows: (store.wallets || []).filter((row) => row.tenant_id === params[0]) };
+    }
+    if (text.includes('FROM public.payment_provider_methods') && text.includes('external_recipient_id = $1')) {
+      return {
+        rows: (store.methods || []).filter((row) => (
+          row.external_recipient_id === params[0] && row.connection_status === 'connected'
+        )),
+      };
+    }
+    if (text.includes('FROM public.payment_provider_methods') && text.includes('provider_payment_method_id = $2')) {
+      return {
+        rows: (store.methods || []).filter((row) => (
+          row.tenant_id === params[0]
+          && row.provider_payment_method_id === params[1]
+          && row.connection_status === 'connected'
+        )),
+      };
+    }
+    if (text.includes('FROM public.payment_provider_methods') && text.includes('provider_bank_account_id = $2')) {
+      return {
+        rows: (store.methods || []).filter((row) => (
+          row.tenant_id === params[0]
+          && row.provider_bank_account_id === params[1]
+          && row.connection_status === 'connected'
+        )),
+      };
+    }
+    if (text.includes('FROM public.payment_provider_methods') && text.includes('provider_bank_account_id = $1')) {
+      return {
+        rows: (store.methods || []).filter((row) => (
+          row.provider_bank_account_id === params[0] && row.connection_status === 'connected'
+        )),
+      };
     }
     if (text.includes('FROM public.external_payment_recipients')) {
       return {
@@ -1378,9 +1450,54 @@ test('M7.4 dark mode records BANK→WALLET intent and never POSTs a transfer', a
   assert.equal(result.liveProviderCalled, false);
   assert.equal(store.transfers.length, 1);
   assert.equal(store.transfers[0].status, 'ready');
+  assert.equal(store.transfers[0].source_payment_method_id, LOCAL_BANK_METHOD_ID);
+  assert.equal(store.transfers[0].wallet_id, LOCAL_WALLET_ROW_ID);
+  assert.notEqual(store.transfers[0].source_payment_method_id, KNOWN_APPROVED_MOOV.freedom.achDebitFundPm);
+  assert.notEqual(store.transfers[0].wallet_id, KNOWN_APPROVED_MOOV.freedom.walletId);
   assert.equal(store.transferPosts || 0, 0);
   assert.ok(!store.moovCalls.some((call) => call.method === 'POST' && /\/transfers$/.test(call.url)));
   assert.equal(store.capabilityPosts || 0, 0);
+});
+
+test('BANK→WALLET dark mode does not write Moov payment-method IDs into payment_transfers FKs', async () => {
+  resetProductionMoovTokenCache();
+  const store = createStore();
+  grantStepUp(store);
+  const darkFlags = { ...productionFlags, AWS_MOOV_TRANSFER_POST_ENABLED: undefined };
+  const result = await withEnv(darkFlags, () => handleProductionMoovWalletFund({
+    client: identityClient(store),
+    mapping,
+    claims: { sub: COGNITO_SUB },
+    body: { tenant_id: FREEDOM_TENANT, amount_cents: 1, idempotency_key: 'm75b-local-pm-fk-1' },
+    spoof: {},
+    fetchImpl: mockMoovFetch(store, { sweepStatus: 'disabled' }),
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
+  }));
+  assert.equal(result.error, 'transfer_post_held');
+  assert.equal(store.transfers[0].source_payment_method_id, LOCAL_BANK_METHOD_ID);
+  assert.equal(store.transfers[0].destination_payment_method_id, null);
+  assert.equal(store.transfers[0].wallet_id, LOCAL_WALLET_ROW_ID);
+});
+
+test('BANK→WALLET fails closed when local bank method is missing', async () => {
+  resetProductionMoovTokenCache();
+  const store = createStore();
+  store.methods = [];
+  grantStepUp(store);
+  const darkFlags = { ...productionFlags, AWS_MOOV_TRANSFER_POST_ENABLED: undefined };
+  const result = await withEnv(darkFlags, () => handleProductionMoovWalletFund({
+    client: identityClient(store),
+    mapping,
+    claims: { sub: COGNITO_SUB },
+    body: { tenant_id: FREEDOM_TENANT, amount_cents: 1, idempotency_key: 'm75b-missing-bank-1' },
+    spoof: {},
+    fetchImpl: mockMoovFetch(store, { sweepStatus: 'disabled' }),
+    deps: { loadProductionSecrets: async () => loadProductionMoovReadSecrets(async () => productionSecrets) },
+  }));
+  assert.equal(result.error, 'local_bank_method_missing');
+  assert.equal(result.statusCode, 409);
+  assert.equal(store.transfers.length, 0);
+  assert.equal(store.transferPosts || 0, 0);
 });
 
 test('M7.4 dark mode records WALLET→RECIPIENT intent and never POSTs a transfer', async () => {
@@ -1410,6 +1527,10 @@ test('M7.4 dark mode records WALLET→RECIPIENT intent and never POSTs a transfe
   assert.equal(result.error, 'transfer_post_held');
   assert.equal(result.darkMode, true);
   assert.equal(store.transfers.length, 1);
+  assert.equal(store.transfers[0].source_payment_method_id, null);
+  assert.equal(store.transfers[0].destination_payment_method_id, LOCAL_RECIPIENT_METHOD_ID);
+  assert.equal(store.transfers[0].wallet_id, LOCAL_WALLET_ROW_ID);
+  assert.notEqual(store.transfers[0].destination_payment_method_id, KNOWN_APPROVED_MOOV.recipient.achCreditStandardPm);
   assert.equal(store.transferPosts || 0, 0);
 });
 
