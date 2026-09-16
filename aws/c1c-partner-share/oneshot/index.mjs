@@ -229,6 +229,74 @@ const inspect = async (client) => {
     };
   });
 
+  const partnerIntegrity = await (async () => {
+    const duplicateCodes = (await client.query(`
+      SELECT partner_code, count(*)::int AS n
+      FROM public.tenants
+      WHERE partner_code IS NOT NULL AND btrim(partner_code) <> ''
+      GROUP BY partner_code
+      HAVING count(*) > 1
+      ORDER BY n DESC, partner_code
+      LIMIT 50
+    `)).rows;
+    const nullCodes = (await client.query(`
+      SELECT count(*)::int AS n
+      FROM public.tenants
+      WHERE partner_code IS NULL OR btrim(partner_code) = ''
+    `)).rows[0]?.n ?? 0;
+    const missingTenantPartnerships = (await client.query(`
+      SELECT count(*)::int AS n
+      FROM public.tenant_partnerships p
+      LEFT JOIN public.tenants inviter ON inviter.id = p.inviter_tenant_id
+      LEFT JOIN public.tenants invitee ON invitee.id = p.invitee_tenant_id
+      WHERE inviter.id IS NULL OR invitee.id IS NULL
+    `)).rows[0]?.n ?? 0;
+    const partnershipStatus = (await client.query(`
+      SELECT status, count(*)::int AS n
+      FROM public.tenant_partnerships
+      GROUP BY status
+      ORDER BY n DESC
+    `)).rows;
+    const orphanShares = (await client.query(`
+      SELECT count(*)::int AS n
+      FROM public.shared_checks s
+      WHERE s.revoked_at IS NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM public.tenant_partnerships p
+          WHERE p.status = 'active'
+            AND (
+              (p.inviter_tenant_id = s.source_tenant_id AND p.invitee_tenant_id = s.target_tenant_id)
+              OR (p.inviter_tenant_id = s.target_tenant_id AND p.invitee_tenant_id = s.source_tenant_id)
+            )
+        )
+    `)).rows[0]?.n ?? 0;
+    const byCreatedMonth = (await client.query(`
+      SELECT to_char(date_trunc('month', created_at), 'YYYY-MM') AS month, count(*)::int AS n
+      FROM public.tenant_partnerships
+      GROUP BY 1
+      ORDER BY 1
+    `)).rows;
+    const checkaltCleared = (await client.query(`
+      SELECT
+        count(*)::int AS total,
+        count(*) FILTER (WHERE cleared_at IS NOT NULL)::int AS with_cleared_at,
+        count(*) FILTER (WHERE last_status_payload::text ILIKE '%depositDate%')::int AS payload_mentions_deposit_date,
+        count(*) FILTER (WHERE last_status_payload->'last_poll' ? 'depositDate')::int AS last_poll_has_deposit_date_key
+      FROM public.checkalt_deposits
+    `)).rows[0];
+    return {
+      duplicatePartnerCodeCount: duplicateCodes.length,
+      duplicatePartnerCodes: duplicateCodes,
+      nullOrBlankPartnerCodes: nullCodes,
+      partnershipsReferencingMissingTenants: missingTenantPartnerships,
+      partnershipStatus,
+      activeSharedChecksMissingPartnership: orphanShares,
+      partnershipsByCreatedMonth: byCreatedMonth,
+      checkaltCleared,
+    };
+  })();
+
   const freedomVisible = await asAppUser(client, FREEDOM_TESTER, async () => {
     const partners = await client.query(`
       SELECT invitee_tenant_id, inviter_tenant_id
@@ -267,6 +335,7 @@ const inspect = async (client) => {
     ownedCounts,
     views,
     partnership,
+    partnerIntegrity,
     totalsIncludesSharedChecks: /shared_checks/i.test(totalsDef),
     helperExists,
     livePolicies: livePolicies.map((p) => ({
