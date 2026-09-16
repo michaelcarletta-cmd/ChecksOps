@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useFinancialGuard } from "@/hooks/useFinancialGuard";
-import { useTenant } from "@/contexts/TenantContext";
+import { useTenantFilter } from "@/hooks/useTenantFilter";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -25,17 +25,16 @@ const dollarsToCents = (value: string): number | null => {
 };
 
 export function CheckAltAutoDepositSettings({
-  canConfigure = false,
+  canConfigure: _canConfigure = true,
 }: {
   canConfigure?: boolean;
 }) {
-  const { tenant } = useTenant();
+  const { tenantId } = useTenantFilter();
   const { user } = useAuth();
-  const tenantId = tenant?.id || null;
   const { toast } = useToast();
   const qc = useQueryClient();
   const guardFinancial = useFinancialGuard(tenantId);
-  const { data: membershipRole } = useQuery({
+  const { data: membershipRole, isLoading: roleLoading } = useQuery({
     queryKey: ["checkalt-auto-deposit-role", tenantId, user?.id],
     queryFn: async () => {
       const { data: row, error } = await supabase
@@ -49,7 +48,10 @@ export function CheckAltAutoDepositSettings({
     },
     enabled: Boolean(tenantId) && Boolean(user?.id),
   });
-  const allowed = canConfigure && ["admin", "owner"].includes(String(membershipRole || ""));
+  const isTenantOwnerOrAdmin = ["admin", "owner"].includes(
+    String(membershipRole || "").toLowerCase(),
+  );
+  const canEdit = isTenantOwnerOrAdmin;
 
   const { data, isLoading } = useQuery({
     queryKey: ["checkalt-auto-deposit-settings", tenantId],
@@ -58,7 +60,7 @@ export function CheckAltAutoDepositSettings({
       if (!result.ok) throw new Error(result.json?.message || result.json?.error || "load_failed");
       return result.json;
     },
-    enabled: Boolean(tenantId) && allowed,
+    enabled: Boolean(tenantId) && canEdit,
   });
 
   const [enabled, setEnabled] = useState(false);
@@ -111,7 +113,40 @@ export function CheckAltAutoDepositSettings({
     },
   });
 
-  if (!allowed) return null;
+  if (roleLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <ShieldCheck className="h-4 w-4" />
+            CheckAlt Auto-Deposit
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading Auto-Deposit settings
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!canEdit) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <ShieldCheck className="h-4 w-4" />
+            CheckAlt Auto-Deposit
+          </CardTitle>
+          <CardDescription>
+            Only a tenant owner or admin can view and change Auto-Deposit. Staff and operators
+            cannot edit these settings.
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
 
   return (
     <Card>

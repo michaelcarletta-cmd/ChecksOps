@@ -7,7 +7,21 @@ import { VitePWA } from "vite-plugin-pwa";
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const awsMode = mode === "aws" || String(env.VITE_AUTH_PROVIDER || "").toLowerCase() === "cognito";
+  // Bracket access — esbuild define can strip process.env.VITE_* member reads
+  // while bundling vite.config.ts.
+  const fromProcess = (key: string) => String(process.env[key] || "").trim();
+  const authProvider = String(
+    fromProcess("VITE_AUTH_PROVIDER") || env.VITE_AUTH_PROVIDER || (mode === "aws" ? "cognito" : ""),
+  ).toLowerCase();
+  const awsMode = mode === "aws" || authProvider === "cognito";
+  // Prefer process.env so production-spa deploy injection wins over leftover .env files.
+  // Do not default pool/client to production IDs — staging aws builds supply their own.
+  const cognitoPoolId = fromProcess("VITE_COGNITO_USER_POOL_ID") || env.VITE_COGNITO_USER_POOL_ID || "";
+  const cognitoClientId =
+    fromProcess("VITE_COGNITO_USER_POOL_CLIENT_ID") || env.VITE_COGNITO_USER_POOL_CLIENT_ID || "";
+  const checksopsApiUrl = fromProcess("VITE_CHECKSOPS_API_URL") || env.VITE_CHECKSOPS_API_URL || "";
+  const appUrl = fromProcess("VITE_APP_URL") || env.VITE_APP_URL || "";
+  const awsRegion = fromProcess("VITE_AWS_REGION") || env.VITE_AWS_REGION || (awsMode ? "us-east-1" : "");
   const supabaseUrl = env.VITE_SUPABASE_URL || env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
   const supabasePublishableKey =
     env.VITE_SUPABASE_PUBLISHABLE_KEY ||
@@ -90,9 +104,17 @@ export default defineConfig(({ mode }) => {
   },
   define: awsMode
     ? {
-        // Never bake production Supabase URL/keys into the AWS staging bundle.
+        // Never bake production Supabase URL/keys into the AWS bundle.
         "import.meta.env.VITE_SUPABASE_URL": JSON.stringify(""),
         "import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY": JSON.stringify(""),
+        // Only define Cognito/API keys when present so empty strings cannot
+        // override Vite's later loadEnv(.env.aws*) injection.
+        ...(authProvider ? { "import.meta.env.VITE_AUTH_PROVIDER": JSON.stringify(authProvider) } : {}),
+        ...(checksopsApiUrl ? { "import.meta.env.VITE_CHECKSOPS_API_URL": JSON.stringify(checksopsApiUrl) } : {}),
+        ...(appUrl ? { "import.meta.env.VITE_APP_URL": JSON.stringify(appUrl) } : {}),
+        ...(awsRegion ? { "import.meta.env.VITE_AWS_REGION": JSON.stringify(awsRegion) } : {}),
+        ...(cognitoPoolId ? { "import.meta.env.VITE_COGNITO_USER_POOL_ID": JSON.stringify(cognitoPoolId) } : {}),
+        ...(cognitoClientId ? { "import.meta.env.VITE_COGNITO_USER_POOL_CLIENT_ID": JSON.stringify(cognitoClientId) } : {}),
       }
     : {
         "import.meta.env.VITE_SUPABASE_URL": JSON.stringify(supabaseUrl),

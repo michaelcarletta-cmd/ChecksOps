@@ -32,8 +32,21 @@ import {
   PRODUCTION_SPA_LOCK,
   assertNotSupabaseArtifact,
   assertMoneyTestSpaArtifact,
+  assertHardenedProductionAuthArtifact,
   assertProductionSpaApplyAllowed,
 } from './production-spa-lock.mjs';
+
+const PRODUCTION_AWS_BUILD_ENV = Object.freeze({
+  VITE_AUTH_PROVIDER: 'cognito',
+  VITE_APP_URL: 'https://checksops.com',
+  VITE_CHECKSOPS_API_URL: '/prep',
+  VITE_AWS_REGION: 'us-east-1',
+  VITE_COGNITO_USER_POOL_ID: PRODUCTION_SPA_LOCK.knownGood.cognitoPoolId,
+  VITE_COGNITO_USER_POOL_CLIENT_ID: PRODUCTION_SPA_LOCK.knownGood.cognitoClientId,
+  VITE_SUPABASE_URL: '',
+  VITE_SUPABASE_PUBLISHABLE_KEY: '',
+  VITE_SUPABASE_PROJECT_ID: '',
+});
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const APPLY = process.argv.includes('--apply');
@@ -118,13 +131,33 @@ if (ROLLBACK_KNOWN_GOOD) {
 }
 
 if (!ROLLBACK_KNOWN_GOOD) {
+  if (PRODUCTION_AWS_BUILD_ENV.VITE_COGNITO_USER_POOL_ID !== PRODUCTION_SPA_LOCK.knownGood.cognitoPoolId
+    || PRODUCTION_AWS_BUILD_ENV.VITE_COGNITO_USER_POOL_CLIENT_ID !== PRODUCTION_SPA_LOCK.knownGood.cognitoClientId
+    || PRODUCTION_AWS_BUILD_ENV.VITE_CHECKSOPS_API_URL !== '/prep'
+    || PRODUCTION_AWS_BUILD_ENV.VITE_AUTH_PROVIDER !== 'cognito') {
+    fail({ error: 'production_spa_build_env_incomplete', expected: PRODUCTION_SPA_LOCK.knownGood });
+  }
+  // Vite mode=aws loads .env.aws / .env.aws.local. Writing the local file is
+  // the reliable bake path — process.env VITE_* did not reach the compiled
+  // artifact on the previous guarded builds.
+  const awsLocalEnvPath = path.join(ROOT, '.env.aws.local');
+  const awsLocalEnv = `${Object.entries(PRODUCTION_AWS_BUILD_ENV)
+    .map(([key, value]) => `${key}=${value}`)
+    .join('\n')}\n`;
+  fs.writeFileSync(awsLocalEnvPath, awsLocalEnv);
   const viteBin = path.join(ROOT, 'node_modules', '.bin', 'vite');
   const build = spawnSync(viteBin, ['build', '--mode', 'aws'], {
     cwd: ROOT,
     encoding: 'utf8',
-    env: { ...process.env },
+    env: { ...process.env, ...PRODUCTION_AWS_BUILD_ENV },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
+  try {
+    fs.copyFileSync(awsLocalEnvPath, '/tmp/production-spa.env.aws.local');
+    fs.unlinkSync(awsLocalEnvPath);
+  } catch {
+    // gitignored bake file; keep going even if unlink fails
+  }
   if (build.status !== 0) {
     fail({
       error: 'production_spa_build_failed',
@@ -135,7 +168,9 @@ if (!ROLLBACK_KNOWN_GOOD) {
 }
 
 const artifactDir = ROLLBACK_KNOWN_GOOD ? restoreDir : DIST;
-const validation = scanProductionSpaArtifact(artifactDir);
+const validation = scanProductionSpaArtifact(artifactDir, {
+  requireHardenedAuth: !ROLLBACK_KNOWN_GOOD,
+});
 if (!validation.ok) {
   fail({
     error: 'production_spa_artifact_rejected',
@@ -145,6 +180,7 @@ if (!validation.ok) {
 try {
   assertNotSupabaseArtifact(validation);
   assertMoneyTestSpaArtifact(validation);
+  if (!ROLLBACK_KNOWN_GOOD) assertHardenedProductionAuthArtifact(validation);
 } catch (error) {
   fail({
     error: error.code || error.message,

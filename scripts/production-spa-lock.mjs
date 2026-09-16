@@ -48,9 +48,32 @@ export const assertNotSupabaseArtifact = (validation) => {
     throw lockedError('production_spa_artifact_rejected', validation);
   }
   if ((validation.forbidden || []).includes('supabase_host')
-    || (validation.forbidden || []).includes('supabase_functions_host')) {
+    || (validation.forbidden || []).includes('supabase_functions_host')
+    || (validation.forbidden || []).includes('blank_supabase_client')) {
     throw lockedError('supabase_artifact_forbidden_for_production', validation);
   }
+};
+
+export const assertHardenedProductionAuthArtifact = (validation) => {
+  if (!validation?.ok) {
+    throw lockedError('production_spa_artifact_rejected', validation);
+  }
+  if (validation.authProvider !== 'cognito') {
+    throw lockedError('production_spa_cognito_mode_required', validation);
+  }
+  if (validation.userPoolId !== PRODUCTION_SPA_LOCK.knownGood.cognitoPoolId) {
+    throw lockedError('production_spa_cognito_pool_required', validation);
+  }
+  if (validation.clientId !== PRODUCTION_SPA_LOCK.knownGood.cognitoClientId) {
+    throw lockedError('production_spa_cognito_client_required', validation);
+  }
+  if (validation.apiTarget !== PRODUCTION_SPA_LOCK.knownGood.apiTarget) {
+    throw lockedError('production_spa_prep_required', validation);
+  }
+  if (validation.bootableLogin !== true) {
+    throw lockedError('production_spa_login_boot_required', validation);
+  }
+  return true;
 };
 
 export const assertProductionSpaApplyAllowed = ({
@@ -72,6 +95,9 @@ export const assertProductionSpaApplyAllowed = ({
   if (validation) {
     assertNotSupabaseArtifact(validation);
     assertMoneyTestSpaArtifact(validation);
+    if (validation.hardenedAuth !== false) {
+      assertHardenedProductionAuthArtifact(validation);
+    }
   }
   return lock;
 };

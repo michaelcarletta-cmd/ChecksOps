@@ -19,4 +19,7 @@ the matching `index.html`. Do not raw-sync unrelated files.
   CHECKSOPS_PRODUCTION_SPA_UNLOCK=M75_MONEY_TEST_HOLD_RELEASE \
     node scripts/deploy-production-spa.mjs --rollback-known-good --apply
 
+New production builds must also pass the hardened auth/API gate before apply:
+Cognito mode, production pool/client, `/prep`, no blank Supabase `createClient`, and a bootable `/freedom/login` marker. The deploy script writes a gitignored `.env.aws.local` and injects those Vite values for `vite build --mode aws`. `vite.config.ts` awsMode `define` bakes non-empty values from `process.env` (no hardcoded production pool/client defaults). Known-good rollback does not rebuild.
+
 The compiled dist must contain wallet.fund / moov-wallet-fund / wallet.disburse / moov-disburse / Authorize held $0.01 fund and zero moov-transfer-create.
