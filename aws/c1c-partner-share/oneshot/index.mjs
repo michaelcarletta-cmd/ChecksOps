@@ -433,7 +433,12 @@ const applyPartnerDdl = async (client, event) => {
   }
   const db = (await client.query('SELECT current_database() AS d')).rows[0];
   if (db.d !== 'checksops') throw new Error(`connected to ${db.d}, expected checksops`);
-  const files = ['34_c1c_partner_visibility.sql', '31_partner_safe_read.sql', '33_partner_stage_totals.sql'];
+  const files = [
+    '34_c1c_partner_visibility.sql',
+    '32_partner_share_lifecycle.sql',
+    '31_partner_safe_read.sql',
+    '33_partner_stage_totals.sql',
+  ];
   const applied = [];
   for (const name of files) {
     const sqlPath = [

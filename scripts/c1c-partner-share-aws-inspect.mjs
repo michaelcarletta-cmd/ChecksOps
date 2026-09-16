@@ -82,6 +82,10 @@ const packOneshot = async () => {
     path.join(staging, 'sql/34_c1c_partner_visibility.sql'),
   );
   await copyFile(
+    path.join(ROOT, 'aws/rls/sql/32_partner_share_lifecycle.sql'),
+    path.join(staging, 'sql/32_partner_share_lifecycle.sql'),
+  );
+  await copyFile(
     path.join(ROOT, 'aws/rls/sql/31_partner_safe_read.sql'),
     path.join(staging, 'sql/31_partner_safe_read.sql'),
   );
