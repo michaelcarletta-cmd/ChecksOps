@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "fail_closed": true,
+  "notes": "Empty by default. A reviewed PR may add an explicit exception that names the other PR number, the exact protected path prefix, and a reason. Wildcards that swallow another workstream are forbidden.",
+  "allow": []
+}

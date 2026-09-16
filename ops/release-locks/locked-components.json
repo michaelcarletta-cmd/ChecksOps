@@ -1,0 +1,580 @@
+{
+  "manifest_version": 1,
+  "baseline_git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+  "fail_closed": true,
+  "classifications": [
+    "PRODUCTION_LOCKED",
+    "SOURCE_LOCKED_NOT_ACTIVE",
+    "STAGING_LOCKED_NOT_PRODUCTION",
+    "UNVERIFIED"
+  ],
+  "unlock_policy": {
+    "requires_reviewed_pr": true,
+    "auto_unlock_forbidden": true,
+    "instructions_path": "ops/release-locks/OPERATOR.md"
+  },
+  "notes": "Initial lock from origin/main 5567757e8286bd9e9f643689f6b7da5a7dfe06c7. No component is PRODUCTION_LOCKED. Repo docs conflict with claimed production cutover; live AWS was not queried.",
+  "components": {
+    "identity-cognito": {
+      "id": "identity-cognito",
+      "ownership_group": "identity-cognito",
+      "classification": "UNVERIFIED",
+      "production_active": false,
+      "environment": "unknown",
+      "source": {
+        "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+        "tree_hash": "d66c11f6775d39eacb19ed9a1bf6b467ff11943c164b0228588b85d959e5f5bc",
+        "merged": true,
+        "merged_pr": null
+      },
+      "required_sql": [
+        {
+          "path": "aws/identity/sql/01_identity_accounts.sql",
+          "source_sha256": "a074281080a6687e3ba6f7570782a380b1451e774030dd5054052cc6ee27df25",
+          "applied": false,
+          "applied_environment": null,
+          "applied_sha256": null,
+          "proof": null
+        },
+        {
+          "path": "aws/identity/sql/08_reconcile_known_users.sql",
+          "source_sha256": "98dd1f007154b9b809962de55d7c2ff2c9b98e80c93862288fd9ecc48f698a6a",
+          "applied": false,
+          "applied_environment": null,
+          "applied_sha256": null,
+          "proof": null
+        }
+      ],
+      "artifact": {
+        "type": "spa",
+        "name": null,
+        "version": null,
+        "hash": null,
+        "cloudfront_distribution": "E1B0ZWWO5559U5",
+        "lambda_name": null,
+        "lambda_version": null,
+        "lambda_alias": null
+      },
+      "production_validation": {
+        "completed": false,
+        "evidence_refs": [
+          "aws/production/LIVE_RESOURCES.md",
+          "aws/cutover/COGNITO_PRODUCTION_TRANSITION.md"
+        ],
+        "recorded_at": null
+      },
+      "deployment_fingerprint": null,
+      "rollback": {
+        "git_sha": null,
+        "artifact": null,
+        "notes": "No production-locked rollback artifact on origin/main. Open PRs #319/#333 propose SPA lock files that this workstream does not own."
+      },
+      "missing_evidence": [
+        "live Cognito user inventory",
+        "deployed SPA Cognito fingerprint on main",
+        "production identity mapping apply hash"
+      ],
+      "open_pr_overlap": ["#316", "#317", "#319", "#313", "#240"],
+      "notes": "Docs on main still say pool us-east-1_h00WorYMT has 0 users; later PRs claim Freedom Adjustment login after cutover. UNVERIFIED."
+    },
+    "moov-webhooks": {
+      "id": "moov-webhooks",
+      "ownership_group": "moov-webhooks",
+      "classification": "UNVERIFIED",
+      "production_active": false,
+      "environment": "unknown",
+      "source": {
+        "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+        "tree_hash": "18037c16ab16c004828d9c6e19cfc309bb7fa1017aaf798487fb163664f96a89",
+        "merged": true,
+        "merged_pr": null
+      },
+      "required_sql": [
+        {
+          "path": "aws/providers/sql/40_tranche4_webhook_receipts.sql",
+          "source_sha256": "b7daa25226579cf1f91c2fa7a80860486e0aa201f12b00644bddbcd14c7e5694",
+          "applied": false,
+          "applied_environment": null,
+          "applied_sha256": null,
+          "proof": null
+        }
+      ],
+      "artifact": {
+        "type": "lambda",
+        "name": "checksops-production-prep-api",
+        "version": null,
+        "hash": null,
+        "cloudfront_distribution": null,
+        "lambda_name": "checksops-production-prep-api",
+        "lambda_version": null,
+        "lambda_alias": null
+      },
+      "production_validation": {
+        "completed": false,
+        "evidence_refs": ["aws/cutover/WEBHOOK_TRANSITION.md"],
+        "recorded_at": null
+      },
+      "deployment_fingerprint": null,
+      "rollback": {
+        "git_sha": null,
+        "artifact": null,
+        "notes": "Lambda aliases are not represented in the repository. Rollback requires an independently recorded version."
+      },
+      "missing_evidence": [
+        "production Lambda version",
+        "signed webhook receipt hash",
+        "independent proof the Supabase Moov webhook is disabled"
+      ],
+      "open_pr_overlap": ["#314", "#315", "#308"],
+      "notes": "WEBHOOK_TRANSITION.md on main still says production URLs remain on Supabase. Background claims AWS accepted events. UNVERIFIED."
+    },
+    "checkalt-submission": {
+      "id": "checkalt-submission",
+      "ownership_group": "checkalt-submission",
+      "classification": "UNVERIFIED",
+      "production_active": false,
+      "environment": "unknown",
+      "source": {
+        "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+        "tree_hash": "ac0a2c99a633ec72df6c42730e95197a6e247d926fccb3e290e2c356b2bedafe",
+        "merged": true,
+        "merged_pr": null
+      },
+      "required_sql": [
+        {
+          "path": "aws/financial/sql/65_checkalt_production_writer.sql",
+          "source_sha256": "90b5f07b26843453223bfee6dccb885fdc24632e8c13050e0794366f3c601902",
+          "applied": false,
+          "applied_environment": null,
+          "applied_sha256": null,
+          "proof": "file contains SELECT 'NOT_APPLIED'"
+        }
+      ],
+      "artifact": {
+        "type": "lambda",
+        "name": "checksops-production-prep-api",
+        "version": null,
+        "hash": null,
+        "cloudfront_distribution": null,
+        "lambda_name": "checksops-production-prep-api",
+        "lambda_version": null,
+        "lambda_alias": null
+      },
+      "production_validation": {
+        "completed": false,
+        "evidence_refs": ["aws/financial/sql/65_checkalt_production_writer.sql"],
+        "recorded_at": null
+      },
+      "deployment_fingerprint": null,
+      "rollback": {
+        "git_sha": null,
+        "artifact": null,
+        "notes": "Writer SQL is explicitly NOT_APPLIED. Do not treat CheckAlt execution as production-locked."
+      },
+      "missing_evidence": [
+        "live AWS_CHECKALT_ENABLED value",
+        "writer SQL apply hash",
+        "deployed Lambda version"
+      ],
+      "open_pr_overlap": ["#327", "#332", "#339", "#322", "#323"],
+      "notes": "template.yaml on main keeps AWS_CHECKALT_ENABLED false. Background says execution was enabled during cutover. UNVERIFIED."
+    },
+    "financial-ledger": {
+      "id": "financial-ledger",
+      "ownership_group": "financial-ledger",
+      "classification": "UNVERIFIED",
+      "production_active": false,
+      "environment": "unknown",
+      "source": {
+        "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+        "tree_hash": "7d2f72fb0d09ee8aaadaf8f7fc8cba6d659c4474d0c959ee27af6aa84ecf1936",
+        "merged": true,
+        "merged_pr": null
+      },
+      "required_sql": [
+        {
+          "path": "aws/financial/sql/64_financial_activation_grants.sql",
+          "source_sha256": "0f505f405adae1b53b417bd8942eb615700bd3d7e3422e3b41037c7684bda7c7",
+          "applied": false,
+          "applied_environment": null,
+          "applied_sha256": null,
+          "proof": "file contains SELECT 'NOT_APPLIED'"
+        },
+        {
+          "path": "aws/rls/sql/28_financial_aggregates.sql",
+          "source_sha256": "98be38a4ed9cbecbb524249497fa8fba1ed6bb5d15d2d51871520dc53fb22277",
+          "applied": false,
+          "applied_environment": null,
+          "applied_sha256": null,
+          "proof": null
+        }
+      ],
+      "artifact": {
+        "type": "lambda",
+        "name": null,
+        "version": null,
+        "hash": null,
+        "cloudfront_distribution": null,
+        "lambda_name": null,
+        "lambda_version": null,
+        "lambda_alias": null
+      },
+      "production_validation": {
+        "completed": false,
+        "evidence_refs": ["aws/financial/PRODUCTION_ACTIVATION_RUNBOOK.md"],
+        "recorded_at": null
+      },
+      "deployment_fingerprint": null,
+      "rollback": {
+        "git_sha": null,
+        "artifact": null,
+        "notes": "Activation SQL remains NOT_APPLIED. No production financial rollback artifact is recorded."
+      },
+      "missing_evidence": [
+        "production financial permission flag",
+        "reconciliation apply proof"
+      ],
+      "open_pr_overlap": ["#315", "#310", "#309"],
+      "notes": "Freedom Adjustment reconciliation is claimed in background/open PRs, not proven on origin/main."
+    },
+    "tenant-email": {
+      "id": "tenant-email",
+      "ownership_group": "tenant-email",
+      "classification": "SOURCE_LOCKED_NOT_ACTIVE",
+      "production_active": false,
+      "environment": "source-only",
+      "source": {
+        "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+        "tree_hash": "ba67f886fecc7bf93a158f19e594a88e324a7222cfd3be00d9e18901d1cec428",
+        "merged": true,
+        "merged_pr": null
+      },
+      "required_sql": [
+        {
+          "path": "aws/migrations/proposed/NOT_APPLIED_20260910_tenant_email_ses_domain.sql",
+          "source_sha256": "433a0558e06fe919009b5675d30a7532b183003869e4fa8f1188a53e85a72dcb",
+          "applied": false,
+          "applied_environment": null,
+          "applied_sha256": null,
+          "proof": "filename and docs say not applied"
+        }
+      ],
+      "artifact": {
+        "type": "config",
+        "name": "AWS_TENANT_EMAIL_DOMAIN_ENABLED",
+        "version": null,
+        "hash": null,
+        "cloudfront_distribution": null,
+        "lambda_name": null,
+        "lambda_version": null,
+        "lambda_alias": null
+      },
+      "production_validation": {
+        "completed": false,
+        "evidence_refs": ["aws/docs/tenant-ses-email-domain.md"],
+        "recorded_at": null
+      },
+      "deployment_fingerprint": null,
+      "rollback": {
+        "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+        "artifact": null,
+        "notes": "Source pinned on origin/main. SES domain enablement is not production-active."
+      },
+      "missing_evidence": [
+        "production SES enablement proof",
+        "SQL apply hash"
+      ],
+      "open_pr_overlap": ["#233", "#231", "#255"],
+      "notes": "Source preserved; template flag false; SQL NOT_APPLIED."
+    },
+    "partner-sharing": {
+      "id": "partner-sharing",
+      "ownership_group": "partner-sharing",
+      "classification": "SOURCE_LOCKED_NOT_ACTIVE",
+      "production_active": false,
+      "environment": "source-only",
+      "source": {
+        "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+        "tree_hash": "5e94c2cc84ee97c1a7d9a99889e8f70128dc353ac457490d824874cd0f658861",
+        "merged": true,
+        "merged_pr": 302
+      },
+      "required_sql": [
+        {
+          "path": "aws/rls/sql/31_partner_safe_read.sql",
+          "source_sha256": "a85a29698e3cfa65ec29b0a834d24c74b2a7cac9c83c72d8ba9f4bb88949dd0f",
+          "applied": false,
+          "applied_environment": null,
+          "applied_sha256": null,
+          "proof": null
+        },
+        {
+          "path": "aws/rls/sql/32_partner_share_lifecycle.sql",
+          "source_sha256": "3e2e12811c8795fed6e139aca60d4b1b43d1c5223b132e34a767fada99331af8",
+          "applied": false,
+          "applied_environment": null,
+          "applied_sha256": null,
+          "proof": null
+        }
+      ],
+      "artifact": {
+        "type": "lambda",
+        "name": null,
+        "version": null,
+        "hash": null,
+        "cloudfront_distribution": null,
+        "lambda_name": null,
+        "lambda_version": null,
+        "lambda_alias": null
+      },
+      "production_validation": {
+        "completed": false,
+        "evidence_refs": [],
+        "recorded_at": null
+      },
+      "deployment_fingerprint": null,
+      "rollback": {
+        "git_sha": "faf9b82e728bd7ef42009e4c96ace05c7bd7232f",
+        "artifact": null,
+        "notes": "PR #302 merge commit is the source pin. Deployment/application status is independently unverified."
+      },
+      "missing_evidence": [
+        "staging or production apply hash",
+        "Lambda version serving partner-share-lifecycle.mjs"
+      ],
+      "open_pr_overlap": [],
+      "notes": "Merged code-only. Do not treat merged as production-active."
+    },
+    "mortgage-ops": {
+      "id": "mortgage-ops",
+      "ownership_group": "mortgage-ops",
+      "classification": "SOURCE_LOCKED_NOT_ACTIVE",
+      "production_active": false,
+      "environment": "source-only",
+      "source": {
+        "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+        "tree_hash": "0837905420fbcc381bf03c81bd12c35e611883797b9ba1124dd070852bc15b20",
+        "merged": true,
+        "merged_pr": null
+      },
+      "required_sql": [
+        {
+          "path": "aws/rls/sql/29_mortgage_ops_library_parity.sql",
+          "source_sha256": "e8d416a58e1920cff27d5d744f0b1b4ff414a866a7eb483bb299bb794c0849be",
+          "applied": false,
+          "applied_environment": null,
+          "applied_sha256": null,
+          "proof": "SQL header: Do not apply from this PR; commit only."
+        },
+        {
+          "path": "supabase/migrations/20260911210000_aws_mortgage_ops_library_parity.sql",
+          "source_sha256": "e88f4eab9fe86da999699e3f3d09860d97d8d5b5b96ae59bff42b28f25e454eb",
+          "applied": false,
+          "applied_environment": null,
+          "applied_sha256": null,
+          "proof": null
+        }
+      ],
+      "artifact": {
+        "type": "sql",
+        "name": null,
+        "version": null,
+        "hash": null,
+        "cloudfront_distribution": null,
+        "lambda_name": null,
+        "lambda_version": null,
+        "lambda_alias": null
+      },
+      "production_validation": {
+        "completed": false,
+        "evidence_refs": ["aws/rls/sql/29_mortgage_ops_library_parity.sql"],
+        "recorded_at": null
+      },
+      "deployment_fingerprint": null,
+      "rollback": {
+        "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+        "artifact": null,
+        "notes": "Library parity is source-locked. SQL apply is unproven."
+      },
+      "missing_evidence": [
+        "production or staging apply proof for SQL 29/30"
+      ],
+      "open_pr_overlap": ["#249", "#248", "#282"],
+      "notes": "Matches background: merged code-only; SQL previously reported unapplied."
+    },
+    "auto-deposit": {
+      "id": "auto-deposit",
+      "ownership_group": "auto-deposit",
+      "classification": "UNVERIFIED",
+      "production_active": false,
+      "environment": "source-only",
+      "source": {
+        "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+        "tree_hash": "4b6e3016ed0eb32a6ea82c8fb235df52648ca3bd67cc632af6b3769385650eca",
+        "merged": false,
+        "merged_pr": null
+      },
+      "required_sql": [],
+      "artifact": {
+        "type": "none",
+        "name": null,
+        "version": null,
+        "hash": null,
+        "cloudfront_distribution": null,
+        "lambda_name": null,
+        "lambda_version": null,
+        "lambda_alias": null
+      },
+      "production_validation": {
+        "completed": false,
+        "evidence_refs": [],
+        "recorded_at": null
+      },
+      "deployment_fingerprint": null,
+      "rollback": {
+        "git_sha": null,
+        "artifact": null,
+        "notes": "Tenant auto-deposit controlled release lives in draft PR #339 and must not be activated from this lock."
+      },
+      "missing_evidence": [
+        "merged tenant auto-deposit source",
+        "production activation proof"
+      ],
+      "open_pr_overlap": ["#342", "#339", "#327", "#332"],
+      "notes": "Validated-as-ready in background is not production-locked. PR #339 is draft and not on main."
+    },
+    "database-rls": {
+      "id": "database-rls",
+      "ownership_group": "database-rls",
+      "classification": "UNVERIFIED",
+      "production_active": false,
+      "environment": "unknown",
+      "source": {
+        "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+        "tree_hash": "8325942717e7b5f06558a1b6369ef2f3075914fc0c9229a10536f17268e1c92c",
+        "merged": true,
+        "merged_pr": null
+      },
+      "required_sql": [
+        {
+          "path": "aws/rls/sql/26_enable_rls.sql",
+          "source_sha256": "0baf1ca30036bc77dc1ae13d4df3c1dd8746e2fe48d4cea5798a34fbded5d559",
+          "applied": false,
+          "applied_environment": null,
+          "applied_sha256": null,
+          "proof": null
+        }
+      ],
+      "artifact": {
+        "type": "sql",
+        "name": null,
+        "version": null,
+        "hash": null,
+        "cloudfront_distribution": null,
+        "lambda_name": null,
+        "lambda_version": null,
+        "lambda_alias": null
+      },
+      "production_validation": {
+        "completed": false,
+        "evidence_refs": [],
+        "recorded_at": null
+      },
+      "deployment_fingerprint": null,
+      "rollback": {
+        "git_sha": null,
+        "artifact": null,
+        "notes": "Staging oneshot apply docs exist; production RLS catalog hash is unknown."
+      },
+      "missing_evidence": [
+        "production RLS catalog hash"
+      ],
+      "open_pr_overlap": ["#289", "#249", "#288"],
+      "notes": "Path-hashed only. Do not treat staging RLS enable docs as production lock."
+    },
+    "provider-secrets": {
+      "id": "provider-secrets",
+      "ownership_group": "provider-secrets",
+      "classification": "UNVERIFIED",
+      "production_active": false,
+      "environment": "unknown",
+      "source": {
+        "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+        "tree_hash": "e4a20f5b6983f9e66732d87b14c1574701ae2263f03211ee4cdf354ade75ad74",
+        "merged": true,
+        "merged_pr": null
+      },
+      "required_sql": [],
+      "artifact": {
+        "type": "config",
+        "name": "provider secret name contract",
+        "version": null,
+        "hash": null,
+        "cloudfront_distribution": null,
+        "lambda_name": null,
+        "lambda_version": null,
+        "lambda_alias": null
+      },
+      "production_validation": {
+        "completed": false,
+        "evidence_refs": ["aws/financial/CHECKALT_PRODUCTION_SECRET_CONTRACT.md"],
+        "recorded_at": null
+      },
+      "deployment_fingerprint": null,
+      "rollback": {
+        "git_sha": null,
+        "artifact": null,
+        "notes": "Secret values are never recorded. Rollback is a Secrets Manager version ID recorded later without exposing the secret."
+      },
+      "missing_evidence": [
+        "Secrets Manager version IDs (not secret values)"
+      ],
+      "open_pr_overlap": ["#316", "#314"],
+      "notes": "Name/config references only."
+    },
+    "production-release": {
+      "id": "production-release",
+      "ownership_group": "production-release",
+      "classification": "UNVERIFIED",
+      "production_active": false,
+      "environment": "unknown",
+      "source": {
+        "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+        "tree_hash": "daa87a11085bd120fac8b9696cf27dd5f1e619ed04d2ae62576602f85e35da68",
+        "merged": false,
+        "merged_pr": null
+      },
+      "required_sql": [],
+      "artifact": {
+        "type": "spa",
+        "name": null,
+        "version": null,
+        "hash": null,
+        "cloudfront_distribution": "E1B0ZWWO5559U5",
+        "lambda_name": "checksops-production-prep-api",
+        "lambda_version": null,
+        "lambda_alias": null
+      },
+      "production_validation": {
+        "completed": false,
+        "evidence_refs": [
+          "aws/production/LIVE_RESOURCES.md",
+          "aws/cutover/API_PERIMETER_STEP2_PASS.md"
+        ],
+        "recorded_at": null
+      },
+      "deployment_fingerprint": null,
+      "rollback": {
+        "git_sha": null,
+        "artifact": null,
+        "notes": "Conflicting SPA fingerprints (index-C24V_ODo.js, index-reP2FWHf.js, open-PR index-CiOVNYWh.js). No single approved rollback on main."
+      },
+      "missing_evidence": [
+        "single approved production fingerprint on main",
+        "GitHub branch protection requiring this workflow"
+      ],
+      "open_pr_overlap": ["#316", "#317", "#319", "#325", "#333", "#326", "#328"],
+      "notes": "This PR adds lock tooling only. It does not own aws/cutover/PRODUCTION_SPA_LOCK.json from other PRs."
+    }
+  }
+}

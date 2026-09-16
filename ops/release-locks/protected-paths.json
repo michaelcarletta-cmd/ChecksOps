@@ -1,0 +1,150 @@
+{
+  "version": 1,
+  "fail_closed": true,
+  "codeowners_file": ".github/CODEOWNERS",
+  "ownership_groups": {
+    "identity-cognito": {
+      "owners": ["@michaelcarletta-cmd"],
+      "description": "Cognito routing, identity mapping, production pool/client references",
+      "paths": [
+        "src/integrations/aws/client.ts",
+        "src/lib/awsStaging.ts",
+        "aws/identity/sql/",
+        "aws/cutover/COGNITO_PRODUCTION_TRANSITION.md",
+        "aws/production/README.md",
+        ".env.production.aws.example"
+      ]
+    },
+    "moov-webhooks": {
+      "owners": ["@michaelcarletta-cmd"],
+      "description": "Moov webhook receive/apply paths and receipt SQL",
+      "paths": [
+        "aws/functions/api/providers/webhooks.mjs",
+        "aws/functions/api/providers/webhook-apply.mjs",
+        "aws/functions/api/providers/hmac.mjs",
+        "aws/providers/sql/40_tranche4_webhook_receipts.sql",
+        "aws/providers/sql/41_tranche4_revoke.sql",
+        "aws/cutover/WEBHOOK_TRANSITION.md",
+        "supabase/functions/moov-webhook/index.ts"
+      ]
+    },
+    "checkalt-submission": {
+      "owners": ["@michaelcarletta-cmd"],
+      "description": "CheckAlt submission, eligibility, images, and production writer SQL",
+      "paths": [
+        "aws/functions/api/providers/production/",
+        "aws/financial/sql/65_checkalt_production_writer.sql",
+        "aws/financial/CHECKALT_PRODUCTION_SECRET_CONTRACT.md",
+        "src/lib/prepareCheckAltDeposit.ts",
+        "src/lib/checkaltDepositOrchestrator.ts"
+      ]
+    },
+    "financial-ledger": {
+      "owners": ["@michaelcarletta-cmd"],
+      "description": "Financial execution flags, ledger, reconciliation, activation SQL",
+      "paths": [
+        "aws/functions/api/financial.mjs",
+        "aws/functions/api/financial-authz.mjs",
+        "aws/functions/api/financial-flags.mjs",
+        "aws/functions/api/financial-reconciliation.mjs",
+        "aws/functions/api/financial-ownership.mjs",
+        "aws/functions/api/financial-idempotency.mjs",
+        "aws/functions/api/financial-audit.mjs",
+        "aws/functions/api/financial-state.mjs",
+        "aws/functions/api/financial-totp.mjs",
+        "aws/rls/sql/28_financial_aggregates.sql",
+        "aws/financial/sql/64_financial_activation_grants.sql",
+        "aws/financial/sql/60_financial_preactivation.sql",
+        "aws/financial/PRODUCTION_ACTIVATION_RUNBOOK.md"
+      ]
+    },
+    "tenant-email": {
+      "owners": ["@michaelcarletta-cmd"],
+      "description": "Tenant SES/email domain settings",
+      "paths": [
+        "aws/functions/api/tenant-email-domain.mjs",
+        "aws/functions/api/tenant-email-domain-handlers.mjs",
+        "aws/migrations/proposed/NOT_APPLIED_20260910_tenant_email_ses_domain.sql",
+        "aws/docs/tenant-ses-email-domain.md",
+        "aws/production/SES_FROM.md"
+      ]
+    },
+    "partner-sharing": {
+      "owners": ["@michaelcarletta-cmd"],
+      "description": "Partner share/revoke lifecycle (merged source; deployment unproven)",
+      "paths": [
+        "aws/functions/api/partner-share-lifecycle.mjs",
+        "aws/rls/sql/31_partner_safe_read.sql",
+        "aws/rls/sql/32_partner_share_lifecycle.sql",
+        "aws/tests/partner-share-lifecycle.test.mjs",
+        "aws/tests/partner-share-lifecycle-pg.test.mjs"
+      ]
+    },
+    "mortgage-ops": {
+      "owners": ["@michaelcarletta-cmd"],
+      "description": "Mortgage Ops library parity SQL and API (SQL previously unapplied)",
+      "paths": [
+        "aws/rls/sql/29_mortgage_ops_library_parity.sql",
+        "aws/rls/sql/30_tenant_documents_mortgage_doc_type.sql",
+        "supabase/migrations/20260911210000_aws_mortgage_ops_library_parity.sql",
+        "aws/functions/api/mortgage-library-docs.mjs",
+        "aws/functions/api/mortgage-library-doc-types.mjs",
+        "aws/providers/AUTH_WHITELABEL_MORTGAGEOPS_CUTOVER.md"
+      ]
+    },
+    "auto-deposit": {
+      "owners": ["@michaelcarletta-cmd"],
+      "description": "Deposit automation / tenant auto-deposit (production activation forbidden without lock update)",
+      "paths": [
+        "supabase/functions/deposit-daily-automation/index.ts",
+        "aws/functions/api/scheduled.mjs",
+        "src/components/deposit-ops/DepositManagerCommandCenter.tsx",
+        "src/components/deposit-ops/DepositAutomationHealth.tsx",
+        "src/lib/depositRails.ts"
+      ]
+    },
+    "database-rls": {
+      "owners": ["@michaelcarletta-cmd"],
+      "description": "Database RLS, write allowlist, and financial authorization helpers",
+      "paths": [
+        "aws/rls/sql/",
+        "aws/functions/api/write-allowlist.mjs",
+        "aws/functions/api/write.mjs",
+        "aws/functions/api/financial-authz.mjs",
+        "aws/functions/api/provider-authz.mjs"
+      ]
+    },
+    "provider-secrets": {
+      "owners": ["@michaelcarletta-cmd"],
+      "description": "Provider secret name/config references (values must never be committed)",
+      "paths": [
+        "aws/functions/api/provider-secrets.mjs",
+        "aws/functions/api/secrets.mjs",
+        "aws/functions/api/provider-flags.mjs",
+        "aws/financial/CHECKALT_PRODUCTION_SECRET_CONTRACT.md"
+      ]
+    },
+    "production-release": {
+      "owners": ["@michaelcarletta-cmd"],
+      "description": "Release-lock tooling, CI, template execution flags, production config examples",
+      "paths": [
+        "ops/release-locks/schema/",
+        "ops/release-locks/protected-paths.json",
+        "ops/release-locks/applied-migrations.ledger.json",
+        "ops/release-locks/overlap-allowlist.json",
+        "scripts/validate-release-locks.mjs",
+        "scripts/check-pr-path-overlap.mjs",
+        "scripts/production-deploy-guard.mjs",
+        "scripts/lib/release-locks.mjs",
+        ".github/workflows/release-locks.yml",
+        ".github/workflows/aws-migration-ci.yml",
+        ".github/workflows/tax-profile-migration-guard.yml",
+        ".github/CODEOWNERS",
+        "aws/template.yaml",
+        "aws/samconfig.toml",
+        "aws/cutover/production/",
+        "aws/production/LIVE_RESOURCES.md"
+      ]
+    }
+  }
+}

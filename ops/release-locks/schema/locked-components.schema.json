@@ -1,0 +1,207 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "$id": "https://checksops.local/ops/release-locks/locked-components.schema.json",
+  "title": "ChecksOps locked-component release manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "manifest_version",
+    "baseline_git_sha",
+    "fail_closed",
+    "classifications",
+    "components"
+  ],
+  "properties": {
+    "manifest_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "baseline_git_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "fail_closed": {
+      "type": "boolean",
+      "const": true
+    },
+    "notes": {
+      "type": "string"
+    },
+    "classifications": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {
+        "type": "string",
+        "enum": [
+          "PRODUCTION_LOCKED",
+          "SOURCE_LOCKED_NOT_ACTIVE",
+          "STAGING_LOCKED_NOT_PRODUCTION",
+          "UNVERIFIED"
+        ]
+      }
+    },
+    "unlock_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requires_reviewed_pr", "auto_unlock_forbidden"],
+      "properties": {
+        "requires_reviewed_pr": { "type": "boolean", "const": true },
+        "auto_unlock_forbidden": { "type": "boolean", "const": true },
+        "instructions_path": { "type": "string" }
+      }
+    },
+    "components": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "$ref": "#/definitions/component" }
+    }
+  },
+  "definitions": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "gitSha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "sqlRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "source_sha256", "applied", "applied_environment"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "source_sha256": { "$ref": "#/definitions/sha256" },
+        "applied": { "type": "boolean" },
+        "applied_environment": {
+          "type": ["string", "null"],
+          "enum": ["production", "staging", null]
+        },
+        "applied_sha256": {
+          "anyOf": [{ "$ref": "#/definitions/sha256" }, { "type": "null" }]
+        },
+        "proof": { "type": ["string", "null"] }
+      }
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "ownership_group",
+        "classification",
+        "production_active",
+        "source",
+        "required_sql",
+        "artifact",
+        "production_validation",
+        "deployment_fingerprint",
+        "rollback",
+        "missing_evidence"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "ownership_group": { "type": "string", "minLength": 1 },
+        "classification": {
+          "type": "string",
+          "enum": [
+            "PRODUCTION_LOCKED",
+            "SOURCE_LOCKED_NOT_ACTIVE",
+            "STAGING_LOCKED_NOT_PRODUCTION",
+            "UNVERIFIED"
+          ]
+        },
+        "production_active": { "type": "boolean" },
+        "environment": {
+          "type": "string",
+          "enum": ["production", "staging", "unknown", "source-only"]
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["git_sha", "tree_hash"],
+          "properties": {
+            "git_sha": { "$ref": "#/definitions/gitSha" },
+            "tree_hash": { "$ref": "#/definitions/sha256" },
+            "merged": { "type": "boolean" },
+            "merged_pr": { "type": ["integer", "null"] }
+          }
+        },
+        "required_sql": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/sqlRecord" }
+        },
+        "artifact": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["spa", "lambda", "sql", "config", "none"]
+            },
+            "name": { "type": ["string", "null"] },
+            "version": { "type": ["string", "null"] },
+            "hash": { "anyOf": [{ "$ref": "#/definitions/sha256" }, { "type": "null" }] },
+            "cloudfront_distribution": { "type": ["string", "null"] },
+            "lambda_name": { "type": ["string", "null"] },
+            "lambda_version": { "type": ["string", "null"] },
+            "lambda_alias": { "type": ["string", "null"] }
+          }
+        },
+        "production_validation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["completed"],
+          "properties": {
+            "completed": { "type": "boolean" },
+            "evidence_refs": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "recorded_at": { "type": ["string", "null"] }
+          }
+        },
+        "deployment_fingerprint": {
+          "anyOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["recorded"],
+              "properties": {
+                "recorded": { "type": "boolean" },
+                "spa_bundle": { "type": ["string", "null"] },
+                "cloudfront_id": { "type": ["string", "null"] },
+                "lambda_name": { "type": ["string", "null"] },
+                "lambda_version": { "type": ["string", "null"] },
+                "config_hash": { "anyOf": [{ "$ref": "#/definitions/sha256" }, { "type": "null" }] },
+                "notes": { "type": "string" }
+              }
+            }
+          ]
+        },
+        "rollback": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["git_sha", "notes"],
+          "properties": {
+            "git_sha": { "anyOf": [{ "$ref": "#/definitions/gitSha" }, { "type": "null" }] },
+            "artifact": { "type": ["string", "null"] },
+            "notes": { "type": "string" }
+          }
+        },
+        "missing_evidence": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "open_pr_overlap": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "notes": { "type": "string" }
+      }
+    }
+  }
+}

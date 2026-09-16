@@ -1,0 +1,84 @@
+# ChecksOps production-protection ownership.
+# CODEOWNERS is advisory until GitHub branch protection requires it.
+# Machine enforcement is ops/release-locks + .github/workflows/release-locks.yml.
+# Do not add a second owner here to take over another open PR's files.
+
+/ops/release-locks/ @michaelcarletta-cmd
+/scripts/lib/release-locks.mjs @michaelcarletta-cmd
+/scripts/validate-release-locks.mjs @michaelcarletta-cmd
+/scripts/check-pr-path-overlap.mjs @michaelcarletta-cmd
+/scripts/production-deploy-guard.mjs @michaelcarletta-cmd
+/.github/workflows/release-locks.yml @michaelcarletta-cmd
+/.github/workflows/aws-migration-ci.yml @michaelcarletta-cmd
+/.github/workflows/tax-profile-migration-guard.yml @michaelcarletta-cmd
+/.github/CODEOWNERS @michaelcarletta-cmd
+
+/src/integrations/aws/client.ts @michaelcarletta-cmd
+/src/lib/awsStaging.ts @michaelcarletta-cmd
+/.env.production.aws.example @michaelcarletta-cmd
+/aws/identity/sql/ @michaelcarletta-cmd
+/aws/cutover/COGNITO_PRODUCTION_TRANSITION.md @michaelcarletta-cmd
+/aws/production/README.md @michaelcarletta-cmd
+/aws/production/LIVE_RESOURCES.md @michaelcarletta-cmd
+/aws/production/SES_FROM.md @michaelcarletta-cmd
+
+/aws/functions/api/providers/webhooks.mjs @michaelcarletta-cmd
+/aws/functions/api/providers/webhook-apply.mjs @michaelcarletta-cmd
+/aws/functions/api/providers/hmac.mjs @michaelcarletta-cmd
+/aws/providers/sql/40_tranche4_webhook_receipts.sql @michaelcarletta-cmd
+/aws/providers/sql/41_tranche4_revoke.sql @michaelcarletta-cmd
+/aws/cutover/WEBHOOK_TRANSITION.md @michaelcarletta-cmd
+/supabase/functions/moov-webhook/index.ts @michaelcarletta-cmd
+
+/aws/functions/api/providers/production/ @michaelcarletta-cmd
+/aws/financial/sql/65_checkalt_production_writer.sql @michaelcarletta-cmd
+/aws/financial/CHECKALT_PRODUCTION_SECRET_CONTRACT.md @michaelcarletta-cmd
+/src/lib/prepareCheckAltDeposit.ts @michaelcarletta-cmd
+/src/lib/checkaltDepositOrchestrator.ts @michaelcarletta-cmd
+
+/aws/functions/api/financial.mjs @michaelcarletta-cmd
+/aws/functions/api/financial-authz.mjs @michaelcarletta-cmd
+/aws/functions/api/financial-flags.mjs @michaelcarletta-cmd
+/aws/functions/api/financial-reconciliation.mjs @michaelcarletta-cmd
+/aws/functions/api/financial-ownership.mjs @michaelcarletta-cmd
+/aws/functions/api/financial-idempotency.mjs @michaelcarletta-cmd
+/aws/functions/api/financial-audit.mjs @michaelcarletta-cmd
+/aws/functions/api/financial-state.mjs @michaelcarletta-cmd
+/aws/functions/api/financial-totp.mjs @michaelcarletta-cmd
+/aws/rls/sql/ @michaelcarletta-cmd
+/aws/financial/sql/64_financial_activation_grants.sql @michaelcarletta-cmd
+/aws/financial/sql/60_financial_preactivation.sql @michaelcarletta-cmd
+/aws/financial/PRODUCTION_ACTIVATION_RUNBOOK.md @michaelcarletta-cmd
+
+/aws/functions/api/tenant-email-domain.mjs @michaelcarletta-cmd
+/aws/functions/api/tenant-email-domain-handlers.mjs @michaelcarletta-cmd
+/aws/migrations/proposed/NOT_APPLIED_20260910_tenant_email_ses_domain.sql @michaelcarletta-cmd
+/aws/docs/tenant-ses-email-domain.md @michaelcarletta-cmd
+
+/aws/functions/api/partner-share-lifecycle.mjs @michaelcarletta-cmd
+/aws/rls/sql/31_partner_safe_read.sql @michaelcarletta-cmd
+/aws/rls/sql/32_partner_share_lifecycle.sql @michaelcarletta-cmd
+
+/aws/rls/sql/29_mortgage_ops_library_parity.sql @michaelcarletta-cmd
+/aws/rls/sql/30_tenant_documents_mortgage_doc_type.sql @michaelcarletta-cmd
+/supabase/migrations/20260911210000_aws_mortgage_ops_library_parity.sql @michaelcarletta-cmd
+/aws/functions/api/mortgage-library-docs.mjs @michaelcarletta-cmd
+/aws/functions/api/mortgage-library-doc-types.mjs @michaelcarletta-cmd
+/aws/providers/AUTH_WHITELABEL_MORTGAGEOPS_CUTOVER.md @michaelcarletta-cmd
+
+/supabase/functions/deposit-daily-automation/index.ts @michaelcarletta-cmd
+/aws/functions/api/scheduled.mjs @michaelcarletta-cmd
+/src/components/deposit-ops/DepositManagerCommandCenter.tsx @michaelcarletta-cmd
+/src/components/deposit-ops/DepositAutomationHealth.tsx @michaelcarletta-cmd
+/src/lib/depositRails.ts @michaelcarletta-cmd
+
+/aws/functions/api/write-allowlist.mjs @michaelcarletta-cmd
+/aws/functions/api/write.mjs @michaelcarletta-cmd
+/aws/functions/api/provider-authz.mjs @michaelcarletta-cmd
+/aws/functions/api/provider-secrets.mjs @michaelcarletta-cmd
+/aws/functions/api/secrets.mjs @michaelcarletta-cmd
+/aws/functions/api/provider-flags.mjs @michaelcarletta-cmd
+
+/aws/template.yaml @michaelcarletta-cmd
+/aws/samconfig.toml @michaelcarletta-cmd
+/aws/cutover/production/ @michaelcarletta-cmd
