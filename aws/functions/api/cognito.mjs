@@ -1,18 +1,54 @@
 export const APP_USER_ID_GUC = 'request.app_user_id';
 export const APP_USER_EMAIL_GUC = 'request.jwt.claim.email';
 
+const claimValue = (source, ...keys) => {
+  if (!source || typeof source !== 'object') return null;
+  for (const key of keys) {
+    const value = source[key];
+    if (value !== undefined && value !== null && String(value) !== '') return value;
+  }
+  return null;
+};
+
+const normalizeAuthClaims = (raw) => {
+  const sub = claimValue(raw, 'sub', 'username');
+  if (!sub) return null;
+  return {
+    sub: String(sub),
+    email: claimValue(raw, 'email') ? String(claimValue(raw, 'email')) : null,
+    tokenUse: claimValue(raw, 'token_use', 'tokenUse'),
+    originJti: claimValue(raw, 'origin_jti', 'originJti')
+      ? String(claimValue(raw, 'origin_jti', 'originJti'))
+      : null,
+    authTime: claimValue(raw, 'auth_time', 'authTime')
+      ? String(claimValue(raw, 'auth_time', 'authTime'))
+      : null,
+    iat: claimValue(raw, 'iat'),
+    jti: claimValue(raw, 'jti') ? String(claimValue(raw, 'jti')) : null,
+  };
+};
+
+/**
+ * Bind financial TOTP to this Cognito login, not to a browser flag and not to
+ * Cognito SOFTWARE_TOKEN_MFA. origin_jti (or sub+auth_time) changes on a new
+ * login and survives access/id token refresh.
+ */
+export const loginSessionIdFromClaims = (claims) => {
+  if (!claims?.sub) return null;
+  const origin = claims.originJti || claims.origin_jti;
+  if (origin) return `origin_jti:${origin}`;
+  const authTime = claims.authTime || claims.auth_time;
+  if (authTime !== undefined && authTime !== null && String(authTime) !== '') {
+    return `auth_time:${claims.sub}:${authTime}`;
+  }
+  return null;
+};
+
 export const cognitoClaimsFromEvent = (event) => {
   const jwt = event?.requestContext?.authorizer?.jwt?.claims
     || event?.requestContext?.authorizer?.claims
     || null;
-  if (!jwt || typeof jwt !== 'object') return null;
-  const sub = jwt.sub || jwt.username || null;
-  if (!sub) return null;
-  return {
-    sub: String(sub),
-    email: jwt.email ? String(jwt.email) : null,
-    tokenUse: jwt.token_use || jwt.tokenUse || null,
-  };
+  return normalizeAuthClaims(jwt);
 };
 
 export const bearerToken = (event) => {
@@ -34,11 +70,10 @@ export const verifyCognitoIdToken = async (token) => {
     clientId,
   });
   const payload = await verifier.verify(token);
-  return {
-    sub: String(payload.sub),
-    email: payload.email ? String(payload.email) : null,
-    tokenUse: payload.token_use || 'id',
-  };
+  return normalizeAuthClaims({
+    ...payload,
+    token_use: payload.token_use || 'id',
+  });
 };
 
 export const refuseSubAsApplicationId = (applicationUserId, cognitoSub) => {

@@ -243,6 +243,7 @@ export async function handleProductionCheckAltPoll({
     mapping,
     memberships,
     check,
+    claims,
     requireStepUp: false,
   });
   if (!authz.ok && authz.error === 'financial_unauthorized') {

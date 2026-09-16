@@ -751,6 +751,7 @@ export function PendingApprovalDeposits() {
   // submitted/pending_approval against CheckAlt's real status right here in
   // the operational queue, instead of only via the admin Settings panel or
   // waiting up to 10 minutes for the cron.
+  // Status/reconciliation only. Do not prompt TOTP. Do not submit/deposit.
   const poll = useMutation({
     mutationFn: async () => {
       requireAwsCheckAltProviderPath({

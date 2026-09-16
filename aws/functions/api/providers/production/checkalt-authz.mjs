@@ -1,6 +1,7 @@
 import { FINANCIAL_ROLES, roleAllowsFinancial } from '../../financial-authz.mjs';
 import { membershipForTenant } from '../../financial-ownership.mjs';
 import { financialPermissionsActivated } from '../../financial-flags.mjs';
+import { loginSessionIdFromClaims } from '../../cognito.mjs';
 import { formatCheckAltUserAmount } from '../amounts.mjs';
 import { productionCheckAltExecutionAllowed } from './checkalt-holds.mjs';
 
@@ -8,6 +9,22 @@ export const CHECKALT_TOTP_ACTION = 'deposit.submit';
 export const CHECKALT_DUAL_CONTROL_ACTION = 'checkalt.dual_control';
 export const TOTP_STEPUP_TTL_MS = 30 * 60 * 1000;
 export const DUAL_CONTROL_TTL_MS = 24 * 60 * 60 * 1000;
+
+/** Actions that may record/reuse application TOTP for the current login session. */
+export const FINANCIAL_SESSION_TOTP_ACTIONS = Object.freeze([
+  CHECKALT_TOTP_ACTION,
+  'deposit.approve',
+  'disbursement.send',
+  'payroll.run',
+  'totp.enroll',
+  'totp.unenroll',
+]);
+
+export const isFinancialSessionTotpAction = (actionKey) =>
+  FINANCIAL_SESSION_TOTP_ACTIONS.includes(String(actionKey || ''));
+
+export const isCheckBoundTotpAction = (actionKey) =>
+  actionKey === CHECKALT_TOTP_ACTION || actionKey === 'deposit.approve';
 
 export const denyCheckAltAuthz = (error, extra = {}) => ({
   ok: false,
@@ -45,6 +62,15 @@ export const stepUpMatchesCheck = (row, {
   if (row.succeeded !== true) return false;
   if (String(row.metadata?.check_id || '') !== String(checkId)) return false;
   return loggedAmountCents(row.metadata) === Number(amountCents);
+};
+
+export const stepUpMatchesLoginSession = (row, { userId, loginSessionId } = {}) => {
+  if (!row || !userId || !loginSessionId) return false;
+  if (String(row.user_id) !== String(userId)) return false;
+  if (row.succeeded !== true) return false;
+  if (String(row.factor_type || 'totp') !== 'totp') return false;
+  if (String(row.action_key || '') === CHECKALT_DUAL_CONTROL_ACTION) return false;
+  return String(row.metadata?.login_session_id || '') === String(loginSessionId);
 };
 
 export async function loadTenantRole(client, userId, tenantId) {
@@ -91,6 +117,27 @@ export async function loadRecentStepUp(client, {
     amountCents: Number(amountCents),
     actionKey,
   }));
+}
+
+export async function loadRecentSessionStepUp(client, {
+  userId,
+  loginSessionId,
+  sinceMs = TOTP_STEPUP_TTL_MS,
+} = {}) {
+  if (!userId || !loginSessionId) return [];
+  const rows = (await client.query(
+    `SELECT id, user_id, tenant_id, action_key, factor_type, succeeded, metadata, created_at
+     FROM public.financial_stepup_log
+     WHERE user_id = $1::uuid
+       AND succeeded IS TRUE
+       AND factor_type = 'totp'
+       AND created_at >= $2::timestamptz
+       AND (metadata->>'login_session_id') = $3
+     ORDER BY created_at DESC
+     LIMIT 5`,
+    [userId, new Date(Date.now() - sinceMs).toISOString(), String(loginSessionId)],
+  )).rows;
+  return rows.filter((row) => stepUpMatchesLoginSession(row, { userId, loginSessionId }));
 }
 
 export async function loadDualControlApproval(client, {
@@ -168,7 +215,7 @@ export const evaluateCheckAltProductionAuthorization = ({
         : !roleOk
           ? 'Operator/staff cannot execute production CheckAlt. Owner/admin/manager required.'
           : !stepUpOk
-            ? 'Cognito TOTP step-up or dual-control approval from a distinct owner/admin/manager is required, bound to this check and amount.'
+            ? 'Application TOTP for this authenticated login session, or dual-control approval from a distinct owner/admin/manager, is required. Cognito login MFA claims are not money-movement authority.'
             : !flagsOk
               ? 'Production CheckAlt holds remain on.'
               : 'CheckAlt production authorization satisfied. Holds must still be lifted by a human.',
@@ -180,6 +227,7 @@ export async function authorizeCheckAltProduction({
   mapping,
   memberships,
   check,
+  claims = null,
   requireStepUp = true,
 } = {}) {
   const userId = mapping?.application_user_id;
@@ -203,16 +251,26 @@ export async function authorizeCheckAltProduction({
   let totpRow = null;
   let dualRow = null;
   if (requireStepUp) {
-    const totpRows = await loadRecentStepUp(client, {
+    const loginSessionId = loginSessionIdFromClaims(claims);
+    const sessionRows = await loadRecentSessionStepUp(client, {
       userId,
-      tenantId: check.tenant_id,
-      actionKey: CHECKALT_TOTP_ACTION,
-      checkId: check.id,
-      amountCents,
+      loginSessionId,
       sinceMs: TOTP_STEPUP_TTL_MS,
     });
-    totpRow = totpRows[0] || null;
+    totpRow = sessionRows[0] || null;
     totpOk = Boolean(totpRow);
+    if (!totpOk) {
+      const totpRows = await loadRecentStepUp(client, {
+        userId,
+        tenantId: check.tenant_id,
+        actionKey: CHECKALT_TOTP_ACTION,
+        checkId: check.id,
+        amountCents,
+        sinceMs: TOTP_STEPUP_TTL_MS,
+      });
+      totpRow = totpRows[0] || null;
+      totpOk = Boolean(totpRow);
+    }
     dualRow = await loadDualControlApproval(client, {
       tenantId: check.tenant_id,
       checkId: check.id,

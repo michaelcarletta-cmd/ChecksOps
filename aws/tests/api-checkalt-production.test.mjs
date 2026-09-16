@@ -59,7 +59,14 @@ const jwtEvent = (pathName, method, body, extra = {}) => ({
     stage: 'staging',
     http: { method, path: pathName },
     authorizer: extra.auth === null ? undefined : {
-      jwt: { claims: { sub: extra.sub || COGNITO_SUB, email: 'owner@freedomadj.com', token_use: 'id' } },
+      jwt: {
+        claims: {
+          sub: extra.sub || COGNITO_SUB,
+          email: 'owner@freedomadj.com',
+          token_use: 'id',
+          ...(extra.authTime ? { auth_time: extra.authTime } : {}),
+        },
+      },
     },
   },
 });
@@ -234,6 +241,18 @@ const identityClient = (store) => ({
           )),
         };
       }
+      if (text.includes("metadata->>'login_session_id'")) {
+        const [userId, since, sessionId] = params;
+        return {
+          rows: store.stepups.filter((row) => (
+            row.user_id === userId
+            && row.succeeded === true
+            && String(row.factor_type || 'totp') === 'totp'
+            && String(row.metadata?.login_session_id || '') === String(sessionId)
+            && new Date(row.created_at) >= new Date(since)
+          )),
+        };
+      }
       const [userId, tenantId, actionKey, since, checkId, amountCents] = params;
       return {
         rows: store.stepups.filter((row) => (
@@ -404,6 +423,7 @@ const grantStepUp = (store, {
   tenantId = FREEDOM_TENANT,
   amountCents = 1234,
   createdAt = new Date().toISOString(),
+  loginSessionId = null,
 } = {}) => {
   store.stepups.push({
     id: crypto.randomUUID(),
@@ -412,7 +432,12 @@ const grantStepUp = (store, {
     action_key: action,
     factor_type: action === 'checkalt.dual_control' ? 'dual_control' : 'totp',
     succeeded: true,
-    metadata: { check_id: checkId, amount_cents: amountCents, operation: 'deposit.submit' },
+    metadata: {
+      check_id: checkId,
+      amount_cents: amountCents,
+      operation: 'deposit.submit',
+      ...(loginSessionId ? { login_session_id: loginSessionId, session_scope: true } : {}),
+    },
     created_at: createdAt,
   });
 };
@@ -911,6 +936,30 @@ test('TOTP is bound to check and amount; tenant-wide leftover does not authorize
     succeeded: true,
     metadata: { check_id: CHECK_ID, amount_cents: 1234 },
   }, { tenantId: FREEDOM_TENANT, checkId: CHECK_ID, amountCents: 5678, actionKey: 'deposit.submit' }), false);
+});
+
+test('login-session TOTP authorizes a different check; a new login does not', async () => {
+  const authTime = '1000';
+  const loginSessionId = `auth_time:${COGNITO_SUB}:${authTime}`;
+  const store = createStore();
+  grantStepUp(store, {
+    checkId: OTHER_CHECK_ID,
+    amountCents: 50,
+    loginSessionId,
+  });
+  const accepted = await submitOnce(store, {}, { authTime });
+  assert.equal(accepted.statusCode, 200, JSON.stringify(accepted));
+  assert.equal(store.processPosts, 1);
+
+  const otherLogin = createStore();
+  grantStepUp(otherLogin, {
+    checkId: OTHER_CHECK_ID,
+    amountCents: 50,
+    loginSessionId,
+  });
+  const denied = await submitOnce(otherLogin, {}, { authTime: '2000' });
+  assert.equal(denied.error, 'step_up_required');
+  assert.equal(otherLogin.processPosts, 0);
 });
 
 test('dual-control requires a distinct owner/admin/manager bound to check and amount', async () => {
