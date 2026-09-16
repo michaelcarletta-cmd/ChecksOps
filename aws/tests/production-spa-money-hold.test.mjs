@@ -112,4 +112,16 @@ describe('M7.5C production SPA money-test hold', () => {
     assert.match(deploy, /VITE_CHECKSOPS_API_URL: '\/prep'/);
     assert.match(deploy, /assertHardenedProductionAuthArtifact/);
   });
+
+  test('awsMode vite define bakes env-provided Cognito and /prep without production defaults', () => {
+    const vite = fs.readFileSync(path.join(ROOT, 'vite.config.ts'), 'utf8');
+    assert.match(vite, /import\.meta\.env\.VITE_AUTH_PROVIDER/);
+    assert.match(vite, /import\.meta\.env\.VITE_CHECKSOPS_API_URL/);
+    assert.match(vite, /import\.meta\.env\.VITE_COGNITO_USER_POOL_ID/);
+    assert.match(vite, /import\.meta\.env\.VITE_COGNITO_USER_POOL_CLIENT_ID/);
+    assert.match(vite, /process\.env\.VITE_COGNITO_USER_POOL_ID \|\| env\.VITE_COGNITO_USER_POOL_ID/);
+    assert.match(vite, /Do not default pool\/client to production IDs/);
+    assert.doesNotMatch(vite, /us-east-1_h00WorYMT/);
+    assert.doesNotMatch(vite, /3ja9fqaq2fjkv3i6up2varcqpe/);
+  });
 });

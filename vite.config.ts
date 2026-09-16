@@ -7,7 +7,18 @@ import { VitePWA } from "vite-plugin-pwa";
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const awsMode = mode === "aws" || String(env.VITE_AUTH_PROVIDER || "").toLowerCase() === "cognito";
+  const authProvider = String(
+    process.env.VITE_AUTH_PROVIDER || env.VITE_AUTH_PROVIDER || (mode === "aws" ? "cognito" : ""),
+  ).toLowerCase();
+  const awsMode = mode === "aws" || authProvider === "cognito";
+  // Prefer process.env so production-spa deploy injection wins over leftover .env files.
+  // Do not default pool/client to production IDs — staging aws builds supply their own.
+  const cognitoPoolId = process.env.VITE_COGNITO_USER_POOL_ID || env.VITE_COGNITO_USER_POOL_ID || "";
+  const cognitoClientId =
+    process.env.VITE_COGNITO_USER_POOL_CLIENT_ID || env.VITE_COGNITO_USER_POOL_CLIENT_ID || "";
+  const checksopsApiUrl = process.env.VITE_CHECKSOPS_API_URL || env.VITE_CHECKSOPS_API_URL || "";
+  const appUrl = process.env.VITE_APP_URL || env.VITE_APP_URL || "";
+  const awsRegion = process.env.VITE_AWS_REGION || env.VITE_AWS_REGION || (awsMode ? "us-east-1" : "");
   const supabaseUrl = env.VITE_SUPABASE_URL || env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
   const supabasePublishableKey =
     env.VITE_SUPABASE_PUBLISHABLE_KEY ||
@@ -90,9 +101,15 @@ export default defineConfig(({ mode }) => {
   },
   define: awsMode
     ? {
-        // Never bake production Supabase URL/keys into the AWS staging bundle.
+        // Never bake production Supabase URL/keys into the AWS bundle.
         "import.meta.env.VITE_SUPABASE_URL": JSON.stringify(""),
         "import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY": JSON.stringify(""),
+        "import.meta.env.VITE_AUTH_PROVIDER": JSON.stringify(authProvider || "cognito"),
+        "import.meta.env.VITE_CHECKSOPS_API_URL": JSON.stringify(checksopsApiUrl),
+        "import.meta.env.VITE_APP_URL": JSON.stringify(appUrl),
+        "import.meta.env.VITE_AWS_REGION": JSON.stringify(awsRegion),
+        "import.meta.env.VITE_COGNITO_USER_POOL_ID": JSON.stringify(cognitoPoolId),
+        "import.meta.env.VITE_COGNITO_USER_POOL_CLIENT_ID": JSON.stringify(cognitoClientId),
       }
     : {
         "import.meta.env.VITE_SUPABASE_URL": JSON.stringify(supabaseUrl),
