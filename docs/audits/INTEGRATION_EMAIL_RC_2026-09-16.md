@@ -86,4 +86,11 @@ Do not revive #210 / #215 / #216 / #218.
 
 ## Tests
 
-Recorded after the RC branch is cut. See the PR and `INTEGRATION_RC_READY` report.
+`npm run test:aws-api`: **798 tests, 790 pass, 0 fail, 8 skipped**.  
+Skips are the same environmental PG16/`initdb` and fixture-database skips as #312, not lost coverage from #349.
+
+`npm run build:aws`: **success**.
+
+#349 `aws-migration-guards` at `51b45c807`: **pass**. This RC’s GitHub check is the docs commit on top of that SHA.
+
+No Functional Audit retest. No staging mutation. Nothing merged, deployed, or applied.
