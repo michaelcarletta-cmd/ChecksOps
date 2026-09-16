@@ -17,6 +17,7 @@ import { ProjectPlanCard } from "@/components/homeowner-ledger/ProjectPlanCard";
 
 import { useState, useMemo, useEffect } from "react";
 import { toast } from "@/hooks/use-toast";
+import { incomingSplitsForCheck } from "@/lib/fundsReceived";
 
 
 interface Props {
@@ -26,6 +27,7 @@ interface Props {
   claimId?: string | null;
   detectedClaimNumber?: string | null;
   payoutEnabled?: boolean;
+  readOnly?: boolean;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; icon: any; className: string }> = {
@@ -40,7 +42,7 @@ type DisburseMode = null | "platform" | "external";
 
 const toCents = (value: number) => Math.round((Number(value) || 0) * 100) / 100;
 
-export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId, detectedClaimNumber, payoutEnabled = true }: Props) {
+export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId, detectedClaimNumber, payoutEnabled = true, readOnly = false }: Props) {
   const { tenant } = useTenant();
   const qc = useQueryClient();
   const [disburseMode, setDisburseMode] = useState<DisburseMode>(null);
@@ -107,18 +109,17 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
   // Payments this tenant RECEIVED on this check that were recorded by the
   // sender as a disbursement (external check, Moov, ACH — any method). These
   // roll into the same Received totals; there is no separate external lane.
+  // Use the recipient-safe RPC so a partner can see authorized incoming
+  // rows without a SELECT on the owner's disbursement tables.
   const { data: incomingSplits = [] } = useQuery({
     queryKey: ["incoming-splits", checkIntakeItemId, tenant?.id],
     enabled: !!checkIntakeItemId && !!tenant?.id,
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
-        .from("disbursement_splits")
-        .select("id, amount, status, created_at, method, external_check_number, recipient_name, disbursement_batches!inner(check_intake_item_id)")
-        .eq("recipient_tenant_id", tenant!.id)
-        .neq("tenant_id", tenant!.id)
-        .eq("disbursement_batches.check_intake_item_id", checkIntakeItemId);
+      const { data, error } = await supabase.rpc("get_tenant_funds_received" as any, {
+        _tenant_id: tenant!.id,
+      });
       if (error) throw error;
-      return data ?? [];
+      return incomingSplitsForCheck(data, checkIntakeItemId);
     },
   });
 
@@ -198,11 +199,13 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
       .reduce((sum: number, s: any) => sum + Number(s.amount || 0), 0)
   );
 
-  // Fallback: when there are no incoming PA→contractor payments, the check
-  // amount itself represents the funds available on this check.
+  // Owner fallback: when there are no incoming PA→contractor payments, the
+  // check amount itself represents the funds available on this check.
+  // Partner/read-only view uses only RPC-authorized incoming rows so an
+  // unrelated owner split is not presented as Funds Received.
   const totalReceived = receivedFromPayments > 0
     ? receivedFromPayments
-    : Number(intakeItem?.amount || 0);
+    : (readOnly ? 0 : Number(intakeItem?.amount || 0));
 
   const totalInTransit = toCents(
     incomingPayments
@@ -247,6 +250,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
   const availableForDisbursement = Math.max(0, toCents(toCents(totalReceived) - paFeeComputed - totalDisbursed));
 
   const savePaFee = async () => {
+    if (readOnly) return;
     const payload: any = { pa_fee_pct: null, pa_fee_amount: null };
     if (paFeeMode === "pct") payload.pa_fee_pct = parseFloat(paFeePct) || null;
     else payload.pa_fee_amount = parseFloat(paFeeAmt) || null;
@@ -266,6 +270,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
   const [extSaving, setExtSaving] = useState(false);
 
   const recordExternal = async () => {
+    if (readOnly) return;
     const amt = toCents(parseFloat(extAmount));
     if (!extRecipient.trim() || !extCheckNum.trim() || !amt || amt <= 0) {
       return toast({ title: "Fill recipient, check #, and amount", variant: "destructive" });
@@ -360,7 +365,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
       </div>
 
       {/* PA Fee + Ledger */}
-      {totalReceived > 0 && (
+      {totalReceived > 0 && !readOnly && (
         <Card>
           <CardContent className="pt-3 pb-3 space-y-3">
             {disburseMode === "platform" && (
@@ -426,7 +431,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
 
       {/* Homeowner links */}
 
-      <div className="space-y-2">
+      {!readOnly && <div className="space-y-2">
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setHomeownerLinkOpen(true)}>
             <Home className="h-3.5 w-3.5 mr-1.5" />
@@ -464,15 +469,17 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
         </p>
       </div>
 
+      {!readOnly && (
       <SendHomeownerBankLinkDialog
         open={homeownerLinkOpen}
         onOpenChange={setHomeownerLinkOpen}
         checkIntakeItemId={checkIntakeItemId}
         claimId={claimId ?? null}
       />
+      )}
 
       {/* Disburse buttons */}
-      {availableForDisbursement > 0 && disburseMode === null && (
+      {!readOnly && availableForDisbursement > 0 && disburseMode === null && (
         <div className="space-y-2">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <Button
@@ -500,13 +507,13 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
         </div>
       )}
 
-      {claimId && tenant?.id && (
+      {!readOnly && claimId && tenant?.id && (
         <ProjectPlanCard claimId={claimId} tenantId={tenant.id} />
       )}
 
 
 
-      {disburseMode === "platform" && (
+      {!readOnly && disburseMode === "platform" && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Disbursement</p>
@@ -537,7 +544,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
         </div>
       )}
 
-      {disburseMode === "external" && (
+      {!readOnly && disburseMode === "external" && (
         <Card>
           <CardContent className="pt-3 pb-3 space-y-3">
             <div className="flex items-center justify-between">
@@ -627,6 +634,45 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
 
       {/* Payment list */}
       <div className="space-y-2">
+        {incomingSplits.map((split: any) => {
+          const cfg = STATUS_CONFIG[split.status] ?? STATUS_CONFIG.settled;
+          const StatusIcon = cfg.icon;
+          const when = split.settled_at || split.created_at;
+          return (
+            <Card key={split.id}>
+              <CardContent className="pt-3 pb-3 space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <ArrowDownCircle className="h-3.5 w-3.5 text-emerald-400" />
+                      <p className="text-sm font-medium">
+                        ${Number(split.amount || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                      </p>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      From {split.sender_name ?? "Partner"}
+                    </p>
+                    {split.method && (
+                      <p className="text-xs text-muted-foreground">
+                        {split.method === "external_check" ? "External check" : split.method}
+                        {split.external_check_number ? ` · #${split.external_check_number}` : ""}
+                      </p>
+                    )}
+                    {when && (
+                      <p className="text-xs text-muted-foreground">
+                        {format(new Date(when), "MMM d, yyyy · h:mm a")}
+                      </p>
+                    )}
+                  </div>
+                  <Badge variant="outline" className={`text-[10px] flex-shrink-0 ${cfg.className}`}>
+                    <StatusIcon className="h-2.5 w-2.5 mr-1" />
+                    {cfg.label}
+                  </Badge>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
         {incomingPayments.map((payment: any) => {
           const cfg = STATUS_CONFIG[payment.status] ?? STATUS_CONFIG.pending;
           const StatusIcon = cfg.icon;
