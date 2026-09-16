@@ -32,8 +32,21 @@ import {
   PRODUCTION_SPA_LOCK,
   assertNotSupabaseArtifact,
   assertMoneyTestSpaArtifact,
+  assertHardenedProductionAuthArtifact,
   assertProductionSpaApplyAllowed,
 } from './production-spa-lock.mjs';
+
+const PRODUCTION_AWS_BUILD_ENV = Object.freeze({
+  VITE_AUTH_PROVIDER: 'cognito',
+  VITE_APP_URL: 'https://checksops.com',
+  VITE_CHECKSOPS_API_URL: '/prep',
+  VITE_AWS_REGION: 'us-east-1',
+  VITE_COGNITO_USER_POOL_ID: PRODUCTION_SPA_LOCK.knownGood.cognitoPoolId,
+  VITE_COGNITO_USER_POOL_CLIENT_ID: PRODUCTION_SPA_LOCK.knownGood.cognitoClientId,
+  VITE_SUPABASE_URL: '',
+  VITE_SUPABASE_PUBLISHABLE_KEY: '',
+  VITE_SUPABASE_PROJECT_ID: '',
+});
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const APPLY = process.argv.includes('--apply');
@@ -122,7 +135,7 @@ if (!ROLLBACK_KNOWN_GOOD) {
   const build = spawnSync(viteBin, ['build', '--mode', 'aws'], {
     cwd: ROOT,
     encoding: 'utf8',
-    env: { ...process.env },
+    env: { ...process.env, ...PRODUCTION_AWS_BUILD_ENV },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   if (build.status !== 0) {
@@ -135,7 +148,9 @@ if (!ROLLBACK_KNOWN_GOOD) {
 }
 
 const artifactDir = ROLLBACK_KNOWN_GOOD ? restoreDir : DIST;
-const validation = scanProductionSpaArtifact(artifactDir);
+const validation = scanProductionSpaArtifact(artifactDir, {
+  requireHardenedAuth: !ROLLBACK_KNOWN_GOOD,
+});
 if (!validation.ok) {
   fail({
     error: 'production_spa_artifact_rejected',
@@ -145,6 +160,7 @@ if (!validation.ok) {
 try {
   assertNotSupabaseArtifact(validation);
   assertMoneyTestSpaArtifact(validation);
+  if (!ROLLBACK_KNOWN_GOOD) assertHardenedProductionAuthArtifact(validation);
 } catch (error) {
   fail({
     error: error.code || error.message,
