@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -64,6 +65,25 @@ test('false in-place applied-status promotion fails', () => {
   };
   const errors = appendOnlyLedgerErrors(ROOT, candidate, base, { genesis: false });
   assert.ok(errors.some((row) => /in-place applied=false to applied=true/.test(row)));
+});
+
+test('partner-share apply_evidence is append-only against origin/main ledger', () => {
+  let base;
+  try {
+    base = JSON.parse(execFileSync('git', ['show', 'origin/main:ops/release-locks/applied-migrations.ledger.json'], {
+      cwd: ROOT,
+      encoding: 'utf8',
+    }));
+  } catch {
+    base = null;
+  }
+  if (!base) return;
+  const candidate = sourceLedger();
+  const errors = appendOnlyLedgerErrors(ROOT, candidate, base, { genesis: false });
+  assert.deepEqual(errors, []);
+  const evidence = candidate.entries.filter((row) => row.record_kind === 'apply_evidence');
+  assert.equal(evidence.length >= 4, true);
+  assert.equal(evidence.every((row) => row.applied === true && row.applied_environment === 'production'), true);
 });
 
 test('fake production evidence (recorded=true or arbitrary hash) fails', () => {
