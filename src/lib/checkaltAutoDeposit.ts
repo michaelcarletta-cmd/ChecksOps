@@ -3,7 +3,8 @@ import { AWS_STAGING_AUTH_SESSION_KEY } from "@/lib/awsStaging";
 
 const readIdToken = (): string | null => {
   try {
-    const raw = sessionStorage.getItem(AWS_STAGING_AUTH_SESSION_KEY);
+    if (typeof localStorage === "undefined") return null;
+    const raw = localStorage.getItem(AWS_STAGING_AUTH_SESSION_KEY);
     if (!raw) return null;
     const idToken = JSON.parse(raw)?.tokens?.idToken;
     return typeof idToken === "string" && idToken ? idToken : null;
