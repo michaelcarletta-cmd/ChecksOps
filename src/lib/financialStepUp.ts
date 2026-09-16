@@ -11,7 +11,12 @@ export const CHECK_BOUND_ACTIONS = Object.freeze([
   "deposit.approve",
 ] as const);
 
+export const TENANT_BOUND_ACTIONS = Object.freeze([
+  "checkalt.auto_deposit.configure",
+] as const);
+
 export type CheckBoundAction = (typeof CHECK_BOUND_ACTIONS)[number];
+export type TenantBoundAction = (typeof TENANT_BOUND_ACTIONS)[number];
 
 export type FinancialStepUpRequest = {
   actionKey: string;
@@ -19,6 +24,8 @@ export type FinancialStepUpRequest = {
   description?: string;
   tenantId?: string | null;
   title?: string;
+  autoDepositEnabled?: boolean;
+  autoDepositMaxCents?: number | null;
 };
 
 export type BuildStepUpResult =
@@ -33,7 +40,7 @@ export type BuildStepUpResult =
     }
   | {
       ok: false;
-      error: "check_intake_item_id is required";
+      error: "check_intake_item_id is required" | "tenant_id is required";
       message: string;
     };
 
@@ -46,6 +53,9 @@ const trimId = (value: unknown): string | null => {
 export const isCheckBoundAction = (actionKey: string | null | undefined): boolean =>
   CHECK_BOUND_ACTIONS.includes(String(actionKey || "") as CheckBoundAction);
 
+export const isTenantBoundAction = (actionKey: string | null | undefined): boolean =>
+  TENANT_BOUND_ACTIONS.includes(String(actionKey || "") as TenantBoundAction);
+
 export const buildFinancialStepUpRequest = (input: {
   actionKey: string;
   checkId?: string | null;
@@ -55,15 +65,25 @@ export const buildFinancialStepUpRequest = (input: {
   amount?: unknown;
   amount_cents?: unknown;
   tenant_id?: unknown;
+  autoDepositEnabled?: boolean;
+  autoDepositMaxCents?: number | null;
 }): BuildStepUpResult => {
   const actionKey = String(input.actionKey || "");
   const checkId = trimId(input.checkId);
+  const tenantId = trimId(input.tenantId) || trimId(input.tenant_id);
   if (isCheckBoundAction(actionKey) && !checkId) {
     return {
       ok: false,
       error: "check_intake_item_id is required",
       message:
         "Financial authorization must be bound to a server-side check. Browser tenant and amount are ignored.",
+    };
+  }
+  if (isTenantBoundAction(actionKey) && !tenantId) {
+    return {
+      ok: false,
+      error: "tenant_id is required",
+      message: "Auto-Deposit configuration must be bound to a tenant. Browser amount is not authority.",
     };
   }
   return {
@@ -73,7 +93,9 @@ export const buildFinancialStepUpRequest = (input: {
       checkId,
       description: input.description,
       title: input.title,
-      tenantId: trimId(input.tenantId) || trimId(input.tenant_id),
+      tenantId,
+      autoDepositEnabled: input.autoDepositEnabled,
+      autoDepositMaxCents: input.autoDepositMaxCents,
     },
     ignored: {
       browserAmount: input.amount !== undefined && input.amount !== null,
@@ -87,11 +109,16 @@ export const stepUpCacheKey = (
   userId: string | null | undefined,
   actionKey: string,
   checkId: string | null,
+  tenantId?: string | null,
 ): string | null => {
   if (!userId) return null;
   if (isCheckBoundAction(actionKey)) {
     if (!checkId) return null;
     return `${userId}|${actionKey}|${checkId}`;
+  }
+  if (isTenantBoundAction(actionKey)) {
+    if (!tenantId) return null;
+    return `${userId}|${actionKey}|${tenantId}`;
   }
   return `${userId}|unbound|session`;
 };
@@ -104,9 +131,20 @@ export const changingCheckRequiresNewAuth = (
   nextCheckId: string | null | undefined,
 ): boolean => String(previousCheckId || "") !== String(nextCheckId || "");
 
-export const awsStepUpBody = (request: FinancialStepUpRequest) => ({
+export const awsStepUpBody = (request: FinancialStepUpRequest & {
+  autoDepositEnabled?: boolean;
+  autoDepositMaxCents?: number | null;
+}) => ({
   action_key: request.actionKey,
   check_intake_item_id: request.checkId || undefined,
-  // tenant_id is a non-authoritative hint; the server uses the check tenant.
+  // tenant_id is a hint; the server uses membership (and the check tenant for deposit.submit).
   tenant_id: request.tenantId || undefined,
+  ...(request.actionKey === "checkalt.auto_deposit.configure"
+    ? {
+        auto_deposit_enabled: request.autoDepositEnabled === true,
+        auto_deposit_max_cents: Number.isInteger(request.autoDepositMaxCents)
+          ? request.autoDepositMaxCents
+          : null,
+      }
+    : {}),
 });

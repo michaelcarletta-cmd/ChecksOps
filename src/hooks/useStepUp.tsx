@@ -14,6 +14,7 @@ import { awsAuthUserId, awsMfaAvailable, getAwsMfaStatus } from "@/lib/awsMfa";
 import {
   cacheAllowsReuse,
   isCheckBoundAction,
+  isTenantBoundAction,
   stepUpCacheKey,
   type FinancialStepUpRequest,
 } from "@/lib/financialStepUp";
@@ -154,7 +155,10 @@ export function StepUpProvider({ children }: { children: ReactNode }) {
       if (isCheckBoundAction(next.actionKey) && !next.checkId) {
         return Promise.resolve(false);
       }
-      const nextKey = stepUpCacheKey(userId, next.actionKey, next.checkId);
+      if (isTenantBoundAction(next.actionKey) && !next.tenantId) {
+        return Promise.resolve(false);
+      }
+      const nextKey = stepUpCacheKey(userId, next.actionKey, next.checkId, next.tenantId);
       if (cacheAllowsReuse(verifiedKey, nextKey)) return Promise.resolve(true);
       return new Promise<boolean>((resolve) => {
         resolverRef.current = resolve;
@@ -169,7 +173,7 @@ export function StepUpProvider({ children }: { children: ReactNode }) {
     (ok: boolean) => {
       const current = requestRef.current;
       if (ok && userId && current) {
-        const key = stepUpCacheKey(userId, current.actionKey, current.checkId);
+        const key = stepUpCacheKey(userId, current.actionKey, current.checkId, current.tenantId);
         if (key) {
           writeVerifiedScope(userId, key);
           setVerifiedKey(key);

@@ -137,6 +137,9 @@ const PendingApprovalDeposits = lazy(() =>
 const CheckAltDepositHistory = lazy(() =>
   import("@/components/settings/CheckAltSettings").then(m => ({ default: m.CheckAltDepositHistory }))
 );
+const CheckAltAutoDepositSettings = lazy(() =>
+  import("@/components/settings/CheckAltAutoDepositSettings").then(m => ({ default: m.CheckAltAutoDepositSettings }))
+);
 const BankDepositReconciliation = lazy(() =>
   import("@/components/deposit-ops/BankDepositReconciliation")
 );
@@ -1378,6 +1381,7 @@ export default function CheckCommandCenter() {
                 {SHOW_CHECKALT && (
                   <>
                     <TabsTrigger value="pending_approvals" className="text-xs gap-1"><ShieldAlert className="h-3 w-3" />Pending Approvals</TabsTrigger>
+                    <TabsTrigger value="checkalt_settings" className="text-xs gap-1"><ShieldAlert className="h-3 w-3" />CheckAlt Settings</TabsTrigger>
                     <TabsTrigger value="bank_deposits" className="text-xs gap-1"><Banknote className="h-3 w-3" />Bank Deposits</TabsTrigger>
                     <TabsTrigger value="deposit_history" className="text-xs gap-1"><Banknote className="h-3 w-3" />Deposit History</TabsTrigger>
                   </>
@@ -1407,6 +1411,13 @@ export default function CheckCommandCenter() {
                   <TabsContent value="pending_approvals" className="mt-3">
                     <Suspense fallback={<TabLoader />}>
                       <PendingApprovalDeposits />
+                    </Suspense>
+                  </TabsContent>
+                  <TabsContent value="checkalt_settings" className="mt-3">
+                    <Suspense fallback={<TabLoader />}>
+                      <CheckAltAutoDepositSettings
+                        canConfigure={["admin", "owner"].includes(tenantMembershipRole ?? "")}
+                      />
                     </Suspense>
                   </TabsContent>
                   <TabsContent value="bank_deposits" className="mt-3">

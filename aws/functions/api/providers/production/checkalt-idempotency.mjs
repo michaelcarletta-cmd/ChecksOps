@@ -137,6 +137,7 @@ export async function insertQueuedDeposit(client, {
   mapping,
   amountCents,
   idempotencyKey,
+  submissionSource = 'manual',
 }) {
   try {
     const row = (await client.query(
@@ -159,6 +160,7 @@ export async function insertQueuedDeposit(client, {
           scale: 'integer_cents',
           amount_cents: amountCents,
           provider_http_attempted: false,
+          submission_source: submissionSource === 'auto_deposit' ? 'auto_deposit' : 'manual',
         })),
       ],
     )).rows[0];
