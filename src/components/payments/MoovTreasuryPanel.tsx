@@ -62,7 +62,7 @@ export function MoovTreasuryPanel() {
     history,
     isLoading,
     error,
-    refetch,
+    refresh,
     save,
     disable,
   } = useSweepConfig("operating");
@@ -132,8 +132,17 @@ export function MoovTreasuryPanel() {
             day, keeping the minimum balance you set in the account.
           </CardDescription>
         </div>
-        <Button variant="outline" size="sm" onClick={() => refetch()}>
-          <RefreshCw className="mr-2 h-3.5 w-3.5" />
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => refresh.mutate()}
+          disabled={refresh.isPending}
+        >
+          {refresh.isPending ? (
+            <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <RefreshCw className="mr-2 h-3.5 w-3.5" />
+          )}
           Refresh
         </Button>
       </CardHeader>
@@ -190,9 +199,28 @@ export function MoovTreasuryPanel() {
             <Separator />
 
             {pushRails.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Connect and verify a settlement bank account to turn on daily payouts.
-              </p>
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  {settlementMethod
+                    ? `${settlementMethod.bank_name ?? "Bank"} ••${settlementMethod.last_four ?? "----"} is connected. Refresh treasury settings to load the payout speeds your bank supports.`
+                    : "Connect and verify a settlement bank account to turn on daily payouts."}
+                </p>
+                {settlementMethod && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => refresh.mutate()}
+                    disabled={refresh.isPending}
+                  >
+                    {refresh.isPending ? (
+                      <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                    )}
+                    Load payout speeds
+                  </Button>
+                )}
+              </div>
             ) : (
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className="space-y-1.5">

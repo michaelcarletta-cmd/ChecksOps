@@ -54,6 +54,19 @@ export function useWallet(walletType: WalletType = "operating") {
     },
   });
 
+  const refresh = useMutation({
+    mutationFn: () => {
+      if (!tenantId) throw new Error("Organization isn't loaded yet. Try again in a moment.");
+      return syncWallet(tenantId, walletType, { force: true });
+    },
+    onSuccess: (data) => {
+      qc.setQueryData(key, data);
+      qc.invalidateQueries({ queryKey: ["wallet-running-balance"] });
+      qc.invalidateQueries({ queryKey: ["wallet-ops-transfers"] });
+      qc.invalidateQueries({ queryKey: ["wallet-ops-readiness"] });
+    },
+  });
+
   return {
     tenantId,
     enabled,
@@ -65,6 +78,7 @@ export function useWallet(walletType: WalletType = "operating") {
     isLoading: query.isLoading,
     error: query.error as Error | null,
     refetch: query.refetch,
+    refresh,
     fund,
   };
 }

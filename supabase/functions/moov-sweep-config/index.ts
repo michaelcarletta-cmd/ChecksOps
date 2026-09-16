@@ -9,10 +9,12 @@ import {
   normalizeSweepConfig,
   updateSweepConfig,
 } from "../_shared/moovSweeps.ts";
+import { resolveRails, saveMethodRails } from "../_shared/moovRails.ts";
 import {
   availablePushRails,
   normalizeStatementDescriptor,
   parseMinimumBalanceCents,
+  pickSettlementMethod,
   selectSweepPullMethod,
   selectSweepPushMethod,
   SWEEP_PULL_RAIL,
@@ -40,6 +42,7 @@ serve(async (req) => {
     const action = String(body?.action ?? "get") as Action;
     const tenantId = body?.tenant_id as string | undefined;
     const walletType = (body?.wallet_type ?? "operating") as "operating" | "trust";
+    const forceRails = body?.force === true;
 
     if (!tenantId) return json({ error: "tenant_id is required" }, 400);
     if (!["operating", "trust"].includes(walletType)) {
@@ -83,7 +86,7 @@ serve(async (req) => {
     const { data: methods } = await supabase
       .from("payment_provider_methods")
       .select(
-        "id, provider_payment_method_id, provider_bank_account_id, bank_name, last_four, is_default, connection_status, supported_rails, rail_payment_method_ids, rails_synced_at",
+        "id, provider_payment_method_id, provider_bank_account_id, bank_name, last_four, is_default, connection_status, verification_status, supported_rails, rail_payment_method_ids, rails_synced_at",
       )
       .eq("tenant_id", tenantId)
       .eq("provider", "moov")
@@ -91,9 +94,19 @@ serve(async (req) => {
       .is("external_recipient_id", null)
       .order("is_default", { ascending: false });
 
-    const method = (methods ?? [])[0] ?? null;
+    const method = pickSettlementMethod(methods ?? []);
+    const railPaymentMethodIds = method
+      ? await resolveRails({
+        cached: method.rail_payment_method_ids,
+        syncedAt: method.rails_synced_at,
+        accountId,
+        bankAccountId: method.provider_bank_account_id ?? null,
+        persist: (rails) => saveMethodRails(supabase, method.id, rails),
+        force: forceRails,
+      })
+      : {};
     const railSource = {
-      railPaymentMethodIds: (method?.rail_payment_method_ids ?? {}) as Record<string, string>,
+      railPaymentMethodIds,
       supportedRails: (method?.supported_rails ?? []) as string[],
     };
     const pushRails = availablePushRails(railSource);

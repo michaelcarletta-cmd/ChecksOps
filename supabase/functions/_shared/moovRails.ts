@@ -112,9 +112,11 @@ export async function resolveRails(opts: {
   accountId: string | null;
   bankAccountId: string | null;
   persist?: (rails: RailMethodIds) => Promise<void>;
+  /** Bypass a fresh cache — used when the operator explicitly refreshes. */
+  force?: boolean;
 }): Promise<RailMethodIds> {
   const cached = (opts.cached && typeof opts.cached === "object" ? opts.cached : {}) as RailMethodIds;
-  if (Object.keys(cached).length > 0 && !isRailCacheStale(opts.syncedAt)) return cached;
+  if (!opts.force && Object.keys(cached).length > 0 && !isRailCacheStale(opts.syncedAt)) return cached;
   if (!opts.accountId) return cached;
 
   const fresh = await fetchRailMethodIds(opts.accountId, opts.bankAccountId);

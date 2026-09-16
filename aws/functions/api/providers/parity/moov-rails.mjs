@@ -64,9 +64,9 @@ export async function saveStakeholderRails(client, stakeholderAccountId, rails) 
   );
 }
 
-export async function resolveRails({ cached, syncedAt, accountId, bankAccountId, persist, fetchImpl }) {
+export async function resolveRails({ cached, syncedAt, accountId, bankAccountId, persist, fetchImpl, force }) {
   const cache = (cached && typeof cached === 'object' ? cached : {});
-  if (Object.keys(cache).length > 0 && !isRailCacheStale(syncedAt)) return cache;
+  if (!force && Object.keys(cache).length > 0 && !isRailCacheStale(syncedAt)) return cache;
   if (!accountId) return cache;
   const fresh = await fetchRailMethodIds(accountId, bankAccountId, fetchImpl);
   if (Object.keys(fresh).length === 0) return cache;

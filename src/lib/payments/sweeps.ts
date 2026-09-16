@@ -93,8 +93,17 @@ async function invoke<T>(body: Record<string, unknown>): Promise<T> {
   return data as T;
 }
 
-export const getSweepSnapshot = (tenantId: string, walletType = "operating") =>
-  invoke<SweepSnapshot>({ action: "get", tenant_id: tenantId, wallet_type: walletType });
+export const getSweepSnapshot = (
+  tenantId: string,
+  walletType = "operating",
+  opts?: { force?: boolean },
+) =>
+  invoke<SweepSnapshot>({
+    action: "get",
+    tenant_id: tenantId,
+    wallet_type: walletType,
+    force: !!opts?.force,
+  });
 
 export const listRecentSweeps = (tenantId: string, walletType = "operating") =>
   invoke<{ sweeps: SweepExecution[] }>({

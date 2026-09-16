@@ -10,6 +10,7 @@ import {
 import { runHomeownerUploadOtpStart } from '../functions/api/homeowner-otp.mjs';
 import { runHireMortgageAgent, runTenantInviteUser } from '../functions/api/tenant-admin.mjs';
 import { runAuthenticatedEndorsement } from '../functions/api/check-endorsement.mjs';
+import { PLATFORM_ENDORSEMENT_FROM } from '../functions/api/endorsement-parity.mjs';
 import { runSendPaymentDirectionRequest } from '../functions/api/payment-direction-email.mjs';
 import {
   runNotifyHomeownerLead,
@@ -387,11 +388,19 @@ test('endorsement and payment-direction use branding From and call mailer once',
         match: (sql) => sql.includes('aws_can_write_tenant'),
         result: () => ({ rows: [{ ok: true }] }),
       },
+      {
+        match: (sql) => sql.includes("SET status = 'sent'"),
+        result: () => ({
+          rows: [{ id: ENDORSE, status: 'sent', request_sent_at: new Date().toISOString() }],
+          rowCount: 1,
+        }),
+      },
     ]),
   });
   assert.equal(endorse.ok, true);
   assert.equal(sent.length, 1);
-  assert.match(sent[0].from || '', /noreply@checksops\.com/);
+  assert.equal(sent[0].from, PLATFORM_ENDORSEMENT_FROM);
+  assert.match(sent[0].from || '', /notify@checksops\.com/);
 
   const pd = await runSendPaymentDirectionRequest({
     spoof,

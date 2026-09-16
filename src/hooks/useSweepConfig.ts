@@ -53,6 +53,16 @@ export function useSweepConfig(walletType: string = "operating") {
     onSuccess: invalidate,
   });
 
+  const refresh = useMutation({
+    mutationFn: () => {
+      if (!tenantId) throw new Error("Organization isn't loaded yet. Try again in a moment.");
+      return getSweepSnapshot(tenantId, walletType, { force: true });
+    },
+    onSuccess: (data) => {
+      qc.setQueryData(key, data);
+    },
+  });
+
   return {
     tenantId,
     enabled,
@@ -68,6 +78,7 @@ export function useSweepConfig(walletType: string = "operating") {
     isLoading: query.isLoading,
     error: query.error as Error | null,
     refetch: query.refetch,
+    refresh,
     save,
     disable,
   };
