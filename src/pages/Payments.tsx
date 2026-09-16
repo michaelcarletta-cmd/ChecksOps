@@ -62,7 +62,7 @@ const Payments = () => {
   const isAdmin = user?.role === 'admin';
   const platformOwner = isPlatformOwner(user?.email, user?.id);
   const [searchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "ledger");
+  const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "wallet");
 
   const { data: tenantRole } = useQuery({
     queryKey: ["tenant-user-role", tenant?.id, user?.id],

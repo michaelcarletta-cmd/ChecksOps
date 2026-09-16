@@ -55,6 +55,7 @@ import { useTenant } from "@/contexts/TenantContext";
 import { useToast } from "@/hooks/use-toast";
 import { SWEEP_RAIL_HINT, SWEEP_RAIL_LABEL, type SweepPushRail } from "@/lib/payments/sweeps";
 import { WalletPanel } from "@/components/payments/WalletPanel";
+import { AuthorizeHeldFundControl } from "@/components/payments/AuthorizeHeldFundControl";
 import { AutoFundingPanel } from "@/components/payments/AutoFundingPanel";
 
 import { MoovTreasuryPanel } from "@/components/payments/MoovTreasuryPanel";
@@ -314,6 +315,9 @@ export default function WalletOps() {
               Refresh balances
             </Button>
           </div>
+        </div>
+        <div className="relative mt-4">
+          <AuthorizeHeldFundControl />
         </div>
       </div>
 

@@ -57,6 +57,9 @@ describe('M7.5 live SPA first-test money routing', () => {
 
   test('live money UI uses wallet.fund / wallet.disburse and never moov-transfer-create', () => {
     const panel = read('src/components/payments/WalletPanel.tsx');
+    const authorize = read('src/components/payments/AuthorizeHeldFundControl.tsx');
+    const walletOps = read('src/pages/WalletOps.tsx');
+    const payments = read('src/pages/Payments.tsx');
     const wallets = read('src/lib/payments/wallets.ts');
     const provider = read('src/lib/payments/providers/moovProvider.ts');
     const auto = read('src/hooks/useAutoFunding.ts');
@@ -68,15 +71,22 @@ describe('M7.5 live SPA first-test money routing', () => {
     assert.match(panel, /FIRST_TEST_FUND_TOTP/);
     assert.match(panel, /FIRST_TEST_DISBURSE_TOTP/);
     assert.match(panel, /Add \{FIRST_TEST_TRANSFER_LABEL\} from bank/);
-    assert.match(panel, /FIRST_TEST_AUTHORIZE_HELD_BUTTON/);
+    assert.match(panel, /AuthorizeHeldFundControl/);
     assert.match(panel, /Send \{FIRST_TEST_TRANSFER_LABEL\} from wallet/);
-    const authorizeFn = panel.slice(
-      panel.indexOf('async function handleAuthorizeHeldFund'),
-      panel.indexOf('async function handleDisburse'),
+    assert.match(authorize, /guardFinancial\(FIRST_TEST_FUND_TOTP/);
+    assert.match(authorize, /FIRST_TEST_AUTHORIZE_HELD_BUTTON/);
+    assert.doesNotMatch(authorize, /fund\.mutateAsync/);
+    assert.doesNotMatch(authorize, /nextFirstTestIdempotencyKey/);
+    assert.doesNotMatch(authorize, /moov-wallet-fund/);
+    assert.match(walletOps, /AuthorizeHeldFundControl/);
+    const addFundsDialog = walletOps.slice(
+      walletOps.indexOf('Add funds'),
+      walletOps.indexOf('Automatic Funding'),
     );
-    assert.match(authorizeFn, /guardFinancial\(FIRST_TEST_FUND_TOTP/);
-    assert.doesNotMatch(authorizeFn, /fund\.mutateAsync/);
-    assert.doesNotMatch(authorizeFn, /nextFirstTestIdempotencyKey/);
+    assert.match(addFundsDialog, /WalletPanel/);
+    const hero = walletOps.slice(0, walletOps.indexOf('Add funds'));
+    assert.match(hero, /AuthorizeHeldFundControl/);
+    assert.match(payments, /searchParams.get\("tab"\) \|\| "wallet"/);
     assert.match(panel, /aria-label="First-test fund amount locked at \$0\.01"/);
     assert.match(autoPanel, /aria-label="First-test fund amount locked at \$0\.01"/);
     assert.match(autoPanel, /isTransferPostHeld/);
