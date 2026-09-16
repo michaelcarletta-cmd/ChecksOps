@@ -500,11 +500,13 @@ const lifecycle = async (client) => {
   `, [FREEDOM, C1C])).rows[0];
   if (!fixture) throw new Error('no unshared Freedom fixture check');
 
-  const asWriter = async (fn) => {
+  const asWriter = async (fn, { asApp = true } = {}) => {
     await client.query('BEGIN');
     try {
-      await client.query('SET LOCAL ROLE checksops');
-      await client.query("SELECT set_config('request.app_user_id', $1, true)", [FREEDOM_TESTER]);
+      if (asApp) {
+        await client.query('SET LOCAL ROLE checksops');
+        await client.query("SELECT set_config('request.app_user_id', $1, true)", [FREEDOM_TESTER]);
+      }
       const result = await fn();
       await client.query('COMMIT');
       return result;
@@ -555,8 +557,8 @@ const lifecycle = async (client) => {
         VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid)
         RETURNING id
       `, [fixture.id, FREEDOM, C1C, FREEDOM_TESTER]);
-      return { ok: true, created: true, share_id: result.rows[0].id };
-    });
+      return { ok: true, created: true, share_id: result.rows[0].id, usedAdminInsert: true };
+    }, { asApp: false });
   }
   const afterShare = await c1cSees(fixture.id);
   const ownerAfterShare = await ownerSees(fixture.id);
@@ -584,7 +586,7 @@ const lifecycle = async (client) => {
     revoked = await asWriter(async () => {
       await client.query('UPDATE public.shared_checks SET revoked_at = now() WHERE id = $1::uuid', [shareId]);
       return { ok: true, revoked: true, share_id: shareId };
-    });
+    }, { asApp: false });
   }
   const afterRevoke = await c1cSees(fixture.id);
   const ownerAfterRevoke = await ownerSees(fixture.id);
@@ -599,7 +601,7 @@ const lifecycle = async (client) => {
     : await asWriter(async () => {
       await client.query('UPDATE public.shared_checks SET revoked_at = NULL WHERE id = $1::uuid', [shareId]);
       return { ok: true, created: false, reactivated: true, share_id: shareId };
-    });
+    }, { asApp: false });
   const afterReshare = await c1cSees(fixture.id);
 
   // Leave the fixture unshared so historical 94 stay the only C1C Freedom shares.
@@ -611,7 +613,7 @@ const lifecycle = async (client) => {
     await asWriter(async () => {
       await client.query('UPDATE public.shared_checks SET revoked_at = now() WHERE id = $1::uuid', [shareId]);
       return { ok: true };
-    });
+    }, { asApp: false });
   }
   const cleaned = await c1cSees(fixture.id);
   const ownerFinal = await ownerSees(fixture.id);
