@@ -71,8 +71,15 @@
 /aws/docs/tenant-ses-email-domain.md @michaelcarletta-cmd
 
 /aws/functions/api/partner-share-lifecycle.mjs @michaelcarletta-cmd
+/aws/functions/api/authorization.mjs @michaelcarletta-cmd
 /aws/rls/sql/31_partner_safe_read.sql @michaelcarletta-cmd
 /aws/rls/sql/32_partner_share_lifecycle.sql @michaelcarletta-cmd
+/aws/rls/sql/33_partner_stage_totals.sql @michaelcarletta-cmd
+/aws/rls/sql/34_c1c_partner_visibility.sql @michaelcarletta-cmd
+/aws/rls/PARTNER_SHARING_INVARIANT.md @michaelcarletta-cmd
+/src/components/check-review/ShareCheckDialog.tsx @michaelcarletta-cmd
+/src/lib/partnerSafeReads.ts @michaelcarletta-cmd
+/src/pages/CheckCommandCenter.tsx @michaelcarletta-cmd
 
 /aws/rls/sql/29_mortgage_ops_library_parity.sql @michaelcarletta-cmd
 /aws/rls/sql/30_tenant_documents_mortgage_doc_type.sql @michaelcarletta-cmd
