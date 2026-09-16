@@ -5,10 +5,10 @@
   "hold": "m75b7_money_test",
   "holdUntil": "M7.5B.7 complete",
   "knownGood": {
-    "gitCommit": "8e155985b103d2fea0251737889a8e6e3687bfed",
+    "gitCommit": "a49069322624e88fe57ace2d0dedc245407a7919",
     "reviewedSource": "cursor/moov-m75b7-restore-money-spa-b844",
-    "reviewedPhase": "M7.5B.7",
-    "spaBundle": "index-C-KblQPy.js",
+    "reviewedPhase": "M7.5B.7 UI CHECK",
+    "spaBundle": "index-C_NPDCdc.js",
     "cognitoPoolId": "us-east-1_h00WorYMT",
     "cognitoClientId": "3ja9fqaq2fjkv3i6up2varcqpe",
     "apiTarget": "/prep",
