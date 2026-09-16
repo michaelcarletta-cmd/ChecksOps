@@ -1,6 +1,7 @@
 import type { Session, User } from "@supabase/supabase-js";
 import {
   AWS_STAGING_AUTH_SESSION_KEY,
+  AWS_STAGING_PUBLIC_CONFIG,
   awsApiBaseUrl,
 } from "@/lib/awsStaging";
 import { createAwsStorageAdapter, rewriteStorageFields } from "./storage";
@@ -858,6 +859,11 @@ export function createAwsStagingClient(options: AwsStagingClientOptions = {}) {
     storage: createAwsStorageAdapter({
       getToken: async () => (await restoreSession()).session?.access_token ?? null,
     }),
+    // Keep production pool/client in the compiled bundle (hardened SPA gate).
+    cognito: {
+      userPoolId: AWS_STAGING_PUBLIC_CONFIG.userPoolId,
+      userPoolClientId: AWS_STAGING_PUBLIC_CONFIG.userPoolClientId,
+    },
     functions,
     channel,
     removeChannel() {},

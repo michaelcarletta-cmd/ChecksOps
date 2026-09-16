@@ -111,6 +111,8 @@ describe('M7.5C production SPA money-test hold', () => {
     assert.match(deploy, /VITE_AUTH_PROVIDER: 'cognito'/);
     assert.match(deploy, /VITE_CHECKSOPS_API_URL: '\/prep'/);
     assert.match(deploy, /assertHardenedProductionAuthArtifact/);
+    assert.match(deploy, /\.env\.aws\.local/);
+    assert.match(deploy, /production_spa_build_env_incomplete/);
   });
 
   test('awsMode vite define bakes env-provided Cognito and /prep without production defaults', () => {
@@ -119,9 +121,13 @@ describe('M7.5C production SPA money-test hold', () => {
     assert.match(vite, /import\.meta\.env\.VITE_CHECKSOPS_API_URL/);
     assert.match(vite, /import\.meta\.env\.VITE_COGNITO_USER_POOL_ID/);
     assert.match(vite, /import\.meta\.env\.VITE_COGNITO_USER_POOL_CLIENT_ID/);
-    assert.match(vite, /process\.env\.VITE_COGNITO_USER_POOL_ID \|\| env\.VITE_COGNITO_USER_POOL_ID/);
+    assert.match(vite, /fromProcess\("VITE_COGNITO_USER_POOL_ID"\)/);
     assert.match(vite, /Do not default pool\/client to production IDs/);
+    assert.match(vite, /Only define Cognito\/API keys when present/);
     assert.doesNotMatch(vite, /us-east-1_h00WorYMT/);
     assert.doesNotMatch(vite, /3ja9fqaq2fjkv3i6up2varcqpe/);
+    const awsClient = fs.readFileSync(path.join(ROOT, 'src/integrations/aws/client.ts'), 'utf8');
+    assert.match(awsClient, /AWS_STAGING_PUBLIC_CONFIG/);
+    assert.match(awsClient, /userPoolId: AWS_STAGING_PUBLIC_CONFIG\.userPoolId/);
   });
 });

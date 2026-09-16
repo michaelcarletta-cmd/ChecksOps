@@ -131,6 +131,20 @@ if (ROLLBACK_KNOWN_GOOD) {
 }
 
 if (!ROLLBACK_KNOWN_GOOD) {
+  if (PRODUCTION_AWS_BUILD_ENV.VITE_COGNITO_USER_POOL_ID !== PRODUCTION_SPA_LOCK.knownGood.cognitoPoolId
+    || PRODUCTION_AWS_BUILD_ENV.VITE_COGNITO_USER_POOL_CLIENT_ID !== PRODUCTION_SPA_LOCK.knownGood.cognitoClientId
+    || PRODUCTION_AWS_BUILD_ENV.VITE_CHECKSOPS_API_URL !== '/prep'
+    || PRODUCTION_AWS_BUILD_ENV.VITE_AUTH_PROVIDER !== 'cognito') {
+    fail({ error: 'production_spa_build_env_incomplete', expected: PRODUCTION_SPA_LOCK.knownGood });
+  }
+  // Vite mode=aws loads .env.aws / .env.aws.local. Writing the local file is
+  // the reliable bake path — process.env VITE_* did not reach the compiled
+  // artifact on the previous guarded builds.
+  const awsLocalEnvPath = path.join(ROOT, '.env.aws.local');
+  const awsLocalEnv = `${Object.entries(PRODUCTION_AWS_BUILD_ENV)
+    .map(([key, value]) => `${key}=${value}`)
+    .join('\n')}\n`;
+  fs.writeFileSync(awsLocalEnvPath, awsLocalEnv);
   const viteBin = path.join(ROOT, 'node_modules', '.bin', 'vite');
   const build = spawnSync(viteBin, ['build', '--mode', 'aws'], {
     cwd: ROOT,
@@ -138,6 +152,12 @@ if (!ROLLBACK_KNOWN_GOOD) {
     env: { ...process.env, ...PRODUCTION_AWS_BUILD_ENV },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
+  try {
+    fs.copyFileSync(awsLocalEnvPath, '/tmp/production-spa.env.aws.local');
+    fs.unlinkSync(awsLocalEnvPath);
+  } catch {
+    // gitignored bake file; keep going even if unlink fails
+  }
   if (build.status !== 0) {
     fail({
       error: 'production_spa_build_failed',
