@@ -87,28 +87,30 @@ const succeedingCompositeDeps = () => {
 
 test('lock-in SQL represents verified staging in_person, grant, and trigger drop', () => {
   const sql = readFileSync(AWS_LOCK, 'utf8');
+  const executable = stripComments(sql);
   assert.match(sql, /in_person/);
   assert.match(sql, /portal','sms','email','internal','manual','in_person/);
-  assert.match(sql, /GRANT UPDATE \(endorsement_render_version\)/);
-  assert.match(sql, /TO checksops, authenticated/);
-  assert.match(sql, new RegExp(`DROP TRIGGER IF EXISTS ${TRIGGER} ON public.check_endorsements`));
+  assert.match(executable, /GRANT UPDATE \(endorsement_render_version\)/);
+  assert.match(executable, /TO checksops, authenticated/);
+  assert.match(executable, new RegExp(`DROP TRIGGER IF EXISTS ${TRIGGER} ON public.check_endorsements`));
   assert.match(sql, /intentionally preserved/);
-  assert.doesNotMatch(sql, /DROP FUNCTION[\s\S]*advance_check_on_endorsement_complete/i);
-  assert.doesNotMatch(sql, /trg_hle_endorsement_(insert|update)/);
-  assert.doesNotMatch(sql, /GRANT UPDATE \(deposit_recommendation\)/);
-  assert.doesNotMatch(sql, /aws_public_endorsement_by_token/);
-  assert.doesNotMatch(sql, /front_image_deposit_path/);
+  assert.doesNotMatch(executable, /DROP FUNCTION[\s\S]*advance_check_on_endorsement_complete/i);
+  assert.doesNotMatch(executable, /trg_hle_endorsement_(insert|update)/);
+  assert.doesNotMatch(executable, /GRANT UPDATE \(deposit_recommendation\)/);
+  assert.doesNotMatch(executable, /aws_public_endorsement_by_token/);
+  assert.doesNotMatch(executable, /front_image_deposit_path/);
   assert.doesNotMatch(sql, /40_endorsement_activation_grants/);
   assert.equal(triggerActions(sql).at(-1), 'DROP');
 });
 
 test('rebuild follow-on drops the legacy Ready trigger and keeps in_person', () => {
   const sql = readFileSync(SUPABASE_LOCK, 'utf8');
-  assert.match(sql, new RegExp(`DROP TRIGGER IF EXISTS ${TRIGGER} ON public.check_endorsements`));
+  const executable = stripComments(sql);
+  assert.match(executable, new RegExp(`DROP TRIGGER IF EXISTS ${TRIGGER} ON public.check_endorsements`));
   assert.match(sql, /in_person/);
-  assert.doesNotMatch(sql, /DROP FUNCTION[\s\S]*advance_check_on_endorsement_complete/i);
-  assert.doesNotMatch(sql, /trg_hle_endorsement_(insert|update)/);
-  assert.doesNotMatch(sql, /GRANT /);
+  assert.doesNotMatch(executable, /DROP FUNCTION[\s\S]*advance_check_on_endorsement_complete/i);
+  assert.doesNotMatch(executable, /trg_hle_endorsement_(insert|update)/);
+  assert.doesNotMatch(executable, /GRANT /);
   assert.equal(triggerActions(sql).at(-1), 'DROP');
 });
 
