@@ -16,7 +16,8 @@ describe('M7.5C production SPA money-test hold', () => {
   test('lock refuses the CheckAlt cutover unlock token', () => {
     const lock = loadProductionSpaLock();
     assert.equal(lock.hold, 'm75b7_money_test');
-    assert.equal(lock.knownGood.gitCommit, '32fd3256e572cd52df1842a7566914fb090cea74');
+    assert.equal(lock.knownGood.gitCommit, '8e155985b103d2fea0251737889a8e6e3687bfed');
+    assert.equal(lock.knownGood.spaBundle, 'index-C-KblQPy.js');
     assert.equal(lock.unlockValue, 'M75_MONEY_TEST_HOLD_RELEASE');
     assert.equal(lock.cutoverUnlockValueNoLongerHonored, 'RELEASE_CUTOVER_LOCK');
     assert.throws(
