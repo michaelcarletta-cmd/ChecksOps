@@ -1,18 +1,25 @@
 {
   "workstream": "ChecksOps Functional Audit Phase 3",
+  "pr": 356,
   "baseline": {
     "pr": 351,
     "branch": "cursor/integration-email-rc-ec26",
     "sha": "16239c0f838f6e06009bc8de87841f12bed20a9e",
     "lambda_codesha256": "2QMW73nT7wjmynB/N2BC4jg18rhvdyd4xpateLPo4R0=",
     "spa_index_etag": "87342b69bcb1e98800ab49bf2c6b0511",
-    "spa_js": "assets/index-D3ryZhBt.js",
-    "spa_css": "assets/index-BveYUpt4.css",
-    "ccc_chunk": "assets/CheckCommandCenter-CDSvFJ-d.js",
-    "findapro_chunk": "assets/FindAPro-Iv9wb-cX.js"
+    "reverified_at": "2026-09-16T20:48:00Z",
+    "baseline_drift": false
   },
   "starting_inventory": {
-    "discovered": 1421,
+    "PASS": 714,
+    "FAIL": 1,
+    "INTERNAL_BLOCKED": 248,
+    "EXTERNAL_BLOCKED": 173,
+    "AWAITING_INTEGRATION_DEPLOYMENT": 0,
+    "N_A": 285,
+    "FAIL_ID": "A8-035"
+  },
+  "ending_inventory": {
     "PASS": 714,
     "FAIL": 1,
     "INTERNAL_BLOCKED": 248,
@@ -20,14 +27,24 @@
     "AWAITING_INTEGRATION_DEPLOYMENT": 0,
     "N_A": 285
   },
-  "ending_inventory": {
-    "discovered": 1421,
-    "PASS": 714,
-    "FAIL": 1,
-    "INTERNAL_BLOCKED": 248,
-    "EXTERNAL_BLOCKED": 173,
-    "AWAITING_INTEGRATION_DEPLOYMENT": 0,
-    "N_A": 285,
-    "note": "Updated after physical pass if any controls move."
-  }
+  "newly_pass": [],
+  "newly_fail": [],
+  "defects": [
+    {
+      "id": "A8-035",
+      "status": "FAIL unchanged",
+      "note": "Freedom admin identity_not_linked; Identity-owned; not retested with EMAIL_OTP"
+    },
+    {
+      "id": "identity-master-uat",
+      "status": "not a new FAIL row",
+      "note": "staging-master@checksops.invalid Cognito 200 then /identity/me identity_not_linked for sub 54a8b4c8-60d1-7028-cfbb-0eb2baee5592"
+    }
+  ],
+  "integration_handoffs": [
+    "Do not restore SQL 72. Keep #331 overlay fingerprint d7de64bd05cdac4bf26784f38c59affa.",
+    "C1C payments@ Cognito last modified 2026-09-14T01:31:34Z after Identity restore; FA will not AdminSetUserPassword. Provide authorized C1C probe password via env/secret if Phase 3 should continue settlement/CCC.",
+    "Read-only inspect identity_accounts for staging-master sub 54a8b4c8-60d1-7028-cfbb-0eb2baee5592 (expected app UUID 7dbb3009-f059-4767-b5dc-1c5c72379330). FA did not change SQL or Cognito.",
+    "claim_settlements write path is already on the #351 pin (AWS_WRITE_TABLES + CCC chunk). A5-201-204 are session-blocked, not missing-deploy."
+  ]
 }
