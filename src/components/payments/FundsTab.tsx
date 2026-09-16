@@ -467,7 +467,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
         <p className="text-[10px] text-muted-foreground">
           Payment link: homeowner verifies their bank account. Tracking link: homeowner sees the full timeline for every check on this claim.
         </p>
-      </div>
+      </div>}
 
       {!readOnly && (
       <SendHomeownerBankLinkDialog
