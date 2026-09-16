@@ -121,6 +121,20 @@
       "reason": "PR 359 persists FinCapture depositDate onto cleared_at in persistPollOutcome; Auto-Deposit PR 339 also touches this CheckAlt file.",
       "expires": "2026-12-31",
       "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 316,
+      "path": ".github/workflows/aws-migration-ci.yml",
+      "reason": "PR 359 fetches the PR base branch so the SQL 31-34 name-only guard works on a shallow checkout; production-guardrails PR 316 also touches this workflow.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 319,
+      "path": ".github/workflows/aws-migration-ci.yml",
+      "reason": "PR 359 fetches the PR base branch so the SQL 31-34 name-only guard works on a shallow checkout; production SPA lock PR 319 also touches this workflow.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
     }
   ]
 }
