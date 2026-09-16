@@ -12,6 +12,7 @@ import {
   insertProductionTransferDraft,
   moovFundingIdempotencyKey,
   productionTransferInsertFkError,
+  providerFundIdempotencyKey,
   resolveLocalFundIntentRefs,
   shouldReconcileInsteadOfPost,
   updateProductionTransfer,
@@ -254,7 +255,7 @@ export async function handleProductionMoovWalletFund({
       path: `/accounts/${facilitatorId}/transfers`,
       method: 'POST',
       allowTransferPost: true,
-      idempotencyKey: `checksops-wallet-fund-${draft.id}`,
+      idempotencyKey: providerFundIdempotencyKey(draft.id),
       fetchImpl,
       body: {
         source: { paymentMethodID: sourcePm },

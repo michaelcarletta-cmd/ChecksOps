@@ -54,9 +54,11 @@ describe('M7.4 prepare production Moov send controls', { concurrency: 1 }, () =>
   test('live git dispatcher uses hardened M72 writers, not parity money', () => {
     const dispatch = read('aws/functions/api/providers/production/moov-dispatch.mjs');
     assert.match(dispatch, /handleProductionMoovWalletFund/);
+    assert.match(dispatch, /handleProductionMoovWalletFundContinue/);
     assert.match(dispatch, /handleProductionMoovWalletDisburse/);
     assert.doesNotMatch(dispatch, /from '\.\.\/parity\/moov-money\.mjs'/);
     assert.equal(hasProductionMoovHandler('moov-wallet-fund'), true);
+    assert.equal(hasProductionMoovHandler('moov-wallet-fund-continue'), true);
     assert.equal(hasProductionMoovHandler('moov-disburse'), true);
     assert.equal(PRODUCTION_MOOV_FUNCTIONS.has('moov-transfer-create'), false);
     assert.equal(PRODUCTION_MOOV_FUNCTIONS.has('calculate-payment-funding'), false);
@@ -102,10 +104,16 @@ describe('M7.4 prepare production Moov send controls', { concurrency: 1 }, () =>
 
   test('writers bind server-authoritative Freedom parties and hold POST when dark', () => {
     const fund = read('aws/functions/api/providers/production/moov-wallet-fund.mjs');
+    const continueFund = read('aws/functions/api/providers/production/moov-wallet-fund-continue.mjs');
     const disburse = read('aws/functions/api/providers/production/moov-wallet-disburse.mjs');
     assert.match(fund, /firstTestFundBinding/);
     assert.match(fund, /transfer_post_held/);
     assert.match(fund, /approved_payment_method_mismatch/);
+    assert.match(continueFund, /payment_transfer_id/);
+    assert.match(continueFund, /casMarkSubmitting/);
+    assert.match(continueFund, /providerFundIdempotencyKey/);
+    assert.match(continueFund, /transfer_post_held/);
+    assert.doesNotMatch(continueFund, /insertProductionTransferDraft/);
     assert.match(disburse, /firstTestDisburseBinding/);
     assert.match(disburse, /transfer_post_held/);
     assert.match(disburse, /productionMoovTransferPostAllowed/);
@@ -143,12 +151,17 @@ describe('M7.4 prepare production Moov send controls', { concurrency: 1 }, () =>
 
   test('TOTP is required before any Moov HTTP on fund and disburse', () => {
     const fund = read('aws/functions/api/providers/production/moov-wallet-fund.mjs');
+    const continueFund = read('aws/functions/api/providers/production/moov-wallet-fund-continue.mjs');
     const disburse = read('aws/functions/api/providers/production/moov-wallet-disburse.mjs');
     const fundAuthz = fund.indexOf('authorizeMoovProduction');
     const fundFetch = fund.indexOf('productionMoovFetch');
+    const railsStart = continueFund.indexOf('async function loadLiveFundRails');
+    const continueAuthz = continueFund.indexOf('authorizeMoovProduction', railsStart);
+    const continueFetch = continueFund.indexOf('productionMoovFetch', railsStart);
     const disburseAuthz = disburse.indexOf('authorizeMoovProduction');
     const disburseFetch = disburse.indexOf('productionMoovFetch');
     assert.ok(fundAuthz > 0 && fundAuthz < fundFetch);
+    assert.ok(railsStart > 0 && continueAuthz > railsStart && continueAuthz < continueFetch);
     assert.ok(disburseAuthz > 0 && disburseAuthz < disburseFetch);
     assert.doesNotMatch(fund, /checkalt-submit|plaid/i);
     assert.doesNotMatch(disburse, /from '\.\.\/parity\/moov-money/);
