@@ -61,7 +61,7 @@ test('unwrapRpcData(get_tenant_funds_received, manyRows) returns the complete ar
 test('unwrapRpcData still unwraps true single-column RPCs', () => {
   assert.equal(unwrapRpcData('has_permission', [{ has_permission: true }]), true);
   assert.equal(unwrapRpcData('get_total_unread_check_messages', [{ get_total_unread_check_messages: 4 }]), 4);
-  assert.equal(unwrapRpcData('get_tenant_funds_received', []), []);
+  assert.deepEqual(unwrapRpcData('get_tenant_funds_received', []), []);
 });
 
 test('lane mapping does not throw when API returns the full funds-received array', () => {
