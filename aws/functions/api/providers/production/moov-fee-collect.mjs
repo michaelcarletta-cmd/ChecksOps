@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { isUuid } from '../../financial-ownership.mjs';
 import { KNOWN_APPROVED_MOOV } from './moov-accounts.mjs';
-import { MOOV_FEE_COLLECT_TOTP_ACTION, authorizeMoovProduction } from './moov-authz.mjs';
+import { MOOV_FEE_COLLECT_TOTP_ACTION, authorizeMoovProduction } from './moov-sequence-authz.mjs';
 import { isPlatformOwnerCaller } from './moov-roles.mjs';
 import { capabilityEnabled } from './moov-capability-policy.mjs';
 import { FIRST_PRODUCTION_TRANSFER_CENTS } from './moov-holds.mjs';
