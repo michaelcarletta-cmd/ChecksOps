@@ -96,8 +96,31 @@ test('product repair files do not hardcode Condition One or Freedom tenant UUIDs
   }
 });
 
+const gitDiffNameOnly = (ref) => execFileSync(
+  'git',
+  ['diff', '--name-only', ref],
+  { cwd: ROOT, encoding: 'utf8' },
+);
+
+const changedFilesVsDefaultBranch = () => {
+  const refs = [
+    process.env.GITHUB_BASE_REF ? `origin/${process.env.GITHUB_BASE_REF}` : null,
+    'origin/main',
+    'main',
+  ].filter(Boolean);
+  let lastErr;
+  for (const ref of refs) {
+    try {
+      return gitDiffNameOnly(ref);
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr || new Error('unable to diff against default branch');
+};
+
 test('this repair does not modify or add protected partner-sharing SQL 31-34', () => {
-  const changed = execFileSync('git', ['diff', '--name-only', 'origin/main'], { cwd: ROOT }).toString();
+  const changed = changedFilesVsDefaultBranch();
   assert.doesNotMatch(changed, /31_partner_safe_read\.sql/);
   assert.doesNotMatch(changed, /32_partner_share_lifecycle\.sql/);
   assert.doesNotMatch(changed, /33_partner_stage_totals\.sql/);

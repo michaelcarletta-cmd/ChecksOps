@@ -295,7 +295,7 @@
       "environment": "source-only",
       "source": {
         "git_sha": "bd97367b76a52444aa8b1438a3f035b6c4ea09b1",
-        "tree_hash": "0abada82a6696041c5e19605790cc4bec843ddbf1501e8e74df54a10a0133ba4",
+        "tree_hash": "61e3cd1285ba1d978ab90ba4eead665f13b58cf808ecc8b4785be63b9709f1d0",
         "merged": true,
         "merged_pr": 354
       },
@@ -359,7 +359,7 @@
         "Lambda version serving partner-share-lifecycle.mjs / authorization.mjs"
       ],
       "open_pr_overlap": ["#339", "#347", "#342", "#332", "#327"],
-      "notes": "SQL 31/32/33/34 are APPLIED IN PRODUCTION (ledger apply_evidence + ops/release-locks/proof/c1c-partner-share-production-apply.md). Do not reapply. required_sql.applied stays false because SOURCE_LOCKED_NOT_ACTIVE cannot claim production-applied SQL. PR #359 retargets tree_hash for Manager navigation and tenants_public partner names; SQL 31-34, Partner Codes, and shared_checks are unchanged. Ownership and visibility are separate; never transfer check tenant_id to repair partner access."
+      "notes": "SQL 31/32/33/34 are APPLIED IN PRODUCTION (ledger apply_evidence + ops/release-locks/proof/c1c-partner-share-production-apply.md). Do not reapply. required_sql.applied stays false because SOURCE_LOCKED_NOT_ACTIVE cannot claim production-applied SQL. PR #359 retargets tree_hash for Manager navigation, tenants_public partner names, and the disposable shared-check READ fixture columns needed by SQL 33; SQL 31-34, Partner Codes, and shared_checks are unchanged. Ownership and visibility are separate; never transfer check tenant_id to repair partner access."
     },
     "mortgage-ops": {
       "id": "mortgage-ops",
@@ -556,7 +556,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "bd97367b76a52444aa8b1438a3f035b6c4ea09b1",
-        "tree_hash": "0ab91fd43c908d9261cb346fb059cf7eb04e9207d49bcaa4fe51baca76c39afb",
+        "tree_hash": "bad536d80b71a924ad7839c146823c8727fc47efbb32d4dbb74f5f7b8b03c7d2",
         "merged": true,
         "merged_pr": 343
       },
@@ -592,7 +592,7 @@
         "direct pushes and administrator bypasses disabled"
       ],
       "open_pr_overlap": ["#316", "#317", "#319", "#325", "#333", "#326", "#328"],
-      "notes": "Control-plane lock tooling only. Hashing this validator with itself is not independent security. Repository evidence does not prove live AWS state. This PR does not own aws/cutover/PRODUCTION_SPA_LOCK.json from other PRs."
+      "notes": "Control-plane lock tooling only. Hashing this validator with itself is not independent security. Repository evidence does not prove live AWS state. This PR does not own aws/cutover/PRODUCTION_SPA_LOCK.json from other PRs. PR #359 fetches the PR base branch in aws-migration-ci so the protected SQL 31-34 name-only diff can run on a shallow checkout."
     }
   }
 }
