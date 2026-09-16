@@ -343,8 +343,45 @@ export const resolveFinancialStepUpBinding = async ({ client, mapping, body, spo
     CHECKALT_TOTP_ACTION,
     serverAmountCentsFromCheck,
   } = checkalt;
-  const { isMoovWalletTotpAction, resolveMoovWalletStepUpBinding } = await import('./providers/production/moov-authz.mjs');
+  const { isMoovWalletTotpAction, resolveMoovWalletStepUpBinding } = await import('./providers/production/moov-sequence-authz.mjs');
   const actionKey = String(body.action_key || body.actionKey || CHECKALT_TOTP_ACTION);
+  if (actionKey === 'checkalt.auto_deposit.configure') {
+    const {
+      CHECKALT_AUTO_DEPOSIT_CONFIGURE_ACTION,
+      authorizeAutoDepositConfig,
+      parseAutoDepositConfigValues,
+    } = await import('./providers/production/checkalt-auto-deposit.mjs');
+    const memberships = (await client.query(TENANT_MEMBERSHIP_SQL, [mapping.application_user_id])).rows;
+    const claimed = body.tenant_id || body.tenantId || null;
+    const tenantId = claimed && membershipForTenant(memberships, claimed)
+      ? claimed
+      : (memberships.length === 1 ? memberships[0].tenant_id : null);
+    if (!tenantId) {
+      return {
+        ok: false,
+        statusCode: claimed ? 403 : 400,
+        error: claimed ? 'cross_tenant_denied' : 'tenant_id is required',
+        message: 'Auto-Deposit TOTP is tenant-bound. Browser tenant_id is not authority.',
+        spoofFieldsIgnored: spoof,
+        ...financialGate(),
+      };
+    }
+    const authz = await authorizeAutoDepositConfig({ client, mapping, tenantId });
+    if (!authz.ok) return { ...authz, spoofFieldsIgnored: spoof, ...financialGate() };
+    const parsed = parseAutoDepositConfigValues(body);
+    if (parsed.error) {
+      return { ok: false, statusCode: 400, error: parsed.error, message: parsed.message, spoofFieldsIgnored: spoof, ...financialGate() };
+    }
+    return {
+      ok: true,
+      check: { id: null, tenant_id: tenantId },
+      amountCents: Number.isInteger(parsed.maxCents) ? parsed.maxCents : 0,
+      actionKey: CHECKALT_AUTO_DEPOSIT_CONFIGURE_ACTION,
+      autoDepositEnabled: parsed.enabled === true,
+      autoDepositMaxCents: parsed.maxCents,
+      tenantId,
+    };
+  }
   if (isMoovWalletTotpAction(actionKey)) {
     return resolveMoovWalletStepUpBinding({
       client,
@@ -433,8 +470,9 @@ export const resolveFinancialStepUpBinding = async ({ client, mapping, body, spo
 
 export const insertAppStepUpLog = async (client, mapping, bound) => {
   const { CHECKALT_TOTP_ACTION } = await import('./providers/production/checkalt-authz.mjs');
-  const { isMoovWalletTotpAction } = await import('./providers/production/moov-authz.mjs');
+  const { isMoovWalletTotpAction } = await import('./providers/production/moov-sequence-authz.mjs');
   const moovBound = isMoovWalletTotpAction(bound.actionKey);
+  const autoDepositBound = bound.actionKey === 'checkalt.auto_deposit.configure';
   const tenantId = bound.tenantId || bound.check?.tenant_id || null;
   const metadata = moovBound
     ? {
@@ -449,6 +487,14 @@ export const insertAppStepUpLog = async (client, mapping, bound) => {
       source: 'app_financial_totp',
       browser_ids_ignored: true,
     }
+    : autoDepositBound
+      ? {
+        amount_cents: bound.amountCents,
+        operation: bound.actionKey,
+        source: 'app_financial_totp',
+        auto_deposit_enabled: bound.autoDepositEnabled === true,
+        auto_deposit_max_cents: Number.isInteger(bound.autoDepositMaxCents) ? bound.autoDepositMaxCents : null,
+      }
     : {
       check_id: bound.check?.id || null,
       amount_cents: bound.amountCents,
@@ -519,7 +565,7 @@ export const handleMfaStepUp = async (event, deps = {}) => {
   return identity(event, async (ctx) => {
     try {
       const checkalt = await import('./providers/production/checkalt-authz.mjs');
-      const { isMoovWalletTotpAction } = await import('./providers/production/moov-authz.mjs');
+      const { isMoovWalletTotpAction } = await import('./providers/production/moov-sequence-authz.mjs');
       const { loginSessionIdFromClaims = null } = await import('./cognito.mjs').catch(() => ({}));
       const actionKey = String(body.action_key || body.actionKey || checkalt.CHECKALT_TOTP_ACTION);
       const walletAction = isMoovWalletTotpAction(actionKey);
