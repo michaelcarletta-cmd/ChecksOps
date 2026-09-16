@@ -32,7 +32,7 @@ const denyBucket = (bucket) => {
 const lookupWritableCheck = async (client, checkId) => {
   if (!UUID_RE.test(String(checkId || ''))) return { error: 'invalid_uuid', field: 'check_id' };
   const rows = (await client.query(
-    `SELECT id, tenant_id, front_image_path, back_image_path, back_image_deposit_path, endorsement_render_meta
+    `SELECT id, tenant_id, front_image_path, back_image_path, back_image_deposit_path, back_image_original_path, endorsement_render_meta
        FROM public.check_intake_items WHERE id = $1::uuid`,
     [checkId],
   )).rows;
@@ -42,17 +42,29 @@ const lookupWritableCheck = async (client, checkId) => {
 
 /** Allow overwrite of stored check images, `.deposit2.jpg`, and official `.checkalt.jpg` siblings. */
 export const CHECK_IMAGE_OR_DEPOSIT2_WRITE_SQL = `
-SELECT id, tenant_id, front_image_path, back_image_path, back_image_deposit_path, endorsement_render_meta
+SELECT id, tenant_id, front_image_path, back_image_path, back_image_deposit_path, back_image_original_path, endorsement_render_meta
 FROM public.check_intake_items
 WHERE split_part(front_image_path, '?', 1) = $1
    OR split_part(back_image_path, '?', 1) = $1
    OR split_part(back_image_deposit_path, '?', 1) = $1
+   OR split_part(back_image_original_path, '?', 1) = $1
    OR regexp_replace(split_part(COALESCE(front_image_path, ''), '?', 1), '\\.[^.]+$', '') || '.deposit2.jpg' = $1
    OR regexp_replace(split_part(COALESCE(back_image_path, ''), '?', 1), '\\.[^.]+$', '') || '.deposit2.jpg' = $1
    OR regexp_replace(split_part(COALESCE(back_image_deposit_path, ''), '?', 1), '\\.[^.]+$', '') || '.deposit2.jpg' = $1
+   OR regexp_replace(split_part(COALESCE(back_image_original_path, ''), '?', 1), '\\.[^.]+$', '') || '.deposit2.jpg' = $1
    OR regexp_replace(split_part(COALESCE(front_image_path, ''), '?', 1), '\\.[^.]+$', '') || '.checkalt.jpg' = $1
    OR regexp_replace(split_part(COALESCE(back_image_path, ''), '?', 1), '\\.[^.]+$', '') || '.checkalt.jpg' = $1
    OR regexp_replace(split_part(COALESCE(back_image_deposit_path, ''), '?', 1), '\\.[^.]+$', '') || '.checkalt.jpg' = $1
+   OR regexp_replace(split_part(COALESCE(back_image_original_path, ''), '?', 1), '\\.[^.]+$', '') || '.checkalt.jpg' = $1
+   OR (
+     $1 ~ 'endorsed_deposit_[^/]+\\.checkalt\\.jpe?g$'
+     AND regexp_replace(split_part($1, '?', 1), '/[^/]+$', '') IN (
+       regexp_replace(split_part(COALESCE(front_image_path, ''), '?', 1), '/[^/]+$', ''),
+       regexp_replace(split_part(COALESCE(back_image_path, ''), '?', 1), '/[^/]+$', ''),
+       regexp_replace(split_part(COALESCE(back_image_deposit_path, ''), '?', 1), '/[^/]+$', ''),
+       regexp_replace(split_part(COALESCE(back_image_original_path, ''), '?', 1), '/[^/]+$', '')
+     )
+   )
 LIMIT 1`;
 
 const lookupWritableCheckByImagePath = async (client, rel) => {
@@ -106,19 +118,31 @@ export const authorizeStorageWritePath = async (client, bucket, objectPath, user
       };
     }
     const looked = await lookupWritableCheck(client, checkId);
-    if (looked.error) {
-      return {
-        ok: false,
-        statusCode: looked.error === 'invalid_uuid' ? 400 : 403,
-        error: looked.error,
-        message: looked.message || 'Not authorized for this object',
-        field: looked.field,
-      };
+    if (!looked.error) {
+      if (!isCheckScopedPathFor(rel, looked.check.id)) {
+        return { ok: false, statusCode: 403, error: 'rls_denied', message: 'path is not scoped to this check' };
+      }
+      return { ok: true, rel, check: looked.check, key: s3KeyFor(bucket, rel), strategy: 'check' };
     }
-    if (!isCheckScopedPathFor(rel, looked.check.id)) {
-      return { ok: false, statusCode: 403, error: 'rls_denied', message: 'path is not scoped to this check' };
+    if (bucket === 'claim-files') {
+      const existing = await lookupWritableCheckByImagePath(client, rel);
+      if (existing) {
+        return {
+          ok: true,
+          rel,
+          check: existing,
+          key: s3KeyFor(bucket, rel),
+          strategy: 'existing_check_image_or_deposit2',
+        };
+      }
     }
-    return { ok: true, rel, check: looked.check, key: s3KeyFor(bucket, rel), strategy: 'check' };
+    return {
+      ok: false,
+      statusCode: looked.error === 'invalid_uuid' ? 400 : 403,
+      error: looked.error,
+      message: looked.message || 'Not authorized for this object',
+      field: looked.field,
+    };
   }
 
   if (bucket === 'tenant-documents') {

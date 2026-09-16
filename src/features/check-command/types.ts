@@ -19,10 +19,14 @@ export interface CheckPayee {
 export interface CheckAltDepositSummary {
   id: string;
   status: string | null;
+  checkalt_reference?: string | null;
   submitted_at: string | null;
   approved_at: string | null;
   updated_at: string | null;
   last_status_payload?: Record<string, unknown> | null;
+  status_unresolved?: boolean | null;
+  provider_http_attempted_at?: string | null;
+  failure_class?: string | null;
 }
 
 export interface CheckItem {

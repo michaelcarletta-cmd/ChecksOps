@@ -5,7 +5,8 @@ import { checkAltFetch, getDepositItemStatus } from '../parity/checkalt-client.m
 import { loadProductionCheckAltConfig, loadProductionTenantAccount } from './checkalt-config.mjs';
 import { persistPollOutcome } from './checkalt-idempotency.mjs';
 import { loadProductionCheckAltSecrets } from './checkalt-secrets.mjs';
-import { authorizeCheckAltProduction } from './checkalt-authz.mjs';
+import { authorizeCheckAltProduction, loadTenantRole } from './checkalt-authz.mjs';
+import { roleAllowsFinancial } from '../../financial-authz.mjs';
 
 const jwtCache = { token: null, expiresAt: null };
 
@@ -96,6 +97,39 @@ export const reconciliationRequired = (row, extra = {}) => ({
   applicationUserId: extra.applicationUserId || null,
 });
 
+const LOCATABLE_DEPOSIT_SELECT = `id, tenant_id, check_intake_item_id, checkalt_reference, status, amount, amount_cents,
+            idempotency_key, provider_http_attempted_at, failure_class, last_status_payload,
+            last_error, submitted_at, cleared_at, returned_at, last_polled_at, submitted_by`;
+
+const isLocatableDeposit = (row) => Boolean(
+  row?.checkalt_reference || row?.provider_http_attempted_at,
+);
+
+export async function loadLocatableProductionDeposits(client, { tenantIds = [], depositIds = [], limit = 50 } = {}) {
+  const tenants = [...new Set((tenantIds || []).filter(Boolean))];
+  if (!tenants.length) return [];
+  const ids = [...new Set((depositIds || []).filter(Boolean))];
+  const params = [tenants];
+  let extra = '';
+  if (ids.length) {
+    params.push(ids);
+    extra = ` AND id = ANY($${params.length}::uuid[])`;
+  }
+  params.push(Math.min(Math.max(Number(limit) || 50, 1), 50));
+  return (await client.query(
+    `SELECT ${LOCATABLE_DEPOSIT_SELECT}
+     FROM public.checkalt_deposits
+     WHERE tenant_id = ANY($1::uuid[])
+       AND (
+         checkalt_reference IS NOT NULL
+         OR provider_http_attempted_at IS NOT NULL
+       )${extra}
+     ORDER BY updated_at DESC NULLS LAST, created_at DESC NULLS LAST, id ASC
+     LIMIT $${params.length}`,
+    params,
+  )).rows.filter(isLocatableDeposit);
+}
+
 export async function loadExistingProductionDeposit(client, { depositId, reference, tenantId }) {
   const params = [];
   const clauses = [];
@@ -113,9 +147,7 @@ export async function loadExistingProductionDeposit(client, { depositId, referen
     clauses.push(`tenant_id = $${params.length}::uuid`);
   }
   return (await client.query(
-    `SELECT id, tenant_id, check_intake_item_id, checkalt_reference, status, amount, amount_cents,
-            idempotency_key, provider_http_attempted_at, failure_class, last_status_payload,
-            last_error, submitted_at, cleared_at, returned_at, last_polled_at, submitted_by
+    `SELECT ${LOCATABLE_DEPOSIT_SELECT}
      FROM public.checkalt_deposits
      WHERE ${clauses.join(' AND ')}
      LIMIT 1`,
@@ -200,51 +232,7 @@ export async function reconcileProductionCheckAltDeposit({
   };
 }
 
-export async function handleProductionCheckAltPoll({
-  client,
-  mapping,
-  claims,
-  body,
-  spoof,
-  fetchImpl = fetch,
-  deps = {},
-} = {}) {
-  const depositId = body.deposit_id || body.checkalt_deposit_id || null;
-  const reference = body.checkalt_reference || body.referenceNumber || null;
-  if (!depositId && !reference) {
-    return fail('deposit_locator_required', 400, {
-      message: 'Production poll requires deposit_id or checkalt_reference. It never creates a deposit.',
-    });
-  }
-
-  const row = await loadExistingProductionDeposit(client, { depositId, reference });
-  if (!row) {
-    return fail('deposit_not_found', 404, {
-      message: 'No existing checkalt_deposits row. Poll will not insert a new deposit.',
-      spoofFieldsIgnored: spoof,
-    });
-  }
-
-  const memberships = await membershipsOf(client, mapping.application_user_id);
-  if (!membershipForTenant(memberships, row.tenant_id)) {
-    return fail('cross_tenant_denied', 403, {
-      message: 'Poll is tenant-safe. The deposit does not belong to the authenticated user.',
-      spoofFieldsIgnored: spoof,
-    });
-  }
-
-  const check = (await client.query(
-    `SELECT id, tenant_id, amount, status FROM public.check_intake_items WHERE id = $1::uuid`,
-    [row.check_intake_item_id],
-  )).rows[0] || { id: row.check_intake_item_id, tenant_id: row.tenant_id, amount: row.amount };
-
-  const authz = await authorizeCheckAltProduction({
-    client,
-    mapping,
-    memberships,
-    check,
-    requireStepUp: false,
-  });
+const pollAuthzDenied = (authz, spoof) => {
   if (!authz.ok && authz.error === 'financial_unauthorized') {
     return { ...authz, createdDeposit: false, spoofFieldsIgnored: spoof };
   }
@@ -257,28 +245,167 @@ export async function handleProductionCheckAltPoll({
       spoofFieldsIgnored: spoof,
     });
   }
+  return null;
+};
+
+const batchPollCounts = (results) => {
+  let updated = 0;
+  let errors = 0;
+  for (const item of results) {
+    if (item?.reconciled === true) updated += 1;
+    else if (item?.ok === false) errors += 1;
+  }
+  return { polled: results.length, updated, errors };
+};
+
+export async function handleProductionCheckAltPoll({
+  client,
+  mapping,
+  claims,
+  body,
+  spoof,
+  fetchImpl = fetch,
+  deps = {},
+} = {}) {
+  const depositId = body.deposit_id || body.checkalt_deposit_id || null;
+  const reference = body.checkalt_reference || body.referenceNumber || null;
+  const depositIds = Array.isArray(body.deposit_ids)
+    ? body.deposit_ids.filter((id) => typeof id === 'string' && id)
+    : [];
+  const batchRequested = !depositId && !reference;
+
+  const memberships = await membershipsOf(client, mapping.application_user_id);
+  const caller = {
+    applicationUserId: mapping.application_user_id,
+    authUid: mapping.application_user_id,
+    cognitoSub: claims.sub,
+    createdDeposit: false,
+    spoofFieldsIgnored: spoof,
+  };
+
+  if (!batchRequested) {
+    const row = await loadExistingProductionDeposit(client, { depositId, reference });
+    if (!row) {
+      return fail('deposit_not_found', 404, {
+        message: 'No existing checkalt_deposits row. Poll will not insert a new deposit.',
+        spoofFieldsIgnored: spoof,
+      });
+    }
+    if (!membershipForTenant(memberships, row.tenant_id)) {
+      return fail('cross_tenant_denied', 403, {
+        message: 'Poll is tenant-safe. The deposit does not belong to the authenticated user.',
+        spoofFieldsIgnored: spoof,
+      });
+    }
+    const check = (await client.query(
+      `SELECT id, tenant_id, amount, status FROM public.check_intake_items WHERE id = $1::uuid`,
+      [row.check_intake_item_id],
+    )).rows[0] || { id: row.check_intake_item_id, tenant_id: row.tenant_id, amount: row.amount };
+    const authz = await authorizeCheckAltProduction({
+      client,
+      mapping,
+      memberships,
+      check,
+      requireStepUp: false,
+    });
+    const denied = pollAuthzDenied(authz, spoof);
+    if (denied) return denied;
+    const secrets = await (deps.loadProductionSecrets || loadProductionCheckAltSecrets)(deps.getSecrets);
+    if (!secrets.ok) return { ...secrets, createdDeposit: false, spoofFieldsIgnored: spoof };
+    const loadedCfg = await loadProductionCheckAltConfig(client, { credentials: secrets.credentials });
+    if (!loadedCfg.ok) return { ...loadedCfg, createdDeposit: false, spoofFieldsIgnored: spoof };
+    const acct = await loadProductionTenantAccount(client, row.tenant_id);
+    const result = await reconcileProductionCheckAltDeposit({
+      client,
+      mapping,
+      row,
+      cfg: loadedCfg.cfg,
+      credentials: loadedCfg.credentials,
+      acct,
+      fetchImpl,
+    });
+    const counts = batchPollCounts([result]);
+    return {
+      ...result,
+      ...counts,
+      ...caller,
+    };
+  }
+
+  const financialTenantIds = [];
+  for (const membership of memberships) {
+    const roles = await loadTenantRole(client, mapping.application_user_id, membership.tenant_id);
+    if (roleAllowsFinancial(roles)) financialTenantIds.push(membership.tenant_id);
+  }
+  if (!financialTenantIds.length) {
+    return fail('financial_unauthorized', 403, {
+      message: 'Operator cannot poll production CheckAlt for another authority path.',
+      spoofFieldsIgnored: spoof,
+    });
+  }
+
+  const rows = await loadLocatableProductionDeposits(client, {
+    tenantIds: financialTenantIds,
+    depositIds,
+    limit: 50,
+  });
+  if (!rows.length) {
+    return {
+      ok: true,
+      statusCode: 200,
+      success: true,
+      polled: 0,
+      updated: 0,
+      errors: 0,
+      createdDeposit: false,
+      liveProviderCalled: false,
+      productionRecordsMutated: false,
+      results: [],
+      ...caller,
+    };
+  }
 
   const secrets = await (deps.loadProductionSecrets || loadProductionCheckAltSecrets)(deps.getSecrets);
   if (!secrets.ok) return { ...secrets, createdDeposit: false, spoofFieldsIgnored: spoof };
   const loadedCfg = await loadProductionCheckAltConfig(client, { credentials: secrets.credentials });
   if (!loadedCfg.ok) return { ...loadedCfg, createdDeposit: false, spoofFieldsIgnored: spoof };
-  const acct = await loadProductionTenantAccount(client, row.tenant_id);
 
-  const result = await reconcileProductionCheckAltDeposit({
-    client,
-    mapping,
-    row,
-    cfg: loadedCfg.cfg,
-    credentials: loadedCfg.credentials,
-    acct,
-    fetchImpl,
-  });
+  const results = [];
+  const accounts = new Map();
+  for (const row of rows) {
+    if (!accounts.has(row.tenant_id)) {
+      accounts.set(row.tenant_id, await loadProductionTenantAccount(client, row.tenant_id));
+    }
+    try {
+      results.push(await reconcileProductionCheckAltDeposit({
+        client,
+        mapping,
+        row,
+        cfg: loadedCfg.cfg,
+        credentials: loadedCfg.credentials,
+        acct: accounts.get(row.tenant_id),
+        fetchImpl,
+      }));
+    } catch {
+      results.push({
+        ok: false,
+        createdDeposit: false,
+        deposit_id: row.id,
+        checkalt_reference: row.checkalt_reference,
+        error: 'poll_failed',
+      });
+    }
+  }
+  const counts = batchPollCounts(results);
   return {
-    ...result,
-    spoofFieldsIgnored: spoof,
-    applicationUserId: mapping.application_user_id,
-    authUid: mapping.application_user_id,
-    cognitoSub: claims.sub,
+    ok: true,
+    statusCode: 200,
+    success: counts.errors === 0,
+    ...counts,
     createdDeposit: false,
+    liveProviderCalled: results.some((item) => item?.liveProviderCalled === true),
+    productionRecordsMutated: results.some((item) => item?.productionRecordsMutated === true),
+    results,
+    ...caller,
   };
 }
