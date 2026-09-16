@@ -135,8 +135,8 @@
       "production_active": false,
       "environment": "unknown",
       "source": {
-        "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
-        "tree_hash": "ac0a2c99a633ec72df6c42730e95197a6e247d926fccb3e290e2c356b2bedafe",
+        "git_sha": "bd97367b76a52444aa8b1438a3f035b6c4ea09b1",
+        "tree_hash": "8f10507527080672924fcf91967e4d155d6fcf97e68921a4acdeb01d2a17c6b8",
         "merged": true,
         "merged_pr": null
       },
@@ -177,7 +177,7 @@
         "deployed Lambda version"
       ],
       "open_pr_overlap": ["#327", "#332", "#339", "#322", "#323"],
-      "notes": "template.yaml on main keeps AWS_CHECKALT_ENABLED false. Background says execution was enabled during cutover. UNVERIFIED."
+      "notes": "template.yaml on main keeps AWS_CHECKALT_ENABLED false. PR #359 retargets tree_hash for persistPollOutcome FinCapture depositDate mapping only. Writer SQL remains NOT_APPLIED. UNVERIFIED."
     },
     "financial-ledger": {
       "id": "financial-ledger",
@@ -294,8 +294,8 @@
       "production_active": false,
       "environment": "source-only",
       "source": {
-        "git_sha": "aad900a93a773a6b9f8efeea7cb75c8a77bea76d",
-        "tree_hash": "42ad751d8e58546f7d07a88227c3c309a46c8122579529fa65967b63d06d90ea",
+        "git_sha": "bd97367b76a52444aa8b1438a3f035b6c4ea09b1",
+        "tree_hash": "0abada82a6696041c5e19605790cc4bec843ddbf1501e8e74df54a10a0133ba4",
         "merged": true,
         "merged_pr": 354
       },
@@ -358,8 +358,8 @@
         "production SPA bundle fingerprint after publishing the reviewed main SHA",
         "Lambda version serving partner-share-lifecycle.mjs / authorization.mjs"
       ],
-      "open_pr_overlap": ["#357"],
-      "notes": "SQL 31/32/33/34 are APPLIED IN PRODUCTION (ledger apply_evidence + ops/release-locks/proof/c1c-partner-share-production-apply.md). Do not reapply. required_sql.applied stays false because SOURCE_LOCKED_NOT_ACTIVE cannot claim production-applied SQL. #350/#354 runtime is on main aad900a93; partner-sharing tree_hash is retargeted to that main tree plus these lock/docs/tests. Ownership and visibility are separate; never transfer check tenant_id to repair partner access."
+      "open_pr_overlap": ["#339", "#347", "#342", "#332", "#327"],
+      "notes": "SQL 31/32/33/34 are APPLIED IN PRODUCTION (ledger apply_evidence + ops/release-locks/proof/c1c-partner-share-production-apply.md). Do not reapply. required_sql.applied stays false because SOURCE_LOCKED_NOT_ACTIVE cannot claim production-applied SQL. PR #359 retargets tree_hash for Manager navigation and tenants_public partner names; SQL 31-34, Partner Codes, and shared_checks are unchanged. Ownership and visibility are separate; never transfer check tenant_id to repair partner access."
     },
     "mortgage-ops": {
       "id": "mortgage-ops",
@@ -555,8 +555,8 @@
       "production_active": false,
       "environment": "unknown",
       "source": {
-        "git_sha": "0792e849bbc063f20708b78bdd1ba5c66d9ed776",
-        "tree_hash": "0f77e1692c7edd5ab33c25565ecfb0863fc26f778c2ec1ce18a7cf2f4b6100b2",
+        "git_sha": "bd97367b76a52444aa8b1438a3f035b6c4ea09b1",
+        "tree_hash": "0ab91fd43c908d9261cb346fb059cf7eb04e9207d49bcaa4fe51baca76c39afb",
         "merged": true,
         "merged_pr": 343
       },
