@@ -81,6 +81,10 @@ import { handleSendPaymentDirectionRequest } from './payment-direction-email.mjs
 import { handleAdminResetTotp } from './admin-reset-totp.mjs';
 import { handleBillMortgageHandling } from './bill-mortgage-handling.mjs';
 import { handleCheckAltDepositPreflight } from './providers/production/checkalt-preflight.mjs';
+import {
+  handleCheckAltAutoDepositOnReady,
+  handleCheckAltAutoDepositSettings,
+} from './providers/production/checkalt-auto-deposit-http.mjs';
 import { handleTaxProfiles } from './tax-profiles.mjs';
 
 export const CLASS_A_FUNCTIONS = new Set([
@@ -129,6 +133,8 @@ export const CLASS_A_FUNCTIONS = new Set([
   'admin-reset-totp',
   'bill-mortgage-handling',
   'checkalt-deposit-preflight',
+  'checkalt-auto-deposit-settings',
+  'checkalt-auto-deposit-on-ready',
   'homeowner-upload-otp-start',
   'homeowner-upload-otp-verify',
   'homeowner-upload-session',
@@ -263,6 +269,10 @@ export const handleAppServiceRequest = async (event, path, method) => {
       return handleBillMortgageHandling(event);
     case 'checkalt-deposit-preflight':
       return handleCheckAltDepositPreflight(event);
+    case 'checkalt-auto-deposit-settings':
+      return handleCheckAltAutoDepositSettings(event);
+    case 'checkalt-auto-deposit-on-ready':
+      return handleCheckAltAutoDepositOnReady(event);
     case 'homeowner-upload-check':
       return handleHomeownerUploadCheck(event);
     case 'homeowner-upload-otp-start':

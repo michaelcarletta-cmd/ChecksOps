@@ -68,7 +68,13 @@ export const associateAwsTotp = async (email?: string | null) => {
 
 const totpBody = (
   code: unknown,
-  extra: { actionKey?: string; tenantId?: string | null; checkId?: string | null } = {},
+  extra: {
+    actionKey?: string;
+    tenantId?: string | null;
+    checkId?: string | null;
+    autoDepositEnabled?: boolean;
+    autoDepositMaxCents?: number | null;
+  } = {},
 ) => {
   const normalized = normalizeTotpCode(code);
   if (!normalized.ok) {
@@ -79,6 +85,14 @@ const totpBody = (
     action_key: extra.actionKey,
     tenant_id: extra.tenantId || undefined,
     check_intake_item_id: extra.checkId || undefined,
+    ...(extra.actionKey === "checkalt.auto_deposit.configure"
+      ? {
+          auto_deposit_enabled: extra.autoDepositEnabled === true,
+          auto_deposit_max_cents: Number.isInteger(extra.autoDepositMaxCents)
+            ? extra.autoDepositMaxCents
+            : null,
+        }
+      : {}),
   };
 };
 
@@ -103,11 +117,15 @@ export const stepUpAwsTotp = async (input: {
   actionKey?: string;
   tenantId?: string | null;
   checkId?: string | null;
+  autoDepositEnabled?: boolean;
+  autoDepositMaxCents?: number | null;
 }) => {
   const payload = await postTotp("/auth/mfa/step-up", totpBody(input.code, {
     actionKey: input.actionKey || "deposit.submit",
     tenantId: input.tenantId,
     checkId: input.checkId,
+    autoDepositEnabled: input.autoDepositEnabled,
+    autoDepositMaxCents: input.autoDepositMaxCents,
   }));
   return Boolean(payload.verified || payload.ok);
 };

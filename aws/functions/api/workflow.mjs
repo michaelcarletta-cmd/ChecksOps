@@ -365,6 +365,30 @@ export const handleCheckTransition = async (event, deps = {}) => {
         }),
       ],
     );
+    let autoDeposit = null;
+    if (decided.readyForProviderExecution === true) {
+      try {
+        const { maybeRunCheckAltAutoDeposit } = await import('./providers/production/checkalt-auto-deposit.mjs');
+        autoDeposit = await maybeRunCheckAltAutoDeposit({
+          client,
+          mapping,
+          claims,
+          check: rows[0],
+          previous: looked.check,
+          trigger: 'ready_transition',
+          spoof,
+          deps,
+        });
+      } catch (error) {
+        autoDeposit = {
+          submitted: false,
+          eligible: false,
+          reason: 'gates_failed',
+          interactiveTotp: false,
+          error: String(error?.message || error).slice(0, 200),
+        };
+      }
+    }
     return okResult({
       mapping,
       claims,
@@ -376,8 +400,9 @@ export const handleCheckTransition = async (event, deps = {}) => {
         toStatus: decided.nextStatus,
         toStage: decided.nextStage,
         readyForProviderExecution: decided.readyForProviderExecution,
-        providerExecution: false,
+        providerExecution: autoDeposit?.submitted === true,
         financialAuthorization: false,
+        autoDeposit,
       },
     });
   }, deps);

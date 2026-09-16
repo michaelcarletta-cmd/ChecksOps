@@ -21,19 +21,29 @@ export function useFinancialGuard(tenantId?: string | null) {
         checkId?: string | null;
         amount?: unknown;
         amount_cents?: unknown;
+        autoDepositEnabled?: boolean;
+        autoDepositMaxCents?: number | null;
       },
     ) => {
       const built = buildFinancialStepUpRequest({
         actionKey,
         checkId: extra?.checkId,
-        title: actionKey === "deposit.submit" ? "Deposit Verification" : undefined,
+        title: actionKey === "deposit.submit"
+          ? "Deposit Verification"
+          : actionKey === "checkalt.auto_deposit.configure"
+            ? "Auto-Deposit Settings"
+            : undefined,
         description: extra?.description
           || (actionKey === "deposit.submit"
             ? "Enter the current 6-digit code from your authenticator app to authorize this deposit."
-            : undefined),
+            : actionKey === "checkalt.auto_deposit.configure"
+              ? "Enter the current 6-digit code to change tenant Auto-Deposit settings."
+              : undefined),
         tenantId,
         amount: extra?.amount,
         amount_cents: extra?.amount_cents,
+        autoDepositEnabled: extra?.autoDepositEnabled,
+        autoDepositMaxCents: extra?.autoDepositMaxCents,
       });
       if (!built.ok) {
         throw new Error((built as { message?: string }).message ?? "Financial authorization failed");

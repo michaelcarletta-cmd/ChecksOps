@@ -110,6 +110,12 @@ export async function handleProductionCheckAltSubmit({
       ignored: ignoredOwnershipSpoof(body),
     });
   }
+  if (body.auto_deposit || body.autoDeposit || body.skip_step_up || body.requireStepUp === false
+    || body.auto_deposit_authority || body.submission_source) {
+    return fail('untrusted_auto_deposit_authority', 403, {
+      message: 'Auto-Deposit authority is server-derived from the tenant setting and Ready transition. Browser flags are ignored.',
+    });
+  }
 
   const check = (await client.query(
     `SELECT ${CHECK_ELIGIBILITY_SELECT}
@@ -131,34 +137,48 @@ export async function handleProductionCheckAltSubmit({
     });
   }
 
+  const autoAuthority = deps.autoDepositAuthority && deps.autoDepositAuthority.enabled === true
+    ? deps.autoDepositAuthority
+    : null;
   const memberships = await membershipsOf(client, mapping.application_user_id);
-  const ownership = verifyOwnershipChain({
-    applicationUserId: mapping.application_user_id,
-    memberships,
-    check,
-    claimed: body,
-  });
-  if (!ownership.ok) {
-    return fail(ownership.error || 'cross_tenant_denied', ownership.statusCode || 403, {
-      field: ownership.field,
-      spoofFieldsIgnored: { ...spoof, ignoredOwnership: ownership.ignored },
+  if (!autoAuthority) {
+    const ownership = verifyOwnershipChain({
+      applicationUserId: mapping.application_user_id,
+      memberships,
+      check,
+      claimed: body,
+    });
+    if (!ownership.ok) {
+      return fail(ownership.error || 'cross_tenant_denied', ownership.statusCode || 403, {
+        field: ownership.field,
+        spoofFieldsIgnored: { ...spoof, ignoredOwnership: ownership.ignored },
+      });
+    }
+
+    const authz = await authorizeCheckAltProduction({
+      client,
+      mapping,
+      memberships,
+      check,
+      requireStepUp: true,
+    });
+    if (!authz.ok) return { ...authz, spoofFieldsIgnored: spoof };
+  } else if (!Number.isInteger(Number(autoAuthority.maxCents))) {
+    return fail('invalid_threshold', 400, {
+      message: 'Auto-Deposit requires a tenant threshold in integer cents.',
     });
   }
-
-  const authz = await authorizeCheckAltProduction({
-    client,
-    mapping,
-    memberships,
-    check,
-    requireStepUp: true,
-  });
-  if (!authz.ok) return { ...authz, spoofFieldsIgnored: spoof };
 
   const formatted = formatCheckAltUserAmount(check.amount);
   if (formatted?.error) return fail(formatted.message || 'invalid_amount', 400);
   const centsCheck = validateProviderCents(formatted.userAmount);
   if (centsCheck.error) return fail(centsCheck.message || 'invalid_amount', 400);
   const userAmount = centsCheck.cents;
+  if (autoAuthority && userAmount > Number(autoAuthority.maxCents)) {
+    return fail('above_threshold', 409, {
+      message: 'Check amount exceeds the tenant Auto-Deposit threshold. Left in Ready for manual deposit.',
+    });
+  }
 
   const idempotencyKey = checkAltIdempotencyKey({
     tenantId: check.tenant_id,
@@ -304,6 +324,7 @@ export async function handleProductionCheckAltSubmit({
       mapping,
       amountCents: userAmount,
       idempotencyKey,
+      submissionSource: autoAuthority ? 'auto_deposit' : 'manual',
     });
   if (!queued.ok) return { ...queued, spoofFieldsIgnored: spoof };
   if (queued.duplicate && shouldReconcileInsteadOfPost(queued.row)) {
@@ -437,7 +458,9 @@ export async function handleProductionCheckAltSubmit({
       spoofFieldsIgnored: spoof,
       applicationUserId: mapping.application_user_id,
       authUid: mapping.application_user_id,
-      cognitoSub: claims.sub,
+      cognitoSub: claims?.sub,
+      submission_source: autoAuthority ? 'auto_deposit' : 'manual',
+      interactiveTotp: !autoAuthority,
     };
   } catch (error) {
     if (isProviderNetworkError(error)) {

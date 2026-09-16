@@ -6,6 +6,7 @@ import {
   cacheAllowsReuse,
   changingCheckRequiresNewAuth,
   isCheckBoundAction,
+  isTenantBoundAction,
   stepUpCacheKey,
 } from '../../src/lib/financialStepUp.ts';
 import { stepUpMatchesCheck } from '../functions/api/providers/production/checkalt-authz.mjs';
@@ -43,10 +44,19 @@ test('deposit.submit requires a check id and passes that check through', () => {
 test('missing check fails closed and non-deposit actions stay unbound', () => {
   assert.equal(isCheckBoundAction('deposit.submit'), true);
   assert.equal(isCheckBoundAction('deposit.approve'), true);
+  assert.equal(isCheckBoundAction('checkalt.auto_deposit.configure'), false);
   assert.equal(isCheckBoundAction('disbursement.send'), false);
   const payroll = buildFinancialStepUpRequest({ actionKey: 'payroll.run' });
   assert.equal(payroll.ok, true);
   assert.equal(payroll.request.checkId, null);
+  assert.equal(isTenantBoundAction('checkalt.auto_deposit.configure'), true);
+  const configure = buildFinancialStepUpRequest({
+    actionKey: 'checkalt.auto_deposit.configure',
+    tenantId: TENANT_A,
+  });
+  assert.equal(configure.ok, true);
+  assert.equal(stepUpCacheKey(USER, 'checkalt.auto_deposit.configure', null, TENANT_A)
+    !== stepUpCacheKey(USER, 'deposit.submit', CHECK_A), true);
 });
 
 test('changing check requires new authorization; stale cache cannot authorize another check', () => {
