@@ -275,10 +275,16 @@ test('deploy guard with production intent and no valid candidate fails', () => {
   assert.equal(guardMain([], ROOT, { CHECKSOPS_PRODUCTION_DEPLOY: '1' }), 1);
 });
 
-test('clean manifest validation still succeeds as genesis', () => {
+test('clean manifest validation succeeds against the trusted base after genesis merge', () => {
   const inputs = loadReleaseLockInputs(ROOT);
   const { errors, genesis } = validateReleaseLocks(inputs);
   assert.deepEqual(errors, []);
-  assert.equal(genesis, true);
+  // PR #343 was the genesis snapshot. After it merged, origin/main has the ledger
+  // so validation is append-only against the trusted base, not a second genesis.
+  assert.equal(genesis, !inputs.base.ledger);
+  if (inputs.base.ledger) {
+    assert.equal(typeof inputs.base.sha, 'string');
+    assert.equal(inputs.base.sha.length, 40);
+  }
   assert.equal(validateMain([], ROOT), 0);
 });

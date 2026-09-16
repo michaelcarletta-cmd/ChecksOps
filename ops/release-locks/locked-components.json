@@ -539,10 +539,10 @@
       "production_active": false,
       "environment": "unknown",
       "source": {
-        "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
-        "tree_hash": "792c90e9f20635ae780e05bc4726dd1f81bd7c53967389fe13e1f2ef56df2067",
-        "merged": false,
-        "merged_pr": null
+        "git_sha": "0792e849bbc063f20708b78bdd1ba5c66d9ed776",
+        "tree_hash": "83f871a6045572701a775788965e46d827f49d183f9e5e9a18c71aaf0b2403d7",
+        "merged": true,
+        "merged_pr": 343
       },
       "required_sql": [],
       "artifact": {
