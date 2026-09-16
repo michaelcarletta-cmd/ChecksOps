@@ -294,10 +294,10 @@
       "production_active": false,
       "environment": "source-only",
       "source": {
-        "git_sha": "9aac7bb5b1ed0a8d03e305552797a9acfacc7f64",
-        "tree_hash": "d44937a54427261c52bf516230637d59093a91c3299a9ebd1b8ff39cb4729122",
-        "merged": false,
-        "merged_pr": 302
+        "git_sha": "aad900a93a773a6b9f8efeea7cb75c8a77bea76d",
+        "tree_hash": "42ad751d8e58546f7d07a88227c3c309a46c8122579529fa65967b63d06d90ea",
+        "merged": true,
+        "merged_pr": 354
       },
       "required_sql": [
         {
@@ -352,15 +352,14 @@
       "rollback": {
         "git_sha": "faf9b82e728bd7ef42009e4c96ace05c7bd7232f",
         "artifact": null,
-        "notes": "PR #302 remains the merged 31/32 source pin. 33/34 and the C1C UI/API repair are unmerged on PR #350 HEAD 9aac7bb5b1ed0a8d03e305552797a9acfacc7f64. Do not revert production SQL."
+        "notes": "PR #302 remains the merged 31/32 source pin. #350 and #354 are on main aad900a93. Do not revert production SQL."
       },
       "missing_evidence": [
-        "merged git SHA for 33/34 plus authorization/UI repair (#350 still open)",
-        "Lambda version serving partner-share-lifecycle.mjs / authorization.mjs",
-        "SPA bundle fingerprint for ShareCheckDialog and CheckCommandCenter partner queue"
+        "production SPA bundle fingerprint after publishing the reviewed main SHA",
+        "Lambda version serving partner-share-lifecycle.mjs / authorization.mjs"
       ],
-      "open_pr_overlap": ["#350", "#347", "#342", "#339", "#332", "#327", "#312"],
-      "notes": "SQL 31/32/33/34 are APPLIED IN PRODUCTION (ledger apply_evidence + ops/release-locks/proof/c1c-partner-share-production-apply.md). Do not reapply. required_sql.applied stays false because SOURCE_LOCKED_NOT_ACTIVE cannot claim production-applied SQL and the application/API/UI tree is not on main. Ownership and visibility are separate; never transfer check tenant_id to repair partner access."
+      "open_pr_overlap": ["#357"],
+      "notes": "SQL 31/32/33/34 are APPLIED IN PRODUCTION (ledger apply_evidence + ops/release-locks/proof/c1c-partner-share-production-apply.md). Do not reapply. required_sql.applied stays false because SOURCE_LOCKED_NOT_ACTIVE cannot claim production-applied SQL. #350/#354 runtime is on main aad900a93; partner-sharing tree_hash is retargeted to that main tree plus these lock/docs/tests. Ownership and visibility are separate; never transfer check tenant_id to repair partner access."
     },
     "mortgage-ops": {
       "id": "mortgage-ops",
