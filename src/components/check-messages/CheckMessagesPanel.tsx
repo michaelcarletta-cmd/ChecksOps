@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Loader2, MessageSquare, Search } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { CheckMessageThread } from "./CheckMessageThread";
+import { resolveMessageThreadTitle } from "@/lib/messageThreadTitle";
 
 interface UnreadRow {
   check_id: string;
@@ -22,6 +23,24 @@ interface CheckSummary {
   status: string | null;
   payee_line: string | null;
   claims: { claim_number: string | null; policyholder_name: string | null } | null;
+  check_payees: { payee_name: string | null; payee_type: string | null }[] | null;
+}
+
+function claimFromEmbed(
+  claims: CheckSummary["claims"] | CheckSummary["claims"][] | null | undefined,
+): { claim_number: string | null; policyholder_name: string | null } | null {
+  if (!claims) return null;
+  if (Array.isArray(claims)) return claims[0] ?? null;
+  return claims;
+}
+
+function threadTitleForCheck(check: CheckSummary): string | null {
+  const claim = claimFromEmbed(check.claims);
+  return resolveMessageThreadTitle({
+    payees: check.check_payees,
+    policyholderName: claim?.policyholder_name,
+    fallbackTitle: check.payee_line,
+  });
 }
 
 
@@ -91,12 +110,12 @@ export function CheckMessagesPanel({ onOpenCheck }: CheckMessagesPanelProps = {}
   const checkIds = mergedRows.map((r) => r.check_id);
 
   const { data: checks = [], isLoading: checksLoading } = useQuery({
-    queryKey: ["check-messages-checks", checkIds.sort().join(",")],
+    queryKey: ["check-messages-checks", "insured-title", checkIds.sort().join(",")],
     queryFn: async () => {
       if (checkIds.length === 0) return [] as CheckSummary[];
       const { data, error } = await supabase
         .from("check_intake_items")
-        .select("id, check_number, carrier_name, amount, status, payee_line, claims(claim_number, policyholder_name)")
+        .select("id, check_number, carrier_name, amount, status, payee_line, claims(claim_number, policyholder_name), check_payees(payee_name, payee_type)")
         .in("id", checkIds);
       if (error) throw error;
       return (data ?? []) as unknown as CheckSummary[];
@@ -113,12 +132,15 @@ export function CheckMessagesPanel({ onOpenCheck }: CheckMessagesPanelProps = {}
         if (!search.trim()) return true;
         const q = search.toLowerCase();
         const c = r.check!;
+        const threadTitle = threadTitleForCheck(c) ?? "";
+        const claim = claimFromEmbed(c.claims);
         return (
           (c.check_number ?? "").toLowerCase().includes(q) ||
           (c.carrier_name ?? "").toLowerCase().includes(q) ||
           (c.payee_line ?? "").toLowerCase().includes(q) ||
-          (c.claims?.policyholder_name ?? "").toLowerCase().includes(q) ||
-          (c.claims?.claim_number ?? "").toLowerCase().includes(q)
+          threadTitle.toLowerCase().includes(q) ||
+          (claim?.policyholder_name ?? "").toLowerCase().includes(q) ||
+          (claim?.claim_number ?? "").toLowerCase().includes(q)
         );
 
       })
@@ -168,6 +190,8 @@ export function CheckMessagesPanel({ onOpenCheck }: CheckMessagesPanelProps = {}
             rows.map((r) => {
               const c = r.check!;
               const isActive = (selected?.check_id ?? "") === r.check_id;
+              const threadTitle = threadTitleForCheck(c);
+              const claimNumber = claimFromEmbed(c.claims)?.claim_number;
               return (
                 <button
                   key={r.check_id}
@@ -187,20 +211,22 @@ export function CheckMessagesPanel({ onOpenCheck }: CheckMessagesPanelProps = {}
                         <span className="text-xs font-semibold truncate">
                           #{c.check_number || "—"}
                         </span>
-                        {c.claims?.claim_number && (
+                        {claimNumber && (
                           <Badge variant="outline" className="text-[9px] h-4 px-1">
-                            {c.claims.claim_number}
+                            {claimNumber}
                           </Badge>
                         )}
                       </div>
-                      {c.payee_line && (
-                        <div className="text-[11px] font-medium text-foreground truncate" title={c.payee_line}>
-                          {c.payee_line}
+                      {threadTitle && (
+                        <div className="text-[11px] font-medium text-foreground truncate" title={threadTitle}>
+                          {threadTitle}
                         </div>
                       )}
-                      <div className="text-[10px] text-muted-foreground truncate">
-                        {c.claims?.policyholder_name || c.carrier_name || "Unknown"}
-                      </div>
+                      {c.carrier_name && (
+                        <div className="text-[10px] text-muted-foreground truncate">
+                          {c.carrier_name}
+                        </div>
+                      )}
 
                       {r.last_message_at && (
                         <div className="text-[10px] text-muted-foreground mt-0.5">
@@ -228,18 +254,17 @@ export function CheckMessagesPanel({ onOpenCheck }: CheckMessagesPanelProps = {}
             <div className="min-w-0 flex-1">
               <CardTitle className="text-sm">
                 {selected?.check
-                  ? `Check #${selected.check.check_number || "—"} • ${
-                      selected.check.payee_line ||
-                      selected.check.claims?.policyholder_name ||
-                      selected.check.carrier_name ||
-                      "Unknown"
-                    }`
+                  ? [
+                      `Check #${selected.check.check_number || "—"}`,
+                      threadTitleForCheck(selected.check),
+                    ].filter(Boolean).join(" • ")
                   : "Select a conversation"}
               </CardTitle>
               {selected?.check && (
-
                 <div className="text-[11px] text-muted-foreground">
-                  {selected.check.claims?.claim_number && `Claim ${selected.check.claims.claim_number} • `}
+                  {claimFromEmbed(selected.check.claims)?.claim_number
+                    ? `Claim ${claimFromEmbed(selected.check.claims)!.claim_number} • `
+                    : ""}
                   {selected.check.amount != null &&
                     `$${Number(selected.check.amount).toLocaleString()} • `}
                   {selected.check.status}
