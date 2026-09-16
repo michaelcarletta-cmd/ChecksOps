@@ -1,14 +1,20 @@
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenantFilter } from "@/hooks/useTenantFilter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Banknote, ChevronDown, ChevronRight, Clock } from "lucide-react";
+import { Banknote, ChevronDown, ChevronRight, Clock, Settings } from "lucide-react";
 import { format, parseISO } from "date-fns";
+
+const CheckAltSettings = lazy(() =>
+  import("@/components/settings/CheckAltSettings").then((m) => ({ default: m.CheckAltSettings })),
+);
 
 interface DepositRow {
   id: string;
@@ -28,17 +34,28 @@ interface DepositRow {
 const fmtMoney = (n: number | null | undefined) =>
   `$${(n ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-const safeDate = (iso: string | null) => {
-  if (!iso) return null;
+/** Bank-credit day from persisted FinCapture depositDate (cleared_at) or submitted_at. */
+export const bankDepositDayKey = (iso: string | null | undefined) => {
+  if (!iso) return "unknown";
+  const day = String(iso).slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : "unknown";
+};
+
+export const sumDepositAmounts = (rows: { amount: number | null | undefined }[]) =>
+  rows.reduce((s, r) => s + Number(r.amount ?? 0), 0);
+
+const labelForDay = (dayKey: string) => {
+  if (dayKey === "unknown") return "Date unknown";
   try {
-    return parseISO(iso);
+    return format(parseISO(`${dayKey}T12:00:00.000Z`), "EEE, MMM d, yyyy");
   } catch {
-    return null;
+    return dayKey;
   }
 };
 
 interface DepositGroup {
   key: string;
+  dayKey: string;
   label: string;
   settled: boolean;
   total: number;
@@ -48,6 +65,8 @@ interface DepositGroup {
 export default function BankDepositReconciliation({ searchQuery = "" }: { searchQuery?: string }) {
   const { tenantId } = useTenantFilter();
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [jumpDate, setJumpDate] = useState("");
+  const [showSettings, setShowSettings] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["bank-deposit-reconciliation", tenantId],
@@ -87,22 +106,21 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
     const map = new Map<string, DepositGroup>();
     for (const row of rows) {
       const settled = !!row.cleared_at;
-      const basis = row.cleared_at ?? row.submitted_at;
-      const d = safeDate(basis);
-      const dayKey = d ? format(d, "yyyy-MM-dd") : "unknown";
+      const dayKey = bankDepositDayKey(row.cleared_at ?? row.submitted_at);
       const key = `${settled ? "settled" : "pending"}:${dayKey}`;
       if (!map.has(key)) {
         map.set(key, {
           key,
-          label: d ? format(d, "EEE, MMM d, yyyy") : "Date unknown",
+          dayKey,
+          label: labelForDay(dayKey),
           settled,
           total: 0,
           rows: [],
         });
       }
       const g = map.get(key)!;
-      g.total += Number(row.amount ?? 0);
       g.rows.push(row);
+      g.total = sumDepositAmounts(g.rows);
     }
 
     return Array.from(map.values()).sort((a, b) => {
@@ -111,8 +129,24 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
     });
   }, [data, searchQuery]);
 
-  const settledTotal = groups.filter((g) => g.settled).reduce((s, g) => s + g.total, 0);
-  const pendingTotal = groups.filter((g) => !g.settled).reduce((s, g) => s + g.total, 0);
+  const visibleGroups = useMemo(() => {
+    if (!jumpDate) return groups;
+    return groups.filter((g) => g.dayKey === jumpDate);
+  }, [groups, jumpDate]);
+
+  useEffect(() => {
+    if (!jumpDate) return;
+    setExpanded((prev) => {
+      const next = { ...prev };
+      for (const g of groups) {
+        if (g.dayKey === jumpDate) next[g.key] = true;
+      }
+      return next;
+    });
+  }, [jumpDate, groups]);
+
+  const settledTotal = visibleGroups.filter((g) => g.settled).reduce((s, g) => s + g.total, 0);
+  const pendingTotal = visibleGroups.filter((g) => !g.settled).reduce((s, g) => s + g.total, 0);
 
   if (isLoading) {
     return (
@@ -125,6 +159,51 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
 
   return (
     <div className="space-y-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="space-y-1">
+          <Label htmlFor="bank-deposit-date" className="text-xs text-muted-foreground">
+            Jump to deposit date
+          </Label>
+          <div className="flex items-center gap-2">
+            <Input
+              id="bank-deposit-date"
+              type="date"
+              value={jumpDate}
+              onChange={(e) => setJumpDate(e.target.value)}
+              className="h-9 w-[11.5rem]"
+            />
+            {jumpDate && (
+              <Button type="button" size="sm" variant="ghost" onClick={() => setJumpDate("")}>
+                All days
+              </Button>
+            )}
+          </div>
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          variant={showSettings ? "default" : "outline"}
+          onClick={() => setShowSettings((v) => !v)}
+          className="gap-1.5"
+        >
+          <Settings className="h-3.5 w-3.5" />
+          Settings
+        </Button>
+      </div>
+
+      {showSettings && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">CheckAlt Settings</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Suspense fallback={<Skeleton className="h-40 w-full" />}>
+              <CheckAltSettings />
+            </Suspense>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid gap-3 sm:grid-cols-2">
         <Card>
           <CardHeader className="pb-2">
@@ -150,18 +229,20 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
 
       <p className="text-xs text-muted-foreground">
         Each row below is one bank credit. Expand a day to see exactly which checks make up that amount.
+        Daily total equals the sum of the checks shown.
       </p>
 
-      {groups.length === 0 && (
+      {visibleGroups.length === 0 && (
         <Card>
           <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            No deposits found yet.
+            {jumpDate ? `No deposits on ${labelForDay(jumpDate)}.` : "No deposits found yet."}
           </CardContent>
         </Card>
       )}
 
-      {groups.map((g) => {
+      {visibleGroups.map((g) => {
         const isOpen = expanded[g.key] ?? false;
+        const displayedSum = sumDepositAmounts(g.rows);
         return (
           <Card key={g.key}>
             <button
@@ -211,6 +292,12 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
                           <TableCell className="text-right tabular-nums whitespace-nowrap">{fmtMoney(r.amount)}</TableCell>
                         </TableRow>
                       ))}
+                      <TableRow>
+                        <TableCell colSpan={6} className="font-medium">TOTAL</TableCell>
+                        <TableCell className="text-right font-semibold tabular-nums whitespace-nowrap">
+                          {fmtMoney(displayedSum)}
+                        </TableCell>
+                      </TableRow>
                     </TableBody>
                   </Table>
                 </div>
@@ -233,7 +320,7 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
                           .map((v) => `"${String(v).replace(/"/g, '""')}"`)
                           .join(","),
                       );
-                      const csv = [header, ...lines, `"TOTAL","","","","","","${g.total.toFixed(2)}"`].join("\n");
+                      const csv = [header, ...lines, `"TOTAL","","","","","","${displayedSum.toFixed(2)}"`].join("\n");
                       const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
                       const a = document.createElement("a");
                       a.href = url;

@@ -12,7 +12,7 @@ import {
 } from '../functions/api/provider-flags.mjs';
 import { PROVIDER_EXECUTION_PERMISSIONS } from '../functions/api/provider-authz.mjs';
 import { FUNCTION_BY_NAME, PROVIDER_FUNCTIONS, classifyFunction } from '../functions/api/providers/catalog.mjs';
-import { dollarsToIntegerCents, formatCheckAltUserAmount, mapCheckAltStatus } from '../functions/api/providers/amounts.mjs';
+import { dollarsToIntegerCents, extractFinCaptureDepositDate, formatCheckAltUserAmount, mapCheckAltStatus } from '../functions/api/providers/amounts.mjs';
 import { hmacHex, safeEqual, verifyHmacBodySignature, verifyMoovSignature } from '../functions/api/providers/hmac.mjs';
 import { evaluateReadiness } from '../functions/api/providers/readiness.mjs';
 import { handleProviderRequest } from '../functions/api/providers.mjs';
@@ -247,6 +247,16 @@ test('CheckAlt integer-cents formatting', () => {
   assert.equal(dollarsToIntegerCents(0.1).cents, 10);
   assert.equal(mapCheckAltStatus({ statusCode: 40 }), 'pending_approval');
   assert.equal(mapCheckAltStatus({ status: 'cleared' }), 'cleared');
+});
+
+test('FinCapture depositDate is extracted and submittedDate is ignored', () => {
+  assert.equal(extractFinCaptureDepositDate({ depositDate: '2026-09-16' }), '2026-09-16T12:00:00.000Z');
+  assert.equal(
+    extractFinCaptureDepositDate({ status: 'cleared', history: { depositDate: '2026-09-16' } }),
+    '2026-09-16T12:00:00.000Z',
+  );
+  assert.equal(extractFinCaptureDepositDate({ submittedDate: '2026-09-01', createdDate: '2026-09-02' }), null);
+  assert.equal(extractFinCaptureDepositDate({ DepositDate: '09/16/2026' }), '2026-09-16T12:00:00.000Z');
 });
 
 test('Moov readiness is local-only and does not claim live provider state', () => {

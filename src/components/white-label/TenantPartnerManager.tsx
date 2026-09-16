@@ -38,18 +38,35 @@ export function TenantPartnerManager() {
     refetchOnMount: "always",
   });
 
-  // Active partnerships
+  // Active partnerships. Names come from tenants_public — AWS RLS on base
+  // tenants is membership-only, so the old inviter/invitee embed rendered Unknown.
   const { data: partnerships = [] } = useQuery({
     queryKey: ["tenant-partnerships", tenantId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tenant_partnerships")
-        .select("*, inviter:tenants!tenant_partnerships_inviter_tenant_id_fkey(name), invitee:tenants!tenant_partnerships_invitee_tenant_id_fkey(name)")
+        .select("id, inviter_tenant_id, invitee_tenant_id, status, created_at")
         .eq("status", "active")
         .or(`inviter_tenant_id.eq.${tenantId},invitee_tenant_id.eq.${tenantId}`)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []) as any[];
+      const rows = (data ?? []) as any[];
+      const partnerIds = [...new Set(rows.map((p) =>
+        p.inviter_tenant_id === tenantId ? p.invitee_tenant_id : p.inviter_tenant_id,
+      ).filter(Boolean))];
+      let names = new Map<string, string>();
+      if (partnerIds.length) {
+        const { data: tenants, error: tErr } = await supabase
+          .from("tenants_public" as any)
+          .select("id, name")
+          .in("id", partnerIds);
+        if (tErr) throw tErr;
+        names = new Map((tenants ?? []).map((t: any) => [t.id, t.name]));
+      }
+      return rows.map((p) => {
+        const partnerId = p.inviter_tenant_id === tenantId ? p.invitee_tenant_id : p.inviter_tenant_id;
+        return { ...p, partnerName: names.get(partnerId) ?? null };
+      });
     },
     enabled: !!tenantId,
   });
@@ -203,9 +220,7 @@ export function TenantPartnerManager() {
         ) : (
           <div className="space-y-3">
             {partnerships.map((p: any) => {
-              const partnerName = p.inviter_tenant_id === tenantId
-                ? p.invitee?.name
-                : p.inviter?.name;
+              const partnerName = p.partnerName;
               return (
                 <div
                   key={p.id}

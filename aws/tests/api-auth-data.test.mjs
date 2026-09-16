@@ -16,6 +16,7 @@ import {
   parseOrExpr,
   parseSelect,
   embedColumnSql,
+  embedRelationTable,
   relatedFk,
   resolvePageLimit,
   resolvePageOffset,
@@ -108,6 +109,10 @@ test('parseSelect supports named FK hints and aliases used by partners/shared ch
   assert.equal(fkColumnFromHint('tenant_partnerships', partners.embeds[0].fkHint), 'inviter_tenant_id');
   assert.equal(partners.embeds[1].alias, 'invitee');
   assert.equal(fkColumnFromHint('tenant_partnerships', partners.embeds[1].fkHint), 'invitee_tenant_id');
+  assert.equal(embedRelationTable('tenants', partners.embeds[0].columns), 'tenants_public');
+  assert.equal(embedRelationTable('tenants', ['name']), 'tenants_public');
+  assert.equal(embedRelationTable('tenants', ['*']), 'tenants');
+  assert.equal(embedRelationTable('tenants_public', ['name']), 'tenants_public');
 });
 
 const FUNDS_RELEASED_SELECT = `

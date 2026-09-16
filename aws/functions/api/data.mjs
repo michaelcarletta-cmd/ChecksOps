@@ -281,6 +281,25 @@ export const embedColumnSql = (columns) => {
   return columns.map((c) => ident(c, 'column')).join(', ');
 };
 
+const TENANTS_PUBLIC_COLUMNS = new Set([
+  'id', 'name', 'slug', 'logo_url', 'primary_color', 'secondary_color',
+  'custom_domain', 'subscription_status', 'plan_tier', 'is_system_tenant', 'partner_code',
+]);
+
+/**
+ * AWS RLS `aws_select_tenants` is membership-only. Partner names must come
+ * from `tenants_public` (security_invoker=false), not base `tenants`.
+ */
+export const embedRelationTable = (embedTable, columns = []) => {
+  if (embedTable !== 'tenants') return embedTable;
+  const requested = (columns || []).filter((c) => c && c !== '*');
+  if (!requested.length) return 'tenants';
+  if (requested.every((c) => TENANTS_PUBLIC_COLUMNS.has(String(c).replace(/"/g, '')))) {
+    return 'tenants_public';
+  }
+  return 'tenants';
+};
+
 export const relatedFk = (table, embedTable, fkHint = null) => {
   if (fkHint) return fkHint;
   if (embedTable === 'tenants' || embedTable === 'tenants_public') {
@@ -544,7 +563,7 @@ const attachEmbeds = async (client, rows, parentTable, embeds) => {
   if (!embeds?.length || !rows?.length) return rows;
   let current = rows;
   for (const embed of embeds) {
-    const relTable = ident(embed.table, 'table');
+    const relTable = ident(embedRelationTable(embed.table, embed.columns), 'table');
     if (!ALLOWED.has(relTable) && relTable !== 'tenants') continue;
     const namedFk = fkColumnFromHint(parentTable, embed.fkHint);
     const fk = relatedFk(parentTable, relTable, namedFk);

@@ -62,3 +62,16 @@ test('Share button and partner queue resolve partner names via tenants_public', 
   assert.equal(/tenants!shared_checks_source_tenant_id_fkey/.test(commandCenter), false);
   assert.equal(/tenants!shared_checks_target_tenant_id_fkey/.test(shareDialog), false);
 });
+
+test('TenantPartnerManager resolves names via tenants_public and does not embed tenants', () => {
+  const partnerManager = fs.readFileSync(
+    path.join(ROOT, '../src/components/white-label/TenantPartnerManager.tsx'),
+    'utf8',
+  );
+  assert.match(partnerManager, /tenants_public/);
+  assert.match(partnerManager, /partnerName/);
+  assert.equal(/tenants!tenant_partnerships_inviter_tenant_id_fkey/.test(partnerManager), false);
+  assert.equal(/invitee:tenants!/.test(partnerManager), false);
+  assert.match(partnerManager, /connect_partner_by_code/);
+  assert.match(partnerManager, /revoke_tenant_partnership/);
+});
