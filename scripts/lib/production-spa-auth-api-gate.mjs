@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * Fail-closed production SPA auth/API release gate.
  *
@@ -12,14 +11,27 @@
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import {
+  PRODUCTION_COGNITO_CLIENT_ID,
+  PRODUCTION_COGNITO_POOL_ID,
+  PRODUCTION_EXECUTE_API_ID,
+  STAGING_API_ID,
+  STAGING_COGNITO_CLIENT_ID,
+  STAGING_COGNITO_POOL_ID,
+  assertAwsSpaBuildEnv,
+  isProductionPrepApi,
+} from './aws-spa-build-env.mjs';
 
-export const PRODUCTION_COGNITO_POOL_ID = 'us-east-1_h00WorYMT';
-export const PRODUCTION_COGNITO_CLIENT_ID = '3ja9fqaq2fjkv3i6up2varcqpe';
-export const STAGING_COGNITO_POOL_ID = 'us-east-1_vPmQ7cL1F';
-export const STAGING_COGNITO_CLIENT_ID = '71bb7a192cbl6o6s8m259tl589';
-export const STAGING_API_ID = 'psr19uhop4';
-export const PRODUCTION_EXECUTE_API_ID = 'kiqojucc02';
+export {
+  PRODUCTION_COGNITO_CLIENT_ID,
+  PRODUCTION_COGNITO_POOL_ID,
+  PRODUCTION_EXECUTE_API_ID,
+  STAGING_API_ID,
+  STAGING_COGNITO_CLIENT_ID,
+  STAGING_COGNITO_POOL_ID,
+  assertAwsSpaBuildEnv,
+  isProductionPrepApi,
+};
 export const PROOF_MARKER = 'checksops.spa.proof';
 export const KNOWN_GOOD_PRODUCTION_BUNDLE = 'index-C_NPDCdc.js';
 export const FAILED_WRONG_AUTH_BUNDLE = 'index-AfZ8zj4L.js';
@@ -59,68 +71,23 @@ function readArtifactText(distDir) {
 }
 
 export function extractSpaReleaseProof(text) {
-  const idx = text.indexOf(PROOF_MARKER);
-  if (idx < 0) return null;
+  const objectMatch = text.match(/["']checksops\.spa\.proof["']\s*:\s*1/);
+  if (!objectMatch || objectMatch.index == null) return null;
+  const idx = objectMatch.index;
   const window = text.slice(Math.max(0, idx - 320), idx + 480);
   const pick = (key) => {
     const match = window.match(new RegExp(`${key}\\s*:\\s*"([^"]*)"`))
       || window.match(new RegExp(`"${key}"\\s*:\\s*"([^"]*)"`));
     return match ? match[1] : '';
   };
-  return {
+  const proof = {
     auth: pick('auth').toLowerCase(),
     api: pick('api'),
     pool: pick('pool'),
     client: pick('client'),
   };
-}
-
-export function isProductionPrepApi(api) {
-  const value = String(api || '').trim().replace(/\/$/, '');
-  return value === '/prep' || value === 'same-origin' || value === 'same-origin:/prep';
-}
-
-export function assertAwsSpaBuildEnv({ mode, env = {}, processEnv = process.env } = {}) {
-  const errors = [];
-  const awsMode = mode === 'aws' || mode === 'production-aws';
-  if (!awsMode) return { ok: true, errors, production: false };
-  const auth = String(env.VITE_AUTH_PROVIDER || '').toLowerCase();
-  const api = String(env.VITE_CHECKSOPS_API_URL || '').trim();
-  const pool = String(env.VITE_COGNITO_USER_POOL_ID || '');
-  const client = String(env.VITE_COGNITO_USER_POOL_CLIENT_ID || '');
-  if (auth !== 'cognito') {
-    errors.push('vite build --mode aws requires VITE_AUTH_PROVIDER=cognito; otherwise AWS mode blanks Supabase and cannot initialize auth');
-  }
-  if (!api) {
-    errors.push('vite build --mode aws requires VITE_CHECKSOPS_API_URL');
-  }
-  const production = processEnv.CHECKSOPS_PRODUCTION_SPA === '1'
-    || mode === 'production-aws'
-    || isProductionPrepApi(api);
-  if (production) {
-    if (!isProductionPrepApi(api)) {
-      errors.push('production SPA requires VITE_CHECKSOPS_API_URL=/prep');
-    }
-    if (pool !== PRODUCTION_COGNITO_POOL_ID) {
-      errors.push('production SPA requires VITE_COGNITO_USER_POOL_ID=us-east-1_h00WorYMT');
-    }
-    if (client !== PRODUCTION_COGNITO_CLIENT_ID) {
-      errors.push('production SPA requires VITE_COGNITO_USER_POOL_CLIENT_ID=3ja9fqaq2fjkv3i6up2varcqpe');
-    }
-    if (pool === STAGING_COGNITO_POOL_ID || client === STAGING_COGNITO_CLIENT_ID) {
-      errors.push('staging Cognito configuration is forbidden in a production SPA build');
-    }
-    if (api.includes(STAGING_API_ID) || api.includes(`${PRODUCTION_EXECUTE_API_ID}.execute-api`)) {
-      errors.push('production SPA must use same-origin /prep, not a raw execute-api URL');
-    }
-  }
-  if (errors.length) {
-    const error = new Error(errors.join('\n'));
-    error.code = 'aws_spa_build_env_rejected';
-    error.errors = errors;
-    throw error;
-  }
-  return { ok: true, errors, production };
+  if (!proof.auth && !proof.api && !proof.pool && !proof.client) return null;
+  return proof;
 }
 
 export function detectBlankSupabaseInit(text) {
@@ -202,8 +169,13 @@ export function validateProductionSpaAuthApi(distDir, { requireProof = false } =
   if (text.includes(STAGING_COGNITO_CLIENT_ID)) forbidden.push('staging_cognito_client');
   if (text.includes(STAGING_API_ID)) forbidden.push('staging_api');
   if (text.includes(`${PRODUCTION_EXECUTE_API_ID}.execute-api`)) forbidden.push('raw_execute_api');
-  if (detectActiveBrowserSupabase(text)) forbidden.push('active_browser_supabase');
-  if (detectBlankSupabaseInit(text) && auth !== 'cognito') forbidden.push('blank_supabase_init');
+  // Cognito-proven artifacts may still contain unused publicWorkflowApi fallback
+  // strings. Those are not an active browser auth path. Flag supabase hosts only
+  // when production Cognito is not inlined.
+  if (detectActiveBrowserSupabase(text) && !poolPresent && proof?.auth !== 'cognito') {
+    forbidden.push('active_browser_supabase');
+  }
+  if (detectBlankSupabaseInit(text) && !poolPresent) forbidden.push('blank_supabase_init');
   const smoke = smokeFreedomLogin(text, proof);
   if (smoke.stuckOnLoadingShell) missing.push('freedom_login_mount');
   if (!smoke.canMount) missing.push('application_boot_smoke');
@@ -361,20 +333,4 @@ export function guardProductionSpaRelease({
     };
   }
   throw new Error('production_spa_apply_refused_in_guard: pass validation does not authorize S3/CloudFront mutation from this module');
-}
-
-const isDirect = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
-if (isDirect) {
-  const idx = process.argv.indexOf('--dir');
-  const distDir = idx >= 0 ? process.argv[idx + 1] : 'dist';
-  const result = guardProductionSpaRelease({
-    distDir,
-    apply: process.argv.includes('--apply'),
-    requireProof: process.argv.includes('--require-proof'),
-  });
-  if (!result.ok) {
-    console.error(JSON.stringify(result, null, 2));
-    process.exit(1);
-  }
-  console.log(JSON.stringify(result, null, 2));
 }

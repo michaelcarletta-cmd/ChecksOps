@@ -7,6 +7,7 @@ import { test } from 'node:test';
 import {
   FAILED_WRONG_AUTH_BUNDLE,
   assertAwsSpaBuildEnv,
+  extractSpaReleaseProof,
   guardProductionSpaRelease,
   scanProductionSpaArtifact,
   smokeArtifactHttpServer,
@@ -22,6 +23,16 @@ const weakScanWouldPass = (text) => (
   && text.includes('moov-wallet-fund')
   && text.includes('moov-disburse')
 );
+
+test('extracts the real Vite-inlined spa.proof object, not source literals', () => {
+  const compiled = 'Object.freeze({"checksops.spa.proof":1,auth:"cognito".toLowerCase(),api:"/prep",pool:"us-east-1_h00WorYMT",client:"3ja9fqaq2fjkv3i6up2varcqpe"})';
+  const proof = extractSpaReleaseProof(compiled);
+  assert.equal(proof.auth, 'cognito');
+  assert.equal(proof.api, '/prep');
+  assert.equal(proof.pool, 'us-east-1_h00WorYMT');
+  assert.equal(proof.client, '3ja9fqaq2fjkv3i6up2varcqpe');
+  assert.equal(extractSpaReleaseProof('void"cognito";void"/prep";'), null);
+});
 
 test('index-AfZ8zj4L.js wrong-auth build is rejected before S3/CloudFront mutation', async () => {
   const distDir = path.join(FIXTURES, 'index-AfZ8zj4L');

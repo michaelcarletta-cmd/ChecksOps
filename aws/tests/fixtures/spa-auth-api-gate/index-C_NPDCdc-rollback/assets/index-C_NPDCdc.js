@@ -1,5 +1,6 @@
-/* Known-good production rollback class: compiled before checksops.spa.proof
- * existed, but inlined production Cognito pool/client and same-origin /prep.
+/* Known-good production rollback class: compiled before the unique SPA
+ * release-proof object existed, but inlined production Cognito pool/client
+ * and same-origin /prep.
  */
 const AWS_STAGING_PUBLIC_CONFIG={userPoolId:"us-east-1_h00WorYMT",userPoolClientId:"3ja9fqaq2fjkv3i6up2varcqpe"};
 function isAwsStaging(){return true}
