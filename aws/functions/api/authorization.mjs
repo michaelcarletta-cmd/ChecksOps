@@ -32,7 +32,18 @@ FROM public.claims`;
 
 export const CHECKS_BY_TENANT_SQL = `SELECT
   count(*) FILTER (WHERE tenant_id = '${FREEDOM_TENANT_ID}')::int AS freedom,
-  count(*) FILTER (WHERE tenant_id = '${C1C_TENANT_ID}')::int AS c1c
+  count(*) FILTER (WHERE tenant_id = '${C1C_TENANT_ID}')::int AS c1c,
+  count(*) FILTER (WHERE tenant_id = '${FREEDOM_TENANT_ID}')::int AS freedom_owned,
+  count(*) FILTER (WHERE tenant_id = '${C1C_TENANT_ID}')::int AS c1c_owned,
+  count(*) FILTER (
+    WHERE tenant_id IS DISTINCT FROM '${C1C_TENANT_ID}'
+      AND public.aws_is_active_shared_check_target(id)
+  )::int AS c1c_shared_accessible,
+  count(*) FILTER (
+    WHERE tenant_id IS DISTINCT FROM '${FREEDOM_TENANT_ID}'
+      AND public.aws_is_active_shared_check_target(id)
+  )::int AS freedom_shared_accessible,
+  count(*)::int AS visible
 FROM public.check_intake_items`;
 
 export const ignoredSpoofFields = (event) => {
@@ -134,7 +145,15 @@ export const runAuthorizationProbe = async ({
     const roles = (await client.query(USER_ROLES_SQL, [mapping.application_user_id])).rows.map((row) => row.role);
     const roleFlags = (await client.query(HAS_STAFF_SQL)).rows[0] || {};
     const claimsVisible = (await client.query(CLAIMS_VISIBLE_SQL)).rows[0] || { n: 0, freedom: 0, org_null: 0 };
-    const checksVisible = (await client.query(CHECKS_BY_TENANT_SQL)).rows[0] || { freedom: 0, c1c: 0 };
+    const checksVisible = (await client.query(CHECKS_BY_TENANT_SQL)).rows[0] || {
+      freedom: 0,
+      c1c: 0,
+      freedom_owned: 0,
+      c1c_owned: 0,
+      c1c_shared_accessible: 0,
+      freedom_shared_accessible: 0,
+      visible: 0,
+    };
 
     await client.query('ROLLBACK');
 
@@ -162,11 +181,30 @@ export const runAuthorizationProbe = async ({
       checksVisible: {
         freedom: Number(checksVisible.freedom || 0),
         c1c: Number(checksVisible.c1c || 0),
+        owned: {
+          freedom: Number(checksVisible.freedom_owned ?? checksVisible.freedom ?? 0),
+          c1c: Number(checksVisible.c1c_owned ?? checksVisible.c1c ?? 0),
+        },
+        sharedAccessible: {
+          freedom: Number(checksVisible.freedom_shared_accessible || 0),
+          c1c: Number(checksVisible.c1c_shared_accessible || 0),
+        },
+        visible: Number(checksVisible.visible || 0),
+        hasCheckAccess: Number(checksVisible.visible || 0) > 0,
       },
       isolation: {
         canReadFreedomProbe: labels.includes('freedom-probe-visible'),
         canReadC1cProbe: labels.includes('c1c-probe-hidden'),
         canReadBarzziniProbe: labels.includes('barzzini-probe-hidden'),
+        ownedChecks: {
+          freedom: Number(checksVisible.freedom_owned ?? checksVisible.freedom ?? 0),
+          c1c: Number(checksVisible.c1c_owned ?? checksVisible.c1c ?? 0),
+        },
+        sharedAccessibleChecks: {
+          freedom: Number(checksVisible.freedom_shared_accessible || 0),
+          c1c: Number(checksVisible.c1c_shared_accessible || 0),
+        },
+        hasCheckAccess: Number(checksVisible.visible || 0) > 0,
       },
       restoredTablesRlsEnabled: true,
       authorizationSource: 'user_roles_and_tenant_users',

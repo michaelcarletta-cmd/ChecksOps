@@ -43,7 +43,7 @@ export function ShareCheckDialog({ checkId, open, onOpenChange }: ShareCheckDial
       if (partnerIds.length === 0) return [];
 
       const { data, error } = await supabase
-        .from("tenants")
+        .from("tenants_public" as any)
         .select("id, name, slug")
         .in("id", partnerIds)
         .order("name");
@@ -59,11 +59,25 @@ export function ShareCheckDialog({ checkId, open, onOpenChange }: ShareCheckDial
     queryFn: async () => {
       const { data, error } = await supabase
         .from("shared_checks")
-        .select("id, target_tenant_id, created_at, revoked_at, tenants!shared_checks_target_tenant_id_fkey(name)")
+        .select("id, target_tenant_id, created_at, revoked_at")
         .eq("check_id", checkId)
         .eq("source_tenant_id", tenantId!);
       if (error) throw error;
-      return (data ?? []) as any[];
+      const rows = (data ?? []) as any[];
+      const targetIds = [...new Set(rows.map((row) => row.target_tenant_id).filter(Boolean))];
+      let names = new Map<string, string>();
+      if (targetIds.length) {
+        const { data: tenants, error: tErr } = await supabase
+          .from("tenants_public" as any)
+          .select("id, name")
+          .in("id", targetIds);
+        if (tErr) throw tErr;
+        names = new Map((tenants ?? []).map((t: any) => [t.id, t.name]));
+      }
+      return rows.map((row) => ({
+        ...row,
+        tenants: { name: names.get(row.target_tenant_id) ?? "Partner" },
+      }));
     },
     enabled: open && !!tenantId,
   });
@@ -82,6 +96,8 @@ export function ShareCheckDialog({ checkId, open, onOpenChange }: ShareCheckDial
       toast({ title: "Check shared successfully" });
       setSelectedTenant("");
       qc.invalidateQueries({ queryKey: ["shared-checks", checkId] });
+      qc.invalidateQueries({ queryKey: ["shared-with-me-checks"] });
+      qc.invalidateQueries({ queryKey: ["check-stage-totals"] });
     },
     onError: (e: any) => {
       toast({ title: "Failed to share", description: e.message, variant: "destructive" });
@@ -99,6 +115,7 @@ export function ShareCheckDialog({ checkId, open, onOpenChange }: ShareCheckDial
       toast({ title: "Share revoked" });
       qc.invalidateQueries({ queryKey: ["shared-checks", checkId] });
       qc.invalidateQueries({ queryKey: ["shared-with-me-checks"] });
+      qc.invalidateQueries({ queryKey: ["check-stage-totals"] });
     },
   });
 
