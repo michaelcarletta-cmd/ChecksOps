@@ -11,6 +11,7 @@ import {
   FIRST_TEST_DISBURSE_TOTP,
   FIRST_TEST_FUND_FN,
   FIRST_TEST_FUND_TOTP,
+  FIRST_TEST_AUTHORIZE_HELD_BUTTON,
   FIRST_TEST_TRANSFER_CENTS,
   FIRST_TEST_TRANSFER_DOLLARS,
   LEGACY_COMBINED_TRANSFER_FN,
@@ -67,7 +68,7 @@ describe('M7.5 live SPA first-test money routing', () => {
     assert.match(panel, /FIRST_TEST_FUND_TOTP/);
     assert.match(panel, /FIRST_TEST_DISBURSE_TOTP/);
     assert.match(panel, /Add \{FIRST_TEST_TRANSFER_LABEL\} from bank/);
-    assert.match(panel, /Authorize held \{FIRST_TEST_TRANSFER_LABEL\} fund/);
+    assert.match(panel, /FIRST_TEST_AUTHORIZE_HELD_BUTTON/);
     assert.match(panel, /Send \{FIRST_TEST_TRANSFER_LABEL\} from wallet/);
     const authorizeFn = panel.slice(
       panel.indexOf('async function handleAuthorizeHeldFund'),
@@ -114,6 +115,7 @@ describe('M7.5 live SPA first-test money routing', () => {
     assert.notEqual(FIRST_TEST_FUND_TOTP, CHECKALT_DEPOSIT_TOTP);
     assert.notEqual(FIRST_TEST_DISBURSE_TOTP, CHECKALT_DEPOSIT_TOTP);
     assert.equal(FIRST_TEST_FUND_FN, 'moov-wallet-fund');
+    assert.equal(FIRST_TEST_AUTHORIZE_HELD_BUTTON, 'Authorize held $0.01 fund');
     assert.equal(FIRST_TEST_DISBURSE_FN, 'moov-disburse');
     assert.equal(LEGACY_COMBINED_TRANSFER_FN, 'moov-transfer-create');
     assert.equal(COUPLED_FUNDING_FN, 'initiate-wallet-funding');

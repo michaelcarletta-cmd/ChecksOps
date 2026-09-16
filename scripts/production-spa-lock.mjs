@@ -35,7 +35,7 @@ export const assertMoneyTestSpaArtifact = (validation) => {
   if ((counts['moov-transfer-create'] || 0) > 0) {
     throw lockedError('moov_transfer_create_forbidden_during_money_test', counts);
   }
-  for (const key of ['moov-wallet-fund', 'moov-disburse', 'wallet.fund', 'wallet.disburse']) {
+  for (const key of ['moov-wallet-fund', 'moov-disburse', 'wallet.fund', 'wallet.disburse', 'Authorize held $0.01 fund']) {
     if ((counts[key] || 0) < 1) {
       throw lockedError('money_ui_marker_missing', { key, counts });
     }
@@ -66,7 +66,7 @@ export const assertProductionSpaApplyAllowed = ({
   }
   if (provided !== lock.unlockValue) {
     throw lockedError(lock.applyRefusedError, {
-      hint: 'Production SPA is locked for the M7.5 money test. Do not use raw s3 sync. Apply requires CHECKSOPS_PRODUCTION_SPA_UNLOCK=M75_MONEY_TEST_HOLD_RELEASE and a dist that contains wallet.fund / moov-wallet-fund with zero moov-transfer-create.',
+      hint: 'Production SPA is locked for the M7.5B.7 money test. Do not use raw s3 sync. Apply requires ChecksOpsProductionSpaDeploy, CHECKSOPS_PRODUCTION_SPA_UNLOCK=M75_MONEY_TEST_HOLD_RELEASE, and a dist that contains wallet.fund / moov-wallet-fund / Authorize held $0.01 fund with zero moov-transfer-create.',
     });
   }
   if (validation) {

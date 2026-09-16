@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useFinancialGuard } from "@/hooks/useFinancialGuard";
 import { disburseWalletFirstTest } from "@/lib/payments/wallets";
 import {
+  FIRST_TEST_AUTHORIZE_HELD_BUTTON,
   FIRST_TEST_AUTHORIZE_HELD_FUND_COPY,
   FIRST_TEST_DISBURSE_COPY,
   FIRST_TEST_DISBURSE_TOTP,
@@ -215,7 +216,7 @@ export function WalletPanel() {
             disabled={fund.isPending || setupRequired || disbursePending || authorizeHeldPending}
           >
             {authorizeHeldPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
-            Authorize held {FIRST_TEST_TRANSFER_LABEL} fund
+            {FIRST_TEST_AUTHORIZE_HELD_BUTTON}
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">{FIRST_TEST_AUTHORIZE_HELD_FUND_COPY}</p>

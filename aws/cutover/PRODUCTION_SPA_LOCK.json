@@ -1,8 +1,9 @@
 {
   "locked": true,
   "lockedAt": "2026-09-15T22:20:00.000Z",
-  "reason": "M7.5 money-test hold. Restore and keep the reviewed dark wallet.fund / wallet.disburse SPA until the authenticated 1-cent dark UI test completes. Do not overwrite with CheckAlt or other workstream builds.",
-  "hold": "m75_money_test",
+  "reason": "M7.5B.7 money-test hold. Keep the reviewed dark wallet.fund SPA with the TOTP-only Authorize held $0.01 fund control until the existing 1-cent intent is dark-continued. Do not overwrite with CheckAlt, raw s3 sync, or RELEASE_CUTOVER_LOCK fingerprints.",
+  "hold": "m75b7_money_test",
+  "holdUntil": "M7.5B.7 complete",
   "knownGood": {
     "gitCommit": "32fd3256e572cd52df1842a7566914fb090cea74",
     "reviewedSource": "cursor/moov-m75-connect-live-ui-b844",
@@ -22,6 +23,7 @@
     "disburseFn": "moov-disburse",
     "fundTotp": "wallet.fund",
     "disburseTotp": "wallet.disburse",
+    "authorizeHeld": "Authorize held $0.01 fund",
     "forbiddenLiveFn": "moov-transfer-create"
   },
   "approvedDeployRole": "ChecksOpsProductionSpaDeploy",
