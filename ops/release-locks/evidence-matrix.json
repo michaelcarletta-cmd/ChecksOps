@@ -25,6 +25,16 @@
     "lambda_aliases_in_repo": "none",
     "spa_lock_files_on_main": "absent; present only in open PRs"
   },
+  "github_enforcement": {
+    "status": "REVISION_REQUIRED_UNTIL_ENFORCED",
+    "release_locks_required_status_check": false,
+    "codeowners_reviews_required": false,
+    "admin_bypass_disabled": false,
+    "direct_pushes_disabled": false,
+    "base_owned_workflow_enforced": false,
+    "repository_evidence_proves_live_aws": false,
+    "notes": "Repository validation protects the release process but cannot independently prove live AWS truth. pull_request_target is forbidden. GitHub must require the release-locks check, require code-owner review, and disable direct pushes/admin bypass. The pre-existing aws-migration-guards failure is unrelated and must not be hidden or renamed."
+  },
   "conflicts": [
     "aws/production/LIVE_RESOURCES.md (2026-09-05) says Cognito production pool has 0 users and CloudFront aliases 0; later cutover docs claim apex/www on E1B0ZWWO5559U5.",
     "Background claims production SPA Cognito cutover, Moov webhook live, CheckAlt execution enabled; origin/main template flags remain false and webhook docs still say production URLs remain on Supabase.",
@@ -161,7 +171,9 @@
       "environment": "unknown",
       "missing_evidence": [
         "single approved production fingerprint on main",
-        "GitHub branch protection requiring this workflow"
+        "GitHub branch protection requiring this workflow as a required status check",
+        "code-owner review required",
+        "direct pushes and administrator bypasses disabled"
       ],
       "open_pr_overlap": ["#316", "#317", "#319", "#325", "#333", "#326", "#328"]
     }

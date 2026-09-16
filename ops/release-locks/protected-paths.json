@@ -2,6 +2,10 @@
   "version": 1,
   "fail_closed": true,
   "codeowners_file": ".github/CODEOWNERS",
+  "control_plane_group": "production-release",
+  "unowned_file_watches": [
+    "aws/functions/api/providers/production/"
+  ],
   "ownership_groups": {
     "identity-cognito": {
       "owners": ["@michaelcarletta-cmd"],
@@ -30,9 +34,21 @@
     },
     "checkalt-submission": {
       "owners": ["@michaelcarletta-cmd"],
-      "description": "CheckAlt submission, eligibility, images, and production writer SQL",
+      "description": "CheckAlt submission, eligibility, images, and production writer SQL. Explicit files only; Moov or future provider siblings are not captured.",
       "paths": [
-        "aws/functions/api/providers/production/",
+        "aws/functions/api/providers/production/checkalt-authz.mjs",
+        "aws/functions/api/providers/production/checkalt-config.mjs",
+        "aws/functions/api/providers/production/checkalt-dispatch.mjs",
+        "aws/functions/api/providers/production/checkalt-dual-control.mjs",
+        "aws/functions/api/providers/production/checkalt-eligibility.mjs",
+        "aws/functions/api/providers/production/checkalt-holds.mjs",
+        "aws/functions/api/providers/production/checkalt-idempotency.mjs",
+        "aws/functions/api/providers/production/checkalt-image-compliance.mjs",
+        "aws/functions/api/providers/production/checkalt-images.mjs",
+        "aws/functions/api/providers/production/checkalt-poll.mjs",
+        "aws/functions/api/providers/production/checkalt-preflight.mjs",
+        "aws/functions/api/providers/production/checkalt-secrets.mjs",
+        "aws/functions/api/providers/production/checkalt-submit.mjs",
         "aws/financial/sql/65_checkalt_production_writer.sql",
         "aws/financial/CHECKALT_PRODUCTION_SECRET_CONTRACT.md",
         "src/lib/prepareCheckAltDeposit.ts",
@@ -126,12 +142,11 @@
     },
     "production-release": {
       "owners": ["@michaelcarletta-cmd"],
-      "description": "Release-lock tooling, CI, template execution flags, production config examples",
+      "description": "Control-plane release-lock tooling, CI, template execution flags, production config examples. Changes here are control-plane changes and require this ownership group. Hashing a changed validator with itself is not independent security.",
+      "control_plane": true,
+      "tree_hash_exclude": ["ops/release-locks/locked-components.json"],
       "paths": [
-        "ops/release-locks/schema/",
-        "ops/release-locks/protected-paths.json",
-        "ops/release-locks/applied-migrations.ledger.json",
-        "ops/release-locks/overlap-allowlist.json",
+        "ops/release-locks/",
         "scripts/validate-release-locks.mjs",
         "scripts/check-pr-path-overlap.mjs",
         "scripts/production-deploy-guard.mjs",

@@ -31,6 +31,7 @@
       "type": "array",
       "minItems": 4,
       "maxItems": 4,
+      "uniqueItems": true,
       "items": {
         "type": "string",
         "enum": [
@@ -160,7 +161,13 @@
               "type": "array",
               "items": { "type": "string" }
             },
-            "recorded_at": { "type": ["string", "null"] }
+            "recorded_at": { "type": ["string", "null"] },
+            "environment": { "type": ["string", "null"] },
+            "component": { "type": ["string", "null"] },
+            "git_sha": { "anyOf": [{ "$ref": "#/definitions/gitSha" }, { "type": "null" }] },
+            "artifact_identity": { "type": ["string", "null"] },
+            "evidence_producer": { "type": ["string", "null"] },
+            "evidence_type": { "type": ["string", "null"] }
           }
         },
         "deployment_fingerprint": {
@@ -173,9 +180,15 @@
               "properties": {
                 "recorded": { "type": "boolean" },
                 "spa_bundle": { "type": ["string", "null"] },
+                "spa_sha256": { "anyOf": [{ "$ref": "#/definitions/sha256" }, { "type": "null" }] },
                 "cloudfront_id": { "type": ["string", "null"] },
+                "cloudfront_distribution": { "type": ["string", "null"] },
+                "cloudfront_deployment_fingerprint": { "type": ["string", "null"] },
                 "lambda_name": { "type": ["string", "null"] },
                 "lambda_version": { "type": ["string", "null"] },
+                "lambda_code_hash": { "anyOf": [{ "$ref": "#/definitions/sha256" }, { "type": "null" }] },
+                "applied_sql_hash": { "anyOf": [{ "$ref": "#/definitions/sha256" }, { "type": "null" }] },
+                "database_evidence_record": { "type": ["string", "null"] },
                 "config_hash": { "anyOf": [{ "$ref": "#/definitions/sha256" }, { "type": "null" }] },
                 "notes": { "type": "string" }
               }

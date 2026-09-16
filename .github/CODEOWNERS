@@ -1,5 +1,8 @@
 # ChecksOps production-protection ownership.
-# CODEOWNERS is advisory until GitHub branch protection requires it.
+# CODEOWNERS is advisory until GitHub branch protection requires code-owner review.
+# The release-locks check must become a required status check. Direct pushes and
+# administrator bypasses must be disabled separately. This file is a
+# control-plane file; changes require the production-release ownership group.
 # Machine enforcement is ops/release-locks + .github/workflows/release-locks.yml.
 # Do not add a second owner here to take over another open PR's files.
 
@@ -30,7 +33,19 @@
 /aws/cutover/WEBHOOK_TRANSITION.md @michaelcarletta-cmd
 /supabase/functions/moov-webhook/index.ts @michaelcarletta-cmd
 
-/aws/functions/api/providers/production/ @michaelcarletta-cmd
+/aws/functions/api/providers/production/checkalt-authz.mjs @michaelcarletta-cmd
+/aws/functions/api/providers/production/checkalt-config.mjs @michaelcarletta-cmd
+/aws/functions/api/providers/production/checkalt-dispatch.mjs @michaelcarletta-cmd
+/aws/functions/api/providers/production/checkalt-dual-control.mjs @michaelcarletta-cmd
+/aws/functions/api/providers/production/checkalt-eligibility.mjs @michaelcarletta-cmd
+/aws/functions/api/providers/production/checkalt-holds.mjs @michaelcarletta-cmd
+/aws/functions/api/providers/production/checkalt-idempotency.mjs @michaelcarletta-cmd
+/aws/functions/api/providers/production/checkalt-image-compliance.mjs @michaelcarletta-cmd
+/aws/functions/api/providers/production/checkalt-images.mjs @michaelcarletta-cmd
+/aws/functions/api/providers/production/checkalt-poll.mjs @michaelcarletta-cmd
+/aws/functions/api/providers/production/checkalt-preflight.mjs @michaelcarletta-cmd
+/aws/functions/api/providers/production/checkalt-secrets.mjs @michaelcarletta-cmd
+/aws/functions/api/providers/production/checkalt-submit.mjs @michaelcarletta-cmd
 /aws/financial/sql/65_checkalt_production_writer.sql @michaelcarletta-cmd
 /aws/financial/CHECKALT_PRODUCTION_SECRET_CONTRACT.md @michaelcarletta-cmd
 /src/lib/prepareCheckAltDeposit.ts @michaelcarletta-cmd

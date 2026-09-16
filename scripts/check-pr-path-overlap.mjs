@@ -14,14 +14,18 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   DEFAULT_PATHS,
+  allowlistCovers,
+  allowlistErrors,
+  collectPaginated,
   loadJson,
   matchProtectedPath,
+  parseGhApiIncludeOutput,
   repoRootFrom,
 } from './lib/release-locks.mjs';
 
-function gitChangedFiles(root) {
-  const base = process.env.RELEASE_LOCK_BASE_SHA
-    || process.env.GITHUB_BASE_SHA
+function gitChangedFiles(root, env = process.env) {
+  const base = env.RELEASE_LOCK_BASE_SHA
+    || env.GITHUB_BASE_SHA
     || 'origin/main';
   try {
     const out = execFileSync('git', ['diff', '--name-only', `${base}...HEAD`], {
@@ -43,37 +47,96 @@ function parseChangedFilesArg(argv, root) {
   return null;
 }
 
-function currentPrNumber() {
-  const ref = process.env.GITHUB_REF || '';
-  const match = ref.match(/refs\/pull\/(\d+)\//);
-  if (match) return Number(match[1]);
-  if (process.env.GITHUB_PR_NUMBER) return Number(process.env.GITHUB_PR_NUMBER);
+export function resolveCurrentPrNumber(env = process.env, execFile = execFileSync) {
+  if (env.GITHUB_PR_NUMBER && /^\d+$/.test(String(env.GITHUB_PR_NUMBER).trim())) {
+    return Number(env.GITHUB_PR_NUMBER);
+  }
+  try {
+    const raw = execFile('gh', ['pr', 'view', '--json', 'number'], { encoding: 'utf8' });
+    const number = JSON.parse(raw)?.number;
+    if (Number.isInteger(number) && number > 0) return number;
+  } catch {
+    return null;
+  }
   return null;
 }
 
-function ghAvailable() {
+export function detectGithubRepo(env = process.env, execFile = execFileSync, root = process.cwd()) {
+  if (env.GITHUB_REPOSITORY && env.GITHUB_REPOSITORY.includes('/')) return env.GITHUB_REPOSITORY;
   try {
-    execFileSync('gh', ['--version'], { stdio: 'ignore' });
+    const remote = execFile('git', ['remote', 'get-url', 'origin'], { cwd: root, encoding: 'utf8' }).trim();
+    const match = remote.match(/github\.com[:/](.+?)(?:\.git)?$/);
+    if (match) return match[1];
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function ghAvailable(execFile = execFileSync) {
+  try {
+    execFile('gh', ['--version'], { stdio: 'ignore' });
     return true;
   } catch {
     return false;
   }
 }
 
-function listOpenPrFiles() {
-  const raw = execFileSync(
-    'gh',
-    ['pr', 'list', '--state', 'open', '--limit', '200', '--json', 'number,title,headRefName,files,isDraft'],
-    { encoding: 'utf8' },
-  );
-  const prs = JSON.parse(raw);
-  return prs.map((pr) => ({
-    number: pr.number,
-    title: pr.title,
-    headRefName: pr.headRefName,
-    isDraft: pr.isDraft,
-    files: (pr.files || []).map((file) => file.path || file).filter(Boolean),
-  }));
+export function createGhFetchPage(execFile = execFileSync, { repo, pathTemplate } = {}) {
+  return function fetchPage(page, pageSize) {
+    try {
+      const endpoint = pathTemplate(page, pageSize);
+      const raw = execFile('gh', ['api', '--include', endpoint], { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 });
+      const parsed = parseGhApiIncludeOutput(raw);
+      if (!parsed.status || parsed.status >= 400) {
+        return { ok: false, error: `GitHub API ${parsed.status || 'failure'} for ${endpoint}` };
+      }
+      const items = JSON.parse(parsed.body);
+      if (!Array.isArray(items)) {
+        return { ok: false, error: `GitHub API returned a non-array page for ${endpoint}` };
+      }
+      const link = parsed.headers.link || '';
+      const hasNext = /rel="next"/.test(link);
+      return { ok: true, items, hasNext };
+    } catch (error) {
+      return { ok: false, error: error.message };
+    }
+  };
+}
+
+export function listOpenPrsPaginated({
+  fetchPrPage,
+  fetchPrFilesPage,
+  pageSize = 100,
+  maxPages = 50,
+  repo,
+  execFile = execFileSync,
+} = {}) {
+  const prPage = fetchPrPage || createGhFetchPage(execFile, {
+    repo,
+    pathTemplate: (page, size) => `repos/${repo}/pulls?state=open&per_page=${size}&page=${page}`,
+  });
+  const { items: prs, complete } = collectPaginated({ fetchPage: prPage, pageSize, maxPages });
+  if (!complete) {
+    throw new Error('pagination not proven complete');
+  }
+  return prs.map((pr) => {
+    const number = pr.number;
+    const filesPage = fetchPrFilesPage
+      ? (page, size) => fetchPrFilesPage(number, page, size)
+      : createGhFetchPage(execFile, {
+        repo,
+        pathTemplate: (page, size) => `repos/${repo}/pulls/${number}/files?per_page=${size}&page=${page}`,
+      });
+    const { items: files } = collectPaginated({ fetchPage: filesPage, pageSize, maxPages });
+    return {
+      number,
+      title: pr.title,
+      headRefName: pr.head?.ref || pr.headRefName,
+      isDraft: pr.draft === true || pr.isDraft === true,
+      files: files.map((file) => file.path || file.filename || file).filter(Boolean),
+    };
+  });
 }
 
 export function overlapHits({ changedFiles, openPrs, protectedPaths, allowlist, currentPr }) {
@@ -85,13 +148,7 @@ export function overlapHits({ changedFiles, openPrs, protectedPaths, allowlist, 
     for (const pr of openPrs) {
       if (currentPr && pr.number === currentPr) continue;
       if (!(pr.files || []).includes(rel)) continue;
-      const allowed = allow.some((row) => (
-        row.other_pr === pr.number
-        && typeof row.path === 'string'
-        && (rel === row.path || rel.startsWith(row.path))
-        && typeof row.reason === 'string'
-        && row.reason.trim().length >= 20
-      ));
+      const allowed = allow.some((row) => allowlistCovers(row, rel, protectedPaths, pr.number));
       if (allowed) continue;
       hits.push({
         path: rel,
@@ -105,19 +162,23 @@ export function overlapHits({ changedFiles, openPrs, protectedPaths, allowlist, 
   return hits;
 }
 
-export function main(argv = process.argv.slice(2), root = repoRootFrom(import.meta.url)) {
+export function main(argv = process.argv.slice(2), root = repoRootFrom(import.meta.url), deps = {}) {
+  const env = deps.env || process.env;
+  const execFile = deps.execFile || execFileSync;
   const required = argv.includes('--require')
-    || process.env.GITHUB_ACTIONS === 'true'
-    || process.env.RELEASE_LOCK_REQUIRE_OVERLAP === '1';
+    || env.GITHUB_ACTIONS === 'true'
+    || env.RELEASE_LOCK_REQUIRE_OVERLAP === '1';
   const protectedPaths = loadJson(path.join(root, DEFAULT_PATHS.protectedPaths));
   const allowlist = loadJson(path.join(root, DEFAULT_PATHS.overlapAllowlist));
-  if (allowlist.fail_closed !== true) {
-    console.error('overlap check: allowlist.fail_closed must be true');
+  const allowErrors = allowlistErrors(allowlist, protectedPaths);
+  if (allowErrors.length) {
+    console.error('overlap check: allowlist is invalid');
+    for (const error of allowErrors) console.error(`  ${error}`);
     return 2;
   }
   let changedFiles;
   try {
-    changedFiles = parseChangedFilesArg(argv, root) || gitChangedFiles(root);
+    changedFiles = parseChangedFilesArg(argv, root) || gitChangedFiles(root, env);
   } catch (error) {
     console.error(`overlap check failed closed: ${error.message}`);
     return 2;
@@ -127,7 +188,7 @@ export function main(argv = process.argv.slice(2), root = repoRootFrom(import.me
     console.log('overlap check: no protected paths changed');
     return 0;
   }
-  if (!ghAvailable()) {
+  if (!ghAvailable(execFile) && !deps.fetchPrPage) {
     const message = 'overlap check: gh CLI unavailable; cannot prove other open PRs do not own these protected paths';
     if (required) {
       console.error(message);
@@ -136,9 +197,25 @@ export function main(argv = process.argv.slice(2), root = repoRootFrom(import.me
     console.error(`${message} (advisory locally; CI is fail-closed)`);
     return 0;
   }
+  const currentPr = resolveCurrentPrNumber(env, execFile);
+  if (required && currentPr == null) {
+    console.error('overlap check failed closed: unable to resolve current PR number via GITHUB_PR_NUMBER or gh pr view --json number');
+    return 2;
+  }
   let openPrs;
   try {
-    openPrs = listOpenPrFiles();
+    const repo = deps.repo || detectGithubRepo(env, execFile, root);
+    if (!repo && !deps.fetchPrPage) {
+      throw new Error('unable to determine GitHub repository for pagination');
+    }
+    openPrs = listOpenPrsPaginated({
+      fetchPrPage: deps.fetchPrPage,
+      fetchPrFilesPage: deps.fetchPrFilesPage,
+      pageSize: deps.pageSize || 100,
+      maxPages: deps.maxPages || 50,
+      repo,
+      execFile,
+    });
   } catch (error) {
     console.error(`overlap check failed closed: unable to list open PRs (${error.message})`);
     return 2;
@@ -148,7 +225,7 @@ export function main(argv = process.argv.slice(2), root = repoRootFrom(import.me
     openPrs,
     protectedPaths,
     allowlist,
-    currentPr: currentPrNumber(),
+    currentPr,
   });
   if (hits.length) {
     console.error('overlap check failed: protected paths are already owned by another open PR');

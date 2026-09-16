@@ -3,9 +3,11 @@
   "append_only": true,
   "fail_closed": true,
   "baseline_git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
-  "notes": "Append-only source ledger. applied=true is forbidden until an independent production/staging apply proof is recorded in a reviewed PR. This file does not apply SQL.",
+  "notes": "Genesis append-only source ledger (immutable starting point). After merge, future validation compares candidate history against this base-branch ledger. applied=true is forbidden until an independent production/staging apply proof is appended as a new apply_evidence record linked to the original source record. This file does not apply SQL.",
   "entries": [
     {
+      "id": "source:aws/identity/sql/01_identity_accounts.sql@a074281080a6687e3ba6f7570782a380b1451e774030dd5054052cc6ee27df25",
+      "record_kind": "source",
       "path": "aws/identity/sql/01_identity_accounts.sql",
       "source_sha256": "a074281080a6687e3ba6f7570782a380b1451e774030dd5054052cc6ee27df25",
       "applied": false,
@@ -13,9 +15,16 @@
       "applied_sha256": null,
       "status": "source_only_not_applied",
       "mutation": "append",
-      "recorded_git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7"
+      "recorded_git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+      "recorded_at": null,
+      "source_record_id": null,
+      "proof_path": null,
+      "environment": null,
+      "component": null
     },
     {
+      "id": "source:aws/identity/sql/02_auth_uid_guc.sql@a9699369925c12d4717256e575f57c4fb22f67e7e11d0f9ae0514306a78305a9",
+      "record_kind": "source",
       "path": "aws/identity/sql/02_auth_uid_guc.sql",
       "source_sha256": "a9699369925c12d4717256e575f57c4fb22f67e7e11d0f9ae0514306a78305a9",
       "applied": false,
@@ -23,9 +32,16 @@
       "applied_sha256": null,
       "status": "source_only_not_applied",
       "mutation": "append",
-      "recorded_git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7"
+      "recorded_git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+      "recorded_at": null,
+      "source_record_id": null,
+      "proof_path": null,
+      "environment": null,
+      "component": null
     },
     {
+      "id": "source:aws/identity/sql/03_grants.sql@54a5c52c583c8b02502344fe08914cf2717f7e63c909e05fe0e86c1e13ae475b",
+      "record_kind": "source",
       "path": "aws/identity/sql/03_grants.sql",
       "source_sha256": "54a5c52c583c8b02502344fe08914cf2717f7e63c909e05fe0e86c1e13ae475b",
       "applied": false,
@@ -33,9 +49,16 @@
       "applied_sha256": null,
       "status": "source_only_not_applied",
       "mutation": "append",
-      "recorded_git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7"
+      "recorded_git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+      "recorded_at": null,
+      "source_record_id": null,
+      "proof_path": null,
+      "environment": null,
+      "component": null
     },
     {
+      "id": "source:aws/identity/sql/08_reconcile_known_users.sql@98dd1f007154b9b809962de55d7c2ff2c9b98e80c93862288fd9ecc48f698a6a",
+      "record_kind": "source",
       "path": "aws/identity/sql/08_reconcile_known_users.sql",
       "source_sha256": "98dd1f007154b9b809962de55d7c2ff2c9b98e80c93862288fd9ecc48f698a6a",
       "applied": false,
@@ -43,9 +66,16 @@
       "applied_sha256": null,
       "status": "source_only_not_applied",
       "mutation": "append",
-      "recorded_git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7"
+      "recorded_git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+      "recorded_at": null,
+      "source_record_id": null,
+      "proof_path": null,
+      "environment": null,
+      "component": null
     },
     {
+      "id": "source:aws/providers/sql/40_tranche4_webhook_receipts.sql@b7daa25226579cf1f91c2fa7a80860486e0aa201f12b00644bddbcd14c7e5694",
+      "record_kind": "source",
       "path": "aws/providers/sql/40_tranche4_webhook_receipts.sql",
       "source_sha256": "b7daa25226579cf1f91c2fa7a80860486e0aa201f12b00644bddbcd14c7e5694",
       "applied": false,
@@ -53,9 +83,16 @@
       "applied_sha256": null,
       "status": "source_only_not_applied",
       "mutation": "append",
-      "recorded_git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7"
+      "recorded_git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+      "recorded_at": null,
+      "source_record_id": null,
+      "proof_path": null,
+      "environment": null,
+      "component": null
     },
     {
+      "id": "source:aws/financial/sql/65_checkalt_production_writer.sql@90b5f07b26843453223bfee6dccb885fdc24632e8c13050e0794366f3c601902",
+      "record_kind": "source",
       "path": "aws/financial/sql/65_checkalt_production_writer.sql",
       "source_sha256": "90b5f07b26843453223bfee6dccb885fdc24632e8c13050e0794366f3c601902",
       "applied": false,
@@ -63,9 +100,16 @@
       "applied_sha256": null,
       "status": "source_only_not_applied",
       "mutation": "append",
-      "recorded_git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7"
+      "recorded_git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+      "recorded_at": null,
+      "source_record_id": null,
+      "proof_path": null,
+      "environment": null,
+      "component": null
     },
     {
+      "id": "source:aws/financial/sql/64_financial_activation_grants.sql@0f505f405adae1b53b417bd8942eb615700bd3d7e3422e3b41037c7684bda7c7",
+      "record_kind": "source",
       "path": "aws/financial/sql/64_financial_activation_grants.sql",
       "source_sha256": "0f505f405adae1b53b417bd8942eb615700bd3d7e3422e3b41037c7684bda7c7",
       "applied": false,
@@ -73,9 +117,16 @@
       "applied_sha256": null,
       "status": "source_only_not_applied",
       "mutation": "append",
-      "recorded_git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7"
+      "recorded_git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+      "recorded_at": null,
+      "source_record_id": null,
+      "proof_path": null,
+      "environment": null,
+      "component": null
     },
     {
+      "id": "source:aws/financial/sql/60_financial_preactivation.sql@b8b049e32281d0194069de8de76c93c8adcb60364014c10c09070f531846a755",
+      "record_kind": "source",
       "path": "aws/financial/sql/60_financial_preactivation.sql",
       "source_sha256": "b8b049e32281d0194069de8de76c93c8adcb60364014c10c09070f531846a755",
       "applied": false,
@@ -83,9 +134,16 @@
       "applied_sha256": null,
       "status": "source_only_not_applied",
       "mutation": "append",
-      "recorded_git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7"
+      "recorded_git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+      "recorded_at": null,
+      "source_record_id": null,
+      "proof_path": null,
+      "environment": null,
+      "component": null
     },
     {
+      "id": "source:aws/rls/sql/28_financial_aggregates.sql@98be38a4ed9cbecbb524249497fa8fba1ed6bb5d15d2d51871520dc53fb22277",
+      "record_kind": "source",
       "path": "aws/rls/sql/28_financial_aggregates.sql",
       "source_sha256": "98be38a4ed9cbecbb524249497fa8fba1ed6bb5d15d2d51871520dc53fb22277",
       "applied": false,
@@ -93,9 +151,16 @@
       "applied_sha256": null,
       "status": "source_only_not_applied",
       "mutation": "append",
-      "recorded_git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7"
+      "recorded_git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+      "recorded_at": null,
+      "source_record_id": null,
+      "proof_path": null,
+      "environment": null,
+      "component": null
     },
     {
+      "id": "source:aws/migrations/proposed/NOT_APPLIED_20260910_tenant_email_ses_domain.sql@433a0558e06fe919009b5675d30a7532b183003869e4fa8f1188a53e85a72dcb",
+      "record_kind": "source",
       "path": "aws/migrations/proposed/NOT_APPLIED_20260910_tenant_email_ses_domain.sql",
       "source_sha256": "433a0558e06fe919009b5675d30a7532b183003869e4fa8f1188a53e85a72dcb",
       "applied": false,
@@ -103,9 +168,16 @@
       "applied_sha256": null,
       "status": "source_only_not_applied",
       "mutation": "append",
-      "recorded_git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7"
+      "recorded_git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+      "recorded_at": null,
+      "source_record_id": null,
+      "proof_path": null,
+      "environment": null,
+      "component": null
     },
     {
+      "id": "source:aws/rls/sql/31_partner_safe_read.sql@a85a29698e3cfa65ec29b0a834d24c74b2a7cac9c83c72d8ba9f4bb88949dd0f",
+      "record_kind": "source",
       "path": "aws/rls/sql/31_partner_safe_read.sql",
       "source_sha256": "a85a29698e3cfa65ec29b0a834d24c74b2a7cac9c83c72d8ba9f4bb88949dd0f",
       "applied": false,
@@ -113,9 +185,16 @@
       "applied_sha256": null,
       "status": "source_only_not_applied",
       "mutation": "append",
-      "recorded_git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7"
+      "recorded_git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+      "recorded_at": null,
+      "source_record_id": null,
+      "proof_path": null,
+      "environment": null,
+      "component": null
     },
     {
+      "id": "source:aws/rls/sql/32_partner_share_lifecycle.sql@3e2e12811c8795fed6e139aca60d4b1b43d1c5223b132e34a767fada99331af8",
+      "record_kind": "source",
       "path": "aws/rls/sql/32_partner_share_lifecycle.sql",
       "source_sha256": "3e2e12811c8795fed6e139aca60d4b1b43d1c5223b132e34a767fada99331af8",
       "applied": false,
@@ -123,9 +202,16 @@
       "applied_sha256": null,
       "status": "source_only_not_applied",
       "mutation": "append",
-      "recorded_git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7"
+      "recorded_git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+      "recorded_at": null,
+      "source_record_id": null,
+      "proof_path": null,
+      "environment": null,
+      "component": null
     },
     {
+      "id": "source:aws/rls/sql/29_mortgage_ops_library_parity.sql@e8d416a58e1920cff27d5d744f0b1b4ff414a866a7eb483bb299bb794c0849be",
+      "record_kind": "source",
       "path": "aws/rls/sql/29_mortgage_ops_library_parity.sql",
       "source_sha256": "e8d416a58e1920cff27d5d744f0b1b4ff414a866a7eb483bb299bb794c0849be",
       "applied": false,
@@ -133,9 +219,16 @@
       "applied_sha256": null,
       "status": "source_only_not_applied",
       "mutation": "append",
-      "recorded_git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7"
+      "recorded_git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+      "recorded_at": null,
+      "source_record_id": null,
+      "proof_path": null,
+      "environment": null,
+      "component": null
     },
     {
+      "id": "source:aws/rls/sql/30_tenant_documents_mortgage_doc_type.sql@d30c7cafb232387e174eb5a3938af9e0942a006fa8b775c2d6eac490d84c7d5a",
+      "record_kind": "source",
       "path": "aws/rls/sql/30_tenant_documents_mortgage_doc_type.sql",
       "source_sha256": "d30c7cafb232387e174eb5a3938af9e0942a006fa8b775c2d6eac490d84c7d5a",
       "applied": false,
@@ -143,9 +236,16 @@
       "applied_sha256": null,
       "status": "source_only_not_applied",
       "mutation": "append",
-      "recorded_git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7"
+      "recorded_git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+      "recorded_at": null,
+      "source_record_id": null,
+      "proof_path": null,
+      "environment": null,
+      "component": null
     },
     {
+      "id": "source:supabase/migrations/20260911210000_aws_mortgage_ops_library_parity.sql@e88f4eab9fe86da999699e3f3d09860d97d8d5b5b96ae59bff42b28f25e454eb",
+      "record_kind": "source",
       "path": "supabase/migrations/20260911210000_aws_mortgage_ops_library_parity.sql",
       "source_sha256": "e88f4eab9fe86da999699e3f3d09860d97d8d5b5b96ae59bff42b28f25e454eb",
       "applied": false,
@@ -153,7 +253,14 @@
       "applied_sha256": null,
       "status": "source_only_not_applied",
       "mutation": "append",
-      "recorded_git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7"
+      "recorded_git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+      "recorded_at": null,
+      "source_record_id": null,
+      "proof_path": null,
+      "environment": null,
+      "component": null
     }
-  ]
+  ],
+  "genesis": true,
+  "immutable_starting_point": true
 }

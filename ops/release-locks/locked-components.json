@@ -540,7 +540,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
-        "tree_hash": "daa87a11085bd120fac8b9696cf27dd5f1e619ed04d2ae62576602f85e35da68",
+        "tree_hash": "792c90e9f20635ae780e05bc4726dd1f81bd7c53967389fe13e1f2ef56df2067",
         "merged": false,
         "merged_pr": null
       },
@@ -571,10 +571,12 @@
       },
       "missing_evidence": [
         "single approved production fingerprint on main",
-        "GitHub branch protection requiring this workflow"
+        "GitHub branch protection requiring this workflow as a required status check",
+        "code-owner review required",
+        "direct pushes and administrator bypasses disabled"
       ],
       "open_pr_overlap": ["#316", "#317", "#319", "#325", "#333", "#326", "#328"],
-      "notes": "This PR adds lock tooling only. It does not own aws/cutover/PRODUCTION_SPA_LOCK.json from other PRs."
+      "notes": "Control-plane lock tooling only. Hashing this validator with itself is not independent security. Repository evidence does not prove live AWS state. This PR does not own aws/cutover/PRODUCTION_SPA_LOCK.json from other PRs."
     }
   }
 }

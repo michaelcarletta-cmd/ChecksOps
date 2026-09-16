@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "$id": "https://checksops.local/ops/release-locks/evidence-matrix.schema.json",
+  "title": "ChecksOps release-lock evidence matrix",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "baseline_git_sha",
+    "fail_closed",
+    "repo_discovery",
+    "components"
+  ],
+  "properties": {
+    "baseline_git_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "generated_at": { "type": "string", "minLength": 1 },
+    "fail_closed": { "type": "boolean", "const": true },
+    "historical_audit_baseline_unverified": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "discovered_controls": { "type": "integer" },
+        "live_non_na": { "type": "integer" },
+        "pass": { "type": "integer" },
+        "fail": { "type": "integer" },
+        "internal_blocked": { "type": "integer" },
+        "external_blocked": { "type": "integer" },
+        "awaiting_integration_deployment": { "type": "integer" },
+        "status": { "type": "string", "minLength": 1 }
+      }
+    },
+    "repo_discovery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["origin_main_sha"],
+      "properties": {
+        "origin_main_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "isolated_branch": { "type": "string" },
+        "dirty_worktree_at_discovery": { "type": "boolean" },
+        "codeowners_on_main": { "type": "boolean" },
+        "github_environment_protection_in_repo": { "type": "boolean" },
+        "workflows_on_main": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "lambda_aliases_in_repo": { "type": "string" },
+        "spa_lock_files_on_main": { "type": "string" }
+      }
+    },
+    "conflicts": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "github_enforcement": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": { "type": "string" },
+        "notes": { "type": "string" },
+        "release_locks_required_status_check": { "type": "boolean" },
+        "codeowners_reviews_required": { "type": "boolean" },
+        "admin_bypass_disabled": { "type": "boolean" },
+        "direct_pushes_disabled": { "type": "boolean" },
+        "base_owned_workflow_enforced": { "type": "boolean" },
+        "repository_evidence_proves_live_aws": { "type": "boolean", "const": false }
+      }
+    },
+    "components": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "$ref": "#/definitions/component" }
+    }
+  },
+  "definitions": {
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["classification", "missing_evidence"],
+      "properties": {
+        "classification": {
+          "type": "string",
+          "enum": [
+            "PRODUCTION_LOCKED",
+            "SOURCE_LOCKED_NOT_ACTIVE",
+            "STAGING_LOCKED_NOT_PRODUCTION",
+            "UNVERIFIED"
+          ]
+        },
+        "git_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "merged_pr": { "type": ["integer", "null"] },
+        "merge_commit": { "type": ["string", "null"] },
+        "deployed_artifact": { "type": "string" },
+        "applied_migrations": { "type": "string" },
+        "environment": { "type": "string" },
+        "missing_evidence": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "open_pr_overlap": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}
