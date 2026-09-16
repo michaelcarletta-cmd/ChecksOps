@@ -106,17 +106,18 @@
     },
     "partner-sharing": {
       "classification": "SOURCE_LOCKED_NOT_ACTIVE",
-      "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
+      "git_sha": "9aac7bb5b1ed0a8d03e305552797a9acfacc7f64",
       "merged_pr": 302,
       "merge_commit": "faf9b82e728bd7ef42009e4c96ace05c7bd7232f",
-      "deployed_artifact": "deployment/application status independently unverified",
-      "applied_migrations": "31/32 SQL in git; production apply unproven",
-      "environment": "source-only",
+      "deployed_artifact": "production SQL 31/32/33/34 applied; application/API/UI repair unmerged in PR 350",
+      "applied_migrations": "31/32/33/34 APPLIED IN PRODUCTION; see ops/release-locks/proof/c1c-partner-share-production-apply.md; do not reapply",
+      "environment": "production",
       "missing_evidence": [
-        "staging or production apply hash",
-        "Lambda version serving partner-share-lifecycle.mjs"
+        "merged git SHA for 33/34 and authorization/UI repair (#350 still open)",
+        "Lambda version serving partner-share-lifecycle.mjs / authorization.mjs",
+        "SPA bundle fingerprint containing ShareCheckDialog and CheckCommandCenter partner queue"
       ],
-      "open_pr_overlap": []
+      "open_pr_overlap": ["#350", "#347", "#342", "#339", "#332", "#327", "#312"]
     },
     "mortgage-ops": {
       "classification": "SOURCE_LOCKED_NOT_ACTIVE",

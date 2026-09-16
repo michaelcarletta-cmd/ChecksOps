@@ -40,6 +40,21 @@ Documentation, chat history, and “merged” status are **not** production lock
 
 Control-plane files (CODEOWNERS, the release-locks workflow, `ops/release-locks/**`, and the lock scripts) are owned by `production-release`. A change to the protection system is a control-plane change.
 
+## Partner-sharing production SQL (C1C)
+
+`31_partner_safe_read.sql`, `32_partner_share_lifecycle.sql`,
+`33_partner_stage_totals.sql`, and `34_c1c_partner_visibility.sql` are
+**APPLIED IN PRODUCTION**. Proof:
+`ops/release-locks/proof/c1c-partner-share-production-apply.md`.
+Ledger `apply_evidence` rows link that proof. Do not reapply those files
+to document them. Do not transfer `check_intake_items.tenant_id` or
+duplicate parent checks to "fix" partner visibility. Read
+`aws/rls/PARTNER_SHARING_INVARIANT.md` before touching partner Checks.
+
+The application/API/UI repair that matches that SQL is PR #350
+(`9aac7bb5b1ed0a8d03e305552797a9acfacc7f64`) and is not on main until
+that PR is reviewed and merged. This guide does not authorize merging it.
+
 ## Intentionally updating a protected component
 
 1. Open a **new** PR from latest `origin/main`. Do not reuse another agent’s branch.
