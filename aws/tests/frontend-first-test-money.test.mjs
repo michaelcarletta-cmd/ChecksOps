@@ -67,7 +67,15 @@ describe('M7.5 live SPA first-test money routing', () => {
     assert.match(panel, /FIRST_TEST_FUND_TOTP/);
     assert.match(panel, /FIRST_TEST_DISBURSE_TOTP/);
     assert.match(panel, /Add \{FIRST_TEST_TRANSFER_LABEL\} from bank/);
+    assert.match(panel, /Authorize held \{FIRST_TEST_TRANSFER_LABEL\} fund/);
     assert.match(panel, /Send \{FIRST_TEST_TRANSFER_LABEL\} from wallet/);
+    const authorizeFn = panel.slice(
+      panel.indexOf('async function handleAuthorizeHeldFund'),
+      panel.indexOf('async function handleDisburse'),
+    );
+    assert.match(authorizeFn, /guardFinancial\(FIRST_TEST_FUND_TOTP/);
+    assert.doesNotMatch(authorizeFn, /fund\.mutateAsync/);
+    assert.doesNotMatch(authorizeFn, /nextFirstTestIdempotencyKey/);
     assert.match(panel, /aria-label="First-test fund amount locked at \$0\.01"/);
     assert.match(autoPanel, /aria-label="First-test fund amount locked at \$0\.01"/);
     assert.match(autoPanel, /isTransferPostHeld/);
