@@ -574,6 +574,7 @@ const AUDIT_ALLOWED_RESULTS = new Set([
   'disabled',
   'identity_mismatch',
   'ses_create_failed',
+  'saved',
 ]);
 
 const isUuid = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || ''));
