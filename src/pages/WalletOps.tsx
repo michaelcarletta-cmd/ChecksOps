@@ -18,7 +18,6 @@ import {
   ArrowUpRight,
   BadgeCheck,
   Banknote,
-  Building2,
   Clock,
   Gauge,
   Landmark,
@@ -41,7 +40,6 @@ import {
 import { useWallet } from "@/hooks/useWallet";
 import { useSweepConfig } from "@/hooks/useSweepConfig";
 import {
-  useAllTenantWalletBalances,
   useRefreshTransferStatuses,
   useWalletOpsReadiness,
   useWalletOpsTransfers,
@@ -133,7 +131,7 @@ export default function WalletOps() {
   const { toast } = useToast();
   const { enabled, isLoading: eligibilityLoading } = usePaymentProviderEligibility();
 
-  const { wallet, ledger, isLoading: walletLoading, setupRequired, refetch: refetchWallet } =
+  const { wallet, ledger, isLoading: walletLoading, setupRequired, refresh: refreshWallet } =
     useWallet("operating");
   const {
     config,
@@ -141,7 +139,7 @@ export default function WalletOps() {
     pushRails,
     history,
     stale,
-    refetch: refetchSweeps,
+    refresh: refreshSweeps,
     save,
   } = useSweepConfig("operating");
   const { data: transferData, isLoading: transfersLoading } = useWalletOpsTransfers();
@@ -149,7 +147,6 @@ export default function WalletOps() {
 
   const { data: readiness } = useWalletOpsReadiness();
   const { data: runningData, isLoading: runningLoading } = useWalletRunningBalance("operating");
-  const { data: tenantBalances } = useAllTenantWalletBalances(userRole === "admin");
 
   const runningPoints = runningData?.points ?? [];
   const chartData = runningPoints.map((p) => ({
@@ -159,6 +156,7 @@ export default function WalletOps() {
 
 
   const [payoutRail, setPayoutRail] = useState<SweepPushRail | "">("");
+  const refreshingBalances = refreshWallet.isPending || refreshSweeps.isPending;
 
   const tenantBase = tenant?.slug
     ? isCheckOpsHost()
@@ -185,6 +183,49 @@ export default function WalletOps() {
   const pendingIn = transferData?.pendingInCents ?? 0;
   const minimumCents = config?.minimum_balance_cents ?? 0;
 
+  const recentActivity = [
+    ...ledger.map((entry) => ({
+      key: `ledger-${entry.id}`,
+      at: entry.created_at,
+      title: ENTRY_LABEL[entry.entry_type] ?? entry.entry_type,
+      subtitle: new Date(entry.created_at).toLocaleString(),
+      kind: "ledger" as const,
+      credit: entry.direction === "credit",
+      amountCents: entry.amount_cents,
+      balanceCents: entry.balance_after_cents,
+      status: null as string | null,
+    })),
+    ...(transferData?.transfers ?? []).map((t) => ({
+      key: `transfer-${t.id}`,
+      at: t.created_at,
+      title: t.is_facilitator_fee ? "Processing fee" : t.description || "Payout",
+      subtitle: new Date(t.created_at).toLocaleString(),
+      kind: "transfer" as const,
+      credit: false,
+      amountCents: t.amount_cents,
+      balanceCents: null as number | null,
+      status: t.status,
+    })),
+  ]
+    .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+    .slice(0, 12);
+
+
+  async function handleRefreshBalances() {
+    try {
+      await Promise.all([
+        refreshWallet.mutateAsync(),
+        refreshSweeps.mutateAsync(),
+      ]);
+      toast({ title: "Balances refreshed" });
+    } catch (e) {
+      toast({
+        title: "Could not refresh balances",
+        description: (e as Error).message,
+        variant: "destructive",
+      });
+    }
+  }
 
   async function handleSavePayoutSpeed() {
     if (!effectiveRail) return;
@@ -284,12 +325,14 @@ export default function WalletOps() {
             <Button
               variant="outline"
               className="col-span-2 bg-background/60"
-              onClick={() => {
-                refetchWallet();
-                refetchSweeps();
-              }}
+              disabled={refreshingBalances}
+              onClick={handleRefreshBalances}
             >
-              <RefreshCw className="mr-2 h-3.5 w-3.5" />
+              {refreshingBalances ? (
+                <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-2 h-3.5 w-3.5" />
+              )}
               Refresh balances
             </Button>
           </div>
@@ -385,60 +428,89 @@ export default function WalletOps() {
           <AutoFundingPanel canEdit={isAdmin} />
         </SectionCard>
 
-
-        {/* Payout preferences */}
-        <SectionCard
-          title="Payout Preferences"
-          icon={<Zap className="h-4 w-4 text-violet-500" />}
-          accent="bg-gradient-to-r from-violet-500/60 to-violet-500/10"
-        >
-          {pushRails.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Connect and verify a settlement bank to choose payout speeds.
-            </p>
-          ) : (
-            <>
-              <div className="space-y-1.5">
-                <Label htmlFor="walletops-rail">Default payout speed</Label>
-                <Select
-                  value={effectiveRail}
-                  onValueChange={(v) => setPayoutRail(v as SweepPushRail)}
-                  disabled={!isAdmin}
-                >
-                  <SelectTrigger id="walletops-rail">
-                    <SelectValue placeholder="Choose a speed" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {pushRails.map((r) => (
-                      <SelectItem key={r} value={r}>
-                        {SWEEP_RAIL_LABEL[r] ?? r}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {effectiveRail && (
-                  <p className="text-xs text-muted-foreground">{SWEEP_RAIL_HINT[effectiveRail]}</p>
+        {/* Recent activity — large box in place of the old payout-preference slot */}
+        <div className="lg:col-span-2">
+          <SectionCard
+            title="Recent Wallet Activity"
+            icon={<Clock className="h-4 w-4 text-sky-500" />}
+            accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
+            action={
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={refreshStatuses.isPending}
+                onClick={async () => {
+                  try {
+                    const res = await refreshStatuses.mutateAsync();
+                    toast({
+                      title: res.checked
+                        ? `Checked ${res.checked} transfer${res.checked === 1 ? "" : "s"}`
+                        : "Nothing in flight",
+                      description: res.checked
+                        ? res.updated
+                          ? `${res.updated} updated with the bank's latest status.`
+                          : "Still processing at the bank — no change yet."
+                        : "All transfers have already settled.",
+                    });
+                  } catch (e) {
+                    toast({
+                      title: "Could not check status",
+                      description: (e as Error).message,
+                      variant: "destructive",
+                    });
+                  }
+                }}
+              >
+                {refreshStatuses.isPending ? (
+                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="mr-2 h-3.5 w-3.5" />
                 )}
+                Check status
+              </Button>
+            }
+          >
+            {recentActivity.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No wallet activity yet. Funding, payouts, and automatic payouts appear here.
+              </p>
+            ) : (
+              <div className="max-h-[28rem] overflow-y-auto divide-y rounded-md border">
+                {recentActivity.map((item) => (
+                  <div key={item.key} className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">{item.title}</p>
+                      <p className="text-xs text-muted-foreground">{item.subtitle}</p>
+                    </div>
+                    {item.kind === "ledger" ? (
+                      <div className="text-right">
+                        <p className={item.credit ? "font-semibold text-emerald-500" : "font-semibold"}>
+                          {item.credit ? "+" : "−"}
+                          {money(item.amountCents)}
+                        </p>
+                        {item.balanceCents != null && (
+                          <p className="text-[11px] text-muted-foreground">
+                            Balance {money(item.balanceCents)}
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant="outline"
+                          className={`text-[10px] ${STATUS_TONE[(item.status ?? "").toLowerCase()] ?? "border-muted-foreground/30 text-muted-foreground"}`}
+                        >
+                          {item.status}
+                        </Badge>
+                        <span className="font-semibold">{money(item.amountCents)}</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
-
-              <div className="rounded-lg border border-violet-500/20 bg-violet-500/5 p-3 text-xs text-muted-foreground">
-                Instant delivery is used automatically when the receiving bank supports it; otherwise the
-                payment falls back to same-day or standard ACH so it always lands.
-              </div>
-
-              {isAdmin ? (
-                <Button onClick={handleSavePayoutSpeed} disabled={save.isPending || !effectiveRail}>
-                  {save.isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
-                  Save payout preference
-                </Button>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  Only administrators can change payout preferences.
-                </p>
-              )}
-            </>
-          )}
-        </SectionCard>
+            )}
+          </SectionCard>
+        </div>
 
         {/* Readiness shortcut */}
         <SectionCard
@@ -487,8 +559,80 @@ export default function WalletOps() {
                 </div>
               </DialogContent>
             </Dialog>
-
           </div>
+        </SectionCard>
+
+        {/* Payout preferences */}
+        <SectionCard
+          title="Payout Preferences"
+          icon={<Zap className="h-4 w-4 text-violet-500" />}
+          accent="bg-gradient-to-r from-violet-500/60 to-violet-500/10"
+        >
+          {pushRails.length === 0 ? (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                {settlementMethod
+                  ? `${settlementMethod.bank_name ?? "Bank"} ••${settlementMethod.last_four ?? "----"} is connected. Load payout speeds from the bank to choose how quickly funds are sent.`
+                  : "Connect and verify a settlement bank to choose payout speeds."}
+              </p>
+              {settlementMethod && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={refreshingBalances}
+                  onClick={handleRefreshBalances}
+                >
+                  {refreshingBalances ? (
+                    <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                  )}
+                  Load payout speeds
+                </Button>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="space-y-1.5">
+                <Label htmlFor="walletops-rail">Default payout speed</Label>
+                <Select
+                  value={effectiveRail}
+                  onValueChange={(v) => setPayoutRail(v as SweepPushRail)}
+                  disabled={!isAdmin}
+                >
+                  <SelectTrigger id="walletops-rail">
+                    <SelectValue placeholder="Choose a speed" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {pushRails.map((r) => (
+                      <SelectItem key={r} value={r}>
+                        {SWEEP_RAIL_LABEL[r] ?? r}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {effectiveRail && (
+                  <p className="text-xs text-muted-foreground">{SWEEP_RAIL_HINT[effectiveRail]}</p>
+                )}
+              </div>
+
+              <div className="rounded-lg border border-violet-500/20 bg-violet-500/5 p-3 text-xs text-muted-foreground">
+                Instant delivery is used automatically when the receiving bank supports it; otherwise the
+                payment falls back to same-day or standard ACH so it always lands.
+              </div>
+
+              {isAdmin ? (
+                <Button onClick={handleSavePayoutSpeed} disabled={save.isPending || !effectiveRail}>
+                  {save.isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+                  Save payout preference
+                </Button>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Only administrators can change payout preferences.
+                </p>
+              )}
+            </>
+          )}
         </SectionCard>
       </div>
 
@@ -570,140 +714,6 @@ export default function WalletOps() {
                 ))}
             </div>
           </>
-        )}
-      </SectionCard>
-
-      {/* Per-organization balances (admin) */}
-      {isAdmin && (tenantBalances?.length ?? 0) > 0 && (
-        <SectionCard
-          title="Balances by Organization"
-          icon={<Building2 className="h-4 w-4 text-violet-500" />}
-          accent="bg-gradient-to-r from-violet-500/60 to-transparent"
-        >
-          <div className="divide-y rounded-md border">
-            {tenantBalances!.map((t) => (
-              <div key={t.tenant_id} className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm">
-                <div className="min-w-0">
-                  <p className="truncate font-medium">{t.tenant_name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {t.last_synced_at
-                      ? `Synced ${new Date(t.last_synced_at).toLocaleString()}`
-                      : "Not synced yet"}
-                  </p>
-                </div>
-                <div className="flex items-center gap-3">
-                  {t.pending_cents > 0 && (
-                    <span className="text-xs text-muted-foreground">
-                      {money(t.pending_cents)} pending
-                    </span>
-                  )}
-                  <Badge
-                    variant="outline"
-                    className={`text-[10px] ${STATUS_TONE[t.status] ?? "border-muted-foreground/30 text-muted-foreground"}`}
-                  >
-                    {t.status}
-                  </Badge>
-                  <span className="font-semibold tabular-nums">
-                    {t.status === "sync_failed" ? "Unavailable" : money(t.available_cents)}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </SectionCard>
-      )}
-
-      {/* Recent activity */}
-      <SectionCard
-        title="Recent Wallet Activity"
-        icon={<Clock className="h-4 w-4 text-sky-500" />}
-        accent="bg-gradient-to-r from-sky-500/60 to-transparent"
-        action={
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={refreshStatuses.isPending}
-            onClick={async () => {
-              try {
-                const res = await refreshStatuses.mutateAsync();
-                toast({
-                  title: res.checked
-                    ? `Checked ${res.checked} transfer${res.checked === 1 ? "" : "s"}`
-                    : "Nothing in flight",
-                  description: res.checked
-                    ? res.updated
-                      ? `${res.updated} updated with the bank's latest status.`
-                      : "Still processing at the bank — no change yet."
-                    : "All transfers have already settled.",
-                });
-              } catch (e) {
-                toast({
-                  title: "Could not check status",
-                  description: (e as Error).message,
-                  variant: "destructive",
-                });
-              }
-            }}
-          >
-            {refreshStatuses.isPending ? (
-              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <RefreshCw className="mr-2 h-3.5 w-3.5" />
-            )}
-            Check status
-          </Button>
-        }
-      >
-
-        {ledger.length === 0 && (transferData?.transfers.length ?? 0) === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No wallet activity yet. Funding, payouts, and automatic payouts appear here.
-          </p>
-        ) : (
-          <div className="divide-y rounded-md border">
-            {ledger.slice(0, 6).map((entry) => (
-              <div key={entry.id} className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm">
-                <div className="min-w-0">
-                  <p className="truncate font-medium">
-                    {ENTRY_LABEL[entry.entry_type] ?? entry.entry_type}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {new Date(entry.created_at).toLocaleString()}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className={entry.direction === "credit" ? "font-semibold text-emerald-500" : "font-semibold"}>
-                    {entry.direction === "credit" ? "+" : "−"}
-                    {money(entry.amount_cents)}
-                  </p>
-                  <p className="text-[11px] text-muted-foreground">
-                    Balance {money(entry.balance_after_cents)}
-                  </p>
-                </div>
-              </div>
-            ))}
-            {(transferData?.transfers ?? []).slice(0, 6).map((t) => (
-              <div key={t.id} className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm">
-                <div className="min-w-0">
-                  <p className="truncate font-medium">
-                    {t.is_facilitator_fee ? "Processing fee" : t.description || "Payout"}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {new Date(t.created_at).toLocaleString()}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge
-                    variant="outline"
-                    className={`text-[10px] ${STATUS_TONE[(t.status ?? "").toLowerCase()] ?? "border-muted-foreground/30 text-muted-foreground"}`}
-                  >
-                    {t.status}
-                  </Badge>
-                  <span className="font-semibold">{money(t.amount_cents)}</span>
-                </div>
-              </div>
-            ))}
-          </div>
         )}
       </SectionCard>
     </div>

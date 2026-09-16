@@ -74,10 +74,12 @@ async function invoke<T>(fn: string, body: Record<string, unknown>): Promise<T> 
 export async function syncWallet(
   tenantId: string,
   walletType: WalletType = "operating",
+  opts?: { force?: boolean },
 ): Promise<WalletSnapshot> {
   return invoke<WalletSnapshot>("moov-wallet-sync", {
     tenant_id: tenantId,
     wallet_type: walletType,
+    force: !!opts?.force,
   });
 }
 

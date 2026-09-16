@@ -402,14 +402,23 @@ const transferStatus = {
        ORDER BY created_at DESC NULLS LAST LIMIT 50`,
       [ctx.tenantId],
     )).rows;
+    if (!rows.length) {
+      return jsonResult({ success: true, checked: 0, updated: 0, results: [], liveProviderCalled: false });
+    }
     const platformAccount = await facilitatorAccountId(account?.provider_account_id || undefined, fetchImpl).catch(() => null);
+    if (!platformAccount) {
+      return jsonResult({
+        success: false,
+        error: "Couldn't reach the bank to check transfer status. Try Refresh balances, then check again.",
+        checked: 0,
+        updated: 0,
+        results: [],
+        liveProviderCalled: false,
+      });
+    }
     const results = [];
     let updated = 0;
     for (const row of rows) {
-      if (!platformAccount) {
-        results.push({ id: row.id, error: 'Facilitator account id is not configured.' });
-        continue;
-      }
       try {
         const remote = await moovFetch(
           `/accounts/${platformAccount}/transfers/${row.provider_transfer_id}`,
@@ -426,7 +435,7 @@ const transferStatus = {
         results.push({ id: row.id, status: row.status, error: e.message });
       }
     }
-    return jsonResult({ success: true, updated, results, liveProviderCalled: rows.length > 0 });
+    return jsonResult({ success: true, checked: rows.length, updated, results, liveProviderCalled: true });
   },
 };
 
@@ -503,7 +512,7 @@ const walletSync = {
         accountId: account.provider_account_id,
         environment: 'sandbox',
         walletType,
-        skipProviderFetch: account.onboarding_status !== 'active',
+        skipProviderFetch: !body?.force && account.onboarding_status !== 'active',
         fetchImpl,
       });
     } catch (error) {

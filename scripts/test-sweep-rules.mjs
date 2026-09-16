@@ -11,6 +11,7 @@ import {
   normalizeStatementDescriptor,
   normalizeSweepStatus,
   parseMinimumBalanceCents,
+  pickSettlementMethod,
   selectSweepPullMethod,
   selectSweepPushMethod,
   SWEEP_PULL_RAIL,
@@ -76,6 +77,27 @@ test("available rails exclude the debit funding method", () => {
 test("pull method resolves only from ach-debit-fund", () => {
   assert.equal(selectSweepPullMethod(FULL), "pm_debit");
   assert.equal(selectSweepPullMethod(ACH_ONLY), null);
+});
+
+test("picks a connected settlement bank over an unverified leftover", () => {
+  const picked = pickSettlementMethod([
+    { is_default: true, connection_status: "pending", verification_status: "pending" },
+    { is_default: false, connection_status: "connected", verification_status: "verified", bank: "Freedom" },
+  ]);
+  assert.equal(picked?.bank, "Freedom");
+});
+
+test("prefers the default among connected banks", () => {
+  const picked = pickSettlementMethod([
+    { is_default: false, connection_status: "connected" },
+    { is_default: true, connection_status: "connected", bank: "Primary" },
+  ]);
+  assert.equal(picked?.bank, "Primary");
+});
+
+test("returns null when no settlement methods exist", () => {
+  assert.equal(pickSettlementMethod([]), null);
+  assert.equal(pickSettlementMethod(null), null);
 });
 
 test("minimum balance conversion", () => {

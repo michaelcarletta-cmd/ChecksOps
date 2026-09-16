@@ -111,6 +111,35 @@ export function selectSweepPullMethod(src: SweepMethodSource): string | null {
   return map[SWEEP_PULL_RAIL] || null;
 }
 
+export interface SettlementMethodRow {
+  is_default?: boolean | null;
+  connection_status?: string | null;
+  verification_status?: string | null;
+}
+
+function isConnectedSettlement(method: SettlementMethodRow): boolean {
+  const connection = String(method.connection_status ?? "").toLowerCase();
+  const verification = String(method.verification_status ?? "").toLowerCase();
+  return (
+    connection === "connected" ||
+    ["verified", "successful"].includes(verification)
+  );
+}
+
+/**
+ * Prefers a verified/connected settlement bank, then the default method.
+ * A connected bank with empty rail cache must still win over an unverified
+ * leftover row — otherwise payout settings look disconnected.
+ */
+export function pickSettlementMethod<T extends SettlementMethodRow>(
+  methods: T[] | null | undefined,
+): T | null {
+  const list = methods ?? [];
+  if (list.length === 0) return null;
+  const rank = (m: T) => (isConnectedSettlement(m) ? 2 : 0) + (m.is_default ? 1 : 0);
+  return [...list].sort((a, b) => rank(b) - rank(a))[0] ?? null;
+}
+
 /* ---------------- minimum balance ---------------- */
 
 export const MIN_BALANCE_MAX_CENTS = 100_000_000; // $1,000,000

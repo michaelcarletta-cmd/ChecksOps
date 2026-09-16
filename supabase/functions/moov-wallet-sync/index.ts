@@ -14,7 +14,7 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { tenant_id, wallet_type = "operating", ledger_limit = 50 } = body ?? {};
+    const { tenant_id, wallet_type = "operating", ledger_limit = 50, force = false } = body ?? {};
     if (!tenant_id) return json({ error: "tenant_id is required" }, 400);
     if (!["operating", "trust"].includes(wallet_type)) {
       return json({ error: "wallet_type must be 'operating' or 'trust'" }, 400);
@@ -41,13 +41,15 @@ serve(async (req) => {
       // If the account isn't verified yet, provider balance fetch often 502s or 403s.
       // We still want to provision the wallet record locally if possible.
       const isVerified = account.onboarding_status === "active";
-      
+
       wallet = await syncWallet(supabase, {
         tenantId: tenant_id,
         accountId: account.provider_account_id,
         environment,
         walletType: wallet_type,
-        skipProviderFetch: !isVerified
+        // An explicit refresh always asks the provider. Page loads still skip
+        // the live fetch while onboarding is unfinished to avoid noisy 502s.
+        skipProviderFetch: !force && !isVerified,
       });
     } catch (e) {
       // Fall back to the last known local state so the UI still renders.

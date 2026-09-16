@@ -68,16 +68,20 @@ export function useRefreshTransferStatuses() {
 
   return useMutation({
     mutationFn: async () => {
+      if (!tenantId) throw new Error("Organization isn't loaded yet. Try again in a moment.");
       const { data, error } = await supabase.functions.invoke("moov-transfer-status", {
         body: { tenant_id: tenantId },
       });
-      if (error) throw error;
-      if ((data as any)?.success === false) throw new Error((data as any)?.error ?? "Status check failed");
+      if (error) throw new Error(await invokeErrorMessage(error, data, "Could not check status"));
+      if ((data as any)?.success === false) {
+        throw new Error((data as any)?.error ?? "Could not check status");
+      }
       return data as { checked: number; updated: number; results: any[] };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["wallet-ops-transfers"] });
       queryClient.invalidateQueries({ queryKey: ["wallet-running-balance"] });
+      queryClient.invalidateQueries({ queryKey: ["payment-wallet"] });
     },
   });
 }
@@ -171,48 +175,22 @@ export function useWalletRunningBalance(walletType: "operating" | "trust" = "ope
   });
 }
 
-export interface TenantWalletBalance {
-  tenant_id: string;
-  tenant_name: string;
-  available_cents: number;
-  pending_cents: number;
-  status: string;
-  last_synced_at: string | null;
-}
-
-/** Admin-only: running balance per organization. */
-export function useAllTenantWalletBalances(isAdmin: boolean, walletType: "operating" | "trust" = "operating") {
-  return useQuery<TenantWalletBalance[]>({
-    queryKey: ["wallet-balances-all-tenants", walletType],
-    enabled: isAdmin,
-    staleTime: 60_000,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("payment_wallets")
-        .select("tenant_id, available_cents, pending_cents, status, last_synced_at")
-        .eq("wallet_type", walletType)
-        .order("available_cents", { ascending: false });
-      if (error) throw error;
-
-      const tenantIds = Array.from(new Set((data ?? []).map((r: any) => r.tenant_id).filter(Boolean)));
-      const nameById = new Map<string, string>();
-      if (tenantIds.length) {
-        const { data: tenants } = await supabase
-          .from("tenants")
-          .select("id, name")
-          .in("id", tenantIds);
-        (tenants ?? []).forEach((t: any) => nameById.set(t.id, t.name));
-      }
-
-      return (data ?? []).map((r: any) => ({
-        tenant_id: r.tenant_id,
-        tenant_name: nameById.get(r.tenant_id) ?? "Organization",
-        available_cents: Number(r.available_cents || 0),
-        pending_cents: Number(r.pending_cents || 0),
-        status: r.status,
-        last_synced_at: r.last_synced_at,
-      }));
-    },
-
-  });
+async function invokeErrorMessage(
+  error: { message?: string; context?: { json?: () => Promise<any> } },
+  data: unknown,
+  fallback: string,
+): Promise<string> {
+  const payload = data && typeof data === "object" ? (data as { error?: string; message?: string }) : null;
+  if (payload?.error) return payload.error;
+  if (payload?.message) return payload.message;
+  try {
+    const parsed = await error?.context?.json?.();
+    if (parsed?.error) return String(parsed.error);
+    if (parsed?.message) return String(parsed.message);
+  } catch {
+    /* keep the original message */
+  }
+  const msg = error?.message ?? fallback;
+  if (/non-2xx|edge function/i.test(msg)) return fallback;
+  return msg;
 }
