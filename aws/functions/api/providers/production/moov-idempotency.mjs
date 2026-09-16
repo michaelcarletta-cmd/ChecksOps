@@ -74,6 +74,159 @@ export const shouldReconcileInsteadOfPost = (row) => {
   return false;
 };
 
+const localRefFail = (error, extra = {}) => ({
+  ok: false,
+  statusCode: extra.statusCode || 409,
+  error,
+  message: extra.message,
+  ...extra,
+});
+
+/**
+ * payment_transfers.source_payment_method_id / destination_payment_method_id
+ * FK to payment_provider_methods.id. wallet_id FK to payment_wallets.id.
+ * Moov paymentMethodIDs must never be written into those columns.
+ */
+export async function loadLocalProductionWallet(client, { tenantId, providerWalletId }) {
+  return (await client.query(
+    `SELECT id, provider_wallet_id, provider_payment_method_id, wallet_type
+     FROM public.payment_wallets
+     WHERE tenant_id = $1::uuid
+       AND provider = 'moov'
+       AND environment = 'production'
+       AND provider_wallet_id = $2
+     LIMIT 1`,
+    [tenantId, providerWalletId],
+  )).rows[0] || null;
+}
+
+export async function loadLocalProductionBankMethod(client, {
+  tenantId,
+  providerBankAccountId,
+  providerPaymentMethodId,
+}) {
+  if (providerBankAccountId) {
+    const byBank = (await client.query(
+      `SELECT id, provider_bank_account_id, provider_payment_method_id, connection_status
+       FROM public.payment_provider_methods
+       WHERE tenant_id = $1::uuid
+         AND provider = 'moov'
+         AND environment = 'production'
+         AND provider_bank_account_id = $2
+         AND connection_status = 'connected'
+       ORDER BY is_default DESC NULLS LAST, updated_at DESC NULLS LAST
+       LIMIT 1`,
+      [tenantId, providerBankAccountId],
+    )).rows[0];
+    if (byBank) return byBank;
+  }
+  if (!providerPaymentMethodId) return null;
+  return (await client.query(
+    `SELECT id, provider_bank_account_id, provider_payment_method_id, connection_status
+     FROM public.payment_provider_methods
+     WHERE tenant_id = $1::uuid
+       AND provider = 'moov'
+       AND environment = 'production'
+       AND provider_payment_method_id = $2
+       AND connection_status = 'connected'
+     ORDER BY is_default DESC NULLS LAST, updated_at DESC NULLS LAST
+     LIMIT 1`,
+    [tenantId, providerPaymentMethodId],
+  )).rows[0] || null;
+}
+
+export async function loadLocalRecipientMethod(client, { recipientId, providerBankAccountId }) {
+  if (recipientId) {
+    const byRecipient = (await client.query(
+      `SELECT id, provider_bank_account_id, provider_payment_method_id, external_recipient_id
+       FROM public.payment_provider_methods
+       WHERE external_recipient_id = $1::uuid
+         AND provider = 'moov'
+         AND connection_status = 'connected'
+       ORDER BY is_default DESC NULLS LAST, updated_at DESC NULLS LAST
+       LIMIT 1`,
+      [recipientId],
+    )).rows[0];
+    if (byRecipient) return byRecipient;
+  }
+  if (!providerBankAccountId) return null;
+  return (await client.query(
+    `SELECT id, provider_bank_account_id, provider_payment_method_id, external_recipient_id
+     FROM public.payment_provider_methods
+     WHERE provider = 'moov'
+       AND provider_bank_account_id = $1
+       AND connection_status = 'connected'
+     ORDER BY is_default DESC NULLS LAST, updated_at DESC NULLS LAST
+     LIMIT 1`,
+    [providerBankAccountId],
+  )).rows[0] || null;
+}
+
+export async function resolveLocalFundIntentRefs(client, {
+  tenantId,
+  bankId,
+  walletId,
+  sourceMoovPaymentMethodId,
+}) {
+  const method = await loadLocalProductionBankMethod(client, {
+    tenantId,
+    providerBankAccountId: bankId,
+    providerPaymentMethodId: sourceMoovPaymentMethodId,
+  });
+  if (!method) {
+    return localRefFail('local_bank_method_missing', {
+      message: 'Freedom verified bank is not linked in payment_provider_methods. Do not create a new bank.',
+    });
+  }
+  const wallet = await loadLocalProductionWallet(client, {
+    tenantId,
+    providerWalletId: walletId,
+  });
+  if (!wallet) {
+    return localRefFail('local_wallet_missing', {
+      message: 'Freedom wallet is not linked in payment_wallets. Do not create a new wallet.',
+    });
+  }
+  return {
+    ok: true,
+    sourcePaymentMethodId: method.id,
+    destinationPaymentMethodId: null,
+    walletId: wallet.id,
+  };
+}
+
+export async function resolveLocalDisburseIntentRefs(client, {
+  tenantId,
+  walletId,
+  recipientId,
+  recipientBankId,
+}) {
+  const wallet = await loadLocalProductionWallet(client, {
+    tenantId,
+    providerWalletId: walletId,
+  });
+  if (!wallet) {
+    return localRefFail('local_wallet_missing', {
+      message: 'Freedom wallet is not linked in payment_wallets. Do not create a new wallet.',
+    });
+  }
+  const destMethod = await loadLocalRecipientMethod(client, {
+    recipientId,
+    providerBankAccountId: recipientBankId,
+  });
+  return {
+    ok: true,
+    sourcePaymentMethodId: null,
+    destinationPaymentMethodId: destMethod?.id || null,
+    walletId: wallet.id,
+  };
+}
+
+export const productionTransferInsertFkError = (error) => {
+  const message = String(error?.constraint || error?.message || error);
+  return /payment_transfers_source_payment_method_id_fkey|payment_transfers_destination_payment_method_id_fkey|payment_transfers_wallet_id_fkey/i.test(message);
+};
+
 export async function insertProductionTransferDraft(client, row) {
   const saved = (await client.query(
     `INSERT INTO public.payment_transfers

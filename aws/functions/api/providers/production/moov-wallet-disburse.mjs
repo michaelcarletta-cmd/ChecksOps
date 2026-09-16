@@ -12,6 +12,8 @@ import {
   existingProductionTransferByKey,
   insertProductionTransferDraft,
   moovDisburseIdempotencyKey,
+  productionTransferInsertFkError,
+  resolveLocalDisburseIntentRefs,
   shouldReconcileInsteadOfPost,
   updateProductionTransfer,
 } from './moov-idempotency.mjs';
@@ -249,19 +251,45 @@ export async function handleProductionMoovWalletDisburse({
     };
   }
 
-  const draft = await insertProductionTransferDraft(client, {
-    tenant_id: tenantId,
-    idempotency_key: key,
-    amount_cents: amount,
-    description: `ChecksOps WALLET→${recipient.label || 'RECIPIENT'}`,
-    source_tenant_account_id: merchant.moovAccountId,
-    source_payment_method_id: sourcePm,
-    destination_recipient_id: recipient.recipientId,
-    destination_payment_method_id: destPm,
-    wallet_id: walletId,
-    leg_role: 'wallet_disbursement',
-    created_by: mapping.application_user_id,
+  const localRefs = await resolveLocalDisburseIntentRefs(client, {
+    tenantId,
+    walletId,
+    recipientId: recipient.recipientId,
+    recipientBankId: recipient.bankId || binding.recipientBankId,
   });
+  if (!localRefs.ok) {
+    return fail(localRefs.error, localRefs.statusCode, {
+      message: localRefs.message,
+      spoofFieldsIgnored: spoof,
+    });
+  }
+
+  let draft;
+  try {
+    draft = await insertProductionTransferDraft(client, {
+      tenant_id: tenantId,
+      idempotency_key: key,
+      amount_cents: amount,
+      description: `ChecksOps WALLET→${recipient.label || 'RECIPIENT'}`,
+      source_tenant_account_id: merchant.moovAccountId,
+      source_payment_method_id: localRefs.sourcePaymentMethodId,
+      destination_recipient_id: recipient.recipientId,
+      destination_payment_method_id: localRefs.destinationPaymentMethodId,
+      wallet_id: localRefs.walletId,
+      leg_role: 'wallet_disbursement',
+      created_by: mapping.application_user_id,
+    });
+  } catch (error) {
+    if (/duplicate/i.test(String(error.message))) {
+      return fail('A matching payment was already submitted.', 409);
+    }
+    if (productionTransferInsertFkError(error)) {
+      return fail('local_payment_ref_fk', 409, {
+        message: 'Durable intent must reference local payment_provider_methods / payment_wallets rows, not Moov payment-method IDs.',
+      });
+    }
+    throw error;
+  }
 
   await commitDurableAttempt(client, mapping, claims);
   if (!productionMoovTransferPostAllowed()) {
