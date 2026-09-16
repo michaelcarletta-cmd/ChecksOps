@@ -23,6 +23,7 @@ import {
   attachPartnerPayees,
   selectOwnerThenPartner,
 } from "@/lib/partnerSafeReads";
+import { mapLaneFundsReceived } from "@/lib/fundsReceived";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -1082,35 +1083,7 @@ export default function CheckCommandCenter() {
 
       if (error) throw error;
 
-      return ((data ?? []) as any[]).map((row) => ({
-        id: row.id,
-        amount: row.amount,
-        settled_at: row.settled_at,
-        created_at: row.created_at,
-        recipient_name: row.recipient_name,
-        method: row.method,
-        external_check_number: row.external_check_number,
-        tenant_id: row.tenant_id,
-        sender: { name: row.sender_name },
-        disbursement_batches: {
-          check_intake_item_id: row.check_intake_item_id,
-          check_intake_items: {
-            id: row.check_intake_item_id,
-            check_number: row.check_number,
-            carrier_name: row.carrier_name,
-            property_address: row.property_address,
-            funds_type: row.funds_type,
-            amount: row.check_amount,
-            claim_id: row.claim_id,
-            detected_claim_number: row.detected_claim_number,
-            payee_line: row.payee_line,
-            claims: {
-              claim_number: row.claim_number,
-              policyholder_name: row.policyholder_name,
-            },
-          },
-        },
-      }));
+      return mapLaneFundsReceived(data);
     },
     enabled: !!tenantId,
     refetchInterval: 60_000,
@@ -4693,6 +4666,8 @@ function CheckDetailPanel({
                       carrierName={check.carrier_name ?? undefined}
                       claimId={check.claim_id ?? null}
                       detectedClaimNumber={check.detected_claim_number ?? null}
+                      payoutEnabled={false}
+                      readOnly
                     />
 
                   );

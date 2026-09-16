@@ -55,7 +55,6 @@ const RPC_UNWRAP_SINGLE_COLUMN = new Set([
   'get_check_dashboard_counts_for_tenant',
   'get_total_unread_check_messages',
   'get_loss_draft_dashboard_counts_for_tenant',
-  'get_tenant_funds_received',
   'get_tenant_check_usage',
   'get_deposit_ops_kpis',
   'get_deposit_exception_kpis',
@@ -639,7 +638,7 @@ const runSelect = async (client, body) => {
   return { rows: attached, count };
 };
 
-const unwrapRpcData = (name, rows) => {
+export const unwrapRpcData = (name, rows) => {
   if (RPC_UNWRAP_SINGLE_COLUMN.has(name)) {
     if (!rows.length) return null;
     const row = rows[0];
