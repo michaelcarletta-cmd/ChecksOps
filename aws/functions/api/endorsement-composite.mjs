@@ -50,6 +50,14 @@ const PRESETS = [
 
 const EXCEPTION_METHODS = new Set(['internal', 'manual', 'physical_check']);
 const DEPOSITED_STATUSES = new Set(['submitted', 'pending_approval', 'cleared', 'rejected']);
+export const HISTORICAL_CHECK_STATUSES = new Set([
+  'deposited',
+  'voided',
+  'returned',
+  'cancelled',
+  'funds_released',
+  'disbursed_externally',
+]);
 
 export const isDrawnSignature = (value) =>
   typeof value === 'string' && value.startsWith('data:image/');
@@ -496,9 +504,35 @@ const recoverOriginalPath = (check) => {
   return original || current || null;
 };
 
-export const invalidateOfficialRearImage = async (client, checkId) => {
+export const isHistoricalCheckLocked = (check = {}, deposits = []) => {
+  if (HISTORICAL_CHECK_STATUSES.has(String(check.status || ''))) return true;
+  if (check.deposited_at) return true;
+  const blocking = pickBlockingDeposit(deposits || []);
+  return Boolean(blocking && (blocking.checkalt_reference || DEPOSITED_STATUSES.has(String(blocking.status || ''))));
+};
+
+export const loadHistoricalLock = async (client, checkId, deps = {}) => {
+  if (!checkId) return { locked: false, check: null, deposits: [] };
+  const check = (await client.query(
+    `SELECT id, tenant_id, status, deposited_at, back_image_path, back_image_original_path,
+            back_image_deposit_path, endorsement_override, endorsement_render_meta, check_stage
+       FROM public.check_intake_items WHERE id = $1::uuid LIMIT 1`,
+    [checkId],
+  )).rows[0] || null;
+  if (!check) return { locked: false, check: null, deposits: [] };
+  const deposits = await (deps.loadDeposits
+    ? deps.loadDeposits(check)
+    : loadDepositsForCheck(client, { tenantId: check.tenant_id, checkId: check.id }));
+  return { locked: isHistoricalCheckLocked(check, deposits), check, deposits };
+};
+
+export const invalidateOfficialRearImage = async (client, checkId, deps = {}) => {
   if (!checkId) return { ok: false, error: 'missing_check_id' };
-  const row = (await client.query(
+  const lock = await loadHistoricalLock(client, checkId, deps);
+  if (lock.locked) {
+    return { ok: false, error: 'historical_deposit_locked', historicalDepositUntouched: true };
+  }
+  const row = lock.check || (await client.query(
     `SELECT id, back_image_path, back_image_original_path, back_image_deposit_path
      FROM public.check_intake_items WHERE id = $1::uuid LIMIT 1`,
     [checkId],
@@ -585,7 +619,7 @@ export const compositeEndorsementSignatures = async ({
   if (!checkId) return { ok: false, statusCode: 400, error: 'missing_check_id' };
   const check = (await client.query(
     `SELECT id, tenant_id, back_image_path, back_image_original_path, back_image_deposit_path,
-            endorsement_override, endorsement_render_meta, status, check_stage
+            endorsement_override, endorsement_render_meta, status, check_stage, deposited_at
        FROM public.check_intake_items WHERE id = $1::uuid LIMIT 1`,
     [checkId],
   )).rows[0];
@@ -594,8 +628,7 @@ export const compositeEndorsementSignatures = async ({
   const deposits = await (deps.loadDeposits
     ? deps.loadDeposits(check)
     : loadDepositsForCheck(client, { tenantId: check.tenant_id, checkId: check.id }));
-  const blocking = pickBlockingDeposit(deposits || []);
-  if (blocking && (blocking.checkalt_reference || DEPOSITED_STATUSES.has(String(blocking.status || '')))) {
+  if (isHistoricalCheckLocked(check, deposits)) {
     return {
       ok: false,
       statusCode: 409,
@@ -721,7 +754,14 @@ export const compositeEndorsementSignatures = async ({
 };
 
 export const afterGenuineEndorsementSigned = async (client, checkId, deps = {}) => {
-  const invalidated = await invalidateOfficialRearImage(client, checkId);
+  const lock = await loadHistoricalLock(client, checkId, deps);
+  if (lock.locked) {
+    return {
+      invalidated: { ok: false, error: 'historical_deposit_locked', historicalDepositUntouched: true },
+      composited: { ok: false, error: 'historical_deposit_locked', historicalDepositUntouched: true },
+    };
+  }
+  const invalidated = await invalidateOfficialRearImage(client, checkId, deps);
   if (deps.skipComposite) return { invalidated, composited: null };
   try {
     const composited = await compositeEndorsementSignatures({ client, checkId, deps });
