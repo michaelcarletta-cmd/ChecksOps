@@ -303,7 +303,7 @@ const callMaybe = async (fn) => {
 
 const fundsInspect = async (client) => {
   const functionRows = (await client.query(`
-    SELECT p.proname
+    SELECT p.proname, p.prosecdef, p.prorettype::regtype::text AS return_type
     FROM pg_proc p
     JOIN pg_namespace n ON n.oid = p.pronamespace
     WHERE n.nspname = 'public'
@@ -313,7 +313,7 @@ const fundsInspect = async (client) => {
         'current_tenant_is_check_funds_recipient'
       )
     ORDER BY p.proname
-  `)).rows.map((r) => r.proname);
+  `)).rows;
 
   const policies = (await client.query(`
     SELECT tablename, policyname, cmd, qual
@@ -521,15 +521,52 @@ const fundsInspect = async (client) => {
     };
   });
 
+  const functionNames = functionRows.map((r) => r.proname);
+  const sampleSplits = sampleCheckId
+    ? (await client.query(`
+        SELECT ds.id, ds.amount, ds.status, ds.method, ds.tenant_id, ds.recipient_tenant_id,
+               (ds.recipient_name IS NOT NULL) AS has_recipient_name
+        FROM public.disbursement_splits ds
+        JOIN public.disbursement_batches db ON db.id = ds.batch_id
+        WHERE db.check_intake_item_id = $1::uuid AND ds.status = 'settled'
+        ORDER BY ds.settled_at DESC NULLS LAST
+      `, [sampleCheckId])).rows.map((r) => ({
+      id: r.id,
+      amount: Number(r.amount),
+      status: r.status,
+      method: r.method,
+      ownerIsFreedom: r.tenant_id === FREEDOM,
+      recipientIsC1c: r.recipient_tenant_id === C1C,
+      recipientIsNull: r.recipient_tenant_id == null,
+      hasRecipientName: Boolean(r.has_recipient_name),
+    }))
+    : [];
+
+  const otherPartnerTenants = (await client.query(`
+    SELECT sc.target_tenant_id, count(DISTINCT sc.check_id)::int AS shared_checks_with_settled_splits
+    FROM public.shared_checks sc
+    JOIN public.disbursement_batches db ON db.check_intake_item_id = sc.check_id
+    JOIN public.disbursement_splits ds ON ds.batch_id = db.id AND ds.status = 'settled'
+    WHERE sc.revoked_at IS NULL
+      AND sc.target_tenant_id <> $1::uuid
+    GROUP BY sc.target_tenant_id
+    ORDER BY count(DISTINCT sc.check_id) DESC
+  `, [FREEDOM])).rows;
+
   return {
     ok: true,
     readOnly: true,
-    functionsPresent: functionRows,
+    functionsPresent: functionNames,
+    functionMeta: functionRows.map((r) => ({
+      name: r.proname,
+      securityDefiner: r.prosecdef === true,
+      returnType: r.return_type,
+    })),
     missingFunctions: [
       'get_tenant_funds_received',
       'get_check_claim_settlement',
       'current_tenant_is_check_funds_recipient',
-    ].filter((name) => !functionRows.includes(name)),
+    ].filter((name) => !functionNames.includes(name)),
     policies,
     physical,
     sample: sample ? {
@@ -541,7 +578,14 @@ const fundsInspect = async (client) => {
       c1c_recipient_count: Number(sample.c1c_recipient_count),
       null_recipient_count: Number(sample.null_recipient_count),
       split_ids: sample.split_ids,
+      splits: sampleSplits,
     } : null,
+    otherPartnerTenants,
+    awsApiUnwrapSimulation: {
+      note: 'AWS data.mjs RPC_UNWRAP_SINGLE_COLUMN includes get_tenant_funds_received and returns only rows[0] when the function has multiple columns',
+      c1cLaneWouldReceive: 'single_object_first_row_or_null_not_array',
+      frontendMapWouldThrow: true,
+    },
     freedomSession: await sessionFor(FREEDOM_TESTER),
     c1cSession: await sessionFor(C1C_ADMIN),
   };
