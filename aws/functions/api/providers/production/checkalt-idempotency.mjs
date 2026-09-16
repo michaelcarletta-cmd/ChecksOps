@@ -2,6 +2,7 @@ import { APP_USER_EMAIL_GUC, APP_USER_ID_GUC } from '../../cognito.mjs';
 import { financialPermissionsActivated } from '../../financial-flags.mjs';
 import { replaySafeResponse, stableIdempotencyKey } from '../../financial-idempotency.mjs';
 import { sanitizeAuditDetails } from '../../financial-audit.mjs';
+import { extractFinCaptureDepositDate } from '../amounts.mjs';
 
 export const checkAltIdempotencyKey = ({ tenantId, checkId, amountCents }) =>
   stableIdempotencyKey({
@@ -246,9 +247,11 @@ export async function persistPollOutcome(client, {
   reference,
   providerPayload = null,
 }) {
+  const depositDate = extractFinCaptureDepositDate(providerPayload);
   const payload = JSON.stringify(sanitizeAuditDetails({
     last_poll: {
       status,
+      depositDate,
       response_keys: providerPayload && typeof providerPayload === 'object'
         ? Object.keys(providerPayload).slice(0, 40)
         : [],
@@ -259,12 +262,12 @@ export async function persistPollOutcome(client, {
      SET status = COALESCE($2, status),
          checkalt_reference = COALESCE($3, checkalt_reference),
          last_polled_at = now(),
-         cleared_at = CASE WHEN $2 = 'cleared' THEN COALESCE(cleared_at, now()) ELSE cleared_at END,
+         cleared_at = CASE WHEN $2 = 'cleared' THEN COALESCE(cleared_at, $5::timestamptz, now()) ELSE cleared_at END,
          returned_at = CASE WHEN $2 = 'returned' THEN COALESCE(returned_at, now()) ELSE returned_at END,
          last_status_payload = COALESCE(last_status_payload, '{}'::jsonb) || $4::jsonb,
          updated_at = now()
      WHERE id = $1::uuid
      RETURNING *`,
-    [rowId, status, reference, payload],
+    [rowId, status, reference, payload, depositDate],
   )).rows[0];
 }

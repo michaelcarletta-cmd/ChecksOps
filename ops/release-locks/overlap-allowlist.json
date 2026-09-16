@@ -1,6 +1,140 @@
 {
   "version": 1,
   "fail_closed": true,
-  "notes": "Empty by default. A reviewed exception must name a concrete other PR number, a path that exactly equals a protected path or a specifically permitted protected prefix, an expiration or review condition, and a meaningful reason. Empty paths and repository-wide entries are forbidden.",
-  "allow": []
+  "notes": "Reviewed exceptions for PR #359 Manager / Bank Deposits / Partner name repair. Paths are exact protected files. SQL 31-34 and Partner Codes are unchanged.",
+  "allow": [
+    {
+      "other_pr": 234,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "PR 359 Manager Bank Deposits and partner-name repair overlaps this open PR on CheckCommandCenter without changing partner SQL 31-34 or Partner Codes.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 237,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "PR 359 Manager Bank Deposits and partner-name repair overlaps this open PR on CheckCommandCenter without changing partner SQL 31-34 or Partner Codes.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 248,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "PR 359 Manager Bank Deposits and partner-name repair overlaps this open PR on CheckCommandCenter without changing partner SQL 31-34 or Partner Codes.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 257,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "PR 359 Manager Bank Deposits and partner-name repair overlaps this open PR on CheckCommandCenter without changing partner SQL 31-34 or Partner Codes.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 258,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "PR 359 Manager Bank Deposits and partner-name repair overlaps this open PR on CheckCommandCenter without changing partner SQL 31-34 or Partner Codes.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 260,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "PR 359 Manager Bank Deposits and partner-name repair overlaps this open PR on CheckCommandCenter without changing partner SQL 31-34 or Partner Codes.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 278,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "PR 359 Manager Bank Deposits and partner-name repair overlaps this open PR on CheckCommandCenter without changing partner SQL 31-34 or Partner Codes.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 282,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "PR 359 Manager Bank Deposits and partner-name repair overlaps this open PR on CheckCommandCenter without changing partner SQL 31-34 or Partner Codes.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 283,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "PR 359 Manager Bank Deposits and partner-name repair overlaps this open PR on CheckCommandCenter without changing partner SQL 31-34 or Partner Codes.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 288,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "PR 359 Manager Bank Deposits and partner-name repair overlaps this open PR on CheckCommandCenter without changing partner SQL 31-34 or Partner Codes.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 312,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "PR 359 Manager Bank Deposits and partner-name repair overlaps this open PR on CheckCommandCenter without changing partner SQL 31-34 or Partner Codes.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 327,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "PR 359 Manager Bank Deposits and partner-name repair overlaps this open PR on CheckCommandCenter without changing partner SQL 31-34 or Partner Codes.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 332,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "PR 359 Manager Bank Deposits and partner-name repair overlaps this open PR on CheckCommandCenter without changing partner SQL 31-34 or Partner Codes.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 339,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "PR 359 Manager Bank Deposits and partner-name repair overlaps this open PR on CheckCommandCenter without changing partner SQL 31-34 or Partner Codes.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 342,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "PR 359 Manager Bank Deposits and partner-name repair overlaps this open PR on CheckCommandCenter without changing partner SQL 31-34 or Partner Codes.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 347,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "PR 359 Manager Bank Deposits and partner-name repair overlaps this open PR on CheckCommandCenter without changing partner SQL 31-34 or Partner Codes.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 339,
+      "path": "aws/functions/api/providers/production/checkalt-idempotency.mjs",
+      "reason": "PR 359 persists FinCapture depositDate onto cleared_at in persistPollOutcome; Auto-Deposit PR 339 also touches this CheckAlt file.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 316,
+      "path": ".github/workflows/aws-migration-ci.yml",
+      "reason": "PR 359 fetches the PR base branch so the SQL 31-34 name-only guard works on a shallow checkout; production-guardrails PR 316 also touches this workflow.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 319,
+      "path": ".github/workflows/aws-migration-ci.yml",
+      "reason": "PR 359 fetches the PR base branch so the SQL 31-34 name-only guard works on a shallow checkout; production SPA lock PR 319 also touches this workflow.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    }
+  ]
 }

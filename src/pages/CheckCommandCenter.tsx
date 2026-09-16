@@ -1355,9 +1355,8 @@ export default function CheckCommandCenter() {
         {/* Manager Hub — Deposit Ops + Reports + Mortgage Cos (admin only) */}
         {activeTab === "manager" && canAccessManager && (
           <div className="mt-3">
-            <Tabs defaultValue="deposit_ops">
+            <Tabs defaultValue={SHOW_CHECKALT ? "pending_approvals" : "deposit_ops"}>
               <TabsList className="w-full flex-wrap h-auto gap-1 bg-muted/50">
-                <TabsTrigger value="deposit_ops" className="text-xs gap-1"><ArrowDownToLine className="h-3 w-3" />Deposit Ops</TabsTrigger>
                 {SHOW_CHECKALT && (
                   <>
                     <TabsTrigger value="pending_approvals" className="text-xs gap-1"><ShieldAlert className="h-3 w-3" />Pending Approvals</TabsTrigger>
@@ -1366,11 +1365,7 @@ export default function CheckCommandCenter() {
                   </>
                 )}
                 <TabsTrigger value="returned" className="text-xs gap-1"><RotateCcw className="h-3 w-3" />Returned{returnedCount > 0 ? ` (${returnedCount})` : ""}</TabsTrigger>
-                <TabsTrigger value="reports" className="text-xs gap-1"><FileBarChart className="h-3 w-3" />Reports</TabsTrigger>
                 <TabsTrigger value="mortgage_cos" className="text-xs gap-1"><Building2 className="h-3 w-3" />Mortgage Cos</TabsTrigger>
-
-                <TabsTrigger value="partners" className="text-xs gap-1"><Users className="h-3 w-3" />Partners</TabsTrigger>
-                <TabsTrigger value="homeowner_uploads" className="text-xs gap-1"><ArrowDownToLine className="h-3 w-3 rotate-180" />Homeowner Uploads</TabsTrigger>
                 <button
                   type="button"
                   onClick={() => { setActiveTab("reissue"); setSelectedCheck(null); }}
@@ -1378,7 +1373,10 @@ export default function CheckCommandCenter() {
                 >
                   <RotateCcw className="h-3 w-3" />Reissue{reissueRequested.length > 0 ? ` (${reissueRequested.length})` : ""}
                 </button>
-
+                <TabsTrigger value="partners" className="text-xs gap-1"><Users className="h-3 w-3" />Partners</TabsTrigger>
+                <TabsTrigger value="homeowner_uploads" className="text-xs gap-1"><ArrowDownToLine className="h-3 w-3 rotate-180" />Homeowner Uploads</TabsTrigger>
+                <TabsTrigger value="deposit_ops" className="text-xs gap-1"><ArrowDownToLine className="h-3 w-3" />Deposit Ops</TabsTrigger>
+                <TabsTrigger value="reports" className="text-xs gap-1"><FileBarChart className="h-3 w-3" />Reports</TabsTrigger>
               </TabsList>
               <TabsContent value="deposit_ops" className="mt-3">
                 <Suspense fallback={<TabLoader />}>

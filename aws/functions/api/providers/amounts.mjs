@@ -126,3 +126,41 @@ export const mapCheckAltStatus = (payload = {}) => {
     || CHECKALT_STATUS_MAP.string[rawStatus]
     || null;
 };
+
+/**
+ * FinCapture history/item payloads expose `depositDate` as the bank-credit day.
+ * `cleared_at` must persist that date — not poll time — so Bank Deposits can
+ * reconstruct the lump-sum. Do not fall back to submittedDate/createdDate.
+ */
+export const extractFinCaptureDepositDate = (payload = {}) => {
+  const seen = new Set();
+  const queue = [payload];
+  while (queue.length) {
+    const current = queue.shift();
+    if (!current || typeof current !== 'object' || seen.has(current)) continue;
+    seen.add(current);
+    const raw = current.depositDate ?? current.DepositDate ?? null;
+    const parsed = parseFinCaptureDepositDate(raw);
+    if (parsed) return parsed;
+    if (current.history && typeof current.history === 'object') queue.push(current.history);
+    if (current.item && typeof current.item === 'object') queue.push(current.item);
+  }
+  return null;
+};
+
+export const parseFinCaptureDepositDate = (raw) => {
+  if (raw == null || raw === '') return null;
+  if (raw instanceof Date && !Number.isNaN(raw.getTime())) return raw.toISOString();
+  const text = String(raw).trim();
+  const isoDay = text.match(/^(\d{4}-\d{2}-\d{2})(?:[T\s].*)?$/);
+  if (isoDay) return `${isoDay[1]}T12:00:00.000Z`;
+  const usDay = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (usDay) {
+    const mm = usDay[1].padStart(2, '0');
+    const dd = usDay[2].padStart(2, '0');
+    return `${usDay[3]}-${mm}-${dd}T12:00:00.000Z`;
+  }
+  const ms = Date.parse(text);
+  if (!Number.isFinite(ms)) return null;
+  return new Date(ms).toISOString();
+};

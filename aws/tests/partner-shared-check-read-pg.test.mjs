@@ -182,7 +182,11 @@ CREATE TABLE public.tenant_users (
 CREATE TABLE public.check_intake_items (
   id uuid PRIMARY KEY,
   tenant_id uuid,
-  status text
+  status text,
+  check_stage text,
+  deposit_recommendation text,
+  ocr_status text,
+  amount numeric
 );
 CREATE TABLE public.claims (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
