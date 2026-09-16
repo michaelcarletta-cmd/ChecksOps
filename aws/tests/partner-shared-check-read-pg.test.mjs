@@ -447,6 +447,8 @@ INSERT INTO public.shared_checks (check_id, source_tenant_id, target_tenant_id, 
 `);
   psql(['-d', dbName, '-f', path.join(SQL_DIR, '31_partner_safe_read.sql')]);
   note('applied 31_partner_safe_read.sql');
+  psql(['-d', dbName, '-f', path.join(SQL_DIR, '33_partner_stage_totals.sql')]);
+  note('applied 33_partner_stage_totals.sql');
 
   const matrixSql = `
 CREATE TABLE public._share_results (
@@ -626,6 +628,12 @@ BEGIN
 
   r := public._as_count('${PARTNER_USER}'::uuid, $q$SELECT count(*) FROM public.aws_partner_check_payees WHERE id = '${PAYEE_SHARED}'::uuid$q$);
   PERFORM public._share_ok('partner_safe_payee_read', (r->>'n')::int = 1, r::text);
+
+  r := public._as_count('${PARTNER_USER}'::uuid, $q$SELECT COALESCE(sum(count),0) FROM public.get_check_stage_totals('${PARTNER}'::uuid)$q$);
+  PERFORM public._share_ok('partner_stage_totals_include_shared', (r->>'n')::int >= 1, r::text);
+
+  r := public._as_count('${PARTNER_USER}'::uuid, $q$SELECT COALESCE(sum(count),0) FROM public.get_check_stage_totals('${SOURCE}'::uuid)$q$);
+  PERFORM public._share_ok('partner_stage_totals_other_tenant_empty', (r->>'n')::int = 0, r::text);
 
   r := public._as_scalar('${PARTNER_USER}'::uuid, $q$SELECT COALESCE(to_jsonb(t)::text, '') FROM public.aws_partner_check_payees t WHERE id = '${PAYEE_SHARED}'::uuid$q$);
   PERFORM public._share_ok('partner_safe_payee_no_token', (r->>'ok')::boolean AND (r->>'val') NOT LIKE '%${TOKEN_PAYEE}%', r::text);

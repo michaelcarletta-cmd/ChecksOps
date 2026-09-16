@@ -1,0 +1,11 @@
+{
+  "name": "checksops-staging-c1c-share-inspect",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "index.mjs",
+  "dependencies": {
+    "@aws-sdk/client-secrets-manager": "3.1124.0",
+    "pg": "8.23.0"
+  }
+}

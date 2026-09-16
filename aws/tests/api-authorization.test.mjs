@@ -74,7 +74,15 @@ const mockProbeClient = () => {
         return { rows: [{ n: 83, freedom: 83, org_null: 0 }] };
       }
       if (sql === CHECKS_BY_TENANT_SQL) {
-        return { rows: [{ freedom: 10, c1c: 0 }] };
+        return { rows: [{
+          freedom: 10,
+          c1c: 0,
+          freedom_owned: 10,
+          c1c_owned: 0,
+          c1c_shared_accessible: 0,
+          freedom_shared_accessible: 0,
+          visible: 10,
+        }] };
       }
       throw new Error(`unexpected query: ${sql}`);
     },
@@ -109,6 +117,10 @@ test('authorization probe uses mapped application UUID and ignores spoofed ids',
   assert.equal(result.isolation.canReadC1cProbe, false);
   assert.deepEqual(result.claimsVisible, { n: 83, freedom: 83, org_null: 0 });
   assert.equal(result.checksVisible.c1c, 0);
+  assert.deepEqual(result.checksVisible.owned, { freedom: 10, c1c: 0 });
+  assert.deepEqual(result.checksVisible.sharedAccessible, { freedom: 0, c1c: 0 });
+  assert.equal(result.checksVisible.hasCheckAccess, true);
+  assert.equal(result.isolation.hasCheckAccess, true);
   assert.equal(result.restoredTablesRlsEnabled, true);
   assert.deepEqual(result.roles, ['staff']);
   assert.equal(result.spoofFieldsIgnored.queryUserId, OTHER_UUID);
@@ -116,4 +128,40 @@ test('authorization probe uses mapped application UUID and ignores spoofed ids',
   const guc = client.queries.filter((q) => q.sql.startsWith('SELECT set_config'));
   assert.equal(guc[0].params[1], APP_ID);
   assert.equal(guc[1].params[1], 'checksops-tester@freedomadj.com');
+});
+
+test('authorization probe treats C1C shared-accessible checks as access, not zero', async () => {
+  const client = mockProbeClient();
+  client.query = async (sql, params) => {
+    if (sql === CHECKS_BY_TENANT_SQL) {
+      return { rows: [{
+        freedom: 94,
+        c1c: 0,
+        freedom_owned: 94,
+        c1c_owned: 0,
+        c1c_shared_accessible: 94,
+        freedom_shared_accessible: 0,
+        visible: 94,
+      }] };
+    }
+    return mockProbeClient().query(sql, params);
+  };
+  const result = await runAuthorizationProbe({
+    cognitoSub: COGNITO_SUB,
+    loadCredentials: async () => ({
+      username: 'checksops',
+      password: 'unit-test-only-not-a-real-secret',
+      host: 'db.example.internal',
+      database: 'checksops',
+    }),
+    createClient: () => client,
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.checksVisible.c1c, 0);
+  assert.equal(result.checksVisible.owned.c1c, 0);
+  assert.equal(result.checksVisible.sharedAccessible.c1c, 94);
+  assert.equal(result.checksVisible.hasCheckAccess, true);
+  assert.equal(result.isolation.hasCheckAccess, true);
+  assert.match(CHECKS_BY_TENANT_SQL, /c1c_shared_accessible/);
+  assert.match(CHECKS_BY_TENANT_SQL, /aws_is_active_shared_check_target/);
 });

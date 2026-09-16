@@ -700,28 +700,41 @@ export default function CheckCommandCenter() {
     queryFn: async () => {
       const { data: sharedData, error: sErr } = await supabase
         .from("shared_checks")
-        .select("check_id, source_tenant_id, tenants!shared_checks_source_tenant_id_fkey(name)")
+        .select("check_id, source_tenant_id")
         .eq("target_tenant_id", tenantId!)
         .is("revoked_at", null);
       if (sErr) throw sErr;
       if (!sharedData || sharedData.length === 0) return [];
 
       const checkIds = sharedData.map((s: any) => s.check_id);
-      const { data: checkData, error: checkErr } = await supabase
-        .from("check_intake_items")
-        .select(
-          "*, check_payees(payee_name, payee_type, endorsement_status), checkalt_deposits(id, status, submitted_at, approved_at, updated_at)",
-        )
-        .in("id", checkIds)
-        .order("created_at", { ascending: false });
+      const sourceIds = [...new Set(sharedData.map((s: any) => s.source_tenant_id).filter(Boolean))];
+      const [{ data: checkData, error: checkErr }, { data: sourceTenants }] = await Promise.all([
+        supabase
+          .from("check_intake_items")
+          .select(
+            "*, check_payees(payee_name, payee_type, endorsement_status), checkalt_deposits(id, status, submitted_at, approved_at, updated_at)",
+          )
+          .in("id", checkIds)
+          .order("created_at", { ascending: false }),
+        sourceIds.length
+          ? supabase.from("tenants_public" as any).select("id, name").in("id", sourceIds)
+          : Promise.resolve({ data: [] as any[] }),
+      ]);
       if (checkErr) throw checkErr;
 
-      const shareMap = new Map(sharedData.map((s: any) => [s.check_id, s.tenants?.name ?? "Partner"]));
-      return (checkData ?? []).map((c: any) => ({
-        ...c,
-        _shared: true,
-        _sourceTenantName: shareMap.get(c.id) ?? "Partner",
-      })) as unknown as (CheckItem & { _shared: true; _sourceTenantName: string })[];
+      const tenantNames = new Map((sourceTenants ?? []).map((t: any) => [t.id, t.name]));
+      const shareMap = new Map(sharedData.map((s: any) => [s.check_id, tenantNames.get(s.source_tenant_id) ?? "Partner"]));
+      const rows = await Promise.all(
+        (checkData ?? []).map(async (c: any) => {
+          const withPayees = await attachPartnerPayees(c, tenantId);
+          return {
+            ...withPayees,
+            _shared: true,
+            _sourceTenantName: shareMap.get(c.id) ?? "Partner",
+          };
+        }),
+      );
+      return rows as unknown as (CheckItem & { _shared: true; _sourceTenantName: string })[];
     },
     enabled: !!tenantId,
     refetchOnWindowFocus: false, // Prevent page jump when switching tabs
@@ -3392,15 +3405,19 @@ function CheckDetailPanel({
     queryFn: async () => {
       const { data } = await supabase
         .from("shared_checks")
-        .select("target_tenant_id, tenants!shared_checks_target_tenant_id_fkey(id, name)")
+        .select("target_tenant_id")
         .eq("check_id", checkId)
         .eq("source_tenant_id", tenantId!)
         .is("revoked_at", null)
         .limit(1)
         .maybeSingle();
       if (!data) return null;
-      const t: any = (data as any).tenants;
-      return { id: data.target_tenant_id as string, name: t?.name as string ?? "Contractor" };
+      const { data: tenant } = await supabase
+        .from("tenants_public" as any)
+        .select("id, name")
+        .eq("id", data.target_tenant_id)
+        .maybeSingle();
+      return { id: data.target_tenant_id as string, name: (tenant as any)?.name as string ?? "Contractor" };
     },
   });
 
