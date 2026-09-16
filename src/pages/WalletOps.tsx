@@ -43,6 +43,7 @@ import { useSweepConfig } from "@/hooks/useSweepConfig";
 import {
   useAllTenantWalletBalances,
   useRefreshTransferStatuses,
+  useTenantWalletStatus,
   useWalletOpsReadiness,
   useWalletOpsTransfers,
   useWalletRunningBalance,
@@ -147,6 +148,7 @@ export default function WalletOps() {
   const { data: transferData, isLoading: transfersLoading } = useWalletOpsTransfers();
   const refreshStatuses = useRefreshTransferStatuses();
 
+  const { data: liveStatus, refetch: refetchLive } = useTenantWalletStatus();
   const { data: readiness } = useWalletOpsReadiness();
   const { data: runningData, isLoading: runningLoading } = useWalletRunningBalance("operating");
   const { data: tenantBalances } = useAllTenantWalletBalances(userRole === "admin");
@@ -163,27 +165,35 @@ export default function WalletOps() {
   const tenantBase = tenant?.slug
     ? isCheckOpsHost()
       ? `/${tenant.slug}`
-      : `/wl/${tenant.slug}`
+      : typeof window !== "undefined" && window.location.pathname.startsWith("/wl/")
+        ? `/wl/${tenant.slug}`
+        : ""
     : "";
 
   const syncFailed = wallet?.status === "sync_failed";
+  const liveAvailable = liveStatus?.wallet?.available_cents;
   const balanceLabel = syncFailed
     ? "Balance unavailable"
+    : liveAvailable !== undefined
+      ? money(liveAvailable)
     : wallet
       ? money(wallet.available_cents)
-      : setupRequired
+      : setupRequired || liveStatus?.setup_required
         ? "Pending setup"
         : "Pending sync";
 
-  const sweepsOn = config?.status === "enabled";
+  const sweepsOn = (liveStatus?.sweep_config?.status ?? config?.status) === "enabled";
   const effectiveRail = (payoutRail || (config?.push_rail as SweepPushRail) || pushRails[0] || "") as
     | SweepPushRail
     | "";
 
   const lastSweep = history?.[0];
-  const pendingOut = transferData?.pendingOutCents ?? 0;
-  const pendingIn = transferData?.pendingInCents ?? 0;
-  const minimumCents = config?.minimum_balance_cents ?? 0;
+  const pendingOut = liveStatus?.pending_out_cents ?? transferData?.pendingOutCents ?? 0;
+  const pendingIn = liveStatus?.pending_in_cents ?? transferData?.pendingInCents ?? 0;
+  const minimumCents = liveStatus?.sweep_config?.minimum_balance_cents ?? config?.minimum_balance_cents ?? 0;
+  const liveBank = liveStatus?.settlement_method ?? settlementMethod;
+  const liveReadiness = liveStatus?.readiness ?? readiness;
+  const verification = liveStatus?.verification;
 
 
   async function handleSavePayoutSpeed() {
@@ -196,7 +206,12 @@ export default function WalletOps() {
         status: sweepsOn ? "enabled" : "disabled",
         enablePull: true,
       });
-      toast({ title: "Payout speed updated" });
+      toast({
+        title: "Payout speed updated",
+        description: sweepsOn && minimumCents <= 0
+          ? "Automatic payouts are on at $0.00 retain — the full wallet is pushed to the bank. Pause them or keep a retain to send through ChecksOps."
+          : undefined,
+      });
     } catch (e) {
       toast({
         title: "Could not update payout speed",
@@ -206,7 +221,7 @@ export default function WalletOps() {
     }
   }
 
-  if (!eligibilityLoading && !enabled) {
+  if (!eligibilityLoading && !enabled && !liveStatus?.wallet && !liveStatus?.verification) {
     return (
       <div className="mx-auto max-w-3xl p-4">
         <SectionCard title="WalletOps" icon={<Wallet className="h-4 w-4" />} accent="bg-primary/40">
@@ -272,6 +287,11 @@ export default function WalletOps() {
               <div className="mt-1 text-xl font-semibold">
                 {transfersLoading ? "…" : money(pendingIn)}
               </div>
+              {liveStatus?.moov_pending_cents ? (
+                <p className="text-[10px] text-muted-foreground">
+                  Moov pending {money(liveStatus.moov_pending_cents)}
+                </p>
+              ) : null}
             </div>
             <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
               <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-amber-500">
@@ -287,6 +307,7 @@ export default function WalletOps() {
               onClick={() => {
                 refetchWallet();
                 refetchSweeps();
+                refetchLive();
               }}
             >
               <RefreshCw className="mr-2 h-3.5 w-3.5" />
@@ -313,18 +334,29 @@ export default function WalletOps() {
               <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Settlement bank</p>
               <p className="mt-0.5 font-medium">
                 {settlementMethod
-                  ? `${settlementMethod.bank_name ?? "Bank"} ••${settlementMethod.last_four ?? "----"}`
-                  : "Not connected"}
+                  ? `${liveBank?.bank_name ?? settlementMethod.bank_name ?? "Bank"} ••${liveBank?.last_four ?? settlementMethod.last_four ?? "----"}`
+                  : liveBank
+                    ? `${liveBank.bank_name ?? "Bank"} ••${liveBank.last_four ?? "----"}`
+                    : "Not connected"}
               </p>
             </div>
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Minimum retained</p>
               <p className="mt-0.5 font-medium">{money(minimumCents)}</p>
+              {sweepsOn && minimumCents <= 0 && (
+                <p className="text-xs text-muted-foreground">
+                  $0 retain auto-pays the full wallet to the bank. Pause automatic payouts or keep a retain to send from the wallet.
+                </p>
+              )}
             </div>
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Payout speed</p>
               <p className="mt-0.5 font-medium">
-                {config?.push_rail ? (SWEEP_RAIL_LABEL[config.push_rail] ?? config.push_rail) : "Not set"}
+                {config?.push_rail || liveStatus?.sweep_config?.push_rail
+                  ? (SWEEP_RAIL_LABEL[(config?.push_rail || liveStatus?.sweep_config?.push_rail) as SweepPushRail]
+                    ?? config?.push_rail
+                    ?? liveStatus?.sweep_config?.push_rail)
+                  : "Not set"}
               </p>
             </div>
             <div>
@@ -448,29 +480,44 @@ export default function WalletOps() {
           action={
             <Badge
               variant="outline"
-              className={READINESS_COPY[readiness?.overall ?? "not_started"].tone}
+              className={READINESS_COPY[liveReadiness?.overall ?? "not_started"].tone}
             >
-              {READINESS_COPY[readiness?.overall ?? "not_started"].label}
+              {READINESS_COPY[liveReadiness?.overall ?? "not_started"].label}
             </Badge>
           }
         >
           <div className="space-y-2">
-            {(readiness?.checks ?? []).slice(0, 5).map((c) => (
-              <div key={c.id} className="flex items-center justify-between gap-2 text-sm">
-                <span className="truncate">{c.label}</span>
+            {verification?.what_is_verified?.length ? (
+              <p className="text-xs text-muted-foreground">
+                Verified: {verification.what_is_verified.join(" · ")}
+              </p>
+            ) : null}
+            {(liveReadiness?.checks ?? []).map((c) => (
+              <div key={c.id} className="flex items-start justify-between gap-2 text-sm">
+                <div className="min-w-0">
+                  <span className="truncate">{c.label}</span>
+                  {c.detail ? (
+                    <p className="text-[11px] text-muted-foreground">{c.detail}</p>
+                  ) : null}
+                </div>
                 <Badge variant="outline" className={`text-[10px] ${READINESS_COPY[c.state].tone}`}>
                   {READINESS_COPY[c.state].label}
                 </Badge>
               </div>
             ))}
-            {!readiness && (
+            {!liveReadiness && (
               <p className="text-sm text-muted-foreground">Checking your account status…</p>
             )}
+            {verification?.payment_methods?.length ? (
+              <p className="text-[11px] text-muted-foreground">
+                Moov methods: {verification.payment_methods.map((m) => m.type).filter(Boolean).join(", ")}
+              </p>
+            ) : null}
           </div>
           <Separator />
           <div className="flex items-center justify-between gap-2">
             <span className="text-sm text-muted-foreground">
-              Settlement bank {settlementMethod ? "connected" : "not connected"}
+              Settlement bank {liveBank || settlementMethod ? "connected" : "not connected"}
             </span>
             <Dialog>
               <DialogTrigger asChild>

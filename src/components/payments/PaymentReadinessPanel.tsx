@@ -6,6 +6,7 @@ import { Loader2, RefreshCw, ShieldCheck, CircleAlert, Clock, CircleDashed, Flas
 import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibility";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
 
 type ReadinessState = "ready" | "pending" | "action_required" | "not_started";
 
@@ -24,6 +25,8 @@ interface Readiness {
   overall: ReadinessState;
   checks: ReadinessCheck[];
   requirements: string[];
+  source?: string;
+  liveProviderCalled?: boolean;
 }
 
 const STATE_LABEL: Record<ReadinessState, string> = {
@@ -69,6 +72,7 @@ async function invoke(fn: string, body: Record<string, unknown>) {
 export function PaymentReadinessPanel() {
   const { tenantId, enabled } = usePaymentProviderEligibility();
   const { toast } = useToast();
+  const qc = useQueryClient();
   const [readiness, setReadiness] = useState<Readiness | null>(null);
   const [loading, setLoading] = useState(false);
   const [tosBusy, setTosBusy] = useState(false);
@@ -79,12 +83,15 @@ export function PaymentReadinessPanel() {
     try {
       const res = await invoke("moov-readiness", { tenant_id: tenantId });
       setReadiness(res?.readiness ?? null);
+      await qc.invalidateQueries({ queryKey: ["payment-account"] });
+      await qc.invalidateQueries({ queryKey: ["stakeholder-accounts"] });
+      await qc.invalidateQueries({ queryKey: ["check-stakeholders"] });
     } catch (e: any) {
       toast({ title: "Couldn't check payment readiness", description: e.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
-  }, [tenantId, enabled, toast]);
+  }, [tenantId, enabled, toast, qc]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -133,6 +140,11 @@ export function PaymentReadinessPanel() {
             {readiness && (
               <Badge variant="outline" className={`text-[10px] ${STATE_CLASS[readiness.overall]}`}>
                 {STATE_LABEL[readiness.overall]}
+              </Badge>
+            )}
+            {readiness?.liveProviderCalled && !readiness.isSandbox && (
+              <Badge variant="outline" className="text-[10px] border-emerald-500/40 text-emerald-500">
+                Live Moov
               </Badge>
             )}
             {readiness?.isSandbox && (

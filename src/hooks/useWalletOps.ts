@@ -82,10 +82,95 @@ export function useRefreshTransferStatuses() {
   });
 }
 
+export interface TenantWalletStatus {
+  wallet: {
+    available_cents: number;
+    pending_cents: number;
+    status: string;
+    last_synced_at: string | null;
+    provider_wallet_id?: string | null;
+  } | null;
+  pending_in_cents: number;
+  pending_out_cents: number;
+  moov_pending_cents: number;
+  sweep_config: {
+    status: string;
+    minimum_balance_cents: number;
+    push_rail: string | null;
+  } | null;
+  settlement_method: {
+    bank_name: string | null;
+    last_four: string | null;
+    connection_status: string | null;
+  } | null;
+  available_push_rails: string[];
+  verification: {
+    account_verified: boolean;
+    identity: string | null;
+    tos_accepted: boolean;
+    capabilities: { capability: string; status: string }[];
+    banks: { bankName?: string | null; lastFour?: string | null; status?: string | null }[];
+    payment_methods: { type: string | null }[];
+    what_is_verified: string[];
+  } | null;
+  payees?: {
+    moov_account_id: string;
+    verification_status: string;
+    bank_verified: boolean;
+    stakeholder_account_ids: string[];
+  }[];
+  readiness: WalletOpsReadiness | null;
+  setup_required: boolean;
+}
+
+/** Live GET snapshot of this organization's Moov wallet. Does not move money. */
+export function useTenantWalletStatus() {
+  const { tenantId } = usePaymentProviderEligibility();
+
+  return useQuery<TenantWalletStatus | null>({
+    queryKey: ["tenant-wallet-status", tenantId],
+    enabled: !!tenantId,
+    staleTime: 30_000,
+    retry: false,
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke("moov-wallet-status", {
+        body: { tenant_id: tenantId },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      const row = data as any;
+      return {
+        wallet: row.wallet ?? null,
+        pending_in_cents: Number(row.pending_in_cents || 0),
+        pending_out_cents: Number(row.pending_out_cents || 0),
+        moov_pending_cents: Number(row.moov_pending_cents || 0),
+        sweep_config: row.sweep_config ?? null,
+        settlement_method: row.settlement_method ?? null,
+        available_push_rails: row.available_push_rails ?? [],
+        verification: row.verification ?? null,
+        payees: row.payees ?? [],
+        readiness: row.readiness
+          ? {
+              overall: row.readiness.overall,
+              canMoveMoney: !!row.readiness.canMoveMoney,
+              checks: (row.readiness.checks ?? []).map((c: any) => ({
+                id: c.id,
+                label: c.label,
+                state: c.state,
+                detail: c.detail,
+              })),
+            }
+          : null,
+        setup_required: !!row.setup_required,
+      };
+    },
+  });
+}
+
 export interface WalletOpsReadiness {
   overall: WalletOpsReadinessState;
   canMoveMoney: boolean;
-  checks: { id: string; label: string; state: WalletOpsReadinessState }[];
+  checks: { id: string; label: string; state: WalletOpsReadinessState; detail?: string | null }[];
 }
 
 /** Compact readiness summary for the WalletOps shortcut card. */
@@ -111,6 +196,7 @@ export function useWalletOpsReadiness() {
           id: c.id,
           label: c.label,
           state: c.state as WalletOpsReadinessState,
+          detail: c.detail,
         })),
       };
     },

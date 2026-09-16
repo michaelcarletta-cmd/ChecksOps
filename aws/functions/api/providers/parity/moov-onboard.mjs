@@ -17,6 +17,7 @@ import {
   scopes,
 } from './moov-client.mjs';
 import { fail, jsonResult } from './caller.mjs';
+import { capabilitiesStillNeeded } from '../readiness.mjs';
 import { sendViaSesOrSink } from '../../email.mjs';
 import { renderTransactionalTemplate } from '../../email-templates.mjs';
 import { emailAssetOrigin, resolveEmailBranding } from '../../email-branding.mjs';
@@ -176,10 +177,18 @@ export const accountOnboard = {
         }).catch(() => {});
       }
     }
-    await moovFetch(`/accounts/${accountId}/capabilities`, {
-      method: 'POST', scopes: scopes.capabilitiesWrite(accountId),
-      body: { capabilities: ['transfers', 'send-funds', 'wallet', 'send-funds.ach'] }, fetchImpl,
-    }).catch(() => {});
+    const existingCaps = await moovFetch(`/accounts/${accountId}/capabilities`, {
+      scopes: scopes.capabilitiesRead(accountId), fetchImpl,
+    }).catch(() => null);
+    if (Array.isArray(existingCaps)) {
+      const missingCaps = capabilitiesStillNeeded(existingCaps, ['transfers', 'send-funds', 'wallet', 'send-funds.ach']);
+      if (missingCaps.length > 0) {
+        await moovFetch(`/accounts/${accountId}/capabilities`, {
+          method: 'POST', scopes: scopes.capabilitiesWrite(accountId),
+          body: { capabilities: missingCaps }, fetchImpl,
+        }).catch(() => {});
+      }
+    }
     await client.query(
       `UPDATE public.payment_provider_accounts SET onboarding_status = 'verification_pending', last_synced_at = now() WHERE id = $1::uuid`,
       [account.id],

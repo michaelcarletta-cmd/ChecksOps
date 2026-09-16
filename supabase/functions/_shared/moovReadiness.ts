@@ -59,6 +59,33 @@ export function findCapability(
   );
 }
 
+/** True when Moov already has this family or dotted id — never re-request (KYC/underwriting is billed). */
+export function capabilityAlreadyPresent(
+  caps: CapabilityLike[] | null | undefined,
+  wanted: string,
+): boolean {
+  return Boolean(findCapability(caps, wanted));
+}
+
+export function capabilityEnabled(
+  caps: CapabilityLike[] | null | undefined,
+  wanted: string,
+): boolean {
+  return String(findCapability(caps, wanted)?.status ?? "").toLowerCase() === "enabled";
+}
+
+/**
+ * Capabilities that are truly absent. Family match (`send-funds` satisfies
+ * `send-funds.ach`) means do not POST. Presence in any status is enough — a
+ * pending/errored family is still an underwriting record; re-POST charges again.
+ */
+export function capabilitiesStillNeeded(
+  caps: CapabilityLike[] | null | undefined,
+  wantedList: string[] | null | undefined,
+): string[] {
+  return (wantedList ?? []).filter((wanted) => !capabilityAlreadyPresent(caps, wanted));
+}
+
 export function capabilityState(cap: CapabilityLike | null): ReadinessState {
   if (!cap) return "not_started";
   switch (String(cap.status ?? "").toLowerCase()) {
@@ -195,7 +222,9 @@ export function evaluateReadiness(input: ReadinessInput): ReadinessResult {
     id: "collect_funds_ach",
     label: "Collect funds via ACH",
     state: capabilityState(collectFunds),
-    detail: collectFunds ? null : "ACH collection not requested or not yet returned.",
+    detail: collectFunds
+      ? null
+      : "Not requested. Send-only merchants can still pay from an already-funded wallet.",
     requirements: collectFunds?.requirements?.currentlyDue ?? [],
   });
 
@@ -224,19 +253,25 @@ export function evaluateReadiness(input: ReadinessInput): ReadinessResult {
   checks.push({
     id: "fee_plan",
     label: "Fee plan assigned",
-    state: input.feePlanCode ? "ready" : input.feePlanUnavailable ? "pending" : "pending",
+    state: input.feePlanCode || input.feePlanUnavailable ? "ready" : "pending",
     detail: input.feePlanCode
       ? `Plan ${input.feePlanCode}`
-      : "Fee plans are provisioned by the payment provider, not self-serve. Onboarding is not blocked by this.",
+      : input.feePlanUnavailable
+        ? "Managed by the payment provider. Live-read mode does not fetch fee-plan codes."
+        : "Fee plans are provisioned by the payment provider, not self-serve. Onboarding is not blocked by this.",
   });
 
   // Fee plan never blocks money movement — it is provider-managed.
+  // Collect-funds is only required when Moov already has that family.
   const blocking = checks.filter((c) => c.id !== "fee_plan");
   const canMoveMoney =
     blocking.every((c) => c.state === "ready") ||
-    // Wallet balance and same-day ACH are additive; don't block basic ACH sends on them.
     (blocking
-      .filter((c) => c.id !== "wallet_balance" && c.id !== "send_funds_ach_sameday")
+      .filter((c) => (
+        c.id !== "wallet_balance"
+        && c.id !== "send_funds_ach_sameday"
+        && !(c.id === "collect_funds_ach" && c.state === "not_started")
+      ))
       .every((c) => c.state === "ready"));
 
   const overall: ReadinessState = canMoveMoney

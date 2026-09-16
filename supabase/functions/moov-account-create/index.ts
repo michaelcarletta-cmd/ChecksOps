@@ -38,6 +38,22 @@ serve(async (req) => {
       return json({ success: true, already_existed: true, account: existing });
     }
 
+    // Freedom Adjustment and Condition One Commercial are already Moov-approved.
+    // Creating a second connected account would re-open billed KYB. Link via
+    // moov-account-discover instead of POST /accounts.
+    const KNOWN_APPROVED: Record<string, string> = {
+      "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a": "60922058-7eca-4889-81dd-5720d7b9de96",
+      "4f172140-f57a-4744-8050-95f4f07b13b4": "817e1bf0-e1f7-4e9e-95a8-ce15bfa31708",
+    };
+    const knownAccountId = KNOWN_APPROVED[String(tenant_id)];
+    if (knownAccountId) {
+      return json({
+        error: "known_approved_account_must_be_linked",
+        provider_account_id: knownAccountId,
+        message: "This organization already has an authorized Moov account. Link it with moov-account-discover. Do not create or re-KYB.",
+      }, 409);
+    }
+
     const { data: tenant, error: tenantErr } = await supabase
       .from("tenants")
       .select("id, name, legal_business_name, email_from_address, email_reply_to, business_phone, business_address")

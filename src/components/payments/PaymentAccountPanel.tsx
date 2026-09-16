@@ -118,7 +118,9 @@ export function PaymentAccountPanel() {
     if (!tenantId) return;
     setBusy("sync");
     try {
-      await invoke("moov-sync", { tenant_id: tenantId });
+      await invoke("moov-readiness", { tenant_id: tenantId }).catch(() =>
+        invoke("moov-sync", { tenant_id: tenantId }),
+      );
       await qc.invalidateQueries({ queryKey: ["payment-account"] });
       await refetch();
     } catch (e: any) {

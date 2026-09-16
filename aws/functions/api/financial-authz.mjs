@@ -81,6 +81,15 @@ export const FINANCIAL_OPERATIONS = {
     canCancel: false,
     activated: false,
   },
+  platform_fee: {
+    operation: 'platform_fee',
+    permission: 'platform.fee_collect',
+    providers: ['moov'],
+    who: 'Tenant Management (checksopsadmin@gmail.com) only + step-up. Pulls monthly/usage fees from a tenant. NOT activated.',
+    canRetry: true,
+    canCancel: false,
+    activated: false,
+  },
   pay_homeowner: {
     operation: 'pay_homeowner',
     permission: 'stakeholder.pay',

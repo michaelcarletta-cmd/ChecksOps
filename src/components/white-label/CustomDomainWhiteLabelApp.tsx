@@ -14,6 +14,7 @@ import { ArrowLeft, Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { isMasterMerchant } from "@/lib/masterMerchant";
 
+const WalletOps = lazy(() => import("@/pages/WalletOps"));
 const Payments = lazy(() => import("@/pages/Payments"));
 const CashJobs = lazy(() => import("@/pages/CashJobs"));
 
@@ -138,6 +139,17 @@ function CustomDomainRoutes() {
             <SubPageHeader />
             <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading…</div>}>
               <CashJobs />
+            </Suspense>
+          </div>
+        )}
+      />
+      <Route
+        path="/wallet-ops"
+        element={requireAuth(
+          <div className="min-h-screen bg-background p-2 sm:p-3 md:p-6 max-w-full overflow-x-hidden">
+            <SubPageHeader />
+            <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading…</div>}>
+              <WalletOps />
             </Suspense>
           </div>
         )}

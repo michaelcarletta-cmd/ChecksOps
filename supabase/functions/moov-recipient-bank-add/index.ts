@@ -9,6 +9,7 @@ import {
   shouldResumeExistingBank,
   tosRequirementOutstanding,
 } from "../_shared/recipientTosPolicy.ts";
+import { capabilitiesStillNeeded } from "../_shared/moovReadiness.ts";
 
 /**
  * PUBLIC, token-authenticated bank collection for the branded recipient page
@@ -123,14 +124,18 @@ serve(async (req) => {
     // Receive-only stakeholders use the baseline transfers capability. They do
     // not initiate payments, hold a wallet, or collect funds, so requesting
     // send-funds would impose unrelated platform-agreement and KYC requirements.
-    try {
-      await moovFetch<any>(`/accounts/${accountId}/capabilities`, {
-        method: "POST",
-        scopes: scopes.capabilitiesWrite(accountId),
-        body: { capabilities: ["transfers"] },
-      });
-    } catch (e) {
-      console.error("[moov-recipient-bank-add] capabilities", (e as Error).message);
+    // Never re-POST if the family is already present (billed underwriting).
+    const missingCaps = capsOk ? capabilitiesStillNeeded(capabilities, ["transfers"]) : [];
+    if (capsOk && missingCaps.length > 0) {
+      try {
+        await moovFetch<any>(`/accounts/${accountId}/capabilities`, {
+          method: "POST",
+          scopes: scopes.capabilitiesWrite(accountId),
+          body: { capabilities: missingCaps },
+        });
+      } catch (e) {
+        console.error("[moov-recipient-bank-add] capabilities", (e as Error).message);
+      }
     }
 
     let created: any;

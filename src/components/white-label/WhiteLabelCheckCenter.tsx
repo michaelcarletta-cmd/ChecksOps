@@ -22,11 +22,13 @@ export function WhiteLabelCheckCenter() {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
 
-  const resolveTenantBase = useCallback((): string | null => {
-    if (!tenant?.slug) return null;
+  const resolveTenantBase = useCallback((): string => {
+    if (!tenant?.slug) return "";
     if (isCheckOpsHost()) return `/${tenant.slug}`;
-    if (window.location.pathname.startsWith("/wl/")) return `/wl/${tenant.slug}`;
-    return null;
+    if (typeof window !== "undefined" && window.location.pathname.startsWith("/wl/")) {
+      return `/wl/${tenant.slug}`;
+    }
+    return "";
   }, [tenant]);
 
   const handleSignOut = useCallback(async () => {
@@ -77,28 +79,28 @@ export function WhiteLabelCheckCenter() {
           </span>
           {tenant && (
             <Button variant="ghost" size="icon" className="h-8 w-8" asChild title="Cash Jobs">
-              <Link to={`${resolveTenantBase() ?? `/wl/${tenant.slug}`}/cash-jobs`}>
+              <Link to={`${resolveTenantBase()}/cash-jobs`}>
                 <Hammer className="h-4 w-4" />
               </Link>
             </Button>
           )}
           {tenant && (
             <Button variant="ghost" size="icon" className="h-8 w-8" asChild title="WalletOps">
-              <Link to={`${resolveTenantBase() ?? `/wl/${tenant.slug}`}/wallet-ops`}>
+              <Link to={`${resolveTenantBase()}/wallet-ops`}>
                 <Wallet className="h-4 w-4" />
               </Link>
             </Button>
           )}
           {tenant && (
             <Button variant="ghost" size="icon" className="h-8 w-8" asChild title="Payments">
-              <Link to={`${resolveTenantBase() ?? `/wl/${tenant.slug}`}/payments`}>
+              <Link to={`${resolveTenantBase()}/payments`}>
                 <Receipt className="h-4 w-4" />
               </Link>
             </Button>
           )}
           {tenant && (
             <Button variant="ghost" size="icon" className="h-8 w-8" asChild title="Settings">
-              <Link to={`${resolveTenantBase() ?? `/wl/${tenant.slug}`}/settings`}>
+              <Link to={`${resolveTenantBase()}/settings`}>
                 <Settings className="h-4 w-4" />
               </Link>
             </Button>

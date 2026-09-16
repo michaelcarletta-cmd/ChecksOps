@@ -10,6 +10,22 @@ export const findCapability = (caps, wanted) => {
     || null;
 };
 
+/** True when Moov already has this family or dotted id — never re-request (KYC/underwriting is billed). */
+export const capabilityAlreadyPresent = (caps, wanted) => Boolean(findCapability(caps, wanted));
+
+export const capabilityEnabled = (caps, wanted) => (
+  String(findCapability(caps, wanted)?.status || '').toLowerCase() === 'enabled'
+);
+
+/**
+ * Capabilities that are truly absent. Family match (`send-funds` satisfies
+ * `send-funds.ach`) means do not POST. Presence in any status is enough — a
+ * pending/errored family is still an underwriting record; re-POST charges again.
+ */
+export const capabilitiesStillNeeded = (caps, wantedList = []) => (
+  (wantedList || []).filter((wanted) => !capabilityAlreadyPresent(caps, wanted))
+);
+
 export const capabilityState = (cap) => {
   if (!cap) return 'not_started';
   switch (String(cap.status ?? '').toLowerCase()) {
@@ -119,7 +135,9 @@ export const evaluateReadiness = (input) => {
     id: 'collect_funds_ach',
     label: 'Collect funds via ACH',
     state: capabilityState(collectFunds),
-    detail: collectFunds ? null : 'ACH collection not requested or not yet returned.',
+    detail: collectFunds
+      ? null
+      : 'Not requested. Send-only merchants can still pay from an already-funded wallet.',
     requirements: collectFunds?.requirements?.currentlyDue ?? [],
   });
 
@@ -146,15 +164,24 @@ export const evaluateReadiness = (input) => {
   checks.push({
     id: 'fee_plan',
     label: 'Fee plan assigned',
-    state: input.feePlanCode ? 'ready' : 'pending',
+    state: input.feePlanCode || input.feePlanUnavailable ? 'ready' : 'pending',
     detail: input.feePlanCode
       ? `Plan ${input.feePlanCode}`
-      : 'Fee plans are provisioned by the payment provider, not self-serve. Onboarding is not blocked by this.',
+      : input.feePlanUnavailable
+        ? 'Managed by the payment provider. Live-read mode does not fetch fee-plan codes.'
+        : 'Fee plans are provisioned by the payment provider, not self-serve. Onboarding is not blocked by this.',
   });
 
+  // Fee plan is provider-managed. Collect-funds is only required when Moov
+  // already has that family (Freedom). C1C has no collect-funds — do not treat
+  // that absence as "not ready" and do not auto-request it.
   const blocking = checks.filter((item) => item.id !== 'fee_plan');
   const canMoveMoney = blocking
-    .filter((item) => item.id !== 'wallet_balance' && item.id !== 'send_funds_ach_sameday')
+    .filter((item) => (
+      item.id !== 'wallet_balance'
+      && item.id !== 'send_funds_ach_sameday'
+      && !(item.id === 'collect_funds_ach' && item.state === 'not_started')
+    ))
     .every((item) => item.state === 'ready');
 
   const overall = canMoveMoney

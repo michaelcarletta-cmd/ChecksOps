@@ -6,6 +6,7 @@
 import assert from "node:assert/strict";
 import {
   bankState,
+  capabilitiesStillNeeded,
   capabilityFamily,
   capabilityState,
   evaluateReadiness,
@@ -34,6 +35,27 @@ test("dotted capability ids resolve to their family", () => {
   assert.equal(capabilityFamily("send-funds.ach"), "send-funds");
   assert.ok(findCapability([{ capability: "send-funds", status: "enabled" }], "send-funds.ach"));
   assert.ok(findCapability([{ capability: "send-funds.ach", status: "enabled" }], "send-funds"));
+});
+
+test("already-enabled families are never re-requested", () => {
+  const freedom = [
+    { capability: "collect-funds", status: "enabled" },
+    { capability: "send-funds", status: "enabled" },
+    { capability: "transfers", status: "enabled" },
+    { capability: "wallet", status: "enabled" },
+  ];
+  assert.deepEqual(
+    capabilitiesStillNeeded(freedom, ["send-funds.ach", "wallet.balance", "collect-funds.ach", "transfers"]),
+    [],
+  );
+  assert.deepEqual(
+    capabilitiesStillNeeded([{ capability: "transfers", status: "pending" }], ["transfers"]),
+    [],
+  );
+  assert.deepEqual(
+    capabilitiesStillNeeded([], ["send-funds.ach"]),
+    ["send-funds.ach"],
+  );
 });
 
 test("capability status mapping", () => {

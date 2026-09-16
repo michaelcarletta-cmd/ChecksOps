@@ -47,14 +47,19 @@ export async function readTenantPaymentAccount(
     capabilities: null,
   };
 
-  const { data: providerRow } = await supabase
+  const { data: providerRows, error: providerError } = await supabase
     .from("payment_provider_accounts")
     .select(
-      "provider_account_id, onboarding_status, verification_status, can_receive_payments, can_send_payments, can_ach_debit, can_ach_credit, requirements, restricted, disabled, last_synced_at",
+      "provider_account_id, environment, onboarding_status, verification_status, can_receive_payments, can_send_payments, can_ach_debit, can_ach_credit, requirements, restricted, disabled, last_synced_at",
     )
     .eq("tenant_id", tenantId)
     .eq("provider", provider)
-    .maybeSingle();
+    .order("updated_at", { ascending: false });
+  if (providerError) throw providerError;
+
+  const providerRow = (providerRows ?? []).find((row: any) => row.environment === "production")
+    ?? (providerRows ?? [])[0]
+    ?? null;
 
   if (!providerRow) return base;
 

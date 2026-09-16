@@ -114,7 +114,7 @@ export function PlatformTreasuryPanel() {
               Platform balance
             </CardTitle>
             <CardDescription>
-              Funds held on the ChecksOps master account — used to pull from and send to organizations.
+              Platform balance used to pull monthly/usage fees and to issue refunds. Tenant Management does not send partner, sub, vendor, or homeowner payouts on a tenant's behalf.
             </CardDescription>
           </div>
           <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>

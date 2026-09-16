@@ -6,6 +6,7 @@ import { TaxSummary } from "@/components/ledger/TaxSummary";
 import { RevenueSummary } from "@/components/ledger/RevenueSummary";
 import { PayrollTab } from "@/pages/payments/PayrollTab";
 import { InvoicesTab } from "@/pages/payments/InvoicesTab";
+import WalletOps from "@/pages/WalletOps";
 
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/contexts/TenantContext";
@@ -114,6 +115,10 @@ const Payments = () => {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="bg-muted/50 p-1 mb-8 overflow-x-auto w-full justify-start sm:w-auto h-auto">
+          <TabsTrigger value="wallet" className="gap-2 py-2">
+            <Wallet className="h-4 w-4" />
+            Wallet
+          </TabsTrigger>
           <TabsTrigger value="ledger" className="gap-2 py-2">
             <Receipt className="h-4 w-4" />
             Payment History
@@ -143,6 +148,10 @@ const Payments = () => {
             </TabsTrigger>
           )}
         </TabsList>
+
+        <TabsContent value="wallet" className="mt-0">
+          <WalletOps />
+        </TabsContent>
 
         <TabsContent value="ledger" className="mt-0">
           <SectionCard 
