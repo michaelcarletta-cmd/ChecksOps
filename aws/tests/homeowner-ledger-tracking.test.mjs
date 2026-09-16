@@ -955,10 +955,13 @@ test('C1C tenant branding is used for claim-bound tracking email', async () => {
   assert.equal(result.ok, true);
   assert.match(result.url, new RegExp(`/ledger/`));
   assert.doesNotMatch(result.url, /\/h\/ledger\//);
-  assert.equal(result.from, `${C1C_NAME} <${C1C_FROM}>`);
+  assert.match(result.from, /Condition One Commercial via ChecksOps/);
+  assert.match(result.from, /noreply@checksops\.com/);
+  assert.doesNotMatch(result.from, /ses-gate\.staging\.checksops\.com|office@/);
   assert.equal(result.replyTo, C1C_REPLY);
   assert.equal(sent.length, 1);
-  assert.equal(sent[0].from, `${C1C_NAME} <${C1C_FROM}>`);
+  assert.match(sent[0].from, /noreply@checksops\.com/);
+  assert.doesNotMatch(sent[0].from, /ses-gate\.staging\.checksops\.com/);
   assert.equal(sent[0].replyTo, C1C_REPLY);
   assert.equal(sent[0].to, LOCK);
   assert.match(sent[0].html, /\/ledger\//);

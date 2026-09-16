@@ -321,7 +321,45 @@ test('valid subdomain normalization and invalid domain rejection', () => {
   assert.equal(sanitizeDisplayName('Freedom\nAdjustment', 'X'), 'FreedomAdjustment');
 });
 
-test('duplicate domain across tenants is rejected', async () => {
+test('sending-domain APIs are retired and never call SES', async () => {
+  resetDomainRateLimits();
+  const client = memoryClient();
+  const sesv2 = mockSes();
+  const started = await runStartDomainVerification({
+    client,
+    mapping,
+    body: { tenantId: TENANT, domain: DOMAIN, replyTo: 'claims@freedomadj.com' },
+    spoof,
+    sesv2,
+  });
+  assert.equal(started.statusCode, 410);
+  assert.equal(started.error, 'tenant_sending_domain_retired');
+  assert.equal(sesv2.calls.length, 0);
+  assert.equal(client.state.settings.get(TENANT), undefined);
+
+  const checked = await runCheckDomainVerification({
+    client, mapping, body: { tenantId: TENANT }, spoof, sesv2,
+  });
+  assert.equal(checked.statusCode, 410);
+  assert.equal(checked.error, 'tenant_sending_domain_retired');
+
+  const disabled = await runDisableCustomSending({
+    client, mapping, body: { tenantId: TENANT }, spoof, sesv2,
+  });
+  assert.equal(disabled.statusCode, 410);
+
+  const deleted = await runDeleteSesIdentity({
+    client: memoryClient({ master: true, systemRole: 'admin' }),
+    mapping,
+    body: { tenantId: TENANT, domain: DOMAIN },
+    spoof,
+    sesv2,
+  });
+  assert.equal(deleted.statusCode, 410);
+  assert.equal(sesv2.calls.length, 0);
+});
+
+test('duplicate domain start is retired rather than creating identities', async () => {
   resetDomainRateLimits();
   const client = memoryClient({ otherDomain: DOMAIN });
   const sesv2 = mockSes();
@@ -332,87 +370,15 @@ test('duplicate domain across tenants is rejected', async () => {
     spoof,
     sesv2,
   });
-  assert.equal(result.statusCode, 409);
-  assert.equal(result.error, 'domain_already_assigned');
+  assert.equal(result.statusCode, 410);
   assert.equal(sesv2.calls.length, 0);
 });
 
-test('tenant admin can start verification pending until SES confirms', async () => {
-  resetDomainRateLimits();
-  const client = memoryClient();
-  const sesv2 = mockSes();
-  const started = await runStartDomainVerification({
-    client,
-    mapping,
-    body: {
-      tenantId: TENANT,
-      domain: DOMAIN,
-      fromLocalPart: 'noreply',
-      fromName: 'Freedom Adjustment',
-      replyTo: 'claims@freedomadj.com',
-      domain_status: 'verified',
-    },
-    spoof,
-    sesv2,
-  });
-  assert.equal(started.ok, true);
-  assert.equal(started.status, 'pending');
-  assert.equal(started.verified, false);
-  assert.equal(started.dns.length, 3);
-  assert.equal(started.dns[0].type, 'CNAME');
-  assert.match(started.fallbackFrom, /Freedom Adjustment via ChecksOps/);
-  assert.match(started.fallbackFrom, /noreply@checksops\.com/);
-  const stored = client.state.settings.get(TENANT);
-  assert.equal(stored.domain_status, 'pending');
-  assert.equal(stored.custom_sending_enabled, false);
-  assert.equal(sesv2.calls[0][0], 'createEmailIdentity');
-  assert.equal(sesv2.calls[0][1].EmailIdentity, DOMAIN);
-
-  const checked = await runCheckDomainVerification({
-    client, mapping, body: { tenantId: TENANT }, spoof, sesv2,
-  });
-  assert.equal(checked.verified, false);
-  assert.ok(['pending', 'verifying'].includes(checked.status));
-  assert.equal(client.state.settings.get(TENANT).domain_status !== 'verified', true);
-});
-
-test('SES success activates custom From; DKIM failure does not', async () => {
-  resetDomainRateLimits();
-  const client = memoryClient();
-  const sesv2 = mockSes();
-  await runStartDomainVerification({
-    client, mapping, body: { tenantId: TENANT, domain: DOMAIN, replyTo: 'claims@freedomadj.com' }, spoof, sesv2,
-  });
-
-  sesv2.identity.VerificationStatus = 'SUCCESS';
-  sesv2.identity.DkimAttributes.Status = 'FAILED';
-  const dkimFail = await runCheckDomainVerification({
-    client, mapping, body: { tenantId: TENANT }, spoof, sesv2,
-  });
-  assert.equal(dkimFail.verified, false);
-  assert.equal(isVerifiedCustomSender(client.state.settings.get(TENANT)), false);
-
-  sesv2.identity.DkimAttributes.Status = 'SUCCESS';
-  const ok = await runCheckDomainVerification({
-    client, mapping, body: { tenantId: TENANT }, spoof, sesv2,
-  });
-  assert.equal(ok.verified, true);
-  assert.equal(ok.status, 'verified');
-  const row = client.state.settings.get(TENANT);
-  assert.equal(row.domain_status, 'verified');
-  assert.equal(row.custom_sending_enabled, true);
-  assert.equal(row.from_address, `noreply@${DOMAIN}`);
-  assert.equal(isVerifiedCustomSender(row), true);
-  assert.ok(row.verified_at);
-  assert.ok(row.last_checked_at);
-});
-
-test('authorization: member cannot configure, cross-tenant denied, platform owner can', async () => {
+test('authorization: member cannot configure, cross-tenant denied, platform owner can read', async () => {
   resetDomainRateLimits();
   const memberClient = memoryClient({ membershipRole: 'member' });
-  const sesv2 = mockSes();
   const memberStart = await runStartDomainVerification({
-    client: memberClient, mapping, body: { tenantId: TENANT, domain: DOMAIN }, spoof, sesv2,
+    client: memberClient, mapping, body: { tenantId: TENANT, domain: DOMAIN }, spoof,
   });
   assert.equal(memberStart.statusCode, 403);
   const memberGet = await runGetEmailBranding({
@@ -429,9 +395,10 @@ test('authorization: member cannot configure, cross-tenant denied, platform owne
 
   const platform = memoryClient({ membershipRole: null, systemRole: 'admin', master: false });
   const ownerStart = await runStartDomainVerification({
-    client: platform, mapping, body: { tenantId: TENANT, domain: DOMAIN }, spoof, sesv2,
+    client: platform, mapping, body: { tenantId: TENANT, domain: DOMAIN }, spoof,
   });
-  assert.equal(ownerStart.ok, true);
+  assert.equal(ownerStart.statusCode, 410);
+  assert.equal(ownerStart.error, 'tenant_sending_domain_retired');
 });
 
 test('frontend cannot set verified status on save', async () => {
@@ -454,16 +421,22 @@ test('frontend cannot set verified status on save', async () => {
       domain_status: 'verified',
       sending_mode: 'custom',
       verified: true,
+      fromLocalPart: 'office',
     },
     spoof,
-    sesv2: mockSes(),
   });
   assert.equal(saved.ok, true);
-  assert.deepEqual(saved.ignoredClientFields.sort(), ['domain_status', 'sending_mode', 'verified']);
+  assert.ok(saved.ignoredClientFields.includes('domain_status'));
+  assert.ok(saved.ignoredClientFields.includes('sending_mode'));
+  assert.ok(saved.ignoredClientFields.includes('verified'));
+  assert.ok(saved.ignoredClientFields.includes('fromLocalPart'));
   assert.equal(client.state.settings.get(TENANT).domain_status, 'pending');
+  assert.equal(client.state.settings.get(TENANT).from_address, `noreply@${DOMAIN}`);
+  assert.equal(client.state.settings.get(TENANT).reply_to, 'claims@freedomadj.com');
+  assert.equal(isVerifiedCustomSender(client.state.settings.get(TENANT)), false);
 });
 
-test('unsafe From display names are rejected; from must belong to verified domain', async () => {
+test('unsafe From display names are rejected; branding save does not require SES', async () => {
   resetDomainRateLimits();
   const client = memoryClient();
   const unsafe = await runSaveEmailBranding({
@@ -471,55 +444,52 @@ test('unsafe From display names are rejected; from must belong to verified domai
     mapping,
     body: { tenantId: TENANT, fromName: 'X\r\nBcc: evil@x.com' },
     spoof,
-    sesv2: mockSes(),
   });
   assert.equal(unsafe.statusCode, 400);
   assert.equal(unsafe.error, 'unsafe_from_name');
 
-  assert.equal(isVerifiedCustomSender({
-    sending_mode: 'custom',
-    domain_status: 'verified',
-    sending_domain: DOMAIN,
-    ses_identity_name: DOMAIN,
-    from_address: 'noreply@freedomadj.com',
-  }), false);
+  const saved = await runSaveEmailBranding({
+    client,
+    mapping,
+    body: { tenantId: TENANT, fromName: 'Freedom Adjustment', replyTo: 'claims@freedomadj.com' },
+    spoof,
+  });
+  assert.equal(saved.ok, true);
+  assert.equal(client.state.settings.get(TENANT).from_name, 'Freedom Adjustment');
   assert.equal(isVerifiedCustomSender({
     sending_mode: 'custom',
     domain_status: 'verified',
     sending_domain: DOMAIN,
     ses_identity_name: DOMAIN,
     from_address: `noreply@${DOMAIN}`,
-  }), true);
+  }), false);
 });
 
-test('disable custom sending does not delete SES identity', async () => {
+test('disable and identity-delete routes stay retired', async () => {
   resetDomainRateLimits();
   const client = memoryClient();
-  const sesv2 = mockSes();
-  await runStartDomainVerification({
-    client, mapping, body: { tenantId: TENANT, domain: DOMAIN }, spoof, sesv2,
-  });
-  sesv2.identity.VerificationStatus = 'SUCCESS';
-  sesv2.identity.DkimAttributes.Status = 'SUCCESS';
-  await runCheckDomainVerification({
-    client, mapping, body: { tenantId: TENANT }, spoof, sesv2,
+  client.state.settings.set(TENANT, {
+    tenant_id: TENANT,
+    sending_domain: DOMAIN,
+    domain_status: 'verified',
+    sending_mode: 'custom',
+    custom_sending_enabled: true,
+    from_address: `noreply@${DOMAIN}`,
   });
   const disabled = await runDisableCustomSending({
-    client, mapping, body: { tenantId: TENANT }, spoof, sesv2,
+    client, mapping, body: { tenantId: TENANT }, spoof,
   });
-  assert.equal(disabled.disabled, true);
-  assert.equal(disabled.sesIdentityDeleted, false);
+  assert.equal(disabled.statusCode, 410);
+  assert.equal(client.state.settings.get(TENANT).domain_status, 'verified');
   assert.equal(isVerifiedCustomSender(client.state.settings.get(TENANT)), false);
-  assert.equal(sesv2.calls.some((c) => c[0] === 'deleteEmailIdentity'), false);
 
   const operator = await runDeleteSesIdentity({
     client: memoryClient({ master: true, systemRole: 'admin' }),
     mapping,
     body: { tenantId: TENANT, domain: DOMAIN },
     spoof,
-    sesv2,
   });
-  assert.equal(operator.statusCode, 403);
+  assert.equal(operator.statusCode, 410);
 });
 
 test('preview uses shared layout and fallback keeps tenant logo/color', async () => {
@@ -529,7 +499,9 @@ test('preview uses shared layout and fallback keeps tenant logo/color', async ()
     sending_mode: 'custom',
     sending_domain: DOMAIN,
     from_address: `noreply@${DOMAIN}`,
-    domain_status: 'pending',
+    domain_status: 'verified',
+    custom_sending_enabled: true,
+    ses_identity_name: DOMAIN,
     from_name: 'Freedom Adjustment',
     reply_to: 'claims@freedomadj.com',
   });
@@ -540,6 +512,7 @@ test('preview uses shared layout and fallback keeps tenant logo/color', async ()
   assert.equal(preview.usingCustomFrom, false);
   assert.match(preview.from, /via ChecksOps/);
   assert.match(preview.from, /noreply@checksops\.com/);
+  assert.doesNotMatch(preview.from, new RegExp(DOMAIN.replace('.', '\\.')));
   assert.equal(preview.replyTo, 'claims@freedomadj.com');
   assert.match(preview.html, /cdn\.freedomadj\.com\/logo\.png/);
   assert.match(preview.html, /#0f4c81/);
@@ -602,8 +575,11 @@ test('class A registry includes branding routes; frontend never writes domain_st
   assert.doesNotMatch(ui, /domain_status\s*:\s*['"`]/);
   assert.doesNotMatch(ui, /update\([\s\S]{0,200}domain_status/);
   assert.doesNotMatch(ui, /upsert\([\s\S]{0,200}domain_status/);
-  assert.match(ui, /tenant-domain-disable/);
+  assert.doesNotMatch(ui, /tenant-domain-verify/);
+  assert.doesNotMatch(ui, /tenant-domain-disable/);
+  assert.doesNotMatch(ui, /Start domain verification/);
   assert.match(ui, /tenant-email-preview/);
+  assert.match(ui, /tenant-email-branding-save/);
   assert.match(ui, /noreply@checksops\.com/);
   assert.doesNotMatch(ui, /notify\.checksops\.com/);
   const yaml = fs.readFileSync(path.join(ROOT, 'aws/template.yaml'), 'utf8');
@@ -892,15 +868,14 @@ test('missing consume function fails closed', async () => {
   assert.equal(limited.error, 'rate_limit_unavailable');
   assert.equal(limited.retryAfterSec, 60);
 
-  const started = await withTx(client, () => runStartDomainVerification({
+  const saved = await withTx(client, () => runSaveEmailBranding({
     client,
     mapping,
-    body: { tenantId: TENANT, domain: DOMAIN },
+    body: { tenantId: TENANT, fromName: 'Freedom Adjustment', replyTo: 'claims@freedomadj.com' },
     spoof,
-    sesv2: mockSes(),
   }));
-  assert.equal(started.statusCode, 503);
-  assert.equal(started.error, 'rate_limit_unavailable');
+  assert.equal(saved.statusCode, 503);
+  assert.equal(saved.error, 'rate_limit_unavailable');
   assert.equal(client.state.settings.get(TENANT), undefined);
 });
 
@@ -960,34 +935,16 @@ test('duplicate-domain migration preflight stops safely without PII or rewrites'
 test('mutating operations roll back when audit insertion fails', async () => {
   resetDomainRateLimits();
   const client = memoryClient({ failAudit: true });
-  client.state.settings.set(TENANT, {
-    tenant_id: TENANT,
-    sending_domain: DOMAIN,
-    domain_status: 'verified',
-    sending_mode: 'custom',
-    custom_sending_enabled: true,
-    from_address: `noreply@${DOMAIN}`,
-  });
-  const disabled = await withTx(client, () => runDisableCustomSending({
-    client, mapping, body: { tenantId: TENANT }, spoof, sesv2: mockSes(),
-  }));
-  assert.equal(disabled.statusCode, 503);
-  assert.equal(disabled.error, 'audit_unavailable');
-  assert.equal(client.state.settings.get(TENANT).domain_status, 'verified');
-  assert.equal(client.state.settings.get(TENANT).sending_mode, 'custom');
-  assert.equal(client.state.audits.length, 0);
-
-  const startClient = memoryClient({ failAudit: true });
-  const started = await withTx(startClient, () => runStartDomainVerification({
-    client: startClient,
+  const saved = await withTx(client, () => runSaveEmailBranding({
+    client,
     mapping,
-    body: { tenantId: TENANT, domain: DOMAIN },
+    body: { tenantId: TENANT, fromName: 'Freedom Adjustment', replyTo: 'claims@freedomadj.com' },
     spoof,
-    sesv2: mockSes(),
   }));
-  assert.equal(started.statusCode, 503);
-  assert.equal(started.error, 'audit_unavailable');
-  assert.equal(startClient.state.settings.get(TENANT), undefined);
+  assert.equal(saved.statusCode, 503);
+  assert.equal(saved.error, 'audit_unavailable');
+  assert.equal(client.state.settings.get(TENANT), undefined);
+  assert.equal(client.state.audits.length, 0);
 });
 
 test('read-only preview and get work without an audit write', async () => {
@@ -1016,25 +973,24 @@ test('read-only preview and get work without an audit write', async () => {
 test('audit payloads omit DKIM tokens, addresses, ARNs, and secrets', async () => {
   resetDomainRateLimits();
   const client = memoryClient();
-  const started = await runStartDomainVerification({
+  const saved = await runSaveEmailBranding({
     client,
     mapping,
     body: {
       tenantId: TENANT,
-      domain: DOMAIN,
       fromName: 'Freedom Adjustment',
       replyTo: 'claims@freedomadj.com',
     },
     spoof,
-    sesv2: mockSes(),
   });
-  assert.equal(started.ok, true);
+  assert.equal(saved.ok, true);
   assert.equal(client.state.audits.length, 1);
   const blob = JSON.stringify(client.state.audits);
   assert.doesNotMatch(blob, /tokena|tokenb|tokenc|dkim/i);
   assert.doesNotMatch(blob, /claims@freedomadj\.com|noreply@/);
   assert.doesNotMatch(blob, /arn:aws|AKIA|otp|password|account/i);
-  assert.match(blob, /notify\.freedomadj\.com/);
+  assert.deepEqual(JSON.parse(client.state.audits[0].new_values), { result: 'saved' });
+  assert.equal(client.state.audits[0].action, 'tenant_email_branding_save');
   const sanitized = safeAuditPayload({
     sending_domain: DOMAIN,
     from_address: 'noreply@notify.freedomadj.com',
