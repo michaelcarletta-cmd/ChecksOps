@@ -199,6 +199,19 @@ const inspect = async (client) => {
       'SELECT count(*)::int AS n FROM public.tenants WHERE id = $1::uuid',
       [FREEDOM],
     );
+    let stageTotals = null;
+    try {
+      const totals = await client.query(
+        'SELECT stage, count::int AS count FROM public.get_check_stage_totals($1::uuid)',
+        [C1C],
+      );
+      stageTotals = {
+        rows: totals.rows,
+        sum: totals.rows.reduce((n, r) => n + Number(r.count || 0), 0),
+      };
+    } catch (error) {
+      stageTotals = { error: String(error.message || error).slice(0, 160) };
+    }
     return {
       authUid: uid.rows[0]?.uid || null,
       tenantIds: tenantsOfUser.rows.map((r) => r.tenant_id),
@@ -212,6 +225,7 @@ const inspect = async (client) => {
       partnerEndorsementsVisible: endorsements.rows[0].n,
       tenantsPublicVisible: tenants.rows[0].n,
       freedomTenantViaTenantsTable: Number(partnerTenants.rows[0].n),
+      stageTotals,
     };
   });
 
@@ -456,6 +470,182 @@ const applyPartnerDdl = async (client, event) => {
   };
 };
 
+const lifecycle = async (client) => {
+  const shareFn = (await client.query(`
+    SELECT EXISTS (
+      SELECT 1 FROM pg_proc p
+      JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = 'public' AND p.proname = 'aws_share_check_with_partner'
+    ) AS ok
+  `)).rows[0].ok;
+  const revokeFn = (await client.query(`
+    SELECT EXISTS (
+      SELECT 1 FROM pg_proc p
+      JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = 'public' AND p.proname = 'aws_revoke_shared_check'
+    ) AS ok
+  `)).rows[0].ok;
+  const fixture = (await client.query(`
+    SELECT ci.id
+    FROM public.check_intake_items ci
+    WHERE ci.tenant_id = $1::uuid
+      AND NOT EXISTS (
+        SELECT 1 FROM public.shared_checks sc
+        WHERE sc.check_id = ci.id
+          AND sc.source_tenant_id = $1::uuid
+          AND sc.target_tenant_id = $2::uuid
+      )
+    ORDER BY ci.created_at DESC
+    LIMIT 1
+  `, [FREEDOM, C1C])).rows[0];
+  if (!fixture) throw new Error('no unshared Freedom fixture check');
+
+  const asWriter = async (fn) => {
+    await client.query('BEGIN');
+    try {
+      await client.query('SET LOCAL ROLE checksops');
+      await client.query("SELECT set_config('request.app_user_id', $1, true)", [FREEDOM_TESTER]);
+      const result = await fn();
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+      throw error;
+    }
+  };
+
+  const c1cSees = async (checkId) => asAppUser(client, C1C_ADMIN, async () => {
+    const intake = await client.query(
+      'SELECT count(*)::int AS n FROM public.check_intake_items WHERE id = $1::uuid',
+      [checkId],
+    );
+    const share = await client.query(`
+      SELECT count(*)::int AS n
+      FROM public.shared_checks
+      WHERE check_id = $1::uuid AND target_tenant_id = $2::uuid AND revoked_at IS NULL
+    `, [checkId, C1C]);
+    return { intake: Number(intake.rows[0].n), share: Number(share.rows[0].n) };
+  });
+
+  const ownerSees = async (checkId) => asAppUser(client, FREEDOM_TESTER, async () => {
+    const intake = await client.query(
+      'SELECT count(*)::int AS n, min(tenant_id::text) AS tenant_id FROM public.check_intake_items WHERE id = $1::uuid',
+      [checkId],
+    );
+    return {
+      intake: Number(intake.rows[0].n),
+      tenant_id: intake.rows[0].tenant_id,
+    };
+  });
+
+  const before = await c1cSees(fixture.id);
+  let created;
+  if (shareFn) {
+    created = await asWriter(async () => {
+      const result = await client.query(
+        'SELECT public.aws_share_check_with_partner($1::uuid, $2::uuid) AS result',
+        [fixture.id, C1C],
+      );
+      return result.rows[0].result;
+    });
+  } else {
+    created = await asWriter(async () => {
+      const result = await client.query(`
+        INSERT INTO public.shared_checks (check_id, source_tenant_id, target_tenant_id, shared_by)
+        VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid)
+        RETURNING id
+      `, [fixture.id, FREEDOM, C1C, FREEDOM_TESTER]);
+      return { ok: true, created: true, share_id: result.rows[0].id };
+    });
+  }
+  const afterShare = await c1cSees(fixture.id);
+  const ownerAfterShare = await ownerSees(fixture.id);
+  const retry = shareFn
+    ? await asWriter(async () => (
+      await client.query(
+        'SELECT public.aws_share_check_with_partner($1::uuid, $2::uuid) AS result',
+        [fixture.id, C1C],
+      )
+    ).rows[0].result)
+    : { ok: true, created: false, reactivated: false };
+
+  const shareId = created.share_id || (await client.query(`
+    SELECT id FROM public.shared_checks
+    WHERE check_id = $1::uuid AND source_tenant_id = $2::uuid AND target_tenant_id = $3::uuid
+    LIMIT 1
+  `, [fixture.id, FREEDOM, C1C])).rows[0]?.id;
+
+  let revoked;
+  if (revokeFn) {
+    revoked = await asWriter(async () => (
+      await client.query('SELECT public.aws_revoke_shared_check($1::uuid) AS result', [shareId])
+    ).rows[0].result);
+  } else {
+    revoked = await asWriter(async () => {
+      await client.query('UPDATE public.shared_checks SET revoked_at = now() WHERE id = $1::uuid', [shareId]);
+      return { ok: true, revoked: true, share_id: shareId };
+    });
+  }
+  const afterRevoke = await c1cSees(fixture.id);
+  const ownerAfterRevoke = await ownerSees(fixture.id);
+
+  const reshared = shareFn
+    ? await asWriter(async () => (
+      await client.query(
+        'SELECT public.aws_share_check_with_partner($1::uuid, $2::uuid) AS result',
+        [fixture.id, C1C],
+      )
+    ).rows[0].result)
+    : await asWriter(async () => {
+      await client.query('UPDATE public.shared_checks SET revoked_at = NULL WHERE id = $1::uuid', [shareId]);
+      return { ok: true, created: false, reactivated: true, share_id: shareId };
+    });
+  const afterReshare = await c1cSees(fixture.id);
+
+  // Leave the fixture unshared so historical 94 stay the only C1C Freedom shares.
+  if (revokeFn) {
+    await asWriter(async () => (
+      await client.query('SELECT public.aws_revoke_shared_check($1::uuid) AS result', [shareId])
+    ).rows[0].result);
+  } else {
+    await asWriter(async () => {
+      await client.query('UPDATE public.shared_checks SET revoked_at = now() WHERE id = $1::uuid', [shareId]);
+      return { ok: true };
+    });
+  }
+  const cleaned = await c1cSees(fixture.id);
+  const ownerFinal = await ownerSees(fixture.id);
+
+  return {
+    ok: before.intake === 0
+      && afterShare.intake === 1
+      && afterShare.share === 1
+      && ownerAfterShare.intake === 1
+      && ownerAfterShare.tenant_id === FREEDOM
+      && retry.created === false
+      && afterRevoke.intake === 0
+      && ownerAfterRevoke.intake === 1
+      && ownerAfterRevoke.tenant_id === FREEDOM
+      && afterReshare.intake === 1
+      && cleaned.intake === 0
+      && ownerFinal.tenant_id === FREEDOM,
+    usedRpc: Boolean(shareFn && revokeFn),
+    fixtureCheckId: fixture.id,
+    before,
+    created,
+    afterShare,
+    retry,
+    revoked,
+    afterRevoke,
+    reshared,
+    afterReshare,
+    cleaned,
+    ownerFinal,
+    ownershipChanged: ownerFinal.tenant_id !== FREEDOM,
+    productionSupabaseChanged: false,
+  };
+};
+
 export const handler = async (event = {}) => {
   const step = event.step || 'inspect';
   const out = {
@@ -470,6 +660,7 @@ export const handler = async (event = {}) => {
     client = await adminClient();
     if (step === 'inspect') return { ...out, ...(await inspect(client)) };
     if (step === 'apply_partner_ddl') return { ...out, ...(await applyPartnerDdl(client, event)) };
+    if (step === 'lifecycle') return { ...out, ...(await lifecycle(client)) };
     if (step === 'restore') return { ...out, ...(await restore(client, event)) };
     throw new Error(`unknown step ${step}`);
   } catch (error) {

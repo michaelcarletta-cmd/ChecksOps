@@ -208,6 +208,20 @@ const main = async () => {
   await assumeRole();
   const zip = await packOneshot();
   await ensureLambda(zip);
+  if (process.env.C1C_APPLY_PARTNER_DDL === '1') {
+    const applied = invokeLambda({ step: 'apply_partner_ddl', confirm: 'APPLY_PARTNER_SAFE_DDL' });
+    await writeFile(path.join(OUT, 'phase4-partner-ddl.json'), JSON.stringify(applied, null, 2));
+    if (applied.ok !== true) {
+      throw new Error(applied.error || 'apply_partner_ddl failed');
+    }
+  }
+  if (process.env.C1C_LIFECYCLE === '1') {
+    const life = invokeLambda({ step: 'lifecycle' });
+    await writeFile(path.join(OUT, 'phase7-lifecycle.json'), JSON.stringify(life, null, 2));
+    if (life.ok !== true) {
+      throw new Error(life.error || 'lifecycle failed');
+    }
+  }
   const inspected = invokeLambda({ step: 'inspect' });
   if (inspected.error) {
     await writeFile(path.join(OUT, 'phase1-aws-inspect.json'), JSON.stringify(inspected, null, 2));
