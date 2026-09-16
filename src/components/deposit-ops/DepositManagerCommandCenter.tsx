@@ -25,6 +25,7 @@ import {
   AutomationHealthCard, AutomationRunHistory, DigestDeliveryCenter, AutomationSettingsPanel,
 } from "./DepositAutomationHealth";
 import { PendingApprovalDeposits } from "@/components/settings/CheckAltSettings";
+import { CheckAltAutoDepositSettings } from "@/components/settings/CheckAltAutoDepositSettings";
 
 const fmtMoney = (n: number | null | undefined) =>
   n != null ? `$${n.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "$0.00";
@@ -556,6 +557,7 @@ export function DepositManagerCommandCenter({ searchQuery: _searchQuery = "" }: 
         </TabsContent>
 
         <TabsContent value="approvals" className="space-y-3">
+          <CheckAltAutoDepositSettings canConfigure />
           <PendingApprovalsPanel />
           <Card>
             <CardHeader className="pb-2">

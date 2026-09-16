@@ -16,8 +16,13 @@ export const MOOV_WALLET_ACTIONS = Object.freeze([
   "wallet.disburse",
 ] as const);
 
+export const TENANT_BOUND_ACTIONS = Object.freeze([
+  "checkalt.auto_deposit.configure",
+] as const);
+
 export type CheckBoundAction = (typeof CHECK_BOUND_ACTIONS)[number];
 export type MoovWalletAction = (typeof MOOV_WALLET_ACTIONS)[number];
+export type TenantBoundAction = (typeof TENANT_BOUND_ACTIONS)[number];
 
 export type FinancialStepUpRequest = {
   actionKey: string;
@@ -25,6 +30,8 @@ export type FinancialStepUpRequest = {
   description?: string;
   tenantId?: string | null;
   title?: string;
+  autoDepositEnabled?: boolean;
+  autoDepositMaxCents?: number | null;
 };
 
 export type BuildStepUpResult =
@@ -39,7 +46,7 @@ export type BuildStepUpResult =
     }
   | {
       ok: false;
-      error: "check_intake_item_id is required";
+      error: "check_intake_item_id is required" | "tenant_id is required";
       message: string;
     };
 
@@ -55,6 +62,9 @@ export const isCheckBoundAction = (actionKey: string | null | undefined): boolea
 export const isMoovWalletAction = (actionKey: string | null | undefined): boolean =>
   MOOV_WALLET_ACTIONS.includes(String(actionKey || "") as MoovWalletAction);
 
+export const isTenantBoundAction = (actionKey: string | null | undefined): boolean =>
+  TENANT_BOUND_ACTIONS.includes(String(actionKey || "") as TenantBoundAction);
+
 export const buildFinancialStepUpRequest = (input: {
   actionKey: string;
   checkId?: string | null;
@@ -64,15 +74,25 @@ export const buildFinancialStepUpRequest = (input: {
   amount?: unknown;
   amount_cents?: unknown;
   tenant_id?: unknown;
+  autoDepositEnabled?: boolean;
+  autoDepositMaxCents?: number | null;
 }): BuildStepUpResult => {
   const actionKey = String(input.actionKey || "");
   const checkId = trimId(input.checkId);
+  const tenantId = trimId(input.tenantId) || trimId(input.tenant_id);
   if (isCheckBoundAction(actionKey) && !checkId) {
     return {
       ok: false,
       error: "check_intake_item_id is required",
       message:
         "Financial authorization must be bound to a server-side check. Browser tenant and amount are ignored.",
+    };
+  }
+  if (isTenantBoundAction(actionKey) && !tenantId) {
+    return {
+      ok: false,
+      error: "tenant_id is required",
+      message: "Auto-Deposit configuration must be bound to a tenant. Browser amount is not authority.",
     };
   }
   return {
@@ -82,7 +102,9 @@ export const buildFinancialStepUpRequest = (input: {
       checkId,
       description: input.description,
       title: input.title,
-      tenantId: trimId(input.tenantId) || trimId(input.tenant_id),
+      tenantId,
+      autoDepositEnabled: input.autoDepositEnabled,
+      autoDepositMaxCents: input.autoDepositMaxCents,
     },
     ignored: {
       browserAmount: input.amount !== undefined && input.amount !== null,
@@ -96,11 +118,16 @@ export const stepUpCacheKey = (
   userId: string | null | undefined,
   actionKey: string,
   checkId: string | null,
+  tenantId?: string | null,
 ): string | null => {
   if (!userId) return null;
   if (isMoovWalletAction(actionKey)) {
     // Never reuse deposit/session TOTP for wallet.fund / wallet.disburse.
     return `${userId}|${actionKey}|first-test`;
+  }
+  if (isTenantBoundAction(actionKey)) {
+    if (!tenantId) return null;
+    return `${userId}|${actionKey}|${tenantId}`;
   }
   if (isCheckBoundAction(actionKey)) {
     if (!checkId) return null;
@@ -112,6 +139,7 @@ export const stepUpCacheKey = (
 export const cacheAllowsReuse = (cachedKey: string | null | undefined, nextKey: string | null | undefined): boolean => {
   if (!cachedKey || !nextKey || cachedKey !== nextKey) return false;
   if (nextKey.includes("|wallet.fund|") || nextKey.includes("|wallet.disburse|")) return false;
+  if (nextKey.includes("|checkalt.auto_deposit.configure|")) return false;
   return true;
 };
 
@@ -125,4 +153,12 @@ export const awsStepUpBody = (request: FinancialStepUpRequest) => ({
   ...(request.checkId ? { check_intake_item_id: request.checkId } : {}),
   // tenant_id is a non-authoritative hint; the server binds Freedom / check tenant.
   tenant_id: request.tenantId || undefined,
+  ...(request.actionKey === "checkalt.auto_deposit.configure"
+    ? {
+        auto_deposit_enabled: request.autoDepositEnabled === true,
+        auto_deposit_max_cents: Number.isInteger(request.autoDepositMaxCents)
+          ? request.autoDepositMaxCents
+          : null,
+      }
+    : {}),
 });

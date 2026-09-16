@@ -6,6 +6,7 @@ import {
   cacheAllowsReuse,
   changingCheckRequiresNewAuth,
   isCheckBoundAction,
+  isTenantBoundAction,
   stepUpCacheKey,
 } from '../../src/lib/financialStepUp.ts';
 import { stepUpMatchesCheck } from '../functions/api/providers/production/checkalt-authz.mjs';
@@ -100,6 +101,32 @@ test('browser amount cannot alter authorization amount', () => {
     amountCents: 999999,
     actionKey: 'deposit.submit',
   }), false);
+});
+
+test('Auto-Deposit configure is tenant-bound and never reuses Moov or deposit TOTP', () => {
+  assert.equal(isTenantBoundAction('checkalt.auto_deposit.configure'), true);
+  assert.equal(isTenantBoundAction('wallet.fund'), false);
+  const missing = buildFinancialStepUpRequest({ actionKey: 'checkalt.auto_deposit.configure' });
+  assert.equal(missing.ok, false);
+  assert.equal(missing.error, 'tenant_id is required');
+  const ok = buildFinancialStepUpRequest({
+    actionKey: 'checkalt.auto_deposit.configure',
+    tenantId: TENANT_A,
+    autoDepositEnabled: true,
+    autoDepositMaxCents: 154672,
+    amount_cents: 1,
+  });
+  assert.equal(ok.ok, true);
+  assert.equal(ok.request.tenantId, TENANT_A);
+  assert.equal(awsStepUpBody(ok.request).auto_deposit_enabled, true);
+  assert.equal(awsStepUpBody(ok.request).auto_deposit_max_cents, 154672);
+  const configure = stepUpCacheKey(USER, 'checkalt.auto_deposit.configure', null, TENANT_A);
+  const fund = stepUpCacheKey(USER, 'wallet.fund', null);
+  const deposit = stepUpCacheKey(USER, 'deposit.submit', CHECK_A);
+  assert.equal(cacheAllowsReuse(configure, configure), false);
+  assert.equal(cacheAllowsReuse(fund, configure), false);
+  assert.equal(cacheAllowsReuse(deposit, configure), false);
+  assert.equal(cacheAllowsReuse(fund, fund), false);
 });
 
 test('browser tenant cannot alter authorization tenant', () => {
