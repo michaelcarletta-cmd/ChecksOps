@@ -485,10 +485,13 @@ export default function CheckCommandCenter() {
       if (error) throw error;
       return data?.role ?? null;
     },
-    enabled: !!tenantId && !!user?.id && isWhiteLabel,
+    enabled: !!tenantId && !!user?.id,
   });
 
-  const canAccessManager = isAdmin || (isWhiteLabel && ["admin", "owner"].includes(tenantMembershipRole ?? ""));
+  const isTenantOwnerOrAdmin = ["admin", "owner"].includes(
+    String(tenantMembershipRole ?? "").toLowerCase(),
+  );
+  const canAccessManager = isAdmin || isTenantOwnerOrAdmin;
 
   // Admin: allow delete at any stage
   const canDeleteAnyCheck = true;
@@ -1413,7 +1416,7 @@ export default function CheckCommandCenter() {
                   <TabsContent value="checkalt_settings" className="mt-3">
                     <Suspense fallback={<TabLoader />}>
                       <CheckAltAutoDepositSettings
-                        canConfigure={["admin", "owner"].includes(tenantMembershipRole ?? "")}
+                        canConfigure={isAdmin || isTenantOwnerOrAdmin}
                       />
                     </Suspense>
                   </TabsContent>
