@@ -420,11 +420,15 @@ test('this change does not add SQL 36 or tenant business_unit', () => {
   assert.match(sql37, /CREATE VIEW public\.checkalt_config_public/);
   assert.match(sql37, /WHERE public\.is_platform_owner\(\)/);
   assert.match(sql37, /CREATE VIEW public\.checkalt_tenant_auto_deposit_public/);
-  assert.match(sql37, /auto_approve_enabled/);
-  assert.match(sql37, /auto_approve_max_cents/);
-  assert.equal(/sso_user_id/.test(sql37), false);
-  assert.equal(/deposit_account_number/.test(sql37), false);
-  assert.equal(/last_register_payload/.test(sql37), false);
+  const autoSelect = sql37.slice(
+    sql37.indexOf('CREATE VIEW public.checkalt_tenant_auto_deposit_public'),
+    sql37.indexOf('COMMENT ON VIEW public.checkalt_tenant_auto_deposit_public'),
+  );
+  assert.match(autoSelect, /auto_approve_enabled/);
+  assert.match(autoSelect, /auto_approve_max_cents/);
+  assert.equal(/sso_user_id/.test(autoSelect), false);
+  assert.equal(/deposit_account_number/.test(autoSelect), false);
+  assert.equal(/last_register_payload/.test(autoSelect), false);
   assert.equal(/ALTER TABLE public\.checkalt_tenant_accounts/.test(sql37), false);
   assert.equal(/ADD COLUMN/.test(sql37), false);
   const changed = [
