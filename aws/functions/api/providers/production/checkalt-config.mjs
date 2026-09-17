@@ -110,7 +110,7 @@ export async function loadProductionTenantAccount(client, tenantId) {
   if (!tenantId) return null;
   const row = (await client.query(
     `SELECT tenant_id, enabled, sso_user_id, deposit_account_number, last_register_payload,
-            auto_approve_enabled, auto_approve_max_cents
+            auto_approve_enabled, auto_approve_max_cents, business_unit
      FROM public.checkalt_tenant_accounts
      WHERE tenant_id = $1::uuid
      LIMIT 1`,
@@ -125,6 +125,7 @@ export async function loadProductionTenantAccount(client, tenantId) {
     deposit_account_number: row.deposit_account_number || null,
     sso_key: ssoFromPayload || row.sso_user_id || null,
     auto_approve_enabled: Boolean(row.auto_approve_enabled),
+    business_unit: row.business_unit || null,
     source: 'checkalt_tenant_accounts',
   };
 }

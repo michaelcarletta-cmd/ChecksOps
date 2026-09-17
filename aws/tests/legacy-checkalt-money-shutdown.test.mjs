@@ -208,10 +208,10 @@ test('production UI sources no longer invoke legacy CheckAlt provider functions'
   assert.match(settings, /invokeAwsCheckAltProviderFunction/);
   assert.match(settings, /checkalt-poll-status/);
   assert.match(settings, /checkalt-test-connection/);
-  assert.match(settings, /checkalt-register-account/);
-  assert.match(settings, /checkalt-verify-account/);
   assert.match(settings, /checkalt-deposit-history/);
   assert.match(settings, /CHECKALT_PROVIDER_UNAVAILABLE|checkAltProviderUserMessage/);
+  assert.doesNotMatch(settings, /checkalt-register-account/);
+  assert.doesNotMatch(settings, /checkalt-verify-account/);
 });
 
 test('Command Center CheckAlt click performs zero prepare/assign when AWS is disabled', async () => {

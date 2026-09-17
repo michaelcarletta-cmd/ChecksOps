@@ -205,8 +205,9 @@ test('5. CheckAlt settings read omits secrets and write is a dedicated RPC', asy
   assert.equal(resolvePublicTable('checkalt_config'), 'checkalt_config_public');
   assert.equal(SAFE_WRITE_RPCS.has('save_checkalt_settings'), true);
   const client = identityClient((sql, params) => {
+    if (sql.includes('aws_is_cross_tenant_reader()')) return { rows: [{ ok: true }] };
     if (sql.includes('FROM public.checkalt_config_public')) {
-      return { rows: [{ singleton: true, merchant: 'm', cached_jwt: undefined }] };
+      return { rows: [{ singleton: true, merchant: 'm', fi_key_configured: true }] };
     }
     if (sql.includes('FROM public.checkalt_config ') && sql.includes('SELECT')) {
       throw new Error('base checkalt_config must not be selected');
@@ -214,9 +215,11 @@ test('5. CheckAlt settings read omits secrets and write is a dedicated RPC', asy
     if (/UPDATE public.checkalt_config/.test(sql)) {
       assert.equal(String(sql).includes('cached_jwt'), false);
       assert.equal(String(sql).includes('webhook_secret'), false);
+      assert.equal(String(sql).includes('business_unit'), false);
+      assert.equal(String(sql).includes('depositor_account_id'), false);
       assert.match(sql, /merchant = \$1/);
       assert.equal(params[0], 'new-merchant');
-      return { rows: [{ singleton: true, merchant: 'new-merchant' }] };
+      return { rows: [{ singleton: true, merchant: 'new-merchant', fi_key_configured: true }] };
     }
     return { rows: [] };
   });

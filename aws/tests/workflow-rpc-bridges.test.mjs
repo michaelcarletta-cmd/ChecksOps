@@ -67,6 +67,8 @@ test('classifies all audit rpc_disabled names', () => {
   }
   assert.equal(SAFE_WRITE_RPCS.has('deposit_action'), true);
   assert.equal(SAFE_WRITE_RPCS.has('save_checkalt_settings'), true);
+  assert.equal(SAFE_WRITE_RPCS.has('save_checkalt_tenant_account'), true);
+  assert.equal(SAFE_WRITE_RPCS.has('save_checkalt_tenant_auto_deposit'), true);
   assert.equal(SAFE_WRITE_RPCS.has('accept_mortgage_handling_request'), true);
   assert.ok(SAFE_LOSS_DRAFT_ACTIONS.has('mark_sent'));
   assert.equal(SAFE_LOSS_DRAFT_ACTIONS.has('mark_escrowed'), false);
@@ -250,4 +252,6 @@ test('deposit_action is a safe subset and money actions stay disabled', () => {
   assert.equal(SAFE_WRITE_RPC_CLASSIFICATION.add_partner_stakeholder_to_check, 'provider_dependent');
   assert.equal(SAFE_WRITE_RPC_CLASSIFICATION.get_tenant_users_with_profiles, 'read_only');
   assert.equal(SAFE_WRITE_RPC_CLASSIFICATION.save_checkalt_settings, 'safe_now');
+  assert.equal(SAFE_WRITE_RPC_CLASSIFICATION.save_checkalt_tenant_account, 'safe_now');
+  assert.equal(SAFE_WRITE_RPC_CLASSIFICATION.save_checkalt_tenant_auto_deposit, 'safe_now');
 });

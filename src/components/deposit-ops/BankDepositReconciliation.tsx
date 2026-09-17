@@ -12,8 +12,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Banknote, ChevronDown, ChevronRight, Clock, Settings } from "lucide-react";
 import { format, parseISO } from "date-fns";
 
-const CheckAltSettings = lazy(() =>
-  import("@/components/settings/CheckAltSettings").then((m) => ({ default: m.CheckAltSettings })),
+const CheckAltTenantAutoDepositCard = lazy(() =>
+  import("@/components/settings/CheckAltTenantAutoDepositCard").then((m) => ({
+    default: m.CheckAltTenantAutoDepositCard,
+  })),
 );
 
 interface DepositRow {
@@ -198,7 +200,7 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
           </CardHeader>
           <CardContent>
             <Suspense fallback={<Skeleton className="h-40 w-full" />}>
-              <CheckAltSettings />
+              <CheckAltTenantAutoDepositCard />
             </Suspense>
           </CardContent>
         </Card>
