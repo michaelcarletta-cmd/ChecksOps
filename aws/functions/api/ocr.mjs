@@ -27,10 +27,10 @@ const streamToBuffer = async (body) => {
 };
 
 const extractLines = (blocks = []) => (blocks || [])
-  .filter((b) => b.BlockType === 'LINE' && b.Text)
+  .filter((b) => b && b.BlockType === 'LINE' && b.Text)
   .map((b) => b.Text);
 
-const loadCheckImageBytes = async (client, checkId) => {
+const loadCheckImageBytes = async (client, checkId, deps = {}) => {
   const row = (await client.query(
     `SELECT id, tenant_id, front_image_path, back_image_path, ocr_status,
             raw_ocr_front, raw_ocr_back, carrier_name, check_number, payee_line,
@@ -46,7 +46,8 @@ const loadCheckImageBytes = async (client, checkId) => {
   if (!key || !filesBucket()) return { error: 's3_not_configured', row };
 
   try {
-    const obj = await s3().send(new GetObjectCommand({ Bucket: filesBucket(), Key: key }));
+    const s3Send = deps.s3Send || ((cmd) => s3().send(cmd));
+    const obj = await s3Send(new GetObjectCommand({ Bucket: filesBucket(), Key: key }));
     const bytes = await streamToBuffer(obj.Body);
     return { row, bytes, key };
   } catch (error) {
@@ -108,22 +109,34 @@ const parsedFromStoredOcr = (row) => {
   };
 };
 
-const runTextract = async (bytes) => {
+const runTextract = async (bytes, deps = {}) => {
   try {
-    const analyzed = await textract().send(new AnalyzeDocumentCommand({
+    const send = deps.textractSend || ((cmd) => textract().send(cmd));
+    const analyzed = await send(new AnalyzeDocumentCommand({
       Document: { Bytes: bytes },
       FeatureTypes: ['FORMS'],
     }));
-    return { lines: extractLines(analyzed.Blocks || []), engine: 'aws_textract_analyze' };
+    return {
+      blocks: analyzed.Blocks || [],
+      lines: extractLines(analyzed.Blocks || []),
+      engine: 'aws_textract_analyze',
+      error: null,
+    };
   } catch (analyzeError) {
     try {
-      const detected = await textract().send(new DetectDocumentTextCommand({
+      const send = deps.textractSend || ((cmd) => textract().send(cmd));
+      const detected = await send(new DetectDocumentTextCommand({
         Document: { Bytes: bytes },
       }));
-      return { lines: extractLines(detected.Blocks || []), engine: 'aws_textract_detect' };
+      return {
+        blocks: detected.Blocks || [],
+        lines: extractLines(detected.Blocks || []),
+        engine: 'aws_textract_detect',
+        error: null,
+      };
     } catch (detectError) {
       const message = String(detectError?.message || analyzeError?.message || detectError).slice(0, 240);
-      return { lines: [], engine: 'aws_textract', error: message };
+      return { blocks: [], lines: [], engine: 'aws_textract', error: message };
     }
   }
 };
@@ -171,10 +184,12 @@ export const handleCheckOcrIntake = async (event) => withIdentity(event, async (
   }
 
   let lines = [];
+  let blocks = [];
   let engine = 'aws_textract';
   let textractError = null;
   if (loaded.bytes && loaded.bytes.length) {
     const tex = await runTextract(loaded.bytes);
+    blocks = tex.blocks || [];
     lines = tex.lines || [];
     engine = tex.engine || engine;
     textractError = tex.error || null;
@@ -221,7 +236,8 @@ export const handleCheckOcrIntake = async (event) => withIdentity(event, async (
     };
   }
 
-  const parsed = parsedFromStore || parseCheckFields(lines);
+  // Prefer Textract blocks when present (geometry-aware). Fallback to stored OCR lines.
+  const parsed = parsedFromStore || (blocks && blocks.length ? parseCheckFields(blocks) : parseCheckFields(lines));
   const eligibility = {
     recommendation: parsed.needs_manual_review ? 'manual_review' : 'proceed',
     reasons: (parsed.low_confidence_fields || []).map((f) => `low_confidence:${f}`),
@@ -297,6 +313,12 @@ export const handleCheckOcrIntake = async (event) => withIdentity(event, async (
     spoofFieldsIgnored: spoof,
   };
 }, { write: true, commit: true });
+
+// Exported test hooks (no production callers).
+export const __test__ = {
+  runTextract,
+  loadCheckImageBytes,
+};
 
 export const handleDetectEndorsementZone = async (event) => withIdentity(event, async ({
   client, body, spoof,
