@@ -10,7 +10,6 @@ import {
   DetectDocumentTextCommand,
   AnalyzeDocumentCommand,
 } from '@aws-sdk/client-textract';
-import { withIdentity } from './data.mjs';
 import { normalizePath, s3KeyFor } from './storage-paths.mjs';
 import { parseCheckFields } from './ocr-parse.mjs';
 
@@ -141,9 +140,11 @@ const runTextract = async (bytes, deps = {}) => {
   }
 };
 
-export const handleCheckOcrIntake = async (event) => withIdentity(event, async ({
-  client, mapping, body, spoof,
-}) => {
+export const handleCheckOcrIntake = async (event) => {
+  const { withIdentity } = await import('./data.mjs');
+  return withIdentity(event, async ({
+    client, mapping, body, spoof,
+  }) => {
   const checkId = body.checkId || body.check_id;
   if (!checkId) {
     return {
@@ -313,6 +314,7 @@ export const handleCheckOcrIntake = async (event) => withIdentity(event, async (
     spoofFieldsIgnored: spoof,
   };
 }, { write: true, commit: true });
+};
 
 // Exported test hooks (no production callers).
 export const __test__ = {
@@ -320,9 +322,11 @@ export const __test__ = {
   loadCheckImageBytes,
 };
 
-export const handleDetectEndorsementZone = async (event) => withIdentity(event, async ({
-  client, body, spoof,
-}) => {
+export const handleDetectEndorsementZone = async (event) => {
+  const { withIdentity } = await import('./data.mjs');
+  return withIdentity(event, async ({
+    client, body, spoof,
+  }) => {
   const checkId = body.checkId || body.check_id;
   // Default endorsement band on check rear (heuristic; Textract geometry optional later)
   const zone = { top: 0.72, bottom: 0.95, left: 0.05, right: 0.95 };
@@ -346,10 +350,13 @@ export const handleDetectEndorsementZone = async (event) => withIdentity(event, 
     spoofFieldsIgnored: spoof,
   };
 });
+};
 
-export const handleCheckOcrBacklog = async (event) => withIdentity(event, async ({
-  client, spoof,
-}) => {
+export const handleCheckOcrBacklog = async (event) => {
+  const { withIdentity } = await import('./data.mjs');
+  return withIdentity(event, async ({
+    client, spoof,
+  }) => {
   // Service-style scan for stale OCR; does not auto-loop Textract for cost control in staging.
   const rows = (await client.query(
     `SELECT id, ocr_status, updated_at
@@ -370,3 +377,4 @@ export const handleCheckOcrBacklog = async (event) => withIdentity(event, async 
     spoofFieldsIgnored: spoof,
   };
 });
+};
