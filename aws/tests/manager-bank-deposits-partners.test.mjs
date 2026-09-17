@@ -75,14 +75,16 @@ test('Manager tab order keeps Deposit Ops and Reports after the eight Manager it
   assert.match(src, /<DepositReports/);
 });
 
-test('Bank Deposits exposes date jump, CheckAlt Settings, and TOTAL = sum of checks', () => {
+test('Bank Deposits exposes date jump, Auto-Deposit only, and TOTAL = sum of checks', () => {
   const src = fs.readFileSync(path.join(spaRoot, 'components/deposit-ops/BankDepositReconciliation.tsx'), 'utf8');
   assert.match(src, /type="date"/);
   assert.match(src, /Jump to deposit date/);
-  assert.match(src, /CheckAlt Settings/);
+  assert.match(src, /TenantAutoApproveCard/);
   assert.match(src, /sumDepositAmounts/);
   assert.match(src, />TOTAL</);
   assert.match(src, /bankDepositDayKey/);
+  assert.equal(/CheckAltSettings/.test(src), false);
+  assert.equal(/from\("checkalt_config"\)/.test(src), false);
   assert.equal(/deposit_date/.test(src), false);
 });
 

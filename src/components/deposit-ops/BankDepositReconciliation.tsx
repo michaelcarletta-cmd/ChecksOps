@@ -1,7 +1,8 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenantFilter } from "@/hooks/useTenantFilter";
+import { TenantAutoApproveCard } from "@/components/billing/TenantAutoApproveCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,10 +12,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Banknote, ChevronDown, ChevronRight, Clock, Settings } from "lucide-react";
 import { format, parseISO } from "date-fns";
-
-const CheckAltSettings = lazy(() =>
-  import("@/components/settings/CheckAltSettings").then((m) => ({ default: m.CheckAltSettings })),
-);
 
 interface DepositRow {
   id: string;
@@ -192,16 +189,7 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
       </div>
 
       {showSettings && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">CheckAlt Settings</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Suspense fallback={<Skeleton className="h-40 w-full" />}>
-              <CheckAltSettings />
-            </Suspense>
-          </CardContent>
-        </Card>
+        <TenantAutoApproveCard tenantId={tenantId} />
       )}
 
       <div className="grid gap-3 sm:grid-cols-2">

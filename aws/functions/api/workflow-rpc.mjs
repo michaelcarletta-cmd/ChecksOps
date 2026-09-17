@@ -83,6 +83,7 @@ export const SAFE_WRITE_RPC_CLASSIFICATION = {
   add_partner_stakeholder_to_check: 'provider_dependent',
   ensure_partner_stakeholders: 'provider_dependent',
   save_checkalt_settings: 'safe_now',
+  save_checkalt_tenant_auto_deposit: 'safe_now',
 };
 
 /** RPCs executed via POST /data/rpc write path. */
@@ -103,6 +104,7 @@ export const SAFE_WRITE_RPCS = new Set([
   'resolve_check_return',
   'deposit_action',
   'save_checkalt_settings',
+  'save_checkalt_tenant_auto_deposit',
 ]);
 
 const SESSION_RPCS = new Set(['register_session', 'validate_session', 'invalidate_session', 'log_audit']);
@@ -130,6 +132,13 @@ const CHECKALT_SETTINGS_SECRETS = new Set([
   'cached_jwt_expires_at',
   'webhook_secret',
 ]);
+
+const CHECKALT_AUTO_DEPOSIT_COLUMNS = new Set([
+  'auto_approve_enabled',
+  'auto_approve_max_cents',
+]);
+
+export const IS_PLATFORM_OWNER_SQL = 'SELECT public.is_platform_owner() AS is_owner';
 
 const denied = (spoof, extra) => ({
   ok: false,
@@ -774,6 +783,31 @@ const requireManagerAdmin = async (client, userId) => {
   return { roles };
 };
 
+const requirePlatformOwner = async (client) => {
+  const row = (await client.query(IS_PLATFORM_OWNER_SQL)).rows[0];
+  if (!row?.is_owner) {
+    return { error: 'not_authorized', message: 'Platform owner required for CheckAlt settings' };
+  }
+  return { ok: true };
+};
+
+const requireOwnTenantAdmin = async (client, userId, tenantId) => {
+  const owner = await requirePlatformOwner(client);
+  if (!owner.error) return { ok: true, platformOwner: true };
+  if (!isUuid(tenantId)) {
+    return { error: 'invalid_uuid', field: 'tenant_id' };
+  }
+  const tenantAdmin = (await client.query(
+    `SELECT 1 FROM public.tenant_users
+     WHERE user_id = $1::uuid AND tenant_id = $2::uuid AND lower(role::text) IN ('admin', 'owner')`,
+    [userId, tenantId],
+  )).rows[0];
+  if (!tenantAdmin) {
+    return { error: 'not_authorized', message: 'Insufficient role for this workflow RPC' };
+  }
+  return { ok: true };
+};
+
 const canAccessTenant = async (client, userId, tenantId) => {
   if (!isUuid(tenantId)) return false;
   const member = (await client.query(
@@ -860,7 +894,7 @@ const executeResolveCheckReturn = async ({ client, mapping, args }) => {
 };
 
 const executeSaveCheckaltSettings = async ({ client, mapping, args }) => {
-  const gated = await requireManagerAdmin(client, mapping.application_user_id);
+  const gated = await requirePlatformOwner(client);
   if (gated.error) return gated;
   const incoming = args && typeof args === 'object' ? { ...args } : {};
   const nested = incoming.p_settings && typeof incoming.p_settings === 'object' ? incoming.p_settings : incoming;
@@ -886,6 +920,70 @@ const executeSaveCheckaltSettings = async ({ client, mapping, args }) => {
      RETURNING id, singleton, base_url, merchant, fi_key, business_unit,
                depositor_account_id, default_enabled, auto_approve_enabled,
                auto_approve_max_cents, notes, created_at, updated_at, updated_by`,
+    params,
+  )).rows;
+  return { data: rows[0] || null };
+};
+
+const executeSaveCheckaltTenantAutoDeposit = async ({ client, mapping, args }) => {
+  const incoming = args && typeof args === 'object' ? { ...args } : {};
+  const nested = incoming.p_settings && typeof incoming.p_settings === 'object'
+    ? incoming.p_settings
+    : incoming;
+  let tenantId = arg(incoming, 'p_tenant_id', 'tenant_id')
+    || arg(nested, 'p_tenant_id', 'tenant_id');
+  if (!tenantId) {
+    const memberships = (await client.query(
+      `SELECT tenant_id FROM public.tenant_users WHERE user_id = $1::uuid`,
+      [mapping.application_user_id],
+    )).rows;
+    if (memberships.length !== 1) {
+      return { error: 'missing_required_field', field: 'tenant_id' };
+    }
+    tenantId = memberships[0].tenant_id;
+  }
+  const gated = await requireOwnTenantAdmin(client, mapping.application_user_id, tenantId);
+  if (gated.error) return gated;
+  for (const key of Object.keys(nested)) {
+    if (key.startsWith('p_') && key !== 'p_settings') continue;
+    if (key === 'tenant_id' || key === 'p_tenant_id' || key === 'p_settings') continue;
+    if (!CHECKALT_AUTO_DEPOSIT_COLUMNS.has(key)) {
+      return { error: 'invalid_field', field: key };
+    }
+  }
+  const hasEnabled = Object.prototype.hasOwnProperty.call(nested, 'auto_approve_enabled');
+  const hasMax = Object.prototype.hasOwnProperty.call(nested, 'auto_approve_max_cents');
+  if (!hasEnabled && !hasMax) {
+    return { error: 'missing_required_field', field: 'auto_approve_enabled' };
+  }
+  let maxCents = hasMax ? nested.auto_approve_max_cents : undefined;
+  if (maxCents === '' || maxCents === undefined) {
+    maxCents = hasMax ? null : undefined;
+  }
+  if (maxCents != null) {
+    maxCents = Number(maxCents);
+    if (!Number.isFinite(maxCents) || maxCents < 0) {
+      return { error: 'invalid_field', field: 'auto_approve_max_cents' };
+    }
+    maxCents = Math.round(maxCents);
+  }
+  const updates = [];
+  const params = [];
+  if (hasEnabled) {
+    params.push(truthy(nested.auto_approve_enabled));
+    updates.push(`auto_approve_enabled = $${params.length}`);
+  }
+  if (hasMax) {
+    params.push(maxCents);
+    updates.push(`auto_approve_max_cents = $${params.length}`);
+  }
+  updates.push('updated_at = now()');
+  params.push(tenantId);
+  const rows = (await client.query(
+    `UPDATE public.checkalt_tenant_accounts
+     SET ${updates.join(', ')}
+     WHERE tenant_id = $${params.length}::uuid
+     RETURNING tenant_id, auto_approve_enabled, auto_approve_max_cents`,
     params,
   )).rows;
   return { data: rows[0] || null };
@@ -1047,6 +1145,8 @@ export const executeSafeWriteRpc = async ({ client, mapping, name, args }) => {
       return executeResolveCheckReturn({ client, mapping, args });
     case 'save_checkalt_settings':
       return executeSaveCheckaltSettings({ client, mapping, args });
+    case 'save_checkalt_tenant_auto_deposit':
+      return executeSaveCheckaltTenantAutoDeposit({ client, mapping, args });
     case 'deposit_action':
       return executeDepositAction({ client, mapping, args });
     default:

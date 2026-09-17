@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
 import { toast as sonnerToast } from "sonner";
-import { Megaphone, Loader2, Plus, Trash2, Mail, Building2, Users, Settings, ArrowLeft, RefreshCw, Copy, Upload, X, FileText, Receipt, Link2, Gift, ShieldCheck, Eye, Crosshair, Palette, Briefcase, Home, Calculator, Landmark, Wallet, LogOut } from "lucide-react";
+import { Megaphone, Loader2, Plus, Trash2, Mail, Building2, Users, Settings, ArrowLeft, RefreshCw, Copy, Upload, X, FileText, Receipt, Link2, Gift, ShieldCheck, Eye, Crosshair, Palette, Briefcase, Home, Calculator, Landmark, Wallet, LogOut, Banknote } from "lucide-react";
 import { goToChecksOpsHome } from "@/lib/goToChecksOpsHome";
 import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
 import { SettingsHero } from "@/components/settings/SettingsHero";
@@ -29,6 +29,7 @@ import { isCheckOpsHost } from "@/lib/checkopsHost";
 import { useRef } from "react";
 
 import { CheckAltSettings } from "@/components/settings/CheckAltSettings";
+import { CheckAltTenantAccountCard } from "@/components/settings/CheckAltTenantAccountCard";
 import { EmailSenderSettings } from "@/components/settings/EmailSenderSettings";
 import { ComplianceSettings } from "@/components/settings/ComplianceSettings";
 import { AdminReferralDashboard } from "@/components/settings/AdminReferralDashboard";
@@ -208,6 +209,7 @@ export default function AdminTenants() {
 
             <TabsTrigger value="tenants"><Building2 className="w-4 h-4 mr-1" /> Tenants</TabsTrigger>
             <TabsTrigger value="platform-finance"><Landmark className="w-4 h-4 mr-1" /> Platform Finance</TabsTrigger>
+            <TabsTrigger value="checkalt"><Banknote className="w-4 h-4 mr-1" /> CheckAlt</TabsTrigger>
             <TabsTrigger value="referrals"><Gift className="w-4 h-4 mr-1" /> Referral Dashboard</TabsTrigger>
             <TabsTrigger value="announcements"><Megaphone className="w-4 h-4 mr-1" /> Announcements</TabsTrigger>
 
@@ -240,6 +242,9 @@ export default function AdminTenants() {
             </Tabs>
           </TabsContent>
 
+          <TabsContent value="checkalt">
+            <CheckAltSettings />
+          </TabsContent>
           <TabsContent value="referrals">
             <AdminReferralDashboard />
           </TabsContent>
@@ -363,7 +368,7 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
           </TabsContent>
           <TabsContent value="integrations" className="mt-6 space-y-6">
             <TenantMoovIdentityCard tenantId={tenant.id} tenantName={tenant.name} />
-            <CheckAltSettings />
+            <CheckAltTenantAccountCard />
           </TabsContent>
           <TabsContent value="billing" className="mt-6 space-y-6">
             <BillingTab tenant={tenant} onUpdated={onUpdated} />

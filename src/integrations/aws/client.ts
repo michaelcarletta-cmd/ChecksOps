@@ -331,6 +331,69 @@ function createBuilder(table: string, store: SessionStore) {
 
   const execute = async () => {
     if (state.op !== "select") {
+      if (state.table === "checkalt_tenant_accounts" && state.op === "update") {
+        const restoredAuto = await store.restoreSession();
+        const autoToken = restoredAuto.session?.access_token;
+        if (!autoToken) {
+          return {
+            data: null,
+            error: postgrestError("JWT expired", "PGRST301"),
+            count: null,
+            status: 401,
+            statusText: "Unauthorized",
+          };
+        }
+        const values = (state.payload && typeof state.payload === "object")
+          ? state.payload as Record<string, unknown>
+          : {};
+        const allowed = new Set(["auto_approve_enabled", "auto_approve_max_cents"]);
+        const extra = Object.keys(values).filter((key) => !allowed.has(key));
+        if (extra.length > 0) {
+          return {
+            data: null,
+            error: postgrestError("writes_disabled", "42501", {
+              hint: "Only auto_approve_enabled and auto_approve_max_cents may be updated",
+            }),
+            count: null,
+            status: 403,
+            statusText: "Forbidden",
+          };
+        }
+        const tenantFilter = state.filters.find((filter) => (
+          filter.column === "tenant_id" && filter.op === "eq"
+        ));
+        const { response, body } = await apiFetch("/data/rpc", {
+          method: "POST",
+          body: JSON.stringify({
+            name: "save_checkalt_tenant_auto_deposit",
+            args: {
+              tenant_id: tenantFilter?.value ?? null,
+              auto_approve_enabled: values.auto_approve_enabled,
+              auto_approve_max_cents: values.auto_approve_max_cents,
+            },
+          }),
+        }, autoToken);
+        if (response.status === 401) {
+          store.writeStored(null);
+          store.emit("SIGNED_OUT", null);
+        }
+        if (!response.ok) {
+          return {
+            data: body.data ?? null,
+            error: postgrestError(String(body.message || body.error || "rpc_failed"), String(body.error || "42501")),
+            count: body.count ?? null,
+            status: response.status,
+            statusText: response.statusText,
+          };
+        }
+        return {
+          data: body.data ?? null,
+          error: null,
+          count: body.count ?? null,
+          status: 200,
+          statusText: "OK",
+        };
+      }
       if (state.table === "checkalt_config" && state.op === "update") {
         const restoredWrite = await store.restoreSession();
         const writeToken = restoredWrite.session?.access_token;

@@ -11,6 +11,7 @@ import {
 } from '../functions/api/data.mjs';
 import { LOOKUP_MAPPING_SQL, USER_ROLES_SQL } from '../functions/api/identity.mjs';
 import {
+  IS_PLATFORM_OWNER_SQL,
   SAFE_DEPOSIT_ACTIONS,
   SAFE_WRITE_RPC_CLASSIFICATION,
   SAFE_WRITE_RPCS,
@@ -201,10 +202,11 @@ test('4. deposit_provider_config reads rewrite to the public display view', asyn
   assert.equal(/^\s+config,/m.test(view), false);
 });
 
-test('5. CheckAlt settings read omits secrets and write is a dedicated RPC', async () => {
+test('5. CheckAlt settings read omits secrets and write is platform-owner only', async () => {
   assert.equal(resolvePublicTable('checkalt_config'), 'checkalt_config_public');
   assert.equal(SAFE_WRITE_RPCS.has('save_checkalt_settings'), true);
   const client = identityClient((sql, params) => {
+    if (sql === IS_PLATFORM_OWNER_SQL) return { rows: [{ is_owner: false }] };
     if (sql.includes('FROM public.checkalt_config_public')) {
       return { rows: [{ singleton: true, merchant: 'm', cached_jwt: undefined }] };
     }
@@ -212,11 +214,7 @@ test('5. CheckAlt settings read omits secrets and write is a dedicated RPC', asy
       throw new Error('base checkalt_config must not be selected');
     }
     if (/UPDATE public.checkalt_config/.test(sql)) {
-      assert.equal(String(sql).includes('cached_jwt'), false);
-      assert.equal(String(sql).includes('webhook_secret'), false);
-      assert.match(sql, /merchant = \$1/);
-      assert.equal(params[0], 'new-merchant');
-      return { rows: [{ singleton: true, merchant: 'new-merchant' }] };
+      throw new Error('tenant admin must not update checkalt_config');
     }
     return { rows: [] };
   });
@@ -229,8 +227,27 @@ test('5. CheckAlt settings read omits secrets and write is a dedicated RPC', asy
   assert.equal(read.ok, true, read.message || read.error);
   assert.equal(read.data.merchant, 'm');
 
-  const saved = await executeSafeWriteRpc({
+  const denied = await executeSafeWriteRpc({
     client,
+    mapping: { application_user_id: APP_ID },
+    name: 'save_checkalt_settings',
+    args: { merchant: 'new-merchant', notes: 'ok' },
+  });
+  assert.equal(denied.error, 'not_authorized');
+
+  const ownerClient = identityClient((sql, params) => {
+    if (sql === IS_PLATFORM_OWNER_SQL) return { rows: [{ is_owner: true }] };
+    if (/UPDATE public.checkalt_config/.test(sql)) {
+      assert.equal(String(sql).includes('cached_jwt'), false);
+      assert.equal(String(sql).includes('webhook_secret'), false);
+      assert.match(sql, /merchant = \$1/);
+      assert.equal(params[0], 'new-merchant');
+      return { rows: [{ singleton: true, merchant: 'new-merchant' }] };
+    }
+    return { rows: [] };
+  });
+  const saved = await executeSafeWriteRpc({
+    client: ownerClient,
     mapping: { application_user_id: APP_ID },
     name: 'save_checkalt_settings',
     args: { merchant: 'new-merchant', cached_jwt: 'secret-token' },
@@ -238,7 +255,7 @@ test('5. CheckAlt settings read omits secrets and write is a dedicated RPC', asy
   assert.equal(saved.error, 'secret_column_denied');
 
   const ok = await executeSafeWriteRpc({
-    client,
+    client: ownerClient,
     mapping: { application_user_id: APP_ID },
     name: 'save_checkalt_settings',
     args: { merchant: 'new-merchant', notes: 'ok' },

@@ -13,25 +13,27 @@ import { toast } from "sonner";
 /**
  * Per-tenant auto-approve controls for CheckAlt deposits.
  * Overrides the global checkalt_config defaults for this tenant only.
+ * Reads/writes only auto_approve_enabled and auto_approve_max_cents.
  */
-export function TenantAutoApproveCard() {
+export function TenantAutoApproveCard({ tenantId: tenantIdProp }: { tenantId?: string | null } = {}) {
   const { tenant } = useTenant();
+  const tenantId = tenantIdProp ?? tenant?.id ?? null;
   const qc = useQueryClient();
   const [enabled, setEnabled] = useState(false);
   const [maxDollars, setMaxDollars] = useState<string>("");
 
   const { data: account, isLoading } = useQuery({
-    queryKey: ["checkalt-tenant-account", tenant?.id],
+    queryKey: ["checkalt-tenant-auto-deposit", tenantId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("checkalt_tenant_accounts")
-        .select("tenant_id, auto_approve_enabled, auto_approve_max_cents, sso_user_id")
-        .eq("tenant_id", tenant!.id)
+        .select("tenant_id, auto_approve_enabled, auto_approve_max_cents")
+        .eq("tenant_id", tenantId!)
         .maybeSingle();
       if (error) throw error;
       return data;
     },
-    enabled: !!tenant?.id,
+    enabled: !!tenantId,
   });
 
   useEffect(() => {
@@ -47,7 +49,7 @@ export function TenantAutoApproveCard() {
 
   const save = useMutation({
     mutationFn: async () => {
-      if (!tenant?.id) throw new Error("No tenant");
+      if (!tenantId) throw new Error("No tenant");
       const cents = maxDollars.trim() === "" ? null : Math.round(parseFloat(maxDollars) * 100);
       if (cents != null && (!Number.isFinite(cents) || cents < 0)) {
         throw new Error("Invalid maximum amount");
@@ -58,24 +60,24 @@ export function TenantAutoApproveCard() {
           auto_approve_enabled: enabled,
           auto_approve_max_cents: cents,
         })
-        .eq("tenant_id", tenant.id);
+        .eq("tenant_id", tenantId);
       if (error) throw error;
     },
     onSuccess: () => {
       toast.success("Auto-approve settings saved");
-      qc.invalidateQueries({ queryKey: ["checkalt-tenant-account", tenant?.id] });
+      qc.invalidateQueries({ queryKey: ["checkalt-tenant-auto-deposit", tenantId] });
     },
     onError: (e: any) => toast.error(e?.message ?? "Failed to save"),
   });
 
-  if (!tenant?.id) return null;
+  if (!tenantId) return null;
 
   return (
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-sm font-semibold flex items-center gap-2">
           <ShieldCheck className="h-4 w-4 text-primary" />
-          Deposit Auto-Approve
+          Auto-Deposit
         </CardTitle>
         <CardDescription className="text-xs">
           Automatically approve clean deposits for your organization. Deposits with any
@@ -83,9 +85,9 @@ export function TenantAutoApproveCard() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {!account?.sso_user_id ? (
+        {!account ? (
           <p className="text-xs text-muted-foreground">
-            Your deposit account isn't registered yet. Register in Integration Settings first.
+            Your deposit account isn't registered yet. Ask ChecksOps to register it in Tenant Management first.
           </p>
         ) : (
           <>

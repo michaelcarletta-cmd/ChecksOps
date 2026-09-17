@@ -196,6 +196,7 @@ test('production UI sources no longer invoke legacy CheckAlt provider functions'
     'src/pages/CheckCommandCenter.tsx',
     'src/components/deposit-ops/DepositOperationsConsole.tsx',
     'src/components/settings/CheckAltSettings.tsx',
+    'src/components/settings/CheckAltTenantAccountCard.tsx',
     'src/integrations/aws/client.ts',
   ];
   for (const rel of files) {
@@ -208,10 +209,12 @@ test('production UI sources no longer invoke legacy CheckAlt provider functions'
   assert.match(settings, /invokeAwsCheckAltProviderFunction/);
   assert.match(settings, /checkalt-poll-status/);
   assert.match(settings, /checkalt-test-connection/);
-  assert.match(settings, /checkalt-register-account/);
-  assert.match(settings, /checkalt-verify-account/);
   assert.match(settings, /checkalt-deposit-history/);
   assert.match(settings, /CHECKALT_PROVIDER_UNAVAILABLE|checkAltProviderUserMessage/);
+  const tenantAccount = sourceOf('src/components/settings/CheckAltTenantAccountCard.tsx');
+  assert.match(tenantAccount, /invokeAwsCheckAltProviderFunction/);
+  assert.match(tenantAccount, /checkalt-register-account/);
+  assert.match(tenantAccount, /checkalt-verify-account/);
 });
 
 test('Command Center CheckAlt click performs zero prepare/assign when AWS is disabled', async () => {
