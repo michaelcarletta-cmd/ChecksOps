@@ -138,6 +138,9 @@ const CHECKALT_AUTO_DEPOSIT_COLUMNS = new Set([
   'auto_approve_max_cents',
 ]);
 
+export const AWS_SAVE_CHECKALT_TENANT_AUTO_DEPOSIT_SQL =
+  'SELECT public.aws_save_checkalt_tenant_auto_deposit($1::uuid, $2::jsonb) AS result';
+
 export { IS_PLATFORM_OWNER_SQL };
 
 const denied = (spoof, extra) => ({
@@ -967,26 +970,31 @@ const executeSaveCheckaltTenantAutoDeposit = async ({ client, mapping, args }) =
     }
     maxCents = Math.round(maxCents);
   }
-  const updates = [];
-  const params = [];
-  if (hasEnabled) {
-    params.push(truthy(nested.auto_approve_enabled));
-    updates.push(`auto_approve_enabled = $${params.length}`);
+  const settings = {};
+  if (hasEnabled) settings.auto_approve_enabled = truthy(nested.auto_approve_enabled);
+  if (hasMax) settings.auto_approve_max_cents = maxCents;
+  try {
+    const rows = (await client.query(AWS_SAVE_CHECKALT_TENANT_AUTO_DEPOSIT_SQL, [
+      tenantId,
+      settings,
+    ])).rows;
+    return { data: rows[0]?.result || null };
+  } catch (error) {
+    const message = String(error?.message || '');
+    if (/not_authorized/i.test(message) || error?.code === '42501') {
+      return { error: 'not_authorized', message: 'Insufficient role for this workflow RPC' };
+    }
+    if (/invalid_field/i.test(message) || error?.code === '22023') {
+      return { error: 'invalid_field', field: 'auto_approve_max_cents' };
+    }
+    if (/missing_required_field/i.test(message)) {
+      return { error: 'missing_required_field', field: 'auto_approve_enabled' };
+    }
+    if (/not_found/i.test(message) || error?.code === 'P0002') {
+      return { error: 'rls_denied', message: 'Auto-Deposit account not found' };
+    }
+    throw error;
   }
-  if (hasMax) {
-    params.push(maxCents);
-    updates.push(`auto_approve_max_cents = $${params.length}`);
-  }
-  updates.push('updated_at = now()');
-  params.push(tenantId);
-  const rows = (await client.query(
-    `UPDATE public.checkalt_tenant_accounts
-     SET ${updates.join(', ')}
-     WHERE tenant_id = $${params.length}::uuid
-     RETURNING tenant_id, auto_approve_enabled, auto_approve_max_cents`,
-    params,
-  )).rows;
-  return { data: rows[0] || null };
 };
 
 const executeDepositAction = async ({ client, mapping, args }) => {

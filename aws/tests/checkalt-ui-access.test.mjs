@@ -12,6 +12,7 @@ import {
 } from '../functions/api/data.mjs';
 import {
   SAFE_WRITE_RPCS,
+  AWS_SAVE_CHECKALT_TENANT_AUTO_DEPOSIT_SQL,
   executeSafeWriteRpc,
 } from '../functions/api/workflow-rpc.mjs';
 import {
@@ -330,23 +331,24 @@ test('Auto-Deposit still reads/writes the existing tenant columns only', async (
   assert.match(clientSrc, /Only auto_approve_enabled and auto_approve_max_cents may be updated/);
   assert.equal(SAFE_WRITE_RPCS.has('save_checkalt_tenant_auto_deposit'), true);
 
-  const updates = [];
+  const persistCalls = [];
   const client = identityClient({ platformOwner: false }, (sql, params) => {
-    if (/UPDATE public.checkalt_tenant_accounts/.test(sql)) {
-      updates.push({ sql, params });
-      assert.match(sql, /auto_approve_enabled/);
-      assert.match(sql, /auto_approve_max_cents/);
-      assert.equal(/sso_user_id/.test(sql), false);
-      assert.equal(/deposit_account_number/.test(sql), false);
-      assert.equal(/last_register_payload/.test(sql), false);
-      assert.equal(/business_unit/.test(sql), false);
+    if (sql === AWS_SAVE_CHECKALT_TENANT_AUTO_DEPOSIT_SQL) {
+      persistCalls.push({ sql, params });
+      assert.equal(params[0], FREEDOM);
+      assert.deepEqual(params[1], { auto_approve_enabled: true, auto_approve_max_cents: 10000 });
       return {
         rows: [{
-          tenant_id: FREEDOM,
-          auto_approve_enabled: true,
-          auto_approve_max_cents: 10000,
+          result: {
+            tenant_id: FREEDOM,
+            auto_approve_enabled: true,
+            auto_approve_max_cents: 10000,
+          },
         }],
       };
+    }
+    if (/UPDATE public.checkalt_tenant_accounts/.test(sql)) {
+      throw new Error('generic UPDATE checkalt_tenant_accounts must not be used');
     }
     return { rows: [] };
   });
@@ -359,7 +361,7 @@ test('Auto-Deposit still reads/writes the existing tenant columns only', async (
   assert.equal(ok.error, undefined);
   assert.equal(ok.data.auto_approve_enabled, true);
   assert.equal(ok.data.auto_approve_max_cents, 10000);
-  assert.equal(updates.length, 1);
+  assert.equal(persistCalls.length, 1);
 
   const deniedOtherTenant = await executeSafeWriteRpc({
     client,
