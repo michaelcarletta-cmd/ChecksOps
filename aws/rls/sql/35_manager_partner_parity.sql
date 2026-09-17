@@ -31,7 +31,7 @@ REVOKE ALL ON FUNCTION public.aws_is_tenant_manager_admin() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.aws_is_tenant_manager_admin() TO checksops, authenticated;
 
 -- Active-tenant public columns only. security_invoker=false so partner-name
--- resolution is not blocked by membership-only aws_select_tenants.
+-- resolution is not blocked by membership-only tenants SELECT.
 -- Base tenants SELECT policy is unchanged.
 DROP VIEW IF EXISTS public.tenants_public;
 CREATE VIEW public.tenants_public

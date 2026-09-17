@@ -87,7 +87,8 @@ test('1. tenants_public SQL stays public-column and does not open base tenants',
   assert.equal(/GRANT SELECT ON public\.tenants\b/.test(sql), false);
   const partnerManager = fs.readFileSync(path.join(spaRoot, 'components/white-label/TenantPartnerManager.tsx'), 'utf8');
   assert.match(partnerManager, /tenants_public/);
-  assert.equal(/from\("tenants"\)[\s\S]*select\("id, name"\)/.test(partnerManager), false);
+  assert.match(partnerManager, /from\("tenants_public"/);
+  assert.equal(/from\("tenants"\)\s*\.select\("id, name"\)/.test(partnerManager), false);
 });
 
 test('2. Bank Deposits query attaches check_intake_items via check_intake_item_id', async () => {
