@@ -341,6 +341,30 @@ const PUBLIC_CONFIG_TABLES = {
   deposit_provider_config: 'deposit_provider_config_public',
 };
 
+export const IS_PLATFORM_OWNER_SQL = 'SELECT public.is_platform_owner() AS is_owner';
+
+export const CHECKALT_AUTO_DEPOSIT_PUBLIC = 'checkalt_tenant_auto_deposit_public';
+export const CHECKALT_AUTO_DEPOSIT_READ_COLUMNS = Object.freeze([
+  'tenant_id',
+  'auto_approve_enabled',
+  'auto_approve_max_cents',
+]);
+export const CHECKALT_PLATFORM_OWNER_READ_TABLES = new Set([
+  'checkalt_config',
+  'checkalt_config_public',
+  'checkalt_tenant_accounts',
+]);
+
+const requestedTableName = (table) => String(table || '').replace(/^public\./, '');
+
+export const isCheckAltAutoDepositPublic = (table) => (
+  requestedTableName(table) === CHECKALT_AUTO_DEPOSIT_PUBLIC
+);
+
+export const isCheckAltPlatformOwnerRead = (table) => (
+  CHECKALT_PLATFORM_OWNER_READ_TABLES.has(requestedTableName(table))
+);
+
 /** Map secret-bearing config tables to tenant-safe public-column views. */
 export const resolvePublicTable = (table) => PUBLIC_CONFIG_TABLES[table] || table;
 
@@ -686,10 +710,16 @@ const attachEmbeds = async (client, rows, parentTable, embeds) => {
 };
 
 const runSelect = async (client, body) => {
-  const table = ident(resolvePublicTable(body.table), 'table');
-  if (!ALLOWED.has(table)) throw new Error(`table not allowlisted: ${table}`);
-  const parsed = parseSelect(body.select);
+  const requested = ident(body.table, 'table');
+  const autoDeposit = requested === CHECKALT_AUTO_DEPOSIT_PUBLIC;
+  const table = ident(autoDeposit ? 'checkalt_tenant_accounts' : resolvePublicTable(body.table), 'table');
+  if (!ALLOWED.has(requested) && !ALLOWED.has(table)) throw new Error(`table not allowlisted: ${table}`);
+  if (autoDeposit && body.order?.column && !CHECKALT_AUTO_DEPOSIT_READ_COLUMNS.includes(body.order.column)) {
+    throw new Error('invalid column');
+  }
+  const parsed = parseSelect(autoDeposit ? CHECKALT_AUTO_DEPOSIT_READ_COLUMNS.join(', ') : body.select);
   const { parent: parentFilters, embed: embedFilters } = splitEmbedFilters(body.filters || []);
+  if (autoDeposit && embedFilters.length) throw new Error('embeds_not_allowed');
   const { clauses, params } = applyFilters(parentFilters);
   clauses.push(...applyEmbedFilters(table, embedFilters, params));
   const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
@@ -700,7 +730,9 @@ const runSelect = async (client, body) => {
   }
   const limit = resolvePageLimit(body.limit);
   const offset = resolvePageOffset(body.offset);
-  const needed = columnsNeededForEmbeds(table, parsed.columns, parsed.embeds);
+  const needed = autoDeposit
+    ? new Set(CHECKALT_AUTO_DEPOSIT_READ_COLUMNS)
+    : columnsNeededForEmbeds(table, parsed.columns, parsed.embeds);
   const cols = needed.has('*') ? '*' : [...needed].map((c) => ident(c, 'column')).join(', ');
   const countSql = `SELECT count(*)::int AS n FROM public.${table} ${where}`;
   const count = body.count ? Number((await client.query(countSql, params)).rows[0]?.n || 0) : null;
@@ -810,6 +842,19 @@ export const handleDataQuery = async (event, deps) => {
       table: secretDeny.table,
       spoofFieldsIgnored: spoof,
     };
+  }
+  if (isCheckAltPlatformOwnerRead(rawTable)) {
+    const owner = (await client.query(IS_PLATFORM_OWNER_SQL)).rows[0];
+    if (!owner?.is_owner) {
+      return {
+        ok: false,
+        statusCode: 403,
+        error: 'not_authorized',
+        message: 'Platform owner required for CheckAlt configuration',
+        table: requestedTableName(rawTable),
+        spoofFieldsIgnored: spoof,
+      };
+    }
   }
   const { rows, count } = await runSelect(client, body);
   let data = rows;

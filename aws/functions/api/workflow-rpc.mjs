@@ -6,7 +6,7 @@
  *
  * Classification for every rpc_disabled name lives in SAFE_WRITE_RPC_CLASSIFICATION.
  */
-import { ignoredSpoof, parseBody, withIdentity, withIdentityWrite } from './data.mjs';
+import { ignoredSpoof, IS_PLATFORM_OWNER_SQL, parseBody, withIdentity, withIdentityWrite } from './data.mjs';
 import { USER_ROLES_SQL } from './identity.mjs';
 import { applicationWorkflowWritesEnabled } from './workflow-flags.mjs';
 import { writesEnabled } from './write-allowlist.mjs';
@@ -138,7 +138,7 @@ const CHECKALT_AUTO_DEPOSIT_COLUMNS = new Set([
   'auto_approve_max_cents',
 ]);
 
-export const IS_PLATFORM_OWNER_SQL = 'SELECT public.is_platform_owner() AS is_owner';
+export { IS_PLATFORM_OWNER_SQL };
 
 const denied = (spoof, extra) => ({
   ok: false,

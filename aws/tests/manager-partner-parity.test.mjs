@@ -173,6 +173,7 @@ test('3. Deposit Ops / Reports tenant filter uses EXISTS on check_id', async () 
 test('allowed-tables includes tenant-safe public config views', () => {
   const tables = JSON.parse(fs.readFileSync(path.join(ROOT, 'functions/api/allowed-tables.json'), 'utf8'));
   assert.equal(tables.includes('checkalt_config_public'), true);
+  assert.equal(tables.includes('checkalt_tenant_auto_deposit_public'), true);
   assert.equal(tables.includes('deposit_provider_config_public'), true);
   assert.equal(tables.includes('tenants_public'), true);
 });
@@ -208,7 +209,7 @@ test('5. CheckAlt settings read omits secrets and write is platform-owner only',
   const client = identityClient((sql, params) => {
     if (sql === IS_PLATFORM_OWNER_SQL) return { rows: [{ is_owner: false }] };
     if (sql.includes('FROM public.checkalt_config_public')) {
-      return { rows: [{ singleton: true, merchant: 'm', cached_jwt: undefined }] };
+      throw new Error('tenant admin must not read checkalt_config_public');
     }
     if (sql.includes('FROM public.checkalt_config ') && sql.includes('SELECT')) {
       throw new Error('base checkalt_config must not be selected');
@@ -224,8 +225,28 @@ test('5. CheckAlt settings read omits secrets and write is platform-owner only',
     filters: [{ column: 'singleton', op: 'eq', value: true }],
     maybeSingle: true,
   }), depsFor(client));
-  assert.equal(read.ok, true, read.message || read.error);
-  assert.equal(read.data.merchant, 'm');
+  assert.equal(read.ok, false);
+  assert.equal(read.error, 'not_authorized');
+  assert.equal(client.queries.some((q) => String(q.sql).includes('FROM public.checkalt_config_public')), false);
+
+  const ownerReadClient = identityClient((sql) => {
+    if (sql === IS_PLATFORM_OWNER_SQL) return { rows: [{ is_owner: true }] };
+    if (sql.includes('FROM public.checkalt_config_public')) {
+      return { rows: [{ singleton: true, merchant: 'm', cached_jwt: undefined }] };
+    }
+    if (sql.includes('FROM public.checkalt_config ') && sql.includes('SELECT')) {
+      throw new Error('base checkalt_config must not be selected');
+    }
+    return { rows: [] };
+  });
+  const ownerRead = await handleDataQuery(jwtEvent({
+    table: 'checkalt_config',
+    select: '*',
+    filters: [{ column: 'singleton', op: 'eq', value: true }],
+    maybeSingle: true,
+  }), depsFor(ownerReadClient));
+  assert.equal(ownerRead.ok, true, ownerRead.message || ownerRead.error);
+  assert.equal(ownerRead.data.merchant, 'm');
 
   const denied = await executeSafeWriteRpc({
     client,

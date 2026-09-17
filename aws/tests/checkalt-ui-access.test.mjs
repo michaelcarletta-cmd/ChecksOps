@@ -5,7 +5,12 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { LOOKUP_MAPPING_SQL, USER_ROLES_SQL } from '../functions/api/identity.mjs';
 import {
+  CHECKALT_AUTO_DEPOSIT_PUBLIC,
+  CHECKALT_AUTO_DEPOSIT_READ_COLUMNS,
+  handleDataQuery,
   IS_PLATFORM_OWNER_SQL,
+} from '../functions/api/data.mjs';
+import {
   SAFE_WRITE_RPCS,
   executeSafeWriteRpc,
 } from '../functions/api/workflow-rpc.mjs';
@@ -22,6 +27,29 @@ const FREEDOM = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
 const OTHER_TENANT = '4f172140-f57a-4744-8050-95f4f07b13b4';
 
 const sourceOf = (rel) => fs.readFileSync(path.join(ROOT, '..', rel), 'utf8');
+
+const jwtEvent = (body) => ({
+  rawPath: '/data/query',
+  headers: { authorization: 'Bearer test-id-token' },
+  body: JSON.stringify(body),
+  requestContext: {
+    stage: 'staging',
+    http: { method: 'POST', path: '/data/query' },
+    authorizer: {
+      jwt: { claims: { sub: 'c4386408-60e1-70e2-abb6-e6194e8e635f', email: 'mcarletta@freedomadj.com', token_use: 'id' } },
+    },
+  },
+});
+
+const depsFor = (client) => ({
+  loadDatabaseCredentials: async () => ({
+    username: 'checksops',
+    password: 'unit-test-only-not-a-real-secret',
+    host: 'db.example.internal',
+    database: 'checksops',
+  }),
+  createClient: () => client,
+});
 
 const identityClient = ({ platformOwner = false, tenantAdminFor = FREEDOM } = {}, handler = () => ({ rows: [] })) => {
   const queries = [];
@@ -159,9 +187,138 @@ test('Tenant Management selected-tenant register UI remains tenant-scoped', () =
   assert.doesNotMatch(card, /functions\.invoke\(/);
 });
 
+test('tenant Manager Auto-Deposit read returns only the two Auto-Deposit fields + tenant ID', async () => {
+  const card = sourceOf('src/components/billing/TenantAutoApproveCard.tsx');
+  assert.match(card, /from\("checkalt_tenant_auto_deposit_public"/);
+  assert.match(card, /select\("tenant_id, auto_approve_enabled, auto_approve_max_cents"\)/);
+  assert.deepEqual([...CHECKALT_AUTO_DEPOSIT_READ_COLUMNS], [
+    'tenant_id',
+    'auto_approve_enabled',
+    'auto_approve_max_cents',
+  ]);
+  const selects = [];
+  const client = identityClient({ platformOwner: false }, (sql) => {
+    if (sql.includes('count(*)')) return { rows: [{ n: 1 }] };
+    if (sql.includes('FROM public.checkalt_tenant_accounts')) {
+      selects.push(sql);
+      assert.match(sql, /tenant_id/);
+      assert.match(sql, /auto_approve_enabled/);
+      assert.match(sql, /auto_approve_max_cents/);
+      assert.equal(/sso_user_id/.test(sql), false);
+      assert.equal(/deposit_account_number/.test(sql), false);
+      assert.equal(/last_register_payload/.test(sql), false);
+      assert.equal(/first_name/.test(sql), false);
+      assert.equal(/SELECT \*/.test(sql), false);
+      return {
+        rows: [{
+          tenant_id: FREEDOM,
+          auto_approve_enabled: true,
+          auto_approve_max_cents: 25000,
+        }],
+      };
+    }
+    return { rows: [] };
+  });
+  const result = await handleDataQuery(jwtEvent({
+    table: CHECKALT_AUTO_DEPOSIT_PUBLIC,
+    select: 'tenant_id, auto_approve_enabled, auto_approve_max_cents, sso_user_id, deposit_account_number',
+    filters: [{ column: 'tenant_id', op: 'eq', value: FREEDOM }],
+    maybeSingle: true,
+  }), depsFor(client));
+  assert.equal(result.ok, true, result.message || result.error);
+  assert.deepEqual(Object.keys(result.data).sort(), [...CHECKALT_AUTO_DEPOSIT_READ_COLUMNS].sort());
+  assert.equal(result.data.sso_user_id, undefined);
+  assert.equal(result.data.deposit_account_number, undefined);
+  assert.equal(selects.length, 1);
+});
+
+test('tenant users cannot read global CheckAlt configuration', async () => {
+  const client = identityClient({ platformOwner: false }, (sql) => {
+    if (sql.includes('FROM public.checkalt_config')) {
+      throw new Error('tenant user must not read checkalt_config');
+    }
+    return { rows: [] };
+  });
+  for (const table of ['checkalt_config', 'checkalt_config_public']) {
+    const result = await handleDataQuery(jwtEvent({
+      table,
+      select: '*',
+      filters: [{ column: 'singleton', op: 'eq', value: true }],
+      maybeSingle: true,
+    }), depsFor(client));
+    assert.equal(result.ok, false, table);
+    assert.equal(result.error, 'not_authorized', table);
+  }
+});
+
+test('tenant users cannot read full checkalt_tenant_accounts', async () => {
+  const client = identityClient({ platformOwner: false }, (sql) => {
+    if (sql.includes('FROM public.checkalt_tenant_accounts') && !sql.includes('auto_approve_enabled')) {
+      throw new Error('tenant user must not read full checkalt_tenant_accounts');
+    }
+    return { rows: [] };
+  });
+  const result = await handleDataQuery(jwtEvent({
+    table: 'checkalt_tenant_accounts',
+    select: 'sso_user_id, deposit_account_number, last_register_payload',
+    filters: [{ column: 'tenant_id', op: 'eq', value: FREEDOM }],
+    maybeSingle: true,
+  }), depsFor(client));
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'not_authorized');
+});
+
+test('Platform Owner/Tenant Management can still access administrative account information', async () => {
+  const card = sourceOf('src/components/settings/CheckAltTenantAccountCard.tsx');
+  assert.match(card, /from\("checkalt_tenant_accounts"\)/);
+  assert.match(card, /sso_user_id, deposit_account_number, first_name, last_name, email, enabled, registered_at, last_register_payload/);
+  const client = identityClient({ platformOwner: true }, (sql) => {
+    if (sql.includes('count(*)')) return { rows: [{ n: 1 }] };
+    if (sql.includes('FROM public.checkalt_tenant_accounts')) {
+      return {
+        rows: [{
+          tenant_id: FREEDOM,
+          sso_user_id: 'mcarletta',
+          deposit_account_number: '90001111',
+          first_name: 'Mike',
+          last_name: 'Carletta',
+          email: 'mcarletta@freedomadj.com',
+          enabled: true,
+          registered_at: '2026-01-01T00:00:00.000Z',
+          last_register_payload: { status: 'ok' },
+        }],
+      };
+    }
+    if (sql.includes('FROM public.checkalt_config_public')) {
+      return { rows: [{ singleton: true, merchant: 'lockbox5', fi_key: 'fi' }] };
+    }
+    return { rows: [] };
+  });
+  const account = await handleDataQuery(jwtEvent({
+    table: 'checkalt_tenant_accounts',
+    select: 'sso_user_id, deposit_account_number, first_name, last_name, email, enabled, registered_at, last_register_payload',
+    filters: [{ column: 'tenant_id', op: 'eq', value: FREEDOM }],
+    maybeSingle: true,
+  }), depsFor(client));
+  assert.equal(account.ok, true, account.message || account.error);
+  assert.equal(account.data.sso_user_id, 'mcarletta');
+  assert.equal(account.data.deposit_account_number, '90001111');
+  assert.equal(account.data.last_register_payload.status, 'ok');
+
+  const cfg = await handleDataQuery(jwtEvent({
+    table: 'checkalt_config',
+    select: '*',
+    filters: [{ column: 'singleton', op: 'eq', value: true }],
+    maybeSingle: true,
+  }), depsFor(client));
+  assert.equal(cfg.ok, true, cfg.message || cfg.error);
+  assert.equal(cfg.data.merchant, 'lockbox5');
+});
+
 test('Auto-Deposit still reads/writes the existing tenant columns only', async () => {
   const card = sourceOf('src/components/billing/TenantAutoApproveCard.tsx');
   const clientSrc = sourceOf('src/integrations/aws/client.ts');
+  assert.match(card, /from\("checkalt_tenant_auto_deposit_public"/);
   assert.match(card, /select\("tenant_id, auto_approve_enabled, auto_approve_max_cents"\)/);
   assert.match(card, /auto_approve_enabled: enabled/);
   assert.match(card, /auto_approve_max_cents: cents/);
@@ -259,6 +416,17 @@ test('Existing CheckAlt provider request builders are unchanged', () => {
 test('this change does not add SQL 36 or tenant business_unit', () => {
   const sql36 = path.join(ROOT, 'rls/sql/36_checkalt_tenant_split.sql');
   assert.equal(fs.existsSync(sql36), false);
+  const sql37 = fs.readFileSync(path.join(ROOT, 'rls/sql/37_checkalt_ui_access_reads.sql'), 'utf8');
+  assert.match(sql37, /CREATE VIEW public\.checkalt_config_public/);
+  assert.match(sql37, /WHERE public\.is_platform_owner\(\)/);
+  assert.match(sql37, /CREATE VIEW public\.checkalt_tenant_auto_deposit_public/);
+  assert.match(sql37, /auto_approve_enabled/);
+  assert.match(sql37, /auto_approve_max_cents/);
+  assert.equal(/sso_user_id/.test(sql37), false);
+  assert.equal(/deposit_account_number/.test(sql37), false);
+  assert.equal(/last_register_payload/.test(sql37), false);
+  assert.equal(/ALTER TABLE public\.checkalt_tenant_accounts/.test(sql37), false);
+  assert.equal(/ADD COLUMN/.test(sql37), false);
   const changed = [
     'src/components/settings/CheckAltSettings.tsx',
     'src/components/settings/CheckAltTenantAccountCard.tsx',

@@ -35,6 +35,7 @@
   "checkalt_config_public",
   "checkalt_deposits",
   "checkalt_tenant_accounts",
+  "checkalt_tenant_auto_deposit_public",
   "checkalt_webhook_events",
   "claim_check_mortgage_draws",
   "claim_check_payments",

@@ -26,7 +26,7 @@ export function TenantAutoApproveCard({ tenantId: tenantIdProp }: { tenantId?: s
     queryKey: ["checkalt-tenant-auto-deposit", tenantId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("checkalt_tenant_accounts")
+        .from("checkalt_tenant_auto_deposit_public" as any)
         .select("tenant_id, auto_approve_enabled, auto_approve_max_cents")
         .eq("tenant_id", tenantId!)
         .maybeSingle();
