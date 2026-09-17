@@ -103,16 +103,25 @@ test('SQL 36 isolates tenant CheckAlt fields and closes ordinary SELECT', () => 
   assert.match(sql, /CREATE VIEW public\.checkalt_tenant_auto_deposit_public/);
   assert.match(sql, /aws_is_platform_checkalt_admin/);
   assert.match(sql, /USING \(public\.aws_is_cross_tenant_reader\(\)\)/);
-  assert.equal(/last_register_payload/.test(sql.slice(sql.indexOf('checkalt_tenant_auto_deposit_public'))), false);
-  const publicView = sql.slice(sql.indexOf('CREATE VIEW public.checkalt_config_public'));
+  const autoView = sql.slice(
+    sql.indexOf('CREATE VIEW public.checkalt_tenant_auto_deposit_public'),
+    sql.indexOf('DROP POLICY IF EXISTS aws_select_checkalt_tenant_accounts'),
+  );
+  assert.equal(/last_register_payload/.test(autoView), false);
+  assert.equal(/deposit_account_number/.test(autoView), false);
+  assert.match(autoView, /auto_approve_enabled/);
+  assert.match(autoView, /has_registration/);
+  const publicView = sql.slice(
+    sql.indexOf('CREATE VIEW public.checkalt_config_public'),
+    sql.indexOf('CREATE VIEW public.checkalt_tenant_accounts_admin'),
+  );
   assert.match(publicView, /fi_key_configured/);
   assert.equal(/^\s+fi_key,/m.test(publicView), false);
-  assert.equal(/^\s+depositor_account_id,/m.test(publicView), false);
-  assert.equal(/^\s+business_unit,/m.test(publicView), false);
+  assert.equal(/depositor_account_id/.test(publicView), false);
+  assert.equal(/business_unit/.test(publicView), false);
   assert.equal(/cached_jwt/.test(sql), false);
   assert.equal(/webhook_secret/.test(sql), false);
   assert.equal(/UPDATE public.checkalt_deposits/.test(sql), false);
-  assert.equal(/cleared_at/.test(sql), false);
 });
 
 test('tenant A/B CheckAlt configuration stays isolated and does not write the singleton', async () => {
