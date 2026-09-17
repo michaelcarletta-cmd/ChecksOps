@@ -190,9 +190,23 @@ const pickPayee = (idx) => {
 
   // Fallback: first non-address-ish line that looks like a payee entity (letters, not "VOID", not "MEMO").
   if (!payeeLine) {
+    // Be conservative: without an explicit pay-to label, only guess a payee line
+    // when the document shows other check-like signals (avoid fabricating payees
+    // from arbitrary uploads).
+    const hasAmount = idx.lines.some((l) => /\$?\s*\d[\d,]*\.\d{2}\b/.test(l.text));
+    const hasDollars = idx.lines.some((l) => /\bdollars?\b/i.test(l.text));
+    const hasDate = idx.lines.some((l) => /\bdate\b/i.test(l.text) || /\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b/.test(l.text));
+    const hasCheckLabel = idx.lines.some((l) => /check\s*(?:no|number|#)/i.test(l.text));
+    const hasMicrBand = idx.lines.some((l) => (l.box?.Top ?? 0) > 0.78 && digitsOnly(l.text).length >= 9);
+    const signalCount = [hasAmount, hasDollars, hasDate, hasCheckLabel, hasMicrBand].filter(Boolean).length;
+    if (signalCount < 2) {
+      // Not check-like enough to infer payee.
+      return { value: null, conf: 20, payees: [] };
+    }
     for (const l of idx.lines) {
       if (/pay\s+to\s+(?:the\s+order\s+of)?/i.test(l.text)) continue;
       if (/void|memo|date|dollars|amount|routing|account/i.test(l.text)) continue;
+      if (/not\s+a\s+check|random\s+text/i.test(l.text)) continue;
       if (looksLikeAddress(l.text)) continue;
       if (l.text.length >= 5 && /[A-Za-z]/.test(l.text)) {
         payeeLine = l.text;
@@ -405,10 +419,19 @@ const pickCheckNumber = (idx) => {
   let best = null;
   let bestScore = -1e9;
   for (const l of idx.lines) {
+    // Avoid harvesting digits from date lines.
+    if (/\bdate\b/i.test(l.text) || /\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b/.test(l.text) || /\b\d{4}-\d{2}-\d{2}\b/.test(l.text)) {
+      if (!/check\s*(?:no|number|#)/i.test(l.text)) continue;
+    }
     const token = l.text.match(/(?:check\s*(?:no|number|#)?[:\s-]*)(\d{3,12})/i)?.[1] || numericToken(l.text);
     if (!token) continue;
     // Avoid date tokens, routing number candidates, and obvious amount lines.
     if (normalizeDate(token)) continue;
+    // Avoid year-only tokens unless explicitly labeled as check number.
+    if (!/check\s*(?:no|number|#)/i.test(l.text) && token.length === 4) {
+      const year = Number(token);
+      if (Number.isFinite(year) && year >= 1900 && year <= 2099) continue;
+    }
     if (token.length === 9 && /\b\d{9}\b/.test(token) && (l.box?.Top ?? 0) > 0.75) continue; // likely routing in MICR band
     if (/\$/.test(l.text) || /amount/i.test(l.text)) continue;
     const top = l.box?.Top ?? 0.5;
