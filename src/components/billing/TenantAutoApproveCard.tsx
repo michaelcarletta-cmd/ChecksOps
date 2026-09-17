@@ -9,11 +9,13 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
+import { resolveAutoDepositUiState } from "@/lib/autoDepositUiState";
 
 /**
  * Per-tenant auto-approve controls for CheckAlt deposits.
  * Overrides the global checkalt_config defaults for this tenant only.
- * Reads/writes only auto_approve_enabled and auto_approve_max_cents.
+ * Reads tenant_id, auto_approve_enabled, auto_approve_max_cents, and derived registered.
+ * Writes only auto_approve_enabled and auto_approve_max_cents.
  */
 export function TenantAutoApproveCard({ tenantId: tenantIdProp }: { tenantId?: string | null } = {}) {
   const { tenant } = useTenant();
@@ -22,12 +24,12 @@ export function TenantAutoApproveCard({ tenantId: tenantIdProp }: { tenantId?: s
   const [enabled, setEnabled] = useState(false);
   const [maxDollars, setMaxDollars] = useState<string>("");
 
-  const { data: account, isLoading } = useQuery({
+  const { data: account, isLoading, isError } = useQuery({
     queryKey: ["checkalt-tenant-auto-deposit", tenantId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("checkalt_tenant_auto_deposit_public" as any)
-        .select("tenant_id, auto_approve_enabled, auto_approve_max_cents")
+        .select("tenant_id, auto_approve_enabled, auto_approve_max_cents, registered")
         .eq("tenant_id", tenantId!)
         .maybeSingle();
       if (error) throw error;
@@ -72,6 +74,8 @@ export function TenantAutoApproveCard({ tenantId: tenantIdProp }: { tenantId?: s
 
   if (!tenantId) return null;
 
+  const uiState = resolveAutoDepositUiState(account, { isLoading, isError });
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -85,9 +89,21 @@ export function TenantAutoApproveCard({ tenantId: tenantIdProp }: { tenantId?: s
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {!account ? (
+        {uiState === "loading" ? (
           <p className="text-xs text-muted-foreground">
-            Your deposit account isn't registered yet. Ask ChecksOps to register it in Tenant Management first.
+            Loading Auto-Deposit settings…
+          </p>
+        ) : uiState === "error" ? (
+          <p className="text-xs text-muted-foreground">
+            Couldn't load Auto-Deposit settings. Try again or contact ChecksOps if this continues.
+          </p>
+        ) : uiState === "no_account" ? (
+          <p className="text-xs text-muted-foreground">
+            No CheckAlt deposit account is on file for your organization. Ask ChecksOps to register it in Tenant Management first.
+          </p>
+        ) : uiState === "unregistered" ? (
+          <p className="text-xs text-muted-foreground">
+            Your CheckAlt deposit account is on file, but registration isn't complete. Ask ChecksOps to finish registration in Tenant Management.
           </p>
         ) : (
           <>

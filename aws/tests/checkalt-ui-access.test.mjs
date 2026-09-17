@@ -188,14 +188,15 @@ test('Tenant Management selected-tenant register UI remains tenant-scoped', () =
   assert.doesNotMatch(card, /functions\.invoke\(/);
 });
 
-test('tenant Manager Auto-Deposit read returns only the two Auto-Deposit fields + tenant ID', async () => {
+test('tenant Manager Auto-Deposit read returns only Auto-Deposit fields + tenant ID + registered', async () => {
   const card = sourceOf('src/components/billing/TenantAutoApproveCard.tsx');
   assert.match(card, /from\("checkalt_tenant_auto_deposit_public"/);
-  assert.match(card, /select\("tenant_id, auto_approve_enabled, auto_approve_max_cents"\)/);
+  assert.match(card, /select\("tenant_id, auto_approve_enabled, auto_approve_max_cents, registered"\)/);
   assert.deepEqual([...CHECKALT_AUTO_DEPOSIT_READ_COLUMNS], [
     'tenant_id',
     'auto_approve_enabled',
     'auto_approve_max_cents',
+    'registered',
   ]);
   const selects = [];
   const client = identityClient({ platformOwner: false }, (sql) => {
@@ -205,6 +206,7 @@ test('tenant Manager Auto-Deposit read returns only the two Auto-Deposit fields 
       assert.match(sql, /tenant_id/);
       assert.match(sql, /auto_approve_enabled/);
       assert.match(sql, /auto_approve_max_cents/);
+      assert.match(sql, /\(registered_at IS NOT NULL\) AS registered/);
       assert.equal(/sso_user_id/.test(sql), false);
       assert.equal(/deposit_account_number/.test(sql), false);
       assert.equal(/last_register_payload/.test(sql), false);
@@ -215,6 +217,7 @@ test('tenant Manager Auto-Deposit read returns only the two Auto-Deposit fields 
           tenant_id: FREEDOM,
           auto_approve_enabled: true,
           auto_approve_max_cents: 25000,
+          registered: true,
         }],
       };
     }
@@ -222,7 +225,7 @@ test('tenant Manager Auto-Deposit read returns only the two Auto-Deposit fields 
   });
   const result = await handleDataQuery(jwtEvent({
     table: CHECKALT_AUTO_DEPOSIT_PUBLIC,
-    select: 'tenant_id, auto_approve_enabled, auto_approve_max_cents, sso_user_id, deposit_account_number',
+    select: 'tenant_id, auto_approve_enabled, auto_approve_max_cents, sso_user_id, deposit_account_number, registered_at',
     filters: [{ column: 'tenant_id', op: 'eq', value: FREEDOM }],
     maybeSingle: true,
   }), depsFor(client));
@@ -230,6 +233,8 @@ test('tenant Manager Auto-Deposit read returns only the two Auto-Deposit fields 
   assert.deepEqual(Object.keys(result.data).sort(), [...CHECKALT_AUTO_DEPOSIT_READ_COLUMNS].sort());
   assert.equal(result.data.sso_user_id, undefined);
   assert.equal(result.data.deposit_account_number, undefined);
+  assert.equal(result.data.registered_at, undefined);
+  assert.equal(result.data.registered, true);
   assert.equal(selects.length, 1);
 });
 
@@ -320,7 +325,7 @@ test('Auto-Deposit still reads/writes the existing tenant columns only', async (
   const card = sourceOf('src/components/billing/TenantAutoApproveCard.tsx');
   const clientSrc = sourceOf('src/integrations/aws/client.ts');
   assert.match(card, /from\("checkalt_tenant_auto_deposit_public"/);
-  assert.match(card, /select\("tenant_id, auto_approve_enabled, auto_approve_max_cents"\)/);
+  assert.match(card, /select\("tenant_id, auto_approve_enabled, auto_approve_max_cents, registered"\)/);
   assert.match(card, /auto_approve_enabled: enabled/);
   assert.match(card, /auto_approve_max_cents: cents/);
   assert.equal(/sso_user_id/.test(card), false);
@@ -428,6 +433,7 @@ test('this change does not add SQL 36 or tenant business_unit', () => {
   );
   assert.match(autoSelect, /auto_approve_enabled/);
   assert.match(autoSelect, /auto_approve_max_cents/);
+  assert.match(autoSelect, /\(registered_at IS NOT NULL\) AS registered/);
   assert.equal(/sso_user_id/.test(autoSelect), false);
   assert.equal(/deposit_account_number/.test(autoSelect), false);
   assert.equal(/last_register_payload/.test(autoSelect), false);

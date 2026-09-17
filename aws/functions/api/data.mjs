@@ -348,7 +348,39 @@ export const CHECKALT_AUTO_DEPOSIT_READ_COLUMNS = Object.freeze([
   'tenant_id',
   'auto_approve_enabled',
   'auto_approve_max_cents',
+  'registered',
 ]);
+/** Derived, non-secret registration flag. Never selected as registered_at. */
+export const CHECKALT_AUTO_DEPOSIT_REGISTERED_EXPR = '(registered_at IS NOT NULL)';
+
+export const autoDepositColumnSql = (column) => (
+  column === 'registered'
+    ? `${CHECKALT_AUTO_DEPOSIT_REGISTERED_EXPR} AS registered`
+    : ident(column, 'column')
+);
+
+export const rewriteAutoDepositFilters = (filters = []) => {
+  for (const filter of filters) {
+    const op = String(filter.op || 'eq');
+    if (op === 'or') throw new Error('invalid column');
+    const col = String(filter.column || filter.col || '');
+    if (!CHECKALT_AUTO_DEPOSIT_READ_COLUMNS.includes(col)) throw new Error('invalid column');
+  }
+  return filters.map((filter) => {
+    const col = String(filter.column || filter.col || '');
+    if (col !== 'registered') return filter;
+    const op = String(filter.op || 'eq');
+    const truthy = filter.value === true || filter.value === 'true' || filter.value === 't';
+    const falsy = filter.value === false || filter.value === 'false' || filter.value === 'f';
+    if ((op === 'eq' || op === 'is') && truthy) {
+      return { column: 'registered_at', op: 'not', notOp: 'is', value: null };
+    }
+    if ((op === 'eq' || op === 'is') && falsy) {
+      return { column: 'registered_at', op: 'is', value: null };
+    }
+    throw new Error('invalid column');
+  });
+};
 export const CHECKALT_PLATFORM_OWNER_READ_TABLES = new Set([
   'checkalt_config',
   'checkalt_config_public',
@@ -720,20 +752,25 @@ const runSelect = async (client, body) => {
   const parsed = parseSelect(autoDeposit ? CHECKALT_AUTO_DEPOSIT_READ_COLUMNS.join(', ') : body.select);
   const { parent: parentFilters, embed: embedFilters } = splitEmbedFilters(body.filters || []);
   if (autoDeposit && embedFilters.length) throw new Error('embeds_not_allowed');
-  const { clauses, params } = applyFilters(parentFilters);
+  const { clauses, params } = applyFilters(autoDeposit ? rewriteAutoDepositFilters(parentFilters) : parentFilters);
   clauses.push(...applyEmbedFilters(table, embedFilters, params));
   const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
   let order = '';
   if (body.order?.column) {
     const dir = body.order.ascending === false ? 'DESC' : 'ASC';
-    order = `ORDER BY ${ident(body.order.column, 'column')} ${dir}`;
+    const orderCol = autoDeposit && body.order.column === 'registered'
+      ? CHECKALT_AUTO_DEPOSIT_REGISTERED_EXPR
+      : ident(body.order.column, 'column');
+    order = `ORDER BY ${orderCol} ${dir}`;
   }
   const limit = resolvePageLimit(body.limit);
   const offset = resolvePageOffset(body.offset);
   const needed = autoDeposit
     ? new Set(CHECKALT_AUTO_DEPOSIT_READ_COLUMNS)
     : columnsNeededForEmbeds(table, parsed.columns, parsed.embeds);
-  const cols = needed.has('*') ? '*' : [...needed].map((c) => ident(c, 'column')).join(', ');
+  const cols = needed.has('*')
+    ? '*'
+    : [...needed].map((c) => (autoDeposit ? autoDepositColumnSql(c) : ident(c, 'column'))).join(', ');
   const countSql = `SELECT count(*)::int AS n FROM public.${table} ${where}`;
   const count = body.count ? Number((await client.query(countSql, params)).rows[0]?.n || 0) : null;
   if (body.head) {
