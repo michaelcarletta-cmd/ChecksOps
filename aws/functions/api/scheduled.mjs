@@ -7,12 +7,12 @@ import { parseBody, ignoredSpoof } from './data.mjs';
 import { handleProcessEmailQueue } from './email-queue.mjs';
 import { handleTenantDomainRecheckCron } from './tenant-email-domain-handlers.mjs';
 import { handleCheckOcrBacklog } from './ocr.mjs';
+import { handleCheckAltStatusReconcileJob } from './providers/production/checkalt-status-reconcile.mjs';
 
 const FINANCIAL_JOBS = new Set([
   'deposit-daily-automation',
   'wallet-fund-on-clear',
   'checkalt-approve-cron',
-  'checkalt-poll-deposits',
   'moov-sweep',
   'platform-treasury',
 ]);
@@ -32,7 +32,7 @@ const authorized = (event) => {
   return Boolean(got && got === expected);
 };
 
-export const handleScheduledRequest = async (event, path) => {
+export const handleScheduledRequest = async (event, path, deps = {}) => {
   if (!path.startsWith('/scheduled')) return null;
   const spoof = ignoredSpoof(event, parseBody(event));
   if (!authorized(event)) {
@@ -46,6 +46,10 @@ export const handleScheduledRequest = async (event, path) => {
 
   const body = parseBody(event);
   const job = body.job || path.replace(/^\/scheduled\/?/, '') || 'class-a';
+
+  if (job === 'checkalt-poll-deposits' || job === 'checkalt-status-reconcile') {
+    return handleCheckAltStatusReconcileJob(event, deps);
+  }
 
   if (FINANCIAL_JOBS.has(job)) {
     return {
@@ -71,6 +75,7 @@ export const handleScheduledRequest = async (event, path) => {
       job: 'class-a',
       results,
       financialJobsSkipped: [...FINANCIAL_JOBS],
+      statusReconcileSkipped: ['checkalt-poll-deposits'],
       spoofFieldsIgnored: spoof,
     };
   }

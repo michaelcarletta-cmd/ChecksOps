@@ -52,9 +52,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 
 
-const DepositOperationsConsole = lazy(() =>
-  import("@/components/deposit-ops/DepositOperationsConsole").then(m => ({ default: m.DepositOperationsConsole }))
-);
 const DepositReports = lazy(() =>
   import("@/components/deposit-ops/DepositReports").then(m => ({ default: m.DepositReports }))
 );

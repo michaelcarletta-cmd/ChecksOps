@@ -110,7 +110,7 @@ export const CHECKALT_STATUS_MAP = {
     submitted: 'submitted',
     pending: 'submitted',
     pending_approval: 'pending_approval',
-    approved: 'cleared',
+    approved: 'submitted',
     cleared: 'cleared',
     settled: 'cleared',
     returned: 'returned',
@@ -125,6 +125,22 @@ export const mapCheckAltStatus = (payload = {}) => {
   return CHECKALT_STATUS_MAP.numeric[numericStatus]
     || CHECKALT_STATUS_MAP.string[rawStatus]
     || null;
+};
+
+/** Local statuses that still need a provider status refresh. */
+export const CHECKALT_STATUS_REFRESH_STATUSES = ['pending_approval', 'submitted'];
+
+/**
+ * Provider approval/processing state. "Approved" / 127 is submitted, never cleared.
+ * Settlement is only numeric 200 / cleared / settled, and persist stamps cleared_at
+ * only when a real FinCapture depositDate is present.
+ */
+export const resolveCheckAltProviderStatus = (payload = {}) => {
+  const mapped = mapCheckAltStatus(payload);
+  if (mapped) return mapped;
+  const raw = String(payload.status ?? '').toLowerCase();
+  if (raw === 'duplicate') return 'duplicate';
+  return null;
 };
 
 /**

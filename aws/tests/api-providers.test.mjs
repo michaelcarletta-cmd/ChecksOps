@@ -246,7 +246,11 @@ test('CheckAlt integer-cents formatting', () => {
   assert.equal(formatCheckAltUserAmount('780.00').userAmount, 78000);
   assert.equal(dollarsToIntegerCents(0.1).cents, 10);
   assert.equal(mapCheckAltStatus({ statusCode: 40 }), 'pending_approval');
+  assert.equal(mapCheckAltStatus({ statusCode: 127 }), 'submitted');
+  assert.equal(mapCheckAltStatus({ status: 'Approved' }), 'submitted');
   assert.equal(mapCheckAltStatus({ status: 'cleared' }), 'cleared');
+  assert.equal(mapCheckAltStatus({ statusCode: 120 }), 'rejected');
+  assert.equal(mapCheckAltStatus({ statusCode: 200 }), 'cleared');
 });
 
 test('FinCapture depositDate is extracted and submittedDate is ignored', () => {

@@ -262,7 +262,7 @@ export async function persistPollOutcome(client, {
      SET status = COALESCE($2, status),
          checkalt_reference = COALESCE($3, checkalt_reference),
          last_polled_at = now(),
-         cleared_at = CASE WHEN $2 = 'cleared' THEN COALESCE(cleared_at, $5::timestamptz, now()) ELSE cleared_at END,
+         cleared_at = CASE WHEN $2 = 'cleared' AND $5::timestamptz IS NOT NULL THEN COALESCE(cleared_at, $5::timestamptz) ELSE cleared_at END,
          returned_at = CASE WHEN $2 = 'returned' THEN COALESCE(returned_at, now()) ELSE returned_at END,
          last_status_payload = COALESCE(last_status_payload, '{}'::jsonb) || $4::jsonb,
          updated_at = now()

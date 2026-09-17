@@ -25,12 +25,14 @@ import {
   shouldBlockNewProcessPost,
 } from '../functions/api/providers/production/checkalt-idempotency.mjs';
 import { handleProductionCheckAltSubmit } from '../functions/api/providers/production/checkalt-submit.mjs';
+import { handleProductionCheckAltApprove } from '../functions/api/providers/production/checkalt-approve.mjs';
 import {
   handleProductionCheckAltPoll,
   historyListOf,
   matchHistoryByReference,
   reconcileProductionCheckAltDeposit,
 } from '../functions/api/providers/production/checkalt-poll.mjs';
+import { runCheckAltStatusReconcile } from '../functions/api/providers/production/checkalt-status-reconcile.mjs';
 import { syntheticCheckRaster } from '../functions/api/providers/parity/checkalt-image.mjs';
 import { syntheticCompliantCheckAltJpeg } from '../functions/api/providers/production/checkalt-image-compliance.mjs';
 import { buildCompletedEndorsementState } from '../functions/api/providers/production/checkalt-eligibility.mjs';
@@ -147,6 +149,7 @@ const createStore = ({
     payees: payees || eligible.payees,
     endorsements: endorsements || eligible.endorsements,
     processPosts: 0,
+    approvePosts: 0,
     historyPosts: 0,
     itemPosts: 0,
     itemPayload: null,
@@ -284,6 +287,24 @@ const identityClient = (store) => ({
       store.deposits.push(row);
       return { rows: [row] };
     }
+    if (text.includes('status_refresh_tenants')) {
+      return {
+        rows: [...new Set(store.deposits
+          .filter((row) => row.checkalt_reference && ['pending_approval', 'submitted'].includes(row.status))
+          .map((row) => row.tenant_id))].map((tenant_id) => ({ tenant_id })),
+      };
+    }
+    if (text.includes('FROM public.checkalt_deposits') && text.includes('status = ANY(')) {
+      const tenantIds = params[0] || [];
+      const statuses = params[1] || [];
+      return {
+        rows: store.deposits.filter((row) => (
+          tenantIds.includes(row.tenant_id)
+          && statuses.includes(row.status)
+          && row.checkalt_reference
+        )),
+      };
+    }
     if (text.includes('FROM public.checkalt_deposits') && text.includes('check_intake_item_id')
       && text.includes('tenant_id') && text.includes('ORDER BY')) {
       return {
@@ -328,6 +349,7 @@ const identityClient = (store) => ({
       if (params[1]) row.status = params[1];
       if (params[2]) row.checkalt_reference = params[2];
       row.last_polled_at = new Date().toISOString();
+      if (params[1] === 'cleared' && params[4]) row.cleared_at = params[4];
       return { rows: [row] };
     }
     return { rows: [] };
@@ -353,6 +375,16 @@ const fetchImpl = (store) => async (url, options = {}) => {
       ok: true,
       status: 200,
       text: async () => JSON.stringify({ referenceNumber: 9001, status: 127 }),
+    };
+  }
+  if (target.includes('/fincapture/deposit/approve')) {
+    store.approvePosts += 1;
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(store.approvePayload || {
+        success: true, status: 'Approved', statusDescription: 'OK',
+      }),
     };
   }
   if (target.includes('/fincapture/deposit/item')) {
@@ -1099,4 +1131,139 @@ test('legacy NULL key and provider-may-have-occurred states block new process po
     status: 'submitted',
     checkalt_reference: 'R1',
   }), true);
+});
+
+test('empty Poll Now refreshes tenant pending_approval using stored reference', async () => {
+  const store = createStore();
+  store.itemPayload = { statusCode: 127, status: 127, statusDescription: 'Approved' };
+  store.deposits.push({
+    id: DEPOSIT_ID,
+    tenant_id: FREEDOM_TENANT,
+    check_intake_item_id: CHECK_ID,
+    checkalt_reference: '9001',
+    status: 'pending_approval',
+    amount: 12.34,
+    amount_cents: 1234,
+    cleared_at: null,
+  });
+  const result = await withEnv(productionFlags, () => handleProviderRequest(
+    jwtEvent('/functions/v1/checkalt-poll-status', 'POST', {}),
+    '/functions/v1/checkalt-poll-status',
+    'POST',
+    submitDeps(store),
+  ));
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.polled, 1);
+  assert.equal(result.updated, 1);
+  assert.equal(result.createdDeposit, false);
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.approvePosts, 0);
+  assert.equal(store.itemPosts, 1);
+  assert.equal(store.deposits[0].status, 'submitted');
+  assert.ok(!store.deposits[0].cleared_at);
+});
+
+test('refresh-before-approve blocks stale 127 Approved and does not POST approve', async () => {
+  const store = createStore();
+  store.itemPayload = { status: 'Approved', statusDescription: 'Approved' };
+  store.deposits.push({
+    id: DEPOSIT_ID,
+    tenant_id: FREEDOM_TENANT,
+    check_intake_item_id: CHECK_ID,
+    checkalt_reference: '9001',
+    status: 'pending_approval',
+    amount: 12.34,
+    amount_cents: 1234,
+    cleared_at: null,
+  });
+  const result = await withEnv(productionFlags, () => handleProviderRequest(
+    jwtEvent('/functions/v1/checkalt-approve-deposit', 'POST', {
+      deposit_id: DEPOSIT_ID,
+      action: 'approve',
+    }),
+    '/functions/v1/checkalt-approve-deposit',
+    'POST',
+    submitDeps(store),
+  ));
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.already_resolved, true);
+  assert.equal(result.action_taken, false);
+  assert.equal(result.approvePosted, false);
+  assert.equal(result.status, 'submitted');
+  assert.equal(store.approvePosts, 0);
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.deposits[0].status, 'submitted');
+  assert.ok(!store.deposits[0].cleared_at);
+});
+
+test('approve still posts only when CheckAlt remains pending_approval', async () => {
+  const store = createStore();
+  store.itemPayload = { statusCode: 40, statusDescription: 'Pending' };
+  store.deposits.push({
+    id: DEPOSIT_ID,
+    tenant_id: FREEDOM_TENANT,
+    check_intake_item_id: CHECK_ID,
+    checkalt_reference: '9001',
+    status: 'pending_approval',
+    amount: 12.34,
+    amount_cents: 1234,
+  });
+  const result = await withEnv(productionFlags, () => handleProviderRequest(
+    jwtEvent('/functions/v1/checkalt-approve-deposit', 'POST', {
+      deposit_id: DEPOSIT_ID,
+      action: 'approve',
+    }),
+    '/functions/v1/checkalt-approve-deposit',
+    'POST',
+    submitDeps(store),
+  ));
+  assert.equal(result.approvePosted, true);
+  assert.equal(result.action_taken, true);
+  assert.equal(result.status, 'submitted');
+  assert.equal(store.approvePosts, 1);
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.deposits[0].status, 'submitted');
+  assert.ok(!store.deposits[0].cleared_at);
+});
+
+test('status reconcile job is read/status only and never submits or approves', async () => {
+  const store = createStore();
+  store.itemPayload = { statusCode: 127, statusDescription: 'Approved' };
+  store.deposits.push({
+    id: DEPOSIT_ID,
+    tenant_id: FREEDOM_TENANT,
+    check_intake_item_id: CHECK_ID,
+    checkalt_reference: '9001',
+    status: 'pending_approval',
+    amount: 12.34,
+    cleared_at: null,
+  });
+  const result = await withEnv(productionFlags, () => runCheckAltStatusReconcile({
+    client: identityClient(store),
+    fetchImpl: fetchImpl(store),
+    deps: submitDeps(store),
+  }));
+  assert.equal(result.ok, true);
+  assert.equal(result.submitPosted, false);
+  assert.equal(result.approvePosted, false);
+  assert.equal(result.moneyMoved, false);
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.approvePosts, 0);
+  assert.equal(store.itemPosts, 1);
+  assert.equal(store.deposits[0].status, 'submitted');
+});
+
+test('production approve helper refuses a locator-less body', async () => {
+  const store = createStore();
+  const result = await handleProductionCheckAltApprove({
+    client: identityClient(store),
+    mapping,
+    claims: { sub: COGNITO_SUB },
+    body: { action: 'approve' },
+    spoof: {},
+    fetchImpl: fetchImpl(store),
+    deps: submitDeps(store),
+  });
+  assert.equal(result.error, 'deposit_locator_required');
+  assert.equal(result.approvePosted, false);
 });

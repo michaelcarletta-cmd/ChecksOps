@@ -2,6 +2,7 @@ import { withIdentityWrite } from '../../data.mjs';
 import { isProviderNetworkError, providerEgressFailure } from '../../sandbox-credentials.mjs';
 import { denyAmbiguousCheckAltMode, PRODUCTION_CHECKALT_FUNCTIONS, productionCheckAltAmbiguousMode, productionCheckAltExecutionAllowed } from './checkalt-holds.mjs';
 import { bindCheckAltProductionGucs } from './checkalt-idempotency.mjs';
+import { handleProductionCheckAltApprove } from './checkalt-approve.mjs';
 import { handleProductionCheckAltPoll } from './checkalt-poll.mjs';
 import { handleProductionCheckAltSubmit } from './checkalt-submit.mjs';
 
@@ -38,6 +39,7 @@ const wrap = (handler) => async (event, deps = {}) => (
 const HANDLERS = {
   'checkalt-submit-deposit': wrap(handleProductionCheckAltSubmit),
   'checkalt-poll-status': wrap(handleProductionCheckAltPoll),
+  'checkalt-approve-deposit': wrap(handleProductionCheckAltApprove),
 };
 
 export const runProductionCheckAltHandler = (name, event, deps = {}) => {

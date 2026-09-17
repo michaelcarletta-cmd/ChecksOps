@@ -7,7 +7,13 @@ const isTrue = (value) => String(value || '') === 'true';
 export const PRODUCTION_CHECKALT_FUNCTIONS = new Set([
   'checkalt-submit-deposit',
   'checkalt-poll-status',
+  'checkalt-approve-deposit',
 ]);
+
+/** Narrow status-only cron. Default false. Does not enable other financial jobs. */
+export const checkaltStatusReconcileEnabled = () => (
+  String(process.env.AWS_CHECKALT_STATUS_RECONCILE_ENABLED || '') === 'true'
+);
 
 /**
  * Dark production CheckAlt HTTP is allowed only when every money-movement
