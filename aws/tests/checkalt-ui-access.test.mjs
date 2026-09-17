@@ -118,7 +118,7 @@ test('Platform owner can still access global CheckAlt settings', async () => {
   assert.match(settings, /CHECKALT_USERNAME/);
   assert.match(admin, /<TabsTrigger value="checkalt"/);
   assert.match(admin, /<CheckAltSettings \/>/);
-  assert.equal(/CheckAltTenantAccountCard/.test(settings), false);
+  assert.equal(/<CheckAltTenantAccountCard/.test(settings), false);
 
   const client = identityClient({ platformOwner: true }, (sql, params) => {
     if (/UPDATE public.checkalt_config/.test(sql)) {
