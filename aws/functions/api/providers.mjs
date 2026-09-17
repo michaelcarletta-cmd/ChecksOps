@@ -223,12 +223,16 @@ export const handleCheckAltStatus = async (event, deps = {}) => withIdentity(eve
 
   const depositId = body.deposit_id || body.checkalt_deposit_id || null;
   const reference = body.checkalt_reference || body.referenceNumber || null;
-  const accounts = (await client.query(
-    `SELECT id, tenant_id, enabled, registered_at, auto_approve_enabled,
-            deposit_account_number, sso_user_id
-     FROM public.checkalt_tenant_accounts
-     ORDER BY updated_at DESC NULLS LAST LIMIT 5`,
-  )).rows;
+  const membershipTenantIds = memberships.map((row) => row.tenant_id).filter(Boolean);
+  const accounts = membershipTenantIds.length
+    ? (await client.query(
+      `SELECT id, tenant_id, enabled, registered_at, auto_approve_enabled
+       FROM public.checkalt_tenant_accounts
+       WHERE tenant_id = ANY($1::uuid[])
+       ORDER BY updated_at DESC NULLS LAST LIMIT 5`,
+      [membershipTenantIds],
+    )).rows
+    : [];
 
   let depositsSql = `SELECT id, tenant_id, check_intake_item_id, checkalt_reference, status,
     amount, submitted_at, approved_at, cleared_at, returned_at, last_polled_at

@@ -29,6 +29,7 @@ import { isCheckOpsHost } from "@/lib/checkopsHost";
 import { useRef } from "react";
 
 import { CheckAltSettings } from "@/components/settings/CheckAltSettings";
+import { CheckAltTenantAdminCard } from "@/components/settings/CheckAltTenantAdminCard";
 import { EmailSenderSettings } from "@/components/settings/EmailSenderSettings";
 import { ComplianceSettings } from "@/components/settings/ComplianceSettings";
 import { AdminReferralDashboard } from "@/components/settings/AdminReferralDashboard";
@@ -207,6 +208,7 @@ export default function AdminTenants() {
           <TabsList className="mb-6 w-full justify-start overflow-x-auto flex-nowrap">
 
             <TabsTrigger value="tenants"><Building2 className="w-4 h-4 mr-1" /> Tenants</TabsTrigger>
+            <TabsTrigger value="checkalt"><Landmark className="w-4 h-4 mr-1" /> CheckAlt</TabsTrigger>
             <TabsTrigger value="platform-finance"><Landmark className="w-4 h-4 mr-1" /> Platform Finance</TabsTrigger>
             <TabsTrigger value="referrals"><Gift className="w-4 h-4 mr-1" /> Referral Dashboard</TabsTrigger>
             <TabsTrigger value="announcements"><Megaphone className="w-4 h-4 mr-1" /> Announcements</TabsTrigger>
@@ -224,6 +226,9 @@ export default function AdminTenants() {
                 onChanged={loadTenants}
               />
             )}
+          </TabsContent>
+          <TabsContent value="checkalt" className="space-y-4">
+            <CheckAltSettings />
           </TabsContent>
           <TabsContent value="platform-finance">
             <Tabs defaultValue="banking" className="w-full">
@@ -363,7 +368,7 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
           </TabsContent>
           <TabsContent value="integrations" className="mt-6 space-y-6">
             <TenantMoovIdentityCard tenantId={tenant.id} tenantName={tenant.name} />
-            <CheckAltSettings />
+            <CheckAltTenantAdminCard tenantId={tenant.id} />
           </TabsContent>
           <TabsContent value="billing" className="mt-6 space-y-6">
             <BillingTab tenant={tenant} onUpdated={onUpdated} />

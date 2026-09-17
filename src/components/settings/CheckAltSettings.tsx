@@ -10,25 +10,24 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { usePermissions } from "@/hooks/usePermissions";
 import { awsApiBaseUrl } from "@/lib/awsStaging";
 import {
   checkAltProviderUserMessage,
   invokeAwsCheckAltProviderFunction,
   requireAwsCheckAltProviderPath,
 } from "@/lib/awsCheckAltMoneyPath";
-import { useTenant } from "@/contexts/TenantContext";
-import { Loader2, Banknote, ShieldCheck, AlertTriangle, RefreshCw, UserPlus, UserCheck, Landmark } from "lucide-react";
+import { isPlatformOwner } from "@/lib/masterMerchant";
+import { useAuth } from "@/hooks/useAuth";
+import { Loader2, Banknote, ShieldCheck, AlertTriangle, RefreshCw } from "lucide-react";
 
 /**
- * Admin-only configuration panel for the CheckAlt (FinCapture) RDC integration.
- * Single ChecksOps-wide account model:
- *   - Username/password live in backend secrets (CHECKALT_USERNAME / CHECKALT_PASSWORD)
- *   - Per-deployment values (base URL, depositor account, business unit, enable flag) live here
+ * ChecksOps platform-only CheckAlt integration controls.
+ * Tenant Business Unit, deposit account, and registration live in Tenant Management.
+ * Tenant Auto-Deposit lives in Manager → Bank Deposits → Settings.
  */
 export function CheckAltSettings() {
-  const { isAdmin } = usePermissions();
-  const { tenant } = useTenant();
+  const { user } = useAuth();
+  const platformAdmin = isPlatformOwner(user?.email, user?.id);
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -43,57 +42,41 @@ export function CheckAltSettings() {
       if (error) throw error;
       return data;
     },
-    enabled: isAdmin,
+    enabled: platformAdmin,
   });
 
   const [form, setForm] = useState({
     base_url: "",
     merchant: "",
     fi_key: "",
-    business_unit: "",
-    depositor_account_id: "",
     default_enabled: false,
-    auto_approve_enabled: false,
-    auto_approve_max_dollars: "",
     notes: "",
   });
 
   useEffect(() => {
     if (cfg) {
       setForm({
-        base_url: cfg.base_url ?? "",
-        merchant: cfg.merchant ?? "",
-        fi_key: cfg.fi_key ?? "",
-        business_unit: cfg.business_unit ?? "",
-        depositor_account_id: cfg.depositor_account_id ?? "",
-        default_enabled: !!cfg.default_enabled,
-        auto_approve_enabled: !!(cfg as any).auto_approve_enabled,
-        auto_approve_max_dollars:
-          (cfg as any).auto_approve_max_cents != null
-            ? String(((cfg as any).auto_approve_max_cents as number) / 100)
-            : "",
-        notes: cfg.notes ?? "",
+        base_url: (cfg as { base_url?: string }).base_url ?? "",
+        merchant: (cfg as { merchant?: string }).merchant ?? "",
+        fi_key: "",
+        default_enabled: !!(cfg as { default_enabled?: boolean }).default_enabled,
+        notes: (cfg as { notes?: string }).notes ?? "",
       });
     }
   }, [cfg]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const maxDollars = form.auto_approve_max_dollars.trim();
-      const maxCents = maxDollars ? Math.round(parseFloat(maxDollars) * 100) : null;
+      const payload: Record<string, unknown> = {
+        base_url: form.base_url.trim() || null,
+        merchant: form.merchant.trim() || null,
+        default_enabled: form.default_enabled,
+        notes: form.notes.trim() || null,
+      };
+      if (form.fi_key.trim()) payload.fi_key = form.fi_key.trim();
       const { error } = await supabase
         .from("checkalt_config")
-        .update({
-          base_url: form.base_url.trim() || null,
-          merchant: form.merchant.trim() || null,
-          fi_key: form.fi_key.trim() || null,
-          business_unit: form.business_unit.trim() || null,
-          depositor_account_id: form.depositor_account_id.trim() || null,
-          default_enabled: form.default_enabled,
-          auto_approve_enabled: form.auto_approve_enabled,
-          auto_approve_max_cents: Number.isFinite(maxCents as number) ? maxCents : null,
-          notes: form.notes.trim() || null,
-        } as any)
+        .update(payload as any)
         .eq("singleton", true);
       if (error) throw error;
     },
@@ -171,116 +154,11 @@ export function CheckAltSettings() {
     },
   });
 
-  // ---- Tenant account registration ----
-  const { data: regAccount, isLoading: regLoading } = useQuery({
-    queryKey: ["checkalt-tenant-account", tenant?.id],
-    enabled: isAdmin && !!tenant?.id,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("checkalt_tenant_accounts")
-        .select("sso_user_id, deposit_account_number, first_name, last_name, email, enabled, registered_at, last_register_payload")
-        .eq("tenant_id", tenant!.id)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const [reg, setReg] = useState({
-    sso_user_id: "",
-    first_name: "",
-    last_name: "",
-    email: "",
-    deposit_account_number: "",
-  });
-
-  useEffect(() => {
-    if (regAccount) {
-      setReg({
-        sso_user_id: regAccount.sso_user_id ?? "",
-        first_name: regAccount.first_name ?? "",
-        last_name: regAccount.last_name ?? "",
-        email: regAccount.email ?? "",
-        deposit_account_number: regAccount.deposit_account_number ?? "",
-      });
-    } else if (cfg?.depositor_account_id) {
-      setReg((r) => ({ ...r, deposit_account_number: r.deposit_account_number || cfg.depositor_account_id! }));
-    }
-  }, [regAccount, cfg]);
-
-  const registerMutation = useMutation({
-    mutationFn: async () => {
-      if (!tenant?.id) throw new Error("No tenant in context");
-      requireAwsCheckAltProviderPath({
-        apiBaseUrl: awsApiBaseUrl(),
-        functionName: "checkalt-register-account",
-      });
-      const { data, error } = await invokeAwsCheckAltProviderFunction(
-        "checkalt-register-account",
-        { body: { tenant_id: tenant.id, ...reg } },
-        { apiBaseUrl: awsApiBaseUrl() },
-      );
-      if (error) throw new Error(checkAltProviderUserMessage(error));
-      if ((data as any)?.error) throw new Error(checkAltProviderUserMessage((data as any).error));
-      return data;
-    },
-    onSuccess: () => {
-      toast({ title: "Account registered with CheckAlt" });
-      qc.invalidateQueries({ queryKey: ["checkalt-tenant-account"] });
-    },
-    onError: (e: unknown) =>
-      toast({
-        title: "Registration failed",
-        description: e instanceof Error ? e.message : "Unknown error",
-        variant: "destructive",
-      }),
-  });
-
-  const [verifyResult, setVerifyResult] = useState<{ action: string; payload: unknown } | null>(null);
-
-  const verifyMutation = useMutation({
-    mutationFn: async (action: "user" | "account") => {
-      if (!tenant?.id) throw new Error("No tenant in context");
-      requireAwsCheckAltProviderPath({
-        apiBaseUrl: awsApiBaseUrl(),
-        functionName: "checkalt-verify-account",
-      });
-      const { data, error } = await invokeAwsCheckAltProviderFunction(
-        "checkalt-verify-account",
-        { body: { tenant_id: tenant.id, action } },
-        { apiBaseUrl: awsApiBaseUrl() },
-      );
-      if (error) throw new Error(checkAltProviderUserMessage(error));
-      if ((data as any)?.success === false) {
-        // Keep the raw CheckAlt response visible so we can see what the vendor said.
-        setVerifyResult({ action, payload: (data as any).details ?? data });
-        throw new Error((data as any).error || "Verification failed");
-      }
-      return { action, payload: (data as any)?.data };
-    },
-    onSuccess: ({ action, payload }) => {
-      setVerifyResult({ action, payload });
-      toast({
-        title: action === "user" ? "User verified" : "Deposit account verified",
-        description: "CheckAlt returned a valid response. See payload below.",
-      });
-    },
-    onError: (e: unknown) =>
-      toast({
-        title: "Verification failed",
-        description: e instanceof Error ? e.message : "Unknown error",
-        variant: "destructive",
-      }),
-  });
-
-
-
-
-  if (!isAdmin) {
+  if (!platformAdmin) {
     return (
       <Card>
         <CardContent className="py-8 text-center text-sm text-muted-foreground">
-          CheckAlt settings are restricted to administrators.
+          Platform CheckAlt settings are restricted to ChecksOps administrators.
         </CardContent>
       </Card>
     );
@@ -294,8 +172,8 @@ export function CheckAltSettings() {
     );
   }
 
-  const fullyConfigured =
-    !!form.base_url && !!form.merchant && !!form.fi_key && !!form.depositor_account_id && form.default_enabled;
+  const fiKeyConfigured = Boolean((cfg as { fi_key_configured?: boolean } | null)?.fi_key_configured);
+  const fullyConfigured = !!form.base_url && !!form.merchant && fiKeyConfigured && form.default_enabled;
 
   return (
     <div className="space-y-6">
@@ -305,11 +183,11 @@ export function CheckAltSettings() {
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Banknote className="h-4 w-4 text-primary" />
-                CheckAlt (FinCapture) Integration
+                Platform CheckAlt (FinCapture)
               </CardTitle>
               <CardDescription>
-                Remote Deposit Capture rail. When enabled, eligible checks can be deposited
-                directly through CheckAlt instead of routing to a branch.
+                ChecksOps-only integration controls. Tenant Business Unit, deposit account,
+                and registration are configured per tenant in Tenant Management.
               </CardDescription>
             </div>
             <Badge variant={fullyConfigured ? "default" : "outline"}>
@@ -327,57 +205,38 @@ export function CheckAltSettings() {
               <Label htmlFor="base_url">Base URL</Label>
               <Input
                 id="base_url"
-                placeholder="https://uatapi.checkalt.com"
+                placeholder="https://api2.checkalt.com"
                 value={form.base_url}
                 onChange={(e) => setForm({ ...form, base_url: e.target.value })}
               />
               <p className="text-xs text-muted-foreground">
-                UAT: https://uatapi.checkalt.com &middot; Prod: provided by CheckAlt
+                Display/legacy host. Production HTTP uses the Secrets Manager Base URL.
               </p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="merchant">Merchant</Label>
               <Input
                 id="merchant"
-                placeholder="e.g. lockbox5"
+                placeholder="WAF merchant header"
                 value={form.merchant}
                 onChange={(e) => setForm({ ...form, merchant: e.target.value })}
               />
               <p className="text-xs text-muted-foreground">
-                Required header for Cloudflare WAF. Assigned by CheckAlt.
+                Required Cloudflare WAF header. Assigned by CheckAlt to the platform.
               </p>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="fi_key">FI Key</Label>
+            <div className="space-y-1.5 md:col-span-2">
+              <Label htmlFor="fi_key">Shared FI Key</Label>
               <Input
                 id="fi_key"
-                placeholder="e.g. 40E28855-35FA-45C3-..."
+                type="password"
+                autoComplete="new-password"
+                placeholder={fiKeyConfigured ? "Configured — enter a new value only to replace" : "Stored in Secrets Manager for live calls"}
                 value={form.fi_key}
                 onChange={(e) => setForm({ ...form, fi_key: e.target.value })}
               />
               <p className="text-xs text-muted-foreground">
-                Financial Institution identifier (UUID). Required for deposits.
-              </p>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="business_unit">Business Unit</Label>
-              <Input
-                id="business_unit"
-                placeholder="e.g. CHECKSOPS_PROD"
-                value={form.business_unit}
-                onChange={(e) => setForm({ ...form, business_unit: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1.5 md:col-span-2">
-              <Label htmlFor="depositor_account_id">Deposit Account Number</Label>
-              <Input
-                id="depositor_account_id"
-                placeholder="Bank account number for deposits"
-                value={form.depositor_account_id}
-                onChange={(e) => setForm({ ...form, depositor_account_id: e.target.value })}
-              />
-              <p className="text-xs text-muted-foreground">
-                The bank account where deposits are credited. Maps to depositAccountNumber in the API.
+                The live request uses the platform secret. This field never displays the current value.
               </p>
             </div>
           </div>
@@ -398,49 +257,6 @@ export function CheckAltSettings() {
               </p>
             </div>
           </div>
-
-          <div className="space-y-3 rounded-md border border-border/60 bg-muted/30 p-3">
-            <div className="flex items-start gap-3">
-              <Switch
-                id="auto_approve_enabled"
-                checked={form.auto_approve_enabled}
-                onCheckedChange={(v) => setForm({ ...form, auto_approve_enabled: v })}
-                disabled={!form.default_enabled}
-              />
-              <div className="space-y-1">
-                <Label htmlFor="auto_approve_enabled" className="cursor-pointer">
-                  Auto-approve clean deposits
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  When on, deposits CheckAlt parks in pending approval are approved
-                  automatically. Any deposit CheckAlt flags (duplicate MICR, amount
-                  mismatch, poor image quality, risk warning, exception, hold) is
-                  always skipped and left for manual review.
-                </p>
-              </div>
-            </div>
-
-            {form.auto_approve_enabled && (
-              <div className="space-y-1.5 pl-11">
-                <Label htmlFor="auto_approve_max_dollars">Auto-approve ceiling (USD, optional)</Label>
-                <Input
-                  id="auto_approve_max_dollars"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="e.g. 10000 — leave blank for no limit"
-                  value={form.auto_approve_max_dollars}
-                  onChange={(e) =>
-                    setForm({ ...form, auto_approve_max_dollars: e.target.value })
-                  }
-                />
-                <p className="text-xs text-muted-foreground">
-                  Deposits over this amount still require a human to approve.
-                </p>
-              </div>
-            )}
-          </div>
-
 
           <div className="space-y-1.5">
             <Label htmlFor="notes">Internal notes</Label>
@@ -482,146 +298,6 @@ export function CheckAltSettings() {
           </div>
         </CardContent>
       </Card>
-
-      <Card>
-        <CardHeader>
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <CardTitle className="flex items-center gap-2 text-sm">
-                <UserPlus className="h-4 w-4 text-primary" />
-                Register Tenant Account with CheckAlt
-              </CardTitle>
-              <CardDescription>
-                Posts <code>fiKey, userId, firstName, lastName, emailAddress, isSSORequest, accountDataList[].accountNumber</code> to
-                <code className="ml-1">/fincapture/useraccount/register</code>. The <code>userId</code> becomes the
-                <code className="ml-1">ssoKey</code> used on every deposit submitted for this tenant.
-              </CardDescription>
-            </div>
-            {regAccount?.registered_at ? (
-              <Badge variant="default" className="shrink-0">
-                <ShieldCheck className="h-3 w-3 mr-1" /> Registered
-              </Badge>
-            ) : (
-              <Badge variant="outline" className="shrink-0">
-                <AlertTriangle className="h-3 w-3 mr-1" /> Not registered
-              </Badge>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {regLoading ? (
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-          ) : (
-            <>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="sso_user_id">User ID (ssoKey)</Label>
-                  <Input
-                    id="sso_user_id"
-                    placeholder="e.g. mcarletta"
-                    value={reg.sso_user_id}
-                    onChange={(e) => setReg({ ...reg, sso_user_id: e.target.value })}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Unique identifier for this depositor. Becomes the <code>ssoKey</code> on all deposits.
-                  </p>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="reg_email">Email address</Label>
-                  <Input
-                    id="reg_email"
-                    type="email"
-                    placeholder="user@company.com"
-                    value={reg.email}
-                    onChange={(e) => setReg({ ...reg, email: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="reg_first">First name</Label>
-                  <Input
-                    id="reg_first"
-                    value={reg.first_name}
-                    onChange={(e) => setReg({ ...reg, first_name: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="reg_last">Last name</Label>
-                  <Input
-                    id="reg_last"
-                    value={reg.last_name}
-                    onChange={(e) => setReg({ ...reg, last_name: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-1.5 md:col-span-2">
-                  <Label htmlFor="reg_acct">Deposit account number</Label>
-                  <Input
-                    id="reg_acct"
-                    placeholder="Bank account number"
-                    value={reg.deposit_account_number}
-                    onChange={(e) => setReg({ ...reg, deposit_account_number: e.target.value })}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Defaults to the deposit account number from the integration config above.
-                  </p>
-                </div>
-              </div>
-
-              {regAccount?.last_register_payload ? (
-                <div className="rounded-md border border-border/60 bg-muted/30 p-3">
-                  <p className="text-xs font-medium mb-1">Last CheckAlt response</p>
-                  <pre className="text-[11px] overflow-x-auto whitespace-pre-wrap break-all text-muted-foreground">
-                    {JSON.stringify(regAccount.last_register_payload, null, 2)}
-                  </pre>
-                </div>
-              ) : null}
-
-              {verifyResult ? (
-                <div className="rounded-md border border-border/60 bg-muted/30 p-3">
-                  <p className="text-xs font-medium mb-1">
-                    Verify {verifyResult.action === "user" ? "user" : "deposit account"} response
-                  </p>
-                  <pre className="text-[11px] overflow-x-auto whitespace-pre-wrap break-all text-muted-foreground">
-                    {JSON.stringify(verifyResult.payload, null, 2)}
-                  </pre>
-                </div>
-              ) : null}
-
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => verifyMutation.mutate("user")}
-                  disabled={verifyMutation.isPending || !regAccount?.registered_at}
-                >
-                  {verifyMutation.isPending && verifyMutation.variables === "user"
-                    ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                    : <UserCheck className="h-4 w-4 mr-1" />}
-                  Verify user
-                </Button>
-                <Button
-                  onClick={() => registerMutation.mutate()}
-                  disabled={
-                    registerMutation.isPending ||
-                    !reg.sso_user_id ||
-                    !reg.first_name ||
-                    !reg.last_name ||
-                    !reg.email ||
-                    !reg.deposit_account_number ||
-                    !tenant?.id
-                  }
-                >
-                  {registerMutation.isPending
-                    ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                    : <UserPlus className="h-4 w-4 mr-1" />}
-                  {regAccount?.registered_at ? "Re-register account" : "Register account"}
-                </Button>
-              </div>
-
-            </>
-          )}
-        </CardContent>
-      </Card>
-
-
 
       <Card>
         <CardHeader>

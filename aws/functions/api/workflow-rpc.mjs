@@ -83,6 +83,8 @@ export const SAFE_WRITE_RPC_CLASSIFICATION = {
   add_partner_stakeholder_to_check: 'provider_dependent',
   ensure_partner_stakeholders: 'provider_dependent',
   save_checkalt_settings: 'safe_now',
+  save_checkalt_tenant_account: 'safe_now',
+  save_checkalt_tenant_auto_deposit: 'safe_now',
 };
 
 /** RPCs executed via POST /data/rpc write path. */
@@ -103,6 +105,8 @@ export const SAFE_WRITE_RPCS = new Set([
   'resolve_check_return',
   'deposit_action',
   'save_checkalt_settings',
+  'save_checkalt_tenant_account',
+  'save_checkalt_tenant_auto_deposit',
 ]);
 
 const SESSION_RPCS = new Set(['register_session', 'validate_session', 'invalidate_session', 'log_audit']);
@@ -117,18 +121,50 @@ const CHECKALT_SETTINGS_COLUMNS = new Set([
   'base_url',
   'merchant',
   'fi_key',
+  'default_enabled',
+  'notes',
+]);
+
+const CHECKALT_TENANT_FIELDS = new Set([
   'business_unit',
   'depositor_account_id',
-  'default_enabled',
   'auto_approve_enabled',
   'auto_approve_max_cents',
-  'notes',
 ]);
 
 const CHECKALT_SETTINGS_SECRETS = new Set([
   'cached_jwt',
   'cached_jwt_expires_at',
   'webhook_secret',
+]);
+
+const CHECKALT_TENANT_ACCOUNT_COLUMNS = new Set([
+  'sso_user_id',
+  'deposit_account_number',
+  'first_name',
+  'last_name',
+  'email',
+  'business_unit',
+  'enabled',
+  'auto_approve_enabled',
+  'auto_approve_max_cents',
+]);
+
+const CHECKALT_TENANT_ACCOUNT_DENIED = new Set([
+  'last_register_payload',
+  'registered_at',
+  'sso_key',
+  'cached_jwt',
+  'webhook_secret',
+  'fi_key',
+  'base_url',
+  'merchant',
+  'depositor_account_id',
+]);
+
+const CHECKALT_AUTO_DEPOSIT_COLUMNS = new Set([
+  'auto_approve_enabled',
+  'auto_approve_max_cents',
 ]);
 
 const denied = (spoof, extra) => ({
@@ -774,6 +810,51 @@ const requireManagerAdmin = async (client, userId) => {
   return { roles };
 };
 
+const requirePlatformOwner = async (client) => {
+  const row = (await client.query(
+    'SELECT public.aws_is_cross_tenant_reader() AS ok',
+  )).rows[0];
+  if (row?.ok !== true) {
+    return { error: 'not_authorized', message: 'Platform administrator required' };
+  }
+  return { ok: true };
+};
+
+const requireTenantAdminForTenant = async (client, userId, tenantId) => {
+  if (!isUuid(tenantId)) return { error: 'invalid_uuid', field: 'tenant_id' };
+  const platform = await requirePlatformOwner(client);
+  if (!platform.error) return { platform: true };
+  const row = (await client.query(
+    `SELECT 1 FROM public.tenant_users
+     WHERE user_id = $1::uuid AND tenant_id = $2::uuid
+       AND lower(role::text) IN ('admin', 'owner')`,
+    [userId, tenantId],
+  )).rows[0];
+  if (!row) {
+    return { error: 'not_authorized', message: 'Tenant administrator required' };
+  }
+  return { platform: false };
+};
+
+const publicTenantAccountRow = (row) => {
+  if (!row) return null;
+  return {
+    id: row.id,
+    tenant_id: row.tenant_id,
+    sso_user_id: row.sso_user_id,
+    deposit_account_number: row.deposit_account_number,
+    first_name: row.first_name,
+    last_name: row.last_name,
+    email: row.email,
+    business_unit: row.business_unit || null,
+    enabled: row.enabled !== false,
+    registered_at: row.registered_at || null,
+    has_sso_key: Boolean(row.has_sso_key || row.last_register_payload?.sso_key),
+    auto_approve_enabled: Boolean(row.auto_approve_enabled),
+    auto_approve_max_cents: row.auto_approve_max_cents ?? null,
+  };
+};
+
 const canAccessTenant = async (client, userId, tenantId) => {
   if (!isUuid(tenantId)) return false;
   const member = (await client.query(
@@ -860,7 +941,7 @@ const executeResolveCheckReturn = async ({ client, mapping, args }) => {
 };
 
 const executeSaveCheckaltSettings = async ({ client, mapping, args }) => {
-  const gated = await requireManagerAdmin(client, mapping.application_user_id);
+  const gated = await requirePlatformOwner(client);
   if (gated.error) return gated;
   const incoming = args && typeof args === 'object' ? { ...args } : {};
   const nested = incoming.p_settings && typeof incoming.p_settings === 'object' ? incoming.p_settings : incoming;
@@ -868,8 +949,12 @@ const executeSaveCheckaltSettings = async ({ client, mapping, args }) => {
   const params = [];
   for (const [key, value] of Object.entries(nested)) {
     if (key.startsWith('p_') && key !== 'p_settings') continue;
+    if (key === 'tenant_id' || key === 'singleton') continue;
     if (CHECKALT_SETTINGS_SECRETS.has(key)) {
       return { error: 'secret_column_denied', field: key };
+    }
+    if (CHECKALT_TENANT_FIELDS.has(key)) {
+      return { error: 'tenant_field_denied', field: key };
     }
     if (!CHECKALT_SETTINGS_COLUMNS.has(key)) continue;
     params.push(value);
@@ -883,12 +968,137 @@ const executeSaveCheckaltSettings = async ({ client, mapping, args }) => {
     `UPDATE public.checkalt_config
      SET ${updates.join(', ')}
      WHERE singleton = true
-     RETURNING id, singleton, base_url, merchant, fi_key, business_unit,
-               depositor_account_id, default_enabled, auto_approve_enabled,
-               auto_approve_max_cents, notes, created_at, updated_at, updated_by`,
+     RETURNING id, singleton, base_url, merchant,
+               (fi_key IS NOT NULL AND length(trim(fi_key)) > 0) AS fi_key_configured,
+               default_enabled, notes, created_at, updated_at, updated_by`,
     params,
   )).rows;
   return { data: rows[0] || null };
+};
+
+const executeSaveCheckaltTenantAccount = async ({ client, mapping, args }) => {
+  const gated = await requirePlatformOwner(client);
+  if (gated.error) return gated;
+  const incoming = args && typeof args === 'object' ? { ...args } : {};
+  const nested = incoming.p_settings && typeof incoming.p_settings === 'object' ? incoming.p_settings : incoming;
+  const tenantId = arg(nested, 'tenant_id', 'p_tenant_id');
+  if (!isUuid(tenantId)) return { error: 'invalid_uuid', field: 'tenant_id' };
+  const updates = {};
+  for (const [key, value] of Object.entries(nested)) {
+    if (key === 'tenant_id' || key === 'p_tenant_id' || key === 'id') continue;
+    if (key.startsWith('p_') && key !== 'p_settings') continue;
+    if (CHECKALT_TENANT_ACCOUNT_DENIED.has(key) || CHECKALT_SETTINGS_SECRETS.has(key)) {
+      return { error: 'secret_column_denied', field: key };
+    }
+    if (!CHECKALT_TENANT_ACCOUNT_COLUMNS.has(key)) continue;
+    updates[key] = value;
+  }
+  if (!Object.keys(updates).length) return { error: 'missing_required_field', field: 'settings' };
+
+  const existing = (await client.query(
+    `SELECT id, tenant_id, sso_user_id, deposit_account_number, first_name, last_name,
+            email, business_unit, enabled, registered_at, last_register_payload,
+            auto_approve_enabled, auto_approve_max_cents
+     FROM public.checkalt_tenant_accounts
+     WHERE tenant_id = $1::uuid
+     LIMIT 1`,
+    [tenantId],
+  )).rows[0];
+
+  const merged = {
+    sso_user_id: updates.sso_user_id ?? existing?.sso_user_id,
+    deposit_account_number: updates.deposit_account_number ?? existing?.deposit_account_number,
+    first_name: updates.first_name ?? existing?.first_name,
+    last_name: updates.last_name ?? existing?.last_name,
+    email: updates.email ?? existing?.email,
+    business_unit: updates.business_unit !== undefined ? updates.business_unit : (existing?.business_unit ?? null),
+    enabled: updates.enabled !== undefined ? updates.enabled !== false : (existing?.enabled !== false),
+    auto_approve_enabled: updates.auto_approve_enabled !== undefined
+      ? Boolean(updates.auto_approve_enabled)
+      : Boolean(existing?.auto_approve_enabled),
+    auto_approve_max_cents: updates.auto_approve_max_cents !== undefined
+      ? updates.auto_approve_max_cents
+      : (existing?.auto_approve_max_cents ?? null),
+  };
+  const required = ['sso_user_id', 'deposit_account_number', 'first_name', 'last_name', 'email'];
+  for (const field of required) {
+    if (!String(merged[field] || '').trim()) {
+      return { error: 'missing_required_field', field };
+    }
+  }
+
+  const rows = (await client.query(
+    `INSERT INTO public.checkalt_tenant_accounts (
+       tenant_id, sso_user_id, deposit_account_number, first_name, last_name, email,
+       business_unit, enabled, auto_approve_enabled, auto_approve_max_cents
+     ) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+     ON CONFLICT (tenant_id) DO UPDATE SET
+       sso_user_id = EXCLUDED.sso_user_id,
+       deposit_account_number = EXCLUDED.deposit_account_number,
+       first_name = EXCLUDED.first_name,
+       last_name = EXCLUDED.last_name,
+       email = EXCLUDED.email,
+       business_unit = EXCLUDED.business_unit,
+       enabled = EXCLUDED.enabled,
+       auto_approve_enabled = EXCLUDED.auto_approve_enabled,
+       auto_approve_max_cents = EXCLUDED.auto_approve_max_cents,
+       updated_at = now()
+     RETURNING id, tenant_id, sso_user_id, deposit_account_number, first_name, last_name,
+               email, business_unit, enabled, registered_at, last_register_payload,
+               auto_approve_enabled, auto_approve_max_cents`,
+    [
+      tenantId,
+      String(merged.sso_user_id).trim(),
+      String(merged.deposit_account_number).trim(),
+      String(merged.first_name).trim(),
+      String(merged.last_name).trim(),
+      String(merged.email).trim(),
+      merged.business_unit == null || String(merged.business_unit).trim() === ''
+        ? null
+        : String(merged.business_unit).trim(),
+      merged.enabled,
+      merged.auto_approve_enabled,
+      merged.auto_approve_max_cents == null || merged.auto_approve_max_cents === ''
+        ? null
+        : Number(merged.auto_approve_max_cents),
+    ],
+  )).rows;
+  return { data: publicTenantAccountRow(rows[0] || null) };
+};
+
+const executeSaveCheckaltTenantAutoDeposit = async ({ client, mapping, args }) => {
+  const incoming = args && typeof args === 'object' ? { ...args } : {};
+  const nested = incoming.p_settings && typeof incoming.p_settings === 'object' ? incoming.p_settings : incoming;
+  const tenantId = arg(nested, 'tenant_id', 'p_tenant_id');
+  const gated = await requireTenantAdminForTenant(client, mapping.application_user_id, tenantId);
+  if (gated.error) return gated;
+  const updates = [];
+  const params = [];
+  for (const [key, value] of Object.entries(nested)) {
+    if (key === 'tenant_id' || key === 'p_tenant_id' || key === 'id') continue;
+    if (key.startsWith('p_') && key !== 'p_settings') continue;
+    if (CHECKALT_TENANT_ACCOUNT_DENIED.has(key) || CHECKALT_SETTINGS_SECRETS.has(key)) {
+      return { error: 'secret_column_denied', field: key };
+    }
+    if (CHECKALT_TENANT_ACCOUNT_COLUMNS.has(key) && !CHECKALT_AUTO_DEPOSIT_COLUMNS.has(key)) {
+      return { error: 'tenant_field_denied', field: key };
+    }
+    if (!CHECKALT_AUTO_DEPOSIT_COLUMNS.has(key)) continue;
+    params.push(key === 'auto_approve_max_cents' && (value === '' || value == null) ? null : value);
+    updates.push(`${key} = $${params.length}`);
+  }
+  if (!updates.length) return { error: 'missing_required_field', field: 'settings' };
+  params.push(tenantId);
+  const rows = (await client.query(
+    `UPDATE public.checkalt_tenant_accounts
+     SET ${updates.join(', ')}, updated_at = now()
+     WHERE tenant_id = $${params.length}::uuid
+     RETURNING tenant_id, auto_approve_enabled, auto_approve_max_cents, enabled,
+               (registered_at IS NOT NULL) AS registered`,
+    params,
+  )).rows;
+  if (!rows[0]) return { error: 'checkalt_tenant_account_missing', tenant_id: tenantId };
+  return { data: rows[0] };
 };
 
 const executeDepositAction = async ({ client, mapping, args }) => {
@@ -1047,6 +1257,10 @@ export const executeSafeWriteRpc = async ({ client, mapping, name, args }) => {
       return executeResolveCheckReturn({ client, mapping, args });
     case 'save_checkalt_settings':
       return executeSaveCheckaltSettings({ client, mapping, args });
+    case 'save_checkalt_tenant_account':
+      return executeSaveCheckaltTenantAccount({ client, mapping, args });
+    case 'save_checkalt_tenant_auto_deposit':
+      return executeSaveCheckaltTenantAutoDeposit({ client, mapping, args });
     case 'deposit_action':
       return executeDepositAction({ client, mapping, args });
     default:

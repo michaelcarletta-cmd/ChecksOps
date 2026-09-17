@@ -331,7 +331,22 @@ function createBuilder(table: string, store: SessionStore) {
 
   const execute = async () => {
     if (state.op !== "select") {
-      if (state.table === "checkalt_config" && state.op === "update") {
+      const checkAltRpcName = state.table === "checkalt_config" && state.op === "update"
+        ? "save_checkalt_settings"
+        : (state.table === "checkalt_tenant_accounts_admin" && ["insert", "update", "upsert"].includes(state.op))
+          ? "save_checkalt_tenant_account"
+          : (
+            (state.table === "checkalt_tenant_auto_deposit_public" && state.op === "update")
+            || (
+              state.table === "checkalt_tenant_accounts"
+              && state.op === "update"
+              && Object.keys((state.payload && typeof state.payload === "object") ? state.payload as object : {})
+                .every((key) => key === "auto_approve_enabled" || key === "auto_approve_max_cents")
+            )
+          )
+            ? "save_checkalt_tenant_auto_deposit"
+            : null;
+      if (checkAltRpcName) {
         const restoredWrite = await store.restoreSession();
         const writeToken = restoredWrite.session?.access_token;
         if (!writeToken) {
@@ -344,12 +359,14 @@ function createBuilder(table: string, store: SessionStore) {
           };
         }
         const values = (state.payload && typeof state.payload === "object")
-          ? state.payload as Record<string, unknown>
+          ? { ...(state.payload as Record<string, unknown>) }
           : {};
+        const tenantFilter = state.filters?.find((filter) => filter.column === "tenant_id" && filter.op === "eq");
+        if (tenantFilter?.value && values.tenant_id == null) values.tenant_id = tenantFilter.value;
         const { response, body } = await apiFetch("/data/rpc", {
           method: "POST",
           body: JSON.stringify({
-            name: "save_checkalt_settings",
+            name: checkAltRpcName,
             args: values,
           }),
         }, writeToken);

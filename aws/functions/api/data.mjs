@@ -338,6 +338,7 @@ const QUALIFIED_COLUMN = /^([a-z_][a-z0-9_]*)\.([a-z_][a-z0-9_]*)$/;
 
 const PUBLIC_CONFIG_TABLES = {
   checkalt_config: 'checkalt_config_public',
+  checkalt_tenant_accounts: 'checkalt_tenant_auto_deposit_public',
   deposit_provider_config: 'deposit_provider_config_public',
 };
 
