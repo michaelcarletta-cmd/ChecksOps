@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import { handler } from '../functions/api/index.mjs';
 import {
   applyFilters,
+  applyEmbedFilters,
   belongsToEmbed,
   childFk,
   classifyDataQueryFailure,
@@ -20,6 +21,8 @@ import {
   relatedFk,
   resolvePageLimit,
   resolvePageOffset,
+  resolvePublicTable,
+  splitEmbedFilters,
 } from '../functions/api/data.mjs';
 import { LOOKUP_MAPPING_SQL } from '../functions/api/identity.mjs';
 import {
@@ -642,4 +645,33 @@ test('login challenge is returned without treating Cognito sub as the applicatio
   } finally {
     globalThis.fetch = original;
   }
+});
+
+test('Bank Deposits embed is belongs-to via check_intake_item_id, not checkalt_deposit_id', () => {
+  assert.equal(belongsToEmbed('checkalt_deposits', 'check_intake_items'), true);
+  assert.equal(relatedFk('checkalt_deposits', 'check_intake_items'), 'check_intake_item_id');
+  assert.equal(childFk('checkalt_deposits', 'check_intake_items'), 'checkalt_deposit_id');
+});
+
+test('Deposit Ops tenant filter uses deposit_items.check_id → check_intake_items.id', () => {
+  assert.equal(belongsToEmbed('deposit_items', 'check_intake_items'), true);
+  assert.equal(relatedFk('deposit_items', 'check_intake_items'), 'check_id');
+  const { parent, embed } = splitEmbedFilters([
+    { column: 'check_intake_items.tenant_id', op: 'eq', value: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a' },
+  ]);
+  assert.deepEqual(parent, []);
+  assert.equal(embed[0].embedTable, 'check_intake_items');
+  assert.equal(embed[0].embedColumn, 'tenant_id');
+  const params = [];
+  const clauses = applyEmbedFilters('deposit_items', embed, params);
+  assert.match(clauses[0], /EXISTS/);
+  assert.match(clauses[0], /check_intake_items\.id = deposit_items\.check_id/);
+  assert.match(clauses[0], /tenant_id = \$1/);
+  assert.equal(params[0], '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a');
+});
+
+test('secret config tables rewrite to public-column views', () => {
+  assert.equal(resolvePublicTable('checkalt_config'), 'checkalt_config_public');
+  assert.equal(resolvePublicTable('deposit_provider_config'), 'deposit_provider_config_public');
+  assert.equal(resolvePublicTable('tenants_public'), 'tenants_public');
 });
