@@ -545,6 +545,41 @@ test('preview uses shared layout and fallback keeps tenant logo/color', async ()
   assert.match(preview.html, /Sent by ChecksOps/);
 });
 
+test('preview accepts safe presentation overrides without persisting them', async () => {
+  const client = memoryClient();
+  client.state.settings.set(TENANT, {
+    tenant_id: TENANT,
+    sending_mode: 'custom',
+    sending_domain: DOMAIN,
+    from_address: `noreply@${DOMAIN}`,
+    domain_status: 'pending',
+    from_name: 'Freedom Adjustment',
+    reply_to: 'claims@freedomadj.com',
+  });
+  const before = { ...client.state.settings.get(TENANT) };
+  const preview = await runPreviewEmailBranding({
+    client,
+    mapping,
+    body: {
+      tenantId: TENANT,
+      overrides: {
+        fromName: 'Preview Only Name',
+        replyTo: 'preview-only@freedomadj.com',
+        logoUrl: 'https://cdn.preview-only.example/logo.png',
+        primaryColor: '#ff00aa',
+      },
+    },
+    spoof,
+  });
+  assert.equal(preview.ok, true);
+  assert.match(preview.from, /Preview Only Name/);
+  assert.match(preview.from, /noreply@checksops\.com/);
+  assert.equal(preview.replyTo, 'preview-only@freedomadj.com');
+  assert.match(preview.html, /cdn\.preview-only\.example\/logo\.png/);
+  assert.match(preview.html, /#ff00aa/i);
+  assert.deepEqual(client.state.settings.get(TENANT), before);
+});
+
 test('sink mode remains active and no live SES SDK is imported', async () => {
   const prev = process.env.AWS_EMAIL_MODE;
   process.env.AWS_EMAIL_MODE = 'sink';
