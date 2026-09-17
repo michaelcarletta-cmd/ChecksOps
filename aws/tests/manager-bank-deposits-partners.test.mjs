@@ -86,6 +86,22 @@ test('Bank Deposits exposes date jump, CheckAlt Settings, and TOTAL = sum of che
   assert.equal(/deposit_date/.test(src), false);
 });
 
+test('SQL 35 recreates tenants_public as public-column security_invoker=false', () => {
+  const sql = fs.readFileSync(path.join(ROOT, 'rls/sql/35_manager_partner_parity.sql'), 'utf8');
+  assert.match(sql, /CREATE VIEW public\.tenants_public/);
+  assert.match(sql, /security_invoker = false/);
+  assert.match(sql, /partner_code/);
+  assert.equal(/ALTER TABLE public\.tenants/i.test(sql), false);
+  assert.equal(/aws_select_tenants/i.test(sql), false);
+  assert.match(sql, /checkalt_config_public/);
+  assert.match(sql, /deposit_provider_config_public/);
+  assert.match(sql, /aws_is_tenant_manager_admin/);
+  assert.equal(/cached_jwt/.test(sql), false);
+  assert.equal(/webhook_secret/.test(sql), false);
+  const providerView = sql.slice(sql.indexOf('CREATE VIEW public.deposit_provider_config_public'));
+  assert.equal(/^\s+config,/m.test(providerView), false);
+});
+
 test('this change does not rewrite Partner Codes or shared_checks', () => {
   const partnerSql = fs.readFileSync(path.join(ROOT, 'rls/sql/32_partner_share_lifecycle.sql'), 'utf8');
   const immutability = fs.readFileSync(

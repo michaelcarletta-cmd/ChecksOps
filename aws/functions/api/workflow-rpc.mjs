@@ -61,7 +61,7 @@ export const SAFE_WRITE_RPC_CLASSIFICATION = {
   get_payment_direction_by_token: 'financial_sensitive',
   admin_override_check_status: 'financial_sensitive',
   admin_delete_check: 'already_bridged', // client → DELETE /workflow/checks
-  deposit_action: 'financial_sensitive',
+  deposit_action: 'safe_now_subset', // money / provider-sensitive actions remain disabled
   assign_deposit_owner: 'financial_sensitive',
   bulk_deposit_closeout: 'financial_sensitive',
   bulk_resolve_deposit_exceptions: 'financial_sensitive',
@@ -82,6 +82,7 @@ export const SAFE_WRITE_RPC_CLASSIFICATION = {
   apply_referral_code: 'financial_sensitive',
   add_partner_stakeholder_to_check: 'provider_dependent',
   ensure_partner_stakeholders: 'provider_dependent',
+  save_checkalt_settings: 'safe_now',
 };
 
 /** RPCs executed via POST /data/rpc write path. */
@@ -100,9 +101,35 @@ export const SAFE_WRITE_RPCS = new Set([
   'admin_set_contractor_pro',
   'record_check_return',
   'resolve_check_return',
+  'deposit_action',
+  'save_checkalt_settings',
 ]);
 
 const SESSION_RPCS = new Set(['register_session', 'validate_session', 'invalidate_session', 'log_audit']);
+
+/** Deposit Ops actions that do not move money or call a provider. */
+export const SAFE_DEPOSIT_ACTIONS = new Set([
+  'prepare_deposit',
+  'assign_provider',
+]);
+
+const CHECKALT_SETTINGS_COLUMNS = new Set([
+  'base_url',
+  'merchant',
+  'fi_key',
+  'business_unit',
+  'depositor_account_id',
+  'default_enabled',
+  'auto_approve_enabled',
+  'auto_approve_max_cents',
+  'notes',
+]);
+
+const CHECKALT_SETTINGS_SECRETS = new Set([
+  'cached_jwt',
+  'cached_jwt_expires_at',
+  'webhook_secret',
+]);
 
 const denied = (spoof, extra) => ({
   ok: false,
@@ -731,6 +758,33 @@ const executeRecordCheckReturn = async ({ client, mapping, args }) => {
   return { data: { ok: true, check_id: checkId, previous_stage: check.check_stage } };
 };
 
+const truthy = (value) => value === true || value === 'true' || value === 1 || value === '1';
+
+const requireManagerAdmin = async (client, userId) => {
+  const roles = await rolesOf(client, userId);
+  if (roles.has('admin') || roles.has('staff')) return { roles };
+  const tenantAdmin = (await client.query(
+    `SELECT 1 FROM public.tenant_users
+     WHERE user_id = $1::uuid AND lower(role::text) IN ('admin', 'owner')`,
+    [userId],
+  )).rows[0];
+  if (!tenantAdmin) {
+    return { error: 'not_authorized', message: 'Insufficient role for this workflow RPC' };
+  }
+  return { roles };
+};
+
+const canAccessTenant = async (client, userId, tenantId) => {
+  if (!isUuid(tenantId)) return false;
+  const member = (await client.query(
+    `SELECT 1 FROM public.tenant_users WHERE user_id = $1::uuid AND tenant_id = $2::uuid`,
+    [userId, tenantId],
+  )).rows[0];
+  if (member) return true;
+  const roles = await rolesOf(client, userId);
+  return roles.has('admin');
+};
+
 const executeResolveCheckReturn = async ({ client, mapping, args }) => {
   const checkId = arg(args, 'p_check_id', 'check_id');
   if (!isUuid(checkId)) return { error: 'invalid_uuid', field: 'p_check_id' };
@@ -751,18 +805,30 @@ const executeResolveCheckReturn = async ({ client, mapping, args }) => {
   if (check.check_stage !== 'returned') {
     return { data: { ok: true, already_resolved: true, check_id: checkId } };
   }
-  const restoreStage = check.pre_return_stage || 'review';
+  const restoreRequested = truthy(arg(args, 'p_restore_stage', 'restore_stage'));
+  const restoreStage = restoreRequested ? (check.pre_return_stage || 'review') : 'returned';
   const resolution = arg(args, 'p_resolution') == null ? 'resolved' : String(arg(args, 'p_resolution')).slice(0, 120);
-  await client.query(
-    `UPDATE public.check_intake_items
-     SET check_stage = $2::public.check_stage,
-         status = CASE WHEN $2::text = 'returned' THEN status ELSE COALESCE(status, 'needs_review') END,
-         return_resolved_at = now(),
-         return_resolution = $3::text,
-         updated_at = now()
-     WHERE id = $1::uuid`,
-    [checkId, restoreStage, resolution],
-  );
+  if (restoreRequested) {
+    await client.query(
+      `UPDATE public.check_intake_items
+       SET check_stage = $2::public.check_stage,
+           status = CASE WHEN $2::text = 'returned' THEN status ELSE COALESCE(status, 'needs_review') END,
+           return_resolved_at = now(),
+           return_resolution = $3::text,
+           updated_at = now()
+       WHERE id = $1::uuid`,
+      [checkId, restoreStage, resolution],
+    );
+  } else {
+    await client.query(
+      `UPDATE public.check_intake_items
+       SET return_resolved_at = now(),
+           return_resolution = $2::text,
+           updated_at = now()
+       WHERE id = $1::uuid`,
+      [checkId, resolution],
+    );
+  }
   await client.query(
     `INSERT INTO public.check_audit_log (
        check_id, tenant_id, actor_id, event_type, event_description, event_data
@@ -774,10 +840,179 @@ const executeResolveCheckReturn = async ({ client, mapping, args }) => {
       checkId,
       check.tenant_id,
       mapping.application_user_id,
-      JSON.stringify({ restored_stage: restoreStage, resolution, provider_execution: false }),
+      JSON.stringify({
+        restored_stage: restoreRequested ? restoreStage : null,
+        restore_stage: restoreRequested,
+        resolution,
+        provider_execution: false,
+      }),
     ],
   );
-  return { data: { ok: true, check_id: checkId, restored_stage: restoreStage } };
+  return {
+    data: {
+      ok: true,
+      check_id: checkId,
+      restored_stage: restoreRequested ? restoreStage : null,
+      restore_stage: restoreRequested,
+      check_stage: restoreStage,
+    },
+  };
+};
+
+const executeSaveCheckaltSettings = async ({ client, mapping, args }) => {
+  const gated = await requireManagerAdmin(client, mapping.application_user_id);
+  if (gated.error) return gated;
+  const incoming = args && typeof args === 'object' ? { ...args } : {};
+  const nested = incoming.p_settings && typeof incoming.p_settings === 'object' ? incoming.p_settings : incoming;
+  const updates = [];
+  const params = [];
+  for (const [key, value] of Object.entries(nested)) {
+    if (key.startsWith('p_') && key !== 'p_settings') continue;
+    if (CHECKALT_SETTINGS_SECRETS.has(key)) {
+      return { error: 'secret_column_denied', field: key };
+    }
+    if (!CHECKALT_SETTINGS_COLUMNS.has(key)) continue;
+    params.push(value);
+    updates.push(`${key} = $${params.length}`);
+  }
+  if (!updates.length) return { error: 'missing_required_field', field: 'settings' };
+  params.push(mapping.application_user_id);
+  updates.push(`updated_by = $${params.length}`);
+  updates.push('updated_at = now()');
+  const rows = (await client.query(
+    `UPDATE public.checkalt_config
+     SET ${updates.join(', ')}
+     WHERE singleton = true
+     RETURNING id, singleton, base_url, merchant, fi_key, business_unit,
+               depositor_account_id, default_enabled, auto_approve_enabled,
+               auto_approve_max_cents, notes, created_at, updated_at, updated_by`,
+    params,
+  )).rows;
+  return { data: rows[0] || null };
+};
+
+const executeDepositAction = async ({ client, mapping, args }) => {
+  const action = String(arg(args, 'p_action', 'action') || '').trim();
+  if (!action) return { error: 'missing_required_field', field: 'p_action' };
+  if (!SAFE_DEPOSIT_ACTIONS.has(action)) {
+    return {
+      error: 'rpc_financial_disabled',
+      message: `deposit_action '${action}' is not enabled (money movement or provider-sensitive)`,
+      action,
+    };
+  }
+  const gated = await requireManagerAdmin(client, mapping.application_user_id);
+  if (gated.error) return gated;
+  const actorId = mapping.application_user_id;
+  const notes = arg(args, 'p_notes', 'notes');
+
+  if (action === 'prepare_deposit') {
+    const checkId = arg(args, 'p_check_id', 'check_id');
+    if (!isUuid(checkId)) return { error: 'invalid_uuid', field: 'p_check_id' };
+    const check = (await client.query(
+      `SELECT id, tenant_id, status, amount, check_number, carrier_name, claim_id
+       FROM public.check_intake_items WHERE id = $1::uuid FOR UPDATE`,
+      [checkId],
+    )).rows[0];
+    if (!check) return { error: 'rls_denied', message: 'Check not found' };
+    if (!(await canAccessTenant(client, actorId, check.tenant_id))) {
+      return { error: 'not_authorized', message: 'Not authorized' };
+    }
+    if (check.status !== 'approved_for_deposit') {
+      return { error: 'invalid_status', message: `Check must be approved_for_deposit, got: ${check.status}` };
+    }
+    const existing = (await client.query(
+      'SELECT id FROM public.deposit_items WHERE check_id = $1::uuid',
+      [checkId],
+    )).rows[0];
+    if (existing) {
+      return { error: 'invalid_status', message: 'duplicate_submission: Check already in deposit pipeline' };
+    }
+    const item = (await client.query(
+      `INSERT INTO public.deposit_items (check_id, amount, check_number, carrier_name, claim_id)
+       VALUES ($1::uuid, $2::numeric, $3::text, $4::text, $5::uuid)
+       RETURNING id`,
+      [checkId, check.amount ?? 0, check.check_number, check.carrier_name, check.claim_id],
+    )).rows[0];
+    await client.query(
+      `INSERT INTO public.deposit_audit_log (deposit_item_id, action, actor_id, amount, notes)
+       VALUES ($1::uuid, 'prepare_deposit', $2::uuid, $3::numeric, $4::text)`,
+      [item.id, actorId, check.amount, notes == null ? null : String(notes).slice(0, 2000)],
+    );
+    return { data: { success: true, deposit_item_id: item.id } };
+  }
+
+  const depositItemId = arg(args, 'p_deposit_item_id', 'deposit_item_id');
+  const provider = arg(args, 'p_provider', 'provider');
+  if (!isUuid(depositItemId)) return { error: 'invalid_uuid', field: 'p_deposit_item_id' };
+  if (!provider) return { error: 'missing_required_field', field: 'p_provider' };
+  const item = (await client.query(
+    `SELECT di.id, di.status, di.amount, di.check_id, ci.tenant_id
+     FROM public.deposit_items di
+     JOIN public.check_intake_items ci ON ci.id = di.check_id
+     WHERE di.id = $1::uuid
+     FOR UPDATE OF di`,
+    [depositItemId],
+  )).rows[0];
+  if (!item) return { error: 'rls_denied', message: 'Deposit item not found' };
+  if (!(await canAccessTenant(client, actorId, item.tenant_id))) {
+    return { error: 'not_authorized', message: 'Not authorized' };
+  }
+  if (item.status !== 'pending_assignment') {
+    return { error: 'invalid_status', message: `Invalid transition: ${item.status} -> assign_provider` };
+  }
+  const active = (await client.query(
+    `SELECT 1 FROM public.deposit_provider_config
+     WHERE provider = $1::text AND is_active = true`,
+    [String(provider)],
+  )).rows[0];
+  if (!active) {
+    return { error: 'invalid_field', field: 'p_provider', message: `Provider "${provider}" is not active or not configured` };
+  }
+  const batchId = arg(args, 'p_batch_id', 'batch_id');
+  let resolvedBatchId = isUuid(batchId) ? batchId : null;
+  if (!resolvedBatchId) {
+    resolvedBatchId = (await client.query(
+      `INSERT INTO public.deposit_batches (provider, total_items, total_amount, created_by)
+       VALUES ($1::public.deposit_provider, 1, $2::numeric, $3::uuid)
+       RETURNING id`,
+      [String(provider), item.amount, actorId],
+    )).rows[0]?.id;
+  } else {
+    await client.query(
+      `UPDATE public.deposit_batches
+       SET total_items = total_items + 1,
+           total_amount = total_amount + $2::numeric,
+           updated_at = now()
+       WHERE id = $1::uuid`,
+      [resolvedBatchId, item.amount],
+    );
+  }
+  await client.query(
+    `UPDATE public.deposit_items
+     SET provider = $2::public.deposit_provider,
+         batch_id = $3::uuid,
+         status = 'provider_assigned',
+         updated_at = now()
+     WHERE id = $1::uuid`,
+    [depositItemId, String(provider), resolvedBatchId],
+  );
+  await client.query(
+    `INSERT INTO public.deposit_audit_log (
+       deposit_item_id, batch_id, action, actor_id, amount, notes, new_values
+     ) VALUES (
+       $1::uuid, $2::uuid, 'assign_provider', $3::uuid, $4::numeric, $5::text, $6::jsonb
+     )`,
+    [
+      depositItemId,
+      resolvedBatchId,
+      actorId,
+      item.amount,
+      notes == null ? null : String(notes).slice(0, 2000),
+      JSON.stringify({ provider: String(provider), batch_id: resolvedBatchId }),
+    ],
+  );
+  return { data: { success: true, batch_id: resolvedBatchId } };
 };
 
 export const executeSafeWriteRpc = async ({ client, mapping, name, args }) => {
@@ -810,6 +1045,10 @@ export const executeSafeWriteRpc = async ({ client, mapping, name, args }) => {
       return executeRecordCheckReturn({ client, mapping, args });
     case 'resolve_check_return':
       return executeResolveCheckReturn({ client, mapping, args });
+    case 'save_checkalt_settings':
+      return executeSaveCheckaltSettings({ client, mapping, args });
+    case 'deposit_action':
+      return executeDepositAction({ client, mapping, args });
     default:
       return { error: 'rpc_disabled', name };
   }

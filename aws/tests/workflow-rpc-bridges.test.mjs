@@ -65,7 +65,8 @@ test('classifies all audit rpc_disabled names', () => {
   for (const name of expected) {
     assert.ok(SAFE_WRITE_RPC_CLASSIFICATION[name], `missing classification for ${name}`);
   }
-  assert.equal(SAFE_WRITE_RPCS.has('deposit_action'), false);
+  assert.equal(SAFE_WRITE_RPCS.has('deposit_action'), true);
+  assert.equal(SAFE_WRITE_RPCS.has('save_checkalt_settings'), true);
   assert.equal(SAFE_WRITE_RPCS.has('accept_mortgage_handling_request'), true);
   assert.ok(SAFE_LOSS_DRAFT_ACTIONS.has('mark_sent'));
   assert.equal(SAFE_LOSS_DRAFT_ACTIONS.has('mark_escrowed'), false);
@@ -244,8 +245,9 @@ test('log_audit inserts with server-derived user_id', async () => {
   assert.equal(insert.params[0], APP_ID);
 });
 
-test('deposit_action remains classified financial_sensitive', () => {
-  assert.equal(SAFE_WRITE_RPC_CLASSIFICATION.deposit_action, 'financial_sensitive');
+test('deposit_action is a safe subset and money actions stay disabled', () => {
+  assert.equal(SAFE_WRITE_RPC_CLASSIFICATION.deposit_action, 'safe_now_subset');
   assert.equal(SAFE_WRITE_RPC_CLASSIFICATION.add_partner_stakeholder_to_check, 'provider_dependent');
   assert.equal(SAFE_WRITE_RPC_CLASSIFICATION.get_tenant_users_with_profiles, 'read_only');
+  assert.equal(SAFE_WRITE_RPC_CLASSIFICATION.save_checkalt_settings, 'safe_now');
 });

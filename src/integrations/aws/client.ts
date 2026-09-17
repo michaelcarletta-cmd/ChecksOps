@@ -331,6 +331,49 @@ function createBuilder(table: string, store: SessionStore) {
 
   const execute = async () => {
     if (state.op !== "select") {
+      if (state.table === "checkalt_config" && state.op === "update") {
+        const restoredWrite = await store.restoreSession();
+        const writeToken = restoredWrite.session?.access_token;
+        if (!writeToken) {
+          return {
+            data: null,
+            error: postgrestError("JWT expired", "PGRST301"),
+            count: null,
+            status: 401,
+            statusText: "Unauthorized",
+          };
+        }
+        const values = (state.payload && typeof state.payload === "object")
+          ? state.payload as Record<string, unknown>
+          : {};
+        const { response, body } = await apiFetch("/data/rpc", {
+          method: "POST",
+          body: JSON.stringify({
+            name: "save_checkalt_settings",
+            args: values,
+          }),
+        }, writeToken);
+        if (response.status === 401) {
+          store.writeStored(null);
+          store.emit("SIGNED_OUT", null);
+        }
+        if (!response.ok) {
+          return {
+            data: body.data ?? null,
+            error: postgrestError(String(body.message || body.error || "rpc_failed"), String(body.error || "42501")),
+            count: body.count ?? null,
+            status: response.status,
+            statusText: response.statusText,
+          };
+        }
+        return {
+          data: body.data ?? null,
+          error: null,
+          count: body.count ?? null,
+          status: 200,
+          statusText: "OK",
+        };
+      }
       if (!AWS_WRITE_TABLES.has(state.table)) {
         return {
           data: null,

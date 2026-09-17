@@ -26,7 +26,8 @@ test('tranche-6 tables are allowlisted with narrow columns', () => {
 
 test('admin_delete_check is client-bridged; financial RPCs stay classified disabled', () => {
   assert.equal(SAFE_WRITE_RPC_CLASSIFICATION.admin_delete_check, 'already_bridged');
-  assert.equal(SAFE_WRITE_RPC_CLASSIFICATION.deposit_action, 'financial_sensitive');
+  assert.equal(SAFE_WRITE_RPC_CLASSIFICATION.deposit_action, 'safe_now_subset');
+  assert.equal(SAFE_WRITE_RPC_CLASSIFICATION.mark_deposit_closeout, 'financial_sensitive');
   assert.equal(SAFE_WRITE_RPC_CLASSIFICATION.add_partner_stakeholder_to_check, 'provider_dependent');
 });
 

@@ -309,6 +309,12 @@ export const relatedFk = (table, embedTable, fkHint = null) => {
   if (embedTable === 'profiles') return 'user_id';
   // Live RDS: disbursement_splits.batch_id / deposit_items.batch_id, not *_batch_id.
   if (embedTable === 'disbursement_batches' || embedTable === 'deposit_batches') return 'batch_id';
+  if (table === 'checkalt_deposits' && embedTable === 'check_intake_items') {
+    return 'check_intake_item_id';
+  }
+  if (table === 'deposit_items' && embedTable === 'check_intake_items') {
+    return 'check_id';
+  }
   if (embedTable.endsWith('batches')) return `${embedTable.replace(/batches$/, 'batch')}_id`;
   if (embedTable.endsWith('s')) {
     const singular = embedTable.slice(0, -1);
@@ -324,7 +330,53 @@ export const belongsToEmbed = (table, embedTable) => (
   || embedTable === 'disbursement_batches'
   || embedTable === 'stakeholder_accounts'
   || embedTable === 'claims'
+  || (table === 'checkalt_deposits' && embedTable === 'check_intake_items')
+  || (table === 'deposit_items' && embedTable === 'check_intake_items')
 );
+
+const QUALIFIED_COLUMN = /^([a-z_][a-z0-9_]*)\.([a-z_][a-z0-9_]*)$/;
+
+const PUBLIC_CONFIG_TABLES = {
+  checkalt_config: 'checkalt_config_public',
+  deposit_provider_config: 'deposit_provider_config_public',
+};
+
+/** Map secret-bearing config tables to tenant-safe public-column views. */
+export const resolvePublicTable = (table) => PUBLIC_CONFIG_TABLES[table] || table;
+
+export const splitEmbedFilters = (filters = []) => {
+  const parent = [];
+  const embed = [];
+  for (const filter of filters) {
+    const col = String(filter.column || filter.col || '');
+    const match = col.match(QUALIFIED_COLUMN);
+    if (match) {
+      embed.push({ ...filter, embedTable: match[1], embedColumn: match[2] });
+    } else {
+      parent.push(filter);
+    }
+  }
+  return { parent, embed };
+};
+
+export const applyEmbedFilters = (parentTable, embedFilters = [], params = []) => {
+  const clauses = [];
+  const parent = ident(parentTable, 'table');
+  for (const filter of embedFilters) {
+    const embedTable = ident(filter.embedTable, 'table');
+    const fk = ident(relatedFk(parent, embedTable), 'column');
+    const inner = applyAtomic(
+      filter.embedColumn,
+      String(filter.op || 'eq'),
+      filter.value,
+      params,
+    );
+    clauses.push(
+      `EXISTS (SELECT 1 FROM public.${embedTable} WHERE ${embedTable}.id = ${parent}.${fk} AND ${inner})`,
+    );
+  }
+  return clauses;
+};
 
 const CHECK_ID_CHILDREN = new Set([
   'check_payees',
@@ -632,10 +684,12 @@ const attachEmbeds = async (client, rows, parentTable, embeds) => {
 };
 
 const runSelect = async (client, body) => {
-  const table = ident(body.table, 'table');
+  const table = ident(resolvePublicTable(body.table), 'table');
   if (!ALLOWED.has(table)) throw new Error(`table not allowlisted: ${table}`);
   const parsed = parseSelect(body.select);
-  const { clauses, params } = applyFilters(body.filters || []);
+  const { parent: parentFilters, embed: embedFilters } = splitEmbedFilters(body.filters || []);
+  const { clauses, params } = applyFilters(parentFilters);
+  clauses.push(...applyEmbedFilters(table, embedFilters, params));
   const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
   let order = '';
   if (body.order?.column) {
