@@ -99,7 +99,7 @@ const mockClient = ({
         return { rows: publicLogo ? [{ logo_url: 'https://example.supabase.co/storage/v1/object/public/tenant-logos/freedom/logo.png' }] : [] };
       }
       if (String(sql).includes('FROM public.tenant_users')) {
-        if (String(sql).includes('WHERE user_id = $1::uuid AND tenant_id = $2::uuid')) {
+        if (String(sql).startsWith('SELECT 1 FROM public.tenant_users') && String(sql).includes('WHERE user_id = $1::uuid AND tenant_id = $2::uuid')) {
           return { rows: memberTenantIds.has(params?.[1]) ? [{ '?column?': 1 }] : [] };
         }
         return { rows: authorize ? [{ role: 'admin' }] : [] };

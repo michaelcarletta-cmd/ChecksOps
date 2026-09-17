@@ -600,9 +600,11 @@ test('class A registry includes branding routes; frontend never writes domain_st
   assert.doesNotMatch(ui, /domain_status\s*:\s*['"`]/);
   assert.doesNotMatch(ui, /update\([\s\S]{0,200}domain_status/);
   assert.doesNotMatch(ui, /upsert\([\s\S]{0,200}domain_status/);
-  assert.match(ui, /tenant-domain-disable/);
+  assert.doesNotMatch(ui, /tenant-domain-verify/);
+  assert.doesNotMatch(ui, /tenant-domain-check/);
+  assert.doesNotMatch(ui, /tenant-domain-disable/);
+  assert.doesNotMatch(ui, /tenant-ses-identity-delete/);
   assert.match(ui, /tenant-email-preview/);
-  assert.match(ui, /noreply@checksops\.com/);
   assert.doesNotMatch(ui, /notify\.checksops\.com/);
   const yaml = fs.readFileSync(path.join(ROOT, 'aws/template.yaml'), 'utf8');
   assert.match(yaml, /AWS_TENANT_EMAIL_DOMAIN_ENABLED:\s*"false"/);

@@ -2,7 +2,7 @@
  * Tenant email-domain HTTP actions (Class A).
  * Domain verification status is written only from SES GetEmailIdentity results.
  */
-import { withIdentity, ignoredSpoof, parseBody } from './data.mjs';
+import { withIdentity } from './data.mjs';
 import { defaultFromAddress } from './email-policy.mjs';
 import {
   resolveEmailBranding,
@@ -600,7 +600,6 @@ export const runPreviewEmailBranding = async ({ client, mapping, body, spoof }) 
   const resolved = await requireTenant(client, mapping, body, spoof, { configure: false });
   if (resolved.error) return resolved.error;
   const branding = await resolveEmailBranding(client, { tenantId: resolved.tenantId });
-
   const override = (body && typeof body === 'object' ? (body.preview || body.overrides || body.override || {}) : {}) || {};
 
   const fromNameRaw = override.fromName || override.from_name;
@@ -653,23 +652,11 @@ const withDomainDeps = (fn, write = true) => (event, deps = {}) => withIdentity(
 
 export const handleTenantEmailBrandingGet = withDomainDeps(runGetEmailBranding, false);
 export const handleTenantEmailBrandingSave = withDomainDeps(runSaveEmailBranding, true);
+export const handleTenantDomainVerify = withDomainDeps(runStartDomainVerification, true);
+export const handleTenantDomainCheck = withDomainDeps(runCheckDomainVerification, true);
+export const handleTenantDomainDisable = withDomainDeps(runDisableCustomSending, true);
+export const handleTenantSesIdentityDelete = withDomainDeps(runDeleteSesIdentity, true);
 export const handleTenantEmailPreview = withDomainDeps(runPreviewEmailBranding, false);
-
-const retired = (action) => (event) => {
-  const spoof = ignoredSpoof(event, parseBody(event));
-  return {
-    ok: false,
-    statusCode: 410,
-    error: 'tenant_sending_domain_retired',
-    message: `Tenant sending-domain configuration (${action}) has been retired. ChecksOps sends From the platform domain; tenant branding remains supported.`,
-    spoofFieldsIgnored: spoof,
-  };
-};
-
-export const handleTenantDomainVerify = retired('tenant-domain-verify');
-export const handleTenantDomainCheck = retired('tenant-domain-check');
-export const handleTenantDomainDisable = retired('tenant-domain-disable');
-export const handleTenantSesIdentityDelete = retired('tenant-ses-identity-delete');
 
 export const handleTenantDomainRecheckCron = async (event) => {
   const spoof = { ignored: true };
