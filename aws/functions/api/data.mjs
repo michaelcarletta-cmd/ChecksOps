@@ -619,7 +619,9 @@ const attachEmbeds = async (client, rows, parentTable, embeds) => {
     if (!ALLOWED.has(relTable) && relTable !== 'tenants') continue;
     const namedFk = fkColumnFromHint(parentTable, embed.fkHint);
     const fk = relatedFk(parentTable, relTable, namedFk);
-    const resultKey = embed.alias || relTable;
+    // Keep the requested PostgREST relation/alias even when the query
+    // internally rewrites tenants → tenants_public.
+    const resultKey = embed.alias || embed.table;
     const parentHasFk = current.some((row) => Object.prototype.hasOwnProperty.call(row, fk));
     const nestedNeeded = columnsNeededForEmbeds(relTable, embed.columns, embed.embeds);
     if (parentHasFk) {
