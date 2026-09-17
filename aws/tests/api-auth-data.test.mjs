@@ -675,3 +675,116 @@ test('secret config tables rewrite to public-column views', () => {
   assert.equal(resolvePublicTable('deposit_provider_config'), 'deposit_provider_config_public');
   assert.equal(resolvePublicTable('tenants_public'), 'tenants_public');
 });
+
+const OWNER_ID = '7dbb3009-f059-4767-b5dc-1c5c72379330';
+const FREEDOM_ID = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
+const LOGIN_SELECT = 'tenant_id, tenants!inner(slug, subscription_status)';
+const C1C_ID = '4f172140-f57a-4744-8050-95f4f07b13b4';
+
+const embedQueryClient = (onQuery) => {
+  const queries = [];
+  return {
+    queries,
+    connect: async () => {},
+    end: async () => {},
+    query: async (sql, params) => {
+      queries.push({ sql, params });
+      if (sql === 'BEGIN' || sql === 'ROLLBACK') return { rows: [] };
+      if (sql.startsWith('SELECT set_config')) return { rows: [{ set_config: params[1] }] };
+      if (sql === LOOKUP_MAPPING_SQL) {
+        return {
+          rows: params[0] === COGNITO_SUB ? [{
+            application_user_id: OWNER_ID,
+            cognito_sub: COGNITO_SUB,
+            email: 'mcarletta@freedomadj.com',
+            status: 'active',
+          }] : [],
+        };
+      }
+      if (sql.includes('count(*)')) return { rows: [{ n: 1 }] };
+      return onQuery(sql, params);
+    },
+  };
+};
+
+const loginFilter = (rows) => (rows ?? []).filter((m) => m.tenants?.subscription_status === 'active' && m.tenants?.slug);
+
+test('login tenant_users embed queries tenants_public but returns tenants', async () => {
+  const parsed = parseSelect(LOGIN_SELECT);
+  assert.equal(parsed.embeds[0].table, 'tenants');
+  assert.equal(parsed.embeds[0].alias, null);
+  assert.equal(embedRelationTable(parsed.embeds[0].table, parsed.embeds[0].columns), 'tenants_public');
+
+  const client = embedQueryClient((sql) => {
+    if (/FROM public\.tenants(?:\s|$)/.test(sql) && !sql.includes('tenants_public')) {
+      throw new Error('base tenants must not be queried for public-column login embed');
+    }
+    if (sql.includes('FROM public.tenant_users')) {
+      return { rows: [{ tenant_id: FREEDOM_ID, user_id: OWNER_ID }] };
+    }
+    if (sql.includes('FROM public.tenants_public')) {
+      return { rows: [{ id: FREEDOM_ID, slug: 'freedom', subscription_status: 'active' }] };
+    }
+    return { rows: [] };
+  });
+
+  const result = await handleDataQuery(jwtEvent('/data/query', 'POST', {
+    table: 'tenant_users',
+    select: LOGIN_SELECT,
+    filters: [{ column: 'user_id', op: 'eq', value: OWNER_ID }],
+  }), depsFor(client));
+
+  assert.equal(result.ok, true, result.message || result.error);
+  const embedSql = client.queries.find((q) => String(q.sql).includes('FROM public.tenants_public'));
+  assert.ok(embedSql, 'login embed must SELECT tenants_public internally');
+  assert.match(String(embedSql.sql), /FROM public\.tenants_public/);
+  assert.equal(client.queries.some((q) => /FROM public\.tenants(?:\s|$)/.test(q.sql) && !String(q.sql).includes('tenants_public')), false);
+  assert.equal(result.data[0].tenants_public, undefined);
+  assert.equal(result.data[0].tenants?.slug, 'freedom');
+  assert.equal(result.data[0].tenants?.subscription_status, 'active');
+
+  const memberships = loginFilter(result.data);
+  assert.equal(memberships.length, 1);
+  assert.equal(memberships[0].tenants.slug, 'freedom');
+
+  const loginSrc = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../../src/pages/checkops/CheckOpsLogin.tsx'), 'utf8');
+  assert.match(loginSrc, /tenants!inner\(slug, subscription_status\)/);
+  assert.match(loginSrc, /m\.tenants\?\.subscription_status === "active"/);
+  assert.equal(loginSrc.includes('tenants_public'), false);
+});
+
+test('aliased partner tenant embeds keep inviter/invitee keys while querying tenants_public', async () => {
+  const client = embedQueryClient((sql) => {
+    if (/FROM public\.tenants(?:\s|$)/.test(sql) && !sql.includes('tenants_public')) {
+      throw new Error('base tenants must not be queried for partner name embeds');
+    }
+    if (sql.includes('FROM public.tenant_partnerships')) {
+      return { rows: [{
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        inviter_tenant_id: FREEDOM_ID,
+        invitee_tenant_id: C1C_ID,
+        status: 'accepted',
+      }] };
+    }
+    if (sql.includes('FROM public.tenants_public')) {
+      return { rows: [
+        { id: FREEDOM_ID, name: 'Freedom Adjustment' },
+        { id: C1C_ID, name: 'Condition 1 Commercial' },
+      ] };
+    }
+    return { rows: [] };
+  });
+
+  const result = await handleDataQuery(jwtEvent('/data/query', 'POST', {
+    table: 'tenant_partnerships',
+    select: 'id, inviter:tenants!tenant_partnerships_inviter_tenant_id_fkey(name), invitee:tenants!tenant_partnerships_invitee_tenant_id_fkey(name)',
+  }), depsFor(client));
+
+  assert.equal(result.ok, true, result.message || result.error);
+  const publicSelects = client.queries.filter((q) => String(q.sql).includes('FROM public.tenants_public'));
+  assert.equal(publicSelects.length >= 1, true);
+  assert.equal(result.data[0].tenants_public, undefined);
+  assert.equal(result.data[0].tenants, undefined);
+  assert.equal(result.data[0].inviter?.name, 'Freedom Adjustment');
+  assert.equal(result.data[0].invitee?.name, 'Condition 1 Commercial');
+});
