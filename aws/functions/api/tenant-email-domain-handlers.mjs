@@ -2,11 +2,14 @@
  * Tenant email-domain HTTP actions (Class A).
  * Domain verification status is written only from SES GetEmailIdentity results.
  */
-import { withIdentity } from './data.mjs';
+import { withIdentity, ignoredSpoof, parseBody } from './data.mjs';
 import { defaultFromAddress } from './email-policy.mjs';
 import {
   resolveEmailBranding,
   brandingForTemplate,
+  formatFromHeader,
+  isSafeHexColor,
+  safeHttpUrl,
 } from './email-branding.mjs';
 import { renderChecksOpsEmail } from './email-layout.mjs';
 import {
@@ -597,6 +600,20 @@ export const runPreviewEmailBranding = async ({ client, mapping, body, spoof }) 
   const resolved = await requireTenant(client, mapping, body, spoof, { configure: false });
   if (resolved.error) return resolved.error;
   const branding = await resolveEmailBranding(client, { tenantId: resolved.tenantId });
+
+  const override = (body && typeof body === 'object' ? (body.preview || body.overrides || body.override || {}) : {}) || {};
+
+  const fromNameRaw = override.fromName || override.from_name;
+  const replyToRaw = override.replyTo || override.reply_to;
+  const logoRaw = override.logoUrl || override.logo_url;
+  const primaryRaw = override.primaryColor || override.primary_color;
+
+  const fromName = typeof fromNameRaw === 'string' ? fromNameRaw.trim().slice(0, 120) : null;
+  const replyTo = typeof replyToRaw === 'string' ? replyToRaw.trim().slice(0, 254) : null;
+  const logoUrl = safeHttpUrl(logoRaw, branding.logoUrl);
+  const primaryColor = isSafeHexColor(primaryRaw) ? String(primaryRaw).trim() : branding.primaryColor;
+  const previewFrom = fromName ? formatFromHeader(fromName, branding.fromAddress) : branding.from;
+
   const rendered = renderChecksOpsEmail({
     title: 'Signature request',
     greeting: 'Hello,',
@@ -608,13 +625,19 @@ export const runPreviewEmailBranding = async ({ client, mapping, body, spoof }) 
     ctaUrl: 'https://staging.checksops.com/h/preview',
     fallbackUrl: 'https://staging.checksops.com/h/preview',
     expiresText: 'This preview does not send mail.',
-    ...brandingForTemplate(branding).branding,
+    ...brandingForTemplate({
+      ...branding,
+      from: previewFrom,
+      replyTo: replyTo || branding.replyTo,
+      logoUrl,
+      primaryColor,
+    }).branding,
   });
   return {
     ok: true,
     statusCode: 200,
-    from: branding.from,
-    replyTo: branding.replyTo,
+    from: previewFrom,
+    replyTo: replyTo || branding.replyTo,
     usingCustomFrom: branding.usingCustomFrom,
     customFromReason: branding.customFromReason || null,
     fallbackFrom: fallbackFromHeader(resolved.tenant.name),
@@ -630,11 +653,23 @@ const withDomainDeps = (fn, write = true) => (event, deps = {}) => withIdentity(
 
 export const handleTenantEmailBrandingGet = withDomainDeps(runGetEmailBranding, false);
 export const handleTenantEmailBrandingSave = withDomainDeps(runSaveEmailBranding, true);
-export const handleTenantDomainVerify = withDomainDeps(runStartDomainVerification, true);
-export const handleTenantDomainCheck = withDomainDeps(runCheckDomainVerification, true);
-export const handleTenantDomainDisable = withDomainDeps(runDisableCustomSending, true);
-export const handleTenantSesIdentityDelete = withDomainDeps(runDeleteSesIdentity, true);
 export const handleTenantEmailPreview = withDomainDeps(runPreviewEmailBranding, false);
+
+const retired = (action) => (event) => {
+  const spoof = ignoredSpoof(event, parseBody(event));
+  return {
+    ok: false,
+    statusCode: 410,
+    error: 'tenant_sending_domain_retired',
+    message: `Tenant sending-domain configuration (${action}) has been retired. ChecksOps sends From the platform domain; tenant branding remains supported.`,
+    spoofFieldsIgnored: spoof,
+  };
+};
+
+export const handleTenantDomainVerify = retired('tenant-domain-verify');
+export const handleTenantDomainCheck = retired('tenant-domain-check');
+export const handleTenantDomainDisable = retired('tenant-domain-disable');
+export const handleTenantSesIdentityDelete = retired('tenant-ses-identity-delete');
 
 export const handleTenantDomainRecheckCron = async (event) => {
   const spoof = { ignored: true };

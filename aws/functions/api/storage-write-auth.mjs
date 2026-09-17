@@ -77,6 +77,21 @@ const hasAnyTenantMembership = async (client, userId) => {
   return rows.length > 0;
 };
 
+const platformStaffOrAdmin = async (client, userId) => {
+  const rows = (await client.query(
+    `SELECT 1 FROM public.user_roles WHERE user_id = $1::uuid AND role IN ('admin','staff')
+     UNION ALL
+     SELECT 1 WHERE public.is_master_owner()`,
+    [userId],
+  )).rows;
+  return rows.length > 0;
+};
+
+const tenantIdPrefix = (rel) => {
+  const match = String(rel || '').match(/^([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\//i);
+  return match ? match[1].toLowerCase() : null;
+};
+
 export const authorizeStorageWritePath = async (client, bucket, objectPath, userId) => {
   const denied = denyBucket(bucket);
   if (denied) return denied;
@@ -174,14 +189,28 @@ export const authorizeStorageWritePath = async (client, bucket, objectPath, user
     return { ok: false, statusCode: 403, error: 'rls_denied', message: 'Not authorized for this loss draft' };
   }
 
-  if (bucket === 'tenant-logos' || bucket === 'company-branding') {
+  if (bucket === 'company-branding') {
     if (!isBrandingUploadPath(rel)) {
       return { ok: false, statusCode: 403, error: 'path_not_allowlisted', message: 'Invalid branding path' };
     }
-    if (!(await hasAnyTenantMembership(client, userId))) {
-      return { ok: false, statusCode: 403, error: 'rls_denied', message: 'Tenant membership required for branding uploads' };
+    if (!(await platformStaffOrAdmin(client, userId))) {
+      return { ok: false, statusCode: 403, error: 'rls_denied', message: 'Platform staff required for company branding uploads' };
     }
-    return { ok: true, rel, key: s3KeyFor(bucket, rel), strategy: 'branding' };
+    return { ok: true, rel, key: s3KeyFor(bucket, rel), strategy: 'branding_platform' };
+  }
+
+  if (bucket === 'tenant-logos') {
+    if (!isBrandingUploadPath(rel)) {
+      return { ok: false, statusCode: 403, error: 'path_not_allowlisted', message: 'Invalid branding path' };
+    }
+    const tenantId = tenantIdPrefix(rel);
+    if (!tenantId) {
+      return { ok: false, statusCode: 403, error: 'path_not_allowlisted', message: 'tenant-logos uploads must start with {tenantId}/' };
+    }
+    if (!(await hasTenantMembership(client, userId, tenantId))) {
+      return { ok: false, statusCode: 403, error: 'rls_denied', message: 'Not authorized for this tenant asset prefix' };
+    }
+    return { ok: true, rel, tenantId, key: s3KeyFor(bucket, rel), strategy: 'branding_tenant' };
   }
 
   if (bucket === 'deposit-attachments') {
