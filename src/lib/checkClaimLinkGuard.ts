@@ -1,12 +1,10 @@
-/** Narrow multi-tenant claim-link guard. Not an ownership-inference model. */
+/** Narrow multi-tenant claim-link guard. Ownership is claims.org_id only. */
 
 export type CheckClaimLinkReason =
   | "unlinked"
   | "same_org"
-  | "legacy_same_tenant"
   | "cross_org"
-  | "legacy_unassigned"
-  | "conflicting_tenants"
+  | "unassigned_claim"
   | "missing_claim"
   | "missing_check_tenant";
 
@@ -17,18 +15,11 @@ export type CheckClaimLinkDecision = {
 
 export const CHECK_CLAIM_LINK_DENIED = "check_claim_link_denied";
 
-export function collectDeterministicClaimTenants(
-  tenantIds: Array<string | null | undefined> = [],
-): string[] {
-  return Array.from(new Set(tenantIds.filter((id): id is string => Boolean(id)).map((id) => String(id))));
-}
-
 export function evaluateCheckClaimLink(opts: {
   checkTenantId?: string | null;
   claimId?: string | null;
   claimExists?: boolean;
   claimOrgId?: string | null;
-  deterministicTenantIds?: string[];
 }): CheckClaimLinkDecision {
   if (opts.claimId == null || opts.claimId === "") {
     return { allowed: true, reason: "unlinked" };
@@ -40,24 +31,13 @@ export function evaluateCheckClaimLink(opts: {
     return { allowed: false, reason: "missing_check_tenant" };
   }
 
-  if (opts.claimOrgId) {
-    if (String(opts.claimOrgId) !== String(opts.checkTenantId)) {
-      return { allowed: false, reason: "cross_org" };
-    }
-    return { allowed: true, reason: "same_org" };
+  if (!opts.claimOrgId) {
+    return { allowed: false, reason: "unassigned_claim" };
   }
-
-  const tenants = collectDeterministicClaimTenants(opts.deterministicTenantIds);
-  if (tenants.length === 0) {
-    return { allowed: false, reason: "legacy_unassigned" };
-  }
-  if (tenants.length > 1) {
-    return { allowed: false, reason: "conflicting_tenants" };
-  }
-  if (String(tenants[0]) !== String(opts.checkTenantId)) {
+  if (String(opts.claimOrgId) !== String(opts.checkTenantId)) {
     return { allowed: false, reason: "cross_org" };
   }
-  return { allowed: true, reason: "legacy_same_tenant" };
+  return { allowed: true, reason: "same_org" };
 }
 
 export function assertCheckClaimLinkAllowed(opts: Parameters<typeof evaluateCheckClaimLink>[0]) {
@@ -77,9 +57,8 @@ export function isCheckClaimLinkDenied(error: { message?: string; code?: string 
 export function claimLinkUserMessage(reason: CheckClaimLinkReason | string) {
   switch (reason) {
     case "cross_org":
-    case "conflicting_tenants":
       return "This claim belongs to another tenant. The check was not linked.";
-    case "legacy_unassigned":
+    case "unassigned_claim":
       return "This legacy claim has no tenant assigned. Ask an owner to set the claim organization before linking.";
     case "missing_claim":
       return "That claim does not exist. The check was not linked.";
@@ -107,6 +86,9 @@ export function filterSelectableClaims<T extends { org_id?: string | null }>(
 }
 
 export function newTrackingClaimInsert(claimNumber: string, checkTenantId: string) {
+  if (!checkTenantId) {
+    throw new Error(`${CHECK_CLAIM_LINK_DENIED}: missing_check_tenant`);
+  }
   return {
     claim_number: claimNumber,
     status: "tracking" as const,

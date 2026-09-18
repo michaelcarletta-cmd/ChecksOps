@@ -78,7 +78,6 @@ function autoLinkIfAllowed(check, claims) {
     claimId: candidateId,
     claimExists: Boolean(claim),
     claimOrgId: claim?.org_id ?? null,
-    deterministicTenantIds: check.deterministicTenantIds ?? [],
   });
   if (!decision.allowed) return { ...check, claim_id: check.claim_id ?? null, denied: decision.reason };
   return { ...check, claim_id: candidateId };
@@ -106,28 +105,15 @@ test('known foreign-org claim is denied', () => {
   assert.equal(decision.reason, 'cross_org');
 });
 
-test('legacy NULL-org claim with one matching intake/case tenant is allowed', () => {
+test('NULL-org claim is denied even with same-tenant child evidence', () => {
   const decision = evaluateCheckClaimLink({
     checkTenantId: TENANT_A,
     claimId: CLAIM_A,
     claimExists: true,
     claimOrgId: null,
-    deterministicTenantIds: [TENANT_A],
-  });
-  assert.equal(decision.allowed, true);
-  assert.equal(decision.reason, 'legacy_same_tenant');
-});
-
-test('legacy NULL-org claim with conflicting deterministic tenants is denied', () => {
-  const decision = evaluateCheckClaimLink({
-    checkTenantId: TENANT_A,
-    claimId: CLAIM_A,
-    claimExists: true,
-    claimOrgId: null,
-    deterministicTenantIds: [TENANT_A, TENANT_B],
   });
   assert.equal(decision.allowed, false);
-  assert.equal(decision.reason, 'conflicting_tenants');
+  assert.equal(decision.reason, 'unassigned_claim');
 });
 
 test('missing check tenant is denied', () => {
@@ -141,26 +127,15 @@ test('missing check tenant is denied', () => {
   assert.equal(decision.reason, 'missing_check_tenant');
 });
 
-test('legacy NULL-org claim without deterministic ownership is denied', () => {
+test('NULL-org claim is denied without using child rows as ownership', () => {
   const decision = evaluateCheckClaimLink({
     checkTenantId: TENANT_A,
     claimId: CLAIM_A,
     claimExists: true,
     claimOrgId: null,
-    deterministicTenantIds: [],
   });
   assert.equal(decision.allowed, false);
-  assert.equal(decision.reason, 'legacy_unassigned');
-  assert.equal(
-    evaluateCheckClaimLink({
-      checkTenantId: TENANT_A,
-      claimId: CLAIM_A,
-      claimExists: true,
-      claimOrgId: null,
-      deterministicTenantIds: [],
-    }).allowed,
-    false,
-  );
+  assert.equal(decision.reason, 'unassigned_claim');
 });
 
 test('new tracking claim is created with the check tenant/org', () => {
@@ -211,7 +186,7 @@ test('auto-link obeys the same guard and does not attach a denied candidate', ()
     freedom_claim_id: CLAIM_A,
   }, [{ id: CLAIM_A, claim_number: 'CL-A', org_id: null }]);
   assert.equal(unassigned.claim_id, null);
-  assert.equal(unassigned.denied, 'legacy_unassigned');
+  assert.equal(unassigned.denied, 'unassigned_claim');
 });
 
 test('service-role / SECURITY DEFINER path uses the same deny rule', () => {
@@ -339,8 +314,10 @@ test('successful link invalidates Received queries without a full reload', () =>
   assert.match(src, /fundsReceivedForClaim/);
   assert.match(src, /filterSelectableClaims/);
   assert.match(src, /invalidateQueries\(\{ queryKey: \["claim-ledger-checks", res\.claimId\] \}\)/);
+  assert.match(src, /invalidateQueries\(\{ queryKey: \["check-detail", checkIntakeItemId\] \}\)/);
   assert.equal(/applyClaimLedgerSync/.test(src), false);
-  assert.equal(/!row\.org_id \|\|/.test(src), false);
+  assert.equal(/legacy_same_tenant/.test(src), false);
+  assert.equal(/check_cases/.test(src), false);
 });
 
 test('failed foreign-org link does not write claim_id', () => {
@@ -398,13 +375,15 @@ test('payment-index catalog matcher uses uniqueness, relation, columns, and pred
 
 test('SQL artifacts restore Lovable writer and fail-closed org guard', () => {
   const guard = readFileSync('supabase/migrations/20260918170010_guard_check_claim_org.sql', 'utf8');
-  assert.match(guard, /legacy_unassigned/);
+  assert.match(guard, /unassigned_claim/);
   assert.match(guard, /same_org/);
+  assert.equal(/legacy_same_tenant/.test(guard), false);
   assert.equal(/first_link/.test(guard), false);
+  assert.equal(/CREATE OR REPLACE FUNCTION public\.claim_deterministic_tenant_ids/.test(guard), false);
   assert.match(guard, /auto_link_check_to_claim/);
   assert.match(guard, /tg_auto_link_check_to_claim/);
   assert.match(guard, /check_claim_link_allowed/);
-  assert.equal(/GRANT EXECUTE ON FUNCTION public\.claim_deterministic_tenant_ids/.test(guard), false);
+  assert.match(guard, /IN \('unlinked', 'same_org'\)/);
 
   const writer = readFileSync('supabase/migrations/20260918170040_one_check_received_writer.sql', 'utf8');
   assert.match(writer, /hle_on_check_intake_insert/);
@@ -415,8 +394,14 @@ test('SQL artifacts restore Lovable writer and fail-closed org guard', () => {
 
   const inspect = readFileSync('supabase/unapplied/ledger-backfill/01_inspect.sql', 'utf8');
   assert.match(inspect, /funds_received_source/);
+  assert.match(inspect, /unassigned_claim/);
+  assert.equal(/legacy_same_tenant/.test(inspect), false);
   assert.equal(/missing_claim_payments/.test(inspect), false);
   assert.equal(/02_apply/.test(readFileSync('supabase/unapplied/ledger-backfill/README.md', 'utf8')), false);
+
+  const strip = readFileSync('supabase/migrations/20260918170110_strip_sync_check_claim_ledger_check_received.sql', 'utf8');
+  assert.match(strip, /inserted_check_received', false/);
+  assert.equal(/event_type = 'check_received'/.test(strip), false);
 
   const indexSql = readFileSync('supabase/migrations/20260918170020_verify_claim_payments_check_intake_index.sql', 'utf8');
   assert.match(indexSql, /indisunique/);

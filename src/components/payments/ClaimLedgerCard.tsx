@@ -122,7 +122,7 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
       if (lookupErr) throw lookupErr;
 
       const sameOrg = filterSelectableClaims(matches ?? [], checkRow.tenant_id);
-      const legacyNullOrg = (matches ?? []).filter((row: { org_id?: string | null }) => !row.org_id);
+      const unassigned = (matches ?? []).filter((row: { org_id?: string | null }) => !row.org_id);
       const foreign = (matches ?? []).filter((row: { org_id?: string | null }) => (
         row.org_id && String(row.org_id) !== String(checkRow.tenant_id || "")
       ));
@@ -130,11 +130,12 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
         throw new Error(`Multiple claims match "${trimmed}". Please disambiguate.`);
       }
 
-      // Known same-org claims are selectable. NULL-org matches are evaluated
-      // fail-closed and never treated as this tenant's claim.
-      let matched = (sameOrg[0] ?? legacyNullOrg[0]) as { id: string; claim_number: string; policyholder_name?: string | null; org_id?: string | null } | undefined;
+      let matched = sameOrg[0] as { id: string; claim_number: string; policyholder_name?: string | null; org_id?: string | null } | undefined;
       let created = false;
 
+      if (!matched && unassigned.length) {
+        throw new Error(claimLinkUserMessage("unassigned_claim"));
+      }
       if (!matched && foreign.length) {
         throw new Error(claimLinkUserMessage("cross_org"));
       }
@@ -149,27 +150,17 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
           .select("id, claim_number, policyholder_name, org_id")
           .single();
         if (insertErr) throw insertErr;
+        if (!newClaim?.org_id || String(newClaim.org_id) !== String(checkRow.tenant_id)) {
+          throw new Error(claimLinkUserMessage("unassigned_claim"));
+        }
         matched = newClaim;
         created = true;
       } else {
-        const { data: otherIntakes } = await supabase
-          .from("check_intake_items")
-          .select("tenant_id")
-          .eq("claim_id", matched.id)
-          .neq("id", checkIntakeItemId);
-        const { data: cases } = await supabase
-          .from("check_cases")
-          .select("tenant_id")
-          .eq("external_claim_id", matched.id);
         const decision = evaluateCheckClaimLink({
           checkTenantId: checkRow.tenant_id,
           claimId: matched.id,
           claimExists: true,
           claimOrgId: matched.org_id,
-          deterministicTenantIds: [
-            ...(otherIntakes ?? []).map((row: { tenant_id?: string | null }) => row.tenant_id),
-            ...(cases ?? []).map((row: { tenant_id?: string | null }) => row.tenant_id),
-          ].filter(Boolean) as string[],
         });
         if (!decision.allowed) {
           throw new Error(claimLinkUserMessage(decision.reason));
@@ -199,6 +190,8 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
     onSuccess: (res) => {
       if (onLinked) onLinked(res.claimId);
       qc.invalidateQueries({ queryKey: ["intake-check"] });
+      qc.invalidateQueries({ queryKey: ["check-detail"] });
+      qc.invalidateQueries({ queryKey: ["check-detail", checkIntakeItemId] });
       qc.invalidateQueries({ queryKey: ["claim-ledger"] });
       qc.invalidateQueries({ queryKey: ["claim-ledger-settlement"] });
       qc.invalidateQueries({ queryKey: ["claim-ledger-checks"] });
