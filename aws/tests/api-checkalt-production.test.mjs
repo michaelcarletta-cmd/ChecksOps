@@ -101,6 +101,11 @@ const productionFlags = {
   PROVIDER_SECRETS_ARN: 'arn:aws:secretsmanager:us-east-1:806168576068:secret:checksops/production/providers',
 };
 
+const productionPollFlags = {
+  ...productionFlags,
+  AWS_CHECKALT_STATUS_RECONCILE_ENABLED: 'true',
+};
+
 const productionSecrets = () => ({
   ok: true,
   credentials: {
@@ -702,7 +707,7 @@ test('provider accepted + DB failure does not blind-resubmit; Lambda/browser ret
 test('status poll cannot create deposits and is tenant-safe', async () => {
   const store = createStore();
   grantStepUp(store);
-  const empty = await withEnv(productionFlags, () => handleProviderRequest(
+  const empty = await withEnv(productionPollFlags, () => handleProviderRequest(
     jwtEvent('/functions/v1/checkalt-poll-status', 'POST', { deposit_id: DEPOSIT_ID }),
     '/functions/v1/checkalt-poll-status',
     'POST',
@@ -722,7 +727,7 @@ test('status poll cannot create deposits and is tenant-safe', async () => {
     amount: 12.34,
     amount_cents: 1234,
   });
-  const cross = await withEnv(productionFlags, () => handleProviderRequest(
+  const cross = await withEnv(productionPollFlags, () => handleProviderRequest(
     jwtEvent('/functions/v1/checkalt-poll-status', 'POST', { deposit_id: DEPOSIT_ID, tenant_id: FREEDOM_TENANT }),
     '/functions/v1/checkalt-poll-status',
     'POST',
@@ -885,7 +890,7 @@ test('existing CheckAlt row for another tenant cannot be used or cross-read', as
   assert.equal(store.deposits.length, 2);
   assert.equal(pickBlockingDeposit(store.deposits.filter((row) => row.tenant_id === FREEDOM_TENANT))?.checkalt_reference, '9001');
 
-  const cross = await withEnv(productionFlags, () => handleProviderRequest(
+  const cross = await withEnv(productionPollFlags, () => handleProviderRequest(
     jwtEvent('/functions/v1/checkalt-poll-status', 'POST', { deposit_id: OTHER_DEPOSIT_ID, tenant_id: FREEDOM_TENANT }),
     '/functions/v1/checkalt-poll-status',
     'POST',
@@ -1146,7 +1151,7 @@ test('empty Poll Now refreshes tenant pending_approval using stored reference', 
     amount_cents: 1234,
     cleared_at: null,
   });
-  const result = await withEnv(productionFlags, () => handleProviderRequest(
+  const result = await withEnv(productionPollFlags, () => handleProviderRequest(
     jwtEvent('/functions/v1/checkalt-poll-status', 'POST', {}),
     '/functions/v1/checkalt-poll-status',
     'POST',

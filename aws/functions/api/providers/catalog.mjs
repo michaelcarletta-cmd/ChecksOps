@@ -76,7 +76,7 @@ export const PROVIDER_FUNCTIONS = [
 
   fn('checkalt-submit-deposit', 'checkalt', OP_CLASS.DEPOSIT, 'sandbox_parity', 'UAT: isolated sandbox rows. Production (dark): checkalt_deposits writer + durable idempotency before FinCapture HTTP. Unreachable while money holds remain on.'),
   fn('checkalt-approve-deposit', 'checkalt', OP_CLASS.DEPOSIT, 'sandbox_parity', 'POST /fincapture/deposit/approve action 1/2 after a status refresh. Production (dark): refreshes checkalt_deposits first; posts approve only if still pending_approval. Unreachable while money holds remain on.'),
-  fn('checkalt-poll-status', 'checkalt', OP_CLASS.READ_STATUS, 'sandbox_parity', 'UAT: isolated rows. Production (dark): locates existing checkalt_deposits or, with an empty body, refreshes tenant pending_approval/submitted rows using stored references. Never INSERTs. Unreachable while holds remain on.'),
+  fn('checkalt-poll-status', 'checkalt', OP_CLASS.READ_STATUS, 'sandbox_parity', 'Status-read only when AWS_CHECKALT_STATUS_RECONCILE_ENABLED=true: item/history lookup + persist of reconciliation fields. Independent of money-movement holds. Never process/approve/INSERT.'),
   fn('checkalt-deposit-history', 'checkalt', OP_CLASS.READ_STATUS, 'sandbox_parity', 'Live POST /fincapture/deposit/history with UAT ssoKey.'),
   fn('checkalt-account-status', 'checkalt', OP_CLASS.READ_STATUS, 'sandbox_parity', 'Live getUserAccountInformation for isolated UAT depositor.'),
   fn('checkalt-test-connection', 'checkalt', OP_CLASS.CONFIG_ADMIN, 'sandbox_parity', 'POST /public/fincapture/authenticate { userName, password }.'),

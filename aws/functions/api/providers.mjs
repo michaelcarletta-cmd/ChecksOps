@@ -37,6 +37,12 @@ import { handleProviderEgress } from './providers/egress.mjs';
 import { providerSandboxExecutionEnabled } from './sandbox-flags.mjs';
 import { hasParityHandler, runParityHandler } from './providers/parity/dispatch.mjs';
 import { hasProductionCheckAltHandler, runProductionCheckAltHandler } from './providers/production/checkalt-dispatch.mjs';
+import {
+  checkaltStatusReadOnlyMode,
+  denyCheckAltMutationUnderStatusRead,
+  isCheckAltMutationFunction,
+  isCheckAltStatusReadFunction,
+} from './providers/production/checkalt-status-read.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isUuid = (value) => UUID_RE.test(String(value || ''));
@@ -354,9 +360,13 @@ export const handleFunctionInvoke = async (event, name, deps = {}) => {
     });
   }
 
-  if (hasProductionCheckAltHandler(name)) {
+  if (hasProductionCheckAltHandler(name) || isCheckAltStatusReadFunction(name)) {
     const production = await runProductionCheckAltHandler(name, event, deps);
     if (production) return production;
+  }
+
+  if (checkaltStatusReadOnlyMode() && isCheckAltMutationFunction(name)) {
+    return denyCheckAltMutationUnderStatusRead(name);
   }
 
   if (executionAllowed(spec.provider) && spec.aws !== 'db_status' && spec.aws !== 'webhook') {

@@ -6,6 +6,7 @@ import { loadProductionCheckAltConfig, loadProductionTenantAccount } from './che
 import { persistPollOutcome } from './checkalt-idempotency.mjs';
 import { loadProductionCheckAltSecrets } from './checkalt-secrets.mjs';
 import { authorizeCheckAltProduction } from './checkalt-authz.mjs';
+import { statusReadOnlyFetch } from './checkalt-status-read.mjs';
 
 const jwtCache = { token: null, expiresAt: null };
 
@@ -151,12 +152,13 @@ export async function reconcileProductionCheckAltDeposit({
     });
   }
 
+  const safeFetch = statusReadOnlyFetch(fetchImpl);
   const item = await getDepositItemStatus({
     cfg,
     credentials,
     tenant: { sso_user_id: ssoKey },
     referenceNumber: reference,
-    fetchImpl,
+    fetchImpl: safeFetch,
     jwtCache,
   });
   let json = item.json;
@@ -167,7 +169,7 @@ export async function reconcileProductionCheckAltDeposit({
       credentials,
       path: '/fincapture/deposit/history',
       body: { fiKey: cfg.fi_key, ...(ssoKey ? { ssoKey } : {}) },
-      fetchImpl,
+      fetchImpl: safeFetch,
       jwtCache,
     });
     const histJson = await parseJson(hist);

@@ -4,10 +4,8 @@ import { loadDatabaseCredentials } from '../../secrets.mjs';
 import { buildWriteClientConfig, sanitizePublicError } from '../../db-health.mjs';
 import { loadProductionCheckAltConfig, loadProductionTenantAccount } from './checkalt-config.mjs';
 import { loadProductionCheckAltSecrets } from './checkalt-secrets.mjs';
-import {
-  checkaltStatusReconcileEnabled,
-  productionCheckAltExecutionAllowed,
-} from './checkalt-holds.mjs';
+import { checkaltStatusReconcileEnabled } from './checkalt-holds.mjs';
+import { statusReadOnlyFetch } from './checkalt-status-read.mjs';
 import {
   CHECKALT_STATUS_REFRESH_STATUSES,
   loadDepositsForStatusRefresh,
@@ -15,9 +13,6 @@ import {
 } from './checkalt-poll.mjs';
 
 const { Client } = pg;
-
-const PROCESS_PATH = '/fincapture/deposit/process';
-const APPROVE_PATH = '/fincapture/deposit/approve';
 
 export const checkAltStatusReconcileJobName = 'checkalt-poll-deposits';
 
@@ -34,14 +29,6 @@ export const statusReconcileDisabled = (spoof, extra = {}) => ({
   spoofFieldsIgnored: spoof,
   ...extra,
 });
-
-const guardedFetch = (fetchImpl) => async (url, options = {}) => {
-  const target = String(url || '');
-  if (target.includes(PROCESS_PATH) || target.includes(APPROVE_PATH)) {
-    throw new Error('status_reconcile_refused_money_path');
-  }
-  return fetchImpl(url, options);
-};
 
 export async function runCheckAltStatusReconcile({
   client,
@@ -88,7 +75,7 @@ export async function runCheckAltStatusReconcile({
     };
   }
 
-  const safeFetch = guardedFetch(fetchImpl);
+  const safeFetch = statusReadOnlyFetch(fetchImpl);
   let polled = 0;
   let updated = 0;
   let errors = 0;
@@ -137,19 +124,6 @@ export async function runCheckAltStatusReconcile({
 export async function handleCheckAltStatusReconcileJob(event, deps = {}) {
   const spoof = ignoredSpoof(event, parseBody(event));
   if (!checkaltStatusReconcileEnabled()) return statusReconcileDisabled(spoof);
-  if (!productionCheckAltExecutionAllowed()) {
-    return {
-      ok: false,
-      statusCode: 403,
-      error: 'production_execution_blocked',
-      message: 'CheckAlt status reconciliation requires production CheckAlt holds to be lifted. Status-only; no submit/approve.',
-      liveProviderCalled: false,
-      submitPosted: false,
-      approvePosted: false,
-      moneyMoved: false,
-      spoofFieldsIgnored: spoof,
-    };
-  }
 
   const body = parseBody(event);
   const createClient = deps.createClient || ((config) => new Client(config));

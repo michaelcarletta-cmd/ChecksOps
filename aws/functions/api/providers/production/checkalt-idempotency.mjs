@@ -26,6 +26,18 @@ export async function bindCheckAltProductionGucs(client, mapping, claims) {
   ]);
 }
 
+/** Identity only. Does not set financial_execution. Used by status-read poll. */
+export async function bindCheckAltStatusReadGucs(client, mapping, claims) {
+  await client.query('SELECT set_config($1, $2, true)', [APP_USER_ID_GUC, mapping.application_user_id]);
+  await client.query('SELECT set_config($1, $2, true)', [
+    APP_USER_EMAIL_GUC,
+    mapping.email || claims?.email || '',
+  ]);
+  await client.query('SELECT set_config($1, $2, true)', ['request.checkalt_status_read', '1']);
+  await client.query('SELECT set_config($1, $2, true)', ['request.financial_execution', '0']);
+  await client.query('SELECT set_config($1, $2, true)', ['request.aws_financial_permissions_activated', '0']);
+}
+
 /**
  * Commit the current write so a later HTTP/Lambda failure cannot erase the
  * durable attempt. Opens a new transaction and rebinds identity GUCs.
