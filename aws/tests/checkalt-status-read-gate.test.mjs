@@ -15,7 +15,7 @@ import {
   statusReadOnlyFetch,
   isCheckAltStatusReadPath,
 } from '../functions/api/providers/production/checkalt-status-read.mjs';
-import { persistPollOutcome } from '../functions/api/providers/production/checkalt-idempotency.mjs';
+import { persistStatusReadOutcome } from '../functions/api/providers/production/checkalt-idempotency.mjs';
 import { handleCheckAltStatusReconcileJob } from '../functions/api/providers/production/checkalt-status-reconcile.mjs';
 import {
   applyCheckAltSettlementInvariant,
@@ -117,6 +117,15 @@ const identityClient = (store) => ({
     if (text.includes('FROM public.check_intake_items')) {
       return { rows: params[0] === store.check.id ? [store.check] : [] };
     }
+    if (text.includes('aws_checkalt_status_read_config')) {
+      return {
+        rows: [{
+          merchant: 'prod-merchant',
+          default_enabled: true,
+          base_url: 'https://api2.checkalt.com',
+        }],
+      };
+    }
     if (text.includes('aws_checkalt_production_config') || (text.includes('FROM public.checkalt_config') && text.includes('singleton'))) {
       return {
         rows: [{
@@ -141,7 +150,21 @@ const identityClient = (store) => ({
       const found = store.deposits.find((row) => row.id === params[0] || row.checkalt_reference === params[0]);
       return { rows: found ? [found] : [] };
     }
+    if (text.includes('aws_checkalt_status_read_persist')) {
+      const row = store.deposits.find((item) => item.id === params[0]);
+      if (!row) return { rows: [] };
+      const before = { ...row };
+      const next = params[1];
+      if (next) row.status = next;
+      row.last_polled_at = new Date().toISOString();
+      if (next === 'cleared' && params[3]) row.cleared_at = params[3];
+      row._persistParams = params;
+      row._before = before;
+      row._persistSql = text;
+      return { rows: [row] };
+    }
     if (text.includes('UPDATE public.checkalt_deposits')) {
+      store.genericUpdate = (store.genericUpdate || 0) + 1;
       const row = store.deposits.find((item) => item.id === params[0]);
       if (!row) return { rows: [] };
       const before = { ...row };
@@ -269,6 +292,8 @@ test('2. flag ON + financial flags OFF allows /deposit/item status lookup', asyn
   assert.equal(store.deposits[0].status, 'submitted');
   assert.equal(store.gucs['request.financial_execution'], '0');
   assert.equal(store.gucs['request.checkalt_status_read'], '1');
+  assert.equal(store.genericUpdate || 0, 0);
+  assert.match(store.deposits[0]._persistSql, /aws_checkalt_status_read_persist/);
 });
 
 test('3. same configuration allows history status fallback', async () => {
@@ -313,34 +338,35 @@ test('4-9. same configuration blocks process, approve, submit, reject, and regis
   assert.equal(store.processPosts, 0);
   assert.equal(store.approvePosts, 0);
   assert.equal(store.registerPosts, 0);
+  assert.equal(store.genericUpdate || 0, 0);
   assert.equal(store.deposits[0].status, 'pending_approval');
 });
 
-test('10. persist writes only approved reconciliation fields', async () => {
+test('10. status-read persist uses isolated SQL helper, not raw UPDATE', async () => {
   const src = fs.readFileSync(path.join(ROOT, 'functions/api/providers/production/checkalt-idempotency.mjs'), 'utf8');
-  const persist = src.slice(src.indexOf('export async function persistPollOutcome'));
-  assert.match(persist, /SET status = COALESCE\(\$2, status\)/);
-  assert.match(persist, /last_polled_at = now\(\)/);
-  assert.match(persist, /last_status_payload/);
-  assert.match(persist, /checkalt_reference = COALESCE\(\$3, checkalt_reference\)/);
-  assert.match(persist, /cleared_at = CASE WHEN \$2 = 'cleared' AND \$5::timestamptz IS NOT NULL/);
-  assert.equal(/amount_cents|submitted_by|idempotency_key/.test(persist.split('RETURNING')[0]), false);
+  const persistStart = src.indexOf('export async function persistStatusReadOutcome');
+  const persistEnd = src.indexOf('export async function persistPollOutcome');
+  const persist = src.slice(persistStart, persistEnd);
+  assert.match(persist, /aws_checkalt_status_read_persist/);
+  assert.equal(persist.includes('UPDATE public.checkalt_deposits'), false);
+  const approvePersist = src.slice(src.indexOf('export async function persistPollOutcome'));
+  assert.match(approvePersist, /UPDATE public.checkalt_deposits/);
 
   const calls = [];
   const client = {
     query: async (sql, params) => {
       calls.push({ sql, params });
-      return { rows: [{ id: params[0], status: params[1], cleared_at: params[1] === 'cleared' ? params[4] : null }] };
+      return { rows: [{ id: params[0], status: params[1], cleared_at: params[1] === 'cleared' ? params[3] : null }] };
     },
   };
-  await persistPollOutcome(client, {
+  await persistStatusReadOutcome(client, {
     rowId: DEPOSIT_ID,
     status: 'submitted',
-    reference: '9001',
     providerPayload: { statusCode: 127, status: 'Approved' },
   });
+  assert.match(calls[0].sql, /aws_checkalt_status_read_persist/);
   assert.equal(calls[0].params[1], 'submitted');
-  assert.equal(calls[0].params[4], null);
+  assert.equal(calls[0].params[3], null);
 });
 
 test('11-13. settlement mapping: 127 never clears; 200 needs depositDate', () => {
@@ -375,6 +401,9 @@ test('11-13 via status-read poll persist', async () => {
   assert.equal(withDateResult.status, 'cleared');
   assert.equal(withDate.deposits[0].status, 'cleared');
   assert.equal(withDate.deposits[0].cleared_at, '2026-09-16T12:00:00.000Z');
+  assert.equal(approved.genericUpdate || 0, 0);
+  assert.equal(noDate.genericUpdate || 0, 0);
+  assert.equal(withDate.genericUpdate || 0, 0);
 });
 
 test('scheduled job uses the same status-read permission and stays off by default', async () => {

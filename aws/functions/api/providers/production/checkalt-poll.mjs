@@ -2,8 +2,8 @@ import { TENANT_MEMBERSHIP_SQL } from '../../identity.mjs';
 import { membershipForTenant } from '../../financial-ownership.mjs';
 import { CHECKALT_STATUS_REFRESH_STATUSES, resolveCheckAltProviderStatus } from '../amounts.mjs';
 import { checkAltFetch, getDepositItemStatus } from '../parity/checkalt-client.mjs';
-import { loadProductionCheckAltConfig, loadProductionTenantAccount } from './checkalt-config.mjs';
-import { persistPollOutcome } from './checkalt-idempotency.mjs';
+import { loadStatusReadCheckAltConfig, loadProductionTenantAccount } from './checkalt-config.mjs';
+import { persistStatusReadOutcome } from './checkalt-idempotency.mjs';
 import { loadProductionCheckAltSecrets } from './checkalt-secrets.mjs';
 import { authorizeCheckAltProduction } from './checkalt-authz.mjs';
 import { statusReadOnlyFetch } from './checkalt-status-read.mjs';
@@ -186,10 +186,9 @@ export async function reconcileProductionCheckAltDeposit({
     json = { ...json, history: match };
     status = resolvePollStatus(match);
   }
-  const saved = await persistPollOutcome(client, {
+  const saved = await persistStatusReadOutcome(client, {
     rowId: row.id,
     status: status || row.status,
-    reference,
     providerPayload: json,
   });
   return {
@@ -240,7 +239,7 @@ const authorizePollRow = async ({ client, mapping, memberships, row }) => {
 const loadPollSecrets = async ({ client, deps }) => {
   const secrets = await (deps.loadProductionSecrets || loadProductionCheckAltSecrets)(deps.getSecrets);
   if (!secrets.ok) return secrets;
-  const loadedCfg = await loadProductionCheckAltConfig(client, { credentials: secrets.credentials });
+  const loadedCfg = await loadStatusReadCheckAltConfig(client, { credentials: secrets.credentials });
   if (!loadedCfg.ok) return loadedCfg;
   return { ok: true, cfg: loadedCfg.cfg, credentials: loadedCfg.credentials };
 };

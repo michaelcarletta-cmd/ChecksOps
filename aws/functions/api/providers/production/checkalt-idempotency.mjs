@@ -253,6 +253,28 @@ export async function persistProviderOutcome(client, {
   )).rows[0];
 }
 
+export async function persistStatusReadOutcome(client, {
+  rowId,
+  status,
+  providerPayload = null,
+}) {
+  const depositDate = extractFinCaptureDepositDate(providerPayload);
+  const persistedStatus = applyCheckAltSettlementInvariant(status, providerPayload);
+  const audit = {
+    last_poll: {
+      status: persistedStatus,
+      depositDate,
+      response_keys: providerPayload && typeof providerPayload === 'object'
+        ? Object.keys(providerPayload).slice(0, 40)
+        : [],
+    },
+  };
+  return (await client.query(
+    `SELECT * FROM public.aws_checkalt_status_read_persist($1::uuid, $2::text, $3::jsonb, $4::timestamptz, $5::jsonb)`,
+    [rowId, persistedStatus, JSON.stringify(sanitizeAuditDetails(audit)), depositDate, JSON.stringify(providerPayload || {})],
+  )).rows[0];
+}
+
 export async function persistPollOutcome(client, {
   rowId,
   status,
