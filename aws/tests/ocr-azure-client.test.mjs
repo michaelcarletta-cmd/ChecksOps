@@ -381,6 +381,7 @@ test('21b) DELETE 429 then 204 is confirmed', async () => {
   assert.equal(deletes, 2);
   assert.ok(logs.entries.some((e) => e.event === 'azure_delete' && e.deleteConfirmed === true && e.status === 204));
   assertNoSecrets(logs.blob());
+  assert.equal('resultId' in out, false);
   assert.ok(!JSON.stringify(out).includes(RESULT_ID));
 });
 
@@ -410,6 +411,7 @@ test('21c) DELETE 429 exhaustion stays unconfirmed and does not fail OCR', async
   assert.equal(deletes, 3);
   assert.ok(logs.entries.some((e) => e.event === 'azure_delete' && e.code === 'delete_http_429' && e.deleteConfirmed === false));
   assertNoSecrets(logs.blob());
+  assert.equal('resultId' in out, false);
   assert.ok(!JSON.stringify(out).includes(API_KEY));
   assert.ok(!JSON.stringify(out).includes(RESULT_ID));
 });

@@ -326,7 +326,7 @@ export const analyzeAzureCheck = async ({
     });
     if (!poll.ok) {
       const del = await deleteAzureAnalyzeResult({ config, resultId: loc.resultId, fetchImpl, log, sleep });
-      return { ok: false, code: poll.code, status: poll.status, deleteConfirmed: del.confirmed, resultId: loc.resultId };
+      return { ok: false, code: poll.code, status: poll.status, deleteConfirmed: del.confirmed };
     }
     const status = poll.json?.status;
     if (status === 'succeeded') {
@@ -336,21 +336,21 @@ export const analyzeAzureCheck = async ({
     if (status === 'failed' || status === 'skipped') {
       const del = await deleteAzureAnalyzeResult({ config, resultId: loc.resultId, fetchImpl, log, sleep });
       safeOcrLog(log, { event: 'azure_analyze', ok: false, code: 'azure_failed', ms: now() - started });
-      return { ok: false, code: 'azure_failed', deleteConfirmed: del.confirmed, resultId: loc.resultId };
+      return { ok: false, code: 'azure_failed', deleteConfirmed: del.confirmed };
     }
     await sleep(400);
   }
   if (!resultJson) {
     const del = await deleteAzureAnalyzeResult({ config, resultId: loc.resultId, fetchImpl, log, sleep });
     safeOcrLog(log, { event: 'azure_analyze', ok: false, code: 'azure_timeout', ms: now() - started });
-    return { ok: false, code: 'azure_timeout', deleteConfirmed: del.confirmed, resultId: loc.resultId };
+    return { ok: false, code: 'azure_timeout', deleteConfirmed: del.confirmed };
   }
 
   const documents = resultJson?.analyzeResult?.documents;
   if (!Array.isArray(documents) || !documents.length) {
     const del = await deleteAzureAnalyzeResult({ config, resultId: loc.resultId, fetchImpl, log, sleep });
     safeOcrLog(log, { event: 'azure_analyze', ok: false, code: 'azure_missing_documents', ms: now() - started });
-    return { ok: false, code: 'azure_missing_documents', deleteConfirmed: del.confirmed, resultId: loc.resultId };
+    return { ok: false, code: 'azure_missing_documents', deleteConfirmed: del.confirmed };
   }
 
   const del = await deleteAzureAnalyzeResult({ config, resultId: loc.resultId, fetchImpl, log, sleep });
@@ -360,6 +360,5 @@ export const analyzeAzureCheck = async ({
     code: 'ok',
     document: documents[0],
     deleteConfirmed: del.confirmed,
-    resultId: loc.resultId,
   };
 };
