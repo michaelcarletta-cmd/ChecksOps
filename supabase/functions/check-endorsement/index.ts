@@ -156,6 +156,97 @@ async function refreshCompositeBackImage(checkId: string) {
   }
 }
 
+function payeeTypeOf(row: { payee_type?: string | null }) {
+  return String(row?.payee_type || "").toLowerCase();
+}
+
+function isEndorsementSatisfied(row: { status?: string | null; payee_type?: string | null }) {
+  const type = payeeTypeOf(row);
+  if (type === "contractor") return true;
+  const status = String(row?.status || "");
+  if (status === "signed" || status === "waived") return true;
+  if (type === "mortgage_company" && status === "manual_required") return true;
+  return false;
+}
+
+function evaluateEndorsementMath(rows: Array<{ status?: string | null; payee_type?: string | null }> = []) {
+  if (!rows.length) return { allRequiredSatisfied: false, anyRejected: false };
+  return {
+    allRequiredSatisfied: rows.every(isEndorsementSatisfied),
+    anyRejected: rows.some((row) => String(row?.status || "") === "rejected"),
+  };
+}
+
+function isActiveLossDraft(check: { status?: string | null; check_stage?: string | null } | null | undefined) {
+  if (!check) return false;
+  return String(check.status || "") === "loss_draft_required"
+    || String(check.check_stage || "") === "loss_draft";
+}
+
+function decideReadyTransition(
+  check: { status?: string | null; check_stage?: string | null; deposit_recommendation?: string | null } | null | undefined,
+  evaluation: { allRequiredSatisfied: boolean; anyRejected: boolean },
+) {
+  if (evaluation.anyRejected) return { action: "return_to_review" as const };
+  if (!evaluation.allRequiredSatisfied) return { action: "none" as const };
+  if (isActiveLossDraft(check)) return { action: "hold_loss_draft" as const };
+  if (
+    String(check?.status || "") === "approved_for_deposit"
+    && String(check?.deposit_recommendation || "") === "ready_for_deposit"
+  ) {
+    return { action: "already_ready" as const };
+  }
+  if (String(check?.deposit_recommendation || "") === "branch_deposit_recommended") {
+    return { action: "branch_ready" as const };
+  }
+  return { action: "ready" as const };
+}
+
+async function insertAllEndorsementsCompleteOnce(
+  supabase: any,
+  checkId: string,
+  description: string,
+  eventData: Record<string, unknown>,
+) {
+  const { data: existing } = await supabase
+    .from("check_audit_log")
+    .select("id")
+    .eq("check_id", checkId)
+    .eq("event_type", "all_endorsements_complete")
+    .limit(1)
+    .maybeSingle();
+  if (existing?.id) return;
+  await supabase.from("check_audit_log").insert({
+    check_id: checkId,
+    event_type: "all_endorsements_complete",
+    event_description: description,
+    event_data: eventData,
+  });
+}
+
+async function persistReadyFields(
+  supabase: any,
+  checkId: string,
+  values: { status: string; check_stage: string; deposit_recommendation?: string },
+) {
+  const update: Record<string, unknown> = {
+    status: values.status,
+    check_stage: values.check_stage,
+    updated_at: new Date().toISOString(),
+  };
+  if (values.deposit_recommendation) update.deposit_recommendation = values.deposit_recommendation;
+  await supabase.from("check_intake_items")
+    .update(update)
+    .eq("id", checkId)
+    .neq("status", "voided")
+    .neq("status", "deposited")
+    .neq("status", "loss_draft_required")
+    .neq("check_stage", "loss_draft");
+  await supabase.from("claim_checks")
+    .update({ check_stage: values.check_stage, updated_at: new Date().toISOString() })
+    .eq("check_intake_item_id", checkId);
+}
+
 async function reEvaluateAfterEndorsement(
   supabase: any,
   checkId: string,
@@ -167,16 +258,14 @@ async function reEvaluateAfterEndorsement(
 
   if (!allEndorsements?.length) return { allSigned: false, newStatus: null };
 
-  const allDone = allEndorsements.every(
-    (e: { status: string; payee_type: string }) =>
-      e.status === "signed" || e.status === "waived" ||
-      (e.payee_type === "mortgage_company" && e.status === "manual_required"),
-  );
-  const anyRejected = allEndorsements.some(
-    (e: { status: string }) => e.status === "rejected",
-  );
+  const evaluation = evaluateEndorsementMath(allEndorsements);
+  const { data: check } = await supabase
+    .from("check_intake_items")
+    .select("status, check_stage, deposit_recommendation, is_multi_payee")
+    .eq("id", checkId)
+    .single();
 
-  if (anyRejected) {
+  if (evaluation.anyRejected) {
     await supabase.from("check_intake_items")
       .update({ status: "needs_review" })
       .eq("id", checkId);
@@ -185,43 +274,53 @@ async function reEvaluateAfterEndorsement(
     return { allSigned: false, newStatus: "needs_review" };
   }
 
-  if (allDone) {
-    const { data: check } = await supabase
-      .from("check_intake_items")
-      .select("is_multi_payee, deposit_recommendation, check_stage")
-      .eq("id", checkId)
-      .single();
+  const decision = decideReadyTransition(check, evaluation);
 
-    const originalRec = check?.deposit_recommendation ?? "";
-    const currentStage = check?.check_stage ?? "";
+  if (decision.action === "none" || decision.action === "hold_loss_draft") {
+    await refreshCompositeBackImage(checkId);
+    return {
+      allSigned: decision.action === "hold_loss_draft",
+      newStatus: check?.status ?? null,
+      heldLossDraft: decision.action === "hold_loss_draft",
+    };
+  }
 
-    // If we have all signatures, the check is ready for deposit (or branch deposit)
-    // regardless of whether it was a loss draft check originally.
-    if (originalRec === "branch_deposit_recommended") {
-      await supabase.from("check_intake_items")
-        .update({ status: "branch_deposit_required" })
-        .eq("id", checkId);
-
-      await supabase.from("check_audit_log").insert({
-        check_id: checkId,
-        event_type: "all_endorsements_complete",
-        event_description: "All endorsements complete — routed to branch deposit workflow",
-      });
-    } else {
-      // Move to approved_for_deposit / ready_for_deposit
-      await supabase.from("check_intake_items")
-        .update({ 
-          status: "approved_for_deposit", 
-          deposit_recommendation: "ready_for_deposit" 
-        })
-        .eq("id", checkId);
-
-      await supabase.from("check_audit_log").insert({
-        check_id: checkId,
-        event_type: "all_endorsements_complete",
-        event_description: "All endorsements complete — ready for deposit",
+  if (decision.action === "already_ready") {
+    if (String(check?.check_stage || "") !== "ready_for_deposit") {
+      await persistReadyFields(supabase, checkId, {
+        status: "approved_for_deposit",
+        check_stage: "ready_for_deposit",
+        deposit_recommendation: "ready_for_deposit",
       });
     }
+  } else if (decision.action === "branch_ready") {
+    await persistReadyFields(supabase, checkId, {
+      status: "branch_deposit_required",
+      check_stage: "ready_for_deposit",
+    });
+    await insertAllEndorsementsCompleteOnce(
+      supabase,
+      checkId,
+      "All endorsements complete — routed to branch deposit workflow",
+      { deposit_path: "branch_deposit_required", check_stage: "ready_for_deposit" },
+    );
+  } else {
+    await persistReadyFields(supabase, checkId, {
+      status: "approved_for_deposit",
+      check_stage: "ready_for_deposit",
+      deposit_recommendation: "ready_for_deposit",
+    });
+    await insertAllEndorsementsCompleteOnce(
+      supabase,
+      checkId,
+      "All endorsements complete — ready for deposit",
+      {
+        status: "approved_for_deposit",
+        deposit_recommendation: "ready_for_deposit",
+        check_stage: "ready_for_deposit",
+      },
+    );
+  }
 
 
     // Auto-generate endorsement packet
@@ -322,17 +421,11 @@ async function reEvaluateAfterEndorsement(
       console.error("Payment direction trigger failed (non-blocking):", pdErr);
     }
 
-    const finalStatus = originalRec === "loss_draft_required"
-      ? "loss_draft_required"
-      : originalRec === "branch_deposit_recommended"
-        ? "branch_deposit_required"
-        : "approved_for_deposit";
+    const finalStatus = decision.action === "branch_ready"
+      ? "branch_deposit_required"
+      : "approved_for_deposit";
 
-    return { allSigned: true, newStatus: finalStatus };
-  }
-
-  await refreshCompositeBackImage(checkId);
-  return { allSigned: false, newStatus: null };
+    return { allSigned: true, newStatus: finalStatus, alreadyReady: decision.action === "already_ready" };
 }
 
 /* ------------------------------------------------------------------ */
@@ -1779,6 +1872,84 @@ Deno.serve(async (req) => {
         });
 
         const result = await reEvaluateAfterEndorsement(supabase, endorsement.check_id);
+        return json({ success: true, ...result });
+      }
+
+      /* ------------------------------------------------------------ */
+      /*  Force-complete remaining required endorsements               */
+      /* ------------------------------------------------------------ */
+      case "force_complete_endorsements": {
+        // Tenant-scoped staff/admin auth BEFORE any service-role write.
+        // Mirrors aws_can_write_tenant / authorizeForceComplete: membership
+        // on THIS check's tenant + user_roles admin/staff. UUID is not auth.
+        const authToken = req.headers.get("authorization")?.replace("Bearer ", "");
+        if (!authToken) return json({ error: "Unauthorized" }, 401);
+
+        const anon = createClient(supabaseUrl, anonKey, {
+          global: { headers: { Authorization: `Bearer ${authToken}` } },
+        });
+        const { data: ud, error: ae } = await anon.auth.getUser(authToken);
+        if (ae || !ud?.user) return json({ error: "Unauthorized" }, 401);
+
+        const checkId = (body.checkId || body.check_id) as string | undefined;
+        if (!checkId) return json({ error: "checkId required" }, 400);
+
+        const { data: check, error: checkErr } = await supabase
+          .from("check_intake_items")
+          .select("id, tenant_id")
+          .eq("id", checkId)
+          .maybeSingle();
+        if (checkErr || !check?.id) return json({ error: "Check not found" }, 404);
+
+        const [{ data: roleRows }, { data: memberships }] = await Promise.all([
+          supabase.from("user_roles").select("role").eq("user_id", ud.user.id),
+          supabase.from("tenant_users").select("tenant_id, role").eq("user_id", ud.user.id),
+        ]);
+        const member = (memberships ?? []).some((row: { tenant_id?: string | null }) => (
+          String(row.tenant_id || "") === String(check.tenant_id || "")
+        ));
+        const privileged = (roleRows ?? []).some((row: { role?: string | null }) => {
+          const role = String(row.role || "").toLowerCase();
+          return role === "admin" || role === "staff";
+        });
+        if (!check.tenant_id || !member || !privileged) {
+          return json({ error: "forbidden" }, 403);
+        }
+
+        const { data: rows } = await supabase
+          .from("check_endorsements")
+          .select("id, status, payee_type, signed_at, notes, signature_method, signature_image_url, endorsement_image_path, signed_by")
+          .eq("check_id", checkId);
+
+        const nowIso = new Date().toISOString();
+        const incomplete = (rows ?? []).filter((row: { status?: string; payee_type?: string }) => (
+          !isEndorsementSatisfied(row)
+        ));
+        for (const row of incomplete) {
+          const { error: updErr } = await supabase
+            .from("check_endorsements")
+            .update({
+              status: "signed",
+              signed_at: row.signed_at || nowIso,
+              notes: row.notes || "Manually marked as received by staff override",
+              signature_method: row.signature_method || "manual",
+              updated_at: nowIso,
+            })
+            .eq("id", row.id)
+            .neq("status", "signed")
+            .neq("status", "waived");
+          if (updErr) return json({ error: updErr.message }, 400);
+        }
+
+        await supabase.from("check_audit_log").insert({
+          check_id: checkId,
+          event_type: "endorsements_force_completed",
+          event_description: `All endorsements manually marked as received (${incomplete.length} updated)`,
+          actor_id: ud.user.id,
+          event_data: { overridden_ids: incomplete.map((row: { id: string }) => row.id) },
+        });
+
+        const result = await reEvaluateAfterEndorsement(supabase, checkId);
         return json({ success: true, ...result });
       }
 

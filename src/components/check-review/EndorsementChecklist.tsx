@@ -37,6 +37,7 @@ import { InPersonSignatureDialog } from "./InPersonSignatureDialog";
 
 import { format } from "date-fns";
 import { CheckStatusTimeline } from "./CheckStatusTimeline";
+import { evaluateEndorsementMath } from "@/lib/endorsementCompletion";
 
 interface CheckEndorsement {
   id: string;
@@ -360,10 +361,7 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
   const [forceCompleting, setForceCompleting] = useState(false);
 
 
-  const allComplete = endorsements.length > 0 && endorsements.every(
-    (e) => e.status === "signed" || e.status === "waived" ||
-      (e.payee_type === "mortgage_company" && e.status === "manual_required"),
-  );
+  const allComplete = evaluateEndorsementMath(endorsements).allRequiredSatisfied;
 
   const pendingCount = endorsements.filter(
     (e) => e.status === "pending" || e.status === "sent",
@@ -442,43 +440,17 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
     setForceCompleting(true);
     try {
       const { data: session } = await supabase.auth.getSession();
-      const userId = session.session?.user?.id ?? "unknown";
+      if (!session.session?.access_token) throw new Error("Not authenticated");
 
-      const incompleteIds = endorsements
-        .filter((e) => e.status !== "signed" && e.status !== "waived")
-        .map((e) => e.id);
-
-      if (incompleteIds.length > 0) {
-        const { error } = await supabase
-          .from("check_endorsements")
-          .update({
-            status: "signed",
-            signed_at: new Date().toISOString(),
-            notes: `Manually marked as received by staff override`,
-            signature_method: "manual",
-          })
-          .in("id", incompleteIds);
-
-        if (error) throw error;
-      }
-
-      // Audit log is best-effort; partner tenants may not have insert rights.
-      try {
-        await supabase.from("check_audit_log").insert({
-          check_id: checkId,
-          event_type: "endorsements_force_completed",
-          event_description: `All endorsements manually marked as received (${incompleteIds.length} updated)`,
-          actor_id: userId,
-          event_data: { overridden_ids: incompleteIds, partner_mode: partnerMode },
-        });
-      } catch (auditErr) {
-        console.warn("Audit log insert skipped:", auditErr);
-      }
-
+      const { error } = await supabase.functions.invoke("check-endorsement", {
+        body: { action: "force_complete_endorsements", checkId, check_id: checkId },
+        headers: { Authorization: `Bearer ${session.session.access_token}` },
+      });
+      if (error) throw new Error(await getFunctionErrorMessage(error, "Failed to mark endorsements received"));
 
       toast({
         title: "Endorsements marked as complete",
-        description: `${incompleteIds.length} endorsement(s) updated at ${new Date().toLocaleTimeString()}`,
+        description: "Required endorsements were re-evaluated through the same completion path as signing.",
       });
 
       refresh();

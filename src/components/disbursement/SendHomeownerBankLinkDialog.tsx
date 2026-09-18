@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Loader2, Home } from "lucide-react";
+import { queriesInvalidatedAfterBankLinkSend } from "@/lib/homeownerBankLink";
 
 interface Props {
   open: boolean;
@@ -55,7 +56,9 @@ export function SendHomeownerBankLinkDialog({ open, onOpenChange, checkIntakeIte
         title: "Payout setup link sent",
         description: `${name} will receive an email to complete their payout profile and bank details. ${url ? "The link was also copied to your clipboard." : ""}`,
       });
-      qc.invalidateQueries({ queryKey: ["check-stakeholders", checkIntakeItemId] });
+      for (const queryKey of queriesInvalidatedAfterBankLinkSend(checkIntakeItemId)) {
+        void qc.invalidateQueries({ queryKey: [...queryKey] });
+      }
       setName(""); setEmail("");
       onOpenChange(false);
     },

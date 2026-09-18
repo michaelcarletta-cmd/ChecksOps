@@ -11,6 +11,7 @@ import { FileText, Link2, CheckCircle2, AlertCircle, Pencil, DollarSign } from "
 import { format } from "date-fns";
 import { ClaimSettlementEditor } from "./ClaimSettlementEditor";
 import { getDepositLabel } from "@/lib/depositLabel";
+import { applyClaimLedgerSync } from "@/lib/claimLedgerSync";
 
 interface Props {
   checkIntakeItemId: string;
@@ -127,11 +128,43 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
         created = true;
       }
 
+      const { data: checkRow, error: checkErr } = await supabase
+        .from("check_intake_items")
+        .select("id, claim_id, amount, check_number, carrier_name, issue_date, payee_line, tenant_id, status")
+        .eq("id", checkIntakeItemId)
+        .single();
+      if (checkErr) throw checkErr;
+
       const { error } = await supabase
         .from("check_intake_items")
         .update({ detected_claim_number: trimmed, claim_id: matched.id })
         .eq("id", checkIntakeItemId);
       if (error) throw error;
+
+      const { data: authData } = await supabase.auth.getUser();
+      let actorTenantId: string | null = null;
+      if (authData?.user?.id) {
+        const { data: memberships } = await supabase
+          .from("tenant_users")
+          .select("tenant_id")
+          .eq("user_id", authData.user.id);
+        const memberOfCheck = (memberships ?? []).some((row: { tenant_id?: string | null }) => (
+          String(row.tenant_id || "") === String(checkRow.tenant_id || "")
+        ));
+        actorTenantId = memberOfCheck
+          ? (checkRow.tenant_id ?? null)
+          : ((memberships ?? [])[0]?.tenant_id ?? null);
+      }
+
+      const sync = await applyClaimLedgerSync(supabase, {
+        check: { ...(checkRow as any), claim_id: matched.id },
+        newClaimId: matched.id,
+        claimNumber: matched.claim_number,
+        actorTenantId,
+      });
+      if ((sync as { denied?: boolean }).denied) {
+        throw new Error("Cannot sync another tenant's ledger");
+      }
 
       return {
         created,
