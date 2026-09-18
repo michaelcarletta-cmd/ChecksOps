@@ -207,7 +207,7 @@ export const validateReadonlyCoreTables = async ({
       const columns = ['front_image_path', 'back_image_path', 'back_image_original_path'];
       const inventory = {};
       for (const column of columns) {
-        const httpCount = Number((await client.query(
+        const httpUrlCount = Number((await client.query(
           `SELECT count(*)::int AS n FROM public.check_intake_items WHERE ${quoteIdent(column)} ILIKE $1`,
           ['http%'],
         )).rows[0]?.n ?? 0);
