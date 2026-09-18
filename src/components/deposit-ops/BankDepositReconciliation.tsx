@@ -41,6 +41,10 @@ export const bankDepositDayKey = (iso: string | null | undefined) => {
 export const sumDepositAmounts = (rows: { amount: number | null | undefined }[]) =>
   rows.reduce((s, r) => s + Number(r.amount ?? 0), 0);
 
+/** Settled only when local status is cleared and provider depositDate was stored. */
+export const isBankDepositSettled = (row: { status?: string | null; cleared_at?: string | null }) =>
+  row?.status === "cleared" && Boolean(row?.cleared_at);
+
 const labelForDay = (dayKey: string) => {
   if (dayKey === "unknown") return "Date unknown";
   try {
@@ -102,7 +106,7 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
 
     const map = new Map<string, DepositGroup>();
     for (const row of rows) {
-      const settled = !!row.cleared_at;
+      const settled = isBankDepositSettled(row);
       const dayKey = bankDepositDayKey(row.cleared_at ?? row.submitted_at);
       const key = `${settled ? "settled" : "pending"}:${dayKey}`;
       if (!map.has(key)) {

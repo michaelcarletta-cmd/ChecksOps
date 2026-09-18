@@ -122,9 +122,10 @@ export const CHECKALT_STATUS_MAP = {
 export const mapCheckAltStatus = (payload = {}) => {
   const rawStatus = String(payload.status ?? '').toLowerCase();
   const numericStatus = Number(payload.statusCode ?? payload.status);
-  return CHECKALT_STATUS_MAP.numeric[numericStatus]
+  const mapped = CHECKALT_STATUS_MAP.numeric[numericStatus]
     || CHECKALT_STATUS_MAP.string[rawStatus]
     || null;
+  return applyCheckAltSettlementInvariant(mapped, payload);
 };
 
 /** Local statuses that still need a provider status refresh. */
@@ -132,15 +133,15 @@ export const CHECKALT_STATUS_REFRESH_STATUSES = ['pending_approval', 'submitted'
 
 /**
  * Provider approval/processing state. "Approved" / 127 is submitted, never cleared.
- * Settlement is only numeric 200 / cleared / settled, and persist stamps cleared_at
- * only when a real FinCapture depositDate is present.
+ * Settlement is only 200 / cleared / settled when a real FinCapture depositDate
+ * is present. Otherwise keep the safest non-settled status: submitted.
  */
 export const resolveCheckAltProviderStatus = (payload = {}) => {
   const mapped = mapCheckAltStatus(payload);
   if (mapped) return mapped;
   const raw = String(payload.status ?? '').toLowerCase();
   if (raw === 'duplicate') return 'duplicate';
-  return null;
+  return applyCheckAltSettlementInvariant(null, payload);
 };
 
 /**
@@ -162,6 +163,15 @@ export const extractFinCaptureDepositDate = (payload = {}) => {
     if (current.item && typeof current.item === 'object') queue.push(current.item);
   }
   return null;
+};
+
+/**
+ * local status = cleared ⇒ a valid provider depositDate exists.
+ * 200 / cleared / settled without that date stays submitted.
+ */
+export const applyCheckAltSettlementInvariant = (mapped, payload = {}) => {
+  if (mapped !== 'cleared') return mapped;
+  return extractFinCaptureDepositDate(payload) ? 'cleared' : 'submitted';
 };
 
 export const parseFinCaptureDepositDate = (raw) => {

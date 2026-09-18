@@ -4,14 +4,16 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
+  applyCheckAltSettlementInvariant,
   mapCheckAltStatus,
   resolveCheckAltProviderStatus,
 } from '../functions/api/providers/amounts.mjs';
 import { persistPollOutcome } from '../functions/api/providers/production/checkalt-idempotency.mjs';
-import { checkaltStatusReconcileEnabled } from '../functions/api/providers/production/checkalt-holds.mjs';
+import { checkaltStatusReconcileEnabled, PRODUCTION_CHECKALT_FUNCTIONS } from '../functions/api/providers/production/checkalt-holds.mjs';
 import { handleCheckAltStatusReconcileJob } from '../functions/api/providers/production/checkalt-status-reconcile.mjs';
 import { handleScheduledRequest } from '../functions/api/scheduled.mjs';
-import { PRODUCTION_CHECKALT_FUNCTIONS } from '../functions/api/providers/production/checkalt-holds.mjs';
+
+const isBankDepositSettled = (row) => row?.status === 'cleared' && Boolean(row?.cleared_at);
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SPA = path.join(ROOT, '../src');
@@ -33,7 +35,7 @@ const withEnv = async (vars, fn) => {
   }
 };
 
-test('status map: 40 pending, 127 submitted, Approved submitted, 120 rejected, 200 cleared', () => {
+test('status map: 40 pending, 127 submitted, Approved submitted, 120 rejected, 200 needs depositDate', () => {
   assert.equal(mapCheckAltStatus({ statusCode: 40 }), 'pending_approval');
   assert.equal(mapCheckAltStatus({ status: 40 }), 'pending_approval');
   assert.equal(resolveCheckAltProviderStatus({ statusCode: 127 }), 'submitted');
@@ -43,8 +45,13 @@ test('status map: 40 pending, 127 submitted, Approved submitted, 120 rejected, 2
   assert.equal(resolveCheckAltProviderStatus({ status: 'submitted' }), 'submitted');
   assert.equal(resolveCheckAltProviderStatus({ statusCode: 120 }), 'rejected');
   assert.equal(resolveCheckAltProviderStatus({ status: 'rejected' }), 'rejected');
-  assert.equal(resolveCheckAltProviderStatus({ statusCode: 200 }), 'cleared');
+  assert.equal(resolveCheckAltProviderStatus({ statusCode: 200, depositDate: '2026-09-16' }), 'cleared');
+  assert.equal(resolveCheckAltProviderStatus({ statusCode: 200 }), 'submitted');
+  assert.equal(resolveCheckAltProviderStatus({ status: 'Approved' }), 'submitted');
   assert.notEqual(resolveCheckAltProviderStatus({ status: 'Approved' }), 'cleared');
+  assert.notEqual(resolveCheckAltProviderStatus({ statusCode: 127 }), 'cleared');
+  assert.equal(resolveCheckAltProviderStatus({ statusCode: 127, depositDate: '2026-09-16' }), 'submitted');
+  assert.equal(resolveCheckAltProviderStatus({ status: 'Approved', depositDate: '2026-09-16' }), 'submitted');
 });
 
 test('approval persist never stamps cleared_at', async () => {
@@ -74,31 +81,55 @@ test('approval persist never stamps cleared_at', async () => {
   }
 });
 
-test('200 + real depositDate stamps cleared_at; 200 without date does not', async () => {
+test('200 + depositDate → cleared + cleared_at; 200 without date stays submitted', async () => {
   const calls = [];
   const client = {
     query: async (sql, params) => {
       calls.push({ sql, params });
-      return { rows: [{ id: params[0], status: params[1], cleared_at: params[4] }] };
+      return { rows: [{ id: params[0], status: params[1], cleared_at: params[1] === 'cleared' ? params[4] : null }] };
     },
   };
+  const withDatePayload = { statusCode: 200, depositDate: '2026-09-16' };
+  const withDateStatus = resolveCheckAltProviderStatus(withDatePayload);
+  assert.equal(withDateStatus, 'cleared');
   const withDate = await persistPollOutcome(client, {
     rowId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-    status: 'cleared',
+    status: withDateStatus,
     reference: '1',
-    providerPayload: { statusCode: 200, depositDate: '2026-09-16' },
+    providerPayload: withDatePayload,
   });
   assert.equal(withDate.status, 'cleared');
+  assert.equal(withDate.cleared_at, '2026-09-16T12:00:00.000Z');
+  assert.equal(calls[0].params[1], 'cleared');
   assert.equal(calls[0].params[4], '2026-09-16T12:00:00.000Z');
+  assert.equal(isBankDepositSettled(withDate), true);
 
   calls.length = 0;
-  await persistPollOutcome(client, {
+  const noDatePayload = { statusCode: 200 };
+  const noDateStatus = resolveCheckAltProviderStatus(noDatePayload);
+  assert.equal(noDateStatus, 'submitted');
+  const withoutDate = await persistPollOutcome(client, {
     rowId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     status: 'cleared',
     reference: '1',
-    providerPayload: { statusCode: 200 },
+    providerPayload: noDatePayload,
   });
+  assert.equal(withoutDate.status, 'submitted');
+  assert.equal(withoutDate.cleared_at, null);
+  assert.equal(calls[0].params[1], 'submitted');
   assert.equal(calls[0].params[4], null);
+  assert.equal(isBankDepositSettled(withoutDate), false);
+  assert.notEqual(withoutDate.status, 'cleared');
+});
+
+test('Bank Deposits never treats status=cleared without cleared_at as settled', () => {
+  assert.equal(isBankDepositSettled({ status: 'cleared', cleared_at: '2026-09-16T12:00:00.000Z' }), true);
+  assert.equal(isBankDepositSettled({ status: 'cleared', cleared_at: null }), false);
+  assert.equal(isBankDepositSettled({ status: 'submitted', cleared_at: null }), false);
+  assert.equal(applyCheckAltSettlementInvariant('cleared', { statusCode: 200 }), 'submitted');
+  const src = fs.readFileSync(path.join(SPA, 'components/deposit-ops/BankDepositReconciliation.tsx'), 'utf8');
+  assert.match(src, /isBankDepositSettled\(row\)/);
+  assert.equal(/const settled = !!row\.cleared_at/.test(src), false);
 });
 
 test('scheduled CheckAlt status job stays disabled and is not a money job', async () => {

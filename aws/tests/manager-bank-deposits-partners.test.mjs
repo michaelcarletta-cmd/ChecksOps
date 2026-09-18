@@ -44,6 +44,7 @@ test('persistPollOutcome does not invent a date from submittedDate', async () =>
     reference: '12345',
     providerPayload: { submittedDate: '2026-09-01', createdDate: '2026-09-02' },
   });
+  assert.equal(calls[0].params[1], 'submitted');
   assert.equal(calls[0].params[4], null);
 });
 
@@ -95,6 +96,7 @@ test('Bank Deposits exposes date jump, Auto-Deposit only, and TOTAL = sum of che
   assert.match(src, /sumDepositAmounts/);
   assert.match(src, />TOTAL</);
   assert.match(src, /bankDepositDayKey/);
+  assert.match(src, /isBankDepositSettled/);
   assert.equal(/CheckAltSettings/.test(src), false);
   assert.equal(/from\("checkalt_config"\)/.test(src), false);
   assert.equal(/deposit_date/.test(src), false);

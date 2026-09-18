@@ -2,7 +2,7 @@ import { APP_USER_EMAIL_GUC, APP_USER_ID_GUC } from '../../cognito.mjs';
 import { financialPermissionsActivated } from '../../financial-flags.mjs';
 import { replaySafeResponse, stableIdempotencyKey } from '../../financial-idempotency.mjs';
 import { sanitizeAuditDetails } from '../../financial-audit.mjs';
-import { extractFinCaptureDepositDate } from '../amounts.mjs';
+import { applyCheckAltSettlementInvariant, extractFinCaptureDepositDate } from '../amounts.mjs';
 
 export const checkAltIdempotencyKey = ({ tenantId, checkId, amountCents }) =>
   stableIdempotencyKey({
@@ -248,9 +248,10 @@ export async function persistPollOutcome(client, {
   providerPayload = null,
 }) {
   const depositDate = extractFinCaptureDepositDate(providerPayload);
+  const persistedStatus = applyCheckAltSettlementInvariant(status, providerPayload);
   const payload = JSON.stringify(sanitizeAuditDetails({
     last_poll: {
-      status,
+      status: persistedStatus,
       depositDate,
       response_keys: providerPayload && typeof providerPayload === 'object'
         ? Object.keys(providerPayload).slice(0, 40)
@@ -268,6 +269,6 @@ export async function persistPollOutcome(client, {
          updated_at = now()
      WHERE id = $1::uuid
      RETURNING *`,
-    [rowId, status, reference, payload, depositDate],
+    [rowId, persistedStatus, reference, payload, depositDate],
   )).rows[0];
 }
