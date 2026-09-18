@@ -58,6 +58,21 @@ const INTAKE_SAFE_COLUMNS = [
   'updated_at',
 ];
 
+/**
+ * Endorsement workflow writes (Adjust Endorsement).
+ * These fields are required for:
+ * - saving placement (`endorsement_override`, `endorsement_render_status`)
+ * - saving generated endorsed deposit artifact (`back_image_deposit_path`, `endorsement_render_meta`)
+ *
+ * These remain tenant- and check-scoped via the check-workflow write executor.
+ */
+const INTAKE_ENDORSEMENT_COLUMNS = [
+  'endorsement_override',
+  'endorsement_render_status',
+  'endorsement_render_meta',
+  'back_image_deposit_path',
+];
+
 export const INTAKE_PROHIBITED_COLUMNS = new Set([
   'amount',
   'pa_fee_amount',
@@ -74,10 +89,6 @@ export const INTAKE_PROHIBITED_COLUMNS = new Set([
   'deposited_by_tenant_id',
   'mortgage_final_released_at',
   'endorsement_packet_path',
-  'back_image_deposit_path',
-  'endorsement_render_status',
-  'endorsement_render_meta',
-  'endorsement_override',
   'partner_status',
   'partner_status_label',
   'check_source',
@@ -119,7 +130,7 @@ export const WRITE_ALLOWLIST = {
   check_intake_items: {
     tranche: 2,
     ops: new Set(['update']),
-    columns: new Set([...INTAKE_SAFE_COLUMNS, ...T5_INTAKE_COLUMNS]),
+    columns: new Set([...INTAKE_SAFE_COLUMNS, ...INTAKE_ENDORSEMENT_COLUMNS, ...T5_INTAKE_COLUMNS]),
     t5Columns: T5_INTAKE_COLUMNS,
     identityColumn: null,
     requiredForWrite: { update: [] },
