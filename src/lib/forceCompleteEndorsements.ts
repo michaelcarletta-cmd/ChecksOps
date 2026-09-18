@@ -1,5 +1,5 @@
-import { isEndorsementSatisfied } from "./endorsementCompletion";
-import { authorizeForceComplete, planForceCompleteRowUpdate } from "./forceCompleteAuth";
+import { isEndorsementSatisfied } from "./endorsementCompletion.ts";
+import { authorizeForceComplete, planForceCompleteRowUpdate } from "./forceCompleteAuth.ts";
 
 export type ForceCompleteDeps = {
   getUser: () => Promise<{ id: string } | null>;

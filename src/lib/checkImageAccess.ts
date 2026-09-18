@@ -1,4 +1,4 @@
-import { mortgageAgentCanReadCheckImages } from "./mortgageCheckImageAccess";
+import { mortgageAgentCanReadCheckImages } from "./mortgageCheckImageAccess.ts";
 
 /** Product rule: any mortgage_agent with an active request for this check may
  *  read images. Assignment isolation is intentionally not added. */

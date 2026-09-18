@@ -124,7 +124,7 @@ async function getUserAccessContext(admin: ReturnType<typeof createClient>, user
 
 /** Product rule: any mortgage_agent with an active requested/in_progress
  *  request for THIS check may read images. Assignment isolation is
- *  intentionally not added (no assigned_employee_id check). */
+ *  intentionally not added. */
 async function mortgageAgentCanAccessCheck(
   admin: ReturnType<typeof createClient>,
   userId: string,
