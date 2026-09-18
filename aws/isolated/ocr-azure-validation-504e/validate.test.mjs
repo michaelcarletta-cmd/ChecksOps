@@ -504,3 +504,139 @@ test('13) redaction helper never copies raw MICR or payee fields', () => {
   assert.ok(!('azure_descriptive' in redacted));
   assert.ok(!('textract_descriptive' in redacted));
 });
+
+test('15) absent ground-truth field leaves isolated response unchanged', async () => {
+  const out = await handler({
+    contentType: 'image/jpeg',
+    imageB64: Buffer.from('tiny-jpeg').toString('base64'),
+    returnMode: 'redacted',
+  }, {}, {
+    log: () => {},
+    extractCheck: async () => ({
+      canonical: {
+        check_number: '778899',
+        micr_check_number: '112233',
+        descriptive_engine: 'aws_textract_analyze',
+        micr_engine: 'azure_prebuilt_check_us',
+        filled_from_azure: [],
+        field_confidence: {},
+        textract_descriptive: { check_number: '778899' },
+      },
+      azure_delete_confirmed: true,
+    }),
+  });
+  assert.equal(out.statusCode, 200);
+  assert.equal('ground_truth_check_present' in out, false);
+  assert.equal('azure_micr_vs_ground_truth' in out, false);
+  assert.equal('textract_printed_vs_ground_truth' in out, false);
+});
+
+test('16) ground-truth compare MATCH/NO_MATCH/UNAVAILABLE without leaking digits', async () => {
+  const GT = '778899';
+  const AZURE_MICR = '112233';
+  const TX_PRINTED = '778899';
+  const logs = [];
+  const out = await handler({
+    contentType: 'image/jpeg',
+    imageB64: Buffer.from('tiny-jpeg').toString('base64'),
+    returnMode: 'redacted',
+    groundTruthPrintedCheck: GT,
+  }, {}, {
+    log: (row) => logs.push(row),
+    extractCheck: async () => ({
+      canonical: {
+        check_number: TX_PRINTED,
+        micr_check_number: AZURE_MICR,
+        micr_check_state: 'REVIEW_REQUIRED',
+        descriptive_engine: 'aws_textract_analyze',
+        micr_engine: 'azure_prebuilt_check_us',
+        filled_from_azure: [],
+        field_confidence: {},
+        textract_descriptive: { check_number: TX_PRINTED },
+      },
+      azure_delete_confirmed: true,
+    }),
+  });
+  assert.equal(out.statusCode, 200);
+  assert.equal(out.ground_truth_check_present, true);
+  assert.equal(out.azure_micr_vs_ground_truth, 'NO_MATCH');
+  assert.equal(out.textract_printed_vs_ground_truth, 'MATCH');
+  const blob = JSON.stringify({ out, logs });
+  assert.ok(!blob.includes(GT));
+  assert.ok(!blob.includes(AZURE_MICR));
+  assert.ok(!blob.includes(TX_PRINTED));
+  assert.ok(!blob.includes('groundTruthPrintedCheck'));
+  assert.ok(logs.every((row) => !('groundTruthPrintedCheck' in row)));
+  assert.ok(!('check_number' in out));
+  assert.ok(!('micr_check_number' in out));
+});
+
+test('17) ground-truth compare is UNAVAILABLE when a side has no digits', async () => {
+  const GT = '778899';
+  const logs = [];
+  const out = await handler({
+    contentType: 'image/png',
+    imageB64: Buffer.from('png').toString('base64'),
+    returnMode: 'redacted',
+    groundTruthPrintedCheck: `No. ${GT}`,
+  }, {}, {
+    log: (row) => logs.push(row),
+    extractCheck: async () => ({
+      canonical: {
+        check_number: null,
+        micr_check_number: null,
+        micr_check_state: 'MISSING',
+        descriptive_engine: 'aws_textract_analyze',
+        micr_engine: 'azure_prebuilt_check_us',
+        filled_from_azure: [],
+        field_confidence: {},
+        textract_descriptive: { check_number: null },
+      },
+      azure_delete_confirmed: false,
+    }),
+  });
+  assert.equal(out.ground_truth_check_present, true);
+  assert.equal(out.azure_micr_vs_ground_truth, 'UNAVAILABLE');
+  assert.equal(out.textract_printed_vs_ground_truth, 'UNAVAILABLE');
+  const blob = JSON.stringify({ out, logs });
+  assert.ok(!blob.includes(GT));
+  assert.ok(!blob.includes('No. '));
+});
+
+test('18) non-digit ground-truth is treated as absent', async () => {
+  const out = await handler({
+    contentType: 'image/jpeg',
+    imageB64: Buffer.from('tiny-jpeg').toString('base64'),
+    returnMode: 'redacted',
+    groundTruthPrintedCheck: 'not-a-check',
+  }, {}, {
+    log: () => {},
+    extractCheck: async () => ({
+      canonical: {
+        check_number: '778899',
+        micr_check_number: '778899',
+        filled_from_azure: [],
+        field_confidence: {},
+      },
+      azure_delete_confirmed: true,
+    }),
+  });
+  assert.equal('ground_truth_check_present' in out, false);
+  assert.equal('azure_micr_vs_ground_truth' in out, false);
+});
+
+test('19) compare helper never returns digits', () => {
+  assert.equal(__test__.compareDigitsOnly('778899', '778899'), 'MATCH');
+  assert.equal(__test__.compareDigitsOnly('112233', '778899'), 'NO_MATCH');
+  assert.equal(__test__.compareDigitsOnly(null, '778899'), 'UNAVAILABLE');
+  assert.equal(__test__.readGroundTruthDigits({}), null);
+  assert.equal(__test__.readGroundTruthDigits({ groundTruthPrintedCheck: '  77-8899  ' }), '778899');
+  const attached = __test__.attachGroundTruthComparison(
+    { ok: true },
+    { canonical: { check_number: '778899', micr_check_number: '778899' } },
+    '778899',
+  );
+  assert.equal(attached.ground_truth_check_present, true);
+  assert.equal(attached.azure_micr_vs_ground_truth, 'MATCH');
+  assert.equal(JSON.stringify(attached).includes('778899'), false);
+});

@@ -96,6 +96,43 @@ const matchesPrinted = (canonical) => {
   return null;
 };
 
+const digitsOnly = (value) => String(value ?? '').replace(/[^0-9]/g, '');
+
+const readGroundTruthDigits = (event) => {
+  if (!event || typeof event !== 'object') return null;
+  if (!Object.prototype.hasOwnProperty.call(event, 'groundTruthPrintedCheck')) return null;
+  const digits = digitsOnly(event.groundTruthPrintedCheck);
+  return digits || null;
+};
+
+const compareDigitsOnly = (candidate, groundTruthDigits) => {
+  const got = digitsOnly(candidate);
+  if (!groundTruthDigits || !got) return 'UNAVAILABLE';
+  return got === groundTruthDigits ? 'MATCH' : 'NO_MATCH';
+};
+
+const textractPrintedCandidate = (canonical = {}) => (
+  canonical?.textract_descriptive?.check_number
+  ?? canonical?.diagnostic?.textract_descriptive?.check_number
+  ?? canonical?.check_number
+  ?? null
+);
+
+const attachGroundTruthComparison = (redacted, extracted, groundTruthDigits) => {
+  if (!groundTruthDigits) return redacted;
+  const canonical = extracted?.canonical || {};
+  redacted.ground_truth_check_present = true;
+  redacted.azure_micr_vs_ground_truth = compareDigitsOnly(
+    canonical.micr_check_number,
+    groundTruthDigits,
+  );
+  redacted.textract_printed_vs_ground_truth = compareDigitsOnly(
+    textractPrintedCandidate(canonical),
+    groundTruthDigits,
+  );
+  return redacted;
+};
+
 export const buildRedactedResponse = (extracted = {}) => {
   const canonical = extracted.canonical || {};
   const filled = Array.isArray(canonical.filled_from_azure) ? [...canonical.filled_from_azure] : [];
@@ -258,6 +295,7 @@ export const handler = async (event = {}, context = {}, deps = {}) => {
 
     const extractCheck = deps.extractCheck || (await loadProvider()).extractCheck;
     const secretLoader = deps.secretLoader || (async () => defaultSecretLoader(deps));
+    const groundTruthDigits = readGroundTruthDigits(event);
 
     const extracted = await extractCheck({
       imageBytes: bytes,
@@ -270,7 +308,11 @@ export const handler = async (event = {}, context = {}, deps = {}) => {
       log,
     });
 
-    const redacted = buildRedactedResponse(extracted);
+    const redacted = attachGroundTruthComparison(
+      buildRedactedResponse(extracted),
+      extracted,
+      groundTruthDigits,
+    );
     redacted.input_bytes = bytes.length;
     redacted.ms = Date.now() - startedAt;
     if (extracted.textract_error) redacted.textract_error = 'textract_failed';
@@ -299,4 +341,7 @@ export const __test__ = {
   resolveImplModule,
   SECRET_ID,
   DEFAULT_MAX_BYTES,
+  readGroundTruthDigits,
+  compareDigitsOnly,
+  attachGroundTruthComparison,
 };
