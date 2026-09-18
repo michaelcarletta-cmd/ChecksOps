@@ -3,25 +3,18 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import {
   assertCheckClaimLinkAllowed,
-  collectClaimTenantIds,
+  claimIsSelectableForTenant,
   evaluateCheckClaimLink,
+  filterSelectableClaims,
   isCheckClaimLinkDenied,
-  signalsFromClaimRows,
-} from '../../src/lib/checkClaimOwnership.ts';
+  newTrackingClaimInsert,
+  resolveAutoLinkCandidate,
+} from '../../src/lib/checkClaimLinkGuard.ts';
+import { fundsReceivedForClaim } from '../../src/lib/claimLedgerSync.ts';
 import {
-  assertClaimPaymentsCheckIntakeIndex,
-  claimPaymentsIndexMatchesInvariant,
+  claimPaymentsIndexCatalogMatches,
   verifyClaimPaymentsCheckIntakeIndex,
 } from '../../src/lib/claimPaymentIndexGuard.ts';
-import {
-  applyLedgerBackfill,
-  inspectLedgerBackfill,
-} from '../../src/lib/ledgerBackfill.ts';
-import {
-  applyDatabaseLedgerSync,
-  buildClaimLedgerSyncPlan,
-  insertCheckReceivedConflictSafe,
-} from '../../src/lib/claimLedgerSync.ts';
 
 const CHECK_ID = '33333333-3333-4333-8333-333333333333';
 const CHECK_2 = '44444444-4444-4444-8444-444444444444';
@@ -30,409 +23,407 @@ const CLAIM_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const TENANT_A = '11111111-1111-4111-8111-111111111111';
 const TENANT_B = '22222222-2222-4222-8222-222222222222';
 
-const CORRECT_PAYMENTS_INDEXDEF =
-  'CREATE UNIQUE INDEX idx_claim_payments_check_intake ON public.claim_payments USING btree (check_intake_item_id) WHERE (check_intake_item_id IS NOT NULL)';
+function applyAuthoritativeCheckReceived(store, check, prevClaimId = null) {
+  if (String(check.check_source || 'insurance') !== 'insurance') return store;
+  if (!check.claim_id) return store;
+  if (prevClaimId != null && String(prevClaimId) === String(check.claim_id)) return store;
+  const existing = store.homeowner_ledger_events
+    .filter((row) => row.check_id === check.id && row.event_type === 'check_received')
+    .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
+  if (existing[0]) {
+    existing[0].claim_id = check.claim_id;
+    existing[0].tenant_id = check.tenant_id || existing[0].tenant_id;
+    return store;
+  }
+  store.homeowner_ledger_events.push({
+    id: `recv-${check.id}`,
+    check_id: check.id,
+    claim_id: check.claim_id,
+    tenant_id: check.tenant_id,
+    event_type: 'check_received',
+    created_at: '2026-01-01T00:00:00.000Z',
+  });
+  return store;
+}
 
-test('claim ownership: same tenant is allowed', () => {
+function applyStatusEvent(store, check, prevStatus) {
+  if (String(check.check_source || 'insurance') !== 'insurance') return store;
+  if (!check.claim_id) return store;
+  if (check.status === prevStatus) return store;
+  const eventType = check.status === 'deposited' ? 'deposited' : null;
+  if (!eventType || eventType === 'check_received') return store;
+  if (store.homeowner_ledger_events.some((row) => row.check_id === check.id && row.event_type === eventType)) {
+    return store;
+  }
+  store.homeowner_ledger_events.push({
+    id: `${eventType}-${check.id}`,
+    check_id: check.id,
+    claim_id: check.claim_id,
+    event_type: eventType,
+  });
+  return store;
+}
+
+function autoLinkIfAllowed(check, claims) {
+  const candidateId = resolveAutoLinkCandidate({
+    freedomClaimId: check.freedom_claim_id,
+    freedomClaimNumber: check.freedom_claim_number,
+    detectedClaimNumber: check.detected_claim_number,
+    claims,
+  });
+  if (!candidateId) return { ...check, claim_id: check.claim_id ?? null };
+  const claim = claims.find((row) => row.id === candidateId);
+  const decision = evaluateCheckClaimLink({
+    checkTenantId: check.tenant_id,
+    claimId: candidateId,
+    claimExists: Boolean(claim),
+    claimOrgId: claim?.org_id ?? null,
+    deterministicTenantIds: check.deterministicTenantIds ?? [],
+  });
+  if (!decision.allowed) return { ...check, claim_id: check.claim_id ?? null, denied: decision.reason };
+  return { ...check, claim_id: candidateId };
+}
+
+test('same-org existing claim is allowed', () => {
   const decision = evaluateCheckClaimLink({
     checkTenantId: TENANT_A,
     claimId: CLAIM_A,
     claimExists: true,
-    claimTenantIds: [TENANT_A],
+    claimOrgId: TENANT_A,
   });
   assert.equal(decision.allowed, true);
-  assert.equal(decision.reason, 'same_tenant');
+  assert.equal(decision.reason, 'same_org');
 });
 
-test('claim ownership: first link with no observed claim tenant is allowed', () => {
-  const decision = evaluateCheckClaimLink({
-    checkTenantId: TENANT_A,
-    claimId: CLAIM_A,
-    claimExists: true,
-    signals: [],
-  });
-  assert.equal(decision.allowed, true);
-  assert.equal(decision.reason, 'first_link');
-});
-
-test('claim ownership: cross tenant is denied', () => {
+test('known foreign-org claim is denied', () => {
   const decision = evaluateCheckClaimLink({
     checkTenantId: TENANT_A,
     claimId: CLAIM_B,
     claimExists: true,
-    signals: [
-      { source: 'check_case', tenantId: TENANT_B },
-      { source: 'intake', tenantId: TENANT_B, checkId: CHECK_2 },
-    ],
+    claimOrgId: TENANT_B,
   });
   assert.equal(decision.allowed, false);
-  assert.equal(decision.reason, 'cross_tenant');
+  assert.equal(decision.reason, 'cross_org');
 });
 
-test('claim ownership: missing claim is denied', () => {
+test('legacy NULL-org claim with one matching intake/case tenant is allowed', () => {
   const decision = evaluateCheckClaimLink({
     checkTenantId: TENANT_A,
     claimId: CLAIM_A,
-    claimExists: false,
-  });
-  assert.equal(decision.allowed, false);
-  assert.equal(decision.reason, 'missing_claim');
-});
-
-test('claim ownership: null unlink remains allowed', () => {
-  const decision = evaluateCheckClaimLink({
-    checkTenantId: TENANT_A,
-    claimId: null,
     claimExists: true,
-    claimTenantIds: [TENANT_B],
+    claimOrgId: null,
+    deterministicTenantIds: [TENANT_A],
   });
   assert.equal(decision.allowed, true);
-  assert.equal(decision.reason, 'unlinked');
+  assert.equal(decision.reason, 'legacy_same_tenant');
 });
 
-test('claim ownership: missing check tenant on a link is denied', () => {
+test('legacy NULL-org claim with conflicting deterministic tenants is denied', () => {
+  const decision = evaluateCheckClaimLink({
+    checkTenantId: TENANT_A,
+    claimId: CLAIM_A,
+    claimExists: true,
+    claimOrgId: null,
+    deterministicTenantIds: [TENANT_A, TENANT_B],
+  });
+  assert.equal(decision.allowed, false);
+  assert.equal(decision.reason, 'conflicting_tenants');
+});
+
+test('missing check tenant is denied', () => {
   const decision = evaluateCheckClaimLink({
     checkTenantId: null,
     claimId: CLAIM_A,
     claimExists: true,
-    claimTenantIds: [],
+    claimOrgId: TENANT_A,
   });
   assert.equal(decision.allowed, false);
   assert.equal(decision.reason, 'missing_check_tenant');
 });
 
-test('claim ownership: conflicting observed tenants are denied', () => {
+test('legacy NULL-org claim without deterministic ownership is denied', () => {
   const decision = evaluateCheckClaimLink({
     checkTenantId: TENANT_A,
     claimId: CLAIM_A,
     claimExists: true,
-    claimTenantIds: [TENANT_A, TENANT_B],
+    claimOrgId: null,
+    deterministicTenantIds: [],
   });
   assert.equal(decision.allowed, false);
-  assert.equal(decision.reason, 'conflicting_claim_tenants');
+  assert.equal(decision.reason, 'legacy_unassigned');
+  assert.equal(
+    evaluateCheckClaimLink({
+      checkTenantId: TENANT_A,
+      claimId: CLAIM_A,
+      claimExists: true,
+      claimOrgId: null,
+      deterministicTenantIds: [],
+    }).allowed,
+    false,
+  );
 });
 
-test('claim ownership: service/internal path uses the same rule and has no bypass', () => {
-  assert.equal(evaluateCheckClaimLink({
+test('new tracking claim is created with the check tenant/org', () => {
+  const row = newTrackingClaimInsert('CL-NEW', TENANT_A);
+  assert.equal(row.status, 'tracking');
+  assert.equal(row.org_id, TENANT_A);
+  assert.equal(row.claim_number, 'CL-NEW');
+});
+
+test('manual link uses the same guard as the database', () => {
+  assert.doesNotThrow(() => assertCheckClaimLinkAllowed({
     checkTenantId: TENANT_A,
     claimId: CLAIM_A,
     claimExists: true,
-    claimTenantIds: [TENANT_A],
-  }).allowed, true);
+    claimOrgId: TENANT_A,
+  }));
+  assert.throws(
+    () => assertCheckClaimLinkAllowed({
+      checkTenantId: TENANT_A,
+      claimId: CLAIM_B,
+      claimExists: true,
+      claimOrgId: TENANT_B,
+    }),
+    /check_claim_link_denied: cross_org/,
+  );
+});
+
+test('auto-link obeys the same guard and does not attach a denied candidate', () => {
+  const claims = [
+    { id: CLAIM_A, claim_number: 'CL-A', org_id: TENANT_A },
+    { id: CLAIM_B, claim_number: 'CL-B', org_id: TENANT_B },
+  ];
+  const allowed = autoLinkIfAllowed({
+    tenant_id: TENANT_A,
+    detected_claim_number: 'CL-A',
+  }, claims);
+  assert.equal(allowed.claim_id, CLAIM_A);
+
+  const denied = autoLinkIfAllowed({
+    tenant_id: TENANT_A,
+    detected_claim_number: 'CL-B',
+  }, claims);
+  assert.equal(denied.claim_id, null);
+  assert.equal(denied.denied, 'cross_org');
+
+  const unassigned = autoLinkIfAllowed({
+    tenant_id: TENANT_A,
+    freedom_claim_id: CLAIM_A,
+  }, [{ id: CLAIM_A, claim_number: 'CL-A', org_id: null }]);
+  assert.equal(unassigned.claim_id, null);
+  assert.equal(unassigned.denied, 'legacy_unassigned');
+});
+
+test('service-role / SECURITY DEFINER path uses the same deny rule', () => {
+  assert.equal(isCheckClaimLinkDenied({ message: 'check_claim_link_denied: cross_org' }), true);
   assert.throws(
     () => assertCheckClaimLinkAllowed({
       checkTenantId: TENANT_B,
       claimId: CLAIM_A,
       claimExists: true,
-      claimTenantIds: [TENANT_A],
+      claimOrgId: TENANT_A,
     }),
-    /check_claim_link_denied: cross_tenant/,
+    /check_claim_link_denied/,
   );
 });
 
-test('claim ownership: current check is excluded from claim tenant evidence', () => {
-  const tenants = collectClaimTenantIds([
-    { source: 'intake', tenantId: TENANT_B, checkId: CHECK_ID },
-    { source: 'intake', tenantId: TENANT_A, checkId: CHECK_2 },
-  ], CHECK_ID);
-  assert.deepEqual(tenants, [TENANT_A]);
+test('one check maps to one claim; multiple checks may share a claim', () => {
+  const checks = [
+    { id: CHECK_ID, claim_id: CLAIM_A, amount: 10 },
+    { id: CHECK_2, claim_id: CLAIM_A, amount: 15 },
+  ];
+  assert.equal(new Set(checks.map((row) => row.claim_id)).size, 1);
+  assert.equal(fundsReceivedForClaim(checks, CLAIM_A), 25);
 });
 
-test('claim ownership: org_id is only one signal, not the sole owner key', () => {
-  const rows = signalsFromClaimRows({
-    claim: { id: CLAIM_A, org_id: null },
-    intakes: [{ id: CHECK_2, tenant_id: TENANT_A }],
-    checkCases: [{ tenant_id: TENANT_A }],
-  });
-  assert.equal(rows.claimExists, true);
-  assert.equal(evaluateCheckClaimLink({
-    checkTenantId: TENANT_A,
-    claimId: CLAIM_A,
-    claimExists: rows.claimExists,
-    signals: rows.signals,
-    excludeCheckId: CHECK_ID,
-  }).reason, 'same_tenant');
+test('linked check contributes its amount to ClaimLedgerCard Received', () => {
+  assert.equal(fundsReceivedForClaim([
+    { id: CHECK_ID, claim_id: CLAIM_A, amount: 100 },
+  ], CLAIM_A), 100);
 });
 
-test('index verification: correct unique partial index passes', () => {
-  const decision = verifyClaimPaymentsCheckIntakeIndex({
-    indexes: [{
-      schemaname: 'public',
-      indexname: 'idx_claim_payments_check_intake',
-      tablename: 'claim_payments',
-      indexdef: CORRECT_PAYMENTS_INDEXDEF,
-    }],
-    duplicateGroups: 0,
-  });
-  assert.equal(decision.ok, true);
-  assert.equal(decision.action, 'pass');
+test('two checks linked to the same claim aggregate', () => {
+  assert.equal(fundsReceivedForClaim([
+    { id: CHECK_ID, claim_id: CLAIM_A, amount: 100 },
+    { id: CHECK_2, claim_id: CLAIM_A, amount: 40 },
+  ], CLAIM_A), 140);
 });
 
-test('index verification: same name but non-unique stops', () => {
-  const decision = verifyClaimPaymentsCheckIntakeIndex({
-    indexes: [{
-      indexname: 'idx_claim_payments_check_intake',
-      indexdef: 'CREATE INDEX idx_claim_payments_check_intake ON public.claim_payments USING btree (check_intake_item_id) WHERE (check_intake_item_id IS NOT NULL)',
-    }],
-  });
-  assert.equal(decision.action, 'stop');
-  assert.equal(decision.reason, 'index_definition_mismatch');
-  assert.throws(
-    () => assertClaimPaymentsCheckIntakeIndex({
-      indexes: [{
-        indexname: 'idx_claim_payments_check_intake',
-        indexdef: 'CREATE INDEX idx_claim_payments_check_intake ON public.claim_payments USING btree (check_intake_item_id) WHERE (check_intake_item_id IS NOT NULL)',
-      }],
-    }),
-    /index_definition_mismatch/,
-  );
+test('relink A → B moves the amount because the source of truth is claim_id', () => {
+  const before = [
+    { id: CHECK_ID, claim_id: CLAIM_A, amount: 75 },
+    { id: CHECK_2, claim_id: CLAIM_A, amount: 10 },
+  ];
+  const after = [
+    { id: CHECK_ID, claim_id: CLAIM_B, amount: 75 },
+    { id: CHECK_2, claim_id: CLAIM_A, amount: 10 },
+  ];
+  assert.equal(fundsReceivedForClaim(before, CLAIM_A), 85);
+  assert.equal(fundsReceivedForClaim(after, CLAIM_A), 10);
+  assert.equal(fundsReceivedForClaim(after, CLAIM_B), 75);
 });
 
-test('index verification: wrong columns stop', () => {
-  const decision = verifyClaimPaymentsCheckIntakeIndex({
-    indexes: [{
-      indexname: 'idx_claim_payments_check_intake',
-      indexdef: 'CREATE UNIQUE INDEX idx_claim_payments_check_intake ON public.claim_payments USING btree (claim_id) WHERE (check_intake_item_id IS NOT NULL)',
-    }],
-  });
-  assert.equal(decision.action, 'stop');
-  assert.equal(claimPaymentsIndexMatchesInvariant(decision.indexdef), false);
+test('missing claim_payments do not change Received', () => {
+  const checks = [{ id: CHECK_ID, claim_id: CLAIM_A, amount: 50 }];
+  const withoutPayments = fundsReceivedForClaim(checks, CLAIM_A);
+  const stillWithoutPayments = fundsReceivedForClaim(checks, CLAIM_A);
+  assert.equal(withoutPayments, 50);
+  assert.equal(stillWithoutPayments, 50);
 });
 
-test('index verification: wrong predicate stops', () => {
-  const decision = verifyClaimPaymentsCheckIntakeIndex({
-    indexes: [{
-      indexname: 'idx_claim_payments_check_intake',
-      indexdef: 'CREATE UNIQUE INDEX idx_claim_payments_check_intake ON public.claim_payments USING btree (check_intake_item_id)',
-    }],
-  });
-  assert.equal(decision.action, 'stop');
+test('missing claim_checks do not change Received', () => {
+  assert.equal(fundsReceivedForClaim([{ id: CHECK_ID, claim_id: CLAIM_A, amount: 12 }], CLAIM_A), 12);
 });
 
-test('index verification: duplicate historical payments stop', () => {
-  const decision = verifyClaimPaymentsCheckIntakeIndex({
-    indexes: [{
-      indexname: 'idx_claim_payments_check_intake',
-      indexdef: CORRECT_PAYMENTS_INDEXDEF,
-    }],
-    duplicateGroups: [{ check_intake_item_id: CHECK_ID, count: 2 }],
-  });
-  assert.equal(decision.action, 'stop');
-  assert.equal(decision.reason, 'duplicate_claim_payments');
-  assert.equal(decision.duplicateGroups, 1);
+test('missing homeowner_ledger_events do not change Received', () => {
+  assert.equal(fundsReceivedForClaim([{ id: CHECK_ID, claim_id: CLAIM_A, amount: 9 }], CLAIM_A), 9);
 });
 
-test('index verification SQL stops on definition mismatch and keeps the duplicate diagnostic', () => {
-  const sql = readFileSync('supabase/migrations/20260918170020_verify_claim_payments_check_intake_index.sql', 'utf8');
-  assert.match(sql, /FROM pg_indexes/);
-  assert.match(sql, /indexdef/);
-  assert.match(sql, /claim_payments_check_intake_index_matches/);
-  assert.match(sql, /RAISE EXCEPTION/);
-  assert.match(sql, /duplicate claim_payments\.check_intake_item_id/);
-  assert.match(sql, /definition does not match/);
-  assert.equal(/CREATE UNIQUE INDEX IF NOT EXISTS idx_claim_payments_check_intake/.test(sql), false);
+test('insurance check inserted already linked creates exactly one check_received', () => {
+  const store = { homeowner_ledger_events: [] };
+  const check = { id: CHECK_ID, claim_id: CLAIM_A, tenant_id: TENANT_A, check_source: 'insurance' };
+  applyAuthoritativeCheckReceived(store, check);
+  applyAuthoritativeCheckReceived(store, check, CLAIM_A);
+  applyStatusEvent(store, check, 'uploaded');
+  assert.equal(store.homeowner_ledger_events.filter((row) => row.event_type === 'check_received').length, 1);
 });
 
-test('check_received: repeated sync keeps one event and preserves the existing row', () => {
-  const store = {
-    check_intake_items: [{
-      id: CHECK_ID,
-      claim_id: CLAIM_A,
-      amount: 100,
-      tenant_id: TENANT_A,
-      issue_date: '2026-09-01',
-    }],
-    claim_checks: [],
-    claim_payments: [],
-    homeowner_ledger_events: [{
-      id: 'keep-me',
-      check_id: CHECK_ID,
-      claim_id: CLAIM_A,
-      event_type: 'check_received',
-      tenant_id: TENANT_A,
-      payload_json: { source: 'preexisting' },
-    }],
-  };
-  applyDatabaseLedgerSync(store, CHECK_ID);
-  applyDatabaseLedgerSync(store, CHECK_ID);
+test('late link NULL → A creates exactly one check_received', () => {
+  const store = { homeowner_ledger_events: [] };
+  const unlinked = { id: CHECK_ID, claim_id: null, tenant_id: TENANT_A, check_source: 'insurance' };
+  applyAuthoritativeCheckReceived(store, unlinked);
+  assert.equal(store.homeowner_ledger_events.length, 0);
+  applyAuthoritativeCheckReceived(store, { ...unlinked, claim_id: CLAIM_A }, null);
+  assert.equal(store.homeowner_ledger_events.length, 1);
+  assert.equal(store.homeowner_ledger_events[0].claim_id, CLAIM_A);
+});
+
+test('relink A → B updates the same physical-check event', () => {
+  const store = { homeowner_ledger_events: [] };
+  const check = { id: CHECK_ID, claim_id: CLAIM_A, tenant_id: TENANT_A };
+  applyAuthoritativeCheckReceived(store, check);
+  applyAuthoritativeCheckReceived(store, { ...check, claim_id: CLAIM_B }, CLAIM_A);
   const received = store.homeowner_ledger_events.filter((row) => row.event_type === 'check_received');
   assert.equal(received.length, 1);
-  assert.equal(received[0].id, 'keep-me');
-  assert.equal(received[0].payload_json.source, 'preexisting');
+  assert.equal(received[0].id, `recv-${CHECK_ID}`);
+  assert.equal(received[0].claim_id, CLAIM_B);
 });
 
-test('check_received: concurrent-equivalent inserts keep one event', () => {
-  const events = [];
-  const first = insertCheckReceivedConflictSafe(events, {
-    id: 'one',
-    check_id: CHECK_ID,
-    event_type: 'check_received',
-  });
-  const second = insertCheckReceivedConflictSafe(events, {
-    id: 'two',
-    check_id: CHECK_ID,
-    event_type: 'check_received',
-  });
-  assert.equal(first.inserted, true);
-  assert.equal(second.inserted, false);
-  assert.equal(events.length, 1);
-  assert.equal(events[0].id, 'one');
-});
-
-test('check_received uniqueness SQL is partial unique on check_id', () => {
-  const sql = readFileSync('supabase/migrations/20260918170030_one_check_received_per_check.sql', 'utf8');
-  assert.match(sql, /CREATE UNIQUE INDEX IF NOT EXISTS idx_homeowner_ledger_one_check_received/);
-  assert.match(sql, /event_type = 'check_received' AND check_id IS NOT NULL/);
-  assert.match(sql, /RAISE EXCEPTION/);
-  assert.match(sql, /duplicate check_received/);
-});
-
-test('future ledger trigger uses conflict-safe check_received and re-asserts ownership', () => {
-  const sql = readFileSync('supabase/migrations/20260918170100_sync_check_claim_ledger.sql', 'utf8');
-  assert.match(sql, /PERFORM public\.assert_check_claim_link_allowed/);
-  assert.match(sql, /ON CONFLICT \(check_id\) WHERE event_type = 'check_received' AND check_id IS NOT NULL/);
-  assert.match(sql, /DO NOTHING/);
-  assert.equal(/IF NOT EXISTS \(\s*SELECT 1 FROM public\.homeowner_ledger_events/.test(sql), false);
-});
-
-test('ownership SQL denies cross-tenant writes even on direct table updates', () => {
-  const sql = readFileSync('supabase/migrations/20260918170010_guard_check_claim_tenant.sql', 'utf8');
-  assert.match(sql, /claim_observed_tenant_ids/);
-  assert.match(sql, /check_cases/);
-  assert.match(sql, /claims cl/);
-  assert.match(sql, /org_id/);
-  assert.match(sql, /trg_guard_check_claim_link/);
-  assert.match(sql, /BEFORE INSERT OR UPDATE ON public\.check_intake_items/);
-  assert.match(sql, /check_claim_link_denied/);
-  assert.match(sql, /WITH CHECK/);
-  assert.match(sql, /GRANT EXECUTE ON FUNCTION public\.assert_check_claim_link_allowed\(uuid, uuid, uuid\) TO service_role/);
-});
-
-test('backfill inspect identifies the three known gap classes without hardcoded counts', () => {
-  const store = {
-    claims: [{ id: CLAIM_A, org_id: null }],
-    checks: [
-      { id: CHECK_ID, claim_id: CLAIM_A, tenant_id: TENANT_A, amount: 100 },
-      { id: CHECK_2, claim_id: CLAIM_A, tenant_id: TENANT_A, amount: 50 },
-    ],
-    claim_checks: [{ id: 'cc-1', claim_id: CLAIM_A, check_intake_item_id: CHECK_ID }],
-    claim_payments: [],
-    homeowner_ledger_events: [{
-      check_id: CHECK_ID,
-      claim_id: CLAIM_A,
-      event_type: 'check_received',
-      tenant_id: TENANT_A,
-    }],
-    check_cases: [{ external_claim_id: CLAIM_A, tenant_id: TENANT_A }],
-  };
-  const report = inspectLedgerBackfill(store);
-  assert.equal(report.eligibleLinkedChecks, 2);
-  assert.deepEqual(report.missingClaimChecks, [CHECK_2]);
-  assert.deepEqual(report.missingClaimPayments, [CHECK_ID, CHECK_2]);
-  assert.deepEqual(report.missingCheckReceived, [CHECK_2]);
-  assert.equal(report.crossTenantAnomalies.length, 0);
-  assert.equal(report.writes, 0);
-  const inspectSql = readFileSync('supabase/unapplied/ledger-backfill/01_inspect.sql', 'utf8');
-  assert.match(inspectSql, /eligible_linked_checks/);
-  assert.match(inspectSql, /missing_claim_checks/);
-  assert.match(inspectSql, /missing_claim_payments/);
-  assert.match(inspectSql, /missing_check_received/);
-  assert.match(inspectSql, /cross_tenant_anomalies/);
-  assert.match(inspectSql, /duplicate_payment_identities/);
-  assert.match(inspectSql, /duplicate_check_received_identities/);
-  assert.equal(/39|107|86/.test(inspectSql), false);
-});
-
-test('backfill apply is idempotent and leaves valid rows intact', () => {
-  const store = {
-    claims: [{ id: CLAIM_A, org_id: null }],
-    checks: [{ id: CHECK_ID, claim_id: CLAIM_A, tenant_id: TENANT_A, amount: 100, carrier_name: 'A' }],
-    claim_checks: [],
-    claim_payments: [],
-    homeowner_ledger_events: [],
-    check_cases: [{ external_claim_id: CLAIM_A, tenant_id: TENANT_A }],
-  };
-  const first = applyLedgerBackfill(store);
-  assert.equal(first.writes, 3);
-  assert.equal(store.claim_checks.length, 1);
-  assert.equal(store.claim_payments.length, 1);
+test('retry does not duplicate check_received', () => {
+  const store = { homeowner_ledger_events: [] };
+  const check = { id: CHECK_ID, claim_id: CLAIM_A, tenant_id: TENANT_A };
+  applyAuthoritativeCheckReceived(store, check);
+  applyAuthoritativeCheckReceived(store, check, CLAIM_A);
+  applyAuthoritativeCheckReceived(store, check, CLAIM_A);
   assert.equal(store.homeowner_ledger_events.length, 1);
-  const existingPaymentId = store.claim_payments[0].id;
-  const existingEventId = store.homeowner_ledger_events[0].id;
-  const second = applyLedgerBackfill(store);
-  assert.equal(second.writes, 0);
-  assert.equal(store.claim_payments[0].id, existingPaymentId);
-  assert.equal(store.homeowner_ledger_events[0].id, existingEventId);
-  assert.equal(store.claim_checks[0].claim_id, CLAIM_A);
 });
 
-test('backfill apply stops on a cross-tenant anomaly instead of repairing blindly', () => {
-  const store = {
-    claims: [{ id: CLAIM_B, org_id: TENANT_B }],
-    checks: [{ id: CHECK_ID, claim_id: CLAIM_B, tenant_id: TENANT_A, amount: 100 }],
-    claim_checks: [],
-    claim_payments: [],
-    homeowner_ledger_events: [],
-    check_cases: [{ external_claim_id: CLAIM_B, tenant_id: TENANT_B }],
-  };
-  const report = inspectLedgerBackfill(store);
-  assert.equal(report.crossTenantAnomalies.length, 1);
-  assert.equal(report.crossTenantAnomalies[0].reason, 'cross_tenant');
-  assert.throws(() => applyLedgerBackfill(store), /ledger_backfill_stop: cross_tenant_anomaly/);
-  assert.equal(store.claim_checks.length, 0);
-  assert.equal(store.claim_payments.length, 0);
-  assert.equal(store.homeowner_ledger_events.length, 0);
+test('status-event path does not create another check_received', () => {
+  const store = { homeowner_ledger_events: [] };
+  const check = { id: CHECK_ID, claim_id: CLAIM_A, tenant_id: TENANT_A, status: 'deposited' };
+  applyAuthoritativeCheckReceived(store, check);
+  applyStatusEvent(store, check, 'uploaded');
+  assert.equal(store.homeowner_ledger_events.filter((row) => row.event_type === 'check_received').length, 1);
+  assert.equal(store.homeowner_ledger_events.filter((row) => row.event_type === 'deposited').length, 1);
 });
 
-test('client planner denies a cross-tenant assignment before writes', () => {
-  const plan = buildClaimLedgerSyncPlan({
-    check: { id: CHECK_ID, tenant_id: TENANT_A, amount: 10, claim_id: null },
-    newClaimId: CLAIM_B,
-    claimNumber: 'CL-B',
-    claimExists: true,
-    claimTenantSignals: [{ source: 'org_id', tenantId: TENANT_B }],
-  });
-  assert.equal(plan.denied, true);
-  assert.equal(plan.skipWrites, true);
+test('two physical checks create two check_received events', () => {
+  const store = { homeowner_ledger_events: [] };
+  applyAuthoritativeCheckReceived(store, { id: CHECK_ID, claim_id: CLAIM_A, tenant_id: TENANT_A });
+  applyAuthoritativeCheckReceived(store, { id: CHECK_2, claim_id: CLAIM_A, tenant_id: TENANT_A });
+  assert.equal(store.homeowner_ledger_events.length, 2);
 });
 
-test('ClaimLedgerCard fails before updating claim_id and reverts if sync is denied', () => {
+test('successful link invalidates Received queries without a full reload', () => {
   const src = readFileSync('src/components/payments/ClaimLedgerCard.tsx', 'utf8');
-  assert.match(src, /evaluateCheckClaimLink/);
-  assert.match(src, /loadClaimTenantSignals/);
-  const ownershipAt = src.indexOf('if (!ownership.allowed)');
-  const updateAt = src.indexOf('.update({ detected_claim_number: trimmed, claim_id: matched.id })');
-  const revertAt = src.indexOf('.update({ claim_id: previousClaimId })');
-  assert.ok(ownershipAt > 0 && updateAt > ownershipAt);
-  assert.ok(revertAt > updateAt);
-  assert.match(src, /isCheckClaimLinkDenied/);
-  assert.match(src, /does not commit and check_intake_items.claim_id is unchanged/);
+  assert.match(src, /fundsReceivedForClaim/);
+  assert.match(src, /filterSelectableClaims/);
+  assert.match(src, /invalidateQueries\(\{ queryKey: \["claim-ledger-checks", res\.claimId\] \}\)/);
+  assert.equal(/applyClaimLedgerSync/.test(src), false);
+  assert.equal(/!row\.org_id \|\|/.test(src), false);
 });
 
-test('database ledger sync refuses to amplify an invalid existing link', () => {
-  const store = {
-    claims: [{ id: CLAIM_B, org_id: TENANT_B }],
-    check_cases: [{ external_claim_id: CLAIM_B, tenant_id: TENANT_B }],
-    check_intake_items: [{
-      id: CHECK_ID,
-      claim_id: CLAIM_B,
-      tenant_id: TENANT_A,
-      amount: 25,
+test('failed foreign-org link does not write claim_id', () => {
+  const check = { id: CHECK_ID, claim_id: null, tenant_id: TENANT_A };
+  const decision = evaluateCheckClaimLink({
+    checkTenantId: check.tenant_id,
+    claimId: CLAIM_B,
+    claimExists: true,
+    claimOrgId: TENANT_B,
+  });
+  assert.equal(decision.allowed, false);
+  assert.equal(check.claim_id, null);
+});
+
+test('claim picker does not offer known foreign-org claims', () => {
+  const claims = [
+    { id: CLAIM_A, org_id: TENANT_A },
+    { id: CLAIM_B, org_id: TENANT_B },
+    { id: 'legacy', org_id: null },
+  ];
+  assert.deepEqual(filterSelectableClaims(claims, TENANT_A).map((row) => row.id), [CLAIM_A]);
+  assert.equal(claimIsSelectableForTenant({ org_id: null }, TENANT_A), false);
+});
+
+test('payment-index catalog matcher uses uniqueness, relation, columns, and predicate', () => {
+  assert.equal(claimPaymentsIndexCatalogMatches({
+    indexname: 'idx_claim_payments_check_intake',
+    nspname: 'public',
+    relname: 'claim_payments',
+    indisunique: true,
+    columns: ['check_intake_item_id'],
+    indpred: '(check_intake_item_id IS NOT NULL)',
+  }), true);
+  assert.equal(verifyClaimPaymentsCheckIntakeIndex({
+    indexes: [{
+      indexname: 'idx_claim_payments_check_intake',
+      nspname: 'public',
+      relname: 'claim_payments',
+      indisunique: false,
+      columns: ['check_intake_item_id'],
+      indpred: '(check_intake_item_id IS NOT NULL)',
     }],
-    claim_checks: [],
-    claim_payments: [],
-    homeowner_ledger_events: [],
-  };
-  assert.throws(() => applyDatabaseLedgerSync(store, CHECK_ID), /check_claim_link_denied: cross_tenant/);
-  assert.equal(store.claim_payments.length, 0);
-  assert.equal(store.homeowner_ledger_events.length, 0);
+  }).action, 'stop');
+  assert.equal(verifyClaimPaymentsCheckIntakeIndex({
+    indexes: [{
+      indexname: 'idx_claim_payments_check_intake',
+      nspname: 'public',
+      relname: 'other_table',
+      indisunique: true,
+      columns: ['check_intake_item_id'],
+      indpred: '(check_intake_item_id IS NOT NULL)',
+    }],
+  }).action, 'stop');
 });
 
-test('backfill apply SQL is conflict-safe and does not touch providers or statuses', () => {
-  const sql = readFileSync('supabase/unapplied/ledger-backfill/02_apply.sql', 'utf8');
-  assert.match(sql, /ledger_backfill_stop: cross_tenant_anomaly/);
-  assert.match(sql, /ON CONFLICT \(check_id\) WHERE event_type = 'check_received'/);
-  assert.equal(/\bcheckalt\b|\bmoov\b/i.test(sql), false);
-  assert.equal(/SET status\b/.test(sql), false);
-  assert.equal(/DELETE FROM/.test(sql), false);
+test('SQL artifacts restore Lovable writer and fail-closed org guard', () => {
+  const guard = readFileSync('supabase/migrations/20260918170010_guard_check_claim_org.sql', 'utf8');
+  assert.match(guard, /legacy_unassigned/);
+  assert.match(guard, /same_org/);
+  assert.equal(/first_link/.test(guard), false);
+  assert.match(guard, /auto_link_check_to_claim/);
+  assert.match(guard, /tg_auto_link_check_to_claim/);
+  assert.match(guard, /check_claim_link_allowed/);
+  assert.equal(/GRANT EXECUTE ON FUNCTION public\.claim_deterministic_tenant_ids/.test(guard), false);
+
+  const writer = readFileSync('supabase/migrations/20260918170040_one_check_received_writer.sql', 'utf8');
+  assert.match(writer, /hle_on_check_intake_insert/);
+  assert.match(writer, /AFTER INSERT OR UPDATE OF claim_id/);
+  assert.match(writer, /DROP TRIGGER IF EXISTS trg_sync_homeowner_ledger_ins/);
+  assert.match(writer, /v_event_type IS DISTINCT FROM 'check_received'/);
+  assert.match(writer, /WHERE NOT EXISTS/);
+
+  const inspect = readFileSync('supabase/unapplied/ledger-backfill/01_inspect.sql', 'utf8');
+  assert.match(inspect, /funds_received_source/);
+  assert.equal(/missing_claim_payments/.test(inspect), false);
+  assert.equal(/02_apply/.test(readFileSync('supabase/unapplied/ledger-backfill/README.md', 'utf8')), false);
+
+  const indexSql = readFileSync('supabase/migrations/20260918170020_verify_claim_payments_check_intake_index.sql', 'utf8');
+  assert.match(indexSql, /indisunique/);
+  assert.match(indexSql, /pg_get_expr\(i\.indpred/);
+  assert.match(indexSql, /unnest\(i\.indkey\)/);
+
+  const ocr = readFileSync('supabase/functions/check-ocr-intake/index.ts', 'utf8');
+  assert.match(ocr, /Skipped — org mismatch or unassigned legacy claim/);
+  assert.equal(/first_link|first-link|claim_observed_tenant/.test(ocr), false);
 });

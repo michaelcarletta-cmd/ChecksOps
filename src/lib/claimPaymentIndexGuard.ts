@@ -1,12 +1,14 @@
-/** Catalog-definition guard for idx_claim_payments_check_intake. Name existence is not proof. */
+/** Catalog-shape guard for idx_claim_payments_check_intake. indexdef text is not proof. */
 
 export const REQUIRED_CLAIM_PAYMENTS_INDEX_NAME = "idx_claim_payments_check_intake";
 
-export type CatalogIndex = {
-  schemaname?: string | null;
+export type CatalogIndexShape = {
   indexname: string;
-  tablename?: string | null;
-  indexdef: string;
+  nspname?: string | null;
+  relname?: string | null;
+  indisunique?: boolean | null;
+  columns?: string[] | null;
+  indpred?: string | null;
 };
 
 export type DuplicatePaymentGroup = {
@@ -18,35 +20,22 @@ export type ClaimPaymentIndexDecision = {
   ok: boolean;
   action: "pass" | "create" | "stop";
   reason: string;
-  indexdef?: string | null;
   duplicateGroups: number;
 };
 
-export function normalizeIndexDef(indexdef?: string | null) {
-  return String(indexdef || "").replace(/\s+/g, " ").trim().toLowerCase();
-}
-
-export function claimPaymentsIndexMatchesInvariant(indexdef?: string | null) {
-  const normalized = normalizeIndexDef(indexdef);
-  if (!normalized) return false;
-  if (!normalized.includes("unique")) return false;
-  if (!/\bon (?:public\.)?claim_payments\b/.test(normalized)) return false;
-
-  const columnMatch = normalized.match(
-    /\bon (?:public\.)?claim_payments(?: using [\w.]+)?\s*\(([^)]+)\)/,
-  );
-  if (!columnMatch) return false;
-  const columns = columnMatch[1].split(",").map((part) => part.trim()).filter(Boolean);
+export function claimPaymentsIndexCatalogMatches(index?: CatalogIndexShape | null) {
+  if (!index) return false;
+  if (!index.indisunique) return false;
+  if (String(index.relname || "") !== "claim_payments") return false;
+  if (String(index.nspname || "public") !== "public") return false;
+  const columns = index.columns ?? [];
   if (columns.length !== 1 || columns[0] !== "check_intake_item_id") return false;
-
-  const whereMatch = normalized.match(/\bwhere\s+(.+)$/);
-  if (!whereMatch) return false;
-  const predicate = whereMatch[1].replace(/[()]/g, " ").replace(/\s+/g, " ").trim();
+  const predicate = String(index.indpred || "").toLowerCase().replace(/[() ]+/g, " ").trim();
   return predicate === "check_intake_item_id is not null";
 }
 
 export function verifyClaimPaymentsCheckIntakeIndex(opts: {
-  indexes?: CatalogIndex[];
+  indexes?: CatalogIndexShape[];
   duplicateGroups?: DuplicatePaymentGroup[] | number;
 }) {
   const duplicateGroups = Array.isArray(opts.duplicateGroups)
@@ -54,46 +43,19 @@ export function verifyClaimPaymentsCheckIntakeIndex(opts: {
     : Number(opts.duplicateGroups || 0);
   const named = (opts.indexes ?? []).find((index) => (
     index.indexname === REQUIRED_CLAIM_PAYMENTS_INDEX_NAME
-    && (!index.schemaname || index.schemaname === "public")
+    && (!index.nspname || index.nspname === "public")
   ));
 
   if (duplicateGroups > 0) {
-    return {
-      ok: false,
-      action: "stop",
-      reason: "duplicate_claim_payments",
-      indexdef: named?.indexdef ?? null,
-      duplicateGroups,
-    } satisfies ClaimPaymentIndexDecision;
+    return { ok: false, action: "stop" as const, reason: "duplicate_claim_payments", duplicateGroups };
   }
-
   if (!named) {
-    return {
-      ok: true,
-      action: "create",
-      reason: "missing_index",
-      indexdef: null,
-      duplicateGroups,
-    } satisfies ClaimPaymentIndexDecision;
+    return { ok: true, action: "create" as const, reason: "missing_index", duplicateGroups };
   }
-
-  if (!claimPaymentsIndexMatchesInvariant(named.indexdef)) {
-    return {
-      ok: false,
-      action: "stop",
-      reason: "index_definition_mismatch",
-      indexdef: named.indexdef,
-      duplicateGroups,
-    } satisfies ClaimPaymentIndexDecision;
+  if (!claimPaymentsIndexCatalogMatches(named)) {
+    return { ok: false, action: "stop" as const, reason: "index_catalog_mismatch", duplicateGroups };
   }
-
-  return {
-    ok: true,
-    action: "pass",
-    reason: "definition_matches",
-    indexdef: named.indexdef,
-    duplicateGroups,
-  } satisfies ClaimPaymentIndexDecision;
+  return { ok: true, action: "pass" as const, reason: "catalog_matches", duplicateGroups };
 }
 
 export function assertClaimPaymentsCheckIntakeIndex(opts: Parameters<typeof verifyClaimPaymentsCheckIntakeIndex>[0]) {

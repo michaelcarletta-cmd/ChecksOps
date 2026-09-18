@@ -11,13 +11,14 @@ import { FileText, Link2, CheckCircle2, AlertCircle, Pencil, DollarSign } from "
 import { format } from "date-fns";
 import { ClaimSettlementEditor } from "./ClaimSettlementEditor";
 import { getDepositLabel } from "@/lib/depositLabel";
-import { applyClaimLedgerSync } from "@/lib/claimLedgerSync";
+import { fundsReceivedForClaim } from "@/lib/claimLedgerSync";
 import {
-  checkClaimLinkUserMessage,
+  claimLinkUserMessage,
   evaluateCheckClaimLink,
+  filterSelectableClaims,
   isCheckClaimLinkDenied,
-  loadClaimTenantSignals,
-} from "@/lib/checkClaimOwnership";
+  newTrackingClaimInsert,
+} from "@/lib/checkClaimLinkGuard";
 
 interface Props {
   checkIntakeItemId: string;
@@ -106,106 +107,92 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
       if (!trimmed) throw new Error("Enter a claim number");
 
       // Look up existing claim by claim_number (case-insensitive)
-      const { data: matches, error: lookupErr } = await supabase
-        .from("claims")
-        .select("id, claim_number, policyholder_name, org_id")
-        .ilike("claim_number", trimmed)
-        .limit(2);
-      if (lookupErr) throw lookupErr;
-
-      if (matches && matches.length > 1) {
-        throw new Error(`Multiple claims match "${trimmed}". Please disambiguate.`);
-      }
-
-      let matched = matches?.[0];
-      let created = false;
-
       const { data: checkRow, error: checkErr } = await supabase
         .from("check_intake_items")
-        .select("id, claim_id, amount, check_number, carrier_name, issue_date, payee_line, tenant_id, status")
+        .select("id, claim_id, amount, tenant_id")
         .eq("id", checkIntakeItemId)
         .single();
       if (checkErr) throw checkErr;
 
-      // No CRM claim — create a lightweight tracking-only claim record so
-      // figures (RCV, ACV, deductible, etc.) can still be entered and all
-      // future checks for this claim number link to the same ledger.
+      const { data: matches, error: lookupErr } = await supabase
+        .from("claims")
+        .select("id, claim_number, policyholder_name, org_id")
+        .ilike("claim_number", trimmed)
+        .limit(5);
+      if (lookupErr) throw lookupErr;
+
+      const sameOrg = filterSelectableClaims(matches ?? [], checkRow.tenant_id);
+      const legacyNullOrg = (matches ?? []).filter((row: { org_id?: string | null }) => !row.org_id);
+      const foreign = (matches ?? []).filter((row: { org_id?: string | null }) => (
+        row.org_id && String(row.org_id) !== String(checkRow.tenant_id || "")
+      ));
+      if (sameOrg.length > 1) {
+        throw new Error(`Multiple claims match "${trimmed}". Please disambiguate.`);
+      }
+
+      // Known same-org claims are selectable. NULL-org matches are evaluated
+      // fail-closed and never treated as this tenant's claim.
+      let matched = (sameOrg[0] ?? legacyNullOrg[0]) as { id: string; claim_number: string; policyholder_name?: string | null; org_id?: string | null } | undefined;
+      let created = false;
+
+      if (!matched && foreign.length) {
+        throw new Error(claimLinkUserMessage("cross_org"));
+      }
+
       if (!matched) {
+        if (!checkRow.tenant_id) {
+          throw new Error(claimLinkUserMessage("missing_check_tenant"));
+        }
         const { data: newClaim, error: insertErr } = await supabase
           .from("claims")
-          .insert({ claim_number: trimmed, status: "tracking" })
+          .insert(newTrackingClaimInsert(trimmed, checkRow.tenant_id))
           .select("id, claim_number, policyholder_name, org_id")
           .single();
         if (insertErr) throw insertErr;
         matched = newClaim;
         created = true;
-      }
-
-      const ownershipRows = await loadClaimTenantSignals(supabase, matched.id);
-      const ownership = evaluateCheckClaimLink({
-        checkTenantId: checkRow.tenant_id,
-        claimId: matched.id,
-        claimExists: ownershipRows.claimExists || created,
-        signals: ownershipRows.signals,
-        excludeCheckId: checkIntakeItemId,
-      });
-      if (!ownership.allowed) {
-        throw new Error(checkClaimLinkUserMessage(ownership.reason));
-      }
-
-      const { data: authData } = await supabase.auth.getUser();
-      let actorTenantId: string | null = null;
-      if (authData?.user?.id) {
-        const { data: memberships } = await supabase
-          .from("tenant_users")
+      } else {
+        const { data: otherIntakes } = await supabase
+          .from("check_intake_items")
           .select("tenant_id")
-          .eq("user_id", authData.user.id);
-        const memberOfCheck = (memberships ?? []).some((row: { tenant_id?: string | null }) => (
-          String(row.tenant_id || "") === String(checkRow.tenant_id || "")
-        ));
-        actorTenantId = memberOfCheck
-          ? (checkRow.tenant_id ?? null)
-          : ((memberships ?? [])[0]?.tenant_id ?? null);
-      }
-      if (actorTenantId && checkRow.tenant_id && String(actorTenantId) !== String(checkRow.tenant_id)) {
-        throw new Error(checkClaimLinkUserMessage("cross_tenant"));
+          .eq("claim_id", matched.id)
+          .neq("id", checkIntakeItemId);
+        const { data: cases } = await supabase
+          .from("check_cases")
+          .select("tenant_id")
+          .eq("external_claim_id", matched.id);
+        const decision = evaluateCheckClaimLink({
+          checkTenantId: checkRow.tenant_id,
+          claimId: matched.id,
+          claimExists: true,
+          claimOrgId: matched.org_id,
+          deterministicTenantIds: [
+            ...(otherIntakes ?? []).map((row: { tenant_id?: string | null }) => row.tenant_id),
+            ...(cases ?? []).map((row: { tenant_id?: string | null }) => row.tenant_id),
+          ].filter(Boolean) as string[],
+        });
+        if (!decision.allowed) {
+          throw new Error(claimLinkUserMessage(decision.reason));
+        }
       }
 
       const previousClaimId = checkRow.claim_id ?? null;
-
-      // Database BEFORE trigger is authoritative. If it rejects, this UPDATE
-      // does not commit and check_intake_items.claim_id is unchanged.
       const { error } = await supabase
         .from("check_intake_items")
         .update({ detected_claim_number: trimmed, claim_id: matched.id })
         .eq("id", checkIntakeItemId);
       if (error) {
         if (isCheckClaimLinkDenied(error)) {
-          throw new Error(checkClaimLinkUserMessage(error.message));
+          throw new Error(claimLinkUserMessage(error.message));
         }
         throw error;
-      }
-
-      const sync = await applyClaimLedgerSync(supabase, {
-        check: { ...(checkRow as any), claim_id: matched.id },
-        newClaimId: matched.id,
-        claimNumber: matched.claim_number,
-        actorTenantId,
-        claimExists: ownershipRows.claimExists || created,
-        claimTenantSignals: ownershipRows.signals,
-      });
-      if ((sync as { denied?: boolean }).denied) {
-        await supabase
-          .from("check_intake_items")
-          .update({ claim_id: previousClaimId })
-          .eq("id", checkIntakeItemId);
-        throw new Error(checkClaimLinkUserMessage((sync as { reason?: string }).reason || "cross_tenant"));
       }
 
       return {
         created,
         claimNumber: matched.claim_number,
         claimId: matched.id,
+        previousClaimId,
         policyholderName: matched.policyholder_name,
       };
     },
@@ -227,6 +214,10 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
       // We must ensure the UI shows the ledger and the editor can be opened.
       qc.invalidateQueries({ queryKey: ["claim-ledger", res.claimId] });
       qc.invalidateQueries({ queryKey: ["claim-ledger-settlement", res.claimId] });
+      qc.invalidateQueries({ queryKey: ["claim-ledger-checks", res.claimId] });
+      if (res.previousClaimId && res.previousClaimId !== res.claimId) {
+        qc.invalidateQueries({ queryKey: ["claim-ledger-checks", res.previousClaimId] });
+      }
       
       // Auto-open editor to allow entering amounts immediately
       setTimeout(() => {
@@ -350,7 +341,7 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
   const totalExpected = totalRcv + Number(s.supplement_expected || 0);
 
 
-  const totalReceived = siblingChecks.reduce((sum, c: any) => sum + Number(c.amount || 0), 0);
+  const totalReceived = fundsReceivedForClaim(siblingChecks, effectiveClaimId);
   const remaining = Math.max(0, totalExpected - totalReceived);
   const pct = totalExpected > 0 ? Math.min(100, (totalReceived / totalExpected) * 100) : 0;
 

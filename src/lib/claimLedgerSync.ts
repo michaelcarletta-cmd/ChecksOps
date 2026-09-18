@@ -1,11 +1,5 @@
 /** Pure plan and idempotent apply for one-check → one-claim ledger sync. No junction table. */
 
-import {
-  evaluateCheckClaimLink,
-  type CheckClaimLinkDecision,
-  type ClaimTenantSignal,
-} from "./checkClaimOwnership.ts";
-
 export type IntakeCheck = {
   id: string;
   claim_id?: string | null;
@@ -73,33 +67,12 @@ export function buildClaimLedgerSyncPlan(opts: {
   existingClaimCheck?: ExistingLedgerRow | null;
   existingPayment?: ExistingLedgerRow | null;
   actorTenantId?: string | null;
-  claimExists?: boolean;
-  claimTenantIds?: string[];
-  claimTenantSignals?: ClaimTenantSignal[];
 }) {
   const { check, newClaimId, claimNumber, existingEvents = [] } = opts;
   if (opts.actorTenantId && check.tenant_id && String(opts.actorTenantId) !== String(check.tenant_id)) {
     return {
       denied: true as const,
       reason: "cross_tenant",
-      sameClaim: false,
-      skipWrites: true,
-      insertCheckReceived: false,
-    };
-  }
-
-  const ownership: CheckClaimLinkDecision = evaluateCheckClaimLink({
-    checkTenantId: check.tenant_id,
-    claimId: newClaimId,
-    claimExists: opts.claimExists,
-    claimTenantIds: opts.claimTenantIds,
-    signals: opts.claimTenantSignals,
-    excludeCheckId: check.id,
-  });
-  if (!ownership.allowed) {
-    return {
-      denied: true as const,
-      reason: ownership.reason,
       sameClaim: false,
       skipWrites: true,
       insertCheckReceived: false,
@@ -190,30 +163,11 @@ type LedgerClient = {
 
 export async function applyClaimLedgerSync(
   supabase: LedgerClient,
-  opts: {
-    check: IntakeCheck;
-    newClaimId: string;
-    claimNumber: string;
-    actorTenantId?: string | null;
-    claimExists?: boolean;
-    claimTenantIds?: string[];
-    claimTenantSignals?: ClaimTenantSignal[];
-  },
+  opts: { check: IntakeCheck; newClaimId: string; claimNumber: string; actorTenantId?: string | null },
 ) {
   const { check, newClaimId, claimNumber, actorTenantId } = opts;
   if (actorTenantId && check.tenant_id && String(actorTenantId) !== String(check.tenant_id)) {
     return { denied: true, reason: "cross_tenant", skipWrites: true };
-  }
-  const ownership = evaluateCheckClaimLink({
-    checkTenantId: check.tenant_id,
-    claimId: newClaimId,
-    claimExists: opts.claimExists,
-    claimTenantIds: opts.claimTenantIds,
-    signals: opts.claimTenantSignals,
-    excludeCheckId: check.id,
-  });
-  if (!ownership.allowed) {
-    return { denied: true, reason: ownership.reason, skipWrites: true };
   }
 
   const { data: claimCheckRows } = await supabase
@@ -247,9 +201,6 @@ export async function applyClaimLedgerSync(
     existingPayment,
     existingEvents: events ?? [],
     actorTenantId,
-    claimExists: opts.claimExists,
-    claimTenantIds: opts.claimTenantIds,
-    claimTenantSignals: opts.claimTenantSignals,
   });
   if (plan.denied || plan.skipWrites) return plan;
 
@@ -336,50 +287,15 @@ export async function applyClaimLedgerSync(
   return { ...plan, duplicatePayments: canonicalPayment.duplicate, duplicateClaimChecks: canonicalCheck.duplicate };
 }
 
-export function insertCheckReceivedConflictSafe(
-  events: Array<Record<string, any>>,
-  row: Record<string, any>,
-) {
-  const existing = events.find((event) => (
-    event.check_id === row.check_id && event.event_type === "check_received"
-  ));
-  if (existing) return { inserted: false, id: existing.id ?? null };
-  events.push(row);
-  return { inserted: true, id: row.id ?? null };
-}
-
 /** In-memory SQL-trigger semantics for double-execution tests. */
 export function applyDatabaseLedgerSync(store: {
   claim_checks: Array<Record<string, any>>;
   claim_payments: Array<Record<string, any>>;
   homeowner_ledger_events: Array<Record<string, any>>;
   check_intake_items: Array<Record<string, any>>;
-  claims?: Array<Record<string, any>>;
-  check_cases?: Array<Record<string, any>>;
 }, checkId: string) {
   const check = store.check_intake_items.find((row) => row.id === checkId);
   if (!check?.claim_id) return { skipped: true };
-  if (store.claims || store.check_cases) {
-    const claim = (store.claims ?? []).find((row) => row.id === check.claim_id);
-    const ownership = evaluateCheckClaimLink({
-      checkTenantId: check.tenant_id,
-      claimId: check.claim_id,
-      claimExists: Boolean(claim),
-      signals: [
-        ...(claim?.org_id ? [{ source: "org_id" as const, tenantId: String(claim.org_id) }] : []),
-        ...(store.check_intake_items ?? [])
-          .filter((row) => row.claim_id === check.claim_id && row.tenant_id)
-          .map((row) => ({ source: "intake" as const, tenantId: String(row.tenant_id), checkId: row.id })),
-        ...(store.check_cases ?? [])
-          .filter((row) => row.external_claim_id === check.claim_id && row.tenant_id)
-          .map((row) => ({ source: "check_case" as const, tenantId: String(row.tenant_id) })),
-      ],
-      excludeCheckId: check.id,
-    });
-    if (!ownership.allowed) {
-      throw new Error(`check_claim_link_denied: ${ownership.reason}`);
-    }
-  }
   const paymentDate = check.issue_date || new Date().toISOString().slice(0, 10);
 
   const existingCc = store.claim_checks.filter((row) => row.check_intake_item_id === check.id);
@@ -418,8 +334,11 @@ export function applyDatabaseLedgerSync(store: {
       event.claim_id = check.claim_id;
     }
   }
-  if (check.tenant_id) {
-    insertCheckReceivedConflictSafe(store.homeowner_ledger_events, {
+  const hasReceived = store.homeowner_ledger_events.some((event) => (
+    event.check_id === check.id && event.event_type === "check_received"
+  ));
+  if (!hasReceived && check.tenant_id) {
+    store.homeowner_ledger_events.push({
       id: `evt-${check.id}`,
       tenant_id: check.tenant_id,
       claim_id: check.claim_id,
