@@ -8,9 +8,10 @@ import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { normalizePath, s3KeyFor } from './storage-paths.mjs';
 import { parseCheckFields } from './ocr-parse.mjs';
 import { runTextract } from './textract-check-ocr.mjs';
-import { mergeCheckExtraction, ocrInProgress } from './check-ocr-provider.mjs';
-import { analyzeAzureCheck } from './azure-check-ocr.mjs';
-import { emptyAzureMicr, normalizeAzureMicr } from './ocr-normalize-azure.mjs';
+import { extractCheck, mergeCheckExtraction, ocrInProgress } from './check-ocr-provider.mjs';
+import { emptyAzureMicr } from './ocr-normalize-azure.mjs';
+import { azureDiAnalyzeSecretLoader } from './azure-di-secret.mjs';
+import { safeOcrLog } from './azure-check-ocr.mjs';
 
 const s3 = () => new S3Client({ region: process.env.AWS_REGION || 'us-east-1' });
 const filesBucket = () => process.env.FILES_BUCKET || '';
@@ -102,9 +103,94 @@ const parsedFromStoredOcr = (row) => {
   };
 };
 
-export const handleCheckOcrIntake = async (event) => {
-  const { withIdentity } = await import('./data.mjs');
-  return withIdentity(event, async ({
+const present = (value) => {
+  if (value == null) return false;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === 'string') return value.trim() !== '';
+  return true;
+};
+
+const abaValidFromState = (state) => {
+  if (state === 'VERIFIED') return true;
+  if (state === 'REVIEW_REQUIRED') return false;
+  return null;
+};
+
+const DESCRIPTIVE_PRESENCE_FIELDS = [
+  'carrier_name',
+  'issue_date',
+  'amount',
+  'written_amount',
+  'payee_line',
+  'claim_number',
+  'bank_name',
+  'memo',
+];
+
+export const redactOcrIntakeResponse = ({
+  parsed = {},
+  eligibility = {},
+  azureRan = false,
+  azureError = null,
+  azureDeleteConfirmed = false,
+  rpcSuccess = false,
+  rpcError = null,
+  spoof = [],
+  engine = null,
+} = {}) => {
+  const descriptive = {};
+  for (const key of DESCRIPTIVE_PRESENCE_FIELDS) {
+    descriptive[key] = {
+      present: present(parsed[key]),
+      source: parsed.descriptive_sources?.[key] || 'none',
+    };
+  }
+  descriptive.payees = {
+    present: present(parsed.payees),
+    count: Array.isArray(parsed.payees) ? parsed.payees.length : 0,
+    source: parsed.descriptive_sources?.payees || 'none',
+  };
+  descriptive.printed_check_number = {
+    present: present(parsed.check_number),
+    source: parsed.descriptive_sources?.check_number || 'none',
+  };
+
+  return {
+    ok: true,
+    statusCode: 200,
+    success: true,
+    ocr_success: true,
+    rpc_success: rpcSuccess,
+    rpc_error: rpcError,
+    descriptive_engine: parsed.descriptive_engine || engine || null,
+    micr_engine: parsed.micr_engine || 'none',
+    micr_routing_state: parsed.micr_routing_state || 'MISSING',
+    micr_account_state: parsed.micr_account_state || 'MISSING',
+    micr_check_state: parsed.micr_check_state || 'MISSING',
+    aba_valid: abaValidFromState(parsed.micr_routing_state),
+    azure_delete_confirmed: Boolean(azureDeleteConfirmed),
+    needs_manual_review: Boolean(parsed.needs_manual_review),
+    descriptive,
+    filled_from_azure: Array.isArray(parsed.filled_from_azure) ? [...parsed.filled_from_azure] : [],
+    azure_error: azureRan ? (azureError || null) : null,
+    eligibility: {
+      recommendation: eligibility.recommendation || (parsed.needs_manual_review ? 'manual_review' : 'proceed'),
+    },
+    engine: parsed.descriptive_engine || engine || null,
+    spoofFieldsIgnored: spoof,
+  };
+};
+
+const resolveOcrDeps = (injected = {}) => (
+  injected.ocr || handleCheckOcrIntake.__ocrDeps || {}
+);
+
+export const handleCheckOcrIntake = async (event, injected = {}) => {
+  const withIdentityFn = injected.withIdentity
+    || handleCheckOcrIntake.__withIdentity
+    || (await import('./data.mjs')).withIdentity;
+  const ocrDeps = resolveOcrDeps(injected);
+  return withIdentityFn(event, async ({
     client, mapping, body, spoof,
   }) => {
   const checkId = body.checkId || body.check_id;
@@ -114,7 +200,7 @@ export const handleCheckOcrIntake = async (event) => {
     };
   }
 
-  const loaded = await loadCheckImageBytes(client, checkId);
+  const loaded = await loadCheckImageBytes(client, checkId, ocrDeps);
   if (loaded.error === 'check_not_found') {
     return {
       ok: false, statusCode: 404, success: false, error: 'check_not_found', spoofFieldsIgnored: spoof,
@@ -161,12 +247,33 @@ export const handleCheckOcrIntake = async (event) => {
   let blocks = [];
   let engine = 'aws_textract';
   let textractError = null;
+  let extracted = null;
+  const secretLoader = typeof ocrDeps.secretLoader === 'function'
+    ? ocrDeps.secretLoader
+    : azureDiAnalyzeSecretLoader({
+      getSecretString: ocrDeps.getSecretString,
+      env: ocrDeps.env,
+      secretId: ocrDeps.secretId,
+    });
+  const fetchImpl = typeof ocrDeps.fetchImpl === 'function'
+    ? ocrDeps.fetchImpl
+    : (typeof globalThis.fetch === 'function' ? globalThis.fetch.bind(globalThis) : null);
+  const ocrLog = ocrDeps.log || ((row) => safeOcrLog(null, row));
+
   if (loaded.bytes && loaded.bytes.length) {
-    const tex = await runTextract(loaded.bytes);
-    blocks = tex.blocks || [];
-    lines = tex.lines || [];
-    engine = tex.engine || engine;
-    textractError = tex.error || null;
+    extracted = await extractCheck({
+      imageBytes: loaded.bytes,
+      secretLoader,
+      fetchImpl,
+      textractSend: ocrDeps.textractSend,
+      sleep: ocrDeps.sleep,
+      now: ocrDeps.now,
+      log: ocrLog,
+    });
+    blocks = [];
+    lines = [];
+    engine = extracted.canonical?.descriptive_engine || engine;
+    textractError = extracted.textract_error || null;
   } else {
     textractError = loaded.imageError || 'image_unavailable';
   }
@@ -174,7 +281,14 @@ export const handleCheckOcrIntake = async (event) => {
   // Staging fallback when Textract is not subscribed / unavailable:
   // re-parse restored raw OCR text/JSON so intake UAT still works without money movement.
   let parsedFromStore = null;
-  if (!lines.length) {
+  const extractedHasDescriptive = Boolean(
+    extracted?.canonical
+    && (present(extracted.canonical.payee_line)
+      || present(extracted.canonical.check_number)
+      || present(extracted.canonical.carrier_name)
+      || present(extracted.canonical.amount)),
+  );
+  if (!extractedHasDescriptive && !lines.length) {
     parsedFromStore = parsedFromStoredOcr(loaded.row);
     const stored = linesFromStoredOcr(loaded.row);
     if (stored.length) {
@@ -185,7 +299,7 @@ export const handleCheckOcrIntake = async (event) => {
     }
   }
 
-  if (!lines.length && !parsedFromStore) {
+  if (!extractedHasDescriptive && !lines.length && !parsedFromStore) {
     try {
       await client.query('SAVEPOINT ocr_status_failed');
       await client.query(
@@ -203,49 +317,45 @@ export const handleCheckOcrIntake = async (event) => {
       ocr_success: false,
       error: textractError || 'textract_empty',
       stage: 'textract',
-      textract_note: textractError && /subscriptionrequired/i.test(String(textractError))
-        ? 'Enable AWS Textract on account 806168576068 for live image OCR; stored OCR reparse used when available.'
-        : undefined,
       spoofFieldsIgnored: spoof,
     };
   }
 
-  // Prefer Textract blocks when present (geometry-aware). Fallback to stored OCR lines.
-  const textractParsed = parsedFromStore || (blocks && blocks.length ? parseCheckFields(blocks) : parseCheckFields(lines));
+  const textractParsed = extractedHasDescriptive
+    ? null
+    : (parsedFromStore || (blocks && blocks.length ? parseCheckFields(blocks) : parseCheckFields(lines)));
 
-  // Azure is not called unless a secret loader + transport are injected (mocked tests only).
-  // Production does not read Secrets Manager in this phase.
-  let azureMicr = emptyAzureMicr();
-  let azureOk = false;
-  let azureRan = false;
-  let azureError = null;
-  let azureDeleteConfirmed = false;
-  const azureDeps = handleCheckOcrIntake.__azureDeps;
-  if (azureDeps?.secretLoader && azureDeps?.fetchImpl && loaded.bytes?.length) {
-    const azure = await analyzeAzureCheck({
-      imageBytes: loaded.bytes,
-      secretLoader: azureDeps.secretLoader,
-      fetchImpl: azureDeps.fetchImpl,
-      sleep: azureDeps.sleep,
-      now: azureDeps.now,
-      log: azureDeps.log,
+  let parsed = extracted?.canonical || null;
+  let azureRan = extracted ? extracted.azure_error !== 'azure_not_configured' : false;
+  let azureError = extracted?.azure_error && extracted.azure_error !== 'azure_not_configured'
+    ? extracted.azure_error
+    : null;
+  let azureDeleteConfirmed = Boolean(extracted?.azure_delete_confirmed);
+
+  if (!parsed) {
+    parsed = mergeCheckExtraction({
+      textractParsed: textractParsed || {},
+      azureMicr: emptyAzureMicr(),
+      descriptiveEngine: engine,
+      azureRan: false,
+      azureOk: false,
     });
-    azureRan = azure.code !== 'azure_not_configured';
-    azureOk = Boolean(azure.ok);
-    azureError = azure.ok ? null : (azure.code || null);
-    azureDeleteConfirmed = Boolean(azure.deleteConfirmed);
-    if (azure.ok) {
-      azureMicr = normalizeAzureMicr(azure.document, { printedCheckNumber: textractParsed.check_number });
+    azureRan = false;
+    azureError = null;
+    azureDeleteConfirmed = false;
+  } else if (textractParsed && !extractedHasDescriptive) {
+    const fallback = mergeCheckExtraction({
+      textractParsed,
+      azureMicr: emptyAzureMicr(),
+      descriptiveEngine: engine,
+      azureRan: false,
+      azureOk: false,
+    });
+    for (const key of ['carrier_name', 'issue_date', 'amount', 'written_amount', 'payee_line', 'payees', 'claim_number', 'detected_claim_number', 'bank_name', 'memo', 'check_number']) {
+      if (!present(parsed[key]) && present(fallback[key])) parsed[key] = fallback[key];
     }
+    parsed.descriptive_engine = engine;
   }
-
-  const parsed = mergeCheckExtraction({
-    textractParsed,
-    azureMicr,
-    descriptiveEngine: engine,
-    azureRan,
-    azureOk,
-  });
   const eligibility = {
     recommendation: parsed.needs_manual_review ? 'manual_review' : 'proceed',
     reasons: (parsed.low_confidence_fields || []).map((f) => `low_confidence:${f}`),
@@ -309,25 +419,17 @@ export const handleCheckOcrIntake = async (event) => {
     try { await client.query('ROLLBACK TO SAVEPOINT ocr_audit'); } catch { /* ignore */ }
   }
 
-  return {
-    ok: true,
-    statusCode: 200,
-    success: true,
-    ocr_success: true,
-    rpc_success: rpcSuccess,
-    rpc_error: rpcError,
+  return redactOcrIntakeResponse({
     parsed,
-    payees: parsed.payees,
     eligibility,
-    payees_preserved: false,
-    transaction: {},
+    azureRan,
+    azureError,
+    azureDeleteConfirmed,
+    rpcSuccess,
+    rpcError,
+    spoof,
     engine: parsed.descriptive_engine || engine,
-    micr_engine: parsed.micr_engine,
-    textract_error: textractError,
-    azure_error: azureRan ? azureError : null,
-    azure_delete_confirmed: azureDeleteConfirmed,
-    spoofFieldsIgnored: spoof,
-  };
+  });
 }, { write: true, commit: true });
 };
 
@@ -337,6 +439,7 @@ export const __test__ = {
   loadCheckImageBytes,
   ocrInProgress,
   mergeCheckExtraction,
+  redactOcrIntakeResponse,
 };
 
 export const handleDetectEndorsementZone = async (event) => {
