@@ -151,6 +151,20 @@
         "aws/financial/CHECKALT_PRODUCTION_SECRET_CONTRACT.md"
       ]
     },
+    "ocr-azure": {
+      "owners": ["@michaelcarletta-cmd"],
+      "description": "Finalized Textract+Azure check OCR runtime. Eight explicit files only. Does not own shared CheckAlt image primitives in providers/parity/checkalt-image.mjs; OCR reuses named exports from that module without claiming it.",
+      "paths": [
+        "aws/functions/api/ocr.mjs",
+        "aws/functions/api/ocr-parse.mjs",
+        "aws/functions/api/ocr-azure-image.mjs",
+        "aws/functions/api/check-ocr-provider.mjs",
+        "aws/functions/api/azure-check-ocr.mjs",
+        "aws/functions/api/azure-di-secret.mjs",
+        "aws/functions/api/ocr-normalize-azure.mjs",
+        "aws/functions/api/textract-check-ocr.mjs"
+      ]
+    },
     "production-release": {
       "owners": ["@michaelcarletta-cmd"],
       "description": "Control-plane release-lock tooling, CI, template execution flags, production config examples. Changes here are control-plane changes and require this ownership group. Hashing a changed validator with itself is not independent security.",

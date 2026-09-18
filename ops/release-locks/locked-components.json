@@ -548,6 +548,50 @@
       "open_pr_overlap": ["#316", "#314"],
       "notes": "Name/config references only."
     },
+    "ocr-azure": {
+      "id": "ocr-azure",
+      "ownership_group": "ocr-azure",
+      "classification": "STAGING_LOCKED_NOT_PRODUCTION",
+      "production_active": false,
+      "environment": "staging",
+      "source": {
+        "git_sha": "8a3ead386d99f0e825d54093ebcb8c174a8c758e",
+        "tree_hash": "168126958fcbe8ec09f36b6b86df26e22a053f407edfeb159d431e85fdb0b69b",
+        "merged": true,
+        "merged_pr": 370
+      },
+      "required_sql": [],
+      "artifact": {
+        "type": "lambda",
+        "name": "checksops-staging-api",
+        "version": null,
+        "hash": null,
+        "cloudfront_distribution": null,
+        "lambda_name": "checksops-staging-api",
+        "lambda_version": null,
+        "lambda_alias": null
+      },
+      "production_validation": {
+        "completed": false,
+        "evidence_refs": [
+          "aws/tests/ocr-intake-staging.test.mjs"
+        ],
+        "recorded_at": null
+      },
+      "deployment_fingerprint": null,
+      "rollback": {
+        "git_sha": "8a3ead386d99f0e825d54093ebcb8c174a8c758e",
+        "artifact": null,
+        "notes": "Staging-validated OCR/Azure runtime from merged PR #370. Not production-locked. Do not deploy or unlock from this lock PR."
+      },
+      "missing_evidence": [
+        "production Lambda version serving the locked OCR runtime",
+        "immutable production deployment fingerprint",
+        "production OCR validation evidence"
+      ],
+      "open_pr_overlap": [],
+      "notes": "Protects the eight finalized OCR runtime files only. Shared providers/parity/checkalt-image.mjs is not owned here; OCR reuses named raster exports without claiming the CheckAlt module. Classification is STAGING_LOCKED_NOT_PRODUCTION because staging validation passed and production is not locked."
+    },
     "production-release": {
       "id": "production-release",
       "ownership_group": "production-release",
@@ -555,8 +599,8 @@
       "production_active": false,
       "environment": "unknown",
       "source": {
-        "git_sha": "bd97367b76a52444aa8b1438a3f035b6c4ea09b1",
-        "tree_hash": "8e15a6d6da996d49a316bf71ac22cfdbce41dd64159545baf39379b1ad882e01",
+        "git_sha": "8a3ead386d99f0e825d54093ebcb8c174a8c758e",
+        "tree_hash": "bf04e4014f4a244fa73e98501806a6d3e2ed9d481819dd940a47d73d5020b4ca",
         "merged": true,
         "merged_pr": 343
       },
