@@ -19,9 +19,7 @@ const profileTab = settings.slice(
 );
 const usageTab = settings.slice(
   settings.indexOf('<TabsContent value="usage"'),
-  settings.indexOf('<TabsContent value="ai-key"') === -1
-    ? settings.indexOf('value="users"')
-    : settings.indexOf('<TabsContent value="ai-key"'),
+  settings.indexOf('<TabsContent value="users"'),
 );
 const partnersTab = settings.slice(
   settings.indexOf('<TabsContent value="partners"'),
