@@ -5,9 +5,10 @@
  * tenant_id, Ready stage, and packet presence are not sources of truth.
  *
  * Rear official-image freshness is bound by a fingerprint of current
- * endorsement state, stamped when the official rear .checkalt.jpg upload URL
- * is issued. Timestamp comparison of S3 LastModified vs updated_at is not
- * used — it cannot prove the rear image matches current signatures.
+ * endorsement state, stamped when the official rear render is committed as
+ * completed (or by other server-side renderers). Timestamp comparison of S3
+ * LastModified vs updated_at is not used — it cannot prove the rear image
+ * matches current signatures.
  */
 import { createHash } from 'node:crypto';
 

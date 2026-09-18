@@ -464,7 +464,7 @@ test('check-scoped .checkalt.jpg remains writable via the check UUID prefix', as
   assert.equal(result.path, path);
 });
 
-test('official rear .checkalt.jpg presign stamps endorsement fingerprint', async () => {
+test('official rear .checkalt.jpg upload-url does not stamp endorsement fingerprint (stamped on render completion)', async () => {
   const path = `checks/${CHECK_ID}/back.checkalt.jpg`;
   const client = mockClient({ writeCheck: true });
   const result = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {
@@ -475,10 +475,6 @@ test('official rear .checkalt.jpg presign stamps endorsement fingerprint', async
   }), depsFor(client, { forceStorageWrites: true }));
   assert.equal(result.ok, true, JSON.stringify(result));
   const stamp = client.queries.find((q) => String(q.sql).includes('jsonb_build_object'));
-  assert.ok(stamp, 'rear presign must stamp endorsement_render_meta fingerprint');
-  assert.equal(stamp.params[0], CHECK_ID);
-  assert.equal(stamp.params[1], 'checkalt_rear_fingerprint');
-  assert.equal(typeof stamp.params[2], 'string');
-  assert.equal(stamp.params[2].length, 64);
+  assert.equal(Boolean(stamp), false, 'upload-url must not write endorsement_render_meta fingerprint');
 });
 

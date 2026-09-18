@@ -9,6 +9,7 @@ import {
   pickAllowlistedValues,
   WRITE_ALLOWLIST,
 } from '../functions/api/write-allowlist.mjs';
+import { endorsementStateFingerprint } from '../functions/api/providers/production/checkalt-eligibility.mjs';
 
 const APP_ID = 'abd3c2a0-6dc0-4680-92dd-a013e1141c91';
 const COGNITO_SUB = 'c4386408-60e1-70e2-abb6-e6194e8e635f';
@@ -41,7 +42,17 @@ const mappingFor = (sub = COGNITO_SUB) => ({
   status: 'active',
 });
 
-const mockClient = ({ rows = [], mapping = mappingFor(), throwOn = null } = {}) => {
+const DEFAULT_TENANT_ID = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
+
+const mockClient = ({
+  rows = [],
+  mapping = mappingFor(),
+  throwOn = null,
+  tenantId = DEFAULT_TENANT_ID,
+  baseOriginalPath = `checks/${CHECK_ID}/back.jpg`,
+  baseBackPath = null,
+  baseDepositPath = null,
+} = {}) => {
   const queries = [];
   return {
     queries,
@@ -60,25 +71,55 @@ const mockClient = ({ rows = [], mapping = mappingFor(), throwOn = null } = {}) 
       if (sql === LOOKUP_MAPPING_SQL) {
         return { rows: params[0] === mapping.cognito_sub ? [mapping] : [] };
       }
-      if (String(sql).includes('SELECT back_image_original_path, back_image_path, back_image_deposit_path FROM public.check_intake_items')) {
+      if (String(sql).includes('SELECT tenant_id, back_image_original_path, back_image_path, back_image_deposit_path FROM public.check_intake_items')) {
         return {
           rows: [{
-            back_image_original_path: `checks/${LEGACY_CLAIM_ID}/unclaimed/back.jpg`,
-            back_image_path: null,
-            back_image_deposit_path: null,
+            tenant_id: tenantId,
+            back_image_original_path: baseOriginalPath,
+            back_image_path: baseBackPath,
+            back_image_deposit_path: baseDepositPath,
           }],
         };
       }
       if (/SELECT id, tenant_id FROM public.check_intake_items/.test(sql)) {
-        return { rows: [{ id: params[0], tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a' }] };
+        return { rows: [{ id: params[0], tenant_id: tenantId }] };
+      }
+      if (String(sql).includes('FROM public.check_payees')
+        && String(sql).includes('WHERE check_id = $1')
+        && String(sql).includes('tenant_id = $2')) {
+        return {
+          rows: [{
+            id: 'payee-1',
+            check_id: CHECK_ID,
+            tenant_id: tenantId,
+            payee_type: 'insured',
+            endorsement_status: 'signed',
+            endorsed_at: '2026-09-02T00:00:00.000Z',
+          }],
+        };
+      }
+      if (String(sql).includes('FROM public.check_endorsements')
+        && String(sql).includes('WHERE check_id = $1')
+        && String(sql).includes('tenant_id = $2')) {
+        return {
+          rows: [{
+            id: 'endorsement-1',
+            check_id: CHECK_ID,
+            tenant_id: tenantId,
+            payee_id: 'payee-1',
+            payee_type: 'insured',
+            status: 'signed',
+            signed_at: '2026-09-02T00:00:00.000Z',
+          }],
+        };
       }
       if (/FROM public.check_payees p/.test(sql)) {
         return {
           rows: [{
             id: params[0],
             check_id: CHECK_ID,
-            payee_tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a',
-            tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a',
+            payee_tenant_id: tenantId,
+            tenant_id: tenantId,
           }],
         };
       }
@@ -87,8 +128,8 @@ const mockClient = ({ rows = [], mapping = mappingFor(), throwOn = null } = {}) 
           rows: [{
             id: params[0],
             check_id: CHECK_ID,
-            endorsement_tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a',
-            tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a',
+            endorsement_tenant_id: tenantId,
+            tenant_id: tenantId,
           }],
         };
       }
@@ -365,7 +406,7 @@ test('Tranche 2 allows endorsement placement + render metadata writes on check_i
       endorsement_override: { xPct: 0.1, yPct: 0.2, scale: 1, rotationDeg: 0, showPayToOrder: true },
       endorsement_render_status: 'position_saved',
       endorsement_render_meta: { request_id: 'req-1', width: 1920, height: 1080, bytes: 1234 },
-      back_image_deposit_path: `checks/${CHECK_ID}/endorsed_deposit_unit.checkalt.jpg`,
+      back_image_deposit_path: `checks/${CHECK_ID}/back.checkalt.jpg`,
     },
     filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
   }), depsFor(client));
@@ -388,6 +429,7 @@ test('Tranche 2 allows endorsement placement + render metadata writes on check_i
 test('Tranche 2 allows legacy back_image_deposit_path as official .checkalt.jpg sibling of back_image_original_path', async () => {
   const legacyDeposit = `checks/${LEGACY_CLAIM_ID}/unclaimed/back.checkalt.jpg`;
   const client = mockClient({
+    baseOriginalPath: `checks/${LEGACY_CLAIM_ID}/unclaimed/back.jpg`,
     rows: [{ id: CHECK_ID, endorsement_render_status: 'completed', back_image_deposit_path: legacyDeposit }],
   });
   const result = await handleWrite(jwtEvent('/data/write', 'POST', {
@@ -404,17 +446,40 @@ test('Tranche 2 allows legacy back_image_deposit_path as official .checkalt.jpg 
   const update = client.queries.find((q) => String(q.sql).includes('UPDATE public.check_intake_items'));
   assert.ok(update);
   assert.equal(update.params.some((p) => p === legacyDeposit), true);
+  const metaParam = update.params.find((p) => typeof p === 'string' && String(p).includes('request_id'));
+  assert.ok(metaParam);
+  const parsed = JSON.parse(String(metaParam));
+  assert.equal(typeof parsed.checkalt_rear_fingerprint, 'string');
+  assert.equal(parsed.checkalt_rear_fingerprint.length, 64);
+  const expected = endorsementStateFingerprint(CHECK_ID, [{
+    id: 'payee-1',
+    check_id: CHECK_ID,
+    tenant_id: DEFAULT_TENANT_ID,
+    payee_type: 'insured',
+    endorsement_status: 'signed',
+    endorsed_at: '2026-09-02T00:00:00.000Z',
+  }], [{
+    id: 'endorsement-1',
+    check_id: CHECK_ID,
+    tenant_id: DEFAULT_TENANT_ID,
+    payee_id: 'payee-1',
+    payee_type: 'insured',
+    status: 'signed',
+    signed_at: '2026-09-02T00:00:00.000Z',
+  }]);
+  assert.equal(parsed.checkalt_rear_fingerprint, expected);
 });
 
 test('Tranche 2 denies legacy back_image_deposit_path that is not the approved .checkalt.jpg sibling', async () => {
   const legacyDenied = `checks/${LEGACY_CLAIM_ID}/unclaimed/endorsed_deposit_x.checkalt.jpg`;
-  const client = mockClient({ rows: [] });
+  const client = mockClient({ baseOriginalPath: `checks/${LEGACY_CLAIM_ID}/unclaimed/back.jpg`, rows: [] });
   const result = await handleWrite(jwtEvent('/data/write', 'POST', {
     table: 'check_intake_items',
     op: 'update',
     values: {
       back_image_deposit_path: legacyDenied,
       endorsement_render_status: 'completed',
+      endorsement_render_meta: { request_id: 'req-1' },
     },
     filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
   }), depsFor(client));
@@ -422,6 +487,60 @@ test('Tranche 2 denies legacy back_image_deposit_path that is not the approved .
   assert.equal(result.statusCode, 403);
   assert.equal(result.error, 'rls_denied');
   assert.match(result.message, /not scoped/i);
+});
+
+test('Tranche 2 denies marking render completed without endorsement_render_meta', async () => {
+  const client = mockClient();
+  const result = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_intake_items',
+    op: 'update',
+    values: {
+      back_image_deposit_path: `checks/${CHECK_ID}/back.checkalt.jpg`,
+      endorsement_render_status: 'completed',
+    },
+    filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
+  }), depsFor(client));
+  assert.equal(result.ok, false);
+  assert.equal(result.statusCode, 400);
+  assert.equal(result.error, 'missing_required_field');
+  assert.equal(result.field, 'endorsement_render_meta');
+});
+
+test('Tranche 2 denies marking render completed without back_image_deposit_path', async () => {
+  const client = mockClient();
+  const result = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_intake_items',
+    op: 'update',
+    values: {
+      endorsement_render_status: 'completed',
+      endorsement_render_meta: { request_id: 'req-1' },
+    },
+    filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
+  }), depsFor(client));
+  assert.equal(result.ok, false);
+  assert.equal(result.statusCode, 400);
+  assert.equal(result.error, 'missing_required_field');
+  assert.equal(result.field, 'back_image_deposit_path');
+});
+
+test('render failures do not stamp checkalt_rear_fingerprint', async () => {
+  const client = mockClient({ rows: [{ id: CHECK_ID }] });
+  const result = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_intake_items',
+    op: 'update',
+    values: {
+      endorsement_render_status: 'failed',
+      endorsement_render_meta: { error: 'boom', request_id: 'req-1' },
+    },
+    filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
+  }), depsFor(client));
+  assert.equal(result.ok, true, JSON.stringify(result));
+  const update = client.queries.find((q) => String(q.sql).includes('UPDATE public.check_intake_items'));
+  assert.ok(update);
+  const metaParam = update.params.find((p) => typeof p === 'string' && String(p).includes('request_id'));
+  assert.ok(metaParam);
+  const parsed = JSON.parse(String(metaParam));
+  assert.equal(parsed.checkalt_rear_fingerprint, undefined);
 });
 
 test('Tranche 2 denies financial intake columns, status, insert, and endorsement signed status', async () => {

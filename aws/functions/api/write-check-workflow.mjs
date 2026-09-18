@@ -1,6 +1,11 @@
 import { ident } from './data.mjs';
 import { WRITE_ALLOWLIST } from './write-allowlist.mjs';
 import { isCheckScopedPathFor, normalizePath } from './storage-paths.mjs';
+import {
+  ENDORSEMENTS_ELIGIBILITY_SQL,
+  PAYEES_ELIGIBILITY_SQL,
+  endorsementStateFingerprint,
+} from './providers/production/checkalt-eligibility.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -197,6 +202,27 @@ const toCheckAltSibling = (rel) => {
   if (/\.checkalt\.jpe?g$/i.test(raw)) return raw;
   if (/\.[^.]+$/.test(raw)) return raw.replace(/\.[^.]+$/i, '.checkalt.jpg');
   return `${raw}.checkalt.jpg`;
+};
+
+const parseJsonObject = (value) => {
+  if (value == null || value === '') return null;
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  if (typeof value !== 'string') return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+
+const bindCheckAltRearFingerprint = async (client, { checkId, tenantId, meta }) => {
+  const payees = (await client.query(PAYEES_ELIGIBILITY_SQL, [checkId, tenantId])).rows || [];
+  const endorsements = (await client.query(ENDORSEMENTS_ELIGIBILITY_SQL, [checkId, tenantId])).rows || [];
+  const fingerprint = endorsementStateFingerprint(checkId, payees, endorsements);
+  const out = isPlainObject(meta) ? { ...meta } : {};
+  out.checkalt_rear_fingerprint = fingerprint;
+  return { fingerprint, meta: out };
 };
 
 const lookupEndorsement = async (client, endorsementId) => {
@@ -402,27 +428,49 @@ const executeIntakeUpdate = async ({ client, values, filters }) => {
   if (coerced.error) return coerced;
   const nextValues = { ...coerced.values };
 
-  // Legacy storage parity: allow `back_image_deposit_path` to be an official `.checkalt.jpg`
-  // sibling of the check's existing rear image path(s), even if the folder UUID isn't the
-  // check_intake_items.id. Remains fail-closed: requires writable check + exact sibling match.
+  const completingRender = String(nextValues.endorsement_render_status || '') === 'completed';
+  if (completingRender) {
+    if (!('back_image_deposit_path' in nextValues) || nextValues.back_image_deposit_path == null || nextValues.back_image_deposit_path === '') {
+      return { error: 'missing_required_field', field: 'back_image_deposit_path', table: 'check_intake_items', op: 'update' };
+    }
+    if (!('endorsement_render_meta' in nextValues) || nextValues.endorsement_render_meta == null || nextValues.endorsement_render_meta === '') {
+      return { error: 'missing_required_field', field: 'endorsement_render_meta', table: 'check_intake_items', op: 'update' };
+    }
+  }
+
+  // Legacy storage parity + safety invariant:
+  // - Deposit path must always be the official `.checkalt.jpg` sibling of the check's stored rear/original path(s).
+  // - When render is marked completed, bind `endorsement_render_meta.checkalt_rear_fingerprint` atomically
+  //   based on current endorsement state for the *actual* check id (never path UUIDs).
   if ('back_image_deposit_path' in nextValues && nextValues.back_image_deposit_path != null) {
     const rel = normalizePath(nextValues.back_image_deposit_path, 'claim-files');
     if (!rel) return { error: 'invalid_field', field: 'file_path', message: 'invalid storage path' };
     nextValues.back_image_deposit_path = rel;
-    if (!isCheckScopedPathFor(rel, checkId)) {
-      const base = (await client.query(
-        'SELECT back_image_original_path, back_image_path, back_image_deposit_path FROM public.check_intake_items WHERE id = $1::uuid',
-        [checkId],
-      )).rows[0];
-      if (!base) return { error: 'rls_denied', message: 'check not writable' };
-      const candidates = [
-        toCheckAltSibling(normalizePath(base.back_image_original_path, 'claim-files')),
-        toCheckAltSibling(normalizePath(base.back_image_path, 'claim-files')),
-        toCheckAltSibling(normalizePath(base.back_image_deposit_path, 'claim-files')),
-      ].filter(Boolean);
-      if (!candidates.includes(rel)) {
-        return { error: 'rls_denied', message: 'image path is not scoped to this check' };
-      }
+
+    const base = (await client.query(
+      'SELECT tenant_id, back_image_original_path, back_image_path, back_image_deposit_path FROM public.check_intake_items WHERE id = $1::uuid',
+      [checkId],
+    )).rows[0];
+    if (!base) return { error: 'rls_denied', message: 'check not writable' };
+
+    const allowed = [
+      toCheckAltSibling(normalizePath(base.back_image_original_path, 'claim-files')),
+      toCheckAltSibling(normalizePath(base.back_image_path, 'claim-files')),
+      toCheckAltSibling(normalizePath(base.back_image_deposit_path, 'claim-files')),
+    ].filter(Boolean);
+    if (!allowed.includes(rel)) {
+      return { error: 'rls_denied', message: 'image path is not scoped to this check' };
+    }
+
+    if (completingRender) {
+      if (!base.tenant_id) return { error: 'rls_denied', message: 'check tenant missing' };
+      const metaObj = parseJsonObject(nextValues.endorsement_render_meta);
+      const bound = await bindCheckAltRearFingerprint(client, {
+        checkId,
+        tenantId: base.tenant_id,
+        meta: metaObj,
+      });
+      nextValues.endorsement_render_meta = JSON.stringify(bound.meta);
     }
   }
   for (const column of IMAGE_PATH_COLUMNS) {
@@ -431,7 +479,7 @@ const executeIntakeUpdate = async ({ client, values, filters }) => {
         const rel = nextValues.back_image_deposit_path;
         if (rel == null || rel === '') continue;
         if (String(rel).length > 512) return { error: 'invalid_field', field: 'file_path' };
-        // Already validated above when not check-scoped. When check-scoped, this is safe too.
+        // Deposit path is validated against official sibling rules above.
         continue;
       }
       const path = asImagePath(checkId, nextValues[column]);
