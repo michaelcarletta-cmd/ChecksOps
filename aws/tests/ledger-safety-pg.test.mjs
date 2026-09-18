@@ -231,6 +231,22 @@ CREATE TRIGGER trg_auto_link_check_to_claim_ins
 ALTER TABLE public.check_intake_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.claims ENABLE ROW LEVEL SECURITY;
 
+CREATE POLICY "Owner tenant staff can view checks"
+ON public.check_intake_items
+FOR SELECT
+USING (
+  (has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'staff'::app_role))
+  AND user_belongs_to_tenant(auth.uid(), tenant_id)
+);
+
+CREATE POLICY "Authenticated users with roles can view claims"
+ON public.claims
+FOR SELECT
+USING (
+  has_role(auth.uid(), 'admin'::app_role)
+  OR has_role(auth.uid(), 'staff'::app_role)
+);
+
 CREATE ROLE service_role NOLOGIN BYPASSRLS;
 CREATE ROLE authenticated NOLOGIN NOBYPASSRLS;
 CREATE ROLE app_staff LOGIN NOSUPERUSER NOBYPASSRLS INHERIT;
@@ -550,20 +566,19 @@ CREATE UNIQUE INDEX idx_claim_payments_check_intake
 `]);
   const staffArgs = ['-h', pgData, '-p', String(port), '-U', 'app_staff', '-d', dbName, '-v', 'ON_ERROR_STOP=1'];
   const authOk = run(path.join(PG_BIN, 'psql'), staffArgs, {
-    input: `BEGIN;
-SELECT set_config('request.app_user_id', '${USER_A}', true);
-UPDATE public.check_intake_items SET claim_id = '${claimC}' WHERE id = '${CHECK_1}';
-COMMIT;\n`,
+    input: `SET search_path TO public;
+SELECT set_config('request.app_user_id', '${USER_A}', false);
+UPDATE public.check_intake_items SET claim_id = '${claimC}' WHERE id = '${CHECK_1}' RETURNING claim_id;\n`,
   });
   assert.equal(authOk.status, 0, `${authOk.stderr}\n${authOk.stdout}`);
+  assert.match(authOk.stdout, new RegExp(claimC));
   assert.equal(scalar(`SELECT claim_id::text FROM public.check_intake_items WHERE id = '${CHECK_1}'`), claimC);
 
   note('30 authenticated foreign-org denied');
   const authDeny = run(path.join(PG_BIN, 'psql'), staffArgs, {
-    input: `BEGIN;
-SELECT set_config('request.app_user_id', '${USER_A}', true);
-UPDATE public.check_intake_items SET claim_id = '${CLAIM_B}' WHERE id = '${CHECK_1}';
-COMMIT;\n`,
+    input: `SET search_path TO public;
+SELECT set_config('request.app_user_id', '${USER_A}', false);
+UPDATE public.check_intake_items SET claim_id = '${CLAIM_B}' WHERE id = '${CHECK_1}';\n`,
   });
   assert.notEqual(authDeny.status, 0);
   assert.equal(scalar(`SELECT claim_id::text FROM public.check_intake_items WHERE id = '${CHECK_1}'`), claimC);
