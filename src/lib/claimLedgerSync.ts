@@ -157,10 +157,20 @@ export function fundsReceivedForClaim(checks: Array<{ id: string; claim_id?: str
   return total;
 }
 
+/** Sum intake amounts already scoped by claim_id. Do not re-filter on row.claim_id. */
+export function fundsReceivedFromScopedIntakeRows(
+  rows: Array<{ amount?: number | null }> = [],
+) {
+  return rows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+}
+
 type LedgerClient = {
   from: (table: string) => any;
 };
 
+// Latent / unused by the live claim-link workflow (ClaimLedgerCard updates
+// check_intake_items.claim_id only). Wave1 tests still exercise it. Do not
+// wire it back into production linking; receipt writes here are dead.
 export async function applyClaimLedgerSync(
   supabase: LedgerClient,
   opts: { check: IntakeCheck; newClaimId: string; claimNumber: string; actorTenantId?: string | null },
