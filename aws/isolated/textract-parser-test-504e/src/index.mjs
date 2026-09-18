@@ -125,6 +125,7 @@ const buildRedactedResponse = (parsed) => ({
     payees: buildRedactedPayees(parsed),
     micr: buildRedactedMicr(parsed),
   },
+  diagnostic: parsed?.diagnostic && typeof parsed.diagnostic === 'object' ? parsed.diagnostic : null,
 });
 
 const respond = (statusCode, body) => ({
