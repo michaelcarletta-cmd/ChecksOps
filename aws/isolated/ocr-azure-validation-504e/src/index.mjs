@@ -41,19 +41,43 @@ const present = (value) => {
   return true;
 };
 
-const sourceFor = (key, canonical) => {
-  const filled = Array.isArray(canonical?.filled_from_azure) ? canonical.filled_from_azure : [];
+const textractSourceLabel = (engine) => {
+  if (engine === 'aws_textract_detect') return 'aws_textract_detect';
+  if (engine === 'aws_textract_analyze') return 'aws_textract_analyze';
+  return 'aws_textract_analyze';
+};
+
+const canonicalSource = (key, canonical) => {
+  const sources = canonical?.descriptive_sources || {};
   if (key === 'printed_check_number') {
-    if (filled.includes('check_number')) return 'azure_prebuilt_check_us';
-    return present(canonical?.check_number) ? (canonical?.descriptive_engine || 'aws_textract') : 'none';
+    if (sources.check_number) return sources.check_number;
+    return present(canonical?.check_number) ? textractSourceLabel(canonical?.descriptive_engine) : 'none';
   }
-  if (key === 'payees') {
-    if (filled.includes('payees')) return 'azure_prebuilt_check_us';
-    return present(canonical?.payees) ? (canonical?.descriptive_engine || 'aws_textract') : 'none';
-  }
-  if (filled.includes(key)) return 'azure_prebuilt_check_us';
-  if (present(canonical?.[key])) return canonical?.descriptive_engine || 'aws_textract';
+  if (sources[key]) return sources[key];
+  const filled = Array.isArray(canonical?.filled_from_azure) ? canonical.filled_from_azure : [];
+  if (filled.includes(key) || (key === 'payees' && filled.includes('payees'))) return 'azure_prebuilt_check_us';
+  const value = canonical?.[key];
+  if (present(value)) return textractSourceLabel(canonical?.descriptive_engine);
   return 'none';
+};
+
+const azurePresent = (key, canonical) => {
+  const azure = canonical?.azure_descriptive || {};
+  if (key === 'printed_check_number' || key === 'claim_number') return false;
+  if (key === 'payees') return present(azure.payees);
+  return present(azure[key]);
+};
+
+const textractPresent = (key, canonical) => {
+  const snap = canonical?.textract_descriptive || canonical?.diagnostic?.textract_descriptive;
+  if (snap && typeof snap === 'object') {
+    if (key === 'printed_check_number') return present(snap.check_number);
+    if (key === 'payees') return present(snap.payees);
+    return present(snap[key]);
+  }
+  if (key === 'printed_check_number') return present(canonical?.check_number);
+  if (key === 'payees') return present(canonical?.payees);
+  return present(canonical?.[key]) && canonicalSource(key, canonical) !== 'azure_prebuilt_check_us';
 };
 
 const abaValidFromState = (state) => {
@@ -79,18 +103,27 @@ export const buildRedactedResponse = (extracted = {}) => {
   for (const key of DESCRIPTIVE_FIELDS) {
     descriptive[key] = {
       present: present(canonical[key]),
-      source: sourceFor(key, canonical),
+      azure_present: azurePresent(key, canonical),
+      textract_present: textractPresent(key, canonical),
+      canonical_source: canonicalSource(key, canonical),
+      source: canonicalSource(key, canonical),
       confidence: canonical.field_confidence?.[key] ?? null,
     };
   }
   descriptive.payees = {
     present: present(canonical.payees),
     count: Array.isArray(canonical.payees) ? canonical.payees.length : 0,
-    source: sourceFor('payees', canonical),
+    azure_present: azurePresent('payees', canonical),
+    textract_present: textractPresent('payees', canonical),
+    canonical_source: canonicalSource('payees', canonical),
+    source: canonicalSource('payees', canonical),
   };
   descriptive.printed_check_number = {
     present: present(canonical.check_number),
-    source: sourceFor('printed_check_number', canonical),
+    azure_present: false,
+    textract_present: textractPresent('printed_check_number', canonical),
+    canonical_source: canonicalSource('printed_check_number', canonical),
+    source: canonicalSource('printed_check_number', canonical),
     confidence: canonical.field_confidence?.check_number ?? null,
   };
 

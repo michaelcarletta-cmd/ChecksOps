@@ -139,3 +139,49 @@ test('Azure descriptive fields stay supplemental only', () => {
   assert.ok(out.supplemental.payees.some((p) => p.name.includes('Azure Payee')));
   assert.equal(out.routing_number, ROUTING_OK);
 });
+
+test('CheckDate uses valueDate', () => {
+  const out = normalizeAzureMicr(azureDoc({
+    extraFields: {
+      CheckDate: { type: 'date', valueDate: '2026-02-02', confidence: 0.91 },
+    },
+  }));
+  assert.equal(out.supplemental.issue_date, '2026-02-02');
+  assert.equal(out.field_confidence.issue_date, 0.91);
+});
+
+test('NumberAmount uses valueNumber', () => {
+  const out = normalizeAzureMicr(azureDoc({
+    extraFields: {
+      NumberAmount: { type: 'number', valueNumber: 150, confidence: 0.88 },
+    },
+  }));
+  assert.equal(out.supplemental.amount, '150.00');
+});
+
+test('NumberAmount uses valueCurrency.amount', () => {
+  const out = normalizeAzureMicr(azureDoc({
+    extraFields: {
+      NumberAmount: {
+        type: 'currency',
+        valueCurrency: { amount: 42.5, currencyCode: 'USD' },
+        confidence: 0.77,
+      },
+    },
+  }));
+  assert.equal(out.supplemental.amount, '42.50');
+});
+
+test('WordAmount prefers content over numeric duplicate', () => {
+  const out = normalizeAzureMicr(azureDoc({
+    extraFields: {
+      WordAmount: {
+        valueNumber: 510,
+        content: 'THREE DOLLARS ONLY',
+        confidence: 0.4,
+      },
+    },
+  }));
+  assert.equal(out.supplemental.written_amount, 'THREE DOLLARS ONLY');
+  assert.notEqual(out.supplemental.written_amount, '510.00');
+});

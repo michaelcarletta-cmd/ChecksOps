@@ -223,7 +223,19 @@ test('10) response redaction omits MICR values, payees, raw provider payloads', 
         micr_routing_state: 'VERIFIED',
         micr_account_state: 'VERIFIED',
         micr_check_state: 'VERIFIED',
-        filled_from_azure: [],
+        filled_from_azure: ['payee_line', 'payees'],
+        descriptive_sources: {
+          amount: 'aws_textract_analyze',
+          payee_line: 'azure_prebuilt_check_us',
+          payees: 'azure_prebuilt_check_us',
+          check_number: 'aws_textract_analyze',
+        },
+        textract_descriptive: {
+          amount: '1234.56',
+          payee_line: PAYEE,
+          payees: [{ name: PAYEE, type: 'unknown' }],
+          check_number: CHECK,
+        },
         needs_manual_review: false,
         field_confidence: {
           routing_number: 0.008,
@@ -232,7 +244,7 @@ test('10) response redaction omits MICR values, payees, raw provider payloads', 
           amount: 94,
         },
         diagnostic: { textract_micr_heuristic: { routing_number: ROUTING } },
-        azure_descriptive: { payee_line: PAYEE },
+        azure_descriptive: { payee_line: PAYEE, payees: [{ name: PAYEE }] },
       },
       azure_delete_confirmed: true,
       textract_error: null,
@@ -243,9 +255,15 @@ test('10) response redaction omits MICR values, payees, raw provider payloads', 
   assert.equal(out.statusCode, 200);
   assert.equal(out.azure_result_delete, 'CONFIRMED');
   assert.equal(out.descriptive.amount.present, true);
-  assert.equal(out.descriptive.amount.source, 'aws_textract_analyze');
+  assert.equal(out.descriptive.amount.canonical_source, 'aws_textract_analyze');
+  assert.equal(out.descriptive.amount.textract_present, true);
+  assert.equal(out.descriptive.amount.azure_present, false);
   assert.equal(out.descriptive.payees.present, true);
   assert.equal(out.descriptive.payees.count, 1);
+  assert.equal(out.descriptive.payees.azure_present, true);
+  assert.equal(out.descriptive.payees.canonical_source, 'azure_prebuilt_check_us');
+  assert.equal(out.descriptive.printed_check_number.azure_present, false);
+  assert.equal(out.descriptive.printed_check_number.textract_present, true);
   assert.equal(out.micr.routing.state, 'VERIFIED');
   assert.equal(out.micr.routing.aba_valid, true);
   assert.equal(out.micr.routing.confidence, 0.008);
@@ -443,18 +461,46 @@ test('13) redaction helper never copies raw MICR or payee fields', () => {
       payee_line: 'Someone',
       payees: [{ name: 'Someone' }],
       check_number: '778899',
+      amount: '1234.56',
+      carrier_name: 'Someone Carrier',
       micr_routing_state: 'REVIEW_REQUIRED',
       micr_account_state: 'MISSING',
       micr_check_state: 'REVIEW_REQUIRED',
       descriptive_engine: 'aws_textract_detect',
       micr_engine: 'azure_prebuilt_check_us',
-      filled_from_azure: [],
+      filled_from_azure: ['payee_line', 'payees', 'carrier_name'],
+      descriptive_sources: {
+        payee_line: 'azure_prebuilt_check_us',
+        payees: 'azure_prebuilt_check_us',
+        carrier_name: 'azure_prebuilt_check_us',
+        amount: 'aws_textract_detect',
+        check_number: 'aws_textract_detect',
+      },
+      textract_descriptive: {
+        payee_line: 'Someone',
+        amount: '1234.56',
+        check_number: '778899',
+      },
+      azure_descriptive: {
+        payee_line: 'Someone',
+        payees: [{ name: 'Someone' }],
+        carrier_name: 'Someone Carrier',
+      },
       field_confidence: { routing_number: 0 },
     },
     azure_delete_confirmed: false,
   });
   assert.equal(redacted.micr.routing.aba_valid, false);
   assert.equal(redacted.micr.micr_check.matches_printed_check, false);
+  assert.equal(redacted.azure_result_delete, 'NOT_CONFIRMED');
+  assert.equal(redacted.descriptive.payee_line.azure_present, true);
+  assert.equal(redacted.descriptive.payee_line.textract_present, true);
+  assert.equal(redacted.descriptive.payee_line.canonical_source, 'azure_prebuilt_check_us');
+  assert.equal(redacted.descriptive.amount.canonical_source, 'aws_textract_detect');
   assert.equal(JSON.stringify(redacted).includes('111000025'), false);
   assert.equal(JSON.stringify(redacted).includes('Someone'), false);
+  assert.equal(JSON.stringify(redacted).includes('1234.56'), false);
+  assert.ok(!('value' in redacted.descriptive.payee_line));
+  assert.ok(!('azure_descriptive' in redacted));
+  assert.ok(!('textract_descriptive' in redacted));
 });

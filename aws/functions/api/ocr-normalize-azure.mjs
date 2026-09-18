@@ -1,6 +1,6 @@
 /**
- * Normalize Azure prebuilt-check.us fields to ChecksOps MICR states.
- * Azure descriptive values are supplemental only; they do not become canonical here.
+ * Normalize Azure prebuilt-check.us fields to ChecksOps MICR + descriptive supplemental.
+ * Descriptive values stay supplemental here; merge decides canonical precedence.
  */
 import { abaRoutingChecksumOk, digitsOnly, splitPayees } from './ocr-parse.mjs';
 
@@ -8,12 +8,43 @@ const STATES = { VERIFIED: 'VERIFIED', REVIEW_REQUIRED: 'REVIEW_REQUIRED', MISSI
 const ACCOUNT_MIN = 6;
 const ACCOUNT_MAX = 17;
 
-const fieldValue = (field) => {
+const trimText = (value) => {
+  if (value == null) return null;
+  const text = String(value).replace(/\s+/g, ' ').trim();
+  return text || null;
+};
+
+const currencyAmount = (field) => {
+  const cur = field?.valueCurrency;
+  if (!cur || typeof cur !== 'object') return null;
+  if (cur.amount != null) return cur.amount;
+  if (cur.amountValue != null) return cur.amountValue;
+  return null;
+};
+
+export const fieldValue = (field, { preferContent = false } = {}) => {
   if (field == null) return { raw: null, confidence: null };
   if (typeof field !== 'object') return { raw: field, confidence: null };
-  const raw = field.valueString ?? field.valueNumber ?? field.content ?? null;
+  const content = trimText(field.content);
+  const raw = preferContent && content != null
+    ? content
+    : (
+      field.valueString
+      ?? field.valueDate
+      ?? field.valueNumber
+      ?? currencyAmount(field)
+      ?? content
+      ?? null
+    );
   const confidence = Number.isFinite(Number(field.confidence)) ? Number(field.confidence) : null;
   return { raw, confidence };
+};
+
+const formatAmount = (raw) => {
+  if (raw == null || raw === '') return null;
+  const n = Number(String(raw).replace(/[$,\s]/g, ''));
+  if (!Number.isFinite(n)) return null;
+  return n.toFixed(2);
 };
 
 const micrChild = (fields, name) => {
@@ -71,10 +102,15 @@ export const normalizeAzureMicr = (document = {}, { printedCheckNumber = null } 
     }
   }
 
+  const payerName = fieldValue(fields.PayerName);
+  const checkDate = fieldValue(fields.CheckDate);
   const numberAmount = fieldValue(fields.NumberAmount);
-  const wordAmount = fieldValue(fields.WordAmount);
+  const wordAmount = fieldValue(fields.WordAmount, { preferContent: true });
   const payTo = fieldValue(fields.PayTo);
-  const payeeLine = payTo.raw != null ? String(payTo.raw).trim() || null : null;
+  const bankName = fieldValue(fields.BankName);
+  const memo = fieldValue(fields.Memo);
+  const payeeLine = trimText(payTo.raw);
+  const wordText = trimText(wordAmount.raw);
 
   return {
     routing_number,
@@ -87,20 +123,23 @@ export const normalizeAzureMicr = (document = {}, { printedCheckNumber = null } 
       routing_number: routingField.confidence,
       account_number: accountField.confidence,
       micr_check_number: checkField.confidence,
+      carrier_name: payerName.confidence,
+      issue_date: checkDate.confidence,
+      amount: numberAmount.confidence,
+      written_amount: wordAmount.confidence,
+      payee_line: payTo.confidence,
+      bank_name: bankName.confidence,
+      memo: memo.confidence,
     },
     supplemental: {
-      carrier_name: fieldValue(fields.PayerName).raw != null ? String(fieldValue(fields.PayerName).raw).trim() || null : null,
-      issue_date: fieldValue(fields.CheckDate).raw != null ? String(fieldValue(fields.CheckDate).raw).trim() || null : null,
-      amount: numberAmount.raw != null && Number.isFinite(Number(numberAmount.raw))
-        ? Number(numberAmount.raw).toFixed(2)
-        : null,
-      written_amount: wordAmount.raw != null && Number.isFinite(Number(wordAmount.raw))
-        ? Number(wordAmount.raw).toFixed(2)
-        : (wordAmount.raw != null ? String(wordAmount.raw).trim() || null : null),
+      carrier_name: trimText(payerName.raw),
+      issue_date: trimText(checkDate.raw),
+      amount: formatAmount(numberAmount.raw),
+      written_amount: wordText,
       payee_line: payeeLine,
       payees: payeeLine ? splitPayees(payeeLine) : [],
-      bank_name: fieldValue(fields.BankName).raw != null ? String(fieldValue(fields.BankName).raw).trim() || null : null,
-      memo: fieldValue(fields.Memo).raw != null ? String(fieldValue(fields.Memo).raw).trim() || null : null,
+      bank_name: trimText(bankName.raw),
+      memo: trimText(memo.raw),
       check_number: micrCheckDigits || null,
     },
   };
@@ -117,6 +156,13 @@ export const emptyAzureMicr = () => ({
     routing_number: null,
     account_number: null,
     micr_check_number: null,
+    carrier_name: null,
+    issue_date: null,
+    amount: null,
+    written_amount: null,
+    payee_line: null,
+    bank_name: null,
+    memo: null,
   },
   supplemental: {
     carrier_name: null,

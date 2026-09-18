@@ -63,7 +63,7 @@ const textractBase = (overrides = {}) => ({
   ...overrides,
 });
 
-test('10) Textract descriptive fields win over Azure descriptive fields', () => {
+test('10) Azure native descriptive fields win when present', () => {
   const canonical = mergeCheckExtraction({
     textractParsed: textractBase(),
     azureMicr: azureMicrFrom(),
@@ -71,19 +71,31 @@ test('10) Textract descriptive fields win over Azure descriptive fields', () => 
     azureRan: true,
     azureOk: true,
   });
-  assert.equal(canonical.carrier_name, 'Textract Carrier Mutual');
-  assert.equal(canonical.issue_date, '2026-01-15');
-  assert.equal(canonical.amount, '1234.56');
+  assert.equal(canonical.carrier_name, 'Azure Carrier Mutual');
+  assert.equal(canonical.issue_date, '2026-02-02');
+  assert.equal(canonical.amount, '99.12');
   assert.equal(canonical.written_amount, '1234.56');
-  assert.equal(canonical.payee_line, PAYEE_TX);
-  assert.equal(canonical.payees[0].name, PAYEE_TX);
+  assert.equal(canonical.payee_line, PAYEE_AZ);
+  assert.ok(canonical.payees.some((p) => p.name.includes('Azure Only Payee')));
   assert.equal(canonical.claim_number, 'CLM-STAGING-7788');
-  assert.equal(canonical.bank_name, 'First Synthetic Bank');
-  assert.equal(canonical.memo, 'Water Loss');
+  assert.equal(canonical.check_number, CHECK);
+  assert.equal(canonical.bank_name, 'Azure Bank NA');
+  assert.equal(canonical.memo, 'Azure memo');
   assert.equal(canonical.descriptive_engine, 'aws_textract_analyze');
   assert.equal(canonical.micr_engine, 'azure_prebuilt_check_us');
-  assert.deepEqual(canonical.filled_from_azure, []);
-  assert.equal(canonical.azure_descriptive.amount, '99.12');
+  assert.ok(canonical.filled_from_azure.includes('carrier_name'));
+  assert.ok(canonical.filled_from_azure.includes('amount'));
+  assert.ok(canonical.filled_from_azure.includes('payee_line'));
+  assert.ok(canonical.filled_from_azure.includes('issue_date'));
+  assert.ok(canonical.filled_from_azure.includes('bank_name'));
+  assert.equal(canonical.textract_descriptive.carrier_name, 'Textract Carrier Mutual');
+  assert.equal(canonical.textract_descriptive.amount, '1234.56');
+  assert.equal(canonical.textract_descriptive.payee_line, PAYEE_TX);
+  assert.equal(canonical.textract_descriptive.check_number, CHECK);
+  assert.equal(canonical.textract_descriptive.claim_number, 'CLM-STAGING-7788');
+  assert.equal(canonical.needs_manual_review, true);
+  assert.equal(canonical.diagnostic.descriptive_comparison.amount.differs, true);
+  assert.equal(canonical.diagnostic.descriptive_comparison.carrier_name.differs, true);
 });
 
 test('11) Azure fills missing descriptive field only where explicitly allowed', () => {
@@ -108,6 +120,64 @@ test('11) Azure fills missing descriptive field only where explicitly allowed', 
   assert.equal(canonical.memo, 'Azure memo');
   assert.equal(canonical.claim_number, 'CLM-KEEP');
   assert.ok(!canonical.filled_from_azure.includes('claim_number'));
+});
+
+test('10b) printed check_number and claim_number remain Textract', () => {
+  const canonical = mergeCheckExtraction({
+    textractParsed: textractBase({ check_number: CHECK, claim_number: 'CLM-KEEP', detected_claim_number: 'CLM-KEEP' }),
+    azureMicr: azureMicrFrom({ check: '112233' }),
+    descriptiveEngine: 'aws_textract_analyze',
+    azureRan: true,
+    azureOk: true,
+  });
+  assert.equal(canonical.check_number, CHECK);
+  assert.equal(canonical.claim_number, 'CLM-KEEP');
+  assert.equal(canonical.detected_claim_number, 'CLM-KEEP');
+  assert.equal(canonical.micr_check_number, '112233');
+  assert.equal(canonical.micr_check_state, 'REVIEW_REQUIRED');
+  assert.ok(!canonical.filled_from_azure.includes('check_number'));
+  assert.ok(!canonical.filled_from_azure.includes('claim_number'));
+  assert.equal(canonical.descriptive_sources.check_number, 'aws_textract_analyze');
+  assert.equal(canonical.descriptive_sources.claim_number, 'aws_textract_analyze');
+});
+
+test('10c) amount/date/payee disagreement sets manual review', () => {
+  const canonical = mergeCheckExtraction({
+    textractParsed: textractBase(),
+    azureMicr: azureMicrFrom(),
+    descriptiveEngine: 'aws_textract_analyze',
+    azureRan: true,
+    azureOk: true,
+  });
+  assert.equal(canonical.needs_manual_review, true);
+  assert.equal(canonical.diagnostic.descriptive_comparison.amount.differs, true);
+  assert.equal(canonical.diagnostic.descriptive_comparison.issue_date.differs, true);
+  assert.equal(canonical.diagnostic.descriptive_comparison.payee_line.differs, true);
+  assert.equal(canonical.amount, '99.12');
+  assert.equal(canonical.issue_date, '2026-02-02');
+  assert.equal(canonical.payee_line, PAYEE_AZ);
+});
+
+test('10d) matching Azure/Textract descriptive does not force review', () => {
+  const canonical = mergeCheckExtraction({
+    textractParsed: textractBase({
+      carrier_name: 'Azure Carrier Mutual',
+      issue_date: '2026-02-02',
+      amount: '99.12',
+      payee_line: PAYEE_AZ,
+      payees: [{ name: PAYEE_AZ, type: 'unknown' }],
+      bank_name: 'Azure Bank NA',
+      memo: 'Azure memo',
+      needs_manual_review: false,
+    }),
+    azureMicr: azureMicrFrom(),
+    descriptiveEngine: 'aws_textract_analyze',
+    azureRan: true,
+    azureOk: true,
+  });
+  assert.equal(canonical.needs_manual_review, false);
+  assert.equal(canonical.diagnostic.descriptive_comparison.amount.differs, false);
+  assert.equal(canonical.diagnostic.descriptive_comparison.payee_line.differs, false);
 });
 
 test('11b) Azure never invents a claim number', () => {
@@ -285,8 +355,11 @@ test('extractCheck merges mocked Azure MICR with Textract descriptive', async ()
   assert.equal(out.canonical.micr_routing_state, 'VERIFIED');
   assert.equal(out.canonical.routing_number, ROUTING_OK);
   assert.equal(out.canonical.account_number, ACCOUNT);
-  assert.equal(out.canonical.amount, '1234.56');
-  assert.notEqual(out.canonical.amount, '9.99');
+  assert.equal(out.canonical.amount, '9.99');
+  assert.notEqual(out.canonical.amount, '1234.56');
+  assert.equal(out.canonical.check_number, CHECK);
+  assert.equal(out.canonical.payee_line.includes('Azure Only Payee'), true);
+  assert.equal(out.canonical.needs_manual_review, true);
   assert.equal(out.azure_delete_confirmed, true);
   const blob = JSON.stringify(logs);
   assert.ok(!blob.includes(ROUTING_OK));
