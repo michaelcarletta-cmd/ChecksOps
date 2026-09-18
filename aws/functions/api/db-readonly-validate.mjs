@@ -60,6 +60,23 @@ const issue = (kind, severity, message, extra = {}) => ({
   ...extra,
 });
 
+const redactPathSample = (value) => {
+  if (value == null) return null;
+  let text = String(value);
+  // Remove query string (can include signed URL credentials).
+  text = text.replace(/\?.*$/s, '');
+  // Redact any UUID-like tokens.
+  text = text.replace(
+    /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi,
+    '[id]',
+  );
+  // Redact host on http(s) URLs while keeping a hint of the path shape.
+  text = text.replace(/^https?:\/\/[^/]+/i, 'https://[host]');
+  // Keep samples short.
+  if (text.length > 220) text = `${text.slice(0, 220)}…`;
+  return text;
+};
+
 const classifyQueryIssue = (error, extra = {}) => {
   const code = error?.code || '';
   const message = sanitizePublicError(error);
@@ -111,6 +128,7 @@ export const validateReadonlyCoreTables = async ({
     rlsMode: null,
     restoredTablesRlsEnabled: false,
     failClosedWithoutIdentity: false,
+    legacyImagePathInventory: null,
     tables: [],
     privileges: [],
     catalog: {},
@@ -181,6 +199,62 @@ export const validateReadonlyCoreTables = async ({
         result.issues.push(classifyQueryIssue(error, { table }));
       }
       result.tables.push(row);
+    }
+
+    // Read-only inventory: identify legacy/non-canonical check image path values
+    // that may require compatibility repair (no DB mutation here).
+    try {
+      const columns = ['front_image_path', 'back_image_path', 'back_image_original_path'];
+      const inventory = {};
+      for (const column of columns) {
+        const httpUrlCount = Number((await client.query(
+          `SELECT count(*)::int AS n FROM public.check_intake_items WHERE ${quoteIdent(column)} ILIKE $1`,
+          ['http%'],
+        )).rows[0]?.n ?? 0);
+        const supabaseUrlCount = Number((await client.query(
+          `SELECT count(*)::int AS n FROM public.check_intake_items WHERE ${quoteIdent(column)} ILIKE $1`,
+          ['%/storage/v1/object/%'],
+        )).rows[0]?.n ?? 0);
+        const bucketPrefixCount = Number((await client.query(
+          `SELECT count(*)::int AS n FROM public.check_intake_items WHERE ${quoteIdent(column)} ILIKE $1`,
+          ['claim-files/%'],
+        )).rows[0]?.n ?? 0);
+        const nonCanonicalPrefixCount = Number((await client.query(
+          `SELECT count(*)::int AS n
+           FROM public.check_intake_items
+           WHERE ${quoteIdent(column)} IS NOT NULL
+             AND ${quoteIdent(column)} NOT ILIKE $1
+             AND ${quoteIdent(column)} NOT ILIKE $2`,
+          ['checks/%', 'check-intake/%'],
+        )).rows[0]?.n ?? 0);
+
+        const examples = (await client.query(
+          `SELECT id::text AS id, ${quoteIdent(column)} AS value
+           FROM public.check_intake_items
+           WHERE ${quoteIdent(column)} ILIKE $1
+              OR ${quoteIdent(column)} ILIKE $2
+              OR ${quoteIdent(column)} ILIKE $3
+              OR (${quoteIdent(column)} IS NOT NULL
+                  AND ${quoteIdent(column)} NOT ILIKE $4
+                  AND ${quoteIdent(column)} NOT ILIKE $5)
+           LIMIT 5`,
+          ['http%', '%/storage/v1/object/%', 'claim-files/%', 'checks/%', 'check-intake/%'],
+        )).rows.map((row) => ({
+          id: redactPathSample(row.id),
+          value: redactPathSample(row.value),
+        }));
+
+        inventory[column] = {
+          httpUrlCount,
+          supabaseStorageUrlCount: supabaseUrlCount,
+          claimFilesPrefixCount: bucketPrefixCount,
+          nonCanonicalPrefixCount,
+          examples,
+        };
+      }
+      result.legacyImagePathInventory = inventory;
+    } catch (error) {
+      result.issues.push(classifyQueryIssue(error, { table: 'check_intake_items', column: 'image_paths' }));
     }
 
     try {

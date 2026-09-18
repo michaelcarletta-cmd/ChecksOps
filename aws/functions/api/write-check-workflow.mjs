@@ -1,6 +1,11 @@
 import { ident } from './data.mjs';
 import { WRITE_ALLOWLIST } from './write-allowlist.mjs';
 import { isCheckScopedPathFor, normalizePath } from './storage-paths.mjs';
+import {
+  ENDORSEMENTS_ELIGIBILITY_SQL,
+  PAYEES_ELIGIBILITY_SQL,
+  endorsementStateFingerprint,
+} from './providers/production/checkalt-eligibility.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -56,6 +61,102 @@ const asBool = (value) => {
   return { error: 'invalid_field', field: 'boolean' };
 };
 
+const asFiniteNumber = (value, field) => {
+  if (value === undefined || value === null || value === '') {
+    return { error: 'invalid_field', field };
+  }
+  const n = Number(value);
+  if (!Number.isFinite(n)) return { error: 'invalid_field', field };
+  return { value: n };
+};
+
+const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
+
+const normalizeRotation = (deg) => {
+  const n = deg % 360;
+  return n < 0 ? n + 360 : n;
+};
+
+const coerceEndorsementOverride = (value) => {
+  if (!value || typeof value !== 'object') return { error: 'invalid_field', field: 'endorsement_override' };
+  const raw = value;
+  const x = asFiniteNumber(raw.xPct, 'endorsement_override.xPct');
+  if (x.error) return x;
+  const y = asFiniteNumber(raw.yPct, 'endorsement_override.yPct');
+  if (y.error) return y;
+  const s = asFiniteNumber(raw.scale, 'endorsement_override.scale');
+  if (s.error) return s;
+  const r = asFiniteNumber(raw.rotationDeg, 'endorsement_override.rotationDeg');
+  if (r.error) return r;
+  const show = asBool(raw.showPayToOrder);
+  if (show && show.error) return { error: 'invalid_field', field: 'endorsement_override.showPayToOrder' };
+  return {
+    value: {
+      xPct: clamp(x.value, 0.05, 0.95),
+      yPct: clamp(y.value, 0.03, 0.95),
+      scale: clamp(s.value, 0.4, 4),
+      rotationDeg: normalizeRotation(r.value),
+      showPayToOrder: Boolean(show),
+    },
+  };
+};
+
+const ENDORSEMENT_RENDER_STATUS = new Set(['idle', 'position_saved', 'completed', 'failed']);
+
+const coerceEndorsementRenderStatus = (value) => {
+  const text = asText(value, 40);
+  if (text.error) return text;
+  const next = (text.value || '').toLowerCase();
+  if (!ENDORSEMENT_RENDER_STATUS.has(next)) {
+    return { error: 'invalid_field', field: 'endorsement_render_status' };
+  }
+  return { value: next };
+};
+
+const isPlainObject = (v) => Boolean(v && typeof v === 'object' && !Array.isArray(v));
+
+const coerceEndorsementRenderMeta = (value) => {
+  if (value === null) return { value: null };
+  if (!isPlainObject(value)) return { error: 'invalid_field', field: 'endorsement_render_meta' };
+  const raw = value;
+  const out = {};
+
+  if ('request_id' in raw) {
+    const text = asText(raw.request_id, 120);
+    if (text.error) return text;
+    if (text.value) out.request_id = text.value;
+  }
+  if ('renderer_version' in raw) {
+    const text = asText(raw.renderer_version, 80);
+    if (text.error) return text;
+    if (text.value) out.renderer_version = text.value;
+  }
+  if ('mime_type' in raw) {
+    const text = asText(raw.mime_type, 80);
+    if (text.error) return text;
+    if (text.value) out.mime_type = text.value;
+  }
+  for (const key of ['width', 'height', 'bytes']) {
+    if (key in raw) {
+      const n = Number(raw[key]);
+      if (!Number.isFinite(n) || n < 0) return { error: 'invalid_field', field: `endorsement_render_meta.${key}` };
+      out[key] = Math.trunc(n);
+    }
+  }
+  if ('error' in raw) {
+    const text = asText(raw.error, 500);
+    if (text.error) return text;
+    if (text.value) out.error = text.value;
+  }
+  if ('override' in raw && raw.override != null) {
+    const coerced = coerceEndorsementOverride(raw.override);
+    if (coerced.error) return coerced;
+    out.override = coerced.value;
+  }
+
+  return { value: Object.keys(out).length ? out : null };
+};
+
 const lookupCheck = async (client, checkId) => {
   const invalid = requireUuid('check_id', checkId);
   if (invalid) return invalid;
@@ -81,7 +182,7 @@ const lookupPayee = async (client, payeeId) => {
   return { payee: rows[0] };
 };
 
-const IMAGE_PATH_COLUMNS = new Set(['front_image_path', 'back_image_path', 'back_image_original_path']);
+const IMAGE_PATH_COLUMNS = new Set(['front_image_path', 'back_image_path', 'back_image_original_path', 'back_image_deposit_path']);
 
 const asImagePath = (checkId, value) => {
   if (value === undefined) return { skip: true };
@@ -93,6 +194,35 @@ const asImagePath = (checkId, value) => {
   }
   if (rel.length > 512) return { error: 'invalid_field', field: 'file_path' };
   return { value: rel };
+};
+
+const toCheckAltSibling = (rel) => {
+  const raw = String(rel || '').split('?')[0].replace(/^\/+/, '').trim();
+  if (!raw) return null;
+  if (/\.checkalt\.jpe?g$/i.test(raw)) return raw;
+  if (/\.[^.]+$/.test(raw)) return raw.replace(/\.[^.]+$/i, '.checkalt.jpg');
+  return `${raw}.checkalt.jpg`;
+};
+
+const parseJsonObject = (value) => {
+  if (value == null || value === '') return null;
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  if (typeof value !== 'string') return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+
+const bindCheckAltRearFingerprint = async (client, { checkId, tenantId, meta }) => {
+  const payees = (await client.query(PAYEES_ELIGIBILITY_SQL, [checkId, tenantId])).rows || [];
+  const endorsements = (await client.query(ENDORSEMENTS_ELIGIBILITY_SQL, [checkId, tenantId])).rows || [];
+  const fingerprint = endorsementStateFingerprint(checkId, payees, endorsements);
+  const out = isPlainObject(meta) ? { ...meta } : {};
+  out.checkalt_rear_fingerprint = fingerprint;
+  return { fingerprint, meta: out };
 };
 
 const lookupEndorsement = async (client, endorsementId) => {
@@ -191,6 +321,22 @@ const intakeCoerce = (values) => {
     if (text.error) return text;
     out.mortgage_tracking_number = text.value;
   }
+  if ('endorsement_render_status' in values) {
+    const status = coerceEndorsementRenderStatus(values.endorsement_render_status);
+    if (status.error) return status;
+    out.endorsement_render_status = status.value;
+  }
+  if ('endorsement_override' in values) {
+    const override = coerceEndorsementOverride(values.endorsement_override);
+    if (override.error) return override;
+    // Persist JSONB explicitly as JSON text; SQL casts to ::jsonb.
+    out.endorsement_override = JSON.stringify(override.value);
+  }
+  if ('endorsement_render_meta' in values) {
+    const meta = coerceEndorsementRenderMeta(values.endorsement_render_meta);
+    if (meta.error) return meta;
+    out.endorsement_render_meta = meta.value == null ? null : JSON.stringify(meta.value);
+  }
   return { values: out };
 };
 
@@ -281,8 +427,61 @@ const executeIntakeUpdate = async ({ client, values, filters }) => {
   const coerced = intakeCoerce(values);
   if (coerced.error) return coerced;
   const nextValues = { ...coerced.values };
+
+  const completingRender = String(nextValues.endorsement_render_status || '') === 'completed';
+  if (completingRender) {
+    if (!('back_image_deposit_path' in nextValues) || nextValues.back_image_deposit_path == null || nextValues.back_image_deposit_path === '') {
+      return { error: 'missing_required_field', field: 'back_image_deposit_path', table: 'check_intake_items', op: 'update' };
+    }
+    if (!('endorsement_render_meta' in nextValues) || nextValues.endorsement_render_meta == null || nextValues.endorsement_render_meta === '') {
+      return { error: 'missing_required_field', field: 'endorsement_render_meta', table: 'check_intake_items', op: 'update' };
+    }
+  }
+
+  // Legacy storage parity + safety invariant:
+  // - Deposit path must always be the official `.checkalt.jpg` sibling of the check's stored rear/original path(s).
+  // - When render is marked completed, bind `endorsement_render_meta.checkalt_rear_fingerprint` atomically
+  //   based on current endorsement state for the *actual* check id (never path UUIDs).
+  if ('back_image_deposit_path' in nextValues && nextValues.back_image_deposit_path != null) {
+    const rel = normalizePath(nextValues.back_image_deposit_path, 'claim-files');
+    if (!rel) return { error: 'invalid_field', field: 'file_path', message: 'invalid storage path' };
+    nextValues.back_image_deposit_path = rel;
+
+    const base = (await client.query(
+      'SELECT tenant_id, back_image_original_path, back_image_path, back_image_deposit_path FROM public.check_intake_items WHERE id = $1::uuid',
+      [checkId],
+    )).rows[0];
+    if (!base) return { error: 'rls_denied', message: 'check not writable' };
+
+    const allowed = [
+      toCheckAltSibling(normalizePath(base.back_image_original_path, 'claim-files')),
+      toCheckAltSibling(normalizePath(base.back_image_path, 'claim-files')),
+      toCheckAltSibling(normalizePath(base.back_image_deposit_path, 'claim-files')),
+    ].filter(Boolean);
+    if (!allowed.includes(rel)) {
+      return { error: 'rls_denied', message: 'image path is not scoped to this check' };
+    }
+
+    if (completingRender) {
+      if (!base.tenant_id) return { error: 'rls_denied', message: 'check tenant missing' };
+      const metaObj = parseJsonObject(nextValues.endorsement_render_meta);
+      const bound = await bindCheckAltRearFingerprint(client, {
+        checkId,
+        tenantId: base.tenant_id,
+        meta: metaObj,
+      });
+      nextValues.endorsement_render_meta = JSON.stringify(bound.meta);
+    }
+  }
   for (const column of IMAGE_PATH_COLUMNS) {
     if (column in nextValues) {
+      if (column === 'back_image_deposit_path') {
+        const rel = nextValues.back_image_deposit_path;
+        if (rel == null || rel === '') continue;
+        if (String(rel).length > 512) return { error: 'invalid_field', field: 'file_path' };
+        // Deposit path is validated against official sibling rules above.
+        continue;
+      }
       const path = asImagePath(checkId, nextValues[column]);
       if (path.error) return path;
       if (path.skip) delete nextValues[column];
@@ -298,6 +497,8 @@ const executeIntakeUpdate = async ({ client, values, filters }) => {
     issue_date: 'date',
     mortgage_sent_at: 'timestamptz',
     mortgage_received_at: 'timestamptz',
+    endorsement_override: 'jsonb',
+    endorsement_render_meta: 'jsonb',
   });
   built.params.push(checkId);
   const rows = (await client.query(

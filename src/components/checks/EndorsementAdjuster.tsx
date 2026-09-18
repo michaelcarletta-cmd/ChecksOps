@@ -11,6 +11,8 @@ import {
   ImageDown,
   CheckCircle2,
   RefreshCw,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -30,6 +32,7 @@ import {
   SignatureAsset,
 } from "@/lib/endorsementDepositRender";
 import { CHECK_IMAGES_BUCKET } from "@/lib/storageBuckets";
+import { toCheckAltPath } from "@/lib/checkaltImageCompliance";
 import { logAudit } from "@/hooks/useAuditLog";
 
 interface SignedEndorsementAsset extends SignatureAsset {
@@ -88,6 +91,7 @@ export function EndorsementAdjuster({
   onClose,
 }: EndorsementAdjusterProps) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const viewerScrollRef = useRef<HTMLDivElement | null>(null);
   const rafRef = useRef<number | null>(null);
   const overrideRef = useRef<EndorsementOverride>(
     initialOverride ?? DEFAULT_ENDORSEMENT_OVERRIDE,
@@ -114,6 +118,8 @@ export function EndorsementAdjuster({
     mimeType: string;
     bytes: number;
   } | null>(null);
+
+  const [viewerZoom, setViewerZoom] = useState(1);
 
   const [signedEndorsements, setSignedEndorsements] = useState<SignedEndorsementAsset[]>([]);
   const [endorsementsLoading, setEndorsementsLoading] = useState(true);
@@ -504,10 +510,10 @@ export function EndorsementAdjuster({
         );
       }
 
-      // Official CheckAlt artifact next to the original rear image. Original file is not overwritten.
-      const folder = originalImagePath.replace(/\/[^/]+$/, "");
-      const version = (Date.now() % 1_000_000).toString(36);
-      const depositPath = `${folder}/endorsed_deposit_${version}.checkalt.jpg`;
+      // Official CheckAlt artifact sibling of the original rear image.
+      // Deterministic path avoids orphaning unlimited endorsed_deposit_* artifacts.
+      const depositPath = toCheckAltPath(originalImagePath);
+      if (!depositPath) throw new Error("Could not derive CheckAlt artifact path.");
 
       const { error: uploadErr } = await supabase.storage
         .from(CHECK_IMAGES_BUCKET)
@@ -805,154 +811,207 @@ export function EndorsementAdjuster({
         </div>
       )}
 
-      {/* Preview */}
-      <div
-        ref={wrapRef}
-        className="relative mx-auto overflow-hidden rounded border bg-white"
-        style={{ width: "100%", maxWidth: 900, touchAction: "none" }}
-      >
-        <img
-          src={originalImageUrl}
-          alt="Back of check"
-          className="block h-auto w-full object-contain"
-          draggable={false}
-        />
-        <div
-          className="absolute left-0 right-0 border-t-2 border-dashed border-green-500/40 pointer-events-none"
-          style={{ top: safeZoneTopPx }}
-        />
-        <div
-          className="absolute left-0 right-0 border-t-2 border-dashed border-destructive/40 pointer-events-none"
-          style={{ top: safeZoneBottomPx }}
-        />
-
-        <div
-          onPointerDown={beginDrag}
-          className="absolute"
-          style={{
-            left: centerXPx,
-            top: centerYPx,
-            width: containerWidthPx * ENDORSEMENT_WIDTH_PCT * (override.scale || 1),
-            transform: `translate(-50%, -50%) rotate(${override.rotationDeg || 0}deg)`,
-            transformOrigin: "center center",
-            color: "#111111",
-            userSelect: "none",
-            touchAction: "none",
-            cursor: dragging ? "grabbing" : "grab",
-            opacity: dragging ? 0.92 : 1,
-            zIndex: 20,
-            textAlign: "center",
-          }}
-        >
-          {override.showPayToOrder && (
-            <>
-              <div style={{ fontSize: payToFontPx, fontWeight: 600, marginBottom: lineGapPx }}>
-                Pay to the order of
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_420px] gap-4 items-start">
+        {/* Source check viewer */}
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <div className="text-xs font-semibold text-muted-foreground">Source Check</div>
+              <div className="text-[10px] text-muted-foreground">
+                Scroll to inspect details • zoom keeps aspect ratio
               </div>
-              <div style={{ fontSize: companyFontPx, fontWeight: 700, marginBottom: lineGapPx }}>
-                {companyName}
-              </div>
-              <div style={{ fontSize: payToFontPx, fontWeight: 700, marginBottom: sectionGapPx }}>
-                For Mobile Deposit Only
-              </div>
-            </>
-          )}
-
-          {clientRows.map((row, rowIndex) => (
-            <div
-              key={`row-${rowIndex}`}
-              className="flex w-full"
-              style={{ gap: columns === 2 ? lineGapPx : 0 }}
-            >
-              {row.map((e) => (
-                <div key={e.id} style={{ width: columns === 2 ? "50%" : "100%" }}>
-                  <div style={{ fontSize: byLineFontPx, fontWeight: 700, marginBottom: lineGapPx }}>
-                    {e.payee_name}
-                  </div>
-                  {e.signature_image_url && !e.signature_image_url.startsWith("typed:") ? (
-                    <img
-                      src={e.signature_image_url}
-                      alt={`${e.payee_name} signature`}
-                      style={{
-                        height: sigHeightPx,
-                        width: clientSignatureWidthPx,
-                        margin: `0 auto ${rowGap * displayScale}px`,
-                        objectFit: "contain",
-                      }}
-                      draggable={false}
-                    />
-                  ) : (
-                    <div
-                      style={{
-                        fontSize: byLineFontPx,
-                        fontStyle: "italic",
-                        fontFamily: '"Brush Script MT", cursive',
-                        marginBottom: rowGap * displayScale,
-                      }}
-                    >
-                      {e.signature_image_url?.startsWith("typed:")
-                        ? e.signature_image_url.slice(6)
-                        : e.payee_name}
-                    </div>
-                  )}
-                </div>
-              ))}
             </div>
-          ))}
-
-          {companyEndorsement && (
-            <>
-              <div style={{ fontSize: companyFontPx, fontWeight: 700, marginBottom: lineGapPx }}>
-                {companyName}
-              </div>
-              {companyEndorsement.signature_image_url?.startsWith("typed:") ? (
-                <div
-                  style={{
-                    fontSize: byLineFontPx,
-                    fontStyle: "italic",
-                    fontFamily: '"Brush Script MT", cursive',
-                  }}
-                >
-                  {companyName}
-                </div>
-              ) : (
-                <img
-                  src={companyEndorsement.signature_image_url ?? undefined}
-                  alt={`${companyName} signature`}
-                  style={{
-                    height: sigHeightPx,
-                    width: companySignatureWidthPx,
-                    margin: "0 auto",
-                    objectFit: "contain",
-                  }}
-                  draggable={false}
-                />
-              )}
-            </>
-          )}
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setViewerZoom((z) => Math.max(1, Math.round((z - 0.25) * 100) / 100))}
+                disabled={viewerZoom <= 1}
+                title="Zoom out"
+              >
+                <ZoomOut className="h-3 w-3 mr-1" />
+                {Math.round(viewerZoom * 100)}%
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setViewerZoom((z) => Math.min(2.5, Math.round((z + 0.25) * 100) / 100))}
+                disabled={viewerZoom >= 2.5}
+                title="Zoom in"
+              >
+                <ZoomIn className="h-3 w-3 mr-1" />
+                Zoom
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setViewerZoom(1)}
+                disabled={viewerZoom === 1}
+                title="Reset zoom"
+              >
+                Reset
+              </Button>
+            </div>
+          </div>
 
           <div
-            onPointerDown={beginResize}
-            className="absolute rounded-full border-2 border-background bg-foreground shadow"
-            style={{
-              width: 32,
-              height: 32,
-              right: -16,
-              bottom: -16,
-              cursor: "nwse-resize",
-              touchAction: "none",
-              opacity: resizing ? 0.85 : 1,
-            }}
-          />
-        </div>
-      </div>
+            ref={viewerScrollRef}
+            className="rounded border bg-white overflow-auto"
+            style={{ maxHeight: "72vh" }}
+          >
+            <div
+              ref={wrapRef}
+              className="relative"
+              style={{
+                width: `${Math.round(viewerZoom * 100)}%`,
+                minWidth: "100%",
+                touchAction: "none",
+              }}
+            >
+              <img
+                src={originalImageUrl}
+                alt="Back of check"
+                className="block h-auto w-full object-contain"
+                draggable={false}
+              />
+              <div
+                className="absolute left-0 right-0 border-t-2 border-dashed border-green-500/40 pointer-events-none"
+                style={{ top: safeZoneTopPx }}
+              />
+              <div
+                className="absolute left-0 right-0 border-t-2 border-dashed border-destructive/40 pointer-events-none"
+                style={{ top: safeZoneBottomPx }}
+              />
 
-      {/* Controls */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Adjust Endorsement</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+              <div
+                onPointerDown={beginDrag}
+                className="absolute"
+                style={{
+                  left: centerXPx,
+                  top: centerYPx,
+                  width: containerWidthPx * ENDORSEMENT_WIDTH_PCT * (override.scale || 1),
+                  transform: `translate(-50%, -50%) rotate(${override.rotationDeg || 0}deg)`,
+                  transformOrigin: "center center",
+                  color: "#111111",
+                  userSelect: "none",
+                  touchAction: "none",
+                  cursor: dragging ? "grabbing" : "grab",
+                  opacity: dragging ? 0.92 : 1,
+                  zIndex: 20,
+                  textAlign: "center",
+                }}
+              >
+                {override.showPayToOrder && (
+                  <>
+                    <div style={{ fontSize: payToFontPx, fontWeight: 600, marginBottom: lineGapPx }}>
+                      Pay to the order of
+                    </div>
+                    <div style={{ fontSize: companyFontPx, fontWeight: 700, marginBottom: lineGapPx }}>
+                      {companyName}
+                    </div>
+                    <div style={{ fontSize: payToFontPx, fontWeight: 700, marginBottom: sectionGapPx }}>
+                      For Mobile Deposit Only
+                    </div>
+                  </>
+                )}
+
+                {clientRows.map((row, rowIndex) => (
+                  <div
+                    key={`row-${rowIndex}`}
+                    className="flex w-full"
+                    style={{ gap: columns === 2 ? lineGapPx : 0 }}
+                  >
+                    {row.map((e) => (
+                      <div key={e.id} style={{ width: columns === 2 ? "50%" : "100%" }}>
+                        <div style={{ fontSize: byLineFontPx, fontWeight: 700, marginBottom: lineGapPx }}>
+                          {e.payee_name}
+                        </div>
+                        {e.signature_image_url && !e.signature_image_url.startsWith("typed:") ? (
+                          <img
+                            src={e.signature_image_url}
+                            alt={`${e.payee_name} signature`}
+                            style={{
+                              height: sigHeightPx,
+                              width: clientSignatureWidthPx,
+                              margin: `0 auto ${rowGap * displayScale}px`,
+                              objectFit: "contain",
+                            }}
+                            draggable={false}
+                          />
+                        ) : (
+                          <div
+                            style={{
+                              fontSize: byLineFontPx,
+                              fontStyle: "italic",
+                              fontFamily: '"Brush Script MT", cursive',
+                              marginBottom: rowGap * displayScale,
+                            }}
+                          >
+                            {e.signature_image_url?.startsWith("typed:")
+                              ? e.signature_image_url.slice(6)
+                              : e.payee_name}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+
+                {companyEndorsement && (
+                  <>
+                    <div style={{ fontSize: companyFontPx, fontWeight: 700, marginBottom: lineGapPx }}>
+                      {companyName}
+                    </div>
+                    {companyEndorsement.signature_image_url?.startsWith("typed:") ? (
+                      <div
+                        style={{
+                          fontSize: byLineFontPx,
+                          fontStyle: "italic",
+                          fontFamily: '"Brush Script MT", cursive',
+                        }}
+                      >
+                        {companyName}
+                      </div>
+                    ) : (
+                      <img
+                        src={companyEndorsement.signature_image_url ?? undefined}
+                        alt={`${companyName} signature`}
+                        style={{
+                          height: sigHeightPx,
+                          width: companySignatureWidthPx,
+                          margin: "0 auto",
+                          objectFit: "contain",
+                        }}
+                        draggable={false}
+                      />
+                    )}
+                  </>
+                )}
+
+                <div
+                  onPointerDown={beginResize}
+                  className="absolute rounded-full border-2 border-background bg-foreground shadow"
+                  style={{
+                    width: 32,
+                    height: 32,
+                    right: -16,
+                    bottom: -16,
+                    cursor: "nwse-resize",
+                    touchAction: "none",
+                    opacity: resizing ? 0.85 : 1,
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Controls */}
+        <Card className="xl:sticky xl:top-4">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Adjust Endorsement</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
           <div className="space-y-2 rounded-md border border-border/60 bg-muted/30 p-3">
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs font-semibold">Easy Placement</p>
@@ -1132,8 +1191,9 @@ export function EndorsementAdjuster({
               </Button>
             )}
           </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

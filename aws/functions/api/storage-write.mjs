@@ -16,7 +16,6 @@ import {
 } from './storage-paths.mjs';
 import { authorizeStorageWritePath } from './storage-write-auth.mjs';
 import { storageWritesEnabled } from './write-allowlist.mjs';
-import { stampOfficialRearFingerprintIfNeeded } from './providers/production/checkalt-eligibility.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -110,20 +109,6 @@ export const handleStorageUploadUrl = async (event, deps = {}) => {
         path: auth.rel,
         spoofFieldsIgnored: spoof,
       };
-    }
-
-    if (auth.check) {
-      try {
-        await stampOfficialRearFingerprintIfNeeded(client, auth.check, auth.rel);
-      } catch {
-        return {
-          ok: false,
-          statusCode: 503,
-          error: 'provider_rear_fingerprint_stamp_failed',
-          message: 'Official rear CheckAlt image could not be bound to current endorsement state',
-          spoofFieldsIgnored: spoof,
-        };
-      }
     }
 
     const sign = deps.getSignedUrl || getSignedUrl;
