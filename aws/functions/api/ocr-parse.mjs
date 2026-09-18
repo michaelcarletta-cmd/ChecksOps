@@ -28,6 +28,7 @@ const toStandardCaps = (input) => {
 const CRITICAL_FIELDS = ['amount', 'check_number', 'payee_line'];
 const CRITICAL_CONFIDENCE_THRESHOLD = 60;
 const OVERALL_CONFIDENCE_THRESHOLD = 50;
+const MICR_SAFE_CONFIDENCE = 70;
 
 const clampPct = (n) => {
   const v = Number(n);
@@ -81,15 +82,19 @@ const looksLikeAddress = (text) => {
   return false;
 };
 
+const PAYEE_SPLIT_RE = /\s*(?:\band\b|&|＆|﹠|／|\/|;|；)\s*/i;
+
+const hasPayeeSeparator = (text) => PAYEE_SPLIT_RE.test(String(text || ''));
+
 const splitPayees = (payeeLine) => {
   if (!payeeLine) return [];
   const cleaned = String(payeeLine)
     .replace(/^\s*(pay\s+to\s+(?:the\s+order\s+of)?[:\s]*|of[:\s]+)/i, '')
     .trim();
   if (!cleaned) return [];
-  // Split on AND/&/slash but keep commas inside entity names (e.g. "Bank, N.A.")
+  // Split on AND/&/slash/semicolon but keep commas inside entity names (e.g. "Bank, N.A.")
   const parts = cleaned
-    .split(/\s*(?:\band\b|&|\/)\s*/i)
+    .split(PAYEE_SPLIT_RE)
     .map((p) => p.trim())
     .filter(Boolean);
   const payees = [];
@@ -97,11 +102,12 @@ const splitPayees = (payeeLine) => {
     if (!p) continue;
     // Do not treat obvious address strings as payees.
     if (looksLikeAddress(p)) continue;
-    // Strip trailing address fragments after the first long digit run.
+    // Strip trailing address fragments after the first long digit run,
+    // but keep entity suffixes like "N.A." / "ISAOA-ATIMA".
     let out = p;
-    const digitIdx = out.search(/\d/);
+    const digitIdx = out.search(/\d{3,}/);
     if (digitIdx > 0) out = out.slice(0, digitIdx).trim();
-    out = out.replace(/\s+/g, ' ').trim();
+    out = out.replace(/[,\s]+$/g, '').replace(/\s+/g, ' ').trim();
     if (out.length < 2) continue;
     payees.push({ name: toStandardCaps(out), type: 'unknown' });
   }
@@ -115,6 +121,52 @@ const maskDigits = (v) => {
   if (!d) return null;
   if (d.length <= 4) return `***${d}`;
   return `***${d.slice(-4)}`;
+};
+
+const abaRoutingChecksumOk = (raw) => {
+  const d = digitsOnly(raw);
+  if (d.length !== 9) return false;
+  const n = [...d].map((c) => Number(c));
+  if (n.some((x) => !Number.isFinite(x))) return false;
+  const sum = 3 * (n[0] + n[3] + n[6]) + 7 * (n[1] + n[4] + n[7]) + (n[2] + n[5] + n[8]);
+  return sum % 10 === 0;
+};
+
+const classifyDateLabel = (text) => {
+  const s = String(text || '');
+  if (/\b(?:date\s+of\s+loss|loss\s*date|lossdate)\b/i.test(s)) return 'loss';
+  if (/\bpolicy\s*date\b/i.test(s)) return 'policy';
+  if (/\beffective\s*date\b/i.test(s)) return 'effective';
+  if (/\bexpir(?:ation|y|es)?\s*date\b/i.test(s)) return 'expiration';
+  if (/\b(?:issue\s*date|date\s*line|dateline)\b/i.test(s)) return 'issue';
+  if (/\bdate\b/i.test(s)) return 'date';
+  return 'other';
+};
+
+const DATE_EXCLUDE = new Set(['loss', 'policy', 'effective', 'expiration']);
+
+const ABA_FRACTION_RE = /\b\d{1,2}\s*-\s*\d{3,5}\s*\/\s*\d{3,5}\b/g;
+const US_STATE_ABBR = new Set([
+  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN', 'IA',
+  'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
+  'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT',
+  'VA', 'WA', 'WV', 'WI', 'WY', 'DC',
+]);
+
+const cleanBankName = (text) => {
+  if (!text) return null;
+  let s = String(text);
+  s = s.replace(ABA_FRACTION_RE, ' ');
+  s = s.replace(/\b\d{5}(?:-\d{4})?\b/g, ' ');
+  s = s.replace(/\b([A-Z][a-z]+),\s*([A-Z]{2})\b/g, (full, city, st) => (
+    US_STATE_ABBR.has(st) ? ' ' : full
+  ));
+  s = s.replace(/\b(?:st|street|ave|avenue|rd|road|blvd|boulevard|dr|drive)\b\.?/gi, ' ');
+  s = s.replace(/\d+/g, ' ');
+  s = s.replace(/[/\\|#*]+/g, ' ').replace(/\s+/g, ' ').trim();
+  s = s.replace(/[,\s]+$/g, '').trim();
+  if (s.length < 3) return null;
+  return toStandardCaps(s);
 };
 
 const buildTextractIndex = (blocks = []) => {
@@ -133,10 +185,20 @@ const buildTextractIndex = (blocks = []) => {
   // Sort top-to-bottom then left-to-right for stable adjacency heuristics.
   lines.sort((a, b) => (a.box?.Top ?? 0) - (b.box?.Top ?? 0) || (a.box?.Left ?? 0) - (b.box?.Left ?? 0));
 
+  const words = (blocks || [])
+    .filter((b) => b && b.BlockType === 'WORD' && b.Text)
+    .map((b) => ({
+      text: String(b.Text || '').trim(),
+      conf: clampPct(b.Confidence ?? null),
+      box: b.Geometry?.BoundingBox || null,
+    }))
+    .filter((w) => w.text);
+
   return {
     blocks,
     byId,
     lines,
+    words,
   };
 };
 
@@ -161,6 +223,7 @@ const pickPayee = (idx) => {
   const payIdx = idx.lines.findIndex((l) => /pay\s+to\s+(?:the\s+order\s+of)?/i.test(l.text));
   let payeeLine = null;
   let payeeConf = 20;
+  let multipleLines = false;
   if (payIdx >= 0) {
     const label = idx.lines[payIdx];
     const labelText = label.text;
@@ -169,22 +232,23 @@ const pickPayee = (idx) => {
     if (inline && !looksLikeAddress(inline)) {
       payeeLine = inline;
       payeeConf = Math.min(95, safeLineConfidence(label));
-    } else {
-      // Otherwise take the next one or two lines directly below, close in Y.
-      const next = idx.lines[payIdx + 1];
-      const next2 = idx.lines[payIdx + 2];
-      const y = label.box?.Top ?? null;
-      const close = (l) => y == null || l?.box?.Top == null ? true : (l.box.Top - y) <= 0.10;
-      const candidates = [];
-      if (next && close(next) && !looksLikeAddress(next.text)) candidates.push(next);
-      if (next2 && close(next2) && !looksLikeAddress(next2.text) && candidates.length) {
-        // Include second line only when first exists (prevents grabbing random text).
-        candidates.push(next2);
-      }
-      if (candidates.length) {
-        payeeLine = candidates.map((c) => c.text).join(' ');
-        payeeConf = Math.min(95, Math.round(candidates.reduce((s, c) => s + safeLineConfidence(c), 0) / candidates.length));
-      }
+    }
+    // Collect following close lines (multiline payees / leftover "& NAME").
+    const y = label.box?.Top ?? null;
+    const close = (l) => (y == null || l?.box?.Top == null ? true : (l.box.Top - y) <= 0.14);
+    const extras = [];
+    for (const l of idx.lines.slice(payIdx + 1, payIdx + 4)) {
+      if (!l || !close(l)) continue;
+      if (looksLikeAddress(l.text)) continue;
+      if (/void|memo|date|dollars|amount|routing|account|authorized|signature/i.test(l.text) && !hasPayeeSeparator(l.text)) continue;
+      extras.push(l);
+    }
+    if (extras.length) {
+      multipleLines = extras.length > 1 || Boolean(payeeLine);
+      const extraText = extras.map((c) => c.text).join(' ');
+      payeeLine = payeeLine ? `${payeeLine} ${extraText}` : extraText;
+      const confs = [payeeConf, ...extras.map((c) => safeLineConfidence(c))];
+      payeeConf = Math.min(95, Math.round(confs.reduce((s, c) => s + c, 0) / confs.length));
     }
   }
 
@@ -201,7 +265,14 @@ const pickPayee = (idx) => {
     const signalCount = [hasAmount, hasDollars, hasDate, hasCheckLabel, hasMicrBand].filter(Boolean).length;
     if (signalCount < 2) {
       // Not check-like enough to infer payee.
-      return { value: null, conf: 20, payees: [] };
+      return {
+        value: null,
+        conf: 20,
+        payees: [],
+        separatorDetected: false,
+        multipleLines: false,
+        ambiguous: false,
+      };
     }
     for (const l of idx.lines) {
       if (/pay\s+to\s+(?:the\s+order\s+of)?/i.test(l.text)) continue;
@@ -217,14 +288,21 @@ const pickPayee = (idx) => {
   }
 
   const normalized = payeeLine ? toStandardCaps(payeeLine.replace(/\s+/g, ' ').trim()) : null;
+  const separatorDetected = hasPayeeSeparator(normalized);
+  const payees = splitPayees(normalized);
+  const ambiguous = Boolean(normalized) && separatorDetected && payees.length < 2;
   return {
     value: normalized,
     conf: normalized ? payeeConf : 20,
-    payees: splitPayees(normalized),
+    payees,
+    separatorDetected,
+    multipleLines,
+    ambiguous,
   };
 };
 
 const pickIssueDate = (idx) => {
+  const classified = [];
   const candidates = idx.lines.filter((l) => /\bdate\b/i.test(l.text) || /\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b/.test(l.text) || /\b\d{4}-\d{2}-\d{2}\b/.test(l.text));
   let best = null;
   let bestScore = -1e9;
@@ -233,19 +311,44 @@ const pickIssueDate = (idx) => {
     const dateToken = t.match(/\b\d{4}-\d{2}-\d{2}\b/)?.[0] || t.match(/\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b/)?.[0];
     const norm = normalizeDate(dateToken);
     if (!norm) continue;
+    const label = classifyDateLabel(t);
+    classified.push(label);
     let score = 0;
-    if (/\bdate\b/i.test(t)) score += 3;
+    if (DATE_EXCLUDE.has(label)) score -= 20;
+    if (label === 'issue') score += 8;
+    if (label === 'date' && !DATE_EXCLUDE.has(label)) score += 2;
     const top = l.box?.Top ?? 0.5;
     const left = l.box?.Left ?? 0.5;
-    if (top < 0.30 && left > 0.50) score += 2; // common date location
+    if (top < 0.30 && left > 0.50) score += 6; // dateline box
+    if (top < 0.22 && left > 0.60) score += 2;
     score += (safeLineConfidence(l) - 50) / 25;
     if (score > bestScore) {
       bestScore = score;
-      best = { norm, line: l };
+      best = { norm, line: l, label };
     }
   }
-  if (!best) return { value: null, conf: 20 };
-  return { value: best.norm, conf: Math.min(95, safeLineConfidence(best.line)) };
+  const lossDates = [];
+  for (const l of candidates) {
+    if (classifyDateLabel(l.text) !== 'loss') continue;
+    const dateToken = l.text.match(/\b\d{4}-\d{2}-\d{2}\b/)?.[0] || l.text.match(/\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b/)?.[0];
+    const norm = normalizeDate(dateToken);
+    if (norm) lossDates.push(norm);
+  }
+  if (!best) {
+    return {
+      value: null,
+      conf: 20,
+      conflict: false,
+      classifications: classified,
+    };
+  }
+  const conflict = lossDates.some((d) => d && d !== best.norm);
+  return {
+    value: best.norm,
+    conf: Math.min(95, safeLineConfidence(best.line)),
+    conflict,
+    classifications: classified,
+  };
 };
 
 const pickAmountNumeric = (idx) => {
@@ -273,15 +376,28 @@ const pickAmountNumeric = (idx) => {
   return { value: best.norm, conf: Math.min(95, safeLineConfidence(best.line)) };
 };
 
+const WORD_NUMBER_IGNORE = new Set([
+  'exactly', 'only', 'dollars', 'dollar', 'and', 'the', 'sum', 'of',
+  'cents', 'cent', 'us', 'usd', 'lawful', 'money',
+]);
+
 const wordsToNumber = (text) => {
-  // Minimal deterministic converter for common check patterns:
-  // "one thousand two hundred ten and 27/100"
+  // Deterministic converter for common insurance-check patterns:
+  // "exactly nine thousand eight hundred sixty and 29/100 dollars"
   if (!text) return null;
-  const raw = String(text).toLowerCase().replace(/[^a-z0-9\/\s-]/g, ' ').replace(/\s+/g, ' ').trim();
+  const raw = String(text)
+    .toLowerCase()
+    .replace(/[^a-z0-9\/\s-]/g, ' ')
+    .replace(/-/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
   if (!raw) return null;
   const frac = raw.match(/\b(\d{1,2})\s*\/\s*100\b/);
   const cents = frac ? Number(frac[1]) : 0;
-  const cleaned = raw.replace(/\b\d{1,2}\s*\/\s*100\b/g, '').replace(/\band\b/g, ' ').replace(/\s+/g, ' ').trim();
+  const cleaned = raw
+    .replace(/\b\d{1,2}\s*\/\s*100\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
   const SMALL = {
     zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9,
     ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19,
@@ -291,27 +407,31 @@ const wordsToNumber = (text) => {
   let total = 0;
   let group = 0;
   const tokens = cleaned.split(/\s+/).filter(Boolean);
+  let sawNumberWord = false;
   for (const tok of tokens) {
+    if (WORD_NUMBER_IGNORE.has(tok)) continue;
+    if (/^\d+$/.test(tok)) continue; // ignore leftover numeric noise
     if (tok in SMALL) {
       group += SMALL[tok];
+      sawNumberWord = true;
       continue;
     }
     if (tok === 'hundred') {
       group = (group || 1) * 100;
+      sawNumberWord = true;
       continue;
     }
     if (tok === 'thousand' || tok === 'million') {
       total += (group || 1) * SCALE[tok];
       group = 0;
+      sawNumberWord = true;
       continue;
     }
-    // Ignore "dollars" / "only" / etc.
-    if (tok === 'dollars' || tok === 'dollar' || tok === 'only') continue;
     // If we hit something unknown, abort (avoid fabrication).
     return null;
   }
   const dollars = total + group;
-  if (!Number.isFinite(dollars) || dollars <= 0) return null;
+  if (!sawNumberWord || !Number.isFinite(dollars) || dollars <= 0) return null;
   const final = dollars + (Number.isFinite(cents) ? cents / 100 : 0);
   return final.toFixed(2);
 };
@@ -319,25 +439,29 @@ const wordsToNumber = (text) => {
 const pickAmountWritten = (idx) => {
   let best = null;
   let bestScore = -1e9;
+  let dollarsLineDetected = false;
   for (const l of idx.lines) {
     if (!/\bdollars?\b/i.test(l.text)) continue;
+    dollarsLineDetected = true;
     // Prefer lines near middle-left (written amount line).
     const top = l.box?.Top ?? 0.5;
     const left = l.box?.Left ?? 0.5;
     let score = 0;
     if (top > 0.20 && top < 0.75 && left < 0.65) score += 2;
+    if (/\bexactly\b|\bonly\b/i.test(l.text)) score += 1;
     score += (safeLineConfidence(l) - 50) / 25;
     if (score > bestScore) {
       bestScore = score;
       best = l;
     }
   }
-  if (!best) return { value: null, conf: 20 };
+  if (!best) return { value: null, conf: 20, raw: null, dollarsLineDetected };
   const norm = wordsToNumber(best.text);
   return {
     value: norm,
     conf: norm ? Math.min(90, safeLineConfidence(best)) : 35,
     raw: best.text.slice(0, 200),
+    dollarsLineDetected,
   };
 };
 
@@ -400,6 +524,7 @@ const pickBankName = (idx, payeeLine) => {
     const top = l.box?.Top ?? 0.5;
     let score = 0;
     if (top > 0.55) score += 2;
+    if (/\b\d{1,2}\s*-\s*\d{3,5}\s*\/\s*\d{3,5}\b/.test(l.text)) score += 1; // transit often sits on drawee line
     score += (safeLineConfidence(l) - 50) / 30;
     if (score > bestScore) {
       bestScore = score;
@@ -407,7 +532,8 @@ const pickBankName = (idx, payeeLine) => {
     }
   }
   if (!best) return { value: null, conf: 20 };
-  return { value: toStandardCaps(best.text), conf: Math.min(80, safeLineConfidence(best)) };
+  const cleaned = cleanBankName(best.text);
+  return { value: cleaned, conf: cleaned ? Math.min(80, safeLineConfidence(best)) : 20 };
 };
 
 const pickCheckNumber = (idx) => {
@@ -453,46 +579,181 @@ const pickCheckNumber = (idx) => {
   return { value: best.token, conf: Math.min(90, safeLineConfidence(best.line)) };
 };
 
-const pickMicr = (idx) => {
-  // MICR generally appears near the bottom; we use only deterministic digit heuristics.
-  const bottomLines = idx.lines.filter((l) => (l.box?.Top ?? 0) > 0.78);
-  let best = null;
-  let bestDigits = '';
-  for (const l of bottomLines) {
-    const d = digitsOnly(l.text);
-    if (d.length >= 15 && d.length > bestDigits.length) {
-      bestDigits = d;
-      best = l;
+const extractDigitRuns = (text) => {
+  const s = String(text || '');
+  const runs = [];
+  const re = /\d+/g;
+  let m;
+  while ((m = re.exec(s))) {
+    runs.push({
+      digits: m[0],
+      index: m.index,
+      isolated9: m[0].length === 9,
+      boundedBySymbol: (
+        (m.index > 0 && /[:*o⑆]/i.test(s[m.index - 1] || ''))
+        || /[:*o⑆]/i.test(s[m.index + m[0].length] || '')
+      ),
+    });
+  }
+  return runs;
+};
+
+const pickMicr = (idx, printedCheckNumber = null) => {
+  const printed = printedCheckNumber ? digitsOnly(printedCheckNumber) : '';
+  const bottomLines = idx.lines.filter((l) => (l.box?.Top ?? 0) > 0.75);
+  const bottomWords = (idx.words || []).filter((w) => (w.box?.Top ?? 0) > 0.75);
+  const sources = bottomLines.length ? bottomLines : [];
+  const runBag = [];
+  for (const l of sources) {
+    for (const run of extractDigitRuns(l.text)) {
+      runBag.push({
+        ...run,
+        left: l.box?.Left ?? 0.5,
+        conf: safeLineConfidence(l),
+      });
     }
   }
-  if (!bestDigits) {
-    // Still allow extracting a routing-only 9-digit run if present.
-    for (const l of bottomLines) {
-      const m = digitsOnly(l.text).match(/\b(\d{9})\b/);
-      if (m) {
-        const routing = m[1];
-        return {
-          routing_number: routing,
-          account_number: null,
-          micr_check_number: null,
-          conf: Math.min(70, safeLineConfidence(l)),
-        };
-      }
+  // WORD-level runs help when a LINE concatenates MICR fields.
+  for (const w of bottomWords) {
+    const d = digitsOnly(w.text);
+    if (d.length >= 4) {
+      runBag.push({
+        digits: d,
+        index: 0,
+        isolated9: d.length === 9,
+        boundedBySymbol: false,
+        left: w.box?.Left ?? 0.5,
+        conf: w.conf ?? 50,
+      });
     }
-    return { routing_number: null, account_number: null, micr_check_number: null, conf: 10 };
   }
 
-  // Heuristic parse: pick the first 9-digit run as routing; remainder as account+check.
-  const routing = bestDigits.match(/(\d{9})/)?.[1] || null;
-  let rest = routing ? bestDigits.replace(routing, '') : bestDigits;
-  rest = rest.replace(/^0+/, rest.length > 10 ? '' : rest); // strip leading zeros only when long
-  const account = rest.length >= 6 ? rest.slice(0, Math.min(17, rest.length)) : null;
-  const micrCheck = rest.length >= 3 ? rest.slice(-Math.min(8, rest.length)) : null;
+  const uniqueRuns = [];
+  const seen = new Set();
+  for (const r of runBag) {
+    const key = `${r.digits}@${Math.round((r.left || 0) * 100)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    uniqueRuns.push(r);
+  }
+
+  const routingCandidates = [];
+  for (const run of uniqueRuns) {
+    const windows = [];
+    if (run.digits.length === 9) {
+      windows.push({ digits: run.digits, isolated: true, parentLen: 9, left: run.left, conf: run.conf, boundedBySymbol: run.boundedBySymbol });
+    } else if (run.digits.length > 9) {
+      for (let i = 0; i <= run.digits.length - 9; i += 1) {
+        windows.push({
+          digits: run.digits.slice(i, i + 9),
+          isolated: false,
+          parentLen: run.digits.length,
+          left: run.left,
+          conf: run.conf,
+          boundedBySymbol: run.boundedBySymbol && i === 0,
+          parentDigits: run.digits,
+        });
+      }
+    }
+    for (const w of windows) {
+      if (!abaRoutingChecksumOk(w.digits)) continue;
+      let score = 40;
+      if (w.isolated) score += 20;
+      if (w.boundedBySymbol) score += 10;
+      const left = w.left ?? 0.5;
+      if (left >= 0.18 && left <= 0.72) score += 10;
+      if (printed && (w.digits.includes(printed) || (w.parentDigits && w.parentDigits.includes(printed)))) score -= 30;
+      if (printed && w.digits === printed) score -= 40;
+      if (!w.isolated && w.parentLen >= 10 && printed && w.parentDigits && w.parentDigits.includes(printed)) score -= 20;
+      routingCandidates.push({ ...w, score });
+    }
+  }
+
+  routingCandidates.sort((a, b) => b.score - a.score);
+  const best = routingCandidates[0] || null;
+  const second = routingCandidates[1] || null;
+  const clearWinner = Boolean(best) && (!second || (best.score - second.score) >= 15);
+  const routingAmbiguous = Boolean(best) && !clearWinner;
+  const routing = clearWinner ? best.digits : null;
+  const checksumPassed = Boolean(best);
+  let routingConf = 10;
+  if (routing) {
+    routingConf = (best.isolated && checksumPassed)
+      ? Math.min(85, Math.max(MICR_SAFE_CONFIDENCE, best.conf || 70))
+      : 55;
+  } else if (best && !clearWinner) {
+    routingConf = 45;
+  }
+
+  const leftover = uniqueRuns.filter((r) => {
+    if (routing && r.digits === routing) return false;
+    if (routing && r.digits.includes(routing) && r.digits.length > 9) {
+      // keep parent only if it has leftover besides routing
+      return r.digits.replace(routing, '').length >= 4;
+    }
+    return true;
+  });
+
+  let micrCheck = null;
+  let printedMatched = false;
+  if (printed) {
+    for (const r of leftover) {
+      if (r.digits === printed || r.digits.includes(printed)) {
+        micrCheck = printed;
+        printedMatched = true;
+        break;
+      }
+    }
+  }
+
+  const accountRuns = leftover
+    .map((r) => {
+      let d = r.digits;
+      if (routing && d.includes(routing)) d = d.replace(routing, '');
+      if (printed && d.includes(printed)) d = d.replace(printed, '');
+      d = d.replace(/^0+/, d.length > 10 ? '' : d);
+      return { ...r, digits: d };
+    })
+    .filter((r) => r.digits.length >= 6 && r.digits.length <= 17);
+
+  // Dedup account runs by digits.
+  const accountSeen = new Set();
+  const uniqueAccounts = [];
+  for (const r of accountRuns) {
+    if (accountSeen.has(r.digits)) continue;
+    accountSeen.add(r.digits);
+    uniqueAccounts.push(r);
+  }
+
+  let account = null;
+  let accountAmbiguous = false;
+  if (uniqueAccounts.length === 1) {
+    account = uniqueAccounts[0].digits;
+  } else if (uniqueAccounts.length > 1) {
+    accountAmbiguous = true;
+  }
+
+  const micrAmbiguous = routingAmbiguous || accountAmbiguous || (Boolean(best) && !routing);
+  const checkConflict = Boolean(printed && micrCheck && digitsOnly(micrCheck) !== printed);
+
   return {
     routing_number: routing,
     account_number: account,
     micr_check_number: micrCheck,
-    conf: Math.min(65, safeLineConfidence(best)),
+    conf: routing ? routingConf : (bottomLines.length ? 40 : 10),
+    routing_conf: routing ? routingConf : null,
+    account_conf: account ? (accountAmbiguous ? 45 : Math.min(75, routingConf || 60)) : null,
+    micr_check_conf: micrCheck ? (printedMatched ? 80 : 50) : null,
+    ambiguous: micrAmbiguous,
+    check_conflict: checkConflict,
+    diagnostic: {
+      micr_band_line_count: bottomLines.length,
+      numeric_run_count: uniqueRuns.length,
+      numeric_run_lengths: uniqueRuns.map((r) => r.digits.length).sort((a, b) => a - b),
+      routing_candidate_count: routingCandidates.length,
+      aba_checksum_passed: checksumPassed,
+      printed_check_matched_micr_candidate: printedMatched,
+    },
   };
 };
 
@@ -513,14 +774,22 @@ const computeConfidenceBundle = (fields) => {
   const low = [];
   for (const [k, v] of entries) {
     if (v == null) continue;
-    const threshold = CRITICAL_FIELDS.includes(k) ? CRITICAL_CONFIDENCE_THRESHOLD : 50;
+    let threshold = 50;
+    if (CRITICAL_FIELDS.includes(k)) threshold = CRITICAL_CONFIDENCE_THRESHOLD;
+    if (k === 'routing_number' || k === 'account_number' || k === 'micr_check_number') {
+      threshold = MICR_SAFE_CONFIDENCE;
+    }
     if (v < threshold) low.push(k);
   }
 
   const criticalMissing = CRITICAL_FIELDS.some((k) => fields[k] == null || String(fields[k]).trim() === '');
   const criticalLow = CRITICAL_FIELDS.some((k) => (fieldConfidence[k] ?? 0) < CRITICAL_CONFIDENCE_THRESHOLD);
   const overallLow = confidence < OVERALL_CONFIDENCE_THRESHOLD;
-  const needsManualReview = criticalMissing || criticalLow || overallLow || low.includes('amount_disagreement');
+  const micrLow = ['routing_number', 'account_number', 'micr_check_number'].some((k) => {
+    const present = fields[k] != null && String(fields[k]).trim() !== '';
+    return present && (fieldConfidence[k] ?? 0) < MICR_SAFE_CONFIDENCE;
+  });
+  const needsManualReview = criticalMissing || criticalLow || overallLow || low.includes('amount_disagreement') || micrLow;
 
   // Drop helper-only sentinel if present.
   const lowOut = low.filter((k) => k !== 'amount_disagreement');
@@ -568,7 +837,15 @@ export const parseCheckFields = (input = []) => {
         if (line.length >= 5 && /[A-Za-z]/.test(line)) { payeeLine = line; break; }
       }
     }
-    return { value: toStandardCaps(payeeLine), conf: payeeLine ? 70 : 20, payees: splitPayees(payeeLine) };
+    const normalized = toStandardCaps(payeeLine);
+    return {
+      value: normalized,
+      conf: payeeLine ? 70 : 20,
+      payees: splitPayees(payeeLine),
+      separatorDetected: hasPayeeSeparator(payeeLine),
+      multipleLines: false,
+      ambiguous: Boolean(payeeLine) && hasPayeeSeparator(payeeLine) && splitPayees(payeeLine).length < 2,
+    };
   })();
 
   const checkNo = isBlocks ? pickCheckNumber(idx) : (() => {
@@ -577,9 +854,24 @@ export const parseCheckFields = (input = []) => {
   })();
 
   const date = isBlocks ? pickIssueDate(idx) : (() => {
-    const m = text.match(/\b(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})\b/) || text.match(/\b(\d{4}-\d{2}-\d{2})\b/);
-    const norm = normalizeDate(m ? m[1] : null);
-    return { value: norm, conf: norm ? 65 : 20 };
+    const classified = [];
+    let chosen = null;
+    for (const line of lines) {
+      const label = classifyDateLabel(line);
+      const m = line.match(/\b(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})\b/) || line.match(/\b(\d{4}-\d{2}-\d{2})\b/);
+      const norm = normalizeDate(m ? m[1] : null);
+      if (!norm) continue;
+      classified.push(label);
+      if (DATE_EXCLUDE.has(label)) continue;
+      if (!chosen) chosen = { norm, label };
+      if (label === 'issue' || label === 'date') chosen = { norm, label };
+    }
+    return {
+      value: chosen?.norm || null,
+      conf: chosen ? 65 : 20,
+      conflict: classified.includes('loss') && Boolean(chosen?.norm),
+      classifications: classified,
+    };
   })();
 
   const amt = isBlocks ? pickAmountNumeric(idx) : (() => {
@@ -588,7 +880,11 @@ export const parseCheckFields = (input = []) => {
     return { value: norm, conf: norm ? 70 : 20 };
   })();
 
-  const written = isBlocks ? pickAmountWritten(idx) : { value: null, conf: 20, raw: null };
+  const written = isBlocks ? pickAmountWritten(idx) : (() => {
+    const dollars = lines.find((l) => /\bdollars?\b/i.test(l));
+    const norm = dollars ? wordsToNumber(dollars) : null;
+    return { value: norm, conf: norm ? 65 : 20, raw: dollars || null, dollarsLineDetected: Boolean(dollars) };
+  })();
   const claim = isBlocks ? pickClaimNumber(idx) : (() => {
     const m = text.match(/(?:claim|clm)[#:\s-]*([A-Z0-9\-]{4,24})/i);
     return { value: m ? m[1] : null, conf: m ? 60 : 20 };
@@ -596,9 +892,29 @@ export const parseCheckFields = (input = []) => {
 
   const memo = isBlocks ? pickMemo(idx) : { value: null, conf: 20 };
   const bank = isBlocks ? pickBankName(idx, payee.value) : { value: null, conf: 20 };
-  const micr = isBlocks ? pickMicr(idx) : (() => {
-    const routingMatch = text.replace(/\s+/g, ' ').match(/\b([0-9]{9})\b/);
-    return { routing_number: routingMatch ? routingMatch[1] : null, account_number: null, micr_check_number: null, conf: routingMatch ? 50 : 10 };
+  const micr = isBlocks ? pickMicr(idx, checkNo.value) : (() => {
+    const runs = extractDigitRuns(text.replace(/\s+/g, ' '));
+    const valid = runs.filter((r) => r.digits.length === 9 && abaRoutingChecksumOk(r.digits));
+    const routing = valid.length === 1 ? valid[0].digits : null;
+    return {
+      routing_number: routing,
+      account_number: null,
+      micr_check_number: null,
+      conf: routing ? 50 : 10,
+      routing_conf: routing ? 50 : null,
+      account_conf: null,
+      micr_check_conf: null,
+      ambiguous: valid.length > 1,
+      check_conflict: false,
+      diagnostic: {
+        micr_band_line_count: 0,
+        numeric_run_count: runs.length,
+        numeric_run_lengths: runs.map((r) => r.digits.length),
+        routing_candidate_count: valid.length,
+        aba_checksum_passed: valid.length > 0,
+        printed_check_matched_micr_candidate: false,
+      },
+    };
   })();
 
   // Amount disagreement rule: if both numeric+written exist and differ materially, flag review.
@@ -606,6 +922,7 @@ export const parseCheckFields = (input = []) => {
   if (amt.value && written.value && amt.value !== written.value) {
     disagreement = true;
   }
+  const writtenMissingWithDollars = Boolean(amt.value && !written.value && written.dollarsLineDetected);
 
   const fields = {
     carrier_name: carrier.value,
@@ -632,16 +949,28 @@ export const parseCheckFields = (input = []) => {
     payee_line__conf: payee.conf,
     memo__conf: memo.conf,
     bank_name__conf: bank.conf,
-    routing_number__conf: micr.conf,
-    account_number__conf: micr.conf != null ? Math.max(10, micr.conf - 10) : null,
-    micr_check_number__conf: micr.conf != null ? Math.max(10, micr.conf - 10) : null,
+    routing_number__conf: micr.routing_conf ?? micr.conf,
+    account_number__conf: micr.account_conf ?? (micr.account_number ? Math.max(10, (micr.conf || 50) - 10) : null),
+    micr_check_number__conf: micr.micr_check_conf ?? (micr.micr_check_number ? Math.max(10, (micr.conf || 50) - 10) : null),
     amount_disagreement__conf: disagreement ? 40 : 90,
     amount_disagreement: disagreement ? true : null,
   };
 
   const bundle = computeConfidenceBundle(fields);
   const low = new Set(bundle.low_confidence_fields || []);
-  if (disagreement) low.add('amount'); // treat as amount confidence issue for UI
+  if (disagreement) low.add('amount');
+  if (writtenMissingWithDollars) low.add('written_amount');
+  if (payee.ambiguous) low.add('payee_line');
+  if (date.conflict) low.add('issue_date');
+  if (micr.ambiguous) low.add('routing_number');
+  if (micr.check_conflict) low.add('micr_check_number');
+
+  const extraReview = disagreement
+    || writtenMissingWithDollars
+    || Boolean(payee.ambiguous)
+    || Boolean(date.conflict)
+    || Boolean(micr.ambiguous)
+    || Boolean(micr.check_conflict);
 
   return {
     carrier_name: toStandardCaps(fields.carrier_name),
@@ -661,7 +990,18 @@ export const parseCheckFields = (input = []) => {
     confidence: bundle.confidence,
     field_confidence: bundle.field_confidence,
     low_confidence_fields: Array.from(low),
-    needs_manual_review: bundle.needs_manual_review || disagreement,
+    needs_manual_review: bundle.needs_manual_review || extraReview,
+    diagnostic: {
+      micr_band_line_count: micr.diagnostic?.micr_band_line_count ?? 0,
+      numeric_run_count: micr.diagnostic?.numeric_run_count ?? 0,
+      numeric_run_lengths: micr.diagnostic?.numeric_run_lengths ?? [],
+      routing_candidate_count: micr.diagnostic?.routing_candidate_count ?? 0,
+      aba_checksum_passed: Boolean(micr.diagnostic?.aba_checksum_passed),
+      printed_check_matched_micr_candidate: Boolean(micr.diagnostic?.printed_check_matched_micr_candidate),
+      payee_separator_detected: Boolean(payee.separatorDetected),
+      multiple_payee_lines_detected: Boolean(payee.multipleLines),
+      date_label_classifications: Array.isArray(date.classifications) ? date.classifications : [],
+    },
     // Helpers for safe logs/tests (do not add raw digits to logs)
     masked: {
       routing_number: maskDigits(fields.routing_number),
@@ -669,4 +1009,12 @@ export const parseCheckFields = (input = []) => {
       micr_check_number: maskDigits(fields.micr_check_number),
     },
   };
+};
+
+export const __test__ = {
+  abaRoutingChecksumOk,
+  wordsToNumber,
+  classifyDateLabel,
+  cleanBankName,
+  splitPayees,
 };
