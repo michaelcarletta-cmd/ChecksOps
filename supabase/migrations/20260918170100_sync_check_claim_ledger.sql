@@ -1,5 +1,13 @@
 -- One check → one claim. Trigger-driven ledger sync.
 -- UNAPPLIED in Wave 1 / review patches. Repo artifact only.
+-- NOT authorized for apply until ownership + uniqueness prerequisites exist.
+--
+-- Prerequisites (apply first, in order):
+--   20260918170010_guard_check_claim_tenant.sql
+--   20260918170020_verify_claim_payments_check_intake_index.sql
+--   20260918170030_one_check_received_per_check.sql
+--   supabase/unapplied/ledger-backfill/01_inspect.sql  (read-only)
+--   supabase/unapplied/ledger-backfill/02_apply.sql    (controlled; do not run here)
 --
 -- Security model:
 -- * SECURITY DEFINER + search_path = public
@@ -8,41 +16,11 @@
 -- * Function writes only rows for p_check_id / NEW.id.
 -- * RLS is bypassed by SECURITY DEFINER so related claim rows can be
 --   mirrored after an RLS-allowed check_intake_items.claim_id write.
--- * Tenant isolation comes from that prior RLS write + scoped WHERE
---   clauses on check_intake_item_id / check_id.
+-- * Tenant isolation comes from trg_guard_check_claim_link +
+--   assert_check_claim_link_allowed inside this function, so an invalid
+--   link cannot be amplified even if called directly by service_role.
 
--- Unique payment row per physical check. Index already exists from
--- 20260308154243 (partial unique). Recreate only if missing. If
--- duplicates exist and the index is absent, STOP — do not delete data.
-DO $$
-DECLARE
-  v_dupes integer := 0;
-  v_index_exists boolean;
-BEGIN
-  SELECT EXISTS (
-    SELECT 1 FROM pg_indexes
-    WHERE schemaname = 'public' AND indexname = 'idx_claim_payments_check_intake'
-  ) INTO v_index_exists;
-
-  SELECT COUNT(*) INTO v_dupes
-  FROM (
-    SELECT check_intake_item_id
-    FROM public.claim_payments
-    WHERE check_intake_item_id IS NOT NULL
-    GROUP BY check_intake_item_id
-    HAVING COUNT(*) > 1
-  ) d;
-
-  IF v_dupes > 0 AND NOT v_index_exists THEN
-    RAISE EXCEPTION
-      'sync_check_claim_ledger: % duplicate claim_payments.check_intake_item_id group(s) exist; stop before apply — no data deleted',
-      v_dupes;
-  END IF;
-END $$;
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_claim_payments_check_intake
-  ON public.claim_payments(check_intake_item_id)
-  WHERE check_intake_item_id IS NOT NULL;
+SELECT public.verify_claim_payments_check_intake_index();
 
 CREATE OR REPLACE FUNCTION public.sync_check_claim_ledger(p_check_id uuid)
 RETURNS jsonb
@@ -56,6 +34,7 @@ DECLARE
   v_payment_id uuid;
   v_inserted_received boolean := false;
   v_payment_date date;
+  v_received_id uuid;
 BEGIN
   SELECT * INTO v_check
   FROM public.check_intake_items
@@ -68,6 +47,8 @@ BEGIN
   IF v_check.claim_id IS NULL THEN
     RETURN jsonb_build_object('success', true, 'skipped', true, 'reason', 'unlinked');
   END IF;
+
+  PERFORM public.assert_check_claim_link_allowed(v_check.id, v_check.tenant_id, v_check.claim_id);
 
   v_payment_date := COALESCE(v_check.issue_date, CURRENT_DATE);
 
@@ -134,24 +115,23 @@ BEGIN
     AND (v_check.tenant_id IS NULL OR tenant_id IS NOT DISTINCT FROM v_check.tenant_id)
     AND claim_id IS DISTINCT FROM v_check.claim_id;
 
-  IF NOT EXISTS (
-    SELECT 1 FROM public.homeowner_ledger_events
-    WHERE check_id = v_check.id AND event_type = 'check_received'
-  ) THEN
-    INSERT INTO public.homeowner_ledger_events (
-      tenant_id, claim_id, check_id, event_type, occurred_at, amount, actor_label, payload_json
-    ) VALUES (
-      v_check.tenant_id,
-      v_check.claim_id,
-      v_check.id,
-      'check_received',
-      COALESCE(v_check.created_at, now()),
-      v_check.amount,
-      'System',
-      jsonb_build_object('status', v_check.status, 'source', 'claim_link_sync')
-    );
-    v_inserted_received := true;
-  END IF;
+  INSERT INTO public.homeowner_ledger_events (
+    tenant_id, claim_id, check_id, event_type, occurred_at, amount, actor_label, payload_json
+  ) VALUES (
+    v_check.tenant_id,
+    v_check.claim_id,
+    v_check.id,
+    'check_received',
+    COALESCE(v_check.created_at, now()),
+    v_check.amount,
+    'System',
+    jsonb_build_object('status', v_check.status, 'source', 'claim_link_sync')
+  )
+  ON CONFLICT (check_id) WHERE event_type = 'check_received' AND check_id IS NOT NULL
+  DO NOTHING
+  RETURNING id INTO v_received_id;
+
+  v_inserted_received := v_received_id IS NOT NULL;
 
   RETURN jsonb_build_object(
     'success', true,

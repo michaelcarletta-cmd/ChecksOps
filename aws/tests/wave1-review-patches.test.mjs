@@ -346,8 +346,10 @@ test('ledger SQL is trigger-internal, DATE-safe, and unique-payment idempotent',
   assert.match(sql, /REVOKE ALL ON FUNCTION public\.sync_check_claim_ledger\(uuid\) FROM authenticated/);
   assert.match(sql, /GRANT EXECUTE ON FUNCTION public\.sync_check_claim_ledger\(uuid\) TO service_role/);
   assert.match(sql, /ON CONFLICT \(check_intake_item_id\) WHERE check_intake_item_id IS NOT NULL/);
-  assert.match(sql, /duplicate claim_payments\.check_intake_item_id/);
-  assert.match(sql, /CREATE UNIQUE INDEX IF NOT EXISTS idx_claim_payments_check_intake/);
+  assert.match(sql, /verify_claim_payments_check_intake_index/);
+  assert.match(sql, /assert_check_claim_link_allowed/);
+  assert.match(sql, /ON CONFLICT \(check_id\) WHERE event_type = 'check_received'/);
+  assert.equal(/IF NOT EXISTS \(\s*SELECT 1 FROM public\.homeowner_ledger_events/.test(sql), false);
   assert.equal(/GRANT EXECUTE ON FUNCTION public\.sync_check_claim_ledger\(uuid\) TO authenticated/.test(sql), false);
 });
 

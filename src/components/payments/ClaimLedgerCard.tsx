@@ -12,6 +12,12 @@ import { format } from "date-fns";
 import { ClaimSettlementEditor } from "./ClaimSettlementEditor";
 import { getDepositLabel } from "@/lib/depositLabel";
 import { applyClaimLedgerSync } from "@/lib/claimLedgerSync";
+import {
+  checkClaimLinkUserMessage,
+  evaluateCheckClaimLink,
+  isCheckClaimLinkDenied,
+  loadClaimTenantSignals,
+} from "@/lib/checkClaimOwnership";
 
 interface Props {
   checkIntakeItemId: string;
@@ -102,7 +108,7 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
       // Look up existing claim by claim_number (case-insensitive)
       const { data: matches, error: lookupErr } = await supabase
         .from("claims")
-        .select("id, claim_number, policyholder_name")
+        .select("id, claim_number, policyholder_name, org_id")
         .ilike("claim_number", trimmed)
         .limit(2);
       if (lookupErr) throw lookupErr;
@@ -114,20 +120,6 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
       let matched = matches?.[0];
       let created = false;
 
-      // No CRM claim — create a lightweight tracking-only claim record so
-      // figures (RCV, ACV, deductible, etc.) can still be entered and all
-      // future checks for this claim number link to the same ledger.
-      if (!matched) {
-        const { data: newClaim, error: insertErr } = await supabase
-          .from("claims")
-          .insert({ claim_number: trimmed, status: "tracking" })
-          .select("id, claim_number, policyholder_name")
-          .single();
-        if (insertErr) throw insertErr;
-        matched = newClaim;
-        created = true;
-      }
-
       const { data: checkRow, error: checkErr } = await supabase
         .from("check_intake_items")
         .select("id, claim_id, amount, check_number, carrier_name, issue_date, payee_line, tenant_id, status")
@@ -135,11 +127,31 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
         .single();
       if (checkErr) throw checkErr;
 
-      const { error } = await supabase
-        .from("check_intake_items")
-        .update({ detected_claim_number: trimmed, claim_id: matched.id })
-        .eq("id", checkIntakeItemId);
-      if (error) throw error;
+      // No CRM claim — create a lightweight tracking-only claim record so
+      // figures (RCV, ACV, deductible, etc.) can still be entered and all
+      // future checks for this claim number link to the same ledger.
+      if (!matched) {
+        const { data: newClaim, error: insertErr } = await supabase
+          .from("claims")
+          .insert({ claim_number: trimmed, status: "tracking" })
+          .select("id, claim_number, policyholder_name, org_id")
+          .single();
+        if (insertErr) throw insertErr;
+        matched = newClaim;
+        created = true;
+      }
+
+      const ownershipRows = await loadClaimTenantSignals(supabase, matched.id);
+      const ownership = evaluateCheckClaimLink({
+        checkTenantId: checkRow.tenant_id,
+        claimId: matched.id,
+        claimExists: ownershipRows.claimExists || created,
+        signals: ownershipRows.signals,
+        excludeCheckId: checkIntakeItemId,
+      });
+      if (!ownership.allowed) {
+        throw new Error(checkClaimLinkUserMessage(ownership.reason));
+      }
 
       const { data: authData } = await supabase.auth.getUser();
       let actorTenantId: string | null = null;
@@ -155,15 +167,39 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
           ? (checkRow.tenant_id ?? null)
           : ((memberships ?? [])[0]?.tenant_id ?? null);
       }
+      if (actorTenantId && checkRow.tenant_id && String(actorTenantId) !== String(checkRow.tenant_id)) {
+        throw new Error(checkClaimLinkUserMessage("cross_tenant"));
+      }
+
+      const previousClaimId = checkRow.claim_id ?? null;
+
+      // Database BEFORE trigger is authoritative. If it rejects, this UPDATE
+      // does not commit and check_intake_items.claim_id is unchanged.
+      const { error } = await supabase
+        .from("check_intake_items")
+        .update({ detected_claim_number: trimmed, claim_id: matched.id })
+        .eq("id", checkIntakeItemId);
+      if (error) {
+        if (isCheckClaimLinkDenied(error)) {
+          throw new Error(checkClaimLinkUserMessage(error.message));
+        }
+        throw error;
+      }
 
       const sync = await applyClaimLedgerSync(supabase, {
         check: { ...(checkRow as any), claim_id: matched.id },
         newClaimId: matched.id,
         claimNumber: matched.claim_number,
         actorTenantId,
+        claimExists: ownershipRows.claimExists || created,
+        claimTenantSignals: ownershipRows.signals,
       });
       if ((sync as { denied?: boolean }).denied) {
-        throw new Error("Cannot sync another tenant's ledger");
+        await supabase
+          .from("check_intake_items")
+          .update({ claim_id: previousClaimId })
+          .eq("id", checkIntakeItemId);
+        throw new Error(checkClaimLinkUserMessage((sync as { reason?: string }).reason || "cross_tenant"));
       }
 
       return {
