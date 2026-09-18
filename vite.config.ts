@@ -17,6 +17,19 @@ export default defineConfig(({ mode }) => {
     process.env.SUPABASE_PUBLISHABLE_KEY ||
     process.env.SUPABASE_ANON_KEY;
 
+  const vercelEnv = String(process.env.VERCEL_ENV || "").trim() || null;
+  const isVercelPreview = vercelEnv === "preview";
+  const previewBuildInfo = {
+    isVercelPreview,
+    vercelEnv,
+    vercelUrl: (isVercelPreview ? String(process.env.VERCEL_URL || "").trim() : "") || null,
+    gitCommitSha: (isVercelPreview ? String(process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || "").trim() : "") || null,
+    gitPrNumber: (isVercelPreview ? String(process.env.VERCEL_GIT_PULL_REQUEST_ID || "").trim() : "") || null,
+    viteAppUrl: (isVercelPreview ? String(env.VITE_APP_URL || "").trim() : "") || null,
+    viteAuthProvider: (isVercelPreview ? String(env.VITE_AUTH_PROVIDER || "").trim() : "") || null,
+    viteChecksopsApiUrl: (isVercelPreview ? String(env.VITE_CHECKSOPS_API_URL || "").trim() : "") || null,
+  };
+
   return {
   server: {
     host: "::",
@@ -93,10 +106,12 @@ export default defineConfig(({ mode }) => {
         // Never bake production Supabase URL/keys into the AWS staging bundle.
         "import.meta.env.VITE_SUPABASE_URL": JSON.stringify(""),
         "import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY": JSON.stringify(""),
+        __CHECKSOPS_PREVIEW_BUILD_INFO__: JSON.stringify(previewBuildInfo),
       }
     : {
         "import.meta.env.VITE_SUPABASE_URL": JSON.stringify(supabaseUrl),
         "import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY": JSON.stringify(supabasePublishableKey),
+        __CHECKSOPS_PREVIEW_BUILD_INFO__: JSON.stringify(previewBuildInfo),
       },
   };
 });
