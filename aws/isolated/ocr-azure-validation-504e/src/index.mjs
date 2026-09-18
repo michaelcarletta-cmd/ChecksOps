@@ -87,13 +87,19 @@ const abaValidFromState = (state) => {
 };
 
 const matchesPrinted = (canonical) => {
-  const state = canonical?.micr_check_state;
+  const cmp = canonical?.diagnostic?.printed_vs_micr_check
+    || canonical?.diagnostic?.descriptive_comparison?.printed_check_vs_micr_check;
+  if (cmp && typeof cmp.both_present === 'boolean') {
+    if (!cmp.both_present) return null;
+    return !cmp.differs;
+  }
   const printed = present(canonical?.check_number);
-  if (state === 'MISSING') return null;
-  if (!printed) return null;
-  if (state === 'VERIFIED') return true;
-  if (state === 'REVIEW_REQUIRED') return false;
-  return null;
+  const micr = present(canonical?.micr_check_number);
+  if (!printed || !micr) return null;
+  const printedDigits = digitsOnly(canonical.check_number);
+  const micrDigits = digitsOnly(canonical.micr_check_number);
+  if (!printedDigits || !micrDigits) return null;
+  return printedDigits === micrDigits;
 };
 
 const digitsOnly = (value) => String(value ?? '').replace(/[^0-9]/g, '');

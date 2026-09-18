@@ -457,7 +457,7 @@ test('13) redaction helper never copies raw MICR or payee fields', () => {
     canonical: {
       routing_number: '111000025',
       account_number: '000111222333',
-      micr_check_number: '778899',
+      micr_check_number: '112233',
       payee_line: 'Someone',
       payees: [{ name: 'Someone' }],
       check_number: '778899',
@@ -465,7 +465,7 @@ test('13) redaction helper never copies raw MICR or payee fields', () => {
       carrier_name: 'Someone Carrier',
       micr_routing_state: 'REVIEW_REQUIRED',
       micr_account_state: 'MISSING',
-      micr_check_state: 'REVIEW_REQUIRED',
+      micr_check_state: 'VERIFIED',
       descriptive_engine: 'aws_textract_detect',
       micr_engine: 'azure_prebuilt_check_us',
       filled_from_azure: ['payee_line', 'payees', 'carrier_name'],
@@ -500,6 +500,8 @@ test('13) redaction helper never copies raw MICR or payee fields', () => {
   assert.equal(JSON.stringify(redacted).includes('111000025'), false);
   assert.equal(JSON.stringify(redacted).includes('Someone'), false);
   assert.equal(JSON.stringify(redacted).includes('1234.56'), false);
+  assert.equal(JSON.stringify(redacted).includes('778899'), false);
+  assert.equal(JSON.stringify(redacted).includes('112233'), false);
   assert.ok(!('value' in redacted.descriptive.payee_line));
   assert.ok(!('azure_descriptive' in redacted));
   assert.ok(!('textract_descriptive' in redacted));

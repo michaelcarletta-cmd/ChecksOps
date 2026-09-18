@@ -77,10 +77,85 @@ test('6) MICR check matches printed => VERIFIED', () => {
   assert.equal(out.micr_check_number, CHECK);
 });
 
-test('7) MICR check mismatch => REVIEW_REQUIRED', () => {
-  const out = normalizeAzureMicr(azureDoc({ check: CHECK }), { printedCheckNumber: '112233' });
-  assert.equal(out.micr_check_state, 'REVIEW_REQUIRED');
+test('7) valid Azure MICR check stays VERIFIED when printed digits differ', () => {
+  const printedOther = '112233';
+  const out = normalizeAzureMicr(azureDoc({ check: CHECK }), { printedCheckNumber: printedOther });
+  assert.equal(out.micr_check_state, 'VERIFIED');
   assert.equal(out.micr_check_number, CHECK);
+  assert.notEqual(out.micr_check_number, printedOther);
+  assert.equal(out.printed_vs_micr_check.both_present, true);
+  assert.equal(out.printed_vs_micr_check.differs, true);
+});
+
+test('R1) Azure MICR valid + Textract printed differs => VERIFIED; disagreement is diagnostic only', () => {
+  const printedOther = '112233';
+  const out = normalizeAzureMicr(azureDoc({
+    routing: ROUTING_OK,
+    account: ACCOUNT,
+    check: CHECK,
+  }), { printedCheckNumber: printedOther });
+  assert.equal(out.micr_routing_state, 'VERIFIED');
+  assert.equal(out.micr_account_state, 'VERIFIED');
+  assert.equal(out.micr_check_state, 'VERIFIED');
+  assert.equal(out.routing_number, ROUTING_OK);
+  assert.equal(out.account_number, ACCOUNT);
+  assert.equal(out.micr_check_number, CHECK);
+  assert.notEqual(out.micr_check_number, printedOther);
+  assert.equal(out.printed_vs_micr_check.differs, true);
+  assert.notEqual(out.micr_check_state, 'REVIEW_REQUIRED');
+});
+
+test('R2) Azure MICR valid + Textract printed matches => VERIFIED', () => {
+  const out = normalizeAzureMicr(azureDoc({
+    routing: ROUTING_OK,
+    account: ACCOUNT,
+    check: CHECK,
+  }), { printedCheckNumber: CHECK });
+  assert.equal(out.micr_routing_state, 'VERIFIED');
+  assert.equal(out.micr_account_state, 'VERIFIED');
+  assert.equal(out.micr_check_state, 'VERIFIED');
+  assert.equal(out.printed_vs_micr_check.both_present, true);
+  assert.equal(out.printed_vs_micr_check.differs, false);
+});
+
+test('R3) Azure MICR missing keeps MISSING and does not invent MICR from printed', () => {
+  const out = normalizeAzureMicr(azureDoc({}), { printedCheckNumber: CHECK });
+  assert.equal(out.micr_routing_state, 'MISSING');
+  assert.equal(out.micr_account_state, 'MISSING');
+  assert.equal(out.micr_check_state, 'MISSING');
+  assert.equal(out.routing_number, null);
+  assert.equal(out.account_number, null);
+  assert.equal(out.micr_check_number, null);
+  assert.equal(out.printed_vs_micr_check.both_present, false);
+});
+
+test('R4) invalid Azure routing ABA remains REVIEW_REQUIRED without a stored routing number', () => {
+  const out = normalizeAzureMicr(azureDoc({
+    routing: ROUTING_BAD,
+    account: ACCOUNT,
+    check: CHECK,
+  }), { printedCheckNumber: CHECK });
+  assert.equal(out.micr_routing_state, 'REVIEW_REQUIRED');
+  assert.equal(out.routing_number, null);
+  assert.equal(out.micr_account_state, 'VERIFIED');
+  assert.equal(out.micr_check_state, 'VERIFIED');
+});
+
+test('R5) printed check number and MICR check number remain separately represented', () => {
+  const printedOther = '112233';
+  const out = normalizeAzureMicr(azureDoc({ check: CHECK }), { printedCheckNumber: printedOther });
+  assert.equal(out.micr_check_number, CHECK);
+  assert.equal(out.supplemental.check_number, CHECK);
+  assert.notEqual(out.micr_check_number, printedOther);
+  assert.equal(out.printed_vs_micr_check.both_present, true);
+  assert.equal(out.printed_vs_micr_check.differs, true);
+  assert.ok(!('printed_check_number' in out.supplemental));
+});
+
+test('Azure MICR check present without digits remains REVIEW_REQUIRED', () => {
+  const out = normalizeAzureMicr(azureDoc({ check: 'ABC' }));
+  assert.equal(out.micr_check_state, 'REVIEW_REQUIRED');
+  assert.equal(out.micr_check_number, null);
 });
 
 test('8) Azure confidence 0 but structurally valid => still VERIFIED', () => {

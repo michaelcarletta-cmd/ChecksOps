@@ -2,7 +2,7 @@
  * Dual-provider check OCR: Textract (descriptive fallback + printed/claim)
  * + Azure (structured MICR and Azure-native descriptive fields).
  */
-import { parseCheckFields } from './ocr-parse.mjs';
+import { digitsOnly, parseCheckFields } from './ocr-parse.mjs';
 import { runTextract } from './textract-check-ocr.mjs';
 import { analyzeAzureCheck, redactOcrLog } from './azure-check-ocr.mjs';
 import { emptyAzureMicr, normalizeAzureMicr } from './ocr-normalize-azure.mjs';
@@ -137,6 +137,7 @@ export const mergeCheckExtraction = ({
       },
       textract_descriptive: textractSnap,
       descriptive_comparison: {},
+      printed_vs_micr_check: { both_present: false, differs: false },
     },
     masked: textractParsed.masked || {},
     descriptive_engine: descriptiveEngine,
@@ -213,8 +214,6 @@ export const mergeCheckExtraction = ({
       differs: namesDiffer(textractSnap.bank_name, supp.bank_name),
     },
   };
-  canonical.diagnostic.descriptive_comparison = comparison;
-
   if (azureOk) {
     canonical.routing_number = azureMicr.routing_number;
     canonical.account_number = azureMicr.account_number;
@@ -223,6 +222,16 @@ export const mergeCheckExtraction = ({
     canonical.field_confidence.account_number = azureMicr.field_confidence?.account_number ?? null;
     canonical.field_confidence.micr_check_number = azureMicr.field_confidence?.micr_check_number ?? null;
   }
+
+  const printedDigits = present(canonical.check_number) ? digitsOnly(canonical.check_number) : '';
+  const micrCheckDigits = present(canonical.micr_check_number) ? digitsOnly(canonical.micr_check_number) : '';
+  const printedVsMicr = {
+    both_present: Boolean(printedDigits && micrCheckDigits),
+    differs: Boolean(printedDigits && micrCheckDigits && printedDigits !== micrCheckDigits),
+  };
+  comparison.printed_check_vs_micr_check = printedVsMicr;
+  canonical.diagnostic.descriptive_comparison = comparison;
+  canonical.diagnostic.printed_vs_micr_check = printedVsMicr;
 
   const micrReview = ['micr_routing_state', 'micr_account_state', 'micr_check_state']
     .some((k) => canonical[k] === 'REVIEW_REQUIRED');

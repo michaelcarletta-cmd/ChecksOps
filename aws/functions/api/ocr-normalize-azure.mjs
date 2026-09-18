@@ -89,18 +89,16 @@ export const normalizeAzureMicr = (document = {}, { printedCheckNumber = null } 
   const micrCheckDigits = digitsOnly(checkField.raw);
   let micr_check_state = STATES.MISSING;
   let micr_check_number = null;
+  // Valid Azure MICR CheckNumber is authoritative. Printed-check disagreement is
+  // diagnostic only and must not force REVIEW_REQUIRED by itself.
   if (checkField.raw != null && String(checkField.raw).trim() !== '') {
     micr_check_number = micrCheckDigits || null;
-    if (printed && micrCheckDigits && printed === micrCheckDigits) {
-      micr_check_state = STATES.VERIFIED;
-    } else if (printed && micrCheckDigits && printed !== micrCheckDigits) {
-      micr_check_state = STATES.REVIEW_REQUIRED;
-    } else if (micrCheckDigits) {
-      micr_check_state = STATES.VERIFIED;
-    } else {
-      micr_check_state = STATES.REVIEW_REQUIRED;
-    }
+    micr_check_state = micrCheckDigits ? STATES.VERIFIED : STATES.REVIEW_REQUIRED;
   }
+  const printed_vs_micr_check = {
+    both_present: Boolean(printed && micrCheckDigits),
+    differs: Boolean(printed && micrCheckDigits && printed !== micrCheckDigits),
+  };
 
   const payerName = fieldValue(fields.PayerName);
   const checkDate = fieldValue(fields.CheckDate);
@@ -119,6 +117,7 @@ export const normalizeAzureMicr = (document = {}, { printedCheckNumber = null } 
     micr_routing_state,
     micr_account_state,
     micr_check_state,
+    printed_vs_micr_check,
     field_confidence: {
       routing_number: routingField.confidence,
       account_number: accountField.confidence,
@@ -152,6 +151,7 @@ export const emptyAzureMicr = () => ({
   micr_routing_state: STATES.MISSING,
   micr_account_state: STATES.MISSING,
   micr_check_state: STATES.MISSING,
+  printed_vs_micr_check: { both_present: false, differs: false },
   field_confidence: {
     routing_number: null,
     account_number: null,

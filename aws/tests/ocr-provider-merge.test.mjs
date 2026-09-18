@@ -123,9 +123,10 @@ test('11) Azure fills missing descriptive field only where explicitly allowed', 
 });
 
 test('10b) printed check_number and claim_number remain Textract', () => {
+  const azureMicrCheck = '112233';
   const canonical = mergeCheckExtraction({
     textractParsed: textractBase({ check_number: CHECK, claim_number: 'CLM-KEEP', detected_claim_number: 'CLM-KEEP' }),
-    azureMicr: azureMicrFrom({ check: '112233' }),
+    azureMicr: azureMicrFrom({ check: azureMicrCheck }),
     descriptiveEngine: 'aws_textract_analyze',
     azureRan: true,
     azureOk: true,
@@ -133,12 +134,138 @@ test('10b) printed check_number and claim_number remain Textract', () => {
   assert.equal(canonical.check_number, CHECK);
   assert.equal(canonical.claim_number, 'CLM-KEEP');
   assert.equal(canonical.detected_claim_number, 'CLM-KEEP');
-  assert.equal(canonical.micr_check_number, '112233');
-  assert.equal(canonical.micr_check_state, 'REVIEW_REQUIRED');
+  assert.equal(canonical.micr_check_number, azureMicrCheck);
+  assert.notEqual(canonical.check_number, canonical.micr_check_number);
+  assert.equal(canonical.micr_check_state, 'VERIFIED');
+  assert.equal(canonical.diagnostic.printed_vs_micr_check.both_present, true);
+  assert.equal(canonical.diagnostic.printed_vs_micr_check.differs, true);
   assert.ok(!canonical.filled_from_azure.includes('check_number'));
   assert.ok(!canonical.filled_from_azure.includes('claim_number'));
   assert.equal(canonical.descriptive_sources.check_number, 'aws_textract_analyze');
   assert.equal(canonical.descriptive_sources.claim_number, 'aws_textract_analyze');
+});
+
+const matchingDescriptiveTextract = (overrides = {}) => textractBase({
+  carrier_name: 'Azure Carrier Mutual',
+  issue_date: '2026-02-02',
+  amount: '99.12',
+  payee_line: PAYEE_AZ,
+  payees: [{ name: PAYEE_AZ, type: 'unknown' }],
+  bank_name: 'Azure Bank NA',
+  memo: 'Azure memo',
+  needs_manual_review: false,
+  ...overrides,
+});
+
+test('R1) Azure MICR valid + Textract printed differs => verified; disagreement alone does not review', () => {
+  const printedOther = '112233';
+  const canonical = mergeCheckExtraction({
+    textractParsed: matchingDescriptiveTextract({ check_number: printedOther }),
+    azureMicr: azureMicrFrom({ check: CHECK }, printedOther),
+    descriptiveEngine: 'aws_textract_analyze',
+    azureRan: true,
+    azureOk: true,
+  });
+  assert.equal(canonical.micr_engine, 'azure_prebuilt_check_us');
+  assert.equal(canonical.micr_routing_state, 'VERIFIED');
+  assert.equal(canonical.micr_account_state, 'VERIFIED');
+  assert.equal(canonical.micr_check_state, 'VERIFIED');
+  assert.equal(canonical.routing_number, ROUTING_OK);
+  assert.equal(canonical.account_number, ACCOUNT);
+  assert.equal(canonical.micr_check_number, CHECK);
+  assert.equal(canonical.check_number, printedOther);
+  assert.notEqual(canonical.check_number, canonical.micr_check_number);
+  assert.equal(canonical.diagnostic.printed_vs_micr_check.differs, true);
+  assert.equal(canonical.needs_manual_review, false);
+});
+
+test('R2) Azure MICR valid + Textract printed matches => verified', () => {
+  const canonical = mergeCheckExtraction({
+    textractParsed: matchingDescriptiveTextract({ check_number: CHECK }),
+    azureMicr: azureMicrFrom({ check: CHECK }, CHECK),
+    descriptiveEngine: 'aws_textract_analyze',
+    azureRan: true,
+    azureOk: true,
+  });
+  assert.equal(canonical.micr_routing_state, 'VERIFIED');
+  assert.equal(canonical.micr_account_state, 'VERIFIED');
+  assert.equal(canonical.micr_check_state, 'VERIFIED');
+  assert.equal(canonical.check_number, CHECK);
+  assert.equal(canonical.micr_check_number, CHECK);
+  assert.equal(canonical.diagnostic.printed_vs_micr_check.both_present, true);
+  assert.equal(canonical.diagnostic.printed_vs_micr_check.differs, false);
+  assert.equal(canonical.needs_manual_review, false);
+});
+
+test('R3) Azure MICR missing keeps existing fallback/review and does not promote Textract MICR', () => {
+  const azure = normalizeAzureMicr({ fields: { MICR: { valueObject: {} } } });
+  const canonical = mergeCheckExtraction({
+    textractParsed: matchingDescriptiveTextract(),
+    azureMicr: azure,
+    descriptiveEngine: 'aws_textract_analyze',
+    azureRan: true,
+    azureOk: true,
+  });
+  assert.equal(canonical.micr_routing_state, 'MISSING');
+  assert.equal(canonical.micr_account_state, 'MISSING');
+  assert.equal(canonical.micr_check_state, 'MISSING');
+  assert.equal(canonical.routing_number, null);
+  assert.equal(canonical.account_number, null);
+  assert.equal(canonical.micr_check_number, null);
+  assert.equal(canonical.check_number, CHECK);
+  assert.equal(canonical.diagnostic.textract_micr_heuristic.routing_present, true);
+  assert.equal(canonical.diagnostic.textract_micr_heuristic.account_present, true);
+  assert.notEqual(canonical.routing_number, ROUTING_HEURISTIC);
+  assert.notEqual(canonical.account_number, ACCOUNT_HEURISTIC);
+  assert.equal(canonical.needs_manual_review, true);
+});
+
+test('R4) invalid Azure routing ABA remains review/failure', () => {
+  const azure = normalizeAzureMicr({
+    fields: {
+      MICR: {
+        valueObject: {
+          RoutingNumber: field('111000026'),
+          AccountNumber: field(ACCOUNT),
+          CheckNumber: field(CHECK),
+        },
+      },
+    },
+  }, { printedCheckNumber: CHECK });
+  const canonical = mergeCheckExtraction({
+    textractParsed: matchingDescriptiveTextract(),
+    azureMicr: azure,
+    descriptiveEngine: 'aws_textract_analyze',
+    azureRan: true,
+    azureOk: true,
+  });
+  assert.equal(canonical.micr_routing_state, 'REVIEW_REQUIRED');
+  assert.equal(canonical.routing_number, null);
+  assert.equal(canonical.micr_account_state, 'VERIFIED');
+  assert.equal(canonical.account_number, ACCOUNT);
+  assert.equal(canonical.micr_check_state, 'VERIFIED');
+  assert.equal(canonical.needs_manual_review, true);
+});
+
+test('R5) printed check number and MICR check number remain separately represented', () => {
+  const printedOther = '112233';
+  const canonical = mergeCheckExtraction({
+    textractParsed: matchingDescriptiveTextract({ check_number: printedOther }),
+    azureMicr: azureMicrFrom({ check: CHECK }, printedOther),
+    descriptiveEngine: 'aws_textract_analyze',
+    azureRan: true,
+    azureOk: true,
+  });
+  assert.equal(canonical.check_number, printedOther);
+  assert.equal(canonical.micr_check_number, CHECK);
+  assert.notEqual(canonical.check_number, canonical.micr_check_number);
+  assert.equal(canonical.textract_descriptive.check_number, printedOther);
+  assert.equal(canonical.azure_descriptive.check_number, CHECK);
+  assert.equal(canonical.descriptive_sources.check_number, 'aws_textract_analyze');
+  assert.ok(!canonical.filled_from_azure.includes('check_number'));
+  assert.equal(canonical.diagnostic.printed_vs_micr_check.both_present, true);
+  assert.equal(canonical.diagnostic.printed_vs_micr_check.differs, true);
+  assert.equal(canonical.needs_manual_review, false);
 });
 
 test('10c) amount/date/payee disagreement sets manual review', () => {
