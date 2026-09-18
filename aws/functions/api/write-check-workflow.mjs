@@ -191,6 +191,14 @@ const asImagePath = (checkId, value) => {
   return { value: rel };
 };
 
+const toCheckAltSibling = (rel) => {
+  const raw = String(rel || '').split('?')[0].replace(/^\/+/, '').trim();
+  if (!raw) return null;
+  if (/\.checkalt\.jpe?g$/i.test(raw)) return raw;
+  if (/\.[^.]+$/.test(raw)) return raw.replace(/\.[^.]+$/i, '.checkalt.jpg');
+  return `${raw}.checkalt.jpg`;
+};
+
 const lookupEndorsement = async (client, endorsementId) => {
   const invalid = requireUuid('id', endorsementId);
   if (invalid) return invalid;
@@ -393,8 +401,39 @@ const executeIntakeUpdate = async ({ client, values, filters }) => {
   const coerced = intakeCoerce(values);
   if (coerced.error) return coerced;
   const nextValues = { ...coerced.values };
+
+  // Legacy storage parity: allow `back_image_deposit_path` to be an official `.checkalt.jpg`
+  // sibling of the check's existing rear image path(s), even if the folder UUID isn't the
+  // check_intake_items.id. Remains fail-closed: requires writable check + exact sibling match.
+  if ('back_image_deposit_path' in nextValues && nextValues.back_image_deposit_path != null) {
+    const rel = normalizePath(nextValues.back_image_deposit_path, 'claim-files');
+    if (!rel) return { error: 'invalid_field', field: 'file_path', message: 'invalid storage path' };
+    nextValues.back_image_deposit_path = rel;
+    if (!isCheckScopedPathFor(rel, checkId)) {
+      const base = (await client.query(
+        'SELECT back_image_original_path, back_image_path, back_image_deposit_path FROM public.check_intake_items WHERE id = $1::uuid',
+        [checkId],
+      )).rows[0];
+      if (!base) return { error: 'rls_denied', message: 'check not writable' };
+      const candidates = [
+        toCheckAltSibling(normalizePath(base.back_image_original_path, 'claim-files')),
+        toCheckAltSibling(normalizePath(base.back_image_path, 'claim-files')),
+        toCheckAltSibling(normalizePath(base.back_image_deposit_path, 'claim-files')),
+      ].filter(Boolean);
+      if (!candidates.includes(rel)) {
+        return { error: 'rls_denied', message: 'image path is not scoped to this check' };
+      }
+    }
+  }
   for (const column of IMAGE_PATH_COLUMNS) {
     if (column in nextValues) {
+      if (column === 'back_image_deposit_path') {
+        const rel = nextValues.back_image_deposit_path;
+        if (rel == null || rel === '') continue;
+        if (String(rel).length > 512) return { error: 'invalid_field', field: 'file_path' };
+        // Already validated above when not check-scoped. When check-scoped, this is safe too.
+        continue;
+      }
       const path = asImagePath(checkId, nextValues[column]);
       if (path.error) return path;
       if (path.skip) delete nextValues[column];

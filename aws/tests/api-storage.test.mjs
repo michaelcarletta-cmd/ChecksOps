@@ -46,7 +46,13 @@ const jwtEvent = (path, method, body, extra = {}) => ({
   },
 });
 
-const mockClient = ({ authorize = false, writeCheck = false, writeSibling = false, publicLogo = false, mapping = {
+const mockClient = ({
+  authorize = false,
+  writeCheck = false,
+  writeSibling = false,
+  siblingRel = null,
+  publicLogo = false,
+  mapping = {
   application_user_id: APP_ID,
   cognito_sub: COGNITO_SUB,
   email: 'checksops-tester@freedomadj.com',
@@ -71,6 +77,7 @@ const mockClient = ({ authorize = false, writeCheck = false, writeSibling = fals
               tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a',
               front_image_path: `checks/${CHECK_ID}/front.jpg`,
               back_image_path: `checks/${CHECK_ID}/back.jpg`,
+              back_image_original_path: `checks/${CHECK_ID}/back.jpg`,
               back_image_deposit_path: `checks/${CHECK_ID}/back.jpg`,
             }]
             : [],
@@ -83,7 +90,8 @@ const mockClient = ({ authorize = false, writeCheck = false, writeSibling = fals
         return { rows: [] };
       }
       if (sql.includes("regexp_replace") && sql.includes("deposit2.jpg") && sql.includes('check_intake_items')) {
-        return { rows: writeSibling ? [{ id: CHECK_ID, tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a' }] : [] };
+        const ok = writeSibling && (!siblingRel || params?.[0] === siblingRel);
+        return { rows: ok ? [{ id: CHECK_ID, tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a' }] : [] };
       }
       if (String(sql).includes('tenants_public')) {
         return { rows: publicLogo ? [{ logo_url: 'https://example.supabase.co/storage/v1/object/public/tenant-logos/freedom/logo.png' }] : [] };
@@ -348,7 +356,7 @@ test('browser .deposit2.jpg sibling of a stored check image is writable', async 
     path: sibling,
     contentType: 'image/jpeg',
     upsert: true,
-  }), depsFor(mockClient({ writeSibling: false }), { forceStorageWrites: true }));
+  }), depsFor(mockClient({ writeSibling: false, siblingRel: sibling }), { forceStorageWrites: true }));
   assert.equal(denied.statusCode, 403);
 
   const allowed = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {
@@ -356,7 +364,7 @@ test('browser .deposit2.jpg sibling of a stored check image is writable', async 
     path: sibling,
     contentType: 'image/jpeg',
     upsert: true,
-  }), depsFor(mockClient({ writeSibling: true }), { forceStorageWrites: true }));
+  }), depsFor(mockClient({ writeSibling: true, siblingRel: sibling }), { forceStorageWrites: true }));
   assert.equal(allowed.ok, true, JSON.stringify(allowed));
   assert.equal(allowed.path, sibling);
 });
@@ -380,7 +388,7 @@ test('browser .checkalt.jpg sibling of a stored check image is writable', async 
     path: sibling,
     contentType: 'image/jpeg',
     upsert: true,
-  }), depsFor(mockClient({ writeSibling: false }), { forceStorageWrites: true }));
+  }), depsFor(mockClient({ writeSibling: false, siblingRel: sibling }), { forceStorageWrites: true }));
   assert.equal(denied.statusCode, 403);
 
   const allowed = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {
@@ -388,9 +396,60 @@ test('browser .checkalt.jpg sibling of a stored check image is writable', async 
     path: sibling,
     contentType: 'image/jpeg',
     upsert: true,
-  }), depsFor(mockClient({ writeSibling: true }), { forceStorageWrites: true }));
+  }), depsFor(mockClient({ writeSibling: true, siblingRel: sibling }), { forceStorageWrites: true }));
   assert.equal(allowed.ok, true, JSON.stringify(allowed));
   assert.equal(allowed.path, sibling);
+});
+
+test('legacy checks/<uuid>/ upload-url is authorized via existing rear-image sibling when uuid != check id', async () => {
+  const claimId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const path = `checks/${claimId}/unclaimed/back.checkalt.jpg`;
+  const deps = depsFor(mockClient({ writeSibling: true, siblingRel: path }), { forceStorageWrites: true });
+  const result = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {
+    bucket: 'claim-files',
+    path,
+    contentType: 'image/jpeg',
+    upsert: true,
+    contentLength: 120000,
+  }), deps);
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(Boolean(result.uploadUrl), true);
+  assert.equal(result.path, path);
+});
+
+test('legacy checks/<uuid>/ upload-url denies arbitrary sibling filenames even in same folder', async () => {
+  const claimId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const allowedSibling = `checks/${claimId}/unclaimed/back.checkalt.jpg`;
+  const deniedPath = `checks/${claimId}/unclaimed/not-approved-sibling.jpg`;
+  const deps = depsFor(mockClient({ writeSibling: true, siblingRel: allowedSibling }), { forceStorageWrites: true });
+  const result = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {
+    bucket: 'claim-files',
+    path: deniedPath,
+    contentType: 'image/jpeg',
+    upsert: true,
+    contentLength: 120000,
+  }), deps);
+  assert.equal(result.ok, false);
+  assert.equal(result.statusCode, 403);
+  assert.equal(Boolean(result.uploadUrl), false);
+});
+
+test('legacy checks/<uuid>/ upload-url denies siblings that do not belong to a writable check', async () => {
+  const claimId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const otherClaimId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const allowedSibling = `checks/${claimId}/unclaimed/back.checkalt.jpg`;
+  const deniedPath = `checks/${otherClaimId}/unclaimed/back.checkalt.jpg`;
+  const deps = depsFor(mockClient({ writeSibling: true, siblingRel: allowedSibling }), { forceStorageWrites: true });
+  const result = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {
+    bucket: 'claim-files',
+    path: deniedPath,
+    contentType: 'image/jpeg',
+    upsert: true,
+    contentLength: 120000,
+  }), deps);
+  assert.equal(result.ok, false);
+  assert.equal(result.statusCode, 403);
+  assert.equal(Boolean(result.uploadUrl), false);
 });
 
 test('check-scoped .checkalt.jpg remains writable via the check UUID prefix', async () => {

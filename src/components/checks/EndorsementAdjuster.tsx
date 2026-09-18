@@ -32,6 +32,7 @@ import {
   SignatureAsset,
 } from "@/lib/endorsementDepositRender";
 import { CHECK_IMAGES_BUCKET } from "@/lib/storageBuckets";
+import { toCheckAltPath } from "@/lib/checkaltImageCompliance";
 import { logAudit } from "@/hooks/useAuditLog";
 
 interface SignedEndorsementAsset extends SignatureAsset {
@@ -509,10 +510,10 @@ export function EndorsementAdjuster({
         );
       }
 
-      // Official CheckAlt artifact next to the original rear image. Original file is not overwritten.
-      const folder = originalImagePath.replace(/\/[^/]+$/, "");
-      const version = (Date.now() % 1_000_000).toString(36);
-      const depositPath = `${folder}/endorsed_deposit_${version}.checkalt.jpg`;
+      // Official CheckAlt artifact sibling of the original rear image.
+      // Deterministic path avoids orphaning unlimited endorsed_deposit_* artifacts.
+      const depositPath = toCheckAltPath(originalImagePath);
+      if (!depositPath) throw new Error("Could not derive CheckAlt artifact path.");
 
       const { error: uploadErr } = await supabase.storage
         .from(CHECK_IMAGES_BUCKET)

@@ -14,6 +14,7 @@ const APP_ID = 'abd3c2a0-6dc0-4680-92dd-a013e1141c91';
 const COGNITO_SUB = 'c4386408-60e1-70e2-abb6-e6194e8e635f';
 const SPOOF_ID = '00000000-0000-0000-0000-000000000099';
 const CHECK_ID = '8d2b1c3e-4f5a-4678-9abc-def012345678';
+const LEGACY_CLAIM_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
 const jwtEvent = (path, method, body, extra = {}) => ({
   rawPath: path,
@@ -58,6 +59,15 @@ const mockClient = ({ rows = [], mapping = mappingFor(), throwOn = null } = {}) 
       if (sql.startsWith('SELECT set_config')) return { rows: [{ set_config: params[1] }] };
       if (sql === LOOKUP_MAPPING_SQL) {
         return { rows: params[0] === mapping.cognito_sub ? [mapping] : [] };
+      }
+      if (String(sql).includes('SELECT back_image_original_path, back_image_path, back_image_deposit_path FROM public.check_intake_items')) {
+        return {
+          rows: [{
+            back_image_original_path: `checks/${LEGACY_CLAIM_ID}/unclaimed/back.jpg`,
+            back_image_path: null,
+            back_image_deposit_path: null,
+          }],
+        };
       }
       if (/SELECT id, tenant_id FROM public.check_intake_items/.test(sql)) {
         return { rows: [{ id: params[0], tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a' }] };
@@ -373,6 +383,45 @@ test('Tranche 2 allows endorsement placement + render metadata writes on check_i
   // Params should be serialized JSON strings (validated before stringify).
   const serialized = update.params.filter((p) => typeof p === 'string' && p.trim().startsWith('{'));
   assert.ok(serialized.length >= 2);
+});
+
+test('Tranche 2 allows legacy back_image_deposit_path as official .checkalt.jpg sibling of back_image_original_path', async () => {
+  const legacyDeposit = `checks/${LEGACY_CLAIM_ID}/unclaimed/back.checkalt.jpg`;
+  const client = mockClient({
+    rows: [{ id: CHECK_ID, endorsement_render_status: 'completed', back_image_deposit_path: legacyDeposit }],
+  });
+  const result = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_intake_items',
+    op: 'update',
+    values: {
+      back_image_deposit_path: legacyDeposit,
+      endorsement_render_status: 'completed',
+      endorsement_render_meta: { request_id: 'req-1', width: 1920, height: 1080, bytes: 1234 },
+    },
+    filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
+  }), depsFor(client));
+  assert.equal(result.ok, true, JSON.stringify(result));
+  const update = client.queries.find((q) => String(q.sql).includes('UPDATE public.check_intake_items'));
+  assert.ok(update);
+  assert.equal(update.params.some((p) => p === legacyDeposit), true);
+});
+
+test('Tranche 2 denies legacy back_image_deposit_path that is not the approved .checkalt.jpg sibling', async () => {
+  const legacyDenied = `checks/${LEGACY_CLAIM_ID}/unclaimed/endorsed_deposit_x.checkalt.jpg`;
+  const client = mockClient({ rows: [] });
+  const result = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_intake_items',
+    op: 'update',
+    values: {
+      back_image_deposit_path: legacyDenied,
+      endorsement_render_status: 'completed',
+    },
+    filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
+  }), depsFor(client));
+  assert.equal(result.ok, false);
+  assert.equal(result.statusCode, 403);
+  assert.equal(result.error, 'rls_denied');
+  assert.match(result.message, /not scoped/i);
 });
 
 test('Tranche 2 denies financial intake columns, status, insert, and endorsement signed status', async () => {
