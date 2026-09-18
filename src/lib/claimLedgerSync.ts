@@ -161,6 +161,9 @@ type LedgerClient = {
   from: (table: string) => any;
 };
 
+// Latent / unused by the live claim-link workflow (ClaimLedgerCard updates
+// check_intake_items.claim_id only). Wave1 tests still exercise it. Do not
+// wire it back into production linking; receipt writes here are dead.
 export async function applyClaimLedgerSync(
   supabase: LedgerClient,
   opts: { check: IntakeCheck; newClaimId: string; claimNumber: string; actorTenantId?: string | null },
