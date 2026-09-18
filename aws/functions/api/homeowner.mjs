@@ -1005,11 +1005,17 @@ export const handleGetCheckImageUrls = async (event) => withIdentity(event, asyn
     }
   };
 
+  const frontUrl = await sign(row.front_image_path);
+  const backUrl = await sign(row.back_image_path);
   return {
     ok: true,
     statusCode: 200,
-    frontUrl: await sign(row.front_image_path),
-    backUrl: await sign(row.back_image_path),
+    checkId: row.id,
+    check_id: row.id,
+    frontUrl,
+    backUrl,
+    front_url: frontUrl,
+    back_url: backUrl,
     spoofFieldsIgnored: spoof,
   };
 });
