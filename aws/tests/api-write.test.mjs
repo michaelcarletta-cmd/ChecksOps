@@ -344,6 +344,30 @@ test('Tranche 2 updates descriptive check fields and ignores spoofed tenant/user
   assert.equal(String(update.sql).includes('amount'), false);
 });
 
+test('Tranche 2 allows endorsement placement + render metadata writes on check_intake_items', async () => {
+  const client = mockClient({
+    rows: [{ id: CHECK_ID, endorsement_render_status: 'position_saved' }],
+  });
+  const result = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_intake_items',
+    op: 'update',
+    values: {
+      endorsement_override: { xPct: 0.1, yPct: 0.2, scale: 1, rotationDeg: 0, showPayToOrder: true },
+      endorsement_render_status: 'position_saved',
+      endorsement_render_meta: { request_id: 'req-1', width: 1920, height: 1080, bytes: 1234 },
+      back_image_deposit_path: `checks/${CHECK_ID}/endorsed_deposit_unit.checkalt.jpg`,
+    },
+    filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
+  }), depsFor(client));
+  assert.equal(result.ok, true);
+  const update = client.queries.find((q) => String(q.sql).includes('UPDATE public.check_intake_items'));
+  assert.ok(update);
+  assert.equal(String(update.sql).includes('endorsement_override'), true);
+  assert.equal(String(update.sql).includes('endorsement_render_status'), true);
+  assert.equal(String(update.sql).includes('endorsement_render_meta'), true);
+  assert.equal(String(update.sql).includes('back_image_deposit_path'), true);
+});
+
 test('Tranche 2 denies financial intake columns, status, insert, and endorsement signed status', async () => {
   const client = mockClient();
   const amount = await handleWrite(jwtEvent('/data/write', 'POST', {
