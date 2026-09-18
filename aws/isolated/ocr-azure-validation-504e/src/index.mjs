@@ -163,14 +163,31 @@ const isolatedLog = async (log, entry) => {
   });
 };
 
+const readSecretPayload = (out) => {
+  if (out?.SecretString) return out.SecretString;
+  if (out?.SecretBinary) {
+    const buf = Buffer.isBuffer(out.SecretBinary)
+      ? out.SecretBinary
+      : Buffer.from(out.SecretBinary);
+    return buf.toString('utf8');
+  }
+  return null;
+};
+
 const defaultSecretLoader = async (deps = {}) => {
+  // Injected clients are used as-is so tests never construct AWS commands.
+  if (typeof deps.loadSecret === 'function') return deps.loadSecret();
+  if (deps.secretsClient) {
+    return readSecretPayload(await deps.secretsClient.send({ SecretId: SECRET_ID }));
+  }
   const { SecretsManagerClient, GetSecretValueCommand } = await import('@aws-sdk/client-secrets-manager');
-  const client = deps.secretsClient || new SecretsManagerClient({
+  const client = new SecretsManagerClient({
     region: process.env.AWS_REGION || 'us-east-1',
   });
   const out = await client.send(new GetSecretValueCommand({ SecretId: SECRET_ID }));
-  // Return raw SecretString only. analyzeAzureCheck parses. Never log this value.
-  return out?.SecretString;
+  // Return raw secret payload only. analyzeAzureCheck parses { api_key, endpoint }.
+  // Never log this value.
+  return readSecretPayload(out);
 };
 
 export const handler = async (event = {}, context = {}, deps = {}) => {
@@ -212,7 +229,8 @@ export const handler = async (event = {}, context = {}, deps = {}) => {
     const extracted = await extractCheck({
       imageBytes: bytes,
       secretLoader,
-      fetchImpl: deps.fetchImpl || globalThis.fetch.bind(globalThis),
+      fetchImpl: deps.fetchImpl
+        || (typeof globalThis.fetch === 'function' ? globalThis.fetch.bind(globalThis) : undefined),
       textractSend: deps.textractSend,
       sleep: deps.sleep,
       now: deps.now,

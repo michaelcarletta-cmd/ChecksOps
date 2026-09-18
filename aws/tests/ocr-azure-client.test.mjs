@@ -74,6 +74,52 @@ test('secret interface has expected name and shape (no hardcoded endpoint)', () 
   assert.ok(!String(analyzeAzureCheck).includes('cognitiveservices.azure.com'));
 });
 
+test('existing isolated secret schema { api_key, endpoint } is recognized', () => {
+  const fromObject = parseAzureDiSecret({ api_key: API_KEY, endpoint: ENDPOINT });
+  assert.equal(fromObject.endpoint, ENDPOINT);
+  assert.equal(fromObject.host, 'di-test.example.test');
+  assert.ok(fromObject.apiKey);
+
+  const fromJson = parseAzureDiSecret(JSON.stringify({ api_key: API_KEY, endpoint: ENDPOINT }));
+  assert.equal(fromJson.endpoint, ENDPOINT);
+  assert.equal(fromJson.host, fromObject.host);
+
+  const doubleEncoded = parseAzureDiSecret(JSON.stringify(JSON.stringify({ api_key: API_KEY, endpoint: ENDPOINT })));
+  assert.equal(doubleEncoded.endpoint, ENDPOINT);
+
+  const alreadyParsed = parseAzureDiSecret({ apiKey: API_KEY, endpoint: ENDPOINT });
+  assert.equal(alreadyParsed.endpoint, ENDPOINT);
+
+  // HEAD rejected host-only endpoints (`new URL('host')` throws → azure_not_configured).
+  const hostOnly = parseAzureDiSecret({ api_key: API_KEY, endpoint: 'di-test.example.test' });
+  assert.equal(hostOnly.endpoint, ENDPOINT);
+  assert.equal(hostOnly.host, 'di-test.example.test');
+});
+
+test('mocked SecretString api_key+endpoint is configured (not azure_not_configured)', async () => {
+  const logs = captureLog();
+  let posts = 0;
+  const fetchImpl = async (url, init) => {
+    if (init.method === 'POST') {
+      posts += 1;
+      return res(400, {});
+    }
+    return res(204, null);
+  };
+  const out = await analyzeAzureCheck({
+    imageBytes: Buffer.from('png'),
+    secretLoader: async () => JSON.stringify({ api_key: API_KEY, endpoint: ENDPOINT }),
+    fetchImpl,
+    sleep: async () => {},
+    now: () => 0,
+    log: logs.log,
+  });
+  assert.notEqual(out.code, 'azure_not_configured');
+  assert.equal(out.code, 'azure_http_400');
+  assert.equal(posts, 1);
+  assertNoSecrets(logs.blob());
+});
+
 test('13) Azure timeout', async () => {
   const logs = captureLog();
   let t = 0;

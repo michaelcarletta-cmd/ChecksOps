@@ -325,6 +325,115 @@ test('12) JPEG and PNG happy-path accept with injected extractCheck', async () =
   }
 });
 
+test('14) mocked Secrets Manager { api_key, endpoint } configures Azure', async () => {
+  const FAKE_ENDPOINT = 'https://di-test.example.test';
+  const FAKE_KEY = 'test-azure-key-not-real';
+  const RESULT = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+  const logs = [];
+  let azurePosts = 0;
+  const out = await handler({
+    contentType: 'image/jpeg',
+    imageB64: Buffer.from('tiny-jpeg').toString('base64'),
+    returnMode: 'redacted',
+  }, {}, {
+    log: (row) => logs.push(row),
+    secretsClient: {
+      send: async () => ({
+        SecretString: JSON.stringify({ api_key: FAKE_KEY, endpoint: FAKE_ENDPOINT }),
+      }),
+    },
+    textractSend: async () => ({
+      Blocks: [{
+        BlockType: 'LINE',
+        Text: 'PAY TO THE ORDER OF',
+        Confidence: 95,
+        Geometry: { BoundingBox: { Left: 0.08, Top: 0.28, Width: 0.3, Height: 0.03 } },
+      }],
+    }),
+    fetchImpl: async (url, init) => {
+      if (init.method === 'POST') {
+        azurePosts += 1;
+        return {
+          status: 202,
+          headers: {
+            get: (name) => (String(name).toLowerCase() === 'operation-location'
+              ? `${FAKE_ENDPOINT}/documentintelligence/documentModels/prebuilt-check.us/analyzeResults/${RESULT}`
+              : null),
+          },
+          text: async () => '',
+        };
+      }
+      if (init.method === 'DELETE') {
+        return { status: 204, headers: { get: () => null }, text: async () => '' };
+      }
+      return {
+        status: 200,
+        headers: { get: () => null },
+        text: async () => JSON.stringify({
+          status: 'succeeded',
+          analyzeResult: {
+            documents: [{
+              fields: {
+                MICR: {
+                  valueObject: {
+                    RoutingNumber: { valueString: '111000025', confidence: 0 },
+                    AccountNumber: { valueString: '000111222333', confidence: 0.008 },
+                    CheckNumber: { valueString: '778899', confidence: 0.168 },
+                  },
+                },
+              },
+            }],
+          },
+        }),
+      };
+    },
+    sleep: async () => {},
+    now: () => 0,
+  });
+  assert.notEqual(out.azure_error, 'azure_not_configured');
+  assert.equal(out.statusCode, 200);
+  assert.equal(out.micr.provider, 'azure_prebuilt_check_us');
+  assert.equal(out.micr.routing.state, 'VERIFIED');
+  assert.equal(out.azure_result_delete, 'CONFIRMED');
+  assert.equal(azurePosts, 1);
+
+  const binaryOut = await handler({
+    contentType: 'image/jpeg',
+    imageB64: Buffer.from('tiny-jpeg').toString('base64'),
+    returnMode: 'redacted',
+  }, {}, {
+    log: (row) => logs.push(row),
+    secretsClient: {
+      send: async () => ({
+        SecretBinary: Buffer.from(JSON.stringify({ api_key: FAKE_KEY, endpoint: 'di-test.example.test' })),
+      }),
+    },
+    textractSend: async () => ({ Blocks: [] }),
+    fetchImpl: async (url, init) => {
+      if (init.method === 'POST') {
+        azurePosts += 1;
+        return {
+          status: 400,
+          headers: { get: () => null },
+          text: async () => '',
+        };
+      }
+      return { status: 204, headers: { get: () => null }, text: async () => '' };
+    },
+    sleep: async () => {},
+    now: () => 1,
+  });
+  assert.notEqual(binaryOut.azure_error, 'azure_not_configured');
+  assert.equal(binaryOut.statusCode, 200);
+  assert.ok(azurePosts >= 2);
+
+  const blob = JSON.stringify({ out, binaryOut, logs });
+  assert.ok(!blob.includes(FAKE_KEY));
+  assert.ok(!blob.includes('111000025'));
+  assert.ok(!blob.includes('000111222333'));
+  assert.ok(!blob.includes('778899'));
+});
+
 test('13) redaction helper never copies raw MICR or payee fields', () => {
   const redacted = buildRedactedResponse({
     canonical: {

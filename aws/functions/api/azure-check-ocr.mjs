@@ -46,13 +46,58 @@ export const safeOcrLog = (log, entry) => {
 
 const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export const parseAzureDiSecret = (raw) => {
+const secretField = (obj, names) => {
+  if (!obj || typeof obj !== 'object') return '';
+  for (const name of names) {
+    if (obj[name] != null && String(obj[name]).trim() !== '') return String(obj[name]).trim();
+  }
+  const lower = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (typeof key === 'string') lower[key.trim().toLowerCase()] = value;
+  }
+  for (const name of names) {
+    const value = lower[String(name).toLowerCase()];
+    if (value != null && String(value).trim() !== '') return String(value).trim();
+  }
+  return '';
+};
+
+const asSecretObject = (raw) => {
   if (raw == null) return null;
-  const obj = typeof raw === 'string' ? JSON.parse(raw) : raw;
-  if (!obj || typeof obj !== 'object') return null;
-  const endpoint = String(obj.endpoint || '').trim().replace(/\/+$/, '');
-  const apiKey = String(obj.api_key || '').trim();
+  let value = raw;
+  if (typeof Buffer !== 'undefined' && Buffer.isBuffer(value)) {
+    value = value.toString('utf8');
+  }
+  if (typeof value === 'string') {
+    let text = value.replace(/^\uFEFF/, '').trim();
+    if (!text) return null;
+    try {
+      value = JSON.parse(text);
+    } catch {
+      return null;
+    }
+    if (typeof value === 'string') {
+      try {
+        value = JSON.parse(value.replace(/^\uFEFF/, '').trim());
+      } catch {
+        return null;
+      }
+    }
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value;
+};
+
+export const parseAzureDiSecret = (raw) => {
+  const obj = asSecretObject(raw);
+  if (!obj) return null;
+  // Existing isolated secret schema is { api_key, endpoint }. Also accept
+  // the already-parsed { apiKey, endpoint } shape and case variants.
+  let endpoint = secretField(obj, ['endpoint', 'Endpoint', 'url']);
+  const apiKey = secretField(obj, ['api_key', 'apiKey', 'API_KEY', 'key']);
   if (!endpoint || !apiKey) return null;
+  if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(endpoint)) endpoint = `https://${endpoint}`;
+  endpoint = endpoint.replace(/\/+$/, '');
   let parsed;
   try {
     parsed = new URL(endpoint);

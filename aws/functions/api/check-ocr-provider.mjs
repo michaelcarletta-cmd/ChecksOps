@@ -142,11 +142,14 @@ export const extractCheck = async ({
     : (tex.lines && tex.lines.length ? parseCheckFields(tex.lines) : {});
 
   let azure = { ok: false, code: 'azure_not_configured', deleteConfirmed: false };
-  if (typeof secretLoader === 'function' && typeof fetchImpl === 'function') {
+  const transport = typeof fetchImpl === 'function'
+    ? fetchImpl
+    : (typeof globalThis.fetch === 'function' ? globalThis.fetch.bind(globalThis) : null);
+  if (typeof secretLoader === 'function' && typeof transport === 'function') {
     azure = await analyzeAzureCheck({
       imageBytes,
       secretLoader,
-      fetchImpl,
+      fetchImpl: transport,
       sleep,
       now,
       log,
