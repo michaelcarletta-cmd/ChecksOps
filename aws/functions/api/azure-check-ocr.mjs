@@ -231,24 +231,33 @@ export const deleteAzureAnalyzeResult = async ({
   resultId,
   fetchImpl,
   log,
+  sleep = defaultSleep,
 } = {}) => {
   if (!config || !resultId) return { confirmed: false, code: 'delete_skipped' };
   const url = `${config.endpoint}/documentintelligence/documentModels/${AZURE_CHECK_MODEL}/analyzeResults/${resultId}?api-version=${AZURE_CHECK_API_VERSION}`;
-  try {
-    const res = await fetchImpl(url, {
-      method: 'DELETE',
-      headers: { 'Ocp-Apim-Subscription-Key': config.apiKey },
-    });
-    if (res.status === 204) {
-      safeOcrLog(log, { event: 'azure_delete', ok: true, code: 'delete_confirmed', status: 204, deleteConfirmed: true });
-      return { confirmed: true, code: 'delete_confirmed' };
-    }
-    safeOcrLog(log, { event: 'azure_delete', ok: false, code: `delete_http_${res.status}`, status: res.status, deleteConfirmed: false });
-    return { confirmed: false, code: `delete_http_${res.status}` };
-  } catch {
+  const res = await requestJson({
+    fetchImpl,
+    url,
+    method: 'DELETE',
+    headers: { 'Ocp-Apim-Subscription-Key': config.apiKey },
+    sleep,
+    log,
+    maxRetries: 2,
+    retryOn: [429, 500],
+  });
+  // Documented Azure DI success for DELETE analyze result is 204 No Content.
+  if (res.ok && res.status === 204) {
+    safeOcrLog(log, { event: 'azure_delete', ok: true, code: 'delete_confirmed', status: 204, deleteConfirmed: true });
+    return { confirmed: true, code: 'delete_confirmed' };
+  }
+  if (res.code === 'azure_network_error') {
     safeOcrLog(log, { event: 'azure_delete', ok: false, code: 'delete_failed', deleteConfirmed: false });
     return { confirmed: false, code: 'delete_failed' };
   }
+  const status = res.status || 0;
+  const code = `delete_http_${status}`;
+  safeOcrLog(log, { event: 'azure_delete', ok: false, code, status, deleteConfirmed: false });
+  return { confirmed: false, code };
 };
 
 export const analyzeAzureCheck = async ({
@@ -316,7 +325,7 @@ export const analyzeAzureCheck = async ({
       retryOn: [429, 500],
     });
     if (!poll.ok) {
-      const del = await deleteAzureAnalyzeResult({ config, resultId: loc.resultId, fetchImpl, log });
+      const del = await deleteAzureAnalyzeResult({ config, resultId: loc.resultId, fetchImpl, log, sleep });
       return { ok: false, code: poll.code, status: poll.status, deleteConfirmed: del.confirmed, resultId: loc.resultId };
     }
     const status = poll.json?.status;
@@ -325,26 +334,26 @@ export const analyzeAzureCheck = async ({
       break;
     }
     if (status === 'failed' || status === 'skipped') {
-      const del = await deleteAzureAnalyzeResult({ config, resultId: loc.resultId, fetchImpl, log });
+      const del = await deleteAzureAnalyzeResult({ config, resultId: loc.resultId, fetchImpl, log, sleep });
       safeOcrLog(log, { event: 'azure_analyze', ok: false, code: 'azure_failed', ms: now() - started });
       return { ok: false, code: 'azure_failed', deleteConfirmed: del.confirmed, resultId: loc.resultId };
     }
     await sleep(400);
   }
   if (!resultJson) {
-    const del = await deleteAzureAnalyzeResult({ config, resultId: loc.resultId, fetchImpl, log });
+    const del = await deleteAzureAnalyzeResult({ config, resultId: loc.resultId, fetchImpl, log, sleep });
     safeOcrLog(log, { event: 'azure_analyze', ok: false, code: 'azure_timeout', ms: now() - started });
     return { ok: false, code: 'azure_timeout', deleteConfirmed: del.confirmed, resultId: loc.resultId };
   }
 
   const documents = resultJson?.analyzeResult?.documents;
   if (!Array.isArray(documents) || !documents.length) {
-    const del = await deleteAzureAnalyzeResult({ config, resultId: loc.resultId, fetchImpl, log });
+    const del = await deleteAzureAnalyzeResult({ config, resultId: loc.resultId, fetchImpl, log, sleep });
     safeOcrLog(log, { event: 'azure_analyze', ok: false, code: 'azure_missing_documents', ms: now() - started });
     return { ok: false, code: 'azure_missing_documents', deleteConfirmed: del.confirmed, resultId: loc.resultId };
   }
 
-  const del = await deleteAzureAnalyzeResult({ config, resultId: loc.resultId, fetchImpl, log });
+  const del = await deleteAzureAnalyzeResult({ config, resultId: loc.resultId, fetchImpl, log, sleep });
   safeOcrLog(log, { event: 'azure_analyze', ok: true, code: 'ok', ms: now() - started, deleteConfirmed: del.confirmed });
   return {
     ok: true,

@@ -355,6 +355,121 @@ test('21) DELETE 204', async () => {
   assertNoSecrets(logs.blob());
 });
 
+test('21b) DELETE 429 then 204 is confirmed', async () => {
+  const logs = captureLog();
+  let deletes = 0;
+  const fetchImpl = async (url, init) => {
+    if (init.method === 'POST') return res(202, {}, { 'Operation-Location': OP_LOC });
+    if (init.method === 'DELETE') {
+      deletes += 1;
+      if (deletes === 1) return res(429, { error: 'throttled' }, { 'Retry-After': '0' });
+      return res(204, null);
+    }
+    return res(200, succeededBody());
+  };
+  const out = await analyzeAzureCheck({
+    imageBytes: Buffer.from('png'),
+    secretLoader,
+    fetchImpl,
+    sleep: async () => {},
+    now: () => 0,
+    log: logs.log,
+    pollTimeoutMs: 5_000,
+  });
+  assert.equal(out.ok, true);
+  assert.equal(out.deleteConfirmed, true);
+  assert.equal(deletes, 2);
+  assert.ok(logs.entries.some((e) => e.event === 'azure_delete' && e.deleteConfirmed === true && e.status === 204));
+  assertNoSecrets(logs.blob());
+  assert.ok(!JSON.stringify(out).includes(RESULT_ID));
+});
+
+test('21c) DELETE 429 exhaustion stays unconfirmed and does not fail OCR', async () => {
+  const logs = captureLog();
+  let deletes = 0;
+  const fetchImpl = async (url, init) => {
+    if (init.method === 'POST') return res(202, {}, { 'Operation-Location': OP_LOC });
+    if (init.method === 'DELETE') {
+      deletes += 1;
+      return res(429, { error: 'throttled', api_key: API_KEY, routing_number: ROUTING_OK }, { 'Retry-After': '0' });
+    }
+    return res(200, succeededBody());
+  };
+  const out = await analyzeAzureCheck({
+    imageBytes: Buffer.from('png'),
+    secretLoader,
+    fetchImpl,
+    sleep: async () => {},
+    now: () => 0,
+    log: logs.log,
+    pollTimeoutMs: 5_000,
+  });
+  assert.equal(out.ok, true);
+  assert.equal(out.code, 'ok');
+  assert.equal(out.deleteConfirmed, false);
+  assert.equal(deletes, 3);
+  assert.ok(logs.entries.some((e) => e.event === 'azure_delete' && e.code === 'delete_http_429' && e.deleteConfirmed === false));
+  assertNoSecrets(logs.blob());
+  assert.ok(!JSON.stringify(out).includes(API_KEY));
+  assert.ok(!JSON.stringify(out).includes(RESULT_ID));
+});
+
+test('21d) DELETE retries after analyze failure when result id exists', async () => {
+  const logs = captureLog();
+  let deletes = 0;
+  let t = 0;
+  const fetchImpl = async (url, init) => {
+    if (init.method === 'POST') return res(202, {}, { 'Operation-Location': OP_LOC });
+    if (init.method === 'DELETE') {
+      deletes += 1;
+      if (deletes === 1) return res(429, { error: 'throttled' }, { 'Retry-After': '0' });
+      return res(204, null);
+    }
+    return res(200, { status: 'running' });
+  };
+  const out = await analyzeAzureCheck({
+    imageBytes: Buffer.from('png'),
+    secretLoader,
+    fetchImpl,
+    sleep: async (ms) => { t += ms; },
+    now: () => t,
+    log: logs.log,
+    pollTimeoutMs: 50,
+  });
+  assert.equal(out.ok, false);
+  assert.equal(out.code, 'azure_timeout');
+  assert.equal(out.deleteConfirmed, true);
+  assert.equal(deletes, 2);
+  assertNoSecrets(logs.blob());
+});
+
+test('21e) DELETE 400 is not retried and stays unconfirmed', async () => {
+  const logs = captureLog();
+  let deletes = 0;
+  const fetchImpl = async (url, init) => {
+    if (init.method === 'POST') return res(202, {}, { 'Operation-Location': OP_LOC });
+    if (init.method === 'DELETE') {
+      deletes += 1;
+      return res(400, { error: 'bad delete', account_number: ACCOUNT });
+    }
+    return res(200, succeededBody());
+  };
+  const out = await analyzeAzureCheck({
+    imageBytes: Buffer.from('png'),
+    secretLoader,
+    fetchImpl,
+    sleep: async () => {},
+    now: () => 0,
+    log: logs.log,
+    pollTimeoutMs: 5_000,
+  });
+  assert.equal(out.ok, true);
+  assert.equal(out.deleteConfirmed, false);
+  assert.equal(deletes, 1);
+  assert.ok(logs.entries.some((e) => e.event === 'azure_delete' && e.code === 'delete_http_400'));
+  assertNoSecrets(logs.blob());
+});
+
 test('22) DELETE failure does not expose payload', async () => {
   const logs = captureLog();
   const fetchImpl = async (url, init) => {

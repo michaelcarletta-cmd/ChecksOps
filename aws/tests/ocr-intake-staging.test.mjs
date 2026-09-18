@@ -214,6 +214,69 @@ test('Azure VERIFIED MICR stays internal and DELETE is boolean only', async () =
   assert.ok(!blob.includes(CHECK));
 });
 
+test('intake DELETE 429 then 204 propagates azure_delete_confirmed', async () => {
+  let deletes = 0;
+  const fetchImpl = async (url, init) => {
+    if (init.method === 'DELETE') {
+      deletes += 1;
+      if (deletes === 1) {
+        return { status: 429, headers: { get: () => '0' }, text: async () => '' };
+      }
+      return { status: 204, headers: { get: () => null }, text: async () => '' };
+    }
+    return azureFetch()(url, init);
+  };
+  const logs = [];
+  const { out } = await runIntake({
+    env: { CHECKSOPS_ENV: 'staging' },
+    getSecretString: async () => JSON.stringify({ api_key: KEY, endpoint: ENDPOINT }),
+    fetchImpl,
+    logs,
+  });
+  assert.equal(out.ocr_success, true);
+  assert.equal(out.azure_delete_confirmed, true);
+  assert.equal(deletes, 2);
+  assert.equal('resultId' in out, false);
+  const blob = JSON.stringify({ out, logs });
+  assert.ok(!blob.includes(KEY));
+  assert.ok(!blob.includes(ENDPOINT));
+  assert.ok(!blob.includes(ROUTING_OK));
+  assert.ok(!blob.includes(ACCOUNT));
+  assert.ok(!blob.includes(RESULT));
+});
+
+test('intake DELETE 429 exhaustion keeps OCR success and hides identifiers', async () => {
+  let deletes = 0;
+  const fetchImpl = async (url, init) => {
+    if (init.method === 'DELETE') {
+      deletes += 1;
+      return {
+        status: 429,
+        headers: { get: () => '0' },
+        text: async () => JSON.stringify({ api_key: KEY, routing_number: ROUTING_OK }),
+      };
+    }
+    return azureFetch()(url, init);
+  };
+  const logs = [];
+  const { out } = await runIntake({
+    env: { CHECKSOPS_ENV: 'staging' },
+    getSecretString: async () => JSON.stringify({ api_key: KEY, endpoint: ENDPOINT }),
+    fetchImpl,
+    logs,
+  });
+  assert.equal(out.ocr_success, true);
+  assert.equal(out.azure_delete_confirmed, false);
+  assert.equal(out.micr_routing_state, 'VERIFIED');
+  assert.equal(deletes, 3);
+  const blob = JSON.stringify({ out, logs });
+  assert.ok(!blob.includes(KEY));
+  assert.ok(!blob.includes(ENDPOINT));
+  assert.ok(!blob.includes(ROUTING_OK));
+  assert.ok(!blob.includes(ACCOUNT));
+  assert.ok(!blob.includes(RESULT));
+});
+
 test('production path does not call Azure or Secrets Manager', async () => {
   let secretLoads = 0;
   let fetches = 0;
