@@ -6,6 +6,7 @@ import { digitsOnly, parseCheckFields } from './ocr-parse.mjs';
 import { runTextract } from './textract-check-ocr.mjs';
 import { analyzeAzureCheck, redactOcrLog } from './azure-check-ocr.mjs';
 import { emptyAzureMicr, normalizeAzureMicr } from './ocr-normalize-azure.mjs';
+import { prepareAzureOcrImage } from './ocr-azure-image.mjs';
 
 /** Azure wins these when present. Printed check + claim stay Textract-only. */
 const AZURE_PREFERRED_DESCRIPTIVE = [
@@ -259,6 +260,8 @@ export const extractCheck = async ({
   sleep,
   now,
   log,
+  prepareImage,
+  prepareOpts,
 } = {}) => {
   const tex = imageBytes && imageBytes.length
     ? await runTextract(imageBytes, { textractSend })
@@ -269,18 +272,47 @@ export const extractCheck = async ({
     : (tex.lines && tex.lines.length ? parseCheckFields(tex.lines) : {});
 
   let azure = { ok: false, code: 'azure_not_configured', deleteConfirmed: false };
+  let prepared = {
+    ok: true,
+    bytes: imageBytes,
+    transformed: false,
+    code: 'passthrough',
+    input_bytes: imageBytes?.length || 0,
+    output_bytes: imageBytes?.length || 0,
+  };
   const transport = typeof fetchImpl === 'function'
     ? fetchImpl
     : (typeof globalThis.fetch === 'function' ? globalThis.fetch.bind(globalThis) : null);
   if (typeof secretLoader === 'function' && typeof transport === 'function') {
-    azure = await analyzeAzureCheck({
-      imageBytes,
-      secretLoader,
-      fetchImpl: transport,
-      sleep,
-      now,
-      log,
-    });
+    const prepare = typeof prepareImage === 'function' ? prepareImage : prepareAzureOcrImage;
+    prepared = await prepare(imageBytes, { now, log, ...(prepareOpts || {}) });
+    if (!prepared?.ok || !prepared.bytes) {
+      azure = {
+        ok: false,
+        code: prepared?.code || 'azure_image_unusable',
+        deleteConfirmed: false,
+      };
+    } else {
+      try {
+        azure = await analyzeAzureCheck({
+          imageBytes: prepared.bytes,
+          secretLoader,
+          fetchImpl: transport,
+          sleep,
+          now,
+          log,
+        });
+      } finally {
+        if (
+          prepared.transformed
+          && prepared.bytes
+          && prepared.bytes !== imageBytes
+          && Buffer.isBuffer(prepared.bytes)
+        ) {
+          prepared.bytes.fill(0);
+        }
+      }
+    }
   }
 
   const azureMicr = azure.ok
@@ -307,6 +339,13 @@ export const extractCheck = async ({
       micr_account_state: canonical.micr_account_state,
       micr_check_state: canonical.micr_check_state,
       azure_code: azure.code || null,
+      azure_image_transformed: Boolean(prepared.transformed),
+      azure_image_input_bytes: Number.isFinite(prepared.input_bytes)
+        ? prepared.input_bytes
+        : (imageBytes?.length || 0),
+      azure_image_output_bytes: Number.isFinite(prepared.output_bytes)
+        ? prepared.output_bytes
+        : null,
     }),
   };
 };

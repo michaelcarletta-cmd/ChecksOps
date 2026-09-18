@@ -116,14 +116,14 @@ export async function lovableBrowserPathDecision({
 
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
-const asBuffer = (bytes) => (Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes));
+export const asBuffer = (bytes) => (Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes));
 
 export const isJpegMagic = (bytes) => {
   const buf = asBuffer(bytes);
   return buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8;
 };
 
-const decodeRaster = (bytes) => {
+export const decodeRaster = (bytes) => {
   const buf = asBuffer(bytes);
   if (isJpegMagic(buf)) {
     const decoded = jpeg.decode(buf, { maxMemoryUsageInMB: 512 });
@@ -136,7 +136,7 @@ const decodeRaster = (bytes) => {
   throw new Error('Unsupported image format. Reupload that side as a clear JPEG/PNG image.');
 };
 
-const rotate90Cw = (img) => {
+export const rotate90Cw = (img) => {
   const { width, height, data } = img;
   const out = Buffer.alloc(width * height * 4);
   for (let y = 0; y < height; y += 1) {
@@ -165,7 +165,7 @@ const resizeNearest = (img, newW, newH) => {
   return { width: newW, height: newH, data: out };
 };
 
-const encodeJpeg = (img, quality) => jpeg.encode({
+export const encodeJpeg = (img, quality) => jpeg.encode({
   data: img.data,
   width: img.width,
   height: img.height,
@@ -209,7 +209,7 @@ const flipV = (img) => {
   return { width: img.width, height: img.height, data: out };
 };
 
-const applyExifOrientation = (img, orientation) => {
+export const applyExifOrientation = (img, orientation) => {
   switch (Number(orientation || 1)) {
     case 2: return flipH(img);
     case 3: return rotate90Cw(rotate90Cw(img));
@@ -222,7 +222,7 @@ const applyExifOrientation = (img, orientation) => {
   }
 };
 
-const resizeBilinear = (img, newW, newH) => {
+export const resizeBilinear = (img, newW, newH) => {
   const out = Buffer.alloc(newW * newH * 4);
   if (newW <= 1 || newH <= 1) return resizeNearest(img, newW, newH);
   const xRatio = (img.width - 1) / (newW - 1);

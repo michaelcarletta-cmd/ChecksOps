@@ -508,3 +508,92 @@ test('Azure not configured leaves MICR engine none and does not call transport',
   assert.equal(out.canonical.micr_routing_state, 'MISSING');
   assert.equal(out.azure_error, 'azure_not_configured');
 });
+
+test('oversized prepare sends original bytes to Textract and derivative to Azure', async () => {
+  const original = Buffer.from('ORIGINAL-SYNTHETIC-CHECK-BYTES');
+  const derivative = Buffer.from('DERIVATIVE-SYNTHETIC-OCR-BYTES');
+  let textractBytes = null;
+  let azureB64 = null;
+  const ENDPOINT = 'https://di-test.example.test';
+  const RESULT = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+  const op = `${ENDPOINT}/documentintelligence/documentModels/prebuilt-check.us/analyzeResults/${RESULT}`;
+  const out = await extractCheck({
+    imageBytes: original,
+    secretLoader: async () => ({ endpoint: ENDPOINT, api_key: 'test-azure-key-not-real' }),
+    textractSend: async (cmd) => {
+      textractBytes = cmd?.input?.Document?.Bytes ?? cmd?.Document?.Bytes;
+      return { Blocks: [] };
+    },
+    fetchImpl: async (_url, init) => {
+      if (init.method === 'POST') {
+        azureB64 = JSON.parse(init.body).base64Source;
+        return {
+          status: 202,
+          headers: { get: (n) => (String(n).toLowerCase() === 'operation-location' ? op : null) },
+          text: async () => '',
+        };
+      }
+      if (init.method === 'DELETE') {
+        return { status: 204, headers: { get: () => null }, text: async () => '' };
+      }
+      return {
+        status: 200,
+        headers: { get: () => null },
+        text: async () => JSON.stringify({
+          status: 'succeeded',
+          analyzeResult: {
+            documents: [{
+              fields: {
+                MICR: {
+                  valueObject: {
+                    RoutingNumber: field(ROUTING_OK, 0),
+                    AccountNumber: field(ACCOUNT, 0.008),
+                    CheckNumber: field(CHECK, 0.208),
+                  },
+                },
+              },
+            }],
+          },
+        }),
+      };
+    },
+    sleep: async () => {},
+    now: () => 0,
+    prepareImage: async (bytes) => {
+      assert.equal(bytes, original);
+      return {
+        ok: true,
+        bytes: derivative,
+        transformed: true,
+        code: 'ok',
+        input_bytes: original.length,
+        output_bytes: derivative.length,
+      };
+    },
+  });
+  assert.equal(textractBytes, original);
+  assert.equal(Buffer.from(azureB64, 'base64').equals(Buffer.from('DERIVATIVE-SYNTHETIC-OCR-BYTES')), true);
+  assert.equal(original.equals(Buffer.from('ORIGINAL-SYNTHETIC-CHECK-BYTES')), true);
+  assert.equal(out.canonical.micr_routing_state, 'VERIFIED');
+  assert.equal(out.azure_delete_confirmed, true);
+});
+
+test('unusable oversized image skips Azure and marks review', async () => {
+  let fetches = 0;
+  const original = Buffer.from('ORIGINAL-SYNTHETIC-CHECK-BYTES');
+  const out = await extractCheck({
+    imageBytes: original,
+    secretLoader: async () => ({ endpoint: 'https://di-test.example.test', api_key: 'test-azure-key-not-real' }),
+    textractSend: async () => ({ Blocks: [] }),
+    fetchImpl: async () => {
+      fetches += 1;
+      return { status: 500, headers: { get: () => null }, text: async () => '' };
+    },
+    prepareImage: async () => ({ ok: false, code: 'azure_image_unusable', bytes: null, transformed: false }),
+  });
+  assert.equal(fetches, 0);
+  assert.equal(out.azure_error, 'azure_image_unusable');
+  assert.equal(out.canonical.micr_routing_state, 'MISSING');
+  assert.equal(out.canonical.needs_manual_review, true);
+  assert.equal(original.equals(Buffer.from('ORIGINAL-SYNTHETIC-CHECK-BYTES')), true);
+});

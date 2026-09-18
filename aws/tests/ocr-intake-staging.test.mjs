@@ -350,6 +350,87 @@ test('descriptive persistence allowlist and prohibited MICR columns stay unchang
   assert.equal(INTAKE_PROHIBITED_COLUMNS.has('detected_claim_number'), true);
 });
 
+test('oversized unusable S3 image skips Azure POST and stays redacted', async () => {
+  const bad = Buffer.concat([
+    Buffer.from([0xff, 0xd8, 0xff, 0xc0, 0x00, 0x0b, 0x08, 0x23, 0x28, 0x0f, 0xa0, 0x01, 0x01, 0x11, 0x00]),
+    Buffer.alloc(Math.floor(3.5 * 1024 * 1024) + 1, 0x00),
+  ]);
+  let s3Commands = [];
+  let posts = 0;
+  const persist = [];
+  const client = {
+    query: async (sql, params) => {
+      persist.push({ sql: String(sql), params: params || [] });
+      if (/FROM public\.check_intake_items WHERE id/.test(sql) && /front_image_path/.test(sql)) {
+        return {
+          rows: [{
+            id: CHECK_ID,
+            tenant_id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+            front_image_path: `checks/${CHECK_ID}/front.jpg`,
+            back_image_path: null,
+            ocr_status: 'pending',
+            raw_ocr_front: null,
+            raw_ocr_back: null,
+            carrier_name: null,
+            check_number: null,
+            payee_line: null,
+            detected_claim_number: null,
+            amount: null,
+          }],
+        };
+      }
+      return { rows: [] };
+    },
+  };
+  const withIdentity = async (_event, fn) => fn({
+    client,
+    mapping: { application_user_id: '11111111-1111-1111-1111-111111111111' },
+    body: { checkId: CHECK_ID },
+    spoof: [],
+  });
+  const logs = [];
+  const prevBucket = process.env.FILES_BUCKET;
+  process.env.FILES_BUCKET = 'test-files-bucket';
+  resetAzureDiSecretCache();
+  try {
+    const out = await handleCheckOcrIntake({ body: JSON.stringify({ checkId: CHECK_ID }) }, {
+      withIdentity,
+      ocr: {
+        env: { CHECKSOPS_ENV: 'staging' },
+        getSecretString: async () => JSON.stringify({ api_key: KEY, endpoint: ENDPOINT }),
+        fetchImpl: async (_url, init) => {
+          if (init.method === 'POST') posts += 1;
+          return { status: 500, headers: { get: () => null }, text: async () => '' };
+        },
+        textractSend,
+        s3Send: async (cmd) => {
+          s3Commands.push(cmd?.constructor?.name || 'unknown');
+          return { Body: bad };
+        },
+        sleep: async () => {},
+        now: () => 0,
+        log: (row) => logs.push(row),
+      },
+    });
+    assert.equal(posts, 0);
+    assert.equal(s3Commands.every((name) => !/PutObject/i.test(name)), true);
+    assert.equal(out.ocr_success, true);
+    assert.equal(out.azure_error, 'azure_image_unusable');
+    assert.equal(out.micr_routing_state, 'MISSING');
+    assert.equal(out.needs_manual_review, true);
+    const blob = JSON.stringify({ out, logs });
+    assert.ok(!blob.includes(KEY));
+    assert.ok(!blob.includes(ENDPOINT));
+    assert.ok(!blob.includes(ROUTING_OK));
+    assert.ok(!blob.includes(ACCOUNT));
+    assert.ok(!blob.includes(RESULT));
+  } finally {
+    if (prevBucket == null) delete process.env.FILES_BUCKET;
+    else process.env.FILES_BUCKET = prevBucket;
+    resetAzureDiSecretCache();
+  }
+});
+
 test('logs contain no key, endpoint, MICR, account, or routing', () => {
   const logs = [];
   safeOcrLog((row) => logs.push(row), {
