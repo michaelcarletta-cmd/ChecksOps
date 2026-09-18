@@ -10,6 +10,7 @@ const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 const settings = read('src/components/white-label/WhiteLabelSettings.tsx');
 const aiKey = read('src/components/white-label/TenantAIKeySettings.tsx');
 const ocr = read('aws/functions/api/ocr.mjs');
+const textractRunner = read('aws/functions/api/textract-check-ocr.mjs');
 const commandCenter = read('src/pages/CheckCommandCenter.tsx');
 
 test('Settings no longer exposes the OpenAI AI Key tab', () => {
@@ -34,6 +35,8 @@ test('OpenAI key component remains in the repo and is not deleted', () => {
 
 test('AWS Textract check OCR path remains', () => {
   assert.match(ocr, /aws_textract_analyze/);
-  assert.match(ocr, /TextractClient/);
+  assert.match(ocr, /runTextract/);
+  assert.match(textractRunner, /TextractClient/);
+  assert.match(textractRunner, /AnalyzeDocumentCommand/);
   assert.match(commandCenter, /functions\.invoke\("check-ocr-intake"/);
 });
