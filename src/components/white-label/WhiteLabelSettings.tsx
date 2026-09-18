@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { 
   LogOut, Building2, Users, Link2, CreditCard, Palette, ArrowLeft,
-  Loader2, Save, Trash2, Receipt, Banknote, KeyRound, HelpCircle,
+  Loader2, Save, Trash2, Receipt, Banknote, HelpCircle,
   ArrowDownToLine, FileBarChart, Gift, ShieldCheck, FileText
 } from "lucide-react";
 import { ReferralSettings } from "@/components/settings/ReferralSettings";
@@ -26,7 +26,6 @@ import { TenantBankAccountSettings } from "@/components/settings/TenantBankAccou
 import { TenantUserManager } from "./TenantUserManager";
 import { TenantDocumentLibrary } from "@/components/settings/TenantDocumentLibrary";
 import { TenantPartnerManager } from "./TenantPartnerManager";
-import { TenantAIKeySettings } from "./TenantAIKeySettings";
 import { ComplianceSettings } from "@/components/settings/ComplianceSettings";
 import { CompanyBrandingSettings } from "@/components/settings/CompanyBrandingSettings";
 import { SettingsHero } from "@/components/settings/SettingsHero";
@@ -100,12 +99,17 @@ export function WhiteLabelSettings() {
   const { user, loading } = useAuth();
   const { isAdmin } = usePermissions();
   const [searchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "profile");
+  const [activeTab, setActiveTab] = useState(() => {
+    const tab = searchParams.get("tab");
+    return !tab || tab === "ai-key" ? "profile" : tab;
+  });
 
   useEffect(() => {
     const tab = searchParams.get("tab");
-    if (tab) {
+    if (tab && tab !== "ai-key") {
       setActiveTab(tab);
+    } else if (tab === "ai-key") {
+      setActiveTab("profile");
     }
   }, [searchParams]);
 
@@ -168,7 +172,6 @@ export function WhiteLabelSettings() {
           <TabsList className="w-full flex-wrap h-auto gap-1 bg-muted/50">
             <TabsTrigger value="profile" className="text-xs gap-1"><Building2 className="h-3 w-3" />Profile</TabsTrigger>
             <TabsTrigger value="usage" className="text-xs gap-1"><Receipt className="h-3 w-3" />Usage</TabsTrigger>
-            {canManageTenant && <TabsTrigger value="ai-key" className="text-xs gap-1"><KeyRound className="h-3 w-3" />AI Key</TabsTrigger>}
             {canManageTenant && <TabsTrigger value="users" className="text-xs gap-1"><Users className="h-3 w-3" />Users</TabsTrigger>}
             {canManageTenant && <TabsTrigger value="partners" className="text-xs gap-1"><Link2 className="h-3 w-3" />Partners</TabsTrigger>}
             {canManageTenant && <TabsTrigger value="banking" className="text-xs gap-1"><Banknote className="h-3 w-3" />Bank Account/Stakeholders</TabsTrigger>}
@@ -195,10 +198,6 @@ export function WhiteLabelSettings() {
 
           {canManageTenant && (
             <>
-              <TabsContent value="ai-key">
-                <TenantAIKeySettings />
-              </TabsContent>
-
               <TabsContent value="users">
                 {tenant && <TenantUserManager tenantId={tenant.id} />}
               </TabsContent>
