@@ -10,7 +10,7 @@ import {
   newTrackingClaimInsert,
   resolveAutoLinkCandidate,
 } from '../../src/lib/checkClaimLinkGuard.ts';
-import { fundsReceivedForClaim } from '../../src/lib/claimLedgerSync.ts';
+import { fundsReceivedForClaim, fundsReceivedFromScopedIntakeRows } from '../../src/lib/claimLedgerSync.ts';
 import {
   claimPaymentsIndexCatalogMatches,
   verifyClaimPaymentsCheckIntakeIndex,
@@ -311,13 +311,70 @@ test('two physical checks create two check_received events', () => {
 
 test('successful link invalidates Received queries without a full reload', () => {
   const src = readFileSync('src/components/payments/ClaimLedgerCard.tsx', 'utf8');
-  assert.match(src, /fundsReceivedForClaim/);
+  assert.match(src, /fundsReceivedFromScopedIntakeRows/);
+  assert.equal(/fundsReceivedForClaim/.test(src), false);
   assert.match(src, /filterSelectableClaims/);
   assert.match(src, /invalidateQueries\(\{ queryKey: \["claim-ledger-checks", res\.claimId\] \}\)/);
   assert.match(src, /invalidateQueries\(\{ queryKey: \["check-detail", checkIntakeItemId\] \}\)/);
   assert.equal(/applyClaimLedgerSync/.test(src), false);
   assert.equal(/legacy_same_tenant/.test(src), false);
   assert.equal(/check_cases/.test(src), false);
+});
+
+test('ClaimLedgerCard Received uses the actual scoped query shape without row.claim_id', () => {
+  const src = readFileSync('src/components/payments/ClaimLedgerCard.tsx', 'utf8');
+  const siblingQuery = src.match(
+    /ownerSiblingChecks[\s\S]*?\.select\("([^"]+)"\)[\s\S]*?\.eq\("claim_id", claimId!\)/,
+  );
+  assert.equal(Boolean(siblingQuery), true);
+  assert.equal(siblingQuery?.[1].includes('claim_id'), false);
+  assert.match(siblingQuery?.[1] ?? '', /\bamount\b/);
+
+  const one = [{
+    id: CHECK_ID,
+    check_number: '1001',
+    amount: 1000,
+    status: 'needs_review',
+    check_stage: 'review',
+  }];
+  assert.equal(one[0].claim_id, undefined);
+  assert.equal(fundsReceivedFromScopedIntakeRows(one), 1000);
+
+  const two = [
+    ...one,
+    {
+      id: CHECK_2,
+      check_number: '1002',
+      amount: 2500,
+      status: 'deposited',
+      check_stage: 'deposit',
+    },
+  ];
+  assert.equal(two.every((row) => row.claim_id === undefined), true);
+  assert.equal(fundsReceivedFromScopedIntakeRows(two), 3500);
+  assert.equal(fundsReceivedFromScopedIntakeRows([]), 0);
+
+  const afterRelinkAway = two.filter((row) => row.id !== CHECK_ID);
+  assert.equal(fundsReceivedFromScopedIntakeRows(afterRelinkAway), 2500);
+  const afterRelinkOnto = [
+    ...afterRelinkAway,
+    {
+      id: CHECK_ID,
+      check_number: '1001',
+      amount: 1000,
+      status: 'needs_review',
+      check_stage: 'review',
+    },
+  ];
+  assert.equal(fundsReceivedFromScopedIntakeRows(afterRelinkOnto), 3500);
+  assert.equal(fundsReceivedFromScopedIntakeRows(two), 3500);
+
+  const withUnusedMirrors = fundsReceivedFromScopedIntakeRows(two);
+  assert.equal(withUnusedMirrors, 3500);
+  assert.equal(withUnusedMirrors, fundsReceivedFromScopedIntakeRows(two));
+  assert.equal(/claim_payments|claim_checks|homeowner_ledger_events/.test(
+    fundsReceivedFromScopedIntakeRows.toString(),
+  ), false);
 });
 
 test('failed foreign-org link does not write claim_id', () => {

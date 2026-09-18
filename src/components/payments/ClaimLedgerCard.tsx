@@ -11,7 +11,7 @@ import { FileText, Link2, CheckCircle2, AlertCircle, Pencil, DollarSign } from "
 import { format } from "date-fns";
 import { ClaimSettlementEditor } from "./ClaimSettlementEditor";
 import { getDepositLabel } from "@/lib/depositLabel";
-import { fundsReceivedForClaim } from "@/lib/claimLedgerSync";
+import { fundsReceivedFromScopedIntakeRows } from "@/lib/claimLedgerSync";
 import {
   claimLinkUserMessage,
   evaluateCheckClaimLink,
@@ -334,7 +334,7 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
   const totalExpected = totalRcv + Number(s.supplement_expected || 0);
 
 
-  const totalReceived = fundsReceivedForClaim(siblingChecks, effectiveClaimId);
+  const totalReceived = fundsReceivedFromScopedIntakeRows(siblingChecks);
   const remaining = Math.max(0, totalExpected - totalReceived);
   const pct = totalExpected > 0 ? Math.min(100, (totalReceived / totalExpected) * 100) : 0;
 

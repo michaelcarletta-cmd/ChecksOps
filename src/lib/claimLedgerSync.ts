@@ -157,6 +157,13 @@ export function fundsReceivedForClaim(checks: Array<{ id: string; claim_id?: str
   return total;
 }
 
+/** Sum intake amounts already scoped by claim_id. Do not re-filter on row.claim_id. */
+export function fundsReceivedFromScopedIntakeRows(
+  rows: Array<{ amount?: number | null }> = [],
+) {
+  return rows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+}
+
 type LedgerClient = {
   from: (table: string) => any;
 };
