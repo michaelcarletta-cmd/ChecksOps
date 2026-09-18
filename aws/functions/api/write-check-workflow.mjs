@@ -295,12 +295,13 @@ const intakeCoerce = (values) => {
   if ('endorsement_override' in values) {
     const override = coerceEndorsementOverride(values.endorsement_override);
     if (override.error) return override;
-    out.endorsement_override = override.value;
+    // Persist JSONB explicitly as JSON text; SQL casts to ::jsonb.
+    out.endorsement_override = JSON.stringify(override.value);
   }
   if ('endorsement_render_meta' in values) {
     const meta = coerceEndorsementRenderMeta(values.endorsement_render_meta);
     if (meta.error) return meta;
-    out.endorsement_render_meta = meta.value;
+    out.endorsement_render_meta = meta.value == null ? null : JSON.stringify(meta.value);
   }
   return { values: out };
 };
@@ -409,6 +410,8 @@ const executeIntakeUpdate = async ({ client, values, filters }) => {
     issue_date: 'date',
     mortgage_sent_at: 'timestamptz',
     mortgage_received_at: 'timestamptz',
+    endorsement_override: 'jsonb',
+    endorsement_render_meta: 'jsonb',
   });
   built.params.push(checkId);
   const rows = (await client.query(

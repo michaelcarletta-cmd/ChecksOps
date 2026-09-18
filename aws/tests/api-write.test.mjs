@@ -366,6 +366,13 @@ test('Tranche 2 allows endorsement placement + render metadata writes on check_i
   assert.equal(String(update.sql).includes('endorsement_render_status'), true);
   assert.equal(String(update.sql).includes('endorsement_render_meta'), true);
   assert.equal(String(update.sql).includes('back_image_deposit_path'), true);
+
+  // JSONB fidelity: write executor must cast JSON fields as ::jsonb.
+  assert.match(String(update.sql), /endorsement_override\s*=\s*\$\d+::jsonb/);
+  assert.match(String(update.sql), /endorsement_render_meta\s*=\s*\$\d+::jsonb/);
+  // Params should be serialized JSON strings (validated before stringify).
+  const serialized = update.params.filter((p) => typeof p === 'string' && p.trim().startsWith('{'));
+  assert.ok(serialized.length >= 2);
 });
 
 test('Tranche 2 denies financial intake columns, status, insert, and endorsement signed status', async () => {
