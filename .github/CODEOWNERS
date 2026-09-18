@@ -101,6 +101,15 @@
 /aws/functions/api/secrets.mjs @michaelcarletta-cmd
 /aws/functions/api/provider-flags.mjs @michaelcarletta-cmd
 
+/aws/functions/api/ocr.mjs @michaelcarletta-cmd
+/aws/functions/api/ocr-parse.mjs @michaelcarletta-cmd
+/aws/functions/api/ocr-azure-image.mjs @michaelcarletta-cmd
+/aws/functions/api/check-ocr-provider.mjs @michaelcarletta-cmd
+/aws/functions/api/azure-check-ocr.mjs @michaelcarletta-cmd
+/aws/functions/api/azure-di-secret.mjs @michaelcarletta-cmd
+/aws/functions/api/ocr-normalize-azure.mjs @michaelcarletta-cmd
+/aws/functions/api/textract-check-ocr.mjs @michaelcarletta-cmd
+
 /aws/template.yaml @michaelcarletta-cmd
 /aws/samconfig.toml @michaelcarletta-cmd
 /aws/cutover/production/ @michaelcarletta-cmd

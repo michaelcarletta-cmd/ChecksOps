@@ -164,6 +164,21 @@
       ],
       "open_pr_overlap": ["#316", "#314"]
     },
+    "ocr-azure": {
+      "classification": "STAGING_LOCKED_NOT_PRODUCTION",
+      "git_sha": "8a3ead386d99f0e825d54093ebcb8c174a8c758e",
+      "merged_pr": 370,
+      "merge_commit": "8a3ead386d99f0e825d54093ebcb8c174a8c758e",
+      "deployed_artifact": "staging-validated checksops-staging-api OCR overlay; production Lambda version not recorded",
+      "applied_migrations": "none; OCR path does not apply SQL/RLS",
+      "environment": "staging",
+      "missing_evidence": [
+        "production Lambda version serving the locked OCR runtime",
+        "immutable production deployment fingerprint",
+        "production OCR validation evidence"
+      ],
+      "open_pr_overlap": []
+    },
     "production-release": {
       "classification": "UNVERIFIED",
       "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
