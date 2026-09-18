@@ -3089,7 +3089,8 @@ function CheckDetailPanel({
     isFetching: backImageUrlFetching,
     refetch: refetchBackImageUrl,
   } = useQuery({
-    queryKey: ["check-back-img", check?.back_image_path],
+    // Include userId so image URL fetch re-runs once auth hydrates on SPA navigation.
+    queryKey: ["check-back-img", user?.id ?? null, check?.id ?? null, check?.back_image_path ?? null, check?.updated_at ?? null],
     enabled: !!check?.back_image_path,
     retry: 1,
     queryFn: async () => {
@@ -3102,10 +3103,12 @@ function CheckDetailPanel({
       }
       const path = toStorageObjectPath(check!.back_image_path);
       if (!path) return null;
-      const { data } = await supabase.storage
+      const { data, error } = await supabase.storage
         .from("claim-files")
         .createSignedUrl(path, 3600);
-      return data?.signedUrl ?? null;
+      if (error) throw error;
+      if (!data?.signedUrl) throw new Error("Signed URL missing for back-of-check image.");
+      return data.signedUrl;
     },
   });
 
@@ -3115,7 +3118,8 @@ function CheckDetailPanel({
     isFetching: endorsementAdjusterImageUrlFetching,
     refetch: refetchEndorsementAdjusterImageUrl,
   } = useQuery({
-    queryKey: ["check-back-img-original-for-adjuster", check?.id, check?.back_image_path],
+    // Include userId so first SPA navigation can't "stick" with a null URL.
+    queryKey: ["check-back-img-original-for-adjuster", user?.id ?? null, check?.id ?? null, check?.back_image_path ?? null, check?.updated_at ?? null],
     // Prefetch on mount so opening the adjuster is instant — resolving the
     // original back-image path can cost 1-2 round trips (audit lookup + signed
     // URL) plus a full image download to read dimensions.
@@ -3138,9 +3142,6 @@ function CheckDetailPanel({
         ((check as any)?.back_image_original_path as string | null) ?? null,
       );
 
-      // Cache-busting for re-uploads
-      const version = new Date(check?.updated_at || Date.now()).getTime();
-
       // Priority: use explicit original path if it's not a composite.
       // If back_image_path was re-uploaded (non-composite), that's our new base.
       const explicitOriginal =
@@ -3151,10 +3152,11 @@ function CheckDetailPanel({
           : null;
 
       if (explicitOriginal) {
-        const { data } = await supabase.storage
+        const { data, error } = await supabase.storage
           .from("claim-files")
           .createSignedUrl(explicitOriginal, 3600);
-        if (data?.signedUrl) return { url: `${data.signedUrl}&v=${version}`, path: explicitOriginal };
+        if (error) throw error;
+        if (data?.signedUrl) return { url: data.signedUrl, path: explicitOriginal };
       }
 
 
@@ -3198,15 +3200,14 @@ function CheckDetailPanel({
 
       if (sourcePath === currentPath && backImageUrl) return { url: backImageUrl, path: sourcePath };
 
-      const { data } = await supabase.storage
+      const { data, error } = await supabase.storage
         .from("claim-files")
         .createSignedUrl(sourcePath, 3600);
-      
-      const version2 = new Date(check?.updated_at || Date.now()).getTime();
+      if (error) throw error;
       return data?.signedUrl
-        ? { url: `${data.signedUrl}&v=${version2}`, path: sourcePath }
+        ? { url: data.signedUrl, path: sourcePath }
         : backImageUrl
-          ? { url: `${backImageUrl}&v=${version2}`, path: currentPath }
+          ? { url: backImageUrl, path: currentPath }
           : null;
     },
   });
@@ -3272,12 +3273,24 @@ function CheckDetailPanel({
     setEndorsementPrepTimedOut(false);
     setBackImageDimError(null);
     setBackImageDimensions(null);
-    qc.invalidateQueries({ queryKey: ["check-back-img", check?.back_image_path] });
-    qc.invalidateQueries({ queryKey: ["check-back-img-original-for-adjuster", check?.id, check?.back_image_path] });
+    qc.invalidateQueries({
+      queryKey: ["check-back-img", user?.id ?? null, check?.id ?? null, check?.back_image_path ?? null, check?.updated_at ?? null],
+    });
+    qc.invalidateQueries({
+      queryKey: ["check-back-img-original-for-adjuster", user?.id ?? null, check?.id ?? null, check?.back_image_path ?? null, check?.updated_at ?? null],
+    });
     void refetchBackImageUrl();
     void refetchEndorsementAdjusterImageUrl();
     setBackImageDimReloadKey((k) => k + 1);
-  }, [qc, check?.back_image_path, check?.id, refetchBackImageUrl, refetchEndorsementAdjusterImageUrl]);
+  }, [
+    qc,
+    user?.id,
+    check?.id,
+    check?.back_image_path,
+    check?.updated_at,
+    refetchBackImageUrl,
+    refetchEndorsementAdjusterImageUrl,
+  ]);
 
   useEffect(() => {
     setFrontImageDimensions(null);
