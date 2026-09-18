@@ -14,7 +14,6 @@ import { StepUpProvider } from "./hooks/useStepUp";
 import { ThemeProvider, ThemeScope } from "./hooks/useTheme";
 import { AwsStagingBanner } from "./components/AwsStagingBanner";
 import { PreviewBuildMarker } from "./components/PreviewBuildMarker";
-import { enforceVercelPreviewCanonicalHost } from "./lib/previewBuildInfo";
 
 
 import { bootstrapEmbedContext } from "./lib/embedContext";
@@ -166,10 +165,6 @@ function RecoveryHashRedirect() {
 }
 
 function AppRoutes() {
-  const redirect = enforceVercelPreviewCanonicalHost();
-  if (redirect.redirected) {
-    return <PageLoader />;
-  }
   const { tenantSlug, loading } = useCustomDomainTenant();
   const pathname = window.location.pathname;
 
