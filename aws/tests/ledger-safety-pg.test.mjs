@@ -57,7 +57,7 @@ RETURNS uuid
 LANGUAGE sql
 STABLE
 AS $$
-  SELECT NULLIF(current_setting('request.jwt.claim.sub', true), '')::uuid
+  SELECT NULLIF(current_setting('request.app_user_id', true), '')::uuid
 $$;
 
 CREATE OR REPLACE FUNCTION public.has_role(_user_id uuid, _role public.app_role)
@@ -236,6 +236,8 @@ CREATE ROLE authenticated NOLOGIN NOBYPASSRLS;
 CREATE ROLE app_staff LOGIN NOSUPERUSER NOBYPASSRLS INHERIT;
 GRANT authenticated TO app_staff;
 GRANT USAGE ON SCHEMA public TO authenticated, service_role, app_staff;
+GRANT USAGE ON SCHEMA auth TO authenticated, service_role, app_staff;
+GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated, service_role, app_staff;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated, service_role, app_staff;
 GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO authenticated, service_role, app_staff;
 
@@ -293,7 +295,13 @@ max_connections = 20
     }
     return result;
   };
-  const scalar = (sql) => psql(['-d', dbName, '-A', '-t', '-c', sql]).stdout.trim();
+  const scalar = (sql) => {
+    const raw = psql(['-d', dbName, '-A', '-t', '-c', sql]).stdout.trim();
+    const line = raw.split('\n').map((part) => part.trim()).find((part) => (
+      part && !/^(INSERT|UPDATE|DELETE|SELECT)\b/i.test(part)
+    ));
+    return line || raw;
+  };
   const applyFile = (rel) => {
     const result = run(path.join(PG_BIN, 'psql'), [...psqlArgs, '-d', dbName, '-v', 'ON_ERROR_STOP=1', '-f', path.join(ROOT, rel)]);
     if (result.status !== 0) {
@@ -308,6 +316,12 @@ max_connections = 20
   applyFile('supabase/migrations/20260918170010_guard_check_claim_org.sql');
   applyFile('supabase/migrations/20260918170020_verify_claim_payments_check_intake_index.sql');
   applyFile('supabase/migrations/20260918170040_one_check_received_writer.sql');
+  psql(['-d', dbName, '-c', `
+DROP TRIGGER IF EXISTS trg_sync_homeowner_ledger_upd ON public.check_intake_items;
+CREATE TRIGGER trg_sync_homeowner_ledger_upd
+AFTER UPDATE OF status ON public.check_intake_items
+FOR EACH ROW EXECUTE FUNCTION public.sync_homeowner_ledger_from_check();
+`]);
   applyFile('supabase/migrations/20260918170100_sync_check_claim_ledger.sql');
   applyFile('supabase/migrations/20260918170110_strip_sync_check_claim_ledger_check_received.sql');
 
@@ -499,6 +513,7 @@ RETURNING id;
 
   note('26 wrong key fail');
   psql(['-d', dbName, '-c', `
+DELETE FROM public.claim_payments;
 DROP INDEX public.idx_claim_payments_check_intake;
 CREATE UNIQUE INDEX idx_claim_payments_check_intake ON public.claim_payments(claim_id);
 `]);
@@ -535,16 +550,20 @@ CREATE UNIQUE INDEX idx_claim_payments_check_intake
 `]);
   const staffArgs = ['-h', pgData, '-p', String(port), '-U', 'app_staff', '-d', dbName, '-v', 'ON_ERROR_STOP=1'];
   const authOk = run(path.join(PG_BIN, 'psql'), staffArgs, {
-    input: `SELECT set_config('request.jwt.claim.sub', '${USER_A}', true);
-UPDATE public.check_intake_items SET claim_id = '${claimC}' WHERE id = '${CHECK_1}';\n`,
+    input: `BEGIN;
+SELECT set_config('request.app_user_id', '${USER_A}', true);
+UPDATE public.check_intake_items SET claim_id = '${claimC}' WHERE id = '${CHECK_1}';
+COMMIT;\n`,
   });
-  assert.equal(authOk.status, 0, authOk.stderr || authOk.stdout);
+  assert.equal(authOk.status, 0, `${authOk.stderr}\n${authOk.stdout}`);
   assert.equal(scalar(`SELECT claim_id::text FROM public.check_intake_items WHERE id = '${CHECK_1}'`), claimC);
 
   note('30 authenticated foreign-org denied');
   const authDeny = run(path.join(PG_BIN, 'psql'), staffArgs, {
-    input: `SELECT set_config('request.jwt.claim.sub', '${USER_A}', true);
-UPDATE public.check_intake_items SET claim_id = '${CLAIM_B}' WHERE id = '${CHECK_1}';\n`,
+    input: `BEGIN;
+SELECT set_config('request.app_user_id', '${USER_A}', true);
+UPDATE public.check_intake_items SET claim_id = '${CLAIM_B}' WHERE id = '${CHECK_1}';
+COMMIT;\n`,
   });
   assert.notEqual(authDeny.status, 0);
   assert.equal(scalar(`SELECT claim_id::text FROM public.check_intake_items WHERE id = '${CHECK_1}'`), claimC);
