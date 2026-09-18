@@ -57,6 +57,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
 import { ViewCheckImageButton } from "@/components/checks/ViewCheckImageButton";
 import { toStorageObjectPath } from "@/lib/storagePath";
+import { CHECK_IMAGES_BUCKET } from "@/lib/storageBuckets";
 import { AdminDeleteCheckButton } from "@/components/checks/AdminDeleteCheckButton";
 import { ReuploadCheckImageButton } from "@/components/checks/ReuploadCheckImageButton";
 import { CheckImageCropper } from "@/components/checks/CheckImageCropper";
@@ -3101,10 +3102,10 @@ function CheckDetailPanel({
         if (error) throw error;
         return (data as any)?.backUrl ?? null;
       }
-      const path = toStorageObjectPath(check!.back_image_path);
+      const path = toStorageObjectPath(check!.back_image_path, CHECK_IMAGES_BUCKET);
       if (!path) return null;
       const { data, error } = await supabase.storage
-        .from("claim-files")
+        .from(CHECK_IMAGES_BUCKET)
         .createSignedUrl(path, 3600);
       if (error) throw error;
       if (!data?.signedUrl) throw new Error("Signed URL missing for back-of-check image.");
@@ -3153,7 +3154,7 @@ function CheckDetailPanel({
 
       if (explicitOriginal) {
         const { data, error } = await supabase.storage
-          .from("claim-files")
+          .from(CHECK_IMAGES_BUCKET)
           .createSignedUrl(explicitOriginal, 3600);
         if (error) throw error;
         if (data?.signedUrl) return { url: data.signedUrl, path: explicitOriginal };
@@ -3201,7 +3202,7 @@ function CheckDetailPanel({
       if (sourcePath === currentPath && backImageUrl) return { url: backImageUrl, path: sourcePath };
 
       const { data, error } = await supabase.storage
-        .from("claim-files")
+        .from(CHECK_IMAGES_BUCKET)
         .createSignedUrl(sourcePath, 3600);
       if (error) throw error;
       return data?.signedUrl
@@ -4568,7 +4569,7 @@ function CheckDetailPanel({
                       if (!open) requestCloseEndorsementAdjuster();
                     }}
                   >
-                    <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+                    <DialogContent className="max-w-7xl w-[min(96vw,1680px)] max-h-[90vh] overflow-y-auto">
                       <DialogHeader>
                         <DialogTitle>Adjust Received Endorsement</DialogTitle>
                       </DialogHeader>
