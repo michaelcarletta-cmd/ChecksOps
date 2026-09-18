@@ -29,6 +29,13 @@ import {
   invalidateOfficialRearImage,
   requireDrawnSignature,
 } from './endorsement-composite.mjs';
+import {
+  decideReadyTransition,
+  evaluateEndorsementMath,
+  isActiveLossDraft,
+  isContractorPayee as isContractorPayeeType,
+  isEndorsementSatisfied,
+} from './endorsement-completion.mjs';
 
 const { Client } = pg;
 
@@ -43,6 +50,7 @@ export const AUTH_ENDORSEMENT_ACTIONS = new Set([
   'sign_in_person',
   'mark_internal_signed',
   'waive_endorsement',
+  'force_complete_endorsements',
 ]);
 
 export const DEFAULT_CONSENT_TEXT = 'I agree to use electronic records and electronic signatures for this endorsement. I confirm my identity as the named payee, intend my electronic signature to be legally binding, and authorize the electronic endorsement of this insurance check payment. I understand I may decline to sign electronically and request another process.';
@@ -59,21 +67,16 @@ export const denyDepositAdvance = () => ({
 });
 
 export const evaluateEndorsementCompletion = (rows = []) => {
+  const math = evaluateEndorsementMath(rows);
   if (!rows.length) return { allSigned: false, anyRejected: false, ...denyDepositAdvance() };
-  const anyRejected = rows.some((row) => row.status === 'rejected');
-  const allDone = rows.every((row) => (
-    row.status === 'signed'
-    || row.status === 'waived'
-    || (row.payee_type === 'mortgage_company' && row.status === 'manual_required')
-  ));
   return {
-    allSigned: allDone && !anyRejected,
-    anyRejected,
+    allSigned: math.allRequiredSatisfied && !math.anyRejected,
+    anyRejected: math.anyRejected,
     ...denyDepositAdvance(),
   };
 };
 
-export const isContractorPayee = (payeeType) => String(payeeType || '').toLowerCase() === 'contractor';
+export const isContractorPayee = isContractorPayeeType;
 
 export const endorsementRateLimited = (requestSentAt, now = Date.now()) => {
   if (!requestSentAt) return false;
@@ -292,7 +295,7 @@ const applyRejectedWorkflow = async (client, checkId, result) => {
   return { ...result, newStatus: ineligible ? check.status || null : 'needs_review' };
 };
 
-const applyAutoAdvanceIfEligible = async (client, checkId, result, { officialRearReady = false } = {}) => {
+export const applyAutoAdvanceIfEligible = async (client, checkId, result, { officialRearReady = false } = {}) => {
   const check = await loadCheckForEndorsement(client, { check_id: checkId });
   const ineligible = INELIGIBLE_AUTO_ADVANCE_STATUSES.has(String(check.status || ''))
     || Boolean(check.deposited_at);
@@ -303,6 +306,18 @@ const applyAutoAdvanceIfEligible = async (client, checkId, result, { officialRea
 
   if (!result.allSigned || !endorsementAutoAdvanceEnabled()) {
     return result;
+  }
+  const readyDecision = decideReadyTransition(check, {
+    allRequiredSatisfied: result.allSigned,
+    anyRejected: result.anyRejected,
+  });
+  if (readyDecision.action === 'hold_loss_draft' || isActiveLossDraft(check)) {
+    return {
+      ...result,
+      depositAdvanceDenied: true,
+      advance_check_on_endorsement_complete: 'held_loss_draft',
+      newStatus: check.status || 'loss_draft_required',
+    };
   }
   if (ineligible) {
     return {
@@ -356,6 +371,26 @@ const applyAutoAdvanceIfEligible = async (client, checkId, result, { officialRea
   const alreadyReady = check.status === 'approved_for_deposit'
     && String(check.deposit_recommendation || '') === 'ready_for_deposit';
   if (alreadyReady) {
+    if (String(check.check_stage || '') !== 'ready_for_deposit') {
+      await safeQuery(
+        client,
+        `UPDATE public.check_intake_items
+         SET check_stage = 'ready_for_deposit', updated_at = now()
+         WHERE id = $1::uuid
+           AND deposited_at IS NULL
+           AND status IS DISTINCT FROM 'deposited'
+           AND status IS DISTINCT FROM 'voided'
+           AND status IS DISTINCT FROM 'loss_draft_required'`,
+        [checkId],
+      );
+      await safeQuery(
+        client,
+        `UPDATE public.claim_checks
+         SET check_stage = 'ready_for_deposit', updated_at = now()
+         WHERE check_intake_item_id = $1::uuid`,
+        [checkId],
+      );
+    }
     return {
       ...result,
       ...allowDepositAdvance('approved_for_deposit'),
@@ -373,7 +408,16 @@ const applyAutoAdvanceIfEligible = async (client, checkId, result, { officialRea
      WHERE id = $1::uuid
        AND deposited_at IS NULL
        AND status IS DISTINCT FROM 'deposited'
-       AND status IS DISTINCT FROM 'voided'`,
+       AND status IS DISTINCT FROM 'voided'
+       AND status IS DISTINCT FROM 'loss_draft_required'
+       AND check_stage IS DISTINCT FROM 'loss_draft'`,
+    [checkId],
+  );
+  await safeQuery(
+    client,
+    `UPDATE public.claim_checks
+     SET check_stage = 'ready_for_deposit', updated_at = now()
+     WHERE check_intake_item_id = $1::uuid`,
     [checkId],
   );
   await safeQuery(
@@ -748,6 +792,61 @@ export const runAuthenticatedEndorsement = async ({
   const action = body.action;
   if (!AUTH_ENDORSEMENT_ACTIONS.has(action)) {
     return { ok: false, statusCode: 400, error: 'Unknown action', spoofFieldsIgnored: spoof };
+  }
+
+  if (action === 'force_complete_endorsements') {
+    const checkId = body.checkId || body.check_id;
+    if (!checkId) {
+      return { ok: false, statusCode: 400, error: 'checkId required', spoofFieldsIgnored: spoof };
+    }
+    const check = await loadCheckForEndorsement(client, { check_id: checkId });
+    if (!check?.id) {
+      return { ok: false, statusCode: 404, error: 'Check not found', spoofFieldsIgnored: spoof };
+    }
+    const tenantId = check.tenant_id;
+    if (!await canWriteTenant(client, tenantId)) {
+      return { ok: false, statusCode: 403, error: 'forbidden', spoofFieldsIgnored: spoof };
+    }
+    const rows = (await safeQuery(
+      client,
+      `SELECT id, status, payee_type, signature_image_url, signed_at
+       FROM public.check_endorsements WHERE check_id = $1::uuid`,
+      [checkId],
+    )).rows;
+    const incompleteIds = rows
+      .filter((row) => !isEndorsementSatisfied(row))
+      .map((row) => row.id)
+      .filter(Boolean);
+    if (incompleteIds.length) {
+      await client.query(
+        `UPDATE public.check_endorsements
+         SET status = 'signed',
+             signed_at = COALESCE(signed_at, now()),
+             notes = COALESCE(notes, $2),
+             signature_method = COALESCE(NULLIF(signature_method, ''), 'manual'),
+             updated_at = now()
+         WHERE check_id = $1::uuid
+           AND id = ANY($3::uuid[])
+           AND status IS DISTINCT FROM 'signed'
+           AND status IS DISTINCT FROM 'waived'`,
+        [checkId, 'Manually marked as received by staff override', incompleteIds],
+      );
+    }
+    await auditEndorsement(client, {
+      endorsement_id: null,
+      check_id: checkId,
+      tenant_id: tenantId,
+      event_type: 'endorsements_force_completed',
+      check_event_type: 'endorsements_force_completed',
+      event_description: `All endorsements manually marked as received (${incompleteIds.length} updated)`,
+      event_data: { overridden_ids: incompleteIds },
+      actor_id: mapping.application_user_id,
+    });
+    const completion = await finalizeEndorsementState(client, checkId, {
+      refreshOfficialRear: true,
+      compositeDeps,
+    });
+    return { ok: true, statusCode: 200, success: true, ...completion, spoofFieldsIgnored: spoof };
   }
 
   const endorsementId = await resolveEndorsementId(client, body);
