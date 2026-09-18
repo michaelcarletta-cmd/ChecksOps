@@ -281,7 +281,10 @@ test('AWS disabled path remains 403 provider_disabled and financial auth stays s
       const result = await handler(jwtEvent(`/functions/v1/${name}`, { check_intake_item_id: '44444444-4444-4444-8444-444444444444' }));
       const body = JSON.parse(result.body);
       assert.equal(result.statusCode, 403, name);
-      assert.ok(['provider_disabled', 'production_execution_blocked'].includes(body.error), name);
+      const allowed = name === 'checkalt-poll-status'
+        ? ['provider_disabled', 'production_execution_blocked', 'checkalt_status_reconcile_disabled']
+        : ['provider_disabled', 'production_execution_blocked'];
+      assert.ok(allowed.includes(body.error), name);
       assert.notEqual(body.error, LEGACY_CHECKALT_PROVIDER_DISABLED_ERROR, name);
     }
   });

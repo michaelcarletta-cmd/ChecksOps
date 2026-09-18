@@ -1,11 +1,12 @@
 import { TENANT_MEMBERSHIP_SQL } from '../../identity.mjs';
 import { membershipForTenant } from '../../financial-ownership.mjs';
-import { mapCheckAltStatus } from '../amounts.mjs';
+import { CHECKALT_STATUS_REFRESH_STATUSES, resolveCheckAltProviderStatus } from '../amounts.mjs';
 import { checkAltFetch, getDepositItemStatus } from '../parity/checkalt-client.mjs';
 import { loadProductionCheckAltConfig, loadProductionTenantAccount } from './checkalt-config.mjs';
 import { persistPollOutcome } from './checkalt-idempotency.mjs';
 import { loadProductionCheckAltSecrets } from './checkalt-secrets.mjs';
 import { authorizeCheckAltProduction } from './checkalt-authz.mjs';
+import { statusReadOnlyFetch } from './checkalt-status-read.mjs';
 
 const jwtCache = { token: null, expiresAt: null };
 
@@ -30,23 +31,30 @@ const membershipsOf = async (client, userId) => {
   }));
 };
 
-const resolvePollStatus = (json) => {
-  const mapped = mapCheckAltStatus(json || {});
-  if (mapped) return mapped;
-  const numeric = Number(json?.statusCode ?? json?.status);
-  if (numeric === 40) return 'pending_approval';
-  if (numeric === 120) return 'rejected';
-  if (numeric === 127) return 'submitted';
-  if (numeric === 200) return 'cleared';
-  const raw = String(json?.status ?? '').toLowerCase();
-  if (['submitted', 'pending'].includes(raw)) return 'submitted';
-  if (raw === 'pending_approval') return 'pending_approval';
-  if (['approved', 'cleared', 'settled'].includes(raw)) return 'cleared';
-  if (raw === 'returned') return 'returned';
-  if (['rejected', 'declined'].includes(raw)) return 'rejected';
-  if (raw === 'duplicate') return 'duplicate';
-  return null;
-};
+const resolvePollStatus = (json) => resolveCheckAltProviderStatus(json || {});
+
+export { CHECKALT_STATUS_REFRESH_STATUSES };
+
+export async function loadDepositsForStatusRefresh(client, {
+  tenantIds = [],
+  limit = 50,
+} = {}) {
+  const ids = [...new Set((tenantIds || []).filter(Boolean))];
+  if (!ids.length) return [];
+  return (await client.query(
+    `SELECT id, tenant_id, check_intake_item_id, checkalt_reference, status, amount, amount_cents,
+            idempotency_key, provider_http_attempted_at, failure_class, last_status_payload,
+            last_error, submitted_at, cleared_at, returned_at, last_polled_at, submitted_by
+     FROM public.checkalt_deposits
+     WHERE tenant_id = ANY($1::uuid[])
+       AND status = ANY($2::text[])
+       AND checkalt_reference IS NOT NULL
+     ORDER BY CASE WHEN status = 'pending_approval' THEN 0 ELSE 1 END,
+              submitted_at DESC NULLS LAST
+     LIMIT $3`,
+    [ids, CHECKALT_STATUS_REFRESH_STATUSES, Math.min(Number(limit) || 50, 100)],
+  )).rows;
+}
 
 const parseJson = async (resp) => {
   const raw = await resp.text();
@@ -144,12 +152,13 @@ export async function reconcileProductionCheckAltDeposit({
     });
   }
 
+  const safeFetch = statusReadOnlyFetch(fetchImpl);
   const item = await getDepositItemStatus({
     cfg,
     credentials,
     tenant: { sso_user_id: ssoKey },
     referenceNumber: reference,
-    fetchImpl,
+    fetchImpl: safeFetch,
     jwtCache,
   });
   let json = item.json;
@@ -160,7 +169,7 @@ export async function reconcileProductionCheckAltDeposit({
       credentials,
       path: '/fincapture/deposit/history',
       body: { fiKey: cfg.fi_key, ...(ssoKey ? { ssoKey } : {}) },
-      fetchImpl,
+      fetchImpl: safeFetch,
       jwtCache,
     });
     const histJson = await parseJson(hist);
@@ -200,6 +209,42 @@ export async function reconcileProductionCheckAltDeposit({
   };
 }
 
+const authorizePollRow = async ({ client, mapping, memberships, row }) => {
+  if (!membershipForTenant(memberships, row.tenant_id)) {
+    return fail('cross_tenant_denied', 403, {
+      message: 'Poll is tenant-safe. The deposit does not belong to the authenticated user.',
+    });
+  }
+  const check = (await client.query(
+    `SELECT id, tenant_id, amount, status FROM public.check_intake_items WHERE id = $1::uuid`,
+    [row.check_intake_item_id],
+  )).rows[0] || { id: row.check_intake_item_id, tenant_id: row.tenant_id, amount: row.amount };
+  const authz = await authorizeCheckAltProduction({
+    client,
+    mapping,
+    memberships,
+    check,
+    requireStepUp: false,
+  });
+  if (!authz.ok && (authz.error === 'financial_unauthorized' || authz.error === 'cross_tenant_denied')) {
+    return { ...authz, createdDeposit: false };
+  }
+  if (!authz.evaluation?.roleOk) {
+    return fail('financial_unauthorized', 403, {
+      message: 'Operator cannot poll production CheckAlt for another authority path.',
+    });
+  }
+  return { ok: true, authz, check };
+};
+
+const loadPollSecrets = async ({ client, deps }) => {
+  const secrets = await (deps.loadProductionSecrets || loadProductionCheckAltSecrets)(deps.getSecrets);
+  if (!secrets.ok) return secrets;
+  const loadedCfg = await loadProductionCheckAltConfig(client, { credentials: secrets.credentials });
+  if (!loadedCfg.ok) return loadedCfg;
+  return { ok: true, cfg: loadedCfg.cfg, credentials: loadedCfg.credentials };
+};
+
 export async function handleProductionCheckAltPoll({
   client,
   mapping,
@@ -211,10 +256,97 @@ export async function handleProductionCheckAltPoll({
 } = {}) {
   const depositId = body.deposit_id || body.checkalt_deposit_id || null;
   const reference = body.checkalt_reference || body.referenceNumber || null;
+  const memberships = await membershipsOf(client, mapping.application_user_id);
+
   if (!depositId && !reference) {
-    return fail('deposit_locator_required', 400, {
-      message: 'Production poll requires deposit_id or checkalt_reference. It never creates a deposit.',
-    });
+    const requestedTenant = body.tenant_id || null;
+    if (requestedTenant && !membershipForTenant(memberships, requestedTenant)) {
+      return fail('cross_tenant_denied', 403, {
+        message: 'Poll is tenant-safe. The deposit does not belong to the authenticated user.',
+        spoofFieldsIgnored: spoof,
+      });
+    }
+    const tenantIds = requestedTenant
+      ? [requestedTenant]
+      : [...new Set(memberships.map((row) => row.tenant_id).filter(Boolean))];
+    if (!tenantIds.length) {
+      return fail('financial_unauthorized', 403, {
+        message: 'Operator has no tenant membership for a CheckAlt status refresh.',
+        spoofFieldsIgnored: spoof,
+      });
+    }
+    const rows = await loadDepositsForStatusRefresh(client, { tenantIds, limit: body.limit });
+    if (!rows.length) {
+      return {
+        ok: true,
+        statusCode: 200,
+        success: true,
+        polled: 0,
+        updated: 0,
+        errors: 0,
+        deposits: [],
+        tenant_ids: tenantIds,
+        liveProviderCalled: false,
+        createdDeposit: false,
+        productionExecution: true,
+        productionRecordsMutated: false,
+        spoofFieldsIgnored: spoof,
+        applicationUserId: mapping.application_user_id,
+        authUid: mapping.application_user_id,
+        cognitoSub: claims.sub,
+      };
+    }
+    const loaded = await loadPollSecrets({ client, deps });
+    if (!loaded.ok) return { ...loaded, createdDeposit: false, spoofFieldsIgnored: spoof, polled: 0, updated: 0, errors: 0 };
+
+    let polled = 0;
+    let updated = 0;
+    let errors = 0;
+    const deposits = [];
+    for (const row of rows) {
+      const authz = await authorizePollRow({ client, mapping, memberships, row });
+      if (!authz.ok) {
+        errors += 1;
+        continue;
+      }
+      const acct = await loadProductionTenantAccount(client, row.tenant_id);
+      const result = await reconcileProductionCheckAltDeposit({
+        client,
+        mapping,
+        row,
+        cfg: loaded.cfg,
+        credentials: loaded.credentials,
+        acct,
+        fetchImpl,
+      });
+      polled += 1;
+      if (result.reconciled) updated += 1;
+      else errors += 1;
+      deposits.push({
+        deposit_id: result.deposit_id || row.id,
+        status: result.status || row.status,
+        previous_status: row.status,
+        reconciled: Boolean(result.reconciled),
+      });
+    }
+    return {
+      ok: true,
+      statusCode: 200,
+      success: true,
+      polled,
+      updated,
+      errors,
+      deposits,
+      tenant_ids: tenantIds,
+      liveProviderCalled: polled > 0,
+      createdDeposit: false,
+      productionExecution: true,
+      productionRecordsMutated: updated > 0,
+      spoofFieldsIgnored: spoof,
+      applicationUserId: mapping.application_user_id,
+      authUid: mapping.application_user_id,
+      cognitoSub: claims.sub,
+    };
   }
 
   const row = await loadExistingProductionDeposit(client, { depositId, reference });
@@ -225,51 +357,19 @@ export async function handleProductionCheckAltPoll({
     });
   }
 
-  const memberships = await membershipsOf(client, mapping.application_user_id);
-  if (!membershipForTenant(memberships, row.tenant_id)) {
-    return fail('cross_tenant_denied', 403, {
-      message: 'Poll is tenant-safe. The deposit does not belong to the authenticated user.',
-      spoofFieldsIgnored: spoof,
-    });
-  }
+  const authz = await authorizePollRow({ client, mapping, memberships, row });
+  if (!authz.ok) return { ...authz, createdDeposit: false, spoofFieldsIgnored: spoof };
 
-  const check = (await client.query(
-    `SELECT id, tenant_id, amount, status FROM public.check_intake_items WHERE id = $1::uuid`,
-    [row.check_intake_item_id],
-  )).rows[0] || { id: row.check_intake_item_id, tenant_id: row.tenant_id, amount: row.amount };
-
-  const authz = await authorizeCheckAltProduction({
-    client,
-    mapping,
-    memberships,
-    check,
-    requireStepUp: false,
-  });
-  if (!authz.ok && authz.error === 'financial_unauthorized') {
-    return { ...authz, createdDeposit: false, spoofFieldsIgnored: spoof };
-  }
-  if (!authz.ok && authz.error === 'cross_tenant_denied') {
-    return { ...authz, createdDeposit: false, spoofFieldsIgnored: spoof };
-  }
-  if (!authz.evaluation?.roleOk) {
-    return fail('financial_unauthorized', 403, {
-      message: 'Operator cannot poll production CheckAlt for another authority path.',
-      spoofFieldsIgnored: spoof,
-    });
-  }
-
-  const secrets = await (deps.loadProductionSecrets || loadProductionCheckAltSecrets)(deps.getSecrets);
-  if (!secrets.ok) return { ...secrets, createdDeposit: false, spoofFieldsIgnored: spoof };
-  const loadedCfg = await loadProductionCheckAltConfig(client, { credentials: secrets.credentials });
-  if (!loadedCfg.ok) return { ...loadedCfg, createdDeposit: false, spoofFieldsIgnored: spoof };
+  const loaded = await loadPollSecrets({ client, deps });
+  if (!loaded.ok) return { ...loaded, createdDeposit: false, spoofFieldsIgnored: spoof };
   const acct = await loadProductionTenantAccount(client, row.tenant_id);
 
   const result = await reconcileProductionCheckAltDeposit({
     client,
     mapping,
     row,
-    cfg: loadedCfg.cfg,
-    credentials: loadedCfg.credentials,
+    cfg: loaded.cfg,
+    credentials: loaded.credentials,
     acct,
     fetchImpl,
   });

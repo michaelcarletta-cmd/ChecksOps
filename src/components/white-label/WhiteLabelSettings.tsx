@@ -40,7 +40,6 @@ import { Search as SearchIcon } from "lucide-react";
 import { PasskeyManagerCard } from "@/components/auth/PasskeyManagerCard";
 import { TotpManagerCard } from "@/components/auth/TotpManagerCard";
 import { FinancialTotpOnlyTestCard } from "@/components/auth/FinancialTotpOnlyTestCard";
-import NotificationPreferencesSettings from "@/components/settings/NotificationPreferencesSettings";
 import { CheckUsageCard } from "@/components/billing/CheckUsageCard";
 import { TenantUsageTracker } from "@/components/billing/TenantUsageTracker";
 import { BillingConfigPanel } from "@/components/billing/BillingConfigPanel";
@@ -51,9 +50,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 
 
-const DepositOperationsConsole = lazy(() =>
-  import("@/components/deposit-ops/DepositOperationsConsole").then(m => ({ default: m.DepositOperationsConsole }))
-);
 const DepositReports = lazy(() =>
   import("@/components/deposit-ops/DepositReports").then(m => ({ default: m.DepositReports }))
 );
@@ -184,7 +180,6 @@ export function WhiteLabelSettings() {
 
           <TabsContent value="profile" className="space-y-6">
             {tenant && <ProfileSettings tenant={tenant} />}
-            <NotificationPreferencesSettings />
             <PasskeyManagerCard />
             <TotpManagerCard />
             <FinancialTotpOnlyTestCard />
@@ -304,7 +299,7 @@ function ProfileSettings({ tenant }: { tenant: any }) {
     <div className="space-y-6">
       <SettingsHero
         title="Company Profile"
-        description="Your company identity, workspace URL, and partner code for check sharing."
+        description="Your company identity and workspace URL."
         badge="Personal Settings"
         icon={<Building2 className="h-4 w-4 text-primary" />}
       />
@@ -329,23 +324,6 @@ function ProfileSettings({ tenant }: { tenant: any }) {
             {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Save className="h-4 w-4 mr-1" />}
             Save Changes
           </Button>
-        </div>
-      </SectionCard>
-
-      <SectionCard
-        title="Partner Code & Plan"
-        icon={<Link2 className="h-4 w-4 text-violet-500" />}
-        accent="bg-gradient-to-r from-violet-500/60 to-violet-500/10"
-        description="Identifiers used for partner check sharing and billing"
-      >
-        <div className="space-y-2">
-          <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">Partner Code</Label>
-          <Input value={tenant.partner_code || "—"} disabled className="h-9 font-mono tracking-widest opacity-60" />
-          <p className="text-xs text-muted-foreground">Share this code with partners for check sharing.</p>
-        </div>
-        <div className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-3 py-2">
-          <span className="text-[11px] uppercase tracking-wide text-muted-foreground">Plan</span>
-          <Badge variant="outline">{tenant.plan_tier}</Badge>
         </div>
       </SectionCard>
     </div>

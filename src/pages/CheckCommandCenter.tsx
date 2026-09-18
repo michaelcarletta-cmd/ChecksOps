@@ -113,9 +113,6 @@ const CheckFilesSection = lazy(() =>
 const DepositPacketGenerator = lazy(() =>
   import("@/components/check-review/DepositPacketGenerator").then(m => ({ default: m.DepositPacketGenerator }))
 );
-const DepositOperationsConsole = lazy(() =>
-  import("@/components/deposit-ops/DepositOperationsConsole").then(m => ({ default: m.DepositOperationsConsole }))
-);
 const DepositReports = lazy(() =>
   import("@/components/deposit-ops/DepositReports").then(m => ({ default: m.DepositReports }))
 );
@@ -1352,10 +1349,10 @@ export default function CheckCommandCenter() {
           </div>
         )}
 
-        {/* Manager Hub — Deposit Ops + Reports + Mortgage Cos (admin only) */}
+        {/* Manager Hub — Bank Deposits, History, Reports, Mortgage Cos (admin only) */}
         {activeTab === "manager" && canAccessManager && (
           <div className="mt-3">
-            <Tabs defaultValue={SHOW_CHECKALT ? "pending_approvals" : "deposit_ops"}>
+            <Tabs defaultValue={SHOW_CHECKALT ? "pending_approvals" : "reports"}>
               <TabsList className="w-full flex-wrap h-auto gap-1 bg-muted/50">
                 {SHOW_CHECKALT && (
                   <>
@@ -1375,14 +1372,8 @@ export default function CheckCommandCenter() {
                 </button>
                 <TabsTrigger value="partners" className="text-xs gap-1"><Users className="h-3 w-3" />Partners</TabsTrigger>
                 <TabsTrigger value="homeowner_uploads" className="text-xs gap-1"><ArrowDownToLine className="h-3 w-3 rotate-180" />Homeowner Uploads</TabsTrigger>
-                <TabsTrigger value="deposit_ops" className="text-xs gap-1"><ArrowDownToLine className="h-3 w-3" />Deposit Ops</TabsTrigger>
                 <TabsTrigger value="reports" className="text-xs gap-1"><FileBarChart className="h-3 w-3" />Reports</TabsTrigger>
               </TabsList>
-              <TabsContent value="deposit_ops" className="mt-3">
-                <Suspense fallback={<TabLoader />}>
-                  <DepositOperationsConsole searchQuery={searchQuery} />
-                </Suspense>
-              </TabsContent>
               {SHOW_CHECKALT && (
                 <>
                   <TabsContent value="pending_approvals" className="mt-3">

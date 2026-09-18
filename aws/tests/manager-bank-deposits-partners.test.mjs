@@ -23,7 +23,8 @@ test('persistPollOutcome stamps cleared_at from FinCapture depositDate, not poll
     providerPayload: { statusCode: 200, history: { depositDate: '2026-09-16' } },
   });
   assert.equal(calls.length, 1);
-  assert.match(calls[0].sql, /COALESCE\(cleared_at, \$5::timestamptz, now\(\)\)/);
+  assert.match(calls[0].sql, /COALESCE\(cleared_at, \$5::timestamptz\)/);
+  assert.doesNotMatch(calls[0].sql, /COALESCE\(cleared_at, \$5::timestamptz, now\(\)\)/);
   assert.equal(calls[0].params[4], '2026-09-16T12:00:00.000Z');
   assert.match(String(calls[0].params[3]), /2026-09-16T12:00:00.000Z/);
   assert.equal(saved.cleared_at, '2026-09-16T12:00:00.000Z');
@@ -43,10 +44,11 @@ test('persistPollOutcome does not invent a date from submittedDate', async () =>
     reference: '12345',
     providerPayload: { submittedDate: '2026-09-01', createdDate: '2026-09-02' },
   });
+  assert.equal(calls[0].params[1], 'submitted');
   assert.equal(calls[0].params[4], null);
 });
 
-test('Manager tab order keeps Deposit Ops and Reports after the eight Manager items', () => {
+test('Manager tab order keeps Reports after the seven Manager items and omits Deposit Ops', () => {
   const src = fs.readFileSync(path.join(spaRoot, 'pages/CheckCommandCenter.tsx'), 'utf8');
   const triggers = [...src.matchAll(/<TabsTrigger value="([^"]+)"/g)].map((m) => m[1]);
   const manager = [];
@@ -56,9 +58,8 @@ test('Manager tab order keeps Deposit Ops and Reports after the eight Manager it
       'mortgage_cos', 'partners', 'homeowner_uploads', 'deposit_ops', 'reports',
     ].includes(value)) manager.push(value);
   }
-  // Last occurrence of this block is the Manager hub (unique pending_approvals).
   const start = manager.lastIndexOf('pending_approvals');
-  const slice = manager.slice(start, start + 9);
+  const slice = manager.slice(start, start + 8);
   assert.deepEqual(slice, [
     'pending_approvals',
     'bank_deposits',
@@ -67,12 +68,24 @@ test('Manager tab order keeps Deposit Ops and Reports after the eight Manager it
     'mortgage_cos',
     'partners',
     'homeowner_uploads',
-    'deposit_ops',
     'reports',
   ]);
+  assert.equal(src.includes('value="deposit_ops"'), false);
+  assert.equal(/DepositOperationsConsole/.test(src), false);
+  assert.match(src, /defaultValue=\{SHOW_CHECKALT \? "pending_approvals" : "reports"\}/);
   assert.match(src, /setActiveTab\("reissue"\)/);
-  assert.match(src, /<DepositOperationsConsole/);
   assert.match(src, /<DepositReports/);
+});
+
+test('Deposit Ops backend console remains intact after Manager tab removal', () => {
+  const ops = fs.readFileSync(path.join(spaRoot, 'components/deposit-ops/DepositOperationsConsole.tsx'), 'utf8');
+  assert.match(ops, /export function DepositOperationsConsole/);
+  assert.match(ops, /from\("deposit_items"\)/);
+  assert.match(ops, /rpc\("deposit_action"/);
+  assert.match(ops, /prepare_deposit/);
+  assert.match(ops, /assign_provider/);
+  const whiteLabel = fs.readFileSync(path.join(spaRoot, 'components/white-label/WhiteLabelSettings.tsx'), 'utf8');
+  assert.equal(/DepositOperationsConsole/.test(whiteLabel), false);
 });
 
 test('Bank Deposits exposes date jump, Auto-Deposit only, and TOTAL = sum of checks', () => {
@@ -83,6 +96,7 @@ test('Bank Deposits exposes date jump, Auto-Deposit only, and TOTAL = sum of che
   assert.match(src, /sumDepositAmounts/);
   assert.match(src, />TOTAL</);
   assert.match(src, /bankDepositDayKey/);
+  assert.match(src, /isBankDepositSettled/);
   assert.equal(/CheckAltSettings/.test(src), false);
   assert.equal(/from\("checkalt_config"\)/.test(src), false);
   assert.equal(/deposit_date/.test(src), false);
