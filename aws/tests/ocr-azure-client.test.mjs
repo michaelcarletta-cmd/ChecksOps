@@ -56,9 +56,9 @@ const assertNoSecrets = (blob) => {
   assert.ok(!blob.includes(ACCOUNT), 'account leaked');
   assert.ok(!blob.includes(CHECK), 'micr check leaked');
   assert.ok(!blob.includes(PAYEE), 'payee leaked');
-  assert.ok(!blob.includes('operation-location'), 'operation-location leaked');
-  assert.ok(!blob.includes('analyzeResults'), 'analyzeResults leaked');
-  assert.ok(!blob.includes('base64Source'), 'base64 leaked');
+  assert.ok(!blob.includes(OP_LOC), 'operation-location leaked');
+  assert.ok(!blob.includes(RESULT_ID), 'result id leaked');
+  assert.ok(!blob.includes(Buffer.from('iVBORw0KGgoaaa').toString('base64')), 'base64 payload leaked');
   assert.ok(!/iVBORw0KGgo/.test(blob), 'image bytes leaked');
 };
 
@@ -378,6 +378,10 @@ test('23) no sensitive values in logs/errors', async () => {
   assert.equal(redacted.routing_number, '[redacted]');
   assert.equal(redacted.account_number, '[redacted]');
   assert.equal(redacted.payee, '[redacted]');
+  assert.equal(redacted.base64Source, '[redacted]');
+  assert.equal(redacted.operation_location, '[redacted]');
+  assert.ok(!Object.keys(logs.entries[0]).includes('api_key'));
+  assert.ok(!Object.keys(logs.entries[0]).includes('base64Source'));
   assertNoSecrets(logs.blob());
   assertNoSecrets(JSON.stringify(redacted));
 
