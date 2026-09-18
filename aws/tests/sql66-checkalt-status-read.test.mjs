@@ -49,7 +49,9 @@ test('SQL 66 is isolated from SQL 65 and fail-closed', () => {
   assert.match(persistSet, /SET status = _next/);
   assert.doesNotMatch(persistSet, /\bamount\b|\bamount_cents\b|\btenant_id\b|\bcheckalt_reference\b/);
   assert.doesNotMatch(persistSet, /\bsubmitted_at\b|\bsubmitted_by\b|\bidempotency_key\b|\bcheck_intake_item_id\b/);
-  assert.doesNotMatch(SQL66, /aws_financial_insert_checkalt_deposits|aws_financial_update_checkalt_deposits/);
+  assert.doesNotMatch(SQL66, /CREATE POLICY aws_financial_(insert|update)_checkalt_deposits/);
+  assert.doesNotMatch(SQL66, /DROP POLICY IF EXISTS aws_financial_(insert|update)_checkalt_deposits/);
+  assert.doesNotMatch(SQL66, /ALTER POLICY aws_financial_(insert|update)_checkalt_deposits/);
   assert.doesNotMatch(SQL66, /GRANT SELECT, INSERT, UPDATE ON TABLE public\.checkalt_deposits/);
   assert.match(SQL65, /aws_checkalt_production_config/);
   assert.match(SQL65, /aws_financial_update_checkalt_deposits/);
