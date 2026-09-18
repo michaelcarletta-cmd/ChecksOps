@@ -50,6 +50,10 @@ test('1) template syntax and isolated resource names', () => {
   assert.match(template, /CodeUri: pack\//);
   assert.match(template, /AZURE_DI_SECRET_ID: checksops\/isolated\/azure-document-intelligence-504e/);
   assert.match(template, /MAX_INPUT_BYTES: '4194304'/);
+  assert.match(template, /Outputs:/);
+  assert.match(template, /AzureDiSecretId:/);
+  assert.doesNotMatch(template, /SecretString/);
+  assert.doesNotMatch(template, /AWS::SecretsManager::Secret/);
 });
 
 test('2) IAM is least privilege and has no broad/shared grants', () => {

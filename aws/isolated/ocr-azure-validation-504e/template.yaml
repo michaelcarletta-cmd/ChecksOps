@@ -66,3 +66,23 @@ Resources:
           CHECKSOPS_OCR_AZURE_VALIDATION_STACK: checksops-ocr-azure-validation-504e
           AZURE_DI_SECRET_ID: checksops/isolated/azure-document-intelligence-504e
           MAX_INPUT_BYTES: '4194304'
+
+Outputs:
+  StackName:
+    Description: Isolated validation stack name
+    Value: checksops-ocr-azure-validation-504e
+  FunctionName:
+    Description: Direct-invoke Lambda name
+    Value: !Ref OcrAzureValidationFunction
+  FunctionArn:
+    Description: Direct-invoke Lambda ARN
+    Value: !GetAtt OcrAzureValidationFunction.Arn
+  RoleArn:
+    Description: Isolated execution role ARN
+    Value: !GetAtt OcrAzureValidationRole.Arn
+  LogGroupName:
+    Description: Isolated 1-day log group
+    Value: /aws/lambda/checksops-ocr-azure-validation-504e
+  AzureDiSecretId:
+    Description: Existing isolated secret name only. Not the secret value.
+    Value: checksops/isolated/azure-document-intelligence-504e
