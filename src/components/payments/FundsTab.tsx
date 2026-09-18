@@ -18,6 +18,7 @@ import { ProjectPlanCard } from "@/components/homeowner-ledger/ProjectPlanCard";
 import { useState, useMemo, useEffect } from "react";
 import { toast } from "@/hooks/use-toast";
 import { incomingSplitsForCheck } from "@/lib/fundsReceived";
+import { homeownerBankLinkQueryKey } from "@/lib/homeownerBankLink";
 
 
 interface Props {
@@ -53,7 +54,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
   // offer a Resend button instead of forcing another Send flow when a link
   // was already sent but the homeowner hasn't finished verifying.
   const { data: existingHomeownerLink, refetch: refetchHomeownerLink } = useQuery({
-    queryKey: ["homeowner-bank-link", checkIntakeItemId],
+    queryKey: homeownerBankLinkQueryKey(checkIntakeItemId),
     enabled: !!checkIntakeItemId,
     queryFn: async () => {
       const { data, error } = await (supabase as any)

@@ -117,6 +117,8 @@ export const DENIED_REVIEW_PATHS = {
   reissue_requested: 'not_in_tranche_5_machine',
   merge_only: 'not_in_tranche_5_machine',
   deposited: 'financial_or_provider',
+  // Lovable Review Void is corrected in SQL; AWS T5 must not enable void.
+  voided: 'not_in_tranche_5_machine',
 };
 
 const PARTNER_ORIGINS = new Set(['freedom_crm']);

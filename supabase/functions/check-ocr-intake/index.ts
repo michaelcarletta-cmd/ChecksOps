@@ -1167,14 +1167,24 @@ Rules:
         if (trimmed) {
           const { data: matches, error: lookupErr } = await supabase
             .from("claims")
-            .select("id, claim_number")
+            .select("id, claim_number, org_id")
             .ilike("claim_number", trimmed)
             .limit(2);
           if (lookupErr) {
             log("auto_link_claim", "Lookup failed", { error: lookupErr.message });
           } else if (matches && matches.length === 1) {
-            autoLinkedClaimId = matches[0].id;
-            log("auto_link_claim", "Linked to existing claim", { claimId: autoLinkedClaimId, claimNumber: trimmed });
+            const candidate = matches[0] as { id: string; org_id?: string | null };
+            const sameOrg = candidate.org_id && tenantId && String(candidate.org_id) === String(tenantId);
+            if (sameOrg) {
+              autoLinkedClaimId = candidate.id;
+              log("auto_link_claim", "Linked to existing claim", { claimId: autoLinkedClaimId, claimNumber: trimmed });
+            } else {
+              log("auto_link_claim", "Skipped — org mismatch or unassigned legacy claim", {
+                claimNumber: trimmed,
+                claimOrgId: candidate.org_id,
+                checkTenantId: tenantId,
+              });
+            }
           } else if (matches && matches.length > 1) {
             log("auto_link_claim", "Ambiguous — multiple claims match", { claimNumber: trimmed, count: matches.length });
           } else {

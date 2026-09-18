@@ -11,7 +11,7 @@
  * Depositor identity is never the API login.
  * Production checkalt_tenant_accounts rows are not overwritten.
  */
-import { formatCheckAltUserAmount } from '../amounts.mjs';
+import { formatCheckAltUserAmount, resolveCheckAltProviderStatus } from '../amounts.mjs';
 import { CHECKALT_UAT_HOST } from '../../sandbox-credentials.mjs';
 import { isPlatformAdmin, jsonResult, fail, checkAltParityContext } from './caller.mjs';
 import {
@@ -336,20 +336,7 @@ const depositHistory = {
   },
 };
 
-const resolvePollStatus = (json) => {
-  const numeric = Number(json?.statusCode ?? json?.status);
-  if (numeric === 40) return 'pending_approval';
-  if (numeric === 120) return 'rejected';
-  if (numeric === 127) return 'submitted';
-  if (numeric === 200) return 'cleared';
-  const raw = String(json?.status ?? '').toLowerCase();
-  if (['submitted', 'pending'].includes(raw)) return 'submitted';
-  if (raw === 'pending_approval') return 'pending_approval';
-  if (['approved', 'cleared', 'settled'].includes(raw)) return 'cleared';
-  if (raw === 'returned') return 'returned';
-  if (['rejected', 'declined'].includes(raw)) return 'rejected';
-  return null;
-};
+const resolvePollStatus = (json) => resolveCheckAltProviderStatus(json || {});
 
 const pollStatus = {
   run: async ({ client, ctx, fetchImpl }) => {

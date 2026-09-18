@@ -479,6 +479,18 @@ export function PendingApprovalDeposits() {
       return data;
     },
     onSuccess: (data: any) => {
+      if (data?.already_resolved || data?.action_taken === false) {
+        toast({
+          title: "Updated from CheckAlt",
+          description: data?.message || `Status is now ${data?.status}. Approve/Reject was not sent.`,
+        });
+        setRejectingId(null);
+        setRejectNotes("");
+        qc.invalidateQueries({ queryKey: ["checkalt-pending-approvals"] });
+        qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+        qc.invalidateQueries({ queryKey: ["deposit-items"] });
+        return;
+      }
       const wasRejected = data?.status === "rejected";
       toast({
         title: wasRejected ? "Deposit rejected by CheckAlt" : "Deposit approved",
@@ -503,10 +515,9 @@ export function PendingApprovalDeposits() {
     },
   });
 
-  // Bulk "Poll Now" — reconciles every checkalt_deposits row sitting in
-  // submitted/pending_approval against CheckAlt's real status right here in
-  // the operational queue, instead of only via the admin Settings panel or
-  // waiting up to 10 minutes for the cron.
+  // Tenant-level Poll Now. Empty body tells production poll to refresh this
+  // tenant's pending_approval (and submitted) checkalt_deposits using each
+  // stored CheckAlt reference. It never fabricates locators.
   const poll = useMutation({
     mutationFn: async () => {
       requireAwsCheckAltProviderPath({

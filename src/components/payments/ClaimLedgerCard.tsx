@@ -11,6 +11,14 @@ import { FileText, Link2, CheckCircle2, AlertCircle, Pencil, DollarSign } from "
 import { format } from "date-fns";
 import { ClaimSettlementEditor } from "./ClaimSettlementEditor";
 import { getDepositLabel } from "@/lib/depositLabel";
+import { fundsReceivedFromScopedIntakeRows } from "@/lib/claimLedgerSync";
+import {
+  claimLinkUserMessage,
+  evaluateCheckClaimLink,
+  filterSelectableClaims,
+  isCheckClaimLinkDenied,
+  newTrackingClaimInsert,
+} from "@/lib/checkClaimLinkGuard";
 
 interface Props {
   checkIntakeItemId: string;
@@ -99,50 +107,91 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
       if (!trimmed) throw new Error("Enter a claim number");
 
       // Look up existing claim by claim_number (case-insensitive)
+      const { data: checkRow, error: checkErr } = await supabase
+        .from("check_intake_items")
+        .select("id, claim_id, amount, tenant_id")
+        .eq("id", checkIntakeItemId)
+        .single();
+      if (checkErr) throw checkErr;
+
       const { data: matches, error: lookupErr } = await supabase
         .from("claims")
-        .select("id, claim_number, policyholder_name")
+        .select("id, claim_number, policyholder_name, org_id")
         .ilike("claim_number", trimmed)
-        .limit(2);
+        .limit(5);
       if (lookupErr) throw lookupErr;
 
-      if (matches && matches.length > 1) {
+      const sameOrg = filterSelectableClaims(matches ?? [], checkRow.tenant_id);
+      const unassigned = (matches ?? []).filter((row: { org_id?: string | null }) => !row.org_id);
+      const foreign = (matches ?? []).filter((row: { org_id?: string | null }) => (
+        row.org_id && String(row.org_id) !== String(checkRow.tenant_id || "")
+      ));
+      if (sameOrg.length > 1) {
         throw new Error(`Multiple claims match "${trimmed}". Please disambiguate.`);
       }
 
-      let matched = matches?.[0];
+      let matched = sameOrg[0] as { id: string; claim_number: string; policyholder_name?: string | null; org_id?: string | null } | undefined;
       let created = false;
 
-      // No CRM claim — create a lightweight tracking-only claim record so
-      // figures (RCV, ACV, deductible, etc.) can still be entered and all
-      // future checks for this claim number link to the same ledger.
-      if (!matched) {
-        const { data: newClaim, error: insertErr } = await supabase
-          .from("claims")
-          .insert({ claim_number: trimmed, status: "tracking" })
-          .select("id, claim_number, policyholder_name")
-          .single();
-        if (insertErr) throw insertErr;
-        matched = newClaim;
-        created = true;
+      if (!matched && unassigned.length) {
+        throw new Error(claimLinkUserMessage("unassigned_claim"));
+      }
+      if (!matched && foreign.length) {
+        throw new Error(claimLinkUserMessage("cross_org"));
       }
 
+      if (!matched) {
+        if (!checkRow.tenant_id) {
+          throw new Error(claimLinkUserMessage("missing_check_tenant"));
+        }
+        const { data: newClaim, error: insertErr } = await supabase
+          .from("claims")
+          .insert(newTrackingClaimInsert(trimmed, checkRow.tenant_id))
+          .select("id, claim_number, policyholder_name, org_id")
+          .single();
+        if (insertErr) throw insertErr;
+        if (!newClaim?.org_id || String(newClaim.org_id) !== String(checkRow.tenant_id)) {
+          throw new Error(claimLinkUserMessage("unassigned_claim"));
+        }
+        matched = newClaim;
+        created = true;
+      } else {
+        const decision = evaluateCheckClaimLink({
+          checkTenantId: checkRow.tenant_id,
+          claimId: matched.id,
+          claimExists: true,
+          claimOrgId: matched.org_id,
+        });
+        if (!decision.allowed) {
+          throw new Error(claimLinkUserMessage(decision.reason));
+        }
+      }
+
+      const previousClaimId = checkRow.claim_id ?? null;
       const { error } = await supabase
         .from("check_intake_items")
         .update({ detected_claim_number: trimmed, claim_id: matched.id })
         .eq("id", checkIntakeItemId);
-      if (error) throw error;
+      if (error) {
+        if (isCheckClaimLinkDenied(error)) {
+          throw new Error(claimLinkUserMessage(error.message));
+        }
+        throw error;
+      }
 
       return {
         created,
         claimNumber: matched.claim_number,
         claimId: matched.id,
+        previousClaimId,
         policyholderName: matched.policyholder_name,
       };
     },
     onSuccess: (res) => {
       if (onLinked) onLinked(res.claimId);
       qc.invalidateQueries({ queryKey: ["intake-check"] });
+      qc.invalidateQueries({ queryKey: ["check-detail"] });
+      qc.invalidateQueries({ queryKey: ["check-detail", checkIntakeItemId] });
       qc.invalidateQueries({ queryKey: ["claim-ledger"] });
       qc.invalidateQueries({ queryKey: ["claim-ledger-settlement"] });
       qc.invalidateQueries({ queryKey: ["claim-ledger-checks"] });
@@ -158,6 +207,10 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
       // We must ensure the UI shows the ledger and the editor can be opened.
       qc.invalidateQueries({ queryKey: ["claim-ledger", res.claimId] });
       qc.invalidateQueries({ queryKey: ["claim-ledger-settlement", res.claimId] });
+      qc.invalidateQueries({ queryKey: ["claim-ledger-checks", res.claimId] });
+      if (res.previousClaimId && res.previousClaimId !== res.claimId) {
+        qc.invalidateQueries({ queryKey: ["claim-ledger-checks", res.previousClaimId] });
+      }
       
       // Auto-open editor to allow entering amounts immediately
       setTimeout(() => {
@@ -281,7 +334,7 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
   const totalExpected = totalRcv + Number(s.supplement_expected || 0);
 
 
-  const totalReceived = siblingChecks.reduce((sum, c: any) => sum + Number(c.amount || 0), 0);
+  const totalReceived = fundsReceivedFromScopedIntakeRows(siblingChecks);
   const remaining = Math.max(0, totalExpected - totalReceived);
   const pct = totalExpected > 0 ? Math.min(100, (totalReceived / totalExpected) * 100) : 0;
 

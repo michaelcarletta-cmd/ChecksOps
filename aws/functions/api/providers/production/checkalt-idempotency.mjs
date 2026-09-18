@@ -2,7 +2,7 @@ import { APP_USER_EMAIL_GUC, APP_USER_ID_GUC } from '../../cognito.mjs';
 import { financialPermissionsActivated } from '../../financial-flags.mjs';
 import { replaySafeResponse, stableIdempotencyKey } from '../../financial-idempotency.mjs';
 import { sanitizeAuditDetails } from '../../financial-audit.mjs';
-import { extractFinCaptureDepositDate } from '../amounts.mjs';
+import { applyCheckAltSettlementInvariant, extractFinCaptureDepositDate } from '../amounts.mjs';
 
 export const checkAltIdempotencyKey = ({ tenantId, checkId, amountCents }) =>
   stableIdempotencyKey({
@@ -24,6 +24,18 @@ export async function bindCheckAltProductionGucs(client, mapping, claims) {
     'request.aws_financial_permissions_activated',
     financialPermissionsActivated() ? '1' : '0',
   ]);
+}
+
+/** Identity only. Does not set financial_execution. Used by status-read poll. */
+export async function bindCheckAltStatusReadGucs(client, mapping, claims) {
+  await client.query('SELECT set_config($1, $2, true)', [APP_USER_ID_GUC, mapping.application_user_id]);
+  await client.query('SELECT set_config($1, $2, true)', [
+    APP_USER_EMAIL_GUC,
+    mapping.email || claims?.email || '',
+  ]);
+  await client.query('SELECT set_config($1, $2, true)', ['request.checkalt_status_read', '1']);
+  await client.query('SELECT set_config($1, $2, true)', ['request.financial_execution', '0']);
+  await client.query('SELECT set_config($1, $2, true)', ['request.aws_financial_permissions_activated', '0']);
 }
 
 /**
@@ -248,9 +260,10 @@ export async function persistPollOutcome(client, {
   providerPayload = null,
 }) {
   const depositDate = extractFinCaptureDepositDate(providerPayload);
+  const persistedStatus = applyCheckAltSettlementInvariant(status, providerPayload);
   const payload = JSON.stringify(sanitizeAuditDetails({
     last_poll: {
-      status,
+      status: persistedStatus,
       depositDate,
       response_keys: providerPayload && typeof providerPayload === 'object'
         ? Object.keys(providerPayload).slice(0, 40)
@@ -262,12 +275,12 @@ export async function persistPollOutcome(client, {
      SET status = COALESCE($2, status),
          checkalt_reference = COALESCE($3, checkalt_reference),
          last_polled_at = now(),
-         cleared_at = CASE WHEN $2 = 'cleared' THEN COALESCE(cleared_at, $5::timestamptz, now()) ELSE cleared_at END,
+         cleared_at = CASE WHEN $2 = 'cleared' AND $5::timestamptz IS NOT NULL THEN COALESCE(cleared_at, $5::timestamptz) ELSE cleared_at END,
          returned_at = CASE WHEN $2 = 'returned' THEN COALESCE(returned_at, now()) ELSE returned_at END,
          last_status_payload = COALESCE(last_status_payload, '{}'::jsonb) || $4::jsonb,
          updated_at = now()
      WHERE id = $1::uuid
      RETURNING *`,
-    [rowId, status, reference, payload, depositDate],
+    [rowId, persistedStatus, reference, payload, depositDate],
   )).rows[0];
 }

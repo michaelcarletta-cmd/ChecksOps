@@ -40,12 +40,13 @@ AS
 SELECT
   tenant_id,
   auto_approve_enabled,
-  auto_approve_max_cents
+  auto_approve_max_cents,
+  (registered_at IS NOT NULL) AS registered
 FROM public.checkalt_tenant_accounts
 WHERE public.aws_is_cross_tenant_reader()
    OR public.aws_can_access_tenant(tenant_id);
 
 COMMENT ON VIEW public.checkalt_tenant_auto_deposit_public IS
-  'Tenant-safe Auto-Deposit columns only. Omits sso_user_id, deposit account, registration payload, and PII.';
+  'Tenant-safe Auto-Deposit columns plus derived registered. Omits sso_user_id, deposit account, registration payload, and PII.';
 
 GRANT SELECT ON public.checkalt_tenant_auto_deposit_public TO authenticated, checksops;

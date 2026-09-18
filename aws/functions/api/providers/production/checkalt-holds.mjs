@@ -7,7 +7,17 @@ const isTrue = (value) => String(value || '') === 'true';
 export const PRODUCTION_CHECKALT_FUNCTIONS = new Set([
   'checkalt-submit-deposit',
   'checkalt-poll-status',
+  'checkalt-approve-deposit',
 ]);
+
+/**
+ * Explicit CheckAlt status-read / reconciliation gate.
+ * Default false. Does not imply AWS_CHECKALT_ENABLED, AWS_PROVIDER_EXECUTION_ENABLED,
+ * or AWS_FINANCIAL_PERMISSIONS_ACTIVATED. Does not enable other financial jobs.
+ */
+export const checkaltStatusReconcileEnabled = () => (
+  String(process.env.AWS_CHECKALT_STATUS_RECONCILE_ENABLED || '') === 'true'
+);
 
 /**
  * Dark production CheckAlt HTTP is allowed only when every money-movement
@@ -37,7 +47,9 @@ export const checkAltProductionHoldSnapshot = () => ({
     || process.env.AWS_PROVIDER_WEBHOOK_DRY_RUN === ''
     || String(process.env.AWS_PROVIDER_WEBHOOK_DRY_RUN) !== 'false',
   AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED_production: isTrue(process.env.AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED),
+  AWS_CHECKALT_STATUS_RECONCILE_ENABLED: checkaltStatusReconcileEnabled(),
   productionCheckAltExecutionAllowed: productionCheckAltExecutionAllowed(),
+  checkaltStatusReconcileEnabled: checkaltStatusReconcileEnabled(),
   sql64: 'NOT_APPLIED',
   sql65: 'NOT_APPLIED',
 });

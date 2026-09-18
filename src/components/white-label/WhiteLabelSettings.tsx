@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { 
   LogOut, Building2, Users, Link2, CreditCard, Palette, ArrowLeft,
-  Loader2, Save, Trash2, Receipt, Banknote, KeyRound, HelpCircle,
+  Loader2, Save, Trash2, Receipt, Banknote, HelpCircle,
   ArrowDownToLine, FileBarChart, Gift, ShieldCheck, FileText
 } from "lucide-react";
 import { ReferralSettings } from "@/components/settings/ReferralSettings";
@@ -26,7 +26,6 @@ import { TenantBankAccountSettings } from "@/components/settings/TenantBankAccou
 import { TenantUserManager } from "./TenantUserManager";
 import { TenantDocumentLibrary } from "@/components/settings/TenantDocumentLibrary";
 import { TenantPartnerManager } from "./TenantPartnerManager";
-import { TenantAIKeySettings } from "./TenantAIKeySettings";
 import { ComplianceSettings } from "@/components/settings/ComplianceSettings";
 import { CompanyBrandingSettings } from "@/components/settings/CompanyBrandingSettings";
 import { SettingsHero } from "@/components/settings/SettingsHero";
@@ -41,7 +40,6 @@ import { Search as SearchIcon } from "lucide-react";
 import { PasskeyManagerCard } from "@/components/auth/PasskeyManagerCard";
 import { TotpManagerCard } from "@/components/auth/TotpManagerCard";
 import { FinancialTotpOnlyTestCard } from "@/components/auth/FinancialTotpOnlyTestCard";
-import NotificationPreferencesSettings from "@/components/settings/NotificationPreferencesSettings";
 import { CheckUsageCard } from "@/components/billing/CheckUsageCard";
 import { TenantUsageTracker } from "@/components/billing/TenantUsageTracker";
 import { BillingConfigPanel } from "@/components/billing/BillingConfigPanel";
@@ -52,9 +50,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 
 
-const DepositOperationsConsole = lazy(() =>
-  import("@/components/deposit-ops/DepositOperationsConsole").then(m => ({ default: m.DepositOperationsConsole }))
-);
 const DepositReports = lazy(() =>
   import("@/components/deposit-ops/DepositReports").then(m => ({ default: m.DepositReports }))
 );
@@ -104,12 +99,17 @@ export function WhiteLabelSettings() {
   const { user, loading } = useAuth();
   const { isAdmin } = usePermissions();
   const [searchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "profile");
+  const [activeTab, setActiveTab] = useState(() => {
+    const tab = searchParams.get("tab");
+    return !tab || tab === "ai-key" ? "profile" : tab;
+  });
 
   useEffect(() => {
     const tab = searchParams.get("tab");
-    if (tab) {
+    if (tab && tab !== "ai-key") {
       setActiveTab(tab);
+    } else if (tab === "ai-key") {
+      setActiveTab("profile");
     }
   }, [searchParams]);
 
@@ -172,7 +172,6 @@ export function WhiteLabelSettings() {
           <TabsList className="w-full flex-wrap h-auto gap-1 bg-muted/50">
             <TabsTrigger value="profile" className="text-xs gap-1"><Building2 className="h-3 w-3" />Profile</TabsTrigger>
             <TabsTrigger value="usage" className="text-xs gap-1"><Receipt className="h-3 w-3" />Usage</TabsTrigger>
-            {canManageTenant && <TabsTrigger value="ai-key" className="text-xs gap-1"><KeyRound className="h-3 w-3" />AI Key</TabsTrigger>}
             {canManageTenant && <TabsTrigger value="users" className="text-xs gap-1"><Users className="h-3 w-3" />Users</TabsTrigger>}
             {canManageTenant && <TabsTrigger value="partners" className="text-xs gap-1"><Link2 className="h-3 w-3" />Partners</TabsTrigger>}
             {canManageTenant && <TabsTrigger value="banking" className="text-xs gap-1"><Banknote className="h-3 w-3" />Bank Account/Stakeholders</TabsTrigger>}
@@ -185,7 +184,6 @@ export function WhiteLabelSettings() {
 
           <TabsContent value="profile" className="space-y-6">
             {tenant && <ProfileSettings tenant={tenant} />}
-            <NotificationPreferencesSettings />
             <PasskeyManagerCard />
             <TotpManagerCard />
             <FinancialTotpOnlyTestCard />
@@ -200,10 +198,6 @@ export function WhiteLabelSettings() {
 
           {canManageTenant && (
             <>
-              <TabsContent value="ai-key">
-                <TenantAIKeySettings />
-              </TabsContent>
-
               <TabsContent value="users">
                 {tenant && <TenantUserManager tenantId={tenant.id} />}
               </TabsContent>
@@ -306,7 +300,7 @@ function ProfileSettings({ tenant }: { tenant: any }) {
     <div className="space-y-6">
       <SettingsHero
         title="Company Profile"
-        description="Your company identity, workspace URL, and partner code for check sharing."
+        description="Your company identity and workspace URL."
         badge="Personal Settings"
         icon={<Building2 className="h-4 w-4 text-primary" />}
       />
@@ -331,23 +325,6 @@ function ProfileSettings({ tenant }: { tenant: any }) {
             {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Save className="h-4 w-4 mr-1" />}
             Save Changes
           </Button>
-        </div>
-      </SectionCard>
-
-      <SectionCard
-        title="Partner Code & Plan"
-        icon={<Link2 className="h-4 w-4 text-violet-500" />}
-        accent="bg-gradient-to-r from-violet-500/60 to-violet-500/10"
-        description="Identifiers used for partner check sharing and billing"
-      >
-        <div className="space-y-2">
-          <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">Partner Code</Label>
-          <Input value={tenant.partner_code || "—"} disabled className="h-9 font-mono tracking-widest opacity-60" />
-          <p className="text-xs text-muted-foreground">Share this code with partners for check sharing.</p>
-        </div>
-        <div className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-3 py-2">
-          <span className="text-[11px] uppercase tracking-wide text-muted-foreground">Plan</span>
-          <Badge variant="outline">{tenant.plan_tier}</Badge>
         </div>
       </SectionCard>
     </div>

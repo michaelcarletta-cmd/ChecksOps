@@ -122,6 +122,36 @@ async function getUserAccessContext(admin: ReturnType<typeof createClient>, user
   };
 }
 
+/** Product rule: any mortgage_agent with an active requested/in_progress
+ *  request for THIS check may read images. Assignment isolation is
+ *  intentionally not added. */
+async function mortgageAgentCanAccessCheck(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+  checkId: string,
+  checkTenantId: string | null,
+) {
+  const { data: roles, error: roleError } = await admin
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId);
+  if (roleError) throw roleError;
+  const isMortgageAgent = (roles ?? []).some((row) => row.role === "mortgage_agent");
+  if (!isMortgageAgent) return false;
+
+  const { data: request, error: requestError } = await admin
+    .from("mortgage_handling_requests")
+    .select("id, tenant_id, check_intake_item_id, status")
+    .eq("check_intake_item_id", checkId)
+    .in("status", ["requested", "in_progress"])
+    .limit(1)
+    .maybeSingle();
+  if (requestError) throw requestError;
+  if (!request) return false;
+  if (checkTenantId && request.tenant_id && request.tenant_id !== checkTenantId) return false;
+  return true;
+}
+
 async function userCanAccessCheck(
   admin: ReturnType<typeof createClient>,
   userId: string,
@@ -132,6 +162,7 @@ async function userCanAccessCheck(
 
   if (isPrivileged) return true;
   if (checkTenantId && tenantIds.includes(checkTenantId)) return true;
+  if (await mortgageAgentCanAccessCheck(admin, userId, checkId, checkTenantId)) return true;
   if (tenantIds.length === 0) return false;
 
   const { data: sharedCheck, error: shareError } = await admin
@@ -177,7 +208,7 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    const checkId = body?.checkId as string | undefined;
+    const checkId = (body?.checkId || body?.check_id) as string | undefined;
     if (!checkId) {
       return new Response(JSON.stringify({ error: "Missing checkId" }), {
         status: 400,
@@ -281,9 +312,12 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         checkId: check.id,
+        check_id: check.id,
         checkNumber: check.check_number,
         frontUrl,
         backUrl,
+        front_url: frontUrl,
+        back_url: backUrl,
         backOriginalUrl,
         // Legacy alias kept for any callers still reading backFlattenedUrl.
         backFlattenedUrl: backUrl,

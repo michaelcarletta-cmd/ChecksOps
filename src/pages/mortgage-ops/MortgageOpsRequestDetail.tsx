@@ -317,10 +317,12 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
       if (r.check_intake_item_id) {
         // Signed image URLs
         const { data: img } = await supabase.functions.invoke("get-check-image-urls", {
-          body: { check_id: r.check_intake_item_id },
+          body: { checkId: r.check_intake_item_id, check_id: r.check_intake_item_id },
         });
-        if (img?.front_url || img?.back_url) {
-          setImages({ front: img.front_url, back: img.back_url });
+        const front = img?.frontUrl || img?.front_url;
+        const back = img?.backUrl || img?.back_url;
+        if (front || back) {
+          setImages({ front, back });
         } else {
           setImages({});
         }
