@@ -11,6 +11,7 @@ import { FileText, Link2, CheckCircle2, AlertCircle, Pencil, DollarSign } from "
 import { format } from "date-fns";
 import { ClaimSettlementEditor } from "./ClaimSettlementEditor";
 import { getDepositLabel } from "@/lib/depositLabel";
+import { applyClaimLedgerSync } from "@/lib/claimLedgerSync";
 
 interface Props {
   checkIntakeItemId: string;
@@ -127,11 +128,24 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
         created = true;
       }
 
+      const { data: checkRow, error: checkErr } = await supabase
+        .from("check_intake_items")
+        .select("id, claim_id, amount, check_number, carrier_name, issue_date, payee_line, tenant_id, status")
+        .eq("id", checkIntakeItemId)
+        .single();
+      if (checkErr) throw checkErr;
+
       const { error } = await supabase
         .from("check_intake_items")
         .update({ detected_claim_number: trimmed, claim_id: matched.id })
         .eq("id", checkIntakeItemId);
       if (error) throw error;
+
+      await applyClaimLedgerSync(supabase, {
+        check: { ...(checkRow as any), claim_id: matched.id },
+        newClaimId: matched.id,
+        claimNumber: matched.claim_number,
+      });
 
       return {
         created,
