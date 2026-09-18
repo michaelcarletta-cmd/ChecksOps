@@ -1879,6 +1879,9 @@ Deno.serve(async (req) => {
       /*  Force-complete remaining required endorsements               */
       /* ------------------------------------------------------------ */
       case "force_complete_endorsements": {
+        // Tenant-scoped staff/admin auth BEFORE any service-role write.
+        // Mirrors aws_can_write_tenant / authorizeForceComplete: membership
+        // on THIS check's tenant + user_roles admin/staff. UUID is not auth.
         const authToken = req.headers.get("authorization")?.replace("Bearer ", "");
         if (!authToken) return json({ error: "Unauthorized" }, 401);
 
@@ -1891,26 +1894,48 @@ Deno.serve(async (req) => {
         const checkId = (body.checkId || body.check_id) as string | undefined;
         if (!checkId) return json({ error: "checkId required" }, 400);
 
+        const { data: check, error: checkErr } = await supabase
+          .from("check_intake_items")
+          .select("id, tenant_id")
+          .eq("id", checkId)
+          .maybeSingle();
+        if (checkErr || !check?.id) return json({ error: "Check not found" }, 404);
+
+        const [{ data: roleRows }, { data: memberships }] = await Promise.all([
+          supabase.from("user_roles").select("role").eq("user_id", ud.user.id),
+          supabase.from("tenant_users").select("tenant_id, role").eq("user_id", ud.user.id),
+        ]);
+        const member = (memberships ?? []).some((row: { tenant_id?: string | null }) => (
+          String(row.tenant_id || "") === String(check.tenant_id || "")
+        ));
+        const privileged = (roleRows ?? []).some((row: { role?: string | null }) => {
+          const role = String(row.role || "").toLowerCase();
+          return role === "admin" || role === "staff";
+        });
+        if (!check.tenant_id || !member || !privileged) {
+          return json({ error: "forbidden" }, 403);
+        }
+
         const { data: rows } = await supabase
           .from("check_endorsements")
-          .select("id, status, payee_type, signature_image_url, signed_at")
+          .select("id, status, payee_type, signed_at, notes, signature_method, signature_image_url, endorsement_image_path, signed_by")
           .eq("check_id", checkId);
 
-        const incompleteIds = (rows ?? [])
-          .filter((row: { status?: string; payee_type?: string }) => !isEndorsementSatisfied(row))
-          .map((row: { id: string }) => row.id);
-
-        if (incompleteIds.length > 0) {
+        const nowIso = new Date().toISOString();
+        const incomplete = (rows ?? []).filter((row: { status?: string; payee_type?: string }) => (
+          !isEndorsementSatisfied(row)
+        ));
+        for (const row of incomplete) {
           const { error: updErr } = await supabase
             .from("check_endorsements")
             .update({
               status: "signed",
-              signed_at: new Date().toISOString(),
-              notes: "Manually marked as received by staff override",
-              signature_method: "manual",
-              updated_at: new Date().toISOString(),
+              signed_at: row.signed_at || nowIso,
+              notes: row.notes || "Manually marked as received by staff override",
+              signature_method: row.signature_method || "manual",
+              updated_at: nowIso,
             })
-            .in("id", incompleteIds)
+            .eq("id", row.id)
             .neq("status", "signed")
             .neq("status", "waived");
           if (updErr) return json({ error: updErr.message }, 400);
@@ -1919,9 +1944,9 @@ Deno.serve(async (req) => {
         await supabase.from("check_audit_log").insert({
           check_id: checkId,
           event_type: "endorsements_force_completed",
-          event_description: `All endorsements manually marked as received (${incompleteIds.length} updated)`,
+          event_description: `All endorsements manually marked as received (${incomplete.length} updated)`,
           actor_id: ud.user.id,
-          event_data: { overridden_ids: incompleteIds },
+          event_data: { overridden_ids: incomplete.map((row: { id: string }) => row.id) },
         });
 
         const result = await reEvaluateAfterEndorsement(supabase, checkId);
