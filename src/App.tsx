@@ -13,7 +13,6 @@ import { AuthProvider } from "./hooks/useAuth";
 import { StepUpProvider } from "./hooks/useStepUp";
 import { ThemeProvider, ThemeScope } from "./hooks/useTheme";
 import { AwsStagingBanner } from "./components/AwsStagingBanner";
-import { PreviewBuildMarker } from "./components/PreviewBuildMarker";
 
 
 import { bootstrapEmbedContext } from "./lib/embedContext";
@@ -214,7 +213,6 @@ const App = () => (
           <AuthProvider>
             <StepUpProvider>
               <ThemeScope>
-                <PreviewBuildMarker />
                 <AwsStagingBanner />
                 <RecoveryHashRedirect />
                 <PlatformAnnouncementBanner />

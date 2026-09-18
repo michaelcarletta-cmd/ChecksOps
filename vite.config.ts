@@ -7,30 +7,7 @@ import { VitePWA } from "vite-plugin-pwa";
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const vercelEnv = String(process.env.VERCEL_ENV || "").trim() || null;
-  const isVercelPreview = vercelEnv === "preview";
-
-  // Vercel Preview builds should use AWS staging auth + APIs so that passwordless login
-  // stays on the preview hostname (Supabase magic-link redirects are allowlisted and will
-  // fall back to the canonical Site URL when the preview hostname is not allowlisted).
-  const awsModeFromEnv =
-    mode === "aws" || String(env.VITE_AUTH_PROVIDER || "").toLowerCase() === "cognito";
-  const awsMode = awsModeFromEnv || isVercelPreview;
-
-  const previewAwsConfig = isVercelPreview
-    ? {
-        VITE_AUTH_PROVIDER: "cognito",
-        VITE_AWS_REGION: String(env.VITE_AWS_REGION || "us-east-1"),
-        VITE_APP_URL: String(env.VITE_APP_URL || "https://staging.checksops.com"),
-        VITE_CHECKSOPS_API_URL: String(
-          env.VITE_CHECKSOPS_API_URL || "https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging",
-        ),
-        VITE_COGNITO_USER_POOL_ID: String(env.VITE_COGNITO_USER_POOL_ID || "us-east-1_vPmQ7cL1F"),
-        VITE_COGNITO_USER_POOL_CLIENT_ID: String(
-          env.VITE_COGNITO_USER_POOL_CLIENT_ID || "71bb7a192cbl6o6s8m259tl589",
-        ),
-      }
-    : null;
+  const awsMode = mode === "aws" || String(env.VITE_AUTH_PROVIDER || "").toLowerCase() === "cognito";
 
   const supabaseUrl = env.VITE_SUPABASE_URL || env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
   const supabasePublishableKey =
@@ -40,20 +17,6 @@ export default defineConfig(({ mode }) => {
     process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
     process.env.SUPABASE_PUBLISHABLE_KEY ||
     process.env.SUPABASE_ANON_KEY;
-
-  const effectiveViteAuthProvider = isVercelPreview ? previewAwsConfig?.VITE_AUTH_PROVIDER : env.VITE_AUTH_PROVIDER;
-  const effectiveViteAppUrl = isVercelPreview ? previewAwsConfig?.VITE_APP_URL : env.VITE_APP_URL;
-  const effectiveViteChecksopsApiUrl = isVercelPreview ? previewAwsConfig?.VITE_CHECKSOPS_API_URL : env.VITE_CHECKSOPS_API_URL;
-  const previewBuildInfo = {
-    isVercelPreview,
-    vercelEnv,
-    vercelUrl: (isVercelPreview ? String(process.env.VERCEL_URL || "").trim() : "") || null,
-    gitCommitSha: (isVercelPreview ? String(process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || "").trim() : "") || null,
-    gitPrNumber: (isVercelPreview ? String(process.env.VERCEL_GIT_PULL_REQUEST_ID || "").trim() : "") || null,
-    viteAppUrl: (isVercelPreview ? String(effectiveViteAppUrl || "").trim() : "") || null,
-    viteAuthProvider: (isVercelPreview ? String(effectiveViteAuthProvider || "").trim() : "") || null,
-    viteChecksopsApiUrl: (isVercelPreview ? String(effectiveViteChecksopsApiUrl || "").trim() : "") || null,
-  };
 
   return {
   server: {
@@ -131,22 +94,10 @@ export default defineConfig(({ mode }) => {
         // Never bake production Supabase URL/keys into the AWS staging bundle.
         "import.meta.env.VITE_SUPABASE_URL": JSON.stringify(""),
         "import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY": JSON.stringify(""),
-        ...(previewAwsConfig
-          ? {
-              "import.meta.env.VITE_AUTH_PROVIDER": JSON.stringify(previewAwsConfig.VITE_AUTH_PROVIDER),
-              "import.meta.env.VITE_AWS_REGION": JSON.stringify(previewAwsConfig.VITE_AWS_REGION),
-              "import.meta.env.VITE_APP_URL": JSON.stringify(previewAwsConfig.VITE_APP_URL),
-              "import.meta.env.VITE_CHECKSOPS_API_URL": JSON.stringify(previewAwsConfig.VITE_CHECKSOPS_API_URL),
-              "import.meta.env.VITE_COGNITO_USER_POOL_ID": JSON.stringify(previewAwsConfig.VITE_COGNITO_USER_POOL_ID),
-              "import.meta.env.VITE_COGNITO_USER_POOL_CLIENT_ID": JSON.stringify(previewAwsConfig.VITE_COGNITO_USER_POOL_CLIENT_ID),
-            }
-          : {}),
-        __CHECKSOPS_PREVIEW_BUILD_INFO__: JSON.stringify(previewBuildInfo),
       }
     : {
         "import.meta.env.VITE_SUPABASE_URL": JSON.stringify(supabaseUrl),
         "import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY": JSON.stringify(supabasePublishableKey),
-        __CHECKSOPS_PREVIEW_BUILD_INFO__: JSON.stringify(previewBuildInfo),
       },
   };
 });
