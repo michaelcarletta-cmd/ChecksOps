@@ -6,7 +6,6 @@ import {
   evaluateEndorsementMath,
   isActiveLossDraft,
   isEndorsementSatisfied,
-  mortgageOpsCompleteDoesNotReleaseCheck,
 } from '../functions/api/endorsement-completion.mjs';
 import {
   AUTH_ENDORSEMENT_ACTIONS,
@@ -89,7 +88,6 @@ test('FIX1 C: after tenant leaves loss draft, satisfied endorsements may go Read
 });
 
 test('FIX1 D: Mortgage Ops completion by itself does not release Ready', () => {
-  assert.equal(mortgageOpsCompleteDoesNotReleaseCheck(), true);
   const rpc = readFileSync('supabase/migrations/20260715122103_5e731951-bea3-49d4-a508-8bdff4edcafc.sql', 'utf8');
   assert.match(rpc, /update_mortgage_handling_request_status/);
   assert.equal(/UPDATE public\.check_intake_items/i.test(rpc), false);
@@ -258,6 +256,7 @@ test('FIX4 claim link/relink keeps one-check-one-claim Funds Received non-duplic
     existingEvents: [{ check_id: CHECK_ID, claim_id: CLAIM_B, event_type: 'check_received' }],
   });
   assert.equal(resave.sameClaim, true);
+  assert.equal(resave.skipWrites, true);
   assert.equal(resave.insertCheckReceived, false);
 
   const twoChecks = [

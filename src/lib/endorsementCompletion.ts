@@ -74,7 +74,3 @@ export function decideReadyTransition(
   }
   return { action: "ready" };
 }
-
-export function mortgageOpsCompleteDoesNotReleaseCheck(): true {
-  return true;
-}

@@ -47,5 +47,3 @@ export const decideReadyTransition = (check = {}, evaluation = {}) => {
   }
   return { action: 'ready' };
 };
-
-export const mortgageOpsCompleteDoesNotReleaseCheck = () => true;
