@@ -141,11 +141,30 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
         .eq("id", checkIntakeItemId);
       if (error) throw error;
 
-      await applyClaimLedgerSync(supabase, {
+      const { data: authData } = await supabase.auth.getUser();
+      let actorTenantId: string | null = null;
+      if (authData?.user?.id) {
+        const { data: memberships } = await supabase
+          .from("tenant_users")
+          .select("tenant_id")
+          .eq("user_id", authData.user.id);
+        const memberOfCheck = (memberships ?? []).some((row: { tenant_id?: string | null }) => (
+          String(row.tenant_id || "") === String(checkRow.tenant_id || "")
+        ));
+        actorTenantId = memberOfCheck
+          ? (checkRow.tenant_id ?? null)
+          : ((memberships ?? [])[0]?.tenant_id ?? null);
+      }
+
+      const sync = await applyClaimLedgerSync(supabase, {
         check: { ...(checkRow as any), claim_id: matched.id },
         newClaimId: matched.id,
         claimNumber: matched.claim_number,
+        actorTenantId,
       });
+      if ((sync as { denied?: boolean }).denied) {
+        throw new Error("Cannot sync another tenant's ledger");
+      }
 
       return {
         created,
