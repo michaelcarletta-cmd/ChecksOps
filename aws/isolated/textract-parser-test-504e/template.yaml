@@ -1,0 +1,62 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >-
+  Isolated Textract parser test stack (direct Lambda invoke only).
+  No DB/S3/Cognito/provider integration. No persistence.
+
+Resources:
+  TextractParserTestLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/checksops-textract-parser-test-504e
+      RetentionInDays: 1
+
+  TextractParserTestRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: checksops-textract-parser-test-504e-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: checksops-textract-parser-test-504e-exec
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: TextractReadOnly
+                Effect: Allow
+                Action:
+                  - textract:AnalyzeDocument
+                  - textract:DetectDocumentText
+                Resource: '*'
+              - Sid: CloudWatchLogsWrite
+                Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/checksops-textract-parser-test-504e:*
+
+  TextractParserTestFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: checksops-textract-parser-test-504e
+      Description: Isolated Textract -> deterministic parser -> redacted result.
+      Runtime: nodejs22.x
+      Architectures:
+        - arm64
+      Handler: index.handler
+      CodeUri: src/
+      Role: !GetAtt TextractParserTestRole.Arn
+      MemorySize: 1024
+      Timeout: 29
+      Tracing: Active
+      Environment:
+        Variables:
+          CHECKSOPS_TEXTRACT_TEST_STACK: checksops-textract-parser-test-504e
+          MAX_INPUT_BYTES: '4194304'
+

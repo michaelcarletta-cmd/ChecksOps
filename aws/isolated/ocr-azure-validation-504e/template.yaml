@@ -1,0 +1,88 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >-
+  Isolated Textract+Azure check OCR validation (direct Lambda invoke only).
+  Packages implementation modules at pack time. No database, object store,
+  identity pool, VPC, or HTTP interface. Do not deploy until operator approval.
+
+Resources:
+  OcrAzureValidationLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/checksops-ocr-azure-validation-504e
+      RetentionInDays: 1
+
+  OcrAzureValidationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: checksops-ocr-azure-validation-504e-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: checksops-ocr-azure-validation-504e-exec
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: TextractAnalyzeOnly
+                Effect: Allow
+                Action:
+                  - textract:AnalyzeDocument
+                  - textract:DetectDocumentText
+                Resource: '*'
+              - Sid: IsolatedAzureSecretReadOnly
+                Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource:
+                  - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:checksops/isolated/azure-document-intelligence-504e-*
+              - Sid: IsolatedLogWriteOnly
+                Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/checksops-ocr-azure-validation-504e:*
+
+  OcrAzureValidationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: checksops-ocr-azure-validation-504e
+      Description: Isolated Textract + Azure prebuilt-check.us merge; redacted invoke result only.
+      Runtime: nodejs22.x
+      Architectures:
+        - arm64
+      Handler: index.handler
+      CodeUri: pack/
+      Role: !GetAtt OcrAzureValidationRole.Arn
+      MemorySize: 1024
+      Timeout: 45
+      Environment:
+        Variables:
+          CHECKSOPS_OCR_AZURE_VALIDATION_STACK: checksops-ocr-azure-validation-504e
+          AZURE_DI_SECRET_ID: checksops/isolated/azure-document-intelligence-504e
+          MAX_INPUT_BYTES: '4194304'
+
+Outputs:
+  StackName:
+    Description: Isolated validation stack name
+    Value: checksops-ocr-azure-validation-504e
+  FunctionName:
+    Description: Direct-invoke Lambda name
+    Value: !Ref OcrAzureValidationFunction
+  FunctionArn:
+    Description: Direct-invoke Lambda ARN
+    Value: !GetAtt OcrAzureValidationFunction.Arn
+  RoleArn:
+    Description: Isolated execution role ARN
+    Value: !GetAtt OcrAzureValidationRole.Arn
+  LogGroupName:
+    Description: Isolated 1-day log group
+    Value: /aws/lambda/checksops-ocr-azure-validation-504e
+  AzureDiSecretId:
+    Description: Existing isolated secret name only. Not the secret value.
+    Value: checksops/isolated/azure-document-intelligence-504e

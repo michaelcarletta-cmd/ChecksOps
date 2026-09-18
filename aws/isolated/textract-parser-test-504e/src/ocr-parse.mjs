@@ -86,7 +86,7 @@ const PAYEE_SPLIT_RE = /\s*(?:\band\b|&|＆|﹠|／|\/|;|；)\s*/i;
 
 const hasPayeeSeparator = (text) => PAYEE_SPLIT_RE.test(String(text || ''));
 
-export const splitPayees = (payeeLine) => {
+const splitPayees = (payeeLine) => {
   if (!payeeLine) return [];
   const cleaned = String(payeeLine)
     .replace(/^\s*(pay\s+to\s+(?:the\s+order\s+of)?[:\s]*|of[:\s]+)/i, '')
@@ -114,7 +114,7 @@ export const splitPayees = (payeeLine) => {
   return payees;
 };
 
-export const digitsOnly = (v) => String(v || '').replace(/[^0-9]/g, '');
+const digitsOnly = (v) => String(v || '').replace(/[^0-9]/g, '');
 
 const maskDigits = (v) => {
   const d = digitsOnly(v);
@@ -123,7 +123,7 @@ const maskDigits = (v) => {
   return `***${d.slice(-4)}`;
 };
 
-export const abaRoutingChecksumOk = (raw) => {
+const abaRoutingChecksumOk = (raw) => {
   const d = digitsOnly(raw);
   if (d.length !== 9) return false;
   const n = [...d].map((c) => Number(c));

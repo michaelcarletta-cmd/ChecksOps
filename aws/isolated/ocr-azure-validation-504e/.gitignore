@@ -1,0 +1,9 @@
+pack/
+dist/
+node_modules/
+.aws-sam/
+src/azure-check-ocr.mjs
+src/check-ocr-provider.mjs
+src/ocr-normalize-azure.mjs
+src/textract-check-ocr.mjs
+src/ocr-parse.mjs
