@@ -5,16 +5,14 @@
  * otherwise updates descriptive columns directly under RLS.
  */
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
-import {
-  TextractClient,
-  DetectDocumentTextCommand,
-  AnalyzeDocumentCommand,
-} from '@aws-sdk/client-textract';
 import { normalizePath, s3KeyFor } from './storage-paths.mjs';
 import { parseCheckFields } from './ocr-parse.mjs';
+import { runTextract } from './textract-check-ocr.mjs';
+import { mergeCheckExtraction, ocrInProgress } from './check-ocr-provider.mjs';
+import { analyzeAzureCheck } from './azure-check-ocr.mjs';
+import { emptyAzureMicr, normalizeAzureMicr } from './ocr-normalize-azure.mjs';
 
 const s3 = () => new S3Client({ region: process.env.AWS_REGION || 'us-east-1' });
-const textract = () => new TextractClient({ region: process.env.AWS_REGION || 'us-east-1' });
 const filesBucket = () => process.env.FILES_BUCKET || '';
 
 const streamToBuffer = async (body) => {
@@ -24,10 +22,6 @@ const streamToBuffer = async (body) => {
   for await (const chunk of body) chunks.push(chunk);
   return Buffer.concat(chunks);
 };
-
-const extractLines = (blocks = []) => (blocks || [])
-  .filter((b) => b && b.BlockType === 'LINE' && b.Text)
-  .map((b) => b.Text);
 
 const loadCheckImageBytes = async (client, checkId, deps = {}) => {
   const row = (await client.query(
@@ -108,38 +102,6 @@ const parsedFromStoredOcr = (row) => {
   };
 };
 
-const runTextract = async (bytes, deps = {}) => {
-  try {
-    const send = deps.textractSend || ((cmd) => textract().send(cmd));
-    const analyzed = await send(new AnalyzeDocumentCommand({
-      Document: { Bytes: bytes },
-      FeatureTypes: ['FORMS'],
-    }));
-    return {
-      blocks: analyzed.Blocks || [],
-      lines: extractLines(analyzed.Blocks || []),
-      engine: 'aws_textract_analyze',
-      error: null,
-    };
-  } catch (analyzeError) {
-    try {
-      const send = deps.textractSend || ((cmd) => textract().send(cmd));
-      const detected = await send(new DetectDocumentTextCommand({
-        Document: { Bytes: bytes },
-      }));
-      return {
-        blocks: detected.Blocks || [],
-        lines: extractLines(detected.Blocks || []),
-        engine: 'aws_textract_detect',
-        error: null,
-      };
-    } catch (detectError) {
-      const message = String(detectError?.message || analyzeError?.message || detectError).slice(0, 240);
-      return { blocks: [], lines: [], engine: 'aws_textract', error: message };
-    }
-  }
-};
-
 export const handleCheckOcrIntake = async (event) => {
   const { withIdentity } = await import('./data.mjs');
   return withIdentity(event, async ({
@@ -165,6 +127,17 @@ export const handleCheckOcrIntake = async (event) => {
       success: false,
       ocr_success: false,
       error: loaded.error,
+      spoofFieldsIgnored: spoof,
+    };
+  }
+
+  if (ocrInProgress(loaded.row)) {
+    return {
+      ok: true,
+      statusCode: 200,
+      success: false,
+      ocr_success: false,
+      error: 'ocr_in_progress',
       spoofFieldsIgnored: spoof,
     };
   }
@@ -238,7 +211,41 @@ export const handleCheckOcrIntake = async (event) => {
   }
 
   // Prefer Textract blocks when present (geometry-aware). Fallback to stored OCR lines.
-  const parsed = parsedFromStore || (blocks && blocks.length ? parseCheckFields(blocks) : parseCheckFields(lines));
+  const textractParsed = parsedFromStore || (blocks && blocks.length ? parseCheckFields(blocks) : parseCheckFields(lines));
+
+  // Azure is not called unless a secret loader + transport are injected (mocked tests only).
+  // Production does not read Secrets Manager in this phase.
+  let azureMicr = emptyAzureMicr();
+  let azureOk = false;
+  let azureRan = false;
+  let azureError = null;
+  let azureDeleteConfirmed = false;
+  const azureDeps = handleCheckOcrIntake.__azureDeps;
+  if (azureDeps?.secretLoader && azureDeps?.fetchImpl && loaded.bytes?.length) {
+    const azure = await analyzeAzureCheck({
+      imageBytes: loaded.bytes,
+      secretLoader: azureDeps.secretLoader,
+      fetchImpl: azureDeps.fetchImpl,
+      sleep: azureDeps.sleep,
+      now: azureDeps.now,
+      log: azureDeps.log,
+    });
+    azureRan = azure.code !== 'azure_not_configured';
+    azureOk = Boolean(azure.ok);
+    azureError = azure.ok ? null : (azure.code || null);
+    azureDeleteConfirmed = Boolean(azure.deleteConfirmed);
+    if (azure.ok) {
+      azureMicr = normalizeAzureMicr(azure.document, { printedCheckNumber: textractParsed.check_number });
+    }
+  }
+
+  const parsed = mergeCheckExtraction({
+    textractParsed,
+    azureMicr,
+    descriptiveEngine: engine,
+    azureRan,
+    azureOk,
+  });
   const eligibility = {
     recommendation: parsed.needs_manual_review ? 'manual_review' : 'proceed',
     reasons: (parsed.low_confidence_fields || []).map((f) => `low_confidence:${f}`),
@@ -286,7 +293,12 @@ export const handleCheckOcrIntake = async (event) => {
         JSON.stringify({
           confidence: parsed.confidence,
           low_confidence_fields: parsed.low_confidence_fields,
-          engine,
+          engine: parsed.descriptive_engine || engine,
+          micr_engine: parsed.micr_engine,
+          micr_routing_state: parsed.micr_routing_state,
+          micr_account_state: parsed.micr_account_state,
+          micr_check_state: parsed.micr_check_state,
+          needs_manual_review: parsed.needs_manual_review,
           rpcSuccess,
         }),
         mapping.application_user_id,
@@ -309,8 +321,11 @@ export const handleCheckOcrIntake = async (event) => {
     eligibility,
     payees_preserved: false,
     transaction: {},
-    engine,
+    engine: parsed.descriptive_engine || engine,
+    micr_engine: parsed.micr_engine,
     textract_error: textractError,
+    azure_error: azureRan ? azureError : null,
+    azure_delete_confirmed: azureDeleteConfirmed,
     spoofFieldsIgnored: spoof,
   };
 }, { write: true, commit: true });
@@ -320,6 +335,8 @@ export const handleCheckOcrIntake = async (event) => {
 export const __test__ = {
   runTextract,
   loadCheckImageBytes,
+  ocrInProgress,
+  mergeCheckExtraction,
 };
 
 export const handleDetectEndorsementZone = async (event) => {
