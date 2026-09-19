@@ -12,7 +12,7 @@ test('M7.9B runner never prints secrets, never arms POST, never creates a replac
   assert.match(src, /checksops\/production\/provider/);
   assert.match(src, /3bef00a5-0bf4-41ba-abf8-5fb4e2b73d43/);
   assert.match(src, /https:\/\/checksops.com/);
-  assert.match(src, /https:\/\/staging.checksops.com/);
+  assert.match(src, /https:\/\/www.checksops.com/);
   assert.match(src, /moov_api_key_origin_requires_dashboard/);
   assert.match(src, /PRODUCTION_PRESERVE/);
   assert.match(src, /PRODUCTION_MOOV_API_VERSION/);

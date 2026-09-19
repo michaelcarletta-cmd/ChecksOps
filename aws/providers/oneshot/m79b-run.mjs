@@ -64,10 +64,10 @@ const SAFE_JWT_KEYS = new Set([
 const OPERATOR_ACTION = [
   'Moov Dashboard → Test/Sandbox mode → Developers → API keys.',
   'Open the EXISTING ChecksOps sandbox API key (do not create a new key).',
-  'Add domain https://checksops.com.',
-  'Keep https://staging.checksops.com.',
+  'Add domain https://checksops.com (apex, no www).',
+  'Keep https://staging.checksops.com and https://www.checksops.com.',
   'Do not rotate the secret. Do not change production keys.',
-  'Then re-run M7.9B Phase 3 (live-origin GET).',
+  'Then re-run M7.9B Phase 3 (live-origin GET with Origin https://checksops.com).',
 ].join(' ');
 
 const run = (cmd, args, opts = {}) => execFileSync(cmd, args, {
@@ -505,6 +505,18 @@ const identifyKey = async (staging) => {
     apiVersion: PROVEN_API_VERSION,
     path: `/accounts/${platformId}`,
   }) : { ok: false, status: profileOauthLive.status, json: null };
+  const profileOauthWww = await moovOauth({
+    publicKey: s.MOOV_SANDBOX_PUBLIC_KEY,
+    secretKey: s.MOOV_SANDBOX_SECRET_KEY,
+    origin: 'https://www.checksops.com',
+    scopes: [`/accounts/${platformId}/profile.read`],
+  });
+  const platformGetWww = profileOauthWww.ok ? await moovCall({
+    token: profileOauthWww.token,
+    origin: 'https://www.checksops.com',
+    apiVersion: PROVEN_API_VERSION,
+    path: `/accounts/${platformId}`,
+  }) : { ok: false, status: profileOauthWww.status, json: null };
   const pingOauth = await moovOauth({
     publicKey: s.MOOV_SANDBOX_PUBLIC_KEY,
     secretKey: s.MOOV_SANDBOX_SECRET_KEY,
@@ -513,7 +525,7 @@ const identifyKey = async (staging) => {
   });
   const ping = {};
   if (pingOauth.ok) {
-    for (const origin of [LIVE_ORIGIN, STAGING_ORIGIN]) {
+    for (const origin of [LIVE_ORIGIN, STAGING_ORIGIN, 'https://www.checksops.com']) {
       const row = await moovCall({
         token: pingOauth.token,
         origin,
@@ -557,6 +569,10 @@ const identifyKey = async (staging) => {
     platformGetLiveBefore: {
       status: platformGetLive.status,
       account: accountSafe(platformGetLive.json),
+    },
+    platformGetWww: {
+      status: platformGetWww.status,
+      account: accountSafe(platformGetWww.json),
     },
     ping,
     applications: {
@@ -1279,6 +1295,7 @@ const main = async () => {
         originBefore: identify.originBefore,
         platformGetStaging: identify.platformGetStaging,
         platformGetLiveBefore: identify.platformGetLiveBefore,
+        platformGetWww: identify.platformGetWww,
       },
       keyProbe: {
         programmaticListAvailable: keyProbe.programmaticListAvailable,
