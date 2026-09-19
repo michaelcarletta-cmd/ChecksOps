@@ -114,6 +114,7 @@
   "payment_method_verifications",
   "payment_methods",
   "payment_provider_accounts",
+  "payment_provider_activity",
   "payment_provider_files",
   "payment_provider_methods",
   "payment_sweep_configs",

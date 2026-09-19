@@ -173,7 +173,9 @@ export const handleProviderWebhook = async (event, provider, deps = {}) => {
     return {
       ok: false,
       statusCode: 401,
-      error: verified.reason === 'missing_signature_headers' || verified.reason === 'malformed_webhook'
+      error: verified.reason === 'missing_signature_headers'
+        || verified.reason === 'malformed_webhook'
+        || verified.reason === 'missing_webhook_secret'
         ? verified.reason
         : 'invalid_signature',
       message: 'Webhook rejected',
@@ -228,22 +230,38 @@ export const handleProviderWebhook = async (event, provider, deps = {}) => {
       }
     }
     if (provider === 'moov' && productionWebhookReconcileEnabled() && !dryRun) {
-      const productionApply = await applyProductionMoovWebhook(client, parsed.payload, {
-        mappedTenantId: mapped.mapped_tenant_id,
-        dryRun: false,
-      });
-      applyResult = {
-        applied: Boolean(applyResult.applied || productionApply.applied),
-        financialTablesMutated: Boolean(applyResult.financialTablesMutated || productionApply.financialTablesMutated),
-        skipped: productionApply.skipped || applyResult.skipped,
-        mutations: [...(applyResult.mutations || []), ...(productionApply.mutations || [])],
-        environment: productionApply.environment || applyResult.environment || null,
-        createdPaymentTransfer: false,
-        liveProviderCalled: false,
-        sandbox_applied: Boolean(applyResult.applied),
-        payment_transfer_id: productionApply.payment_transfer_id || applyResult.payment_transfer_id || null,
-        observed_id: productionApply.observed_id || null,
-      };
+      try {
+        await client.query('SAVEPOINT aws_prod_moov_apply');
+        const productionApply = await applyProductionMoovWebhook(client, parsed.payload, {
+          mappedTenantId: mapped.mapped_tenant_id,
+          dryRun: false,
+        });
+        await client.query('RELEASE SAVEPOINT aws_prod_moov_apply');
+        applyResult = {
+          applied: Boolean(applyResult.applied || productionApply.applied),
+          financialTablesMutated: Boolean(applyResult.financialTablesMutated || productionApply.financialTablesMutated),
+          skipped: productionApply.skipped || applyResult.skipped,
+          mutations: [...(applyResult.mutations || []), ...(productionApply.mutations || [])],
+          environment: productionApply.environment || applyResult.environment || null,
+          createdPaymentTransfer: false,
+          liveProviderCalled: false,
+          sandbox_applied: Boolean(applyResult.applied),
+          payment_transfer_id: productionApply.payment_transfer_id || applyResult.payment_transfer_id || null,
+          observed_id: productionApply.observed_id || null,
+        };
+      } catch (applyErr) {
+        try { await client.query('ROLLBACK TO SAVEPOINT aws_prod_moov_apply'); } catch { /* keep receipt */ }
+        console.log(JSON.stringify({
+          kind: 'moov_webhook_production_apply_failed',
+          message: String(applyErr?.message || applyErr).slice(0, 200),
+        }));
+        applyResult = {
+          ...applyResult,
+          createdPaymentTransfer: false,
+          liveProviderCalled: false,
+          production_apply_error: String(applyErr?.message || applyErr).slice(0, 200),
+        };
+      }
     }
 
     await client.query('COMMIT');

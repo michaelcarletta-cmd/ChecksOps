@@ -24,6 +24,11 @@ import {
   productionMoovFetch,
 } from '../functions/api/providers/production/moov-client.mjs';
 import { FINANCIAL_OR_PROVIDER_TABLES } from '../functions/api/write-allowlist.mjs';
+import {
+  loadProviderSecrets,
+  resetProviderSecretsCache,
+  webhookSecret,
+} from '../functions/api/provider-secrets.mjs';
 
 const FREEDOM_TENANT = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
 const FUND_INTENT = '257b6033-eac0-4555-877e-a8cb4f801c8f';
@@ -469,4 +474,28 @@ test('extractTransferEvent maps completion fixture onto the known fund transfer'
   assert.equal(extracted.status, 'completed');
   assert.equal(extracted.completedOn, COMPLETED_ON);
   assert.equal(extracted.amountCents, 1);
+});
+
+test('loadProviderSecrets merges MOOV_WEBHOOK_SECRET from dedicated ARN', async () => {
+  const previousProvider = process.env.PROVIDER_SECRETS_ARN;
+  const previousWebhook = process.env.MOOV_WEBHOOK_SECRET_ARN;
+  process.env.PROVIDER_SECRETS_ARN = 'arn:provider';
+  process.env.MOOV_WEBHOOK_SECRET_ARN = 'arn:webhook';
+  resetProviderSecretsCache();
+  try {
+    const secrets = await loadProviderSecrets(async (arn) => {
+      if (arn === 'arn:provider') return JSON.stringify({ MOOV_PUBLIC_KEY: 'pk' });
+      if (arn === 'arn:webhook') return JSON.stringify({ MOOV_WEBHOOK_SECRET: 'dedicated-webhook-secret' });
+      throw new Error(`unexpected arn ${arn}`);
+    });
+    assert.equal(secrets.MOOV_PUBLIC_KEY, 'pk');
+    assert.equal(secrets.MOOV_WEBHOOK_SECRET, 'dedicated-webhook-secret');
+    assert.equal(webhookSecret(secrets, 'moov'), 'dedicated-webhook-secret');
+  } finally {
+    resetProviderSecretsCache();
+    if (previousProvider === undefined) delete process.env.PROVIDER_SECRETS_ARN;
+    else process.env.PROVIDER_SECRETS_ARN = previousProvider;
+    if (previousWebhook === undefined) delete process.env.MOOV_WEBHOOK_SECRET_ARN;
+    else process.env.MOOV_WEBHOOK_SECRET_ARN = previousWebhook;
+  }
 });
