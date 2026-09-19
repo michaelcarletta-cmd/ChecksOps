@@ -1,6 +1,6 @@
-import { withIdentityWrite } from '../../data.mjs';
+import { withIdentity, withIdentityWrite } from '../../data.mjs';
 import { isProviderNetworkError, providerEgressFailure } from '../../sandbox-credentials.mjs';
-import { executionAllowed } from '../../provider-flags.mjs';
+import { executionAllowed, providerLiveReadsEnabled } from '../../provider-flags.mjs';
 import { providerSandboxExecutionEnabled } from '../../sandbox-flags.mjs';
 import { handleProductionMoovTransferStatus } from './moov-transfer-status.mjs';
 import { handleProductionMoovPayoutOrchestrate } from './moov-payout-orchestrate.mjs';
@@ -12,15 +12,32 @@ const PRODUCTION_MOOV_FUNCTIONS = new Set([
   'moov-tenant-environment',
 ]);
 
+/** Live zip providers.mjs still routes these names before money handlers. */
+const PRODUCTION_MOOV_LIVE_READ_FUNCTIONS = new Set([
+  'moov-wallet-status',
+  'moov-readiness',
+  'moov-wallet-sync',
+  'moov-sweep-config',
+  'moov-payout-orchestrate',
+]);
+
 export const hasProductionMoovHandler = (name) => PRODUCTION_MOOV_FUNCTIONS.has(name);
+
+export const hasProductionMoovLiveReadHandler = (name) => PRODUCTION_MOOV_LIVE_READ_FUNCTIONS.has(name);
 
 export const productionMoovGetReconcileAllowed = () => (
   executionAllowed('moov') && !providerSandboxExecutionEnabled()
 );
 
-const wrap = (handler) => async (event, deps = {}) => (
-  withIdentityWrite(event, async ({ client, mapping, claims, body, spoof }) => {
+const wrapNetwork = (handler, identityFn, productionExecution) => async (event, deps = {}) => (
+  identityFn(event, async ({ client, mapping, claims, body, spoof }) => {
     try {
+      try {
+        const { bindMoovProductionGucs } = await import('./moov-idempotency.mjs');
+        await bindMoovProductionGucs(client, mapping, claims);
+      } catch {
+        /* Live zip has this helper. Git tests do not. */
+      }
       const result = await handler({
         client,
         mapping,
@@ -50,13 +67,16 @@ const wrap = (handler) => async (event, deps = {}) => (
           applicationUserId: mapping.application_user_id,
           createdPaymentTransfer: false,
           liveProviderPosted: false,
-          productionExecution: true,
+          productionExecution,
         };
       }
       throw error;
     }
   }, deps)
 );
+
+const wrap = (handler) => wrapNetwork(handler, withIdentityWrite, true);
+const wrapRead = (handler) => wrapNetwork(handler, withIdentity, false);
 
 const HANDLERS = {
   'moov-transfer-status': wrap(handleProductionMoovTransferStatus),
@@ -71,6 +91,32 @@ export const runProductionMoovHandler = (name, event, deps = {}) => {
   }
   if (!productionMoovGetReconcileAllowed()) return null;
   const handler = HANDLERS[name];
+  if (!handler) return null;
+  return handler(event, deps);
+};
+
+const productionMoovLiveReadsAllowed = () => (
+  providerLiveReadsEnabled() && !providerSandboxExecutionEnabled()
+);
+
+export const runProductionMoovLiveReadHandler = async (name, event, deps = {}) => {
+  if (!productionMoovLiveReadsAllowed()) return null;
+  if (name === 'moov-payout-orchestrate') return null;
+  let liveRead;
+  let sweep;
+  try {
+    liveRead = await import('./moov-live-read.mjs');
+    sweep = await import('./moov-sweep-config.mjs');
+  } catch {
+    return null;
+  }
+  const LIVE_READ_HANDLERS = {
+    'moov-wallet-status': wrapRead(liveRead.handleProductionMoovWalletStatus),
+    'moov-readiness': wrapRead(liveRead.handleProductionMoovReadiness),
+    'moov-wallet-sync': wrapRead(liveRead.handleProductionMoovWalletSync),
+    'moov-sweep-config': wrapRead(sweep.handleProductionMoovSweepConfig),
+  };
+  const handler = LIVE_READ_HANDLERS[name];
   if (!handler) return null;
   return handler(event, deps);
 };
