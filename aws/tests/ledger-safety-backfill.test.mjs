@@ -440,7 +440,10 @@ test('SQL artifacts restore Lovable writer and fail-closed org guard', () => {
   assert.match(guard, /auto_link_check_to_claim/);
   assert.match(guard, /tg_auto_link_check_to_claim/);
   assert.match(guard, /check_claim_link_allowed/);
+  assert.match(guard, /ocr_unique_tenant_claim_id/);
   assert.match(guard, /IN \('unlinked', 'same_org'\)/);
+  assert.equal(/\[\^A-Z0-9\]/.test(guard), false);
+  assert.equal(/ORDER BY c\.created_at ASC/.test(guard), false);
 
   const writer = readFileSync('supabase/migrations/20260918170040_one_check_received_writer.sql', 'utf8');
   assert.match(writer, /hle_on_check_intake_insert/);
