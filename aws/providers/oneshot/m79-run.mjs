@@ -482,6 +482,58 @@ const main = async () => {
     console.log(JSON.stringify(report, null, 2));
     return;
   }
+  if (step === 'verify') {
+    const tenantId = inspect.designated?.id;
+    report.switch = invokeOneshot({ step: 'switch', tenantId });
+    report.verify = invokeOneshot({ step: 'verify', tenantId });
+    try {
+      const staging = inspectSecrets('checksops/staging/providers');
+      report.stagingProviderSandbox = {
+        secretName: staging.secretName,
+        sandbox: staging.sandbox,
+        missingSandbox: staging.missingSandbox,
+        sandboxCopiedFromProduction: staging.sandboxEqualsProductionPublic || staging.sandboxEqualsProductionSecret,
+        usedForProductionPrep: false,
+      };
+    } catch (error) {
+      report.stagingProviderSandbox = { readable: false, error: String(error?.message || error).slice(0, 180) };
+    }
+    report.authProbe = await probe('/auth/login', 'POST', { email: 'nobody@example.com', password: 'invalid' });
+    report.webhookUnsigned = await probe('/webhooks/moov', 'POST', { type: 'transfer.updated' });
+    report.providersStatus = await probe('/providers/status', 'GET');
+    report.stopped = report.secrets.provider.missingSandbox.length
+      ? 'sandbox_credentials_missing_on_production_prep_secret'
+      : null;
+    fs.writeFileSync('/opt/cursor/artifacts/m79_verify.json', JSON.stringify(report, null, 2));
+    console.log(JSON.stringify({
+      ok: report.verify?.ok === true && report.authProbe?.status !== 500,
+      designated: inspect.designated,
+      switch: report.switch,
+      verify: {
+        ok: report.verify?.ok,
+        tenant: report.verify?.tenant,
+        freedomEnvironment: report.verify?.freedomEnvironment,
+        audit: report.verify?.audit,
+        sandbox: report.verify?.sandbox && {
+          account: Boolean(report.verify.sandbox.account),
+          wallet: Boolean(report.verify.sandbox.wallet),
+          banks: report.verify.sandbox.banks?.length || 0,
+          recipients: report.verify.sandbox.recipients?.length || 0,
+          productionIdHits: report.verify.sandbox.productionIdHits,
+        },
+        productionIgnored: report.verify?.productionIgnored,
+      },
+      productionPrepSandbox: report.secrets.provider.sandbox,
+      missingSandbox: report.secrets.provider.missingSandbox,
+      stagingProviderSandbox: report.stagingProviderSandbox,
+      authProbe: report.authProbe,
+      webhookUnsigned: report.webhookUnsigned,
+      POST_ARMED: report.POST_ARMED,
+      SANDBOX_POST_ARMED: report.SANDBOX_POST_ARMED,
+      stopped: report.stopped,
+    }, null, 2));
+    return;
+  }
   if (!inspect.sql77Safe) {
     report.stopped = 'sql77_preflight_failed';
     console.log(JSON.stringify(report, null, 2));

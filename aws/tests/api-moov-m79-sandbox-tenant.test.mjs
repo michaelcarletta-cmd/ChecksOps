@@ -26,6 +26,7 @@ test('M7.9 runner overlays M7.8 files without replacing money writers or auth', 
   assert.match(src, /overlay mutated protected file/);
   assert.match(sourceOf('../functions/api/provider-flags.mjs'), /export const moovTransferPostEnabled = productionMoovTransferPostEnabled/);
   assert.match(src, /overlay missing exports/);
+  assert.match(src, /sandbox_credentials_missing_on_production_prep_secret/);
   assert.doesNotMatch(src, /AWS_MOOV_TRANSFER_POST_ENABLED': 'true'/);
   assert.equal(hasProductionMoovHandler('moov-tenant-environment'), true);
   assert.equal(hasProductionMoovLiveReadHandler('moov-wallet-status'), true);
