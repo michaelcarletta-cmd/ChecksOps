@@ -117,6 +117,20 @@ export const loadProviderSecrets = async (getSecretString = getSecretStringFromA
       fromManager = {};
     }
   }
+  const webhookArn = String(process.env.MOOV_WEBHOOK_SECRET_ARN || '').trim();
+  if (webhookArn) {
+    try {
+      const raw = await getSecretString(webhookArn);
+      const parsed = parseSecretObject(raw);
+      if (parsed && typeof parsed === 'object' && Object.keys(parsed).length) {
+        fromManager = { ...fromManager, ...parsed };
+      } else if (typeof raw === 'string' && raw.trim()) {
+        fromManager = { ...fromManager, MOOV_WEBHOOK_SECRET: raw.trim() };
+      }
+    } catch {
+      /* dedicated webhook secret is optional until configured */
+    }
+  }
   const merged = { ...fromManager };
   for (const key of SECRET_KEYS) {
     if (!merged[key] && process.env[key]) merged[key] = process.env[key];
@@ -141,6 +155,7 @@ export const providerSecretsConfigured = async () => {
   const secrets = await loadProviderSecrets();
   return {
     providerSecretsArnConfigured: Boolean(process.env.PROVIDER_SECRETS_ARN),
+    moovWebhookSecretArnConfigured: Boolean(process.env.MOOV_WEBHOOK_SECRET_ARN),
     ...configuredFlags(secrets),
     moovWebhookSecretConfigured: Boolean(webhookSecret(secrets, 'moov')),
     checkaltWebhookSecretConfigured: Boolean(webhookSecret(secrets, 'checkalt')),

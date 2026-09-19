@@ -43,6 +43,7 @@ import { useSweepConfig } from "@/hooks/useSweepConfig";
 import {
   useAllTenantWalletBalances,
   useRefreshTransferStatuses,
+  useWalletOpsProviderActivity,
   useWalletOpsReadiness,
   useWalletOpsTransfers,
   useWalletRunningBalance,
@@ -145,6 +146,7 @@ export default function WalletOps() {
     save,
   } = useSweepConfig("operating");
   const { data: transferData, isLoading: transfersLoading } = useWalletOpsTransfers();
+  const { data: providerActivity = [] } = useWalletOpsProviderActivity();
   const refreshStatuses = useRefreshTransferStatuses();
 
   const { data: readiness } = useWalletOpsReadiness();
@@ -655,7 +657,7 @@ export default function WalletOps() {
         }
       >
 
-        {ledger.length === 0 && (transferData?.transfers.length ?? 0) === 0 ? (
+        {ledger.length === 0 && (transferData?.transfers.length ?? 0) === 0 && providerActivity.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             No wallet activity yet. Funding, payouts, and automatic payouts appear here.
           </p>
@@ -686,7 +688,11 @@ export default function WalletOps() {
               <div key={t.id} className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm">
                 <div className="min-w-0">
                   <p className="truncate font-medium">
-                    {t.is_facilitator_fee ? "Processing fee" : t.description || "Payout"}
+                    {t.is_facilitator_fee
+                      ? "Processing fee"
+                      : t.leg_role === "wallet_funding" || t.leg_role === "funding"
+                        ? "BANK → WALLET"
+                        : t.description || "Payout"}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {new Date(t.created_at).toLocaleString()}
@@ -703,6 +709,37 @@ export default function WalletOps() {
                 </div>
               </div>
             ))}
+            {providerActivity.slice(0, 6).map((row) => {
+              const isSweep = row.origin === "provider_sweep" || String(row.activity_kind || "").startsWith("sweep");
+              const from = String(row.source_rail || "").includes("wallet") ? "WALLET" : "BANK";
+              const to = String(row.destination_rail || "").includes("wallet") ? "WALLET" : "CHECKING";
+              return (
+                <div key={row.id} className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">
+                      {isSweep ? `${from} → ${to}` : "Provider activity"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {isSweep ? "Sweep · provider-created" : "Observed · not a ChecksOps transfer"}
+                      {" · "}
+                      {new Date(row.provider_created_at || row.observed_at).toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-[10px] border-muted-foreground/30 text-muted-foreground">
+                      Sweep
+                    </Badge>
+                    <Badge
+                      variant="outline"
+                      className={`text-[10px] ${STATUS_TONE[(row.status ?? "").toLowerCase()] ?? "border-muted-foreground/30 text-muted-foreground"}`}
+                    >
+                      {row.status}
+                    </Badge>
+                    <span className="font-semibold">{money(Number(row.amount_cents || 0))}</span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </SectionCard>

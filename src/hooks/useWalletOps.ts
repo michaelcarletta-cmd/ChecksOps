@@ -48,12 +48,48 @@ export function useWalletOpsTransfers(limit = 25) {
       return {
         transfers: rows,
         pendingOutCents: inFlight
-          .filter((r) => r.leg_role !== "funding")
+          .filter((r) => r.leg_role !== "funding" && r.leg_role !== "wallet_funding")
           .reduce((sum, r) => sum + Number(r.amount_cents || 0), 0),
         pendingInCents: inFlight
-          .filter((r) => r.leg_role === "funding")
+          .filter((r) => r.leg_role === "funding" || r.leg_role === "wallet_funding")
           .reduce((sum, r) => sum + Number(r.amount_cents || 0), 0),
       };
+    },
+  });
+}
+
+export interface WalletOpsProviderActivity {
+  id: string;
+  origin: string | null;
+  activity_kind: string | null;
+  provider_transfer_id: string;
+  status: string | null;
+  amount_cents: number | null;
+  source_rail: string | null;
+  destination_rail: string | null;
+  provider_created_at: string | null;
+  observed_at: string;
+}
+
+/** Provider-created activity (Moov Sweep). Observe-only — not a ChecksOps money intent. */
+export function useWalletOpsProviderActivity(limit = 25) {
+  const { tenantId, enabled } = usePaymentProviderEligibility();
+
+  return useQuery({
+    queryKey: ["wallet-ops-provider-activity", tenantId, limit],
+    enabled: !!tenantId && enabled,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("payment_provider_activity")
+        .select(
+          "id, origin, activity_kind, provider_transfer_id, status, amount_cents, source_rail, destination_rail, provider_created_at, observed_at",
+        )
+        .eq("tenant_id", tenantId!)
+        .order("observed_at", { ascending: false })
+        .limit(limit);
+      if (error) throw error;
+      return (data ?? []) as WalletOpsProviderActivity[];
     },
   });
 }
@@ -77,6 +113,7 @@ export function useRefreshTransferStatuses() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["wallet-ops-transfers"] });
+      queryClient.invalidateQueries({ queryKey: ["wallet-ops-provider-activity"] });
       queryClient.invalidateQueries({ queryKey: ["wallet-running-balance"] });
     },
   });

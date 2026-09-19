@@ -139,10 +139,11 @@ export const PRODUCTION_MOOV_READ_PATH_RE = new RegExp(
   '^/accounts/[^/?#]+'
   + '(?:'
     + '|/capabilities(?:/[A-Za-z0-9._-]+)?'
-    + '|/wallets(?:/[^/?#]+)?'
+    + '|/wallets(?:/[^/?#]+(?:/sweeps(?:/[^/?#]+)?)?)?'
     + '|/bank-accounts(?:/[^/?#]+(?:/(?:verify|verification))?)?'
     + '|/payment-methods(?:/[^/?#]+)?'
     + '|/transfers/[^/?#]+'
+    + '|/sweep-configs(?:/[^/?#]+)?'
   + ')?$',
 );
 
@@ -162,7 +163,10 @@ export const PRODUCTION_MOOV_BANK_VERIFY_WRITE_PATH_RE = new RegExp(
   'i',
 );
 
-export const isProductionMoovReadPath = (path) => PRODUCTION_MOOV_READ_PATH_RE.test(String(path || ''));
+export const isProductionMoovReadPath = (path) => {
+  const raw = String(path || '').split('?')[0];
+  return PRODUCTION_MOOV_READ_PATH_RE.test(raw);
+};
 
 export const assertReadOnlyMoovRequest = ({ method = 'GET', path } = {}) => {
   const verb = String(method || 'GET').toUpperCase();
