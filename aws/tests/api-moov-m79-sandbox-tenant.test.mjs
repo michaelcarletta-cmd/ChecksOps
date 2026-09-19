@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import {
+  hasProductionMoovHandler,
+  hasProductionMoovLiveReadHandler,
+} from '../functions/api/providers/production/moov-dispatch.mjs';
 
 const sourceOf = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8');
 
@@ -20,8 +24,16 @@ test('M7.9 runner overlays M7.8 files without replacing money writers or auth', 
   assert.match(src, /providers\/moov-tenant-environment.mjs/);
   assert.match(src, /auth-cognito.mjs/);
   assert.match(src, /overlay mutated protected file/);
-  assert.match(src, /Never arms AWS_MOOV_TRANSFER_POST_ENABLED/);
+  assert.match(sourceOf('../functions/api/provider-flags.mjs'), /export const moovTransferPostEnabled = productionMoovTransferPostEnabled/);
+  assert.match(src, /overlay missing exports/);
   assert.doesNotMatch(src, /AWS_MOOV_TRANSFER_POST_ENABLED': 'true'/);
+  assert.equal(hasProductionMoovHandler('moov-tenant-environment'), true);
+  assert.equal(hasProductionMoovLiveReadHandler('moov-wallet-status'), true);
+  assert.equal(hasProductionMoovLiveReadHandler('moov-payout-orchestrate'), true);
+  assert.match(
+    sourceOf('../functions/api/providers/production/moov-dispatch.mjs'),
+    /export const runProductionMoovLiveReadHandler/,
+  );
 });
 
 test('SQL 77 still does not bulk-switch tenants or mention Freedom', () => {

@@ -225,6 +225,67 @@ const invokeOneshot = (payload) => {
 
 const sha256File = (file) => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 
+const namedExportsOf = (src) => {
+  const names = new Set();
+  for (const match of src.matchAll(/export\s+(?:async\s+)?(?:function|const|class|let|var)\s+([A-Za-z0-9_]+)/g)) {
+    names.add(match[1]);
+  }
+  for (const match of src.matchAll(/export\s*\{([^}]+)\}/g)) {
+    for (const part of match[1].split(',')) {
+      const bits = part.trim();
+      if (!bits) continue;
+      const name = bits.includes(' as ') ? bits.split(/\s+as\s+/).pop().trim() : bits;
+      if (name) names.add(name);
+    }
+  }
+  return names;
+};
+
+const walkMjs = (dir) => {
+  const out = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...walkMjs(full));
+    else if (entry.name.endsWith('.mjs')) out.push(full);
+  }
+  return out;
+};
+
+const assertOverlayExports = (unpacked) => {
+  const overlayAbs = new Set(OVERLAY_FILES.map((rel) => path.join(unpacked, rel)));
+  const exportCache = new Map();
+  const missing = [];
+  for (const file of walkMjs(unpacked)) {
+    const src = fs.readFileSync(file, 'utf8');
+    for (const match of src.matchAll(/import\s*\{([^}]+)\}\s*from\s*['"](\.[^'"]+)['"]/g)) {
+      let resolved = path.resolve(path.dirname(file), match[2]);
+      if (!resolved.endsWith('.mjs')) {
+        if (fs.existsSync(`${resolved}.mjs`)) resolved = `${resolved}.mjs`;
+        else continue;
+      }
+      if (!overlayAbs.has(resolved) || !fs.existsSync(resolved)) continue;
+      if (!exportCache.has(resolved)) exportCache.set(resolved, namedExportsOf(fs.readFileSync(resolved, 'utf8')));
+      const exported = exportCache.get(resolved);
+      for (const part of match[1].split(',')) {
+        const bits = part.trim();
+        if (!bits) continue;
+        const name = bits.includes(' as ') ? bits.split(/\s+as\s+/)[0].trim() : bits;
+        if (name && !exported.has(name)) {
+          missing.push({
+            file: path.relative(unpacked, file),
+            from: path.relative(unpacked, resolved),
+            name,
+          });
+        }
+      }
+    }
+  }
+  if (missing.length) {
+    throw new Error(`overlay missing exports: ${JSON.stringify(missing).slice(0, 1500)}`);
+  }
+  return { ok: true, overlayFilesChecked: OVERLAY_FILES.length };
+};
+
 const overlayApi = () => {
   const work = path.join(os.tmpdir(), 'checksops-m79-overlay');
   fs.rmSync(work, { recursive: true, force: true });
@@ -256,6 +317,7 @@ const overlayApi = () => {
       throw new Error(`overlay mutated protected file ${rel}`);
     }
   }
+  const exportCompat = assertOverlayExports(unpacked);
   const outZip = path.join(work, 'overlay.zip');
   run('zip', ['-qr', outZip, '.'], { cwd: unpacked });
   const before = awsJson(['lambda', 'get-function-configuration', '--function-name', API_FN]);
@@ -273,6 +335,7 @@ const overlayApi = () => {
     envUnchanged: JSON.stringify(before.Environment?.Variables) === JSON.stringify(after.Environment?.Variables),
     POST_FLAG: after.Environment?.Variables?.AWS_MOOV_TRANSFER_POST_ENABLED || null,
     SANDBOX_POST_FLAG: after.Environment?.Variables?.AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED || null,
+    exportCompat,
   };
 };
 
@@ -379,6 +442,28 @@ const main = async () => {
     SANDBOX_POST_ARMED: flags.flags.AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED === 'true',
   };
 
+  if (step === 'overlay') {
+    report.overlay = overlayApi();
+    report.authProbe = await probe('/auth/login', 'POST', { email: 'nobody@example.com', password: 'invalid' });
+    report.webhookUnsigned = await probe('/webhooks/moov', 'POST', { type: 'transfer.updated' });
+    report.providersStatus = await probe('/providers/status', 'GET');
+    fs.writeFileSync('/opt/cursor/artifacts/m79_overlay_fix.json', JSON.stringify(report, null, 2));
+    console.log(JSON.stringify({
+      ok: report.overlay?.lastUpdateStatus === 'Successful' && report.authProbe?.status !== 500,
+      overlay: {
+        beforeSha: report.overlay.beforeSha,
+        afterSha: report.overlay.afterSha,
+        envUnchanged: report.overlay.envUnchanged,
+        protectedUnchanged: report.overlay.protectedUnchanged,
+        POST_FLAG: report.overlay.POST_FLAG,
+      },
+      authProbe: report.authProbe,
+      webhookUnsigned: report.webhookUnsigned,
+      providersStatus: report.providersStatus,
+    }, null, 2));
+    return;
+  }
+
   if (step === 'aws-inspect') {
     fs.writeFileSync('/opt/cursor/artifacts/m79_aws_inspect.json', JSON.stringify(report, null, 2));
     console.log(JSON.stringify(report, null, 2));
@@ -402,8 +487,8 @@ const main = async () => {
     console.log(JSON.stringify(report, null, 2));
     process.exit(2);
   }
-  if (step === 'apply' || step === 'all') {
-    report.sql77 = invokeOneshot({ step: 'apply_sql77' });
+  if (step === 'apply' || step === 'all' || step === 'overlay') {
+    if (step !== 'overlay') report.sql77 = invokeOneshot({ step: 'apply_sql77' });
     report.overlay = overlayApi();
     report.authProbe = await probe('/auth/login', 'POST', { email: 'nobody@example.com', password: 'invalid' });
     report.webhookUnsigned = await probe('/webhooks/moov', 'POST', { type: 'transfer.updated' });

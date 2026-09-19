@@ -50,6 +50,9 @@ export const providerWebhookDryRun = () => {
 /** Production Moov transfer POST. Independent of sandbox execution. Default false. */
 export const productionMoovTransferPostEnabled = () => isTrue(process.env.AWS_MOOV_TRANSFER_POST_ENABLED);
 
+/** Live money writers still import this name. Alias must remain production-gated. */
+export const moovTransferPostEnabled = productionMoovTransferPostEnabled;
+
 /** Sandbox Moov transfer POST. Independent of production POST. Default false. */
 export const sandboxMoovTransferPostEnabled = () => isTrue(process.env.AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED);
 
