@@ -190,6 +190,16 @@ const probe = async (pathName, method = 'GET', body = null, headers = {}) => {
   };
 };
 
+const claimAccountId = (token) => {
+  if (!token || String(token).split('.').length !== 3) return null;
+  try {
+    const claims = JSON.parse(Buffer.from(String(token).split('.')[1], 'base64url').toString('utf8'));
+    return claims?.accountID || claims?.account_id || claims?.aid || null;
+  } catch {
+    return null;
+  }
+};
+
 const moovOauth = async ({ publicKey, secretKey, origin, scopes }) => {
   const started = Date.now();
   const res = await fetch('https://api.moov.io/oauth2/token', {
@@ -206,34 +216,31 @@ const moovOauth = async ({ publicKey, secretKey, origin, scopes }) => {
   });
   const json = await res.json().catch(() => null);
   const token = json?.access_token || null;
-  let claims = null;
-  if (token && String(token).split('.').length === 3) {
-    try {
-      claims = JSON.parse(Buffer.from(String(token).split('.')[1], 'base64url').toString('utf8'));
-    } catch {
-      claims = null;
-    }
-  }
+  const accountId = claimAccountId(token);
   return {
     ok: res.ok && Boolean(token),
     status: res.status,
     ms: Date.now() - started,
+    token,
     tokenType: json?.token_type || null,
-    scope: json?.scope || (Array.isArray(claims?.scope) ? claims.scope.join(' ') : claims?.scope) || null,
-    accountFp: fingerprint(claims?.accountID || claims?.account_id || claims?.aid),
+    scope: json?.scope || null,
+    accountId,
+    accountFp: fingerprint(accountId),
     origin,
     scopes,
   };
 };
 
-const moovGet = async ({ token, origin, apiVersion, path }) => {
+const moovGet = async ({ token, origin, apiVersion, path, extraHeaders = {} }) => {
   const res = await fetch(`https://api.moov.io${path}`, {
     method: 'GET',
     headers: {
       Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
       Accept: 'application/json',
       Origin: origin,
       'x-moov-version': apiVersion,
+      ...extraHeaders,
     },
   });
   const json = await res.json().catch(() => null);
@@ -242,6 +249,7 @@ const moovGet = async ({ token, origin, apiVersion, path }) => {
     status: res.status,
     path,
     versionEcho: res.headers.get('x-moov-version') || res.headers.get('X-Moov-Version') || null,
+    error: json?.error || json?.message || null,
     json,
   };
 };
@@ -330,23 +338,37 @@ const inspectPhase = (staging, production, webhookSecret) => {
 
 const proveSandbox = async (staging, production) => {
   const s = staging.parsed;
-  const p = production.parsed;
   const originCandidates = [...new Set([
     PROVEN_ORIGIN,
     originHost(s.MOOV_SANDBOX_ALLOWED_ORIGIN),
   ].filter(Boolean))];
   const oauthByOrigin = [];
   for (const origin of originCandidates) {
-    oauthByOrigin.push(await moovOauth({
+    const row = await moovOauth({
       publicKey: s.MOOV_SANDBOX_PUBLIC_KEY,
       secretKey: s.MOOV_SANDBOX_SECRET_KEY,
       origin,
       scopes: ['/accounts.read'],
-    }));
+    });
+    oauthByOrigin.push({
+      ok: row.ok,
+      status: row.status,
+      ms: row.ms,
+      tokenType: row.tokenType,
+      scope: row.scope,
+      accountFp: row.accountFp,
+      origin: row.origin,
+      scopes: row.scopes,
+    });
   }
-  const oauth = oauthByOrigin.find((row) => row.ok) || oauthByOrigin[0];
   const checksopsOriginOauth = oauthByOrigin.find((row) => row.origin === PROVEN_ORIGIN) || null;
-  if (!oauth?.ok) {
+  const bootstrap = await moovOauth({
+    publicKey: s.MOOV_SANDBOX_PUBLIC_KEY,
+    secretKey: s.MOOV_SANDBOX_SECRET_KEY,
+    origin: PROVEN_ORIGIN,
+    scopes: ['/accounts.read'],
+  });
+  if (!bootstrap.ok) {
     return {
       ok: false,
       stopped: 'sandbox_oauth_failed',
@@ -355,67 +377,120 @@ const proveSandbox = async (staging, production) => {
       providerMutation: false,
     };
   }
-  const tokenRes = await fetch('https://api.moov.io/oauth2/token', {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${Buffer.from(`${s.MOOV_SANDBOX_PUBLIC_KEY}:${s.MOOV_SANDBOX_SECRET_KEY}`).toString('base64')}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-      Origin: oauth.origin,
-    },
-    body: new URLSearchParams({ grant_type: 'client_credentials', scope: '/accounts.read /webhooks.read' }),
+  const appAccountId = bootstrap.accountId;
+  const platformId = s.MOOV_SANDBOX_PLATFORM_ACCOUNT_ID;
+  const resourceOrigin = originHost(s.MOOV_SANDBOX_ALLOWED_ORIGIN) || PROVEN_ORIGIN;
+  const profileOauth = await moovOauth({
+    publicKey: s.MOOV_SANDBOX_PUBLIC_KEY,
+    secretKey: s.MOOV_SANDBOX_SECRET_KEY,
+    origin: resourceOrigin,
+    scopes: [`/accounts/${platformId}/profile.read`, `/accounts/${platformId}/capabilities.read`],
   });
-  const tokenJson = await tokenRes.json().catch(() => null);
-  const token = tokenJson?.access_token;
-  const webhookOauthOk = tokenRes.ok && Boolean(token);
-  const getToken = webhookOauthOk ? token : (await fetch('https://api.moov.io/oauth2/token', {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${Buffer.from(`${s.MOOV_SANDBOX_PUBLIC_KEY}:${s.MOOV_SANDBOX_SECRET_KEY}`).toString('base64')}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-      Origin: oauth.origin,
-    },
-    body: new URLSearchParams({ grant_type: 'client_credentials', scope: '/accounts.read' }),
-  }).then((res) => res.json())).access_token;
-
-  const platformGet = await moovGet({
-    token: getToken,
-    origin: oauth.origin,
+  const appProfileOauth = appAccountId ? await moovOauth({
+    publicKey: s.MOOV_SANDBOX_PUBLIC_KEY,
+    secretKey: s.MOOV_SANDBOX_SECRET_KEY,
+    origin: resourceOrigin,
+    scopes: [`/accounts/${appAccountId}/profile.read`],
+  }) : { ok: false, status: null };
+  const platformGet = profileOauth.ok ? await moovGet({
+    token: profileOauth.token,
+    origin: resourceOrigin,
     apiVersion: PROVEN_API_VERSION,
-    path: `/accounts/${s.MOOV_SANDBOX_PLATFORM_ACCOUNT_ID}`,
+    path: `/accounts/${platformId}`,
+  }) : { ok: false, status: profileOauth.status, versionEcho: null, json: null, error: null, path: `/accounts/${platformId}` };
+  const platformGetOnBehalf = (!platformGet.ok && profileOauth.ok) ? await moovGet({
+    token: profileOauth.token,
+    origin: resourceOrigin,
+    apiVersion: PROVEN_API_VERSION,
+    path: `/accounts/${platformId}`,
+    extraHeaders: { 'X-Account-ID': platformId },
+  }) : null;
+  const pingOauth = await moovOauth({
+    publicKey: s.MOOV_SANDBOX_PUBLIC_KEY,
+    secretKey: s.MOOV_SANDBOX_SECRET_KEY,
+    origin: resourceOrigin,
+    scopes: ['/ping.read'],
   });
-  const freedomGet = await moovGet({
-    token: getToken,
-    origin: oauth.origin,
+  const pingVariants = [];
+  if (pingOauth.ok) {
+    for (const variant of [
+      { name: 'full', extraHeaders: {} },
+      { name: 'no_origin', extraHeaders: { Origin: undefined } },
+      { name: 'staging_origin', extraHeaders: { Origin: 'https://staging.checksops.com' } },
+    ]) {
+      const headers = {
+        Authorization: `Bearer ${pingOauth.token}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        'x-moov-version': PROVEN_API_VERSION,
+      };
+      if (variant.name === 'no_origin') delete headers.Origin;
+      else headers.Origin = variant.name === 'staging_origin' ? 'https://staging.checksops.com' : PROVEN_ORIGIN;
+      const res = await fetch('https://api.moov.io/ping', { method: 'GET', headers });
+      const text = await res.text();
+      pingVariants.push({
+        name: variant.name,
+        status: res.status,
+        contentType: res.headers.get('content-type'),
+        wwwAuth: res.headers.get('www-authenticate') ? 'present' : null,
+        versionEcho: res.headers.get('x-moov-version'),
+        bodyLen: text.length,
+        bodyLooksJson: text.trim().startsWith('{') || text.trim().startsWith('['),
+        error: (() => {
+          try { return JSON.parse(text)?.error || JSON.parse(text)?.message || null; } catch { return text.slice(0, 80); }
+        })(),
+      });
+    }
+  }
+  const appGet = appProfileOauth.ok ? await moovGet({
+    token: appProfileOauth.token,
+    origin: resourceOrigin,
+    apiVersion: PROVEN_API_VERSION,
+    path: `/accounts/${appAccountId}`,
+  }) : { ok: false, status: appProfileOauth.status, versionEcho: null, json: null };
+  const capsGet = profileOauth.ok ? await moovGet({
+    token: profileOauth.token,
+    origin: resourceOrigin,
+    apiVersion: PROVEN_API_VERSION,
+    path: `/accounts/${platformId}/capabilities`,
+  }) : { ok: false, status: profileOauth.status, json: null };
+  const freedomScopeOauth = await moovOauth({
+    publicKey: s.MOOV_SANDBOX_PUBLIC_KEY,
+    secretKey: s.MOOV_SANDBOX_SECRET_KEY,
+    origin: resourceOrigin,
+    scopes: [`/accounts/${FREEDOM_MOOV}/profile.read`],
+  });
+  const freedomGet = freedomScopeOauth.ok ? await moovGet({
+    token: freedomScopeOauth.token,
+    origin: resourceOrigin,
     apiVersion: PROVEN_API_VERSION,
     path: `/accounts/${FREEDOM_MOOV}`,
+  }) : { ok: false, status: freedomScopeOauth.status, json: null };
+  const prodPlatformScopeOauth = await moovOauth({
+    publicKey: s.MOOV_SANDBOX_PUBLIC_KEY,
+    secretKey: s.MOOV_SANDBOX_SECRET_KEY,
+    origin: resourceOrigin,
+    scopes: [`/accounts/${PRODUCTION_PLATFORM}/profile.read`],
   });
-  const productionPlatformGet = await moovGet({
-    token: getToken,
-    origin: oauth.origin,
+  const productionPlatformGet = prodPlatformScopeOauth.ok ? await moovGet({
+    token: prodPlatformScopeOauth.token,
+    origin: resourceOrigin,
     apiVersion: PROVEN_API_VERSION,
     path: `/accounts/${PRODUCTION_PLATFORM}`,
-  });
-  const listGet = await moovGet({
-    token: getToken,
-    origin: oauth.origin,
-    apiVersion: PROVEN_API_VERSION,
-    path: '/accounts',
-  });
-  const listed = Array.isArray(listGet.json) ? listGet.json
-    : Array.isArray(listGet.json?.accounts) ? listGet.json.accounts
-      : [];
-  const listedIds = listed.map((row) => String(row.accountID || row.accountId || '').toLowerCase()).filter(Boolean);
-  const productionLeak = listedIds.some((id) => PRODUCTION_IDS.has(id))
-    || (freedomGet.ok === true)
-    || (productionPlatformGet.ok === true)
-    || (accountSafe(platformGet.json)?.isProductionId === true);
+  }) : { ok: false, status: prodPlatformScopeOauth.status, json: null };
 
-  const webhooks = await moovGet({
-    token: getToken,
-    origin: oauth.origin,
+  const webhookOauth = await moovOauth({
+    publicKey: s.MOOV_SANDBOX_PUBLIC_KEY,
+    secretKey: s.MOOV_SANDBOX_SECRET_KEY,
+    origin: resourceOrigin,
+    scopes: ['/webhooks.read'],
+  });
+  const webhooks = webhookOauth.ok ? await moovGet({
+    token: webhookOauth.token,
+    origin: resourceOrigin,
     apiVersion: PROVEN_API_VERSION,
     path: '/webhooks',
-  });
+  }) : { ok: false, status: webhookOauth.status, json: null };
   const webhookRows = Array.isArray(webhooks.json) ? webhooks.json
     : Array.isArray(webhooks.json?.webhooks) ? webhooks.json.webhooks
       : [];
@@ -428,16 +503,22 @@ const proveSandbox = async (staging, production) => {
   const preferredUrl = 'https://checksops.com/prep/webhooks/moov';
   const matching = webhookSummary.filter((row) => String(row.url || '').replace(/\/$/, '') === preferredUrl.replace(/\/$/, ''));
   let secretMatch = null;
-  if (matching[0]?.idFp && present(s.MOOV_SANDBOX_WEBHOOK_SECRET)) {
+  if (matching.length && present(s.MOOV_SANDBOX_WEBHOOK_SECRET)) {
     const full = webhookRows.find((row) => fingerprint(row.webhookID || row.webhookId || row.id) === matching[0].idFp);
     const webhookId = full?.webhookID || full?.webhookId || full?.id;
     if (webhookId) {
-      const secretGet = await moovGet({
-        token: getToken,
-        origin: oauth.origin,
+      const secretOauth = await moovOauth({
+        publicKey: s.MOOV_SANDBOX_PUBLIC_KEY,
+        secretKey: s.MOOV_SANDBOX_SECRET_KEY,
+        origin: resourceOrigin,
+        scopes: ['/webhooks.read'],
+      });
+      const secretGet = secretOauth.ok ? await moovGet({
+        token: secretOauth.token,
+        origin: resourceOrigin,
         apiVersion: PROVEN_API_VERSION,
         path: `/webhooks/${webhookId}/secret`,
-      });
+      }) : { ok: false, status: secretOauth.status, json: null };
       const remote = secretGet.json?.secret || secretGet.json?.webhookSecret || secretGet.json?.signingSecret || null;
       secretMatch = {
         status: secretGet.status,
@@ -447,42 +528,81 @@ const proveSandbox = async (staging, production) => {
   }
 
   const platformSafe = accountSafe(platformGet.json);
-  const intended = oauth.ok
-    && platformGet.ok
-    && platformSafe
-    && !platformSafe.isProductionId
-    && !productionLeak
+  const appSafe = accountSafe(appGet.json);
+  const productionLeak = (freedomGet.ok === true)
+    || (productionPlatformGet.ok === true)
+    || (platformSafe?.isProductionId === true)
+    || (appSafe?.isProductionId === true)
+    || PRODUCTION_IDS.has(String(platformId || '').toLowerCase())
+    || PRODUCTION_IDS.has(String(appAccountId || '').toLowerCase());
+
+  const liveOriginReady = pingVariants.some((row) => row.name === 'full' && row.status === 200);
+  const identityProven = Boolean(
+    (platformGet.ok && platformSafe && !platformSafe.isProductionId)
+    || (appGet.ok && appSafe && !appSafe.isProductionId)
+  ) && !productionLeak
     && checksopsOriginOauth?.ok === true;
+  const intended = identityProven && liveOriginReady;
 
   return {
     ok: intended,
+    identityProven,
+    liveOriginReady,
+    resourceOrigin,
     oauthByOrigin,
     checksopsOriginWorks: checksopsOriginOauth?.ok === true,
-    chosenOrigin: oauth.origin,
+    chosenOrigin: PROVEN_ORIGIN,
     apiVersionUsed: PROVEN_API_VERSION,
+    scopedOauth: {
+      platformProfile: { ok: profileOauth.ok, status: profileOauth.status, scope: profileOauth.scope },
+      appProfile: { ok: appProfileOauth.ok, status: appProfileOauth.status },
+      freedomProfile: { ok: freedomScopeOauth.ok, status: freedomScopeOauth.status },
+      productionPlatformProfile: { ok: prodPlatformScopeOauth.ok, status: prodPlatformScopeOauth.status },
+      webhooks: { ok: webhookOauth.ok, status: webhookOauth.status },
+    },
     platformGet: {
       status: platformGet.status,
       versionEcho: platformGet.versionEcho,
+      error: platformGet.error || null,
       account: platformSafe,
+      capabilitiesStatus: capsGet.status,
+      capabilitiesError: capsGet.error || null,
+    },
+    applicationAccountGet: {
+      status: appGet.status,
+      error: appGet.error || null,
+      account: appSafe,
+      jwtAccountFp: fingerprint(appAccountId),
+      jwtAccountIsProductionId: PRODUCTION_IDS.has(String(appAccountId || '').toLowerCase()),
     },
     productionAccountGets: {
-      freedomStatus: freedomGet.status,
-      productionPlatformStatus: productionPlatformGet.status,
+      freedomOauthStatus: freedomScopeOauth.status,
+      freedomGetStatus: freedomGet.status,
+      productionPlatformOauthStatus: prodPlatformScopeOauth.status,
+      productionPlatformGetStatus: productionPlatformGet.status,
       visible: freedomGet.ok || productionPlatformGet.ok,
     },
-    listedAccountCount: listedIds.length,
-    listedProductionIds: listedIds.filter((id) => PRODUCTION_IDS.has(id)).length,
     productionAccountLeaked: productionLeak,
     webhooks: {
       listStatus: webhooks.status,
+      error: webhooks.error || null,
       count: webhookSummary.length,
       rows: webhookSummary,
       matchingPrepUrl: matching,
       secretMatch,
     },
+    ping: { oauth: pingOauth.ok, variants: pingVariants },
+    platformGetOnBehalf: platformGetOnBehalf && {
+      status: platformGetOnBehalf.status,
+      error: platformGetOnBehalf.error || null,
+      account: accountSafe(platformGetOnBehalf.json),
+    },
     transferPost: false,
     providerMutation: false,
-    stopped: intended ? null : (productionLeak ? 'production_account_leaked_into_sandbox' : 'sandbox_identity_not_proven'),
+    stopped: intended ? null
+      : productionLeak ? 'production_account_leaked_into_sandbox'
+        : !identityProven ? 'sandbox_identity_not_proven'
+          : 'sandbox_api_key_origin_is_staging_only',
   };
 };
 
@@ -603,6 +723,14 @@ const main = async () => {
   }
   const prove = await proveSandbox(staging, production);
   report.prove = prove;
+  report.health = {
+    login: await probe('/auth/login', 'POST', { email: 'nobody@example.com', password: 'invalid' }),
+    emailOtp: await probe('/auth/passwordless/start', 'POST', { email: 'nobody@example.com' }),
+    passkey: await probe('/auth/passkey/authenticate/start', 'POST', { email: 'nobody@example.com' }),
+    financialTotp: await probe('/auth/mfa/status', 'POST', {}),
+    webhookUnsigned: await probe('/webhooks/moov', 'POST', { type: 'transfer.updated' }),
+    providersStatus: await probe('/providers/status', 'GET'),
+  };
   fs.writeFileSync('/opt/cursor/artifacts/m79a_prove.json', JSON.stringify(report, null, 2));
   if (step === 'prove' || !prove.ok) {
     console.log(JSON.stringify({
@@ -616,7 +744,12 @@ const main = async () => {
       prove: {
         oauthByOrigin: prove.oauthByOrigin,
         checksopsOriginWorks: prove.checksopsOriginWorks,
+        identityProven: prove.identityProven,
+        liveOriginReady: prove.liveOriginReady,
+        resourceOrigin: prove.resourceOrigin,
         platformGet: prove.platformGet,
+        applicationAccountGet: prove.applicationAccountGet,
+        ping: prove.ping,
         productionAccountLeaked: prove.productionAccountLeaked,
         productionAccountGets: prove.productionAccountGets,
         webhooks: prove.webhooks,
@@ -625,6 +758,9 @@ const main = async () => {
         transferPost: false,
         providerMutation: false,
       },
+      health: report.health,
+      POST_ARMED: report.POST_ARMED,
+      SANDBOX_POST_ARMED: report.SANDBOX_POST_ARMED,
     }, null, 2));
     if (!prove.ok) process.exit(2);
     return;

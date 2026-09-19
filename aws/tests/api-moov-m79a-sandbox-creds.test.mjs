@@ -11,7 +11,7 @@ test('M7.9A runner never prints secret values or arms POST flags', () => {
   assert.match(src, /3bef00a5-0bf4-41ba-abf8-5fb4e2b73d43/);
   assert.match(src, /PRODUCTION_MOOV_ORIGIN/);
   assert.match(src, /PRODUCTION_MOOV_API_VERSION/);
-  assert.match(src, /refused_copy_production_public/);
+  assert.match(src, /sandbox_api_key_origin_is_staging_only/);
   assert.match(src, /refused_overwrite_MOOV_PUBLIC_KEY|PRODUCTION_PRESERVE/);
   assert.doesNotMatch(src, /AWS_MOOV_TRANSFER_POST_ENABLED': 'true'/);
   assert.doesNotMatch(src, /AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED': 'true'/);
