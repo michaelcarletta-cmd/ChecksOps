@@ -1,10 +1,15 @@
 /**
- * Staging-only Azure Document Intelligence secret loader.
+ * Azure Document Intelligence secret loader.
  * Never logs or returns endpoint / api_key to HTTP callers.
+ * Staging may load only the staging Azure DI secret.
+ * production and production-prep may load only the production Azure DI secret.
  */
 import { parseAzureDiSecret } from './azure-check-ocr.mjs';
 
 export const STAGING_AZURE_DI_SECRET_ID = 'checksops/staging/providers/azure-document-intelligence';
+export const PRODUCTION_AZURE_DI_SECRET_ID = 'checksops/production/providers/azure-document-intelligence';
+
+const AZURE_DI_ALLOWED_ENVS = new Set(['staging', 'production', 'production-prep']);
 
 let cached = null;
 
@@ -27,16 +32,16 @@ export const resolveAzureDiSecretId = (env = process.env) => (
 );
 
 export const assertAzureDiSecretIdAllowed = (secretId, envName) => {
-  if (envName !== 'staging') return { ok: false, code: 'wrong_env' };
+  if (!AZURE_DI_ALLOWED_ENVS.has(envName)) return { ok: false, code: 'wrong_env' };
   if (secretId == null || String(secretId).trim() === '') {
     return { ok: false, code: 'secret_id_missing' };
   }
   const id = String(secretId).trim();
   if (id.includes('/isolated/')) return { ok: false, code: 'isolated_secret_blocked' };
-  if (id === 'checksops/staging/providers') return { ok: false, code: 'secret_id_rejected' };
-  if (!id.startsWith('checksops/staging/providers/azure-document-intelligence')) {
-    return { ok: false, code: 'secret_id_rejected' };
-  }
+  const expected = envName === 'staging'
+    ? STAGING_AZURE_DI_SECRET_ID
+    : PRODUCTION_AZURE_DI_SECRET_ID;
+  if (id !== expected) return { ok: false, code: 'secret_id_rejected' };
   return { ok: true, secretId: id };
 };
 

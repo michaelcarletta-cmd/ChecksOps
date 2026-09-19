@@ -556,7 +556,7 @@
       "environment": "staging",
       "source": {
         "git_sha": "8a3ead386d99f0e825d54093ebcb8c174a8c758e",
-        "tree_hash": "8874c64b03bd7b584e54a9c6c2ed93fa7b48626ad4b5239f3dd328b8d5500e53",
+        "tree_hash": "9ecc8ae0c814947afb1badc354b467831b24eec09cb8a60bdb454cb6abfb2801",
         "merged": true,
         "merged_pr": 370
       },
