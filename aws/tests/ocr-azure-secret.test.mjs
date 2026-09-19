@@ -234,7 +234,7 @@ test('allowlist REJECT: empty and malformed secret ids', async () => {
     }
     await assertLoad({
       envName,
-      secretId: '',
+      secretId: '   ',
       expectCode: 'secret_id_missing',
       expectConfigured: false,
     });
