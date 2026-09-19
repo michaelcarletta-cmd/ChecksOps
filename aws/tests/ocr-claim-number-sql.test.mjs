@@ -21,7 +21,10 @@ const CHECK_2 = '33333333-3333-4333-8333-333333333332';
 const CHECK_3 = '33333333-3333-4333-8333-333333333333';
 const CHECK_4 = '33333333-3333-4333-8333-333333333334';
 const CHECK_5 = '33333333-3333-4333-8333-333333333335';
+const CHECK_6 = '33333333-3333-4333-8333-333333333336';
+const CHECK_7 = '33333333-3333-4333-8333-333333333337';
 const LINKED = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa9';
+const GUARD = fs.readFileSync(path.join(ROOT, 'supabase/migrations/20260918170010_guard_check_claim_org.sql'), 'utf8');
 
 const run = (bin, args, opts = {}) => spawnSync(bin, args, {
   encoding: 'utf8',
@@ -44,7 +47,20 @@ test('SQL artifact keeps generic write prohibited and is not an apply script', (
   assert.match(SQL, /ocr_unique_tenant_claim_id/);
   assert.match(SQL, /v_count IS DISTINCT FROM 1/);
   assert.match(SQL, /c\.org_id IS NOT DISTINCT FROM p_tenant_id/);
+  assert.match(SQL, /Many checks may share one claim number/);
+  assert.doesNotMatch(SQL, /INSERT INTO public\.claims/);
   assert.doesNotMatch(SQL, /checkalt-submit|moov-webhook|amount\s*=/);
+});
+
+test('170010 and SQL 41 share unique-tenant claim matching and do not treat checks as duplicates', () => {
+  assert.match(GUARD, /ocr_unique_tenant_claim_id/);
+  assert.match(GUARD, /v_count IS DISTINCT FROM 1/);
+  assert.match(GUARD, /many checks may share that claim number/);
+  assert.equal(/\[\^A-Z0-9\]/.test(GUARD), false);
+  assert.equal(/ORDER BY c\.created_at ASC/.test(GUARD), false);
+  assert.match(SQL, /ocr_unique_tenant_claim_id/);
+  assert.match(GUARD, /ocr_unique_tenant_claim_id/);
+  assert.doesNotMatch(GUARD, /INSERT INTO public\.claims/);
 });
 
 test('isolated PostgreSQL unique-tenant claim persist and auto-link', { timeout: 180000 }, async (t) => {
@@ -88,6 +104,8 @@ CREATE TABLE public.check_intake_items (
   detected_claim_number text,
   freedom_claim_id uuid,
   freedom_claim_number text,
+  payee_line text,
+  amount numeric,
   front_image_path text NOT NULL DEFAULT 'x',
   updated_at timestamptz DEFAULT now()
 );
@@ -115,13 +133,17 @@ INSERT INTO public.claims(id, org_id, claim_number) VALUES
 INSERT INTO public.claims(id, org_id, claim_number) VALUES
   ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3', '${TENANT_A}', 'dup-99');
 
-INSERT INTO public.check_intake_items(id, tenant_id, detected_claim_number, claim_id) VALUES
-  ('${CHECK_1}', '${TENANT_A}', NULL, NULL),
-  ('${CHECK_2}', '${TENANT_A}', NULL, NULL),
-  ('${CHECK_3}', '${TENANT_A}', NULL, NULL),
-  ('${CHECK_4}', '${TENANT_A}', NULL, '${LINKED}'),
-  ('${CHECK_5}', '${TENANT_A}', '38-99V2-97X', NULL);
+INSERT INTO public.check_intake_items(id, tenant_id, detected_claim_number, claim_id, payee_line, amount) VALUES
+  ('${CHECK_1}', '${TENANT_A}', NULL, NULL, 'Insured A', 100),
+  ('${CHECK_2}', '${TENANT_A}', NULL, NULL, 'Mortgagee B', 250),
+  ('${CHECK_3}', '${TENANT_A}', NULL, NULL, NULL, NULL),
+  ('${CHECK_4}', '${TENANT_A}', NULL, '${LINKED}', NULL, NULL),
+  ('${CHECK_5}', '${TENANT_A}', '38-99V2-97X', NULL, NULL, NULL),
+  ('${CHECK_6}', '${TENANT_A}', NULL, NULL, 'Contractor C', 75),
+  ('${CHECK_7}', '${TENANT_B}', NULL, NULL, 'Other Tenant Payee', 999);
 `);
+
+    const claimsBefore = psql('SELECT count(*) FROM public.claims;');
 
     const written = JSON.parse(psql(`SELECT public.ocr_persist_detected_claim_number('${CHECK_1}'::uuid, '${TENANT_A}'::uuid, '  00412-AB/9  ')::text;`));
     assert.equal(written.code, 'written');
@@ -129,6 +151,23 @@ INSERT INTO public.check_intake_items(id, tenant_id, detected_claim_number, clai
     assert.equal(written.linked, true);
     const row1 = psql(`SELECT detected_claim_number || '|' || coalesce(claim_id::text,'') FROM public.check_intake_items WHERE id = '${CHECK_1}';`);
     assert.equal(row1, `00412-AB/9|${CLAIM_A1}`);
+
+    const second = JSON.parse(psql(`SELECT public.ocr_persist_detected_claim_number('${CHECK_6}'::uuid, '${TENANT_A}'::uuid, '00412-AB/9')::text;`));
+    assert.equal(second.code, 'written');
+    assert.equal(second.linked, true);
+    const row6 = psql(`SELECT detected_claim_number || '|' || claim_id::text || '|' || payee_line FROM public.check_intake_items WHERE id = '${CHECK_6}';`);
+    assert.equal(row6, `00412-AB/9|${CLAIM_A1}|Contractor C`);
+    const shared = psql(`SELECT count(*)::text || '|' || coalesce(sum(amount)::text,'') FROM public.check_intake_items WHERE claim_id = '${CLAIM_A1}';`);
+    assert.equal(shared, '2|175');
+
+    const otherTenant = JSON.parse(psql(`SELECT public.ocr_persist_detected_claim_number('${CHECK_7}'::uuid, '${TENANT_B}'::uuid, '00412-AB/9')::text;`));
+    assert.equal(otherTenant.code, 'written');
+    assert.equal(otherTenant.linked, true);
+    const row7 = psql(`SELECT claim_id::text FROM public.check_intake_items WHERE id = '${CHECK_7}';`);
+    assert.equal(row7, CLAIM_B1);
+    assert.equal(psql(`SELECT count(*) FROM public.check_intake_items WHERE claim_id = '${CLAIM_A1}';`), '2');
+
+    assert.equal(psql('SELECT count(*) FROM public.claims;'), claimsBefore);
 
     const zero = JSON.parse(psql(`SELECT public.ocr_persist_detected_claim_number('${CHECK_2}'::uuid, '${TENANT_A}'::uuid, 'NO-SUCH-CLAIM')::text;`));
     assert.equal(zero.code, 'written');
@@ -171,4 +210,92 @@ INSERT INTO public.check_intake_items(id, tenant_id, detected_claim_number, clai
     assert.equal(colGrant, 'f');
     const colGrantAuth = psql(`SELECT has_column_privilege('authenticated', 'public.check_intake_items', 'detected_claim_number', 'UPDATE');`);
     assert.equal(colGrantAuth, 'f');
+});
+
+test('170010 then SQL 41 still unique-links many checks to one tenant claim', { timeout: 180000 }, async (t) => {
+  assert.equal(fs.existsSync(path.join(PG_BIN, 'initdb')), true);
+  const pgData = fs.mkdtempSync(path.join(os.tmpdir(), 'pg-ocr-guard-'));
+  const port = 56600 + (process.pid % 1000);
+  const logPath = path.join(pgData, 'pg.log');
+  mustRun(path.join(PG_BIN, 'initdb'), [
+    '-D', pgData, '--auth=trust', '--no-sync', '--username=ubuntu', '--encoding=UTF8',
+  ]);
+  fs.appendFileSync(path.join(pgData, 'postgresql.conf'), `
+listen_addresses = ''
+port = ${port}
+unix_socket_directories = '${pgData}'
+logging_collector = off
+shared_buffers = 32MB
+max_connections = 20
+`);
+  mustRun(path.join(PG_BIN, 'pg_ctl'), ['-D', pgData, '-l', logPath, '-w', 'start']);
+  t.after(() => {
+    run(path.join(PG_BIN, 'pg_ctl'), ['-D', pgData, '-m', 'immediate', 'stop']);
+    fs.rmSync(pgData, { recursive: true, force: true });
+  });
+  const psql = (sql) => mustRun(path.join(PG_BIN, 'psql'), [
+    '-h', pgData, '-p', String(port), '-U', 'ubuntu', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-tA', '-c', sql,
+  ]).stdout.trim();
+  psql(`
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE SCHEMA IF NOT EXISTS auth;
+CREATE ROLE checksops NOLOGIN;
+CREATE ROLE authenticated NOLOGIN;
+CREATE ROLE service_role NOLOGIN;
+DO $$ BEGIN
+  CREATE TYPE public.app_role AS ENUM ('admin', 'staff');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT NULL::uuid $$;
+CREATE FUNCTION public.has_role(uuid, public.app_role) RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT false $$;
+CREATE FUNCTION public.user_belongs_to_tenant(uuid, uuid) RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT false $$;
+CREATE TABLE public.claims (
+  id uuid PRIMARY KEY,
+  org_id uuid,
+  claim_number text,
+  created_at timestamptz DEFAULT now()
+);
+CREATE TABLE public.check_intake_items (
+  id uuid PRIMARY KEY,
+  tenant_id uuid,
+  claim_id uuid,
+  detected_claim_number text,
+  freedom_claim_id uuid,
+  freedom_claim_number text,
+  payee_line text,
+  amount numeric,
+  front_image_path text NOT NULL DEFAULT 'x',
+  updated_at timestamptz DEFAULT now()
+);
+ALTER TABLE public.check_intake_items ENABLE ROW LEVEL SECURITY;
+`);
+  mustRun(path.join(PG_BIN, 'psql'), [
+    '-h', pgData, '-p', String(port), '-U', 'ubuntu', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1',
+    '-f', path.join(ROOT, 'supabase/migrations/20260918170010_guard_check_claim_org.sql'),
+  ]);
+  mustRun(path.join(PG_BIN, 'psql'), [
+    '-h', pgData, '-p', String(port), '-U', 'ubuntu', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1',
+    '-f', path.join(ROOT, 'aws/write-path/sql/41_ocr_detected_claim_number.sql'),
+  ]);
+  psql(`
+CREATE TRIGGER trg_auto_link_check_to_claim
+BEFORE INSERT OR UPDATE OF freedom_claim_id, detected_claim_number, claim_id
+ON public.check_intake_items
+FOR EACH ROW EXECUTE FUNCTION public.auto_link_check_to_claim();
+INSERT INTO public.claims(id, org_id, claim_number) VALUES
+  ('${CLAIM_A1}', '${TENANT_A}', '00412-AB/9'),
+  ('${CLAIM_B1}', '${TENANT_B}', '00412-AB/9');
+INSERT INTO public.check_intake_items(id, tenant_id, payee_line, amount) VALUES
+  ('${CHECK_1}', '${TENANT_A}', 'Payee One', 10),
+  ('${CHECK_6}', '${TENANT_A}', 'Payee Two', 15);
+`);
+  const first = JSON.parse(psql(`SELECT public.ocr_persist_detected_claim_number('${CHECK_1}'::uuid, '${TENANT_A}'::uuid, '00412-AB/9')::text;`));
+  const again = JSON.parse(psql(`SELECT public.ocr_persist_detected_claim_number('${CHECK_6}'::uuid, '${TENANT_A}'::uuid, '00412-AB/9')::text;`));
+  assert.equal(first.linked, true);
+  assert.equal(again.linked, true);
+  assert.equal(psql(`SELECT count(DISTINCT claim_id) FROM public.check_intake_items WHERE id IN ('${CHECK_1}','${CHECK_6}');`), '1');
+  assert.equal(psql(`SELECT claim_id::text FROM public.check_intake_items WHERE id = '${CHECK_1}';`), CLAIM_A1);
+  assert.equal(psql(`SELECT sum(amount)::text FROM public.check_intake_items WHERE claim_id = '${CLAIM_A1}';`), '25');
+  assert.equal(psql(`SELECT public.ocr_unique_tenant_claim_id('${TENANT_A}'::uuid, '00412AB9') IS NULL;`), 't');
+  assert.equal(psql(`SELECT public.check_claim_link_allowed('${TENANT_A}'::uuid, '${CLAIM_B1}'::uuid, NULL) IS FALSE;`), 't');
 });

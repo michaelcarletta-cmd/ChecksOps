@@ -5,6 +5,8 @@
  * Does not extract, call Azure/Textract, persist amount, or write MICR.
  * Generic /data/write stays blocked for detected_claim_number.
  * Does not invoke CheckAlt or Moov.
+ * Claim numbers identify the claim: many checks may share one number
+ * and link to the same existing tenant claim. Never inserts a claims row.
  */
 import {
   normalizeClaimNumber,

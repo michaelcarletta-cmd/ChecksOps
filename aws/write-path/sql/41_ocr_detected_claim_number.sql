@@ -1,16 +1,20 @@
 -- NOT APPLIED. Repo artifact only. Do not apply from this PR.
 --
 -- Safe OCR claim-number persistence for AWS check-ocr-intake.
+-- See 41_ocr_claim_link_semantics.md.
+--
+-- A claim number identifies the claim, not the check and not the payee.
+-- Many checks may share one claim number and must all link to that same
+-- existing tenant-local claim_id. Payee differences are ignored. This
+-- artifact never inserts a claims row.
+--
+-- Ambiguous only when two+ claims rows in the SAME tenant share the
+-- normalized number (lower + btrim; punctuation significant). Repeated
+-- detected_claim_number values on check_intake_items are required, not errors.
+-- Cross-tenant numbers never link. Existing claim_id is never rewritten.
 --
 -- Does not grant table-column UPDATE of detected_claim_number to authenticated or checksops.
 -- Generic /data/write remains blocked by INTAKE_PROHIBITED_COLUMNS.
---
--- Replaces both live auto-link functions so writing detected_claim_number cannot:
---   * pick LIMIT 1 among multiple matches
---   * link a cross-tenant claim
---   * change an existing claim_id
--- Unique tenant-local match (trim + case-insensitive, punctuation preserved) may
--- set claim_id. Zero or many matches persist the number only.
 
 CREATE OR REPLACE FUNCTION public.ocr_claim_number_key(p_value text)
 RETURNS text

@@ -2,6 +2,7 @@
 --
 -- Narrow multi-tenant safety on Lovable claim linking.
 -- Ownership of an EXISTING claim is claims.org_id only.
+-- See aws/write-path/sql/41_ocr_claim_link_semantics.md.
 --
 -- Rule:
 -- * claim_id NULL (unlink) allowed
@@ -10,6 +11,11 @@
 -- * claims.org_id IS NOT NULL must equal check_intake_items.tenant_id
 -- * claims.org_id IS NULL is DENY unassigned_claim
 -- * child/mirror rows never establish ownership
+-- * auto-link attaches only one existing same-tenant claims row
+-- * many checks may share that claim number and must reuse the same claim_id
+-- * payees do not affect linking; no claims row is created
+-- * ambiguous only when two+ claims rows in the same tenant share the number
+-- * never LIMIT 1 across tenants or punctuation-stripped lookalikes
 --
 -- Existing rows with the same claim_id are not re-validated on unrelated updates.
 
@@ -124,7 +130,50 @@ BEFORE INSERT OR UPDATE ON public.check_intake_items
 FOR EACH ROW
 EXECUTE FUNCTION public.trg_guard_check_claim_link();
 
--- Preserve Lovable auto-link (b21d4b989) but do not attach a denied candidate.
+-- Unique-tenant matcher shared with SQL 41. Count is of claims rows, not checks.
+CREATE OR REPLACE FUNCTION public.ocr_claim_number_key(p_value text)
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+AS $$
+  SELECT NULLIF(lower(btrim(p_value)), '');
+$$;
+
+CREATE OR REPLACE FUNCTION public.ocr_unique_tenant_claim_id(
+  p_tenant_id uuid,
+  p_claim_number text
+)
+RETURNS uuid
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path TO public
+AS $$
+DECLARE
+  v_key text := public.ocr_claim_number_key(p_claim_number);
+  v_id uuid;
+  v_count int;
+BEGIN
+  IF p_tenant_id IS NULL OR v_key IS NULL THEN
+    RETURN NULL;
+  END IF;
+
+  SELECT c.id, count(*) OVER ()
+    INTO v_id, v_count
+  FROM public.claims c
+  WHERE c.org_id IS NOT DISTINCT FROM p_tenant_id
+    AND public.ocr_claim_number_key(c.claim_number) = v_key
+  LIMIT 1;
+
+  IF v_count IS DISTINCT FROM 1 THEN
+    RETURN NULL;
+  END IF;
+  RETURN v_id;
+END;
+$$;
+
+-- Attach an existing same-tenant claim only. Never create a claims row.
+-- Many checks may reuse the same claim number / claim_id.
 CREATE OR REPLACE FUNCTION public.auto_link_check_to_claim()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -132,43 +181,32 @@ SECURITY DEFINER
 SET search_path TO 'public'
 AS $$
 DECLARE
-  normalized TEXT;
   v_candidate uuid;
 BEGIN
-  IF NEW.claim_id IS NULL THEN
-    IF NEW.freedom_claim_id IS NOT NULL THEN
-      SELECT id INTO v_candidate
-      FROM public.claims
-      WHERE id = NEW.freedom_claim_id
-      LIMIT 1;
-    END IF;
-
-    IF v_candidate IS NULL AND NEW.freedom_claim_number IS NOT NULL THEN
-      normalized := regexp_replace(upper(NEW.freedom_claim_number), '[^A-Z0-9]', '', 'g');
-      IF length(normalized) > 0 THEN
-        SELECT id INTO v_candidate
-        FROM public.claims
-        WHERE regexp_replace(upper(coalesce(claim_number,'')), '[^A-Z0-9]', '', 'g') = normalized
-        LIMIT 1;
-      END IF;
-    END IF;
-
-    IF v_candidate IS NULL AND NEW.detected_claim_number IS NOT NULL THEN
-      normalized := regexp_replace(upper(NEW.detected_claim_number), '[^A-Z0-9]', '', 'g');
-      IF length(normalized) > 0 THEN
-        SELECT id INTO v_candidate
-        FROM public.claims
-        WHERE regexp_replace(upper(coalesce(claim_number,'')), '[^A-Z0-9]', '', 'g') = normalized
-        LIMIT 1;
-      END IF;
-    END IF;
-
-    IF v_candidate IS NOT NULL
-       AND public.check_claim_link_allowed(NEW.tenant_id, v_candidate, NEW.id) THEN
-      NEW.claim_id := v_candidate;
-    END IF;
+  IF NEW.claim_id IS NOT NULL THEN
+    RETURN NEW;
   END IF;
 
+  IF NEW.freedom_claim_id IS NOT NULL AND NEW.tenant_id IS NOT NULL THEN
+    SELECT c.id
+      INTO v_candidate
+    FROM public.claims c
+    WHERE c.id = NEW.freedom_claim_id
+      AND c.org_id IS NOT DISTINCT FROM NEW.tenant_id;
+  END IF;
+
+  IF v_candidate IS NULL AND NEW.freedom_claim_number IS NOT NULL THEN
+    v_candidate := public.ocr_unique_tenant_claim_id(NEW.tenant_id, NEW.freedom_claim_number);
+  END IF;
+
+  IF v_candidate IS NULL AND NEW.detected_claim_number IS NOT NULL THEN
+    v_candidate := public.ocr_unique_tenant_claim_id(NEW.tenant_id, NEW.detected_claim_number);
+  END IF;
+
+  IF v_candidate IS NOT NULL
+     AND public.check_claim_link_allowed(NEW.tenant_id, v_candidate, NEW.id) THEN
+    NEW.claim_id := v_candidate;
+  END IF;
   RETURN NEW;
 END;
 $$;
@@ -197,7 +235,7 @@ WITH CHECK (
   AND public.check_claim_link_allowed(tenant_id, claim_id, id)
 );
 
--- Older June auto-link (fd2d5505) still has its own BEFORE triggers.
+-- Older June auto-link trigger name is preserved; matching is unique-tenant only.
 CREATE OR REPLACE FUNCTION public.tg_auto_link_check_to_claim()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -205,36 +243,24 @@ SECURITY DEFINER
 SET search_path TO 'public'
 AS $$
 DECLARE
-  found_claim_id uuid;
-  needle text;
+  v_candidate uuid;
 BEGIN
   IF NEW.claim_id IS NOT NULL THEN
     RETURN NEW;
   END IF;
-
-  needle := NULLIF(btrim(NEW.detected_claim_number), '');
-  IF needle IS NULL THEN
-    RETURN NEW;
+  v_candidate := public.ocr_unique_tenant_claim_id(NEW.tenant_id, NEW.detected_claim_number);
+  IF v_candidate IS NOT NULL
+     AND public.check_claim_link_allowed(NEW.tenant_id, v_candidate, NEW.id) THEN
+    NEW.claim_id := v_candidate;
   END IF;
-
-  SELECT c.id
-    INTO found_claim_id
-  FROM public.claims c
-  WHERE lower(btrim(c.claim_number)) = lower(needle)
-  ORDER BY c.created_at ASC
-  LIMIT 1;
-
-  IF found_claim_id IS NOT NULL
-     AND public.check_claim_link_allowed(NEW.tenant_id, found_claim_id, NEW.id) THEN
-    NEW.claim_id := found_claim_id;
-  END IF;
-
   RETURN NEW;
 END;
 $$;
 
 DROP FUNCTION IF EXISTS public.claim_deterministic_tenant_ids(uuid, uuid);
 
+REVOKE ALL ON FUNCTION public.ocr_claim_number_key(text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.ocr_unique_tenant_claim_id(uuid, text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.evaluate_check_claim_link(uuid, uuid, uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.check_claim_link_allowed(uuid, uuid, uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.assert_check_claim_link_allowed(uuid, uuid, uuid) FROM PUBLIC;
