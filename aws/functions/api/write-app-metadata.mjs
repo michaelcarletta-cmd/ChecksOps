@@ -521,8 +521,15 @@ export const executeTenantsNarrow = async ({ client, mapping, values, filters })
   }
   const out = {};
   for (const [col, max] of [
-    ['name', 200], ['logo_url', 512], ['invoice_letterhead_url', 512],
-    ['primary_color', 40], ['invoice_footer_note', 2000], ['invoice_default_terms', 4000],
+    ['name', 200],
+    ['logo_url', 512],
+    ['primary_color', 40],
+    ['secondary_color', 40],
+    ['invoice_letterhead_url', 512],
+    ['invoice_footer_note', 2000],
+    ['invoice_default_terms', 4000],
+    ['invoice_accent_color', 40],
+    ['invoice_theme', 20],
   ]) {
     if (col in values) {
       const text = clip(values[col], max);

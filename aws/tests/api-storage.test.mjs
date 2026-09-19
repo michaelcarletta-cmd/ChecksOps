@@ -46,7 +46,14 @@ const jwtEvent = (path, method, body, extra = {}) => ({
   },
 });
 
-const mockClient = ({ authorize = false, writeCheck = false, writeSibling = false, publicLogo = false, mapping = {
+const mockClient = ({
+  authorize = false,
+  writeCheck = false,
+  writeSibling = false,
+  publicLogo = false,
+  memberTenantIds = new Set(),
+  staff = false,
+  mapping = {
   application_user_id: APP_ID,
   cognito_sub: COGNITO_SUB,
   email: 'checksops-tester@freedomadj.com',
@@ -62,6 +69,9 @@ const mockClient = ({ authorize = false, writeCheck = false, writeSibling = fals
       if (sql.startsWith('SELECT set_config')) return { rows: [{ set_config: params[1] }] };
       if (sql === LOOKUP_MAPPING_SQL) {
         return { rows: params[0] === mapping.cognito_sub ? [mapping] : [] };
+      }
+      if (String(sql).includes('FROM public.user_roles')) {
+        return { rows: staff ? [{ role: 'staff' }] : [] };
       }
       if (String(sql).replace(/\s+/g, ' ').includes('FROM public.check_intake_items WHERE id = $1::uuid')) {
         return {
@@ -89,6 +99,9 @@ const mockClient = ({ authorize = false, writeCheck = false, writeSibling = fals
         return { rows: publicLogo ? [{ logo_url: 'https://example.supabase.co/storage/v1/object/public/tenant-logos/freedom/logo.png' }] : [] };
       }
       if (String(sql).includes('FROM public.tenant_users')) {
+        if (String(sql).startsWith('SELECT 1 FROM public.tenant_users') && String(sql).includes('WHERE user_id = $1::uuid AND tenant_id = $2::uuid')) {
+          return { rows: memberTenantIds.has(params?.[1]) ? [{ '?column?': 1 }] : [] };
+        }
         return { rows: authorize ? [{ role: 'admin' }] : [] };
       }
       if (String(sql).startsWith('SELECT 1 FROM')) {
@@ -307,6 +320,60 @@ test('company-branding public bucket is allowlisted for signed public reads', as
   assert.ok(PUBLIC_BRANDING_BUCKETS.includes('company-branding'));
   assert.ok(STORAGE_WRITE_BUCKETS.includes('tenant-documents'));
   assert.ok(STORAGE_WRITE_BUCKETS.includes('homeowner-uploads'));
+});
+
+test('tenant-logos uploads require tenant-scoped prefix and membership', async () => {
+  const TENANT = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
+  const path = `${TENANT}/branding/logo.png`;
+
+  const missingPrefix = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {
+    bucket: 'tenant-logos',
+    path: 'branding/logo.png',
+    contentType: 'image/png',
+    upsert: true,
+  }), depsFor(mockClient({ authorize: true }), { forceStorageWrites: true }));
+  assert.equal(missingPrefix.statusCode, 403);
+  assert.equal(missingPrefix.error, 'path_not_allowlisted');
+
+  const outsider = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {
+    bucket: 'tenant-logos',
+    path,
+    contentType: 'image/png',
+    upsert: true,
+  }), depsFor(mockClient({ authorize: true, memberTenantIds: new Set() }), { forceStorageWrites: true }));
+  assert.equal(outsider.statusCode, 403);
+  assert.equal(outsider.error, 'rls_denied');
+
+  const member = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {
+    bucket: 'tenant-logos',
+    path,
+    contentType: 'image/png',
+    upsert: true,
+  }), depsFor(mockClient({ authorize: true, memberTenantIds: new Set([TENANT]) }), { forceStorageWrites: true }));
+  assert.equal(member.ok, true, JSON.stringify(member));
+  assert.equal(member.path, path);
+});
+
+test('company-branding uploads require platform staff or admin', async () => {
+  const path = 'branding/platform-logo.png';
+
+  const denied = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {
+    bucket: 'company-branding',
+    path,
+    contentType: 'image/png',
+    upsert: true,
+  }), depsFor(mockClient({ authorize: true, staff: false }), { forceStorageWrites: true }));
+  assert.equal(denied.statusCode, 403);
+  assert.equal(denied.error, 'rls_denied');
+
+  const allowed = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {
+    bucket: 'company-branding',
+    path,
+    contentType: 'image/png',
+    upsert: true,
+  }), depsFor(mockClient({ authorize: true, staff: true }), { forceStorageWrites: true }));
+  assert.equal(allowed.ok, true, JSON.stringify(allowed));
+  assert.equal(allowed.path, path);
 });
 
 test('delete and move require server-side authorization', async () => {
