@@ -25,10 +25,10 @@ const IN_FLIGHT = ["pending", "processing", "submitted", "queued", "created"];
  * Sourced from `payment_transfers` — nothing is estimated or synthesised.
  */
 export function useWalletOpsTransfers(limit = 25) {
-  const { tenantId, enabled } = usePaymentProviderEligibility();
+  const { tenantId, enabled, environment } = usePaymentProviderEligibility();
 
   return useQuery({
-    queryKey: ["wallet-ops-transfers", tenantId, limit],
+    queryKey: ["wallet-ops-transfers", tenantId, environment, limit],
     enabled: !!tenantId && enabled,
     staleTime: 30_000,
     queryFn: async () => {
@@ -38,6 +38,7 @@ export function useWalletOpsTransfers(limit = 25) {
           "id, amount_cents, status, speed, selected_rail, description, created_at, completed_at, leg_role, is_facilitator_fee",
         )
         .eq("tenant_id", tenantId!)
+        .eq("environment", environment || "sandbox")
         .order("created_at", { ascending: false })
         .limit(limit);
       if (error) throw error;
@@ -73,10 +74,10 @@ export interface WalletOpsProviderActivity {
 
 /** Provider-created activity (Moov Sweep). Observe-only — not a ChecksOps money intent. */
 export function useWalletOpsProviderActivity(limit = 25) {
-  const { tenantId, enabled } = usePaymentProviderEligibility();
+  const { tenantId, enabled, environment } = usePaymentProviderEligibility();
 
   return useQuery({
-    queryKey: ["wallet-ops-provider-activity", tenantId, limit],
+    queryKey: ["wallet-ops-provider-activity", tenantId, environment, limit],
     enabled: !!tenantId && enabled,
     staleTime: 30_000,
     queryFn: async () => {
@@ -86,6 +87,7 @@ export function useWalletOpsProviderActivity(limit = 25) {
           "id, origin, activity_kind, provider_transfer_id, status, amount_cents, source_rail, destination_rail, provider_created_at, observed_at",
         )
         .eq("tenant_id", tenantId!)
+        .eq("environment", environment || "sandbox")
         .order("observed_at", { ascending: false })
         .limit(limit);
       if (error) throw error;
@@ -168,10 +170,10 @@ export interface RunningBalancePoint {
  * straight from `payment_wallet_ledger` (balance_after_cents is authoritative).
  */
 export function useWalletRunningBalance(walletType: "operating" | "trust" = "operating", limit = 60) {
-  const { tenantId, enabled } = usePaymentProviderEligibility();
+  const { tenantId, enabled, environment } = usePaymentProviderEligibility();
 
   return useQuery({
-    queryKey: ["wallet-running-balance", tenantId, walletType, limit],
+    queryKey: ["wallet-running-balance", tenantId, environment, walletType, limit],
     enabled: !!tenantId && enabled,
     staleTime: 30_000,
     queryFn: async () => {
@@ -180,6 +182,7 @@ export function useWalletRunningBalance(walletType: "operating" | "trust" = "ope
         .select("id")
         .eq("tenant_id", tenantId!)
         .eq("wallet_type", walletType)
+        .eq("environment", environment || "sandbox")
         .maybeSingle();
       if (!wallet?.id) return { points: [] as RunningBalancePoint[] };
 
@@ -226,22 +229,28 @@ export function useAllTenantWalletBalances(isAdmin: boolean, walletType: "operat
     queryFn: async () => {
       const { data, error } = await supabase
         .from("payment_wallets")
-        .select("tenant_id, available_cents, pending_cents, status, last_synced_at")
+        .select("tenant_id, available_cents, pending_cents, status, last_synced_at, environment")
         .eq("wallet_type", walletType)
         .order("available_cents", { ascending: false });
       if (error) throw error;
 
       const tenantIds = Array.from(new Set((data ?? []).map((r: any) => r.tenant_id).filter(Boolean)));
       const nameById = new Map<string, string>();
+      const envById = new Map<string, string>();
       if (tenantIds.length) {
         const { data: tenants } = await supabase
           .from("tenants")
-          .select("id, name")
+          .select("id, name, moov_environment")
           .in("id", tenantIds);
-        (tenants ?? []).forEach((t: any) => nameById.set(t.id, t.name));
+        (tenants ?? []).forEach((t: any) => {
+          nameById.set(t.id, t.name);
+          envById.set(t.id, t.moov_environment || "sandbox");
+        });
       }
 
-      return (data ?? []).map((r: any) => ({
+      return (data ?? [])
+        .filter((r: any) => (r.environment || "sandbox") === (envById.get(r.tenant_id) || "sandbox"))
+        .map((r: any) => ({
         tenant_id: r.tenant_id,
         tenant_name: nameById.get(r.tenant_id) ?? "Organization",
         available_cents: Number(r.available_cents || 0),

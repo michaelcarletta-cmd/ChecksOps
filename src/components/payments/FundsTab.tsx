@@ -1,6 +1,8 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/contexts/TenantContext";
+import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibility";
+import { MoovEnvironmentBadge } from "@/components/payments/MoovEnvironmentBadge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,6 +44,7 @@ const toCents = (value: number) => Math.round((Number(value) || 0) * 100) / 100;
 
 export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId, detectedClaimNumber, payoutEnabled = true }: Props) {
   const { tenant } = useTenant();
+  const { environment } = usePaymentProviderEligibility();
   const qc = useQueryClient();
   const [disburseMode, setDisburseMode] = useState<DisburseMode>(null);
   const [homeownerLinkOpen, setHomeownerLinkOpen] = useState(false);
@@ -333,6 +336,9 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
 
   return (
     <div className="space-y-4 p-1">
+      <div className="flex items-center gap-2">
+        <MoovEnvironmentBadge environment={environment} />
+      </div>
       {/* Summary cards */}
       <div className="grid grid-cols-2 gap-2">
         <Card>

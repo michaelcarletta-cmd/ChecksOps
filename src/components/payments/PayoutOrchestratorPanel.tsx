@@ -11,6 +11,7 @@ import {
   type PayoutOrchestratorPlan,
   type PayoutUxStage,
 } from "@/lib/payoutOrchestrator";
+import { MoovEnvironmentBadge } from "@/components/payments/MoovEnvironmentBadge";
 import { ArrowRight, Loader2, Wallet } from "lucide-react";
 
 const STAGE_TONE: Record<PayoutUxStage, string> = {
@@ -25,9 +26,11 @@ const STAGE_TONE: Record<PayoutUxStage, string> = {
 export function PayoutOrchestratorPanel({
   tenantId,
   plan,
+  environment,
 }: {
   tenantId?: string | null;
   plan?: PayoutOrchestratorPlan | null;
+  environment?: string | null;
 }) {
   const { toast } = useToast();
   const orchestrate = usePayoutOrchestrator();
@@ -58,6 +61,7 @@ export function PayoutOrchestratorPanel({
         <CardTitle className="flex items-center gap-2 text-base font-semibold">
           <Wallet className="h-4 w-4" />
           Shortfall-aware payout
+          <MoovEnvironmentBadge environment={environment || view?.environment} />
         </CardTitle>
         <Badge variant="outline" className={`text-[10px] ${STAGE_TONE[stage] ?? ""}`}>
           {view?.ux?.stage_label || PAYOUT_UX_LABEL[stage]}

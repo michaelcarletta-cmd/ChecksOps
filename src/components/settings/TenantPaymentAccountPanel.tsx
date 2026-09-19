@@ -8,6 +8,9 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, RefreshCw, Link2, Copy, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
+import { MoovEnvironmentControl } from "@/components/payments/MoovEnvironmentControl";
+import { MoovEnvironmentBadge } from "@/components/payments/MoovEnvironmentBadge";
+import { SANDBOX_SETUP_REQUIRED, PRODUCTION_SETUP_REQUIRED, normalizeMoovEnvironment } from "@/lib/moovEnvironment";
 
 interface Props {
   tenantId: string;
@@ -68,23 +71,23 @@ export function TenantPaymentAccountPanel({ tenantId, tenantName, isOpen, onClos
     queryKey: ["tenant-payment-account", tenantId],
     enabled: isOpen && !!tenantId,
     queryFn: async () => {
-      const [tenantRes, acctRes] = await Promise.all([
-        supabase
-          .from("tenants")
-          .select(
-            "id, name, payment_provider, moov_account_id, moov_allowlisted, payment_status, bank_connection_status, bank_name, bank_last_four, last_sync",
-          )
-          .eq("id", tenantId)
-          .maybeSingle(),
-        supabase
-          .from("payment_provider_accounts")
-          .select("*")
-          .eq("tenant_id", tenantId)
-          .eq("provider", "moov")
-          .maybeSingle(),
-      ]);
+      const tenantRes = await supabase
+        .from("tenants")
+        .select(
+          "id, name, payment_provider, moov_account_id, moov_allowlisted, moov_environment, payment_status, bank_connection_status, bank_name, bank_last_four, last_sync",
+        )
+        .eq("id", tenantId)
+        .maybeSingle();
       if (tenantRes.error) throw tenantRes.error;
-      return { tenant: (tenantRes.data ?? {}) as any, account: (acctRes.data ?? null) as any };
+      const environment = normalizeMoovEnvironment((tenantRes.data as any)?.moov_environment);
+      const acctRes = await supabase
+        .from("payment_provider_accounts")
+        .select("*")
+        .eq("tenant_id", tenantId)
+        .eq("provider", "moov")
+        .eq("environment", environment)
+        .maybeSingle();
+      return { tenant: (tenantRes.data ?? {}) as any, account: (acctRes.data ?? null) as any, environment };
     },
   });
 
@@ -163,14 +166,19 @@ export function TenantPaymentAccountPanel({ tenantId, tenantName, isOpen, onClos
 
   const tenant = data?.tenant ?? {};
   const acct = data?.account ?? null;
+  const environment = normalizeMoovEnvironment(tenant.moov_environment || data?.environment);
   const onboarding = acct?.onboarding_status ?? "not_started";
   const requirements: string[] = Array.isArray(acct?.requirements) ? acct.requirements : [];
+  const setupRequired = !acct?.provider_account_id;
 
   return (
     <Dialog open={isOpen} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Payment Account — {tenantName}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            Payment Account — {tenantName}
+            <MoovEnvironmentBadge environment={environment} />
+          </DialogTitle>
           <DialogDescription>
             Oversight only. The organization completes onboarding and connects its own bank from their Payment settings.
           </DialogDescription>
@@ -193,6 +201,14 @@ export function TenantPaymentAccountPanel({ tenantId, tenantName, isOpen, onClos
                 disabled={toggleAllowlist.isPending}
               />
             </div>
+
+            <MoovEnvironmentControl tenantId={tenantId} current={environment} />
+
+            {setupRequired && (
+              <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+                {environment === "sandbox" ? SANDBOX_SETUP_REQUIRED : PRODUCTION_SETUP_REQUIRED}
+              </div>
+            )}
 
             <div className="rounded-md border p-3 divide-y divide-border/60">
               <Row label="Provider account">

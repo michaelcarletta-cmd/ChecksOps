@@ -140,22 +140,35 @@ const uuidV5 = (name, namespaceHex) => {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 };
 
-/** Durable first-test payout business operation. Independent of Sweep and prior funds. */
-export const firstTestPayoutOperationId = () => uuidV5(
+export const payoutOperationIdFor = ({
+  tenantId,
+  environment = 'production',
+  recipientId,
+  payoutCents = FIRST_PAYOUT_CENTS,
+} = {}) => uuidV5(
   [
     'checksops:m77:first-payout',
-    KNOWN_APPROVED_MOOV.freedom.tenantId,
-    KNOWN_APPROVED_MOOV.recipient.recipientId,
-    String(FIRST_PAYOUT_CENTS),
+    String(environment || 'production'),
+    String(tenantId || ''),
+    String(recipientId || ''),
+    String(payoutCents),
   ].join(':'),
   '6ba7b8109dad11d180b400c04fd430c8',
 );
 
-export const fundingIdempotencyKey = (operationId, shortfallCents) =>
-  `checksops:m77:wallet_funding:op:${operationId}:cents:${Number(shortfallCents)}`;
+/** Durable first-test payout business operation. Independent of Sweep and prior funds. */
+export const firstTestPayoutOperationId = (environment = 'production') => payoutOperationIdFor({
+  tenantId: KNOWN_APPROVED_MOOV.freedom.tenantId,
+  environment,
+  recipientId: KNOWN_APPROVED_MOOV.recipient.recipientId,
+  payoutCents: FIRST_PAYOUT_CENTS,
+});
 
-export const payoutIdempotencyKey = (operationId, payoutCents) =>
-  `checksops:m77:wallet_disbursement:op:${operationId}:cents:${Number(payoutCents)}`;
+export const fundingIdempotencyKey = (operationId, shortfallCents, environment = 'production') =>
+  `checksops:m77:wallet_funding:env:${environment}:op:${operationId}:cents:${Number(shortfallCents)}`;
+
+export const payoutIdempotencyKey = (operationId, payoutCents, environment = 'production') =>
+  `checksops:m77:wallet_disbursement:env:${environment}:op:${operationId}:cents:${Number(payoutCents)}`;
 
 export const canTransitionFunding = (from, to) => {
   if (from === to) return { ok: true, noop: true, reason: 'idempotent_same_status' };
@@ -285,13 +298,14 @@ export const createMemoryPayoutStore = (seed = {}) => {
   };
 };
 
-const plannedFundingIntent = ({ operationId, shortfallCents, decision }) => {
-  const fund = firstTestFundBinding();
+const plannedFundingIntent = ({ operationId, shortfallCents, decision, environment = 'production', labels = null }) => {
+  const fund = labels?.fund || firstTestFundBinding();
   return {
     kind: 'wallet_funding',
     leg_role: 'wallet_funding',
+    environment,
     payout_operation_id: operationId,
-    idempotency_key: fundingIdempotencyKey(operationId, shortfallCents),
+    idempotency_key: fundingIdempotencyKey(operationId, shortfallCents, environment),
     amount_cents: shortfallCents,
     status: 'planned',
     source_label: fund.sourceLabel,
@@ -305,13 +319,14 @@ const plannedFundingIntent = ({ operationId, shortfallCents, decision }) => {
   };
 };
 
-const plannedPayoutIntent = ({ operationId, payoutCents }) => {
-  const disburse = firstTestDisburseBinding();
+const plannedPayoutIntent = ({ operationId, payoutCents, environment = 'production', labels = null }) => {
+  const disburse = labels?.disburse || firstTestDisburseBinding();
   return {
     kind: 'wallet_disbursement',
     leg_role: 'wallet_disbursement',
+    environment,
     payout_operation_id: operationId,
-    idempotency_key: payoutIdempotencyKey(operationId, payoutCents),
+    idempotency_key: payoutIdempotencyKey(operationId, payoutCents, environment),
     amount_cents: payoutCents,
     status: 'planned',
     source_label: disburse.sourceLabel,
@@ -353,8 +368,18 @@ export const orchestratePayout = async ({
   store = null,
   existingRows = [],
   sweepActivity = [],
+  environment = 'production',
+  tenantId = KNOWN_APPROVED_MOOV.freedom.tenantId,
+  operationId: providedOperationId = null,
+  labels = null,
 } = {}) => {
-  const operationId = firstTestPayoutOperationId();
+  const env = String(environment || 'production').toLowerCase() === 'sandbox' ? 'sandbox' : 'production';
+  const operationId = providedOperationId || payoutOperationIdFor({
+    tenantId,
+    environment: env,
+    recipientId: labels?.disburse?.recipientId || KNOWN_APPROVED_MOOV.recipient.recipientId,
+    payoutCents,
+  });
   const amounts = decidePayoutFunding({ payoutCents, availableCents });
   const ignoredSweep = [...sweepActivity, ...existingRows].filter(isSweepActivity);
   const unrelatedFunding = existingRows.filter((row) => (
@@ -367,10 +392,11 @@ export const orchestratePayout = async ({
   let existingFunding = null;
   let existingPayout = null;
   if (store) {
-    existingFunding = await store.getIntent(fundingIdempotencyKey(operationId, amounts.shortfall_cents));
-    existingPayout = await store.getIntent(payoutIdempotencyKey(operationId, amounts.payout_cents));
+    existingFunding = await store.getIntent(fundingIdempotencyKey(operationId, amounts.shortfall_cents, env));
+    existingPayout = await store.getIntent(payoutIdempotencyKey(operationId, amounts.payout_cents, env));
   }
   for (const row of existingRows) {
+    if (row.environment && String(row.environment) !== env) continue;
     if (isAuthoritativeFundingIntent(row, operationId) && !existingFunding) existingFunding = row;
     if (String(row.leg_role || row.kind || '') === 'wallet_disbursement'
       && String(row.payout_operation_id || '') === operationId
@@ -384,6 +410,8 @@ export const orchestratePayout = async ({
       operationId,
       shortfallCents: amounts.shortfall_cents,
       decision: amounts.decision,
+      environment: env,
+      labels,
     })
     : null;
 
@@ -394,7 +422,12 @@ export const orchestratePayout = async ({
   const payoutResult = await reuseOrPlan(
     store,
     persistMoneyIntents === true,
-    plannedPayoutIntent({ operationId, payoutCents: amounts.payout_cents }),
+    plannedPayoutIntent({
+      operationId,
+      payoutCents: amounts.payout_cents,
+      environment: env,
+      labels,
+    }),
     existingPayout,
   );
 
@@ -455,7 +488,10 @@ export const orchestratePayout = async ({
     ok: true,
     phase: M77_PHASE,
     operation: 'payout.orchestrate',
+    environment: env,
+    tenant_id: tenantId,
     payout_operation_id: operationId,
+    idempotency_scope: `tenant:${tenantId}:env:${env}:op:${operationId}`,
     ...amounts,
     funding_mechanism: amounts.decision === DECISION.FUND_FIRST
       ? AUTHORITATIVE_DISBURSEMENT_FUNDING
@@ -487,6 +523,7 @@ export const orchestratePayout = async ({
     blocked_reasons: blockedReasons,
     funding_intent: fundingResult.intent ? {
       kind: 'wallet_funding',
+      environment: env,
       amount_cents: fundingResult.intent.amount_cents,
       idempotency_key: fundingResult.intent.idempotency_key,
       status: fundingResult.intent.status,
@@ -498,6 +535,7 @@ export const orchestratePayout = async ({
     } : null,
     payout_intent: {
       kind: 'wallet_disbursement',
+      environment: env,
       amount_cents: payoutResult.intent.amount_cents,
       idempotency_key: payoutResult.intent.idempotency_key,
       status: payoutResult.intent.status,

@@ -62,6 +62,8 @@ import { PaymentAccountPanel } from "@/components/payments/PaymentAccountPanel";
 import { PaymentReadinessPanel } from "@/components/payments/PaymentReadinessPanel";
 import { PayoutOrchestratorPanel } from "@/components/payments/PayoutOrchestratorPanel";
 import { VerificationDocumentsPanel } from "@/components/payments/VerificationDocumentsPanel";
+import { MoovEnvironmentBadge } from "@/components/payments/MoovEnvironmentBadge";
+import { SANDBOX_SETUP_REQUIRED } from "@/lib/moovEnvironment";
 
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 
@@ -133,7 +135,7 @@ export default function WalletOps() {
   const { userRole } = useAuth();
   const isAdmin = userRole === "admin";
   const { toast } = useToast();
-  const { enabled, isLoading: eligibilityLoading } = usePaymentProviderEligibility();
+  const { enabled, isLoading: eligibilityLoading, environment } = usePaymentProviderEligibility();
 
   const { wallet, ledger, isLoading: walletLoading, setupRequired, refetch: refetchWallet } =
     useWallet("operating");
@@ -235,11 +237,17 @@ export default function WalletOps() {
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-primary" />
               <span className="text-xs font-bold uppercase tracking-widest text-primary">WalletOps</span>
+              <MoovEnvironmentBadge environment={environment} />
             </div>
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Available operating balance</p>
             <div className="text-4xl font-bold tracking-tight md:text-5xl">
               {walletLoading ? "…" : balanceLabel}
             </div>
+            {setupRequired && (
+              <p className="text-sm font-medium text-amber-600">
+                {environment === "sandbox" ? SANDBOX_SETUP_REQUIRED : "Production Moov setup required"}
+              </p>
+            )}
             <div className="flex flex-wrap items-center gap-2">
               <Badge
                 variant="outline"
@@ -299,7 +307,7 @@ export default function WalletOps() {
         </div>
       </div>
 
-      <PayoutOrchestratorPanel tenantId={tenant?.id} />
+      <PayoutOrchestratorPanel tenantId={tenant?.id} environment={environment} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Wallet & Treasury */}

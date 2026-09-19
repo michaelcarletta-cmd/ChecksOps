@@ -45,6 +45,7 @@ test('WalletOps panel omits raw provider IDs and does not dual-trigger', () => {
   const page = sourceOf('src/pages/WalletOps.tsx');
   const hook = sourceOf('src/hooks/usePayoutOrchestrator.ts');
   assert.match(page, /PayoutOrchestratorPanel/);
+  assert.match(page, /MoovEnvironmentBadge/);
   assert.match(panel, /Prepare funding/);
   assert.match(panel, /Prepare payout/);
   assert.match(panel, /if \(!canPrepareFunding \|\| canPreparePayout\) return/);

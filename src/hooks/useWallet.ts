@@ -70,7 +70,7 @@ export function useWallet(walletType: WalletType = "operating") {
 }
 
 const SETUP_HINTS = [
-  "set up your payment account",
+  "Sandbox Moov setup required",
   "not active yet",
   "not ready to receive funds",
   "not enabled for this payment provider",

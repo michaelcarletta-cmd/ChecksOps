@@ -9,14 +9,15 @@ export const productionWebhookReconcileEnabled = () => true;
 
 const call = async (client, sql, params = []) => (await client.query(sql, params)).rows;
 
-export async function applyProductionMoovWebhook(client, payload, { mappedTenantId = null, dryRun = false } = {}) {
+export async function applyProductionMoovWebhook(client, payload, { mappedTenantId = null, dryRun = false, environment = 'production' } = {}) {
   const extracted = extractTransferEvent(payload);
+  const env = String(environment || 'production').toLowerCase() === 'sandbox' ? 'sandbox' : 'production';
   const mutations = [];
   if (dryRun) {
     return {
       applied: false,
       skipped: 'dry_run',
-      environment: 'production',
+      environment: env,
       financialTablesMutated: false,
       mutations,
       createdPaymentTransfer: false,
@@ -27,7 +28,7 @@ export async function applyProductionMoovWebhook(client, payload, { mappedTenant
     return {
       applied: false,
       skipped: 'no_transfer_id',
-      environment: 'production',
+      environment: env,
       financialTablesMutated: false,
       mutations,
       createdPaymentTransfer: false,
@@ -40,15 +41,15 @@ export async function applyProductionMoovWebhook(client, payload, { mappedTenant
 
   const existing = (await call(
     client,
-    `SELECT * FROM public.aws_moov_lookup_transfer($1)`,
-    [extracted.transferId],
+    `SELECT * FROM public.aws_moov_lookup_transfer($1, $2)`,
+    [extracted.transferId, env],
   ))[0] || null;
 
-  if (existing?.environment === 'sandbox') {
+  if (existing && existing.environment && existing.environment !== env) {
     return {
       applied: false,
-      skipped: 'sandbox_row_use_sandbox_apply',
-      environment: 'sandbox',
+      skipped: 'cross_environment_row_refused',
+      environment: existing.environment,
       financialTablesMutated: false,
       mutations,
       createdPaymentTransfer: false,
@@ -111,7 +112,7 @@ export async function applyProductionMoovWebhook(client, payload, { mappedTenant
     const updated = (await call(
       client,
       `SELECT * FROM public.aws_moov_reconcile_existing_transfer(
-         $1, $2, $3, $4::timestamptz, $5, $6, $7::jsonb)`,
+         $1, $2, $3, $4::timestamptz, $5, $6, $7::jsonb, $8)`,
       [
         extracted.transferId,
         extracted.status,
@@ -125,6 +126,7 @@ export async function applyProductionMoovWebhook(client, payload, { mappedTenant
           createdOn: extracted.createdOn,
           sweep: extracted.sweep,
         })),
+        env,
       ],
     ))[0];
     mutations.push('payment_transfers', 'payment_event_log');
@@ -145,7 +147,7 @@ export async function applyProductionMoovWebhook(client, payload, { mappedTenant
   const observed = (await call(
     client,
     `SELECT * FROM public.aws_moov_observe_provider_activity(
-       $1::uuid, $2, $3, $4, $5, $6, $7, $8, $9::timestamptz, $10::timestamptz, $11::jsonb)`,
+       $1::uuid, $2, $3, $4, $5, $6, $7, $8, $9::timestamptz, $10::timestamptz, $11::jsonb, $12)`,
     [
       mappedTenantId,
       extracted.transferId,
@@ -163,13 +165,14 @@ export async function applyProductionMoovWebhook(client, payload, { mappedTenant
         accountID: extracted.accountId,
         metadata: extracted.metadata,
       })),
+      env,
     ],
   ))[0];
   mutations.push('payment_provider_activity');
   return {
     applied: true,
     skipped: 'unknown_transfer_observed_only',
-    environment: 'production',
+    environment: env,
     financialTablesMutated: false,
     mutations,
     createdPaymentTransfer: false,
@@ -185,15 +188,17 @@ export async function reconcileExistingFromProviderGet(client, {
   completedOn = null,
   eventType = 'transfer.status_refresh',
   sweep = null,
+  environment = 'production',
 } = {}) {
+  const env = String(environment || 'production').toLowerCase() === 'sandbox' ? 'sandbox' : 'production';
   const extractedStatus = normalizeMoovStatus(providerStatus, eventType);
   const existing = (await call(
     client,
-    `SELECT * FROM public.aws_moov_lookup_transfer($1)`,
-    [providerTransferId],
+    `SELECT * FROM public.aws_moov_lookup_transfer($1, $2)`,
+    [providerTransferId, env],
   ))[0] || null;
   if (!existing) {
-    return { applied: false, skipped: 'unknown_transfer', createdPaymentTransfer: false };
+    return { applied: false, skipped: 'unknown_transfer', createdPaymentTransfer: false, environment: env };
   }
   const gate = canTransition(existing.status, extractedStatus);
   if (!gate.ok || gate.noop) {
@@ -205,6 +210,7 @@ export async function reconcileExistingFromProviderGet(client, {
       completed_at: existing.completed_at,
       createdPaymentTransfer: false,
       liveProviderPosted: false,
+      environment: env,
     };
   }
   const completedAt = completedAtFor({
@@ -215,7 +221,7 @@ export async function reconcileExistingFromProviderGet(client, {
   const updated = (await call(
     client,
     `SELECT * FROM public.aws_moov_reconcile_existing_transfer(
-       $1, $2, $3, $4::timestamptz, $5, $6, $7::jsonb)`,
+       $1, $2, $3, $4::timestamptz, $5, $6, $7::jsonb, $8)`,
     [
       providerTransferId,
       extractedStatus,
@@ -224,6 +230,7 @@ export async function reconcileExistingFromProviderGet(client, {
       eventType,
       existing.status,
       JSON.stringify(sanitize({ source: 'moov_get', completedOn, sweep })),
+      env,
     ],
   ))[0];
   return {
@@ -234,5 +241,6 @@ export async function reconcileExistingFromProviderGet(client, {
     completed_at: updated?.completed_at || completedAt,
     createdPaymentTransfer: false,
     liveProviderPosted: false,
+    environment: env,
   };
 }

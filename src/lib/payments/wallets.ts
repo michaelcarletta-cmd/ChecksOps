@@ -105,11 +105,22 @@ export async function readWallet(
   tenantId: string,
   walletType: WalletType = "operating",
 ): Promise<Wallet | null> {
+  const { data: tenant, error: tenantError } = await supabase
+    .from("tenants")
+    .select("moov_environment")
+    .eq("id", tenantId)
+    .maybeSingle();
+  if (tenantError) throw tenantError;
+  const environment = String((tenant as any)?.moov_environment || "").toLowerCase() === "production"
+    ? "production"
+    : "sandbox";
+
   const { data, error } = await supabase
     .from("payment_wallets")
     .select("*")
     .eq("tenant_id", tenantId)
     .eq("wallet_type", walletType)
+    .eq("environment", environment)
     .maybeSingle();
   if (error) throw error;
   return (data as Wallet) ?? null;

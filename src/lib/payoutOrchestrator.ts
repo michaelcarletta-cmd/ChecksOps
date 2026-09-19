@@ -38,6 +38,7 @@ export type PayoutOrchestratorUx = {
 
 export type PayoutOrchestratorPlan = {
   ok?: boolean;
+  environment?: "sandbox" | "production";
   decision: "FUND_FIRST" | "PAYOUT_READY";
   payout_cents: number;
   available_cents: number;
