@@ -174,7 +174,7 @@ export async function applyProductionMoovWebhook(client, payload, { mappedTenant
     mutations,
     createdPaymentTransfer: false,
     liveProviderCalled: false,
-    observed_id: observed?.id || null,
+    observed_id: observed?.observed_id || observed?.id || null,
     provider_transfer_id: extracted.transferId,
   };
 }

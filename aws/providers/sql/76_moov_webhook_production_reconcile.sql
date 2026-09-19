@@ -179,6 +179,8 @@ BEGIN
 END;
 $$;
 
+DROP FUNCTION IF EXISTS public.aws_moov_observe_provider_activity(uuid, text, text, text, text, bigint, text, text, timestamptz, timestamptz, jsonb);
+
 CREATE OR REPLACE FUNCTION public.aws_moov_observe_provider_activity(
   p_tenant_id uuid,
   p_provider_transfer_id text,
@@ -192,20 +194,15 @@ CREATE OR REPLACE FUNCTION public.aws_moov_observe_provider_activity(
   p_completed_at timestamptz,
   p_metadata jsonb
 ) RETURNS TABLE (
-  id uuid,
-  provider_transfer_id text,
-  origin text,
-  status text
+  observed_id uuid,
+  observed_transfer_id text,
+  observed_origin text,
+  observed_status text
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
-DECLARE
-  v_id uuid;
-  v_transfer_id text;
-  v_origin text;
-  v_status text;
 BEGIN
   IF current_setting('request.provider_webhook', true) IS DISTINCT FROM '1'
      AND current_setting('request.moov_get_reconcile', true) IS DISTINCT FROM '1' THEN
@@ -213,40 +210,35 @@ BEGIN
       USING ERRCODE = '42501';
   END IF;
 
-  INSERT INTO public.payment_provider_activity (
-    tenant_id, provider, environment, origin, activity_kind, provider_transfer_id,
-    provider_sweep_id, status, amount_cents, source_rail, destination_rail,
-    provider_created_at, provider_completed_at, provider_metadata
-  ) VALUES (
-    p_tenant_id, 'moov', 'production', COALESCE(p_origin, 'provider_unknown'),
-    COALESCE(p_activity_kind, 'transfer'), p_provider_transfer_id,
-    p_metadata->>'sweepID', p_status, p_amount_cents, p_source_rail, p_destination_rail,
-    p_created_at, p_completed_at, COALESCE(p_metadata, '{}'::jsonb)
+  RETURN QUERY
+  WITH ins AS (
+    INSERT INTO public.payment_provider_activity (
+      tenant_id, provider, environment, origin, activity_kind, provider_transfer_id,
+      provider_sweep_id, status, amount_cents, source_rail, destination_rail,
+      provider_created_at, provider_completed_at, provider_metadata
+    ) VALUES (
+      p_tenant_id, 'moov', 'production', COALESCE(p_origin, 'provider_unknown'),
+      COALESCE(p_activity_kind, 'transfer'), p_provider_transfer_id,
+      p_metadata->>'sweepID', p_status, p_amount_cents, p_source_rail, p_destination_rail,
+      p_created_at, p_completed_at, COALESCE(p_metadata, '{}'::jsonb)
+    )
+    ON CONFLICT (provider, provider_transfer_id) DO UPDATE SET
+      status = COALESCE(EXCLUDED.status, payment_provider_activity.status),
+      amount_cents = COALESCE(EXCLUDED.amount_cents, payment_provider_activity.amount_cents),
+      provider_sweep_id = COALESCE(EXCLUDED.provider_sweep_id, payment_provider_activity.provider_sweep_id),
+      origin = CASE
+        WHEN payment_provider_activity.origin = 'provider_unknown' THEN EXCLUDED.origin
+        ELSE payment_provider_activity.origin
+      END,
+      provider_completed_at = COALESCE(EXCLUDED.provider_completed_at, payment_provider_activity.provider_completed_at),
+      provider_metadata = payment_provider_activity.provider_metadata || EXCLUDED.provider_metadata,
+      updated_at = now()
+    RETURNING payment_provider_activity.id,
+              payment_provider_activity.provider_transfer_id,
+              payment_provider_activity.origin,
+              payment_provider_activity.status
   )
-  ON CONFLICT (provider, provider_transfer_id) DO UPDATE SET
-    status = COALESCE(EXCLUDED.status, payment_provider_activity.status),
-    amount_cents = COALESCE(EXCLUDED.amount_cents, payment_provider_activity.amount_cents),
-    provider_sweep_id = COALESCE(EXCLUDED.provider_sweep_id, payment_provider_activity.provider_sweep_id),
-    origin = CASE
-      WHEN payment_provider_activity.origin = 'provider_unknown' THEN EXCLUDED.origin
-      ELSE payment_provider_activity.origin
-    END,
-    provider_completed_at = COALESCE(EXCLUDED.provider_completed_at, payment_provider_activity.provider_completed_at),
-    provider_metadata = payment_provider_activity.provider_metadata || EXCLUDED.provider_metadata,
-    updated_at = now()
-  RETURNING public.payment_provider_activity.id
-  INTO v_id;
-
-  SELECT a.provider_transfer_id, a.origin, a.status
-    INTO v_transfer_id, v_origin, v_status
-    FROM public.payment_provider_activity a
-   WHERE a.id = v_id;
-
-  id := v_id;
-  provider_transfer_id := v_transfer_id;
-  origin := v_origin;
-  status := v_status;
-  RETURN NEXT;
+  SELECT ins.id, ins.provider_transfer_id, ins.origin, ins.status FROM ins;
 END;
 $$;
 

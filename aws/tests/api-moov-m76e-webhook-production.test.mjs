@@ -134,6 +134,7 @@ const mockWebhookClient = ({ lookup = existingCompleted, observeId = 'act-1' } =
         return {
           rows: [{
             id: observeId,
+            observed_id: observeId,
             provider_transfer_id: params[1],
             origin: params[2],
             status: params[4],
