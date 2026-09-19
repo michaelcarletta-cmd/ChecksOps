@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  claimNumbersEqual,
   isEffectivelyAllCaps,
   normalizeClaimNumber,
   normalizeDescriptiveText,
@@ -40,6 +41,8 @@ test('recognized acronyms and business suffixes stay uppercase', () => {
 test('claim-number formatter preserves leading zeros and punctuation', () => {
   assert.equal(normalizeClaimNumber('  00412-AB/9  '), '00412-AB/9');
   assert.equal(normalizeClaimNumber('38-99V2-97X'), '38-99V2-97X');
+  assert.equal(claimNumbersEqual('00412-AB/9', '00412-ab/9'), true);
+  assert.equal(claimNumbersEqual('00412-AB/9', '00412AB9'), false);
 });
 
 test('emails and URLs are not title-cased', () => {

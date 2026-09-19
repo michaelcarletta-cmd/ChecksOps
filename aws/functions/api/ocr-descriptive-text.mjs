@@ -55,7 +55,6 @@ export const titleCaseDescriptive = (value) => String(value || '')
 
 /**
  * Trim-only claim-number sanitizer. Does not change case, digits, or punctuation.
- * Not applied to persistence while detected_claim_number remains ungranted.
  */
 export const normalizeClaimNumber = (value) => {
   if (value == null) return null;
@@ -63,11 +62,19 @@ export const normalizeClaimNumber = (value) => {
   return text || null;
 };
 
+export const claimNumbersEqual = (left, right) => {
+  const a = normalizeClaimNumber(left);
+  const b = normalizeClaimNumber(right);
+  if (!a || !b) return false;
+  return a.toLowerCase() === b.toLowerCase();
+};
+
 export const normalizeDescriptiveText = (value, { max = 200 } = {}) => {
   if (value == null) return null;
   const text = String(value).trim().replace(/\s+/g, ' ');
   if (!text) return null;
   if (EMAIL_RE.test(text) || URL_RE.test(text) || UUID_RE.test(text)) return text.slice(0, max);
+  if (/\d/.test(text) && !/\s/.test(text)) return text.slice(0, max);
   const out = isEffectivelyAllCaps(text) ? titleCaseDescriptive(text) : text;
   return out.slice(0, max);
 };

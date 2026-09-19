@@ -11,6 +11,7 @@ import {
   persistOcrDescriptiveHandoff,
 } from '../functions/api/ocr-descriptive-persist.mjs';
 import {
+  claimNumbersEqual,
   normalizeClaimNumber,
   normalizeDescriptiveText,
 } from '../functions/api/ocr-descriptive-text.mjs';
@@ -33,6 +34,7 @@ const createClient = ({ existingPayees = [] } = {}) => {
     carrier_name: null,
     payee_line: null,
     detected_claim_number: null,
+    claim_id: null,
     payees: existingPayees.map((row) => ({ ...row })),
   };
   const statements = [];
@@ -42,7 +44,26 @@ const createClient = ({ existingPayees = [] } = {}) => {
     query: async (sql, params = []) => {
       const text = String(sql);
       statements.push({ sql: text, params: [...params] });
-      assert.equal(/detected_claim_number\s*=/.test(text), false);
+      assert.equal(/UPDATE public\.check_intake_items[\s\S]*detected_claim_number\s*=/.test(text), false);
+      if (/SAVEPOINT |RELEASE SAVEPOINT |ROLLBACK TO SAVEPOINT /.test(text)) {
+        return { rows: [] };
+      }
+      if (/ocr_persist_detected_claim_number/.test(text)) {
+        const incoming = String(params[2] || '').trim();
+        const existing = store.detected_claim_number;
+        if (!incoming) {
+          return { rows: [{ result: { ok: true, persisted: false, linked: false, code: 'absent' } }] };
+        }
+        if (!existing) {
+          store.detected_claim_number = incoming;
+          if (store.uniqueClaimId && !store.claim_id) store.claim_id = store.uniqueClaimId;
+          return { rows: [{ result: { ok: true, persisted: true, linked: Boolean(store.claim_id), code: 'written' } }] };
+        }
+        if (claimNumbersEqual(existing, incoming)) {
+          return { rows: [{ result: { ok: true, persisted: false, linked: false, code: 'unchanged' } }] };
+        }
+        return { rows: [{ result: { ok: true, persisted: false, linked: false, code: 'conflict_preserved' } }] };
+      }
       if (/UPDATE public\.check_intake_items/.test(text) && /issue_date = \$2/.test(text)) {
         assert.equal(text.includes('amount'), false);
         store.issue_date = params[1];
@@ -293,7 +314,7 @@ test('18) persist logs are count/status only', async () => {
   const blob = JSON.stringify(logs);
   assert.equal(blob.includes('Secret Payee Name'), false);
   assert.equal(blob.includes('Another Name'), false);
-  assert.match(logs[0].code, /date_1_ins_2_skip_0_multi_1/);
+  assert.match(logs[0].code, /date_1_ins_2_skip_0_multi_1_claim_none/);
 });
 
 test('19) amount remains prohibited and unpersisted after intake', async () => {
@@ -417,32 +438,66 @@ test('candidate collection collapses whitespace and drops empties', () => {
   assert.equal(normalizePayeeKey(rows[0].name), 'alpha payee');
 });
 
-test('claim number persist is blocked without SQL/RLS grant', async () => {
+test('1) extracted claim number persists when field empty', async () => {
   const client = createClient();
-  client.store.detected_claim_number = '38-99V2-97X';
-  await persistOcrDescriptiveHandoff({
+  const out = await persistOcrDescriptiveHandoff({
     client,
     checkId: CHECK_ID,
     tenantId: TENANT_ID,
-    parsed: {
-      claim_number: '00412-AB/9',
-      detected_claim_number: '00412-AB/9',
-      payees: [],
-    },
+    parsed: { claim_number: '  00412-AB/9  ', payees: [] },
   });
-  const blob = JSON.stringify(client.statements);
-  assert.equal(blob.includes('detected_claim_number'), false);
-  assert.equal(blob.includes('claim_number'), false);
-  assert.equal(client.store.detected_claim_number, '38-99V2-97X');
+  assert.equal(out.claim_persisted, true);
+  assert.equal(client.store.detected_claim_number, '00412-AB/9');
   assert.equal(INTAKE_PROHIBITED_COLUMNS.has('detected_claim_number'), true);
 });
 
-test('claim-number formatter trims only and preserves zeros/punctuation', () => {
+test('2-5) claim number preserves zeros, letters, punctuation, and case', () => {
   assert.equal(normalizeClaimNumber('  00412-AB/9  '), '00412-AB/9');
   assert.equal(normalizeClaimNumber('38-99V2-97X'), '38-99V2-97X');
   assert.equal(normalizeClaimNumber('abc-001'), 'abc-001');
-  assert.equal(normalizeClaimNumber(''), null);
   assert.notEqual(normalizeClaimNumber('ABC-001'), 'Abc-001');
+  assert.equal(normalizeDescriptiveText('00412-AB/9'), '00412-AB/9');
+});
+
+test('6) absent OCR claim number does nothing', async () => {
+  const client = createClient();
+  client.store.detected_claim_number = 'KEEP-9';
+  const out = await persistOcrDescriptiveHandoff({
+    client,
+    checkId: CHECK_ID,
+    tenantId: TENANT_ID,
+    parsed: { claim_number: null, payees: [] },
+  });
+  assert.equal(out.claim_code, 'none');
+  assert.equal(client.store.detected_claim_number, 'KEEP-9');
+  assert.equal(client.statements.some((row) => /ocr_persist_detected_claim_number/.test(row.sql)), false);
+});
+
+test('7) same OCR claim number is idempotent', async () => {
+  const client = createClient();
+  client.store.detected_claim_number = '00412-AB/9';
+  const out = await persistOcrDescriptiveHandoff({
+    client,
+    checkId: CHECK_ID,
+    tenantId: TENANT_ID,
+    parsed: { claim_number: '00412-ab/9', payees: [] },
+  });
+  assert.equal(out.claim_persisted, false);
+  assert.equal(out.claim_code, 'unchanged');
+  assert.equal(client.store.detected_claim_number, '00412-AB/9');
+});
+
+test('8) different OCR claim number does not overwrite existing value', async () => {
+  const client = createClient();
+  client.store.detected_claim_number = '38-99V2-97X';
+  const out = await persistOcrDescriptiveHandoff({
+    client,
+    checkId: CHECK_ID,
+    tenantId: TENANT_ID,
+    parsed: { claim_number: '00412-AB/9', payees: [] },
+  });
+  assert.equal(out.claim_code, 'conflict_preserved');
+  assert.equal(client.store.detected_claim_number, '38-99V2-97X');
 });
 
 test('ALL-CAPS person and company names become human-readable', async () => {
@@ -497,7 +552,7 @@ test('ALL-CAPS OCR payee dedups against mixed-case manual payee without rename',
   assert.equal(client.store.payees[0].contact_email, 'keep@example.test');
 });
 
-test('claim/check/MICR/amount values are not case-normalized or persisted', async () => {
+test('claim/check/MICR/amount values are not case-normalized; only claim RPC writes the number', async () => {
   const client = createClient();
   await persistOcrDescriptiveHandoff({
     client,
@@ -513,11 +568,19 @@ test('claim/check/MICR/amount values are not case-normalized or persisted', asyn
       payees: [],
     },
   });
-  const blob = JSON.stringify(client.statements);
-  assert.equal(blob.includes('AB-001/X'), false);
+  const blob = JSON.stringify(client.statements.map((row) => row.sql));
+  assert.equal(client.store.detected_claim_number, 'AB-001/X');
   assert.equal(blob.includes('001234'), false);
   assert.equal(blob.includes('1500.00'), false);
   assert.equal(blob.includes(ROUTING_OK), false);
   assert.equal(blob.includes(ACCOUNT), false);
+  assert.equal(/UPDATE public\.check_intake_items[\s\S]*detected_claim_number\s*=/.test(blob), false);
   assert.equal(client.store.amount, null);
+});
+
+test('generic /data/write still prohibits detected_claim_number', () => {
+  const sql = fs.readFileSync(path.join(ROOT, 'aws/write-path/sql/41_ocr_detected_claim_number.sql'), 'utf8');
+  assert.equal(INTAKE_PROHIBITED_COLUMNS.has('detected_claim_number'), true);
+  assert.doesNotMatch(sql, /^GRANT UPDATE/m);
+  assert.match(sql, /REVOKE ALL ON FUNCTION public\.ocr_persist_detected_claim_number[\s\S]*FROM authenticated/);
 });
