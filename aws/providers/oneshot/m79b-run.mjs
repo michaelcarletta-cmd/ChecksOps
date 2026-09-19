@@ -237,7 +237,11 @@ const decodeJwt = (token) => {
       if (typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(value)) {
         safe[key] = fingerprint(value);
       } else if (Array.isArray(value)) {
-        safe[key] = value.map((item) => (typeof item === 'string' && item.length > 24 ? fingerprint(item) : item)).slice(0, 12);
+        safe[key] = value.map((item) => {
+          if (typeof item === 'string' && /^https?:\/\//i.test(item)) return originHost(item) || item;
+          if (typeof item === 'string' && item.length > 24 && /^[0-9a-f-]{36}$/i.test(item)) return fingerprint(item);
+          return item;
+        }).slice(0, 12);
       } else if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
         safe[key] = value;
       }
@@ -520,6 +524,24 @@ const identifyKey = async (staging) => {
     }
   }
 
+  const applications = await moovCall({
+    publicKey: s.MOOV_SANDBOX_PUBLIC_KEY,
+    secretKey: s.MOOV_SANDBOX_SECRET_KEY,
+    origin: STAGING_ORIGIN,
+    apiVersion: PROVEN_API_VERSION,
+    path: '/applications',
+  });
+  const applicationRows = Array.isArray(applications.json) ? applications.json : [];
+  const applicationMeta = applicationRows.map((row) => ({
+    applicationFp: fingerprint(row.applicationID || row.applicationId || row.id),
+    accountFp: fingerprint(row.accountID || row.accountId),
+    name: row.name || row.description || null,
+    accountMode: row.accountMode ?? row.mode ?? null,
+    domainFields: Object.keys(row || {}).filter((key) => /origin|domain/i.test(key)),
+    fieldNames: Object.keys(row || {}).sort(),
+    matchesPlatform: String(row.accountID || row.accountId || '').toLowerCase() === String(platformId).toLowerCase(),
+  }));
+
   return {
     publicKeyFp: shortFp(s.MOOV_SANDBOX_PUBLIC_KEY),
     platformFp: fingerprint(platformId),
@@ -537,6 +559,11 @@ const identifyKey = async (staging) => {
       account: accountSafe(platformGetLive.json),
     },
     ping,
+    applications: {
+      status: applications.status,
+      count: applicationMeta.length,
+      rows: applicationMeta,
+    },
     originBefore: {
       stagingAccepted: platformGetStaging.status === 200,
       liveAccepted: platformGetLive.status === 200,
@@ -1247,6 +1274,8 @@ const main = async () => {
         publicKeyFp: identify.publicKeyFp,
         platformFp: identify.platformFp,
         jwtAccountFp: identify.jwtAccountFp,
+        jwtSafe: identify.jwtSafe,
+        applications: identify.applications,
         originBefore: identify.originBefore,
         platformGetStaging: identify.platformGetStaging,
         platformGetLiveBefore: identify.platformGetLiveBefore,
