@@ -741,6 +741,7 @@ export const FINANCIAL_OR_PROVIDER_TABLES = new Set([
   'payment_idempotency_keys',
   'payment_methods',
   'payment_provider_accounts',
+  'payment_provider_activity',
   'payment_sweep_configs',
   'payment_transfer_groups',
   'payment_transfers',

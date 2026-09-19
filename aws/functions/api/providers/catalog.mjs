@@ -62,7 +62,7 @@ export const PROVIDER_FUNCTIONS = [
   fn('moov-recipient-bank-verify', 'moov', OP_CLASS.BANK_CONNECTION, 'sandbox_parity', 'Recipient instant micro-deposit verify. Not a transfer.'),
   fn('moov-recipient-disconnect', 'moov', OP_CLASS.IDENTITY_KYC, 'sandbox_parity', 'Disconnects recipient account.'),
   fn('moov-transfer-create', 'moov', OP_CLASS.MONEY_MOVEMENT, 'sandbox_parity', 'Creates ACH/RTP/wallet transfer.'),
-  fn('moov-transfer-status', 'moov', OP_CLASS.READ_STATUS, 'sandbox_parity', 'Live GET facilitator transfer + payment_transfers write-back for sandbox rows.'),
+  fn('moov-transfer-status', 'moov', OP_CLASS.READ_STATUS, 'sandbox_parity', 'Sandbox: GET facilitator transfer write-back. Production: GET-only reconcile of existing payment_transfers; never POST; never INSERT intents.'),
   fn('moov-transfer-group-create', 'moov', OP_CLASS.MONEY_MOVEMENT, 'sandbox_parity', 'Creates grouped transfers.'),
   fn('moov-disburse', 'moov', OP_CLASS.DISBURSEMENT, 'sandbox_parity', 'Executes disbursement splits.'),
   fn('moov-tenant-fee-charge', 'moov', OP_CLASS.MONEY_MOVEMENT, 'sandbox_parity', 'Charges tenant fees via Moov.'),
