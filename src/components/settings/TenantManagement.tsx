@@ -18,6 +18,7 @@ import { TenantUsageDashboard } from "./TenantUsageDashboard";
 import { TenantProBadgeManagement } from "./TenantProBadgeManagement";
 import { TenantPaymentAccountPanel } from "./TenantPaymentAccountPanel";
 import { TenantSecurityCompliance } from "./TenantSecurityCompliance";
+import { MoovEnvironmentBadge } from "@/components/payments/MoovEnvironmentBadge";
 
 interface TenantForm {
   name: string;
@@ -507,6 +508,7 @@ export function TenantManagement() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-medium truncate">{t.name}</span>
                     {t.is_system_tenant && <Badge variant="outline" className="text-xs">System</Badge>}
+                    <MoovEnvironmentBadge environment={(t as any).moov_environment} />
                     <Badge className={`text-xs ${getStatusColor(t.subscription_status)}`}>{t.subscription_status}</Badge>
                     <Badge variant="outline" className="text-xs">{t.plan_tier}</Badge>
                     {t.email_provider && t.email_provider !== "none" && <Badge variant="outline" className="text-xs text-blue-400">✉ {t.email_provider}</Badge>}

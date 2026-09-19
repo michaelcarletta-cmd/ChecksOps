@@ -235,6 +235,73 @@ export const loadProductionMoovReadSecrets = async (getSecrets = loadProviderSec
   };
 };
 
+const sandboxCredentialsFromSecrets = (secrets) => ({
+  environment: 'sandbox',
+  host: PRODUCTION_MOOV_HOST,
+  publicKey: secrets.MOOV_SANDBOX_PUBLIC_KEY,
+  secretKey: secrets.MOOV_SANDBOX_SECRET_KEY,
+  platformAccountId: present(secrets, 'MOOV_SANDBOX_PLATFORM_ACCOUNT_ID')
+    ? String(secrets.MOOV_SANDBOX_PLATFORM_ACCOUNT_ID).trim()
+    : null,
+  origin: present(secrets, 'MOOV_SANDBOX_ALLOWED_ORIGIN')
+    ? String(secrets.MOOV_SANDBOX_ALLOWED_ORIGIN).trim()
+    : PRODUCTION_MOOV_ORIGIN,
+  webhookSecretConfigured: present(secrets, 'MOOV_SANDBOX_WEBHOOK_SECRET'),
+  apiVersion: present(secrets, 'MOOV_SANDBOX_API_VERSION')
+    ? String(secrets.MOOV_SANDBOX_API_VERSION).trim()
+    : PRODUCTION_MOOV_API_VERSION,
+});
+
+/** Sandbox-only credential path. Never copies production key values into the returned object. */
+export const loadSandboxMoovReadSecrets = async (getSecrets = loadProviderSecrets) => {
+  const arn = process.env.PROVIDER_SECRETS_ARN;
+  if (!arn) {
+    return {
+      ok: false,
+      statusCode: 503,
+      error: 'sandbox_secret_missing',
+      provider: 'moov',
+      environment: 'sandbox',
+      secretNames: [...SANDBOX_MOOV_SECRET_NAMES],
+      configured: false,
+      message: 'Sandbox Moov secrets are absent. Production keys cannot satisfy this path.',
+    };
+  }
+  let secrets;
+  try {
+    secrets = await getSecrets();
+  } catch {
+    return {
+      ok: false,
+      statusCode: 503,
+      error: 'sandbox_secret_missing',
+      provider: 'moov',
+      environment: 'sandbox',
+      configured: false,
+    };
+  }
+  if (!present(secrets, 'MOOV_SANDBOX_PUBLIC_KEY') || !present(secrets, 'MOOV_SANDBOX_SECRET_KEY')) {
+    return {
+      ok: false,
+      statusCode: 503,
+      error: 'sandbox_secret_missing',
+      provider: 'moov',
+      environment: 'sandbox',
+      secretNames: ['MOOV_SANDBOX_PUBLIC_KEY', 'MOOV_SANDBOX_SECRET_KEY'],
+      configured: false,
+      message: 'Sandbox Moov secrets are absent. Production keys cannot satisfy this path.',
+    };
+  }
+  return {
+    ok: true,
+    contract: 'read',
+    environment: 'sandbox',
+    configured: true,
+    secretNames: [...SANDBOX_MOOV_SECRET_NAMES],
+    credentials: sandboxCredentialsFromSecrets(secrets),
+  };
+};
+
 export const loadProductionMoovSecrets = async (getSecrets = loadProviderSecrets) => {
   const arn = process.env.PROVIDER_SECRETS_ARN;
   if (!arn) {

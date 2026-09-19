@@ -274,6 +274,9 @@ test('handler uses live GET wallet, refuses persist/POST, and ignores Sweep as f
       if (String(sql).includes('tenant_users') || String(sql).includes('TENANT_MEMBERSHIP')) {
         return { rows: [{ tenant_id: FREEDOM_TENANT, role: 'admin', tenant_name: 'Freedom', tenant_slug: 'freedom' }] };
       }
+      if (String(sql).includes('FROM public.tenants')) {
+        return { rows: [{ id: FREEDOM_TENANT, moov_allowlisted: true, moov_environment: 'production' }] };
+      }
       if (String(sql).includes('FROM public.payment_transfers')) {
         return { rows: [PRIOR_FUND] };
       }

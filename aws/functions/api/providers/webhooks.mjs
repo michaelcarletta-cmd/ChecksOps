@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import pg from 'pg';
 import { loadDatabaseCredentials } from '../secrets.mjs';
 import { buildWriteClientConfig } from '../db-health.mjs';
-import { loadProviderSecrets, webhookSecret } from '../provider-secrets.mjs';
+import { loadProviderSecrets, webhookSecret, webhookSecretForEnvironment } from '../provider-secrets.mjs';
 import { providerWebhookDryRun } from '../provider-flags.mjs';
 import { rawEventBody, verifyHmacBodySignature, verifyMoovSignature } from './hmac.mjs';
 import { applyCheckAltWebhook, applyMoovWebhook, sandboxWebhookApplyEnabled } from './webhook-apply.mjs';
@@ -67,22 +67,50 @@ export const verifyProviderWebhook = ({ provider, event, rawBody, secret, nowMs 
   return verifyHmacBodySignature({ event, rawBody, secret, nowMs });
 };
 
-const lookupMappedTenant = async (client, provider, payload) => {
+export const verifyMoovWebhookEnvironment = ({ event, rawBody, secrets, nowMs }) => {
+  const productionSecret = webhookSecretForEnvironment(secrets, 'moov', 'production');
+  const sandboxSecret = webhookSecretForEnvironment(secrets, 'moov', 'sandbox');
+  const production = verifyMoovSignature({ event, rawBody, secret: productionSecret, nowMs });
+  const sandbox = verifyMoovSignature({ event, rawBody, secret: sandboxSecret, nowMs });
+  if (production.ok && sandbox.ok) {
+    return { ok: false, reason: 'webhook_secret_environment_ambiguous', eventId: null };
+  }
+  if (production.ok && sandboxSecret) {
+    return { ...production, environment: 'production', secretEnvironment: 'production' };
+  }
+  if (sandbox.ok && productionSecret) {
+    return { ...sandbox, environment: 'sandbox', secretEnvironment: 'sandbox' };
+  }
+  if (production.ok) {
+    return { ...production, environment: null, secretEnvironment: 'production' };
+  }
+  if (sandbox.ok) {
+    return { ...sandbox, environment: null, secretEnvironment: 'sandbox' };
+  }
+  return {
+    ok: false,
+    reason: production.reason || sandbox.reason || 'invalid_signature',
+    eventId: production.eventId || sandbox.eventId || null,
+  };
+};
+
+const lookupMappedTenant = async (client, provider, payload, environment = null) => {
   if (provider === 'moov') {
     const providerAccountId = providerAccountOf(provider, payload);
-    if (!providerAccountId) return { mapped_tenant_id: null, mapped_internal_id: null, lookup: 'no_provider_id' };
+    if (!providerAccountId) return { mapped_tenant_id: null, mapped_internal_id: null, lookup: 'no_provider_id', environment: environment || null };
     try {
       const row = (await client.query(
-        'SELECT id, tenant_id FROM public.aws_lookup_provider_account($1, $2)',
-        ['moov', String(providerAccountId)],
+        'SELECT id, tenant_id, environment FROM public.aws_lookup_provider_account($1, $2, $3)',
+        ['moov', String(providerAccountId), environment],
       )).rows[0];
       return {
         mapped_tenant_id: row?.tenant_id || null,
         mapped_internal_id: row?.id || null,
+        environment: row?.environment || environment || null,
         lookup: row ? 'provider_account' : 'unmapped',
       };
     } catch {
-      return { mapped_tenant_id: null, mapped_internal_id: null, lookup: 'lookup_unavailable' };
+      return { mapped_tenant_id: null, mapped_internal_id: null, lookup: 'lookup_unavailable', environment: environment || null };
     }
   }
   if (provider === 'checkalt') {
@@ -140,14 +168,26 @@ export const handleProviderWebhook = async (event, provider, deps = {}) => {
   }
 
   const secrets = await (deps.loadProviderSecrets || loadProviderSecrets)();
-  const secret = webhookSecret(secrets, provider);
-  const verified = verifyProviderWebhook({
-    provider,
-    event,
-    rawBody,
-    secret,
-    nowMs: deps.nowMs,
-  });
+  let verified;
+  let signedEnvironment = null;
+  if (provider === 'moov') {
+    verified = verifyMoovWebhookEnvironment({
+      event,
+      rawBody,
+      secrets,
+      nowMs: deps.nowMs,
+    });
+    signedEnvironment = verified.ok ? (verified.environment || null) : null;
+  } else {
+    const secret = webhookSecret(secrets, provider);
+    verified = verifyProviderWebhook({
+      provider,
+      event,
+      rawBody,
+      secret,
+      nowMs: deps.nowMs,
+    });
+  }
   if (!verified.ok) {
     console.log(JSON.stringify({
       kind: 'moov_webhook_verify',
@@ -202,7 +242,26 @@ export const handleProviderWebhook = async (event, provider, deps = {}) => {
     await client.query('SET TRANSACTION READ WRITE');
     await client.query("SELECT set_config('request.provider_webhook', '1', true)");
 
-    const mapped = await lookupMappedTenant(client, provider, parsed.payload);
+    const mapped = await lookupMappedTenant(client, provider, parsed.payload, signedEnvironment);
+    const webhookEnvironment = signedEnvironment || mapped.environment || null;
+    if (
+      provider === 'moov'
+      && signedEnvironment
+      && mapped.environment
+      && mapped.environment !== signedEnvironment
+    ) {
+      await client.query('ROLLBACK');
+      didCommit = true;
+      return {
+        ok: false,
+        statusCode: 409,
+        error: 'cross_environment_webhook_refused',
+        message: 'Webhook signing environment does not match the mapped provider account environment.',
+        provider,
+        environment: signedEnvironment,
+        mapped_environment: mapped.environment,
+      };
+    }
     const stored = await insertReceipt(client, {
       provider,
       external_event_id: String(externalEventId),
@@ -220,7 +279,7 @@ export const handleProviderWebhook = async (event, provider, deps = {}) => {
       createdPaymentTransfer: false,
       liveProviderCalled: false,
     };
-    if (!stored.duplicate && sandboxWebhookApplyEnabled()) {
+    if (!stored.duplicate && sandboxWebhookApplyEnabled() && webhookEnvironment !== 'production') {
       if (provider === 'moov') {
         applyResult = await applyMoovWebhook(client, parsed.payload, {
           mappedTenantId: mapped.mapped_tenant_id,
@@ -229,12 +288,19 @@ export const handleProviderWebhook = async (event, provider, deps = {}) => {
         applyResult = await applyCheckAltWebhook(client, parsed.payload);
       }
     }
-    if (provider === 'moov' && productionWebhookReconcileEnabled() && !dryRun) {
+    const reconcileEnv = webhookEnvironment || (sandboxWebhookApplyEnabled() ? 'sandbox' : 'production');
+    if (
+      provider === 'moov'
+      && productionWebhookReconcileEnabled()
+      && !dryRun
+      && !(sandboxWebhookApplyEnabled() && reconcileEnv === 'sandbox')
+    ) {
       try {
         await client.query('SAVEPOINT aws_prod_moov_apply');
         const productionApply = await applyProductionMoovWebhook(client, parsed.payload, {
           mappedTenantId: mapped.mapped_tenant_id,
           dryRun: false,
+          environment: reconcileEnv,
         });
         await client.query('RELEASE SAVEPOINT aws_prod_moov_apply');
         applyResult = {

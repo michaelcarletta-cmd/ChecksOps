@@ -37,6 +37,8 @@ import { TenantProBadgeManagement } from "@/components/settings/TenantProBadgeMa
 
 import { TenantProvider } from "@/contexts/TenantContext";
 import { Switch } from "@/components/ui/switch";
+import { MoovEnvironmentControl } from "@/components/payments/MoovEnvironmentControl";
+import { MoovEnvironmentBadge } from "@/components/payments/MoovEnvironmentBadge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DataView, FilterBar, type DataColumn } from "@/components/shell";
 
@@ -54,6 +56,7 @@ type Tenant = {
   subscription_status: string | null;
   plan_tier: string | null;
   is_test_account?: boolean | null;
+  moov_environment?: string | null;
   max_checks_per_month: number | null;
   email_from_name: string | null;
   email_from_address: string | null;
@@ -472,11 +475,12 @@ function CompanyTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
             <Label>Test Account</Label>
             <p className="text-xs text-muted-foreground">
               Marks this organization as a demo account so prospects can explore the platform before purchasing.
-              Test accounts run on the payment provider's sandbox ledger — no real money moves.
+              This flag does not change the Moov sandbox/production ledger. Use Moov Environment below.
             </p>
           </div>
           <Switch checked={isTest} onCheckedChange={setIsTest} />
         </div>
+        <MoovEnvironmentControl tenantId={tenant.id} current={tenant.moov_environment} />
         {tenant.partner_code && (
           <div className="space-y-2">
             <Label>Partner Code</Label>
@@ -488,7 +492,7 @@ function CompanyTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
             </div>
           </div>
         )}
-        <Button onClick={() => save({ name, slug, custom_domain: customDomain || null, subscription_status: subStatus, is_test_account: isTest, moov_environment: isTest ? "sandbox" : "production", max_checks_per_month: maxChecks } as any)} disabled={saving}>
+        <Button onClick={() => save({ name, slug, custom_domain: customDomain || null, subscription_status: subStatus, is_test_account: isTest, max_checks_per_month: maxChecks } as any)} disabled={saving}>
           {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Save Changes
         </Button>
 
@@ -1396,12 +1400,11 @@ function TenantManagementTable({
       ? { is_founding_partner: true, monthly_rate_cents: 7500 }
       : { is_founding_partner: false });
 
-  // Test accounts also move to the payment provider's sandbox ledger, so
-  // nothing they do moves real money.
+  // Test-account is an ops flag only. Moov sandbox/production is a separate
+  // tenant setting and must never be changed from this toggle.
   const toggleTestAccount = (t: Tenant, on: boolean) =>
     updateTenant(t.id, {
       is_test_account: on,
-      moov_environment: on ? "sandbox" : "production",
     } as any);
 
   const fmtMoney = (cents?: number | null) =>
@@ -1498,6 +1501,13 @@ function TenantManagementTable({
           aria-label={`Test account for ${t.name}`}
         />
       ),
+    },
+    {
+      id: "moov_env",
+      header: "Moov",
+      headerClassName: "w-[8%] min-w-[80px] text-center",
+      className: "text-center",
+      cell: (t) => <MoovEnvironmentBadge environment={t.moov_environment} />,
     },
     {
       id: "rate",

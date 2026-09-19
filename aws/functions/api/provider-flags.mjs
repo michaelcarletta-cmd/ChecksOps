@@ -47,6 +47,19 @@ export const providerWebhookDryRun = () => {
   return String(value) !== 'false';
 };
 
+/** Production Moov transfer POST. Independent of sandbox execution. Default false. */
+export const productionMoovTransferPostEnabled = () => isTrue(process.env.AWS_MOOV_TRANSFER_POST_ENABLED);
+
+/** Sandbox Moov transfer POST. Independent of production POST. Default false. */
+export const sandboxMoovTransferPostEnabled = () => isTrue(process.env.AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED);
+
+export const transferPostEnabledForEnvironment = (environment) => {
+  const env = String(environment || '').toLowerCase();
+  if (env === 'sandbox') return sandboxMoovTransferPostEnabled();
+  if (env === 'production') return productionMoovTransferPostEnabled();
+  return false;
+};
+
 export const executionAllowed = (provider) => providerExecutionEnabled() && providerEnabled(provider);
 
 export const denyProviderExecution = (provider, operation, extra = {}) => ({
@@ -73,4 +86,6 @@ export const flagSnapshot = () => ({
   AWS_PROVIDER_RECIPIENT_KYC_TOS_WRITES_ENABLED: providerRecipientKycTosWritesEnabled(),
   AWS_PROVIDER_RECIPIENT_BANK_VERIFY_WRITES_ENABLED: providerRecipientBankVerifyWritesEnabled(),
   AWS_PROVIDER_WEBHOOK_DRY_RUN: providerWebhookDryRun(),
+  AWS_MOOV_TRANSFER_POST_ENABLED: productionMoovTransferPostEnabled(),
+  AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED: sandboxMoovTransferPostEnabled(),
 });

@@ -25,7 +25,7 @@ export async function readTenantPaymentAccount(
   const { data, error } = await supabase
     .from("tenants")
     .select(
-      "id, payment_provider, moov_account_id, payment_status, bank_connection_status, bank_name, bank_last_four, verification_status, last_sync",
+      "id, payment_provider, moov_account_id, moov_environment, payment_status, bank_connection_status, bank_name, bank_last_four, verification_status, last_sync",
     )
     .eq("id", tenantId)
     .maybeSingle();
@@ -47,13 +47,18 @@ export async function readTenantPaymentAccount(
     capabilities: null,
   };
 
+  const environment = String(row.moov_environment || "sandbox").toLowerCase() === "production"
+    ? "production"
+    : "sandbox";
+
   const { data: providerRow } = await supabase
     .from("payment_provider_accounts")
     .select(
-      "provider_account_id, onboarding_status, verification_status, can_receive_payments, can_send_payments, can_ach_debit, can_ach_credit, requirements, restricted, disabled, last_synced_at",
+      "provider_account_id, onboarding_status, verification_status, can_receive_payments, can_send_payments, can_ach_debit, can_ach_credit, requirements, restricted, disabled, last_synced_at, environment",
     )
     .eq("tenant_id", tenantId)
     .eq("provider", provider)
+    .eq("environment", environment)
     .maybeSingle();
 
   if (!providerRow) return base;

@@ -151,6 +151,21 @@ export const webhookSecret = (secrets, provider) => {
   return null;
 };
 
+export const webhookSecretForEnvironment = (secrets, provider, environment) => {
+  if (provider !== 'moov') return webhookSecret(secrets, provider);
+  const env = String(environment || '').toLowerCase();
+  if (env === 'sandbox') {
+    if (secrets?.MOOV_SANDBOX_WEBHOOK_SECRET) return secrets.MOOV_SANDBOX_WEBHOOK_SECRET;
+    return null;
+  }
+  if (env === 'production') {
+    if (secrets?.MOOV_WEBHOOK_SECRET) return secrets.MOOV_WEBHOOK_SECRET;
+    if (process.env.AWS_MOOV_WEBHOOK_SECRET) return process.env.AWS_MOOV_WEBHOOK_SECRET;
+    return null;
+  }
+  return null;
+};
+
 export const providerSecretsConfigured = async () => {
   const secrets = await loadProviderSecrets();
   return {

@@ -15,6 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { MoovBankLink } from "./MoovBankLink";
 import { MicroDepositVerification } from "./MicroDepositVerification";
 import { PaymentOnboardingDialog } from "./PaymentOnboardingDialog";
+import { MoovEnvironmentBadge } from "@/components/payments/MoovEnvironmentBadge";
 
 import {
   BANK_STATUS_LABEL,
@@ -40,7 +41,7 @@ const STATUS_CLASS: Record<AccountOnboardingStatus, string> = {
  */
 export function PaymentAccountPanel() {
   const { account, isLoading, refetch } = usePaymentAccount();
-  const { tenantId, enabled } = usePaymentProviderEligibility();
+  const { tenantId, enabled, environment } = usePaymentProviderEligibility();
   const { toast } = useToast();
   const qc = useQueryClient();
   const [busy, setBusy] = useState<null | "setup" | "sync" | "bridge" | "bank_link">(null);
@@ -136,6 +137,7 @@ export function PaymentAccountPanel() {
             <CardTitle className="text-sm flex items-center gap-2">
               <CreditCard className="h-4 w-4 text-primary" />
               Connected Payment Account
+              <MoovEnvironmentBadge environment={environment} />
             </CardTitle>
             <CardDescription className="text-xs mt-1">
               Your organization's payment account and connected bank. Funds stay in your own bank
