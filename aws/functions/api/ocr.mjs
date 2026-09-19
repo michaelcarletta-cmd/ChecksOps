@@ -12,6 +12,7 @@ import { extractCheck, mergeCheckExtraction, ocrInProgress } from './check-ocr-p
 import { emptyAzureMicr } from './ocr-normalize-azure.mjs';
 import { azureDiAnalyzeSecretLoader } from './azure-di-secret.mjs';
 import { safeOcrLog } from './azure-check-ocr.mjs';
+import { persistOcrDescriptiveHandoff } from './ocr-descriptive-persist.mjs';
 
 const s3 = () => new S3Client({ region: process.env.AWS_REGION || 'us-east-1' });
 const filesBucket = () => process.env.FILES_BUCKET || '';
@@ -391,6 +392,26 @@ export const handleCheckOcrIntake = async (event, injected = {}) => {
   } catch (error) {
     try { await client.query('ROLLBACK TO SAVEPOINT ocr_descriptive_commit'); } catch { /* ignore */ }
     rpcError = String(error?.message || error).slice(0, 240);
+  }
+
+  // Post-OCR application handoff: issue_date + pending payee candidates only.
+  // Extraction/merge/redaction stay unchanged. Amount and MICR are not persisted.
+  try {
+    await client.query('SAVEPOINT ocr_descriptive_handoff');
+    await persistOcrDescriptiveHandoff({
+      client,
+      checkId,
+      tenantId: loaded.row?.tenant_id,
+      parsed,
+      log: (row) => ocrLog({
+        event: 'ocr_descriptive_persist',
+        ok: row?.ok !== false,
+        code: row?.code || 'handoff',
+      }),
+    });
+    await client.query('RELEASE SAVEPOINT ocr_descriptive_handoff');
+  } catch {
+    try { await client.query('ROLLBACK TO SAVEPOINT ocr_descriptive_handoff'); } catch { /* ignore */ }
   }
 
   try {
