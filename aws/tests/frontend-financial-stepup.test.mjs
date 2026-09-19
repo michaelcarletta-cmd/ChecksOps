@@ -6,6 +6,7 @@ import {
   cacheAllowsReuse,
   changingCheckRequiresNewAuth,
   isCheckBoundAction,
+  isWalletBoundAction,
   stepUpCacheKey,
 } from '../../src/lib/financialStepUp.ts';
 import { stepUpMatchesCheck } from '../functions/api/providers/production/checkalt-authz.mjs';
@@ -44,6 +45,8 @@ test('missing check fails closed and non-deposit actions stay unbound', () => {
   assert.equal(isCheckBoundAction('deposit.submit'), true);
   assert.equal(isCheckBoundAction('deposit.approve'), true);
   assert.equal(isCheckBoundAction('disbursement.send'), false);
+  assert.equal(isCheckBoundAction('wallet.fund'), false);
+  assert.equal(isCheckBoundAction('wallet.disburse'), false);
   const payroll = buildFinancialStepUpRequest({ actionKey: 'payroll.run' });
   assert.equal(payroll.ok, true);
   assert.equal(payroll.request.checkId, null);
@@ -103,4 +106,23 @@ test('browser tenant cannot alter authorization tenant', () => {
     amountCents: 500,
     actionKey: 'deposit.submit',
   }), false);
+});
+
+test('wallet.fund and wallet.disburse stay distinct from deposit.submit and each other', () => {
+  assert.equal(isWalletBoundAction('wallet.fund'), true);
+  assert.equal(isWalletBoundAction('wallet.disburse'), true);
+  assert.equal(isWalletBoundAction('deposit.submit'), false);
+  const fund = buildFinancialStepUpRequest({ actionKey: 'wallet.fund', amount_cents: 1 });
+  const disburse = buildFinancialStepUpRequest({ actionKey: 'wallet.disburse', amount: 99 });
+  assert.equal(fund.ok, true);
+  assert.equal(disburse.ok, true);
+  assert.equal(fund.request.actionKey, 'wallet.fund');
+  assert.equal(disburse.request.actionKey, 'wallet.disburse');
+  assert.equal(Object.prototype.hasOwnProperty.call(fund.request, 'amount_cents'), false);
+  const fundKey = stepUpCacheKey(USER, 'wallet.fund', null);
+  const disburseKey = stepUpCacheKey(USER, 'wallet.disburse', null);
+  const depositKey = stepUpCacheKey(USER, 'deposit.submit', CHECK_A);
+  assert.equal(cacheAllowsReuse(fundKey, disburseKey), false);
+  assert.equal(cacheAllowsReuse(fundKey, depositKey), false);
+  assert.equal(cacheAllowsReuse(fundKey, fundKey), true);
 });

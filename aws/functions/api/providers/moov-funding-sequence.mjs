@@ -31,9 +31,9 @@ export const OUTGOING_PAYMENT_SEQUENCE = Object.freeze({
     id: 'CASE_2',
     when: 'wallet available is insufficient; linked bank can cover the shortage',
     steps: [
-      'Create exactly one BANK→WALLET wallet_funding intent for the shortage (initiate-wallet-funding).',
+      'Create exactly one BANK→WALLET wallet_funding intent for the shortage (moov-payout-orchestrate → wallet_funding).',
       'GET-reconcile that funding row until provider status is completed and wallet available covers the payout.',
-      'Only then create the WALLET→RECIPIENT intent.',
+      'Only then the WALLET→RECIPIENT wallet_disbursement intent becomes submittable.',
       'Do not create a second BANK→WALLET for the same disbursement.',
       'Do not rely on Sweep pull to fund this payment — Sweep is daily, not per-payment.',
     ],

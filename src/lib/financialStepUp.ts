@@ -11,7 +11,13 @@ export const CHECK_BOUND_ACTIONS = Object.freeze([
   "deposit.approve",
 ] as const);
 
+export const WALLET_BOUND_ACTIONS = Object.freeze([
+  "wallet.fund",
+  "wallet.disburse",
+] as const);
+
 export type CheckBoundAction = (typeof CHECK_BOUND_ACTIONS)[number];
+export type WalletBoundAction = (typeof WALLET_BOUND_ACTIONS)[number];
 
 export type FinancialStepUpRequest = {
   actionKey: string;
@@ -45,6 +51,9 @@ const trimId = (value: unknown): string | null => {
 
 export const isCheckBoundAction = (actionKey: string | null | undefined): boolean =>
   CHECK_BOUND_ACTIONS.includes(String(actionKey || "") as CheckBoundAction);
+
+export const isWalletBoundAction = (actionKey: string | null | undefined): boolean =>
+  WALLET_BOUND_ACTIONS.includes(String(actionKey || "") as WalletBoundAction);
 
 export const buildFinancialStepUpRequest = (input: {
   actionKey: string;
@@ -92,6 +101,9 @@ export const stepUpCacheKey = (
   if (isCheckBoundAction(actionKey)) {
     if (!checkId) return null;
     return `${userId}|${actionKey}|${checkId}`;
+  }
+  if (isWalletBoundAction(actionKey)) {
+    return `${userId}|${actionKey}|moov-first-test`;
   }
   return `${userId}|unbound|session`;
 };
