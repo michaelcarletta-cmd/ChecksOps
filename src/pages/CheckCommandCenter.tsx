@@ -2561,7 +2561,7 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
         const token = session.session?.access_token;
         if (!token) throw new Error("Not authenticated");
         const created = await createAwsCheck(token, {
-          review_notes: skipAi ? "AWS staging intake — manual entry (OCR skipped)" : "AWS staging intake — OCR not invoked",
+          review_notes: skipAi ? "AWS staging intake — manual entry (OCR skipped)" : "AWS staging intake",
         });
         check = created.check as { id: string };
         prefix = created.imagePrefix.replace(/\/$/, "");
@@ -2625,10 +2625,13 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
 
       if (!check?.id) throw new Error("Insert failed");
 
-      if (aws) {
+      // AWS create is image-less by design. After the front image is stored,
+      // invoke the same check-ocr-intake path as production unless the user
+      // chose manual entry. Do not call CheckAlt or Moov from upload.
+      if (aws && skipAi) {
         toast({
           title: "Check uploaded for manual entry",
-          description: "AWS staging created an internal check. OCR and provider submission were not invoked.",
+          description: "AWS staging created an internal check. OCR was not invoked.",
         });
         onSuccess();
         return;
