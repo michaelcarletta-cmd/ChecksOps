@@ -10,6 +10,10 @@ import {
   normalizePayeeKey,
   persistOcrDescriptiveHandoff,
 } from '../functions/api/ocr-descriptive-persist.mjs';
+import {
+  normalizeClaimNumber,
+  normalizeDescriptiveText,
+} from '../functions/api/ocr-descriptive-text.mjs';
 import { handleCheckOcrIntake, redactOcrIntakeResponse } from '../functions/api/ocr.mjs';
 import { resetAzureDiSecretCache } from '../functions/api/azure-di-secret.mjs';
 
@@ -26,6 +30,9 @@ const createClient = ({ existingPayees = [] } = {}) => {
     amount: null,
     routing_number: null,
     account_number: null,
+    carrier_name: null,
+    payee_line: null,
+    detected_claim_number: null,
     payees: existingPayees.map((row) => ({ ...row })),
   };
   const statements = [];
@@ -35,10 +42,16 @@ const createClient = ({ existingPayees = [] } = {}) => {
     query: async (sql, params = []) => {
       const text = String(sql);
       statements.push({ sql: text, params: [...params] });
+      assert.equal(/detected_claim_number\s*=/.test(text), false);
       if (/UPDATE public\.check_intake_items/.test(text) && /issue_date = \$2/.test(text)) {
         assert.equal(text.includes('amount'), false);
         store.issue_date = params[1];
         return { rows: [{ id: CHECK_ID, issue_date: store.issue_date }] };
+      }
+      if (/UPDATE public\.check_intake_items/.test(text) && /carrier_name = COALESCE/.test(text)) {
+        if (params[1] != null) store.carrier_name = params[1];
+        if (params[2] != null) store.payee_line = params[2];
+        return { rows: [{ id: CHECK_ID, carrier_name: store.carrier_name, payee_line: store.payee_line }] };
       }
       if (/UPDATE public\.check_intake_items/.test(text) && /is_multi_payee = true/.test(text)) {
         store.is_multi_payee = true;
@@ -402,4 +415,109 @@ test('candidate collection collapses whitespace and drops empties', () => {
   });
   assert.equal(rows.length, 2);
   assert.equal(normalizePayeeKey(rows[0].name), 'alpha payee');
+});
+
+test('claim number persist is blocked without SQL/RLS grant', async () => {
+  const client = createClient();
+  client.store.detected_claim_number = '38-99V2-97X';
+  await persistOcrDescriptiveHandoff({
+    client,
+    checkId: CHECK_ID,
+    tenantId: TENANT_ID,
+    parsed: {
+      claim_number: '00412-AB/9',
+      detected_claim_number: '00412-AB/9',
+      payees: [],
+    },
+  });
+  const blob = JSON.stringify(client.statements);
+  assert.equal(blob.includes('detected_claim_number'), false);
+  assert.equal(blob.includes('claim_number'), false);
+  assert.equal(client.store.detected_claim_number, '38-99V2-97X');
+  assert.equal(INTAKE_PROHIBITED_COLUMNS.has('detected_claim_number'), true);
+});
+
+test('claim-number formatter trims only and preserves zeros/punctuation', () => {
+  assert.equal(normalizeClaimNumber('  00412-AB/9  '), '00412-AB/9');
+  assert.equal(normalizeClaimNumber('38-99V2-97X'), '38-99V2-97X');
+  assert.equal(normalizeClaimNumber('abc-001'), 'abc-001');
+  assert.equal(normalizeClaimNumber(''), null);
+  assert.notEqual(normalizeClaimNumber('ABC-001'), 'Abc-001');
+});
+
+test('ALL-CAPS person and company names become human-readable', async () => {
+  const client = createClient();
+  await persistOcrDescriptiveHandoff({
+    client,
+    checkId: CHECK_ID,
+    tenantId: TENANT_ID,
+    parsed: {
+      carrier_name: 'FREEDOM ADJUSTMENT INC',
+      payee_line: 'MICHAEL GLEITMAN AND JANE DOE',
+      payees: [{ name: 'MICHAEL GLEITMAN' }, { name: 'FREEDOM ADJUSTMENT INC' }],
+    },
+  });
+  assert.equal(client.store.carrier_name, 'Freedom Adjustment Inc');
+  assert.equal(client.store.payee_line, 'Michael Gleitman And Jane Doe');
+  assert.deepEqual(client.store.payees.map((row) => row.payee_name), [
+    'Michael Gleitman',
+    'Freedom Adjustment Inc',
+  ]);
+});
+
+test('mixed-case names stay unchanged and hyphen/apostrophe/acronyms are preserved', () => {
+  assert.equal(normalizeDescriptiveText('Michael Gleitman'), 'Michael Gleitman');
+  assert.equal(normalizeDescriptiveText("O'CONNOR"), "O'Connor");
+  assert.equal(normalizeDescriptiveText('SMITH-JONES'), 'Smith-Jones');
+  assert.equal(normalizeDescriptiveText('A.B.C. COMPANY'), 'A.B.C. Company');
+  assert.equal(normalizeDescriptiveText('JOHN SMITH LLC'), 'John Smith LLC');
+  assert.equal(normalizeDescriptiveText('USAA CASUALTY'), 'USAA Casualty');
+  assert.equal(normalizeDescriptiveText('NJM / PA PLLC LLP LP PC'), 'NJM / PA PLLC LLP LP PC');
+});
+
+test('ALL-CAPS OCR payee dedups against mixed-case manual payee without rename', async () => {
+  const client = createClient({
+    existingPayees: [{
+      id: 'manual-1',
+      payee_name: 'Michael Gleitman',
+      payee_type: 'insured',
+      endorsement_status: 'viewed',
+      contact_email: 'keep@example.test',
+    }],
+  });
+  await persistOcrDescriptiveHandoff({
+    client,
+    checkId: CHECK_ID,
+    tenantId: TENANT_ID,
+    parsed: { payees: [{ name: 'MICHAEL GLEITMAN' }] },
+  });
+  assert.equal(client.store.payees.length, 1);
+  assert.equal(client.store.payees[0].payee_name, 'Michael Gleitman');
+  assert.equal(client.store.payees[0].endorsement_status, 'viewed');
+  assert.equal(client.store.payees[0].contact_email, 'keep@example.test');
+});
+
+test('claim/check/MICR/amount values are not case-normalized or persisted', async () => {
+  const client = createClient();
+  await persistOcrDescriptiveHandoff({
+    client,
+    checkId: CHECK_ID,
+    tenantId: TENANT_ID,
+    parsed: {
+      claim_number: 'AB-001/X',
+      check_number: '001234',
+      amount: '1500.00',
+      routing_number: ROUTING_OK,
+      account_number: ACCOUNT,
+      micr_check_number: '001234',
+      payees: [],
+    },
+  });
+  const blob = JSON.stringify(client.statements);
+  assert.equal(blob.includes('AB-001/X'), false);
+  assert.equal(blob.includes('001234'), false);
+  assert.equal(blob.includes('1500.00'), false);
+  assert.equal(blob.includes(ROUTING_OK), false);
+  assert.equal(blob.includes(ACCOUNT), false);
+  assert.equal(client.store.amount, null);
 });

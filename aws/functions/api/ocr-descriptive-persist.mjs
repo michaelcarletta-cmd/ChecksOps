@@ -1,10 +1,13 @@
 /**
- * Post-OCR application handoff: persist issue_date and pending check_payees
- * candidates from the already-merged OCR result.
+ * Post-OCR application handoff: persist issue_date, normalized descriptive
+ * text, and pending check_payees candidates from the already-merged OCR result.
  *
- * Does not extract, call Azure/Textract, persist amount, or write MICR.
+ * Does not extract, call Azure/Textract, persist amount, MICR, or claim numbers.
+ * detected_claim_number is INTAKE_PROHIBITED and has no T2 UPDATE grant.
  * Does not invoke CheckAlt or Moov.
  */
+import { normalizeDescriptiveText } from './ocr-descriptive-text.mjs';
+
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_PAYEE_NAME = 200;
@@ -17,9 +20,9 @@ export const normalizePayeeKey = (name) => String(name || '')
   .toLowerCase();
 
 export const normalizePayeeName = (name) => {
-  const text = String(name || '').trim().replace(/\s+/g, ' ');
-  if (text.length < 2) return null;
-  return text.slice(0, MAX_PAYEE_NAME);
+  const text = normalizeDescriptiveText(name, { max: MAX_PAYEE_NAME });
+  if (!text || text.length < 2) return null;
+  return text;
 };
 
 export const normalizeIssueDate = (value) => {
@@ -90,6 +93,8 @@ export const persistOcrDescriptiveHandoff = async ({
   }
 
   const issueDate = normalizeIssueDate(parsed.issue_date);
+  const carrierName = normalizeDescriptiveText(parsed.carrier_name);
+  const payeeLine = normalizeDescriptiveText(parsed.payee_line);
   const candidates = collectOcrPayeeCandidates(parsed);
   let issueDatePersisted = false;
   let inserted = 0;
@@ -104,6 +109,17 @@ export const persistOcrDescriptiveHandoff = async ({
       [checkId, issueDate],
     );
     issueDatePersisted = true;
+  }
+
+  if (carrierName || payeeLine) {
+    await client.query(
+      `UPDATE public.check_intake_items
+       SET carrier_name = COALESCE($2, carrier_name),
+           payee_line = COALESCE($3, payee_line),
+           updated_at = now()
+       WHERE id = $1::uuid`,
+      [checkId, carrierName, payeeLine],
+    );
   }
 
   const existing = (await client.query(
