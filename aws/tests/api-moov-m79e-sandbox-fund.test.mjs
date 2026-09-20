@@ -43,6 +43,7 @@ const rds = {
 };
 const live = {
   accountId: EXPECTED.accountId,
+  platformAccountId: EXPECTED.platformAccountId,
   wallets: [{ id: EXPECTED.walletId, status: 'active', availableCents: 0 }],
   banks: [{
     id: EXPECTED.bankId,
@@ -84,6 +85,7 @@ test('sandbox writer binds Pipeline Test objects from tenant/RDS/live and ignore
   assert.equal(binding.destinationPaymentMethodId, EXPECTED.walletPm);
   assert.equal(binding.walletId, EXPECTED.walletId);
   assert.equal(binding.amountCents, SANDBOX_FUNDING_AMOUNT_CENTS);
+  assert.equal(binding.platformAccountId, EXPECTED.platformAccountId);
   assert.equal(binding.browserAuthoritative, false);
   assert.equal(binding.liveFundingPmAuthoritative, true);
   assert.equal(binding.rdsSourceMethodId, rds.banks[0].id);
@@ -210,7 +212,8 @@ test('armed sandbox funding POSTs once with UUID idempotency and does not retry 
   assert.equal(posted.provider_transfer_id, '11111111-2222-4333-8444-555555555555');
   assert.equal(calls.length, 1);
   assert.equal(calls[0].method, 'POST');
-  assert.match(calls[0].path, new RegExp(`/accounts/${EXPECTED.accountId}/transfers`));
+  assert.match(calls[0].path, new RegExp(`/accounts/${EXPECTED.platformAccountId}/transfers`));
+  assert.doesNotMatch(calls[0].path, new RegExp(`/accounts/${EXPECTED.accountId}/transfers`));
   assert.match(calls[0].idempotency, /^[0-9a-f-]{36}$/i);
   assert.equal(calls[0].body.source.paymentMethodID, EXPECTED.achDebitFundPm);
   assert.equal(calls[0].body.destination.paymentMethodID, EXPECTED.walletPm);

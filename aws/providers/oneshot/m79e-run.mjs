@@ -38,6 +38,7 @@ const SANDBOX_WALLET = '58571121-67ea-4e10-abae-6c9680ac455d';
 const SANDBOX_BANK = '8390f74b-706e-4d89-80b0-f96bd7c1b414';
 const SANDBOX_FUND_PM = '8a0f6ffa-a549-48f5-bb8e-f5b6a9d9cfff';
 const SANDBOX_WALLET_PM = '1eb24c1c-b7ab-45cd-8775-332da40b9647';
+const SANDBOX_PLATFORM = '36b79957-ce7a-4ca7-a68f-30986c9e47bb';
 const FREEDOM = KNOWN_APPROVED_MOOV.freedom.tenantId;
 const FREEDOM_MOOV = KNOWN_APPROVED_MOOV.freedom.moovAccountId;
 const PREFERRED_WEBHOOK_URL = 'https://checksops.com/prep/webhooks/moov';
@@ -407,7 +408,8 @@ const main = async () => {
     || SANDBOX_WALLET !== PIPELINE_TEST_SANDBOX.walletId
     || SANDBOX_BANK !== PIPELINE_TEST_SANDBOX.bankId
     || SANDBOX_FUND_PM !== PIPELINE_TEST_SANDBOX.achDebitFundPm
-    || SANDBOX_WALLET_PM !== PIPELINE_TEST_SANDBOX.walletPm) {
+    || SANDBOX_WALLET_PM !== PIPELINE_TEST_SANDBOX.walletPm
+    || SANDBOX_PLATFORM !== PIPELINE_TEST_SANDBOX.platformAccountId) {
     throw new Error('sandbox_object_constants_drift');
   }
   const identity = await assumeRole();
@@ -452,13 +454,13 @@ const main = async () => {
   const productionHintDenied = resolveSandboxFundBinding({
     tenant,
     rds,
-    live: { accountId: SANDBOX_ACCOUNT, wallets: live.wallets, banks: live.banks, paymentMethods: live.paymentMethods },
+    live: { accountId: SANDBOX_ACCOUNT, wallets: live.wallets, banks: live.banks, paymentMethods: live.paymentMethods, platformAccountId: credentials.platformId },
     clientHints: { bankId: KNOWN_APPROVED_MOOV.freedom.bankId, amountCents: 1 },
   });
   const binding = resolveSandboxFundBinding({
     tenant,
     rds,
-    live: { accountId: SANDBOX_ACCOUNT, wallets: live.wallets, banks: live.banks, paymentMethods: live.paymentMethods },
+    live: { accountId: SANDBOX_ACCOUNT, wallets: live.wallets, banks: live.banks, paymentMethods: live.paymentMethods, platformAccountId: credentials.platformId },
     clientHints: { environment: 'production', accountId: SANDBOX_ACCOUNT, amountCents: 1 },
   });
   const planned = binding.ok ? planSandboxWalletFunding(binding) : binding;
