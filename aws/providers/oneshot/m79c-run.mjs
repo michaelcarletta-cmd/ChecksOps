@@ -432,6 +432,7 @@ const probe = async (pathName, method = 'GET', body = null, headers = {}) => {
 };
 
 const signedWebhook = async (secret, environment, accountId, eventId) => {
+  if (!present(secret)) return { environment, skipped: 'secret_missing', status: null };
   const ts = Math.floor(Date.now() / 1000);
   const nonce = `m79c-${environment}-${Date.now()}`;
   const webhookId = eventId || `m79c-${environment}-${Math.random().toString(16).slice(2, 10)}`;
@@ -1455,6 +1456,11 @@ const main = async () => {
     throw new Error('refused_armed_post_flag');
   }
   const production = loadSecret(flags.PROVIDER_SECRETS_ARN || PRODUCTION_SECRET);
+  let webhookBundle = null;
+  if (flags.MOOV_WEBHOOK_SECRET_ARN) {
+    try { webhookBundle = loadSecret(flags.MOOV_WEBHOOK_SECRET_ARN); }
+    catch { webhookBundle = null; }
+  }
   const s = production.parsed;
   const creds = {
     publicKey: s.MOOV_SANDBOX_PUBLIC_KEY,
@@ -1462,10 +1468,14 @@ const main = async () => {
     platformId: s.MOOV_SANDBOX_PLATFORM_ACCOUNT_ID,
     origin: s.MOOV_SANDBOX_ALLOWED_ORIGIN || LIVE_ORIGIN,
     apiVersion: s.MOOV_SANDBOX_API_VERSION || PROVEN_API_VERSION,
-    webhookSecret: s.MOOV_SANDBOX_WEBHOOK_SECRET,
+    webhookSecret: s.MOOV_SANDBOX_WEBHOOK_SECRET
+      || webhookBundle?.parsed?.MOOV_SANDBOX_WEBHOOK_SECRET
+      || null,
     productionPublicKey: s.MOOV_PUBLIC_KEY,
     productionSecretKey: s.MOOV_SECRET_KEY,
-    productionWebhookSecret: s.MOOV_WEBHOOK_SECRET,
+    productionWebhookSecret: webhookBundle?.parsed?.MOOV_WEBHOOK_SECRET
+      || s.MOOV_WEBHOOK_SECRET
+      || null,
   };
   if (!present(creds.publicKey) || !present(creds.secretKey) || !present(creds.platformId)) {
     throw new Error('sandbox_credentials_missing');
