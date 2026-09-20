@@ -337,9 +337,142 @@ const switchTenant = async (client, tenantId) => {
   };
 };
 
+const unusedProductionAccount = async (client, tenantId) => (await client.query(
+  `SELECT id, environment, provider_account_id, display_name, onboarding_status
+     FROM public.payment_provider_accounts
+    WHERE tenant_id = $1::uuid AND provider = 'moov' AND environment = 'production'
+    ORDER BY updated_at DESC NULLS LAST LIMIT 1`,
+  [tenantId],
+)).rows[0] || null;
+
+const lookupAccount = async (client, providerAccountId, environment) => {
+  const row = (await client.query(
+    `SELECT id, tenant_id, environment, provider_account_id
+       FROM public.aws_lookup_provider_account($1, $2, $3)`,
+    ['moov', String(providerAccountId), environment],
+  )).rows[0] || null;
+  return row;
+};
+
+const objectProof = async (client, tenantId) => {
+  const tenant = (await client.query(
+    `SELECT id, name, slug, moov_environment, is_test_account FROM public.tenants WHERE id = $1::uuid`,
+    [tenantId],
+  )).rows[0] || null;
+  const freedom = await freedomRow(client);
+  const sandbox = await tenantObjects(client, tenantId, 'sandbox');
+  const production = await tenantObjects(client, tenantId, 'production');
+  const freedomSandbox = await tenantObjects(client, FREEDOM, 'sandbox');
+  const freedomProduction = await tenantObjects(client, FREEDOM, 'production');
+  const unused = await unusedProductionAccount(client, tenantId);
+  const sandboxLookupOfFreedom = freedomProduction.account?.provider_account_id
+    ? await lookupAccount(client, freedomProduction.account.provider_account_id, 'sandbox')
+    : null;
+  const productionLookupOfSandbox = sandbox.account?.provider_account_id
+    ? await lookupAccount(client, sandbox.account.provider_account_id, 'production')
+    : null;
+  const sandboxLookupOfSandbox = sandbox.account?.provider_account_id
+    ? await lookupAccount(client, sandbox.account.provider_account_id, 'sandbox')
+    : null;
+  const productionLookupOfFreedom = freedomProduction.account?.provider_account_id
+    ? await lookupAccount(client, freedomProduction.account.provider_account_id, 'production')
+    : null;
+  return {
+    ok: tenant?.moov_environment === 'sandbox'
+      && freedom?.moov_environment === 'production'
+      && sandbox.productionIdHits.length === 0
+      && !sandboxLookupOfFreedom
+      && !productionLookupOfSandbox,
+    tenant,
+    freedom: {
+      id: freedom?.id,
+      name: freedom?.name,
+      moov_environment: freedom?.moov_environment,
+      sandboxAccount: Boolean(freedomSandbox.account?.provider_account_id),
+      productionAccount: Boolean(freedomProduction.account?.provider_account_id),
+      productionWallet: Boolean(freedomProduction.wallet?.provider_wallet_id),
+      productionBanks: freedomProduction.banks.length,
+      productionRecipients: freedomProduction.recipients.length,
+    },
+    pipeline: {
+      sandbox,
+      unusedProductionAccount: unused ? {
+        id: unused.id,
+        environment: unused.environment,
+        provider_account_id: unused.provider_account_id,
+        reused: sandbox.account?.provider_account_id
+          && String(sandbox.account.provider_account_id).toLowerCase()
+            === String(unused.provider_account_id || '').toLowerCase(),
+      } : null,
+      productionIgnored: {
+        account: Boolean(production.account?.provider_account_id),
+        wallet: Boolean(production.wallet?.provider_wallet_id),
+      },
+    },
+    lookups: {
+      sandboxLookupOfFreedomAccount: sandboxLookupOfFreedom,
+      productionLookupOfSandboxAccount: productionLookupOfSandbox,
+      sandboxLookupOfSandboxAccount: sandboxLookupOfSandbox ? {
+        tenant_id: sandboxLookupOfSandbox.tenant_id,
+        environment: sandboxLookupOfSandbox.environment,
+      } : null,
+      productionLookupOfFreedomAccount: productionLookupOfFreedom ? {
+        tenant_id: productionLookupOfFreedom.tenant_id,
+        environment: productionLookupOfFreedom.environment,
+      } : null,
+      fallbackUsed: false,
+    },
+    sweep: await sweepUnchanged(client),
+  };
+};
+
+const webhookReceipts = async (client, eventIds = []) => {
+  if (!Array.isArray(eventIds) || !eventIds.length) return { ok: true, rows: [] };
+  const rows = (await client.query(
+    `SELECT id, provider, external_event_id, event_type, mapped_tenant_id, mapped_internal_id,
+            dry_run, received_at
+       FROM public.aws_provider_webhook_receipts
+      WHERE provider = 'moov' AND external_event_id = ANY($1::text[])
+      ORDER BY received_at DESC NULLS LAST`,
+    [eventIds.map(String)],
+  )).rows;
+  let recentProductionAccountWebhookMutations = 0;
+  let recentSandboxAccountWebhookMutations = [];
+  try {
+    recentProductionAccountWebhookMutations = (await client.query(
+      `SELECT count(*)::int AS n
+         FROM public.payment_provider_accounts
+        WHERE provider = 'moov' AND environment = 'production'
+          AND last_webhook_event_at > now() - interval '15 minutes'`,
+    )).rows[0]?.n || 0;
+    recentSandboxAccountWebhookMutations = (await client.query(
+      `SELECT id, tenant_id, environment, provider_account_id, last_webhook_event_type, last_webhook_event_at
+         FROM public.payment_provider_accounts
+        WHERE provider = 'moov' AND environment = 'sandbox'
+          AND last_webhook_event_at > now() - interval '15 minutes'
+        ORDER BY last_webhook_event_at DESC NULLS LAST
+        LIMIT 5`,
+    )).rows;
+  } catch {
+    recentProductionAccountWebhookMutations = null;
+  }
+  const intents = (await client.query(
+    `SELECT count(*)::int AS n FROM public.payment_transfers
+      WHERE created_at > now() - interval '15 minutes'`,
+  )).rows[0];
+  return {
+    ok: true,
+    rows,
+    recentProductionAccountWebhookMutations,
+    recentSandboxAccountWebhookMutations,
+    recentPaymentTransfersCreated: intents?.n || 0,
+  };
+};
+
 const linkObjects = async (client, body = {}) => {
   const tenantId = body.tenantId;
   if (!tenantId || tenantId === FREEDOM || tenantId === C1C) return fail('refused_production_tenant');
+  const unused = await unusedProductionAccount(client, tenantId);
   const ids = [
     body.accountId,
     body.walletId,
@@ -352,37 +485,46 @@ const linkObjects = async (client, body = {}) => {
   if (ids.some((id) => PRODUCTION_IDS.has(id))) {
     return fail('production_object_refused', { hits: ids.filter((id) => PRODUCTION_IDS.has(id)) });
   }
+  if (unused?.provider_account_id && ids.includes(String(unused.provider_account_id).toLowerCase())) {
+    return fail('unused_production_row_refused', { unusedProductionAccountId: unused.provider_account_id });
+  }
+  const displayName = body.displayName || 'ChecksOps Pipeline Test';
   if (body.accountId) {
     await client.query(
       `INSERT INTO public.payment_provider_accounts (
           tenant_id, provider, environment, provider_account_id, account_type, display_name,
           onboarding_status, verification_status, can_send_payments, can_receive_payments
         ) VALUES (
-          $1::uuid, 'moov', 'sandbox', $2, 'business', 'ChecksOps Sandbox UAT',
+          $1::uuid, 'moov', 'sandbox', $2, 'business', $3,
           'completed', 'verified', true, true
         )
         ON CONFLICT (tenant_id, provider, environment) DO UPDATE SET
           provider_account_id = EXCLUDED.provider_account_id,
+          display_name = EXCLUDED.display_name,
           onboarding_status = EXCLUDED.onboarding_status,
           verification_status = EXCLUDED.verification_status,
           can_send_payments = true,
           can_receive_payments = true,
           updated_at = now()`,
-      [tenantId, body.accountId],
+      [tenantId, body.accountId, displayName],
     );
   }
   if (body.walletId) {
+    const available = Number.isFinite(Number(body.availableCents)) ? Number(body.availableCents) : 0;
+    const pending = Number.isFinite(Number(body.pendingCents)) ? Number(body.pendingCents) : 0;
     await client.query(
       `INSERT INTO public.payment_wallets (
           tenant_id, provider, environment, wallet_type, provider_wallet_id, status, available_cents, pending_cents
         ) VALUES (
-          $1::uuid, 'moov', 'sandbox', 'operating', $2, 'active', 0, 0
+          $1::uuid, 'moov', 'sandbox', 'operating', $2, 'active', $3, $4
         )
         ON CONFLICT (tenant_id, provider, environment, wallet_type) DO UPDATE SET
           provider_wallet_id = EXCLUDED.provider_wallet_id,
           status = 'active',
+          available_cents = EXCLUDED.available_cents,
+          pending_cents = EXCLUDED.pending_cents,
           updated_at = now()`,
-      [tenantId, body.walletId],
+      [tenantId, body.walletId, available, pending],
     );
   }
   if (body.bankId) {
@@ -391,14 +533,50 @@ const linkObjects = async (client, body = {}) => {
           tenant_id, provider, environment, provider_account_id, provider_bank_account_id,
           provider_payment_method_id, bank_name, last_four, verification_status
         ) VALUES (
-          $1::uuid, 'moov', 'sandbox', $2, $3, $4, $5, $6, 'verified'
+          $1::uuid, 'moov', 'sandbox', $2, $3, $4, $5, $6, $7
         )
         ON CONFLICT DO NOTHING`,
-      [tenantId, body.accountId, body.bankId, body.bankPmId || null, body.bankName || 'Moov Test Bank', body.lastFour || '0000'],
+      [
+        tenantId,
+        body.accountId,
+        body.bankId,
+        body.bankPmId || null,
+        body.bankName || 'Moov Test Bank',
+        body.lastFour || '0000',
+        body.bankVerified === false ? 'unverified' : 'verified',
+      ],
     );
+    if (body.bankPmId) {
+      await client.query(
+        `UPDATE public.payment_provider_methods
+            SET provider_payment_method_id = COALESCE(provider_payment_method_id, $3),
+                verification_status = $4,
+                bank_name = COALESCE($5, bank_name),
+                last_four = COALESCE($6, last_four)
+          WHERE tenant_id = $1::uuid
+            AND provider = 'moov'
+            AND environment = 'sandbox'
+            AND provider_bank_account_id = $2`,
+        [
+          tenantId,
+          body.bankId,
+          body.bankPmId,
+          body.bankVerified === false ? 'unverified' : 'verified',
+          body.bankName || null,
+          body.lastFour || null,
+        ],
+      );
+    }
   }
   if (body.recipientAccountId) {
-    const recipient = (await client.query(
+    const existing = (await client.query(
+      `SELECT id FROM public.external_payment_recipients
+        WHERE tenant_id = $1::uuid AND provider = 'moov' AND environment = 'sandbox'
+          AND provider_account_id = $2
+        ORDER BY created_at DESC NULLS LAST LIMIT 1`,
+      [tenantId, body.recipientAccountId],
+    )).rows[0];
+    const recipient = existing || (await client.query(
       `INSERT INTO public.external_payment_recipients (
           tenant_id, provider, environment, provider_account_id, display_name, onboarding_status
         ) VALUES (
@@ -434,6 +612,7 @@ const linkObjects = async (client, body = {}) => {
     error: objects.productionIdHits.length ? 'production_object_linked' : null,
     objects,
     environment: 'sandbox',
+    unusedProductionReused: false,
   };
 };
 
@@ -481,6 +660,8 @@ export const handler = async (event = {}) => {
     if (step === 'switch') return await switchTenant(client, event.tenantId);
     if (step === 'link_objects') return await linkObjects(client, event);
     if (step === 'verify') return await verify(client, event.tenantId);
+    if (step === 'object_proof') return await objectProof(client, event.tenantId);
+    if (step === 'webhook_receipts') return await webhookReceipts(client, event.eventIds || []);
     return fail('unknown_step', { step });
   } catch (error) {
     return fail(String(error?.message || error).slice(0, 400), { step });
