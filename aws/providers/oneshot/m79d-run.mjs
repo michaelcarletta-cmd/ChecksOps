@@ -1022,7 +1022,8 @@ const main = async () => {
     TOS_STATUS: after.tosAccepted || before.tosAccepted ? 'accepted' : 'missing',
     REPRESENTATIVE_STATUS: after.representativeCount > 0 ? `present:${after.representativeCount}` : 'missing',
     collect_funds_BEFORE: before.collectFunds.status || `http_${before.collectFunds.getStatus}`,
-    collect_funds_ach_BEFORE: before.collectFundsAch.status || `http_${before.collectFundsAch.getStatus}`,
+    collect_funds_ach_BEFORE: before.collectFundsAch.status
+      || (before.collectFundsAch.getStatus === 422 ? 'not_on_v2024.01.00' : `http_${before.collectFundsAch.getStatus}`),
     ACH_DEBIT_PM_BEFORE: before.achDebitPm?.id || null,
     '422_ENDPOINT': trace422.endpoint,
     '422_ERROR_CODE': trace422.errorCode || trace422.error || trace422.httpStatus,
@@ -1030,7 +1031,10 @@ const main = async () => {
     REQUIRED_SANDBOX_FIX: completed.due,
     OPERATOR_ACTION_REQUIRED: completed.operatorAction || 'none',
     collect_funds_AFTER: after.collectFunds.status || `http_${after.collectFunds.getStatus}`,
-    collect_funds_ach_AFTER: after.collectFundsAch.status || `http_${after.collectFundsAch.getStatus}`,
+    collect_funds_ach_AFTER: after.collectFundsAch.status
+      || (after.collectFundsAch.getStatus === 422
+        ? (collectActive ? 'not_on_v2024.01.00; parent collect-funds=enabled' : 'not_on_v2024.01.00')
+        : `http_${after.collectFundsAch.getStatus}`),
     ACH_DEBIT_PM_AFTER: after.achDebitPm?.id || null,
     BANK_VERIFIED: bankVerified,
     WALLET_ACTIVE: walletActive,
