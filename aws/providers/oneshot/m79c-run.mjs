@@ -1601,7 +1601,6 @@ const main = async () => {
     SANDBOX_BANK_FUNDING_CAPABILITY: capabilities.collectFundsAch === true
       ? true
       : `pending:${(capabilities.listed || []).filter((row) => String(row.capability || '').includes('collect-funds')).map((row) => `${row.capability}=${row.status}`).join(',') || 'missing'}`,
-    SAFE_TO_ARM_ONLY_AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED: dark.ok && bank.verified && recipient.ready && webhookCut.ok && cross.ok && capabilities.collectFundsAch === true && sandboxEvent.status === 200 && sandboxEvent.mappedTenantId === PIPELINE ? 'REVIEW' : 'NO',
     SANDBOX_RECIPIENT: 'Pipeline Test Payee',
     SANDBOX_RECIPIENT_ACCOUNT: recipient.accountId,
     SANDBOX_RECIPIENT_METHOD: recipient.paymentMethodId || recipient.bankId,
@@ -1643,7 +1642,7 @@ const main = async () => {
     PRODUCTION_MONEY_MOVED: false,
     SANDBOX_POST_FLAG: postFlagsAfter.flags.AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED || 'false',
     PRODUCTION_POST_FLAG: postFlagsAfter.flags.AWS_MOOV_TRANSFER_POST_ENABLED || 'false',
-    SAFE_TO_ARM_ONLY_AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED: dark.ok && bank.verified && recipient.ready && webhookCut.ok && cross.ok && !stoppedForWebhook ? 'REVIEW' : 'NO',
+    SAFE_TO_ARM_ONLY_AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED: dark.ok && bank.verified && recipient.ready && webhookCut.ok && cross.ok && capabilities.collectFundsAch === true && sandboxEvent.status === 200 && sandboxEvent.mappedTenantId === PIPELINE ? 'REVIEW' : 'NO',
     SAFE_TO_RUN_FIRST_SANDBOX_BANK_TO_WALLET: 'NO',
     GO_NO_GO: stoppedForWebhook || !webhookCut.ok || !linked.ok || !dark.ok ? 'NO-GO — STOP FOR REVIEW' : 'NO-GO — STOP FOR REVIEW',
   };

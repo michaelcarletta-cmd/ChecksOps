@@ -28,6 +28,12 @@ test('M7.9C runner never arms POST, never posts transfers, never creates a repla
   assert.match(src, /termsOfService/);
   assert.match(src, /Sandbox-only/);
   assert.doesNotMatch(src, /path: '\/webhooks',\s*[\s\S]{0,40}method: 'POST'/);
+  assert.match(src, /SAFE_TO_ARM_ONLY_AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED:[\s\S]*capabilities\.collectFundsAch === true/);
+  assert.equal(
+    (src.match(/SAFE_TO_ARM_ONLY_AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED:/g) || []).length,
+    1,
+    'arming decision must be a single collect-funds-gated assignment',
+  );
 });
 
 test('M7.9C oneshot refuses Freedom, production IDs, and unused production rows', () => {
