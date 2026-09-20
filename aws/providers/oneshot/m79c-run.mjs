@@ -72,10 +72,10 @@ const POST_ALLOW = [
   /^\/accounts\/[0-9a-f-]+\/bank-accounts\/[0-9a-f-]+\/micro-deposits$/,
   /^\/accounts\/[0-9a-f-]+\/capabilities$/,
   /^\/accounts\/[0-9a-f-]+\/capabilities\/[^/]+$/,
-  /^\/webhooks\/[0-9a-f-]+\/ping$/,
+  /^\/webhooks\/[^/]+\/ping$/,
 ];
 const PATCH_ALLOW = [
-  /^\/webhooks\/[0-9a-f-]+$/i,
+  /^\/webhooks\/[^/]+$/i,
   /^\/accounts\/[0-9a-f-]+$/i,
   /^\/accounts\/[0-9a-f-]+\/underwriting$/i,
   /^\/accounts\/[0-9a-f-]+\/bank-accounts\/[0-9a-f-]+\/verify$/i,
@@ -1686,11 +1686,12 @@ const main = async () => {
     duplicates,
     returnCard,
     STOP_FOR_REVIEW: true,
+    stopped: webhookCut.stopped || null,
   };
   fs.writeFileSync('/opt/cursor/artifacts/m79c_run.json', JSON.stringify(report, null, 2));
   fs.writeFileSync('/opt/cursor/artifacts/m79c_return_card.md', `${Object.entries(returnCard).map(([key, value]) => `${key}: ${typeof value === 'string' ? value : JSON.stringify(value)}`).join('\n')}\n`);
   console.log(JSON.stringify({
-    ok: linked.ok === true && proof.ok === true && webhookCut.ok === true && dark.ok === true && cross.ok === true,
+    ok: linked.ok === true && proof.ok === true && webhookCut.ok === true && dark.ok === true && cross.ok === true && !webhookCut.stopped,
     returnCard,
     created,
     reused,
@@ -1699,9 +1700,11 @@ const main = async () => {
       alreadyPrep: webhookCut.alreadyPrep,
       secretRotated: webhookCut.secretRotated,
       productionWebhookChanged: webhookCut.productionWebhookChanged,
+      stopped: webhookCut.stopped || null,
     },
     STOP_FOR_REVIEW: true,
   }, null, 2));
+  if (webhookCut.stopped) process.exit(2);
 };
 
 main().catch((error) => {

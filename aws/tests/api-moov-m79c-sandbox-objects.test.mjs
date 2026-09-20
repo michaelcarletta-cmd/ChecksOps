@@ -17,7 +17,7 @@ test('M7.9C runner never arms POST, never posts transfers, never creates a repla
   assert.match(src, /https:\/\/checksops.com\/prep\/webhooks\/moov/);
   assert.match(src, /322271627/);
   assert.match(src, /0001/);
-  assert.match(src, /auth: 'basic'/);
+  assert.match(src, /\/webhooks\\\/\[\^\/\]\+/);
   assert.match(src, /webhook_url_update_not_allowed/);
   assert.match(src, /unused_production_row_refused|unusedProductionReused/);
   assert.match(src, /STOP_FOR_REVIEW/);
