@@ -932,47 +932,81 @@ const inspectWebhooks = async (staging, origin) => {
       if (more.length) rows = more;
     }
   }
-  const summary = rows.map((row) => ({
-    idFp: fingerprint(row.webhookID || row.webhookId || row.id),
-    url: row.url || row.endpoint || null,
-    disabled: row.disabled === true || String(row.status || '').toLowerCase() === 'disabled',
-    status: row.status || (row.disabled === true ? 'disabled' : 'enabled'),
-    events: row.events || row.eventTypes || row.subscribedEvents || null,
-    description: row.description || null,
-  }));
-  const matching = summary.filter((row) => String(row.url || '').replace(/\/$/, '') === PREFERRED_WEBHOOK_URL.replace(/\/$/, ''));
-  const enabledMatching = matching.filter((row) => row.disabled !== true);
-  let secretMatch = null;
-  if (matching.length && present(s.MOOV_SANDBOX_WEBHOOK_SECRET)) {
-    const full = rows.find((row) => fingerprint(row.webhookID || row.webhookId || row.id) === matching[0].idFp);
-    const webhookId = full?.webhookID || full?.webhookId || full?.id;
-    if (webhookId) {
-      const secretGet = await moovCall({
-        publicKey: s.MOOV_SANDBOX_PUBLIC_KEY,
-        secretKey: s.MOOV_SANDBOX_SECRET_KEY,
-        origin,
-        apiVersion: PROVEN_API_VERSION,
-        path: `/webhooks/${webhookId}/secret`,
-      });
-      const remote = secretGet.json?.secret || secretGet.json?.webhookSecret || secretGet.json?.signingSecret || null;
-      secretMatch = {
-        status: secretGet.status,
-        match: present(remote) ? remote === s.MOOV_SANDBOX_WEBHOOK_SECRET : null,
-      };
+  const checksOpsWebhook = (url) => {
+    try {
+      const parsed = new URL(String(url || ''));
+      const host = parsed.hostname.toLowerCase();
+      return ['checksops.com', 'staging.checksops.com', 'www.checksops.com'].includes(host)
+        && /webhooks\/moov\/?$/i.test(parsed.pathname);
+    } catch {
+      return false;
     }
+  };
+  const parsedRows = rows.map((row) => {
+    const id = row.webhookID || row.webhookId || row.id || row.foreignID || null;
+    const url = row.url || row.endpoint || null;
+    const disabled = row.disabled === true || String(row.status || '').toLowerCase() === 'disabled';
+    return {
+      id,
+      idFp: fingerprint(id),
+      url,
+      disabled,
+      status: row.status || (disabled ? 'disabled' : 'enabled'),
+      events: row.events || row.eventTypes || row.subscribedEvents || null,
+      description: row.description || null,
+      fieldNames: Object.keys(row || {}).sort(),
+      isChecksOps: checksOpsWebhook(url),
+      isPrepUrl: String(url || '').replace(/\/$/, '') === PREFERRED_WEBHOOK_URL.replace(/\/$/, ''),
+    };
+  });
+  const matching = parsedRows.filter((row) => row.isPrepUrl);
+  const enabledChecksOps = parsedRows.filter((row) => row.isChecksOps && row.disabled !== true);
+  const chosen = matching.find((row) => row.disabled !== true) || enabledChecksOps[0] || null;
+  let secretMatch = null;
+  if (chosen?.id && present(s.MOOV_SANDBOX_WEBHOOK_SECRET)) {
+    const secretGet = await moovCall({
+      publicKey: s.MOOV_SANDBOX_PUBLIC_KEY,
+      secretKey: s.MOOV_SANDBOX_SECRET_KEY,
+      origin,
+      apiVersion: PROVEN_API_VERSION,
+      path: `/webhooks/${chosen.id}/secret`,
+    });
+    const remote = secretGet.json?.secret || secretGet.json?.webhookSecret || secretGet.json?.signingSecret || null;
+    secretMatch = {
+      status: secretGet.status,
+      match: present(remote) ? remote === s.MOOV_SANDBOX_WEBHOOK_SECRET : null,
+      compared: Boolean(present(remote)),
+    };
   }
   const listed = attempts.some((row) => row.status === 200);
-  const reusable = enabledMatching.length > 0;
+  const reusable = Boolean(chosen)
+    && chosen.disabled !== true
+    && chosen.isChecksOps
+    && secretMatch?.match !== false;
+  const summary = parsedRows.map((row) => ({
+    idFp: row.idFp,
+    url: row.url,
+    disabled: row.disabled,
+    status: row.status,
+    events: row.events,
+    description: row.description,
+    fieldNames: row.fieldNames,
+    isChecksOps: row.isChecksOps,
+    isPrepUrl: row.isPrepUrl,
+  }));
   return {
     listed,
     attempts,
     count: summary.length,
     rows: summary,
-    matchingPrepUrl: matching,
+    matchingPrepUrl: matching.map((row) => ({ idFp: row.idFp, url: row.url, disabled: row.disabled })),
+    chosen: chosen ? { idFp: chosen.idFp, url: chosen.url, disabled: chosen.disabled, events: chosen.events } : null,
     reusable,
     secretMatch,
     stopped: listed
-      ? (reusable ? null : (summary.length ? 'existing_sandbox_webhook_not_prep_url' : 'no_valid_sandbox_webhook'))
+      ? (reusable ? null : (secretMatch?.match === false
+        ? 'sandbox_webhook_secret_mismatch'
+        : (enabledChecksOps.length ? 'sandbox_webhook_secret_unproven' : (summary.length ? 'no_enabled_checksops_sandbox_webhook' : 'no_valid_sandbox_webhook'))))
       : 'sandbox_webhook_list_failed',
   };
 };
@@ -1341,6 +1375,7 @@ const main = async () => {
         count: webhooks.count,
         rows: webhooks.rows,
         matchingPrepUrl: webhooks.matchingPrepUrl,
+        chosen: webhooks.chosen,
         secretMatch: webhooks.secretMatch,
         attempts: webhooks.attempts,
       },

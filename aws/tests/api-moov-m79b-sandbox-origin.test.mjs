@@ -24,7 +24,9 @@ test('M7.9B runner never prints secrets, never arms POST, never creates a replac
   assert.doesNotMatch(src, /console\.log\(.*SecretString/);
   assert.doesNotMatch(src, /console\.log\(.*MOOV_SANDBOX_SECRET_KEY\)/);
   assert.doesNotMatch(src, /method: 'POST',\s*[\s\S]{0,80}\/transfers/);
-  assert.match(src, /if \(!\['GET', 'PATCH', 'PUT'\]\.includes\(method\)\)/);
+  assert.match(src, /checksOpsWebhook/);
+  assert.match(src, /sandbox\/webhooks\/moov/);
+  assert.doesNotMatch(src, /method: 'POST'[\s\S]{0,40}\/webhooks'/);
 });
 
 test('M7.9B webhook isolation classifies signing secret environment independently of payload account id', () => {
