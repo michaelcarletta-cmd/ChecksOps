@@ -70,6 +70,8 @@ const OPERATOR_ACTION = [
   'Then re-run M7.9B Phase 3 (live-origin GET with Origin https://checksops.com).',
 ].join(' ');
 
+let sandboxWebhookSecretForInstall = null;
+
 const run = (cmd, args, opts = {}) => execFileSync(cmd, args, {
   encoding: 'utf8',
   stdio: ['ignore', 'pipe', 'pipe'],
@@ -877,7 +879,7 @@ const proveLiveOrigin = async (staging) => {
   };
 };
 
-const inspectWebhooks = async (staging, origin) => {
+const inspectWebhooks = async (staging, origin, productionWebhookSecret) => {
   const s = staging.parsed;
   const platformId = s.MOOV_SANDBOX_PLATFORM_ACCOUNT_ID;
   const paths = [
@@ -972,17 +974,37 @@ const inspectWebhooks = async (staging, origin) => {
       path: `/webhooks/${chosen.id}/secret`,
     });
     const remote = secretGet.json?.secret || secretGet.json?.webhookSecret || secretGet.json?.signingSecret || null;
-    secretMatch = {
-      status: secretGet.status,
-      match: present(remote) ? remote === s.MOOV_SANDBOX_WEBHOOK_SECRET : null,
-      compared: Boolean(present(remote)),
-    };
+    if (present(remote) && present(productionWebhookSecret) && remote === productionWebhookSecret) {
+      sandboxWebhookSecretForInstall = null;
+      secretMatch = {
+        status: secretGet.status,
+        match: false,
+        compared: true,
+        equalsProduction: true,
+        remoteLength: remote.length,
+        stagingLength: String(s.MOOV_SANDBOX_WEBHOOK_SECRET || '').length,
+      };
+    } else {
+      sandboxWebhookSecretForInstall = present(remote) ? remote : null;
+      secretMatch = {
+        status: secretGet.status,
+        match: present(remote) ? remote === s.MOOV_SANDBOX_WEBHOOK_SECRET : null,
+        compared: Boolean(present(remote)),
+        equalsProduction: false,
+        remoteLength: present(remote) ? remote.length : null,
+        stagingLength: String(s.MOOV_SANDBOX_WEBHOOK_SECRET || '').length,
+        installSource: present(remote) && remote === s.MOOV_SANDBOX_WEBHOOK_SECRET
+          ? 'staging_secret'
+          : (present(remote) ? 'existing_webhook_secret' : null),
+      };
+    }
   }
   const listed = attempts.some((row) => row.status === 200);
   const reusable = Boolean(chosen)
     && chosen.disabled !== true
     && chosen.isChecksOps
-    && secretMatch?.match !== false;
+    && present(sandboxWebhookSecretForInstall)
+    && secretMatch?.equalsProduction !== true;
   const summary = parsedRows.map((row) => ({
     idFp: row.idFp,
     url: row.url,
@@ -1004,9 +1026,11 @@ const inspectWebhooks = async (staging, origin) => {
     reusable,
     secretMatch,
     stopped: listed
-      ? (reusable ? null : (secretMatch?.match === false
-        ? 'sandbox_webhook_secret_mismatch'
-        : (enabledChecksOps.length ? 'sandbox_webhook_secret_unproven' : (summary.length ? 'no_enabled_checksops_sandbox_webhook' : 'no_valid_sandbox_webhook'))))
+      ? (reusable ? null : (secretMatch?.equalsProduction
+        ? 'sandbox_webhook_secret_equals_production'
+        : (enabledChecksOps.length && !present(sandboxWebhookSecretForInstall)
+          ? 'sandbox_webhook_secret_unproven'
+          : (summary.length ? 'no_enabled_checksops_sandbox_webhook' : 'no_valid_sandbox_webhook'))))
       : 'sandbox_webhook_list_failed',
   };
 };
@@ -1015,10 +1039,11 @@ const installSandbox = (staging, production) => {
   const before = { ...production.parsed };
   const beforeHashes = Object.fromEntries(Object.keys(before).sort().map((key) => [key, sha256(before[key])]));
   const next = { ...before };
+  const webhookSecret = sandboxWebhookSecretForInstall || staging.parsed.MOOV_SANDBOX_WEBHOOK_SECRET;
   next.MOOV_SANDBOX_PUBLIC_KEY = staging.parsed.MOOV_SANDBOX_PUBLIC_KEY;
   next.MOOV_SANDBOX_SECRET_KEY = staging.parsed.MOOV_SANDBOX_SECRET_KEY;
   next.MOOV_SANDBOX_PLATFORM_ACCOUNT_ID = staging.parsed.MOOV_SANDBOX_PLATFORM_ACCOUNT_ID;
-  next.MOOV_SANDBOX_WEBHOOK_SECRET = staging.parsed.MOOV_SANDBOX_WEBHOOK_SECRET;
+  next.MOOV_SANDBOX_WEBHOOK_SECRET = webhookSecret;
   next.MOOV_SANDBOX_ALLOWED_ORIGIN = LIVE_ORIGIN;
   next.MOOV_SANDBOX_API_VERSION = PROVEN_API_VERSION;
   for (const key of PRODUCTION_PRESERVE) {
@@ -1031,6 +1056,9 @@ const installSandbox = (staging, production) => {
   }
   if (next.MOOV_SANDBOX_SECRET_KEY === next.MOOV_SECRET_KEY) {
     return { ok: false, error: 'refused_copy_production_secret' };
+  }
+  if (present(next.MOOV_WEBHOOK_SECRET) && next.MOOV_SANDBOX_WEBHOOK_SECRET === next.MOOV_WEBHOOK_SECRET) {
+    return { ok: false, error: 'refused_copy_production_webhook' };
   }
   const tmp = '/tmp/m79b-production-provider.json';
   fs.writeFileSync(tmp, JSON.stringify(next));
@@ -1049,6 +1077,11 @@ const installSandbox = (staging, production) => {
     productionKeyCountAfter: Object.keys(after.parsed).length,
     originWritten: originHost(after.parsed.MOOV_SANDBOX_ALLOWED_ORIGIN),
     apiVersionWritten: present(after.parsed.MOOV_SANDBOX_API_VERSION) ? after.parsed.MOOV_SANDBOX_API_VERSION : null,
+    webhookSecretSource: sandboxWebhookSecretForInstall
+      && sandboxWebhookSecretForInstall !== staging.parsed.MOOV_SANDBOX_WEBHOOK_SECRET
+      ? 'existing_webhook_secret'
+      : 'staging_secret',
+    webhookSecretLength: present(after.parsed.MOOV_SANDBOX_WEBHOOK_SECRET) ? after.parsed.MOOV_SANDBOX_WEBHOOK_SECRET.length : 0,
     extraKeysUnchanged: Object.keys(before).filter((key) => !SANDBOX_KEYS.includes(key)).every((key) => beforeHashes[key] === afterHashes[key]),
   };
 };
@@ -1358,7 +1391,11 @@ const main = async () => {
     process.exit(2);
   }
 
-  const webhooks = await inspectWebhooks(staging, LIVE_ORIGIN);
+  const webhooks = await inspectWebhooks(
+    staging,
+    LIVE_ORIGIN,
+    webhookBundle?.parsed?.MOOV_WEBHOOK_SECRET || production.parsed.MOOV_WEBHOOK_SECRET,
+  );
   report.webhooks = webhooks;
   fs.writeFileSync('/opt/cursor/artifacts/m79b_webhooks.json', JSON.stringify(report, null, 2));
   if (webhooks.stopped) {
