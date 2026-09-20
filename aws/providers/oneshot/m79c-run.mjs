@@ -1598,7 +1598,10 @@ const main = async () => {
     SANDBOX_WALLET_BALANCE: wallet.availableCents,
     SANDBOX_BANK: bank.bankName,
     SANDBOX_BANK_VERIFIED: bank.verified === true,
-    SANDBOX_BANK_FUNDING_CAPABILITY: capabilities.collectFundsAch === true,
+    SANDBOX_BANK_FUNDING_CAPABILITY: capabilities.collectFundsAch === true
+      ? true
+      : `pending:${(capabilities.listed || []).filter((row) => String(row.capability || '').includes('collect-funds')).map((row) => `${row.capability}=${row.status}`).join(',') || 'missing'}`,
+    SAFE_TO_ARM_ONLY_AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED: dark.ok && bank.verified && recipient.ready && webhookCut.ok && cross.ok && capabilities.collectFundsAch === true && sandboxEvent.status === 200 && sandboxEvent.mappedTenantId === PIPELINE ? 'REVIEW' : 'NO',
     SANDBOX_RECIPIENT: 'Pipeline Test Payee',
     SANDBOX_RECIPIENT_ACCOUNT: recipient.accountId,
     SANDBOX_RECIPIENT_METHOD: recipient.paymentMethodId || recipient.bankId,
@@ -1612,18 +1615,25 @@ const main = async () => {
     WEBHOOK_URL_UPDATED: webhookCut.updated === true || webhookCut.alreadyPrep === true,
     WEBHOOK_SECRET_ROTATED: webhookCut.secretRotated === true,
     PRODUCTION_WEBHOOK_CHANGED: webhookCut.productionWebhookChanged === true,
-    SANDBOX_WEBHOOK_LIVE_PROOF: sandboxEvent.status === 200 && sandboxEvent.environment === 'sandbox',
+    SANDBOX_WEBHOOK_LIVE_PROOF: sandboxEvent.status === 200
+      && sandboxEvent.signedEnvironment === 'sandbox'
+      && sandboxEvent.accepted === true
+      && sandboxEvent.mappedTenantId === PIPELINE,
     SANDBOX_RECEIPT_PERSISTED: Boolean(sandboxEvent.receiptId)
       || Boolean((receipts.rows || []).some((row) => row.external_event_id === sandboxEvent.eventId)),
     PRODUCTION_ISOLATION: productionEvent.status === 200
-      && productionEvent.environment === 'production'
-      && sandboxEvent.environment === 'sandbox'
+      && productionEvent.signedEnvironment === 'production'
+      && productionEvent.mappedTenantId === FREEDOM
+      && sandboxEvent.mappedTenantId === PIPELINE
       && sandboxOnFreedom.mappedTenantId !== FREEDOM
       && productionOnSandbox.mappedTenantId !== PIPELINE
       && unknownSandbox.status === 200
+      && unknownSandbox.lookup === 'unmapped'
       && sandboxDup.duplicate === true
       && sandboxEvent.createdPaymentTransfer !== true
-      && productionEvent.createdPaymentTransfer !== true,
+      && productionEvent.createdPaymentTransfer !== true
+      && (receipts.recentProductionAccountWebhookMutations === 0 || receipts.recentProductionAccountWebhookMutations === null)
+      && (receipts.recentPaymentTransfersCreated === 0),
     TENANT_MANAGEMENT_BADGE: rdsVerify?.tenant?.moov_environment === 'sandbox' ? 'SANDBOX' : rdsVerify?.tenant?.moov_environment,
     WALLETOPS_BADGE: rdsVerify?.tenant?.moov_environment === 'sandbox' ? 'SANDBOX' : rdsVerify?.tenant?.moov_environment,
     DARK_M77_RESULT: dark.ok ? 'PASS' : 'FAIL',
