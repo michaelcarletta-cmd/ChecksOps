@@ -170,7 +170,10 @@ export const moovSandboxFetch = async ({
         provider: 'moov',
         httpStatus: response.status,
         path,
-        message: parsed.json?.error || parsed.json?.message || 'Moov sandbox request failed',
+        message: parsed.json?.error || parsed.json?.message || parsed.json?.title
+          || parsed.json?.errorCode || 'Moov sandbox request failed',
+        errorCode: parsed.json?.errorCode || parsed.json?.code || null,
+        errorTitle: parsed.json?.title || null,
       };
     }
     return { ok: true, statusCode: response.status, data: parsed.json, idempotencyKey: headers['X-Idempotency-Key'] || null };

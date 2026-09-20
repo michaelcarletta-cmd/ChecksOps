@@ -12,6 +12,10 @@ const { Client } = pg;
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const FREEDOM = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
 const C1C = '4f172140-f57a-4744-8050-95f4f07b13b4';
+const PIPELINE = '3bef00a5-0bf4-41ba-abf8-5fb4e2b73d43';
+const SANDBOX_ACCOUNT = '1d59a6a8-3307-4687-8367-1495293ecc73';
+const SANDBOX_WALLET = '58571121-67ea-4e10-abae-6c9680ac455d';
+const SANDBOX_BANK = '8390f74b-706e-4d89-80b0-f96bd7c1b414';
 const ACTOR = '7dbb3009-f059-4767-b5dc-1c5c72379330';
 const PRODUCTION_IDS = new Set([
   '60922058-7eca-4889-81dd-5720d7b9de96',
@@ -616,6 +620,258 @@ const linkObjects = async (client, body = {}) => {
   };
 };
 
+const intentCountFor = async (client, tenantId, idempotencyKey) => {
+  const matching = (await client.query(
+    `SELECT count(*)::int AS n FROM public.payment_transfers
+      WHERE tenant_id = $1::uuid AND environment = 'sandbox' AND idempotency_key = $2`,
+    [tenantId, idempotencyKey],
+  )).rows[0]?.n || 0;
+  const funding = (await client.query(
+    `SELECT count(*)::int AS n FROM public.payment_transfers
+      WHERE tenant_id = $1::uuid AND environment = 'sandbox'
+        AND leg_role = 'wallet_funding' AND amount_cents = 1`,
+    [tenantId],
+  )).rows[0]?.n || 0;
+  const production = (await client.query(
+    `SELECT count(*)::int AS n FROM public.payment_transfers
+      WHERE environment = 'production' AND created_at > now() - interval '2 hours'`,
+  )).rows[0]?.n || 0;
+  const freedom = (await client.query(
+    `SELECT count(*)::int AS n FROM public.payment_transfers
+      WHERE tenant_id = $1::uuid AND created_at > now() - interval '2 hours'`,
+    [FREEDOM],
+  )).rows[0]?.n || 0;
+  return { matching, funding, recentProduction: production, recentFreedom: freedom };
+};
+
+const persistFundingIntent = async (client, body = {}) => {
+  const tenantId = body.tenantId;
+  if (!tenantId || tenantId === FREEDOM || tenantId === C1C) return fail('refused_production_tenant');
+  if (tenantId !== PIPELINE) return fail('undesignated_tenant', { tenantId });
+  const tenant = (await client.query(
+    `SELECT id, name, slug, moov_environment FROM public.tenants WHERE id = $1::uuid`,
+    [tenantId],
+  )).rows[0];
+  if (!tenant) return fail('tenant_not_found');
+  if (tenant.moov_environment !== 'sandbox') return fail('tenant_not_sandbox', { environment: tenant.moov_environment });
+  const idempotencyKey = String(body.idempotencyKey || '');
+  if (!idempotencyKey) return fail('idempotency_required');
+  if (!idempotencyKey.includes('sandbox') || !idempotencyKey.includes(tenantId) || !idempotencyKey.includes('wallet_funding')) {
+    return fail('idempotency_scope_invalid', { idempotencyKey });
+  }
+  const ids = [body.accountId, body.bankId, body.walletId, body.sourcePaymentMethodId, body.destinationPaymentMethodId]
+    .filter(Boolean)
+    .map((id) => String(id).toLowerCase());
+  if (ids.some((id) => PRODUCTION_IDS.has(id))) {
+    return fail('production_object_refused', { hits: ids.filter((id) => PRODUCTION_IDS.has(id)) });
+  }
+  if (body.accountId && String(body.accountId).toLowerCase() !== SANDBOX_ACCOUNT) {
+    return fail('sandbox_account_mismatch');
+  }
+  if (body.bankId && String(body.bankId).toLowerCase() !== SANDBOX_BANK) {
+    return fail('sandbox_bank_mismatch');
+  }
+  if (body.walletId && String(body.walletId).toLowerCase() !== SANDBOX_WALLET) {
+    return fail('sandbox_wallet_mismatch');
+  }
+  const objects = await tenantObjects(client, tenantId, 'sandbox');
+  if (String(objects.account?.provider_account_id || '').toLowerCase() !== SANDBOX_ACCOUNT) {
+    return fail('sandbox_account_unlinked');
+  }
+  if (String(objects.wallet?.provider_wallet_id || '').toLowerCase() !== SANDBOX_WALLET) {
+    return fail('sandbox_wallet_unlinked');
+  }
+  const fundingBank = (objects.banks || []).find((row) => String(row.provider_bank_account_id || '').toLowerCase() === SANDBOX_BANK);
+  if (!fundingBank) return fail('sandbox_bank_unlinked');
+  const existing = (await client.query(
+    `SELECT * FROM public.payment_transfers
+      WHERE tenant_id = $1::uuid AND idempotency_key = $2
+      LIMIT 1`,
+    [tenantId, idempotencyKey],
+  )).rows[0] || null;
+  if (existing) {
+    const counts = await intentCountFor(client, tenantId, idempotencyKey);
+    return {
+      ok: true,
+      reused: true,
+      created: false,
+      intent: existing,
+      intentCount: counts.matching,
+      fundingIntentCount: counts.funding,
+      recentProductionTransfers: counts.recentProduction,
+      recentFreedomTransfers: counts.recentFreedom,
+      sweep: await sweepUnchanged(client),
+      freedomEnvironment: (await freedomRow(client))?.moov_environment,
+    };
+  }
+  let inserted;
+  try {
+    inserted = (await client.query(
+      `INSERT INTO public.payment_transfers (
+          tenant_id, provider, environment, status, idempotency_key, amount_cents,
+          platform_fee_cents, net_amount_cents, speed, description,
+          source_tenant_account_id, source_payment_method_id,
+          wallet_id, leg_role, provider_metadata, created_by
+        ) VALUES (
+          $1::uuid, 'moov', 'sandbox', 'planned', $2, 1,
+          0, 1, 'standard', 'M7.9E sandbox BANK to WALLET 0.01',
+          $3, $4::uuid, $5::uuid, 'wallet_funding', $6::jsonb, $7::uuid
+        )
+        RETURNING *`,
+      [
+        tenantId,
+        idempotencyKey,
+        SANDBOX_ACCOUNT,
+        fundingBank.id,
+        objects.wallet.id,
+        JSON.stringify(body.providerMetadata || {
+          phase: 'M7.9E',
+          operation: 'sandbox_bank_to_wallet',
+          environment: 'sandbox',
+          account_id: SANDBOX_ACCOUNT,
+          bank_id: SANDBOX_BANK,
+          wallet_id: SANDBOX_WALLET,
+          source_payment_method_id: body.sourcePaymentMethodId || null,
+          destination_payment_method_id: body.destinationPaymentMethodId || null,
+          provider_idempotency_key: body.providerIdempotencyKey || null,
+        }),
+        ACTOR,
+      ],
+    )).rows[0];
+  } catch (error) {
+    if (String(error?.code) === '23505') {
+      const raced = (await client.query(
+        `SELECT * FROM public.payment_transfers
+          WHERE tenant_id = $1::uuid AND idempotency_key = $2 LIMIT 1`,
+        [tenantId, idempotencyKey],
+      )).rows[0];
+      const counts = await intentCountFor(client, tenantId, idempotencyKey);
+      return {
+        ok: true,
+        reused: true,
+        created: false,
+        intent: raced,
+        intentCount: counts.matching,
+        fundingIntentCount: counts.funding,
+        recentProductionTransfers: counts.recentProduction,
+        recentFreedomTransfers: counts.recentFreedom,
+        sweep: await sweepUnchanged(client),
+        freedomEnvironment: (await freedomRow(client))?.moov_environment,
+      };
+    }
+    throw error;
+  }
+  const counts = await intentCountFor(client, tenantId, idempotencyKey);
+  return {
+    ok: true,
+    reused: false,
+    created: true,
+    intent: inserted,
+    intentCount: counts.matching,
+    fundingIntentCount: counts.funding,
+    recentProductionTransfers: counts.recentProduction,
+    recentFreedomTransfers: counts.recentFreedom,
+    sweep: await sweepUnchanged(client),
+    freedomEnvironment: (await freedomRow(client))?.moov_environment,
+  };
+};
+
+const updateFundingIntent = async (client, body = {}) => {
+  const tenantId = body.tenantId;
+  const intentId = body.intentId;
+  if (!tenantId || tenantId === FREEDOM || tenantId === C1C) return fail('refused_production_tenant');
+  if (tenantId !== PIPELINE) return fail('undesignated_tenant', { tenantId });
+  if (!intentId) return fail('intent_id_required');
+  const productionHits = [body.providerTransferId].filter((id) => PRODUCTION_IDS.has(String(id || '').toLowerCase()));
+  if (productionHits.length) return fail('production_object_refused', { hits: productionHits });
+  const existing = (await client.query(
+    `SELECT * FROM public.payment_transfers
+      WHERE id = $1::uuid AND tenant_id = $2::uuid AND environment = 'sandbox'
+      LIMIT 1`,
+    [intentId, tenantId],
+  )).rows[0];
+  if (!existing) return fail('intent_not_found');
+  const metadata = {
+    ...(existing.provider_metadata && typeof existing.provider_metadata === 'object' ? existing.provider_metadata : {}),
+    ...(body.providerMetadata || {}),
+  };
+  const updated = (await client.query(
+    `UPDATE public.payment_transfers SET
+        provider_transfer_id = COALESCE($3, provider_transfer_id),
+        provider_status = COALESCE($4, provider_status),
+        status = COALESCE($5, status),
+        provider_metadata = $6::jsonb,
+        submitted_at = CASE WHEN $7::boolean THEN COALESCE(submitted_at, now()) ELSE submitted_at END,
+        failure_reason = COALESCE($8, failure_reason),
+        updated_at = now()
+      WHERE id = $1::uuid AND tenant_id = $2::uuid AND environment = 'sandbox'
+      RETURNING *`,
+    [
+      intentId,
+      tenantId,
+      body.providerTransferId || null,
+      body.providerStatus || null,
+      body.status || null,
+      JSON.stringify(metadata),
+      body.markSubmitted === true,
+      body.failureReason || null,
+    ],
+  )).rows[0];
+  const counts = await intentCountFor(client, tenantId, existing.idempotency_key);
+  return {
+    ok: true,
+    intent: updated,
+    intentCount: counts.matching,
+    fundingIntentCount: counts.funding,
+    recentProductionTransfers: counts.recentProduction,
+    recentFreedomTransfers: counts.recentFreedom,
+  };
+};
+
+const verifyFundingIntent = async (client, body = {}) => {
+  const tenantId = body.tenantId || PIPELINE;
+  const idempotencyKey = body.idempotencyKey || null;
+  const tenant = (await client.query(
+    `SELECT id, name, slug, moov_environment FROM public.tenants WHERE id = $1::uuid`,
+    [tenantId],
+  )).rows[0];
+  const freedom = await freedomRow(client);
+  const sweep = await sweepUnchanged(client);
+  const intent = idempotencyKey
+    ? (await client.query(
+      `SELECT * FROM public.payment_transfers
+        WHERE tenant_id = $1::uuid AND idempotency_key = $2
+        ORDER BY created_at DESC LIMIT 1`,
+      [tenantId, idempotencyKey],
+    )).rows[0] || null
+    : (await client.query(
+      `SELECT * FROM public.payment_transfers
+        WHERE tenant_id = $1::uuid AND environment = 'sandbox' AND leg_role = 'wallet_funding'
+        ORDER BY created_at DESC LIMIT 1`,
+      [tenantId],
+    )).rows[0] || null;
+  const counts = await intentCountFor(client, tenantId, intent?.idempotency_key || idempotencyKey || '');
+  const objects = await tenantObjects(client, tenantId, 'sandbox');
+  return {
+    ok: tenant?.moov_environment === 'sandbox'
+      && freedom?.moov_environment === 'production'
+      && objects.productionIdHits.length === 0
+      && counts.recentProduction === 0
+      && counts.recentFreedom === 0,
+    tenant,
+    freedomEnvironment: freedom?.moov_environment,
+    freedomChanged: false,
+    sweep,
+    sweepChanged: false,
+    intent,
+    intentCount: counts.matching,
+    fundingIntentCount: counts.funding,
+    recentProductionTransfers: counts.recentProduction,
+    recentFreedomTransfers: counts.recentFreedom,
+    sandbox: objects,
+  };
+};
+
 const verify = async (client, tenantId) => {
   const freedom = await freedomRow(client);
   const tenant = (await client.query(
@@ -662,6 +918,9 @@ export const handler = async (event = {}) => {
     if (step === 'verify') return await verify(client, event.tenantId);
     if (step === 'object_proof') return await objectProof(client, event.tenantId);
     if (step === 'webhook_receipts') return await webhookReceipts(client, event.eventIds || []);
+    if (step === 'persist_funding_intent') return await persistFundingIntent(client, event);
+    if (step === 'update_funding_intent') return await updateFundingIntent(client, event);
+    if (step === 'verify_funding_intent') return await verifyFundingIntent(client, event);
     return fail('unknown_step', { step });
   } catch (error) {
     return fail(String(error?.message || error).slice(0, 400), { step });
