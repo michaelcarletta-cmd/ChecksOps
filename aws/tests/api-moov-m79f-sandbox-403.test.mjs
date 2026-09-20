@@ -154,6 +154,9 @@ test('M7.9F runner never posts transfers, never arms flags, and never creates in
   assert.match(src, /reconstructM79eFailedTransferRequest/);
   assert.match(src, /sandboxFacilitatorTransferContract/);
   assert.match(src, /STOP FOR REVIEW/);
+  assert.match(src, /getJson\(credentials, '\/accounts'/);
+  assert.match(src, /matchingFundingCount/);
+  assert.match(src, /SANDBOX_TRANSFER_CREATED: matchingFunding.length > 0/);
   assert.doesNotMatch(src, /setSandboxPostFlag/);
   assert.doesNotMatch(src, /AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED': 'true'/);
   assert.doesNotMatch(src, /AWS_MOOV_TRANSFER_POST_ENABLED': 'true'/);

@@ -432,6 +432,9 @@ export const executeSandboxWalletFunding = async ({
       doNotRetry: true,
     };
   }
+  // Classified 4xx with no transfer ID is reusable after review with the same
+  // provider UUID. This gate still refuses a second POST so an authorized retry
+  // must explicitly allow classified-failed (not timeout/unknown).
   if (current.provider_metadata?.post_attempted === true && !current.provider_transfer_id) {
     return {
       ...heldBase,

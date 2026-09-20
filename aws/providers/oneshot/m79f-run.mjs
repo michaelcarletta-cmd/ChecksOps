@@ -200,6 +200,21 @@ const main = async () => {
   const merchantTransfers = await getJson(credentials, `/accounts/${SANDBOX_ACCOUNT}/transfers`, moovSandboxScopes.transfersRead(SANDBOX_ACCOUNT));
   const platformTransfers = await getJson(credentials, `/accounts/${SANDBOX_PLATFORM}/transfers`, moovSandboxScopes.transfersRead(SANDBOX_PLATFORM));
   const listed = await getJson(credentials, '/accounts', moovSandboxScopes.accountsRead());
+  const summarizeTransfer = (row) => ({
+    id: row?.transferID || row?.transferId || row?.id || null,
+    status: row?.status || null,
+    amountCents: Number(row?.amount?.value ?? 0),
+    sourcePm: row?.source?.paymentMethodID || row?.source?.paymentMethodId || null,
+    destinationPm: row?.destination?.paymentMethodID || row?.destination?.paymentMethodId || null,
+    description: row?.description || null,
+  });
+  const merchantTransferRows = asList(merchantTransfers.data).map(summarizeTransfer);
+  const platformTransferRows = asList(platformTransfers.data).map(summarizeTransfer);
+  const matchingFunding = [...merchantTransferRows, ...platformTransferRows].filter((row) => (
+    row.amountCents === 1
+    && String(row.sourcePm || '').toLowerCase() === SANDBOX_FUND_PM
+    && String(row.destinationPm || '').toLowerCase() === SANDBOX_WALLET_PM
+  ));
   const writeMerchant = await moovSandboxToken({ credentials, scopes: moovSandboxScopes.transfersWrite(SANDBOX_ACCOUNT) });
   const writePlatform = await moovSandboxToken({ credentials, scopes: moovSandboxScopes.transfersWrite(SANDBOX_PLATFORM) });
 
@@ -297,7 +312,7 @@ const main = async () => {
     RETRY_IDEMPOTENCY_STRATEGY: 'reuse_existing_intent_and_same_provider_uuid',
     SANDBOX_POST_FLAG: String(flags.flags.AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED || 'false'),
     PRODUCTION_POST_FLAG: String(flags.flags.AWS_MOOV_TRANSFER_POST_ENABLED || 'false'),
-    SANDBOX_TRANSFER_CREATED: asList(platformTransfers.data).length + asList(merchantTransfers.data).length > 0,
+    SANDBOX_TRANSFER_CREATED: matchingFunding.length > 0,
     PRODUCTION_TRANSFER_CREATED: (intent.recentProductionTransfers || 0) > 0,
     MONEY_MOVED: false,
     SAFE_TO_PREPARE_ONE_RETRY_AFTER_REVIEW: Boolean(binding.ok && corrected && writePlatform.ok),
@@ -349,8 +364,10 @@ const main = async () => {
       platformTransfersWrite: { ok: writePlatform.ok === true, scope: writePlatform.grantedScope || null },
     },
     transfers: {
-      merchantCount: asList(merchantTransfers.data).length,
-      platformCount: asList(platformTransfers.data).length,
+      merchantCount: merchantTransferRows.length,
+      platformCount: platformTransferRows.length,
+      matchingFundingCount: matchingFunding.length,
+      matchingFunding,
       merchantListOk: merchantTransfers.ok === true,
       platformListOk: platformTransfers.ok === true,
     },
