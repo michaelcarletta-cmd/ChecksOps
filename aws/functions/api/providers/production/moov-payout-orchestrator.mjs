@@ -298,8 +298,11 @@ export const createMemoryPayoutStore = (seed = {}) => {
   };
 };
 
+const fundBindingOf = (labels) => labels?.fund || firstTestFundBinding();
+const disburseBindingOf = (labels) => labels?.disburse || firstTestDisburseBinding();
+
 const plannedFundingIntent = ({ operationId, shortfallCents, decision, environment = 'production', labels = null }) => {
-  const fund = labels?.fund || firstTestFundBinding();
+  const fund = fundBindingOf(labels);
   return {
     kind: 'wallet_funding',
     leg_role: 'wallet_funding',
@@ -310,6 +313,10 @@ const plannedFundingIntent = ({ operationId, shortfallCents, decision, environme
     status: 'planned',
     source_label: fund.sourceLabel,
     destination_label: fund.destinationLabel,
+    source_bank_id: fund.bankId || fund.sourceBankId || null,
+    destination_wallet_id: fund.walletId || fund.destinationWalletId || null,
+    source_payment_method_id: fund.sourcePaymentMethodId || null,
+    destination_payment_method_id: fund.destinationPaymentMethodId || null,
     source_rail: 'ach-debit-fund',
     destination_rail: 'moov-wallet',
     totp_action: MOOV_FUND_TOTP_ACTION,
@@ -527,8 +534,12 @@ export const orchestratePayout = async ({
       amount_cents: fundingResult.intent.amount_cents,
       idempotency_key: fundingResult.intent.idempotency_key,
       status: fundingResult.intent.status,
-      source_label: fundingResult.intent.source_label || KNOWN_APPROVED_MOOV.freedom.fundingBankLabel,
-      destination_label: fundingResult.intent.destination_label || KNOWN_APPROVED_MOOV.freedom.walletLabel,
+      source_label: fundingResult.intent.source_label || fundBindingOf(labels).sourceLabel,
+      destination_label: fundingResult.intent.destination_label || fundBindingOf(labels).destinationLabel,
+      source_bank_id: fundingResult.intent.source_bank_id || fundBindingOf(labels).bankId || null,
+      destination_wallet_id: fundingResult.intent.destination_wallet_id || fundBindingOf(labels).walletId || null,
+      source_payment_method_id: fundingResult.intent.source_payment_method_id || fundBindingOf(labels).sourcePaymentMethodId || null,
+      destination_payment_method_id: fundingResult.intent.destination_payment_method_id || fundBindingOf(labels).destinationPaymentMethodId || null,
       reused: fundingResult.reused,
       created: fundingResult.created,
       required: amounts.decision === DECISION.FUND_FIRST,
@@ -539,9 +550,9 @@ export const orchestratePayout = async ({
       amount_cents: payoutResult.intent.amount_cents,
       idempotency_key: payoutResult.intent.idempotency_key,
       status: payoutResult.intent.status,
-      source_label: payoutResult.intent.source_label || KNOWN_APPROVED_MOOV.freedom.walletLabel,
-      destination_label: payoutResult.intent.destination_label || KNOWN_APPROVED_MOOV.recipient.bankLabel,
-      recipient_label: payoutResult.intent.recipient_label || KNOWN_APPROVED_MOOV.recipient.displayName,
+      source_label: payoutResult.intent.source_label || disburseBindingOf(labels).sourceLabel,
+      destination_label: payoutResult.intent.destination_label || disburseBindingOf(labels).destinationLabel,
+      recipient_label: payoutResult.intent.recipient_label || disburseBindingOf(labels).recipientLabel,
       reused: payoutResult.reused,
       created: payoutResult.created,
       blocked: effectivePayoutState !== 'payout_ready',
@@ -550,16 +561,18 @@ export const orchestratePayout = async ({
       funding: amounts.decision === DECISION.FUND_FIRST ? {
         action: MOOV_FUND_TOTP_ACTION,
         amount_cents: amounts.shortfall_cents,
-        source_label: KNOWN_APPROVED_MOOV.freedom.fundingBankLabel,
-        destination_label: KNOWN_APPROVED_MOOV.freedom.walletLabel,
+        source_label: fundBindingOf(labels).sourceLabel,
+        destination_label: fundBindingOf(labels).destinationLabel,
+        source_bank_id: fundBindingOf(labels).bankId || null,
+        destination_wallet_id: fundBindingOf(labels).walletId || null,
         consumed: false,
       } : null,
       payout: {
         action: MOOV_DISBURSE_TOTP_ACTION,
         amount_cents: amounts.payout_cents,
-        source_label: KNOWN_APPROVED_MOOV.freedom.walletLabel,
-        recipient_label: KNOWN_APPROVED_MOOV.recipient.displayName,
-        destination_label: KNOWN_APPROVED_MOOV.recipient.bankLabel,
+        source_label: disburseBindingOf(labels).sourceLabel,
+        recipient_label: disburseBindingOf(labels).recipientLabel,
+        destination_label: disburseBindingOf(labels).destinationLabel,
         consumed: false,
       },
       deposit_submit_reused: false,
@@ -569,9 +582,9 @@ export const orchestratePayout = async ({
       payout_requested: amounts.payout_cents,
       wallet_available: amounts.available_cents,
       funding_required: amounts.shortfall_cents,
-      funding_source: KNOWN_APPROVED_MOOV.freedom.fundingBankLabel,
-      recipient: KNOWN_APPROVED_MOOV.recipient.bankLabel,
-      recipient_name: KNOWN_APPROVED_MOOV.recipient.displayName,
+      funding_source: fundBindingOf(labels).sourceLabel,
+      recipient: disburseBindingOf(labels).destinationLabel,
+      recipient_name: disburseBindingOf(labels).recipientLabel,
       stage: ux_stage,
       stage_label: UX_STAGE_LABEL[ux_stage],
       actions,

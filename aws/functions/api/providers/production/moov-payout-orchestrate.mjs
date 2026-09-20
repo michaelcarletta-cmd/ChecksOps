@@ -313,9 +313,23 @@ async function orchestrateSandbox({
   }
 
   const { transferRows, activityRows } = await loadEnvRows(client, tenantId, 'sandbox');
+  const recipientBankId = recipientBank?.provider_bank_account_id || null;
+  const fundingBank = (objects.banks || []).find((row) => (
+    String(row.provider_account_id || '') === String(accountId)
+    && String(row.verification_status || '').toLowerCase() === 'verified'
+    && String(row.provider_bank_account_id || '') !== String(recipientBankId || '')
+  )) || (objects.banks || []).find((row) => (
+    String(row.verification_status || '').toLowerCase() === 'verified'
+    && String(row.provider_bank_account_id || '') !== String(recipientBankId || '')
+  )) || (objects.banks || []).find((row) => String(row.provider_bank_account_id || '') !== String(recipientBankId || ''))
+    || objects.banks?.[0]
+    || null;
   const bankLabel = recipientBank?.last_four
     ? `${recipientBank.bank_name || 'Bank'} ••••${recipientBank.last_four}`
     : 'Sandbox recipient bank';
+  const fundLabel = fundingBank?.last_four
+    ? `${fundingBank.bank_name || 'Bank'} ••••${fundingBank.last_four}`
+    : 'Sandbox funding bank';
   const plan = await orchestratePayout({
     availableCents,
     payoutCents: FIRST_PRODUCTION_TRANSFER_CENTS,
@@ -331,10 +345,11 @@ async function orchestrateSandbox({
     tenantId,
     labels: {
       fund: {
-        sourceLabel: objects.banks[0]?.last_four
-          ? `${objects.banks[0].bank_name || 'Bank'} ••••${objects.banks[0].last_four}`
-          : 'Sandbox funding bank',
+        sourceLabel: fundLabel,
         destinationLabel: 'Sandbox wallet',
+        bankId: fundingBank?.provider_bank_account_id || null,
+        walletId,
+        sourcePaymentMethodId: fundingBank?.provider_payment_method_id || null,
       },
       disburse: {
         sourceLabel: 'Sandbox wallet',
