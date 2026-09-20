@@ -24,6 +24,8 @@ test('M7.9D runner never arms POST, never posts transfers, never creates duplica
   assert.match(src, /geographicReach: 'us-only'/);
   assert.match(src, /collectFunds: \{/);
   assert.match(src, /monthlyVolumeRange: 'under-10k'/);
+  assert.match(src, /filePurpose', 'merchant_underwriting'/);
+  assert.match(src, /business.underwriting-documents-tier-one/);
   assert.match(src, /STOP_FOR_REVIEW/);
   assert.match(src, /capability: 'collect-funds.ach'/);
   assert.doesNotMatch(src, /AWS_MOOV_TRANSFER_POST_ENABLED': 'true'/);

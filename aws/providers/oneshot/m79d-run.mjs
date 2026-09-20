@@ -67,6 +67,7 @@ const POST_ALLOW = [
   /^\/accounts\/[0-9a-f-]+\/underwriting$/,
   /^\/accounts\/[0-9a-f-]+\/capabilities$/,
   /^\/accounts\/[0-9a-f-]+\/capabilities\/[^/]+$/,
+  /^\/accounts\/[0-9a-f-]+\/files$/,
 ];
 const PATCH_ALLOW = [
   /^\/accounts\/[0-9a-f-]+$/i,
@@ -332,21 +333,27 @@ const findCap = (rows, name) => {
     || (rows || []).find((row) => wanted.startsWith(`${capName(row)}.`))
     || null;
 };
-const achDebitPm = (methods) => (methods || []).find((row) => {
-  const type = pmType(row);
-  return type === 'ach-debit-fund' || type === 'ach-debit-collect' || type.includes('ach-debit');
-}) || null;
+const achDebitPm = (methods) => {
+  const rows = methods || [];
+  return rows.find((row) => pmType(row) === 'ach-debit-fund')
+    || rows.find((row) => pmType(row) === 'ach-debit-collect')
+    || rows.find((row) => pmType(row).includes('ach-debit'))
+    || null;
+};
 const classifyDue = (due, errors, status422) => {
   const text = [...(due || []), ...(errors || []).map((row) => row?.requirement || row?.errorCode || ''), status422 || '']
     .join(' ')
     .toLowerCase();
   if (/tos|terms/.test(text)) return 'ToS';
   if (/representative|beneficial|ownersprovided|controller/.test(text)) return 'representative';
+  if (/underwriting-documents|merchant_underwriting|processing.?statement/.test(text)) return 'capability request';
   if (/underwriting/.test(text)) return 'capability request';
   if (/bank/.test(text)) return 'bank verification';
   if (/document|verification|ein|legalname|ssn|profile|business\.|individual\./.test(text)) return 'KYC';
   if (/account.?type|accounttype/.test(text)) return 'account type';
-  if (/unsupported|not found|unknown capability|invalid capability/.test(text)) return 'unsupported sandbox behavior';
+  if (/not allowed on this api version/.test(text)) return 'unsupported sandbox behavior';
+  if (/cannot be blank|invalid capability|unknown capability/.test(text)) return 'capability request';
+  if (/unsupported|not found/.test(text)) return 'unsupported sandbox behavior';
   if (/capability/.test(text) || status422) return 'capability request';
   return null;
 };
@@ -382,7 +389,15 @@ const readAccountState = async (creds, accountId) => {
   const methods = await sandboxGet(creds, `/accounts/${accountId}/payment-methods`, [`/accounts/${accountId}/payment-methods.read`]);
   const listed = asList(caps.json).map(summarizeCap);
   const collect = summarizeCap(collectFunds.json && collectFunds.ok ? collectFunds.json : findCap(asList(caps.json), 'collect-funds') || {});
-  const collectAch = summarizeCap(collectFundsAch.json && collectFundsAch.ok ? collectFundsAch.json : findCap(asList(caps.json), 'collect-funds.ach') || {});
+  const collectAch = collectFundsAch.ok
+    ? summarizeCap(collectFundsAch.json)
+    : {
+      capability: 'collect-funds.ach',
+      status: null,
+      currentlyDue: [],
+      errors: [],
+      disabledReason: collectFundsAch.error || `http_${collectFundsAch.status}`,
+    };
   const debit = achDebitPm(asList(methods.json));
   const walletCap = findCap(listed, 'wallet') || findCap(listed, 'wallet.balance');
   const sendCap = findCap(listed, 'send-funds') || findCap(listed, 'send-funds.ach');
@@ -557,9 +572,9 @@ const COLLECT_FUNDS_UNDERWRITING = {
   },
 };
 const LEGACY_UNDERWRITING = {
-  averageTransactionSize: 10000,
-  maxTransactionSize: 50000,
-  averageMonthlyTransactionVolume: 100000,
+  averageTransactionSize: 100,
+  maxTransactionSize: 500,
+  averageMonthlyTransactionVolume: 1000,
   volumeByCustomerType: {
     businessToBusinessPercentage: 50,
     consumerToBusinessPercentage: 50,
@@ -593,6 +608,65 @@ const submitUnderwriting = async (creds, accountId) => {
   return { ok: false, attempts };
 };
 
+const listFiles = async (creds, accountId) => {
+  const listed = await sandboxGet(creds, `/accounts/${accountId}/files`, [`/accounts/${accountId}/files.read`]);
+  return {
+    status: listed.status,
+    ok: listed.ok,
+    files: asList(listed.json).map((row) => ({
+      idFp: fingerprint(row.fileID || row.id),
+      purpose: row.filePurpose || row.purpose || null,
+      status: row.status || null,
+      metadata: row.metadata || null,
+    })),
+  };
+};
+
+const sandboxUploadUnderwritingFile = async (creds, accountId) => {
+  assertSafeMoovPath('POST', `/accounts/${accountId}/files`);
+  const oauth = await moovOauth({
+    publicKey: creds.publicKey,
+    secretKey: creds.secretKey,
+    origin: creds.origin,
+    scopes: [`/accounts/${accountId}/files.write`],
+  });
+  if (!oauth.ok) return { ok: false, status: oauth.status, error: oauth.error, oauth: false };
+  const csv = [
+    'period,volume_usd,transaction_count,notes',
+    '2026-07,100,2,sandbox-only ChecksOps Pipeline Test underwriting',
+    '2026-08,100,2,sandbox-only ChecksOps Pipeline Test underwriting',
+    '2026-09,100,2,sandbox-only ChecksOps Pipeline Test underwriting',
+    '',
+  ].join('\n');
+  const form = new FormData();
+  form.append('file', new Blob([csv], { type: 'text/csv' }), 'pipeline-test-sandbox-underwriting.csv');
+  form.append('filePurpose', 'merchant_underwriting');
+  form.append('metadata', JSON.stringify({
+    requirement_id: 'business.underwriting-documents-tier-one',
+    checksops_purpose: 'm79d_sandbox',
+  }));
+  const res = await fetch(`https://api.moov.io/accounts/${accountId}/files`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${oauth.token}`,
+      Origin: creds.origin,
+      'x-moov-version': creds.apiVersion,
+    },
+    body: form,
+  });
+  const text = await res.text();
+  let json = null;
+  try { json = text ? JSON.parse(text) : null; } catch { json = { raw: text.slice(0, 240) }; }
+  return {
+    ok: res.ok,
+    status: res.status,
+    error: json?.error || json?.message || json?.errorCode || null,
+    fileFp: fingerprint(json?.fileID || json?.id),
+    purpose: json?.filePurpose || json?.purpose || null,
+    fileStatus: json?.status || null,
+  };
+};
+
 const requestCollectFunds = async (creds, accountId) => {
   const documented = { capabilities: ['collect-funds.ach'] };
   const family = { capabilities: ['collect-funds'] };
@@ -618,18 +692,20 @@ const requestCollectFunds = async (creds, accountId) => {
   return results;
 };
 
+const uniqueDue = (before) => [...new Set([
+  ...(before.currentlyDueAll || []),
+  ...(before.collectFunds?.currentlyDue || []),
+  ...(before.collectFundsAch?.currentlyDue || []),
+].map((item) => String(item)))];
+
 const completeRequired = async (creds, accountId, before, created) => {
-  const due = [
-    ...(before.currentlyDueAll || []),
-    ...(before.collectFunds?.currentlyDue || []),
-    ...(before.collectFundsAch?.currentlyDue || []),
-  ].map((item) => String(item));
+  const due = uniqueDue(before);
   const dueText = due.join(' ').toLowerCase();
   const actions = [];
   let operatorAction = null;
 
-  if (due.some((item) => /document\./i.test(item))) {
-    operatorAction = `Moov Dashboard: upload required sandbox verification document(s) for account ${SANDBOX_ACCOUNT} (${due.filter((item) => /document\./i.test(item)).join(', ')}). This principal will not upload identity documents.`;
+  if (due.some((item) => /^document\./i.test(item))) {
+    operatorAction = `Moov Dashboard: upload required sandbox identity document(s) for account ${SANDBOX_ACCOUNT} (${due.filter((item) => /^document\./i.test(item)).join(', ')}). This principal will not upload identity documents.`;
     return { actions, operatorAction, due };
   }
 
@@ -658,7 +734,7 @@ const completeRequired = async (creds, accountId, before, created) => {
     if (write.ok) created.push('sandbox_representative');
   }
 
-  if (/business\.|individual\.|legalname|ein|profile/.test(dueText)) {
+  if (/legalname|ein|industry-code|description-or-website/.test(dueText)) {
     const profile = await sandboxWrite(creds, `/accounts/${accountId}`, 'PATCH', {
       profile: {
         business: {
@@ -680,7 +756,7 @@ const completeRequired = async (creds, accountId, before, created) => {
     if (profile.ok) created.push('sandbox_profile_patch');
   }
 
-  if (/underwriting/.test(dueText) || before.collectFunds.status === 'pending' || before.collectFundsAch.getStatus === 404) {
+  if (/underwriting/.test(dueText) || before.collectFunds.status === 'pending') {
     const underwriting = await submitUnderwriting(creds, accountId);
     actions.push({ kind: 'underwriting', ...underwriting });
     if (underwriting.ok) created.push(`sandbox_underwriting:${underwriting.label}`);
@@ -689,6 +765,23 @@ const completeRequired = async (creds, accountId, before, created) => {
   const requested = await requestCollectFunds(creds, accountId);
   actions.push({ kind: 'capability_request', requested });
   if (requested.some((row) => row.ok)) created.push('capability:collect-funds');
+
+  let afterRequest = await readAccountState(creds, accountId);
+  if ((afterRequest.currentlyDueAll || []).some((item) => /underwriting-documents/i.test(item))) {
+    const existing = await listFiles(creds, accountId);
+    actions.push({ kind: 'files_list', ...existing });
+    const already = (existing.files || []).some((row) => /underwriting/i.test(String(row.purpose || '')));
+    if (already) {
+      created.push('sandbox_underwriting_file_reused');
+    } else {
+      const uploaded = await sandboxUploadUnderwritingFile(creds, accountId);
+      actions.push({ kind: 'underwriting_file', ...uploaded });
+      if (uploaded.ok) created.push('sandbox_underwriting_file');
+      else {
+        operatorAction = `Moov Dashboard: upload merchant underwriting document for sandbox account ${SANDBOX_ACCOUNT} to satisfy business.underwriting-documents-tier-one. API file upload failed (${uploaded.status}: ${uploaded.error || 'unknown'}). Do not create another account.`;
+      }
+    }
+  }
 
   return { actions, operatorAction, due };
 };
@@ -894,8 +987,11 @@ const main = async () => {
   const waited = await waitForCollectFunds(creds, SANDBOX_ACCOUNT);
   const after = waited.state;
 
-  if (!collectEnabled(after) && !(completed.due || []).length && !completed.operatorAction) {
-    completed.operatorAction = `Moov Dashboard: sandbox account ${SANDBOX_ACCOUNT} still has collect-funds=${after.collectFunds.status || 'missing'} after API underwriting/capability request. currentlyDue=${JSON.stringify(after.currentlyDueAll || [])}. Enable collect-funds / ACH debit for ChecksOps Pipeline Test. Do not create another account.`;
+  if (!collectEnabled(after) && !completed.operatorAction) {
+    const dueAfter = (after.currentlyDueAll || []).join(', ') || 'none';
+    completed.operatorAction = (after.currentlyDueAll || []).some((item) => /underwriting-documents/i.test(item))
+      ? `Moov Dashboard: open sandbox account ${SANDBOX_ACCOUNT} (ChecksOps Pipeline Test) and approve or attach merchant underwriting documents for business.underwriting-documents-tier-one. API submitted sandbox underwriting answers and a merchant_underwriting file. Do not create another account. Do not use production identity.`
+      : `Moov Dashboard: sandbox account ${SANDBOX_ACCOUNT} still has collect-funds=${after.collectFunds.status || 'missing'} after API underwriting/capability request. currentlyDue=${dueAfter}. Enable collect-funds / ACH debit for ChecksOps Pipeline Test. Do not create another account.`;
   }
 
   const rdsVerify = invokeOneshot({ step: 'verify', tenantId: PIPELINE });
