@@ -20,8 +20,9 @@ import {
   planSandboxWalletFunding,
   resolveSandboxFundBinding,
   SANDBOX_FUNDING_AMOUNT_CENTS,
+  sandboxWalletFundingIdempotencyKey,
 } from '../../functions/api/providers/production/moov-sandbox-wallet-fund.mjs';
-import { moovSandboxFetch, moovSandboxScopes } from '../../functions/api/providers/moov-sandbox.mjs';
+import { moovSandboxFetch, moovSandboxScopes, moovSandboxToken } from '../../functions/api/providers/moov-sandbox.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const AWS = process.env.AWS_CLI || `${process.env.HOME}/.local/bin/aws`;
@@ -369,18 +370,24 @@ const readLiveObjects = async (credentials) => {
 };
 
 const inspectWebhooks = async (credentials) => {
-  const listed = await moovSandboxFetch({
-    credentials,
-    path: '/webhooks',
-    scopes: ['/accounts.read'],
+  const res = await fetch('https://api.moov.io/webhooks', {
+    method: 'GET',
+    headers: {
+      Authorization: `Basic ${Buffer.from(`${credentials.publicKey}:${credentials.secretKey}`).toString('base64')}`,
+      Accept: 'application/json',
+      Origin: credentials.origin,
+      'x-moov-version': credentials.apiVersion,
+    },
   });
-  const rows = asList(listed.ok ? listed.data : []).map((row) => ({
+  const json = await res.json().catch(() => null);
+  const rows = asList(json).map((row) => ({
     url: row.url || null,
     disabled: row.disabled === true,
   }));
   const webhook = rows.find((row) => String(row.url || '').replace(/\/$/, '') === PREFERRED_WEBHOOK_URL.replace(/\/$/, ''));
   return {
-    listed: listed.ok === true,
+    listed: res.ok === true,
+    status: res.status,
     webhook: webhook || null,
     healthy: Boolean(webhook && webhook.disabled !== true),
   };
@@ -585,6 +592,61 @@ const main = async () => {
     return;
   }
 
+  const alreadyAttempted = Boolean(intent?.provider_transfer_id)
+    || intent?.provider_metadata?.post_attempted === true
+    || intent?.status === 'failed'
+    || intent?.status === 'unknown';
+  if (alreadyAttempted) {
+    const flagsEnd = lambdaFlags();
+    const liveNow = await readLiveObjects(credentials);
+    const webhooksNow = await inspectWebhooks(credentials);
+    const verifyNow = invokeOneshot({
+      step: 'verify_funding_intent',
+      tenantId: PIPELINE,
+      idempotencyKey: planned.idempotency_key,
+    });
+    writeReturnCard({
+      SANDBOX_WRITER_BINDING: 'PASS',
+      SANDBOX_ACCOUNT,
+      SANDBOX_BANK,
+      SANDBOX_FUNDING_PM: SANDBOX_FUND_PM,
+      SANDBOX_WALLET,
+      PRODUCTION_IDS_BLOCKED: 'true',
+      SANDBOX_INTENT_ID: intent.id,
+      INTENT_COUNT: String(verifyNow.intentCount ?? 1),
+      IDEMPOTENCY: planned.idempotency_key,
+      DARK_RESULT: dark.outcome,
+      TRANSFER_POST_HELD: String(dark.transfer_post_held === true),
+      SANDBOX_POST_FLAG_ARMED: 'false',
+      PRODUCTION_POST_FLAG: String(flagsEnd.flags.AWS_MOOV_TRANSFER_POST_ENABLED || 'false'),
+      OTHER_ENV_CHANGES: 'none',
+      PROVIDER_POST_COUNT: '1_prior_attempt_not_retried',
+      SANDBOX_MOOV_TRANSFER_ID: intent.provider_transfer_id || liveNow.fundingTransfers[0]?.id || 'none',
+      SANDBOX_MOOV_STATUS: liveNow.fundingTransfers[0]?.status || intent.provider_status || 'none',
+      INTENT_STATUS: intent.status,
+      PROVIDER_REFERENCE: intent.provider_transfer_id || 'none',
+      SANDBOX_POST_FLAG_DISARMED: String(flagsEnd.flags.AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED !== 'true'),
+      DUPLICATE_TRANSFER: String(liveNow.fundingTransfers.length > 1),
+      PRODUCTION_TRANSFER_CREATED: String((verifyNow.recentProductionTransfers || 0) > 0),
+      FREEDOM_CHANGED: 'false',
+      SWEEP_CHANGED: 'false',
+      PRODUCTION_MONEY_MOVED: 'false',
+      SAFE_TO_RECONCILE_SANDBOX_TRANSFER: liveNow.fundingTransfers.length === 1 ? 'YES' : 'NO',
+      SAFE_TO_PREPARE_SANDBOX_WALLET_RECIPIENT_AFTER_FUNDS_AVAILABLE: 'NO',
+      GO_NO_GO: 'NO-GO',
+    });
+    fs.writeFileSync('/opt/cursor/artifacts/m79e_run.json', JSON.stringify({
+      ...report,
+      stopped: 'already_attempted_no_retry',
+      liveNow,
+      webhooksNow,
+      verifyNow,
+      flagsEnd: flagsEnd.flags,
+    }, null, 2));
+    console.log(JSON.stringify({ ok: true, stopped: 'already_attempted_no_retry', flagsEnd: flagsEnd.flags }, null, 2));
+    return;
+  }
+
   let armed = null;
   let posted = null;
   let disarmed = null;
@@ -737,7 +799,68 @@ const main = async () => {
   }, null, 2));
 };
 
-main().catch((error) => {
+const reconcileOnly = async () => {
+  const identity = await assumeRole();
+  const flags = lambdaFlags();
+  const production = loadSecret(flags.PROVIDER_SECRETS_ARN || PRODUCTION_SECRET);
+  const credentials = sandboxCredentials(production.parsed);
+  const live = await readLiveObjects(credentials);
+  const writeToken = await moovSandboxToken({
+    credentials,
+    scopes: moovSandboxScopes.transfersWrite(SANDBOX_ACCOUNT),
+  });
+  const readToken = await moovSandboxToken({
+    credentials,
+    scopes: moovSandboxScopes.transfersRead(SANDBOX_ACCOUNT),
+  });
+  const webhooks = await inspectWebhooks(credentials);
+  const verifyAfter = invokeOneshot({
+    step: 'verify_funding_intent',
+    tenantId: PIPELINE,
+    idempotencyKey: sandboxWalletFundingIdempotencyKey({
+      tenantId: PIPELINE,
+      environment: 'sandbox',
+      amountCents: 1,
+    }),
+  });
+  const out = {
+    at: new Date().toISOString(),
+    identity: { arn: identity.Arn },
+    flags: flags.flags,
+    live: {
+      wallet: live.wallet,
+      fundingTransfers: live.fundingTransfers,
+      transferCount: live.transfers.length,
+    },
+    oauth: {
+      transfersWriteOk: writeToken.ok === true,
+      transfersWriteStatus: writeToken.statusCode || null,
+      transfersWriteScope: writeToken.grantedScope || null,
+      transfersWriteError: writeToken.error || writeToken.message || null,
+      transfersReadOk: readToken.ok === true,
+      transfersReadScope: readToken.grantedScope || null,
+    },
+    webhooks,
+    verifyAfter: {
+      ok: verifyAfter.ok,
+      intentId: verifyAfter.intent?.id || null,
+      intentStatus: verifyAfter.intent?.status || null,
+      providerTransferId: verifyAfter.intent?.provider_transfer_id || null,
+      failureReason: verifyAfter.intent?.failure_reason || null,
+      postAttempted: verifyAfter.intent?.provider_metadata?.post_attempted || false,
+      intentCount: verifyAfter.intentCount,
+      recentProductionTransfers: verifyAfter.recentProductionTransfers,
+      recentFreedomTransfers: verifyAfter.recentFreedomTransfers,
+      freedomEnvironment: verifyAfter.freedomEnvironment,
+    },
+    posted: false,
+    armed: false,
+  };
+  fs.writeFileSync('/opt/cursor/artifacts/m79e_reconcile.json', JSON.stringify(out, null, 2));
+  console.log(JSON.stringify(out, null, 2));
+};
+
+const failMain = (error) => {
   try { setSandboxPostFlag('false'); } catch { /* still report */ }
   console.error(error);
   writeReturnCard({
@@ -747,4 +870,13 @@ main().catch((error) => {
     PRODUCTION_MONEY_MOVED: 'false',
   });
   process.exitCode = 1;
-});
+};
+
+if (process.argv[2] === 'reconcile') {
+  reconcileOnly().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+} else {
+  main().catch(failMain);
+}

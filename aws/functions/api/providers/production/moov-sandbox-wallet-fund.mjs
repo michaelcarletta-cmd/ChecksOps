@@ -146,8 +146,9 @@ export const resolveSandboxFundBinding = ({
   const accountId = accountIdOf(rds.account) || live.accountId || null;
   const wallet = (live.wallets || []).find((row) => sameId(walletIdOf(row), expected.walletId))
     || (sameId(walletIdOf(rds.wallet), expected.walletId) ? rds.wallet : null);
+  const rdsFunding = (rds.banks || []).find((row) => sameId(row.provider_bank_account_id, expected.bankId)) || null;
   const fundingBank = (live.banks || []).find((row) => sameId(bankIdOf(row), expected.bankId))
-    || (rds.banks || []).find((row) => sameId(row.provider_bank_account_id, expected.bankId))
+    || rdsFunding
     || null;
   const recipientBank = (rds.banks || []).find((row) => sameId(row.provider_bank_account_id, expected.recipientBankId))
     || (live.banks || []).find((row) => sameId(bankIdOf(row), expected.recipientBankId))
@@ -183,7 +184,7 @@ export const resolveSandboxFundBinding = ({
     return fail('sandbox_wallet_pm_mismatch', { statusCode: 409, found: pmIdOf(walletPm) });
   }
 
-  const rdsCreditPm = fundingBank?.provider_payment_method_id || null;
+  const rdsCreditPm = rdsFunding?.provider_payment_method_id || null;
 
   const guard = assertNoCrossEnvironmentObject({
     environment: 'sandbox',
@@ -225,7 +226,7 @@ export const resolveSandboxFundBinding = ({
     walletId: expected.walletId,
     sourcePaymentMethodId: expected.achDebitFundPm,
     destinationPaymentMethodId: expected.walletPm,
-    rdsSourceMethodId: fundingBank.id || null,
+    rdsSourceMethodId: rdsFunding?.id || null,
     rdsWalletId: rds.wallet?.id || null,
     rdsStoredBankPaymentMethodId: rdsCreditPm,
     liveFundingPmAuthoritative: true,
@@ -447,6 +448,8 @@ export const executeSandboxWalletFunding = async ({
       error: posted.error || 'moov_sandbox_http_failed',
       httpStatus: posted.statusCode,
       message: posted.message,
+      errorCode: posted.errorCode || null,
+      errorTitle: posted.errorTitle || null,
     };
   }
   return {

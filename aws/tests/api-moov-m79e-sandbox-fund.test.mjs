@@ -86,7 +86,8 @@ test('sandbox writer binds Pipeline Test objects from tenant/RDS/live and ignore
   assert.equal(binding.amountCents, SANDBOX_FUNDING_AMOUNT_CENTS);
   assert.equal(binding.browserAuthoritative, false);
   assert.equal(binding.liveFundingPmAuthoritative, true);
-  assert.notEqual(binding.sourcePaymentMethodId, rds.banks[0].provider_payment_method_id);
+  assert.equal(binding.rdsSourceMethodId, rds.banks[0].id);
+  assert.notEqual(binding.rdsSourceMethodId, EXPECTED.bankId);
   assert.equal(binding.idempotencyKey.includes(EXPECTED.tenantId), true);
   assert.equal(binding.idempotencyKey.includes('sandbox'), true);
   assert.equal(binding.idempotencyKey.includes('wallet_funding'), true);
