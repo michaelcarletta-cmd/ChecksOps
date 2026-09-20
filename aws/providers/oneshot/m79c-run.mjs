@@ -64,6 +64,9 @@ const PRODUCTION_IDS = new Set([
 
 const POST_ALLOW = [
   /^\/accounts$/,
+  /^\/accounts\/[0-9a-f-]+\/wallets$/,
+  /^\/accounts\/[0-9a-f-]+\/representatives$/,
+  /^\/accounts\/[0-9a-f-]+\/underwriting$/,
   /^\/accounts\/[0-9a-f-]+\/bank-accounts$/,
   /^\/accounts\/[0-9a-f-]+\/bank-accounts\/[0-9a-f-]+\/verify$/,
   /^\/accounts\/[0-9a-f-]+\/bank-accounts\/[0-9a-f-]+\/micro-deposits$/,
@@ -71,6 +74,21 @@ const POST_ALLOW = [
   /^\/accounts\/[0-9a-f-]+\/capabilities\/[^/]+$/,
   /^\/webhooks\/[0-9a-f-]+\/ping$/,
 ];
+const PATCH_ALLOW = [
+  /^\/webhooks\/[0-9a-f-]+$/i,
+  /^\/accounts\/[0-9a-f-]+$/i,
+  /^\/accounts\/[0-9a-f-]+\/underwriting$/i,
+  /^\/accounts\/[0-9a-f-]+\/bank-accounts\/[0-9a-f-]+\/verify$/i,
+  /^\/accounts\/[0-9a-f-]+\/bank-accounts\/[0-9a-f-]+\/micro-deposits$/i,
+];
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const TEST_ADDRESS = {
+  addressLine1: '123 Main Street',
+  city: 'Boulder',
+  stateOrProvince: 'CO',
+  postalCode: '80301',
+  country: 'US',
+};
 
 const run = (cmd, args, opts = {}) => execFileSync(cmd, args, {
   encoding: 'utf8',
@@ -300,11 +318,7 @@ const assertSafeMoovPath = (method, apiPath) => {
   const p = String(apiPath || '');
   if (/\/transfers(\/|$|\?)/i.test(p)) throw new Error('refused_transfer_path');
   if (verb === 'GET') return;
-  if (['PATCH', 'PUT'].includes(verb) && (
-    /^\/webhooks\/[0-9a-f-]+$/i.test(p)
-    || /^\/accounts\/[0-9a-f-]+\/bank-accounts\/[0-9a-f-]+\/verify$/i.test(p)
-    || /^\/accounts\/[0-9a-f-]+\/bank-accounts\/[0-9a-f-]+\/micro-deposits$/i.test(p)
-  )) return;
+  if (['PATCH', 'PUT'].includes(verb) && PATCH_ALLOW.some((re) => re.test(p))) return;
   if (verb === 'POST' && POST_ALLOW.some((re) => re.test(p))) return;
   throw new Error(`refused_method_${verb}_${p}`);
 };
@@ -589,6 +603,160 @@ const chooseAccount = (inspect) => {
   return byForeign || named || rows[0] || null;
 };
 
+const acceptTos = async (creds, accountId) => {
+  const tokenGet = await sandboxGet(creds, '/tos-token', [`/accounts/${accountId}/profile.write`]);
+  const token = tokenGet.json?.token || tokenGet.json?.tosToken || (typeof tokenGet.json === 'string' ? tokenGet.json : null);
+  if (present(token)) {
+    const patched = await sandboxWrite(creds, `/accounts/${accountId}`, 'PATCH', {
+      termsOfService: { token },
+    }, [`/accounts/${accountId}/profile.write`]);
+    if (patched.ok) return { ok: true, method: 'token', status: patched.status };
+  }
+  const manual = await sandboxWrite(creds, `/accounts/${accountId}`, 'PATCH', {
+    termsOfService: {
+      manual: {
+        acceptedDate: new Date().toISOString(),
+        acceptedIP: '127.0.0.1',
+        acceptedUserAgent: 'ChecksOps-M79C/1.0',
+        acceptedDomain: 'checksops.com',
+      },
+    },
+  }, [`/accounts/${accountId}/profile.write`]);
+  return { ok: manual.ok, method: 'manual', status: manual.status, error: manual.error, tokenStatus: tokenGet.status };
+};
+
+const saveUnderwriting = async (creds, accountId) => {
+  const body = {
+    averageTransactionSize: 10000,
+    maxTransactionSize: 50000,
+    averageMonthlyTransactionVolume: 100000,
+    volumeByCustomerType: {
+      businessToBusinessPercentage: 50,
+      consumerToBusinessPercentage: 50,
+    },
+    fulfillment: {
+      hasPhysicalGoods: false,
+      isShippingProduct: false,
+      shipmentDurationDays: 0,
+      returnPolicy: 'none',
+    },
+  };
+  const put = await sandboxWrite(creds, `/accounts/${accountId}/underwriting`, 'PUT', body, [`/accounts/${accountId}/profile.write`]);
+  if (put.ok) return { ok: true, method: 'PUT', status: put.status };
+  const post = await sandboxWrite(creds, `/accounts/${accountId}/underwriting`, 'POST', body, [`/accounts/${accountId}/profile.write`]);
+  return { ok: post.ok, method: 'POST', status: post.status, putStatus: put.status, error: post.error || put.error };
+};
+
+const completeBusinessOnboarding = async (creds, accountId, created) => {
+  const profile = await sandboxWrite(creds, `/accounts/${accountId}`, 'PATCH', {
+    profile: {
+      business: {
+        legalBusinessName: 'ChecksOps Pipeline Test',
+        doingBusinessAs: 'Pipeline Test',
+        businessType: 'llc',
+        email: 'pipeline-test-sandbox@checksops.com',
+        website: 'https://checksops.com',
+        description: 'Sandbox-only ChecksOps pipeline payout test tenant. No live money.',
+        phone: { number: '8185551212', countryCode: '1' },
+        address: TEST_ADDRESS,
+        taxID: { ein: { number: '123456789' } },
+        industryCodes: { mcc: '7372', naics: '541511', sic: '7371' },
+        ownersProvided: false,
+      },
+    },
+  }, [`/accounts/${accountId}/profile.write`]);
+  const reps = await sandboxGet(creds, `/accounts/${accountId}/representatives`, [`/accounts/${accountId}/representatives.read`]);
+  const existingReps = asList(reps.json);
+  let representative = { reused: existingReps.length > 0, created: false, status: reps.status };
+  if (!existingReps.length) {
+    const write = await sandboxWrite(creds, `/accounts/${accountId}/representatives`, 'POST', {
+      name: { firstName: 'Pat', lastName: 'Pipeline' },
+      email: 'pat.pipeline-sandbox@checksops.com',
+      phone: { number: '8185551212', countryCode: '1' },
+      address: TEST_ADDRESS,
+      birthDate: { year: 1988, month: 6, day: 15 },
+      governmentID: { ssn: { full: '123456789' } },
+      responsibilities: {
+        isController: true,
+        isOwner: true,
+        ownershipPercentage: 100,
+        jobTitle: 'Owner',
+      },
+    }, [`/accounts/${accountId}/representatives.write`]);
+    if (write.ok) created.push('sandbox_representative');
+    representative = { reused: false, created: write.ok, status: write.status, error: write.error };
+  } else {
+    representative = { reused: true, created: false, status: reps.status, count: existingReps.length };
+  }
+  const owners = await sandboxWrite(creds, `/accounts/${accountId}`, 'PATCH', {
+    profile: { business: { ownersProvided: true } },
+  }, [`/accounts/${accountId}/profile.write`]);
+  const tos = await acceptTos(creds, accountId);
+  const underwriting = await saveUnderwriting(creds, accountId);
+  return {
+    profileStatus: profile.status,
+    representative,
+    ownersProvidedStatus: owners.status,
+    tos,
+    underwriting,
+  };
+};
+
+const completeIndividualOnboarding = async (creds, accountId, created) => {
+  const profile = await sandboxWrite(creds, `/accounts/${accountId}`, 'PATCH', {
+    profile: {
+      individual: {
+        name: { firstName: 'Pipeline', lastName: 'Payee' },
+        email: 'pipeline-payee-sandbox@checksops.com',
+        phone: { number: '3035550100', countryCode: '1' },
+        address: TEST_ADDRESS,
+        birthDate: { year: 1990, month: 1, day: 15 },
+        governmentID: { ssn: { full: '987654321' } },
+      },
+    },
+  }, [`/accounts/${accountId}/profile.write`]);
+  const tos = await acceptTos(creds, accountId);
+  if (tos.ok) created.push('sandbox_recipient_tos');
+  return { profileStatus: profile.status, tos };
+};
+
+const waitForWallet = async (creds, accountId) => {
+  for (let i = 0; i < 8; i += 1) {
+    const listed = await sandboxGet(creds, `/accounts/${accountId}/wallets`, [`/accounts/${accountId}/wallets.read`]);
+    const wallets = asList(listed.json);
+    const wallet = wallets.find((row) => walletIdOf(row) && !isProdId(walletIdOf(row))) || wallets[0];
+    if (wallet && walletIdOf(wallet)) {
+      return { listed, wallet, attempts: i + 1 };
+    }
+    const methodsGet = await sandboxGet(
+      creds,
+      `/accounts/${accountId}/payment-methods`,
+      [`/accounts/${accountId}/payment-methods.read`],
+    );
+    const methods = asList(methodsGet.json);
+    const walletPm = methods.find((row) => {
+      const type = String(row.paymentMethodType || row.type || '').toLowerCase();
+      const walletId = row.wallet?.walletID || row.walletID || null;
+      return type.includes('wallet') && walletId && !isProdId(walletId);
+    });
+    if (walletPm) {
+      const walletId = walletPm.wallet?.walletID || walletPm.walletID;
+      return {
+        listed,
+        wallet: { walletID: walletId, status: 'active', availableBalance: { value: 0 } },
+        attempts: i + 1,
+        fromPaymentMethod: true,
+      };
+    }
+    await sleep(2000);
+  }
+  return {
+    listed: await sandboxGet(creds, `/accounts/${accountId}/wallets`, [`/accounts/${accountId}/wallets.read`]),
+    wallet: null,
+    attempts: 8,
+  };
+};
+
 const ensureCapabilities = async (creds, accountId, created) => {
   const needed = ['transfers', 'wallet', 'send-funds', 'send-funds.ach', 'collect-funds', 'collect-funds.ach'];
   const listed = await sandboxGet(creds, `/accounts/${accountId}/capabilities`, [`/accounts/${accountId}/capabilities.read`]);
@@ -648,21 +816,42 @@ const ensureAccount = async (creds, inspect, created, reused) => {
 
 const ensureWallet = async (creds, accountId, inspect, created, reused) => {
   const existing = (chooseAccount(inspect)?.wallets || []).find((row) => row.id && !isProdId(row.id));
-  const listed = await sandboxGet(creds, `/accounts/${accountId}/wallets`, [`/accounts/${accountId}/wallets.read`]);
-  const wallets = asList(listed.json);
-  const wallet = wallets.find((row) => walletIdOf(row) && !isProdId(walletIdOf(row))) || wallets[0];
-  if (wallet && walletIdOf(wallet)) {
-    if (existing) reused.push('sandbox_wallet');
+  const waited = await waitForWallet(creds, accountId);
+  if (waited.wallet && walletIdOf(waited.wallet)) {
+    if (existing || waited.attempts > 1) reused.push('sandbox_wallet');
     else reused.push('sandbox_wallet_from_account');
     return {
-      walletId: walletIdOf(wallet),
-      status: wallet.status || null,
-      availableCents: amountCentsOf(wallet.availableBalance ?? wallet.available),
-      pendingCents: amountCentsOf(wallet.pendingBalance ?? wallet.pending),
+      walletId: walletIdOf(waited.wallet),
+      status: waited.wallet.status || null,
+      availableCents: amountCentsOf(waited.wallet.availableBalance ?? waited.wallet.available),
+      pendingCents: amountCentsOf(waited.wallet.pendingBalance ?? waited.wallet.pending),
       created: false,
+      waitAttempts: waited.attempts,
     };
   }
-  return { ok: false, error: 'sandbox_wallet_missing', listedStatus: listed.status };
+  const write = await sandboxWrite(creds, `/accounts/${accountId}/wallets`, 'POST', {
+    name: 'Operating wallet',
+    description: 'ChecksOps Pipeline Test sandbox operating wallet',
+  }, [`/accounts/${accountId}/wallets.write`]);
+  const walletId = walletIdOf(write.json);
+  if (write.ok && walletId && !isProdId(walletId)) {
+    created.push('sandbox_wallet');
+    return {
+      walletId,
+      status: write.json?.status || 'active',
+      availableCents: amountCentsOf(write.json?.availableBalance ?? write.json?.available),
+      pendingCents: amountCentsOf(write.json?.pendingBalance ?? write.json?.pending),
+      created: true,
+      waitAttempts: waited.attempts,
+    };
+  }
+  return {
+    ok: false,
+    error: 'sandbox_wallet_missing',
+    listedStatus: waited.listed?.status,
+    createStatus: write.status,
+    createError: write.error,
+  };
 };
 
 const verifyBank = async (creds, accountId, bankId, created) => {
@@ -843,6 +1032,7 @@ const ensureRecipient = async (creds, inspectAllAccounts, created, reused) => {
     created.push('sandbox_recipient');
     createdAccount = true;
   }
+  const recipientKyc = await completeIndividualOnboarding(creds, accountId, created);
   const banks = await sandboxGet(creds, `/accounts/${accountId}/bank-accounts`, [`/accounts/${accountId}/bank-accounts.read`]);
   let bank = asList(banks.json).find((row) => !isProdId(bankIdOf(row)));
   let createdBank = false;
@@ -887,6 +1077,7 @@ const ensureRecipient = async (creds, inspectAllAccounts, created, reused) => {
     bankName: after.json?.bankName || 'Moov Test Bank',
     paymentMethodId: achCredit?.id || null,
     ready: verified && Boolean(accountId) && Boolean(bankId),
+    kyc: recipientKyc,
   };
 };
 
@@ -1232,9 +1423,10 @@ const main = async () => {
     process.exit(2);
   }
   const capabilities = await ensureCapabilities(creds, account.accountId, created);
+  const onboarding = await completeBusinessOnboarding(creds, account.accountId, created);
   const wallet = await ensureWallet(creds, account.accountId, moovInspect, created, reused);
   if (wallet.ok === false) {
-    const stopped = { ok: false, stopped: wallet.error, account, wallet };
+    const stopped = { ok: false, stopped: wallet.error, account, onboarding, capabilities, wallet };
     fs.writeFileSync('/opt/cursor/artifacts/m79c_stopped.json', JSON.stringify(stopped, null, 2));
     console.log(JSON.stringify(stopped, null, 2));
     process.exit(2);
@@ -1400,6 +1592,7 @@ const main = async () => {
       sandboxWebhook: moovInspect.sandboxWebhook,
     },
     account: { ...account, accountFp: fingerprint(account.accountId) },
+    onboarding,
     wallet: { ...wallet, walletFp: fingerprint(wallet.walletId) },
     bank: { ...bank, bankFp: fingerprint(bank.bankId), paymentMethodFp: fingerprint(bank.paymentMethodId) },
     recipient: {

@@ -24,6 +24,8 @@ test('M7.9C runner never arms POST, never posts transfers, never creates a repla
   assert.doesNotMatch(src, /AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED': 'true'/);
   assert.doesNotMatch(src, /method: 'POST',\s*[\s\S]{0,80}\/transfers/);
   assert.doesNotMatch(src, /console\.log\(.*MOOV_SANDBOX_SECRET_KEY\)/);
+  assert.match(src, /termsOfService/);
+  assert.match(src, /sandbox-only/);
   assert.doesNotMatch(src, /path: '\/webhooks',\s*[\s\S]{0,40}method: 'POST'/);
 });
 
