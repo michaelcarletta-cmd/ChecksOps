@@ -29,6 +29,7 @@ export const PIPELINE_TEST_TENANT_ID = '3bef00a5-0bf4-41ba-abf8-5fb4e2b73d43';
 
 export const PIPELINE_TEST_SANDBOX = Object.freeze({
   tenantId: PIPELINE_TEST_TENANT_ID,
+  platformAccountId: '36b79957-ce7a-4ca7-a68f-30986c9e47bb',
   accountId: '1d59a6a8-3307-4687-8367-1495293ecc73',
   walletId: '58571121-67ea-4e10-abae-6c9680ac455d',
   bankId: '8390f74b-706e-4d89-80b0-f96bd7c1b414',
@@ -39,6 +40,69 @@ export const PIPELINE_TEST_SANDBOX = Object.freeze({
   routingNumber: '322271627',
   lastFour: '4321',
 });
+
+export const sandboxFacilitatorTransferPath = (platformAccountId) => (
+  `/accounts/${platformAccountId}/transfers`
+);
+
+/** Exact M7.9E POST that returned HTTP 403. Reconstruct from code + live run; no retry. */
+export const reconstructM79eFailedTransferRequest = () => {
+  const expected = PIPELINE_TEST_SANDBOX;
+  const body = buildMoovSandboxTransferBody({
+    sourcePaymentMethodId: expected.achDebitFundPm,
+    destinationPaymentMethodId: expected.walletPm,
+    amountCents: SANDBOX_FUNDING_AMOUNT_CENTS,
+    description: 'M7.9E sandbox BANK to WALLET 0.01',
+  });
+  return {
+    endpoint: sandboxFacilitatorTransferPath(expected.accountId),
+    method: 'POST',
+    apiVersion: 'v2024.01.00',
+    origin: 'https://checksops.com',
+    idempotencyFormat: 'UUIDv4-shaped SHA-256 of business key',
+    providerIdempotencyKey: '72f44c1a-5ee4-4601-9e4b-3ca54fbc3935',
+    scopes: [`/accounts/${expected.accountId}/transfers.write`],
+    sourceAccount: expected.accountId,
+    destinationAccount: expected.accountId,
+    sourcePaymentMethodId: expected.achDebitFundPm,
+    destinationPaymentMethodId: expected.walletPm,
+    amount: body.amount,
+    description: body.description,
+    facilitatorAccountIdInPath: false,
+    platformAccountId: expected.platformAccountId,
+    facilitatorFee: null,
+    metadata: null,
+    transferOptions: null,
+    achType: null,
+    statementDescriptor: null,
+  };
+};
+
+export const sandboxFacilitatorTransferContract = (binding) => {
+  const body = buildMoovSandboxTransferBody({
+    sourcePaymentMethodId: binding.sourcePaymentMethodId,
+    destinationPaymentMethodId: binding.destinationPaymentMethodId,
+    amountCents: binding.amountCents || SANDBOX_FUNDING_AMOUNT_CENTS,
+    description: 'M7.9E sandbox BANK to WALLET 0.01',
+  });
+  return {
+    endpoint: sandboxFacilitatorTransferPath(binding.platformAccountId),
+    method: 'POST',
+    apiVersion: 'v2024.01.00',
+    scopes: moovSandboxScopes.transfersWrite(binding.platformAccountId),
+    sourceAccount: binding.accountId,
+    destinationAccount: binding.accountId,
+    sourcePaymentMethodId: binding.sourcePaymentMethodId,
+    destinationPaymentMethodId: binding.destinationPaymentMethodId,
+    amount: body.amount,
+    description: body.description,
+    facilitatorAccountIdInPath: true,
+    platformAccountId: binding.platformAccountId,
+    facilitatorFee: null,
+    metadata: null,
+    transferOptions: null,
+  };
+};
 
 const lower = (value) => String(value || '').trim().toLowerCase();
 const sameId = (left, right) => Boolean(left) && lower(left) === lower(right);
@@ -144,6 +208,7 @@ export const resolveSandboxFundBinding = ({
   }
 
   const accountId = accountIdOf(rds.account) || live.accountId || null;
+  const platformAccountId = live.platformAccountId || live.platformId || rds.platformAccountId || null;
   const wallet = (live.wallets || []).find((row) => sameId(walletIdOf(row), expected.walletId))
     || (sameId(walletIdOf(rds.wallet), expected.walletId) ? rds.wallet : null);
   const rdsFunding = (rds.banks || []).find((row) => sameId(row.provider_bank_account_id, expected.bankId)) || null;
@@ -163,6 +228,12 @@ export const resolveSandboxFundBinding = ({
 
   if (!sameId(accountId, expected.accountId)) {
     return fail('sandbox_account_mismatch', { statusCode: 409, accountId });
+  }
+  if (isKnownProductionMoovObject(platformAccountId) || sameId(platformAccountId, KNOWN_APPROVED_MOOV.platform.moovAccountId)) {
+    return fail('production_ids_blocked', { statusCode: 409, hits: [platformAccountId] });
+  }
+  if (!sameId(platformAccountId, expected.platformAccountId)) {
+    return fail('sandbox_platform_mismatch', { statusCode: 409, platformAccountId });
   }
   if (!fundingBank || !sameId(bankIdOf(fundingBank), expected.bankId)) {
     return fail('sandbox_bank_mismatch', { statusCode: 409 });
@@ -222,6 +293,7 @@ export const resolveSandboxFundBinding = ({
     environment: 'sandbox',
     tenantId: expected.tenantId,
     accountId: expected.accountId,
+    platformAccountId: expected.platformAccountId,
     bankId: expected.bankId,
     walletId: expected.walletId,
     sourcePaymentMethodId: expected.achDebitFundPm,
@@ -272,6 +344,7 @@ export const planSandboxWalletFunding = (binding) => {
       operation: SANDBOX_FUNDING_OPERATION,
       environment: 'sandbox',
       account_id: binding.accountId,
+      platform_account_id: binding.platformAccountId,
       bank_id: binding.bankId,
       wallet_id: binding.walletId,
       source_payment_method_id: binding.sourcePaymentMethodId,
@@ -343,6 +416,7 @@ export const executeSandboxWalletFunding = async ({
     source_payment_method_id: binding.sourcePaymentMethodId,
     destination_wallet_id: binding.walletId,
     account_id: binding.accountId,
+    platform_account_id: binding.platformAccountId,
     provider_idempotency_key: binding.providerIdempotencyKey,
     production_credentials_used: false,
   };
@@ -358,6 +432,9 @@ export const executeSandboxWalletFunding = async ({
       doNotRetry: true,
     };
   }
+  // Classified 4xx with no transfer ID is reusable after review with the same
+  // provider UUID. This gate still refuses a second POST so an authorized retry
+  // must explicitly allow classified-failed (not timeout/unknown).
   if (current.provider_metadata?.post_attempted === true && !current.provider_transfer_id) {
     return {
       ...heldBase,
@@ -380,14 +457,18 @@ export const executeSandboxWalletFunding = async ({
     description: 'M7.9E sandbox BANK to WALLET 0.01',
   });
   if (body.error) return fail(body.error, { statusCode: 400, message: body.message });
+  if (!binding.platformAccountId) return fail('sandbox_platform_required', { statusCode: 409 });
+  if (sameId(binding.platformAccountId, binding.accountId)) {
+    return fail('facilitator_must_not_be_connected_account', { statusCode: 409 });
+  }
 
   let posted;
   try {
     posted = await moovSandboxFetch({
       credentials,
-      path: `/accounts/${binding.accountId}/transfers`,
+      path: sandboxFacilitatorTransferPath(binding.platformAccountId),
       method: 'POST',
-      scopes: moovSandboxScopes.transfersWrite(binding.accountId),
+      scopes: moovSandboxScopes.transfersWrite(binding.platformAccountId),
       body,
       idempotencyKey: binding.providerIdempotencyKey,
       fetchImpl,
@@ -450,6 +531,8 @@ export const executeSandboxWalletFunding = async ({
       message: posted.message,
       errorCode: posted.errorCode || null,
       errorTitle: posted.errorTitle || null,
+      errorDetail: posted.errorDetail || null,
+      requestId: posted.requestId || null,
     };
   }
   return {
