@@ -17,6 +17,7 @@ test('M7.9C runner never arms POST, never posts transfers, never creates a repla
   assert.match(src, /https:\/\/checksops.com\/prep\/webhooks\/moov/);
   assert.match(src, /322271627/);
   assert.match(src, /0001/);
+  assert.match(src, /auth: 'basic'/);
   assert.match(src, /webhook_url_update_not_allowed/);
   assert.match(src, /unused_production_row_refused|unusedProductionReused/);
   assert.match(src, /STOP_FOR_REVIEW/);
@@ -25,7 +26,7 @@ test('M7.9C runner never arms POST, never posts transfers, never creates a repla
   assert.doesNotMatch(src, /method: 'POST',\s*[\s\S]{0,80}\/transfers/);
   assert.doesNotMatch(src, /console\.log\(.*MOOV_SANDBOX_SECRET_KEY\)/);
   assert.match(src, /termsOfService/);
-  assert.match(src, /sandbox-only/);
+  assert.match(src, /Sandbox-only/);
   assert.doesNotMatch(src, /path: '\/webhooks',\s*[\s\S]{0,40}method: 'POST'/);
 });
 

@@ -877,9 +877,32 @@ const verifyBank = async (creds, accountId, bankId, created) => {
     { code: INSTANT_CODE },
     [`/accounts/${accountId}/bank-accounts.write`],
   );
+  const afterWait = async () => {
+    for (let i = 0; i < 5; i += 1) {
+      const after = await sandboxGet(
+        creds,
+        `/accounts/${accountId}/bank-accounts/${bankId}`,
+        [`/accounts/${accountId}/bank-accounts.read`],
+      );
+      if (String(after.json?.status || '').toLowerCase() === 'verified') return after;
+      await sleep(1500);
+    }
+    return sandboxGet(
+      creds,
+      `/accounts/${accountId}/bank-accounts/${bankId}`,
+      [`/accounts/${accountId}/bank-accounts.read`],
+    );
+  };
   if (instant.ok || instant.status === 200 || instant.status === 204) {
     created.push('sandbox_bank_instant_verify');
-    return { verified: true, method: 'instant_0001', initiateStatus: initiate.status, confirmStatus: instant.status };
+    const after = await afterWait();
+    return {
+      verified: String(after.json?.status || '').toLowerCase() === 'verified',
+      method: 'instant_0001',
+      initiateStatus: initiate.status,
+      confirmStatus: instant.status,
+      status: after.json?.status || null,
+    };
   }
   const microInit = await sandboxWrite(
     creds,
@@ -1122,29 +1145,80 @@ const cutWebhook = async (creds, existing, productionBefore) => {
   };
   const attempts = [];
   let updated = null;
+  const bodies = [
+    { url: PREFERRED_WEBHOOK_URL },
+    {
+      url: PREFERRED_WEBHOOK_URL,
+      status: 'enabled',
+      eventTypes: existing.events && Array.isArray(existing.events) && existing.events.length ? existing.events : ['*'],
+    },
+  ];
   for (const method of ['PATCH', 'PUT']) {
-    const oauth = await moovOauth({
-      publicKey: creds.publicKey,
-      secretKey: creds.secretKey,
-      origin: creds.origin,
-      scopes: ['/webhooks.write'],
-    });
-    if (!oauth.ok) {
-      attempts.push({ method, oauthStatus: oauth.status, error: oauth.error });
-      continue;
+    for (const payload of bodies) {
+      const basic = await moovCall({
+        publicKey: creds.publicKey,
+        secretKey: creds.secretKey,
+        origin: creds.origin,
+        apiVersion: creds.apiVersion,
+        path: `/webhooks/${existing.id}`,
+        method,
+        body: payload,
+      });
+      attempts.push({
+        auth: 'basic',
+        method,
+        status: basic.status,
+        error: basic.error,
+        url: basic.json?.url || null,
+        bodyKeys: Object.keys(payload),
+      });
+      if (basic.ok) {
+        updated = basic;
+        break;
+      }
     }
-    const row = await moovCall({
-      token: oauth.token,
-      origin: creds.origin,
-      apiVersion: creds.apiVersion,
-      path: `/webhooks/${existing.id}`,
-      method,
-      body,
-    });
-    attempts.push({ method, status: row.status, error: row.error, url: row.json?.url || null });
-    if (row.ok) {
-      updated = row;
-      break;
+    if (updated) break;
+  }
+  if (!updated) {
+    const scopesToTry = [
+      ['/webhooks.write'],
+      [`/accounts/${creds.platformId}/webhooks.write`],
+      ['/webhooks.read', '/webhooks.write'],
+    ];
+    for (const method of ['PATCH', 'PUT']) {
+      for (const scopes of scopesToTry) {
+        const oauth = await moovOauth({
+          publicKey: creds.publicKey,
+          secretKey: creds.secretKey,
+          origin: creds.origin,
+          scopes,
+        });
+        if (!oauth.ok) {
+          attempts.push({ auth: 'oauth', method, scopes, oauthStatus: oauth.status, error: oauth.error });
+          continue;
+        }
+        const row = await moovCall({
+          token: oauth.token,
+          origin: creds.origin,
+          apiVersion: creds.apiVersion,
+          path: `/webhooks/${existing.id}`,
+          method,
+          body: { url: PREFERRED_WEBHOOK_URL },
+        });
+        attempts.push({
+          auth: 'oauth',
+          method,
+          scopes,
+          status: row.status,
+          error: row.error,
+          url: row.json?.url || null,
+        });
+        if (row.ok) {
+          updated = row;
+          break;
+        }
+      }
+      if (updated) break;
     }
   }
   if (!updated) {
@@ -1461,6 +1535,7 @@ const main = async () => {
     bankPmId: bank.paymentMethodId,
     bankName: bank.bankName,
     lastFour: bank.lastFour,
+    bankVerified: bank.verified === true,
     recipientAccountId: recipient.accountId,
     recipientBankId: recipient.bankId,
     recipientPmId: recipient.paymentMethodId,
@@ -1472,24 +1547,7 @@ const main = async () => {
   const cross = await crossEnvLookups(creds, account.accountId);
 
   const webhookCut = await cutWebhook(creds, moovInspect.sandboxWebhook, productionWebhooksBefore);
-  if (webhookCut.stopped) {
-    const stopped = {
-      ok: false,
-      stopped: webhookCut.stopped,
-      webhookCut,
-      account: { id: account.accountId, fp: fingerprint(account.accountId) },
-      wallet: { id: wallet.walletId, fp: fingerprint(wallet.walletId), availableCents: wallet.availableCents },
-      bank: { id: bank.bankId, verified: bank.verified },
-      recipient: { accountId: recipient.accountId, ready: recipient.ready },
-      linked,
-      proof,
-      created,
-      reused,
-    };
-    fs.writeFileSync('/opt/cursor/artifacts/m79c_stopped.json', JSON.stringify(stopped, null, 2));
-    console.log(JSON.stringify(stopped, null, 2));
-    process.exit(2);
-  }
+  const stoppedForWebhook = Boolean(webhookCut.stopped);
 
   const unknownId = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
   const sandboxEvent = await signedWebhook(creds.webhookSecret, 'sandbox', account.accountId);
@@ -1504,7 +1562,7 @@ const main = async () => {
   });
 
   let ping = null;
-  if (moovInspect.sandboxWebhook?.id) {
+  if (!stoppedForWebhook && moovInspect.sandboxWebhook?.id) {
     ping = await sandboxWrite(
       creds,
       `/webhooks/${moovInspect.sandboxWebhook.id}/ping`,
@@ -1565,9 +1623,9 @@ const main = async () => {
     PRODUCTION_MONEY_MOVED: false,
     SANDBOX_POST_FLAG: postFlagsAfter.flags.AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED || 'false',
     PRODUCTION_POST_FLAG: postFlagsAfter.flags.AWS_MOOV_TRANSFER_POST_ENABLED || 'false',
-    SAFE_TO_ARM_ONLY_AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED: dark.ok && bank.verified && recipient.ready && webhookCut.ok && cross.ok ? 'REVIEW' : 'NO',
+    SAFE_TO_ARM_ONLY_AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED: dark.ok && bank.verified && recipient.ready && webhookCut.ok && cross.ok && !stoppedForWebhook ? 'REVIEW' : 'NO',
     SAFE_TO_RUN_FIRST_SANDBOX_BANK_TO_WALLET: 'NO',
-    GO_NO_GO: 'NO-GO — STOP FOR REVIEW',
+    GO_NO_GO: stoppedForWebhook || !webhookCut.ok || !linked.ok || !dark.ok ? 'NO-GO — STOP FOR REVIEW' : 'NO-GO — STOP FOR REVIEW',
   };
 
   const report = {

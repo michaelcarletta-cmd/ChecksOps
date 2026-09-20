@@ -533,23 +533,38 @@ const linkObjects = async (client, body = {}) => {
           tenant_id, provider, environment, provider_account_id, provider_bank_account_id,
           provider_payment_method_id, bank_name, last_four, verification_status
         ) VALUES (
-          $1::uuid, 'moov', 'sandbox', $2, $3, $4, $5, $6, 'verified'
+          $1::uuid, 'moov', 'sandbox', $2, $3, $4, $5, $6, $7
         )
         ON CONFLICT DO NOTHING`,
-      [tenantId, body.accountId, body.bankId, body.bankPmId || null, body.bankName || 'Moov Test Bank', body.lastFour || '0000'],
+      [
+        tenantId,
+        body.accountId,
+        body.bankId,
+        body.bankPmId || null,
+        body.bankName || 'Moov Test Bank',
+        body.lastFour || '0000',
+        body.bankVerified === false ? 'unverified' : 'verified',
+      ],
     );
     if (body.bankPmId) {
       await client.query(
         `UPDATE public.payment_provider_methods
-            SET provider_payment_method_id = COALESCE(provider_payment_method_id, $4),
-                verification_status = 'verified',
+            SET provider_payment_method_id = COALESCE(provider_payment_method_id, $3),
+                verification_status = $4,
                 bank_name = COALESCE($5, bank_name),
                 last_four = COALESCE($6, last_four)
           WHERE tenant_id = $1::uuid
             AND provider = 'moov'
             AND environment = 'sandbox'
-            AND provider_bank_account_id = $3`,
-        [tenantId, body.accountId, body.bankId, body.bankPmId, body.bankName || null, body.lastFour || null],
+            AND provider_bank_account_id = $2`,
+        [
+          tenantId,
+          body.bankId,
+          body.bankPmId,
+          body.bankVerified === false ? 'unverified' : 'verified',
+          body.bankName || null,
+          body.lastFour || null,
+        ],
       );
     }
   }
