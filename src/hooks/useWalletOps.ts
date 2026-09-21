@@ -9,6 +9,7 @@ export interface WalletOpsTransfer {
   id: string;
   amount_cents: number;
   status: string;
+  provider_status?: string | null;
   speed: string | null;
   selected_rail: string | null;
   description: string | null;
@@ -16,9 +17,18 @@ export interface WalletOpsTransfer {
   completed_at: string | null;
   leg_role: string | null;
   is_facilitator_fee: boolean | null;
+  provider_transfer_id?: string | null;
 }
 
-const IN_FLIGHT = ["pending", "processing", "submitted", "queued", "created"];
+const IN_FLIGHT = ["pending", "processing", "submitted", "queued", "created", "originated"];
+
+const isInFlightTransfer = (row: WalletOpsTransfer) => {
+  const status = String(row.status || "").toLowerCase();
+  const provider = String(row.provider_status || "").toLowerCase();
+  return IN_FLIGHT.includes(status)
+    || IN_FLIGHT.includes(provider)
+    || provider.includes("originated");
+};
 
 /**
  * Money currently in flight for the organization, split by direction.
@@ -35,7 +45,7 @@ export function useWalletOpsTransfers(limit = 25) {
       const { data, error } = await supabase
         .from("payment_transfers")
         .select(
-          "id, amount_cents, status, speed, selected_rail, description, created_at, completed_at, leg_role, is_facilitator_fee",
+          "id, amount_cents, status, provider_status, speed, selected_rail, description, created_at, completed_at, leg_role, is_facilitator_fee, provider_transfer_id",
         )
         .eq("tenant_id", tenantId!)
         .eq("environment", environment || "sandbox")
@@ -44,7 +54,7 @@ export function useWalletOpsTransfers(limit = 25) {
       if (error) throw error;
 
       const rows = (data ?? []) as WalletOpsTransfer[];
-      const inFlight = rows.filter((r) => IN_FLIGHT.includes((r.status ?? "").toLowerCase()));
+      const inFlight = rows.filter(isInFlightTransfer);
 
       return {
         transfers: rows,

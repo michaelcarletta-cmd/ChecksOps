@@ -64,6 +64,7 @@ import { PayoutOrchestratorPanel } from "@/components/payments/PayoutOrchestrato
 import { VerificationDocumentsPanel } from "@/components/payments/VerificationDocumentsPanel";
 import { MoovEnvironmentBadge } from "@/components/payments/MoovEnvironmentBadge";
 import { SANDBOX_SETUP_REQUIRED } from "@/lib/moovEnvironment";
+import { walletActivityTitle, walletBalanceLabel, walletIsSynchronized, walletOpsDisplayStatus } from "@/lib/payments/walletDisplay";
 
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 
@@ -89,6 +90,8 @@ const STATUS_TONE: Record<string, string> = {
   settled: "border-emerald-500/40 text-emerald-500 bg-emerald-500/5",
   pending: "border-amber-500/40 text-amber-500 bg-amber-500/5",
   processing: "border-amber-500/40 text-amber-500 bg-amber-500/5",
+  originated: "border-amber-500/40 text-amber-500 bg-amber-500/5",
+  planned: "border-muted-foreground/30 text-muted-foreground",
   submitted: "border-sky-500/40 text-sky-500 bg-sky-500/5",
   failed: "border-destructive/40 text-destructive bg-destructive/5",
   returned: "border-destructive/40 text-destructive bg-destructive/5",
@@ -137,7 +140,7 @@ export default function WalletOps() {
   const { toast } = useToast();
   const { enabled, isLoading: eligibilityLoading, environment } = usePaymentProviderEligibility();
 
-  const { wallet, ledger, isLoading: walletLoading, setupRequired, refetch: refetchWallet } =
+  const { wallet, ledger, transfers: syncedTransfers = [], isLoading: walletLoading, setupRequired, refetch: refetchWallet } =
     useWallet("operating");
   const {
     config,
@@ -171,14 +174,8 @@ export default function WalletOps() {
       : `/wl/${tenant.slug}`
     : "";
 
-  const syncFailed = wallet?.status === "sync_failed";
-  const balanceLabel = syncFailed
-    ? "Balance unavailable"
-    : wallet
-      ? money(wallet.available_cents)
-      : setupRequired
-        ? "Pending setup"
-        : "Pending sync";
+  const syncFailed = wallet?.status === "sync_failed" && !walletIsSynchronized(wallet);
+  const balanceLabel = walletBalanceLabel(wallet, { setupRequired, loading: false });
 
   const sweepsOn = config?.status === "enabled";
   const effectiveRail = (payoutRail || (config?.push_rail as SweepPushRail) || pushRails[0] || "") as
@@ -254,14 +251,14 @@ export default function WalletOps() {
                 className={
                   syncFailed
                     ? READINESS_COPY.pending.tone
-                    : wallet?.status === "active"
+                    : walletIsSynchronized(wallet)
                       ? READINESS_COPY.ready.tone
                       : READINESS_COPY.not_started.tone
                 }
               >
                 {syncFailed
                   ? "Pending sync"
-                  : wallet?.status === "active"
+                  : walletIsSynchronized(wallet)
                     ? "Balance active"
                     : setupRequired
                       ? "Setup in progress"
@@ -668,12 +665,33 @@ export default function WalletOps() {
         }
       >
 
-        {ledger.length === 0 && (transferData?.transfers.length ?? 0) === 0 && providerActivity.length === 0 ? (
+        {ledger.length === 0 && (transferData?.transfers.length ?? 0) === 0 && providerActivity.length === 0 && syncedTransfers.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             No wallet activity yet. Funding, payouts, and automatic payouts appear here.
           </p>
         ) : (
           <div className="divide-y rounded-md border">
+            {(transferData?.transfers?.length ? transferData.transfers : syncedTransfers).slice(0, 8).map((t: any) => (
+              <div key={t.id} className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm">
+                <div className="min-w-0">
+                  <p className="truncate font-medium">
+                    {walletActivityTitle(t)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {new Date(t.created_at).toLocaleString()}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] ${STATUS_TONE[(walletOpsDisplayStatus(t) ?? "").toLowerCase()] ?? "border-muted-foreground/30 text-muted-foreground"}`}
+                  >
+                    {walletOpsDisplayStatus(t)}
+                  </Badge>
+                  <span className="font-semibold">{money(t.amount_cents)}</span>
+                </div>
+              </div>
+            ))}
             {ledger.slice(0, 6).map((entry) => (
               <div key={entry.id} className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm">
                 <div className="min-w-0">
@@ -692,31 +710,6 @@ export default function WalletOps() {
                   <p className="text-[11px] text-muted-foreground">
                     Balance {money(entry.balance_after_cents)}
                   </p>
-                </div>
-              </div>
-            ))}
-            {(transferData?.transfers ?? []).slice(0, 6).map((t) => (
-              <div key={t.id} className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm">
-                <div className="min-w-0">
-                  <p className="truncate font-medium">
-                    {t.is_facilitator_fee
-                      ? "Processing fee"
-                      : t.leg_role === "wallet_funding" || t.leg_role === "funding"
-                        ? "BANK → WALLET"
-                        : t.description || "Payout"}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {new Date(t.created_at).toLocaleString()}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge
-                    variant="outline"
-                    className={`text-[10px] ${STATUS_TONE[(t.status ?? "").toLowerCase()] ?? "border-muted-foreground/30 text-muted-foreground"}`}
-                  >
-                    {t.status}
-                  </Badge>
-                  <span className="font-semibold">{money(t.amount_cents)}</span>
                 </div>
               </div>
             ))}

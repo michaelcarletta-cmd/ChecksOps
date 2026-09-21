@@ -365,6 +365,31 @@ export const handleFunctionInvoke = async (event, name, deps = {}) => {
     if (production) return production;
   }
 
+  if (name === 'moov-wallet-sync') {
+    try {
+      const { handleMoovWalletProjection } = await import('./providers/production/moov-wallet-projection.mjs');
+      const projected = await handleMoovWalletProjection(event, deps);
+      if (projected) return projected;
+    } catch {
+      return {
+        ok: false,
+        statusCode: 500,
+        error: 'wallet_projection_failed',
+        liveProviderPosted: false,
+        createdPaymentTransfer: false,
+        productionExecution: false,
+      };
+    }
+    return {
+      ok: false,
+      statusCode: 500,
+      error: 'wallet_projection_failed',
+      liveProviderPosted: false,
+      createdPaymentTransfer: false,
+      productionExecution: false,
+    };
+  }
+
   if (executionAllowed(spec.provider) && spec.aws !== 'db_status' && spec.aws !== 'webhook') {
     return denyProviderExecution(spec.provider, spec.name, {
       error: 'production_execution_blocked',
