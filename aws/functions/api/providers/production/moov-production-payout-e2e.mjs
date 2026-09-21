@@ -29,25 +29,26 @@ import {
   CONSUME_TOTP_THIS_PHASE,
   DECISION,
   PERSIST_MONEY_INTENTS_THIS_PHASE,
-  applyGetFallbackToIntent,
+  canTransitionFunding,
+  canTransitionPayout,
   createMemoryPayoutStore,
   getReconciliationMayCreateMoneyIntent,
   orchestratePayout,
   payoutOperationIdFor,
   webhookMayCreateMoneyIntent,
 } from './moov-payout-orchestrator.mjs';
-import { PIPELINE_TEST_TENANT_ID } from './moov-sandbox-wallet-fund.mjs';
-import {
-  evaluateProductionPennyAuthorization,
-  evaluateProductionPennySweepRace,
-} from './moov-production-penny-authz.mjs';
 import {
   M714_PHASE,
+  PIPELINE_TEST_TENANT_ID,
   executeProductionWalletDisbursement,
   executeProductionWalletFunding,
   persistProductionIntentCas,
   refuseIndependentMustKeepInvocation,
 } from './moov-production-transfer-primitives.mjs';
+import {
+  evaluateProductionPennyAuthorization,
+  evaluateProductionPennySweepRace,
+} from './moov-production-penny-authz.mjs';
 
 export { evaluateProductionPennySweepRace } from './moov-production-penny-authz.mjs';
 
@@ -87,6 +88,93 @@ const amountCentsOf = (amount) => {
   }
   const n = Number(amount);
   return Number.isFinite(n) ? Math.round(n) : 0;
+};
+
+const providerStatusToIntentStatus = (providerStatus) => {
+  const s = String(providerStatus || '').toLowerCase();
+  if (s === 'completed') return 'completed';
+  if (s === 'failed') return 'failed';
+  if (s === 'returned' || s === 'reversed') return 'returned';
+  if (s === 'canceled' || s === 'cancelled') return 'canceled';
+  if (s === 'unknown') return 'unknown';
+  if (s === 'submitting') return 'submitting';
+  if (['pending', 'processing', 'queued', 'created', 'originated', 'submitted'].includes(s)) return 'pending';
+  return s || 'pending';
+};
+
+const intentStatusToFundingState = (status) => {
+  const s = String(status || '').toLowerCase();
+  if (s === 'completed') return 'funding_completed';
+  if (s === 'failed') return 'funding_failed';
+  if (s === 'returned') return 'funding_returned';
+  if (s === 'unknown') return 'funding_unknown';
+  if (s === 'submitting') return 'funding_submitting';
+  if (['pending', 'processing', 'queued', 'created', 'originated'].includes(s)) return 'funding_pending';
+  if (s === 'submitted') return 'funding_submitted';
+  if (s === 'planned' || s === 'funding_required') return 'funding_required';
+  return 'funding_required';
+};
+
+const intentStatusToPayoutState = (status) => {
+  const s = String(status || '').toLowerCase();
+  if (s === 'completed') return 'payout_completed';
+  if (s === 'failed' || s === 'returned' || s === 'canceled') return 'payout_failed';
+  if (s === 'unknown') return 'payout_unknown';
+  if (s === 'submitting') return 'payout_submitting';
+  if (['pending', 'processing', 'queued', 'created', 'originated'].includes(s)) return 'payout_pending';
+  if (s === 'submitted') return 'payout_submitted';
+  if (s === 'ready' || s === 'payout_ready') return 'payout_ready';
+  if (s === 'wallet_check') return 'wallet_check';
+  return 'payout_requested';
+};
+
+const applyGetFallbackToIntent = ({
+  intent = null,
+  providerStatus = null,
+  completedOn = null,
+  failureReason = null,
+} = {}) => {
+  if (!intent) return { applied: false, skipped: 'intent_missing', createdPaymentTransfer: false };
+  if (!intent.provider_transfer_id) {
+    return { applied: false, skipped: 'no_provider_transfer_id', createdPaymentTransfer: false, liveProviderPosted: false };
+  }
+  const nextStatus = providerStatusToIntentStatus(providerStatus);
+  const role = String(intent.leg_role || intent.kind || '');
+  const fromState = role.includes('fund')
+    ? intentStatusToFundingState(intent.status)
+    : intentStatusToPayoutState(intent.status);
+  const toState = role.includes('fund')
+    ? intentStatusToFundingState(nextStatus)
+    : intentStatusToPayoutState(nextStatus);
+  const transition = role.includes('fund')
+    ? canTransitionFunding(fromState, toState)
+    : canTransitionPayout(fromState, toState);
+  if (!transition.ok) {
+    return {
+      applied: false,
+      skipped: transition.reason,
+      createdPaymentTransfer: false,
+      liveProviderPosted: false,
+      fromState,
+      toState,
+    };
+  }
+  const patched = {
+    ...intent,
+    status: nextStatus,
+    provider_status: providerStatus || intent.provider_status,
+    completed_at: nextStatus === 'completed' ? (completedOn || intent.completed_at) : intent.completed_at,
+    failure_reason: nextStatus === 'completed' ? null : (failureReason || intent.failure_reason || null),
+  };
+  return {
+    applied: transition.noop !== true || Boolean(nextStatus === 'completed' && !intent.completed_at && completedOn),
+    skipped: transition.noop === true && !(nextStatus === 'completed' && !intent.completed_at && completedOn) ? 'idempotent' : null,
+    createdPaymentTransfer: false,
+    liveProviderPosted: false,
+    intent: patched,
+    fromState,
+    toState,
+  };
 };
 
 const snapshotTransfer = (json) => {

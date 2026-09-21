@@ -35,14 +35,18 @@ const OVERLAY_FILES = [
 ];
 const CATALOG_REL = 'providers/catalog.mjs';
 const E2E_CATALOG_LINE = "  fn('moov-production-payout-e2e', 'moov', OP_CLASS.MONEY_MOVEMENT, 'dark_deployed', 'M7.15 Freedom production e2e wrapper. Shared orchestratePayout. Dark HTTP only: persist off, POST off, TOTP not consumed. MUST_KEEP fund/disburse writers are blocked from independent invocation.'),";
-const MUST_KEEP = [
-  'auth-cognito.mjs',
-  'index.mjs',
+const MUST_KEEP_REQUIRED = [
   'providers/production/moov-wallet-fund.mjs',
   'providers/production/moov-wallet-disburse.mjs',
+];
+const MUST_KEEP_IF_PRESENT = [
+  'auth-cognito.mjs',
+  'index.mjs',
   'providers/moov-wallet-fund.mjs',
   'providers/moov-wallet-disburse.mjs',
+  'providers/production/moov-wallet-fund-continue.mjs',
 ];
+const MUST_KEEP = [...MUST_KEEP_REQUIRED, ...MUST_KEEP_IF_PRESENT];
 
 const run = (cmd, args, opts = {}) => execFileSync(cmd, args, {
   encoding: 'utf8',
@@ -253,10 +257,14 @@ const overlayPrepApi = async () => {
   const work = path.join(os.tmpdir(), 'checksops-m715-overlay');
   const { unpacked, codeSha256 } = downloadLiveZip(work);
   const keepBefore = {};
-  for (const rel of MUST_KEEP) {
+  for (const rel of MUST_KEEP_REQUIRED) {
+    const full = path.join(unpacked, rel);
+    if (!fs.existsSync(full)) throw new Error(`must_keep_missing ${rel}`);
+    keepBefore[rel] = sha256File(full);
+  }
+  for (const rel of MUST_KEEP_IF_PRESENT) {
     const full = path.join(unpacked, rel);
     if (fs.existsSync(full)) keepBefore[rel] = sha256File(full);
-    else if (rel.includes('moov-wallet-')) throw new Error(`must_keep_missing ${rel}`);
   }
   const dispatchGuard = validateDispatchNotShrinking(unpacked);
   const catalogPatch = patchLiveCatalog(unpacked);
@@ -507,7 +515,12 @@ const main = async () => {
   if (rds?.ok !== true) throw new Error(`rds_inspect_failed:${rds?.error || 'unknown'}`);
 
   const deployed = downloadLiveZip(path.join(os.tmpdir(), 'checksops-m715-deployed-zip'));
-  for (const rel of MUST_KEEP.filter((item) => item.includes('moov-wallet-'))) {
+  for (const rel of MUST_KEEP_REQUIRED) {
+    const full = path.join(deployed.unpacked, rel);
+    if (!fs.existsSync(full)) throw new Error(`deployed_missing_must_keep ${rel}`);
+    if (sha256File(full) !== overlay.mustKeepSha[rel]) throw new Error(`must_keep_changed_after_deploy ${rel}`);
+  }
+  for (const rel of MUST_KEEP_IF_PRESENT.filter((item) => overlay.mustKeepSha[item])) {
     const full = path.join(deployed.unpacked, rel);
     if (!fs.existsSync(full)) throw new Error(`deployed_missing_must_keep ${rel}`);
     if (sha256File(full) !== overlay.mustKeepSha[rel]) throw new Error(`must_keep_changed_after_deploy ${rel}`);

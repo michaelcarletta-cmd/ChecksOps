@@ -63,4 +63,8 @@ test('M7.15 overlay does not replace MUST_KEEP writers or arm POST', () => {
   assert.doesNotMatch(src, /AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED': 'true'/);
   assert.equal(existsSync(path.join(ROOT, 'functions/api/providers/production/moov-wallet-fund.mjs')), false);
   assert.equal(existsSync(path.join(ROOT, 'functions/api/providers/production/moov-wallet-disburse.mjs')), false);
+  const e2e = sourceOf('../functions/api/providers/production/moov-production-payout-e2e.mjs');
+  const primitives = sourceOf('../functions/api/providers/production/moov-production-transfer-primitives.mjs');
+  assert.doesNotMatch(e2e, /moov-sandbox-wallet-fund/);
+  assert.doesNotMatch(primitives, /moov-sandbox-wallet-fund/);
 });
