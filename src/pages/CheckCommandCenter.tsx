@@ -3143,15 +3143,12 @@ function CheckDetailPanel({
         ((check as any)?.back_image_original_path as string | null) ?? null,
       );
 
-      // Cache-busting for re-uploads
-      const version = new Date(check?.updated_at || Date.now()).getTime();
-
       // Priority: use explicit original path if it's not a composite.
-      // If back_image_path was re-uploaded (non-composite), that's our new base.
+      // Do not attempt to "cache bust" a presigned URL by mutating its query
+      // params; doing so breaks S3 signatures. Reuploads use new object paths,
+      // so queryKey changes are sufficient to invalidate caches.
       const explicitOriginal =
-        explicitOriginalRaw &&
-        !looksComposited(explicitOriginalRaw) &&
-        (looksComposited(currentBackPath) || currentBackPath === explicitOriginalRaw)
+        explicitOriginalRaw && !looksComposited(explicitOriginalRaw)
           ? explicitOriginalRaw
           : null;
 
@@ -3159,7 +3156,7 @@ function CheckDetailPanel({
         const { data } = await supabase.storage
           .from("claim-files")
           .createSignedUrl(explicitOriginal, 3600);
-        if (data?.signedUrl) return { url: `${data.signedUrl}&v=${version}`, path: explicitOriginal };
+        if (data?.signedUrl) return { url: data.signedUrl, path: explicitOriginal };
       }
 
 
@@ -3206,10 +3203,8 @@ function CheckDetailPanel({
       const { data } = await supabase.storage
         .from("claim-files")
         .createSignedUrl(sourcePath, 3600);
-
-      const version2 = new Date(check?.updated_at || Date.now()).getTime();
       return data?.signedUrl
-        ? { url: `${data.signedUrl}&v=${version2}`, path: sourcePath }
+        ? { url: data.signedUrl, path: sourcePath }
         : null;
     },
   });
@@ -4589,6 +4584,16 @@ function CheckDetailPanel({
                             const originalToPersist =
                               ((check as any)?.back_image_original_path as string | null) ??
                               endorsementAdjusterSourcePath;
+                            const looksGenerated = (p: string | null) =>
+                              !!p && (
+                                /_endorsed(?:_\d+)?\.[^.]+$/i.test(p) ||
+                                /endorsed_deposit_[^/]+\.[^.]+$/i.test(p) ||
+                                /\.checkalt\.jpg(\?|$)/i.test(p) ||
+                                /\.svg(\?|$)/i.test(p)
+                              );
+                            if (looksGenerated(originalToPersist)) {
+                              throw new Error("Refusing to promote a generated artifact as the clean original back image.");
+                            }
                             const { error: saveErr } = await supabase
                               .from("check_intake_items")
                               .update({
