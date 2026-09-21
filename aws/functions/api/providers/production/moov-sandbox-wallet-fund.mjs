@@ -22,9 +22,14 @@ import { FIRST_PRODUCTION_TRANSFER_CENTS } from './moov-first-test.mjs';
 import { KNOWN_APPROVED_MOOV } from './moov-accounts.mjs';
 
 export const M79E_PHASE = 'M7.9E';
+export const M79G_PHASE = 'M7.9G';
 export const SANDBOX_FUNDING_OPERATION = 'sandbox_bank_to_wallet';
 export const SANDBOX_FUNDING_LEG = 'wallet_funding';
 export const SANDBOX_FUNDING_AMOUNT_CENTS = FIRST_PRODUCTION_TRANSFER_CENTS;
+export const SANDBOX_FUNDING_DESCRIPTION = 'M7.9G sandbox BANK to WALLET 0.01';
+export const SANDBOX_FUNDING_PROVIDER_UUID = '72f44c1a-5ee4-4601-9e4b-3ca54fbc3935';
+export const FAILED_SANDBOX_FUNDING_INTENT_ID = 'b18a96d7-4415-4df8-992f-70d5a17365a9';
+export const CLASSIFIED_PROVIDER_REJECTED = 'classified_provider_rejected_not_created';
 export const PIPELINE_TEST_TENANT_ID = '3bef00a5-0bf4-41ba-abf8-5fb4e2b73d43';
 
 export const PIPELINE_TEST_SANDBOX = Object.freeze({
@@ -83,7 +88,7 @@ export const sandboxFacilitatorTransferContract = (binding) => {
     sourcePaymentMethodId: binding.sourcePaymentMethodId,
     destinationPaymentMethodId: binding.destinationPaymentMethodId,
     amountCents: binding.amountCents || SANDBOX_FUNDING_AMOUNT_CENTS,
-    description: 'M7.9E sandbox BANK to WALLET 0.01',
+    description: SANDBOX_FUNDING_DESCRIPTION,
   });
   return {
     endpoint: sandboxFacilitatorTransferPath(binding.platformAccountId),
@@ -133,6 +138,41 @@ export const sandboxWalletFundingIdempotencyKey = ({
 );
 
 export const sandboxWalletFundingProviderIdempotency = (businessKey) => idempotencyUuid(businessKey);
+
+const UNKNOWN_POST_OUTCOMES = new Set([
+  'unknown',
+  'unknown_no_retry',
+  'timeout',
+  'provider_post_unknown',
+  'conflict',
+]);
+
+/** Narrow retry: classified 4xx with no provider object. Unknown/timeout stay blocked. */
+export const sandboxFundingRetryClassification = (intent = {}) => {
+  if (intent?.provider_transfer_id) {
+    return { retryable: false, reason: 'provider_object_exists', classification: 'already_posted' };
+  }
+  const meta = intent?.provider_metadata && typeof intent.provider_metadata === 'object'
+    ? intent.provider_metadata
+    : {};
+  const attempted = meta.post_attempted === true;
+  if (!attempted) {
+    return { retryable: false, reason: 'not_attempted', classification: 'not_attempted' };
+  }
+  const outcome = String(meta.post_outcome || '').toLowerCase();
+  const status = String(intent.status || '').toLowerCase();
+  if (UNKNOWN_POST_OUTCOMES.has(outcome) || status === 'unknown') {
+    return { retryable: false, reason: 'unknown_or_timeout', classification: 'unknown_no_retry' };
+  }
+  if (outcome === 'failed' || status === 'failed') {
+    return {
+      retryable: true,
+      reason: CLASSIFIED_PROVIDER_REJECTED,
+      classification: CLASSIFIED_PROVIDER_REJECTED,
+    };
+  }
+  return { retryable: false, reason: 'unknown_or_timeout', classification: 'unknown_no_retry' };
+};
 
 const claimed = (body = {}, keys = []) => {
   for (const key of keys) {
@@ -402,6 +442,18 @@ export const executeSandboxWalletFunding = async ({
   if (!binding?.ok) return binding || fail('binding_required');
   const planned = planSandboxWalletFunding(binding);
   const current = intent ? { ...planned, ...intent } : planned;
+  const retry = sandboxFundingRetryClassification(current);
+  const providerIdempotencyKey = current.provider_idempotency_key
+    || current.provider_metadata?.provider_idempotency_key
+    || binding.providerIdempotencyKey;
+  if (providerIdempotencyKey && binding.providerIdempotencyKey
+    && !sameId(providerIdempotencyKey, binding.providerIdempotencyKey)) {
+    return fail('idempotency_uuid_mismatch', { statusCode: 409 });
+  }
+  if (providerIdempotencyKey && !sameId(providerIdempotencyKey, SANDBOX_FUNDING_PROVIDER_UUID)) {
+    return fail('idempotency_uuid_mismatch', { statusCode: 409 });
+  }
+  const postPath = sandboxFacilitatorTransferPath(binding.platformAccountId);
   const heldBase = {
     ok: true,
     environment: 'sandbox',
@@ -417,7 +469,9 @@ export const executeSandboxWalletFunding = async ({
     destination_wallet_id: binding.walletId,
     account_id: binding.accountId,
     platform_account_id: binding.platformAccountId,
-    provider_idempotency_key: binding.providerIdempotencyKey,
+    post_account_path: postPath,
+    provider_idempotency_key: providerIdempotencyKey,
+    retry_classification: retry.classification,
     production_credentials_used: false,
   };
 
@@ -432,10 +486,7 @@ export const executeSandboxWalletFunding = async ({
       doNotRetry: true,
     };
   }
-  // Classified 4xx with no transfer ID is reusable after review with the same
-  // provider UUID. This gate still refuses a second POST so an authorized retry
-  // must explicitly allow classified-failed (not timeout/unknown).
-  if (current.provider_metadata?.post_attempted === true && !current.provider_transfer_id) {
+  if (retry.classification === 'unknown_no_retry') {
     return {
       ...heldBase,
       outcome: 'unknown_no_retry',
@@ -454,7 +505,7 @@ export const executeSandboxWalletFunding = async ({
     sourcePaymentMethodId: binding.sourcePaymentMethodId,
     destinationPaymentMethodId: binding.destinationPaymentMethodId,
     amountCents: SANDBOX_FUNDING_AMOUNT_CENTS,
-    description: 'M7.9E sandbox BANK to WALLET 0.01',
+    description: SANDBOX_FUNDING_DESCRIPTION,
   });
   if (body.error) return fail(body.error, { statusCode: 400, message: body.message });
   if (!binding.platformAccountId) return fail('sandbox_platform_required', { statusCode: 409 });
@@ -466,11 +517,11 @@ export const executeSandboxWalletFunding = async ({
   try {
     posted = await moovSandboxFetch({
       credentials,
-      path: sandboxFacilitatorTransferPath(binding.platformAccountId),
+      path: postPath,
       method: 'POST',
       scopes: moovSandboxScopes.transfersWrite(binding.platformAccountId),
       body,
-      idempotencyKey: binding.providerIdempotencyKey,
+      idempotencyKey: providerIdempotencyKey,
       fetchImpl,
     });
   } catch (error) {
@@ -483,6 +534,8 @@ export const executeSandboxWalletFunding = async ({
       liveProviderPosted: false,
       doNotRetry: true,
       error: 'provider_post_unknown',
+      httpStatus: null,
+      requestId: null,
       message: String(error?.message || error).slice(0, 240),
     };
   }
@@ -490,6 +543,13 @@ export const executeSandboxWalletFunding = async ({
   const outcome = classifyPostOutcome(posted);
   const normalized = posted?.ok ? normalizeMoovSandboxTransfer(posted.data || {}) : null;
   const transferId = normalized?.provider_transfer_id || collectMoovTransferIds(posted?.data || {}).at(0) || null;
+  const captured = {
+    httpStatus: posted.statusCode || posted.httpStatus || null,
+    requestId: posted.requestId || null,
+    errorCode: posted.errorCode || null,
+    errorTitle: posted.errorTitle || null,
+    errorDetail: posted.errorDetail || null,
+  };
 
   if (outcome === 'posted' && transferId) {
     return {
@@ -500,8 +560,9 @@ export const executeSandboxWalletFunding = async ({
       liveProviderPosted: true,
       provider_transfer_id: transferId,
       provider_status: normalized?.status || posted.data?.status || null,
-      provider_idempotency_key: posted.idempotencyKey || binding.providerIdempotencyKey,
+      provider_idempotency_key: posted.idempotencyKey || providerIdempotencyKey,
       doNotRetry: true,
+      ...captured,
     };
   }
   if (outcome === 'conflict') {
@@ -513,8 +574,8 @@ export const executeSandboxWalletFunding = async ({
       liveProviderPosted: false,
       doNotRetry: true,
       error: 'idempotent_conflict',
-      httpStatus: posted.statusCode,
       message: 'Moov returned conflict. Reconcile GET-only. Do not retry.',
+      ...captured,
     };
   }
   if (outcome === 'failed') {
@@ -527,12 +588,8 @@ export const executeSandboxWalletFunding = async ({
       liveProviderPosted: false,
       doNotRetry: true,
       error: posted.error || 'moov_sandbox_http_failed',
-      httpStatus: posted.statusCode,
       message: posted.message,
-      errorCode: posted.errorCode || null,
-      errorTitle: posted.errorTitle || null,
-      errorDetail: posted.errorDetail || null,
-      requestId: posted.requestId || null,
+      ...captured,
     };
   }
   return {
@@ -544,8 +601,8 @@ export const executeSandboxWalletFunding = async ({
     liveProviderPosted: false,
     doNotRetry: true,
     error: 'provider_post_unknown',
-    httpStatus: posted?.statusCode || null,
     message: 'POST outcome is unknown. Reconcile GET-only. Do not retry.',
+    ...captured,
   };
 };
 

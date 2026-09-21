@@ -162,10 +162,10 @@ export const moovSandboxFetch = async ({
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     const parsed = await parseBody(response);
+    const requestId = response.headers?.get?.('x-request-id')
+      || response.headers?.get?.('X-Request-Id')
+      || null;
     if (!response.ok) {
-      const requestId = response.headers?.get?.('x-request-id')
-        || response.headers?.get?.('X-Request-Id')
-        || null;
       return {
         ok: false,
         statusCode: response.status,
@@ -181,7 +181,13 @@ export const moovSandboxFetch = async ({
         requestId,
       };
     }
-    return { ok: true, statusCode: response.status, data: parsed.json, idempotencyKey: headers['X-Idempotency-Key'] || null };
+    return {
+      ok: true,
+      statusCode: response.status,
+      data: parsed.json,
+      idempotencyKey: headers['X-Idempotency-Key'] || null,
+      requestId,
+    };
   } catch (error) {
     if (isProviderNetworkError(error)) return providerEgressFailure('moov', { path });
     throw error;
