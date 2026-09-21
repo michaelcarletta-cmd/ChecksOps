@@ -553,8 +553,6 @@ const main = async () => {
   const rails = [...new Set(historical.map((row) => row.rail))];
   const sourceTypes = [...new Set(historical.map((row) => row.source?.paymentMethodType).filter(Boolean))];
   const destTypes = [...new Set(historical.map((row) => row.destination?.paymentMethodType).filter(Boolean))];
-  const walletWalletPresent = historical.some((row) => row.rail === 'wallet-wallet')
-    || asList(merchantMethods.data).some((row) => (row.type || row.paymentMethodType) === 'moov-wallet');
   const weekendHold = current.weekendCreatedEt === true;
   const achRail = String(current.rail || '') === 'ach-debit-to-wallet';
   const stillPending = PENDING.has(moovStatus);
@@ -590,6 +588,12 @@ const main = async () => {
     if (example.destination?.paymentMethodType !== current.destination?.paymentMethodType) {
       exactDifferenceParts.push(`dest type ${example.destination?.paymentMethodType} vs ${current.destination?.paymentMethodType}`);
     }
+    if (example.source?.routingNumber !== current.source?.routingNumber) {
+      exactDifferenceParts.push(`source routing ${example.source?.routingNumber || 'none'} (${example.source?.bankName || 'unknown'}) vs ${current.source?.routingNumber || 'none'} (${current.source?.bankName || 'unknown'})`);
+    }
+    if (example.source?.achOriginatedOn && !current.source?.achOriginatedOn) {
+      exactDifferenceParts.push(`old originatedOn=${example.source.achOriginatedOn} vs current originatedOn=none achStatus=${current.source?.achStatus || 'none'}`);
+    }
     if (example.weekendCreatedEt !== current.weekendCreatedEt) {
       exactDifferenceParts.push(`created weekday ET ${example.createdEt} vs ${current.createdEt}`);
     }
@@ -602,9 +606,20 @@ const main = async () => {
   }
   exactDifferenceParts.push('Lovable and AWS both POST facilitator /transfers with ach-debit-fund → moov-wallet, v2024.01.00, no x-wait-for, no transferOptions');
 
-  const fastMethod = walletWalletPresent
-    ? 'For rapid BANK-equivalent testing use a weekday ACH wait (~1h) OR a separate wallet-wallet path for instant movement. Keep ACH debit→wallet plus trigger amounts ($55.01+) for pending/failed/returned. Do not POST either path this phase.'
-    : 'Rapid sandbox completion is wallet-wallet per Moov test-mode docs. Current BANK→WALLET path is ACH and is not instant. Keep ACH for pending/failed/returned. Do not POST this phase.';
+  const historicalAchElapsed = historical
+    .filter((row) => row.rail === 'ach-debit-to-wallet' && row.elapsedMs != null)
+    .map((row) => row.elapsed);
+  const fastMethod = [
+    'BANK→WALLET on this sandbox platform is ACH debit-fund→moov-wallet.',
+    historicalAchElapsed.length
+      ? `Weekday examples completed in ${historicalAchElapsed.slice(0, 4).join(', ')} after the next :00/:30 origination window.`
+      : 'Weekday ACH in Moov test mode completes in about an hour.',
+    'Weekend ACH waits until Monday 00:00 ET, then the same origination windows.',
+    'No wallet-wallet transfer exists in the 9 historical sandbox platform transfers; Moov docs say wallet-wallet is almost instant if used later.',
+    'WALLET→RECIPIENT: historical wallet→ach-credit-same-day took 39.6m; rtp-credit PMs exist but were not used.',
+    'Keep ACH plus $55.01+ trigger amounts for pending/failed/returned.',
+    'Do not POST this phase.',
+  ].join(' ');
 
   const returnCard = {
     OLD_LOVABLE_TRANSFERS_FOUND: String(examples.length),
