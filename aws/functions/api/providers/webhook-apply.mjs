@@ -6,6 +6,7 @@
 import { normalizeTransferStatus } from './parity/moov-client.mjs';
 import { postTransferLedger } from './parity/moov-wallet.mjs';
 import { sanitize } from './parity/db.mjs';
+import { centsFromMoovAmount } from './moov-lifecycle.mjs';
 import { providerSandboxExecutionEnabled } from '../sandbox-flags.mjs';
 import { financialPermissionsActivated } from '../financial-flags.mjs';
 import { providerExecutionEnabled } from '../provider-flags.mjs';
@@ -149,6 +150,24 @@ export async function applyMoovWebhook(client, payload, { mappedTenantId = null 
     return { applied: true, environment: 'sandbox', financialTablesMutated: mutations.length > 0, mutations };
   }
 
+  const walletId = data?.walletID ?? data?.walletId ?? null;
+  const availableCents = centsFromMoovAmount(data?.availableBalance ?? data?.available);
+  const pendingCents = centsFromMoovAmount(data?.pendingBalance ?? data?.pending);
+  if (walletId && (availableCents != null || pendingCents != null)) {
+    const wallet = (await client.query(
+      `UPDATE public.payment_wallets
+          SET available_cents = COALESCE($2, available_cents),
+              pending_cents = COALESCE($3, pending_cents),
+              last_synced_at = now()
+        WHERE provider = 'moov'
+          AND provider_wallet_id = $1
+          AND environment = 'sandbox'
+        RETURNING id, environment, available_cents, pending_cents`,
+      [String(walletId), availableCents, pendingCents],
+    )).rows[0];
+    if (wallet) mutations.push('payment_wallets');
+  }
+
   const transferId = data?.transferID ?? data?.transferId ?? null;
   const disputeId = data?.disputeID ?? data?.disputeId ?? null;
   if (!transferId && !disputeId) {
@@ -199,14 +218,22 @@ export async function applyMoovWebhook(client, payload, { mappedTenantId = null 
   }
 
   const previous = transfer.status;
-  const completedAt = newStatus === 'completed' ? new Date().toISOString() : null;
+  const completedAt = newStatus === 'completed'
+    ? (data?.completedOn || data?.completedAt || data?.source?.achDetails?.completedOn || null)
+    : null;
   const failureReason = (newStatus === 'failed' || newStatus === 'returned')
     ? (data?.failureReason ?? data?.reason ?? eventType)
     : null;
   await client.query(
     `UPDATE public.payment_transfers
-     SET status = $2, provider_status = $3, completed_at = COALESCE($4::timestamptz, completed_at),
-         failure_reason = COALESCE($5, failure_reason)
+     SET status = $2,
+         provider_status = $3,
+         completed_at = COALESCE($4::timestamptz, completed_at),
+         failure_reason = CASE
+           WHEN $2 = 'completed' THEN NULL
+           WHEN $5 IS NOT NULL THEN $5
+           ELSE failure_reason
+         END
      WHERE id = $1::uuid AND environment = 'sandbox'`,
     [transfer.id, newStatus, providerStatus, completedAt, failureReason],
   );

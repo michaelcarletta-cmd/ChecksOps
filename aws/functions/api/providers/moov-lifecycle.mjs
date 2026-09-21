@@ -56,6 +56,59 @@ export const completedAtFor = ({ nextStatus, providerCompletedAt, existingComple
   return null;
 };
 
+export const needsParityFill = (existing, extracted) => {
+  if (!existing) return false;
+  const next = String(extracted?.status || '').toLowerCase();
+  if (next !== 'completed') return false;
+  if (String(existing.status || '').toLowerCase() !== 'completed') return false;
+  if (!existing.completed_at) return true;
+  if (existing.failure_reason) return true;
+  return false;
+};
+
+export const centsFromMoovAmount = (amount) => {
+  if (amount === undefined || amount === null) return null;
+  if (typeof amount === 'object') {
+    if (amount.valueDecimal != null && amount.valueDecimal !== '') {
+      const n = Math.round(Number(amount.valueDecimal) * 100);
+      return Number.isFinite(n) ? n : null;
+    }
+    if (amount.value != null && amount.value !== '') {
+      const n = Math.round(Number(amount.value));
+      return Number.isFinite(n) ? n : null;
+    }
+  }
+  const n = Number(amount);
+  return Number.isFinite(n) ? Math.round(n) : null;
+};
+
+export const extractWalletEvent = (payload = {}) => {
+  const data = payload.data ?? payload;
+  const eventType = String(payload?.type ?? payload?.eventType ?? 'unknown');
+  const walletId = data?.walletID ?? data?.walletId ?? payload?.walletID ?? payload?.walletId ?? null;
+  const accountId = payload?.accountID ?? data?.accountID ?? payload?.accountId ?? null;
+  const availableCents = centsFromMoovAmount(data?.availableBalance ?? data?.available);
+  const pendingCents = centsFromMoovAmount(data?.pendingBalance ?? data?.pending);
+  const sourceType = String(data?.sourceType || data?.source_type || '').toLowerCase();
+  const sourceId = data?.sourceID ?? data?.sourceId ?? null;
+  const transferId = data?.transferID ?? data?.transferId
+    ?? (sourceType === 'transfer' && sourceId ? sourceId : null)
+    ?? null;
+  const isWalletEvent = eventType.startsWith('balance.')
+    || eventType.startsWith('walletTransaction.')
+    || eventType.startsWith('wallet.');
+  return {
+    isWalletEvent,
+    eventType,
+    walletId: walletId ? String(walletId) : null,
+    accountId: accountId ? String(accountId) : null,
+    availableCents,
+    pendingCents,
+    hasAmounts: availableCents != null || pendingCents != null,
+    transferId: transferId ? String(transferId) : null,
+  };
+};
+
 export const inferSweepActivity = (payload = {}) => {
   const data = payload.data ?? payload;
   const metadata = data?.metadata || payload?.metadata || {};
@@ -88,7 +141,11 @@ export const extractTransferEvent = (payload = {}) => {
     eventType: String(eventType),
     providerStatus: String(providerStatus || ''),
     status: normalizeMoovStatus(providerStatus, eventType),
-    completedOn: data?.completedOn || data?.completedAt || null,
+    completedOn: data?.completedOn
+      || data?.completedAt
+      || data?.source?.achDetails?.completedOn
+      || data?.destination?.achDetails?.completedOn
+      || null,
     createdOn: data?.createdOn || payload?.createdOn || null,
     amountCents: Number.isFinite(amountCents) ? amountCents : null,
     accountId: payload?.accountID ?? data?.accountID ?? payload?.accountId ?? null,
