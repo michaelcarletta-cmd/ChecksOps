@@ -505,6 +505,8 @@ test('M7.9I runner overlays recon files, applies SQL 78, and never posts or arms
   assert.doesNotMatch(src, /wallet-disburse|wallet_disbursement/);
   assert.match(oneshot, /aws_moov_reconcile_wallet_cache/);
   assert.match(oneshot, /reconcileFundingParity/);
+  assert.match(oneshot, /request\.moov_get_reconcile/);
+  assert.match(oneshot, /BEGIN/);
   assert.match(overlay, /providers\/moov-lifecycle\.mjs/);
   assert.match(overlay, /providers\/webhook-apply\.mjs/);
   const sql = sourceOf('../providers/sql/78_moov_recon_parity.sql');

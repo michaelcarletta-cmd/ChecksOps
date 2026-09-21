@@ -350,37 +350,46 @@ const reconcileFundingParity = async (client, body = {}) => {
     [tenantId],
   )).rows;
 
-  await client.query("SELECT set_config('request.moov_get_reconcile', '1', true)");
-  const recon = (await client.query(
-    `SELECT * FROM public.aws_moov_reconcile_existing_transfer(
-       $1, $2, $3, $4::timestamptz, $5, $6, $7::jsonb, $8)`,
-    [
-      transferId,
-      'completed',
-      body.providerStatus || 'completed',
-      completedAt,
-      'moov.parity_fill',
-      intentBefore.status,
-      JSON.stringify({
-        source: 'moov_get',
-        completedOn: completedAt,
-        phase: 'm79i',
-      }),
-      'sandbox',
-    ],
-  )).rows[0];
+  await client.query('BEGIN');
+  let recon;
+  let wallet;
+  try {
+    await client.query("SELECT set_config('request.moov_get_reconcile', '1', true)");
+    recon = (await client.query(
+      `SELECT * FROM public.aws_moov_reconcile_existing_transfer(
+         $1, $2, $3, $4::timestamptz, $5, $6, $7::jsonb, $8)`,
+      [
+        transferId,
+        'completed',
+        body.providerStatus || 'completed',
+        completedAt,
+        'moov.parity_fill',
+        intentBefore.status,
+        JSON.stringify({
+          source: 'moov_get',
+          completedOn: completedAt,
+          phase: 'm79i',
+        }),
+        'sandbox',
+      ],
+    )).rows[0];
 
-  const wallet = (await client.query(
-    `SELECT * FROM public.aws_moov_reconcile_wallet_cache($1, $2, $3::bigint, $4::bigint, $5::uuid, $6::jsonb)`,
-    [
-      walletId,
-      'sandbox',
-      availableCents,
-      pendingCents,
-      tenantId,
-      JSON.stringify({ source: 'moov_get', phase: 'm79i' }),
-    ],
-  )).rows[0] || null;
+    wallet = (await client.query(
+      `SELECT * FROM public.aws_moov_reconcile_wallet_cache($1, $2, $3::bigint, $4::bigint, $5::uuid, $6::jsonb)`,
+      [
+        walletId,
+        'sandbox',
+        availableCents,
+        pendingCents,
+        tenantId,
+        JSON.stringify({ source: 'moov_get', phase: 'm79i' }),
+      ],
+    )).rows[0] || null;
+    await client.query('COMMIT');
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch { /* keep original */ }
+    throw error;
+  }
 
   const intentAfter = (await client.query(
     `SELECT id, tenant_id, environment, status, provider_status, completed_at, failure_reason,
