@@ -5,6 +5,7 @@ import { createMemoryPayoutStore } from '../functions/api/providers/production/m
 import { KNOWN_APPROVED_MOOV } from '../functions/api/providers/production/moov-accounts.mjs';
 import { PIPELINE_TEST_SANDBOX } from '../functions/api/providers/production/moov-sandbox-wallet-fund.mjs';
 import {
+  ensureSandboxRecipientAchCredit,
   executeSandboxWalletDisbursement,
   persistSandboxPayoutIntent,
   planSandboxWalletDisbursement,
@@ -303,6 +304,44 @@ test('sandbox payout writer refuses production credentials and production POST f
   assert.equal(prodFlag.liveProviderCalled, false);
 });
 
+test('recipient ACH-credit ensure requests collect-funds on the sandbox payee and never POSTs transfers', async () => {
+  const calls = [];
+  const methods = [];
+  const result = await ensureSandboxRecipientAchCredit({
+    credentials: sandboxCreds,
+    delayMs: 0,
+    attempts: 3,
+    sleepImpl: async () => {},
+    fetchImpl: async (url, opts = {}) => {
+      const path = String(url);
+      if (path.includes('/oauth2/token')) {
+        return { ok: true, status: 200, text: async () => JSON.stringify({ access_token: 'sandbox-token' }) };
+      }
+      calls.push({ path, method: opts.method, body: opts.body ? JSON.parse(opts.body) : null });
+      if (path.includes('/capabilities') && opts.method === 'POST') {
+        return { ok: true, status: 201, text: async () => JSON.stringify({ capability: JSON.parse(opts.body).capability, status: 'enabled' }) };
+      }
+      if (path.includes('/payment-methods')) {
+        const payload = methods.length ? [{
+          paymentMethodID: RECIPIENT_ACH_CREDIT_PM,
+          paymentMethodType: 'ach-credit-standard',
+          bankAccountID: EXPECTED.recipientBankId,
+        }] : [];
+        methods.push('listed');
+        return { ok: true, status: 200, text: async () => JSON.stringify(payload) };
+      }
+      throw new Error(`unexpected:${path}`);
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.destinationPaymentMethodId, RECIPIENT_ACH_CREDIT_PM);
+  assert.equal(result.liveProviderPostedTransfer, false);
+  assert.equal(calls.some((row) => row.method === 'POST' && row.path.includes('/transfers')), false);
+  assert.equal(calls.filter((row) => row.method === 'POST' && row.path.includes('/capabilities')).length, 2);
+  assert.match(calls.find((row) => row.method === 'POST').path, new RegExp(`/accounts/${EXPECTED.recipientAccountId}/capabilities`));
+  assert.doesNotMatch(JSON.stringify(calls), new RegExp(EXPECTED.accountId));
+});
+
 test('M7.10 runner arms sandbox only, posts wallet→recipient once, and never funds or arms production', () => {
   const src = sourceOf('../providers/oneshot/m710-run.mjs');
   const oneshot = sourceOf('../providers/oneshot/m79-sandbox-tenant/index.mjs');
@@ -317,6 +356,7 @@ test('M7.10 runner arms sandbox only, posts wallet→recipient once, and never f
   assert.match(src, /setSandboxPostFlag\('false'\)/);
   assert.match(src, /AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED = value/);
   assert.match(src, /finally/);
+  assert.match(src, /ensureSandboxRecipientAchCredit/);
   assert.match(src, /persist_payout_intent/);
   assert.match(src, /wallet_disbursement/);
   assert.match(src, /STOP_FOR_REVIEW/);
@@ -332,6 +372,7 @@ test('M7.10 runner arms sandbox only, posts wallet→recipient once, and never f
   assert.doesNotMatch(oneshot, /\/transfers/);
   assert.doesNotMatch(oneshot, /AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED/);
   assert.doesNotMatch(oneshot, /AWS_MOOV_TRANSFER_POST_ENABLED/);
+  assert.match(writer, /ensureSandboxRecipientAchCredit/);
   assert.match(writer, /transfer_post_held/);
   assert.match(writer, /funding_pm_refused_as_payout_source/);
   assert.match(writer, /production_credentials_refused/);

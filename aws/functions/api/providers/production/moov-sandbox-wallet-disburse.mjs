@@ -599,6 +599,110 @@ export const executeSandboxWalletDisbursement = async ({
   };
 };
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const asMethodRows = (payload) => {
+  const rows = Array.isArray(payload)
+    ? payload
+    : (payload?.paymentMethods || payload?.items || payload?.data || []);
+  return (Array.isArray(rows) ? rows : []).map((row) => ({
+    id: pmIdOf(row),
+    type: pmTypeOf(row),
+    bankAccountId: row?.bankAccountID || row?.bankAccount?.bankAccountID || row?.bankAccountId || null,
+  })).filter((row) => row.id);
+};
+
+const pickRecipientAchCredit = (rows = []) => (rows || []).find((row) => (
+  isAchCredit(row)
+  && (!row.bankAccountId || sameId(row.bankAccountId, PIPELINE_TEST_SANDBOX.recipientBankId))
+)) || null;
+
+export const ensureSandboxRecipientAchCredit = async ({
+  credentials,
+  fetchImpl = fetch,
+  sleepImpl = sleep,
+  attempts = 8,
+  delayMs = 1500,
+} = {}) => {
+  const creds = assertSandboxPayoutCredentials({ credentials });
+  if (!creds.ok) return creds;
+  const expected = PIPELINE_TEST_SANDBOX;
+  if (isKnownProductionMoovObject(expected.recipientAccountId)) {
+    return fail('production_ids_blocked', { statusCode: 409, hits: [expected.recipientAccountId] });
+  }
+  const listMethods = async () => {
+    const listed = await moovSandboxFetch({
+      credentials,
+      path: `/accounts/${expected.recipientAccountId}/payment-methods`,
+      scopes: moovSandboxScopes.paymentMethodsRead(expected.recipientAccountId),
+      fetchImpl,
+    });
+    if (!listed.ok) {
+      return fail('recipient_methods_read_failed', {
+        statusCode: listed.statusCode,
+        message: listed.message,
+      });
+    }
+    return { ok: true, methods: asMethodRows(listed.data) };
+  };
+  const first = await listMethods();
+  if (!first.ok) return first;
+  const existing = pickRecipientAchCredit(first.methods);
+  if (existing) {
+    return {
+      ok: true,
+      reused: true,
+      requested: [],
+      destinationPaymentMethodId: existing.id,
+      methods: first.methods,
+      liveProviderPostedTransfer: false,
+    };
+  }
+  const requested = [];
+  for (const capability of ['transfers', 'collect-funds']) {
+    const posted = await moovSandboxFetch({
+      credentials,
+      path: `/accounts/${expected.recipientAccountId}/capabilities`,
+      method: 'POST',
+      scopes: moovSandboxScopes.capabilitiesWrite(expected.recipientAccountId),
+      body: { capability },
+      fetchImpl,
+    });
+    requested.push({
+      capability,
+      ok: posted.ok === true || posted.statusCode === 409,
+      status: posted.statusCode || null,
+      error: posted.ok ? null : (posted.error || posted.message || null),
+    });
+  }
+  let methods = first.methods;
+  let found = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const listed = await listMethods();
+    if (!listed.ok) return listed;
+    methods = listed.methods;
+    found = pickRecipientAchCredit(methods);
+    if (found) break;
+    if (attempt < attempts - 1) await sleepImpl(delayMs);
+  }
+  if (!found) {
+    return fail('sandbox_recipient_pm_missing', {
+      statusCode: 409,
+      requested,
+      methods,
+      recipientBankId: expected.recipientBankId,
+    });
+  }
+  return {
+    ok: true,
+    reused: false,
+    requested,
+    destinationPaymentMethodId: found.id,
+    methods,
+    liveProviderPostedTransfer: false,
+  };
+};
+
 export const knownProductionIdsBlocked = (ids = []) => ids.filter((id) => (
   isKnownProductionMoovObject(id)
   || Object.values(KNOWN_APPROVED_MOOV.freedom).some((value) => sameId(value, id))

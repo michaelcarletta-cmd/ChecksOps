@@ -15,6 +15,7 @@ import { KNOWN_APPROVED_MOOV } from '../../functions/api/providers/production/mo
 import { PRODUCTION_MOOV_API_VERSION, PRODUCTION_MOOV_ORIGIN } from '../../functions/api/providers/production/moov-secrets.mjs';
 import { PIPELINE_TEST_SANDBOX } from '../../functions/api/providers/production/moov-sandbox-wallet-fund.mjs';
 import {
+  ensureSandboxRecipientAchCredit,
   executeSandboxWalletDisbursement,
   persistSandboxPayoutIntent,
   planSandboxWalletDisbursement,
@@ -395,6 +396,11 @@ const main = async () => {
   const recipient = await getJson(credentials, `/accounts/${SANDBOX_RECIPIENT_ACCOUNT}`, moovSandboxScopes.accountRead(SANDBOX_RECIPIENT_ACCOUNT));
   const recipientBanks = await getJson(credentials, `/accounts/${SANDBOX_RECIPIENT_ACCOUNT}/bank-accounts`, moovSandboxScopes.bankAccountsRead(SANDBOX_RECIPIENT_ACCOUNT));
   const recipientMethods = await getJson(credentials, `/accounts/${SANDBOX_RECIPIENT_ACCOUNT}/payment-methods`, moovSandboxScopes.paymentMethodsRead(SANDBOX_RECIPIENT_ACCOUNT));
+  const ensureRecipientPm = await ensureSandboxRecipientAchCredit({
+    credentials,
+    attempts: 10,
+    delayMs: 2000,
+  });
   const merchantTransfers = await getJson(credentials, `/accounts/${SANDBOX_ACCOUNT}/transfers`, moovSandboxScopes.transfersRead(SANDBOX_ACCOUNT));
   const platformTransfers = await getJson(credentials, `/accounts/${SANDBOX_PLATFORM}/transfers`, moovSandboxScopes.transfersRead(SANDBOX_PLATFORM));
   const webhooksBefore = await inspectWebhooks(credentials);
@@ -420,6 +426,13 @@ const main = async () => {
     type: pmType(row),
     bankAccountId: row.bankAccountID || row.bankAccount?.bankAccountID || null,
   }));
+  if (ensureRecipientPm.ok === true) {
+    for (const row of (ensureRecipientPm.methods || [])) {
+      if (!recipientMethodRows.some((existing) => String(existing.id).toLowerCase() === String(row.id).toLowerCase())) {
+        recipientMethodRows.push(row);
+      }
+    }
+  }
   const merchantTransferRows = asList(merchantTransfers.data).map(summarizeTransfer);
   const platformTransferRows = asList(platformTransfers.data).map(summarizeTransfer);
   const allTransfers = [...merchantTransferRows, ...platformTransferRows];
@@ -599,6 +612,14 @@ const main = async () => {
       productionHintDenied: { ok: productionHintDenied.ok, error: productionHintDenied.error },
       wallet,
       destPm,
+      ensureRecipientPm: {
+        ok: ensureRecipientPm.ok,
+        error: ensureRecipientPm.error || null,
+        reused: ensureRecipientPm.reused === true,
+        destinationPaymentMethodId: ensureRecipientPm.destinationPaymentMethodId || null,
+        requested: ensureRecipientPm.requested || [],
+        methodCount: (ensureRecipientPm.methods || recipientMethodRows).length,
+      },
       payoutRows,
       fundingRows: fundingRows.map((row) => row.id),
       sendFunds: { status: sendFundsStatus, ach: sendFundsAchStatus },
