@@ -875,7 +875,7 @@ function BillingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
             </span>
           </div>
           <p className="text-xs text-muted-foreground">
-            Saved on `tenants.per_check_rate_cents`. Editable whether per-check billing is on or off.
+            Saved as tenants.per_check_rate_cents. Editable whether per-check billing is on or off.
           </p>
         </div>
 
