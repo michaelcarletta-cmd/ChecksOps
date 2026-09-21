@@ -182,6 +182,34 @@ test('check_intake_items allowlist permits endorsement render pointers and overr
   assert.equal(picked.values.endorsement_render_status, 'completed');
 });
 
+test('POST /data/write updates check_intake_items endorsement render fields', async () => {
+  const client = mockClient({
+    rows: [{
+      id: CHECK_ID,
+      tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a',
+      endorsement_render_status: 'completed',
+      back_image_deposit_path: `check-intake/${CHECK_ID}/files/endorsed_deposit_x.checkalt.jpg`,
+    }],
+  });
+  const result = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_intake_items',
+    op: 'update',
+    values: {
+      endorsement_override: { xPct: 0.5, yPct: 0.5, scale: 1, rotationDeg: 0, showPayToOrder: false },
+      endorsement_render_status: 'completed',
+      endorsement_render_meta: { renderer_version: 'test', bytes: 123 },
+      back_image_deposit_path: `check-intake/${CHECK_ID}/files/endorsed_deposit_x.checkalt.jpg`,
+    },
+    filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
+    single: true,
+  }), depsFor(client));
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.data?.id, CHECK_ID);
+  const update = client.queries.find((q) => String(q.sql).startsWith('UPDATE public.check_intake_items'));
+  assert.ok(update);
+});
+
 test('POST /data/write upserts check_message_reads as mapped UUID and ignores spoofed ids', async () => {
   const client = mockClient({
     rows: [{ user_id: APP_ID, check_id: CHECK_ID, last_read_at: '2026-09-02T00:00:00.000Z' }],
