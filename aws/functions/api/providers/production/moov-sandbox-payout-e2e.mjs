@@ -46,6 +46,7 @@ export const M712_OPERATION_ID = '69704e23-9ddd-52f8-a2b1-d48bdb500926';
 export const M712_FUNDING_INTENT_ID = '985f487b-74f2-4d9f-8e6f-7cad9ae10c97';
 export const M712_PAYOUT_INTENT_ID = 'df6e3d55-ccc9-43cd-b275-8cde8e24c343';
 export const M712_FUNDING_TRANSFER_ID = 'e42635e8-7a75-4d25-ad2f-dd0e5696372d';
+export const M712_PAYOUT_TRANSFER_ID = 'c7026476-42d3-43af-bfd3-6f5c4d6480e7';
 
 const FAILED_PROVIDER = new Set(['failed', 'returned', 'canceled', 'cancelled', 'unknown']);
 

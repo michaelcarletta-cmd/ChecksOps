@@ -3,10 +3,15 @@
  * Applies ONLY to environment='sandbox' rows (and CheckAlt isolated sandbox ops).
  * Production-environment payment_* / checkalt_* rows are never updated here.
  */
-import { normalizeTransferStatus } from './parity/moov-client.mjs';
 import { postTransferLedger } from './parity/moov-wallet.mjs';
 import { sanitize } from './parity/db.mjs';
-import { centsFromMoovAmount } from './moov-lifecycle.mjs';
+import {
+  canTransition,
+  centsFromMoovAmount,
+  completedAtFor,
+  extractTransferEvent,
+  needsParityFill,
+} from './moov-lifecycle.mjs';
 import { providerSandboxExecutionEnabled } from '../sandbox-flags.mjs';
 import { financialPermissionsActivated } from '../financial-flags.mjs';
 import { providerExecutionEnabled } from '../provider-flags.mjs';
@@ -168,7 +173,8 @@ export async function applyMoovWebhook(client, payload, { mappedTenantId = null 
     if (wallet) mutations.push('payment_wallets');
   }
 
-  const transferId = data?.transferID ?? data?.transferId ?? null;
+  const extracted = extractTransferEvent(payload);
+  const transferId = extracted.transferId;
   const disputeId = data?.disputeID ?? data?.disputeId ?? null;
   if (!transferId && !disputeId) {
     return { applied: true, environment: 'sandbox', financialTablesMutated: mutations.length > 0, mutations };
@@ -197,30 +203,91 @@ export async function applyMoovWebhook(client, payload, { mappedTenantId = null 
 
   const transfer = (await client.query(
     `SELECT id, tenant_id, status, destination_recipient_id, amount_cents, wallet_id, leg_role,
-            transfer_group_id, claim_id, check_id, description
+            transfer_group_id, claim_id, check_id, description, completed_at, failure_reason,
+            provider_status, environment
      FROM public.payment_transfers
      WHERE provider_transfer_id = $1 AND environment = 'sandbox'
      LIMIT 1`,
     [transferId],
   )).rows[0];
 
-  const providerStatus = data?.status ?? eventTypeToStatus(eventType);
-  const newStatus = normalizeTransferStatus(providerStatus);
+  const providerStatus = extracted.providerStatus;
+  const newStatus = extracted.status;
 
   if (!transfer) {
     await client.query(
       `INSERT INTO public.payment_event_log
         (provider, environment, tenant_id, provider_transfer_id, event_type, new_status, provider_metadata)
        VALUES ('moov', 'sandbox', $1::uuid, $2, $3, $4, $5::jsonb)`,
-      [tenantId, transferId, eventType, newStatus, JSON.stringify(sanitize({ provider_status: providerStatus }))],
+      [tenantId, transferId, eventType, newStatus, JSON.stringify(sanitize({
+        provider_status: providerStatus,
+        completedOn: extracted.completedOn,
+      }))],
     ).catch(() => {});
-    return { applied: true, environment: 'sandbox', financialTablesMutated: false, mutations, note: 'unknown_sandbox_transfer' };
+    return {
+      applied: true,
+      environment: 'sandbox',
+      financialTablesMutated: false,
+      mutations,
+      note: 'unknown_sandbox_transfer',
+      createdPaymentTransfer: false,
+    };
   }
 
   const previous = transfer.status;
-  const completedAt = newStatus === 'completed'
-    ? (data?.completedOn || data?.completedAt || data?.source?.achDetails?.completedOn || null)
-    : null;
+  const gate = canTransition(previous, newStatus);
+  const parityFill = needsParityFill({
+    status: transfer.status,
+    completed_at: transfer.completed_at,
+    failure_reason: transfer.failure_reason,
+  }, extracted);
+  if (!gate.ok) {
+    await client.query(
+      `INSERT INTO public.payment_event_log
+        (provider, environment, tenant_id, recipient_id, transfer_id, provider_transfer_id,
+         event_type, previous_status, new_status, provider_metadata)
+       VALUES ('moov', 'sandbox', $1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7, $8::jsonb)`,
+      [
+        transfer.tenant_id, transfer.destination_recipient_id, transfer.id, transferId,
+        eventType, previous, previous, JSON.stringify(sanitize({
+          skipped: gate.reason,
+          attempted: newStatus,
+          provider_status: providerStatus,
+        })),
+      ],
+    ).catch(() => {});
+    mutations.push('payment_event_log');
+    return {
+      applied: false,
+      skipped: gate.reason,
+      environment: 'sandbox',
+      financialTablesMutated: false,
+      mutations,
+      createdPaymentTransfer: false,
+      status: previous,
+      completed_at: transfer.completed_at || null,
+      failure_reason: transfer.failure_reason || null,
+    };
+  }
+  if (gate.noop && !parityFill) {
+    return {
+      applied: true,
+      skipped: 'idempotent_same_status',
+      environment: 'sandbox',
+      financialTablesMutated: mutations.length > 0,
+      mutations,
+      createdPaymentTransfer: false,
+      status: previous,
+      completed_at: transfer.completed_at || null,
+      failure_reason: transfer.failure_reason || null,
+    };
+  }
+
+  const completedAt = completedAtFor({
+    nextStatus: newStatus,
+    providerCompletedAt: extracted.completedOn,
+    existingCompletedAt: transfer.completed_at,
+  });
   const failureReason = (newStatus === 'failed' || newStatus === 'returned')
     ? (data?.failureReason ?? data?.reason ?? eventType)
     : null;
@@ -238,36 +305,36 @@ export async function applyMoovWebhook(client, payload, { mappedTenantId = null 
     [transfer.id, newStatus, providerStatus, completedAt, failureReason],
   );
   mutations.push('payment_transfers');
-  await postTransferLedger(client, transfer, newStatus, transferId);
-
-  if (transfer.transfer_group_id) {
-    const legs = (await client.query(
-      `SELECT status, leg_role FROM public.payment_transfers
-       WHERE transfer_group_id = $1::uuid AND environment = 'sandbox'`,
-      [transfer.transfer_group_id],
-    )).rows;
-    const children = legs.filter((l) => l.leg_role !== 'parent');
-    const failed = children.filter((l) => ['failed', 'returned', 'canceled', 'cancelled'].includes(l.status)).length;
-    const done = children.filter((l) => l.status === 'completed').length;
-    const groupStatus = children.length === 0
-      ? 'submitted'
-      : done === children.length
-        ? 'completed'
-        : failed === children.length
-          ? 'failed'
-          : failed > 0
-            ? 'partially_failed'
-            : 'processing';
-    await client.query(
-      `UPDATE public.payment_transfer_groups
-       SET status = $2, completed_at = CASE WHEN $2 = 'completed' THEN now() ELSE completed_at END
-       WHERE id = $1::uuid`,
-      [transfer.transfer_group_id, groupStatus],
-    );
-    mutations.push('payment_transfer_groups');
+  if (!gate.noop) {
+    await postTransferLedger(client, transfer, newStatus, transferId);
+    if (transfer.transfer_group_id) {
+      const legs = (await client.query(
+        `SELECT status, leg_role FROM public.payment_transfers
+         WHERE transfer_group_id = $1::uuid AND environment = 'sandbox'`,
+        [transfer.transfer_group_id],
+      )).rows;
+      const children = legs.filter((l) => l.leg_role !== 'parent');
+      const failed = children.filter((l) => ['failed', 'returned', 'canceled', 'cancelled'].includes(l.status)).length;
+      const done = children.filter((l) => l.status === 'completed').length;
+      const groupStatus = children.length === 0
+        ? 'submitted'
+        : done === children.length
+          ? 'completed'
+          : failed === children.length
+            ? 'failed'
+            : failed > 0
+              ? 'partially_failed'
+              : 'processing';
+      await client.query(
+        `UPDATE public.payment_transfer_groups
+         SET status = $2, completed_at = CASE WHEN $2 = 'completed' THEN now() ELSE completed_at END
+         WHERE id = $1::uuid`,
+        [transfer.transfer_group_id, groupStatus],
+      );
+      mutations.push('payment_transfer_groups');
+    }
+    await syncFundingRequest(client, transferId, newStatus, failureReason);
   }
-
-  await syncFundingRequest(client, transferId, newStatus, failureReason);
   await client.query(
     `INSERT INTO public.payment_event_log
       (provider, environment, tenant_id, recipient_id, transfer_id, provider_transfer_id,
@@ -275,11 +342,27 @@ export async function applyMoovWebhook(client, payload, { mappedTenantId = null 
      VALUES ('moov', 'sandbox', $1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7, $8::jsonb)`,
     [
       transfer.tenant_id, transfer.destination_recipient_id, transfer.id, transferId,
-      eventType, previous, newStatus, JSON.stringify(sanitize({ provider_status: providerStatus })),
+      eventType, previous, newStatus, JSON.stringify(sanitize({
+        provider_status: providerStatus,
+        completedOn: extracted.completedOn,
+        source: 'moov_webhook',
+        parity_fill: Boolean(parityFill),
+      })),
     ],
   ).catch(() => {});
   mutations.push('payment_event_log');
-  return { applied: true, environment: 'sandbox', financialTablesMutated: true, mutations };
+  return {
+    applied: true,
+    skipped: null,
+    environment: 'sandbox',
+    financialTablesMutated: true,
+    mutations,
+    createdPaymentTransfer: false,
+    status: newStatus,
+    completed_at: completedAt || transfer.completed_at || null,
+    failure_reason: newStatus === 'completed' ? null : (failureReason || transfer.failure_reason || null),
+    parity_fill: Boolean(parityFill),
+  };
 }
 
 async function syncFundingRequest(client, providerTransferId, newStatus, failureReason) {

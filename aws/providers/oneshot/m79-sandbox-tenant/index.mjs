@@ -24,6 +24,11 @@ const PAYOUT_INTENT_ID = '80f4648b-551c-4ec6-a9fc-921b85bc8320';
 const PAYOUT_TRANSFER_ID = 'c2d1078a-0261-4a3b-9782-777fad834af9';
 const FUNDING_INTENT_ID = 'b18a96d7-4415-4df8-992f-70d5a17365a9';
 const FUNDING_TRANSFER_ID = 'dec24b01-e559-4014-b072-af1ac0e4d013';
+const M712_OPERATION_ID = '69704e23-9ddd-52f8-a2b1-d48bdb500926';
+const M712_FUNDING_INTENT_ID = '985f487b-74f2-4d9f-8e6f-7cad9ae10c97';
+const M712_PAYOUT_INTENT_ID = 'df6e3d55-ccc9-43cd-b275-8cde8e24c343';
+const M712_FUNDING_TRANSFER_ID = 'e42635e8-7a75-4d25-ad2f-dd0e5696372d';
+const M712_PAYOUT_TRANSFER_ID = 'c7026476-42d3-43af-bfd3-6f5c4d6480e7';
 const ACTOR = '7dbb3009-f059-4767-b5dc-1c5c72379330';
 const PRODUCTION_IDS = new Set([
   '60922058-7eca-4889-81dd-5720d7b9de96',
@@ -2177,6 +2182,143 @@ const verify = async (client, tenantId) => {
   };
 };
 
+const snapshotM712Intent = async (client, intentId) => (await client.query(
+  `SELECT id, tenant_id, environment, status, provider_status, provider_transfer_id,
+          completed_at, failure_reason, amount_cents, leg_role, idempotency_key,
+          to_char(completed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS completed_at_utc
+     FROM public.payment_transfers
+    WHERE id = $1::uuid AND tenant_id = $2::uuid AND environment = 'sandbox'
+    LIMIT 1`,
+  [intentId, PIPELINE],
+)).rows[0] || null;
+
+const m712OperationCounts = async (client) => {
+  const rows = (await client.query(
+    `SELECT id, leg_role, provider_transfer_id, status
+       FROM public.payment_transfers
+      WHERE tenant_id = $1::uuid AND environment = 'sandbox'
+        AND coalesce(provider_metadata->>'payout_operation_id', '') = $2`,
+    [PIPELINE, M712_OPERATION_ID],
+  )).rows;
+  const funding = rows.filter((row) => row.leg_role === 'wallet_funding');
+  const payout = rows.filter((row) => row.leg_role === 'wallet_disbursement');
+  return {
+    fundingIntentCount: funding.length,
+    payoutIntentCount: payout.length,
+    fundingProviderTransferCount: funding.filter((row) => row.provider_transfer_id).length,
+    payoutProviderTransferCount: payout.filter((row) => row.provider_transfer_id).length,
+    fundingIds: funding.map((row) => row.id),
+    payoutIds: payout.map((row) => row.id),
+    fundingTransferIds: funding.map((row) => row.provider_transfer_id).filter(Boolean),
+    payoutTransferIds: payout.map((row) => row.provider_transfer_id).filter(Boolean),
+  };
+};
+
+const reconcileM712PayoutCompletedAt = async (client, body = {}) => {
+  const tenantId = body.tenantId;
+  const intentId = String(body.intentId || '');
+  const transferId = String(body.providerTransferId || '');
+  const providerStatus = String(body.providerStatus || '').toLowerCase();
+  const completedAt = body.completedAt || null;
+  if (!tenantId || tenantId === FREEDOM || tenantId === C1C) return fail('refused_production_tenant');
+  if (tenantId !== PIPELINE) return fail('undesignated_tenant', { tenantId });
+  if (intentId.toLowerCase() !== M712_PAYOUT_INTENT_ID) return fail('m712_payout_intent_mismatch');
+  if (transferId.toLowerCase() !== M712_PAYOUT_TRANSFER_ID) return fail('m712_payout_transfer_mismatch');
+  if (intentId.toLowerCase() === M712_FUNDING_INTENT_ID) return fail('funding_intent_refused');
+  if (transferId.toLowerCase() === M712_FUNDING_TRANSFER_ID) return fail('funding_transfer_refused');
+  if (providerStatus !== 'completed') return fail('unsupported_payout_status', { providerStatus });
+  if (!completedAt) return fail('provider_completed_on_missing');
+
+  const freedomBefore = await freedomRow(client);
+  const sweepBefore = await sweepUnchanged(client);
+  const fundingBefore = await snapshotM712Intent(client, M712_FUNDING_INTENT_ID);
+  const countsBefore = await m712OperationCounts(client);
+  if (!fundingBefore) return fail('funding_intent_missing');
+  if (String(fundingBefore.provider_transfer_id || '').toLowerCase() !== M712_FUNDING_TRANSFER_ID) {
+    return fail('funding_transfer_mismatch');
+  }
+  const intentBefore = await snapshotM712Intent(client, intentId);
+  if (!intentBefore) return fail('intent_not_found');
+  if (String(intentBefore.leg_role || '') !== 'wallet_disbursement') {
+    return fail('intent_leg_mismatch', { leg_role: intentBefore.leg_role });
+  }
+  if (String(intentBefore.provider_transfer_id || '').toLowerCase() !== transferId.toLowerCase()) {
+    return fail('transfer_id_mismatch');
+  }
+  if (Number(intentBefore.amount_cents) !== 1) return fail('amount_mismatch');
+  if (countsBefore.fundingIntentCount !== 1 || countsBefore.payoutIntentCount !== 1) {
+    return fail('unexpected_intent_count', countsBefore);
+  }
+  if (countsBefore.fundingProviderTransferCount !== 1 || countsBefore.payoutProviderTransferCount !== 1) {
+    return fail('unexpected_provider_transfer_count', countsBefore);
+  }
+
+  await client.query('BEGIN');
+  let recon;
+  try {
+    await client.query("SELECT set_config('request.moov_get_reconcile', '1', true)");
+    recon = (await client.query(
+      `SELECT * FROM public.aws_moov_reconcile_existing_transfer(
+         $1, $2, $3, $4::timestamptz, $5, $6, $7::jsonb, $8)`,
+      [
+        transferId,
+        'completed',
+        body.providerStatus || 'completed',
+        completedAt,
+        'moov.parity_fill',
+        intentBefore.status,
+        JSON.stringify({
+          source: 'moov_get',
+          completedOn: completedAt,
+          phase: 'm712_completed_at',
+        }),
+        'sandbox',
+      ],
+    )).rows[0];
+    await client.query('COMMIT');
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch { /* keep original */ }
+    throw error;
+  }
+
+  const intentAfter = await snapshotM712Intent(client, intentId);
+  const fundingAfter = await snapshotM712Intent(client, M712_FUNDING_INTENT_ID);
+  const countsAfter = await m712OperationCounts(client);
+  const freedom = await freedomRow(client);
+  const sweep = await sweepUnchanged(client);
+  const fundingSame = Boolean(
+    fundingBefore
+    && fundingAfter
+    && String(fundingBefore.id) === String(fundingAfter.id)
+    && String(fundingBefore.id).toLowerCase() === M712_FUNDING_INTENT_ID
+    && String(fundingBefore.status) === String(fundingAfter.status)
+    && String(fundingBefore.provider_status) === String(fundingAfter.provider_status)
+    && String(fundingBefore.provider_transfer_id || '') === String(fundingAfter.provider_transfer_id || '')
+    && String(fundingBefore.provider_transfer_id || '').toLowerCase() === M712_FUNDING_TRANSFER_ID
+    && String(fundingBefore.completed_at || '') === String(fundingAfter.completed_at || '')
+    && String(fundingBefore.failure_reason || '') === String(fundingAfter.failure_reason || '')
+  );
+  return {
+    ok: true,
+    skipped: false,
+    mode: 'update_existing_only',
+    createdPaymentTransfer: false,
+    liveProviderPosted: false,
+    recon,
+    intent: intentAfter,
+    intentBefore,
+    funding: fundingAfter,
+    fundingUnchanged: Boolean(fundingSame),
+    countsBefore,
+    countsAfter,
+    freedomEnvironment: freedom?.moov_environment,
+    freedomChanged: freedomBefore?.moov_environment !== freedom?.moov_environment,
+    sweep,
+    sweepChanged: String(sweepBefore?.id || '') !== String(sweep?.id || '')
+      || String(sweepBefore?.status || '') !== String(sweep?.status || ''),
+  };
+};
+
 export const handler = async (event = {}) => {
   const step = event.step || 'inspect';
   let client;
@@ -2206,6 +2348,7 @@ export const handler = async (event = {}) => {
     if (step === 'get_orchestrator_intent') return await getOrchestratorIntent(client, event);
     if (step === 'update_orchestrator_intent') return await updateOrchestratorIntent(client, event);
     if (step === 'list_orchestrator_operation') return await listOrchestratorOperation(client, event);
+    if (step === 'reconcile_m712_payout_completed_at') return await reconcileM712PayoutCompletedAt(client, event);
     return fail('unknown_step', { step });
   } catch (error) {
     return fail(String(error?.message || error).slice(0, 400), { step });
