@@ -63,7 +63,7 @@ export const PROVIDER_FUNCTIONS = [
   fn('moov-recipient-disconnect', 'moov', OP_CLASS.IDENTITY_KYC, 'sandbox_parity', 'Disconnects recipient account.'),
   fn('moov-transfer-create', 'moov', OP_CLASS.MONEY_MOVEMENT, 'sandbox_parity', 'Creates ACH/RTP/wallet transfer.'),
   fn('moov-transfer-status', 'moov', OP_CLASS.READ_STATUS, 'sandbox_parity', 'Sandbox: GET facilitator transfer write-back. Production: GET-only reconcile of existing payment_transfers; never POST; never INSERT intents.'),
-  fn('moov-payout-orchestrate', 'moov', OP_CLASS.READ_STATUS, 'sandbox_parity', 'Environment-aware dark payout plan. Tenant.moov_environment is server authority. Sandbox and production objects/credentials/idempotency never mix. Never POSTs. Never INSERTs payment_transfers this phase.'),
+  fn('moov-payout-orchestrate', 'moov', OP_CLASS.READ_STATUS, 'sandbox_parity', 'M7.7/M7.11 environment-aware payout plan. Tenant.moov_environment is server authority. Pipeline Test sandbox e2e engine is moov-sandbox-payout-e2e. HTTP handler never POSTs while POST flags are false. Never INSERTs payment_transfers from this handler.'),
   fn('moov-tenant-environment', 'moov', OP_CLASS.CONFIG_ADMIN, 'sandbox_parity', 'Tenant-level Moov sandbox/production switch. Dedicated server handler with confirm + audit. Does not migrate provider objects.'),
   fn('moov-transfer-group-create', 'moov', OP_CLASS.MONEY_MOVEMENT, 'sandbox_parity', 'Creates grouped transfers.'),
   fn('moov-disburse', 'moov', OP_CLASS.DISBURSEMENT, 'sandbox_parity', 'Executes disbursement splits.'),
