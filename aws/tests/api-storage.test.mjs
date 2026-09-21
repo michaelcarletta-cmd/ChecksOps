@@ -336,9 +336,42 @@ test('delete and move require server-side authorization', async () => {
 
 test('claim-files read auth includes endorsed deposit JPEGs and .deposit2.jpg siblings', () => {
   assert.match(CHECK_INTAKE_CLAIM_FILES_AUTH_SQL, /back_image_deposit_path/);
+  assert.match(CHECK_INTAKE_CLAIM_FILES_AUTH_SQL, /back_image_original_path/);
   assert.match(CHECK_INTAKE_CLAIM_FILES_AUTH_SQL, /deposit2\.jpg/);
   assert.match(CHECK_INTAKE_CLAIM_FILES_AUTH_SQL, /checkalt\.jpg/);
   assert.equal(BUCKET_AUTH_SQL['claim-files'].includes(CHECK_INTAKE_CLAIM_FILES_AUTH_SQL), true);
+});
+
+test('authorizeObject allows legacy check back_image_original_path (including checks/reupload/<uuid>/...)', async () => {
+  const LEGACY_REUPLOAD = 'checks/reupload/aa148d55-25be-4c3f-9fdd-833ba143593e/back-legacy.jpg';
+  const client = mockClient({ authorize: true });
+  // Simulate an RLS-visible check_intake_items row that references ONLY back_image_original_path.
+  client.query = async (sql, params) => {
+    client.queries.push({ sql, params });
+    if (sql === 'BEGIN' || sql === 'ROLLBACK') return { rows: [] };
+    if (sql.startsWith('SELECT set_config')) return { rows: [{ set_config: params[1] }] };
+    if (sql === LOOKUP_MAPPING_SQL) return { rows: [{ application_user_id: APP_ID, cognito_sub: COGNITO_SUB, email: 'checksops-tester@freedomadj.com', status: 'active' }] };
+    if (String(sql).includes('FROM public.tenant_users')) return { rows: [{ role: 'admin' }] };
+    // The auth SQL checks any candidate match against multiple columns including back_image_original_path.
+    if (String(sql).includes('FROM check_intake_items') && String(sql).includes('back_image_original_path')) {
+      const candidates = params?.[0] || [];
+      const rel = params?.[1];
+      const ok = candidates.includes(LEGACY_REUPLOAD) || rel === LEGACY_REUPLOAD;
+      return { rows: ok ? [{ '?column?': 1 }] : [] };
+    }
+    if (String(sql).startsWith('SELECT 1 FROM')) return { rows: [] };
+    return { rows: [] };
+  };
+
+  const key = `files/claim-files/${LEGACY_REUPLOAD}`;
+  const deps = depsFor(client, { keys: new Set([key]) });
+  const result = await handleStorageSign(jwtEvent('/storage/sign', 'POST', {
+    bucket: 'claim-files',
+    path: LEGACY_REUPLOAD,
+  }), deps);
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(result.path, LEGACY_REUPLOAD);
+  assert.match(result.signedUrl, /presigned/);
 });
 
 test('browser .deposit2.jpg sibling of a stored check image is writable', async () => {
