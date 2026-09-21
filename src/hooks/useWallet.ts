@@ -1,7 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibility";
+import { walletIsSynchronized } from "@/lib/payments/walletDisplay";
 import {
   fundWallet,
+  readWalletSnapshot,
   syncWallet,
   type WalletSnapshot,
   type WalletType,
@@ -9,29 +11,40 @@ import {
 
 /**
  * Live view of an organization's balance, its ledger and (for trust balances)
- * its per-matter sub-ledgers.
+ * its per-matter sub-ledgers. Local environment-scoped rows are the display
+ * source; provider sync is GET-only and never required to show a synchronized $0.00.
  */
 export function useWallet(walletType: WalletType = "operating") {
-  const { tenantId, enabled } = usePaymentProviderEligibility();
+  const { tenantId, enabled, environment } = usePaymentProviderEligibility();
   const qc = useQueryClient();
-  const key = ["payment-wallet", tenantId, walletType];
+  const key = ["payment-wallet", tenantId, environment, walletType];
 
-  const query = useQuery<WalletSnapshot & { setup_required?: boolean }>({
+  const query = useQuery<WalletSnapshot & { setup_required?: boolean; transfers?: unknown[] }>({
     queryKey: key,
     enabled: !!tenantId && enabled,
     staleTime: 30_000,
     retry: false,
     queryFn: async () => {
+      const local = await readWalletSnapshot(tenantId!, walletType);
       try {
-        return await syncWallet(tenantId!, walletType);
+        const synced = await syncWallet(tenantId!, walletType);
+        return {
+          ...synced,
+          transfers: (synced as any)?.transfers ?? local.transfers,
+          setup_required: false,
+        };
       } catch (e) {
+        if (walletIsSynchronized(local.wallet) || (local.transfers?.length ?? 0) > 0) {
+          return { ...local, setup_required: false };
+        }
         // A balance that simply isn't provisioned yet is an empty state, not
         // an error — the organization just hasn't finished payment setup.
         if (isSetupError(e as Error)) {
           return {
             wallet: null as any,
-            ledger: [],
-            sub_ledgers: [],
+            ledger: local.ledger,
+            sub_ledgers: local.sub_ledgers,
+            transfers: local.transfers,
             setup_required: true,
           } as WalletSnapshot & { setup_required: boolean };
         }
@@ -66,6 +79,7 @@ export function useWallet(walletType: WalletType = "operating") {
     error: query.error as Error | null,
     refetch: query.refetch,
     fund,
+    transfers: (query.data as any)?.transfers ?? [],
   };
 }
 

@@ -37,7 +37,6 @@ import { handleProviderEgress } from './providers/egress.mjs';
 import { providerSandboxExecutionEnabled } from './sandbox-flags.mjs';
 import { hasParityHandler, runParityHandler } from './providers/parity/dispatch.mjs';
 import { hasProductionCheckAltHandler, runProductionCheckAltHandler } from './providers/production/checkalt-dispatch.mjs';
-import { hasProductionMoovHandler, runProductionMoovHandler } from './providers/production/moov-dispatch.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isUuid = (value) => UUID_RE.test(String(value || ''));
@@ -360,9 +359,39 @@ export const handleFunctionInvoke = async (event, name, deps = {}) => {
     if (production) return production;
   }
 
-  if (hasProductionMoovHandler(name)) {
-    const production = await runProductionMoovHandler(name, event, deps);
-    if (production) return production;
+  try {
+    const { hasProductionMoovHandler, runProductionMoovHandler } = await import('./providers/production/moov-dispatch.mjs');
+    if (hasProductionMoovHandler(name)) {
+      const production = await runProductionMoovHandler(name, event, deps);
+      if (production) return production;
+    }
+  } catch {
+    /* Live staging zip may not include production Moov dispatch. Auth must still boot. */
+  }
+
+  if (name === 'moov-wallet-sync') {
+    try {
+      const { handleMoovWalletProjection } = await import('./providers/production/moov-wallet-projection.mjs');
+      const projected = await handleMoovWalletProjection(event, deps);
+      if (projected) return projected;
+    } catch {
+      return {
+        ok: false,
+        statusCode: 500,
+        error: 'wallet_projection_failed',
+        liveProviderPosted: false,
+        createdPaymentTransfer: false,
+        productionExecution: false,
+      };
+    }
+    return {
+      ok: false,
+      statusCode: 500,
+      error: 'wallet_projection_failed',
+      liveProviderPosted: false,
+      createdPaymentTransfer: false,
+      productionExecution: false,
+    };
   }
 
   if (executionAllowed(spec.provider) && spec.aws !== 'db_status' && spec.aws !== 'webhook') {

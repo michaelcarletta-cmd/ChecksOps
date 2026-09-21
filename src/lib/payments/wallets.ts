@@ -21,6 +21,9 @@ export interface Wallet {
   pending_cents: number;
   status: string;
   last_synced_at: string | null;
+  provider_wallet_id?: string | null;
+  environment?: string | null;
+  synchronized?: boolean | null;
 }
 
 export interface WalletLedgerEntry {
@@ -100,21 +103,24 @@ export async function fundWallet(input: {
   });
 }
 
-/** Reads the locally stored balance without calling the provider. */
-export async function readWallet(
-  tenantId: string,
-  walletType: WalletType = "operating",
-): Promise<Wallet | null> {
+const tenantMoovEnvironment = async (tenantId: string) => {
   const { data: tenant, error: tenantError } = await supabase
     .from("tenants")
     .select("moov_environment")
     .eq("id", tenantId)
     .maybeSingle();
   if (tenantError) throw tenantError;
-  const environment = String((tenant as any)?.moov_environment || "").toLowerCase() === "production"
+  return String((tenant as any)?.moov_environment || "").toLowerCase() === "production"
     ? "production"
     : "sandbox";
+};
 
+/** Reads the locally stored balance without calling the provider. */
+export async function readWallet(
+  tenantId: string,
+  walletType: WalletType = "operating",
+): Promise<Wallet | null> {
+  const environment = await tenantMoovEnvironment(tenantId);
   const { data, error } = await supabase
     .from("payment_wallets")
     .select("*")
@@ -124,6 +130,62 @@ export async function readWallet(
     .maybeSingle();
   if (error) throw error;
   return (data as Wallet) ?? null;
+}
+
+/** Local environment-scoped wallet, ledger, and money intents. No provider POST. */
+export async function readWalletSnapshot(
+  tenantId: string,
+  walletType: WalletType = "operating",
+  ledgerLimit = 50,
+): Promise<WalletSnapshot & { transfers: Record<string, unknown>[] }> {
+  const environment = await tenantMoovEnvironment(tenantId);
+  const wallet = await readWallet(tenantId, walletType);
+  if (!wallet?.id) {
+    const { data: transfers, error: transferError } = await supabase
+      .from("payment_transfers")
+      .select(
+        "id, amount_cents, status, provider_status, speed, selected_rail, description, created_at, completed_at, leg_role, is_facilitator_fee, provider_transfer_id",
+      )
+      .eq("tenant_id", tenantId)
+      .eq("environment", environment)
+      .order("created_at", { ascending: false })
+      .limit(ledgerLimit);
+    if (transferError) throw transferError;
+    return { wallet: null as unknown as Wallet, ledger: [], sub_ledgers: [], transfers: transfers ?? [] };
+  }
+
+  const [{ data: ledger, error: ledgerError }, { data: subLedgers, error: subError }, { data: transfers, error: transferError }] =
+    await Promise.all([
+      supabase
+        .from("payment_wallet_ledger")
+        .select("*")
+        .eq("wallet_id", wallet.id)
+        .order("created_at", { ascending: false })
+        .limit(Math.min(Number(ledgerLimit) || 50, 200)),
+      supabase
+        .from("payment_wallet_sub_ledgers")
+        .select("*")
+        .eq("wallet_id", wallet.id)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("payment_transfers")
+        .select(
+          "id, amount_cents, status, provider_status, speed, selected_rail, description, created_at, completed_at, leg_role, is_facilitator_fee, provider_transfer_id",
+        )
+        .eq("tenant_id", tenantId)
+        .eq("environment", environment)
+        .order("created_at", { ascending: false })
+        .limit(ledgerLimit),
+    ]);
+  if (ledgerError) throw ledgerError;
+  if (subError) throw subError;
+  if (transferError) throw transferError;
+  return {
+    wallet,
+    ledger: (ledger ?? []) as WalletLedgerEntry[],
+    sub_ledgers: (subLedgers ?? []) as WalletSubLedger[],
+    transfers: transfers ?? [],
+  };
 }
 
 /** Opens a per-matter sub-ledger inside a trust balance. */
