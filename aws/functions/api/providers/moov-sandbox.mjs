@@ -259,6 +259,7 @@ export const moovSandboxScopes = {
   accountRead: (id) => [`/accounts/${id}/profile.read`],
   walletsRead: (id) => [`/accounts/${id}/wallets.read`],
   capabilitiesRead: (id) => [`/accounts/${id}/capabilities.read`],
+  capabilitiesWrite: (id) => [`/accounts/${id}/capabilities.write`],
   bankAccountsRead: (id) => [`/accounts/${id}/bank-accounts.read`],
   paymentMethodsRead: (id) => [`/accounts/${id}/payment-methods.read`],
   transfersWrite: (id) => [`/accounts/${id}/transfers.write`],
