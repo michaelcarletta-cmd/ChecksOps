@@ -55,6 +55,13 @@ const INTAKE_SAFE_COLUMNS = [
   'front_image_path',
   'back_image_path',
   'back_image_original_path',
+  // Endorsement adjuster + deposit artifact pointers (non-financial).
+  // These must be writable on AWS staging so Adjust Endorsement can persist the
+  // clean original and the deposit-ready image without overwriting it.
+  'back_image_deposit_path',
+  'endorsement_override',
+  'endorsement_render_status',
+  'endorsement_render_meta',
   'updated_at',
 ];
 
@@ -74,10 +81,6 @@ export const INTAKE_PROHIBITED_COLUMNS = new Set([
   'deposited_by_tenant_id',
   'mortgage_final_released_at',
   'endorsement_packet_path',
-  'back_image_deposit_path',
-  'endorsement_render_status',
-  'endorsement_render_meta',
-  'endorsement_override',
   'partner_status',
   'partner_status_label',
   'check_source',
