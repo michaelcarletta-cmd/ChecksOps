@@ -374,6 +374,37 @@ test('authorizeObject allows legacy check back_image_original_path (including ch
   assert.match(result.signedUrl, /presigned/);
 });
 
+test('authorizeObject allows legacy checks/<uuid>/... back_image_original_path when UUID differs from check row id', async () => {
+  const LEGACY_UUID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const LEGACY_PATH = `legacy checks/${LEGACY_UUID}/back.jpg`;
+  const client = mockClient({ authorize: true });
+  client.query = async (sql, params) => {
+    client.queries.push({ sql, params });
+    if (sql === 'BEGIN' || sql === 'ROLLBACK') return { rows: [] };
+    if (sql.startsWith('SELECT set_config')) return { rows: [{ set_config: params[1] }] };
+    if (sql === LOOKUP_MAPPING_SQL) return { rows: [{ application_user_id: APP_ID, cognito_sub: COGNITO_SUB, email: 'checksops-tester@freedomadj.com', status: 'active' }] };
+    if (String(sql).includes('FROM public.tenant_users')) return { rows: [{ role: 'admin' }] };
+    if (String(sql).includes('FROM check_intake_items') && String(sql).includes('back_image_original_path')) {
+      const candidates = params?.[0] || [];
+      const rel = params?.[1];
+      const ok = candidates.includes(LEGACY_PATH) || rel === LEGACY_PATH;
+      return { rows: ok ? [{ '?column?': 1 }] : [] };
+    }
+    if (String(sql).startsWith('SELECT 1 FROM')) return { rows: [] };
+    return { rows: [] };
+  };
+
+  const key = `files/claim-files/${LEGACY_PATH}`;
+  const deps = depsFor(client, { keys: new Set([key]) });
+  const result = await handleStorageSign(jwtEvent('/storage/sign', 'POST', {
+    bucket: 'claim-files',
+    path: LEGACY_PATH,
+  }), deps);
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(result.path, LEGACY_PATH);
+  assert.match(result.signedUrl, /presigned/);
+});
+
 test('browser .deposit2.jpg sibling of a stored check image is writable', async () => {
   const sibling = 'checks/user-not-a-check-id/front.deposit2.jpg';
   const denied = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {

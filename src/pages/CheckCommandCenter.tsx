@@ -57,6 +57,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
 import { ViewCheckImageButton } from "@/components/checks/ViewCheckImageButton";
 import { toStorageObjectPath } from "@/lib/storagePath";
+import { assertCleanBackOriginalPath } from "@/lib/checkImageInvariants";
 import { AdminDeleteCheckButton } from "@/components/checks/AdminDeleteCheckButton";
 import { ReuploadCheckImageButton } from "@/components/checks/ReuploadCheckImageButton";
 import { CheckImageCropper } from "@/components/checks/CheckImageCropper";
@@ -4584,16 +4585,7 @@ function CheckDetailPanel({
                             const originalToPersist =
                               ((check as any)?.back_image_original_path as string | null) ??
                               endorsementAdjusterSourcePath;
-                            const looksGenerated = (p: string | null) =>
-                              !!p && (
-                                /_endorsed(?:_\d+)?\.[^.]+$/i.test(p) ||
-                                /endorsed_deposit_[^/]+\.[^.]+$/i.test(p) ||
-                                /\.checkalt\.jpg(\?|$)/i.test(p) ||
-                                /\.svg(\?|$)/i.test(p)
-                              );
-                            if (looksGenerated(originalToPersist)) {
-                              throw new Error("Refusing to promote a generated artifact as the clean original back image.");
-                            }
+                            assertCleanBackOriginalPath(originalToPersist);
                             const { error: saveErr } = await supabase
                               .from("check_intake_items")
                               .update({

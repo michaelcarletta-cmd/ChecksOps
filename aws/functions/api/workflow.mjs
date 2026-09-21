@@ -444,10 +444,117 @@ export const handleDeleteCheck = async (event, deps = {}) => {
   }, deps);
 };
 
+const looksGeneratedBack = (p) =>
+  !!p && (
+    /_endorsed(?:_\d+)?\.[^.]+$/i.test(String(p)) ||
+    /endorsed_deposit_[^/]+\.[^.]+$/i.test(String(p)) ||
+    /\.svg(\?|$)/i.test(String(p)) ||
+    /\.checkalt\.jpg(\?|$)/i.test(String(p))
+  );
+
+/**
+ * Staging-only operator reset for endorsement render pointers.
+ *
+ * Narrowly scoped to McGurrin #9562:
+ * - verifies caller has transition role (admin/staff/member)
+ * - verifies check_number == 9562
+ * - preserves back_image_path + back_image_original_path
+ * - resets only back_image_deposit_path + endorsement_render_status + endorsement_render_meta
+ * - reports before/after
+ */
+export const handleEndorsementRenderReset = async (event, deps = {}) => {
+  const gate = requireWorkflowEnabled(event, deps);
+  if (gate.blocked) {
+    return withIdentity(event, async () => gate.blocked, deps);
+  }
+  return withIdentityWrite(event, async ({ client, mapping, claims, body, spoof }) => {
+    if (body.sql || body.query || body.rawSql) {
+      return denied(spoof, { error: 'generic_sql_denied' });
+    }
+    const checkId = body.check_id || body.checkId || body.id;
+    if (!isUuid(checkId)) {
+      return denied(spoof, { statusCode: 400, error: 'invalid_uuid', field: 'check_id' });
+    }
+    const rows = (await client.query(
+      `SELECT id, tenant_id, check_number,
+              back_image_path, back_image_original_path, back_image_deposit_path,
+              endorsement_render_status, endorsement_render_meta
+         FROM public.check_intake_items
+        WHERE id = $1::uuid`,
+      [checkId],
+    )).rows;
+    if (!rows.length) return denied(spoof, { error: 'rls_denied', message: 'check not found or not writable' });
+    const before = rows[0];
+    if (String(before.check_number || '') !== '9562') {
+      return denied(spoof, { statusCode: 403, error: 'reset_scope_denied', message: 'Reset operator is restricted to McGurrin #9562' });
+    }
+    const roles = await rolesOf(client, mapping.application_user_id, before.tenant_id);
+    if (!canTransition(roles)) {
+      return denied(spoof, { error: 'insufficient_role', message: 'Reset requires a tenant membership role' });
+    }
+    if (!before.back_image_original_path || looksGeneratedBack(before.back_image_original_path)) {
+      return denied(spoof, { statusCode: 409, error: 'precondition_failed', message: 'back_image_original_path is missing or points to a generated artifact' });
+    }
+    if (before.back_image_deposit_path && !looksGeneratedBack(before.back_image_deposit_path)) {
+      return denied(spoof, { statusCode: 409, error: 'precondition_failed', message: 'back_image_deposit_path is not a recognized generated artifact' });
+    }
+
+    const afterRows = (await client.query(
+      `UPDATE public.check_intake_items
+          SET back_image_deposit_path = NULL,
+              endorsement_render_status = 'idle',
+              endorsement_render_meta = NULL,
+              updated_at = now()
+        WHERE id = $1::uuid
+        RETURNING id, tenant_id, check_number,
+                  back_image_path, back_image_original_path, back_image_deposit_path,
+                  endorsement_render_status, endorsement_render_meta`,
+      [checkId],
+    )).rows;
+    if (!afterRows.length) return denied(spoof, { error: 'rls_denied', message: 'reset blocked by RLS' });
+    const after = afterRows[0];
+
+    await client.query(
+      `INSERT INTO public.check_audit_log (
+         check_id, tenant_id, actor_id, event_type, event_description, event_data
+       ) VALUES (
+         $1::uuid, $2::uuid, $3::uuid, 'aws_endorsement_render_reset',
+         'AWS staging reset endorsement render pointers (deposit path + render status/meta only).',
+         $4::jsonb
+       )`,
+      [
+        after.id,
+        after.tenant_id,
+        mapping.application_user_id,
+        JSON.stringify({
+          check_number: after.check_number ?? null,
+          before: {
+            back_image_deposit_path: before.back_image_deposit_path ?? null,
+            endorsement_render_status: before.endorsement_render_status ?? null,
+          },
+          after: {
+            back_image_deposit_path: after.back_image_deposit_path ?? null,
+            endorsement_render_status: after.endorsement_render_status ?? null,
+          },
+        }),
+      ],
+    );
+
+    return okResult({
+      mapping,
+      claims,
+      spoof,
+      data: after,
+      extra: { before, after, reset: true },
+    });
+  }, deps);
+};
+
 export const matchWorkflowRoute = (method, path) => {
   if (method === 'GET' && path === '/workflow/status') return 'status';
   if (method === 'POST' && path === '/workflow/checks') return 'create';
   if (method === 'POST' && (path === '/workflow/transition' || path === '/workflow/checks/transition')) return 'transition';
+  if (method === 'POST' && path === '/workflow/endorsement-render-reset') return 'endorsement-render-reset';
   const transition = path.match(/^\/workflow\/checks\/([^/]+)\/transition$/);
   if (method === 'POST' && transition) return { kind: 'transition', checkId: decodeURIComponent(transition[1]) };
   const remove = path.match(/^\/workflow\/checks\/([^/]+)$/);
@@ -461,6 +568,7 @@ export const handleWorkflowRequest = async (event, path, method, deps = {}) => {
   if (match === 'status') return handleWorkflowStatus(event);
   if (match === 'create') return handleCreateCheck(event, deps);
   if (match === 'transition') return handleCheckTransition(event, deps);
+  if (match === 'endorsement-render-reset') return handleEndorsementRenderReset(event, deps);
   if (match.kind === 'transition') {
     const body = parseBody(event);
     event = { ...event, body: JSON.stringify({ ...body, check_id: body.check_id || match.checkId }) };

@@ -30,6 +30,7 @@ import {
   SignatureAsset,
 } from "@/lib/endorsementDepositRender";
 import { CHECK_IMAGES_BUCKET } from "@/lib/storageBuckets";
+import { assertCleanBackOriginalPath } from "@/lib/checkImageInvariants";
 import { logAudit } from "@/hooks/useAuditLog";
 
 interface SignedEndorsementAsset extends SignatureAsset {
@@ -59,8 +60,8 @@ export type EndorsementAdjusterProps = {
   initialOverride?: EndorsementOverride | null;
   /**
    * Called after the user approves the flattened deposit image.
-   * Parent typically updates `back_image_path` to point at the new deposit
-   * artifact so the existing CheckAlt submit flow picks it up unchanged.
+   * Parent persists `back_image_deposit_path` for the generated artifact while
+   * preserving `back_image_original_path` as the clean back-of-check image.
    */
   onDepositImageApproved: (payload: {
     depositPath: string;
@@ -455,6 +456,13 @@ export function EndorsementAdjuster({
   const handleGenerate = async () => {
     if (!originalImageUrl || !originalImagePath) {
       toast.error("Original back-of-check image is not available.");
+      return;
+    }
+    // Prevent stacked endorsements: never render from a previously generated artifact.
+    try {
+      assertCleanBackOriginalPath(originalImagePath);
+    } catch (e: any) {
+      toast.error(e?.message || "Original back-of-check image is not available.");
       return;
     }
     setStatus("rendering");
