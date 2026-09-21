@@ -100,6 +100,19 @@ Sandbox / test: Pipeline Test is `is_test_account=true` and
 `moov_environment=sandbox`. Usage queries are tenant-scoped. Test-account
 preview is labeled not production billable.
 
+## Monthly vs YTD presentation
+
+Tenant Management Billing & Usage now always shows both:
+
+- **Current Billing Period** — selected month usage + current
+  `monthly_rate_cents` / `referral_discount_cents` pricing settings
+- **Year-to-Date Usage / Charges** — YTD check / mortgage / disbursement
+  events. Recurring maintenance appears in YTD only when
+  `tenant_maintenance_payments` records exist. The current monthly rate is
+  not multiplied across prior months.
+
+`payment_transfers` remain informational volume at $0.
+
 ## Rechecked billing model (established sources only)
 
 Freedom September 2026 (staging snapshot, no collection):
