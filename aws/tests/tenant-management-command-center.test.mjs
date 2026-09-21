@@ -13,6 +13,7 @@ import { executeSafeWriteRpc } from '../functions/api/workflow-rpc.mjs';
 import { tenantFeeCharge } from '../functions/api/providers/parity/moov-money.mjs';
 import { transferPostEnabled } from '../functions/api/providers/parity/caller.mjs';
 import { runTenantInviteUser } from '../functions/api/tenant-admin.mjs';
+import { readTenantCheckUsage } from '../functions/api/data.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const PIPELINE = '3bef00a5-0bf4-41ba-abf8-5fb4e2b73d43';
@@ -304,6 +305,33 @@ test('invite reports invite_sent honestly and coerces member role to viewer', as
   assert.equal(failed.ok, true);
   assert.equal(failed.invite_sent, false);
   assert.match(String(failed.invite_error), /sink refused/);
+});
+
+test('platform-owner usage reader uses existing billing event tables', async () => {
+  const queries = [];
+  const client = {
+    query: async (sql, params = []) => {
+      queries.push({ sql, params });
+      if (sql.includes('FROM public.check_billing_events') && sql.includes('COUNT')) {
+        return { rows: [{ count: 2, amount_cents: 800 }] };
+      }
+      if (sql.includes('FROM public.mortgage_handling_requests') && sql.includes('COUNT')) {
+        return { rows: [{ count: 1, amount_cents: 1000, shipping_cents: 0 }] };
+      }
+      return { rows: [{ item: { event_type: 'check_processing', unit_price_cents: 400 } }] };
+    },
+  };
+  const data = await readTenantCheckUsage(client, {
+    tenantId: FREEDOM,
+    monthStart: '2026-09-01T00:00:00Z',
+    monthEnd: '2026-10-01T00:00:00Z',
+  });
+  assert.equal(data.count, 3);
+  assert.equal(data.amount_cents, 1800);
+  assert.equal(data.mortgage_count, 1);
+  assert.equal(data.currency, 'usd');
+  assert.ok(queries.some((q) => q.sql.includes('check_billing_events')));
+  assert.ok(queries.some((q) => q.sql.includes('mortgage_handling_requests')));
 });
 
 test('TM UI uses env-aware KYC, invite resend, and dark collection copy', () => {
