@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibility";
-import { walletIsSynchronized } from "@/lib/payments/walletDisplay";
+import { mergeWalletSnapshots, walletIsSynchronized } from "@/lib/payments/walletDisplay";
 import { buildWalletActivityFeed, type WalletActivityItem } from "@/lib/payments/walletActivityFeed";
 import {
   fundWallet,
@@ -29,32 +29,36 @@ export function useWallet(walletType: WalletType = "operating") {
       const local = await readWalletSnapshot(tenantId!, walletType);
       try {
         const synced = await syncWallet(tenantId!, walletType);
-        const transfers = (synced as any)?.transfers ?? local.transfers;
-        const providerActivity = (synced as any)?.provider_activity ?? local.provider_activity ?? [];
-        const activity = Array.isArray((synced as any)?.activity) && (synced as any).activity.length > 0
-          ? (synced as any).activity
+        const merged = mergeWalletSnapshots(local as any, synced as any);
+        const transfers = (merged as any)?.transfers ?? local.transfers;
+        const providerActivity = (merged as any)?.provider_activity ?? local.provider_activity ?? [];
+        const activity = Array.isArray((merged as any)?.activity) && (merged as any).activity.length > 0
+          ? (merged as any).activity
           : buildWalletActivityFeed({
             transfers: transfers ?? [],
             providerActivity,
-            ledger: (synced as any)?.ledger ?? local.ledger,
+            ledger: (merged as any)?.ledger ?? local.ledger,
             environment,
           });
         return {
-          ...synced,
+          ...merged,
+          wallet: (merged as any).wallet ?? local.wallet,
           transfers,
           provider_activity: providerActivity,
           activity,
           setup_required: false,
         };
       } catch (e) {
-        if (walletIsSynchronized(local.wallet) || (local.transfers?.length ?? 0) > 0 || (local.activity?.length ?? 0) > 0) {
-          return { ...local, setup_required: false };
+        const merged = mergeWalletSnapshots(local as any, null);
+        if (walletIsSynchronized((merged as any).wallet) || (local.transfers?.length ?? 0) > 0 || (local.activity?.length ?? 0) > 0) {
+          return { ...merged, setup_required: false } as WalletSnapshot & { setup_required: boolean };
         }
         // A balance that simply isn't provisioned yet is an empty state, not
         // an error — the organization just hasn't finished payment setup.
         if (isSetupError(e as Error)) {
           return {
-            wallet: null as any,
+            ...merged,
+            wallet: (merged as any).wallet ?? null,
             ledger: local.ledger,
             sub_ledgers: local.sub_ledgers,
             transfers: local.transfers,

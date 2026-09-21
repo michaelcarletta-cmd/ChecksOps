@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibility";
+import { walletOpsPendingCents, walletTransferIsInFlight } from "@/lib/payments/walletDisplay";
 
 
 export type WalletOpsReadinessState = "ready" | "pending" | "action_required" | "not_started";
@@ -20,19 +21,10 @@ export interface WalletOpsTransfer {
   provider_transfer_id?: string | null;
 }
 
-const IN_FLIGHT = ["pending", "processing", "submitted", "queued", "created", "originated"];
-
-const isInFlightTransfer = (row: WalletOpsTransfer) => {
-  const status = String(row.status || "").toLowerCase();
-  const provider = String(row.provider_status || "").toLowerCase();
-  return IN_FLIGHT.includes(status)
-    || IN_FLIGHT.includes(provider)
-    || provider.includes("originated");
-};
-
 /**
  * Money currently in flight for the organization, split by direction.
  * Sourced from `payment_transfers` — nothing is estimated or synthesised.
+ * Planned payouts are not provider-pending money.
  */
 export function useWalletOpsTransfers(limit = 25) {
   const { tenantId, enabled, environment } = usePaymentProviderEligibility();
@@ -54,16 +46,12 @@ export function useWalletOpsTransfers(limit = 25) {
       if (error) throw error;
 
       const rows = (data ?? []) as WalletOpsTransfer[];
-      const inFlight = rows.filter(isInFlightTransfer);
-
+      const pending = walletOpsPendingCents(rows);
       return {
         transfers: rows,
-        pendingOutCents: inFlight
-          .filter((r) => r.leg_role !== "funding" && r.leg_role !== "wallet_funding")
-          .reduce((sum, r) => sum + Number(r.amount_cents || 0), 0),
-        pendingInCents: inFlight
-          .filter((r) => r.leg_role === "funding" || r.leg_role === "wallet_funding")
-          .reduce((sum, r) => sum + Number(r.amount_cents || 0), 0),
+        pendingOutCents: pending.pendingOutCents,
+        pendingInCents: pending.pendingInCents,
+        inFlightCount: rows.filter(walletTransferIsInFlight).length,
       };
     },
   });

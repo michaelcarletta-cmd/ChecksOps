@@ -17,6 +17,7 @@ import { buildWalletActivityFeed } from './moov-wallet-activity.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const FREEDOM = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
+export const PLATFORM_OWNER_SQL = `SELECT public.is_platform_owner() AS is_platform, public.is_master_owner() AS is_master`;
 
 const fail = (error, statusCode, extra = {}) => ({
   ok: false,
@@ -38,6 +39,40 @@ const membershipsOf = async (client, userId) => {
     tenant_name: row.tenant_name,
     tenant_slug: row.tenant_slug,
   }));
+};
+
+/** GET-only preview: never inserts tenant_users or impersonates a member. */
+export const callerIsPlatformOwner = async (client) => {
+  try {
+    const row = (await client.query(PLATFORM_OWNER_SQL)).rows[0] || {};
+    return row.is_platform === true || row.is_master === true;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Ordinary users keep tenant_users isolation.
+ * Platform owner may claim another tenant_id for GET/read preview only.
+ */
+export const resolveProjectionTenant = async ({ client, memberships = [], claimed = null } = {}) => {
+  if (claimed) {
+    if (!UUID_RE.test(String(claimed))) {
+      return { ok: false, statusCode: 400, error: 'invalid_uuid', field: 'tenant_id', tenantId: null };
+    }
+    if (membershipForTenant(memberships, claimed)) {
+      return { ok: true, tenantId: claimed, platformOwnerPreview: false };
+    }
+    if (await callerIsPlatformOwner(client)) {
+      return { ok: true, tenantId: claimed, platformOwnerPreview: true };
+    }
+    return { ok: false, statusCode: 403, error: 'tenant_not_authorized', tenantId: null };
+  }
+  const tenantId = memberships[0]?.tenant_id || null;
+  if (!tenantId) {
+    return { ok: false, statusCode: 400, error: 'tenant_id is required', tenantId: null };
+  }
+  return { ok: true, tenantId, platformOwnerPreview: false };
 };
 
 const amountCentsOf = (amount) => {
@@ -159,13 +194,11 @@ export async function runMoovWalletProjection({
 } = {}) {
   const memberships = await membershipsOf(client, mapping.application_user_id);
   const claimed = body.tenant_id || body.tenantId || null;
-  if (claimed && !UUID_RE.test(String(claimed))) {
-    return fail('invalid_uuid', 400, { field: 'tenant_id' });
+  const resolved = await resolveProjectionTenant({ client, memberships, claimed });
+  if (!resolved.ok) {
+    return fail(resolved.error, resolved.statusCode, resolved.field ? { field: resolved.field } : {});
   }
-  const tenantId = claimed
-    ? (membershipForTenant(memberships, claimed)?.tenant_id || null)
-    : (memberships[0]?.tenant_id || null);
-  if (!tenantId) return fail('tenant_id is required', 400);
+  const tenantId = resolved.tenantId;
 
   const tenantEnv = await loadTenantMoovEnvironment(client, tenantId);
   if (!tenantEnv?.ok) return fail(tenantEnv?.error || 'moov_environment_invalid', tenantEnv?.statusCode || 409);
@@ -274,6 +307,7 @@ export async function runMoovWalletProjection({
     provider: 'moov',
     environment,
     tenant_id: tenantId,
+    platformOwnerPreview: resolved.platformOwnerPreview === true,
     ignoredClientEnvironment,
     freedomTenant: tenantId === FREEDOM,
     wallet: projected.wallet,
