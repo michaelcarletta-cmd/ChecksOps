@@ -13,6 +13,7 @@ import {
 } from '../moov-environment.mjs';
 import { moovSandboxFetch, moovSandboxScopes } from '../moov-sandbox.mjs';
 import { loadSandboxCredentials } from '../../sandbox-credentials.mjs';
+import { buildWalletActivityFeed } from './moov-wallet-activity.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const FREEDOM = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
@@ -86,6 +87,18 @@ const loadTransfers = async (client, tenantId, environment, limit) => (await cli
       AND environment = $2
       AND provider = 'moov'
     ORDER BY created_at DESC NULLS LAST
+    LIMIT $3`,
+  [tenantId, environment, limit],
+)).rows;
+
+const loadProviderActivity = async (client, tenantId, environment, limit) => (await client.query(
+  `SELECT id, tenant_id, environment, origin, activity_kind, provider_transfer_id,
+          payment_transfer_id, status, amount_cents, source_rail, destination_rail,
+          provider_created_at, provider_completed_at, observed_at
+     FROM public.payment_provider_activity
+    WHERE tenant_id = $1::uuid
+      AND environment = $2
+    ORDER BY COALESCE(provider_created_at, observed_at) DESC NULLS LAST
     LIMIT $3`,
   [tenantId, environment, limit],
 )).rows;
@@ -232,6 +245,19 @@ export async function runMoovWalletProjection({
   const ledgerLimit = Math.min(Number(body.ledger_limit) || 50, 200);
   const ledger = await loadLedger(client, projected.wallet?.id || local?.id, ledgerLimit);
   const transfers = await loadTransfers(client, tenantId, environment, ledgerLimit);
+  let providerActivity = [];
+  try {
+    providerActivity = await loadProviderActivity(client, tenantId, environment, ledgerLimit);
+  } catch {
+    providerActivity = [];
+  }
+  const activity = buildWalletActivityFeed({
+    transfers,
+    providerActivity,
+    ledger,
+    limit: ledgerLimit,
+    environment,
+  });
   const subLedgers = projected.wallet?.id
     ? (await client.query(
       `SELECT * FROM public.payment_wallet_sub_ledgers
@@ -254,6 +280,8 @@ export async function runMoovWalletProjection({
     synchronized: projected.synchronized,
     ledger,
     transfers,
+    provider_activity: providerActivity,
+    activity,
     sub_ledgers: subLedgers,
     liveProviderCalled,
     liveProviderPosted: false,

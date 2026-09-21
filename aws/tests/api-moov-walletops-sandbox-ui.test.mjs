@@ -84,13 +84,14 @@ const productionTransfers = [
   },
 ];
 
-const mockClient = ({
+  const mockClient = ({
   tenantId = PIPELINE,
   environment = 'sandbox',
   wallets = [],
   accounts = [],
   transfers = [],
   ledger = [],
+  providerActivity = [],
 } = {}) => {
   const queries = [];
   const writes = [];
@@ -128,6 +129,11 @@ const mockClient = ({
             && row.environment === params[1]
             && row.wallet_type === params[2]
           )),
+        };
+      }
+      if (sql.includes('FROM public.payment_provider_activity')) {
+        return {
+          rows: providerActivity.filter((row) => row.tenant_id === params[0] && row.environment === params[1]),
         };
       }
       if (sql.includes('FROM public.payment_transfers')) {
@@ -391,6 +397,8 @@ test('WalletOps intercept is GET-only and cannot fall through to parity POST', (
 
   assert.match(parityWallet, /method: 'POST'/);
   assert.match(walletOps, /walletBalanceLabel/);
+  assert.match(walletOps, /buildWalletActivityFeed/);
+  assert.match(walletOps, /row\.label/);
   assert.match(walletOps, /walletActivityTitle/);
   assert.match(walletOps, /walletOpsDisplayStatus/);
   assert.match(walletOps, /MoovEnvironmentBadge/);

@@ -100,7 +100,7 @@ export function useWalletOpsProviderActivity(limit = 25) {
         .eq("environment", environment || "sandbox")
         .order("observed_at", { ascending: false })
         .limit(limit);
-      if (error) throw error;
+      if (error) return [];
       return (data ?? []) as WalletOpsProviderActivity[];
     },
   });
