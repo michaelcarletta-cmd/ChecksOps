@@ -2741,6 +2741,98 @@ const consumeWalletFundStepup = async (client, body = {}) => {
   return { ok: true, stepup: updated, consumed: true };
 };
 
+const M716_FUNDING_INTENT_ID = 'd4580db2-1a3a-4ff0-94ff-4f68af8bcd0f';
+
+const abandonM716PennyIntent = async (client, body = {}) => {
+  const intentId = String(body.intentId || M716_FUNDING_INTENT_ID);
+  const operationId = String(body.payoutOperationId || M716_OPERATION_ID);
+  if (intentId !== M716_FUNDING_INTENT_ID) return fail('unexpected_intent_id', { intentId });
+  if (operationId !== M716_OPERATION_ID) return fail('unexpected_operation', { operationId });
+  const existing = (await client.query(
+    `SELECT *
+       FROM public.payment_transfers
+      WHERE id = $1::uuid
+        AND tenant_id = $2::uuid
+        AND environment = 'production'
+      LIMIT 1`,
+    [intentId, FREEDOM],
+  )).rows[0] || null;
+  if (!existing) return fail('intent_missing', { intentId });
+  if (existing.provider_transfer_id) {
+    return fail('already_posted_refused', {
+      intent: existing,
+      message: 'Intent already has a provider transfer. Do not abandon by status rewrite.',
+    });
+  }
+  if (Number(existing.amount_cents) !== 1) return fail('amount_mismatch', { amount_cents: existing.amount_cents });
+  if (String(existing.idempotency_key || '') !== M716_FUNDING_KEY) {
+    return fail('idempotency_mismatch', { idempotency_key: existing.idempotency_key });
+  }
+  if (String(existing.leg_role || '') !== 'wallet_funding') {
+    return fail('leg_role_mismatch', { leg_role: existing.leg_role });
+  }
+  const status = String(existing.status || '').toLowerCase();
+  if (status === 'canceled' || status === 'cancelled') {
+    return {
+      ok: true,
+      reused: true,
+      abandoned: true,
+      never_executable: true,
+      liveProviderPosted: false,
+      createdPaymentTransfer: false,
+      productionMoneyMoved: false,
+      intent: existing,
+    };
+  }
+  if (status !== 'planned') {
+    return fail('status_not_abandonable', {
+      status: existing.status,
+      message: 'Only a planned unsubmitted test intent can be marked canceled.',
+    });
+  }
+  const meta = existing.provider_metadata && typeof existing.provider_metadata === 'object'
+    ? existing.provider_metadata
+    : {};
+  const updated = (await client.query(
+    `UPDATE public.payment_transfers
+        SET status = 'canceled',
+            failure_reason = 'abandoned_unsubmitted_test_intent',
+            provider_metadata = $3::jsonb
+      WHERE id = $1::uuid
+        AND tenant_id = $2::uuid
+        AND environment = 'production'
+        AND provider_transfer_id IS NULL
+        AND status = 'planned'
+        AND amount_cents = 1
+        AND leg_role = 'wallet_funding'
+      RETURNING *`,
+    [
+      intentId,
+      FREEDOM,
+      JSON.stringify({
+        ...meta,
+        never_executable: true,
+        abandoned_at: new Date().toISOString(),
+        abandoned_phase: 'M7.17',
+        abandoned_reason: 'unsubmitted_test_intent',
+        original_status: 'planned',
+        payout_operation_id: operationId,
+      }),
+    ],
+  )).rows[0];
+  if (!updated) return fail('abandon_cas_lost');
+  return {
+    ok: true,
+    reused: false,
+    abandoned: true,
+    never_executable: true,
+    liveProviderPosted: false,
+    createdPaymentTransfer: false,
+    productionMoneyMoved: false,
+    intent: updated,
+  };
+};
+
 export const handler = async (event = {}) => {
   const step = event.step || 'inspect';
   let client;
@@ -2777,6 +2869,7 @@ export const handler = async (event = {}) => {
     if (step === 'update_production_funding_intent') return await updateProductionFundingIntent(client, event);
     if (step === 'cas_mark_production_funding_post_attempt') return await casMarkProductionFundingPostAttempt(client, event);
     if (step === 'consume_wallet_fund_stepup') return await consumeWalletFundStepup(client, event);
+    if (step === 'abandon_m716_penny_intent') return await abandonM716PennyIntent(client, event);
     return fail('unknown_step', { step });
   } catch (error) {
     return fail(String(error?.message || error).slice(0, 400), { step });

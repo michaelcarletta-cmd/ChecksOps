@@ -105,7 +105,7 @@ const providerStatusToIntentStatus = (providerStatus) => {
 const intentStatusToFundingState = (status) => {
   const s = String(status || '').toLowerCase();
   if (s === 'completed') return 'funding_completed';
-  if (s === 'failed') return 'funding_failed';
+  if (s === 'failed' || s === 'canceled' || s === 'cancelled') return 'funding_failed';
   if (s === 'returned') return 'funding_returned';
   if (s === 'unknown') return 'funding_unknown';
   if (s === 'submitting') return 'funding_submitting';
