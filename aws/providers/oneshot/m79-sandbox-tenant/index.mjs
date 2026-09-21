@@ -168,7 +168,8 @@ const uniqueness = async (client) => {
           'aws_moov_lookup_transfer',
           'aws_moov_reconcile_existing_transfer',
           'aws_moov_observe_provider_activity',
-          'aws_moov_set_tenant_environment'
+          'aws_moov_set_tenant_environment',
+          'aws_moov_reconcile_wallet_cache'
         )
       ORDER BY 1, 2`,
   )).rows;
@@ -263,6 +264,211 @@ const applySql77 = async (client) => {
     freedomChanged: false,
     uniqueness: post,
     setFn: post.functions.some((row) => row.proname === 'aws_moov_set_tenant_environment'),
+  };
+};
+
+const applySql78 = async (client) => {
+  const sqlPath = path.join(ROOT, '78_moov_recon_parity.sql');
+  const sql = fs.readFileSync(sqlPath, 'utf8');
+  if (sql.includes(FREEDOM)) return fail('sql78_mentions_freedom');
+  if (/DELETE\s+FROM\s+public\.payment_event_log/i.test(sql)) return fail('sql78_deletes_event_log');
+  if (/INSERT\s+INTO\s+public\.payment_transfers/i.test(sql)) return fail('sql78_inserts_transfers');
+  const freedomBefore = await freedomRow(client);
+  const sweepBefore = await sweepUnchanged(client);
+  await client.query(sql);
+  const post = await uniqueness(client);
+  const freedom = await freedomRow(client);
+  const sweep = await sweepUnchanged(client);
+  return {
+    ok: true,
+    applied: true,
+    freedomEnvironment: freedom?.moov_environment,
+    freedomChanged: freedomBefore?.moov_environment !== freedom?.moov_environment,
+    sweepChanged: String(sweepBefore?.id || '') !== String(sweep?.id || '')
+      || String(sweepBefore?.status || '') !== String(sweep?.status || ''),
+    uniqueness: post,
+    hasWalletCache: post.functions.some((row) => row.proname === 'aws_moov_reconcile_wallet_cache'),
+    hasFailureReasonLookup: post.functions.some((row) => (
+      row.proname === 'aws_moov_lookup_transfer' && String(row.args || '').includes('text')
+    )),
+  };
+};
+
+const reconcileFundingParity = async (client, body = {}) => {
+  const tenantId = body.tenantId;
+  const intentId = body.intentId;
+  const transferId = body.providerTransferId;
+  const walletId = body.providerWalletId;
+  const completedAt = body.completedAt || null;
+  const availableCents = body.availableCents;
+  const pendingCents = body.pendingCents;
+  if (!tenantId || tenantId === FREEDOM || tenantId === C1C) return fail('refused_production_tenant');
+  if (tenantId !== PIPELINE) return fail('undesignated_tenant', { tenantId });
+  if (!intentId || !transferId) return fail('intent_and_transfer_required');
+  if (!walletId || String(walletId).toLowerCase() !== SANDBOX_WALLET) return fail('wallet_id_mismatch');
+  const productionHits = [transferId, walletId].filter((id) => PRODUCTION_IDS.has(String(id || '').toLowerCase()));
+  if (productionHits.length) return fail('production_object_refused', { hits: productionHits });
+
+  const freedomBefore = await freedomRow(client);
+  const sweepBefore = await sweepUnchanged(client);
+  const intentBefore = (await client.query(
+    `SELECT id, tenant_id, environment, status, provider_status, completed_at, failure_reason,
+            provider_transfer_id, provider_metadata
+       FROM public.payment_transfers
+      WHERE id = $1::uuid AND tenant_id = $2::uuid AND environment = 'sandbox'
+      LIMIT 1`,
+    [intentId, tenantId],
+  )).rows[0];
+  if (!intentBefore) return fail('intent_not_found');
+  if (String(intentBefore.provider_transfer_id || '').toLowerCase() !== String(transferId).toLowerCase()) {
+    return fail('transfer_id_mismatch');
+  }
+
+  const historyBefore = (await client.query(
+    `SELECT count(*)::int AS n
+       FROM public.payment_event_log
+      WHERE tenant_id = $1::uuid
+        AND (
+          provider_transfer_id = $2
+          OR transfer_id = $3::uuid
+          OR COALESCE(provider_metadata->>'failure_reason', '') = 'moov_sandbox_http_failed'
+          OR COALESCE(provider_metadata->>'code', '') IN ('403', 'http_403')
+        )`,
+    [tenantId, transferId, intentId],
+  )).rows[0];
+  const failureHistoryBefore = (await client.query(
+    `SELECT id, event_type, previous_status, new_status, created_at
+       FROM public.payment_event_log
+      WHERE tenant_id = $1::uuid
+        AND (
+          COALESCE(provider_metadata->>'failure_reason', '') = 'moov_sandbox_http_failed'
+          OR event_type ILIKE '%fail%'
+          OR new_status IN ('failed', 'http_failed')
+        )
+      ORDER BY created_at ASC
+      LIMIT 20`,
+    [tenantId],
+  )).rows;
+
+  await client.query('BEGIN');
+  let recon;
+  let wallet;
+  try {
+    await client.query("SELECT set_config('request.moov_get_reconcile', '1', true)");
+    recon = (await client.query(
+      `SELECT * FROM public.aws_moov_reconcile_existing_transfer(
+         $1, $2, $3, $4::timestamptz, $5, $6, $7::jsonb, $8)`,
+      [
+        transferId,
+        'completed',
+        body.providerStatus || 'completed',
+        completedAt,
+        'moov.parity_fill',
+        intentBefore.status,
+        JSON.stringify({
+          source: 'moov_get',
+          completedOn: completedAt,
+          phase: 'm79i',
+        }),
+        'sandbox',
+      ],
+    )).rows[0];
+
+    wallet = (await client.query(
+      `SELECT * FROM public.aws_moov_reconcile_wallet_cache($1, $2, $3::bigint, $4::bigint, $5::uuid, $6::jsonb)`,
+      [
+        walletId,
+        'sandbox',
+        availableCents,
+        pendingCents,
+        tenantId,
+        JSON.stringify({ source: 'moov_get', phase: 'm79i' }),
+      ],
+    )).rows[0] || null;
+    await client.query('COMMIT');
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch { /* keep original */ }
+    throw error;
+  }
+
+  const intentAfter = (await client.query(
+    `SELECT id, tenant_id, environment, status, provider_status, completed_at, failure_reason,
+            provider_transfer_id, provider_metadata
+       FROM public.payment_transfers
+      WHERE id = $1::uuid AND tenant_id = $2::uuid AND environment = 'sandbox'
+      LIMIT 1`,
+    [intentId, tenantId],
+  )).rows[0];
+  const historyAfter = (await client.query(
+    `SELECT count(*)::int AS n
+       FROM public.payment_event_log
+      WHERE tenant_id = $1::uuid
+        AND (
+          provider_transfer_id = $2
+          OR transfer_id = $3::uuid
+          OR COALESCE(provider_metadata->>'failure_reason', '') = 'moov_sandbox_http_failed'
+          OR COALESCE(provider_metadata->>'code', '') IN ('403', 'http_403')
+        )`,
+    [tenantId, transferId, intentId],
+  )).rows[0];
+  const failureHistoryAfter = (await client.query(
+    `SELECT id
+       FROM public.payment_event_log
+      WHERE tenant_id = $1::uuid
+        AND (
+          COALESCE(provider_metadata->>'failure_reason', '') = 'moov_sandbox_http_failed'
+          OR event_type ILIKE '%fail%'
+          OR new_status IN ('failed', 'http_failed')
+        )`,
+    [tenantId],
+  )).rows;
+  const productionWallet = (await client.query(
+    `SELECT id, environment, available_cents, pending_cents, provider_wallet_id
+       FROM public.payment_wallets
+      WHERE tenant_id = $1::uuid AND provider = 'moov' AND environment = 'production'`,
+    [tenantId],
+  )).rows;
+  const freedomWallet = (await client.query(
+    `SELECT id, environment, available_cents, pending_cents, last_synced_at
+       FROM public.payment_wallets
+      WHERE tenant_id = $1::uuid AND provider = 'moov'`,
+    [FREEDOM],
+  )).rows;
+  const freedom = await freedomRow(client);
+  const sweep = await sweepUnchanged(client);
+  const objects = await tenantObjects(client, tenantId, 'sandbox');
+  return {
+    ok: String(intentAfter?.status) === 'completed'
+      && String(intentAfter?.provider_status) === 'completed'
+      && intentAfter?.failure_reason == null
+      && Number(wallet?.available_cents) === Number(availableCents)
+      && Number(wallet?.pending_cents) === Number(pendingCents)
+      && Number(historyAfter?.n || 0) >= Number(historyBefore?.n || 0)
+      && failureHistoryAfter.length >= failureHistoryBefore.length
+      && freedom?.moov_environment === 'production',
+    recon,
+    wallet,
+    intentBefore: {
+      status: intentBefore.status,
+      provider_status: intentBefore.provider_status,
+      completed_at: intentBefore.completed_at,
+      failure_reason: intentBefore.failure_reason,
+    },
+    intent: intentAfter,
+    historyBefore: historyBefore?.n || 0,
+    historyAfter: historyAfter?.n || 0,
+    failureHistoryPreserved: failureHistoryAfter.length >= failureHistoryBefore.length,
+    failureHistoryCount: failureHistoryAfter.length,
+    productionWalletRows: productionWallet,
+    freedomWalletRows: freedomWallet,
+    rdsWallet: objects.wallet,
+    freedomEnvironment: freedom?.moov_environment,
+    freedomChanged: freedomBefore?.moov_environment !== freedom?.moov_environment,
+    sweep,
+    sweepChanged: String(sweepBefore?.id || '') !== String(sweep?.id || '')
+      || String(sweepBefore?.status || '') !== String(sweep?.status || ''),
+    createdPaymentTransfer: false,
+    liveProviderPosted: false,
   };
 };
 
@@ -951,7 +1157,11 @@ const diagnoseFundingReconcile = async (client, body = {}) => {
   const objects = await tenantObjects(client, tenantId, 'sandbox');
   const intent = intentId
     ? (await client.query(
-      `SELECT * FROM public.payment_transfers
+      `SELECT id, tenant_id, environment, status, provider_status, provider_transfer_id,
+              failure_reason, provider_metadata,
+              completed_at,
+              to_char(completed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS completed_at_utc
+         FROM public.payment_transfers
         WHERE id = $1::uuid AND tenant_id = $2::uuid AND environment = 'sandbox'
         LIMIT 1`,
       [intentId, tenantId],
@@ -1064,6 +1274,7 @@ export const handler = async (event = {}) => {
     client = await connect();
     if (step === 'inspect') return await inspect(client);
     if (step === 'apply_sql77') return await applySql77(client);
+    if (step === 'apply_sql78') return await applySql78(client);
     if (step === 'create_tenant') return await createDedicatedTenant(client);
     if (step === 'switch') return await switchTenant(client, event.tenantId);
     if (step === 'link_objects') return await linkObjects(client, event);
@@ -1075,6 +1286,7 @@ export const handler = async (event = {}) => {
     if (step === 'verify_funding_intent') return await verifyFundingIntent(client, event);
     if (step === 'list_sandbox_history') return await listSandboxHistory(client);
     if (step === 'diagnose_funding_reconcile') return await diagnoseFundingReconcile(client, event);
+    if (step === 'reconcile_funding_parity') return await reconcileFundingParity(client, event);
     return fail('unknown_step', { step });
   } catch (error) {
     return fail(String(error?.message || error).slice(0, 400), { step });

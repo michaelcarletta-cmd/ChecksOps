@@ -35,6 +35,8 @@ const OVERLAY_FILES = [
   'providers/catalog.mjs',
   'providers/webhooks.mjs',
   'providers/webhook-apply-production.mjs',
+  'providers/webhook-apply.mjs',
+  'providers/moov-lifecycle.mjs',
   'providers/moov-environment.mjs',
   'providers/moov-tenant-environment.mjs',
   'providers/production/moov-dispatch.mjs',
@@ -163,6 +165,7 @@ const packOneshot = () => {
   fs.copyFileSync(path.join(ONESHOT_DIR, 'package.json'), path.join(staging, 'package.json'));
   fs.copyFileSync(path.join(ROOT, 'aws/rls/oneshot/rds-global-bundle.pem'), path.join(staging, 'rds-global-bundle.pem'));
   fs.copyFileSync(path.join(ROOT, 'aws/providers/sql/77_moov_tenant_environment.sql'), path.join(staging, '77_moov_tenant_environment.sql'));
+  fs.copyFileSync(path.join(ROOT, 'aws/providers/sql/78_moov_recon_parity.sql'), path.join(staging, '78_moov_recon_parity.sql'));
   run('npm', ['install', '--omit=dev', '--no-audit', '--no-fund'], { cwd: staging, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   const zipPath = path.join(os.tmpdir(), 'checksops-m79-oneshot.zip');
   fs.rmSync(zipPath, { force: true });
