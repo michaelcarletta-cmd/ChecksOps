@@ -28,11 +28,19 @@ import {
   createMemoryPayoutStore,
   getReconciliationMayCreateMoneyIntent,
   orchestratePayout,
+  payoutOperationIdFor,
   webhookMayCreateMoneyIntent,
 } from './moov-payout-orchestrator.mjs';
 
 export const M711_PHASE = 'M7.11';
+export const M712_PHASE = 'M7.12';
 export const SANDBOX_E2E_PAYOUT_CENTS = SANDBOX_PAYOUT_AMOUNT_CENTS;
+export const m712PayoutOperationId = () => payoutOperationIdFor({
+  tenantId: PIPELINE_TEST_TENANT_ID,
+  environment: 'sandbox',
+  recipientId: `m712:${PIPELINE_TEST_SANDBOX.recipientAccountId}`,
+  payoutCents: SANDBOX_E2E_PAYOUT_CENTS,
+});
 
 const FREEDOM = KNOWN_APPROVED_MOOV.freedom.tenantId;
 const fail = (error, extra = {}) => ({
@@ -228,6 +236,8 @@ export async function executeSandboxPayoutE2e({
   fetchImpl = fetch,
   executeFunding = executeSandboxWalletFunding,
   executePayout = executeSandboxWalletDisbursement,
+  operationId = null,
+  haltAfterFundingAttempt = false,
 } = {}) {
   if (tenantEnvironment !== 'sandbox') return fail('tenant_not_sandbox', { tenantEnvironment });
   if (!tenantId || tenantId === FREEDOM) return fail('refused_production_tenant', { tenantId });
@@ -264,6 +274,7 @@ export async function executeSandboxPayoutE2e({
     tenantId,
     labels,
     rdsAvailableCents,
+    operationId,
   });
 
   let rows = [...existingRows];
@@ -408,7 +419,8 @@ export async function executeSandboxPayoutE2e({
     && transferPostEnabled === true
     && productionTransferPostEnabled !== true
     && availableCents >= payoutCents
-    && !payoutGateBlocked;
+    && !payoutGateBlocked
+    && !(haltAfterFundingAttempt === true && posts.funding > 0);
   if (canPostPayout) {
     payoutExec = await executePayout({
       credentials,
@@ -526,6 +538,7 @@ export async function executeSandboxPayoutE2e({
       || plan.payout_state === 'payout_unknown',
     webhook_recon: Boolean(applyWebhookPayload),
     get_fallback: Boolean(getTransfer),
+    halted_after_funding: haltAfterFundingAttempt === true && posts.funding > 0,
     finished,
     blocked_reasons: plan.blocked_reasons,
     payout_operation_id: plan.payout_operation_id,
