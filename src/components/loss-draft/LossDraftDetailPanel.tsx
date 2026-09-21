@@ -255,6 +255,10 @@ export function LossDraftDetailPanel({
           <div className="flex flex-wrap gap-2 pt-2">
             <ViewCheckImageButton
               checkId={draft.check_intake_item_id}
+              frontImagePath={draft.check_intake_items?.front_image_path ?? null}
+              backImagePath={draft.check_intake_items?.back_image_path ?? null}
+              backImageOriginalPath={(draft.check_intake_items as any)?.back_image_original_path ?? null}
+              backImageDepositPath={(draft.check_intake_items as any)?.back_image_deposit_path ?? null}
               size="sm"
               variant="outline"
               className="h-7 text-xs"

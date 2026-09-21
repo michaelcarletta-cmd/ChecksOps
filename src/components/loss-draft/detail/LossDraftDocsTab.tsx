@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { LossDraftDocsManager } from "@/components/loss-draft/LossDraftDocsManager";
 import type { LossDraftDoc } from "@/hooks/queries/useLossDraft";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
 interface Props {
@@ -28,6 +29,21 @@ interface ClaimCtx {
 export function LossDraftDocsTab({ lossDraftId, claimId, checkIntakeItemId, docs, onChanged }: Props) {
   const { user } = useAuth();
   const [ctx, setCtx] = useState<ClaimCtx>({});
+  const { data: checkImages } = useQuery({
+    queryKey: ["loss-draft-docs-check-images", checkIntakeItemId],
+    enabled: !!checkIntakeItemId,
+    queryFn: async () => {
+      if (!checkIntakeItemId) return null;
+      const { data, error } = await supabase
+        .from("check_intake_items")
+        .select("front_image_path, back_image_path, back_image_original_path, back_image_deposit_path, check_number")
+        .eq("id", checkIntakeItemId)
+        .maybeSingle();
+      if (error) throw error;
+      return data as any;
+    },
+    staleTime: 60_000,
+  });
 
   useEffect(() => {
     if (!claimId) return;
@@ -59,6 +75,11 @@ export function LossDraftDocsTab({ lossDraftId, claimId, checkIntakeItemId, docs
           <div className="flex justify-end">
             <ViewCheckImageButton
               checkId={checkIntakeItemId}
+              frontImagePath={checkImages?.front_image_path ?? null}
+              backImagePath={checkImages?.back_image_path ?? null}
+              backImageOriginalPath={checkImages?.back_image_original_path ?? null}
+              backImageDepositPath={checkImages?.back_image_deposit_path ?? null}
+              checkNumber={checkImages?.check_number ?? null}
               className="w-full text-xs h-8"
             />
           </div>

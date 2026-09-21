@@ -19,6 +19,8 @@ export function ViewCheckImageButton({
   checkId,
   frontImagePath,
   backImagePath,
+  backImageOriginalPath,
+  backImageDepositPath,
   checkNumber,
   size = "sm",
   variant = "outline",
@@ -28,6 +30,10 @@ export function ViewCheckImageButton({
   checkId?: string | null;
   frontImagePath?: string | null;
   backImagePath?: string | null;
+  /** Optional: clean rear image path (preferred for view). */
+  backImageOriginalPath?: string | null;
+  /** Optional: deposit-ready rear image (shown only when explicitly requested elsewhere). */
+  backImageDepositPath?: string | null;
   checkNumber?: string | null;
   size?: "default" | "sm" | "lg" | "icon";
   variant?: "default" | "outline" | "ghost" | "secondary";
@@ -41,7 +47,7 @@ export function ViewCheckImageButton({
   const [loading, setLoading] = useState(false);
 
   const handleClick = async () => {
-    if (!checkId && !frontImagePath && !backImagePath) return;
+    if (!checkId && !frontImagePath && !backImagePath && !backImageOriginalPath) return;
     setLoading(true);
     try {
       // AWS staging has no get-check-image-urls Edge Function; sign via Storage API.
@@ -52,7 +58,8 @@ export function ViewCheckImageButton({
         if (error) throw error;
 
         const front = (data as any)?.frontUrl ?? null;
-        const back = (data as any)?.backUrl ?? null;
+        // Prefer the authoritative clean original back image when available.
+        const back = (data as any)?.backOriginalUrl ?? (data as any)?.backUrl ?? null;
 
         if (!front && !back) {
           toast({
@@ -70,7 +77,9 @@ export function ViewCheckImageButton({
       }
 
       let fPath = frontImagePath ?? null;
-      let bPath = backImagePath ?? null;
+      // Default viewer should show the clean back-of-check when we have it.
+      // Deposit-ready artifacts are shown only in explicit deposit views.
+      let bPath = backImageOriginalPath ?? backImagePath ?? null;
 
       if (!fPath && !bPath) {
         toast({

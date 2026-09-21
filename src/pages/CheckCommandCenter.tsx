@@ -2592,6 +2592,10 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
           .update({
             front_image_path: frontPath,
             back_image_path: backPath,
+            back_image_original_path: backPath,
+            back_image_deposit_path: null,
+            endorsement_render_status: "idle",
+            endorsement_render_meta: null,
           })
           .eq("id", check.id);
         if (pathErr) throw new Error(pathErr.message);
@@ -2605,6 +2609,10 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
         .insert({
           front_image_path: frontPath,
           back_image_path: backPath,
+          back_image_original_path: backPath,
+          back_image_deposit_path: null,
+          endorsement_render_status: "idle",
+          endorsement_render_meta: null,
           claim_id: claimId || null,
           uploaded_by: user.id,
           ...(tenantId ? { tenant_id: tenantId } : {}),
@@ -3087,28 +3095,20 @@ function CheckDetailPanel({
   });
 
   const {
-    data: backImageUrl,
+    data: sharedBackImageUrl,
     error: backImageUrlError,
     isFetching: backImageUrlFetching,
     refetch: refetchBackImageUrl,
   } = useQuery({
-    queryKey: ["check-back-img", check?.back_image_path],
-    enabled: !!check?.back_image_path,
+    queryKey: ["check-back-img-shared", check?.id, check?.back_image_path],
+    enabled: !!check?.id && !!check?.back_image_path && isSharedView,
     retry: 1,
     queryFn: async () => {
-      if (isSharedView && check?.id) {
-        const { data, error } = await supabase.functions.invoke("get-check-image-urls", {
-          body: { checkId: check.id },
-        });
-        if (error) throw error;
-        return (data as any)?.backUrl ?? null;
-      }
-      const path = toStorageObjectPath(check!.back_image_path);
-      if (!path) return null;
-      const { data } = await supabase.storage
-        .from("claim-files")
-        .createSignedUrl(path, 3600);
-      return data?.signedUrl ?? null;
+      const { data, error } = await supabase.functions.invoke("get-check-image-urls", {
+        body: { checkId: check!.id },
+      });
+      if (error) throw error;
+      return (data as any)?.backOriginalUrl ?? (data as any)?.backUrl ?? null;
     },
   });
 
@@ -3118,11 +3118,11 @@ function CheckDetailPanel({
     isFetching: endorsementAdjusterImageUrlFetching,
     refetch: refetchEndorsementAdjusterImageUrl,
   } = useQuery({
-    queryKey: ["check-back-img-original-for-adjuster", check?.id, check?.back_image_path],
+    queryKey: ["check-back-img-original-for-adjuster", check?.id, check?.back_image_path, (check as any)?.back_image_original_path],
     // Prefetch on mount so opening the adjuster is instant — resolving the
     // original back-image path can cost 1-2 round trips (audit lookup + signed
     // URL) plus a full image download to read dimensions.
-    enabled: !!check?.id && !!check?.back_image_path && !isSharedView,
+    enabled: !!check?.id && (!!check?.back_image_path || !!(check as any)?.back_image_original_path) && !isSharedView,
     staleTime: 5 * 60 * 1000,
     retry: 1,
     queryFn: async () => {
@@ -3136,7 +3136,9 @@ function CheckDetailPanel({
           /\.svg(\?|$)/i.test(p)
         );
 
-      const currentBackPath = toStorageObjectPath(check!.back_image_path);
+      const currentBackPath = toStorageObjectPath(
+        check!.back_image_path ?? ((check as any)?.back_image_original_path as string | null) ?? null,
+      );
       const explicitOriginalRaw = toStorageObjectPath(
         ((check as any)?.back_image_original_path as string | null) ?? null,
       );
@@ -3161,8 +3163,10 @@ function CheckDetailPanel({
       }
 
 
-      const currentPath = toStorageObjectPath(check!.back_image_path);
-      if (!currentPath) return backImageUrl ? { url: backImageUrl, path: null } : null;
+      const currentPath = toStorageObjectPath(
+        check!.back_image_path ?? ((check as any)?.back_image_original_path as string | null) ?? null,
+      );
+      if (!currentPath) return null;
 
       // Detect any known "already-composited" back artifact so we don't feed
       // the composite back into the editor (which stacks endorsements).
@@ -3199,25 +3203,25 @@ function CheckDetailPanel({
           currentPath;
       }
 
-      if (sourcePath === currentPath && backImageUrl) return { url: backImageUrl, path: sourcePath };
-
       const { data } = await supabase.storage
         .from("claim-files")
         .createSignedUrl(sourcePath, 3600);
-      
+
       const version2 = new Date(check?.updated_at || Date.now()).getTime();
       return data?.signedUrl
         ? { url: `${data.signedUrl}&v=${version2}`, path: sourcePath }
-        : backImageUrl
-          ? { url: `${backImageUrl}&v=${version2}`, path: currentPath }
-          : null;
+        : null;
     },
   });
 
-  const endorsementAdjusterSourceUrl =
-    endorsementAdjusterImageSource?.url ?? (endorsementAdjusterImageUrlFetching ? null : backImageUrl ?? null);
+  const backImageUrl = isSharedView
+    ? (sharedBackImageUrl ?? null)
+    : (endorsementAdjusterImageSource?.url ?? null);
+
+  const endorsementAdjusterSourceUrl = backImageUrl;
   const endorsementAdjusterSourcePath =
-    endorsementAdjusterImageSource?.path ?? toStorageObjectPath(check?.back_image_path ?? null);
+    endorsementAdjusterImageSource?.path ??
+    toStorageObjectPath(((check as any)?.back_image_original_path as string | null) ?? check?.back_image_path ?? null);
 
   const [backImageDimError, setBackImageDimError] = useState<string | null>(null);
   const [backImageDimReloadKey, setBackImageDimReloadKey] = useState(0);
@@ -3275,8 +3279,8 @@ function CheckDetailPanel({
     setEndorsementPrepTimedOut(false);
     setBackImageDimError(null);
     setBackImageDimensions(null);
-    qc.invalidateQueries({ queryKey: ["check-back-img", check?.back_image_path] });
-    qc.invalidateQueries({ queryKey: ["check-back-img-original-for-adjuster", check?.id, check?.back_image_path] });
+    qc.invalidateQueries({ queryKey: ["check-back-img-shared", check?.id] });
+    qc.invalidateQueries({ queryKey: ["check-back-img-original-for-adjuster", check?.id] });
     void refetchBackImageUrl();
     void refetchEndorsementAdjusterImageUrl();
     setBackImageDimReloadKey((k) => k + 1);
@@ -3750,7 +3754,8 @@ function CheckDetailPanel({
         payload.composited_back_path ??
         null;
 
-      let originalPath = payload.original_back_image_path ?? check.back_image_path ?? null;
+      const explicitOriginal = ((check as any)?.back_image_original_path as string | null) ?? null;
+      let originalPath = payload.original_back_image_path ?? explicitOriginal ?? check.back_image_path ?? null;
       let renderMode = payload.output_format ?? null;
       let dbPathUpdateCommitted = payload.db_path_update_committed ?? null;
 
@@ -3810,7 +3815,9 @@ function CheckDetailPanel({
         current
           ? {
               ...current,
-              back_image_path: compositedPath,
+              // Deposit view writes the endorsed artifact into the explicit deposit pointer.
+              // The clean rear image remains in back_image_original_path/back_image_path.
+              back_image_deposit_path: compositedPath,
               endorsement_override: overrideData
                 ? (overrideData as unknown as Record<string, unknown>)
                 : current.endorsement_override,
@@ -3829,7 +3836,7 @@ function CheckDetailPanel({
 
       qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
       qc.invalidateQueries({ queryKey: ["check-audit", checkId] });
-      qc.invalidateQueries({ queryKey: ["check-back-img"] });
+      qc.invalidateQueries({ queryKey: ["check-back-img-shared", checkId] });
       qc.invalidateQueries({ queryKey: ["check-back-img-original-for-adjuster", checkId] });
       onRefresh();
 
@@ -3922,6 +3929,8 @@ function CheckDetailPanel({
             checkId={checkId}
             frontImagePath={check.front_image_path}
             backImagePath={check.back_image_path}
+            backImageOriginalPath={((check as any)?.back_image_original_path as string | null) ?? null}
+            backImageDepositPath={((check as any)?.back_image_deposit_path as string | null) ?? null}
             checkNumber={check.check_number}
             size="sm"
             variant="outline"
@@ -4220,12 +4229,10 @@ function CheckDetailPanel({
                               const backUpdate: Record<string, unknown> = {
                                 back_image_path: newPath,
                                 back_image_original_path: newPath,
+                                back_image_deposit_path: null,
+                                endorsement_render_status: "idle",
+                                endorsement_render_meta: null,
                               };
-                              if (!isAwsStaging()) {
-                                backUpdate.back_image_deposit_path = null;
-                                backUpdate.endorsement_render_status = "idle";
-                                backUpdate.endorsement_render_meta = null;
-                              }
                               const { error: updateErr } = await supabase
                                 .from("check_intake_items")
                                 .update(backUpdate)
@@ -4240,7 +4247,8 @@ function CheckDetailPanel({
                               });
                               toast({ title: "Back image uploaded", description: "You can now collect endorsement signatures." });
                               qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
-                              qc.invalidateQueries({ queryKey: ["check-back-img"] });
+                              qc.invalidateQueries({ queryKey: ["check-back-img-shared", checkId] });
+                              qc.invalidateQueries({ queryKey: ["check-back-img-original-for-adjuster", checkId] });
                               onRefresh();
                             } catch (err: any) {
                               toast({ title: "Upload failed", description: err.message, variant: "destructive" });
@@ -4584,8 +4592,10 @@ function CheckDetailPanel({
                             const { error: saveErr } = await supabase
                               .from("check_intake_items")
                               .update({
-                                back_image_path: depositPath,
+                                // Preserve the clean rear image pointer; never overwrite it with the
+                                // deposit-ready artifact. Deposit flows read back_image_deposit_path.
                                 back_image_original_path: originalToPersist,
+                                back_image_deposit_path: depositPath,
                                 updated_at: new Date().toISOString(),
                               })
                               .eq("id", checkId);
@@ -4593,7 +4603,8 @@ function CheckDetailPanel({
                             setHasUnapprovedEndorsementDeposit(false);
                             setShowEndorsementAdjuster(false);
                             qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
-                            qc.invalidateQueries({ queryKey: ["check-back-img"] });
+                            qc.invalidateQueries({ queryKey: ["check-back-img-shared", checkId] });
+                            qc.invalidateQueries({ queryKey: ["check-back-img-original-for-adjuster", checkId] });
                           }}
                           onClose={requestCloseEndorsementAdjuster}
                         />
