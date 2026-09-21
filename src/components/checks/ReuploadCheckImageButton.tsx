@@ -3,7 +3,6 @@ import { Button } from "@/components/ui/button";
 import { Upload, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { compressCheckImage } from "@/lib/compressCheckImage";
-import { isAwsStaging } from "@/lib/awsStaging";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
@@ -83,11 +82,9 @@ export function ReuploadCheckImageButton({
       const updatePayload: Record<string, unknown> = { [column]: path };
       if (side === "back") {
         updatePayload.back_image_original_path = path;
-        if (!isAwsStaging()) {
-          updatePayload.back_image_deposit_path = null;
-          updatePayload.endorsement_render_status = "idle";
-          updatePayload.endorsement_render_meta = null;
-        }
+        updatePayload.back_image_deposit_path = null;
+        updatePayload.endorsement_render_status = "idle";
+        updatePayload.endorsement_render_meta = null;
       }
 
       const { error: updErr } = await supabase
@@ -116,7 +113,7 @@ export function ReuploadCheckImageButton({
       qc.invalidateQueries({ queryKey: ["check-intake-items"] });
       qc.invalidateQueries({ queryKey: ["check-image", checkId] });
       qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
-      qc.invalidateQueries({ queryKey: ["check-back-img"] });
+      qc.invalidateQueries({ queryKey: ["check-back-img-shared", checkId] });
       qc.invalidateQueries({ queryKey: ["check-back-img-original-for-adjuster", checkId] });
       onUploaded?.();
     } catch (e: any) {

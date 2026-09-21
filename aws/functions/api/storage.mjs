@@ -45,9 +45,10 @@ const depositSibling = (column, suffix) =>
 export const CHECK_INTAKE_CLAIM_FILES_AUTH_SQL = `SELECT 1 FROM check_intake_items WHERE ${[
   '(front_image_path = ANY($1::text[]) OR split_part(front_image_path, \'?\', 1) LIKE \'%\' || $2)',
   '(back_image_path = ANY($1::text[]) OR split_part(back_image_path, \'?\', 1) LIKE \'%\' || $2)',
+  '(back_image_original_path = ANY($1::text[]) OR split_part(back_image_original_path, \'?\', 1) LIKE \'%\' || $2)',
   '(back_image_deposit_path = ANY($1::text[]) OR split_part(back_image_deposit_path, \'?\', 1) LIKE \'%\' || $2)',
-  `(${depositSibling('front_image_path', '.deposit2.jpg')} OR ${depositSibling('back_image_path', '.deposit2.jpg')} OR ${depositSibling('back_image_deposit_path', '.deposit2.jpg')})`,
-  `(${depositSibling('front_image_path', '.checkalt.jpg')} OR ${depositSibling('back_image_path', '.checkalt.jpg')} OR ${depositSibling('back_image_deposit_path', '.checkalt.jpg')})`,
+  `(${depositSibling('front_image_path', '.deposit2.jpg')} OR ${depositSibling('back_image_path', '.deposit2.jpg')} OR ${depositSibling('back_image_original_path', '.deposit2.jpg')} OR ${depositSibling('back_image_deposit_path', '.deposit2.jpg')})`,
+  `(${depositSibling('front_image_path', '.checkalt.jpg')} OR ${depositSibling('back_image_path', '.checkalt.jpg')} OR ${depositSibling('back_image_original_path', '.checkalt.jpg')} OR ${depositSibling('back_image_deposit_path', '.checkalt.jpg')})`,
 ].join(' OR ')} LIMIT 1`;
 
 export const BUCKET_AUTH_SQL = {
@@ -97,7 +98,13 @@ export const LIST_SQL = {
   'claim-files': [
     `SELECT file_path AS path, file_name AS name, file_type AS mimetype, file_size AS size, created_at FROM check_files WHERE split_part(file_path, '?', 1) LIKE '%' || $1 LIMIT 100`,
     `SELECT file_path AS path, file_name AS name, file_type AS mimetype, file_size AS size, created_at FROM claim_files WHERE split_part(file_path, '?', 1) LIKE '%' || $1 LIMIT 100`,
-    `SELECT COALESCE(front_image_path, back_image_path, back_image_deposit_path) AS path, NULL::text AS name, NULL::text AS mimetype, NULL::bigint AS size, created_at FROM check_intake_items WHERE front_image_path LIKE '%' || $1 OR back_image_path LIKE '%' || $1 OR back_image_deposit_path LIKE '%' || $1 LIMIT 100`,
+    `SELECT COALESCE(front_image_path, back_image_path, back_image_original_path, back_image_deposit_path) AS path, NULL::text AS name, NULL::text AS mimetype, NULL::bigint AS size, created_at
+     FROM check_intake_items
+     WHERE front_image_path LIKE '%' || $1
+        OR back_image_path LIKE '%' || $1
+        OR back_image_original_path LIKE '%' || $1
+        OR back_image_deposit_path LIKE '%' || $1
+     LIMIT 100`,
   ],
   'endorsement-packets': [
     `SELECT endorsement_packet_path AS path, NULL::text AS name, 'image/svg+xml'::text AS mimetype, NULL::bigint AS size, created_at FROM check_intake_items WHERE endorsement_packet_path LIKE '%' || $1 LIMIT 100`,

@@ -7,12 +7,10 @@
  * the browser has plenty of RAM to decode a 4MB phone photo. The output is a
  * flat JPEG blob that can be uploaded straight to storage.
  */
-import {
-  EndorsementOverride,
-  clampEndorsementOverride,
-} from "@/lib/endorsementLayout";
-import { fitEndorsementLayout } from "@/lib/endorsementFit";
-import { normalizeBlobToCheckAltCanvas } from "@/lib/checkaltImageCompliance";
+import { clampEndorsementOverride } from "./endorsementLayout.ts";
+import type { EndorsementOverride } from "./endorsementLayout.ts";
+import { fitEndorsementLayout } from "./endorsementFit.ts";
+import { normalizeBlobToCheckAltCanvas } from "./checkaltImageCompliance.ts";
 
 export const ENDORSEMENT_RENDERER_VERSION = "canvas-v2";
 
@@ -116,6 +114,14 @@ async function loadImage(
     });
   }
 }
+
+/**
+ * Internal test hooks for AWS parity tests.
+ * Not part of the public product API.
+ */
+export const __private = {
+  loadImage,
+};
 
 function fitLongEdge(w: number, h: number, target = MAX_LONG_EDGE) {
   const longest = Math.max(w, h);

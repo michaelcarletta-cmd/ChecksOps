@@ -491,6 +491,52 @@ test('already deposited checks are not re-composited', async () => {
   assert.equal(store.state.check.back_image_deposit_path, null);
 });
 
+test('upload or DB failure does not leave completed deposit state', async () => {
+  const store = createStore({
+    payees: [{
+      id: PAYEE_ID,
+      check_id: CHECK_ID,
+      tenant_id: TENANT,
+      payee_type: 'insured',
+      endorsement_status: 'signed',
+      endorsed_at: '2026-09-15T00:00:00.000Z',
+      endorsement_image_path: makeInkSignatureDataUrl({ mark: 'FAIL' }),
+    }],
+    endorsements: [{
+      id: ENDORSE_ID,
+      check_id: CHECK_ID,
+      tenant_id: TENANT,
+      payee_id: PAYEE_ID,
+      payee_name: 'Jane Doe',
+      payee_type: 'insured',
+      status: 'signed',
+      signed_at: '2026-09-15T00:00:00.000Z',
+      signature_image_url: makeInkSignatureDataUrl({ mark: 'FAIL' }),
+      signature_method: 'portal',
+    }],
+  });
+  store.files.set(ORIGINAL_BACK, syntheticCompliantCheckAltJpeg({ seed: 77, quality: 78 }));
+
+  await assert.rejects(
+    () => compositeEndorsementSignatures({
+      client: store.client,
+      checkId: CHECK_ID,
+      deps: {
+        downloadClaimFile: async (rel) => store.files.get(rel),
+        uploadClaimFile: async () => {
+          throw new Error('upload_failed');
+        },
+        loadDeposits: async () => [],
+      },
+    }),
+    /upload_failed/,
+  );
+  // The clean original pointer must remain intact; no deposit path should be persisted.
+  assert.equal(store.state.check.back_image_original_path, ORIGINAL_BACK);
+  assert.equal(store.state.check.back_image_deposit_path, null);
+  assert.notEqual(store.state.check.endorsement_render_status, 'completed');
+});
+
 test('signed-without-ink cannot be composited as a drawn endorsement', async () => {
   const store = createStore({
     endorsements: [{

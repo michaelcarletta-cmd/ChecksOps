@@ -188,7 +188,7 @@ Deno.serve(async (req) => {
 
     const { data: check, error: checkErr } = await supabase
       .from("check_intake_items")
-      .select("id, back_image_path, front_image_path, check_number, carrier_name, amount, endorsement_override, tenant_id")
+      .select("id, back_image_path, back_image_original_path, back_image_deposit_path, front_image_path, check_number, carrier_name, amount, endorsement_override, tenant_id")
       .eq("id", checkId)
       .single();
 
@@ -207,10 +207,21 @@ Deno.serve(async (req) => {
       }
     }
 
-    if (!check.back_image_path) throw new Error("No back image to composite onto");
+    const looksComposited = (p: string | null | undefined) =>
+      !!p && (
+        /_endorsed(?:_\d+)?\.[^.]+$/i.test(p) ||
+        /endorsed_deposit_[^/]+\.[^.]+$/i.test(p) ||
+        /\.svg(\?|$)/i.test(p)
+      );
 
-    let backImagePath = check.back_image_path as string;
-    if (backImagePath.includes("_endorsed")) {
+    const explicitOriginal = (check as any).back_image_original_path as string | null;
+    const currentBack = (check as any).back_image_path as string | null;
+    const baseBack = explicitOriginal ?? currentBack ?? null;
+    if (!baseBack) throw new Error("No back image to composite onto");
+
+    let backImagePath = baseBack;
+    // Never composite on top of an already-composited artifact (stacks endorsements).
+    if (looksComposited(backImagePath)) {
       const { data: compositeAudits } = await supabase
         .from("check_audit_log")
         .select("event_data, created_at")
@@ -232,9 +243,10 @@ Deno.serve(async (req) => {
       } | null;
 
       const recoveredOriginalPath =
-        await recoverOriginalBackImagePath(supabase, backImagePath) ??
+        (explicitOriginal && !looksComposited(explicitOriginal) ? explicitOriginal : null) ??
         auditData?.original_back_image_path ??
         auditData?.original_back_path ??
+        await recoverOriginalBackImagePath(supabase, backImagePath) ??
         null;
 
       if (recoveredOriginalPath) {
@@ -265,7 +277,7 @@ Deno.serve(async (req) => {
       return await restoreOriginalBackImage(
         supabase,
         checkId,
-        check.back_image_path,
+        (check as any).back_image_deposit_path ?? check.back_image_path,
         backImagePath,
         "no_visible_signatures",
       );
@@ -363,7 +375,7 @@ Deno.serve(async (req) => {
       return await restoreOriginalBackImage(
         supabase,
         checkId,
-        check.back_image_path,
+        (check as any).back_image_deposit_path ?? check.back_image_path,
         backImagePath,
         "no_renderable_signatures",
       );
@@ -639,7 +651,8 @@ async function uploadAndFinalize(
   const { error: updateErr } = await supabase
     .from("check_intake_items")
     .update({
-      back_image_path: compositePath,
+      back_image_original_path: backImagePath,
+      back_image_deposit_path: compositePath,
       updated_at: new Date().toISOString(),
     })
     .eq("id", checkId);
@@ -707,20 +720,19 @@ async function restoreOriginalBackImage(
   originalBackImagePath: string,
   reason: string,
 ) {
-  const shouldUpdatePath = currentBackImagePath !== originalBackImagePath;
+  // Under the explicit fields model, restoring the "original" means clearing the
+  // deposit artifact pointer; the clean back image pointer stays intact.
+  const { error: updateErr } = await supabase
+    .from("check_intake_items")
+    .update({
+      back_image_original_path: originalBackImagePath,
+      back_image_deposit_path: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", checkId);
 
-  if (shouldUpdatePath) {
-    const { error: updateErr } = await supabase
-      .from("check_intake_items")
-      .update({
-        back_image_path: originalBackImagePath,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", checkId);
-
-    if (updateErr) {
-      throw new Error(`Failed to restore original back image path: ${updateErr.message}`);
-    }
+  if (updateErr) {
+    throw new Error(`Failed to clear deposit image pointer: ${updateErr.message}`);
   }
 
   await supabase.from("check_audit_log").insert({
@@ -745,7 +757,7 @@ async function restoreOriginalBackImage(
     endorsed_back_image_path: originalBackImagePath,
     composited_path: originalBackImagePath,
     output_format: "restored_original",
-    db_path_update_committed: shouldUpdatePath,
+    db_path_update_committed: true,
   });
 }
 

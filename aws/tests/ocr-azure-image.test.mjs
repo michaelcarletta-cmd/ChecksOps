@@ -158,7 +158,14 @@ test('oversized JPEG becomes an in-memory derivative at or under the target', as
   assert.ok(isJpegMagic(out.bytes));
   assert.equal(sha256(src), before);
   assert.equal(src.length, out.input_bytes);
-  const created = tmpAfter.filter((name) => !tmpBefore.has(name) && /ocr|azure|check/i.test(name));
+  // Node's test runner may execute other PostgreSQL-backed OCR SQL tests in
+  // parallel, which legitimately create /tmp/pg-ocr-claim-* clusters. This
+  // assertion is specifically about prepareAzureOcrImage being in-memory.
+  const created = tmpAfter.filter((name) =>
+    !tmpBefore.has(name)
+    && /ocr|azure|check/i.test(name)
+    && !/^pg-ocr-claim-/i.test(name)
+  );
   assert.deepEqual(created, []);
 });
 

@@ -218,7 +218,7 @@ serve(async (req) => {
 
     const { data: check, error: checkError } = await admin
       .from("check_intake_items")
-      .select("id, tenant_id, check_number, front_image_path, back_image_path")
+      .select("id, tenant_id, check_number, front_image_path, back_image_path, back_image_original_path, back_image_deposit_path")
       .eq("id", checkId)
       .maybeSingle();
     if (checkError) throw checkError;
@@ -239,6 +239,7 @@ serve(async (req) => {
 
     let frontPath = toStorageObjectPath(check.front_image_path);
     let backPath = toStorageObjectPath(check.back_image_path);
+    const explicitOriginalBackPath = toStorageObjectPath((check as any).back_image_original_path);
 
     if (frontPath && !(await objectExists(admin, frontPath))) {
       frontPath = await repairLegacyUrlIfNeeded(admin, check.id, "front", check.front_image_path);
@@ -256,7 +257,17 @@ serve(async (req) => {
       !!p && (/\.svg(\?|$)/i.test(p) || /_endorsed_\d+\./i.test(p) || /\/composite[-_]/i.test(p));
 
     let originalBackPath: string | null = null;
-    if (backPath && isCompositeBack(backPath)) {
+    if (explicitOriginalBackPath && !isCompositeBack(explicitOriginalBackPath)) {
+      try {
+        if (await objectExists(admin, explicitOriginalBackPath)) {
+          originalBackPath = explicitOriginalBackPath;
+        }
+      } catch {
+        // Ignore existence errors; we'll fall back to audit heuristics below.
+      }
+    }
+
+    if (!originalBackPath && backPath && isCompositeBack(backPath)) {
       try {
         const { data: evts } = await admin
           .from("check_endorsement_events")

@@ -169,6 +169,19 @@ test('allowlist rejects financial tables and unknown columns; ignores spoof iden
   assert.equal(stepupOk.values.tenant_id, APP_ID);
 });
 
+test('check_intake_items allowlist permits endorsement render pointers and override metadata', () => {
+  const picked = pickAllowlistedValues('check_intake_items', {
+    back_image_original_path: 'checks/reupload/aa148d55-25be-4c3f-9fdd-833ba143593e/back.jpg',
+    back_image_deposit_path: 'checks/reupload/aa148d55-25be-4c3f-9fdd-833ba143593e/endorsed_deposit_x.checkalt.jpg',
+    endorsement_render_status: 'completed',
+    endorsement_render_meta: { renderer_version: 1, bytes: 123 },
+    endorsement_override: { xPct: 0.5, yPct: 0.5, scale: 1, rotationDeg: 0, showPayToOrder: false },
+  });
+  assert.equal(picked.error, undefined, JSON.stringify(picked));
+  assert.equal(picked.values.back_image_deposit_path.includes('endorsed_deposit'), true);
+  assert.equal(picked.values.endorsement_render_status, 'completed');
+});
+
 test('POST /data/write upserts check_message_reads as mapped UUID and ignores spoofed ids', async () => {
   const client = mockClient({
     rows: [{ user_id: APP_ID, check_id: CHECK_ID, last_read_at: '2026-09-02T00:00:00.000Z' }],
