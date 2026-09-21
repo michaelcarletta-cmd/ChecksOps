@@ -379,6 +379,7 @@ test('WalletOps intercept is GET-only and cannot fall through to parity POST', (
   assert.match(providers, /handleMoovWalletProjection/);
   assert.match(providers, /wallet_projection_failed/);
   assert.doesNotMatch(providers, /fall through to existing stubs/);
+  assert.doesNotMatch(providers, /from '\.\/providers\/production\/moov-dispatch\.mjs'/);
 
   assert.match(projection, /Never POSTs to Moov/);
   assert.match(projection, /method: 'GET'/);
