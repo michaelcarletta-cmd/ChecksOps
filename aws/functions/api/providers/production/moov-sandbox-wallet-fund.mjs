@@ -610,3 +610,64 @@ export const knownProductionIdsBlocked = (ids = []) => ids.filter((id) => (
   isKnownProductionMoovObject(id)
   || Object.values(KNOWN_APPROVED_MOOV.freedom).some((value) => sameId(value, id))
 ));
+
+/**
+ * Code-level request comparison for M7.9H.2. Sourced from readable Lovable
+ * and AWS writers — not inferred from live timing.
+ *
+ * Lovable: supabase/functions/moov-wallet-fund/index.ts and
+ * supabase/functions/initiate-wallet-funding/index.ts
+ * AWS: buildMoovSandboxTransferBody + executeSandboxWalletFunding
+ */
+export const lovableSandboxFundingRequestFromCode = Object.freeze({
+  endpointPattern: 'POST /accounts/${facilitatorId}/transfers',
+  apiVersion: 'v2024.01.00',
+  origin: 'https://checksops.com',
+  sourcePaymentMethodType: 'ach-debit-fund',
+  destinationPaymentMethodType: 'moov-wallet',
+  amountShape: 'amount.currency USD + amount.value integer cents',
+  transferOptions: null,
+  achType: null,
+  xWaitFor: null,
+  facilitatorFee: null,
+  metadataKeys: ['checksops_transfer_id', 'checksops_tenant_id'],
+  fundingMetadataKeys: ['checksops_funding_request_id', 'checksops_tenant_id', 'checksops_payment_id'],
+  ledgerCredit: 'only_if_post_response_status_completed',
+  walletToWallet: false,
+  sandboxSimulationHeader: false,
+});
+
+export const awsSandboxFundingRequestFromCode = Object.freeze({
+  endpointPattern: 'POST /accounts/${platformAccountId}/transfers',
+  apiVersion: 'v2024.01.00',
+  origin: 'https://checksops.com',
+  sourcePaymentMethodType: 'ach-debit-fund',
+  destinationPaymentMethodType: 'moov-wallet',
+  amountShape: 'amount.currency USD + amount.value integer cents',
+  transferOptions: null,
+  achType: null,
+  xWaitFor: null,
+  facilitatorFee: null,
+  metadataKeys: [],
+  description: SANDBOX_FUNDING_DESCRIPTION,
+  amountCents: SANDBOX_FUNDING_AMOUNT_CENTS,
+  walletToWallet: false,
+  sandboxSimulationHeader: false,
+});
+
+export const compareLovableVsAwsSandboxFundingRequest = () => ({
+  sameEndpointPattern: true,
+  sameApiVersion: lovableSandboxFundingRequestFromCode.apiVersion === awsSandboxFundingRequestFromCode.apiVersion,
+  sameSourceType: lovableSandboxFundingRequestFromCode.sourcePaymentMethodType
+    === awsSandboxFundingRequestFromCode.sourcePaymentMethodType,
+  sameDestinationType: lovableSandboxFundingRequestFromCode.destinationPaymentMethodType
+    === awsSandboxFundingRequestFromCode.destinationPaymentMethodType,
+  sameWaitFor: lovableSandboxFundingRequestFromCode.xWaitFor === awsSandboxFundingRequestFromCode.xWaitFor,
+  sameTransferOptions: lovableSandboxFundingRequestFromCode.transferOptions
+    === awsSandboxFundingRequestFromCode.transferOptions,
+  sameAchType: lovableSandboxFundingRequestFromCode.achType === awsSandboxFundingRequestFromCode.achType,
+  walletToWalletUsedByEither: false,
+  metadataPresentOnLovableOnly: true,
+  lovable: lovableSandboxFundingRequestFromCode,
+  aws: awsSandboxFundingRequestFromCode,
+});
