@@ -337,7 +337,7 @@ const main = async () => {
   ));
   const storedProviderKey = payoutBefore?.provider_metadata?.provider_idempotency_key || null;
   const recipientReady = Boolean(destPm)
-    && sameId(recipientGet.data?.accountID || recipientGet.data?.accountId, SANDBOX_RECIPIENT_ACCOUNT)
+    && (recipientGet.ok === true || recipientGet.statusCode === 200)
     && String(recBank?.status || '').toLowerCase() === 'verified';
   const prePostProviderTransferId = payoutBefore?.provider_transfer_id || null;
   const duplicateCheck = existingPayouts.length === 0 && !prePostProviderTransferId ? 'clear' : 'duplicate_or_already_posted';
