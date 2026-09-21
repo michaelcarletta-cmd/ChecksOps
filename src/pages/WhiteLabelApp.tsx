@@ -78,9 +78,8 @@ function WhiteLabelRoutes() {
     enabled: !!tenant?.id && !!user?.id,
   });
 
-  // Platform owner can preview any tenant without tenant_users membership.
-  const isMember = !!isTenantMember || canPlatformPreviewTenant(user);
-
+  const canPreview = canPlatformPreviewTenant(user);
+  const isMember = !!isTenantMember || canPreview;
 
   if (loading || authLoading || (user && memberLoading)) {
     return (
@@ -103,7 +102,7 @@ function WhiteLabelRoutes() {
     );
   }
 
-  if (tenant.subscription_status !== "active") {
+  if (tenant.subscription_status !== "active" && !canPreview) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center space-y-2">

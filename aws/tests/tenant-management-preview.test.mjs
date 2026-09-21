@@ -162,6 +162,7 @@ test('frontend preview stays in the selected tenant and does not require members
   const admin = read('src/pages/admin/AdminTenants.tsx');
   const helper = read('src/lib/platformAdminPreview.ts');
   const wallet = read('src/pages/WalletOps.tsx');
+  const checkCenter = read('src/components/white-label/WhiteLabelCheckCenter.tsx');
   const context = read('src/contexts/TenantContext.tsx');
 
   assert.match(helper, /isMasterOwner/);
@@ -177,6 +178,12 @@ test('frontend preview stays in the selected tenant and does not require members
   assert.match(admin, /Preview Tenant/);
   assert.match(wallet, /tenant\?\.name/);
   assert.match(wallet, /SANDBOX/);
+  assert.match(checkCenter, /TEST/);
+  assert.match(checkCenter, /SANDBOX/);
   assert.match(context, /is_test_account, moov_environment/);
+  assert.match(context, /from\("tenants"\)/);
+  assert.match(context, /tenants_public is active-only/);
+  assert.match(whiteLabel, /subscription_status !== "active" && !canPreview/);
+  assert.match(custom, /subscription_status !== "active" && !canPreview/);
   assert.match(read('src/integrations/aws/client.ts'), /isMasterOwner: identity.isMasterOwner === true/);
 });

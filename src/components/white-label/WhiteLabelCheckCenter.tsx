@@ -61,6 +61,23 @@ export function WhiteLabelCheckCenter() {
                 </span>
               </div>
             )}
+            {tenant?.is_test_account && (
+              <Badge variant="outline" className="h-4 border-amber-500/50 px-1.5 text-[9px] text-amber-700 dark:text-amber-400">
+                TEST
+              </Badge>
+            )}
+            {tenant?.moov_environment && (
+              <Badge
+                variant="outline"
+                className={
+                  String(tenant.moov_environment).toLowerCase() === "sandbox"
+                    ? "h-4 border-sky-500/50 px-1.5 text-[9px] text-sky-600 dark:text-sky-400"
+                    : "h-4 border-emerald-500/50 px-1.5 text-[9px] text-emerald-600 dark:text-emerald-400"
+                }
+              >
+                {String(tenant.moov_environment).toLowerCase() === "sandbox" ? "SANDBOX" : "Production"}
+              </Badge>
+            )}
             {tenant && !tenant.is_system_tenant && tenant.subscription_status === "active" && (
               <Badge
                 variant="outline"
