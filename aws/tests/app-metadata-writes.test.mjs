@@ -15,6 +15,7 @@ test('tranche-6 tables are allowlisted with narrow columns', () => {
     'tenants', 'privacy_notice_acknowledgments', 'tenant_users',
     'cash_jobs', 'cash_job_line_items', 'cash_job_attachments', 'homeowner_ledger_events',
     'mortgage_request_library_documents',
+    'tenant_billing_accounts', 'platform_announcements', 'glba_security_events',
   ]) {
     assert.equal(WRITE_ALLOWLIST[table].tranche, 6, table);
   }

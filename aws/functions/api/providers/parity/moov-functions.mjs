@@ -16,7 +16,14 @@ import {
   scopes,
   withMoovContext,
 } from './moov-client.mjs';
-import { fail, jsonResult, moovParityContext } from './caller.mjs';
+import {
+  fail,
+  jsonResult,
+  membershipsOf,
+  moovParityContext,
+  resolveTenant,
+  transferPostEnabled,
+} from './caller.mjs';
 import { loadMoovAccount, logPaymentEvent, sanitize } from './db.mjs';
 import { readWallet, syncWallet } from './moov-wallet.mjs';
 import {
@@ -69,6 +76,41 @@ const wrap = (handler) => async (event, deps = {}) => {
     ? deps.loadSandboxCredentials
     : loadSandboxCredentials;
   return withIdentityWrite(event, async ({ client, mapping, claims, body, spoof }) => {
+    if (handler.darkUnlessTransferPost === true && !transferPostEnabled()) {
+      const memberships = await membershipsOf(client, mapping.application_user_id);
+      const tenant = await resolveTenant(client, {
+        userId: mapping.application_user_id,
+        body,
+        memberships,
+        requireAdmin: handler.requireAdmin === true,
+      });
+      if (tenant.error) {
+        return { ...tenant, spoofFieldsIgnored: spoof, applicationUserId: mapping.application_user_id };
+      }
+      const lines = Array.isArray(body.line_items) ? body.line_items : [];
+      const fromLines = lines.reduce((sum, line) => sum + (Number(line.amount_cents) || 0), 0);
+      const previewAmount = Number.isFinite(Number(body.amount_cents)) && Number(body.amount_cents) > 0
+        ? Number(body.amount_cents)
+        : fromLines;
+      return {
+        ok: true,
+        statusCode: 200,
+        success: true,
+        dark: true,
+        liveProviderCalled: false,
+        productionExecution: false,
+        results: [{
+          status: 'preview',
+          amount_cents: previewAmount,
+          tenant_id: tenant.tenantId,
+          kind: body.kind || 'maintenance',
+          line_items: lines,
+          message: 'Collection preview only. ACH is not submitted while transfer POST is disabled.',
+        }],
+        spoofFieldsIgnored: spoof,
+        applicationUserId: mapping.application_user_id,
+      };
+    }
     const ctx = await moovParityContext({
       client,
       mapping,

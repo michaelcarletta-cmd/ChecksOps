@@ -37,6 +37,7 @@ import { PlatformAnnouncementsManager } from "@/components/admin/PlatformAnnounc
 import { TenantProBadgeManagement } from "@/components/settings/TenantProBadgeManagement";
 
 import { TenantProvider } from "@/contexts/TenantContext";
+import { TenantUsageInlinePanel } from "@/pages/admin/TenantBillingUsagePanel";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DataView, FilterBar, type DataColumn } from "@/components/shell";
@@ -55,6 +56,7 @@ type Tenant = {
   subscription_status: string | null;
   plan_tier: string | null;
   is_test_account?: boolean | null;
+  moov_environment?: string | null;
   max_checks_per_month: number | null;
   email_from_name: string | null;
   email_from_address: string | null;
@@ -84,6 +86,7 @@ type TenantUserRow = {
 
 
 const TENANT_ROLES = ["admin", "operator", "viewer"];
+
 
 export default function AdminTenants() {
   const navigate = useNavigate();
@@ -437,6 +440,10 @@ function CompanyTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
   const [subStatus, setSubStatus] = useState(tenant.subscription_status || "inactive");
   const [isTest, setIsTest] = useState(!!(tenant as any).is_test_account);
   const [maxChecks, setMaxChecks] = useState(tenant.max_checks_per_month ?? 100);
+  const [referralCode, setReferralCode] = useState(tenant.referral_code || "");
+  const [referralDiscount, setReferralDiscount] = useState(
+    tenant.referral_discount_cents != null ? (tenant.referral_discount_cents / 100).toFixed(2) : "0.00",
+  );
   const { saving, save } = useTenantSave(tenant, onUpdated);
 
   return (
@@ -482,18 +489,56 @@ function CompanyTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
           </div>
           <Switch checked={isTest} onCheckedChange={setIsTest} />
         </div>
-        {tenant.partner_code && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label>Partner Code</Label>
-            <div className="flex gap-2">
-              <Input value={tenant.partner_code} readOnly className="font-mono" />
+            <Label>Referral Code</Label>
+            <Input
+              value={referralCode}
+              onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
+              className="font-mono"
+              placeholder="CHECKS0000"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Referral Discount ($ / month)</Label>
+            <Input
+              type="number"
+              step="0.01"
+              value={referralDiscount}
+              onChange={(e) => setReferralDiscount(e.target.value)}
+            />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label>Partner Code</Label>
+          <div className="flex gap-2">
+            <Input
+              value={tenant.partner_code || ""}
+              readOnly
+              className="font-mono bg-muted/50"
+              placeholder="Assigned permanently on create"
+            />
+            {tenant.partner_code && (
               <Button variant="outline" size="icon" onClick={() => { navigator.clipboard.writeText(tenant.partner_code!); toast({ title: "Copied" }); }}>
                 <Copy className="w-4 h-4" />
               </Button>
-            </div>
+            )}
           </div>
-        )}
-        <Button onClick={() => save({ name, slug, custom_domain: customDomain || null, subscription_status: subStatus, is_test_account: isTest, moov_environment: isTest ? "sandbox" : "production", max_checks_per_month: maxChecks } as any)} disabled={saving}>
+          <p className="text-xs text-muted-foreground">
+            Permanent identifier. Tenant Management can display and search it, but cannot edit or regenerate it.
+          </p>
+        </div>
+        <Button onClick={() => save({
+          name,
+          slug,
+          custom_domain: customDomain || null,
+          subscription_status: subStatus,
+          is_test_account: isTest,
+          moov_environment: isTest ? "sandbox" : "production",
+          max_checks_per_month: maxChecks,
+          referral_code: referralCode.trim() || null,
+          referral_discount_cents: Math.max(0, Math.round(parseFloat(referralDiscount || "0") * 100)) || 0,
+        } as any)} disabled={saving}>
           {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Save Changes
         </Button>
 
@@ -618,7 +663,7 @@ function UsersTab({ tenant }: { tenant: Tenant }) {
   const [loading, setLoading] = useState(true);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteName, setInviteName] = useState("");
-  const [inviteRole, setInviteRole] = useState("member");
+  const [inviteRole, setInviteRole] = useState("viewer");
   const [inviting, setInviting] = useState(false);
 
   const load = async () => {
@@ -675,13 +720,31 @@ function UsersTab({ tenant }: { tenant: Tenant }) {
   };
 
   const resendInvite = async (email: string) => {
-    const tenantBaseUrl = tenant.custom_domain ? `https://${tenant.custom_domain}` : `https://checksops.com/${tenant.slug}`;
-    const redirectTo = `${tenantBaseUrl}/login`;
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `https://checksops.com/reset-password?next=${encodeURIComponent(redirectTo)}`,
+    const { data, error } = await supabase.functions.invoke("tenant-invite-user", {
+      body: {
+        tenant_id: tenant.id,
+        email,
+        role: "viewer",
+        resend: true,
+      },
     });
-    if (error) { toast({ title: "Resend failed", description: error.message, variant: "destructive" }); return; }
-    toast({ title: "Reset link resent", description: `Sent to ${email}` });
+    if (error || (data as any)?.error) {
+      toast({
+        title: "Resend failed",
+        description: error?.message || (data as any)?.error || (data as any)?.invite_error,
+        variant: "destructive",
+      });
+      return;
+    }
+    if ((data as any)?.invite_sent === false) {
+      toast({
+        title: "Invite not sent",
+        description: (data as any)?.invite_error || "The invite email was not delivered.",
+        variant: "destructive",
+      });
+      return;
+    }
+    toast({ title: "Invite resent", description: `Sent to ${email}` });
   };
 
   const updateRole = async (id: string, role: string) => {
@@ -764,8 +827,16 @@ function UsersTab({ tenant }: { tenant: Tenant }) {
 
 function BillingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tenant) => void }) {
   const [enabled, setEnabled] = useState(tenant.per_check_billing_enabled || false);
-  const [rate, setRate] = useState(tenant.per_check_rate_cents || 0);
+  const [rateDollars, setRateDollars] = useState(
+    ((tenant.per_check_rate_cents ?? 0) / 100).toFixed(2),
+  );
   const { saving, save } = useTenantSave(tenant, onUpdated);
+  const rateCents = Math.max(0, Math.round(parseFloat(rateDollars || "0") * 100) || 0);
+
+  useEffect(() => {
+    setEnabled(tenant.per_check_billing_enabled || false);
+    setRateDollars(((tenant.per_check_rate_cents ?? 0) / 100).toFixed(2));
+  }, [tenant.id, tenant.per_check_billing_enabled, tenant.per_check_rate_cents]);
 
   return (
     <SectionCard
@@ -784,19 +855,24 @@ function BillingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
         </div>
         
         <div className="space-y-2">
-          <Label>Standard Check Rate (cents)</Label>
+          <Label>Standard Check Rate</Label>
           <div className="flex items-center gap-2">
-            <Input 
-              type="number" 
-              value={rate} 
-              onChange={(e) => setRate(parseInt(e.target.value) || 0)} 
-              disabled={!enabled}
+            <span className="text-sm text-muted-foreground">$</span>
+            <Input
+              type="number"
+              step="0.01"
+              min="0"
+              value={rateDollars}
+              onChange={(e) => setRateDollars(e.target.value)}
               className="max-w-[200px]"
             />
             <span className="text-sm text-muted-foreground font-mono">
-              = ${(rate / 100).toFixed(2)} per check
+              = {rateCents} cents per check
             </span>
           </div>
+          <p className="text-xs text-muted-foreground">
+            Saved as tenants.per_check_rate_cents. Editable whether per-check billing is on or off.
+          </p>
         </div>
 
         <Separator />
@@ -818,7 +894,7 @@ function BillingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
         </div>
 
         <Button 
-          onClick={() => save({ per_check_billing_enabled: enabled, per_check_rate_cents: rate })} 
+          onClick={() => save({ per_check_billing_enabled: enabled, per_check_rate_cents: rateCents })} 
           disabled={saving}
         >
           {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Save Billing Settings
@@ -909,6 +985,11 @@ function TenantBillingBankPanel({ tenantId, tenantName }: { tenantId: string; te
     const failure = (data as any)?.error ?? (error ? await readFnError(error) : null);
     if (failure) return sonnerToast.error(failure);
     const r = (data as any)?.results?.[0];
+    if ((data as any)?.dark || r?.status === "preview") {
+      return sonnerToast.info(
+        `Preview only: $${((r?.amount_cents ?? amount_cents) / 100).toFixed(2)}. ACH was not submitted.`,
+      );
+    }
     if (r?.status === "submitted") sonnerToast.success(`ACH debit submitted for $${(r.amount_cents / 100).toFixed(2)}`);
     else sonnerToast.info(JSON.stringify(r ?? data));
   };
@@ -936,6 +1017,9 @@ function TenantBillingBankPanel({ tenantId, tenantName }: { tenantId: string; te
       accent="bg-gradient-to-r from-sky-500 to-sky-500/30"
       description={`Moov-verified account we pull maintenance fees from for ${tenantName}.`}
     >
+      <p className="text-xs text-amber-700 bg-amber-500/10 border border-amber-500/30 rounded-md px-3 py-2">
+        Collection is in preview mode. The monthly workflow calculates the amount due but does not submit ACH.
+      </p>
       <div className="flex justify-end">
         <Button size="sm" onClick={pullNow} disabled={charging}>
           {charging ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
@@ -979,368 +1063,6 @@ function TenantBillingBankPanel({ tenantId, tenantName }: { tenantId: string; te
   );
 }
 
-/* ---------------- Usage Tab ---------------- */
-
-function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; tenantName: string }) {
-  const now = new Date();
-  const [scope, setScope] = useState<"month" | "year">("month");
-  const [month, setMonth] = useState(now.getMonth()); // 0-11
-  const [year, setYear] = useState(now.getFullYear());
-  const [data, setData] = useState<any>(null);
-  const [checkalt, setCheckalt] = useState<{ count: number; amount: number } | null>(null);
-  const [moov, setMoov] = useState<{ count: number; amountOut: number } | null>(null);
-  const [maintenance, setMaintenance] = useState<any[]>([]);
-  const [tenantMeta, setTenantMeta] = useState<{ monthly_rate_cents: number; referral_discount_cents: number; is_founding_partner: boolean } | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [pulling, setPulling] = useState(false);
-
-  const range = (() => {
-    if (scope === "month") {
-      const start = new Date(year, month, 1);
-      const end = new Date(year, month + 1, 1);
-      return { start, end, label: start.toLocaleDateString("en-US", { month: "long", year: "numeric" }) };
-    }
-    const start = new Date(year, 0, 1);
-    const end = new Date(year + 1, 0, 1);
-    return { start, end, label: String(year) };
-  })();
-
-  const load = async () => {
-    setLoading(true);
-    setError(null);
-    const startISO = range.start.toISOString();
-    const endISO = new Date(range.end.getTime() - 1).toISOString();
-
-    try {
-      const [usageRes, checkaltRes, moovRes, maintRes, tenantRes] = await Promise.all([
-        supabase.rpc("get_tenant_check_usage", {
-          _tenant_id: tenantId,
-          _month_start: startISO,
-          _month_end: endISO,
-        } as any),
-        supabase
-          .from("checkalt_deposits")
-          .select("id, amount, status, created_at")
-          .eq("tenant_id", tenantId)
-          .gte("created_at", range.start.toISOString())
-          .lt("created_at", range.end.toISOString()),
-        supabase
-          .from("payment_transfers")
-          .select("id, amount_cents, status, created_at")
-          .eq("provider", "moov")
-          .eq("tenant_id", tenantId)
-          .gte("created_at", range.start.toISOString())
-          .lt("created_at", range.end.toISOString()),
-        supabase
-          .from("tenant_maintenance_payments")
-          .select("id, amount_cents, status, received_at, period_start, method, reference, failure_reason")
-          .eq("tenant_id", tenantId)
-          .gte("received_at", range.start.toISOString())
-          .lt("received_at", range.end.toISOString())
-          .order("received_at", { ascending: false }),
-        supabase
-          .from("tenants")
-          .select("monthly_rate_cents, referral_discount_cents, is_founding_partner")
-          .eq("id", tenantId)
-          .maybeSingle(),
-      ]);
-      if (usageRes.error) throw usageRes.error;
-      setData(usageRes.data);
-      setCheckalt({
-        count: checkaltRes.data?.length ?? 0,
-        amount: (checkaltRes.data ?? []).reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0),
-      });
-      setMoov({
-        count: moovRes.data?.length ?? 0,
-        amountOut: (moovRes.data ?? [])
-          .filter((r: any) => r.status === "completed")
-          .reduce((s: number, r: any) => s + Number(r.amount_cents ?? 0) / 100, 0),
-      });
-      setMaintenance(maintRes.data ?? []);
-      setTenantMeta(tenantRes.data as any ?? null);
-    } catch (e: any) {
-      setError(e.message);
-    }
-    setLoading(false);
-  };
-
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [tenantId, scope, month, year]);
-
-  const events: any[] = data?.events || [];
-  const checkCount = events.filter((e) => e.event_type === "check_processing").length;
-  const mortgageCount = data?.mortgage_count || events.filter((e) => e.event_type === "mortgage_handling").length;
-  const sameDay = events.filter((e) => e.event_type === "moov_same_day").length;
-  const nextDay = events.filter((e) => e.event_type === "moov_next_day" || e.event_type === "moov_standard").length;
-
-  const fmt = (cents: number) =>
-    new Intl.NumberFormat("en-US", { style: "currency", currency: (data?.currency || "usd").toUpperCase() }).format((cents || 0) / 100);
-  const maintenancePaidCents = maintenance
-    .filter((r) => ["cleared", "recorded", "submitted"].includes(r.status))
-    .reduce((s, r) => s + (r.amount_cents ?? 0), 0);
-  const months = Array.from({ length: 12 }, (_, i) => ({ v: i, l: new Date(2020, i, 1).toLocaleString("en-US", { month: "long" }) }));
-  const years = Array.from({ length: 5 }, (_, i) => now.getFullYear() - i);
-
-  // Consolidated billing: check processing fees ($4/check), Moov disbursement fees ($1 transfer),
-  // maintenance for the month (monthly_rate - referral discount). Applies only when scope=month.
-  const usageEvents: any[] = data?.events || [];
-  const checkProcessingCents = usageEvents.filter(e => e.event_type === 'check_processing').reduce((s, e) => s + (e.unit_price_cents ?? 0), 0);
-  const mortgageOpsCents = usageEvents.filter(e => e.event_type === 'mortgage_handling').reduce((s, e) => s + (e.unit_price_cents ?? 0), 0);
-  const disbursementCents = usageEvents.filter(e => e.event_type?.startsWith('moov_')).reduce((s, e) => s + (e.unit_price_cents ?? 0), 0);
-  
-  const grossMaintenance = tenantMeta?.monthly_rate_cents ?? 0;
-  const discount = tenantMeta?.referral_discount_cents ?? 0;
-  const netMaintenance = Math.max(0, grossMaintenance - discount);
-  const consolidatedTotalCents = checkProcessingCents + mortgageOpsCents + disbursementCents + netMaintenance;
-
-  const pullConsolidated = async () => {
-    if (scope !== "month") {
-      sonnerToast.error("Switch to a specific month to pull consolidated billing.");
-      return;
-    }
-    if (consolidatedTotalCents <= 0) {
-      sonnerToast.warning("Nothing to charge for this period.");
-      return;
-    }
-    const confirmed = window.confirm(
-      `Pull $${(consolidatedTotalCents / 100).toFixed(2)} from ${tenantName}'s verified bank account and email them an invoice?`
-    );
-    if (!confirmed) return;
-    setPulling(true);
-    const line_items = [
-      checkProcessingCents > 0 && { label: "Check processing", detail: `${usageEvents.filter(e => e.event_type === 'check_processing').length} checks`, amount_cents: checkProcessingCents },
-      disbursementCents > 0 && { label: "Moov disbursements", detail: `${usageEvents.filter(e => e.event_type?.startsWith('moov_')).length} txns`, amount_cents: disbursementCents },
-      mortgageOpsCents > 0 && { label: "MortgageOps handling", detail: `${mortgageCount} requests`, amount_cents: mortgageOpsCents },
-      grossMaintenance > 0 && { label: "Monthly maintenance", detail: range.label, amount_cents: grossMaintenance },
-      discount > 0 && { label: "Referral discount", detail: "applied to maintenance", amount_cents: -discount },
-    ].filter(Boolean);
-
-    const { data: resp, error } = await supabase.functions.invoke("moov-tenant-fee-charge", {
-      body: {
-        tenant_id: tenantId,
-        amount_cents: consolidatedTotalCents,
-        kind: "consolidated",
-        line_items,
-        period_label: range.label,
-        send_invoice: true,
-      },
-    });
-    setPulling(false);
-    const failure = (resp as any)?.error ?? (error ? await readFnError(error) : null);
-    if (failure) return sonnerToast.error(failure);
-    const r = (resp as any)?.results?.[0];
-    if (r?.status === "submitted") {
-      sonnerToast.success(
-        `ACH debit for $${(r.amount_cents / 100).toFixed(2)} submitted${r.invoice_sent ? " · invoice emailed" : r.invoice_error ? ` · invoice: ${r.invoice_error}` : ""}`
-      );
-      load();
-    } else sonnerToast.info(JSON.stringify(r ?? resp));
-  };
-
-  return (
-    <SectionCard
-      title={`Usage & Payments — ${range.label}`}
-      icon={<Receipt className="h-4 w-4 text-emerald-500" />}
-      accent="bg-gradient-to-r from-emerald-500 to-emerald-500/30"
-      description="Checks processed, CheckAlt deposits, Moov disbursements & maintenance fees paid to ChecksOps."
-    >
-      <div className="flex items-center gap-2 flex-wrap">
-        <Select value={scope} onValueChange={(v) => setScope(v as any)}>
-          <SelectTrigger className="w-[110px] h-8"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="month">Month</SelectItem>
-            <SelectItem value="year">Year</SelectItem>
-          </SelectContent>
-        </Select>
-        {scope === "month" && (
-          <Select value={String(month)} onValueChange={(v) => setMonth(parseInt(v))}>
-            <SelectTrigger className="w-[130px] h-8"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {months.map((m) => <SelectItem key={m.v} value={String(m.v)}>{m.l}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        )}
-        <Select value={String(year)} onValueChange={(v) => setYear(parseInt(v))}>
-          <SelectTrigger className="w-[90px] h-8"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            {years.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Button variant="ghost" size="sm" onClick={load} disabled={loading}>
-          <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-        </Button>
-      </div>
-      <div className="space-y-6">
-
-        {error ? (
-          <div className="text-sm text-destructive">{error}</div>
-        ) : loading ? (
-          <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
-        ) : (
-          <>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="rounded-lg border bg-card p-3">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Check Processing Usage</div>
-                <div className="text-2xl font-bold mt-1">{checkCount}</div>
-                <div className="text-[10px] text-muted-foreground mt-1">Fees: {fmt(data?.amount_cents ?? 0)}</div>
-              </div>
-              <div className="rounded-lg border bg-card p-3">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">MortgageOps Usage</div>
-                <div className="text-2xl font-bold mt-1">{mortgageCount}</div>
-                <div className="text-[10px] text-muted-foreground mt-1">Fees: {fmt(data?.mortgage_amount_cents ?? 0)}</div>
-              </div>
-              <div className="rounded-lg border bg-card p-3">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Disbursement Usage</div>
-                <div className="text-2xl font-bold mt-1">{moov?.count ?? 0}</div>
-                <div className="text-[10px] text-muted-foreground mt-1">Next Day {nextDay} · Same Day {sameDay}</div>
-              </div>
-              <div className="rounded-lg border bg-card p-3">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Paid to ChecksOps</div>
-                <div className="text-2xl font-bold mt-1">{fmt(maintenancePaidCents)}</div>
-                <div className="text-[10px] text-muted-foreground mt-1">Maintenance fees</div>
-              </div>
-            </div>
-
-            {/* Consolidated billing table — one ACH pull for CheckAlt + Moov + maintenance */}
-            {scope === "month" && (
-              <div className="rounded-lg border">
-                <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
-                  <div>
-                    <h4 className="text-sm font-semibold">Consolidated Billing — {range.label}</h4>
-                    <p className="text-[11px] text-muted-foreground">
-                      One ACH pull covers all ChecksOps fees for the month. Invoice is emailed automatically.
-                    </p>
-                  </div>
-                  <Button size="sm" onClick={pullConsolidated} disabled={pulling || consolidatedTotalCents <= 0}>
-                    {pulling ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
-                    Pull {fmt(consolidatedTotalCents)} & email invoice
-                  </Button>
-                </div>
-                <table className="w-full text-sm">
-                  <thead className="text-[10px] uppercase text-muted-foreground bg-muted/20">
-                    <tr>
-                      <th className="text-left px-4 py-2 font-medium">Line item</th>
-                      <th className="text-right px-4 py-2 font-medium">Usage</th>
-                      <th className="text-right px-4 py-2 font-medium">Rate</th>
-                      <th className="text-right px-4 py-2 font-medium">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    <tr>
-                      <td className="px-4 py-2">Check Processing Usage</td>
-                      <td className="text-right px-4 py-2 tabular-nums">{checkCount} checks</td>
-                      <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">$4.00</td>
-                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(data?.events?.filter((e: any) => e.event_type === 'check_processing').reduce((s: number, e: any) => s + (e.unit_price_cents ?? 0), 0) ?? 0)}</td>
-                    </tr>
-                    <tr>
-                      <td className="px-4 py-2">MortgageOps Usage</td>
-                      <td className="text-right px-4 py-2 tabular-nums">{mortgageCount} requests</td>
-                      <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">$10.00 / $5.00</td>
-                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(data?.events?.filter((e: any) => e.event_type === 'mortgage_handling').reduce((s: number, e: any) => s + (e.unit_price_cents ?? 0), 0) ?? 0)}</td>
-                    </tr>
-                    <tr>
-                      <td className="px-4 py-2">Disbursement Usage</td>
-                      <td className="text-right px-4 py-2 tabular-nums">{moov?.count ?? 0} txns</td>
-                      <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">$1.00</td>
-                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(data?.events?.filter((e: any) => e.event_type?.startsWith('moov_')).reduce((s: number, e: any) => s + (e.unit_price_cents ?? 0), 0) ?? 0)}</td>
-                    </tr>
-                    <tr>
-                      <td className="px-4 py-2">
-                        Monthly maintenance
-                        {tenantMeta?.is_founding_partner && (
-                          <Badge variant="outline" className="ml-2 text-[9px] h-4 border-yellow-500/40 text-yellow-600">Founding partner</Badge>
-                        )}
-                      </td>
-                      <td className="text-right px-4 py-2 tabular-nums">1 mo</td>
-                      <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">{fmt(grossMaintenance)}</td>
-                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(grossMaintenance)}</td>
-                    </tr>
-                    {discount > 0 && (
-                      <tr>
-                        <td className="px-4 py-2 text-emerald-600">Referral discount</td>
-                        <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">—</td>
-                        <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">—</td>
-                        <td className="text-right px-4 py-2 tabular-nums font-medium text-emerald-600">−{fmt(discount)}</td>
-                      </tr>
-                    )}
-                    <tr className="bg-muted/30">
-                      <td className="px-4 py-2 font-semibold" colSpan={3}>Total to pull</td>
-                      <td className="text-right px-4 py-2 tabular-nums font-bold text-base">{fmt(consolidatedTotalCents)}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {maintenance.length > 0 && (
-              <div>
-                <h4 className="text-sm font-semibold mb-2">Maintenance Fee Payments ({maintenance.length})</h4>
-                <div className="border rounded-lg max-h-56 overflow-y-auto divide-y">
-                  {maintenance.map((p) => (
-                    <div key={p.id} className="flex items-center justify-between px-3 py-2 text-xs">
-                      <div>
-                        <div className="font-medium">
-                          {new Date(p.received_at).toLocaleDateString()}
-                          {p.period_start && <span className="text-muted-foreground ml-2">· {new Date(p.period_start).toLocaleDateString(undefined, { month: "short", year: "numeric" })}</span>}
-                        </div>
-                        <div className="text-[10px] text-muted-foreground">
-                          {p.method?.toUpperCase()} {p.reference && `· ${p.reference}`} {p.failure_reason && `· ${p.failure_reason}`}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold">{fmt(p.amount_cents)}</span>
-                        <Badge variant="outline" className={`text-[9px] h-4 ${
-                          p.status === "cleared" ? "border-emerald-500/40 text-emerald-500" :
-                          p.status === "returned" || p.status === "failed" ? "border-destructive/40 text-destructive" :
-                          "border-muted-foreground/30"
-                        }`}>
-                          {p.status}
-                        </Badge>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div>
-              <h4 className="text-sm font-semibold mb-2">Detailed Check Log ({events.length})</h4>
-              <div className="border rounded-lg max-h-72 overflow-y-auto divide-y">
-                {events.length === 0 ? (
-                  <div className="p-6 text-center text-sm text-muted-foreground italic">No usage events for this range.</div>
-                ) : (
-                  events.map((e) => (
-                    <div key={e.id} className="flex items-center justify-between px-3 py-2 text-xs">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium">{new Date(e.billed_at).toLocaleString()}</span>
-                          <Badge variant="secondary" className="text-[9px] h-4 px-1 uppercase">
-                            {(e.event_type || "processing").replace("_", " ")}
-                          </Badge>
-                        </div>
-                        <div className="text-[10px] text-muted-foreground font-mono">
-                          {e.check_number && <>Check #{e.check_number} · </>}
-                          {e.payee_name && <>{e.payee_name} · </>}
-                          {e.processed_by && <span className="text-primary/80">By: {e.processed_by}</span>}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-semibold">{fmt(e.unit_price_cents)}</div>
-                        <Badge variant="outline" className="text-[9px] h-4 mt-0.5">{e.status}</Badge>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </>
-        )}
-      </div>
-    </SectionCard>
-
-  );
-}
-
 
 /* ---------------- Tenant Management Table (master owner only) ---------------- */
 
@@ -1358,7 +1080,8 @@ function TenantManagementTable({
   const [proTenant, setProTenant] = useState<Tenant | null>(null);
   const [search, setSearch] = useState("");
 
-  // Live Moov KYC/verification status per tenant (keyed by tenant_id).
+  // Live Moov KYC/verification status per tenant, keyed by tenant_id + environment.
+  // Never pick the newest row across environments — Pipeline Test is sandbox, Freedom is production.
   const { data: moovKycByTenant } = useQuery({
     queryKey: ["admin-tenants-moov-kyc"],
     queryFn: async () => {
@@ -1368,12 +1091,18 @@ function TenantManagementTable({
         .eq("provider", "moov")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      const map: Record<string, { status: string | null; verification_status: string | null }> = {};
+      const map: Record<string, Array<{
+        environment: string | null;
+        status: string | null;
+        verification_status: string | null;
+      }>> = {};
       for (const a of data ?? []) {
-        // newest account wins (rows ordered desc)
-        if (!map[a.tenant_id]) {
-          map[a.tenant_id] = { status: a.onboarding_status, verification_status: a.verification_status };
-        }
+        if (!map[a.tenant_id]) map[a.tenant_id] = [];
+        map[a.tenant_id].push({
+          environment: a.environment,
+          status: a.onboarding_status,
+          verification_status: a.verification_status,
+        });
       }
       return map;
     },
@@ -1441,6 +1170,13 @@ function TenantManagementTable({
       headerClassName: "w-[10%] min-w-[90px]",
       className: "font-mono text-[11px] text-muted-foreground break-all",
       cell: (t) => `/${t.slug}`,
+    },
+    {
+      id: "partner",
+      header: "Partner",
+      headerClassName: "w-[9%] min-w-[80px]",
+      className: "font-mono text-[11px] break-all",
+      cell: (t) => t.partner_code || "—",
     },
     {
       id: "created",
@@ -1521,7 +1257,13 @@ function TenantManagementTable({
       mobileLabel: "Referral code",
       headerClassName: "w-[9%] min-w-[80px]",
       className: "font-mono text-[11px] break-all",
-      cell: (t) => t.referral_code || "—",
+      cell: (t) => (
+        <InlineTextEditor
+          value={t.referral_code || ""}
+          placeholder="Set code"
+          onSave={(code) => updateTenant(t.id, { referral_code: code.trim() ? code.trim().toUpperCase() : null })}
+        />
+      ),
     },
     {
       id: "ref_disc",
@@ -1529,14 +1271,21 @@ function TenantManagementTable({
       mobileLabel: "Referral discount",
       headerClassName: "w-[8%] min-w-[70px]",
       className: "text-[11px]",
-      cell: (t) => fmtMoney(t.referral_discount_cents),
+      cell: (t) => (
+        <InlineMoneyEditor
+          valueCents={t.referral_discount_cents ?? null}
+          onSave={(cents) => updateTenant(t.id, { referral_discount_cents: cents ?? 0 })}
+        />
+      ),
     },
     {
       id: "kyc",
       header: "KYC",
       headerClassName: "w-[10%] min-w-[110px]",
       cell: (t) => {
-        const moov = moovKycByTenant?.[t.id];
+        const env = String(t.moov_environment || (t.is_test_account ? "sandbox" : "production")).toLowerCase();
+        const accounts = moovKycByTenant?.[t.id] ?? [];
+        const moov = accounts.find((a) => String(a.environment || "").toLowerCase() === env) ?? null;
         const vs = (moov?.verification_status || "").toLowerCase();
         const moovBadge = !moov ? (
           <Badge variant="outline" className="text-[10px] border-muted-foreground/30 text-muted-foreground">No Moov acct</Badge>
@@ -1619,7 +1368,8 @@ function TenantManagementTable({
         (t) =>
           t.name?.toLowerCase().includes(q) ||
           t.slug?.toLowerCase().includes(q) ||
-          (t.referral_code || "").toLowerCase().includes(q),
+          (t.referral_code || "").toLowerCase().includes(q) ||
+          (t.partner_code || "").toLowerCase().includes(q),
       )
     : tenants;
 
@@ -1633,7 +1383,7 @@ function TenantManagementTable({
       <FilterBar
         search={search}
         onSearchChange={setSearch}
-        placeholder="Search tenants by name, slug or referral code…"
+        placeholder="Search tenants by name, slug, referral code, or partner code…"
         actions={
           <Badge variant="secondary" className="text-[11px]">
             {visibleTenants.length} of {tenants.length}
@@ -1669,6 +1419,50 @@ function TenantManagementTable({
       )}
     </SectionCard>
 
+  );
+}
+
+function InlineTextEditor({
+  value,
+  placeholder,
+  onSave,
+}: {
+  value: string;
+  placeholder?: string;
+  onSave: (next: string) => Promise<boolean> | void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(value);
+
+  useEffect(() => {
+    setVal(value);
+  }, [value]);
+
+  if (!editing) {
+    return (
+      <button
+        className="font-mono text-[11px] hover:underline break-all text-left"
+        onClick={() => setEditing(true)}
+      >
+        {value || placeholder || "Set"}
+      </button>
+    );
+  }
+  return (
+    <Input
+      autoFocus
+      className="h-8 w-28 font-mono text-[11px]"
+      value={val}
+      onChange={(e) => setVal(e.target.value.toUpperCase())}
+      onBlur={async () => {
+        if (val !== value) await onSave(val);
+        setEditing(false);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        if (e.key === "Escape") setEditing(false);
+      }}
+    />
   );
 }
 

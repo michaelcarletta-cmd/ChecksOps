@@ -77,6 +77,13 @@ const hasAnyTenantMembership = async (client, userId) => {
   return rows.length > 0;
 };
 
+const isPlatformOwnerActor = async (client) => {
+  const row = (await client.query(
+    'SELECT public.is_platform_owner() AS is_owner',
+  )).rows[0];
+  return row?.is_owner === true;
+};
+
 export const authorizeStorageWritePath = async (client, bucket, objectPath, userId) => {
   const denied = denyBucket(bucket);
   if (denied) return denied;
@@ -178,8 +185,8 @@ export const authorizeStorageWritePath = async (client, bucket, objectPath, user
     if (!isBrandingUploadPath(rel)) {
       return { ok: false, statusCode: 403, error: 'path_not_allowlisted', message: 'Invalid branding path' };
     }
-    if (!(await hasAnyTenantMembership(client, userId))) {
-      return { ok: false, statusCode: 403, error: 'rls_denied', message: 'Tenant membership required for branding uploads' };
+    if (!(await isPlatformOwnerActor(client)) && !(await hasAnyTenantMembership(client, userId))) {
+      return { ok: false, statusCode: 403, error: 'rls_denied', message: 'Tenant membership or platform owner required for branding uploads' };
     }
     return { ok: true, rel, key: s3KeyFor(bucket, rel), strategy: 'branding' };
   }

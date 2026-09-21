@@ -52,6 +52,8 @@ const cognitoJson = async (target, payload) => {
   }
 };
 
+const TENANT_INVITE_ROLES = new Set(['admin', 'operator', 'viewer']);
+
 const assertTenantAdmin = async (client, mapping, tenantId) => {
   const membership = (await client.query(
     `SELECT role FROM public.tenant_users
@@ -65,9 +67,13 @@ const assertTenantAdmin = async (client, mapping, tenantId) => {
   const master = (await client.query(
     `SELECT public.is_master_owner() AS is_master`,
   )).rows[0];
+  const owner = (await client.query(
+    'SELECT public.is_platform_owner() AS is_owner',
+  )).rows[0];
   const ok = membership?.role === 'admin'
     || system?.role === 'admin'
-    || master?.is_master === true;
+    || master?.is_master === true
+    || owner?.is_owner === true;
   return ok;
 };
 
@@ -77,7 +83,8 @@ export const runTenantInviteUser = async ({
   const adminCognito = cognitoFn || cognitoJson;
   const tenantId = body.tenant_id || body.tenantId;
   const email = normalizeEmail(body.email);
-  const role = body.role || 'member';
+  const rawRole = String(body.role || 'viewer').toLowerCase();
+  const role = TENANT_INVITE_ROLES.has(rawRole) ? rawRole : 'viewer';
   const fullName = body.full_name || body.fullName || email;
   if (!tenantId || !email) {
     return { ok: false, statusCode: 400, error: 'Missing tenant_id, email, or role', spoofFieldsIgnored: spoof };
@@ -192,20 +199,29 @@ export const runTenantInviteUser = async ({
     branding,
   });
   const mailer = send || sendViaSesOrSink;
-  await mailer({
-    to: email,
-    subject: rendered.subject,
-    html: rendered.html,
-    text: rendered.text,
-    from: branding.from,
-    replyTo: branding.replyTo,
-  });
+  let inviteSent = false;
+  let inviteError = null;
+  try {
+    await mailer({
+      to: email,
+      subject: rendered.subject,
+      html: rendered.html,
+      text: rendered.text,
+      from: branding.from,
+      replyTo: branding.replyTo,
+    });
+    inviteSent = true;
+  } catch (error) {
+    inviteError = String(error?.message || error).slice(0, 240);
+  }
 
   return {
     ok: true,
     statusCode: 200,
     success: true,
     invited: true,
+    invite_sent: inviteSent,
+    invite_error: inviteError,
     isNewUser,
     email,
     role,

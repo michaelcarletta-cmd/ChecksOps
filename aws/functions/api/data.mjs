@@ -782,6 +782,111 @@ const runSelect = async (client, body) => {
   return { rows: attached, count };
 };
 
+const argOf = (args, ...keys) => {
+  for (const key of keys) {
+    if (args[key] !== undefined && args[key] !== null) return args[key];
+  }
+  return null;
+};
+
+/** Same check_billing_events / mortgage_handling_requests totals as Lovable get_tenant_check_usage. */
+export const readTenantCheckUsage = async (client, { tenantId, monthStart, monthEnd }) => {
+  const start = monthStart || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+  const end = monthEnd || new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toISOString();
+  const checks = (await client.query(
+    `SELECT COUNT(*)::int AS count, COALESCE(SUM(unit_price_cents), 0)::bigint AS amount_cents
+     FROM public.check_billing_events
+     WHERE tenant_id = $1::uuid
+       AND billed_at >= $2::timestamptz
+       AND billed_at < $3::timestamptz
+       AND status <> 'voided'`,
+    [tenantId, start, end],
+  )).rows[0];
+  const mortgage = (await client.query(
+    `SELECT COUNT(*)::int AS count,
+            COALESCE(SUM(flat_fee_cents), 0)::bigint AS amount_cents,
+            COALESCE(SUM(COALESCE(invoice_shipping_cents, 0)), 0)::bigint AS shipping_cents
+     FROM public.mortgage_handling_requests
+     WHERE tenant_id = $1::uuid
+       AND billed_at >= $2::timestamptz
+       AND billed_at < $3::timestamptz
+       AND billing_status = 'billed'`,
+    [tenantId, start, end],
+  )).rows[0];
+  const events = (await client.query(
+    `SELECT item FROM (
+       SELECT jsonb_build_object(
+         'id', e.id,
+         'check_intake_item_id', e.check_intake_item_id,
+         'billed_at', e.billed_at,
+         'unit_price_cents', e.unit_price_cents,
+         'currency', e.currency,
+         'status', e.status,
+         'event_type', e.event_type,
+         'check_number', ci.check_number,
+         'payee_name', ci.payee_line,
+         'processed_by', p.full_name,
+         'source', 'check'
+       ) AS item
+       FROM public.check_billing_events e
+       LEFT JOIN public.check_intake_items ci ON ci.id = e.check_intake_item_id
+       LEFT JOIN public.profiles p ON p.id = ci.uploaded_by
+       WHERE e.tenant_id = $1::uuid
+         AND e.billed_at >= $2::timestamptz
+         AND e.billed_at < $3::timestamptz
+         AND e.status <> 'voided'
+       UNION ALL
+       SELECT jsonb_build_object(
+         'id', m.id,
+         'billed_at', m.billed_at,
+         'unit_price_cents', m.flat_fee_cents,
+         'currency', 'usd',
+         'status', 'billed',
+         'event_type', 'mortgage_handling',
+         'mortgage_company', m.mortgage_company,
+         'loan_number', m.loan_number,
+         'source', 'mortgage'
+       )
+       FROM public.mortgage_handling_requests m
+       WHERE m.tenant_id = $1::uuid
+         AND m.billed_at >= $2::timestamptz
+         AND m.billed_at < $3::timestamptz
+         AND m.billing_status = 'billed'
+       UNION ALL
+       SELECT jsonb_build_object(
+         'id', m.id || ':shipping',
+         'billed_at', m.billed_at,
+         'unit_price_cents', m.invoice_shipping_cents,
+         'currency', 'usd',
+         'status', 'billed',
+         'event_type', 'mortgage_shipping_label',
+         'mortgage_company', m.mortgage_company,
+         'loan_number', m.loan_number,
+         'source', 'mortgage'
+       )
+       FROM public.mortgage_handling_requests m
+       WHERE m.tenant_id = $1::uuid
+         AND m.billed_at >= $2::timestamptz
+         AND m.billed_at < $3::timestamptz
+         AND m.billing_status = 'billed'
+         AND COALESCE(m.invoice_shipping_cents, 0) > 0
+     ) sub
+     ORDER BY item->>'billed_at' DESC`,
+    [tenantId, start, end],
+  )).rows.map((row) => row.item);
+  return {
+    count: (checks.count || 0) + (mortgage.count || 0),
+    amount_cents: Number(checks.amount_cents || 0) + Number(mortgage.amount_cents || 0) + Number(mortgage.shipping_cents || 0),
+    currency: 'usd',
+    month_start: start,
+    month_end: end,
+    events,
+    mortgage_count: mortgage.count || 0,
+    mortgage_amount_cents: Number(mortgage.amount_cents || 0) + Number(mortgage.shipping_cents || 0),
+    mortgage_shipping_cents: Number(mortgage.shipping_cents || 0),
+  };
+};
+
 export const unwrapRpcData = (name, rows) => {
   if (RPC_UNWRAP_SINGLE_COLUMN.has(name)) {
     if (!rows.length) return null;
@@ -961,6 +1066,26 @@ export const handleDataRpc = async (event, deps) => {
     };
   }
   const name = ident(body.name || body.rpc, 'rpc');
+  if (name === 'get_tenant_check_usage') {
+    const args = body.args && typeof body.args === 'object' ? body.args : {};
+    const tenantId = argOf(args, '_tenant_id', 'tenant_id', 'p_tenant_id');
+    const owner = (await client.query('SELECT public.is_platform_owner() AS is_owner')).rows[0];
+    if (owner?.is_owner === true && tenantId) {
+      const data = await readTenantCheckUsage(client, {
+        tenantId,
+        monthStart: argOf(args, '_month_start', 'month_start'),
+        monthEnd: argOf(args, '_month_end', 'month_end'),
+      });
+      return {
+        ok: true,
+        statusCode: 200,
+        data,
+        applicationUserId: mapping.application_user_id,
+        cognitoSub: claims.sub,
+        spoofFieldsIgnored: spoof,
+      };
+    }
+  }
   if (!READ_RPCS.has(name)) {
     return {
       ok: false,

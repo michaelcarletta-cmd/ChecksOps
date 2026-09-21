@@ -651,12 +651,18 @@ export const resolveTenantAccess = async (client, mapping, tenantId) => {
     [userId],
   )).rows[0];
   let master = false;
+  let platformOwner = false;
   try {
     master = (await client.query(`SELECT public.is_master_owner() AS is_master`)).rows[0]?.is_master === true;
   } catch {
     master = false;
   }
-  const platformAdmin = system?.role === 'admin' || master === true;
+  try {
+    platformOwner = (await client.query(`SELECT public.is_platform_owner() AS is_owner`)).rows[0]?.is_owner === true;
+  } catch {
+    platformOwner = false;
+  }
+  const platformAdmin = system?.role === 'admin' || master === true || platformOwner === true;
   const tenantAdmin = membership?.role === 'admin';
   const member = Boolean(membership);
   return {

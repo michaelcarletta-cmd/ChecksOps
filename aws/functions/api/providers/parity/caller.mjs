@@ -101,6 +101,12 @@ export function effectiveMoovEnvironment(tenantEnv) {
   return 'sandbox';
 }
 
+/** Real ACH / Moov transfer POST. Unset or false keeps collection in dark preview. */
+export function transferPostEnabled() {
+  return String(process.env.AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED || '') === 'true'
+    || String(process.env.AWS_MOOV_TRANSFER_POST_ENABLED || '') === 'true';
+}
+
 export async function requireParityEnabled(provider) {
   if (executionAllowed(provider)) {
     return fail('production_execution_blocked', 403, {

@@ -532,6 +532,10 @@ const TENANT_PLATFORM_TEXT = [
   ['slug', 80], ['custom_domain', 255], ['subscription_status', 40],
   ['plan_tier', 40], ['moov_environment', 20], ['kyc_status', 40],
   ['kyc_notes', 8000], ['internal_notes', 8000],
+  ['referral_code', 40],
+  ['legal_business_name', 200], ['ein', 32], ['business_address', 500],
+  ['business_phone', 40], ['beneficial_owner_name', 200],
+  ['beneficial_owner_dob', 20], ['beneficial_owner_id_url', 512],
 ];
 
 const pickTenantText = (values, columns) => {
@@ -599,6 +603,45 @@ export const executeTenantsNarrow = async ({ client, mapping, op = 'update', val
         out.monthly_rate_cents = Math.round(n);
       }
     }
+    if ('per_check_billing_enabled' in values) {
+      out.per_check_billing_enabled = values.per_check_billing_enabled === true
+        || values.per_check_billing_enabled === 'true';
+    }
+    if ('per_check_rate_cents' in values) {
+      if (values.per_check_rate_cents === null || values.per_check_rate_cents === '') {
+        out.per_check_rate_cents = null;
+      } else {
+        const n = Number(values.per_check_rate_cents);
+        if (!Number.isFinite(n) || n < 0) return { error: 'invalid_field', field: 'per_check_rate_cents' };
+        out.per_check_rate_cents = Math.round(n);
+      }
+    }
+    if ('referral_discount_cents' in values) {
+      if (values.referral_discount_cents === null || values.referral_discount_cents === '') {
+        out.referral_discount_cents = 0;
+      } else {
+        const n = Number(values.referral_discount_cents);
+        if (!Number.isFinite(n) || n < 0) return { error: 'invalid_field', field: 'referral_discount_cents' };
+        out.referral_discount_cents = Math.round(n);
+      }
+    }
+    if ('referred_by_tenant_id' in values) {
+      if (values.referred_by_tenant_id === null || values.referred_by_tenant_id === '') {
+        out.referred_by_tenant_id = null;
+      } else if (!isUuid(values.referred_by_tenant_id)) {
+        return { error: 'invalid_uuid', field: 'referred_by_tenant_id' };
+      } else {
+        out.referred_by_tenant_id = values.referred_by_tenant_id;
+      }
+    }
+    if ('kyc_completed_at' in values) {
+      out.kyc_completed_at = values.kyc_completed_at || null;
+    }
+    if ('kyc_completed_by' in values) {
+      out.kyc_completed_by = mapping.application_user_id;
+    }
+    if (out.referral_code != null) out.referral_code = String(out.referral_code).toUpperCase();
+    delete out.partner_code;
     if (out.moov_environment != null) {
       const env = String(out.moov_environment).toLowerCase();
       if (env !== 'sandbox' && env !== 'production') {
@@ -612,8 +655,14 @@ export const executeTenantsNarrow = async ({ client, mapping, op = 'update', val
   const casts = {
     is_test_account: 'boolean',
     is_founding_partner: 'boolean',
+    per_check_billing_enabled: 'boolean',
     max_checks_per_month: 'int',
     monthly_rate_cents: 'int',
+    per_check_rate_cents: 'int',
+    referral_discount_cents: 'int',
+    referred_by_tenant_id: 'uuid',
+    kyc_completed_at: 'timestamptz',
+    kyc_completed_by: 'uuid',
   };
   const built = buildSet(out, casts);
   built.params.push(id);
@@ -923,6 +972,229 @@ export const executeCashJobAttachments = async ({ client, mapping, op, values, f
   return { error: 'operation_not_allowlisted', op };
 };
 
+export const executeTenantBillingAccounts = async ({ client, mapping, op, values, filters }) => {
+  const platformOwner = await isPlatformOwnerActor(client);
+  const tenantId = values.tenant_id || eqFilter(filters, 'tenant_id');
+  const id = eqFilter(filters, 'id');
+  let targetTenant = tenantId;
+  if (id && isUuid(id)) {
+    const existing = (await client.query(
+      'SELECT id, tenant_id FROM public.tenant_billing_accounts WHERE id = $1::uuid',
+      [id],
+    )).rows[0];
+    if (!existing) return { error: 'rls_denied', message: 'billing account not found' };
+    targetTenant = existing.tenant_id;
+  }
+  if (!isUuid(targetTenant)) return { error: 'invalid_uuid', field: 'tenant_id' };
+  if (!platformOwner && !(await memberOfTenant(client, mapping.application_user_id, targetTenant))) {
+    return { error: 'not_authorized', message: 'Not authorized for this tenant billing account' };
+  }
+
+  const out = { tenant_id: targetTenant };
+  if ('stakeholder_account_id' in values) {
+    if (values.stakeholder_account_id === null || values.stakeholder_account_id === '') {
+      out.stakeholder_account_id = null;
+    } else if (!isUuid(values.stakeholder_account_id)) {
+      return { error: 'invalid_uuid', field: 'stakeholder_account_id' };
+    } else {
+      out.stakeholder_account_id = values.stakeholder_account_id;
+    }
+  }
+  if ('auto_debit_enabled' in values) {
+    out.auto_debit_enabled = values.auto_debit_enabled === true || values.auto_debit_enabled === 'true';
+  }
+  if ('ach_authorized_at' in values) out.ach_authorized_at = values.ach_authorized_at || null;
+  if ('nickname' in values) {
+    const text = clip(values.nickname, 120);
+    if (text?.error) return text;
+    out.nickname = text;
+  }
+
+  if (op === 'update') {
+    const built = buildSet(out, {
+      tenant_id: 'uuid',
+      stakeholder_account_id: 'uuid',
+      auto_debit_enabled: 'boolean',
+      ach_authorized_at: 'timestamptz',
+    });
+    if (!built.sets.length) return { error: 'missing_required_field', field: 'values' };
+    if (id && isUuid(id)) {
+      built.params.push(id);
+      const rows = (await client.query(
+        `UPDATE public.tenant_billing_accounts SET ${built.sets.join(', ')}, updated_at = now()
+         WHERE id = $${built.next}::uuid RETURNING *`,
+        built.params,
+      )).rows;
+      if (!rows.length) return { error: 'rls_denied', message: 'billing account not writable' };
+      return { rows };
+    }
+    built.params.push(targetTenant);
+    const rows = (await client.query(
+      `UPDATE public.tenant_billing_accounts SET ${built.sets.join(', ')}, updated_at = now()
+       WHERE tenant_id = $${built.next}::uuid RETURNING *`,
+      built.params,
+    )).rows;
+    if (!rows.length) return { error: 'rls_denied', message: 'billing account not writable' };
+    return { rows };
+  }
+
+  if (op !== 'insert') return { error: 'operation_not_allowlisted', op };
+  const existing = (await client.query(
+    'SELECT id FROM public.tenant_billing_accounts WHERE tenant_id = $1::uuid LIMIT 1',
+    [targetTenant],
+  )).rows[0];
+  if (existing) {
+    const built = buildSet(out, {
+      tenant_id: 'uuid',
+      stakeholder_account_id: 'uuid',
+      auto_debit_enabled: 'boolean',
+      ach_authorized_at: 'timestamptz',
+    });
+    built.params.push(existing.id);
+    const rows = (await client.query(
+      `UPDATE public.tenant_billing_accounts SET ${built.sets.join(', ')}, updated_at = now()
+       WHERE id = $${built.next}::uuid RETURNING *`,
+      built.params,
+    )).rows;
+    return { rows };
+  }
+  // Link-only insert: required ACH number columns stay unused placeholders so
+  // the tenant's verified stakeholder account can be selected without storing
+  // a second set of routing/account numbers.
+  const rows = (await client.query(
+    `INSERT INTO public.tenant_billing_accounts (
+       tenant_id, stakeholder_account_id, auto_debit_enabled, ach_authorized_at,
+       ach_authorized_by, nickname, account_holder_name, routing_number,
+       account_number_last4, account_number_encrypted
+     ) VALUES (
+       $1::uuid, $2::uuid, $3::boolean, $4::timestamptz,
+       $5::uuid, $6::text, 'Linked stakeholder account', '000000000',
+       '0000', 'stakeholder-linked'
+     ) RETURNING *`,
+    [
+      targetTenant,
+      out.stakeholder_account_id || null,
+      out.auto_debit_enabled !== false,
+      out.ach_authorized_at || new Date().toISOString(),
+      mapping.application_user_id,
+      out.nickname || null,
+    ],
+  )).rows;
+  return { rows };
+};
+
+export const executePlatformAnnouncements = async ({ client, mapping, op, values, filters }) => {
+  if (!(await isPlatformOwnerActor(client))) {
+    return { error: 'not_authorized', message: 'Platform owner required to manage announcements' };
+  }
+  if (op === 'delete') {
+    const id = eqFilter(filters, 'id');
+    if (!isUuid(id)) return { error: 'invalid_uuid', field: 'id' };
+    const rows = (await client.query(
+      'DELETE FROM public.platform_announcements WHERE id = $1::uuid RETURNING *',
+      [id],
+    )).rows;
+    return { rows };
+  }
+  const out = {};
+  for (const [col, max] of [
+    ['title', 200], ['message', 4000], ['severity', 40], ['refresh_instructions', 2000],
+  ]) {
+    if (col in values) {
+      const text = clip(values[col], max);
+      if (text?.error) return text;
+      out[col] = text;
+    }
+  }
+  if ('is_active' in values) out.is_active = values.is_active === true || values.is_active === 'true';
+  for (const col of ['starts_at', 'ends_at', 'scheduled_start', 'scheduled_end']) {
+    if (col in values) out[col] = values[col] || null;
+  }
+  if (op === 'insert') {
+    if (!out.title || !out.message) return { error: 'missing_required_field', field: 'title|message' };
+    const rows = (await client.query(
+      `INSERT INTO public.platform_announcements (
+         title, message, severity, is_active, starts_at, ends_at,
+         scheduled_start, scheduled_end, refresh_instructions, created_by
+       ) VALUES (
+         $1, $2, $3, $4, $5::timestamptz, $6::timestamptz,
+         $7::timestamptz, $8::timestamptz, $9, $10::uuid
+       ) RETURNING *`,
+      [
+        out.title,
+        out.message,
+        out.severity || 'info',
+        out.is_active !== false,
+        out.starts_at || new Date().toISOString(),
+        out.ends_at || null,
+        out.scheduled_start || null,
+        out.scheduled_end || null,
+        out.refresh_instructions || null,
+        mapping.application_user_id,
+      ],
+    )).rows;
+    return { rows };
+  }
+  if (op !== 'update') return { error: 'operation_not_allowlisted', op };
+  const id = eqFilter(filters, 'id');
+  if (!isUuid(id)) return { error: 'invalid_uuid', field: 'id' };
+  const built = buildSet(out, {
+    is_active: 'boolean',
+    starts_at: 'timestamptz',
+    ends_at: 'timestamptz',
+    scheduled_start: 'timestamptz',
+    scheduled_end: 'timestamptz',
+  });
+  if (!built.sets.length) return { error: 'missing_required_field', field: 'values' };
+  built.params.push(id);
+  const rows = (await client.query(
+    `UPDATE public.platform_announcements SET ${built.sets.join(', ')}, updated_at = now()
+     WHERE id = $${built.next}::uuid RETURNING *`,
+    built.params,
+  )).rows;
+  if (!rows.length) return { error: 'rls_denied', message: 'announcement not writable' };
+  return { rows };
+};
+
+export const executeGlbaSecurityEvents = async ({ client, mapping, op, values }) => {
+  if (op !== 'insert') return { error: 'operation_not_allowlisted', op };
+  const tenantId = values.tenant_id || null;
+  if (tenantId && !isUuid(tenantId)) return { error: 'invalid_uuid', field: 'tenant_id' };
+  const platformOwner = await isPlatformOwnerActor(client);
+  if (tenantId && !platformOwner && !(await memberOfTenant(client, mapping.application_user_id, tenantId))) {
+    return { error: 'not_authorized', message: 'Not authorized to record events for this tenant' };
+  }
+  if (!tenantId && !platformOwner) {
+    return { error: 'not_authorized', message: 'Platform owner or tenant member required' };
+  }
+  const eventType = clip(values.event_type, 80);
+  if (eventType?.error || !eventType) {
+    return eventType?.error || { error: 'missing_required_field', field: 'event_type' };
+  }
+  const description = clip(values.description, 2000);
+  if (description?.error) return description;
+  const severity = clip(values.severity || 'info', 40);
+  if (severity?.error) return severity;
+  const metadata = values.metadata && typeof values.metadata === 'object'
+    ? values.metadata
+    : {};
+  const rows = (await client.query(
+    `INSERT INTO public.glba_security_events (
+       tenant_id, event_type, actor_user_id, metadata, description, severity
+     ) VALUES ($1::uuid, $2::text, $3::uuid, $4::jsonb, $5::text, $6::text)
+     RETURNING *`,
+    [
+      tenantId,
+      eventType,
+      mapping.application_user_id,
+      JSON.stringify(metadata || {}),
+      description,
+      severity,
+    ],
+  )).rows;
+  return { rows };
+};
+
 export const executeAppMetadataWrite = async ({ client, mapping, table, op, values, filters }) => {
   switch (table) {
     case 'notifications':
@@ -959,6 +1231,12 @@ export const executeAppMetadataWrite = async ({ client, mapping, table, op, valu
       return executeCashJobAttachments({ client, mapping, op, values, filters });
     case 'homeowner_ledger_events':
       return executeHomeownerLedgerEvents({ client, mapping, values });
+    case 'tenant_billing_accounts':
+      return executeTenantBillingAccounts({ client, mapping, op, values, filters });
+    case 'platform_announcements':
+      return executePlatformAnnouncements({ client, mapping, op, values, filters });
+    case 'glba_security_events':
+      return executeGlbaSecurityEvents({ client, mapping, op, values });
     default:
       return { error: 'table_not_allowlisted', table };
   }
