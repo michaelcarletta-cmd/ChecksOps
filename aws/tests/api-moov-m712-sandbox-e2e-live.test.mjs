@@ -171,6 +171,7 @@ test('M7.12 runner never arms production, overlays API, or POSTs payout after fu
   assert.match(src, /m712PayoutOperationId/);
   assert.match(src, /setSandboxPostFlag\('false'\)/);
   assert.match(src, /refused_production_post_armed/);
+  assert.match(src, /already_posted/);
   assert.doesNotMatch(src, /AWS_MOOV_TRANSFER_POST_ENABLED': 'true'/);
   assert.doesNotMatch(src, /update-function-code[\s\S]{0,120}API_FN/);
   assert.doesNotMatch(src, /overlayApi/);

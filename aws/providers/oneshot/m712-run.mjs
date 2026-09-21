@@ -373,7 +373,8 @@ const main = async () => {
     throw new Error('refused_production_post_armed');
   }
   if (flagsStart.flags.AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED === 'true') {
-    throw new Error('refused_sandbox_post_already_armed');
+    setSandboxPostFlag('false');
+    flagsStart = lambdaFlags();
   }
   const parsed = JSON.parse(awsJson([
     'secretsmanager', 'get-secret-value',
@@ -438,8 +439,7 @@ const main = async () => {
     && (capEnabled(collectFunds) || capEnabled(collectFundsAch))
     && (capEnabled(sendFunds) || capEnabled(sendFundsAch))
     && recipientReady
-    && liveAvailable != null
-    && (existingOp.rows || []).length === 0;
+    && liveAvailable != null;
 
   const labels = {
     fund: {
@@ -605,6 +605,9 @@ const main = async () => {
     && (listedDark.operationPayout || 0) <= 1
     && flagsStart.flags.AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED !== 'true';
 
+  const alreadyPosted = [...(listedDark.fundingRows || []), ...(listedDark.payoutRows || [])]
+    .some((row) => row.provider_transfer_id);
+
   if (!darkOk) {
     stop({
       'LIVE WALLET AVAILABLE': String(liveAvailable),
@@ -612,8 +615,8 @@ const main = async () => {
       SHORTFALL: String(shortfall),
       'INITIAL DECISION': initialDecision,
       PAYOUT_OPERATION_ID: dark.payout_operation_id || OPERATION,
-      FUNDING_INTENT_ID: listedDark.funding?.[0]?.id || 'none',
-      PAYOUT_INTENT_ID: listedDark.payout?.[0]?.id || 'none',
+      FUNDING_INTENT_ID: listedDark.fundingRows?.[0]?.id || 'none',
+      PAYOUT_INTENT_ID: listedDark.payoutRows?.[0]?.id || 'none',
       'DARK RESULT': dark.error || dark.decision || 'failed',
       'DUPLICATE OPERATION': String(darkReplay.payout_operation_id !== dark.payout_operation_id),
       'DUPLICATE FUNDING INTENT': String((listedDark.operationFunding || 0) > 1),
@@ -630,21 +633,30 @@ const main = async () => {
   let live = null;
   let disarmed = null;
   try {
-    armed = setSandboxPostFlag('true');
-    if (armed.flags.AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED !== 'true') {
-      throw new Error('sandbox_post_not_armed');
+    if (alreadyPosted) {
+      live = await executeSandboxPayoutE2e({
+        ...orchBase,
+        transferPostEnabled: false,
+        productionTransferPostEnabled: false,
+      });
+      armed = { skipped: 'already_posted', flags: flagsStart.flags, changed: [] };
+    } else {
+      armed = setSandboxPostFlag('true');
+      if (armed.flags.AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED !== 'true') {
+        throw new Error('sandbox_post_not_armed');
+      }
+      if (armed.flags.AWS_MOOV_TRANSFER_POST_ENABLED === 'true') {
+        throw new Error('production_post_armed');
+      }
+      if (armed.changed.some((key) => key !== 'AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED')) {
+        throw new Error(`other_env_changes:${armed.changed.join(',')}`);
+      }
+      live = await executeSandboxPayoutE2e({
+        ...orchBase,
+        transferPostEnabled: true,
+        productionTransferPostEnabled: false,
+      });
     }
-    if (armed.flags.AWS_MOOV_TRANSFER_POST_ENABLED === 'true') {
-      throw new Error('production_post_armed');
-    }
-    if (armed.changed.some((key) => key !== 'AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED')) {
-      throw new Error(`other_env_changes:${armed.changed.join(',')}`);
-    }
-    live = await executeSandboxPayoutE2e({
-      ...orchBase,
-      transferPostEnabled: true,
-      productionTransferPostEnabled: false,
-    });
   } finally {
     try { disarmed = setSandboxPostFlag('false'); } catch { /* still report */ }
   }
@@ -662,8 +674,8 @@ const main = async () => {
     pendingCents: amountCentsOf(row.pendingBalance ?? row.pending),
   })).find((row) => String(row.id).toLowerCase() === SANDBOX_WALLET) || wallet;
 
-  const fundingRow = listedLive.funding?.[0] || null;
-  const payoutRow = listedLive.payout?.[0] || null;
+  const fundingRow = listedLive.fundingRows?.[0] || null;
+  const payoutRow = listedLive.payoutRows?.[0] || null;
   const platformTransfers = await getJson(credentials, `/accounts/${SANDBOX_PLATFORM}/transfers`, moovSandboxScopes.transfersRead(SANDBOX_PLATFORM));
   const transferRows = asList(platformTransfers.data).map(summarizeTransfer);
   const fundingTransfers = transferRows.filter((row) => (
@@ -684,11 +696,13 @@ const main = async () => {
     liveAvailableCents: walletAfter?.availableCents ?? liveAvailable,
     transferPostEnabled: false,
     productionTransferPostEnabled: false,
-    existingRows: [...(listedLive.funding || []), ...(listedLive.payout || [])].map(mapIntent),
+    existingRows: [...(listedLive.fundingRows || []), ...(listedLive.payoutRows || [])].map(mapIntent),
   });
 
-  const fundingPosted = live?.funding_provider_posts === 1;
-  const payoutPosted = live?.payout_provider_posts === 1;
+  const fundingPostedThisRun = live?.funding_provider_posts === 1;
+  const payoutPostedThisRun = live?.payout_provider_posts === 1;
+  const fundingPosted = fundingPostedThisRun || Boolean(fundingRow?.provider_transfer_id);
+  const payoutPosted = payoutPostedThisRun || Boolean(payoutRow?.provider_transfer_id);
   const isolated = flagsEnd.flags.AWS_MOOV_TRANSFER_POST_ENABLED !== 'true'
     && flagsEnd.flags.AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED !== 'true'
     && verifyTenant.freedomEnvironment === 'production';
@@ -730,7 +744,7 @@ const main = async () => {
     'SANDBOX POST FLAG DISARMED': String(flagsEnd.flags.AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED !== 'true'),
     'FUNDING TRANSFER COUNT': String(fundingTransfers.length || (fundingRow?.provider_transfer_id ? 1 : 0)),
     'PAYOUT TRANSFER COUNT': String(payoutTransfers.length || (payoutRow?.provider_transfer_id ? 1 : 0)),
-    'SECOND POST': String(((live?.funding_provider_posts || 0) + (live?.payout_provider_posts || 0)) > 1),
+    'SECOND POST': String(((live?.funding_provider_posts || 0) + (live?.payout_provider_posts || 0)) > 1 || alreadyPosted && (fundingPostedThisRun || payoutPostedThisRun)),
     'PRODUCTION TRANSFER': String((listedLive.recentProduction || 0) > 0),
     'FREEDOM CHANGED': String(verifyTenant.freedomEnvironment !== 'production'),
     'SWEEP CHANGED': String(listedLive.sweep?.changed === true),
