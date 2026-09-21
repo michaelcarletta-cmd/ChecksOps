@@ -402,7 +402,8 @@ test('production wrapper uses shared orchestratePayout and never requireTotp:fal
   assert.match(e2e, /executeProductionWalletFunding/);
   assert.match(e2e, /executeProductionWalletDisbursement/);
   assert.doesNotMatch(primitives, /orchestratePayout/);
-  assert.doesNotMatch(dispatch, /moov-production-payout-e2e/);
+  assert.match(dispatch, /moov-production-payout-e2e/);
+  assert.match(dispatch, /refuseIndependentMustKeepInvocation/);
   assert.equal(existsSync(path.join(ROOT, 'functions/api/providers/production/moov-wallet-fund.mjs')), false);
   assert.equal(existsSync(path.join(ROOT, 'functions/api/providers/production/moov-wallet-disburse.mjs')), false);
   const general = evaluateFinancialAuthorization({

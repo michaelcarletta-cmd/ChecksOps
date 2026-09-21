@@ -64,7 +64,7 @@ export const PROVIDER_FUNCTIONS = [
   fn('moov-transfer-create', 'moov', OP_CLASS.MONEY_MOVEMENT, 'sandbox_parity', 'Creates ACH/RTP/wallet transfer.'),
   fn('moov-transfer-status', 'moov', OP_CLASS.READ_STATUS, 'sandbox_parity', 'Sandbox: GET facilitator transfer write-back. Production: GET-only reconcile of existing payment_transfers; never POST; never INSERT intents.'),
   fn('moov-payout-orchestrate', 'moov', OP_CLASS.READ_STATUS, 'sandbox_parity', 'M7.7/M7.11/M7.12 environment-aware payout plan. Pipeline Test sandbox e2e engine is moov-sandbox-payout-e2e. HTTP handler never POSTs while POST flags are false. Never INSERTs payment_transfers from this handler.'),
-  fn('moov-production-payout-e2e', 'moov', OP_CLASS.MONEY_MOVEMENT, 'git_prepared_not_deployed', 'M7.14 Freedom production e2e wrapper. Shared orchestratePayout. HTTP not registered this phase. MUST_KEEP fund/disburse writers are primitives only. Never POSTs while AWS_MOOV_TRANSFER_POST_ENABLED is false. CONSUME_TOTP_THIS_PHASE false.'),
+  fn('moov-production-payout-e2e', 'moov', OP_CLASS.MONEY_MOVEMENT, 'dark_deployed', 'M7.15 Freedom production e2e wrapper. Shared orchestratePayout. Dark HTTP only: persist off, POST off, TOTP not consumed. MUST_KEEP fund/disburse writers are blocked from independent invocation.'),
   fn('moov-tenant-environment', 'moov', OP_CLASS.CONFIG_ADMIN, 'sandbox_parity', 'Tenant-level Moov sandbox/production switch. Dedicated server handler with confirm + audit. Does not migrate provider objects.'),
   fn('moov-transfer-group-create', 'moov', OP_CLASS.MONEY_MOVEMENT, 'sandbox_parity', 'Creates grouped transfers.'),
   fn('moov-disburse', 'moov', OP_CLASS.DISBURSEMENT, 'sandbox_parity', 'Executes disbursement splits.'),
