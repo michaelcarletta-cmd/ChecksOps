@@ -57,6 +57,8 @@ test('M7.10A runner is GET-only for the existing payout and never posts or arms 
   assert.match(src, /verify_payout_intent/);
   assert.match(src, /webhook_receipts/);
   assert.match(src, /pendingStop/);
+  assert.match(src, /false \(GET recon\)/);
+  assert.match(src, /readbackOnly/);
   assert.match(src, /STOP FOR REVIEW/);
   assert.match(src, /Do not POST anything/);
   assert.match(src, /PAYOUT FULLY RECONCILED/);

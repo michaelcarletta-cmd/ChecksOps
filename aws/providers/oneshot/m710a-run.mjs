@@ -440,15 +440,16 @@ const main = async () => {
   const uniqueFunding = fundingRows.length === 1 && String(fundingRows[0]?.id || '').toLowerCase() === FUNDING_TRANSFER_ID;
   const fundingBefore = snapshotOf(diagnoseFundingBefore.intent);
   const payoutIntentBefore = diagnosePayoutBefore.intent || verifyBefore.intent || null;
+  const readbackOnly = process.argv[2] === 'readback';
 
   let recon = {
     ok: true,
-    skipped: PENDING.has(moovStatus) ? 'pending' : null,
+    skipped: readbackOnly ? 'readback' : (PENDING.has(moovStatus) ? 'pending' : null),
     createdPaymentTransfer: false,
     liveProviderPosted: false,
     fundingUnchanged: true,
   };
-  if (moovStatus === 'completed') {
+  if (!readbackOnly && moovStatus === 'completed') {
     if (!moovCompletedAt) throw new Error('provider_completed_on_missing');
     recon = invokeOneshot({
       step: 'reconcile_payout_parity',
@@ -462,7 +463,7 @@ const main = async () => {
       pendingCents: walletPending,
     });
     if (recon?.ok !== true) throw new Error(`payout_recon_failed:${recon?.error || 'unknown'}`);
-  } else if (FAILED.has(moovStatus)) {
+  } else if (!readbackOnly && FAILED.has(moovStatus)) {
     recon = invokeOneshot({
       step: 'reconcile_payout_parity',
       tenantId: PIPELINE,
@@ -509,12 +510,11 @@ const main = async () => {
     && String(fundingAfter?.status || '').toLowerCase() === 'completed';
   const receipts = [...(receiptsAfter.rows || []), ...(receiptsBefore.rows || []), ...(diagnosePayoutAfter.transferIdReceipts || [])];
   const receipt = receipts[0] || null;
-  const appliedEvent = (diagnosePayoutAfter.events || []).find((row) => (
+  const getReconEvent = (diagnosePayoutAfter.events || []).find((row) => (
     String(row.provider_transfer_id || '').toLowerCase() === PAYOUT_TRANSFER_ID
-    && ['completed', 'failed', 'returned', 'canceled'].includes(String(row.new_status || '').toLowerCase())
+    && String(row.event_type || '') === 'moov.parity_fill'
   ));
-  const webhookApplied = Boolean(receipt && receipt.dry_run === false && appliedEvent)
-    || (moovStatus === 'completed' && recon.skipped == null && String(intent?.status || '').toLowerCase() === 'completed' && appliedEvent);
+  const webhookApplied = Boolean(receipt && receipt.dry_run === false);
   const isolated = intent?.id === PAYOUT_INTENT_ID
     && intent?.environment === 'sandbox'
     && String(intent?.provider_transfer_id || '').toLowerCase() === PAYOUT_TRANSFER_ID
@@ -561,9 +561,7 @@ const main = async () => {
     'WEBHOOK RECEIPT': receipt?.id || receipt?.external_event_id || (receipts.length ? String(receipts.length) : 'none'),
     'WEBHOOK APPLIED': webhookApplied
       ? 'true'
-      : (pendingStop
-        ? 'false'
-        : (moovStatus === 'completed' ? 'false (GET recon)' : 'false')),
+      : (moovStatus === 'completed' && getReconEvent ? 'false (GET recon)' : 'false'),
     'WALLET AVAILABLE': String(walletAvailable),
     'WALLET PENDING': String(walletPending),
     'PAYOUT TRANSFER COUNT': String(payouts.length),
@@ -616,7 +614,14 @@ const main = async () => {
     receipts: {
       count: receipts.length,
       ids: receipts.map((row) => row.id || row.external_event_id),
-      applied: webhookApplied,
+      webhookApplied,
+      getReconEvent: getReconEvent ? {
+        id: getReconEvent.id,
+        event_type: getReconEvent.event_type,
+        previous_status: getReconEvent.previous_status,
+        new_status: getReconEvent.new_status,
+        created_at: getReconEvent.created_at,
+      } : null,
     },
     recon: {
       ok: recon.ok,
