@@ -2425,6 +2425,322 @@ const inspectFreedomProduction = async (client) => {
   };
 };
 
+const M716_OPERATION_ID = '534bfe2d-6bd9-5f78-a367-61e66e7ed33a';
+const M716_FUNDING_KEY = `checksops:m77:wallet_funding:env:production:op:${M716_OPERATION_ID}:cents:1`;
+const PROD_ACCOUNT = '60922058-7eca-4889-81dd-5720d7b9de96';
+const PROD_WALLET = '3e6286ca-a19c-45f6-aad9-f73dac5f0358';
+const PROD_BANK = '61062c38-a79e-4f62-bb64-32ddecf3d37c';
+const PROD_FUND_PM = 'a02c1c81-9ca6-434d-accc-ea4471a70ef2';
+const PROD_WALLET_PM = '744ea734-f5e3-4b31-bb92-38f85fd29b91';
+
+const inspectM716PhaseA = async (client, body = {}) => {
+  const operationId = String(body.payoutOperationId || M716_OPERATION_ID);
+  const idempotencyKey = String(body.idempotencyKey || M716_FUNDING_KEY);
+  const freedom = await freedomRow(client);
+  const objects = await tenantObjects(client, FREEDOM, 'production');
+  const fundingBank = (objects.banks || []).find((row) => String(row.provider_bank_account_id || '').toLowerCase() === PROD_BANK);
+  const fundPm = (objects.banks || []).find((row) => String(row.provider_payment_method_id || '').toLowerCase() === PROD_FUND_PM);
+  const walletPm = (objects.banks || []).find((row) => String(row.provider_payment_method_id || '').toLowerCase() === PROD_WALLET_PM);
+  const operationRows = (await client.query(
+    `SELECT id, tenant_id, environment, status, leg_role, amount_cents, idempotency_key,
+            provider_transfer_id, provider_status, completed_at, failure_reason,
+            source_tenant_account_id, description, created_at, provider_metadata
+       FROM public.payment_transfers
+      WHERE tenant_id = $1::uuid
+        AND environment = 'production'
+        AND (
+          idempotency_key = $2
+          OR COALESCE(provider_metadata->>'payout_operation_id', '') = $3
+        )
+      ORDER BY created_at DESC NULLS LAST`,
+    [FREEDOM, idempotencyKey, operationId],
+  )).rows;
+  const fundingRows = operationRows.filter((row) => String(row.leg_role || '') === 'wallet_funding');
+  const payoutRows = operationRows.filter((row) => String(row.leg_role || '') === 'wallet_disbursement');
+  const conflicting = fundingRows.filter((row) => ['pending', 'submitting', 'submitted', 'unknown', 'processing'].includes(String(row.status || '').toLowerCase())
+    || String(row.provider_status || '').toLowerCase() === 'unknown');
+  const posted = fundingRows.filter((row) => row.provider_transfer_id);
+  const owners = (await client.query(
+    `SELECT tu.user_id, tu.role, p.email, p.full_name
+       FROM public.tenant_users tu
+       LEFT JOIN public.profiles p ON p.id = tu.user_id
+      WHERE tu.tenant_id = $1::uuid
+      ORDER BY tu.role`,
+    [FREEDOM],
+  )).rows;
+  const stepups = (await client.query(
+    `SELECT id, user_id, tenant_id, action_key, succeeded, metadata, created_at
+       FROM public.financial_stepup_log
+      WHERE tenant_id = $1::uuid
+        AND user_id = $2::uuid
+        AND action_key = 'wallet.fund'
+        AND succeeded IS TRUE
+        AND created_at >= now() - interval '30 minutes'
+        AND COALESCE(metadata->>'consumed_at', '') = ''
+      ORDER BY created_at DESC
+      LIMIT 10`,
+    [FREEDOM, ACTOR],
+  )).rows.map((row) => ({
+    id: row.id,
+    user_id: row.user_id,
+    tenant_id: row.tenant_id,
+    action_key: row.action_key,
+    succeeded: row.succeeded,
+    amount_cents: row.metadata?.amount_cents ?? null,
+    source_payment_method_id: row.metadata?.source_payment_method_id || null,
+    destination_payment_method_id: row.metadata?.destination_payment_method_id || null,
+    created_at: row.created_at,
+  }));
+  const sweep = await sweepUnchanged(client);
+  return {
+    ok: freedom?.moov_environment === 'production',
+    createdPaymentTransfer: false,
+    liveProviderPosted: false,
+    freedom,
+    objects: {
+      account: objects.account?.provider_account_id || null,
+      wallet: objects.wallet?.provider_wallet_id || null,
+      walletLocalId: objects.wallet?.id || null,
+      fundingBankLocalId: fundingBank?.id || null,
+      fundingBank: fundingBank?.provider_bank_account_id || null,
+      fundingBankStatus: fundingBank?.verification_status || null,
+      fundPm: fundPm?.provider_payment_method_id || fundPm?.provider_payment_method_id || null,
+      fundPmLocalId: fundPm?.id || fundingBank?.id || null,
+      walletPm: walletPm?.provider_payment_method_id || null,
+      walletPmLocalId: walletPm?.id || null,
+    },
+    operationId,
+    idempotencyKey,
+    operationRows,
+    fundingRows,
+    payoutRows,
+    fundingIntentCount: fundingRows.length,
+    payoutIntentCount: payoutRows.length,
+    conflictingFunding: conflicting,
+    postedFunding: posted,
+    owners,
+    walletFundStepups: stepups,
+    sweep,
+    sweepUnchanged: true,
+  };
+};
+
+const persistProductionFundingIntent = async (client, body = {}) => {
+  if (body.leg_role && body.leg_role !== 'wallet_funding') return fail('payout_intent_refused_phase_a');
+  const tenantId = body.tenantId || FREEDOM;
+  if (tenantId !== FREEDOM) return fail('refused_non_freedom_tenant', { tenantId });
+  const freedom = await freedomRow(client);
+  if (!freedom || freedom.moov_environment !== 'production') {
+    return fail('tenant_not_production', { environment: freedom?.moov_environment || null });
+  }
+  const operationId = String(body.payoutOperationId || M716_OPERATION_ID);
+  const idempotencyKey = String(body.idempotencyKey || M716_FUNDING_KEY);
+  if (operationId !== M716_OPERATION_ID) return fail('unexpected_operation', { operationId });
+  if (idempotencyKey !== M716_FUNDING_KEY) return fail('unexpected_idempotency', { idempotencyKey });
+  if (Number(body.amountCents || 1) !== 1) return fail('amount_not_one_cent');
+  if (String(body.leg_role || 'wallet_funding') === 'wallet_disbursement') {
+    return fail('payout_intent_refused_phase_a');
+  }
+  const objects = await tenantObjects(client, FREEDOM, 'production');
+  if (String(objects.account?.provider_account_id || '').toLowerCase() !== PROD_ACCOUNT) {
+    return fail('production_account_mismatch');
+  }
+  if (String(objects.wallet?.provider_wallet_id || '').toLowerCase() !== PROD_WALLET) {
+    return fail('production_wallet_mismatch');
+  }
+  const fundingBank = (objects.banks || []).find((row) => String(row.provider_bank_account_id || '').toLowerCase() === PROD_BANK);
+  const fundPm = (objects.banks || []).find((row) => String(row.provider_payment_method_id || '').toLowerCase() === PROD_FUND_PM);
+  const walletPm = (objects.banks || []).find((row) => String(row.provider_payment_method_id || '').toLowerCase() === PROD_WALLET_PM);
+  if (!fundingBank) return fail('production_bank_unlinked');
+  const sourceMethodLocalId = fundPm?.id || fundingBank.id;
+  const existing = (await client.query(
+    `SELECT * FROM public.payment_transfers
+      WHERE tenant_id = $1::uuid AND idempotency_key = $2 LIMIT 1`,
+    [FREEDOM, idempotencyKey],
+  )).rows[0] || null;
+  const inspectedBefore = await inspectM716PhaseA(client, { payoutOperationId: operationId, idempotencyKey });
+  if ((inspectedBefore.payoutIntentCount || 0) > 0) return fail('payout_intent_present');
+  if ((inspectedBefore.postedFunding || []).length && !existing) {
+    return fail('existing_funding_provider_transfer');
+  }
+  if ((inspectedBefore.conflictingFunding || []).length && !existing) {
+    return fail('conflicting_pending_or_unknown_funding');
+  }
+  if (existing) {
+    return {
+      ok: true,
+      reused: true,
+      created: false,
+      intent: existing,
+      ...inspectedBefore,
+    };
+  }
+  const metadata = {
+    phase: 'M7.16',
+    payout_operation_id: operationId,
+    environment: 'production',
+    account_id: PROD_ACCOUNT,
+    wallet_id: PROD_WALLET,
+    bank_id: PROD_BANK,
+    source_payment_method_id: PROD_FUND_PM,
+    destination_payment_method_id: PROD_WALLET_PM,
+    provider_idempotency_key: body.providerIdempotencyKey || null,
+    post_attempted: false,
+    ...(body.providerMetadata || {}),
+    payout_operation_id: operationId,
+    phase: 'M7.16',
+  };
+  let inserted;
+  try {
+    inserted = (await client.query(
+      `INSERT INTO public.payment_transfers (
+          tenant_id, provider, environment, status, idempotency_key, amount_cents,
+          platform_fee_cents, net_amount_cents, speed, description,
+          source_tenant_account_id, source_payment_method_id,
+          wallet_id, leg_role, provider_metadata, created_by
+        ) VALUES (
+          $1::uuid, 'moov', 'production', 'planned', $2, 1,
+          0, 1, 'standard', $3,
+          $4, $5::uuid, $6::uuid, 'wallet_funding', $7::jsonb, $8::uuid
+        )
+        RETURNING *`,
+      [
+        FREEDOM,
+        idempotencyKey,
+        'M7.16 production BANK to WALLET 0.01',
+        PROD_ACCOUNT,
+        sourceMethodLocalId,
+        objects.wallet.id,
+        JSON.stringify(metadata),
+        ACTOR,
+      ],
+    )).rows[0];
+  } catch (error) {
+    if (String(error?.code) === '23505') {
+      const raced = (await client.query(
+        `SELECT * FROM public.payment_transfers
+          WHERE tenant_id = $1::uuid AND idempotency_key = $2 LIMIT 1`,
+        [FREEDOM, idempotencyKey],
+      )).rows[0];
+      return { ok: true, reused: true, created: false, intent: raced, cas: 'reuse' };
+    }
+    throw error;
+  }
+  const inspected = await inspectM716PhaseA(client, { payoutOperationId: operationId, idempotencyKey });
+  return {
+    ok: true,
+    reused: false,
+    created: true,
+    intent: inserted,
+    cas: 'insert',
+    payoutCreated: false,
+    liveProviderPosted: false,
+    ...inspected,
+  };
+};
+
+const updateProductionFundingIntent = async (client, body = {}) => {
+  const idempotencyKey = String(body.idempotencyKey || M716_FUNDING_KEY);
+  const existing = (await client.query(
+    `SELECT * FROM public.payment_transfers
+      WHERE tenant_id = $1::uuid AND environment = 'production'
+        AND idempotency_key = $2 AND leg_role = 'wallet_funding'
+      LIMIT 1`,
+    [FREEDOM, idempotencyKey],
+  )).rows[0];
+  if (!existing) return fail('funding_intent_missing');
+  const meta = {
+    ...(existing.provider_metadata && typeof existing.provider_metadata === 'object' ? existing.provider_metadata : {}),
+    ...(body.providerMetadata || {}),
+  };
+  const updated = (await client.query(
+    `UPDATE public.payment_transfers
+        SET provider_transfer_id = COALESCE($3, provider_transfer_id),
+            provider_status = COALESCE($4, provider_status),
+            status = COALESCE($5, status),
+            failure_reason = COALESCE($6, failure_reason),
+            provider_metadata = $7::jsonb
+      WHERE id = $1::uuid AND tenant_id = $2::uuid AND environment = 'production'
+      RETURNING *`,
+    [
+      existing.id,
+      FREEDOM,
+      body.providerTransferId || null,
+      body.providerStatus || null,
+      body.status || null,
+      body.failureReason || null,
+      JSON.stringify(meta),
+    ],
+  )).rows[0];
+  return { ok: true, intent: updated, liveProviderPosted: false };
+};
+
+const casMarkProductionFundingPostAttempt = async (client, body = {}) => {
+  const idempotencyKey = String(body.idempotencyKey || M716_FUNDING_KEY);
+  const existing = (await client.query(
+    `SELECT * FROM public.payment_transfers
+      WHERE tenant_id = $1::uuid AND environment = 'production'
+        AND idempotency_key = $2 AND leg_role = 'wallet_funding'
+      LIMIT 1`,
+    [FREEDOM, idempotencyKey],
+  )).rows[0];
+  if (!existing) return fail('funding_intent_missing');
+  if (existing.provider_transfer_id) return fail('already_posted', { intent: existing });
+  const meta = existing.provider_metadata && typeof existing.provider_metadata === 'object'
+    ? existing.provider_metadata
+    : {};
+  if (meta.post_attempted === true) return fail('post_already_attempted_unknown', { intent: existing });
+  const updated = (await client.query(
+    `UPDATE public.payment_transfers
+        SET provider_metadata = $3::jsonb
+      WHERE id = $1::uuid AND tenant_id = $2::uuid
+        AND environment = 'production'
+        AND provider_transfer_id IS NULL
+        AND COALESCE(provider_metadata->>'post_attempted', '') <> 'true'
+      RETURNING *`,
+    [
+      existing.id,
+      FREEDOM,
+      JSON.stringify({
+        ...meta,
+        post_attempted: true,
+        post_outcome: 'in_flight',
+        provider_idempotency_key: body.providerIdempotencyKey || meta.provider_idempotency_key || null,
+      }),
+    ],
+  )).rows[0];
+  if (!updated) return fail('cas_lost');
+  return { ok: true, intent: updated, cas: 'post_attempted' };
+};
+
+const consumeWalletFundStepup = async (client, body = {}) => {
+  const stepupId = body.stepupId;
+  if (!stepupId) return fail('stepup_id_required');
+  const updated = (await client.query(
+    `UPDATE public.financial_stepup_log
+        SET metadata = COALESCE(metadata, '{}'::jsonb) || $3::jsonb
+      WHERE id = $1::uuid
+        AND tenant_id = $2::uuid
+        AND user_id = $4::uuid
+        AND action_key = 'wallet.fund'
+        AND succeeded IS TRUE
+        AND COALESCE(metadata->>'consumed_at', '') = ''
+      RETURNING id, user_id, tenant_id, action_key, metadata, created_at`,
+    [
+      stepupId,
+      FREEDOM,
+      JSON.stringify({
+        consumed_at: new Date().toISOString(),
+        consumed_by_intent_id: body.intentId || null,
+        consumed_operation: M716_OPERATION_ID,
+      }),
+      ACTOR,
+    ],
+  )).rows[0];
+  if (!updated) return fail('stepup_not_consumable');
+  return { ok: true, stepup: updated, consumed: true };
+};
+
 export const handler = async (event = {}) => {
   const step = event.step || 'inspect';
   let client;
@@ -2456,6 +2772,11 @@ export const handler = async (event = {}) => {
     if (step === 'list_orchestrator_operation') return await listOrchestratorOperation(client, event);
     if (step === 'reconcile_m712_payout_completed_at') return await reconcileM712PayoutCompletedAt(client, event);
     if (step === 'inspect_freedom_production') return await inspectFreedomProduction(client);
+    if (step === 'inspect_m716_phase_a') return await inspectM716PhaseA(client, event);
+    if (step === 'persist_production_funding_intent') return await persistProductionFundingIntent(client, event);
+    if (step === 'update_production_funding_intent') return await updateProductionFundingIntent(client, event);
+    if (step === 'cas_mark_production_funding_post_attempt') return await casMarkProductionFundingPostAttempt(client, event);
+    if (step === 'consume_wallet_fund_stepup') return await consumeWalletFundStepup(client, event);
     return fail('unknown_step', { step });
   } catch (error) {
     return fail(String(error?.message || error).slice(0, 400), { step });

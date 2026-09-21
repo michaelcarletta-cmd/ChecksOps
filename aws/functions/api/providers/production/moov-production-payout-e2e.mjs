@@ -264,6 +264,9 @@ export async function executeProductionPayoutE2e({
   operationId = null,
   postPhase = 'none',
   independentMustKeepInvocation = false,
+  consumeTotpThisPhase = CONSUME_TOTP_THIS_PHASE,
+  markPostAttempted = null,
+  postTransfer = null,
 } = {}) {
   if (totpCode) return fail('totp_code_refused', { message: 'Cursor must never receive a Financial TOTP code.' });
   if (independentMustKeepInvocation === true) {
@@ -427,11 +430,18 @@ export async function executeProductionPayoutE2e({
       intent: fundingPersist?.intent || plan.funding_intent,
       transferPostEnabled,
       sandboxTransferPostEnabled,
-      persistDone: fundingPersist?.persisted === true,
+      persistDone: fundingPersist?.persisted === true
+        || Boolean(fundingPersist?.intent?.id)
+        || Boolean((existingRows || []).find((row) => (
+          String(row.leg_role || row.kind || '') === 'wallet_funding' && row.id
+        ))),
       orchestratorAllows: plan.funding_post_allowed === true,
       totpPresent: totpFundPresent,
       totpValid: totpFundValid,
+      consumeTotpThisPhase: consumeTotpThisPhase === true,
       fetchImpl,
+      markPostAttempted,
+      postTransfer,
     });
     if (fundingExec?.liveProviderPosted === true) posts.funding += 1;
   }
@@ -479,6 +489,7 @@ export async function executeProductionPayoutE2e({
       orchestratorAllows: plan.payout_submittable === true,
       totpPresent: totpDisbursePresent,
       totpValid: totpDisburseValid,
+      consumeTotpThisPhase: false,
       fetchImpl,
     });
     if (payoutExec?.liveProviderPosted === true) posts.payout += 1;
@@ -542,8 +553,8 @@ export async function executeProductionPayoutE2e({
       || plan.funding_state === 'funding_unknown'
       || plan.payout_state === 'payout_unknown',
     require_totp: true,
-    totp_consumed: false,
-    consume_totp_this_phase: CONSUME_TOTP_THIS_PHASE === true,
+    totp_consumed: consumeTotpThisPhase === true && fundingExec?.liveProviderPosted === true,
+    consume_totp_this_phase: consumeTotpThisPhase === true,
     fund_authz: fundAuthz,
     disburse_authz: disburseAuthz,
     blocked_reasons: plan.blocked_reasons,
