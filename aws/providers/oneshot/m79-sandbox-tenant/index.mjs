@@ -940,6 +940,90 @@ const listSandboxHistory = async (client) => {
   };
 };
 
+const diagnoseFundingReconcile = async (client, body = {}) => {
+  const tenantId = body.tenantId || PIPELINE;
+  const transferId = String(body.transferId || '');
+  const intentId = String(body.intentId || '');
+  if (tenantId === FREEDOM || tenantId === C1C) return fail('refused_production_tenant');
+  if (tenantId !== PIPELINE) return fail('undesignated_tenant', { tenantId });
+  const freedom = await freedomRow(client);
+  const sweep = await sweepUnchanged(client);
+  const objects = await tenantObjects(client, tenantId, 'sandbox');
+  const intent = intentId
+    ? (await client.query(
+      `SELECT * FROM public.payment_transfers
+        WHERE id = $1::uuid AND tenant_id = $2::uuid AND environment = 'sandbox'
+        LIMIT 1`,
+      [intentId, tenantId],
+    )).rows[0] || null
+    : null;
+  const events = (await client.query(
+    `SELECT id, provider, environment, tenant_id, transfer_id, provider_transfer_id,
+            event_type, previous_status, new_status, created_at
+       FROM public.payment_event_log
+      WHERE tenant_id = $1::uuid
+        AND (
+          provider_transfer_id = $2
+          OR transfer_id = $3::uuid
+        )
+      ORDER BY created_at DESC
+      LIMIT 20`,
+    [tenantId, transferId, intentId || '00000000-0000-0000-0000-000000000000'],
+  )).rows;
+  const sandboxAccountId = objects.account?.id || null;
+  const tenantReceipts = (await client.query(
+    `SELECT id, provider, external_event_id, event_type, mapped_tenant_id,
+            mapped_internal_id, dry_run, received_at
+       FROM public.aws_provider_webhook_receipts
+      WHERE provider = 'moov'
+        AND received_at > now() - interval '48 hours'
+        AND (
+          mapped_tenant_id = $1::uuid
+          OR ($2::uuid IS NOT NULL AND mapped_internal_id = $2::uuid)
+        )
+      ORDER BY received_at DESC NULLS LAST
+      LIMIT 50`,
+    [tenantId, sandboxAccountId],
+  )).rows;
+  const receiptSummary = (await client.query(
+    `SELECT mapped_tenant_id, event_type, dry_run, count(*)::int AS n
+       FROM public.aws_provider_webhook_receipts
+      WHERE provider = 'moov' AND received_at > now() - interval '48 hours'
+      GROUP BY 1, 2, 3
+      ORDER BY n DESC
+      LIMIT 30`,
+  )).rows;
+  const transferIdReceipts = transferId
+    ? (await client.query(
+      `SELECT id, external_event_id, event_type, mapped_tenant_id, mapped_internal_id, dry_run, received_at
+         FROM public.aws_provider_webhook_receipts
+        WHERE provider = 'moov'
+          AND (
+            external_event_id = $1
+            OR mapped_internal_id::text = $1
+          )
+        ORDER BY received_at DESC NULLS LAST
+        LIMIT 20`,
+      [transferId],
+    )).rows
+    : [];
+  return {
+    ok: freedom?.moov_environment === 'production',
+    readOnly: true,
+    freedomEnvironment: freedom?.moov_environment,
+    freedomChanged: false,
+    sweep,
+    sweepChanged: false,
+    intent,
+    events,
+    tenantReceipts,
+    transferIdReceipts,
+    receiptSummary,
+    sandboxAccountId,
+    rdsWallet: objects.wallet || null,
+  };
+};
+
 const verify = async (client, tenantId) => {
   const freedom = await freedomRow(client);
   const tenant = (await client.query(
@@ -990,6 +1074,7 @@ export const handler = async (event = {}) => {
     if (step === 'update_funding_intent') return await updateFundingIntent(client, event);
     if (step === 'verify_funding_intent') return await verifyFundingIntent(client, event);
     if (step === 'list_sandbox_history') return await listSandboxHistory(client);
+    if (step === 'diagnose_funding_reconcile') return await diagnoseFundingReconcile(client, event);
     return fail('unknown_step', { step });
   } catch (error) {
     return fail(String(error?.message || error).slice(0, 400), { step });
