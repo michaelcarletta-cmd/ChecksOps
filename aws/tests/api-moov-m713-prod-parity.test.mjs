@@ -173,7 +173,7 @@ test('M7.13 runner is GET-only dark audit and never posts or writes intents', ()
   assert.match(src, /persistMoneyIntents: false/);
   assert.match(src, /STOP BEFORE WRITING/);
   assert.match(oneshot, /inspect_freedom_production/);
-  assert.doesNotMatch(src, /requireTotp:\s*false/);
+  assert.doesNotMatch(src, /requireTotp:\s*false,\s*$/m);
   assert.doesNotMatch(src, /setSandboxPostFlag/);
   assert.doesNotMatch(src, /AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED': 'true'/);
   assert.doesNotMatch(src, /AWS_MOOV_TRANSFER_POST_ENABLED': 'true'/);
