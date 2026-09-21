@@ -205,7 +205,10 @@ export const resolveSandboxPayoutBinding = ({
     || null;
   const recipientPm = recipientMethods.find((row) => (
     isAchCredit(row)
-    && (!row.bankAccountId || sameId(row.bankAccountId, expected.recipientBankId))
+    && (
+      !row.bankAccountId && !row.bankAccountID && !row.bankAccount?.bankAccountID
+      || sameId(row.bankAccountId || row.bankAccountID || row.bankAccount?.bankAccountID, expected.recipientBankId)
+    )
   )) || recipientMethods.find((row) => sameId(pmIdOf(row), expected.recipientBankId) && isAchCredit(row))
     || null;
 
@@ -659,20 +662,20 @@ export const ensureSandboxRecipientAchCredit = async ({
     };
   }
   const requested = [];
-  for (const capability of ['transfers', 'collect-funds']) {
+  for (const capability of ['transfers', 'wallet']) {
     const posted = await moovSandboxFetch({
       credentials,
       path: `/accounts/${expected.recipientAccountId}/capabilities`,
       method: 'POST',
       scopes: moovSandboxScopes.capabilitiesWrite(expected.recipientAccountId),
-      body: { capability },
+      body: { capabilities: [capability] },
       fetchImpl,
     });
     requested.push({
       capability,
       ok: posted.ok === true || posted.statusCode === 409,
       status: posted.statusCode || null,
-      error: posted.ok ? null : (posted.error || posted.message || null),
+      error: posted.ok ? null : (posted.message || posted.error || null),
     });
   }
   let methods = first.methods;

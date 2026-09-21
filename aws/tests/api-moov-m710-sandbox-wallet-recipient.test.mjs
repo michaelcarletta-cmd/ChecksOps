@@ -304,7 +304,7 @@ test('sandbox payout writer refuses production credentials and production POST f
   assert.equal(prodFlag.liveProviderCalled, false);
 });
 
-test('recipient ACH-credit ensure requests collect-funds on the sandbox payee and never POSTs transfers', async () => {
+test('recipient ACH-credit ensure requests transfers on the sandbox payee and never POSTs transfers', async () => {
   const calls = [];
   const methods = [];
   const result = await ensureSandboxRecipientAchCredit({
@@ -319,7 +319,7 @@ test('recipient ACH-credit ensure requests collect-funds on the sandbox payee an
       }
       calls.push({ path, method: opts.method, body: opts.body ? JSON.parse(opts.body) : null });
       if (path.includes('/capabilities') && opts.method === 'POST') {
-        return { ok: true, status: 201, text: async () => JSON.stringify({ capability: JSON.parse(opts.body).capability, status: 'enabled' }) };
+        return { ok: true, status: 200, text: async () => JSON.stringify([{ capability: JSON.parse(opts.body).capabilities[0], status: 'enabled' }]) };
       }
       if (path.includes('/payment-methods')) {
         const payload = methods.length ? [{
@@ -337,8 +337,12 @@ test('recipient ACH-credit ensure requests collect-funds on the sandbox payee an
   assert.equal(result.destinationPaymentMethodId, RECIPIENT_ACH_CREDIT_PM);
   assert.equal(result.liveProviderPostedTransfer, false);
   assert.equal(calls.some((row) => row.method === 'POST' && row.path.includes('/transfers')), false);
-  assert.equal(calls.filter((row) => row.method === 'POST' && row.path.includes('/capabilities')).length, 2);
-  assert.match(calls.find((row) => row.method === 'POST').path, new RegExp(`/accounts/${EXPECTED.recipientAccountId}/capabilities`));
+  const capPosts = calls.filter((row) => row.method === 'POST' && row.path.includes('/capabilities'));
+  assert.equal(capPosts.length, 2);
+  assert.deepEqual(capPosts[0].body, { capabilities: ['transfers'] });
+  assert.deepEqual(capPosts[1].body, { capabilities: ['wallet'] });
+  assert.match(capPosts[0].path, new RegExp(`/accounts/${EXPECTED.recipientAccountId}/capabilities`));
+  assert.doesNotMatch(JSON.stringify(calls), /collect-funds/);
   assert.doesNotMatch(JSON.stringify(calls), new RegExp(EXPECTED.accountId));
 });
 
