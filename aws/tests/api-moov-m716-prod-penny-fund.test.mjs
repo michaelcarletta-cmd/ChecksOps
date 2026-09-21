@@ -39,6 +39,7 @@ test('oneshot persist refuses payout and keeps production funding CAS', () => {
   assert.match(oneshot, /persist_production_funding_intent/);
   assert.match(oneshot, /cas_mark_production_funding_post_attempt/);
   assert.match(oneshot, /consume_wallet_fund_stepup/);
+  assert.match(oneshot, /abandon_m716_penny_intent/);
 });
 
 test('wallet.fund authorize UI never funds or disburses', async () => {
@@ -63,8 +64,8 @@ test('wallet.fund authorize UI never funds or disburses', async () => {
   assert.doesNotMatch(lib, /from ['"]@\/hooks\/useWallet/);
   assert.doesNotMatch(card, /fundWallet|useWallet|moov-wallet-fund/);
   assert.match(card, /Authorize \$0\.01 wallet\.fund/);
-  assert.match(sourceOf('../../src/pages/AccountSecurity.tsx'), /WalletFundAuthorizeCard/);
-  assert.match(sourceOf('../../src/pages/WalletOps.tsx'), /WalletFundAuthorizeCard/);
+  assert.doesNotMatch(sourceOf('../../src/pages/AccountSecurity.tsx'), /WalletFundAuthorizeCard/);
+  assert.doesNotMatch(sourceOf('../../src/pages/WalletOps.tsx'), /WalletFundAuthorizeCard/);
 });
 
 test('evaluateOneAuthorizedLegPost arms funding only when TOTP is consumed this phase', () => {

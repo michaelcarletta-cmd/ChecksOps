@@ -18,6 +18,15 @@ export const PAYOUT_UX_LABEL: Record<PayoutUxStage, string> = {
   payment_completed: "Payment completed",
 };
 
+export const PAYMENT_STATUS_LABEL: Record<PayoutUxStage, string> = {
+  funding_required: "Funding",
+  funding_pending: "Waiting for funds",
+  funds_available: "Ready to send",
+  ready_to_send: "Ready to send",
+  payment_pending: "Sending",
+  payment_completed: "Completed",
+};
+
 export type PayoutOrchestratorUx = {
   payout_requested: number;
   wallet_available: number;

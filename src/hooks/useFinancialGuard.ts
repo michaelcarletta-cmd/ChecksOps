@@ -21,6 +21,8 @@ export function useFinancialGuard(tenantId?: string | null) {
         checkId?: string | null;
         amount?: unknown;
         amount_cents?: unknown;
+        payoutOperationId?: string | null;
+        recipientId?: string | null;
       },
     ) => {
       const built = buildFinancialStepUpRequest({
@@ -30,10 +32,14 @@ export function useFinancialGuard(tenantId?: string | null) {
         description: extra?.description
           || (actionKey === "deposit.submit"
             ? "Enter the current 6-digit code from your authenticator app to authorize this deposit."
-            : undefined),
+            : actionKey === "disbursement.send"
+              ? "Enter the current 6-digit code from your authenticator app to authorize this payment."
+              : undefined),
         tenantId,
         amount: extra?.amount,
         amount_cents: extra?.amount_cents,
+        payoutOperationId: extra?.payoutOperationId,
+        recipientId: extra?.recipientId,
       });
       if (!built.ok) {
         throw new Error((built as { message?: string }).message ?? "Financial authorization failed");

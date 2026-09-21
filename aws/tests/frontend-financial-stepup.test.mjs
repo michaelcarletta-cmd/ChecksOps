@@ -41,7 +41,7 @@ test('deposit.submit requires a check id and passes that check through', () => {
   assert.equal(ok.ignored.browserTenantNotAuthoritative, true);
 });
 
-test('missing check fails closed and non-deposit actions stay unbound', () => {
+test('missing check fails closed and payroll stays unbound', () => {
   assert.equal(isCheckBoundAction('deposit.submit'), true);
   assert.equal(isCheckBoundAction('deposit.approve'), true);
   assert.equal(isCheckBoundAction('disbursement.send'), false);
@@ -50,6 +50,27 @@ test('missing check fails closed and non-deposit actions stay unbound', () => {
   const payroll = buildFinancialStepUpRequest({ actionKey: 'payroll.run' });
   assert.equal(payroll.ok, true);
   assert.equal(payroll.request.checkId, null);
+});
+
+test('disbursement.send cache cannot reuse a different recipient or amount', () => {
+  const keyA = stepUpCacheKey(USER, 'disbursement.send', CHECK_A, {
+    payoutOperationId: 'op-a',
+    recipientId: 'rec-a',
+    amountCents: 850000,
+  });
+  const keyB = stepUpCacheKey(USER, 'disbursement.send', CHECK_A, {
+    payoutOperationId: 'op-a',
+    recipientId: 'rec-b',
+    amountCents: 850000,
+  });
+  const keyC = stepUpCacheKey(USER, 'disbursement.send', CHECK_A, {
+    payoutOperationId: 'op-a',
+    recipientId: 'rec-a',
+    amountCents: 1,
+  });
+  assert.equal(cacheAllowsReuse(keyA, keyA), true);
+  assert.equal(cacheAllowsReuse(keyA, keyB), false);
+  assert.equal(cacheAllowsReuse(keyA, keyC), false);
 });
 
 test('changing check requires new authorization; stale cache cannot authorize another check', () => {

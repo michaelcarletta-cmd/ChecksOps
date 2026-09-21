@@ -21,6 +21,8 @@ import { usePaymentRail } from "@/hooks/usePaymentRail";
 import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibility";
 import { useWallet } from "@/hooks/useWallet";
 import { VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus } from "@/lib/banking";
+import { awsPayoutOrchestrateReady, invokeAwsPayoutOrchestrate } from "@/lib/awsPayoutOrchestrate";
+import { PAYMENT_STATUS_LABEL, type PayoutUxStage } from "@/lib/payoutOrchestrator";
 
 interface Props {
   checkIntakeItemId?: string;
@@ -234,7 +236,34 @@ export function DisbursementConsole({
 
   const submitBatch = useMutation({
     mutationFn: async () => {
-      await guardFinancial("disbursement.send");
+      const allocatedSplits = accounts
+        .filter((a: any) => {
+          const val = parseFloat(allocations[a.id] || "0");
+          return !isNaN(val) && val > 0;
+        })
+        .map((a: any) => {
+          const val = parseFloat(allocations[a.id]);
+          const dollarAmount = usePercent ? (val / 100) * availableAmount : val;
+          return {
+            stakeholder_account_id: a.id,
+            tenant_id: tenant?.id,
+            amount: Math.round(dollarAmount * 100) / 100,
+            recipient_id: a.id,
+            destination_label: a.provider_last_four
+              ? `${a.provider_bank_name || a.nickname || "Bank"} ••••${a.provider_last_four}`
+              : a.nickname,
+          };
+        });
+      const firstRecipient = allocatedSplits[0];
+      const authorizedCents = allocatedSplits.reduce((sum, row) => sum + Math.round(Number(row.amount || 0) * 100), 0);
+      await guardFinancial("disbursement.send", {
+        checkId: checkIntakeItemId,
+        amount_cents: authorizedCents,
+        recipientId: firstRecipient?.recipient_id,
+        description: firstRecipient
+          ? `Authorize $${(authorizedCents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} payment to ${firstRecipient.destination_label}`
+          : "Authorize this payment",
+      });
       if (!user || !tenant) throw new Error("Not authenticated");
       if (fundsHoldActive) {
         throw new Error(
@@ -349,6 +378,32 @@ export function DisbursementConsole({
       let moovFallbackNote: string | null = null;
 
       if (moovEnabled && deliverySpeed !== "external") {
+        if (awsPayoutOrchestrateReady()) {
+          const paymentCents = Math.round(Number(splits[0]?.amount || 0) * 100);
+          const { data: plan, error: planErr } = await invokeAwsPayoutOrchestrate({
+            tenant_id: tenant.id,
+            amount_cents: paymentCents,
+            requested_speed: deliverySpeed,
+            batch_id: batch.id,
+            recipient_id: splits[0]?.stakeholder_account_id,
+          });
+          if (planErr) {
+            throw new Error(planErr.message || "Could not authorize this payment.");
+          }
+          const statusKey = String((plan as any)?.payment_status || (plan as any)?.ux_stage || "") as PayoutUxStage;
+          const statusLabel = (plan as any)?.payment_status_label
+            || PAYMENT_STATUS_LABEL[statusKey]
+            || "Waiting for funds";
+          if ((plan as any)?.error) {
+            throw new Error((plan as any)?.message || (plan as any)?.error);
+          }
+          return {
+            batchId: batch.id,
+            rail: "moov" as const,
+            note: `${statusLabel} — ${(paymentCents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" })} authorized. Funding, if needed, continues without keeping this page open.`,
+          };
+        }
+
         // Does the wallet cover it? If not, pull the exact shortage first and
         // hold the payment until the funds are actually available.
         const { data: fundingCalc } = await supabase.functions.invoke("calculate-payment-funding", {
@@ -837,7 +892,7 @@ export function DisbursementConsole({
                 <span className="flex items-center justify-center gap-2 flex-wrap px-1">
                   <Send className="h-4 w-4 shrink-0" />
                   <span className="break-words">
-                    Send {amountText}{recipText} — {speedLabel} (${fee.toFixed(2)}/ea){adminOverride && hasUnverifiedAllocations ? " · override" : ""}
+                    Authorize {amountText} payment{recipText} — {speedLabel} (${fee.toFixed(2)}/ea){adminOverride && hasUnverifiedAllocations ? " · override" : ""}
                   </span>
                 </span>
               );
@@ -846,7 +901,7 @@ export function DisbursementConsole({
 
 
         <p className="text-xs text-center text-muted-foreground">
-          One click sends every allocated stakeholder in a single {SPEED_LABELS[deliverySpeed]} ACH batch.
+          One click authorizes the complete payment. Funding from your bank, if needed, is handled automatically.
         </p>
       </CardContent>
     </Card>

@@ -58,7 +58,7 @@ export const FINANCIAL_OPERATIONS = {
     operation: 'disbursement',
     permission: 'disbursement.send',
     providers: ['moov', 'plaid'],
-    who: 'Tenant owner/admin/manager + disbursement.send + step-up. NOT activated. First-test WALLET→RECIPIENT uses wallet.disburse, not this permission.',
+    who: 'Tenant owner/admin/manager + disbursement.send + step-up for the complete payment. Internal wallet.fund and wallet.disburse legs of that operation are covered by the durable grant. TOTP is not stored. NOT activated.',
     canRetry: true,
     canCancel: true,
     activated: false,

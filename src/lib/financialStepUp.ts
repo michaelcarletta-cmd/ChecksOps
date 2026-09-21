@@ -16,8 +16,13 @@ export const WALLET_BOUND_ACTIONS = Object.freeze([
   "wallet.disburse",
 ] as const);
 
+export const PAYOUT_BOUND_ACTIONS = Object.freeze([
+  "disbursement.send",
+] as const);
+
 export type CheckBoundAction = (typeof CHECK_BOUND_ACTIONS)[number];
 export type WalletBoundAction = (typeof WALLET_BOUND_ACTIONS)[number];
+export type PayoutBoundAction = (typeof PAYOUT_BOUND_ACTIONS)[number];
 
 export type FinancialStepUpRequest = {
   actionKey: string;
@@ -25,6 +30,15 @@ export type FinancialStepUpRequest = {
   description?: string;
   tenantId?: string | null;
   title?: string;
+  payoutOperationId?: string | null;
+  recipientId?: string | null;
+  amountCents?: number | null;
+};
+
+export type StepUpCacheScope = {
+  payoutOperationId?: string | null;
+  recipientId?: string | null;
+  amountCents?: number | null;
 };
 
 export type BuildStepUpResult =
@@ -64,6 +78,8 @@ export const buildFinancialStepUpRequest = (input: {
   amount?: unknown;
   amount_cents?: unknown;
   tenant_id?: unknown;
+  payoutOperationId?: string | null;
+  recipientId?: string | null;
 }): BuildStepUpResult => {
   const actionKey = String(input.actionKey || "");
   const checkId = trimId(input.checkId);
@@ -75,6 +91,7 @@ export const buildFinancialStepUpRequest = (input: {
         "Financial authorization must be bound to a server-side check. Browser tenant and amount are ignored.",
     };
   }
+  const amountCents = Number.isInteger(Number(input.amount_cents)) ? Number(input.amount_cents) : null;
   return {
     ok: true,
     request: {
@@ -83,6 +100,9 @@ export const buildFinancialStepUpRequest = (input: {
       description: input.description,
       title: input.title,
       tenantId: trimId(input.tenantId) || trimId(input.tenant_id),
+      payoutOperationId: trimId(input.payoutOperationId),
+      recipientId: trimId(input.recipientId),
+      amountCents,
     },
     ignored: {
       browserAmount: input.amount !== undefined && input.amount !== null,
@@ -92,10 +112,14 @@ export const buildFinancialStepUpRequest = (input: {
   };
 };
 
+export const isPayoutBoundAction = (actionKey: string | null | undefined): boolean =>
+  PAYOUT_BOUND_ACTIONS.includes(String(actionKey || "") as PayoutBoundAction);
+
 export const stepUpCacheKey = (
   userId: string | null | undefined,
   actionKey: string,
   checkId: string | null,
+  scope: StepUpCacheScope | null = null,
 ): string | null => {
   if (!userId) return null;
   if (isCheckBoundAction(actionKey)) {
@@ -104,6 +128,12 @@ export const stepUpCacheKey = (
   }
   if (isWalletBoundAction(actionKey)) {
     return `${userId}|${actionKey}|moov-first-test`;
+  }
+  if (isPayoutBoundAction(actionKey)) {
+    const op = trimId(scope?.payoutOperationId) || checkId || "unbound-op";
+    const recipient = trimId(scope?.recipientId) || "unbound-recipient";
+    const amount = Number.isInteger(scope?.amountCents) ? String(scope?.amountCents) : "unbound-amount";
+    return `${userId}|${actionKey}|${op}|${recipient}|${amount}`;
   }
   return `${userId}|unbound|session`;
 };
