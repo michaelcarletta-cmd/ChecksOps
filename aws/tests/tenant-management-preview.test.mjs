@@ -99,6 +99,8 @@ test('tenant writes still deny provider allowlist flags', () => {
   assert.ok(WRITE_ALLOWLIST.tenants.columns.has('is_test_account'));
   assert.ok(WRITE_ALLOWLIST.tenants.columns.has('moov_environment'));
   assert.ok(WRITE_ALLOWLIST.tenants.ops.has('insert'));
+  assert.ok(WRITE_ALLOWLIST.check_intake_items.columns.has('endorsement_override'));
+  assert.ok(WRITE_ALLOWLIST.check_intake_items.columns.has('back_image_deposit_path'));
 });
 
 test('platform owner can update Tenant Management flags without membership', async () => {
