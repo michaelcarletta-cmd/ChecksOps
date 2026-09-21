@@ -5,6 +5,7 @@ import { TENANT_MEMBERSHIP_SQL } from '../functions/api/identity.mjs';
 import { PIPELINE_TEST_SANDBOX } from '../functions/api/providers/production/moov-sandbox-wallet-fund.mjs';
 import { KNOWN_APPROVED_MOOV } from '../functions/api/providers/production/moov-accounts.mjs';
 import {
+  PLATFORM_OWNER_SQL,
   projectWalletSnapshot,
   runMoovWalletProjection,
   walletSnapshotIsSynchronized,
@@ -12,10 +13,15 @@ import {
 import {
   PENDING_SETUP_LABEL,
   PENDING_SYNC_LABEL,
+  WALLET_ACTIVE_LABEL,
+  WALLET_NOT_SET_UP_LABEL,
+  mergeWalletSnapshots,
   walletActivityTitle,
   walletBalanceLabel,
   walletIsSynchronized,
   walletOpsDisplayStatus,
+  walletOpsHeaderStatus,
+  walletOpsPendingCents,
 } from '../../src/lib/payments/walletDisplay.ts';
 
 const sourceOf = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8');
@@ -27,9 +33,14 @@ const COMPLETED_IN = 'dec24b01-e559-4014-b072-af1ac0e4d013';
 const COMPLETED_OUT = 'c2d1078a-0261-4a3b-9782-777fad834af9';
 const CURRENT_FUND = 'e42635e8-7a75-4d25-ad2f-dd0e5696372d';
 const FUNDING_INTENT = '985f487b-74f2-4d9f-8e6f-7cad9ae10c97';
+const PLANNED_PAYOUT = 'df6e3d55-ccc9-43cd-b275-8cde8e24c343';
 const M712_OPERATION = '69704e23-9ddd-52f8-a2b1-d48bdb500926';
 const SANDBOX_WALLET_ROW = '34f86d69-c84a-41f9-b5f1-781ebe9b5884';
 const PROD_WALLET_ROW = '8c2b96f1-79c8-4c80-bbfd-fd5906c2bb73';
+const DEFAULT_MEMBERSHIPS = [
+  { tenant_id: PIPELINE, role: 'admin', tenant_name: 'Pipeline Test', tenant_slug: 'pipeline-test' },
+  { tenant_id: FREEDOM, role: 'admin', tenant_name: 'Freedom', tenant_slug: 'freedom' },
+];
 
 const sandboxTransfers = [
   {
@@ -92,6 +103,8 @@ const productionTransfers = [
   transfers = [],
   ledger = [],
   providerActivity = [],
+  memberships = DEFAULT_MEMBERSHIPS,
+  platformOwner = false,
 } = {}) => {
   const queries = [];
   const writes = [];
@@ -105,12 +118,10 @@ const productionTransfers = [
         throw new Error('wallet_projection_write_forbidden');
       }
       if (sql === TENANT_MEMBERSHIP_SQL || sql.includes('FROM public.tenant_users')) {
-        return {
-          rows: [
-            { tenant_id: PIPELINE, role: 'admin', tenant_name: 'Pipeline Test', tenant_slug: 'pipeline-test' },
-            { tenant_id: FREEDOM, role: 'admin', tenant_name: 'Freedom', tenant_slug: 'freedom' },
-          ],
-        };
+        return { rows: memberships };
+      }
+      if (sql === PLATFORM_OWNER_SQL || sql.includes('is_platform_owner()')) {
+        return { rows: [{ is_platform: platformOwner === true, is_master: platformOwner === true }] };
       }
       if (sql.includes('FROM public.tenants')) {
         const id = params[0];
@@ -364,6 +375,167 @@ test('sandbox projection refuses known production Moov object ids', async () => 
   assert.equal(result.liveProviderPosted, false);
 });
 
+test('platform owner previews Pipeline Test without tenant_users membership', async () => {
+  const client = mockClient({
+    memberships: [],
+    platformOwner: true,
+    wallets: [{
+      id: SANDBOX_WALLET_ROW,
+      tenant_id: PIPELINE,
+      environment: 'sandbox',
+      wallet_type: 'operating',
+      status: 'active',
+      available_cents: 1,
+      pending_cents: 0,
+      provider_wallet_id: PIPELINE_TEST_SANDBOX.walletId,
+      last_synced_at: '2026-09-21T17:55:51.263Z',
+    }, {
+      id: 'freedom-prod-wallet',
+      tenant_id: FREEDOM,
+      environment: 'production',
+      wallet_type: 'operating',
+      status: 'active',
+      available_cents: 99,
+      provider_wallet_id: KNOWN_APPROVED_MOOV.freedom.walletId,
+    }],
+    accounts: [{
+      tenant_id: PIPELINE,
+      environment: 'sandbox',
+      provider_account_id: PIPELINE_TEST_SANDBOX.accountId,
+    }],
+    transfers: [...sandboxTransfers, ...productionTransfers],
+  });
+  const result = await runMoovWalletProjection({
+    client,
+    mapping: { application_user_id: USER },
+    body: { tenant_id: PIPELINE, environment: 'production' },
+    getWallet: async ({ environment, walletId }) => {
+      assert.equal(environment, 'sandbox');
+      assert.equal(walletId, PIPELINE_TEST_SANDBOX.walletId);
+      return { availableBalance: { valueDecimal: '0.01' }, pendingBalance: { valueDecimal: '0.00' } };
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.platformOwnerPreview, true);
+  assert.equal(result.environment, 'sandbox');
+  assert.equal(result.tenant_id, PIPELINE);
+  assert.equal(result.wallet.id, SANDBOX_WALLET_ROW);
+  assert.equal(result.wallet.provider_wallet_id, PIPELINE_TEST_SANDBOX.walletId);
+  assert.equal(result.wallet.available_cents, 1);
+  assert.equal(result.synchronized, true);
+  assert.equal(result.liveProviderPosted, false);
+  assert.equal(result.createdPaymentTransfer, false);
+  assert.equal(client.writes.length, 0);
+  assert.equal(result.transfers.some((row) => row.environment === 'production'), false);
+  assert.equal(client.queries.some((row) => /INSERT INTO public\.tenant_users/i.test(row.sql)), false);
+});
+
+test('ordinary user without Pipeline Test membership is denied cross-tenant projection', async () => {
+  const client = mockClient({
+    memberships: [{ tenant_id: FREEDOM, role: 'operator', tenant_name: 'Freedom', tenant_slug: 'freedom' }],
+    platformOwner: false,
+    wallets: [{
+      id: SANDBOX_WALLET_ROW,
+      tenant_id: PIPELINE,
+      environment: 'sandbox',
+      wallet_type: 'operating',
+      status: 'active',
+      available_cents: 1,
+      provider_wallet_id: PIPELINE_TEST_SANDBOX.walletId,
+    }],
+  });
+  const result = await runMoovWalletProjection({
+    client,
+    mapping: { application_user_id: USER },
+    body: { tenant_id: PIPELINE },
+    getWallet: async () => {
+      throw new Error('cross_tenant_must_not_get_wallet');
+    },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.statusCode, 403);
+  assert.equal(result.error, 'tenant_not_authorized');
+  assert.equal(result.liveProviderPosted, false);
+  assert.equal(result.wallet, undefined);
+  assert.equal(client.writes.length, 0);
+});
+
+test('valid local wallet survives failed or empty provider projection', () => {
+  const local = {
+    wallet: {
+      id: SANDBOX_WALLET_ROW,
+      available_cents: 1,
+      pending_cents: 0,
+      status: 'active',
+      provider_wallet_id: PIPELINE_TEST_SANDBOX.walletId,
+      last_synced_at: '2026-09-21T17:55:51.263Z',
+    },
+    transfers: sandboxTransfers,
+    activity: [{ id: 'local-activity' }],
+  };
+  const failed = mergeWalletSnapshots(local, null);
+  assert.equal(failed.wallet.available_cents, 1);
+  assert.equal(failed.setup_required, false);
+
+  const emptySync = mergeWalletSnapshots(local, { wallet: null, transfers: [] });
+  assert.equal(emptySync.wallet.id, SANDBOX_WALLET_ROW);
+  assert.equal(emptySync.wallet.available_cents, 1);
+
+  const updated = mergeWalletSnapshots(local, {
+    wallet: { ...local.wallet, available_cents: 1, synchronized: true },
+    transfers: sandboxTransfers,
+  });
+  assert.equal(updated.wallet.available_cents, 1);
+  assert.equal(updated.wallet.synchronized, true);
+});
+
+test('linked wallet displays $0.01 or synchronized $0.00 and never Not set up', () => {
+  const penny = {
+    available_cents: 1,
+    pending_cents: 0,
+    status: 'active',
+    provider_wallet_id: PIPELINE_TEST_SANDBOX.walletId,
+    last_synced_at: '2026-09-21T17:55:51.263Z',
+  };
+  assert.equal(walletBalanceLabel(penny), '$0.01');
+  assert.equal(walletOpsHeaderStatus(penny, { syncFailed: true, setupRequired: true }), WALLET_ACTIVE_LABEL);
+  assert.notEqual(walletOpsHeaderStatus(penny), WALLET_NOT_SET_UP_LABEL);
+  assert.notEqual(walletBalanceLabel(penny), PENDING_SYNC_LABEL);
+
+  const zero = {
+    available_cents: 0,
+    status: 'active',
+    provider_wallet_id: PIPELINE_TEST_SANDBOX.walletId,
+    last_synced_at: '2026-09-21T17:55:51.263Z',
+    synchronized: true,
+  };
+  assert.equal(walletBalanceLabel(zero), '$0.00');
+  assert.notEqual(walletBalanceLabel(zero), PENDING_SYNC_LABEL);
+  assert.equal(walletOpsHeaderStatus(zero, { syncFailed: true }), WALLET_ACTIVE_LABEL);
+});
+
+test('M7.12 planned payout is not provider-pending outgoing money', () => {
+  const pending = walletOpsPendingCents([
+    {
+      id: PLANNED_PAYOUT,
+      amount_cents: 1,
+      status: 'planned',
+      provider_status: null,
+      leg_role: 'wallet_disbursement',
+    },
+    {
+      id: FUNDING_INTENT,
+      amount_cents: 1,
+      status: 'completed',
+      provider_status: 'completed',
+      leg_role: 'wallet_funding',
+    },
+  ]);
+  assert.equal(pending.pendingOutCents, 0);
+  assert.equal(pending.pendingInCents, 0);
+});
+
 test('WalletOps intercept is GET-only and cannot fall through to parity POST', () => {
   const providers = sourceOf('../functions/api/providers.mjs');
   const projection = sourceOf('../functions/api/providers/production/moov-wallet-projection.mjs');
@@ -414,9 +586,20 @@ test('WalletOps intercept is GET-only and cannot fall through to parity POST', (
   assert.doesNotMatch(walletOps, /Payment pending/);
   assert.doesNotMatch(walletOps, /Payment completed/);
   assert.match(display, /PENDING_SYNC_LABEL = "Pending sync"/);
+  assert.match(display, /WALLET_ACTIVE_LABEL = "Balance active"/);
+  assert.match(display, /mergeWalletSnapshots/);
+  assert.match(display, /walletOpsHeaderStatus/);
   assert.match(display, /formatWalletCents/);
   assert.match(useWallet, /readWalletSnapshot/);
-  assert.match(useWalletOps, /originated/);
+  assert.match(useWallet, /mergeWalletSnapshots/);
+  assert.match(display, /originated/);
+  assert.match(useWalletOps, /walletOpsPendingCents/);
+  assert.match(useWalletOps, /Planned payouts are not provider-pending money/);
+  assert.match(walletOps, /walletOpsHeaderStatus/);
+  assert.match(projection, /is_platform_owner\(\)/);
+  assert.match(projection, /tenant_not_authorized/);
+  assert.match(projection, /platformOwnerPreview/);
+  assert.doesNotMatch(projection, /INSERT INTO public\.tenant_users/);
   assert.match(walletOps, /walletOpsDisplayStatus/);
   assert.match(wallets, /eq\("environment", environment\)/);
   assert.match(wallets, /readWalletSnapshot/);

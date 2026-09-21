@@ -63,7 +63,7 @@ import { PaymentReadinessPanel } from "@/components/payments/PaymentReadinessPan
 import { VerificationDocumentsPanel } from "@/components/payments/VerificationDocumentsPanel";
 import { MoovEnvironmentBadge } from "@/components/payments/MoovEnvironmentBadge";
 import { SANDBOX_SETUP_REQUIRED } from "@/lib/moovEnvironment";
-import { walletActivityTitle, walletBalanceLabel, walletIsSynchronized, walletOpsDisplayStatus } from "@/lib/payments/walletDisplay";
+import { walletActivityTitle, walletBalanceLabel, walletIsSynchronized, walletOpsDisplayStatus, walletOpsHeaderStatus } from "@/lib/payments/walletDisplay";
 import { buildWalletActivityFeed } from "@/lib/payments/walletActivityFeed";
 
 import { isCheckOpsHost } from "@/lib/checkopsHost";
@@ -176,6 +176,7 @@ export default function WalletOps() {
 
   const syncFailed = wallet?.status === "sync_failed" && !walletIsSynchronized(wallet);
   const balanceLabel = walletBalanceLabel(wallet, { setupRequired, loading: false });
+  const headerStatus = walletOpsHeaderStatus(wallet, { setupRequired, syncFailed });
 
   const sweepsOn = config?.status === "enabled";
   const effectiveRail = (payoutRail || (config?.push_rail as SweepPushRail) || pushRails[0] || "") as
@@ -267,20 +268,14 @@ export default function WalletOps() {
               <Badge
                 variant="outline"
                 className={
-                  syncFailed
-                    ? READINESS_COPY.pending.tone
-                    : walletIsSynchronized(wallet)
-                      ? READINESS_COPY.ready.tone
+                  walletIsSynchronized(wallet)
+                    ? READINESS_COPY.ready.tone
+                    : syncFailed
+                      ? READINESS_COPY.pending.tone
                       : READINESS_COPY.not_started.tone
                 }
               >
-                {syncFailed
-                  ? "Pending sync"
-                  : walletIsSynchronized(wallet)
-                    ? "Balance active"
-                    : setupRequired
-                      ? "Setup in progress"
-                      : (wallet?.status ?? "Not set up")}
+                {headerStatus}
               </Badge>
               {wallet?.last_synced_at && !syncFailed && (
                 <span className="text-[11px] text-muted-foreground">
