@@ -60,7 +60,6 @@ import { AutoFundingPanel } from "@/components/payments/AutoFundingPanel";
 import { MoovTreasuryPanel } from "@/components/payments/MoovTreasuryPanel";
 import { PaymentAccountPanel } from "@/components/payments/PaymentAccountPanel";
 import { PaymentReadinessPanel } from "@/components/payments/PaymentReadinessPanel";
-import { PayoutOrchestratorPanel } from "@/components/payments/PayoutOrchestratorPanel";
 import { VerificationDocumentsPanel } from "@/components/payments/VerificationDocumentsPanel";
 import { MoovEnvironmentBadge } from "@/components/payments/MoovEnvironmentBadge";
 import { SANDBOX_SETUP_REQUIRED } from "@/lib/moovEnvironment";
@@ -303,8 +302,6 @@ export default function WalletOps() {
           </div>
         </div>
       </div>
-
-      <PayoutOrchestratorPanel tenantId={tenant?.id} environment={environment} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Wallet & Treasury */}
