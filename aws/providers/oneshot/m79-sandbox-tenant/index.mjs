@@ -882,6 +882,64 @@ const verifyFundingIntent = async (client, body = {}) => {
   };
 };
 
+const listSandboxHistory = async (client) => {
+  const freedom = await freedomRow(client);
+  const sweep = await sweepUnchanged(client);
+  const sandboxTransfers = (await client.query(
+    `SELECT t.id, t.tenant_id, tn.name AS tenant_name, tn.slug,
+            t.status, t.amount_cents, t.provider_transfer_id, t.provider_status,
+            t.source_tenant_account_id, t.source_payment_method_id,
+            t.destination_payment_method_id, t.wallet_id, t.leg_role, t.speed,
+            t.selected_rail, t.description, t.created_at, t.submitted_at,
+            t.completed_at, t.failure_reason
+       FROM public.payment_transfers t
+       JOIN public.tenants tn ON tn.id = t.tenant_id
+      WHERE t.provider = 'moov' AND t.environment = 'sandbox'
+      ORDER BY t.created_at DESC
+      LIMIT 50`,
+  )).rows;
+  const fundingRequests = (await client.query(
+    `SELECT r.id, r.tenant_id, r.status, r.requested_amount_cents, r.moov_transfer_id,
+            r.moov_account_id, r.moov_wallet_id, r.source_payment_method_id,
+            r.transfer_id, r.created_at, r.completed_at, r.funds_available_at,
+            t.environment AS transfer_environment
+       FROM public.wallet_funding_requests r
+       LEFT JOIN public.payment_transfers t ON t.id = r.transfer_id
+      WHERE t.environment = 'sandbox'
+         OR (
+           t.id IS NULL
+           AND r.moov_account_id IS NOT NULL
+           AND lower(r.moov_account_id::text) = $1
+         )
+      ORDER BY r.created_at DESC
+      LIMIT 50`,
+    [SANDBOX_ACCOUNT],
+  )).rows;
+  const sandboxAccounts = (await client.query(
+    `SELECT a.tenant_id, tn.name AS tenant_name, tn.slug, a.provider_account_id,
+            a.environment, a.onboarding_status, a.created_at
+       FROM public.payment_provider_accounts a
+       JOIN public.tenants tn ON tn.id = a.tenant_id
+      WHERE a.provider = 'moov' AND a.environment = 'sandbox'
+      ORDER BY a.created_at DESC NULLS LAST
+      LIMIT 20`,
+  )).rows;
+  const productionHits = sandboxTransfers.filter((row) => PRODUCTION_IDS.has(String(row.provider_transfer_id || '').toLowerCase())
+    || PRODUCTION_IDS.has(String(row.source_tenant_account_id || '').toLowerCase()));
+  return {
+    ok: freedom?.moov_environment === 'production' && productionHits.length === 0,
+    readOnly: true,
+    freedomEnvironment: freedom?.moov_environment,
+    freedomChanged: false,
+    sweep,
+    sweepChanged: false,
+    sandboxTransfers,
+    fundingRequests,
+    sandboxAccounts,
+    productionObjectHits: productionHits.length,
+  };
+};
+
 const verify = async (client, tenantId) => {
   const freedom = await freedomRow(client);
   const tenant = (await client.query(
@@ -931,6 +989,7 @@ export const handler = async (event = {}) => {
     if (step === 'persist_funding_intent') return await persistFundingIntent(client, event);
     if (step === 'update_funding_intent') return await updateFundingIntent(client, event);
     if (step === 'verify_funding_intent') return await verifyFundingIntent(client, event);
+    if (step === 'list_sandbox_history') return await listSandboxHistory(client);
     return fail('unknown_step', { step });
   } catch (error) {
     return fail(String(error?.message || error).slice(0, 400), { step });
