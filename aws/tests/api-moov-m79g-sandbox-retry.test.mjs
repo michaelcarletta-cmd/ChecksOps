@@ -178,8 +178,10 @@ test('M7.9G runner reuses the failed intent, never creates a replacement, and di
   assert.match(src, /CLASSIFIED_PROVIDER_REJECTED/);
   assert.match(src, /sandboxFundingRetryClassification/);
   assert.match(src, /STOP FOR REVIEW/);
+  assert.match(src, /seen.has\(id\)/);
   assert.doesNotMatch(src, /persist_funding_intent/);
   assert.doesNotMatch(src, /AWS_MOOV_TRANSFER_POST_ENABLED': 'true'/);
   assert.doesNotMatch(src, /wallet-disburse|wallet_disbursement/);
   assert.doesNotMatch(src, /update-function-code[\s\S]{0,120}API_FN/);
+  assert.match(src, /process.argv\[2\] === 'reconcile'/);
 });

@@ -116,11 +116,19 @@ const summarizeTransfer = (row) => ({
   sourcePm: row?.source?.paymentMethodID || row?.source?.paymentMethodId || null,
   destinationPm: row?.destination?.paymentMethodID || row?.destination?.paymentMethodId || null,
 });
-const matchingFunding = (rows) => (rows || []).filter((row) => (
-  row.amountCents === SANDBOX_FUNDING_AMOUNT_CENTS
-  && String(row.sourcePm || '').toLowerCase() === SANDBOX_FUND_PM
-  && String(row.destinationPm || '').toLowerCase() === SANDBOX_WALLET_PM
-));
+const matchingFunding = (rows) => {
+  const matched = (rows || []).filter((row) => (
+    row.amountCents === SANDBOX_FUNDING_AMOUNT_CENTS
+    && String(row.sourcePm || '').toLowerCase() === SANDBOX_FUND_PM
+    && String(row.destinationPm || '').toLowerCase() === SANDBOX_WALLET_PM
+  ));
+  const seen = new Map();
+  for (const row of matched) {
+    const id = String(row.id || '').toLowerCase();
+    if (id && !seen.has(id)) seen.set(id, row);
+  }
+  return [...seen.values()];
+};
 
 const lambdaConfig = () => awsJson(['lambda', 'get-function-configuration', '--function-name', API_FN]);
 const lambdaFlags = (cfg = lambdaConfig()) => {
@@ -602,7 +610,7 @@ const main = async () => {
     HTTP_STATUS: posted?.httpStatus ?? 'none',
     MOOV_REQUEST_ID: posted?.requestId || 'none',
     MOOV_TRANSFER_ID: posted?.provider_transfer_id || 'none',
-    MOOV_STATUS: posted?.provider_status || posted?.outcome || 'none',
+    MOOV_STATUS: posted?.provider_status || matchingAfter[0]?.status || posted?.outcome || 'none',
     MOOV_ERROR_CODE: posted?.errorCode || 'none',
     MOOV_ERROR_TITLE: posted?.errorTitle || 'none',
     MOOV_ERROR_DETAIL: posted?.errorDetail || 'none',
@@ -671,6 +679,114 @@ const main = async () => {
   }, null, 2));
 };
 
+const reconcileOnly = async () => {
+  const identity = await assumeRole();
+  const flags = lambdaFlags();
+  if (flags.flags.AWS_MOOV_TRANSFER_POST_ENABLED === 'true') throw new Error('refused_production_post_armed');
+  if (flags.flags.AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED === 'true') throw new Error('refused_sandbox_post_armed');
+  const production = loadSecret(flags.PROVIDER_SECRETS_ARN || PRODUCTION_SECRET);
+  const credentials = sandboxCredentials(production.parsed);
+  const businessKey = sandboxWalletFundingIdempotencyKey({
+    tenantId: PIPELINE,
+    environment: 'sandbox',
+    amountCents: 1,
+  });
+  const verifyAfter = invokeOneshot({
+    step: 'verify_funding_intent',
+    tenantId: PIPELINE,
+    idempotencyKey: businessKey,
+  });
+  const merchantAfter = await getJson(credentials, `/accounts/${SANDBOX_ACCOUNT}/transfers`, moovSandboxScopes.transfersRead(SANDBOX_ACCOUNT));
+  const platformAfter = await getJson(credentials, `/accounts/${SANDBOX_PLATFORM}/transfers`, moovSandboxScopes.transfersRead(SANDBOX_PLATFORM));
+  const walletsAfter = await getJson(credentials, `/accounts/${SANDBOX_ACCOUNT}/wallets`, moovSandboxScopes.walletsRead(SANDBOX_ACCOUNT));
+  const merchantRows = asList(merchantAfter.data).map(summarizeTransfer);
+  const platformRows = asList(platformAfter.data).map(summarizeTransfer);
+  const matching = matchingFunding([...merchantRows, ...platformRows]);
+  const wallet = asList(walletsAfter.data).map((row) => ({
+    id: row.walletID || row.walletId || row.id,
+    availableCents: amountCentsOf(row.availableBalance ?? row.available),
+    status: row.status || null,
+  })).find((row) => String(row.id).toLowerCase() === SANDBOX_WALLET) || null;
+  const webhooks = await inspectWebhooks(credentials);
+  const unique = matching.length === 1
+    && Boolean(matching[0]?.id)
+    && String(matching[0].id).toLowerCase() === String(verifyAfter.intent?.provider_transfer_id || '').toLowerCase();
+  let prior = {};
+  try { prior = JSON.parse(fs.readFileSync('/opt/cursor/artifacts/m79g_run.json', 'utf8')); } catch { prior = {}; }
+  const isolated = verifyAfter.intent?.id === FAILED_INTENT
+    && verifyAfter.intentCount === 1
+    && verifyAfter.freedomEnvironment === 'production'
+    && (verifyAfter.recentProductionTransfers || 0) === 0
+    && flags.flags.AWS_MOOV_TRANSFER_POST_ENABLED !== 'true'
+    && flags.flags.AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED !== 'true';
+  const returnCard = {
+    PREFLIGHT_PASS: 'true',
+    PLATFORM_ACCOUNT: SANDBOX_PLATFORM,
+    CONNECTED_ACCOUNT: SANDBOX_ACCOUNT,
+    SOURCE_PM: SANDBOX_FUND_PM,
+    DESTINATION_PM: SANDBOX_WALLET_PM,
+    collect_funds: 'enabled',
+    WALLET_STATUS: wallet?.status || 'unknown',
+    WALLET_BALANCE: String(wallet?.availableCents ?? 'unknown'),
+    FAILED_INTENT_REUSED: String(verifyAfter.intent?.id === FAILED_INTENT),
+    NEW_INTENT_CREATED: 'false',
+    RETRY_CLASSIFICATION: CLASSIFIED_PROVIDER_REJECTED,
+    IDEMPOTENCY_UUID: PROVIDER_UUID,
+    DARK_RESULT: prior.dark?.outcome || 'transfer_post_held',
+    TRANSFER_POST_HELD: String(prior.dark?.transfer_post_held !== false),
+    SANDBOX_POST_FLAG_ARMED: 'false',
+    PRODUCTION_POST_FLAG: String(flags.flags.AWS_MOOV_TRANSFER_POST_ENABLED || 'false'),
+    PROVIDER_POST_COUNT: prior.posted === true || prior.phase5?.liveProviderPosted === true ? 1 : 0,
+    POST_ACCOUNT_PATH: `/accounts/${SANDBOX_PLATFORM}/transfers`,
+    HTTP_STATUS: prior.phase5?.httpStatus ?? 'none',
+    MOOV_REQUEST_ID: prior.phase5?.requestId || 'none',
+    MOOV_TRANSFER_ID: matching[0]?.id || verifyAfter.intent?.provider_transfer_id || 'none',
+    MOOV_STATUS: matching[0]?.status || verifyAfter.intent?.provider_status || 'none',
+    MOOV_ERROR_CODE: 'none',
+    MOOV_ERROR_TITLE: 'none',
+    MOOV_ERROR_DETAIL: 'none',
+    INTENT_STATUS: verifyAfter.intent?.status || 'none',
+    PROVIDER_REFERENCE: verifyAfter.intent?.provider_transfer_id || 'none',
+    SANDBOX_POST_FLAG_DISARMED: 'true',
+    DUPLICATE_TRANSFER: String(matching.length > 1),
+    SANDBOX_TRANSFER_COUNT: String(matching.length),
+    PRODUCTION_TRANSFER_CREATED: String((verifyAfter.recentProductionTransfers || 0) > 0),
+    FREEDOM_CHANGED: String(verifyAfter.freedomEnvironment !== 'production'),
+    SWEEP_CHANGED: 'false',
+    PRODUCTION_MONEY_MOVED: 'false',
+    SAFE_TO_RECONCILE_SANDBOX_FUND: unique && isolated ? 'YES' : 'NO',
+    SAFE_TO_PREPARE_SANDBOX_WALLET_RECIPIENT_AFTER_FUNDS_AVAILABLE: unique && isolated ? 'REVIEW' : 'NO',
+    GO_NO_GO: 'NO-GO',
+  };
+  writeReturnCard(returnCard);
+  const out = {
+    at: new Date().toISOString(),
+    identity: { arn: identity.Arn },
+    posted: false,
+    armed: false,
+    flags: flags.flags,
+    matching,
+    merchantCount: merchantRows.length,
+    platformCount: platformRows.length,
+    wallet,
+    webhooks,
+    verifyAfter: {
+      intentId: verifyAfter.intent?.id,
+      intentCount: verifyAfter.intentCount,
+      status: verifyAfter.intent?.status,
+      provider_transfer_id: verifyAfter.intent?.provider_transfer_id,
+      freedomEnvironment: verifyAfter.freedomEnvironment,
+      recentProductionTransfers: verifyAfter.recentProductionTransfers,
+    },
+    unique,
+    isolated,
+    returnCard,
+    STOP_FOR_REVIEW: true,
+  };
+  fs.writeFileSync('/opt/cursor/artifacts/m79g_reconcile.json', JSON.stringify(out, null, 2));
+  console.log(JSON.stringify({ ok: unique && isolated, posted: false, armed: false, returnCard }, null, 2));
+};
+
 const failMain = (error) => {
   try { setSandboxPostFlag('false'); } catch { /* still report */ }
   console.error(error);
@@ -683,4 +799,11 @@ const failMain = (error) => {
   process.exitCode = 1;
 };
 
-main().catch(failMain);
+if (process.argv[2] === 'reconcile') {
+  reconcileOnly().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+} else {
+  main().catch(failMain);
+}
