@@ -18,8 +18,20 @@ import {
   firstTestFundBinding,
 } from './moov-first-test.mjs';
 import { CONSUME_TOTP_THIS_PHASE } from './moov-payout-orchestrator.mjs';
-import { PIPELINE_TEST_SANDBOX } from './moov-sandbox-wallet-fund.mjs';
 import { evaluateOneAuthorizedLegPost } from './moov-production-penny-authz.mjs';
+
+export const PIPELINE_TEST_TENANT_ID = '3bef00a5-0bf4-41ba-abf8-5fb4e2b73d43';
+export const PIPELINE_TEST_SANDBOX = Object.freeze({
+  tenantId: PIPELINE_TEST_TENANT_ID,
+  platformAccountId: '36b79957-ce7a-4ca7-a68f-30986c9e47bb',
+  accountId: '1d59a6a8-3307-4687-8367-1495293ecc73',
+  walletId: '58571121-67ea-4e10-abae-6c9680ac455d',
+  bankId: '8390f74b-706e-4d89-80b0-f96bd7c1b414',
+  achDebitFundPm: '8a0f6ffa-a549-48f5-bb8e-f5b6a9d9cfff',
+  walletPm: '1eb24c1c-b7ab-45cd-8775-332da40b9647',
+  recipientAccountId: '90050a69-84f3-41bb-aa30-490ca7e7bf34',
+  recipientBankId: '92e17650-94ed-43cb-8bff-14cf506c3988',
+});
 
 export const M714_PHASE = 'M7.14';
 export const PRODUCTION_FUNDING_DESCRIPTION = 'M7.14 production BANK to WALLET 0.01';

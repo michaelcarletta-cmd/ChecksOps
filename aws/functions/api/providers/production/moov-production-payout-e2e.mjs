@@ -7,9 +7,19 @@
  *
  * This phase never POSTs, never consumes TOTP, and defaults persist off.
  */
+import { TENANT_MEMBERSHIP_SQL } from '../../identity.mjs';
+import { membershipForTenant } from '../../financial-ownership.mjs';
+import { transferPostEnabledForEnvironment } from '../../provider-flags.mjs';
 import { extractTransferEvent, normalizeMoovStatus } from '../moov-lifecycle.mjs';
+import {
+  assertNoCrossEnvironmentObject,
+  ignoreClientEnvironment,
+  loadTenantMoovEnvironment,
+} from '../moov-environment.mjs';
 import { reconcileExistingFromProviderGet } from '../webhook-apply-production.mjs';
 import { KNOWN_APPROVED_MOOV } from './moov-accounts.mjs';
+import { productionMoovFetch } from './moov-client.mjs';
+import { loadProductionMoovReadSecrets } from './moov-secrets.mjs';
 import {
   FIRST_PRODUCTION_TRANSFER_CENTS,
   firstTestDisburseBinding,
@@ -19,25 +29,26 @@ import {
   CONSUME_TOTP_THIS_PHASE,
   DECISION,
   PERSIST_MONEY_INTENTS_THIS_PHASE,
-  applyGetFallbackToIntent,
+  canTransitionFunding,
+  canTransitionPayout,
   createMemoryPayoutStore,
   getReconciliationMayCreateMoneyIntent,
   orchestratePayout,
   payoutOperationIdFor,
   webhookMayCreateMoneyIntent,
 } from './moov-payout-orchestrator.mjs';
-import { PIPELINE_TEST_TENANT_ID } from './moov-sandbox-wallet-fund.mjs';
-import {
-  evaluateProductionPennyAuthorization,
-  evaluateProductionPennySweepRace,
-} from './moov-production-penny-authz.mjs';
 import {
   M714_PHASE,
+  PIPELINE_TEST_TENANT_ID,
   executeProductionWalletDisbursement,
   executeProductionWalletFunding,
   persistProductionIntentCas,
   refuseIndependentMustKeepInvocation,
 } from './moov-production-transfer-primitives.mjs';
+import {
+  evaluateProductionPennyAuthorization,
+  evaluateProductionPennySweepRace,
+} from './moov-production-penny-authz.mjs';
 
 export { evaluateProductionPennySweepRace } from './moov-production-penny-authz.mjs';
 
@@ -77,6 +88,93 @@ const amountCentsOf = (amount) => {
   }
   const n = Number(amount);
   return Number.isFinite(n) ? Math.round(n) : 0;
+};
+
+const providerStatusToIntentStatus = (providerStatus) => {
+  const s = String(providerStatus || '').toLowerCase();
+  if (s === 'completed') return 'completed';
+  if (s === 'failed') return 'failed';
+  if (s === 'returned' || s === 'reversed') return 'returned';
+  if (s === 'canceled' || s === 'cancelled') return 'canceled';
+  if (s === 'unknown') return 'unknown';
+  if (s === 'submitting') return 'submitting';
+  if (['pending', 'processing', 'queued', 'created', 'originated', 'submitted'].includes(s)) return 'pending';
+  return s || 'pending';
+};
+
+const intentStatusToFundingState = (status) => {
+  const s = String(status || '').toLowerCase();
+  if (s === 'completed') return 'funding_completed';
+  if (s === 'failed') return 'funding_failed';
+  if (s === 'returned') return 'funding_returned';
+  if (s === 'unknown') return 'funding_unknown';
+  if (s === 'submitting') return 'funding_submitting';
+  if (['pending', 'processing', 'queued', 'created', 'originated'].includes(s)) return 'funding_pending';
+  if (s === 'submitted') return 'funding_submitted';
+  if (s === 'planned' || s === 'funding_required') return 'funding_required';
+  return 'funding_required';
+};
+
+const intentStatusToPayoutState = (status) => {
+  const s = String(status || '').toLowerCase();
+  if (s === 'completed') return 'payout_completed';
+  if (s === 'failed' || s === 'returned' || s === 'canceled') return 'payout_failed';
+  if (s === 'unknown') return 'payout_unknown';
+  if (s === 'submitting') return 'payout_submitting';
+  if (['pending', 'processing', 'queued', 'created', 'originated'].includes(s)) return 'payout_pending';
+  if (s === 'submitted') return 'payout_submitted';
+  if (s === 'ready' || s === 'payout_ready') return 'payout_ready';
+  if (s === 'wallet_check') return 'wallet_check';
+  return 'payout_requested';
+};
+
+const applyGetFallbackToIntent = ({
+  intent = null,
+  providerStatus = null,
+  completedOn = null,
+  failureReason = null,
+} = {}) => {
+  if (!intent) return { applied: false, skipped: 'intent_missing', createdPaymentTransfer: false };
+  if (!intent.provider_transfer_id) {
+    return { applied: false, skipped: 'no_provider_transfer_id', createdPaymentTransfer: false, liveProviderPosted: false };
+  }
+  const nextStatus = providerStatusToIntentStatus(providerStatus);
+  const role = String(intent.leg_role || intent.kind || '');
+  const fromState = role.includes('fund')
+    ? intentStatusToFundingState(intent.status)
+    : intentStatusToPayoutState(intent.status);
+  const toState = role.includes('fund')
+    ? intentStatusToFundingState(nextStatus)
+    : intentStatusToPayoutState(nextStatus);
+  const transition = role.includes('fund')
+    ? canTransitionFunding(fromState, toState)
+    : canTransitionPayout(fromState, toState);
+  if (!transition.ok) {
+    return {
+      applied: false,
+      skipped: transition.reason,
+      createdPaymentTransfer: false,
+      liveProviderPosted: false,
+      fromState,
+      toState,
+    };
+  }
+  const patched = {
+    ...intent,
+    status: nextStatus,
+    provider_status: providerStatus || intent.provider_status,
+    completed_at: nextStatus === 'completed' ? (completedOn || intent.completed_at) : intent.completed_at,
+    failure_reason: nextStatus === 'completed' ? null : (failureReason || intent.failure_reason || null),
+  };
+  return {
+    applied: transition.noop !== true || Boolean(nextStatus === 'completed' && !intent.completed_at && completedOn),
+    skipped: transition.noop === true && !(nextStatus === 'completed' && !intent.completed_at && completedOn) ? 'idempotent' : null,
+    createdPaymentTransfer: false,
+    liveProviderPosted: false,
+    intent: patched,
+    fromState,
+    toState,
+  };
 };
 
 const snapshotTransfer = (json) => {
@@ -455,5 +553,162 @@ export async function executeProductionPayoutE2e({
     sweepChanged: false,
     webhook_may_create_intent: webhookMayCreateMoneyIntent(),
     get_recon_may_create_transfer: getReconciliationMayCreateMoneyIntent(),
+  };
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const truthy = (value) => value === true || value === 'true' || value === 1 || value === '1';
+
+const failHttp = (error, statusCode, extra = {}) => ({
+  ok: false,
+  statusCode,
+  error,
+  provider: 'moov',
+  operation: 'payout.e2e',
+  phase: M714_PHASE,
+  liveProviderPosted: false,
+  createdPaymentTransfer: false,
+  persistMoneyIntents: false,
+  totp_consumed: false,
+  require_totp: true,
+  ...extra,
+});
+
+/**
+ * Dark HTTP entry for the production e2e wrapper.
+ * Never persists money intents. Never POSTs. Never consumes TOTP.
+ */
+export async function handleProductionPayoutE2e({
+  client,
+  mapping,
+  body = {},
+  fetchImpl = fetch,
+  loadSecrets = loadProductionMoovReadSecrets,
+  store = null,
+} = {}) {
+  if (truthy(body.persist_money_intents) || truthy(body.persist) || truthy(body.create_intents)) {
+    return failHttp('money_intent_persist_refused', 403, {
+      message: 'M7.15 is deploy-dark only. payment_transfers INSERT stays off.',
+    });
+  }
+  if (truthy(body.post) || truthy(body.submit) || truthy(body.execute) || truthy(body.auto_send_after_funding)) {
+    return failHttp('provider_post_refused', 403, {
+      message: 'M7.15 does not POST to Moov.',
+    });
+  }
+  if (body.totp_code || body.totpCode || body.code) {
+    return failHttp('totp_code_refused', 403, {
+      message: 'Cursor and this handler must never receive a Financial TOTP code.',
+    });
+  }
+
+  const rows = (await client.query(TENANT_MEMBERSHIP_SQL, [mapping.application_user_id])).rows;
+  const memberships = rows.map((row) => ({
+    tenant_id: row.tenant_id,
+    role: row.role,
+    tenant_name: row.tenant_name,
+    tenant_slug: row.tenant_slug,
+  }));
+  const claimed = body.tenant_id || body.tenantId || null;
+  if (claimed && !UUID_RE.test(String(claimed))) {
+    return failHttp('invalid_uuid', 400, { field: 'tenant_id' });
+  }
+  const tenantId = claimed || FREEDOM_PRODUCTION_TENANT_ID;
+  if (!membershipForTenant(memberships, tenantId)) {
+    return failHttp('cross_tenant_denied', 403);
+  }
+
+  const tenantEnv = await loadTenantMoovEnvironment(client, tenantId);
+  if (!tenantEnv.ok) return failHttp(tenantEnv.error, tenantEnv.statusCode || 409);
+  if (tenantEnv.environment !== 'production') {
+    return failHttp('tenant_not_production', 409, { tenantEnvironment: tenantEnv.environment });
+  }
+  if (tenantId !== FREEDOM_PRODUCTION_TENANT_ID) {
+    return failHttp('undesignated_tenant', 403, { tenantId });
+  }
+
+  const secrets = await loadSecrets();
+  if (!secrets?.ok) {
+    return failHttp(secrets?.error || 'production_secret_missing', secrets?.statusCode || 503, { ...secrets });
+  }
+  if (secrets.credentials?.environment !== 'production') {
+    return failHttp('cross_environment_credential_refused', 409);
+  }
+
+  const freedom = KNOWN_APPROVED_MOOV.freedom;
+  const recipient = KNOWN_APPROVED_MOOV.recipient;
+  const spoof = assertNoCrossEnvironmentObject({
+    environment: 'production',
+    accountId: freedom.moovAccountId,
+    walletId: freedom.walletId,
+    bankId: freedom.bankId,
+  });
+  if (!spoof.ok) return failHttp(spoof.error, spoof.statusCode || 409, spoof);
+
+  let liveProviderCalled = false;
+  let walletJson;
+  try {
+    const result = await productionMoovFetch({
+      credentials: secrets.credentials,
+      path: `/accounts/${freedom.moovAccountId}/wallets/${freedom.walletId}`,
+      method: 'GET',
+      mode: 'read',
+      scopes: [`/accounts/${freedom.moovAccountId}/wallets.read`],
+      fetchImpl,
+    });
+    walletJson = result?.json !== undefined ? result.json : result;
+    liveProviderCalled = true;
+  } catch (error) {
+    return failHttp('moov_wallet_read_failed', error.status || 502, {
+      liveProviderCalled: true,
+      message: error.message,
+    });
+  }
+
+  let recipientVerified = false;
+  try {
+    const bank = await productionMoovFetch({
+      credentials: secrets.credentials,
+      path: `/accounts/${recipient.moovAccountId}/bank-accounts/${recipient.bankId}`,
+      method: 'GET',
+      mode: 'read',
+      scopes: [`/accounts/${recipient.moovAccountId}/bank-accounts.read`],
+      fetchImpl,
+    });
+    const bankJson = bank?.json !== undefined ? bank.json : bank;
+    liveProviderCalled = true;
+    recipientVerified = String(bankJson?.status || '').toLowerCase() === 'verified';
+  } catch {
+    recipientVerified = false;
+  }
+
+  const plan = await executeProductionPayoutE2e({
+    tenantId,
+    tenantEnvironment: 'production',
+    liveAvailableCents: amountCentsOf(walletJson?.availableBalance ?? walletJson?.available),
+    recipientVerified,
+    persistMoneyIntents: false,
+    transferPostEnabled: transferPostEnabledForEnvironment('production'),
+    sandboxTransferPostEnabled: transferPostEnabledForEnvironment('sandbox'),
+    store: null,
+    totpFundPresent: false,
+    totpDisbursePresent: false,
+    fetchImpl,
+    postPhase: 'none',
+  });
+
+  return {
+    ...plan,
+    ok: plan.ok === true,
+    statusCode: plan.ok === true ? 200 : (plan.statusCode || 409),
+    success: plan.ok === true,
+    provider: 'moov',
+    liveProviderCalled,
+    liveProviderPosted: false,
+    createdPaymentTransfer: false,
+    persistMoneyIntents: false,
+    productionExecution: false,
+    totp_consumed: false,
+    client_environment_ignored: ignoreClientEnvironment(body),
   };
 }

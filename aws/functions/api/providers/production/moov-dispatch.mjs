@@ -5,11 +5,16 @@ import { providerSandboxExecutionEnabled } from '../../sandbox-flags.mjs';
 import { handleProductionMoovTransferStatus } from './moov-transfer-status.mjs';
 import { handleProductionMoovPayoutOrchestrate } from './moov-payout-orchestrate.mjs';
 import { handleMoovTenantEnvironment } from '../moov-tenant-environment.mjs';
+import { handleProductionPayoutE2e } from './moov-production-payout-e2e.mjs';
+import { refuseIndependentMustKeepInvocation } from './moov-production-transfer-primitives.mjs';
 
 const PRODUCTION_MOOV_FUNCTIONS = new Set([
   'moov-transfer-status',
   'moov-payout-orchestrate',
   'moov-tenant-environment',
+  'moov-production-payout-e2e',
+  'moov-wallet-fund',
+  'moov-wallet-disburse',
 ]);
 
 /** Live zip providers.mjs still routes these names before money handlers. */
@@ -82,10 +87,13 @@ const HANDLERS = {
   'moov-transfer-status': wrap(handleProductionMoovTransferStatus),
   'moov-payout-orchestrate': wrap(handleProductionMoovPayoutOrchestrate),
   'moov-tenant-environment': wrap(handleMoovTenantEnvironment),
+  'moov-production-payout-e2e': wrap(handleProductionPayoutE2e),
+  'moov-wallet-fund': wrap(async () => refuseIndependentMustKeepInvocation('moov-wallet-fund')),
+  'moov-wallet-disburse': wrap(async () => refuseIndependentMustKeepInvocation('moov-wallet-disburse')),
 };
 
 export const runProductionMoovHandler = (name, event, deps = {}) => {
-  if (name === 'moov-tenant-environment') {
+  if (name === 'moov-tenant-environment' || name === 'moov-wallet-fund' || name === 'moov-wallet-disburse' || name === 'moov-production-payout-e2e') {
     const handler = HANDLERS[name];
     return handler ? handler(event, deps) : null;
   }
