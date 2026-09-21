@@ -55,6 +55,7 @@ import { useTenant } from "@/contexts/TenantContext";
 import { useToast } from "@/hooks/use-toast";
 import { SWEEP_RAIL_HINT, SWEEP_RAIL_LABEL, type SweepPushRail } from "@/lib/payments/sweeps";
 import { WalletPanel } from "@/components/payments/WalletPanel";
+import { WalletFundAuthorizeCard } from "@/components/payments/WalletFundAuthorizeCard";
 import { AutoFundingPanel } from "@/components/payments/AutoFundingPanel";
 
 import { MoovTreasuryPanel } from "@/components/payments/MoovTreasuryPanel";
@@ -396,6 +397,8 @@ export default function WalletOps() {
             </Dialog>
           </div>
         </SectionCard>
+
+        <WalletFundAuthorizeCard />
 
         {/* Automatic funding */}
         <SectionCard

@@ -41,6 +41,7 @@ import { Search as SearchIcon } from "lucide-react";
 import { PasskeyManagerCard } from "@/components/auth/PasskeyManagerCard";
 import { TotpManagerCard } from "@/components/auth/TotpManagerCard";
 import { FinancialTotpOnlyTestCard } from "@/components/auth/FinancialTotpOnlyTestCard";
+import { WalletFundAuthorizeCard } from "@/components/payments/WalletFundAuthorizeCard";
 import NotificationPreferencesSettings from "@/components/settings/NotificationPreferencesSettings";
 import { CheckUsageCard } from "@/components/billing/CheckUsageCard";
 import { TenantUsageTracker } from "@/components/billing/TenantUsageTracker";
@@ -188,6 +189,7 @@ export function WhiteLabelSettings() {
             <NotificationPreferencesSettings />
             <PasskeyManagerCard />
             <TotpManagerCard />
+            <WalletFundAuthorizeCard />
             <FinancialTotpOnlyTestCard />
           </TabsContent>
 

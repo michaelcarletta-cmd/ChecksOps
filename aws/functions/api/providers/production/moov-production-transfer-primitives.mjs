@@ -6,11 +6,14 @@
  * orchestrate. This module never overlays those filenames.
  *
  * POST is unreachable while CONSUME_TOTP_THIS_PHASE is false or the production
- * transfer POST flag is false.
+ * transfer POST flag is false. M7.16 may POST funding only when the caller
+ * passes consumeTotpThisPhase=true after a fresh unused wallet.fund step-up.
+ * Payout POST stays blocked.
  */
 import { formatMoovTransferAmount } from '../amounts.mjs';
 import { assertNoCrossEnvironmentObject, isKnownProductionMoovObject } from '../moov-environment.mjs';
 import { idempotencyUuid } from '../moov-sandbox.mjs';
+import { productionMoovFetch, transferIdOf } from './moov-client.mjs';
 import { KNOWN_APPROVED_MOOV } from './moov-accounts.mjs';
 import {
   FIRST_PRODUCTION_TRANSFER_CENTS,
@@ -209,6 +212,35 @@ export const persistProductionIntentCas = async (store, planned) => {
   };
 };
 
+const classifyFundingPostOutcome = (posted) => {
+  if (posted?.ok) return 'posted';
+  const status = Number(posted?.statusCode || posted?.httpStatus || posted?.status || 0);
+  if (posted?.error === 'provider_egress_failed' || status === 0) return 'unknown';
+  if (status >= 500) return 'unknown';
+  if (status === 408 || status === 429) return 'unknown';
+  if (status === 409) return 'conflict';
+  if (status >= 400) return 'failed';
+  return 'unknown';
+};
+
+const defaultPostProductionFunding = async ({
+  credentials,
+  path,
+  body,
+  idempotencyKey,
+  fetchImpl,
+  platformAccountId,
+}) => productionMoovFetch({
+  credentials,
+  path,
+  method: 'POST',
+  body,
+  idempotencyKey,
+  scopes: [`/accounts/${platformAccountId}/transfers.write`],
+  fetchImpl,
+  mode: 'execute',
+});
+
 const executeLeg = async ({
   leg,
   credentials,
@@ -222,8 +254,11 @@ const executeLeg = async ({
   orchestratorAllows = false,
   totpPresent = false,
   totpValid = false,
+  consumeTotpThisPhase = CONSUME_TOTP_THIS_PHASE,
   independentInvocation = false,
   fetchImpl = fetch,
+  markPostAttempted = null,
+  postTransfer = null,
 } = {}) => {
   if (independentInvocation === true) {
     return refuseIndependentMustKeepInvocation(leg === 'payout' ? 'moov-wallet-disburse' : 'moov-wallet-fund');
@@ -294,17 +329,122 @@ const executeLeg = async ({
     persistDone,
     orchestratorAllows,
     previousLegPostedThisWindow: false,
+    consumeTotpThisPhase: consumeTotpThisPhase === true,
   });
   if (arm.arm !== true) {
-    return { ...heldBase, arm, consume_totp_this_phase: CONSUME_TOTP_THIS_PHASE === true };
+    return { ...heldBase, arm, consume_totp_this_phase: consumeTotpThisPhase === true };
   }
-  if (typeof fetchImpl !== 'function') {
-    return fail('fetch_required_for_execute', { statusCode: 500 });
+  if (leg === 'payout') {
+    return {
+      ...heldBase,
+      arm,
+      consume_totp_this_phase: false,
+      error: 'payout_post_blocked_phase_a',
+      message: 'M7.16 Phase A never POSTs WALLET→RECIPIENT.',
+    };
   }
-  return fail('production_post_unreachable_this_phase', {
-    statusCode: 403,
-    message: 'M7.14 never POSTs. CONSUME_TOTP_THIS_PHASE is false.',
-  });
+  if (body.error) return fail(body.error, { statusCode: 400, message: body.message });
+  if (typeof markPostAttempted === 'function') {
+    const marked = await markPostAttempted({
+      idempotency_key: businessKey,
+      provider_idempotency_key: providerIdempotencyKey,
+    });
+    if (marked && marked.ok === false) {
+      return fail(marked.error || 'cas_post_attempt_failed', { statusCode: 409, cas: marked });
+    }
+  }
+  const platformAccountId = binding.platformAccountId || PLATFORM.moovAccountId;
+  let posted;
+  try {
+    const postImpl = typeof postTransfer === 'function' ? postTransfer : defaultPostProductionFunding;
+    posted = await postImpl({
+      credentials,
+      path: postPath,
+      body,
+      idempotencyKey: providerIdempotencyKey,
+      fetchImpl,
+      platformAccountId,
+    });
+  } catch (error) {
+    const status = Number(error?.status || error?.statusCode || 0);
+    const outcome = status >= 400 && status < 500 && status !== 408 && status !== 429
+      ? (status === 409 ? 'conflict' : 'failed')
+      : 'unknown';
+    return {
+      ...heldBase,
+      ok: false,
+      outcome,
+      transfer_post_held: false,
+      liveProviderCalled: true,
+      liveProviderPosted: false,
+      doNotRetry: true,
+      error: outcome === 'unknown' ? 'provider_post_unknown' : (error?.code || error?.error || 'provider_post_failed'),
+      httpStatus: status || null,
+      requestId: error?.diagnosis?.request_id || null,
+      message: String(error?.message || error).slice(0, 240),
+    };
+  }
+  const outcome = classifyFundingPostOutcome(posted);
+  const json = posted?.json || posted?.data || posted || {};
+  const transferId = transferIdOf(json) || json.transferID || json.transferId || json.id || null;
+  const captured = {
+    httpStatus: posted?.status || posted?.statusCode || posted?.httpStatus || null,
+    requestId: posted?.diagnosis?.request_id || posted?.requestId || null,
+  };
+  if (outcome === 'posted' && transferId) {
+    return {
+      ...heldBase,
+      outcome: 'posted',
+      transfer_post_held: false,
+      liveProviderCalled: true,
+      liveProviderPosted: true,
+      provider_transfer_id: transferId,
+      provider_status: json.status || null,
+      provider_idempotency_key: providerIdempotencyKey,
+      doNotRetry: true,
+      consume_totp_this_phase: true,
+      ...captured,
+    };
+  }
+  if (outcome === 'conflict') {
+    return {
+      ...heldBase,
+      outcome: 'conflict',
+      transfer_post_held: false,
+      liveProviderCalled: true,
+      liveProviderPosted: false,
+      doNotRetry: true,
+      error: 'idempotent_conflict',
+      message: 'Moov returned conflict. Reconcile GET-only. Do not retry.',
+      ...captured,
+    };
+  }
+  if (outcome === 'failed') {
+    return {
+      ...heldBase,
+      ok: false,
+      outcome: 'failed',
+      transfer_post_held: false,
+      liveProviderCalled: true,
+      liveProviderPosted: false,
+      doNotRetry: true,
+      error: posted?.error || 'provider_post_failed',
+      message: posted?.message || 'Moov rejected the funding POST.',
+      ...captured,
+    };
+  }
+  return {
+    ...heldBase,
+    ok: false,
+    outcome: 'unknown',
+    transfer_post_held: false,
+    liveProviderCalled: true,
+    liveProviderPosted: false,
+    doNotRetry: true,
+    error: 'provider_post_unknown',
+    message: 'POST outcome is unknown. Reconcile GET-only. Do not retry.',
+    ...captured,
+  };
 };
 
 export const executeProductionWalletFunding = (args = {}) => executeLeg({ ...args, leg: 'funding' });
