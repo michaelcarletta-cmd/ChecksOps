@@ -34,6 +34,7 @@ import {
 
 export const M711_PHASE = 'M7.11';
 export const M712_PHASE = 'M7.12';
+export const M712A_PHASE = 'M7.12A';
 export const SANDBOX_E2E_PAYOUT_CENTS = SANDBOX_PAYOUT_AMOUNT_CENTS;
 export const m712PayoutOperationId = () => payoutOperationIdFor({
   tenantId: PIPELINE_TEST_TENANT_ID,
@@ -41,6 +42,68 @@ export const m712PayoutOperationId = () => payoutOperationIdFor({
   recipientId: `m712:${PIPELINE_TEST_SANDBOX.recipientAccountId}`,
   payoutCents: SANDBOX_E2E_PAYOUT_CENTS,
 });
+export const M712_OPERATION_ID = '69704e23-9ddd-52f8-a2b1-d48bdb500926';
+export const M712_FUNDING_INTENT_ID = '985f487b-74f2-4d9f-8e6f-7cad9ae10c97';
+export const M712_PAYOUT_INTENT_ID = 'df6e3d55-ccc9-43cd-b275-8cde8e24c343';
+export const M712_FUNDING_TRANSFER_ID = 'e42635e8-7a75-4d25-ad2f-dd0e5696372d';
+
+const FAILED_PROVIDER = new Set(['failed', 'returned', 'canceled', 'cancelled', 'unknown']);
+
+export const evaluateSandboxFundingResumeGate = ({
+  fundingIntentStatus = null,
+  providerStatus = null,
+  liveAvailableCents = 0,
+  payoutCents = SANDBOX_E2E_PAYOUT_CENTS,
+} = {}) => {
+  const funding = String(fundingIntentStatus || '').toLowerCase();
+  const provider = String(providerStatus || '').toLowerCase();
+  const live = Number(liveAvailableCents);
+  const walletCovers = Number.isFinite(live) && live >= Number(payoutCents || 1);
+  const fundingCompleted = funding === 'completed';
+  const providerFailed = FAILED_PROVIDER.has(provider) || FAILED_PROVIDER.has(funding);
+
+  if (providerFailed && !fundingCompleted) {
+    const fundingState = (funding === 'returned' || provider === 'returned')
+      ? 'funding_returned'
+      : ((funding === 'unknown' || provider === 'unknown') ? 'funding_unknown' : 'funding_failed');
+    return {
+      payout_ready: false,
+      release_conditions_satisfied: false,
+      reason: 'payout_blocked',
+      funding_state: fundingState,
+      payout_state: 'payout_requested',
+      safe_to_resume_payout: false,
+    };
+  }
+  if (!fundingCompleted) {
+    return {
+      payout_ready: false,
+      release_conditions_satisfied: false,
+      reason: 'funding_pending',
+      funding_state: 'funding_pending',
+      payout_state: 'payout_requested',
+      safe_to_resume_payout: false,
+    };
+  }
+  if (!walletCovers) {
+    return {
+      payout_ready: false,
+      release_conditions_satisfied: false,
+      reason: 'funding_completed_waiting_for_wallet',
+      funding_state: 'funding_completed',
+      payout_state: 'payout_requested',
+      safe_to_resume_payout: false,
+    };
+  }
+  return {
+    payout_ready: true,
+    release_conditions_satisfied: true,
+    reason: 'payout_ready',
+    funding_state: 'funding_completed',
+    payout_state: 'payout_ready',
+    safe_to_resume_payout: true,
+  };
+};
 
 const FREEDOM = KNOWN_APPROVED_MOOV.freedom.tenantId;
 const fail = (error, extra = {}) => ({
