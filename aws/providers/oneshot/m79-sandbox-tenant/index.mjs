@@ -1941,33 +1941,55 @@ const persistOrchestratorIntent = async (client, body = {}) => {
   const description = leg === 'wallet_funding'
     ? 'M7.12 sandbox BANK to WALLET 0.01'
     : 'M7.12 sandbox WALLET to RECIPIENT 0.01';
-  const inserted = (await client.query(
-    `INSERT INTO public.payment_transfers (
-        tenant_id, provider, environment, status, idempotency_key, amount_cents,
-        platform_fee_cents, net_amount_cents, speed, description,
-        source_tenant_account_id, source_payment_method_id,
-        destination_recipient_id, destination_payment_method_id,
-        wallet_id, leg_role, provider_metadata, created_by
-      ) VALUES (
-        $1::uuid, 'moov', 'sandbox', 'planned', $2, 1,
-        0, 1, 'standard', $3,
-        $4, $5::uuid, $6::uuid, $7::uuid, $8::uuid, $9, $10::jsonb, $11::uuid
-      )
-      RETURNING *`,
-    [
-      tenantId,
-      idempotencyKey,
-      description,
-      SANDBOX_ACCOUNT,
-      leg === 'wallet_funding' ? fundingBank.id : (walletMethod?.id || null),
-      leg === 'wallet_disbursement' ? recipient.id : null,
-      leg === 'wallet_disbursement' ? (recipientBank?.id || null) : null,
-      objects.wallet.id,
-      leg,
-      JSON.stringify(metadata),
-      ACTOR,
-    ],
-  )).rows[0];
+  let inserted;
+  try {
+    inserted = (await client.query(
+      `INSERT INTO public.payment_transfers (
+          tenant_id, provider, environment, status, idempotency_key, amount_cents,
+          platform_fee_cents, net_amount_cents, speed, description,
+          source_tenant_account_id, source_payment_method_id,
+          destination_recipient_id, destination_payment_method_id,
+          wallet_id, leg_role, provider_metadata, created_by
+        ) VALUES (
+          $1::uuid, 'moov', 'sandbox', 'planned', $2, 1,
+          0, 1, 'standard', $3,
+          $4, $5::uuid, $6::uuid, $7::uuid, $8::uuid, $9, $10::jsonb, $11::uuid
+        )
+        RETURNING *`,
+      [
+        tenantId,
+        idempotencyKey,
+        description,
+        SANDBOX_ACCOUNT,
+        leg === 'wallet_funding' ? fundingBank.id : (walletMethod?.id || null),
+        leg === 'wallet_disbursement' ? recipient.id : null,
+        leg === 'wallet_disbursement' ? (recipientBank?.id || null) : null,
+        objects.wallet.id,
+        leg,
+        JSON.stringify(metadata),
+        ACTOR,
+      ],
+    )).rows[0];
+  } catch (error) {
+    if (String(error?.code) === '23505') {
+      const raced = (await client.query(
+        `SELECT * FROM public.payment_transfers
+          WHERE tenant_id = $1::uuid AND idempotency_key = $2 LIMIT 1`,
+        [tenantId, idempotencyKey],
+      )).rows[0];
+      const counts = await orchestratorIntentCounts(client, tenantId, operationId, idempotencyKey);
+      return {
+        ok: true,
+        reused: true,
+        created: false,
+        intent: raced,
+        ...counts,
+        sweep: await sweepUnchanged(client),
+        freedomEnvironment: (await freedomRow(client))?.moov_environment,
+      };
+    }
+    throw error;
+  }
   const counts = await orchestratorIntentCounts(client, tenantId, operationId, idempotencyKey);
   return {
     ok: true,
