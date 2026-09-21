@@ -22,6 +22,7 @@ import {
   amountToCents,
   orchestratePayout,
 } from './moov-payout-orchestrator.mjs';
+import { evaluatePaymentAmountLimits } from './moov-payout-limits.mjs';
 import { sandboxMoovGet } from './moov-sandbox-client.mjs';
 import {
   SANDBOX_SETUP_REQUIRED,
@@ -96,6 +97,31 @@ const loadEnvRows = async (client, tenantId, environment) => {
   return { transferRows, activityRows };
 };
 
+const isPaymentWorkflow = (body = {}) => String(body.workflow || body.workflow_name || '').toLowerCase() === 'payment';
+
+const resolvePayoutCents = (body = {}, { paymentWorkflow }) => {
+  if (!paymentWorkflow) {
+    return { ok: true, payoutCents: FIRST_PRODUCTION_TRANSFER_CENTS, firstTestCapApplied: true };
+  }
+  const raw = body.amount_cents ?? body.amountCents ?? body.payout_cents ?? body.payoutCents;
+  const cents = Number(raw);
+  const limits = evaluatePaymentAmountLimits({
+    payoutCents: cents,
+    requestedSpeed: body.requested_speed || body.delivery_speed || body.speed,
+    checkRemainingCents: body.check_remaining_cents ?? body.checkRemainingCents ?? null,
+  });
+  if (!limits.ok) {
+    return {
+      ok: false,
+      error: limits.error,
+      statusCode: 403,
+      ...limits,
+      firstTestCapApplied: false,
+    };
+  }
+  return { ok: true, payoutCents: limits.payout_cents, firstTestCapApplied: false, limits };
+};
+
 async function orchestrateProduction({
   client,
   mapping,
@@ -105,14 +131,25 @@ async function orchestrateProduction({
   store,
   memberships,
 }) {
+  const paymentWorkflow = isPaymentWorkflow(body);
   const binding = firstTestDisburseBinding();
-  const mismatch = mismatchFirstTestBody(body, binding);
-  if (mismatch) {
-    return fail(mismatch.error, mismatch.statusCode, {
-      field: mismatch.field,
-      amountCents: mismatch.amountCents,
-      capCents: mismatch.capCents,
-      message: mismatch.message,
+  if (!paymentWorkflow) {
+    const mismatch = mismatchFirstTestBody(body, binding);
+    if (mismatch) {
+      return fail(mismatch.error, mismatch.statusCode, {
+        field: mismatch.field,
+        amountCents: mismatch.amountCents,
+        capCents: mismatch.capCents,
+        message: mismatch.message,
+        environment: 'production',
+      });
+    }
+  }
+
+  const amount = resolvePayoutCents(body, { paymentWorkflow });
+  if (!amount.ok) {
+    return fail(amount.error, amount.statusCode || 403, {
+      ...amount,
       environment: 'production',
     });
   }
@@ -185,7 +222,7 @@ async function orchestrateProduction({
   const { transferRows, activityRows } = await loadEnvRows(client, tenantId, 'production');
   const plan = await orchestratePayout({
     availableCents,
-    payoutCents: FIRST_PRODUCTION_TRANSFER_CENTS,
+    payoutCents: amount.payoutCents,
     recipientVerified,
     totpFundPresent: false,
     totpDisbursePresent: false,
@@ -196,6 +233,22 @@ async function orchestrateProduction({
     sweepActivity: activityRows,
     environment: 'production',
     tenantId,
+    labels: paymentWorkflow ? {
+      fund: {
+        sourceLabel: KNOWN_APPROVED_MOOV.freedom.fundingBankLabel,
+        destinationLabel: KNOWN_APPROVED_MOOV.freedom.walletLabel,
+        bankId: KNOWN_APPROVED_MOOV.freedom.bankId,
+        walletId: KNOWN_APPROVED_MOOV.freedom.walletId,
+        sourcePaymentMethodId: KNOWN_APPROVED_MOOV.freedom.achDebitFundPm,
+        destinationPaymentMethodId: KNOWN_APPROVED_MOOV.freedom.walletPm,
+      },
+      disburse: {
+        sourceLabel: KNOWN_APPROVED_MOOV.freedom.walletLabel,
+        destinationLabel: KNOWN_APPROVED_MOOV.recipient.bankLabel,
+        recipientLabel: KNOWN_APPROVED_MOOV.recipient.displayName,
+        recipientId: KNOWN_APPROVED_MOOV.recipient.recipientId,
+      },
+    } : null,
   });
 
   return {
@@ -212,6 +265,8 @@ async function orchestrateProduction({
     kycRequested: false,
     capabilitiesPosted: false,
     environment: 'production',
+    workflow: paymentWorkflow ? 'payment' : 'first_test',
+    first_test_cap_applied: amount.firstTestCapApplied === true,
     client_environment_ignored: ignoreClientEnvironment(body),
   };
 }
@@ -313,6 +368,14 @@ async function orchestrateSandbox({
   }
 
   const { transferRows, activityRows } = await loadEnvRows(client, tenantId, 'sandbox');
+  const paymentWorkflow = isPaymentWorkflow(body);
+  const amount = resolvePayoutCents(body, { paymentWorkflow });
+  if (!amount.ok) {
+    return fail(amount.error, amount.statusCode || 403, {
+      ...amount,
+      environment: 'sandbox',
+    });
+  }
   const recipientBankId = recipientBank?.provider_bank_account_id || null;
   const fundingBank = (objects.banks || []).find((row) => (
     String(row.provider_account_id || '') === String(accountId)
@@ -332,7 +395,7 @@ async function orchestrateSandbox({
     : 'Sandbox funding bank';
   const plan = await orchestratePayout({
     availableCents,
-    payoutCents: FIRST_PRODUCTION_TRANSFER_CENTS,
+    payoutCents: amount.payoutCents,
     recipientVerified,
     totpFundPresent: false,
     totpDisbursePresent: false,
@@ -374,6 +437,8 @@ async function orchestrateSandbox({
     sandboxExecution: transferPostEnabledForEnvironment('sandbox'),
     environment: 'sandbox',
     setup_required: false,
+    workflow: paymentWorkflow ? 'payment' : 'first_test',
+    first_test_cap_applied: amount.firstTestCapApplied === true,
     client_environment_ignored: ignoreClientEnvironment(body),
   };
 }

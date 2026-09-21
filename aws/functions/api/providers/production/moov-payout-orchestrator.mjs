@@ -88,6 +88,16 @@ export const UX_STAGE_LABEL = Object.freeze({
   payment_completed: 'Payment completed',
 });
 
+/** Product-facing payment status. Internal M7 / rail labels stay off this map. */
+export const PAYMENT_STATUS_LABEL = Object.freeze({
+  funding_required: 'Funding',
+  funding_pending: 'Waiting for funds',
+  funds_available: 'Ready to send',
+  ready_to_send: 'Ready to send',
+  payment_pending: 'Sending',
+  payment_completed: 'Completed',
+});
+
 const FUNDING_TRANSITIONS = Object.freeze({
   funding_required: Object.freeze(['funding_submitting', 'funding_submitted']),
   funding_submitting: Object.freeze(['funding_pending', 'funding_submitted', 'funding_failed', 'funding_unknown']),
@@ -237,10 +247,10 @@ export const isAuthoritativeFundingIntent = (row, operationId) => {
   return true;
 };
 
-const intentStatusToFundingState = (status) => {
+export const intentStatusToFundingState = (status) => {
   const s = String(status || '').toLowerCase();
   if (s === 'completed') return 'funding_completed';
-  if (s === 'failed') return 'funding_failed';
+  if (s === 'failed' || s === 'canceled' || s === 'cancelled') return 'funding_failed';
   if (s === 'returned') return 'funding_returned';
   if (s === 'unknown') return 'funding_unknown';
   if (s === 'submitting') return 'funding_submitting';
@@ -504,6 +514,9 @@ export const orchestratePayout = async ({
   if (fundingPending) blockedReasons.push('funding_pending');
   if (fundingFailed) blockedReasons.push('funding_failed');
   if (!walletAvailableConfirmed) blockedReasons.push('wallet_available_unconfirmed');
+  if (fundingState === 'funding_completed' && !walletAvailableConfirmed) {
+    blockedReasons.push('funding_completed_wallet_unavailable');
+  }
   if (recipientVerified !== true) blockedReasons.push('recipient_not_verified');
   if (requireTotp === true && totpDisbursePresent !== true) blockedReasons.push('wallet_disburse_totp_required');
   if (payoutInFlight) blockedReasons.push('payout_in_flight');
@@ -548,6 +561,8 @@ export const orchestratePayout = async ({
     payout_state: effectivePayoutState,
     ux_stage,
     ux_label: UX_STAGE_LABEL[ux_stage],
+    payment_status: ux_stage,
+    payment_status_label: PAYMENT_STATUS_LABEL[ux_stage] || UX_STAGE_LABEL[ux_stage],
     wallet_available_confirmed: walletAvailableConfirmed && fundingCompleted,
     recipient_verified: recipientVerified === true,
     payout_submittable: mayPostPayout,
@@ -641,6 +656,7 @@ export const orchestratePayout = async ({
       recipient_name: disburseBindingOf(labels).recipientLabel,
       stage: ux_stage,
       stage_label: UX_STAGE_LABEL[ux_stage],
+      payment_status_label: PAYMENT_STATUS_LABEL[ux_stage] || UX_STAGE_LABEL[ux_stage],
       actions,
     },
     webhook_role: 'read_update_existing_intents_only',

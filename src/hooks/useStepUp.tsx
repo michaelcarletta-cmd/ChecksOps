@@ -154,7 +154,11 @@ export function StepUpProvider({ children }: { children: ReactNode }) {
       if (isCheckBoundAction(next.actionKey) && !next.checkId) {
         return Promise.resolve(false);
       }
-      const nextKey = stepUpCacheKey(userId, next.actionKey, next.checkId);
+      const nextKey = stepUpCacheKey(userId, next.actionKey, next.checkId, {
+        payoutOperationId: next.payoutOperationId,
+        recipientId: next.recipientId,
+        amountCents: next.amountCents,
+      });
       if (cacheAllowsReuse(verifiedKey, nextKey)) return Promise.resolve(true);
       return new Promise<boolean>((resolve) => {
         resolverRef.current = resolve;
@@ -169,7 +173,11 @@ export function StepUpProvider({ children }: { children: ReactNode }) {
     (ok: boolean) => {
       const current = requestRef.current;
       if (ok && userId && current) {
-        const key = stepUpCacheKey(userId, current.actionKey, current.checkId);
+        const key = stepUpCacheKey(userId, current.actionKey, current.checkId, {
+          payoutOperationId: current.payoutOperationId,
+          recipientId: current.recipientId,
+          amountCents: current.amountCents,
+        });
         if (key) {
           writeVerifiedScope(userId, key);
           setVerifiedKey(key);
