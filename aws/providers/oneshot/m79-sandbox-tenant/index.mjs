@@ -321,16 +321,44 @@ const reconcileFundingParity = async (client, body = {}) => {
   const sweepBefore = await sweepUnchanged(client);
   const intentBefore = (await client.query(
     `SELECT id, tenant_id, environment, status, provider_status, completed_at, failure_reason,
-            provider_transfer_id, provider_metadata
+            provider_transfer_id, provider_metadata, leg_role, amount_cents
        FROM public.payment_transfers
       WHERE id = $1::uuid AND tenant_id = $2::uuid AND environment = 'sandbox'
       LIMIT 1`,
     [intentId, tenantId],
   )).rows[0];
   if (!intentBefore) return fail('intent_not_found');
+  if (String(intentBefore.leg_role || '') !== 'wallet_funding') {
+    return fail('intent_leg_mismatch', { leg_role: intentBefore.leg_role });
+  }
+  if (String(intentId).toLowerCase() === PAYOUT_INTENT_ID) return fail('payout_intent_refused');
+  if (String(transferId).toLowerCase() === PAYOUT_TRANSFER_ID) return fail('payout_transfer_refused');
   if (String(intentBefore.provider_transfer_id || '').toLowerCase() !== String(transferId).toLowerCase()) {
     return fail('transfer_id_mismatch');
   }
+
+  const providerStatus = String(body.providerStatus || '').toLowerCase();
+  const pendingStatuses = ['pending', 'processing', 'queued', 'originated', 'submitted', 'created'];
+  const failedStatuses = ['failed', 'returned', 'canceled', 'cancelled'];
+  if (pendingStatuses.includes(providerStatus)) {
+    return {
+      ok: true,
+      skipped: 'pending',
+      mode: 'pending_stop',
+      createdPaymentTransfer: false,
+      liveProviderPosted: false,
+      intent: intentBefore,
+      fundingUnchanged: true,
+      rdsWallet: (await tenantObjects(client, tenantId, 'sandbox')).wallet,
+      freedomEnvironment: (await freedomRow(client))?.moov_environment,
+      freedomChanged: false,
+      sweep: await sweepUnchanged(client),
+      sweepChanged: false,
+    };
+  }
+  const nextStatus = failedStatuses.includes(providerStatus)
+    ? (providerStatus === 'cancelled' ? 'canceled' : providerStatus)
+    : 'completed';
 
   const historyBefore = (await client.query(
     `SELECT count(*)::int AS n
@@ -368,15 +396,16 @@ const reconcileFundingParity = async (client, body = {}) => {
          $1, $2, $3, $4::timestamptz, $5, $6, $7::jsonb, $8)`,
       [
         transferId,
-        'completed',
-        body.providerStatus || 'completed',
-        completedAt,
+        nextStatus,
+        body.providerStatus || nextStatus,
+        nextStatus === 'completed' ? completedAt : null,
         'moov.parity_fill',
         intentBefore.status,
         JSON.stringify({
           source: 'moov_get',
-          completedOn: completedAt,
-          phase: 'm79i',
+          completedOn: nextStatus === 'completed' ? completedAt : null,
+          phase: body.phase || 'm79i',
+          failureReason: body.failureReason || null,
         }),
         'sandbox',
       ],
@@ -390,7 +419,7 @@ const reconcileFundingParity = async (client, body = {}) => {
         availableCents,
         pendingCents,
         tenantId,
-        JSON.stringify({ source: 'moov_get', phase: 'm79i' }),
+        JSON.stringify({ source: 'moov_get', phase: body.phase || 'm79i' }),
       ],
     )).rows[0] || null;
     await client.query('COMMIT');
@@ -445,15 +474,21 @@ const reconcileFundingParity = async (client, body = {}) => {
   const freedom = await freedomRow(client);
   const sweep = await sweepUnchanged(client);
   const objects = await tenantObjects(client, tenantId, 'sandbox');
+  const completedOk = nextStatus === 'completed'
+    && String(intentAfter?.status) === 'completed'
+    && String(intentAfter?.provider_status).toLowerCase() === 'completed'
+    && intentAfter?.failure_reason == null;
+  const failedOk = nextStatus !== 'completed'
+    && String(intentAfter?.status) === nextStatus;
   return {
-    ok: String(intentAfter?.status) === 'completed'
-      && String(intentAfter?.provider_status) === 'completed'
-      && intentAfter?.failure_reason == null
+    ok: (completedOk || failedOk)
       && Number(wallet?.available_cents) === Number(availableCents)
       && Number(wallet?.pending_cents) === Number(pendingCents)
       && Number(historyAfter?.n || 0) >= Number(historyBefore?.n || 0)
       && failureHistoryAfter.length >= failureHistoryBefore.length
       && freedom?.moov_environment === 'production',
+    mode: 'update_existing_only',
+    nextStatus,
     recon,
     wallet,
     intentBefore: {
