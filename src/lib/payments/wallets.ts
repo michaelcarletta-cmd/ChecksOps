@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { buildWalletActivityFeed } from "@/lib/payments/walletActivityFeed";
 
 /**
  * Provider-agnostic access to organization balances (wallets).
@@ -54,6 +55,9 @@ export interface WalletSnapshot {
   wallet: Wallet;
   ledger: WalletLedgerEntry[];
   sub_ledgers: WalletSubLedger[];
+  transfers?: Record<string, unknown>[];
+  provider_activity?: Record<string, unknown>[];
+  activity?: ReturnType<typeof buildWalletActivityFeed>;
 }
 
 async function invoke<T>(fn: string, body: Record<string, unknown>): Promise<T> {
@@ -132,29 +136,55 @@ export async function readWallet(
   return (data as Wallet) ?? null;
 }
 
-/** Local environment-scoped wallet, ledger, and money intents. No provider POST. */
+/** Local environment-scoped wallet, ledger, money intents, and provider activity. No provider POST. */
 export async function readWalletSnapshot(
   tenantId: string,
   walletType: WalletType = "operating",
   ledgerLimit = 50,
-): Promise<WalletSnapshot & { transfers: Record<string, unknown>[] }> {
+): Promise<WalletSnapshot & { transfers: Record<string, unknown>[]; provider_activity: Record<string, unknown>[] }> {
   const environment = await tenantMoovEnvironment(tenantId);
   const wallet = await readWallet(tenantId, walletType);
-  if (!wallet?.id) {
-    const { data: transfers, error: transferError } = await supabase
+  const [{ data: transfers, error: transferError }, { data: providerActivity, error: activityError }] = await Promise.all([
+    supabase
       .from("payment_transfers")
       .select(
-        "id, amount_cents, status, provider_status, speed, selected_rail, description, created_at, completed_at, leg_role, is_facilitator_fee, provider_transfer_id",
+        "id, amount_cents, status, provider_status, speed, selected_rail, description, created_at, completed_at, leg_role, is_facilitator_fee, provider_transfer_id, environment",
       )
       .eq("tenant_id", tenantId)
       .eq("environment", environment)
       .order("created_at", { ascending: false })
-      .limit(ledgerLimit);
-    if (transferError) throw transferError;
-    return { wallet: null as unknown as Wallet, ledger: [], sub_ledgers: [], transfers: transfers ?? [] };
+      .limit(ledgerLimit),
+    (supabase as any)
+      .from("payment_provider_activity")
+      .select(
+        "id, origin, activity_kind, provider_transfer_id, payment_transfer_id, status, amount_cents, source_rail, destination_rail, provider_created_at, provider_completed_at, observed_at, environment",
+      )
+      .eq("tenant_id", tenantId)
+      .eq("environment", environment)
+      .order("observed_at", { ascending: false })
+      .limit(ledgerLimit),
+  ]);
+  if (transferError) throw transferError;
+  const activityRows = activityError ? [] : (providerActivity ?? []);
+  if (!wallet?.id) {
+    const activity = buildWalletActivityFeed({
+      transfers: transfers ?? [],
+      providerActivity: activityRows,
+      ledger: [],
+      limit: ledgerLimit,
+      environment,
+    });
+    return {
+      wallet: null as unknown as Wallet,
+      ledger: [],
+      sub_ledgers: [],
+      transfers: transfers ?? [],
+      provider_activity: activityRows,
+      activity,
+    };
   }
 
-  const [{ data: ledger, error: ledgerError }, { data: subLedgers, error: subError }, { data: transfers, error: transferError }] =
+  const [{ data: ledger, error: ledgerError }, { data: subLedgers, error: subError }] =
     await Promise.all([
       supabase
         .from("payment_wallet_ledger")
@@ -167,24 +197,23 @@ export async function readWalletSnapshot(
         .select("*")
         .eq("wallet_id", wallet.id)
         .order("created_at", { ascending: false }),
-      supabase
-        .from("payment_transfers")
-        .select(
-          "id, amount_cents, status, provider_status, speed, selected_rail, description, created_at, completed_at, leg_role, is_facilitator_fee, provider_transfer_id",
-        )
-        .eq("tenant_id", tenantId)
-        .eq("environment", environment)
-        .order("created_at", { ascending: false })
-        .limit(ledgerLimit),
     ]);
   if (ledgerError) throw ledgerError;
   if (subError) throw subError;
-  if (transferError) throw transferError;
+  const activity = buildWalletActivityFeed({
+    transfers: transfers ?? [],
+    providerActivity: activityRows,
+    ledger: ledger ?? [],
+    limit: ledgerLimit,
+    environment,
+  });
   return {
     wallet,
     ledger: (ledger ?? []) as WalletLedgerEntry[],
     sub_ledgers: (subLedgers ?? []) as WalletSubLedger[],
     transfers: transfers ?? [],
+    provider_activity: activityRows,
+    activity,
   };
 }
 

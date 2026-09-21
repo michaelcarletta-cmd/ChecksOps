@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -64,6 +64,7 @@ import { VerificationDocumentsPanel } from "@/components/payments/VerificationDo
 import { MoovEnvironmentBadge } from "@/components/payments/MoovEnvironmentBadge";
 import { SANDBOX_SETUP_REQUIRED } from "@/lib/moovEnvironment";
 import { walletActivityTitle, walletBalanceLabel, walletIsSynchronized, walletOpsDisplayStatus } from "@/lib/payments/walletDisplay";
+import { buildWalletActivityFeed } from "@/lib/payments/walletActivityFeed";
 
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 
@@ -139,7 +140,7 @@ export default function WalletOps() {
   const { toast } = useToast();
   const { enabled, isLoading: eligibilityLoading, environment } = usePaymentProviderEligibility();
 
-  const { wallet, ledger, transfers: syncedTransfers = [], isLoading: walletLoading, setupRequired, refetch: refetchWallet } =
+  const { wallet, ledger, transfers: syncedTransfers = [], activity: projectedActivity = [], providerActivity: projectedProviderActivity = [], isLoading: walletLoading, setupRequired, refetch: refetchWallet } =
     useWallet("operating");
   const {
     config,
@@ -185,6 +186,24 @@ export default function WalletOps() {
   const pendingOut = transferData?.pendingOutCents ?? 0;
   const pendingIn = transferData?.pendingInCents ?? 0;
   const minimumCents = config?.minimum_balance_cents ?? 0;
+
+  const activity = useMemo(() => {
+    if (Array.isArray(projectedActivity) && projectedActivity.length > 0) return projectedActivity;
+    return buildWalletActivityFeed({
+      transfers: transferData?.transfers?.length ? transferData.transfers : syncedTransfers,
+      providerActivity: projectedProviderActivity.length ? projectedProviderActivity : providerActivity,
+      ledger,
+      environment,
+    });
+  }, [
+    projectedActivity,
+    transferData?.transfers,
+    syncedTransfers,
+    projectedProviderActivity,
+    providerActivity,
+    ledger,
+    environment,
+  ]);
 
 
   async function handleSavePayoutSpeed() {
@@ -662,85 +681,35 @@ export default function WalletOps() {
         }
       >
 
-        {ledger.length === 0 && (transferData?.transfers.length ?? 0) === 0 && providerActivity.length === 0 && syncedTransfers.length === 0 ? (
+        {activity.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             No wallet activity yet. Funding, payouts, and automatic payouts appear here.
           </p>
         ) : (
           <div className="divide-y rounded-md border">
-            {(transferData?.transfers?.length ? transferData.transfers : syncedTransfers).slice(0, 8).map((t: any) => (
-              <div key={t.id} className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm">
+            {activity.map((row) => (
+              <div key={`${row.source}:${row.id}`} className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm">
                 <div className="min-w-0">
-                  <p className="truncate font-medium">
-                    {walletActivityTitle(t)}
-                  </p>
+                  <p className="truncate font-medium">{row.label}</p>
                   <p className="text-xs text-muted-foreground">
-                    {new Date(t.created_at).toLocaleString()}
+                    {row.timestamp ? new Date(row.timestamp).toLocaleString() : "Unknown time"}
+                    {row.provider_transfer_id ? ` · ${row.provider_transfer_id}` : ""}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge
                     variant="outline"
-                    className={`text-[10px] ${STATUS_TONE[(walletOpsDisplayStatus(t) ?? "").toLowerCase()] ?? "border-muted-foreground/30 text-muted-foreground"}`}
+                    className={`text-[10px] ${STATUS_TONE[(row.status ?? "").toLowerCase()] ?? "border-muted-foreground/30 text-muted-foreground"}`}
                   >
-                    {walletOpsDisplayStatus(t)}
+                    {row.status}
                   </Badge>
-                  <span className="font-semibold">{money(t.amount_cents)}</span>
+                  <span className={row.direction === "in" ? "font-semibold text-emerald-500" : "font-semibold"}>
+                    {row.direction === "in" ? "+" : "−"}
+                    {money(row.amount_cents)}
+                  </span>
                 </div>
               </div>
             ))}
-            {ledger.slice(0, 6).map((entry) => (
-              <div key={entry.id} className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm">
-                <div className="min-w-0">
-                  <p className="truncate font-medium">
-                    {ENTRY_LABEL[entry.entry_type] ?? entry.entry_type}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {new Date(entry.created_at).toLocaleString()}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className={entry.direction === "credit" ? "font-semibold text-emerald-500" : "font-semibold"}>
-                    {entry.direction === "credit" ? "+" : "−"}
-                    {money(entry.amount_cents)}
-                  </p>
-                  <p className="text-[11px] text-muted-foreground">
-                    Balance {money(entry.balance_after_cents)}
-                  </p>
-                </div>
-              </div>
-            ))}
-            {providerActivity.slice(0, 6).map((row) => {
-              const isSweep = row.origin === "provider_sweep" || String(row.activity_kind || "").startsWith("sweep");
-              const from = String(row.source_rail || "").includes("wallet") ? "WALLET" : "BANK";
-              const to = String(row.destination_rail || "").includes("wallet") ? "WALLET" : "CHECKING";
-              return (
-                <div key={row.id} className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm">
-                  <div className="min-w-0">
-                    <p className="truncate font-medium">
-                      {isSweep ? `${from} → ${to}` : "Provider activity"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {isSweep ? "Sweep · provider-created" : "Observed · not a ChecksOps transfer"}
-                      {" · "}
-                      {new Date(row.provider_created_at || row.observed_at).toLocaleString()}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="text-[10px] border-muted-foreground/30 text-muted-foreground">
-                      Sweep
-                    </Badge>
-                    <Badge
-                      variant="outline"
-                      className={`text-[10px] ${STATUS_TONE[(row.status ?? "").toLowerCase()] ?? "border-muted-foreground/30 text-muted-foreground"}`}
-                    >
-                      {row.status}
-                    </Badge>
-                    <span className="font-semibold">{money(Number(row.amount_cents || 0))}</span>
-                  </div>
-                </div>
-              );
-            })}
           </div>
         )}
       </SectionCard>

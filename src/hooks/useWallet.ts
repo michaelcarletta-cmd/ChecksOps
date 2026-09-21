@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibility";
 import { walletIsSynchronized } from "@/lib/payments/walletDisplay";
+import { buildWalletActivityFeed, type WalletActivityItem } from "@/lib/payments/walletActivityFeed";
 import {
   fundWallet,
   readWalletSnapshot,
@@ -19,7 +20,7 @@ export function useWallet(walletType: WalletType = "operating") {
   const qc = useQueryClient();
   const key = ["payment-wallet", tenantId, environment, walletType];
 
-  const query = useQuery<WalletSnapshot & { setup_required?: boolean; transfers?: unknown[] }>({
+  const query = useQuery<WalletSnapshot & { setup_required?: boolean; transfers?: unknown[]; provider_activity?: unknown[]; activity?: WalletActivityItem[] }>({
     queryKey: key,
     enabled: !!tenantId && enabled,
     staleTime: 30_000,
@@ -28,13 +29,25 @@ export function useWallet(walletType: WalletType = "operating") {
       const local = await readWalletSnapshot(tenantId!, walletType);
       try {
         const synced = await syncWallet(tenantId!, walletType);
+        const transfers = (synced as any)?.transfers ?? local.transfers;
+        const providerActivity = (synced as any)?.provider_activity ?? local.provider_activity ?? [];
+        const activity = Array.isArray((synced as any)?.activity) && (synced as any).activity.length > 0
+          ? (synced as any).activity
+          : buildWalletActivityFeed({
+            transfers: transfers ?? [],
+            providerActivity,
+            ledger: (synced as any)?.ledger ?? local.ledger,
+            environment,
+          });
         return {
           ...synced,
-          transfers: (synced as any)?.transfers ?? local.transfers,
+          transfers,
+          provider_activity: providerActivity,
+          activity,
           setup_required: false,
         };
       } catch (e) {
-        if (walletIsSynchronized(local.wallet) || (local.transfers?.length ?? 0) > 0) {
+        if (walletIsSynchronized(local.wallet) || (local.transfers?.length ?? 0) > 0 || (local.activity?.length ?? 0) > 0) {
           return { ...local, setup_required: false };
         }
         // A balance that simply isn't provisioned yet is an empty state, not
@@ -45,6 +58,8 @@ export function useWallet(walletType: WalletType = "operating") {
             ledger: local.ledger,
             sub_ledgers: local.sub_ledgers,
             transfers: local.transfers,
+            provider_activity: local.provider_activity,
+            activity: local.activity,
             setup_required: true,
           } as WalletSnapshot & { setup_required: boolean };
         }
@@ -80,6 +95,8 @@ export function useWallet(walletType: WalletType = "operating") {
     refetch: query.refetch,
     fund,
     transfers: (query.data as any)?.transfers ?? [],
+    providerActivity: (query.data as any)?.provider_activity ?? [],
+    activity: (query.data as any)?.activity ?? [],
   };
 }
 
