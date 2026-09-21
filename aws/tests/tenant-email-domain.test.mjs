@@ -118,6 +118,7 @@ const memoryClient = (opts = {}) => {
     membershipRole: opts.membershipRole === undefined ? 'admin' : opts.membershipRole,
     systemRole: opts.systemRole || null,
     master: opts.master === true,
+    platformOwner: opts.platformOwner === true,
     otherDomain: opts.otherDomain || null,
     failAudit: opts.failAudit === true,
     missingRateLimitFunction: opts.missingRateLimitFunction === true,
@@ -172,6 +173,9 @@ const memoryClient = (opts = {}) => {
       }
       if (compact.includes('is_master_owner')) {
         return { rows: [{ is_master: state.master }] };
+      }
+      if (compact.includes('is_platform_owner')) {
+        return { rows: [{ is_owner: state.master === true || state.platformOwner === true }] };
       }
       if (/set_config/i.test(compact) && params[0] === 'request.app_user_id') {
         state.authUid = params[1];
@@ -432,6 +436,20 @@ test('authorization: member cannot configure, cross-tenant denied, platform owne
     client: platform, mapping, body: { tenantId: TENANT, domain: DOMAIN }, spoof, sesv2,
   });
   assert.equal(ownerStart.ok, true);
+
+  const ownerOnly = memoryClient({ membershipRole: null, systemRole: null, master: false, platformOwner: true });
+  const ownerGet = await runGetEmailBranding({
+    client: ownerOnly, mapping, body: { tenantId: TENANT }, spoof,
+  });
+  assert.equal(ownerGet.ok, true);
+  assert.equal(ownerGet.settings.canConfigure, true);
+  const ownerSave = await runSaveEmailBranding({
+    client: ownerOnly,
+    mapping,
+    body: { tenantId: TENANT, fromName: 'Pipeline Test', replyTo: 'ops@example.com' },
+    spoof,
+  });
+  assert.equal(ownerSave.ok, true);
 });
 
 test('frontend cannot set verified status on save', async () => {

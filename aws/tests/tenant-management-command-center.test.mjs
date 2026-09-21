@@ -334,6 +334,14 @@ test('platform-owner usage reader uses existing billing event tables', async () 
   assert.ok(queries.some((q) => q.sql.includes('mortgage_handling_requests')));
 });
 
+test('email branding treats is_platform_owner as a platform-admin without user_roles', () => {
+  const src = read('aws/functions/api/tenant-email-domain.mjs');
+  assert.match(src, /is_platform_owner\(\) AS is_owner/);
+  assert.match(src, /platformOwner === true/);
+  assert.doesNotMatch(src, /INSERT INTO public\.user_roles/);
+  assert.doesNotMatch(src, /INSERT INTO public\.tenant_users/);
+});
+
 test('TM UI uses env-aware KYC, invite resend, and dark collection copy', () => {
   const admin = read('src/pages/admin/AdminTenants.tsx');
   assert.match(admin, /Never pick the newest row across environments/);
