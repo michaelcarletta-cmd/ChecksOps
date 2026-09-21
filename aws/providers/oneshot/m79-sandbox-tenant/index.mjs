@@ -431,14 +431,19 @@ const objectProof = async (client, tenantId) => {
 };
 
 const webhookReceipts = async (client, eventIds = []) => {
-  if (!Array.isArray(eventIds) || !eventIds.length) return { ok: true, rows: [] };
+  const ids = Array.isArray(eventIds) ? eventIds.map(String).filter(Boolean) : [];
+  if (!ids.length) return { ok: true, rows: [] };
   const rows = (await client.query(
     `SELECT id, provider, external_event_id, event_type, mapped_tenant_id, mapped_internal_id,
             dry_run, received_at
        FROM public.aws_provider_webhook_receipts
-      WHERE provider = 'moov' AND external_event_id = ANY($1::text[])
+      WHERE provider = 'moov'
+        AND (
+          external_event_id = ANY($1::text[])
+          OR mapped_internal_id::text = ANY($1::text[])
+        )
       ORDER BY received_at DESC NULLS LAST`,
-    [eventIds.map(String)],
+    [ids],
   )).rows;
   let recentProductionAccountWebhookMutations = 0;
   let recentSandboxAccountWebhookMutations = [];
@@ -803,6 +808,10 @@ const updateFundingIntent = async (client, body = {}) => {
         provider_metadata = $6::jsonb,
         submitted_at = CASE WHEN $7::boolean THEN COALESCE(submitted_at, now()) ELSE submitted_at END,
         failure_reason = COALESCE($8, failure_reason),
+        completed_at = CASE
+          WHEN $9::timestamptz IS NOT NULL THEN COALESCE(completed_at, $9::timestamptz)
+          ELSE completed_at
+        END,
         updated_at = now()
       WHERE id = $1::uuid AND tenant_id = $2::uuid AND environment = 'sandbox'
       RETURNING *`,
@@ -815,6 +824,7 @@ const updateFundingIntent = async (client, body = {}) => {
       JSON.stringify(metadata),
       body.markSubmitted === true,
       body.failureReason || null,
+      body.completedAt || null,
     ],
   )).rows[0];
   const counts = await intentCountFor(client, tenantId, existing.idempotency_key);
