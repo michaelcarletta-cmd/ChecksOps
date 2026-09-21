@@ -12,7 +12,7 @@ import {
   pendingCapabilities,
   scopes,
 } from './moov-client.mjs';
-import { fail, jsonResult } from './caller.mjs';
+import { fail, jsonResult, transferPostEnabled } from './caller.mjs';
 import {
   canSendPayments,
   existingTransferByKey,
@@ -635,11 +635,27 @@ export const walletFundOnClear = {
 
 export const tenantFeeCharge = {
   requireAdmin: true,
+  darkUnlessTransferPost: true,
   run: async ({ client, mapping, body, ctx, fetchImpl }) => {
     const tenantId = body.tenant_id || ctx.tenantId;
     const lines = Array.isArray(body.line_items) ? body.line_items : [];
     const amount = lines.reduce((s, l) => s + Math.max(0, Number(l.amount_cents) || 0), 0) || Number(body.amount_cents);
     if (!Number.isFinite(amount) || amount <= 0) return fail('Amount must be greater than zero.', 400);
+    if (!transferPostEnabled()) {
+      return jsonResult({
+        success: true,
+        dark: true,
+        liveProviderCalled: false,
+        results: [{
+          status: 'preview',
+          amount_cents: amount,
+          tenant_id: tenantId,
+          kind: body.kind || 'maintenance',
+          line_items: lines,
+          message: 'Collection preview only. ACH is not submitted while transfer POST is disabled.',
+        }],
+      });
+    }
     const account = await loadMoovAccount(client, tenantId, 'sandbox');
     if (!account?.provider_account_id) return fail('Set up your payment account first.', 409);
     const source = await loadConnectedMethod(client, { tenantId, providerAccountId: account.provider_account_id });

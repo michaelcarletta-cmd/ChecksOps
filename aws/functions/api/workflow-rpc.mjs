@@ -658,8 +658,11 @@ const executeResolveCheckCase = async ({ client, mapping, args }) => {
 };
 
 const executeAdminSetContractorPro = async ({ client, mapping, args }) => {
-  const gated = await requireRole(client, mapping.application_user_id, ['admin']);
-  if (gated.error) return gated;
+  const owner = (await client.query(IS_PLATFORM_OWNER_SQL)).rows[0];
+  if (owner?.is_owner !== true) {
+    const gated = await requireRole(client, mapping.application_user_id, ['admin']);
+    if (gated.error) return gated;
+  }
   const contractorId = arg(args, 'p_contractor_id', 'contractor_id');
   const approve = arg(args, 'p_approve', 'approve');
   if (!isUuid(contractorId)) return { error: 'invalid_uuid', field: 'p_contractor_id' };

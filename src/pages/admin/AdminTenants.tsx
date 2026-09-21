@@ -55,6 +55,7 @@ type Tenant = {
   subscription_status: string | null;
   plan_tier: string | null;
   is_test_account?: boolean | null;
+  moov_environment?: string | null;
   max_checks_per_month: number | null;
   email_from_name: string | null;
   email_from_address: string | null;
@@ -437,6 +438,11 @@ function CompanyTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
   const [subStatus, setSubStatus] = useState(tenant.subscription_status || "inactive");
   const [isTest, setIsTest] = useState(!!(tenant as any).is_test_account);
   const [maxChecks, setMaxChecks] = useState(tenant.max_checks_per_month ?? 100);
+  const [referralCode, setReferralCode] = useState(tenant.referral_code || "");
+  const [referralDiscount, setReferralDiscount] = useState(
+    tenant.referral_discount_cents != null ? (tenant.referral_discount_cents / 100).toFixed(2) : "0.00",
+  );
+  const [partnerCode, setPartnerCode] = useState(tenant.partner_code || "");
   const { saving, save } = useTenantSave(tenant, onUpdated);
 
   return (
@@ -482,18 +488,54 @@ function CompanyTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
           </div>
           <Switch checked={isTest} onCheckedChange={setIsTest} />
         </div>
-        {tenant.partner_code && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label>Partner Code</Label>
-            <div className="flex gap-2">
-              <Input value={tenant.partner_code} readOnly className="font-mono" />
-              <Button variant="outline" size="icon" onClick={() => { navigator.clipboard.writeText(tenant.partner_code!); toast({ title: "Copied" }); }}>
+            <Label>Referral Code</Label>
+            <Input
+              value={referralCode}
+              onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
+              className="font-mono"
+              placeholder="CHECKS0000"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Referral Discount ($ / month)</Label>
+            <Input
+              type="number"
+              step="0.01"
+              value={referralDiscount}
+              onChange={(e) => setReferralDiscount(e.target.value)}
+            />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label>Partner Code</Label>
+          <div className="flex gap-2">
+            <Input
+              value={partnerCode}
+              onChange={(e) => setPartnerCode(e.target.value.toUpperCase())}
+              className="font-mono"
+              placeholder="Partner / Freedom code"
+            />
+            {partnerCode && (
+              <Button variant="outline" size="icon" onClick={() => { navigator.clipboard.writeText(partnerCode); toast({ title: "Copied" }); }}>
                 <Copy className="w-4 h-4" />
               </Button>
-            </div>
+            )}
           </div>
-        )}
-        <Button onClick={() => save({ name, slug, custom_domain: customDomain || null, subscription_status: subStatus, is_test_account: isTest, moov_environment: isTest ? "sandbox" : "production", max_checks_per_month: maxChecks } as any)} disabled={saving}>
+        </div>
+        <Button onClick={() => save({
+          name,
+          slug,
+          custom_domain: customDomain || null,
+          subscription_status: subStatus,
+          is_test_account: isTest,
+          moov_environment: isTest ? "sandbox" : "production",
+          max_checks_per_month: maxChecks,
+          referral_code: referralCode.trim() || null,
+          referral_discount_cents: Math.max(0, Math.round(parseFloat(referralDiscount || "0") * 100)) || 0,
+          partner_code: partnerCode.trim() || tenant.partner_code,
+        } as any)} disabled={saving}>
           {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Save Changes
         </Button>
 
@@ -618,7 +660,7 @@ function UsersTab({ tenant }: { tenant: Tenant }) {
   const [loading, setLoading] = useState(true);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteName, setInviteName] = useState("");
-  const [inviteRole, setInviteRole] = useState("member");
+  const [inviteRole, setInviteRole] = useState("viewer");
   const [inviting, setInviting] = useState(false);
 
   const load = async () => {
@@ -675,13 +717,31 @@ function UsersTab({ tenant }: { tenant: Tenant }) {
   };
 
   const resendInvite = async (email: string) => {
-    const tenantBaseUrl = tenant.custom_domain ? `https://${tenant.custom_domain}` : `https://checksops.com/${tenant.slug}`;
-    const redirectTo = `${tenantBaseUrl}/login`;
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `https://checksops.com/reset-password?next=${encodeURIComponent(redirectTo)}`,
+    const { data, error } = await supabase.functions.invoke("tenant-invite-user", {
+      body: {
+        tenant_id: tenant.id,
+        email,
+        role: "viewer",
+        resend: true,
+      },
     });
-    if (error) { toast({ title: "Resend failed", description: error.message, variant: "destructive" }); return; }
-    toast({ title: "Reset link resent", description: `Sent to ${email}` });
+    if (error || (data as any)?.error) {
+      toast({
+        title: "Resend failed",
+        description: error?.message || (data as any)?.error || (data as any)?.invite_error,
+        variant: "destructive",
+      });
+      return;
+    }
+    if ((data as any)?.invite_sent === false) {
+      toast({
+        title: "Invite not sent",
+        description: (data as any)?.invite_error || "The invite email was not delivered.",
+        variant: "destructive",
+      });
+      return;
+    }
+    toast({ title: "Invite resent", description: `Sent to ${email}` });
   };
 
   const updateRole = async (id: string, role: string) => {
@@ -909,6 +969,11 @@ function TenantBillingBankPanel({ tenantId, tenantName }: { tenantId: string; te
     const failure = (data as any)?.error ?? (error ? await readFnError(error) : null);
     if (failure) return sonnerToast.error(failure);
     const r = (data as any)?.results?.[0];
+    if ((data as any)?.dark || r?.status === "preview") {
+      return sonnerToast.info(
+        `Preview only: $${((r?.amount_cents ?? amount_cents) / 100).toFixed(2)}. ACH was not submitted.`,
+      );
+    }
     if (r?.status === "submitted") sonnerToast.success(`ACH debit submitted for $${(r.amount_cents / 100).toFixed(2)}`);
     else sonnerToast.info(JSON.stringify(r ?? data));
   };
@@ -936,6 +1001,9 @@ function TenantBillingBankPanel({ tenantId, tenantName }: { tenantId: string; te
       accent="bg-gradient-to-r from-sky-500 to-sky-500/30"
       description={`Moov-verified account we pull maintenance fees from for ${tenantName}.`}
     >
+      <p className="text-xs text-amber-700 bg-amber-500/10 border border-amber-500/30 rounded-md px-3 py-2">
+        Collection is in preview mode. The monthly workflow calculates the amount due but does not submit ACH.
+      </p>
       <div className="flex justify-end">
         <Button size="sm" onClick={pullNow} disabled={charging}>
           {charging ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
@@ -1103,7 +1171,7 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
       return;
     }
     const confirmed = window.confirm(
-      `Pull $${(consolidatedTotalCents / 100).toFixed(2)} from ${tenantName}'s verified bank account and email them an invoice?`
+      `Preview $${(consolidatedTotalCents / 100).toFixed(2)} for ${tenantName}? ACH will not be submitted.`,
     );
     if (!confirmed) return;
     setPulling(true);
@@ -1129,6 +1197,12 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
     const failure = (resp as any)?.error ?? (error ? await readFnError(error) : null);
     if (failure) return sonnerToast.error(failure);
     const r = (resp as any)?.results?.[0];
+    if ((resp as any)?.dark || r?.status === "preview") {
+      sonnerToast.info(
+        `Preview only: ${fmt(r?.amount_cents ?? consolidatedTotalCents)}. ACH was not submitted.`,
+      );
+      return;
+    }
     if (r?.status === "submitted") {
       sonnerToast.success(
         `ACH debit for $${(r.amount_cents / 100).toFixed(2)} submitted${r.invoice_sent ? " · invoice emailed" : r.invoice_error ? ` · invoice: ${r.invoice_error}` : ""}`
@@ -1208,12 +1282,12 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
                   <div>
                     <h4 className="text-sm font-semibold">Consolidated Billing — {range.label}</h4>
                     <p className="text-[11px] text-muted-foreground">
-                      One ACH pull covers all ChecksOps fees for the month. Invoice is emailed automatically.
+                      Preview calculates maintenance + usage for the month. ACH is not submitted in this environment.
                     </p>
                   </div>
                   <Button size="sm" onClick={pullConsolidated} disabled={pulling || consolidatedTotalCents <= 0}>
                     {pulling ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
-                    Pull {fmt(consolidatedTotalCents)} & email invoice
+                    Preview {fmt(consolidatedTotalCents)}
                   </Button>
                 </div>
                 <table className="w-full text-sm">
@@ -1358,7 +1432,8 @@ function TenantManagementTable({
   const [proTenant, setProTenant] = useState<Tenant | null>(null);
   const [search, setSearch] = useState("");
 
-  // Live Moov KYC/verification status per tenant (keyed by tenant_id).
+  // Live Moov KYC/verification status per tenant, keyed by tenant_id + environment.
+  // Never pick the newest row across environments — Pipeline Test is sandbox, Freedom is production.
   const { data: moovKycByTenant } = useQuery({
     queryKey: ["admin-tenants-moov-kyc"],
     queryFn: async () => {
@@ -1368,12 +1443,18 @@ function TenantManagementTable({
         .eq("provider", "moov")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      const map: Record<string, { status: string | null; verification_status: string | null }> = {};
+      const map: Record<string, Array<{
+        environment: string | null;
+        status: string | null;
+        verification_status: string | null;
+      }>> = {};
       for (const a of data ?? []) {
-        // newest account wins (rows ordered desc)
-        if (!map[a.tenant_id]) {
-          map[a.tenant_id] = { status: a.onboarding_status, verification_status: a.verification_status };
-        }
+        if (!map[a.tenant_id]) map[a.tenant_id] = [];
+        map[a.tenant_id].push({
+          environment: a.environment,
+          status: a.onboarding_status,
+          verification_status: a.verification_status,
+        });
       }
       return map;
     },
@@ -1521,7 +1602,13 @@ function TenantManagementTable({
       mobileLabel: "Referral code",
       headerClassName: "w-[9%] min-w-[80px]",
       className: "font-mono text-[11px] break-all",
-      cell: (t) => t.referral_code || "—",
+      cell: (t) => (
+        <InlineTextEditor
+          value={t.referral_code || ""}
+          placeholder="Set code"
+          onSave={(code) => updateTenant(t.id, { referral_code: code.trim() ? code.trim().toUpperCase() : null })}
+        />
+      ),
     },
     {
       id: "ref_disc",
@@ -1529,14 +1616,21 @@ function TenantManagementTable({
       mobileLabel: "Referral discount",
       headerClassName: "w-[8%] min-w-[70px]",
       className: "text-[11px]",
-      cell: (t) => fmtMoney(t.referral_discount_cents),
+      cell: (t) => (
+        <InlineMoneyEditor
+          valueCents={t.referral_discount_cents ?? null}
+          onSave={(cents) => updateTenant(t.id, { referral_discount_cents: cents ?? 0 })}
+        />
+      ),
     },
     {
       id: "kyc",
       header: "KYC",
       headerClassName: "w-[10%] min-w-[110px]",
       cell: (t) => {
-        const moov = moovKycByTenant?.[t.id];
+        const env = String(t.moov_environment || (t.is_test_account ? "sandbox" : "production")).toLowerCase();
+        const accounts = moovKycByTenant?.[t.id] ?? [];
+        const moov = accounts.find((a) => String(a.environment || "").toLowerCase() === env) ?? null;
         const vs = (moov?.verification_status || "").toLowerCase();
         const moovBadge = !moov ? (
           <Badge variant="outline" className="text-[10px] border-muted-foreground/30 text-muted-foreground">No Moov acct</Badge>
@@ -1669,6 +1763,50 @@ function TenantManagementTable({
       )}
     </SectionCard>
 
+  );
+}
+
+function InlineTextEditor({
+  value,
+  placeholder,
+  onSave,
+}: {
+  value: string;
+  placeholder?: string;
+  onSave: (next: string) => Promise<boolean> | void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(value);
+
+  useEffect(() => {
+    setVal(value);
+  }, [value]);
+
+  if (!editing) {
+    return (
+      <button
+        className="font-mono text-[11px] hover:underline break-all text-left"
+        onClick={() => setEditing(true)}
+      >
+        {value || placeholder || "Set"}
+      </button>
+    );
+  }
+  return (
+    <Input
+      autoFocus
+      className="h-8 w-28 font-mono text-[11px]"
+      value={val}
+      onChange={(e) => setVal(e.target.value.toUpperCase())}
+      onBlur={async () => {
+        if (val !== value) await onSave(val);
+        setEditing(false);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        if (e.key === "Escape") setEditing(false);
+      }}
+    />
   );
 }
 
