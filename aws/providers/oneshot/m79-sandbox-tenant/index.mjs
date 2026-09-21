@@ -2319,6 +2319,112 @@ const reconcileM712PayoutCompletedAt = async (client, body = {}) => {
   };
 };
 
+const inspectFreedomProduction = async (client) => {
+  const freedom = await freedomRow(client);
+  const pipeline = (await client.query(
+    `SELECT id, name, slug, moov_environment, is_test_account
+       FROM public.tenants WHERE id = $1::uuid`,
+    [PIPELINE],
+  )).rows[0] || null;
+  const freedomProduction = await tenantObjects(client, FREEDOM, 'production');
+  const freedomSandbox = await tenantObjects(client, FREEDOM, 'sandbox');
+  const pipelineSandbox = await tenantObjects(client, PIPELINE, 'sandbox');
+  const pipelineProduction = await tenantObjects(client, PIPELINE, 'production');
+  const sandboxIds = [
+    pipelineSandbox.account?.provider_account_id,
+    pipelineSandbox.wallet?.provider_wallet_id,
+    ...pipelineSandbox.banks.map((row) => row.provider_bank_account_id),
+    ...pipelineSandbox.banks.map((row) => row.provider_payment_method_id),
+    ...pipelineSandbox.recipients.map((row) => row.provider_account_id),
+    '1d59a6a8-3307-4687-8367-1495293ecc73',
+    '58571121-67ea-4e10-abae-6c9680ac455d',
+    '8390f74b-706e-4d89-80b0-f96bd7c1b414',
+    '8a0f6ffa-a549-48f5-bb8e-f5b6a9d9cfff',
+    '1eb24c1c-b7ab-45cd-8775-332da40b9647',
+    '90050a69-84f3-41bb-aa30-490ca7e7bf34',
+    '92e17650-94ed-43cb-8bff-14cf506c3988',
+    '7a5ef572-501e-4eac-8c1b-7a4794296a85',
+    '36b79957-ce7a-4ca7-a68f-30986c9e47bb',
+  ].filter(Boolean).map((id) => String(id).toLowerCase());
+  const sandboxIdSet = new Set(sandboxIds);
+  const productionIds = [
+    freedomProduction.account?.provider_account_id,
+    freedomProduction.wallet?.provider_wallet_id,
+    ...freedomProduction.banks.map((row) => row.provider_bank_account_id),
+    ...freedomProduction.banks.map((row) => row.provider_payment_method_id),
+    ...freedomProduction.recipients.map((row) => row.provider_account_id),
+  ].filter(Boolean).map((id) => String(id).toLowerCase());
+  const sandboxIdsInProductionPath = productionIds.filter((id) => sandboxIdSet.has(id));
+  const recipientMethods = (await client.query(
+    `SELECT id, tenant_id, environment, provider_account_id, provider_bank_account_id,
+            provider_payment_method_id, bank_name, last_four, verification_status
+       FROM public.payment_provider_methods
+      WHERE provider = 'moov' AND environment = 'production'
+        AND (
+          tenant_id = $1::uuid
+          OR provider_account_id = ANY($2::text[])
+        )
+      ORDER BY connected_at DESC NULLS LAST`,
+    [FREEDOM, freedomProduction.recipients.map((row) => row.provider_account_id).filter(Boolean)],
+  )).rows;
+  const productionTransfers = (await client.query(
+    `SELECT count(*)::int AS n,
+            count(*) FILTER (WHERE created_at > now() - interval '2 hours')::int AS recent
+       FROM public.payment_transfers
+      WHERE tenant_id = $1::uuid AND environment = 'production'`,
+    [FREEDOM],
+  )).rows[0];
+  const existingProductionRows = (await client.query(
+    `SELECT id, amount_cents, status, leg_role, idempotency_key, provider_transfer_id,
+            description, environment, completed_at, failure_reason
+       FROM public.payment_transfers
+      WHERE tenant_id = $1::uuid AND environment = 'production'
+      ORDER BY created_at DESC NULLS LAST
+      LIMIT 50`,
+    [FREEDOM],
+  )).rows;
+  const webhookAccounts = (await client.query(
+    `SELECT tenant_id, environment, provider_account_id
+       FROM public.payment_provider_accounts
+      WHERE provider = 'moov'
+        AND provider_account_id IN ($1, $2)
+      ORDER BY environment, tenant_id`,
+    [
+      freedomProduction.account?.provider_account_id || '00000000-0000-0000-0000-000000000000',
+      pipelineSandbox.account?.provider_account_id || '00000000-0000-0000-0000-000000000000',
+    ],
+  )).rows;
+  return {
+    ok: freedom?.moov_environment === 'production'
+      && pipeline?.moov_environment === 'sandbox'
+      && sandboxIdsInProductionPath.length === 0
+      && pipelineSandbox.productionIdHits.length === 0,
+    createdPaymentTransfer: false,
+    liveProviderPosted: false,
+    freedom,
+    pipeline,
+    freedomProduction,
+    freedomSandbox: {
+      account: freedomSandbox.account?.provider_account_id || null,
+      wallet: freedomSandbox.wallet?.provider_wallet_id || null,
+      banks: freedomSandbox.banks.length,
+      recipients: freedomSandbox.recipients.length,
+    },
+    pipelineSandbox,
+    pipelineProduction: {
+      account: pipelineProduction.account?.provider_account_id || null,
+      wallet: pipelineProduction.wallet?.provider_wallet_id || null,
+    },
+    recipientMethods,
+    productionTransferCount: productionTransfers?.n || 0,
+    recentProductionTransfers: productionTransfers?.recent || 0,
+    existingProductionRows,
+    webhookAccounts,
+    sandboxIdsInProductionPath,
+    sweep: await sweepUnchanged(client),
+  };
+};
+
 export const handler = async (event = {}) => {
   const step = event.step || 'inspect';
   let client;
@@ -2349,6 +2455,7 @@ export const handler = async (event = {}) => {
     if (step === 'update_orchestrator_intent') return await updateOrchestratorIntent(client, event);
     if (step === 'list_orchestrator_operation') return await listOrchestratorOperation(client, event);
     if (step === 'reconcile_m712_payout_completed_at') return await reconcileM712PayoutCompletedAt(client, event);
+    if (step === 'inspect_freedom_production') return await inspectFreedomProduction(client);
     return fail('unknown_step', { step });
   } catch (error) {
     return fail(String(error?.message || error).slice(0, 400), { step });
