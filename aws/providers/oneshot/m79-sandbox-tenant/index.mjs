@@ -20,6 +20,10 @@ const SANDBOX_WALLET_PM = '1eb24c1c-b7ab-45cd-8775-332da40b9647';
 const SANDBOX_FUND_PM = '8a0f6ffa-a549-48f5-bb8e-f5b6a9d9cfff';
 const SANDBOX_RECIPIENT_ACCOUNT = '90050a69-84f3-41bb-aa30-490ca7e7bf34';
 const SANDBOX_RECIPIENT_BANK = '92e17650-94ed-43cb-8bff-14cf506c3988';
+const PAYOUT_INTENT_ID = '80f4648b-551c-4ec6-a9fc-921b85bc8320';
+const PAYOUT_TRANSFER_ID = 'c2d1078a-0261-4a3b-9782-777fad834af9';
+const FUNDING_INTENT_ID = 'b18a96d7-4415-4df8-992f-70d5a17365a9';
+const FUNDING_TRANSFER_ID = 'dec24b01-e559-4014-b072-af1ac0e4d013';
 const ACTOR = '7dbb3009-f059-4767-b5dc-1c5c72379330';
 const PRODUCTION_IDS = new Set([
   '60922058-7eca-4889-81dd-5720d7b9de96',
@@ -466,6 +470,223 @@ const reconcileFundingParity = async (client, body = {}) => {
     productionWalletRows: productionWallet,
     freedomWalletRows: freedomWallet,
     rdsWallet: objects.wallet,
+    freedomEnvironment: freedom?.moov_environment,
+    freedomChanged: freedomBefore?.moov_environment !== freedom?.moov_environment,
+    sweep,
+    sweepChanged: String(sweepBefore?.id || '') !== String(sweep?.id || '')
+      || String(sweepBefore?.status || '') !== String(sweep?.status || ''),
+    createdPaymentTransfer: false,
+    liveProviderPosted: false,
+  };
+};
+
+const snapshotFundingIntent = async (client) => (await client.query(
+  `SELECT id, tenant_id, environment, status, provider_status, provider_transfer_id,
+          completed_at, failure_reason, amount_cents, leg_role, updated_at
+     FROM public.payment_transfers
+    WHERE id = $1::uuid AND environment = 'sandbox'
+    LIMIT 1`,
+  [FUNDING_INTENT_ID],
+)).rows[0] || null;
+
+const fundingUnchanged = (before, after) => Boolean(
+  before
+  && after
+  && String(before.id) === String(after.id)
+  && String(before.status) === String(after.status)
+  && String(before.provider_status) === String(after.provider_status)
+  && String(before.provider_transfer_id || '') === String(after.provider_transfer_id || '')
+  && String(before.completed_at || '') === String(after.completed_at || '')
+  && String(before.failure_reason || '') === String(after.failure_reason || '')
+  && String(before.leg_role) === 'wallet_funding'
+  && Number(before.amount_cents) === 1
+  && String(before.provider_transfer_id || '').toLowerCase() === FUNDING_TRANSFER_ID
+);
+
+const reconcilePayoutParity = async (client, body = {}) => {
+  const tenantId = body.tenantId;
+  const intentId = String(body.intentId || '');
+  const transferId = String(body.providerTransferId || '');
+  const walletId = body.providerWalletId;
+  const providerStatus = String(body.providerStatus || '').toLowerCase();
+  const completedAt = body.completedAt || null;
+  const availableCents = body.availableCents;
+  const pendingCents = body.pendingCents;
+  if (!tenantId || tenantId === FREEDOM || tenantId === C1C) return fail('refused_production_tenant');
+  if (tenantId !== PIPELINE) return fail('undesignated_tenant', { tenantId });
+  if (!intentId || !transferId) return fail('intent_and_transfer_required');
+  if (intentId.toLowerCase() === FUNDING_INTENT_ID) return fail('funding_intent_refused');
+  if (transferId.toLowerCase() === FUNDING_TRANSFER_ID) return fail('funding_transfer_refused');
+  if (intentId.toLowerCase() !== PAYOUT_INTENT_ID) return fail('payout_intent_mismatch');
+  if (transferId.toLowerCase() !== PAYOUT_TRANSFER_ID) return fail('payout_transfer_mismatch');
+  if (!walletId || String(walletId).toLowerCase() !== SANDBOX_WALLET) return fail('wallet_id_mismatch');
+  const productionHits = [transferId, walletId, intentId].filter((id) => PRODUCTION_IDS.has(String(id || '').toLowerCase()));
+  if (productionHits.length) return fail('production_object_refused', { hits: productionHits });
+
+  const freedomBefore = await freedomRow(client);
+  const sweepBefore = await sweepUnchanged(client);
+  const fundingBefore = await snapshotFundingIntent(client);
+  const intentBefore = (await client.query(
+    `SELECT id, tenant_id, environment, status, provider_status, completed_at, failure_reason,
+            provider_transfer_id, provider_metadata, leg_role, amount_cents
+       FROM public.payment_transfers
+      WHERE id = $1::uuid AND tenant_id = $2::uuid AND environment = 'sandbox'
+      LIMIT 1`,
+    [intentId, tenantId],
+  )).rows[0];
+  if (!intentBefore) return fail('intent_not_found');
+  if (String(intentBefore.leg_role || '') !== 'wallet_disbursement') {
+    return fail('intent_leg_mismatch', { leg_role: intentBefore.leg_role });
+  }
+  if (String(intentBefore.provider_transfer_id || '').toLowerCase() !== transferId.toLowerCase()) {
+    return fail('transfer_id_mismatch');
+  }
+  if (Number(intentBefore.amount_cents) !== 1) return fail('amount_mismatch');
+
+  const pendingStatuses = ['pending', 'processing', 'queued', 'originated', 'submitted', 'created'];
+  if (pendingStatuses.includes(providerStatus) || (!providerStatus && pendingStatuses.includes(String(intentBefore.status || '').toLowerCase()))) {
+    return {
+      ok: true,
+      skipped: 'pending',
+      createdPaymentTransfer: false,
+      liveProviderPosted: false,
+      intent: intentBefore,
+      fundingUnchanged: true,
+      funding: fundingBefore,
+      freedomEnvironment: freedomBefore?.moov_environment,
+      freedomChanged: false,
+      sweep: sweepBefore,
+      sweepChanged: false,
+    };
+  }
+
+  const failedStatuses = ['failed', 'returned', 'canceled', 'cancelled'];
+  if (failedStatuses.includes(providerStatus)) {
+    const updated = await updatePayoutIntent(client, {
+      tenantId,
+      intentId,
+      providerTransferId: transferId,
+      providerStatus: body.providerStatus,
+      status: providerStatus === 'cancelled' ? 'canceled' : providerStatus,
+      failureReason: body.failureReason || providerStatus,
+      completedAt: null,
+      providerMetadata: {
+        source: 'moov_get',
+        phase: 'm710a',
+        do_not_retry: true,
+        failure_detail: body.failureReason || null,
+      },
+    });
+    const fundingAfter = await snapshotFundingIntent(client);
+    const freedom = await freedomRow(client);
+    const sweep = await sweepUnchanged(client);
+    return {
+      ok: updated.ok === true && fundingUnchanged(fundingBefore, fundingAfter),
+      skipped: false,
+      mode: 'update_existing_only',
+      createdPaymentTransfer: false,
+      liveProviderPosted: false,
+      intent: updated.intent,
+      fundingUnchanged: fundingUnchanged(fundingBefore, fundingAfter),
+      funding: fundingAfter,
+      payoutIntentCount: updated.payoutIntentCount,
+      fundingIntentCount: updated.fundingIntentCount,
+      freedomEnvironment: freedom?.moov_environment,
+      freedomChanged: freedomBefore?.moov_environment !== freedom?.moov_environment,
+      sweep,
+      sweepChanged: String(sweepBefore?.id || '') !== String(sweep?.id || '')
+        || String(sweepBefore?.status || '') !== String(sweep?.status || ''),
+    };
+  }
+
+  if (providerStatus !== 'completed') return fail('unsupported_payout_status', { providerStatus });
+  if (!completedAt) return fail('provider_completed_on_missing');
+
+  await client.query('BEGIN');
+  let recon;
+  let wallet;
+  try {
+    await client.query("SELECT set_config('request.moov_get_reconcile', '1', true)");
+    recon = (await client.query(
+      `SELECT * FROM public.aws_moov_reconcile_existing_transfer(
+         $1, $2, $3, $4::timestamptz, $5, $6, $7::jsonb, $8)`,
+      [
+        transferId,
+        'completed',
+        body.providerStatus || 'completed',
+        completedAt,
+        'moov.parity_fill',
+        intentBefore.status,
+        JSON.stringify({
+          source: 'moov_get',
+          completedOn: completedAt,
+          phase: 'm710a',
+        }),
+        'sandbox',
+      ],
+    )).rows[0];
+    wallet = (await client.query(
+      `SELECT * FROM public.aws_moov_reconcile_wallet_cache($1, $2, $3::bigint, $4::bigint, $5::uuid, $6::jsonb)`,
+      [
+        walletId,
+        'sandbox',
+        availableCents,
+        pendingCents,
+        tenantId,
+        JSON.stringify({ source: 'moov_get', phase: 'm710a' }),
+      ],
+    )).rows[0] || null;
+    await client.query('COMMIT');
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch { /* keep original */ }
+    throw error;
+  }
+
+  const intentAfter = (await client.query(
+    `SELECT id, tenant_id, environment, status, provider_status, completed_at, failure_reason,
+            provider_transfer_id, provider_metadata, leg_role, idempotency_key,
+            to_char(completed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS completed_at_utc
+       FROM public.payment_transfers
+      WHERE id = $1::uuid AND tenant_id = $2::uuid AND environment = 'sandbox'
+      LIMIT 1`,
+    [intentId, tenantId],
+  )).rows[0];
+  const fundingAfter = await snapshotFundingIntent(client);
+  const productionWallet = (await client.query(
+    `SELECT id, environment, available_cents, pending_cents, provider_wallet_id
+       FROM public.payment_wallets
+      WHERE tenant_id = $1::uuid AND provider = 'moov' AND environment = 'production'`,
+    [tenantId],
+  )).rows;
+  const freedom = await freedomRow(client);
+  const sweep = await sweepUnchanged(client);
+  const objects = await tenantObjects(client, tenantId, 'sandbox');
+  const counts = await intentCountFor(client, tenantId, intentAfter?.idempotency_key || '');
+  return {
+    ok: String(intentAfter?.status) === 'completed'
+      && String(intentAfter?.provider_status) === 'completed'
+      && intentAfter?.failure_reason == null
+      && String(intentAfter?.leg_role) === 'wallet_disbursement'
+      && Number(wallet?.available_cents) === Number(availableCents)
+      && Number(wallet?.pending_cents) === Number(pendingCents)
+      && fundingUnchanged(fundingBefore, fundingAfter)
+      && freedom?.moov_environment === 'production',
+    recon,
+    wallet,
+    intentBefore: {
+      status: intentBefore.status,
+      provider_status: intentBefore.provider_status,
+      completed_at: intentBefore.completed_at,
+      failure_reason: intentBefore.failure_reason,
+      leg_role: intentBefore.leg_role,
+    },
+    intent: intentAfter,
+    fundingUnchanged: fundingUnchanged(fundingBefore, fundingAfter),
+    funding: fundingAfter,
+    productionWalletRows: productionWallet,
+    rdsWallet: objects.wallet,
+    payoutIntentCount: counts.payout,
+    fundingIntentCount: counts.funding,
     freedomEnvironment: freedom?.moov_environment,
     freedomChanged: freedomBefore?.moov_environment !== freedom?.moov_environment,
     sweep,
@@ -1558,6 +1779,7 @@ export const handler = async (event = {}) => {
     if (step === 'list_sandbox_history') return await listSandboxHistory(client);
     if (step === 'diagnose_funding_reconcile') return await diagnoseFundingReconcile(client, event);
     if (step === 'reconcile_funding_parity') return await reconcileFundingParity(client, event);
+    if (step === 'reconcile_payout_parity') return await reconcilePayoutParity(client, event);
     return fail('unknown_step', { step });
   } catch (error) {
     return fail(String(error?.message || error).slice(0, 400), { step });
