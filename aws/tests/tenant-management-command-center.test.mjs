@@ -372,6 +372,7 @@ test('TM UI uses env-aware KYC, invite resend, and dark collection copy', () => 
   assert.doesNotMatch(admin, /setPartnerCode/);
   assert.match(admin, /SAME_DAY_DISBURSEMENT_CENTS = 100/);
   assert.match(admin, /NEXT_DAY_DISBURSEMENT_CENTS = 75/);
+  assert.match(admin, /Test\/sandbox — not production billable/);
   assert.match(admin, /per_check_rate_cents: rateCents/);
   assert.doesNotMatch(admin, /disabled=\{!enabled\}/);
   assert.match(admin, /useState\("viewer"\)/);

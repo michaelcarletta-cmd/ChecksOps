@@ -1,6 +1,16 @@
 # Tenant SES email-domain branding
 
-Status: **prepared, not deployed, SES not enabled.**
+Status: **not required by current ChecksOps business design.**
+
+Custom tenant sending-subdomain create/verify is **not** a Tenant Management
+parity defect. Do **not** enable `AWS_TENANT_EMAIL_DOMAIN_ENABLED` for Lovable
+parity. Tenant email administration still uses `tenant_email_settings` for
+sender/display identity, Reply-To, and branding.
+
+The rest of this document is the historical SES domain assessment. It stays
+prepared and disabled (`AWS_TENANT_EMAIL_DOMAIN_ENABLED=false`).
+
+Status (engineering): **prepared, not deployed, SES not enabled.**
 
 This document is the schema assessment, IAM note, and deployment prerequisites
 for tenant-owned sending domains (example: `notify.freedomadj.com`).

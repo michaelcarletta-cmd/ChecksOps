@@ -1303,6 +1303,11 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
         <Button variant="ghost" size="sm" onClick={load} disabled={loading}>
           <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
         </Button>
+        {tenantMeta?.is_test_account && (
+          <Badge variant="outline" className="text-[10px] h-6 border-amber-500/40 text-amber-700">
+            Test/sandbox — not production billable
+          </Badge>
+        )}
       </div>
       <div className="space-y-6">
 
@@ -1342,7 +1347,9 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
                   <div>
                     <h4 className="text-sm font-semibold">Consolidated Billing — {range.label}</h4>
                     <p className="text-[11px] text-muted-foreground">
-                      Preview calculates maintenance + usage for the month. ACH is not submitted in this environment.
+                      {tenantMeta?.is_test_account
+                        ? "Test/sandbox tenant. This preview is not production billable and is not mixed into other tenants."
+                        : "Preview calculates maintenance + usage for the month. ACH is not submitted in this environment."}
                     </p>
                   </div>
                   <Button size="sm" onClick={pullConsolidated} disabled={pulling || consolidatedTotalCents <= 0}>
@@ -1404,7 +1411,9 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
                       </tr>
                     )}
                     <tr className="bg-muted/30">
-                      <td className="px-4 py-2 font-semibold" colSpan={3}>Total to pull</td>
+                      <td className="px-4 py-2 font-semibold" colSpan={3}>
+                        {tenantMeta?.is_test_account ? "Test preview — not production billable" : "Total to pull"}
+                      </td>
                       <td className="text-right px-4 py-2 tabular-nums font-bold text-base">{fmt(consolidatedTotalCents)}</td>
                     </tr>
                   </tbody>
