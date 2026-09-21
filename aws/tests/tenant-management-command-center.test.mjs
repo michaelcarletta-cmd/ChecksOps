@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { WRITE_ALLOWLIST } from '../functions/api/write-allowlist.mjs';
+import { WRITE_ALLOWLIST, pickAllowlistedValues } from '../functions/api/write-allowlist.mjs';
 import {
   executeAppMetadataWrite,
   executeTenantsNarrow,
@@ -97,12 +97,14 @@ const clientOf = ({
 test('TM command-center allowlist restores Lovable tenant columns and denies provider flags', () => {
   for (const col of [
     'per_check_billing_enabled', 'per_check_rate_cents',
-    'referral_code', 'referral_discount_cents', 'partner_code', 'referred_by_tenant_id',
+    'referral_code', 'referral_discount_cents', 'referred_by_tenant_id',
     'legal_business_name', 'ein', 'business_address', 'business_phone',
     'beneficial_owner_name', 'beneficial_owner_dob', 'kyc_completed_at',
   ]) {
     assert.ok(WRITE_ALLOWLIST.tenants.columns.has(col), col);
   }
+  assert.ok(!WRITE_ALLOWLIST.tenants.columns.has('partner_code'));
+  assert.ok(WRITE_ALLOWLIST.tenants.clientIgnored.has('partner_code'));
   assert.ok(!WRITE_ALLOWLIST.tenants.columns.has('moov_allowlisted'));
   assert.ok(!WRITE_ALLOWLIST.tenants.columns.has('checkalt_enabled'));
   assert.ok(!WRITE_ALLOWLIST.tenants.columns.has('actum_password'));
@@ -111,6 +113,17 @@ test('TM command-center allowlist restores Lovable tenant columns and denies pro
   assert.equal(WRITE_ALLOWLIST.glba_security_events.tranche, 6);
   assert.ok(!WRITE_ALLOWLIST.tenant_billing_accounts.columns.has('account_number_encrypted'));
   assert.ok(!WRITE_ALLOWLIST.tenant_billing_accounts.columns.has('routing_number'));
+});
+
+test('partner_code is ignored on the normal tenants write path', () => {
+  const picked = pickAllowlistedValues('tenants', {
+    monthly_rate_cents: 10000,
+    partner_code: 'HACKCODE',
+  });
+  assert.equal(picked.error, undefined);
+  assert.equal(picked.values.partner_code, undefined);
+  assert.ok(picked.ignored.includes('partner_code'));
+  assert.equal(picked.values.monthly_rate_cents, 10000);
 });
 
 test('frontend write table set includes TM command-center tables', () => {
@@ -132,7 +145,6 @@ test('platform owner can save pricing, referral, and compliance on the tenant ro
       per_check_rate_cents: 400,
       referral_code: 'checks9636',
       referral_discount_cents: 2500,
-      partner_code: 'b3136bc9',
       legal_business_name: 'Pipeline Test LLC',
       ein: '12-3456789',
       kyc_completed_at: '2026-09-21T00:00:00Z',
@@ -145,6 +157,9 @@ test('platform owner can save pricing, referral, and compliance on the tenant ro
   assert.match(updates[0].sql, /per_check_billing_enabled/);
   assert.match(updates[0].sql, /referral_code/);
   assert.match(updates[0].sql, /legal_business_name/);
+  assert.doesNotMatch(updates[0].sql, /partner_code/);
+  assert.ok(!updates[0].params.includes('B3136BC9'));
+  assert.ok(!updates[0].params.includes('b3136bc9'));
   assert.ok(updates[0].params.includes('CHECKS9636'));
   assert.ok(updates[0].params.includes(APP_ID));
 });
@@ -352,7 +367,13 @@ test('TM UI uses env-aware KYC, invite resend, and dark collection copy', () => 
   assert.match(admin, /Preview only/);
   assert.match(admin, /ACH was not submitted/);
   assert.match(admin, /referral_discount_cents/);
-  assert.match(admin, /partner_code: partnerCode/);
+  assert.match(admin, /Permanent identifier/);
+  assert.doesNotMatch(admin, /partner_code: partnerCode/);
+  assert.doesNotMatch(admin, /setPartnerCode/);
+  assert.match(admin, /SAME_DAY_DISBURSEMENT_CENTS = 100/);
+  assert.match(admin, /NEXT_DAY_DISBURSEMENT_CENTS = 75/);
+  assert.match(admin, /per_check_rate_cents: rateCents/);
+  assert.doesNotMatch(admin, /disabled=\{!enabled\}/);
   assert.match(admin, /useState\("viewer"\)/);
   assert.match(read('src/integrations/aws/client.ts'), /tenant_billing_accounts/);
 });

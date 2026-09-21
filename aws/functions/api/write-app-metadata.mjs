@@ -532,7 +532,7 @@ const TENANT_PLATFORM_TEXT = [
   ['slug', 80], ['custom_domain', 255], ['subscription_status', 40],
   ['plan_tier', 40], ['moov_environment', 20], ['kyc_status', 40],
   ['kyc_notes', 8000], ['internal_notes', 8000],
-  ['referral_code', 40], ['partner_code', 40],
+  ['referral_code', 40],
   ['legal_business_name', 200], ['ein', 32], ['business_address', 500],
   ['business_phone', 40], ['beneficial_owner_name', 200],
   ['beneficial_owner_dob', 20], ['beneficial_owner_id_url', 512],
@@ -641,7 +641,7 @@ export const executeTenantsNarrow = async ({ client, mapping, op = 'update', val
       out.kyc_completed_by = mapping.application_user_id;
     }
     if (out.referral_code != null) out.referral_code = String(out.referral_code).toUpperCase();
-    if (out.partner_code != null) out.partner_code = String(out.partner_code).toUpperCase();
+    delete out.partner_code;
     if (out.moov_environment != null) {
       const env = String(out.moov_environment).toLowerCase();
       if (env !== 'sandbox' && env !== 'production') {

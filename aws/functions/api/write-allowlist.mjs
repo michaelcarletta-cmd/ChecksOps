@@ -645,7 +645,7 @@ export const WRITE_ALLOWLIST = {
       'is_founding_partner', 'monthly_rate_cents', 'kyc_status',
       'kyc_notes', 'internal_notes',
       'per_check_billing_enabled', 'per_check_rate_cents',
-      'referral_code', 'referral_discount_cents', 'partner_code', 'referred_by_tenant_id',
+      'referral_code', 'referral_discount_cents', 'referred_by_tenant_id',
       'legal_business_name', 'ein', 'business_address', 'business_phone',
       'beneficial_owner_name', 'beneficial_owner_dob', 'beneficial_owner_id_url',
       'kyc_completed_at', 'kyc_completed_by',
@@ -653,11 +653,11 @@ export const WRITE_ALLOWLIST = {
     identityColumn: null,
     requiredForWrite: { insert: ['name', 'slug'], update: [] },
     filterColumns: new Set(['id']),
-    clientIgnored: new Set(['id', 'created_at']),
+    clientIgnored: new Set(['id', 'created_at', 'partner_code']),
     frontend: {
       file: 'AdminTenants / TenantManagement / ComplianceSettings',
       op: 'update',
-      reason: 'Member branding plus platform-owner Tenant Management fields on the same tenants row. Provider allowlist flags stay denied.',
+      reason: 'Member branding plus platform-owner Tenant Management fields on the same tenants row. partner_code is immutable once assigned and is ignored on writes. Provider allowlist flags stay denied.',
     },
   },
   tenant_billing_accounts: {

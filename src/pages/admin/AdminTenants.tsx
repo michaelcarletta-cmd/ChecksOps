@@ -86,6 +86,17 @@ type TenantUserRow = {
 
 const TENANT_ROLES = ["admin", "operator", "viewer"];
 
+/** Established ChecksOps disbursement fees from disbursement_batches.delivery_speed. */
+const SAME_DAY_DISBURSEMENT_CENTS = 100;
+const NEXT_DAY_DISBURSEMENT_CENTS = 75;
+const BILLABLE_SPLIT_STATUSES = new Set([
+  "pending", "submitted", "processing", "completed", "settled", "paid",
+]);
+
+function disbursementSpeedOf(split: { requested_speed?: string | null }, batch?: { delivery_speed?: string | null } | null) {
+  return String(split.requested_speed || batch?.delivery_speed || "").toLowerCase();
+}
+
 export default function AdminTenants() {
   const navigate = useNavigate();
   const [authChecked, setAuthChecked] = useState(false);
@@ -442,7 +453,6 @@ function CompanyTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
   const [referralDiscount, setReferralDiscount] = useState(
     tenant.referral_discount_cents != null ? (tenant.referral_discount_cents / 100).toFixed(2) : "0.00",
   );
-  const [partnerCode, setPartnerCode] = useState(tenant.partner_code || "");
   const { saving, save } = useTenantSave(tenant, onUpdated);
 
   return (
@@ -512,17 +522,20 @@ function CompanyTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
           <Label>Partner Code</Label>
           <div className="flex gap-2">
             <Input
-              value={partnerCode}
-              onChange={(e) => setPartnerCode(e.target.value.toUpperCase())}
-              className="font-mono"
-              placeholder="Partner / Freedom code"
+              value={tenant.partner_code || ""}
+              readOnly
+              className="font-mono bg-muted/50"
+              placeholder="Assigned permanently on create"
             />
-            {partnerCode && (
-              <Button variant="outline" size="icon" onClick={() => { navigator.clipboard.writeText(partnerCode); toast({ title: "Copied" }); }}>
+            {tenant.partner_code && (
+              <Button variant="outline" size="icon" onClick={() => { navigator.clipboard.writeText(tenant.partner_code!); toast({ title: "Copied" }); }}>
                 <Copy className="w-4 h-4" />
               </Button>
             )}
           </div>
+          <p className="text-xs text-muted-foreground">
+            Permanent identifier. Tenant Management can display and search it, but cannot edit or regenerate it.
+          </p>
         </div>
         <Button onClick={() => save({
           name,
@@ -534,7 +547,6 @@ function CompanyTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
           max_checks_per_month: maxChecks,
           referral_code: referralCode.trim() || null,
           referral_discount_cents: Math.max(0, Math.round(parseFloat(referralDiscount || "0") * 100)) || 0,
-          partner_code: partnerCode.trim() || tenant.partner_code,
         } as any)} disabled={saving}>
           {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Save Changes
         </Button>
@@ -824,8 +836,11 @@ function UsersTab({ tenant }: { tenant: Tenant }) {
 
 function BillingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tenant) => void }) {
   const [enabled, setEnabled] = useState(tenant.per_check_billing_enabled || false);
-  const [rate, setRate] = useState(tenant.per_check_rate_cents || 0);
+  const [rateDollars, setRateDollars] = useState(
+    ((tenant.per_check_rate_cents ?? 0) / 100).toFixed(2),
+  );
   const { saving, save } = useTenantSave(tenant, onUpdated);
+  const rateCents = Math.max(0, Math.round(parseFloat(rateDollars || "0") * 100) || 0);
 
   return (
     <SectionCard
@@ -844,19 +859,24 @@ function BillingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
         </div>
         
         <div className="space-y-2">
-          <Label>Standard Check Rate (cents)</Label>
+          <Label>Standard Check Rate</Label>
           <div className="flex items-center gap-2">
-            <Input 
-              type="number" 
-              value={rate} 
-              onChange={(e) => setRate(parseInt(e.target.value) || 0)} 
-              disabled={!enabled}
+            <span className="text-sm text-muted-foreground">$</span>
+            <Input
+              type="number"
+              step="0.01"
+              min="0"
+              value={rateDollars}
+              onChange={(e) => setRateDollars(e.target.value)}
               className="max-w-[200px]"
             />
             <span className="text-sm text-muted-foreground font-mono">
-              = ${(rate / 100).toFixed(2)} per check
+              = {rateCents} cents per check
             </span>
           </div>
+          <p className="text-xs text-muted-foreground">
+            Saved on `tenants.per_check_rate_cents`. Editable whether per-check billing is on or off.
+          </p>
         </div>
 
         <Separator />
@@ -878,7 +898,7 @@ function BillingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
         </div>
 
         <Button 
-          onClick={() => save({ per_check_billing_enabled: enabled, per_check_rate_cents: rate })} 
+          onClick={() => save({ per_check_billing_enabled: enabled, per_check_rate_cents: rateCents })} 
           disabled={saving}
         >
           {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Save Billing Settings
@@ -1058,7 +1078,14 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
   const [checkalt, setCheckalt] = useState<{ count: number; amount: number } | null>(null);
   const [moov, setMoov] = useState<{ count: number; amountOut: number } | null>(null);
   const [maintenance, setMaintenance] = useState<any[]>([]);
-  const [tenantMeta, setTenantMeta] = useState<{ monthly_rate_cents: number; referral_discount_cents: number; is_founding_partner: boolean } | null>(null);
+  const [tenantMeta, setTenantMeta] = useState<{
+    monthly_rate_cents: number;
+    referral_discount_cents: number;
+    is_founding_partner: boolean;
+    per_check_rate_cents: number;
+    is_test_account: boolean;
+  } | null>(null);
+  const [disbursements, setDisbursements] = useState<{ sameDay: number; nextDay: number }>({ sameDay: 0, nextDay: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pulling, setPulling] = useState(false);
@@ -1081,7 +1108,7 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
     const endISO = new Date(range.end.getTime() - 1).toISOString();
 
     try {
-      const [usageRes, checkaltRes, moovRes, maintRes, tenantRes] = await Promise.all([
+      const [usageRes, checkaltRes, moovRes, maintRes, tenantRes, batchRes, splitRes] = await Promise.all([
         supabase.rpc("get_tenant_check_usage", {
           _tenant_id: tenantId,
           _month_start: startISO,
@@ -1109,9 +1136,21 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
           .order("received_at", { ascending: false }),
         supabase
           .from("tenants")
-          .select("monthly_rate_cents, referral_discount_cents, is_founding_partner")
+          .select("monthly_rate_cents, referral_discount_cents, is_founding_partner, per_check_rate_cents, is_test_account")
           .eq("id", tenantId)
           .maybeSingle(),
+        supabase
+          .from("disbursement_batches")
+          .select("id, delivery_speed, status, created_at")
+          .eq("tenant_id", tenantId)
+          .gte("created_at", range.start.toISOString())
+          .lt("created_at", range.end.toISOString()),
+        supabase
+          .from("disbursement_splits")
+          .select("id, status, requested_speed, batch_id, created_at")
+          .eq("tenant_id", tenantId)
+          .gte("created_at", range.start.toISOString())
+          .lt("created_at", range.end.toISOString()),
       ]);
       if (usageRes.error) throw usageRes.error;
       setData(usageRes.data);
@@ -1127,6 +1166,21 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
       });
       setMaintenance(maintRes.data ?? []);
       setTenantMeta(tenantRes.data as any ?? null);
+      const batches = new Map((batchRes.data ?? []).map((b: any) => [b.id, b]));
+      const billableSplits = (splitRes.data ?? []).filter((s: any) => BILLABLE_SPLIT_STATUSES.has(String(s.status || "").toLowerCase()));
+      const source = billableSplits.length
+        ? billableSplits
+        : (batchRes.data ?? []).filter((b: any) => BILLABLE_SPLIT_STATUSES.has(String(b.status || "").toLowerCase()));
+      let sameDay = 0;
+      let nextDay = 0;
+      source.forEach((row: any) => {
+        const speed = billableSplits.length
+          ? disbursementSpeedOf(row, batches.get(row.batch_id))
+          : String(row.delivery_speed || "").toLowerCase();
+        if (speed === "same_day") sameDay += 1;
+        if (speed === "next_day") nextDay += 1;
+      });
+      setDisbursements({ sameDay, nextDay });
     } catch (e: any) {
       setError(e.message);
     }
@@ -1138,8 +1192,8 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
   const events: any[] = data?.events || [];
   const checkCount = events.filter((e) => e.event_type === "check_processing").length;
   const mortgageCount = data?.mortgage_count || events.filter((e) => e.event_type === "mortgage_handling").length;
-  const sameDay = events.filter((e) => e.event_type === "moov_same_day").length;
-  const nextDay = events.filter((e) => e.event_type === "moov_next_day" || e.event_type === "moov_standard").length;
+  const sameDay = disbursements.sameDay;
+  const nextDay = disbursements.nextDay;
 
   const fmt = (cents: number) =>
     new Intl.NumberFormat("en-US", { style: "currency", currency: (data?.currency || "usd").toUpperCase() }).format((cents || 0) / 100);
@@ -1149,13 +1203,18 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
   const months = Array.from({ length: 12 }, (_, i) => ({ v: i, l: new Date(2020, i, 1).toLocaleString("en-US", { month: "long" }) }));
   const years = Array.from({ length: 5 }, (_, i) => now.getFullYear() - i);
 
-  // Consolidated billing: check processing fees ($4/check), Moov disbursement fees ($1 transfer),
-  // maintenance for the month (monthly_rate - referral discount). Applies only when scope=month.
+  // Consolidated billing from established sources only. Disbursement fees use
+  // disbursement_batches.delivery_speed / disbursement_splits.requested_speed
+  // (same_day=$1.00, next_day=$0.75). payment_transfers are volume only — not
+  // added again as a fee line.
   const usageEvents: any[] = data?.events || [];
   const checkProcessingCents = usageEvents.filter(e => e.event_type === 'check_processing').reduce((s, e) => s + (e.unit_price_cents ?? 0), 0);
   const mortgageOpsCents = usageEvents.filter(e => e.event_type === 'mortgage_handling').reduce((s, e) => s + (e.unit_price_cents ?? 0), 0);
-  const disbursementCents = usageEvents.filter(e => e.event_type?.startsWith('moov_')).reduce((s, e) => s + (e.unit_price_cents ?? 0), 0);
-  
+  const sameDayCents = sameDay * SAME_DAY_DISBURSEMENT_CENTS;
+  const nextDayCents = nextDay * NEXT_DAY_DISBURSEMENT_CENTS;
+  const disbursementCents = sameDayCents + nextDayCents;
+  const standardRateCents = tenantMeta?.per_check_rate_cents ?? 0;
+
   const grossMaintenance = tenantMeta?.monthly_rate_cents ?? 0;
   const discount = tenantMeta?.referral_discount_cents ?? 0;
   const netMaintenance = Math.max(0, grossMaintenance - discount);
@@ -1177,7 +1236,8 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
     setPulling(true);
     const line_items = [
       checkProcessingCents > 0 && { label: "Check processing", detail: `${usageEvents.filter(e => e.event_type === 'check_processing').length} checks`, amount_cents: checkProcessingCents },
-      disbursementCents > 0 && { label: "Moov disbursements", detail: `${usageEvents.filter(e => e.event_type?.startsWith('moov_')).length} txns`, amount_cents: disbursementCents },
+      sameDayCents > 0 && { label: "Same-day disbursements", detail: `${sameDay} payments`, amount_cents: sameDayCents },
+      nextDayCents > 0 && { label: "Next-day disbursements", detail: `${nextDay} payments`, amount_cents: nextDayCents },
       mortgageOpsCents > 0 && { label: "MortgageOps handling", detail: `${mortgageCount} requests`, amount_cents: mortgageOpsCents },
       grossMaintenance > 0 && { label: "Monthly maintenance", detail: range.label, amount_cents: grossMaintenance },
       discount > 0 && { label: "Referral discount", detail: "applied to maintenance", amount_cents: -discount },
@@ -1266,7 +1326,7 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
               <div className="rounded-lg border bg-card p-3">
                 <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Disbursement Usage</div>
                 <div className="text-2xl font-bold mt-1">{moov?.count ?? 0}</div>
-                <div className="text-[10px] text-muted-foreground mt-1">Next Day {nextDay} · Same Day {sameDay}</div>
+                <div className="text-[10px] text-muted-foreground mt-1">Same Day {sameDay} × $1.00 · Next Day {nextDay} × $0.75</div>
               </div>
               <div className="rounded-lg border bg-card p-3">
                 <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Paid to ChecksOps</div>
@@ -1303,20 +1363,26 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
                     <tr>
                       <td className="px-4 py-2">Check Processing Usage</td>
                       <td className="text-right px-4 py-2 tabular-nums">{checkCount} checks</td>
-                      <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">$4.00</td>
-                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(data?.events?.filter((e: any) => e.event_type === 'check_processing').reduce((s: number, e: any) => s + (e.unit_price_cents ?? 0), 0) ?? 0)}</td>
+                      <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">{fmt(standardRateCents)}</td>
+                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(checkProcessingCents)}</td>
                     </tr>
                     <tr>
                       <td className="px-4 py-2">MortgageOps Usage</td>
                       <td className="text-right px-4 py-2 tabular-nums">{mortgageCount} requests</td>
                       <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">$10.00 / $5.00</td>
-                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(data?.events?.filter((e: any) => e.event_type === 'mortgage_handling').reduce((s: number, e: any) => s + (e.unit_price_cents ?? 0), 0) ?? 0)}</td>
+                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(mortgageOpsCents)}</td>
                     </tr>
                     <tr>
-                      <td className="px-4 py-2">Disbursement Usage</td>
-                      <td className="text-right px-4 py-2 tabular-nums">{moov?.count ?? 0} txns</td>
-                      <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">$1.00</td>
-                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(data?.events?.filter((e: any) => e.event_type?.startsWith('moov_')).reduce((s: number, e: any) => s + (e.unit_price_cents ?? 0), 0) ?? 0)}</td>
+                      <td className="px-4 py-2">Same-day disbursement</td>
+                      <td className="text-right px-4 py-2 tabular-nums">{sameDay} payments</td>
+                      <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">{fmt(SAME_DAY_DISBURSEMENT_CENTS)}</td>
+                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(sameDayCents)}</td>
+                    </tr>
+                    <tr>
+                      <td className="px-4 py-2">Next-day disbursement</td>
+                      <td className="text-right px-4 py-2 tabular-nums">{nextDay} payments</td>
+                      <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">{fmt(NEXT_DAY_DISBURSEMENT_CENTS)}</td>
+                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(nextDayCents)}</td>
                     </tr>
                     <tr>
                       <td className="px-4 py-2">
@@ -1524,6 +1590,13 @@ function TenantManagementTable({
       cell: (t) => `/${t.slug}`,
     },
     {
+      id: "partner",
+      header: "Partner",
+      headerClassName: "w-[9%] min-w-[80px]",
+      className: "font-mono text-[11px] break-all",
+      cell: (t) => t.partner_code || "—",
+    },
+    {
       id: "created",
       header: "Created",
       headerClassName: "w-[9%] min-w-[80px]",
@@ -1713,7 +1786,8 @@ function TenantManagementTable({
         (t) =>
           t.name?.toLowerCase().includes(q) ||
           t.slug?.toLowerCase().includes(q) ||
-          (t.referral_code || "").toLowerCase().includes(q),
+          (t.referral_code || "").toLowerCase().includes(q) ||
+          (t.partner_code || "").toLowerCase().includes(q),
       )
     : tenants;
 
@@ -1727,7 +1801,7 @@ function TenantManagementTable({
       <FilterBar
         search={search}
         onSearchChange={setSearch}
-        placeholder="Search tenants by name, slug or referral code…"
+        placeholder="Search tenants by name, slug, referral code, or partner code…"
         actions={
           <Badge variant="secondary" className="text-[11px]">
             {visibleTenants.length} of {tenants.length}

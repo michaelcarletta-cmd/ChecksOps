@@ -405,13 +405,16 @@ export function EmailSenderSettings() {
           title="Sending subdomain"
           icon={<Globe className="h-4 w-4 text-violet-500" />}
           accent="bg-gradient-to-r from-violet-500/60 to-violet-500/10"
-          description="Verify a subdomain such as notify.yourcompany.com. Do not use your inbound MX hostname."
+          description="Custom sending subdomain is not required. ChecksOps sends branded mail from the platform sender using the display name and Reply-To above."
         >
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant={badgeVariant}>{statusLabel}</Badge>
-            {aws && payload?.settings && payload.settings.domainFeatureEnabled === false && (
-              <span className="text-xs text-muted-foreground">SES domain APIs are not enabled in this environment.</span>
-            )}
+            <span className="text-xs text-muted-foreground">
+              Not required by current ChecksOps business design.
+              {aws && payload?.settings && payload.settings.domainFeatureEnabled === false
+                ? " SES domain APIs stay disabled in this environment."
+                : ""}
+            </span>
           </div>
 
           <div className="grid gap-4 md:grid-cols-[2fr_1fr]">
@@ -422,7 +425,7 @@ export function EmailSenderSettings() {
                 value={domain}
                 onChange={(e) => setDomain(e.target.value)}
                 placeholder="notify.yourcompany.com"
-                disabled={!canConfigure || isVerified}
+                disabled={!canConfigure || isVerified || payload?.settings?.domainFeatureEnabled === false}
               />
             </div>
             <div className="space-y-2">
@@ -433,14 +436,14 @@ export function EmailSenderSettings() {
                   value={fromLocal}
                   onChange={(e) => setFromLocal(e.target.value)}
                   placeholder="noreply"
-                  disabled={!canConfigure || isVerified}
+                  disabled={!canConfigure || isVerified || payload?.settings?.domainFeatureEnabled === false}
                 />
                 <span className="whitespace-nowrap text-sm text-muted-foreground">@{domain || "…"}</span>
               </div>
             </div>
           </div>
 
-          {canConfigure && (
+          {canConfigure && payload?.settings?.domainFeatureEnabled !== false && (
             <div className="flex flex-wrap gap-2">
               {!isVerified && (
                 <Button
