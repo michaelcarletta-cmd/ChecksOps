@@ -56,6 +56,102 @@ const asBool = (value) => {
   return { error: 'invalid_field', field: 'boolean' };
 };
 
+const asFiniteNumber = (value, field) => {
+  if (value === undefined || value === null || value === '') {
+    return { error: 'invalid_field', field };
+  }
+  const n = Number(value);
+  if (!Number.isFinite(n)) return { error: 'invalid_field', field };
+  return { value: n };
+};
+
+const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
+
+const normalizeRotation = (deg) => {
+  const n = deg % 360;
+  return n < 0 ? n + 360 : n;
+};
+
+const coerceEndorsementOverride = (value) => {
+  if (!value || typeof value !== 'object') return { error: 'invalid_field', field: 'endorsement_override' };
+  const raw = value;
+  const x = asFiniteNumber(raw.xPct, 'endorsement_override.xPct');
+  if (x.error) return x;
+  const y = asFiniteNumber(raw.yPct, 'endorsement_override.yPct');
+  if (y.error) return y;
+  const s = asFiniteNumber(raw.scale, 'endorsement_override.scale');
+  if (s.error) return s;
+  const r = asFiniteNumber(raw.rotationDeg, 'endorsement_override.rotationDeg');
+  if (r.error) return r;
+  const show = asBool(raw.showPayToOrder);
+  if (show && show.error) return { error: 'invalid_field', field: 'endorsement_override.showPayToOrder' };
+  return {
+    value: {
+      xPct: clamp(x.value, 0.05, 0.95),
+      yPct: clamp(y.value, 0.03, 0.95),
+      scale: clamp(s.value, 0.4, 4),
+      rotationDeg: normalizeRotation(r.value),
+      showPayToOrder: Boolean(show),
+    },
+  };
+};
+
+const ENDORSEMENT_RENDER_STATUS = new Set(['idle', 'position_saved', 'completed', 'failed']);
+
+const coerceEndorsementRenderStatus = (value) => {
+  const text = asText(value, 40);
+  if (text.error) return text;
+  const next = (text.value || '').toLowerCase();
+  if (!ENDORSEMENT_RENDER_STATUS.has(next)) {
+    return { error: 'invalid_field', field: 'endorsement_render_status' };
+  }
+  return { value: next };
+};
+
+const isPlainObject = (v) => Boolean(v && typeof v === 'object' && !Array.isArray(v));
+
+const coerceEndorsementRenderMeta = (value) => {
+  if (value === null) return { value: null };
+  if (!isPlainObject(value)) return { error: 'invalid_field', field: 'endorsement_render_meta' };
+  const raw = value;
+  const out = {};
+
+  if ('request_id' in raw) {
+    const text = asText(raw.request_id, 120);
+    if (text.error) return text;
+    if (text.value) out.request_id = text.value;
+  }
+  if ('renderer_version' in raw) {
+    const text = asText(raw.renderer_version, 80);
+    if (text.error) return text;
+    if (text.value) out.renderer_version = text.value;
+  }
+  if ('mime_type' in raw) {
+    const text = asText(raw.mime_type, 80);
+    if (text.error) return text;
+    if (text.value) out.mime_type = text.value;
+  }
+  for (const key of ['width', 'height', 'bytes']) {
+    if (key in raw) {
+      const n = Number(raw[key]);
+      if (!Number.isFinite(n) || n < 0) return { error: 'invalid_field', field: `endorsement_render_meta.${key}` };
+      out[key] = Math.trunc(n);
+    }
+  }
+  if ('error' in raw) {
+    const text = asText(raw.error, 500);
+    if (text.error) return text;
+    if (text.value) out.error = text.value;
+  }
+  if ('override' in raw && raw.override != null) {
+    const coerced = coerceEndorsementOverride(raw.override);
+    if (coerced.error) return coerced;
+    out.override = coerced.value;
+  }
+
+  return { value: Object.keys(out).length ? out : null };
+};
+
 const lookupCheck = async (client, checkId) => {
   const invalid = requireUuid('check_id', checkId);
   if (invalid) return invalid;
@@ -81,7 +177,7 @@ const lookupPayee = async (client, payeeId) => {
   return { payee: rows[0] };
 };
 
-const IMAGE_PATH_COLUMNS = new Set(['front_image_path', 'back_image_path', 'back_image_original_path']);
+const IMAGE_PATH_COLUMNS = new Set(['front_image_path', 'back_image_path', 'back_image_original_path', 'back_image_deposit_path']);
 
 const asImagePath = (checkId, value) => {
   if (value === undefined) return { skip: true };
@@ -190,6 +286,21 @@ const intakeCoerce = (values) => {
     const text = asText(values.mortgage_tracking_number, 80);
     if (text.error) return text;
     out.mortgage_tracking_number = text.value;
+  }
+  if ('endorsement_render_status' in values) {
+    const status = coerceEndorsementRenderStatus(values.endorsement_render_status);
+    if (status.error) return status;
+    out.endorsement_render_status = status.value;
+  }
+  if ('endorsement_override' in values) {
+    const override = coerceEndorsementOverride(values.endorsement_override);
+    if (override.error) return override;
+    out.endorsement_override = override.value;
+  }
+  if ('endorsement_render_meta' in values) {
+    const meta = coerceEndorsementRenderMeta(values.endorsement_render_meta);
+    if (meta.error) return meta;
+    out.endorsement_render_meta = meta.value;
   }
   return { values: out };
 };
