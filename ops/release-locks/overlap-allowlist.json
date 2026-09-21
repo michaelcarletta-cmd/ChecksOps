@@ -4,6 +4,13 @@
   "notes": "Reviewed exceptions for PR #359 Manager / Bank Deposits / Partner name repair. Paths are exact protected files. SQL 31-34 and Partner Codes are unchanged.",
   "allow": [
     {
+      "other_pr": 369,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "Release-lock reconciliation must update locked-components tree hashes; PR #369 also edits locked-components.json. This exception is limited to that single file.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
       "other_pr": 234,
       "path": "src/pages/CheckCommandCenter.tsx",
       "reason": "PR 359 Manager Bank Deposits and partner-name repair overlaps this open PR on CheckCommandCenter without changing partner SQL 31-34 or Partner Codes.",

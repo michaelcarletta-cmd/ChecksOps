@@ -175,6 +175,7 @@
       "tree_hash_exclude": ["ops/release-locks/locked-components.json"],
       "paths": [
         "ops/release-locks/",
+        "ops/release-locks/locked-components.json",
         "scripts/validate-release-locks.mjs",
         "scripts/check-pr-path-overlap.mjs",
         "scripts/production-deploy-guard.mjs",
