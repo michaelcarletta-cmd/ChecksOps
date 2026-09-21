@@ -28,6 +28,13 @@ export const SANDBOX_FUNDING_LEG = 'wallet_funding';
 export const SANDBOX_FUNDING_AMOUNT_CENTS = FIRST_PRODUCTION_TRANSFER_CENTS;
 export const SANDBOX_FUNDING_DESCRIPTION = 'M7.9G sandbox BANK to WALLET 0.01';
 export const SANDBOX_FUNDING_PROVIDER_UUID = '72f44c1a-5ee4-4601-9e4b-3ca54fbc3935';
+export const M712_FUNDING_PROVIDER_UUID = idempotencyUuid(
+  'checksops:m712:wallet_funding:env:sandbox:tenant:3bef00a5-0bf4-41ba-abf8-5fb4e2b73d43:cents:1',
+);
+export const allowedSandboxFundingProviderUuids = () => [
+  SANDBOX_FUNDING_PROVIDER_UUID,
+  M712_FUNDING_PROVIDER_UUID,
+];
 export const FAILED_SANDBOX_FUNDING_INTENT_ID = 'b18a96d7-4415-4df8-992f-70d5a17365a9';
 export const CLASSIFIED_PROVIDER_REJECTED = 'classified_provider_rejected_not_created';
 export const PIPELINE_TEST_TENANT_ID = '3bef00a5-0bf4-41ba-abf8-5fb4e2b73d43';
@@ -450,7 +457,7 @@ export const executeSandboxWalletFunding = async ({
     && !sameId(providerIdempotencyKey, binding.providerIdempotencyKey)) {
     return fail('idempotency_uuid_mismatch', { statusCode: 409 });
   }
-  if (providerIdempotencyKey && !sameId(providerIdempotencyKey, SANDBOX_FUNDING_PROVIDER_UUID)) {
+  if (providerIdempotencyKey && !allowedSandboxFundingProviderUuids().some((id) => sameId(providerIdempotencyKey, id))) {
     return fail('idempotency_uuid_mismatch', { statusCode: 409 });
   }
   const postPath = sandboxFacilitatorTransferPath(binding.platformAccountId);

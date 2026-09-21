@@ -1798,6 +1798,317 @@ const diagnosePayoutWebhook = async (client, body = {}) => {
   };
 };
 
+const ORCHESTRATOR_KEY_RE = /^checksops:m(77|712):(wallet_funding|wallet_disbursement):env:sandbox:/;
+
+const orchestratorIntentCounts = async (client, tenantId, operationId, idempotencyKey) => {
+  const matching = (await client.query(
+    `SELECT count(*)::int AS n FROM public.payment_transfers
+      WHERE tenant_id = $1::uuid AND environment = 'sandbox' AND idempotency_key = $2`,
+    [tenantId, idempotencyKey || ''],
+  )).rows[0]?.n || 0;
+  const operation = (await client.query(
+    `SELECT leg_role, count(*)::int AS n FROM public.payment_transfers
+      WHERE tenant_id = $1::uuid AND environment = 'sandbox'
+        AND coalesce(provider_metadata->>'payout_operation_id', '') = $2
+      GROUP BY 1`,
+    [tenantId, operationId || ''],
+  )).rows;
+  const funding = (await client.query(
+    `SELECT count(*)::int AS n FROM public.payment_transfers
+      WHERE tenant_id = $1::uuid AND environment = 'sandbox' AND leg_role = 'wallet_funding'`,
+    [tenantId],
+  )).rows[0]?.n || 0;
+  const payout = (await client.query(
+    `SELECT count(*)::int AS n FROM public.payment_transfers
+      WHERE tenant_id = $1::uuid AND environment = 'sandbox' AND leg_role = 'wallet_disbursement'`,
+    [tenantId],
+  )).rows[0]?.n || 0;
+  const production = (await client.query(
+    `SELECT count(*)::int AS n FROM public.payment_transfers
+      WHERE environment = 'production' AND created_at > now() - interval '2 hours'`,
+  )).rows[0]?.n || 0;
+  const freedom = (await client.query(
+    `SELECT count(*)::int AS n FROM public.payment_transfers
+      WHERE tenant_id = $1::uuid AND created_at > now() - interval '2 hours'`,
+    [FREEDOM],
+  )).rows[0]?.n || 0;
+  return {
+    matching,
+    operationFunding: operation.find((row) => row.leg_role === 'wallet_funding')?.n || 0,
+    operationPayout: operation.find((row) => row.leg_role === 'wallet_disbursement')?.n || 0,
+    funding,
+    payout,
+    recentProduction: production,
+    recentFreedom: freedom,
+  };
+};
+
+const persistOrchestratorIntent = async (client, body = {}) => {
+  const tenantId = body.tenantId;
+  if (!tenantId || tenantId === FREEDOM || tenantId === C1C) return fail('refused_production_tenant');
+  if (tenantId !== PIPELINE) return fail('undesignated_tenant', { tenantId });
+  const tenant = (await client.query(
+    `SELECT id, name, slug, moov_environment FROM public.tenants WHERE id = $1::uuid`,
+    [tenantId],
+  )).rows[0];
+  if (!tenant) return fail('tenant_not_found');
+  if (tenant.moov_environment !== 'sandbox') return fail('tenant_not_sandbox', { environment: tenant.moov_environment });
+  const idempotencyKey = String(body.idempotencyKey || body.idempotency_key || '');
+  const operationId = String(body.payoutOperationId || body.payout_operation_id || '');
+  const leg = String(body.leg_role || body.kind || '');
+  if (!ORCHESTRATOR_KEY_RE.test(idempotencyKey)) return fail('idempotency_scope_invalid', { idempotencyKey });
+  if (!operationId) return fail('payout_operation_id_required');
+  if (leg === 'wallet_funding' && !idempotencyKey.includes('wallet_funding')) {
+    return fail('idempotency_scope_invalid', { idempotencyKey });
+  }
+  if (leg === 'wallet_disbursement' && !idempotencyKey.includes('wallet_disbursement')) {
+    return fail('idempotency_scope_invalid', { idempotencyKey });
+  }
+  if (leg !== 'wallet_funding' && leg !== 'wallet_disbursement') return fail('unknown_leg_role', { leg });
+  const ids = [
+    body.accountId, body.bankId, body.walletId, body.recipientAccountId, body.recipientBankId,
+    body.sourcePaymentMethodId, body.destinationPaymentMethodId, body.providerTransferId,
+  ].filter(Boolean).map((id) => String(id).toLowerCase());
+  if (ids.some((id) => PRODUCTION_IDS.has(id))) {
+    return fail('production_object_refused', { hits: ids.filter((id) => PRODUCTION_IDS.has(id)) });
+  }
+  if (body.accountId && String(body.accountId).toLowerCase() !== SANDBOX_ACCOUNT) {
+    return fail('sandbox_account_mismatch');
+  }
+  if (body.walletId && String(body.walletId).toLowerCase() !== SANDBOX_WALLET) {
+    return fail('sandbox_wallet_mismatch');
+  }
+  if (leg === 'wallet_funding' && body.bankId && String(body.bankId).toLowerCase() !== SANDBOX_BANK) {
+    return fail('sandbox_bank_mismatch');
+  }
+  if (leg === 'wallet_disbursement' && body.recipientAccountId
+    && String(body.recipientAccountId).toLowerCase() !== SANDBOX_RECIPIENT_ACCOUNT) {
+    return fail('sandbox_recipient_mismatch');
+  }
+  const objects = await tenantObjects(client, tenantId, 'sandbox');
+  if (String(objects.account?.provider_account_id || '').toLowerCase() !== SANDBOX_ACCOUNT) {
+    return fail('sandbox_account_unlinked');
+  }
+  if (String(objects.wallet?.provider_wallet_id || '').toLowerCase() !== SANDBOX_WALLET) {
+    return fail('sandbox_wallet_unlinked');
+  }
+  const fundingBank = (objects.banks || []).find((row) => String(row.provider_bank_account_id || '').toLowerCase() === SANDBOX_BANK);
+  const recipient = (objects.recipients || []).find((row) => (
+    String(row.provider_account_id || '').toLowerCase() === SANDBOX_RECIPIENT_ACCOUNT
+  ));
+  const recipientBank = (objects.banks || []).find((row) => (
+    String(row.provider_bank_account_id || '').toLowerCase() === SANDBOX_RECIPIENT_BANK
+  ));
+  const walletMethod = (objects.banks || []).find((row) => (
+    String(row.provider_payment_method_id || '').toLowerCase() === SANDBOX_WALLET_PM
+  ));
+  if (leg === 'wallet_funding' && !fundingBank) return fail('sandbox_bank_unlinked');
+  if (leg === 'wallet_disbursement' && !recipient) return fail('sandbox_recipient_unlinked');
+  const existing = (await client.query(
+    `SELECT * FROM public.payment_transfers
+      WHERE tenant_id = $1::uuid AND idempotency_key = $2
+      LIMIT 1`,
+    [tenantId, idempotencyKey],
+  )).rows[0] || null;
+  if (existing) {
+    const counts = await orchestratorIntentCounts(client, tenantId, operationId, idempotencyKey);
+    return {
+      ok: true,
+      reused: true,
+      created: false,
+      intent: existing,
+      ...counts,
+      sweep: await sweepUnchanged(client),
+      freedomEnvironment: (await freedomRow(client))?.moov_environment,
+    };
+  }
+  const metadata = {
+    phase: 'M7.12',
+    payout_operation_id: operationId,
+    environment: 'sandbox',
+    account_id: SANDBOX_ACCOUNT,
+    wallet_id: SANDBOX_WALLET,
+    bank_id: leg === 'wallet_funding' ? SANDBOX_BANK : null,
+    recipient_account_id: leg === 'wallet_disbursement' ? SANDBOX_RECIPIENT_ACCOUNT : null,
+    recipient_bank_id: leg === 'wallet_disbursement' ? SANDBOX_RECIPIENT_BANK : null,
+    source_payment_method_id: body.sourcePaymentMethodId || null,
+    destination_payment_method_id: body.destinationPaymentMethodId || null,
+    provider_idempotency_key: body.providerIdempotencyKey || body.provider_idempotency_key || null,
+    ...(body.providerMetadata || body.provider_metadata || {}),
+    payout_operation_id: operationId,
+    phase: 'M7.12',
+  };
+  const description = leg === 'wallet_funding'
+    ? 'M7.12 sandbox BANK to WALLET 0.01'
+    : 'M7.12 sandbox WALLET to RECIPIENT 0.01';
+  let inserted;
+  try {
+    inserted = (await client.query(
+      `INSERT INTO public.payment_transfers (
+          tenant_id, provider, environment, status, idempotency_key, amount_cents,
+          platform_fee_cents, net_amount_cents, speed, description,
+          source_tenant_account_id, source_payment_method_id,
+          destination_recipient_id, destination_payment_method_id,
+          wallet_id, leg_role, provider_metadata, created_by
+        ) VALUES (
+          $1::uuid, 'moov', 'sandbox', 'planned', $2, 1,
+          0, 1, 'standard', $3,
+          $4, $5::uuid, $6::uuid, $7::uuid, $8::uuid, $9, $10::jsonb, $11::uuid
+        )
+        RETURNING *`,
+      [
+        tenantId,
+        idempotencyKey,
+        description,
+        SANDBOX_ACCOUNT,
+        leg === 'wallet_funding' ? fundingBank.id : (walletMethod?.id || null),
+        leg === 'wallet_disbursement' ? recipient.id : null,
+        leg === 'wallet_disbursement' ? (recipientBank?.id || null) : null,
+        objects.wallet.id,
+        leg,
+        JSON.stringify(metadata),
+        ACTOR,
+      ],
+    )).rows[0];
+  } catch (error) {
+    if (String(error?.code) === '23505') {
+      const raced = (await client.query(
+        `SELECT * FROM public.payment_transfers
+          WHERE tenant_id = $1::uuid AND idempotency_key = $2 LIMIT 1`,
+        [tenantId, idempotencyKey],
+      )).rows[0];
+      const counts = await orchestratorIntentCounts(client, tenantId, operationId, idempotencyKey);
+      return {
+        ok: true,
+        reused: true,
+        created: false,
+        intent: raced,
+        ...counts,
+        sweep: await sweepUnchanged(client),
+        freedomEnvironment: (await freedomRow(client))?.moov_environment,
+      };
+    }
+    throw error;
+  }
+  const counts = await orchestratorIntentCounts(client, tenantId, operationId, idempotencyKey);
+  return {
+    ok: true,
+    reused: false,
+    created: true,
+    intent: inserted,
+    ...counts,
+    sweep: await sweepUnchanged(client),
+    freedomEnvironment: (await freedomRow(client))?.moov_environment,
+  };
+};
+
+const getOrchestratorIntent = async (client, body = {}) => {
+  const tenantId = body.tenantId || PIPELINE;
+  if (tenantId === FREEDOM || tenantId === C1C) return fail('refused_production_tenant');
+  if (tenantId !== PIPELINE) return fail('undesignated_tenant', { tenantId });
+  const idempotencyKey = String(body.idempotencyKey || body.idempotency_key || '');
+  if (!idempotencyKey) return fail('idempotency_required');
+  const intent = (await client.query(
+    `SELECT * FROM public.payment_transfers
+      WHERE tenant_id = $1::uuid AND environment = 'sandbox' AND idempotency_key = $2
+      LIMIT 1`,
+    [tenantId, idempotencyKey],
+  )).rows[0] || null;
+  const operationId = body.payoutOperationId || intent?.provider_metadata?.payout_operation_id || '';
+  return {
+    ok: true,
+    intent,
+    ...(await orchestratorIntentCounts(client, tenantId, operationId, idempotencyKey)),
+    freedomEnvironment: (await freedomRow(client))?.moov_environment,
+    sweep: await sweepUnchanged(client),
+  };
+};
+
+const updateOrchestratorIntent = async (client, body = {}) => {
+  const tenantId = body.tenantId || PIPELINE;
+  if (tenantId === FREEDOM || tenantId === C1C) return fail('refused_production_tenant');
+  if (tenantId !== PIPELINE) return fail('undesignated_tenant', { tenantId });
+  if (body.providerTransferId && PRODUCTION_IDS.has(String(body.providerTransferId).toLowerCase())) {
+    return fail('production_object_refused');
+  }
+  const existing = body.intentId
+    ? (await client.query(
+      `SELECT * FROM public.payment_transfers
+        WHERE id = $1::uuid AND tenant_id = $2::uuid AND environment = 'sandbox' LIMIT 1`,
+      [body.intentId, tenantId],
+    )).rows[0]
+    : (await client.query(
+      `SELECT * FROM public.payment_transfers
+        WHERE tenant_id = $1::uuid AND environment = 'sandbox' AND idempotency_key = $2 LIMIT 1`,
+      [tenantId, body.idempotencyKey || body.idempotency_key],
+    )).rows[0];
+  if (!existing) return fail('intent_not_found');
+  const metadata = {
+    ...(existing.provider_metadata && typeof existing.provider_metadata === 'object' ? existing.provider_metadata : {}),
+    ...(body.providerMetadata || body.provider_metadata || {}),
+  };
+  const updated = (await client.query(
+    `UPDATE public.payment_transfers SET
+        provider_transfer_id = COALESCE($3, provider_transfer_id),
+        provider_status = COALESCE($4, provider_status),
+        status = COALESCE($5, status),
+        provider_metadata = $6::jsonb,
+        submitted_at = CASE WHEN $7::boolean THEN COALESCE(submitted_at, now()) ELSE submitted_at END,
+        failure_reason = COALESCE($8, failure_reason),
+        completed_at = CASE
+          WHEN $9::timestamptz IS NOT NULL THEN COALESCE(completed_at, $9::timestamptz)
+          ELSE completed_at
+        END,
+        updated_at = now()
+      WHERE id = $1::uuid AND tenant_id = $2::uuid AND environment = 'sandbox'
+      RETURNING *`,
+    [
+      existing.id,
+      tenantId,
+      body.providerTransferId || body.provider_transfer_id || null,
+      body.providerStatus || body.provider_status || null,
+      body.status || null,
+      JSON.stringify(metadata),
+      body.markSubmitted === true,
+      body.failureReason || body.failure_reason || null,
+      body.completedAt || body.completed_at || null,
+    ],
+  )).rows[0];
+  const operationId = updated.provider_metadata?.payout_operation_id || body.payoutOperationId || '';
+  return {
+    ok: true,
+    intent: updated,
+    ...(await orchestratorIntentCounts(client, tenantId, operationId, updated.idempotency_key)),
+  };
+};
+
+const listOrchestratorOperation = async (client, body = {}) => {
+  const tenantId = body.tenantId || PIPELINE;
+  if (tenantId === FREEDOM || tenantId === C1C) return fail('refused_production_tenant');
+  if (tenantId !== PIPELINE) return fail('undesignated_tenant', { tenantId });
+  const operationId = String(body.payoutOperationId || body.payout_operation_id || '');
+  if (!operationId) return fail('payout_operation_id_required');
+  const rows = (await client.query(
+    `SELECT id, tenant_id, environment, leg_role, status, amount_cents, idempotency_key,
+            provider_transfer_id, provider_status, completed_at, created_at, provider_metadata
+       FROM public.payment_transfers
+      WHERE tenant_id = $1::uuid AND environment = 'sandbox'
+        AND coalesce(provider_metadata->>'payout_operation_id', '') = $2
+      ORDER BY created_at ASC`,
+    [tenantId, operationId],
+  )).rows;
+  return {
+    ok: true,
+    operationId,
+    rows,
+    fundingRows: rows.filter((row) => row.leg_role === 'wallet_funding'),
+    payoutRows: rows.filter((row) => row.leg_role === 'wallet_disbursement'),
+    ...(await orchestratorIntentCounts(client, tenantId, operationId, rows[0]?.idempotency_key || '')),
+    freedomEnvironment: (await freedomRow(client))?.moov_environment,
+    sweep: await sweepUnchanged(client),
+  };
+};
+
 const verify = async (client, tenantId) => {
   const freedom = await freedomRow(client);
   const tenant = (await client.query(
@@ -1856,6 +2167,10 @@ export const handler = async (event = {}) => {
     if (step === 'reconcile_funding_parity') return await reconcileFundingParity(client, event);
     if (step === 'reconcile_payout_parity') return await reconcilePayoutParity(client, event);
     if (step === 'diagnose_payout_webhook') return await diagnosePayoutWebhook(client, event);
+    if (step === 'persist_orchestrator_intent') return await persistOrchestratorIntent(client, event);
+    if (step === 'get_orchestrator_intent') return await getOrchestratorIntent(client, event);
+    if (step === 'update_orchestrator_intent') return await updateOrchestratorIntent(client, event);
+    if (step === 'list_orchestrator_operation') return await listOrchestratorOperation(client, event);
     return fail('unknown_step', { step });
   } catch (error) {
     return fail(String(error?.message || error).slice(0, 400), { step });

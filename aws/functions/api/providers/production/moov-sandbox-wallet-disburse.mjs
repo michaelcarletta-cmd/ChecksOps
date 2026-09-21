@@ -43,6 +43,13 @@ export const sandboxWalletDisbursementIdempotencyKey = ({
 export const SANDBOX_PAYOUT_PROVIDER_UUID = idempotencyUuid(
   sandboxWalletDisbursementIdempotencyKey({ tenantId: PIPELINE_TEST_TENANT_ID }),
 );
+export const M712_PAYOUT_PROVIDER_UUID = idempotencyUuid(
+  'checksops:m712:wallet_disbursement:env:sandbox:tenant:3bef00a5-0bf4-41ba-abf8-5fb4e2b73d43:cents:1',
+);
+export const allowedSandboxPayoutProviderUuids = () => [
+  SANDBOX_PAYOUT_PROVIDER_UUID,
+  M712_PAYOUT_PROVIDER_UUID,
+];
 
 export const sandboxFacilitatorPayoutPath = (platformAccountId) => (
   `/accounts/${platformAccountId}/transfers`
@@ -440,7 +447,7 @@ export const executeSandboxWalletDisbursement = async ({
     && !sameId(providerIdempotencyKey, binding.providerIdempotencyKey)) {
     return fail('idempotency_uuid_mismatch', { statusCode: 409 });
   }
-  if (providerIdempotencyKey && !sameId(providerIdempotencyKey, SANDBOX_PAYOUT_PROVIDER_UUID)) {
+  if (providerIdempotencyKey && !allowedSandboxPayoutProviderUuids().some((id) => sameId(providerIdempotencyKey, id))) {
     return fail('idempotency_uuid_mismatch', { statusCode: 409 });
   }
   const postPath = sandboxFacilitatorPayoutPath(binding.platformAccountId);
