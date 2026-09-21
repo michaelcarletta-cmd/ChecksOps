@@ -527,6 +527,25 @@ test('M7.10 webhook receipt lookup cannot key off the transfer UUID', () => {
   assert.equal(explained.lookup.notStored.includes('transferID'), true);
   assert.ok(explained.reasons.includes('receipts_keyed_by_event_uuid_not_transfer_uuid'));
   assert.ok(explained.reasons.includes('sandbox_apply_disabled'));
+  const liveShape = explainMissingSandboxPayoutWebhookReceipt({
+    transferId: PAYOUT_TRANSFER,
+    receiptsByTransferId: [],
+    transferTypedReceipts: [{
+      event_type: 'transfer.updated',
+      mapped_tenant_id: null,
+      mapped_internal_id: null,
+      received_at: '2026-09-21T12:46:02.253Z',
+    }],
+    eventLog: [{
+      event_type: 'transfer.updated',
+      provider_transfer_id: PAYOUT_TRANSFER,
+    }],
+    sandboxApplyEnabled: false,
+    productionExecutionEnabled: true,
+  });
+  assert.equal(liveShape.rootCause, 'emitted_receipted_unmapped_lookup_miss');
+  assert.ok(liveShape.reasons.includes('transfer_receipts_unmapped_tenant_and_account_null'));
+  assert.ok(liveShape.reasons.includes('production_apply_matched_provider_transfer_id'));
   const src = sourceOf('../functions/api/providers/webhooks.mjs');
   assert.match(src, /external_event_id/);
   assert.match(src, /payload\?\.eventID/);

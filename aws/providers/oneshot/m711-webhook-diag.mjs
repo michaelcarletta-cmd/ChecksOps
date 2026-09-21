@@ -222,7 +222,9 @@ const main = async () => {
     transferId: PAYOUT_TRANSFER_ID,
     receiptsByTransferId: rds.receiptsByTransferId || [],
     receiptsByEventId: [],
-    tenantTransferReceipts: rds.transferTypedReceipts || rds.tenantRecentReceipts || [],
+    tenantTransferReceipts: rds.tenantRecentReceipts || [],
+    transferTypedReceipts: rds.transferTypedReceipts || [],
+    eventLog: rds.events || [],
     sandboxApplyEnabled: sandboxWebhookApplyEnabled()
       && flags.flags.AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED === 'true'
       && flags.flags.AWS_PROVIDER_EXECUTION_ENABLED !== 'true',

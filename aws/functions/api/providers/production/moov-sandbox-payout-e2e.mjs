@@ -66,12 +66,24 @@ export const explainMissingSandboxPayoutWebhookReceipt = ({
   receiptsByTransferId = [],
   receiptsByEventId = [],
   tenantTransferReceipts = [],
+  transferTypedReceipts = [],
+  eventLog = [],
   sandboxApplyEnabled = false,
   productionExecutionEnabled = false,
   dryRun = false,
 } = {}) => {
+  const unmappedTransferReceipts = (transferTypedReceipts || []).filter((row) => (
+    !row.mapped_tenant_id && !row.mapped_internal_id
+    && String(row.event_type || '').toLowerCase().includes('transfer')
+  ));
+  const matchingEventLog = (eventLog || []).filter((row) => (
+    String(row.provider_transfer_id || '') === String(transferId || '')
+    && String(row.event_type || '').toLowerCase().includes('transfer')
+  ));
   const lookupMiss = (receiptsByTransferId || []).length === 0
-    && ((receiptsByEventId || []).length > 0 || (tenantTransferReceipts || []).length > 0);
+    && ((receiptsByEventId || []).length > 0
+      || (tenantTransferReceipts || []).length > 0
+      || unmappedTransferReceipts.length > 0);
   const reasons = [];
   if (!sandboxApplyEnabled) {
     reasons.push('sandbox_apply_disabled');
@@ -82,8 +94,22 @@ export const explainMissingSandboxPayoutWebhookReceipt = ({
   if (dryRun) reasons.push('webhook_dry_run');
   reasons.push('receipts_keyed_by_event_uuid_not_transfer_uuid');
   if (lookupMiss) reasons.push('receipt_lookup_by_transfer_id_misses_event_uuid_rows');
-  if ((receiptsByTransferId || []).length === 0 && (tenantTransferReceipts || []).length === 0 && (receiptsByEventId || []).length === 0) {
+  if (unmappedTransferReceipts.length > 0) {
+    reasons.push('transfer_receipts_unmapped_tenant_and_account_null');
+  }
+  if (matchingEventLog.length > 0) {
+    reasons.push('production_apply_matched_provider_transfer_id');
+  }
+  if ((receiptsByTransferId || []).length === 0 && (tenantTransferReceipts || []).length === 0 && (receiptsByEventId || []).length === 0 && unmappedTransferReceipts.length === 0) {
     reasons.push('no_persisted_receipt_for_event_or_transfer');
+  }
+  let rootCause = 'no_matching_persisted_receipt';
+  if ((receiptsByTransferId || []).length > 0) {
+    rootCause = 'receipt_present_apply_or_mapping';
+  } else if (unmappedTransferReceipts.length > 0 && matchingEventLog.length > 0) {
+    rootCause = 'emitted_receipted_unmapped_lookup_miss';
+  } else if (lookupMiss) {
+    rootCause = 'receipt_lookup_issue';
   }
   return {
     transferId: transferId || null,
@@ -97,12 +123,10 @@ export const explainMissingSandboxPayoutWebhookReceipt = ({
       notStored: 'provider_transfer_id / transferID',
       mapped_internal_id: 'payment_provider_accounts.id, not the transfer',
     },
+    unmappedTransferReceipts: unmappedTransferReceipts.length,
+    matchingEventLog: matchingEventLog.length,
     reasons,
-    rootCause: (receiptsByTransferId || []).length === 0
-      ? (lookupMiss
-        ? 'receipt_lookup_issue'
-        : 'no_matching_persisted_receipt')
-      : 'receipt_present_apply_or_mapping',
+    rootCause,
   };
 };
 
