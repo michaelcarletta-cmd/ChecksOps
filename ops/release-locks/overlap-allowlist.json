@@ -11,6 +11,153 @@
       "review_condition": "other-PR-rebase-or-close"
     },
     {
+      "other_pr": 411,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #413 updates AWS write allowlists for endorsement parity and overlaps PR #411 on write-allowlist.mjs; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 410,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #413 updates AWS write allowlists for endorsement parity and overlaps PR #410 on write-allowlist.mjs; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 386,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #413 updates AWS write allowlists for endorsement parity and overlaps PR #386 on write-allowlist.mjs; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 379,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #413 updates AWS write allowlists for endorsement parity and overlaps PR #379 on write-allowlist.mjs; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 377,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #413 updates AWS write allowlists for endorsement parity and overlaps PR #377 on write-allowlist.mjs; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 375,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #413 updates AWS write allowlists for endorsement parity and overlaps PR #375 on write-allowlist.mjs; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 369,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #413 updates AWS write allowlists for endorsement parity and overlaps PR #369 on write-allowlist.mjs; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 332,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #413 updates AWS write allowlists for endorsement parity and overlaps PR #332 on write-allowlist.mjs; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 312,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #413 updates AWS write allowlists for endorsement parity and overlaps PR #312 on write-allowlist.mjs; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 310,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #413 updates AWS write allowlists for endorsement parity and overlaps PR #310 on write-allowlist.mjs; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 309,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #413 updates AWS write allowlists for endorsement parity and overlaps PR #309 on write-allowlist.mjs; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 288,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #413 updates AWS write allowlists for endorsement parity and overlaps PR #288 on write-allowlist.mjs; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 286,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #413 updates AWS write allowlists for endorsement parity and overlaps PR #286 on write-allowlist.mjs; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 283,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #413 updates AWS write allowlists for endorsement parity and overlaps PR #283 on write-allowlist.mjs; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 282,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #413 updates AWS write allowlists for endorsement parity and overlaps PR #282 on write-allowlist.mjs; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 277,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #413 updates AWS write allowlists for endorsement parity and overlaps PR #277 on write-allowlist.mjs; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 263,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #413 updates AWS write allowlists for endorsement parity and overlaps PR #263 on write-allowlist.mjs; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 258,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #413 updates AWS write allowlists for endorsement parity and overlaps PR #258 on write-allowlist.mjs; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 249,
+      "path": "aws/functions/api/write-allowlist.mjs",
+      "reason": "PR #413 updates AWS write allowlists for endorsement parity and overlaps PR #249 on write-allowlist.mjs; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 379,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "PR #413 overlaps PR #379 on CheckCommandCenter.tsx; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 375,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "PR #413 overlaps PR #375 on CheckCommandCenter.tsx; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
       "other_pr": 234,
       "path": "src/pages/CheckCommandCenter.tsx",
       "reason": "PR 359 Manager Bank Deposits and partner-name repair overlaps this open PR on CheckCommandCenter without changing partner SQL 31-34 or Partner Codes.",
