@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { LogOut, Settings, BadgeCheck, Banknote, Receipt, Hammer, Wallet } from "lucide-react";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
+import { TenantPreviewBanner } from "@/components/admin/TenantPreviewBanner";
 
 const CheckCommandCenter = lazy(() => import("@/pages/CheckCommandCenter"));
 
@@ -45,6 +46,7 @@ export function WhiteLabelCheckCenter() {
 
   return (
     <div className="min-h-screen bg-background">
+      <TenantPreviewBanner />
       <header className="h-14 border-b border-border/40 bg-background/95 backdrop-blur flex items-center px-3 md:px-5 sticky top-0 z-10">
         <div className="flex items-center gap-2 md:gap-3 min-w-0">
           {tenant?.logo_url ? (

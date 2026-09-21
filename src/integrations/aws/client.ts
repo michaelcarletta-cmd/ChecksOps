@@ -103,6 +103,7 @@ const toUser = (identity: Record<string, unknown>, emailFallback?: string | null
     app_metadata: {
       provider: "cognito",
       providers: ["cognito"],
+      isMasterOwner: identity.isMasterOwner === true,
       roles: Array.isArray(identity.roles) ? identity.roles : [],
       tenant_roles: Array.isArray(identity.tenants)
         ? identity.tenants

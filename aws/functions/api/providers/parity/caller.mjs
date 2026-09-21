@@ -41,24 +41,39 @@ export async function isPlatformAdmin(client, userId) {
   return Boolean(row);
 }
 
+export async function isPlatformOwnerActor(client) {
+  const row = (await client.query(
+    'SELECT public.is_platform_owner() AS is_owner',
+  )).rows[0];
+  return row?.is_owner === true;
+}
+
 export async function resolveTenant(client, { userId, body, memberships, requireAdmin = false }) {
   const claimed = body?.tenant_id || body?.tenantId || null;
   if (claimed && !UUID_RE.test(String(claimed))) return fail('invalid_uuid', 400, { field: 'tenant_id' });
+  const platformOwner = await isPlatformOwnerActor(client);
   const admin = await isPlatformAdmin(client, userId);
-  if (requireAdmin && !admin) {
-    const role = claimed ? memberships.find((m) => m.tenant_id === claimed)?.role : memberships[0]?.role;
-    if (!['owner', 'admin'].includes(String(role || ''))) {
+  const membershipRole = claimed
+    ? memberships.find((m) => m.tenant_id === claimed)?.role
+    : memberships[0]?.role;
+  if (claimed) {
+    // Platform-owner preview is explicit and scoped to the claimed tenant.
+    // user_roles.admin is not cross-tenant (matches aws_is_cross_tenant_reader).
+    if (!platformOwner && !memberships.some((m) => m.tenant_id === claimed)) {
+      return fail('Forbidden', 403, { error: 'cross_tenant_denied' });
+    }
+  } else if (!memberships.length && !platformOwner && !admin) {
+    return fail('Forbidden', 403);
+  }
+  if (requireAdmin && !platformOwner && !admin) {
+    if (!['owner', 'admin'].includes(String(membershipRole || ''))) {
       return fail('Administrator access required', 403);
     }
   }
   if (claimed) {
-    if (!admin && !memberships.some((m) => m.tenant_id === claimed)) {
-      return fail('Forbidden', 403, { error: 'cross_tenant_denied' });
-    }
-    return { tenantId: claimed, isAdmin: admin };
+    return { tenantId: claimed, isAdmin: platformOwner || admin || ['owner', 'admin'].includes(String(membershipRole || '')) };
   }
-  if (!memberships.length && !admin) return fail('Forbidden', 403);
-  return { tenantId: memberships[0]?.tenant_id || null, isAdmin: admin };
+  return { tenantId: memberships[0]?.tenant_id || null, isAdmin: platformOwner || admin };
 }
 
 export async function loadTenantMoovEnv(client, tenantId) {

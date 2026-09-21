@@ -97,6 +97,7 @@ export const resolveIdentitySession = async ({
       authUid: uid,
       mappingStatus: mapping.status,
       isMasterOwner: masterOwner,
+      email: jsonSafe(profile?.email || mapping.email || email),
       profile: profile ? {
         id: profile.id,
         email: jsonSafe(profile.email),

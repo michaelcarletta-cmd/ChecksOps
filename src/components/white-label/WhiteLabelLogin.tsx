@@ -46,6 +46,17 @@ export function WhiteLabelLogin() {
   const resolveAndRedirect = async (userId: string, emailHint?: string | null) => {
     const emailLc = (emailHint ?? "").trim().toLowerCase();
     if (isPlatformOwner(emailLc, userId)) {
+      // Preview Tenant: stay in the selected tenant. /login (CheckOps) is the
+      // only path that should send the platform owner to Tenant Management.
+      if (tenant?.slug) {
+        const basePath = isCheckOpsHost()
+          ? `/${tenant.slug}`
+          : location.pathname.startsWith(`/wl/${tenant.slug}`)
+            ? `/wl/${tenant.slug}`
+            : "";
+        navigate(basePath ? `${basePath}/checks` : "/checks", { replace: true });
+        return;
+      }
       navigate("/admin/tenants", { replace: true });
       return;
     }

@@ -270,9 +270,29 @@ export default function WalletOps() {
         <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-primary/20 blur-3xl" />
         <div className="relative flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div className="space-y-2 min-w-0">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Sparkles className="h-4 w-4 text-primary" />
               <span className="text-xs font-bold uppercase tracking-widest text-primary">WalletOps</span>
+              {tenant?.name && (
+                <span className="text-sm font-semibold text-foreground">{tenant.name}</span>
+              )}
+              {tenant?.is_test_account && (
+                <Badge variant="outline" className="h-5 border-amber-500/50 px-1.5 text-[10px] text-amber-600">
+                  TEST
+                </Badge>
+              )}
+              {tenant?.moov_environment && (
+                <Badge
+                  variant="outline"
+                  className={
+                    String(tenant.moov_environment).toLowerCase() === "sandbox"
+                      ? "h-5 border-sky-500/50 px-1.5 text-[10px] text-sky-600"
+                      : "h-5 border-emerald-500/50 px-1.5 text-[10px] text-emerald-600"
+                  }
+                >
+                  {String(tenant.moov_environment).toLowerCase() === "sandbox" ? "SANDBOX" : "Production"}
+                </Badge>
+              )}
             </div>
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Available operating balance</p>
             <div className="text-4xl font-bold tracking-tight md:text-5xl">
