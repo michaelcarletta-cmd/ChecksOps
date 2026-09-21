@@ -29,8 +29,28 @@ export const DECISION = Object.freeze({
   PAYOUT_READY: 'PAYOUT_READY',
 });
 
+export const SEQUENCE_STATES = Object.freeze([
+  'payout_requested',
+  'wallet_check',
+  'funding_required',
+  'funding_submitting',
+  'funding_pending',
+  'funding_completed',
+  'funding_failed',
+  'funding_returned',
+  'funding_unknown',
+  'payout_ready',
+  'payout_submitting',
+  'payout_pending',
+  'payout_completed',
+  'payout_failed',
+  'payout_unknown',
+]);
+
 export const FUNDING_STATES = Object.freeze([
   'funding_required',
+  'funding_submitting',
+  'funding_pending',
   'funding_submitted',
   'funding_unknown',
   'funding_completed',
@@ -40,8 +60,10 @@ export const FUNDING_STATES = Object.freeze([
 
 export const PAYOUT_STATES = Object.freeze([
   'payout_requested',
+  'wallet_check',
   'payout_ready',
   'payout_submitting',
+  'payout_pending',
   'payout_submitted',
   'payout_unknown',
   'payout_completed',
@@ -67,26 +89,30 @@ export const UX_STAGE_LABEL = Object.freeze({
 });
 
 const FUNDING_TRANSITIONS = Object.freeze({
-  funding_required: Object.freeze(['funding_submitted']),
-  funding_submitted: Object.freeze(['funding_completed', 'funding_failed', 'funding_returned', 'funding_unknown']),
-  funding_unknown: Object.freeze(['funding_submitted', 'funding_completed', 'funding_failed', 'funding_returned']),
+  funding_required: Object.freeze(['funding_submitting', 'funding_submitted']),
+  funding_submitting: Object.freeze(['funding_pending', 'funding_submitted', 'funding_failed', 'funding_unknown']),
+  funding_pending: Object.freeze(['funding_completed', 'funding_failed', 'funding_returned', 'funding_unknown']),
+  funding_submitted: Object.freeze(['funding_pending', 'funding_completed', 'funding_failed', 'funding_returned', 'funding_unknown']),
+  funding_unknown: Object.freeze(['funding_pending', 'funding_submitted', 'funding_completed', 'funding_failed', 'funding_returned']),
   funding_completed: Object.freeze([]),
   funding_failed: Object.freeze([]),
   funding_returned: Object.freeze([]),
 });
 
 const PAYOUT_TRANSITIONS = Object.freeze({
-  payout_requested: Object.freeze(['payout_ready']),
+  payout_requested: Object.freeze(['wallet_check', 'payout_ready']),
+  wallet_check: Object.freeze(['payout_ready', 'funding_required']),
   payout_ready: Object.freeze(['payout_submitting']),
-  payout_submitting: Object.freeze(['payout_submitted', 'payout_failed', 'payout_unknown']),
-  payout_submitted: Object.freeze(['payout_completed', 'payout_failed', 'payout_unknown']),
-  payout_unknown: Object.freeze(['payout_submitted', 'payout_completed', 'payout_failed']),
+  payout_submitting: Object.freeze(['payout_pending', 'payout_submitted', 'payout_failed', 'payout_unknown']),
+  payout_pending: Object.freeze(['payout_completed', 'payout_failed', 'payout_unknown']),
+  payout_submitted: Object.freeze(['payout_pending', 'payout_completed', 'payout_failed', 'payout_unknown']),
+  payout_unknown: Object.freeze(['payout_pending', 'payout_submitted', 'payout_completed', 'payout_failed']),
   payout_completed: Object.freeze([]),
   payout_failed: Object.freeze([]),
 });
 
-const FUNDING_IN_FLIGHT = new Set(['funding_submitted', 'funding_unknown']);
-const PAYOUT_IN_FLIGHT = new Set(['payout_submitting', 'payout_submitted', 'payout_unknown']);
+const FUNDING_IN_FLIGHT = new Set(['funding_submitting', 'funding_pending', 'funding_submitted', 'funding_unknown']);
+const PAYOUT_IN_FLIGHT = new Set(['payout_submitting', 'payout_pending', 'payout_submitted', 'payout_unknown']);
 const FUNDING_TERMINAL_FAIL = new Set(['funding_failed', 'funding_returned']);
 const PAYOUT_TERMINAL = new Set(['payout_completed', 'payout_failed']);
 
@@ -217,9 +243,11 @@ const intentStatusToFundingState = (status) => {
   if (s === 'failed') return 'funding_failed';
   if (s === 'returned') return 'funding_returned';
   if (s === 'unknown') return 'funding_unknown';
-  if (['pending', 'processing', 'submitted', 'queued', 'created', 'submitting'].includes(s)) {
-    return 'funding_submitted';
+  if (s === 'submitting') return 'funding_submitting';
+  if (['pending', 'processing', 'queued', 'created', 'originated'].includes(s)) {
+    return 'funding_pending';
   }
+  if (s === 'submitted') return 'funding_submitted';
   if (s === 'planned' || s === 'funding_required') return 'funding_required';
   return 'funding_required';
 };
@@ -230,8 +258,10 @@ const intentStatusToPayoutState = (status) => {
   if (s === 'failed' || s === 'returned' || s === 'canceled') return 'payout_failed';
   if (s === 'unknown') return 'payout_unknown';
   if (s === 'submitting') return 'payout_submitting';
-  if (['pending', 'processing', 'submitted', 'queued', 'created'].includes(s)) return 'payout_submitted';
+  if (['pending', 'processing', 'queued', 'created', 'originated'].includes(s)) return 'payout_pending';
+  if (s === 'submitted') return 'payout_submitted';
   if (s === 'ready' || s === 'payout_ready') return 'payout_ready';
+  if (s === 'wallet_check') return 'wallet_check';
   return 'payout_requested';
 };
 
@@ -288,6 +318,13 @@ export const createMemoryPayoutStore = (seed = {}) => {
     },
     async getOperation(id) {
       return ops.get(String(id)) || null;
+    },
+    async updateIntent(key, patch = {}) {
+      const existing = intents.get(String(key));
+      if (!existing) return null;
+      const next = { ...existing, ...patch, idempotency_key: existing.idempotency_key };
+      intents.set(String(key), next);
+      return next;
     },
     snapshot() {
       return {
@@ -379,6 +416,8 @@ export const orchestratePayout = async ({
   tenantId = KNOWN_APPROVED_MOOV.freedom.tenantId,
   operationId: providedOperationId = null,
   labels = null,
+  requireTotp = true,
+  rdsAvailableCents = null,
 } = {}) => {
   const env = String(environment || 'production').toLowerCase() === 'sandbox' ? 'sandbox' : 'production';
   const operationId = providedOperationId || payoutOperationIdFor({
@@ -466,21 +505,23 @@ export const orchestratePayout = async ({
   if (fundingFailed) blockedReasons.push('funding_failed');
   if (!walletAvailableConfirmed) blockedReasons.push('wallet_available_unconfirmed');
   if (recipientVerified !== true) blockedReasons.push('recipient_not_verified');
-  if (totpDisbursePresent !== true) blockedReasons.push('wallet_disburse_totp_required');
+  if (requireTotp === true && totpDisbursePresent !== true) blockedReasons.push('wallet_disburse_totp_required');
   if (payoutInFlight) blockedReasons.push('payout_in_flight');
 
   const mayCreateSecondFunding = false;
   const mayCreateSecondPayout = false;
+  const totpFundOk = requireTotp !== true || totpFundPresent === true;
+  const totpPayoutOk = requireTotp !== true || totpDisbursePresent === true;
   const mayPostFunding = transferPostEnabled === true
     && persistMoneyIntents === true
     && fundingState === 'funding_required'
     && !fundingPending
-    && totpFundPresent === true;
+    && totpFundOk;
   const mayPostPayout = transferPostEnabled === true
     && persistMoneyIntents === true
     && effectivePayoutState === 'payout_ready'
     && blockedReasons.length === 0
-    && totpDisbursePresent === true
+    && totpPayoutOk
     && !fundingPending;
 
   const ux_stage = uxStageFor({
@@ -527,9 +568,13 @@ export const orchestratePayout = async ({
     live_provider_posted: false,
     transfer_post_enabled: transferPostEnabled === true,
     totp_consumed: false,
+    require_totp: requireTotp === true,
+    live_balance_authority: true,
+    rds_balance_ignored: rdsAvailableCents != null,
     blocked_reasons: blockedReasons,
     funding_intent: fundingResult.intent ? {
       kind: 'wallet_funding',
+      leg_role: 'wallet_funding',
       environment: env,
       amount_cents: fundingResult.intent.amount_cents,
       idempotency_key: fundingResult.intent.idempotency_key,
@@ -540,12 +585,16 @@ export const orchestratePayout = async ({
       destination_wallet_id: fundingResult.intent.destination_wallet_id || fundBindingOf(labels).walletId || null,
       source_payment_method_id: fundingResult.intent.source_payment_method_id || fundBindingOf(labels).sourcePaymentMethodId || null,
       destination_payment_method_id: fundingResult.intent.destination_payment_method_id || fundBindingOf(labels).destinationPaymentMethodId || null,
+      provider_transfer_id: fundingResult.intent.provider_transfer_id || null,
+      provider_status: fundingResult.intent.provider_status || null,
+      completed_at: fundingResult.intent.completed_at || null,
       reused: fundingResult.reused,
       created: fundingResult.created,
       required: amounts.decision === DECISION.FUND_FIRST,
     } : null,
     payout_intent: {
       kind: 'wallet_disbursement',
+      leg_role: 'wallet_disbursement',
       environment: env,
       amount_cents: payoutResult.intent.amount_cents,
       idempotency_key: payoutResult.intent.idempotency_key,
@@ -553,6 +602,9 @@ export const orchestratePayout = async ({
       source_label: payoutResult.intent.source_label || disburseBindingOf(labels).sourceLabel,
       destination_label: payoutResult.intent.destination_label || disburseBindingOf(labels).destinationLabel,
       recipient_label: payoutResult.intent.recipient_label || disburseBindingOf(labels).recipientLabel,
+      provider_transfer_id: payoutResult.intent.provider_transfer_id || null,
+      provider_status: payoutResult.intent.provider_status || null,
+      completed_at: payoutResult.intent.completed_at || null,
       reused: payoutResult.reused,
       created: payoutResult.created,
       blocked: effectivePayoutState !== 'payout_ready',
@@ -596,3 +648,65 @@ export const orchestratePayout = async ({
 
 export const webhookMayCreateMoneyIntent = () => false;
 export const getReconciliationMayCreateMoneyIntent = () => false;
+
+const providerStatusToIntentStatus = (providerStatus) => {
+  const s = String(providerStatus || '').toLowerCase();
+  if (s === 'completed') return 'completed';
+  if (s === 'failed') return 'failed';
+  if (s === 'returned' || s === 'reversed') return 'returned';
+  if (s === 'canceled' || s === 'cancelled') return 'canceled';
+  if (s === 'unknown') return 'unknown';
+  if (s === 'submitting') return 'submitting';
+  if (['pending', 'processing', 'queued', 'created', 'originated', 'submitted'].includes(s)) return 'pending';
+  return s || 'pending';
+};
+
+export const applyGetFallbackToIntent = ({
+  intent = null,
+  providerStatus = null,
+  completedOn = null,
+  failureReason = null,
+} = {}) => {
+  if (!intent) return { applied: false, skipped: 'intent_missing', createdPaymentTransfer: false };
+  if (!intent.provider_transfer_id) {
+    return { applied: false, skipped: 'no_provider_transfer_id', createdPaymentTransfer: false, liveProviderPosted: false };
+  }
+  const nextStatus = providerStatusToIntentStatus(providerStatus);
+  const role = String(intent.leg_role || intent.kind || '');
+  const fromState = role.includes('fund')
+    ? intentStatusToFundingState(intent.status)
+    : intentStatusToPayoutState(intent.status);
+  const toState = role.includes('fund')
+    ? intentStatusToFundingState(nextStatus)
+    : intentStatusToPayoutState(nextStatus);
+  const transition = role.includes('fund')
+    ? canTransitionFunding(fromState, toState)
+    : canTransitionPayout(fromState, toState);
+  if (!transition.ok) {
+    return {
+      applied: false,
+      skipped: transition.reason,
+      createdPaymentTransfer: false,
+      liveProviderPosted: false,
+      fromState,
+      toState,
+    };
+  }
+  const patched = {
+    ...intent,
+    status: nextStatus,
+    provider_status: providerStatus || intent.provider_status,
+    completed_at: nextStatus === 'completed' ? (completedOn || intent.completed_at) : intent.completed_at,
+    failure_reason: nextStatus === 'completed' ? null : (failureReason || intent.failure_reason || null),
+  };
+  return {
+    applied: transition.noop !== true || Boolean(nextStatus === 'completed' && !intent.completed_at && completedOn),
+    skipped: transition.noop === true && !(nextStatus === 'completed' && !intent.completed_at && completedOn) ? 'idempotent' : null,
+    createdPaymentTransfer: false,
+    liveProviderPosted: false,
+    intent: patched,
+    fromState,
+    toState,
+  };
+};
+

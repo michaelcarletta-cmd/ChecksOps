@@ -1723,6 +1723,81 @@ const diagnoseFundingReconcile = async (client, body = {}) => {
   };
 };
 
+const diagnosePayoutWebhook = async (client, body = {}) => {
+  const tenantId = body.tenantId || PIPELINE;
+  const transferId = String(body.transferId || PAYOUT_TRANSFER_ID);
+  const intentId = String(body.intentId || PAYOUT_INTENT_ID);
+  if (tenantId === FREEDOM || tenantId === C1C) return fail('refused_production_tenant');
+  if (tenantId !== PIPELINE) return fail('undesignated_tenant', { tenantId });
+  try {
+    await client.query("SELECT set_config('request.provider_webhook', '1', true)");
+  } catch { /* admin connection; receipts remain readable */ }
+  const objects = await tenantObjects(client, tenantId, 'sandbox');
+  const sandboxAccountId = objects.account?.id || null;
+  const byTransferId = (await client.query(
+    `SELECT id, external_event_id, event_type, mapped_tenant_id, mapped_internal_id, dry_run, received_at
+       FROM public.aws_provider_webhook_receipts
+      WHERE provider = 'moov'
+        AND (
+          external_event_id = $1
+          OR mapped_internal_id::text = $1
+        )
+      ORDER BY received_at DESC NULLS LAST
+      LIMIT 20`,
+    [transferId],
+  )).rows;
+  const tenantRecent = (await client.query(
+    `SELECT id, external_event_id, event_type, mapped_tenant_id, mapped_internal_id, dry_run, received_at
+       FROM public.aws_provider_webhook_receipts
+      WHERE provider = 'moov'
+        AND received_at > now() - interval '7 days'
+        AND (
+          mapped_tenant_id = $1::uuid
+          OR ($2::uuid IS NOT NULL AND mapped_internal_id = $2::uuid)
+        )
+      ORDER BY received_at DESC NULLS LAST
+      LIMIT 50`,
+    [tenantId, sandboxAccountId],
+  )).rows;
+  const transferTyped = (await client.query(
+    `SELECT id, external_event_id, event_type, mapped_tenant_id, mapped_internal_id, dry_run, received_at
+       FROM public.aws_provider_webhook_receipts
+      WHERE provider = 'moov'
+        AND received_at > now() - interval '7 days'
+        AND event_type ILIKE '%transfer%'
+      ORDER BY received_at DESC NULLS LAST
+      LIMIT 50`,
+  )).rows;
+  const events = (await client.query(
+    `SELECT id, event_type, previous_status, new_status, provider_transfer_id, created_at
+       FROM public.payment_event_log
+      WHERE tenant_id = $1::uuid
+        AND (provider_transfer_id = $2 OR transfer_id = $3::uuid)
+      ORDER BY created_at DESC
+      LIMIT 20`,
+    [tenantId, transferId, intentId],
+  )).rows;
+  return {
+    ok: true,
+    readOnly: true,
+    transferId,
+    intentId,
+    sandboxAccountId,
+    receiptsByTransferId: byTransferId,
+    tenantRecentReceipts: tenantRecent,
+    transferTypedReceipts: transferTyped.slice(0, 20),
+    events,
+    lookup: {
+      storedKey: 'external_event_id = Moov eventID',
+      notStored: 'provider_transfer_id',
+      mapped_internal_id: sandboxAccountId,
+    },
+    lookupMiss: byTransferId.length === 0 && (tenantRecent.length > 0 || transferTyped.length > 0),
+    getFallbackRequired: true,
+    webhookChangeRequired: false,
+  };
+};
+
 const verify = async (client, tenantId) => {
   const freedom = await freedomRow(client);
   const tenant = (await client.query(
@@ -1780,6 +1855,7 @@ export const handler = async (event = {}) => {
     if (step === 'diagnose_funding_reconcile') return await diagnoseFundingReconcile(client, event);
     if (step === 'reconcile_funding_parity') return await reconcileFundingParity(client, event);
     if (step === 'reconcile_payout_parity') return await reconcilePayoutParity(client, event);
+    if (step === 'diagnose_payout_webhook') return await diagnosePayoutWebhook(client, event);
     return fail('unknown_step', { step });
   } catch (error) {
     return fail(String(error?.message || error).slice(0, 400), { step });
