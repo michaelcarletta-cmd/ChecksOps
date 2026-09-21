@@ -40,12 +40,20 @@ test('UI cannot enable fund and payout at the same time', () => {
   assert.equal(exclusivePayoutActions('ready_to_send').prepare_payout, true);
 });
 
-test('WalletOps panel omits raw provider IDs and does not dual-trigger', () => {
+test('debug payout panel omits raw provider IDs and does not dual-trigger', () => {
   const panel = sourceOf('src/components/payments/PayoutOrchestratorPanel.tsx');
   const page = sourceOf('src/pages/WalletOps.tsx');
   const hook = sourceOf('src/hooks/usePayoutOrchestrator.ts');
-  assert.match(page, /PayoutOrchestratorPanel/);
+  assert.doesNotMatch(page, /PayoutOrchestratorPanel/);
+  assert.doesNotMatch(page, /Shortfall-aware/);
+  assert.doesNotMatch(page, /Funding required/);
+  assert.doesNotMatch(page, /Funding pending/);
+  assert.doesNotMatch(page, /Funds available/);
+  assert.doesNotMatch(page, /Ready to send/);
+  assert.doesNotMatch(page, /Payment pending/);
+  assert.doesNotMatch(page, /Payment completed/);
   assert.match(page, /MoovEnvironmentBadge/);
+  assert.match(panel, /Admin\/debug payout-orchestration view/);
   assert.match(panel, /Prepare funding/);
   assert.match(panel, /Prepare payout/);
   assert.match(panel, /if \(!canPrepareFunding \|\| canPreparePayout\) return/);
@@ -59,4 +67,18 @@ test('WalletOps panel omits raw provider IDs and does not dual-trigger', () => {
   assert.match(hook, /moov-payout-orchestrate/);
   assert.doesNotMatch(hook, /moov-wallet-fund/);
   assert.doesNotMatch(hook, /moov-disburse/);
+});
+
+test('backend shortfall orchestrator remains available after WalletOps UI hide', () => {
+  const orchestrator = sourceOf('aws/functions/api/providers/production/moov-payout-orchestrator.mjs');
+  const handler = sourceOf('aws/functions/api/providers/production/moov-payout-orchestrate.mjs');
+  const catalog = sourceOf('aws/functions/api/providers/catalog.mjs');
+  const e2e = sourceOf('aws/functions/api/providers/production/moov-sandbox-payout-e2e.mjs');
+  assert.match(orchestrator, /Dark, server-authoritative shortfall-aware payout orchestrator/);
+  assert.match(orchestrator, /funding_required: 'Funding required'/);
+  assert.match(orchestrator, /ready_to_send: 'Ready to send'/);
+  assert.match(handler, /handleProductionMoovPayoutOrchestrate/);
+  assert.match(catalog, /moov-payout-orchestrate/);
+  assert.match(e2e, /M711_PHASE = 'M7.11'/);
+  assert.match(e2e, /M712_PHASE = 'M7.12'/);
 });

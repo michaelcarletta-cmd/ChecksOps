@@ -394,6 +394,17 @@ test('WalletOps intercept is GET-only and cannot fall through to parity POST', (
   assert.match(walletOps, /walletActivityTitle/);
   assert.match(walletOps, /walletOpsDisplayStatus/);
   assert.match(walletOps, /MoovEnvironmentBadge/);
+  assert.match(walletOps, /Automatic Funding/);
+  assert.match(walletOps, /Payout Preferences/);
+  assert.match(walletOps, /Recent Wallet Activity/);
+  assert.doesNotMatch(walletOps, /PayoutOrchestratorPanel/);
+  assert.doesNotMatch(walletOps, /Shortfall-aware/);
+  assert.doesNotMatch(walletOps, /Funding required/);
+  assert.doesNotMatch(walletOps, /Funding pending/);
+  assert.doesNotMatch(walletOps, /Funds available/);
+  assert.doesNotMatch(walletOps, /Ready to send/);
+  assert.doesNotMatch(walletOps, /Payment pending/);
+  assert.doesNotMatch(walletOps, /Payment completed/);
   assert.match(display, /PENDING_SYNC_LABEL = "Pending sync"/);
   assert.match(display, /formatWalletCents/);
   assert.match(useWallet, /readWalletSnapshot/);
