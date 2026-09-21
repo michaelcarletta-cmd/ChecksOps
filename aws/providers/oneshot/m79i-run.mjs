@@ -377,26 +377,37 @@ const main = async () => {
   if (!moovCompletedAt) throw new Error('provider_completed_on_missing');
   if (String(transfer.id || '').toLowerCase() !== MOOV_TRANSFER_ID) throw new Error('unexpected_transfer_id');
 
-  const sql78 = invokeOneshot({ step: 'apply_sql78' });
-  if (sql78?.ok !== true) throw new Error(`sql78_failed:${sql78?.error || 'unknown'}`);
-  const overlay = overlayApi();
-  const flagsAfterOverlay = lambdaFlags();
-  if (flagsAfterOverlay.flags.AWS_MOOV_TRANSFER_POST_ENABLED === 'true') throw new Error('overlay_armed_production_post');
-  if (flagsAfterOverlay.flags.AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED === 'true') throw new Error('overlay_armed_sandbox_post');
-  if (flagsAfterOverlay.envKeyCount !== flagsBefore.envKeyCount) throw new Error('overlay_changed_env_keys');
+  const readbackOnly = process.argv[2] === 'readback';
+  let sql78 = { ok: true, applied: false, skipped: readbackOnly ? 'readback' : null };
+  let overlay = { skipped: readbackOnly ? 'readback' : null };
+  let recon = {
+    ok: true,
+    skipped: readbackOnly ? 'readback' : null,
+    failureHistoryPreserved: true,
+    productionWalletRows: [],
+  };
+  if (!readbackOnly) {
+    sql78 = invokeOneshot({ step: 'apply_sql78' });
+    if (sql78?.ok !== true) throw new Error(`sql78_failed:${sql78?.error || 'unknown'}`);
+    overlay = overlayApi();
+    const flagsAfterOverlay = lambdaFlags();
+    if (flagsAfterOverlay.flags.AWS_MOOV_TRANSFER_POST_ENABLED === 'true') throw new Error('overlay_armed_production_post');
+    if (flagsAfterOverlay.flags.AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED === 'true') throw new Error('overlay_armed_sandbox_post');
+    if (flagsAfterOverlay.envKeyCount !== flagsBefore.envKeyCount) throw new Error('overlay_changed_env_keys');
 
-  const recon = invokeOneshot({
-    step: 'reconcile_funding_parity',
-    tenantId: PIPELINE,
-    intentId: INTENT_ID,
-    providerTransferId: MOOV_TRANSFER_ID,
-    providerWalletId: SANDBOX_WALLET,
-    providerStatus: transfer.status || 'completed',
-    completedAt: moovCompletedAt,
-    availableCents: walletAvailable,
-    pendingCents: walletPending,
-  });
-  if (recon?.ok !== true) throw new Error(`parity_recon_failed:${recon?.error || 'unknown'}`);
+    recon = invokeOneshot({
+      step: 'reconcile_funding_parity',
+      tenantId: PIPELINE,
+      intentId: INTENT_ID,
+      providerTransferId: MOOV_TRANSFER_ID,
+      providerWalletId: SANDBOX_WALLET,
+      providerStatus: transfer.status || 'completed',
+      completedAt: moovCompletedAt,
+      availableCents: walletAvailable,
+      pendingCents: walletPending,
+    });
+    if (recon?.ok !== true) throw new Error(`parity_recon_failed:${recon?.error || 'unknown'}`);
+  }
 
   const verifyAfter = invokeOneshot({
     step: 'verify_funding_intent',
@@ -449,7 +460,7 @@ const main = async () => {
     TESTS: 'aws/tests/api-moov-m79i-sandbox-recon-parity.test.mjs',
     'INTENT STATUS': String(intent?.status || 'none'),
     'PROVIDER STATUS': String(intent?.provider_status || 'none'),
-    COMPLETED_AT: intent?.completed_at || 'none',
+    COMPLETED_AT: intent?.completed_at_utc || intent?.completed_at || 'none',
     FAILURE_REASON: intent?.failure_reason == null ? 'null' : String(intent.failure_reason),
     'MOOV WALLET AVAILABLE': String(walletAvailable),
     'RDS WALLET AVAILABLE': String(rdsWallet?.available_cents ?? 'none'),
@@ -480,8 +491,8 @@ const main = async () => {
     armed: false,
     flagsBefore: flagsBefore.flags,
     flagsEnd: flagsEnd.flags,
-    overlaySha: overlay?.overlay?.afterSha || overlay?.afterSha || flagsAfterOverlay.codeSha256,
-    overlayEnvUnchanged: overlay?.overlay?.envUnchanged ?? overlay?.envUnchanged ?? null,
+    overlaySha: overlay?.overlay?.afterSha || overlay?.afterSha || flagsEnd.codeSha256,
+    overlayEnvUnchanged: overlay?.overlay?.envUnchanged ?? overlay?.envUnchanged ?? (readbackOnly ? true : null),
     sql78,
     recon,
     liveTransfer: {

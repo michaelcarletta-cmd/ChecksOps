@@ -1157,7 +1157,11 @@ const diagnoseFundingReconcile = async (client, body = {}) => {
   const objects = await tenantObjects(client, tenantId, 'sandbox');
   const intent = intentId
     ? (await client.query(
-      `SELECT * FROM public.payment_transfers
+      `SELECT id, tenant_id, environment, status, provider_status, provider_transfer_id,
+              failure_reason, provider_metadata,
+              completed_at,
+              to_char(completed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS completed_at_utc
+         FROM public.payment_transfers
         WHERE id = $1::uuid AND tenant_id = $2::uuid AND environment = 'sandbox'
         LIMIT 1`,
       [intentId, tenantId],
