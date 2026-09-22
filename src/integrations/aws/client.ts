@@ -640,20 +640,59 @@ export function createAwsStagingClient(options: AwsStagingClientOptions = {}) {
   });
 
   const auth = {
-    signInWithPassword: async () => ({
-      data: { user: null, session: null },
-      error: authError("Password login is disabled on AWS staging. Use EMAIL_OTP or a passkey.", {
-        status: 410,
-        code: "password_auth_disabled",
-      }),
-    }),
-    completeNewPassword: async () => ({
-      data: { user: null, session: null },
-      error: authError("Password login is disabled on AWS staging. Use EMAIL_OTP or a passkey.", {
-        status: 410,
-        code: "password_auth_disabled",
-      }),
-    }),
+    signInWithPassword: async ({ email, password }: { email: string; password: string }) => {
+      const { response, body } = await apiFetch("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email, password }),
+      });
+      if (body.challenge === "NEW_PASSWORD_REQUIRED") {
+        return {
+          data: { user: null, session: null },
+          error: authError("NEW_PASSWORD_REQUIRED", {
+            code: "NEW_PASSWORD_REQUIRED",
+            session: body.session,
+            email: body.email || email,
+            status: 401,
+          }),
+        };
+      }
+      if (!response.ok || !body.authentication) {
+        return {
+          data: { user: null, session: null },
+          error: authError(String(body.message || body.error || "Invalid credentials"), { status: response.status }),
+        };
+      }
+      try {
+        const mapped = await identityFromTokens(body.authentication as Record<string, unknown>, email);
+        emit("SIGNED_IN", mapped.session);
+        return { data: { user: mapped.user, session: mapped.session }, error: null };
+      } catch (error: any) {
+        return { data: { user: null, session: null }, error: authError(error.message || "identity_not_linked") };
+      }
+    },
+    completeNewPassword: async ({
+      email,
+      session,
+      newPassword,
+    }: {
+      email: string;
+      session: string;
+      newPassword: string;
+    }) => {
+      const { response, body } = await apiFetch("/auth/challenge", {
+        method: "POST",
+        body: JSON.stringify({ email, session, newPassword }),
+      });
+      if (!response.ok || !body.authentication) {
+        return {
+          data: { user: null, session: null },
+          error: authError(String(body.message || body.error || "challenge_failed"), { status: response.status }),
+        };
+      }
+      const mapped = await identityFromTokens(body.authentication as Record<string, unknown>, email);
+      emit("SIGNED_IN", mapped.session);
+      return { data: { user: mapped.user, session: mapped.session }, error: null };
+    },
     signOut: async () => {
       const stored = readStored();
       const accessToken = (stored?.tokens as Record<string, unknown> | undefined)?.accessToken;

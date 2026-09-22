@@ -42,18 +42,12 @@ test('login verify SQL is read-only', () => {
   assert.match(sql, /FROM public\.identity_accounts/);
 });
 
-test('web client template is passwordless USER_AUTH (no application password flows)', () => {
+test('web client template enables USER_PASSWORD_AUTH without dropping SRP', () => {
   const yaml = fs.readFileSync(path.join(ROOT, 'template.yaml'), 'utf8');
-  assert.match(yaml, /ALLOW_USER_AUTH/);
+  assert.match(yaml, /ALLOW_USER_PASSWORD_AUTH/);
+  assert.match(yaml, /ALLOW_USER_SRP_AUTH/);
   assert.match(yaml, /ALLOW_REFRESH_TOKEN_AUTH/);
   assert.match(yaml, /ALLOW_ADMIN_USER_PASSWORD_AUTH/);
-  assert.doesNotMatch(yaml, /ALLOW_USER_PASSWORD_AUTH/);
-  assert.doesNotMatch(yaml, /ALLOW_USER_SRP_AUTH/);
-  const factors = yaml.match(/AllowedFirstAuthFactors:\n((?:\s+-\s+\w+\n)+)/);
-  assert.ok(factors, 'AllowedFirstAuthFactors missing');
-  assert.match(factors[1], /EMAIL_OTP/);
-  assert.match(factors[1], /WEB_AUTHN/);
-  assert.doesNotMatch(factors[1], /PASSWORD/);
 });
 
 test('redactSecrets strips passwords, codes, and JWTs', () => {

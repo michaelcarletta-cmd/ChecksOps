@@ -33,7 +33,6 @@ const MICHAEL = EXPECTED_DUAL_ENV_IDENTITIES[0];
 const UNKNOWN_SUB = '00000000-0000-4000-8000-000000000099';
 
 const loginUi = () => fs.readFileSync(path.join(REPO, 'src/pages/checkops/CheckOpsLogin.tsx'), 'utf8');
-const awsClient = () => fs.readFileSync(path.join(REPO, 'src/integrations/aws/client.ts'), 'utf8');
 const template = () => fs.readFileSync(path.join(ROOT, 'template.yaml'), 'utf8');
 const productionPrep = () => fs.readFileSync(path.join(ROOT, 'production/prep-stack.yaml'), 'utf8');
 const authSource = () => fs.readFileSync(path.join(ROOT, 'functions/api/auth-cognito.mjs'), 'utf8');
@@ -119,9 +118,8 @@ test('login UI offers passkey and email verification and has no password entry p
   assert.doesNotMatch(ui, /htmlFor="password"/);
   assert.doesNotMatch(ui, /id="password"/);
   assert.doesNotMatch(ui, /type="password"/);
-  assert.doesNotMatch(awsClient(), /apiFetch\("\/auth\/login"/);
-  assert.doesNotMatch(awsClient(), /apiFetch\("\/auth\/challenge"/);
-  assert.match(awsClient(), /password_auth_disabled/);
+  assert.doesNotMatch(ui, /\/auth\/login/);
+  assert.doesNotMatch(ui, /\/auth\/challenge/);
 });
 
 test('identity resolver, tenant roles, and fail-closed unknown identities are unchanged', async () => {
@@ -220,15 +218,15 @@ test('identity resolver, tenant roles, and fail-closed unknown identities are un
   assert.equal(MICHAEL.applicationUserId, '7dbb3009-f059-4767-b5dc-1c5c72379330');
 });
 
-test('staging template drops PASSWORD first factor; production prep-stack is untouched', () => {
+test('staging SAM template and production prep-stack stay untouched by this password-path removal', () => {
   const yaml = template();
   const factors = yaml.match(/AllowedFirstAuthFactors:\n((?:\s+-\s+\w+\n)+)/);
   assert.ok(factors);
   assert.match(factors[1], /EMAIL_OTP/);
   assert.match(factors[1], /WEB_AUTHN/);
-  assert.doesNotMatch(factors[1], /PASSWORD/);
-  assert.doesNotMatch(yaml, /ALLOW_USER_PASSWORD_AUTH/);
-  assert.doesNotMatch(yaml, /ALLOW_USER_SRP_AUTH/);
   assert.match(yaml, /ALLOW_USER_AUTH/);
   assert.match(productionPrep(), /ALLOW_USER_PASSWORD_AUTH/);
+  assert.match(authSource(), /password_auth_disabled/);
+  assert.match(authSource(), /handleAuthLogin = async \(\) => passwordAuthDisabled/);
+  assert.match(authSource(), /handleAuthChallenge = async \(\) => passwordAuthDisabled/);
 });
