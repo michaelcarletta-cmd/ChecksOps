@@ -228,6 +228,45 @@ test('correct TOTP step-up writes financial_stepup_log bound to server check amo
   assert.equal(store.stepups[0].user_id, TESTER_APP);
 });
 
+test('disbursement.send records an operation-scoped grant after TOTP and never stores the code', async () => {
+  const prevEnv = process.env.CHECKSOPS_ENV;
+  process.env.CHECKSOPS_ENV = 'production';
+  const store = createStore();
+  const { code } = await enrollTester(store);
+  const payout = {
+    code,
+    action_key: 'disbursement.send',
+    tenant_id: TENANT,
+    recipient_id: '72eb66c1-d9a9-4f85-ab50-8871db9ceeea',
+    amount_cents: 850000,
+    payout_operation_id: '11111111-1111-4111-8111-111111111111',
+  };
+  const invalid = await handleMfaStepUp(eventOf({ ...payout, code: '000000' }), depsOf(store));
+  assert.equal(invalid.ok, false);
+  assert.equal(store.stepups.length, 0);
+  const wrongTenant = await handleMfaStepUp(eventOf({ ...payout, tenant_id: OTHER_TENANT }), depsOf(store));
+  assert.equal(wrongTenant.error, 'cross_tenant_denied');
+  assert.equal(store.stepups.length, 0);
+  const missingRecipient = await handleMfaStepUp(eventOf({ ...payout, recipient_id: null }), depsOf(store));
+  assert.equal(missingRecipient.error, 'recipient_id is required');
+  const stepped = await handleMfaStepUp(eventOf(payout), depsOf(store));
+  assert.equal(stepped.ok, true, JSON.stringify(stepped));
+  assert.equal(stepped.recorded, true);
+  assert.equal(stepped.amount_cents, 850000);
+  assert.equal(stepped.tenant_id, TENANT);
+  assert.equal(stepped.payout_operation_id, payout.payout_operation_id);
+  assert.equal(stepped.totp_code_stored, false);
+  assert.equal(stepped.reusable, false);
+  assert.equal(JSON.stringify(stepped).includes(code), false);
+  assert.equal(store.stepups.length, 1);
+  assert.equal(store.stepups[0].action_key, 'disbursement.send');
+  assert.equal(store.stepups[0].metadata.purpose, 'payout');
+  assert.equal(store.stepups[0].metadata.reusable, false);
+  assert.equal(Object.prototype.hasOwnProperty.call(store.stepups[0].metadata, 'totp_code'), false);
+  assert.equal(JSON.stringify(store.stepups[0].metadata).includes(code), false);
+  process.env.CHECKSOPS_ENV = prevEnv;
+});
+
 test('wrong TOTP fails closed and does not write financial_stepup_log', async () => {
   const store = createStore();
   await enrollTester(store);

@@ -147,3 +147,19 @@ test('wallet.fund and wallet.disburse stay distinct from deposit.submit and each
   assert.equal(cacheAllowsReuse(fundKey, depositKey), false);
   assert.equal(cacheAllowsReuse(fundKey, fundKey), true);
 });
+
+test('disbursement.send step-up body carries operation scope and deposit.submit still omits amount', () => {
+  const payout = buildFinancialStepUpRequest({
+    actionKey: 'disbursement.send',
+    tenantId: TENANT_A,
+    recipientId: 'rec-a',
+    payoutOperationId: 'op-a',
+    amount_cents: 850000,
+  });
+  assert.equal(payout.ok, true);
+  const body = awsStepUpBody(payout.request);
+  assert.equal(body.action_key, 'disbursement.send');
+  assert.equal(body.recipient_id, 'rec-a');
+  assert.equal(body.payout_operation_id, 'op-a');
+  assert.equal(body.amount_cents, 850000);
+});

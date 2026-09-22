@@ -20,9 +20,36 @@ const readIdToken = (): string | null => {
   }
 };
 
-export const awsPayoutOrchestrateReady = (): boolean => {
-  if (!isAwsStaging()) return false;
-  const base = String(awsApiBaseUrl() || "").trim();
+export const isChecksOpsProductionHost = (
+  hostname: string = typeof window !== "undefined" ? window.location.hostname : "",
+): boolean => {
+  const host = String(hostname || "").toLowerCase();
+  return host === "checksops.com" || host === "www.checksops.com" || host.endsWith(".checksops.com");
+};
+
+/** Production and AWS staging must never fall through to Lovable money movers. */
+export const mustBlockLegacyMoneyMovers = (
+  hostname: string = typeof window !== "undefined" ? window.location.hostname : "",
+): boolean => isAwsStaging() || isChecksOpsProductionHost(hostname);
+
+export const productionPrepApiBase = (
+  hostname: string = typeof window !== "undefined" ? window.location.hostname : "",
+  origin: string = typeof window !== "undefined" ? window.location.origin : "",
+): string => {
+  const configured = String(awsApiBaseUrl() || "").trim();
+  if (configured && !LEGACY_HOST.test(configured)) return configured.replace(/\/$/, "");
+  if (isChecksOpsProductionHost(hostname)) {
+    if (origin) return `${origin.replace(/\/$/, "")}/prep`;
+    return "/prep";
+  }
+  return configured.replace(/\/$/, "");
+};
+
+export const awsPayoutOrchestrateReady = (
+  hostname: string = typeof window !== "undefined" ? window.location.hostname : "",
+): boolean => {
+  if (!mustBlockLegacyMoneyMovers(hostname)) return false;
+  const base = productionPrepApiBase(hostname);
   return Boolean(base) && !LEGACY_HOST.test(base);
 };
 
@@ -30,7 +57,7 @@ export async function invokeAwsPayoutOrchestrate(
   body: Record<string, unknown>,
   deps: { fetchImpl?: typeof fetch; idToken?: string | null; apiBaseUrl?: string } = {},
 ): Promise<{ data: Record<string, unknown> | null; error: Error | null }> {
-  const base = String(deps.apiBaseUrl || awsApiBaseUrl() || "").replace(/\/$/, "");
+  const base = String(deps.apiBaseUrl || productionPrepApiBase() || "").replace(/\/$/, "");
   if (!base || LEGACY_HOST.test(base)) {
     return { data: null, error: new Error("legacy_payout_path_blocked") };
   }

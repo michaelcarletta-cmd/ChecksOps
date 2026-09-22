@@ -2743,6 +2743,30 @@ const consumeWalletFundStepup = async (client, body = {}) => {
 
 const M716_FUNDING_INTENT_ID = 'd4580db2-1a3a-4ff0-94ff-4f68af8bcd0f';
 
+const inspectM716PennyIntent = async (client) => {
+  const row = (await client.query(
+    `SELECT id, tenant_id, environment, amount_cents, status, leg_role, idempotency_key,
+            provider_transfer_id, failure_reason, provider_metadata, created_at, updated_at
+       FROM public.payment_transfers
+      WHERE id = $1::uuid
+      LIMIT 1`,
+    [M716_FUNDING_INTENT_ID],
+  )).rows[0] || null;
+  const meta = row?.provider_metadata && typeof row.provider_metadata === 'object' ? row.provider_metadata : {};
+  return {
+    ok: true,
+    inspect_only: true,
+    mutated: false,
+    intent: row,
+    status: row?.status || null,
+    provider_transfer_id: row?.provider_transfer_id ?? null,
+    failure_reason: row?.failure_reason || null,
+    never_executable: meta.never_executable === true,
+    abandoned: String(row?.status || '').toLowerCase() === 'canceled'
+      && String(row?.failure_reason || '') === 'abandoned_unsubmitted_test_intent',
+  };
+};
+
 const abandonM716PennyIntent = async (client, body = {}) => {
   const intentId = String(body.intentId || M716_FUNDING_INTENT_ID);
   const operationId = String(body.payoutOperationId || M716_OPERATION_ID);
@@ -2869,6 +2893,7 @@ export const handler = async (event = {}) => {
     if (step === 'update_production_funding_intent') return await updateProductionFundingIntent(client, event);
     if (step === 'cas_mark_production_funding_post_attempt') return await casMarkProductionFundingPostAttempt(client, event);
     if (step === 'consume_wallet_fund_stepup') return await consumeWalletFundStepup(client, event);
+    if (step === 'inspect_m716_penny_intent') return await inspectM716PennyIntent(client);
     if (step === 'abandon_m716_penny_intent') return await abandonM716PennyIntent(client, event);
     return fail('unknown_step', { step });
   } catch (error) {
