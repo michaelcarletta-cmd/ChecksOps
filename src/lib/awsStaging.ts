@@ -1,12 +1,28 @@
 /**
- * AWS Cognito frontend switch. Production Vite builds use `.env.production`
- * and never set VITE_AUTH_PROVIDER=cognito, so this stays false for ChecksOps.com
- * until an approved production AWS frontend env is deployed.
+ * AWS frontend helpers.
+ *
+ * AUTH and DATA/SERVICE are independent (see `@/lib/providers`).
+ * `isAwsStaging()` remains the *combined* Cognito-auth + AWS-data switch
+ * used by today's staging deploy. Do not rename or invert it.
+ *
+ * Production Vite builds use `.env.production` and never set
+ * VITE_AUTH_PROVIDER=cognito, so combined AWS mode stays false on
+ * ChecksOps.com until an approved production frontend env is deployed.
  */
 
 import { resolveAwsApiBaseUrl } from "@/lib/awsApiBase";
+import {
+  resolveAuthProvider,
+  resolveDataServiceProvider,
+  resolveIntegrationSelection,
+} from "@/lib/providers";
 
 export { resolveAwsApiBaseUrl } from "@/lib/awsApiBase";
+export {
+  resolveAuthProvider,
+  resolveDataServiceProvider,
+  resolveIntegrationSelection,
+} from "@/lib/providers";
 
 const DEFAULT_ORIGIN = "https://staging.checksops.com";
 const DEFAULT_RP_ID = "staging.checksops.com";
@@ -33,8 +49,29 @@ export const AWS_STAGING_AUTH_SESSION_KEY = "checksops.aws.staging.auth";
 /** Mortgage Desk Cognito session — isolated from CheckOps (parity with sb-mortgage-ops-auth). */
 export const AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY = "checksops.aws.staging.auth.mortgage-ops";
 
+const viteEnv = () => import.meta.env as Record<string, string | undefined>;
+
+/** Browser identity is Cognito (EMAIL_OTP / WebAuthn). */
+export function isCognitoAuth(): boolean {
+  return resolveAuthProvider(viteEnv()) === "cognito";
+}
+
+/** Data/storage/functions/rpc use the AWS /prep adapter. */
+export function isAwsDataPlane(): boolean {
+  return resolveDataServiceProvider(viteEnv()) === "aws";
+}
+
+export function isSupabaseDataPlane(): boolean {
+  return resolveDataServiceProvider(viteEnv()) === "supabase";
+}
+
+/**
+ * Combined Cognito auth + AWS data adapter. Staging `--mode aws` stays true.
+ * Future production (Cognito auth + explicit Supabase data) is false so
+ * existing Supabase-backed services keep their current wiring.
+ */
 export function isAwsStaging(): boolean {
-  return String(import.meta.env.VITE_AUTH_PROVIDER || "").toLowerCase() === "cognito";
+  return resolveIntegrationSelection(viteEnv()).client === "aws-adapter";
 }
 
 /**
@@ -58,7 +95,7 @@ export function awsApiBaseUrl(): string {
  * this stays false on ChecksOps.com until an approved AWS frontend env exists.
  */
 export function isAwsStagingHttpsPasskeysEnabled(): boolean {
-  if (!isAwsStaging()) return false;
+  if (!isCognitoAuth()) return false;
   if (typeof window === "undefined") return false;
   try {
     const { protocol, hostname, origin } = window.location;

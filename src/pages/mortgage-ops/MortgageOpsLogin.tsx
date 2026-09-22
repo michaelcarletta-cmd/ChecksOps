@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Fingerprint, Mail, CheckCircle2, Loader2 } from "lucide-react";
 import mortgageOpsLogo from "@/assets/mortgage-ops-logo.png";
-import { isAwsStaging, isAwsStagingHttpsPasskeysEnabled, AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY } from "@/lib/awsStaging";
+import { isCognitoAuth, isAwsStagingHttpsPasskeysEnabled, AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY } from "@/lib/awsStaging";
 import { signInWithAwsPasskey } from "@/lib/awsPasskeys";
 import { signInWithPasskey, sendMagicLink, passkeysSupported } from "@/lib/passkeys";
 import { startAwsEmailOtp, verifyAwsEmailOtp } from "@/lib/awsPasswordless";
@@ -20,7 +20,7 @@ export default function MortgageOpsLogin() {
   const [linkSent, setLinkSent] = useState(false);
   const [awsSession, setAwsSession] = useState("");
   const [code, setCode] = useState("");
-  const awsStaging = isAwsStaging();
+  const awsStaging = isCognitoAuth();
   const awsHttpsPasskeys = isAwsStagingHttpsPasskeysEnabled();
   const canUsePasskeys = awsStaging
     ? awsHttpsPasskeys && passkeysSupported()

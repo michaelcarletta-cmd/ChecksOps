@@ -1,4 +1,4 @@
-import { AWS_STAGING_AUTH_SESSION_KEY, awsApiBaseUrl, isAwsStaging } from "@/lib/awsStaging";
+import { AWS_STAGING_AUTH_SESSION_KEY, awsApiBaseUrl, isCognitoAuth } from "@/lib/awsStaging";
 import { normalizeTotpCode, totpUserFailureMessage } from "@/lib/totpCode";
 
 export type AwsMfaStatus = {
@@ -48,7 +48,7 @@ const post = async (path: string, body: Record<string, unknown> = {}) => {
   return payload;
 };
 
-export const awsMfaAvailable = () => isAwsStaging() && Boolean(awsApiBaseUrl());
+export const awsMfaAvailable = () => isCognitoAuth() && Boolean(awsApiBaseUrl());
 
 export const getAwsMfaStatus = async (): Promise<AwsMfaStatus> => {
   const payload = await post("/auth/mfa/status");

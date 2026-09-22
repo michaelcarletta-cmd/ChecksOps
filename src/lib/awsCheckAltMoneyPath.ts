@@ -57,6 +57,7 @@ export const awsCheckAltMoneyRequestUrl = awsCheckAltProviderRequestUrl;
 
 export const awsCheckAltProviderPathReady = (deps: {
   authProvider?: string;
+  dataServiceProvider?: string;
   apiBaseUrl?: string;
   functionName: string;
 }): { ok: true; url: string } | { ok: false; error: string } => {
@@ -65,7 +66,17 @@ export const awsCheckAltProviderPathReady = (deps: {
       ?? (typeof import.meta !== "undefined" ? import.meta.env?.VITE_AUTH_PROVIDER : "")
       ?? "",
   ).toLowerCase();
-  if (authProvider !== "cognito") {
+  const explicitData = String(
+    deps.dataServiceProvider
+      ?? (typeof import.meta !== "undefined" ? import.meta.env?.VITE_DATA_SERVICE_PROVIDER : "")
+      ?? "",
+  ).toLowerCase();
+  const dataServiceProvider = explicitData === "supabase" || explicitData === "aws"
+    ? explicitData
+    : (authProvider === "cognito" ? "aws" : "supabase");
+  // Combined AWS data plane only. Cognito auth + Supabase data must not
+  // suddenly send CheckAlt through /prep.
+  if (authProvider !== "cognito" || dataServiceProvider !== "aws") {
     return { ok: false, error: LEGACY_CHECKALT_PROVIDER_BLOCKED };
   }
   const url = awsCheckAltProviderRequestUrl(String(deps.apiBaseUrl || ""), deps.functionName);
@@ -78,6 +89,7 @@ export const awsCheckAltMoneyPathReady = awsCheckAltProviderPathReady;
 
 export const requireAwsCheckAltProviderPath = (deps: {
   authProvider?: string;
+  dataServiceProvider?: string;
   apiBaseUrl?: string;
   functionName: string;
 }): string => {
@@ -116,6 +128,7 @@ export async function invokeAwsCheckAltProviderFunction(
   options: { body?: Record<string, unknown> } = {},
   deps: {
     authProvider?: string;
+    dataServiceProvider?: string;
     apiBaseUrl?: string;
     idToken?: string | null;
     fetchImpl?: typeof fetch;
@@ -123,6 +136,7 @@ export async function invokeAwsCheckAltProviderFunction(
 ): Promise<{ data: unknown; error: Error | null; providerHttp: false }> {
   const ready = awsCheckAltProviderPathReady({
     authProvider: deps.authProvider,
+    dataServiceProvider: deps.dataServiceProvider,
     apiBaseUrl: deps.apiBaseUrl,
     functionName: name,
   });
@@ -177,6 +191,7 @@ export async function runCheckAltOneClickSubmit(
   checkId: string,
   deps: {
     authProvider?: string;
+    dataServiceProvider?: string;
     apiBaseUrl?: string;
     idToken?: string | null;
     fetchImpl?: typeof fetch;
@@ -194,6 +209,7 @@ export async function runCheckAltOneClickSubmit(
 } }> {
   requireAwsCheckAltProviderPath({
     authProvider: deps.authProvider,
+    dataServiceProvider: deps.dataServiceProvider,
     apiBaseUrl: deps.apiBaseUrl,
     functionName: "checkalt-submit-deposit",
   });

@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, ArrowLeft, CheckCircle2 } from "lucide-react";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
-import { isAwsStaging } from "@/lib/awsStaging";
+import { isCognitoAuth } from "@/lib/awsStaging";
 
 export default function CheckOpsForgotPassword() {
   const { toast } = useToast();
@@ -19,7 +19,7 @@ export default function CheckOpsForgotPassword() {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [confirmed, setConfirmed] = useState(false);
-  const aws = isAwsStaging();
+  const aws = isCognitoAuth();
 
   const sendResetEmail = async () => {
     setLoading(true);
