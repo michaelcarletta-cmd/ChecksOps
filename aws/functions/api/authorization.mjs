@@ -16,6 +16,7 @@ import {
 } from './identity.mjs';
 import { assertTrustedIssuer } from './identity-env.mjs';
 import { fetchCognitoJwks } from './jwks.mjs';
+import { bindActiveTenantSlug } from './claim-owner-tenant.mjs';
 
 const { Client } = pg;
 
@@ -79,6 +80,7 @@ export const ignoredSpoofFields = (event) => {
     headerCognitoSub: lower['x-cognito-sub'] || null,
     bodyUserId: bodyObj.user_id || bodyObj.applicationUserId || bodyObj.sub || null,
     bodyTenantId: bodyObj.tenant_id || bodyObj.tenantId || null,
+    bodyOrgId: bodyObj.org_id || bodyObj.orgId || null,
   };
 };
 
@@ -108,6 +110,7 @@ export const runAuthorizationProbe = async ({
   cognitoEmail = null,
   claims = null,
   spoof = null,
+  event = null,
   identityScope = null,
   loadCredentials = loadDatabaseCredentials,
   createClient = (config) => new Client(config),
@@ -144,6 +147,7 @@ export const runAuthorizationProbe = async ({
     const appEmail = mapping.email || cognitoEmail || '';
     await client.query('SELECT set_config($1, $2, true)', [APP_USER_ID_GUC, mapping.application_user_id]);
     await client.query('SELECT set_config($1, $2, true)', [APP_USER_EMAIL_GUC, appEmail]);
+    await bindActiveTenantSlug(client, event || {}, null);
 
     const uid = (await client.query(AUTH_UID_SQL)).rows[0]?.auth_uid;
     if (uid !== mapping.application_user_id) {
@@ -257,6 +261,7 @@ export const handleAuthorizationProbe = async (event) => {
     cognitoEmail: claimsResult.claims.email,
     claims: claimsResult.claims,
     spoof: ignoredSpoofFields(event),
+    event,
   });
 };
 

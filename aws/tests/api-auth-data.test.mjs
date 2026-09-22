@@ -25,6 +25,7 @@ import {
   splitEmbedFilters,
 } from '../functions/api/data.mjs';
 import { LOOKUP_MAPPING_SQL } from '../functions/api/identity.mjs';
+import { ACTIVE_TENANT_SLUG_GUC } from '../functions/api/claim-owner-tenant.mjs';
 import {
   handleAuthForgot,
   handleAuthLogin,
@@ -338,6 +339,35 @@ test('POST /data/query maps Cognito sub to application UUID and ignores spoofed 
   const guc = client.queries.find((q) => String(q.sql).includes('set_config') && q.params?.[1] === APP_ID);
   assert.ok(guc, 'request.app_user_id must be the mapped ChecksOps UUID');
   assert.equal(client.queries.some((q) => q.params?.[1] === SPOOF_ID && String(q.sql).includes('set_config')), false);
+});
+
+test('withIdentity binds membership slug and ignores client org_id / tenant UUID', async () => {
+  const C1C = '4f172140-f57a-4744-8050-95f4f07b13b4';
+  const client = mockClient({
+    rows: [{ id: 'role-1', role: 'staff', user_id: APP_ID }],
+  });
+  const result = await handleDataQuery(jwtEvent('/data/query', 'POST', {
+    table: 'user_roles',
+    select: 'role',
+    org_id: C1C,
+    tenant_id: C1C,
+    active_tenant_slug: 'freedom',
+  }, {
+    headers: {
+      'x-tenant-id': C1C,
+      'x-active-tenant-slug': 'freedom',
+    },
+  }), depsFor(client));
+  assert.equal(result.ok, true);
+  const slugGuc = client.queries.find((q) => (
+    String(q.sql).includes('set_config') && q.params?.[0] === ACTIVE_TENANT_SLUG_GUC
+  ));
+  assert.equal(slugGuc?.params?.[1], 'freedom');
+  assert.equal(client.queries.some((q) => (
+    String(q.sql).includes('set_config') && q.params?.[1] === C1C
+  )), false);
+  assert.equal(result.spoofFieldsIgnored.bodyOrgId, C1C);
+  assert.equal(result.spoofFieldsIgnored.headerTenantId, C1C);
 });
 
 test('unauthenticated tenants_public reads are allowed; other tables are not', async () => {

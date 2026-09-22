@@ -111,6 +111,13 @@ const depsFor = (client) => ({
   },
 });
 
+test('claims stay off the write allowlist; client org_id is an ignored identity key', () => {
+  assert.equal(WRITE_ALLOWLIST.claims, undefined);
+  assert.equal(denyTableReason('claims'), 'unknown_table');
+  assert.equal(CLIENT_IDENTITY_KEYS.has('org_id'), true);
+  assert.equal(CLIENT_IDENTITY_KEYS.has('tenant_id'), true);
+});
+
 test('allowlist rejects financial tables and unknown columns; ignores spoof identity keys', () => {
   assert.equal(denyTableReason('claim_payments'), 'financial_or_provider');
   assert.equal(denyTableReason('check_intake_items'), null);
