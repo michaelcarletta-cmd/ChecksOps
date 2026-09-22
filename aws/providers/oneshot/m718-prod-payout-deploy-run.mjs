@@ -393,6 +393,43 @@ const overlayPrepApi = async () => {
     unpacked,
   };
 };
+const inspectOnlyOverlay = async () => {
+  const flags = lambdaFlags();
+  refuseArmed(flags.flags);
+  const { unpacked, codeSha256 } = downloadLiveZip(path.join(os.tmpdir(), 'checksops-m718-verify-zip'));
+  const totp = fs.readFileSync(path.join(unpacked, TOTP_REL), 'utf8');
+  if (!totp.includes('resolvePayoutStepUpBinding') || !totp.includes('disbursement.send')) {
+    throw new Error('deployed_totp_missing_disbursement_send');
+  }
+  if (!totp.includes('isMoovWalletTotpAction')) throw new Error('deployed_wallet_totp_missing');
+  const graph = await importGraph(unpacked);
+  const copied = [...OVERLAY_FILES, TOTP_REL].map((rel) => ({
+    rel,
+    sha256: sha256File(path.join(unpacked, rel)),
+  }));
+  const mustKeepSha = {};
+  for (const rel of MUST_KEEP) {
+    const full = path.join(unpacked, rel);
+    if (fs.existsSync(full)) mustKeepSha[rel] = sha256File(full);
+  }
+  return {
+    beforeSha: codeSha256,
+    afterSha: flags.codeSha256 || codeSha256,
+    lastModified: flags.lastModified,
+    state: flags.state,
+    lastUpdateStatus: flags.lastUpdateStatus,
+    copied,
+    totpMerge: 'verify_only',
+    graph,
+    protectedUnchanged: true,
+    mustKeepSha,
+    envUnchanged: true,
+    POST_FLAG: flags.flags.AWS_MOOV_TRANSFER_POST_ENABLED,
+    SANDBOX_POST_FLAG: flags.flags.AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED,
+    unpacked,
+    skippedOverlay: true,
+  };
+};
 const packOneshot = () => {
   const staging = path.join(os.tmpdir(), 'checksops-m718-oneshot-pack');
   fs.rmSync(staging, { recursive: true, force: true });
@@ -672,7 +709,9 @@ const main = async () => {
   const flagsBefore = lambdaFlags();
   refuseArmed(flagsBefore.flags);
   const spaBefore = await spaFingerprint();
-  const overlay = await overlayPrepApi();
+  const overlay = process.env.M718_SKIP_OVERLAY === '1'
+    ? await inspectOnlyOverlay()
+    : await overlayPrepApi();
   const flagsAfterBackend = lambdaFlags();
   refuseArmed(flagsAfterBackend.flags);
 
@@ -767,12 +806,35 @@ const main = async () => {
   const live = walletJson?.json || walletJson;
   const liveAvailable = amountCentsOf(live?.availableBalance ?? live?.available);
 
-  const spa = deploySpa();
+  let spa = {
+    skipped: true,
+    error: null,
+    hasPennyCard: null,
+    invalidationId: null,
+    sha256: null,
+    asset: null,
+  };
+  try {
+    if (process.env.M718_SKIP_SPA !== '1') spa = { skipped: false, error: null, ...deploySpa() };
+  } catch (error) {
+    spa = {
+      skipped: true,
+      error: String(error?.message || error).slice(0, 500),
+      hasPennyCard: null,
+      invalidationId: null,
+      sha256: null,
+      asset: null,
+    };
+  }
   const flagsAfterSpa = lambdaFlags();
   refuseArmed(flagsAfterSpa.flags);
   const spaAfter = await spaFingerprint();
   const site = await fetch(SPA_ORIGIN);
   const siteHtml = await site.text();
+  const builtIndex = fs.existsSync(path.join(ROOT, 'dist/index.html'))
+    ? fs.readFileSync(path.join(ROOT, 'dist/index.html'), 'utf8')
+    : '';
+  const builtAsset = builtIndex.match(/assets\/(?:index|main)-[^"' ]+\.js/)?.[0] || null;
 
   const card = {
     PRE_DEPLOY_API_SHA: overlay.beforeSha,
@@ -831,10 +893,20 @@ const main = async () => {
     LIVE_WALLET_AVAILABLE_CENTS: liveAvailable,
     INDEPENDENT_FUND_BLOCKED: independentFund.json?.error || independentFund.statusCode,
     SITE_STATUS: site.status,
+    SPA_DEPLOYED: spa.skipped !== true && !spa.error,
+    SPA_ERROR: spa.error || null,
+    SPA_BUILT_ASSET: builtAsset,
     SPA_INVALIDATION: spa.invalidationId,
     IDENTITY: identity.Arn,
     ROOT_HEALTH: rootHealth.json || rootHealth.statusCode,
+    TOTP_MERGE: overlay.totpMerge,
+    SKIPPED_OVERLAY: overlay.skippedOverlay === true,
   };
+  const cardPath = '/opt/cursor/artifacts/m718_deploy_card.json';
+  try {
+    fs.mkdirSync('/opt/cursor/artifacts', { recursive: true });
+    fs.writeFileSync(cardPath, JSON.stringify(card, null, 2));
+  } catch { /* artifacts dir may be missing in unit tests */ }
   console.log(JSON.stringify(card, null, 2));
   if (dark.pass !== true) throw new Error(`dark_ao_failed:${dark.failed.join(',')}`);
   if (flagsAfterSpa.flags.AWS_MOOV_TRANSFER_POST_ENABLED === 'true') throw new Error('post_armed_after_spa');
