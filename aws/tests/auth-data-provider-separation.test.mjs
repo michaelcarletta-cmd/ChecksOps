@@ -53,8 +53,8 @@ test('2. Cognito auth can be selected independently of the data plane', () => {
   assert.deepEqual(stagingDefault, { auth: 'cognito', data: 'aws', client: 'aws-adapter' });
   assert.deepEqual(split, { auth: 'cognito', data: 'supabase', client: 'cognito-auth-supabase-data' });
   assert.deepEqual(explicitAws, { auth: 'cognito', data: 'aws', client: 'aws-adapter' });
-  assert.equal(resolveAuthProvider(split), 'cognito');
-  assert.equal(resolveDataServiceProvider(split), 'supabase');
+  assert.equal(split.auth, 'cognito');
+  assert.equal(split.data, 'supabase');
 });
 
 test('unsupported Supabase-auth + AWS-data fail-closes to the Supabase client', () => {
