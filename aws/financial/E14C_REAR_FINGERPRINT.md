@@ -42,7 +42,14 @@ Eligibility contract unchanged. No one-off stamp on this check.
 
 ## Deploy
 
-Production Lambda `checksops-production-prep-api` overlay of `write-check-workflow.mjs` + `write.mjs` only if this packet’s tests pass. Env / money flags unchanged.
+Production Lambda `checksops-production-prep-api` overlay of `write-check-workflow.mjs` + `write.mjs` at 2026-09-22T23:44:36Z.
+
+| Item | Value |
+| --- | --- |
+| CodeSha before | `xt/R8za4uuGndEDN0g82S4wIhR+eBO0sO/RR92u5P/E=` |
+| CodeSha after | `fG/MT+D3Zolft+W94i/eW/uf1uEWIF3YaM4KtuorRCQ=` |
+| Env count | 41 (unchanged) |
+| Money flags | still all OFF; dry-run `true` |
 
 ## Operator
 
