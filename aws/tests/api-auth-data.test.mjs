@@ -625,23 +625,23 @@ test('classifyDataQueryFailure logs shape only and redacts secrets, SQL URLs, an
   assert.equal(logs[0].includes('contact_email'), false);
 });
 
-test('login challenge is returned without treating Cognito sub as the application UUID', async () => {
+test('password login is disabled and never treats Cognito sub as the application UUID', async () => {
+  let fetchCalled = false;
   const original = globalThis.fetch;
-  globalThis.fetch = async () => ({
-    ok: true,
-    status: 200,
-    text: async () => JSON.stringify({
-      ChallengeName: 'NEW_PASSWORD_REQUIRED',
-      Session: 'challenge-session',
-    }),
-  });
+  globalThis.fetch = async () => {
+    fetchCalled = true;
+    throw new Error('Cognito must not be called for retired password login');
+  };
   try {
     const result = await handleAuthLogin({
       body: JSON.stringify({ email: 'checksops-tester@freedomadj.com', password: 'unused-in-test' }),
     });
-    assert.equal(result.challenge, 'NEW_PASSWORD_REQUIRED');
-    assert.equal(result.session, 'challenge-session');
+    assert.equal(result.ok, false);
+    assert.equal(result.statusCode, 410);
+    assert.equal(result.error, 'password_auth_disabled');
     assert.equal(result.authentication, undefined);
+    assert.equal(result.challenge, undefined);
+    assert.equal(fetchCalled, false);
   } finally {
     globalThis.fetch = original;
   }

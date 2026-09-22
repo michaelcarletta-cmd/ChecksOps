@@ -163,74 +163,21 @@ export const handleAuthPasswordlessVerify = async (event) => {
   }
 };
 
-/** Legacy staging password flow retained only until passwordless rollout is proven. */
-export const handleAuthLogin = async (event) => {
-  const body = parseBody(event);
-  const email = emailOf(body.email || body.username);
-  const password = body.password;
-  if (!email || !password) {
-    return { ok: false, statusCode: 400, error: 'missing_credentials' };
-  }
-  try {
-    const result = await cognitoJson('InitiateAuth', {
-      AuthFlow: 'USER_PASSWORD_AUTH',
-      ClientId: CLIENT_ID(),
-      AuthParameters: { USERNAME: email, PASSWORD: password },
-    });
-    if (result.ChallengeName === 'NEW_PASSWORD_REQUIRED') {
-      return {
-        ok: true,
-        statusCode: 200,
-        challenge: 'NEW_PASSWORD_REQUIRED',
-        session: result.Session,
-        email,
-      };
-    }
-    return {
-      ok: true,
-      statusCode: 200,
-      challenge: null,
-      authentication: authenticationOf(result),
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      statusCode: error.statusCode || 401,
-      error: 'login_failed',
-      message: String(error.message || error).slice(0, 200),
-    };
-  }
-};
+const passwordAuthDisabled = () => ({
+  ok: false,
+  statusCode: 410,
+  error: 'password_auth_disabled',
+  message: 'Staging password login is disabled. Use EMAIL_OTP or a passkey.',
+});
 
-export const handleAuthChallenge = async (event) => {
-  const body = parseBody(event);
-  const email = emailOf(body.email || body.username);
-  const session = body.session;
-  const newPassword = body.newPassword || body.password;
-  if (!email || !session || !newPassword) {
-    return { ok: false, statusCode: 400, error: 'missing_challenge_fields' };
-  }
-  try {
-    const result = await cognitoJson('RespondToAuthChallenge', {
-      ClientId: CLIENT_ID(),
-      ChallengeName: 'NEW_PASSWORD_REQUIRED',
-      Session: session,
-      ChallengeResponses: { USERNAME: email, NEW_PASSWORD: newPassword },
-    });
-    return {
-      ok: true,
-      statusCode: 200,
-      authentication: authenticationOf(result),
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      statusCode: error.statusCode || 400,
-      error: 'challenge_failed',
-      message: String(error.message || error).slice(0, 200),
-    };
-  }
-};
+/**
+ * Staging application password login is retired. EMAIL_OTP and WEB_AUTHN remain.
+ * Does not call Cognito and does not accept credentials.
+ */
+export const handleAuthLogin = async () => passwordAuthDisabled();
+
+/** NEW_PASSWORD_REQUIRED is part of the retired password login path. */
+export const handleAuthChallenge = async () => passwordAuthDisabled();
 
 export const handleAuthRefresh = async (event) => {
   const body = parseBody(event);
@@ -358,5 +305,8 @@ export const PASSWORDLESS_AUTH = {
   authFlow: 'USER_AUTH',
   preferredChallenge: 'EMAIL_OTP',
   passwordAcceptedByPasswordlessRoutes: false,
+  passwordLoginEnabled: false,
+  masterUatPasswordLoginEnabled: false,
+  allowedFirstFactors: ['EMAIL_OTP', 'WEB_AUTHN'],
   webAuthn: WEBAUTHN_STAGING,
 };
