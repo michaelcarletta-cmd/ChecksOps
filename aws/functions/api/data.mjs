@@ -12,7 +12,11 @@ import {
   refuseSubAsApplicationId,
   verifyCognitoIdToken,
 } from './cognito.mjs';
-import { LOOKUP_MAPPING_SQL } from './identity.mjs';
+import {
+  lookupIdentityMapping,
+  resolveTrustedIdentityScope,
+} from './identity.mjs';
+import { assertTrustedIssuer } from './identity-env.mjs';
 import { denyTaxSecretQuery, denyTaxSecretRpc } from './tax-secrets.mjs';
 
 const { Client } = pg;
@@ -207,7 +211,18 @@ export const withIdentity = async (event, fn, deps = {}) => {
     if (write) {
       await client.query('SET TRANSACTION READ WRITE');
     }
-    const mapping = (await client.query(LOOKUP_MAPPING_SQL, [claimsResult.claims.sub])).rows[0];
+    const scope = deps.identityScope || resolveTrustedIdentityScope();
+    if (!scope.ok) {
+      await client.query('ROLLBACK');
+      return { ok: false, statusCode: 401, error: scope.error, spoofFieldsIgnored: spoof };
+    }
+    const issuerCheck = assertTrustedIssuer(claimsResult.claims, scope);
+    if (!issuerCheck.ok) {
+      await client.query('ROLLBACK');
+      return { ok: false, statusCode: 401, error: issuerCheck.error, spoofFieldsIgnored: spoof };
+    }
+    const resolved = await lookupIdentityMapping(client, claimsResult.claims.sub, scope);
+    const mapping = resolved.mapping;
     if (!mapping) {
       await client.query('ROLLBACK');
       return { ok: false, statusCode: 401, error: 'identity_not_linked', spoofFieldsIgnored: spoof };
