@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { handler } from '../functions/api/index.mjs';
 import { LOOKUP_MAPPING_SQL } from '../functions/api/identity.mjs';
 import { handleWrite } from '../functions/api/write.mjs';
@@ -714,5 +717,14 @@ test('Tranche 3 intake image path must be scoped to the same check', async () =>
     filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
   }), depsFor(client));
   assert.equal(denied.statusCode, 403);
+});
+
+test('claims grant file is insert-only for checksops', () => {
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const grant = fs.readFileSync(path.join(root, 'workflows/sql/71_claims_insert_grant.sql'), 'utf8');
+  const revoke = fs.readFileSync(path.join(root, 'workflows/sql/71_claims_insert_revoke.sql'), 'utf8');
+  assert.match(grant, /GRANT INSERT ON TABLE public\.claims TO checksops;/);
+  assert.doesNotMatch(grant, /^\s*GRANT (UPDATE|DELETE|ALL)\b/im);
+  assert.match(revoke, /REVOKE INSERT ON TABLE public\.claims FROM checksops;/);
 });
 
