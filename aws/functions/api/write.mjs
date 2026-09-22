@@ -209,7 +209,7 @@ export const executeAllowlistedWrite = async ({
       table,
     };
   }
-  if ((spec.tranche === 5 || spec.tranche === 6) && !applicationWorkflowEnabled) {
+  if ((spec.tranche === 5 || spec.tranche === 6) && table !== 'claims' && !applicationWorkflowEnabled) {
     return {
       error: 'application_workflow_writes_disabled',
       message: 'Application-workflow writes are disabled by AWS_APPLICATION_WORKFLOW_WRITES_ENABLED',
@@ -263,7 +263,8 @@ export const executeAllowlistedWrite = async ({
     };
   }
   if (spec.tranche === 2 || spec.tranche === 3 || spec.tranche === 5 || spec.tranche === 6
-    || table === 'audit_logs' || table === 'user_sessions') {
+    || spec.tranche === 7
+    || table === 'audit_logs' || table === 'user_sessions' || table === 'claims') {
     return executeCheckWorkflowWrite({
       client,
       mapping,

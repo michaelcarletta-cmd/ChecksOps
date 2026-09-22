@@ -1354,6 +1354,28 @@ const executeUserSessionsTable = async ({ client, mapping, op, values, filters }
   return { error: 'missing_required_field', field: 'id' };
 };
 
+const CLAIM_CREATE_STATUSES = new Set(['tracking']);
+
+export const executeClaimsCreate = async ({ client, values }) => {
+  const number = asText(values.claim_number, 120);
+  if (number.error || !number.value) {
+    return number.error || { error: 'missing_required_field', field: 'claim_number' };
+  }
+  const statusRaw = values.status == null || values.status === ''
+    ? 'tracking'
+    : String(values.status).trim().toLowerCase();
+  if (!CLAIM_CREATE_STATUSES.has(statusRaw)) {
+    return { error: 'invalid_field', field: 'status', message: 'Only tracking claims can be created on this path' };
+  }
+  const rows = (await client.query(
+    `INSERT INTO public.claims (claim_number, status)
+     VALUES ($1::text, $2::text)
+     RETURNING *`,
+    [number.value, statusRaw],
+  )).rows;
+  return { rows };
+};
+
 export const executeCheckWorkflowWrite = async ({ client, mapping, table, op, values, filters }) => {
   const spec = WRITE_ALLOWLIST[table];
   const badFilters = rejectNonEqFilters(filters, spec);
@@ -1375,6 +1397,11 @@ export const executeCheckWorkflowWrite = async ({ client, mapping, table, op, va
   if (table === 'contractor_profiles') return executeContractorProfiles({ client, mapping, values, filters });
   if (table === 'audit_logs') return executeAuditLogsTable({ client, mapping, values });
   if (table === 'user_sessions') return executeUserSessionsTable({ client, mapping, op, values, filters });
+  if (table === 'claims') return executeClaimsCreate({ client, values });
+  if (table === 'financial_stepup_log') {
+    const { executeFinancialStepupLog } = await import('./write-app-metadata.mjs');
+    return executeFinancialStepupLog({ client, mapping, op, values });
+  }
   if ([
     'notifications', 'tenant_documents', 'loss_draft_documents', 'mortgage_companies',
     'shared_check_messages', 'profiles', 'company_branding', 'referral_alerts',

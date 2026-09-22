@@ -82,6 +82,16 @@ const mockClient = ({ rows = [], mapping = mappingFor(), throwOn = null } = {}) 
           }],
         };
       }
+      if (/INSERT INTO public.claims/.test(sql)) {
+        return {
+          rows: [{
+            id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+            claim_number: params[0],
+            status: params[1],
+            org_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a',
+          }],
+        };
+      }
       if (/FROM public.check_files f/.test(sql) || /FROM public.claim_checks cc/.test(sql)) {
         return {
           rows: [{
@@ -111,11 +121,33 @@ const depsFor = (client) => ({
   },
 });
 
-test('claims stay off the write allowlist; client org_id is an ignored identity key', () => {
-  assert.equal(WRITE_ALLOWLIST.claims, undefined);
-  assert.equal(denyTableReason('claims'), 'unknown_table');
+test('claims insert is allowlisted without client ownership columns', () => {
+  assert.equal(WRITE_ALLOWLIST.claims.ops.has('insert'), true);
+  assert.equal(WRITE_ALLOWLIST.claims.ops.has('update'), false);
+  assert.equal(WRITE_ALLOWLIST.claims.ops.has('delete'), false);
+  assert.deepEqual([...WRITE_ALLOWLIST.claims.columns].sort(), ['claim_number', 'status']);
+  assert.equal(WRITE_ALLOWLIST.claims.clientIgnored.has('org_id'), true);
+  assert.equal(WRITE_ALLOWLIST.claims.clientIgnored.has('tenant_id'), true);
   assert.equal(CLIENT_IDENTITY_KEYS.has('org_id'), true);
   assert.equal(CLIENT_IDENTITY_KEYS.has('tenant_id'), true);
+  assert.equal(denyTableReason('claims'), null);
+  const spoofed = pickAllowlistedValues('claims', {
+    claim_number: 'E12-TEST',
+    status: 'tracking',
+    org_id: '4f172140-f57a-4744-8050-95f4f07b13b4',
+    tenant_id: '4f172140-f57a-4744-8050-95f4f07b13b4',
+  });
+  assert.equal(spoofed.error, undefined);
+  assert.equal(spoofed.values.org_id, undefined);
+  assert.equal(spoofed.values.tenant_id, undefined);
+  assert.equal(spoofed.values.claim_number, 'E12-TEST');
+  assert.equal(spoofed.ignored.includes('org_id'), true);
+  const extra = pickAllowlistedValues('claims', {
+    claim_number: 'E12-TEST',
+    policyholder_name: 'nope',
+  });
+  assert.equal(extra.error, 'column_not_allowlisted');
+  assert.deepEqual(extra.columns, ['policyholder_name']);
 });
 
 test('allowlist rejects financial tables and unknown columns; ignores spoof identity keys', () => {
@@ -306,6 +338,74 @@ test('unauthenticated write is 401; unapproved table/column/financial tables are
     values: { webhook_url: 'https://evil.example' },
   }), depsFor(client));
   assert.equal(column.error, 'column_not_allowlisted');
+});
+
+test('POST /data/write creates a tracking claim and ignores client org_id', async () => {
+  const C1C = '4f172140-f57a-4744-8050-95f4f07b13b4';
+  const FREEDOM = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
+  const client = mockClient();
+  const result = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'claims',
+    op: 'insert',
+    values: {
+      claim_number: 'E12-CLAIM',
+      status: 'tracking',
+      org_id: C1C,
+      tenant_id: C1C,
+    },
+    single: true,
+  }, { headers: { 'x-active-tenant-slug': 'freedom', 'x-tenant-id': C1C } }), {
+    ...depsFor(client),
+    forceWorkflow: true,
+  });
+  assert.equal(result.ok, true, JSON.stringify(result));
+  const insert = client.queries.find((q) => String(q.sql).includes('INSERT INTO public.claims'));
+  assert.ok(insert);
+  assert.deepEqual(insert.params, ['E12-CLAIM', 'tracking']);
+  assert.equal(insert.params.includes(C1C), false);
+  assert.equal(result.data.org_id, FREEDOM);
+  const slugBind = client.queries.find((q) => q.sql.startsWith('SELECT set_config') && q.params?.[0] === 'request.active_tenant_slug');
+  assert.equal(slugBind?.params[1], 'freedom');
+});
+
+test('claim create is exempt from the application-workflow kill switch', async () => {
+  const client = mockClient();
+  const result = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'claims',
+    op: 'insert',
+    values: { claim_number: 'E12-CLAIM-NO-T6', status: 'tracking' },
+    single: true,
+  }, { headers: { 'x-active-tenant-slug': 'freedom' } }), {
+    ...depsFor(client),
+    forceWorkflow: false,
+  });
+  assert.equal(result.ok, true, JSON.stringify(result));
+  const insert = client.queries.find((q) => String(q.sql).includes('INSERT INTO public.claims'));
+  assert.ok(insert);
+  const deniedT6 = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'cash_jobs',
+    op: 'insert',
+    values: { job_name: 'x', customer_name: 'y', tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a' },
+  }), { ...depsFor(client), forceWorkflow: false });
+  assert.equal(deniedT6.error, 'application_workflow_writes_disabled');
+});
+
+test('claim create rejects update/delete and non-tracking status', async () => {
+  const client = mockClient();
+  const updated = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'claims',
+    op: 'update',
+    values: { status: 'tracking' },
+    filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
+  }), { ...depsFor(client), forceWorkflow: true });
+  assert.equal(updated.error, 'operation_not_allowlisted');
+
+  const badStatus = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'claims',
+    op: 'insert',
+    values: { claim_number: 'E12-BAD', status: 'open' },
+  }), { ...depsFor(client), forceWorkflow: true });
+  assert.equal(badStatus.error, 'invalid_field');
 });
 
 test('generic /data mutating routes stay writes_disabled; get_or_create ignores p_user_id', async () => {

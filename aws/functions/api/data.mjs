@@ -247,7 +247,18 @@ export const withIdentity = async (event, fn, deps = {}) => {
       try { await client.query('ROLLBACK'); } catch { /* ignore */ }
     }
     const pgCode = error?.code || null;
+    const claimOwnerDenied = /claim_owner_tenant_required|claim_org_id_required/i.test(String(error?.message || ''));
     const rlsDenied = pgCode === '42501' || /row-level security/i.test(String(error?.message || ''));
+    if (claimOwnerDenied) {
+      return {
+        ok: false,
+        statusCode: 403,
+        error: /claim_org_id_required/i.test(String(error?.message || ''))
+          ? 'claim_org_id_required'
+          : 'claim_owner_tenant_required',
+        message: 'Claim ownership could not be stamped from authenticated tenant membership',
+      };
+    }
     const classified = logDataQueryFailure(error, {
       table: typeof body?.table === 'string' ? body.table : undefined,
       select: typeof body?.select === 'string' ? body.select : undefined,

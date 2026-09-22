@@ -12,17 +12,23 @@ import { Loader2, ArrowLeft, KeyRound, Mail, CheckCircle2 } from "lucide-react";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
 import { useAuth } from "@/hooks/useAuth";
 import { isPlatformOwner } from "@/lib/masterMerchant";
-import { isAwsStaging, isAwsStagingHttpsPasskeysEnabled } from "@/lib/awsStaging";
+import {
+  awsPasskeysBlockedMessage,
+  isAwsStaging,
+  isAwsStagingEnvironment,
+  isAwsStagingHttpsPasskeysEnabled,
+} from "@/lib/awsStaging";
 import { signInWithAwsPasskey } from "@/lib/awsPasskeys";
 import { passkeysSupported, sendMagicLink, signInWithPasskey } from "@/lib/passkeys";
 import { readPendingAwsEmailOtp, startAwsEmailOtp, verifyAwsEmailOtp } from "@/lib/awsPasswordless";
 
-/** Passwordless ChecksOps sign-in. AWS staging: Cognito WebAuthn + EMAIL_OTP only. No password path. */
+/** Passwordless ChecksOps sign-in. AWS Cognito: WebAuthn + EMAIL_OTP only. No password path. */
 export default function CheckOpsLogin() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user, loading: authLoading } = useAuth();
   const awsStaging = isAwsStaging();
+  const awsStagingHost = isAwsStagingEnvironment();
   const awsHttpsPasskeys = isAwsStagingHttpsPasskeysEnabled();
   const pendingAws = awsStaging ? readPendingAwsEmailOtp() : null;
   const [email, setEmail] = useState(pendingAws?.email || "");
@@ -30,7 +36,7 @@ export default function CheckOpsLogin() {
   const [linkSent, setLinkSent] = useState(Boolean(pendingAws));
   const [awsSession, setAwsSession] = useState(pendingAws?.session || "");
   const [code, setCode] = useState("");
-  // Production: Supabase SimpleWebAuthn. AWS staging: Cognito WebAuthn only on https://staging.checksops.com.
+  // Cognito WebAuthn only on the configured HTTPS origin (staging or apex production).
   const supportsPasskeys = awsStaging
     ? awsHttpsPasskeys && passkeysSupported()
     : passkeysSupported();
@@ -76,7 +82,7 @@ export default function CheckOpsLogin() {
     try {
       if (awsStaging) {
         if (!awsHttpsPasskeys) {
-          throw new Error("Passkeys require https://staging.checksops.com. Use email verification on this origin.");
+          throw new Error(awsPasskeysBlockedMessage());
         }
         // Persist Cognito tokens + emit SIGNED_IN, then full reload so useAuth()
         // hydrates before route guards run (same pattern as EMAIL_OTP verify).
@@ -131,7 +137,7 @@ export default function CheckOpsLogin() {
         <CardHeader className="text-center space-y-3 pb-2">
           <div className="mx-auto"><CheckOpsLogo className="h-16 md:h-20" /></div>
           <CardTitle className="text-xl md:text-2xl">Sign in to ChecksOps</CardTitle>
-          <p className="text-xs text-muted-foreground">Access your organization's check workflows.{awsStaging ? " AWS staging." : ""}</p>
+          <p className="text-xs text-muted-foreground">Access your organization's check workflows.{awsStagingHost ? " AWS staging." : ""}</p>
         </CardHeader>
         <CardContent className="pt-2 space-y-4">
           {linkSent ? (
@@ -161,8 +167,10 @@ export default function CheckOpsLogin() {
               <Button type="submit" variant="outline" className="w-full" disabled={loading}>{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}{awsStaging ? "Email me a verification code" : "Email me a sign-in link"}</Button>
               <p className="text-center text-[11px] text-muted-foreground">{awsStaging
                 ? (awsHttpsPasskeys
-                  ? "AWS staging: passkeys use Cognito WebAuthn; email verification remains available. Password sign-in is disabled."
-                  : "AWS staging passkeys require https://staging.checksops.com. Use email verification on this origin. Password sign-in is disabled.")
+                  ? (awsStagingHost
+                    ? "AWS staging: passkeys use Cognito WebAuthn; email verification remains available. Password sign-in is disabled."
+                    : "Passkeys use Cognito WebAuthn; email verification remains available. Password sign-in is disabled.")
+                  : awsPasskeysBlockedMessage())
                 : "Two-factor verification is still required before any money moves."}</p>
             </form>
           )}
