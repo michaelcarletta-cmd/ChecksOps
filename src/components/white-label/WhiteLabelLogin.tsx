@@ -12,7 +12,12 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, KeyRound, Mail, CheckCircle2 } from "lucide-react";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 import { isPlatformOwner } from "@/lib/masterMerchant";
-import { isAwsStaging, isAwsStagingHttpsPasskeysEnabled } from "@/lib/awsStaging";
+import {
+  awsPasskeysBlockedMessage,
+  isAwsStaging,
+  isAwsStagingEnvironment,
+  isAwsStagingHttpsPasskeysEnabled,
+} from "@/lib/awsStaging";
 import { signInWithAwsPasskey } from "@/lib/awsPasskeys";
 import { passkeysSupported, sendMagicLink, signInWithPasskey } from "@/lib/passkeys";
 import { startAwsEmailOtp, verifyAwsEmailOtp } from "@/lib/awsPasswordless";
@@ -27,6 +32,7 @@ export function WhiteLabelLogin() {
   const navigate = useNavigate();
   const location = useLocation();
   const awsStaging = isAwsStaging();
+  const awsStagingHost = isAwsStagingEnvironment();
   const awsHttpsPasskeys = isAwsStagingHttpsPasskeysEnabled();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
@@ -79,7 +85,7 @@ export function WhiteLabelLogin() {
     try {
       if (awsStaging) {
         if (!awsHttpsPasskeys) {
-          throw new Error("Passkeys require https://staging.checksops.com. Use email verification on this origin.");
+          throw new Error(awsPasskeysBlockedMessage());
         }
         await signInWithAwsPasskey(email);
         window.location.assign(loginReturnPath());
@@ -268,8 +274,10 @@ export function WhiteLabelLogin() {
               <p className="text-center text-[11px] text-muted-foreground">
                 {awsStaging
                   ? (awsHttpsPasskeys
-                    ? "AWS staging: Cognito passkeys and email verification."
-                    : "AWS staging passkeys require https://staging.checksops.com.")
+                    ? (awsStagingHost
+                      ? "AWS staging: Cognito passkeys and email verification."
+                      : "Passkeys use Cognito WebAuthn; email verification remains available.")
+                    : awsPasskeysBlockedMessage())
                   : "Two-factor verification is still required before any money moves."}
               </p>
             </>

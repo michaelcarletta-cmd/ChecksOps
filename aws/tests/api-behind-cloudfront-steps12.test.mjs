@@ -55,6 +55,38 @@ test('SPA fallback function rewrites deep links and never HTML-ifies /prep', () 
   assert.equal(kept.querystring.keep.value, '1');
 });
 
+test('SPA fallback 301s www.checksops.com to apex and preserves path/query', () => {
+  const handler = loadHandler();
+  const redirected = handler({
+    request: {
+      uri: '/freedom/checks',
+      querystring: { tab: { value: 'open' } },
+      headers: { host: { value: 'www.checksops.com' } },
+    },
+  });
+  assert.equal(redirected.statusCode, 301);
+  assert.equal(redirected.headers.location.value, 'https://checksops.com/freedom/checks?tab=open');
+
+  const login = handler({
+    request: {
+      uri: '/login',
+      querystring: {},
+      headers: { host: { value: 'www.checksops.com' } },
+    },
+  });
+  assert.equal(login.headers.location.value, 'https://checksops.com/login');
+
+  const apex = handler({
+    request: {
+      uri: '/login',
+      querystring: { keep: { value: '1' } },
+      headers: { host: { value: 'checksops.com' } },
+    },
+  });
+  assert.equal(apex.uri, '/index.html');
+  assert.equal(apex.statusCode, undefined);
+});
+
 test('Step 1 proposed distribution is API-behind-CloudFront without dropping WAF or execute-api', () => {
   const built = spawnSync(process.execPath, [path.join(ROOT, 'aws/cloudfront/build-step1-config.mjs')], {
     encoding: 'utf8',

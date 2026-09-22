@@ -18,6 +18,7 @@ import {
   rejectUntrustedIdentityHints,
   resolveTrustedIdentityScope,
 } from './identity-env.mjs';
+import { bindActiveTenantSlug } from './claim-owner-tenant.mjs';
 
 const { Client } = pg;
 
@@ -53,6 +54,7 @@ export const resolveIdentitySession = async ({
   email = null,
   claims = null,
   identityScope = null,
+  event = null,
   loadCredentials = loadDatabaseCredentials,
   createClient = (config) => new Client(config),
 } = {}) => {
@@ -88,6 +90,7 @@ export const resolveIdentitySession = async ({
     await client.query('SELECT set_config($1, $2, true)', [APP_USER_ID_GUC, mapping.application_user_id]);
     // Application email, not Cognito probe email, so JWT-email policies cannot be spoofed.
     await client.query('SELECT set_config($1, $2, true)', [APP_USER_EMAIL_GUC, mapping.email || email || '']);
+    await bindActiveTenantSlug(client, event || {}, null);
 
     const uid = (await client.query('SELECT auth.uid()::text AS auth_uid')).rows[0]?.auth_uid;
     if (uid !== mapping.application_user_id) {
@@ -171,5 +174,6 @@ export const handleIdentityMe = async (event) => {
     cognitoSub: claims.sub,
     email: claims.email,
     claims,
+    event,
   });
 };

@@ -9,7 +9,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Fingerprint, Mail, CheckCircle2, Loader2 } from "lucide-react";
 import mortgageOpsLogo from "@/assets/mortgage-ops-logo.png";
-import { isAwsStaging, isAwsStagingHttpsPasskeysEnabled, AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY } from "@/lib/awsStaging";
+import {
+  AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY,
+  awsPasskeysBlockedMessage,
+  isAwsStaging,
+  isAwsStagingEnvironment,
+  isAwsStagingHttpsPasskeysEnabled,
+} from "@/lib/awsStaging";
 import { signInWithAwsPasskey } from "@/lib/awsPasskeys";
 import { signInWithPasskey, sendMagicLink, passkeysSupported } from "@/lib/passkeys";
 import { startAwsEmailOtp, verifyAwsEmailOtp } from "@/lib/awsPasswordless";
@@ -21,6 +27,7 @@ export default function MortgageOpsLogin() {
   const [awsSession, setAwsSession] = useState("");
   const [code, setCode] = useState("");
   const awsStaging = isAwsStaging();
+  const awsStagingHost = isAwsStagingEnvironment();
   const awsHttpsPasskeys = isAwsStagingHttpsPasskeysEnabled();
   const canUsePasskeys = awsStaging
     ? awsHttpsPasskeys && passkeysSupported()
@@ -60,7 +67,7 @@ export default function MortgageOpsLogin() {
     try {
       if (awsStaging) {
         if (!awsHttpsPasskeys) {
-          throw new Error("Passkeys require https://staging.checksops.com. Use email verification on this origin.");
+          throw new Error(awsPasskeysBlockedMessage());
         }
         // Persist into Mortgage Desk session key + emit SIGNED_IN on mortgage client.
         await signInWithAwsPasskey(email, {
@@ -135,7 +142,7 @@ export default function MortgageOpsLogin() {
         <CardHeader className="text-center">
           <CardTitle>ChecksOps Mortgage Desk</CardTitle>
           <p className="text-sm text-muted-foreground">
-            Employee sign-in{awsStaging ? " · AWS staging" : ""}
+            Employee sign-in{awsStagingHost ? " · AWS staging" : ""}
           </p>
         </CardHeader>
         <CardContent className="space-y-5">

@@ -1,12 +1,30 @@
 /**
- * AWS Cognito frontend switch. Production Vite builds use `.env.production`
- * and never set VITE_AUTH_PROVIDER=cognito, so this stays false for ChecksOps.com
- * until an approved production AWS frontend env is deployed.
+ * AWS Cognito frontend switch.
+ * `isAwsStaging()` means "this SPA uses Cognito + the AWS API adapter".
+ * Do not invert it — production checksops.com also sets VITE_AUTH_PROVIDER=cognito.
+ * Host-specific staging vs production UX uses `isAwsStagingHost()` from awsHost.
  */
 
 import { resolveAwsApiBaseUrl } from "@/lib/awsApiBase";
+import {
+  awsPasskeyRequiredMessage,
+  currentBrowserHostname,
+  isAwsProductionHost,
+  isAwsStagingHost,
+  shouldShowAwsStagingBanner,
+} from "@/lib/awsHost";
 
 export { resolveAwsApiBaseUrl } from "@/lib/awsApiBase";
+export {
+  AWS_PRODUCTION_HOSTNAME,
+  AWS_PRODUCTION_WWW_HOSTNAME,
+  AWS_STAGING_HOSTNAME,
+  awsPasskeyRequiredMessage,
+  currentBrowserHostname,
+  isAwsProductionHost,
+  isAwsStagingHost,
+  shouldShowAwsStagingBanner,
+} from "@/lib/awsHost";
 
 const DEFAULT_ORIGIN = "https://staging.checksops.com";
 const DEFAULT_RP_ID = "staging.checksops.com";
@@ -35,6 +53,24 @@ export const AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY = "checksops.aws.staging.auth
 
 export function isAwsStaging(): boolean {
   return String(import.meta.env.VITE_AUTH_PROVIDER || "").toLowerCase() === "cognito";
+}
+
+/** Cognito SPA on staging.checksops.com — banner and staging-only copy. */
+export function isAwsStagingEnvironment(hostname = currentBrowserHostname()): boolean {
+  return isAwsStaging() && isAwsStagingHost(hostname);
+}
+
+/** Cognito SPA on checksops.com / www.checksops.com. */
+export function isAwsProductionEnvironment(hostname = currentBrowserHostname()): boolean {
+  return isAwsStaging() && isAwsProductionHost(hostname);
+}
+
+export function awsStagingBannerVisible(hostname = currentBrowserHostname()): boolean {
+  return shouldShowAwsStagingBanner({ cognito: isAwsStaging(), hostname });
+}
+
+export function awsPasskeysBlockedMessage(): string {
+  return `${awsPasskeyRequiredMessage(AWS_STAGING_HTTPS_ORIGIN)} Password sign-in is disabled.`;
 }
 
 /**

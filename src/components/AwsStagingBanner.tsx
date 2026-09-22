@@ -1,7 +1,7 @@
-import { isAwsStaging } from "@/lib/awsStaging";
+import { awsStagingBannerVisible } from "@/lib/awsStaging";
 
 export function AwsStagingBanner() {
-  if (!isAwsStaging()) return null;
+  if (!awsStagingBannerVisible()) return null;
   return (
     <div
       data-testid="aws-staging-banner"

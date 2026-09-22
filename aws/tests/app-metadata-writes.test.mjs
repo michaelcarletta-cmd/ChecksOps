@@ -14,7 +14,7 @@ test('tranche-6 tables are allowlisted with narrow columns', () => {
     'shared_check_messages', 'profiles', 'company_branding', 'referral_alerts',
     'tenants', 'privacy_notice_acknowledgments', 'tenant_users',
     'cash_jobs', 'cash_job_line_items', 'cash_job_attachments', 'homeowner_ledger_events',
-    'mortgage_request_library_documents',
+    'mortgage_request_library_documents', 'claims',
   ]) {
     assert.equal(WRITE_ALLOWLIST[table].tranche, 6, table);
   }
@@ -132,6 +132,56 @@ test('cash_jobs denies payment columns; homeowner ledger denies amount via clien
   assert.ok(WRITE_ALLOWLIST.homeowner_ledger_events.clientIgnored.has('amount'));
   assert.ok(!WRITE_ALLOWLIST.homeowner_ledger_events.columns.has('amount'));
   assert.ok(!WRITE_ALLOWLIST['cash_job_payments']);
+  assert.equal(WRITE_ALLOWLIST.claims.ops.has('insert'), true);
+  assert.equal(WRITE_ALLOWLIST.claims.ops.has('update'), false);
+  assert.ok(WRITE_ALLOWLIST.claims.clientIgnored.has('org_id'));
+});
+
+test('financial_stepup_log insert stamps server user_id and membership-checks tenant', async () => {
+  const queries = [];
+  const client = {
+    query: async (sql, params) => {
+      queries.push({ sql, params });
+      if (/FROM public.tenant_users/.test(sql)) return { rows: [{ ok: 1 }] };
+      if (/INSERT INTO public.financial_stepup_log/.test(sql)) {
+        assert.equal(params[0], APP_ID);
+        assert.equal(params[1], TENANT);
+        assert.equal(params[2], 'disburse');
+        return { rows: [{ id: 's1', user_id: params[0], action_key: params[2] }] };
+      }
+      return { rows: [] };
+    },
+  };
+  const result = await executeAppMetadataWrite({
+    client,
+    mapping,
+    table: 'financial_stepup_log',
+    op: 'insert',
+    values: {
+      user_id: '00000000-0000-4000-8000-000000000099',
+      tenant_id: TENANT,
+      action_key: 'disburse',
+      factor_type: 'totp',
+      succeeded: true,
+    },
+    filters: [],
+  });
+  assert.equal(result.rows[0].user_id, APP_ID);
+  const outsider = {
+    query: async (sql) => {
+      if (/FROM public.tenant_users/.test(sql)) return { rows: [] };
+      return { rows: [] };
+    },
+  };
+  const denied = await executeAppMetadataWrite({
+    client: outsider,
+    mapping,
+    table: 'financial_stepup_log',
+    op: 'insert',
+    values: { tenant_id: TENANT, action_key: 'disburse' },
+    filters: [],
+  });
+  assert.equal(denied.error, 'not_authorized');
 });
 
 test('homeowner ledger insert forces null amount and membership check', async () => {

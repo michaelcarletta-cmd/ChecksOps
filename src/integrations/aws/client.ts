@@ -8,6 +8,7 @@ import {
   invokeAwsCheckAltProviderFunction,
   isLegacyCheckAltProviderFunction,
 } from "@/lib/awsCheckAltMoneyPath";
+import { activeTenantSlugFromPath } from "@/lib/activeTenantSlug";
 
 export {
   AWS_STAGING_AUTH_SESSION_KEY,
@@ -65,6 +66,12 @@ const AWS_WRITE_TABLES = new Set([
   "tenants",
   "privacy_notice_acknowledgments",
   "tenant_users",
+  "claims",
+  "cash_jobs",
+  "cash_job_line_items",
+  "cash_job_attachments",
+  "homeowner_ledger_events",
+  "financial_stepup_log",
 ]);
 
 const REVIEW_DECISION_RPCS = new Set([
@@ -140,6 +147,12 @@ const apiFetch = async (path: string, init: RequestInit = {}, token?: string | n
   const headers = new Headers(init.headers || {});
   headers.set("content-type", "application/json");
   if (token) headers.set("authorization", `Bearer ${token}`);
+  const slug = typeof window !== "undefined"
+    ? activeTenantSlugFromPath(window.location.pathname)
+    : null;
+  if (slug && !headers.has("x-active-tenant-slug")) {
+    headers.set("x-active-tenant-slug", slug);
+  }
   const response = await fetch(apiUrl(path), { ...init, headers });
   let body: Record<string, unknown> = {};
   try {

@@ -7,7 +7,12 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { KeyRound, Loader2, Plus, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { deleteAwsPasskey, listAwsPasskeys, registerAwsPasskey } from "@/lib/awsPasskeys";
-import { isAwsStaging, isAwsStagingHttpsPasskeysEnabled } from "@/lib/awsStaging";
+import {
+  AWS_STAGING_HTTPS_ORIGIN,
+  isAwsStaging,
+  isAwsStagingHttpsPasskeysEnabled,
+} from "@/lib/awsStaging";
+import { awsPasskeyRequiredMessage } from "@/lib/awsHost";
 import {
   formatPasskeyMetaLine,
   passkeyCreatedAtIso,
@@ -133,15 +138,15 @@ export function PasskeyManagerCard({ onChanged }: { onChanged?: () => void }) {
         <CardDescription>
           Sign in with Face ID, Touch ID, Windows Hello or a security key — the fastest and most
           secure option. Nothing to remember and nothing to phish.
-          {cognitoMode ? " AWS staging stores passkeys in Cognito (staging RP only)." : ""}
+          {cognitoMode ? " Passkeys are stored in Cognito for this hostname." : ""}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {blockedOnAwsHttp && (
           <Alert>
             <AlertDescription className="text-xs">
-              Passkey management is available only at https://staging.checksops.com. This origin
-              fails closed — production Supabase passkeys are not used or modified here.
+              {awsPasskeyRequiredMessage(AWS_STAGING_HTTPS_ORIGIN)} This origin
+              fails closed.
             </AlertDescription>
           </Alert>
         )}
