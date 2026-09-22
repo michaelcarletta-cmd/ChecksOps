@@ -81,7 +81,12 @@ const lookupPayee = async (client, payeeId) => {
   return { payee: rows[0] };
 };
 
-const IMAGE_PATH_COLUMNS = new Set(['front_image_path', 'back_image_path', 'back_image_original_path']);
+const IMAGE_PATH_COLUMNS = new Set([
+  'front_image_path',
+  'back_image_path',
+  'back_image_original_path',
+  'back_image_deposit_path',
+]);
 
 const asImagePath = (checkId, value) => {
   if (value === undefined) return { skip: true };
@@ -107,6 +112,18 @@ const lookupEndorsement = async (client, endorsementId) => {
   )).rows;
   if (!rows.length) return { error: 'rls_denied', message: 'endorsement not found or not writable' };
   return { endorsement: rows[0] };
+};
+
+const asJsonObject = (value, field) => {
+  if (value === undefined) return { skip: true };
+  if (value === null || value === '') return { value: null };
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    return { error: 'invalid_field', field, message: 'expected JSON object' };
+  }
+  // Shallow size guard: prevent huge payloads in generic write path.
+  const keys = Object.keys(value);
+  if (keys.length > 64) return { error: 'invalid_field', field, message: 'too many keys' };
+  return { value };
 };
 
 const intakeCoerce = (values) => {
@@ -166,6 +183,26 @@ const intakeCoerce = (values) => {
   }
   for (const column of IMAGE_PATH_COLUMNS) {
     if (column in values) out[column] = values[column];
+  }
+  if ('endorsement_override' in values) {
+    const json = asJsonObject(values.endorsement_override, 'endorsement_override');
+    if (json.error) return json;
+    if (!json.skip) out.endorsement_override = json.value;
+  }
+  if ('endorsement_render_meta' in values) {
+    const json = asJsonObject(values.endorsement_render_meta, 'endorsement_render_meta');
+    if (json.error) return json;
+    if (!json.skip) out.endorsement_render_meta = json.value;
+  }
+  if ('endorsement_render_status' in values) {
+    const text = asText(values.endorsement_render_status, 40);
+    if (text.error) return text;
+    const next = (text.value || '').toLowerCase();
+    const allowed = new Set(['idle', 'position_saved', 'rendering', 'completed', 'failed']);
+    if (next && !allowed.has(next)) {
+      return { error: 'invalid_field', field: 'endorsement_render_status' };
+    }
+    out.endorsement_render_status = next || null;
   }
   if ('mortgage_monitoring_type' in values) {
     const text = asText(values.mortgage_monitoring_type, 40);
@@ -298,6 +335,8 @@ const executeIntakeUpdate = async ({ client, values, filters }) => {
     issue_date: 'date',
     mortgage_sent_at: 'timestamptz',
     mortgage_received_at: 'timestamptz',
+    endorsement_override: 'jsonb',
+    endorsement_render_meta: 'jsonb',
   });
   built.params.push(checkId);
   const rows = (await client.query(
