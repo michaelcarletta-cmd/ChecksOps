@@ -11,6 +11,7 @@ import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { isAwsStaging, awsApiBaseUrl } from "@/lib/awsStaging";
 import { CheckAltImageComplianceCard } from "@/components/checks/CheckAltImageComplianceCard";
+import { ensureOfficialCheckAltArtifact, isRasterPath } from "@/lib/prepareCheckAltDeposit";
 import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
 import { FunctionsHttpError, FunctionsRelayError, FunctionsFetchError } from "@supabase/supabase-js";
 import { useToast } from "@/hooks/use-toast";
@@ -3044,6 +3045,42 @@ function CheckDetailPanel({
   }, [checkId, qc]);
   useAwsPollingFallback(!!checkId, pollCheckDetail, 12_000);
 
+  // Production image model: official CheckAlt front is the sibling of
+  // front_image_path. Official rear is the sibling of back_image_deposit_path.
+  // After Admin Tools re-upload, prepare those siblings so Deposit image
+  // check does not report *_missing.
+  useEffect(() => {
+    if (!checkAltEnabled || !check?.id) return;
+    let cancelled = false;
+    const front = check.front_image_path;
+    const rearDeposit = check.back_image_deposit_path;
+    (async () => {
+      let prepared = false;
+      if (isRasterPath(front)) {
+        try {
+          await ensureOfficialCheckAltArtifact(front, "front");
+          prepared = true;
+        } catch {
+          /* source remains; card reports unprepared until retry */
+        }
+      }
+      if (isRasterPath(rearDeposit)) {
+        try {
+          await ensureOfficialCheckAltArtifact(rearDeposit, "rear");
+          prepared = true;
+        } catch {
+          /* endorsed rear must exist first */
+        }
+      }
+      if (!cancelled && prepared) {
+        qc.invalidateQueries({ queryKey: ["checkalt-image-compliance", check.id] });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [checkAltEnabled, check?.id, check?.front_image_path, check?.back_image_deposit_path, qc]);
+
   useEffect(() => {
     if (!checkId) return;
     const channel = supabase
@@ -4284,6 +4321,11 @@ function CheckDetailPanel({
                               checkId={check.id}
                               frontImagePath={check.front_image_path}
                               backImageDepositPath={check.back_image_deposit_path}
+                              rearPresencePath={
+                                check.back_image_deposit_path
+                                || (check as { back_image_original_path?: string | null }).back_image_original_path
+                                || check.back_image_path
+                              }
                             />
                             <Button
                               size="sm"

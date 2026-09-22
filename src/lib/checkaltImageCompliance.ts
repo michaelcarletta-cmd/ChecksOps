@@ -235,6 +235,33 @@ export const emptySide = (side: "front" | "rear"): CheckAltSideReport => ({
   prepared: false,
 });
 
+/** Source image exists but the official 1920×1080 `.checkalt.jpg` sibling does not. */
+export const unpreparedSide = (
+  side: "front" | "rear",
+  bytes = 0,
+): CheckAltSideReport => ({
+  pass: false,
+  side,
+  reason: `${side}_unprepared`,
+  width: null,
+  height: null,
+  bytes,
+  prepared: false,
+});
+
+export const isRasterClaimPath = (path: string | null | undefined) =>
+  !!path && /\.(jpe?g|png|webp)$/i.test(normalizeClaimRel(path));
+
+/**
+ * Official artifact missing: `_missing` only when no source bytes exist.
+ * A present source is `_unprepared` — never treat that as front_missing/rear_missing.
+ */
+export const reportOfficialMissing = (
+  side: "front" | "rear",
+  sourcePresent: boolean,
+  bytes = 0,
+): CheckAltSideReport => (sourcePresent ? unpreparedSide(side, bytes) : emptySide(side));
+
 export const combineCheckAltCompliance = (
   front: CheckAltSideReport,
   rear: CheckAltSideReport,

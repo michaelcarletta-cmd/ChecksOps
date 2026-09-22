@@ -18,3 +18,19 @@ test('check detail back-image upload updates both pointers in one update payload
   assert.match(src, /invalidateQueries\(\{ queryKey: \[\"check-back-img-original-for-adjuster\", checkId\] \}\)/);
 });
 
+test('front re-upload prepares official CheckAlt sibling from front_image_path only', () => {
+  const src = readFileSync('src/components/checks/ReuploadCheckImageButton.tsx', 'utf8');
+  assert.match(src, /ensureOfficialCheckAltArtifact\(path, \"front\"\)/);
+  assert.doesNotMatch(src, /ensureOfficialCheckAltArtifact\(path, \"rear\"\)/);
+  assert.match(src, /invalidateQueries\(\{ queryKey: \[\"checkalt-image-compliance\", checkId\] \}\)/);
+});
+
+test('Command Center prepares official artifacts from production columns and never invents front_image_deposit_path', () => {
+  const src = readFileSync('src/pages/CheckCommandCenter.tsx', 'utf8');
+  assert.match(src, /ensureOfficialCheckAltArtifact\(front, \"front\"\)/);
+  assert.match(src, /ensureOfficialCheckAltArtifact\(rearDeposit, \"rear\"\)/);
+  assert.match(src, /backImageDepositPath=\{check\.back_image_deposit_path\}/);
+  assert.match(src, /rearPresencePath=/);
+  assert.doesNotMatch(src, /frontImageDepositPath/);
+});
+
