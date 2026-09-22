@@ -9,7 +9,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { isAwsStaging, awsApiBaseUrl } from "@/lib/awsStaging";
+import { isAwsDataPlane, awsApiBaseUrl } from "@/lib/awsStaging";
 import { CheckAltImageComplianceCard } from "@/components/checks/CheckAltImageComplianceCard";
 import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
 import { FunctionsHttpError, FunctionsRelayError, FunctionsFetchError } from "@supabase/supabase-js";
@@ -2548,7 +2548,7 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
       if (!user) throw new Error("Not authenticated");
 
       const { data: session } = await supabase.auth.getSession();
-      const aws = isAwsStaging();
+      const aws = isAwsDataPlane();
 
       // AWS staging creates the internal check first so images can use the
       // validated check-scoped S3 prefix (checks/{checkId}/). Production still

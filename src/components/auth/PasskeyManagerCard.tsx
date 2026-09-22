@@ -7,7 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { KeyRound, Loader2, Plus, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { deleteAwsPasskey, listAwsPasskeys, registerAwsPasskey } from "@/lib/awsPasskeys";
-import { isAwsStaging, isAwsStagingHttpsPasskeysEnabled } from "@/lib/awsStaging";
+import { isCognitoAuth, isAwsStagingHttpsPasskeysEnabled } from "@/lib/awsStaging";
 import {
   formatPasskeyMetaLine,
   passkeyCreatedAtIso,
@@ -28,7 +28,7 @@ export function PasskeyManagerCard({ onChanged }: { onChanged?: () => void }) {
   const [rows, setRows] = useState<PasskeyRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
-  const awsStaging = isAwsStaging();
+  const awsStaging = isCognitoAuth();
   const awsHttpsPasskeys = isAwsStagingHttpsPasskeysEnabled();
   const supported = passkeysSupported();
   // AWS staging: Cognito WebAuthn only on the HTTPS staging origin. Production: Supabase table.

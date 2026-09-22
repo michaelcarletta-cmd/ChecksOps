@@ -12,7 +12,7 @@ assert.ok(uploadFn, 'CheckUploadForm handleUpload must exist');
 const upload = uploadFn[0];
 
 test('AWS staging upload invokes check-ocr-intake after the image path is saved', () => {
-  assert.match(upload, /const aws = isAwsStaging\(\)/);
+  assert.match(upload, /const aws = isAwsDataPlane\(\)/);
   assert.match(upload, /createAwsCheck/);
   assert.match(upload, /front_image_path: frontPath/);
   assert.match(upload, /functions\.invoke\("check-ocr-intake"/);

@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, KeyRound, Mail, CheckCircle2 } from "lucide-react";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 import { isPlatformOwner } from "@/lib/masterMerchant";
-import { isAwsStaging, isAwsStagingHttpsPasskeysEnabled } from "@/lib/awsStaging";
+import { isCognitoAuth, isAwsStagingHttpsPasskeysEnabled } from "@/lib/awsStaging";
 import { signInWithAwsPasskey } from "@/lib/awsPasskeys";
 import { passkeysSupported, sendMagicLink, signInWithPasskey } from "@/lib/passkeys";
 import { startAwsEmailOtp, verifyAwsEmailOtp } from "@/lib/awsPasswordless";
@@ -26,7 +26,7 @@ export function WhiteLabelLogin() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
-  const awsStaging = isAwsStaging();
+  const awsStaging = isCognitoAuth();
   const awsHttpsPasskeys = isAwsStagingHttpsPasskeysEnabled();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);

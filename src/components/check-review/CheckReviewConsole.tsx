@@ -2,7 +2,7 @@ import { Fragment, useState, useEffect, useRef, useCallback, useMemo } from "rea
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { isAwsStaging } from "@/lib/awsStaging";
+import { isAwsDataPlane } from "@/lib/awsStaging";
 import { pickAwsSafeIntakeUpdates } from "@/integrations/aws/safeIntakeFields";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -763,7 +763,7 @@ export function ReviewDecisionPanel({
 
       if (Object.keys(updates).length === 0) throw new Error("No field changes to save");
 
-      const persist = isAwsStaging() ? pickAwsSafeIntakeUpdates(updates) : { safe: updates, skipped: [] };
+      const persist = isAwsDataPlane() ? pickAwsSafeIntakeUpdates(updates) : { safe: updates, skipped: [] };
       if (Object.keys(persist.safe).length === 0) {
         throw new Error("AWS staging cannot save amount, routing, or account fields");
       }

@@ -1,10 +1,10 @@
 import { useEffect } from "react";
-import { isAwsStaging } from "@/lib/awsStaging";
+import { isAwsDataPlane } from "@/lib/awsStaging";
 
 /**
- * AWS staging has no Supabase Realtime websocket. When Cognito staging is active,
- * poll/refetch on an interval so ordinary UI freshness still works.
- * Production (Supabase) keeps realtime channels and skips this fallback.
+ * AWS data plane has no Supabase Realtime websocket. When the AWS adapter is
+ * active, poll/refetch on an interval so ordinary UI freshness still works.
+ * Supabase data (including Cognito-auth + Supabase-data) keeps realtime.
  */
 export function useAwsPollingFallback(
   enabled: boolean,
@@ -12,7 +12,7 @@ export function useAwsPollingFallback(
   intervalMs = 15_000,
 ) {
   useEffect(() => {
-    if (!enabled || !isAwsStaging()) return;
+    if (!enabled || !isAwsDataPlane()) return;
     const id = window.setInterval(() => {
       try {
         onTick();

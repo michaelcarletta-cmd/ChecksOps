@@ -12,7 +12,7 @@ import { Loader2, ArrowLeft, KeyRound, Mail, CheckCircle2 } from "lucide-react";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
 import { useAuth } from "@/hooks/useAuth";
 import { isPlatformOwner } from "@/lib/masterMerchant";
-import { isAwsStaging, isAwsStagingHttpsPasskeysEnabled } from "@/lib/awsStaging";
+import { isCognitoAuth, isAwsStagingHttpsPasskeysEnabled } from "@/lib/awsStaging";
 import { signInWithAwsPasskey } from "@/lib/awsPasskeys";
 import { passkeysSupported, sendMagicLink, signInWithPasskey } from "@/lib/passkeys";
 import { readPendingAwsEmailOtp, startAwsEmailOtp, verifyAwsEmailOtp } from "@/lib/awsPasswordless";
@@ -22,7 +22,7 @@ export default function CheckOpsLogin() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user, loading: authLoading } = useAuth();
-  const awsStaging = isAwsStaging();
+  const awsStaging = isCognitoAuth();
   const awsHttpsPasskeys = isAwsStagingHttpsPasskeysEnabled();
   const pendingAws = awsStaging ? readPendingAwsEmailOtp() : null;
   const [email, setEmail] = useState(pendingAws?.email || "");

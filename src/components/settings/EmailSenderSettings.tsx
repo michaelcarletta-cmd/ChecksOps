@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenantFilter } from "@/hooks/useTenantFilter";
 import { useAuth } from "@/hooks/useAuth";
-import { isAwsStaging } from "@/lib/awsStaging";
+import { isAwsDataPlane } from "@/lib/awsStaging";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -114,7 +114,7 @@ export function EmailSenderSettings() {
   const { tenantId } = useTenantFilter();
   const { user, userRole } = useAuth();
   const qc = useQueryClient();
-  const aws = isAwsStaging();
+  const aws = isAwsDataPlane();
 
   const { data: tenant } = useQuery({
     queryKey: ["tenant-branding-for-email", tenantId],

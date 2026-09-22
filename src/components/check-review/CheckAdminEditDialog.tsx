@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/select";
 import { Loader2, Pencil, ShieldAlert, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { isAwsStaging } from "@/lib/awsStaging";
+import { isAwsDataPlane } from "@/lib/awsStaging";
 import { pickAwsSafeIntakeUpdates } from "@/integrations/aws/safeIntakeFields";
 import { pickAwsSafeClaimCheckUpdates } from "@/integrations/aws/safeClaimCheckFields";
 import { toast } from "sonner";
@@ -229,7 +229,7 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
       }
 
       if (Object.keys(intakeUpdates).length > 0) {
-        const persist = isAwsStaging()
+        const persist = isAwsDataPlane()
           ? pickAwsSafeIntakeUpdates(intakeUpdates)
           : { safe: intakeUpdates, skipped: [] };
         if (Object.keys(persist.safe).length === 0) {
@@ -257,7 +257,7 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
       // AWS staging persists only non-financial columns (no amount/mortgage/deposit/stage).
       if (data.claimCheck?.id) {
         const ccUpdates: Record<string, unknown> = {};
-        if (!isAwsStaging()) {
+        if (!isAwsDataPlane()) {
           if (form.mortgage_flag !== data.claimCheck.mortgage_flag) {
             ccUpdates.mortgage_flag = form.mortgage_flag;
           }
@@ -273,7 +273,7 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
         if (intakeUpdates.payee_line !== undefined) ccUpdates.payee_line = intakeUpdates.payee_line;
         if (intakeUpdates.carrier_name !== undefined) ccUpdates.carrier_name = intakeUpdates.carrier_name;
         if (intakeUpdates.issue_date !== undefined) ccUpdates.check_date = intakeUpdates.issue_date;
-        const persistCc = isAwsStaging()
+        const persistCc = isAwsDataPlane()
           ? pickAwsSafeClaimCheckUpdates(ccUpdates)
           : { safe: ccUpdates, skipped: [] };
         if (Object.keys(persistCc.safe).length > 0) {
