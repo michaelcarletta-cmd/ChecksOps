@@ -146,9 +146,17 @@ export const changingCheckRequiresNewAuth = (
   nextCheckId: string | null | undefined,
 ): boolean => String(previousCheckId || "") !== String(nextCheckId || "");
 
-export const awsStepUpBody = (request: FinancialStepUpRequest) => ({
-  action_key: request.actionKey,
-  check_intake_item_id: request.checkId || undefined,
-  // tenant_id is a non-authoritative hint; the server uses the check tenant.
-  tenant_id: request.tenantId || undefined,
-});
+export const awsStepUpBody = (request: FinancialStepUpRequest) => {
+  const body: Record<string, unknown> = {
+    action_key: request.actionKey,
+    check_intake_item_id: request.checkId || undefined,
+    // tenant_id is a non-authoritative hint for check-bound actions.
+    tenant_id: request.tenantId || undefined,
+  };
+  if (isPayoutBoundAction(request.actionKey)) {
+    body.payout_operation_id = request.payoutOperationId || undefined;
+    body.recipient_id = request.recipientId || undefined;
+    if (Number.isInteger(request.amountCents)) body.amount_cents = request.amountCents;
+  }
+  return body;
+};

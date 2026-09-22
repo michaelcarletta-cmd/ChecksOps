@@ -166,6 +166,9 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
             actionKey: request?.actionKey,
             tenantId: request?.tenantId,
             checkId: request?.checkId,
+            payoutOperationId: request?.payoutOperationId,
+            recipientId: request?.recipientId,
+            amountCents: request?.amountCents,
           });
           if (!enrolled) throw new Error(TOTP_BOUNDARY_MESSAGE);
         } else {
@@ -174,6 +177,9 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
             actionKey: request?.actionKey,
             tenantId: request?.tenantId,
             checkId: request?.checkId,
+            payoutOperationId: request?.payoutOperationId,
+            recipientId: request?.recipientId,
+            amountCents: request?.amountCents,
           });
           if (!stepped) throw new Error(TOTP_BOUNDARY_MESSAGE);
         }

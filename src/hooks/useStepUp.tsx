@@ -115,17 +115,8 @@ export function StepUpProvider({ children }: { children: ReactNode }) {
       }
       setVerifiedKey(readVerifiedScope(resolved));
       await refreshFactors();
-
-      if (!awsMfaAvailable()) {
-        const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-        if (active && aal?.currentLevel === "aal2") {
-          const sessionKey = stepUpCacheKey(resolved, "disbursement.send", null);
-          if (sessionKey) {
-            writeVerifiedScope(resolved, sessionKey);
-            setVerifiedKey(sessionKey);
-          }
-        }
-      }
+      // Login AAL2 is not a reusable disbursement.send grant.
+      // Each payment still requires operation-scoped Financial TOTP.
     };
 
     supabase.auth.getSession().then(({ data }) => hydrate(data.session?.user?.id ?? null));

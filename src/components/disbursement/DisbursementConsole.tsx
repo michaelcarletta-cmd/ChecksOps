@@ -21,7 +21,11 @@ import { usePaymentRail } from "@/hooks/usePaymentRail";
 import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibility";
 import { useWallet } from "@/hooks/useWallet";
 import { VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus } from "@/lib/banking";
-import { awsPayoutOrchestrateReady, invokeAwsPayoutOrchestrate } from "@/lib/awsPayoutOrchestrate";
+import {
+  awsPayoutOrchestrateReady,
+  invokeAwsPayoutOrchestrate,
+  mustBlockLegacyMoneyMovers,
+} from "@/lib/awsPayoutOrchestrate";
 import { PAYMENT_STATUS_LABEL, type PayoutUxStage } from "@/lib/payoutOrchestrator";
 
 interface Props {
@@ -378,7 +382,7 @@ export function DisbursementConsole({
       let moovFallbackNote: string | null = null;
 
       if (moovEnabled && deliverySpeed !== "external") {
-        if (awsPayoutOrchestrateReady()) {
+        if (awsPayoutOrchestrateReady() || mustBlockLegacyMoneyMovers()) {
           const paymentCents = Math.round(Number(splits[0]?.amount || 0) * 100);
           const { data: plan, error: planErr } = await invokeAwsPayoutOrchestrate({
             tenant_id: tenant.id,
@@ -387,16 +391,17 @@ export function DisbursementConsole({
             batch_id: batch.id,
             recipient_id: splits[0]?.stakeholder_account_id,
           });
-          if (planErr) {
-            throw new Error(planErr.message || "Could not authorize this payment.");
+          if (planErr || (plan as any)?.error) {
+            return {
+              batchId: batch.id,
+              rail: "moov" as const,
+              note: "Payment is recorded and waiting. Sending stays paused on this path. No money was sent.",
+            };
           }
           const statusKey = String((plan as any)?.payment_status || (plan as any)?.ux_stage || "") as PayoutUxStage;
           const statusLabel = (plan as any)?.payment_status_label
             || PAYMENT_STATUS_LABEL[statusKey]
             || "Waiting for funds";
-          if ((plan as any)?.error) {
-            throw new Error((plan as any)?.message || (plan as any)?.error);
-          }
           return {
             batchId: batch.id,
             rail: "moov" as const,

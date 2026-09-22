@@ -335,6 +335,121 @@ export const handleMfaVerify = async (event, deps = {}) => {
   }, deps);
 };
 
+const payoutGrantEnvironment = () => (productionEnv() ? 'production' : 'sandbox');
+
+const metadataWithoutTotpCode = (value) => {
+  const raw = value && typeof value === 'object' ? { ...value } : {};
+  delete raw.totp_code;
+  delete raw.code;
+  delete raw.userCode;
+  delete raw.totpCode;
+  return raw;
+};
+
+export const resolvePayoutStepUpBinding = async ({ client, mapping, body, spoof }) => {
+  const { TENANT_MEMBERSHIP_SQL } = await import('./identity.mjs');
+  const { membershipForTenant } = await import('./financial-ownership.mjs');
+  const { payoutOperationIdFor } = await import('./providers/production/moov-payout-orchestrator.mjs');
+  const {
+    PAYMENT_AUTHORIZATION_ACTION,
+    PAYMENT_AUTHORIZATION_PURPOSE,
+    createPaymentAuthorizationGrant,
+  } = await import('./providers/production/moov-payout-authorization.mjs');
+  const actionKey = String(body.action_key || body.actionKey || '');
+  if (actionKey !== PAYMENT_AUTHORIZATION_ACTION && actionKey !== 'disbursement.send') {
+    return {
+      ok: false,
+      statusCode: 409,
+      error: 'action_mismatch',
+      message: 'Financial TOTP step-up action is server-controlled.',
+      spoofFieldsIgnored: spoof,
+      ...financialGate(),
+    };
+  }
+  const tenantId = body.tenant_id || body.tenantId || null;
+  if (!tenantId) {
+    return {
+      ok: false,
+      statusCode: 400,
+      error: 'tenant_id is required',
+      message: 'Payment authorization must name the tenant the authenticated user belongs to.',
+      spoofFieldsIgnored: spoof,
+      ...financialGate(),
+    };
+  }
+  const memberships = (await client.query(TENANT_MEMBERSHIP_SQL, [mapping.application_user_id])).rows;
+  if (!membershipForTenant(memberships, tenantId)) {
+    return {
+      ok: false,
+      statusCode: 403,
+      error: 'cross_tenant_denied',
+      message: 'Payment authorization tenant is taken from membership. Browser tenant_id is not authority without membership.',
+      spoofFieldsIgnored: spoof,
+      ...financialGate(),
+    };
+  }
+  const amountCents = Number(body.amount_cents ?? body.amountCents);
+  if (!Number.isInteger(amountCents) || amountCents <= 0) {
+    return {
+      ok: false,
+      statusCode: 400,
+      error: 'invalid_amount',
+      message: 'Payment authorization requires the exact payout amount in cents.',
+      spoofFieldsIgnored: spoof,
+      ...financialGate(),
+    };
+  }
+  const recipientId = body.recipient_id || body.recipientId || null;
+  if (!recipientId) {
+    return {
+      ok: false,
+      statusCode: 400,
+      error: 'recipient_id is required',
+      message: 'Payment authorization is bound to one recipient and cannot be reused.',
+      spoofFieldsIgnored: spoof,
+      ...financialGate(),
+    };
+  }
+  const environment = payoutGrantEnvironment();
+  if (body.environment && String(body.environment).toLowerCase() !== environment) {
+    return {
+      ok: false,
+      statusCode: 409,
+      error: 'environment_mismatch',
+      message: 'Browser environment is ignored. Payment authorization is bound to the server environment.',
+      spoofFieldsIgnored: spoof,
+      ...financialGate(),
+    };
+  }
+  const payoutOperationId = body.payout_operation_id || body.payoutOperationId || payoutOperationIdFor({
+    tenantId,
+    environment,
+    recipientId,
+    payoutCents: amountCents,
+  });
+  const grant = createPaymentAuthorizationGrant({
+    tenantId,
+    environment,
+    userId: mapping.application_user_id,
+    payoutOperationId,
+    recipientId,
+    recipientPaymentMethodId: body.recipient_payment_method_id || body.recipientPaymentMethodId || null,
+    amountCents,
+    purpose: PAYMENT_AUTHORIZATION_PURPOSE,
+  });
+  return {
+    ok: true,
+    kind: 'payout',
+    actionKey,
+    tenantId,
+    amountCents,
+    recipientId,
+    payoutOperationId,
+    environment,
+    grant: metadataWithoutTotpCode(grant),
+  };
+};
+
 export const resolveFinancialStepUpBinding = async ({ client, mapping, body, spoof }) => {
   const { TENANT_MEMBERSHIP_SQL } = await import('./identity.mjs');
   const { membershipForTenant } = await import('./financial-ownership.mjs');
@@ -342,7 +457,11 @@ export const resolveFinancialStepUpBinding = async ({ client, mapping, body, spo
     CHECKALT_TOTP_ACTION,
     serverAmountCentsFromCheck,
   } = await import('./providers/production/checkalt-authz.mjs');
+  const { PAYMENT_AUTHORIZATION_ACTION } = await import('./providers/production/moov-payout-authorization.mjs');
   const actionKey = String(body.action_key || body.actionKey || CHECKALT_TOTP_ACTION);
+  if (actionKey === PAYMENT_AUTHORIZATION_ACTION || actionKey === 'disbursement.send') {
+    return resolvePayoutStepUpBinding({ client, mapping, body, spoof });
+  }
   if (actionKey !== CHECKALT_TOTP_ACTION) {
     return {
       ok: false,
@@ -403,11 +522,63 @@ export const resolveFinancialStepUpBinding = async ({ client, mapping, body, spo
       ...financialGate(),
     };
   }
-  return { ok: true, check, amountCents, actionKey };
+  return { ok: true, kind: 'check', check, amountCents, actionKey };
 };
 
 export const insertAppStepUpLog = async (client, mapping, bound) => {
   const { CHECKALT_TOTP_ACTION } = await import('./providers/production/checkalt-authz.mjs');
+  if (bound.kind === 'payout') {
+    const metadata = metadataWithoutTotpCode({
+      ...(bound.grant || {}),
+      action: bound.actionKey,
+      tenant_id: bound.tenantId,
+      environment: bound.environment,
+      user_id: mapping.application_user_id,
+      payout_operation_id: bound.payoutOperationId,
+      recipient_id: bound.recipientId,
+      amount_cents: bound.amountCents,
+      purpose: 'payout',
+      reusable: false,
+      source: 'app_financial_totp',
+    });
+    const serialized = JSON.stringify(metadata);
+    if (/totp_code|userCode|"code":/.test(serialized)) {
+      return {
+        ok: false,
+        statusCode: 500,
+        error: 'totp_code_must_not_be_stored',
+        message: 'Payment authorization grants must not store TOTP codes.',
+      };
+    }
+    const row = (await client.query(
+      `INSERT INTO public.financial_stepup_log
+        (user_id, tenant_id, action_key, factor_type, succeeded, metadata)
+       VALUES ($1::uuid, $2::uuid, $3, 'totp', true, $4::jsonb)
+       RETURNING id, created_at`,
+      [
+        mapping.application_user_id,
+        bound.tenantId,
+        bound.actionKey || 'disbursement.send',
+        serialized,
+      ],
+    )).rows[0];
+    return {
+      ok: true,
+      statusCode: 200,
+      recorded: true,
+      kind: 'payout',
+      stepup_id: row.id,
+      check_id: null,
+      tenant_id: bound.tenantId,
+      amount_cents: bound.amountCents,
+      payout_operation_id: bound.payoutOperationId,
+      recipient_id: bound.recipientId,
+      environment: bound.environment,
+      totp_code_stored: false,
+      reusable: false,
+      applicationUserId: mapping.application_user_id,
+    };
+  }
   const row = (await client.query(
     `INSERT INTO public.financial_stepup_log
       (user_id, tenant_id, action_key, factor_type, succeeded, metadata)
@@ -429,6 +600,7 @@ export const insertAppStepUpLog = async (client, mapping, bound) => {
     ok: true,
     statusCode: 200,
     recorded: true,
+    kind: 'check',
     stepup_id: row.id,
     check_id: bound.check.id,
     tenant_id: bound.check.tenant_id,
@@ -495,6 +667,10 @@ export const handleMfaStepUp = async (event, deps = {}) => {
         check_id: recorded.check_id,
         tenant_id: recorded.tenant_id,
         amount_cents: recorded.amount_cents,
+        payout_operation_id: recorded.payout_operation_id || null,
+        recipient_id: recorded.recipient_id || null,
+        totp_code_stored: false,
+        reusable: false,
         spoofFieldsIgnored: ctx.spoof,
         ...financialGate(),
       };

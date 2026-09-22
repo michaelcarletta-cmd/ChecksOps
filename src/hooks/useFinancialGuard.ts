@@ -28,7 +28,11 @@ export function useFinancialGuard(tenantId?: string | null) {
       const built = buildFinancialStepUpRequest({
         actionKey,
         checkId: extra?.checkId,
-        title: actionKey === "deposit.submit" ? "Deposit Verification" : undefined,
+        title: actionKey === "deposit.submit"
+          ? "Deposit Verification"
+          : actionKey === "disbursement.send"
+            ? "Authorize payment"
+            : undefined,
         description: extra?.description
           || (actionKey === "deposit.submit"
             ? "Enter the current 6-digit code from your authenticator app to authorize this deposit."

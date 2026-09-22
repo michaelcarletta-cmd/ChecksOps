@@ -68,7 +68,14 @@ export const associateAwsTotp = async (email?: string | null) => {
 
 const totpBody = (
   code: unknown,
-  extra: { actionKey?: string; tenantId?: string | null; checkId?: string | null } = {},
+  extra: {
+    actionKey?: string;
+    tenantId?: string | null;
+    checkId?: string | null;
+    payoutOperationId?: string | null;
+    recipientId?: string | null;
+    amountCents?: number | null;
+  } = {},
 ) => {
   const normalized = normalizeTotpCode(code);
   if (!normalized.ok) {
@@ -79,6 +86,9 @@ const totpBody = (
     action_key: extra.actionKey,
     tenant_id: extra.tenantId || undefined,
     check_intake_item_id: extra.checkId || undefined,
+    payout_operation_id: extra.payoutOperationId || undefined,
+    recipient_id: extra.recipientId || undefined,
+    amount_cents: Number.isInteger(extra.amountCents) ? extra.amountCents : undefined,
   };
 };
 
@@ -92,7 +102,14 @@ const postTotp = async (path: string, body: Record<string, unknown>) => {
 
 export const verifyAwsTotp = async (
   code: string,
-  extra: { actionKey?: string; tenantId?: string | null; checkId?: string | null } = {},
+  extra: {
+    actionKey?: string;
+    tenantId?: string | null;
+    checkId?: string | null;
+    payoutOperationId?: string | null;
+    recipientId?: string | null;
+    amountCents?: number | null;
+  } = {},
 ) => {
   const payload = await postTotp("/auth/mfa/verify", totpBody(code, extra));
   return Boolean(payload.verified || payload.ok);
@@ -103,11 +120,17 @@ export const stepUpAwsTotp = async (input: {
   actionKey?: string;
   tenantId?: string | null;
   checkId?: string | null;
+  payoutOperationId?: string | null;
+  recipientId?: string | null;
+  amountCents?: number | null;
 }) => {
   const payload = await postTotp("/auth/mfa/step-up", totpBody(input.code, {
     actionKey: input.actionKey || "deposit.submit",
     tenantId: input.tenantId,
     checkId: input.checkId,
+    payoutOperationId: input.payoutOperationId,
+    recipientId: input.recipientId,
+    amountCents: input.amountCents,
   }));
   return Boolean(payload.verified || payload.ok);
 };
