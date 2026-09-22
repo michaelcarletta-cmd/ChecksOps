@@ -11,6 +11,11 @@ Parameters:
   FilesBucketName:
     Type: String
     Default: checksops-staging-privatefilesbucket-erzqsolpucjp
+    Description: >
+      Live production must pass checksops-production-privatefiles-806168576068.
+      The identity policy on this role is the PutObject grant; the production
+      privatefiles bucket policy (privatefiles-bucket-policy.json) must also
+      allow the same actions so Admin Tools presigned PUTs succeed.
   AppDatabaseSecretArn:
     Type: String
     Default: arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-staging/checksops/1788286468693-b4U0Rn
