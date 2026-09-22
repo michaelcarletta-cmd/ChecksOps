@@ -8,7 +8,12 @@ import { postTransferLedger } from './parity/moov-wallet.mjs';
 import { sanitize } from './parity/db.mjs';
 import { providerSandboxExecutionEnabled } from '../sandbox-flags.mjs';
 import { financialPermissionsActivated } from '../financial-flags.mjs';
-import { providerExecutionEnabled } from '../provider-flags.mjs';
+import { providerExecutionEnabled, providerWebhookDryRun } from '../provider-flags.mjs';
+import {
+  applyCheckAltSettlementInvariant,
+  extractFinCaptureDepositDate,
+  resolveCheckAltProviderStatus,
+} from './amounts.mjs';
 
 const FUNDING_TERMINAL = ['completed', 'failed', 'returned', 'canceled'];
 
@@ -16,6 +21,16 @@ export const sandboxWebhookApplyEnabled = () => (
   providerSandboxExecutionEnabled()
   && !financialPermissionsActivated()
   && !providerExecutionEnabled()
+);
+
+/** Production CheckAlt ledger apply. Dry-run and sandbox/UAT mode both refuse. */
+export const productionCheckAltWebhookApplyEnabled = () => (
+  !providerWebhookDryRun()
+  && !providerSandboxExecutionEnabled()
+);
+
+export const checkAltWebhookReference = (payload) => (
+  payload?.referenceNumber ?? payload?.checkalt_reference ?? payload?.reference ?? null
 );
 
 export const eventTypeToStatus = (eventType) => {
@@ -292,8 +307,109 @@ async function syncFundingRequest(client, providerTransferId, newStatus, failure
   }
 }
 
+/**
+ * Status-only apply for an existing isolated-production CheckAlt deposit.
+ * Does not INSERT deposits, submit, approve, or call CheckAlt HTTP.
+ * Tenant/deposit correlation comes from aws_lookup_checkalt_deposit (reference),
+ * never from payload tenant_id.
+ */
+export async function applyProductionCheckAltWebhook(client, payload, {
+  mappedTenantId = null,
+  mappedInternalId = null,
+} = {}) {
+  if (!productionCheckAltWebhookApplyEnabled()) {
+    return {
+      applied: false,
+      skipped: providerWebhookDryRun() ? 'webhook_dry_run' : 'sandbox_mode_refused',
+      financialTablesMutated: false,
+      productionRecordsMutated: false,
+    };
+  }
+  const reference = checkAltWebhookReference(payload);
+  if (!reference) {
+    return { applied: false, skipped: 'no_reference', financialTablesMutated: false, productionRecordsMutated: false };
+  }
+
+  let deposit = null;
+  if (mappedInternalId) {
+    deposit = (await client.query(
+      `SELECT id, tenant_id, checkalt_reference, status
+       FROM public.checkalt_deposits
+       WHERE id = $1::uuid AND checkalt_reference = $2
+       LIMIT 1`,
+      [mappedInternalId, String(reference)],
+    )).rows[0] || null;
+  }
+  if (!deposit) {
+    try {
+      deposit = (await client.query(
+        'SELECT id, tenant_id, checkalt_reference, status FROM public.aws_lookup_checkalt_deposit($1)',
+        [String(reference)],
+      )).rows[0] || null;
+    } catch {
+      deposit = null;
+    }
+  }
+  if (!deposit) {
+    return { applied: false, skipped: 'unmapped_production_deposit', financialTablesMutated: false, productionRecordsMutated: false };
+  }
+  if (mappedTenantId && String(deposit.tenant_id) !== String(mappedTenantId)) {
+    return { applied: false, skipped: 'tenant_mismatch', financialTablesMutated: false, productionRecordsMutated: false };
+  }
+
+  await client.query("SELECT set_config('request.provider_webhook_apply', '1', true)");
+  await client.query("SELECT set_config('request.aws_financial_permissions_activated', '0', true)");
+  await client.query("SELECT set_config('request.financial_execution', '0', true)");
+
+  const resolved = resolveCheckAltProviderStatus(payload);
+  const persistedStatus = applyCheckAltSettlementInvariant(resolved, payload);
+  const depositDate = extractFinCaptureDepositDate(payload);
+  const webhookMeta = JSON.stringify(sanitize({
+    last_webhook: {
+      status: persistedStatus,
+      event: payload?.type ?? payload?.eventType ?? payload?.webhook_type ?? null,
+      reference: String(reference),
+      depositDate,
+    },
+  }));
+
+  const saved = (await client.query(
+    `UPDATE public.checkalt_deposits
+     SET status = COALESCE($2, status),
+         last_status_payload = COALESCE(last_status_payload, '{}'::jsonb) || $3::jsonb,
+         cleared_at = CASE WHEN $2 = 'cleared' AND $4::timestamptz IS NOT NULL THEN COALESCE(cleared_at, $4::timestamptz) ELSE cleared_at END,
+         returned_at = CASE WHEN $2 = 'returned' THEN COALESCE(returned_at, now()) ELSE returned_at END,
+         updated_at = now()
+     WHERE id = $1::uuid
+       AND checkalt_reference = $5
+       AND ($6::uuid IS NULL OR tenant_id = $6::uuid)
+     RETURNING id, tenant_id, status, checkalt_reference`,
+    [
+      deposit.id,
+      persistedStatus,
+      webhookMeta,
+      depositDate,
+      String(reference),
+      mappedTenantId || deposit.tenant_id,
+    ],
+  )).rows[0];
+  if (!saved) {
+    return { applied: false, skipped: 'production_update_missed', financialTablesMutated: false, productionRecordsMutated: false };
+  }
+  return {
+    applied: true,
+    environment: 'production',
+    financialTablesMutated: true,
+    productionRecordsMutated: true,
+    depositId: saved.id,
+    mappedTenantId: saved.tenant_id,
+    status: saved.status,
+    mutations: ['checkalt_deposits'],
+  };
+}
+
 export async function applyCheckAltWebhook(client, payload) {
-  const reference = payload?.referenceNumber ?? payload?.checkalt_reference ?? payload?.reference ?? null;
+  const reference = checkAltWebhookReference(payload);
   if (!reference) {
     return { applied: false, skipped: 'no_reference', financialTablesMutated: false };
   }
