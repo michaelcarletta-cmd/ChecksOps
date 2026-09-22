@@ -12,7 +12,7 @@ test('WhiteLabelLogin and MortgageOpsLogin use Cognito passkey + EMAIL_OTP on AW
   const checkops = fs.readFileSync(path.join(ROOT, 'src/pages/checkops/CheckOpsLogin.tsx'), 'utf8');
 
   for (const src of [wl, mops]) {
-    assert.match(src, /isAwsStaging/);
+    assert.match(src, /isCognitoAuth/);
     assert.match(src, /signInWithAwsPasskey/);
     assert.match(src, /startAwsEmailOtp/);
     assert.match(src, /verifyAwsEmailOtp/);
