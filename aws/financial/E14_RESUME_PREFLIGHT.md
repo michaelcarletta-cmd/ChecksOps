@@ -63,8 +63,12 @@ Live submit (`checkalt-submit.mjs`) calls `evaluateProductionDepositEligibility`
 
 Inspect oneshot restored to staging RDS.
 
-## Operator next
+## Operator next (superseded by E14C)
+
+This packet's compositor assumption was **wrong**. Repeating Adjust on the then-current write path would **not** have stamped `checkalt_rear_fingerprint`. See `aws/financial/E14C_REAR_FINGERPRINT.md`.
+
+After the E14C write-path overlay is live:
 
 1. Do **not** click Deposit.
-2. Open the check → **Adjust Received Endorsement** again so the AWS compositor writes `checkalt_rear_fingerprint` onto the official rear (do not drop a one-off S3 file).
+2. Run **Adjust Received Endorsement** once more on `#0121319295` so `/data/write` stamps this existing row.
 3. Ask to resume this preflight. Flags stay off until that stamp exists.
