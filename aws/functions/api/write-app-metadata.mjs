@@ -39,6 +39,13 @@ const memberOfTenant = async (client, userId, tenantId) => {
   return rows.length > 0;
 };
 
+const isPlatformOwnerActor = async (client) => {
+  const row = (await client.query(
+    'SELECT public.is_platform_owner() AS is_owner',
+  )).rows[0];
+  return row?.is_owner === true;
+};
+
 export const executeNotifications = async ({ client, mapping, op, values, filters }) => {
   if (op !== 'update') return { error: 'operation_not_allowlisted', op };
   if (!('is_read' in values)) return { error: 'missing_required_field', field: 'is_read' };
@@ -326,6 +333,7 @@ export const executeTenantUsers = async ({ client, mapping, op, values, filters 
   const userId = eqFilter(filters, 'user_id');
 
   const actorIsAdmin = async (tid) => {
+    if (await isPlatformOwnerActor(client)) return true;
     if (!(await memberOfTenant(client, mapping.application_user_id, tid))) return false;
     const rows = (await client.query(
       `SELECT role::text AS role FROM public.tenant_users
@@ -513,25 +521,101 @@ export const executeReferralAlerts = async ({ client, values, filters }) => {
   return { rows };
 };
 
-export const executeTenantsNarrow = async ({ client, mapping, values, filters }) => {
+const TENANT_MEMBER_TEXT = [
+  ['name', 200], ['logo_url', 512], ['invoice_letterhead_url', 512],
+  ['primary_color', 40], ['secondary_color', 40],
+  ['invoice_footer_note', 2000], ['invoice_default_terms', 4000],
+];
+
+const TENANT_PLATFORM_TEXT = [
+  ...TENANT_MEMBER_TEXT,
+  ['slug', 80], ['custom_domain', 255], ['subscription_status', 40],
+  ['plan_tier', 40], ['moov_environment', 20], ['kyc_status', 40],
+  ['kyc_notes', 8000], ['internal_notes', 8000],
+];
+
+const pickTenantText = (values, columns) => {
+  const out = {};
+  for (const [col, max] of columns) {
+    if (!(col in values)) continue;
+    const text = clip(values[col], max);
+    if (text?.error) return text;
+    out[col] = text;
+  }
+  return out;
+};
+
+export const executeTenantsNarrow = async ({ client, mapping, op = 'update', values, filters }) => {
+  const platformOwner = await isPlatformOwnerActor(client);
+
+  if (op === 'insert') {
+    if (!platformOwner) {
+      return { error: 'not_authorized', message: 'Platform owner required to create tenants' };
+    }
+    const name = clip(values.name, 200);
+    const slug = clip(values.slug, 80);
+    if (name?.error) return name;
+    if (slug?.error) return slug;
+    if (!name || !slug) return { error: 'missing_required_field', field: !name ? 'name' : 'slug' };
+    const rows = (await client.query(
+      `INSERT INTO public.tenants (name, slug)
+       VALUES ($1, $2)
+       RETURNING *`,
+      [name, String(slug).toLowerCase()],
+    )).rows;
+    return { rows };
+  }
+
+  if (op !== 'update') return { error: 'operation_not_allowlisted', op };
   const id = eqFilter(filters, 'id');
   if (!isUuid(id)) return { error: 'invalid_uuid', field: 'id' };
-  if (!(await memberOfTenant(client, mapping.application_user_id, id))) {
+  const member = await memberOfTenant(client, mapping.application_user_id, id);
+  if (!platformOwner && !member) {
     return { error: 'not_authorized', message: 'Not a member of tenant' };
   }
-  const out = {};
-  for (const [col, max] of [
-    ['name', 200], ['logo_url', 512], ['invoice_letterhead_url', 512],
-    ['primary_color', 40], ['invoice_footer_note', 2000], ['invoice_default_terms', 4000],
-  ]) {
-    if (col in values) {
-      const text = clip(values[col], max);
-      if (text?.error) return text;
-      out[col] = text;
+
+  const textCols = platformOwner ? TENANT_PLATFORM_TEXT : TENANT_MEMBER_TEXT;
+  const picked = pickTenantText(values, textCols);
+  if (picked.error) return picked;
+  const out = { ...picked };
+  if (platformOwner) {
+    if ('is_test_account' in values) {
+      out.is_test_account = values.is_test_account === true || values.is_test_account === 'true';
+    }
+    if ('is_founding_partner' in values) {
+      out.is_founding_partner = values.is_founding_partner === true || values.is_founding_partner === 'true';
+    }
+    if ('max_checks_per_month' in values) {
+      const n = Number(values.max_checks_per_month);
+      if (!Number.isFinite(n) || n < 0) return { error: 'invalid_field', field: 'max_checks_per_month' };
+      out.max_checks_per_month = Math.round(n);
+    }
+    if ('monthly_rate_cents' in values) {
+      if (values.monthly_rate_cents === null || values.monthly_rate_cents === '') {
+        out.monthly_rate_cents = null;
+      } else {
+        const n = Number(values.monthly_rate_cents);
+        if (!Number.isFinite(n) || n < 0) return { error: 'invalid_field', field: 'monthly_rate_cents' };
+        out.monthly_rate_cents = Math.round(n);
+      }
+    }
+    if (out.moov_environment != null) {
+      const env = String(out.moov_environment).toLowerCase();
+      if (env !== 'sandbox' && env !== 'production') {
+        return { error: 'invalid_field', field: 'moov_environment' };
+      }
+      out.moov_environment = env;
     }
   }
+
   if (!Object.keys(out).length) return { error: 'missing_required_field', field: 'values' };
-  const built = buildSet(out);
+  const casts = {
+    is_test_account: 'boolean',
+    is_founding_partner: 'boolean',
+    max_checks_per_month: 'int',
+    monthly_rate_cents: 'int',
+  };
+  const built = buildSet(out, casts);
   built.params.push(id);
   const rows = (await client.query(
     `UPDATE public.tenants SET ${built.sets.join(', ')} WHERE id = $${built.next}::uuid RETURNING *`,
@@ -862,7 +946,7 @@ export const executeAppMetadataWrite = async ({ client, mapping, table, op, valu
     case 'referral_alerts':
       return executeReferralAlerts({ client, values, filters });
     case 'tenants':
-      return executeTenantsNarrow({ client, mapping, values, filters });
+      return executeTenantsNarrow({ client, mapping, op, values, filters });
     case 'privacy_notice_acknowledgments':
       return executePrivacyAck({ client, mapping, values });
     case 'tenant_users':

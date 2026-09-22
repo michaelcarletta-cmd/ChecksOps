@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { LogOut, Settings, BadgeCheck, Banknote, Receipt, Hammer, Wallet } from "lucide-react";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
+import { TenantPreviewBanner } from "@/components/admin/TenantPreviewBanner";
 
 const CheckCommandCenter = lazy(() => import("@/pages/CheckCommandCenter"));
 
@@ -45,6 +46,7 @@ export function WhiteLabelCheckCenter() {
 
   return (
     <div className="min-h-screen bg-background">
+      <TenantPreviewBanner />
       <header className="h-14 border-b border-border/40 bg-background/95 backdrop-blur flex items-center px-3 md:px-5 sticky top-0 z-10">
         <div className="flex items-center gap-2 md:gap-3 min-w-0">
           {tenant?.logo_url ? (
@@ -58,6 +60,23 @@ export function WhiteLabelCheckCenter() {
                   <Banknote className="h-3 w-3" /> ChecksOps command center
                 </span>
               </div>
+            )}
+            {tenant?.is_test_account && (
+              <Badge variant="outline" className="h-4 border-amber-500/50 px-1.5 text-[9px] text-amber-700 dark:text-amber-400">
+                TEST
+              </Badge>
+            )}
+            {tenant?.moov_environment && (
+              <Badge
+                variant="outline"
+                className={
+                  String(tenant.moov_environment).toLowerCase() === "sandbox"
+                    ? "h-4 border-sky-500/50 px-1.5 text-[9px] text-sky-600 dark:text-sky-400"
+                    : "h-4 border-emerald-500/50 px-1.5 text-[9px] text-emerald-600 dark:text-emerald-400"
+                }
+              >
+                {String(tenant.moov_environment).toLowerCase() === "sandbox" ? "SANDBOX" : "Production"}
+              </Badge>
             )}
             {tenant && !tenant.is_system_tenant && tenant.subscription_status === "active" && (
               <Badge

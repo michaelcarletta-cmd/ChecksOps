@@ -13,7 +13,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
-import { isMasterMerchant } from "@/lib/masterMerchant";
+import { canPlatformPreviewTenant } from "@/lib/platformAdminPreview";
+import { TenantPreviewBanner } from "@/components/admin/TenantPreviewBanner";
 
 const Payments = lazy(() => import("@/pages/Payments"));
 const CashJobs = lazy(() => import("@/pages/CashJobs"));
@@ -35,20 +36,23 @@ function useTenantBasePath(slug?: string) {
 
 function SubPageHeader({ basePath }: { basePath: string }) {
   return (
-    <div className="flex items-center gap-2 mb-3">
-      <Button variant="ghost" size="sm" asChild className="gap-1.5 h-8 px-2 text-muted-foreground hover:text-foreground">
-        <Link to={`${basePath}/checks`}>
-          <ArrowLeft className="h-4 w-4" />
-          <span className="text-xs">Back</span>
-        </Link>
-      </Button>
-      <Button variant="ghost" size="sm" asChild className="gap-1.5 h-8 px-2 text-muted-foreground hover:text-foreground">
-        <Link to={`${basePath}/checks`}>
-          <Home className="h-4 w-4" />
-          <span className="text-xs">Home</span>
-        </Link>
-      </Button>
-    </div>
+    <>
+      <TenantPreviewBanner />
+      <div className="flex items-center gap-2 mb-3">
+        <Button variant="ghost" size="sm" asChild className="gap-1.5 h-8 px-2 text-muted-foreground hover:text-foreground">
+          <Link to={`${basePath}/checks`}>
+            <ArrowLeft className="h-4 w-4" />
+            <span className="text-xs">Back</span>
+          </Link>
+        </Button>
+        <Button variant="ghost" size="sm" asChild className="gap-1.5 h-8 px-2 text-muted-foreground hover:text-foreground">
+          <Link to={`${basePath}/checks`}>
+            <Home className="h-4 w-4" />
+            <span className="text-xs">Home</span>
+          </Link>
+        </Button>
+      </div>
+    </>
   );
 }
 
@@ -74,9 +78,8 @@ function WhiteLabelRoutes() {
     enabled: !!tenant?.id && !!user?.id,
   });
 
-  // Master merchant can preview any tenant's Check Center
-  const isMember = !!isTenantMember || isMasterMerchant(user?.email, user?.id);
-
+  const canPreview = canPlatformPreviewTenant(user);
+  const isMember = !!isTenantMember || canPreview;
 
   if (loading || authLoading || (user && memberLoading)) {
     return (
@@ -99,7 +102,7 @@ function WhiteLabelRoutes() {
     );
   }
 
-  if (tenant.subscription_status !== "active") {
+  if (tenant.subscription_status !== "active" && !canPreview) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center space-y-2">

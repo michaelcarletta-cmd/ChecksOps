@@ -65,6 +65,21 @@ const INTAKE_SAFE_COLUMNS = [
   'updated_at',
 ];
 
+/**
+ * Endorsement workflow writes (Adjust Endorsement).
+ * These fields are required for:
+ * - saving placement (`endorsement_override`, `endorsement_render_status`)
+ * - saving generated endorsed deposit artifact (`back_image_deposit_path`, `endorsement_render_meta`)
+ *
+ * These remain tenant- and check-scoped via the check-workflow write executor.
+ */
+const INTAKE_ENDORSEMENT_COLUMNS = [
+  'endorsement_override',
+  'endorsement_render_status',
+  'endorsement_render_meta',
+  'back_image_deposit_path',
+];
+
 export const INTAKE_PROHIBITED_COLUMNS = new Set([
   'amount',
   'pa_fee_amount',
@@ -122,7 +137,7 @@ export const WRITE_ALLOWLIST = {
   check_intake_items: {
     tranche: 2,
     ops: new Set(['update']),
-    columns: new Set([...INTAKE_SAFE_COLUMNS, ...T5_INTAKE_COLUMNS]),
+    columns: new Set([...INTAKE_SAFE_COLUMNS, ...INTAKE_ENDORSEMENT_COLUMNS, ...T5_INTAKE_COLUMNS]),
     t5Columns: T5_INTAKE_COLUMNS,
     identityColumn: null,
     requiredForWrite: { update: [] },
@@ -628,16 +643,24 @@ export const WRITE_ALLOWLIST = {
   },
   tenants: {
     tranche: 6,
-    ops: new Set(['update']),
+    ops: new Set(['insert', 'update']),
     columns: new Set([
-      'name', 'logo_url', 'invoice_letterhead_url', 'primary_color',
-      'invoice_footer_note', 'invoice_default_terms',
+      'name', 'slug', 'logo_url', 'invoice_letterhead_url', 'primary_color',
+      'secondary_color', 'invoice_footer_note', 'invoice_default_terms',
+      'custom_domain', 'subscription_status', 'plan_tier',
+      'is_test_account', 'moov_environment', 'max_checks_per_month',
+      'is_founding_partner', 'monthly_rate_cents', 'kyc_status',
+      'kyc_notes', 'internal_notes',
     ]),
     identityColumn: null,
-    requiredForWrite: { update: [] },
+    requiredForWrite: { insert: ['name', 'slug'], update: [] },
     filterColumns: new Set(['id']),
-    clientIgnored: new Set(['id', 'slug', 'created_at']),
-    frontend: { file: 'TenantManagement / CompanyBranding', op: 'update', reason: 'Branding/name only; billing/provider flags denied.' },
+    clientIgnored: new Set(['id', 'created_at']),
+    frontend: {
+      file: 'AdminTenants / TenantManagement',
+      op: 'update',
+      reason: 'Member branding plus platform-owner Tenant Management fields. Provider allowlist flags stay denied.',
+    },
   },
   privacy_notice_acknowledgments: {
     tranche: 6,

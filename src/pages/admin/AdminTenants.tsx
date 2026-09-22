@@ -1596,7 +1596,7 @@ function TenantManagementTable({
                 });
               }}
             >
-              <Eye className="w-4 h-4 mr-2 text-blue-400" /> Preview portal
+              <Eye className="w-4 h-4 mr-2 text-blue-400" /> Preview Tenant
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setNotesTenant(t)}>
               <FileText className="w-4 h-4 mr-2" /> Notes
