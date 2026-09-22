@@ -55,8 +55,8 @@ Do these in this order. Do not skip ahead.
    - Secret: production `CHECKALT_WEBHOOK_SECRET` (copy from Secrets Manager; do not paste into git/chat)
    - Signature scheme: HMAC-SHA256 hex over `${webhookId}.${timestamp}.${rawBody}` with the headers above
    - If the dashboard cannot emit that scheme, STOP and adapt the verifier before any deposit.
-3. Apply `aws/financial/sql/65_checkalt_production_writer.sql` to isolated production RDS only after explicit review. This is still a migration; it is **not** done in E13.
-4. Confirm SQL 65 columns, `aws_financial_execution_active()`, and `GRANT SELECT, INSERT, UPDATE` on `checkalt_deposits` for `checksops`.
+3. SQL 65 writer objects are **already present** on isolated production RDS (columns, GUC function, financial insert/update policies, `checksops` SELECT/INSERT/UPDATE). Do **not** re-apply `65_checkalt_production_writer.sql` unless a reviewed drift check shows they are missing.
+4. Confirm those objects still exist and `FORCE ROW LEVEL SECURITY` on `checkalt_deposits` is still off (E13: off). If FORCE RLS is later enabled, add a webhook-apply policy before disabling dry-run.
 5. Confirm webhook apply can still UPDATE when dry-run is later false:
    - `request.provider_webhook='1'`
    - `request.provider_webhook_apply='1'`
@@ -70,7 +70,7 @@ Do these in this order. Do not skip ahead.
 
 ## Tenant / check prerequisites
 
-- Tenant is Freedom (`2eff5f1a-929d-4ce3-9a8b-cd96b98df42a`) unless a later written exception names another production tenant.
+- Tenant is Freedom (`2eff5f1a-929d-4ce3-9a8b-cd96b98df42a`) unless a later written exception names another production tenant. E13: Freedom is the only registered production CheckAlt tenant. C1C is not mapped.
 - `checkalt_tenant_accounts` for that tenant: `enabled`, `sso_user_id`, `deposit_account_number` present. Do not copy UAT rows.
 - One production check in `approved_for_deposit` (or the documented ready-for-deposit stage) with both front and back deposit images in production S3.
 - No existing `checkalt_deposits` row for that check with `checkalt_reference`, `provider_http_attempted_at`, or a submitted/pending/cleared/error status. If one exists, reconcile — do not POST again.
