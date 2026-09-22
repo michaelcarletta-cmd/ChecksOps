@@ -1,6 +1,13 @@
 import { ident } from './data.mjs';
 import { WRITE_ALLOWLIST } from './write-allowlist.mjs';
 import { isCheckScopedPathFor, normalizePath } from './storage-paths.mjs';
+import { isCheckAltArtifactPath } from './providers/production/checkalt-image-compliance.mjs';
+import {
+  FINGERPRINT_META_KEY,
+  loadCheckEndorsements,
+  loadCheckPayees,
+  stampCheckAltRearFingerprint,
+} from './providers/production/checkalt-eligibility.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -54,6 +61,26 @@ const asBool = (value) => {
   if (value === true || value === 'true') return true;
   if (value === false || value === 'false') return false;
   return { error: 'invalid_field', field: 'boolean' };
+};
+
+const stripClientRearFingerprint = (meta) => {
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return meta;
+  if (!(FINGERPRINT_META_KEY in meta)) return meta;
+  const next = { ...meta };
+  delete next[FINGERPRINT_META_KEY];
+  return next;
+};
+
+/** Browser Adjust Received Endorsement persist — not a clear/reset. */
+export const intakeWriteShouldStampOfficialRear = (values = {}) => {
+  if (values.back_image_deposit_path === null) return false;
+  if (values.endorsement_render_meta === null) return false;
+  const status = String(values.endorsement_render_status || '').toLowerCase();
+  if (status === 'idle' || status === 'failed' || status === 'position_saved' || status === 'rendering') {
+    return false;
+  }
+  return typeof values.back_image_deposit_path === 'string'
+    && isCheckAltArtifactPath(values.back_image_deposit_path);
 };
 
 const lookupCheck = async (client, checkId) => {
@@ -192,7 +219,7 @@ const intakeCoerce = (values) => {
   if ('endorsement_render_meta' in values) {
     const json = asJsonObject(values.endorsement_render_meta, 'endorsement_render_meta');
     if (json.error) return json;
-    if (!json.skip) out.endorsement_render_meta = json.value;
+    if (!json.skip) out.endorsement_render_meta = stripClientRearFingerprint(json.value);
   }
   if ('endorsement_render_status' in values) {
     const text = asText(values.endorsement_render_status, 40);
@@ -347,6 +374,23 @@ const executeIntakeUpdate = async ({ client, values, filters }) => {
     built.params,
   )).rows;
   if (!rows.length) return { error: 'rls_denied', message: 'check not writable' };
+  if (intakeWriteShouldStampOfficialRear(nextValues)) {
+    try {
+      const payees = await loadCheckPayees(client, rows[0].id, rows[0].tenant_id);
+      const endorsements = await loadCheckEndorsements(client, rows[0].id, rows[0].tenant_id);
+      await stampCheckAltRearFingerprint(client, rows[0].id, rows[0].tenant_id, payees, endorsements);
+      const stamped = (await client.query(
+        'SELECT * FROM public.check_intake_items WHERE id = $1::uuid',
+        [rows[0].id],
+      )).rows;
+      return { rows: stamped.length ? stamped : rows };
+    } catch {
+      return {
+        error: 'provider_rear_fingerprint_stamp_failed',
+        message: 'Official rear CheckAlt image could not be bound to current endorsement state',
+      };
+    }
+  }
   return { rows };
 };
 
