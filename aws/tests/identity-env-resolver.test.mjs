@@ -276,7 +276,11 @@ test('email equality alone cannot cross-resolve identities', async () => {
   });
   assert.equal(result.ok, false);
   assert.equal(result.error, 'identity_not_linked');
-  assert.ok(!store.queries.some((row) => String(row.sql).toLowerCase().includes('email')));
+  assert.ok(store.queries.every((row) => !row.params.includes(MICHAEL.email)));
+  assert.ok(store.queries.every((row) => !/where[\s\S]*\bemail\b/i.test(row.sql)));
+  assert.match(LOOKUP_PRODUCTION_IDENTITY_SQL, /WHERE lock\.cognito_sub = \$1/);
+  assert.doesNotMatch(LOOKUP_MAPPING_SQL, /WHERE[\s\S]*\bemail\b/i);
+  assert.doesNotMatch(LOOKUP_PRODUCTION_IDENTITY_SQL, /WHERE[\s\S]*\bemail\b/i);
 });
 
 test('wrong issuer fails closed without consulting either map', async () => {
