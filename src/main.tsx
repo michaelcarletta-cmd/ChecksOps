@@ -2,8 +2,30 @@
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import { AppErrorBoundary } from "./components/AppErrorBoundary";
+import { apexCanonicalRedirectUrl } from "./lib/awsHost";
 import { isCheckOpsHost, isMortgageOpsHost } from "./lib/checkopsHost";
 import "./index.css";
+
+if (typeof window !== "undefined") {
+  const apex = apexCanonicalRedirectUrl({
+    hostname: window.location.hostname,
+    protocol: window.location.protocol,
+    pathname: window.location.pathname,
+    search: window.location.search,
+    hash: window.location.hash,
+  });
+  if (apex) {
+    window.location.replace(apex);
+  }
+}
+
+if (typeof window !== "undefined" && apexCanonicalRedirectUrl({
+  hostname: window.location.hostname,
+  protocol: window.location.protocol,
+  pathname: window.location.pathname,
+})) {
+  // Redirect in progress; skip hydrating the www origin.
+} else {
 
 // Set document title + meta based on host
 if (typeof window !== "undefined") {
@@ -24,8 +46,15 @@ if (typeof window !== "undefined") {
   }
 }
 
-createRoot(document.getElementById("root")!).render(
-  <AppErrorBoundary>
-    <App />
-  </AppErrorBoundary>
-);
+const skipWwwHydrate = typeof window !== "undefined" && Boolean(apexCanonicalRedirectUrl({
+  hostname: window.location.hostname,
+  protocol: window.location.protocol,
+  pathname: window.location.pathname,
+}));
+if (!skipWwwHydrate) {
+  createRoot(document.getElementById("root")!).render(
+    <AppErrorBoundary>
+      <App />
+    </AppErrorBoundary>
+  );
+}

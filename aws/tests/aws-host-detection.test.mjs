@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import {
+  apexCanonicalRedirectUrl,
   awsPasskeyRequiredMessage,
   isAwsProductionHost,
   isAwsStagingHost,
@@ -28,6 +29,18 @@ test('hostname helpers distinguish staging from production without treating Cogn
   assert.equal(shouldShowAwsStagingBanner({ cognito: false, hostname: 'staging.checksops.com' }), false);
   assert.match(awsPasskeyRequiredMessage('https://checksops.com'), /https:\/\/checksops\.com/);
   assert.doesNotMatch(awsPasskeyRequiredMessage('https://checksops.com'), /staging\.checksops\.com/);
+  assert.equal(
+    apexCanonicalRedirectUrl({
+      hostname: 'www.checksops.com',
+      protocol: 'https:',
+      pathname: '/freedom/checks',
+      search: '?tab=open',
+      hash: '#row',
+    }),
+    'https://checksops.com/freedom/checks?tab=open#row',
+  );
+  assert.equal(apexCanonicalRedirectUrl({ hostname: 'checksops.com', pathname: '/login' }), null);
+  assert.equal(apexCanonicalRedirectUrl({ hostname: 'staging.checksops.com', pathname: '/login' }), null);
 });
 
 test('isAwsStaging remains the Cognito adapter switch and is not inverted', () => {
@@ -54,6 +67,14 @@ test('production login copy no longer tells users to use staging.checksops.com',
   assert.match(login, /awsStagingHost \? " AWS staging\." : ""/);
   assert.match(banner, /awsStagingBannerVisible/);
   assert.doesNotMatch(banner, /isAwsStaging\(\)/);
+});
+
+test('index.html canonicalizes www.checksops.com before the SPA boots', () => {
+  const html = read('index.html');
+  assert.match(html, /www\.checksops\.com/);
+  assert.match(html, /https:\/\/checksops\.com/);
+  assert.match(html, /location\.pathname \+ window\.location\.search \+ window\.location\.hash/);
+  assert.doesNotMatch(html, /staging\.checksops\.com/);
 });
 
 test('frontend AWS write tables include the reviewed nonfinancial gaps', () => {

@@ -38,3 +38,20 @@ export function awsPasskeyRequiredMessage(requiredOrigin: string): string {
   const origin = String(requiredOrigin || "").replace(/\/$/, "") || "the configured HTTPS origin";
   return `Passkeys require ${origin}. Use email verification on this origin.`;
 }
+
+/** Apex URL for www.checksops.com so WebAuthn stays on RP ID checksops.com. */
+export function apexCanonicalRedirectUrl(opts: {
+  hostname?: string | null;
+  protocol?: string | null;
+  pathname?: string | null;
+  search?: string | null;
+  hash?: string | null;
+}): string | null {
+  if (normalizePublicHostname(opts.hostname) !== AWS_PRODUCTION_WWW_HOSTNAME) return null;
+  const protocol = String(opts.protocol || "https:").toLowerCase();
+  if (protocol && protocol !== "https:") return null;
+  const pathname = opts.pathname && String(opts.pathname).startsWith("/") ? String(opts.pathname) : "/";
+  const search = opts.search ? String(opts.search) : "";
+  const hash = opts.hash ? String(opts.hash) : "";
+  return `https://${AWS_PRODUCTION_HOSTNAME}${pathname}${search}${hash}`;
+}

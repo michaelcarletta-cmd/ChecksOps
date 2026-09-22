@@ -28,6 +28,15 @@
 
     <script>
       (function() {
+        var host = String(window.location.hostname || "").toLowerCase();
+        if (host === "www.checksops.com" && window.location.protocol === "https:") {
+          window.location.replace("https://checksops.com" + window.location.pathname + window.location.search + window.location.hash);
+          return;
+        }
+      })();
+    </script>
+    <script>
+      (function() {
         const host = window.location.hostname;
         const isCheckOps = [
           "checkops.com","www.checkops.com",
