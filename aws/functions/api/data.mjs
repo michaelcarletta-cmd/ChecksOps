@@ -12,7 +12,12 @@ import {
   refuseSubAsApplicationId,
   verifyCognitoIdToken,
 } from './cognito.mjs';
-import { LOOKUP_MAPPING_SQL } from './identity.mjs';
+import {
+  LOOKUP_MAPPING_SQL,
+  LOOKUP_MAPPING_BY_APP_ID_SQL,
+  LOOKUP_PRODUCTION_LOCK_BY_SUB_SQL,
+  allowProductionLockFallback,
+} from './identity.mjs';
 import { denyTaxSecretQuery, denyTaxSecretRpc } from './tax-secrets.mjs';
 
 const { Client } = pg;
@@ -207,7 +212,13 @@ export const withIdentity = async (event, fn, deps = {}) => {
     if (write) {
       await client.query('SET TRANSACTION READ WRITE');
     }
-    const mapping = (await client.query(LOOKUP_MAPPING_SQL, [claimsResult.claims.sub])).rows[0];
+    let mapping = (await client.query(LOOKUP_MAPPING_SQL, [claimsResult.claims.sub])).rows[0];
+    if (!mapping && allowProductionLockFallback()) {
+      const lock = (await client.query(LOOKUP_PRODUCTION_LOCK_BY_SUB_SQL, [claimsResult.claims.sub])).rows[0] || null;
+      if (lock?.application_user_id) {
+        mapping = (await client.query(LOOKUP_MAPPING_BY_APP_ID_SQL, [lock.application_user_id])).rows[0] || null;
+      }
+    }
     if (!mapping) {
       await client.query('ROLLBACK');
       return { ok: false, statusCode: 401, error: 'identity_not_linked', spoofFieldsIgnored: spoof };

@@ -21,6 +21,36 @@ FROM public.identity_accounts
 WHERE cognito_sub = $1
   AND status IN ('active', 'isolated_test')`;
 
+export const LOOKUP_MAPPING_BY_APP_ID_SQL = `SELECT application_user_id::text AS application_user_id,
+       cognito_sub,
+       email,
+       status
+FROM public.identity_accounts
+WHERE application_user_id = $1::uuid
+  AND status IN ('active', 'isolated_test')`;
+
+export const LOOKUP_PRODUCTION_LOCK_BY_SUB_SQL = `SELECT application_user_id::text AS application_user_id,
+       cognito_sub
+FROM public.identity_production_cognito_locks
+WHERE cognito_sub = $1`;
+
+export const allowProductionLockFallback = () => (
+  String(process.env.CHECKSOPS_ENV || '').toLowerCase().startsWith('production')
+);
+
+export const lookupIdentityMapping = async (client, cognitoSub) => {
+  const direct = (await client.query(LOOKUP_MAPPING_SQL, [cognitoSub])).rows[0] || null;
+  if (direct) return { mapping: direct, source: 'identity_accounts_by_sub' };
+  if (!allowProductionLockFallback()) return { mapping: null, source: 'identity_accounts_by_sub' };
+
+  const lock = (await client.query(LOOKUP_PRODUCTION_LOCK_BY_SUB_SQL, [cognitoSub])).rows[0] || null;
+  if (!lock?.application_user_id) return { mapping: null, source: 'production_lock_not_found' };
+
+  const byApp = (await client.query(LOOKUP_MAPPING_BY_APP_ID_SQL, [lock.application_user_id])).rows[0] || null;
+  if (!byApp) return { mapping: null, source: 'identity_accounts_by_application_user_id_missing' };
+  return { mapping: byApp, source: 'production_lock_to_identity_accounts_by_app_id', lock };
+};
+
 export const PROFILE_SQL = `SELECT id::text AS id, email, full_name, approval_status
 FROM public.profiles
 WHERE id = $1::uuid`;
@@ -58,7 +88,8 @@ export const resolveIdentitySession = async ({
     await client.connect();
     await client.query('BEGIN');
 
-    const mapping = (await client.query(LOOKUP_MAPPING_SQL, [cognitoSub])).rows[0];
+    const resolved = await lookupIdentityMapping(client, cognitoSub);
+    const mapping = resolved.mapping;
     if (!mapping) {
       await client.query('ROLLBACK');
       return { ok: false, statusCode: 401, error: 'identity_not_linked' };
