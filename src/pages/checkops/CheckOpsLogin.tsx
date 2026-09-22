@@ -11,14 +11,13 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, ArrowLeft, KeyRound, Mail, CheckCircle2 } from "lucide-react";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
 import { useAuth } from "@/hooks/useAuth";
-import { isPlatformOwner, STAGING_MASTER_LOGIN_EMAIL } from "@/lib/masterMerchant";
+import { isPlatformOwner } from "@/lib/masterMerchant";
 import { isAwsStaging, isAwsStagingHttpsPasskeysEnabled } from "@/lib/awsStaging";
 import { signInWithAwsPasskey } from "@/lib/awsPasskeys";
 import { passkeysSupported, sendMagicLink, signInWithPasskey } from "@/lib/passkeys";
 import { readPendingAwsEmailOtp, startAwsEmailOtp, verifyAwsEmailOtp } from "@/lib/awsPasswordless";
 
-/** Passwordless ChecksOps sign-in. AWS staging HTTPS enables Cognito WebAuthn; EMAIL_OTP remains fallback.
- *  Staging also exposes password sign-in for the activated master principal UAT account. */
+/** Passwordless ChecksOps sign-in. AWS staging: Cognito WebAuthn + EMAIL_OTP only. No password path. */
 export default function CheckOpsLogin() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -27,8 +26,6 @@ export default function CheckOpsLogin() {
   const awsHttpsPasskeys = isAwsStagingHttpsPasskeysEnabled();
   const pendingAws = awsStaging ? readPendingAwsEmailOtp() : null;
   const [email, setEmail] = useState(pendingAws?.email || "");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [linkSent, setLinkSent] = useState(Boolean(pendingAws));
   const [awsSession, setAwsSession] = useState(pendingAws?.session || "");
@@ -128,42 +125,6 @@ export default function CheckOpsLogin() {
     } finally { setLoading(false); }
   };
 
-  const handlePasswordLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!awsStaging) return;
-    if (!email.trim() || !password) {
-      toast({ title: "Enter email and password", variant: "destructive" });
-      return;
-    }
-    setLoading(true);
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
-      });
-      if (error) throw error;
-      const challenge = (error as any)?.challenge || (data as any)?.challenge;
-      if (challenge === "NEW_PASSWORD_REQUIRED") {
-        toast({
-          title: "Password change required",
-          description: "Complete the first-password change via the staging API challenge flow.",
-          variant: "destructive",
-        });
-        return;
-      }
-      const authedId = data.user?.id || data.session?.user?.id;
-      if (!authedId) {
-        window.location.assign("/login");
-        return;
-      }
-      await resolveAndRedirect(authedId, data.user?.email ?? email);
-    } catch (err: any) {
-      toast({ title: "Password sign-in failed", description: err.message || "Check credentials and try again.", variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md border-border/50">
@@ -193,34 +154,15 @@ export default function CheckOpsLogin() {
               )}
             </>
           ) : (
-            <form onSubmit={awsStaging && showPassword ? handlePasswordLogin : handleMagicLink} className="space-y-4">
+            <form onSubmit={handleMagicLink} className="space-y-4">
               <div className="space-y-2"><Label htmlFor="email">Email</Label><Input id="email" type="email" autoComplete="username webauthn" value={email} onChange={(e) => setEmail(e.target.value)} required /></div>
-              {awsStaging && showPassword && (
-                <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
-                  <Input id="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-                  <p className="text-[11px] text-muted-foreground">
-                    Staging master UAT: <code className="text-[10px]">{STAGING_MASTER_LOGIN_EMAIL}</code>
-                  </p>
-                </div>
-              )}
-              {supportsPasskeys && !showPassword && <div className="space-y-1.5"><Button type="button" className="w-full" disabled={loading} onClick={() => void handlePasskey()}>{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <KeyRound className="mr-2 h-4 w-4" />}Sign in with a passkey<Badge variant="secondary" className="ml-2">Recommended</Badge></Button><p className="text-center text-[11px] text-muted-foreground">Fastest and most secure — Face ID, Touch ID or Windows Hello.</p></div>}
-              {supportsPasskeys && !showPassword && <div className="relative py-1"><div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border/60" /></div><div className="relative flex justify-center"><span className="bg-card px-2 text-[11px] uppercase tracking-wide text-muted-foreground">or</span></div></div>}
-              {!showPassword && (
-                <Button type="submit" variant="outline" className="w-full" disabled={loading}>{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}{awsStaging ? "Email me a verification code" : "Email me a sign-in link"}</Button>
-              )}
-              {showPassword && (
-                <Button type="submit" className="w-full" disabled={loading}>{loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Sign in with password</Button>
-              )}
-              {awsStaging && (
-                <Button type="button" variant="ghost" className="w-full text-xs" disabled={loading} onClick={() => setShowPassword((v) => !v)}>
-                  {showPassword ? "Use email verification / passkey instead" : "Use staging password (master UAT)"}
-                </Button>
-              )}
+              {supportsPasskeys && <div className="space-y-1.5"><Button type="button" className="w-full" disabled={loading} onClick={() => void handlePasskey()}>{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <KeyRound className="mr-2 h-4 w-4" />}Sign in with a passkey<Badge variant="secondary" className="ml-2">Recommended</Badge></Button><p className="text-center text-[11px] text-muted-foreground">Fastest and most secure — Face ID, Touch ID or Windows Hello.</p></div>}
+              {supportsPasskeys && <div className="relative py-1"><div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border/60" /></div><div className="relative flex justify-center"><span className="bg-card px-2 text-[11px] uppercase tracking-wide text-muted-foreground">or</span></div></div>}
+              <Button type="submit" variant="outline" className="w-full" disabled={loading}>{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}{awsStaging ? "Email me a verification code" : "Email me a sign-in link"}</Button>
               <p className="text-center text-[11px] text-muted-foreground">{awsStaging
                 ? (awsHttpsPasskeys
-                  ? "AWS staging: passkeys use Cognito WebAuthn; email verification remains available."
-                  : "AWS staging passkeys require https://staging.checksops.com. Use email verification on this origin.")
+                  ? "AWS staging: passkeys use Cognito WebAuthn; email verification remains available. Password sign-in is disabled."
+                  : "AWS staging passkeys require https://staging.checksops.com. Use email verification on this origin. Password sign-in is disabled.")
                 : "Two-factor verification is still required before any money moves."}</p>
             </form>
           )}

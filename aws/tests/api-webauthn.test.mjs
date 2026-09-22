@@ -75,11 +75,14 @@ test('authenticate/start requires staging HTTPS Origin before Cognito is called'
   assert.equal(blocked.error, 'staging_https_origin_required');
 });
 
-test('template SignInPolicy includes WEB_AUTHN alongside EMAIL_OTP', () => {
+test('template SignInPolicy includes WEB_AUTHN alongside EMAIL_OTP and excludes PASSWORD', () => {
   const yaml = fs.readFileSync(path.join(ROOT, 'template.yaml'), 'utf8');
   assert.match(yaml, /SignInPolicy:/);
   assert.match(yaml, /EMAIL_OTP/);
   assert.match(yaml, /WEB_AUTHN/);
+  const factors = yaml.match(/AllowedFirstAuthFactors:\n((?:\s+-\s+\w+\n)+)/);
+  assert.ok(factors, 'AllowedFirstAuthFactors missing');
+  assert.doesNotMatch(factors[1], /PASSWORD/);
 });
 
 test('default WebAuthn origin is staging and rejects production/apex hosts', () => {
