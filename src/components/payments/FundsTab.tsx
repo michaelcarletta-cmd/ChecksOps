@@ -508,12 +508,6 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
         </div>
       )}
 
-      {!readOnly && claimId && tenant?.id && (
-        <ProjectPlanCard claimId={claimId} tenantId={tenant.id} />
-      )}
-
-
-
       {!readOnly && disburseMode === "platform" && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
@@ -631,6 +625,10 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {!readOnly && claimId && tenant?.id && (
+        <ProjectPlanCard claimId={claimId} tenantId={tenant.id} />
       )}
 
       {/* Payment list */}
