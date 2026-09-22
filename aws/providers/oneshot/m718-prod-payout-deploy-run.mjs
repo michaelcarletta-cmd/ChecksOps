@@ -210,37 +210,100 @@ const validateCatalogNotShrinking = (liveSrc, nextSrc) => {
   if (missing.length) throw new Error(`catalog overlay would drop live functions: ${missing.join(',')}`);
   return { liveCount: live.length, nextCount: next.length, added: next.filter((name) => !live.includes(name)) };
 };
+const extractGitPayoutHelpers = (gitSrc) => {
+  const start = gitSrc.indexOf('const payoutGrantEnvironment');
+  const end = gitSrc.indexOf('export const resolveFinancialStepUpBinding');
+  if (start < 0 || end < 0 || end <= start) throw new Error('git_payout_helpers_missing');
+  return gitSrc.slice(start, end).trim() + '\n\n';
+};
+
 const mergeTotp = (liveSrc, gitSrc) => {
-  if (liveSrc.includes('resolvePayoutStepUpBinding') && liveSrc.includes('disbursement.send')) {
+  if (liveSrc.includes('resolvePayoutStepUpBinding') && liveSrc.includes("kind: 'payout'")) {
     return { src: liveSrc, patched: false, reason: 'payout_already_present' };
   }
-  const liveHasWallet = /wallet\.fund/.test(liveSrc)
-    && (liveSrc.includes('resolveMoovWalletStepUpBinding') || liveSrc.includes("actionKey === 'wallet.fund'"));
-  if (!liveHasWallet) {
-    return { src: gitSrc, patched: true, reason: 'replaced_with_git_payout_totp' };
-  }
-  let src = gitSrc;
-  const walletFn = liveSrc.match(/export const resolveMoovWalletStepUpBinding[\s\S]*?\n};\n/);
-  if (walletFn && !src.includes('resolveMoovWalletStepUpBinding')) {
+  const helpers = extractGitPayoutHelpers(gitSrc);
+  let src = liveSrc;
+  if (!src.includes('resolvePayoutStepUpBinding')) {
     src = src.replace(
       'export const resolveFinancialStepUpBinding',
-      `${walletFn[0]}\nexport const resolveFinancialStepUpBinding`,
+      `${helpers}export const resolveFinancialStepUpBinding`,
     );
   }
-  if (!src.includes("actionKey === 'wallet.fund'") && !src.includes('resolveMoovWalletStepUpBinding')) {
-    throw new Error('live_wallet_totp_could_not_be_preserved');
-  }
-  if (src.includes('resolveMoovWalletStepUpBinding') && !src.includes("actionKey === 'wallet.fund'")) {
+  if (!src.includes("actionKey === 'disbursement.send'")) {
+    const marker = "const actionKey = String(body.action_key || body.actionKey || CHECKALT_TOTP_ACTION);";
+    if (!src.includes(marker)) throw new Error('live_totp_actionkey_marker_missing');
     src = src.replace(
-      'if (actionKey === PAYMENT_AUTHORIZATION_ACTION) {\n    return resolvePayoutStepUpBinding({ client, mapping, body, spoof });\n  }',
-      `if (actionKey === PAYMENT_AUTHORIZATION_ACTION) {\n    return resolvePayoutStepUpBinding({ client, mapping, body, spoof });\n  }\n  if (actionKey === 'wallet.fund' || actionKey === 'wallet.disburse') {\n    return resolveMoovWalletStepUpBinding({ client, mapping, body, spoof });\n  }`,
+      marker,
+      `${marker}\n  if (actionKey === 'disbursement.send') {\n    return resolvePayoutStepUpBinding({ client, mapping, body, spoof });\n  }`,
     );
   }
-  if (!src.includes('disbursement.send') || !src.includes('resolvePayoutStepUpBinding')) {
-    throw new Error('payout_totp_merge_failed');
+  src = src.replace(
+    "const sessionReuseBlocked = actionKey === 'totp.enroll' || actionKey === 'totp.unenroll';",
+    "const sessionReuseBlocked = actionKey === 'totp.enroll' || actionKey === 'totp.unenroll' || actionKey === 'disbursement.send';",
+  );
+  src = src.replace(
+    'if (!walletAction) bound.loginSessionId = readLoginSessionId();',
+    "if (!walletAction && bound.kind !== 'payout' && actionKey !== 'disbursement.send') bound.loginSessionId = readLoginSessionId();",
+  );
+  if (!src.includes("bound.kind === 'payout'")) {
+    const insertMarker = "export const insertAppStepUpLog = async (client, mapping, bound) => {";
+    if (!src.includes(insertMarker)) throw new Error('live_totp_insert_marker_missing');
+    src = src.replace(
+      insertMarker,
+      `${insertMarker}
+  if (bound.kind === 'payout') {
+    const metadata = metadataWithoutTotpCode({
+      ...(bound.grant || {}),
+      action: bound.actionKey,
+      tenant_id: bound.tenantId,
+      environment: bound.environment,
+      user_id: mapping.application_user_id,
+      payout_operation_id: bound.payoutOperationId,
+      recipient_id: bound.recipientId,
+      amount_cents: bound.amountCents,
+      purpose: 'payout',
+      reusable: false,
+      source: 'app_financial_totp',
+    });
+    const serialized = JSON.stringify(metadata);
+    if (/"totp_code"/.test(serialized)) {
+      return { ok: false, statusCode: 500, error: 'totp_code_must_not_be_stored' };
+    }
+    const row = (await client.query(
+      \`INSERT INTO public.financial_stepup_log
+        (user_id, tenant_id, action_key, factor_type, succeeded, metadata)
+       VALUES ($1::uuid, $2::uuid, $3, 'totp', true, $4::jsonb)
+       RETURNING id, created_at\`,
+      [mapping.application_user_id, bound.tenantId, bound.actionKey || 'disbursement.send', serialized],
+    )).rows[0];
+    return {
+      ok: true,
+      statusCode: 200,
+      recorded: true,
+      kind: 'payout',
+      stepup_id: row.id,
+      check_id: null,
+      tenant_id: bound.tenantId,
+      amount_cents: bound.amountCents,
+      payout_operation_id: bound.payoutOperationId,
+      recipient_id: bound.recipientId,
+      environment: bound.environment,
+      totp_code_stored: false,
+      reusable: false,
+      action_key: bound.actionKey,
+      applicationUserId: mapping.application_user_id,
+    };
+  }`,
+    );
   }
-  if (!src.includes('wallet.fund')) throw new Error('wallet_fund_totp_lost');
-  return { src, patched: true, reason: 'merged_payout_into_live_wallet_totp' };
+  if (!src.includes('resolvePayoutStepUpBinding') || !src.includes("actionKey === 'disbursement.send'")) {
+    throw new Error('payout_totp_inject_failed');
+  }
+  if (!src.includes('isMoovWalletTotpAction') || !src.includes('wallet.fund')) {
+    throw new Error('wallet_fund_totp_lost');
+  }
+  if (!src.includes('checkalt.auto_deposit.configure')) throw new Error('auto_deposit_totp_lost');
+  return { src, patched: true, reason: 'injected_payout_into_live_totp' };
 };
 const importGraph = async (unpacked) => {
   for (const rel of [...OVERLAY_FILES, TOTP_REL, 'index.mjs', CATALOG_REL]) {
