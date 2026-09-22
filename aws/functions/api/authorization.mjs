@@ -9,7 +9,12 @@ import {
   refuseSubAsApplicationId,
   verifyCognitoIdToken,
 } from './cognito.mjs';
-import { LOOKUP_MAPPING_SQL, USER_ROLES_SQL } from './identity.mjs';
+import {
+  USER_ROLES_SQL,
+  lookupIdentityMapping,
+  resolveTrustedIdentityScope,
+} from './identity.mjs';
+import { assertTrustedIssuer } from './identity-env.mjs';
 import { fetchCognitoJwks } from './jwks.mjs';
 
 const { Client } = pg;
@@ -101,12 +106,23 @@ export const resolveCognitoClaims = async (event) => {
 export const runAuthorizationProbe = async ({
   cognitoSub,
   cognitoEmail = null,
+  claims = null,
   spoof = null,
+  identityScope = null,
   loadCredentials = loadDatabaseCredentials,
   createClient = (config) => new Client(config),
 } = {}) => {
   if (!cognitoSub) {
     return { ok: false, statusCode: 401, error: 'missing_cognito_sub' };
+  }
+
+  const scope = identityScope || resolveTrustedIdentityScope();
+  if (!scope.ok) {
+    return { ok: false, statusCode: 401, error: scope.error };
+  }
+  const issuerCheck = assertTrustedIssuer(claims, scope);
+  if (!issuerCheck.ok) {
+    return { ok: false, statusCode: 401, error: issuerCheck.error };
   }
 
   let client;
@@ -116,7 +132,8 @@ export const runAuthorizationProbe = async ({
     await client.connect();
     await client.query('BEGIN');
 
-    const mapping = (await client.query(LOOKUP_MAPPING_SQL, [cognitoSub])).rows[0];
+    const resolved = await lookupIdentityMapping(client, cognitoSub, scope);
+    const mapping = resolved.mapping;
     if (!mapping) {
       await client.query('ROLLBACK');
       return { ok: false, statusCode: 401, error: 'identity_not_linked' };
@@ -209,7 +226,9 @@ export const runAuthorizationProbe = async ({
       restoredTablesRlsEnabled: true,
       authorizationSource: 'user_roles_and_tenant_users',
       cognitoGroupsUsed: false,
-      sessionIdentitySource: 'identity_accounts.application_user_id',
+      identityEnv: scope.identityEnv,
+      identitySource: resolved.source,
+      sessionIdentitySource: `${resolved.source}.application_user_id`,
       spoofFieldsIgnored: spoof,
       writes: 'disabled',
     };
@@ -236,6 +255,7 @@ export const handleAuthorizationProbe = async (event) => {
   return runAuthorizationProbe({
     cognitoSub: claimsResult.claims.sub,
     cognitoEmail: claimsResult.claims.email,
+    claims: claimsResult.claims,
     spoof: ignoredSpoofFields(event),
   });
 };

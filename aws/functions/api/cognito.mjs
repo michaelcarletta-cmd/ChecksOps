@@ -12,6 +12,7 @@ export const cognitoClaimsFromEvent = (event) => {
     sub: String(sub),
     email: jwt.email ? String(jwt.email) : null,
     tokenUse: jwt.token_use || jwt.tokenUse || null,
+    iss: jwt.iss ? String(jwt.iss) : null,
   };
 };
 
@@ -38,6 +39,7 @@ export const verifyCognitoIdToken = async (token) => {
     sub: String(payload.sub),
     email: payload.email ? String(payload.email) : null,
     tokenUse: payload.token_use || 'id',
+    iss: payload.iss ? String(payload.iss) : `https://cognito-idp.us-east-1.amazonaws.com/${poolId}`,
   };
 };
 

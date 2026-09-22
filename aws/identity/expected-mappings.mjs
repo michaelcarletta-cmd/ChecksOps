@@ -9,6 +9,25 @@ export const LIFECYCLE_EMAILS = {
   c1c: 'payments@condition1commercial.com',
 };
 
+export const COGNITO_POOLS = {
+  staging: 'us-east-1_vPmQ7cL1F',
+  production: 'us-east-1_h00WorYMT',
+};
+
+// Live dual-environment mappings for fixture/tests only. Runtime resolution
+// does not import these values. claims@ remains a separate application user
+// and is intentionally omitted from this dual-env list.
+export const EXPECTED_DUAL_ENV_IDENTITIES = [
+  {
+    email: 'mcarletta@freedomadj.com',
+    applicationUserId: '7dbb3009-f059-4767-b5dc-1c5c72379330',
+    stagingCognitoSub: 'c4386408-60e1-70e2-abb6-e6194e8e635f',
+    productionCognitoSub: 'a45884b8-d051-70b3-b19d-ca704964c6e8',
+  },
+];
+
+// Historical onboard snapshot used by cutover/onboard scripts. Live dual-env
+// mappings (staging vs production Cognito) live in EXPECTED_DUAL_ENV_IDENTITIES.
 export const EXPECTED_EIGHT = [
   {
     email: 'asukanick@condition1commercial.com',

@@ -3,13 +3,17 @@
 Cognito authenticates. ChecksOps authorization keeps the existing application UUID.
 
 ```
-Cognito ID token sub
-  -> public.identity_accounts.cognito_sub
+verified Cognito ID token (server CHECKSOPS_ENV + COGNITO_USER_POOL_ID + issuer)
+  -> environment-specific mapping only
+       staging:        identity_accounts.cognito_sub
+       production:     identity_production_cognito_locks.cognito_sub
   -> application_user_id
   -> profiles.id / tenant_users.user_id / user_roles.user_id
   -> SET LOCAL request.app_user_id
   -> auth.uid()
 ```
+
+One application user may have a staging Cognito sub and a production Cognito sub at the same time. The resolver never consults the other environment's map, never keys by email, and never writes identity rows during login. Client-supplied environment/pool values are ignored.
 
 No `profiles.id`, `tenant_users.user_id`, `user_roles.user_id`, or audit UUID was rewritten to a Cognito `sub`. Application roles stay in `user_roles`. Cognito groups are not used.
 
@@ -30,7 +34,7 @@ Not applied: the 47 skipped `auth.users` FKs (`aws/identity/sql/06_retarget_auth
 ## API changes (staging `checksops-staging-api`)
 
 - Env: `DATABASE_NAME=checksops` unchanged; added `COGNITO_USER_POOL_ID=us-east-1_vPmQ7cL1F`, `COGNITO_CLIENT_ID=71bb7a192cbl6o6s8m259tl589`.
-- `GET /identity/me` (and `/identity/session`): verify Cognito ID token, look up `identity_accounts` by `sub`, `SET LOCAL request.app_user_id` to the existing UUID, `SELECT auth.uid()`, then `tenant_users` / `user_roles` **by that UUID**.
+- `GET /identity/me` (and `/identity/session`): verify Cognito ID token against the server pool, resolve `sub` through the environment-specific map only (`identity_accounts` in staging, `identity_production_cognito_locks` in production/production-prep), `SET LOCAL request.app_user_id` to the existing UUID, `SELECT auth.uid()`, then `tenant_users` / `user_roles` **by that UUID**.
 - HTTP API JWT authorizer on `GET /identity/me` only. Unauthenticated call returns API Gateway 401.
 - Staging Cognito client gained `ALLOW_ADMIN_USER_PASSWORD_AUTH` for the isolated probe only. SRP remains.
 

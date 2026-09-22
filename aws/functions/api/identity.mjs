@@ -10,16 +10,23 @@ import {
   verifyCognitoIdToken,
 } from './cognito.mjs';
 import { isPrivilegedRoleList, privilegedAuthPolicy } from './privileged-auth.mjs';
+import {
+  LOOKUP_MAPPING_SQL,
+  LOOKUP_PRODUCTION_IDENTITY_SQL,
+  assertTrustedIssuer,
+  lookupIdentityMapping,
+  rejectUntrustedIdentityHints,
+  resolveTrustedIdentityScope,
+} from './identity-env.mjs';
 
 const { Client } = pg;
 
-export const LOOKUP_MAPPING_SQL = `SELECT application_user_id::text AS application_user_id,
-       cognito_sub,
-       email,
-       status
-FROM public.identity_accounts
-WHERE cognito_sub = $1
-  AND status IN ('active', 'isolated_test')`;
+export {
+  LOOKUP_MAPPING_SQL,
+  LOOKUP_PRODUCTION_IDENTITY_SQL,
+  lookupIdentityMapping,
+  resolveTrustedIdentityScope,
+};
 
 export const PROFILE_SQL = `SELECT id::text AS id, email, full_name, approval_status
 FROM public.profiles
@@ -44,11 +51,22 @@ const jsonSafe = (value) => (value === undefined ? null : value);
 export const resolveIdentitySession = async ({
   cognitoSub,
   email = null,
+  claims = null,
+  identityScope = null,
   loadCredentials = loadDatabaseCredentials,
   createClient = (config) => new Client(config),
 } = {}) => {
   if (!cognitoSub) {
     return { ok: false, statusCode: 401, error: 'missing_cognito_sub' };
+  }
+
+  const scope = identityScope || resolveTrustedIdentityScope();
+  if (!scope.ok) {
+    return { ok: false, statusCode: 401, error: scope.error };
+  }
+  const issuerCheck = assertTrustedIssuer(claims, scope);
+  if (!issuerCheck.ok) {
+    return { ok: false, statusCode: 401, error: issuerCheck.error };
   }
 
   let client;
@@ -58,7 +76,8 @@ export const resolveIdentitySession = async ({
     await client.connect();
     await client.query('BEGIN');
 
-    const mapping = (await client.query(LOOKUP_MAPPING_SQL, [cognitoSub])).rows[0];
+    const resolved = await lookupIdentityMapping(client, cognitoSub, scope);
+    const mapping = resolved.mapping;
     if (!mapping) {
       await client.query('ROLLBACK');
       return { ok: false, statusCode: 401, error: 'identity_not_linked' };
@@ -95,6 +114,8 @@ export const resolveIdentitySession = async ({
       cognitoSub,
       applicationUserId: mapping.application_user_id,
       authUid: uid,
+      identityEnv: scope.identityEnv,
+      identitySource: resolved.source,
       mappingStatus: mapping.status,
       isMasterOwner: masterOwner,
       profile: profile ? {
@@ -145,8 +166,10 @@ export const handleIdentityMe = async (event) => {
       };
     }
   }
+  rejectUntrustedIdentityHints(event);
   return resolveIdentitySession({
     cognitoSub: claims.sub,
     email: claims.email,
+    claims,
   });
 };
