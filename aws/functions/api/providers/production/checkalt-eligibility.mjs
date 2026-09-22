@@ -29,7 +29,7 @@ export const CHECKALT_IMAGE_ERROR = 'CHECKALT_IMAGE_COMPLIANCE_FAILED';
 export const FINGERPRINT_META_KEY = 'checkalt_rear_fingerprint';
 
 export const CHECK_ELIGIBILITY_SELECT = `id, tenant_id, amount, check_number,
-         front_image_path, back_image_path, front_image_deposit_path, back_image_deposit_path,
+         front_image_path, back_image_path, back_image_deposit_path,
          status, check_stage, endorsement_render_meta`;
 
 export const PAYEES_ELIGIBILITY_SQL = `SELECT id, check_id, tenant_id, payee_type, endorsement_status, endorsed_at

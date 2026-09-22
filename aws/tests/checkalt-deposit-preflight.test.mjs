@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { CLASS_A_FUNCTIONS } from '../functions/api/app-services.mjs';
 import {
+  CHECK_ELIGIBILITY_SELECT,
   endorsementStateFingerprint,
   ERROR_ENDORSEMENTS_INCOMPLETE,
   ERROR_PROVIDER_FRONT_IMAGE_MISSING,
@@ -44,6 +45,12 @@ const mockClient = ({ check, payees, endorsements, deposits = [] }) => ({
 });
 
 const jpeg = () => syntheticCompliantCheckAltJpeg();
+
+test('eligibility select uses production check_intake_items columns only', () => {
+  assert.match(CHECK_ELIGIBILITY_SELECT, /front_image_path/);
+  assert.match(CHECK_ELIGIBILITY_SELECT, /back_image_deposit_path/);
+  assert.doesNotMatch(CHECK_ELIGIBILITY_SELECT, /front_image_deposit_path/);
+});
 
 test('class A registry includes checkalt-deposit-preflight and it is not a money path', () => {
   assert.equal(CLASS_A_FUNCTIONS.has('checkalt-deposit-preflight'), true);
