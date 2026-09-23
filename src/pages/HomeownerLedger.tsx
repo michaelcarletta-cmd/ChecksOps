@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
 import { CheckImageCropper } from "@/components/checks/CheckImageCropper";
 import homeownerOpsLogo from "@/assets/homeowner-ops-logo.png";
+import { shapeHomeownerLedgerSummary } from "@/lib/homeownerLedgerSummary";
 
 type LedgerEvent = {
   id: string;
@@ -173,7 +174,7 @@ export default function HomeownerLedger({ preClaim = false }: { preClaim?: boole
       });
       if (e) throw e;
       if ((res as any)?.error) throw new Error((res as any).error);
-      setData(res as Summary);
+      setData(shapeHomeownerLedgerSummary(res as Record<string, unknown>) as Summary);
     } catch (e: any) {
       setError(e.message || "Could not load ledger");
     } finally {
@@ -218,7 +219,8 @@ export default function HomeownerLedger({ preClaim = false }: { preClaim?: boole
 }
 
 function ClaimView({ data, onRefresh, token }: { data: Summary; onRefresh: () => void; token: string }) {
-  const groups = useMemo(() => groupByCheck(data.events), [data.events]);
+  const totals = data.totals || { received: 0, deposited: 0, released: 0, remaining: 0 };
+  const groups = useMemo(() => groupByCheck(data.events || []), [data.events]);
 
   return (
     <>
@@ -239,10 +241,10 @@ function ClaimView({ data, onRefresh, token }: { data: Summary; onRefresh: () =>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <TotalTile label="Received"  value={data.totals.received}  tone="text-emerald-400" />
-            <TotalTile label="Deposited" value={data.totals.deposited} tone="text-sky-400" />
-            <TotalTile label="Released"  value={data.totals.released}  tone="text-primary" />
-            <TotalTile label="Remaining" value={data.totals.remaining} tone="text-foreground" highlight />
+            <TotalTile label="Received"  value={totals.received}  tone="text-emerald-400" />
+            <TotalTile label="Deposited" value={totals.deposited} tone="text-sky-400" />
+            <TotalTile label="Released"  value={totals.released}  tone="text-primary" />
+            <TotalTile label="Remaining" value={totals.remaining} tone="text-foreground" highlight />
           </div>
         </CardContent>
       </Card>

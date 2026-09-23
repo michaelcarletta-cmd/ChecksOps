@@ -33,6 +33,62 @@ const appOrigin = (override) => String(
   override || process.env.VITE_APP_URL || emailAssetOrigin(),
 ).replace(/\/$/, '');
 
+const RECEIVED_EVENTS = new Set([
+  'check_received',
+  'supplement_check',
+  'depreciation_check',
+  'deductible_check',
+]);
+const DEPOSITED_EVENTS = new Set(['deposited', 'cleared']);
+const RELEASED_EVENTS = new Set(['funds_released']);
+
+export const totalsFromLedgerEvents = (events = []) => {
+  const totals = { received: 0, deposited: 0, released: 0, remaining: 0 };
+  for (const event of events) {
+    const amount = Number(event?.amount || 0);
+    if (!amount) continue;
+    if (RECEIVED_EVENTS.has(String(event.event_type || ''))) totals.received += amount;
+    if (DEPOSITED_EVENTS.has(String(event.event_type || ''))) totals.deposited += amount;
+    if (RELEASED_EVENTS.has(String(event.event_type || ''))) totals.released += amount;
+  }
+  totals.remaining = Math.max(0, totals.received - totals.released);
+  return totals;
+};
+
+/** Map AWS token/claim/events doc onto the public ledger UI contract. */
+export const shapeHomeownerLedgerView = (doc = {}) => {
+  const claim = doc.claim || null;
+  const events = Array.isArray(doc.events) ? doc.events : [];
+  const token = doc.token && typeof doc.token === 'object' ? doc.token : {};
+  const homeowner = doc.homeowner && typeof doc.homeowner === 'object' ? doc.homeowner : {};
+  const incomingTotals = doc.totals && typeof doc.totals === 'object' ? doc.totals : null;
+  return {
+    ...doc,
+    mode: doc.mode === 'pre_claim' || doc.mode === 'claim'
+      ? doc.mode
+      : (claim ? 'claim' : 'pre_claim'),
+    homeowner: {
+      name: homeowner.name ?? token.homeowner_name ?? null,
+      email: homeowner.email ?? token.homeowner_email ?? null,
+    },
+    claim,
+    events,
+    totals: incomingTotals
+      ? {
+          received: Number(incomingTotals.received || 0),
+          deposited: Number(incomingTotals.deposited || 0),
+          released: Number(incomingTotals.released || 0),
+          remaining: Number(incomingTotals.remaining || 0),
+        }
+      : totalsFromLedgerEvents(events),
+    pending_upload_count: Number(doc.pending_upload_count || 0),
+    pending_signatures: Array.isArray(doc.pending_signatures) ? doc.pending_signatures : [],
+    pending_endorsements: Array.isArray(doc.pending_endorsements) ? doc.pending_endorsements : [],
+    shared_documents: Array.isArray(doc.shared_documents) ? doc.shared_documents : [],
+    can_upload: doc.can_upload !== false,
+  };
+};
+
 const loadLedgerTokenStaffRow = async (client, token) => {
   try {
     return (await client.query(
@@ -128,11 +184,13 @@ export const handleHomeownerLedgerView = async (event) => {
     return {
       ok: true,
       statusCode: 200,
-      ...doc,
-      // Keep money movement CTAs off
-      allow_deductible_payment: false,
-      money: null,
-      deductible_payments: [],
+      ...shapeHomeownerLedgerView({
+        ...doc,
+        // Keep money movement CTAs off
+        allow_deductible_payment: false,
+        money: null,
+        deductible_payments: [],
+      }),
       spoofFieldsIgnored: spoof,
     };
   } catch (error) {
