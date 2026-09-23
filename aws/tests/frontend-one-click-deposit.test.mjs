@@ -259,6 +259,53 @@ test('TOTP failure never submits; valid TOTP binds deposit.submit to the check',
   assert.equal(request.ignored.browserTenantNotAuthoritative, true);
 });
 
+test('expired server grant re-challenges then retries ChecksOps submit once', async () => {
+  resetDepositInFlightForTests();
+  const challenges = [];
+  let invalidated = 0;
+  let submits = 0;
+  const result = await runCheckAltDepositClick(CHECK, {
+    authProvider: 'cognito',
+    apiBaseUrl: '/prep',
+    preflight: async () => ready(),
+    invalidateStepUp: () => { invalidated += 1; },
+    requireStepUp: async (request, options) => {
+      challenges.push({ actionKey: request.actionKey, force: options?.force === true });
+      return true;
+    },
+    submit: async () => {
+      submits += 1;
+      if (submits === 1) return { error: new Error('step_up_required') };
+      return { error: null, data: { ok: true } };
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.submitted, true);
+  assert.equal(submits, 2);
+  assert.equal(invalidated, 1);
+  assert.equal(challenges.length, 2);
+  assert.equal(challenges[0].actionKey, 'deposit.submit');
+  assert.equal(challenges[1].force, true);
+});
+
+test('ambiguous provider response is not retried by one Deposit click', async () => {
+  resetDepositInFlightForTests();
+  let submits = 0;
+  const result = await runCheckAltDepositClick(CHECK, {
+    authProvider: 'cognito',
+    apiBaseUrl: '/prep',
+    preflight: async () => ready(),
+    requireStepUp: async () => true,
+    submit: async () => {
+      submits += 1;
+      return { error: new Error('reconciliation_required') };
+    },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'reconciliation_required');
+  assert.equal(submits, 1);
+});
+
 test('double Deposit click cannot produce duplicate provider execution', async () => {
   resetDepositInFlightForTests();
   let started;
@@ -340,12 +387,20 @@ test('Command Center and deposit ops no longer require a separate Prepare click'
   const card = fs.readFileSync(path.join(ROOT, 'src/components/checks/CheckAltImageComplianceCard.tsx'), 'utf8');
   const ops = fs.readFileSync(path.join(ROOT, 'src/components/deposit-ops/DepositOperationsConsole.tsx'), 'utf8');
   const dialog = fs.readFileSync(path.join(ROOT, 'src/components/auth/StepUpDialog.tsx'), 'utf8');
+  const settings = fs.readFileSync(path.join(ROOT, 'src/components/settings/CheckAltSettings.tsx'), 'utf8');
+  const hook = fs.readFileSync(path.join(ROOT, 'src/hooks/useStepUp.tsx'), 'utf8');
   assert.match(ccc, /runCheckAltDepositClick/);
   assert.doesNotMatch(ccc, /guardFinancial\("deposit.submit"/);
   assert.doesNotMatch(card, /Prepare official/);
   assert.match(ops, /runCheckAltDepositClick/);
+  assert.match(ops, /invalidateStepUp/);
+  assert.match(ccc, /invalidateStepUp/);
   assert.match(dialog, /Deposit Verification/);
   assert.match(dialog, /normalizeTotpCode/);
+  assert.match(dialog, /authorizedAt: stepped.authorizedAt/);
+  assert.match(settings, /runAuthorized\("deposit.approve"/);
+  assert.match(hook, /stepUpCacheAllowsReuse/);
+  assert.match(hook, /invalidateStepUp/);
   assert.match(ccc, /Preparing check for deposit/);
   assert.match(ccc, /DEPOSIT_PHASE_LABEL/);
   const preflight = fs.readFileSync(path.join(ROOT, 'aws/functions/api/providers/production/checkalt-preflight.mjs'), 'utf8');

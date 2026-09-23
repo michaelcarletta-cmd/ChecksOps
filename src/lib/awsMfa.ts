@@ -1,5 +1,12 @@
 import { AWS_STAGING_AUTH_SESSION_KEY, awsApiBaseUrl, isAwsStaging } from "@/lib/awsStaging";
+import { resolveStepUpAuthorizedAt } from "@/lib/financialStepUp";
 import { normalizeTotpCode, totpUserFailureMessage } from "@/lib/totpCode";
+
+export type AwsTotpResult = {
+  ok: boolean;
+  authorizedAt: number;
+  source: "server" | "client";
+};
 
 export type AwsMfaStatus = {
   totpEnrolled: boolean;
@@ -90,12 +97,24 @@ const postTotp = async (path: string, body: Record<string, unknown>) => {
   }
 };
 
+const totpResult = (payload: Record<string, unknown>): AwsTotpResult => {
+  const resolved = resolveStepUpAuthorizedAt({
+    serverCreatedAt: payload?.created_at ?? payload?.authorized_at,
+    clientNowMs: Date.now(),
+  });
+  return {
+    ok: Boolean(payload.verified || payload.ok),
+    authorizedAt: resolved.authorizedAt,
+    source: resolved.source,
+  };
+};
+
 export const verifyAwsTotp = async (
   code: string,
   extra: { actionKey?: string; tenantId?: string | null; checkId?: string | null } = {},
-) => {
+): Promise<AwsTotpResult> => {
   const payload = await postTotp("/auth/mfa/verify", totpBody(code, extra));
-  return Boolean(payload.verified || payload.ok);
+  return totpResult(payload);
 };
 
 export const stepUpAwsTotp = async (input: {
@@ -103,13 +122,13 @@ export const stepUpAwsTotp = async (input: {
   actionKey?: string;
   tenantId?: string | null;
   checkId?: string | null;
-}) => {
+}): Promise<AwsTotpResult> => {
   const payload = await postTotp("/auth/mfa/step-up", totpBody(input.code, {
     actionKey: input.actionKey || "deposit.submit",
     tenantId: input.tenantId,
     checkId: input.checkId,
   }));
-  return Boolean(payload.verified || payload.ok);
+  return totpResult(payload);
 };
 
 export const recordCheckAltDualControl = async (checkId: string) => {

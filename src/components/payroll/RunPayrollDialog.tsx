@@ -76,7 +76,7 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
   const total = amount + fee;
   const canContinue = !!selected && amount > 0 && Number.isFinite(amount);
 
-  const guardFinancial = useFinancialGuard(tenant?.id);
+  const { guardFinancial } = useFinancialGuard(tenant?.id);
 
   const runMutation = useMutation({
     mutationFn: async () => {

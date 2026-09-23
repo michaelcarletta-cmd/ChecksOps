@@ -208,7 +208,7 @@ export function DepositOperationsConsole({ searchQuery = "" }: DepositOperations
     unsynced_count: 0,
   });
 
-  const { requireStepUp } = useStepUp();
+  const { requireStepUp, invalidateStepUp } = useStepUp();
 
   // Deposit action mutation
   const actionMutation = useMutation({
@@ -255,6 +255,7 @@ export function DepositOperationsConsole({ searchQuery = "" }: DepositOperations
       const result = await runCheckAltDepositClick(checkId, {
         apiBaseUrl: awsApiBaseUrl(),
         requireStepUp,
+        invalidateStepUp,
       });
       if (!result.ok) throw new Error(result.message || checkAltProviderUserMessage(result.error));
       return result;

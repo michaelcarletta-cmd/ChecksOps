@@ -219,6 +219,8 @@ test('correct TOTP step-up writes financial_stepup_log bound to server check amo
   }), depsOf(store));
   assert.equal(stepped.ok, true, JSON.stringify(stepped));
   assert.equal(stepped.recorded, true);
+  assert.ok(stepped.created_at);
+  assert.equal(stepped.authorized_at, stepped.created_at);
   assert.equal(stepped.amount_cents, 1234);
   assert.equal(stepped.tenant_id, TENANT);
   assert.equal(stepped.check_id, CHECK);

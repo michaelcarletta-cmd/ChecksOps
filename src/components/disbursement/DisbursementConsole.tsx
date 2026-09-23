@@ -230,7 +230,7 @@ export function DisbursementConsole({
   }, [accounts, allocations]);
   const hasUnverifiedAllocations = unverifiedAllocated.length > 0;
 
-  const guardFinancial = useFinancialGuard(tenant?.id);
+  const { guardFinancial } = useFinancialGuard(tenant?.id);
 
   const submitBatch = useMutation({
     mutationFn: async () => {

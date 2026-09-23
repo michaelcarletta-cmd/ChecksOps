@@ -13,7 +13,9 @@ import {
 } from "./awsCheckAltMoneyPath.ts";
 import {
   buildFinancialStepUpRequest,
-  type FinancialStepUpRequest,
+  FinancialStepUpDeniedError,
+  runFinancialActionWithStepUp,
+  type RequireStepUpFn,
 } from "./financialStepUp.ts";
 
 export type DepositPhase =
@@ -131,7 +133,8 @@ export async function runCheckAltDepositClick(
     idToken?: string | null;
     fetchImpl?: typeof fetch;
     onPhase?: (phase: DepositPhase) => void;
-    requireStepUp: (request: FinancialStepUpRequest) => Promise<boolean>;
+    requireStepUp: RequireStepUpFn;
+    invalidateStepUp?: () => void;
     prepareCheckAltDeposit?: (
       checkId: string,
       options?: { forceFront?: boolean; forceRear?: boolean },
@@ -217,14 +220,6 @@ export async function runCheckAltDepositClick(
       const b = built as { message?: string; error?: string };
       return fail(b.message ?? "Two-factor verification is required.", { prepared: true, error: b.error });
     }
-    const verified = await deps.requireStepUp(built.request);
-    if (!verified) {
-      return fail("Two-factor verification is required before money can move.", {
-        prepared: true,
-        error: "totp_required",
-      });
-    }
-
     phase("submitting");
     const submit = deps.submit || (async (id: string) => invokeAwsCheckAltProviderFunction(
       "checkalt-submit-deposit",
@@ -236,11 +231,28 @@ export async function runCheckAltDepositClick(
         fetchImpl: deps.fetchImpl,
       },
     ));
-    const submitted = await submit(checkId);
-    if (submitted.error) {
-      const mapped = checkAltProviderUserMessage(submitted.error);
+    let submitted: { error: Error | null; data?: unknown };
+    try {
+      submitted = await runFinancialActionWithStepUp({
+        requireStepUp: deps.requireStepUp,
+        invalidateStepUp: deps.invalidateStepUp,
+        request: built.request,
+        action: async () => {
+          const result = await submit(checkId);
+          if (result.error) throw result.error;
+          return result;
+        },
+      });
+    } catch (error) {
+      if (error instanceof FinancialStepUpDeniedError) {
+        return fail(error.message, {
+          prepared: true,
+          error: "totp_required",
+        });
+      }
+      const mapped = checkAltProviderUserMessage(error);
       const held = /provider_disabled|production_execution_blocked|Provider not enabled/i.test(
-        String(submitted.error.message || mapped),
+        String(error instanceof Error ? error.message : mapped),
       );
       if (held) {
         phase("done");
@@ -261,7 +273,7 @@ export async function runCheckAltDepositClick(
         prepared: true,
         verified: true,
         historicalReference: preflight.historicalReference === true,
-        error: submitted.error.message,
+        error: error instanceof Error ? error.message : "deposit_failed",
       });
     }
 
