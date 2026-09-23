@@ -62,6 +62,29 @@ const mockClient = ({ rows = [], mapping = mappingFor(), throwOn = null } = {}) 
       if (/SELECT id, tenant_id FROM public.check_intake_items/.test(sql)) {
         return { rows: [{ id: params[0], tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a' }] };
       }
+      if (/review_save_detected_claim_number/.test(sql)) {
+        return {
+          rows: [{
+            result: {
+              ok: true,
+              persisted: true,
+              code: 'written',
+              detected_claim_number: params[2],
+            },
+          }],
+        };
+      }
+      if (/SELECT \* FROM public.check_intake_items WHERE id =/.test(sql)) {
+        return {
+          rows: [{
+            id: params[0],
+            tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a',
+            detected_claim_number: '003779807',
+            carrier_name: 'USAA',
+            amount: 18893.07,
+          }],
+        };
+      }
       if (/FROM public.check_payees p/.test(sql)) {
         return {
           rows: [{
@@ -607,5 +630,37 @@ test('Tranche 3 intake image path must be scoped to the same check', async () =>
     filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
   }), depsFor(client));
   assert.equal(denied.statusCode, 403);
+});
+
+test('Review claim # save uses RPC and does not allowlist the column or amount', async () => {
+  assert.equal(WRITE_ALLOWLIST.check_intake_items.columns.has('detected_claim_number'), false);
+  const stillDenied = pickAllowlistedValues('check_intake_items', { detected_claim_number: '003779807' });
+  assert.equal(stillDenied.error, 'column_not_allowlisted');
+  assert.deepEqual(stillDenied.columns, ['detected_claim_number']);
+
+  const client = mockClient();
+  const saved = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_intake_items',
+    op: 'update',
+    values: { detected_claim_number: '003779807' },
+    filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
+  }), depsFor(client));
+  assert.equal(saved.ok, true);
+  assert.equal(saved.data?.[0]?.detected_claim_number, '003779807');
+  const rpc = client.queries.find((q) => String(q.sql).includes('review_save_detected_claim_number'));
+  assert.ok(rpc);
+  assert.equal(rpc.params[0], CHECK_ID);
+  assert.equal(rpc.params[2], '003779807');
+  assert.equal(client.queries.some((q) => /UPDATE public.check_intake_items\s+SET/.test(String(q.sql))), false);
+
+  const amountStillDenied = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_intake_items',
+    op: 'update',
+    values: { amount: 50, detected_claim_number: '003779807' },
+    filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
+  }), depsFor(client));
+  assert.equal(amountStillDenied.statusCode, 403);
+  assert.equal(amountStillDenied.error, 'column_not_allowlisted');
+  assert.ok(amountStillDenied.columns.includes('amount'));
 });
 
