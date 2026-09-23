@@ -21,11 +21,15 @@ import {
 } from '../functions/api/providers/production/checkalt-authz.mjs';
 import {
   isLegacyDepositRow,
+  persistPollOutcome,
   pickBlockingDeposit,
   shouldBlockNewProcessPost,
 } from '../functions/api/providers/production/checkalt-idempotency.mjs';
 import { handleProductionCheckAltSubmit } from '../functions/api/providers/production/checkalt-submit.mjs';
-import { handleProductionCheckAltApprove } from '../functions/api/providers/production/checkalt-approve.mjs';
+import {
+  handleProductionCheckAltApprove,
+  persistManagerApprovedAt,
+} from '../functions/api/providers/production/checkalt-approve.mjs';
 import {
   handleProductionCheckAltPoll,
   historyListOf,
@@ -335,6 +339,14 @@ const identityClient = (store) => ({
       row.last_status_payload = { provider_http_attempted: true };
       return { rows: [row] };
     }
+    if (text.includes('UPDATE public.checkalt_deposits')
+      && text.includes('approved_at = COALESCE(approved_at, now())')
+      && !text.includes('status = CASE')) {
+      const row = store.deposits.find((item) => item.id === params[0]);
+      if (!row) return { rows: [] };
+      if (!row.approved_at) row.approved_at = new Date().toISOString();
+      return { rows: [row] };
+    }
     if (text.includes('UPDATE public.checkalt_deposits') && text.includes('failure_class')) {
       if (store.persistOutcomeFails > 0) {
         store.persistOutcomeFails -= 1;
@@ -384,11 +396,13 @@ const fetchImpl = (store) => async (url, options = {}) => {
   }
   if (target.includes('/fincapture/deposit/approve')) {
     store.approvePosts += 1;
+    if (store.approveThrow) throw store.approveThrow;
+    const http = store.approveHttp || { ok: true, status: 200 };
     return {
-      ok: true,
-      status: 200,
+      ok: http.ok !== false,
+      status: http.status || 200,
       text: async () => JSON.stringify(store.approvePayload || {
-        success: true, status: 'Approved', statusDescription: 'OK',
+        success: true, status: 127, statusDescription: 'Approved',
       }),
     };
   }
@@ -1229,6 +1243,7 @@ test('approve still posts only when CheckAlt remains pending_approval', async ()
   assert.equal(store.processPosts, 0);
   assert.equal(store.deposits[0].status, 'submitted');
   assert.ok(!store.deposits[0].cleared_at);
+  assert.ok(store.deposits[0].approved_at);
 });
 
 test('status reconcile job is read/status only and never submits or approves', async () => {
@@ -1271,4 +1286,123 @@ test('production approve helper refuses a locator-less body', async () => {
   });
   assert.equal(result.error, 'deposit_locator_required');
   assert.equal(result.approvePosted, false);
+});
+
+const pendingApproveStore = (extra = {}) => {
+  const store = createStore();
+  store.itemPayload = { statusCode: 40, statusDescription: 'Pending Approval' };
+  store.deposits.push({
+    id: DEPOSIT_ID,
+    tenant_id: FREEDOM_TENANT,
+    check_intake_item_id: CHECK_ID,
+    checkalt_reference: '9001',
+    status: 'pending_approval',
+    amount: 12.34,
+    amount_cents: 1234,
+    approved_at: extra.approved_at || null,
+    last_status_payload: {},
+  });
+  return store;
+};
+
+const managerApprove = (store) => withEnv(productionFlags, () => handleProviderRequest(
+  jwtEvent('/functions/v1/checkalt-approve-deposit', 'POST', {
+    deposit_id: DEPOSIT_ID,
+    action: 'approve',
+  }),
+  '/functions/v1/checkalt-approve-deposit',
+  'POST',
+  submitDeps(store),
+));
+
+test('successful Manager approval stamps approved_at; failed/ambiguous approval does not', async () => {
+  const ok = pendingApproveStore();
+  ok.approvePayload = { success: true, status: 127, statusDescription: 'Approved' };
+  const okResult = await managerApprove(ok);
+  assert.equal(okResult.approvePosted, true);
+  assert.equal(okResult.status, 'submitted');
+  assert.ok(ok.deposits[0].approved_at);
+  assert.ok(!ok.deposits[0].cleared_at);
+
+  const rejected = pendingApproveStore();
+  rejected.approvePayload = { success: false, status: 40, statusDescription: 'Declined' };
+  const rejectedResult = await managerApprove(rejected);
+  assert.equal(rejectedResult.approvePosted, false);
+  assert.equal(rejectedResult.error, 'checkalt_approve_failed');
+  assert.equal(rejected.deposits[0].status, 'pending_approval');
+  assert.equal(rejected.deposits[0].approved_at, null);
+
+  const ambiguous = pendingApproveStore();
+  ambiguous.approveHttp = { ok: false, status: 500 };
+  ambiguous.approvePayload = { message: 'upstream' };
+  const ambiguousResult = await managerApprove(ambiguous);
+  assert.equal(ambiguousResult.approvePosted, false);
+  assert.equal(ambiguous.deposits[0].approved_at, null);
+});
+
+test('existing approved_at is preserved by Manager approve COALESCE', async () => {
+  const existing = '2026-09-20T12:00:00.000Z';
+  const store = pendingApproveStore({ approved_at: existing });
+  store.approvePayload = { success: true, status: 127, statusDescription: 'Approved' };
+  const result = await managerApprove(store);
+  assert.equal(result.approvePosted, true);
+  assert.equal(store.deposits[0].approved_at, existing);
+
+  const client = {
+    query: async (sql, params) => ({
+      rows: [{
+        id: params[0],
+        approved_at: existing,
+        status: 'submitted',
+      }],
+    }),
+  };
+  const saved = await persistManagerApprovedAt(client, DEPOSIT_ID);
+  assert.equal(saved.approved_at, existing);
+});
+
+test('polling/reconcile persist cannot create approved_at', async () => {
+  const pollSrc = persistPollOutcome.toString();
+  assert.doesNotMatch(pollSrc, /approved_at/);
+  assert.doesNotMatch(pollSrc, /persistManagerApprovedAt/);
+
+  const store = createStore();
+  store.itemPayload = { statusCode: 127, status: 127, statusDescription: 'Approved' };
+  store.deposits.push({
+    id: DEPOSIT_ID,
+    tenant_id: FREEDOM_TENANT,
+    check_intake_item_id: CHECK_ID,
+    checkalt_reference: '9001',
+    status: 'pending_approval',
+    amount: 12.34,
+    amount_cents: 1234,
+    approved_at: null,
+    cleared_at: null,
+  });
+  const polled = await withEnv(productionPollFlags, () => handleProviderRequest(
+    jwtEvent('/functions/v1/checkalt-poll-status', 'POST', {}),
+    '/functions/v1/checkalt-poll-status',
+    'POST',
+    submitDeps(store),
+  ));
+  assert.equal(polled.statusCode, 200);
+  assert.equal(store.deposits[0].status, 'submitted');
+  assert.equal(store.deposits[0].approved_at, null);
+  assert.equal(store.approvePosts, 0);
+});
+
+test('Fix A auto-approve persist path is unchanged by the Manager approved_at stamp', () => {
+  const approveSrc = fs.readFileSync(new URL('../functions/api/providers/production/checkalt-approve.mjs', import.meta.url), 'utf8');
+  const pollSrc = persistPollOutcome.toString();
+  const submitSrc = fs.readFileSync(new URL('../functions/api/providers/production/checkalt-submit.mjs', import.meta.url), 'utf8');
+  assert.match(approveSrc, /persistManagerApprovedAt/);
+  assert.match(approveSrc, /actionName === 'approve'/);
+  assert.doesNotMatch(pollSrc, /approved_at/);
+  assert.doesNotMatch(submitSrc, /persistManagerApprovedAt/);
+  const autoPath = path.join(path.dirname(fileURLToPath(import.meta.url)), '../functions/api/providers/production/checkalt-auto-approve.mjs');
+  if (fs.existsSync(autoPath)) {
+    const autoSrc = fs.readFileSync(autoPath, 'utf8');
+    assert.doesNotMatch(autoSrc, /persistManagerApprovedAt/);
+    assert.match(autoSrc, /persistAutoApproveOutcome/);
+  }
 });

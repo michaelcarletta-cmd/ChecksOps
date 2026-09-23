@@ -10,6 +10,18 @@ import {
   reconcileProductionCheckAltDeposit,
 } from './checkalt-poll.mjs';
 
+/** Manager /deposit/approve success only. Poll/reconcile must never call this. */
+export async function persistManagerApprovedAt(client, rowId) {
+  if (!rowId) return null;
+  return (await client.query(
+    `UPDATE public.checkalt_deposits
+     SET approved_at = COALESCE(approved_at, now())
+     WHERE id = $1::uuid
+     RETURNING *`,
+    [rowId],
+  )).rows[0] || null;
+}
+
 const jwtCache = { token: null, expiresAt: null };
 
 const fail = (error, statusCode, extra = {}) => ({
@@ -192,12 +204,15 @@ export async function handleProductionCheckAltApprove({
   }
 
   const internalStatus = actionName === 'reject' ? 'rejected' : 'submitted';
-  const saved = await persistPollOutcome(client, {
+  let saved = await persistPollOutcome(client, {
     rowId: row.id,
     status: internalStatus,
     reference: row.checkalt_reference,
     providerPayload: json,
   });
+  if (actionName === 'approve' && saved?.id) {
+    saved = await persistManagerApprovedAt(client, saved.id) || saved;
+  }
   return {
     ok: true,
     statusCode: 200,
