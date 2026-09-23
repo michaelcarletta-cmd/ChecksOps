@@ -212,6 +212,13 @@ const isOptionalSatelliteWriteError = (error) => {
 };
 
 const updateClaimCheckStageIfWritable = async (client, checkId) => {
+  let usedSavepoint = false;
+  try {
+    await client.query('SAVEPOINT claim_check_stage');
+    usedSavepoint = true;
+  } catch {
+    usedSavepoint = false;
+  }
   try {
     await client.query(
       `UPDATE public.claim_checks
@@ -219,7 +226,11 @@ const updateClaimCheckStageIfWritable = async (client, checkId) => {
        WHERE check_intake_item_id = $1::uuid`,
       [checkId],
     );
+    if (usedSavepoint) await client.query('RELEASE SAVEPOINT claim_check_stage');
   } catch (error) {
+    if (usedSavepoint) {
+      try { await client.query('ROLLBACK TO SAVEPOINT claim_check_stage'); } catch { /* keep parent txn */ }
+    }
     if (!isOptionalSatelliteWriteError(error)) throw error;
   }
 };
