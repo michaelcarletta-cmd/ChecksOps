@@ -1,4 +1,4 @@
--- NOT APPLIED. Repo artifact only. Do not apply from this PR until reviewed.
+-- Applied to production-prep after the enum-safe check_stage::text guard.
 --
 -- Safe OCR amount persistence for AWS check-ocr-intake.
 -- Fills check_intake_items.amount only when the row is still empty and the
@@ -52,7 +52,7 @@ BEGIN
    WHERE id = p_check_id
      AND amount IS NULL
      AND deposited_at IS NULL
-     AND COALESCE(check_stage, '') NOT IN ('deposited', 'voided', 'returned');
+     AND COALESCE(check_stage::text, '') NOT IN ('deposited', 'voided', 'returned');
 
   IF NOT FOUND THEN
     RETURN jsonb_build_object('ok', true, 'persisted', false, 'code', 'conflict_preserved');
