@@ -211,6 +211,7 @@ export const updatePayeeSigned = (client, endorsement, payload) => (
 );
 
 export const retryAutoAdvanceAfterOfficialRear = async (client, checkId) => {
+  await synchronizePayeesFromEndorsements(client, checkId);
   const evaluation = await evaluateCompletionState(client, checkId);
   return applyAutoAdvanceIfEligible(client, checkId, evaluation, { officialRearReady: true });
 };
@@ -325,17 +326,22 @@ export const applyAutoAdvanceIfEligible = async (client, checkId, result, { offi
         advance_check_on_endorsement_complete: 'already_ready',
       };
     }
-    await safeQuery(
-      client,
+    const routed = await client.query(
       `UPDATE public.check_intake_items
        SET status = 'branch_deposit_required', updated_at = now()
        WHERE id = $1::uuid
          AND deposited_at IS NULL
-         AND status IS DISTINCT FROM 'deposited'`,
+         AND status IS DISTINCT FROM 'deposited'
+       RETURNING id, status`,
       [checkId],
     );
-    await safeQuery(
-      client,
+    if (!routed.rowCount) {
+      throw Object.assign(new Error('ready_transition_not_applied'), {
+        statusCode: 503,
+        error: 'ready_transition_not_applied',
+      });
+    }
+    await client.query(
       `INSERT INTO public.check_audit_log (
          check_id, event_type, event_description, event_data, tenant_id
        ) VALUES (
@@ -352,10 +358,9 @@ export const applyAutoAdvanceIfEligible = async (client, checkId, result, { offi
     && String(check.deposit_recommendation || '') === 'ready_for_deposit';
   if (alreadyReady) {
     if (String(check.check_stage || '') !== 'ready_for_deposit') {
-      await safeQuery(
-        client,
+      await client.query(
         `UPDATE public.check_intake_items
-         SET check_stage = 'ready_for_deposit', updated_at = now()
+         SET check_stage = 'ready_for_deposit'::check_stage, updated_at = now()
          WHERE id = $1::uuid
            AND deposited_at IS NULL
            AND status IS DISTINCT FROM 'deposited'
@@ -363,10 +368,9 @@ export const applyAutoAdvanceIfEligible = async (client, checkId, result, { offi
            AND status IS DISTINCT FROM 'loss_draft_required'`,
         [checkId],
       );
-      await safeQuery(
-        client,
+      await client.query(
         `UPDATE public.claim_checks
-         SET check_stage = 'ready_for_deposit', updated_at = now()
+         SET check_stage = 'ready_for_deposit'::check_stage, updated_at = now()
          WHERE check_intake_item_id = $1::uuid`,
         [checkId],
       );
@@ -378,30 +382,34 @@ export const applyAutoAdvanceIfEligible = async (client, checkId, result, { offi
     };
   }
 
-  await safeQuery(
-    client,
+  const advanced = await client.query(
     `UPDATE public.check_intake_items
      SET status = 'approved_for_deposit',
          deposit_recommendation = 'ready_for_deposit',
-         check_stage = 'ready_for_deposit',
+         check_stage = 'ready_for_deposit'::check_stage,
          updated_at = now()
      WHERE id = $1::uuid
        AND deposited_at IS NULL
        AND status IS DISTINCT FROM 'deposited'
        AND status IS DISTINCT FROM 'voided'
        AND status IS DISTINCT FROM 'loss_draft_required'
-       AND check_stage IS DISTINCT FROM 'loss_draft'`,
+       AND check_stage IS DISTINCT FROM 'loss_draft'
+     RETURNING id, status, check_stage, deposit_recommendation`,
     [checkId],
   );
-  await safeQuery(
-    client,
+  if (!advanced.rowCount) {
+    throw Object.assign(new Error('ready_transition_not_applied'), {
+      statusCode: 503,
+      error: 'ready_transition_not_applied',
+    });
+  }
+  await client.query(
     `UPDATE public.claim_checks
-     SET check_stage = 'ready_for_deposit', updated_at = now()
+     SET check_stage = 'ready_for_deposit'::check_stage, updated_at = now()
      WHERE check_intake_item_id = $1::uuid`,
     [checkId],
   );
-  await safeQuery(
-    client,
+  await client.query(
     `INSERT INTO public.check_audit_log (
        check_id, event_type, event_description, event_data, tenant_id
      ) VALUES (
@@ -449,6 +457,10 @@ export const finalizeEndorsementState = async (client, checkId, {
       await invalidateOfficialRearImage(client, checkId, compositeDeps);
     }
     return applyRejectedWorkflow(client, checkId, evaluation);
+  }
+
+  if (evaluation.allSigned) {
+    await synchronizePayeesFromEndorsements(client, checkId);
   }
 
   let composited = null;
@@ -1064,7 +1076,7 @@ export const runAuthenticatedEndorsement = async ({
     const consent = typeof body.consentText === 'string' && body.consentText.trim()
       ? body.consentText
       : 'In-person electronic signature captured by staff on behalf of the named payee, who consented to sign electronically.';
-    await client.query(
+    const marked = await client.query(
       `UPDATE public.check_endorsements
        SET status = 'signed',
            signed_at = now(),
@@ -1077,10 +1089,24 @@ export const runAuthenticatedEndorsement = async ({
            token_expires_at = NULL,
            notes = COALESCE($7, notes),
            updated_at = now()
-       WHERE id = $1::uuid`,
+       WHERE id = $1::uuid
+       RETURNING id, status, signed_at, payee_id, payee_name, check_id`,
       [endorsement.id, signatureData, ip, ua, consent, newToken, body.notes || 'Signed in person, captured by staff'],
     );
-    await updatePayeeSigned(client, endorsement, {
+    if (!marked.rowCount) {
+      return {
+        ok: false,
+        statusCode: 503,
+        error: 'endorsement_update_not_applied',
+        endorsementId: endorsement.id,
+        spoofFieldsIgnored: spoof,
+      };
+    }
+    await updatePayeeSigned(client, {
+      ...endorsement,
+      payee_id: marked.rows[0]?.payee_id || endorsement.payee_id,
+      payee_name: marked.rows[0]?.payee_name || endorsement.payee_name,
+    }, {
       status: 'signed',
       token: newToken,
       image: signatureData,

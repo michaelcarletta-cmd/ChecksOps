@@ -519,7 +519,31 @@ test('Ready transition source does not submit CheckAlt', () => {
   assert.match(write, /synchronizePayeesFromEndorsements/);
   assert.match(documents, /retryAutoAdvanceAfterOfficialRear/);
   assert.match(endorsement, /officialRearReady: true/);
+  assert.match(endorsement, /ready_for_deposit'::check_stage/);
+  assert.match(endorsement, /ready_transition_not_applied/);
   assert.doesNotMatch(endorsement, /checkalt_deposits|processDeposit|submitCheckAlt/);
   assert.doesNotMatch(write, /checkalt_deposits|processDeposit|submitCheckAlt/);
   assert.equal(typeof updatePayeeSigned, 'function');
+});
+
+test('Ready intake UPDATE is fail-closed when no row is applied', async () => {
+  await withEnv({ AWS_ENDORSEMENT_AUTO_ADVANCE: 'true' }, async () => {
+    const store = createAdvanceStore();
+    const original = store.client.query;
+    store.client.query = async (sql, params = []) => {
+      const compact = String(sql).replace(/\s+/g, ' ');
+      if (compact.includes("SET status = 'approved_for_deposit'")) {
+        return { rows: [], rowCount: 0 };
+      }
+      return original(sql, params);
+    };
+    await assert.rejects(
+      () => applyAutoAdvanceIfEligible(store.client, CHECK_ID, {
+        allSigned: true,
+        anyRejected: false,
+      }, { officialRearReady: true }),
+      (error) => error.error === 'ready_transition_not_applied' && error.statusCode === 503,
+    );
+    assert.equal(store.check.status, 'endorsements_in_progress');
+  });
 });
