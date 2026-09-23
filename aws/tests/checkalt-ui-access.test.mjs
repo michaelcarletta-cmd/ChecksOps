@@ -328,6 +328,8 @@ test('Auto-Deposit still reads/writes the existing tenant columns only', async (
   assert.match(card, /select\("tenant_id, auto_approve_enabled, auto_approve_max_cents, registered"\)/);
   assert.match(card, /auto_approve_enabled: enabled/);
   assert.match(card, /auto_approve_max_cents: cents/);
+  assert.match(card, /echoAutoDepositSave/);
+  assert.match(card, /200000/);
   assert.equal(/sso_user_id/.test(card), false);
   assert.equal(/deposit_account_number/.test(card), false);
   assert.equal(/last_register_payload/.test(card), false);

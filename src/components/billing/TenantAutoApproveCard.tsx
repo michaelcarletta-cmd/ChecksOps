@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
-import { resolveAutoDepositUiState } from "@/lib/autoDepositUiState";
+import { dollarsToAutoApproveCents, echoAutoDepositSave, resolveAutoDepositUiState } from "@/lib/autoDepositUiState";
 
 /**
  * Per-tenant auto-approve controls for CheckAlt deposits.
@@ -52,10 +52,7 @@ export function TenantAutoApproveCard({ tenantId: tenantIdProp }: { tenantId?: s
   const save = useMutation({
     mutationFn: async () => {
       if (!tenantId) throw new Error("No tenant");
-      const cents = maxDollars.trim() === "" ? null : Math.round(parseFloat(maxDollars) * 100);
-      if (cents != null && (!Number.isFinite(cents) || cents < 0)) {
-        throw new Error("Invalid maximum amount");
-      }
+      const cents = dollarsToAutoApproveCents(maxDollars);
       const { error } = await supabase
         .from("checkalt_tenant_accounts")
         .update({
@@ -64,6 +61,15 @@ export function TenantAutoApproveCard({ tenantId: tenantIdProp }: { tenantId?: s
         })
         .eq("tenant_id", tenantId);
       if (error) throw error;
+      const { data: echoed, error: echoError } = await supabase
+        .from("checkalt_tenant_auto_deposit_public" as any)
+        .select("tenant_id, auto_approve_enabled, auto_approve_max_cents, registered")
+        .eq("tenant_id", tenantId)
+        .maybeSingle();
+      if (echoError) throw echoError;
+      const check = echoAutoDepositSave(echoed, { enabled, cents });
+      if (!check.ok) throw new Error(check.error);
+      return echoed;
     },
     onSuccess: () => {
       toast.success("Auto-approve settings saved");
@@ -123,7 +129,7 @@ export function TenantAutoApproveCard({ tenantId: tenantIdProp }: { tenantId?: s
 
             <div className="space-y-1.5">
               <Label htmlFor="auto-approve-max" className="text-xs">
-                Auto-approve ceiling (optional)
+                Auto-approve ceiling (required for automatic approval)
               </Label>
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">$</span>
@@ -132,7 +138,7 @@ export function TenantAutoApproveCard({ tenantId: tenantIdProp }: { tenantId?: s
                   type="number"
                   min="0"
                   step="0.01"
-                  placeholder="No limit"
+                  placeholder="e.g. 2000.00"
                   value={maxDollars}
                   onChange={(e) => setMaxDollars(e.target.value)}
                   disabled={!enabled || isLoading}
@@ -140,7 +146,8 @@ export function TenantAutoApproveCard({ tenantId: tenantIdProp }: { tenantId?: s
                 />
               </div>
               <p className="text-[11px] text-muted-foreground">
-                Deposits above this amount still go to manual review. Leave blank for no ceiling.
+                Stored as integer cents ($2,000 saves as 200000). A blank ceiling is NULL and
+                does not auto-approve. Deposits above the ceiling stay in pending approval.
               </p>
             </div>
 
