@@ -88,7 +88,7 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
     queryFn: async () => {
       const { data, error } = await supabase
         .from("check_intake_items")
-        .select("id, check_number, amount, carrier_name, issue_date, status, check_stage, created_at")
+        .select("id, check_number, amount, carrier_name, issue_date, status, check_stage, created_at, checkalt_deposits(status)")
         .eq("claim_id", claimId!)
         .order("issue_date", { ascending: false, nullsFirst: false });
       if (error) throw error;
@@ -99,6 +99,28 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
   const claim: any = readOnly ? rpcData?.claim : ownerClaim;
   const settlement: any = readOnly ? rpcData?.settlement : ownerSettlement;
   const siblingChecks: any[] = readOnly ? (rpcData?.sibling_checks ?? []) : ownerSiblingChecks;
+  const siblingIds = siblingChecks.map((c: any) => c.id).filter(Boolean);
+
+  // Partner RPC siblings omit checkalt_deposits. Best-effort read for the
+  // display label only — never writes, never calls CheckAlt.
+  const { data: checkAltStatusRows = [] } = useQuery({
+    queryKey: ["claim-ledger-checkalt-status", siblingIds.join(",")],
+    enabled: siblingIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("checkalt_deposits")
+        .select("check_intake_item_id, status")
+        .in("check_intake_item_id", siblingIds);
+      if (error) return [];
+      return data ?? [];
+    },
+  });
+  const checkAltStatusByIntake = new Map<string, string>();
+  for (const row of checkAltStatusRows as Array<{ check_intake_item_id?: string | null; status?: string | null }>) {
+    if (row.check_intake_item_id && row.status && !checkAltStatusByIntake.has(row.check_intake_item_id)) {
+      checkAltStatusByIntake.set(row.check_intake_item_id, row.status);
+    }
+  }
   const effectiveClaimId = readOnly ? (rpcData?.claim?.id ?? null) : claimId;
 
   const linkMutation = useMutation({
@@ -545,7 +567,12 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <Badge variant="outline" className="text-[9px] capitalize">
-                      {getDepositLabel(c as any)}
+                      {getDepositLabel({
+                        check_stage: c.check_stage,
+                        deposit_status: c.deposit_status ?? c.status,
+                        checkalt_status: checkAltStatusByIntake.get(c.id) ?? null,
+                        checkalt_deposits: c.checkalt_deposits,
+                      })}
                     </Badge>
                     <span className="tabular-nums font-medium">{fmt(Number(c.amount || 0))}</span>
                   </div>
