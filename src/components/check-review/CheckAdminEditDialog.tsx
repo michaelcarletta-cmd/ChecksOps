@@ -14,6 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { isAwsStaging } from "@/lib/awsStaging";
 import { pickAwsSafeIntakeUpdates } from "@/integrations/aws/safeIntakeFields";
 import { pickAwsSafeClaimCheckUpdates } from "@/integrations/aws/safeClaimCheckFields";
+import { adminOverrideCheckStatus } from "@/lib/adminCheckWorkflow";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -147,7 +148,12 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
       }
 
       if (effectiveStatus !== data.intake.status) {
-        intakeUpdates.status = effectiveStatus;
+        await adminOverrideCheckStatus({
+          checkId,
+          newStatus: effectiveStatus,
+          actorId: user?.id ?? null,
+          reason: "Admin edit check status correction",
+        });
         changes.push(`status → ${effectiveStatus.replace(/_/g, " ")}`);
       }
 
@@ -193,6 +199,9 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
       }
       const currentAmount = data.intake.amount != null ? Number(data.intake.amount) : null;
       if (newAmount !== currentAmount) {
+        if (isAwsStaging()) {
+          throw new Error("Amount cannot be changed on AWS. Status and descriptive fields can still be saved.");
+        }
         intakeUpdates.amount = newAmount;
         changes.push(`amount → ${newAmount != null ? `$${newAmount.toFixed(2)}` : "—"}`);
       }
@@ -215,6 +224,9 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
       const newRouting = digitsOrNull(form.routing_number);
       const currentRouting = (data.intake as any).routing_number ?? null;
       if (newRouting !== currentRouting) {
+        if (isAwsStaging()) {
+          throw new Error("Routing number cannot be changed on AWS. Status and descriptive fields can still be saved.");
+        }
         if (newRouting && newRouting.length !== 9) {
           throw new Error("Routing number must be exactly 9 digits");
         }
@@ -224,6 +236,9 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
       const newAccount = digitsOrNull(form.account_number);
       const currentAccount = (data.intake as any).account_number ?? null;
       if (newAccount !== currentAccount) {
+        if (isAwsStaging()) {
+          throw new Error("Account number cannot be changed on AWS. Status and descriptive fields can still be saved.");
+        }
         intakeUpdates.account_number = newAccount;
         changes.push(`account # → ${newAccount ? `***${newAccount.slice(-4)}` : "—"}`);
       }
@@ -232,25 +247,24 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
         const persist = isAwsStaging()
           ? pickAwsSafeIntakeUpdates(intakeUpdates)
           : { safe: intakeUpdates, skipped: [] };
-        if (Object.keys(persist.safe).length === 0) {
-          throw new Error("AWS staging cannot save status, amount, routing, account, or mortgage fields");
-        }
-        persist.safe.updated_at = new Date().toISOString();
-        const { error } = await supabase
-          .from("check_intake_items")
-          .update(persist.safe)
-          .eq("id", checkId);
-        if (error) throw error;
+        if (Object.keys(persist.safe).length > 0) {
+          persist.safe.updated_at = new Date().toISOString();
+          const { error } = await supabase
+            .from("check_intake_items")
+            .update(persist.safe)
+            .eq("id", checkId);
+          if (error) throw error;
 
-        await supabase.from("check_audit_log").insert([{
-          check_id: checkId,
-          event_type: "admin_correction",
-          actor_id: user?.id ?? null,
-          event_description: `Admin edit: ${Object.entries(persist.safe)
-            .filter(([k]) => k !== "updated_at")
-            .map(([k, v]) => `${k}=${v}`).join(", ")}`,
-          event_data: persist.safe as Record<string, any>,
-        }]);
+          await supabase.from("check_audit_log").insert([{
+            check_id: checkId,
+            event_type: "admin_correction",
+            actor_id: user?.id ?? null,
+            event_description: `Admin edit: ${Object.entries(persist.safe)
+              .filter(([k]) => k !== "updated_at")
+              .map(([k, v]) => `${k}=${v}`).join(", ")}`,
+            event_data: persist.safe as Record<string, any>,
+          }]);
+        }
       }
 
       // 3. Mirror descriptive fields to claim_checks if the row exists.
@@ -416,6 +430,8 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
                     onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
                     className="h-8 text-sm"
                     placeholder="0.00"
+                    readOnly={isAwsStaging()}
+                    disabled={isAwsStaging()}
                   />
                 </div>
                 <div className="space-y-1 col-span-2">
@@ -445,6 +461,8 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
                     className="h-8 text-sm font-mono"
                     placeholder="021000021"
                     maxLength={9}
+                    readOnly={isAwsStaging()}
+                    disabled={isAwsStaging()}
                   />
                 </div>
                 <div className="space-y-1">
@@ -456,10 +474,14 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
                     className="h-8 text-sm font-mono"
                     placeholder="From bottom of check"
                     maxLength={20}
+                    readOnly={isAwsStaging()}
+                    disabled={isAwsStaging()}
                   />
                 </div>
                 <p className="text-[10px] text-muted-foreground col-span-2 -mt-1">
-                  Routing & account numbers are read from the MICR line at the bottom of the check.
+                  {isAwsStaging()
+                    ? "Amount, routing, and account numbers are read-only on AWS. Carrier, check #, payee, date, mortgage routing, and status can be corrected."
+                    : "Routing & account numbers are read from the MICR line at the bottom of the check."}
                 </p>
               </div>
             </div>

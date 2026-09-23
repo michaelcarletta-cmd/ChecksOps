@@ -34,6 +34,7 @@ import {
 import { toast } from "sonner";
 import { format, differenceInDays } from "date-fns";
 import { CheckAdminEditDialog } from "./CheckAdminEditDialog";
+import { adminDeleteCheck, adminOverrideCheckStatus } from "@/lib/adminCheckWorkflow";
 
 type CheckRow = {
   id: string;
@@ -205,35 +206,14 @@ export function AdminCheckTracker({ searchQuery = "" }: { searchQuery?: string }
       const intakeId = c.check_intake_item_id;
       const { data: ud } = await supabase.auth.getUser();
 
-      // Audit BEFORE delete so the log survives
-      if (intakeId) {
-        await supabase.from("check_audit_log").insert({
-          check_id: intakeId,
-          event_type: "admin_deleted",
-          event_description: `Admin deleted check from Check Tracker (claim_check ${c.id})`,
-          actor_id: ud.user?.id ?? null,
-          event_data: {
-            claim_check_id: c.id,
-            check_intake_item_id: intakeId,
-            payee_line: c.payee_line,
-            amount: c.amount,
-            check_number: c.check_number,
-          },
-        });
+      if (!intakeId) {
+        throw new Error("This tracker row has no intake check to delete.");
       }
-
-      // Best-effort cleanup of dependent rows that may not cascade
-      if (intakeId) {
-        await (supabase.from("deposit_items") as any).delete().eq("check_id", intakeId);
-        await (supabase.from("check_endorsements") as any).delete().eq("check_intake_item_id", intakeId);
-      }
-      // Delete claim_checks first (FKs may reference it)
-      const { error: ccErr } = await (supabase.from("claim_checks") as any).delete().eq("id", c.id);
-      if (ccErr) throw ccErr;
-      if (intakeId) {
-        const { error: intakeErr } = await (supabase.from("check_intake_items") as any).delete().eq("id", intakeId);
-        if (intakeErr) throw intakeErr;
-      }
+      await adminDeleteCheck({
+        checkId: intakeId,
+        actorId: ud.user?.id ?? null,
+        reason: `Deleted from Check Tracker (claim_check ${c.id})`,
+      });
 
       toast.success("Check deleted");
       setDeleteTarget(null);
@@ -260,12 +240,11 @@ export function AdminCheckTracker({ searchQuery = "" }: { searchQuery?: string }
         // Route through the admin override RPC (SECURITY DEFINER) so stage,
         // status, claim_checks mirror and audit stay in sync.
         const { data: ud } = await supabase.auth.getUser();
-        const { error } = await supabase.rpc("admin_override_check_status", {
-          p_check_id: intakeId,
-          p_new_status: newStatus,
-          p_actor_id: ud.user?.id ?? null,
-        } as any);
-        if (error) throw error;
+        await adminOverrideCheckStatus({
+          checkId: intakeId,
+          newStatus,
+          actorId: ud.user?.id ?? null,
+        });
       } else {
         // No intake item linked — fall back to claim_checks only
         const depositStatus =

@@ -59,6 +59,7 @@ import { ViewCheckImageButton } from "@/components/checks/ViewCheckImageButton";
 import { toStorageObjectPath } from "@/lib/storagePath";
 import { assertCleanBackOriginalPath } from "@/lib/checkImageInvariants";
 import { AdminDeleteCheckButton } from "@/components/checks/AdminDeleteCheckButton";
+import { adminDeleteCheck, adminOverrideCheckStatus } from "@/lib/adminCheckWorkflow";
 import { ReuploadCheckImageButton } from "@/components/checks/ReuploadCheckImageButton";
 import { CheckImageCropper } from "@/components/checks/CheckImageCropper";
 import { EndorsementOverride } from "@/lib/endorsementLayout";
@@ -491,40 +492,11 @@ export default function CheckCommandCenter() {
 
   const deleteCheckMutation = useMutation({
     mutationFn: async (checkId: string) => {
-      // Delete all related records first (order matters for FK constraints)
-      const tables = [
-        "check_endorsement_events",
-        "check_endorsements",
-        "check_review_decisions",
-        "check_reissue_requests",
-        "check_eligibility_results",
-        "check_audit_log",
-        "check_payees",
-      ] as const;
-
-      for (const table of tables) {
-        const { error } = await supabase.from(table).delete().eq("check_id", checkId);
-        if (error) {
-          console.error(`[DELETE] Failed to delete from ${table}:`, error);
-          throw new Error(`Failed to clear ${table}: ${error.message}`);
-        }
-      }
-
-      // Remove any accounting rows and unlink any active loss draft before deleting the check
-      const { error: ccErr } = await supabase.from("claim_checks").delete().eq("check_intake_item_id", checkId);
-      if (ccErr) console.warn("[DELETE] claim_checks cleanup:", ccErr.message);
-
-      const { error: lossDraftErr } = await supabase
-        .from("loss_draft_tracking")
-        .update({ check_intake_item_id: null })
-        .eq("check_intake_item_id", checkId);
-      if (lossDraftErr) {
-        console.error("[DELETE] loss_draft_tracking unlink:", lossDraftErr);
-        throw new Error(`Failed to unlink loss draft: ${lossDraftErr.message}`);
-      }
-
-      const { error } = await supabase.from("check_intake_items").delete().eq("id", checkId);
-      if (error) throw new Error(`Failed to delete check: ${error.message}`);
+      await adminDeleteCheck({
+        checkId,
+        actorId: user?.id ?? null,
+        reason: "Deleted from check queue",
+      });
     },
     // Phase 4: drop the row from the queue immediately, restore it if the
     // delete fails server-side.
@@ -2842,17 +2814,11 @@ function StatusOverride({
     }
     setSaving(true);
     try {
-      // Route through the security-definer RPC: it validates the admin/staff
-      // permission server-side, updates status + stage + recommendation
-      // atomically, mirrors claim_checks, and writes the audit log — bypassing
-      // the RLS failures that blocked direct frontend updates.
-      const { data, error } = await supabase.rpc("admin_override_check_status", {
-        p_check_id: checkId,
-        p_new_status: newStatus,
-        p_actor_id: user?.id ?? null,
+      await adminOverrideCheckStatus({
+        checkId,
+        newStatus,
+        actorId: user?.id ?? null,
       });
-      if (error) throw error;
-      if (data && (data as any).ok === false) throw new Error((data as any).error ?? "Override rejected");
       toast({ title: "Status updated", description: `Moved to ${newStatus.replace(/_/g, " ")}` });
       setEditing(false);
       onSuccess();
