@@ -12,8 +12,8 @@ import {
 import { Loader2, Pencil, ShieldAlert, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { isAwsStaging } from "@/lib/awsStaging";
-import { pickAwsSafeIntakeUpdates } from "@/integrations/aws/safeIntakeFields";
 import { pickAwsSafeClaimCheckUpdates } from "@/integrations/aws/safeClaimCheckFields";
+import { submitAwsReviewCorrection } from "@/integrations/aws/workflow";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -229,28 +229,37 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
       }
 
       if (Object.keys(intakeUpdates).length > 0) {
-        const persist = isAwsStaging()
-          ? pickAwsSafeIntakeUpdates(intakeUpdates)
-          : { safe: intakeUpdates, skipped: [] };
-        if (Object.keys(persist.safe).length === 0) {
-          throw new Error("AWS staging cannot save status, amount, routing, account, or mortgage fields");
-        }
-        persist.safe.updated_at = new Date().toISOString();
-        const { error } = await supabase
-          .from("check_intake_items")
-          .update(persist.safe)
-          .eq("id", checkId);
-        if (error) throw error;
+        if (isAwsStaging()) {
+          const correction: Record<string, unknown> = {};
+          for (const key of ["carrier_name", "check_number", "amount", "payee_line", "issue_date"] as const) {
+            if (key in intakeUpdates) correction[key] = intakeUpdates[key];
+          }
+          if (Object.keys(correction).length === 0) {
+            throw new Error("AWS staging cannot save status, routing, account, or mortgage fields from this dialog");
+          }
+          const { data: sessionData } = await supabase.auth.getSession();
+          const token = sessionData.session?.access_token;
+          if (!token) throw new Error("Not authenticated");
+          await submitAwsReviewCorrection(token, checkId, correction);
+        } else {
+          const persist = { safe: intakeUpdates, skipped: [] as string[] };
+          persist.safe.updated_at = new Date().toISOString();
+          const { error } = await supabase
+            .from("check_intake_items")
+            .update(persist.safe)
+            .eq("id", checkId);
+          if (error) throw error;
 
-        await supabase.from("check_audit_log").insert([{
-          check_id: checkId,
-          event_type: "admin_correction",
-          actor_id: user?.id ?? null,
-          event_description: `Admin edit: ${Object.entries(persist.safe)
-            .filter(([k]) => k !== "updated_at")
-            .map(([k, v]) => `${k}=${v}`).join(", ")}`,
-          event_data: persist.safe as Record<string, any>,
-        }]);
+          await supabase.from("check_audit_log").insert([{
+            check_id: checkId,
+            event_type: "admin_correction",
+            actor_id: user?.id ?? null,
+            event_description: `Admin edit: ${Object.entries(persist.safe)
+              .filter(([k]) => k !== "updated_at")
+              .map(([k, v]) => `${k}=${v}`).join(", ")}`,
+            event_data: persist.safe as Record<string, any>,
+          }]);
+        }
       }
 
       // 3. Mirror descriptive fields to claim_checks if the row exists.
@@ -269,10 +278,12 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
           if (intakeUpdates.routing_number !== undefined) ccUpdates.routing_number = intakeUpdates.routing_number;
           if (intakeUpdates.account_number !== undefined) ccUpdates.account_number = intakeUpdates.account_number;
         }
-        if (intakeUpdates.check_number !== undefined) ccUpdates.check_number = intakeUpdates.check_number;
-        if (intakeUpdates.payee_line !== undefined) ccUpdates.payee_line = intakeUpdates.payee_line;
-        if (intakeUpdates.carrier_name !== undefined) ccUpdates.carrier_name = intakeUpdates.carrier_name;
-        if (intakeUpdates.issue_date !== undefined) ccUpdates.check_date = intakeUpdates.issue_date;
+        if (!isAwsStaging()) {
+          if (intakeUpdates.check_number !== undefined) ccUpdates.check_number = intakeUpdates.check_number;
+          if (intakeUpdates.payee_line !== undefined) ccUpdates.payee_line = intakeUpdates.payee_line;
+          if (intakeUpdates.carrier_name !== undefined) ccUpdates.carrier_name = intakeUpdates.carrier_name;
+          if (intakeUpdates.issue_date !== undefined) ccUpdates.check_date = intakeUpdates.issue_date;
+        }
         const persistCc = isAwsStaging()
           ? pickAwsSafeClaimCheckUpdates(ccUpdates)
           : { safe: ccUpdates, skipped: [] };

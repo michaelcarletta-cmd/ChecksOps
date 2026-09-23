@@ -3,7 +3,7 @@ import { Fragment, useState, useEffect, useRef, useCallback, useMemo } from "rea
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { isAwsStaging } from "@/lib/awsStaging";
-import { pickAwsSafeIntakeUpdates } from "@/integrations/aws/safeIntakeFields";
+import { submitAwsReviewCorrection } from "@/integrations/aws/workflow";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenantFilter } from "@/hooks/useTenantFilter";
@@ -127,6 +127,48 @@ function buildReviewDraftCheck(check: ReviewCheck, draft: ReviewFieldDraft): Rev
     routing_number: draft.routingNumber.replace(/\D/g, "").slice(0, 9) || null,
     account_number: draft.accountNumber.replace(/\D/g, "").slice(0, 20) || null,
   };
+}
+
+const AWS_REVIEW_CORRECTION_FIELDS = new Set([
+  "carrier_name",
+  "check_number",
+  "amount",
+  "payee_line",
+  "issue_date",
+]);
+
+function pickReviewCorrectionUpdates(
+  updates: Record<string, string | number | null>,
+): Record<string, string | number | null> {
+  const out: Record<string, string | number | null> = {};
+  for (const [key, value] of Object.entries(updates)) {
+    if (AWS_REVIEW_CORRECTION_FIELDS.has(key)) out[key] = value;
+  }
+  return out;
+}
+
+async function persistReviewFieldUpdates(
+  checkId: string,
+  updates: Record<string, string | number | null>,
+) {
+  if (isAwsStaging()) {
+    const correction = pickReviewCorrectionUpdates(updates);
+    if (Object.keys(correction).length === 0) {
+      throw new Error("AWS staging cannot save routing or account fields during Review");
+    }
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+    if (!token) throw new Error("Not authenticated");
+    await submitAwsReviewCorrection(token, checkId, correction);
+    return { skipped: Object.keys(updates).filter((key) => !(key in correction)) };
+  }
+  const persist = { safe: updates, skipped: [] as string[] };
+  const { error } = await supabase
+    .from("check_intake_items")
+    .update({ ...persist.safe, updated_at: new Date().toISOString() })
+    .eq("id", checkId);
+  if (error) throw error;
+  return persist;
 }
 
 function buildReviewFieldUpdatePayload(
@@ -763,30 +805,22 @@ export function ReviewDecisionPanel({
 
       if (Object.keys(updates).length === 0) throw new Error("No field changes to save");
 
-      const persist = isAwsStaging() ? pickAwsSafeIntakeUpdates(updates) : { safe: updates, skipped: [] };
-      if (Object.keys(persist.safe).length === 0) {
-        throw new Error("AWS staging cannot save amount, routing, or account fields");
-      }
-
-      const { error } = await supabase
-        .from("check_intake_items")
-        .update({ ...persist.safe, updated_at: new Date().toISOString() })
-        .eq("id", checkId);
-      if (error) throw error;
-
-      const persistedChanges = fieldChanges.filter((change) => change.field in persist.safe);
-      await supabase.from("check_audit_log").insert({
-        check_id: checkId,
-        event_type: "review_fields_saved",
-        event_description: persist.skipped.length
-          ? "Review fields updated without moving workflow status (AWS staging skipped financial fields)"
-          : "Review fields updated without moving workflow status",
-        event_data: {
-          field_changes: persistedChanges,
-          skipped_fields: persist.skipped,
-        },
-        actor_id: user?.id ?? null,
+      const persist = await persistReviewFieldUpdates(checkId, updates);
+      const persistedChanges = fieldChanges.filter((change) => {
+        if (isAwsStaging()) return change.field in pickReviewCorrectionUpdates(updates);
+        return !persist.skipped?.includes(change.field);
       });
+      if (!isAwsStaging()) {
+        await supabase.from("check_audit_log").insert({
+          check_id: checkId,
+          event_type: "review_fields_saved",
+          event_description: "Review fields updated without moving workflow status",
+          event_data: {
+            field_changes: persistedChanges,
+          },
+          actor_id: user?.id ?? null,
+        });
+      }
     },
     onSuccess: () => {
       formDirtyRef.current = false;
@@ -831,11 +865,7 @@ export function ReviewDecisionPanel({
       });
 
       if (Object.keys(updates).length > 0) {
-        const { error: updateError } = await supabase
-          .from("check_intake_items")
-          .update({ ...updates, updated_at: new Date().toISOString() })
-          .eq("id", checkId);
-        if (updateError) throw updateError;
+        await persistReviewFieldUpdates(checkId, updates);
       }
 
       const { data, error } = await supabase.rpc("submit_check_review_decision_safe", {
@@ -950,7 +980,7 @@ export function ReviewDecisionPanel({
               }}
             >
               <Edit3 className="h-3 w-3 mr-1" />
-              {editing ? "Cancel Edit" : "Edit Fields"}
+              {editing ? "Cancel Edit" : "Edit Check"}
             </Button>
           </div>
         </div>
@@ -1098,6 +1128,7 @@ export function ReviewDecisionPanel({
                   className="h-8 text-sm"
                 />
               </div>
+              {!isAwsStaging() && (
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <Label className="text-xs">Routing #</Label>
@@ -1121,6 +1152,7 @@ export function ReviewDecisionPanel({
                   />
                 </div>
               </div>
+              )}
               <Button
                 type="button"
                 size="sm"
