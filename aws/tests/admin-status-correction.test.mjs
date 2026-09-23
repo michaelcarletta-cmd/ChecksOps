@@ -63,6 +63,7 @@ const mockClient = ({
   platformOwner = false,
   masterOwner = false,
   check = checkRow,
+  claimChecksError = null,
 } = {}) => {
   const queries = [];
   return {
@@ -71,7 +72,12 @@ const mockClient = ({
     end: async () => {},
     query: async (sql, params) => {
       queries.push({ sql, params });
-      if (sql === 'BEGIN' || sql === 'ROLLBACK' || sql === 'COMMIT' || sql === 'SET TRANSACTION READ WRITE') {
+      if (
+        sql === 'BEGIN' || sql === 'ROLLBACK' || sql === 'COMMIT' || sql === 'SET TRANSACTION READ WRITE'
+        || sql === 'SAVEPOINT admin_status_claim_mirror'
+        || sql === 'RELEASE SAVEPOINT admin_status_claim_mirror'
+        || sql === 'ROLLBACK TO SAVEPOINT admin_status_claim_mirror'
+      ) {
         return { rows: [] };
       }
       if (sql.startsWith('SELECT set_config')) return { rows: [{ set_config: params[1] }] };
@@ -106,7 +112,14 @@ const mockClient = ({
       if (/UPDATE public.check_intake_items/.test(sql)) {
         return { rows: [{ ...check, status: params?.[1] || check.status, check_stage: params?.[2] || check.check_stage }] };
       }
-      if (/UPDATE public.claim_checks/.test(sql)) return { rows: [] };
+      if (/UPDATE public.claim_checks/.test(sql)) {
+        if (claimChecksError) {
+          const error = new Error(claimChecksError.message);
+          error.code = claimChecksError.code;
+          throw error;
+        }
+        return { rows: [] };
+      }
       if (/INSERT INTO public.check_audit_log/.test(sql)) return { rows: [{ id: 'audit' }] };
       if (/DELETE FROM public.check_intake_items/.test(sql)) return { rows: [{ id: CHECK_ID }] };
       if (/DELETE FROM public.check_/.test(sql) || /DELETE FROM public.loss_draft/.test(sql) || /DELETE FROM public.mortgage_/.test(sql)) {
@@ -159,6 +172,20 @@ test('admin status correction succeeds for an authorized tenant admin', async ()
   assert.match(String(audit.params[3]), /endorsements_in_progress/);
   assert.match(String(audit.params[3]), /needs_review/);
   assert.equal(JSON.parse(audit.params[4]).reason, 'Misclassified');
+});
+
+test('claim_checks mirror permission denied does not fail the intake correction', async () => {
+  const client = mockClient({
+    claimChecksError: { code: '42501', message: 'permission denied for table claim_checks' },
+  });
+  const result = await handleAdminStatusCorrection(jwtEvent('/workflow/admin-status-correction', 'POST', {
+    check_id: CHECK_ID,
+    new_status: 'needs_review',
+  }), depsFor(client));
+  assert.equal(result.ok, true);
+  assert.equal(result.data.new_status, 'needs_review');
+  assert.ok(client.queries.some((q) => q.sql === 'ROLLBACK TO SAVEPOINT admin_status_claim_mirror'));
+  assert.ok(client.queries.some((q) => /INSERT INTO public.check_audit_log/.test(q.sql)));
 });
 
 test('unauthorized staff or member cannot perform admin status correction', async () => {

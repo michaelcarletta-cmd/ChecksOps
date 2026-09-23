@@ -225,12 +225,28 @@ export const handleAdminStatusCorrection = async (event, deps = {}) => {
     }
     const updated = rows[0];
 
-    await client.query(
-      `UPDATE public.claim_checks
-       SET check_stage = $2::public.check_stage, updated_at = now()
-       WHERE check_intake_item_id = $1::uuid`,
-      [looked.check.id, nextStage],
-    );
+    // Historical DEFINER RPC mirrored claim_checks.check_stage. The staging
+    // application role has no table UPDATE grant, so this is best-effort and
+    // must not abort the authorized intake correction transaction.
+    let claimChecksMirrored = false;
+    await client.query('SAVEPOINT admin_status_claim_mirror');
+    try {
+      await client.query(
+        `UPDATE public.claim_checks
+         SET check_stage = $2::public.check_stage, updated_at = now()
+         WHERE check_intake_item_id = $1::uuid`,
+        [looked.check.id, nextStage],
+      );
+      await client.query('RELEASE SAVEPOINT admin_status_claim_mirror');
+      claimChecksMirrored = true;
+    } catch (error) {
+      await client.query('ROLLBACK TO SAVEPOINT admin_status_claim_mirror');
+      const code = String(error?.code || '');
+      const message = String(error?.message || error);
+      if (code !== '42501' && !/permission denied for (table|relation) claim_checks/i.test(message)) {
+        throw error;
+      }
+    }
 
     await client.query(
       `INSERT INTO public.check_audit_log (
@@ -269,6 +285,7 @@ export const handleAdminStatusCorrection = async (event, deps = {}) => {
         actor_id: actorId,
         timestamp: updated.updated_at || correctedAt,
         reason,
+        claim_checks_mirrored: claimChecksMirrored,
       },
       applicationUserId: mapping.application_user_id,
       authUid: mapping.application_user_id,
