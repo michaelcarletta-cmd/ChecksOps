@@ -253,6 +253,35 @@ export async function persistProviderOutcome(client, {
   )).rows[0];
 }
 
+export async function persistAutoApproveOutcome(client, {
+  rowId,
+  approved = false,
+  skipReason = null,
+  approvePayload = null,
+}) {
+  const payload = JSON.stringify(sanitizeAuditDetails({
+    _auto_approve: {
+      approved: approved === true,
+      skip_reason: skipReason || null,
+      at: new Date().toISOString(),
+      response_keys: approvePayload && typeof approvePayload === 'object'
+        ? Object.keys(approvePayload).slice(0, 40)
+        : [],
+      status_code: approvePayload?.status ?? approvePayload?.statusCode ?? null,
+    },
+  }));
+  return (await client.query(
+    `UPDATE public.checkalt_deposits
+     SET status = CASE WHEN $2::boolean THEN 'submitted' ELSE status END,
+         approved_at = CASE WHEN $2::boolean THEN COALESCE(approved_at, now()) ELSE approved_at END,
+         last_status_payload = COALESCE(last_status_payload, '{}'::jsonb) || $3::jsonb,
+         updated_at = now()
+     WHERE id = $1::uuid
+     RETURNING *`,
+    [rowId, approved === true, payload],
+  )).rows[0] || null;
+}
+
 export async function persistPollOutcome(client, {
   rowId,
   status,
