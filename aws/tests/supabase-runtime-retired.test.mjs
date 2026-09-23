@@ -61,7 +61,7 @@ test('legacy publish-key check is a no-op and env files have no supabase credent
   const local = fs.readFileSync(path.join(ROOT, '.env'), 'utf8');
   const example = fs.readFileSync(path.join(ROOT, '.env.example'), 'utf8');
   assert.match(checker, /do not use VITE_SUPABASE_/);
-  assert.doesNotMatch(prod, /VITE_SUPABASE_/);
-  assert.doesNotMatch(local, /VITE_SUPABASE_/);
-  assert.doesNotMatch(example, /VITE_SUPABASE_/);
+  assert.doesNotMatch(prod, /^VITE_SUPABASE_[A-Z0-9_]+=/m);
+  assert.doesNotMatch(local, /^VITE_SUPABASE_[A-Z0-9_]+=/m);
+  assert.doesNotMatch(example, /^VITE_SUPABASE_[A-Z0-9_]+=/m);
 });

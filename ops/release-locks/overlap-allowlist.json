@@ -429,6 +429,293 @@
       "reason": "PR #449 adds fail-closed AWS tenant create on the write allowlist and updates the database-rls tree hash; allow parallel review with open PR #448 on the same protected files.",
       "expires": "2026-12-31",
       "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 428,
+      "path": ".env.production.aws.example",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 319,
+      "path": ".env.production.aws.example",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 316,
+      "path": ".env.production.aws.example",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 237,
+      "path": ".env.production.aws.example",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 234,
+      "path": ".env.production.aws.example",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 347,
+      "path": "src/components/deposit-ops/DepositManagerCommandCenter.tsx",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 342,
+      "path": "src/components/deposit-ops/DepositManagerCommandCenter.tsx",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 339,
+      "path": "src/components/deposit-ops/DepositManagerCommandCenter.tsx",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 430,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 429,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 411,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 410,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 364,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 347,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 316,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 312,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 310,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 309,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 283,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 282,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 257,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 254,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 237,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 234,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 229,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 226,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 222,
+      "path": "src/integrations/aws/client.ts",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 430,
+      "path": "src/lib/awsStaging.ts",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 428,
+      "path": "src/lib/awsStaging.ts",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 316,
+      "path": "src/lib/awsStaging.ts",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 237,
+      "path": "src/lib/awsStaging.ts",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 234,
+      "path": "src/lib/awsStaging.ts",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 172,
+      "path": "src/lib/awsStaging.ts",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 432,
+      "path": "src/lib/prepareCheckAltDeposit.ts",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 438,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 432,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 428,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 429,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 428,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 438,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 432,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #449 retires the hosted Supabase SPA client and only changes import paths or AWS-client comments on this protected file; allow parallel review while the other PR remains open.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
     }
   ]
 }

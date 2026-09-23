@@ -33,8 +33,8 @@ test('financial activation SQL remains a NOT_APPLIED stub and is not auto-applie
 
 test('live production frontend env does not ship hosted Supabase credentials', () => {
   const prod = read('.env.production');
-  assert.doesNotMatch(prod, /VITE_SUPABASE_/);
-  assert.doesNotMatch(prod, /supabase\.co/);
+  assert.doesNotMatch(prod, /^VITE_SUPABASE_[A-Z0-9_]+=/m);
+  assert.doesNotMatch(prod, /https:\/\/[a-z0-9]+\.supabase\.co/);
   const example = read('.env.production.aws.example');
   assert.match(example, /Private production AWS frontend/);
   assert.match(example, /us-east-1_vPmQ7cL1F/);

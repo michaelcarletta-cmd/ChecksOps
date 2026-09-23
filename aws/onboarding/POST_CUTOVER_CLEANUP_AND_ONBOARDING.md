@@ -190,7 +190,7 @@ None to live AWS resources, DNS, flags, Freedom provider identities, or producti
 
 ## P. Staging tests performed
 
-Unit tests for tenant insert isolation, allowlist denial of provider columns, tenant/email/class-A handlers, and `validate-release-locks` passed. Full `npm run test:aws-api` was 1104 pass / 9 fail / 3 skip: the 9 failures are disposable local PostgreSQL 16 `initdb` matrices, not this change. No money movement. No production tenant created.
+Unit tests for tenant insert isolation, allowlist denial of provider columns, tenant/email/class-A handlers, and `validate-release-locks` passed. After the SPA client retirement, `npm run test:aws-api` is 1107 pass / 9 fail / 3 skip: the 9 failures are the same disposable local PostgreSQL 16 `initdb` matrices. See `aws/onboarding/SUPABASE_RUNTIME_RETIREMENT.md`. No money movement. No production tenant created.
 
 ## Q. Regression results
 
