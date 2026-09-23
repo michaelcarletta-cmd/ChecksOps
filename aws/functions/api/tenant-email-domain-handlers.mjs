@@ -7,6 +7,7 @@ import { defaultFromAddress } from './email-policy.mjs';
 import {
   resolveEmailBranding,
   brandingForTemplate,
+  resolveTenantLogoUrl,
 } from './email-branding.mjs';
 import { renderChecksOpsEmail } from './email-layout.mjs';
 import {
@@ -113,7 +114,7 @@ const publicSettings = (row, tenant = {}, access = {}) => {
   return {
     tenantId: row?.tenant_id || tenant.id || null,
     tenantName: tenant.name || null,
-    logoUrl: tenant.logo_url || null,
+    logoUrl: resolveTenantLogoUrl(tenant.logo_url, null),
     primaryColor: tenant.primary_color || null,
     fromName: row?.from_name || tenant.name || null,
     replyTo: row?.reply_to || tenant.email_reply_to || null,
