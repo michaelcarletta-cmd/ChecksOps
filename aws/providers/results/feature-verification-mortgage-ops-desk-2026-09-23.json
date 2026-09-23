@@ -1,0 +1,87 @@
+{
+  "recordedAt": "2026-09-23T21:42:00Z",
+  "workstream": "feature-verification-mortgage-ops-desk",
+  "verdict": "PARTIAL_PASS",
+  "environment": "staging",
+  "api": "https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging",
+  "frontend": "https://staging.checksops.com/mortgage-ops/queue",
+  "productionModified": false,
+  "cognitoPoolConfigurationModified": false,
+  "sesConfigurationModified": false,
+  "passwordAuthReopened": false,
+  "checkaltDeposit": false,
+  "moov": false,
+  "completeOrBill": false,
+  "otp": {
+    "codeUsed": "74572267",
+    "http": 200,
+    "completed": true,
+    "passwordUsed": false
+  },
+  "identity": {
+    "applicationUserId": "b100f05d-9e81-4a7b-b9cc-9baf173131d9",
+    "cognitoSub": "047824f8-b0b1-7018-c5e3-c0350a6c8a40",
+    "email": "claims@freedomadj.com",
+    "fullName": "Morgan Carletta",
+    "roles": ["mortgage_agent"],
+    "tenants": [],
+    "subEqualsApplicationUserId": false,
+    "isMasterOwner": false,
+    "privileged": false,
+    "identityEnv": "staging"
+  },
+  "role": {
+    "id": "5ce3f34f-7404-455c-b2c4-f6d39845547e",
+    "role": "mortgage_agent",
+    "otherRoles": []
+  },
+  "queue": {
+    "http": 200,
+    "visible": 3,
+    "accepted": "d42ba6fb-b967-4414-b373-f3b78cfbb751",
+    "remainingRequested": "7f549fcb-1d1c-4ef7-9168-33f22a56be39",
+    "completedHistory": "aa3d85f9-ebed-4100-acf6-34d73109539d"
+  },
+  "accept": {
+    "rpc": "accept_mortgage_handling_request",
+    "http": 200,
+    "status": "in_progress",
+    "assignedEmployeeId": "b100f05d-9e81-4a7b-b9cc-9baf173131d9",
+    "acceptedAt": "2026-09-23T21:40:41.191Z"
+  },
+  "images": {
+    "function": "get-check-image-urls",
+    "checkId": "d8cf4555-28b4-431a-8807-eaf128a22223",
+    "http": 404,
+    "error": "not_found",
+    "checkEmbed": null,
+    "visibleCheckCount": 0,
+    "classification": "orphan_check_fixture"
+  },
+  "documents": {
+    "check_files": 0,
+    "library": 0,
+    "loss_draft": null,
+    "messages": 0
+  },
+  "notes": {
+    "rpc": "update_mortgage_handling_request_status",
+    "statusArg": "in_progress",
+    "http": 200,
+    "persisted": true,
+    "completedAt": null,
+    "billingStatus": "unbilled"
+  },
+  "isolation": {
+    "hire": { "http": 403, "error": "Admin access required" },
+    "is_master_owner": false,
+    "is_platform_owner": false,
+    "checkalt_submit": { "http": 403, "error": "provider_disabled" },
+    "checkalt_preflight": { "http": 403, "error": "provider_disabled" },
+    "moov_payout": { "http": 403, "error": "provider_disabled" },
+    "save_checkalt_settings": { "http": 403, "error": "not_authorized" },
+    "password_login": { "http": 410, "error": "password_auth_disabled" },
+    "tenant_users": [],
+    "unscoped_checks": 0
+  }
+}

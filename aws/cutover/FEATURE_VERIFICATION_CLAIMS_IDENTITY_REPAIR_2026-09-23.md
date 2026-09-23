@@ -81,11 +81,11 @@ Not modified. Staging login does not read it. The protect trigger treats a lock 
 | `passwordUsed` | false |
 | `environment` | staging |
 | destination | `c***@f***` |
-| verify | **not called** |
+| verify | completed after operator codes — see desk record |
 
 This is a **real** Cognito challenge: user exists and is CONFIRMED; mailbox received a new message at `2026-09-23T21:30:52Z` from `no-reply@verificationemail.com` (Cognito default), subject “Your authentication code”. Earlier missing-user starts delivered no Cognito-default mail.
 
-Operator retrieves the code. This run does not verify it and does not continue desk acceptance.
+Operator codes: `42161060` expired session; `9103830` invalid/stale; `74572267` **200** `completed=true` `passwordUsed=false`. Desk walk is in `FEATURE_VERIFICATION_MORTGAGE_OPS_DESK_2026-09-23.md`.
 
 ## J. Production unchanged
 
