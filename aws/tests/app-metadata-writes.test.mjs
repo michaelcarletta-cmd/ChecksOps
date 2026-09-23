@@ -53,6 +53,8 @@ test('tenant insert is platform-owner only and fail-closes provider inheritance'
         assert.equal(params[8], 'active');
         assert.match(sql, /moov_allowlisted/);
         assert.match(sql, /false, false, false, NULL/);
+        assert.match(sql, /monthly_rate_cents, actum_credits_only/);
+        assert.match(sql, /0, false/);
         assert.doesNotMatch(sql, /freedom/i);
         return {
           rows: [{
@@ -285,4 +287,16 @@ test('operator SQL grants tenant INSERT only under platform-owner RLS', () => {
   assert.doesNotMatch(sql, /GRANT UPDATE OF/);
   assert.doesNotMatch(sql, /moov_allowlisted/);
   assert.doesNotMatch(sql, /UPDATE public\.tenants SET/);
+});
+
+test('operator SQL neutralizes new-tenant billing defaults without rewriting rows', () => {
+  const sql = fs.readFileSync(
+    path.join(ROOT, 'onboarding/sql/83_new_tenant_neutral_billing_defaults.sql'),
+    'utf8',
+  );
+  assert.match(sql, /ALTER COLUMN payment_provider SET DEFAULT NULL/);
+  assert.match(sql, /ALTER COLUMN monthly_rate_cents SET DEFAULT 0/);
+  assert.match(sql, /ALTER COLUMN actum_credits_only SET DEFAULT false/);
+  assert.doesNotMatch(sql, /UPDATE public\.tenants/);
+  assert.doesNotMatch(sql, /2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/);
 });

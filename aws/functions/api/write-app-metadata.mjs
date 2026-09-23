@@ -664,7 +664,8 @@ const executeTenantInsert = async ({ client, values }) => {
          email_provider_config, invoice_footer_note, invoice_default_terms,
          is_system_tenant, is_founding_partner, moov_allowlisted, moov_account_id,
          payment_provider, payment_status, bank_connection_status, bank_name,
-         bank_last_four, plaid_funding_account_id, stripe_customer_id
+         bank_last_four, plaid_funding_account_id, stripe_customer_id,
+         monthly_rate_cents, actum_credits_only
        ) VALUES (
          $1, $2, $3, $4, $5, $6,
          $7, $8, $9, $10,
@@ -672,7 +673,8 @@ const executeTenantInsert = async ({ client, values }) => {
          $15::jsonb, $16, $17,
          false, false, false, NULL,
          NULL, 'not_connected', 'not_connected', NULL,
-         NULL, NULL, NULL
+         NULL, NULL, NULL,
+         0, false
        )
        RETURNING *`,
       [
