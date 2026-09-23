@@ -19,6 +19,51 @@ export const emailAssetOrigin = () => String(
 
 export const checksOpsLogoUrl = () => `${emailAssetOrigin()}/checksops-logo.png`;
 
+/** Public branding objects are served by the AWS API, not the SPA origin. */
+export const publicStorageOrigin = () => {
+  const explicit = String(process.env.AWS_API_PUBLIC_URL || process.env.API_PUBLIC_URL || '').trim();
+  if (explicit) return explicit.replace(/\/$/, '');
+  const sign = String(process.env.SIGN_BASE_URL || process.env.APP_PUBLIC_URL || '').trim().replace(/\/$/, '');
+  if (sign) {
+    try {
+      const host = new URL(sign).hostname.toLowerCase();
+      if (host === 'checksops.com' || host === 'www.checksops.com') {
+        return 'https://checksops.com/prep';
+      }
+    } catch {
+      /* fall through */
+    }
+  }
+  return 'https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging';
+};
+
+export const resolveTenantLogoUrl = (value, fallback = null) => {
+  const raw = String(value || '').trim();
+  if (!raw) return fallback;
+  const supabase = raw.match(
+    /^https?:\/\/[^/]*supabase\.co\/storage\/v1\/object\/(?:public|sign)\/([^/]+)\/([^?]+)/i,
+  );
+  if (supabase) {
+    const bucket = supabase[1];
+    const path = decodeURIComponent(supabase[2]);
+    if (bucket === 'tenant-logos' || bucket === 'email-assets' || bucket === 'company-branding') {
+      return `${publicStorageOrigin()}/storage/public?bucket=${encodeURIComponent(bucket)}&path=${encodeURIComponent(path)}`;
+    }
+  }
+  if (isSafeHttpUrl(raw)) return raw;
+  const path = raw.replace(/^\//, '');
+  if (
+    path
+    && path.length <= 512
+    && !path.includes('..')
+    && !path.includes(':')
+    && /^[A-Za-z0-9._\-/=]+$/.test(path)
+  ) {
+    return `${publicStorageOrigin()}/storage/public?bucket=tenant-logos&path=${encodeURIComponent(path)}`;
+  }
+  return fallback;
+};
+
 /**
  * Allow only https URLs in email href/src attributes.
  * http is permitted solely for loopback hosts (local test environments).
@@ -199,7 +244,7 @@ export const resolveEmailBranding = async (client, { tenantId = null, senderOver
   const primaryColor = isSafeHexColor(tenant.primary_color)
     ? String(tenant.primary_color).trim()
     : platform.primaryColor;
-  const logoUrl = safeHttpUrl(tenant.logo_url, platform.logoUrl);
+  const logoUrl = resolveTenantLogoUrl(tenant.logo_url, platform.logoUrl);
 
   if (verified) {
     return {

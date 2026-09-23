@@ -8,7 +8,9 @@ import {
   isSafeHttpUrl,
   isVerifiedCustomSender,
   platformBranding,
+  publicStorageOrigin,
   resolveEmailBranding,
+  resolveTenantLogoUrl,
 } from '../functions/api/email-branding.mjs';
 import { sendViaSesOrSink } from '../functions/api/email.mjs';
 import { renderTransactionalTemplate, TEMPLATE_NAMES } from '../functions/api/email-templates.mjs';
@@ -65,6 +67,41 @@ test('unsafe tenant color is not injected into CSS', () => {
   });
   assert.doesNotMatch(layout.html, /javascript:/);
   assert.match(layout.html, /#1a56db/);
+});
+
+test('publicStorageOrigin uses production /prep when SIGN_BASE_URL is checksops.com', () => {
+  const prevSign = process.env.SIGN_BASE_URL;
+  const prevApi = process.env.AWS_API_PUBLIC_URL;
+  const prevApi2 = process.env.API_PUBLIC_URL;
+  delete process.env.AWS_API_PUBLIC_URL;
+  delete process.env.API_PUBLIC_URL;
+  process.env.SIGN_BASE_URL = 'https://checksops.com';
+  assert.equal(publicStorageOrigin(), 'https://checksops.com/prep');
+  process.env.AWS_API_PUBLIC_URL = 'https://explicit.example/api';
+  assert.equal(publicStorageOrigin(), 'https://explicit.example/api');
+  if (prevSign === undefined) delete process.env.SIGN_BASE_URL;
+  else process.env.SIGN_BASE_URL = prevSign;
+  if (prevApi === undefined) delete process.env.AWS_API_PUBLIC_URL;
+  else process.env.AWS_API_PUBLIC_URL = prevApi;
+  if (prevApi2 === undefined) delete process.env.API_PUBLIC_URL;
+  else process.env.API_PUBLIC_URL = prevApi2;
+});
+
+test('tenant logo resolver rewrites supabase and relative paths to AWS public storage', () => {
+  const origin = publicStorageOrigin();
+  const supabase = 'https://example.supabase.co/storage/v1/object/public/tenant-logos/2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/logo.png';
+  const rewritten = resolveTenantLogoUrl(supabase, 'fallback');
+  assert.equal(
+    rewritten,
+    `${origin}/storage/public?bucket=tenant-logos&path=${encodeURIComponent('2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/logo.png')}`,
+  );
+  const relative = resolveTenantLogoUrl('2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/logo-1.png', 'fallback');
+  assert.equal(
+    relative,
+    `${origin}/storage/public?bucket=tenant-logos&path=${encodeURIComponent('2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/logo-1.png')}`,
+  );
+  assert.equal(resolveTenantLogoUrl('https://cdn.acme.test/brand.png', 'fallback'), 'https://cdn.acme.test/brand.png');
+  assert.equal(resolveTenantLogoUrl('javascript:alert(1)', 'fallback'), 'fallback');
 });
 
 test('tenant logo replaces the platform logo and missing or unsafe logos fall back', async () => {

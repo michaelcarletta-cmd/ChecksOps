@@ -25,6 +25,21 @@ const publicDb = async () => {
 
 const hashToken = (value) => createHash('sha256').update(String(value)).digest('hex');
 
+export const homeownerUploadTokenFromEvent = (event, body = {}) => {
+  const authHeader = event.headers?.authorization || event.headers?.Authorization || '';
+  const bearer = authHeader.match(/^Bearer\s+(.+)$/i)?.[1]?.trim() || '';
+  const explicit = String(
+    body.upload_token
+    || body.uploadToken
+    || event.headers?.['x-homeowner-upload-token']
+    || event.headers?.['X-Homeowner-Upload-Token']
+    || '',
+  ).trim();
+  if (explicit) return explicit;
+  if (/^[a-f0-9]{32,80}$/i.test(bearer)) return bearer;
+  return '';
+};
+
 const mintCode = () => String(randomInt(100000, 999999));
 
 export const runHomeownerUploadOtpStart = async ({ client, body, spoof, send }) => {
@@ -203,13 +218,7 @@ export const handleHomeownerUploadOtpVerify = async (event) => {
 export const handleHomeownerUploadSession = async (event) => {
   const body = parseBody(event);
   const spoof = ignoredSpoof(event, body);
-  const token = String(
-    body.upload_token
-    || body.uploadToken
-    || event.headers?.['x-homeowner-upload-token']
-    || event.headers?.['X-Homeowner-Upload-Token']
-    || '',
-  ).trim();
+  const token = homeownerUploadTokenFromEvent(event, body);
   const action = body.action || 'get';
   if (!token || token.length < 32) {
     return { ok: false, statusCode: 401, error: 'missing_upload_token', spoofFieldsIgnored: spoof };
