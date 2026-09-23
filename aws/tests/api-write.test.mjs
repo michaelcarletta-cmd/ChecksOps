@@ -169,6 +169,31 @@ test('allowlist rejects financial tables and unknown columns; ignores spoof iden
   assert.equal(stepupOk.values.tenant_id, APP_ID);
 });
 
+test('company_branding ignores missing logo_url column; tenants accept invoice theme writes', () => {
+  const branding = pickAllowlistedValues('company_branding', {
+    company_name: 'Freedom',
+    letterhead_url: 'letterhead_1.png',
+    logo_url: 'should-be-ignored',
+    updated_at: '2026-09-23T00:00:00.000Z',
+  });
+  assert.equal(branding.error, undefined, JSON.stringify(branding));
+  assert.equal(branding.values.company_name, 'Freedom');
+  assert.equal(branding.values.letterhead_url, 'letterhead_1.png');
+  assert.equal(branding.values.logo_url, undefined);
+  assert.equal(branding.ignored.includes('logo_url'), true);
+  assert.equal(branding.ignored.includes('updated_at'), true);
+
+  const tenants = pickAllowlistedValues('tenants', {
+    logo_url: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/logo.png',
+    invoice_accent_color: '#112233',
+    invoice_theme: 'dark',
+    invoice_footer_note: 'Thanks',
+  });
+  assert.equal(tenants.error, undefined, JSON.stringify(tenants));
+  assert.equal(tenants.values.invoice_theme, 'dark');
+  assert.equal(tenants.values.invoice_accent_color, '#112233');
+});
+
 test('check_intake_items allowlist permits endorsement render pointers and override metadata', () => {
   const picked = pickAllowlistedValues('check_intake_items', {
     back_image_original_path: 'checks/reupload/aa148d55-25be-4c3f-9fdd-833ba143593e/back.jpg',
