@@ -17,6 +17,11 @@ import {
   loadCheckEndorsements,
   loadCheckPayees,
 } from './providers/production/checkalt-eligibility.mjs';
+import {
+  REVIEW_CORRECTION_LOOKUP_SQL,
+  applyReviewCorrection,
+  parseReviewCorrectionBody,
+} from './review-correction.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -550,11 +555,76 @@ export const handleEndorsementRenderReset = async (event, deps = {}) => {
   }, deps);
 };
 
+export const handleReviewCorrection = async (event, deps = {}) => {
+  const gate = requireWorkflowEnabled(event, deps);
+  if (gate.blocked) {
+    return withIdentity(event, async () => gate.blocked, deps);
+  }
+  return withIdentityWrite(event, async ({ client, mapping, claims, body, spoof }) => {
+    if (body.sql || body.query || body.rawSql) {
+      return denied(spoof, { error: 'generic_sql_denied' });
+    }
+    const checkId = body.check_id || body.checkId || body.p_check_id || body.id;
+    if (!isUuid(checkId)) {
+      return denied(spoof, { statusCode: 400, error: 'invalid_uuid', field: 'check_id' });
+    }
+    const parsed = parseReviewCorrectionBody(body);
+    if (parsed.error) {
+      const status = parsed.error === 'column_not_allowlisted' ? 403 : 400;
+      return denied(spoof, { statusCode: status, ...parsed });
+    }
+    const rows = (await client.query(REVIEW_CORRECTION_LOOKUP_SQL, [checkId])).rows;
+    if (!rows.length) {
+      return denied(spoof, { error: 'rls_denied', message: 'check not found or not writable' });
+    }
+    const check = rows[0];
+    const memberships = await membershipsOf(client, mapping.application_user_id);
+    const roles = await rolesOf(client, mapping.application_user_id, check.tenant_id);
+    if (!canTransition(roles)) {
+      return denied(spoof, { error: 'insufficient_role', message: 'Review correction requires a review/admin role' });
+    }
+    const applied = await applyReviewCorrection({
+      client,
+      mapping,
+      check,
+      values: parsed.values,
+      canAccessTenant: async (tenantId) => {
+        if (roles.includes('admin') || roles.includes('staff')) return true;
+        return memberships.some((row) => row.tenant_id === tenantId);
+      },
+    });
+    if (applied.error && applied.error !== 'no_changes') {
+      const status = applied.error === 'invalid_field' || applied.error === 'invalid_uuid' || applied.error === 'missing_required_field'
+        ? 400
+        : (applied.statusCode || 403);
+      return denied(spoof, { statusCode: status, ...applied });
+    }
+    return okResult({
+      mapping,
+      claims,
+      spoof,
+      data: applied.after || check,
+      extra: {
+        corrected: applied.error !== 'no_changes',
+        fieldChanges: applied.fieldChanges || [],
+        payeeChanges: applied.payeeChanges || [],
+        ocrPreserved: applied.ocrPreserved !== false,
+        statusUnchanged: check.status,
+        stageUnchanged: check.check_stage,
+        genericDataWrite: false,
+        providerExecution: false,
+      },
+    });
+  }, deps);
+};
+
 export const matchWorkflowRoute = (method, path) => {
   if (method === 'GET' && path === '/workflow/status') return 'status';
   if (method === 'POST' && path === '/workflow/checks') return 'create';
   if (method === 'POST' && (path === '/workflow/transition' || path === '/workflow/checks/transition')) return 'transition';
   if (method === 'POST' && path === '/workflow/endorsement-render-reset') return 'endorsement-render-reset';
+  const correction = path.match(/^\/workflow\/checks\/([^/]+)\/review-correction$/);
+  if (method === 'POST' && correction) return { kind: 'review-correction', checkId: decodeURIComponent(correction[1]) };
   const transition = path.match(/^\/workflow\/checks\/([^/]+)\/transition$/);
   if (method === 'POST' && transition) return { kind: 'transition', checkId: decodeURIComponent(transition[1]) };
   const remove = path.match(/^\/workflow\/checks\/([^/]+)$/);
@@ -569,6 +639,11 @@ export const handleWorkflowRequest = async (event, path, method, deps = {}) => {
   if (match === 'create') return handleCreateCheck(event, deps);
   if (match === 'transition') return handleCheckTransition(event, deps);
   if (match === 'endorsement-render-reset') return handleEndorsementRenderReset(event, deps);
+  if (match.kind === 'review-correction') {
+    const body = parseBody(event);
+    event = { ...event, body: JSON.stringify({ ...body, check_id: body.check_id || match.checkId }) };
+    return handleReviewCorrection(event, deps);
+  }
   if (match.kind === 'transition') {
     const body = parseBody(event);
     event = { ...event, body: JSON.stringify({ ...body, check_id: body.check_id || match.checkId }) };

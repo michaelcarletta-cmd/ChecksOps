@@ -37,3 +37,22 @@ export async function createAwsCheck(
     imagePrefix: String(body.imagePrefix || `checks/${check.id}/`),
   };
 }
+
+export async function submitAwsReviewCorrection(
+  token: string,
+  checkId: string,
+  updates: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const { ok, body } = await workflowFetch(
+    `/workflow/checks/${encodeURIComponent(checkId)}/review-correction`,
+    token,
+    {
+      method: "POST",
+      body: JSON.stringify({ check_id: checkId, ...updates }),
+    },
+  );
+  if (!ok) {
+    throw new Error(String(body.message || body.error || "AWS review correction failed"));
+  }
+  return (body.data as Record<string, unknown>) || body;
+}
