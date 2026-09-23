@@ -178,6 +178,77 @@ test('merge keeps Textract USAA when Azure payer is Bank of America', () => {
   assert.equal(canonical.bank_name, 'Bank of America');
 });
 
+test('USAA # claim wins over LOSS DATE, LOSS RPT, and POLICYHOLDER', () => {
+  const out = parseCheckFields([
+    line(WATERMARK, 0.04, 0.08, 88),
+    line('USAA', 0.07, 0.10, 96),
+    line('BANK OF AMERICA', 0.08, 0.55, 94),
+    line('POLICYHOLDER SONDRA GLEITMAN', 0.16, 0.08, 93),
+    line('LOSS DATE 03/16/2026', 0.19, 0.08, 94),
+    line('LOSS RPT # 8000', 0.22, 0.08, 93),
+    line('USAA # 003779807', 0.25, 0.08, 95),
+    line('CHECK NO 41822', 0.10, 0.72, 95),
+    line('PAY TO THE ORDER OF', 0.30, 0.08, 95),
+    line('FREEDOM ADJUSTMENT AND IRWIN L GLEITMAN AND SONDRA GLEITMAN', 0.34, 0.10, 94),
+    line('$18,893.07', 0.42, 0.78, 95),
+    line('000000000 111122223333 4444', 0.90, 0.10, 80),
+  ]);
+  assert.equal(out.claim_number, '003779807');
+  assert.equal(out.detected_claim_number, '003779807');
+  assert.notEqual(out.claim_number, 'DATE');
+  assert.notEqual(out.claim_number, '8000');
+  assert.notEqual(out.claim_number, 'HOLDER');
+});
+
+test('USAA # on the next line still extracts the claim number', () => {
+  const out = parseCheckFields([
+    line('USAA', 0.07, 0.10, 96),
+    line('USAA #', 0.24, 0.08, 94),
+    line('003779807', 0.27, 0.08, 95),
+    line('LOSS DATE 03/16/2026', 0.19, 0.40, 94),
+    line('LOSS RPT # 8000', 0.22, 0.40, 93),
+    line('PAY TO THE ORDER OF', 0.30, 0.08, 95),
+    line('FREEDOM ADJUSTMENT LLC', 0.34, 0.10, 94),
+    line('$18,893.07', 0.42, 0.78, 95),
+  ]);
+  assert.equal(out.claim_number, '003779807');
+});
+
+test('Claim # CLM-STAGING-7788 still wins over MICR digits', () => {
+  const out = parseCheckFields([
+    line('SYNTHETIC STAGING MUTUAL INSURANCE COMPANY', 0.05, 0.10, 96),
+    line('Claim # CLM-STAGING-7788', 0.55, 0.10, 91),
+    line('PAY TO THE ORDER OF', 0.28, 0.08, 95),
+    line('STAGING UAT HOMEOWNER', 0.32, 0.10, 92),
+    line('$1,234.56', 0.42, 0.78, 94),
+    line('000000000 111122223333 4444', 0.90, 0.10, 80),
+  ]);
+  assert.equal(out.claim_number, 'CLM-STAGING-7788');
+});
+
+test('unlabeled 9-digit MICR tokens are not used as the claim number', () => {
+  const out = parseCheckFields([
+    line('USAA', 0.07, 0.10, 96),
+    line('LOSS DATE 03/16/2026', 0.19, 0.08, 94),
+    line('POLICYHOLDER SONDRA GLEITMAN', 0.16, 0.08, 93),
+    line('PAY TO THE ORDER OF', 0.30, 0.08, 95),
+    line('FREEDOM ADJUSTMENT LLC', 0.34, 0.10, 94),
+    line('$10.00', 0.42, 0.78, 95),
+    line('121000358 806168576 00005794511', 0.91, 0.10, 80),
+  ]);
+  assert.equal(out.claim_number, null);
+});
+
+test('claimTokenFromText ranks carrier # over leftover loss labels', () => {
+  assert.equal(__test__.claimTokenFromText('USAA # 003779807')?.token, '003779807');
+  assert.equal(__test__.claimTokenFromText('Claim # CLM-STAGING-7788')?.token, 'CLM-STAGING-7788');
+  assert.equal(__test__.claimTokenFromText('NJM # 22-8891A')?.token, '22-8891A');
+  assert.equal(__test__.claimTokenFromText('LOSS DATE 03/16/2026'), null);
+  assert.equal(__test__.claimTokenFromText('LOSS RPT # 8000'), null);
+  assert.equal(__test__.claimTokenFromText('POLICYHOLDER SONDRA GLEITMAN'), null);
+  assert.equal(__test__.claimTokenFromText('121000358'), null);
+});
+
 test('merge keeps Textract USAA when Azure payer is a disclaimer', () => {
   const canonical = mergeCheckExtraction({
     textractParsed: {

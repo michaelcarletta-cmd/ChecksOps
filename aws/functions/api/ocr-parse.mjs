@@ -616,28 +616,59 @@ const pickAmountWritten = (idx) => {
   };
 };
 
+const CLAIM_JUNK_TOKENS = new Set([
+  'DATE', 'RPT', 'REPORT', 'HOLDER', 'NUMBER', 'NO', 'LOSS', 'FILE',
+  'POLICY', 'CLAIM', 'CLM', 'REF', 'THE', 'AND', 'OF',
+]);
+
+const CLAIM_PATTERNS = [
+  { re: /\b(usaa|njm|geico|aaa|csaa|aig)\s*#\s*([A-Z0-9][A-Z0-9\-]{3,32})\b/i, group: 2, score: 5, allowLongDigits: true },
+  { re: /\b(?:claim|clm)\s*(?:#|no\.?|number|:|-)?\s*([A-Z0-9][A-Z0-9\-]{3,32})\b/i, group: 1, score: 4, allowLongDigits: true },
+  { re: /\b(?:file|ref(?:erence)?)\s*(?:#|no\.?|number|:|-)?\s*([A-Z0-9][A-Z0-9\-]{3,32})\b/i, group: 1, score: 3, allowLongDigits: true },
+];
+
+const looksLikeClaimToken = (token, { allowLongDigits } = {}) => {
+  const text = String(token || '').trim();
+  if (text.length < 4 || text.length > 32) return false;
+  if (CLAIM_JUNK_TOKENS.has(text.toUpperCase())) return false;
+  if (!/\d/.test(text)) return false;
+  if (/^(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)/i.test(text)) return false;
+  if (/^\d{9,}$/.test(text) && !allowLongDigits) return false;
+  return true;
+};
+
+const claimTokenFromText = (text) => {
+  let best = null;
+  for (const pattern of CLAIM_PATTERNS) {
+    const match = String(text || '').match(pattern.re);
+    const token = match ? match[pattern.group] : null;
+    if (!looksLikeClaimToken(token, { allowLongDigits: pattern.allowLongDigits })) continue;
+    if (!best || pattern.score > best.score) best = { token, score: pattern.score };
+  }
+  return best;
+};
+
 const pickClaimNumber = (idx) => {
-  const labelRe = /\b(claim|loss|file|policy|ref(?:erence)?)\b/i;
   let best = null;
   let bestScore = -1e9;
-  for (const l of idx.lines) {
-    if (!labelRe.test(l.text)) continue;
-    // Extract token after label-ish punctuation.
-    const m = l.text.match(/(?:claim|loss|file|policy|ref(?:erence)?)\s*(?:#|no\.?|number|:|\-)?\s*([A-Z0-9][A-Z0-9\-]{3,32})/i);
-    const token = m ? m[1] : null;
-    if (!token) continue;
-    // Avoid accidentally grabbing routing/account sequences (pure long digits).
-    if (/^\d{9,}$/.test(token)) continue;
-    let score = 0;
-    if (/claim/i.test(l.text)) score += 2;
-    if (/loss|file|policy/i.test(l.text)) score += 1;
-    // Prefer not in MICR bottom band.
+  const lines = idx.lines;
+  for (let i = 0; i < lines.length; i += 1) {
+    const l = lines[i];
     const top = l.box?.Top ?? 0.5;
+    if (top >= 0.85) continue;
+    const next = lines[i + 1];
+    const nextTop = next?.box?.Top ?? 1;
+    const joined = next && nextTop < 0.85 && (nextTop - top) < 0.08
+      ? `${l.text} ${next.text}`
+      : l.text;
+    const found = claimTokenFromText(l.text) || claimTokenFromText(joined);
+    if (!found) continue;
+    let score = found.score;
     if (top < 0.85) score += 1;
     score += (safeLineConfidence(l) - 50) / 30;
     if (score > bestScore) {
       bestScore = score;
-      best = { token, line: l };
+      best = { token: found.token, line: l };
     }
   }
   if (!best) return { value: null, conf: 20 };
@@ -1067,8 +1098,8 @@ export const parseCheckFields = (input = []) => {
     return { value: norm, conf: norm ? 65 : 20, raw: dollars || null, dollarsLineDetected: Boolean(dollars) };
   })();
   const claim = isBlocks ? pickClaimNumber(idx) : (() => {
-    const m = text.match(/(?:claim|clm)[#:\s-]*([A-Z0-9\-]{4,24})/i);
-    return { value: m ? m[1] : null, conf: m ? 60 : 20 };
+    const found = claimTokenFromText(text);
+    return { value: found?.token || null, conf: found ? 60 : 20 };
   })();
 
   const memo = isBlocks ? pickMemo(idx) : { value: null, conf: 20 };
@@ -1208,4 +1239,5 @@ export const __test__ = {
   matchKnownCarrier,
   matchKnownBank,
   normalizeAmount,
+  claimTokenFromText,
 };
