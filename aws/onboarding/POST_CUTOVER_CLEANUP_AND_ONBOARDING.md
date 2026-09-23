@@ -189,7 +189,7 @@ None to live AWS resources, DNS, flags, Freedom provider identities, or producti
 
 ## P. Staging tests performed
 
-See this PR’s automated write/allowlist tests. No money movement. No production tenant created.
+Unit tests for tenant insert isolation, allowlist denial of provider columns, tenant/email/class-A handlers, and `validate-release-locks` passed. Full `npm run test:aws-api` was 1104 pass / 9 fail / 3 skip: the 9 failures are disposable local PostgreSQL 16 `initdb` matrices, not this change. No money movement. No production tenant created.
 
 ## Q. Regression results
 
