@@ -126,6 +126,12 @@ test('tenant_users role updates require admin membership and valid enum', async 
 });
 
 
+test('production claims insert allowlist is preserved next to branding columns', () => {
+  assert.ok(WRITE_ALLOWLIST.claims.ops.has('insert'));
+  assert.ok(WRITE_ALLOWLIST.claims.columns.has('claim_number'));
+  assert.ok(WRITE_ALLOWLIST.financial_stepup_log.ops.has('insert'));
+});
+
 test('company_branding ignores logo_url/updated_at; tenants allow invoice accent/theme', () => {
   assert.ok(WRITE_ALLOWLIST.company_branding.clientIgnored.has('logo_url'));
   assert.ok(WRITE_ALLOWLIST.company_branding.clientIgnored.has('updated_at'));

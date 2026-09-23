@@ -734,6 +734,28 @@ export const WRITE_ALLOWLIST = {
       reason: 'Append-only TOTP step-up audit. user_id is server-derived. Not a money-movement table.',
     },
   },
+  claims: {
+    tranche: 6,
+    ops: new Set(['insert']),
+    columns: new Set(['claim_number', 'status']),
+    identityColumn: null,
+    requiredForWrite: { insert: ['claim_number'] },
+    filterColumns: new Set([]),
+    clientIgnored: new Set([
+      'id',
+      'org_id',
+      'tenant_id',
+      'created_at',
+      'updated_at',
+      'created_by',
+      'updated_by',
+    ]),
+    frontend: {
+      file: 'ClaimLedgerCard / newTrackingClaimInsert',
+      op: 'insert',
+      reason: 'Create a tracking claim. Client org_id/tenant_id are ignored; trg_aws_stamp_claim_org_id stamps ownership.',
+    },
+  },
 };
 
 export const FINANCIAL_OR_PROVIDER_TABLES = new Set([

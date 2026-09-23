@@ -20,11 +20,22 @@ export const emailAssetOrigin = () => String(
 export const checksOpsLogoUrl = () => `${emailAssetOrigin()}/checksops-logo.png`;
 
 /** Public branding objects are served by the AWS API, not the SPA origin. */
-export const publicStorageOrigin = () => String(
-  process.env.AWS_API_PUBLIC_URL
-  || process.env.API_PUBLIC_URL
-  || 'https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging',
-).replace(/\/$/, '');
+export const publicStorageOrigin = () => {
+  const explicit = String(process.env.AWS_API_PUBLIC_URL || process.env.API_PUBLIC_URL || '').trim();
+  if (explicit) return explicit.replace(/\/$/, '');
+  const sign = String(process.env.SIGN_BASE_URL || process.env.APP_PUBLIC_URL || '').trim().replace(/\/$/, '');
+  if (sign) {
+    try {
+      const host = new URL(sign).hostname.toLowerCase();
+      if (host === 'checksops.com' || host === 'www.checksops.com') {
+        return 'https://checksops.com/prep';
+      }
+    } catch {
+      /* fall through */
+    }
+  }
+  return 'https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging';
+};
 
 export const resolveTenantLogoUrl = (value, fallback = null) => {
   const raw = String(value || '').trim();
