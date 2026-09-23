@@ -35,6 +35,9 @@ const sqlClient = (handlers) => mockClient((sql, params) => {
   for (const handler of handlers) {
     if (handler.match(compact, params)) return handler.result(params, compact);
   }
+  if (compact.includes('UPDATE public.check_payees')) {
+    return { rows: [{ id: params[0], endorsement_status: params[1] || params[2] }], rowCount: 1 };
+  }
   return { rows: [], rowCount: 0 };
 });
 

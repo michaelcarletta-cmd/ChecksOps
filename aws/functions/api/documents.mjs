@@ -281,5 +281,10 @@ export const handleCompositeEndorsementSignatures = async (event) => withIdentit
     checkId,
     overrideData: body.overrideData || body.override || null,
   });
+  if (result?.ok && (result.back_image_deposit_path || result.endorsed_back_image_path)) {
+    const { retryAutoAdvanceAfterOfficialRear } = await import('./check-endorsement.mjs');
+    const advanced = await retryAutoAdvanceAfterOfficialRear(client, checkId);
+    return { ...result, ...advanced, officialRearReady: true, spoofFieldsIgnored: spoof };
+  }
   return { ...result, spoofFieldsIgnored: spoof };
 }, { write: true, commit: true });

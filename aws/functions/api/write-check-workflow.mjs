@@ -8,6 +8,7 @@ import {
   loadCheckPayees,
   stampCheckAltRearFingerprint,
 } from './providers/production/checkalt-eligibility.mjs';
+import { synchronizePayeesFromEndorsements } from './endorsement-payee-sync.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -376,20 +377,33 @@ const executeIntakeUpdate = async ({ client, values, filters }) => {
   if (!rows.length) return { error: 'rls_denied', message: 'check not writable' };
   if (intakeWriteShouldStampOfficialRear(nextValues)) {
     try {
+      await synchronizePayeesFromEndorsements(client, rows[0].id);
       const payees = await loadCheckPayees(client, rows[0].id, rows[0].tenant_id);
       const endorsements = await loadCheckEndorsements(client, rows[0].id, rows[0].tenant_id);
       await stampCheckAltRearFingerprint(client, rows[0].id, rows[0].tenant_id, payees, endorsements);
-      const stamped = (await client.query(
-        'SELECT * FROM public.check_intake_items WHERE id = $1::uuid',
-        [rows[0].id],
-      )).rows;
-      return { rows: stamped.length ? stamped : rows };
-    } catch {
+    } catch (error) {
+      if (error?.error === 'payee_status_sync_failed') {
+        return {
+          error: 'payee_status_sync_failed',
+          message: error.message || 'Corresponding check_payees row could not be synchronized',
+        };
+      }
       return {
         error: 'provider_rear_fingerprint_stamp_failed',
         message: 'Official rear CheckAlt image could not be bound to current endorsement state',
       };
     }
+    try {
+      const { retryAutoAdvanceAfterOfficialRear } = await import('./check-endorsement.mjs');
+      await retryAutoAdvanceAfterOfficialRear(client, rows[0].id);
+    } catch {
+      // Stamp already committed in this handler; Ready retry must not convert to stamp failure.
+    }
+    const stamped = (await client.query(
+      'SELECT * FROM public.check_intake_items WHERE id = $1::uuid',
+      [rows[0].id],
+    )).rows;
+    return { rows: stamped.length ? stamped : rows };
   }
   return { rows };
 };

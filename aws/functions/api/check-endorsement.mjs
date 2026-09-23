@@ -36,6 +36,7 @@ import {
   isContractorPayee as isContractorPayeeType,
   isEndorsementSatisfied,
 } from './endorsement-completion.mjs';
+import { syncPayeeAfterEndorsement, synchronizePayeesFromEndorsements } from './endorsement-payee-sync.mjs';
 
 const { Client } = pg;
 
@@ -205,34 +206,13 @@ const resolveEndorsementId = async (client, body) => {
 
 const rotateToken = () => randomUUID();
 
-const updatePayeeSigned = async (client, endorsement, { status, token, image, signedAt }) => {
-  if (endorsement.payee_id) {
-    await safeQuery(
-      client,
-      `UPDATE public.check_payees
-       SET endorsement_status = $2,
-           endorsed_at = COALESCE($3::timestamptz, endorsed_at),
-           endorsement_image_path = COALESCE($4, endorsement_image_path),
-           endorsement_token = COALESCE($5, endorsement_token),
-           endorsement_token_expires_at = NULL,
-           updated_at = now()
-       WHERE id = $1::uuid`,
-      [endorsement.payee_id, status, signedAt || null, image || null, token || null],
-    );
-    return;
-  }
-  await safeQuery(
-    client,
-    `UPDATE public.check_payees
-     SET endorsement_status = $3,
-         endorsed_at = COALESCE($4::timestamptz, endorsed_at),
-         endorsement_image_path = COALESCE($5, endorsement_image_path),
-         endorsement_token = COALESCE($6, endorsement_token),
-         endorsement_token_expires_at = NULL,
-         updated_at = now()
-     WHERE check_id = $1::uuid AND payee_name = $2`,
-    [endorsement.check_id, endorsement.payee_name, status, signedAt || null, image || null, token || null],
-  );
+export const updatePayeeSigned = (client, endorsement, payload) => (
+  syncPayeeAfterEndorsement(client, endorsement, payload)
+);
+
+export const retryAutoAdvanceAfterOfficialRear = async (client, checkId) => {
+  const evaluation = await evaluateCompletionState(client, checkId);
+  return applyAutoAdvanceIfEligible(client, checkId, evaluation, { officialRearReady: true });
 };
 
 const auditEndorsement = async (client, row) => {
@@ -842,6 +822,7 @@ export const runAuthenticatedEndorsement = async ({
       event_data: { overridden_ids: incompleteIds },
       actor_id: mapping.application_user_id,
     });
+    await synchronizePayeesFromEndorsements(client, checkId);
     const completion = await finalizeEndorsementState(client, checkId, {
       refreshOfficialRear: true,
       compositeDeps,
@@ -1170,6 +1151,10 @@ export const runAuthenticatedEndorsement = async ({
      WHERE id = $1::uuid`,
     [endorsement.id, body.notes || 'Endorsement waived by staff'],
   );
+  await updatePayeeSigned(client, endorsement, {
+    status: 'waived',
+    signedAt: new Date().toISOString(),
+  });
   await auditEndorsement(client, {
     endorsement_id: endorsement.id,
     check_id: endorsement.check_id,

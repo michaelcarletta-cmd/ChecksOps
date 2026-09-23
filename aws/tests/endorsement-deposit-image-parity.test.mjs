@@ -64,6 +64,9 @@ const sqlClient = (handlers) => mockClient((sql, params) => {
   for (const handler of handlers) {
     if (handler.match(compact, params)) return handler.result(params, compact);
   }
+  if (compact.includes('UPDATE public.check_payees')) {
+    return { rows: [{ id: params[0], endorsement_status: params[1] || params[2] }], rowCount: 1 };
+  }
   return { rows: [], rowCount: 0 };
 });
 
@@ -162,6 +165,18 @@ const createStore = ({
         target.signature_image_url = params[1];
       }
       return { rows: [], rowCount: 1 };
+    }
+    if (compact.includes('UPDATE public.check_payees')) {
+      const payee = state.payees.find((row) => row.id === params[0] || row.payee_name === params[1])
+        || state.payees[0];
+      if (payee && compact.includes('endorsement_status')) {
+        payee.endorsement_status = params[1] || params[2] || payee.endorsement_status;
+        payee.endorsed_at = params[2] || params[3] || payee.endorsed_at;
+      }
+      if (payee && compact.includes('endorsement_image_path')) {
+        payee.endorsement_image_path = params[1] || params[2] || payee.endorsement_image_path;
+      }
+      return { rows: payee ? [payee] : [{ id: params[0], endorsement_status: 'signed' }], rowCount: 1 };
     }
     return { rows: [], rowCount: 0 };
   });

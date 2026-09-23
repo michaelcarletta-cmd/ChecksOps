@@ -155,6 +155,23 @@ const createStore = () => {
       if (compact.includes('SELECT * FROM public.check_intake_items')) {
         return { rows: [check] };
       }
+      if (compact.includes('UPDATE public.check_payees')) {
+        const payee = state.payees.find((row) => row.id === params[0]);
+        if (payee && compact.includes('endorsement_status')) {
+          payee.endorsement_status = params[1];
+          payee.endorsed_at = params[2] || payee.endorsed_at;
+        }
+        return { rows: payee ? [payee] : [{ id: params[0], endorsement_status: params[1] }], rowCount: 1 };
+      }
+      if (compact.includes('FROM public.check_endorsements') && compact.includes('payee_name')) {
+        return { rows: state.endorsements };
+      }
+      if (compact.includes('SELECT status, payee_type FROM public.check_endorsements')) {
+        return { rows: state.endorsements.map((row) => ({ status: row.status, payee_type: row.payee_type })) };
+      }
+      if (compact.includes('FROM public.check_intake_items') && compact.includes('deposit_recommendation')) {
+        return { rows: [check] };
+      }
       return { rows: [] };
     },
   };
