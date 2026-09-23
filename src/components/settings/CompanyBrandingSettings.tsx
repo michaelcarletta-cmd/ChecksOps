@@ -6,10 +6,23 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Upload, Building2, Loader2, Sparkles, Image as ImageIcon, Layout } from "lucide-react";
+import { Upload, Building2, Loader2, Image as ImageIcon, Layout } from "lucide-react";
+import { toStorageObjectPath } from "@/lib/storagePath";
 
 import { SectionCard } from "./SectionCard";
 import { SettingsHero } from "./SettingsHero";
+
+const persistBrandingPath = (value: string | null | undefined, bucket: string) => {
+  if (!value) return null;
+  return toStorageObjectPath(value, bucket) || (/^https?:\/\//i.test(value) ? value : value.replace(/^\//, ""));
+};
+
+const displayBrandingUrl = (value: string | null | undefined, bucket: string) => {
+  if (!value) return null;
+  if (/^https?:\/\//i.test(value)) return value;
+  const path = toStorageObjectPath(value, bucket) || value.replace(/^\//, "");
+  return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl || value;
+};
 
 export function CompanyBrandingSettings() {
   const [companyName, setCompanyName] = useState("");
@@ -50,11 +63,11 @@ export function CompanyBrandingSettings() {
       setAddress(branding.company_address || "");
       setPhone(branding.company_phone || "");
       setEmail(branding.company_email || "");
-      setLogoUrl(branding.logo_url || null);
       setLetterheadUrl(branding.letterhead_url || null);
     }
 
-    // 2. Get invoice-specific settings from the current tenant
+    // 2. Tenant logo + invoice settings. Sidebar/public pages read tenants.logo_url
+    // (company_branding has no logo_url column on staging RDS).
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
       const { data: tenantUser } = await supabase
@@ -66,12 +79,13 @@ export function CompanyBrandingSettings() {
       if (tenantUser) {
         const { data: tenant } = await supabase
           .from("tenants")
-          .select("invoice_letterhead_url, invoice_footer_note, invoice_default_terms, invoice_accent_color, invoice_theme, primary_color")
+          .select("logo_url, invoice_letterhead_url, invoice_footer_note, invoice_default_terms, invoice_accent_color, invoice_theme, primary_color")
           .eq("id", tenantUser.tenant_id)
           .maybeSingle();
         
         if (tenant) {
           const t = tenant as any;
+          setLogoUrl(t.logo_url || null);
           setInvoiceLetterheadUrl(t.invoice_letterhead_url || null);
           setInvoiceFooterNote(t.invoice_footer_note || "");
           setInvoiceDefaultTerms(t.invoice_default_terms || "");
@@ -99,8 +113,7 @@ export function CompanyBrandingSettings() {
       if (error) throw error;
 
       const { data: urlData } = supabase.storage.from("company-branding").getPublicUrl(path);
-      
-      setInvoiceLetterheadUrl(urlData?.publicUrl || null);
+      setInvoiceLetterheadUrl(urlData?.publicUrl || path);
       toast({ title: "Invoice letterhead uploaded successfully" });
     } catch (error: any) {
       toast({ title: "Upload failed", description: error.message, variant: "destructive" });
@@ -126,8 +139,7 @@ export function CompanyBrandingSettings() {
       if (error) throw error;
 
       const { data: urlData } = supabase.storage.from("company-branding").getPublicUrl(path);
-      
-      setLetterheadUrl(urlData?.publicUrl || null);
+      setLetterheadUrl(urlData?.publicUrl || path);
       toast({ title: "Letterhead uploaded successfully" });
     } catch (error: any) {
       toast({ title: "Upload failed", description: error.message, variant: "destructive" });
@@ -147,14 +159,24 @@ export function CompanyBrandingSettings() {
 
     setUploadingLogo(true);
     try {
-      const path = `logo_${Date.now()}.${file.name.split(".").pop()}`;
-      const { error } = await supabase.storage.from("company-branding").upload(path, file);
-      
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("You must be signed in to upload a logo");
+      const { data: tenantUser, error: membershipError } = await supabase
+        .from("tenant_users")
+        .select("tenant_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (membershipError) throw membershipError;
+      if (!tenantUser?.tenant_id) throw new Error("No tenant membership found");
+
+      const ext = file.name.split(".").pop() || "png";
+      const path = `${tenantUser.tenant_id}/logo-${Date.now()}.${ext}`;
+      const { error } = await supabase.storage.from("tenant-logos").upload(path, file);
+
       if (error) throw error;
 
-      const { data: urlData } = supabase.storage.from("company-branding").getPublicUrl(path);
-      
-      setLogoUrl(urlData?.publicUrl || null);
+      const { data: urlData } = supabase.storage.from("tenant-logos").getPublicUrl(path);
+      setLogoUrl(urlData?.publicUrl || path);
       toast({ title: "Company logo uploaded successfully" });
     } catch (error: any) {
       toast({ title: "Upload failed", description: error.message, variant: "destructive" });
@@ -171,44 +193,47 @@ export function CompanyBrandingSettings() {
         company_address: address,
         company_phone: phone,
         company_email: email,
-        logo_url: logoUrl,
-        letterhead_url: letterheadUrl,
-        updated_at: new Date().toISOString()
+        letterhead_url: persistBrandingPath(letterheadUrl, "company-branding"),
       };
 
       if (brandingId) {
-        await supabase
+        const { error } = await supabase
           .from("company_branding" as any)
           .update(brandingData)
           .eq("id", brandingId);
+        if (error) throw error;
       } else {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from("company_branding" as any)
           .insert(brandingData)
           .select()
           .single();
+        if (error) throw error;
         if (data) setBrandingId((data as any).id);
       }
 
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        const { data: tenantUser } = await supabase
+        const { data: tenantUser, error: membershipError } = await supabase
           .from("tenant_users")
           .select("tenant_id")
           .eq("user_id", user.id)
           .maybeSingle();
+        if (membershipError) throw membershipError;
         
         if (tenantUser) {
-          await supabase
+          const { error } = await supabase
             .from("tenants")
             .update({
-              invoice_letterhead_url: invoiceLetterheadUrl,
+              logo_url: persistBrandingPath(logoUrl, "tenant-logos"),
+              invoice_letterhead_url: persistBrandingPath(invoiceLetterheadUrl, "company-branding"),
               invoice_footer_note: invoiceFooterNote,
               invoice_default_terms: invoiceDefaultTerms,
               invoice_accent_color: invoiceAccentColor,
               invoice_theme: invoiceTheme,
             })
             .eq("id", tenantUser.tenant_id);
+          if (error) throw error;
         }
       }
 
@@ -291,7 +316,7 @@ export function CompanyBrandingSettings() {
               
               {logoUrl && (
                 <div className="border rounded-lg p-4 bg-muted/50 flex items-center justify-center">
-                  <img src={logoUrl} alt="Company logo" className="h-12 w-auto object-contain" />
+                  <img src={displayBrandingUrl(logoUrl, "tenant-logos") || undefined} alt="Company logo" className="h-12 w-auto object-contain" />
                 </div>
               )}
               
@@ -326,7 +351,7 @@ export function CompanyBrandingSettings() {
               
               {letterheadUrl && (
                 <div className="border rounded-lg p-4 bg-muted/50 flex items-center justify-center">
-                  <img src={letterheadUrl} alt="Company letterhead" className="h-12 w-auto object-contain" />
+                  <img src={displayBrandingUrl(letterheadUrl, "company-branding") || undefined} alt="Company letterhead" className="h-12 w-auto object-contain" />
                 </div>
               )}
               
@@ -372,7 +397,7 @@ export function CompanyBrandingSettings() {
                 >
                   <div className="flex flex-col items-center justify-center pt-5 pb-6">
                     {invoiceLetterheadUrl ? (
-                      <img src={invoiceLetterheadUrl} alt="Invoice Letterhead Preview" className="h-20 object-contain mb-2" />
+                      <img src={displayBrandingUrl(invoiceLetterheadUrl, "company-branding") || undefined} alt="Invoice Letterhead Preview" className="h-20 object-contain mb-2" />
                     ) : (
                       <Upload className="h-8 w-8 text-muted-foreground mb-2" />
                     )}

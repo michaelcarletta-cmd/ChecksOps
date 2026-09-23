@@ -614,7 +614,16 @@ export const WRITE_ALLOWLIST = {
     identityColumn: null,
     requiredForWrite: { insert: [], update: [] },
     filterColumns: new Set(['id']),
-    clientIgnored: new Set(['id', 'created_at', 'zapier_webhook_url', 'online_check_writer_bank_account_id']),
+    clientIgnored: new Set([
+      'id',
+      'created_at',
+      'updated_at',
+      // Staging RDS has no company_branding.logo_url column. Client still
+      // sends it from the Branding form; ignore so name/letterhead persist.
+      'logo_url',
+      'zapier_webhook_url',
+      'online_check_writer_bank_account_id',
+    ]),
     frontend: { file: 'CompanyBrandingSettings', op: 'upsert', reason: 'Branding text/URLs only.' },
   },
   referral_alerts: {
@@ -632,6 +641,7 @@ export const WRITE_ALLOWLIST = {
     columns: new Set([
       'name', 'logo_url', 'invoice_letterhead_url', 'primary_color',
       'invoice_footer_note', 'invoice_default_terms',
+      'invoice_accent_color', 'invoice_theme',
     ]),
     identityColumn: null,
     requiredForWrite: { update: [] },
