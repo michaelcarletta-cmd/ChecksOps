@@ -21,6 +21,8 @@ test('tranche-6 tables are allowlisted with narrow columns', () => {
   assert.ok(WRITE_ALLOWLIST.tenants.ops.has('insert'));
   assert.ok(WRITE_ALLOWLIST.tenants.ops.has('update'));
   assert.ok(WRITE_ALLOWLIST.tenants.columns.has('slug'));
+  assert.ok(WRITE_ALLOWLIST.tenants.columns.has('invoice_accent_color'));
+  assert.ok(WRITE_ALLOWLIST.tenants.columns.has('invoice_theme'));
   assert.ok(!WRITE_ALLOWLIST.tenants.columns.has('moov_allowlisted'));
   assert.ok(!WRITE_ALLOWLIST.tenants.columns.has('moov_account_id'));
   assert.ok(!WRITE_ALLOWLIST.tenants.columns.has('checkalt_enabled'));

@@ -636,6 +636,7 @@ export const WRITE_ALLOWLIST = {
       'email_from_name', 'email_from_address', 'email_reply_to',
       'email_provider', 'email_provider_config',
       'invoice_footer_note', 'invoice_default_terms',
+      'invoice_accent_color', 'invoice_theme',
     ]),
     identityColumn: null,
     requiredForWrite: { insert: ['name', 'slug'], update: [] },

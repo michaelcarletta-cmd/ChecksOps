@@ -585,6 +585,22 @@ const collectTenantSafeFields = (values, { allowSlug = false } = {}) => {
       out[col] = text;
     }
   }
+  if ('invoice_accent_color' in values) {
+    const text = clip(values.invoice_accent_color, 40);
+    if (text?.error) return text;
+    if (text && !/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(text)) {
+      return { error: 'invalid_field', field: 'invoice_accent_color' };
+    }
+    out.invoice_accent_color = text;
+  }
+  if ('invoice_theme' in values) {
+    const text = clip(values.invoice_theme, 16);
+    if (text?.error) return text;
+    if (text && text !== 'light' && text !== 'dark') {
+      return { error: 'invalid_field', field: 'invoice_theme' };
+    }
+    out.invoice_theme = text;
+  }
   if (allowSlug && 'slug' in values) {
     const slug = slugifyTenant(values.slug);
     if (!slug || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
