@@ -134,7 +134,7 @@ export const liveInventoryPath = (repoRoot) =>
 export const loadCommittedLiveInventory = (repoRoot) => {
   const inventoryPath = liveInventoryPath(repoRoot);
   const live = parseLiveSourceInventory(inventoryPath);
-  const types = parseGeneratedDatabaseTypes(path.join(repoRoot, 'src/integrations/supabase/types.ts'));
+  const types = parseGeneratedDatabaseTypes(path.join(repoRoot, 'src/types/database.ts'));
   const access = describeLiveAccess();
 
   const tableCountMatch = live.public.baseTables === types.tables.length;
@@ -173,7 +173,7 @@ export const loadCommittedLiveInventory = (repoRoot) => {
 };
 
 export const buildRepoInventory = (repoRoot) => {
-  const typesPath = path.join(repoRoot, 'src/integrations/supabase/types.ts');
+  const typesPath = path.join(repoRoot, 'src/types/database.ts');
   const migrationsDir = path.join(repoRoot, 'supabase/migrations');
   const functionsDir = path.join(repoRoot, 'supabase/functions');
   const parsed = parseGeneratedDatabaseTypes(typesPath);

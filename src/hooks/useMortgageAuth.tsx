@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import type { User, Session } from "@supabase/supabase-js";
-import { mortgageSupabase } from "@/integrations/supabase/mortgageClient";
+import type { User, Session } from "@/integrations/aws/client";
+import { mortgageSupabase } from "@/integrations/aws/client";
 
 const ROLE_PRIORITY = ["admin", "staff", "mortgage_agent", "read_only", "guided", "contractor", "client"] as const;
 

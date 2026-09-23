@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/aws/client";
 import { queryKeys } from "@/lib/queryKeys";
 
 /* ------------------------------------------------------------------ */

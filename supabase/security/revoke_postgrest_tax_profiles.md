@@ -120,9 +120,9 @@ The gate never selects table rows or TIN values, runs `SET TRANSACTION READ ONLY
 | Triggers / audit | Only `recipient_tax_profiles_set_updated_at`. |
 | Exports / backups / jobs | `aws/db-copy/sql/reconciliation_counts.sql` counts the table (ops SQL, not PostgREST). Do not run it against production as part of this PR. Logical dumps still contain plaintext `tin` (at-rest risk; out of scope). No `pg_cron` job in repo names the table. |
 | Frontend | `src/components/ledger/TaxSummary.tsx` uses `supabase.functions.invoke('tenant-tax-profiles')` only. No `.from('recipient_tax_profiles')`. **This PR does not modify the SPA.** |
-| Browser keys | `src/integrations/supabase/client.ts` uses the publishable (anon) key. No service-role key in `src/`. |
+| Browser keys | `src/integrations/aws/client.ts` uses Cognito session tokens. No service-role key in `src/`. |
 | Edge Functions | No `supabase/functions/*` reference to this table. There is **no** hosted `tenant-tax-profiles` Edge Function in this repo; that handler is AWS (`aws/functions/api/tax-profiles.mjs`) from PR #247. |
-| Types | `src/integrations/supabase/types.ts` still lists the table (generated types, not a grant). |
+| Types | `src/types/database.ts` still lists the table (generated types, not a grant). |
 
 ## Containment contract
 

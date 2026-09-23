@@ -23,7 +23,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
-        "tree_hash": "b2fc9e1152ca2ffbfac86c43fccdc22461dda17266bbea2d447f6d3f7cbb1bed",
+        "tree_hash": "0587a53eb54b98f33f0f0be644cc1513268b7822270de30166f05fb65f16982e",
         "merged": true,
         "merged_pr": null
       },
@@ -75,7 +75,7 @@
         "production identity mapping apply hash"
       ],
       "open_pr_overlap": ["#316", "#317", "#319", "#313", "#240"],
-      "notes": "Docs on main still say pool us-east-1_h00WorYMT has 0 users; later PRs claim Freedom Adjustment login after cutover. UNVERIFIED."
+      "notes": "Docs on main still say pool us-east-1_h00WorYMT has 0 users; later PRs claim Freedom Adjustment login after cutover. UNVERIFIED. Hash retargeted because the SPA now always uses the AWS ChecksOps client (no hosted createClient fallback). Cognito pool/client IDs and /identity/me mapping are unchanged."
     },
     "moov-webhooks": {
       "id": "moov-webhooks",
@@ -136,7 +136,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "bd97367b76a52444aa8b1438a3f035b6c4ea09b1",
-        "tree_hash": "9ef255b20a7f01cafacf0386f9a989eb8e8b77278c5e9d88ac5737ab27252f4d",
+        "tree_hash": "3c5c1b5b0f1e2863877949e7a3e3a08ce2832738b02a22c50dec4b5d103f40fe",
         "merged": true,
         "merged_pr": null
       },
@@ -177,7 +177,7 @@
         "deployed Lambda version"
       ],
       "open_pr_overlap": ["#327", "#332", "#339", "#322", "#323"],
-      "notes": "template.yaml on main keeps AWS_CHECKALT_ENABLED false. PR #359 retargets tree_hash for persistPollOutcome FinCapture depositDate mapping only. Writer SQL remains NOT_APPLIED. UNVERIFIED."
+      "notes": "template.yaml on main keeps AWS_CHECKALT_ENABLED false. PR #359 retargets tree_hash for persistPollOutcome FinCapture depositDate mapping only. Writer SQL remains NOT_APPLIED. UNVERIFIED. PR #449 retargets tree_hash for an import-path-only change in prepareCheckAltDeposit.ts (AWS client, no CheckAlt execution change)."
     },
     "financial-ledger": {
       "id": "financial-ledger",
@@ -295,7 +295,7 @@
       "environment": "source-only",
       "source": {
         "git_sha": "bd97367b76a52444aa8b1438a3f035b6c4ea09b1",
-        "tree_hash": "ea919c1c1726542c2dff4c4e704b73d2d56db30098154ef577f27adbe0b4b2d1",
+        "tree_hash": "ab98e1ae4ba7cfa62b2e9594c1fe08e74c75c0293a181c8e2a64360be390c173",
         "merged": true,
         "merged_pr": 354
       },
@@ -426,7 +426,7 @@
       "environment": "source-only",
       "source": {
         "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
-        "tree_hash": "7537faf0225986f9dc73d8aab4dc578adb3bea0015b47b288479fd00ab6dd900",
+        "tree_hash": "43acbe7c16ca22f0b5ac935d15ecd222d9c739bc080eedc0c0855fe4fb9af8be",
         "merged": false,
         "merged_pr": null
       },
@@ -467,7 +467,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "9aac7bb5b1ed0a8d03e305552797a9acfacc7f64",
-        "tree_hash": "a67d882ccedcffb80007aa936f270398dd62617220c2b0ab790c4a8612002fbd",
+        "tree_hash": "a85f1263e1ab4d33691d296070e859bcabe13589d4bd154ac1f5facdde4d8c54",
         "merged": false,
         "merged_pr": null
       },
@@ -600,7 +600,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "8a3ead386d99f0e825d54093ebcb8c174a8c758e",
-        "tree_hash": "d7ed7db31c345a0352b0ca7610c1f7d2763c8be2e96527c20a7eae3f840c258a",
+        "tree_hash": "f2ffc61fd9786715deee482f00ec76174c816c402762afc7424de9fd4f351824",
         "merged": true,
         "merged_pr": 343
       },

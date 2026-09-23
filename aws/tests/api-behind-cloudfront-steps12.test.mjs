@@ -134,7 +134,7 @@ test('same-origin /prep resolver keeps staging execute-api and www same-origin',
   assert.match(staging, /resolveAwsApiBaseUrl/);
   assert.match(staging, /window\.location\.origin/);
   const example = read('.env.production.aws.example');
-  assert.match(example, /DO NOT USE YET/);
+  assert.match(example, /Private production AWS frontend/);
   assert.match(example, /VITE_CHECKSOPS_API_URL=\/prep/);
   assert.match(example, /kiqojucc02\.execute-api\.us-east-1\.amazonaws\.com\/prep/);
   const tenant = read('src/lib/aws/tenantCompliance.ts');

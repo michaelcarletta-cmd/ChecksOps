@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/aws/client";
 
 /**
  * Provider-agnostic access to organization balances (wallets).

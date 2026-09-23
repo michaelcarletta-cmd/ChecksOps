@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, RefreshCw, ShieldCheck, CircleAlert, Clock, CircleDashed, FlaskConical } from "lucide-react";
 import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibility";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/aws/client";
 
 type ReadinessState = "ready" | "pending" | "action_required" | "not_started";
 

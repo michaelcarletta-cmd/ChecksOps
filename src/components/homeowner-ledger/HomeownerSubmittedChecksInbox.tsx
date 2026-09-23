@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/aws/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, ImageIcon, CheckCircle2, XCircle, Send, Eye } from "lucide-react";
 import { toast } from "sonner";
 import { AttachUploadToClaimDialog } from "./AttachUploadToClaimDialog";
-import { supabase as client } from "@/integrations/supabase/client";
+import { supabase as client } from "@/integrations/aws/client";
 
 type PendingUpload = {
   id: string;

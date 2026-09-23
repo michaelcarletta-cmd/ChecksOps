@@ -1,7 +1,6 @@
 /**
- * AWS Cognito frontend switch. Production Vite builds use `.env.production`
- * and never set VITE_AUTH_PROVIDER=cognito, so this stays false for ChecksOps.com
- * until an approved production AWS frontend env is deployed.
+ * AWS Cognito frontend switch.
+ * Production and staging SPA builds use `--mode aws` with VITE_AUTH_PROVIDER=cognito.
  */
 
 import { resolveAwsApiBaseUrl } from "@/lib/awsApiBase";
@@ -50,12 +49,16 @@ export function awsApiBaseUrl(): string {
   return resolveAwsApiBaseUrl(configured, origin);
 }
 
+/** AWS function path used by XHR/public fetches that cannot go through functions.invoke. */
+export function awsFunctionsUrl(name: string): string {
+  return `${awsApiBaseUrl()}/functions/v1/${encodeURIComponent(name)}`;
+}
+
 /**
  * Fail-closed gate for Cognito native WebAuthn.
  * Enabled only when the browser HTTPS origin matches VITE_APP_URL
  * (default https://staging.checksops.com). HTTP S3 / localhost / unexpected
- * hosts fail closed. Production `.env.production` does not set Cognito, so
- * this stays false on ChecksOps.com until an approved AWS frontend env exists.
+ * hosts fail closed. Requires VITE_AUTH_PROVIDER=cognito from `--mode aws`.
  */
 export function isAwsStagingHttpsPasskeysEnabled(): boolean {
   if (!isAwsStaging()) return false;

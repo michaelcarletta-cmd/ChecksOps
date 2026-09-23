@@ -282,9 +282,10 @@ test('frontend still does not query the table directly', () => {
   assert.match(taxSummary, /tenant-tax-profiles/);
   assert.match(taxSummary, /taxProfiles = \[\]/);
   assert.match(taxSummary, /No TIN on file/);
-  const client = fs.readFileSync(path.join(ROOT, 'src/integrations/supabase/client.ts'), 'utf8');
+  const client = fs.readFileSync(path.join(ROOT, 'src/integrations/aws/client.ts'), 'utf8');
   assert.doesNotMatch(client, /SERVICE_ROLE/);
-  assert.match(client, /VITE_SUPABASE_PUBLISHABLE_KEY/);
+  assert.doesNotMatch(client, /VITE_SUPABASE_PUBLISHABLE_KEY/);
+  assert.doesNotMatch(client, /@supabase\/supabase-js/);
 });
 
 before(() => {

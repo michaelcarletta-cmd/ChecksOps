@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Shield, Search, RefreshCw, Download, Eye, FileText, User, Clock } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/aws/client";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { usePermissions } from "@/hooks/usePermissions";

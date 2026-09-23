@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/aws/client";
 import { AlertCircle, CheckCircle2, Clock, FileText, Lock, ExternalLink, Ban, Calendar } from "lucide-react";
 
 interface InvoiceLineItem {

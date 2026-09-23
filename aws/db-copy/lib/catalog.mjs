@@ -39,7 +39,7 @@ export const SOURCE = {
   twentyTableDiscrepancy: false,
   doNotUseProjectRef: 'sqyyvpaymashtdwjjmku',
   generatedTypesNote:
-    'Generated src/integrations/supabase/types.ts lists the same 166 public tables and 20 views as the live catalog. 186 was tables+views, not a missing-table gap. PostgREST types list 358 functions (subset of live 960). Do not treat the other Management-API-visible project named ChecksOps (sqyyvpaymashtdwjjmku) as live.',
+    'Generated src/types/database.ts lists the same 166 public tables and 20 views as the live catalog. 186 was tables+views, not a missing-table gap. PostgREST types list 358 functions (subset of live 960). Do not treat the other Management-API-visible project named ChecksOps (sqyyvpaymashtdwjjmku) as live.',
 };
 
 export const EXCLUDED_SCHEMAS = [

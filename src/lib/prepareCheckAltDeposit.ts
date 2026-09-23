@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/aws/client";
 import { CHECK_IMAGES_BUCKET } from "@/lib/storageBuckets";
 import {
   CHECKALT_IMAGE_ERROR,

@@ -2,7 +2,8 @@ import {
   FunctionsFetchError,
   FunctionsHttpError,
   FunctionsRelayError,
-} from "@supabase/supabase-js";
+  isFunctionsHttpError,
+} from "@/integrations/aws/errors";
 
 export interface FunctionErrorDetails {
   message: string;
@@ -31,7 +32,7 @@ export async function getFunctionErrorDetails(
   error: unknown,
   fallback = "Request failed",
 ): Promise<FunctionErrorDetails> {
-  if (error instanceof FunctionsHttpError) {
+  if (isFunctionsHttpError(error)) {
     const response = error.context;
     const payload = await parseFunctionErrorPayload(response);
 

@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/aws/client";
 import { resolveProvider } from "./featureFlags";
 import { getProvider } from "./providers";
 import type {

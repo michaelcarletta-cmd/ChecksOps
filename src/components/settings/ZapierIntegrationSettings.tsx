@@ -6,7 +6,9 @@ import { Label } from "@/components/ui/label";
 import { ExternalLink, Zap, ArrowRight, CheckCircle2, Camera, FileText, Bell, Database } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+import { awsApiBaseUrl } from "@/lib/awsStaging";
+
+const AWS_FUNCTIONS_BASE = `${awsApiBaseUrl()}/functions/v1`;
 
 const zapTemplates = [
   {
@@ -136,12 +138,12 @@ export function ZapierIntegrationSettings({ embedded }: ZapierIntegrationSetting
               <div>
                 <span className="text-muted-foreground">Automations:</span>
                 <br />
-                <code className="text-xs break-all">POST {SUPABASE_URL}/functions/v1/automation-webhook</code>
+                <code className="text-xs break-all">POST {AWS_FUNCTIONS_BASE}/automation-webhook</code>
               </div>
               <div className="pt-2 border-t">
                 <span className="text-muted-foreground">Inbound Email:</span>
                 <br />
-                <code className="text-xs break-all">POST {SUPABASE_URL}/functions/v1/inbound-email</code>
+                <code className="text-xs break-all">POST {AWS_FUNCTIONS_BASE}/inbound-email</code>
               </div>
             </div>
           </div>

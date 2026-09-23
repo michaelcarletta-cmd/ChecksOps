@@ -7,7 +7,7 @@ import {
   startRegistration,
   browserSupportsWebAuthn,
 } from "@simplewebauthn/browser";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/aws/client";
 import {
   AWS_STAGING_AUTH_SESSION_KEY,
   AWS_STAGING_HTTPS_ORIGIN,

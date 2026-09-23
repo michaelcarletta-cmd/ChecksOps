@@ -1,5 +1,5 @@
 import imageCompression from "browser-image-compression";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/aws/client";
 import { convertHeicToJpegIfNeeded } from "@/lib/convertHeic";
 
 export type UploadedImageResult = {

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, lazy, Suspense } from "react";
-import { mortgageSupabase as supabase } from "@/integrations/supabase/mortgageClient";
+import { mortgageSupabase as supabase } from "@/integrations/aws/client";
 import { useMortgageAuth } from "@/hooks/useMortgageAuth";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";

@@ -11,7 +11,7 @@ import { WhiteLabelSettings } from "@/components/white-label/WhiteLabelSettings"
 import { useTenant } from "@/contexts/TenantContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/aws/client";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 import { isMasterMerchant } from "@/lib/masterMerchant";
 

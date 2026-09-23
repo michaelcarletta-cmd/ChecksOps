@@ -3,7 +3,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { Button } from "./button";
 import { cn } from "@/lib/utils";
 import { getMaskedValue } from "@/hooks/usePIIMasking";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/aws/client";
 import { useAuth } from "@/hooks/useAuth";
 
 interface MaskedFieldProps {

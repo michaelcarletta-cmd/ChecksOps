@@ -97,7 +97,7 @@ const compliance = [
 ];
 
 const vendors = [
-  { name: "Supabase / Lovable Cloud", purpose: "Database, auth, storage, edge compute" },
+  { name: "Amazon Web Services", purpose: "Database, Cognito auth, S3 storage, API compute" },
   { name: "Bank-grade deposit processor", purpose: "Remote check deposit rail" },
   { name: "ACH origination partner", purpose: "ACH disbursement rail" },
   { name: "OpenAI", purpose: "AI inference on redacted claim text" },
