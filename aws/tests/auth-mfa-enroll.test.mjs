@@ -325,6 +325,27 @@ test('amount change and action mismatch are rejected', async () => {
   assert.equal(store.stepups.length, 0);
 });
 
+test('deposit.approve TOTP uses the same check/amount binding as deposit.submit', async () => {
+  const store = createStore();
+  const { code } = await enrollTester(store);
+  const stepped = await handleMfaStepUp(eventOf({
+    code,
+    action_key: 'deposit.approve',
+    tenant_id: OTHER_TENANT,
+    check_intake_item_id: CHECK,
+  }), depsOf(store));
+  assert.equal(stepped.ok, true, JSON.stringify(stepped));
+  assert.equal(stepped.recorded, true);
+  assert.equal(stepped.amount_cents, 1234);
+  assert.equal(stepped.tenant_id, TENANT);
+  assert.equal(stepped.check_id, CHECK);
+  assert.equal(store.stepups.length, 1);
+  assert.equal(store.stepups[0].action_key, 'deposit.approve');
+  assert.equal(store.stepups[0].metadata.operation, 'deposit.approve');
+  assert.equal(store.stepups[0].metadata.check_id, CHECK);
+  assert.equal(store.stepups[0].metadata.amount_cents, 1234);
+});
+
 test('Cognito MFA state is ignored for financial enrollment', async () => {
   const store = createStore();
   const status = await handleMfaStatus(eventOf({}), depsOf(store));

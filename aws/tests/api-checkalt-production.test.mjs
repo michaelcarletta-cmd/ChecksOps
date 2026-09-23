@@ -1170,6 +1170,7 @@ test('empty Poll Now refreshes tenant pending_approval using stored reference', 
 
 test('refresh-before-approve blocks stale 127 Approved and does not POST approve', async () => {
   const store = createStore();
+  grantStepUp(store, { action: 'deposit.approve' });
   store.itemPayload = { status: 'Approved', statusDescription: 'Approved' };
   store.deposits.push({
     id: DEPOSIT_ID,
@@ -1203,6 +1204,7 @@ test('refresh-before-approve blocks stale 127 Approved and does not POST approve
 
 test('approve still posts only when CheckAlt remains pending_approval', async () => {
   const store = createStore();
+  grantStepUp(store, { action: 'deposit.approve' });
   store.itemPayload = { statusCode: 40, statusDescription: 'Pending' };
   store.deposits.push({
     id: DEPOSIT_ID,
@@ -1271,4 +1273,118 @@ test('production approve helper refuses a locator-less body', async () => {
   });
   assert.equal(result.error, 'deposit_locator_required');
   assert.equal(result.approvePosted, false);
+});
+
+test('Manager approve requires deposit.approve TOTP; deposit.submit TOTP cannot authorize approve', async () => {
+  const missing = createStore();
+  missing.itemPayload = { statusCode: 40, statusDescription: 'Pending' };
+  missing.deposits.push({
+    id: DEPOSIT_ID,
+    tenant_id: FREEDOM_TENANT,
+    check_intake_item_id: CHECK_ID,
+    checkalt_reference: '123733567',
+    status: 'pending_approval',
+    amount: 1546.72,
+    amount_cents: 154672,
+  });
+  const noTotp = await withEnv(productionFlags, () => handleProviderRequest(
+    jwtEvent('/functions/v1/checkalt-approve-deposit', 'POST', {
+      deposit_id: DEPOSIT_ID,
+      action: 'approve',
+    }),
+    '/functions/v1/checkalt-approve-deposit',
+    'POST',
+    submitDeps(missing),
+  ));
+  assert.equal(noTotp.error, 'step_up_required');
+  assert.equal(noTotp.approvePosted, false);
+  assert.equal(missing.approvePosts, 0);
+  assert.equal(missing.processPosts, 0);
+
+  const wrongAction = createStore();
+  wrongAction.itemPayload = { statusCode: 40, statusDescription: 'Pending' };
+  wrongAction.deposits.push({
+    id: DEPOSIT_ID,
+    tenant_id: FREEDOM_TENANT,
+    check_intake_item_id: CHECK_ID,
+    checkalt_reference: '123733567',
+    status: 'pending_approval',
+    amount: 12.34,
+    amount_cents: 1234,
+  });
+  grantStepUp(wrongAction, { action: 'deposit.submit' });
+  const submitTotp = await withEnv(productionFlags, () => handleProviderRequest(
+    jwtEvent('/functions/v1/checkalt-approve-deposit', 'POST', {
+      deposit_id: DEPOSIT_ID,
+      action: 'approve',
+    }),
+    '/functions/v1/checkalt-approve-deposit',
+    'POST',
+    submitDeps(wrongAction),
+  ));
+  assert.equal(submitTotp.error, 'step_up_required');
+  assert.equal(wrongAction.approvePosts, 0);
+  assert.equal(wrongAction.processPosts, 0);
+});
+
+test('valid deposit.approve TOTP can POST /deposit/approve and never recreates the original deposit', async () => {
+  const store = createStore();
+  store.itemPayload = { statusCode: 40, statusDescription: 'Pending' };
+  store.deposits.push({
+    id: DEPOSIT_ID,
+    tenant_id: FREEDOM_TENANT,
+    check_intake_item_id: CHECK_ID,
+    checkalt_reference: '123733567',
+    status: 'pending_approval',
+    amount: 12.34,
+    amount_cents: 1234,
+  });
+  grantStepUp(store, { action: 'deposit.approve' });
+  const result = await withEnv(productionFlags, () => handleProviderRequest(
+    jwtEvent('/functions/v1/checkalt-approve-deposit', 'POST', {
+      deposit_id: DEPOSIT_ID,
+      action: 'approve',
+    }),
+    '/functions/v1/checkalt-approve-deposit',
+    'POST',
+    submitDeps(store),
+  ));
+  assert.equal(result.approvePosted, true);
+  assert.equal(result.createdDeposit, false);
+  assert.equal(result.checkalt_reference, '123733567');
+  assert.equal(result.status, 'submitted');
+  assert.equal(store.approvePosts, 1);
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.deposits.length, 1);
+});
+
+test('valid TOTP plus CheckAlt approve failure stays approval-specific and does not process', async () => {
+  const store = createStore();
+  store.itemPayload = { statusCode: 40, statusDescription: 'Pending' };
+  store.approvePayload = { success: false, statusDescription: 'Unable to approve' };
+  store.deposits.push({
+    id: DEPOSIT_ID,
+    tenant_id: FREEDOM_TENANT,
+    check_intake_item_id: CHECK_ID,
+    checkalt_reference: '123733567',
+    status: 'pending_approval',
+    amount: 12.34,
+    amount_cents: 1234,
+  });
+  grantStepUp(store, { action: 'deposit.approve' });
+  const result = await withEnv(productionFlags, () => handleProviderRequest(
+    jwtEvent('/functions/v1/checkalt-approve-deposit', 'POST', {
+      deposit_id: DEPOSIT_ID,
+      action: 'approve',
+    }),
+    '/functions/v1/checkalt-approve-deposit',
+    'POST',
+    submitDeps(store),
+  ));
+  assert.equal(result.error, 'checkalt_approve_failed');
+  assert.equal(result.approvePosted, false);
+  assert.doesNotMatch(String(result.message || ''), /authenticator|verification code/i);
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.deposits[0].checkalt_reference, '123733567');
+  assert.equal(store.deposits[0].status, 'pending_approval');
 });

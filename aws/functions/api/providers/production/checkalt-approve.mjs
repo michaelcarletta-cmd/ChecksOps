@@ -4,7 +4,7 @@ import { checkAltFetch } from '../parity/checkalt-client.mjs';
 import { loadProductionCheckAltConfig, loadProductionTenantAccount } from './checkalt-config.mjs';
 import { persistPollOutcome } from './checkalt-idempotency.mjs';
 import { loadProductionCheckAltSecrets } from './checkalt-secrets.mjs';
-import { authorizeCheckAltProduction } from './checkalt-authz.mjs';
+import { authorizeCheckAltProduction, CHECKALT_APPROVE_ACTION } from './checkalt-authz.mjs';
 import {
   loadExistingProductionDeposit,
   reconcileProductionCheckAltDeposit,
@@ -114,16 +114,17 @@ export async function handleProductionCheckAltApprove({
     mapping,
     memberships,
     check,
-    requireStepUp: false,
+    requireStepUp: actionName === 'approve',
+    actionKey: CHECKALT_APPROVE_ACTION,
   });
-  if (!authz.ok && (authz.error === 'financial_unauthorized' || authz.error === 'cross_tenant_denied')) {
-    return { ...authz, createdDeposit: false, approvePosted: false, action_taken: false, spoofFieldsIgnored: spoof };
-  }
-  if (!authz.evaluation?.roleOk) {
-    return fail('financial_unauthorized', 403, {
-      message: 'Operator cannot approve production CheckAlt for another authority path.',
+  if (!authz.ok) {
+    return {
+      ...authz,
+      createdDeposit: false,
+      approvePosted: false,
+      action_taken: false,
       spoofFieldsIgnored: spoof,
-    });
+    };
   }
 
   const secrets = await (deps.loadProductionSecrets || loadProductionCheckAltSecrets)(deps.getSecrets);

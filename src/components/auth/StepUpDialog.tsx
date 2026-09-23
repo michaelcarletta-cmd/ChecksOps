@@ -235,13 +235,19 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
           <DialogTitle className="flex items-center gap-2">
             <ShieldCheck className="h-5 w-5 text-primary" />
             {request?.title
-              ?? (request?.actionKey === "deposit.submit" ? "Deposit Verification" : "Confirm with two-factor")}
+              ?? (request?.actionKey === "deposit.submit"
+                ? "Deposit Verification"
+                : request?.actionKey === "deposit.approve"
+                  ? "Approval Verification"
+                  : "Confirm with two-factor")}
           </DialogTitle>
           <DialogDescription>
             {request?.description
               ?? (request?.actionKey === "deposit.submit"
                 ? "Enter the current 6-digit code from your authenticator app to authorize this deposit."
-                : "Money movement requires two-factor verification. Enter the 6-digit code from your authenticator app.")}
+                : request?.actionKey === "deposit.approve"
+                  ? "Enter the current 6-digit code from your authenticator app to authorize this approval."
+                  : "Money movement requires two-factor verification. Enter the 6-digit code from your authenticator app.")}
           </DialogDescription>
         </DialogHeader>
 

@@ -10,6 +10,7 @@ import {
   legacyCheckAltMoneyShutdownResponse,
 } from '../../supabase/functions/_shared/legacy-checkalt-money-shutdown.ts';
 import {
+  CHECKALT_APPROVE_USER_ERROR,
   CHECKALT_PROVIDER_UNAVAILABLE,
   awsCheckAltProviderPathReady,
   awsCheckAltProviderRequestUrl,
@@ -189,6 +190,15 @@ test('production SPA cannot reach Lovable/Supabase CheckAlt hosts', async () => 
   assert.deepEqual(called, ['/prep/functions/v1/checkalt-deposit-history']);
   assert.equal(awsResult.error?.message, 'provider_disabled');
   assert.equal(checkAltProviderUserMessage(awsResult.error), CHECKALT_PROVIDER_UNAVAILABLE);
+  assert.equal(
+    checkAltProviderUserMessage(new Error('checkalt_approve_failed')),
+    CHECKALT_APPROVE_USER_ERROR,
+  );
+  assert.doesNotMatch(CHECKALT_APPROVE_USER_ERROR, /authenticator|verification code/i);
+  assert.match(
+    checkAltProviderUserMessage(new Error('That verification code could not be confirmed')),
+    /verification code/i,
+  );
 });
 
 test('production UI sources no longer invoke legacy CheckAlt provider functions', () => {

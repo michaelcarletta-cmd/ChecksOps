@@ -16,6 +16,26 @@ const CHECK_B = '623442f0-a408-4db5-85be-14bae231a722';
 const TENANT_A = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
 const TENANT_B = '4f172140-f57a-4744-8050-95f4f07b13b4';
 
+test('deposit.approve requires a check id and stays bound separately from deposit.submit', () => {
+  const missing = buildFinancialStepUpRequest({ actionKey: 'deposit.approve' });
+  assert.equal(missing.ok, false);
+  assert.equal(missing.error, 'check_intake_item_id is required');
+  const ok = buildFinancialStepUpRequest({
+    actionKey: 'deposit.approve',
+    checkId: CHECK_A,
+    amount: 1546.72,
+    amount_cents: 1,
+  });
+  assert.equal(ok.ok, true);
+  assert.equal(ok.request.actionKey, 'deposit.approve');
+  assert.equal(ok.request.checkId, CHECK_A);
+  assert.equal(awsStepUpBody(ok.request).action_key, 'deposit.approve');
+  assert.equal(Object.prototype.hasOwnProperty.call(awsStepUpBody(ok.request), 'amount_cents'), false);
+  const submitKey = stepUpCacheKey(USER, 'deposit.submit', CHECK_A);
+  const approveKey = stepUpCacheKey(USER, 'deposit.approve', CHECK_A);
+  assert.equal(cacheAllowsReuse(submitKey, approveKey), false);
+});
+
 test('deposit.submit requires a check id and passes that check through', () => {
   const missing = buildFinancialStepUpRequest({ actionKey: 'deposit.submit' });
   assert.equal(missing.ok, false);
