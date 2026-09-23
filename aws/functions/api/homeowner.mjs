@@ -33,6 +33,62 @@ const appOrigin = (override) => String(
   override || process.env.VITE_APP_URL || emailAssetOrigin(),
 ).replace(/\/$/, '');
 
+const RECEIVED_EVENTS = new Set([
+  'check_received',
+  'supplement_check',
+  'depreciation_check',
+  'deductible_check',
+]);
+const DEPOSITED_EVENTS = new Set(['deposited', 'cleared']);
+const RELEASED_EVENTS = new Set(['funds_released']);
+
+export const totalsFromLedgerEvents = (events = []) => {
+  const totals = { received: 0, deposited: 0, released: 0, remaining: 0 };
+  for (const event of events) {
+    const amount = Number(event?.amount || 0);
+    if (!amount) continue;
+    if (RECEIVED_EVENTS.has(String(event.event_type || ''))) totals.received += amount;
+    if (DEPOSITED_EVENTS.has(String(event.event_type || ''))) totals.deposited += amount;
+    if (RELEASED_EVENTS.has(String(event.event_type || ''))) totals.released += amount;
+  }
+  totals.remaining = Math.max(0, totals.received - totals.released);
+  return totals;
+};
+
+/** Map AWS token/claim/events doc onto the public ledger UI contract. */
+export const shapeHomeownerLedgerView = (doc = {}) => {
+  const claim = doc.claim || null;
+  const events = Array.isArray(doc.events) ? doc.events : [];
+  const token = doc.token && typeof doc.token === 'object' ? doc.token : {};
+  const homeowner = doc.homeowner && typeof doc.homeowner === 'object' ? doc.homeowner : {};
+  const incomingTotals = doc.totals && typeof doc.totals === 'object' ? doc.totals : null;
+  return {
+    ...doc,
+    mode: doc.mode === 'pre_claim' || doc.mode === 'claim'
+      ? doc.mode
+      : (claim ? 'claim' : 'pre_claim'),
+    homeowner: {
+      name: homeowner.name ?? token.homeowner_name ?? null,
+      email: homeowner.email ?? token.homeowner_email ?? null,
+    },
+    claim,
+    events,
+    totals: incomingTotals
+      ? {
+          received: Number(incomingTotals.received || 0),
+          deposited: Number(incomingTotals.deposited || 0),
+          released: Number(incomingTotals.released || 0),
+          remaining: Number(incomingTotals.remaining || 0),
+        }
+      : totalsFromLedgerEvents(events),
+    pending_upload_count: Number(doc.pending_upload_count || 0),
+    pending_signatures: Array.isArray(doc.pending_signatures) ? doc.pending_signatures : [],
+    pending_endorsements: Array.isArray(doc.pending_endorsements) ? doc.pending_endorsements : [],
+    shared_documents: Array.isArray(doc.shared_documents) ? doc.shared_documents : [],
+    can_upload: doc.can_upload !== false,
+  };
+};
+
 const loadLedgerTokenStaffRow = async (client, token) => {
   try {
     return (await client.query(
@@ -128,11 +184,13 @@ export const handleHomeownerLedgerView = async (event) => {
     return {
       ok: true,
       statusCode: 200,
-      ...doc,
-      // Keep money movement CTAs off
-      allow_deductible_payment: false,
-      money: null,
-      deductible_payments: [],
+      ...shapeHomeownerLedgerView({
+        ...doc,
+        // Keep money movement CTAs off
+        allow_deductible_payment: false,
+        money: null,
+        deductible_payments: [],
+      }),
       spoofFieldsIgnored: spoof,
     };
   } catch (error) {
@@ -366,13 +424,25 @@ export const handleHomeownerLedgerUpload = async (event, deps = {}) => {
         ContentType: 'image/jpeg',
       }));
     }
-    const row = (await client.query(
-      `INSERT INTO public.homeowner_ledger_check_uploads (
-         tenant_id, claim_id, front_path, status, created_at
-       ) VALUES ($1::uuid, $2::uuid, $3, 'uploaded', now())
-       RETURNING id, front_path, status, created_at`,
-      [doc.token.tenant_id, doc.token.claim_id, rel],
-    )).rows[0];
+    const inserted = (await client.query(
+      `SELECT public.aws_public_homeowner_ledger_upload_insert($1, $2, $3) AS doc`,
+      [token, rel, body.homeowner_note || null],
+    )).rows[0]?.doc;
+    if (!inserted?.ok || !inserted.id) {
+      if (!deps.client) await client.query('ROLLBACK');
+      return {
+        ok: false,
+        statusCode: inserted?.error === 'not_found' ? 404 : 503,
+        error: inserted?.error || 'ledger_upload_failed',
+        spoofFieldsIgnored: spoof,
+      };
+    }
+    const row = {
+      id: inserted.id,
+      front_path: inserted.front_path || rel,
+      status: inserted.status || 'pending_review',
+      created_at: inserted.created_at || null,
+    };
     if (!deps.client) await client.query('COMMIT');
     let notified = false;
     try {
@@ -550,7 +620,7 @@ export const runHomeownerLedgerSend = async ({
   }
 
   const origin = appOrigin(body.origin);
-  const url = `${origin}/h/ledger/${tokenRow.token}`;
+  const url = `${origin}/ledger/${tokenRow.token}`;
   if (homeownerEmail) {
     const branding = await resolveEmailBranding(client, {
       tenantId,
@@ -646,7 +716,7 @@ export const runSendFileToHomeowner = async ({
   }
 
   const origin = appOrigin(body.origin);
-  const portalUrl = `${origin}/h/ledger/${tok.token}`;
+  const portalUrl = `${origin}/ledger/${tok.token}`;
   const branding = await resolveEmailBranding(client, {
     tenantId: file.tenant_id,
     senderOverride: 'checksops',

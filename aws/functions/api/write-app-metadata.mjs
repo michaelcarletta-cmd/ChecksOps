@@ -530,6 +530,22 @@ export const executeTenantsNarrow = async ({ client, mapping, values, filters })
       out[col] = text;
     }
   }
+  if ('invoice_accent_color' in values) {
+    const text = clip(values.invoice_accent_color, 40);
+    if (text?.error) return text;
+    if (text && !/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(text)) {
+      return { error: 'invalid_field', field: 'invoice_accent_color' };
+    }
+    out.invoice_accent_color = text;
+  }
+  if ('invoice_theme' in values) {
+    const text = clip(values.invoice_theme, 16);
+    if (text?.error) return text;
+    if (text && text !== 'light' && text !== 'dark') {
+      return { error: 'invalid_field', field: 'invoice_theme' };
+    }
+    out.invoice_theme = text;
+  }
   if (!Object.keys(out).length) return { error: 'missing_required_field', field: 'values' };
   const built = buildSet(out);
   built.params.push(id);
@@ -875,7 +891,45 @@ export const executeAppMetadataWrite = async ({ client, mapping, table, op, valu
       return executeCashJobAttachments({ client, mapping, op, values, filters });
     case 'homeowner_ledger_events':
       return executeHomeownerLedgerEvents({ client, mapping, values });
+    case 'financial_stepup_log':
+      return executeFinancialStepupLog({ client, mapping, op, values });
     default:
       return { error: 'table_not_allowlisted', table };
   }
+};
+
+export const executeFinancialStepupLog = async ({ client, mapping, op, values }) => {
+  if (op !== 'insert') return { error: 'operation_not_allowlisted', op, table: 'financial_stepup_log' };
+  const action = clip(values.action_key, 120);
+  if (action?.error || !action) {
+    return action?.error || { error: 'missing_required_field', field: 'action_key' };
+  }
+  let tenantId = values.tenant_id || null;
+  if (tenantId) {
+    if (!isUuid(tenantId)) return { error: 'invalid_uuid', field: 'tenant_id' };
+    if (!(await memberOfTenant(client, mapping.application_user_id, tenantId))) {
+      return { error: 'not_authorized', message: 'Not a member of tenant' };
+    }
+  }
+  const factor = clip(values.factor_type, 40) || 'totp';
+  if (factor?.error) return factor;
+  const succeeded = values.succeeded === false || values.succeeded === 'false' ? false : true;
+  const metadata = values.metadata && typeof values.metadata === 'object' && !Array.isArray(values.metadata)
+    ? values.metadata
+    : {};
+  const rows = (await client.query(
+    `INSERT INTO public.financial_stepup_log (
+       user_id, tenant_id, action_key, factor_type, succeeded, metadata
+     ) VALUES ($1::uuid, $2::uuid, $3::text, $4::text, $5::boolean, $6::jsonb)
+     RETURNING *`,
+    [
+      mapping.application_user_id,
+      tenantId,
+      action,
+      typeof factor === 'string' ? factor : 'totp',
+      succeeded,
+      JSON.stringify(metadata),
+    ],
+  )).rows;
+  return { rows };
 };
