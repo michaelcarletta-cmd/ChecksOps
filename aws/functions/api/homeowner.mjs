@@ -382,7 +382,7 @@ export const handleHomeownerLedgerUpload = async (event, deps = {}) => {
     const row = {
       id: inserted.id,
       front_path: inserted.front_path || rel,
-      status: inserted.status || 'uploaded',
+      status: inserted.status || 'pending_review',
       created_at: inserted.created_at || null,
     };
     if (!deps.client) await client.query('COMMIT');

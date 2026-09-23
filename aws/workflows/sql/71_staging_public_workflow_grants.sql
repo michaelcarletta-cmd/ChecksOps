@@ -42,7 +42,7 @@ BEGIN
   INSERT INTO public.homeowner_ledger_check_uploads (
     tenant_id, claim_id, front_path, status, created_at
   ) VALUES (
-    tok.tenant_id, tok.claim_id, trim(p_front_path), 'uploaded', now()
+    tok.tenant_id, tok.claim_id, trim(p_front_path), 'pending_review', now()
   )
   RETURNING id, created_at INTO new_id, created;
 
@@ -50,7 +50,7 @@ BEGIN
     'ok', true,
     'id', new_id,
     'front_path', trim(p_front_path),
-    'status', 'uploaded',
+    'status', 'pending_review',
     'created_at', created,
     'note_ignored', p_note
   );
