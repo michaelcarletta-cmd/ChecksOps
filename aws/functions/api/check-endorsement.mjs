@@ -206,6 +206,24 @@ const resolveEndorsementId = async (client, body) => {
 
 const rotateToken = () => randomUUID();
 
+const isOptionalSatelliteWriteError = (error) => {
+  const message = String(error?.message || error || '');
+  return /permission denied|does not exist|undefined_table|undefined_column/i.test(message);
+};
+
+const updateClaimCheckStageIfWritable = async (client, checkId) => {
+  try {
+    await client.query(
+      `UPDATE public.claim_checks
+       SET check_stage = 'ready_for_deposit'::check_stage, updated_at = now()
+       WHERE check_intake_item_id = $1::uuid`,
+      [checkId],
+    );
+  } catch (error) {
+    if (!isOptionalSatelliteWriteError(error)) throw error;
+  }
+};
+
 export const updatePayeeSigned = (client, endorsement, payload) => (
   syncPayeeAfterEndorsement(client, endorsement, payload)
 );
@@ -368,12 +386,7 @@ export const applyAutoAdvanceIfEligible = async (client, checkId, result, { offi
            AND status IS DISTINCT FROM 'loss_draft_required'`,
         [checkId],
       );
-      await client.query(
-        `UPDATE public.claim_checks
-         SET check_stage = 'ready_for_deposit'::check_stage, updated_at = now()
-         WHERE check_intake_item_id = $1::uuid`,
-        [checkId],
-      );
+      await updateClaimCheckStageIfWritable(client, checkId);
     }
     return {
       ...result,
@@ -403,12 +416,7 @@ export const applyAutoAdvanceIfEligible = async (client, checkId, result, { offi
       error: 'ready_transition_not_applied',
     });
   }
-  await client.query(
-    `UPDATE public.claim_checks
-     SET check_stage = 'ready_for_deposit'::check_stage, updated_at = now()
-     WHERE check_intake_item_id = $1::uuid`,
-    [checkId],
-  );
+  await updateClaimCheckStageIfWritable(client, checkId);
   await client.query(
     `INSERT INTO public.check_audit_log (
        check_id, event_type, event_description, event_data, tenant_id

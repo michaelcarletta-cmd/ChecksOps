@@ -526,6 +526,27 @@ test('Ready transition source does not submit CheckAlt', () => {
   assert.equal(typeof updatePayeeSigned, 'function');
 });
 
+test('claim_checks permission denied does not block intake Ready', async () => {
+  await withEnv({ AWS_ENDORSEMENT_AUTO_ADVANCE: 'true' }, async () => {
+    const store = createAdvanceStore();
+    const original = store.client.query;
+    store.client.query = async (sql, params = []) => {
+      const compact = String(sql).replace(/\s+/g, ' ');
+      if (compact.includes('UPDATE public.claim_checks')) {
+        throw new Error('permission denied for table claim_checks');
+      }
+      return original(sql, params);
+    };
+    const result = await applyAutoAdvanceIfEligible(store.client, CHECK_ID, {
+      allSigned: true,
+      anyRejected: false,
+    }, { officialRearReady: true });
+    assert.equal(result.advance_check_on_endorsement_complete, 'applied');
+    assert.equal(store.check.status, 'approved_for_deposit');
+    assert.equal(store.check.check_stage, 'ready_for_deposit');
+  });
+});
+
 test('Ready intake UPDATE is fail-closed when no row is applied', async () => {
   await withEnv({ AWS_ENDORSEMENT_AUTO_ADVANCE: 'true' }, async () => {
     const store = createAdvanceStore();
