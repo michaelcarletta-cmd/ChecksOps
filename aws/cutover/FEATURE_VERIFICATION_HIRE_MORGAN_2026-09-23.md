@@ -9,9 +9,11 @@ Tester requested: **Morgan Carletta** / `claims@freedomadj.com` / temporary pass
 
 ## Verdict
 
-**HIRE + CLAIMS EMAIL_OTP — STOPPED before a real claims@ OTP.**
+**REHIRE PLAN WITHDRAWN.** See `FEATURE_VERIFICATION_CLAIMS_RECONCILE_2026-09-23.md`.
 
-The existing Hire Agent path is the correct path. It was **not** completed because the Hire Agent caller is the platform-owner CheckOps session (`checksopsadmin@gmail.com` EMAIL_OTP), and that mailbox is not readable from this agent. A claims@ EMAIL_OTP start without a live Cognito user is only an enumeration-suppressed fake challenge; **no claims@ OTP was left outstanding for the operator to retrieve.**
+The UI is already showing the existing Morgan Carletta / `claims@` application account. Do not revoke. Do not hire a second account. Hire Agent is the first-grant path and would 409; it is not a relink/reinvite for this row.
+
+Earlier stop: Hire + claims EMAIL_OTP were not completed. A claims@ passwordless start without a live Cognito user is an enumeration-suppressed fake challenge.
 
 Do not treat the earlier `POST /staging/auth/passwordless/start` for `claims@freedomadj.com` as a real OTP. Inbox and junk had no new Cognito authentication mail after that call.
 
