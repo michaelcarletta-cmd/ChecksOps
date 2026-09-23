@@ -1,0 +1,214 @@
+{
+  "recordedAt": "2026-09-23T18:41:34Z",
+  "workstream": "feature-verification",
+  "nature": "read-only verification of the accepted production baseline; no implementation change",
+  "account": "806168576068",
+  "region": "us-east-1",
+  "caller": "arn:aws:sts::806168576068:assumed-role/ChecksOpsCursorCloudStaging/checksops-t0-run",
+  "git": {
+    "branchObserved": "main",
+    "sha": "0075b5a4a"
+  },
+  "production": {
+    "spa": {
+      "host": "https://checksops.com",
+      "wwwHost": "https://www.checksops.com",
+      "indexLastModified": "Wed, 23 Sep 2026 12:34:55 GMT",
+      "etag": "644114c9dbe41b11248279ea66f40fde",
+      "s3VersionId": "h11J_MRe5OmOjP5JOe9.1AJqkky_jRky",
+      "bundle": "assets/index-BR49bZTp.js",
+      "css": "assets/index-BbhoCT-2.css",
+      "sha256": "0a6c0437aa42436b30542ee646ca9c9ce65513c3fe9ed7a490ccf18e7de76a09",
+      "bytes": 896579,
+      "wwwBundle": "assets/index-BR49bZTp.js",
+      "authProviderCompiled": "cognito",
+      "apiBaseCompiled": "/prep",
+      "webauthnAppUrl": "https://checksops.com",
+      "executeApiHostnamePresent": false,
+      "supabaseCoPresent": false
+    },
+    "lambda": {
+      "name": "checksops-production-prep-api",
+      "codeSha256": "KlG4w4x94w5+SXUP2uiIEw0XaKHFNUgzHPKxZE7i3uY=",
+      "revisionId": "b2f8f3c2-3397-405a-8764-a24f396b3701",
+      "lastModified": "2026-09-23T18:24:08.000+0000",
+      "version": "$LATEST",
+      "runtime": "nodejs22.x",
+      "role": "arn:aws:iam::806168576068:role/checksops-production-api-execution",
+      "env": "production-prep",
+      "cognitoUserPoolId": "us-east-1_h00WorYMT",
+      "webauthnOrigin": "https://checksops.com",
+      "webauthnRpId": "checksops.com"
+    },
+    "cloudfront": {
+      "healthVia": "https://checksops.com/prep/health",
+      "distributionHint": "E1B0ZWWO5559U5",
+      "rawExecuteApiHealth": {
+        "url": "https://kiqojucc02.execute-api.us-east-1.amazonaws.com/prep/health",
+        "http": 403
+      }
+    },
+    "health": {
+      "service": "checksops-api",
+      "environment": "production-prep",
+      "status": "ok",
+      "database": "not-connected",
+      "databaseSecretConfigured": true,
+      "databaseName": "checksops",
+      "productionSupabaseChanged": false
+    },
+    "dbHealth": {
+      "secretsManager": "ok",
+      "networkTls": "ok",
+      "authentication": "ok",
+      "postgresqlVersion": "18.3",
+      "select1": "ok",
+      "currentDatabase": "checksops",
+      "currentUser": "checksops",
+      "transactionReadOnly": "on",
+      "connectedDatabase": "checksops"
+    },
+    "readiness": {
+      "holdsOk": false,
+      "holdsFailures": [
+        "AWS_PROVIDER_EXECUTION_ENABLED=true",
+        "AWS_CHECKALT_ENABLED=true",
+        "AWS_FINANCIAL_PERMISSIONS_ACTIVATED=true"
+      ],
+      "financialActivationSqlApplied": false,
+      "webauthn": {
+        "origin": "https://checksops.com",
+        "rpId": "checksops.com"
+      },
+      "emailOtp": {
+        "authFlow": "USER_AUTH",
+        "preferredChallenge": "EMAIL_OTP"
+      }
+    },
+    "financialStatus": {
+      "productionExecution": false,
+      "liveProviderTransactions": false,
+      "moneyMovementUnlocked": false,
+      "flags": {
+        "AWS_PROVIDER_EXECUTION_ENABLED": true,
+        "AWS_MOOV_ENABLED": false,
+        "AWS_MOOV_TRANSFER_POST_ENABLED": false,
+        "AWS_CHECKALT_ENABLED": true,
+        "AWS_PLAID_ENABLED": false,
+        "AWS_PROVIDER_LIVE_READS_ENABLED": false,
+        "AWS_PROVIDER_WEBHOOK_DRY_RUN": true,
+        "AWS_FINANCIAL_SANDBOX_SIMULATION_ENABLED": false,
+        "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": true,
+        "AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED": false
+      }
+    },
+    "lambdaFlags": {
+      "AWS_PROVIDER_EXECUTION_ENABLED": "true",
+      "AWS_CHECKALT_ENABLED": "true",
+      "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": "true",
+      "AWS_MOOV_ENABLED": "false",
+      "AWS_MOOV_TRANSFER_POST_ENABLED": "false",
+      "AWS_ENDORSEMENT_AUTO_ADVANCE": "false",
+      "AWS_ENDORSEMENT_RESEND_ENABLED": "false",
+      "AWS_PROVIDER_WEBHOOK_DRY_RUN": "true",
+      "AWS_WRITES_ENABLED": "true",
+      "AWS_STORAGE_WRITES_ENABLED": "true",
+      "AWS_CHECK_WORKFLOW_WRITES_ENABLED": "true",
+      "AWS_APPLICATION_WORKFLOW_WRITES_ENABLED": "true",
+      "AWS_EMAIL_MODE": "ses"
+    },
+    "unauthenticatedProbes": {
+      "GET /prep/identity/me": { "http": 401, "error": "missing_cognito_token" },
+      "POST /prep/functions/v1/hire-mortgage-agent": { "http": 401, "error": "missing_cognito_token" },
+      "POST /prep/auth/login": { "http": 410, "error": "password_auth_disabled" },
+      "POST /prep/financial/prepare": { "http": 401, "error": "missing_cognito_token" },
+      "POST /prep/public/signature-document": { "http": 400, "error": "validate_token" },
+      "POST /prep/public/endorsement": { "http": 400, "error": "Token required" }
+    }
+  },
+  "staging": {
+    "spa": {
+      "host": "https://staging.checksops.com",
+      "indexLastModified": "Wed, 23 Sep 2026 11:46:26 GMT",
+      "etag": "4a6c71cfe2fbfc5e049d0185f54e69d7",
+      "bundle": "assets/index-Drua3bVl.js",
+      "sha256": "4cc8d418712471ebfceb49bc68ffd463027f2be493f9e5a4a7e0a95a414e52d9",
+      "bytes": 896644,
+      "authProviderCompiled": "cognito",
+      "apiBaseCompiled": "https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging",
+      "webauthnAppUrl": "https://staging.checksops.com"
+    },
+    "lambda": {
+      "name": "checksops-staging-api",
+      "codeSha256": "z9eA6eJK3XZ8EsvDTLYLGZQ6sm3SrPiXybzw434NICI=",
+      "revisionId": "60f77d23-2eea-44a0-862b-3f6568b546e6",
+      "lastModified": "2026-09-23T18:40:53.000+0000",
+      "version": "$LATEST",
+      "runtime": "nodejs22.x",
+      "role": "arn:aws:iam::806168576068:role/checksops-staging-ApiFunctionRole-7E7XRyLe3nyi",
+      "env": "staging",
+      "cognitoUserPoolId": "us-east-1_vPmQ7cL1F",
+      "note": "LastModified during this verification window; another workstream may have overlaid staging. This run did not deploy."
+    },
+    "health": {
+      "environment": "staging",
+      "status": "ok",
+      "database": "not-connected",
+      "databaseSecretConfigured": true
+    },
+    "dbHealth": {
+      "select1": "ok",
+      "currentDatabase": "checksops",
+      "currentUser": "checksops",
+      "transactionReadOnly": "on",
+      "postgresqlVersion": "18.3"
+    },
+    "readiness": {
+      "holdsOk": true,
+      "holdsFailures": [],
+      "flags": {
+        "AWS_PROVIDER_EXECUTION_ENABLED": false,
+        "AWS_MOOV_ENABLED": false,
+        "AWS_CHECKALT_ENABLED": false,
+        "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": false
+      }
+    },
+    "lambdaFlags": {
+      "AWS_PROVIDER_EXECUTION_ENABLED": "false",
+      "AWS_CHECKALT_ENABLED": "false",
+      "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": "false",
+      "AWS_MOOV_ENABLED": "false",
+      "AWS_ENDORSEMENT_AUTO_ADVANCE": "true",
+      "AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED": "true",
+      "AWS_EMAIL_MODE": "sink"
+    },
+    "unauthenticatedProbes": {
+      "GET /staging/identity/me": { "http": 401, "body": "API Gateway Unauthorized" },
+      "POST /staging/functions/v1/hire-mortgage-agent": { "http": 401, "error": "missing_cognito_token" },
+      "POST /staging/auth/login": { "http": 410, "error": "password_auth_disabled" }
+    }
+  },
+  "automatedTests": {
+    "mortgageOpsIsolationAndParity": {
+      "command": "node --test aws/tests/mortgage-ops-isolation.test.mjs aws/tests/mortgage-ops-library-parity.test.mjs aws/tests/parity-bill-mortgage.test.mjs aws/tests/tenant-documents-mortgage-doc-type.test.mjs",
+      "pass": 33,
+      "fail": 1,
+      "failedFile": "aws/tests/tenant-documents-mortgage-doc-type.test.mjs",
+      "failedReason": "Node test runner cannot import src/lib/mortgageLibraryDocTypes.ts (ERR_UNKNOWN_FILE_EXTENSION). Harness limitation, not a live workflow failure."
+    },
+    "portalAndAuthorization": {
+      "command": "node --test aws/tests/portal-session-isolation.test.mjs aws/tests/auth-embed-parity.test.mjs aws/tests/api-authorization.test.mjs aws/tests/privileged-auth.test.mjs",
+      "pass": 13,
+      "fail": 0
+    }
+  },
+  "notDone": [
+    "Did not submit EMAIL_OTP for a real mailbox",
+    "Did not hire or revoke a mortgage agent",
+    "Did not submit or approve a CheckAlt deposit",
+    "Did not fund Moov or create a transfer",
+    "Did not enable production execution or endorsement auto-advance",
+    "Did not alter Freedom production records",
+    "Did not overlay Lambda or publish SPA"
+  ]
+}
