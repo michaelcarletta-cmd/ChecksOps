@@ -12,11 +12,11 @@ production regression in that component.
 | Git SHA | `707f4f5092b3ac8cd81b113ae36fbef72250ed39` |
 | Production Lambda | `checksops-production-prep-api` |
 | Accepted Lambda CodeSha256 | `pVwEBVCZJG5PCS6kVmktMiziQ3SxE2NTnncC1pWxHUY=` |
-| Accepted Lambda LastModified | `2026-09-23T12:29:41.000+0000` |
+| Accepted Lambda LastModified | `2026-09-23T15:30:51.000+0000` (SES env update; CodeSha256 unchanged) |
 | Accepted production SPA | `index-BR49bZTp.js` |
 | Accepted SQL | `71_staging_public_workflow_grants.sql` with additive 3-argument `aws_public_homeowner_ledger_upload_insert(text,text,text)` while preserving the existing 4-argument overload; plus minimum production `72_production_homeowner_ledger_token_grants.sql` (`GRANT SELECT, INSERT, UPDATE` on `homeowner_ledger_tokens` to `checksops` only) |
 
-Live confirmation on 2026-09-23 (this run): Lambda SHA/LastModified and SPA `index-BR49bZTp.js` still match. Both SQL overloads remain present. Money flags untouched.
+Live confirmation on 2026-09-23 (CheckAlt preflight): Lambda SHA and SPA `index-BR49bZTp.js` still match. LastModified is the SES env update (`15:30:51`), not a code rollback. Money flags unread-only and untouched. CheckAlt deposit execution is PENDING REAL INPUT — not CLOSED.
 
 ## CLOSED / PRODUCTION COMPLETE
 
@@ -47,6 +47,8 @@ Never roll production backward to make hashes match.
 
 ## Explicitly out of scope here
 
-- CheckAlt E14 / deposit execution (separate workstream)
+- CheckAlt production deposit execution remains the next Master
+  item and is **PENDING REAL DEPOSIT INPUT** (no unused eligible
+  Freedom check; do not reuse `123733567`)
 - Moov redesign or Moov flag changes
-- Real money movement
+- Real money movement beyond an already-submitted CheckAlt row
