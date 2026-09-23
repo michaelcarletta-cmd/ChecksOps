@@ -425,3 +425,13 @@ test('SPA bridges recording RPCs and does not allowlist disbursement tables', ()
   assert.doesNotMatch(funds, /disbursement_batches"\)\s*\n\s*\.insert/);
   assert.doesNotMatch(funds, /disbursement_splits"\)\s*\.insert/);
 });
+
+test('external recording grants are narrow and do not activate providers', () => {
+  const sql = readFileSync(join(ROOT, 'aws/workflows/sql/72_external_recording_grants.sql'), 'utf8');
+  assert.match(sql, /GRANT SELECT, INSERT, UPDATE[\s\S]*deposit_items/);
+  assert.match(sql, /GRANT SELECT, INSERT, UPDATE[\s\S]*disbursement_batches/);
+  assert.match(sql, /GRANT SELECT, INSERT, UPDATE[\s\S]*disbursement_splits/);
+  assert.doesNotMatch(sql, /GRANT EXECUTE/);
+  assert.doesNotMatch(sql, /ON TABLE public\.(checkalt_deposits|payment_transfers)/);
+  assert.match(sql, /aws_write_deposit_batches_insert_creator/);
+});
