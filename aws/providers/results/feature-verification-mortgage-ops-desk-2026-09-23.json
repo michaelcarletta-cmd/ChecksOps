@@ -83,5 +83,16 @@
     "password_login": { "http": 410, "error": "password_auth_disabled" },
     "tenant_users": [],
     "unscoped_checks": 0
+  },
+  "browser": {
+    "url": "https://staging.checksops.com/mortgage-ops/queue",
+    "sessionKey": "checksops.aws.staging.auth.mortgage-ops",
+    "signedInAs": "claims@freedomadj.com",
+    "counts": { "queued": 1, "inProgress": 1, "completed": 1 },
+    "inProgressNoteVisible": true,
+    "detailCheckLinked": false,
+    "detailAttachments": 0,
+    "completedVisible": "Spencer Savings Bank-Sla / Martin Cohen / Freedom Adjustment",
+    "completeCancelAcceptClicked": false
   }
 }

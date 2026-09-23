@@ -157,3 +157,16 @@ No Cognito / SES / production / money-path defect was shown after OTP.
 - Password auth remains 410
 - No CheckAlt deposit, no Moov, no complete/bill
 - Temporary inspect Lambda not reused this phase
+
+## O. Browser desk (`https://staging.checksops.com/mortgage-ops/queue`)
+
+Session key `checksops.aws.staging.auth.mortgage-ops`. Header shows `claims@freedomadj.com`. AWS staging banner present. Counts **Queued 1 / In progress 1 / Completed 1**.
+
+| Tab | Visible |
+|---|---|
+| Queued | remaining `C046-AUDIT-NO-CONTACT` / Condition One Commercial — Accept not clicked |
+| In progress | accepted `C046-AUDIT-NO-CONTACT`; work note `2026-09-23 21:40 — STAGING ACCEPTANCE 2026-09-23 — Morgan desk note (in_progress only; do not complete)` |
+| Detail | status `in_progress`; **No check linked to this request**; **No attachments yet** |
+| Completed | Spencer Savings Bank-Sla / Freedom Adjustment / Martin Cohen — billing not reopened |
+
+No login bounce. Complete / Cancel / Accept / invoice not clicked.
