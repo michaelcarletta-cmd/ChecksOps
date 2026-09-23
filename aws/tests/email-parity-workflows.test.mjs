@@ -586,6 +586,26 @@ test('hire-mortgage-agent and tenant invite stay SUPPRESS and never leak passwor
           match: (sql) => sql.includes('FROM public.profiles'),
           result: () => ({ rows: [] }),
         },
+        {
+          match: (sql) => sql.includes('FROM public.identity_accounts'),
+          result: () => ({ rows: [] }),
+        },
+        {
+          match: (sql) => sql.includes('SAVEPOINT') || sql.includes('RELEASE SAVEPOINT') || sql.includes('ROLLBACK TO SAVEPOINT'),
+          result: () => ({ rows: [] }),
+        },
+        {
+          match: (sql) => sql.includes('INSERT INTO public.identity_accounts'),
+          result: () => ({ rows: [{ application_user_id: 'new-user' }] }),
+        },
+        {
+          match: (sql) => sql.includes('INSERT INTO public.profiles'),
+          result: () => ({ rows: [{ id: 'new-user' }] }),
+        },
+        {
+          match: (sql) => sql.includes('INSERT INTO public.tenant_users'),
+          result: () => ({ rows: [{ tenant_id: TENANT }] }),
+        },
       ]),
     });
     assert.equal(invite.ok, true);
