@@ -4,6 +4,11 @@ Settings persist shipped separately. Freedom production is
 `auto_approve_enabled=true` / `auto_approve_max_cents=200000`. This module
 restores post-process auto-approval only.
 
+Deployed 2026-09-23T11:04:59Z as an isolated overlay on
+`checksops-production-prep-api` (`CodeSha256=JPn2juCV/iTFwdhk099v5nwGms+QV/OTNTUly0yXYjk=`).
+Existing reference `123733567` was not used to test and remains `submitted`.
+No new real deposit was initiated.
+
 Do not call `/deposit/process` or `/deposit/approve` against existing
 reference `123733567`. Do not insert another deposit to test this path.
 
