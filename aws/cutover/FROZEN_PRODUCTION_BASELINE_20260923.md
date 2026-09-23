@@ -30,6 +30,8 @@ Live confirmation on 2026-09-23 (this run): Lambda SHA/LastModified and SPA `ind
 8. Homeowner upload
 9. Ledger / tracking
 10. Token/storage/tenant isolation for those public workflows
+11. Production staff check operations
+12. Production application SES email delivery (`AWS_EMAIL_MODE=ses`, From `ChecksOps <support@checksops.com>`)
 
 Preserve existing production work already completed elsewhere, including
 Manager / Partners / Bank Deposits / WalletOps. Do not broadly retest
