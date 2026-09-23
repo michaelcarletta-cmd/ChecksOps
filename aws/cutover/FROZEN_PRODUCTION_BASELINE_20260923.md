@@ -16,7 +16,7 @@ production regression in that component.
 | Accepted production SPA | `index-BR49bZTp.js` |
 | Accepted SQL | `71_staging_public_workflow_grants.sql` with additive 3-argument `aws_public_homeowner_ledger_upload_insert(text,text,text)` while preserving the existing 4-argument overload; plus minimum production `72_production_homeowner_ledger_token_grants.sql` (`GRANT SELECT, INSERT, UPDATE` on `homeowner_ledger_tokens` to `checksops` only) |
 
-Live confirmation on 2026-09-23 (CheckAlt preflight): Lambda SHA and SPA `index-BR49bZTp.js` still match. LastModified is the SES env update (`15:30:51`), not a code rollback. Money flags unread-only and untouched. CheckAlt deposit execution is PENDING REAL INPUT — not CLOSED.
+Live confirmation on 2026-09-23 (Moov preflight): Lambda SHA and SPA `index-BR49bZTp.js` still match. Money flags unread-only and untouched. `AWS_MOOV_ENABLED` remains `false`. CheckAlt deposit execution remains PENDING REAL INPUT. Moov activation is NOT COMPLETE.
 
 ## CLOSED / PRODUCTION COMPLETE
 
@@ -47,8 +47,10 @@ Never roll production backward to make hashes match.
 
 ## Explicitly out of scope here
 
-- CheckAlt production deposit execution remains the next Master
-  item and is **PENDING REAL DEPOSIT INPUT** (no unused eligible
-  Freedom check; do not reuse `123733567`)
-- Moov redesign or Moov flag changes
-- Real money movement beyond an already-submitted CheckAlt row
+- CheckAlt production deposit execution remains PENDING REAL
+  INPUT (do not reuse `123733567`)
+- Moov production activation is **NOT COMPLETE**. Do not flip
+  `AWS_MOOV_ENABLED` until a production execution path exists.
+  Do not rebuild Moov in this record.
+- First new production check intake remains PENDING REAL INPUT
+- Real money movement / disbursement
