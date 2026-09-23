@@ -14,7 +14,7 @@ production regression in that component.
 | Accepted Lambda CodeSha256 | `pVwEBVCZJG5PCS6kVmktMiziQ3SxE2NTnncC1pWxHUY=` |
 | Accepted Lambda LastModified | `2026-09-23T12:29:41.000+0000` |
 | Accepted production SPA | `index-BR49bZTp.js` |
-| Accepted SQL | `71_staging_public_workflow_grants.sql` with additive 3-argument `aws_public_homeowner_ledger_upload_insert(text,text,text)` while preserving the existing 4-argument overload |
+| Accepted SQL | `71_staging_public_workflow_grants.sql` with additive 3-argument `aws_public_homeowner_ledger_upload_insert(text,text,text)` while preserving the existing 4-argument overload; plus minimum production `72_production_homeowner_ledger_token_grants.sql` (`GRANT SELECT, INSERT, UPDATE` on `homeowner_ledger_tokens` to `checksops` only) |
 
 Live confirmation on 2026-09-23 (this run): Lambda SHA/LastModified and SPA `index-BR49bZTp.js` still match. Both SQL overloads remain present. Money flags untouched.
 
@@ -32,6 +32,7 @@ Live confirmation on 2026-09-23 (this run): Lambda SHA/LastModified and SPA `ind
 10. Token/storage/tenant isolation for those public workflows
 11. Production staff check operations
 12. Production application SES email delivery (`AWS_EMAIL_MODE=ses`, From `ChecksOps <support@checksops.com>`)
+13. Narrow `homeowner-ledger-send` table-privilege defect on `homeowner_ledger_tokens` (`checksops` `SELECT`/`INSERT`/`UPDATE` only; RLS unchanged)
 
 Preserve existing production work already completed elsewhere, including
 Manager / Partners / Bank Deposits / WalletOps. Do not broadly retest
