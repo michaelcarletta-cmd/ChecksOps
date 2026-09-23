@@ -412,6 +412,16 @@ test('review-correction is bridged, not on SAFE_WRITE_RPCS or generic /data/writ
   assert.equal(rpc.error, 'rpc_disabled');
 });
 
+test('narrow review-correction grant covers amount and claim number only', () => {
+  const sql = readFileSync(join(ROOT, 'aws/workflows/sql/71_review_correction_grants.sql'), 'utf8');
+  const grantLine = sql.split('\n').find((line) => line.startsWith('GRANT UPDATE'));
+  assert.match(grantLine, /GRANT UPDATE \(amount, detected_claim_number\)/);
+  assert.equal(grantLine.includes('routing'), false);
+  assert.equal(grantLine.includes('account'), false);
+  assert.equal(grantLine.includes('deposited'), false);
+  assert.equal(WRITE_ALLOWLIST.check_intake_items.columns.has('amount'), false);
+});
+
 test('Review UI exposes Edit Check and uses the dedicated correction helper', () => {
   const consoleSrc = readFileSync(join(ROOT, 'src/components/check-review/CheckReviewConsole.tsx'), 'utf8');
   const edit = readFileSync(join(ROOT, 'src/components/check-review/CheckAdminEditDialog.tsx'), 'utf8');
