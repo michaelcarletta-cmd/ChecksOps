@@ -59,6 +59,7 @@
 /aws/functions/api/providers/production/moov-secrets.mjs @michaelcarletta-cmd
 /aws/functions/api/providers/production/moov-submit.mjs @michaelcarletta-cmd
 /aws/cutover/MOOV_PRODUCTION_DISBURSEMENT_20260923.md @michaelcarletta-cmd
+/aws/cutover/MOOV_PRODUCTION_ACTIVATION_READINESS_20260923.md @michaelcarletta-cmd
 /aws/tests/api-moov-production.test.mjs @michaelcarletta-cmd
 
 /aws/functions/api/financial.mjs @michaelcarletta-cmd

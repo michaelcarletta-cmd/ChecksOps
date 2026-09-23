@@ -187,7 +187,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "295ef72ce463a2f98439a8957be8db8c0fdacb13",
-        "tree_hash": "880ae4daa397f3f46c0a9464f44e26028469ebdbd9defd625a97ee043d17cd9a",
+        "tree_hash": "9358724dd0e2bf96aa57952648882d15a32c513dea705d1308c4ff7f7e1f70d7",
         "merged": false,
         "merged_pr": null
       },
@@ -215,11 +215,10 @@
       },
       "missing_evidence": [
         "funded Freedom wallet or approved funding source",
-        "production payout method with Moov payment-method id",
         "operator authorization for one real transfer"
       ],
       "open_pr_overlap": [],
-      "notes": "Dedicated production Moov execution handler deployed fail-closed. Lambda SHA zQzfz1Use78/jI/+t2FWpcCguCEK9uF/oMPejSAuDbY=. Not activated. Wallet remains $0. collect-funds remains in-review."
+      "notes": "Dedicated production Moov execution handler deployed fail-closed. Lambda SHA zQzfz1Use78/jI/+t2FWpcCguCEK9uF/oMPejSAuDbY=. Payment method 7a78a544-340d-46fd-a4a4-228661374da7 reconciled. collect-funds enabled at provider. Not activated. Wallet remains $0."
     },
     "financial-ledger": {
       "id": "financial-ledger",
@@ -642,7 +641,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "8a3ead386d99f0e825d54093ebcb8c174a8c758e",
-        "tree_hash": "c1e54f5c8915086ac3de8116e41348a057a6b1f8ca56a8e801d51073ae27ae31",
+        "tree_hash": "c28986d535a93903ed12e54dbf2ed92404f7b1049da7ef77b7e6ffc26e9b853a",
         "merged": true,
         "merged_pr": 343
       },

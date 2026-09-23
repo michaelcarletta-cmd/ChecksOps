@@ -257,10 +257,16 @@ The code path is production-ready and remains disabled.
 
 ## Q. Remaining provider / funding blocker
 
-- Freedom production wallet `available_cents=0`
-- `collect-funds` remains in-review / `can_ach_debit=false`
-- Production payout method still needs a Moov payment-method
-  id before a real send can succeed
+Updated 2026-09-23 activation-readiness read:
+
+- Production payout method reconciled:
+  `provider_payment_method_id=7a78a544-340d-46fd-a4a4-228661374da7`
+- Provider `collect-funds` is **enabled**; local
+  `can_ach_debit` snapshot was stale and was reconciled
+- Freedom production wallet is still `available_cents=0`
+  at the provider (not stale)
+
+See `MOOV_PRODUCTION_ACTIVATION_READINESS_20260923.md`.
 
 ## R. Remaining requirement before activation
 
