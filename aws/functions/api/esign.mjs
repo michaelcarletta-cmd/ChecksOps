@@ -245,12 +245,8 @@ export const runSendSignatureRequest = async ({
   }
 
   if (skipEmail) {
-    for (const signer of signers) {
-      await client.query(
-        `UPDATE public.signature_signers SET access_token = NULL WHERE id = $1::uuid`,
-        [signer.id],
-      );
-    }
+    // Keep access_token populated. Staging RDS enforces NOT NULL on
+    // signature_signers.access_token; public lookup uses token_hash.
     await client.query(
       `UPDATE public.signature_requests
        SET status = 'pending', delivery_mode = 'manual_bypass', provider_status = 'manual_bypass',
@@ -294,7 +290,7 @@ export const runSendSignatureRequest = async ({
       const delivery = sendResult.results?.[0]?.delivery || sendResult.mode;
       await client.query(
         `UPDATE public.signature_signers
-         SET access_token = NULL, delivery_status = 'sent', email_sent_at = now(),
+         SET delivery_status = 'sent', email_sent_at = now(),
              email_provider_message_id = $2
          WHERE id = $1::uuid`,
         [signer.id, messageId],
@@ -304,7 +300,7 @@ export const runSendSignatureRequest = async ({
       const errMsg = String(emailErr?.message || emailErr).slice(0, 300);
       await client.query(
         `UPDATE public.signature_signers
-         SET access_token = NULL, delivery_status = 'failed', delivery_error = $2
+         SET delivery_status = 'failed', delivery_error = $2
          WHERE id = $1::uuid`,
         [signer.id, errMsg],
       );
