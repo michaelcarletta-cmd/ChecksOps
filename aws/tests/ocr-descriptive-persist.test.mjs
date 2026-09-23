@@ -48,6 +48,17 @@ const createClient = ({ existingPayees = [] } = {}) => {
       if (/SAVEPOINT |RELEASE SAVEPOINT |ROLLBACK TO SAVEPOINT /.test(text)) {
         return { rows: [] };
       }
+      if (/ocr_persist_extracted_amount/.test(text)) {
+        const incoming = params[1] == null ? null : Number(params[1]);
+        if (!Number.isFinite(incoming) || incoming <= 0) {
+          return { rows: [{ result: { ok: true, persisted: false, code: 'absent' } }] };
+        }
+        if (store.amount != null) {
+          return { rows: [{ result: { ok: true, persisted: false, code: 'conflict_preserved' } }] };
+        }
+        store.amount = incoming;
+        return { rows: [{ result: { ok: true, persisted: true, code: 'written' } }] };
+      }
       if (/ocr_persist_detected_claim_number/.test(text)) {
         const incoming = String(params[2] || '').trim();
         const existing = store.detected_claim_number;
@@ -144,9 +155,9 @@ test('2) absent date does not overwrite existing date', async () => {
   assert.equal(client.statements.some((row) => /issue_date = \$2/.test(row.sql)), false);
 });
 
-test('3) no amount persistence occurs', async () => {
+test('3) extracted amount fills via RPC only when the row is empty', async () => {
   const client = createClient();
-  await persistOcrDescriptiveHandoff({
+  const out = await persistOcrDescriptiveHandoff({
     client,
     checkId: CHECK_ID,
     tenantId: TENANT_ID,
@@ -159,8 +170,10 @@ test('3) no amount persistence occurs', async () => {
     },
   });
   const blob = JSON.stringify(client.statements.map((row) => row.sql));
-  assert.equal(blob.includes('amount'), false);
-  assert.equal(client.store.amount, null);
+  assert.match(blob, /ocr_persist_extracted_amount/);
+  assert.doesNotMatch(blob, /SET[\s\S]{0,80}amount\s*=/);
+  assert.equal(out.amount_persisted, true);
+  assert.equal(client.store.amount, 1500);
   assert.equal(INTAKE_PROHIBITED_COLUMNS.has('amount'), true);
 });
 
@@ -316,7 +329,7 @@ test('18) persist logs are count/status only', async () => {
   const blob = JSON.stringify(logs);
   assert.equal(blob.includes('Secret Payee Name'), false);
   assert.equal(blob.includes('Another Name'), false);
-  assert.match(logs[0].code, /date_1_ins_2_skip_0_multi_1_claim_none/);
+  assert.match(logs[0].code, /date_1_ins_2_skip_0_multi_1_claim_none_amt_none/);
 });
 
 test('19) amount remains prohibited and unpersisted after intake', async () => {
@@ -554,7 +567,7 @@ test('ALL-CAPS OCR payee dedups against mixed-case manual payee without rename',
   assert.equal(client.store.payees[0].contact_email, 'keep@example.test');
 });
 
-test('claim/check/MICR/amount values are not case-normalized; only claim RPC writes the number', async () => {
+test('claim/check/MICR values are not case-normalized; amount fills only through the amount RPC', async () => {
   const client = createClient();
   await persistOcrDescriptiveHandoff({
     client,
@@ -573,11 +586,12 @@ test('claim/check/MICR/amount values are not case-normalized; only claim RPC wri
   const blob = JSON.stringify(client.statements.map((row) => row.sql));
   assert.equal(client.store.detected_claim_number, 'AB-001/X');
   assert.equal(blob.includes('001234'), false);
-  assert.equal(blob.includes('1500.00'), false);
   assert.equal(blob.includes(ROUTING_OK), false);
   assert.equal(blob.includes(ACCOUNT), false);
   assert.equal(/UPDATE public\.check_intake_items[\s\S]*detected_claim_number\s*=/.test(blob), false);
-  assert.equal(client.store.amount, null);
+  assert.match(blob, /ocr_persist_extracted_amount/);
+  assert.doesNotMatch(blob, /SET[\s\S]{0,80}amount\s*=/);
+  assert.equal(client.store.amount, 1500);
 });
 
 test('watermark carrier is cleared and trailing The Order is stripped from payees', async () => {
@@ -607,6 +621,22 @@ test('watermark carrier is cleared and trailing The Order is stripped from payee
     'Irwin L Gleitman',
     'Sondra Gleitman',
   ]);
+});
+
+test('Bank of America stored as carrier is cleared on rerun', async () => {
+  const client = createClient();
+  client.store.carrier_name = 'Bank Of America';
+  await persistOcrDescriptiveHandoff({
+    client,
+    checkId: CHECK_ID,
+    tenantId: TENANT_ID,
+    parsed: {
+      carrier_name: 'Bank of America',
+      payees: [],
+      diagnostic: { carrier_rejected_bank: true },
+    },
+  });
+  assert.equal(client.store.carrier_name, null);
 });
 
 test('known USAA alias persists instead of watermark text', async () => {

@@ -2,13 +2,22 @@
  * Post-OCR application handoff: persist issue_date, normalized descriptive
  * text, pending check_payees, and detected_claim_number via a narrow RPC.
  *
- * Does not extract, call Azure/Textract, persist amount, or write MICR.
- * Generic /data/write stays blocked for detected_claim_number.
+ * Does not extract, call Azure/Textract, or write MICR.
+ * Amount fills only through ocr_persist_extracted_amount when the row is
+ * still empty and undeposited. Generic /data/write stays blocked for amount
+ * and detected_claim_number.
  * Does not invoke CheckAlt or Moov.
  * Claim numbers identify the claim: many checks may share one number
  * and link to the same existing tenant claim. Never inserts a claims row.
  */
-import { cleanPayeeLine, looksLikeSecurityDisclaimer, matchKnownCarrier, sanitizeCarrierName } from './ocr-parse.mjs';
+import {
+  cleanPayeeLine,
+  looksLikeBankName,
+  looksLikeSecurityDisclaimer,
+  matchKnownCarrier,
+  normalizeAmount,
+  sanitizeCarrierName,
+} from './ocr-parse.mjs';
 import {
   normalizeClaimNumber,
   normalizeDescriptiveText,
@@ -78,8 +87,9 @@ const persistCode = ({
   skipped = 0,
   multiPayeeSet = false,
   claim = 'none',
+  amount = 'none',
 } = {}) => (
-  `date_${issueDatePersisted ? 1 : 0}_ins_${inserted}_skip_${skipped}_multi_${multiPayeeSet ? 1 : 0}_claim_${claim}`
+  `date_${issueDatePersisted ? 1 : 0}_ins_${inserted}_skip_${skipped}_multi_${multiPayeeSet ? 1 : 0}_claim_${claim}_amt_${amount}`
 );
 
 export const persistOcrDescriptiveHandoff = async ({
@@ -97,6 +107,8 @@ export const persistOcrDescriptiveHandoff = async ({
     multi_payee_set: false,
     claim_persisted: false,
     claim_code: 'none',
+    amount_persisted: false,
+    amount_code: 'none',
     code: persistCode(),
   };
   if (!client || !isUuid(checkId)) {
@@ -110,7 +122,9 @@ export const persistOcrDescriptiveHandoff = async ({
   const payeeLine = normalizeDescriptiveText(cleanPayeeLine(parsed.payee_line) || parsed.payee_line);
   const clearBadCarrier = !carrierName && (
     looksLikeSecurityDisclaimer(parsed.carrier_name)
+    || looksLikeBankName(parsed.carrier_name)
     || Boolean(parsed.diagnostic?.carrier_rejected_disclaimer)
+    || Boolean(parsed.diagnostic?.carrier_rejected_bank)
   );
   const candidates = collectOcrPayeeCandidates(parsed);
   let issueDatePersisted = false;
@@ -119,10 +133,30 @@ export const persistOcrDescriptiveHandoff = async ({
   let multiPayeeSet = false;
   let claimPersisted = false;
   let claimCode = 'none';
+  let amountPersisted = false;
+  let amountCode = 'none';
+  const extractedAmount = normalizeAmount(parsed.amount);
 
   const incomingClaim = normalizeClaimNumber(
     parsed.claim_number || parsed.detected_claim_number,
   );
+  if (extractedAmount) {
+    try {
+      await client.query('SAVEPOINT ocr_extracted_amount');
+      const rpc = await client.query(
+        `SELECT public.ocr_persist_extracted_amount($1::uuid, $2::numeric) AS result`,
+        [checkId, extractedAmount],
+      );
+      const row = rpc.rows?.[0]?.result || {};
+      amountPersisted = row.persisted === true;
+      amountCode = String(row.code || 'written');
+      await client.query('RELEASE SAVEPOINT ocr_extracted_amount');
+    } catch {
+      try { await client.query('ROLLBACK TO SAVEPOINT ocr_extracted_amount'); } catch { /* ignore */ }
+      amountCode = 'rpc_unavailable';
+    }
+  }
+
   if (incomingClaim) {
     try {
       await client.query('SAVEPOINT ocr_claim_number');
@@ -211,12 +245,15 @@ export const persistOcrDescriptiveHandoff = async ({
     multi_payee_set: multiPayeeSet,
     claim_persisted: claimPersisted,
     claim_code: claimCode,
+    amount_persisted: amountPersisted,
+    amount_code: amountCode,
     code: persistCode({
       issueDatePersisted,
       inserted,
       skipped,
       multiPayeeSet,
       claim: claimCode,
+      amount: amountCode,
     }),
   };
   if (typeof log === 'function') {

@@ -116,6 +116,68 @@ test('merge prefers USAA over Azure/Textract watermark payer text', () => {
   assert.equal(canonical.amount, '1234.56');
 });
 
+test('Bank of America is the drawee bank, not the USAA carrier', () => {
+  const out = parseCheckFields([
+    line(WATERMARK, 0.04, 0.08, 88),
+    line('USAA', 0.07, 0.10, 96),
+    line('BANK OF AMERICA', 0.08, 0.55, 94),
+    line('CHECK NO 41822', 0.10, 0.72, 95),
+    line('08/24/2026', 0.12, 0.78, 95),
+    line('PAY TO THE ORDER OF', 0.30, 0.08, 95),
+    line('FREEDOM ADJUSTMENT AND IRWIN L GLEITMAN AND SONDRA GLEITMAN', 0.34, 0.10, 94),
+    line('***$1,234.56', 0.42, 0.78, 95),
+    line('ONE THOUSAND TWO HUNDRED THIRTY FOUR AND 56/100', 0.46, 0.10, 92),
+  ]);
+  assert.equal(out.carrier_name, 'USAA');
+  assert.notEqual(out.carrier_name, 'Bank Of America');
+  assert.equal(out.amount, '1234.56');
+  assert.equal(out.written_amount, '1234.56');
+  assert.equal(out.bank_name, 'Bank Of America');
+  assert.equal(out.diagnostic.carrier_rejected_bank, true);
+});
+
+test('bank-only face does not persist Bank of America as carrier', () => {
+  const out = parseCheckFields([
+    line('BANK OF AMERICA', 0.08, 0.10, 96),
+    line('CHECK NO 41822', 0.10, 0.72, 95),
+    line('PAY TO THE ORDER OF', 0.30, 0.08, 95),
+    line('FREEDOM ADJUSTMENT LLC', 0.34, 0.10, 94),
+    line('$10.00', 0.42, 0.78, 95),
+  ]);
+  assert.equal(out.carrier_name, null);
+  assert.equal(__test__.sanitizeCarrierName('Bank of America'), null);
+  assert.equal(__test__.looksLikeBankName('BANK OF AMERICA'), true);
+});
+
+test('merge keeps Textract USAA when Azure payer is Bank of America', () => {
+  const canonical = mergeCheckExtraction({
+    textractParsed: {
+      carrier_name: 'USAA',
+      bank_name: 'Bank of America',
+      payee_line: 'Freedom Adjustment And Irwin L Gleitman And Sondra Gleitman',
+      payees: [{ name: 'Freedom Adjustment', type: 'unknown' }],
+      amount: '1234.56',
+      check_number: '41822',
+    },
+    azureMicr: normalizeAzureMicr({
+      fields: {
+        PayerName: { valueString: 'Bank of America', confidence: 0.81 },
+        BankName: { valueString: 'Bank of America', confidence: 0.9 },
+        PayTo: { valueString: 'FREEDOM ADJUSTMENT AND IRWIN L GLEITMAN AND SONDRA GLEITMAN', confidence: 0.4 },
+        NumberAmount: { valueNumber: 1234.56, confidence: 0.88 },
+      },
+    }),
+    descriptiveEngine: 'aws_textract_analyze',
+    azureRan: true,
+    azureOk: true,
+  });
+  assert.equal(canonical.carrier_name, 'USAA');
+  assert.equal(canonical.descriptive_sources.carrier_name, 'aws_textract_analyze');
+  assert.ok(!canonical.filled_from_azure.includes('carrier_name'));
+  assert.equal(canonical.amount, '1234.56');
+  assert.equal(canonical.bank_name, 'Bank of America');
+});
+
 test('merge keeps Textract USAA when Azure payer is a disclaimer', () => {
   const canonical = mergeCheckExtraction({
     textractParsed: {

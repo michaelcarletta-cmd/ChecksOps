@@ -37,7 +37,7 @@ const clampPct = (n) => {
   return Math.max(0, Math.min(100, Math.round(v)));
 };
 
-const normalizeAmount = (raw) => {
+export const normalizeAmount = (raw) => {
   if (!raw) return null;
   const token = String(raw).trim().replace(/[$,\s]/g, '');
   if (!token) return null;
@@ -90,6 +90,23 @@ const ORDER_FRAGMENT_RE = /^(?:the\s+)?order(?:\s+of)?$/i;
 
 const hasPayeeSeparator = (text) => PAYEE_SPLIT_RE.test(String(text || ''));
 
+const KNOWN_BANK_ALIASES = [
+  { re: /\bbank of america\b|\bbofa\b|\bbankofamerica\b/i, name: 'Bank of America' },
+  { re: /\bjp\s*morgan\b|\bchase bank\b|\bchase\b/i, name: 'Chase' },
+  { re: /\bwells fargo\b/i, name: 'Wells Fargo' },
+  { re: /\bcitibank\b|\bciti bank\b/i, name: 'Citibank' },
+  { re: /\bpnc bank\b/i, name: 'PNC Bank' },
+  { re: /\btd bank\b/i, name: 'TD Bank' },
+  { re: /\bu\.?s\.?\s*bank\b|\busbancorp\b/i, name: 'U.S. Bank' },
+  { re: /\bcapital one\b/i, name: 'Capital One' },
+  { re: /\btruist\b/i, name: 'Truist' },
+  { re: /\bregions bank\b/i, name: 'Regions Bank' },
+  { re: /\bfifth third\b/i, name: 'Fifth Third' },
+  { re: /\bkeybank\b|\bkey bank\b/i, name: 'KeyBank' },
+  { re: /\bcitizens bank\b/i, name: 'Citizens Bank' },
+  { re: /\bm&t bank\b|\bm and t bank\b/i, name: 'M&T Bank' },
+];
+
 const KNOWN_CARRIER_ALIASES = [
   { re: /\busaa\b|united services automobile association|garrison property(?:\s+and\s+casualty)?/i, name: 'USAA' },
   { re: /\b(?:the\s+)?hartford (?:fire|casualty|insurance|accident|underwriter)|\bthe hartford\b/i, name: 'The Hartford' },
@@ -125,10 +142,31 @@ export const matchKnownCarrier = (text) => {
   return null;
 };
 
+export const matchKnownBank = (text) => {
+  const s = String(text || '').trim();
+  if (!s) return null;
+  for (const alias of KNOWN_BANK_ALIASES) {
+    if (alias.re.test(s)) return alias.name;
+  }
+  return null;
+};
+
+export const looksLikeBankName = (text) => {
+  const s = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!s) return false;
+  if (matchKnownCarrier(s)) return false;
+  if (matchKnownBank(s)) return true;
+  if (/\bbank\b/i.test(s) && !/insurance|mutual|casualty|assurance|indemnity|underwriter/i.test(s)) {
+    return true;
+  }
+  return false;
+};
+
 export const sanitizeCarrierName = (text) => {
   const s = String(text || '').replace(/\s+/g, ' ').trim();
   if (!s) return null;
   if (looksLikeSecurityDisclaimer(s) || looksLikeAddress(s)) return null;
+  if (looksLikeBankName(s)) return null;
   if (/\b(?:pay\s+to|order of|check\s*(?:no|number|#)|claim|memo|dollars?)\b/i.test(s) && !/insurance|mutual|casualty|assurance/i.test(s)) {
     return null;
   }
@@ -281,17 +319,22 @@ const safeLineConfidence = (line) => (line && line.conf != null ? line.conf : 50
 
 const pickCarrierName = (idx) => {
   let rejectedDisclaimer = false;
+  let rejectedBank = false;
   for (const l of idx.lines) {
     if (looksLikeSecurityDisclaimer(l.text)) rejectedDisclaimer = true;
+    if (looksLikeBankName(l.text)) rejectedBank = true;
+  }
+  for (const l of idx.lines) {
     const alias = matchKnownCarrier(l.text);
     if (alias) {
-      return { value: alias, conf: Math.min(95, safeLineConfidence(l)), rejectedDisclaimer };
+      return { value: alias, conf: Math.min(95, safeLineConfidence(l)), rejectedDisclaimer, rejectedBank };
     }
   }
   const candidates = idx.lines.filter((l) => {
     if ((l.box?.Top ?? 0) > 0.25) return false;
     if (!/[A-Za-z]/.test(l.text)) return false;
     if (looksLikeSecurityDisclaimer(l.text) || looksLikeAddress(l.text)) return false;
+    if (looksLikeBankName(l.text)) return false;
     if (looksLikeAmountLine(l.text) || /\$/.test(l.text)) return false;
     if (/^(?:pay(?:ee)?\s+to|the\s+order)/i.test(l.text)) return false;
     if (/check\s*(?:no|number|#)/i.test(l.text)) return false;
@@ -318,6 +361,7 @@ const pickCarrierName = (idx) => {
     value: sanitized,
     conf: sanitized ? Math.min(90, safeLineConfidence(best)) : 15,
     rejectedDisclaimer,
+    rejectedBank,
   };
 };
 
@@ -456,7 +500,7 @@ const pickIssueDate = (idx) => {
 };
 
 const pickAmountNumeric = (idx) => {
-  const moneyRe = /\$?\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})|[0-9]+\.[0-9]{2})\b/;
+  const moneyRe = /(?:usd)?\s*\$?\s*\*{0,12}([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})|[0-9]+\.[0-9]{2})\b/i;
   let best = null;
   let bestScore = -1e9;
   for (const l of idx.lines) {
@@ -468,10 +512,11 @@ const pickAmountNumeric = (idx) => {
     const left = l.box?.Left ?? 0.5;
     let score = 0;
     if (left > 0.55 && top > 0.10 && top < 0.70) score += 3; // numeric amount box tends to be right-ish
-    if (/\$/.test(l.text)) score += 1;
+    if (/\$/.test(l.text)) score += 2;
+    if (/\b(?:usd|amount)\b/i.test(l.text)) score += 1;
     if (looksLikeSecurityDisclaimer(l.text)) continue;
     if ((l.box?.Top ?? 0) > 0.80) score -= 5; // MICR band
-    if (/routing|account|micr/i.test(l.text)) score -= 4;
+    if (/routing|account|micr|check\s*(?:no|number|#)/i.test(l.text)) score -= 4;
     score += (safeLineConfidence(l) - 50) / 20;
     if (score > bestScore) {
       bestScore = score;
@@ -547,8 +592,8 @@ const pickAmountWritten = (idx) => {
   let bestScore = -1e9;
   let dollarsLineDetected = false;
   for (const l of idx.lines) {
-    if (!/\bdollars?\b/i.test(l.text)) continue;
-    dollarsLineDetected = true;
+    if (!/\bdollars?\b/i.test(l.text) && !/\band\s+\d{1,2}\s*\/\s*100\b/i.test(l.text)) continue;
+    if (/\bdollars?\b/i.test(l.text)) dollarsLineDetected = true;
     // Prefer lines near middle-left (written amount line).
     const top = l.box?.Top ?? 0.5;
     const left = l.box?.Left ?? 0.5;
@@ -925,14 +970,18 @@ export const parseCheckFields = (input = []) => {
 
   const carrier = isBlocks ? pickCarrierName(idx) : (() => {
     let rejectedDisclaimer = false;
+    let rejectedBank = false;
     let value = null;
     for (const line of lines) {
       if (looksLikeSecurityDisclaimer(line)) rejectedDisclaimer = true;
+      if (looksLikeBankName(line)) rejectedBank = true;
+    }
+    for (const line of lines) {
       const alias = matchKnownCarrier(line);
-      if (alias) return { value: alias, conf: 70, rejectedDisclaimer };
+      if (alias) return { value: alias, conf: 70, rejectedDisclaimer, rejectedBank };
     }
     for (const line of lines.slice(0, 8)) {
-      if (looksLikeSecurityDisclaimer(line) || looksLikeAddress(line)) continue;
+      if (looksLikeSecurityDisclaimer(line) || looksLikeAddress(line) || looksLikeBankName(line)) continue;
       if (looksLikeAmountLine(line) || /^(?:pay(?:ee)?\s+to|the\s+order)/i.test(line)) continue;
       if (/check\s*(?:no|number|#)/i.test(line)) continue;
       if (/insurance|mutual|assurance|casualty|property|indemnity|underwriter/i.test(line)) {
@@ -942,14 +991,14 @@ export const parseCheckFields = (input = []) => {
     }
     if (!value) {
       for (const line of lines.slice(0, 8)) {
-        if (looksLikeSecurityDisclaimer(line) || looksLikeAddress(line)) continue;
+        if (looksLikeSecurityDisclaimer(line) || looksLikeAddress(line) || looksLikeBankName(line)) continue;
         if (looksLikeAmountLine(line) || /^(?:pay(?:ee)?\s+to|the\s+order)/i.test(line)) continue;
         if (/check\s*(?:no|number|#)/i.test(line)) continue;
         value = sanitizeCarrierName(line);
         if (value) break;
       }
     }
-    return { value, conf: value ? 55 : 15, rejectedDisclaimer };
+    return { value, conf: value ? 55 : 15, rejectedDisclaimer, rejectedBank };
   })();
 
   const payee = isBlocks ? pickPayee(idx) : (() => {
@@ -1134,6 +1183,7 @@ export const parseCheckFields = (input = []) => {
       multiple_payee_lines_detected: Boolean(payee.multipleLines),
       date_label_classifications: Array.isArray(date.classifications) ? date.classifications : [],
       carrier_rejected_disclaimer: Boolean(carrier.rejectedDisclaimer),
+      carrier_rejected_bank: Boolean(carrier.rejectedBank),
     },
     // Helpers for safe logs/tests (do not add raw digits to logs)
     masked: {
@@ -1154,5 +1204,8 @@ export const __test__ = {
   sanitizeCarrierName,
   looksLikeSecurityDisclaimer,
   looksLikeAmountLine,
+  looksLikeBankName,
   matchKnownCarrier,
+  matchKnownBank,
+  normalizeAmount,
 };
