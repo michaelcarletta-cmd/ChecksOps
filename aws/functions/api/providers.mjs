@@ -37,6 +37,7 @@ import { handleProviderEgress } from './providers/egress.mjs';
 import { providerSandboxExecutionEnabled } from './sandbox-flags.mjs';
 import { hasParityHandler, runParityHandler } from './providers/parity/dispatch.mjs';
 import { hasProductionCheckAltHandler, runProductionCheckAltHandler } from './providers/production/checkalt-dispatch.mjs';
+import { hasProductionMoovHandler, runProductionMoovHandler } from './providers/production/moov-dispatch.mjs';
 import {
   checkaltStatusReadOnlyMode,
   denyCheckAltMutationUnderStatusRead,
@@ -362,6 +363,11 @@ export const handleFunctionInvoke = async (event, name, deps = {}) => {
 
   if (hasProductionCheckAltHandler(name) || isCheckAltStatusReadFunction(name)) {
     const production = await runProductionCheckAltHandler(name, event, deps);
+    if (production) return production;
+  }
+
+  if (hasProductionMoovHandler(name)) {
+    const production = await runProductionMoovHandler(name, event, deps);
     if (production) return production;
   }
 

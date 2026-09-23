@@ -342,7 +342,19 @@ export const resolveFinancialStepUpBinding = async ({ client, mapping, body, spo
     CHECKALT_TOTP_ACTION,
     serverAmountCentsFromCheck,
   } = await import('./providers/production/checkalt-authz.mjs');
+  const { MOOV_TOTP_ACTION, resolveDisbursementStepUpBinding } = await import('./providers/production/moov-authz.mjs');
   const actionKey = String(body.action_key || body.actionKey || CHECKALT_TOTP_ACTION);
+  if (actionKey === MOOV_TOTP_ACTION) {
+    const memberships = (await client.query(TENANT_MEMBERSHIP_SQL, [mapping.application_user_id])).rows;
+    const bound = await resolveDisbursementStepUpBinding({
+      client,
+      mapping,
+      memberships,
+      body,
+    });
+    if (!bound.ok) return { ...bound, spoofFieldsIgnored: spoof, ...financialGate() };
+    return bound;
+  }
   if (actionKey !== CHECKALT_TOTP_ACTION) {
     return {
       ok: false,
@@ -408,6 +420,13 @@ export const resolveFinancialStepUpBinding = async ({ client, mapping, body, spo
 
 export const insertAppStepUpLog = async (client, mapping, bound) => {
   const { CHECKALT_TOTP_ACTION } = await import('./providers/production/checkalt-authz.mjs');
+  const tenantId = bound.tenantId || bound.check?.tenant_id;
+  const metadata = bound.metadata || {
+    check_id: bound.check?.id || null,
+    amount_cents: bound.amountCents,
+    operation: bound.actionKey || CHECKALT_TOTP_ACTION,
+    source: 'app_financial_totp',
+  };
   const row = (await client.query(
     `INSERT INTO public.financial_stepup_log
       (user_id, tenant_id, action_key, factor_type, succeeded, metadata)
@@ -415,14 +434,9 @@ export const insertAppStepUpLog = async (client, mapping, bound) => {
      RETURNING id, created_at`,
     [
       mapping.application_user_id,
-      bound.check.tenant_id,
+      tenantId,
       bound.actionKey,
-      JSON.stringify({
-        check_id: bound.check.id,
-        amount_cents: bound.amountCents,
-        operation: CHECKALT_TOTP_ACTION,
-        source: 'app_financial_totp',
-      }),
+      JSON.stringify(metadata),
     ],
   )).rows[0];
   return {
@@ -430,8 +444,11 @@ export const insertAppStepUpLog = async (client, mapping, bound) => {
     statusCode: 200,
     recorded: true,
     stepup_id: row.id,
-    check_id: bound.check.id,
-    tenant_id: bound.check.tenant_id,
+    check_id: bound.check?.id || null,
+    transfer_id: bound.transferId || null,
+    batch_id: bound.batchId || null,
+    destination_id: bound.destinationId || null,
+    tenant_id: tenantId,
     amount_cents: bound.amountCents,
     applicationUserId: mapping.application_user_id,
   };
