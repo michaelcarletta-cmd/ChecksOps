@@ -3400,7 +3400,7 @@ function CheckDetailPanel({
       .replace(/'/g, "&#39;");
   }, []);
 
-  const canUndo = check && ['branch_deposit_required', 'approved_for_deposit', 'loss_draft_required', 'reissue_requested'].includes(check.status) && check.status !== 'deposited';
+  const canUndo = check && ['branch_deposit_required', 'approved_for_deposit', 'loss_draft_required', 'reissue_requested', 'endorsements_in_progress'].includes(check.status) && check.status !== 'deposited';
 
   const handleBypassEndorsements = async () => {
     if (!user?.id || !check) return;
@@ -3500,77 +3500,19 @@ function CheckDetailPanel({
     setMovingToDeposited(true);
     const rollbackStage = optimisticStage(qc, [checkId], "deposited");
     try {
-
-      // 1. Check if a deposit_items row already exists for this check
-      const { data: existingItem } = await supabase
-        .from("deposit_items")
-        .select("id, status")
-        .eq("check_id", checkId)
-        .maybeSingle();
-
-      let depositItemId = existingItem?.id ?? null;
-
-      // 2. If not, we need check.status = 'approved_for_deposit' to call prepare_deposit.
-      //    If we're force-moving from branch_deposit_required (or some other state),
-      //    flip it to approved_for_deposit first so the RPC accepts it.
-      if (!depositItemId) {
-        if (check.status !== "approved_for_deposit") {
-          const { error: flipErr } = await supabase
-            .from("check_intake_items")
-            .update({ status: "approved_for_deposit", updated_at: new Date().toISOString() })
-            .eq("id", checkId);
-          if (flipErr) throw flipErr;
-        }
-
-        const { data: prepData, error: prepErr } = await supabase.rpc("deposit_action", {
-          p_action: "prepare_deposit",
-          p_actor_id: user.id,
-          p_check_id: checkId,
-          p_notes: force ? "Force-moved from Check Command Center" : "Moved to deposit pipeline from Check Command Center",
-        });
-        if (prepErr) throw prepErr;
-        depositItemId = (prepData as any)?.deposit_item_id ?? null;
-        if (!depositItemId) throw new Error("prepare_deposit did not return a deposit_item_id");
+      // Dedicated AWS recording path. Does not call CheckAlt or enable
+      // generic deposit_action money actions /data/write status flips.
+      const { data, error } = await supabase.rpc("record_external_deposit" as never, {
+        p_check_id: checkId,
+        p_notes: force
+          ? "Force-marked deposited from Check Command Center"
+          : "Marked deposited from Check Command Center",
+      } as never);
+      if (error) throw error;
+      const recorded = data as { ok?: boolean; message?: string; error?: string; deposit_item_id?: string } | null;
+      if (recorded && recorded.ok === false) {
+        throw new Error(recorded.message || recorded.error || "External deposit recording rejected");
       }
-
-      // 3. Assign manual_branch provider if still pending
-      const { data: itemAfterPrep } = await supabase
-        .from("deposit_items")
-        .select("status, provider")
-        .eq("id", depositItemId)
-        .single();
-
-      if (itemAfterPrep?.status === "pending_assignment") {
-        const { error: assignErr } = await supabase.rpc("deposit_action", {
-          p_action: "assign_provider",
-          p_actor_id: user.id,
-          p_deposit_item_id: depositItemId,
-          p_provider: "manual_branch",
-          p_notes: "Auto-assigned manual_branch from Check Command Center",
-        });
-        if (assignErr) throw assignErr;
-      }
-
-      // 4. Mark as manually deposited (sets check_intake_items.status = 'deposited' too)
-      if (itemAfterPrep?.status !== "succeeded" && itemAfterPrep?.status !== "reconciled") {
-        const { error: markErr } = await supabase.rpc("deposit_action", {
-          p_action: "mark_manual_deposit",
-          p_actor_id: user.id,
-          p_deposit_item_id: depositItemId,
-          p_notes: force ? "Force-marked deposited from Check Command Center" : "Marked deposited from Check Command Center",
-        });
-        if (markErr) throw markErr;
-      }
-
-      await supabase.from("check_audit_log").insert({
-        check_id: checkId,
-        event_type: force ? "force_moved_to_deposited" : "moved_to_deposited",
-        actor_id: user.id,
-        event_description: force
-          ? "Check force-moved to deposited via deposit pipeline"
-          : "Check moved to deposited via deposit pipeline",
-        event_data: { deposit_item_id: depositItemId },
-      });
 
       sonnerToast.success("Check moved to Deposited", {
         description: `Check #${check.check_number ?? checkId.slice(0, 8)} now visible in Deposit Operations.`,

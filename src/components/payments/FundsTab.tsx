@@ -282,39 +282,25 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
     setExtSaving(true);
     try {
       const { data: userData } = await supabase.auth.getUser();
-      const uid = userData?.user?.id;
-      if (!uid) throw new Error("Not signed in");
-      // Create a batch for this external payment
-      const { data: batch, error: bErr } = await (supabase as any)
-        .from("disbursement_batches")
-        .insert({
-          tenant_id: tenant!.id,
-          check_intake_item_id: checkIntakeItemId,
-          created_by: uid,
-          check_amount: amt,
-          available_amount: amt,
-          status: "completed",
-          notes: `External check #${extCheckNum} to ${extRecipient}`,
-          completed_at: new Date().toISOString(),
-        })
-        .select("id").single();
-
-      if (bErr) throw bErr;
-      const { error: sErr } = await (supabase as any)
-        .from("disbursement_splits").insert({
-          batch_id: batch.id,
-          tenant_id: tenant!.id,
-          amount: amt,
-          status: "settled",
-          method: "external_check",
-          external_check_number: extCheckNum,
-          recipient_name: extRecipient,
-          recipient_type: extRecipientType,
-          external_notes: extNotes || null,
-          settled_at: new Date().toISOString(),
-        });
-      if (sErr) throw sErr;
-      const remaining = Math.max(0, toCents(availableForDisbursement - amt));
+      if (!userData?.user?.id) throw new Error("Not signed in");
+      // Dedicated AWS recording path. Does not insert via /data/write and
+      // never calls Moov or writes disbursement tables from the browser.
+      const { data, error } = await supabase.rpc("record_external_payment" as never, {
+        p_check_id: checkIntakeItemId,
+        p_recipient_name: extRecipient.trim(),
+        p_recipient_type: extRecipientType,
+        p_amount: amt,
+        p_external_check_number: extCheckNum.trim(),
+        p_notes: extNotes || null,
+      } as never);
+      if (error) throw error;
+      const recorded = data as { ok?: boolean; message?: string; error?: string; remaining?: number } | null;
+      if (recorded && recorded.ok === false) {
+        throw new Error(recorded.message || recorded.error || "External payment recording rejected");
+      }
+      const remaining = recorded?.remaining != null
+        ? toCents(Number(recorded.remaining))
+        : Math.max(0, toCents(availableForDisbursement - amt));
       toast({
         title: "External disbursement recorded",
         description: remaining > 0
