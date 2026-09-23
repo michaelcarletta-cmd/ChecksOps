@@ -1197,6 +1197,7 @@ test('empty Poll Now refreshes tenant pending_approval using stored reference', 
 
 test('refresh-before-approve blocks stale 127 Approved and does not POST approve', async () => {
   const store = createStore();
+  grantStepUp(store, { action: 'deposit.approve' });
   store.itemPayload = { status: 'Approved', statusDescription: 'Approved' };
   store.deposits.push({
     id: DEPOSIT_ID,
@@ -1230,6 +1231,7 @@ test('refresh-before-approve blocks stale 127 Approved and does not POST approve
 
 test('approve still posts only when CheckAlt remains pending_approval', async () => {
   const store = createStore();
+  grantStepUp(store, { action: 'deposit.approve' });
   store.itemPayload = { statusCode: 40, statusDescription: 'Pending' };
   store.deposits.push({
     id: DEPOSIT_ID,
@@ -1452,6 +1454,7 @@ test('identical capped history pages without the target stay fail-closed', async
 
 test('history 40 stays pending_approval and already-approved 127 does not POST approve', async () => {
   const pending = createStore();
+  grantStepUp(pending, { action: 'deposit.approve' });
   pending.itemPayload = { referenceNumber: '9001', ruleDetails: {} };
   pending.historyPayload = {
     depositHistoryList: [{ referenceNumber: '9001', status: '40', statusDescription: 'Pending Approval' }],
@@ -1481,6 +1484,7 @@ test('history 40 stays pending_approval and already-approved 127 does not POST a
   assert.ok(pending.historyBodies[0].userId);
 
   const resolved = createStore();
+  grantStepUp(resolved, { action: 'deposit.approve' });
   resolved.itemPayload = { referenceNumber: '9001', ruleDetails: {} };
   resolved.historyPayload = {
     depositHistoryList: [{ referenceNumber: '9001', status: '127', statusDescription: 'Approved' }],
@@ -1580,4 +1584,219 @@ test('production approve helper refuses a locator-less body', async () => {
   });
   assert.equal(result.error, 'deposit_locator_required');
   assert.equal(result.approvePosted, false);
+});
+
+const process40Payload = (extra = {}) => ({
+  provider_http_attempted: true,
+  phase: 'provider_outcome',
+  status_code: 40,
+  response_keys: ['referenceNumber', 'status', 'success'],
+  ...extra,
+});
+
+const seedManagerDeposit = (store, extra = {}) => {
+  store.deposits.push({
+    id: extra.id || DEPOSIT_ID,
+    tenant_id: FREEDOM_TENANT,
+    check_intake_item_id: CHECK_ID,
+    checkalt_reference: extra.checkalt_reference === undefined ? '9001' : extra.checkalt_reference,
+    status: extra.status || 'pending_approval',
+    amount: extra.amount ?? 12.34,
+    amount_cents: extra.amount_cents ?? 1234,
+    last_status_payload: extra.last_status_payload || {},
+    submitted_at: extra.submitted_at || '2026-09-23T01:01:04.223Z',
+    approved_at: extra.approved_at === undefined ? null : extra.approved_at,
+  });
+};
+
+const makeRefreshAmbiguous = (store) => {
+  store.itemPayload = {
+    processDate: '2026-09-22T20:01:05.474-05',
+    ruleDetails: { itemRules: [{ ruleType: 'IQA' }] },
+    depositId: 9001,
+    referenceNumber: '9001',
+  };
+  store.historyForBody = () => ([
+    { referenceNumber: '115497665', status: '120', statusDescription: 'Rejected' },
+    { referenceNumber: '122678838', status: '127', statusDescription: 'Approved' },
+  ]);
+};
+
+const approveDeposit = (store, body = {}) => withEnv(productionFlags, () => handleProviderRequest(
+  jwtEvent('/functions/v1/checkalt-approve-deposit', 'POST', {
+    deposit_id: DEPOSIT_ID,
+    action: 'approve',
+    ...body,
+  }),
+  '/functions/v1/checkalt-approve-deposit',
+  'POST',
+  submitDeps(store),
+));
+
+test('authoritative refresh already resolved does not POST approve', async () => {
+  const store = createStore();
+  grantStepUp(store, { action: 'deposit.approve' });
+  store.itemPayload = { status: 127, statusCode: 127, statusDescription: 'Approved' };
+  seedManagerDeposit(store, { last_status_payload: process40Payload() });
+  const result = await approveDeposit(store);
+  assert.equal(result.already_resolved, true);
+  assert.equal(result.approvePosted, false);
+  assert.equal(result.action_taken, false);
+  assert.equal(result.status, 'submitted');
+  assert.equal(store.approvePosts, 0);
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.deposits.length, 1);
+  assert.equal(store.deposits[0].status, 'submitted');
+  assert.equal(store.deposits[0].approved_at, null);
+});
+
+test('authoritative refresh pending_approval posts exactly one approve', async () => {
+  const store = createStore();
+  grantStepUp(store, { action: 'deposit.approve' });
+  store.itemPayload = { statusCode: 40, status: 40, statusDescription: 'Pending Approval' };
+  seedManagerDeposit(store, { last_status_payload: process40Payload() });
+  const result = await approveDeposit(store);
+  assert.equal(result.approvePosted, true);
+  assert.equal(result.action_taken, true);
+  assert.equal(result.createdDeposit, false);
+  assert.equal(result.status, 'submitted');
+  assert.equal(store.approvePosts, 1);
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.deposits.length, 1);
+});
+
+test('ambiguous refresh plus local pending plus stored process 40 posts exactly one approve', async () => {
+  const store = createStore();
+  grantStepUp(store, { action: 'deposit.approve' });
+  makeRefreshAmbiguous(store);
+  seedManagerDeposit(store, { last_status_payload: process40Payload() });
+  const result = await approveDeposit(store);
+  assert.equal(result.approvePosted, true);
+  assert.equal(result.createdDeposit, false);
+  assert.equal(result.checkalt_reference, '9001');
+  assert.equal(result.status, 'submitted');
+  assert.equal(store.approvePosts, 1);
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.deposits.length, 1);
+  assert.ok(store.itemPosts >= 1);
+  assert.ok(store.historyPosts >= 1);
+});
+
+test('ambiguous refresh without stored process status 40 does not POST approve', async () => {
+  const missing = createStore();
+  grantStepUp(missing, { action: 'deposit.approve' });
+  makeRefreshAmbiguous(missing);
+  seedManagerDeposit(missing, { last_status_payload: { provider_http_attempted: true } });
+  const noPayload = await approveDeposit(missing);
+  assert.equal(noPayload.error, 'reconciliation_required');
+  assert.equal(noPayload.approvePosted, false);
+  assert.equal(missing.approvePosts, 0);
+  assert.equal(missing.processPosts, 0);
+  assert.equal(missing.deposits[0].status, 'pending_approval');
+
+  const synthesized = createStore();
+  grantStepUp(synthesized, { action: 'deposit.approve' });
+  makeRefreshAmbiguous(synthesized);
+  seedManagerDeposit(synthesized, {
+    last_status_payload: {
+      last_poll: { status: 'pending_approval' },
+      status_code: 40,
+    },
+  });
+  const fromPoll = await approveDeposit(synthesized);
+  assert.equal(fromPoll.error, 'reconciliation_required');
+  assert.equal(synthesized.approvePosts, 0);
+  assert.equal(synthesized.processPosts, 0);
+  assert.equal(synthesized.deposits[0].status, 'pending_approval');
+});
+
+test('ambiguous refresh with wrong local status does not POST approve', async () => {
+  const store = createStore();
+  grantStepUp(store, { action: 'deposit.approve' });
+  makeRefreshAmbiguous(store);
+  seedManagerDeposit(store, {
+    status: 'submitted',
+    last_status_payload: process40Payload(),
+  });
+  const result = await approveDeposit(store);
+  assert.equal(result.error, 'reconciliation_required');
+  assert.equal(result.approvePosted, false);
+  assert.equal(store.approvePosts, 0);
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.deposits[0].status, 'submitted');
+  assert.equal(store.deposits.length, 1);
+});
+
+test('ambiguous refresh without stored reference does not POST approve', async () => {
+  const store = createStore();
+  grantStepUp(store, { action: 'deposit.approve' });
+  makeRefreshAmbiguous(store);
+  seedManagerDeposit(store, {
+    checkalt_reference: null,
+    last_status_payload: process40Payload(),
+  });
+  const result = await approveDeposit(store);
+  assert.equal(result.error, 'reconciliation_required');
+  assert.equal(result.approvePosted, false);
+  assert.equal(store.approvePosts, 0);
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.deposits[0].status, 'pending_approval');
+});
+
+test('valid deposit.submit TOTP cannot authorize Manager approval', async () => {
+  const store = createStore();
+  grantStepUp(store, { action: 'deposit.submit' });
+  store.itemPayload = { statusCode: 40, statusDescription: 'Pending' };
+  seedManagerDeposit(store, { last_status_payload: process40Payload() });
+  const result = await approveDeposit(store);
+  assert.equal(result.error, 'step_up_required');
+  assert.equal(result.approvePosted, false);
+  assert.equal(store.approvePosts, 0);
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.deposits[0].status, 'pending_approval');
+});
+
+test('valid deposit.approve TOTP can authorize Manager approval', async () => {
+  const store = createStore();
+  grantStepUp(store, { action: 'deposit.approve' });
+  store.itemPayload = { statusCode: 40, statusDescription: 'Pending' };
+  seedManagerDeposit(store, { last_status_payload: process40Payload() });
+  const result = await approveDeposit(store);
+  assert.equal(result.approvePosted, true);
+  assert.equal(result.createdDeposit, false);
+  assert.equal(store.approvePosts, 1);
+  assert.equal(store.processPosts, 0);
+});
+
+test('CheckAlt approval failure leaves the local row pending_approval', async () => {
+  const store = createStore();
+  grantStepUp(store, { action: 'deposit.approve' });
+  store.itemPayload = { statusCode: 40, statusDescription: 'Pending' };
+  store.approvePayload = { success: false, statusDescription: 'Unable to approve' };
+  seedManagerDeposit(store, { last_status_payload: process40Payload() });
+  const result = await approveDeposit(store);
+  assert.equal(result.error, 'checkalt_approve_failed');
+  assert.equal(result.approvePosted, false);
+  assert.equal(store.approvePosts, 1);
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.deposits.length, 1);
+  assert.equal(store.deposits[0].checkalt_reference, '9001');
+  assert.equal(store.deposits[0].status, 'pending_approval');
+  assert.equal(store.deposits[0].approved_at, null);
+});
+
+test('ambiguous approval response does not automatically retry approve', async () => {
+  const store = createStore();
+  grantStepUp(store, { action: 'deposit.approve' });
+  makeRefreshAmbiguous(store);
+  store.approvePayload = { status: 'unknown' };
+  seedManagerDeposit(store, { last_status_payload: process40Payload() });
+  const result = await approveDeposit(store);
+  assert.equal(result.error, 'checkalt_approve_failed');
+  assert.equal(result.approvePosted, false);
+  assert.equal(store.approvePosts, 1);
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.deposits.length, 1);
+  assert.equal(store.deposits[0].status, 'pending_approval');
+  assert.equal(store.deposits[0].checkalt_reference, '9001');
 });
