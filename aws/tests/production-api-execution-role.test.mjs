@@ -21,7 +21,10 @@ test('production API execution role template is least-privilege and omits stagin
   assert.doesNotMatch(yaml, /checksops\/staging\/providers/);
   assert.doesNotMatch(yaml, /checksops_admin/);
   assert.doesNotMatch(yaml, /AdminCreateUser|AdminGetUser|AdminDisableUser|AdminSetUserPassword/);
-  assert.doesNotMatch(yaml, /ses:SendEmail|ses:SendRawEmail|ses:/);
+  assert.match(yaml, /ses:SendEmail/);
+  assert.doesNotMatch(yaml, /ses:SendRawEmail/);
+  assert.match(yaml, /identity\/checksops\.com/);
+  assert.match(yaml, /identity\/Support@checksops\.com/);
   assert.doesNotMatch(yaml, /textract:/);
   assert.doesNotMatch(yaml, /Resource: '\*'/);
 });

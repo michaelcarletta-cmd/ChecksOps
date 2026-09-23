@@ -482,5 +482,8 @@ test('staging template names AWS_EMAIL_MODE=sink and does not grant SES', () => 
   assert.match(yaml, /AWS_SES_CONFIGURATION_SET:\s*""/);
   assert.doesNotMatch(yaml, /ses:SendEmail|ses:SendRawEmail|ses:/);
   const production = fs.readFileSync(path.join(ROOT, 'aws/production/api-execution-role.yaml'), 'utf8');
-  assert.doesNotMatch(production, /ses:SendEmail|ses:SendRawEmail|ses:/);
+  assert.match(production, /ses:SendEmail/);
+  assert.doesNotMatch(production, /ses:SendRawEmail/);
+  assert.match(production, /identity\/checksops\.com/);
+  assert.match(production, /identity\/Support@checksops\.com/);
 });
