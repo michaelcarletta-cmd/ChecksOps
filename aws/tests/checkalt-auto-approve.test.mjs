@@ -65,13 +65,16 @@ test('tenant-over-global policy; tenant NULL does not inherit unlimited from mis
 test('decideAutoApprove: clean + enabled + amount <= ceiling approves; NULL ceiling stays pending', () => {
   const base = {
     processRequiresApproval: true,
-    reference: '123733567',
+    reference: '9001555',
     enabled: true,
     maxCents: 200000,
     amountCents: 154672,
     flagged: false,
   };
   assert.deepEqual(decideAutoApprove(base), { approve: true, skipReason: null });
+  assert.equal(decideAutoApprove({ ...base, amountCents: 154672 }).approve, true);
+  assert.equal(decideAutoApprove({ ...base, amountCents: 200000 }).approve, true);
+  assert.equal(decideAutoApprove({ ...base, amountCents: 200001 }).skipReason, 'over_max_amount');
   assert.equal(decideAutoApprove({ ...base, processRequiresApproval: false }).skipReason, 'not_pending_approval');
   assert.equal(decideAutoApprove({ ...base, reference: null }).skipReason, 'missing_reference');
   assert.equal(decideAutoApprove({ ...base, enabled: false }).skipReason, 'auto_approve_disabled');
@@ -79,8 +82,6 @@ test('decideAutoApprove: clean + enabled + amount <= ceiling approves; NULL ceil
   assert.equal(decideAutoApprove({ ...base, amountCents: 12.3 }).skipReason, 'invalid_amount');
   assert.equal(decideAutoApprove({ ...base, maxCents: null }).skipReason, 'missing_auto_approve_ceiling');
   assert.equal(decideAutoApprove({ ...base, maxCents: 12.5 }).skipReason, 'missing_auto_approve_ceiling');
-  assert.equal(decideAutoApprove({ ...base, amountCents: 200001 }).skipReason, 'over_max_amount');
-  assert.equal(decideAutoApprove({ ...base, amountCents: 200000 }).approve, true);
 });
 
 test('flagged/risky/discrepant CheckAlt payloads stay pending_approval', () => {
@@ -90,9 +91,18 @@ test('flagged/risky/discrepant CheckAlt payloads stay pending_approval', () => {
   assert.equal(depositIsFlagged({ riskFactors: ['mismatch'] }), true);
   assert.equal(depositIsFlagged({ errors: ['unreadable'] }), true);
   assert.equal(depositIsFlagged({ amountDiscrepancyDetected: true }), true);
-  assert.equal(depositIsFlagged({ riskRating: 2 }), true);
   assert.equal(depositIsFlagged({ statusDescription: 'Possible duplicate' }), true);
   assert.equal(depositIsFlagged({ statusDescription: 'Pending Approval', status: 40 }), false);
+  // Clean production process-40 payloads include these keys; they must not skip auto-approve.
+  assert.equal(depositIsFlagged({
+    status: 40,
+    statusDescription: 'Pending Approval',
+    riskRating: 2,
+    riskRatingDescription: 'Low Risk',
+    amountDiscrepancyDetected: false,
+    errors: [],
+    messages: [],
+  }), false);
 });
 
 test('lock/retry uses proven backoff and never posts /deposit/process', async () => {
@@ -120,7 +130,7 @@ test('lock/retry uses proven backoff and never posts /deposit/process', async ()
     credentials: {},
     fetchImpl: fetch,
     jwtCache: {},
-    reference: '123733567',
+    reference: '9001555',
     fiKey: 'fi',
     parseProviderJson,
     sleepFn: async (ms) => { sleeps.push(ms); },
@@ -133,6 +143,49 @@ test('lock/retry uses proven backoff and never posts /deposit/process', async ()
     '/fincapture/deposit/approve',
     '/fincapture/deposit/approve',
   ]);
+});
+
+test('lock-retry does not retry CheckAlt rejection or network/ambiguous errors', async () => {
+  const rejectedPaths = [];
+  const rejected = await attemptAutoApproveWithLockRetry({
+    checkAltFetch: async ({ path }) => {
+      rejectedPaths.push(path);
+      return { ok: true, status: 200 };
+    },
+    parseProviderJson: async () => ({ json: { success: false, status: 40, statusDescription: 'Declined' } }),
+    reference: '9001555',
+    fiKey: 'fi',
+    cfg: { fi_key: 'fi' },
+    sleepFn: async () => { throw new Error('must not backoff on reject'); },
+  });
+  assert.equal(rejected.approved, false);
+  assert.equal(rejected.attempts, 1);
+  assert.match(rejected.skipReason, /auto_approve_failed/);
+  assert.deepEqual(rejectedPaths, ['/fincapture/deposit/approve']);
+
+  const network = await attemptAutoApproveWithLockRetry({
+    checkAltFetch: async () => { throw new Error('ECONNRESET'); },
+    parseProviderJson: async () => ({ json: {} }),
+    reference: '9001555',
+    fiKey: 'fi',
+    cfg: { fi_key: 'fi' },
+    sleepFn: async () => { throw new Error('must not backoff on network'); },
+  });
+  assert.equal(network.approved, false);
+  assert.equal(network.attempts, 1);
+  assert.match(network.skipReason, /auto_approve_error:ECONNRESET/);
+
+  const ambiguous = await attemptAutoApproveWithLockRetry({
+    checkAltFetch: async () => ({ ok: false, status: 500 }),
+    parseProviderJson: async () => ({ json: { message: 'upstream' } }),
+    reference: '9001555',
+    fiKey: 'fi',
+    cfg: { fi_key: 'fi' },
+    sleepFn: async () => { throw new Error('must not backoff on 500'); },
+  });
+  assert.equal(ambiguous.approved, false);
+  assert.equal(ambiguous.attempts, 1);
+  assert.match(ambiguous.skipReason, /auto_approve_failed/);
 });
 
 test('maybeAutoApproveAfterProcess never processes and persists skip/success audit', async () => {
@@ -165,7 +218,7 @@ test('maybeAutoApproveAfterProcess never processes and persists skip/success aud
     tenantId: TENANT,
     amountCents: 154672,
     processStatus: 'pending_approval',
-    reference: '123733567',
+    reference: '9001555',
     providerJson: { exceptions: ['risk'] },
     persistAutoApproveOutcome,
     checkAltFetch: async () => { throw new Error('must not approve flagged'); },
@@ -184,16 +237,19 @@ test('maybeAutoApproveAfterProcess never processes and persists skip/success aud
     tenantId: TENANT,
     amountCents: 154672,
     processStatus: 'pending_approval',
-    reference: '123733567',
+    reference: '9001555',
     providerJson: { status: 40, statusDescription: 'Pending Approval' },
     persistAutoApproveOutcome,
-    checkAltFetch: async ({ path }) => {
+    checkAltFetch: async ({ path, body }) => {
       approveCalls += 1;
       assert.equal(path, '/fincapture/deposit/approve');
+      assert.equal(body.referenceNumber, 9001555);
+      assert.equal(body.action, 1);
+      assert.ok(!String(path).includes('/process'));
       return { ok: true, status: 200 };
     },
     cfg: { fi_key: 'fi' },
-    parseProviderJson: async () => ({ json: { success: true, status: 'Approved' } }),
+    parseProviderJson: async () => ({ json: { success: true, status: 127, statusDescription: 'Approved' } }),
     sleepFn: async () => {},
   });
   assert.equal(approved.attempted, true);
@@ -208,7 +264,7 @@ test('maybeAutoApproveAfterProcess never processes and persists skip/success aud
     tenantId: TENANT,
     amountCents: 154672,
     processStatus: 'submitted',
-    reference: '123733567',
+    reference: '9001555',
     providerJson: {},
     persistAutoApproveOutcome,
     checkAltFetch: async () => { throw new Error('must not approve submitted'); },
@@ -217,4 +273,87 @@ test('maybeAutoApproveAfterProcess never processes and persists skip/success aud
   assert.equal(notPending.attempted, false);
   assert.equal(notPending.approvePosted, false);
   assert.equal(notPending.skipReason, 'not_pending_approval');
+
+  const missingRef = await maybeAutoApproveAfterProcess({
+    client,
+    rowId: ROW_ID,
+    tenantId: TENANT,
+    amountCents: 154672,
+    processStatus: 'pending_approval',
+    reference: null,
+    providerJson: { status: 40, statusDescription: 'Pending Approval' },
+    persistAutoApproveOutcome,
+    checkAltFetch: async () => { throw new Error('must not approve without reference'); },
+    parseProviderJson: async () => ({ json: {} }),
+  });
+  assert.equal(missingRef.attempted, false);
+  assert.equal(missingRef.approvePosted, false);
+  assert.equal(missingRef.skipReason, 'missing_reference');
+
+  const rejected = await maybeAutoApproveAfterProcess({
+    client,
+    rowId: ROW_ID,
+    tenantId: TENANT,
+    amountCents: 154672,
+    processStatus: 'pending_approval',
+    reference: '9001555',
+    providerJson: { status: 40, statusDescription: 'Pending Approval' },
+    persistAutoApproveOutcome,
+    checkAltFetch: async () => ({ ok: true, status: 200 }),
+    cfg: { fi_key: 'fi' },
+    parseProviderJson: async () => ({ json: { success: false, status: 40, statusDescription: 'Declined' } }),
+    sleepFn: async () => {},
+  });
+  assert.equal(rejected.attempted, true);
+  assert.equal(rejected.approved, false);
+  assert.equal(rejected.saved.status, 'pending_approval');
+  assert.equal(rejected.saved.last_status_payload._auto_approve.approved, false);
+
+  const network = await maybeAutoApproveAfterProcess({
+    client,
+    rowId: ROW_ID,
+    tenantId: TENANT,
+    amountCents: 154672,
+    processStatus: 'pending_approval',
+    reference: '9001555',
+    providerJson: { status: 40, statusDescription: 'Pending Approval' },
+    persistAutoApproveOutcome,
+    checkAltFetch: async () => { throw new Error('socket hang up'); },
+    cfg: { fi_key: 'fi' },
+    parseProviderJson: async () => ({ json: {} }),
+    sleepFn: async () => {},
+  });
+  assert.equal(network.attempted, true);
+  assert.equal(network.approved, false);
+  assert.equal(network.saved.status, 'pending_approval');
+  assert.match(network.skipReason, /auto_approve_error/);
+});
+
+test('persistAutoApproveOutcome maps 127/Approved to submitted and never writes cleared', async () => {
+  const source = persistAutoApproveOutcome.toString();
+  assert.match(source, /THEN 'submitted'/);
+  assert.doesNotMatch(source, /cleared_at/);
+  assert.doesNotMatch(source, /INSERT INTO public\.checkalt_deposits/);
+  assert.doesNotMatch(source, /checkalt_reference/);
+  const client = {
+    query: async (sql, params) => ({
+      rows: [{
+        id: params[0],
+        status: params[1] === true ? 'submitted' : 'pending_approval',
+        approved_at: params[1] === true ? '2026-09-23T00:00:00Z' : null,
+        cleared_at: null,
+        checkalt_reference: '9001555',
+        last_status_payload: JSON.parse(params[2]),
+      }],
+    }),
+  };
+  const saved = await persistAutoApproveOutcome(client, {
+    rowId: ROW_ID,
+    approved: true,
+    approvePayload: { success: true, status: 127, statusDescription: 'Approved' },
+  });
+  assert.equal(saved.status, 'submitted');
+  assert.equal(saved.cleared_at, null);
+  assert.equal(saved.checkalt_reference, '9001555');
+  assert.equal(saved.last_status_payload._auto_approve.status_code, 127);
 });

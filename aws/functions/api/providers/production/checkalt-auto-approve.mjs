@@ -45,16 +45,13 @@ export const depositIsFlagged = (providerJson = {}) => {
   if (Array.isArray(json.riskFactors) && json.riskFactors.length > 0) return true;
   if (Array.isArray(json.errors) && json.errors.length > 0) return true;
   if (json.amountDiscrepancyDetected === true || json.amountDiscrepancyDetected === 'true') return true;
-  const riskRating = json.riskRating;
-  if (typeof riskRating === 'number' && riskRating > 0) return true;
+  // Proven Lovable flag text is statusDescription + warnings + exceptions only.
+  // Clean production process-40 payloads include riskRating / riskRatingDescription
+  // keys; regexing those would skip every eligible deposit.
   const flagText = [
     json.statusDescription,
-    json.riskRating,
-    json.riskRatingDescription,
     JSON.stringify(json.warnings ?? ''),
     JSON.stringify(json.exceptions ?? ''),
-    JSON.stringify(json.messages ?? ''),
-    JSON.stringify(json.errors ?? ''),
   ].join(' ').toLowerCase();
   return FLAG_TEXT_RE.test(flagText);
 };
