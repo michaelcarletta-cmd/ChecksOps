@@ -11,6 +11,7 @@
 const STANDARD_CAPS_ACRONYMS = new Set([
   'LLC', 'INC', 'LP', 'LLP', 'PA', 'PC', 'CO', 'CORP', 'NA', 'USA',
   'II', 'III', 'IV', 'DBA', 'LTD', 'JR', 'SR', 'US', 'PLLC',
+  'USAA', 'NJM', 'AAA', 'CSAA', 'AIG', 'GEICO',
 ]);
 
 const toStandardCaps = (input) => {
@@ -83,14 +84,87 @@ const looksLikeAddress = (text) => {
 };
 
 const PAYEE_SPLIT_RE = /\s*(?:\band\b|&|＆|﹠|／|\/|;|；)\s*/i;
+const PAY_TO_LABEL_RE = /^(?:pay(?:ee)?\s+to\s+(?:the\s+order\s+of)?|pay\s+to|the\s+order(?:\s+of)?)\b[:\s,]*/i;
+const TRAILING_PAY_TO_RE = /(?:[,:\s]+(?:pay(?:ee)?\s+to\s+(?:the\s+order\s+of)?|the\s+order(?:\s+of)?))+$/i;
+const ORDER_FRAGMENT_RE = /^(?:the\s+)?order(?:\s+of)?$/i;
 
 const hasPayeeSeparator = (text) => PAYEE_SPLIT_RE.test(String(text || ''));
 
+const KNOWN_CARRIER_ALIASES = [
+  { re: /\busaa\b|united services automobile association|garrison property(?:\s+and\s+casualty)?/i, name: 'USAA' },
+  { re: /\b(?:the\s+)?hartford (?:fire|casualty|insurance|accident|underwriter)|\bthe hartford\b/i, name: 'The Hartford' },
+  { re: /\ballstate\b/i, name: 'Allstate' },
+  { re: /\bnationwide\b/i, name: 'Nationwide' },
+  { re: /\btravelers\b/i, name: 'Travelers' },
+  { re: /\bstate farm\b/i, name: 'State Farm' },
+  { re: /\bliberty mutual\b/i, name: 'Liberty Mutual' },
+  { re: /\bfarmers(?:\s+insurance)?\b/i, name: 'Farmers' },
+  { re: /\bprogressive\b/i, name: 'Progressive' },
+  { re: /\bnew jersey manufacturers\b|\bnjm\b/i, name: 'NJM' },
+  { re: /\bdonegal\b/i, name: 'Donegal' },
+  { re: /\bchubb\b/i, name: 'Chubb' },
+  { re: /\baig\b/i, name: 'AIG' },
+  { re: /\bgeico\b/i, name: 'GEICO' },
+  { re: /\berie insurance\b/i, name: 'Erie Insurance' },
+  { re: /\bamica\b/i, name: 'Amica' },
+  { re: /\bpreferred mutual\b/i, name: 'Preferred Mutual' },
+];
+
+export const looksLikeSecurityDisclaimer = (text) => {
+  const s = String(text || '');
+  if (!s.trim()) return false;
+  return /colored background|artificial watermark|hold at (?:an?\s+)?angle|face of (?:the\s+)?document|security features|microprint|void if altered|original document|this document contains|thermochromic|padlock icon/i.test(s);
+};
+
+export const matchKnownCarrier = (text) => {
+  const s = String(text || '').trim();
+  if (!s || looksLikeSecurityDisclaimer(s) || looksLikeAddress(s)) return null;
+  for (const alias of KNOWN_CARRIER_ALIASES) {
+    if (alias.re.test(s)) return alias.name;
+  }
+  return null;
+};
+
+export const sanitizeCarrierName = (text) => {
+  const s = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!s) return null;
+  if (looksLikeSecurityDisclaimer(s) || looksLikeAddress(s)) return null;
+  if (/\b(?:pay\s+to|order of|check\s*(?:no|number|#)|claim|memo|dollars?)\b/i.test(s) && !/insurance|mutual|casualty|assurance/i.test(s)) {
+    return null;
+  }
+  const alias = matchKnownCarrier(s);
+  if (alias) return alias;
+  if (/insurance|mutual|assurance|casualty|indemnity|underwriter/i.test(s)) {
+    return toStandardCaps(s);
+  }
+  const words = s.split(/\s+/).filter(Boolean);
+  if (words.length >= 2 && words.length <= 8 && !/\$/.test(s) && /[A-Za-z]{3,}/.test(s)) {
+    return toStandardCaps(s);
+  }
+  return null;
+};
+
+export const looksLikeAmountLine = (text) => {
+  const s = String(text || '').trim();
+  if (!s) return false;
+  return /^\$?\s*\d[\d,]*(?:\.\d{2})?\s*$/.test(s) || /^\$\s*\d/.test(s);
+};
+
+export const cleanPayeeLine = (text) => {
+  if (text == null) return null;
+  let s = String(text).replace(/\s+/g, ' ').trim();
+  if (!s) return null;
+  s = s.replace(new RegExp(PAY_TO_LABEL_RE.source, 'ig'), '');
+  s = s.replace(new RegExp(TRAILING_PAY_TO_RE.source, 'ig'), '');
+  s = s.replace(/\s+/g, ' ').trim();
+  if (!s || ORDER_FRAGMENT_RE.test(s) || /^pay\s+to$/i.test(s)) return null;
+  if (looksLikeAmountLine(s)) return null;
+  return s;
+};
+
 export const splitPayees = (payeeLine) => {
   if (!payeeLine) return [];
-  const cleaned = String(payeeLine)
-    .replace(/^\s*(pay\s+to\s+(?:the\s+order\s+of)?[:\s]*|of[:\s]+)/i, '')
-    .trim();
+  const cleaned = cleanPayeeLine(payeeLine) || '';
   if (!cleaned) return [];
   // Split on AND/&/slash/semicolon but keep commas inside entity names (e.g. "Bank, N.A.")
   const parts = cleaned
@@ -108,7 +182,8 @@ export const splitPayees = (payeeLine) => {
     const digitIdx = out.search(/\d{3,}/);
     if (digitIdx > 0) out = out.slice(0, digitIdx).trim();
     out = out.replace(/[,\s]+$/g, '').replace(/\s+/g, ' ').trim();
-    if (out.length < 2) continue;
+    out = cleanPayeeLine(out) || '';
+    if (out.length < 2 || ORDER_FRAGMENT_RE.test(out) || looksLikeSecurityDisclaimer(out)) continue;
     payees.push({ name: toStandardCaps(out), type: 'unknown' });
   }
   return payees;
@@ -205,18 +280,45 @@ const buildTextractIndex = (blocks = []) => {
 const safeLineConfidence = (line) => (line && line.conf != null ? line.conf : 50);
 
 const pickCarrierName = (idx) => {
-  const candidates = idx.lines.filter((l) => (l.box?.Top ?? 0) < 0.25 && /[A-Za-z]/.test(l.text));
+  let rejectedDisclaimer = false;
+  for (const l of idx.lines) {
+    if (looksLikeSecurityDisclaimer(l.text)) rejectedDisclaimer = true;
+    const alias = matchKnownCarrier(l.text);
+    if (alias) {
+      return { value: alias, conf: Math.min(95, safeLineConfidence(l)), rejectedDisclaimer };
+    }
+  }
+  const candidates = idx.lines.filter((l) => {
+    if ((l.box?.Top ?? 0) > 0.25) return false;
+    if (!/[A-Za-z]/.test(l.text)) return false;
+    if (looksLikeSecurityDisclaimer(l.text) || looksLikeAddress(l.text)) return false;
+    if (looksLikeAmountLine(l.text) || /\$/.test(l.text)) return false;
+    if (/^(?:pay(?:ee)?\s+to|the\s+order)/i.test(l.text)) return false;
+    if (/check\s*(?:no|number|#)/i.test(l.text)) return false;
+    if (/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}$/.test(l.text.trim())) return false;
+    return true;
+  });
   let best = null;
-  for (const l of candidates.slice(0, 10)) {
+  for (const l of candidates.slice(0, 12)) {
     if (/insurance|mutual|assurance|casualty|property|indemnity|underwriter/i.test(l.text)) {
       best = l;
       break;
     }
   }
-  if (!best && candidates.length) best = candidates[0];
-  return best
-    ? { value: toStandardCaps(best.text), conf: Math.min(90, safeLineConfidence(best)) }
-    : { value: null, conf: 15 };
+  if (!best) {
+    for (const l of candidates.slice(0, 8)) {
+      if (sanitizeCarrierName(l.text)) {
+        best = l;
+        break;
+      }
+    }
+  }
+  const sanitized = best ? sanitizeCarrierName(best.text) : null;
+  return {
+    value: sanitized,
+    conf: sanitized ? Math.min(90, safeLineConfidence(best)) : 15,
+    rejectedDisclaimer,
+  };
 };
 
 const pickPayee = (idx) => {
@@ -239,7 +341,9 @@ const pickPayee = (idx) => {
     const extras = [];
     for (const l of idx.lines.slice(payIdx + 1, payIdx + 4)) {
       if (!l || !close(l)) continue;
-      if (looksLikeAddress(l.text)) continue;
+      if (looksLikeAddress(l.text) || looksLikeSecurityDisclaimer(l.text)) continue;
+      if (looksLikeAmountLine(l.text)) continue;
+      if (ORDER_FRAGMENT_RE.test(String(l.text).trim()) || PAY_TO_LABEL_RE.test(String(l.text).trim())) continue;
       if (/void|memo|date|dollars|amount|routing|account|authorized|signature/i.test(l.text) && !hasPayeeSeparator(l.text)) continue;
       extras.push(l);
     }
@@ -287,7 +391,7 @@ const pickPayee = (idx) => {
     }
   }
 
-  const normalized = payeeLine ? toStandardCaps(payeeLine.replace(/\s+/g, ' ').trim()) : null;
+  const normalized = payeeLine ? (toStandardCaps(cleanPayeeLine(payeeLine) || '') || null) : null;
   const separatorDetected = hasPayeeSeparator(normalized);
   const payees = splitPayees(normalized);
   const ambiguous = Boolean(normalized) && separatorDetected && payees.length < 2;
@@ -365,6 +469,8 @@ const pickAmountNumeric = (idx) => {
     let score = 0;
     if (left > 0.55 && top > 0.10 && top < 0.70) score += 3; // numeric amount box tends to be right-ish
     if (/\$/.test(l.text)) score += 1;
+    if (looksLikeSecurityDisclaimer(l.text)) continue;
+    if ((l.box?.Top ?? 0) > 0.80) score -= 5; // MICR band
     if (/routing|account|micr/i.test(l.text)) score -= 4;
     score += (safeLineConfidence(l) - 50) / 20;
     if (score > bestScore) {
@@ -818,26 +924,52 @@ export const parseCheckFields = (input = []) => {
   const text = lines.join('\n');
 
   const carrier = isBlocks ? pickCarrierName(idx) : (() => {
-    let c = null;
-    for (const line of lines.slice(0, 8)) {
-      if (/insurance|mutual|assurance|casualty|property|indemnity|underwriter/i.test(line)) { c = line; break; }
+    let rejectedDisclaimer = false;
+    let value = null;
+    for (const line of lines) {
+      if (looksLikeSecurityDisclaimer(line)) rejectedDisclaimer = true;
+      const alias = matchKnownCarrier(line);
+      if (alias) return { value: alias, conf: 70, rejectedDisclaimer };
     }
-    if (!c && lines[0] && /[A-Za-z]/.test(lines[0])) c = lines[0];
-    return { value: toStandardCaps(c), conf: c ? 55 : 15 };
+    for (const line of lines.slice(0, 8)) {
+      if (looksLikeSecurityDisclaimer(line) || looksLikeAddress(line)) continue;
+      if (looksLikeAmountLine(line) || /^(?:pay(?:ee)?\s+to|the\s+order)/i.test(line)) continue;
+      if (/check\s*(?:no|number|#)/i.test(line)) continue;
+      if (/insurance|mutual|assurance|casualty|property|indemnity|underwriter/i.test(line)) {
+        value = sanitizeCarrierName(line);
+        break;
+      }
+    }
+    if (!value) {
+      for (const line of lines.slice(0, 8)) {
+        if (looksLikeSecurityDisclaimer(line) || looksLikeAddress(line)) continue;
+        if (looksLikeAmountLine(line) || /^(?:pay(?:ee)?\s+to|the\s+order)/i.test(line)) continue;
+        if (/check\s*(?:no|number|#)/i.test(line)) continue;
+        value = sanitizeCarrierName(line);
+        if (value) break;
+      }
+    }
+    return { value, conf: value ? 55 : 15, rejectedDisclaimer };
   })();
 
   const payee = isBlocks ? pickPayee(idx) : (() => {
     let payeeLine = null;
     const payIdx = lines.findIndex((l) => /pay\s+to\s+(?:the\s+order\s+of)?/i.test(l));
-    if (payIdx >= 0 && lines[payIdx + 1]) payeeLine = lines[payIdx + 1];
+    if (payIdx >= 0) {
+      const inline = String(lines[payIdx]).split(/pay\s+to\s+(?:the\s+order\s+of)?/i).slice(1).join(' ').replace(/^[:\s]+/, '').trim();
+      if (inline && !looksLikeAddress(inline) && cleanPayeeLine(inline)) payeeLine = inline;
+      else if (lines[payIdx + 1] && cleanPayeeLine(lines[payIdx + 1])) payeeLine = lines[payIdx + 1];
+    }
     if (!payeeLine) {
       for (const line of lines) {
         if (/pay\s+to\s+(?:the\s+order\s+of)?/i.test(line)) continue;
         if (/dollars|void|memo|date|check/i.test(line)) continue;
-        if (line.length >= 5 && /[A-Za-z]/.test(line)) { payeeLine = line; break; }
+        if (looksLikeSecurityDisclaimer(line) || ORDER_FRAGMENT_RE.test(line.trim())) continue;
+        if (looksLikeAmountLine(line)) continue;
+        if (line.length >= 5 && /[A-Za-z]/.test(line) && cleanPayeeLine(line)) { payeeLine = line; break; }
       }
     }
-    const normalized = toStandardCaps(payeeLine);
+    const normalized = payeeLine ? toStandardCaps(cleanPayeeLine(payeeLine) || '') || null : null;
     return {
       value: normalized,
       conf: payeeLine ? 70 : 20,
@@ -973,14 +1105,14 @@ export const parseCheckFields = (input = []) => {
     || Boolean(micr.check_conflict);
 
   return {
-    carrier_name: toStandardCaps(fields.carrier_name),
+    carrier_name: sanitizeCarrierName(fields.carrier_name),
     check_number: fields.check_number || null,
     amount: fields.amount || null,
     written_amount: fields.written_amount || null,
     issue_date: fields.issue_date || null,
     claim_number: fields.claim_number || null,
     detected_claim_number: fields.detected_claim_number || null,
-    payee_line: toStandardCaps(fields.payee_line),
+    payee_line: fields.payee_line ? toStandardCaps(cleanPayeeLine(fields.payee_line) || '') || null : null,
     routing_number: fields.routing_number || null,
     account_number: fields.account_number || null,
     micr_check_number: fields.micr_check_number || null,
@@ -1001,6 +1133,7 @@ export const parseCheckFields = (input = []) => {
       payee_separator_detected: Boolean(payee.separatorDetected),
       multiple_payee_lines_detected: Boolean(payee.multipleLines),
       date_label_classifications: Array.isArray(date.classifications) ? date.classifications : [],
+      carrier_rejected_disclaimer: Boolean(carrier.rejectedDisclaimer),
     },
     // Helpers for safe logs/tests (do not add raw digits to logs)
     masked: {
@@ -1017,4 +1150,9 @@ export const __test__ = {
   classifyDateLabel,
   cleanBankName,
   splitPayees,
+  cleanPayeeLine,
+  sanitizeCarrierName,
+  looksLikeSecurityDisclaimer,
+  looksLikeAmountLine,
+  matchKnownCarrier,
 };

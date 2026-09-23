@@ -69,8 +69,10 @@ const createClient = ({ existingPayees = [] } = {}) => {
         store.issue_date = params[1];
         return { rows: [{ id: CHECK_ID, issue_date: store.issue_date }] };
       }
-      if (/UPDATE public\.check_intake_items/.test(text) && /carrier_name = COALESCE/.test(text)) {
-        if (params[1] != null) store.carrier_name = params[1];
+      if (/UPDATE public\.check_intake_items/.test(text) && /carrier_name/.test(text) && /payee_line/.test(text)) {
+        const clearCarrier = params[3] === true;
+        if (clearCarrier) store.carrier_name = null;
+        else if (params[1] != null) store.carrier_name = params[1];
         if (params[2] != null) store.payee_line = params[2];
         return { rows: [{ id: CHECK_ID, carrier_name: store.carrier_name, payee_line: store.payee_line }] };
       }
@@ -420,7 +422,7 @@ test('19) amount remains prohibited and unpersisted after intake', async () => {
   assert.match(sql, /is_multi_payee = true/);
   assert.doesNotMatch(sql, /SET[\s\S]{0,80}amount\s*=/);
   assert.equal(persist.some((row) => String(row.sql).includes('routing_number =')), false);
-  const carrierUpdate = persist.find((row) => /carrier_name = COALESCE/.test(row.sql));
+  const carrierUpdate = persist.find((row) => /COALESCE\(\$2, carrier_name\)/.test(row.sql));
   assert.ok(carrierUpdate);
   assert.equal(carrierUpdate.sql.includes('amount'), false);
 });
@@ -576,6 +578,46 @@ test('claim/check/MICR/amount values are not case-normalized; only claim RPC wri
   assert.equal(blob.includes(ACCOUNT), false);
   assert.equal(/UPDATE public\.check_intake_items[\s\S]*detected_claim_number\s*=/.test(blob), false);
   assert.equal(client.store.amount, null);
+});
+
+test('watermark carrier is cleared and trailing The Order is stripped from payees', async () => {
+  const WATERMARK = 'FACE OF DOCUMENT HAS A COLORED BACKGROUND THE BACK CONTAINS AN ARTIFICIAL WATERMARK HOLD AT ANGLE TO VIEW';
+  const client = createClient();
+  client.store.carrier_name = WATERMARK;
+  await persistOcrDescriptiveHandoff({
+    client,
+    checkId: CHECK_ID,
+    tenantId: TENANT_ID,
+    parsed: {
+      carrier_name: WATERMARK,
+      payee_line: 'FREEDOM ADJUSTMENT AND IRWIN L GLEITMAN AND SONDRA GLEITMAN THE ORDER',
+      payees: [
+        { name: 'Freedom Adjustment' },
+        { name: 'Irwin L Gleitman' },
+        { name: 'Sondra Gleitman The Order' },
+        { name: 'THE ORDER' },
+      ],
+      diagnostic: { carrier_rejected_disclaimer: true },
+    },
+  });
+  assert.equal(client.store.carrier_name, null);
+  assert.doesNotMatch(String(client.store.payee_line || ''), /The Order/i);
+  assert.deepEqual(client.store.payees.map((row) => row.payee_name), [
+    'Freedom Adjustment',
+    'Irwin L Gleitman',
+    'Sondra Gleitman',
+  ]);
+});
+
+test('known USAA alias persists instead of watermark text', async () => {
+  const client = createClient();
+  await persistOcrDescriptiveHandoff({
+    client,
+    checkId: CHECK_ID,
+    tenantId: TENANT_ID,
+    parsed: { carrier_name: 'USAA CASUALTY INSURANCE COMPANY', payees: [] },
+  });
+  assert.equal(client.store.carrier_name, 'USAA');
 });
 
 test('generic /data/write still prohibits detected_claim_number', () => {

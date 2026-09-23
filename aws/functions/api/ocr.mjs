@@ -6,7 +6,7 @@
  */
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { normalizePath, s3KeyFor } from './storage-paths.mjs';
-import { parseCheckFields } from './ocr-parse.mjs';
+import { cleanPayeeLine, parseCheckFields, sanitizeCarrierName } from './ocr-parse.mjs';
 import { runTextract } from './textract-check-ocr.mjs';
 import { extractCheck, mergeCheckExtraction, ocrInProgress } from './check-ocr-provider.mjs';
 import { emptyAzureMicr } from './ocr-normalize-azure.mjs';
@@ -357,6 +357,14 @@ export const handleCheckOcrIntake = async (event, injected = {}) => {
     }
     parsed.descriptive_engine = engine;
   }
+  parsed.carrier_name = sanitizeCarrierName(parsed.carrier_name);
+  parsed.payee_line = cleanPayeeLine(parsed.payee_line) || parsed.payee_line || null;
+  if (Array.isArray(parsed.payees)) {
+    parsed.payees = parsed.payees
+      .map((row) => ({ ...row, name: cleanPayeeLine(row?.name) || row?.name }))
+      .filter((row) => row.name && !/^(?:the\s+)?order(?:\s+of)?$/i.test(row.name));
+  }
+
   const eligibility = {
     recommendation: parsed.needs_manual_review ? 'manual_review' : 'proceed',
     reasons: (parsed.low_confidence_fields || []).map((f) => `low_confidence:${f}`),

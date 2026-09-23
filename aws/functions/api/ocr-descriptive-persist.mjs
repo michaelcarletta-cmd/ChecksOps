@@ -8,6 +8,7 @@
  * Claim numbers identify the claim: many checks may share one number
  * and link to the same existing tenant claim. Never inserts a claims row.
  */
+import { cleanPayeeLine, looksLikeSecurityDisclaimer, matchKnownCarrier, sanitizeCarrierName } from './ocr-parse.mjs';
 import {
   normalizeClaimNumber,
   normalizeDescriptiveText,
@@ -59,7 +60,9 @@ export const collectOcrPayeeCandidates = (parsed = {}) => {
   const out = [];
   const rows = Array.isArray(parsed.payees) ? parsed.payees : [];
   for (const row of rows) {
-    const name = normalizePayeeName(row?.name);
+    const cleaned = cleanPayeeLine(row?.name);
+    if (row?.name && !cleaned) continue;
+    const name = normalizePayeeName(cleaned || row?.name);
     if (!name) continue;
     const key = normalizePayeeKey(name);
     if (!key || seen.has(key)) continue;
@@ -101,8 +104,14 @@ export const persistOcrDescriptiveHandoff = async ({
   }
 
   const issueDate = normalizeIssueDate(parsed.issue_date);
-  const carrierName = normalizeDescriptiveText(parsed.carrier_name);
-  const payeeLine = normalizeDescriptiveText(parsed.payee_line);
+  const alias = matchKnownCarrier(parsed.carrier_name);
+  const carrierGate = sanitizeCarrierName(parsed.carrier_name);
+  const carrierName = alias || (carrierGate ? normalizeDescriptiveText(parsed.carrier_name) : null);
+  const payeeLine = normalizeDescriptiveText(cleanPayeeLine(parsed.payee_line) || parsed.payee_line);
+  const clearBadCarrier = !carrierName && (
+    looksLikeSecurityDisclaimer(parsed.carrier_name)
+    || Boolean(parsed.diagnostic?.carrier_rejected_disclaimer)
+  );
   const candidates = collectOcrPayeeCandidates(parsed);
   let issueDatePersisted = false;
   let inserted = 0;
@@ -141,14 +150,17 @@ export const persistOcrDescriptiveHandoff = async ({
     issueDatePersisted = true;
   }
 
-  if (carrierName || payeeLine) {
+  if (carrierName || payeeLine || clearBadCarrier) {
     await client.query(
       `UPDATE public.check_intake_items
-       SET carrier_name = COALESCE($2, carrier_name),
+       SET carrier_name = CASE
+             WHEN $4::boolean THEN NULL
+             ELSE COALESCE($2, carrier_name)
+           END,
            payee_line = COALESCE($3, payee_line),
            updated_at = now()
        WHERE id = $1::uuid`,
-      [checkId, carrierName, payeeLine],
+      [checkId, carrierName, payeeLine, clearBadCarrier],
     );
   }
 
