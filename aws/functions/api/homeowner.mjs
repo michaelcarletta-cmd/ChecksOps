@@ -366,13 +366,25 @@ export const handleHomeownerLedgerUpload = async (event, deps = {}) => {
         ContentType: 'image/jpeg',
       }));
     }
-    const row = (await client.query(
-      `INSERT INTO public.homeowner_ledger_check_uploads (
-         tenant_id, claim_id, front_path, status, created_at
-       ) VALUES ($1::uuid, $2::uuid, $3, 'uploaded', now())
-       RETURNING id, front_path, status, created_at`,
-      [doc.token.tenant_id, doc.token.claim_id, rel],
-    )).rows[0];
+    const inserted = (await client.query(
+      `SELECT public.aws_public_homeowner_ledger_upload_insert($1, $2, $3) AS doc`,
+      [token, rel, body.homeowner_note || null],
+    )).rows[0]?.doc;
+    if (!inserted?.ok || !inserted.id) {
+      if (!deps.client) await client.query('ROLLBACK');
+      return {
+        ok: false,
+        statusCode: inserted?.error === 'not_found' ? 404 : 503,
+        error: inserted?.error || 'ledger_upload_failed',
+        spoofFieldsIgnored: spoof,
+      };
+    }
+    const row = {
+      id: inserted.id,
+      front_path: inserted.front_path || rel,
+      status: inserted.status || 'uploaded',
+      created_at: inserted.created_at || null,
+    };
     if (!deps.client) await client.query('COMMIT');
     let notified = false;
     try {
@@ -550,7 +562,7 @@ export const runHomeownerLedgerSend = async ({
   }
 
   const origin = appOrigin(body.origin);
-  const url = `${origin}/h/ledger/${tokenRow.token}`;
+  const url = `${origin}/ledger/${tokenRow.token}`;
   if (homeownerEmail) {
     const branding = await resolveEmailBranding(client, {
       tenantId,
@@ -646,7 +658,7 @@ export const runSendFileToHomeowner = async ({
   }
 
   const origin = appOrigin(body.origin);
-  const portalUrl = `${origin}/h/ledger/${tok.token}`;
+  const portalUrl = `${origin}/ledger/${tok.token}`;
   const branding = await resolveEmailBranding(client, {
     tenantId: file.tenant_id,
     senderOverride: 'checksops',
