@@ -684,7 +684,7 @@ const executeTenantInsert = async ({ client, values }) => {
         collected.secondary_color ?? null,
         collected.custom_domain ?? null,
         collected.max_checks_per_month ?? null,
-        collected.subscription_status ?? 'trial',
+        collected.subscription_status ?? 'active',
         collected.plan_tier ?? 'starter',
         collected.email_from_name ?? null,
         collected.email_from_address ?? null,

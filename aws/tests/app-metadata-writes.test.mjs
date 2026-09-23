@@ -50,6 +50,7 @@ test('tenant insert is platform-owner only and fail-closes provider inheritance'
       if (/INSERT INTO public.tenants/.test(sql)) {
         assert.equal(params[0], 'Acme Adjusting');
         assert.equal(params[1], 'acme-adjusting');
+        assert.equal(params[8], 'active');
         assert.match(sql, /moov_allowlisted/);
         assert.match(sql, /false, false, false, NULL/);
         assert.doesNotMatch(sql, /freedom/i);
