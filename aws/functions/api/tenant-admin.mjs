@@ -133,6 +133,27 @@ export const runTenantInviteUser = async ({
     }
   }
 
+  // AdminCreateUser leaves FORCE_CHANGE_PASSWORD. Staging login is EMAIL_OTP /
+  // WebAuthn only, and Cognito rejects EMAIL_OTP until the user is CONFIRMED.
+  try {
+    await adminCognito('AdminSetUserPassword', {
+      UserPoolId: POOL_ID(),
+      Username: email,
+      Password: tempPassword,
+      Permanent: true,
+    });
+  } catch (error) {
+    if (isNewUser) {
+      return {
+        ok: false,
+        statusCode: 502,
+        error: 'cognito_confirm_failed',
+        message: String(error.message || error).slice(0, 240),
+        spoofFieldsIgnored: spoof,
+      };
+    }
+  }
+
   const existingProfile = (await client.query(
     `SELECT id::text AS id FROM public.profiles WHERE lower(email) = $1 LIMIT 1`,
     [email],
