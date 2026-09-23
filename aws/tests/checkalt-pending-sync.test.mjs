@@ -38,6 +38,9 @@ const withEnv = async (vars, fn) => {
 test('status map: 40 pending, 127 submitted, Approved submitted, 120 rejected, 200 needs depositDate', () => {
   assert.equal(mapCheckAltStatus({ statusCode: 40 }), 'pending_approval');
   assert.equal(mapCheckAltStatus({ status: 40 }), 'pending_approval');
+  assert.equal(mapCheckAltStatus({ status: '40' }), 'pending_approval');
+  assert.equal(mapCheckAltStatus({ statusDescription: 'Pending Approval' }), 'pending_approval');
+  assert.equal(mapCheckAltStatus({ status: '120', statusDescription: 'Rejected' }), 'rejected');
   assert.equal(resolveCheckAltProviderStatus({ statusCode: 127 }), 'submitted');
   assert.equal(resolveCheckAltProviderStatus({ status: 127 }), 'submitted');
   assert.equal(resolveCheckAltProviderStatus({ status: 'Approved' }), 'submitted');
