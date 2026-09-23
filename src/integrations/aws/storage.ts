@@ -43,6 +43,18 @@ async function apiFetch(path: string, init: RequestInit, token?: string | null) 
   return { response, body };
 }
 
+const PUBLIC_BRANDING_BUCKETS = new Set(["tenant-logos", "email-assets", "company-branding"]);
+
+const BRANDING_FIELD_BUCKET: Record<string, string> = {
+  logo_url: "tenant-logos",
+  logoUrl: "tenant-logos",
+  letterhead_url: "company-branding",
+  invoice_letterhead_url: "company-branding",
+};
+
+const publicBrandingUrl = (bucket: string, path: string) =>
+  `${awsApiBaseUrl()}/storage/public?bucket=${encodeURIComponent(bucket)}&path=${encodeURIComponent(path)}`;
+
 export function rewriteSupabaseStorageUrl(value: unknown): unknown {
   if (typeof value !== "string") return value;
   const match = value.match(
@@ -51,10 +63,24 @@ export function rewriteSupabaseStorageUrl(value: unknown): unknown {
   if (!match) return value;
   const bucket = match[1];
   const path = decodeURIComponent(match[2]);
-  if (bucket === "tenant-logos" || bucket === "email-assets" || bucket === "company-branding") {
-    return `${awsApiBaseUrl()}/storage/public?bucket=${encodeURIComponent(bucket)}&path=${encodeURIComponent(path)}`;
+  if (PUBLIC_BRANDING_BUCKETS.has(bucket)) {
+    return publicBrandingUrl(bucket, path);
   }
   return value;
+}
+
+export function rewriteBrandingFieldUrl(key: string, value: unknown): unknown {
+  if (typeof value !== "string" || !value.trim()) return value;
+  const supabase = rewriteSupabaseStorageUrl(value);
+  if (supabase !== value) return supabase;
+  if (/^https?:\/\//i.test(value)) return value;
+  const bucket = BRANDING_FIELD_BUCKET[key];
+  if (!bucket) return value;
+  const path = toStorageObjectPath(value, bucket) || value.replace(/^\//, "");
+  if (!path || path.includes("..") || path.includes(":") || !/^[A-Za-z0-9._\-/=]+$/.test(path)) {
+    return value;
+  }
+  return publicBrandingUrl(bucket, path);
 }
 
 export function rewriteStorageFields(value: unknown): unknown {
@@ -63,7 +89,7 @@ export function rewriteStorageFields(value: unknown): unknown {
   const out: Record<string, unknown> = {};
   for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
     if (typeof nested === "string" && /(_url|logoUrl)$/i.test(key)) {
-      out[key] = rewriteSupabaseStorageUrl(nested);
+      out[key] = rewriteBrandingFieldUrl(key, nested);
     } else if (nested && typeof nested === "object") {
       out[key] = rewriteStorageFields(nested);
     } else {

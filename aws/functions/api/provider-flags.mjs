@@ -31,6 +31,8 @@ export const providerWebhookDryRun = () => {
   return String(value) !== 'false';
 };
 
+export const moovTransferPostEnabled = () => isTrue(process.env.AWS_MOOV_TRANSFER_POST_ENABLED);
+
 export const executionAllowed = (provider) => providerExecutionEnabled() && providerEnabled(provider);
 
 export const denyProviderExecution = (provider, operation, extra = {}) => ({
@@ -55,4 +57,5 @@ export const flagSnapshot = () => ({
   AWS_QUICKBOOKS_ENABLED: providerEnabled('quickbooks'),
   AWS_PROVIDER_LIVE_READS_ENABLED: providerLiveReadsEnabled(),
   AWS_PROVIDER_WEBHOOK_DRY_RUN: providerWebhookDryRun(),
+  AWS_MOOV_TRANSFER_POST_ENABLED: moovTransferPostEnabled(),
 });

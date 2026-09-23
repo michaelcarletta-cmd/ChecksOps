@@ -51,6 +51,17 @@
 /src/lib/prepareCheckAltDeposit.ts @michaelcarletta-cmd
 /src/lib/checkaltDepositOrchestrator.ts @michaelcarletta-cmd
 
+/aws/functions/api/providers/production/moov-authz.mjs @michaelcarletta-cmd
+/aws/functions/api/providers/production/moov-dispatch.mjs @michaelcarletta-cmd
+/aws/functions/api/providers/production/moov-holds.mjs @michaelcarletta-cmd
+/aws/functions/api/providers/production/moov-idempotency.mjs @michaelcarletta-cmd
+/aws/functions/api/providers/production/moov-methods.mjs @michaelcarletta-cmd
+/aws/functions/api/providers/production/moov-secrets.mjs @michaelcarletta-cmd
+/aws/functions/api/providers/production/moov-submit.mjs @michaelcarletta-cmd
+/aws/cutover/MOOV_PRODUCTION_DISBURSEMENT_20260923.md @michaelcarletta-cmd
+/aws/cutover/MOOV_PRODUCTION_ACTIVATION_READINESS_20260923.md @michaelcarletta-cmd
+/aws/tests/api-moov-production.test.mjs @michaelcarletta-cmd
+
 /aws/functions/api/financial.mjs @michaelcarletta-cmd
 /aws/functions/api/financial-authz.mjs @michaelcarletta-cmd
 /aws/functions/api/financial-flags.mjs @michaelcarletta-cmd

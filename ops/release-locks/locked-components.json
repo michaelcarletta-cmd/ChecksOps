@@ -179,6 +179,47 @@
       "open_pr_overlap": ["#327", "#332", "#339", "#322", "#323"],
       "notes": "template.yaml on main keeps AWS_CHECKALT_ENABLED false. PR #359 retargets tree_hash for persistPollOutcome FinCapture depositDate mapping only. Writer SQL remains NOT_APPLIED. UNVERIFIED."
     },
+    "moov-production-execution": {
+      "id": "moov-production-execution",
+      "ownership_group": "moov-production-execution",
+      "classification": "UNVERIFIED",
+      "production_active": false,
+      "environment": "unknown",
+      "source": {
+        "git_sha": "295ef72ce463a2f98439a8957be8db8c0fdacb13",
+        "tree_hash": "9358724dd0e2bf96aa57952648882d15a32c513dea705d1308c4ff7f7e1f70d7",
+        "merged": false,
+        "merged_pr": null
+      },
+      "required_sql": [],
+      "artifact": {
+        "type": "lambda",
+        "name": "checksops-production-prep-api",
+        "version": null,
+        "hash": null,
+        "cloudfront_distribution": null,
+        "lambda_name": "checksops-production-prep-api",
+        "lambda_version": null,
+        "lambda_alias": null
+      },
+      "production_validation": {
+        "completed": false,
+        "evidence_refs": ["aws/cutover/MOOV_PRODUCTION_DISBURSEMENT_20260923.md"],
+        "recorded_at": "2026-09-23T17:11:26.000+0000"
+      },
+      "deployment_fingerprint": null,
+      "rollback": {
+        "git_sha": null,
+        "artifact": null,
+        "notes": "Implementation is fail-closed. Do not treat Moov activation as complete. AWS_MOOV_ENABLED and AWS_MOOV_TRANSFER_POST_ENABLED stay false. Do not roll the Lambda backward."
+      },
+      "missing_evidence": [
+        "funded Freedom wallet or approved funding source",
+        "operator authorization for one real transfer"
+      ],
+      "open_pr_overlap": [],
+      "notes": "Dedicated production Moov execution handler deployed fail-closed. Lambda SHA zQzfz1Use78/jI/+t2FWpcCguCEK9uF/oMPejSAuDbY=. Payment method 7a78a544-340d-46fd-a4a4-228661374da7 reconciled. collect-funds enabled at provider. Not activated. Wallet remains $0."
+    },
     "financial-ledger": {
       "id": "financial-ledger",
       "ownership_group": "financial-ledger",
@@ -245,7 +286,7 @@
       "environment": "source-only",
       "source": {
         "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
-        "tree_hash": "ba67f886fecc7bf93a158f19e594a88e324a7222cfd3be00d9e18901d1cec428",
+        "tree_hash": "72a5f1680a9a3b76345809c1492ad1e2fd278307d402d0f47ff69a90cfb812df",
         "merged": true,
         "merged_pr": null
       },
@@ -467,7 +508,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "9aac7bb5b1ed0a8d03e305552797a9acfacc7f64",
-        "tree_hash": "a67d882ccedcffb80007aa936f270398dd62617220c2b0ab790c4a8612002fbd",
+        "tree_hash": "a55d31525e7193b57d72da56591b50431a8e7f1d547372d9ce49cea9edae5fa6",
         "merged": false,
         "merged_pr": null
       },
@@ -516,7 +557,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
-        "tree_hash": "e4a20f5b6983f9e66732d87b14c1574701ae2263f03211ee4cdf354ade75ad74",
+        "tree_hash": "b67f632330fe584a99decb56bb87b57a9cbb068910c507f902b3b928f817da5e",
         "merged": true,
         "merged_pr": null
       },
@@ -600,7 +641,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "8a3ead386d99f0e825d54093ebcb8c174a8c758e",
-        "tree_hash": "d7ed7db31c345a0352b0ca7610c1f7d2763c8be2e96527c20a7eae3f840c258a",
+        "tree_hash": "c28986d535a93903ed12e54dbf2ed92404f7b1049da7ef77b7e6ffc26e9b853a",
         "merged": true,
         "merged_pr": 343
       },

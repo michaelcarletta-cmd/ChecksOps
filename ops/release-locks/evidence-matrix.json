@@ -67,6 +67,19 @@
       ],
       "open_pr_overlap": ["#314", "#315", "#308"]
     },
+    "moov-production-execution": {
+      "classification": "UNVERIFIED",
+      "git_sha": "295ef72ce463a2f98439a8957be8db8c0fdacb13",
+      "deployed_artifact": "fail-closed handler; not activated",
+      "applied_migrations": "none",
+      "environment": "unknown",
+      "missing_evidence": [
+        "accepted production handler deploy SHA",
+        "funded Freedom wallet or approved funding source",
+        "operator authorization for one real transfer"
+      ],
+      "open_pr_overlap": []
+    },
     "checkalt-submission": {
       "classification": "UNVERIFIED",
       "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",

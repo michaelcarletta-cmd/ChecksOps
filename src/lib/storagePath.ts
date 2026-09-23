@@ -20,6 +20,15 @@ export function toStorageObjectPath(
 
   try {
     const url = new URL(v);
+    // AWS public branding:
+    //   /storage/public?bucket=<bucket>&path=<object>
+    const awsPath = url.searchParams.get("path");
+    const awsBucket = url.searchParams.get("bucket");
+    if (awsPath && (awsBucket === bucket || url.pathname.includes("/storage/public"))) {
+      if (!awsBucket || awsBucket === bucket) {
+        return decodeURIComponent(awsPath);
+      }
+    }
     // Patterns:
     //   /storage/v1/object/sign/<bucket>/<path>?token=...
     //   /storage/v1/object/public/<bucket>/<path>
