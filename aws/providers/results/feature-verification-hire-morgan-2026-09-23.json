@@ -1,0 +1,59 @@
+{
+  "recordedAt": "2026-09-23T20:50:00Z",
+  "workstream": "feature-verification-hire-morgan-carletta",
+  "verdict": "STOPPED_BEFORE_REAL_CLAIMS_OTP",
+  "productionModified": false,
+  "cognitoConfigurationModified": false,
+  "sesConfigurationModified": false,
+  "passwordAuthReopened": false,
+  "parallelAuthPathCreated": false,
+  "hireInvoked": false,
+  "claimsOtpVerifyAttempted": false,
+  "staging": {
+    "api": "https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging",
+    "frontend": "https://staging.checksops.com",
+    "pool": "us-east-1_vPmQ7cL1F",
+    "database": "checksops"
+  },
+  "tester": {
+    "fullName": "Morgan Carletta",
+    "email": "claims@freedomadj.com",
+    "temporaryPassword": null,
+    "requestedRole": "mortgage_agent"
+  },
+  "claimsIdentity": {
+    "applicationUserId": "b100f05d-9e81-4a7b-b9cc-9baf173131d9",
+    "profileName": "Morgan Carletta",
+    "roles": ["mortgage_agent"],
+    "tenantUsers": [],
+    "staleCognitoSub": "34c8a478-e0d1-70f3-3c49-02225e7404b6",
+    "historicalCognitoSub": "2498c4b8-f0a1-701b-da4b-a1f5c79f675a",
+    "stagingCognito": "UserNotFoundException"
+  },
+  "hireBlockers": [
+    "platform_owner_email_otp_mailbox_not_readable_in_this_agent",
+    "existing_mortgage_agent_role_would_409_before_cognito_create"
+  ],
+  "requiredExistingSequence": [
+    "checksopsadmin EMAIL_OTP at https://staging.checksops.com/login",
+    "Admin → Mortgage Ops revoke existing claims@ mortgage_agent row",
+    "Hire Agent Morgan Carletta / claims@freedomadj.com / password blank",
+    "verify new staging Cognito user + identity_accounts + mortgage_agent only",
+    "POST /auth/passwordless/start for claims@freedomadj.com",
+    "STOP for operator-supplied claims@ OTP"
+  ],
+  "claimsPasswordlessStart": {
+    "http": 200,
+    "challenge": "EMAIL_OTP",
+    "realDelivery": false,
+    "reason": "PreventUserExistenceErrors fake challenge; no Cognito user; no new mailbox message"
+  },
+  "platformOwnerPasswordlessStart": {
+    "email": "checksopsadmin@gmail.com",
+    "http": 200,
+    "challenge": "EMAIL_OTP",
+    "deliveryDestinationMasked": "c***@g***",
+    "passwordUsed": false,
+    "verify": "not_attempted"
+  }
+}
