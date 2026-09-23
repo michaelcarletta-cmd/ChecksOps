@@ -124,6 +124,25 @@ test('allowlist rejects financial tables and unknown columns; ignores spoof iden
   assert.equal(financialIntake.error, 'column_not_allowlisted');
   assert.ok(financialIntake.columns.includes('amount'));
   assert.ok(financialIntake.columns.includes('routing_number'));
+  const tenantProvider = pickAllowlistedValues('tenants', {
+    name: 'Acme',
+    slug: 'acme',
+    moov_account_id: 'acct_freedom',
+    moov_allowlisted: true,
+    payment_provider: 'moov',
+  });
+  assert.equal(tenantProvider.error, 'column_not_allowlisted');
+  assert.ok(tenantProvider.columns.includes('moov_account_id'));
+  assert.ok(tenantProvider.columns.includes('moov_allowlisted'));
+  assert.ok(tenantProvider.columns.includes('payment_provider'));
+  const tenantCreate = pickAllowlistedValues('tenants', {
+    name: 'Acme',
+    slug: 'acme',
+    email_from_address: 'ops@acme.test',
+  });
+  assert.equal(tenantCreate.error, undefined);
+  assert.equal(tenantCreate.values.slug, 'acme');
+  assert.ok(WRITE_ALLOWLIST.tenants.ops.has('insert'));
   assert.equal(WRITE_ALLOWLIST.check_message_reads.ops.has('upsert'), true);
   const picked = pickAllowlistedValues('check_message_reads', {
     user_id: SPOOF_ID,
