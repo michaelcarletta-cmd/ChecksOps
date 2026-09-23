@@ -79,12 +79,13 @@ export function CompanyBrandingSettings() {
       if (tenantUser) {
         const { data: tenant } = await supabase
           .from("tenants")
-          .select("logo_url, invoice_letterhead_url, invoice_footer_note, invoice_default_terms, invoice_accent_color, invoice_theme, primary_color")
+          .select("name, logo_url, invoice_letterhead_url, invoice_footer_note, invoice_default_terms, invoice_accent_color, invoice_theme, primary_color")
           .eq("id", tenantUser.tenant_id)
           .maybeSingle();
         
         if (tenant) {
           const t = tenant as any;
+          if (!brandingData?.company_name) setCompanyName(t.name || "");
           setLogoUrl(t.logo_url || null);
           setInvoiceLetterheadUrl(t.invoice_letterhead_url || null);
           setInvoiceFooterNote(t.invoice_footer_note || "");
@@ -188,30 +189,6 @@ export function CompanyBrandingSettings() {
   const saveSettings = async () => {
     setSaving(true);
     try {
-      const brandingData = {
-        company_name: companyName,
-        company_address: address,
-        company_phone: phone,
-        company_email: email,
-        letterhead_url: persistBrandingPath(letterheadUrl, "company-branding"),
-      };
-
-      if (brandingId) {
-        const { error } = await supabase
-          .from("company_branding" as any)
-          .update(brandingData)
-          .eq("id", brandingId);
-        if (error) throw error;
-      } else {
-        const { data, error } = await supabase
-          .from("company_branding" as any)
-          .insert(brandingData)
-          .select()
-          .single();
-        if (error) throw error;
-        if (data) setBrandingId((data as any).id);
-      }
-
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         const { data: tenantUser, error: membershipError } = await supabase
@@ -225,6 +202,7 @@ export function CompanyBrandingSettings() {
           const { error } = await supabase
             .from("tenants")
             .update({
+              ...(companyName.trim() ? { name: companyName.trim() } : {}),
               logo_url: persistBrandingPath(logoUrl, "tenant-logos"),
               invoice_letterhead_url: persistBrandingPath(invoiceLetterheadUrl, "company-branding"),
               invoice_footer_note: invoiceFooterNote,
@@ -235,6 +213,22 @@ export function CompanyBrandingSettings() {
             .eq("id", tenantUser.tenant_id);
           if (error) throw error;
         }
+      }
+
+      const brandingData = {
+        company_name: companyName,
+        company_address: address,
+        company_phone: phone,
+        company_email: email,
+        letterhead_url: persistBrandingPath(letterheadUrl, "company-branding"),
+      };
+      // company_branding is a platform-owner singleton. Tenant admins persist
+      // identity on tenants.*; do not fail the save if this write is RLS-denied.
+      if (brandingId) {
+        await supabase.from("company_branding" as any).update(brandingData).eq("id", brandingId);
+      } else {
+        const { data } = await supabase.from("company_branding" as any).insert(brandingData).select().single();
+        if (data) setBrandingId((data as any).id);
       }
 
       toast({ title: "Company settings saved" });
