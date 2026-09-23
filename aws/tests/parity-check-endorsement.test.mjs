@@ -252,6 +252,13 @@ test('in-person sign requires image consent and stays fail-closed on deposit', a
         result: () => ({ rows: [{ ok: true }] }),
       },
       {
+        match: (sql) => sql.includes("SET status = 'signed'"),
+        result: () => ({
+          rows: [{ id: ENDORSE_ID, status: 'signed', payee_id: null, payee_name: 'Jane', check_id: CHECK_ID }],
+          rowCount: 1,
+        }),
+      },
+      {
         match: (sql) => sql.includes('SELECT status, payee_type'),
         result: () => ({ rows: [{ status: 'signed', payee_type: 'insured' }] }),
       },
