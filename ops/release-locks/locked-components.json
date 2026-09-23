@@ -187,7 +187,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "295ef72ce463a2f98439a8957be8db8c0fdacb13",
-        "tree_hash": "9e8a7c738b3881c237b99e8d7563e58c7ae493554c3cb66ae03da308dc3f5973",
+        "tree_hash": "880ae4daa397f3f46c0a9464f44e26028469ebdbd9defd625a97ee043d17cd9a",
         "merged": false,
         "merged_pr": null
       },
@@ -205,21 +205,21 @@
       "production_validation": {
         "completed": false,
         "evidence_refs": ["aws/cutover/MOOV_PRODUCTION_DISBURSEMENT_20260923.md"],
-        "recorded_at": null
+        "recorded_at": "2026-09-23T17:11:26.000+0000"
       },
       "deployment_fingerprint": null,
       "rollback": {
         "git_sha": null,
         "artifact": null,
-        "notes": "Implementation is fail-closed. Do not treat Moov activation as complete. AWS_MOOV_ENABLED and AWS_MOOV_TRANSFER_POST_ENABLED stay false."
+        "notes": "Implementation is fail-closed. Do not treat Moov activation as complete. AWS_MOOV_ENABLED and AWS_MOOV_TRANSFER_POST_ENABLED stay false. Do not roll the Lambda backward."
       },
       "missing_evidence": [
-        "accepted production handler deploy SHA",
         "funded Freedom wallet or approved funding source",
+        "production payout method with Moov payment-method id",
         "operator authorization for one real transfer"
       ],
       "open_pr_overlap": [],
-      "notes": "Dedicated production Moov execution handler. Not activated. Wallet remains $0. collect-funds remains in-review."
+      "notes": "Dedicated production Moov execution handler deployed fail-closed. Lambda SHA zQzfz1Use78/jI/+t2FWpcCguCEK9uF/oMPejSAuDbY=. Not activated. Wallet remains $0. collect-funds remains in-review."
     },
     "financial-ledger": {
       "id": "financial-ledger",

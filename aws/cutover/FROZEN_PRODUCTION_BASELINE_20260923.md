@@ -11,12 +11,13 @@ production regression in that component.
 |---|---|
 | Git SHA | `707f4f5092b3ac8cd81b113ae36fbef72250ed39` |
 | Production Lambda | `checksops-production-prep-api` |
-| Accepted Lambda CodeSha256 | `pVwEBVCZJG5PCS6kVmktMiziQ3SxE2NTnncC1pWxHUY=` |
-| Accepted Lambda LastModified | `2026-09-23T15:30:51.000+0000` (SES env update; CodeSha256 unchanged) |
+| Accepted Lambda CodeSha256 | `zQzfz1Use78/jI/+t2FWpcCguCEK9uF/oMPejSAuDbY=` |
+| Accepted Lambda LastModified | `2026-09-23T17:11:26.000+0000` (Moov production execution overlay; flags unchanged) |
+| Previous Lambda CodeSha256 | `pVwEBVCZJG5PCS6kVmktMiziQ3SxE2NTnncC1pWxHUY=` |
 | Accepted production SPA | `index-BR49bZTp.js` |
 | Accepted SQL | `71_staging_public_workflow_grants.sql` with additive 3-argument `aws_public_homeowner_ledger_upload_insert(text,text,text)` while preserving the existing 4-argument overload; plus minimum production `72_production_homeowner_ledger_token_grants.sql` (`GRANT SELECT, INSERT, UPDATE` on `homeowner_ledger_tokens` to `checksops` only) |
 
-Live confirmation on 2026-09-23 (Moov preflight): Lambda SHA and SPA `index-BR49bZTp.js` still match. Money flags unread-only and untouched. `AWS_MOOV_ENABLED` remains `false`. CheckAlt deposit execution remains PENDING REAL INPUT. Moov activation is NOT COMPLETE.
+Live confirmation on 2026-09-23 (Moov production execution overlay): Lambda SHA advanced forward-only from `pVwEBVCZJG5PCS6kVmktMiziQ3SxE2NTnncC1pWxHUY=` to `zQzfz1Use78/jI/+t2FWpcCguCEK9uF/oMPejSAuDbY=`. SPA `index-BR49bZTp.js` unchanged. `AWS_MOOV_ENABLED` and `AWS_MOOV_TRANSFER_POST_ENABLED` remain `false`. No production Moov transfer exists. Wallet `available_cents=0`. CheckAlt deposit execution remains PENDING REAL INPUT. Moov **activation** is NOT COMPLETE.
 
 ## CLOSED / PRODUCTION COMPLETE
 

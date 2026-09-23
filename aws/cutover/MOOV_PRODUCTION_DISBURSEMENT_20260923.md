@@ -178,30 +178,76 @@ No real Moov transfer was sent.
 
 ## L. Exact production deployment
 
-Forward-only overlay of the current production Lambda with
-this handler delta only. Flags were not changed.
-`AWS_ENDORSEMENT_AUTO_ADVANCE` remains false.
+Forward-only overlay of live `checksops-production-prep-api`.
+Downloaded current production zip
+(`pVwEBVCZJG5PCS6kVmktMiziQ3SxE2NTnncC1pWxHUY=`), copied
+only this handler delta, re-zipped, `update-function-code`.
+Staging Lambda SHA unchanged
+(`n82ErD+mGSUt71qm2+4UyoF4SUVSArNa2qYIO/oWhaI=`).
+Lambda environment was not updated.
 CheckAlt handlers were not replaced.
+`AWS_ENDORSEMENT_AUTO_ADVANCE` remains false.
+
+Overlaid:
+
+- `providers.mjs`
+- `provider-flags.mjs`
+- `ops-readiness.mjs`
+- `auth-financial-totp.mjs`
+- `providers/production/moov-*.mjs` (added)
+
+Inspect Lambda
+`checksops-endorsement-transition-inspect-e3dd` was used
+read-only and restored to
+`yYb/cXdUXkVh6JIesDAXwPcLmPwyTy86WwWvf4+xyso=`.
 
 ## M. Current production Lambda SHA / SPA after deployment
 
-Recorded after live deploy in this same document section.
+| Item | Live value |
+|---|---|
+| Lambda | `checksops-production-prep-api` |
+| CodeSha256 | `zQzfz1Use78/jI/+t2FWpcCguCEK9uF/oMPejSAuDbY=` |
+| LastModified | `2026-09-23T17:11:26.000+0000` |
+| Previous SHA | `pVwEBVCZJG5PCS6kVmktMiziQ3SxE2NTnncC1pWxHUY=` |
+| SPA | `index-BR49bZTp.js` (unchanged) |
+| `/prep/health` | 200 `ok` / `production-prep` |
+| `/prep/ops/readiness` | 200; reports `AWS_MOOV_TRANSFER_POST_ENABLED=false` |
+
+Live readiness now includes the new first-class
+`AWS_MOOV_TRANSFER_POST_ENABLED` flag, proving the overlay
+is the running code.
 
 ## N. Current Moov flags
 
-Keep:
+Live Lambda environment (unread after overlay; not mutated):
 
 - `AWS_MOOV_ENABLED=false`
 - `AWS_MOOV_TRANSFER_POST_ENABLED=false`
 - `AWS_ENDORSEMENT_AUTO_ADVANCE=false`
-
-CheckAlt flags were not modified.
+- `AWS_CHECKALT_ENABLED=true` (unchanged)
+- `AWS_PROVIDER_EXECUTION_ENABLED=true` (unchanged)
+- `AWS_FINANCIAL_PERMISSIONS_ACTIVATED=true` (unchanged)
+- `AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED=false`
+- `AWS_CHECKALT_STATUS_RECONCILE_ENABLED=false`
+- `AWS_PROVIDER_WEBHOOK_DRY_RUN=true`
+- `AWS_EMAIL_MODE=ses`
 
 ## O. Proof no real transfer occurred
 
-Implementation tests use mocked `fetchImpl` only. Live deploy
-verification confirms no new Freedom `payment_transfers`
-provider reference and no wallet movement.
+Implementation tests use mocked `fetchImpl` only. No Moov
+HTTP was issued from this run.
+
+Live read-only RDS after overlay:
+
+- Freedom production `payment_transfers`: **0 rows**
+- Freedom production transfers with `provider_transfer_id`: **0**
+- Freedom production wallet `473ceaca-3534-467b-8d92-49baa53f6c68`
+  `available_cents=0`, `pending_cents=0`,
+  `last_synced_at=2026-09-03T17:38:08.418Z` (unchanged)
+- Latest CheckAlt deposit still `123733567`
+  (`updated_at=2026-09-23T10:05:55.230Z`; not mutated)
+
+No historical transfer executed. No wallet balance moved.
 
 ## P. MOOV PRODUCTION EXECUTION PATH — READY
 
