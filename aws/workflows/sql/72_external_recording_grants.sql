@@ -24,14 +24,33 @@ GRANT SELECT, INSERT, UPDATE
   ON TABLE public.disbursement_splits
   TO checksops, authenticated;
 
--- New deposit batches have no items yet, so the existing
--- aws_write_deposit_batches WITH CHECK (items.batch_id = id) rejects INSERT.
--- Allow the authenticated actor to create a batch they own.
+-- New deposit batches have no items yet, so the existing ALL policy
+-- WITH CHECK (items.batch_id = id) rejects INSERT. Recreate it with a
+-- creator clause. The handler also savepoints this insert so recording
+-- can complete without a batch if RLS still refuses.
 DROP POLICY IF EXISTS aws_write_deposit_batches_insert_creator ON public.deposit_batches;
-CREATE POLICY aws_write_deposit_batches_insert_creator ON public.deposit_batches
-  FOR INSERT TO authenticated
+DROP POLICY IF EXISTS aws_write_deposit_batches ON public.deposit_batches;
+CREATE POLICY aws_write_deposit_batches ON public.deposit_batches
+  FOR ALL TO authenticated
+  USING (
+    (public.aws_is_authenticated() AND public.aws_is_cross_tenant_reader())
+    OR created_by = auth.uid()
+    OR EXISTS (
+      SELECT 1
+      FROM public.deposit_items di
+      JOIN public.check_intake_items ci ON ci.id = di.check_id
+      WHERE di.batch_id = deposit_batches.id
+        AND public.aws_can_write_tenant(ci.tenant_id)
+    )
+  )
   WITH CHECK (
-    public.aws_is_authenticated()
-    AND created_by IS NOT NULL
-    AND created_by = auth.uid()
+    (public.aws_is_authenticated() AND public.aws_is_cross_tenant_reader())
+    OR created_by = auth.uid()
+    OR EXISTS (
+      SELECT 1
+      FROM public.deposit_items di
+      JOIN public.check_intake_items ci ON ci.id = di.check_id
+      WHERE di.batch_id = deposit_batches.id
+        AND public.aws_can_write_tenant(ci.tenant_id)
+    )
   );

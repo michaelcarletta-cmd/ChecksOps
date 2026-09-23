@@ -291,12 +291,24 @@ export const handleExternalDeposit = async (event, deps = {}) => {
 
     let batchId = item.batch_id;
     if (!batchId) {
-      batchId = (await client.query(
-        `INSERT INTO public.deposit_batches (provider, total_items, total_amount, created_by)
-         VALUES ($1::public.deposit_provider, 1, $2::numeric, $3::uuid)
-         RETURNING id`,
-        [EXTERNAL_DEPOSIT_PROVIDER, amount, actorId],
-      )).rows[0]?.id;
+      await client.query('SAVEPOINT external_deposit_batch');
+      try {
+        batchId = (await client.query(
+          `INSERT INTO public.deposit_batches (provider, total_items, total_amount, created_by)
+           VALUES ($1::public.deposit_provider, 1, $2::numeric, $3::uuid)
+           RETURNING id`,
+          [EXTERNAL_DEPOSIT_PROVIDER, amount, actorId],
+        )).rows[0]?.id;
+        await client.query('RELEASE SAVEPOINT external_deposit_batch');
+      } catch (error) {
+        await client.query('ROLLBACK TO SAVEPOINT external_deposit_batch');
+        const code = String(error?.code || '');
+        const message = String(error?.message || error);
+        if (code !== '42501' && !/row-level security|permission denied/i.test(message)) {
+          throw error;
+        }
+        batchId = null;
+      }
     }
 
     const updatedItem = (await client.query(

@@ -73,6 +73,7 @@ const mockClient = ({
   spent = 0,
   existingSplit = null,
   afterStage = null,
+  failBatchInsert = false,
 } = {}) => {
   const queries = [];
   let item = depositItem;
@@ -88,6 +89,7 @@ const mockClient = ({
       ) {
         return { rows: [] };
       }
+      if (/^(SAVEPOINT|RELEASE SAVEPOINT|ROLLBACK TO SAVEPOINT)/.test(sql)) return { rows: [] };
       if (sql.startsWith('SELECT set_config')) return { rows: [{ set_config: params[1] }] };
       if (sql === LOOKUP_MAPPING_SQL) {
         return { rows: params[0] === mapping.cognito_sub ? [mapping] : [] };
@@ -129,7 +131,14 @@ const mockClient = ({
         };
         return { rows: [item] };
       }
-      if (/INSERT INTO public.deposit_batches/.test(sql)) return { rows: [{ id: BATCH_ID }] };
+      if (/INSERT INTO public.deposit_batches/.test(sql)) {
+        if (failBatchInsert) {
+          const error = new Error('new row violates row-level security policy for table "deposit_batches"');
+          error.code = '42501';
+          throw error;
+        }
+        return { rows: [{ id: BATCH_ID }] };
+      }
       if (/UPDATE public.deposit_items/.test(sql)) {
         item = {
           ...(item || {}),
@@ -270,6 +279,19 @@ test('external deposit records manual_branch without CheckAlt', async () => {
   const itemUpdate = client.queries.find((q) => /UPDATE public.deposit_items/.test(q.sql));
   assert.match(itemUpdate.sql, /status = 'succeeded'/);
   assert.equal(itemUpdate.params.includes(OTHER_APP), false);
+});
+
+test('external deposit still records when deposit_batches insert is RLS-denied', async () => {
+  const client = mockClient({ failBatchInsert: true });
+  const result = await handleExternalDeposit(jwtEvent(`/workflow/checks/${CHECK_ID}/external-deposit`, 'POST', {
+    check_id: CHECK_ID,
+    notes: 'Deposited at branch without batch',
+  }), depsFor(client));
+  assert.equal(result.ok, true);
+  assert.equal(result.data.new_status, 'deposited');
+  assert.equal(result.data.new_stage, 'deposited');
+  assert.equal(result.checkAltInvoked, false);
+  assert.equal(client.queries.some((q) => /ROLLBACK TO SAVEPOINT external_deposit_batch/.test(q.sql)), true);
 });
 
 test('external deposit is idempotent when already deposited', async () => {
@@ -433,5 +455,6 @@ test('external recording grants are narrow and do not activate providers', () =>
   assert.match(sql, /GRANT SELECT, INSERT, UPDATE[\s\S]*disbursement_splits/);
   assert.doesNotMatch(sql, /GRANT EXECUTE/);
   assert.doesNotMatch(sql, /ON TABLE public\.(checkalt_deposits|payment_transfers)/);
-  assert.match(sql, /aws_write_deposit_batches_insert_creator/);
+  assert.match(sql, /DROP POLICY IF EXISTS aws_write_deposit_batches ON public.deposit_batches/);
+  assert.match(sql, /created_by = auth.uid\(\)/);
 });
