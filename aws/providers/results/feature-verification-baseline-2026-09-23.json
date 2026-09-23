@@ -202,6 +202,22 @@
       "fail": 0
     }
   },
+  "browserWalkthrough": {
+    "video": "/opt/cursor/artifacts/feature_verification_login_surfaces.mp4",
+    "submittedOtp": false,
+    "submittedPassword": false,
+    "moneyButtonsClicked": false,
+    "passwordFieldPresent": false,
+    "unauthenticatedQueueRedirectsToLogin": true,
+    "pages": [
+      "https://staging.checksops.com/mortgage-ops/login",
+      "https://staging.checksops.com/mortgage-ops/queue",
+      "https://staging.checksops.com/login",
+      "https://checksops.com/mortgage-ops/login",
+      "https://checksops.com/login",
+      "https://www.checksops.com/mortgage-ops/login"
+    ]
+  },
   "notDone": [
     "Did not submit EMAIL_OTP for a real mailbox",
     "Did not hire or revoke a mortgage agent",

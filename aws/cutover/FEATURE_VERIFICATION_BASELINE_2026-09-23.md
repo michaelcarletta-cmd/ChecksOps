@@ -141,3 +141,18 @@ No item above is an **actual software defect** that blocks the shipped Cognito +
 5. Stop before any financial button past the existing fail-closed boundary.
 
 If a later authenticated run finds a defect that would require changing Cognito, `/prep`, or a money path: **stop and report** before deployment.
+
+## 9. Browser walkthrough (safe boundary, 2026-09-23)
+
+No email typed. No OTP started. No money buttons.
+
+| URL | Result |
+|---|---|
+| `https://staging.checksops.com/mortgage-ops/login` | Mortgage Desk card: passkey + “Email me a verification code”. No password field. |
+| `https://staging.checksops.com/mortgage-ops/queue` | Unauthenticated → remains on / redirects to login. |
+| `https://staging.checksops.com/login` | ChecksOps passwordless (passkey + email code). Copy states password sign-in is disabled. |
+| `https://checksops.com/mortgage-ops/login` | Same desk controls as staging. Banner still says “AWS staging” because `isAwsStaging()` means Cognito. |
+| `https://checksops.com/login` | Production ChecksOps passwordless. Same leftover “AWS staging” banner. |
+| `https://www.checksops.com/mortgage-ops/login` | Apex/www desk login reachable; EMAIL_OTP available. Passkey UI depends on final hostname matching RP `checksops.com`. |
+
+Classification of the leftover “AWS staging” banner on production: **post-cutover copy enhancement**, not a login-blocking software defect. Do not rename the Cognito helper or reopen branding in this workstream.
