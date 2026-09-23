@@ -4,8 +4,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { homeownerUploadTokenFromEvent } from '../functions/api/homeowner-otp.mjs';
-import { handleHomeownerLedgerUpload } from '../functions/api/homeowner.mjs';
+import { handleHomeownerLedgerUpload, shapeHomeownerLedgerView } from '../functions/api/homeowner.mjs';
 import { runSendSignatureRequest } from '../functions/api/esign.mjs';
+import { shapeHomeownerLedgerSummary } from '../../src/lib/homeownerLedgerSummary.ts';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sourceOf = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
@@ -122,4 +123,61 @@ test('ledger upload calls public insert helper with token and path', async () =>
   const insert = calls.find((row) => row.sql.includes('aws_public_homeowner_ledger_upload_insert'));
   assert.equal(insert.params[0], 'ledger-token-value');
   assert.match(insert.params[1], /^ledger\//);
+});
+
+test('AWS ledger view maps token/claim onto UI mode/homeowner/totals', () => {
+  const shaped = shapeHomeownerLedgerView({
+    ok: true,
+    token: {
+      id: 'tok-1',
+      tenant_id: 't1',
+      claim_id: 'c1',
+      homeowner_name: 'Amanda Onori',
+      homeowner_email: 'amanda@example.com',
+    },
+    claim: { id: 'c1', claim_number: '249987', property_address: '1 Main' },
+    events: [
+      { id: 'e1', event_type: 'check_received', amount: 270.87 },
+      { id: 'e2', event_type: 'deposited', amount: 270.87 },
+    ],
+  });
+  assert.equal(shaped.mode, 'claim');
+  assert.equal(shaped.homeowner.name, 'Amanda Onori');
+  assert.equal(shaped.homeowner.email, 'amanda@example.com');
+  assert.equal(shaped.totals.received, 270.87);
+  assert.equal(shaped.totals.deposited, 270.87);
+  assert.equal(shaped.can_upload, true);
+  assert.equal(shaped.pending_upload_count, 0);
+  assert.ok(Array.isArray(shaped.events));
+});
+
+test('AWS ledger view without claim is pre_claim and never leaves homeowner undefined', () => {
+  const shaped = shapeHomeownerLedgerView({
+    ok: true,
+    token: { id: 'tok-2', homeowner_name: 'Pat', homeowner_email: 'pat@example.com' },
+  });
+  assert.equal(shaped.mode, 'pre_claim');
+  assert.equal(shaped.homeowner.name, 'Pat');
+  assert.equal(shaped.homeowner.email, 'pat@example.com');
+  assert.deepEqual(shaped.totals, { received: 0, deposited: 0, released: 0, remaining: 0 });
+  assert.equal(shaped.homeowner.name.length > 0, true);
+});
+
+test('frontend ledger summary shaper accepts the live AWS payload', () => {
+  const ui = shapeHomeownerLedgerSummary({
+    ok: true,
+    token: { homeowner_name: 'Amanda Onori', homeowner_email: 'amanda@example.com' },
+    claim: { id: 'c61e6e61-f0bc-418b-ad92-fba64e2f227c', claim_number: '249987' },
+    events: [],
+  });
+  assert.equal(ui.mode, 'claim');
+  assert.equal(ui.homeowner.name, 'Amanda Onori');
+  assert.equal(ui.totals.received, 0);
+  assert.equal(ui.can_upload, true);
+});
+
+test('ledger page uses the AWS summary shaper', () => {
+  const page = sourceOf('../src/pages/HomeownerLedger.tsx');
+  assert.match(page, /shapeHomeownerLedgerSummary/);
+  assert.doesNotMatch(page, /setData\(res as Summary\)/);
 });
