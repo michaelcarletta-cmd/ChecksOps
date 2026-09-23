@@ -152,6 +152,8 @@ test('admin status correction succeeds for an authorized tenant admin', async ()
   assert.equal(update.params[1], 'needs_review');
   assert.equal(update.params[2], 'review');
   assert.equal(update.params.includes(OTHER_APP), false);
+  const claimMirror = client.queries.find((q) => /UPDATE public.claim_checks/.test(q.sql));
+  assert.match(claimMirror.sql, /check_stage = \$2::public\.check_stage/);
   const audit = client.queries.find((q) => /INSERT INTO public.check_audit_log/.test(q.sql));
   assert.equal(audit.params[2], APP_ID);
   assert.match(String(audit.params[3]), /endorsements_in_progress/);
