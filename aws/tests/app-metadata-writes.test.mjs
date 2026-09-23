@@ -1,8 +1,13 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { WRITE_ALLOWLIST } from '../functions/api/write-allowlist.mjs';
 import { executeAppMetadataWrite } from '../functions/api/write-app-metadata.mjs';
 import { SAFE_WRITE_RPC_CLASSIFICATION } from '../functions/api/workflow-rpc.mjs';
+
+const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 const APP_ID = 'abd3c2a0-6dc0-4680-92dd-a013e1141c91';
 const TENANT = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
@@ -265,4 +270,18 @@ test('homeowner ledger insert forces null amount and membership check', async ()
   });
   assert.equal(result.rows[0].amount, null);
   assert.match(queries.at(-1).sql, /amount/);
+});
+
+test('operator SQL grants tenant INSERT only under platform-owner RLS', () => {
+  const sql = fs.readFileSync(
+    path.join(ROOT, 'onboarding/sql/81_tenant_insert_platform_owner.sql'),
+    'utf8',
+  );
+  assert.match(sql, /GRANT INSERT ON TABLE public\.tenants TO checksops/);
+  assert.match(sql, /CREATE POLICY aws_insert_tenants_platform_owner/);
+  assert.match(sql, /is_master_owner\(\)/);
+  assert.match(sql, /is_platform_owner\(\)/);
+  assert.doesNotMatch(sql, /GRANT UPDATE OF/);
+  assert.doesNotMatch(sql, /moov_allowlisted/);
+  assert.doesNotMatch(sql, /UPDATE public\.tenants SET/);
 });
