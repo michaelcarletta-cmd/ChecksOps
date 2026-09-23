@@ -1,5 +1,5 @@
 import { ViewCheckImageButton } from "@/components/checks/ViewCheckImageButton";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/aws/client";
 import { useAuth } from "@/hooks/useAuth";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { LossDraftDocsManager } from "@/components/loss-draft/LossDraftDocsManager";

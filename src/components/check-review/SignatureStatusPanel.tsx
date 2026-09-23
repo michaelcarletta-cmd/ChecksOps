@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/aws/client";
 import {
   PARTNER_CHECK_ENDORSEMENTS,
   PARTNER_CHECK_PAYEES,

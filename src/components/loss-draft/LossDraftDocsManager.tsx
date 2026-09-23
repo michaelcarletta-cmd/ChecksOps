@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { ChecksOpsClient } from "@/integrations/aws/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,7 +60,7 @@ export interface LossDraftClaimContext {
 }
 
 interface Props {
-  supabaseClient: SupabaseClient<any, any, any>;
+  supabaseClient: ChecksOpsClient;
   lossDraftId: string;
   claimId: string | null;
   claimContext: LossDraftClaimContext;

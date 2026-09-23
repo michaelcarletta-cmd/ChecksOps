@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useStepUp } from "@/hooks/useStepUp";
 import { runCheckAltDepositClick } from "@/lib/checkaltDepositOrchestrator";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/aws/client";
 import { matchesAmountQuery } from "@/features/check-command/status";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";

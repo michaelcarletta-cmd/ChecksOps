@@ -571,7 +571,7 @@ const main = async () => {
     'payment_transfers', 'payment_wallet_ledger', 'claim_payments',
     'homeowner_ledger_events', 'check_endorsements',
   ]);
-  const types = parseGeneratedDatabaseTypes(path.join(ROOT, 'src/integrations/supabase/types.ts'));
+  const types = parseGeneratedDatabaseTypes(path.join(ROOT, 'src/types/database.ts'));
   const businessTableNames = loadBusinessTableNames(path.join(ROOT, 'aws/db-copy/sql/reconciliation_counts.sql'));
 
   if (resumeLambda) {

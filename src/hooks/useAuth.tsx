@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, createContext, useContext, ReactNode, useMemo } from "react";
-import { User, Session } from "@supabase/supabase-js";
-import { supabase } from "@/integrations/supabase/client";
+import type { User, Session } from "@/integrations/aws/client";
+import { supabase } from "@/integrations/aws/client";
 
 const ROLE_CACHE_KEY = "cached_user_role";
 const ROLE_PRIORITY = ["admin", "staff", "mortgage_agent", "read_only", "guided", "contractor", "client"] as const;

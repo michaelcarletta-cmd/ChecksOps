@@ -4,10 +4,10 @@ import {
   browserSupportsWebAuthn,
   platformAuthenticatorIsAvailable,
 } from "@simplewebauthn/browser";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { supabase as defaultClient } from "@/integrations/supabase/client";
+import type { ChecksOpsClient } from "@/integrations/aws/client";
+import { supabase as defaultClient } from "@/integrations/aws/client";
 
-type Client = SupabaseClient<any, any, any>;
+type Client = ChecksOpsClient;
 
 /** True when this browser can create/use passkeys at all. */
 export function passkeysSupported() {

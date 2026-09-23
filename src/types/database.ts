@@ -6,9 +6,13 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
+/**
+ * PostgreSQL schema types for ChecksOps.
+ * Generated from the live catalog; kept as TypeScript-only (no runtime import).
+ * Not a Supabase SDK client and not hosted-Supabase infrastructure.
+ */
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  // Codegen leftover kept so existing helper aliases stay valid.
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }

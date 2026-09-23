@@ -19,7 +19,7 @@ password. Live catalog counts are parsed from that file.
 | `auth.users` | **9** | **Out of scope** (Cognito later). **0** FKs from public → `auth.users` |
 | `storage.objects` | **1,335** | **Out of scope** (S3 later) |
 
-Generated PostgREST types (`src/integrations/supabase/types.ts`) list the same
+Generated PostgREST types (`src/types/database.ts`) list the same
 **166 tables and 20 views**. Function coverage in that file is only 358 names
 (a PostgREST subset of the live 960).
 

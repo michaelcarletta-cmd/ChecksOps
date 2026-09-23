@@ -21,7 +21,7 @@ The application role `checksops` stays least-privileged. Eventual schema restore
 | `auth.users` | 9 | **Out of scope** (Cognito). 0 public FKs |
 | `storage.objects` | 1,335 | **Out of scope** (S3) |
 
-Generated PostgREST types (`src/integrations/supabase/types.ts`) match **166 tables and 20 views**. That file lists 358 functions (a PostgREST subset of the live 960).
+Generated PostgREST types (`src/types/database.ts`) match **166 tables and 20 views**. That file lists 358 functions (a PostgREST subset of the live 960).
 
 ```bash
 node aws/db-copy/cli.mjs validate

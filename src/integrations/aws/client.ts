@@ -1,6 +1,7 @@
-import type { Session, User } from "@supabase/supabase-js";
+import type { Session, User } from "./auth-types";
 import {
   AWS_STAGING_AUTH_SESSION_KEY,
+  AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY,
   awsApiBaseUrl,
 } from "@/lib/awsStaging";
 import { createAwsStorageAdapter, rewriteStorageFields } from "./storage";
@@ -829,9 +830,9 @@ export function createAwsStagingClient(options: AwsStagingClientOptions = {}) {
     }),
     verifyOtp: async () => ({
       data: { user: null, session: null },
-      error: authError("Supabase OTP verify is disabled on AWS staging"),
+      error: authError("OTP verify is disabled on the AWS client; use Cognito EMAIL_OTP"),
     }),
-    /** Staging stub — Cognito MFA not provisioned; production Supabase TOTP unchanged. */
+    /** Cognito MFA list is empty until factors are provisioned for this session. */
     mfa: {
       listFactors: async () => ({ data: { totp: [], all: [], phone: [] }, error: null }),
       enroll: mfaUnavailable,
@@ -972,3 +973,18 @@ export function createAwsStagingClient(options: AwsStagingClientOptions = {}) {
     },
   };
 }
+
+/** Default CheckOps / WhiteLabel client. Cognito session → AWS /prep APIs. */
+export const api = createAwsStagingClient();
+/** @deprecated Use `api`. Kept so existing call sites can migrate by import path only. */
+export const supabase = api;
+
+/** Mortgage Desk client — isolated Cognito session key. */
+export const mortgageApi = createAwsStagingClient({
+  sessionKey: AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY,
+});
+/** @deprecated Use `mortgageApi`. */
+export const mortgageSupabase = mortgageApi;
+
+export type ChecksOpsClient = ReturnType<typeof createAwsStagingClient>;
+export type { Session, User } from "./auth-types";

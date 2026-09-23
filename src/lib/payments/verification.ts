@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/aws/client";
 
 /**
  * Bank ownership verification for recipients who will not use an instant bank

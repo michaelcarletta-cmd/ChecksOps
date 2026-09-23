@@ -11,7 +11,7 @@ import {
   FileSignature,
   Send,
 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/aws/client";
 import { compressCheckImage } from "@/lib/compressCheckImage";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";

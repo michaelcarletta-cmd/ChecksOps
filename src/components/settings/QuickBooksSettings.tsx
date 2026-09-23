@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/aws/client";
 import { CheckCircle, XCircle, Loader2, ExternalLink } from "lucide-react";
 
 const QUICKBOOKS_STORAGE_KEY = 'quickbooks_connection';

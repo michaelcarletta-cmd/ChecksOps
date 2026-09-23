@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useFinancialGuard } from "@/hooks/useFinancialGuard";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/aws/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";

@@ -8,8 +8,6 @@ const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 test('MortgageOps AWS session key is isolated from CheckOps/WhiteLabel', () => {
   const staging = fs.readFileSync(path.join(ROOT, 'src/lib/awsStaging.ts'), 'utf8');
-  const mortgageClient = fs.readFileSync(path.join(ROOT, 'src/integrations/supabase/mortgageClient.ts'), 'utf8');
-  const mainClient = fs.readFileSync(path.join(ROOT, 'src/integrations/supabase/client.ts'), 'utf8');
   const awsClient = fs.readFileSync(path.join(ROOT, 'src/integrations/aws/client.ts'), 'utf8');
   const mopsLogin = fs.readFileSync(path.join(ROOT, 'src/pages/mortgage-ops/MortgageOpsLogin.tsx'), 'utf8');
   const passwordless = fs.readFileSync(path.join(ROOT, 'src/lib/awsPasswordless.ts'), 'utf8');
@@ -20,12 +18,13 @@ test('MortgageOps AWS session key is isolated from CheckOps/WhiteLabel', () => {
     staging,
     /AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY\s*=\s*"checksops\.aws\.staging\.auth\.mortgage-ops"/,
   );
-  assert.match(mortgageClient, /sessionKey:\s*AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY/);
-  assert.match(mortgageClient, /sb-mortgage-ops-auth/);
-  // Main CheckOps client must not pass the mortgage session key.
-  assert.doesNotMatch(mainClient, /MORTGAGE_AUTH_SESSION_KEY/);
+  assert.match(awsClient, /export const mortgageApi = createAwsStagingClient\(\{\s*sessionKey: AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY,/);
+  assert.match(awsClient, /export const api = createAwsStagingClient\(\)/);
+  assert.doesNotMatch(awsClient, /export const api = createAwsStagingClient\(\{[\s\S]*MORTGAGE_AUTH_SESSION_KEY/);
   assert.match(awsClient, /createAwsSessionStore/);
   assert.match(awsClient, /options\.sessionKey/);
+  assert.doesNotMatch(awsClient, /@supabase\/supabase-js/);
+  assert.doesNotMatch(awsClient, /createClient/);
   // Mortgage login must write Cognito tokens into the mortgage portal store.
   assert.match(mopsLogin, /portal:\s*"mortgage-ops"/);
   assert.match(mopsLogin, /AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY/);

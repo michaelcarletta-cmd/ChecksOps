@@ -14,7 +14,7 @@ Production runtime is the accepted AWS stack:
 - CheckAlt production execution
 - Moov production execution implementation
 
-Do not introduce a new Supabase, Lovable, or preview runtime. Historical `supabase/` sources and `supabase.functions.invoke` call sites remain as the AWS adapter surface; they are not a second production backend.
+The SPA talks to AWS through `src/integrations/aws/client.ts`. There is no hosted-Supabase or Lovable production path.
 
 ## Local development
 
@@ -24,26 +24,18 @@ Requires Node.js 20+ and npm.
 git clone <YOUR_GIT_URL>
 cd ChecksOps
 npm i
+cp .env.aws.example .env.aws
+npm run dev
 ```
-
-AWS frontend (Cognito + `/prep`):
-
-```sh
-npm run dev:aws
-```
-
-Default `npm run dev` is a historical Vite mode. Do not point new work at Lovable Cloud or live Supabase keys.
 
 ## Production / staging builds
 
 ```sh
-npm run build:aws
-npm run preview:aws
+npm run build
+npm run preview
 ```
 
-Copy values from `.env.production.aws.example` privately for an AWS SPA build. Do not copy that file over `.env.production`.
-
-`npm run build` without `--mode aws` is the legacy Lovable/Supabase bundle path. Do not use it for ChecksOps.com.
+`npm run build` and `npm run build:aws` are the same AWS Cognito frontend. Copy values from `.env.production.aws.example` privately for a production SPA build. Do not put `VITE_SUPABASE_*` in `.env.production`.
 
 ## Tests
 

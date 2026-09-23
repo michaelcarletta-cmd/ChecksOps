@@ -55,7 +55,7 @@ test('committed live inventory is 166 tables, 20 views, and related catalog coun
 });
 
 test('generated types match the live 166 tables and 20 views', () => {
-  const types = parseGeneratedDatabaseTypes(path.join(repoRoot, 'src/integrations/supabase/types.ts'));
+  const types = parseGeneratedDatabaseTypes(path.join(repoRoot, 'src/types/database.ts'));
   const live = loadCommittedLiveInventory(repoRoot);
   assert.equal(types.tables.length, 166);
   assert.equal(types.views.length, 20);
@@ -148,7 +148,7 @@ test('cli dump and restore refuse without execute authorization', () => {
 test('reconciliation SQL covers all 166 generated tables plus financial payment domains', () => {
   const counts = fs.readFileSync(path.join(dbCopyRoot, 'sql/reconciliation_counts.sql'), 'utf8');
   const financial = fs.readFileSync(path.join(dbCopyRoot, 'sql/reconciliation_financial.sql'), 'utf8');
-  const types = parseGeneratedDatabaseTypes(path.join(repoRoot, 'src/integrations/supabase/types.ts'));
+  const types = parseGeneratedDatabaseTypes(path.join(repoRoot, 'src/types/database.ts'));
   const named = listReconciliationTables(counts);
   assert.equal(named.length, 166, `expected 166 count queries, found ${named.length}`);
   assert.deepEqual([...named].sort(), [...types.tables].sort());

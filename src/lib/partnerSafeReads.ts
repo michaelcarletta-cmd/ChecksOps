@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/aws/client";
 
 export const PARTNER_CHECK_ENDORSEMENTS = "aws_partner_check_endorsements";
 export const PARTNER_CHECK_PAYEES = "aws_partner_check_payees";

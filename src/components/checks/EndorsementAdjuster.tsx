@@ -19,7 +19,7 @@ import {
   EndorsementOverride,
 } from "@/lib/endorsementLayout";
 import { fitEndorsementLayout } from "@/lib/endorsementFit";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/aws/client";
 import {
   ENDORSEMENT_RENDERER_VERSION,
   ENDORSEMENT_WIDTH_PCT,

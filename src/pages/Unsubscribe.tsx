@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/aws/client";
+import { awsFunctionsUrl } from "@/lib/awsStaging";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Loader2, MailCheck, MailX } from "lucide-react";
@@ -19,9 +20,6 @@ export default function Unsubscribe() {
   const token = params.get("token") ?? "";
   const [state, setState] = useState<State>({ kind: "loading" });
 
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
-  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
-
   useEffect(() => {
     if (!token) {
       setState({ kind: "invalid", message: "Missing unsubscribe token." });
@@ -30,8 +28,7 @@ export default function Unsubscribe() {
     (async () => {
       try {
         const resp = await fetch(
-          `${supabaseUrl}/functions/v1/handle-email-unsubscribe?token=${encodeURIComponent(token)}`,
-          { headers: { apikey: supabaseAnonKey } },
+          `${awsFunctionsUrl("handle-email-unsubscribe")}?token=${encodeURIComponent(token)}`,
         );
         const json = await resp.json().catch(() => ({}));
         if (!resp.ok) {
@@ -47,7 +44,7 @@ export default function Unsubscribe() {
         setState({ kind: "invalid", message: "Could not validate this link." });
       }
     })();
-  }, [token, supabaseUrl, supabaseAnonKey]);
+  }, [token]);
 
   const confirm = async () => {
     if (state.kind !== "valid") return;

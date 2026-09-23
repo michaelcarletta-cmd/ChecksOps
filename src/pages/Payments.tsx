@@ -12,7 +12,7 @@ import { useTenant } from "@/contexts/TenantContext";
 import { useSearchParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/aws/client";
 import { canAccessTaxUi } from "@/lib/taxAccess";
 import { isPlatformOwner } from "@/lib/masterMerchant";
 import { 

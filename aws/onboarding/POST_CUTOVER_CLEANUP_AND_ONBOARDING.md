@@ -6,17 +6,17 @@ Scope: dormant Supabase/Lovable remnant classification plus the **existing** ten
 
 | Finding | Classification | Notes |
 |---|---|---|
-| `src/integrations/supabase/client.ts` + `src/integrations/aws/client.ts` | **2. STILL RUNTIME-REFERENCED** | AWS builds (`VITE_AUTH_PROVIDER=cognito`) swap in the Cognito/AWS adapter. Call sites stay `supabase.from` / `supabase.functions.invoke`. Do not delete. |
-| `@supabase/supabase-js` | **2. STILL RUNTIME-REFERENCED** | Types and non-AWS fallback client. |
-| `src/integrations/supabase/types.ts` | **2. STILL RUNTIME-REFERENCED** | Generated table types used across the SPA. |
-| Hundreds of `supabase.*` call sites in `src/` | **2. STILL RUNTIME-REFERENCED** | Routed to AWS `/data/*`, `/storage/*`, `/functions/v1/*` in Cognito builds. |
+| `src/integrations/aws/client.ts` | **2. STILL RUNTIME-REFERENCED** | ChecksOps AWS client. Call sites keep `from` / `functions.invoke` names. Hosted Supabase client removed. |
+| `@supabase/supabase-js` | **1. SAFE TO REMOVE** | Removed from the SPA package after no `src/` runtime import remained. |
+| `src/types/database.ts` | **3. DEVELOPMENT/HISTORICAL ONLY** | Moved schema types; TypeScript-only. |
+| Hundreds of `from` / `functions.invoke` call sites in `src/` | **2. STILL RUNTIME-REFERENCED** | Routed to AWS `/data/*`, `/storage/*`, `/functions/v1/*`. |
 | `aws/functions/api/app-services.mjs` Class A names | **2. STILL RUNTIME-REFERENCED** | AWS handlers that preserve Edge Function names. |
 | `supabase/functions/**` | **3. DEVELOPMENT/HISTORICAL ONLY** | Original function source / parity reference. AWS does not import these at runtime. Tests still import some `_shared` modules. |
 | `supabase/migrations/**` | **3. DEVELOPMENT/HISTORICAL ONLY** | Schema history. RDS is the live catalog. |
-| `.env.production` `VITE_SUPABASE_*` | **2. STILL RUNTIME-REFERENCED** | Consumed by legacy `npm run build` (no `--mode aws`). AWS production uses `build:aws`. |
-| `scripts/check-publish-keys.mjs` | **3. DEVELOPMENT/HISTORICAL ONLY** | `prebuild` for the legacy bundle only. Not used by `build:aws`. |
-| `vite.config.ts` Supabase PWA cache + key define | **2. STILL RUNTIME-REFERENCED** | Non-AWS Vite mode only. AWS mode blanks the keys. |
-| `src/lib/supabaseTimed.ts` | **4. UNKNOWN — NEEDS NARROW VERIFICATION** | Wrapper around the shared client. Leave until a caller audit proves unused. |
+| `.env.production` `VITE_SUPABASE_*` | **1. SAFE TO REMOVE** | Retired. `npm run build` is `--mode aws`. |
+| `scripts/check-publish-keys.mjs` | **1. SAFE TO REMOVE / no-op** | CI keeps the script name as a no-op. |
+| `vite.config.ts` Supabase PWA cache + key define | **1. SAFE TO REMOVE** | Keys always blanked; supabase.co PWA caches removed. |
+| `src/lib/supabaseTimed.ts` | **1. SAFE TO REMOVE** | Unused after client migration; deleted. |
 | `scripts/*` that `createClient` against Supabase | **3. DEVELOPMENT/HISTORICAL ONLY** | One-off prod-era scripts (`moov-e2e-freedom.mjs`, RPC testers). Not the AWS API. |
 | `aws/db-copy/**` + `aws/storage/copy-from-supabase.mjs` | **3. DEVELOPMENT/HISTORICAL ONLY** | Cutover copy tooling. Do not run against production. |
 | `supabase.json` | **3. DEVELOPMENT/HISTORICAL ONLY** | Windows Scoop CLI manifest, not a live project config. |
@@ -29,9 +29,10 @@ Scope: dormant Supabase/Lovable remnant classification plus the **existing** ten
 | README Lovable editor/deploy instructions | **1. SAFE TO REMOVE** | Replaced with AWS-first project docs. |
 | `.env.example` Lovable-as-production comments | **1. SAFE TO REMOVE** | Replaced with AWS-first template. |
 | `.lovable/plan/**` | **3. DEVELOPMENT/HISTORICAL ONLY** | Old planning notes. Not runtime. |
-| `lovable-tagger` (devDependency) | **3. DEVELOPMENT/HISTORICAL ONLY** | Vite plugin, non-AWS `development` mode only. |
-| `index.html` CSP `*.lovable.app` + preview OG image | **4. UNKNOWN — NEEDS NARROW VERIFICATION** | Could still matter if a preview host frames the SPA. Not changed. |
-| `src/integrations/supabase/previewAuthStorage.ts` | **2. STILL RUNTIME-REFERENCED** | Used only by the non-AWS `createClient` fallback. Leave until the legacy bundle is retired. |
+| `lovable-tagger` (devDependency) | **1. SAFE TO REMOVE** | Removed; Vite no longer loads it. |
+| `index.html` CSP `*.lovable.app` | **1. SAFE TO REMOVE** | Restricted to self + freedomclaims.work + checksops.com. |
+| `index.html` preview OG image filename | **3. DEVELOPMENT/HISTORICAL ONLY** | R2 asset URL still contains `.lovable.app` in the object name. Not a runtime host. |
+| `src/integrations/supabase/previewAuthStorage.ts` | **1. SAFE TO REMOVE** | Deleted with the hosted createClient fallback. |
 | `supabase/functions/**` Lovable email/AI gateways | **3. DEVELOPMENT/HISTORICAL ONLY** | AWS mail is SES (`email.mjs` / `email-branding.mjs`). Do not call `connector-gateway.lovable.dev` from AWS. |
 
 ## C. Proven dormant remnants safe to remove
@@ -42,9 +43,9 @@ Scope: dormant Supabase/Lovable remnant classification plus the **existing** ten
 
 ## D. Still-runtime-referenced legacy dependency
 
-The SPA still speaks a Supabase-shaped client. That is the accepted AWS adapter, not a second backend. **Do not redesign it in this workstream.**
+The SPA still speaks a ChecksOps client that keeps `from` / `invoke` method names. That is the accepted AWS adapter, not a second backend.
 
-Legacy `npm run build` still embeds `.env.production` Supabase URL/key. **Do not delete those keys** until the legacy bundle path is formally retired.
+See `aws/onboarding/SUPABASE_RUNTIME_RETIREMENT.md`. Legacy `npm run build` is now `--mode aws`. `.env.production` no longer contains Supabase credentials.
 
 ## E. Files / config / env / docs removed or rewritten
 

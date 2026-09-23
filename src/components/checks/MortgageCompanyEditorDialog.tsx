@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { supabase as defaultSupabase } from "@/integrations/supabase/client";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { supabase as defaultSupabase } from "@/integrations/aws/client";
+import type { ChecksOpsClient } from "@/integrations/aws/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -50,7 +50,7 @@ interface Props {
   initialName?: string;
   onSaved?: (saved: MortgageCompanyRecord) => void;
   /** Supabase client to use — defaults to the ChecksOps client. Pass mortgageSupabase from the Mortgage Ops portal. */
-  supabaseClient?: SupabaseClient<any>;
+  supabaseClient?: ChecksOpsClient;
 }
 
 export function MortgageCompanyEditorDialog({
