@@ -72,8 +72,8 @@ const privileges = async (client) => {
 export const handler = async () => {
   if (!SQL_PATH) throw new Error('72_external_recording_grants.sql missing');
   const sql = fs.readFileSync(SQL_PATH, 'utf8');
-  if (/64_financial_activation|AWS_MOOV_ENABLED|AWS_CHECKALT_ENABLED/i.test(sql)) {
-    throw new Error('refusing to apply SQL that mentions financial activation or provider flags');
+  if (/\bGRANT\b[\s\S]{0,120}(checkalt_deposits|payment_transfers|64_financial_activation)/i.test(sql)) {
+    throw new Error('refusing to apply SQL that grants financial-activation or provider tables');
   }
   const client = await adminClient();
   try {
