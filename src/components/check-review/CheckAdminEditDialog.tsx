@@ -15,6 +15,7 @@ import { isAwsStaging } from "@/lib/awsStaging";
 import { pickAwsSafeIntakeUpdates } from "@/integrations/aws/safeIntakeFields";
 import { pickAwsSafeClaimCheckUpdates } from "@/integrations/aws/safeClaimCheckFields";
 import { adminOverrideCheckStatus } from "@/lib/adminCheckWorkflow";
+import { applyCheckReviewCorrection } from "@/lib/reviewCheckCorrection";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -199,9 +200,6 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
       }
       const currentAmount = data.intake.amount != null ? Number(data.intake.amount) : null;
       if (newAmount !== currentAmount) {
-        if (isAwsStaging()) {
-          throw new Error("Amount cannot be changed on AWS. Status and descriptive fields can still be saved.");
-        }
         intakeUpdates.amount = newAmount;
         changes.push(`amount → ${newAmount != null ? `$${newAmount.toFixed(2)}` : "—"}`);
       }
@@ -244,14 +242,39 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
       }
 
       if (Object.keys(intakeUpdates).length > 0) {
-        const persist = isAwsStaging()
-          ? pickAwsSafeIntakeUpdates(intakeUpdates)
-          : { safe: intakeUpdates, skipped: [] };
-        if (Object.keys(persist.safe).length > 0) {
-          persist.safe.updated_at = new Date().toISOString();
+        if (isAwsStaging()) {
+          const reviewFields: Record<string, unknown> = {};
+          for (const key of ["carrier_name", "check_number", "payee_line", "issue_date", "amount"] as const) {
+            if (key in intakeUpdates) reviewFields[key] = intakeUpdates[key];
+          }
+          const leftover = { ...intakeUpdates };
+          delete leftover.carrier_name;
+          delete leftover.check_number;
+          delete leftover.payee_line;
+          delete leftover.issue_date;
+          delete leftover.amount;
+          delete leftover.routing_number;
+          delete leftover.account_number;
+          if (Object.keys(reviewFields).length > 0) {
+            await applyCheckReviewCorrection({
+              checkId,
+              fields: reviewFields as Parameters<typeof applyCheckReviewCorrection>[0]["fields"],
+            });
+          }
+          const persist = pickAwsSafeIntakeUpdates(leftover);
+          if (Object.keys(persist.safe).length > 0) {
+            persist.safe.updated_at = new Date().toISOString();
+            const { error } = await supabase
+              .from("check_intake_items")
+              .update(persist.safe)
+              .eq("id", checkId);
+            if (error) throw error;
+          }
+        } else {
+          intakeUpdates.updated_at = new Date().toISOString();
           const { error } = await supabase
             .from("check_intake_items")
-            .update(persist.safe)
+            .update(intakeUpdates)
             .eq("id", checkId);
           if (error) throw error;
 
@@ -259,10 +282,10 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
             check_id: checkId,
             event_type: "admin_correction",
             actor_id: user?.id ?? null,
-            event_description: `Admin edit: ${Object.entries(persist.safe)
+            event_description: `Admin edit: ${Object.entries(intakeUpdates)
               .filter(([k]) => k !== "updated_at")
               .map(([k, v]) => `${k}=${v}`).join(", ")}`,
-            event_data: persist.safe as Record<string, any>,
+            event_data: intakeUpdates as Record<string, any>,
           }]);
         }
       }
@@ -430,8 +453,6 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
                     onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
                     className="h-8 text-sm"
                     placeholder="0.00"
-                    readOnly={isAwsStaging()}
-                    disabled={isAwsStaging()}
                   />
                 </div>
                 <div className="space-y-1 col-span-2">
@@ -480,7 +501,7 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
                 </div>
                 <p className="text-[10px] text-muted-foreground col-span-2 -mt-1">
                   {isAwsStaging()
-                    ? "Amount, routing, and account numbers are read-only on AWS. Carrier, check #, payee, date, mortgage routing, and status can be corrected."
+                    ? "Routing and account numbers stay as extracted MICR evidence. Amount and descriptive check details can be corrected while the check is still in Review."
                     : "Routing & account numbers are read from the MICR line at the bottom of the check."}
                 </p>
               </div>

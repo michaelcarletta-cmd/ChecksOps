@@ -913,6 +913,24 @@ export function createAwsStagingClient(options: AwsStagingClientOptions = {}) {
         }
         return { data: body.data ?? body, error: null };
       }
+      if (name === "apply_check_review_correction") {
+        const checkId = String(args.p_check_id || args.check_id || "");
+        const { response, body } = await apiFetch(`/workflow/checks/${encodeURIComponent(checkId)}/review-correction`, {
+          method: "POST",
+          body: JSON.stringify({
+            check_id: checkId,
+            fields: args.p_fields || args.fields || {},
+          }),
+        }, token);
+        if (response.status === 401) {
+          writeStored(null);
+          emit("SIGNED_OUT", null);
+        }
+        if (!response.ok) {
+          return { data: null, error: postgrestError(String(body.message || body.error || "rpc_failed"), String(body.error || "42501")) };
+        }
+        return { data: body.data ?? body, error: null };
+      }
       if (name === "admin_override_check_status") {
         const { response, body } = await apiFetch("/workflow/admin-status-correction", {
           method: "POST",
