@@ -133,8 +133,8 @@ export const runTenantInviteUser = async ({
     }
   }
 
-  // AdminCreateUser leaves FORCE_CHANGE_PASSWORD. Staging login is EMAIL_OTP /
-  // WebAuthn only, and Cognito rejects EMAIL_OTP until the user is CONFIRMED.
+  // AdminCreateUser leaves FORCE_CHANGE_PASSWORD. Passwordless login is
+  // EMAIL_OTP / WebAuthn, and Cognito rejects EMAIL_OTP until CONFIRMED.
   try {
     await adminCognito('AdminSetUserPassword', {
       UserPoolId: POOL_ID(),

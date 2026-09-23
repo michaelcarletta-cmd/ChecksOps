@@ -19,7 +19,7 @@ test('tranche-6 tables are allowlisted with narrow columns', () => {
     'shared_check_messages', 'profiles', 'company_branding', 'referral_alerts',
     'tenants', 'privacy_notice_acknowledgments', 'tenant_users',
     'cash_jobs', 'cash_job_line_items', 'cash_job_attachments', 'homeowner_ledger_events',
-    'mortgage_request_library_documents',
+    'mortgage_request_library_documents', 'claims',
   ]) {
     assert.equal(WRITE_ALLOWLIST[table].tranche, 6, table);
   }
@@ -299,4 +299,14 @@ test('operator SQL neutralizes new-tenant billing defaults without rewriting row
   assert.match(sql, /ALTER COLUMN actum_credits_only SET DEFAULT false/);
   assert.doesNotMatch(sql, /UPDATE public\.tenants/);
   assert.doesNotMatch(sql, /2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/);
+});
+
+test('production baseline extras stay with tenant-create insert', () => {
+  assert.equal(WRITE_ALLOWLIST.tenants.ops.has('insert'), true);
+  assert.equal(WRITE_ALLOWLIST.tenants.ops.has('update'), true);
+  assert.ok(WRITE_ALLOWLIST.company_branding.clientIgnored.has('logo_url'));
+  assert.equal(WRITE_ALLOWLIST.claims.ops.has('insert'), true);
+  assert.equal(WRITE_ALLOWLIST.claims.ops.has('update'), false);
+  assert.ok(WRITE_ALLOWLIST.claims.clientIgnored.has('org_id'));
+  assert.ok(WRITE_ALLOWLIST.claims.clientIgnored.has('tenant_id'));
 });
