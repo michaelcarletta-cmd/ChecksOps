@@ -58,6 +58,21 @@
         "src/lib/checkaltDepositOrchestrator.ts"
       ]
     },
+    "moov-production-execution": {
+      "owners": ["@michaelcarletta-cmd"],
+      "description": "Dedicated production Moov transfer/disbursement execution boundary. Explicit files only; does not own CheckAlt, sandbox parity, or webhook apply.",
+      "paths": [
+        "aws/functions/api/providers/production/moov-authz.mjs",
+        "aws/functions/api/providers/production/moov-dispatch.mjs",
+        "aws/functions/api/providers/production/moov-holds.mjs",
+        "aws/functions/api/providers/production/moov-idempotency.mjs",
+        "aws/functions/api/providers/production/moov-methods.mjs",
+        "aws/functions/api/providers/production/moov-secrets.mjs",
+        "aws/functions/api/providers/production/moov-submit.mjs",
+        "aws/cutover/MOOV_PRODUCTION_DISBURSEMENT_20260923.md",
+        "aws/tests/api-moov-production.test.mjs"
+      ]
+    },
     "financial-ledger": {
       "owners": ["@michaelcarletta-cmd"],
       "description": "Financial execution flags, ledger, reconciliation, activation SQL",
