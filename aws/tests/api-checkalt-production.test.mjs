@@ -1413,6 +1413,43 @@ test('history date window locates a reference missing from the default page', as
   assert.equal(store.approvePosts, 0);
 });
 
+test('identical capped history pages without the target stay fail-closed', async () => {
+  const store = createStore();
+  store.itemPayload = {
+    processDate: '2026-09-22T20:01:05.474-05',
+    ruleDetails: { itemRules: [{ ruleType: 'IQA' }] },
+    depositId: 123733567,
+    referenceNumber: '123733567',
+  };
+  const defaultPage = [
+    { referenceNumber: '115497665', status: '120', statusDescription: 'Rejected', dateSubmitted: '2026-07-17T12:00:00.000-05' },
+    { referenceNumber: '122678838', status: '127', statusDescription: 'Approved', dateSubmitted: '2026-09-14T12:00:00.000-05' },
+  ];
+  store.historyForBody = () => defaultPage;
+  const result = await reconcileProductionCheckAltDeposit({
+    client: identityClient(store),
+    mapping,
+    row: pushLegacyDeposit(store, {
+      checkalt_reference: '123733567',
+      status: 'pending_approval',
+      submitted_at: '2026-09-23T01:01:04.223Z',
+      idempotency_key: 'key-capped',
+    }),
+    cfg: { fi_key: 'prod-fi-key', merchant: 'prod-merchant', base_url: 'https://api2.checkalt.com' },
+    credentials: productionSecrets().credentials,
+    acct: { sso_user_id: 'depositor-prod', deposit_account_number: '1234567890' },
+    fetchImpl: fetchImpl(store),
+  });
+  assert.equal(result.error, 'reconciliation_required');
+  assert.equal(result.reconciled, false);
+  assert.equal(store.deposits[0].status, 'pending_approval');
+  assert.equal(store.deposits[0].last_polled_at, undefined);
+  assert.equal(store.historyBodies[0].userId, 'depositor-prod');
+  assert.ok(store.historyPosts >= 1);
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.approvePosts, 0);
+});
+
 test('history 40 stays pending_approval and already-approved 127 does not POST approve', async () => {
   const pending = createStore();
   pending.itemPayload = { referenceNumber: '9001', ruleDetails: {} };

@@ -99,7 +99,11 @@ const addDays = (value, days) => {
   return date;
 };
 
-/** Documented FinCapture history body (Lovable + live 400 for missing userId). */
+/**
+ * Documented FinCapture history body (Lovable + live api2.checkalt.com).
+ * Live 400 without userId: "[userId] must not be null; [userId] must not be blank".
+ * Live success envelope is a raw array of history rows, not {depositHistoryList}.
+ */
 export const buildCheckAltHistoryBody = ({
   fiKey,
   userId,
@@ -119,9 +123,18 @@ export const buildCheckAltHistoryBody = ({
 
 /**
  * Date windows used to locate a known reference instead of treating the
- * default history page as complete. Live api2.checkalt.com currently returns
- * a capped page and ignores these filters; sending them still matches the
- * documented contract and lets a host that honors dates find newer rows.
+ * default history page as complete.
+ *
+ * Proven live api2.checkalt.com contract (2026-09-23):
+ * - POST /fincapture/deposit/item returns processDate/aba/accountNumber/images/
+ *   ruleDetails/depositId/referenceNumber and never status/statusCode/
+ *   statusDescription/itemStatus. Item existence is not a status.
+ * - POST /fincapture/deposit/history requires userId. Rows that do appear expose
+ *   status + statusDescription (e.g. "40"/"Pending Approval", "127"/"Approved").
+ * - The host returns a capped ~57-row page and ignores startDate/endDate,
+ *   page/offset/sort, and referenceNumber filters. Pending (40) rows were not
+ *   present on that default page. If every window returns the same page without
+ *   a unique reference match, fail closed — do not infer pending_approval.
  */
 export const historyWindowsForDeposit = (row = {}, now = new Date()) => {
   const endDate = toYmd(now);
