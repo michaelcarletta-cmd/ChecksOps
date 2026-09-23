@@ -126,6 +126,68 @@ test('tenant_users role updates require admin membership and valid enum', async 
 });
 
 
+test('company_branding ignores logo_url/updated_at; tenants allow invoice accent/theme', () => {
+  assert.ok(WRITE_ALLOWLIST.company_branding.clientIgnored.has('logo_url'));
+  assert.ok(WRITE_ALLOWLIST.company_branding.clientIgnored.has('updated_at'));
+  assert.ok(!WRITE_ALLOWLIST.company_branding.columns.has('logo_url'));
+  assert.ok(WRITE_ALLOWLIST.tenants.columns.has('invoice_accent_color'));
+  assert.ok(WRITE_ALLOWLIST.tenants.columns.has('invoice_theme'));
+  assert.ok(WRITE_ALLOWLIST.tenants.columns.has('logo_url'));
+});
+
+test('tenants branding write persists accent/theme after membership check', async () => {
+  const queries = [];
+  const client = {
+    query: async (sql, params) => {
+      queries.push({ sql, params });
+      if (/FROM public.tenant_users/.test(sql)) return { rows: [{ ok: 1 }] };
+      if (/UPDATE public.tenants/.test(sql)) {
+        assert.match(sql, /invoice_accent_color/);
+        assert.match(sql, /invoice_theme/);
+        assert.equal(params[0], '#112233');
+        assert.equal(params[1], 'dark');
+        return { rows: [{ id: TENANT, invoice_accent_color: params[0], invoice_theme: params[1] }] };
+      }
+      return { rows: [] };
+    },
+  };
+  const result = await executeAppMetadataWrite({
+    client,
+    mapping,
+    table: 'tenants',
+    op: 'update',
+    values: { invoice_accent_color: '#112233', invoice_theme: 'dark' },
+    filters: [{ column: 'id', op: 'eq', value: TENANT }],
+  });
+  assert.equal(result.rows[0].invoice_theme, 'dark');
+
+  const outsider = {
+    query: async (sql) => {
+      if (/FROM public.tenant_users/.test(sql)) return { rows: [] };
+      return { rows: [] };
+    },
+  };
+  const denied = await executeAppMetadataWrite({
+    client: outsider,
+    mapping,
+    table: 'tenants',
+    op: 'update',
+    values: { invoice_theme: 'light' },
+    filters: [{ column: 'id', op: 'eq', value: TENANT }],
+  });
+  assert.equal(denied.error, 'not_authorized');
+
+  const invalid = await executeAppMetadataWrite({
+    client,
+    mapping,
+    table: 'tenants',
+    op: 'update',
+    values: { invoice_theme: 'neon', invoice_accent_color: 'red' },
+    filters: [{ column: 'id', op: 'eq', value: TENANT }],
+  });
+  assert.equal(invalid.error, 'invalid_field');
+});
+
 test('cash_jobs denies payment columns; homeowner ledger denies amount via clientIgnored', () => {
   assert.ok(!WRITE_ALLOWLIST.cash_jobs.columns.has('total_paid'));
   assert.ok(!WRITE_ALLOWLIST.cash_jobs.columns.has('balance_due'));
