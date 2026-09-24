@@ -6,8 +6,8 @@ Description: >
   checksops-production-api-execution, except ProductionApiLeastPrivilege
   resources are the working production RDS secret and private-files bucket
   instead of the stale staging ARNs still stored on the 2026-09-06 stack.
-  Does not grant TOTP wrap-key, general provider-secret, Moov, CheckAlt,
-  staging providers, the RDS admin secret, or Cognito wildcards.
+  Does not grant TOTP wrap-key, general provider-secret, staging
+  providers, the RDS admin secret, or Cognito wildcards.
   Do not CloudFormation-update until the reconciliation report is reviewed.
   A stack update MUST pass the production parameter values below; the live
   stack still stores staging secret/bucket parameters from create.

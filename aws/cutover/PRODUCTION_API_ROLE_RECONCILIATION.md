@@ -47,8 +47,9 @@ resource-level defect this candidate corrects.
 
 ## A. Revised candidate SHA
 
-Recorded after the revision commit on
-`cursor/production-iam-reconciliation-0ebf`.
+Branch `cursor/production-iam-reconciliation-0ebf`.
+Authoritative-snapshot revision starts at `d87ae8f7c5bcd2cfd3f89db3db0b687e482e3ac6`.
+HEAD after the passing-test follow-up is recorded on the same branch.
 
 ---
 

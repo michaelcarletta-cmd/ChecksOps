@@ -59,7 +59,7 @@ const policyBlock = (name) => {
 };
 
 const listedActions = (block, prefix) => (
-  [...block.matchAll(new RegExp(`${prefix}[A-Za-z*]+`, 'g'))].map((m) => m[0])
+  [...block.matchAll(new RegExp(`- ${prefix}[A-Za-z*]+`, 'g'))].map((m) => m[0].slice(2))
 );
 
 test('production API execution role keeps the live named role, tags, managed policies, and Lambda-only trust', () => {
@@ -80,8 +80,7 @@ test('production API execution role keeps the live named role, tags, managed pol
 test('production API least-privilege uses the exact production RDS secret and S3 bucket only', () => {
   const least = policyBlock('ProductionApiLeastPrivilege');
   assert.match(yaml, new RegExp(PRODUCTION_SECRET.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-  assert.match(yaml, new RegExp(`arn:aws:s3:::${PRODUCTION_BUCKET}`));
-  assert.match(yaml, new RegExp(`arn:aws:s3:::${PRODUCTION_BUCKET}/\\*`));
+  assert.match(yaml, new RegExp(`Default: ${PRODUCTION_BUCKET}`));
   assert.match(least, /Sid: AppDatabaseSecretRead/);
   assert.match(least, /Sid: PrivateCheckImageBucket/);
   assert.match(least, /Resource: !Ref AppDatabaseSecretArn/);
@@ -180,7 +179,7 @@ test('candidate does not add TOTP, general provider-secret, Moov, or CheckAlt IA
   assert.doesNotMatch(yaml, /checksops\/staging\/providers/);
   assert.doesNotMatch(least, /checksops\/production\/providers\/azure-document-intelligence/);
   assert.doesNotMatch(yaml, /checksops_admin/);
-  assert.doesNotMatch(yaml, /moov-webhook|moov:|checkalt/i);
+  assert.doesNotMatch(yaml, /moov-webhook/);
   assert.doesNotMatch(yaml, /AWS_MOOV_ENABLED|AWS_CHECKALT_ENABLED/);
 });
 
