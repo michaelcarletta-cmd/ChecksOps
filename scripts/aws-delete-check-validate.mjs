@@ -152,7 +152,7 @@ const uploadDisposableFile = async (token, checkId) => {
   return { ok: true, objectPath, s3Bucket, s3Key };
 };
 
-const ensureTerminalFinancialViaOneshot = async ({ checkId }) => {
+const ensureProtectedStateViaOneshot = async ({ checkId, uploadedBy }) => {
   // Uses a temporary VPC-attached Lambda with the same DB secret as checksops-staging-api
   // to set deposited_at/status/check_stage on a disposable check, solely to validate
   // delete protections for terminal financial state.
@@ -184,31 +184,44 @@ async function loadDbSecret() {
 
 export const handler = async (event = {}) => {
   const checkId = String(event.checkId || '');
+  const uploadedBy = String(event.uploadedBy || '');
   if (!checkId) return { ok: false, error: 'missing_check_id' };
+  if (!uploadedBy) return { ok: false, error: 'missing_uploaded_by' };
   const creds = await loadDbSecret();
   const ssl = { ca: fs.readFileSync(new URL('./rds-global-bundle.pem', import.meta.url), 'utf8') };
   const client = new Client({ host: creds.host, port: creds.port || 5432, user: creds.username, password: creds.password, database: databaseName, ssl });
   await client.connect();
   try {
     await client.query('BEGIN');
-    const row = (await client.query('SELECT id, tenant_id, uploaded_by FROM public.check_intake_items WHERE id = $1::uuid LIMIT 1', [checkId])).rows[0];
-    if (!row) return { ok: false, error: 'check_not_found' };
-    await client.query('SELECT set_config($1, $2, true)', ['request.app_user_id', String(row.uploaded_by)]);
-    if (String(event.step) === 'set_deposited') {
-      await client.query(
-        \"UPDATE public.check_intake_items SET status = 'deposited', check_stage = 'deposited', deposited_at = now(), updated_at = now() WHERE id = $1::uuid\",
+    await client.query('SELECT set_config($1, $2, true)', ['request.app_user_id', uploadedBy]);
+    const step = String(event.step || '');
+    let updated = null;
+    if (step === 'set_deposited') {
+      updated = (await client.query(
+        \"UPDATE public.check_intake_items SET status = 'deposited', check_stage = 'deposited', deposited_at = now(), updated_at = now() WHERE id = $1::uuid RETURNING id, tenant_id, uploaded_by\",
         [checkId],
-      );
-    } else if (String(event.step) === 'reset_deposited') {
-      await client.query(
-        \"UPDATE public.check_intake_items SET status = 'uploaded', check_stage = 'review', deposited_at = NULL, updated_at = now() WHERE id = $1::uuid\",
+      )).rows[0];
+    } else if (step === 'reset_deposited') {
+      updated = (await client.query(
+        \"UPDATE public.check_intake_items SET status = 'uploaded', check_stage = 'review', deposited_at = NULL, updated_at = now() WHERE id = $1::uuid RETURNING id, tenant_id, uploaded_by\",
         [checkId],
-      );
+      )).rows[0];
+    } else if (step === 'set_partner_linked') {
+      updated = (await client.query(
+        \"UPDATE public.check_intake_items SET external_origin = $2::jsonb, updated_at = now() WHERE id = $1::uuid RETURNING id, tenant_id, uploaded_by\",
+        [checkId, JSON.stringify({ source_app: 'freedom_crm', source_check_id: 'abc' })],
+      )).rows[0];
+    } else if (step === 'reset_partner_linked') {
+      updated = (await client.query(
+        \"UPDATE public.check_intake_items SET external_origin = NULL, updated_at = now() WHERE id = $1::uuid RETURNING id, tenant_id, uploaded_by\",
+        [checkId],
+      )).rows[0];
     } else {
       return { ok: false, error: 'unknown_step' };
     }
+    if (!updated) return { ok: false, error: 'check_not_found_or_rls_denied' };
     await client.query('COMMIT');
-    return { ok: true, checkId, step: event.step, tenantId: row.tenant_id, uploadedBy: row.uploaded_by };
+    return { ok: true, checkId, step, tenantId: updated.tenant_id, uploadedBy: updated.uploaded_by };
   } catch (e) {
     try { await client.query('ROLLBACK'); } catch {}
     return { ok: false, error: String(e?.message || e).slice(0, 240) };
@@ -252,7 +265,7 @@ export const handler = async (event = {}) => {
   const invoke = (step) => {
     const outFile = path.join(os.tmpdir(), `${lambdaName}-${step}.json`);
     const payloadFile = path.join(os.tmpdir(), `${lambdaName}-${step}-payload.json`);
-    fs.writeFileSync(payloadFile, JSON.stringify({ step, checkId }));
+    fs.writeFileSync(payloadFile, JSON.stringify({ step, checkId, uploadedBy }));
     execFileSync(AWS, [
       '--region', 'us-east-1',
       'lambda', 'invoke',
@@ -270,6 +283,8 @@ export const handler = async (event = {}) => {
     ok: Boolean(set?.ok),
     set,
     reset,
+    setPartnerLinked: () => invoke('set_partner_linked'),
+    resetPartnerLinked: () => invoke('reset_partner_linked'),
     cleanup: () => {
       try { execFileSync(AWS, ['--region', 'us-east-1', 'lambda', 'delete-function', '--function-name', lambdaName], { encoding: 'utf8', stdio: 'ignore' }); } catch {}
     },
@@ -369,30 +384,24 @@ const main = async () => {
   // Protected state: partner-linked checks must not be deletable.
   const partner = await createDisposableCheck(freedomToken, `${marker} PARTNER`);
   const partnerId = partner.id;
-  const partnerUpdate = await write(freedomToken, {
-    table: 'check_intake_items',
-    op: 'update',
-    values: { external_origin: { source_app: 'freedom_crm', source_check_id: 'abc' } },
-    filters: [{ column: 'id', op: 'eq', value: partnerId }],
-  });
-  record('set partner external_origin succeeds', partnerUpdate.status === 200, { detail: `status=${partnerUpdate.status} error=${partnerUpdate.json.error || ''}` });
+  const partnerUploadedBy = partner.uploaded_by || partner.uploadedBy || null;
+  const partnerOneshot = await ensureProtectedStateViaOneshot({ checkId: partnerId, uploadedBy: partnerUploadedBy });
+  const partnerSet = await partnerOneshot.setPartnerLinked();
+  record('set partner external_origin via oneshot', partnerSet?.ok === true, { detail: partnerSet?.error ? `error=${partnerSet.error}` : `checkId=${partnerId}` });
   const partnerDel = await api(`/workflow/checks/${partnerId}`, { method: 'DELETE', token: freedomToken, body: { check_id: partnerId, reason: 'should be denied' } });
   record('partner-linked delete is denied', partnerDel.status === 403 && partnerDel.json.error === 'cleanup_denied', {
     detail: `status=${partnerDel.status} error=${partnerDel.json.error || partnerDel.json.message || ''}`,
   });
   // Reset and clean up.
-  await write(freedomToken, {
-    table: 'check_intake_items',
-    op: 'update',
-    values: { external_origin: null },
-    filters: [{ column: 'id', op: 'eq', value: partnerId }],
-  });
+  try { await partnerOneshot.resetPartnerLinked(); } catch {}
+  try { await partnerOneshot.cleanup(); } catch {}
   await api(`/workflow/checks/${partnerId}`, { method: 'DELETE', token: freedomToken, body: { check_id: partnerId, reason: 'cleanup partner disposable check' } });
 
   // Protected state: terminal financial checks must not be deletable.
   const fin = await createDisposableCheck(freedomToken, `${marker} FINANCIAL`);
   const finId = fin.id;
-  const oneshot = await ensureTerminalFinancialViaOneshot({ checkId: finId });
+  const finUploadedBy = fin.uploaded_by || fin.uploadedBy || null;
+  const oneshot = await ensureProtectedStateViaOneshot({ checkId: finId, uploadedBy: finUploadedBy });
   record('set terminal financial state via oneshot', oneshot.ok === true && oneshot.set?.ok === true, { detail: oneshot.set?.error ? `error=${oneshot.set.error}` : `checkId=${finId}` });
   const finDel = await api(`/workflow/checks/${finId}`, { method: 'DELETE', token: freedomToken, body: { check_id: finId, reason: 'should be denied' } });
   record('terminal-financial delete is denied', finDel.status === 403 && finDel.json.error === 'cleanup_denied', {
