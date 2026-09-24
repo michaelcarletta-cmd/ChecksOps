@@ -420,7 +420,9 @@ const main = async () => {
   });
   const partnerSet = await partnerOneshot.setPartnerLinked();
   record('set partner external_origin via oneshot', partnerSet?.ok === true, {
-    detail: partnerSet?.ok ? `checkId=${partnerId}` : `error=${partnerSet?.error} code=${partnerSet?.code || ''} msg=${partnerSet?.message || ''}`,
+    detail: partnerSet?.ok
+      ? `checkId=${partnerId} user=${partnerSet?.ident?.user || ''} uid=${partnerSet?.ident?.uid || ''}`
+      : `error=${partnerSet?.error} code=${partnerSet?.code || ''} msg=${partnerSet?.message || ''} user=${partnerSet?.ident?.user || ''} uid=${partnerSet?.ident?.uid || ''}`,
   });
   const partnerDel = await api(`/workflow/checks/${partnerId}`, { method: 'DELETE', token: freedomToken, body: { check_id: partnerId, reason: 'should be denied' } });
   record('partner-linked delete is denied', partnerDel.status === 403 && partnerDel.json.error === 'cleanup_denied', {
@@ -440,7 +442,9 @@ const main = async () => {
     email: freedomIdentity.profile?.email || '',
   });
   record('set terminal financial state via oneshot', oneshot.ok === true && oneshot.set?.ok === true, {
-    detail: oneshot.set?.ok ? `checkId=${finId}` : `error=${oneshot.set?.error} code=${oneshot.set?.code || ''} msg=${oneshot.set?.message || ''}`,
+    detail: oneshot.set?.ok
+      ? `checkId=${finId} user=${oneshot.set?.ident?.user || ''} uid=${oneshot.set?.ident?.uid || ''}`
+      : `error=${oneshot.set?.error} code=${oneshot.set?.code || ''} msg=${oneshot.set?.message || ''} user=${oneshot.set?.ident?.user || ''} uid=${oneshot.set?.ident?.uid || ''}`,
   });
   const finDel = await api(`/workflow/checks/${finId}`, { method: 'DELETE', token: freedomToken, body: { check_id: finId, reason: 'should be denied' } });
   record('terminal-financial delete is denied', finDel.status === 403 && finDel.json.error === 'cleanup_denied', {
