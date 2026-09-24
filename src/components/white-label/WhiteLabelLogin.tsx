@@ -16,6 +16,7 @@ import { isAwsStaging, isAwsStagingHttpsPasskeysEnabled } from "@/lib/awsStaging
 import { signInWithAwsPasskey } from "@/lib/awsPasskeys";
 import { passkeysSupported, sendMagicLink, signInWithPasskey } from "@/lib/passkeys";
 import { startAwsEmailOtp, verifyAwsEmailOtp } from "@/lib/awsPasswordless";
+import { TenantLogo } from "@/components/branding/TenantLogo";
 
 /**
  * Tenant-branded sign-in. Passwords are retired platform-wide: users sign in
@@ -153,13 +154,11 @@ export function WhiteLabelLogin() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md border-border/50">
         <CardHeader className="text-center space-y-3 pb-2">
-          {tenant.logo_url && (
-            <img
-              src={tenant.logo_url}
-              alt={tenant.name}
-              className="h-10 md:h-12 mx-auto object-contain"
-            />
-          )}
+          <TenantLogo
+            src={tenant.logo_url}
+            alt={tenant.name}
+            className="h-10 md:h-12 mx-auto object-contain"
+          />
           <div>
             <CardTitle className="text-xl md:text-2xl">{tenant.name}</CardTitle>
             <p className="text-xs text-muted-foreground mt-1">ChecksOps{awsStaging ? " · AWS staging" : ""}</p>

@@ -7,14 +7,19 @@ import { createClient } from "@supabase/supabase-js";
 import type { Database } from "./types";
 import {
   AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY,
-  isAwsStaging,
 } from "@/lib/awsStaging";
 import { createAwsStagingClient } from "@/integrations/aws/client";
+import { runtimeHostname, shouldUseAwsChecksOpsBackendFor } from "@/lib/backendMode";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-export const mortgageSupabase = isAwsStaging()
+const shouldUseAws = shouldUseAwsChecksOpsBackendFor({
+  hostname: runtimeHostname(),
+  authProvider: String(import.meta.env.VITE_AUTH_PROVIDER || ""),
+});
+
+export const mortgageSupabase = shouldUseAws
   ? (createAwsStagingClient({
       sessionKey: AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY,
     }) as unknown as ReturnType<typeof createClient<Database>>)

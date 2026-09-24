@@ -90,11 +90,21 @@ export function TenantManagement() {
       toast({ title: "File too large", description: "Logo must be under 2MB.", variant: "destructive" });
       return;
     }
+    if (!editingId) {
+      toast({
+        title: "Create the tenant first",
+        description: "Save the tenant to get an ID, then upload the logo from the Edit dialog.",
+        variant: "destructive",
+      });
+      return;
+    }
     setUploading(true);
     try {
       const ext = file.name.split(".").pop() || "png";
-      const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      const { error: uploadError } = await supabase.storage.from("tenant-logos").upload(path, file);
+      const path = `${editingId}/logo-${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from("tenant-logos")
+        .upload(path, file, { upsert: true, contentType: file.type });
       if (uploadError) throw uploadError;
       const { data: urlData } = supabase.storage.from("tenant-logos").getPublicUrl(path);
       setForm((prev) => ({ ...prev, logo_url: urlData.publicUrl }));

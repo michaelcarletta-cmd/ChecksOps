@@ -26,17 +26,23 @@ const CHECKOPS_HOSTS = [
   "checksops.lovable.app",
 ];
 
+export function isChecksOpsPlatformHost(hostname: string): boolean {
+  if (!hostname) return false;
+  const host = String(hostname).toLowerCase();
+  if (CHECKOPS_HOSTS.includes(host)) return true;
+  // Any subdomain of checkops.com / checksops.com / checkops.app / checksops.app
+  if (host.endsWith(".checkops.com")) return true;
+  if (host.endsWith(".checksops.com")) return true;
+  if (host.endsWith(".checkops.app")) return true;
+  if (host.endsWith(".checksops.app")) return true;
+  return false;
+}
+
 export function isCheckOpsHost(hostname: string = typeof window !== "undefined" ? window.location.hostname : ""): boolean {
   // Isolated AWS staging frontend uses the same /{slug} ChecksOps routing as production.
   if (isAwsStaging()) return true;
   if (!hostname) return false;
-  if (CHECKOPS_HOSTS.includes(hostname)) return true;
-  // Any subdomain of checkops.com / checksops.com / checkops.app / checksops.app
-  if (hostname.endsWith(".checkops.com")) return true;
-  if (hostname.endsWith(".checksops.com")) return true;
-  if (hostname.endsWith(".checkops.app")) return true;
-  if (hostname.endsWith(".checksops.app")) return true;
-  return false;
+  return isChecksOpsPlatformHost(hostname);
 }
 
 const MORTGAGE_OPS_HOSTS = [

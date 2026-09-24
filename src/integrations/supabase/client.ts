@@ -3,8 +3,8 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 import { brokeredPreviewStorage } from './previewAuthStorage';
-import { isAwsStaging } from '@/lib/awsStaging';
 import { createAwsStagingClient } from '@/integrations/aws/client';
+import { runtimeHostname, shouldUseAwsChecksOpsBackendFor } from "@/lib/backendMode";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
@@ -12,7 +12,12 @@ const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-export const supabase = isAwsStaging()
+const shouldUseAws = shouldUseAwsChecksOpsBackendFor({
+  hostname: runtimeHostname(),
+  authProvider: String(import.meta.env.VITE_AUTH_PROVIDER || ""),
+});
+
+export const supabase = shouldUseAws
   ? (createAwsStagingClient() as unknown as ReturnType<typeof createClient<Database>>)
   : createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
       auth: {
