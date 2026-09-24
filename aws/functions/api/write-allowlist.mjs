@@ -614,7 +614,16 @@ export const WRITE_ALLOWLIST = {
     identityColumn: null,
     requiredForWrite: { insert: [], update: [] },
     filterColumns: new Set(['id']),
-    clientIgnored: new Set(['id', 'created_at', 'zapier_webhook_url', 'online_check_writer_bank_account_id']),
+    clientIgnored: new Set([
+      'id',
+      'created_at',
+      'updated_at',
+      // Production RDS has no company_branding.logo_url column. Client still
+      // sends it from the Branding form; ignore so name/letterhead persist.
+      'logo_url',
+      'zapier_webhook_url',
+      'online_check_writer_bank_account_id',
+    ]),
     frontend: { file: 'CompanyBrandingSettings', op: 'upsert', reason: 'Branding text/URLs only.' },
   },
   referral_alerts: {
@@ -628,16 +637,25 @@ export const WRITE_ALLOWLIST = {
   },
   tenants: {
     tranche: 6,
-    ops: new Set(['update']),
+    ops: new Set(['insert', 'update']),
     columns: new Set([
-      'name', 'logo_url', 'invoice_letterhead_url', 'primary_color',
+      'name', 'slug', 'logo_url', 'invoice_letterhead_url',
+      'primary_color', 'secondary_color', 'custom_domain',
+      'max_checks_per_month', 'subscription_status', 'plan_tier',
+      'email_from_name', 'email_from_address', 'email_reply_to',
+      'email_provider', 'email_provider_config',
       'invoice_footer_note', 'invoice_default_terms',
+      'invoice_accent_color', 'invoice_theme',
     ]),
     identityColumn: null,
-    requiredForWrite: { update: [] },
+    requiredForWrite: { insert: ['name', 'slug'], update: [] },
     filterColumns: new Set(['id']),
-    clientIgnored: new Set(['id', 'slug', 'created_at']),
-    frontend: { file: 'TenantManagement / CompanyBranding', op: 'update', reason: 'Branding/name only; billing/provider flags denied.' },
+    clientIgnored: new Set(['id', 'created_at']),
+    frontend: {
+      file: 'AdminTenants / TenantManagement',
+      op: 'insert/update',
+      reason: 'Platform-owner create + branding/email/limits only. Moov/CheckAlt/wallet/bank/provider flags denied and forced fail-closed on insert.',
+    },
   },
   privacy_notice_acknowledgments: {
     tranche: 6,
@@ -722,6 +740,28 @@ export const WRITE_ALLOWLIST = {
       file: 'StepUpDialog',
       op: 'insert',
       reason: 'Append-only TOTP step-up audit. user_id is server-derived. Not a money-movement table.',
+    },
+  },
+  claims: {
+    tranche: 6,
+    ops: new Set(['insert']),
+    columns: new Set(['claim_number', 'status']),
+    identityColumn: null,
+    requiredForWrite: { insert: ['claim_number'] },
+    filterColumns: new Set([]),
+    clientIgnored: new Set([
+      'id',
+      'org_id',
+      'tenant_id',
+      'created_at',
+      'updated_at',
+      'created_by',
+      'updated_by',
+    ]),
+    frontend: {
+      file: 'ClaimLedgerCard / newTrackingClaimInsert',
+      op: 'insert',
+      reason: 'Create a tracking claim. Client org_id/tenant_id are ignored; trg_aws_stamp_claim_org_id stamps ownership.',
     },
   },
 };

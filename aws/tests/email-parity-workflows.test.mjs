@@ -563,6 +563,11 @@ test('hire-mortgage-agent and tenant invite stay SUPPRESS and never leak passwor
     const invite = await runTenantInviteUser({
       mapping,
       spoof,
+      identityScope: {
+        ok: true,
+        identityEnv: 'staging',
+        mappingSource: 'identity_accounts',
+      },
       send: capturingMailer(sent),
       body: { tenant_id: TENANT, email: 'member@example.com', role: 'member', full_name: 'New Member' },
       cognitoJson: async (target, payload) => {
@@ -570,6 +575,12 @@ test('hire-mortgage-agent and tenant invite stay SUPPRESS and never leak passwor
           issuedInvite = payload.TemporaryPassword;
           assert.equal(payload.MessageAction, 'SUPPRESS');
           return { User: { Username: 'cog2', Attributes: [{ Name: 'sub', Value: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' }] } };
+        }
+        if (target === 'AdminSetUserPassword') {
+          assert.equal(payload.Permanent, true);
+          assert.ok(payload.Password);
+          assert.equal(payload.Password, issuedInvite);
+          return {};
         }
         throw new Error(`unexpected ${target}`);
       },
@@ -585,6 +596,30 @@ test('hire-mortgage-agent and tenant invite stay SUPPRESS and never leak passwor
         {
           match: (sql) => sql.includes('FROM public.profiles'),
           result: () => ({ rows: [] }),
+        },
+        {
+          match: (sql) => sql.includes('FROM public.identity_accounts'),
+          result: () => ({ rows: [] }),
+        },
+        {
+          match: (sql) => sql.includes('SAVEPOINT') || sql.includes('RELEASE SAVEPOINT') || sql.includes('ROLLBACK TO SAVEPOINT'),
+          result: () => ({ rows: [] }),
+        },
+        {
+          match: (sql) => sql.includes('INSERT INTO public.identity_accounts'),
+          result: () => ({ rows: [{ application_user_id: 'new-user' }] }),
+        },
+        {
+          match: (sql) => sql.includes('identity_production_cognito_locks') || sql.includes('set_config'),
+          result: () => ({ rows: [] }),
+        },
+        {
+          match: (sql) => sql.includes('INSERT INTO public.profiles'),
+          result: () => ({ rows: [{ id: 'new-user' }] }),
+        },
+        {
+          match: (sql) => sql.includes('INSERT INTO public.tenant_users'),
+          result: () => ({ rows: [{ tenant_id: TENANT }] }),
         },
       ]),
     });
