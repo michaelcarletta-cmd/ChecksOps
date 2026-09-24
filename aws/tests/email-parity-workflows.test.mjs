@@ -521,6 +521,11 @@ test('hire-mortgage-agent and tenant invite stay SUPPRESS and never leak passwor
     const hire = await runHireMortgageAgent({
       mapping,
       spoof,
+      identityScope: {
+        ok: true,
+        identityEnv: 'staging',
+        mappingSource: 'identity_accounts',
+      },
       send: capturingMailer(sent),
       body: { email: 'agent@example.com', full_name: 'Mo Agent' },
       cognitoJson: async (target, payload) => {

@@ -373,7 +373,7 @@ export const handleTenantRemoveOpenaiKey = async (event) => withIdentity(event, 
  * or returned. The invite is passwordless login.
  */
 export const runHireMortgageAgent = async ({
-  client, mapping, body, spoof, send, cognitoJson: cognitoFn,
+  client, mapping, body, spoof, send, cognitoJson: cognitoFn, identityScope,
 }) => {
   const adminCognito = cognitoFn || cognitoJson;
   const system = (await client.query(
@@ -507,6 +507,21 @@ export const runHireMortgageAgent = async ({
            linked_at = COALESCE(public.identity_accounts.linked_at, now())`,
     [cognitoSub, appUserId, email],
   );
+
+  const lockResult = await bindProductionCognitoLock(client, {
+    cognitoSub,
+    applicationUserId: appUserId,
+    identityScope,
+  });
+  if (!lockResult.ok) {
+    return {
+      ok: false,
+      statusCode: lockResult.error === 'identity_lock_conflict' ? 409 : 500,
+      error: lockResult.error,
+      message: lockResult.message || undefined,
+      spoofFieldsIgnored: spoof,
+    };
+  }
 
   await client.query(
     `INSERT INTO public.profiles (id, email, full_name, created_at, updated_at)
