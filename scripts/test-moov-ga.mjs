@@ -173,9 +173,9 @@ test("readiness still blocks money movement without ToS, KYB, bank, or send-fund
   assert.equal(ready.checks.find((c) => c.id === "send_funds_ach")?.state, "ready");
 });
 
-test("migration backfills every tenant and defaults new inserts to production Moov", () => {
+test("AWS SQL backfills every tenant and defaults new inserts to production Moov", () => {
   const sql = readFileSync(
-    join(root, "supabase/migrations/20260924120000_moov_generally_available.sql"),
+    join(root, "aws/rls/sql/42_moov_generally_available.sql"),
     "utf8",
   );
   assert.match(sql, /SET moov_allowlisted = true/);
@@ -193,9 +193,6 @@ test("migration backfills every tenant and defaults new inserts to production Mo
 
 test("runtime gates no longer consult moov_allowlisted", () => {
   const files = [
-    "supabase/functions/_shared/moovGuard.ts",
-    "supabase/functions/_shared/moovPlaidBridge.ts",
-    "supabase/functions/wallet-fund-on-clear/index.ts",
     "aws/functions/api/providers/parity/caller.mjs",
     "src/hooks/usePaymentProviderEligibility.ts",
     "src/components/settings/TenantPaymentAccountPanel.tsx",

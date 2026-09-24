@@ -1,4 +1,14 @@
-/** Tranche 4 kill switches. Only the string `true` enables a flag. Default is false. */
+/**
+ * Tranche 4 kill switches. Only the string `true` enables a flag. Default is false.
+ *
+ * AWS_MOOV_ENABLED is NOT a tenant-availability / allowlist switch.
+ * It is the per-provider production mutation + real-money safety hold.
+ * Combined with AWS_PROVIDER_EXECUTION_ENABLED it becomes executionAllowed('moov').
+ * The current AWS router treats that as production_execution_blocked and
+ * refuses Moov parity handlers. Sandbox/UAT onboarding uses
+ * AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED while this flag stays false.
+ * Do not flip AWS_MOOV_ENABLED to make Moov generally available.
+ */
 
 const isTrue = (value) => String(value || '') === 'true';
 
