@@ -133,28 +133,56 @@ export const runTenantInviteUser = async ({
     }
   }
 
-  let appUserId = (await client.query(
+  // AdminCreateUser leaves FORCE_CHANGE_PASSWORD. Staging login is EMAIL_OTP /
+  // WebAuthn only, and Cognito rejects EMAIL_OTP until the user is CONFIRMED.
+  try {
+    await adminCognito('AdminSetUserPassword', {
+      UserPoolId: POOL_ID(),
+      Username: email,
+      Password: tempPassword,
+      Permanent: true,
+    });
+  } catch (error) {
+    if (isNewUser) {
+      return {
+        ok: false,
+        statusCode: 502,
+        error: 'cognito_confirm_failed',
+        message: String(error.message || error).slice(0, 240),
+        spoofFieldsIgnored: spoof,
+      };
+    }
+  }
+
+  const existingProfile = (await client.query(
     `SELECT id::text AS id FROM public.profiles WHERE lower(email) = $1 LIMIT 1`,
     [email],
   )).rows[0]?.id;
-  if (!appUserId) {
-    appUserId = randomUUID();
-    await client.query(
-      `INSERT INTO public.profiles (id, email, full_name, created_at, updated_at)
-       VALUES ($1::uuid, $2, $3, now(), now())
-       ON CONFLICT (id) DO NOTHING`,
-      [appUserId, email, fullName],
-    ).catch(async () => {
-      await client.query(
-        `INSERT INTO public.profiles (id, email, full_name)
-         VALUES ($1::uuid, $2, $3)`,
-        [appUserId, email, fullName],
-      ).catch(() => {});
-    });
-  }
+  const existingIdentity = (await client.query(
+    `SELECT application_user_id::text AS id
+     FROM public.identity_accounts
+     WHERE lower(email) = $1 OR cognito_sub = $2
+     LIMIT 1`,
+    [email, cognitoSub],
+  )).rows[0]?.id;
+  const appUserId = existingProfile || existingIdentity || randomUUID();
+
+  // identity_accounts is the FK parent of profiles.id. Insert it first and
+  // isolate each write so one failure does not abort the invite transaction.
+  const execInviteWrite = async (fn) => {
+    await client.query('SAVEPOINT invite_write');
+    try {
+      await fn();
+      await client.query('RELEASE SAVEPOINT invite_write');
+      return null;
+    } catch (error) {
+      try { await client.query('ROLLBACK TO SAVEPOINT invite_write'); } catch { /* ignore */ }
+      return error;
+    }
+  };
 
   if (cognitoSub && appUserId && String(cognitoSub) !== String(appUserId)) {
-    await client.query(
+    const identityError = await execInviteWrite(() => client.query(
       `INSERT INTO public.identity_accounts (cognito_sub, application_user_id, email, status, linked_at, created_at)
        VALUES ($1, $2::uuid, $3, 'active', now(), now())
        ON CONFLICT (cognito_sub) DO UPDATE
@@ -163,22 +191,68 @@ export const runTenantInviteUser = async ({
              status = 'active',
              linked_at = COALESCE(public.identity_accounts.linked_at, now())`,
       [cognitoSub, appUserId, email],
-    ).catch(() => {});
+    ));
+    if (identityError) {
+      return {
+        ok: false,
+        statusCode: 500,
+        error: 'identity_link_failed',
+        message: String(identityError.message || identityError).slice(0, 240),
+        spoofFieldsIgnored: spoof,
+      };
+    }
   }
 
-  await client.query(
+  const profileError = await execInviteWrite(() => client.query(
+    `INSERT INTO public.profiles (id, email, full_name, created_at, updated_at)
+     VALUES ($1::uuid, $2, $3, now(), now())
+     ON CONFLICT (id) DO UPDATE
+       SET email = EXCLUDED.email,
+           full_name = COALESCE(public.profiles.full_name, EXCLUDED.full_name),
+           updated_at = now()`,
+    [appUserId, email, fullName],
+  ));
+  if (profileError) {
+    const fallback = await execInviteWrite(() => client.query(
+      `INSERT INTO public.profiles (id, email, full_name)
+       VALUES ($1::uuid, $2, $3)
+       ON CONFLICT (id) DO NOTHING`,
+      [appUserId, email, fullName],
+    ));
+    if (fallback) {
+      return {
+        ok: false,
+        statusCode: 500,
+        error: 'profile_create_failed',
+        message: String(fallback.message || fallback).slice(0, 240),
+        spoofFieldsIgnored: spoof,
+      };
+    }
+  }
+
+  const membershipError = await execInviteWrite(() => client.query(
     `INSERT INTO public.tenant_users (id, tenant_id, user_id, role, created_at)
      VALUES ($1::uuid, $2::uuid, $3::uuid, $4, now())
      ON CONFLICT DO NOTHING`,
     [randomUUID(), tenantId, appUserId, role],
-  ).catch(async () => {
-    await client.query(
+  ));
+  if (membershipError) {
+    const fallback = await execInviteWrite(() => client.query(
       `INSERT INTO public.tenant_users (tenant_id, user_id, role)
        VALUES ($1::uuid, $2::uuid, $3)
        ON CONFLICT DO NOTHING`,
       [tenantId, appUserId, role],
-    ).catch(() => {});
-  });
+    ));
+    if (fallback) {
+      return {
+        ok: false,
+        statusCode: 500,
+        error: 'tenant_membership_failed',
+        message: String(fallback.message || fallback).slice(0, 240),
+        spoofFieldsIgnored: spoof,
+      };
+    }
+  }
 
   const origin = emailAssetOrigin();
   const loginUrl = tenant.custom_domain
