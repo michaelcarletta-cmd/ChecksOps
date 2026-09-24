@@ -86,6 +86,18 @@ const write = (token, body, extraHeaders = {}) =>
 const query = (token, body) => api('/data/query', { token, body });
 const rowOf = (payload) => (Array.isArray(payload) ? payload[0] : payload);
 
+const retry = async (fn, attempts = 3, delayMs = 250) => {
+  let last = null;
+  for (let i = 0; i < attempts; i += 1) {
+    // eslint-disable-next-line no-await-in-loop
+    last = await fn();
+    if (last?.status && last.status < 500) return last;
+    // eslint-disable-next-line no-await-in-loop
+    await sleep(delayMs);
+  }
+  return last;
+};
+
 const parseS3TargetFromPresignedUrl = (presignedUrl) => {
   const url = new URL(String(presignedUrl || ''));
   const bucket = String(url.hostname || '').split('.')[0] || '';
@@ -202,8 +214,12 @@ export const handler = async (event = {}) => {
   await client.connect();
   try {
     await client.query('BEGIN');
+    await client.query('SET TRANSACTION READ WRITE');
     await client.query('SELECT set_config($1, $2, true)', ['request.app_user_id', appUserId]);
     await client.query('SELECT set_config($1, $2, true)', ['request.jwt.claim.email', email]);
+    const ident = (await client.query(
+      "SELECT current_database() AS db, current_user AS user, current_setting('transaction_read_only') AS tro, current_setting('default_transaction_read_only') AS dtro, auth.uid()::text AS uid",
+    )).rows[0] || null;
     const step = String(event.step || '');
     let updated = null;
     if (step === 'set_deposited') {
@@ -231,10 +247,10 @@ export const handler = async (event = {}) => {
     }
     if (!updated) return { ok: false, error: 'check_not_found_or_rls_denied' };
     await client.query('COMMIT');
-    return { ok: true, checkId, step, tenantId: updated.tenant_id, uploadedBy: updated.uploaded_by, actor: appUserId };
+    return { ok: true, checkId, step, tenantId: updated.tenant_id, uploadedBy: updated.uploaded_by, actor: appUserId, ident };
   } catch (e) {
     try { await client.query('ROLLBACK'); } catch {}
-    return { ok: false, error: String(e?.message || e).slice(0, 240) };
+    return { ok: false, error: 'db_error', code: e?.code || null, message: String(e?.message || e).slice(0, 240) };
   } finally {
     try { await client.end(); } catch {}
   }
@@ -343,14 +359,14 @@ const main = async () => {
   // Give the API a moment before validating reads (Lambda + DB commit).
   await sleep(250);
 
-  const checkGone = await query(freedomToken, {
+  const checkGoneRetry = await retry(() => query(freedomToken, {
     table: 'check_intake_items',
     select: 'id',
     filters: [{ column: 'id', op: 'eq', value: checkId }],
     limit: 1,
-  });
-  record('deleted check no longer queryable', checkGone.status === 200 && Array.isArray(checkGone.json.data) && checkGone.json.data.length === 0, {
-    detail: `status=${checkGone.status} rows=${(checkGone.json.data || []).length}`,
+  }));
+  record('deleted check no longer queryable', checkGoneRetry.status === 200 && Array.isArray(checkGoneRetry.json.data) && checkGoneRetry.json.data.length === 0, {
+    detail: `status=${checkGoneRetry.status} rows=${(checkGoneRetry.json.data || []).length}`,
   });
 
   const payeesGone = await query(freedomToken, {
