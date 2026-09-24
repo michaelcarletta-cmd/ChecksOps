@@ -76,6 +76,7 @@ const mockClient = ({
     payee_type: 'insured',
     endorsement_status: 'signed',
     endorsed_at: '2026-01-01T00:00:00.000Z',
+    endorsement_image_path: `checks/${check?.id || CHECK_ID}/endorsement/payee-ready-1.png`,
   }];
   const defaultEndorsements = endorsements || [{
     id: 'endo-ready-1',
@@ -85,6 +86,7 @@ const mockClient = ({
     payee_type: 'insured',
     status: 'signed',
     signed_at: '2026-01-01T00:00:00.000Z',
+    signature_image_url: `checks/${check?.id || CHECK_ID}/endorsement/signature-1.png`,
   }];
   return {
     queries,
@@ -106,8 +108,27 @@ const mockClient = ({
       if (/FROM public.check_intake_items/.test(sql) && /SELECT id, tenant_id, uploaded_by/.test(sql)) {
         return { rows: check ? [check] : [] };
       }
+      if (/SELECT id, tenant_id,\s*front_image_path/i.test(sql) && /FROM public\.check_intake_items/i.test(sql)) {
+        return {
+          rows: [{
+            id: params?.[0] || CHECK_ID,
+            tenant_id: FREEDOM_TENANT,
+            front_image_path: `checks/${CHECK_ID}/front.jpg`,
+            back_image_path: `checks/${CHECK_ID}/back.jpg`,
+            back_image_original_path: `checks/${CHECK_ID}/back_original.jpg`,
+            back_image_deposit_path: `checks/${CHECK_ID}/back_deposit.jpg`,
+            endorsement_packet_path: `endorsement-packets/${FREEDOM_TENANT}/${CHECK_ID}/packet.pdf`,
+          }],
+        };
+      }
       if (/SELECT id, tenant_id FROM public.check_intake_items/.test(sql)) {
         return { rows: [{ id: params[0], tenant_id: FREEDOM_TENANT }] };
+      }
+      if (/SELECT file_path FROM public\.check_files/.test(sql)) {
+        return { rows: [{ file_path: `check-intake/${CHECK_ID}/files/unit-test-delete-check.txt` }] };
+      }
+      if (/SELECT id FROM public\.loss_draft_tracking WHERE check_intake_item_id/.test(sql)) {
+        return { rows: [] };
       }
       if (/INSERT INTO public.check_intake_items/.test(sql)) return { rows };
       if (/UPDATE public.check_intake_items/.test(sql)) {
@@ -142,6 +163,7 @@ const mockClient = ({
 const depsFor = (client, extra = {}) => ({
   forceEnabled: true,
   forceWorkflow: true,
+  disableS3Cleanup: true,
   loadDatabaseCredentials: async () => ({
     username: 'checksops',
     password: 'unit-test-only-not-a-real-secret',
@@ -451,4 +473,93 @@ test('workflow delete validates UUID and requires reason', async () => {
   }), depsFor(mockClient({ roles: [{ role: 'admin' }] })));
   assert.equal(missingReason.statusCode, 400);
   assert.equal(missingReason.error, 'missing_required_field');
+});
+
+test('workflow delete performs S3 cleanup for check-owned keys (stubbed)', async () => {
+  const client = mockClient({
+    check: { ...createdRow, status: 'needs_review', check_stage: 'review', claim_id: null, deposited_at: null, external_origin: null },
+    roles: [{ role: 'admin' }],
+  });
+
+  const sent = [];
+  const s3 = {
+    send: async (cmd) => {
+      sent.push(cmd);
+      const name = cmd?.constructor?.name || '';
+      if (name === 'ListObjectsV2Command') {
+        const prefix = cmd?.input?.Prefix || '';
+        const key = prefix.endsWith('/')
+          ? `${prefix}generated.png`
+          : `${prefix}/packet.pdf`;
+        return { IsTruncated: false, Contents: [{ Key: key }] };
+      }
+      if (name === 'DeleteObjectsCommand') {
+        const objs = cmd?.input?.Delete?.Objects || [];
+        return { Deleted: objs.map((o) => ({ Key: o.Key })), Errors: [] };
+      }
+      return {};
+    },
+  };
+
+  const prevBucket = process.env.FILES_BUCKET;
+  process.env.FILES_BUCKET = 'unit-test-files-bucket';
+  try {
+    const result = await handleDeleteCheck(jwtEvent(`/workflow/checks/${CHECK_ID}`, 'DELETE', {
+      check_id: CHECK_ID,
+      reason: 'duplicate',
+    }), depsFor(client, { disableS3Cleanup: false, forceStorageWrites: true, s3 }));
+    assert.equal(result.ok, true);
+    assert.equal(result.data.deleted, true);
+    assert.equal(result.storageCleanup.ok, true);
+    assert.ok(client.queries.some((q) => /DELETE FROM public\.check_intake_items/.test(String(q.sql))));
+
+    const listed = sent.filter((c) => (c?.constructor?.name || '') === 'ListObjectsV2Command');
+    const deleted = sent.find((c) => (c?.constructor?.name || '') === 'DeleteObjectsCommand');
+    assert.ok(listed.length >= 1);
+    assert.ok(deleted);
+    const deleteKeys = (deleted?.input?.Delete?.Objects || []).map((o) => o.Key).filter(Boolean);
+    assert.ok(deleteKeys.some((k) => String(k).includes(`files/claim-files/checks/${CHECK_ID}/`)));
+    assert.ok(deleteKeys.some((k) => String(k).includes(`files/claim-files/check-intake/${CHECK_ID}/files/`)));
+  } finally {
+    if (prevBucket === undefined) delete process.env.FILES_BUCKET;
+    else process.env.FILES_BUCKET = prevBucket;
+  }
+});
+
+test('workflow delete reports storage cleanup failure without rolling back DB delete (stubbed)', async () => {
+  const client = mockClient({
+    check: { ...createdRow, status: 'needs_review', check_stage: 'review', claim_id: null, deposited_at: null, external_origin: null },
+    roles: [{ role: 'admin' }],
+  });
+
+  const s3 = {
+    send: async (cmd) => {
+      const name = cmd?.constructor?.name || '';
+      if (name === 'ListObjectsV2Command') {
+        const prefix = cmd?.input?.Prefix || '';
+        return { IsTruncated: false, Contents: [{ Key: `${prefix}generated.png` }] };
+      }
+      if (name === 'DeleteObjectsCommand') {
+        const objs = cmd?.input?.Delete?.Objects || [];
+        return { Deleted: [], Errors: [{ Key: objs[0]?.Key || null, Code: 'AccessDenied', Message: 'denied' }] };
+      }
+      return {};
+    },
+  };
+
+  const prevBucket = process.env.FILES_BUCKET;
+  process.env.FILES_BUCKET = 'unit-test-files-bucket';
+  try {
+    const result = await handleDeleteCheck(jwtEvent(`/workflow/checks/${CHECK_ID}`, 'DELETE', {
+      check_id: CHECK_ID,
+      reason: 'duplicate',
+    }), depsFor(client, { disableS3Cleanup: false, forceStorageWrites: true, s3 }));
+    assert.equal(result.ok, true);
+    assert.equal(result.data.deleted, true);
+    assert.equal(result.storageCleanup.ok, false);
+    assert.ok(client.queries.some((q) => /DELETE FROM public\.check_intake_items/.test(String(q.sql))));
+  } finally {
+    if (prevBucket === undefined) delete process.env.FILES_BUCKET;
+    else process.env.FILES_BUCKET = prevBucket;
+  }
 });

@@ -3,6 +3,7 @@ import { TENANT_MEMBERSHIP_SQL, USER_ROLES_SQL } from './identity.mjs';
 import { applicationWorkflowWritesEnabled, workflowFlagSnapshot } from './workflow-flags.mjs';
 import { writesEnabled, checkWorkflowWritesEnabled, storageWritesEnabled } from './write-allowlist.mjs';
 import { flagSnapshot } from './provider-flags.mjs';
+import { DeleteObjectsCommand, ListObjectsV2Command, S3Client } from '@aws-sdk/client-s3';
 import {
   evaluateTransition,
   INTERNAL_CREATE_STAGE,
@@ -17,6 +18,7 @@ import {
   loadCheckEndorsements,
   loadCheckPayees,
 } from './providers/production/checkalt-eligibility.mjs';
+import { isCheckScopedPathFor, normalizePath, s3KeyFor } from './storage-paths.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -60,6 +62,180 @@ const okResult = ({ mapping, claims, spoof, data, extra = {} }) => ({
   productionSupabaseChanged: false,
   ...extra,
 });
+
+const filesBucket = () => process.env.FILES_BUCKET || '';
+const s3Region = () => process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1';
+const defaultS3 = (deps) => deps.s3 || new S3Client({ region: s3Region() });
+
+const MAX_CHECK_DELETE_KEYS = 2000;
+
+const listKeysByPrefix = async (deps, prefix) => {
+  const s3 = defaultS3(deps);
+  const bucket = filesBucket();
+  if (!bucket) {
+    const error = new Error('s3_not_configured');
+    error.name = 'S3NotConfigured';
+    throw error;
+  }
+  const keys = [];
+  let token = undefined;
+  while (true) {
+    const out = await s3.send(new ListObjectsV2Command({
+      Bucket: bucket,
+      Prefix: prefix,
+      ContinuationToken: token,
+      MaxKeys: 1000,
+    }));
+    for (const obj of out.Contents || []) {
+      if (obj?.Key) keys.push(obj.Key);
+      if (keys.length > MAX_CHECK_DELETE_KEYS) {
+        const error = new Error('too_many_objects');
+        error.name = 'TooManyObjects';
+        error.prefix = prefix;
+        error.count = keys.length;
+        throw error;
+      }
+    }
+    if (!out.IsTruncated) break;
+    token = out.NextContinuationToken;
+    if (!token) break;
+  }
+  return keys;
+};
+
+const deleteKeys = async (deps, keys) => {
+  const s3 = defaultS3(deps);
+  const bucket = filesBucket();
+  if (!bucket) {
+    return { ok: false, error: 's3_not_configured' };
+  }
+  const errors = [];
+  let deleted = 0;
+  for (let i = 0; i < keys.length; i += 1000) {
+    const batch = keys.slice(i, i + 1000);
+    const out = await s3.send(new DeleteObjectsCommand({
+      Bucket: bucket,
+      Delete: {
+        Quiet: true,
+        Objects: batch.map((Key) => ({ Key })),
+      },
+    }));
+    deleted += (out.Deleted || []).length;
+    for (const err of out.Errors || []) {
+      errors.push({
+        key: err.Key || null,
+        code: err.Code || null,
+        message: err.Message || null,
+      });
+    }
+    if (errors.length) break;
+  }
+  if (errors.length) return { ok: false, error: 'storage_delete_failed', deleted, errors };
+  return { ok: true, deleted, errors: [] };
+};
+
+const collectCheckOwnedStorageKeys = async (client, checkId) => {
+  const row = (await client.query(
+    `SELECT id, tenant_id,
+            front_image_path, back_image_path, back_image_original_path, back_image_deposit_path,
+            endorsement_packet_path
+       FROM public.check_intake_items
+      WHERE id = $1::uuid
+      LIMIT 1`,
+    [checkId],
+  )).rows[0];
+  if (!row) return { error: 'rls_denied', message: 'check not found or not writable' };
+
+  const tenantId = row.tenant_id;
+  const keys = new Set();
+  const meta = [];
+
+  const addClaimFilesPath = (value, source) => {
+    const rel = normalizePath(value, 'claim-files');
+    if (!rel) return;
+    if (!isCheckScopedPathFor(rel, checkId)) return;
+    const key = s3KeyFor('claim-files', rel);
+    if (!key) return;
+    keys.add(key);
+    meta.push({ bucket: 'claim-files', rel, source });
+  };
+
+  // Check intake images and known render artifacts stored under check-scoped prefixes.
+  addClaimFilesPath(row.front_image_path, 'check_intake_items.front_image_path');
+  addClaimFilesPath(row.back_image_path, 'check_intake_items.back_image_path');
+  addClaimFilesPath(row.back_image_original_path, 'check_intake_items.back_image_original_path');
+  addClaimFilesPath(row.back_image_deposit_path, 'check_intake_items.back_image_deposit_path');
+
+  // Files uploaded for the check (metadata table does not store bucket; these are claim-files by design).
+  const fileRows = (await client.query(
+    'SELECT file_path FROM public.check_files WHERE check_intake_item_id = $1::uuid',
+    [checkId],
+  )).rows;
+  for (const f of fileRows) addClaimFilesPath(f.file_path, 'check_files.file_path');
+
+  // Payee endorsement images (if present).
+  const payeeRows = (await client.query(
+    'SELECT endorsement_image_path FROM public.check_payees WHERE check_id = $1::uuid',
+    [checkId],
+  )).rows;
+  for (const p of payeeRows) addClaimFilesPath(p.endorsement_image_path, 'check_payees.endorsement_image_path');
+
+  // Endorsement signature images (if stored as claim-files object paths or URLs).
+  const endorsementRows = (await client.query(
+    'SELECT signature_image_url FROM public.check_endorsements WHERE check_id = $1::uuid',
+    [checkId],
+  )).rows;
+  for (const e of endorsementRows) addClaimFilesPath(e.signature_image_url, 'check_endorsements.signature_image_url');
+
+  // Loss-draft documents linked via loss_draft_tracking → loss_draft_documents (check-owned).
+  const lossDraftIds = (await client.query(
+    'SELECT id FROM public.loss_draft_tracking WHERE check_intake_item_id = $1::uuid',
+    [checkId],
+  )).rows.map((r) => r.id).filter(Boolean);
+  if (lossDraftIds.length) {
+    const docs = (await client.query(
+      'SELECT file_path FROM public.loss_draft_documents WHERE loss_draft_id = ANY($1::uuid[])',
+      [lossDraftIds],
+    )).rows;
+    for (const d of docs) {
+      const rel = normalizePath(d.file_path, 'loss-draft-documents');
+      if (!rel) continue;
+      const key = s3KeyFor('loss-draft-documents', rel);
+      if (!key) continue;
+      keys.add(key);
+      meta.push({ bucket: 'loss-draft-documents', rel, source: 'loss_draft_documents.file_path' });
+    }
+  }
+
+  // Endorsement packets referenced by the check. Stored under an endorsement-packets prefix.
+  const packetRaw = row.endorsement_packet_path;
+  if (packetRaw && tenantId) {
+    const tenantLower = String(tenantId).toLowerCase();
+    const idLower = String(checkId).toLowerCase();
+
+    // In some environments this is stored in the claim-files map under an endorsement-packets/ prefix.
+    const relClaim = normalizePath(packetRaw, 'claim-files');
+    if (relClaim && String(relClaim).toLowerCase().startsWith(`endorsement-packets/${tenantLower}/${idLower}`)) {
+      const key = s3KeyFor('claim-files', relClaim);
+      if (key) {
+        keys.add(key);
+        meta.push({ bucket: 'claim-files', rel: relClaim, source: 'check_intake_items.endorsement_packet_path' });
+      }
+    }
+
+    // Also attempt the dedicated endorsement-packets map (prefix stripped by normalizePath).
+    const relPackets = normalizePath(packetRaw, 'endorsement-packets');
+    if (relPackets && String(relPackets).toLowerCase().startsWith(`${tenantLower}/${idLower}`)) {
+      const key = s3KeyFor('endorsement-packets', relPackets);
+      if (key) {
+        keys.add(key);
+        meta.push({ bucket: 'endorsement-packets', rel: relPackets, source: 'check_intake_items.endorsement_packet_path' });
+      }
+    }
+  }
+
+  return { tenantId, keys: [...keys], meta };
+};
 
 const membershipsOf = async (client, userId) => {
   const rows = (await client.query(TENANT_MEMBERSHIP_SQL, [userId])).rows;
@@ -388,36 +564,16 @@ export const handleCheckTransition = async (event, deps = {}) => {
   }, deps);
 };
 
-const deleteChildren = async (client, checkId) => {
-  await client.query('DELETE FROM public.check_endorsement_events WHERE check_id = $1::uuid', [checkId]);
-  await client.query('DELETE FROM public.check_endorsements WHERE check_id = $1::uuid', [checkId]);
-  await client.query('DELETE FROM public.check_payees WHERE check_id = $1::uuid', [checkId]);
-  await client.query('DELETE FROM public.check_messages WHERE check_id = $1::uuid', [checkId]);
-  await client.query('DELETE FROM public.check_files WHERE check_intake_item_id = $1::uuid', [checkId]);
-  await client.query('DELETE FROM public.check_message_reads WHERE check_id = $1::uuid', [checkId]);
-  await client.query('DELETE FROM public.check_audit_log WHERE check_id = $1::uuid', [checkId]);
-  await client.query('DELETE FROM public.mortgage_handling_requests WHERE check_intake_item_id = $1::uuid', [checkId]);
-  await client.query('DELETE FROM public.check_review_decisions WHERE check_id = $1::uuid', [checkId]);
-  await client.query('DELETE FROM public.check_reissue_requests WHERE check_id = $1::uuid', [checkId]);
-  await client.query('DELETE FROM public.check_eligibility_results WHERE check_id = $1::uuid', [checkId]);
-  await client.query('DELETE FROM public.claim_checks WHERE check_intake_item_id = $1::uuid', [checkId]);
-  const drafts = (await client.query(
-    'SELECT id FROM public.loss_draft_tracking WHERE check_intake_item_id = $1::uuid',
-    [checkId],
-  )).rows.map((row) => row.id);
-  if (drafts.length) {
-    await client.query('DELETE FROM public.loss_draft_audit_log WHERE loss_draft_id = ANY($1::uuid[])', [drafts]);
-    await client.query('DELETE FROM public.loss_draft_documents WHERE loss_draft_id = ANY($1::uuid[])', [drafts]);
-    await client.query('DELETE FROM public.loss_draft_tracking WHERE id = ANY($1::uuid[])', [drafts]);
-  }
-};
-
 export const handleDeleteCheck = async (event, deps = {}) => {
   const gate = requireWorkflowEnabled(event, deps);
   if (gate.blocked) {
     return withIdentity(event, async () => gate.blocked, deps);
   }
-  return withIdentityWrite(event, async ({ client, mapping, claims, body, spoof }) => {
+  let plannedStorageKeys = [];
+  let plannedStorageKeyCount = 0;
+  let plannedStorageKeySample = [];
+
+  const result = await withIdentityWrite(event, async ({ client, mapping, claims, body, spoof }) => {
     if (body.sql || body.query || body.rawSql) {
       return denied(spoof, { error: 'generic_sql_denied' });
     }
@@ -492,6 +648,74 @@ export const handleDeleteCheck = async (event, deps = {}) => {
       }
     }
 
+    // S3 cleanup: gather only object keys conclusively owned by this check.
+    // Must plan before DB cascades remove check_files and related metadata.
+    if (deps.disableS3Cleanup !== true) {
+      const storageEnabled = deps.forceStorageWrites === true || storageWritesEnabled();
+      if (!storageEnabled) {
+        return denied(spoof, {
+          statusCode: 403,
+          error: 'storage_writes_disabled',
+          message: 'Refusing to delete: storage deletes are disabled by AWS_STORAGE_WRITES_ENABLED',
+        });
+      }
+      if (!filesBucket()) {
+        return denied(spoof, {
+          statusCode: 503,
+          error: 's3_not_configured',
+          message: 'Refusing to delete: FILES_BUCKET is not configured',
+        });
+      }
+
+      const collected = await collectCheckOwnedStorageKeys(client, looked.check.id);
+      if (collected.error) {
+        return denied(spoof, { statusCode: 403, ...collected });
+      }
+
+      const keySet = new Set(collected.keys);
+      const checkIdText = String(looked.check.id);
+
+      // Claim-files check-scoped prefixes cover originals, crops, composites, and other generated artifacts.
+      for (const relPrefix of [
+        `checks/${checkIdText}/`,
+        `checks/reupload/${checkIdText}/`,
+        `check-intake/${checkIdText}/files/`,
+      ]) {
+        const prefixKey = `files/claim-files/${relPrefix}`;
+        const found = await listKeysByPrefix(deps, prefixKey);
+        for (const k of found) {
+          const rel = String(k).replace(/^files\/claim-files\//, '');
+          if (!isCheckScopedPathFor(rel, looked.check.id)) continue;
+          keySet.add(k);
+        }
+      }
+
+      // Endorsement packets are stored under an endorsement-packets prefix; delete only for this tenant+check.
+      if (collected.tenantId) {
+        const tenantId = String(collected.tenantId);
+        for (const prefixKey of [
+          `files/claim-files/endorsement-packets/${tenantId}/${checkIdText}`,
+          `files/endorsement-packets/${tenantId}/${checkIdText}`,
+        ]) {
+          const found = await listKeysByPrefix(deps, prefixKey);
+          for (const k of found) {
+            if (prefixKey.startsWith('files/claim-files/')) {
+              const rel = String(k).replace(/^files\/claim-files\//, '');
+              if (!String(rel).toLowerCase().startsWith(`endorsement-packets/${tenantId.toLowerCase()}/${checkIdText.toLowerCase()}`)) continue;
+            } else if (prefixKey.startsWith('files/endorsement-packets/')) {
+              const rel = String(k).replace(/^files\/endorsement-packets\//, '');
+              if (!String(rel).toLowerCase().startsWith(`${tenantId.toLowerCase()}/${checkIdText.toLowerCase()}`)) continue;
+            }
+            keySet.add(k);
+          }
+        }
+      }
+
+      plannedStorageKeys = [...keySet];
+      plannedStorageKeyCount = plannedStorageKeys.length;
+      plannedStorageKeySample = plannedStorageKeys.slice(0, 50);
+    }
+
     // Preserve an audit snapshot before deleting the check + check_audit_log rows.
     await client.query('SAVEPOINT delete_audit_snapshot');
     try {
@@ -535,9 +759,57 @@ export const handleDeleteCheck = async (event, deps = {}) => {
       claims,
       spoof,
       data: { id: looked.check.id, deleted: true },
-      extra: { cleanedUp: true },
+      extra: {
+        cleanedUp: true,
+        storageCleanup: deps.disableS3Cleanup === true
+          ? { ok: true, deleted: 0, skipped: true }
+          : { ok: true, deleted: 0, skipped: plannedStorageKeyCount === 0, planned: plannedStorageKeyCount, plannedSample: plannedStorageKeySample },
+      },
     });
   }, deps);
+
+  // After DB commit, attempt S3 deletion. Never delete S3 objects unless the DB deletion succeeded.
+  if (!result?.ok || deps.disableS3Cleanup === true) return result;
+  if (!plannedStorageKeys.length) {
+    result.storageCleanup = { ok: true, deleted: 0, skipped: true };
+    return result;
+  }
+
+  try {
+    const deleted = await deleteKeys(deps, plannedStorageKeys);
+    if (!deleted.ok) {
+      console.error(JSON.stringify({
+        service: 'checksops-api',
+        event: 'check_delete_storage_cleanup_failed',
+        checkId: result?.data?.id || null,
+        error: deleted.error || 'storage_delete_failed',
+        deletedCount: deleted.deleted || 0,
+        errorCount: (deleted.errors || []).length,
+        sampleErrors: (deleted.errors || []).slice(0, 10),
+      }));
+      result.storageCleanup = {
+        ok: false,
+        error: deleted.error || 'storage_delete_failed',
+        deleted: deleted.deleted || 0,
+        errors: (deleted.errors || []).slice(0, 10),
+        attempted: Math.min(plannedStorageKeys.length, 50),
+      };
+      return result;
+    }
+    result.storageCleanup = { ok: true, deleted: deleted.deleted || 0, skipped: false };
+    return result;
+  } catch (error) {
+    const message = String(error?.message || error).slice(0, 240);
+    console.error(JSON.stringify({
+      service: 'checksops-api',
+      event: 'check_delete_storage_cleanup_failed',
+      checkId: result?.data?.id || null,
+      error: 'storage_delete_failed',
+      message,
+    }));
+    result.storageCleanup = { ok: false, error: 'storage_delete_failed', message };
+    return result;
+  }
 };
 
 const looksGeneratedBack = (p) =>
