@@ -469,6 +469,13 @@ export const childFk = (parentTable, childTable) => {
   if (parentTable === 'check_intake_items') {
     return CHECK_ID_CHILDREN.has(childTable) ? 'check_id' : 'check_intake_item_id';
   }
+  // Live RDS uses batch_id, not disbursement_batche_id / deposit_batche_id.
+  if (parentTable === 'disbursement_batches' && childTable === 'disbursement_splits') {
+    return 'batch_id';
+  }
+  if (parentTable === 'deposit_batches' && (childTable === 'deposit_items' || childTable === 'deposit_audit_log')) {
+    return 'batch_id';
+  }
   if (parentTable.endsWith('s')) return `${parentTable.slice(0, -1)}_id`;
   return `${parentTable}_id`;
 };

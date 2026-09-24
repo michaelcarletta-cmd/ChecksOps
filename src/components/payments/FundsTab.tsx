@@ -139,6 +139,25 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
     },
   });
 
+  const { data: fundsSummary } = useQuery({
+    queryKey: ["check-funds-summary", checkIntakeItemId],
+    enabled: !!checkIntakeItemId,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_check_funds_summary" as never, {
+        p_check_id: checkIntakeItemId,
+      } as never);
+      if (error) throw error;
+      return data as {
+        received?: number;
+        disbursed?: number;
+        available?: number;
+        in_transit?: number;
+        pa_fee?: number;
+        payments?: Array<Record<string, unknown>>;
+      } | null;
+    },
+  });
+
   const { data: outgoingBatches = [] } = useQuery({
     queryKey: ["funds-tab-disbursements", checkIntakeItemId, tenant?.id],
     enabled: !!checkIntakeItemId && !!tenant?.id,
@@ -184,12 +203,15 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
 
 
 
-  const outgoingSplits = outgoingBatches.flatMap((b: any) =>
+  const embedSplits = outgoingBatches.flatMap((b: any) =>
     (b.disbursement_splits ?? []).map((s: any) => ({ ...s, batch_id: b.id }))
   );
-  const totalDisbursed = toCents(outgoingSplits
-    .filter((s: any) => s.status !== "failed" && s.status !== "cancelled" && s.status !== "returned")
-    .reduce((sum: number, s: any) => sum + toCents(Number(s.amount || 0)), 0));
+  const outgoingSplits = (fundsSummary?.payments?.length ? fundsSummary.payments : embedSplits) as any[];
+  const totalDisbursed = fundsSummary?.disbursed != null
+    ? toCents(Number(fundsSummary.disbursed))
+    : toCents(outgoingSplits
+      .filter((s: any) => s.status !== "failed" && s.status !== "cancelled" && s.status !== "returned" && s.status !== "voided")
+      .reduce((sum: number, s: any) => sum + toCents(Number(s.amount || 0)), 0));
 
   const receivedFromPayments = toCents(
     incomingPayments
@@ -204,9 +226,11 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
   // check amount itself represents the funds available on this check.
   // Partner/read-only view uses only RPC-authorized incoming rows so an
   // unrelated owner split is not presented as Funds Received.
-  const totalReceived = receivedFromPayments > 0
-    ? receivedFromPayments
-    : (readOnly ? 0 : Number(intakeItem?.amount || 0));
+  const totalReceived = fundsSummary?.received != null
+    ? toCents(Number(fundsSummary.received))
+    : (receivedFromPayments > 0
+      ? receivedFromPayments
+      : (readOnly ? 0 : Number(intakeItem?.amount || 0)));
 
   const totalInTransit = toCents(
     incomingPayments
@@ -248,7 +272,9 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
     return isNaN(amt) ? 0 : toCents(amt);
   }, [paFeeMode, paFeePct, paFeeAmt, totalReceived]);
 
-  const availableForDisbursement = Math.max(0, toCents(toCents(totalReceived) - paFeeComputed - totalDisbursed));
+  const availableForDisbursement = fundsSummary?.available != null
+    ? toCents(Number(fundsSummary.available))
+    : Math.max(0, toCents(toCents(totalReceived) - paFeeComputed - totalDisbursed));
 
   const savePaFee = async () => {
     if (readOnly) return;
@@ -260,6 +286,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
     if (error) return toast({ title: "Couldn't save PA fee", description: error.message, variant: "destructive" });
     toast({ title: "PA fee saved" });
     qc.invalidateQueries({ queryKey: ["intake-pa-fee", checkIntakeItemId] });
+    qc.invalidateQueries({ queryKey: ["check-funds-summary", checkIntakeItemId] });
   };
 
   // External check form
@@ -311,6 +338,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
       // Keep the form open when funds remain so the tenant can immediately record the next payment.
       if (remaining <= 0.005) setDisburseMode(null);
       qc.invalidateQueries({ queryKey: ["funds-tab-disbursements", checkIntakeItemId, tenant?.id] });
+      qc.invalidateQueries({ queryKey: ["check-funds-summary", checkIntakeItemId] });
       qc.invalidateQueries({ queryKey: ["recurring-recipients", tenant?.id] });
     } catch (e: any) {
       toast({ title: "Couldn't record external disbursement", description: e.message, variant: "destructive" });

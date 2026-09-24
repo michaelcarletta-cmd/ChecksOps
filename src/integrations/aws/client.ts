@@ -950,6 +950,21 @@ export function createAwsStagingClient(options: AwsStagingClientOptions = {}) {
         }
         return { data: body.data ?? body, error: null };
       }
+      if (name === "get_check_funds_summary") {
+        const checkId = String(args.p_check_id || args.check_id || "");
+        const { response, body } = await apiFetch(`/workflow/checks/${encodeURIComponent(checkId)}/funds-summary`, {
+          method: "POST",
+          body: JSON.stringify({ check_id: checkId }),
+        }, token);
+        if (response.status === 401) {
+          writeStored(null);
+          emit("SIGNED_OUT", null);
+        }
+        if (!response.ok) {
+          return { data: null, error: postgrestError(String(body.message || body.error || "rpc_failed"), String(body.error || "42501")) };
+        }
+        return { data: body.data ?? body, error: null };
+      }
       if (name === "record_external_payment") {
         const checkId = String(args.p_check_id || args.check_id || "");
         const { response, body } = await apiFetch(`/workflow/checks/${encodeURIComponent(checkId)}/external-payment`, {

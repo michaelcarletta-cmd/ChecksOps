@@ -15,6 +15,7 @@
 import { ignoredSpoof, IS_PLATFORM_OWNER_SQL, parseBody, withIdentity, withIdentityWrite } from './data.mjs';
 import { USER_ROLES_SQL } from './identity.mjs';
 import { applicationWorkflowWritesEnabled } from './workflow-flags.mjs';
+import { loadCheckFunds, toCents as fundsToCents } from './workflow-funds-summary.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -253,16 +254,15 @@ export const handleExternalPayment = async (event, deps = {}) => {
       };
     }
 
-    const spent = (await client.query(
-      `SELECT COALESCE(SUM(s.amount), 0) AS spent
-       FROM public.disbursement_splits s
-       JOIN public.disbursement_batches b ON b.id = s.batch_id
-       WHERE b.check_intake_item_id = $1::uuid
-         AND s.tenant_id = $2::uuid
-         AND s.status NOT IN ('failed', 'cancelled', 'returned')`,
-      [check.id, check.tenant_id],
-    )).rows[0];
-    const available = Math.max(0, toCents(toCents(check.amount || 0) - toCents(spent?.spent)));
+    const funds = await loadCheckFunds(client, { checkId: check.id });
+    if (funds.error || !funds.totals) {
+      return denied(spoof, {
+        statusCode: funds.error === 'not_found' ? 404 : 500,
+        error: funds.error || 'funds_summary_failed',
+        message: funds.message || 'Could not load remaining funds for this check',
+      });
+    }
+    const available = fundsToCents(funds.totals.available);
     if (amount > available + 0.005) {
       return denied(spoof, {
         statusCode: 400,

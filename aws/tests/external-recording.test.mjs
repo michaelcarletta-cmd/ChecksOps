@@ -178,8 +178,29 @@ const mockClient = ({
       if (/FROM public.check_intake_items/.test(sql) && /SELECT id, tenant_id, uploaded_by/.test(sql)) {
         return { rows: check ? [check] : [] };
       }
+      if (/AS received_amount/.test(sql) || /disbursed_amount/.test(sql)) {
+        return {
+          rows: check ? [{
+            check_id: check.id,
+            tenant_id: check.tenant_id,
+            status: check.status,
+            check_stage: check.check_stage,
+            received_amount: check.amount,
+            pa_fee_pct: null,
+            pa_fee_amount: null,
+            disbursed_amount: spent,
+            in_transit_amount: 0,
+          }] : [],
+        };
+      }
       if (/FROM public.check_intake_items/.test(sql)) {
         return { rows: check ? [check] : [] };
+      }
+      if (/FROM public.disbursement_splits s/.test(sql) && /lower\(s.recipient_name\)/.test(sql)) {
+        return { rows: existingSplit ? [existingSplit] : [] };
+      }
+      if (/FROM public.disbursement_splits s/.test(sql) && /ORDER BY s.created_at/.test(sql)) {
+        return { rows: existingSplit ? [existingSplit] : [] };
       }
       if (/FROM public.disbursement_splits s/.test(sql) && /external_check_number/.test(sql)) {
         return { rows: existingSplit ? [existingSplit] : [] };

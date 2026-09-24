@@ -21,6 +21,7 @@ import { handleAdminStatusCorrection } from './workflow-admin-status.mjs';
 import { handleReviewCorrection } from './workflow-review-correction.mjs';
 import { handleExternalDeposit } from './workflow-external-deposit.mjs';
 import { handleExternalPayment } from './workflow-external-payment.mjs';
+import { handleFundsSummary } from './workflow-funds-summary.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -570,6 +571,7 @@ export const matchWorkflowRoute = (method, path) => {
   if (method === 'POST' && path === '/workflow/review-correction') return 'review-correction';
   if (method === 'POST' && path === '/workflow/external-deposit') return 'external-deposit';
   if (method === 'POST' && path === '/workflow/external-payment') return 'external-payment';
+  if ((method === 'GET' || method === 'POST') && path === '/workflow/funds-summary') return 'funds-summary';
   const adminCorrection = path.match(/^\/workflow\/checks\/([^/]+)\/admin-status-correction$/);
   if (method === 'POST' && adminCorrection) {
     return { kind: 'admin-status-correction', checkId: decodeURIComponent(adminCorrection[1]) };
@@ -585,6 +587,10 @@ export const matchWorkflowRoute = (method, path) => {
   const externalPayment = path.match(/^\/workflow\/checks\/([^/]+)\/external-payment$/);
   if (method === 'POST' && externalPayment) {
     return { kind: 'external-payment', checkId: decodeURIComponent(externalPayment[1]) };
+  }
+  const fundsSummary = path.match(/^\/workflow\/checks\/([^/]+)\/funds-summary$/);
+  if ((method === 'GET' || method === 'POST') && fundsSummary) {
+    return { kind: 'funds-summary', checkId: decodeURIComponent(fundsSummary[1]) };
   }
   const transition = path.match(/^\/workflow\/checks\/([^/]+)\/transition$/);
   if (method === 'POST' && transition) return { kind: 'transition', checkId: decodeURIComponent(transition[1]) };
@@ -604,6 +610,7 @@ export const handleWorkflowRequest = async (event, path, method, deps = {}) => {
   if (match === 'review-correction') return handleReviewCorrection(event, deps);
   if (match === 'external-deposit') return handleExternalDeposit(event, deps);
   if (match === 'external-payment') return handleExternalPayment(event, deps);
+  if (match === 'funds-summary') return handleFundsSummary(event, deps);
   if (match.kind === 'admin-status-correction') {
     const body = parseBody(event);
     event = { ...event, body: JSON.stringify({ ...body, check_id: body.check_id || match.checkId }) };
@@ -623,6 +630,11 @@ export const handleWorkflowRequest = async (event, path, method, deps = {}) => {
     const body = parseBody(event);
     event = { ...event, body: JSON.stringify({ ...body, check_id: body.check_id || match.checkId }) };
     return handleExternalPayment(event, deps);
+  }
+  if (match.kind === 'funds-summary') {
+    const body = parseBody(event);
+    event = { ...event, body: JSON.stringify({ ...body, check_id: body.check_id || match.checkId }) };
+    return handleFundsSummary(event, deps);
   }
   if (match.kind === 'transition') {
     const body = parseBody(event);
