@@ -4,7 +4,7 @@
  * spoofed tenant headers ignored, production credentials refused on staging.
  */
 import { TENANT_MEMBERSHIP_SQL } from '../../identity.mjs';
-import { executionAllowed } from '../../provider-flags.mjs';
+import { executionAllowed, isProductionChecksOpsRuntime } from '../../provider-flags.mjs';
 import { providerSandboxExecutionEnabled } from '../../sandbox-flags.mjs';
 import { loadSandboxCredentials } from '../../sandbox-credentials.mjs';
 import { evaluateReadiness } from '../readiness.mjs';
@@ -84,6 +84,15 @@ export function effectiveMoovEnvironment(tenantEnv) {
 }
 
 export async function requireParityEnabled(provider) {
+  if (isProductionChecksOpsRuntime()) {
+    if (!executionAllowed(provider)) {
+      return fail('provider_disabled', 403, {
+        provider,
+        message: 'Moov production execution is disabled. AWS_MOOV_ENABLED remains the global availability hold.',
+      });
+    }
+    return null;
+  }
   if (executionAllowed(provider)) {
     return fail('production_execution_blocked', 403, {
       message: 'Production provider flags are reserved for a later cutover. Staging runs sandbox/UAT only.',
@@ -116,36 +125,39 @@ export async function moovParityContext({ client, mapping, body, requireAdmin = 
   bindMoovEnvironment(environment);
   const loader = typeof loadSandbox === 'function' ? loadSandbox : loadSandboxCredentials;
   const loaded = await loader();
-  if (environment === 'production') {
+  if (environment === 'production' && !isProductionChecksOpsRuntime()) {
     return fail('production_credentials_refused', 403, {
       message: 'Production Moov keys are not used on AWS staging.',
     });
   }
-  if (!loaded.moov) {
+  const secrets = loaded.secrets || {};
+  const sandboxReady = Boolean(loaded.moov?.publicKey && loaded.moov?.secretKey);
+  const productionReady = Boolean(secrets.MOOV_PUBLIC_KEY && secrets.MOOV_SECRET_KEY);
+  if (environment === 'production' && !productionReady) {
+    return fail('Production payment credentials are not configured.', 503, {
+      error: 'production_credentials_unavailable',
+    });
+  }
+  if (environment !== 'production' && !sandboxReady) {
     return fail('Sandbox payment credentials are not configured for this test organization.', 503, {
       error: 'sandbox_credentials_unavailable',
     });
   }
   const ctx = {
-    environment: 'sandbox',
-    sandboxPublicKey: loaded.moov.publicKey,
-    sandboxSecretKey: loaded.moov.secretKey,
-    sandboxPlatformAccountId: loaded.moov.platformAccountId || null,
-    sandboxOrigin: loaded.moov.origin || 'https://checksops.com',
-    apiVersion: loaded.moov.apiVersion || 'v2024.01.00',
-    productionPublicKey: null,
-    productionSecretKey: null,
-    productionPlatformAccountId: null,
+    environment,
+    sandboxPublicKey: loaded.moov?.publicKey || null,
+    sandboxSecretKey: loaded.moov?.secretKey || null,
+    sandboxPlatformAccountId: loaded.moov?.platformAccountId || null,
+    sandboxOrigin: loaded.moov?.origin || 'https://checksops.com',
+    apiVersion: loaded.moov?.apiVersion || secrets.MOOV_SANDBOX_API_VERSION || 'v2024.01.00',
+    productionPublicKey: secrets.MOOV_PUBLIC_KEY || null,
+    productionSecretKey: secrets.MOOV_SECRET_KEY || null,
+    productionPlatformAccountId: secrets.MOOV_ACCOUNT_ID || null,
   };
-  if (!ctx.sandboxPublicKey || !ctx.sandboxSecretKey) {
-    return fail('Sandbox payment credentials are not configured for this test organization.', 503, {
-      error: 'sandbox_credentials_unavailable',
-    });
-  }
   return {
     tenantId: tenant.tenantId,
     isAdmin: tenant.isAdmin,
-    environment: 'sandbox',
+    environment,
     userId: mapping.application_user_id,
     memberships,
     moovContext: ctx,

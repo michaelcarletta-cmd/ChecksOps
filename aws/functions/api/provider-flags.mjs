@@ -56,6 +56,13 @@ export const denyProviderExecution = (provider, operation, extra = {}) => ({
   ...extra,
 });
 
+export const isProductionChecksOpsRuntime = () => (
+  String(process.env.CHECKSOPS_ENV || '').toLowerCase().startsWith('production')
+);
+
+/** Live unused-until-now money-movement hold already present on production Lambda. */
+export const moovTransferPostEnabled = () => isTrue(process.env.AWS_MOOV_TRANSFER_POST_ENABLED);
+
 export const flagSnapshot = () => ({
   AWS_PROVIDER_EXECUTION_ENABLED: providerExecutionEnabled(),
   AWS_MOOV_ENABLED: providerEnabled('moov'),
@@ -65,4 +72,5 @@ export const flagSnapshot = () => ({
   AWS_QUICKBOOKS_ENABLED: providerEnabled('quickbooks'),
   AWS_PROVIDER_LIVE_READS_ENABLED: providerLiveReadsEnabled(),
   AWS_PROVIDER_WEBHOOK_DRY_RUN: providerWebhookDryRun(),
+  AWS_MOOV_TRANSFER_POST_ENABLED: moovTransferPostEnabled(),
 });

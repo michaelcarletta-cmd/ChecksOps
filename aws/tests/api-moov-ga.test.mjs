@@ -31,6 +31,26 @@ const withEnv = async (vars, fn) => {
   }
 };
 
+test('production runtime uses AWS_MOOV_ENABLED as availability; transfers stay separately held', async () => {
+  await withEnv({
+    CHECKSOPS_ENV: 'production-prep',
+    AWS_MOOV_ENABLED: 'true',
+    AWS_PROVIDER_EXECUTION_ENABLED: 'true',
+    AWS_MOOV_TRANSFER_POST_ENABLED: 'false',
+  }, async () => {
+    const allowed = await requireParityEnabled('moov');
+    assert.equal(allowed, null);
+  });
+  await withEnv({
+    CHECKSOPS_ENV: 'production-prep',
+    AWS_MOOV_ENABLED: 'false',
+    AWS_PROVIDER_EXECUTION_ENABLED: 'true',
+  }, async () => {
+    const blocked = await requireParityEnabled('moov');
+    assert.equal(blocked.error, 'provider_disabled');
+  });
+});
+
 test('AWS_MOOV_ENABLED is a money-movement safety hold, not a tenant allowlist', async () => {
   await withEnv({
     AWS_MOOV_ENABLED: 'false',
