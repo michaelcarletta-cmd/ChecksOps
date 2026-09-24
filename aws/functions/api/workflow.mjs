@@ -105,6 +105,11 @@ const lookupWorkflowCheck = async (client, checkId) => {
   return { check: rows[0] };
 };
 
+const platformRolesOf = async (client, userId) => {
+  const rows = (await client.query(USER_ROLES_SQL, [userId])).rows;
+  return new Set(rows.map((row) => String(row.role || '').toLowerCase()).filter(Boolean));
+};
+
 const descriptiveFromBody = (body = {}) => {
   const out = {};
   for (const [column, max] of [
@@ -392,6 +397,10 @@ const deleteChildren = async (client, checkId) => {
   await client.query('DELETE FROM public.check_message_reads WHERE check_id = $1::uuid', [checkId]);
   await client.query('DELETE FROM public.check_audit_log WHERE check_id = $1::uuid', [checkId]);
   await client.query('DELETE FROM public.mortgage_handling_requests WHERE check_intake_item_id = $1::uuid', [checkId]);
+  await client.query('DELETE FROM public.check_review_decisions WHERE check_id = $1::uuid', [checkId]);
+  await client.query('DELETE FROM public.check_reissue_requests WHERE check_id = $1::uuid', [checkId]);
+  await client.query('DELETE FROM public.check_eligibility_results WHERE check_id = $1::uuid', [checkId]);
+  await client.query('DELETE FROM public.claim_checks WHERE check_intake_item_id = $1::uuid', [checkId]);
   const drafts = (await client.query(
     'SELECT id FROM public.loss_draft_tracking WHERE check_intake_item_id = $1::uuid',
     [checkId],
@@ -401,7 +410,6 @@ const deleteChildren = async (client, checkId) => {
     await client.query('DELETE FROM public.loss_draft_documents WHERE loss_draft_id = ANY($1::uuid[])', [drafts]);
     await client.query('DELETE FROM public.loss_draft_tracking WHERE id = ANY($1::uuid[])', [drafts]);
   }
-  await client.query('DELETE FROM public.check_review_decisions WHERE check_id = $1::uuid', [checkId]);
 };
 
 export const handleDeleteCheck = async (event, deps = {}) => {
@@ -410,8 +418,22 @@ export const handleDeleteCheck = async (event, deps = {}) => {
     return withIdentity(event, async () => gate.blocked, deps);
   }
   return withIdentityWrite(event, async ({ client, mapping, claims, body, spoof }) => {
+    if (body.sql || body.query || body.rawSql) {
+      return denied(spoof, { error: 'generic_sql_denied' });
+    }
+    const roles = await platformRolesOf(client, mapping.application_user_id);
+    if (!roles.has('admin')) {
+      return denied(spoof, { error: 'not_authorized', message: 'Only admins can delete checks' });
+    }
     const checkId = body.check_id || body.checkId || body.id
       || String(event?.rawPath || '').split('/').filter(Boolean).pop();
+    const reason = clip(body.reason || body.p_reason || body.delete_reason, 2000);
+    if (reason && reason.error) {
+      return denied(spoof, { statusCode: 400, ...reason });
+    }
+    if (!reason || String(reason).length < 3) {
+      return denied(spoof, { statusCode: 400, error: 'missing_required_field', field: 'reason', message: 'A deletion reason (min 3 characters) is required' });
+    }
     const looked = await lookupWorkflowCheck(client, checkId);
     if (looked.error) {
       return denied(spoof, { statusCode: looked.error === 'invalid_uuid' ? 400 : 403, ...looked });
@@ -428,6 +450,60 @@ export const handleDeleteCheck = async (event, deps = {}) => {
         message: 'Refusing to delete a partner-linked or deposited check',
       });
     }
+
+    // Refuse delete once a check has entered any financial/provider pipeline tables.
+    // Deleting those records is intentionally out of scope for the AWS workflow write tranche.
+    const blockers = [
+      { table: 'deposit_items', sql: 'SELECT 1 FROM public.deposit_items WHERE check_id = $1::uuid LIMIT 1' },
+      { table: 'checkalt_deposits', sql: 'SELECT 1 FROM public.checkalt_deposits WHERE check_intake_item_id = $1::uuid LIMIT 1' },
+      { table: 'disbursement_batches', sql: 'SELECT 1 FROM public.disbursement_batches WHERE check_intake_item_id = $1::uuid LIMIT 1' },
+      { table: 'claim_check_payments', sql: 'SELECT 1 FROM public.claim_check_payments WHERE check_intake_item_id = $1::uuid LIMIT 1' },
+      { table: 'check_billing_events', sql: 'SELECT 1 FROM public.check_billing_events WHERE check_intake_item_id = $1::uuid LIMIT 1' },
+      { table: 'check_payment_directions', sql: 'SELECT 1 FROM public.check_payment_directions WHERE check_id = $1::uuid LIMIT 1' },
+    ];
+    for (const blocker of blockers) {
+      try {
+        const rows = (await client.query(blocker.sql, [looked.check.id])).rows;
+        if (rows.length) {
+          return denied(spoof, {
+            error: 'cleanup_denied',
+            message: `Refusing to delete a check with dependent financial/provider records (${blocker.table})`,
+            blocker: blocker.table,
+          });
+        }
+      } catch (error) {
+        // If a table is absent on this schema snapshot, do not treat it as a blocker.
+        if (error?.code !== '42P01') throw error;
+      }
+    }
+
+    // Preserve an audit snapshot before deleting the check + check_audit_log rows.
+    try {
+      const exists = (await client.query("SELECT to_regclass('public.check_deletion_log') AS t")).rows[0]?.t;
+      if (exists) {
+        const row = (await client.query('SELECT * FROM public.check_intake_items WHERE id = $1::uuid', [looked.check.id])).rows[0];
+        if (row) {
+          await client.query(
+            `INSERT INTO public.check_deletion_log
+              (check_id, claim_id, check_number, amount, status, reason, deleted_by, snapshot)
+             VALUES ($1::uuid, $2::uuid, $3::text, $4::numeric, $5::text, $6::text, $7::uuid, $8::jsonb)`,
+            [
+              looked.check.id,
+              row.claim_id ?? null,
+              row.check_number ?? null,
+              row.amount ?? null,
+              row.status ?? null,
+              String(reason),
+              mapping.application_user_id,
+              JSON.stringify(row),
+            ],
+          );
+        }
+      }
+    } catch {
+      // Best-effort audit snapshot; deletion must still proceed.
+    }
+
     await deleteChildren(client, looked.check.id);
     const rows = (await client.query(
       'DELETE FROM public.check_intake_items WHERE id = $1::uuid AND claim_id IS NULL RETURNING id',

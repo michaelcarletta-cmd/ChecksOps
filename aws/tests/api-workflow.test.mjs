@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { handler } from '../functions/api/index.mjs';
 import { LOOKUP_MAPPING_SQL, TENANT_MEMBERSHIP_SQL, USER_ROLES_SQL } from '../functions/api/identity.mjs';
-import { handleCreateCheck, handleCheckTransition, handleWorkflowStatus } from '../functions/api/workflow.mjs';
+import { handleCreateCheck, handleCheckTransition, handleDeleteCheck, handleWorkflowStatus } from '../functions/api/workflow.mjs';
 import { handleWrite } from '../functions/api/write.mjs';
 import {
   evaluateTransition,
@@ -123,6 +123,16 @@ const mockClient = ({
       if (/FROM public.loss_draft_tracking d/.test(sql)) {
         return { rows: [{ id: params[0], check_intake_item_id: CHECK_ID, tenant_id: FREEDOM_TENANT }] };
       }
+      if (/SELECT 1 FROM public\.deposit_items/.test(sql)) return { rows: [] };
+      if (/SELECT 1 FROM public\.checkalt_deposits/.test(sql)) return { rows: [] };
+      if (/SELECT 1 FROM public\.disbursement_batches/.test(sql)) return { rows: [] };
+      if (/SELECT 1 FROM public\.claim_check_payments/.test(sql)) return { rows: [] };
+      if (/SELECT 1 FROM public\.check_billing_events/.test(sql)) return { rows: [] };
+      if (/SELECT 1 FROM public\.check_payment_directions/.test(sql)) return { rows: [] };
+      if (/SELECT to_regclass\('public\.check_deletion_log'\)/.test(sql)) return { rows: [{ t: 'public.check_deletion_log' }] };
+      if (/INSERT INTO public\.check_deletion_log/.test(sql)) return { rows: [{ id: 'log-1' }] };
+      if (/SELECT \* FROM public\.check_intake_items WHERE id =/.test(sql)) return { rows: [check] };
+      if (/DELETE FROM public\.check_intake_items/.test(sql) && /RETURNING id/.test(sql)) return { rows: [{ id: params[0] }] };
       return { rows };
     },
     end: async () => {},
@@ -365,4 +375,81 @@ test('provider execution routes remain disabled', async () => {
   const body = JSON.parse(result.body);
   assert.equal(result.statusCode, 403);
   assert.equal(body.error, 'provider_disabled');
+});
+
+test('admin can delete a safe check via workflow delete route', async () => {
+  const client = mockClient({
+    check: { ...createdRow, status: 'needs_review', check_stage: 'review', claim_id: null, deposited_at: null, external_origin: null },
+    roles: [{ role: 'admin' }],
+  });
+  const result = await handleDeleteCheck(jwtEvent(`/workflow/checks/${CHECK_ID}`, 'DELETE', {
+    check_id: CHECK_ID,
+    reason: 'duplicate',
+  }), depsFor(client));
+  assert.equal(result.ok, true);
+  assert.equal(result.data.deleted, true);
+  assert.ok(client.queries.some((q) => /DELETE FROM public\.check_files/.test(String(q.sql))));
+  assert.ok(client.queries.some((q) => /DELETE FROM public\.check_intake_items/.test(String(q.sql))));
+});
+
+test('non-admin cannot delete check', async () => {
+  const client = mockClient({
+    check: { ...createdRow, status: 'needs_review', claim_id: null, deposited_at: null, external_origin: null },
+    roles: [{ role: 'staff' }],
+  });
+  const result = await handleDeleteCheck(jwtEvent(`/workflow/checks/${CHECK_ID}`, 'DELETE', {
+    check_id: CHECK_ID,
+    reason: 'duplicate',
+  }), depsFor(client));
+  assert.equal(result.statusCode, 403);
+  assert.equal(result.error, 'not_authorized');
+});
+
+test('workflow delete denies claim-linked, partner-linked, and deposited checks', async () => {
+  const claimLinked = await handleDeleteCheck(jwtEvent(`/workflow/checks/${CHECK_ID}`, 'DELETE', {
+    check_id: CHECK_ID,
+    reason: 'entered in error',
+  }), depsFor(mockClient({
+    check: { ...createdRow, claim_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+    roles: [{ role: 'admin' }],
+  })));
+  assert.equal(claimLinked.statusCode, 403);
+  assert.equal(claimLinked.error, 'cleanup_denied');
+
+  const partnerLinked = await handleDeleteCheck(jwtEvent(`/workflow/checks/${CHECK_ID}`, 'DELETE', {
+    check_id: CHECK_ID,
+    reason: 'entered in error',
+  }), depsFor(mockClient({
+    check: { ...createdRow, external_origin: { source_app: 'freedom_crm', source_check_id: 'abc' } },
+    roles: [{ role: 'admin' }],
+  })));
+  assert.equal(partnerLinked.statusCode, 403);
+  assert.equal(partnerLinked.error, 'cleanup_denied');
+
+  const deposited = await handleDeleteCheck(jwtEvent(`/workflow/checks/${CHECK_ID}`, 'DELETE', {
+    check_id: CHECK_ID,
+    reason: 'entered in error',
+  }), depsFor(mockClient({
+    check: { ...createdRow, check_stage: 'deposited', status: 'deposited', deposited_at: '2026-01-01T00:00:00.000Z' },
+    roles: [{ role: 'admin' }],
+  })));
+  assert.equal(deposited.statusCode, 403);
+  assert.equal(deposited.error, 'cleanup_denied');
+});
+
+test('workflow delete validates UUID and requires reason', async () => {
+  const client = mockClient({ roles: [{ role: 'admin' }] });
+  const badId = await handleDeleteCheck(jwtEvent('/workflow/checks/not-a-uuid', 'DELETE', {
+    check_id: 'not-a-uuid',
+    reason: 'duplicate',
+  }), depsFor(client));
+  assert.equal(badId.statusCode, 400);
+  assert.equal(badId.error, 'invalid_uuid');
+
+  const missingReason = await handleDeleteCheck(jwtEvent(`/workflow/checks/${CHECK_ID}`, 'DELETE', {
+    check_id: CHECK_ID,
+    reason: 'x',
+  }), depsFor(mockClient({ roles: [{ role: 'admin' }] })));
+  assert.equal(missingReason.statusCode, 400);
+  assert.equal(missingReason.error, 'missing_required_field');
 });

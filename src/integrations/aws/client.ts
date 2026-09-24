@@ -915,9 +915,17 @@ export function createAwsStagingClient(options: AwsStagingClientOptions = {}) {
       }
       if (name === "admin_delete_check") {
         const checkId = String(args.p_check_id || args.check_id || "");
+        const reasonRaw = args.p_reason ?? args.reason ?? args.delete_reason ?? null;
+        const actorRaw = args.p_actor_id ?? args.actor_id ?? null;
+        const reason = reasonRaw == null ? null : String(reasonRaw).trim();
+        const actor_id = actorRaw == null ? null : String(actorRaw).trim();
         const { response, body } = await apiFetch(`/workflow/checks/${encodeURIComponent(checkId)}`, {
           method: "DELETE",
-          body: JSON.stringify({ check_id: checkId }),
+          body: JSON.stringify({
+            check_id: checkId,
+            reason: reason && reason.length ? reason : undefined,
+            actor_id: actor_id && actor_id.length ? actor_id : undefined,
+          }),
         }, token);
         if (response.status === 401) {
           writeStored(null);
