@@ -212,12 +212,13 @@ export const handler = async (event = {}) => {
   const ssl = { ca: fs.readFileSync(new URL('./rds-global-bundle.pem', import.meta.url), 'utf8') };
   const client = new Client({ host: creds.host, port: creds.port || 5432, user: creds.username, password: creds.password, database: databaseName, ssl });
   await client.connect();
+  let ident = null;
   try {
     await client.query('BEGIN');
     await client.query('SET TRANSACTION READ WRITE');
     await client.query('SELECT set_config($1, $2, true)', ['request.app_user_id', appUserId]);
     await client.query('SELECT set_config($1, $2, true)', ['request.jwt.claim.email', email]);
-    const ident = (await client.query(
+    ident = (await client.query(
       "SELECT current_database() AS db, current_user AS user, current_setting('transaction_read_only') AS tro, current_setting('default_transaction_read_only') AS dtro, auth.uid()::text AS uid",
     )).rows[0] || null;
     const step = String(event.step || '');
@@ -250,7 +251,7 @@ export const handler = async (event = {}) => {
     return { ok: true, checkId, step, tenantId: updated.tenant_id, uploadedBy: updated.uploaded_by, actor: appUserId, ident };
   } catch (e) {
     try { await client.query('ROLLBACK'); } catch {}
-    return { ok: false, error: 'db_error', code: e?.code || null, message: String(e?.message || e).slice(0, 240) };
+    return { ok: false, error: 'db_error', code: e?.code || null, message: String(e?.message || e).slice(0, 240), ident };
   } finally {
     try { await client.end(); } catch {}
   }
@@ -418,7 +419,9 @@ const main = async () => {
     email: freedomIdentity.profile?.email || '',
   });
   const partnerSet = await partnerOneshot.setPartnerLinked();
-  record('set partner external_origin via oneshot', partnerSet?.ok === true, { detail: partnerSet?.error ? `error=${partnerSet.error}` : `checkId=${partnerId}` });
+  record('set partner external_origin via oneshot', partnerSet?.ok === true, {
+    detail: partnerSet?.ok ? `checkId=${partnerId}` : `error=${partnerSet?.error} code=${partnerSet?.code || ''} msg=${partnerSet?.message || ''}`,
+  });
   const partnerDel = await api(`/workflow/checks/${partnerId}`, { method: 'DELETE', token: freedomToken, body: { check_id: partnerId, reason: 'should be denied' } });
   record('partner-linked delete is denied', partnerDel.status === 403 && partnerDel.json.error === 'cleanup_denied', {
     detail: `status=${partnerDel.status} error=${partnerDel.json.error || partnerDel.json.message || ''}`,
@@ -436,7 +439,9 @@ const main = async () => {
     appUserId: freedomIdentity.applicationUserId,
     email: freedomIdentity.profile?.email || '',
   });
-  record('set terminal financial state via oneshot', oneshot.ok === true && oneshot.set?.ok === true, { detail: oneshot.set?.error ? `error=${oneshot.set.error}` : `checkId=${finId}` });
+  record('set terminal financial state via oneshot', oneshot.ok === true && oneshot.set?.ok === true, {
+    detail: oneshot.set?.ok ? `checkId=${finId}` : `error=${oneshot.set?.error} code=${oneshot.set?.code || ''} msg=${oneshot.set?.message || ''}`,
+  });
   const finDel = await api(`/workflow/checks/${finId}`, { method: 'DELETE', token: freedomToken, body: { check_id: finId, reason: 'should be denied' } });
   record('terminal-financial delete is denied', finDel.status === 403 && finDel.json.error === 'cleanup_denied', {
     detail: `status=${finDel.status} error=${finDel.json.error || finDel.json.message || ''}`,
