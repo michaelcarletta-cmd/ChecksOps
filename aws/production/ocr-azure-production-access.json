@@ -1,0 +1,22 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AzureDiProductionSecretRead",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:GetSecretValue"
+      ],
+      "Resource": "arn:aws:secretsmanager:us-east-1:806168576068:secret:checksops/production/providers/azure-document-intelligence-*"
+    },
+    {
+      "Sid": "ProductionTextractOcr",
+      "Effect": "Allow",
+      "Action": [
+        "textract:AnalyzeDocument",
+        "textract:DetectDocumentText"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
