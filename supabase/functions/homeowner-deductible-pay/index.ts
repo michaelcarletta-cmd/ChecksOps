@@ -14,7 +14,7 @@ import {
   facilitatorAccountId,
   normalizeTransferStatus,
 } from "../_shared/moovClient.ts";
-import { corsHeaders, json, sanitize, logPaymentEvent } from "../_shared/moovGuard.ts";
+import { corsHeaders, json, sanitize, logPaymentEvent, moovGloballyEnabled } from "../_shared/moovGuard.ts";
 import { syncWallet } from "../_shared/moovWallet.ts";
 
 const DIGITS = /^\d+$/;
@@ -28,7 +28,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    if ((Deno.env.get("MOOV_ENABLED") ?? "false").toLowerCase() !== "true") {
+    if (!moovGloballyEnabled()) {
       return json({ error: "Online payments are not enabled." }, 403);
     }
     if (!moovConfigured()) return json({ error: "Payment provider is not configured." }, 503);

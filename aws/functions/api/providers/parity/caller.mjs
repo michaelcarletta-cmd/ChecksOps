@@ -64,13 +64,10 @@ export async function resolveTenant(client, { userId, body, memberships, require
 export async function loadTenantMoovEnv(client, tenantId) {
   if (!tenantId) return 'sandbox';
   const row = (await client.query(
-    'SELECT moov_allowlisted, moov_environment FROM public.tenants WHERE id = $1::uuid',
+    'SELECT moov_environment FROM public.tenants WHERE id = $1::uuid',
     [tenantId],
   )).rows[0];
   if (!row) return { error: 'Organization not found', statusCode: 404 };
-  if (row.moov_allowlisted === false) {
-    return { error: 'This organization is not enabled for this payment provider.', statusCode: 403 };
-  }
   const tenantEnv = String(row.moov_environment || '').toLowerCase();
   return tenantEnv === 'production' || tenantEnv === 'sandbox' ? tenantEnv : 'sandbox';
 }
