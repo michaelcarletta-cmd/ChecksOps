@@ -513,16 +513,71 @@ export const executeReferralAlerts = async ({ client, values, filters }) => {
   return { rows };
 };
 
-export const executeTenantsNarrow = async ({ client, mapping, values, filters }) => {
-  const id = eqFilter(filters, 'id');
-  if (!isUuid(id)) return { error: 'invalid_uuid', field: 'id' };
-  if (!(await memberOfTenant(client, mapping.application_user_id, id))) {
-    return { error: 'not_authorized', message: 'Not a member of tenant' };
+const TENANT_PLAN_TIERS = new Set(['starter', 'pro', 'enterprise']);
+const TENANT_SUBSCRIPTION_STATUSES = new Set(['trial', 'active', 'inactive']);
+const TENANT_EMAIL_PROVIDERS = new Set(['none', 'ses', 'resend', 'smtp']);
+
+const isPlatformOwnerActor = async (client) => {
+  const row = (await client.query(
+    `SELECT public.is_master_owner() AS is_master, public.is_platform_owner() AS is_platform`,
+  )).rows[0] || {};
+  return row.is_master === true || row.is_platform === true;
+};
+
+const slugifyTenant = (value) => String(value || '')
+  .toLowerCase()
+  .trim()
+  .replace(/[^a-z0-9]+/g, '-')
+  .replace(/^-+|-+$/g, '')
+  .slice(0, 80);
+
+const asTenantInt = (value, { min, max }) => {
+  if (value === undefined || value === null || value === '') return null;
+  const num = Number(value);
+  if (!Number.isInteger(num) || num < min || num > max) {
+    return { error: 'invalid_field', field: 'max_checks_per_month' };
   }
+  return num;
+};
+
+const asEmailProviderConfig = (value) => {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value === 'string') {
+    const text = clip(value, 2000);
+    if (text?.error) return text;
+    if (!text) return null;
+    try {
+      const parsed = JSON.parse(text);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return { error: 'invalid_field', field: 'email_provider_config' };
+      }
+      return parsed;
+    } catch {
+      return { error: 'invalid_field', field: 'email_provider_config' };
+    }
+  }
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    return { error: 'invalid_field', field: 'email_provider_config' };
+  }
+  const json = JSON.stringify(value);
+  if (json.length > 2000) return { error: 'invalid_field', field: 'email_provider_config' };
+  return value;
+};
+
+const collectTenantSafeFields = (values, { allowSlug = false } = {}) => {
   const out = {};
   for (const [col, max] of [
-    ['name', 200], ['logo_url', 512], ['invoice_letterhead_url', 512],
-    ['primary_color', 40], ['invoice_footer_note', 2000], ['invoice_default_terms', 4000],
+    ['name', 200],
+    ['logo_url', 512],
+    ['invoice_letterhead_url', 512],
+    ['primary_color', 40],
+    ['secondary_color', 40],
+    ['custom_domain', 253],
+    ['email_from_name', 120],
+    ['email_from_address', 254],
+    ['email_reply_to', 254],
+    ['invoice_footer_note', 2000],
+    ['invoice_default_terms', 4000],
   ]) {
     if (col in values) {
       const text = clip(values[col], max);
@@ -530,8 +585,159 @@ export const executeTenantsNarrow = async ({ client, mapping, values, filters })
       out[col] = text;
     }
   }
+  if ('invoice_accent_color' in values) {
+    const text = clip(values.invoice_accent_color, 40);
+    if (text?.error) return text;
+    if (text && !/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(text)) {
+      return { error: 'invalid_field', field: 'invoice_accent_color' };
+    }
+    out.invoice_accent_color = text;
+  }
+  if ('invoice_theme' in values) {
+    const text = clip(values.invoice_theme, 16);
+    if (text?.error) return text;
+    if (text && text !== 'light' && text !== 'dark') {
+      return { error: 'invalid_field', field: 'invoice_theme' };
+    }
+    out.invoice_theme = text;
+  }
+  if (allowSlug && 'slug' in values) {
+    const slug = slugifyTenant(values.slug);
+    if (!slug || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+      return { error: 'invalid_field', field: 'slug' };
+    }
+    out.slug = slug;
+  }
+  if ('max_checks_per_month' in values) {
+    const num = asTenantInt(values.max_checks_per_month, { min: 1, max: 100000 });
+    if (num?.error) return num;
+    out.max_checks_per_month = num;
+  }
+  if ('subscription_status' in values) {
+    const status = String(values.subscription_status || '').trim().toLowerCase();
+    if (!TENANT_SUBSCRIPTION_STATUSES.has(status)) {
+      return { error: 'invalid_field', field: 'subscription_status' };
+    }
+    out.subscription_status = status;
+  }
+  if ('plan_tier' in values) {
+    const tier = String(values.plan_tier || '').trim().toLowerCase();
+    if (!TENANT_PLAN_TIERS.has(tier)) return { error: 'invalid_field', field: 'plan_tier' };
+    out.plan_tier = tier;
+  }
+  if ('email_provider' in values) {
+    const provider = String(values.email_provider || 'none').trim().toLowerCase() || 'none';
+    if (!TENANT_EMAIL_PROVIDERS.has(provider)) {
+      return { error: 'invalid_field', field: 'email_provider' };
+    }
+    out.email_provider = provider;
+  }
+  if ('email_provider_config' in values) {
+    const config = asEmailProviderConfig(values.email_provider_config);
+    if (config?.error) return config;
+    out.email_provider_config = config;
+  }
+  return out;
+};
+
+const executeTenantInsert = async ({ client, values }) => {
+  const collected = collectTenantSafeFields(values, { allowSlug: true });
+  if (collected?.error) return collected;
+  const name = collected.name;
+  const slug = collected.slug || slugifyTenant(values.slug || values.name);
+  if (!name) return { error: 'missing_required_field', field: 'name' };
+  if (!slug || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+    return { error: 'invalid_field', field: 'slug' };
+  }
+  const taken = (await client.query(
+    `SELECT 1 FROM public.tenants WHERE slug = $1 LIMIT 1`,
+    [slug],
+  )).rows[0];
+  if (taken) return { error: 'invalid_field', field: 'slug', message: 'slug already exists' };
+
+  try {
+    const rows = (await client.query(
+      `INSERT INTO public.tenants (
+         name, slug, logo_url, invoice_letterhead_url, primary_color, secondary_color,
+         custom_domain, max_checks_per_month, subscription_status, plan_tier,
+         email_from_name, email_from_address, email_reply_to, email_provider,
+         email_provider_config, invoice_footer_note, invoice_default_terms,
+         is_system_tenant, is_founding_partner, moov_allowlisted, moov_account_id,
+         payment_provider, payment_status, bank_connection_status, bank_name,
+         bank_last_four, plaid_funding_account_id, stripe_customer_id,
+         monthly_rate_cents, actum_credits_only
+       ) VALUES (
+         $1, $2, $3, $4, $5, $6,
+         $7, $8, $9, $10,
+         $11, $12, $13, $14,
+         $15::jsonb, $16, $17,
+         false, false, false, NULL,
+         NULL, 'not_connected', 'not_connected', NULL,
+         NULL, NULL, NULL,
+         0, false
+       )
+       RETURNING *`,
+      [
+        name,
+        slug,
+        collected.logo_url ?? null,
+        collected.invoice_letterhead_url ?? null,
+        collected.primary_color ?? null,
+        collected.secondary_color ?? null,
+        collected.custom_domain ?? null,
+        collected.max_checks_per_month ?? null,
+        collected.subscription_status ?? 'active',
+        collected.plan_tier ?? 'starter',
+        collected.email_from_name ?? null,
+        collected.email_from_address ?? null,
+        collected.email_reply_to ?? null,
+        collected.email_provider ?? 'none',
+        collected.email_provider_config ? JSON.stringify(collected.email_provider_config) : '{}',
+        collected.invoice_footer_note ?? null,
+        collected.invoice_default_terms ?? null,
+      ],
+    )).rows;
+    const created = rows[0];
+    if (created?.moov_allowlisted === true || created?.moov_account_id || created?.is_system_tenant === true) {
+      return { error: 'rls_denied', message: 'new tenant failed fail-closed provider isolation' };
+    }
+    return { rows };
+  } catch (error) {
+    if (error?.code === '23505') {
+      return { error: 'invalid_field', field: 'slug', message: 'slug already exists' };
+    }
+    throw error;
+  }
+};
+
+export const executeTenantsNarrow = async ({ client, mapping, op, values, filters }) => {
+  const platformOwner = await isPlatformOwnerActor(client);
+  if (op === 'insert') {
+    if (!platformOwner) {
+      return { error: 'not_authorized', message: 'Platform owner required to create tenants' };
+    }
+    return executeTenantInsert({ client, values });
+  }
+  if (op && op !== 'update') return { error: 'operation_not_allowlisted', op };
+
+  const id = eqFilter(filters, 'id');
+  if (!isUuid(id)) return { error: 'invalid_uuid', field: 'id' };
+  if (!platformOwner && !(await memberOfTenant(client, mapping.application_user_id, id))) {
+    return { error: 'not_authorized', message: 'Not a member of tenant' };
+  }
+  const collected = collectTenantSafeFields(values, { allowSlug: false });
+  if (collected?.error) return collected;
+  const out = { ...collected };
   if (!Object.keys(out).length) return { error: 'missing_required_field', field: 'values' };
-  const built = buildSet(out);
+  const casts = {};
+  if ('max_checks_per_month' in out) casts.max_checks_per_month = 'int';
+  if ('email_provider_config' in out) {
+    casts.email_provider_config = 'jsonb';
+    out.email_provider_config = out.email_provider_config
+      ? JSON.stringify(out.email_provider_config)
+      : '{}';
+  }
+  const built = buildSet(out, casts);
   built.params.push(id);
   const rows = (await client.query(
     `UPDATE public.tenants SET ${built.sets.join(', ')} WHERE id = $${built.next}::uuid RETURNING *`,
@@ -862,7 +1068,7 @@ export const executeAppMetadataWrite = async ({ client, mapping, table, op, valu
     case 'referral_alerts':
       return executeReferralAlerts({ client, values, filters });
     case 'tenants':
-      return executeTenantsNarrow({ client, mapping, values, filters });
+      return executeTenantsNarrow({ client, mapping, op, values, filters });
     case 'privacy_notice_acknowledgments':
       return executePrivacyAck({ client, mapping, values });
     case 'tenant_users':
@@ -875,7 +1081,45 @@ export const executeAppMetadataWrite = async ({ client, mapping, table, op, valu
       return executeCashJobAttachments({ client, mapping, op, values, filters });
     case 'homeowner_ledger_events':
       return executeHomeownerLedgerEvents({ client, mapping, values });
+    case 'financial_stepup_log':
+      return executeFinancialStepupLog({ client, mapping, op, values });
     default:
       return { error: 'table_not_allowlisted', table };
   }
+};
+
+export const executeFinancialStepupLog = async ({ client, mapping, op, values }) => {
+  if (op !== 'insert') return { error: 'operation_not_allowlisted', op, table: 'financial_stepup_log' };
+  const action = clip(values.action_key, 120);
+  if (action?.error || !action) {
+    return action?.error || { error: 'missing_required_field', field: 'action_key' };
+  }
+  let tenantId = values.tenant_id || null;
+  if (tenantId) {
+    if (!isUuid(tenantId)) return { error: 'invalid_uuid', field: 'tenant_id' };
+    if (!(await memberOfTenant(client, mapping.application_user_id, tenantId))) {
+      return { error: 'not_authorized', message: 'Not a member of tenant' };
+    }
+  }
+  const factor = clip(values.factor_type, 40) || 'totp';
+  if (factor?.error) return factor;
+  const succeeded = values.succeeded === false || values.succeeded === 'false' ? false : true;
+  const metadata = values.metadata && typeof values.metadata === 'object' && !Array.isArray(values.metadata)
+    ? values.metadata
+    : {};
+  const rows = (await client.query(
+    `INSERT INTO public.financial_stepup_log (
+       user_id, tenant_id, action_key, factor_type, succeeded, metadata
+     ) VALUES ($1::uuid, $2::uuid, $3::text, $4::text, $5::boolean, $6::jsonb)
+     RETURNING *`,
+    [
+      mapping.application_user_id,
+      tenantId,
+      action,
+      typeof factor === 'string' ? factor : 'totp',
+      succeeded,
+      JSON.stringify(metadata),
+    ],
+  )).rows;
+  return { rows };
 };
