@@ -78,7 +78,8 @@ test('production API execution role represents all five live inline policies', (
 
 test('Cognito invite actions are exactly the three approved actions on the production pool', () => {
   assert.deepEqual(listedCognitoActions, COGNITO_ACTIONS);
-  assert.match(cognitoBlock, new RegExp(PRODUCTION_POOL_ARN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(yaml, new RegExp(PRODUCTION_POOL_ARN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(cognitoBlock, /Resource: !Ref ProductionUserPoolArn/);
   assert.doesNotMatch(yaml, /cognito-idp:\*/);
   assert.doesNotMatch(yaml, /cognito-idp:AdminDisableUser|cognito-idp:AdminDeleteUser|cognito-idp:AdminUpdateUserAttributes/);
   assert.doesNotMatch(yaml, new RegExp(STAGING_POOL_ID));
@@ -103,7 +104,8 @@ test('DynamoDB recipient verification permissions remain represented', () => {
   assert.match(ddb, /dynamodb:PutItem/);
   assert.match(ddb, /dynamodb:UpdateItem/);
   assert.match(ddb, /dynamodb:DescribeTable/);
-  assert.match(ddb, new RegExp(DDB_TABLE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(yaml, new RegExp(DDB_TABLE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(ddb, /Resource: !Ref RecipientBankVerifyStateTableArn/);
   assert.doesNotMatch(ddb, /dynamodb:Scan|dynamodb:Query|dynamodb:DeleteItem|dynamodb:CreateTable/);
   const isolated = JSON.parse(bankVerify);
   assert.deepEqual(isolated.Statement[0].Action, [
@@ -120,7 +122,8 @@ test('OCR production permissions remain represented without broadening provider 
   assert.match(ocr, /textract:AnalyzeDocument/);
   assert.match(ocr, /textract:DetectDocumentText/);
   assert.doesNotMatch(ocr, /textract:AnalyzeExpense|textract:AnalyzeID|textract:\*/);
-  assert.match(ocr, new RegExp(AZURE_SECRET_PREFIX.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(yaml, new RegExp(AZURE_SECRET_PREFIX.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(ocr, /Resource: !Ref AzureDiSecretArn/);
   assert.doesNotMatch(ocr, /checksops\/staging\/providers/);
   assert.doesNotMatch(ocr, /checksops\/isolated\//);
   const isolated = JSON.parse(ocrAzure);
@@ -136,8 +139,10 @@ test('OCR production permissions remain represented without broadening provider 
 
 test('provider and TOTP secret access stay exact production ARNs', () => {
   const least = policyBlock('ProductionApiLeastPrivilege');
-  assert.match(least, new RegExp(PROVIDER_SECRET.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-  assert.match(least, new RegExp(TOTP_SECRET.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(yaml, new RegExp(PROVIDER_SECRET.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(yaml, new RegExp(TOTP_SECRET.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(least, /Resource: !Ref ProductionProviderSecretArn/);
+  assert.match(least, /Resource: !Ref FinancialTotpWrapKeyArn/);
   assert.doesNotMatch(yaml, /checksops\/staging\/providers/);
   assert.doesNotMatch(yaml, /checksops\/production\/provider-\*/);
   assert.doesNotMatch(least, /checksops\/production\/providers\/azure-document-intelligence/);

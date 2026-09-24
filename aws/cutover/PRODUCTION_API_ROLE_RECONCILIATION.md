@@ -265,13 +265,27 @@ Do not retarget the live Lambda to another role as part of this work.
 
 ## M. Tests / validation
 
-See the commit that updates `aws/tests/production-api-execution-role.test.mjs`
-and `aws/tests/email-layout.test.mjs`. Run:
+`node --test aws/tests/production-api-execution-role.test.mjs aws/tests/email-layout.test.mjs`
 
-```bash
-node --test aws/tests/production-api-execution-role.test.mjs aws/tests/email-layout.test.mjs
-aws cloudformation validate-template --template-body file://aws/production/api-execution-role.yaml
-```
+Result: **18/18 pass**.
+
+Covered:
+
+- no staging RDS secret ARN
+- no staging S3 bucket ARN
+- Cognito actions exactly the three approved actions
+- Cognito resource the exact production pool (`!Ref` + parameter default)
+- no Cognito wildcard
+- SES `SendEmail` on the two verified identities; no `SendRawEmail`
+- DynamoDB recipient-verify four actions on the production table
+- OCR Azure DI secret + Textract analyze/detect
+- Lambda-only trust
+- provider secret is the exact live ARN (not a family wildcard)
+- `Resource: '*'` only on the Textract OCR statement
+
+`aws cloudformation validate-template` was **denied** to
+`ChecksOpsCursorCloudStaging`. Local structural checks passed (template
+bytes 7262; staging secret/bucket strings absent).
 
 ---
 
@@ -294,7 +308,9 @@ CloudFormation rollback path. That is one reason this is **NOT SAFE TO DEPLOY**.
 
 ## O. Candidate git SHA
 
-Recorded after commit on this branch.
+Branch `cursor/production-iam-reconciliation-0ebf`.
+First candidate commit `141662d6b94fc0b392a2d62e63bd3ce6ffe7e744`.
+Follow-up test/report commit is recorded on the same branch after this file.
 
 ---
 
