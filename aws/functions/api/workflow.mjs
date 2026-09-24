@@ -461,9 +461,12 @@ export const handleDeleteCheck = async (event, deps = {}) => {
       { table: 'check_billing_events', sql: 'SELECT 1 FROM public.check_billing_events WHERE check_intake_item_id = $1::uuid LIMIT 1' },
       { table: 'check_payment_directions', sql: 'SELECT 1 FROM public.check_payment_directions WHERE check_id = $1::uuid LIMIT 1' },
     ];
-    for (const blocker of blockers) {
+    for (const [idx, blocker] of blockers.entries()) {
+      const savepoint = `delete_blocker_${idx}`;
+      await client.query(`SAVEPOINT ${savepoint}`);
       try {
         const rows = (await client.query(blocker.sql, [looked.check.id])).rows;
+        await client.query(`RELEASE SAVEPOINT ${savepoint}`);
         if (rows.length) {
           return denied(spoof, {
             error: 'cleanup_denied',
@@ -472,12 +475,25 @@ export const handleDeleteCheck = async (event, deps = {}) => {
           });
         }
       } catch (error) {
+        // Always roll back to a savepoint on error; otherwise the outer transaction is aborted.
+        try { await client.query(`ROLLBACK TO SAVEPOINT ${savepoint}`); } catch { /* ignore */ }
+        try { await client.query(`RELEASE SAVEPOINT ${savepoint}`); } catch { /* ignore */ }
         // If a table is absent on this schema snapshot, do not treat it as a blocker.
-        if (error?.code !== '42P01') throw error;
+        if (error?.code === '42P01') continue;
+        // If we cannot even read blockers, refuse deletion rather than returning a 503.
+        if (error?.code === '42501') {
+          return denied(spoof, {
+            error: 'cleanup_denied',
+            message: `Refusing to delete: unable to verify financial/provider blockers (${blocker.table})`,
+            blocker: blocker.table,
+          });
+        }
+        throw error;
       }
     }
 
     // Preserve an audit snapshot before deleting the check + check_audit_log rows.
+    await client.query('SAVEPOINT delete_audit_snapshot');
     try {
       const exists = (await client.query("SELECT to_regclass('public.check_deletion_log') AS t")).rows[0]?.t;
       if (exists) {
@@ -500,11 +516,25 @@ export const handleDeleteCheck = async (event, deps = {}) => {
           );
         }
       }
+      await client.query('RELEASE SAVEPOINT delete_audit_snapshot');
     } catch {
       // Best-effort audit snapshot; deletion must still proceed.
+      try { await client.query('ROLLBACK TO SAVEPOINT delete_audit_snapshot'); } catch { /* ignore */ }
+      try { await client.query('RELEASE SAVEPOINT delete_audit_snapshot'); } catch { /* ignore */ }
     }
 
-    await deleteChildren(client, looked.check.id);
+    await client.query('SAVEPOINT delete_children');
+    try {
+      await deleteChildren(client, looked.check.id);
+      await client.query('RELEASE SAVEPOINT delete_children');
+    } catch (error) {
+      try { await client.query('ROLLBACK TO SAVEPOINT delete_children'); } catch { /* ignore */ }
+      try { await client.query('RELEASE SAVEPOINT delete_children'); } catch { /* ignore */ }
+      return denied(spoof, {
+        error: 'cleanup_failed',
+        message: 'Failed to delete dependent check records',
+      });
+    }
     const rows = (await client.query(
       'DELETE FROM public.check_intake_items WHERE id = $1::uuid AND claim_id IS NULL RETURNING id',
       [looked.check.id],

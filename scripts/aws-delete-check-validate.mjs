@@ -131,7 +131,7 @@ const main = async () => {
         file_type: 'text/plain',
         file_size: 17,
         category: 'other',
-        source: 'ops',
+        source: 'manual',
       },
     });
     record('insert check_files row succeeds', fileRow.status === 200, { detail: `status=${fileRow.status} error=${fileRow.json.error || ''}` });
