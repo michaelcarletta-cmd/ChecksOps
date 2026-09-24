@@ -1,6 +1,5 @@
 import { Fragment, lazy, Suspense, useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useStepUp } from "@/hooks/useStepUp";
-import { Link } from "react-router-dom";
 import {
   DEPOSIT_PHASE_LABEL,
   runCheckAltDepositClick,
@@ -4414,9 +4413,11 @@ function CheckDetailPanel({
                 <div className="min-w-0 flex-1">
                   {check.claim_id ? (
                     <div className="text-right">
-                      <Link
-                        to={`/claims/${check.claim_id}`}
+                      <button
+                        type="button"
+                        onClick={() => setDetailTab("funds")}
                         className="font-medium underline underline-offset-2 hover:opacity-90 break-words"
+                        title="Open claim ledger"
                       >
                         {(() => {
                           const num = linkedClaim?.claim_number?.trim();
@@ -4424,7 +4425,7 @@ function CheckDetailPanel({
                           const left = num ? `Claim #${num}` : "Claim";
                           return name ? `${left} — ${name}` : left;
                         })()}
-                      </Link>
+                      </button>
                     </div>
                   ) : (
                     <div className="flex items-center justify-end gap-2">
