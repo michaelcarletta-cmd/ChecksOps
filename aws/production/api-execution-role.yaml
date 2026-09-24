@@ -2,13 +2,15 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: >
   Dedicated ChecksOps production API/Lambda execution role.
   Reconciled candidate for stack checksops-production-api-role.
-  Represents the five live inline policies on checksops-production-api-execution.
-  Production RDS app secret and production private-files bucket only.
-  Do not grant staging RDS, staging private-files, staging providers,
-  the RDS admin secret, or Cognito wildcards.
+  Matches the authoritative live inline policies on
+  checksops-production-api-execution, except ProductionApiLeastPrivilege
+  resources are the working production RDS secret and private-files bucket
+  instead of the stale staging ARNs still stored on the 2026-09-06 stack.
+  Does not grant TOTP wrap-key, general provider-secret, Moov, CheckAlt,
+  staging providers, the RDS admin secret, or Cognito wildcards.
   Do not CloudFormation-update until the reconciliation report is reviewed.
-  A stack update MUST pass production parameter values; the live stack still
-  stores staging secret/bucket parameters from the 2026-09-06 create.
+  A stack update MUST pass the production parameter values below; the live
+  stack still stores staging secret/bucket parameters from create.
 
 Parameters:
   RoleName:
@@ -31,21 +33,11 @@ Parameters:
     Default: arn:aws:cognito-idp:us-east-1:806168576068:userpool/us-east-1_h00WorYMT
     AllowedPattern: '^arn:aws:cognito-idp:us-east-1:806168576068:userpool/us-east-1_h00WorYMT$'
     Description: Production ChecksOps user pool only. Do not point at staging.
-  FinancialTotpWrapKeyArn:
-    Type: String
-    Default: arn:aws:secretsmanager:us-east-1:806168576068:secret:checksops/production/financial-totp-wrap-key-81bFID
-    AllowedPattern: '^arn:aws:secretsmanager:us-east-1:806168576068:secret:checksops/production/financial-totp-wrap-key-.+'
-    Description: Production Financial TOTP wrap key only.
-  ProductionProviderSecretArn:
-    Type: String
-    Default: arn:aws:secretsmanager:us-east-1:806168576068:secret:checksops/production/provider-At4ZFR
-    AllowedPattern: '^arn:aws:secretsmanager:us-east-1:806168576068:secret:checksops/production/provider-.+'
-    Description: Exact live production provider secret. Do not broaden to staging or a wildcard family.
   AzureDiSecretArn:
     Type: String
     Default: arn:aws:secretsmanager:us-east-1:806168576068:secret:checksops/production/providers/azure-document-intelligence-*
-    AllowedPattern: '^arn:aws:secretsmanager:us-east-1:806168576068:secret:checksops/production/providers/azure-document-intelligence-.+'
-    Description: Production Azure Document Intelligence secret only.
+    AllowedPattern: '^arn:aws:secretsmanager:us-east-1:806168576068:secret:checksops/production/providers/azure-document-intelligence-\*$'
+    Description: Production Azure Document Intelligence secret prefix exactly as live.
   RecipientBankVerifyStateTableArn:
     Type: String
     Default: arn:aws:dynamodb:us-east-1:806168576068:table/checksops-recipient-bank-verify-state
@@ -77,16 +69,6 @@ Resources:
                 Action:
                   - secretsmanager:GetSecretValue
                 Resource: !Ref AppDatabaseSecretArn
-              - Sid: FinancialTotpWrapKeyRead
-                Effect: Allow
-                Action:
-                  - secretsmanager:GetSecretValue
-                Resource: !Ref FinancialTotpWrapKeyArn
-              - Sid: ProductionProviderSecretRead
-                Effect: Allow
-                Action:
-                  - secretsmanager:GetSecretValue
-                Resource: !Ref ProductionProviderSecretArn
               - Sid: PrivateCheckImageBucket
                 Effect: Allow
                 Action:

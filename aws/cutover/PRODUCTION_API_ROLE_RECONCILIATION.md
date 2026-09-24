@@ -1,344 +1,282 @@
 # Production API execution-role IaC reconciliation
 
-**STOP. Do not deploy. Do not execute a CloudFormation change set.**
+**STOP. Do not deploy. Do not execute a CloudFormation change set.
+Do not mutate the live role.**
 
-Production tenant onboarding is accepted. This file is the post-acceptance
-IaC reconciliation report for `checksops-production-api-execution`.
+Authoritative live IAM snapshot is now in hand for
+`checksops-production-api-execution` in account `806168576068`.
+This revision removes TOTP wrap-key and general provider-secret grants
+that the previous candidate incorrectly inferred from Lambda env.
 
-Verdict: **NOT SAFE TO DEPLOY** until a privileged identity re-reads the live
-inline policy documents and confirms no unknown statements would be replaced.
-
-Account `806168576068`. Region `us-east-1`.
-Caller used for this run: `ChecksOpsCursorCloudStaging`.
-That identity is denied `iam:GetRole` / `iam:GetRolePolicy` /
-`iam:ListRolePolicies` on the production execution role.
+Verdict: **SAFE TO CREATE CHANGE SET** after human review of this report.
+**NOT SAFE TO EXECUTE** the change set from this agent.
 
 ---
 
-## A. Live role snapshot
+## Authoritative live baseline
 
-Direct IAM capture failed (`AccessDenied` on every `get-role`,
-`list-role-policies`, `get-role-policy`, `list-attached-role-policies`,
-`list-role-tags` call).
+Trust: `lambda.amazonaws.com` / `sts:AssumeRole` only.
 
-Working production runtime was captured read-only from
-`lambda:GetFunctionConfiguration` on `checksops-production-prep-api`
-(LastModified `2026-09-24T12:47:01Z`):
+Attached managed policies exactly:
 
-| Field | Live value |
-|---|---|
-| Function | `checksops-production-prep-api` |
-| Role | `arn:aws:iam::806168576068:role/checksops-production-api-execution` |
-| VPC | `vpc-09f2268778966ce97` |
-| `DATABASE_SECRET_ARN` | `arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops/1790081257144-A2Z4bw` |
-| `FILES_BUCKET` | `checksops-production-privatefiles-806168576068` |
-| `COGNITO_USER_POOL_ID` | `us-east-1_h00WorYMT` |
-| `AZURE_DI_SECRET_ID` | `checksops/production/providers/azure-document-intelligence` |
-| `PROVIDER_SECRETS_ARN` | `arn:aws:secretsmanager:us-east-1:806168576068:secret:checksops/production/provider-At4ZFR` |
-| `FINANCIAL_TOTP_WRAP_KEY_ARN` | `arn:aws:secretsmanager:us-east-1:806168576068:secret:checksops/production/financial-totp-wrap-key-81bFID` |
-| `AWS_RECIPIENT_BANK_VERIFY_STATE_TABLE` | `checksops-recipient-bank-verify-state` |
-| `AWS_EMAIL_MODE` | `ses` |
-| `AWS_EMAIL_FROM` | `ChecksOps <support@checksops.com>` |
-
-Known live inline policy names (operator-confirmed after onboarding):
-
-1. `OcrAzureProductionAccess`
-2. `ProductionApiLeastPrivilege`
-3. `ProductionApiSesSend`
-4. `RecipientBankVerifyStateLeastPrivilege`
-5. `TenantInviteUserProductionCognito`
-
-Permissions boundary, role tags, and attached managed-policy list could not
-be read from IAM. The CloudFormation create event and every subsequent
-template revision attach:
-
-- `arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole`
 - `arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess`
+- `arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole`
 
-Trust policy from the live stack create / every repo revision:
+Tags exactly: `HardeningBatch=1`, `Environment=production`,
+`DoNotGrantProviderSecrets=true`.
 
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [{
-    "Effect": "Allow",
-    "Principal": { "Service": "lambda.amazonaws.com" },
-    "Action": "sts:AssumeRole"
-  }]
-}
-```
+Inline policies exactly five. No others.
 
-No live evidence of a non-Lambda trust principal.
-
----
-
-## B. Deployed-template snapshot
-
-Stack: `checksops-production-api-role`  
-Stack ID: `arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-api-role/dc1a2560-aa2c-11f1-a95c-0e418ccab31f`  
-Status: `CREATE_COMPLETE` (created `2026-09-06T19:55:07Z`, **never updated**)  
-Capabilities: `CAPABILITY_NAMED_IAM`  
-Logical resource: `ProductionApiExecutionRole`  
-Role name: `checksops-production-api-execution`
-
-Current stack parameters (this is the known drift):
-
-| Parameter | Stored value |
+| Policy | Live statements |
 |---|---|
-| `RoleName` | `checksops-production-api-execution` |
-| `AppDatabaseSecretArn` | staging RDS secret `.../checksops-staging/checksops/1788286468693-b4U0Rn` |
-| `FilesBucketName` | `checksops-staging-privatefilesbucket-erzqsolpucjp` |
+| `OcrAzureProductionAccess` | `GetSecretValue` on `.../azure-document-intelligence-*`; `textract:AnalyzeDocument` + `textract:DetectDocumentText` on `*` |
+| `ProductionApiLeastPrivilege` | `GetSecretValue` on **staging** RDS secret; S3 object/bucket actions on **staging** private-files bucket |
+| `ProductionApiSesSend` | `ses:SendEmail` on `identity/checksops.com` and `identity/Support@checksops.com` |
+| `RecipientBankVerifyStateLeastPrivilege` | `GetItem`/`PutItem`/`UpdateItem`/`DescribeTable` on `checksops-recipient-bank-verify-state` |
+| `TenantInviteUserProductionCognito` | `AdminCreateUser`/`AdminGetUser`/`AdminSetUserPassword` on `us-east-1_h00WorYMT` |
 
-Deployed template body is the original Batch 1 role: Lambda trust, the two
-managed policies, and **only** inline policy `ProductionApiLeastPrivilege`
-with `AppDatabaseSecretRead` + `PrivateCheckImageBucket` pointed at those
-staging parameters. It does not contain SES, DynamoDB, OCR, or Cognito.
+Live `ProductionApiLeastPrivilege` has **only those two statements**.
+No TOTP, provider-secret, Moov, or CheckAlt statements exist on the role.
 
-`checksops-production-prep-api` is a different stack. It still records
-`ExistingExecutionRoleArn=checksops-production-prep-api-role`, but the live
-Lambda role is `checksops-production-api-execution`. This report does not
-change that Lambda stack.
-
----
-
-## C. Repository-template snapshot (before this change)
-
-`aws/production/api-execution-role.yaml` on `main` matched the deployed
-stack defaults: staging RDS secret, staging private-files bucket, only
-`ProductionApiLeastPrivilege`, no Cognito / SES / DynamoDB / OCR.
-
-Later unmerged branches recorded production RDS/S3 defaults and a Cognito
-Sid **inside** `ProductionApiLeastPrivilege`. The accepted live architecture
-keeps Cognito as the isolated policy `TenantInviteUserProductionCognito`.
+Working production Lambda env still points at the production RDS secret
+`.../checksops-production/checksops/1790081257144-A2Z4bw` and bucket
+`checksops-production-privatefiles-806168576068`. That is the known
+resource-level defect this candidate corrects.
 
 ---
 
-## D. Three-way permission comparison
+## A. Revised candidate SHA
 
-| Statement / policy | Live? | Deployed CFN? | Repo `main` before? | Candidate IaC? | Production resource? | Staging resource? | Disposition |
-|---|---|---|---|---|---|---|---|
-| Trust `lambda.amazonaws.com` | Yes (stack + every revision) | Yes | Yes | Yes | n/a | n/a | Keep |
-| Managed `AWSLambdaVPCAccessExecutionRole` | Yes (stack) | Yes | Yes | Yes | n/a | n/a | Keep |
-| Managed `AWSXrayWriteOnlyAccess` | Yes (stack) | Yes | Yes | Yes | n/a | n/a | Keep |
-| `ProductionApiLeastPrivilege` / `AppDatabaseSecretRead` staging RDS | Not used by live Lambda | Yes (stack param) | Yes | No | No | Yes | Remove from candidate |
-| `ProductionApiLeastPrivilege` / `AppDatabaseSecretRead` production RDS | Yes (live Lambda `DATABASE_SECRET_ARN`) | No | No | Yes | Yes | No | Represent |
-| `ProductionApiLeastPrivilege` / `PrivateCheckImageBucket` staging bucket | Not used by live Lambda | Yes (stack param) | Yes | No | No | Yes | Remove from candidate |
-| `ProductionApiLeastPrivilege` / `PrivateCheckImageBucket` production bucket | Yes (live Lambda `FILES_BUCKET`) | No | No | Yes | Yes | No | Represent |
-| `ProductionApiLeastPrivilege` / `FinancialTotpWrapKeyRead` | Likely (live env + reviewed grant `553b19414`) | No | No | Yes | Yes | No | Represent; confirm on privileged read |
-| `ProductionApiLeastPrivilege` / `ProductionProviderSecretRead` | Likely (live `PROVIDER_SECRETS_ARN`, CheckAlt enabled) | No | No | Yes | Yes | No | Represent exact ARN only; confirm on privileged read |
-| `ProductionApiSesSend` / `ses:SendEmail` on `checksops.com` + `Support@checksops.com` | Yes (named live policy + SES freeze 2026-09-23) | No | No | Yes | Yes | No | Represent isolated |
-| `RecipientBankVerifyStateLeastPrivilege` four DynamoDB actions on `checksops-recipient-bank-verify-state` | Yes (named live policy + operator template) | No | No | Yes | Yes | No | Represent isolated |
-| `OcrAzureProductionAccess` Azure DI GetSecretValue + Textract analyze/detect | Yes (named live policy + operator JSON) | No | No | Yes | Yes | No | Represent isolated |
-| `TenantInviteUserProductionCognito` three actions on `us-east-1_h00WorYMT` | Yes (named live isolated policy; operator-applied) | No | No | Yes | Yes | No | Represent isolated; do not fold into least-privilege |
-| Unknown extra Sids inside live `ProductionApiLeastPrivilege` | Unknown — IAM read denied | n/a | n/a | No | ? | ? | **STOP** — do not deploy until captured |
+Recorded after the revision commit on
+`cursor/production-iam-reconciliation-0ebf`.
 
 ---
 
-## E. Staging references removed from candidate IaC
+## B. Exact CloudFormation / IaC diff
 
-Removed as defaults / allowed values:
+Relative to `main` / the deployed stack template:
 
-- `arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-staging/checksops/1788286468693-b4U0Rn`
-- `checksops-staging-privatefilesbucket-erzqsolpucjp`
+1. Parameter defaults `AppDatabaseSecretArn` and `FilesBucketName` change
+   from the staging ARNs to the production ARNs above.
+2. `AllowedPattern` rejects staging RDS/S3 values.
+3. Four live isolated policies are added so CloudFormation will manage
+   them instead of deleting them on a later update:
+   `ProductionApiSesSend`, `RecipientBankVerifyStateLeastPrivilege`,
+   `OcrAzureProductionAccess`, `TenantInviteUserProductionCognito`.
+4. RoleName, logical ID `ProductionApiExecutionRole`, Lambda trust,
+   two managed policies, and the three live tags are unchanged.
 
-`AllowedPattern` now rejects any staging RDS secret and any bucket name other
-than `checksops-production-privatefiles-806168576068`.
+Relative to the previous (incorrect) candidate on this branch:
 
----
-
-## F. Exact production resources represented
-
-| Resource | Identifier |
-|---|---|
-| RDS app secret | `arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops/1790081257144-A2Z4bw` |
-| Private-files bucket | `checksops-production-privatefiles-806168576068` |
-| Cognito pool | `arn:aws:cognito-idp:us-east-1:806168576068:userpool/us-east-1_h00WorYMT` |
-| SES identities | `arn:aws:ses:us-east-1:806168576068:identity/checksops.com`, `.../identity/Support@checksops.com` |
-| DynamoDB table | `arn:aws:dynamodb:us-east-1:806168576068:table/checksops-recipient-bank-verify-state` |
-| Azure DI secret | `arn:aws:secretsmanager:us-east-1:806168576068:secret:checksops/production/providers/azure-document-intelligence-*` |
-| Provider secret | `arn:aws:secretsmanager:us-east-1:806168576068:secret:checksops/production/provider-At4ZFR` |
-| Financial TOTP wrap key | `arn:aws:secretsmanager:us-east-1:806168576068:secret:checksops/production/financial-totp-wrap-key-81bFID` |
-
-Admin RDS secret `.../checksops-production/checksops_admin/1790081257144-R3rJpx` is not granted.
-Staging providers secret is not granted. Moov webhook secret is not granted
-(`AWS_MOOV_ENABLED=false`; purpose of that live env key is not an IAM grant
-we can prove).
+1. Removed parameter `FinancialTotpWrapKeyArn`.
+2. Removed parameter `ProductionProviderSecretArn`.
+3. Removed Sid `FinancialTotpWrapKeyRead`.
+4. Removed Sid `ProductionProviderSecretRead`.
+5. `ProductionApiLeastPrivilege` is again exactly two statements.
 
 ---
 
-## G. Exact Cognito policy represented
+## C. Live-vs-candidate IAM comparison
 
-Isolated inline policy `TenantInviteUserProductionCognito`:
-
-```
-Effect: Allow
-Action:
-  - cognito-idp:AdminCreateUser
-  - cognito-idp:AdminGetUser
-  - cognito-idp:AdminSetUserPassword
-Resource: arn:aws:cognito-idp:us-east-1:806168576068:userpool/us-east-1_h00WorYMT
-```
-
-No `cognito-idp:*`. No `Resource *`. No staging pool.
-
----
-
-## H. Policies / statements a future update would add
-
-Relative to the **deployed CloudFormation template** (not the live role):
-
-- Isolated `ProductionApiSesSend`
-- Isolated `RecipientBankVerifyStateLeastPrivilege`
-- Isolated `OcrAzureProductionAccess`
-- Isolated `TenantInviteUserProductionCognito`
-- Production RDS + production S3 on `ProductionApiLeastPrivilege`
-- `FinancialTotpWrapKeyRead`
-- `ProductionProviderSecretRead`
-
-Relative to the **live role**, adds are unknown until `iam:GetRolePolicy`
-succeeds. The candidate is intended to **record** the five live policies, not
-invent a sixth.
-
----
-
-## I. Policies / statements a future update would remove
-
-Relative to the **deployed template parameters**:
-
-- Staging RDS secret ARN
-- Staging private-files bucket ARN
-
-Relative to the **live role**:
-
-- Would remove any unknown Sid that exists on live
-  `ProductionApiLeastPrivilege` and is not enumerated here.
-- Would remove staging ARNs if they are still present on the live policy
-  document (desired).
-
----
-
-## J. Policies / statements that would change
-
-- `ProductionApiLeastPrivilege` document would be rewritten from the
-  2026-09-06 staging pair to the production statements above.
-- CloudFormation would begin managing the four currently out-of-band inline
-  policies. That is required so a later stack update cannot delete them.
-- Role name, logical ID, trust, and managed policies stay the same.
-
----
-
-## K. CloudFormation change-set preview
-
-Not created. `ChecksOpsCursorCloudStaging` is the wrong identity to write a
-change set against this production IAM stack, and this report must not deploy.
-
-Logical preview for stack `checksops-production-api-role`:
-
-| Action | Resource | Type | Replacement |
+| Item | Live | Candidate | Match |
 |---|---|---|---|
-| Modify | `ProductionApiExecutionRole` | `AWS::IAM::Role` | **No** if `RoleName` and logical ID stay `checksops-production-api-execution` / `ProductionApiExecutionRole` |
-| Parameter change | `AppDatabaseSecretArn` | parameter | Must be overridden to the production secret; `AllowedPattern` rejects the stored staging value |
-| Parameter change | `FilesBucketName` | parameter | Must be overridden to the production bucket |
-
-Required capabilities: `CAPABILITY_NAMED_IAM`.
-
----
-
-## L. Replacement risk
-
-**IAM role must not be replaced.**
-
-The candidate keeps:
-
-- Stack name `checksops-production-api-role`
-- Logical ID `ProductionApiExecutionRole`
-- Physical `RoleName` `checksops-production-api-execution`
-- Lambda-only trust
-
-CloudFormation replaces `AWS::IAM::Role` when `RoleName` or the logical ID
-changes. This candidate changes neither. Inline policy updates on a named
-role are in-place updates.
-
-Do not retarget the live Lambda to another role as part of this work.
+| RoleName | `checksops-production-api-execution` | same | Yes |
+| Logical ID | `ProductionApiExecutionRole` | same | Yes |
+| Trust | Lambda / `sts:AssumeRole` | same | Yes |
+| Managed policies | X-Ray + Lambda VPC | same | Yes |
+| Tags | three live tags | same | Yes |
+| Inline policy names | five named above | same five | Yes |
+| OCR | Azure DI `-*` + two Textract actions on `*` | same | Yes |
+| SES | `SendEmail` on the two identities | same | Yes |
+| DynamoDB | four actions on the one table | same | Yes |
+| Cognito | three actions on `us-east-1_h00WorYMT` | same | Yes |
+| Least-privilege actions | `GetSecretValue` + eight S3 actions | same | Yes |
+| Least-privilege RDS resource | staging secret | **production** secret | Intentional correction |
+| Least-privilege S3 resources | staging bucket + `/*` | **production** bucket + `/*` | Intentional correction |
+| TOTP wrap-key | absent | absent | Yes |
+| General provider secret | absent | absent | Yes |
+| Moov / CheckAlt | absent | absent | Yes |
 
 ---
 
-## M. Tests / validation
+## D. Every live action is preserved
+
+- `secretsmanager:GetSecretValue` (least-privilege + OCR Azure DI)
+- eight live S3 actions
+- `ses:SendEmail`
+- four live DynamoDB actions
+- `textract:AnalyzeDocument`, `textract:DetectDocumentText`
+- `cognito-idp:AdminCreateUser`, `AdminGetUser`, `AdminSetUserPassword`
+
+No live action is dropped.
+
+---
+
+## E. Only staging RDS/S3 resources are corrected
+
+The only resource replacements are:
+
+- staging RDS secret `.../checksops-staging/checksops/1788286468693-b4U0Rn`
+  → production `.../checksops-production/checksops/1790081257144-A2Z4bw`
+- staging bucket `checksops-staging-privatefilesbucket-erzqsolpucjp`
+  → `checksops-production-privatefiles-806168576068` and `/*`
+
+All other resources stay exactly as live.
+
+---
+
+## F. No new privilege is introduced
+
+The candidate does **not** add:
+
+- TOTP wrap-key `GetSecretValue`
+- `checksops/production/provider-*` / `provider-At4ZFR`
+- Moov webhook or CheckAlt statements
+- `ses:SendRawEmail`
+- extra Cognito admin actions or `cognito-idp:*`
+- extra Textract APIs
+- extra DynamoDB actions
+- RDS admin secret
+
+If production TOTP or general provider-secret access is later required,
+that is a separate demonstrated IAM workstream.
+
+---
+
+## G. Tests
 
 `node --test aws/tests/production-api-execution-role.test.mjs aws/tests/email-layout.test.mjs`
 
-Result: **18/18 pass**.
+Required assertions:
 
-Covered:
-
-- no staging RDS secret ARN
-- no staging S3 bucket ARN
-- Cognito actions exactly the three approved actions
-- Cognito resource the exact production pool (`!Ref` + parameter default)
-- no Cognito wildcard
-- SES `SendEmail` on the two verified identities; no `SendRawEmail`
-- DynamoDB recipient-verify four actions on the production table
-- OCR Azure DI secret + Textract analyze/detect
-- Lambda-only trust
-- provider secret is the exact live ARN (not a family wildcard)
-- `Resource: '*'` only on the Textract OCR statement
-
-`aws cloudformation validate-template` was **denied** to
-`ChecksOpsCursorCloudStaging`. Local structural checks passed (template
-bytes 7262; staging secret/bucket strings absent).
-
----
-
-## N. Rollback plan
-
-If a reviewed stack update is later executed and must be undone:
-
-1. Do **not** roll back to the original 2026-09-06 template. That restores
-   staging RDS/S3 and deletes the four live isolated policies.
-2. Privileged operator: `iam:PutRolePolicy` the pre-change snapshots of all
-   five inline policies.
-3. Leave the Lambda role name and trust unchanged.
-4. If CloudFormation stack status is `UPDATE_ROLLBACK_*`, inspect the live
-   inline policy names before assuming rollback recreated the working set.
-
-Until a privileged pre-change snapshot exists, there is no safe
-CloudFormation rollback path. That is one reason this is **NOT SAFE TO DEPLOY**.
+- no staging RDS ARN
+- no staging S3 ARN
+- production RDS secret exact
+- production S3 bucket exact
+- all five inline policies represented
+- Cognito actions exactly three
+- Cognito pool exact
+- SES unchanged
+- DynamoDB unchanged
+- OCR unchanged
+- Lambda trust unchanged
+- attached managed policies unchanged
+- no TOTP permission added
+- no general provider-secret permission added
+- no Moov/CheckAlt permission added
+- no wildcard Cognito permission
 
 ---
 
-## O. Candidate git SHA
+## H. CloudFormation validation
 
-Branch `cursor/production-iam-reconciliation-0ebf`.
+`ChecksOpsCursorCloudStaging` is denied `cloudformation:ValidateTemplate`
+and must not create a change set. Local structural checks: staging
+secret/bucket strings absent; RoleName and logical ID unchanged.
 
-- First candidate: `141662d6b94fc0b392a2d62e63bd3ce6ffe7e744`
-- This report + passing tests: `b6c3973b25a3f8f04a25ab4069acbed165e914c3`
-
----
-
-## P. Verdict
-
-**NOT SAFE TO DEPLOY**
-
-Blockers:
-
-1. Live inline policy documents were not readable from this identity.
-2. Live `ProductionApiLeastPrivilege` may contain additional statements
-   (CheckAlt/Moov overlays were previously noted). Replacing that document
-   from this candidate could delete an unlisted live grant.
-3. No privileged change-set was created.
-4. The live stack still stores staging parameters; any update must pass
-   production overrides or it will fail `AllowedPattern` (fail-closed, not
-   a restore of staging).
-
-Safe next operator step, from an identity that can `iam:GetRole` and
-`iam:GetRolePolicy` on `checksops-production-api-execution`:
+A privileged operator should run:
 
 ```bash
-aws iam get-role --role-name checksops-production-api-execution
-aws iam list-role-policies --role-name checksops-production-api-execution
-aws iam list-attached-role-policies --role-name checksops-production-api-execution
-# then get-role-policy for each name
+aws cloudformation validate-template \
+  --region us-east-1 \
+  --template-body file://aws/production/api-execution-role.yaml
 ```
 
-Compare those documents to this candidate. Only then create — and review —
-a change set. Do not execute it from this agent.
+---
+
+## I. Exact production parameter values required
+
+The live stack still stores staging parameter values. Any update **must**
+override them. `AllowedPattern` rejects the stored staging values.
+
+```
+RoleName=checksops-production-api-execution
+AppDatabaseSecretArn=arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops/1790081257144-A2Z4bw
+FilesBucketName=checksops-production-privatefiles-806168576068
+ProductionUserPoolArn=arn:aws:cognito-idp:us-east-1:806168576068:userpool/us-east-1_h00WorYMT
+AzureDiSecretArn=arn:aws:secretsmanager:us-east-1:806168576068:secret:checksops/production/providers/azure-document-intelligence-*
+RecipientBankVerifyStateTableArn=arn:aws:dynamodb:us-east-1:806168576068:table/checksops-recipient-bank-verify-state
+```
+
+Capabilities: `CAPABILITY_NAMED_IAM`.
+Stack: `checksops-production-api-role`.
+
+---
+
+## J. Proposed non-executed change-set command
+
+Do **not** run this from the staging Cursor role. Privileged operator only.
+Do **not** execute the change set after create.
+
+```bash
+aws cloudformation create-change-set \
+  --region us-east-1 \
+  --stack-name checksops-production-api-role \
+  --change-set-name iam-recon-prod-rds-s3-do-not-execute \
+  --change-set-type UPDATE \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --template-body file://aws/production/api-execution-role.yaml \
+  --parameters \
+    ParameterKey=RoleName,ParameterValue=checksops-production-api-execution \
+    ParameterKey=AppDatabaseSecretArn,ParameterValue=arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops/1790081257144-A2Z4bw \
+    ParameterKey=FilesBucketName,ParameterValue=checksops-production-privatefiles-806168576068 \
+    ParameterKey=ProductionUserPoolArn,ParameterValue=arn:aws:cognito-idp:us-east-1:806168576068:userpool/us-east-1_h00WorYMT \
+    ParameterKey=AzureDiSecretArn,ParameterValue=arn:aws:secretsmanager:us-east-1:806168576068:secret:checksops/production/providers/azure-document-intelligence-* \
+    ParameterKey=RecipientBankVerifyStateTableArn,ParameterValue=arn:aws:dynamodb:us-east-1:806168576068:table/checksops-recipient-bank-verify-state
+
+aws cloudformation describe-change-set \
+  --region us-east-1 \
+  --stack-name checksops-production-api-role \
+  --change-set-name iam-recon-prod-rds-s3-do-not-execute
+
+# Confirm Replacement=False on ProductionApiExecutionRole.
+# Do not: aws cloudformation execute-change-set ...
+```
+
+Expected change: **Modify** `ProductionApiExecutionRole`,
+**Replacement=False**.
+
+---
+
+## K. Rollback using the authoritative live snapshot
+
+If a reviewed execute later goes wrong, do **not** roll the stack back to
+the 2026-09-06 template (that would drop the four isolated policies).
+
+Privileged operator restores the five live documents exactly:
+
+1. `OcrAzureProductionAccess` — Azure DI `-*` + two Textract actions on `*`
+2. `ProductionApiLeastPrivilege` — staging RDS secret + staging bucket
+   (the pre-change live document) **or**, if the production-resource
+   correction should stay, keep the candidate least-privilege document
+   and only restore the other four
+3. `ProductionApiSesSend` — `ses:SendEmail` on the two identities
+4. `RecipientBankVerifyStateLeastPrivilege` — four DynamoDB actions
+5. `TenantInviteUserProductionCognito` — three Cognito actions on the
+   production pool
+
+Use `iam:PutRolePolicy` per policy name. Do not change RoleName or trust.
+Do not recreate the role.
+
+Companion JSON in this repo:
+
+- `aws/production/ocr-azure-production-access.json`
+- `aws/production/production-api-ses-send.json`
+- `aws/production/bank-verify-state-lambda-policy.json`
+- `aws/production/tenant-invite-user-production-cognito.json`
+
+The pre-change least-privilege document is the live snapshot (staging
+RDS/S3). Keep that snapshot offline with the privileged capture; it is
+intentionally not the candidate default.
+
+---
+
+## L. Verdict
+
+**SAFE TO CREATE CHANGE SET** after review of this revised candidate.
+
+**NOT SAFE TO EXECUTE** the change set from this agent. Do not mutate AWS
+in this step.
+
+Replacement risk remains **no role replacement** if RoleName and logical
+ID stay unchanged.

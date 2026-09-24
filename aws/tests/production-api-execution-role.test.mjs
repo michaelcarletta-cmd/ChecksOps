@@ -6,18 +6,22 @@ import { test } from 'node:test';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const yaml = fs.readFileSync(path.join(ROOT, 'aws/production/api-execution-role.yaml'), 'utf8');
-const bankVerify = fs.readFileSync(
+const bankVerify = JSON.parse(fs.readFileSync(
   path.join(ROOT, 'aws/production/bank-verify-state-lambda-policy.json'),
   'utf8',
-);
-const ocrAzure = fs.readFileSync(
+));
+const ocrAzure = JSON.parse(fs.readFileSync(
   path.join(ROOT, 'aws/production/ocr-azure-production-access.json'),
   'utf8',
-);
-const inviteCognito = fs.readFileSync(
+));
+const inviteCognito = JSON.parse(fs.readFileSync(
   path.join(ROOT, 'aws/production/tenant-invite-user-production-cognito.json'),
   'utf8',
-);
+));
+const sesSend = JSON.parse(fs.readFileSync(
+  path.join(ROOT, 'aws/production/production-api-ses-send.json'),
+  'utf8',
+));
 
 const PRODUCTION_SECRET = 'arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops/1790081257144-A2Z4bw';
 const STAGING_SECRET = 'arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-staging/checksops/1788286468693-b4U0Rn';
@@ -27,12 +31,22 @@ const PRODUCTION_POOL_ARN = 'arn:aws:cognito-idp:us-east-1:806168576068:userpool
 const STAGING_POOL_ID = 'us-east-1_vPmQ7cL1F';
 const PROVIDER_SECRET = 'arn:aws:secretsmanager:us-east-1:806168576068:secret:checksops/production/provider-At4ZFR';
 const TOTP_SECRET = 'arn:aws:secretsmanager:us-east-1:806168576068:secret:checksops/production/financial-totp-wrap-key-81bFID';
-const AZURE_SECRET_PREFIX = 'arn:aws:secretsmanager:us-east-1:806168576068:secret:checksops/production/providers/azure-document-intelligence-';
+const AZURE_SECRET = 'arn:aws:secretsmanager:us-east-1:806168576068:secret:checksops/production/providers/azure-document-intelligence-*';
 const DDB_TABLE = 'arn:aws:dynamodb:us-east-1:806168576068:table/checksops-recipient-bank-verify-state';
 const COGNITO_ACTIONS = [
   'cognito-idp:AdminCreateUser',
   'cognito-idp:AdminGetUser',
   'cognito-idp:AdminSetUserPassword',
+];
+const S3_ACTIONS = [
+  's3:GetObject',
+  's3:GetObjectVersion',
+  's3:GetBucketLocation',
+  's3:ListBucket',
+  's3:PutObject',
+  's3:DeleteObject',
+  's3:DeleteObjectVersion',
+  's3:AbortMultipartUpload',
 ];
 
 const policyBlock = (name) => {
@@ -44,110 +58,130 @@ const policyBlock = (name) => {
   return yaml.slice(start, cut);
 };
 
-const cognitoBlock = policyBlock('TenantInviteUserProductionCognito');
-const listedCognitoActions = [...cognitoBlock.matchAll(/cognito-idp:[A-Za-z*]+/g)].map((m) => m[0]);
+const listedActions = (block, prefix) => (
+  [...block.matchAll(new RegExp(`${prefix}[A-Za-z*]+`, 'g'))].map((m) => m[0])
+);
 
-test('production API execution role keeps the live named role and Lambda-only trust', () => {
+test('production API execution role keeps the live named role, tags, managed policies, and Lambda-only trust', () => {
   assert.match(yaml, /RoleName:\n    Type: String\n    Default: checksops-production-api-execution/);
   assert.match(yaml, /AllowedValues:\n      - checksops-production-api-execution/);
+  assert.match(yaml, /ProductionApiExecutionRole:\n    Type: AWS::IAM::Role/);
   assert.match(yaml, /AWSLambdaVPCAccessExecutionRole/);
   assert.match(yaml, /AWSXrayWriteOnlyAccess/);
   assert.match(yaml, /Service: lambda\.amazonaws\.com/);
   assert.match(yaml, /Action: sts:AssumeRole/);
+  assert.match(yaml, /Key: HardeningBatch\n          Value: '1'/);
+  assert.match(yaml, /Key: Environment\n          Value: production/);
+  assert.match(yaml, /Key: DoNotGrantProviderSecrets\n          Value: 'true'/);
   assert.doesNotMatch(yaml, /events\.amazonaws\.com|edgelambda\.amazonaws\.com|ec2\.amazonaws\.com|states\.amazonaws\.com/);
+  assert.equal((yaml.match(/arn:aws:iam::aws:policy\//g) || []).length, 2);
 });
 
-test('production API execution role contains no staging RDS or staging S3 ARNs', () => {
+test('production API least-privilege uses the exact production RDS secret and S3 bucket only', () => {
+  const least = policyBlock('ProductionApiLeastPrivilege');
   assert.match(yaml, new RegExp(PRODUCTION_SECRET.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-  assert.match(yaml, new RegExp(PRODUCTION_BUCKET));
+  assert.match(yaml, new RegExp(`arn:aws:s3:::${PRODUCTION_BUCKET}`));
+  assert.match(yaml, new RegExp(`arn:aws:s3:::${PRODUCTION_BUCKET}/\\*`));
+  assert.match(least, /Sid: AppDatabaseSecretRead/);
+  assert.match(least, /Sid: PrivateCheckImageBucket/);
+  assert.match(least, /Resource: !Ref AppDatabaseSecretArn/);
+  assert.match(least, /!Sub arn:aws:s3:::\${FilesBucketName}/);
+  assert.match(least, /!Sub arn:aws:s3:::\${FilesBucketName}\/\*/);
+  assert.deepEqual(listedActions(least, 'secretsmanager:'), ['secretsmanager:GetSecretValue']);
+  assert.deepEqual(listedActions(least, 's3:'), S3_ACTIONS);
   assert.doesNotMatch(yaml, new RegExp(STAGING_SECRET.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   assert.doesNotMatch(yaml, new RegExp(STAGING_BUCKET));
   assert.doesNotMatch(yaml, /rds-db-credentials\/checksops-staging\//);
   assert.doesNotMatch(yaml, /checksops-staging-privatefiles/);
-  assert.match(yaml, /AllowedPattern: '\^arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials\/checksops-production\/checksops\/\.\+'/);
-  assert.match(yaml, /AllowedPattern: '\^checksops-production-privatefiles-806168576068\$'/);
+  assert.equal((least.match(/Sid:/g) || []).length, 2);
 });
 
-test('production API execution role represents all five live inline policies', () => {
-  assert.match(yaml, /PolicyName: ProductionApiLeastPrivilege/);
-  assert.match(yaml, /PolicyName: ProductionApiSesSend/);
-  assert.match(yaml, /PolicyName: RecipientBankVerifyStateLeastPrivilege/);
-  assert.match(yaml, /PolicyName: OcrAzureProductionAccess/);
-  assert.match(yaml, /PolicyName: TenantInviteUserProductionCognito/);
+test('production API execution role represents all five live inline policies and no others', () => {
+  const names = [...yaml.matchAll(/PolicyName: ([A-Za-z]+)/g)].map((m) => m[1]);
+  assert.deepEqual(names, [
+    'ProductionApiLeastPrivilege',
+    'ProductionApiSesSend',
+    'RecipientBankVerifyStateLeastPrivilege',
+    'OcrAzureProductionAccess',
+    'TenantInviteUserProductionCognito',
+  ]);
 });
 
 test('Cognito invite actions are exactly the three approved actions on the production pool', () => {
-  assert.deepEqual(listedCognitoActions, COGNITO_ACTIONS);
+  const cognito = policyBlock('TenantInviteUserProductionCognito');
+  assert.deepEqual(listedActions(cognito, 'cognito-idp:'), COGNITO_ACTIONS);
   assert.match(yaml, new RegExp(PRODUCTION_POOL_ARN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-  assert.match(cognitoBlock, /Resource: !Ref ProductionUserPoolArn/);
+  assert.match(cognito, /Resource: !Ref ProductionUserPoolArn/);
   assert.doesNotMatch(yaml, /cognito-idp:\*/);
   assert.doesNotMatch(yaml, /cognito-idp:AdminDisableUser|cognito-idp:AdminDeleteUser|cognito-idp:AdminUpdateUserAttributes/);
   assert.doesNotMatch(yaml, new RegExp(STAGING_POOL_ID));
-  assert.doesNotMatch(cognitoBlock, /Resource: '\*'/);
-  const isolated = JSON.parse(inviteCognito);
-  assert.deepEqual(isolated.Statement[0].Action, COGNITO_ACTIONS);
-  assert.equal(isolated.Statement[0].Resource, PRODUCTION_POOL_ARN);
+  assert.doesNotMatch(cognito, /Resource: '\*'/);
+  assert.deepEqual(inviteCognito.Statement[0].Action, COGNITO_ACTIONS);
+  assert.equal(inviteCognito.Statement[0].Resource, PRODUCTION_POOL_ARN);
 });
 
-test('SES production permissions remain represented and SendRawEmail stays denied', () => {
+test('SES production permissions remain exactly ses:SendEmail on the two verified identities', () => {
   const ses = policyBlock('ProductionApiSesSend');
-  assert.match(ses, /ses:SendEmail/);
+  assert.deepEqual(listedActions(ses, 'ses:'), ['ses:SendEmail']);
   assert.doesNotMatch(ses, /ses:SendRawEmail|ses:\*/);
   assert.match(ses, /identity\/checksops\.com/);
   assert.match(ses, /identity\/Support@checksops\.com/);
   assert.doesNotMatch(ses, /identity\/ses-gate\.staging\.checksops\.com/);
+  assert.deepEqual(sesSend.Statement[0].Action, ['ses:SendEmail']);
+  assert.deepEqual(sesSend.Statement[0].Resource, [
+    'arn:aws:ses:us-east-1:806168576068:identity/checksops.com',
+    'arn:aws:ses:us-east-1:806168576068:identity/Support@checksops.com',
+  ]);
 });
 
-test('DynamoDB recipient verification permissions remain represented', () => {
+test('DynamoDB recipient verification permissions remain exactly the four live actions', () => {
   const ddb = policyBlock('RecipientBankVerifyStateLeastPrivilege');
-  assert.match(ddb, /dynamodb:GetItem/);
-  assert.match(ddb, /dynamodb:PutItem/);
-  assert.match(ddb, /dynamodb:UpdateItem/);
-  assert.match(ddb, /dynamodb:DescribeTable/);
-  assert.match(yaml, new RegExp(DDB_TABLE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-  assert.match(ddb, /Resource: !Ref RecipientBankVerifyStateTableArn/);
-  assert.doesNotMatch(ddb, /dynamodb:Scan|dynamodb:Query|dynamodb:DeleteItem|dynamodb:CreateTable/);
-  const isolated = JSON.parse(bankVerify);
-  assert.deepEqual(isolated.Statement[0].Action, [
+  assert.deepEqual(listedActions(ddb, 'dynamodb:'), [
     'dynamodb:GetItem',
     'dynamodb:PutItem',
     'dynamodb:UpdateItem',
     'dynamodb:DescribeTable',
   ]);
-  assert.equal(isolated.Statement[0].Resource, DDB_TABLE);
+  assert.match(yaml, new RegExp(DDB_TABLE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(ddb, /Resource: !Ref RecipientBankVerifyStateTableArn/);
+  assert.deepEqual(bankVerify.Statement[0].Action, [
+    'dynamodb:GetItem',
+    'dynamodb:PutItem',
+    'dynamodb:UpdateItem',
+    'dynamodb:DescribeTable',
+  ]);
+  assert.equal(bankVerify.Statement[0].Resource, DDB_TABLE);
 });
 
-test('OCR production permissions remain represented without broadening provider secrets', () => {
+test('OCR production permissions remain exactly Azure DI GetSecretValue plus two Textract actions', () => {
   const ocr = policyBlock('OcrAzureProductionAccess');
-  assert.match(ocr, /textract:AnalyzeDocument/);
-  assert.match(ocr, /textract:DetectDocumentText/);
-  assert.doesNotMatch(ocr, /textract:AnalyzeExpense|textract:AnalyzeID|textract:\*/);
-  assert.match(yaml, new RegExp(AZURE_SECRET_PREFIX.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.deepEqual(listedActions(ocr, 'textract:'), [
+    'textract:AnalyzeDocument',
+    'textract:DetectDocumentText',
+  ]);
+  assert.deepEqual(listedActions(ocr, 'secretsmanager:'), ['secretsmanager:GetSecretValue']);
+  assert.match(yaml, new RegExp(AZURE_SECRET.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   assert.match(ocr, /Resource: !Ref AzureDiSecretArn/);
   assert.doesNotMatch(ocr, /checksops\/staging\/providers/);
-  assert.doesNotMatch(ocr, /checksops\/isolated\//);
-  const isolated = JSON.parse(ocrAzure);
-  assert.equal(
-    isolated.Statement[0].Resource,
-    `${AZURE_SECRET_PREFIX}*`,
-  );
-  assert.deepEqual(isolated.Statement[1].Action, [
+  assert.equal(ocrAzure.Statement[0].Resource, AZURE_SECRET);
+  assert.deepEqual(ocrAzure.Statement[1].Action, [
     'textract:AnalyzeDocument',
     'textract:DetectDocumentText',
   ]);
 });
 
-test('provider and TOTP secret access stay exact production ARNs', () => {
+test('candidate does not add TOTP, general provider-secret, Moov, or CheckAlt IAM', () => {
   const least = policyBlock('ProductionApiLeastPrivilege');
-  assert.match(yaml, new RegExp(PROVIDER_SECRET.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-  assert.match(yaml, new RegExp(TOTP_SECRET.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-  assert.match(least, /Resource: !Ref ProductionProviderSecretArn/);
-  assert.match(least, /Resource: !Ref FinancialTotpWrapKeyArn/);
+  assert.doesNotMatch(yaml, /FinancialTotpWrapKeyRead|ProductionProviderSecretRead/);
+  assert.doesNotMatch(yaml, /financial-totp-wrap-key/);
+  assert.doesNotMatch(yaml, new RegExp(TOTP_SECRET.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.doesNotMatch(yaml, new RegExp(PROVIDER_SECRET.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.doesNotMatch(yaml, /checksops\/production\/provider-/);
   assert.doesNotMatch(yaml, /checksops\/staging\/providers/);
-  assert.doesNotMatch(yaml, /checksops\/production\/provider-\*/);
   assert.doesNotMatch(least, /checksops\/production\/providers\/azure-document-intelligence/);
   assert.doesNotMatch(yaml, /checksops_admin/);
-  assert.doesNotMatch(yaml, /moov-webhook/);
+  assert.doesNotMatch(yaml, /moov-webhook|moov:|checkalt/i);
+  assert.doesNotMatch(yaml, /AWS_MOOV_ENABLED|AWS_CHECKALT_ENABLED/);
 });
 
 test('star resources are limited to Textract OCR and never used for Cognito, SES, S3, or secrets', () => {
