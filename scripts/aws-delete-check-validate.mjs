@@ -44,6 +44,14 @@ const api = async (path, { method = 'POST', token, body, headers: extra } = {}) 
   return { status: response.status, json };
 };
 
+const identityMe = async (token) => {
+  const me = await api('/identity/me', { method: 'GET', token });
+  if (me.status !== 200 || me.json?.ok !== true || !me.json?.applicationUserId) {
+    throw new Error(`identity/me failed: ${me.status} ${me.json?.error || me.json?.message || ''}`);
+  }
+  return me.json;
+};
+
 const login = async (email) => {
   const { status, json } = await api('/auth/login', {
     body: { email, password: passwords[email] || passwords[email.toLowerCase()] },
@@ -152,7 +160,7 @@ const uploadDisposableFile = async (token, checkId) => {
   return { ok: true, objectPath, s3Bucket, s3Key };
 };
 
-const ensureProtectedStateViaOneshot = async ({ checkId, uploadedBy }) => {
+const ensureProtectedStateViaOneshot = async ({ checkId, appUserId, email }) => {
   // Uses a temporary VPC-attached Lambda with the same DB secret as checksops-staging-api
   // to set deposited_at/status/check_stage on a disposable check, solely to validate
   // delete protections for terminal financial state.
@@ -184,16 +192,18 @@ async function loadDbSecret() {
 
 export const handler = async (event = {}) => {
   const checkId = String(event.checkId || '');
-  const uploadedBy = String(event.uploadedBy || '');
+  const appUserId = String(event.appUserId || '');
+  const email = String(event.email || '');
   if (!checkId) return { ok: false, error: 'missing_check_id' };
-  if (!uploadedBy) return { ok: false, error: 'missing_uploaded_by' };
+  if (!appUserId) return { ok: false, error: 'missing_app_user_id' };
   const creds = await loadDbSecret();
   const ssl = { ca: fs.readFileSync(new URL('./rds-global-bundle.pem', import.meta.url), 'utf8') };
   const client = new Client({ host: creds.host, port: creds.port || 5432, user: creds.username, password: creds.password, database: databaseName, ssl });
   await client.connect();
   try {
     await client.query('BEGIN');
-    await client.query('SELECT set_config($1, $2, true)', ['request.app_user_id', uploadedBy]);
+    await client.query('SELECT set_config($1, $2, true)', ['request.app_user_id', appUserId]);
+    await client.query('SELECT set_config($1, $2, true)', ['request.jwt.claim.email', email]);
     const step = String(event.step || '');
     let updated = null;
     if (step === 'set_deposited') {
@@ -221,7 +231,7 @@ export const handler = async (event = {}) => {
     }
     if (!updated) return { ok: false, error: 'check_not_found_or_rls_denied' };
     await client.query('COMMIT');
-    return { ok: true, checkId, step, tenantId: updated.tenant_id, uploadedBy: updated.uploaded_by };
+    return { ok: true, checkId, step, tenantId: updated.tenant_id, uploadedBy: updated.uploaded_by, actor: appUserId };
   } catch (e) {
     try { await client.query('ROLLBACK'); } catch {}
     return { ok: false, error: String(e?.message || e).slice(0, 240) };
@@ -265,7 +275,7 @@ export const handler = async (event = {}) => {
   const invoke = (step) => {
     const outFile = path.join(os.tmpdir(), `${lambdaName}-${step}.json`);
     const payloadFile = path.join(os.tmpdir(), `${lambdaName}-${step}-payload.json`);
-    fs.writeFileSync(payloadFile, JSON.stringify({ step, checkId, uploadedBy }));
+    fs.writeFileSync(payloadFile, JSON.stringify({ step, checkId, appUserId, email }));
     execFileSync(AWS, [
       '--region', 'us-east-1',
       'lambda', 'invoke',
@@ -295,6 +305,8 @@ const main = async () => {
   const marker = `AWS DELETE CHECK TEST ${new Date().toISOString()} ${crypto.randomUUID().slice(0, 8)}`;
   const freedomToken = await login(FREEDOM_EMAIL);
   const c1cToken = await login(C1C_EMAIL);
+  const freedomIdentity = await identityMe(freedomToken);
+  record('identity/me returns application user id', Boolean(freedomIdentity.applicationUserId), { detail: `applicationUserId=${freedomIdentity.applicationUserId}` });
 
   const disposable1 = await createDisposableCheck(freedomToken, `${marker} A`);
   const checkId = disposable1.id;
@@ -384,8 +396,11 @@ const main = async () => {
   // Protected state: partner-linked checks must not be deletable.
   const partner = await createDisposableCheck(freedomToken, `${marker} PARTNER`);
   const partnerId = partner.id;
-  const partnerUploadedBy = partner.uploaded_by || partner.uploadedBy || null;
-  const partnerOneshot = await ensureProtectedStateViaOneshot({ checkId: partnerId, uploadedBy: partnerUploadedBy });
+  const partnerOneshot = await ensureProtectedStateViaOneshot({
+    checkId: partnerId,
+    appUserId: freedomIdentity.applicationUserId,
+    email: freedomIdentity.profile?.email || '',
+  });
   const partnerSet = await partnerOneshot.setPartnerLinked();
   record('set partner external_origin via oneshot', partnerSet?.ok === true, { detail: partnerSet?.error ? `error=${partnerSet.error}` : `checkId=${partnerId}` });
   const partnerDel = await api(`/workflow/checks/${partnerId}`, { method: 'DELETE', token: freedomToken, body: { check_id: partnerId, reason: 'should be denied' } });
@@ -400,8 +415,11 @@ const main = async () => {
   // Protected state: terminal financial checks must not be deletable.
   const fin = await createDisposableCheck(freedomToken, `${marker} FINANCIAL`);
   const finId = fin.id;
-  const finUploadedBy = fin.uploaded_by || fin.uploadedBy || null;
-  const oneshot = await ensureProtectedStateViaOneshot({ checkId: finId, uploadedBy: finUploadedBy });
+  const oneshot = await ensureProtectedStateViaOneshot({
+    checkId: finId,
+    appUserId: freedomIdentity.applicationUserId,
+    email: freedomIdentity.profile?.email || '',
+  });
   record('set terminal financial state via oneshot', oneshot.ok === true && oneshot.set?.ok === true, { detail: oneshot.set?.error ? `error=${oneshot.set.error}` : `checkId=${finId}` });
   const finDel = await api(`/workflow/checks/${finId}`, { method: 'DELETE', token: freedomToken, body: { check_id: finId, reason: 'should be denied' } });
   record('terminal-financial delete is denied', finDel.status === 403 && finDel.json.error === 'cleanup_denied', {
