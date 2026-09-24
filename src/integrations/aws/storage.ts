@@ -13,6 +13,8 @@ const storageError = (message: string, statusCode = 403) => ({
 
 type TokenGetter = () => Promise<string | null>;
 
+const TENANT_SCOPED_PATH = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/.+/i;
+
 /** Prefer CheckOps session; fall back to Mortgage Desk if only that portal is signed in. */
 const readIdToken = (): string | null => {
   for (const key of [AWS_STAGING_AUTH_SESSION_KEY, AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY]) {
@@ -57,12 +59,35 @@ export function rewriteSupabaseStorageUrl(value: unknown): unknown {
   return value;
 }
 
+export function rewriteTenantLogoUrl(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed) return value;
+
+  // Preserve non-http URL schemes and absolute paths.
+  if (/^(data:|blob:)/i.test(trimmed)) return value;
+  if (trimmed.startsWith("/")) return value;
+
+  // First, rewrite legacy Supabase public/sign URLs.
+  const rewritten = rewriteSupabaseStorageUrl(trimmed);
+  if (typeof rewritten === "string" && rewritten !== trimmed) return rewritten;
+
+  // Then, handle relative tenant-scoped paths (uuid/filename) returned by tenants_public.
+  if (/^https?:\/\//i.test(trimmed)) return value;
+  const normalized = trimmed.replace(/^\/+/, "");
+  const path = toStorageObjectPath(normalized, "tenant-logos") || normalized;
+  if (!TENANT_SCOPED_PATH.test(path)) return value;
+  return `${awsApiBaseUrl()}/storage/public?bucket=tenant-logos&path=${encodeURIComponent(path)}`;
+}
+
 export function rewriteStorageFields(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(rewriteStorageFields);
   if (!value || typeof value !== "object") return rewriteSupabaseStorageUrl(value);
   const out: Record<string, unknown> = {};
   for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
-    if (typeof nested === "string" && /(_url|logoUrl)$/i.test(key)) {
+    if (typeof nested === "string" && /^(logo_url|logoUrl)$/i.test(key)) {
+      out[key] = rewriteTenantLogoUrl(nested);
+    } else if (typeof nested === "string" && /(_url|logoUrl)$/i.test(key)) {
       out[key] = rewriteSupabaseStorageUrl(nested);
     } else if (nested && typeof nested === "object") {
       out[key] = rewriteStorageFields(nested);

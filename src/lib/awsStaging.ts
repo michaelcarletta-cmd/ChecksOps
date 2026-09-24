@@ -8,6 +8,10 @@ import { resolveAwsApiBaseUrl } from "@/lib/awsApiBase";
 
 export { resolveAwsApiBaseUrl } from "@/lib/awsApiBase";
 
+// `import.meta.env` is provided by Vite at runtime. Node-based unit tests run
+// without it, so we fail open to an empty object.
+const viteEnv = (): Record<string, unknown> => ((import.meta as any)?.env ?? {}) as Record<string, unknown>;
+
 const DEFAULT_ORIGIN = "https://staging.checksops.com";
 const DEFAULT_RP_ID = "staging.checksops.com";
 
@@ -22,7 +26,7 @@ const originFromAppUrl = (appUrl) => {
   }
 };
 
-const configured = originFromAppUrl(import.meta.env.VITE_APP_URL);
+const configured = originFromAppUrl(viteEnv().VITE_APP_URL);
 
 /** Cognito native WebAuthn RP ID / HTTPS origin (staging default). */
 export const AWS_STAGING_HTTPS_ORIGIN = configured.origin;
@@ -34,7 +38,7 @@ export const AWS_STAGING_AUTH_SESSION_KEY = "checksops.aws.staging.auth";
 export const AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY = "checksops.aws.staging.auth.mortgage-ops";
 
 export function isAwsStaging(): boolean {
-  return String(import.meta.env.VITE_AUTH_PROVIDER || "").toLowerCase() === "cognito";
+  return String(viteEnv().VITE_AUTH_PROVIDER || "").toLowerCase() === "cognito";
 }
 
 /**
@@ -45,7 +49,7 @@ export function isAwsStaging(): boolean {
  * Does not change Cognito IdP, JWT, or WebAuthn semantics.
  */
 export function awsApiBaseUrl(): string {
-  const configured = String(import.meta.env.VITE_CHECKSOPS_API_URL || "");
+  const configured = String(viteEnv().VITE_CHECKSOPS_API_URL || "");
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   return resolveAwsApiBaseUrl(configured, origin);
 }
@@ -73,8 +77,8 @@ export function isAwsStagingHttpsPasskeysEnabled(): boolean {
 
 export const AWS_STAGING_PUBLIC_CONFIG = {
   region: "us-east-1",
-  userPoolId: String(import.meta.env.VITE_COGNITO_USER_POOL_ID || ""),
-  userPoolClientId: String(import.meta.env.VITE_COGNITO_USER_POOL_CLIENT_ID || ""),
+  userPoolId: String(viteEnv().VITE_COGNITO_USER_POOL_ID || ""),
+  userPoolClientId: String(viteEnv().VITE_COGNITO_USER_POOL_CLIENT_ID || ""),
   rpId: AWS_STAGING_RP_ID,
   requiredOrigin: AWS_STAGING_HTTPS_ORIGIN,
 } as const;
