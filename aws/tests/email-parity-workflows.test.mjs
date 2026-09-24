@@ -517,6 +517,14 @@ test('hire-mortgage-agent and tenant invite stay SUPPRESS and never leak passwor
   console.warn = (...args) => logs.push(args.map(String).join(' '));
   let issuedHire = null;
   let issuedInvite = null;
+  const assertStrongTemp = (value) => {
+    const pw = String(value || '');
+    assert.ok(pw.length >= 32, `expected temp password length >= 32, got ${pw.length}`);
+    assert.match(pw, /[A-Z]/, 'expected uppercase');
+    assert.match(pw, /[a-z]/, 'expected lowercase');
+    assert.match(pw, /[0-9]/, 'expected digit');
+    assert.match(pw, /[^A-Za-z0-9]/, 'expected special char');
+  };
   try {
     const hire = await runHireMortgageAgent({
       mapping,
@@ -532,6 +540,7 @@ test('hire-mortgage-agent and tenant invite stay SUPPRESS and never leak passwor
         if (target === 'AdminCreateUser') {
           issuedHire = payload.TemporaryPassword;
           assert.equal(payload.MessageAction, 'SUPPRESS');
+          assertStrongTemp(issuedHire);
           return { User: { Username: 'cog', Attributes: [{ Name: 'sub', Value: COGNITO_SUB }] } };
         }
         throw new Error(`unexpected ${target}`);
@@ -580,6 +589,7 @@ test('hire-mortgage-agent and tenant invite stay SUPPRESS and never leak passwor
         if (target === 'AdminCreateUser') {
           issuedInvite = payload.TemporaryPassword;
           assert.equal(payload.MessageAction, 'SUPPRESS');
+          assertStrongTemp(issuedInvite);
           return { User: { Username: 'cog2', Attributes: [{ Name: 'sub', Value: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' }] } };
         }
         throw new Error(`unexpected ${target}`);

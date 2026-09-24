@@ -1,7 +1,7 @@
 /**
  * Tenant Cognito invite / admin (Class A) + domain + OpenAI BYOK helpers.
  */
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomBytes, randomInt, randomUUID } from 'node:crypto';
 import {
   SecretsManagerClient,
   CreateSecretCommand,
@@ -27,6 +27,40 @@ const POOL_ID = () => process.env.COGNITO_USER_POOL_ID;
 const CLIENT_ID = () => process.env.COGNITO_CLIENT_ID;
 const sm = () => new SecretsManagerClient({ region: process.env.AWS_REGION || 'us-east-1' });
 const cognito = () => new CognitoIdentityProviderClient({ region: process.env.AWS_REGION || 'us-east-1' });
+
+const randomFrom = (alphabet) => alphabet[randomInt(0, alphabet.length)];
+const shuffle = (chars) => {
+  const a = chars.slice();
+  for (let i = a.length - 1; i > 0; i -= 1) {
+    const j = randomInt(0, i + 1);
+    const tmp = a[i];
+    a[i] = a[j];
+    a[j] = tmp;
+  }
+  return a;
+};
+
+/**
+ * Cognito temporary password generator for staging/prod-prep pools.
+ * Guaranteed: uppercase + lowercase + number + special, and comfortably long.
+ */
+const generateCognitoTempPassword = (minLength = 40) => {
+  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const lower = 'abcdefghijkmnopqrstuvwxyz';
+  const digits = '23456789';
+  const special = '!@#$%^&*';
+  const all = `${upper}${lower}${digits}${special}`;
+
+  const required = [
+    randomFrom(upper),
+    randomFrom(lower),
+    randomFrom(digits),
+    randomFrom(special),
+  ];
+  const remaining = Math.max(Number(minLength) || 40, required.length) - required.length;
+  const extra = Array.from({ length: remaining }, () => randomFrom(all));
+  return shuffle([...required, ...extra]).join('');
+};
 
 /** Admin Cognito APIs require SigV4 (Lambda execution role). Unsigned fetch returns Missing Authentication Token. */
 const cognitoJson = async (target, payload) => {
@@ -93,7 +127,7 @@ export const runTenantInviteUser = async ({
   )).rows[0];
   if (!tenant) return { ok: false, statusCode: 404, error: 'Tenant not found', spoofFieldsIgnored: spoof };
 
-  const tempPassword = `Tmp-${randomBytes(9).toString('base64url')}!a1`;
+  const tempPassword = generateCognitoTempPassword(40);
   let cognitoSub = null;
   let isNewUser = false;
   try {
@@ -397,7 +431,7 @@ export const runHireMortgageAgent = async ({
     ? String(body.password)
     : null;
   const tempPassword = providedPassword
-    || `MortgageOps!${randomBytes(6).toString('base64url')}9a`;
+    || generateCognitoTempPassword(40);
 
   let appUserId = (await client.query(
     `SELECT id::text AS id FROM public.profiles WHERE lower(email) = $1 LIMIT 1`,
