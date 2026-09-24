@@ -15,8 +15,10 @@ test('production API execution role template is least-privilege and omits stagin
   assert.match(yaml, /AWSLambdaVPCAccessExecutionRole/);
   assert.match(yaml, /AWSXrayWriteOnlyAccess/);
   assert.match(yaml, /secretsmanager:GetSecretValue/);
-  assert.match(yaml, /rds-db-credentials\/checksops-staging\/checksops\/1788286468693-b4U0Rn/);
-  assert.match(yaml, /checksops-staging-privatefilesbucket-erzqsolpucjp/);
+  assert.match(yaml, /rds-db-credentials\/checksops-production\/checksops\/1790081257144-A2Z4bw/);
+  assert.match(yaml, /checksops-production-privatefiles-806168576068/);
+  assert.doesNotMatch(yaml, /rds-db-credentials\/checksops-staging\/checksops\/1788286468693-b4U0Rn/);
+  assert.doesNotMatch(yaml, /checksops-staging-privatefilesbucket-erzqsolpucjp/);
   assert.match(yaml, /s3:GetObject/);
   assert.match(yaml, /s3:PutObject/);
   assert.match(yaml, /s3:DeleteObject/);

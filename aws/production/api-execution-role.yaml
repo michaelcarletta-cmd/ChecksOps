@@ -1,9 +1,12 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
   Dedicated ChecksOps production API/Lambda execution role (Hardening Batch 1).
-  Least privilege for RDS app secret, private files bucket, VPC ENI, and logs.
-  Does not grant staging provider/sandbox secrets or the RDS admin secret.
-  Cognito admin is limited to tenant-invite-user on the production ChecksOps pool.
+  Least privilege for the production RDS app secret, production private files
+  bucket, VPC ENI, and logs. Cognito admin is limited to tenant-invite-user
+  on the production ChecksOps pool. Do not CloudFormation-update the live
+  checksops-production-api-role stack from this file until a live role
+  snapshot has been diffed; the live inline policy may still contain extra
+  statements this template does not enumerate.
 
 Parameters:
   RoleName:
@@ -11,11 +14,11 @@ Parameters:
     Default: checksops-production-api-execution
   FilesBucketName:
     Type: String
-    Default: checksops-staging-privatefilesbucket-erzqsolpucjp
+    Default: checksops-production-privatefiles-806168576068
   AppDatabaseSecretArn:
     Type: String
-    Default: arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-staging/checksops/1788286468693-b4U0Rn
-    Description: Application DB secret only. Never the RDS admin secret or staging providers secret.
+    Default: arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops/1790081257144-A2Z4bw
+    Description: Production application DB secret only. Never the RDS admin secret or staging providers secret.
   ProductionUserPoolArn:
     Type: String
     Default: arn:aws:cognito-idp:us-east-1:806168576068:userpool/us-east-1_h00WorYMT
