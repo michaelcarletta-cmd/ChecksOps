@@ -134,3 +134,111 @@ export const lookupIdentityMapping = async (client, cognitoSub, scope = resolveT
     writesAttempted: false,
   };
 };
+
+export const PRODUCTION_IDENTITY_WRITE_GUC = 'request.production_identity_write';
+
+export const PRODUCTION_COGNITO_LOCK_INSERT_SQL = `INSERT INTO public.identity_production_cognito_locks (application_user_id, cognito_sub)
+VALUES ($1::uuid, $2)
+ON CONFLICT DO NOTHING`;
+
+export const PRODUCTION_COGNITO_LOCK_LOOKUP_SQL = `SELECT application_user_id::text AS application_user_id,
+       cognito_sub
+FROM public.identity_production_cognito_locks
+WHERE application_user_id = $1::uuid
+   OR cognito_sub = $2`;
+
+/**
+ * Bind the authoritative production Cognito sub to an existing application user.
+ *
+ * - Runs only when resolveTrustedIdentityScope() selects the production identity env.
+ * - Uses SET LOCAL request.production_identity_write=1 to satisfy the lock table trigger.
+ * - Idempotent for the same application_user_id + cognito_sub pair.
+ * - Fails closed on conflicting bindings (either side).
+ */
+export const bindProductionCognitoLock = async (
+  client,
+  applicationUserId,
+  cognitoSub,
+  scope = resolveTrustedIdentityScope(),
+) => {
+  if (!scope?.ok) {
+    const error = new Error(scope?.error || 'identity_env_unconfigured');
+    error.name = 'IdentityEnvUnconfigured';
+    error.publicError = scope?.error || 'identity_env_unconfigured';
+    error.statusCode = 500;
+    throw error;
+  }
+
+  if (scope.identityEnv !== IDENTITY_ENV_PRODUCTION) {
+    return {
+      ok: true,
+      skipped: true,
+      writesAttempted: false,
+      identityEnv: scope.identityEnv,
+    };
+  }
+
+  if (!applicationUserId || !cognitoSub) {
+    const error = new Error('missing_application_user_or_cognito_sub');
+    error.name = 'ProductionCognitoLockMissingFields';
+    error.publicError = 'missing_application_user_or_cognito_sub';
+    error.statusCode = 500;
+    throw error;
+  }
+
+  await client.query(`SET LOCAL ${PRODUCTION_IDENTITY_WRITE_GUC}=1`);
+  await client.query(PRODUCTION_COGNITO_LOCK_INSERT_SQL, [applicationUserId, cognitoSub]);
+  const rows = (await client.query(PRODUCTION_COGNITO_LOCK_LOOKUP_SQL, [applicationUserId, cognitoSub])).rows || [];
+
+  const byUser = rows.find((row) => String(row.application_user_id) === String(applicationUserId)) || null;
+  const bySub = rows.find((row) => String(row.cognito_sub) === String(cognitoSub)) || null;
+
+  const userMatches = byUser && String(byUser.cognito_sub) === String(cognitoSub);
+  const subMatches = bySub && String(bySub.application_user_id) === String(applicationUserId);
+
+  if (userMatches && subMatches) {
+    return {
+      ok: true,
+      skipped: false,
+      writesAttempted: true,
+      identityEnv: scope.identityEnv,
+      applicationUserId: String(applicationUserId),
+      cognitoSub: String(cognitoSub),
+      idempotent: rows.length > 0,
+    };
+  }
+
+  if (byUser && String(byUser.cognito_sub) !== String(cognitoSub)) {
+    const error = new Error('production_identity_lock_conflict_application_user');
+    error.name = 'ProductionCognitoLockConflict';
+    error.publicError = 'production_identity_lock_conflict';
+    error.statusCode = 409;
+    error.conflict = {
+      kind: 'application_user_id',
+      applicationUserId: String(applicationUserId),
+      existingCognitoSub: String(byUser.cognito_sub),
+      requestedCognitoSub: String(cognitoSub),
+    };
+    throw error;
+  }
+
+  if (bySub && String(bySub.application_user_id) !== String(applicationUserId)) {
+    const error = new Error('production_identity_lock_conflict_cognito_sub');
+    error.name = 'ProductionCognitoLockConflict';
+    error.publicError = 'production_identity_lock_conflict';
+    error.statusCode = 409;
+    error.conflict = {
+      kind: 'cognito_sub',
+      cognitoSub: String(cognitoSub),
+      existingApplicationUserId: String(bySub.application_user_id),
+      requestedApplicationUserId: String(applicationUserId),
+    };
+    throw error;
+  }
+
+  const error = new Error('production_identity_lock_write_failed');
+  error.name = 'ProductionCognitoLockWriteFailed';
+  error.publicError = 'production_identity_lock_write_failed';
+  error.statusCode = 500;
+  throw error;
+};

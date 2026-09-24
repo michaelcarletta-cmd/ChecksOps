@@ -21,6 +21,7 @@ import { normalizeEmail } from './email-policy.mjs';
 import { sendViaSesOrSink } from './email.mjs';
 import { renderTransactionalTemplate } from './email-templates.mjs';
 import { emailAssetOrigin, resolveEmailBranding } from './email-branding.mjs';
+import { bindProductionCognitoLock } from './identity-env.mjs';
 
 const POOL_ID = () => process.env.COGNITO_USER_POOL_ID;
 const CLIENT_ID = () => process.env.COGNITO_CLIENT_ID;
@@ -164,6 +165,20 @@ export const runTenantInviteUser = async ({
              linked_at = COALESCE(public.identity_accounts.linked_at, now())`,
       [cognitoSub, appUserId, email],
     ).catch(() => {});
+  }
+
+  if (cognitoSub && appUserId && String(cognitoSub) !== String(appUserId)) {
+    try {
+      await bindProductionCognitoLock(client, appUserId, cognitoSub);
+    } catch (error) {
+      return {
+        ok: false,
+        statusCode: Number(error?.statusCode || 500),
+        error: error?.publicError || 'production_identity_lock_bind_failed',
+        message: String(error?.message || error).slice(0, 240),
+        spoofFieldsIgnored: spoof,
+      };
+    }
   }
 
   await client.query(
@@ -488,6 +503,18 @@ export const runHireMortgageAgent = async ({
            linked_at = COALESCE(public.identity_accounts.linked_at, now())`,
     [cognitoSub, appUserId, email],
   );
+
+  try {
+    await bindProductionCognitoLock(client, appUserId, cognitoSub);
+  } catch (error) {
+    return {
+      ok: false,
+      statusCode: Number(error?.statusCode || 500),
+      error: error?.publicError || 'production_identity_lock_bind_failed',
+      message: String(error?.message || error).slice(0, 240),
+      spoofFieldsIgnored: spoof,
+    };
+  }
 
   await client.query(
     `INSERT INTO public.profiles (id, email, full_name, created_at, updated_at)
