@@ -911,6 +911,118 @@ export function createAwsStagingClient(options: AwsStagingClientOptions = {}) {
         if (!response.ok) {
           return { data: null, error: postgrestError(String(body.message || body.error || "rpc_failed"), String(body.error || "42501")) };
         }
+        const payload = (body.data ?? body) as Record<string, unknown>;
+        const newStage = payload.new_stage ?? body.toStage ?? payload.check_stage;
+        return {
+          data: {
+            ...payload,
+            new_stage: newStage,
+            new_status: payload.new_status ?? body.toStatus ?? payload.status,
+          },
+          error: null,
+        };
+      }
+      if (name === "record_external_deposit" || (
+        name === "deposit_action" && String(args.p_action || args.action || "") === "mark_manual_deposit"
+      )) {
+        const checkId = String(args.p_check_id || args.check_id || "");
+        const path = checkId
+          ? `/workflow/checks/${encodeURIComponent(checkId)}/external-deposit`
+          : "/workflow/external-deposit";
+        const { response, body } = await apiFetch(path, {
+          method: "POST",
+          body: JSON.stringify({
+            check_id: checkId || undefined,
+            deposit_item_id: args.p_deposit_item_id || args.deposit_item_id || undefined,
+            notes: args.p_notes || args.notes || null,
+            deposit_date: args.p_deposit_date || args.deposit_date || undefined,
+            deposit_slip_number: args.p_deposit_slip_number || args.deposit_slip_number || undefined,
+            bank_reference: args.p_bank_reference || args.bank_reference || undefined,
+            amount: args.p_amount || args.amount || undefined,
+          }),
+        }, token);
+        if (response.status === 401) {
+          writeStored(null);
+          emit("SIGNED_OUT", null);
+        }
+        if (!response.ok) {
+          return { data: null, error: postgrestError(String(body.message || body.error || "rpc_failed"), String(body.error || "42501")) };
+        }
+        return { data: body.data ?? body, error: null };
+      }
+      if (name === "get_check_funds_summary") {
+        const checkId = String(args.p_check_id || args.check_id || "");
+        const { response, body } = await apiFetch(`/workflow/checks/${encodeURIComponent(checkId)}/funds-summary`, {
+          method: "POST",
+          body: JSON.stringify({ check_id: checkId }),
+        }, token);
+        if (response.status === 401) {
+          writeStored(null);
+          emit("SIGNED_OUT", null);
+        }
+        if (!response.ok) {
+          return { data: null, error: postgrestError(String(body.message || body.error || "rpc_failed"), String(body.error || "42501")) };
+        }
+        return { data: body.data ?? body, error: null };
+      }
+      if (name === "record_external_payment") {
+        const checkId = String(args.p_check_id || args.check_id || "");
+        const { response, body } = await apiFetch(`/workflow/checks/${encodeURIComponent(checkId)}/external-payment`, {
+          method: "POST",
+          body: JSON.stringify({
+            check_id: checkId,
+            recipient_name: args.p_recipient_name || args.recipient_name,
+            recipient_type: args.p_recipient_type || args.recipient_type || "vendor",
+            amount: args.p_amount || args.amount,
+            external_check_number: args.p_external_check_number || args.external_check_number || args.reference,
+            notes: args.p_notes || args.notes || args.external_notes || null,
+            payment_date: args.p_payment_date || args.payment_date || undefined,
+            idempotency_key: args.p_idempotency_key || args.idempotency_key || undefined,
+          }),
+        }, token);
+        if (response.status === 401) {
+          writeStored(null);
+          emit("SIGNED_OUT", null);
+        }
+        if (!response.ok) {
+          return { data: null, error: postgrestError(String(body.message || body.error || "rpc_failed"), String(body.error || "42501")) };
+        }
+        return { data: body.data ?? body, error: null };
+      }
+      if (name === "apply_check_review_correction") {
+        const checkId = String(args.p_check_id || args.check_id || "");
+        const { response, body } = await apiFetch(`/workflow/checks/${encodeURIComponent(checkId)}/review-correction`, {
+          method: "POST",
+          body: JSON.stringify({
+            check_id: checkId,
+            fields: args.p_fields || args.fields || {},
+          }),
+        }, token);
+        if (response.status === 401) {
+          writeStored(null);
+          emit("SIGNED_OUT", null);
+        }
+        if (!response.ok) {
+          return { data: null, error: postgrestError(String(body.message || body.error || "rpc_failed"), String(body.error || "42501")) };
+        }
+        return { data: body.data ?? body, error: null };
+      }
+      if (name === "admin_override_check_status") {
+        const { response, body } = await apiFetch("/workflow/admin-status-correction", {
+          method: "POST",
+          body: JSON.stringify({
+            check_id: args.p_check_id || args.check_id,
+            new_status: args.p_new_status || args.new_status,
+            reason: args.p_reason || args.reason || null,
+          }),
+        }, token);
+        if (response.status === 401) {
+          writeStored(null);
+          emit("SIGNED_OUT", null);
+        }
+        if (!response.ok) {
+          return { data: null, error: postgrestError(String(body.message || body.error || "rpc_failed"), String(body.error || "42501")) };
+        }
         return { data: body.data ?? body, error: null };
       }
       if (name === "admin_delete_check") {

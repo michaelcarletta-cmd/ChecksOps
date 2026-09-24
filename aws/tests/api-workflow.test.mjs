@@ -230,6 +230,8 @@ test('valid start_review then mark_ready; skip and deposited denied', async () =
   }), depsFor(client));
   assert.equal(review.ok, true);
   assert.equal(review.toStatus, 'needs_review');
+  assert.equal(review.data.new_stage, 'review');
+  assert.equal(review.data.new_status, 'needs_review');
 
   const skip = await handleCheckTransition(jwtEvent('/workflow/transition', 'POST', {
     check_id: CHECK_ID,

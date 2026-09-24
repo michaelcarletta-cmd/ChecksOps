@@ -3,7 +3,7 @@ import { Fragment, useState, useEffect, useRef, useCallback, useMemo } from "rea
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { isAwsStaging } from "@/lib/awsStaging";
-import { pickAwsSafeIntakeUpdates } from "@/integrations/aws/safeIntakeFields";
+import { applyCheckReviewCorrection } from "@/lib/reviewCheckCorrection";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenantFilter } from "@/hooks/useTenantFilter";
@@ -248,15 +248,25 @@ export function CheckReviewQueue({
 
   const saveClaimNumber = useCallback(async (checkId: string, value: string) => {
     setSavingClaimId(checkId);
-    const { error } = await supabase
-      .from("check_intake_items")
-      .update({ detected_claim_number: value.trim() || null })
-      .eq("id", checkId);
-    setSavingClaimId(null);
-    if (error) {
+    try {
+      if (isAwsStaging()) {
+        await applyCheckReviewCorrection({
+          checkId,
+          fields: { detected_claim_number: value.trim() || null },
+        });
+      } else {
+        const { error } = await supabase
+          .from("check_intake_items")
+          .update({ detected_claim_number: value.trim() || null })
+          .eq("id", checkId);
+        if (error) throw error;
+      }
+    } catch (error: any) {
+      setSavingClaimId(null);
       toast({ title: "Failed to save claim #", description: error.message, variant: "destructive" });
       return;
     }
+    setSavingClaimId(null);
     setClaimEdits((prev) => {
       const next = { ...prev };
       delete next[checkId];
@@ -763,27 +773,30 @@ export function ReviewDecisionPanel({
 
       if (Object.keys(updates).length === 0) throw new Error("No field changes to save");
 
-      const persist = isAwsStaging() ? pickAwsSafeIntakeUpdates(updates) : { safe: updates, skipped: [] };
-      if (Object.keys(persist.safe).length === 0) {
-        throw new Error("AWS staging cannot save amount, routing, or account fields");
+      if (isAwsStaging()) {
+        const { routing_number: _routing, account_number: _account, ...reviewFields } = updates;
+        if (Object.keys(reviewFields).length === 0) {
+          throw new Error("Routing and account numbers are not operator-correctable during Review on AWS");
+        }
+        await applyCheckReviewCorrection({
+          checkId,
+          fields: reviewFields,
+        });
+        return;
       }
 
       const { error } = await supabase
         .from("check_intake_items")
-        .update({ ...persist.safe, updated_at: new Date().toISOString() })
+        .update({ ...updates, updated_at: new Date().toISOString() })
         .eq("id", checkId);
       if (error) throw error;
 
-      const persistedChanges = fieldChanges.filter((change) => change.field in persist.safe);
       await supabase.from("check_audit_log").insert({
         check_id: checkId,
         event_type: "review_fields_saved",
-        event_description: persist.skipped.length
-          ? "Review fields updated without moving workflow status (AWS staging skipped financial fields)"
-          : "Review fields updated without moving workflow status",
+        event_description: "Review fields updated without moving workflow status",
         event_data: {
-          field_changes: persistedChanges,
-          skipped_fields: persist.skipped,
+          field_changes: fieldChanges,
         },
         actor_id: user?.id ?? null,
       });
@@ -831,11 +844,21 @@ export function ReviewDecisionPanel({
       });
 
       if (Object.keys(updates).length > 0) {
-        const { error: updateError } = await supabase
-          .from("check_intake_items")
-          .update({ ...updates, updated_at: new Date().toISOString() })
-          .eq("id", checkId);
-        if (updateError) throw updateError;
+        if (isAwsStaging()) {
+          const { routing_number: _routing, account_number: _account, ...reviewFields } = updates;
+          if (Object.keys(reviewFields).length > 0) {
+            await applyCheckReviewCorrection({
+              checkId,
+              fields: reviewFields,
+            });
+          }
+        } else {
+          const { error: updateError } = await supabase
+            .from("check_intake_items")
+            .update({ ...updates, updated_at: new Date().toISOString() })
+            .eq("id", checkId);
+          if (updateError) throw updateError;
+        }
       }
 
       const { data, error } = await supabase.rpc("submit_check_review_decision_safe", {
@@ -934,7 +957,7 @@ export function ReviewDecisionPanel({
             )}
             <Button
               size="sm"
-              variant={editing ? "default" : "outline"}
+              variant={editing ? "outline" : "default"}
               onClick={() => {
                 if (!editing) {
                   setCarrierName(check.carrier_name ?? "");
@@ -950,7 +973,7 @@ export function ReviewDecisionPanel({
               }}
             >
               <Edit3 className="h-3 w-3 mr-1" />
-              {editing ? "Cancel Edit" : "Edit Fields"}
+              {editing ? "Cancel Edit" : "Edit Check"}
             </Button>
           </div>
         </div>
@@ -1108,6 +1131,8 @@ export function ReviewDecisionPanel({
                     value={routingNumber}
                     onChange={(e) => { setRoutingNumber(e.target.value.replace(/\D/g, "").slice(0, 9)); markDirty(); }}
                     className="h-8 text-sm font-mono"
+                    readOnly={isAwsStaging()}
+                    disabled={isAwsStaging()}
                   />
                 </div>
                 <div>
@@ -1118,9 +1143,17 @@ export function ReviewDecisionPanel({
                     value={accountNumber}
                     onChange={(e) => { setAccountNumber(e.target.value.replace(/\D/g, "").slice(0, 20)); markDirty(); }}
                     className="h-8 text-sm font-mono"
+                    readOnly={isAwsStaging()}
+                    disabled={isAwsStaging()}
                   />
                 </div>
               </div>
+              {isAwsStaging() && (
+                <p className="text-[10px] text-muted-foreground">
+                  Routing and account numbers stay as extracted MICR evidence and are not edited during Review.
+                  Amount, carrier, check #, payee, and date can be corrected.
+                </p>
+              )}
               <Button
                 type="button"
                 size="sm"
@@ -1134,7 +1167,7 @@ export function ReviewDecisionPanel({
                 ) : (
                   <Save className="h-4 w-4 mr-2" />
                 )}
-                Save Field Changes
+                Save Check Edits
               </Button>
             </>
           ) : (

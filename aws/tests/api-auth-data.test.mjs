@@ -436,6 +436,9 @@ test('check queue has-many embeds do not select nonexistent parent FKs', async (
   assert.equal(relatedFk('check_intake_items', 'check_payees'), 'check_payee_id');
   assert.equal(childFk('check_intake_items', 'check_payees'), 'check_id');
   assert.equal(childFk('check_intake_items', 'checkalt_deposits'), 'check_intake_item_id');
+  assert.equal(childFk('disbursement_batches', 'disbursement_splits'), 'batch_id');
+  assert.equal(childFk('deposit_batches', 'deposit_items'), 'batch_id');
+  assert.notEqual(childFk('disbursement_batches', 'disbursement_splits'), 'disbursement_batche_id');
 
   const parentId = '7dbb3009-f059-4767-b5dc-1c5c72379330';
   const client = {
