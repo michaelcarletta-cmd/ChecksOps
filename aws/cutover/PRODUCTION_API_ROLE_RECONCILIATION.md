@@ -309,8 +309,9 @@ CloudFormation rollback path. That is one reason this is **NOT SAFE TO DEPLOY**.
 ## O. Candidate git SHA
 
 Branch `cursor/production-iam-reconciliation-0ebf`.
-First candidate commit `141662d6b94fc0b392a2d62e63bd3ce6ffe7e744`.
-Follow-up test/report commit is recorded on the same branch after this file.
+
+- First candidate: `141662d6b94fc0b392a2d62e63bd3ce6ffe7e744`
+- This report + passing tests: `b6c3973b25a3f8f04a25ab4069acbed165e914c3`
 
 ---
 
