@@ -204,7 +204,10 @@ export const handler = async (event = {}) => {
       beforeCount: before.length,
       afterCount: after.length,
       afterCols,
-      afterPolicies: afterPolicies.map((row) => row.polname),
+      afterPolicies: afterPolicies.map((row) => ({
+        name: row.polname,
+        with_check: String(row.with_check || '').slice(0, 800),
+      })),
       providerExecution: false,
       moovInvoked: false,
     };
