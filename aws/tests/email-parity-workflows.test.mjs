@@ -549,9 +549,10 @@ test('hire-mortgage-agent and tenant invite stay SUPPRESS and never leak passwor
           match: (sql) => sql.includes('FROM public.profiles'),
           result: () => ({ rows: [] }),
         },
+        { match: (sql) => sql.includes('INSERT INTO public.identity_accounts'), result: () => ({ rows: [], rowCount: 1 }) },
         {
-          match: (sql) => sql.includes('INSERT INTO public.user_roles') && sql.includes('mortgage_agent'),
-          result: () => ({ rows: [{ id: '1' }] }),
+          match: (sql) => sql.includes('aws_hire_mortgage_agent_provision'),
+          result: () => ({ rows: [{ result: { ok: true, mortgage_agent_granted: true } }], rowCount: 1 }),
         },
       ]),
     });

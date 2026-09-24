@@ -375,6 +375,8 @@ export const handleTenantRemoveOpenaiKey = async (event) => withIdentity(event, 
 export const runHireMortgageAgent = async ({
   client, mapping, body, spoof, send, cognitoJson: cognitoFn, identityScope,
 }) => {
+  const HIRE_PROVISION_SQL =
+    'SELECT public.aws_hire_mortgage_agent_provision($1::uuid, $2::text, $3::text) AS result';
   const adminCognito = cognitoFn || cognitoJson;
   const system = (await client.query(
     `SELECT role FROM public.user_roles WHERE user_id = $1::uuid AND role = 'admin' LIMIT 1`,
@@ -508,6 +510,29 @@ export const runHireMortgageAgent = async ({
     [cognitoSub, appUserId, email],
   );
 
+  const provisionRaw = (await client.query(HIRE_PROVISION_SQL, [appUserId, email, fullName])).rows[0]?.result;
+  const provision = typeof provisionRaw === 'string'
+    ? (() => { try { return JSON.parse(provisionRaw); } catch { return null; } })()
+    : provisionRaw;
+  if (!provision || provision.ok !== true) {
+    const err = provision?.error || 'hire_provision_failed';
+    const statusCode = err === 'not_authorized' || err === 'not_authenticated' ? 403 : 400;
+    return {
+      ok: false,
+      statusCode,
+      error: err,
+      spoofFieldsIgnored: spoof,
+    };
+  }
+  if (provision.mortgage_agent_granted !== true) {
+    return {
+      ok: false,
+      statusCode: 400,
+      error: 'Failed to grant mortgage_agent role',
+      spoofFieldsIgnored: spoof,
+    };
+  }
+
   const lockResult = await bindProductionCognitoLock(client, {
     cognitoSub,
     applicationUserId: appUserId,
@@ -521,53 +546,6 @@ export const runHireMortgageAgent = async ({
       message: lockResult.message || undefined,
       spoofFieldsIgnored: spoof,
     };
-  }
-
-  await client.query(
-    `INSERT INTO public.profiles (id, email, full_name, created_at, updated_at)
-     VALUES ($1::uuid, $2, $3, now(), now())
-     ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, full_name = EXCLUDED.full_name, updated_at = now()`,
-    [appUserId, email, fullName],
-  );
-
-  let roleOk = false;
-  try {
-    const roleInsert = await client.query(
-      `INSERT INTO public.user_roles (user_id, role)
-       VALUES ($1::uuid, 'mortgage_agent')
-       ON CONFLICT DO NOTHING
-       RETURNING id`,
-      [appUserId],
-    );
-    roleOk = Boolean(roleInsert?.rows?.length);
-  } catch {
-    try {
-      const roleInsert = await client.query(
-        `INSERT INTO public.user_roles (id, user_id, role)
-         VALUES ($1::uuid, $2::uuid, 'mortgage_agent')
-         ON CONFLICT DO NOTHING
-         RETURNING id`,
-        [randomUUID(), appUserId],
-      );
-      roleOk = Boolean(roleInsert?.rows?.length);
-    } catch {
-      roleOk = false;
-    }
-  }
-
-  if (!roleOk) {
-    const has = (await client.query(
-      `SELECT 1 FROM public.user_roles WHERE user_id = $1::uuid AND role = 'mortgage_agent' LIMIT 1`,
-      [appUserId],
-    )).rows[0];
-    if (!has) {
-      return {
-        ok: false,
-        statusCode: 400,
-        error: 'Failed to grant mortgage_agent role',
-        spoofFieldsIgnored: spoof,
-      };
-    }
   }
 
   const loginUrl = `${emailAssetOrigin()}/mortgage-ops/login`;

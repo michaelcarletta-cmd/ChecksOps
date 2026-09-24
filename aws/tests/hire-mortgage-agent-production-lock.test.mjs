@@ -50,6 +50,15 @@ test('production hire-mortgage-agent binds production lock using server-resolved
       result: () => ({ rows: [] }),
     },
     { match: (sql) => sql.includes('INSERT INTO public.identity_accounts'), result: () => ({ rows: [], rowCount: 1 }) },
+    {
+      match: (sql) => sql.includes('aws_hire_mortgage_agent_provision'),
+      result: (params) => {
+        assert.equal(params[0], APP_USER);
+        assert.equal(params[1], 'agent@example.com');
+        assert.equal(params[2], 'Mo Agent');
+        return { rows: [{ result: { ok: true, mortgage_agent_granted: true } }], rowCount: 1 };
+      },
+    },
 
     {
       match: (sql) => sql === SUB_SQL,
@@ -86,14 +95,10 @@ test('production hire-mortgage-agent binds production lock using server-resolved
       },
     },
 
-    { match: (sql) => sql.includes('INSERT INTO public.profiles'), result: () => ({ rows: [], rowCount: 1 }) },
+    // profiles/user_roles provisioning must happen via the narrow SECURITY DEFINER function.
     {
-      match: (sql) => sql.includes('INSERT INTO public.user_roles') && sql.includes("'mortgage_agent'"),
-      result: () => ({ rows: [{ id: '1' }], rowCount: 1 }),
-    },
-    {
-      match: (sql) => sql.includes('SELECT 1 FROM public.user_roles') && sql.includes("'mortgage_agent'"),
-      result: () => ({ rows: [{ '?column?': 1 }], rowCount: 1 }),
+      match: (sql) => sql.includes('INSERT INTO public.profiles') || (sql.includes('INSERT INTO public.user_roles') && sql.includes('mortgage_agent')),
+      result: () => { throw new Error('direct provisioning write attempted'); },
     },
   ]);
 
@@ -128,6 +133,10 @@ test('production hire-mortgage-agent fails closed on conflicting lock', async ()
     { match: (sql) => sql.includes('FROM public.profiles') && sql.includes('lower(email)'), result: () => ({ rows: [{ id: APP_USER }] }) },
     { match: (sql) => sql.includes('SELECT role FROM public.user_roles') && sql.includes('WHERE user_id = $1::uuid'), result: () => ({ rows: [] }) },
     { match: (sql) => sql.includes('INSERT INTO public.identity_accounts'), result: () => ({ rows: [], rowCount: 1 }) },
+    {
+      match: (sql) => sql.includes('aws_hire_mortgage_agent_provision'),
+      result: () => ({ rows: [{ result: { ok: true, mortgage_agent_granted: true } }], rowCount: 1 }),
+    },
     { match: (sql) => sql === SUB_SQL, result: () => ({ rows: [{ application_user_id: OTHER_USER, cognito_sub: 'server-sub-2' }] }) },
     { match: (sql) => sql === USER_SQL, result: () => ({ rows: [] }) },
   ]);
@@ -154,15 +163,17 @@ test('staging hire-mortgage-agent never touches production lock table', async ()
     { match: (sql) => sql.includes('FROM public.profiles') && sql.includes('lower(email)'), result: () => ({ rows: [{ id: APP_USER }] }) },
     { match: (sql) => sql.includes('SELECT role FROM public.user_roles') && sql.includes('WHERE user_id = $1::uuid'), result: () => ({ rows: [] }) },
     { match: (sql) => sql.includes('INSERT INTO public.identity_accounts'), result: () => ({ rows: [], rowCount: 1 }) },
+    { match: (sql) => sql.includes('aws_hire_mortgage_agent_provision'), result: () => ({ rows: [{ result: { ok: true, mortgage_agent_granted: true } }], rowCount: 1 }) },
     {
       match: (sql) => sql.includes('identity_production_cognito_locks') || sql.startsWith('SELECT set_config'),
       result: () => {
         throw new Error('production lock write attempted in staging');
       },
     },
-    { match: (sql) => sql.includes('INSERT INTO public.profiles'), result: () => ({ rows: [], rowCount: 1 }) },
-    { match: (sql) => sql.includes('INSERT INTO public.user_roles') && sql.includes("'mortgage_agent'"), result: () => ({ rows: [{ id: '1' }], rowCount: 1 }) },
-    { match: (sql) => sql.includes('SELECT 1 FROM public.user_roles') && sql.includes("'mortgage_agent'"), result: () => ({ rows: [{ '?column?': 1 }], rowCount: 1 }) },
+    {
+      match: (sql) => sql.includes('INSERT INTO public.profiles') || (sql.includes('INSERT INTO public.user_roles') && sql.includes('mortgage_agent')),
+      result: () => { throw new Error('direct provisioning write attempted'); },
+    },
   ]);
 
   const result = await runHireMortgageAgent({
