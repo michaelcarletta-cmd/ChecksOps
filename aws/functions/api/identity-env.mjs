@@ -135,110 +135,95 @@ export const lookupIdentityMapping = async (client, cognitoSub, scope = resolveT
   };
 };
 
+/** Live trigger identity_protect_production_cognito_locks requires this GUC. */
 export const PRODUCTION_IDENTITY_WRITE_GUC = 'request.production_identity_write';
 
-export const PRODUCTION_COGNITO_LOCK_INSERT_SQL = `INSERT INTO public.identity_production_cognito_locks (application_user_id, cognito_sub)
-VALUES ($1::uuid, $2)
-ON CONFLICT DO NOTHING`;
+export const SELECT_PRODUCTION_LOCK_BY_SUB_SQL = `SELECT application_user_id::text AS application_user_id,
+       cognito_sub
+FROM public.identity_production_cognito_locks
+WHERE cognito_sub = $1
+LIMIT 1`;
 
-export const PRODUCTION_COGNITO_LOCK_LOOKUP_SQL = `SELECT application_user_id::text AS application_user_id,
+export const SELECT_PRODUCTION_LOCK_BY_USER_SQL = `SELECT application_user_id::text AS application_user_id,
        cognito_sub
 FROM public.identity_production_cognito_locks
 WHERE application_user_id = $1::uuid
-   OR cognito_sub = $2`;
+LIMIT 1`;
+
+export const INSERT_PRODUCTION_LOCK_SQL = `INSERT INTO public.identity_production_cognito_locks (application_user_id, cognito_sub)
+VALUES ($1::uuid, $2)`;
 
 /**
- * Bind the authoritative production Cognito sub to an existing application user.
+ * Provision the production Cognito lock using the existing write contract
+ * (SET LOCAL request.production_identity_write=1, then INSERT).
  *
- * - Runs only when resolveTrustedIdentityScope() selects the production identity env.
- * - Uses SET LOCAL request.production_identity_write=1 to satisfy the lock table trigger.
- * - Idempotent for the same application_user_id + cognito_sub pair.
- * - Fails closed on conflicting bindings (either side).
+ * Login /identity/me must not call this. Staging identityEnv is a no-op.
+ * Bind only the server-resolved Cognito sub + application user.
  */
-export const bindProductionCognitoLock = async (
-  client,
-  applicationUserId,
+export const bindProductionCognitoLock = async (client, {
   cognitoSub,
-  scope = resolveTrustedIdentityScope(),
-) => {
-  if (!scope?.ok) {
-    const error = new Error(scope?.error || 'identity_env_unconfigured');
-    error.name = 'IdentityEnvUnconfigured';
-    error.publicError = scope?.error || 'identity_env_unconfigured';
-    error.statusCode = 500;
-    throw error;
+  applicationUserId,
+  identityScope = resolveTrustedIdentityScope(),
+} = {}) => {
+  if (!identityScope?.ok) {
+    return { ok: false, error: identityScope?.error || 'identity_env_unconfigured', writesAttempted: false };
   }
-
-  if (scope.identityEnv !== IDENTITY_ENV_PRODUCTION) {
+  if (identityScope.identityEnv !== IDENTITY_ENV_PRODUCTION) {
     return {
       ok: true,
+      bound: false,
       skipped: true,
+      reason: 'staging_identity_env',
       writesAttempted: false,
-      identityEnv: scope.identityEnv,
     };
   }
 
-  if (!applicationUserId || !cognitoSub) {
-    const error = new Error('missing_application_user_or_cognito_sub');
-    error.name = 'ProductionCognitoLockMissingFields';
-    error.publicError = 'missing_application_user_or_cognito_sub';
-    error.statusCode = 500;
-    throw error;
+  const sub = String(cognitoSub || '').trim();
+  const userId = String(applicationUserId || '').trim();
+  if (!sub || !userId) {
+    return { ok: false, error: 'identity_lock_missing_binding', writesAttempted: false };
+  }
+  if (sub === userId) {
+    return { ok: false, error: 'unsafe_or_missing_cognito_sub', writesAttempted: false };
   }
 
-  await client.query(`SET LOCAL ${PRODUCTION_IDENTITY_WRITE_GUC}=1`);
-  await client.query(PRODUCTION_COGNITO_LOCK_INSERT_SQL, [applicationUserId, cognitoSub]);
-  const rows = (await client.query(PRODUCTION_COGNITO_LOCK_LOOKUP_SQL, [applicationUserId, cognitoSub])).rows || [];
+  const bySub = (await client.query(SELECT_PRODUCTION_LOCK_BY_SUB_SQL, [sub])).rows[0] || null;
+  const byUser = (await client.query(SELECT_PRODUCTION_LOCK_BY_USER_SQL, [userId])).rows[0] || null;
 
-  const byUser = rows.find((row) => String(row.application_user_id) === String(applicationUserId)) || null;
-  const bySub = rows.find((row) => String(row.cognito_sub) === String(cognitoSub)) || null;
-
-  const userMatches = byUser && String(byUser.cognito_sub) === String(cognitoSub);
-  const subMatches = bySub && String(bySub.application_user_id) === String(applicationUserId);
-
-  if (userMatches && subMatches) {
+  if (bySub && String(bySub.application_user_id) !== userId) {
+    return { ok: false, error: 'identity_lock_conflict', writesAttempted: false };
+  }
+  if (byUser && String(byUser.cognito_sub) !== sub) {
+    return { ok: false, error: 'identity_lock_conflict', writesAttempted: false };
+  }
+  if (bySub && byUser) {
     return {
       ok: true,
-      skipped: false,
+      bound: true,
+      idempotent: true,
+      applicationUserId: userId,
+      cognitoSub: sub,
+      writesAttempted: false,
+    };
+  }
+
+  await client.query('SELECT set_config($1, $2, true)', [PRODUCTION_IDENTITY_WRITE_GUC, '1']);
+  try {
+    await client.query(INSERT_PRODUCTION_LOCK_SQL, [userId, sub]);
+  } catch (error) {
+    return {
+      ok: false,
+      error: 'identity_lock_failed',
+      message: String(error.message || error).slice(0, 240),
       writesAttempted: true,
-      identityEnv: scope.identityEnv,
-      applicationUserId: String(applicationUserId),
-      cognitoSub: String(cognitoSub),
-      idempotent: rows.length > 0,
     };
   }
-
-  if (byUser && String(byUser.cognito_sub) !== String(cognitoSub)) {
-    const error = new Error('production_identity_lock_conflict_application_user');
-    error.name = 'ProductionCognitoLockConflict';
-    error.publicError = 'production_identity_lock_conflict';
-    error.statusCode = 409;
-    error.conflict = {
-      kind: 'application_user_id',
-      applicationUserId: String(applicationUserId),
-      existingCognitoSub: String(byUser.cognito_sub),
-      requestedCognitoSub: String(cognitoSub),
-    };
-    throw error;
-  }
-
-  if (bySub && String(bySub.application_user_id) !== String(applicationUserId)) {
-    const error = new Error('production_identity_lock_conflict_cognito_sub');
-    error.name = 'ProductionCognitoLockConflict';
-    error.publicError = 'production_identity_lock_conflict';
-    error.statusCode = 409;
-    error.conflict = {
-      kind: 'cognito_sub',
-      cognitoSub: String(cognitoSub),
-      existingApplicationUserId: String(bySub.application_user_id),
-      requestedApplicationUserId: String(applicationUserId),
-    };
-    throw error;
-  }
-
-  const error = new Error('production_identity_lock_write_failed');
-  error.name = 'ProductionCognitoLockWriteFailed';
-  error.publicError = 'production_identity_lock_write_failed';
-  error.statusCode = 500;
-  throw error;
+  return {
+    ok: true,
+    bound: true,
+    idempotent: false,
+    applicationUserId: userId,
+    cognitoSub: sub,
+    writesAttempted: true,
+  };
 };

@@ -17,11 +17,11 @@ import {
   AdminSetUserPasswordCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import { withIdentity } from './data.mjs';
+import { bindProductionCognitoLock } from './identity-env.mjs';
 import { normalizeEmail } from './email-policy.mjs';
 import { sendViaSesOrSink } from './email.mjs';
 import { renderTransactionalTemplate } from './email-templates.mjs';
 import { emailAssetOrigin, resolveEmailBranding } from './email-branding.mjs';
-import { bindProductionCognitoLock } from './identity-env.mjs';
 
 const POOL_ID = () => process.env.COGNITO_USER_POOL_ID;
 const CLIENT_ID = () => process.env.COGNITO_CLIENT_ID;
@@ -73,7 +73,7 @@ const assertTenantAdmin = async (client, mapping, tenantId) => {
 };
 
 export const runTenantInviteUser = async ({
-  client, mapping, body, spoof, send, cognitoJson: cognitoFn,
+  client, mapping, body, spoof, send, cognitoJson: cognitoFn, identityScope,
 }) => {
   const adminCognito = cognitoFn || cognitoJson;
   const tenantId = body.tenant_id || body.tenantId;
@@ -167,18 +167,22 @@ export const runTenantInviteUser = async ({
     ).catch(() => {});
   }
 
-  if (cognitoSub && appUserId && String(cognitoSub) !== String(appUserId)) {
-    try {
-      await bindProductionCognitoLock(client, appUserId, cognitoSub);
-    } catch (error) {
-      return {
-        ok: false,
-        statusCode: Number(error?.statusCode || 500),
-        error: error?.publicError || 'production_identity_lock_bind_failed',
-        message: String(error?.message || error).slice(0, 240),
-        spoofFieldsIgnored: spoof,
-      };
-    }
+  // Production /identity/me resolves via identity_production_cognito_locks.
+  // Login must not write that table. Bind here with the server-resolved
+  // Cognito sub + application user only (never email, client user id, or tenant_id).
+  const lockResult = await bindProductionCognitoLock(client, {
+    cognitoSub,
+    applicationUserId: appUserId,
+    identityScope,
+  });
+  if (!lockResult.ok) {
+    return {
+      ok: false,
+      statusCode: lockResult.error === 'identity_lock_conflict' ? 409 : 500,
+      error: lockResult.error,
+      message: lockResult.message || undefined,
+      spoofFieldsIgnored: spoof,
+    };
   }
 
   await client.query(
@@ -503,18 +507,6 @@ export const runHireMortgageAgent = async ({
            linked_at = COALESCE(public.identity_accounts.linked_at, now())`,
     [cognitoSub, appUserId, email],
   );
-
-  try {
-    await bindProductionCognitoLock(client, appUserId, cognitoSub);
-  } catch (error) {
-    return {
-      ok: false,
-      statusCode: Number(error?.statusCode || 500),
-      error: error?.publicError || 'production_identity_lock_bind_failed',
-      message: String(error?.message || error).slice(0, 240),
-      spoofFieldsIgnored: spoof,
-    };
-  }
 
   await client.query(
     `INSERT INTO public.profiles (id, email, full_name, created_at, updated_at)
