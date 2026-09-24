@@ -147,6 +147,41 @@ const fixtureHits = async (client) => {
   return rows;
 };
 
+const SIGNED_TOKEN = 'e99049e3-03cc-4c23-9d33-269c0fd2e565';
+
+const signedCheckInspect = async (client) => {
+  const endorsements = (await client.query(
+    `SELECT id, check_id, status, token, updated_at
+     FROM public.check_endorsements
+     WHERE token = $1 OR id::text = $1
+     LIMIT 5`,
+    [SIGNED_TOKEN],
+  )).rows;
+  const payees = (await client.query(
+    `SELECT id, check_id, endorsement_token, endorsement_status
+     FROM public.check_payees
+     WHERE endorsement_token = $1
+     LIMIT 5`,
+    [SIGNED_TOKEN],
+  )).rows;
+  const checkIds = [...new Set([...endorsements, ...payees].map((r) => r.check_id).filter(Boolean))];
+  let checks = [];
+  if (checkIds.length) {
+    checks = (await client.query(
+      `SELECT id, check_number, status, check_stage, amount, updated_at
+       FROM public.check_intake_items WHERE id = ANY($1::uuid[])`,
+      [checkIds],
+    )).rows;
+  }
+  return {
+    tokenId: SIGNED_TOKEN,
+    endorsements,
+    payees,
+    checks,
+    tokenStillAbsent: endorsements.length === 0 && payees.length === 0,
+  };
+};
+
 export const handler = async (event = {}) => {
   const apply = event.apply === true || event.apply === 'true';
   const applyPolicy = event.applyPolicy === true || event.applyPolicy === 'true';
@@ -157,6 +192,7 @@ export const handler = async (event = {}) => {
     const beforeCols = await columnPrivs(client);
     const beforePolicies = await policies(client);
     const productionFixtures = await fixtureHits(client);
+    const signedCheck = await signedCheckInspect(client);
     const host = clientWrap.host;
     const granted = (table, priv) => before.some((row) => (
       row.table_name === table && row.grantee === 'checksops' && row.privilege_type === priv
@@ -201,6 +237,7 @@ export const handler = async (event = {}) => {
       policyHasCreator,
       authenticatedFinancialGrants: authenticatedFinancial,
       productionFixtureHits: productionFixtures,
+      signedCheck,
       beforeCount: before.length,
       afterCount: after.length,
       afterCols,
