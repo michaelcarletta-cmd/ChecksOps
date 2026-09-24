@@ -563,6 +563,11 @@ test('hire-mortgage-agent and tenant invite stay SUPPRESS and never leak passwor
     const invite = await runTenantInviteUser({
       mapping,
       spoof,
+      identityScope: {
+        ok: true,
+        identityEnv: 'staging',
+        mappingSource: 'identity_accounts',
+      },
       send: capturingMailer(sent),
       body: { tenant_id: TENANT, email: 'member@example.com', role: 'member', full_name: 'New Member' },
       cognitoJson: async (target, payload) => {
@@ -603,6 +608,10 @@ test('hire-mortgage-agent and tenant invite stay SUPPRESS and never leak passwor
         {
           match: (sql) => sql.includes('INSERT INTO public.identity_accounts'),
           result: () => ({ rows: [{ application_user_id: 'new-user' }] }),
+        },
+        {
+          match: (sql) => sql.includes('identity_production_cognito_locks') || sql.includes('set_config'),
+          result: () => ({ rows: [] }),
         },
         {
           match: (sql) => sql.includes('INSERT INTO public.profiles'),

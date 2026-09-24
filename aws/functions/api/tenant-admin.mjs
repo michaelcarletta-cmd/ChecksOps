@@ -17,6 +17,7 @@ import {
   AdminSetUserPasswordCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import { withIdentity } from './data.mjs';
+import { bindProductionCognitoLock } from './identity-env.mjs';
 import { normalizeEmail } from './email-policy.mjs';
 import { sendViaSesOrSink } from './email.mjs';
 import { renderTransactionalTemplate } from './email-templates.mjs';
@@ -72,7 +73,7 @@ const assertTenantAdmin = async (client, mapping, tenantId) => {
 };
 
 export const runTenantInviteUser = async ({
-  client, mapping, body, spoof, send, cognitoJson: cognitoFn,
+  client, mapping, body, spoof, send, cognitoJson: cognitoFn, identityScope,
 }) => {
   const adminCognito = cognitoFn || cognitoJson;
   const tenantId = body.tenant_id || body.tenantId;
@@ -201,6 +202,24 @@ export const runTenantInviteUser = async ({
         spoofFieldsIgnored: spoof,
       };
     }
+  }
+
+  // Production /identity/me resolves via identity_production_cognito_locks.
+  // Login must not write that table. Bind here with the server-resolved
+  // Cognito sub + application user only (never email, client user id, or tenant_id).
+  const lockResult = await bindProductionCognitoLock(client, {
+    cognitoSub,
+    applicationUserId: appUserId,
+    identityScope,
+  });
+  if (!lockResult.ok) {
+    return {
+      ok: false,
+      statusCode: lockResult.error === 'identity_lock_conflict' ? 409 : 500,
+      error: lockResult.error,
+      message: lockResult.message || undefined,
+      spoofFieldsIgnored: spoof,
+    };
   }
 
   const profileError = await execInviteWrite(() => client.query(
