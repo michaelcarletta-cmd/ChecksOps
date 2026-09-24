@@ -50,6 +50,20 @@ test("global Moov flag defaults on for GA", () => {
 });
 
 test("existing non-Freedom tenant is eligible even when historically not allowlisted", () => {
+  // C1C / Condition 1 Commercial is a live ChecksOps tenant that was never on
+  // the Freedom-only Moov allowlist. After GA they can start onboarding.
+  const c1c = {
+    id: "4f172140-f57a-4744-8050-95f4f07b13b4",
+    slug: "c1c",
+    name: "Condition 1 Commercial",
+    moov_allowlisted: false,
+    moov_environment: "sandbox",
+    is_test_account: false,
+    has_moov_account: false,
+  };
+  assert.notEqual(c1c.slug, "freedom");
+  assert.equal(isMoovAllowedForTenant(c1c.moov_allowlisted), true);
+  assert.equal(shouldPromoteExistingTenantToProduction(c1c), true);
   assert.equal(isMoovAllowedForTenant(false), true);
   assert.equal(isMoovAllowedForTenant(null), true);
   assert.equal(isMoovAllowedForTenant(undefined), true);
@@ -60,6 +74,18 @@ test("Freedom and every other tenant share the same eligibility rule", () => {
 });
 
 test("new live tenants receive production Moov configuration", () => {
+  const created = {
+    name: "North Shore Restoration",
+    slug: "north-shore-restoration",
+    ...tenantMoovDefaults(),
+  };
+  assert.deepEqual(created, {
+    name: "North Shore Restoration",
+    slug: "north-shore-restoration",
+    payment_provider: "moov",
+    moov_allowlisted: true,
+    moov_environment: "production",
+  });
   assert.deepEqual(tenantMoovDefaults(), {
     payment_provider: "moov",
     moov_allowlisted: true,
