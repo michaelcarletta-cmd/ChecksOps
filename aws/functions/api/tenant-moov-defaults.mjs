@@ -2,8 +2,8 @@
  * Server-side Moov defaults for every ChecksOps tenant.
  *
  * Availability is not gated by moov_allowlisted, Freedom, or a pilot list.
- * AWS_MOOV_ENABLED is a real-money / production-mutation safety hold
- * (see provider-flags.mjs). It is not a tenant eligibility switch.
+ * AWS_MOOV_ENABLED is the production onboarding/availability hold
+ * (see provider-flags.mjs). Real-money stays on AWS_MOOV_TRANSFER_POST_ENABLED.
  */
 export const tenantMoovDefaults = ({ isTestAccount = false } = {}) => ({
   payment_provider: 'moov',
