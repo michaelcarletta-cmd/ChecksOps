@@ -523,18 +523,8 @@ export const handleDeleteCheck = async (event, deps = {}) => {
       try { await client.query('RELEASE SAVEPOINT delete_audit_snapshot'); } catch { /* ignore */ }
     }
 
-    await client.query('SAVEPOINT delete_children');
-    try {
-      await deleteChildren(client, looked.check.id);
-      await client.query('RELEASE SAVEPOINT delete_children');
-    } catch (error) {
-      try { await client.query('ROLLBACK TO SAVEPOINT delete_children'); } catch { /* ignore */ }
-      try { await client.query('RELEASE SAVEPOINT delete_children'); } catch { /* ignore */ }
-      return denied(spoof, {
-        error: 'cleanup_failed',
-        message: 'Failed to delete dependent check records',
-      });
-    }
+    // Rely on FK ON DELETE CASCADE for dependent records (payees/files/messages/etc).
+    // We explicitly block financial/provider tables above; those are the non-cascading integrity holders.
     const rows = (await client.query(
       'DELETE FROM public.check_intake_items WHERE id = $1::uuid AND claim_id IS NULL RETURNING id',
       [looked.check.id],

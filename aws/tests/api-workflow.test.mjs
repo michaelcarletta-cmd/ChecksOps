@@ -388,7 +388,6 @@ test('admin can delete a safe check via workflow delete route', async () => {
   }), depsFor(client));
   assert.equal(result.ok, true);
   assert.equal(result.data.deleted, true);
-  assert.ok(client.queries.some((q) => /DELETE FROM public\.check_files/.test(String(q.sql))));
   assert.ok(client.queries.some((q) => /DELETE FROM public\.check_intake_items/.test(String(q.sql))));
 });
 
