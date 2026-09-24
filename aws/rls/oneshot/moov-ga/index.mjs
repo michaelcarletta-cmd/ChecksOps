@@ -36,7 +36,16 @@ const adminClient = async () => {
 };
 
 export const handler = async () => {
-  const client = await adminClient();
+  let client;
+  try {
+    client = await adminClient();
+  } catch (error) {
+    return {
+      ok: false,
+      phase: 'connect',
+      error: String(error.message || error).slice(0, 500),
+    };
+  }
   try {
     await client.query('BEGIN');
     await client.query(SQL);
