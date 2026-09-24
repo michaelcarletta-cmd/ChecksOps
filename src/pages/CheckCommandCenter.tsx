@@ -3294,7 +3294,7 @@ function CheckDetailPanel({
     return () => { cancelled = true; };
   }, [frontImageUrl]);
 
-  const { data: linkedClaim } = useQuery({
+  const linkedClaimQuery = useQuery({
     queryKey: ["check-detail-linked-claim", check?.claim_id],
     enabled: !!check?.claim_id,
     queryFn: async () => {
@@ -3308,6 +3308,7 @@ function CheckDetailPanel({
     },
     staleTime: 60_000,
   });
+  const linkedClaim = linkedClaimQuery.data;
 
   const { data: auditLog = [] } = useQuery({
     queryKey: ["check-audit", checkId],
@@ -4420,12 +4421,29 @@ function CheckDetailPanel({
                         title="Open claim ledger"
                       >
                         {(() => {
-                          const num = linkedClaim?.claim_number?.trim();
-                          const name = linkedClaim?.policyholder_name?.trim();
+                          if (linkedClaimQuery.isLoading) return "Loading linked claim…";
+                          if (linkedClaimQuery.isError) return "Linked claim (unavailable)";
+                          if (!linkedClaim) return "Linked claim (not found)";
+                          const num = linkedClaim.claim_number?.trim();
+                          const name = linkedClaim.policyholder_name?.trim();
                           const left = num ? `Claim #${num}` : "Claim";
                           return name ? `${left} — ${name}` : left;
                         })()}
                       </button>
+                      {linkedClaimQuery.isError && (
+                        <div className="mt-1 flex justify-end">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground"
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); linkedClaimQuery.refetch(); }}
+                            title="Retry linked claim lookup"
+                          >
+                            Retry
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="flex items-center justify-end gap-2">
