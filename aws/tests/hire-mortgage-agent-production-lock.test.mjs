@@ -54,7 +54,7 @@ test('production hire-mortgage-agent binds production lock using server-resolved
     {
       match: (sql) => sql === SUB_SQL,
       result: (params) => {
-        queries.push({ sql, params });
+        queries.push({ sql: SUB_SQL, params });
         assert.equal(params[0], 'server-sub-1');
         return { rows: [] };
       },
@@ -62,7 +62,7 @@ test('production hire-mortgage-agent binds production lock using server-resolved
     {
       match: (sql) => sql === USER_SQL,
       result: (params) => {
-        queries.push({ sql, params });
+        queries.push({ sql: USER_SQL, params });
         assert.equal(params[0], APP_USER);
         return { rows: [] };
       },
@@ -70,7 +70,7 @@ test('production hire-mortgage-agent binds production lock using server-resolved
     {
       match: (sql) => sql.startsWith('SELECT set_config'),
       result: (params) => {
-        queries.push({ sql, params });
+        queries.push({ sql: 'SELECT set_config', params });
         assert.equal(params[0], PRODUCTION_IDENTITY_WRITE_GUC);
         assert.equal(params[1], '1');
         return { rows: [{ set_config: '1' }] };
@@ -79,7 +79,7 @@ test('production hire-mortgage-agent binds production lock using server-resolved
     {
       match: (sql) => sql === INSERT_SQL,
       result: (params) => {
-        queries.push({ sql, params });
+        queries.push({ sql: INSERT_SQL, params });
         assert.equal(params[0], APP_USER);
         assert.equal(params[1], 'server-sub-1');
         return { rows: [], rowCount: 1 };
