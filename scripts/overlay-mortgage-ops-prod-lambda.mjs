@@ -21,9 +21,21 @@ const EXPECTED_METHOD = 'c70a90f2-9bcc-4084-8263-d5a0fb5d806c';
 const OVERLAY = [
   'tenant-billing-engine.mjs',
   'tenant-billing-handlers.mjs',
-  'workflow-rpc.mjs',
   'write-allowlist.mjs',
 ];
+const LIVE_PATCH = ['workflow-rpc.mjs'];
+const ACCEPT_HOOK = `  if (!rows.length) return { error: 'already_taken', message: 'already_taken' };
+  try {
+    const { accrueMortgageOpsAcceptedRequest } = await import('./tenant-billing-engine.mjs');
+    await accrueMortgageOpsAcceptedRequest(client, { request: rows[0], persist: true });
+  } catch {
+    // Accept must succeed even if usage accrual is retried later by the DB trigger.
+  }
+  return { data: rows[0] };
+};`;
+const ACCEPT_ANCHOR = `  if (!rows.length) return { error: 'already_taken', message: 'already_taken' };
+  return { data: rows[0] };
+};`;
 const FROZEN = [
   'providers/parity/moov-money.mjs',
   'providers/parity/rail-router.mjs',
@@ -46,8 +58,8 @@ const FROZEN_FLAGS = [
 const REASONS = {
   'tenant-billing-engine.mjs': 'Mortgage Ops accrual + cutoff + consolidated invoice totals',
   'tenant-billing-handlers.mjs': 'Mortgage Ops rate update fields',
-  'workflow-rpc.mjs': 'Accept hook calls accrueMortgageOpsAcceptedRequest',
   'write-allowlist.mjs': 'Allow tenant mortgage rate columns on admin save',
+  'workflow-rpc.mjs': 'Narrow accept-hook forward-port onto current live workflow-rpc',
 };
 
 const sha256 = (file) => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
@@ -129,6 +141,29 @@ const main = async () => {
     });
   }
 
+  const liveRpc = path.join(beforePkg, 'workflow-rpc.mjs');
+  const destRpc = path.join(afterPkg, 'workflow-rpc.mjs');
+  const liveRpcText = fs.readFileSync(liveRpc, 'utf8');
+  if (liveRpcText.includes('accrueMortgageOpsAcceptedRequest')) {
+    throw new Error('live workflow-rpc already has Mortgage Ops accrual; collision');
+  }
+  if (!liveRpcText.includes(ACCEPT_ANCHOR)) {
+    throw new Error('live executeAcceptMortgage anchor missing; refusing wholesale replace');
+  }
+  const patchedRpc = liveRpcText.replace(ACCEPT_ANCHOR, ACCEPT_HOOK);
+  if (patchedRpc === liveRpcText || (patchedRpc.match(/accrueMortgageOpsAcceptedRequest/g) || []).length !== 1) {
+    throw new Error('workflow-rpc accept hook patch failed');
+  }
+  fs.writeFileSync(destRpc, patchedRpc);
+  overlayManifest.push({
+    file: 'workflow-rpc.mjs',
+    currentHash: sha256(liveRpc),
+    candidateHash: sha256(destRpc),
+    afterHash: sha256(destRpc),
+    reason: REASONS['workflow-rpc.mjs'],
+    method: 'live_forward_port_patch',
+  });
+
   const beforeFiles = new Map(walk(beforePkg).map((file) => [path.relative(beforePkg, file), sha256(file)]));
   const afterFiles = new Map(walk(afterPkg).map((file) => [path.relative(afterPkg, file), sha256(file)]));
   const changed = [];
@@ -146,7 +181,7 @@ const main = async () => {
     unchangedFrozen.push({ file: rel, identical: beforeHash === afterHash, hash: afterHash });
     if (beforeHash !== afterHash) throw new Error(`frozen_file_changed:${rel}`);
   }
-  const unexpected = changed.filter((row) => !OVERLAY.includes(row.file));
+  const unexpected = changed.filter((row) => ![...OVERLAY, ...LIVE_PATCH].includes(row.file));
   if (unexpected.length) {
     throw new Error(`unexpected_overlay_changes:${unexpected.map((r) => r.file).join(',')}`);
   }
