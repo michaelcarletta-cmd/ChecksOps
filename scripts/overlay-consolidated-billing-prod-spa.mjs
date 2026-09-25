@@ -81,19 +81,12 @@ const main = async () => {
     }
   }
 
-  const prodEnv = {
-    VITE_AUTH_PROVIDER: 'cognito',
-    VITE_APP_URL: 'https://checksops.com',
-    VITE_CHECKSOPS_API_URL: '/prep',
-    VITE_AWS_REGION: 'us-east-1',
-    VITE_COGNITO_USER_POOL_ID: PROD_POOL,
-    VITE_COGNITO_USER_POOL_CLIENT_ID: PROD_CLIENT,
-  };
-  await writeFile(path.join(SPA_SRC, '.env.production.local'), `${Object.entries(prodEnv).map(([k, v]) => `${k}=${v}`).join('\n')}\n`);
-
+  // Current production SPA is a Vite --mode production build. It does not bake
+  // VITE_AUTH_PROVIDER=cognito; ChecksOps.com routing stays on the accepted
+  // hostname adapter. Forcing Cognito here would replace that production config.
   const built = spawnSync('npx', ['vite', 'build', '--mode', 'production'], {
     cwd: SPA_SRC,
-    env: { ...process.env, ...prodEnv },
+    env: { ...process.env },
     encoding: 'utf8',
     timeout: 180000,
   });
@@ -105,33 +98,31 @@ const main = async () => {
   const index = path.join(dist, 'index.html');
   const indexHtml = fs.readFileSync(index, 'utf8');
   const assets = fs.readdirSync(path.join(dist, 'assets'));
-  const indexJs = assets.find((name) => name.startsWith('index-') && name.endsWith('.js'));
-  const adminJs = assets.find((name) => name.startsWith('AdminTenants-'));
-  const css = assets.find((name) => name.startsWith('index-') && name.endsWith('.css'));
-  const haystack = [
-    indexHtml,
-    indexJs ? fs.readFileSync(path.join(dist, 'assets', indexJs), 'utf8') : '',
-    adminJs ? fs.readFileSync(path.join(dist, 'assets', adminJs), 'utf8') : '',
-  ].join('\n');
+  const haystack = [indexHtml];
+  for (const name of assets) {
+    if (!/\.(js|css|html)$/.test(name)) continue;
+    haystack.push(fs.readFileSync(path.join(dist, 'assets', name), 'utf8'));
+  }
+  const text = haystack.join('\n');
   const leaks = {
-    stagingApi: /psr19uhop4/.test(haystack),
-    stagingCloudFront: /E1CG52WRQZI7X1/.test(haystack),
-    stagingCognitoPool: /us-east-1_vPmQ7cL1F/.test(haystack),
-    stagingCognitoClient: /71bb7a192cbl6o6s8m259tl589/.test(haystack),
-    rawExecuteApi: /kiqojucc02/.test(haystack),
-    sandboxMerchant: /36b79957-ce7a-4ca7-a68f-30986c9e47bb/.test(haystack),
+    stagingApi: /psr19uhop4/.test(text),
+    stagingCloudFront: /E1CG52WRQZI7X1/.test(text),
+    stagingCognitoPool: /us-east-1_vPmQ7cL1F/.test(text),
+    stagingCognitoClient: /71bb7a192cbl6o6s8m259tl589/.test(text),
+    rawExecuteApi: /kiqojucc02/.test(text),
+    sandboxMerchant: /36b79957-ce7a-4ca7-a68f-30986c9e47bb/.test(text),
   };
   const preserves = {
-    sameOriginPrep: /["']\/prep["']|CHECKSOPS_API_URL:"\/prep"|\/prep/.test(haystack),
-    productionPool: haystack.includes(PROD_POOL),
-    productionClient: haystack.includes(PROD_CLIENT),
-    monthlyBilling: /Monthly tenant billing|next_day_rate|Same Day/.test(haystack),
+    sameOriginPrep: /\/prep/.test(text),
+    noForcedCognitoBake: !text.includes(PROD_POOL) && !text.includes(PROD_CLIENT),
+    monthlyBilling: /Monthly tenant billing|next_day_rate/.test(text),
+    matchesCurrentProductionAuthShape: /nbcqwpysqgyxrrbgtmkw/.test(text),
   };
   if (Object.values(leaks).some(Boolean)) {
     throw new Error(`staging_or_raw_endpoint_leak:${JSON.stringify(leaks)}`);
   }
-  if (!preserves.sameOriginPrep || !preserves.productionPool || !preserves.productionClient) {
-    throw new Error(`missing_production_api_config:${JSON.stringify(preserves)}`);
+  if (!preserves.sameOriginPrep || !preserves.monthlyBilling) {
+    throw new Error(`missing_production_api_or_billing:${JSON.stringify(preserves)}`);
   }
 
   await assumeCursorRole('phase3a-spa-deploy');
@@ -169,7 +160,8 @@ const main = async () => {
 
   const operatorDir = path.join(OUT, 'spa-operator-package');
   await rm(operatorDir, { recursive: true, force: true });
-  execFileSync('cp', ['-a', dist, operatorDir]);
+  execFileSync('mkdir', ['-p', operatorDir]);
+  execFileSync('cp', ['-r', '--no-preserve=mode', `${dist}/.`, operatorDir]);
   execFileSync('tar', ['-czf', path.join(OUT, 'checksops-production-consolidated-billing-spa.tar.gz'), '-C', OUT, 'spa-operator-package']);
 
   const head = awsTry(['s3api', 'head-object', '--bucket', PROD_BUCKET, '--key', 'index.html']);
@@ -179,6 +171,7 @@ const main = async () => {
     billingOverlay: copied,
     usedDelete: false,
     mode: 'production',
+    forcedCognito: false,
     leaks,
     preserves,
     indexSha256: sha256(index),
