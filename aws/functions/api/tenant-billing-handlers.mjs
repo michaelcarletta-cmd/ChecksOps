@@ -83,6 +83,8 @@ export const handleTenantBillingAdmin = async (event, deps = {}) => {
         perCheckRateCents: body.per_check_rate_cents,
         nextDayRateCents: body.next_day_rate_cents,
         sameDayRateCents: body.same_day_rate_cents,
+        mortgageOpsInitialRateCents: body.mortgage_ops_initial_rate_cents,
+        mortgageOpsAdditionalRateCents: body.mortgage_ops_additional_rate_cents,
         billingEnabled: body.billing_enabled,
         billingDay: body.billing_day_of_month,
         userId: mapping.application_user_id,

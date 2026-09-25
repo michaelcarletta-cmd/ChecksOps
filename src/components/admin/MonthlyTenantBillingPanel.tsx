@@ -49,6 +49,8 @@ export function MonthlyTenantBillingPanel({
   const [checkRate, setCheckRate] = useState("4.00");
   const [nextDayRate, setNextDayRate] = useState("0.75");
   const [sameDayRate, setSameDayRate] = useState("1.00");
+  const [mortgageInitialRate, setMortgageInitialRate] = useState("10.00");
+  const [mortgageAdditionalRate, setMortgageAdditionalRate] = useState("5.00");
   const [day, setDay] = useState(1);
   const [enabled, setEnabled] = useState(false);
   const [selectedMethod, setSelectedMethod] = useState("");
@@ -59,8 +61,10 @@ export function MonthlyTenantBillingPanel({
     setRate(((snapshot.monthly_rate_cents || 0) / 100).toFixed(2));
     setDiscount(((snapshot.referral_discount_cents || 0) / 100).toFixed(2));
     setCheckRate(((snapshot.per_check_rate_cents || 400) / 100).toFixed(2));
-    setNextDayRate(((snapshot.next_day_rate_cents || 75) / 100).toFixed(2));
-    setSameDayRate(((snapshot.same_day_rate_cents || 100) / 100).toFixed(2));
+    setNextDayRate(((snapshot.next_day_rate_cents ?? 75) / 100).toFixed(2));
+    setSameDayRate(((snapshot.same_day_rate_cents ?? 100) / 100).toFixed(2));
+    setMortgageInitialRate(((snapshot.mortgage_ops_initial_rate_cents ?? 1000) / 100).toFixed(2));
+    setMortgageAdditionalRate(((snapshot.mortgage_ops_additional_rate_cents ?? 500) / 100).toFixed(2));
     setDay(snapshot.billing_day_of_month || 1);
     setEnabled(snapshot.billing_enabled === true);
     setSelectedMethod(snapshot.authorization?.provider_payment_method_id || "");
@@ -91,6 +95,8 @@ export function MonthlyTenantBillingPanel({
       per_check_rate_cents: dollarsToCents(checkRate),
       next_day_rate_cents: dollarsToCents(nextDayRate),
       same_day_rate_cents: dollarsToCents(sameDayRate),
+      mortgage_ops_initial_rate_cents: dollarsToCents(mortgageInitialRate),
+      mortgage_ops_additional_rate_cents: dollarsToCents(mortgageAdditionalRate),
       billing_enabled: enabled,
       billing_day_of_month: day,
     });
@@ -145,7 +151,7 @@ export function MonthlyTenantBillingPanel({
       title="Monthly tenant billing"
       icon={<Banknote className="h-4 w-4 text-sky-500" />}
       accent="bg-gradient-to-r from-sky-500 to-sky-500/30"
-      description={`Consolidated ChecksOps invoice for ${tenantName}: maintenance, check processing, Next Day, and Same Day. Instant is not offered.`}
+      description={`Consolidated ChecksOps invoice for ${tenantName}: maintenance, check processing, Next Day, Same Day, and Mortgage Ops. Instant is not offered.`}
     >
       {loading || !data ? (
         <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
@@ -208,6 +214,16 @@ export function MonthlyTenantBillingPanel({
                 <div className="space-y-1">
                   <Label className="text-xs">Same Day rate</Label>
                   <Input type="number" step="0.01" min="0" value={sameDayRate} onChange={(e) => setSameDayRate(e.target.value)} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Mortgage Ops — First Check</Label>
+                  <Input type="number" step="0.01" min="0" value={mortgageInitialRate} onChange={(e) => setMortgageInitialRate(e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Mortgage Ops — Additional Check</Label>
+                  <Input type="number" step="0.01" min="0" value={mortgageAdditionalRate} onChange={(e) => setMortgageAdditionalRate(e.target.value)} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3 items-end">
@@ -318,6 +334,9 @@ export function MonthlyTenantBillingPanel({
                         {row.check_usage_cents != null ? ` · checks ${money(row.check_usage_cents)}` : ""}
                         {row.next_day_usage_cents != null ? ` · next day ${money(row.next_day_usage_cents)}` : ""}
                         {row.same_day_usage_cents != null ? ` · same day ${money(row.same_day_usage_cents)}` : ""}
+                        {row.mortgage_ops_initial_amount_cents != null || row.mortgage_ops_additional_amount_cents != null
+                          ? ` · mortgage ${money((row.mortgage_ops_initial_amount_cents || 0) + (row.mortgage_ops_additional_amount_cents || 0))}`
+                          : ""}
                         {data.authorization?.account_number_last4
                           ? ` · source ••••${data.authorization.account_number_last4}`
                           : ""}

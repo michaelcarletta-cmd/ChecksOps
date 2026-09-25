@@ -11,6 +11,7 @@ import {
 } from '../functions/api/tenant-billing-destination.mjs';
 import {
   applyBillingProviderEvent,
+  accrueMortgageOpsAcceptedRequest,
   assembleInvoiceTotals,
   billingIdempotencyKey,
   buildConsolidatedInvoice,
@@ -19,14 +20,19 @@ import {
   collectionPeriodKey,
   createOrGetOccurrence,
   DEFAULT_CHECK_RATE_CENTS,
+  DEFAULT_MORTGAGE_ADDITIONAL_RATE_CENTS,
+  DEFAULT_MORTGAGE_INITIAL_RATE_CENTS,
   DEFAULT_NEXT_DAY_RATE_CENTS,
   DEFAULT_SAME_DAY_RATE_CENTS,
   defaultPullPeriodKey,
   evaluateBillingReadiness,
   feeTypeForTransfer,
+  mortgageRequestIsAccepted,
   netFeeCents,
   periodKey,
   resolveCheckRateCents,
+  resolveMortgageAdditionalRateCents,
+  resolveMortgageInitialRateCents,
   resolveNextDayRateCents,
   resolveSameDayRateCents,
   runMonthlyBillingScheduler,
@@ -84,12 +90,14 @@ const makeStore = () => ({
       monthly_rate_cents: 10000, referral_discount_cents: 0, is_founding_partner: false,
       per_check_rate_cents: 400, per_check_billing_enabled: true,
       next_day_rate_cents: 75, same_day_rate_cents: 100,
+      mortgage_ops_initial_rate_cents: 1000, mortgage_ops_additional_rate_cents: 500,
     }],
     [TENANT_B, {
       id: TENANT_B, name: 'Tenant B', slug: 'b', subscription_status: 'active',
       monthly_rate_cents: 7500, referral_discount_cents: 1500, is_founding_partner: true,
       per_check_rate_cents: 400, per_check_billing_enabled: true,
       next_day_rate_cents: 75, same_day_rate_cents: 100,
+      mortgage_ops_initial_rate_cents: 1000, mortgage_ops_additional_rate_cents: 500,
     }],
   ]),
   checkEvents: [],
@@ -240,6 +248,39 @@ const mockClient = (store, { platformOwner = true, actorTenant = TENANT_A, actor
           })),
       };
     }
+    if (text.includes('pg_advisory_xact_lock')) return { rows: [{}] };
+    if (text.includes('FROM public.check_intake_items WHERE id') && text.includes('claim_id')) {
+      return { rows: store.checks.get(params[0]) ? [{ claim_id: store.checks.get(params[0]).claim_id || null }] : [] };
+    }
+    if (text.includes('FROM public.check_billing_events') && text.includes('mortgage_ops_initial')) {
+      const mortgageTypes = ['mortgage_ops_initial', 'mortgage_ops_additional_check'];
+      if (text.includes('check_intake_item_id = $1')) {
+        return {
+          rows: store.checkEvents.filter((row) => (
+            row.check_intake_item_id === params[0] && mortgageTypes.includes(row.event_type)
+          )).slice(0, 1),
+        };
+      }
+      if (text.includes('claim_id = $2')) {
+        return {
+          rows: store.checkEvents.filter((row) => (
+            row.tenant_id === params[0]
+            && row.claim_id === params[1]
+            && mortgageTypes.includes(row.event_type)
+            && row.status !== 'voided'
+          )),
+        };
+      }
+      return {
+        rows: store.checkEvents.filter((row) => (
+          row.tenant_id === params[0]
+          && mortgageTypes.includes(row.event_type)
+          && new Date(row.billed_at).getTime() >= new Date(params[1]).getTime()
+          && new Date(row.billed_at).getTime() < new Date(params[2]).getTime()
+          && row.status !== 'voided'
+        )),
+      };
+    }
     if (text.includes('FROM public.check_billing_events') && text.includes("event_type IN")) {
       return {
         rows: store.checkEvents.filter((row) => (
@@ -260,6 +301,39 @@ const mockClient = (store, { platformOwner = true, actorTenant = TENANT_A, actor
           return at >= new Date(params[1]).getTime() && at < new Date(params[2]).getTime();
         }),
       };
+    }
+    if (text.includes('INSERT INTO public.check_billing_events') && text.includes('mortgage_request_id')) {
+      const mortgageTypes = ['mortgage_ops_initial', 'mortgage_ops_additional_check'];
+      const dupCheck = store.checkEvents.find((row) => (
+        row.check_intake_item_id === params[1] && mortgageTypes.includes(row.event_type)
+      ));
+      if (dupCheck) return { rows: [] };
+      const dupInitial = params[2] === 'mortgage_ops_initial' && params[6]
+        ? store.checkEvents.find((row) => (
+          row.tenant_id === params[0]
+          && row.claim_id === params[6]
+          && row.event_type === 'mortgage_ops_initial'
+        ))
+        : null;
+      if (dupInitial) return { rows: [] };
+      const row = {
+        id: `evt-mo-${store.checkEvents.length + 1}`,
+        tenant_id: params[0],
+        check_intake_item_id: params[1],
+        payment_transfer_id: null,
+        event_type: params[2],
+        unit_price_cents: params[3],
+        billed_at: params[4],
+        billing_period: params[5],
+        source_kind: params[2],
+        source_id: params[1],
+        claim_id: params[6] || null,
+        mortgage_request_id: params[7],
+        invoice_id: null,
+        status: 'recorded',
+      };
+      store.checkEvents.push(row);
+      return { rows: [row] };
     }
     if (text.includes('INSERT INTO public.check_billing_events')) {
       const dup = store.checkEvents.find((row) => (
@@ -353,6 +427,10 @@ const mockClient = (store, { platformOwner = true, actorTenant = TENANT_A, actor
         check_count: params[19],
         next_day_count: params[20],
         same_day_count: params[21],
+        mortgage_ops_initial_count: params[22] ?? 0,
+        mortgage_ops_initial_amount_cents: params[23] ?? 0,
+        mortgage_ops_additional_count: params[24] ?? 0,
+        mortgage_ops_additional_amount_cents: params[25] ?? 0,
         provider_transfer_id: null,
         submitted_at: null,
         settled_at: null,
@@ -777,6 +855,7 @@ test('schema SQL is additive and unique on tenant plus billing period', () => {
 
 test('SQL 44 is additive with uniqueness for checks, transfers, allocations, and invoices', () => {
   const sql = readFileSync(path.join(ROOT, 'rls/sql/44_consolidated_monthly_tenant_billing.sql'), 'utf8');
+  assert.doesNotMatch(sql, /mortgage_ops_initial_rate_cents/);
   assert.match(sql, /ADD COLUMN IF NOT EXISTS next_day_rate_cents/);
   assert.match(sql, /ADD COLUMN IF NOT EXISTS same_day_rate_cents/);
   assert.match(sql, /DEFAULT 75/);
@@ -834,10 +913,12 @@ const seedTransfer = (store, {
   });
 };
 
-test('default tenant-facing rates are 400 / 75 / 100 cents', () => {
+test('default tenant-facing rates are 400 / 75 / 100 / 1000 / 500 cents', () => {
   assert.equal(DEFAULT_CHECK_RATE_CENTS, 400);
   assert.equal(DEFAULT_NEXT_DAY_RATE_CENTS, 75);
   assert.equal(DEFAULT_SAME_DAY_RATE_CENTS, 100);
+  assert.equal(DEFAULT_MORTGAGE_INITIAL_RATE_CENTS, 1000);
+  assert.equal(DEFAULT_MORTGAGE_ADDITIONAL_RATE_CENTS, 500);
   assert.equal(resolveCheckRateCents({}), 400);
   assert.equal(resolveCheckRateCents({ per_check_rate_cents: 0 }), 400);
   assert.equal(resolveCheckRateCents({ per_check_rate_cents: 250 }), 250);
@@ -845,6 +926,12 @@ test('default tenant-facing rates are 400 / 75 / 100 cents', () => {
   assert.equal(resolveNextDayRateCents({ next_day_rate_cents: 50 }), 50);
   assert.equal(resolveSameDayRateCents({}), 100);
   assert.equal(resolveSameDayRateCents({ same_day_rate_cents: 80 }), 80);
+  assert.equal(resolveMortgageInitialRateCents({}), 1000);
+  assert.equal(resolveMortgageInitialRateCents({ mortgage_ops_initial_rate_cents: 0 }), 0);
+  assert.equal(resolveMortgageAdditionalRateCents({}), 500);
+  assert.equal(resolveMortgageAdditionalRateCents({ mortgage_ops_additional_rate_cents: 0 }), 0);
+  assert.equal(mortgageRequestIsAccepted({ status: 'requested' }), false);
+  assert.equal(mortgageRequestIsAccepted({ status: 'in_progress', accepted_at: '2026-09-10T12:00:00Z' }), true);
 });
 
 test('October 1 UTC selects September billing period and month boundaries stay UTC', () => {
@@ -1082,10 +1169,14 @@ test('shared money-movement files were not modified by consolidated billing', ()
   const router = readFileSync(path.join(ROOT, 'functions/api/providers/parity/rail-router.mjs'), 'utf8');
   assert.doesNotMatch(money, /buildConsolidatedInvoice/);
   assert.doesNotMatch(router, /tenant-billing-engine/);
+  assert.doesNotMatch(money, /mortgage_ops_initial/);
+  assert.doesNotMatch(router, /mortgage_ops_additional/);
   const ui = readFileSync(path.resolve(ROOT, '../src/components/admin/MonthlyTenantBillingPanel.tsx'), 'utf8');
   assert.match(ui, /Instant is not offered/);
   assert.doesNotMatch(ui, /instant_rate/);
   assert.match(ui, /Same Day rate/);
+  assert.match(ui, /Mortgage Ops — First Check/);
+  assert.match(ui, /Mortgage Ops — Additional Check/);
 });
 
 test('assembleInvoiceTotals matches the $109.50 staging acceptance example', () => {
@@ -1099,5 +1190,378 @@ test('assembleInvoiceTotals matches the $109.50 staging acceptance example', () 
   assert.equal(totals.amount_cents, 10950);
   assert.equal(totals.maintenance_net_cents, 9500);
   assert.equal(totals.usage_total_cents, 1450);
+  assert.equal(totals.mortgage_ops_usage_cents, 0);
+});
+
+test('SQL 45 is additive with Mortgage Ops uniqueness and free-zero rates', () => {
+  const sql = readFileSync(path.join(ROOT, 'rls/sql/45_mortgage_ops_tenant_billing.sql'), 'utf8');
+  assert.match(sql, /mortgage_ops_initial_rate_cents/);
+  assert.match(sql, /mortgage_ops_additional_rate_cents/);
+  assert.match(sql, /DEFAULT 1000/);
+  assert.match(sql, /DEFAULT 500/);
+  assert.match(sql, /Explicit 0 is FREE/);
+  assert.match(sql, /check_billing_events_mortgage_ops_check_uidx/);
+  assert.match(sql, /check_billing_events_mortgage_ops_initial_claim_uidx/);
+  assert.match(sql, /accrue_mortgage_ops_billing/);
+  assert.match(sql, /tr_accrue_mortgage_ops_billing/);
+  assert.match(sql, /mortgage_ops_initial_amount_cents/);
+  assert.match(sql, /mortgage_ops_additional_amount_cents/);
+  assert.doesNotMatch(sql, /DROP TABLE/);
+  assert.doesNotMatch(sql, /ALTER TABLE public\.checkalt/i);
+  assert.doesNotMatch(sql, /44_consolidated/);
+});
+
+const CLAIM_A = 'caaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const CLAIM_B = 'cbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const CLAIM_C = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+const CLAIM_D = 'cddddddd-dddd-4ddd-8ddd-dddddddddddd';
+const CLAIM_E = 'ceeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+
+const acceptedRequest = ({
+  id, checkId, claimId, tenantId = TENANT_A, acceptedAt = '2026-09-10T12:00:00.000Z',
+}) => ({
+  id,
+  tenant_id: tenantId,
+  check_intake_item_id: checkId,
+  claim_id: claimId,
+  status: 'in_progress',
+  accepted_at: acceptedAt,
+});
+
+test('Mortgage Ops first check is initial, later distinct checks are additional, new claim resets', async () => {
+  const store = makeStore();
+  const client = mockClient(store);
+  const a1 = await accrueMortgageOpsAcceptedRequest(client, {
+    request: acceptedRequest({ id: 'req-a1', checkId: 'chk-a1', claimId: CLAIM_A }),
+  });
+  const a2 = await accrueMortgageOpsAcceptedRequest(client, {
+    request: acceptedRequest({ id: 'req-a2', checkId: 'chk-a2', claimId: CLAIM_A, acceptedAt: '2026-09-11T12:00:00.000Z' }),
+  });
+  const a3 = await accrueMortgageOpsAcceptedRequest(client, {
+    request: acceptedRequest({ id: 'req-a3', checkId: 'chk-a3', claimId: CLAIM_A, acceptedAt: '2026-09-12T12:00:00.000Z' }),
+  });
+  const b1 = await accrueMortgageOpsAcceptedRequest(client, {
+    request: acceptedRequest({ id: 'req-b1', checkId: 'chk-b1', claimId: CLAIM_B, acceptedAt: '2026-09-13T12:00:00.000Z' }),
+  });
+  assert.equal(a1.event.event_type, 'mortgage_ops_initial');
+  assert.equal(a1.event.unit_price_cents, 1000);
+  assert.equal(a2.event.event_type, 'mortgage_ops_additional_check');
+  assert.equal(a2.event.unit_price_cents, 500);
+  assert.equal(a3.event.event_type, 'mortgage_ops_additional_check');
+  assert.equal(b1.event.event_type, 'mortgage_ops_initial');
+  assert.equal(b1.event.unit_price_cents, 1000);
+  const mortgage = store.checkEvents.filter((row) => String(row.event_type).startsWith('mortgage_ops'));
+  assert.equal(mortgage.filter((row) => row.event_type === 'mortgage_ops_initial').length, 2);
+  assert.equal(mortgage.filter((row) => row.event_type === 'mortgage_ops_additional_check').length, 2);
+});
+
+test('duplicate Accept and same-check retry do not create a second Mortgage Ops fee', async () => {
+  const store = makeStore();
+  const client = mockClient(store);
+  const first = await accrueMortgageOpsAcceptedRequest(client, {
+    request: acceptedRequest({ id: 'req-a1', checkId: 'chk-a1', claimId: CLAIM_A }),
+  });
+  const again = await accrueMortgageOpsAcceptedRequest(client, {
+    request: acceptedRequest({ id: 'req-a1', checkId: 'chk-a1', claimId: CLAIM_A, acceptedAt: '2026-09-11T12:00:00.000Z' }),
+  });
+  const reassigned = await accrueMortgageOpsAcceptedRequest(client, {
+    request: acceptedRequest({ id: 'req-a1-retry', checkId: 'chk-a1', claimId: CLAIM_A, acceptedAt: '2026-09-12T12:00:00.000Z' }),
+  });
+  assert.equal(first.created, true);
+  assert.equal(again.duplicate, true);
+  assert.equal(reassigned.duplicate, true);
+  assert.equal(store.checkEvents.filter((row) => row.check_intake_item_id === 'chk-a1').length, 1);
+});
+
+test('submitted, rejected, canceled, and unaccepted Mortgage Ops work is not billable', async () => {
+  const store = makeStore();
+  const client = mockClient(store);
+  const submitted = await accrueMortgageOpsAcceptedRequest(client, {
+    request: {
+      id: 'req-sub', tenant_id: TENANT_A, check_intake_item_id: 'chk-sub',
+      claim_id: CLAIM_A, status: 'requested', accepted_at: null,
+    },
+  });
+  const canceled = await accrueMortgageOpsAcceptedRequest(client, {
+    request: {
+      id: 'req-can', tenant_id: TENANT_A, check_intake_item_id: 'chk-can',
+      claim_id: CLAIM_A, status: 'cancelled', accepted_at: null,
+    },
+  });
+  const rejected = await accrueMortgageOpsAcceptedRequest(client, {
+    request: {
+      id: 'req-rej', tenant_id: TENANT_A, check_intake_item_id: 'chk-rej',
+      claim_id: CLAIM_A, status: 'cancelled', accepted_at: null,
+    },
+  });
+  assert.equal(submitted.skipped, 'not_accepted');
+  assert.equal(canceled.skipped, 'not_accepted');
+  assert.equal(rejected.skipped, 'not_accepted');
+  assert.equal(store.checkEvents.length, 0);
+});
+
+test('Mortgage Ops rates snapshot at Accept and later rate changes do not rewrite history', async () => {
+  const store = makeStore();
+  const client = mockClient(store);
+  const d1 = await accrueMortgageOpsAcceptedRequest(client, {
+    request: acceptedRequest({ id: 'req-d1', checkId: 'chk-d1', claimId: CLAIM_D }),
+  });
+  const d2 = await accrueMortgageOpsAcceptedRequest(client, {
+    request: acceptedRequest({ id: 'req-d2', checkId: 'chk-d2', claimId: CLAIM_D, acceptedAt: '2026-09-12T12:00:00.000Z' }),
+  });
+  assert.equal(d1.event.unit_price_cents, 1000);
+  assert.equal(d2.event.unit_price_cents, 500);
+  store.tenants.get(TENANT_A).mortgage_ops_initial_rate_cents = 800;
+  store.tenants.get(TENANT_A).mortgage_ops_additional_rate_cents = 300;
+  const firstInvoice = await buildConsolidatedInvoice(client, { tenantId: TENANT_A, period: '2026-09', persist: false });
+  assert.equal(firstInvoice.mortgage_ops_initial_amount_cents, 1000);
+  assert.equal(firstInvoice.mortgage_ops_additional_amount_cents, 500);
+  assert.equal(d1.event.unit_price_cents, 1000);
+  assert.equal(d2.event.unit_price_cents, 500);
+  const d3 = await accrueMortgageOpsAcceptedRequest(client, {
+    request: acceptedRequest({ id: 'req-d3', checkId: 'chk-d3', claimId: CLAIM_D, acceptedAt: '2026-09-21T12:00:00.000Z' }),
+  });
+  const e1 = await accrueMortgageOpsAcceptedRequest(client, {
+    request: acceptedRequest({ id: 'req-e1', checkId: 'chk-e1', claimId: CLAIM_E, acceptedAt: '2026-09-22T12:00:00.000Z' }),
+  });
+  assert.equal(d3.event.event_type, 'mortgage_ops_additional_check');
+  assert.equal(d3.event.unit_price_cents, 300);
+  assert.equal(e1.event.event_type, 'mortgage_ops_initial');
+  assert.equal(e1.event.unit_price_cents, 800);
+  assert.equal(store.checkEvents.find((row) => row.check_intake_item_id === 'chk-d1').unit_price_cents, 1000);
+  assert.equal(store.checkEvents.find((row) => row.check_intake_item_id === 'chk-d2').unit_price_cents, 500);
+});
+
+test('explicit zero Mortgage Ops rates remain zero and do not fall back to defaults', async () => {
+  const store = makeStore();
+  const client = mockClient(store);
+  store.tenants.get(TENANT_A).mortgage_ops_initial_rate_cents = 0;
+  store.tenants.get(TENANT_A).mortgage_ops_additional_rate_cents = 0;
+  const first = await accrueMortgageOpsAcceptedRequest(client, {
+    request: acceptedRequest({ id: 'req-z1', checkId: 'chk-z1', claimId: CLAIM_A }),
+  });
+  const second = await accrueMortgageOpsAcceptedRequest(client, {
+    request: acceptedRequest({ id: 'req-z2', checkId: 'chk-z2', claimId: CLAIM_A, acceptedAt: '2026-09-11T12:00:00.000Z' }),
+  });
+  assert.equal(first.event.unit_price_cents, 0);
+  assert.equal(second.event.unit_price_cents, 0);
+  const invoice = await buildConsolidatedInvoice(client, { tenantId: TENANT_A, period: '2026-09' });
+  assert.equal(invoice.mortgage_ops_initial_amount_cents, 0);
+  assert.equal(invoice.mortgage_ops_additional_amount_cents, 0);
+});
+
+test('concurrent first and second Accept on the same claim yield one initial and one additional', async () => {
+  const store = makeStore();
+  const client = mockClient(store);
+  const [first, second] = await Promise.all([
+    accrueMortgageOpsAcceptedRequest(client, {
+      request: acceptedRequest({ id: 'req-c1', checkId: 'chk-c1', claimId: CLAIM_C, acceptedAt: '2026-09-10T12:00:00.100Z' }),
+    }),
+    accrueMortgageOpsAcceptedRequest(client, {
+      request: acceptedRequest({ id: 'req-c2', checkId: 'chk-c2', claimId: CLAIM_C, acceptedAt: '2026-09-10T12:00:00.200Z' }),
+    }),
+  ]);
+  const types = [first.event.event_type, second.event.event_type].sort();
+  assert.deepEqual(types, ['mortgage_ops_additional_check', 'mortgage_ops_initial']);
+  const amounts = [first.event.unit_price_cents, second.event.unit_price_cents].sort((a, b) => a - b);
+  assert.deepEqual(amounts, [500, 1000]);
+  assert.equal(store.checkEvents.filter((row) => String(row.event_type).startsWith('mortgage_ops')).length, 2);
+});
+
+test('consolidated invoice includes Mortgage Ops and keeps the $4 check fee additive', async () => {
+  const store = makeStore();
+  const client = mockClient(store);
+  store.tenants.get(TENANT_A).monthly_rate_cents = 10000;
+  store.tenants.get(TENANT_A).referral_discount_cents = 500;
+  seedCheck(store, { id: 'c1' });
+  seedCheck(store, { id: 'c2' });
+  seedCheck(store, { id: 'c3' });
+  seedTransfer(store, { id: 'nd1' });
+  seedTransfer(store, { id: 'nd2', completedAt: '2026-09-13T12:00:00.000Z' });
+  seedTransfer(store, { id: 'sd1', speed: 'same_day', requestedSpeed: 'same_day', completedAt: '2026-09-14T12:00:00.000Z' });
+  await accrueMortgageOpsAcceptedRequest(client, {
+    request: acceptedRequest({ id: 'req-a1', checkId: 'c1', claimId: CLAIM_A }),
+  });
+  await accrueMortgageOpsAcceptedRequest(client, {
+    request: acceptedRequest({ id: 'req-a2', checkId: 'c2', claimId: CLAIM_A, acceptedAt: '2026-09-11T12:00:00.000Z' }),
+  });
+  await accrueMortgageOpsAcceptedRequest(client, {
+    request: acceptedRequest({ id: 'req-a3', checkId: 'c3', claimId: CLAIM_A, acceptedAt: '2026-09-12T12:00:00.000Z' }),
+  });
+  await accrueMortgageOpsAcceptedRequest(client, {
+    request: acceptedRequest({ id: 'req-b1', checkId: 'chk-b1', claimId: CLAIM_B, acceptedAt: '2026-09-13T12:00:00.000Z' }),
+  });
+  const invoice = await buildConsolidatedInvoice(client, { tenantId: TENANT_A, period: '2026-09', persist: true });
+  assert.equal(invoice.maintenance_net_cents, 9500);
+  assert.equal(invoice.check_count, 3);
+  assert.equal(invoice.check_usage_cents, 1200);
+  assert.equal(invoice.next_day_usage_cents, 150);
+  assert.equal(invoice.same_day_usage_cents, 100);
+  assert.equal(invoice.mortgage_ops_initial_count, 2);
+  assert.equal(invoice.mortgage_ops_initial_amount_cents, 2000);
+  assert.equal(invoice.mortgage_ops_additional_count, 2);
+  assert.equal(invoice.mortgage_ops_additional_amount_cents, 1000);
+  assert.equal(invoice.mortgage_ops_usage_cents, 3000);
+  assert.equal(invoice.amount_cents, 13950);
+  const snap = await buildTenantBillingSnapshot(client, TENANT_A, { ok: true, ...DEST }, {
+    now: new Date('2026-09-25T12:00:00.000Z'),
+  });
+  assert.equal(snap.invoice.amount_cents, 13950);
+  assert.equal(snap.current_amount_due_cents, 13950);
+});
+
+test('platform owner can edit Mortgage Ops rates and tenant staff cannot', async () => {
+  await withEnv({ AWS_MOOV_MONTHLY_BILLING_ENABLED: 'true', CHECKSOPS_ENV: 'staging' }, async () => {
+    const store = makeStore();
+    const ownerClient = mockClient(store, { platformOwner: true });
+    const staffClient = mockClient(store, { platformOwner: false, actorTenant: TENANT_A, actorRole: 'admin' });
+    const denied = await handleTenantBillingAdmin(identityEvent(STAFF, {
+      action: 'update', tenant_id: TENANT_A,
+      mortgage_ops_initial_rate_cents: 800, mortgage_ops_additional_rate_cents: 300,
+    }, 'staff-a@example.com'), {
+      client: staffClient,
+      mapping: { application_user_id: STAFF },
+    });
+    assert.equal(denied.error, 'platform_owner_required');
+    assert.equal(store.tenants.get(TENANT_A).mortgage_ops_initial_rate_cents, 1000);
+    const saved = await handleTenantBillingAdmin(identityEvent(OWNER, {
+      action: 'update', tenant_id: TENANT_A,
+      mortgage_ops_initial_rate_cents: 800, mortgage_ops_additional_rate_cents: 300,
+    }), {
+      client: ownerClient,
+      mapping: { application_user_id: OWNER },
+      destination: { ok: true, ...DEST },
+    });
+    assert.equal(saved.ok, true);
+    assert.equal(store.tenants.get(TENANT_A).mortgage_ops_initial_rate_cents, 800);
+    assert.equal(store.tenants.get(TENANT_A).mortgage_ops_additional_rate_cents, 300);
+    const view = await handleTenantBillingAuthorize(identityEvent(STAFF, {
+      action: 'snapshot', tenant_id: TENANT_A,
+    }, 'staff-a@example.com'), {
+      client: staffClient,
+      mapping: { application_user_id: STAFF },
+      destination: { ok: true, ...DEST },
+    });
+    assert.equal(view.ok, true);
+    assert.equal(view.mortgage_ops_initial_rate_cents, 800);
+    assert.equal(view.mortgage_ops_additional_rate_cents, 300);
+  });
+});
+
+test('Pull Now and scheduler consume the Mortgage Ops consolidated total and ignore client amount', async () => {
+  await withEnv({ AWS_MOOV_MONTHLY_BILLING_ENABLED: 'true', CHECKSOPS_ENV: 'staging' }, async () => {
+    const store = makeStore();
+    const client = mockClient(store);
+    await readyTenant(client, store, TENANT_A, 'pm-a');
+    store.tenants.get(TENANT_A).monthly_rate_cents = 10000;
+    store.tenants.get(TENANT_A).referral_discount_cents = 500;
+    seedCheck(store, { id: 'c1' });
+    seedCheck(store, { id: 'c2' });
+    seedCheck(store, { id: 'c3' });
+    seedTransfer(store, { id: 'nd1' });
+    seedTransfer(store, { id: 'nd2', completedAt: '2026-09-13T12:00:00.000Z' });
+    seedTransfer(store, { id: 'sd1', speed: 'same_day', requestedSpeed: 'same_day', completedAt: '2026-09-14T12:00:00.000Z' });
+    await accrueMortgageOpsAcceptedRequest(client, {
+      request: acceptedRequest({ id: 'req-a1', checkId: 'c1', claimId: CLAIM_A }),
+    });
+    await accrueMortgageOpsAcceptedRequest(client, {
+      request: acceptedRequest({ id: 'req-a2', checkId: 'c2', claimId: CLAIM_A, acceptedAt: '2026-09-11T12:00:00.000Z' }),
+    });
+    await accrueMortgageOpsAcceptedRequest(client, {
+      request: acceptedRequest({ id: 'req-a3', checkId: 'c3', claimId: CLAIM_A, acceptedAt: '2026-09-12T12:00:00.000Z' }),
+    });
+    await accrueMortgageOpsAcceptedRequest(client, {
+      request: acceptedRequest({ id: 'req-b1', checkId: 'chk-b1', claimId: CLAIM_B, acceptedAt: '2026-09-13T12:00:00.000Z' }),
+    });
+    const pull = await handleTenantBillingAdmin(identityEvent(OWNER, {
+      action: 'pull', tenant_id: TENANT_A, period: '2026-09', confirm: true, amount_cents: 1,
+    }), { client, mapping: { application_user_id: OWNER }, destination: { ok: true, ...DEST } });
+    assert.equal(pull.ok, true);
+    assert.equal(pull.pull.occurrence.amount_cents, 13950);
+    assert.equal(pull.amount_cents_posted, 13950);
+    assert.equal(pull.client_amount_ignored, true);
+    assert.equal(pull.pull.occurrence.mortgage_ops_initial_count, 2);
+    assert.equal(pull.pull.occurrence.mortgage_ops_additional_count, 2);
+    const allocKinds = new Set(store.allocations.map((row) => `${row.source_kind}:${row.source_id}:${row.fee_type}`));
+    assert.equal(allocKinds.size, store.allocations.length);
+    assert.ok(store.allocations.some((row) => row.fee_type === 'mortgage_ops_initial'));
+    assert.ok(store.allocations.some((row) => row.fee_type === 'mortgage_ops_additional_check'));
+    const retry = await handleTenantBillingAdmin(identityEvent(OWNER, {
+      action: 'pull', tenant_id: TENANT_A, period: '2026-09', confirm: true,
+    }), { client, mapping: { application_user_id: OWNER }, destination: { ok: true, ...DEST } });
+    assert.equal(retry.pull.duplicate, true);
+    store.occurrences[0].status = 'submitted';
+    store.occurrences[0].provider_transfer_id = 'moov-ret-mo';
+    const returned = await applyBillingProviderEvent(client, {
+      providerTransferId: 'moov-ret-mo', status: 'transfer.returned', reason: 'R01',
+    });
+    assert.equal(returned.occurrence.status, 'returned');
+    const mortgageBefore = store.checkEvents.filter((row) => String(row.event_type).startsWith('mortgage_ops'));
+    const retryReturned = await chargeTenantPeriod(client, {
+      tenantId: TENANT_A, period: '2026-09',
+      deps: { destination: { ok: true, ...DEST } },
+    });
+    assert.equal(retryReturned.duplicate, true);
+    assert.equal(store.checkEvents.filter((row) => String(row.event_type).startsWith('mortgage_ops')).length, mortgageBefore.length);
+    assert.equal(store.allocations.filter((row) => String(row.fee_type).startsWith('mortgage_ops')).length, 4);
+  });
+});
+
+test('Mortgage Ops billing period uses accepted_at and Instant remains unrelated', async () => {
+  const store = makeStore();
+  const client = mockClient(store);
+  await accrueMortgageOpsAcceptedRequest(client, {
+    request: acceptedRequest({
+      id: 'req-sep', checkId: 'chk-sep', claimId: CLAIM_A, acceptedAt: '2026-09-30T23:59:59.000Z',
+    }),
+  });
+  await accrueMortgageOpsAcceptedRequest(client, {
+    request: acceptedRequest({
+      id: 'req-oct', checkId: 'chk-oct', claimId: CLAIM_B, acceptedAt: '2026-10-01T00:00:00.000Z',
+    }),
+  });
+  seedTransfer(store, { id: 'instant', speed: 'instant', requestedSpeed: 'instant' });
+  const september = await buildConsolidatedInvoice(client, { tenantId: TENANT_A, period: '2026-09', persist: true });
+  const october = await buildConsolidatedInvoice(client, { tenantId: TENANT_A, period: '2026-10', persist: true });
+  assert.equal(september.mortgage_ops_initial_count, 1);
+  assert.equal(october.mortgage_ops_initial_count, 1);
+  assert.equal(september.same_day_count, 0);
+  assert.equal(store.checkEvents.filter((row) => row.event_type === 'moov_instant').length, 0);
+});
+
+test('unrelated tenant isolation still holds for Mortgage Ops events', async () => {
+  const store = makeStore();
+  const client = mockClient(store);
+  await accrueMortgageOpsAcceptedRequest(client, {
+    request: acceptedRequest({ id: 'req-a', checkId: 'chk-a', claimId: CLAIM_A, tenantId: TENANT_A }),
+  });
+  await accrueMortgageOpsAcceptedRequest(client, {
+    request: acceptedRequest({ id: 'req-b', checkId: 'chk-b', claimId: CLAIM_A, tenantId: TENANT_B }),
+  });
+  const a = await buildConsolidatedInvoice(client, { tenantId: TENANT_A, period: '2026-09' });
+  const b = await buildConsolidatedInvoice(client, { tenantId: TENANT_B, period: '2026-09' });
+  assert.equal(a.mortgage_ops_initial_count, 1);
+  assert.equal(b.mortgage_ops_initial_count, 1);
+  assert.equal(a.amount_cents - a.maintenance_net_cents, 1000);
+  assert.equal(b.amount_cents - b.maintenance_net_cents, 1000);
+});
+
+test('production monthly billing post remains disabled by default', async () => {
+  const { monthlyBillingProductionPostEnabled, billingShouldSimulate } = await import('../functions/api/tenant-billing-destination.mjs');
+  await withEnv({
+    CHECKSOPS_ENV: 'production-prep',
+    AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST: undefined,
+    AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED: undefined,
+  }, () => {
+    assert.equal(monthlyBillingProductionPostEnabled(), false);
+    assert.equal(billingShouldSimulate(), true);
+  });
+  await withEnv({
+    CHECKSOPS_ENV: 'production-prep',
+    AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST: 'false',
+  }, () => {
+    assert.equal(monthlyBillingProductionPostEnabled(), false);
+    assert.equal(billingShouldSimulate(), true);
+  });
 });
 
