@@ -38,6 +38,8 @@ import { TenantProBadgeManagement } from "@/components/settings/TenantProBadgeMa
 
 import { TenantProvider } from "@/contexts/TenantContext";
 import { tenantMoovDefaults } from "@/lib/payments/tenantMoovDefaults";
+import { MonthlyTenantBillingPanel } from "@/components/admin/MonthlyTenantBillingPanel";
+import { invokeTenantBillingAdmin } from "@/lib/billing/tenantBilling";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DataView, FilterBar, type DataColumn } from "@/components/shell";
@@ -372,8 +374,14 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
             <CheckAltTenantAccountCard />
           </TabsContent>
           <TabsContent value="billing" className="mt-6 space-y-6">
+            <MonthlyTenantBillingPanel
+              tenantId={tenant.id}
+              tenantName={tenant.name}
+              onRateSaved={(monthlyRateCents, referralDiscountCents) =>
+                onUpdated({ ...tenant, monthly_rate_cents: monthlyRateCents, referral_discount_cents: referralDiscountCents })
+              }
+            />
             <BillingTab tenant={tenant} onUpdated={onUpdated} />
-            <TenantBillingBankPanel tenantId={tenant.id} tenantName={tenant.name} />
             <TenantUsageInlinePanel tenantId={tenant.id} tenantName={tenant.name} />
           </TabsContent>
           <TabsContent value="pro-badge" className="mt-6">
@@ -884,34 +892,12 @@ function TenantBillingBankPanel({ tenantId, tenantName }: { tenantId: string; te
 
   const pullNow = async () => {
     setCharging(true);
-    const { data: t } = await supabase
-      .from("tenants")
-      .select("monthly_rate_cents, referral_discount_cents")
-      .eq("id", tenantId)
-      .maybeSingle();
-    const amount_cents = Math.max(
-      0,
-      (t?.monthly_rate_cents ?? 0) - (t?.referral_discount_cents ?? 0),
-    );
-    if (amount_cents <= 0) {
-      setCharging(false);
-      return sonnerToast.warning("No maintenance fee configured for this organization.");
-    }
-    const { data, error } = await supabase.functions.invoke("moov-tenant-fee-charge", {
-      body: {
-        tenant_id: tenantId,
-        amount_cents,
-        kind: "maintenance",
-        line_items: [{ label: "Monthly maintenance", amount_cents }],
-        send_invoice: true,
-      },
-    });
+    const result = await invokeTenantBillingAdmin({ action: "pull", tenant_id: tenantId });
     setCharging(false);
-    const failure = (data as any)?.error ?? (error ? await readFnError(error) : null);
-    if (failure) return sonnerToast.error(failure);
-    const r = (data as any)?.results?.[0];
-    if (r?.status === "submitted") sonnerToast.success(`ACH debit submitted for $${(r.amount_cents / 100).toFixed(2)}`);
-    else sonnerToast.info(JSON.stringify(r ?? data));
+    if (!result.ok) return sonnerToast.error(result.error);
+    const status = (result.data.pull as any)?.occurrence?.status || "submitted";
+    sonnerToast.success(`Monthly subscription ${status} for ${tenantName}`);
+    load();
   };
 
   const linkForBilling = async () => {
@@ -1209,12 +1195,11 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
                   <div>
                     <h4 className="text-sm font-semibold">Consolidated Billing — {range.label}</h4>
                     <p className="text-[11px] text-muted-foreground">
-                      One ACH pull covers all ChecksOps fees for the month. Invoice is emailed automatically.
+                      Check processing and disbursement usage stay separate from monthly ChecksOps subscription billing.
                     </p>
                   </div>
-                  <Button size="sm" onClick={pullConsolidated} disabled={pulling || consolidatedTotalCents <= 0}>
-                    {pulling ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
-                    Pull {fmt(consolidatedTotalCents)} & email invoice
+                  <Button size="sm" variant="outline" disabled>
+                    Usage only — monthly subscription is billed separately
                   </Button>
                 </div>
                 <table className="w-full text-sm">
@@ -1383,6 +1368,31 @@ function TenantManagementTable({
 
   const updateTenant = async (id: string, patch: Record<string, any>, silent = false) => {
     setBusyId(id);
+    const billingPatch = {
+      monthly_rate_cents: patch.monthly_rate_cents,
+      referral_discount_cents: patch.referral_discount_cents,
+    };
+    const hasBilling = Object.values(billingPatch).some((value) => value !== undefined);
+    if (hasBilling) {
+      const result = await invokeTenantBillingAdmin({
+        action: "update",
+        tenant_id: id,
+        ...billingPatch,
+      });
+      if (!result.ok) {
+        setBusyId(null);
+        toast({ title: "Update failed", description: result.error, variant: "destructive" });
+        return false;
+      }
+      delete patch.monthly_rate_cents;
+      delete patch.referral_discount_cents;
+    }
+    if (Object.keys(patch).length === 0) {
+      setBusyId(null);
+      if (!silent) toast({ title: "Saved" });
+      onChanged();
+      return true;
+    }
     const { error } = await supabase.from("tenants").update(patch as any).eq("id", id);
     setBusyId(null);
     if (error) {

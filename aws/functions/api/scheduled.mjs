@@ -8,6 +8,7 @@ import { handleProcessEmailQueue } from './email-queue.mjs';
 import { handleTenantDomainRecheckCron } from './tenant-email-domain-handlers.mjs';
 import { handleCheckOcrBacklog } from './ocr.mjs';
 import { handleCheckAltStatusReconcileJob } from './providers/production/checkalt-status-reconcile.mjs';
+import { handleMonthlyBillingScheduled } from './tenant-billing-handlers.mjs';
 
 const FINANCIAL_JOBS = new Set([
   'deposit-daily-automation',
@@ -97,6 +98,9 @@ export const handleScheduledRequest = async (event, path, deps = {}) => {
       message: 'check-ocr-backlog remains staff-invoked under Cognito identity for RLS',
       spoofFieldsIgnored: spoof,
     };
+  }
+  if (job === 'moov-monthly-tenant-billing') {
+    return handleMonthlyBillingScheduled(event, deps);
   }
 
   return {
