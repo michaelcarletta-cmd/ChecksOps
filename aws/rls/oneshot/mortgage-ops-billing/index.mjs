@@ -102,6 +102,19 @@ const ensureTenant = async (client, { slug, name, rates }) => {
 };
 
 const insertClaim = async (client, tenantId, number) => {
+  const existing = (await client.query(
+    `SELECT * FROM public.claims WHERE claim_number = $1 LIMIT 1`,
+    [number],
+  )).rows[0];
+  if (existing) {
+    await client.query(
+      `UPDATE public.claims
+       SET org_id = COALESCE(org_id, $2::uuid)
+       WHERE id = $1::uuid`,
+      [existing.id, tenantId],
+    ).catch(() => {});
+    return (await client.query(`SELECT * FROM public.claims WHERE id = $1::uuid`, [existing.id])).rows[0];
+  }
   try {
     return await insertDynamic(client, 'claims', {
       tenant_id: tenantId,
