@@ -15,6 +15,7 @@
     "preview:aws": "vite preview --mode aws --host 0.0.0.0 --port 4173",
     "dev:aws": "vite --mode aws --host 0.0.0.0 --port 8080",
     "test:aws-api": "node --experimental-strip-types --test aws/tests/*.test.mjs",
+    "test:s14-safeguard": "node scripts/aws-s14-deposit-payee-line-safeguard.mjs",
     "check:contract-version": "node scripts/check-darwin-contract-version.mjs",
     "validate:darwin-fixtures": "node scripts/validate-darwin-fixtures.mjs",
     "test:darwin-merge": "node scripts/test-merge-missing-doc-requests.mjs",
