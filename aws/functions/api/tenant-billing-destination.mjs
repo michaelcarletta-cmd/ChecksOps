@@ -24,6 +24,11 @@ export const monthlyBillingProductionPostEnabled = () => (
   isTrue(process.env.AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST)
 );
 
+/** Isolated $1 billing-verification POST. Independent of monthly PRODUCTION_POST. Default false. */
+export const billingVerificationPostEnabled = () => (
+  isTrue(process.env.AWS_MOOV_BILLING_VERIFICATION_POST_ENABLED)
+);
+
 export const billingEnvironment = () => {
   const raw = String(process.env.CHECKSOPS_ENV || '').toLowerCase();
   if (raw.startsWith('production')) return 'production';
@@ -36,6 +41,14 @@ export const billingShouldSimulate = (deps = {}) => {
   if (isTrue(process.env.AWS_MOOV_MONTHLY_BILLING_SIMULATE)) return true;
   if (billingEnvironment() === 'production') return !monthlyBillingProductionPostEnabled();
   return !isTrue(process.env.AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED);
+};
+
+/** Simulate unless the isolated verification gate is explicitly true. Does not read monthly POST. */
+export const billingVerificationShouldSimulate = (deps = {}) => {
+  if (deps.simulate === true) return true;
+  if (deps.simulate === false) return false;
+  if (isTrue(process.env.AWS_MOOV_BILLING_VERIFICATION_SIMULATE)) return true;
+  return !billingVerificationPostEnabled();
 };
 
 const failClosed = (reason, extra = {}) => ({
