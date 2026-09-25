@@ -1161,6 +1161,18 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
                       <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(invoice?.same_day_usage_cents ?? 0)}</td>
                     </tr>
                     <tr>
+                      <td className="px-4 py-2">Mortgage Ops — First Check</td>
+                      <td className="text-right px-4 py-2 tabular-nums">{invoice?.mortgage_ops_initial_count ?? 0} checks</td>
+                      <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">{fmt(snapshot?.mortgage_ops_initial_rate_cents ?? 0)}</td>
+                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(invoice?.mortgage_ops_initial_amount_cents ?? 0)}</td>
+                    </tr>
+                    <tr>
+                      <td className="px-4 py-2">Mortgage Ops — Additional Check</td>
+                      <td className="text-right px-4 py-2 tabular-nums">{invoice?.mortgage_ops_additional_count ?? 0} checks</td>
+                      <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">{fmt(snapshot?.mortgage_ops_additional_rate_cents ?? 0)}</td>
+                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(invoice?.mortgage_ops_additional_amount_cents ?? 0)}</td>
+                    </tr>
+                    <tr>
                       <td className="px-4 py-2">
                         Monthly maintenance
                         {tenantMeta?.is_founding_partner && (

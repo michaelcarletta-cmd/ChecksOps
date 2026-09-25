@@ -639,6 +639,7 @@ export const WRITE_ALLOWLIST = {
     clientIgnored: new Set([
       'id', 'created_at',
       'payment_provider', 'moov_allowlisted', 'moov_environment', 'is_test_account',
+      'mortgage_ops_initial_rate_cents', 'mortgage_ops_additional_rate_cents',
     ]),
     frontend: {
       file: 'AdminTenants / TenantManagement',

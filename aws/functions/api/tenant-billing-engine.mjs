@@ -4,7 +4,9 @@
  *
  * Consolidated invoice:
  *   maintenance - discount + check_processing + moov_next_day + moov_same_day
+ *   + mortgage_ops_initial + mortgage_ops_additional_check
  * Instant is schema-compatible but never generated or billed.
+ * Mortgage Ops accrues on Accept (status in_progress + accepted_at), not on submit.
  */
 import {
   billingEnvironment,
@@ -21,6 +23,8 @@ const IN_FLIGHT = new Set(['submitted']);
 export const DEFAULT_CHECK_RATE_CENTS = 400;
 export const DEFAULT_NEXT_DAY_RATE_CENTS = 75;
 export const DEFAULT_SAME_DAY_RATE_CENTS = 100;
+export const DEFAULT_MORTGAGE_INITIAL_RATE_CENTS = 1000;
+export const DEFAULT_MORTGAGE_ADDITIONAL_RATE_CENTS = 500;
 export const MAX_RATE_CENTS = 1_000_000;
 
 /** Safest existing billable point: transfer actually completed (webhook sets completed_at). */
@@ -31,6 +35,9 @@ export const FEE_CHECK = 'check_processing';
 export const FEE_NEXT_DAY = 'moov_next_day';
 export const FEE_SAME_DAY = 'moov_same_day';
 export const FEE_INSTANT = 'moov_instant';
+export const FEE_MORTGAGE_INITIAL = 'mortgage_ops_initial';
+export const FEE_MORTGAGE_ADDITIONAL = 'mortgage_ops_additional_check';
+export const MORTGAGE_EVENT_TYPES = [FEE_MORTGAGE_INITIAL, FEE_MORTGAGE_ADDITIONAL];
 
 export const periodKey = (date = new Date()) => {
   const d = date instanceof Date ? date : new Date(date);
@@ -134,6 +141,30 @@ export const resolveSameDayRateCents = (tenant) => {
   return Math.max(0, Number(tenant.same_day_rate_cents) || 0);
 };
 
+/** Explicit 0 is a free promotion and must not fall back to $10. */
+export const resolveMortgageInitialRateCents = (tenant) => {
+  if (tenant?.mortgage_ops_initial_rate_cents === undefined || tenant?.mortgage_ops_initial_rate_cents === null) {
+    return DEFAULT_MORTGAGE_INITIAL_RATE_CENTS;
+  }
+  const stored = Number(tenant.mortgage_ops_initial_rate_cents);
+  return Number.isFinite(stored) ? Math.max(0, stored) : DEFAULT_MORTGAGE_INITIAL_RATE_CENTS;
+};
+
+/** Explicit 0 is a free promotion and must not fall back to $5. */
+export const resolveMortgageAdditionalRateCents = (tenant) => {
+  if (tenant?.mortgage_ops_additional_rate_cents === undefined || tenant?.mortgage_ops_additional_rate_cents === null) {
+    return DEFAULT_MORTGAGE_ADDITIONAL_RATE_CENTS;
+  }
+  const stored = Number(tenant.mortgage_ops_additional_rate_cents);
+  return Number.isFinite(stored) ? Math.max(0, stored) : DEFAULT_MORTGAGE_ADDITIONAL_RATE_CENTS;
+};
+
+export const mortgageRequestIsAccepted = (request) => {
+  if (!request) return false;
+  if (!request.accepted_at) return false;
+  return ['in_progress', 'completed'].includes(String(request.status || ''));
+};
+
 export const feeTypeForTransfer = (transfer) => {
   const speed = String(transfer?.requested_speed || transfer?.speed || 'standard')
     .toLowerCase()
@@ -212,10 +243,17 @@ export async function loadTenantBillingContext(client, tenantId) {
   const tenant = (await client.query(
     `SELECT id, name, slug, subscription_status, monthly_rate_cents, referral_discount_cents,
             is_founding_partner, per_check_rate_cents, per_check_billing_enabled,
+            next_day_rate_cents, same_day_rate_cents,
+            mortgage_ops_initial_rate_cents, mortgage_ops_additional_rate_cents
+     FROM public.tenants WHERE id = $1::uuid`,
+    [tenantId],
+  ).catch(() => client.query(
+    `SELECT id, name, slug, subscription_status, monthly_rate_cents, referral_discount_cents,
+            is_founding_partner, per_check_rate_cents, per_check_billing_enabled,
             next_day_rate_cents, same_day_rate_cents
      FROM public.tenants WHERE id = $1::uuid`,
     [tenantId],
-  )).rows[0];
+  ))).rows[0];
   if (!tenant) return fail('tenant_not_found', { statusCode: 404 });
   const settings = (await client.query(
     `SELECT tenant_id, billing_enabled, billing_day_of_month, next_period_start, updated_at
@@ -314,6 +352,8 @@ export async function evaluateBillingReadiness(client, {
     perCheckRateCents: resolveCheckRateCents(tenant),
     nextDayRateCents: resolveNextDayRateCents(tenant),
     sameDayRateCents: resolveSameDayRateCents(tenant),
+    mortgageInitialRateCents: resolveMortgageInitialRateCents(tenant),
+    mortgageAdditionalRateCents: resolveMortgageAdditionalRateCents(tenant),
     period: period || accrualPeriodKey(),
     destination,
     environment: env,
@@ -334,6 +374,8 @@ const asEvent = (row) => ({
   source_id: row.source_id || row.check_intake_item_id || row.payment_transfer_id,
   check_intake_item_id: row.check_intake_item_id || null,
   payment_transfer_id: row.payment_transfer_id || null,
+  claim_id: row.claim_id || null,
+  mortgage_request_id: row.mortgage_request_id || null,
 });
 
 export async function loadCheckUsageForPeriod(client, { tenantId, period }) {
@@ -470,14 +512,173 @@ export async function persistMoovUsageForPeriod(client, { tenant, period, persis
 
 const sumCents = (rows) => rows.reduce((sum, row) => sum + Number(row.unit_price_cents || 0), 0);
 
-export function assembleInvoiceTotals({ tenant, period, checks, nextDay, sameDay }) {
+const loadMortgageEventByCheck = async (client, checkId) => (
+  (await client.query(
+    `SELECT id, tenant_id, event_type, unit_price_cents, billed_at, billing_period,
+            invoice_id, status, source_kind, source_id, check_intake_item_id,
+            payment_transfer_id, claim_id, mortgage_request_id
+     FROM public.check_billing_events
+     WHERE check_intake_item_id = $1::uuid
+       AND event_type IN ('mortgage_ops_initial', 'mortgage_ops_additional_check')
+     LIMIT 1`,
+    [checkId],
+  ).catch(() => ({ rows: [] }))).rows[0] || null
+);
+
+export async function accrueMortgageOpsAcceptedRequest(client, {
+  request,
+  tenant = null,
+  persist = true,
+}) {
+  if (!request?.id || !request?.tenant_id || !request?.check_intake_item_id) {
+    return { skipped: 'incomplete_request' };
+  }
+  if (!mortgageRequestIsAccepted(request)) {
+    return { skipped: 'not_accepted' };
+  }
+
+  const existing = await loadMortgageEventByCheck(client, request.check_intake_item_id);
+  if (existing) return { ok: true, event: asEvent(existing), duplicate: true, created: false };
+
+  let claimId = request.claim_id || null;
+  if (!claimId) {
+    const check = (await client.query(
+      `SELECT claim_id FROM public.check_intake_items WHERE id = $1::uuid`,
+      [request.check_intake_item_id],
+    ).catch(() => ({ rows: [] }))).rows[0];
+    claimId = check?.claim_id || null;
+  }
+
+  await client.query(
+    `SELECT pg_advisory_xact_lock(hashtext($1::text), hashtext($2::text))`,
+    [String(request.tenant_id), `mortgage_ops:${claimId || request.check_intake_item_id}`],
+  ).catch(() => ({ rows: [] }));
+
+  const locked = await loadMortgageEventByCheck(client, request.check_intake_item_id);
+  if (locked) return { ok: true, event: asEvent(locked), duplicate: true, created: false };
+
+  let billingTenant = tenant;
+  if (!billingTenant) {
+    const ctx = await loadTenantBillingContext(client, request.tenant_id);
+    if (!ctx.ok) return ctx;
+    billingTenant = ctx.tenant;
+  }
+
+  const prior = claimId
+    ? (await client.query(
+      `SELECT id, event_type FROM public.check_billing_events
+       WHERE tenant_id = $1::uuid
+         AND claim_id = $2::uuid
+         AND event_type IN ('mortgage_ops_initial', 'mortgage_ops_additional_check')
+         AND status IS DISTINCT FROM 'voided'`,
+      [request.tenant_id, claimId],
+    ).catch(() => ({ rows: [] }))).rows
+    : [];
+
+  const classifyAdditional = prior.length > 0;
+  const insertEvent = async (eventType, unit) => {
+    const billedAt = request.accepted_at;
+    const period = periodKey(new Date(billedAt));
+    if (!persist) {
+      return {
+        id: null,
+        tenant_id: request.tenant_id,
+        event_type: eventType,
+        unit_price_cents: unit,
+        billed_at: billedAt,
+        billing_period: period,
+        invoice_id: null,
+        status: 'recorded',
+        source_kind: eventType,
+        source_id: request.check_intake_item_id,
+        check_intake_item_id: request.check_intake_item_id,
+        payment_transfer_id: null,
+        claim_id: claimId,
+        mortgage_request_id: request.id,
+        preview: true,
+      };
+    }
+    return (await client.query(
+      `INSERT INTO public.check_billing_events (
+         tenant_id, check_intake_item_id, payment_transfer_id, event_type,
+         unit_price_cents, currency, status, billed_at, billing_period,
+         source_kind, source_id, claim_id, mortgage_request_id
+       ) VALUES (
+         $1::uuid, $2::uuid, NULL, $3, $4, 'usd', 'recorded', $5::timestamptz, $6,
+         $3, $2::uuid, $7::uuid, $8::uuid
+       )
+       ON CONFLICT DO NOTHING
+       RETURNING id, tenant_id, event_type, unit_price_cents, billed_at, billing_period,
+                 invoice_id, status, source_kind, source_id, check_intake_item_id,
+                 payment_transfer_id, claim_id, mortgage_request_id`,
+      [
+        request.tenant_id,
+        request.check_intake_item_id,
+        eventType,
+        unit,
+        billedAt,
+        period,
+        claimId,
+        request.id,
+      ],
+    ).catch(() => ({ rows: [] }))).rows[0] || null;
+  };
+
+  const preferredType = classifyAdditional ? FEE_MORTGAGE_ADDITIONAL : FEE_MORTGAGE_INITIAL;
+  const preferredRate = classifyAdditional
+    ? resolveMortgageAdditionalRateCents(billingTenant)
+    : resolveMortgageInitialRateCents(billingTenant);
+  let inserted = await insertEvent(preferredType, preferredRate);
+  if (!inserted && !classifyAdditional && persist) {
+    inserted = await insertEvent(
+      FEE_MORTGAGE_ADDITIONAL,
+      resolveMortgageAdditionalRateCents(billingTenant),
+    );
+  }
+  if (!inserted) {
+    const raced = await loadMortgageEventByCheck(client, request.check_intake_item_id);
+    if (raced) return { ok: true, event: asEvent(raced), duplicate: true, created: false };
+    return { skipped: 'not_inserted' };
+  }
+  return { ok: true, event: asEvent(inserted), created: !inserted.preview, duplicate: false };
+}
+
+export async function loadMortgageOpsUsageForPeriod(client, { tenantId, period }) {
+  const bounds = utcBounds(period);
+  const rows = (await client.query(
+    `SELECT e.id, e.tenant_id, e.event_type, e.unit_price_cents, e.billed_at, e.billing_period,
+            e.invoice_id, e.status, e.source_kind, e.source_id, e.check_intake_item_id,
+            e.payment_transfer_id, e.claim_id, e.mortgage_request_id
+     FROM public.check_billing_events e
+     WHERE e.tenant_id = $1::uuid
+       AND e.event_type IN ('mortgage_ops_initial', 'mortgage_ops_additional_check')
+       AND e.billed_at >= $2::timestamptz
+       AND e.billed_at < $3::timestamptz
+       AND e.status IS DISTINCT FROM 'voided'`,
+    [tenantId, bounds.startIso, bounds.endIso],
+  ).catch(() => ({ rows: [] }))).rows;
+  return {
+    initial: rows.filter((row) => row.event_type === FEE_MORTGAGE_INITIAL).map(asEvent),
+    additional: rows.filter((row) => row.event_type === FEE_MORTGAGE_ADDITIONAL).map(asEvent),
+  };
+}
+
+export function assembleInvoiceTotals({
+  tenant, period, checks, nextDay, sameDay, mortgageInitial = [], mortgageAdditional = [],
+}) {
   const maintenance_rate_cents = Number(tenant.monthly_rate_cents || 0);
   const discount_cents = Number(tenant.referral_discount_cents || 0);
   const maintenance_net_cents = netFeeCents(maintenance_rate_cents, discount_cents);
   const check_usage_cents = sumCents(checks);
   const next_day_usage_cents = sumCents(nextDay);
   const same_day_usage_cents = sumCents(sameDay);
-  const usage_total_cents = check_usage_cents + next_day_usage_cents + same_day_usage_cents;
+  const mortgage_ops_initial_amount_cents = sumCents(mortgageInitial);
+  const mortgage_ops_additional_amount_cents = sumCents(mortgageAdditional);
+  const mortgage_ops_usage_cents = mortgage_ops_initial_amount_cents + mortgage_ops_additional_amount_cents;
+  const usage_total_cents = check_usage_cents
+    + next_day_usage_cents
+    + same_day_usage_cents
+    + mortgage_ops_usage_cents;
   const amount_cents = maintenance_net_cents + usage_total_cents;
   return {
     billing_period: period,
@@ -490,11 +691,18 @@ export function assembleInvoiceTotals({ tenant, period, checks, nextDay, sameDay
     next_day_usage_cents,
     same_day_count: sameDay.length,
     same_day_usage_cents,
+    mortgage_ops_initial_count: mortgageInitial.length,
+    mortgage_ops_initial_amount_cents,
+    mortgage_ops_additional_count: mortgageAdditional.length,
+    mortgage_ops_additional_amount_cents,
+    mortgage_ops_usage_cents,
     usage_total_cents,
     amount_cents,
     per_check_rate_cents: resolveCheckRateCents(tenant),
     next_day_rate_cents: resolveNextDayRateCents(tenant),
     same_day_rate_cents: resolveSameDayRateCents(tenant),
+    mortgage_ops_initial_rate_cents: resolveMortgageInitialRateCents(tenant),
+    mortgage_ops_additional_rate_cents: resolveMortgageAdditionalRateCents(tenant),
   };
 }
 
@@ -507,12 +715,15 @@ export async function buildConsolidatedInvoice(client, {
   const moov = await persistMoovUsageForPeriod(client, {
     tenant: ctx.tenant, period, persist,
   });
+  const mortgage = await loadMortgageOpsUsageForPeriod(client, { tenantId, period });
   const totals = assembleInvoiceTotals({
     tenant: ctx.tenant,
     period,
     checks: checks.included,
     nextDay: moov.nextDay,
     sameDay: moov.sameDay,
+    mortgageInitial: mortgage.initial,
+    mortgageAdditional: mortgage.additional,
   });
   const allocations = [
     ...checks.included.map((row) => ({
@@ -544,6 +755,28 @@ export async function buildConsolidatedInvoice(client, {
       invoice_id: row.invoice_id,
       payment_transfer_id: row.payment_transfer_id,
     })),
+    ...mortgage.initial.map((row) => ({
+      source_kind: FEE_MORTGAGE_INITIAL,
+      source_id: row.id,
+      fee_type: FEE_MORTGAGE_INITIAL,
+      unit_price_cents: row.unit_price_cents,
+      amount_cents: row.unit_price_cents,
+      billed_at: row.billed_at,
+      invoice_id: row.invoice_id,
+      claim_id: row.claim_id,
+      mortgage_request_id: row.mortgage_request_id,
+    })),
+    ...mortgage.additional.map((row) => ({
+      source_kind: FEE_MORTGAGE_ADDITIONAL,
+      source_id: row.id,
+      fee_type: FEE_MORTGAGE_ADDITIONAL,
+      unit_price_cents: row.unit_price_cents,
+      amount_cents: row.unit_price_cents,
+      billed_at: row.billed_at,
+      invoice_id: row.invoice_id,
+      claim_id: row.claim_id,
+      mortgage_request_id: row.mortgage_request_id,
+    })),
   ];
   return {
     ok: true,
@@ -557,6 +790,8 @@ export async function buildConsolidatedInvoice(client, {
       checks: checks.included,
       next_day: moov.nextDay,
       same_day: moov.sameDay,
+      mortgage_ops_initial: mortgage.initial,
+      mortgage_ops_additional: mortgage.additional,
     },
     excluded_voided_checks: checks.excludedVoided,
     skipped_transfers: moov.skipped,
@@ -639,11 +874,13 @@ export async function createOrGetOccurrence(client, {
        funding_source_method_id, destination_account_id, destination_payment_method_id,
        provider_environment,
        maintenance_net_cents, check_usage_cents, next_day_usage_cents, same_day_usage_cents,
-       usage_total_cents, check_count, next_day_count, same_day_count
+       usage_total_cents, check_count, next_day_count, same_day_count,
+       mortgage_ops_initial_count, mortgage_ops_initial_amount_cents,
+       mortgage_ops_additional_count, mortgage_ops_additional_amount_cents
      ) VALUES (
        $1::uuid, $2, $3, $4, $5::date, $6::date, $7, 'moov_ach', 'due',
        $8, $9::uuid, $10, $11, $12, $13, $14,
-       $15, $16, $17, $18, $19, $20, $21, $22
+       $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26
      )
      ON CONFLICT (tenant_id, billing_period) WHERE billing_period IS NOT NULL
      DO UPDATE SET updated_at = public.tenant_maintenance_payments.updated_at
@@ -671,6 +908,10 @@ export async function createOrGetOccurrence(client, {
       invoice.check_count ?? 0,
       invoice.next_day_count ?? 0,
       invoice.same_day_count ?? 0,
+      invoice.mortgage_ops_initial_count ?? 0,
+      invoice.mortgage_ops_initial_amount_cents ?? 0,
+      invoice.mortgage_ops_additional_count ?? 0,
+      invoice.mortgage_ops_additional_amount_cents ?? 0,
     ],
   )).rows[0];
   return { ok: true, occurrence: inserted, created: true, idempotency_key: key };
@@ -939,6 +1180,7 @@ export async function applyBillingProviderEvent(client, {
 export async function saveBillingSettings(client, {
   tenantId, monthlyRateCents, referralDiscountCents, billingEnabled, billingDay, userId,
   perCheckRateCents, nextDayRateCents, sameDayRateCents,
+  mortgageOpsInitialRateCents, mortgageOpsAdditionalRateCents,
 }) {
   const sets = [];
   const params = [];
@@ -961,6 +1203,14 @@ export async function saveBillingSettings(client, {
   if (nextDay !== true) return nextDay;
   const sameDay = applyRate(sameDayRateCents, 'same_day_rate', 'same_day_rate_cents');
   if (sameDay !== true) return sameDay;
+  const mortgageInitial = applyRate(
+    mortgageOpsInitialRateCents, 'mortgage_ops_initial_rate', 'mortgage_ops_initial_rate_cents',
+  );
+  if (mortgageInitial !== true) return mortgageInitial;
+  const mortgageAdditional = applyRate(
+    mortgageOpsAdditionalRateCents, 'mortgage_ops_additional_rate', 'mortgage_ops_additional_rate_cents',
+  );
+  if (mortgageAdditional !== true) return mortgageAdditional;
   if (sets.length) {
     params.push(tenantId);
     await client.query(
@@ -1070,7 +1320,9 @@ export async function listBillingHistory(client, tenantId, limit = 24) {
             submitted_at, settled_at, returned_at, failure_reason, return_reason,
             idempotence_key, created_at,
             maintenance_net_cents, check_usage_cents, next_day_usage_cents, same_day_usage_cents,
-            usage_total_cents, check_count, next_day_count, same_day_count
+            usage_total_cents, check_count, next_day_count, same_day_count,
+            mortgage_ops_initial_count, mortgage_ops_initial_amount_cents,
+            mortgage_ops_additional_count, mortgage_ops_additional_amount_cents
      FROM public.tenant_maintenance_payments
      WHERE tenant_id = $1::uuid
      ORDER BY period_start DESC NULLS LAST, created_at DESC
@@ -1145,6 +1397,8 @@ export async function buildTenantBillingSnapshot(client, tenantId, dest, { now =
     per_check_rate_cents: resolveCheckRateCents(ctx.tenant),
     next_day_rate_cents: resolveNextDayRateCents(ctx.tenant),
     same_day_rate_cents: resolveSameDayRateCents(ctx.tenant),
+    mortgage_ops_initial_rate_cents: resolveMortgageInitialRateCents(ctx.tenant),
+    mortgage_ops_additional_rate_cents: resolveMortgageAdditionalRateCents(ctx.tenant),
     instant_rate_cents: null,
     instant_enabled: false,
     billing_enabled: ctx.settings.billing_enabled === true,
@@ -1165,6 +1419,11 @@ export async function buildTenantBillingSnapshot(client, tenantId, dest, { now =
       next_day_usage_cents: invoice.next_day_usage_cents,
       same_day_count: invoice.same_day_count,
       same_day_usage_cents: invoice.same_day_usage_cents,
+      mortgage_ops_initial_count: invoice.mortgage_ops_initial_count,
+      mortgage_ops_initial_amount_cents: invoice.mortgage_ops_initial_amount_cents,
+      mortgage_ops_additional_count: invoice.mortgage_ops_additional_count,
+      mortgage_ops_additional_amount_cents: invoice.mortgage_ops_additional_amount_cents,
+      mortgage_ops_usage_cents: invoice.mortgage_ops_usage_cents,
       usage_total_cents: invoice.usage_total_cents,
       amount_cents: invoice.amount_cents,
       allocations: pendingAllocations,
@@ -1183,6 +1442,11 @@ export async function buildTenantBillingSnapshot(client, tenantId, dest, { now =
       next_day_usage_cents: pullPreview.next_day_usage_cents,
       same_day_count: pullPreview.same_day_count,
       same_day_usage_cents: pullPreview.same_day_usage_cents,
+      mortgage_ops_initial_count: pullPreview.mortgage_ops_initial_count,
+      mortgage_ops_initial_amount_cents: pullPreview.mortgage_ops_initial_amount_cents,
+      mortgage_ops_additional_count: pullPreview.mortgage_ops_additional_count,
+      mortgage_ops_additional_amount_cents: pullPreview.mortgage_ops_additional_amount_cents,
+      mortgage_ops_usage_cents: pullPreview.mortgage_ops_usage_cents,
       usage_total_cents: pullPreview.usage_total_cents,
       amount_cents: pullPreview.amount_cents,
     } : null,

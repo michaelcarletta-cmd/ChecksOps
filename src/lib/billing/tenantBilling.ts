@@ -10,6 +10,10 @@ export type BillingOccurrence = {
   check_usage_cents?: number | null;
   next_day_usage_cents?: number | null;
   same_day_usage_cents?: number | null;
+  mortgage_ops_initial_count?: number | null;
+  mortgage_ops_initial_amount_cents?: number | null;
+  mortgage_ops_additional_count?: number | null;
+  mortgage_ops_additional_amount_cents?: number | null;
   usage_total_cents?: number | null;
   check_count?: number | null;
   next_day_count?: number | null;
@@ -51,6 +55,11 @@ export type ConsolidatedInvoice = {
   next_day_usage_cents: number;
   same_day_count: number;
   same_day_usage_cents: number;
+  mortgage_ops_initial_count?: number;
+  mortgage_ops_initial_amount_cents?: number;
+  mortgage_ops_additional_count?: number;
+  mortgage_ops_additional_amount_cents?: number;
+  mortgage_ops_usage_cents?: number;
   usage_total_cents: number;
   amount_cents: number;
   allocations?: BillingAllocation[];
@@ -58,6 +67,8 @@ export type ConsolidatedInvoice = {
     checks?: unknown[];
     next_day?: unknown[];
     same_day?: unknown[];
+    mortgage_ops_initial?: Array<{ unit_price_cents?: number }>;
+    mortgage_ops_additional?: Array<{ unit_price_cents?: number }>;
   };
   excluded_voided_checks?: unknown[];
 };
@@ -72,6 +83,8 @@ export type TenantBillingSnapshot = {
   per_check_rate_cents?: number;
   next_day_rate_cents?: number;
   same_day_rate_cents?: number;
+  mortgage_ops_initial_rate_cents?: number;
+  mortgage_ops_additional_rate_cents?: number;
   instant_rate_cents?: number | null;
   instant_enabled?: boolean;
   billing_enabled: boolean;
@@ -165,6 +178,21 @@ export const billingPeriodLabel = (period?: string | null) => {
     year: "numeric",
     timeZone: "UTC",
   });
+};
+
+export const snapshottedRateLabel = (
+  lines: Array<{ unit_price_cents?: number }> | undefined,
+  fallbackCents: number,
+) => {
+  const rates = [...new Set((lines || []).map((line) => Number(line.unit_price_cents ?? 0)))];
+  if (rates.length === 0) return money(fallbackCents);
+  if (rates.length === 1) return `${lines!.length} × ${money(rates[0])}`;
+  return rates
+    .map((rate) => {
+      const count = (lines || []).filter((line) => Number(line.unit_price_cents ?? 0) === rate).length;
+      return `${count} × ${money(rate)}`;
+    })
+    .join(" + ");
 };
 
 export const billingStatusLabel = (status?: string | null) => {

@@ -1,4 +1,4 @@
-import { billingPeriodLabel, money, type ConsolidatedInvoice } from "@/lib/billing/tenantBilling";
+import { billingPeriodLabel, money, snapshottedRateLabel, type ConsolidatedInvoice } from "@/lib/billing/tenantBilling";
 
 export function ConsolidatedInvoicePreview({
   invoice,
@@ -57,6 +57,24 @@ export function ConsolidatedInvoicePreview({
               <span className="block text-[11px] text-muted-foreground">{invoice.same_day_count} transactions</span>
             </td>
             <td className="px-4 py-2 text-right tabular-nums">{money(invoice.same_day_usage_cents)}</td>
+          </tr>
+          <tr>
+            <td className="px-4 py-2">
+              Mortgage Ops — First Check
+              <span className="block text-[11px] text-muted-foreground">
+                {snapshottedRateLabel(invoice.lines?.mortgage_ops_initial, 1000)}
+              </span>
+            </td>
+            <td className="px-4 py-2 text-right tabular-nums">{money(invoice.mortgage_ops_initial_amount_cents)}</td>
+          </tr>
+          <tr>
+            <td className="px-4 py-2">
+              Mortgage Ops — Additional Check
+              <span className="block text-[11px] text-muted-foreground">
+                {snapshottedRateLabel(invoice.lines?.mortgage_ops_additional, 500)}
+              </span>
+            </td>
+            <td className="px-4 py-2 text-right tabular-nums">{money(invoice.mortgage_ops_additional_amount_cents)}</td>
           </tr>
           <tr className="bg-muted/30">
             <td className="px-4 py-2 font-semibold">Current amount due</td>
