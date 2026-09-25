@@ -174,7 +174,7 @@ const accountCreate = {
             address: addr ?? undefined,
           },
         },
-        capabilities: ['transfers', 'send-funds', 'wallet', 'send-funds.ach'],
+        capabilities: ['transfers', 'send-funds', 'wallet', 'send-funds.ach', 'collect-funds', 'collect-funds.ach'],
         ...(tosToken ? { termsOfService: { token: tosToken } } : {}),
         foreignID: tenantId,
         metadata: { checksops_tenant_id: tenantId },

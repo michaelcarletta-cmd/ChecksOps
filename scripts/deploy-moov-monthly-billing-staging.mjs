@@ -89,6 +89,9 @@ const overlayApi = async () => {
     ['aws/functions/api/scheduled.mjs', 'scheduled.mjs'],
     ['aws/functions/api/providers/webhook-apply.mjs', 'providers/webhook-apply.mjs'],
     ['aws/functions/api/providers/parity/moov-money.mjs', 'providers/parity/moov-money.mjs'],
+    ['aws/functions/api/providers/parity/moov-onboard.mjs', 'providers/parity/moov-onboard.mjs'],
+    ['aws/functions/api/providers/parity/moov-functions.mjs', 'providers/parity/moov-functions.mjs'],
+    ['aws/functions/api/providers/parity/moov-rails.mjs', 'providers/parity/moov-rails.mjs'],
   ];
   const placed = [];
   for (const [src, dest] of copies) {
@@ -106,6 +109,9 @@ const overlayApi = async () => {
   const vars = { ...(before.Environment?.Variables || {}) };
   vars.AWS_MOOV_MONTHLY_BILLING_ENABLED = 'true';
   vars.AWS_MOOV_BILLING_DESTINATION_ACCOUNT_ID = SANDBOX_MERCHANT;
+  if (!vars.AWS_MOOV_BILLING_DESTINATION_PAYMENT_METHOD_ID) {
+    vars.AWS_MOOV_BILLING_DESTINATION_PAYMENT_METHOD_ID = '3c3133e7-5489-4af8-9d9a-4b0cf6bad362';
+  }
   delete vars.AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED;
   delete vars.AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST;
   awsJson([

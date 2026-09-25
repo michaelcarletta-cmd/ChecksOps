@@ -52,6 +52,17 @@ const snapshot = async (client, tenantId, dest) => {
   const history = await listBillingHistory(client, tenantId, 24);
   const last = history[0] || null;
   const pending = history.find((row) => row.status === 'submitted' || row.status === 'due') || null;
+  const methods = (await client.query(
+    `SELECT provider_payment_method_id, holder_name, last_four, nickname,
+            connection_status, can_send, environment, provider_account_id
+     FROM public.payment_provider_methods
+     WHERE tenant_id = $1::uuid
+       AND environment = $2
+       AND connection_status = 'connected'
+       AND provider_payment_method_id IS NOT NULL
+     ORDER BY updated_at DESC NULLS LAST`,
+    [tenantId, billingEnvironment()],
+  ).catch(() => ({ rows: [] }))).rows;
   return {
     ok: true,
     tenant_id: tenantId,
@@ -84,6 +95,7 @@ const snapshot = async (client, tenantId, dest) => {
     last_charge: last,
     pending_charge: pending,
     history,
+    methods,
   };
 };
 
@@ -133,6 +145,22 @@ export const handleTenantBillingAdmin = async (event, deps = {}) => {
       if (!saved.ok) return denied(spoof, { statusCode: 400, ...saved });
       const data = await snapshot(client, tenantId, dest);
       return { ok: true, statusCode: 200, spoofFieldsIgnored: spoof, saved: true, ...data };
+    }
+
+    if (action === 'apply-event') {
+      const applied = await applyBillingProviderEvent(client, {
+        providerTransferId: body.provider_transfer_id || body.providerTransferId,
+        status: body.status,
+        reason: body.reason || 'simulated_webhook',
+      });
+      const data = await snapshot(client, tenantId, dest);
+      return {
+        ok: applied.applied === true,
+        statusCode: applied.applied ? 200 : 409,
+        spoofFieldsIgnored: spoof,
+        event: applied,
+        ...data,
+      };
     }
 
     if (action === 'pull') {

@@ -79,6 +79,22 @@ export async function canAuthorizeTenantBilling(client, userId, tenantId) {
 
 const fail = (error, extra = {}) => ({ ok: false, error, ...extra });
 
+const capabilityEntries = (capabilities) => {
+  if (Array.isArray(capabilities)) return capabilities;
+  if (capabilities && typeof capabilities === 'object') return Object.values(capabilities);
+  return [];
+};
+
+const sandboxCollectFundsAvailable = (account, env) => {
+  if (env !== 'sandbox') return false;
+  return capabilityEntries(account?.capabilities).some((entry) => {
+    const name = String(entry?.capability || entry || '');
+    const status = String(entry?.status || (typeof entry === 'string' ? 'pending' : '')).toLowerCase();
+    const collect = name === 'collect-funds' || name === 'collect-funds.ach';
+    return collect && !['disabled', 'disconnected', 'errored'].includes(status);
+  });
+};
+
 export async function loadTenantBillingContext(client, tenantId) {
   const tenant = (await client.query(
     `SELECT id, name, slug, subscription_status, monthly_rate_cents, referral_discount_cents,
@@ -139,9 +155,14 @@ export async function evaluateBillingReadiness(client, {
   if (!account?.provider_account_id) reasons.push('moov_account_missing');
   else {
     if (account.onboarding_status && account.onboarding_status !== 'active') {
-      reasons.push('moov_account_inactive');
+      const sandboxIncompleteOk = env === 'sandbox'
+        && Boolean(account.provider_account_id)
+        && !['suspended', 'restricted'].includes(String(account.onboarding_status));
+      if (!sandboxIncompleteOk) reasons.push('moov_account_inactive');
     }
-    if (account.can_ach_debit === false) reasons.push('ach_capability_unavailable');
+    if (account.can_ach_debit === false && !sandboxCollectFundsAvailable(account, env)) {
+      reasons.push('ach_capability_unavailable');
+    }
     if (
       authorization?.provider_account_id
       && authorization.provider_account_id !== account.provider_account_id

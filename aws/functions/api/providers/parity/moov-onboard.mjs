@@ -29,6 +29,7 @@ import {
   secureToken,
 } from './db.mjs';
 import { syncWallet } from './moov-wallet.mjs';
+import { fetchRailMethodIds } from './moov-rails.mjs';
 import {
   buildIndividualKycPatch,
   dropTokenFromBody,
@@ -178,7 +179,7 @@ export const accountOnboard = {
     }
     await moovFetch(`/accounts/${accountId}/capabilities`, {
       method: 'POST', scopes: scopes.capabilitiesWrite(accountId),
-      body: { capabilities: ['transfers', 'send-funds', 'wallet', 'send-funds.ach'] }, fetchImpl,
+      body: { capabilities: ['transfers', 'send-funds', 'wallet', 'send-funds.ach', 'collect-funds', 'collect-funds.ach'] }, fetchImpl,
     }).catch(() => {});
     await client.query(
       `UPDATE public.payment_provider_accounts SET onboarding_status = 'verification_pending', last_synced_at = now() WHERE id = $1::uuid`,
@@ -225,21 +226,31 @@ export const bankAccountAdd = {
     const bankName = created?.bankName ?? null;
     const lastFour = created?.lastFourAccountNumber ?? safeLastFour(accountNumber);
     const status = String(created?.status ?? 'new').toLowerCase();
+    const rails = await fetchRailMethodIds(accountId, bankAccountId, fetchImpl).catch(() => ({}));
+    const debitPaymentMethodId = rails['ach-debit-fund'] || rails['ach-debit-collect'] || null;
     const method = (await client.query(
       `INSERT INTO public.payment_provider_methods
         (tenant_id, provider, environment, provider_account_id, provider_bank_account_id,
-         bank_name, account_type, last_four, holder_name, verification_status, connection_status,
-         can_send, can_receive, is_default, connected_at, provider_metadata)
-       VALUES ($1::uuid, 'moov', 'sandbox', $2, $3, $4, $5, $6, $7, $8, 'connected', true, true, true, now(), $9::jsonb)
+         provider_payment_method_id, bank_name, account_type, last_four, holder_name,
+         verification_status, connection_status, can_send, can_receive, is_default,
+         connected_at, provider_metadata, supported_rails, rail_payment_method_ids, rails_synced_at)
+       VALUES ($1::uuid, 'moov', 'sandbox', $2, $3, $4, $5, $6, $7, $8, $9, 'connected', true, true, true,
+         now(), $10::jsonb, $11::text[], $12::jsonb, now())
        ON CONFLICT (provider, environment, provider_bank_account_id) DO UPDATE SET
+         provider_payment_method_id = COALESCE(EXCLUDED.provider_payment_method_id, payment_provider_methods.provider_payment_method_id),
          bank_name = EXCLUDED.bank_name, last_four = EXCLUDED.last_four,
          verification_status = EXCLUDED.verification_status, connection_status = 'connected',
-         connected_at = now()
+         can_send = true, connected_at = now(),
+         supported_rails = EXCLUDED.supported_rails,
+         rail_payment_method_ids = EXCLUDED.rail_payment_method_ids,
+         rails_synced_at = now()
        RETURNING *`,
       [
-        ctx.tenantId, accountId, bankAccountId, bankName, bankAccountType, lastFour, holderName,
+        ctx.tenantId, accountId, bankAccountId, debitPaymentMethodId, bankName, bankAccountType, lastFour, holderName,
         status === 'verified' ? 'verified' : 'unverified',
-        JSON.stringify(sanitize({ status, source: 'manual_entry' })),
+        JSON.stringify(sanitize({ status, source: 'manual_entry', rails })),
+        Object.keys(rails),
+        JSON.stringify(rails),
       ],
     )).rows[0];
     await client.query(
@@ -252,6 +263,7 @@ export const bankAccountAdd = {
     });
     return jsonResult({
       success: true, payment_method_id: method?.id ?? null, bank_account_id: bankAccountId,
+      provider_payment_method_id: debitPaymentMethodId || method?.provider_payment_method_id || null,
       bank_name: bankName, last_four: lastFour, status, liveProviderCalled: true,
     });
   },

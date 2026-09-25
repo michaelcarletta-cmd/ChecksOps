@@ -187,6 +187,13 @@ const mockClient = (store, { platformOwner = true, actorTenant = TENANT_A, actor
       return { rows: store.accounts.get(`${params[0]}:${params[1]}`) ? [store.accounts.get(`${params[0]}:${params[1]}`)] : [] };
     }
     if (text.includes('FROM public.payment_provider_methods')) {
+      if (text.includes("connection_status = 'connected'")) {
+        return {
+          rows: [...store.methods.values()].filter((row) => (
+            row.tenant_id === params[0] && row.environment === params[1]
+          )),
+        };
+      }
       const key = `${params[0]}:${params[1]}`;
       return { rows: store.methods.get(key) ? [store.methods.get(key)] : [] };
     }
@@ -546,6 +553,79 @@ test('scheduled job is narrow, secret-gated, and not in the disabled financial s
   const scheduled = readFileSync(path.join(ROOT, 'functions/api/scheduled.mjs'), 'utf8');
   assert.match(scheduled, /moov-monthly-tenant-billing/);
   assert.equal(/'moov-monthly-tenant-billing'/.test(scheduled.split('FINANCIAL_JOBS')[1].split(']')[0]), false);
+});
+
+test('sandbox readiness accepts pending collect-funds and incomplete onboarding', async () => {
+  const store = makeStore();
+  store.accounts.set(`${TENANT_A}:sandbox`, {
+    provider_account_id: 'acct-a',
+    onboarding_status: 'verification_pending',
+    can_ach_debit: false,
+    can_send_payments: true,
+    verification_status: 'pending',
+    capabilities: [{ capability: 'collect-funds', status: 'pending' }],
+  });
+  store.settings.set(TENANT_A, { tenant_id: TENANT_A, billing_enabled: true, billing_day_of_month: 1 });
+  store.authorizations.set(TENANT_A, {
+    auto_debit_enabled: true,
+    ach_authorized_at: new Date().toISOString(),
+    provider_payment_method_id: 'pm-a',
+    provider_account_id: 'acct-a',
+  });
+  const ready = await evaluateBillingReadiness(mockClient(store), {
+    tenantId: TENANT_A,
+    destination: { ok: true, ...DEST },
+    environment: 'sandbox',
+  });
+  assert.equal(ready.ready, true);
+  store.accounts.set(`${TENANT_A}:sandbox`, {
+    provider_account_id: 'acct-a',
+    onboarding_status: 'suspended',
+    can_ach_debit: false,
+    capabilities: [{ capability: 'collect-funds', status: 'pending' }],
+  });
+  const suspended = await evaluateBillingReadiness(mockClient(store), {
+    tenantId: TENANT_A,
+    destination: { ok: true, ...DEST },
+    environment: 'sandbox',
+  });
+  assert.ok(suspended.reasons.includes('moov_account_inactive'));
+});
+
+test('admin apply-event moves a simulated occurrence submitted to settled then returned', async () => {
+  await withEnv({ AWS_MOOV_MONTHLY_BILLING_ENABLED: 'true', CHECKSOPS_ENV: 'staging' }, async () => {
+    const store = makeStore();
+    const client = mockClient(store);
+    await readyTenant(client, store, TENANT_A, 'pm-a');
+    const pull = await handleTenantBillingAdmin(identityEvent(OWNER, { action: 'pull', tenant_id: TENANT_A }), {
+      client,
+      mapping: { application_user_id: OWNER },
+      destination: { ok: true, ...DEST },
+    });
+    assert.equal(pull.ok, true);
+    assert.equal(pull.pull.occurrence.status, 'submitted');
+    const transferId = pull.pull.occurrence.provider_transfer_id;
+    const settled = await handleTenantBillingAdmin(identityEvent(OWNER, {
+      action: 'apply-event', tenant_id: TENANT_A, provider_transfer_id: transferId, status: 'transfer.completed',
+    }), {
+      client,
+      mapping: { application_user_id: OWNER },
+      destination: { ok: true, ...DEST },
+    });
+    assert.equal(settled.ok, true);
+    assert.equal(settled.event.occurrence.status, 'settled');
+    const returned = await handleTenantBillingAdmin(identityEvent(OWNER, {
+      action: 'apply-event', tenant_id: TENANT_A, provider_transfer_id: transferId, status: 'transfer.returned',
+    }), {
+      client,
+      mapping: { application_user_id: OWNER },
+      destination: { ok: true, ...DEST },
+    });
+    assert.equal(returned.ok, true);
+    assert.equal(returned.event.occurrence.status, 'returned');
+    assert.equal(returned.event.occurrence.provider_transfer_id, transferId);
+    assert.equal(store.occurrences.length, 1);
+  });
 });
 
 test('schema SQL is additive and unique on tenant plus billing period', () => {

@@ -44,6 +44,7 @@ export function MonthlyTenantBillingPanel({
   const [day, setDay] = useState(1);
   const [enabled, setEnabled] = useState(false);
   const [selectedMethod, setSelectedMethod] = useState("");
+  const [fundingMethods, setFundingMethods] = useState<Method[]>(methods);
 
   const load = async () => {
     setLoading(true);
@@ -59,6 +60,7 @@ export function MonthlyTenantBillingPanel({
     setDay(result.data.billing_day_of_month || 1);
     setEnabled(result.data.billing_enabled === true);
     setSelectedMethod(result.data.authorization?.provider_payment_method_id || "");
+    setFundingMethods(Array.isArray(result.data.methods) ? result.data.methods : methods);
     setLoading(false);
   };
 
@@ -180,7 +182,7 @@ export function MonthlyTenantBillingPanel({
                 onChange={(e) => setSelectedMethod(e.target.value)}
               >
                 <option value="">Select connected Moov bank…</option>
-                {methods.map((method) => (
+                {fundingMethods.map((method) => (
                   <option key={method.provider_payment_method_id} value={method.provider_payment_method_id}>
                     {(method.nickname || method.holder_name || "Bank")} · ••••{method.last_four || "????"} · {method.connection_status}
                   </option>
@@ -225,6 +227,15 @@ export function MonthlyTenantBillingPanel({
                       <div className="font-medium">{row.billing_period || "period"} · {money(row.amount_cents)}</div>
                       <div className="text-muted-foreground">
                         rate {money(row.monthly_rate_cents)} · discount {money(row.discount_cents)}
+                        {data.authorization?.account_number_last4
+                          ? ` · source ••••${data.authorization.account_number_last4}`
+                          : ""}
+                        {row.destination_account_id
+                          ? ` · dest ${String(row.destination_account_id).slice(0, 8)}`
+                          : ""}
+                        {row.provider_transfer_id
+                          ? ` · ${String(row.provider_transfer_id).startsWith("sim:") ? "simulated" : "moov"} ${row.provider_transfer_id}`
+                          : ""}
                       </div>
                     </div>
                     <Badge variant="outline">{billingStatusLabel(row.status)}</Badge>

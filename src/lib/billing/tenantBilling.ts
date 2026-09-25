@@ -9,6 +9,10 @@ export type BillingOccurrence = {
   billing_period?: string | null;
   status: string;
   provider_transfer_id?: string | null;
+  funding_source_method_id?: string | null;
+  destination_account_id?: string | null;
+  destination_payment_method_id?: string | null;
+  idempotence_key?: string | null;
   submitted_at?: string | null;
   settled_at?: string | null;
   returned_at?: string | null;
@@ -49,6 +53,14 @@ export type TenantBillingSnapshot = {
   last_charge: BillingOccurrence | null;
   pending_charge: BillingOccurrence | null;
   history: BillingOccurrence[];
+  methods?: Array<{
+    provider_payment_method_id: string;
+    holder_name?: string | null;
+    last_four?: string | null;
+    nickname?: string | null;
+    connection_status?: string;
+    can_send?: boolean;
+  }>;
   pull?: Record<string, unknown>;
 };
 
