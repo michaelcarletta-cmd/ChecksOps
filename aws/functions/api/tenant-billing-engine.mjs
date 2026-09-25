@@ -962,6 +962,110 @@ export async function createOrGetOccurrence(client, {
   return { ok: true, occurrence: inserted, created: true, idempotency_key: key };
 }
 
+const debitRailFromMap = (rails) => {
+  const map = rails && typeof rails === 'object' ? rails : {};
+  return map['ach-debit-fund'] || map['ach-debit-collect'] || null;
+};
+
+const debitRailTypeForId = (rails, paymentMethodId) => {
+  const map = rails && typeof rails === 'object' ? rails : {};
+  if (map['ach-debit-fund'] === paymentMethodId) return 'ach-debit-fund';
+  if (map['ach-debit-collect'] === paymentMethodId) return 'ach-debit-collect';
+  return null;
+};
+
+/**
+ * Resolve the tenant bank ACH debit source for billing.
+ * Reuses resolveDebitSourceMethodId (fund, then collect). Never uses
+ * ach-credit-standard or the raw stored authorization payment method as source.
+ */
+export async function resolveBillingDebitSource(client, {
+  authorization,
+  fetchImpl,
+} = {}) {
+  const tenantId = authorization?.tenant_id;
+  const storedMethodId = authorization?.provider_payment_method_id;
+  const accountId = authorization?.provider_account_id;
+  if (!tenantId || !storedMethodId || !accountId) {
+    return fail('billing_debit_source_unavailable', {
+      statusCode: 409,
+      message: 'No ACH debit-fund or debit-collect payment method is available for this billing bank account.',
+    });
+  }
+
+  const source = (await client.query(
+    `SELECT id, tenant_id, provider_account_id, provider_payment_method_id, provider_bank_account_id,
+            rail_payment_method_ids, rails_synced_at
+     FROM public.payment_provider_methods
+     WHERE tenant_id = $1::uuid
+       AND provider_payment_method_id = $2
+     LIMIT 1`,
+    [tenantId, storedMethodId],
+  ).catch(() => ({ rows: [] }))).rows[0];
+  if (!source) {
+    return fail('billing_debit_source_unavailable', {
+      statusCode: 409,
+      message: 'No ACH debit-fund or debit-collect payment method is available for this billing bank account.',
+    });
+  }
+
+  const { resolveDebitSourceMethodId } = await import('./providers/parity/moov-rails.mjs');
+  const resolved = await resolveDebitSourceMethodId(client, source, accountId, fetchImpl);
+  const cachedRails = source.rail_payment_method_ids;
+  const cachedDebit = debitRailFromMap(cachedRails);
+  if (resolved && (resolved === cachedDebit || debitRailTypeForId(cachedRails, resolved))) {
+    return {
+      ok: true,
+      sourceMethodId: resolved,
+      sourceAccountId: accountId,
+      sourceRail: debitRailTypeForId(cachedRails, resolved) || (
+        cachedRails?.['ach-debit-fund'] === resolved ? 'ach-debit-fund' : 'ach-debit-collect'
+      ),
+    };
+  }
+
+  const refreshed = source.id
+    ? (await client.query(
+      `SELECT rail_payment_method_ids
+       FROM public.payment_provider_methods
+       WHERE id = $1::uuid
+       LIMIT 1`,
+      [source.id],
+    ).catch(() => ({ rows: [] }))).rows[0]
+    : null;
+  const freshRails = refreshed?.rail_payment_method_ids;
+  const freshDebit = debitRailFromMap(freshRails);
+  if (resolved && freshDebit && (resolved === freshDebit || debitRailTypeForId(freshRails, resolved))) {
+    return {
+      ok: true,
+      sourceMethodId: resolved,
+      sourceAccountId: accountId,
+      sourceRail: debitRailTypeForId(freshRails, resolved),
+    };
+  }
+  if (freshDebit) {
+    return {
+      ok: true,
+      sourceMethodId: freshDebit,
+      sourceAccountId: accountId,
+      sourceRail: debitRailTypeForId(freshRails, freshDebit),
+    };
+  }
+  // Resolver only returns a non-stored ID from pick(fund/collect).
+  if (resolved && resolved !== storedMethodId) {
+    return {
+      ok: true,
+      sourceMethodId: resolved,
+      sourceAccountId: accountId,
+      sourceRail: null,
+    };
+  }
+  return fail('billing_debit_source_unavailable', {
+    statusCode: 409,
+    message: 'No ACH debit-fund or debit-collect payment method is available for this billing bank account.',
+  });
+}
+
 export const postTransfer = async ({
   sourceMethodId, destMethodId, amount, description, metadata, idempotencyKey, fetchImpl,
   facilitatorAccountId, environment, deps = {},
@@ -1033,6 +1137,7 @@ export async function submitOccurrence(client, {
   let providerTransferId = occurrence.provider_transfer_id;
   let providerStatus = occurrence.status;
   let failure = null;
+  let debitSource = null;
   if (simulate) {
     if (deps.simulateResult === 'failed') {
       failure = deps.simulateFailure || 'simulated_provider_rejection';
@@ -1042,9 +1147,17 @@ export async function submitOccurrence(client, {
       providerStatus = 'submitted';
     }
   } else {
+    const debit = await resolveBillingDebitSource(client, {
+      authorization: readiness.authorization,
+      fetchImpl,
+    });
+    if (!debit.ok) {
+      return debit;
+    }
+    debitSource = debit;
     try {
       const created = await postTransfer({
-        sourceMethodId: readiness.authorization.provider_payment_method_id,
+        sourceMethodId: debit.sourceMethodId,
         destMethodId: destination.paymentMethodId,
         amount: occurrence.amount_cents,
         description: `ChecksOps subscription ${occurrence.billing_period}`,
@@ -1102,6 +1215,9 @@ export async function submitOccurrence(client, {
     occurrence: saved,
     liveProviderCalled: !simulate && !failure,
     error: failure,
+    resolvedDebitSourceMethodId: debitSource?.sourceMethodId || null,
+    resolvedDebitSourceRail: debitSource?.sourceRail || null,
+    resolvedDebitSourceAccountId: debitSource?.sourceAccountId || null,
   };
 }
 
@@ -1179,6 +1295,7 @@ export async function submitVerificationOccurrence(client, {
   let providerTransferId = occurrence.provider_transfer_id;
   let providerStatus = occurrence.status;
   let failure = null;
+  let debitSource = null;
   if (simulate) {
     if (deps.simulateResult === 'failed') {
       failure = deps.simulateFailure || 'simulated_provider_rejection';
@@ -1188,9 +1305,17 @@ export async function submitVerificationOccurrence(client, {
       providerStatus = 'submitted';
     }
   } else {
+    const debit = await resolveBillingDebitSource(client, {
+      authorization: readiness.authorization,
+      fetchImpl,
+    });
+    if (!debit.ok) {
+      return debit;
+    }
+    debitSource = debit;
     try {
       const created = await postTransfer({
-        sourceMethodId: readiness.authorization.provider_payment_method_id,
+        sourceMethodId: debit.sourceMethodId,
         destMethodId: destination.paymentMethodId,
         amount: BILLING_VERIFICATION_AMOUNT_CENTS,
         description: 'ChecksOps billing verification $1.00',
@@ -1239,6 +1364,9 @@ export async function submitVerificationOccurrence(client, {
     occurrence: saved,
     liveProviderCalled: !simulate && !failure,
     error: failure,
+    resolvedDebitSourceMethodId: debitSource?.sourceMethodId || null,
+    resolvedDebitSourceRail: debitSource?.sourceRail || null,
+    resolvedDebitSourceAccountId: debitSource?.sourceAccountId || null,
   };
 }
 
