@@ -4,6 +4,7 @@ import { isCheckScopedPathFor, normalizePath } from './storage-paths.mjs';
 import {
   invalidateEndorsementsForMaterialPayeeChange,
   isMaterialPayeeChange,
+  materialPayeeFieldsChanged,
 } from './endorsement-material-invalidation.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -417,6 +418,9 @@ const executePayees = async ({ client, mapping, op, values, filters }) => {
       payeeId: looked.payee.id,
       previousName: looked.payee.payee_name,
       newName: coerced.values.payee_name ?? looked.payee.payee_name,
+      previousType: looked.payee.payee_type,
+      newType: coerced.values.payee_type ?? looked.payee.payee_type,
+      materialFields: materialPayeeFieldsChanged(looked.payee, coerced.values),
       actorId: mapping?.application_user_id || null,
     });
   }

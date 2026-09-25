@@ -418,14 +418,46 @@ async function scenario2(ctx) {
   });
 
   const afterEdit = await snapshot(freedom, check.id);
-  const staleSigned = afterEdit.endorsements.some((row) => row.status === 'signed');
+  const staleSigned = afterEdit.endorsements.some((row) => ['signed', 'waived'].includes(row.status));
   const payeeNameChanged = afterEdit.payees.some((row) => row.payee_name === 'CHANGED PAYEE LLC');
   const amountUnchanged = Number(afterEdit.check?.amount) === 250;
+  const currentEndorsements = afterEdit.endorsements;
+  const pendingOnly = currentEndorsements.length === 1 && currentEndorsements[0]?.status === 'pending';
+  const invalidateAudit = afterEdit.audit.find((row) => row.event_type === 'endorsement_invalidated_material_edit');
+  const auditData = invalidateAudit?.event_data && typeof invalidateAudit.event_data === 'string'
+    ? JSON.parse(invalidateAudit.event_data)
+    : (invalidateAudit?.event_data || {});
+  const auditComplete = Boolean(
+    invalidateAudit
+    && invalidateAudit.actor_id
+    && invalidateAudit.created_at
+    && invalidateAudit.check_id === check.id
+    && auditData.reason === 'material_payee_change'
+    && auditData.material_change_category === 'payee_identity'
+    && Array.isArray(auditData.material_fields) && auditData.material_fields.includes('payee_name')
+    && Array.isArray(auditData.prior_endorsement_state)
+    && auditData.prior_endorsement_state.some((row) => row.status === 'signed')
+    && auditData.prior_signature_state?.signed_or_waived_ids?.length,
+  );
+  const rearCleared = !afterEdit.check?.back_image_deposit_path
+    && !afterEdit.check?.endorsement_render_meta?.checkalt_rear_fingerprint;
   record(`${name} amount remains locked`, amountUnchanged, {
     detail: `amount=${afterEdit.check?.amount}`,
   });
-  record(`${name} prior endorsement after material payee edit`, true, {
-    detail: `signedRemains=${staleSigned} payeeRenamed=${payeeNameChanged} signedHttp=${signed?.status || 'none'}`,
+  record(`${name} payee renamed`, payeeNameChanged, {
+    detail: `payees=${afterEdit.payees.map((row) => row.payee_name).join(',')}`,
+  });
+  record(`${name} prior signature no longer signed`, !staleSigned && payeeNameChanged, {
+    detail: `statuses=${currentEndorsements.map((row) => row.status).join(',')} signedHttp=${signed?.status || 'none'}`,
+  });
+  record(`${name} single current pending endorsement`, pendingOnly, {
+    detail: `count=${currentEndorsements.length} statuses=${currentEndorsements.map((row) => `${row.id}:${row.status}`).join(',')}`,
+  });
+  record(`${name} invalidation audit recorded`, auditComplete, {
+    detail: `event=${invalidateAudit?.event_type || 'missing'} actor=${invalidateAudit?.actor_id || 'none'} reason=${auditData.reason || ''} fields=${(auditData.material_fields || []).join(',')} priorSigned=${(auditData.prior_signature_state?.signed_or_waived_ids || []).join(',')}`,
+  });
+  record(`${name} official rear artifact cleared`, rearCleared, {
+    detail: `depositPath=${afterEdit.check?.back_image_deposit_path || 'null'} fingerprint=${afterEdit.check?.endorsement_render_meta?.checkalt_rear_fingerprint || 'null'}`,
   });
 
   if (staleSigned && payeeNameChanged) {
@@ -449,14 +481,18 @@ async function scenario2(ctx) {
     detail: `status=${forward.status}`,
   });
   const ready = await transition(freedom, check.id, 'mark_ready_for_deposit');
-  if (staleSigned && payeeNameChanged && ready.status === 200) {
+  const readyBlockedCorrectly = ready.status !== 200
+    && ready.json.error === 'endorsements_incomplete'
+    && ready.json.reason === 'required_payee_unsigned'
+    && ready.json.error !== 'endorsement_state_ambiguous';
+  if (ready.status === 200) {
     finding({
       id: 'S2-READY-ACCEPTS-STALE-SIGNATURE',
       scenario: 2,
       severity: 'MONEY-RISK',
       title: 'Ready-for-deposit accepted after material payee change without new signature',
       reproduction: 'After S2 payee rename, call mark_ready_for_deposit.',
-      expected: 'Ready must fail until the renamed payee re-endorses.',
+      expected: 'Ready must fail until the renamed payee re-endorses, for endorsements_incomplete rather than duplicate-row ambiguity.',
       actual: `mark_ready_for_deposit ${ready.status} status=${rowOf(ready.json.data)?.status}`,
       affected: 'POST /workflow/transition mark_ready_for_deposit; evaluateEndorsementEligibility',
       risk: 'Check can become deposit-eligible under a different payee than the one who signed.',
@@ -464,17 +500,61 @@ async function scenario2(ctx) {
       stopFurther: true,
     });
   } else {
-    record(`${name} ready after material edit`, ready.status !== 200 || !staleSigned || !payeeNameChanged, {
-      detail: `status=${ready.status} error=${ready.json.error || ''} signed=${staleSigned}`,
+    record(`${name} ready blocked until fresh signature`, readyBlockedCorrectly, {
+      detail: `status=${ready.status} error=${ready.json.error || ''} reason=${ready.json.reason || ''} signed=${staleSigned}`,
+    });
+    if (!readyBlockedCorrectly && ready.json.error === 'endorsement_state_ambiguous') {
+      finding({
+        id: 'S2-READY-BLOCKED-ONLY-BY-AMBIGUITY',
+        scenario: 2,
+        severity: 'MONEY-RISK',
+        title: 'Ready blocked only by duplicate endorsement rows after material payee rename',
+        reproduction: 'After S2 payee rename, call mark_ready_for_deposit.',
+        expected: 'The stale signature itself must no longer qualify. Ready should fail as endorsements_incomplete / required_payee_unsigned.',
+        actual: `mark_ready_for_deposit ${ready.status} error=${ready.json.error} reason=${ready.json.reason}`,
+        affected: 'evaluateEndorsementEligibility; tg_mirror_payee_to_endorsement',
+        risk: 'Removing the extra pending row would let the stale signed row satisfy Ready.',
+        fix: 'Invalidate and collapse to one pending current endorsement on material payee change.',
+        stopFurther: true,
+      });
+    }
+  }
+
+  const beforeResign = await snapshot(freedom, check.id);
+  const currentPending = beforeResign.endorsements.find((row) => row.status === 'pending')
+    || beforeResign.endorsements[0];
+  let resign = null;
+  if (currentPending?.id) {
+    resign = await endorse(freedom, {
+      action: 'sign_in_person',
+      endorsementId: currentPending.id,
+      signatureData: TINY_PNG_DATA,
+      eSignConsentAccepted: true,
     });
   }
+  record(`${name} fresh re-sign after invalidation`, resign?.status === 200 && (resign.json.success === true || resign.json.ok === true || resign.json.allSigned === true), {
+    detail: `status=${resign?.status} error=${resign?.json.error || ''} endorsement=${currentPending?.id || 'none'}`,
+  });
+  const readyAfterResign = await transition(freedom, check.id, 'mark_ready_for_deposit');
+  const afterResign = await snapshot(freedom, check.id);
+  const signedNow = afterResign.endorsements.filter((row) => row.status === 'signed');
+  const readyOk = readyAfterResign.status === 200 && rowOf(readyAfterResign.json.data)?.status === 'approved_for_deposit';
+  record(`${name} ready after fresh signature`, readyOk, {
+    detail: `status=${readyAfterResign.status} error=${readyAfterResign.json.error || ''} reason=${readyAfterResign.json.reason || ''} check=${rowOf(readyAfterResign.json.data)?.status}`,
+  });
+  record(`${name} exactly one current signed endorsement`, signedNow.length === 1 && afterResign.endorsements.length === 1, {
+    detail: `signed=${signedNow.map((row) => `${row.id}:${row.payee_name}`).join(',')} count=${afterResign.endorsements.length}`,
+  });
+  record(`${name} stale signed row did not reactivate`, !signedNow.some((row) => auditData.prior_signature_state?.signed_or_waived_ids?.includes(row.id) && row.signed_at && auditData.prior_endorsement_state?.some((prior) => prior.id === row.id && prior.signed_at === row.signed_at)), {
+    detail: `currentSigned=${signedNow[0]?.id || 'none'} priorSigned=${(auditData.prior_signature_state?.signed_or_waived_ids || []).join(',')}`,
+  });
 
   const auditHasReturn = afterEdit.audit.some((row) => /return_to_review|aws_workflow_transition|admin_correction/i.test(`${row.event_type} ${row.event_description}`));
   record(`${name} audit retains rollback`, auditHasReturn && afterEdit.audit.length > 0, {
     detail: `auditRows=${afterEdit.audit.length}`,
   });
 
-  ctx.material = { check: afterEdit.check, related: afterEdit };
+  ctx.material = { check: afterResign.check || afterEdit.check, related: afterResign, invalidation: auditData, readyBeforeResign: ready, readyAfterResign };
 }
 
 async function scenario3(ctx) {
@@ -1099,21 +1179,28 @@ const main = async () => {
   const c1c = await login(C1C_EMAIL);
   const ctx = { freedom, c1c, flags: { workflow: workflowFlags.json, financial: financialFlags.json } };
 
-  await scenario1(ctx);
-  await scenario2(ctx);
-  await scenario3(ctx);
-  await scenario4(ctx);
-  await scenario5(ctx);
-  await scenario6(ctx);
-  await scenario7(ctx);
-  await scenario8(ctx);
-  await scenario9(ctx);
-  await scenario10(ctx);
-  await scenario11(ctx);
-  await scenario12(ctx);
-  await scenario13(ctx);
-  await scenario14(ctx);
-  await scenario15(ctx);
+  const wanted = new Set(
+    String(process.env.PHASE1_SCENARIOS || '')
+      .split(',')
+      .map((part) => part.trim().toLowerCase())
+      .filter(Boolean),
+  );
+  const run = (id) => wanted.size === 0 || wanted.has(String(id)) || wanted.has(`s${id}`);
+  if (run(1)) await scenario1(ctx);
+  if (run(2)) await scenario2(ctx);
+  if (run(3)) await scenario3(ctx);
+  if (run(4)) await scenario4(ctx);
+  if (run(5)) await scenario5(ctx);
+  if (run(6)) await scenario6(ctx);
+  if (run(7)) await scenario7(ctx);
+  if (run(8)) await scenario8(ctx);
+  if (run(9)) await scenario9(ctx);
+  if (run(10)) await scenario10(ctx);
+  if (run(11)) await scenario11(ctx);
+  if (run(12)) await scenario12(ctx);
+  if (run(13)) await scenario13(ctx);
+  if (run(14)) await scenario14(ctx);
+  if (run(15)) await scenario15(ctx);
   await cleanupAll(ctx);
 
   const failed = results.filter((row) => !row.ok);
