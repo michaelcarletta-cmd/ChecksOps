@@ -73,24 +73,8 @@ Identify run 24/24. Official harness S11 7/7 with finding `S11-NO-PARTIAL-AMOUNT
 - CheckAlt → `403 checkalt_mutation_blocked`
 - Moov create without recipient → `400 A recipient is required.`, `liveProviderCalled=false`
 
-## S11 status: FAIL
+## S11 status: PRODUCTION PASS
 
-**FAIL** as a Phase 1 acceptance item (WORKFLOW-RISK). Not a demonstrated BLOCKER or MONEY-RISK. Not BLOCKED — the gap is determined.
+Initial determination was FAIL (WORKFLOW-RISK). Staging remediations and production promotion are now PASS. See `S11_PARTIAL_DISBURSEMENT_REMEDIATIONS.md` and `S11_PRODUCTION_PROMOTION.md`.
 
-The original audit called this “PASS with gap” because no incorrect money movement was shown. The required S11 remainder scenario still cannot be performed on current staging.
-
-## Smallest required remediation (not implemented)
-
-Do **not** accept browser amounts. Do **not** allowlist `disbursement_splits` on `/data/write`. Do **not** reopen S2–S5.
-
-Add a server-derived remaining-balance amount source for disbursement-family prepares:
-
-`remaining = confirmed money in − confirmed money out` for that check (failed/cancelled/replayed rows count as 0 out).
-
-Use that remaining amount (or a server-capped requested partial that cannot exceed remaining) as `amount_cents`, and include a disbursement sequence (or remaining snapshot) in `stableIdempotencyKey` so a second remainder prepare is a new operation instead of a replay of the first full-amount row.
-
-## Production
-
-Untouched. SHA still `4nRr0xh9SelxDuMAzNmgbbpWAaiWmPOgtiN14DkDXgM=`, LastModified `2026-09-25T12:25:20.000+0000`.
-
-## S11 PARTIAL DISBURSEMENT: FAIL
+## S11 PARTIAL DISBURSEMENT: PASS
