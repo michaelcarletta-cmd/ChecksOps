@@ -1276,6 +1276,8 @@ test('SQL 47 adds typed occurrence_kind without mutating penny financials', () =
   assert.match(sql, /billing_verification/);
   assert.match(sql, /legacy/);
   assert.match(sql, /amount_cents = 100/);
+  assert.match(sql, /ALTER COLUMN period_start DROP NOT NULL/);
+  assert.match(sql, /ALTER COLUMN period_end DROP NOT NULL/);
   assert.match(sql, /tenant_maintenance_payments_verification_uidx/);
   assert.match(sql, /tenant_maintenance_payments_idempotence_key_uidx/);
   assert.doesNotMatch(sql, /SET\s+amount_cents/i);

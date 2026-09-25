@@ -12,6 +12,13 @@
 --   amount_cents    = 100
 --   billing_period  IS NULL
 
+-- Verification rows have no monthly period. Existing monthly rows keep their dates.
+ALTER TABLE public.tenant_maintenance_payments
+  ALTER COLUMN period_start DROP NOT NULL;
+
+ALTER TABLE public.tenant_maintenance_payments
+  ALTER COLUMN period_end DROP NOT NULL;
+
 ALTER TABLE public.tenant_maintenance_payments
   ADD COLUMN IF NOT EXISTS occurrence_kind text;
 
@@ -50,7 +57,12 @@ ALTER TABLE public.tenant_maintenance_payments
   ADD CONSTRAINT tenant_maintenance_payments_verification_contract_check
   CHECK (
     occurrence_kind <> 'billing_verification'
-    OR (billing_period IS NULL AND amount_cents = 100)
+    OR (
+      billing_period IS NULL
+      AND period_start IS NULL
+      AND period_end IS NULL
+      AND amount_cents = 100
+    )
   );
 
 CREATE UNIQUE INDEX IF NOT EXISTS tenant_maintenance_payments_verification_uidx
