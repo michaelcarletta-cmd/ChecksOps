@@ -49,14 +49,14 @@ Rollback zip retained at `/tmp/checksops-prod-s14-rollback-before.zip`.
 | | Value |
 | --- | --- |
 | Production SHA before | `dplSPx8YJoYbkolr2c6mKersDAV7OCzHt5y3UyIOdoc=` |
-| Production SHA after | _pending deploy_ |
-| Last modified after | _pending deploy_ |
-| LastUpdateStatus | _pending deploy_ |
+| Production SHA after | `zb7E5ptHPmRsBegkIFgNzq3rzBktHvpNCJ1QMTHM6l0=` |
+| Last modified after | `2026-09-25T13:43:44.000+0000` |
+| LastUpdateStatus | Successful |
 | State | Active |
 
 ## Exact files promoted
 
-Package vs rollback zip `/tmp/checksops-prod-s14-rollback-before.zip` (preflight overlay `/tmp/checksops-prod-s14-overlay/updated.zip`):
+Package vs rollback zip `/tmp/checksops-prod-s14-rollback-before.zip` (live after matches proposed overlay):
 
 - added `{check-deposited.mjs}`
 - changed `{write-check-workflow.mjs, ocr.mjs, ocr-descriptive-persist.mjs, ingest-shared-check.mjs}`
@@ -64,25 +64,59 @@ Package vs rollback zip `/tmp/checksops-prod-s14-rollback-before.zip` (preflight
 
 `check-deposited.mjs`, `write-check-workflow.mjs`, `ocr.mjs`, and `ocr-descriptive-persist.mjs` match the accepted repo files byte-for-byte. `ingest-shared-check.mjs` is the live production file plus the S14 lock hunks; the production tenant INSERT is preserved.
 
-Every other live file remains byte-for-byte identical (6460 → 6461 files).
+Every other live file remained byte-for-byte identical (6460 → 6461 files). Confirmed unchanged: `write-allowlist.mjs`, `workflow.mjs`, `financial.mjs`, `financial-remaining.mjs`, `financial-idempotency.mjs`, `workflow-rpc.mjs`, `endorsement-material-invalidation.mjs`.
 
-## Environment / config before
+## Environment / config before / after
 
-44 keys. Role `checksops-production-api-execution`. Runtime `nodejs22.x`. Memory 1024. Timeout 45. Handler `index.handler`. VPC `vpc-09f2268778966ce97`. Cognito pool `us-east-1_h00WorYMT`. `UpdateFunctionConfiguration` will not be called.
+**None.** `Environment.Variables` (44 keys) identical. Role, runtime, memory, timeout, VPC, description, handler, architectures, and Cognito ids unchanged. `UpdateFunctionConfiguration` was not called.
 
-| Flag | Before |
-| --- | --- |
-| `AWS_MOOV_ENABLED` | true |
-| `AWS_MOOV_TRANSFER_POST_ENABLED` | true |
-| `AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED` | false |
-| `AWS_CHECKALT_ENABLED` | true |
-| `AWS_CHECKALT_STATUS_RECONCILE_ENABLED` | false |
-| `AWS_PROVIDER_EXECUTION_ENABLED` | true |
-| `AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED` | false |
-| `AWS_FINANCIAL_PERMISSIONS_ACTIVATED` | true |
-| `AWS_FINANCIAL_SANDBOX_SIMULATION_ENABLED` | false |
-| `AWS_PROVIDER_WEBHOOK_DRY_RUN` | true |
+| Flag | Before | After |
+| --- | --- | --- |
+| `AWS_MOOV_ENABLED` | true | true |
+| `AWS_MOOV_TRANSFER_POST_ENABLED` | true | true |
+| `AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED` | false | false |
+| `AWS_CHECKALT_ENABLED` | true | true |
+| `AWS_CHECKALT_STATUS_RECONCILE_ENABLED` | false | false |
+| `AWS_PROVIDER_EXECUTION_ENABLED` | true | true |
+| `AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED` | false | false |
+| `AWS_FINANCIAL_PERMISSIONS_ACTIVATED` | true | true |
+| `AWS_FINANCIAL_SANDBOX_SIMULATION_ENABLED` | false | false |
+| `AWS_PROVIDER_WEBHOOK_DRY_RUN` | true | true |
 
-Public `/prep/financial/status`: `liveProviderTransactions=false`, `productionExecution=false`, `productionSupabaseChanged=false`. Money-movement permissions remain `NOT activated`.
+Public `/prep/workflow/status` and `/prep/financial/status` flags match. `liveProviderTransactions` stayed `false`. `productionExecution` stayed `false`. `productionSupabaseChanged` stayed `false`. Money-movement permissions remain `NOT activated`. `moneyMovementUnlocked` stayed `false`.
 
 `GET /prep/db-health`: `select1=ok`, `currentDatabase=checksops`, `transactionReadOnly=on`.
+
+## Production code-path verification
+
+Live package contains and imports `check-deposited.mjs`. Present invariants:
+
+- `deposited_at IS NOT NULL` → deposited / locked
+- confirmed `checkalt_deposit` in `provider_confirmed` / `settled` → deposited / locked
+- deposited-state lookup failure → fail closed
+- pre-deposit `payee_line` correction remains allowed (`payee_line` still `INTAKE_SAFE_COLUMNS`)
+- same-value post-deposit request is a no-op
+- generic post-deposit `payee_line` mutation is denied (`payee_line_locked`)
+- OCR (`ocr.mjs`, `ocr-descriptive-persist.mjs`) cannot overwrite post-deposit `payee_line`
+- existing-row ingest cannot overwrite post-deposit `payee_line` (`guardIngestPlanPayeeLine`)
+- `claim_checks` cannot bypass the lock (`rejectPayeeLineIfDeposited` in `executeClaimChecks`)
+- `payee_line` is not in `INTAKE_PROHIBITED_COLUMNS`
+- S2 `invalidateEndorsementsForMaterialPayeeChange` remains in live `write-check-workflow.mjs`
+
+Unauthenticated `POST /prep/data/write` against `check_intake_items` and `claim_checks` with a `payee_line` mutation returns `401 missing_cognito_token` and does not mutate a row. Behavioral lock proof remains the accepted staging 15/15 run.
+
+## CloudWatch
+
+`/aws/lambda/checksops-production-prep-api` since `2026-09-25T13:43:44Z`:
+
+- ERROR filter: 0 events
+- Recent sample: INIT_START / START / END / REPORT only
+- No `payee_line_locked`, provider-execution, or CheckAlt/Moov errors
+
+## Safety
+
+No real production check was modified. No Moov transfer, CheckAlt transaction, ACH, RTP, wire, wallet movement, or deposit was created.
+
+Rollback zip retained at `/tmp/checksops-prod-s14-rollback-before.zip` (SHA `dplSPx8YJoYbkolr2c6mKersDAV7OCzHt5y3UyIOdoc=`).
+
+## S14 DEPOSIT PAYEE_LINE PROTECTION PRODUCTION PROMOTION: PASS

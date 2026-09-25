@@ -89,6 +89,9 @@ S14 synthetics deleted. Prior leftover ingest rows `7a7b6a07-…`, `eb0696a2-…
 
 ## Production
 
-Not modified. Live SHA remains `dplSPx8YJoYbkolr2c6mKersDAV7OCzHt5y3UyIOdoc=`.
+Promoted 2026-09-25. See `aws/audit/S14_PRODUCTION_PROMOTION.md`.
 
-**S14 is ready for a later explicit production-promotion request.** Do not promote from this document.
+| When | SHA |
+| --- | --- |
+| Frozen baseline before S14 | `dplSPx8YJoYbkolr2c6mKersDAV7OCzHt5y3UyIOdoc=` |
+| After S14 overlay | `zb7E5ptHPmRsBegkIFgNzq3rzBktHvpNCJ1QMTHM6l0=` |
