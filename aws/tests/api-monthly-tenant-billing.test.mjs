@@ -635,6 +635,8 @@ test('schema SQL is additive and unique on tenant plus billing period', () => {
   assert.match(sql, /tenant_maintenance_payments_tenant_period_uidx/);
   assert.match(sql, /billing_period/);
   assert.match(sql, /aws_can_authorize_tenant_billing/);
+  assert.match(sql, /tenant_billing_accounts_bank_source_check/);
+  assert.match(sql, /'due', 'settled'/);
   assert.doesNotMatch(sql, /ALTER TABLE public\.checkalt/i);
 });
 

@@ -56,6 +56,18 @@ ALTER TABLE public.tenant_billing_accounts
   );
 
 ALTER TABLE public.tenant_maintenance_payments
+  DROP CONSTRAINT IF EXISTS tenant_maintenance_payments_status_check;
+
+ALTER TABLE public.tenant_maintenance_payments
+  ADD CONSTRAINT tenant_maintenance_payments_status_check
+  CHECK (status = ANY (ARRAY[
+    'recorded', 'pending', 'submitted', 'failed', 'returned', 'cleared', 'due', 'settled'
+  ]));
+
+ALTER TABLE public.tenant_maintenance_payments
+  ALTER COLUMN received_at SET DEFAULT now();
+
+ALTER TABLE public.tenant_maintenance_payments
   ADD COLUMN IF NOT EXISTS monthly_rate_cents integer,
   ADD COLUMN IF NOT EXISTS discount_cents integer,
   ADD COLUMN IF NOT EXISTS billing_period text,
