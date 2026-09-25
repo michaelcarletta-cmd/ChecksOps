@@ -175,6 +175,23 @@ export const handler = async () => {
     }
 
     await client.query(
+      `UPDATE public.payment_provider_accounts SET
+         can_ach_debit = true,
+         can_send_payments = true,
+         onboarding_status = 'active',
+         verification_status = 'verified',
+         capabilities = COALESCE(capabilities, '{}'::jsonb)
+       WHERE tenant_id = $1::uuid AND provider = 'moov' AND environment = 'sandbox'`,
+      [tenantId],
+    ).catch(() => {});
+    await client.query(
+      `UPDATE public.payment_provider_accounts SET
+         capabilities = '[{"capability":"collect-funds","status":"enabled"},{"capability":"collect-funds.ach","status":"enabled"}]'::jsonb
+       WHERE tenant_id = $1::uuid AND provider = 'moov' AND environment = 'sandbox'`,
+      [tenantId],
+    ).catch(() => {});
+
+    await client.query(
       `INSERT INTO public.payment_provider_methods
          (tenant_id, provider, environment, provider_account_id, provider_bank_account_id,
           provider_payment_method_id, holder_name, last_four, verification_status,
@@ -319,9 +336,18 @@ export const handler = async () => {
       await client.query(
         `DELETE FROM public.check_billing_events
          WHERE tenant_id = $1::uuid
-           AND billing_period = $2
-           AND invoice_id IS NULL`,
+           AND invoice_id IS NULL
+           AND (
+             billing_period IN ($2, '2026-10')
+             OR event_type IN ('check_processing', 'moov_next_day', 'moov_same_day')
+           )`,
         [tenantId, PERIOD],
+      ).catch(() => {});
+      await client.query(
+        `DELETE FROM public.payment_transfers
+         WHERE tenant_id = $1::uuid
+           AND idempotency_key LIKE 'synth-%'`,
+        [tenantId],
       ).catch(() => {});
       const sept = '2026-09-15T16:00:00.000Z';
       const checks = [];
@@ -401,10 +427,10 @@ export const handler = async () => {
           `INSERT INTO public.tenant_maintenance_payments (
              tenant_id, amount_cents, monthly_rate_cents, discount_cents,
              period_start, period_end, billing_period, method, status,
-             idempotence_key, notes
+             idempotence_key, notes, provider_transfer_id
            ) VALUES (
-             $1::uuid, 1, 1, 0, NULL, NULL, NULL, 'moov_ach', 'submitted',
-             $2, 'SYNTHETIC period-less provider-less $0.01 legacy row. Not Freedom.'
+             $1::uuid, 1, 1, 0, '2024-01-01', '2024-01-31', NULL, 'moov_ach', 'submitted',
+             $2, 'SYNTHETIC period-less provider-less $0.01 legacy row. Not Freedom.', NULL
            ) RETURNING id, amount_cents, billing_period, status, provider_transfer_id`,
           [tenantId, `legacy-penny-${tenantId}`],
         )).rows[0];
