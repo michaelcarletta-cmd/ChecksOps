@@ -39,6 +39,22 @@ ALTER TABLE public.tenant_billing_accounts
   ADD COLUMN IF NOT EXISTS provider_account_id text,
   ADD COLUMN IF NOT EXISTS provider_environment text;
 
+ALTER TABLE public.tenant_billing_accounts
+  DROP CONSTRAINT IF EXISTS tenant_billing_accounts_bank_source_check;
+
+ALTER TABLE public.tenant_billing_accounts
+  ADD CONSTRAINT tenant_billing_accounts_bank_source_check
+  CHECK (
+    stakeholder_account_id IS NOT NULL
+    OR provider_payment_method_id IS NOT NULL
+    OR (
+      routing_number IS NOT NULL
+      AND account_number_last4 IS NOT NULL
+      AND account_number_encrypted IS NOT NULL
+      AND account_holder_name IS NOT NULL
+    )
+  );
+
 ALTER TABLE public.tenant_maintenance_payments
   ADD COLUMN IF NOT EXISTS monthly_rate_cents integer,
   ADD COLUMN IF NOT EXISTS discount_cents integer,
