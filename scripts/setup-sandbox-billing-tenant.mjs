@@ -322,16 +322,18 @@ const main = async () => {
   });
   let paymentMethodId = bank.data?.provider_payment_method_id
     || afterBank.data?.methods?.[0]?.provider_payment_method_id
+    || bank.data?.recovered_provider_payment_method_id
     || null;
-  if (!paymentMethodId && (bank.data?.recovered_provider_payment_method_id || bank.data?.bank_account_id)) {
-    const persistedMethod = await upsertSyntheticTenant({
+  let privilegedMethod = null;
+  if (paymentMethodId || bank.data?.bank_account_id) {
+    privilegedMethod = await upsertSyntheticTenant({
       accountId: recoveredAccountId || account.data?.account?.provider_account_id,
-      paymentMethodId: bank.data?.recovered_provider_payment_method_id || bank.data?.provider_payment_method_id,
+      paymentMethodId: paymentMethodId || bank.data?.recovered_provider_payment_method_id,
       bankAccountId: bank.data?.bank_account_id,
       lastFour: bank.data?.last_four || '9992',
       skipRebuild: true,
     });
-    paymentMethodId = persistedMethod.method?.provider_payment_method_id || paymentMethodId;
+    paymentMethodId = privilegedMethod.method?.provider_payment_method_id || paymentMethodId;
   }
   const authorize = paymentMethodId
     ? await api('/functions/v1/tenant-billing-authorize', {
@@ -449,6 +451,7 @@ const main = async () => {
       synced: { ok: synced.ok, status: synced.status, onboarding: synced.data?.status || null },
       afterBankSync: { ok: afterBankSync.ok, status: afterBankSync.status },
       bank,
+      privilegedMethod,
     },
     authorization: authorize,
     readiness: {
