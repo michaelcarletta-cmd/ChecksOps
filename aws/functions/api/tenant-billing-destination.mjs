@@ -100,6 +100,66 @@ export async function resolveBillingDestination(client, { environment, deps = {}
   });
 }
 
+/**
+ * Bind the same credential object shape the accepted Moov parity path uses
+ * (`caller.mjs` moovParityContext), without changing shared provider architecture.
+ * Production never falls back to sandbox keys. Missing required keys fail closed
+ * before any provider HTTP.
+ */
+export async function resolveBillingMoovContext({ environment, deps = {} } = {}) {
+  const env = String(environment || billingEnvironment()).toLowerCase();
+  if (env !== 'production' && env !== 'sandbox') {
+    return { ok: false, error: 'invalid_billing_moov_environment', environment: env };
+  }
+
+  const { isProductionChecksOpsRuntime } = await import('./provider-flags.mjs');
+  const { loadSandboxCredentials } = await import('./sandbox-credentials.mjs');
+  const loader = typeof deps.loadSandboxCredentials === 'function'
+    ? deps.loadSandboxCredentials
+    : loadSandboxCredentials;
+  const loaded = await loader();
+  const secrets = loaded.secrets || {};
+
+  if (env === 'production') {
+    if (!isProductionChecksOpsRuntime()) {
+      return {
+        ok: false,
+        error: 'production_credentials_refused',
+        message: 'Production Moov keys are not used on AWS staging.',
+      };
+    }
+    if (!secrets.MOOV_PUBLIC_KEY || !secrets.MOOV_SECRET_KEY) {
+      return {
+        ok: false,
+        error: 'production_credentials_unavailable',
+        message: 'Production payment credentials are not configured.',
+      };
+    }
+  } else if (!loaded.moov?.publicKey || !loaded.moov?.secretKey) {
+    return {
+      ok: false,
+      error: 'sandbox_credentials_unavailable',
+      message: 'Sandbox payment credentials are not configured for this test organization.',
+    };
+  }
+
+  return {
+    ok: true,
+    environment: env,
+    moovContext: {
+      environment: env,
+      sandboxPublicKey: env === 'sandbox' ? (loaded.moov?.publicKey || null) : null,
+      sandboxSecretKey: env === 'sandbox' ? (loaded.moov?.secretKey || null) : null,
+      sandboxPlatformAccountId: env === 'sandbox' ? (loaded.moov?.platformAccountId || null) : null,
+      sandboxOrigin: loaded.moov?.origin || secrets.MOOV_SANDBOX_ALLOWED_ORIGIN || 'https://checksops.com',
+      apiVersion: loaded.moov?.apiVersion || secrets.MOOV_SANDBOX_API_VERSION || 'v2024.01.00',
+      productionPublicKey: env === 'production' ? (secrets.MOOV_PUBLIC_KEY || null) : null,
+      productionSecretKey: env === 'production' ? (secrets.MOOV_SECRET_KEY || null) : null,
+      productionPlatformAccountId: env === 'production' ? (secrets.MOOV_ACCOUNT_ID || null) : null,
+    },
+  };
+}
+
 export function normalizeDest(row, environment) {
   const accountId = String(row.moov_account_id || row.accountId || '').trim();
   const methodId = String(row.moov_payment_method_id || row.paymentMethodId || '').trim();

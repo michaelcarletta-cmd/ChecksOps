@@ -16,6 +16,7 @@ import {
   monthlyBillingEnabled,
   monthlyBillingProductionPostEnabled,
   resolveBillingDestination,
+  resolveBillingMoovContext,
 } from './tenant-billing-destination.mjs';
 
 export const BILLING_STATUSES = ['due', 'submitted', 'settled', 'failed', 'returned'];
@@ -963,21 +964,47 @@ export async function createOrGetOccurrence(client, {
 
 export const postTransfer = async ({
   sourceMethodId, destMethodId, amount, description, metadata, idempotencyKey, fetchImpl,
-  facilitatorAccountId,
+  facilitatorAccountId, environment, deps = {},
 }) => {
-  const { moovFetch, scopes } = await import('./providers/parity/moov-client.mjs');
-  return moovFetch(`/accounts/${facilitatorAccountId}/transfers`, {
-    method: 'POST',
-    scopes: scopes.transfersWrite(facilitatorAccountId),
-    idempotencyKey,
-    fetchImpl,
-    body: {
-      source: { paymentMethodID: sourceMethodId },
-      destination: { paymentMethodID: destMethodId },
-      amount: { currency: 'USD', value: amount },
-      description: String(description || 'ChecksOps monthly subscription').slice(0, 128),
-      metadata,
-    },
+  const env = String(environment || billingEnvironment()).toLowerCase();
+  const resolved = deps.moovContext
+    ? { ok: true, environment: deps.moovContext.environment, moovContext: deps.moovContext }
+    : await resolveBillingMoovContext({ environment: env, deps });
+  if (!resolved.ok) {
+    throw new Error(resolved.message || resolved.error);
+  }
+  if (resolved.environment !== env) {
+    throw new Error(`billing_moov_environment_mismatch:${resolved.environment}`);
+  }
+  if (env === 'production' && (!resolved.moovContext?.productionPublicKey || !resolved.moovContext?.productionSecretKey)) {
+    throw new Error('Production payment credentials are not configured.');
+  }
+  if (env === 'sandbox' && (!resolved.moovContext?.sandboxPublicKey || !resolved.moovContext?.sandboxSecretKey)) {
+    throw new Error('Sandbox payment credentials are not configured for this test organization.');
+  }
+
+  const { moovFetch, scopes, withMoovContext, moovEnvironment } = await import('./providers/parity/moov-client.mjs');
+  return withMoovContext({ ...resolved.moovContext, fetchImpl }, async () => {
+    const bound = moovEnvironment();
+    if (bound !== env) {
+      throw new Error(`moov_context_unbound:${bound}`);
+    }
+    if (env === 'production' && bound === 'sandbox') {
+      throw new Error('production_moov_refused_sandbox_fallback');
+    }
+    return moovFetch(`/accounts/${facilitatorAccountId}/transfers`, {
+      method: 'POST',
+      scopes: scopes.transfersWrite(facilitatorAccountId),
+      idempotencyKey,
+      fetchImpl,
+      body: {
+        source: { paymentMethodID: sourceMethodId },
+        destination: { paymentMethodID: destMethodId },
+        amount: { currency: 'USD', value: amount },
+        description: String(description || 'ChecksOps monthly subscription').slice(0, 128),
+        metadata,
+      },
+    });
   });
 };
 
@@ -1030,6 +1057,8 @@ export async function submitOccurrence(client, {
         idempotencyKey: occurrence.idempotence_key,
         fetchImpl,
         facilitatorAccountId: destination.accountId,
+        environment: readiness.environment || destination.environment || billingEnvironment(),
+        deps,
       });
       providerTransferId = created?.transferID || created?.transferId || providerTransferId;
       providerStatus = 'submitted';
@@ -1175,6 +1204,8 @@ export async function submitVerificationOccurrence(client, {
         idempotencyKey: occurrence.idempotence_key,
         fetchImpl,
         facilitatorAccountId: destination.accountId,
+        environment: readiness.environment || destination.environment || billingEnvironment(),
+        deps,
       });
       providerTransferId = created?.transferID || created?.transferId || providerTransferId;
       providerStatus = 'submitted';
