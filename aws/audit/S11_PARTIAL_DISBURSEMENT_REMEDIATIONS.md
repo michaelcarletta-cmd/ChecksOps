@@ -60,4 +60,48 @@ None. Sequence and draw kind live in `aws_financial_operations.metadata`.
 - `aws/audit/S11_PARTIAL_DISBURSEMENT.md`
 - `aws/audit/S11_PARTIAL_DISBURSEMENT_REMEDIATIONS.md`
 
-Production remains frozen at `4nRr0xh9SelxDuMAzNmgbbpWAaiWmPOgtiN14DkDXgM=`.
+## Staging Lambda SHA
+
+| | Value |
+| --- | --- |
+| Before | `P8eTuIEr7GNEiwLC5og1ba8Ajp06kTPUvlSstBCYfzI=` |
+| After | `jSjcGOr9efEuixUEKSU3WSdHsc+Nmd7P21cRaRi0zBk=` |
+| LastUpdateStatus | Successful |
+| Overlay | `financial.mjs`, `financial-remaining.mjs`, `financial-idempotency.mjs` |
+
+## Staging acceptance
+
+`scripts/aws-s11-partial-disbursement-accept.mjs` — 18/18 PASS. Synthetic checks `d9602621-…` and race check deleted. 7 sandbox ops cleaned.
+
+| # | Case | Result |
+| --- | --- | --- |
+| 1 | Confirmed Money In = $200 | PASS |
+| 2 | First partial = $50 | PASS `872d2676-…` |
+| 3 | Remaining = $150 | PASS |
+| 4 | Retry same sequence no duplicate | PASS |
+| 5 | Second $50 leaves $100 | PASS `0618a012-…` |
+| 6 | Failed pay_homeowner does not reduce $100 | PASS |
+| 7 | $100 remainder leaves $0 | PASS `924e2198-…` |
+| 8 | All three successful partials in history | PASS |
+| 9 | fully_disbursed only at remaining 0 | PASS |
+| 10 | $100.01 denied | PASS `409 exceeds_remaining` |
+| 11 | Zero/negative/malformed denied | PASS |
+| 12 | Concurrent $50 vs $50: one created, one 409 | PASS |
+| 13 | `/data/write` splits/batches denied | PASS |
+| 14 | `amount_cents` still untrusted | PASS |
+| 15 | Sandbox/non-live flags | PASS |
+
+## Regressions
+
+- S2/S3/S4 harness `PHASE1_SCENARIOS=2,3,4`: 26/26 PASS. Three Ready/billing leftovers retained (`7dc2e538`, `037fd0e8`, `a4f00f74`), not force-deleted.
+- S5 smoke: generic `claim_id` write still `403 column_not_allowlisted`; `admin_set_check_claim` noop still works; C1C denied. Synthetic check deleted.
+
+## Production
+
+Untouched. SHA `4nRr0xh9SelxDuMAzNmgbbpWAaiWmPOgtiN14DkDXgM=`.
+
+## Promotion
+
+**Ready pending explicit approval.** Overlay the three financial files onto live `checksops-production-prep-api`. Do not replace production with this staging zip. No SQL. Do not begin S14.
+
+## S11 PARTIAL DISBURSEMENT STAGING REMEDIATIONS: PASS
