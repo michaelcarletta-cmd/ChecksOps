@@ -99,6 +99,10 @@ export const handleScheduledRequest = async (event, path, deps = {}) => {
       spoofFieldsIgnored: spoof,
     };
   }
+  // EventBridge requirement (not created by ChecksOpsCursorCloudStaging):
+  // rule moov-monthly-tenant-billing, cron(15 6 * * ? *), target POST
+  // https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging/scheduled
+  // header x-scheduled-job-secret, body {"job":"moov-monthly-tenant-billing"}.
   if (job === 'moov-monthly-tenant-billing') {
     return handleMonthlyBillingScheduled(event, deps);
   }

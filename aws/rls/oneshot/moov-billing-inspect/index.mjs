@@ -99,12 +99,22 @@ const inspectRds = async (client) => {
   const platformMethods = await querySafe(client, `
     SELECT
       provider, environment, provider_account_id, provider_payment_method_id,
-      payment_method_type, is_platform, connection_status, last_four, nickname
+      is_platform, connection_status, last_four, nickname, can_send, can_receive
     FROM public.payment_provider_methods
     WHERE is_platform = true
        OR provider_account_id = $1
     ORDER BY environment, is_platform DESC
   `, [SANDBOX_MERCHANT]);
+  const providerAccounts = await querySafe(client, `
+    SELECT
+      p.tenant_id, t.name AS tenant_name, t.slug, t.is_system_tenant,
+      p.provider, p.environment, p.provider_account_id, p.status, p.display_name
+    FROM public.payment_provider_accounts p
+    LEFT JOIN public.tenants t ON t.id = p.tenant_id
+    WHERE p.provider = 'moov'
+    ORDER BY p.environment, t.name
+    LIMIT 50
+  `);
   const destination = await querySafe(client, `
     SELECT environment, moov_account_id, moov_payment_method_id, label, verified_at
     FROM public.platform_billing_destination

@@ -5,10 +5,13 @@
  * Known sandbox merchant (MOOV_SANDBOX_PLATFORM_ACCOUNT_ID in staging and
  * production provider secrets): 36b79957-ce7a-4ca7-a68f-30986c9e47bb
  *
- * Production MOOV_ACCOUNT_ID is not present in AWS provider secrets. Production
- * charges fail closed until AWS_MOOV_BILLING_DESTINATION_ACCOUNT_ID and
- * AWS_MOOV_BILLING_DESTINATION_PAYMENT_METHOD_ID are set to the approved
- * ChecksOps production merchant (not the sandbox id).
+ * Production MOOV_ACCOUNT_ID / MOOV_PLATFORM_ACCOUNT_ID are absent from AWS
+ * provider secrets. The existing approved production ChecksOps merchant was
+ * identified read-only from tenant wallet partnerAccountID values:
+ *   account  41cb5d67-4911-4bef-aad5-d8ee9c582208
+ *   wallet   c70a90f2-9bcc-4084-8263-d5a0fb5d806c
+ * Do not write those to production env until operator approval. Production
+ * charges fail closed until both destination IDs are set explicitly.
  */
 
 export const CHECKSOPS_SANDBOX_MERCHANT_ACCOUNT_ID = '36b79957-ce7a-4ca7-a68f-30986c9e47bb';
