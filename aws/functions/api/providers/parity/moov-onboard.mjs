@@ -226,8 +226,33 @@ export const bankAccountAdd = {
     const bankName = created?.bankName ?? null;
     const lastFour = created?.lastFourAccountNumber ?? safeLastFour(accountNumber);
     const status = String(created?.status ?? 'new').toLowerCase();
-    const rails = await fetchRailMethodIds(accountId, bankAccountId, fetchImpl).catch(() => ({}));
-    const debitPaymentMethodId = rails['ach-debit-fund'] || rails['ach-debit-collect'] || null;
+    const loadRails = async () => {
+      const found = await fetchRailMethodIds(accountId, bankAccountId, fetchImpl).catch(() => ({}));
+      if (Object.keys(found).length) return found;
+      const listed = await moovFetch(`/accounts/${accountId}/payment-methods`, {
+        scopes: scopes.paymentMethodsRead(accountId),
+        fetchImpl,
+      }).catch(() => []);
+      const out = {};
+      for (const row of (Array.isArray(listed) ? listed : [])) {
+        const owner = row?.bankAccount?.bankAccountID ?? row?.bankAccount?.bankAccountId ?? null;
+        if (bankAccountId && owner && owner !== bankAccountId) continue;
+        const id = row?.paymentMethodID ?? row?.paymentMethodId;
+        const type = String(row?.paymentMethodType || 'unknown');
+        if (id) out[type] = id;
+      }
+      return out;
+    };
+    let rails = await loadRails();
+    if (!Object.keys(rails).length) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      rails = await loadRails();
+    }
+    const debitPaymentMethodId = rails['ach-debit-fund']
+      || rails['ach-debit-collect']
+      || rails['ach-debit-standard']
+      || Object.values(rails)[0]
+      || null;
     let method;
     try {
       method = (await client.query(
