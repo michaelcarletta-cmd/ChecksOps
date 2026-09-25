@@ -22,10 +22,17 @@ const S14_TESTS = [
 ];
 
 const CROSS_PROTECTION_TESTS = {
-  S2: ['aws/tests/endorsement-material-invalidation.test.mjs'],
+  S2: [
+    'aws/tests/endorsement-material-invalidation.test.mjs',
+    'aws/tests/s2-material-endorsement-invalidation-safeguard.test.mjs',
+  ],
   S3: ['aws/tests/endorsement-material-invalidation.test.mjs'],
   S4: ['aws/tests/api-workflow.test.mjs', 'aws/tests/checkalt-endorsement-gate.test.mjs'],
-  S5: ['aws/tests/api-write.test.mjs'],
+  S5: [
+    'aws/tests/api-write.test.mjs',
+    'aws/tests/admin-set-check-claim.test.mjs',
+    'aws/tests/s5-audited-claim-association-safeguard.test.mjs',
+  ],
   S11: ['aws/tests/financial-remaining.test.mjs', 'aws/tests/api-financial.test.mjs'],
 };
 
