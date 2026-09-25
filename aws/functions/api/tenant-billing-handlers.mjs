@@ -18,6 +18,7 @@ import {
   runMonthlyBillingScheduler,
   saveBillingAuthorization,
   saveBillingSettings,
+  verifyTenantBillingDebit,
 } from './tenant-billing-engine.mjs';
 import {
   billingEnvironment,
@@ -114,6 +115,51 @@ export const handleTenantBillingAdmin = async (event, deps = {}) => {
       const data = await snapshot(client, tenantId, dest);
       if (!data.ok) return denied(spoof, { statusCode: data.statusCode || 404, ...data });
       return { ok: true, statusCode: 200, spoofFieldsIgnored: spoof, preview: true, ...data };
+    }
+
+    if (action === 'verify-debit') {
+      if (body.confirm !== true) {
+        const data = await snapshot(client, tenantId, dest);
+        return {
+          ...data,
+          ok: false,
+          statusCode: 409,
+          error: 'confirmation_required',
+          message: 'Verify Billing Debit requires explicit operator confirmation.',
+          spoofFieldsIgnored: spoof,
+        };
+      }
+      if (body.amount_cents != null || body.amount != null) {
+        const raw = Number(body.amount_cents ?? body.amount);
+        if (raw !== 100) {
+          return denied(spoof, {
+            statusCode: 400,
+            error: 'verification_amount_locked',
+            message: 'Verify Billing Debit is hard-limited to $1.00 (100 cents). Client amounts are rejected.',
+          });
+        }
+      }
+      if (!isUuid(body.verification_id || body.verificationId)) {
+        return denied(spoof, { statusCode: 400, error: 'invalid_uuid', field: 'verification_id' });
+      }
+      const verified = await verifyTenantBillingDebit(client, {
+        tenantId,
+        verificationId: body.verification_id || body.verificationId,
+        recordedBy: mapping.application_user_id,
+        fetchImpl: deps.fetchImpl,
+        deps,
+      });
+      const data = await snapshot(client, tenantId, dest);
+      return {
+        ...data,
+        ok: verified.ok === true,
+        statusCode: verified.ok ? 200 : (verified.statusCode || 409),
+        spoofFieldsIgnored: spoof,
+        verify: verified,
+        amount_cents_posted: 100,
+        client_amount_ignored: body.amount_cents != null || body.amount != null,
+        idempotency_key: verified.idempotency_key || null,
+      };
     }
 
     if (action === 'pull') {

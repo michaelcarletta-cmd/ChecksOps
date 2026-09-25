@@ -19,6 +19,7 @@ export type BillingOccurrence = {
   next_day_count?: number | null;
   same_day_count?: number | null;
   billing_period?: string | null;
+  occurrence_kind?: string | null;
   status: string;
   provider_transfer_id?: string | null;
   funding_source_method_id?: string | null;
@@ -122,6 +123,8 @@ export type TenantBillingSnapshot = {
   settled_charges?: BillingOccurrence[];
   failed_charges?: BillingOccurrence[];
   returned_charges?: BillingOccurrence[];
+  verification_charges?: BillingOccurrence[];
+  verification_post_enabled?: boolean;
   history: BillingOccurrence[];
   methods?: Array<{
     provider_payment_method_id: string;
@@ -178,6 +181,15 @@ export const billingPeriodLabel = (period?: string | null) => {
     year: "numeric",
     timeZone: "UTC",
   });
+};
+
+export const occurrenceKindLabel = (row?: { occurrence_kind?: string | null; billing_period?: string | null }) => {
+  const kind = String(row?.occurrence_kind || "");
+  if (kind === "billing_verification") return "Billing Verification";
+  if (kind === "legacy") return "Legacy";
+  if (row?.billing_period) return billingPeriodLabel(row.billing_period);
+  if (kind === "monthly_subscription") return "Monthly subscription";
+  return "Legacy";
 };
 
 export const snapshottedRateLabel = (

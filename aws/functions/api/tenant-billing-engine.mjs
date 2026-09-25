@@ -11,6 +11,8 @@
 import {
   billingEnvironment,
   billingShouldSimulate,
+  billingVerificationPostEnabled,
+  billingVerificationShouldSimulate,
   monthlyBillingEnabled,
   monthlyBillingProductionPostEnabled,
   resolveBillingDestination,
@@ -19,6 +21,12 @@ import {
 export const BILLING_STATUSES = ['due', 'submitted', 'settled', 'failed', 'returned'];
 const TERMINAL_SUCCESS = new Set(['settled']);
 const IN_FLIGHT = new Set(['submitted']);
+
+export const OCCURRENCE_KIND_MONTHLY = 'monthly_subscription';
+export const OCCURRENCE_KIND_VERIFICATION = 'billing_verification';
+export const OCCURRENCE_KIND_LEGACY = 'legacy';
+export const BILLING_VERIFICATION_AMOUNT_CENTS = 100;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export const DEFAULT_CHECK_RATE_CENTS = 400;
 export const DEFAULT_NEXT_DAY_RATE_CENTS = 75;
@@ -106,6 +114,10 @@ export const periodBounds = (period) => {
 };
 
 export const billingIdempotencyKey = (tenantId, period) => `billing:${tenantId}:${period}`;
+
+export const billingVerificationIdempotencyKey = (tenantId, verificationId) => (
+  `billing_verification:${tenantId}:${verificationId}`
+);
 
 export const nextPeriodAfter = (period) => {
   const [ys, ms] = String(period).split('-');
@@ -906,11 +918,12 @@ export async function createOrGetOccurrence(client, {
        maintenance_net_cents, check_usage_cents, next_day_usage_cents, same_day_usage_cents,
        usage_total_cents, check_count, next_day_count, same_day_count,
        mortgage_ops_initial_count, mortgage_ops_initial_amount_cents,
-       mortgage_ops_additional_count, mortgage_ops_additional_amount_cents
+       mortgage_ops_additional_count, mortgage_ops_additional_amount_cents,
+       occurrence_kind
      ) VALUES (
        $1::uuid, $2, $3, $4, $5::date, $6::date, $7, 'moov_ach', 'due',
        $8, $9::uuid, $10, $11, $12, $13, $14,
-       $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26
+       $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27
      )
      ON CONFLICT (tenant_id, billing_period) WHERE billing_period IS NOT NULL
      DO UPDATE SET updated_at = public.tenant_maintenance_payments.updated_at
@@ -942,12 +955,13 @@ export async function createOrGetOccurrence(client, {
       invoice.mortgage_ops_initial_amount_cents ?? 0,
       invoice.mortgage_ops_additional_count ?? 0,
       invoice.mortgage_ops_additional_amount_cents ?? 0,
+      OCCURRENCE_KIND_MONTHLY,
     ],
   )).rows[0];
   return { ok: true, occurrence: inserted, created: true, idempotency_key: key };
 }
 
-const postTransfer = async ({
+export const postTransfer = async ({
   sourceMethodId, destMethodId, amount, description, metadata, idempotencyKey, fetchImpl,
   facilitatorAccountId,
 }) => {
@@ -1059,6 +1073,194 @@ export async function submitOccurrence(client, {
     occurrence: saved,
     liveProviderCalled: !simulate && !failure,
     error: failure,
+  };
+}
+
+export async function createOrGetVerificationOccurrence(client, {
+  tenantId, verificationId, readiness, destination, recordedBy = null,
+}) {
+  const key = billingVerificationIdempotencyKey(tenantId, verificationId);
+  const existing = (await client.query(
+    `SELECT * FROM public.tenant_maintenance_payments
+     WHERE idempotence_key = $1
+     LIMIT 1`,
+    [key],
+  )).rows[0];
+  if (existing) {
+    return { ok: true, occurrence: existing, created: false, idempotency_key: key };
+  }
+
+  const inserted = (await client.query(
+    `INSERT INTO public.tenant_maintenance_payments (
+       tenant_id, amount_cents, monthly_rate_cents, discount_cents,
+       period_start, period_end, billing_period, method, status,
+       idempotence_key, recorded_by, notes,
+       funding_source_method_id, destination_account_id, destination_payment_method_id,
+       provider_environment,
+       maintenance_net_cents, check_usage_cents, next_day_usage_cents, same_day_usage_cents,
+       usage_total_cents, check_count, next_day_count, same_day_count,
+       mortgage_ops_initial_count, mortgage_ops_initial_amount_cents,
+       mortgage_ops_additional_count, mortgage_ops_additional_amount_cents,
+       occurrence_kind
+     ) VALUES (
+       $1::uuid, $2, 0, 0, NULL, NULL, NULL, 'moov_ach', 'due',
+       $3, $4::uuid, $5, $6, $7, $8, $9,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, $10
+     )
+     ON CONFLICT (idempotence_key)
+     DO UPDATE SET updated_at = public.tenant_maintenance_payments.updated_at
+     RETURNING *`,
+    [
+      tenantId,
+      BILLING_VERIFICATION_AMOUNT_CENTS,
+      key,
+      recordedBy,
+      'Billing verification $1.00',
+      readiness.authorization?.provider_payment_method_id || null,
+      destination.accountId,
+      destination.paymentMethodId,
+      readiness.environment,
+      OCCURRENCE_KIND_VERIFICATION,
+    ],
+  )).rows[0];
+  return { ok: true, occurrence: inserted, created: true, idempotency_key: key };
+}
+
+export async function submitVerificationOccurrence(client, {
+  occurrence, readiness, destination, fetchImpl, deps = {},
+}) {
+  if (TERMINAL_SUCCESS.has(occurrence.status)) {
+    return { ok: true, duplicate: true, occurrence, reason: 'already_settled' };
+  }
+  if (occurrence.status === 'returned') {
+    return { ok: true, duplicate: true, occurrence, reason: 'already_returned' };
+  }
+  if (IN_FLIGHT.has(occurrence.status) && occurrence.provider_transfer_id) {
+    return { ok: true, duplicate: true, occurrence, reason: 'already_submitted' };
+  }
+
+  const simulate = billingVerificationShouldSimulate(deps);
+  if (!simulate && !billingVerificationPostEnabled()) {
+    return fail('verification_post_disabled', {
+      statusCode: 403,
+      message: 'Billing verification posts are not authorized.',
+    });
+  }
+
+  let providerTransferId = occurrence.provider_transfer_id;
+  let providerStatus = occurrence.status;
+  let failure = null;
+  if (simulate) {
+    if (deps.simulateResult === 'failed') {
+      failure = deps.simulateFailure || 'simulated_provider_rejection';
+      providerStatus = 'failed';
+    } else {
+      providerTransferId = providerTransferId || `sim:${occurrence.id}`;
+      providerStatus = 'submitted';
+    }
+  } else {
+    try {
+      const created = await postTransfer({
+        sourceMethodId: readiness.authorization.provider_payment_method_id,
+        destMethodId: destination.paymentMethodId,
+        amount: BILLING_VERIFICATION_AMOUNT_CENTS,
+        description: 'ChecksOps billing verification $1.00',
+        metadata: {
+          checksops_kind: 'billing_verification',
+          checksops_tenant_id: occurrence.tenant_id,
+          checksops_verification_id: String(deps.verificationId || '').trim()
+            || String(occurrence.idempotence_key || '').split(':').pop(),
+          checksops_payment_id: occurrence.id,
+        },
+        idempotencyKey: occurrence.idempotence_key,
+        fetchImpl,
+        facilitatorAccountId: destination.accountId,
+      });
+      providerTransferId = created?.transferID || created?.transferId || providerTransferId;
+      providerStatus = 'submitted';
+    } catch (error) {
+      failure = error.message || 'moov_request_rejected';
+      providerStatus = 'failed';
+    }
+  }
+
+  const saved = (await client.query(
+    `UPDATE public.tenant_maintenance_payments SET
+       status = $2,
+       provider_transfer_id = COALESCE($3, provider_transfer_id),
+       submitted_at = CASE WHEN $2 = 'submitted' THEN COALESCE(submitted_at, now()) ELSE submitted_at END,
+       failure_reason = $4,
+       notes = COALESCE(notes, '') || $5
+     WHERE id = $1::uuid
+     RETURNING *`,
+    [
+      occurrence.id,
+      providerStatus,
+      providerTransferId,
+      failure,
+      failure ? ` · fail:${failure}` : (providerTransferId ? ` · moov:${providerTransferId}` : ''),
+    ],
+  )).rows[0];
+
+  return {
+    ok: !failure,
+    simulated: simulate,
+    occurrence: saved,
+    liveProviderCalled: !simulate && !failure,
+    error: failure,
+  };
+}
+
+export async function verifyTenantBillingDebit(client, {
+  tenantId,
+  verificationId,
+  recordedBy = null,
+  fetchImpl,
+  deps = {},
+}) {
+  if (!UUID_RE.test(String(verificationId || ''))) {
+    return fail('invalid_verification_id', { statusCode: 400, field: 'verification_id' });
+  }
+  const environment = deps.environment || billingEnvironment();
+  const destination = await resolveBillingDestination(client, { environment, deps });
+  if (!destination.ok) return { ...destination, statusCode: 503 };
+
+  const readiness = await evaluateBillingReadiness(client, {
+    tenantId,
+    period: null,
+    destination,
+    environment,
+  });
+  readiness.reasons = (readiness.reasons || []).filter((reason) => reason !== 'invalid_amount');
+  readiness.ready = readiness.reasons.length === 0;
+  readiness.ok = readiness.ready;
+  readiness.amountCents = BILLING_VERIFICATION_AMOUNT_CENTS;
+  if (!readiness.ready) {
+    return fail('billing_not_ready', {
+      statusCode: 409,
+      reasons: readiness.reasons,
+      amount_cents: BILLING_VERIFICATION_AMOUNT_CENTS,
+    });
+  }
+
+  const booked = await createOrGetVerificationOccurrence(client, {
+    tenantId, verificationId, readiness, destination, recordedBy,
+  });
+  if (!booked.ok) return booked;
+
+  const submitted = await submitVerificationOccurrence(client, {
+    occurrence: booked.occurrence,
+    readiness,
+    destination,
+    fetchImpl,
+    deps: { ...deps, verificationId },
+  });
+  return {
+    ...submitted,
+    created: booked.created,
+    amount_cents: BILLING_VERIFICATION_AMOUNT_CENTS,
+    idempotency_key: booked.idempotency_key,
+    client_amount_ignored: true,
   };
 }
 
@@ -1352,18 +1554,39 @@ export async function listBillingHistory(client, tenantId, limit = 24) {
             maintenance_net_cents, check_usage_cents, next_day_usage_cents, same_day_usage_cents,
             usage_total_cents, check_count, next_day_count, same_day_count,
             mortgage_ops_initial_count, mortgage_ops_initial_amount_cents,
+            mortgage_ops_additional_count, mortgage_ops_additional_amount_cents,
+            occurrence_kind
+     FROM public.tenant_maintenance_payments
+     WHERE tenant_id = $1::uuid
+     ORDER BY period_start DESC NULLS LAST, created_at DESC
+     LIMIT $2`,
+    [tenantId, limit],
+  ).catch(() => client.query(
+    `SELECT id, tenant_id, amount_cents, monthly_rate_cents, discount_cents, billing_period,
+            period_start, period_end, status, method, provider_transfer_id,
+            funding_source_method_id, destination_account_id, destination_payment_method_id,
+            submitted_at, settled_at, returned_at, failure_reason, return_reason,
+            idempotence_key, created_at,
+            maintenance_net_cents, check_usage_cents, next_day_usage_cents, same_day_usage_cents,
+            usage_total_cents, check_count, next_day_count, same_day_count,
+            mortgage_ops_initial_count, mortgage_ops_initial_amount_cents,
             mortgage_ops_additional_count, mortgage_ops_additional_amount_cents
      FROM public.tenant_maintenance_payments
      WHERE tenant_id = $1::uuid
      ORDER BY period_start DESC NULLS LAST, created_at DESC
      LIMIT $2`,
     [tenantId, limit],
-  )).rows;
+  ))).rows;
   return rows;
 }
 
-const isPeriodKeyedOccurrence = (row) => Boolean(row?.billing_period)
-  && String(row.billing_period).trim() !== '';
+const isMonthlyOccurrence = (row) => {
+  const kind = String(row?.occurrence_kind || OCCURRENCE_KIND_MONTHLY);
+  if (kind === OCCURRENCE_KIND_VERIFICATION || kind === OCCURRENCE_KIND_LEGACY) return false;
+  return Boolean(row?.billing_period) && String(row.billing_period).trim() !== '';
+};
+
+const isPeriodKeyedOccurrence = isMonthlyOccurrence;
 
 export async function buildTenantBillingSnapshot(client, tenantId, dest, { now = new Date() } = {}) {
   const ctx = await loadTenantBillingContext(client, tenantId);
@@ -1499,6 +1722,8 @@ export async function buildTenantBillingSnapshot(client, tenantId, dest, { now =
     settled_charges: settled,
     failed_charges: failed,
     returned_charges: returned,
+    verification_charges: history.filter((row) => row.occurrence_kind === OCCURRENCE_KIND_VERIFICATION),
+    verification_post_enabled: billingVerificationPostEnabled(),
     history,
     methods,
   };

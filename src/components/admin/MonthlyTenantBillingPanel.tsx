@@ -14,6 +14,7 @@ import {
   invokeTenantBillingAdmin,
   invokeTenantBillingAuthorize,
   money,
+  occurrenceKindLabel,
   type TenantBillingSnapshot,
 } from "@/lib/billing/tenantBilling";
 
@@ -44,6 +45,8 @@ export function MonthlyTenantBillingPanel({
   const [saving, setSaving] = useState(false);
   const [pulling, setPulling] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [verifyOpen, setVerifyOpen] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const [rate, setRate] = useState("0.00");
   const [discount, setDiscount] = useState("0.00");
   const [checkRate, setCheckRate] = useState("4.00");
@@ -123,6 +126,23 @@ export function MonthlyTenantBillingPanel({
       ?? result.data.pull_preview?.amount_cents;
     const status = (result.data.pull as any)?.occurrence?.status || (result.data.pull as any)?.reason;
     sonnerToast.success(`Consolidated pull ${status || "submitted"} — ${money(posted)}`);
+    load();
+  };
+
+  const verifyDebit = async () => {
+    setVerifying(true);
+    const verificationId = crypto.randomUUID();
+    const result = await invokeTenantBillingAdmin({
+      action: "verify-debit",
+      tenant_id: tenantId,
+      confirm: true,
+      verification_id: verificationId,
+    });
+    setVerifying(false);
+    setVerifyOpen(false);
+    if (!result.ok) return sonnerToast.error(result.error);
+    const status = (result.data as any).verify?.occurrence?.status || (result.data as any).verify?.reason;
+    sonnerToast.success(`Billing verification ${status || "submitted"} — $1.00`);
     load();
   };
 
@@ -269,12 +289,41 @@ export function MonthlyTenantBillingPanel({
                   {pulling ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
                   Pull now
                 </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setVerifyOpen(true)}
+                  disabled={verifying || data.verification_post_enabled !== true}
+                  title={data.verification_post_enabled === true
+                    ? "Create an isolated $1.00 billing verification debit"
+                    : "Disabled until AWS_MOOV_BILLING_VERIFICATION_POST_ENABLED=true"}
+                >
+                  {verifying ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
+                  Verify Billing Debit — $1.00
+                </Button>
               </div>
               <div className="text-[11px] text-muted-foreground">
                 Destination: {data.destination?.label || "ChecksOps merchant"} · {data.destination?.accountId || data.destination?.reason || "unresolved"}
               </div>
             </div>
           </div>
+
+          {verifyOpen && (
+            <div className="rounded-lg border border-amber-500/40 p-4 space-y-3 bg-amber-500/5">
+              <div className="text-sm font-semibold">Confirm Billing Verification — $1.00</div>
+              <div className="text-xs text-muted-foreground">
+                Isolated ACH debit from the authorized billing bank to the ChecksOps merchant.
+                This is not a monthly invoice and will not change amount due.
+              </div>
+              <div className="flex gap-2">
+                <Button onClick={verifyDebit} disabled={verifying || data.verification_post_enabled !== true}>
+                  {verifying && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  Debit $1.00
+                </Button>
+                <Button variant="outline" onClick={() => setVerifyOpen(false)} disabled={verifying}>Cancel</Button>
+              </div>
+            </div>
+          )}
 
           {confirmOpen && pullPreview && (
             <div className="rounded-lg border border-sky-500/40 p-4 space-y-3 bg-sky-500/5">
@@ -328,16 +377,20 @@ export function MonthlyTenantBillingPanel({
                 {history.map((row) => (
                   <div key={row.id} className="flex items-center justify-between px-3 py-2 text-xs">
                     <div>
-                      <div className="font-medium">{row.billing_period || "legacy / no period"} · {money(row.amount_cents)}</div>
+                      <div className="font-medium">{occurrenceKindLabel(row)} · {money(row.amount_cents)}</div>
                       <div className="text-muted-foreground">
-                        maintenance {money(row.monthly_rate_cents)} · discount {money(row.discount_cents)}
-                        {row.check_usage_cents != null ? ` · checks ${money(row.check_usage_cents)}` : ""}
-                        {row.next_day_usage_cents != null ? ` · next day ${money(row.next_day_usage_cents)}` : ""}
-                        {row.same_day_usage_cents != null ? ` · same day ${money(row.same_day_usage_cents)}` : ""}
-                        {row.mortgage_ops_initial_amount_cents != null || row.mortgage_ops_additional_amount_cents != null
-                          ? ` · mortgage ${money((row.mortgage_ops_initial_amount_cents || 0) + (row.mortgage_ops_additional_amount_cents || 0))}`
-                          : ""}
-                        {data.authorization?.account_number_last4
+                        {row.occurrence_kind === "billing_verification"
+                          ? "isolated verification debit"
+                          : row.occurrence_kind === "legacy"
+                            ? "historical row · excluded from monthly billing"
+                            : `maintenance ${money(row.monthly_rate_cents)} · discount ${money(row.discount_cents)}${
+                              row.check_usage_cents != null ? ` · checks ${money(row.check_usage_cents)}` : ""
+                            }${row.next_day_usage_cents != null ? ` · next day ${money(row.next_day_usage_cents)}` : ""}${
+                              row.same_day_usage_cents != null ? ` · same day ${money(row.same_day_usage_cents)}` : ""
+                            }${row.mortgage_ops_initial_amount_cents != null || row.mortgage_ops_additional_amount_cents != null
+                              ? ` · mortgage ${money((row.mortgage_ops_initial_amount_cents || 0) + (row.mortgage_ops_additional_amount_cents || 0))}`
+                              : ""}`}
+                        {data.authorization?.account_number_last4}
                           ? ` · source ••••${data.authorization.account_number_last4}`
                           : ""}
                         {row.provider_transfer_id
