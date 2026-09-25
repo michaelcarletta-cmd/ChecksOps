@@ -5,7 +5,7 @@
 **S14:** later unresolved item. Not started.  
 **Production:** frozen at `4nRr0xh9SelxDuMAzNmgbbpWAaiWmPOgtiN14DkDXgM=`. Not modified.  
 **Target:** AWS staging `https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging`  
-**No remediation implemented.**
+**Staging remediations:** see `S11_PARTIAL_DISBURSEMENT_REMEDIATIONS.md`.
 
 ## Requirement
 

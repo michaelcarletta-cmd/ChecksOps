@@ -1,0 +1,63 @@
+# S11 partial disbursement — staging remediations
+
+**Date:** 2026-09-25  
+**Scope:** Staging Lambda overlay only. No production deploy.  
+**S2/S3/S4/S5:** CLOSED, not reopened. **S14:** not started.
+
+## Requirement
+
+`Money In − successful Money Out = Remaining Available Balance`, with authorized partials and remainder draws that cannot over-disburse, duplicate, trust browser amounts, or lose history.
+
+## Authoritative remaining-balance formula
+
+```
+confirmed_in  = sum(amount_cents) where operation_type = checkalt_deposit
+                and status in (provider_confirmed, settled)
+confirmed_out = sum(amount_cents) where operation_type in
+                (disbursement, pay_homeowner, pay_contractor, pay_vendor, ach, rtp, wire)
+                and status in (provider_confirmed, settled)
+remaining     = max(0, confirmed_in - confirmed_out)
+reserved_out  = sum of the same money-out types in
+                ready_for_provider | submitting | provider_pending
+available     = max(0, remaining - reserved_out)
+fully_disbursed = confirmed_in > 0 AND remaining = 0
+```
+
+Failed, cancelled, rejected, returned, and reversed money-out rows contribute **$0** to `confirmed_out`. Remaining never goes negative.
+
+`check_intake_items.amount` is not remaining after the first successful disbursement.
+
+## Partial request
+
+`requested_partial_cents` is a request, not financial state. `rejectUntrustedAmountFields` is unchanged; `amount_cents` / `amount` remain `400 untrusted_amount`.
+
+Server requires `0 < requested_partial_cents <= remaining` and `<= available`.
+
+## Idempotency
+
+Money-out key is `sha256(tenant|operation_type|check_id|seq:N|USD)`.  
+Two legitimate $50 partials use sequences 1 and 2. Retry of sequence 1 replays the original row.
+
+An omitted request (remainder draw) without a sequence replays an in-flight remainder draw of that operation type, otherwise creates the next sequence for `available`.
+
+## Concurrency
+
+`pg_advisory_xact_lock(hashtext(check_id))` inside the existing write transaction, then remaining/available is computed and the row is inserted. Unique `(tenant_id, idempotency_key)` treats a same-sequence race as replay.
+
+## Schema
+
+None. Sequence and draw kind live in `aws_financial_operations.metadata`.
+
+## Files
+
+- `aws/functions/api/financial-remaining.mjs`
+- `aws/functions/api/financial.mjs`
+- `aws/functions/api/financial-idempotency.mjs`
+- `aws/tests/financial-remaining.test.mjs`
+- `aws/tests/api-financial.test.mjs`
+- `scripts/aws-s11-partial-disbursement-accept.mjs`
+- `scripts/aws-overlay-staging-api.mjs`
+- `aws/audit/S11_PARTIAL_DISBURSEMENT.md`
+- `aws/audit/S11_PARTIAL_DISBURSEMENT_REMEDIATIONS.md`
+
+Production remains frozen at `4nRr0xh9SelxDuMAzNmgbbpWAaiWmPOgtiN14DkDXgM=`.
