@@ -127,7 +127,7 @@ const mockClient = ({
         const existing = ops.find((row) => row.tenant_id === params[0] && row.idempotency_key === params[7]);
         if (existing) return { rows: [existing] };
         const row = {
-          id: OP_ID,
+          id: ops.length === 0 ? OP_ID : `bbbbbbbb-bbbb-4bbb-8bbb-${String(ops.length).padStart(12, '0')}`,
           tenant_id: params[0],
           application_user_id: params[1],
           operation_type: params[2],
@@ -172,7 +172,13 @@ const mockClient = ({
         row.updated_at = new Date().toISOString();
         return { rows: [row] };
       }
+      if (sql.includes('pg_advisory_xact_lock') || sql.includes('hashtext')) {
+        return { rows: [{ pg_advisory_xact_lock: true }] };
+      }
       if (sql.includes('FROM public.aws_financial_operations')) {
+        if (sql.includes('resource_id')) {
+          return { rows: ops.filter((row) => row.resource_id === params[0]) };
+        }
         if (params[0] && /(?:WHERE|AND) id =/.test(sql)) {
           return { rows: ops.filter((row) => row.id === params[0] && (!params[1] || row.tenant_id === params[1])) };
         }
@@ -211,6 +217,31 @@ const depsFor = (client) => ({
   loadDatabaseCredentials: async () => ({ host: 'localhost', username: 'checksops', password: 'x', database: 'checksops' }),
   createClient: () => client,
 });
+
+const confirmDeposit = async (client) => {
+  await handleFinancialRequest(
+    jwtEvent('/financial/prepare', 'POST', { operation_type: 'checkalt_deposit', check_id: CHECK_ID }),
+    '/financial/prepare',
+    'POST',
+    depsFor(client),
+  );
+  await handleFinancialRequest(
+    jwtEvent('/financial/simulate-submit', 'POST', { operation_id: OP_ID }),
+    '/financial/simulate-submit',
+    'POST',
+    depsFor(client),
+  );
+  await handleFinancialRequest(
+    jwtEvent('/financial/simulate-webhook', 'POST', {
+      operation_id: OP_ID,
+      event_type: 'deposit.cleared',
+      external_event_id: 'evt-deposit',
+    }),
+    '/financial/simulate-webhook',
+    'POST',
+    depsFor(client),
+  );
+};
 
 test('CheckAlt integer-cents and Moov amount.value stay cents', () => {
   assert.equal(formatCheckAltUserAmount(123.45).userAmount, 12345);
@@ -472,14 +503,15 @@ test('simulated provider failures do not call a live provider', async () => {
   }, async () => {
     for (const failureClass of ['provider_400', 'provider_401', 'provider_409', 'provider_429', 'provider_500', 'provider_timeout']) {
       const client = mockClient();
-      await handleFinancialRequest(
+      await confirmDeposit(client);
+      const prepared = await handleFinancialRequest(
         jwtEvent('/financial/prepare', 'POST', { operation_type: 'disbursement', check_id: CHECK_ID }),
         '/financial/prepare',
         'POST',
         depsFor(client),
       );
       const failed = await handleFinancialRequest(
-        jwtEvent('/financial/simulate-failure', 'POST', { operation_id: OP_ID, failure_class: failureClass }),
+        jwtEvent('/financial/simulate-failure', 'POST', { operation_id: prepared.operation.id, failure_class: failureClass }),
         '/financial/simulate-failure',
         'POST',
         depsFor(client),
@@ -497,14 +529,15 @@ test('db failure after provider accept is reported for reconciliation', async ()
     AWS_PROVIDER_EXECUTION_ENABLED: 'false',
   }, async () => {
     const client = mockClient();
-    await handleFinancialRequest(
+    await confirmDeposit(client);
+    const prepared = await handleFinancialRequest(
       jwtEvent('/financial/prepare', 'POST', { operation_type: 'ach', check_id: CHECK_ID }),
       '/financial/prepare',
       'POST',
       depsFor(client),
     );
     const hung = await handleFinancialRequest(
-      jwtEvent('/financial/simulate-submit', 'POST', { operation_id: OP_ID, failure_class: 'db_after_provider' }),
+      jwtEvent('/financial/simulate-submit', 'POST', { operation_id: prepared.operation.id, failure_class: 'db_after_provider' }),
       '/financial/simulate-submit',
       'POST',
       depsFor(client),
@@ -513,7 +546,7 @@ test('db failure after provider accept is reported for reconciliation', async ()
     assert.equal(hung.operation.status, FINANCIAL_STATES.submitting);
     assert.ok(hung.operation.provider_reference);
     const report = await handleFinancialRequest(
-      jwtEvent('/financial/reconcile', 'POST', { operation_id: OP_ID }),
+      jwtEvent('/financial/reconcile', 'POST', { operation_id: prepared.operation.id }),
       '/financial/reconcile',
       'POST',
       depsFor(client),
@@ -541,5 +574,92 @@ test('production execution stays blocked even if the master flag is flipped', as
     const liveFn = await handler(jwtEvent('/functions/v1/moov-transfer-create', 'POST', { amount_cents: 100 }));
     assert.equal(liveFn.statusCode, 403);
     assert.equal(JSON.parse(liveFn.body).error, 'production_execution_blocked');
+  });
+});
+
+test('partial disbursement uses remaining balance and sequence identity', async () => {
+  await withEnv({
+    AWS_FINANCIAL_SANDBOX_SIMULATION_ENABLED: 'true',
+    AWS_PROVIDER_EXECUTION_ENABLED: 'false',
+    AWS_FINANCIAL_PERMISSIONS_ACTIVATED: 'false',
+  }, async () => {
+    const client = mockClient();
+    await confirmDeposit(client);
+    const untrusted = await handleFinancialRequest(
+      jwtEvent('/financial/prepare', 'POST', {
+        operation_type: 'disbursement',
+        check_id: CHECK_ID,
+        amount_cents: 5000,
+      }),
+      '/financial/prepare',
+      'POST',
+      depsFor(client),
+    );
+    assert.equal(untrusted.error, 'untrusted_amount');
+
+    const first = await handleFinancialRequest(
+      jwtEvent('/financial/prepare', 'POST', {
+        operation_type: 'disbursement',
+        check_id: CHECK_ID,
+        requested_partial_cents: 5000,
+        disbursement_sequence: 1,
+      }),
+      '/financial/prepare',
+      'POST',
+      depsFor(client),
+    );
+    assert.equal(first.ok, true);
+    assert.equal(first.operation.amount_cents, 5000);
+    assert.equal(first.operation.amount_source, 'requested_partial_cents');
+    assert.equal(first.operation.disbursement_sequence, 1);
+    assert.equal(first.remaining.remaining_cents, 12345);
+    assert.equal(first.remaining.reserved_out_cents, 5000);
+
+    const retry = await handleFinancialRequest(
+      jwtEvent('/financial/prepare', 'POST', {
+        operation_type: 'disbursement',
+        check_id: CHECK_ID,
+        requested_partial_cents: 5000,
+        disbursement_sequence: 1,
+      }),
+      '/financial/prepare',
+      'POST',
+      depsFor(client),
+    );
+    assert.equal(retry.duplicate, true);
+    assert.equal(retry.operation.id, first.operation.id);
+
+    await handleFinancialRequest(
+      jwtEvent('/financial/simulate-submit', 'POST', { operation_id: first.operation.id }),
+      '/financial/simulate-submit',
+      'POST',
+      depsFor(client),
+    );
+    const confirmed = await handleFinancialRequest(
+      jwtEvent('/financial/simulate-webhook', 'POST', {
+        operation_id: first.operation.id,
+        event_type: 'transfer.completed',
+        external_event_id: 'evt-partial-1',
+      }),
+      '/financial/simulate-webhook',
+      'POST',
+      depsFor(client),
+    );
+    assert.equal(confirmed.remaining.remaining_cents, 7345);
+    assert.equal(confirmed.remaining.fully_disbursed, false);
+
+    const over = await handleFinancialRequest(
+      jwtEvent('/financial/prepare', 'POST', {
+        operation_type: 'disbursement',
+        check_id: CHECK_ID,
+        requested_partial_cents: 7346,
+        disbursement_sequence: 2,
+      }),
+      '/financial/prepare',
+      'POST',
+      depsFor(client),
+    );
+    assert.equal(over.statusCode, 409);
+    assert.equal(over.error, 'exceeds_remaining');
   });
 });

@@ -92,6 +92,10 @@ const runIntake = async ({ env, getSecretString, fetchImpl, logs = [] }) => {
   const client = {
     query: async (sql, params) => {
       persist.push({ sql: String(sql), params: params || [] });
+      if (/SELECT deposited_at, payee_line/.test(sql)) {
+        return { rows: [{ deposited_at: null, payee_line: null }] };
+      }
+      if (/FROM public.aws_financial_operations/.test(sql)) return { rows: [] };
       if (/FROM public\.check_intake_items WHERE id/.test(sql) && /front_image_path/.test(sql)) {
         return {
           rows: [{
@@ -361,6 +365,10 @@ test('oversized unusable S3 image skips Azure POST and stays redacted', async ()
   const client = {
     query: async (sql, params) => {
       persist.push({ sql: String(sql), params: params || [] });
+      if (/SELECT deposited_at, payee_line/.test(sql)) {
+        return { rows: [{ deposited_at: null, payee_line: null }] };
+      }
+      if (/FROM public.aws_financial_operations/.test(sql)) return { rows: [] };
       if (/FROM public\.check_intake_items WHERE id/.test(sql) && /front_image_path/.test(sql)) {
         return {
           rows: [{
