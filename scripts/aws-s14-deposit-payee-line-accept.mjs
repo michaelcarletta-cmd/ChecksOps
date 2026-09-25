@@ -151,7 +151,8 @@ const forceDeleteChecks = async (checkIds) => {
 import pg from 'pg';
 export const handler = async (event) => {
   const sm = new SecretsManagerClient({});
-  const secret = JSON.parse((await sm.send(new GetSecretValueCommand({ SecretId: process.env.DATABASE_SECRET_ARN }))).SecretString);
+  const secret = JSON.parse((await sm.send(new GetSecretValueCommand({ SecretId: process.env.ADMIN_SECRET_ARN }))).SecretString);
+  if (!/checksops_admin/i.test(secret.username || '')) throw new Error('not staging admin');
   const client = new pg.Client({
     host: secret.host, port: Number(secret.port || 5432), user: secret.username,
     password: secret.password, database: process.env.DATABASE_NAME || 'checksops',
@@ -161,10 +162,23 @@ export const handler = async (event) => {
   const deleted = [];
   try {
     await client.query('BEGIN');
-    await client.query("SELECT set_config('request.financial_certification', '1', true)");
+    const optional = async (sql, params) => {
+      await client.query('SAVEPOINT s14_optional');
+      try {
+        await client.query(sql, params);
+        await client.query('RELEASE SAVEPOINT s14_optional');
+      } catch {
+        await client.query('ROLLBACK TO SAVEPOINT s14_optional');
+      }
+    };
     for (const id of event.checkIds || []) {
+      await optional('DELETE FROM public.check_endorsement_events WHERE check_id = $1::uuid', [id]);
       await client.query('DELETE FROM public.check_endorsements WHERE check_id = $1::uuid', [id]);
       await client.query('DELETE FROM public.check_payees WHERE check_id = $1::uuid', [id]);
+      await optional('DELETE FROM public.check_messages WHERE check_id = $1::uuid', [id]);
+      await optional('DELETE FROM public.check_message_reads WHERE check_id = $1::uuid', [id]);
+      await optional('DELETE FROM public.check_files WHERE check_intake_item_id = $1::uuid', [id]);
+      await optional('DELETE FROM public.check_audit_log WHERE check_id = $1::uuid', [id]);
       await client.query('DELETE FROM public.shared_checks WHERE check_id = $1::uuid', [id]);
       await client.query('DELETE FROM public.claim_checks WHERE check_intake_item_id = $1::uuid', [id]);
       await client.query(
@@ -196,7 +210,7 @@ export const handler = async (event) => {
     '--handler', 'index.handler',
     '--timeout', '30',
     '--zip-file', `fileb://${zip}`,
-    '--environment', `Variables={DATABASE_SECRET_ARN=${apiFn.Environment.Variables.DATABASE_SECRET_ARN},DATABASE_NAME=${apiFn.Environment.Variables.DATABASE_NAME || 'checksops'}}`,
+    '--environment', `Variables={ADMIN_SECRET_ARN=${stagingAdminSecretArn()},DATABASE_NAME=${apiFn.Environment.Variables.DATABASE_NAME || 'checksops'}}`,
     ...(vpc.SubnetIds?.length ? [
       '--vpc-config',
       `SubnetIds=${vpc.SubnetIds.join(',')},SecurityGroupIds=${(vpc.SecurityGroupIds || []).join(',')}`,
@@ -225,6 +239,15 @@ export const handler = async (event) => {
 
 const awsJson = (args) => JSON.parse(execFileSync(AWS, ['--region', REGION, ...args], { encoding: 'utf8' }));
 
+const stagingAdminSecretArn = () => {
+  const secrets = awsJson(['secretsmanager', 'list-secrets']);
+  const match = (secrets.SecretList || []).find((row) => (
+    /rds-db-credentials\/checksops-staging\/checksops_admin/i.test(row.Name || '')
+  ));
+  if (!match?.ARN) throw new Error('staging checksops_admin secret not listed');
+  return match.ARN;
+};
+
 const stampDepositedAt = async (checkId) => {
   const apiFn = awsJson(['lambda', 'get-function-configuration', '--function-name', 'checksops-staging-api']);
   const name = `checksops-staging-s14-stamp-${Date.now().toString().slice(-6)}`;
@@ -233,7 +256,8 @@ const stampDepositedAt = async (checkId) => {
 import pg from 'pg';
 export const handler = async (event) => {
   const sm = new SecretsManagerClient({});
-  const secret = JSON.parse((await sm.send(new GetSecretValueCommand({ SecretId: process.env.DATABASE_SECRET_ARN }))).SecretString);
+  const secret = JSON.parse((await sm.send(new GetSecretValueCommand({ SecretId: process.env.ADMIN_SECRET_ARN }))).SecretString);
+  if (!/checksops_admin/i.test(secret.username || '')) throw new Error('not staging admin');
   const client = new pg.Client({
     host: secret.host, port: Number(secret.port || 5432), user: secret.username,
     password: secret.password, database: process.env.DATABASE_NAME || 'checksops',
@@ -251,6 +275,8 @@ export const handler = async (event) => {
       [event.checkId, JSON.stringify({ payee_line: event.ocrPayee, confidence: 80 }), event.marker],
     )).rows;
     return { ok: rows.length === 1, row: rows[0] || null };
+  } catch (error) {
+    return { ok: false, error: String(error.message || error).slice(0, 240) };
   } finally { await client.end(); }
 };
 `;
@@ -268,7 +294,7 @@ export const handler = async (event) => {
     '--handler', 'index.handler',
     '--timeout', '30',
     '--zip-file', `fileb://${zip}`,
-    '--environment', `Variables={DATABASE_SECRET_ARN=${apiFn.Environment.Variables.DATABASE_SECRET_ARN},DATABASE_NAME=${apiFn.Environment.Variables.DATABASE_NAME || 'checksops'}}`,
+    '--environment', `Variables={ADMIN_SECRET_ARN=${stagingAdminSecretArn()},DATABASE_NAME=${apiFn.Environment.Variables.DATABASE_NAME || 'checksops'}}`,
     ...(vpc.SubnetIds?.length ? [
       '--vpc-config',
       `SubnetIds=${vpc.SubnetIds.join(',')},SecurityGroupIds=${(vpc.SecurityGroupIds || []).join(',')}`,
@@ -496,9 +522,15 @@ const main = async () => {
     const row = await loadCheck(id);
     if (row?.id) leftover.push(id);
   }
+  const priorLeftovers = [
+    '7a7b6a07-f796-4a28-8fbd-724503cd7019',
+    '16ec73d3-8435-45d6-99dd-f3870c0bf4ef',
+    'eb0696a2-5ece-4326-9685-8b5163a27f04',
+  ];
   let forceCleanup = null;
-  if (leftover.length) {
-    forceCleanup = await forceDeleteChecks(leftover);
+  const forceIds = [...new Set([...leftover, ...priorLeftovers])];
+  if (forceIds.length) {
+    forceCleanup = await forceDeleteChecks(forceIds);
     leftover = [];
     for (const id of evidence.checks) {
       const row = await loadCheck(id);
