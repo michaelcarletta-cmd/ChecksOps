@@ -100,9 +100,10 @@ export const handler = async () => {
       WHERE tenant_id = $1::uuid AND billing_period = '2026-09'
     `, [FREEDOM]);
     const septemberEvents = await q(client, `
-      SELECT event_type, count(*)::int AS count, coalesce(sum(amount_cents),0)::int AS amount_cents
+      SELECT event_type, count(*)::int AS count, coalesce(sum(unit_price_cents),0)::int AS amount_cents
       FROM public.check_billing_events
-      WHERE tenant_id = $1::uuid AND billing_period = '2026-09'
+      WHERE tenant_id = $1::uuid
+        AND to_char(billed_at AT TIME ZONE 'UTC', 'YYYY-MM') = '2026-09'
       GROUP BY 1 ORDER BY 1
     `, [FREEDOM]);
     const invoice = await buildConsolidatedInvoice(client, {
