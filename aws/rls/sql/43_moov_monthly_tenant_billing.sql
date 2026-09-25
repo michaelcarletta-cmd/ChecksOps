@@ -209,6 +209,21 @@ CREATE POLICY aws_write_tenant_maintenance_payments_job ON public.tenant_mainten
     OR current_setting('request.provider_webhook_apply', true) = '1'
   );
 
+DROP POLICY IF EXISTS aws_select_payment_provider_accounts_job ON public.payment_provider_accounts;
+CREATE POLICY aws_select_payment_provider_accounts_job ON public.payment_provider_accounts
+  FOR SELECT TO checksops
+  USING (public.aws_monthly_billing_job());
+
+DROP POLICY IF EXISTS aws_select_payment_provider_methods_job ON public.payment_provider_methods;
+CREATE POLICY aws_select_payment_provider_methods_job ON public.payment_provider_methods
+  FOR SELECT TO checksops
+  USING (public.aws_monthly_billing_job());
+
+DROP POLICY IF EXISTS aws_select_tenant_billing_accounts_job ON public.tenant_billing_accounts;
+CREATE POLICY aws_select_tenant_billing_accounts_job ON public.tenant_billing_accounts
+  FOR SELECT TO checksops
+  USING (public.aws_monthly_billing_job());
+
 DROP POLICY IF EXISTS aws_write_tenant_billing_accounts_job ON public.tenant_billing_accounts;
 CREATE POLICY aws_write_tenant_billing_accounts_job ON public.tenant_billing_accounts
   FOR ALL TO checksops
