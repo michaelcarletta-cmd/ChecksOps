@@ -87,7 +87,9 @@ const snapshot = async (client, tenantId, dest) => {
       paymentMethodId: dest.paymentMethodId,
       label: dest.label,
       environment: dest.environment,
-    } : { error: dest.error, reason: dest.reason },
+      source: dest.source || 'explicit',
+      firstWalletFallback: false,
+    } : { error: dest.error, reason: dest.reason, firstWalletFallback: false },
     readiness: {
       ready: readiness.ready,
       reasons: readiness.reasons || [],

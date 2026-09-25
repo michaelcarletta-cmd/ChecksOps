@@ -46,6 +46,8 @@ export type TenantBillingSnapshot = {
     paymentMethodId?: string;
     label?: string;
     environment?: string;
+    source?: string;
+    firstWalletFallback?: boolean;
     error?: string;
     reason?: string;
   };
