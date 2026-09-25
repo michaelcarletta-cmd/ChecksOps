@@ -8,6 +8,7 @@ import { copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { refuseProductionOverlayBypass } from './lib/phase1-freeze.mjs';
 
 const AWS = process.env.AWS_CLI || (existsSync(`${process.env.HOME}/.local/bin/aws`)
   ? `${process.env.HOME}/.local/bin/aws`
@@ -43,6 +44,7 @@ const findDest = (extractDir, basename) => {
 };
 
 const main = async () => {
+  refuseProductionOverlayBypass(FUNCTION_NAME);
   const before = awsJson(['lambda', 'get-function', '--function-name', FUNCTION_NAME]);
   const beforeSha = before.Configuration?.CodeSha256;
   const work = path.join(os.tmpdir(), `checksops-overlay-${Date.now()}`);
