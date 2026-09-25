@@ -56,7 +56,11 @@ const main = async () => {
   for (const rel of FILES) {
     const src = path.join(ROOT, rel);
     if (!existsSync(src)) throw new Error(`missing overlay source ${rel}`);
-    const dest = findDest(extractDir, path.basename(rel));
+    let dest = findDest(extractDir, path.basename(rel));
+    if (!existsSync(dest)) {
+      const sibling = findDest(extractDir, 'financial.mjs');
+      dest = path.join(path.dirname(sibling), path.basename(rel));
+    }
     copyFileSync(src, dest);
     copied.push({ src: rel, dest: dest.replace(extractDir, '') });
   }
