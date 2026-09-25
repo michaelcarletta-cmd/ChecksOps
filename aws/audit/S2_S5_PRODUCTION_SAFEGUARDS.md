@@ -74,3 +74,21 @@ The safeguard fails if:
 9. SQL does not introduce a direct `GRANT UPDATE(claim_id)` escape path
 
 Mutation probes (local copies only) fail CI if the RPC dispatcher/bridge, deposited protection, tenant protection, audit insertion, or generic `claim_id` prohibition is removed.
+
+## Verification (2026-09-25)
+
+Cross-regression: **131/131 PASS** (S2/S3/S4/S5/S11/S14 unit + safeguard suites).
+
+Read-only production compare of `checksops-production-prep-api`:
+
+- SHA unchanged: `zb7E5ptHPmRsBegkIFgNzq3rzBktHvpNCJ1QMTHM6l0=`
+- LastModified unchanged: `2026-09-25T13:43:44.000+0000`
+- `workflow-rpc.mjs` is now byte-identical to production (S5 RPC is no longer missing from this line)
+- `write-check-workflow.mjs`, `endorsement-material-invalidation.mjs`, `financial-remaining.mjs`, `financial.mjs`, `check-deposited.mjs`, `ocr.mjs`, `ocr-descriptive-persist.mjs` are byte-identical
+- Remaining non-S2/S5/S11/S14 diffs: `write-allowlist.mjs` tenants insert/slug allowlist, and `ingest-shared-check.mjs` production tenant INSERT columns (`payment_provider` / `moov_*`). Those are not accepted S2/S5 behavior and were not changed here.
+
+No production Lambda update. No staging runtime update. No SQL execution. No provider calls.
+
+**S2 SAFEGUARD: PASS**  
+**S5 SAFEGUARD: PASS**  
+**PHASE 1 REMEDIATION SAFEGUARDS COMPLETE: YES**
