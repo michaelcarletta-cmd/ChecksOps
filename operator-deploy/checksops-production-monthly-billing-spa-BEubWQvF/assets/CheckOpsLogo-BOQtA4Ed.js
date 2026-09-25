@@ -1,0 +1,1 @@
+import{j as e,ag as t}from"./index-BEubWQvF.js";const c="/assets/checksops-logo-dark-CYQASaW6.png",n="/assets/checksops-logo-dark-CYQASaW6.png";function l({className:s,variant:o="dark"}){const a=o==="light"?n:c;return e.jsx("img",{src:a,alt:"ChecksOps",className:t("inline-block w-auto h-[6em] select-none",s),draggable:!1})}export{l as C};
