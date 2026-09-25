@@ -9,15 +9,12 @@ import {
   actorIsPlatformOwner,
   applyBillingProviderEvent,
   billingIdempotencyKey,
+  buildTenantBillingSnapshot,
   canAuthorizeTenantBilling,
+  canViewTenantBilling,
   chargeTenantPeriod,
-  evaluateBillingReadiness,
-  listBillingHistory,
+  defaultPullPeriodKey,
   loadTenantBillingContext,
-  nextBillingDate,
-  netFeeCents,
-  periodKey,
-  runMonthlyBillingScheduler,
   saveBillingAuthorization,
   saveBillingSettings,
 } from './tenant-billing-engine.mjs';
@@ -39,67 +36,9 @@ const denied = (spoof, extra) => ({
   ...extra,
 });
 
-const snapshot = async (client, tenantId, dest) => {
-  const ctx = await loadTenantBillingContext(client, tenantId);
-  if (!ctx.ok) return ctx;
-  const period = periodKey();
-  const readiness = await evaluateBillingReadiness(client, {
-    tenantId,
-    period,
-    destination: dest,
-    environment: billingEnvironment(),
-  });
-  const history = await listBillingHistory(client, tenantId, 24);
-  const last = history[0] || null;
-  const pending = history.find((row) => row.status === 'submitted' || row.status === 'due') || null;
-  const methods = (await client.query(
-    `SELECT provider_payment_method_id, holder_name, last_four,
-            connection_status, can_send, environment, provider_account_id
-     FROM public.payment_provider_methods
-     WHERE tenant_id = $1::uuid
-       AND environment = $2
-       AND connection_status = 'connected'
-       AND provider_payment_method_id IS NOT NULL
-     ORDER BY updated_at DESC NULLS LAST`,
-    [tenantId, billingEnvironment()],
-  ).catch(() => ({ rows: [] }))).rows;
-  return {
-    ok: true,
-    tenant_id: tenantId,
-    tenant: {
-      id: ctx.tenant.id,
-      name: ctx.tenant.name,
-      slug: ctx.tenant.slug,
-      subscription_status: ctx.tenant.subscription_status,
-      is_founding_partner: ctx.tenant.is_founding_partner,
-    },
-    monthly_rate_cents: Number(ctx.tenant.monthly_rate_cents || 0),
-    referral_discount_cents: Number(ctx.tenant.referral_discount_cents || 0),
-    net_fee_cents: netFeeCents(ctx.tenant.monthly_rate_cents, ctx.tenant.referral_discount_cents),
-    billing_enabled: ctx.settings.billing_enabled === true,
-    billing_day_of_month: Number(ctx.settings.billing_day_of_month || 1),
-    next_billing_date: nextBillingDate(ctx.settings.billing_day_of_month || 1),
-    next_period_start: ctx.settings.next_period_start,
-    current_period: period,
-    authorization: ctx.authorization,
-    destination: dest.ok ? {
-      accountId: dest.accountId,
-      paymentMethodId: dest.paymentMethodId,
-      label: dest.label,
-      environment: dest.environment,
-      source: dest.source || 'explicit',
-      firstWalletFallback: false,
-    } : { error: dest.error, reason: dest.reason, firstWalletFallback: false },
-    readiness: {
-      ready: readiness.ready,
-      reasons: readiness.reasons || [],
-    },
-    last_charge: last,
-    pending_charge: pending,
-    history,
-    methods,
-  };
-};
+const snapshot = (client, tenantId, dest, extras = {}) => (
+  buildTenantBillingSnapshot(client, tenantId, dest, extras)
+);
 
 const runWithIdentity = (event, fn, deps) => {
   if (deps.client && deps.mapping) {
@@ -140,6 +79,9 @@ export const handleTenantBillingAdmin = async (event, deps = {}) => {
         tenantId,
         monthlyRateCents: body.monthly_rate_cents,
         referralDiscountCents: body.referral_discount_cents,
+        perCheckRateCents: body.per_check_rate_cents,
+        nextDayRateCents: body.next_day_rate_cents,
+        sameDayRateCents: body.same_day_rate_cents,
         billingEnabled: body.billing_enabled,
         billingDay: body.billing_day_of_month,
         userId: mapping.application_user_id,
@@ -165,13 +107,36 @@ export const handleTenantBillingAdmin = async (event, deps = {}) => {
       };
     }
 
+    if (action === 'preview') {
+      const data = await snapshot(client, tenantId, dest);
+      if (!data.ok) return denied(spoof, { statusCode: data.statusCode || 404, ...data });
+      return { ok: true, statusCode: 200, spoofFieldsIgnored: spoof, preview: true, ...data };
+    }
+
     if (action === 'pull') {
+      if (body.confirm !== true) {
+        const data = await snapshot(client, tenantId, dest);
+        return {
+          ok: false,
+          statusCode: 409,
+          error: 'confirmation_required',
+          message: 'Pull Now requires explicit operator confirmation of the server invoice preview.',
+          spoofFieldsIgnored: spoof,
+          ...data,
+        };
+      }
+      const ctx = await loadTenantBillingContext(client, tenantId);
+      const period = body.period || defaultPullPeriodKey(new Date(), ctx.settings?.billing_day_of_month || 1);
       const charged = await chargeTenantPeriod(client, {
         tenantId,
-        period: body.period || periodKey(),
+        period,
         recordedBy: mapping.application_user_id,
         fetchImpl: deps.fetchImpl,
-        deps,
+        deps: {
+          ...deps,
+          // Never trust a client-supplied amount. Persisted invoice total wins.
+          amountCents: undefined,
+        },
       });
       const data = await snapshot(client, tenantId, dest);
       return {
@@ -179,7 +144,9 @@ export const handleTenantBillingAdmin = async (event, deps = {}) => {
         statusCode: charged.ok ? 200 : (charged.statusCode || 409),
         spoofFieldsIgnored: spoof,
         pull: charged,
-        idempotency_key: billingIdempotencyKey(tenantId, body.period || periodKey()),
+        amount_cents_posted: charged.amount_cents ?? charged.occurrence?.amount_cents ?? null,
+        client_amount_ignored: body.amount_cents != null || body.amount != null,
+        idempotency_key: billingIdempotencyKey(tenantId, period),
         ...data,
       };
     }
@@ -195,6 +162,21 @@ export const handleTenantBillingAuthorize = async (event, deps = {}) => {
     const tenantId = body.tenant_id || body.tenantId;
     if (!isUuid(tenantId)) {
       return denied(spoof, { statusCode: 400, error: 'invalid_uuid', field: 'tenant_id' });
+    }
+    if (body.action === 'snapshot' || body.action === 'get') {
+      if (!(await canViewTenantBilling(client, mapping.application_user_id, tenantId))) {
+        return denied(spoof, {
+          error: 'not_authorized',
+          message: 'Only tenant members or the ChecksOps platform owner can view billing.',
+        });
+      }
+      const dest = await resolveBillingDestination(client, {
+        environment: billingEnvironment(),
+        deps,
+      });
+      const data = await snapshot(client, tenantId, dest);
+      if (!data.ok) return denied(spoof, { statusCode: data.statusCode || 404, ...data });
+      return { ok: true, statusCode: 200, spoofFieldsIgnored: spoof, ...data };
     }
     if (!(await canAuthorizeTenantBilling(client, mapping.application_user_id, tenantId))) {
       return denied(spoof, {

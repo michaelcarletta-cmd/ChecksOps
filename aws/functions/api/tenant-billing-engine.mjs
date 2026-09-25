@@ -1,6 +1,10 @@
 /**
  * Monthly ChecksOps tenant subscription billing engine.
  * One occurrence per (tenant_id, billing_period). Same path for scheduler and Pull Now.
+ *
+ * Consolidated invoice:
+ *   maintenance - discount + check_processing + moov_next_day + moov_same_day
+ * Instant is schema-compatible but never generated or billed.
  */
 import {
   billingEnvironment,
@@ -14,11 +18,51 @@ export const BILLING_STATUSES = ['due', 'submitted', 'settled', 'failed', 'retur
 const TERMINAL_SUCCESS = new Set(['settled']);
 const IN_FLIGHT = new Set(['submitted']);
 
+export const DEFAULT_CHECK_RATE_CENTS = 400;
+export const DEFAULT_NEXT_DAY_RATE_CENTS = 75;
+export const DEFAULT_SAME_DAY_RATE_CENTS = 100;
+export const MAX_RATE_CENTS = 1_000_000;
+
+/** Safest existing billable point: transfer actually completed (webhook sets completed_at). */
+export const BILLABLE_TRANSFER_STATUSES = new Set(['completed', 'settled', 'succeeded']);
+export const VOIDED_CHECK_STATUSES = new Set(['voided', 'void']);
+
+export const FEE_CHECK = 'check_processing';
+export const FEE_NEXT_DAY = 'moov_next_day';
+export const FEE_SAME_DAY = 'moov_same_day';
+export const FEE_INSTANT = 'moov_instant';
+
 export const periodKey = (date = new Date()) => {
   const d = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(d.getTime())) throw new Error('invalid_billing_date');
   const y = d.getUTCFullYear();
   const m = String(d.getUTCMonth() + 1).padStart(2, '0');
   return `${y}-${m}`;
+};
+
+/** Current accruing UTC calendar month. Preview / current amount due. */
+export const accrualPeriodKey = (date = new Date()) => periodKey(date);
+
+/**
+ * Collection on billing-day of month M closes the previous UTC calendar month.
+ * October 1 → 2026-09. UTC boundaries only; UI local time is ignored.
+ */
+export const collectionPeriodKey = (date = new Date()) => {
+  const d = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(d.getTime())) throw new Error('invalid_billing_date');
+  return periodKey(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - 1, 1)));
+};
+
+/**
+ * Pull Now default period:
+ *   on the tenant billing day → closed previous month (Oct 1 + day 1 → September)
+ *   otherwise → current accruing month (in-month early collection)
+ */
+export const defaultPullPeriodKey = (date = new Date(), billingDay = 1) => {
+  const d = date instanceof Date ? date : new Date(date);
+  const day = Math.min(28, Math.max(1, Number(billingDay) || 1));
+  if (d.getUTCDate() === day) return collectionPeriodKey(d);
+  return accrualPeriodKey(d);
 };
 
 export const periodBounds = (period) => {
@@ -59,6 +103,66 @@ export const netFeeCents = (rateCents, discountCents) => (
   Math.max(0, Number(rateCents || 0) - Number(discountCents || 0))
 );
 
+const fail = (error, extra = {}) => ({ ok: false, error, ...extra });
+
+export const parseRateCents = (value, field) => {
+  if (value === undefined || value === null || value === '') {
+    return { ok: true, cents: undefined };
+  }
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || !Number.isInteger(numeric)) return fail(`invalid_${field}`);
+  if (numeric < 0 || numeric > MAX_RATE_CENTS) return fail(`invalid_${field}`);
+  return { ok: true, cents: numeric };
+};
+
+export const resolveCheckRateCents = (tenant) => {
+  const stored = Number(tenant?.per_check_rate_cents);
+  return stored > 0 ? stored : DEFAULT_CHECK_RATE_CENTS;
+};
+
+export const resolveNextDayRateCents = (tenant) => {
+  if (tenant?.next_day_rate_cents === undefined || tenant?.next_day_rate_cents === null) {
+    return DEFAULT_NEXT_DAY_RATE_CENTS;
+  }
+  return Math.max(0, Number(tenant.next_day_rate_cents) || 0);
+};
+
+export const resolveSameDayRateCents = (tenant) => {
+  if (tenant?.same_day_rate_cents === undefined || tenant?.same_day_rate_cents === null) {
+    return DEFAULT_SAME_DAY_RATE_CENTS;
+  }
+  return Math.max(0, Number(tenant.same_day_rate_cents) || 0);
+};
+
+export const feeTypeForTransfer = (transfer) => {
+  const speed = String(transfer?.requested_speed || transfer?.speed || 'standard')
+    .toLowerCase()
+    .replace(/-/g, '_');
+  if (['instant', 'rtp', 'instant_ach', 'moov_instant'].includes(speed)) return null;
+  if (speed === 'same_day' || speed === 'moov_same_day') return FEE_SAME_DAY;
+  if (['standard', 'next_day', 'moov_next_day', 'ach'].includes(speed)) return FEE_NEXT_DAY;
+  return null;
+};
+
+export const transferIsQualifying = (transfer) => {
+  if (!transfer) return false;
+  const status = String(transfer.status || '').toLowerCase();
+  if (['failed', 'canceled', 'cancelled', 'ready', 'pending', 'created'].includes(status)) {
+    return false;
+  }
+  if (transfer.completed_at) return true;
+  return BILLABLE_TRANSFER_STATUSES.has(status);
+};
+
+const utcBounds = (period) => {
+  const bounds = periodBounds(period);
+  return {
+    ...bounds,
+    startIso: `${bounds.period_start}T00:00:00.000Z`,
+    endIso: `${bounds.period_end}T00:00:00.000Z`,
+  };
+};
+
 export async function actorIsPlatformOwner(client) {
   const row = (await client.query(
     `SELECT COALESCE(public.is_platform_owner(), false) AS ok`,
@@ -77,7 +181,16 @@ export async function canAuthorizeTenantBilling(client, userId, tenantId) {
   return String(row?.role || '') === 'admin';
 }
 
-const fail = (error, extra = {}) => ({ ok: false, error, ...extra });
+export async function canViewTenantBilling(client, userId, tenantId) {
+  if (await actorIsPlatformOwner(client)) return true;
+  const row = (await client.query(
+    `SELECT role FROM public.tenant_users
+     WHERE user_id = $1::uuid AND tenant_id = $2::uuid
+     LIMIT 1`,
+    [userId, tenantId],
+  )).rows[0];
+  return Boolean(row?.role);
+}
 
 const capabilityEntries = (capabilities) => {
   if (Array.isArray(capabilities)) return capabilities;
@@ -98,7 +211,8 @@ const sandboxCollectFundsAvailable = (account, env) => {
 export async function loadTenantBillingContext(client, tenantId) {
   const tenant = (await client.query(
     `SELECT id, name, slug, subscription_status, monthly_rate_cents, referral_discount_cents,
-            is_founding_partner
+            is_founding_partner, per_check_rate_cents, per_check_billing_enabled,
+            next_day_rate_cents, same_day_rate_cents
      FROM public.tenants WHERE id = $1::uuid`,
     [tenantId],
   )).rows[0];
@@ -196,11 +310,311 @@ export async function evaluateBillingReadiness(client, {
     amountCents,
     rateCents: Number(tenant.monthly_rate_cents || 0),
     discountCents: Number(tenant.referral_discount_cents || 0),
-    period: period || periodKey(),
+    maintenanceNetCents: amountCents,
+    perCheckRateCents: resolveCheckRateCents(tenant),
+    nextDayRateCents: resolveNextDayRateCents(tenant),
+    sameDayRateCents: resolveSameDayRateCents(tenant),
+    period: period || accrualPeriodKey(),
     destination,
     environment: env,
     account,
   };
+}
+
+const asEvent = (row) => ({
+  id: row.id,
+  tenant_id: row.tenant_id,
+  event_type: row.event_type,
+  unit_price_cents: Number(row.unit_price_cents || 0),
+  billed_at: row.billed_at,
+  billing_period: row.billing_period,
+  invoice_id: row.invoice_id || null,
+  status: row.status,
+  source_kind: row.source_kind || row.event_type,
+  source_id: row.source_id || row.check_intake_item_id || row.payment_transfer_id,
+  check_intake_item_id: row.check_intake_item_id || null,
+  payment_transfer_id: row.payment_transfer_id || null,
+});
+
+export async function loadCheckUsageForPeriod(client, { tenantId, period }) {
+  const bounds = utcBounds(period);
+  const rows = (await client.query(
+    `SELECT e.id, e.tenant_id, e.event_type, e.unit_price_cents, e.billed_at, e.billing_period,
+            e.invoice_id, e.status, e.source_kind, e.source_id, e.check_intake_item_id,
+            e.payment_transfer_id, c.status AS check_status
+     FROM public.check_billing_events e
+     LEFT JOIN public.check_intake_items c ON c.id = e.check_intake_item_id
+     WHERE e.tenant_id = $1::uuid
+       AND e.event_type = $2
+       AND e.billed_at >= $3::timestamptz
+       AND e.billed_at < $4::timestamptz
+       AND e.status IS DISTINCT FROM 'voided'`,
+    [tenantId, FEE_CHECK, bounds.startIso, bounds.endIso],
+  ).catch(() => ({ rows: [] }))).rows;
+
+  const included = [];
+  const excludedVoided = [];
+  for (const row of rows) {
+    const voided = VOIDED_CHECK_STATUSES.has(String(row.check_status || '').toLowerCase());
+    if (voided && !row.invoice_id) {
+      excludedVoided.push(asEvent(row));
+      continue;
+    }
+    included.push(asEvent(row));
+  }
+  return { included, excludedVoided };
+}
+
+export async function persistMoovUsageForPeriod(client, { tenant, period, persist }) {
+  const tenantId = tenant.id;
+  const bounds = utcBounds(period);
+  const transfers = (await client.query(
+    `SELECT id, tenant_id, status, speed, requested_speed, completed_at, created_at,
+            provider_transfer_id, provider_fee_cents, platform_fee_cents
+     FROM public.payment_transfers
+     WHERE tenant_id = $1::uuid
+       AND provider = 'moov'
+       AND COALESCE(completed_at, created_at) >= $2::timestamptz
+       AND COALESCE(completed_at, created_at) < $3::timestamptz`,
+    [tenantId, bounds.startIso, bounds.endIso],
+  ).catch(() => ({ rows: [] }))).rows;
+
+  const existing = (await client.query(
+    `SELECT id, payment_transfer_id, event_type, unit_price_cents, billed_at, billing_period,
+            invoice_id, status, source_kind, source_id, tenant_id, check_intake_item_id
+     FROM public.check_billing_events
+     WHERE tenant_id = $1::uuid
+       AND event_type IN ('moov_next_day', 'moov_same_day', 'moov_instant')
+       AND payment_transfer_id IS NOT NULL`,
+    [tenantId],
+  ).catch(() => ({ rows: [] }))).rows;
+  const existingByTransfer = new Map(
+    existing.map((row) => [`${row.payment_transfer_id}:${row.event_type}`, row]),
+  );
+
+  const created = [];
+  const skipped = [];
+  for (const transfer of transfers) {
+    const feeType = feeTypeForTransfer(transfer);
+    if (!feeType) {
+      skipped.push({ id: transfer.id, reason: 'instant_or_unknown_speed', speed: transfer.speed });
+      continue;
+    }
+    if (!transferIsQualifying(transfer)) {
+      skipped.push({ id: transfer.id, reason: 'not_qualifying', status: transfer.status });
+      continue;
+    }
+    const key = `${transfer.id}:${feeType}`;
+    if (existingByTransfer.has(key)) {
+      created.push(asEvent(existingByTransfer.get(key)));
+      continue;
+    }
+    const unit = feeType === FEE_SAME_DAY
+      ? resolveSameDayRateCents(tenant)
+      : resolveNextDayRateCents(tenant);
+    const billedAt = transfer.completed_at || transfer.created_at || bounds.startIso;
+    if (!persist) {
+      created.push({
+        id: null,
+        tenant_id: tenantId,
+        event_type: feeType,
+        unit_price_cents: unit,
+        billed_at: billedAt,
+        billing_period: period,
+        invoice_id: null,
+        status: 'recorded',
+        source_kind: feeType,
+        source_id: transfer.id,
+        check_intake_item_id: null,
+        payment_transfer_id: transfer.id,
+        preview: true,
+      });
+      continue;
+    }
+    const inserted = (await client.query(
+      `INSERT INTO public.check_billing_events (
+         tenant_id, check_intake_item_id, payment_transfer_id, event_type,
+         unit_price_cents, currency, status, billed_at, billing_period,
+         source_kind, source_id
+       ) VALUES (
+         $1::uuid, NULL, $2::uuid, $3, $4, 'usd', 'recorded', $5::timestamptz, $6, $7, $2::uuid
+       )
+       ON CONFLICT DO NOTHING
+       RETURNING id, tenant_id, event_type, unit_price_cents, billed_at, billing_period,
+                 invoice_id, status, source_kind, source_id, check_intake_item_id,
+                 payment_transfer_id`,
+      [tenantId, transfer.id, feeType, unit, billedAt, period, feeType],
+    ).catch(async () => {
+      const again = (await client.query(
+        `SELECT id, tenant_id, event_type, unit_price_cents, billed_at, billing_period,
+                invoice_id, status, source_kind, source_id, check_intake_item_id,
+                payment_transfer_id
+         FROM public.check_billing_events
+         WHERE payment_transfer_id = $1::uuid AND event_type = $2
+         LIMIT 1`,
+        [transfer.id, feeType],
+      )).rows[0];
+      return { rows: again ? [again] : [] };
+    })).rows[0];
+    if (inserted) {
+      existingByTransfer.set(key, inserted);
+      created.push(asEvent(inserted));
+    }
+  }
+
+  const nextDay = created.filter((row) => row.event_type === FEE_NEXT_DAY);
+  const sameDay = created.filter((row) => row.event_type === FEE_SAME_DAY);
+  const instant = created.filter((row) => row.event_type === FEE_INSTANT);
+  return { nextDay, sameDay, instant, skipped };
+}
+
+const sumCents = (rows) => rows.reduce((sum, row) => sum + Number(row.unit_price_cents || 0), 0);
+
+export function assembleInvoiceTotals({ tenant, period, checks, nextDay, sameDay }) {
+  const maintenance_rate_cents = Number(tenant.monthly_rate_cents || 0);
+  const discount_cents = Number(tenant.referral_discount_cents || 0);
+  const maintenance_net_cents = netFeeCents(maintenance_rate_cents, discount_cents);
+  const check_usage_cents = sumCents(checks);
+  const next_day_usage_cents = sumCents(nextDay);
+  const same_day_usage_cents = sumCents(sameDay);
+  const usage_total_cents = check_usage_cents + next_day_usage_cents + same_day_usage_cents;
+  const amount_cents = maintenance_net_cents + usage_total_cents;
+  return {
+    billing_period: period,
+    maintenance_rate_cents,
+    discount_cents,
+    maintenance_net_cents,
+    check_count: checks.length,
+    check_usage_cents,
+    next_day_count: nextDay.length,
+    next_day_usage_cents,
+    same_day_count: sameDay.length,
+    same_day_usage_cents,
+    usage_total_cents,
+    amount_cents,
+    per_check_rate_cents: resolveCheckRateCents(tenant),
+    next_day_rate_cents: resolveNextDayRateCents(tenant),
+    same_day_rate_cents: resolveSameDayRateCents(tenant),
+  };
+}
+
+export async function buildConsolidatedInvoice(client, {
+  tenantId, period, persist = false,
+}) {
+  const ctx = await loadTenantBillingContext(client, tenantId);
+  if (!ctx.ok) return ctx;
+  const checks = await loadCheckUsageForPeriod(client, { tenantId, period });
+  const moov = await persistMoovUsageForPeriod(client, {
+    tenant: ctx.tenant, period, persist,
+  });
+  const totals = assembleInvoiceTotals({
+    tenant: ctx.tenant,
+    period,
+    checks: checks.included,
+    nextDay: moov.nextDay,
+    sameDay: moov.sameDay,
+  });
+  const allocations = [
+    ...checks.included.map((row) => ({
+      source_kind: FEE_CHECK,
+      source_id: row.id,
+      fee_type: FEE_CHECK,
+      unit_price_cents: row.unit_price_cents,
+      amount_cents: row.unit_price_cents,
+      billed_at: row.billed_at,
+      invoice_id: row.invoice_id,
+    })),
+    ...moov.nextDay.map((row) => ({
+      source_kind: FEE_NEXT_DAY,
+      source_id: row.id || row.payment_transfer_id,
+      fee_type: FEE_NEXT_DAY,
+      unit_price_cents: row.unit_price_cents,
+      amount_cents: row.unit_price_cents,
+      billed_at: row.billed_at,
+      invoice_id: row.invoice_id,
+      payment_transfer_id: row.payment_transfer_id,
+    })),
+    ...moov.sameDay.map((row) => ({
+      source_kind: FEE_SAME_DAY,
+      source_id: row.id || row.payment_transfer_id,
+      fee_type: FEE_SAME_DAY,
+      unit_price_cents: row.unit_price_cents,
+      amount_cents: row.unit_price_cents,
+      billed_at: row.billed_at,
+      invoice_id: row.invoice_id,
+      payment_transfer_id: row.payment_transfer_id,
+    })),
+  ];
+  return {
+    ok: true,
+    tenant: ctx.tenant,
+    settings: ctx.settings,
+    authorization: ctx.authorization,
+    period,
+    period_bounds: utcBounds(period),
+    ...totals,
+    lines: {
+      checks: checks.included,
+      next_day: moov.nextDay,
+      same_day: moov.sameDay,
+    },
+    excluded_voided_checks: checks.excludedVoided,
+    skipped_transfers: moov.skipped,
+    allocations,
+    instant_billable: false,
+  };
+}
+
+export async function allocateInvoiceLines(client, { invoice, invoiceBuild }) {
+  if (!invoice?.id || !invoiceBuild?.allocations) return { allocated: 0 };
+  let allocated = 0;
+  for (const line of invoiceBuild.allocations) {
+    if (!line.source_id) continue;
+    const existing = (await client.query(
+      `SELECT invoice_id FROM public.tenant_invoice_allocations
+       WHERE source_kind = $1 AND source_id = $2::uuid AND fee_type = $3
+       LIMIT 1`,
+      [line.source_kind, line.source_id, line.fee_type],
+    ).catch(() => ({ rows: [] }))).rows[0];
+    if (existing && existing.invoice_id !== invoice.id) continue;
+    if (!existing) {
+      await client.query(
+        `INSERT INTO public.tenant_invoice_allocations (
+           invoice_id, tenant_id, billing_period, source_kind, source_id, fee_type,
+           unit_price_cents, amount_cents, billed_at
+         ) VALUES ($1::uuid, $2::uuid, $3, $4, $5::uuid, $6, $7, $8, $9::timestamptz)
+         ON CONFLICT (source_kind, source_id, fee_type) DO NOTHING`,
+        [
+          invoice.id, invoice.tenant_id, invoice.billing_period,
+          line.source_kind, line.source_id, line.fee_type,
+          line.unit_price_cents, line.amount_cents, line.billed_at,
+        ],
+      ).catch(() => {});
+      allocated += 1;
+    }
+    if (line.source_id) {
+      await client.query(
+        `UPDATE public.check_billing_events
+         SET invoice_id = $2::uuid, billing_period = COALESCE(billing_period, $3), status = CASE
+           WHEN status = 'recorded' THEN 'invoiced' ELSE status END
+         WHERE id = $1::uuid AND invoice_id IS NULL`,
+        [line.source_id, invoice.id, invoice.billing_period],
+      ).catch(() => {});
+    }
+  }
+  return { allocated };
+}
+
+export async function listInvoiceAllocations(client, invoiceId) {
+  if (!invoiceId) return [];
+  return (await client.query(
+    `SELECT id, invoice_id, tenant_id, billing_period, source_kind, source_id, fee_type,
+            unit_price_cents, amount_cents, billed_at, created_at
+     FROM public.tenant_invoice_allocations
+     WHERE invoice_id = $1::uuid
+     ORDER BY billed_at ASC NULLS LAST, created_at ASC`,
+    [invoiceId],
+  ).catch(() => ({ rows: [] }))).rows;
 }
 
 export async function createOrGetOccurrence(client, {
@@ -216,16 +630,20 @@ export async function createOrGetOccurrence(client, {
   )).rows[0];
   if (existing) return { ok: true, occurrence: existing, created: false, idempotency_key: key };
 
+  const invoice = readiness.invoice || {};
   const inserted = (await client.query(
     `INSERT INTO public.tenant_maintenance_payments (
        tenant_id, amount_cents, monthly_rate_cents, discount_cents,
        period_start, period_end, billing_period, method, status,
        idempotence_key, recorded_by, notes,
        funding_source_method_id, destination_account_id, destination_payment_method_id,
-       provider_environment
+       provider_environment,
+       maintenance_net_cents, check_usage_cents, next_day_usage_cents, same_day_usage_cents,
+       usage_total_cents, check_count, next_day_count, same_day_count
      ) VALUES (
        $1::uuid, $2, $3, $4, $5::date, $6::date, $7, 'moov_ach', 'due',
-       $8, $9::uuid, $10, $11, $12, $13, $14
+       $8, $9::uuid, $10, $11, $12, $13, $14,
+       $15, $16, $17, $18, $19, $20, $21, $22
      )
      ON CONFLICT (tenant_id, billing_period) WHERE billing_period IS NOT NULL
      DO UPDATE SET updated_at = public.tenant_maintenance_payments.updated_at
@@ -240,11 +658,19 @@ export async function createOrGetOccurrence(client, {
       period,
       key,
       recordedBy,
-      `Monthly subscription ${period}`,
+      `Monthly consolidated invoice ${period}`,
       readiness.authorization?.provider_payment_method_id || null,
       destination.accountId,
       destination.paymentMethodId,
       readiness.environment,
+      invoice.maintenance_net_cents ?? netFeeCents(readiness.rateCents, readiness.discountCents),
+      invoice.check_usage_cents ?? 0,
+      invoice.next_day_usage_cents ?? 0,
+      invoice.same_day_usage_cents ?? 0,
+      invoice.usage_total_cents ?? 0,
+      invoice.check_count ?? 0,
+      invoice.next_day_count ?? 0,
+      invoice.same_day_count ?? 0,
     ],
   )).rows[0];
   return { ok: true, occurrence: inserted, created: true, idempotency_key: key };
@@ -347,11 +773,12 @@ export async function submitOccurrence(client, {
   )).rows[0];
 
   if (providerStatus === 'submitted' && readiness.settings) {
+    const nextStart = nextBillingDate(readiness.settings.billing_day_of_month || 1, new Date());
     await client.query(
       `UPDATE public.tenant_billing_settings
        SET next_period_start = $2::date, updated_at = now()
        WHERE tenant_id = $1::uuid`,
-      [occurrence.tenant_id, periodBounds(nextPeriodAfter(occurrence.billing_period)).period_start],
+      [occurrence.tenant_id, nextStart],
     ).catch(() => {});
   }
 
@@ -381,14 +808,27 @@ export async function chargeTenantPeriod(client, {
   const destination = await resolveBillingDestination(client, { environment, deps });
   if (!destination.ok) return { ...destination, statusCode: 503 };
 
+  const invoice = await buildConsolidatedInvoice(client, {
+    tenantId, period, persist: true,
+  });
+  if (!invoice.ok) return invoice;
+
   const readiness = await evaluateBillingReadiness(client, {
     tenantId, period, destination, environment,
   });
+  readiness.amountCents = invoice.amount_cents;
+  readiness.invoice = invoice;
+  if (invoice.amount_cents > 0) {
+    readiness.reasons = (readiness.reasons || []).filter((reason) => reason !== 'invalid_amount');
+    readiness.ready = readiness.reasons.length === 0;
+    readiness.ok = readiness.ready;
+  }
   if (!readiness.ready) {
     return fail('billing_not_ready', {
       statusCode: 409,
       reasons: readiness.reasons,
       amount_cents: readiness.amountCents,
+      invoice,
     });
   }
 
@@ -403,14 +843,22 @@ export async function chargeTenantPeriod(client, {
   ) {
     // Historical snapshot wins. Do not rewrite amount on an existing period row.
   }
+  if (booked.created) {
+    await allocateInvoiceLines(client, { invoice: booked.occurrence, invoiceBuild: invoice });
+  }
 
-  return submitOccurrence(client, {
+  const submitted = await submitOccurrence(client, {
     occurrence: booked.occurrence,
     readiness,
     destination,
     fetchImpl,
     deps,
   });
+  return {
+    ...submitted,
+    invoice,
+    amount_cents: booked.occurrence.amount_cents,
+  };
 }
 
 export async function runMonthlyBillingScheduler(client, { now = new Date(), fetchImpl, deps = {} } = {}) {
@@ -418,7 +866,7 @@ export async function runMonthlyBillingScheduler(client, { now = new Date(), fet
     return fail('monthly_billing_disabled', { statusCode: 403 });
   }
   const today = (now instanceof Date ? now : new Date(now)).toISOString().slice(0, 10);
-  const period = periodKey(now);
+  const period = collectionPeriodKey(now);
   const due = (await client.query(
     `SELECT t.id AS tenant_id
      FROM public.tenants t
@@ -490,22 +938,29 @@ export async function applyBillingProviderEvent(client, {
 
 export async function saveBillingSettings(client, {
   tenantId, monthlyRateCents, referralDiscountCents, billingEnabled, billingDay, userId,
+  perCheckRateCents, nextDayRateCents, sameDayRateCents,
 }) {
   const sets = [];
   const params = [];
   let i = 1;
-  if (monthlyRateCents !== undefined) {
-    const cents = Math.round(Number(monthlyRateCents));
-    if (!Number.isFinite(cents) || cents < 0) return fail('invalid_monthly_rate');
-    sets.push(`monthly_rate_cents = $${i++}`);
-    params.push(cents);
-  }
-  if (referralDiscountCents !== undefined) {
-    const cents = Math.round(Number(referralDiscountCents));
-    if (!Number.isFinite(cents) || cents < 0) return fail('invalid_referral_discount');
-    sets.push(`referral_discount_cents = $${i++}`);
-    params.push(cents);
-  }
+  const applyRate = (value, field, column) => {
+    if (value === undefined) return true;
+    const parsed = parseRateCents(value, field);
+    if (!parsed.ok) return parsed;
+    sets.push(`${column} = $${i++}`);
+    params.push(parsed.cents);
+    return true;
+  };
+  const monthly = applyRate(monthlyRateCents, 'monthly_rate', 'monthly_rate_cents');
+  if (monthly !== true) return monthly;
+  const discount = applyRate(referralDiscountCents, 'referral_discount', 'referral_discount_cents');
+  if (discount !== true) return discount;
+  const checkRate = applyRate(perCheckRateCents, 'per_check_rate', 'per_check_rate_cents');
+  if (checkRate !== true) return checkRate;
+  const nextDay = applyRate(nextDayRateCents, 'next_day_rate', 'next_day_rate_cents');
+  if (nextDay !== true) return nextDay;
+  const sameDay = applyRate(sameDayRateCents, 'same_day_rate', 'same_day_rate_cents');
+  if (sameDay !== true) return sameDay;
   if (sets.length) {
     params.push(tenantId);
     await client.query(
@@ -613,7 +1068,9 @@ export async function listBillingHistory(client, tenantId, limit = 24) {
             period_start, period_end, status, method, provider_transfer_id,
             funding_source_method_id, destination_account_id, destination_payment_method_id,
             submitted_at, settled_at, returned_at, failure_reason, return_reason,
-            idempotence_key, created_at
+            idempotence_key, created_at,
+            maintenance_net_cents, check_usage_cents, next_day_usage_cents, same_day_usage_cents,
+            usage_total_cents, check_count, next_day_count, same_day_count
      FROM public.tenant_maintenance_payments
      WHERE tenant_id = $1::uuid
      ORDER BY period_start DESC NULLS LAST, created_at DESC
@@ -621,4 +1078,134 @@ export async function listBillingHistory(client, tenantId, limit = 24) {
     [tenantId, limit],
   )).rows;
   return rows;
+}
+
+const isPeriodKeyedOccurrence = (row) => Boolean(row?.billing_period)
+  && String(row.billing_period).trim() !== '';
+
+export async function buildTenantBillingSnapshot(client, tenantId, dest, { now = new Date() } = {}) {
+  const ctx = await loadTenantBillingContext(client, tenantId);
+  if (!ctx.ok) return ctx;
+  const currentPeriod = accrualPeriodKey(now);
+  const collectionPeriod = collectionPeriodKey(now);
+  const pullPeriod = defaultPullPeriodKey(now, ctx.settings.billing_day_of_month || 1);
+  const invoice = await buildConsolidatedInvoice(client, {
+    tenantId, period: currentPeriod, persist: false,
+  });
+  const pullPreview = pullPeriod === currentPeriod
+    ? invoice
+    : await buildConsolidatedInvoice(client, { tenantId, period: pullPeriod, persist: false });
+  const readiness = await evaluateBillingReadiness(client, {
+    tenantId,
+    period: pullPeriod,
+    destination: dest,
+    environment: billingEnvironment(),
+  });
+  readiness.amountCents = pullPreview.ok ? pullPreview.amount_cents : readiness.amountCents;
+  if (readiness.amountCents > 0) {
+    readiness.reasons = (readiness.reasons || []).filter((reason) => reason !== 'invalid_amount');
+    readiness.ready = readiness.reasons.length === 0;
+  }
+  const history = await listBillingHistory(client, tenantId, 24);
+  const last = history.find((row) => isPeriodKeyedOccurrence(row)) || null;
+  const pending = history.find((row) => (
+    isPeriodKeyedOccurrence(row)
+    && (row.status === 'submitted' || row.status === 'due')
+  )) || null;
+  const settled = history.filter((row) => row.status === 'settled' && isPeriodKeyedOccurrence(row));
+  const failed = history.filter((row) => row.status === 'failed' && isPeriodKeyedOccurrence(row));
+  const returned = history.filter((row) => row.status === 'returned' && isPeriodKeyedOccurrence(row));
+  const methods = (await client.query(
+    `SELECT provider_payment_method_id, holder_name, last_four,
+            connection_status, can_send, environment, provider_account_id
+     FROM public.payment_provider_methods
+     WHERE tenant_id = $1::uuid
+       AND environment = $2
+       AND connection_status = 'connected'
+       AND provider_payment_method_id IS NOT NULL
+     ORDER BY updated_at DESC NULLS LAST`,
+    [tenantId, billingEnvironment()],
+  ).catch(() => ({ rows: [] }))).rows;
+  const pendingAllocations = pending
+    ? await listInvoiceAllocations(client, pending.id)
+    : invoice.allocations || [];
+  return {
+    ok: true,
+    tenant_id: tenantId,
+    tenant: {
+      id: ctx.tenant.id,
+      name: ctx.tenant.name,
+      slug: ctx.tenant.slug,
+      subscription_status: ctx.tenant.subscription_status,
+      is_founding_partner: ctx.tenant.is_founding_partner,
+    },
+    monthly_rate_cents: Number(ctx.tenant.monthly_rate_cents || 0),
+    referral_discount_cents: Number(ctx.tenant.referral_discount_cents || 0),
+    net_fee_cents: netFeeCents(ctx.tenant.monthly_rate_cents, ctx.tenant.referral_discount_cents),
+    per_check_rate_cents: resolveCheckRateCents(ctx.tenant),
+    next_day_rate_cents: resolveNextDayRateCents(ctx.tenant),
+    same_day_rate_cents: resolveSameDayRateCents(ctx.tenant),
+    instant_rate_cents: null,
+    instant_enabled: false,
+    billing_enabled: ctx.settings.billing_enabled === true,
+    billing_day_of_month: Number(ctx.settings.billing_day_of_month || 1),
+    next_billing_date: nextBillingDate(ctx.settings.billing_day_of_month || 1, now),
+    next_period_start: ctx.settings.next_period_start,
+    current_period: currentPeriod,
+    collection_period: collectionPeriod,
+    pull_period: pullPeriod,
+    invoice: invoice.ok ? {
+      billing_period: invoice.billing_period,
+      maintenance_rate_cents: invoice.maintenance_rate_cents,
+      discount_cents: invoice.discount_cents,
+      maintenance_net_cents: invoice.maintenance_net_cents,
+      check_count: invoice.check_count,
+      check_usage_cents: invoice.check_usage_cents,
+      next_day_count: invoice.next_day_count,
+      next_day_usage_cents: invoice.next_day_usage_cents,
+      same_day_count: invoice.same_day_count,
+      same_day_usage_cents: invoice.same_day_usage_cents,
+      usage_total_cents: invoice.usage_total_cents,
+      amount_cents: invoice.amount_cents,
+      allocations: pendingAllocations,
+      lines: invoice.lines,
+      excluded_voided_checks: invoice.excluded_voided_checks,
+    } : null,
+    current_amount_due_cents: invoice.ok ? invoice.amount_cents : 0,
+    pull_preview: pullPreview.ok ? {
+      billing_period: pullPreview.billing_period,
+      maintenance_rate_cents: pullPreview.maintenance_rate_cents,
+      discount_cents: pullPreview.discount_cents,
+      maintenance_net_cents: pullPreview.maintenance_net_cents,
+      check_count: pullPreview.check_count,
+      check_usage_cents: pullPreview.check_usage_cents,
+      next_day_count: pullPreview.next_day_count,
+      next_day_usage_cents: pullPreview.next_day_usage_cents,
+      same_day_count: pullPreview.same_day_count,
+      same_day_usage_cents: pullPreview.same_day_usage_cents,
+      usage_total_cents: pullPreview.usage_total_cents,
+      amount_cents: pullPreview.amount_cents,
+    } : null,
+    authorization: ctx.authorization,
+    funding_source_last4: ctx.authorization?.account_number_last4 || null,
+    destination: dest.ok ? {
+      accountId: dest.accountId,
+      paymentMethodId: dest.paymentMethodId,
+      label: dest.label,
+      environment: dest.environment,
+      source: dest.source || 'explicit',
+      firstWalletFallback: false,
+    } : { error: dest.error, reason: dest.reason, firstWalletFallback: false },
+    readiness: {
+      ready: readiness.ready,
+      reasons: readiness.reasons || [],
+    },
+    last_charge: last,
+    pending_charge: pending,
+    settled_charges: settled,
+    failed_charges: failed,
+    returned_charges: returned,
+    history,
+    methods,
+  };
 }

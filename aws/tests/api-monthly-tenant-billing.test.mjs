@@ -11,15 +11,28 @@ import {
 } from '../functions/api/tenant-billing-destination.mjs';
 import {
   applyBillingProviderEvent,
+  assembleInvoiceTotals,
   billingIdempotencyKey,
+  buildConsolidatedInvoice,
+  buildTenantBillingSnapshot,
   chargeTenantPeriod,
+  collectionPeriodKey,
   createOrGetOccurrence,
+  DEFAULT_CHECK_RATE_CENTS,
+  DEFAULT_NEXT_DAY_RATE_CENTS,
+  DEFAULT_SAME_DAY_RATE_CENTS,
+  defaultPullPeriodKey,
   evaluateBillingReadiness,
+  feeTypeForTransfer,
   netFeeCents,
   periodKey,
+  resolveCheckRateCents,
+  resolveNextDayRateCents,
+  resolveSameDayRateCents,
   runMonthlyBillingScheduler,
   saveBillingAuthorization,
   saveBillingSettings,
+  transferIsQualifying,
 } from '../functions/api/tenant-billing-engine.mjs';
 import {
   handleMonthlyBillingScheduled,
@@ -69,12 +82,20 @@ const makeStore = () => ({
     [TENANT_A, {
       id: TENANT_A, name: 'Tenant A', slug: 'a', subscription_status: 'active',
       monthly_rate_cents: 10000, referral_discount_cents: 0, is_founding_partner: false,
+      per_check_rate_cents: 400, per_check_billing_enabled: true,
+      next_day_rate_cents: 75, same_day_rate_cents: 100,
     }],
     [TENANT_B, {
       id: TENANT_B, name: 'Tenant B', slug: 'b', subscription_status: 'active',
       monthly_rate_cents: 7500, referral_discount_cents: 1500, is_founding_partner: true,
+      per_check_rate_cents: 400, per_check_billing_enabled: true,
+      next_day_rate_cents: 75, same_day_rate_cents: 100,
     }],
   ]),
+  checkEvents: [],
+  transfers: [],
+  checks: new Map(),
+  allocations: [],
   settings: new Map(),
   authorizations: new Map(),
   accounts: new Map([
@@ -132,11 +153,10 @@ const mockClient = (store, { platformOwner = true, actorTenant = TENANT_A, actor
     }
     if (text.includes('UPDATE public.tenants SET')) {
       const tenant = store.tenants.get(params[params.length - 1]);
-      if (text.includes('monthly_rate_cents') && text.includes('referral_discount_cents')) {
-        tenant.monthly_rate_cents = params[0];
-        tenant.referral_discount_cents = params[1];
-      } else if (text.includes('monthly_rate_cents')) tenant.monthly_rate_cents = params[0];
-      else if (text.includes('referral_discount_cents')) tenant.referral_discount_cents = params[0];
+      const columns = [...text.matchAll(/(\w+_cents)\s*=/g)].map((match) => match[1]);
+      columns.forEach((column, index) => {
+        tenant[column] = params[index];
+      });
       return { rows: [tenant] };
     }
     if (text.includes('FROM public.tenant_billing_settings')) {
@@ -206,6 +226,104 @@ const mockClient = (store, { platformOwner = true, actorTenant = TENANT_A, actor
     if (text.includes('WHERE provider_transfer_id')) {
       return { rows: store.occurrences.filter((row) => row.provider_transfer_id === params[0]) };
     }
+    if (text.includes('FROM public.check_billing_events e') && text.includes('LEFT JOIN')) {
+      return {
+        rows: store.checkEvents
+          .filter((row) => row.tenant_id === params[0] && row.event_type === params[1])
+          .filter((row) => {
+            const billed = new Date(row.billed_at).getTime();
+            return billed >= new Date(params[2]).getTime() && billed < new Date(params[3]).getTime();
+          })
+          .map((row) => ({
+            ...row,
+            check_status: store.checks.get(row.check_intake_item_id)?.status || null,
+          })),
+      };
+    }
+    if (text.includes('FROM public.check_billing_events') && text.includes("event_type IN")) {
+      return {
+        rows: store.checkEvents.filter((row) => (
+          row.tenant_id === params[0] && ['moov_next_day', 'moov_same_day', 'moov_instant'].includes(row.event_type)
+        )),
+      };
+    }
+    if (text.includes('FROM public.check_billing_events') && text.includes('payment_transfer_id')) {
+      return {
+        rows: store.checkEvents.filter((row) => row.payment_transfer_id === params[0] && row.event_type === params[1]),
+      };
+    }
+    if (text.includes('FROM public.payment_transfers') && text.includes('COALESCE(completed_at')) {
+      return {
+        rows: store.transfers.filter((row) => {
+          if (row.tenant_id !== params[0]) return false;
+          const at = new Date(row.completed_at || row.created_at).getTime();
+          return at >= new Date(params[1]).getTime() && at < new Date(params[2]).getTime();
+        }),
+      };
+    }
+    if (text.includes('INSERT INTO public.check_billing_events')) {
+      const dup = store.checkEvents.find((row) => (
+        row.payment_transfer_id === params[1] && row.event_type === params[2]
+      ));
+      if (dup) return { rows: [dup] };
+      const row = {
+        id: `evt-${store.checkEvents.length + 1}`,
+        tenant_id: params[0],
+        check_intake_item_id: null,
+        payment_transfer_id: params[1],
+        event_type: params[2],
+        unit_price_cents: params[3],
+        billed_at: params[4],
+        billing_period: params[5],
+        source_kind: params[6],
+        source_id: params[1],
+        invoice_id: null,
+        status: 'recorded',
+      };
+      store.checkEvents.push(row);
+      return { rows: [row] };
+    }
+    if (text.includes('UPDATE public.check_billing_events')) {
+      const row = store.checkEvents.find((item) => item.id === params[0]);
+      if (row && !row.invoice_id) {
+        row.invoice_id = params[1];
+        row.billing_period = row.billing_period || params[2];
+        if (row.status === 'recorded') row.status = 'invoiced';
+      }
+      return { rows: row ? [row] : [] };
+    }
+    if (text.includes('FROM public.tenant_invoice_allocations') && text.includes('source_kind')) {
+      return {
+        rows: store.allocations.filter((row) => (
+          row.source_kind === params[0] && row.source_id === params[1] && row.fee_type === params[2]
+        )),
+      };
+    }
+    if (text.includes('FROM public.tenant_invoice_allocations') && text.includes('invoice_id')) {
+      return {
+        rows: store.allocations.filter((row) => row.invoice_id === params[0]),
+      };
+    }
+    if (text.includes('INSERT INTO public.tenant_invoice_allocations')) {
+      const dup = store.allocations.find((row) => (
+        row.source_kind === params[3] && row.source_id === params[4] && row.fee_type === params[5]
+      ));
+      if (dup) return { rows: [dup] };
+      const row = {
+        id: `alloc-${store.allocations.length + 1}`,
+        invoice_id: params[0],
+        tenant_id: params[1],
+        billing_period: params[2],
+        source_kind: params[3],
+        source_id: params[4],
+        fee_type: params[5],
+        unit_price_cents: params[6],
+        amount_cents: params[7],
+        billed_at: params[8],
+      };
+      store.allocations.push(row);
+      return { rows: [row] };
+    }
     if (text.includes('INSERT INTO public.tenant_maintenance_payments')) {
       const existing = store.occurrences.find((row) => row.tenant_id === params[0] && row.billing_period === params[6]);
       if (existing) return { rows: [existing] };
@@ -227,6 +345,14 @@ const mockClient = (store, { platformOwner = true, actorTenant = TENANT_A, actor
         destination_account_id: params[11],
         destination_payment_method_id: params[12],
         provider_environment: params[13],
+        maintenance_net_cents: params[14],
+        check_usage_cents: params[15],
+        next_day_usage_cents: params[16],
+        same_day_usage_cents: params[17],
+        usage_total_cents: params[18],
+        check_count: params[19],
+        next_day_count: params[20],
+        same_day_count: params[21],
         provider_transfer_id: null,
         submitted_at: null,
         settled_at: null,
@@ -534,7 +660,7 @@ test('platform-owner admin path is required; tenant A cannot debit tenant B', as
     });
     assert.equal(cross.error, 'not_authorized');
     await readyTenant(ownerClient, store, TENANT_A, 'pm-a');
-    const pull = await handleTenantBillingAdmin(identityEvent(OWNER, { action: 'pull', tenant_id: TENANT_A }), {
+    const pull = await handleTenantBillingAdmin(identityEvent(OWNER, { action: 'pull', tenant_id: TENANT_A, confirm: true }), {
       client: ownerClient,
       mapping: { application_user_id: OWNER },
       destination: { ok: true, ...DEST },
@@ -606,7 +732,7 @@ test('admin apply-event moves a simulated occurrence submitted to settled then r
     const store = makeStore();
     const client = mockClient(store);
     await readyTenant(client, store, TENANT_A, 'pm-a');
-    const pull = await handleTenantBillingAdmin(identityEvent(OWNER, { action: 'pull', tenant_id: TENANT_A }), {
+    const pull = await handleTenantBillingAdmin(identityEvent(OWNER, { action: 'pull', tenant_id: TENANT_A, confirm: true }), {
       client,
       mapping: { application_user_id: OWNER },
       destination: { ok: true, ...DEST },
@@ -649,8 +775,329 @@ test('schema SQL is additive and unique on tenant plus billing period', () => {
   assert.doesNotMatch(sql, /ALTER TABLE public\.checkalt/i);
 });
 
+test('SQL 44 is additive with uniqueness for checks, transfers, allocations, and invoices', () => {
+  const sql = readFileSync(path.join(ROOT, 'rls/sql/44_consolidated_monthly_tenant_billing.sql'), 'utf8');
+  assert.match(sql, /ADD COLUMN IF NOT EXISTS next_day_rate_cents/);
+  assert.match(sql, /ADD COLUMN IF NOT EXISTS same_day_rate_cents/);
+  assert.match(sql, /DEFAULT 75/);
+  assert.match(sql, /DEFAULT 100/);
+  assert.match(sql, /check_billing_events_check_processing_uidx/);
+  assert.match(sql, /check_billing_events_transfer_fee_uidx/);
+  assert.match(sql, /tenant_invoice_allocations_unique_source/);
+  assert.match(sql, /CREATE TABLE IF NOT EXISTS public\.tenant_invoice_allocations/);
+  assert.match(sql, /check_usage_cents/);
+  assert.match(sql, /next_day_usage_cents/);
+  assert.match(sql, /same_day_usage_cents/);
+  assert.doesNotMatch(sql, /DROP TABLE/);
+  assert.doesNotMatch(sql, /ALTER TABLE public\.checkalt/i);
+});
+
 test('net fee and idempotency identity are period-based', () => {
   assert.equal(netFeeCents(10000, 2500), 7500);
   assert.equal(netFeeCents(1000, 5000), 0);
   assert.equal(billingIdempotencyKey(TENANT_A, '2026-09'), `billing:${TENANT_A}:2026-09`);
 });
+
+const seedCheck = (store, { id, tenantId = TENANT_A, cents = 400, billedAt = '2026-09-10T12:00:00.000Z', status = 'deposited' }) => {
+  store.checks.set(id, { id, status, tenant_id: tenantId });
+  store.checkEvents.push({
+    id: `evt-${id}`,
+    tenant_id: tenantId,
+    check_intake_item_id: id,
+    event_type: 'check_processing',
+    unit_price_cents: cents,
+    billed_at: billedAt,
+    billing_period: '2026-09',
+    source_kind: 'check_processing',
+    source_id: id,
+    invoice_id: null,
+    status: 'recorded',
+    payment_transfer_id: null,
+  });
+};
+
+const seedTransfer = (store, {
+  id, tenantId = TENANT_A, status = 'completed', speed = 'standard',
+  requestedSpeed = speed, completedAt = '2026-09-12T12:00:00.000Z',
+}) => {
+  store.transfers.push({
+    id,
+    tenant_id: tenantId,
+    status,
+    speed,
+    requested_speed: requestedSpeed,
+    completed_at: status === 'completed' || status === 'settled' ? completedAt : null,
+    created_at: completedAt,
+    provider_transfer_id: status === 'ready' ? null : `moov-${id}`,
+    provider_fee_cents: 25,
+    platform_fee_cents: 0,
+  });
+};
+
+test('default tenant-facing rates are 400 / 75 / 100 cents', () => {
+  assert.equal(DEFAULT_CHECK_RATE_CENTS, 400);
+  assert.equal(DEFAULT_NEXT_DAY_RATE_CENTS, 75);
+  assert.equal(DEFAULT_SAME_DAY_RATE_CENTS, 100);
+  assert.equal(resolveCheckRateCents({}), 400);
+  assert.equal(resolveCheckRateCents({ per_check_rate_cents: 0 }), 400);
+  assert.equal(resolveCheckRateCents({ per_check_rate_cents: 250 }), 250);
+  assert.equal(resolveNextDayRateCents({}), 75);
+  assert.equal(resolveNextDayRateCents({ next_day_rate_cents: 50 }), 50);
+  assert.equal(resolveSameDayRateCents({}), 100);
+  assert.equal(resolveSameDayRateCents({ same_day_rate_cents: 80 }), 80);
+});
+
+test('October 1 UTC selects September billing period and month boundaries stay UTC', () => {
+  assert.equal(collectionPeriodKey(new Date('2026-10-01T00:00:00.000Z')), '2026-09');
+  assert.equal(collectionPeriodKey(new Date('2026-10-01T23:59:59.000Z')), '2026-09');
+  assert.equal(defaultPullPeriodKey(new Date('2026-10-01T00:00:00.000Z'), 1), '2026-09');
+  assert.equal(defaultPullPeriodKey(new Date('2026-09-15T12:00:00.000Z'), 1), '2026-09');
+  assert.equal(periodKey(new Date('2026-09-30T23:59:59.000Z')), '2026-09');
+  assert.equal(periodKey(new Date('2026-10-01T00:00:00.000Z')), '2026-10');
+});
+
+test('transfer qualification: completed bills, failed/ready do not, instant never bills', () => {
+  assert.equal(feeTypeForTransfer({ speed: 'standard' }), 'moov_next_day');
+  assert.equal(feeTypeForTransfer({ requested_speed: 'same_day' }), 'moov_same_day');
+  assert.equal(feeTypeForTransfer({ speed: 'instant' }), null);
+  assert.equal(transferIsQualifying({ status: 'completed', completed_at: '2026-09-01T00:00:00Z' }), true);
+  assert.equal(transferIsQualifying({ status: 'failed' }), false);
+  assert.equal(transferIsQualifying({ status: 'ready' }), false);
+  assert.equal(transferIsQualifying({ status: 'returned', completed_at: '2026-09-01T00:00:00Z' }), true);
+});
+
+test('consolidated arithmetic and promotional check / speed rates snapshot historical usage', async () => {
+  const store = makeStore();
+  const client = mockClient(store);
+  store.tenants.get(TENANT_A).monthly_rate_cents = 10000;
+  store.tenants.get(TENANT_A).referral_discount_cents = 500;
+  seedCheck(store, { id: 'c1', cents: 400 });
+  seedCheck(store, { id: 'c2', cents: 400 });
+  seedCheck(store, { id: 'c3', cents: 400 });
+  seedTransfer(store, { id: 'nd1', speed: 'standard' });
+  seedTransfer(store, { id: 'nd2', speed: 'standard', completedAt: '2026-09-13T12:00:00.000Z' });
+  seedTransfer(store, { id: 'sd1', speed: 'same_day', requestedSpeed: 'same_day', completedAt: '2026-09-14T12:00:00.000Z' });
+  const invoice = await buildConsolidatedInvoice(client, { tenantId: TENANT_A, period: '2026-09', persist: true });
+  assert.equal(invoice.maintenance_net_cents, 9500);
+  assert.equal(invoice.check_count, 3);
+  assert.equal(invoice.check_usage_cents, 1200);
+  assert.equal(invoice.next_day_count, 2);
+  assert.equal(invoice.next_day_usage_cents, 150);
+  assert.equal(invoice.same_day_count, 1);
+  assert.equal(invoice.same_day_usage_cents, 100);
+  assert.equal(invoice.amount_cents, 10950);
+
+  store.tenants.get(TENANT_A).next_day_rate_cents = 50;
+  store.tenants.get(TENANT_A).per_check_rate_cents = 250;
+  const again = await buildConsolidatedInvoice(client, { tenantId: TENANT_A, period: '2026-09', persist: true });
+  assert.equal(again.next_day_usage_cents, 150);
+  assert.equal(again.check_usage_cents, 1200);
+  assert.equal(again.amount_cents, 10950);
+
+  seedTransfer(store, { id: 'nd3', speed: 'standard', completedAt: '2026-09-20T12:00:00.000Z' });
+  const later = await buildConsolidatedInvoice(client, { tenantId: TENANT_A, period: '2026-09', persist: true });
+  assert.equal(later.next_day_count, 3);
+  assert.equal(later.next_day_usage_cents, 200);
+});
+
+test('same check and same Moov transfer cannot bill twice; failed and instant create no fee', async () => {
+  const store = makeStore();
+  const client = mockClient(store);
+  seedCheck(store, { id: 'dup-check' });
+  seedCheck(store, { id: 'dup-check' });
+  store.checkEvents = store.checkEvents.slice(0, 1);
+  seedTransfer(store, { id: 'ok-nd', speed: 'standard' });
+  seedTransfer(store, { id: 'fail-nd', speed: 'standard', status: 'failed' });
+  seedTransfer(store, { id: 'instant', speed: 'instant', requestedSpeed: 'instant' });
+  const first = await buildConsolidatedInvoice(client, { tenantId: TENANT_A, period: '2026-09', persist: true });
+  const second = await buildConsolidatedInvoice(client, { tenantId: TENANT_A, period: '2026-09', persist: true });
+  assert.equal(first.check_count, 1);
+  assert.equal(second.check_count, 1);
+  assert.equal(first.next_day_count, 1);
+  assert.equal(second.next_day_count, 1);
+  assert.equal(store.checkEvents.filter((row) => row.event_type === 'moov_next_day').length, 1);
+  assert.equal(store.checkEvents.filter((row) => row.event_type === 'moov_instant').length, 0);
+  assert.equal(first.skipped_transfers.some((row) => row.reason === 'not_qualifying'), true);
+  assert.equal(first.skipped_transfers.some((row) => row.reason === 'instant_or_unknown_speed'), true);
+});
+
+test('voided unallocated check is excluded from invoice creation', async () => {
+  const store = makeStore();
+  const client = mockClient(store);
+  seedCheck(store, { id: 'kept' });
+  seedCheck(store, { id: 'voided-later' });
+  store.checks.get('voided-later').status = 'voided';
+  const invoice = await buildConsolidatedInvoice(client, { tenantId: TENANT_A, period: '2026-09', persist: false });
+  assert.equal(invoice.check_count, 1);
+  assert.equal(invoice.excluded_voided_checks.length, 1);
+});
+
+test('Pull Now posts persisted server total and ignores client-supplied amount', async () => {
+  await withEnv({ AWS_MOOV_MONTHLY_BILLING_ENABLED: 'true', CHECKSOPS_ENV: 'staging' }, async () => {
+    const store = makeStore();
+    const client = mockClient(store);
+    await readyTenant(client, store, TENANT_A, 'pm-a');
+    store.tenants.get(TENANT_A).monthly_rate_cents = 10000;
+    store.tenants.get(TENANT_A).referral_discount_cents = 500;
+    seedCheck(store, { id: 'c1' });
+    seedCheck(store, { id: 'c2' });
+    seedCheck(store, { id: 'c3' });
+    seedTransfer(store, { id: 'nd1' });
+    seedTransfer(store, { id: 'nd2', completedAt: '2026-09-13T12:00:00.000Z' });
+    seedTransfer(store, { id: 'sd1', speed: 'same_day', requestedSpeed: 'same_day', completedAt: '2026-09-14T12:00:00.000Z' });
+    const denied = await handleTenantBillingAdmin(identityEvent(OWNER, {
+      action: 'pull', tenant_id: TENANT_A, period: '2026-09', amount_cents: 1,
+    }), { client, mapping: { application_user_id: OWNER }, destination: { ok: true, ...DEST } });
+    assert.equal(denied.error, 'confirmation_required');
+    const pull = await handleTenantBillingAdmin(identityEvent(OWNER, {
+      action: 'pull', tenant_id: TENANT_A, period: '2026-09', confirm: true, amount_cents: 1,
+    }), { client, mapping: { application_user_id: OWNER }, destination: { ok: true, ...DEST } });
+    assert.equal(pull.ok, true);
+    assert.equal(pull.pull.occurrence.amount_cents, 10950);
+    assert.equal(pull.amount_cents_posted, 10950);
+    assert.equal(pull.client_amount_ignored, true);
+    const retry = await handleTenantBillingAdmin(identityEvent(OWNER, {
+      action: 'pull', tenant_id: TENANT_A, period: '2026-09', confirm: true,
+    }), { client, mapping: { application_user_id: OWNER }, destination: { ok: true, ...DEST } });
+    assert.equal(retry.pull.duplicate, true);
+    assert.equal(store.occurrences.length, 1);
+    assert.equal(store.occurrences[0].provider_transfer_id, pull.pull.occurrence.provider_transfer_id);
+  });
+});
+
+test('scheduler uses the same chargeTenantPeriod engine and closed period', async () => {
+  await withEnv({ AWS_MOOV_MONTHLY_BILLING_ENABLED: 'true', CHECKSOPS_ENV: 'staging' }, async () => {
+    const store = makeStore();
+    const client = mockClient(store);
+    await readyTenant(client, store, TENANT_A, 'pm-a');
+    const scheduled = await runMonthlyBillingScheduler(client, {
+      now: new Date('2026-10-01T00:00:00.000Z'),
+      deps: { destination: { ok: true, ...DEST } },
+    });
+    assert.equal(scheduled.period, '2026-09');
+    assert.equal(scheduled.results[0].ok, true);
+    const again = await chargeTenantPeriod(client, {
+      tenantId: TENANT_A,
+      period: '2026-09',
+      deps: { destination: { ok: true, ...DEST } },
+    });
+    assert.equal(again.duplicate, true);
+    assert.equal(store.occurrences.length, 1);
+  });
+});
+
+test('failed and returned collections preserve allocations and do not recreate usage', async () => {
+  await withEnv({ AWS_MOOV_MONTHLY_BILLING_ENABLED: 'true', CHECKSOPS_ENV: 'staging' }, async () => {
+    const store = makeStore();
+    const client = mockClient(store);
+    await readyTenant(client, store, TENANT_A, 'pm-a');
+    seedCheck(store, { id: 'kept-alloc' });
+    const failed = await chargeTenantPeriod(client, {
+      tenantId: TENANT_A, period: '2026-09',
+      deps: { destination: { ok: true, ...DEST }, simulateResult: 'failed' },
+    });
+    assert.equal(failed.ok, false);
+    assert.equal(failed.occurrence.status, 'failed');
+    const allocCount = store.allocations.length;
+    assert.ok(allocCount >= 1);
+    const retry = await chargeTenantPeriod(client, {
+      tenantId: TENANT_A, period: '2026-09',
+      deps: { destination: { ok: true, ...DEST } },
+    });
+    assert.equal(retry.occurrence.id, failed.occurrence.id);
+    assert.equal(store.allocations.length, allocCount);
+    store.occurrences[0].status = 'submitted';
+    store.occurrences[0].provider_transfer_id = 'moov-ret';
+    const returned = await applyBillingProviderEvent(client, {
+      providerTransferId: 'moov-ret', status: 'transfer.returned', reason: 'R01',
+    });
+    assert.equal(returned.occurrence.status, 'returned');
+    assert.equal(store.allocations.length, allocCount);
+  });
+});
+
+test('legacy period-less $0.01 row is not current pending', async () => {
+  const store = makeStore();
+  const client = mockClient(store);
+  store.occurrences.push({
+    id: '68041b0b-563e-4948-b19c-ce6c0c2e1a07',
+    tenant_id: TENANT_A,
+    amount_cents: 1,
+    billing_period: null,
+    status: 'submitted',
+    provider_transfer_id: null,
+    created_at: '2026-01-01T00:00:00.000Z',
+  });
+  const snap = await buildTenantBillingSnapshot(client, TENANT_A, { ok: true, ...DEST }, {
+    now: new Date('2026-09-15T12:00:00.000Z'),
+  });
+  assert.equal(snap.pending_charge, null);
+  assert.equal(snap.history[0].id, '68041b0b-563e-4948-b19c-ce6c0c2e1a07');
+});
+
+test('tenant isolation and platform-owner rate-edit authorization', async () => {
+  await withEnv({ AWS_MOOV_MONTHLY_BILLING_ENABLED: 'true', CHECKSOPS_ENV: 'staging' }, async () => {
+    const store = makeStore();
+    const ownerClient = mockClient(store, { platformOwner: true });
+    const staffClient = mockClient(store, { platformOwner: false, actorTenant: TENANT_A, actorRole: 'admin' });
+    seedCheck(store, { id: 'a-only', tenantId: TENANT_A });
+    seedCheck(store, { id: 'b-only', tenantId: TENANT_B });
+    const a = await buildConsolidatedInvoice(ownerClient, { tenantId: TENANT_A, period: '2026-09' });
+    const b = await buildConsolidatedInvoice(ownerClient, { tenantId: TENANT_B, period: '2026-09' });
+    assert.equal(a.check_count, 1);
+    assert.equal(b.check_count, 1);
+    const denied = await handleTenantBillingAdmin(identityEvent(STAFF, {
+      action: 'update', tenant_id: TENANT_A, next_day_rate_cents: 50,
+    }, 'staff-a@example.com'), {
+      client: staffClient,
+      mapping: { application_user_id: STAFF },
+    });
+    assert.equal(denied.error, 'platform_owner_required');
+    const saved = await handleTenantBillingAdmin(identityEvent(OWNER, {
+      action: 'update', tenant_id: TENANT_A, next_day_rate_cents: 50, same_day_rate_cents: 80, per_check_rate_cents: 250,
+    }), {
+      client: ownerClient,
+      mapping: { application_user_id: OWNER },
+      destination: { ok: true, ...DEST },
+    });
+    assert.equal(saved.ok, true);
+    assert.equal(store.tenants.get(TENANT_A).next_day_rate_cents, 50);
+    assert.equal(store.tenants.get(TENANT_A).same_day_rate_cents, 80);
+    assert.equal(store.tenants.get(TENANT_A).per_check_rate_cents, 250);
+    const view = await handleTenantBillingAuthorize(identityEvent(STAFF, {
+      action: 'snapshot', tenant_id: TENANT_A,
+    }, 'staff-a@example.com'), {
+      client: staffClient,
+      mapping: { application_user_id: STAFF },
+      destination: { ok: true, ...DEST },
+    });
+    assert.equal(view.ok, true);
+    assert.equal(view.instant_enabled, false);
+    assert.equal(view.instant_rate_cents, null);
+  });
+});
+
+test('shared money-movement files were not modified by consolidated billing', () => {
+  const money = readFileSync(path.join(ROOT, 'functions/api/providers/parity/moov-money.mjs'), 'utf8');
+  const router = readFileSync(path.join(ROOT, 'functions/api/providers/parity/rail-router.mjs'), 'utf8');
+  assert.doesNotMatch(money, /buildConsolidatedInvoice/);
+  assert.doesNotMatch(router, /tenant-billing-engine/);
+  const ui = readFileSync(path.resolve(ROOT, '../src/components/admin/MonthlyTenantBillingPanel.tsx'), 'utf8');
+  assert.match(ui, /Instant is not offered/);
+  assert.doesNotMatch(ui, /instant_rate/);
+  assert.match(ui, /Same Day rate/);
+});
+
+test('assembleInvoiceTotals matches the $109.50 staging acceptance example', () => {
+  const totals = assembleInvoiceTotals({
+    tenant: { monthly_rate_cents: 10000, referral_discount_cents: 500, per_check_rate_cents: 400, next_day_rate_cents: 75, same_day_rate_cents: 100 },
+    period: '2026-09',
+    checks: [{ unit_price_cents: 400 }, { unit_price_cents: 400 }, { unit_price_cents: 400 }],
+    nextDay: [{ unit_price_cents: 75 }, { unit_price_cents: 75 }],
+    sameDay: [{ unit_price_cents: 100 }],
+  });
+  assert.equal(totals.amount_cents, 10950);
+  assert.equal(totals.maintenance_net_cents, 9500);
+  assert.equal(totals.usage_total_cents, 1450);
+});
+

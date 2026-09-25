@@ -10,6 +10,8 @@ import { BarChart3, Receipt, Landmark, ArrowDownCircle, CheckCircle2, Calendar }
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 import { TenantAutoApproveCard } from "./TenantAutoApproveCard";
+import { ConsolidatedInvoicePreview } from "./ConsolidatedInvoicePreview";
+import { invokeTenantBillingSnapshot } from "@/lib/billing/tenantBilling";
 
 
 export function TenantUsageTracker() {
@@ -24,6 +26,16 @@ export function TenantUsageTracker() {
     d.setDate(1);
     d.setMonth(d.getMonth() - i);
     return format(d, "yyyy-MM");
+  });
+
+  const { data: billingSnapshot } = useQuery({
+    queryKey: ["tenant-billing-snapshot", tenant?.id],
+    queryFn: async () => {
+      const result = await invokeTenantBillingSnapshot(tenant!.id);
+      if (!result.ok) throw new Error(result.error);
+      return result.data;
+    },
+    enabled: !!tenant?.id,
   });
 
   const { data: usage, isLoading: usageLoading } = useQuery({
@@ -90,8 +102,26 @@ export function TenantUsageTracker() {
     .filter((f: any) => f.status === "settled")
     .reduce((sum: number, f: any) => sum + Number(f.payment_amount), 0);
 
+  const invoice = billingSnapshot?.invoice;
+
   return (
     <div className="space-y-6">
+      {invoice && (
+        <div className="space-y-2">
+          <ConsolidatedInvoicePreview
+            invoice={invoice}
+            title={`Current amount due · ${invoice.billing_period}`}
+            fundingLast4={billingSnapshot?.funding_source_last4 || billingSnapshot?.authorization?.account_number_last4}
+            destinationLabel={billingSnapshot?.destination?.label || "ChecksOps merchant"}
+          />
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs text-muted-foreground">
+            <div>Your check rate: {formatCurrency((billingSnapshot?.per_check_rate_cents || 0) / 100)}</div>
+            <div>Next Day: {formatCurrency((billingSnapshot?.next_day_rate_cents || 0) / 100)}</div>
+            <div>Same Day: {formatCurrency((billingSnapshot?.same_day_rate_cents || 0) / 100)}</div>
+            <div>Billing date: {billingSnapshot?.next_billing_date || "—"}</div>
+          </div>
+        </div>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="bg-gradient-to-br from-primary/10 to-blue-500/5 border-primary/20">
           <CardHeader className="pb-2">

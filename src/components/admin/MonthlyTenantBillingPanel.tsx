@@ -7,7 +7,9 @@ import { Switch } from "@/components/ui/switch";
 import { SectionCard } from "@/components/settings/SectionCard";
 import { Loader2, Banknote, ShieldCheck } from "lucide-react";
 import { toast as sonnerToast } from "sonner";
+import { ConsolidatedInvoicePreview } from "@/components/billing/ConsolidatedInvoicePreview";
 import {
+  billingPeriodLabel,
   billingStatusLabel,
   invokeTenantBillingAdmin,
   invokeTenantBillingAuthorize,
@@ -24,6 +26,8 @@ type Method = {
   can_send: boolean;
 };
 
+const dollarsToCents = (value: string) => Math.round(parseFloat(value || "0") * 100);
+
 export function MonthlyTenantBillingPanel({
   tenantId,
   tenantName,
@@ -39,12 +43,29 @@ export function MonthlyTenantBillingPanel({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [pulling, setPulling] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [rate, setRate] = useState("0.00");
   const [discount, setDiscount] = useState("0.00");
+  const [checkRate, setCheckRate] = useState("4.00");
+  const [nextDayRate, setNextDayRate] = useState("0.75");
+  const [sameDayRate, setSameDayRate] = useState("1.00");
   const [day, setDay] = useState(1);
   const [enabled, setEnabled] = useState(false);
   const [selectedMethod, setSelectedMethod] = useState("");
   const [fundingMethods, setFundingMethods] = useState<Method[]>(methods);
+
+  const applySnapshot = (snapshot: TenantBillingSnapshot) => {
+    setData(snapshot);
+    setRate(((snapshot.monthly_rate_cents || 0) / 100).toFixed(2));
+    setDiscount(((snapshot.referral_discount_cents || 0) / 100).toFixed(2));
+    setCheckRate(((snapshot.per_check_rate_cents || 400) / 100).toFixed(2));
+    setNextDayRate(((snapshot.next_day_rate_cents || 75) / 100).toFixed(2));
+    setSameDayRate(((snapshot.same_day_rate_cents || 100) / 100).toFixed(2));
+    setDay(snapshot.billing_day_of_month || 1);
+    setEnabled(snapshot.billing_enabled === true);
+    setSelectedMethod(snapshot.authorization?.provider_payment_method_id || "");
+    setFundingMethods(Array.isArray(snapshot.methods) ? snapshot.methods : methods);
+  };
 
   const load = async () => {
     setLoading(true);
@@ -54,13 +75,7 @@ export function MonthlyTenantBillingPanel({
       setLoading(false);
       return;
     }
-    setData(result.data);
-    setRate(((result.data.monthly_rate_cents || 0) / 100).toFixed(2));
-    setDiscount(((result.data.referral_discount_cents || 0) / 100).toFixed(2));
-    setDay(result.data.billing_day_of_month || 1);
-    setEnabled(result.data.billing_enabled === true);
-    setSelectedMethod(result.data.authorization?.provider_payment_method_id || "");
-    setFundingMethods(Array.isArray(result.data.methods) ? result.data.methods : methods);
+    applySnapshot(result.data);
     setLoading(false);
   };
 
@@ -71,26 +86,37 @@ export function MonthlyTenantBillingPanel({
     const result = await invokeTenantBillingAdmin({
       action: "update",
       tenant_id: tenantId,
-      monthly_rate_cents: Math.round(parseFloat(rate || "0") * 100),
-      referral_discount_cents: Math.round(parseFloat(discount || "0") * 100),
+      monthly_rate_cents: dollarsToCents(rate),
+      referral_discount_cents: dollarsToCents(discount),
+      per_check_rate_cents: dollarsToCents(checkRate),
+      next_day_rate_cents: dollarsToCents(nextDayRate),
+      same_day_rate_cents: dollarsToCents(sameDayRate),
       billing_enabled: enabled,
       billing_day_of_month: day,
     });
     setSaving(false);
     if (!result.ok) return sonnerToast.error(result.error);
-    setData(result.data);
+    applySnapshot(result.data);
     onRateSaved?.(result.data.monthly_rate_cents, result.data.referral_discount_cents);
-    sonnerToast.success("Monthly subscription billing saved");
+    sonnerToast.success("Monthly tenant billing saved");
   };
 
   const pullNow = async () => {
     setPulling(true);
-    const result = await invokeTenantBillingAdmin({ action: "pull", tenant_id: tenantId });
+    const result = await invokeTenantBillingAdmin({
+      action: "pull",
+      tenant_id: tenantId,
+      confirm: true,
+    });
     setPulling(false);
+    setConfirmOpen(false);
     if (!result.ok) return sonnerToast.error(result.error);
-    setData(result.data);
+    applySnapshot(result.data);
+    const posted = (result.data as any).amount_cents_posted
+      ?? (result.data.pull as any)?.occurrence?.amount_cents
+      ?? result.data.pull_preview?.amount_cents;
     const status = (result.data.pull as any)?.occurrence?.status || (result.data.pull as any)?.reason;
-    sonnerToast.success(`Monthly pull ${status || "submitted"} — ${money(result.data.net_fee_cents)}`);
+    sonnerToast.success(`Consolidated pull ${status || "submitted"} — ${money(posted)}`);
     load();
   };
 
@@ -103,21 +129,23 @@ export function MonthlyTenantBillingPanel({
       auto_debit_enabled: true,
     });
     if (!result.ok) return sonnerToast.error(result.error);
-    sonnerToast.success("ACH authorization recorded for monthly subscription billing");
+    sonnerToast.success("ACH authorization recorded for monthly tenant billing");
     load();
   };
 
   const history = data?.history || [];
-  const settled = history.filter((row) => row.status === "settled");
-  const failed = history.filter((row) => row.status === "failed");
-  const returned = history.filter((row) => row.status === "returned");
+  const settled = data?.settled_charges || history.filter((row) => row.status === "settled");
+  const failed = data?.failed_charges || history.filter((row) => row.status === "failed");
+  const returned = data?.returned_charges || history.filter((row) => row.status === "returned");
+  const invoice = data?.invoice;
+  const pullPreview = data?.pull_preview || invoice;
 
   return (
     <SectionCard
-      title="Monthly subscription billing"
+      title="Monthly tenant billing"
       icon={<Banknote className="h-4 w-4 text-sky-500" />}
       accent="bg-gradient-to-r from-sky-500 to-sky-500/30"
-      description={`ChecksOps platform subscription for ${tenantName}. Separate from insurance check processing and disbursement.`}
+      description={`Consolidated ChecksOps invoice for ${tenantName}: maintenance, check processing, Next Day, and Same Day. Instant is not offered.`}
     >
       {loading || !data ? (
         <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
@@ -125,12 +153,14 @@ export function MonthlyTenantBillingPanel({
         <div className="space-y-5">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="rounded-lg border p-3">
-              <div className="text-[10px] uppercase text-muted-foreground">Monthly fee</div>
-              <div className="text-lg font-semibold">{money(data.monthly_rate_cents)}</div>
+              <div className="text-[10px] uppercase text-muted-foreground">Current period</div>
+              <div className="text-lg font-semibold">{billingPeriodLabel(data.current_period)}</div>
+              <div className="text-[10px] text-muted-foreground">Collection closes {billingPeriodLabel(data.collection_period)}</div>
             </div>
             <div className="rounded-lg border p-3">
-              <div className="text-[10px] uppercase text-muted-foreground">Discount / net</div>
-              <div className="text-lg font-semibold">{money(data.referral_discount_cents)} / {money(data.net_fee_cents)}</div>
+              <div className="text-[10px] uppercase text-muted-foreground">Current amount due</div>
+              <div className="text-lg font-semibold">{money(data.current_amount_due_cents ?? invoice?.amount_cents)}</div>
+              <div className="text-[10px] text-muted-foreground">Server invoice, not a browser total</div>
             </div>
             <div className="rounded-lg border p-3">
               <div className="text-[10px] uppercase text-muted-foreground">Billing</div>
@@ -146,16 +176,38 @@ export function MonthlyTenantBillingPanel({
             </div>
           </div>
 
+          {invoice && (
+            <ConsolidatedInvoicePreview
+              invoice={invoice}
+              fundingLast4={data.funding_source_last4 || data.authorization?.account_number_last4}
+              destinationLabel={data.destination?.label || "ChecksOps merchant"}
+            />
+          )}
+
           <div className="grid md:grid-cols-2 gap-4">
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <Label className="text-xs">Monthly rate</Label>
-                  <Input type="number" step="0.01" value={rate} onChange={(e) => setRate(e.target.value)} />
+                  <Label className="text-xs">Monthly maintenance</Label>
+                  <Input type="number" step="0.01" min="0" value={rate} onChange={(e) => setRate(e.target.value)} />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Referral discount</Label>
-                  <Input type="number" step="0.01" value={discount} onChange={(e) => setDiscount(e.target.value)} />
+                  <Input type="number" step="0.01" min="0" value={discount} onChange={(e) => setDiscount(e.target.value)} />
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Per-check rate</Label>
+                  <Input type="number" step="0.01" min="0" value={checkRate} onChange={(e) => setCheckRate(e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Next Day rate</Label>
+                  <Input type="number" step="0.01" min="0" value={nextDayRate} onChange={(e) => setNextDayRate(e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Same Day rate</Label>
+                  <Input type="number" step="0.01" min="0" value={sameDayRate} onChange={(e) => setSameDayRate(e.target.value)} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3 items-end">
@@ -170,7 +222,7 @@ export function MonthlyTenantBillingPanel({
               </div>
               <Button onClick={save} disabled={saving}>
                 {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Save subscription billing
+                Save billing rates
               </Button>
             </div>
 
@@ -197,7 +249,7 @@ export function MonthlyTenantBillingPanel({
                 <Button size="sm" variant="outline" onClick={authorize} disabled={!selectedMethod}>
                   <ShieldCheck className="w-4 h-4 mr-1" /> Authorize ACH
                 </Button>
-                <Button size="sm" onClick={pullNow} disabled={pulling || !data.readiness.ready}>
+                <Button size="sm" onClick={() => setConfirmOpen(true)} disabled={pulling || !data.readiness.ready}>
                   {pulling ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
                   Pull now
                 </Button>
@@ -208,30 +260,66 @@ export function MonthlyTenantBillingPanel({
             </div>
           </div>
 
+          {confirmOpen && pullPreview && (
+            <div className="rounded-lg border border-sky-500/40 p-4 space-y-3 bg-sky-500/5">
+              <div className="text-sm font-semibold">Confirm Pull Now</div>
+              <ConsolidatedInvoicePreview
+                invoice={pullPreview}
+                title={`Pull ${billingPeriodLabel(pullPreview.billing_period)} invoice`}
+                fundingLast4={data.funding_source_last4 || data.authorization?.account_number_last4}
+                destinationLabel={data.destination?.label || "ChecksOps merchant"}
+              />
+              <div className="flex gap-2">
+                <Button onClick={pullNow} disabled={pulling}>
+                  {pulling && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  Collect {money(pullPreview.amount_cents)}
+                </Button>
+                <Button variant="outline" onClick={() => setConfirmOpen(false)} disabled={pulling}>Cancel</Button>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-            <div>Last charge: {data.last_charge ? `${money(data.last_charge.amount_cents)} · ${billingStatusLabel(data.last_charge.status)}` : "—"}</div>
-            <div>Current / pending: {data.pending_charge ? `${money(data.pending_charge.amount_cents)} · ${billingStatusLabel(data.pending_charge.status)}` : "None"}</div>
+            <div>Last collection: {data.last_charge ? `${money(data.last_charge.amount_cents)} · ${billingStatusLabel(data.last_charge.status)}` : "—"}</div>
+            <div>Pending collection: {data.pending_charge ? `${money(data.pending_charge.amount_cents)} · ${billingStatusLabel(data.pending_charge.status)}` : "None"}</div>
             <div>Settled: {settled.length}</div>
             <div>Failed / returned: {failed.length} / {returned.length}</div>
           </div>
 
+          {invoice?.allocations && invoice.allocations.length > 0 && (
+            <div>
+              <h4 className="text-sm font-semibold mb-2">Invoice allocations</h4>
+              <div className="border rounded-md divide-y max-h-40 overflow-y-auto">
+                {invoice.allocations.map((row, index) => (
+                  <div key={`${row.source_id}-${index}`} className="flex items-center justify-between px-3 py-2 text-xs">
+                    <div>
+                      <div className="font-medium">{row.fee_type.replace(/_/g, " ")}</div>
+                      <div className="text-muted-foreground font-mono">{String(row.source_id).slice(0, 8)}</div>
+                    </div>
+                    <div>{money(row.amount_cents)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div>
-            <h4 className="text-sm font-semibold mb-2">Subscription billing history</h4>
+            <h4 className="text-sm font-semibold mb-2">Collection history</h4>
             {history.length === 0 ? (
-              <div className="text-xs text-muted-foreground italic">No monthly subscription charges yet.</div>
+              <div className="text-xs text-muted-foreground italic">No monthly collections yet.</div>
             ) : (
               <div className="border rounded-md divide-y max-h-56 overflow-y-auto">
                 {history.map((row) => (
                   <div key={row.id} className="flex items-center justify-between px-3 py-2 text-xs">
                     <div>
-                      <div className="font-medium">{row.billing_period || "period"} · {money(row.amount_cents)}</div>
+                      <div className="font-medium">{row.billing_period || "legacy / no period"} · {money(row.amount_cents)}</div>
                       <div className="text-muted-foreground">
-                        rate {money(row.monthly_rate_cents)} · discount {money(row.discount_cents)}
+                        maintenance {money(row.monthly_rate_cents)} · discount {money(row.discount_cents)}
+                        {row.check_usage_cents != null ? ` · checks ${money(row.check_usage_cents)}` : ""}
+                        {row.next_day_usage_cents != null ? ` · next day ${money(row.next_day_usage_cents)}` : ""}
+                        {row.same_day_usage_cents != null ? ` · same day ${money(row.same_day_usage_cents)}` : ""}
                         {data.authorization?.account_number_last4
                           ? ` · source ••••${data.authorization.account_number_last4}`
-                          : ""}
-                        {row.destination_account_id
-                          ? ` · dest ${String(row.destination_account_id).slice(0, 8)}`
                           : ""}
                         {row.provider_transfer_id
                           ? ` · ${String(row.provider_transfer_id).startsWith("sim:") ? "simulated" : "moov"} ${row.provider_transfer_id}`
