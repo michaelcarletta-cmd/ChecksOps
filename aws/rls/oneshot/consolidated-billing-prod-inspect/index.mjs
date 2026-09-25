@@ -121,11 +121,17 @@ export const handler = async () => {
         (SELECT count(*) FROM public.payment_transfers) AS transfers
     `))[0];
 
+    const tenantColNames = new Set(
+      (Array.isArray(tenantCols) ? tenantCols : []).map((r) => r.column_name),
+    );
+    const hasNextDay = tenantColNames.has('next_day_rate_cents');
+    const hasSameDay = tenantColNames.has('same_day_rate_cents');
     const freedom = (await q(client, `
       SELECT t.id, t.slug, t.name, t.subscription_status,
              t.monthly_rate_cents, t.referral_discount_cents,
              t.per_check_rate_cents, t.per_check_billing_enabled,
-             t.next_day_rate_cents, t.same_day_rate_cents,
+             ${hasNextDay ? 't.next_day_rate_cents' : 'NULL::int AS next_day_rate_cents'},
+             ${hasSameDay ? 't.same_day_rate_cents' : 'NULL::int AS same_day_rate_cents'},
              s.billing_enabled, s.billing_day_of_month, s.next_period_start,
              a.auto_debit_enabled, a.ach_authorized_at IS NOT NULL AS ach_authorized,
              a.account_number_last4, a.provider_account_id, a.provider_payment_method_id,
@@ -168,6 +174,28 @@ export const handler = async () => {
         AND billed_at >= '2026-09-01T00:00:00.000Z'
         AND billed_at < '2026-10-01T00:00:00.000Z'
     `, [FREEDOM]);
+    const septCheckIds = await q(client, `
+      SELECT check_intake_item_id, unit_price_cents, status, billed_at
+      FROM public.check_billing_events
+      WHERE tenant_id = $1::uuid
+        AND event_type = 'check_processing'
+        AND billed_at >= '2026-09-01T00:00:00.000Z'
+        AND billed_at < '2026-10-01T00:00:00.000Z'
+      ORDER BY billed_at
+      LIMIT 30
+    `, [FREEDOM]);
+    const depositedWithEvents = await q(client, `
+      SELECT
+        (SELECT count(*)::int FROM public.check_intake_items
+          WHERE tenant_id = $1::uuid AND lower(status) = 'deposited') AS deposited_checks,
+        (SELECT count(*)::int FROM public.check_billing_events
+          WHERE tenant_id = $1::uuid AND event_type = 'check_processing') AS processing_events
+    `, [FREEDOM]);
+    const transferTables = await q(client, `
+      SELECT table_name FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name ~* 'transfer'
+      ORDER BY 1
+    `);
     const eventTypes = await q(client, `
       SELECT event_type, count(*)::int AS n
       FROM public.check_billing_events
@@ -278,6 +306,9 @@ export const handler = async () => {
         byStatus: eventsByStatus,
         byMonth: eventsByMonth,
         september: Array.isArray(septEvents) ? septEvents[0] : septEvents,
+        septemberCheckIds: septCheckIds,
+        depositedWithEvents: Array.isArray(depositedWithEvents) ? depositedWithEvents[0] : depositedWithEvents,
+        transferTables,
         byType: eventTypes,
       },
       freedomTransfersSeptember: {
@@ -292,9 +323,19 @@ export const handler = async () => {
         duplicateTransferFee: Array.isArray(dupTransferFee) ? dupTransferFee.length : dupTransferFee,
         duplicateSourceFee: Array.isArray(dupSourceFee) ? dupSourceFee.length : dupSourceFee,
         duplicateCheckProcessingRows: Array.isArray(dupCheckProcessing) ? dupCheckProcessing.slice(0, 5) : null,
+        transferFeeColumnMissing: Boolean(dupTransferFee?.error && /payment_transfer_id/.test(dupTransferFee.error)),
+        sourceFeeColumnsMissing: Boolean(dupSourceFee?.error && /source_kind|source_id/.test(dupSourceFee.error)),
+        // New SQL 44 unique indexes are partial and only cover newly added nullable
+        // columns. Missing columns mean every existing row will be NULL and excluded.
         safe: Array.isArray(dupCheckProcessing) && dupCheckProcessing.length === 0
-          && Array.isArray(dupTransferFee) && dupTransferFee.length === 0
-          && Array.isArray(dupSourceFee) && dupSourceFee.length === 0,
+          && (
+            (Array.isArray(dupTransferFee) && dupTransferFee.length === 0)
+            || Boolean(dupTransferFee?.error && /payment_transfer_id/.test(dupTransferFee.error))
+          )
+          && (
+            (Array.isArray(dupSourceFee) && dupSourceFee.length === 0)
+            || Boolean(dupSourceFee?.error && /source_kind|source_id/.test(dupSourceFee.error))
+          ),
       },
       sql44Present,
     };
