@@ -50,23 +50,7 @@ const api = async (pathName, { token, body, method = 'POST' } = {}) => {
   return { ok: res.ok && data?.ok !== false && data?.success !== false, status: res.status, data };
 };
 
-const persistTenantSql = (tenantId) => `
-UPDATE public.tenants SET
-  is_test_account = true,
-  moov_environment = 'sandbox',
-  subscription_status = 'active',
-  name = '${NAME}'
-WHERE id = '${tenantId}'::uuid;
-
-INSERT INTO public.tenant_users (user_id, tenant_id, role)
-SELECT '${OWNER}'::uuid, '${tenantId}'::uuid, 'admin'
-WHERE NOT EXISTS (
-  SELECT 1 FROM public.tenant_users
-  WHERE user_id = '${OWNER}'::uuid AND tenant_id = '${tenantId}'::uuid
-);
-`;
-
-const persistHandler = (tenantId) => `import fs from 'node:fs';
+const persistHandler = () => `import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
@@ -86,29 +70,56 @@ export const handler = async () => {
   });
   await client.connect();
   try {
-    await client.query(\`${persistTenantSql(tenantId).replace(/`/g, '\\`')}\`);
+    await client.query('SET default_transaction_read_only = off');
+    const existing = (await client.query(
+      "SELECT id FROM public.tenants WHERE slug = $1 LIMIT 1",
+      ['${SLUG}']
+    )).rows[0];
+    const created = !existing;
+    const tenantId = existing?.id || (await client.query(
+      "INSERT INTO public.tenants (name, slug) VALUES ($1, $2) RETURNING id",
+      ['${NAME}', '${SLUG}']
+    )).rows[0].id;
+    await client.query(
+      \`UPDATE public.tenants SET
+         is_test_account = true,
+         moov_environment = 'sandbox',
+         subscription_status = 'active',
+         name = $2
+       WHERE id = $1::uuid\`,
+      [tenantId, '${NAME}']
+    );
+    await client.query(
+      \`INSERT INTO public.tenant_users (user_id, tenant_id, role)
+       SELECT $1::uuid, $2::uuid, 'admin'
+       WHERE NOT EXISTS (
+         SELECT 1 FROM public.tenant_users
+         WHERE user_id = $1::uuid AND tenant_id = $2::uuid
+       )\`,
+      ['${OWNER}', tenantId]
+    );
     const tenant = (await client.query(
       "SELECT id, name, slug, is_test_account, moov_environment, subscription_status FROM public.tenants WHERE id = $1::uuid",
-      ['${tenantId}']
+      [tenantId]
     )).rows[0];
     const membership = (await client.query(
       "SELECT user_id, tenant_id, role FROM public.tenant_users WHERE tenant_id = $1::uuid AND user_id = $2::uuid",
-      ['${tenantId}', '${OWNER}']
+      [tenantId, '${OWNER}']
     )).rows[0] || null;
-    return { ok: true, tenant, membership, synthetic: true };
+    return { ok: true, created, tenant, membership, synthetic: true, neverProductionDebitSource: true };
   } finally {
     await client.end();
   }
 };
 `;
 
-const markTenant = async (tenantId) => {
+const upsertSyntheticTenant = async () => {
   const rehearsal = awsJson(['lambda', 'get-function-configuration', '--function-name', 'checksops-staging-rehearsal-oneshot']);
   const apiCfg = awsJson(['lambda', 'get-function-configuration', '--function-name', API_NAME]);
   const staging = path.join(os.tmpdir(), 'checksops-billing-tenant-mark');
   await rm(staging, { recursive: true, force: true });
   await mkdir(staging, { recursive: true });
-  await writeFile(path.join(staging, 'index.mjs'), persistHandler(tenantId));
+  await writeFile(path.join(staging, 'index.mjs'), persistHandler());
   await writeFile(path.join(staging, 'package.json'), JSON.stringify({
     type: 'module',
     dependencies: { '@aws-sdk/client-secrets-manager': '3.1124.0', pg: '8.23.0' },
@@ -162,33 +173,14 @@ const main = async () => {
   const owner = JSON.parse(await readFile(`${OUT}/.staging-owner.jwt.json`, 'utf8'));
   const token = owner.idToken;
 
-  const existing = await api('/data/query', {
-    token,
-    body: {
-      table: 'tenants',
-      op: 'select',
-      select: 'id,name,slug,subscription_status,is_test_account,moov_environment,monthly_rate_cents',
-      filters: [{ column: 'slug', op: 'eq', value: SLUG }],
-    },
-  });
-  const existingRows = existing.data?.rows || existing.data?.data || [];
-  let tenantId = existingRows[0]?.id || null;
-  let created = false;
+  const marked = await upsertSyntheticTenant();
+  const tenantId = marked.tenant?.id || marked.Payload && JSON.parse(marked.Payload)?.tenant?.id || null;
+  const created = marked.created === true || marked.Payload && JSON.parse(marked.Payload)?.created === true;
   if (!tenantId) {
-    const createdTenant = await api('/data/query', {
-      token,
-      body: { table: 'tenants', op: 'insert', values: { name: NAME, slug: SLUG } },
-    });
-    tenantId = createdTenant.data?.rows?.[0]?.id || createdTenant.data?.data?.[0]?.id || null;
-    created = Boolean(tenantId);
-    if (!tenantId) {
-      await writeFile(`${OUT}/sandbox-tenant-setup.json`, JSON.stringify({ ok: false, step: 'create_tenant', createdTenant }, null, 2));
-      console.log(JSON.stringify({ ok: false, step: 'create_tenant', createdTenant }, null, 2));
-      return;
-    }
+    await writeFile(`${OUT}/sandbox-tenant-setup.json`, JSON.stringify({ ok: false, step: 'create_tenant', marked }, null, 2));
+    console.log(JSON.stringify({ ok: false, step: 'create_tenant', marked }, null, 2));
+    return;
   }
-
-  const marked = await markTenant(tenantId);
   const before = await api('/functions/v1/tenant-billing-admin', {
     token,
     body: { action: 'get', tenant_id: tenantId },
