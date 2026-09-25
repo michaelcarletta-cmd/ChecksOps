@@ -205,22 +205,31 @@ const accountCreate = {
     }
     const accountId = created?.accountID ?? created?.accountId;
     if (!accountId) return fail('Payment provider did not return an account id', 502);
-    const saved = (await client.query(
-      `INSERT INTO public.payment_provider_accounts
-        (tenant_id, provider, environment, provider_account_id, account_type, display_name,
-         onboarding_status, verification_status, provider_metadata, last_synced_at,
-         tos_accepted_at, tos_accepted_by, tos_source)
-       VALUES ($1::uuid, 'moov', $2, $3, 'business', $4, 'onboarding_incomplete', 'not_started', $5::jsonb, now(),
-         ${tosToken ? 'now()' : 'NULL'}, ${tosToken ? '$6::uuid' : 'NULL'}, ${tosToken ? "'tos_drop'" : 'NULL'})
-       ON CONFLICT (tenant_id, provider, environment) DO UPDATE SET
-         provider_account_id = EXCLUDED.provider_account_id,
-         provider_metadata = EXCLUDED.provider_metadata,
-         last_synced_at = now()
-       RETURNING *`,
-      tosToken
-        ? [tenantId, environment, accountId, tenant.name ?? null, JSON.stringify(sanitize(created)), mapping.application_user_id]
-        : [tenantId, environment, accountId, tenant.name ?? null, JSON.stringify(sanitize(created))],
-    )).rows[0];
+    let saved;
+    try {
+      saved = (await client.query(
+        `INSERT INTO public.payment_provider_accounts
+          (tenant_id, provider, environment, provider_account_id, account_type, display_name,
+           onboarding_status, verification_status, provider_metadata, last_synced_at,
+           tos_accepted_at, tos_accepted_by, tos_source)
+         VALUES ($1::uuid, 'moov', $2, $3, 'business', $4, 'onboarding_incomplete', 'not_started', $5::jsonb, now(),
+           ${tosToken ? 'now()' : 'NULL'}, ${tosToken ? '$6::uuid' : 'NULL'}, ${tosToken ? "'tos_drop'" : 'NULL'})
+         ON CONFLICT (tenant_id, provider, environment) DO UPDATE SET
+           provider_account_id = EXCLUDED.provider_account_id,
+           provider_metadata = EXCLUDED.provider_metadata,
+           last_synced_at = now()
+         RETURNING *`,
+        tosToken
+          ? [tenantId, environment, accountId, tenant.name ?? null, JSON.stringify(sanitize(created)), mapping.application_user_id]
+          : [tenantId, environment, accountId, tenant.name ?? null, JSON.stringify(sanitize(created))],
+      )).rows[0];
+    } catch (error) {
+      return fail(error.message, /permission denied/i.test(String(error.message || '')) ? 403 : 500, {
+        recovered_provider_account_id: accountId,
+        needs_privileged_persist: true,
+        liveProviderCalled: true,
+      });
+    }
     await logPaymentEvent(client, {
       tenant_id: tenantId,
       event_type: 'payment_account.created',

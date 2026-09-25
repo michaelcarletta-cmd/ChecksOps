@@ -109,65 +109,120 @@ export const handler = async () => {
        )\`,
       ['${OWNER}', tenantId]
     );
+    const accountId = process.env.MOOV_ACCOUNT_ID || null;
+    let account = null;
+    if (accountId) {
+      account = (await client.query(
+        \`INSERT INTO public.payment_provider_accounts
+           (tenant_id, provider, environment, provider_account_id, account_type, display_name,
+            onboarding_status, verification_status, last_synced_at)
+         VALUES ($1::uuid, 'moov', 'sandbox', $2, 'business', $3, 'onboarding_incomplete', 'not_started', now())
+         ON CONFLICT (tenant_id, provider, environment) DO UPDATE SET
+           provider_account_id = EXCLUDED.provider_account_id,
+           last_synced_at = now()
+         RETURNING id, tenant_id, provider_account_id, environment, onboarding_status\`,
+        [tenantId, accountId, '${NAME}']
+      )).rows[0];
+    }
+    const paymentMethodId = process.env.MOOV_PAYMENT_METHOD_ID || null;
+    let method = null;
+    if (paymentMethodId) {
+      method = (await client.query(
+        \`INSERT INTO public.payment_provider_methods
+           (tenant_id, provider, environment, provider_account_id, provider_bank_account_id,
+            provider_payment_method_id, holder_name, last_four, verification_status,
+            connection_status, can_send, can_receive, is_default, connected_at)
+         VALUES ($1::uuid, 'moov', 'sandbox', $2, $3, $4, $5, $6, 'verified', 'connected', true, true, true, now())
+         ON CONFLICT (provider, environment, provider_bank_account_id) DO UPDATE SET
+           provider_payment_method_id = COALESCE(EXCLUDED.provider_payment_method_id, payment_provider_methods.provider_payment_method_id),
+           connection_status = 'connected',
+           can_send = true,
+           last_four = EXCLUDED.last_four
+         RETURNING provider_payment_method_id, provider_account_id, last_four, connection_status\`,
+        [
+          tenantId,
+          process.env.MOOV_ACCOUNT_ID,
+          process.env.MOOV_BANK_ACCOUNT_ID || paymentMethodId,
+          paymentMethodId,
+          '${NAME}',
+          process.env.MOOV_LAST_FOUR || '9992',
+        ]
+      )).rows[0];
+    }
     const tenant = (await client.query(
-      "SELECT id, name, slug, is_test_account, moov_environment, subscription_status FROM public.tenants WHERE id = $1::uuid",
+      "SELECT id, name, slug, is_test_account, moov_environment, subscription_status, monthly_rate_cents FROM public.tenants WHERE id = $1::uuid",
       [tenantId]
     )).rows[0];
     const membership = (await client.query(
       "SELECT user_id, tenant_id, role FROM public.tenant_users WHERE tenant_id = $1::uuid AND user_id = $2::uuid",
       [tenantId, '${OWNER}']
     )).rows[0] || null;
-    return { ok: true, created, tenant, membership, synthetic: true, neverProductionDebitSource: true };
+    const grants = (await client.query(
+      \`SELECT grantee, privilege_type
+       FROM information_schema.role_table_grants
+       WHERE table_schema = 'public' AND table_name IN ('payment_provider_accounts','payment_provider_methods')
+       ORDER BY table_name, grantee, privilege_type\`
+    )).rows;
+    return { ok: true, created, tenant, membership, account, method, grants, synthetic: true, neverProductionDebitSource: true };
   } finally {
     await client.end();
   }
 };
 `;
 
-const upsertSyntheticTenant = async () => {
+const upsertSyntheticTenant = async ({ accountId = '', paymentMethodId = '', bankAccountId = '', lastFour = '', skipRebuild = false } = {}) => {
   const rehearsal = awsJson(['lambda', 'get-function-configuration', '--function-name', 'checksops-staging-rehearsal-oneshot']);
   const apiCfg = awsJson(['lambda', 'get-function-configuration', '--function-name', API_NAME]);
-  const staging = path.join(os.tmpdir(), 'checksops-billing-tenant-mark');
-  await rm(staging, { recursive: true, force: true });
-  await mkdir(staging, { recursive: true });
-  await writeFile(path.join(staging, 'index.mjs'), persistHandler());
-  await writeFile(path.join(staging, 'package.json'), JSON.stringify({
-    type: 'module',
-    dependencies: { '@aws-sdk/client-secrets-manager': '3.1124.0', pg: '8.23.0' },
-  }));
-  await copyFile(path.join(ROOT, 'aws/rls/oneshot/rds-global-bundle.pem'), path.join(staging, 'rds-global-bundle.pem'));
-  execFileSync('npm', ['install', '--omit=dev'], { cwd: staging, stdio: 'ignore' });
-  const zip = path.join(os.tmpdir(), 'checksops-billing-tenant-mark.zip');
-  await rm(zip, { force: true });
-  execFileSync('zip', ['-qr', zip, '.'], { cwd: staging });
   const env = {
     Variables: {
       ADMIN_SECRET_ARN: rehearsal.Environment?.Variables?.ADMIN_SECRET_ARN,
       RDS_HOST: rehearsal.Environment?.Variables?.RDS_HOST,
       DATABASE_NAME: 'checksops',
+      ...(accountId ? { MOOV_ACCOUNT_ID: accountId } : {}),
+      ...(paymentMethodId ? { MOOV_PAYMENT_METHOD_ID: paymentMethodId } : {}),
+      ...(bankAccountId ? { MOOV_BANK_ACCOUNT_ID: bankAccountId } : {}),
+      ...(lastFour ? { MOOV_LAST_FOUR: lastFour } : {}),
     },
   };
-  try {
-    awsJson(['lambda', 'get-function', '--function-name', ONESHOT]);
-    awsJson(['lambda', 'update-function-code', '--function-name', ONESHOT, '--zip-file', `fileb://${zip}`]);
+  if (!skipRebuild) {
+    const staging = path.join(os.tmpdir(), 'checksops-billing-tenant-mark');
+    await rm(staging, { recursive: true, force: true });
+    await mkdir(staging, { recursive: true });
+    await writeFile(path.join(staging, 'index.mjs'), persistHandler());
+    await writeFile(path.join(staging, 'package.json'), JSON.stringify({
+      type: 'module',
+      dependencies: { '@aws-sdk/client-secrets-manager': '3.1124.0', pg: '8.23.0' },
+    }));
+    await copyFile(path.join(ROOT, 'aws/rls/oneshot/rds-global-bundle.pem'), path.join(staging, 'rds-global-bundle.pem'));
+    execFileSync('npm', ['install', '--omit=dev'], { cwd: staging, stdio: 'ignore' });
+    const zip = path.join(os.tmpdir(), 'checksops-billing-tenant-mark.zip');
+    await rm(zip, { force: true });
+    execFileSync('zip', ['-qr', zip, '.'], { cwd: staging });
+    try {
+      awsJson(['lambda', 'get-function', '--function-name', ONESHOT]);
+      awsJson(['lambda', 'update-function-code', '--function-name', ONESHOT, '--zip-file', `fileb://${zip}`]);
+      waitFn(ONESHOT);
+      awsJson(['lambda', 'update-function-configuration', '--function-name', ONESHOT, '--timeout', '60', '--environment', JSON.stringify(env)]);
+    } catch {
+      const vpc = apiCfg.VpcConfig || {};
+      awsJson([
+        'lambda', 'create-function',
+        '--function-name', ONESHOT,
+        '--runtime', 'nodejs20.x',
+        '--role', rehearsal.Role,
+        '--handler', 'index.handler',
+        '--timeout', '60',
+        '--memory-size', '256',
+        '--zip-file', `fileb://${zip}`,
+        '--environment', JSON.stringify(env),
+        '--vpc-config', `SubnetIds=${(vpc.SubnetIds || []).join(',')},SecurityGroupIds=${(vpc.SecurityGroupIds || []).join(',')}`,
+      ]);
+    }
     waitFn(ONESHOT);
-    awsJson(['lambda', 'update-function-configuration', '--function-name', ONESHOT, '--timeout', '60', '--environment', JSON.stringify(env)]);
-  } catch {
-    const vpc = apiCfg.VpcConfig || {};
-    awsJson([
-      'lambda', 'create-function',
-      '--function-name', ONESHOT,
-      '--runtime', 'nodejs20.x',
-      '--role', rehearsal.Role,
-      '--handler', 'index.handler',
-      '--timeout', '60',
-      '--memory-size', '256',
-      '--zip-file', `fileb://${zip}`,
-      '--environment', JSON.stringify(env),
-      '--vpc-config', `SubnetIds=${(vpc.SubnetIds || []).join(',')},SecurityGroupIds=${(vpc.SecurityGroupIds || []).join(',')}`,
-    ]);
+  } else {
+    awsJson(['lambda', 'update-function-configuration', '--function-name', ONESHOT, '--environment', JSON.stringify(env)]);
+    waitFn(ONESHOT);
   }
-  waitFn(ONESHOT);
   const outFile = path.join(os.tmpdir(), `billing-tenant-mark-${Date.now()}.json`);
   execFileSync(AWS, ['lambda', 'invoke', '--function-name', ONESHOT, outFile]);
   return JSON.parse(fs.readFileSync(outFile, 'utf8'));
@@ -207,10 +262,21 @@ const main = async () => {
       billing_day_of_month: 1,
     },
   });
-  const account = await api('/functions/v1/moov-account-create', {
+  let account = await api('/functions/v1/moov-account-create', {
     token,
     body: { tenant_id: tenantId },
   });
+  const recoveredAccountId = account.data?.recovered_provider_account_id
+    || account.data?.account?.provider_account_id
+    || null;
+  let privilegedAccount = null;
+  if (recoveredAccountId && !account.data?.account?.provider_account_id) {
+    privilegedAccount = await upsertSyntheticTenant({ accountId: recoveredAccountId, skipRebuild: true });
+    account = await api('/functions/v1/moov-account-create', {
+      token,
+      body: { tenant_id: tenantId },
+    });
+  }
   const onboard = await api('/functions/v1/moov-account-onboard', {
     token,
     body: {
@@ -254,9 +320,19 @@ const main = async () => {
     token,
     body: { action: 'get', tenant_id: tenantId },
   });
-  const paymentMethodId = bank.data?.provider_payment_method_id
+  let paymentMethodId = bank.data?.provider_payment_method_id
     || afterBank.data?.methods?.[0]?.provider_payment_method_id
     || null;
+  if (!paymentMethodId && (bank.data?.recovered_provider_payment_method_id || bank.data?.bank_account_id)) {
+    const persistedMethod = await upsertSyntheticTenant({
+      accountId: recoveredAccountId || account.data?.account?.provider_account_id,
+      paymentMethodId: bank.data?.recovered_provider_payment_method_id || bank.data?.provider_payment_method_id,
+      bankAccountId: bank.data?.bank_account_id,
+      lastFour: bank.data?.last_four || '9992',
+      skipRebuild: true,
+    });
+    paymentMethodId = persistedMethod.method?.provider_payment_method_id || paymentMethodId;
+  }
   const authorize = paymentMethodId
     ? await api('/functions/v1/tenant-billing-authorize', {
       token,
@@ -367,6 +443,8 @@ const main = async () => {
     },
     moov: {
       account,
+      privilegedAccount,
+      recoveredAccountId,
       onboard: { ok: onboard.ok, status: onboard.status, error: onboard.data?.error || null },
       synced: { ok: synced.ok, status: synced.status, onboarding: synced.data?.status || null },
       afterBankSync: { ok: afterBankSync.ok, status: afterBankSync.status },
