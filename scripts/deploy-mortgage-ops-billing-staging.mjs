@@ -197,8 +197,11 @@ const main = async () => {
   await assumeRole();
   const baseline = freezeBaseline();
   const overlayOnly = process.argv.includes('--overlay-only');
-  const sql = overlayOnly ? { ok: true, skipped: 'overlay_only' } : await applySqlAndAccept();
-  const overlay = await overlayApi();
+  const acceptOnly = process.argv.includes('--accept-only');
+  const sql = overlayOnly
+    ? { ok: true, skipped: 'overlay_only' }
+    : await applySqlAndAccept(acceptOnly ? 'accept_only' : 'apply_and_accept');
+  const overlay = acceptOnly ? { skipped: 'accept_only' } : await overlayApi();
   const report = {
     generatedAt: new Date().toISOString(),
     productionRecordsMutated: false,

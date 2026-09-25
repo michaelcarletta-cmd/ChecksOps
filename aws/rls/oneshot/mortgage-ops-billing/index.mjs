@@ -105,11 +105,16 @@ const insertClaim = async (client, tenantId, number) => {
   try {
     return await insertDynamic(client, 'claims', {
       tenant_id: tenantId,
+      org_id: tenantId,
       claim_number: number,
       status: 'open',
     });
   } catch {
-    return insertDynamic(client, 'claims', { tenant_id: tenantId, claim_number: number });
+    return insertDynamic(client, 'claims', {
+      tenant_id: tenantId,
+      org_id: tenantId,
+      claim_number: number,
+    });
   }
 };
 
