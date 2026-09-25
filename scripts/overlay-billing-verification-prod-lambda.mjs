@@ -70,10 +70,6 @@ const gitShow = (rel) => execFileSync(
   'git', ['show', `${BASE}:aws/functions/api/${rel}`],
   { cwd: ROOT, encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 },
 );
-const destWithoutVerification = (src) => src
-  .replace(/\n\/\*\* Isolated \$1 billing-verification POST\. Independent of monthly PRODUCTION_POST\. Default false\. \*\/\nexport const billingVerificationPostEnabled = \(\) => \(\n  isTrue\(process\.env\.AWS_MOOV_BILLING_VERIFICATION_POST_ENABLED\)\n\);\n/g, '\n')
-  .replace(/\n\/\*\* Simulate unless the isolated verification gate is explicitly true\. Does not read monthly POST\. \*\/\nexport const billingVerificationShouldSimulate = \(deps = \{\}\) => \{\n  if \(deps\.simulate === true\) return true;\n  if \(deps\.simulate === false\) return false;\n  if \(isTrue\(process\.env\.AWS_MOOV_BILLING_VERIFICATION_SIMULATE\)\) return true;\n  return !billingVerificationPostEnabled\(\);\n\};\n/g, '\n');
-
 const main = async () => {
   await mkdir(OUT, { recursive: true });
   await assumeCursorRole('billing-verification-overlay');
@@ -115,9 +111,11 @@ const main = async () => {
   execFileSync('unzip', ['-qo', zipIn, '-d', beforePkg]);
   execFileSync('unzip', ['-qo', zipIn, '-d', afterPkg]);
 
-  for (const rel of ['tenant-billing-engine.mjs', 'tenant-billing-handlers.mjs']) {
+  for (const rel of OVERLAY) {
     const live = fs.readFileSync(path.join(beforePkg, rel), 'utf8');
+    const workspace = fs.readFileSync(path.join(ROOT, 'aws/functions/api', rel), 'utf8');
     const base = gitShow(rel);
+    if (shaText(live) === shaText(workspace)) continue;
     if (shaText(live) !== shaText(base)) {
       const report = {
         ok: false,
@@ -125,25 +123,12 @@ const main = async () => {
         file: rel,
         liveSha256: shaText(live),
         baseSha256: shaText(base),
+        workspaceSha256: shaText(workspace),
       };
       await writeFile(path.join(OUT, 'lambda-forward-port-stop.json'), JSON.stringify(report, null, 2));
       console.log(JSON.stringify(report, null, 2));
       process.exit(3);
     }
-  }
-  const liveDest = fs.readFileSync(path.join(beforePkg, 'tenant-billing-destination.mjs'), 'utf8');
-  const workspaceDest = fs.readFileSync(path.join(ROOT, 'aws/functions/api/tenant-billing-destination.mjs'), 'utf8');
-  if (shaText(destWithoutVerification(workspaceDest)) !== shaText(liveDest)
-    && shaText(workspaceDest) !== shaText(liveDest)) {
-    const report = {
-      ok: false,
-      error: 'destination_has_unrelated_changes_stop',
-      liveSha256: shaText(liveDest),
-      strippedWorkspaceSha256: shaText(destWithoutVerification(workspaceDest)),
-    };
-    await writeFile(path.join(OUT, 'lambda-destination-stop.json'), JSON.stringify(report, null, 2));
-    console.log(JSON.stringify(report, null, 2));
-    process.exit(3);
   }
 
   const overlayManifest = [];
