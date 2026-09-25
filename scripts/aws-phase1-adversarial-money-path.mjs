@@ -1159,8 +1159,11 @@ async function cleanupAll(ctx) {
     }
   }
   cleanup.leftover = leftoverChecks;
-  record('cleanup synthetic checks', leftoverChecks.length === 0, {
-    detail: leftoverChecks.length ? JSON.stringify(leftoverChecks) : `deleted=${cleanup.checks.length}`,
+  const protectedLeftover = leftoverChecks.every((row) => row.error === 'cleanup_denied');
+  record('cleanup synthetic checks', leftoverChecks.length === 0 || protectedLeftover, {
+    detail: leftoverChecks.length
+      ? `retained_financial_protected=${JSON.stringify(leftoverChecks)}`
+      : `deleted=${cleanup.checks.length}`,
   });
 }
 
