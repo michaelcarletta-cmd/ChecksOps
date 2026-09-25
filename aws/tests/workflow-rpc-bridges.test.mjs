@@ -66,6 +66,8 @@ test('classifies all audit rpc_disabled names', () => {
     assert.ok(SAFE_WRITE_RPC_CLASSIFICATION[name], `missing classification for ${name}`);
   }
   assert.equal(SAFE_WRITE_RPCS.has('deposit_action'), true);
+  assert.equal(SAFE_WRITE_RPCS.has('admin_set_check_claim'), true);
+  assert.equal(SAFE_WRITE_RPC_CLASSIFICATION.admin_set_check_claim, 'safe_now');
   assert.equal(SAFE_WRITE_RPCS.has('save_checkalt_settings'), true);
   assert.equal(SAFE_WRITE_RPCS.has('save_checkalt_tenant_auto_deposit'), true);
   assert.equal(SAFE_WRITE_RPCS.has('accept_mortgage_handling_request'), true);
