@@ -11,7 +11,10 @@ import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-sec
 const { Client } = pg;
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const CA_PATH = path.join(ROOT, 'rds-global-bundle.pem');
-const SQL = fs.readFileSync(path.join(ROOT, '45_mortgage_ops_tenant_billing.sql'), 'utf8');
+const SQL45 = fs.readFileSync(path.join(ROOT, '45_mortgage_ops_tenant_billing.sql'), 'utf8');
+const SQL46 = fs.readFileSync(path.join(ROOT, '46_mortgage_ops_billing_launch.sql'), 'utf8');
+const STAGING_LAUNCH_AT = '2026-09-01T00:00:00.000Z';
+const HISTORICAL_ACCEPTED_AT = '2026-07-15T19:47:15.958Z';
 const FREEDOM = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
 const SLUG = 'synthetic-mortgage-ops-billing';
 const ZERO_SLUG = 'synthetic-mortgage-ops-zero';
@@ -178,8 +181,26 @@ const mortgageEvents = async (client, tenantId) => (
   )).rows
 );
 
+const ensureStagingLaunch = async (client, launchedAt = STAGING_LAUNCH_AT) => {
+  await client.query(
+    `INSERT INTO public.mortgage_ops_billing_launch (singleton, launched_at, environment, note)
+     VALUES (true, $1::timestamptz, 'staging', $2)
+     ON CONFLICT (singleton) DO UPDATE
+       SET launched_at = EXCLUDED.launched_at,
+           note = EXCLUDED.note`,
+    [launchedAt, 'Staging Mortgage Ops usage billing launch. Pre-launch accepted work is never accrued.'],
+  );
+  return (await client.query(
+    `SELECT launched_at, environment, note, created_at
+     FROM public.mortgage_ops_billing_launch
+     WHERE singleton IS TRUE`,
+  )).rows[0];
+};
+
 const applySql = async (client) => {
-  await client.query(SQL);
+  await client.query(SQL45);
+  await client.query(SQL46);
+  const launch = await ensureStagingLaunch(client);
   const tenantCols = (await client.query(`
     SELECT column_name, column_default
     FROM information_schema.columns
@@ -204,7 +225,81 @@ const applySql = async (client) => {
     tenantCols,
     indexes: indexes.map((row) => row.indexname),
     trigger: trigger.map((row) => row.tgname),
-    ok: tenantCols.length === 2 && indexes.length === 2 && trigger.length === 1,
+    launch,
+    ok: tenantCols.length === 2 && indexes.length === 2 && trigger.length === 1 && Boolean(launch?.launched_at),
+  };
+};
+
+const runCutoffProof = async (client) => {
+  const tenantId = await ensureTenant(client, {
+    slug: SLUG,
+    name: NAME,
+    rates: {
+      monthly: 10000, discount: 500, check: 400, nextDay: 75, sameDay: 100,
+      mortgageInitial: 1000, mortgageAdditional: 500,
+    },
+  });
+  const launch = await ensureStagingLaunch(client, new Date().toISOString());
+  const historicalClaim = await insertClaim(client, tenantId, 'SYNTH-MO-CUTOFF-HIST');
+  const historicalCheck = await insertCheck(client, tenantId, historicalClaim.id, 'CUTOFF-HIST');
+  const historicalReq = await insertRequest(client, tenantId, historicalClaim.id, historicalCheck.id);
+  const acceptedHistorical = await acceptRequest(client, historicalReq.id, HISTORICAL_ACCEPTED_AT);
+  const replay = (await client.query(
+    `SELECT public.accrue_mortgage_ops_billing($1::uuid) AS event`,
+    [historicalReq.id],
+  )).rows[0];
+  const historicalEvents = (await client.query(
+    `SELECT id, event_type, unit_price_cents
+     FROM public.check_billing_events
+     WHERE check_intake_item_id = $1::uuid
+       AND event_type IN ('mortgage_ops_initial', 'mortgage_ops_additional_check')`,
+    [historicalCheck.id],
+  )).rows;
+
+  const liveClaim = await insertClaim(client, tenantId, 'SYNTH-MO-CUTOFF-LIVE');
+  const liveCheck = await insertCheck(client, tenantId, liveClaim.id, 'CUTOFF-LIVE');
+  const liveReq = await insertRequest(client, tenantId, liveClaim.id, liveCheck.id);
+  const acceptedLive = await acceptRequest(client, liveReq.id);
+  const liveEvents = (await client.query(
+    `SELECT id, event_type, unit_price_cents, billed_at
+     FROM public.check_billing_events
+     WHERE check_intake_item_id = $1::uuid
+       AND event_type IN ('mortgage_ops_initial', 'mortgage_ops_additional_check')`,
+    [liveCheck.id],
+  )).rows;
+
+  await ensureStagingLaunch(client, STAGING_LAUNCH_AT);
+
+  const ok = historicalEvents.length === 0
+    && !replay?.event
+    && liveEvents.length === 1
+    && liveEvents[0].event_type === 'mortgage_ops_initial'
+    && Number(liveEvents[0].unit_price_cents) === 1000
+    && new Date(acceptedHistorical.accepted_at).getTime() < new Date(launch.launched_at).getTime()
+    && new Date(acceptedLive.accepted_at).getTime() >= new Date(launch.launched_at).getTime();
+
+  return {
+    ok,
+    launch,
+    historical: {
+      requestId: historicalReq.id,
+      checkId: historicalCheck.id,
+      claimId: historicalClaim.id,
+      acceptedAt: acceptedHistorical.accepted_at,
+      replayReturnedEvent: Boolean(replay?.event),
+      billingEvents: historicalEvents.length,
+    },
+    live: {
+      requestId: liveReq.id,
+      checkId: liveCheck.id,
+      claimId: liveClaim.id,
+      acceptedAt: acceptedLive.accepted_at,
+      eventType: liveEvents[0]?.event_type || null,
+      unitPriceCents: liveEvents[0]?.unit_price_cents ?? null,
+    },
+    productionRecordsMutated: false,
+    liveDebitCreated: false,
+    historicalBackfill: false,
   };
 };
 
@@ -481,6 +576,21 @@ export const handler = async () => {
   }
   const { client, host, creds } = packed;
   try {
+    if (ACTION === 'cutoff_proof') {
+      const schema = await applySql(client);
+      const cutoff = await runCutoffProof(client);
+      return {
+        ok: schema.ok === true && cutoff.ok === true,
+        action: ACTION,
+        host,
+        database: process.env.DATABASE_NAME || 'checksops',
+        schema,
+        cutoff,
+        productionRecordsMutated: false,
+        liveDebitCreated: false,
+        historicalBackfill: false,
+      };
+    }
     const schema = ACTION === 'accept_only' ? { ok: true, skipped: true } : await applySql(client);
     const acceptance = ACTION === 'apply_only'
       ? { ok: true, skipped: true }
