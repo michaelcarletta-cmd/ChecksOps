@@ -28,7 +28,8 @@ const main = async () => {
   await assumeCursorRole('moov-billing-spa-deploy');
   const index = path.join(DIST, 'index.html');
   const assets = fs.readdirSync(path.join(DIST, 'assets')).filter((name) => name.startsWith('AdminTenants-') || name.startsWith('index-'));
-  const sync = awsTry(['s3', 'sync', DIST, `s3://${BUCKET}`, '--delete', '--only-show-errors']);
+  const sync = awsTry(['s3', 'sync', DIST, `s3://${BUCKET}`, '--delete', '--exact-timestamps', '--only-show-errors']);
+  const forceIndex = awsTry(['s3', 'cp', index, `s3://${BUCKET}/index.html`]);
   const invalidation = awsTry([
     'cloudfront', 'create-invalidation',
     '--distribution-id', DISTRIBUTION,
@@ -39,7 +40,7 @@ const main = async () => {
     generatedAt: new Date().toISOString(),
     bucket: BUCKET,
     distribution: DISTRIBUTION,
-    sync: { ok: sync.ok, error: sync.error || null },
+    sync: { ok: sync.ok && forceIndex.ok, error: sync.error || forceIndex.error || null },
     invalidation: invalidation.ok
       ? { ok: true, id: invalidation.data?.Invalidation?.Id || null, status: invalidation.data?.Invalidation?.Status || null }
       : { ok: false, error: invalidation.error },
