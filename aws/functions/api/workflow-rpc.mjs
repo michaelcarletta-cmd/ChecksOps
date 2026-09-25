@@ -690,7 +690,7 @@ export const executeAdminSetCheckClaim = async ({ client, mapping, args }) => {
       WHERE id = $1::uuid`,
     [checkId],
   )).rows[0];
-  if (!check) return { error: 'rls_denied', message: 'check not found or not writable' };
+  if (!check) return { error: 'not_authorized', message: 'check not found or not writable' };
 
   const member = (await client.query(
     `SELECT 1 FROM public.tenant_users
@@ -727,62 +727,20 @@ export const executeAdminSetCheckClaim = async ({ client, mapping, args }) => {
         WHERE id = $1::uuid`,
       [newClaimId],
     )).rows[0];
-    if (!claim) return { error: 'rls_denied', message: 'claim not found or not writable' };
-    if (String(claim.tenant_id) !== String(check.tenant_id)) {
+    if (claim && String(claim.tenant_id) !== String(check.tenant_id)) {
       return { error: 'cross_tenant_denied', message: 'Target claim is not in the check tenant' };
     }
   }
 
-  const updated = (await client.query(
-    `UPDATE public.check_intake_items
-        SET claim_id = $2::uuid,
-            updated_at = now()
-      WHERE id = $1::uuid
-        AND tenant_id = $3::uuid
-        AND deposited_at IS NULL
-      RETURNING id, claim_id, tenant_id, amount, deposited_at`,
-    [checkId, newClaimId, check.tenant_id],
-  )).rows[0];
-  if (!updated) {
-    return { error: 'already_deposited', message: 'claim_id cannot change after deposit' };
+  const executed = (await client.query(
+    `SELECT public.admin_set_check_claim($1::uuid, $2::uuid, $3::uuid) AS result`,
+    [mapping.application_user_id, checkId, newClaimId],
+  )).rows[0]?.result;
+  const payload = typeof executed === 'string' ? JSON.parse(executed) : executed;
+  if (!payload || payload.error) {
+    return payload || { error: 'rls_denied', message: 'claim association was not written' };
   }
-
-  const changedAt = new Date().toISOString();
-  await client.query(
-    `INSERT INTO public.check_audit_log (
-       check_id, tenant_id, actor_id, event_type, event_description, event_data
-     ) VALUES (
-       $1::uuid,
-       $2::uuid,
-       $3::uuid,
-       'admin_set_check_claim',
-       'Admin set or cleared check claim association',
-       $4::jsonb
-     )`,
-    [
-      checkId,
-      check.tenant_id,
-      mapping.application_user_id,
-      JSON.stringify({
-        actor_id: mapping.application_user_id,
-        changed_at: changedAt,
-        check_id: checkId,
-        prior_claim_id: priorClaimId,
-        new_claim_id: newClaimId,
-      }),
-    ],
-  );
-
-  return {
-    data: {
-      ok: true,
-      noop: false,
-      check_id: checkId,
-      prior_claim_id: priorClaimId,
-      new_claim_id: newClaimId,
-      claim_id: updated.claim_id,
-    },
-  };
+  return { data: payload };
 };
 
 const executeAdminSetContractorPro = async ({ client, mapping, args }) => {

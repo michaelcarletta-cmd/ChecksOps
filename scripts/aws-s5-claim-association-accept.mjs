@@ -11,7 +11,6 @@ const FREEDOM_EMAIL = 'checksops-tester@freedomadj.com';
 const C1C_EMAIL = 'payments@condition1commercial.com';
 const FREEDOM_TENANT = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
 const C1C_TENANT = '4f172140-f57a-4744-8050-95f4f07b13b4';
-const FREEDOM_USER = 'abd3c2a0-6dc0-4680-92dd-a013e1141c91';
 const RUN_ID = `S5ACC-${Date.now()}`;
 const MARKER = `AWS S5 ACC ${RUN_ID}`;
 const ARTIFACT = process.env.S5_ACCEPT_ARTIFACT || '/opt/cursor/artifacts/s5-staging-acceptance.json';
@@ -165,6 +164,10 @@ const deleteCheck = async (token, checkId) => {
   if (PROTECTED.has(checkId)) {
     return { status: 0, json: { error: 'protected_leftover', skipped: true } };
   }
+  const current = await loadCheck(token, checkId);
+  if (current?.claim_id) {
+    await rpc(token, 'admin_set_check_claim', { p_check_id: checkId, p_claim_id: null });
+  }
   return api(`/workflow/checks/${checkId}`, {
     method: 'DELETE',
     token,
@@ -182,30 +185,35 @@ const main = async () => {
     detail: `t5=${flags.json.flags?.AWS_APPLICATION_WORKFLOW_WRITES_ENABLED}`,
   });
 
-  const roles = await query(freedom, {
+  const whoami = await query(freedom, {
     table: 'user_roles',
     select: 'user_id,role',
-    filters: [{ column: 'user_id', op: 'eq', value: FREEDOM_USER }],
-    limit: 10,
+    limit: 20,
   });
-  const roleNames = rowsOf(roles.json.data).map((row) => String(row.role || '').toLowerCase());
-  record('freedom tester is admin', roles.status === 200 && roleNames.includes('admin'), {
-    detail: `status=${roles.status} roles=${roleNames.join(',') || 'none'}`,
+  const actorId = whoami.json.applicationUserId;
+  const roleNames = rowsOf(whoami.json.data)
+    .filter((row) => String(row.user_id) === String(actorId))
+    .map((row) => String(row.role || '').toLowerCase());
+  record('freedom caller is admin', Boolean(actorId) && roleNames.includes('admin'), {
+    detail: `actor=${actorId || 'none'} roles=${roleNames.join(',') || 'none'}`,
   });
 
-  const freedomClaims = await listClaims(freedom, FREEDOM_TENANT);
+  const freedomClaims = (await listClaims(freedom, FREEDOM_TENANT))
+    .sort((a, b) => String(a.claim_number || '').localeCompare(String(b.claim_number || '')));
+  const synthetic = freedomClaims.filter((row) => String(row.claim_number || '').startsWith('AWS-S5-SYNTHETIC'));
+  const usableFreedom = synthetic.length >= 2 ? synthetic : freedomClaims;
   const c1cClaims = await listClaims(c1c, C1C_TENANT);
-  record('freedom has two claims', freedomClaims.length >= 2, {
-    detail: `count=${freedomClaims.length} ids=${freedomClaims.slice(0, 2).map((row) => row.id).join(',')}`,
+  record('freedom has two claims', usableFreedom.length >= 2, {
+    detail: `count=${usableFreedom.length} ids=${usableFreedom.slice(0, 2).map((row) => row.id).join(',')}`,
   });
   record('c1c has a cross-tenant claim', c1cClaims.length >= 1, {
     detail: `count=${c1cClaims.length} id=${c1cClaims[0]?.id || 'none'}`,
   });
-  if (freedomClaims.length < 2 || !c1cClaims[0]?.id) {
+  if (usableFreedom.length < 2 || !c1cClaims[0]?.id) {
     throw new Error('Need ≥2 Freedom claims and ≥1 C1C claim for S5 acceptance');
   }
-  const claimA = freedomClaims[0].id;
-  const claimB = freedomClaims[1].id;
+  const claimA = usableFreedom[0].id;
+  const claimB = usableFreedom[1].id;
   const claimC1c = c1cClaims[0].id;
 
   const createdCheck = await api('/workflow/checks', {
@@ -250,7 +258,7 @@ const main = async () => {
     && String(afterA?.claim_id) === String(claimA)
     && dataA.prior_claim_id == null
     && String(dataA.new_claim_id) === String(claimA)
-    && String(auditA?.actor_id) === FREEDOM_USER
+    && String(auditA?.actor_id) === String(actorId)
     && String(auditA?.check_id) === String(check.id)
     && Boolean(auditA?.created_at || dataA.changed_at);
   record('1 unlinked → Claim A succeeds and audits', case1, {

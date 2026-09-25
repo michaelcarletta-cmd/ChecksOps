@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { executeAdminSetCheckClaim, SAFE_WRITE_RPCS } from '../functions/api/workflow-rpc.mjs';
 import { INTAKE_PROHIBITED_COLUMNS } from '../functions/api/write-allowlist.mjs';
@@ -11,6 +12,11 @@ const CLAIM_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const CLAIM_C1C = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const FREEDOM = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
 const C1C = '4f172140-f57a-4744-8050-95f4f07b13b4';
+const SQL = readFileSync(new URL('../workflows/sql/71_admin_set_check_claim.sql', import.meta.url), 'utf8');
+
+const isWrite = (sql) => /admin_set_check_claim\(\$1::uuid/.test(sql)
+  || /UPDATE public.check_intake_items/.test(sql)
+  || /INSERT INTO public.check_audit_log/.test(sql);
 
 const mockClient = ({
   roles = [{ role: 'admin' }],
@@ -24,7 +30,6 @@ const mockClient = ({
   },
   member = true,
   claim = { id: CLAIM_A, tenant_id: FREEDOM },
-  updateRow = null,
 } = {}) => {
   const queries = [];
   const store = { check: { ...check } };
@@ -46,15 +51,23 @@ const mockClient = ({
         if (String(id) === CLAIM_A) return { rows: [{ id: CLAIM_A, tenant_id: FREEDOM }] };
         return { rows: [] };
       }
-      if (sql.includes('UPDATE public.check_intake_items')) {
-        if (store.check?.deposited_at) return { rows: [] };
-        store.check = {
-          ...store.check,
-          claim_id: params[1],
+      if (sql.includes('public.admin_set_check_claim')) {
+        const prior = store.check?.claim_id || null;
+        const next = params[2] ?? null;
+        store.check = { ...store.check, claim_id: next };
+        return {
+          rows: [{
+            result: {
+              ok: true,
+              noop: false,
+              check_id: CHECK_ID,
+              prior_claim_id: prior,
+              new_claim_id: next,
+              claim_id: next,
+            },
+          }],
         };
-        return { rows: [updateRow || store.check] };
       }
-      if (sql.includes('INSERT INTO public.check_audit_log')) return { rows: [{ id: 'audit-1' }] };
       return { rows: [] };
     },
   };
@@ -63,6 +76,10 @@ const mockClient = ({
 test('generic intake allowlist still prohibits claim_id', () => {
   assert.equal(INTAKE_PROHIBITED_COLUMNS.has('claim_id'), true);
   assert.equal(SAFE_WRITE_RPCS.has('admin_set_check_claim'), true);
+  assert.match(SQL, /CREATE OR REPLACE FUNCTION public\.admin_set_check_claim/);
+  assert.match(SQL, /SECURITY DEFINER/);
+  assert.match(SQL, /GRANT EXECUTE ON FUNCTION public\.admin_set_check_claim/);
+  assert.match(SQL, /Does not GRANT UPDATE\(claim_id\)/);
 });
 
 test('admin can set, correct, and clear claim_id with audit; noop skips audit', async () => {
@@ -76,9 +93,10 @@ test('admin can set, correct, and clear claim_id with audit; noop skips audit', 
   assert.equal(setA.data.noop, false);
   assert.equal(setA.data.prior_claim_id, null);
   assert.equal(setA.data.new_claim_id, CLAIM_A);
-  assert.ok(client.queries.some((row) => /INSERT INTO public.check_audit_log/.test(row.sql)
-    && JSON.parse(row.params[3]).prior_claim_id === null
-    && JSON.parse(row.params[3]).new_claim_id === CLAIM_A));
+  assert.ok(client.queries.some((row) => /public\.admin_set_check_claim/.test(row.sql)
+    && row.params[0] === ADMIN
+    && row.params[1] === CHECK_ID
+    && row.params[2] === CLAIM_A));
 
   const setB = await executeAdminSetCheckClaim({
     client,
@@ -88,15 +106,15 @@ test('admin can set, correct, and clear claim_id with audit; noop skips audit', 
   assert.equal(setB.data.prior_claim_id, CLAIM_A);
   assert.equal(setB.data.new_claim_id, CLAIM_B);
 
-  const auditsBeforeClear = client.queries.filter((row) => /INSERT INTO public.check_audit_log/.test(row.sql)).length;
+  const writesBeforeNoop = client.queries.filter((row) => /public\.admin_set_check_claim/.test(row.sql)).length;
   const noop = await executeAdminSetCheckClaim({
     client,
     mapping: { application_user_id: ADMIN },
     args: { p_check_id: CHECK_ID, p_claim_id: CLAIM_B },
   });
   assert.equal(noop.data.noop, true);
-  const auditsAfterNoop = client.queries.filter((row) => /INSERT INTO public.check_audit_log/.test(row.sql)).length;
-  assert.equal(auditsAfterNoop, auditsBeforeClear);
+  const writesAfterNoop = client.queries.filter((row) => /public\.admin_set_check_claim/.test(row.sql)).length;
+  assert.equal(writesAfterNoop, writesBeforeNoop);
 
   const cleared = await executeAdminSetCheckClaim({
     client,
@@ -105,9 +123,8 @@ test('admin can set, correct, and clear claim_id with audit; noop skips audit', 
   });
   assert.equal(cleared.data.prior_claim_id, CLAIM_B);
   assert.equal(cleared.data.new_claim_id, null);
-  const lastAudit = [...client.queries].reverse().find((row) => /INSERT INTO public.check_audit_log/.test(row.sql));
-  assert.equal(JSON.parse(lastAudit.params[3]).new_claim_id, null);
-  assert.equal(JSON.parse(lastAudit.params[3]).prior_claim_id, CLAIM_B);
+  const lastWrite = [...client.queries].reverse().find((row) => /public\.admin_set_check_claim/.test(row.sql));
+  assert.equal(lastWrite.params[2], null);
 });
 
 test('staff, cross-tenant claim, and deposited checks are denied without mutation', async () => {
@@ -118,7 +135,7 @@ test('staff, cross-tenant claim, and deposited checks are denied without mutatio
     args: { p_check_id: CHECK_ID, p_claim_id: CLAIM_A },
   });
   assert.equal(staffResult.error, 'not_authorized');
-  assert.equal(staff.queries.some((row) => /UPDATE public.check_intake_items/.test(row.sql)), false);
+  assert.equal(staff.queries.some((row) => isWrite(row.sql)), false);
 
   const outsider = mockClient({ member: false });
   const outsiderResult = await executeAdminSetCheckClaim({
@@ -127,7 +144,7 @@ test('staff, cross-tenant claim, and deposited checks are denied without mutatio
     args: { p_check_id: CHECK_ID, p_claim_id: CLAIM_A },
   });
   assert.equal(outsiderResult.error, 'not_authorized');
-  assert.equal(outsider.queries.some((row) => /UPDATE public.check_intake_items/.test(row.sql)), false);
+  assert.equal(outsider.queries.some((row) => isWrite(row.sql)), false);
 
   const cross = mockClient();
   const crossResult = await executeAdminSetCheckClaim({
@@ -136,7 +153,7 @@ test('staff, cross-tenant claim, and deposited checks are denied without mutatio
     args: { p_check_id: CHECK_ID, p_claim_id: CLAIM_C1C },
   });
   assert.equal(crossResult.error, 'cross_tenant_denied');
-  assert.equal(cross.queries.some((row) => /UPDATE public.check_intake_items/.test(row.sql)), false);
+  assert.equal(cross.queries.some((row) => isWrite(row.sql)), false);
 
   const deposited = mockClient({
     check: {
@@ -154,7 +171,7 @@ test('staff, cross-tenant claim, and deposited checks are denied without mutatio
     args: { p_check_id: CHECK_ID, p_claim_id: CLAIM_B },
   });
   assert.equal(depositedResult.error, 'already_deposited');
-  assert.equal(deposited.queries.some((row) => /UPDATE public.check_intake_items/.test(row.sql)), false);
+  assert.equal(deposited.queries.some((row) => isWrite(row.sql)), false);
   assert.equal(deposited.store.check.claim_id, CLAIM_A);
 
   const depositedClear = await executeAdminSetCheckClaim({
@@ -164,7 +181,7 @@ test('staff, cross-tenant claim, and deposited checks are denied without mutatio
   });
   assert.equal(depositedClear.error, 'already_deposited');
   assert.equal(deposited.store.check.claim_id, CLAIM_A);
-  assert.equal(deposited.queries.some((row) => /INSERT INTO public.check_audit_log/.test(row.sql)), false);
+  assert.equal(deposited.queries.some((row) => isWrite(row.sql)), false);
 });
 
 test('claim association update does not rewrite amount or deposit columns', async () => {
@@ -174,10 +191,9 @@ test('claim association update does not rewrite amount or deposit columns', asyn
     mapping: { application_user_id: ADMIN },
     args: { p_check_id: CHECK_ID, p_claim_id: CLAIM_A },
   });
-  const update = client.queries.find((row) => /UPDATE public.check_intake_items/.test(row.sql));
-  assert.ok(update);
-  const setClause = update.sql.split('WHERE')[0];
-  assert.match(setClause, /SET claim_id = \$2::uuid,\s+updated_at = now\(\)/);
-  assert.equal(/amount|payee_line|status|check_stage/.test(setClause), false);
+  assert.equal(client.queries.some((row) => /UPDATE public.check_intake_items/.test(row.sql)), false);
+  assert.ok(client.queries.some((row) => /public\.admin_set_check_claim/.test(row.sql)));
+  assert.match(SQL, /SET claim_id = p_claim_id,\s+updated_at = now\(\)/);
+  assert.equal(/SET[^;]*amount/i.test(SQL), false);
   assert.equal(client.store.check.amount, 150);
 });
