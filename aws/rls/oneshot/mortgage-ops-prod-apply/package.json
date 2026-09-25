@@ -1,0 +1,9 @@
+{
+  "name": "checksops-mortgage-ops-prod-apply",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@aws-sdk/client-secrets-manager": "3.1124.0",
+    "pg": "8.23.0"
+  }
+}

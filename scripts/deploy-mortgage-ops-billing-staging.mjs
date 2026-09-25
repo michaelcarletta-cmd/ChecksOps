@@ -152,6 +152,7 @@ const applySqlAndAccept = async (action = 'apply_and_accept') => {
   await copyFile(path.join(ROOT, 'aws/rls/oneshot/mortgage-ops-billing/index.mjs'), path.join(staging, 'index.mjs'));
   await copyFile(path.join(ROOT, 'aws/rls/oneshot/mortgage-ops-billing/package.json'), path.join(staging, 'package.json'));
   await copyFile(path.join(ROOT, 'aws/rls/sql/45_mortgage_ops_tenant_billing.sql'), path.join(staging, '45_mortgage_ops_tenant_billing.sql'));
+  await copyFile(path.join(ROOT, 'aws/rls/sql/46_mortgage_ops_billing_launch.sql'), path.join(staging, '46_mortgage_ops_billing_launch.sql'));
   await copyFile(path.join(ROOT, 'aws/rls/oneshot/rds-global-bundle.pem'), path.join(staging, 'rds-global-bundle.pem'));
   execFileSync('npm', ['install', '--omit=dev'], { cwd: staging, stdio: 'ignore' });
   const zip = path.join(os.tmpdir(), 'checksops-mortgage-ops-billing-oneshot.zip');
@@ -198,9 +199,10 @@ const main = async () => {
   const baseline = freezeBaseline();
   const overlayOnly = process.argv.includes('--overlay-only');
   const acceptOnly = process.argv.includes('--accept-only');
+  const cutoffProof = process.argv.includes('--cutoff-proof');
   const sql = overlayOnly
     ? { ok: true, skipped: 'overlay_only' }
-    : await applySqlAndAccept(acceptOnly ? 'accept_only' : 'apply_and_accept');
+    : await applySqlAndAccept(cutoffProof ? 'cutoff_proof' : acceptOnly ? 'accept_only' : 'apply_and_accept');
   const overlay = acceptOnly ? { skipped: 'accept_only' } : await overlayApi();
   const report = {
     generatedAt: new Date().toISOString(),

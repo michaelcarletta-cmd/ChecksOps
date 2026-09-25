@@ -13,6 +13,8 @@ import {
   applyBillingProviderEvent,
   accrueMortgageOpsAcceptedRequest,
   assembleInvoiceTotals,
+  loadMortgageOpsBillingLaunch,
+  mortgageOpsAcceptedBeforeLaunch,
   billingIdempotencyKey,
   buildConsolidatedInvoice,
   buildTenantBillingSnapshot,
@@ -105,6 +107,13 @@ const makeStore = () => ({
   checks: new Map(),
   allocations: [],
   settings: new Map(),
+  mortgageLaunch: {
+    singleton: true,
+    launched_at: '2020-01-01T00:00:00.000Z',
+    environment: 'test',
+    note: 'unit test default Mortgage Ops launch',
+    created_at: '2020-01-01T00:00:00.000Z',
+  },
   authorizations: new Map(),
   accounts: new Map([
     [`${TENANT_A}:sandbox`, {
@@ -227,6 +236,9 @@ const mockClient = (store, { platformOwner = true, actorTenant = TENANT_A, actor
     }
     if (text.includes('FROM public.platform_billing_destination')) {
       return { rows: store.destination && store.destination.environment === params[0] ? [store.destination] : [] };
+    }
+    if (text.includes('FROM public.mortgage_ops_billing_launch')) {
+      return { rows: store.mortgageLaunch ? [store.mortgageLaunch] : [] };
     }
     if (text.includes('SELECT * FROM public.tenant_maintenance_payments') && text.includes('billing_period')) {
       return { rows: store.occurrences.filter((row) => row.tenant_id === params[0] && row.billing_period === params[1]) };
@@ -1209,6 +1221,22 @@ test('SQL 45 is additive with Mortgage Ops uniqueness and free-zero rates', () =
   assert.doesNotMatch(sql, /DROP TABLE/);
   assert.doesNotMatch(sql, /ALTER TABLE public\.checkalt/i);
   assert.doesNotMatch(sql, /44_consolidated/);
+  assert.doesNotMatch(sql, /INSERT INTO public\.check_billing_events[\s\S]*SELECT[\s\S]*FROM public\.mortgage_handling_requests/);
+});
+
+test('SQL 46 adds a fail-closed prospective launch cutoff without backfill', () => {
+  const sql = readFileSync(path.join(ROOT, 'rls/sql/46_mortgage_ops_billing_launch.sql'), 'utf8');
+  assert.match(sql, /CREATE TABLE IF NOT EXISTS public\.mortgage_ops_billing_launch/);
+  assert.match(sql, /accepted_at < launched_at/);
+  assert.match(sql, /IF v_cutoff IS NULL THEN/);
+  assert.match(sql, /IF v_req\.accepted_at < v_cutoff THEN/);
+  assert.doesNotMatch(sql, /INSERT INTO public\.mortgage_ops_billing_launch/);
+  assert.doesNotMatch(sql, /UPDATE public\.mortgage_handling_requests/);
+  assert.doesNotMatch(sql, /INSERT INTO public\.check_billing_events[\s\S]*SELECT[\s\S]*FROM public\.mortgage_handling_requests/);
+  assert.doesNotMatch(sql, /DROP TABLE/);
+  assert.doesNotMatch(sql, /ALTER TABLE public\.checkalt/i);
+  assert.ok(mortgageOpsAcceptedBeforeLaunch('2026-07-15T19:47:15.958Z', '2026-09-25T00:00:00.000Z'));
+  assert.equal(mortgageOpsAcceptedBeforeLaunch('2026-09-25T00:00:00.000Z', '2026-09-25T00:00:00.000Z'), false);
 });
 
 const CLAIM_A = 'caaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -1544,6 +1572,75 @@ test('unrelated tenant isolation still holds for Mortgage Ops events', async () 
   assert.equal(b.mortgage_ops_initial_count, 1);
   assert.equal(a.amount_cents - a.maintenance_net_cents, 1000);
   assert.equal(b.amount_cents - b.maintenance_net_cents, 1000);
+});
+
+test('pre-launch accepted Mortgage Ops never accrues on replay', async () => {
+  const store = makeStore();
+  const client = mockClient(store);
+  store.mortgageLaunch.launched_at = '2026-09-25T18:00:00.000Z';
+  const historical = {
+    id: 'req-july-15',
+    tenant_id: TENANT_A,
+    check_intake_item_id: 'chk-july-15',
+    claim_id: CLAIM_A,
+    status: 'in_progress',
+    accepted_at: '2026-07-15T19:47:15.958Z',
+    assigned_employee_id: OWNER,
+  };
+  const first = await accrueMortgageOpsAcceptedRequest(client, { request: historical });
+  const replay = await accrueMortgageOpsAcceptedRequest(client, { request: historical });
+  const invoice = await buildConsolidatedInvoice(client, { tenantId: TENANT_A, period: '2026-07' });
+  assert.equal(first.skipped, 'before_launch_cutoff');
+  assert.equal(replay.skipped, 'before_launch_cutoff');
+  assert.equal(store.checkEvents.length, 0);
+  assert.equal(invoice.mortgage_ops_initial_count, 0);
+  assert.equal(invoice.mortgage_ops_usage_cents, 0);
+  assert.equal(invoice.amount_cents, 10000);
+});
+
+test('post-launch accepted Mortgage Ops accrues at the snapshotted tenant rate', async () => {
+  const store = makeStore();
+  const client = mockClient(store);
+  store.mortgageLaunch.launched_at = '2026-09-25T18:00:00.000Z';
+  const created = await accrueMortgageOpsAcceptedRequest(client, {
+    request: {
+      id: 'req-after-launch',
+      tenant_id: TENANT_A,
+      check_intake_item_id: 'chk-after-launch',
+      claim_id: CLAIM_A,
+      status: 'in_progress',
+      accepted_at: '2026-09-25T19:00:00.000Z',
+      assigned_employee_id: OWNER,
+    },
+  });
+  assert.equal(created.ok, true);
+  assert.equal(created.event.event_type, 'mortgage_ops_initial');
+  assert.equal(created.event.unit_price_cents, 1000);
+  const invoice = await buildConsolidatedInvoice(client, { tenantId: TENANT_A, period: '2026-09' });
+  assert.equal(invoice.mortgage_ops_initial_count, 1);
+  assert.equal(invoice.mortgage_ops_usage_cents, 1000);
+});
+
+test('unset Mortgage Ops launch row fails closed', async () => {
+  const store = makeStore();
+  const client = mockClient(store);
+  store.mortgageLaunch = null;
+  const launch = await loadMortgageOpsBillingLaunch(client);
+  assert.equal(launch.present, true);
+  assert.equal(launch.launch, null);
+  const created = await accrueMortgageOpsAcceptedRequest(client, {
+    request: {
+      id: 'req-no-launch',
+      tenant_id: TENANT_A,
+      check_intake_item_id: 'chk-no-launch',
+      claim_id: CLAIM_A,
+      status: 'in_progress',
+      accepted_at: '2026-09-25T19:00:00.000Z',
+      assigned_employee_id: OWNER,
+    },
+  });
+  assert.equal(created.skipped, 'launch_cutoff_unset');
+  assert.equal(store.checkEvents.length, 0);
 });
 
 test('production monthly billing post remains disabled by default', async () => {

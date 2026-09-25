@@ -141,29 +141,84 @@ export const handler = async () => {
     `);
 
     const alreadyBilled = await q(client, `
-      SELECT count(*) AS mortgage_ops_events
+      SELECT
+        count(*) FILTER (WHERE event_type = 'mortgage_ops_initial') AS mortgage_ops_initial,
+        count(*) FILTER (WHERE event_type = 'mortgage_ops_additional_check') AS mortgage_ops_additional_check,
+        count(*) FILTER (
+          WHERE event_type IN ('mortgage_ops_initial', 'mortgage_ops_additional_check')
+        ) AS mortgage_ops_events
       FROM public.check_billing_events
-      WHERE event_type IN ('mortgage_ops_initial', 'mortgage_ops_additional_check')
-    `).catch(() => [{ mortgage_ops_events: 0, note: 'event_types_absent' }]);
+    `);
 
+    const acceptedItems = await q(client, `
+      SELECT r.id AS request_id, r.tenant_id, t.slug, r.claim_id, r.check_intake_item_id,
+             r.status, r.accepted_at, r.assigned_employee_id
+      FROM public.mortgage_handling_requests r
+      LEFT JOIN public.tenants t ON t.id = r.tenant_id
+      WHERE r.accepted_at IS NOT NULL
+        AND r.status IN ('in_progress', 'completed')
+      ORDER BY r.accepted_at ASC
+      LIMIT 50
+    `);
+
+    const counts = await q(client, `
+      SELECT
+        (SELECT count(*) FROM public.tenants) AS tenants,
+        (SELECT count(*) FROM public.check_billing_events) AS check_billing_events,
+        (SELECT count(*) FROM public.tenant_maintenance_payments) AS tenant_maintenance_payments,
+        (SELECT count(*) FROM public.tenant_invoice_allocations) AS tenant_invoice_allocations,
+        (SELECT count(*) FROM public.mortgage_handling_requests) AS mortgage_handling_requests
+    `);
+
+    const sql44 = await q(client, `
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'tenants'
+        AND column_name IN ('next_day_rate_cents', 'same_day_rate_cents')
+    `);
+    const sql44Alloc = await q(client, `
+      SELECT table_name FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = 'tenant_invoice_allocations'
+    `);
     const sql45 = await q(client, `
       SELECT column_name
       FROM information_schema.columns
       WHERE table_schema = 'public' AND table_name = 'tenants'
         AND column_name IN ('mortgage_ops_initial_rate_cents', 'mortgage_ops_additional_rate_cents')
     `);
+    const sql45EventCols = await q(client, `
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'check_billing_events'
+        AND column_name IN ('claim_id', 'mortgage_request_id')
+    `);
+    const sql46 = await q(client, `
+      SELECT table_name FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = 'mortgage_ops_billing_launch'
+    `);
+    const launch = await q(client, `
+      SELECT launched_at, environment, note, created_at
+      FROM public.mortgage_ops_billing_launch
+      WHERE singleton IS TRUE
+    `);
 
     return {
       ok: true,
       readOnly: identity?.read_only === 'on',
       identity,
+      counts: counts[0] || counts,
       totals: totals[0] || totals,
       byMonth,
       byTenant,
+      acceptedItems,
       multiCheckClaims: multiCheckClaims[0] || multiCheckClaims,
       identityReady: identityReady[0] || identityReady,
       alreadyBilled: alreadyBilled[0] || alreadyBilled,
+      sql44Present: Array.isArray(sql44) && sql44.length === 2 && Array.isArray(sql44Alloc) && sql44Alloc.length === 1,
       sql45Present: Array.isArray(sql45) && sql45.length === 2,
+      sql45EventColsPresent: Array.isArray(sql45EventCols) && sql45EventCols.length === 2,
+      sql46Present: Array.isArray(sql46) && sql46.length === 1,
+      launch: Array.isArray(launch) ? launch[0] || null : null,
       billingEventsCreated: false,
       historicalBackfill: false,
       productionRecordsMutated: false,

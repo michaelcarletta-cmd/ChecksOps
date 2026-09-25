@@ -39,6 +39,25 @@ export const FEE_MORTGAGE_INITIAL = 'mortgage_ops_initial';
 export const FEE_MORTGAGE_ADDITIONAL = 'mortgage_ops_additional_check';
 export const MORTGAGE_EVENT_TYPES = [FEE_MORTGAGE_INITIAL, FEE_MORTGAGE_ADDITIONAL];
 
+export const mortgageOpsAcceptedBeforeLaunch = (acceptedAt, launchedAt) => {
+  if (!acceptedAt || !launchedAt) return false;
+  return new Date(acceptedAt).getTime() < new Date(launchedAt).getTime();
+};
+
+export async function loadMortgageOpsBillingLaunch(client) {
+  try {
+    const row = (await client.query(
+      `SELECT launched_at, environment, note, created_at
+       FROM public.mortgage_ops_billing_launch
+       WHERE singleton IS TRUE
+       LIMIT 1`,
+    )).rows[0] || null;
+    return { present: true, launch: row };
+  } catch {
+    return { present: false, launch: null };
+  }
+}
+
 export const periodKey = (date = new Date()) => {
   const d = date instanceof Date ? date : new Date(date);
   if (Number.isNaN(d.getTime())) throw new Error('invalid_billing_date');
@@ -535,6 +554,17 @@ export async function accrueMortgageOpsAcceptedRequest(client, {
   }
   if (!mortgageRequestIsAccepted(request)) {
     return { skipped: 'not_accepted' };
+  }
+
+  const launchState = await loadMortgageOpsBillingLaunch(client);
+  if (launchState.present && !launchState.launch) {
+    return { skipped: 'launch_cutoff_unset' };
+  }
+  if (launchState.launch && mortgageOpsAcceptedBeforeLaunch(request.accepted_at, launchState.launch.launched_at)) {
+    return {
+      skipped: 'before_launch_cutoff',
+      launched_at: launchState.launch.launched_at,
+    };
   }
 
   const existing = await loadMortgageEventByCheck(client, request.check_intake_item_id);
