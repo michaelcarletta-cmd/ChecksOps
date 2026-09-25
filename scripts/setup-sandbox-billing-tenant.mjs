@@ -85,9 +85,20 @@ export const handler = async () => {
          is_test_account = true,
          moov_environment = 'sandbox',
          subscription_status = 'active',
+         monthly_rate_cents = COALESCE(NULLIF(monthly_rate_cents, 0), 2500),
          name = $2
        WHERE id = $1::uuid\`,
       [tenantId, '${NAME}']
+    );
+    await client.query(
+      \`INSERT INTO public.tenant_billing_settings (
+         tenant_id, billing_enabled, billing_day_of_month
+       ) VALUES ($1::uuid, true, 1)
+       ON CONFLICT (tenant_id) DO UPDATE SET
+         billing_enabled = true,
+         billing_day_of_month = 1,
+         updated_at = now()\`,
+      [tenantId]
     );
     await client.query(
       \`INSERT INTO public.tenant_users (user_id, tenant_id, role)

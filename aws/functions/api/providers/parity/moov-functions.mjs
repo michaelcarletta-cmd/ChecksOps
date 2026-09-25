@@ -150,13 +150,18 @@ const accountCreate = {
     })();
     const idempotencyKey = `checksops-account-${environment}-${tenantId}`;
     try {
+      await client.query('SAVEPOINT moov_account_idempotency');
       await client.query(
         `INSERT INTO public.payment_idempotency_keys
           (tenant_id, provider, scope, idempotency_key, status)
-         VALUES ($1::uuid, 'moov', 'account_create', $2, 'in_progress')`,
+         VALUES ($1::uuid, 'moov', 'account_create', $2, 'in_progress')
+         ON CONFLICT (provider, scope, idempotency_key) DO NOTHING`,
         [tenantId, idempotencyKey],
       );
-    } catch { /* duplicate ok */ }
+      await client.query('RELEASE SAVEPOINT moov_account_idempotency');
+    } catch {
+      await client.query('ROLLBACK TO SAVEPOINT moov_account_idempotency').catch(() => {});
+    }
     const created = await moovFetch('/accounts', {
       method: 'POST',
       scopes: scopes.accountsWrite(),
