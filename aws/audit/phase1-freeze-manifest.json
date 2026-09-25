@@ -1,0 +1,164 @@
+{
+  "id": "phase1-adversarial-money-path-freeze",
+  "status": "COMPLETE / PASS",
+  "scenariosClosed": "15/15",
+  "acceptanceBlockers": 0,
+  "remainingAcceptanceTests": 0,
+  "remediationSafeguards": "COMPLETE",
+  "additionalFormallyDefinedAcceptancePhases": 0,
+  "officialScenarioIds": [
+    "S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9",
+    "S10", "S11", "S12", "S13", "S14", "S15"
+  ],
+  "remediatedScenarios": ["S2", "S5", "S11", "S14"],
+  "closureDocumentation": "aws/audit/PHASE1_ADVERSARIAL_MONEY_PATH.md",
+  "freezeDocumentation": "aws/audit/PHASE1_FREEZE.md",
+  "phase1ClosureProductionSha": "zb7E5ptHPmRsBegkIFgNzq3rzBktHvpNCJ1QMTHM6l0=",
+  "shaPinPolicy": "historical_provenance_only",
+  "shaPinNote": "Closure SHA is provenance, not a permanent pin. Future accepted deployments may advance production. The new live SHA becomes the next baseline. Phase 1 protection follows behavioral invariants; deployment safety follows the current live package.",
+  "productionFunction": "checksops-production-prep-api",
+  "promotionPolicy": {
+    "mode": "narrow_overlay_from_current_live",
+    "forbidFullZipReplace": true,
+    "forbidImplicitFileDeletion": true,
+    "forbidImplicitConfigChange": true,
+    "forbidSqlAsCodeSideEffect": true,
+    "requireCandidateBaselineSha": true,
+    "toctouRecheckRequired": true,
+    "staleBaselineFailsClosed": true,
+    "noForceThroughPath": true,
+    "updateFunctionCodeOnly": true,
+    "productionDeployEnv": "CHECKSOPS_PRODUCTION_DEPLOY"
+  },
+  "protectedRuntimeComponents": {
+    "S2": {
+      "label": "S2 Material Endorsement Invalidation",
+      "files": [
+        {
+          "path": "aws/functions/api/endorsement-material-invalidation.mjs",
+          "markers": [
+            "invalidateEndorsementsForMaterialPayeeChange",
+            "isMaterialPayeeChange",
+            "endorsement_invalidated_material_edit"
+          ]
+        },
+        {
+          "path": "aws/functions/api/write-check-workflow.mjs",
+          "markers": [
+            "invalidateEndorsementsForMaterialPayeeChange",
+            "isMaterialPayeeChange(looked.payee, coerced.values)"
+          ]
+        }
+      ]
+    },
+    "S5": {
+      "label": "S5 Audited Claim Association",
+      "files": [
+        {
+          "path": "aws/functions/api/workflow-rpc.mjs",
+          "markers": [
+            "admin_set_check_claim: 'safe_now'",
+            "executeAdminSetCheckClaim",
+            "case 'admin_set_check_claim':",
+            "already_deposited",
+            "cross_tenant_denied"
+          ]
+        },
+        {
+          "path": "aws/functions/api/write-allowlist.mjs",
+          "markers": [
+            "export const INTAKE_PROHIBITED_COLUMNS = new Set([",
+            "'check_stage',\n  'claim_id',\n  'detected_claim_number',"
+          ]
+        }
+      ],
+      "sqlContract": "aws/workflows/sql/71_admin_set_check_claim.sql",
+      "sqlAutoExecute": false
+    },
+    "S11": {
+      "label": "S11 Partial Disbursement / Remaining Balance",
+      "files": [
+        {
+          "path": "aws/functions/api/financial-remaining.mjs",
+          "markers": [
+            "remaining_cents",
+            "requested_partial_cents"
+          ]
+        },
+        {
+          "path": "aws/functions/api/financial.mjs",
+          "markers": [
+            "remaining_cents",
+            "requested_partial_cents"
+          ]
+        },
+        {
+          "path": "aws/functions/api/financial-idempotency.mjs",
+          "markers": [
+            "seq:"
+          ]
+        }
+      ]
+    },
+    "S14": {
+      "label": "S14 Deposit payee_line Protection",
+      "files": [
+        {
+          "path": "aws/functions/api/check-deposited.mjs",
+          "markers": [
+            "isCheckDeposited",
+            "rejectPayeeLineIfDeposited",
+            "confirmed_provider_deposit",
+            "s14_deposit_lookup"
+          ]
+        },
+        {
+          "path": "aws/functions/api/write-check-workflow.mjs",
+          "markers": [
+            "rejectPayeeLineIfDeposited"
+          ]
+        },
+        {
+          "path": "aws/functions/api/ocr.mjs",
+          "markers": [
+            "resolveWritablePayeeLine"
+          ]
+        },
+        {
+          "path": "aws/functions/api/ocr-descriptive-persist.mjs",
+          "markers": [
+            "resolveWritablePayeeLine"
+          ]
+        },
+        {
+          "path": "aws/functions/api/ingest-shared-check.mjs",
+          "markers": [
+            "rejectPayeeLineIfDeposited"
+          ]
+        }
+      ]
+    }
+  },
+  "mandatorySafeguardSuites": [
+    "aws/tests/s2-material-endorsement-invalidation-safeguard.test.mjs",
+    "aws/tests/s5-audited-claim-association-safeguard.test.mjs",
+    "aws/tests/admin-set-check-claim.test.mjs",
+    "aws/tests/financial-remaining.test.mjs",
+    "aws/tests/api-financial.test.mjs",
+    "aws/tests/s14-deposit-payee-line-safeguard.test.mjs",
+    "aws/tests/check-deposited.test.mjs",
+    "aws/tests/phase1-freeze-safeguard.test.mjs"
+  ],
+  "ci": {
+    "workflow": ".github/workflows/aws-migration-ci.yml",
+    "command": "bun run test:aws-api",
+    "glob": "aws/tests/*.test.mjs",
+    "awsCredentialsRequired": false
+  },
+  "productionPromotion": {
+    "script": "scripts/aws-production-overlay.mjs",
+    "localPreflight": "scripts/aws-phase1-freeze-preflight.mjs",
+    "defaultMode": "preflight-only",
+    "applyRequires": ["--apply", "CHECKSOPS_PRODUCTION_DEPLOY=1", "--baseline-sha"]
+  }
+}

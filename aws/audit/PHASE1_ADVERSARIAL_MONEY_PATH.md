@@ -49,6 +49,8 @@ Accepted remediations/promotion/safeguard records:
 
 CI: `.github/workflows/aws-migration-ci.yml` → `bun run test:aws-api` → `aws/tests/*.test.mjs`.
 
+Phase 1 freeze / cross-build overwrite protection: `aws/audit/PHASE1_FREEZE.md` and `aws/audit/phase1-freeze-manifest.json`. The closure SHA above is historical provenance only. Future accepted deployments may advance production; deployment safety follows the current live package. Production promotion is `scripts/aws-production-overlay.mjs` (preflight default; `UpdateFunctionCode` only with `--apply`, `CHECKSOPS_PRODUCTION_DEPLOY=1`, and an explicit `--baseline-sha`).
+
 ---
 
 ## Scenario matrix (authoritative S1–S15)
