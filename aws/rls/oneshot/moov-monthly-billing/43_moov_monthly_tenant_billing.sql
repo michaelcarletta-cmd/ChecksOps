@@ -88,7 +88,7 @@ AS $$
         FROM public.tenant_users tu
         WHERE tu.user_id = auth.uid()
           AND tu.tenant_id = _tenant_id
-          AND tu.role IN ('owner', 'admin')
+          AND tu.role = 'admin'::public.tenant_role
       );
 $$;
 

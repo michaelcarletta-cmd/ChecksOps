@@ -169,7 +169,7 @@ export const handleTenantBillingAuthorize = async (event, deps = {}) => {
     if (!(await canAuthorizeTenantBilling(client, mapping.application_user_id, tenantId))) {
       return denied(spoof, {
         error: 'not_authorized',
-        message: 'Only the tenant owner/admin or ChecksOps platform owner can authorize billing.',
+        message: 'Only the tenant admin or ChecksOps platform owner can authorize billing.',
       });
     }
     if (body.action === 'pause' || body.auto_debit_enabled === false) {

@@ -504,7 +504,7 @@ test('platform-owner admin path is required; tenant A cannot debit tenant B', as
   await withEnv({ AWS_MOOV_MONTHLY_BILLING_ENABLED: 'true', AWS_SCHEDULED_JOB_SECRET: 'cron' }, async () => {
     const store = makeStore();
     const ownerClient = mockClient(store, { platformOwner: true });
-    const staffClient = mockClient(store, { platformOwner: false, actorTenant: TENANT_A, actorRole: 'owner' });
+    const staffClient = mockClient(store, { platformOwner: false, actorTenant: TENANT_A, actorRole: 'admin' });
     const denied = await handleTenantBillingAdmin(identityEvent(STAFF, { action: 'pull', tenant_id: TENANT_B }, 'staff-a@example.com'), {
       client: staffClient,
       mapping: { application_user_id: STAFF },

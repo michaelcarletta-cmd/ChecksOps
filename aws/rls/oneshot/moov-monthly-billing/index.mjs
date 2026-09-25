@@ -45,12 +45,69 @@ const resolveSandboxWallet = async () => {
   if (methodId) {
     return { ok: true, accountId, paymentMethodId: methodId, source: 'env' };
   }
-  return {
-    ok: false,
-    reason: 'destination_payment_method_required',
-    accountId,
-    message: 'Set AWS_MOOV_BILLING_DESTINATION_PAYMENT_METHOD_ID to the ChecksOps merchant wallet. Do not select first wallet at charge time.',
-  };
+  const arn = process.env.PROVIDER_SECRETS_ARN;
+  if (!arn) {
+    return {
+      ok: false,
+      reason: 'destination_payment_method_required',
+      accountId,
+      message: 'Set AWS_MOOV_BILLING_DESTINATION_PAYMENT_METHOD_ID to the ChecksOps merchant wallet. Do not select first wallet at charge time.',
+    };
+  }
+  try {
+    const sm = new SecretsManagerClient({});
+    const secret = await sm.send(new GetSecretValueCommand({ SecretId: arn }));
+    const parsed = JSON.parse(secret.SecretString || '{}');
+    const key = parsed.MOOV_SANDBOX_PUBLIC_KEY;
+    const secretKey = parsed.MOOV_SANDBOX_SECRET_KEY;
+    const origin = parsed.MOOV_SANDBOX_ALLOWED_ORIGIN || 'https://staging.checksops.com';
+    if (!key || !secretKey) {
+      return { ok: false, reason: 'sandbox_moov_credentials_missing', accountId };
+    }
+    const basic = Buffer.from(`${key}:${secretKey}`).toString('base64');
+    const tokenRes = await fetch('https://api.moov.io/oauth2/token', {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${basic}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Origin: origin,
+        'x-moov-version': 'v2024.01.00',
+      },
+      body: new URLSearchParams({
+        grant_type: 'client_credentials',
+        scope: `/accounts/${accountId}/payment-methods.read`,
+      }),
+    });
+    const tokenBody = await tokenRes.json().catch(() => ({}));
+    if (!tokenRes.ok || !tokenBody.access_token) {
+      return { ok: false, reason: 'moov_token_failed', status: tokenRes.status, accountId };
+    }
+    const methodsRes = await fetch(`https://api.moov.io/accounts/${accountId}/payment-methods`, {
+      headers: {
+        Authorization: `Bearer ${tokenBody.access_token}`,
+        Origin: origin,
+        'x-moov-version': 'v2024.01.00',
+      },
+    });
+    const methods = await methodsRes.json().catch(() => []);
+    const wallets = (Array.isArray(methods) ? methods : []).filter((row) => (
+      String(row?.paymentMethodType || row?.paymentMethodType || '') === 'moov-wallet'
+    ));
+    if (wallets.length !== 1) {
+      return {
+        ok: false,
+        reason: 'sandbox_wallet_not_unique',
+        accountId,
+        walletCount: wallets.length,
+        message: 'ChecksOps merchant wallet must be uniquely identified. Refusing first-wallet selection.',
+      };
+    }
+    const paymentMethodId = wallets[0].paymentMethodID || wallets[0].paymentMethodId;
+    if (!paymentMethodId) return { ok: false, reason: 'wallet_id_missing', accountId };
+    return { ok: true, accountId, paymentMethodId, source: 'moov_unique_wallet' };
+  } catch (error) {
+    return { ok: false, reason: 'moov_resolve_failed', accountId, error: String(error.message || error).slice(0, 180) };
+  }
 };
 
 export const handler = async () => {

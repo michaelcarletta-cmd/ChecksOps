@@ -74,7 +74,7 @@ export async function canAuthorizeTenantBilling(client, userId, tenantId) {
      LIMIT 1`,
     [userId, tenantId],
   )).rows[0];
-  return ['owner', 'admin'].includes(String(row?.role || ''));
+  return String(row?.role || '') === 'admin';
 }
 
 const fail = (error, extra = {}) => ({ ok: false, error, ...extra });
