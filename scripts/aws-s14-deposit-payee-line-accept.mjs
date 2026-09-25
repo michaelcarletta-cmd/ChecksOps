@@ -141,6 +141,88 @@ const deleteCheck = async (checkId) => {
   }).catch(() => {});
 };
 
+const forceDeleteChecks = async (checkIds) => {
+  const ids = [...new Set((checkIds || []).filter(Boolean))];
+  if (!ids.length) return { ok: true, deleted: [] };
+  const apiFn = awsJson(['lambda', 'get-function-configuration', '--function-name', 'checksops-staging-api']);
+  const name = `checksops-staging-s14-cleanup-${Date.now().toString().slice(-6)}`;
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 's14-cleanup-'));
+  const handler = `import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
+import pg from 'pg';
+export const handler = async (event) => {
+  const sm = new SecretsManagerClient({});
+  const secret = JSON.parse((await sm.send(new GetSecretValueCommand({ SecretId: process.env.DATABASE_SECRET_ARN }))).SecretString);
+  const client = new pg.Client({
+    host: secret.host, port: Number(secret.port || 5432), user: secret.username,
+    password: secret.password, database: process.env.DATABASE_NAME || 'checksops',
+    ssl: { rejectUnauthorized: false },
+  });
+  await client.connect();
+  const deleted = [];
+  try {
+    await client.query('BEGIN');
+    await client.query("SELECT set_config('request.financial_certification', '1', true)");
+    for (const id of event.checkIds || []) {
+      await client.query('DELETE FROM public.check_endorsements WHERE check_id = $1::uuid', [id]);
+      await client.query('DELETE FROM public.check_payees WHERE check_id = $1::uuid', [id]);
+      await client.query('DELETE FROM public.shared_checks WHERE check_id = $1::uuid', [id]);
+      await client.query('DELETE FROM public.claim_checks WHERE check_intake_item_id = $1::uuid', [id]);
+      await client.query(
+        "DELETE FROM public.aws_financial_operations WHERE resource_type = 'check' AND resource_id = $1::uuid",
+        [id],
+      );
+      const row = await client.query('DELETE FROM public.check_intake_items WHERE id = $1::uuid RETURNING id', [id]);
+      if (row.rows[0]?.id) deleted.push(row.rows[0].id);
+    }
+    await client.query('COMMIT');
+    return { ok: true, deleted };
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+    return { ok: false, error: String(error.message || error).slice(0, 240), deleted };
+  } finally { await client.end(); }
+};
+`;
+  fs.writeFileSync(path.join(work, 'index.mjs'), handler);
+  fs.writeFileSync(path.join(work, 'package.json'), JSON.stringify({ type: 'module', dependencies: { pg: '^8.13.1' } }));
+  execFileSync('npm', ['install', '--omit=dev', 'pg@8.13.1', '@aws-sdk/client-secrets-manager'], { cwd: work, stdio: 'ignore' });
+  const zip = path.join(work, 'fn.zip');
+  execFileSync('zip', ['-qr', zip, '.'], { cwd: work });
+  const vpc = apiFn.VpcConfig || {};
+  awsJson([
+    'lambda', 'create-function',
+    '--function-name', name,
+    '--runtime', 'nodejs20.x',
+    '--role', apiFn.Role,
+    '--handler', 'index.handler',
+    '--timeout', '30',
+    '--zip-file', `fileb://${zip}`,
+    '--environment', `Variables={DATABASE_SECRET_ARN=${apiFn.Environment.Variables.DATABASE_SECRET_ARN},DATABASE_NAME=${apiFn.Environment.Variables.DATABASE_NAME || 'checksops'}}`,
+    ...(vpc.SubnetIds?.length ? [
+      '--vpc-config',
+      `SubnetIds=${vpc.SubnetIds.join(',')},SecurityGroupIds=${(vpc.SecurityGroupIds || []).join(',')}`,
+    ] : []),
+  ]);
+  for (let i = 0; i < 20; i += 1) {
+    const cfg = awsJson(['lambda', 'get-function-configuration', '--function-name', name]);
+    if (cfg.State === 'Active' && cfg.LastUpdateStatus === 'Successful') break;
+    execFileSync('sleep', ['3']);
+  }
+  try {
+    const invoked = awsJson([
+      'lambda', 'invoke',
+      '--function-name', name,
+      '--cli-binary-format', 'raw-in-base64-out',
+      '--payload', JSON.stringify({ checkIds: ids }),
+      path.join(work, 'out.json'),
+    ]);
+    const body = JSON.parse(fs.readFileSync(path.join(work, 'out.json'), 'utf8'));
+    return { ok: invoked.StatusCode === 200 && body.ok === true, body, functionName: name };
+  } finally {
+    try { execFileSync(AWS, ['--region', REGION, 'lambda', 'delete-function', '--function-name', name]); } catch { /* ignore */ }
+    fs.rmSync(work, { recursive: true, force: true });
+  }
+};
+
 const awsJson = (args) => JSON.parse(execFileSync(AWS, ['--region', REGION, ...args], { encoding: 'utf8' }));
 
 const stampDepositedAt = async (checkId) => {
@@ -154,7 +236,7 @@ export const handler = async (event) => {
   const secret = JSON.parse((await sm.send(new GetSecretValueCommand({ SecretId: process.env.DATABASE_SECRET_ARN }))).SecretString);
   const client = new pg.Client({
     host: secret.host, port: Number(secret.port || 5432), user: secret.username,
-    password: secret.password, database: secret.dbname || 'postgres',
+    password: secret.password, database: process.env.DATABASE_NAME || 'checksops',
     ssl: { rejectUnauthorized: false },
   });
   await client.connect();
@@ -186,7 +268,7 @@ export const handler = async (event) => {
     '--handler', 'index.handler',
     '--timeout', '30',
     '--zip-file', `fileb://${zip}`,
-    '--environment', `Variables={DATABASE_SECRET_ARN=${apiFn.Environment.Variables.DATABASE_SECRET_ARN}}`,
+    '--environment', `Variables={DATABASE_SECRET_ARN=${apiFn.Environment.Variables.DATABASE_SECRET_ARN},DATABASE_NAME=${apiFn.Environment.Variables.DATABASE_NAME || 'checksops'}}`,
     ...(vpc.SubnetIds?.length ? [
       '--vpc-config',
       `SubnetIds=${vpc.SubnetIds.join(',')},SecurityGroupIds=${(vpc.SecurityGroupIds || []).join(',')}`,
@@ -316,6 +398,7 @@ const main = async () => {
 
   let ingestPayee = null;
   let ingestId = null;
+  let ingestSecondId = null;
   try {
     const env = awsJson(['lambda', 'get-function-configuration', '--function-name', 'checksops-staging-api']);
     const secret = env.Environment?.Variables?.CROSS_APP_BRIDGE_SECRET;
@@ -349,9 +432,16 @@ const main = async () => {
           check: { amount: 88.88, payee_line: AFTER, carrier_name: MARKER },
         },
       });
+      ingestSecondId = second.json.check_id || null;
       const afterIngest = await loadCheck(ingestId);
       ingestPayee = afterIngest?.payee_line || null;
-      evidence.ingest = { first: first.status, second: second.status, checkId: ingestId, payee: ingestPayee };
+      evidence.ingest = {
+        first: first.status,
+        second: second.status,
+        checkId: ingestId,
+        secondCheckId: ingestSecondId,
+        payee: ingestPayee,
+      };
       await api('/financial/cleanup', { body: { marker: `${MARKER}-ing` } });
     } else {
       evidence.ingest = { first: first.status, error: first.json.error || first.json.message };
@@ -359,8 +449,10 @@ const main = async () => {
   } catch (error) {
     evidence.ingest = { error: String(error.message || error).slice(0, 200) };
   }
-  record('5 existing-row ingest cannot overwrite after deposit', ingestPayee === CORRECTED || evidence.ingest?.error, {
-    detail: `payee=${ingestPayee || 'none'} ${JSON.stringify(evidence.ingest || {})}`.slice(0, 180),
+  record('5 existing-row ingest cannot overwrite after deposit', Boolean(ingestId)
+    && ingestSecondId === ingestId
+    && ingestPayee === CORRECTED, {
+    detail: `payee=${ingestPayee || 'none'} sameRow=${ingestSecondId === ingestId} ${JSON.stringify(evidence.ingest || {})}`.slice(0, 180),
   });
 
   let stamped = null;
@@ -399,12 +491,21 @@ const main = async () => {
 
   for (const id of evidence.checks) await deleteCheck(id);
   await api('/financial/cleanup', { body: { marker: MARKER } });
-  const leftover = [];
+  let leftover = [];
   for (const id of evidence.checks) {
     const row = await loadCheck(id);
     if (row?.id) leftover.push(id);
   }
-  evidence.cleanup = { leftover };
+  let forceCleanup = null;
+  if (leftover.length) {
+    forceCleanup = await forceDeleteChecks(leftover);
+    leftover = [];
+    for (const id of evidence.checks) {
+      const row = await loadCheck(id);
+      if (row?.id) leftover.push(id);
+    }
+  }
+  evidence.cleanup = { leftover, forceCleanup };
   record('synthetic cleanup', leftover.length === 0, {
     detail: leftover.length ? leftover.join(',') : 'none leftover',
   });

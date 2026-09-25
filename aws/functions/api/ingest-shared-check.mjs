@@ -459,17 +459,41 @@ export const persistIngestInline = async (client, plan) => {
   };
 };
 
+export const guardIngestPlanPayeeLine = async (client, plan) => {
+  if (!plan?.check || plan.check.payee_line === undefined) return plan;
+  const existing = await client.query(
+    `SELECT id, payee_line FROM public.check_intake_items
+     WHERE external_origin->>'source_check_id' = $1
+     LIMIT 1`,
+    [plan.source_check_id],
+  );
+  const row = existing.rows?.[0];
+  if (!row?.id) return plan;
+  const incomingPayee = toStandardCaps(plan.check.payee_line ?? null);
+  const guard = await rejectPayeeLineIfDeposited(client, row.id, {
+    current: row.payee_line,
+    next: incomingPayee,
+  });
+  if (guard.locked || guard.noop) {
+    const check = { ...plan.check };
+    delete check.payee_line;
+    return { ...plan, check };
+  }
+  return plan;
+};
+
 export const persistIngest = async (client, plan) => {
+  const guarded = await guardIngestPlanPayeeLine(client, plan);
   try {
     const doc = (await client.query(
       'SELECT public.aws_ingest_shared_check($1::jsonb) AS doc',
-      [JSON.stringify({ ...plan, check: plan.check })],
+      [JSON.stringify({ ...guarded, check: guarded.check })],
     )).rows[0]?.doc;
     if (doc?.ok || doc?.error) return doc;
   } catch (error) {
     if (error?.code !== '42883') throw error;
   }
-  return persistIngestInline(client, plan);
+  return persistIngestInline(client, guarded);
 };
 
 const maybeStatusBackfill = async (plan) => {

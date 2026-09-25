@@ -61,17 +61,16 @@ export const isCheckDeposited = async (client, checkId) => {
         payee_line: payeeLine,
       };
     }
-    const ops = await client.query(
-      `SELECT 1
-         FROM public.aws_financial_operations
-        WHERE resource_type = 'check'
-          AND resource_id = $1::uuid
-          AND operation_type = ANY($2::text[])
-          AND status = ANY($3::text[])
-        LIMIT 1`,
-      [checkId, [...MONEY_IN_OPERATION_TYPES], [...CONFIRMED_MONEY_STATUSES]],
-    );
-    if (ops.rows?.length) {
+    const confirmed = await lookupConfirmedProviderDeposit(client, checkId);
+    if (confirmed.error) {
+      return {
+        deposited: true,
+        failClosed: true,
+        reason: 'lookup_failed',
+        payee_line: null,
+      };
+    }
+    if (confirmed.found) {
       return {
         deposited: true,
         failClosed: false,
@@ -93,6 +92,41 @@ export const isCheckDeposited = async (client, checkId) => {
       payee_line: null,
     };
   }
+};
+
+/**
+ * Financial-ops RLS requires request.financial_certification='1'.
+ * /data/write does not set that GUC. Raise it only inside a savepoint so a
+ * confirmed sandbox deposit is visible, then roll the GUC back before the
+ * rest of the write transaction continues.
+ */
+const lookupConfirmedProviderDeposit = async (client, checkId) => {
+  const savepoint = 's14_deposit_lookup';
+  let result = { error: true, found: false };
+  try {
+    await client.query(`SAVEPOINT ${savepoint}`);
+    await client.query("SELECT set_config('request.financial_certification', '1', true)");
+    const ops = await client.query(
+      `SELECT 1
+         FROM public.aws_financial_operations
+        WHERE resource_type = 'check'
+          AND resource_id = $1::uuid
+          AND operation_type = ANY($2::text[])
+          AND status = ANY($3::text[])
+        LIMIT 1`,
+      [checkId, [...MONEY_IN_OPERATION_TYPES], [...CONFIRMED_MONEY_STATUSES]],
+    );
+    result = { error: false, found: Boolean(ops.rows?.length) };
+  } catch {
+    result = { error: true, found: false };
+  }
+  try {
+    await client.query(`ROLLBACK TO SAVEPOINT ${savepoint}`);
+    await client.query(`RELEASE SAVEPOINT ${savepoint}`);
+  } catch {
+    return { error: true, found: false };
+  }
+  return result;
 };
 
 export const rejectPayeeLineIfDeposited = async (client, checkId, { current, next } = {}) => {

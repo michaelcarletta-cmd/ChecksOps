@@ -6,6 +6,7 @@ import {
   handleIngestSharedCheck,
   NATIVE_TENANT_MAP,
   normalizePayeeType,
+  persistIngest,
   persistIngestInline,
 } from '../functions/api/ingest-shared-check.mjs';
 import { CLASS_A_FUNCTIONS, handleAppServiceRequest } from '../functions/api/app-services.mjs';
@@ -128,6 +129,42 @@ test('ninth UUID is not a live production user and is excluded from Cognito invi
   assert.equal(ninth.inventEmail, false);
   assert.equal(ninth.failClosed, true);
   assert.equal(ninthExcludedFromInvite(), true);
+});
+
+test('persistIngest strips locked payee_line before SQL ingest', async () => {
+  const CHECK_ID = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+  const statements = [];
+  const client = {
+    query: async (sql, params = []) => {
+      statements.push({ sql: String(sql), params });
+      if (/external_origin->>'source_check_id'/.test(sql)) {
+        return { rows: [{ id: CHECK_ID, payee_line: 'Corrected Payee Line' }] };
+      }
+      if (/SELECT deposited_at, payee_line/.test(sql)) {
+        return { rows: [{ deposited_at: null, payee_line: 'Corrected Payee Line' }] };
+      }
+      if (/FROM public.aws_financial_operations/.test(sql)) {
+        return { rows: [{ ok: 1 }] };
+      }
+      if (/aws_ingest_shared_check/.test(sql)) {
+        return { rows: [{ doc: { ok: true, check_id: CHECK_ID } }] };
+      }
+      return { rows: [] };
+    },
+  };
+  const plan = buildIngestPlan({
+    source_check_id: '11111111-1111-4111-8111-111111111111',
+    target_partner_code: 'abc',
+    source_tenant_id: '22222222-2222-4222-8222-222222222222',
+    source_partner_code: 'DF9CC985',
+    check: { amount: 10, payee_line: 'Ingest Rewrite After Deposit', carrier_name: 'Still Ok' },
+  });
+  const result = await persistIngest(client, plan);
+  const sqlCall = statements.find((row) => /aws_ingest_shared_check/.test(row.sql));
+  assert.ok(sqlCall);
+  const payload = JSON.parse(sqlCall.params[0]);
+  assert.equal(payload.check.payee_line, undefined);
+  assert.equal(result.check_id, CHECK_ID);
 });
 
 test('existing-row ingest skips payee_line after a confirmed deposit', async () => {

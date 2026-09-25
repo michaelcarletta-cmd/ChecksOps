@@ -23,6 +23,8 @@ Pre-deposit descriptive correction remains allowed. Same-value post-deposit requ
 3. Confirmed money-in row exists (same sets as `financial-remaining.mjs`) → `{ deposited: true, reason: 'confirmed_provider_deposit' }`
 4. Else `{ deposited: false, reason: 'not_deposited' }`
 
+Confirmed-provider lookup raises `request.financial_certification='1'` inside `SAVEPOINT s14_deposit_lookup` and rolls that savepoint back so `/data/write` can see `aws_financial_operations` without leaving the GUC set for the rest of the transaction. Savepoint, GUC, or ops errors fail closed.
+
 `rejectPayeeLineIfDeposited` allows a same-value no-op without mutation. A changed value is rejected with `payee_line_locked` when deposited or fail-closed.
 
 `payee_line` is **not** added to `INTAKE_PROHIBITED_COLUMNS`.

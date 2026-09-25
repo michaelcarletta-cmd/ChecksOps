@@ -27,6 +27,12 @@ const mockClient = ({
     query: async (sql, params = []) => {
       queries.push({ sql: String(sql), params });
       if (throwOn && String(sql).includes(throwOn)) throw new Error('synthetic lookup failure');
+      if (/^SAVEPOINT /i.test(sql) || /^ROLLBACK TO SAVEPOINT /i.test(sql) || /^RELEASE SAVEPOINT /i.test(sql)) {
+        return { rows: [] };
+      }
+      if (/SELECT set_config/.test(sql)) {
+        return { rows: [{ set_config: params[1] }] };
+      }
       if (/SELECT deposited_at, payee_line/.test(sql)) {
         return { rows: missing ? [] : [{ deposited_at, payee_line }] };
       }
@@ -54,9 +60,16 @@ test('isCheckDeposited is true when deposited_at is set', async () => {
 });
 
 test('isCheckDeposited is true when a confirmed provider deposit exists', async () => {
-  const state = await isCheckDeposited(mockClient({ confirmedDeposit: true }), CHECK_ID);
+  const client = mockClient({ confirmedDeposit: true });
+  const state = await isCheckDeposited(client, CHECK_ID);
   assert.equal(state.deposited, true);
   assert.equal(state.reason, 'confirmed_provider_deposit');
+  const sqls = client.queries.map((row) => row.sql);
+  const save = sqls.findIndex((sql) => /^SAVEPOINT s14_deposit_lookup/i.test(sql));
+  const guc = sqls.findIndex((sql) => /set_config\('request.financial_certification'/.test(sql));
+  const ops = sqls.findIndex((sql) => /FROM public.aws_financial_operations/.test(sql));
+  const rollback = sqls.findIndex((sql) => /ROLLBACK TO SAVEPOINT s14_deposit_lookup/i.test(sql));
+  assert.ok(save >= 0 && save < guc && guc < ops && ops < rollback);
 });
 
 test('isCheckDeposited fails closed on lookup errors, missing rows, and invalid ids', async () => {
@@ -117,6 +130,22 @@ test('lookup failure while changing payee_line fails closed', async () => {
   assert.equal(guard.locked, true);
   assert.equal(guard.failClosed, true);
   assert.equal(guard.reason, 'lookup_failed');
+
+  const gucFailed = await rejectPayeeLineIfDeposited(
+    mockClient({ throwOn: 'request.financial_certification' }),
+    CHECK_ID,
+    { current: 'Corrected Payee Line', next: 'Anything Else' },
+  );
+  assert.equal(gucFailed.locked, true);
+  assert.equal(gucFailed.failClosed, true);
+
+  const savepointFailed = await rejectPayeeLineIfDeposited(
+    mockClient({ throwOn: 'SAVEPOINT' }),
+    CHECK_ID,
+    { current: 'Corrected Payee Line', next: 'Anything Else' },
+  );
+  assert.equal(savepointFailed.locked, true);
+  assert.equal(savepointFailed.failClosed, true);
 });
 
 test('resolveWritablePayeeLine returns incoming only when not deposited', async () => {

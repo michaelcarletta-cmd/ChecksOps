@@ -59,10 +59,11 @@ const mockClient = ({
         error.code = '40001';
         throw error;
       }
-      if (sql === 'BEGIN' || sql === 'ROLLBACK' || sql === 'COMMIT' || sql === 'SET TRANSACTION READ WRITE') {
+      if (sql === 'BEGIN' || sql === 'ROLLBACK' || sql === 'COMMIT' || sql === 'SET TRANSACTION READ WRITE'
+        || /^SAVEPOINT /i.test(sql) || /^ROLLBACK TO SAVEPOINT /i.test(sql) || /^RELEASE SAVEPOINT /i.test(sql)) {
         return { rows: [] };
       }
-      if (sql.startsWith('SELECT set_config')) return { rows: [{ set_config: params[1] }] };
+      if (String(sql).startsWith('SELECT set_config')) return { rows: [{ set_config: params?.[1] || '1' }] };
       if (sql === LOOKUP_MAPPING_SQL) {
         return { rows: params[0] === mapping.cognito_sub ? [mapping] : [] };
       }
@@ -648,6 +649,7 @@ test('S14 confirmed provider deposit locks payee_line writes', async () => {
   }), depsFor(client));
   assert.equal(result.statusCode, 403);
   assert.equal(result.error, 'payee_line_locked');
+  assert.equal(result.reason, 'confirmed_provider_deposit');
   assert.equal(client.queries.some((q) => String(q.sql).startsWith('UPDATE public.check_intake_items')), false);
 });
 
