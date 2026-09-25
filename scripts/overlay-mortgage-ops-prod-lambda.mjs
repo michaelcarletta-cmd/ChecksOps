@@ -152,7 +152,7 @@ const main = async () => {
     throw new Error('live executeAcceptMortgage anchor missing; refusing wholesale replace');
   }
   const patchedRpc = liveRpcText.replace(ACCEPT_ANCHOR, ACCEPT_HOOK);
-  if (patchedRpc === liveRpcText || (patchedRpc.match(/accrueMortgageOpsAcceptedRequest/g) || []).length !== 1) {
+  if (patchedRpc === liveRpcText || (patchedRpc.match(/accrueMortgageOpsAcceptedRequest/g) || []).length !== 2) {
     throw new Error('workflow-rpc accept hook patch failed');
   }
   fs.writeFileSync(destRpc, patchedRpc);
