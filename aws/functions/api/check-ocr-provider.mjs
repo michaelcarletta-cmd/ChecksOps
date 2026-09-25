@@ -2,7 +2,7 @@
  * Dual-provider check OCR: Textract (descriptive fallback + printed/claim)
  * + Azure (structured MICR and Azure-native descriptive fields).
  */
-import { digitsOnly, parseCheckFields } from './ocr-parse.mjs';
+import { cleanPayeeLine, digitsOnly, parseCheckFields, sanitizeCarrierName, splitPayees } from './ocr-parse.mjs';
 import { runTextract } from './textract-check-ocr.mjs';
 import { analyzeAzureCheck, redactOcrLog } from './azure-check-ocr.mjs';
 import { emptyAzureMicr, normalizeAzureMicr } from './ocr-normalize-azure.mjs';
@@ -153,6 +153,48 @@ export const mergeCheckExtraction = ({
   };
 
   for (const key of AZURE_PREFERRED_DESCRIPTIVE) {
+    if (key === 'carrier_name') {
+      const azureCarrier = sanitizeCarrierName(supp.carrier_name);
+      const textractCarrier = sanitizeCarrierName(textractSnap.carrier_name);
+      if (azureCarrier) {
+        canonical.carrier_name = azureCarrier;
+        canonical.filled_from_azure.push(key);
+        descriptive_sources[key] = 'azure_prebuilt_check_us';
+        if (azureMicr.field_confidence && azureMicr.field_confidence[key] != null) {
+          canonical.field_confidence[key] = azureMicr.field_confidence[key];
+        }
+      } else if (textractCarrier) {
+        canonical.carrier_name = textractCarrier;
+        descriptive_sources[key] = texLabel;
+      } else {
+        canonical.carrier_name = null;
+        descriptive_sources[key] = 'none';
+      }
+      continue;
+    }
+    if (key === 'payee_line') {
+      const azurePayee = cleanPayeeLine(supp.payee_line);
+      const textractPayee = cleanPayeeLine(textractSnap.payee_line);
+      if (azurePayee) {
+        canonical.payee_line = azurePayee;
+        canonical.payees = splitPayees(azurePayee);
+        canonical.filled_from_azure.push(key);
+        if (!canonical.filled_from_azure.includes('payees')) canonical.filled_from_azure.push('payees');
+        descriptive_sources[key] = 'azure_prebuilt_check_us';
+        descriptive_sources.payees = 'azure_prebuilt_check_us';
+        if (azureMicr.field_confidence && azureMicr.field_confidence[key] != null) {
+          canonical.field_confidence[key] = azureMicr.field_confidence[key];
+        }
+      } else if (textractPayee) {
+        canonical.payee_line = textractPayee;
+        canonical.payees = splitPayees(textractPayee);
+        descriptive_sources[key] = texLabel;
+      } else {
+        canonical.payee_line = null;
+        descriptive_sources[key] = 'none';
+      }
+      continue;
+    }
     if (present(supp[key])) {
       canonical[key] = supp[key];
       canonical.filled_from_azure.push(key);
@@ -165,10 +207,19 @@ export const mergeCheckExtraction = ({
     }
   }
 
-  if (present(supp.payees)) {
-    canonical.payees = supp.payees;
-    if (!canonical.filled_from_azure.includes('payees')) canonical.filled_from_azure.push('payees');
+  if (canonical.filled_from_azure.includes('payees')) {
     descriptive_sources.payees = 'azure_prebuilt_check_us';
+  } else if (present(supp.payees) && !canonical.filled_from_azure.includes('payee_line')) {
+    const cleanedPayees = (Array.isArray(supp.payees) ? supp.payees : [])
+      .map((row) => ({ ...row, name: cleanPayeeLine(row?.name) }))
+      .filter((row) => row.name);
+    if (cleanedPayees.length) {
+      canonical.payees = cleanedPayees;
+      canonical.filled_from_azure.push('payees');
+      descriptive_sources.payees = 'azure_prebuilt_check_us';
+    } else {
+      descriptive_sources.payees = present(canonical.payees) ? texLabel : 'none';
+    }
   } else {
     descriptive_sources.payees = present(canonical.payees) ? texLabel : 'none';
   }
