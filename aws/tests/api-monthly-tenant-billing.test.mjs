@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 import {
   CHECKSOPS_SANDBOX_MERCHANT_ACCOUNT_ID,
   billingShouldSimulate,
+  billingVerificationPostEnabled,
+  billingVerificationShouldSimulate,
   normalizeDest,
   resolveBillingDestination,
 } from '../functions/api/tenant-billing-destination.mjs';
@@ -16,6 +18,11 @@ import {
   loadMortgageOpsBillingLaunch,
   mortgageOpsAcceptedBeforeLaunch,
   billingIdempotencyKey,
+  billingVerificationIdempotencyKey,
+  BILLING_VERIFICATION_AMOUNT_CENTS,
+  OCCURRENCE_KIND_LEGACY,
+  OCCURRENCE_KIND_MONTHLY,
+  OCCURRENCE_KIND_VERIFICATION,
   buildConsolidatedInvoice,
   buildTenantBillingSnapshot,
   chargeTenantPeriod,
@@ -41,6 +48,7 @@ import {
   saveBillingAuthorization,
   saveBillingSettings,
   transferIsQualifying,
+  verifyTenantBillingDebit,
 } from '../functions/api/tenant-billing-engine.mjs';
 import {
   handleMonthlyBillingScheduled,
@@ -240,6 +248,9 @@ const mockClient = (store, { platformOwner = true, actorTenant = TENANT_A, actor
     if (text.includes('FROM public.mortgage_ops_billing_launch')) {
       return { rows: store.mortgageLaunch ? [store.mortgageLaunch] : [] };
     }
+    if (text.includes('SELECT * FROM public.tenant_maintenance_payments') && text.includes('idempotence_key')) {
+      return { rows: store.occurrences.filter((row) => row.idempotence_key === params[0]) };
+    }
     if (text.includes('SELECT * FROM public.tenant_maintenance_payments') && text.includes('billing_period')) {
       return { rows: store.occurrences.filter((row) => row.tenant_id === params[0] && row.billing_period === params[1]) };
     }
@@ -411,6 +422,39 @@ const mockClient = (store, { platformOwner = true, actorTenant = TENANT_A, actor
       return { rows: [row] };
     }
     if (text.includes('INSERT INTO public.tenant_maintenance_payments')) {
+      if (text.includes('Billing verification') || params[params.length - 1] === 'billing_verification') {
+        const existing = store.occurrences.find((row) => row.idempotence_key === params[2]);
+        if (existing) return { rows: [existing] };
+        const row = {
+          id: `occ-${store.occurrences.length + 1}`,
+          tenant_id: params[0],
+          amount_cents: params[1],
+          monthly_rate_cents: 0,
+          discount_cents: 0,
+          period_start: null,
+          period_end: null,
+          billing_period: null,
+          method: 'moov_ach',
+          status: 'due',
+          idempotence_key: params[2],
+          recorded_by: params[3],
+          notes: params[4],
+          funding_source_method_id: params[5],
+          destination_account_id: params[6],
+          destination_payment_method_id: params[7],
+          provider_environment: params[8],
+          occurrence_kind: 'billing_verification',
+          provider_transfer_id: null,
+          submitted_at: null,
+          settled_at: null,
+          returned_at: null,
+          failure_reason: null,
+          return_reason: null,
+          created_at: new Date().toISOString(),
+        };
+        store.occurrences.push(row);
+        return { rows: [row] };
+      }
       const existing = store.occurrences.find((row) => row.tenant_id === params[0] && row.billing_period === params[6]);
       if (existing) return { rows: [existing] };
       const row = {
@@ -443,6 +487,7 @@ const mockClient = (store, { platformOwner = true, actorTenant = TENANT_A, actor
         mortgage_ops_initial_amount_cents: params[23] ?? 0,
         mortgage_ops_additional_count: params[24] ?? 0,
         mortgage_ops_additional_amount_cents: params[25] ?? 0,
+        occurrence_kind: params[26] || 'monthly_subscription',
         provider_transfer_id: null,
         submitted_at: null,
         settled_at: null,
@@ -1224,6 +1269,22 @@ test('SQL 45 is additive with Mortgage Ops uniqueness and free-zero rates', () =
   assert.doesNotMatch(sql, /INSERT INTO public\.check_billing_events[\s\S]*SELECT[\s\S]*FROM public\.mortgage_handling_requests/);
 });
 
+test('SQL 47 adds typed occurrence_kind without mutating penny financials', () => {
+  const sql = readFileSync(path.join(ROOT, 'rls/sql/47_billing_verification_occurrence.sql'), 'utf8');
+  assert.match(sql, /occurrence_kind/);
+  assert.match(sql, /monthly_subscription/);
+  assert.match(sql, /billing_verification/);
+  assert.match(sql, /legacy/);
+  assert.match(sql, /amount_cents = 100/);
+  assert.match(sql, /tenant_maintenance_payments_verification_uidx/);
+  assert.match(sql, /tenant_maintenance_payments_idempotence_key_uidx/);
+  assert.doesNotMatch(sql, /SET\s+amount_cents/i);
+  assert.doesNotMatch(sql, /SET\s+provider_transfer_id/i);
+  assert.doesNotMatch(sql, /SET\s+status/i);
+  assert.doesNotMatch(sql, /68041b0b-563e-4948-b19c-ce6c0c2e1a07/);
+  assert.doesNotMatch(sql, /DROP TABLE/);
+});
+
 test('SQL 46 adds a fail-closed prospective launch cutoff without backfill', () => {
   const sql = readFileSync(path.join(ROOT, 'rls/sql/46_mortgage_ops_billing_launch.sql'), 'utf8');
   assert.match(sql, /CREATE TABLE IF NOT EXISTS public\.mortgage_ops_billing_launch/);
@@ -1659,6 +1720,224 @@ test('production monthly billing post remains disabled by default', async () => 
   }, () => {
     assert.equal(monthlyBillingProductionPostEnabled(), false);
     assert.equal(billingShouldSimulate(), true);
+  });
+});
+
+const VERIFY_ID = '33333333-3333-4333-8333-333333333333';
+
+test('verification gate is independent of monthly PRODUCTION_POST and defaults to simulate', async () => {
+  await withEnv({
+    CHECKSOPS_ENV: 'production-prep',
+    AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST: 'false',
+    AWS_MOOV_BILLING_VERIFICATION_POST_ENABLED: undefined,
+  }, () => {
+    assert.equal(billingVerificationPostEnabled(), false);
+    assert.equal(billingVerificationShouldSimulate(), true);
+    assert.equal(billingShouldSimulate(), true);
+  });
+  await withEnv({
+    CHECKSOPS_ENV: 'production-prep',
+    AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST: 'true',
+    AWS_MOOV_BILLING_VERIFICATION_POST_ENABLED: 'false',
+  }, () => {
+    assert.equal(billingVerificationPostEnabled(), false);
+    assert.equal(billingVerificationShouldSimulate(), true);
+    assert.equal(billingShouldSimulate(), false);
+  });
+  await withEnv({
+    CHECKSOPS_ENV: 'production-prep',
+    AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST: 'false',
+    AWS_MOOV_BILLING_VERIFICATION_POST_ENABLED: 'true',
+  }, () => {
+    assert.equal(billingVerificationPostEnabled(), true);
+    assert.equal(billingVerificationShouldSimulate(), false);
+    assert.equal(billingShouldSimulate(), true);
+  });
+});
+
+test('isolated billing verification simulates $1 without monthly invoice side effects', async () => {
+  await withEnv({
+    AWS_MOOV_MONTHLY_BILLING_ENABLED: 'true',
+    AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST: 'false',
+    AWS_MOOV_BILLING_VERIFICATION_POST_ENABLED: 'false',
+    AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED: undefined,
+    CHECKSOPS_ENV: 'staging',
+  }, async () => {
+    const store = makeStore();
+    const client = mockClient(store);
+    await readyTenant(client, store, TENANT_A, 'pm-a');
+    const dest = { ok: true, ...DEST };
+    const before = await buildConsolidatedInvoice(client, {
+      tenantId: TENANT_A, period: '2026-09', persist: false,
+    });
+    const beforeDue = (await buildTenantBillingSnapshot(client, TENANT_A, dest)).current_amount_due_cents;
+    const eventsBefore = store.checkEvents.length;
+    const allocationsBefore = store.allocations.length;
+
+    const denied = await handleTenantBillingAdmin(identityEvent(STAFF, {
+      action: 'verify-debit', tenant_id: TENANT_A, confirm: true, verification_id: VERIFY_ID,
+    }, 'staff-a@example.com'), {
+      client: mockClient(store, { platformOwner: false }),
+      mapping: { application_user_id: STAFF },
+    });
+    assert.equal(denied.error, 'platform_owner_required');
+
+    const unconfirmed = await handleTenantBillingAdmin(identityEvent(OWNER, {
+      action: 'verify-debit', tenant_id: TENANT_A, confirm: false, verification_id: VERIFY_ID,
+    }), {
+      client, mapping: { application_user_id: OWNER }, destination: dest,
+    });
+    assert.equal(unconfirmed.ok, false);
+    assert.equal(unconfirmed.error, 'confirmation_required');
+
+    const badAmount = await handleTenantBillingAdmin(identityEvent(OWNER, {
+      action: 'verify-debit', tenant_id: TENANT_A, confirm: true, verification_id: VERIFY_ID,
+      amount_cents: 50000,
+    }), {
+      client, mapping: { application_user_id: OWNER }, destination: dest,
+    });
+    assert.equal(badAmount.error, 'verification_amount_locked');
+    assert.equal(store.occurrences.length, 0);
+
+    const first = await handleTenantBillingAdmin(identityEvent(OWNER, {
+      action: 'verify-debit', tenant_id: TENANT_A, confirm: true, verification_id: VERIFY_ID,
+    }), {
+      client, mapping: { application_user_id: OWNER }, destination: dest,
+    });
+    assert.equal(first.ok, true);
+    assert.equal(first.verify.simulated, true);
+    assert.equal(first.verify.liveProviderCalled, false);
+    assert.equal(first.verify.occurrence.occurrence_kind, OCCURRENCE_KIND_VERIFICATION);
+    assert.equal(first.verify.occurrence.amount_cents, BILLING_VERIFICATION_AMOUNT_CENTS);
+    assert.equal(first.verify.occurrence.billing_period, null);
+    assert.equal(first.verify.occurrence.status, 'submitted');
+    assert.match(String(first.verify.occurrence.provider_transfer_id), /^sim:/);
+    assert.equal(first.idempotency_key, billingVerificationIdempotencyKey(TENANT_A, VERIFY_ID));
+    assert.equal(store.occurrences.length, 1);
+    assert.equal(store.allocations.length, allocationsBefore);
+    assert.equal(store.checkEvents.length, eventsBefore);
+
+    const replay = await handleTenantBillingAdmin(identityEvent(OWNER, {
+      action: 'verify-debit', tenant_id: TENANT_A, confirm: true, verification_id: VERIFY_ID,
+      amount_cents: 13900,
+    }), {
+      client, mapping: { application_user_id: OWNER }, destination: dest,
+    });
+    assert.equal(replay.error, 'verification_amount_locked');
+
+    const replayOk = await handleTenantBillingAdmin(identityEvent(OWNER, {
+      action: 'verify-debit', tenant_id: TENANT_A, confirm: true, verification_id: VERIFY_ID,
+    }), {
+      client, mapping: { application_user_id: OWNER }, destination: dest,
+    });
+    assert.equal(replayOk.ok, true);
+    assert.equal(replayOk.verify.duplicate, true);
+    assert.equal(store.occurrences.length, 1);
+
+    const snapshot = await buildTenantBillingSnapshot(client, TENANT_A, dest);
+    assert.equal(snapshot.current_amount_due_cents, beforeDue);
+    assert.equal(snapshot.pending_charge, null);
+    assert.equal(snapshot.last_charge, null);
+    assert.equal(snapshot.verification_charges.length, 1);
+    assert.equal(snapshot.verification_post_enabled, false);
+
+    const after = await buildConsolidatedInvoice(client, {
+      tenantId: TENANT_A, period: '2026-09', persist: false,
+    });
+    assert.equal(after.amount_cents, before.amount_cents);
+    assert.equal(after.check_usage_cents, before.check_usage_cents);
+    assert.equal(after.mortgage_ops_usage_cents, before.mortgage_ops_usage_cents);
+    assert.equal(after.next_day_usage_cents, before.next_day_usage_cents);
+    assert.equal(after.same_day_usage_cents, before.same_day_usage_cents);
+    assert.equal(after.maintenance_net_cents, before.maintenance_net_cents);
+
+    const transferId = first.verify.occurrence.provider_transfer_id;
+    const settled = await applyBillingProviderEvent(client, {
+      providerTransferId: transferId, status: 'transfer.completed',
+    });
+    assert.equal(settled.occurrence.status, 'settled');
+
+    store.occurrences[0].status = 'submitted';
+    store.occurrences[0].settled_at = null;
+    const failed = await applyBillingProviderEvent(client, {
+      providerTransferId: transferId, status: 'transfer.failed', reason: 'R01-sim',
+    });
+    assert.equal(failed.occurrence.status, 'failed');
+    assert.equal(failed.occurrence.failure_reason, 'R01-sim');
+
+    store.occurrences[0].status = 'submitted';
+    const returned = await applyBillingProviderEvent(client, {
+      providerTransferId: transferId, status: 'transfer.returned', reason: 'R10',
+    });
+    assert.equal(returned.occurrence.status, 'returned');
+    assert.equal(returned.occurrence.return_reason, 'R10');
+
+    store.occurrences.push({
+      id: 'penny-legacy',
+      tenant_id: TENANT_A,
+      amount_cents: 1,
+      billing_period: null,
+      occurrence_kind: OCCURRENCE_KIND_LEGACY,
+      status: 'submitted',
+      provider_transfer_id: null,
+      created_at: '2026-08-20T16:26:20.031Z',
+    });
+    const afterLegacy = await buildTenantBillingSnapshot(client, TENANT_A, dest);
+    assert.equal(afterLegacy.pending_charge, null);
+    assert.equal(afterLegacy.current_amount_due_cents, beforeDue);
+    assert.equal(afterLegacy.last_charge, null);
+
+    const engine = readFileSync(path.join(ROOT, 'functions/api/tenant-billing-engine.mjs'), 'utf8');
+    assert.match(engine, /export const postTransfer/);
+    assert.equal(engine.includes('chargeTenantPeriod(client, {\n  tenantId,\n  period: body.period'), false);
+    const money = readFileSync(path.join(ROOT, 'functions/api/providers/parity/moov-money.mjs'), 'utf8');
+    assert.match(money, /export const tenantFeeCharge/);
+  });
+});
+
+test('verification does not enable monthly posting and Pull Now / scheduler stay simulated', async () => {
+  await withEnv({
+    AWS_MOOV_MONTHLY_BILLING_ENABLED: 'true',
+    AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST: 'false',
+    AWS_MOOV_BILLING_VERIFICATION_POST_ENABLED: 'false',
+    AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED: undefined,
+    CHECKSOPS_ENV: 'staging',
+  }, async () => {
+    const store = makeStore();
+    const client = mockClient(store);
+    await readyTenant(client, store, TENANT_A, 'pm-a');
+    const dest = { ok: true, ...DEST };
+    const pull = await handleTenantBillingAdmin(identityEvent(OWNER, {
+      action: 'pull', tenant_id: TENANT_A, confirm: true,
+    }), {
+      client, mapping: { application_user_id: OWNER }, destination: dest,
+    });
+    assert.equal(pull.ok, true);
+    assert.equal(pull.pull.simulated, true);
+    assert.equal(pull.pull.liveProviderCalled, false);
+    assert.equal(pull.pull.occurrence.occurrence_kind, OCCURRENCE_KIND_MONTHLY);
+    assert.ok(pull.pull.occurrence.billing_period);
+    const verify = await verifyTenantBillingDebit(client, {
+      tenantId: TENANT_A,
+      verificationId: VERIFY_ID,
+      recordedBy: OWNER,
+      deps: { destination: dest },
+    });
+    assert.equal(verify.ok, true);
+    assert.equal(verify.simulated, true);
+    assert.equal(verify.liveProviderCalled, false);
+    assert.equal(store.occurrences.filter((row) => row.occurrence_kind === OCCURRENCE_KIND_VERIFICATION).length, 1);
+    assert.equal(store.occurrences.filter((row) => row.occurrence_kind === OCCURRENCE_KIND_MONTHLY).length, 1);
+    const snapshot = await buildTenantBillingSnapshot(client, TENANT_A, dest);
+    assert.ok(snapshot.pending_charge);
+    assert.equal(snapshot.pending_charge.occurrence_kind, OCCURRENCE_KIND_MONTHLY);
+    assert.notEqual(snapshot.pending_charge.amount_cents, 100);
+    const scheduled = await runMonthlyBillingScheduler(client, {
+      destination: dest,
+      deps: { destination: dest },
+    });
+    assert.equal(scheduled.ok, true);
+    assert.ok((scheduled.results || []).every((row) => row.simulated === true && row.liveProviderCalled !== true));
   });
 });
 
