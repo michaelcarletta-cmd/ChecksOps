@@ -14,8 +14,11 @@ import {
 import {
   BILLING_VERIFICATION_AMOUNT_CENTS,
   OCCURRENCE_KIND_VERIFICATION,
+  billingIdempotencyKey,
   billingVerificationIdempotencyKey,
+  chargeTenantPeriod,
   postTransfer,
+  resolveBillingDebitSource,
   verifyTenantBillingDebit,
 } from '../functions/api/tenant-billing-engine.mjs';
 import { resetMoovTokenCache } from '../functions/api/providers/parity/moov-client.mjs';
@@ -25,9 +28,17 @@ const TENANT = '11111111-1111-4111-8111-111111111111';
 const OWNER = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const VERIFY_ID = '44444444-4444-4444-8444-444444444444';
 const SOURCE_METHOD = '7a78a544-340d-46fd-a4a4-228661374da7';
+const DEBIT_FUND_METHOD = 'a02c1c81-9ca6-434d-accc-ea4471a70ef2';
+const DEBIT_COLLECT_METHOD = '128977bb-5034-4e8b-89ed-b10982105aa3';
 const SOURCE_ACCOUNT = '60922058-7eca-4889-81dd-5720d7b9de96';
 const DEST_ACCOUNT = '41cb5d67-4911-4bef-aad5-d8ee9c582208';
 const DEST_METHOD = 'c70a90f2-9bcc-4084-8263-d5a0fb5d806c';
+const DEST_METHOD_TYPE = 'moov-wallet';
+const FREEDOM_RAILS = {
+  'ach-debit-fund': DEBIT_FUND_METHOD,
+  'ach-debit-collect': DEBIT_COLLECT_METHOD,
+  'ach-credit-standard': SOURCE_METHOD,
+};
 const PROD_DEST = {
   ok: true,
   accountId: DEST_ACCOUNT,
@@ -87,6 +98,8 @@ const makeStore = () => ({
       provider_payment_method_id: SOURCE_METHOD, provider_bank_account_id: 'bank-4573',
       holder_name: 'Freedom Bank', last_four: '4573', verification_status: 'verified',
       connection_status: 'connected', environment: 'production', nickname: '4573', can_send: true,
+      rail_payment_method_ids: { ...FREEDOM_RAILS },
+      rails_synced_at: new Date().toISOString(),
     }],
   ]),
   occurrences: [],
@@ -144,6 +157,14 @@ const mockClient = (store) => ({
     if (text.includes('FROM public.payment_provider_accounts')) {
       return { rows: store.accounts.get(`${params[0]}:${params[1]}`) ? [store.accounts.get(`${params[0]}:${params[1]}`)] : [] };
     }
+    if (text.includes('UPDATE public.payment_provider_methods')) {
+      const row = [...store.methods.values()].find((item) => item.id === params[0]);
+      if (!row) return { rows: [] };
+      row.supported_rails = params[1];
+      row.rail_payment_method_ids = typeof params[2] === 'string' ? JSON.parse(params[2]) : params[2];
+      row.rails_synced_at = new Date().toISOString();
+      return { rows: [row] };
+    }
     if (text.includes('FROM public.payment_provider_methods')) {
       if (text.includes("connection_status = 'connected'")) {
         return {
@@ -151,6 +172,10 @@ const mockClient = (store) => ({
             row.tenant_id === params[0] && row.environment === params[1]
           )),
         };
+      }
+      if (text.includes('WHERE id =') || text.includes('WHERE id=$')) {
+        const row = [...store.methods.values()].find((item) => item.id === params[0]);
+        return { rows: row ? [row] : [] };
       }
       const key = `${params[0]}:${params[1]}`;
       return { rows: store.methods.get(key) ? [store.methods.get(key)] : [] };
@@ -465,9 +490,13 @@ test('E F G live verification keeps source, destination, and 100 cents', async (
     assert.equal(verify.occurrence.billing_period, null);
     assert.equal(verify.occurrence.occurrence_kind, OCCURRENCE_KIND_VERIFICATION);
     const transferCall = calls.find((row) => row.url.includes('/transfers') && row.method === 'POST');
-    assert.equal(transferCall.body.source.paymentMethodID, SOURCE_METHOD);
+    assert.equal(transferCall.body.source.paymentMethodID, DEBIT_FUND_METHOD);
+    assert.notEqual(transferCall.body.source.paymentMethodID, SOURCE_METHOD);
     assert.equal(transferCall.body.destination.paymentMethodID, DEST_METHOD);
     assert.equal(transferCall.body.amount.value, BILLING_VERIFICATION_AMOUNT_CENTS);
+    assert.equal(verify.resolvedDebitSourceMethodId, DEBIT_FUND_METHOD);
+    assert.equal(verify.resolvedDebitSourceRail, 'ach-debit-fund');
+    assert.equal(verify.resolvedDebitSourceAccountId, SOURCE_ACCOUNT);
     const tokenCall = calls.find((row) => row.url.includes('/oauth2/token'));
     assert.equal(tokenCall.basicKey, PROD_KEY);
   });
@@ -543,10 +572,17 @@ test('K monthly billing behavior remains unchanged and shared postTransfer now b
   assert.match(engine, /withMoovContext/);
   assert.match(engine, /resolveBillingMoovContext/);
   assert.match(engine, /production_moov_refused_sandbox_fallback/);
+  assert.match(engine, /resolveDebitSourceMethodId/);
+  assert.match(engine, /billing_debit_source_unavailable/);
+  assert.equal(engine.includes('sourceMethodId: readiness.authorization.provider_payment_method_id'), false);
   const dest = readFileSync(path.join(ROOT, 'functions/api/tenant-billing-destination.mjs'), 'utf8');
   assert.match(dest, /export async function resolveBillingMoovContext/);
   assert.match(dest, /production_credentials_refused/);
   assert.equal(dest.includes('MOOV_PUBLIC_KEY || secrets.MOOV_SANDBOX_PUBLIC_KEY'), false);
+  const money = readFileSync(path.join(ROOT, 'functions/api/providers/parity/moov-money.mjs'), 'utf8');
+  const router = readFileSync(path.join(ROOT, 'functions/api/providers/parity/rail-router.mjs'), 'utf8');
+  assert.match(money, /postFacilitatorTransfer/);
+  assert.ok(router.length > 0);
   await withEnv({
     CHECKSOPS_ENV: 'production-prep',
     AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST: 'false',
@@ -556,3 +592,198 @@ test('K monthly billing behavior remains unchanged and shared postTransfer now b
     assert.equal(billingVerificationPostEnabled(), false);
   });
 });
+
+const setRails = (store, rails) => {
+  const method = store.methods.get(`${TENANT}:${SOURCE_METHOD}`);
+  method.rail_payment_method_ids = rails;
+  method.rails_synced_at = new Date().toISOString();
+};
+
+const liveVerify = async (store, fetchImpl) => {
+  const client = mockClient(store);
+  await readyFreedom(client, store);
+  return verifyTenantBillingDebit(client, {
+    tenantId: TENANT,
+    verificationId: VERIFY_ID,
+    recordedBy: OWNER,
+    fetchImpl,
+    deps: {
+      destination: PROD_DEST,
+      loadSandboxCredentials: async () => loadedSecrets(),
+    },
+  });
+};
+
+test('V3D A verification uses ach-debit-fund when present', async () => {
+  resetMoovTokenCache();
+  await withEnv(productionEnv, async () => {
+    const store = makeStore();
+    const { calls, fetchImpl } = recordingFetch();
+    const verify = await liveVerify(store, fetchImpl);
+    assert.equal(verify.ok, true);
+    const transferCall = calls.find((row) => row.url.includes('/transfers') && row.method === 'POST');
+    assert.equal(transferCall.body.source.paymentMethodID, DEBIT_FUND_METHOD);
+    assert.equal(verify.resolvedDebitSourceRail, 'ach-debit-fund');
+    assert.equal(transferCall.url, `https://api.moov.io/accounts/${DEST_ACCOUNT}/transfers`);
+  });
+});
+
+test('V3D B verification falls back to ach-debit-collect only when fund is absent', async () => {
+  resetMoovTokenCache();
+  await withEnv(productionEnv, async () => {
+    const store = makeStore();
+    setRails(store, {
+      'ach-debit-collect': DEBIT_COLLECT_METHOD,
+      'ach-credit-standard': SOURCE_METHOD,
+    });
+    const { calls, fetchImpl } = recordingFetch();
+    const verify = await liveVerify(store, fetchImpl);
+    assert.equal(verify.ok, true);
+    const transferCall = calls.find((row) => row.url.includes('/transfers') && row.method === 'POST');
+    assert.equal(transferCall.body.source.paymentMethodID, DEBIT_COLLECT_METHOD);
+    assert.notEqual(transferCall.body.source.paymentMethodID, DEBIT_FUND_METHOD);
+    assert.notEqual(transferCall.body.source.paymentMethodID, SOURCE_METHOD);
+    assert.equal(verify.resolvedDebitSourceRail, 'ach-debit-collect');
+  });
+});
+
+test('V3D C verification never uses ach-credit-standard as source', async () => {
+  resetMoovTokenCache();
+  await withEnv(productionEnv, async () => {
+    const store = makeStore();
+    const resolved = await resolveBillingDebitSource(mockClient(store), {
+      authorization: {
+        tenant_id: TENANT,
+        provider_payment_method_id: SOURCE_METHOD,
+        provider_account_id: SOURCE_ACCOUNT,
+      },
+    });
+    assert.equal(resolved.ok, true);
+    assert.notEqual(resolved.sourceMethodId, SOURCE_METHOD);
+    assert.equal(resolved.sourceMethodId, DEBIT_FUND_METHOD);
+    const { calls, fetchImpl } = recordingFetch();
+    const verify = await liveVerify(store, fetchImpl);
+    const transferCall = calls.find((row) => row.url.includes('/transfers') && row.method === 'POST');
+    assert.equal(transferCall.body.source.paymentMethodID, DEBIT_FUND_METHOD);
+    assert.notEqual(transferCall.body.source.paymentMethodID, SOURCE_METHOD);
+  });
+});
+
+test('V3D D monthly submitOccurrence uses the same resolver', async () => {
+  resetMoovTokenCache();
+  await withEnv({
+    ...productionEnv,
+    AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST: 'true',
+    AWS_MOOV_MONTHLY_BILLING_ENABLED: 'true',
+    AWS_MOOV_BILLING_VERIFICATION_POST_ENABLED: 'false',
+  }, async () => {
+    const store = makeStore();
+    store.settings.set(TENANT, {
+      tenant_id: TENANT, billing_enabled: true, billing_day_of_month: 1, next_period_start: null,
+    });
+    const client = mockClient(store);
+    await readyFreedom(client, store);
+    const { calls, fetchImpl } = recordingFetch();
+    const pull = await chargeTenantPeriod(client, {
+      tenantId: TENANT,
+      period: '2026-09',
+      recordedBy: OWNER,
+      fetchImpl,
+      deps: {
+        destination: PROD_DEST,
+        loadSandboxCredentials: async () => loadedSecrets(),
+        ignoreEnabledFlag: true,
+      },
+    });
+    assert.equal(pull.ok, true);
+    assert.equal(pull.simulated, false);
+    assert.equal(pull.liveProviderCalled, true);
+    assert.equal(pull.occurrence.occurrence_kind, 'monthly_subscription');
+    assert.equal(pull.occurrence.amount_cents, pull.invoice.amount_cents);
+    assert.notEqual(pull.occurrence.amount_cents, 100);
+    const transferCall = calls.find((row) => row.url.includes('/transfers') && row.method === 'POST');
+    assert.equal(transferCall.body.source.paymentMethodID, DEBIT_FUND_METHOD);
+    assert.notEqual(transferCall.body.source.paymentMethodID, SOURCE_METHOD);
+    assert.equal(transferCall.body.destination.paymentMethodID, DEST_METHOD);
+    assert.equal(transferCall.url, `https://api.moov.io/accounts/${DEST_ACCOUNT}/transfers`);
+    assert.equal(pull.resolvedDebitSourceMethodId, DEBIT_FUND_METHOD);
+    assert.equal(pull.idempotency_key || pull.occurrence.idempotence_key, billingIdempotencyKey(TENANT, '2026-09'));
+  });
+});
+
+test('V3D E missing debit source fails before Moov HTTP', async () => {
+  resetMoovTokenCache();
+  await withEnv(productionEnv, async () => {
+    const store = makeStore();
+    setRails(store, { 'ach-credit-standard': SOURCE_METHOD });
+    const { calls, fetchImpl } = recordingFetch();
+    const verify = await liveVerify(store, fetchImpl);
+    assert.equal(verify.ok, false);
+    assert.equal(verify.error, 'billing_debit_source_unavailable');
+    assert.equal(calls.filter((row) => row.url.includes('/transfers') && row.method === 'POST').length, 0);
+  });
+});
+
+test('V3D F G H destination facilitator and verification amount stay explicit', async () => {
+  resetMoovTokenCache();
+  await withEnv(productionEnv, async () => {
+    const store = makeStore();
+    const { calls, fetchImpl } = recordingFetch();
+    const verify = await liveVerify(store, fetchImpl);
+    const transferCall = calls.find((row) => row.url.includes('/transfers') && row.method === 'POST');
+    assert.equal(transferCall.body.destination.paymentMethodID, DEST_METHOD);
+    assert.equal(DEST_METHOD, 'c70a90f2-9bcc-4084-8263-d5a0fb5d806c');
+    assert.equal(DEST_METHOD_TYPE, 'moov-wallet');
+    assert.equal(verify.occurrence.destination_payment_method_id, DEST_METHOD);
+    assert.equal(verify.occurrence.destination_account_id, DEST_ACCOUNT);
+    assert.equal(transferCall.url, `https://api.moov.io/accounts/${DEST_ACCOUNT}/transfers`);
+    assert.equal(transferCall.body.amount.value, 100);
+    assert.equal(verify.amount_cents, 100);
+  });
+});
+
+test('V3D I J K L monthly amount, idempotency, and gated simulation stay unchanged', async () => {
+  resetMoovTokenCache();
+  await withEnv({
+    ...productionEnv,
+    AWS_MOOV_BILLING_VERIFICATION_POST_ENABLED: 'false',
+    AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST: 'false',
+    AWS_MOOV_MONTHLY_BILLING_ENABLED: 'true',
+  }, async () => {
+    const store = makeStore();
+    const client = mockClient(store);
+    await readyFreedom(client, store);
+    const { calls, fetchImpl } = recordingFetch();
+    const verify = await verifyTenantBillingDebit(client, {
+      tenantId: TENANT,
+      verificationId: VERIFY_ID,
+      recordedBy: OWNER,
+      fetchImpl,
+      deps: { destination: PROD_DEST, loadSandboxCredentials: async () => loadedSecrets() },
+    });
+    assert.equal(verify.ok, true);
+    assert.equal(verify.simulated, true);
+    assert.equal(verify.liveProviderCalled, false);
+    assert.equal(verify.idempotency_key, billingVerificationIdempotencyKey(TENANT, VERIFY_ID));
+    const pull = await chargeTenantPeriod(client, {
+      tenantId: TENANT,
+      period: '2026-09',
+      recordedBy: OWNER,
+      fetchImpl,
+      deps: { destination: PROD_DEST, ignoreEnabledFlag: true },
+    });
+    assert.equal(pull.ok, true);
+    assert.equal(pull.simulated, true);
+    assert.equal(pull.liveProviderCalled, false);
+    assert.equal(pull.occurrence.amount_cents, pull.invoice.amount_cents);
+    assert.equal(pull.occurrence.idempotence_key, billingIdempotencyKey(TENANT, '2026-09'));
+    assert.equal(calls.length, 0);
+  });
+});
+
+test('V3D unused failed UUIDs stay retired', () => {
+  const engine = readFileSync(path.join(ROOT, 'functions/api/tenant-billing-engine.mjs'), 'utf8');
+  assert.equal(engine.includes('de8f0478-ce49-4505-a72c-be09d9ed494e'), false);
+  assert.equal(engine.includes('27f422af-5a6e-4862-98bc-3ade306c1edd'), false);
+});
+
