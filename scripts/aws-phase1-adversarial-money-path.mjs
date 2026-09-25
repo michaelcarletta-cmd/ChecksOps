@@ -1097,8 +1097,8 @@ async function scenario14(ctx) {
   record(`${name} financial history not rewritten`, replay.json.operation?.id === prep.json.operation?.id && replay.json.operation?.amount_cents === 12345 && replay.json.duplicate === true, {
     detail: `op=${replay.json.operation?.id} cents=${replay.json.operation?.amount_cents} dup=${replay.json.duplicate}`,
   });
-  record(`${name} descriptive payee_line still writable`, payeeEdit.status === 200, {
-    detail: `status=${payeeEdit.status} payee=${after.payee_line}`,
+  record(`${name} payee_line locked after confirmed deposit`, payeeEdit.status >= 400 && after.payee_line === 'Post Deposit', {
+    detail: `status=${payeeEdit.status} error=${payeeEdit.json.error} payee=${after.payee_line}`,
   });
   if (payeeEdit.status === 200) {
     finding({
@@ -1107,11 +1107,11 @@ async function scenario14(ctx) {
       severity: 'WORKFLOW-RISK',
       title: 'Payee line remains writable after a simulated deposit confirmation',
       reproduction: 'Prepare+confirm sandbox deposit, then PATCH payee_line.',
-      expected: 'Financially material fields stay locked after deposit; history is not rewritten.',
+      expected: 'payee_line stays locked after deposited_at or a confirmed provider deposit.',
       actual: `amount locked (good). payee_line write status=${payeeEdit.status}. aws_financial_operations amount_cents unchanged.`,
       affected: 'INTAKE_SAFE_COLUMNS.payee_line; no deposited_at lock on descriptive writes',
-      risk: 'Metadata can diverge from the deposited instrument. Sandbox deposit does not set deposited_at, so the production deposited lock was not exercised.',
-      fix: 'When deposited_at or a confirmed provider operation exists, reject material descriptive edits or require an audited override.',
+      risk: 'Metadata can diverge from the deposited instrument.',
+      fix: 'Reject payee_line changes when deposited_at is set or a confirmed provider deposit exists.',
     });
   }
 }

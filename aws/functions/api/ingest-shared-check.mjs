@@ -11,6 +11,7 @@ import { loadDatabaseCredentials } from './secrets.mjs';
 import { buildWriteClientConfig, sanitizePublicError } from './db-health.mjs';
 import { s3KeyFor } from './storage-paths.mjs';
 import { safeEqual, header } from './providers/hmac.mjs';
+import { rejectPayeeLineIfDeposited } from './check-deposited.mjs';
 
 const { Client } = pg;
 const s3 = () => new S3Client({ region: process.env.AWS_REGION || 'us-east-1' });
@@ -289,7 +290,7 @@ export const persistIngestInline = async (client, plan) => {
   }
 
   const existingCheck = await client.query(
-    `SELECT id FROM public.check_intake_items
+    `SELECT id, payee_line FROM public.check_intake_items
      WHERE external_origin->>'source_check_id' = $1
      LIMIT 1`,
     [plan.source_check_id],
@@ -321,7 +322,14 @@ export const persistIngestInline = async (client, plan) => {
     if (check.check_number !== undefined) add('check_number', check.check_number ?? null);
     if (check.amount !== undefined) add('amount', plan.amount);
     if (check.issue_date !== undefined) add('issue_date', check.issue_date ?? null);
-    if (check.payee_line !== undefined) add('payee_line', toStandardCaps(check.payee_line ?? null));
+    if (check.payee_line !== undefined) {
+      const incomingPayee = toStandardCaps(check.payee_line ?? null);
+      const guard = await rejectPayeeLineIfDeposited(client, checkId, {
+        current: existingCheck.rows[0].payee_line,
+        next: incomingPayee,
+      });
+      if (!guard.locked && !guard.noop) add('payee_line', incomingPayee);
+    }
     if (check.detected_claim_number !== undefined) add('detected_claim_number', check.detected_claim_number ?? null);
     if (check.funds_type !== undefined) add('funds_type', check.funds_type ?? null);
     if (check.property_address !== undefined) add('property_address', toStandardCaps(check.property_address ?? null));

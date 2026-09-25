@@ -6,6 +6,7 @@ import {
   isMaterialPayeeChange,
   materialPayeeFieldsChanged,
 } from './endorsement-material-invalidation.mjs';
+import { rejectPayeeLineIfDeposited } from './check-deposited.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -65,7 +66,8 @@ const lookupCheck = async (client, checkId) => {
   const invalid = requireUuid('check_id', checkId);
   if (invalid) return invalid;
   const rows = (await client.query(
-    'SELECT id, tenant_id FROM public.check_intake_items WHERE id = $1::uuid',
+    `SELECT id, tenant_id, deposited_at, payee_line
+     FROM public.check_intake_items WHERE id = $1::uuid`,
     [checkId],
   )).rows;
   if (!rows.length) return { error: 'rls_denied', message: 'check not found or not writable' };
@@ -323,6 +325,25 @@ const executeIntakeUpdate = async ({ client, values, filters }) => {
   const coerced = intakeCoerce(values);
   if (coerced.error) return coerced;
   const nextValues = { ...coerced.values };
+  let payeeLineNoop = false;
+  if ('payee_line' in nextValues) {
+    const guard = await rejectPayeeLineIfDeposited(client, checkId, {
+      current: looked.check.payee_line,
+      next: nextValues.payee_line,
+    });
+    if (guard.locked) {
+      return {
+        error: guard.error,
+        message: guard.message,
+        field: 'payee_line',
+        reason: guard.reason,
+      };
+    }
+    if (guard.noop) {
+      delete nextValues.payee_line;
+      payeeLineNoop = true;
+    }
+  }
   for (const column of IMAGE_PATH_COLUMNS) {
     if (column in nextValues) {
       const path = asImagePath(checkId, nextValues[column]);
@@ -332,6 +353,13 @@ const executeIntakeUpdate = async ({ client, values, filters }) => {
     }
   }
   if (!Object.keys(nextValues).length) {
+    if (payeeLineNoop) {
+      const existing = (await client.query(
+        'SELECT * FROM public.check_intake_items WHERE id = $1::uuid',
+        [checkId],
+      )).rows;
+      return { rows: existing };
+    }
     return { error: 'missing_required_field', field: 'values', table: 'check_intake_items', op: 'update' };
   }
   const built = buildSet(nextValues, {
@@ -715,11 +743,12 @@ const executeClaimChecks = async ({ client, values, filters }) => {
   const id = eqFilter(filters, 'id');
   const intakeId = eqFilter(filters, 'check_intake_item_id');
   let checkId = intakeId;
+  let currentPayeeLine = null;
   if (id) {
     const invalid = requireUuid('id', id);
     if (invalid) return invalid;
     const rows = (await client.query(
-      `SELECT cc.id, cc.check_intake_item_id, c.tenant_id
+      `SELECT cc.id, cc.check_intake_item_id, cc.payee_line, c.tenant_id
        FROM public.claim_checks cc
        JOIN public.check_intake_items c ON c.id = cc.check_intake_item_id
        WHERE cc.id = $1::uuid`,
@@ -727,10 +756,18 @@ const executeClaimChecks = async ({ client, values, filters }) => {
     )).rows;
     if (!rows.length) return { error: 'rls_denied', message: 'claim_checks row not found or not writable' };
     checkId = rows[0].check_intake_item_id;
+    currentPayeeLine = rows[0].payee_line;
   }
   if (!checkId) return { error: 'missing_required_field', field: 'id', table: 'claim_checks', op: 'update' };
   const looked = await lookupCheck(client, checkId);
   if (looked.error) return looked;
+  if (!id) {
+    const mirror = (await client.query(
+      `SELECT payee_line FROM public.claim_checks WHERE check_intake_item_id = $1::uuid LIMIT 1`,
+      [looked.check.id],
+    )).rows[0];
+    currentPayeeLine = mirror?.payee_line ?? null;
+  }
 
   const out = {};
   for (const column of ['carrier_name', 'check_number', 'payee_line', 'notes']) {
@@ -738,6 +775,25 @@ const executeClaimChecks = async ({ client, values, filters }) => {
       const text = asText(values[column], column === 'notes' || column === 'payee_line' ? 2000 : 200);
       if (text.error) return text;
       out[column] = text.value;
+    }
+  }
+  let payeeLineNoop = false;
+  if ('payee_line' in out) {
+    const guard = await rejectPayeeLineIfDeposited(client, looked.check.id, {
+      current: currentPayeeLine,
+      next: out.payee_line,
+    });
+    if (guard.locked) {
+      return {
+        error: guard.error,
+        message: guard.message,
+        field: 'payee_line',
+        reason: guard.reason,
+      };
+    }
+    if (guard.noop) {
+      delete out.payee_line;
+      payeeLineNoop = true;
     }
   }
   if ('check_date' in values) {
@@ -756,6 +812,15 @@ const executeClaimChecks = async ({ client, values, filters }) => {
     out.ocr_needs_verification = flag;
   }
   if (!Object.keys(out).length) {
+    if (payeeLineNoop) {
+      const existing = (await client.query(
+        id
+          ? 'SELECT * FROM public.claim_checks WHERE id = $1::uuid'
+          : 'SELECT * FROM public.claim_checks WHERE check_intake_item_id = $1::uuid',
+        [id || looked.check.id],
+      )).rows;
+      return { rows: existing };
+    }
     return { error: 'missing_required_field', field: 'values', table: 'claim_checks', op: 'update' };
   }
   const built = buildSet(out, {

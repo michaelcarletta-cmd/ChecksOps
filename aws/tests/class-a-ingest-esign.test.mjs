@@ -6,6 +6,7 @@ import {
   handleIngestSharedCheck,
   NATIVE_TENANT_MAP,
   normalizePayeeType,
+  persistIngestInline,
 } from '../functions/api/ingest-shared-check.mjs';
 import { CLASS_A_FUNCTIONS, handleAppServiceRequest } from '../functions/api/app-services.mjs';
 import { hashToken, replaceMergeFields, signBaseUrl } from '../functions/api/esign.mjs';
@@ -127,6 +128,42 @@ test('ninth UUID is not a live production user and is excluded from Cognito invi
   assert.equal(ninth.inventEmail, false);
   assert.equal(ninth.failClosed, true);
   assert.equal(ninthExcludedFromInvite(), true);
+});
+
+test('existing-row ingest skips payee_line after a confirmed deposit', async () => {
+  const CHECK_ID = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+  const statements = [];
+  const client = {
+    query: async (sql, params = []) => {
+      statements.push({ sql: String(sql), params });
+      if (/lookup_tenant_by_partner_code/.test(sql)) {
+        return { rows: [{ id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a' }] };
+      }
+      if (/external_origin->>'source_check_id'/.test(sql)) {
+        return { rows: [{ id: CHECK_ID, payee_line: 'Corrected Payee Line' }] };
+      }
+      if (/SELECT deposited_at, payee_line/.test(sql)) {
+        return { rows: [{ deposited_at: null, payee_line: 'Corrected Payee Line' }] };
+      }
+      if (/FROM public.aws_financial_operations/.test(sql)) {
+        return { rows: [{ ok: 1 }] };
+      }
+      return { rows: [] };
+    },
+  };
+  const plan = buildIngestPlan({
+    source_check_id: '11111111-1111-4111-8111-111111111111',
+    target_partner_code: 'abc',
+    source_tenant_id: '22222222-2222-4222-8222-222222222222',
+    source_partner_code: 'DF9CC985',
+    check: { amount: 10, payee_line: 'Ingest Rewrite After Deposit', carrier_name: 'Still Ok' },
+  });
+  await persistIngestInline(client, plan);
+  const update = statements.find((row) => /UPDATE public.check_intake_items SET/.test(row.sql));
+  assert.ok(update);
+  assert.equal(/payee_line =/.test(update.sql), false);
+  assert.equal(update.params.includes('Ingest Rewrite After Deposit'), false);
+  assert.equal(update.params.includes('Still Ok'), true);
 });
 
 test('partner status mapping does not invent deposit execution', () => {
