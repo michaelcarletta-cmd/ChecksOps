@@ -276,6 +276,9 @@ export async function submitOccurrence(client, {
   if (TERMINAL_SUCCESS.has(occurrence.status)) {
     return { ok: true, duplicate: true, occurrence, reason: 'already_settled' };
   }
+  if (occurrence.status === 'returned') {
+    return { ok: true, duplicate: true, occurrence, reason: 'already_returned' };
+  }
   if (IN_FLIGHT.has(occurrence.status) && occurrence.provider_transfer_id) {
     return { ok: true, duplicate: true, occurrence, reason: 'already_submitted' };
   }

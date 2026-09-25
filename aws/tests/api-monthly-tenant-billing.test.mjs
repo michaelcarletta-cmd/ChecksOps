@@ -460,6 +460,15 @@ test('failed debit and ACH return do not remain paid; duplicate and out-of-order
     const lateComplete = await applyBillingProviderEvent(client, { providerTransferId: transferId, status: 'transfer.completed' });
     assert.equal(lateComplete.skipped, 'already_returned');
     assert.equal(store.occurrences.find((row) => row.billing_period === '2026-09').status, 'returned');
+    const retryReturned = await chargeTenantPeriod(client, {
+      tenantId: TENANT_A, period: '2026-09',
+      deps: { destination: { ok: true, ...DEST } },
+    });
+    assert.equal(retryReturned.ok, true);
+    assert.equal(retryReturned.duplicate, true);
+    assert.equal(retryReturned.reason, 'already_returned');
+    assert.equal(store.occurrences.find((row) => row.billing_period === '2026-09').status, 'returned');
+    assert.equal(store.occurrences.filter((row) => row.billing_period === '2026-09').length, 1);
   });
 });
 

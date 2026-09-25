@@ -210,7 +210,8 @@ const invokeScheduler = async () => {
 const main = async () => {
   await mkdir(OUT, { recursive: true });
   await assumeRole();
-  const sql = await applySql();
+  const overlayOnly = process.argv.includes('--overlay-only');
+  const sql = overlayOnly ? { ok: true, skipped: 'overlay_only' } : await applySql();
   const overlay = await overlayApi();
   if (sql?.persisted?.moov_payment_method_id) {
     const cfg = awsJson(['lambda', 'get-function-configuration', '--function-name', API_NAME]);
