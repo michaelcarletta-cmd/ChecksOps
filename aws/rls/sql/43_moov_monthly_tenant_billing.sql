@@ -181,6 +181,35 @@ CREATE POLICY aws_write_tenant_maintenance_payments ON public.tenant_maintenance
     OR current_setting('request.provider_webhook_apply', true) = '1'
   );
 
+DROP POLICY IF EXISTS aws_select_tenant_billing_settings_job ON public.tenant_billing_settings;
+CREATE POLICY aws_select_tenant_billing_settings_job ON public.tenant_billing_settings
+  FOR SELECT TO checksops
+  USING (public.aws_monthly_billing_job() OR public.is_platform_owner());
+
+DROP POLICY IF EXISTS aws_write_tenant_billing_settings_job ON public.tenant_billing_settings;
+CREATE POLICY aws_write_tenant_billing_settings_job ON public.tenant_billing_settings
+  FOR ALL TO checksops
+  USING (public.aws_monthly_billing_job() OR public.is_platform_owner())
+  WITH CHECK (public.aws_monthly_billing_job() OR public.is_platform_owner());
+
+DROP POLICY IF EXISTS aws_write_tenant_maintenance_payments_job ON public.tenant_maintenance_payments;
+CREATE POLICY aws_write_tenant_maintenance_payments_job ON public.tenant_maintenance_payments
+  FOR ALL TO checksops
+  USING (
+    public.aws_monthly_billing_job()
+    OR current_setting('request.provider_webhook_apply', true) = '1'
+  )
+  WITH CHECK (
+    public.aws_monthly_billing_job()
+    OR current_setting('request.provider_webhook_apply', true) = '1'
+  );
+
+DROP POLICY IF EXISTS aws_write_tenant_billing_accounts_job ON public.tenant_billing_accounts;
+CREATE POLICY aws_write_tenant_billing_accounts_job ON public.tenant_billing_accounts
+  FOR ALL TO checksops
+  USING (public.aws_monthly_billing_job())
+  WITH CHECK (public.aws_monthly_billing_job());
+
 GRANT SELECT, INSERT, UPDATE ON public.tenant_billing_settings TO checksops, authenticated;
 GRANT SELECT ON public.platform_billing_destination TO checksops, authenticated;
 GRANT INSERT, UPDATE ON public.platform_billing_destination TO checksops;
