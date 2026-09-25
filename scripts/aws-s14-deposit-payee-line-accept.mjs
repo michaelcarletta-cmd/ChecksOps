@@ -141,21 +141,99 @@ const deleteCheck = async (checkId) => {
   }).catch(() => {});
 };
 
+const awsJson = (args) => JSON.parse(execFileSync(AWS, ['--region', REGION, ...args], { encoding: 'utf8' }));
+
+const stagingAdminSecretArn = () => {
+  const secrets = awsJson(['secretsmanager', 'list-secrets']);
+  const match = (secrets.SecretList || []).find((row) => (
+    /rds-db-credentials\/checksops-staging\/checksops_admin/i.test(row.Name || '')
+  ));
+  if (!match?.ARN) throw new Error('staging checksops_admin secret not listed');
+  return match.ARN;
+};
+
+const loadAdminDbConfig = () => {
+  const apiFn = awsJson(['lambda', 'get-function-configuration', '--function-name', 'checksops-staging-api']);
+  const app = JSON.parse(execFileSync(AWS, [
+    '--region', REGION, 'secretsmanager', 'get-secret-value',
+    '--secret-id', apiFn.Environment.Variables.DATABASE_SECRET_ARN,
+    '--query', 'SecretString', '--output', 'text',
+  ], { encoding: 'utf8' }));
+  const admin = JSON.parse(execFileSync(AWS, [
+    '--region', REGION, 'secretsmanager', 'get-secret-value',
+    '--secret-id', stagingAdminSecretArn(),
+    '--query', 'SecretString', '--output', 'text',
+  ], { encoding: 'utf8' }));
+  if (!/checksops_admin/i.test(admin.username || '')) throw new Error('not staging admin');
+  if (!app.host) throw new Error('app secret host missing');
+  return {
+    host: app.host,
+    port: Number(app.port || 5432),
+    user: admin.username,
+    password: admin.password,
+    database: apiFn.Environment.Variables.DATABASE_NAME || 'checksops',
+  };
+};
+
+const invokeVpcOneshot = ({ prefix, handlerSource, payload }) => {
+  const apiFn = awsJson(['lambda', 'get-function-configuration', '--function-name', 'checksops-staging-api']);
+  const name = `checksops-staging-${prefix}-${Date.now().toString().slice(-6)}`;
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), `${prefix}-`));
+  fs.writeFileSync(path.join(work, 'index.mjs'), handlerSource);
+  fs.writeFileSync(path.join(work, 'package.json'), JSON.stringify({ type: 'module', dependencies: { pg: '^8.13.1' } }));
+  execFileSync('npm', ['install', '--omit=dev', 'pg@8.13.1'], { cwd: work, stdio: 'ignore' });
+  const zip = path.join(work, 'fn.zip');
+  execFileSync('zip', ['-qr', zip, '.'], { cwd: work });
+  const vpc = apiFn.VpcConfig || {};
+  awsJson([
+    'lambda', 'create-function',
+    '--function-name', name,
+    '--runtime', 'nodejs20.x',
+    '--role', apiFn.Role,
+    '--handler', 'index.handler',
+    '--timeout', '30',
+    '--zip-file', `fileb://${zip}`,
+    ...(vpc.SubnetIds?.length ? [
+      '--vpc-config',
+      `SubnetIds=${vpc.SubnetIds.join(',')},SecurityGroupIds=${(vpc.SecurityGroupIds || []).join(',')}`,
+    ] : []),
+  ]);
+  for (let i = 0; i < 20; i += 1) {
+    const cfg = awsJson(['lambda', 'get-function-configuration', '--function-name', name]);
+    if (cfg.State === 'Active' && cfg.LastUpdateStatus === 'Successful') break;
+    execFileSync('sleep', ['3']);
+  }
+  const payloadPath = path.join(work, 'payload.json');
+  fs.writeFileSync(payloadPath, JSON.stringify(payload), { mode: 0o600 });
+  try {
+    const invoked = awsJson([
+      'lambda', 'invoke',
+      '--function-name', name,
+      '--cli-binary-format', 'raw-in-base64-out',
+      '--payload', `fileb://${payloadPath}`,
+      path.join(work, 'out.json'),
+    ]);
+    const body = JSON.parse(fs.readFileSync(path.join(work, 'out.json'), 'utf8'));
+    return { ok: invoked.StatusCode === 200 && body.ok === true, body, functionName: name };
+  } finally {
+    try { execFileSync(AWS, ['--region', REGION, 'lambda', 'delete-function', '--function-name', name]); } catch { /* ignore */ }
+    fs.rmSync(work, { recursive: true, force: true });
+  }
+};
+
 const forceDeleteChecks = async (checkIds) => {
   const ids = [...new Set((checkIds || []).filter(Boolean))];
   if (!ids.length) return { ok: true, deleted: [] };
-  const apiFn = awsJson(['lambda', 'get-function-configuration', '--function-name', 'checksops-staging-api']);
-  const name = `checksops-staging-s14-cleanup-${Date.now().toString().slice(-6)}`;
-  const work = fs.mkdtempSync(path.join(os.tmpdir(), 's14-cleanup-'));
-  const handler = `import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
-import pg from 'pg';
+  return invokeVpcOneshot({
+    prefix: 's14-cleanup',
+    payload: { db: loadAdminDbConfig(), checkIds: ids },
+    handlerSource: `import pg from 'pg';
 export const handler = async (event) => {
-  const sm = new SecretsManagerClient({});
-  const secret = JSON.parse((await sm.send(new GetSecretValueCommand({ SecretId: process.env.ADMIN_SECRET_ARN }))).SecretString);
-  if (!/checksops_admin/i.test(secret.username || '')) throw new Error('not staging admin');
+  const db = event.db || {};
+  if (!/checksops_admin/i.test(db.user || '')) throw new Error('not staging admin');
   const client = new pg.Client({
-    host: secret.host, port: Number(secret.port || 5432), user: secret.username,
-    password: secret.password, database: process.env.DATABASE_NAME || 'checksops',
+    host: db.host, port: Number(db.port || 5432), user: db.user,
+    password: db.password, database: db.database || 'checksops',
     ssl: { rejectUnauthorized: false },
   });
   await client.connect();
@@ -195,72 +273,25 @@ export const handler = async (event) => {
     return { ok: false, error: String(error.message || error).slice(0, 240), deleted };
   } finally { await client.end(); }
 };
-`;
-  fs.writeFileSync(path.join(work, 'index.mjs'), handler);
-  fs.writeFileSync(path.join(work, 'package.json'), JSON.stringify({ type: 'module', dependencies: { pg: '^8.13.1' } }));
-  execFileSync('npm', ['install', '--omit=dev', 'pg@8.13.1', '@aws-sdk/client-secrets-manager'], { cwd: work, stdio: 'ignore' });
-  const zip = path.join(work, 'fn.zip');
-  execFileSync('zip', ['-qr', zip, '.'], { cwd: work });
-  const vpc = apiFn.VpcConfig || {};
-  awsJson([
-    'lambda', 'create-function',
-    '--function-name', name,
-    '--runtime', 'nodejs20.x',
-    '--role', apiFn.Role,
-    '--handler', 'index.handler',
-    '--timeout', '30',
-    '--zip-file', `fileb://${zip}`,
-    '--environment', `Variables={ADMIN_SECRET_ARN=${stagingAdminSecretArn()},DATABASE_NAME=${apiFn.Environment.Variables.DATABASE_NAME || 'checksops'}}`,
-    ...(vpc.SubnetIds?.length ? [
-      '--vpc-config',
-      `SubnetIds=${vpc.SubnetIds.join(',')},SecurityGroupIds=${(vpc.SecurityGroupIds || []).join(',')}`,
-    ] : []),
-  ]);
-  for (let i = 0; i < 20; i += 1) {
-    const cfg = awsJson(['lambda', 'get-function-configuration', '--function-name', name]);
-    if (cfg.State === 'Active' && cfg.LastUpdateStatus === 'Successful') break;
-    execFileSync('sleep', ['3']);
-  }
-  try {
-    const invoked = awsJson([
-      'lambda', 'invoke',
-      '--function-name', name,
-      '--cli-binary-format', 'raw-in-base64-out',
-      '--payload', JSON.stringify({ checkIds: ids }),
-      path.join(work, 'out.json'),
-    ]);
-    const body = JSON.parse(fs.readFileSync(path.join(work, 'out.json'), 'utf8'));
-    return { ok: invoked.StatusCode === 200 && body.ok === true, body, functionName: name };
-  } finally {
-    try { execFileSync(AWS, ['--region', REGION, 'lambda', 'delete-function', '--function-name', name]); } catch { /* ignore */ }
-    fs.rmSync(work, { recursive: true, force: true });
-  }
+`,
+  });
 };
 
-const awsJson = (args) => JSON.parse(execFileSync(AWS, ['--region', REGION, ...args], { encoding: 'utf8' }));
-
-const stagingAdminSecretArn = () => {
-  const secrets = awsJson(['secretsmanager', 'list-secrets']);
-  const match = (secrets.SecretList || []).find((row) => (
-    /rds-db-credentials\/checksops-staging\/checksops_admin/i.test(row.Name || '')
-  ));
-  if (!match?.ARN) throw new Error('staging checksops_admin secret not listed');
-  return match.ARN;
-};
-
-const stampDepositedAt = async (checkId) => {
-  const apiFn = awsJson(['lambda', 'get-function-configuration', '--function-name', 'checksops-staging-api']);
-  const name = `checksops-staging-s14-stamp-${Date.now().toString().slice(-6)}`;
-  const work = fs.mkdtempSync(path.join(os.tmpdir(), 's14-stamp-'));
-  const handler = `import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
-import pg from 'pg';
+const stampDepositedAt = async (checkId) => invokeVpcOneshot({
+  prefix: 's14-stamp',
+  payload: {
+    db: loadAdminDbConfig(),
+    checkId,
+    marker: MARKER,
+    ocrPayee: 'S14 OCR After deposited_at',
+  },
+  handlerSource: `import pg from 'pg';
 export const handler = async (event) => {
-  const sm = new SecretsManagerClient({});
-  const secret = JSON.parse((await sm.send(new GetSecretValueCommand({ SecretId: process.env.ADMIN_SECRET_ARN }))).SecretString);
-  if (!/checksops_admin/i.test(secret.username || '')) throw new Error('not staging admin');
+  const db = event.db || {};
+  if (!/checksops_admin/i.test(db.user || '')) throw new Error('not staging admin');
   const client = new pg.Client({
-    host: secret.host, port: Number(secret.port || 5432), user: secret.username,
-    password: secret.password, database: process.env.DATABASE_NAME || 'checksops',
+    host: db.host, port: Number(db.port || 5432), user: db.user,
+    password: db.password, database: db.database || 'checksops',
     ssl: { rejectUnauthorized: false },
   });
   await client.connect();
@@ -279,47 +310,8 @@ export const handler = async (event) => {
     return { ok: false, error: String(error.message || error).slice(0, 240) };
   } finally { await client.end(); }
 };
-`;
-  fs.writeFileSync(path.join(work, 'index.mjs'), handler);
-  fs.writeFileSync(path.join(work, 'package.json'), JSON.stringify({ type: 'module', dependencies: { pg: '^8.13.1' } }));
-  execFileSync('npm', ['install', '--omit=dev', 'pg@8.13.1', '@aws-sdk/client-secrets-manager'], { cwd: work, stdio: 'ignore' });
-  const zip = path.join(work, 'fn.zip');
-  execFileSync('zip', ['-qr', zip, '.'], { cwd: work });
-  const vpc = apiFn.VpcConfig || {};
-  awsJson([
-    'lambda', 'create-function',
-    '--function-name', name,
-    '--runtime', 'nodejs20.x',
-    '--role', apiFn.Role,
-    '--handler', 'index.handler',
-    '--timeout', '30',
-    '--zip-file', `fileb://${zip}`,
-    '--environment', `Variables={ADMIN_SECRET_ARN=${stagingAdminSecretArn()},DATABASE_NAME=${apiFn.Environment.Variables.DATABASE_NAME || 'checksops'}}`,
-    ...(vpc.SubnetIds?.length ? [
-      '--vpc-config',
-      `SubnetIds=${vpc.SubnetIds.join(',')},SecurityGroupIds=${(vpc.SecurityGroupIds || []).join(',')}`,
-    ] : []),
-  ]);
-  for (let i = 0; i < 20; i += 1) {
-    const cfg = awsJson(['lambda', 'get-function-configuration', '--function-name', name]);
-    if (cfg.State === 'Active' && cfg.LastUpdateStatus === 'Successful') break;
-    execFileSync('sleep', ['3']);
-  }
-  try {
-    const invoked = awsJson([
-      'lambda', 'invoke',
-      '--function-name', name,
-      '--cli-binary-format', 'raw-in-base64-out',
-      '--payload', JSON.stringify({ checkId, marker: MARKER, ocrPayee: 'S14 OCR After deposited_at' }),
-      path.join(work, 'out.json'),
-    ]);
-    const body = JSON.parse(fs.readFileSync(path.join(work, 'out.json'), 'utf8'));
-    return { ok: invoked.StatusCode === 200 && body.ok === true, body, functionName: name };
-  } finally {
-    try { execFileSync(AWS, ['--region', REGION, 'lambda', 'delete-function', '--function-name', name]); } catch { /* ignore */ }
-    fs.rmSync(work, { recursive: true, force: true });
-  }
-};
+`,
+});
 
 const main = async () => {
   const financial = await api('/financial/status', { method: 'GET', token: null });
