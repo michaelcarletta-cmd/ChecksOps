@@ -536,7 +536,7 @@ export async function saveBillingAuthorization(client, {
 }) {
   const method = (await client.query(
     `SELECT id, tenant_id, provider_account_id, provider_payment_method_id, provider_bank_account_id,
-            holder_name, last_four, verification_status, connection_status, environment, nickname
+            holder_name, last_four, verification_status, connection_status, environment
      FROM public.payment_provider_methods
      WHERE tenant_id = $1::uuid AND provider_payment_method_id = $2
      LIMIT 1`,
@@ -565,7 +565,7 @@ export async function saveBillingAuthorization(client, {
     method.provider_bank_account_id,
     method.provider_account_id,
     method.environment,
-    method.holder_name || method.nickname || 'Billing account',
+    method.holder_name || 'Billing account',
   ];
 
   const saved = existing

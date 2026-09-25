@@ -53,7 +53,7 @@ const snapshot = async (client, tenantId, dest) => {
   const last = history[0] || null;
   const pending = history.find((row) => row.status === 'submitted' || row.status === 'due') || null;
   const methods = (await client.query(
-    `SELECT provider_payment_method_id, holder_name, last_four, nickname,
+    `SELECT provider_payment_method_id, holder_name, last_four,
             connection_status, can_send, environment, provider_account_id
      FROM public.payment_provider_methods
      WHERE tenant_id = $1::uuid
