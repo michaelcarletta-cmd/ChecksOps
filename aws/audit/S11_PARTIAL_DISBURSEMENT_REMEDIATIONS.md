@@ -98,10 +98,15 @@ None. Sequence and draw kind live in `aws_financial_operations.metadata`.
 
 ## Production
 
-Untouched. SHA `4nRr0xh9SelxDuMAzNmgbbpWAaiWmPOgtiN14DkDXgM=`.
+**Promoted 2026-09-25.** See `S11_PRODUCTION_PROMOTION.md`.
+
+| | Value |
+| --- | --- |
+| Production SHA before | `4nRr0xh9SelxDuMAzNmgbbpWAaiWmPOgtiN14DkDXgM=` |
+| Production SHA after | `dplSPx8YJoYbkolr2c6mKersDAV7OCzHt5y3UyIOdoc=` |
 
 ## Promotion
 
-**Ready pending explicit approval.** Overlay the three financial files onto live `checksops-production-prep-api`. Do not replace production with this staging zip. No SQL. Do not begin S14.
+Promoted by overlaying the three accepted financial files onto live `checksops-production-prep-api`. Staging zip was not deployed. No SQL. S14 not started.
 
 ## S11 PARTIAL DISBURSEMENT STAGING REMEDIATIONS: PASS

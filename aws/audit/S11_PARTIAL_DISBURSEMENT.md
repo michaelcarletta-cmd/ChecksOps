@@ -3,9 +3,9 @@
 **Date:** 2026-09-25  
 **S2/S3/S4/S5:** CLOSED / PRODUCTION PASS. Not reopened.  
 **S14:** later unresolved item. Not started.  
-**Production:** frozen at `4nRr0xh9SelxDuMAzNmgbbpWAaiWmPOgtiN14DkDXgM=`. Not modified.  
+**Production promotion:** PASS. SHA after S11: `dplSPx8YJoYbkolr2c6mKersDAV7OCzHt5y3UyIOdoc=`. See `S11_PRODUCTION_PROMOTION.md`.  
 **Target:** AWS staging `https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging`  
-**Staging remediations:** see `S11_PARTIAL_DISBURSEMENT_REMEDIATIONS.md`.
+**Staging remediations:** PASS. See `S11_PARTIAL_DISBURSEMENT_REMEDIATIONS.md`.
 
 ## Requirement
 
