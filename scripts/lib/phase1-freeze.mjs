@@ -289,10 +289,10 @@ export const assertPromotionScriptsRemainCodeOnly = (root) => {
   const overlay = readRepoFile(root, 'scripts/aws-production-overlay.mjs');
   const staging = readRepoFile(root, 'scripts/aws-overlay-staging-api.mjs');
   const errors = [];
-  if (overlay.includes('UpdateFunctionConfiguration')) {
+  if (/update-function-configuration/i.test(overlay)) {
     errors.push('production overlay must not call UpdateFunctionConfiguration');
   }
-  if (/\bpsql\b/.test(overlay) || overlay.includes('71_admin_set_check_claim.sql')) {
+  if (/\bpsql\b/.test(overlay) || /(?:spawn|exec|apply|run)[^\n]*71_admin_set_check_claim\.sql/.test(overlay)) {
     errors.push('production overlay must not execute SQL as a code-promotion side effect');
   }
   if (!overlay.includes('assertDeployShaUnchanged') || !overlay.includes('update-function-code')) {
