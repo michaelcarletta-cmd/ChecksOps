@@ -17,6 +17,7 @@ import {
   AdminSetUserPasswordCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import { withIdentity } from './data.mjs';
+import { bindProductionCognitoLock } from './identity-env.mjs';
 import { normalizeEmail } from './email-policy.mjs';
 import { sendViaSesOrSink } from './email.mjs';
 import { renderTransactionalTemplate } from './email-templates.mjs';
@@ -72,7 +73,7 @@ const assertTenantAdmin = async (client, mapping, tenantId) => {
 };
 
 export const runTenantInviteUser = async ({
-  client, mapping, body, spoof, send, cognitoJson: cognitoFn,
+  client, mapping, body, spoof, send, cognitoJson: cognitoFn, identityScope,
 }) => {
   const adminCognito = cognitoFn || cognitoJson;
   const tenantId = body.tenant_id || body.tenantId;
@@ -138,6 +139,15 @@ export const runTenantInviteUser = async ({
     [email],
   )).rows[0]?.id;
   if (!appUserId) {
+    appUserId = (await client.query(
+      `SELECT application_user_id::text AS id
+       FROM public.identity_accounts
+       WHERE lower(email) = $1 OR cognito_sub = $2
+       LIMIT 1`,
+      [email, cognitoSub],
+    )).rows[0]?.id;
+  }
+  if (!appUserId) {
     appUserId = randomUUID();
     await client.query(
       `INSERT INTO public.profiles (id, email, full_name, created_at, updated_at)
@@ -154,31 +164,71 @@ export const runTenantInviteUser = async ({
   }
 
   if (cognitoSub && appUserId && String(cognitoSub) !== String(appUserId)) {
-    await client.query(
-      `INSERT INTO public.identity_accounts (cognito_sub, application_user_id, email, status, linked_at, created_at)
-       VALUES ($1, $2::uuid, $3, 'active', now(), now())
-       ON CONFLICT (cognito_sub) DO UPDATE
-         SET application_user_id = EXCLUDED.application_user_id,
-             email = EXCLUDED.email,
-             status = 'active',
-             linked_at = COALESCE(public.identity_accounts.linked_at, now())`,
-      [cognitoSub, appUserId, email],
-    ).catch(() => {});
+    try {
+      await client.query(
+        `INSERT INTO public.identity_accounts (cognito_sub, application_user_id, email, status, linked_at, created_at)
+         VALUES ($1, $2::uuid, $3, 'active', now(), now())
+         ON CONFLICT (cognito_sub) DO UPDATE
+           SET application_user_id = EXCLUDED.application_user_id,
+               email = EXCLUDED.email,
+               status = 'active',
+               linked_at = COALESCE(public.identity_accounts.linked_at, now())`,
+        [cognitoSub, appUserId, email],
+      );
+    } catch (identityError) {
+      return {
+        ok: false,
+        statusCode: 500,
+        error: 'identity_link_failed',
+        message: String(identityError.message || identityError).slice(0, 240),
+        spoofFieldsIgnored: spoof,
+      };
+    }
   }
 
-  await client.query(
-    `INSERT INTO public.tenant_users (id, tenant_id, user_id, role, created_at)
-     VALUES ($1::uuid, $2::uuid, $3::uuid, $4, now())
-     ON CONFLICT DO NOTHING`,
-    [randomUUID(), tenantId, appUserId, role],
-  ).catch(async () => {
-    await client.query(
-      `INSERT INTO public.tenant_users (tenant_id, user_id, role)
-       VALUES ($1::uuid, $2::uuid, $3)
-       ON CONFLICT DO NOTHING`,
-      [tenantId, appUserId, role],
-    ).catch(() => {});
+  // Production /identity/me resolves via identity_production_cognito_locks.
+  // Login must not write that table. Bind here with the server-resolved
+  // Cognito sub + application user only (never email, client user id, or tenant_id).
+  const lockResult = await bindProductionCognitoLock(client, {
+    cognitoSub,
+    applicationUserId: appUserId,
+    identityScope,
   });
+  if (!lockResult.ok) {
+    return {
+      ok: false,
+      statusCode: lockResult.error === 'identity_lock_conflict' ? 409 : 500,
+      error: lockResult.error,
+      message: lockResult.message || undefined,
+      spoofFieldsIgnored: spoof,
+    };
+  }
+
+  try {
+    await client.query(
+      `INSERT INTO public.tenant_users (id, tenant_id, user_id, role, created_at)
+       VALUES ($1::uuid, $2::uuid, $3::uuid, $4, now())
+       ON CONFLICT DO NOTHING`,
+      [randomUUID(), tenantId, appUserId, role],
+    );
+  } catch (membershipError) {
+    try {
+      await client.query(
+        `INSERT INTO public.tenant_users (tenant_id, user_id, role)
+         VALUES ($1::uuid, $2::uuid, $3)
+         ON CONFLICT DO NOTHING`,
+        [tenantId, appUserId, role],
+      );
+    } catch (fallbackError) {
+      return {
+        ok: false,
+        statusCode: 500,
+        error: 'tenant_membership_failed',
+        message: String(fallbackError.message || fallbackError).slice(0, 240),
+        spoofFieldsIgnored: spoof,
+      };
+    }
+  }
 
   const origin = emailAssetOrigin();
   const loginUrl = tenant.custom_domain
@@ -219,6 +269,7 @@ export const runTenantInviteUser = async ({
 export const handleTenantInviteUser = (event, deps = {}) => withIdentity(event, (ctx) => (
   runTenantInviteUser({
     ...ctx,
+    identityScope: deps.identityScope,
     send: deps.sendViaSesOrSink,
     cognitoJson: deps.cognitoJson,
   })
