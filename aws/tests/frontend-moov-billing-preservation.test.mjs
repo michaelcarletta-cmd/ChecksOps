@@ -8,6 +8,12 @@ const account = readFileSync(new URL("../../src/components/settings/TenantBillin
 
 test("Moov monthly-billing admin panel remains wired", () => {
   assert.match(admin, /MonthlyTenantBillingPanel/);
-  assert.match(panel, /Monthly subscription billing/);
   assert.match(account, /Monthly subscription billing account authorized/);
+});
+
+test("PR #492 Mortgage Ops billing UI remains on AdminTenants / panel", () => {
+  assert.match(admin, /mortgage_ops_initial/);
+  assert.match(panel, /Mortgage Ops — First Check/);
+  assert.match(panel, /Mortgage Ops — Additional Check/);
+  assert.match(panel, /Consolidated ChecksOps invoice/);
 });
