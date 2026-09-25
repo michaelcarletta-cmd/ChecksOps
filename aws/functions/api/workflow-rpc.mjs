@@ -56,6 +56,7 @@ export const SAFE_WRITE_RPC_CLASSIFICATION = {
   invalidate_session: 'safe_now',
   resolve_check_case: 'safe_now',
   admin_set_contractor_pro: 'safe_now',
+  admin_set_check_claim: 'safe_now',
   record_check_return: 'safe_now',
   resolve_check_return: 'safe_now',
   get_payment_direction_by_token: 'financial_sensitive',
@@ -100,6 +101,7 @@ export const SAFE_WRITE_RPCS = new Set([
   'invalidate_session',
   'resolve_check_case',
   'admin_set_contractor_pro',
+  'admin_set_check_claim',
   'record_check_return',
   'resolve_check_return',
   'deposit_action',
@@ -657,6 +659,90 @@ const executeResolveCheckCase = async ({ client, mapping, args }) => {
   return { data: null };
 };
 
+const sameClaimId = (left, right) => {
+  if (left == null && right == null) return true;
+  if (left == null || right == null) return false;
+  return String(left) === String(right);
+};
+
+export const executeAdminSetCheckClaim = async ({ client, mapping, args }) => {
+  const gated = await requireRole(client, mapping.application_user_id, ['admin']);
+  if (gated.error) return gated;
+
+  const checkId = arg(args, 'p_check_id', 'check_id');
+  if (!isUuid(checkId)) return { error: 'invalid_uuid', field: 'p_check_id' };
+
+  const hasClaim = Object.prototype.hasOwnProperty.call(args || {}, 'p_claim_id')
+    || Object.prototype.hasOwnProperty.call(args || {}, 'claim_id');
+  if (!hasClaim) return { error: 'missing_required_field', field: 'p_claim_id' };
+
+  const rawClaim = arg(args, 'p_claim_id', 'claim_id');
+  const clearing = rawClaim === null || rawClaim === '' || rawClaim === 'null';
+  let newClaimId = null;
+  if (!clearing) {
+    if (!isUuid(rawClaim)) return { error: 'invalid_uuid', field: 'p_claim_id' };
+    newClaimId = rawClaim;
+  }
+
+  const check = (await client.query(
+    `SELECT id, tenant_id, claim_id, deposited_at, amount, status
+       FROM public.check_intake_items
+      WHERE id = $1::uuid`,
+    [checkId],
+  )).rows[0];
+  if (!check) return { error: 'not_authorized', message: 'check not found or not writable' };
+
+  const member = (await client.query(
+    `SELECT 1 FROM public.tenant_users
+      WHERE user_id = $1::uuid AND tenant_id = $2::uuid
+      LIMIT 1`,
+    [mapping.application_user_id, check.tenant_id],
+  )).rows[0];
+  if (!member) {
+    return { error: 'not_authorized', message: 'Check is not in the caller tenant' };
+  }
+
+  if (check.deposited_at) {
+    return { error: 'already_deposited', message: 'claim_id cannot change after deposit' };
+  }
+
+  const priorClaimId = check.claim_id || null;
+  if (sameClaimId(priorClaimId, newClaimId)) {
+    return {
+      data: {
+        ok: true,
+        noop: true,
+        check_id: checkId,
+        prior_claim_id: priorClaimId,
+        new_claim_id: newClaimId,
+        claim_id: priorClaimId,
+      },
+    };
+  }
+
+  if (newClaimId) {
+    const claim = (await client.query(
+      `SELECT id, org_id AS tenant_id
+         FROM public.claims
+        WHERE id = $1::uuid`,
+      [newClaimId],
+    )).rows[0];
+    if (claim && String(claim.tenant_id) !== String(check.tenant_id)) {
+      return { error: 'cross_tenant_denied', message: 'Target claim is not in the check tenant' };
+    }
+  }
+
+  const executed = (await client.query(
+    `SELECT public.admin_set_check_claim($1::uuid, $2::uuid, $3::uuid) AS result`,
+    [mapping.application_user_id, checkId, newClaimId],
+  )).rows[0]?.result;
+  const payload = typeof executed === 'string' ? JSON.parse(executed) : executed;
+  if (!payload || payload.error) {
+    return payload || { error: 'rls_denied', message: 'claim association was not written' };
+  }
+  return { data: payload };
+};
+
 const executeAdminSetContractorPro = async ({ client, mapping, args }) => {
   const gated = await requireRole(client, mapping.application_user_id, ['admin']);
   if (gated.error) return gated;
@@ -1147,6 +1233,8 @@ export const executeSafeWriteRpc = async ({ client, mapping, name, args }) => {
       return executeResolveCheckCase({ client, mapping, args });
     case 'admin_set_contractor_pro':
       return executeAdminSetContractorPro({ client, mapping, args });
+    case 'admin_set_check_claim':
+      return executeAdminSetCheckClaim({ client, mapping, args });
     case 'record_check_return':
       return executeRecordCheckReturn({ client, mapping, args });
     case 'resolve_check_return':
