@@ -145,7 +145,9 @@ const expected10950 = (proof) => (
 const main = async () => {
   await mkdir(OUT, { recursive: true });
   await assumeCursorRole('phase2b-accept');
-  execFileSync(process.execPath, [path.join(ROOT, 'scripts/mint-platform-owner-token.mjs')], { stdio: 'inherit' });
+  execFileSync(process.execPath, [path.join(ROOT, 'scripts/mint-platform-owner-token.mjs')], {
+    stdio: ['ignore', 'pipe', 'inherit'],
+  });
   const ownerTok = JSON.parse(await readFile('/opt/cursor/artifacts/moov-monthly-billing-preprod/.staging-owner.jwt.json', 'utf8'));
   const testerTok = JSON.parse(await readFile('/opt/cursor/artifacts/moov-monthly-billing-preprod/.staging-tester.jwt.json', 'utf8'));
   const ownerMe = await fetch(`${API}/identity/me`, { headers: { authorization: `Bearer ${ownerTok.idToken}` } }).then((r) => r.json());

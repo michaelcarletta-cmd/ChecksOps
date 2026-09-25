@@ -64,8 +64,11 @@ const main = async () => {
   const dist = path.join(SPA_SRC, 'dist');
   const index = path.join(dist, 'index.html');
   const indexHtml = fs.readFileSync(index, 'utf8');
-  const productionLeak = /checksops\.com(?!\s)|kiqojucc02|E1B0ZWWO5559U5|production-prep|41cb5d67-4911-4bef-aad5-d8ee9c582208/.test(indexHtml)
-    && !/staging\.checksops\.com/.test(indexHtml);
+  const indexJs = assets.find((name) => name.startsWith('index-') && name.endsWith('.js'));
+  const indexJsText = indexJs ? fs.readFileSync(path.join(dist, 'assets', indexJs), 'utf8') : '';
+  const haystack = `${indexHtml}\n${indexJsText}`;
+  const productionLeak = /kiqojucc02|E1B0ZWWO5559U5|checksops-production-prep-api|41cb5d67-4911-4bef-aad5-d8ee9c582208/.test(haystack);
+  const hasStagingApi = /psr19uhop4|staging\.checksops\.com/.test(haystack);
   const assets = fs.readdirSync(path.join(dist, 'assets'));
   const assetHashes = Object.fromEntries(
     assets.map((name) => [name, hashFile(path.join(dist, 'assets', name))]),
@@ -98,6 +101,7 @@ const main = async () => {
     distribution: DISTRIBUTION,
     usedDelete: false,
     productionUrlsEmbedded: productionLeak,
+    hasStagingApi,
     hasMonthlyBillingUi: hasMonthly,
     indexSha256: hashFile(index),
     indexRefs,

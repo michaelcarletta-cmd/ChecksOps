@@ -135,7 +135,7 @@ export const handler = async () => {
     if (TESTER) {
       await client.query(
         `INSERT INTO public.tenant_users (user_id, tenant_id, role)
-         SELECT $1::uuid, $2::uuid, 'owner'
+         SELECT $1::uuid, $2::uuid, 'admin'
          WHERE NOT EXISTS (
            SELECT 1 FROM public.tenant_users WHERE user_id = $1::uuid AND tenant_id = $2::uuid
          )`,
