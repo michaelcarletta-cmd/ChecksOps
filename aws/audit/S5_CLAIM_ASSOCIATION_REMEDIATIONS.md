@@ -1,7 +1,7 @@
 # S5 claim association — staging remediations
 
 **Date:** 2026-09-25  
-**Scope:** Narrow Phase 1 S5 remediations only. Staging Lambda overlay + one SECURITY DEFINER function. No production deploy.  
+**Scope:** Narrow Phase 1 S5 remediations. Staging Lambda overlay + one SECURITY DEFINER function. Production promotion is documented in `S5_PRODUCTION_PROMOTION.md`.  
 **S2/S3/S4/S11/S14:** not reopened.  
 **API:** `https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging`  
 **Function:** `checksops-staging-api` (in-place `UpdateFunctionCode`, not SAM)
@@ -32,7 +32,7 @@ Column grants on `check_intake_items` intentionally omit `claim_id`. A direct `U
 | After S5 overlay | `x/2kTsBOzLCoBErLjVoNEKtEGibJbN+XRbx1QsbS5z0=` |
 | Current (S5 RPC still present) | `P8eTuIEr7GNEiwLC5og1ba8Ajp06kTPUvlSstBCYfzI=` |
 | Overlay file | `workflow-rpc.mjs` only |
-| Production (unchanged) | `hjz0G98YOSPT2vyE9+Qy+n8a7pr87e2+Dgodm4zzC2A=` |
+| Production before S5 promotion | `hjz0G98YOSPT2vyE9+Qy+n8a7pr87e2+Dgodm4zzC2A=` |
 
 Live staging `workflow-rpc.mjs` differed from this branch only by the S5 hunks before overlay.
 
@@ -83,13 +83,16 @@ Still blocked after cleanup: `403 column_not_allowlisted` `columns=["claim_id"]`
 
 ## Production promotion
 
-**Not deployed.** Production SHA remains `hjz0G98YOSPT2vyE9+Qy+n8a7pr87e2+Dgodm4zzC2A=`.
+**Promoted 2026-09-25.** See `S5_PRODUCTION_PROMOTION.md`.
 
-S5 staging acceptance is complete. Promotion is **ready pending explicit approval** and must apply both:
+1. Applied `aws/workflows/sql/71_admin_set_check_claim.sql` on production RDS
+2. Overlaid accepted `workflow-rpc.mjs` onto live `checksops-production-prep-api`
 
-1. Overlay `workflow-rpc.mjs` onto `checksops-production-prep-api`
-2. Apply `aws/workflows/sql/71_admin_set_check_claim.sql` on production RDS
+| | Value |
+| --- | --- |
+| Production SHA before | `hjz0G98YOSPT2vyE9+Qy+n8a7pr87e2+Dgodm4zzC2A=` |
+| Production SHA after | `4nRr0xh9SelxDuMAzNmgbbpWAaiWmPOgtiN14DkDXgM=` |
 
-JS without the DEFINER function fails with `permission denied` / `data_query_failed`. Do not `GRANT UPDATE(claim_id)` on `check_intake_items`.
+JS without the DEFINER function fails with `permission denied` / `data_query_failed`. The accepted SQL does not `GRANT UPDATE(claim_id)` on `check_intake_items`.
 
 ## S5 CLAIM ASSOCIATION STAGING REMEDIATIONS: PASS

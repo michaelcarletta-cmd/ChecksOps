@@ -1,8 +1,9 @@
 # S5 wrong claim association — next Phase 1 item after S2
 
 **Date:** 2026-09-25  
-**S2:** CLOSED / PRODUCTION PASS. Production SHA unchanged: `hjz0G98YOSPT2vyE9+Qy+n8a7pr87e2+Dgodm4zzC2A=`.  
-**Staging remediations:** PASS. See `S5_CLAIM_ASSOCIATION_REMEDIATIONS.md`. Production not promoted.
+**S2:** CLOSED / PRODUCTION PASS.  
+**Staging remediations:** PASS. See `S5_CLAIM_ASSOCIATION_REMEDIATIONS.md`.  
+**Production promotion:** PASS. See `S5_PRODUCTION_PROMOTION.md`. Production SHA after S5: `4nRr0xh9SelxDuMAzNmgbbpWAaiWmPOgtiN14DkDXgM=`.
 
 ## Requirement
 
@@ -10,7 +11,7 @@ A check must not be able to move from Claim A to Claim B in a way that mis-attri
 
 ## Current status
 
-**STAGING PASS.** Production remains frozen. Do not promote until explicitly approved.
+**STAGING PASS. PRODUCTION PASS.** Authorized admins can set, correct, or clear `claim_id` through `POST /data/rpc` `admin_set_check_claim` on staging and production.
 
 Authorized admins can set, correct, or clear `claim_id` through `POST /data/rpc` `admin_set_check_claim`. The writer is `public.admin_set_check_claim` (SECURITY DEFINER). Generic `/data/write` of `claim_id` remains `403 column_not_allowlisted`.
 
