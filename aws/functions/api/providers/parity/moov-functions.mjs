@@ -162,29 +162,47 @@ const accountCreate = {
     } catch {
       await client.query('ROLLBACK TO SAVEPOINT moov_account_idempotency').catch(() => {});
     }
-    const created = await moovFetch('/accounts', {
-      method: 'POST',
-      scopes: scopes.accountsWrite(),
-      idempotencyKey,
-      fetchImpl,
-      body: {
-        accountType: 'business',
-        profile: {
-          business: {
-            legalBusinessName: tenant.legal_business_name ?? tenant.name ?? 'ChecksOps Organization',
-            email: tenant.email_reply_to ?? tenant.email_from_address ?? undefined,
-            phone: tenant.business_phone
-              ? { number: String(tenant.business_phone).replace(/\D/g, '').slice(-10) }
-              : undefined,
-            address: addr ?? undefined,
-          },
+    const accountBody = {
+      accountType: 'business',
+      profile: {
+        business: {
+          legalBusinessName: tenant.legal_business_name ?? tenant.name ?? 'ChecksOps Organization',
+          email: tenant.email_reply_to ?? tenant.email_from_address ?? undefined,
+          phone: tenant.business_phone
+            ? { number: String(tenant.business_phone).replace(/\D/g, '').slice(-10) }
+            : undefined,
+          address: addr ?? undefined,
         },
-        capabilities: ['transfers', 'send-funds', 'wallet', 'send-funds.ach', 'collect-funds', 'collect-funds.ach'],
-        ...(tosToken ? { termsOfService: { token: tosToken } } : {}),
-        foreignID: tenantId,
-        metadata: { checksops_tenant_id: tenantId },
       },
-    });
+      capabilities: ['transfers', 'send-funds', 'wallet', 'send-funds.ach', 'collect-funds', 'collect-funds.ach'],
+      ...(tosToken ? { termsOfService: { token: tosToken } } : {}),
+      foreignID: tenantId,
+      metadata: { checksops_tenant_id: tenantId },
+    };
+    let created;
+    try {
+      created = await moovFetch('/accounts', {
+        method: 'POST',
+        scopes: scopes.accountsWrite(),
+        idempotencyKey,
+        fetchImpl,
+        body: accountBody,
+      });
+    } catch (error) {
+      const detail = `${error.message || ''} ${JSON.stringify(error.body || {})}`;
+      if (!/foreignID already associated/i.test(detail)) throw error;
+      const listed = await moovFetch(`/accounts?foreignID=${encodeURIComponent(tenantId)}`, {
+        method: 'GET',
+        scopes: scopes.accountsRead(),
+        fetchImpl,
+      }).catch(() => []);
+      const rows = Array.isArray(listed) ? listed : (listed?.accounts || []);
+      created = rows.find((row) => (
+        String(row?.foreignID || row?.foreignId || '') === tenantId
+        || String(row?.metadata?.checksops_tenant_id || '') === tenantId
+      )) || rows[0] || null;
+      if (!(created?.accountID || created?.accountId)) throw error;
+    }
     const accountId = created?.accountID ?? created?.accountId;
     if (!accountId) return fail('Payment provider did not return an account id', 502);
     const saved = (await client.query(
