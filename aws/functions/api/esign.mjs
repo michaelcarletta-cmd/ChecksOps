@@ -298,6 +298,7 @@ export const runSendSignatureRequest = async ({
   }
 
   const results = [];
+  console.log('[send-signature-request] from', mailFrom);
   for (const signer of signers) {
     const signUrl = signer._signUrl;
     const html = emailHtml(signer, request, signUrl, branding);
