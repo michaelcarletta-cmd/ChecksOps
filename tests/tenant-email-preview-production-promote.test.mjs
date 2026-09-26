@@ -90,6 +90,8 @@ test("SPA promotion cannot package or deploy Lambda", () => {
   assert.match(promote, /lambdaAuthority: false/);
   assert.match(promote, /forbidden Lambda/);
   assert.match(promote, /ChecksOpsProductionSpaDeploy/);
+  assert.match(promote, /ZERO Lambda authority by design/);
+  assert.match(promote, /tenant-email-preview-prod-lambda-ro/);
   assert.match(promote, /planUploadOrder/);
   assert.match(promote, /indexLast/);
   assert.match(promote, /syncDelete: false/);

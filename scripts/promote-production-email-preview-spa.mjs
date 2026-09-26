@@ -245,16 +245,21 @@ const main = async () => {
     return;
   }
 
+  // Lambda pins are read-only and use the existing staging/read role.
+  // ChecksOpsProductionSpaDeploy has ZERO Lambda authority by design.
+  await assumeCursorRole('tenant-email-preview-prod-lambda-ro');
+  const lambdaBefore = readLambdaPins();
+
   const assumed = await assumeProductionSpaDeployRole();
   if (!assumed.ok) {
     report.ok = false;
     report.stopped = 'PRODUCTION SPA DEPLOY ROLE NOT ASSUMABLE';
     report.assume = assumed;
+    report.prewrite = { lambda: lambdaBefore };
     console.error(JSON.stringify(report, null, 2));
     process.exit(3);
   }
   report.assume = assumed;
-  const lambdaBefore = readLambdaPins();
   const liveHead = headIndex();
   const liveSha = downloadIndexSha();
   report.prewrite = { head: liveHead, sha256: liveSha, lambda: lambdaBefore };
@@ -280,6 +285,7 @@ const main = async () => {
   ]);
   const afterHead = headIndex();
   const afterSha = downloadIndexSha();
+  await assumeCursorRole('tenant-email-preview-prod-lambda-ro-after');
   const lambdaAfter = readLambdaPins();
   report.ok = afterSha === report.indexSha256
     && lambdaAfter.CodeSha256 === lambdaBefore.CodeSha256
