@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, KeyRound, Mail, CheckCircle2 } from "lucide-react";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 import { isPlatformOwner } from "@/lib/masterMerchant";
-import { isAwsStaging, isAwsStagingHttpsPasskeysEnabled } from "@/lib/awsStaging";
+import { isAwsStaging, isAwsStagingHttpsPasskeysEnabled, shouldShowAwsStagingBanner } from "@/lib/awsStaging";
 import { signInWithAwsPasskey } from "@/lib/awsPasskeys";
 import { passkeysSupported, sendMagicLink, signInWithPasskey } from "@/lib/passkeys";
 import { startAwsEmailOtp, verifyAwsEmailOtp } from "@/lib/awsPasswordless";
@@ -28,6 +28,7 @@ export function WhiteLabelLogin() {
   const navigate = useNavigate();
   const location = useLocation();
   const awsStaging = isAwsStaging();
+  const awsStagingChrome = shouldShowAwsStagingBanner();
   const awsHttpsPasskeys = isAwsStagingHttpsPasskeysEnabled();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
@@ -161,7 +162,7 @@ export function WhiteLabelLogin() {
           />
           <div>
             <CardTitle className="text-xl md:text-2xl">{tenant.name}</CardTitle>
-            <p className="text-xs text-muted-foreground mt-1">ChecksOps{awsStaging ? " · AWS staging" : ""}</p>
+            <p className="text-xs text-muted-foreground mt-1">ChecksOps{awsStagingChrome ? " · AWS staging" : ""}</p>
           </div>
         </CardHeader>
         <CardContent className="pt-2 space-y-4">

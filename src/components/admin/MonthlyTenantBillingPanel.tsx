@@ -390,7 +390,7 @@ export function MonthlyTenantBillingPanel({
                             }${row.mortgage_ops_initial_amount_cents != null || row.mortgage_ops_additional_amount_cents != null
                               ? ` · mortgage ${money((row.mortgage_ops_initial_amount_cents || 0) + (row.mortgage_ops_additional_amount_cents || 0))}`
                               : ""}`}
-                        {data.authorization?.account_number_last4}
+                        {data.authorization?.account_number_last4
                           ? ` · source ••••${data.authorization.account_number_last4}`
                           : ""}
                         {row.provider_transfer_id

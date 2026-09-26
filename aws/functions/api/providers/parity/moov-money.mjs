@@ -13,6 +13,7 @@ import {
   scopes,
 } from './moov-client.mjs';
 import { fail, jsonResult } from './caller.mjs';
+import { failClosedMissingAccount, requireMoovProviderEnvironment } from './moov-provider-env.mjs';
 import {
   canSendPayments,
   existingTransferByKey,
@@ -25,7 +26,7 @@ import {
 } from './db.mjs';
 import { railDecisionMetadata, selectRail } from './rail-router.mjs';
 import { resolveDebitSourceMethodId, resolveRails, saveMethodRails, saveStakeholderRails } from './moov-rails.mjs';
-import { postTransferLedger, syncWallet, writeLedgerEntry } from './moov-wallet.mjs';
+import { postTransferLedger, readWallet, syncWallet, writeLedgerEntry } from './moov-wallet.mjs';
 import {
   calculateFunding,
   isTerminalFundingStatus,
@@ -213,6 +214,36 @@ export const transferCreate = {
   },
 };
 
+export async function resolveWalletFundContext({
+  client, tenantId, environment, walletType = 'operating', fetchImpl, skipWalletSync = false,
+}) {
+  const account = await loadMoovAccount(client, tenantId, environment);
+  const missing = failClosedMissingAccount(account, environment);
+  if (missing) return { ok: false, ...missing };
+  if (account.onboarding_status !== 'active') {
+    return { ok: false, error: `Your payment account is not active yet (${account.onboarding_status}).`, statusCode: 409 };
+  }
+  if (!account.can_ach_debit) {
+    return { ok: false, error: 'Your payment account cannot pull funds from your bank yet.', statusCode: 409 };
+  }
+  const source = await loadConnectedMethod(client, {
+    tenantId,
+    providerAccountId: account.provider_account_id,
+    environment,
+  });
+  if (!source) {
+    return { ok: false, error: 'Connect an eligible business bank account first.', statusCode: 409 };
+  }
+  if (skipWalletSync) {
+    const wallet = await readWallet(client, tenantId, environment, walletType);
+    return { ok: true, environment, account, source, wallet };
+  }
+  const wallet = await syncWallet(client, {
+    tenantId, accountId: account.provider_account_id, environment, walletType, fetchImpl,
+  });
+  return { ok: true, environment, account, source, wallet };
+}
+
 export const walletFund = {
   run: async ({ client, mapping, body, ctx, fetchImpl }) => {
     const tenantId = ctx.tenantId;
@@ -223,20 +254,14 @@ export const walletFund = {
     if (!(await canSendPayments(client, mapping.application_user_id, tenantId, ctx.memberships))) {
       return fail('You do not have permission to move funds.', 403);
     }
-    const account = await loadMoovAccount(client, tenantId, 'sandbox');
-    if (!account?.provider_account_id) return fail('Set up your payment account first.', 409);
-    if (account.onboarding_status !== 'active') {
-      return fail(`Your payment account is not active yet (${account.onboarding_status}).`, 409);
-    }
-    if (!account.can_ach_debit) return fail('Your payment account cannot pull funds from your bank yet.', 409);
-    const source = await loadConnectedMethod(client, {
-      tenantId, providerAccountId: account.provider_account_id,
+    const envRes = requireMoovProviderEnvironment(ctx);
+    if (!envRes.ok) return fail(envRes.message || envRes.error, envRes.statusCode, { error: envRes.error });
+    const resolved = await resolveWalletFundContext({
+      client, tenantId, environment: envRes.environment, walletType, fetchImpl,
     });
-    if (!source) return fail('Connect an eligible business bank account first.', 409);
-    const wallet = await syncWallet(client, {
-      tenantId, accountId: account.provider_account_id, environment: 'sandbox', walletType, fetchImpl,
-    });
-    if (!wallet.provider_payment_method_id) {
+    if (!resolved.ok) return fail(resolved.error, resolved.statusCode, { error: resolved.error });
+    const { account, source, wallet } = resolved;
+    if (!wallet?.provider_payment_method_id) {
       return fail('Your balance account is not ready to receive funds yet.', 409);
     }
     const key = body.idempotency_key ?? `wallet-fund:${tenantId}:${walletType}:${amount}`;
