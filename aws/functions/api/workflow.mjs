@@ -764,36 +764,48 @@ export const handleDeleteCheck = async (event, deps = {}) => {
       try { await client.query('RELEASE SAVEPOINT delete_audit_snapshot'); } catch { /* ignore */ }
     }
 
-    // Claim + escrow link cleanup: these relationships are non-financial, but they hold FK references
-    // that can prevent deletion of the check row.
-    // - claim_checks.check_intake_item_id is not guaranteed to be ON DELETE CASCADE on all schemas
-    // - loss_draft_tracking.check_intake_item_id is likewise a non-cascading reference
-    await client.query('SAVEPOINT delete_claim_links');
-    try {
-      await client.query('DELETE FROM public.claim_checks WHERE check_intake_item_id = $1::uuid', [looked.check.id]);
-      await client.query('UPDATE public.loss_draft_tracking SET check_intake_item_id = NULL WHERE check_intake_item_id = $1::uuid', [looked.check.id]);
-      await client.query('RELEASE SAVEPOINT delete_claim_links');
-    } catch (error) {
-      try { await client.query('ROLLBACK TO SAVEPOINT delete_claim_links'); } catch { /* ignore */ }
-      try { await client.query('RELEASE SAVEPOINT delete_claim_links'); } catch { /* ignore */ }
-      if (error?.code === '42P01' || error?.code === '42703') {
-        // schema mismatch (table/column absent): ignore and proceed with best-effort deletion
-      } else if (error?.code === '42501') {
-        return denied(spoof, {
-          error: 'cleanup_denied',
-          message: 'This check cannot be deleted because dependent claim/escrow links could not be cleaned up.',
-        });
-      } else {
-        throw error;
-      }
-    }
-
     // Rely on FK ON DELETE CASCADE for dependent records (payees/files/messages/etc).
     // We explicitly block financial/provider tables above; those are the non-cascading integrity holders.
-    const rows = (await client.query(
-      'DELETE FROM public.check_intake_items WHERE id = $1::uuid RETURNING id',
-      [looked.check.id],
-    )).rows;
+    //
+    // Some legacy schemas may still hold non-financial FK references (ex: claim_checks, loss_draft_tracking)
+    // that are not cascading. Only attempt to clean those up if the delete actually fails with an FK error.
+    let rows = [];
+    try {
+      rows = (await client.query(
+        'DELETE FROM public.check_intake_items WHERE id = $1::uuid RETURNING id',
+        [looked.check.id],
+      )).rows;
+    } catch (error) {
+      if (error?.code !== '23503') throw error; // not a foreign key violation
+
+      // Retry path: attempt best-effort cleanup of non-financial claim/escrow links, then retry delete.
+      await client.query('SAVEPOINT delete_claim_links');
+      try {
+        await client.query('DELETE FROM public.claim_checks WHERE check_intake_item_id = $1::uuid', [looked.check.id]);
+        await client.query('UPDATE public.loss_draft_tracking SET check_intake_item_id = NULL WHERE check_intake_item_id = $1::uuid', [looked.check.id]);
+        await client.query('RELEASE SAVEPOINT delete_claim_links');
+      } catch (cleanupError) {
+        try { await client.query('ROLLBACK TO SAVEPOINT delete_claim_links'); } catch { /* ignore */ }
+        try { await client.query('RELEASE SAVEPOINT delete_claim_links'); } catch { /* ignore */ }
+        if (cleanupError?.code === '42P01' || cleanupError?.code === '42703') {
+          // schema mismatch (table/column absent): ignore and proceed to retry delete anyway
+        } else if (cleanupError?.code === '42501') {
+          return denied(spoof, {
+            error: 'cleanup_denied',
+            message: 'This check cannot be deleted because dependent claim/escrow links could not be cleaned up.',
+          });
+        } else {
+          throw cleanupError;
+        }
+      }
+
+      // If the cleanup ran (or was ignored), retry delete.
+      rows = (await client.query(
+        'DELETE FROM public.check_intake_items WHERE id = $1::uuid RETURNING id',
+        [looked.check.id],
+      )).rows;
+    }
+
     if (!rows.length) return denied(spoof, { error: 'rls_denied', message: 'check not deletable' });
     return okResult({
       mapping,
