@@ -9,7 +9,7 @@ import { mkdir, writeFile, rm } from 'node:fs/promises';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { assumeCursorRole } from './cognito-staging-token.mjs';
+import { assumeCursorRole, oidcToken } from './cognito-staging-token.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const AWS = process.env.AWS_CLI || '/usr/local/bin/aws';
@@ -24,6 +24,24 @@ const PROD_POOL = 'us-east-1_h00WorYMT';
 const PROD_CLIENT = '3ja9fqaq2fjkv3i6up2varcqpe';
 const STAGING_POOL = 'us-east-1_vPmQ7cL1F';
 const STAGING_CLIENT = '71bb7a192cbl6o6s8m259tl589';
+const SPA_ROLE = 'arn:aws:iam::806168576068:role/ChecksOpsProductionSpaDeploy';
+
+const assumeSpaDeploy = async () => {
+  const token = await oidcToken();
+  const out = execFileSync(AWS, [
+    'sts', 'assume-role-with-web-identity',
+    '--role-arn', SPA_ROLE,
+    '--role-session-name', 'walletops-w2-spa-deploy',
+    '--web-identity-token', String(token),
+    '--duration-seconds', '3600',
+    '--output', 'json',
+  ], { encoding: 'utf8' });
+  const creds = JSON.parse(out).Credentials;
+  process.env.AWS_ACCESS_KEY_ID = creds.AccessKeyId;
+  process.env.AWS_SECRET_ACCESS_KEY = creds.SecretAccessKey;
+  process.env.AWS_SESSION_TOKEN = creds.SessionToken;
+  process.env.AWS_REGION = REGION;
+};
 
 const sha256 = (file) => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const awsTry = (args, { json = true } = {}) => {
@@ -42,6 +60,7 @@ const main = async () => {
   await mkdir(OUT, { recursive: true });
   await assumeCursorRole(`walletops-w2-spa-${TARGET}`);
   const production = TARGET === 'production';
+  if (production) await assumeSpaDeploy();
   const bucket = production ? PROD_BUCKET : STAGING_BUCKET;
   const cf = production ? PROD_CF : STAGING_CF;
   const outDir = path.join('/tmp', `walletops-w2-spa-${TARGET}`);

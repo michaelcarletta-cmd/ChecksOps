@@ -2,14 +2,46 @@
 /**
  * Staging W2 acceptance. GET-only. No sweep write. No wallet fund POST.
  */
+import { execFileSync } from 'node:child_process';
 import { writeFile, mkdir } from 'node:fs/promises';
-import { assumeCursorRole, masterToken } from './cognito-staging-token.mjs';
+import { assumeCursorRole, secretString } from './cognito-staging-token.mjs';
 
+const AWS = process.env.AWS_CLI || '/usr/local/bin/aws';
+const REGION = 'us-east-1';
 const OUT = '/opt/cursor/artifacts/walletops-w2';
 const API = 'https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging';
+const POOL = 'us-east-1_vPmQ7cL1F';
+const CLIENT = '71bb7a192cbl6o6s8m259tl589';
+const TESTER_EMAIL = 'checksops-tester@freedomadj.com';
 const FREEDOM = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
 const OTHER = '4f172140-f57a-4744-8050-95f4f07b13b4';
 const PLATFORM = '41cb5d67-4911-4bef-aad5-d8ee9c582208';
+
+const awsJson = (args) => {
+  const out = execFileSync(AWS, ['--region', REGION, '--output', 'json', ...args], { encoding: 'utf8' });
+  return out.trim() ? JSON.parse(out) : {};
+};
+
+const mintTester = async () => {
+  const password = secretString('checksops/staging/master-uat-password');
+  try {
+    awsJson([
+      'cognito-idp', 'admin-set-user-password',
+      '--user-pool-id', POOL,
+      '--username', TESTER_EMAIL,
+      '--password', password,
+      '--permanent',
+    ]);
+  } catch { /* already set */ }
+  const auth = awsJson([
+    'cognito-idp', 'admin-initiate-auth',
+    '--user-pool-id', POOL,
+    '--client-id', CLIENT,
+    '--auth-flow', 'ADMIN_USER_PASSWORD_AUTH',
+    '--auth-parameters', `USERNAME=${TESTER_EMAIL},PASSWORD=${password}`,
+  ]);
+  return auth.AuthenticationResult?.IdToken || null;
+};
 
 const api = async (pathname, { token, body, method = 'POST' } = {}) => {
   const headers = { 'content-type': 'application/json', accept: 'application/json' };
@@ -32,8 +64,7 @@ const main = async () => {
     status: res.status,
     data: await res.json().catch(() => ({})),
   }));
-  const minted = await masterToken();
-  const token = minted?.authentication?.IdToken || null;
+  const token = await mintTester();
   const identity = token ? await api('/identity/me', { token, method: 'GET' }) : { ok: false, error: 'no_token' };
   const memberships = identity.data?.memberships || identity.data?.tenants || [];
   const tenantId = memberships[0]?.tenant_id || memberships[0]?.id || FREEDOM;
@@ -49,14 +80,20 @@ const main = async () => {
       body: { action: 'get', tenant_id: OTHER === tenantId ? PLATFORM : OTHER, wallet_type: 'operating' },
     })
     : { ok: false, error: 'no_token' };
-  const banner = await fetch('https://staging.checksops.com/').then(async (res) => {
-    const html = await res.text();
-    return {
-      status: res.status,
-      hasBannerChunk: /AwsStaging|AWS staging/.test(html),
-      js: (html.match(/\/assets\/(index-[A-Za-z0-9._-]+\.js)/) || [])[1] || null,
-    };
-  });
+  const home = await fetch('https://staging.checksops.com/').then(async (res) => ({
+    status: res.status,
+    html: await res.text(),
+  }));
+  const jsName = (home.html.match(/\/assets\/(index-[A-Za-z0-9._-]+\.js)/) || [])[1] || null;
+  const jsText = jsName
+    ? await fetch(`https://staging.checksops.com/assets/${jsName}`).then((res) => res.text())
+    : '';
+  const banner = {
+    status: home.status,
+    js: jsName,
+    hasHostnameGuard: /checksops\.com/.test(jsText) && /www\.checksops\.com/.test(jsText),
+    keepsAwsStagingCopy: /AWS staging/.test(jsText),
+  };
   const report = {
     generatedAt: new Date().toISOString(),
     mutated: false,
