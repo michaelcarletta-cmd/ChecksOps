@@ -6,7 +6,8 @@
  * Does not modify the staging pool.
  */
 import { execFileSync } from 'node:child_process';
-import { cpSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { enforceScriptGuard } from '../../../scripts/deployment-guard/require-guard.mjs';
 
@@ -52,6 +53,9 @@ const record = (step, result) => {
   attempts.push({ step, ok: result.ok, denied: result.denied || false, message: result.ok ? null : result.message });
   return result;
 };
+
+const sha256Base64File = (filePath) =>
+  createHash('sha256').update(readFileSync(filePath)).digest('base64');
 
 const before = run(['cognito-idp', 'get-user-pool-mfa-config', '--user-pool-id', POOL]);
 record('getMfaConfig', before);
@@ -106,6 +110,13 @@ if (codeUrl.ok && codeUrl.data.Code?.Location) {
     rmSync(work, { recursive: true, force: true });
     mkdirSync(work, { recursive: true });
     execFileSync('curl', ['-fsSL', codeUrl.data.Code.Location, '-o', '/tmp/security/prep-b3-current.zip'], { encoding: 'utf8' });
+    const expectedSha = codeUrl.data.Configuration?.CodeSha256
+      || run(['lambda', 'get-function-configuration', '--function-name', PREP]).data?.CodeSha256
+      || null;
+    const actualSha = sha256Base64File('/tmp/security/prep-b3-current.zip');
+    if (!expectedSha || actualSha !== expectedSha) {
+      throw new Error(`live_package_sha_mismatch expected=${expectedSha || 'missing'} actual=${actualSha}`);
+    }
     execFileSync('unzip', ['-o', '-q', '/tmp/security/prep-b3-current.zip', '-d', work], { encoding: 'utf8' });
     for (const file of [
       'privileged-auth.mjs',
