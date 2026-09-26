@@ -1,6 +1,6 @@
 {
   "baseline_git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
-  "generated_at": "2026-09-16",
+  "generated_at": "2026-09-26",
   "fail_closed": true,
   "historical_audit_baseline_unverified": {
     "discovered_controls": 1421,
@@ -41,6 +41,19 @@
     "Open PRs #316/#317/#319/#326/#333 record SPA bundle names (including index-CiOVNYWh.js) that are not on origin/main."
   ],
   "components": {
+    "delete-check-contract": {
+      "classification": "UNVERIFIED",
+      "git_sha": "f5d616431642ce5938827379c9221c822fea5bf3",
+      "merged_pr": 501,
+      "deployed_artifact": "Accepted post-deploy production-prep Lambda CodeSha256 Hhij5GWW/GDBcRE+4wYomml96R+6IWwFJPczbz5YLZM= (staging-accepted workflow.mjs overlaid onto then-live production-prep package).",
+      "applied_migrations": "n/a (behavioral contract guarded by release-locks + invariant tests)",
+      "environment": "production-prep",
+      "missing_evidence": [
+        "immutable production-prep Lambda version/alias fingerprint recorded in-repo for the Delete Check contract",
+        "independent live-package hash capture for the accepted CodeSha256 baseline"
+      ],
+      "open_pr_overlap": []
+    },
     "identity-cognito": {
       "classification": "UNVERIFIED",
       "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",

@@ -18,6 +18,7 @@ const SPOOF_ID = '00000000-0000-0000-0000-000000000099';
 const FREEDOM_TENANT = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
 const C1C_TENANT = '4f172140-f57a-4744-8050-95f4f07b13b4';
 const CHECK_ID = '8d2b1c3e-4f5a-4678-9abc-def012345678';
+const OTHER_CHECK_ID = '7d2b1c3e-4f5a-4678-9abc-def012345679';
 
 const jwtEvent = (path, method, body, extra = {}) => ({
   rawPath: path,
@@ -68,6 +69,7 @@ const mockClient = ({
   payees,
   endorsements,
   blockerHits = new Set(),
+  deleteOk = true,
 } = {}) => {
   const queries = [];
   const defaultPayees = payees || [{
@@ -180,7 +182,9 @@ const mockClient = ({
       if (/SELECT \* FROM public\.check_intake_items WHERE id =/.test(sql)) return { rows: [check] };
       if (/DELETE FROM public\.claim_checks WHERE check_intake_item_id/.test(sql)) return { rows: [] };
       if (/UPDATE public\.loss_draft_tracking SET check_intake_item_id = NULL/.test(sql)) return { rows: [] };
-      if (/DELETE FROM public\.check_intake_items/.test(sql) && /RETURNING id/.test(sql)) return { rows: [{ id: params[0] }] };
+      if (/DELETE FROM public\.check_intake_items/.test(sql) && /RETURNING id/.test(sql)) {
+        return { rows: deleteOk ? [{ id: params[0] }] : [] };
+      }
       return { rows };
     },
     end: async () => {},
@@ -502,6 +506,30 @@ test('workflow delete validates UUID and requires reason', async () => {
   assert.equal(missingReason.error, 'missing_required_field');
 });
 
+test('workflow delete trims reason before enforcing minimum length', async () => {
+  const client = mockClient({ roles: [{ role: 'admin' }] });
+  const result = await handleDeleteCheck(jwtEvent(`/workflow/checks/${CHECK_ID}`, 'DELETE', {
+    check_id: CHECK_ID,
+    reason: '  x  ',
+  }), depsFor(client));
+  assert.equal(result.statusCode, 400);
+  assert.equal(result.error, 'missing_required_field');
+});
+
+test('workflow delete returns rls_denied when RLS prevents deletion (simulated)', async () => {
+  const client = mockClient({
+    roles: [{ role: 'admin' }],
+    check: { ...createdRow, tenant_id: C1C_TENANT },
+    deleteOk: false,
+  });
+  const result = await handleDeleteCheck(jwtEvent(`/workflow/checks/${CHECK_ID}`, 'DELETE', {
+    check_id: CHECK_ID,
+    reason: 'duplicate',
+  }), depsFor(client));
+  assert.equal(result.statusCode, 403);
+  assert.equal(result.error, 'rls_denied');
+});
+
 test('workflow delete denies checks with dependent financial/provider records (specific blocker)', async () => {
   const client = mockClient({
     check: { ...createdRow, status: 'needs_review', check_stage: 'review', claim_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
@@ -533,7 +561,14 @@ test('workflow delete performs S3 cleanup for check-owned keys (stubbed)', async
         const key = prefix.endsWith('/')
           ? `${prefix}generated.png`
           : `${prefix}/packet.pdf`;
-        return { IsTruncated: false, Contents: [{ Key: key }] };
+        return {
+          IsTruncated: false,
+          Contents: [
+            { Key: key },
+            // Defensive: if an overly-broad prefix ever lists other checks, verify we still don't delete them.
+            { Key: `files/claim-files/checks/${OTHER_CHECK_ID}/front.jpg` },
+          ],
+        };
       }
       if (name === 'DeleteObjectsCommand') {
         const objs = cmd?.input?.Delete?.Objects || [];
@@ -559,9 +594,15 @@ test('workflow delete performs S3 cleanup for check-owned keys (stubbed)', async
     const deleted = sent.find((c) => (c?.constructor?.name || '') === 'DeleteObjectsCommand');
     assert.ok(listed.length >= 1);
     assert.ok(deleted);
+    for (const cmd of listed) {
+      const prefix = cmd?.input?.Prefix || '';
+      assert.ok(String(prefix).includes(CHECK_ID), 'S3 list prefix must remain check-scoped');
+      assert.ok(!String(prefix).endsWith('/checks/'), 'S3 list prefix must not broaden to tenant-wide checks/');
+    }
     const deleteKeys = (deleted?.input?.Delete?.Objects || []).map((o) => o.Key).filter(Boolean);
     assert.ok(deleteKeys.some((k) => String(k).includes(`files/claim-files/checks/${CHECK_ID}/`)));
     assert.ok(deleteKeys.some((k) => String(k).includes(`files/claim-files/check-intake/${CHECK_ID}/files/`)));
+    assert.ok(deleteKeys.every((k) => !String(k).includes(OTHER_CHECK_ID)), 'S3 cleanup must never delete another check');
   } finally {
     if (prevBucket === undefined) delete process.env.FILES_BUCKET;
     else process.env.FILES_BUCKET = prevBucket;

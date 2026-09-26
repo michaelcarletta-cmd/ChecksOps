@@ -4,7 +4,8 @@
  * Does not change Lambda env/VPC/role. Does not FORCE RLS. Does not enable money flags.
  */
 import { execFileSync } from 'node:child_process';
-import { cpSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const AWS = process.env.AWS_CLI || `${process.env.HOME}/.local/bin/aws`;
@@ -37,6 +38,9 @@ const record = (step, result) => {
   return result;
 };
 
+const sha256Base64File = (filePath) =>
+  createHash('sha256').update(readFileSync(filePath)).digest('base64');
+
 const codeUrl = run(['lambda', 'get-function', '--function-name', PREP]);
 if (codeUrl.ok && codeUrl.data.Code?.Location) {
   try {
@@ -44,6 +48,13 @@ if (codeUrl.ok && codeUrl.data.Code?.Location) {
     rmSync(work, { recursive: true, force: true });
     mkdirSync(work, { recursive: true });
     execFileSync('curl', ['-fsSL', codeUrl.data.Code.Location, '-o', '/tmp/security/prep-b4-current.zip'], { encoding: 'utf8' });
+    const expectedSha = codeUrl.data.Configuration?.CodeSha256
+      || run(['lambda', 'get-function-configuration', '--function-name', PREP]).data?.CodeSha256
+      || null;
+    const actualSha = sha256Base64File('/tmp/security/prep-b4-current.zip');
+    if (!expectedSha || actualSha !== expectedSha) {
+      throw new Error(`live_package_sha_mismatch expected=${expectedSha || 'missing'} actual=${actualSha}`);
+    }
     execFileSync('unzip', ['-o', '-q', '/tmp/security/prep-b4-current.zip', '-d', work], { encoding: 'utf8' });
     for (const file of [
       'storage.mjs',
