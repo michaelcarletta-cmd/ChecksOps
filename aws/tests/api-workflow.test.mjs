@@ -97,6 +97,9 @@ const mockClient = ({
       if (sql === 'BEGIN' || sql === 'ROLLBACK' || sql === 'COMMIT' || sql === 'SET TRANSACTION READ WRITE') {
         return { rows: [] };
       }
+      if (String(sql).startsWith('SAVEPOINT') || String(sql).startsWith('RELEASE SAVEPOINT') || String(sql).startsWith('ROLLBACK TO SAVEPOINT')) {
+        return { rows: [] };
+      }
       if (sql.startsWith('SELECT set_config')) return { rows: [{ set_config: params[1] }] };
       if (sql === LOOKUP_MAPPING_SQL) {
         return { rows: params[0] === mapping.cognito_sub ? [mapping] : [] };
@@ -156,6 +159,9 @@ const mockClient = ({
       }
       if (/SELECT 1 FROM public\.claim_check_payments/.test(sql)) {
         return { rows: blockerHits.has('claim_check_payments') ? [{ ok: true }] : [] };
+      }
+      if (/SELECT 1 FROM public\.claim_payments/.test(sql)) {
+        return { rows: blockerHits.has('claim_payments') ? [{ ok: true }] : [] };
       }
       if (/SELECT 1 FROM public\.check_billing_events/.test(sql)) {
         return { rows: blockerHits.has('check_billing_events') ? [{ ok: true }] : [] };
