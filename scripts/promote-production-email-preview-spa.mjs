@@ -152,7 +152,7 @@ const main = async () => {
     console.error(buildGuard.errors.join('\n'));
     process.exit(2);
   }
-  if (builder.includes("update-function-code") || builder.includes('aws/functions/api')) {
+  if (/update-function-code/.test(builder) || /aws\/functions\/api/.test(builder)) {
     console.error('production builder must remain SPA-only');
     process.exit(2);
   }
