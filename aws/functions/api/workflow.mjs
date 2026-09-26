@@ -614,6 +614,8 @@ export const handleDeleteCheck = async (event, deps = {}) => {
       { table: 'checkalt_deposits', sql: 'SELECT 1 FROM public.checkalt_deposits WHERE check_intake_item_id = $1::uuid LIMIT 1' },
       { table: 'disbursement_batches', sql: 'SELECT 1 FROM public.disbursement_batches WHERE check_intake_item_id = $1::uuid LIMIT 1' },
       { table: 'claim_check_payments', sql: 'SELECT 1 FROM public.claim_check_payments WHERE check_intake_item_id = $1::uuid LIMIT 1' },
+      // Payments/ledger activity tied to check_intake_items must block deletion.
+      { table: 'claim_payments', sql: 'SELECT 1 FROM public.claim_payments WHERE check_intake_item_id = $1::uuid LIMIT 1' },
       { table: 'check_billing_events', sql: 'SELECT 1 FROM public.check_billing_events WHERE check_intake_item_id = $1::uuid LIMIT 1' },
       // Financial tables keyed by claim_checks.id. Join via claim_checks.check_intake_item_id.
       { table: 'check_payment_directions', sql: `SELECT 1
@@ -734,7 +736,9 @@ export const handleDeleteCheck = async (event, deps = {}) => {
     }
 
     // Preserve an audit snapshot before deleting the check + check_audit_log rows.
+    let auditSavepointHeld = false;
     await client.query('SAVEPOINT delete_audit_snapshot');
+    auditSavepointHeld = true;
     try {
       const exists = (await client.query("SELECT to_regclass('public.check_deletion_log') AS t")).rows[0]?.t;
       if (exists) {
@@ -757,11 +761,11 @@ export const handleDeleteCheck = async (event, deps = {}) => {
           );
         }
       }
-      await client.query('RELEASE SAVEPOINT delete_audit_snapshot');
     } catch {
       // Best-effort audit snapshot; deletion must still proceed.
       try { await client.query('ROLLBACK TO SAVEPOINT delete_audit_snapshot'); } catch { /* ignore */ }
       try { await client.query('RELEASE SAVEPOINT delete_audit_snapshot'); } catch { /* ignore */ }
+      auditSavepointHeld = false;
     }
 
     // Rely on FK ON DELETE CASCADE for dependent records (payees/files/messages/etc).
@@ -798,10 +802,49 @@ export const handleDeleteCheck = async (event, deps = {}) => {
         if (cleanupError?.code === '42P01' || cleanupError?.code === '42703') {
           // schema mismatch (table/column absent): ignore and proceed to retry delete anyway
         } else if (cleanupError?.code === '42501') {
-          return denied(spoof, {
-            error: 'cleanup_denied',
-            message: 'This check cannot be deleted because dependent claim/escrow links could not be cleaned up.',
-          });
+          // The AWS application role cannot always delete claim_checks / loss_draft_tracking directly
+          // (RLS policies are scoped to the authenticated role). Fall back to the SECURITY DEFINER
+          // function that performs the same non-financial cleanup, after our explicit blockers ran.
+          if (auditSavepointHeld) {
+            try { await client.query('ROLLBACK TO SAVEPOINT delete_audit_snapshot'); } catch { /* ignore */ }
+            try { await client.query('RELEASE SAVEPOINT delete_audit_snapshot'); } catch { /* ignore */ }
+            auditSavepointHeld = false;
+          }
+          try {
+            const out = await client.query(
+              'SELECT public.admin_delete_check($1::uuid, $2::uuid, $3::text) AS result',
+              [looked.check.id, mapping.application_user_id, String(reason)],
+            );
+            const res = out.rows?.[0]?.result || {};
+            const success = res?.success === true || res?.success === 'true';
+            if (!success) {
+              return denied(spoof, {
+                error: 'cleanup_denied',
+                message: 'This check cannot be deleted because dependent claim/escrow links could not be cleaned up.',
+              });
+            }
+            return okResult({
+              mapping,
+              claims,
+              spoof,
+              data: { id: looked.check.id, deleted: true },
+              extra: {
+                cleanedUp: true,
+                usedAdminDeleteCheck: true,
+                storageCleanup: deps.disableS3Cleanup === true
+                  ? { ok: true, deleted: 0, skipped: true }
+                  : { ok: true, deleted: 0, skipped: plannedStorageKeyCount === 0, planned: plannedStorageKeyCount, plannedSample: plannedStorageKeySample },
+              },
+            });
+          } catch (fallbackError) {
+            if (fallbackError?.code === '42P01' || fallbackError?.code === '42883') {
+              return denied(spoof, {
+                error: 'cleanup_denied',
+                message: 'This check cannot be deleted because dependent claim/escrow links could not be cleaned up.',
+              });
+            }
+            throw fallbackError;
+          }
         } else {
           throw cleanupError;
         }
@@ -814,6 +857,10 @@ export const handleDeleteCheck = async (event, deps = {}) => {
       )).rows;
     }
 
+    if (auditSavepointHeld) {
+      try { await client.query('RELEASE SAVEPOINT delete_audit_snapshot'); } catch { /* ignore */ }
+      auditSavepointHeld = false;
+    }
     if (!rows.length) return denied(spoof, { error: 'rls_denied', message: 'check not deletable' });
     return okResult({
       mapping,
