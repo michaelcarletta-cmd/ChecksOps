@@ -67,6 +67,7 @@ const mockClient = ({
   rows = [createdRow],
   payees,
   endorsements,
+  blockerHits = new Set(),
 } = {}) => {
   const queries = [];
   const defaultPayees = payees || [{
@@ -144,15 +145,35 @@ const mockClient = ({
       if (/FROM public.loss_draft_tracking d/.test(sql)) {
         return { rows: [{ id: params[0], check_intake_item_id: CHECK_ID, tenant_id: FREEDOM_TENANT }] };
       }
-      if (/SELECT 1 FROM public\.deposit_items/.test(sql)) return { rows: [] };
-      if (/SELECT 1 FROM public\.checkalt_deposits/.test(sql)) return { rows: [] };
-      if (/SELECT 1 FROM public\.disbursement_batches/.test(sql)) return { rows: [] };
-      if (/SELECT 1 FROM public\.claim_check_payments/.test(sql)) return { rows: [] };
-      if (/SELECT 1 FROM public\.check_billing_events/.test(sql)) return { rows: [] };
-      if (/SELECT 1 FROM public\.check_payment_directions/.test(sql)) return { rows: [] };
+      if (/SELECT 1 FROM public\.deposit_items/.test(sql)) {
+        return { rows: blockerHits.has('deposit_items') ? [{ ok: true }] : [] };
+      }
+      if (/SELECT 1 FROM public\.checkalt_deposits/.test(sql)) {
+        return { rows: blockerHits.has('checkalt_deposits') ? [{ ok: true }] : [] };
+      }
+      if (/SELECT 1 FROM public\.disbursement_batches/.test(sql)) {
+        return { rows: blockerHits.has('disbursement_batches') ? [{ ok: true }] : [] };
+      }
+      if (/SELECT 1 FROM public\.claim_check_payments/.test(sql)) {
+        return { rows: blockerHits.has('claim_check_payments') ? [{ ok: true }] : [] };
+      }
+      if (/SELECT 1 FROM public\.check_billing_events/.test(sql)) {
+        return { rows: blockerHits.has('check_billing_events') ? [{ ok: true }] : [] };
+      }
+      if (/FROM public\.check_payment_directions/.test(sql)) {
+        return { rows: blockerHits.has('check_payment_directions') ? [{ ok: true }] : [] };
+      }
+      if (/FROM public\.claim_disbursements/.test(sql)) {
+        return { rows: blockerHits.has('claim_disbursements') ? [{ ok: true }] : [] };
+      }
+      if (/FROM public\.claim_checks cc/.test(sql) && /deposit_status/.test(sql)) {
+        return { rows: blockerHits.has('claim_checks_terminal') ? [{ ok: true }] : [] };
+      }
       if (/SELECT to_regclass\('public\.check_deletion_log'\)/.test(sql)) return { rows: [{ t: 'public.check_deletion_log' }] };
       if (/INSERT INTO public\.check_deletion_log/.test(sql)) return { rows: [{ id: 'log-1' }] };
       if (/SELECT \* FROM public\.check_intake_items WHERE id =/.test(sql)) return { rows: [check] };
+      if (/DELETE FROM public\.claim_checks WHERE check_intake_item_id/.test(sql)) return { rows: [] };
+      if (/UPDATE public\.loss_draft_tracking SET check_intake_item_id = NULL/.test(sql)) return { rows: [] };
       if (/DELETE FROM public\.check_intake_items/.test(sql) && /RETURNING id/.test(sql)) return { rows: [{ id: params[0] }] };
       return { rows };
     },
@@ -434,8 +455,8 @@ test('workflow delete denies claim-linked, partner-linked, and deposited checks'
     check: { ...createdRow, claim_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
     roles: [{ role: 'admin' }],
   })));
-  assert.equal(claimLinked.statusCode, 403);
-  assert.equal(claimLinked.error, 'cleanup_denied');
+  assert.equal(claimLinked.ok, true);
+  assert.equal(claimLinked.data.deleted, true);
 
   const partnerLinked = await handleDeleteCheck(jwtEvent(`/workflow/checks/${CHECK_ID}`, 'DELETE', {
     check_id: CHECK_ID,
@@ -445,7 +466,7 @@ test('workflow delete denies claim-linked, partner-linked, and deposited checks'
     roles: [{ role: 'admin' }],
   })));
   assert.equal(partnerLinked.statusCode, 403);
-  assert.equal(partnerLinked.error, 'cleanup_denied');
+  assert.equal(partnerLinked.error, 'check_shared_with_partner');
 
   const deposited = await handleDeleteCheck(jwtEvent(`/workflow/checks/${CHECK_ID}`, 'DELETE', {
     check_id: CHECK_ID,
@@ -455,7 +476,7 @@ test('workflow delete denies claim-linked, partner-linked, and deposited checks'
     roles: [{ role: 'admin' }],
   })));
   assert.equal(deposited.statusCode, 403);
-  assert.equal(deposited.error, 'cleanup_denied');
+  assert.equal(deposited.error, 'check_terminal_financial_state');
 });
 
 test('workflow delete validates UUID and requires reason', async () => {
@@ -473,6 +494,21 @@ test('workflow delete validates UUID and requires reason', async () => {
   }), depsFor(mockClient({ roles: [{ role: 'admin' }] })));
   assert.equal(missingReason.statusCode, 400);
   assert.equal(missingReason.error, 'missing_required_field');
+});
+
+test('workflow delete denies checks with dependent financial/provider records (specific blocker)', async () => {
+  const client = mockClient({
+    check: { ...createdRow, status: 'needs_review', check_stage: 'review', claim_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+    roles: [{ role: 'admin' }],
+    blockerHits: new Set(['claim_disbursements']),
+  });
+  const result = await handleDeleteCheck(jwtEvent(`/workflow/checks/${CHECK_ID}`, 'DELETE', {
+    check_id: CHECK_ID,
+    reason: 'duplicate',
+  }), depsFor(client));
+  assert.equal(result.statusCode, 403);
+  assert.equal(result.error, 'check_has_financial_activity');
+  assert.equal(result.blocker, 'claim_disbursements');
 });
 
 test('workflow delete performs S3 cleanup for check-owned keys (stubbed)', async () => {

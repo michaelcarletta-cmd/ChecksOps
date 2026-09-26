@@ -594,16 +594,16 @@ export const handleDeleteCheck = async (event, deps = {}) => {
     if (looked.error) {
       return denied(spoof, { statusCode: looked.error === 'invalid_uuid' ? 400 : 403, ...looked });
     }
-    if (looked.check.claim_id) {
+    if (isPartnerLinked(looked.check)) {
       return denied(spoof, {
-        error: 'cleanup_denied',
-        message: 'Refusing to delete a claim-linked check',
+        error: 'check_shared_with_partner',
+        message: 'This check cannot be deleted because it is shared with a partner.',
       });
     }
-    if (isPartnerLinked(looked.check) || isTerminalFinancial(looked.check)) {
+    if (isTerminalFinancial(looked.check)) {
       return denied(spoof, {
-        error: 'cleanup_denied',
-        message: 'Refusing to delete a partner-linked or deposited check',
+        error: 'check_terminal_financial_state',
+        message: 'This check cannot be deleted because it has already reached a terminal financial state (e.g. deposited or released).',
       });
     }
 
@@ -615,7 +615,24 @@ export const handleDeleteCheck = async (event, deps = {}) => {
       { table: 'disbursement_batches', sql: 'SELECT 1 FROM public.disbursement_batches WHERE check_intake_item_id = $1::uuid LIMIT 1' },
       { table: 'claim_check_payments', sql: 'SELECT 1 FROM public.claim_check_payments WHERE check_intake_item_id = $1::uuid LIMIT 1' },
       { table: 'check_billing_events', sql: 'SELECT 1 FROM public.check_billing_events WHERE check_intake_item_id = $1::uuid LIMIT 1' },
-      { table: 'check_payment_directions', sql: 'SELECT 1 FROM public.check_payment_directions WHERE check_id = $1::uuid LIMIT 1' },
+      // Financial tables keyed by claim_checks.id. Join via claim_checks.check_intake_item_id.
+      { table: 'check_payment_directions', sql: `SELECT 1
+          FROM public.check_payment_directions d
+          JOIN public.claim_checks cc ON cc.id = d.check_id
+         WHERE cc.check_intake_item_id = $1::uuid
+         LIMIT 1` },
+      { table: 'claim_disbursements', sql: `SELECT 1
+          FROM public.claim_disbursements cd
+          JOIN public.claim_checks cc ON cc.id = cd.check_id
+         WHERE cc.check_intake_item_id = $1::uuid
+         LIMIT 1` },
+      // Defensive: if accounting deposit_status says deposited/cleared/settled, refuse deletion even if
+      // check_intake_items hasn't reflected a terminal stage yet.
+      { table: 'claim_checks_terminal', sql: `SELECT 1
+          FROM public.claim_checks cc
+         WHERE cc.check_intake_item_id = $1::uuid
+           AND lower(coalesce(cc.deposit_status::text, '')) IN ('deposited','cleared','settled')
+         LIMIT 1` },
     ];
     for (const [idx, blocker] of blockers.entries()) {
       const savepoint = `delete_blocker_${idx}`;
@@ -625,8 +642,8 @@ export const handleDeleteCheck = async (event, deps = {}) => {
         await client.query(`RELEASE SAVEPOINT ${savepoint}`);
         if (rows.length) {
           return denied(spoof, {
-            error: 'cleanup_denied',
-            message: `Refusing to delete a check with dependent financial/provider records (${blocker.table})`,
+            error: 'check_has_financial_activity',
+            message: `This check cannot be deleted because it has dependent financial/provider records (${blocker.table}).`,
             blocker: blocker.table,
           });
         }
@@ -639,8 +656,8 @@ export const handleDeleteCheck = async (event, deps = {}) => {
         // If we cannot even read blockers, refuse deletion rather than returning a 503.
         if (error?.code === '42501') {
           return denied(spoof, {
-            error: 'cleanup_denied',
-            message: `Refusing to delete: unable to verify financial/provider blockers (${blocker.table})`,
+            error: 'blocker_verification_denied',
+            message: `This check cannot be deleted because the service cannot verify financial/provider blockers (${blocker.table}).`,
             blocker: blocker.table,
           });
         }
@@ -747,10 +764,34 @@ export const handleDeleteCheck = async (event, deps = {}) => {
       try { await client.query('RELEASE SAVEPOINT delete_audit_snapshot'); } catch { /* ignore */ }
     }
 
+    // Claim + escrow link cleanup: these relationships are non-financial, but they hold FK references
+    // that can prevent deletion of the check row.
+    // - claim_checks.check_intake_item_id is not guaranteed to be ON DELETE CASCADE on all schemas
+    // - loss_draft_tracking.check_intake_item_id is likewise a non-cascading reference
+    await client.query('SAVEPOINT delete_claim_links');
+    try {
+      await client.query('DELETE FROM public.claim_checks WHERE check_intake_item_id = $1::uuid', [looked.check.id]);
+      await client.query('UPDATE public.loss_draft_tracking SET check_intake_item_id = NULL WHERE check_intake_item_id = $1::uuid', [looked.check.id]);
+      await client.query('RELEASE SAVEPOINT delete_claim_links');
+    } catch (error) {
+      try { await client.query('ROLLBACK TO SAVEPOINT delete_claim_links'); } catch { /* ignore */ }
+      try { await client.query('RELEASE SAVEPOINT delete_claim_links'); } catch { /* ignore */ }
+      if (error?.code === '42P01' || error?.code === '42703') {
+        // schema mismatch (table/column absent): ignore and proceed with best-effort deletion
+      } else if (error?.code === '42501') {
+        return denied(spoof, {
+          error: 'cleanup_denied',
+          message: 'This check cannot be deleted because dependent claim/escrow links could not be cleaned up.',
+        });
+      } else {
+        throw error;
+      }
+    }
+
     // Rely on FK ON DELETE CASCADE for dependent records (payees/files/messages/etc).
     // We explicitly block financial/provider tables above; those are the non-cascading integrity holders.
     const rows = (await client.query(
-      'DELETE FROM public.check_intake_items WHERE id = $1::uuid AND claim_id IS NULL RETURNING id',
+      'DELETE FROM public.check_intake_items WHERE id = $1::uuid RETURNING id',
       [looked.check.id],
     )).rows;
     if (!rows.length) return denied(spoof, { error: 'rls_denied', message: 'check not deletable' });
