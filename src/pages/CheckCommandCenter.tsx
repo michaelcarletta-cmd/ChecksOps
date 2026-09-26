@@ -59,6 +59,7 @@ import { ViewCheckImageButton } from "@/components/checks/ViewCheckImageButton";
 import { toStorageObjectPath } from "@/lib/storagePath";
 import {
   assertCleanBackOriginalPath,
+  isGeneratedBackArtifactPath,
   recoverCleanBackOriginalPath,
   resolveCleanBackOriginalPath,
   type CleanBackOriginalAudit,
@@ -3147,6 +3148,17 @@ function CheckDetailPanel({
       const recovered = await resolveCleanBackOriginalPath({
         record,
         normalizePath: (value) => toStorageObjectPath(value),
+        probeCleanStemPaths: async (candidates) => {
+          const found: string[] = [];
+          for (const candidate of candidates) {
+            if (!candidate || isGeneratedBackArtifactPath(candidate)) continue;
+            const { data } = await supabase.storage
+              .from("claim-files")
+              .createSignedUrl(candidate, 3600);
+            if (data?.signedUrl) found.push(candidate);
+          }
+          return found;
+        },
         loadAudits: async () => {
           const { data } = await supabase
             .from("check_audit_log")

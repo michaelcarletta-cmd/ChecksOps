@@ -27,6 +27,7 @@ test("merge ports deposit recovery onto R1 CCC without replacing the file", () =
   assert.match(ccc, /resolveCleanBackOriginalPath/);
   assert.match(ccc, /loadAudits:/);
   assert.match(ccc, /loadSiblingNames:/);
+  assert.match(ccc, /probeCleanStemPaths:/);
   assert.match(ccc, /assertCleanBackOriginalPath\(recovered\.path\)/);
   assert.match(ccc, /assertCleanBackOriginalPath\(\s*recovered\.ok \? recovered\.path : endorsementAdjusterSourcePath/);
 });

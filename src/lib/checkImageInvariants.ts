@@ -1,3 +1,7 @@
+export const CLEAN_STEM_EXTENSIONS = [".jpg", ".jpeg", ".png"] as const;
+
+const ENDORSED_FILENAME_RE = /^(.*)_endorsed(?:_\d+)?\.[^.]+$/i;
+
 export function isGeneratedBackArtifactPath(path: string | null | undefined): boolean {
   const p = String(path ?? "").trim();
   if (!p) return false;
@@ -7,6 +11,42 @@ export function isGeneratedBackArtifactPath(path: string | null | undefined): bo
     /\.svg(\?|$)/i.test(p) ||
     /\.checkalt\.jpg(\?|$)/i.test(p)
   );
+}
+
+/** Recognized generated endorsed filename: *_endorsed_*.ext — not deposit or checkalt. */
+export function isRecognizedEndorsedGeneratedPath(path: string | null | undefined): boolean {
+  const raw = String(path ?? "").trim().split("?")[0];
+  if (!raw) return false;
+  if (/endorsed_deposit_[^/]+\.[^.]+$/i.test(raw)) return false;
+  if (/\.checkalt\.jpg$/i.test(raw)) return false;
+  const name = fileNameOf(raw);
+  return Boolean(name && ENDORSED_FILENAME_RE.test(name));
+}
+
+export function endorsedGeneratedStem(path: string | null | undefined): {
+  directory: string;
+  stem: string;
+  candidates: string[];
+} | null {
+  const raw = String(path ?? "").trim().split("?")[0];
+  if (!raw || !isRecognizedEndorsedGeneratedPath(raw)) return null;
+  const directory = parentDirectory(raw) ?? "";
+  const name = fileNameOf(raw);
+  const match = name ? name.match(ENDORSED_FILENAME_RE) : null;
+  const stem = match?.[1]?.trim() || "";
+  if (!stem || stem.includes("/") || isGeneratedBackArtifactPath(stem)) return null;
+  const candidates = CLEAN_STEM_EXTENSIONS.map((ext) => joinSibling(directory || null, `${stem}${ext}`));
+  return { directory, stem, candidates };
+}
+
+export function isExactCleanStemOfGeneratedPointer(
+  cleanPath: string | null | undefined,
+  generatedPath: string | null | undefined,
+): boolean {
+  const rel = String(cleanPath ?? "").trim().split("?")[0];
+  if (!rel || isGeneratedBackArtifactPath(rel)) return false;
+  const derived = endorsedGeneratedStem(generatedPath);
+  return Boolean(derived?.candidates.includes(rel));
 }
 
 export function assertCleanBackOriginalPath(path: string | null | undefined): string {
@@ -48,6 +88,7 @@ export type RecoverCleanBackOriginalInput = {
   record: CleanBackOriginalRecord;
   audits?: Array<CleanBackOriginalAudit | null | undefined> | null;
   siblingNames?: Array<string | null | undefined> | null;
+  existingStemPaths?: Array<string | null | undefined> | null;
   normalizePath?: (path: string | null | undefined) => string | null;
 };
 
@@ -56,7 +97,8 @@ export type RecoverCleanBackOriginalSource =
   | "meta"
   | "audit"
   | "current"
-  | "sibling";
+  | "sibling"
+  | "endorsed_stem";
 
 export type RecoverCleanBackOriginalSuccess = {
   ok: true;
@@ -71,6 +113,7 @@ export type RecoverCleanBackOriginalFailure = {
   directory: string | null;
   canTryAudits: boolean;
   canTrySiblings: boolean;
+  canTryStemProbe: boolean;
 };
 
 export type RecoverCleanBackOriginalResult =
@@ -145,6 +188,8 @@ function fail(
   directory: string | null,
   auditsProvided: boolean,
   siblingsProvided: boolean,
+  stemProbeProvided = true,
+  canProbeStem = false,
 ): RecoverCleanBackOriginalFailure {
   return {
     ok: false,
@@ -155,6 +200,7 @@ function fail(
     directory,
     canTryAudits: !auditsProvided,
     canTrySiblings: !siblingsProvided && directory !== null,
+    canTryStemProbe: !stemProbeProvided && canProbeStem,
   };
 }
 
@@ -171,9 +217,12 @@ export function recoverCleanBackOriginalPath(
 
   const auditsProvided = input.audits !== undefined && input.audits !== null;
   const siblingsProvided = input.siblingNames !== undefined && input.siblingNames !== null;
+  const stemProbeProvided = input.existingStemPaths !== undefined && input.existingStemPaths !== null;
 
   const hintPaths = [original, current, deposit, ...metaOriginals];
   const directory = hintPaths.map(parentDirectory).find((dir) => dir !== null) ?? null;
+  const stemSources = [original, current].filter((path): path is string => Boolean(endorsedGeneratedStem(path)));
+  const stemCandidates = [...new Set(stemSources.flatMap((path) => endorsedGeneratedStem(path)?.candidates ?? []))];
 
   if (isUsableClean(original, deposit)) {
     return { ok: true, path: original, source: "original" };
@@ -212,14 +261,43 @@ export function recoverCleanBackOriginalPath(
     return { ok: true, path: current, source: "current" };
   }
 
+  if (stemProbeProvided) {
+    const existing = [...new Set(
+      (input.existingStemPaths ?? [])
+        .map((path) => normalize(path))
+        .filter((path): path is string => Boolean(path) && stemCandidates.includes(path) && isUsableClean(path, deposit)),
+    )];
+    if (existing.length === 1) {
+      return { ok: true, path: existing[0], source: "endorsed_stem" };
+    }
+    if (existing.length > 1) {
+      return fail("ambiguous", directory, auditsProvided, siblingsProvided, true, false);
+    }
+  }
+
   if (!siblingsProvided) {
-    return fail("missing", directory, auditsProvided, false);
+    return fail("missing", directory, auditsProvided, false, stemProbeProvided, stemCandidates.length > 0);
   }
 
   const siblingNames = (input.siblingNames ?? [])
     .map((name) => String(name ?? "").trim())
     .map((name) => (name.includes("/") ? fileNameOf(name) ?? name : name))
     .filter(Boolean);
+
+  if (stemCandidates.length) {
+    const stemHits = [...new Set(
+      stemCandidates.filter((path) => {
+        const name = fileNameOf(path);
+        return Boolean(name && siblingNames.includes(name) && isUsableClean(path, deposit));
+      }),
+    )];
+    if (stemHits.length === 1) {
+      return { ok: true, path: stemHits[0], source: "endorsed_stem" };
+    }
+    if (stemHits.length > 1) {
+      return fail("ambiguous", directory, auditsProvided, true, stemProbeProvided, false);
+    }
+  }
 
   const depositName = fileNameOf(deposit);
   const cleanSiblings = siblingNames.filter((name) => (
@@ -239,20 +317,36 @@ export function recoverCleanBackOriginalPath(
   return fail("missing", directory, auditsProvided, true);
 }
 
+export function collectEndorsedCleanStemCandidates(
+  record: CleanBackOriginalRecord,
+  normalizePath?: (path: string | null | undefined) => string | null,
+): string[] {
+  const normalize: Normalize = normalizePath ?? defaultNormalize;
+  const original = normalize(record.back_image_original_path);
+  const current = normalize(record.back_image_path);
+  return [...new Set(
+    [original, current].flatMap((path) => endorsedGeneratedStem(path)?.candidates ?? []),
+  )];
+}
+
 export async function resolveCleanBackOriginalPath(opts: {
   record: CleanBackOriginalRecord;
   audits?: Array<CleanBackOriginalAudit | null | undefined> | null;
   siblingNames?: Array<string | null | undefined> | null;
+  existingStemPaths?: Array<string | null | undefined> | null;
   normalizePath?: (path: string | null | undefined) => string | null;
   loadAudits?: () => Promise<Array<CleanBackOriginalAudit | null | undefined>>;
   loadSiblingNames?: (directory: string) => Promise<Array<string | null | undefined>>;
+  probeCleanStemPaths?: (candidates: string[]) => Promise<Array<string | null | undefined>>;
 }): Promise<RecoverCleanBackOriginalSuccess> {
   let audits = opts.audits ?? null;
   let siblingNames = opts.siblingNames ?? null;
+  let existingStemPaths = opts.existingStemPaths ?? null;
   let result = recoverCleanBackOriginalPath({
     record: opts.record,
     audits,
     siblingNames,
+    existingStemPaths,
     normalizePath: opts.normalizePath,
   });
 
@@ -262,6 +356,19 @@ export async function resolveCleanBackOriginalPath(opts: {
       record: opts.record,
       audits,
       siblingNames,
+      existingStemPaths,
+      normalizePath: opts.normalizePath,
+    });
+  }
+
+  if (!result.ok && result.canTryStemProbe && opts.probeCleanStemPaths) {
+    const candidates = collectEndorsedCleanStemCandidates(opts.record, opts.normalizePath);
+    existingStemPaths = await opts.probeCleanStemPaths(candidates);
+    result = recoverCleanBackOriginalPath({
+      record: opts.record,
+      audits,
+      siblingNames,
+      existingStemPaths,
       normalizePath: opts.normalizePath,
     });
   }
@@ -272,6 +379,7 @@ export async function resolveCleanBackOriginalPath(opts: {
       record: opts.record,
       audits,
       siblingNames,
+      existingStemPaths,
       normalizePath: opts.normalizePath,
     });
   }
