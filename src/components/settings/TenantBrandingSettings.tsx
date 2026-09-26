@@ -8,12 +8,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { TenantLogo } from "@/components/branding/TenantLogo";
 import { resolveTenantLogoUrl } from "@/lib/tenantLogoUrl";
+import { SignatureRequestEmailPreview } from "@/components/settings/SignatureRequestEmailPreview";
 
 type TenantBranding = {
   id: string;
+  name?: string | null;
   logo_url?: string | null;
   primary_color?: string | null;
   secondary_color?: string | null;
+  email_reply_to?: string | null;
 };
 
 export function TenantBrandingSettings({ tenant }: { tenant: TenantBranding }) {
@@ -137,6 +140,12 @@ export function TenantBrandingSettings({ tenant }: { tenant: TenantBranding }) {
           {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Save className="h-4 w-4 mr-1" />}
           Save Branding
         </Button>
+        <SignatureRequestEmailPreview
+          tenantName={tenant.name || ""}
+          logoUrl={logoUrl}
+          primaryColor={primaryColor}
+          replyTo={tenant.email_reply_to}
+        />
       </CardContent>
     </Card>
   );
