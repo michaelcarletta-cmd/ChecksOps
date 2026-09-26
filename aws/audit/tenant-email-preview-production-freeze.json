@@ -1,0 +1,148 @@
+{
+  "schema": "checksops.tenant-email-preview-production-freeze.v1",
+  "status": "SOURCE_LOCKED_NOT_ACTIVE",
+  "captured_at": "2026-09-26T23:53:47.822Z",
+  "freeze_datetime": "2026-09-26T23:53:47.822Z",
+  "production_application_state_changed_by_this_workstream": false,
+  "aws_writes": 0,
+  "authority": "Fresh read-only production preflight after the accepted Tenant Email Preview SPA promotion. SHA256/VersionId are accepted provenance, not permanent rollback pins. Future overlays start from the then-current live SPA. Git main is not the deployment baseline.",
+  "preflight": {
+    "mode": "READ_ONLY",
+    "identity": "arn:aws:sts::806168576068:assumed-role/ChecksOpsCursorCloudStaging/tenant-email-preview-freeze-preflight",
+    "spa_moved": false,
+    "lambda_moved": false,
+    "email_preview_contract_ok": true,
+    "sender_invariant_ok": true
+  },
+  "accepted_production_spa": {
+    "role": "current_accepted_provenance_not_rollback_pin",
+    "bucket": "checksops-production-frontend-806168576068",
+    "cloudfront": "E1B0ZWWO5559U5",
+    "index_sha256": "58c867a066a32813e47f454aeadf7166c609ca9b7b3bb17be6c9f1a6a71d109b",
+    "index_version_id": "KoqxddGRI3swQom6uSEhLcRASAgwbkR9",
+    "index_last_modified": "2026-09-26T23:21:06+00:00",
+    "entry": "/assets/index-BAD1KYoF.js",
+    "entry_sha256": "bdd262a81426b2c772961e8dde3e10fe626a2717a69a4644f001c3cffba001e6",
+    "graph": {
+      "present": 103,
+      "total": 103,
+      "missing": 0,
+      "html_fallbacks": 0,
+      "label": "103/103"
+    },
+    "https_apex_matches": true,
+    "overlay": "tenant-email-preview"
+  },
+  "accepted_signature_sender": {
+    "function_name": "checksops-production-prep-api",
+    "CodeSha256": "9OLR9DMhuDrAUp5/TmT6+8bfQC2I6USFk+zwFkluJLQ=",
+    "RevisionId": "a6a23fc9-a7cb-4e7c-b1c8-db9cb80ea150",
+    "LastModified": "2026-09-26T22:08:02.000+0000",
+    "esign_sha256": "b8f707dfc724a54fb5d973a11cb26380f3381baea26324c08aa30dc93cb5656e",
+    "from": "{Request-Owning Tenant Name} <support@checksops.com>",
+    "this_workstream_did_not_package_or_deploy_lambda": true
+  },
+  "protected_preview_source": {
+    "src/lib/signatureRequestSender.ts": "e7829efd58fdd310ad43f359a3da6f646586cbcbb476c6bc0c33cc2a795bd587",
+    "src/components/settings/SignatureRequestEmailPreview.tsx": "22c76d610d0743640bda542c64e25a308467fea86525178ec8989d7119f56a91",
+    "mount_file_not_wholly_locked": "src/components/settings/TenantBrandingSettings.tsx",
+    "mount_contract": [
+      "SignatureRequestEmailPreview",
+      "tenantName={tenant.name",
+      "logoUrl={logoUrl}",
+      "resolveTenantLogoUrl"
+    ]
+  },
+  "preserved_r4a_logo_resolver": {
+    "src/lib/tenantLogoUrl.ts": "4a7d568ba509c7913d1ceb19e7dca1ac8e980cae2749a2ca9f1ef18cd65f41b5",
+    "src/components/branding/TenantLogo.tsx": "aff9c277cbbffcab018c0bf0959a7a6018e5bb6e56552cc880b28cfa0a498371",
+    "missing_logo_fallback": "null / displayName text"
+  },
+  "contract": {
+    "settings_label": "Branding & Appearance",
+    "preview_label": "Email Preview",
+    "from": "{Current Tenant Name} <support@checksops.com>",
+    "freedom": "Freedom Adjustment <support@checksops.com>",
+    "generic": "{Tenant Name} <support@checksops.com>",
+    "branding_from_current_tenant_context": true,
+    "uses_accepted_r4a_logo_resolver": true,
+    "forbidden_from": [
+      "Freedom Adjustment via ChecksOps <support@checksops.com>",
+      "Freedom Adjustment <noreply@checksops.com>",
+      "ChecksOps <support@checksops.com>"
+    ],
+    "forbidden_restore": [
+      "Sending Domain",
+      "Sending Subdomain",
+      "custom sender-domain configuration",
+      "DNS configuration",
+      "SES configuration",
+      "SES verification",
+      "DKIM",
+      "SPF",
+      "infrastructure/domain verification controls",
+      "via ChecksOps in signature preview",
+      "noreply@checksops.com",
+      "Supabase runtime dependency in preview source"
+    ]
+  },
+  "future_spa_overlay_rules": {
+    "start_from_then_current_live_spa": true,
+    "sha_version_are_provenance_not_rollback_pins": true,
+    "must_not_require_this_sha_for_all_future_deploys": true,
+    "change_that_does_not_supersede_must_preserve_email_preview": true,
+    "changing_protected_preview_files_requires": [
+      "explicit component allowlist",
+      "preserve Email Preview invariant unless explicitly superseding",
+      "pass the preview regression suite",
+      "preserve tenant isolation",
+      "preserve the signature-sender contract",
+      "use the existing guarded SPA promotion process",
+      "prove production data-plane configuration",
+      "prove the complete recursive asset graph before acceptance"
+    ]
+  },
+  "historical_provenance_only": {
+    "r4a_production_spa": {
+      "index_sha256": "6b211037ae70b510a9b5cfe316f006dbbc308ee3c94687ccea943b24cfd09f2e",
+      "index_version_id": "advEv5N0JfqM41odUraOM7kCH6Z2snP3",
+      "entry": "/assets/index-CS_JpvZg.js",
+      "must_not_automatically_replace_current": true,
+      "note": "Previous R4A production SPA. Historical provenance only."
+    },
+    "staging_preview_spa": {
+      "index_sha256": "3201c90ca4ca8ae9b1e854fa666b17d8a04c18e01771f358ade2907e95548773",
+      "never_production_authority": true,
+      "note": "Staging Email Preview SPA. Never production authority."
+    },
+    "rejected_pre_fix_esign": {
+      "path": "aws/functions/api/esign.mjs",
+      "sha256": "37c5c742f516ce750a402c53214307eee429742e8eed8d4ef9399772516209c5",
+      "never_production_authority": true,
+      "note": "Rejected pre-fix sender from the Email Preview development worktree. Do not copy into a production Lambda package."
+    }
+  },
+  "zero_production_write_boundary": {
+    "s3": false,
+    "cloudfront_invalidation": false,
+    "spa_deployment": false,
+    "update_function_code": false,
+    "update_function_configuration": false,
+    "lambda_packaging": false,
+    "sql": false,
+    "tenant_data": false,
+    "ses": false,
+    "iam": false,
+    "dns": false,
+    "cognito": false,
+    "moov": false,
+    "billing": false,
+    "r4b": false
+  },
+  "out_of_scope": [
+    "R4B storage write-auth / stored logo_url migration / SQL",
+    "Lambda packaging or deployment by this freeze workstream",
+    "SES / DNS / DKIM / SPF / sending-domain restore",
+    "Cognito / IAM / Moov / billing changes"
+  ]
+}

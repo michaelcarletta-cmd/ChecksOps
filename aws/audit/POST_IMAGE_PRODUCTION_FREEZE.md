@@ -69,20 +69,23 @@ narrow `/storage/sign` grant for that reconstructed sibling, existing
 
 ## Current live SPA pin
 
-Updated after the accepted R4A tenant-branding production promotion. The
-previous post-image SPA (`342c2e15…` / `index-CK2xJ5OO.js`) is provenance only.
+Updated after the accepted Tenant Email Preview production promotion. The
+previous R4A SPA (`6b211037…` / `advEv5N0JfqM41odUraOM7kCH6Z2snP3` /
+`index-CS_JpvZg.js`) is historical provenance only and must never
+automatically replace this bundle. SHA/VersionId are provenance, not
+permanent rollback pins.
 
 | Field | Value |
 | --- | --- |
-| Index SHA256 | `6b211037ae70b510a9b5cfe316f006dbbc308ee3c94687ccea943b24cfd09f2e` |
-| Index VersionId | `advEv5N0JfqM41odUraOM7kCH6Z2snP3` |
-| Index LastModified | `2026-09-26T19:26:02Z` |
-| Entry | `assets/index-CS_JpvZg.js` |
-| Claim Check | `assets/CheckCommandCenter-DHNFge6N.js` |
+| Index SHA256 | `58c867a066a32813e47f454aeadf7166c609ca9b7b3bb17be6c9f1a6a71d109b` |
+| Index VersionId | `KoqxddGRI3swQom6uSEhLcRASAgwbkR9` |
+| Index LastModified | `2026-09-26T23:21:06Z` |
+| Entry | `assets/index-BAD1KYoF.js` |
+| Claim Check | `assets/CheckCommandCenter-Bv3f8RK7.js` |
 | Recursive objects | 103 |
 | Missing | 0 |
 | HTML fallbacks | 0 |
-| Overlay | R4A tenant branding |
+| Overlay | Tenant Email Preview |
 
 ## Accepted R4A branding contract
 

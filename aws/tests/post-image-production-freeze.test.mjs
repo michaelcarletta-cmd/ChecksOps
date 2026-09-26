@@ -23,17 +23,22 @@ test('freeze pins the accepted live Lambda, not R3 or pre-compat hashes', () => 
 });
 
 test('freeze pins the accepted live SPA graph', () => {
-  assert.equal(freeze.spa.current_live.index_sha256, '6b211037ae70b510a9b5cfe316f006dbbc308ee3c94687ccea943b24cfd09f2e');
-  assert.equal(freeze.spa.current_live.index_version_id, 'advEv5N0JfqM41odUraOM7kCH6Z2snP3');
-  assert.equal(freeze.spa.current_live.main, 'assets/index-CS_JpvZg.js');
-  assert.equal(freeze.spa.current_live.claim_check, 'assets/CheckCommandCenter-DHNFge6N.js');
+  assert.equal(freeze.spa.current_live.index_sha256, '58c867a066a32813e47f454aeadf7166c609ca9b7b3bb17be6c9f1a6a71d109b');
+  assert.equal(freeze.spa.current_live.index_version_id, 'KoqxddGRI3swQom6uSEhLcRASAgwbkR9');
+  assert.equal(freeze.spa.current_live.main, 'assets/index-BAD1KYoF.js');
+  assert.equal(freeze.spa.current_live.claim_check, 'assets/CheckCommandCenter-Bv3f8RK7.js');
   assert.equal(freeze.spa.current_live.missing_count, 0);
   assert.equal(freeze.spa.current_live.html_fallback_count, 0);
   assert.equal(freeze.spa.objects.length, 103);
   assert.equal(freeze.spa.current_live.required_surfaces.claim_check.present, true);
   assert.equal(freeze.spa.current_live.required_surfaces.mortgage_desk.present, true);
   assert.equal(freeze.spa.current_live.required_surfaces.admin_tenant_moov_billing.present, true);
-  assert.equal(freeze.spa.current_live.overlay, 'r4a-tenant-branding');
+  assert.equal(freeze.spa.current_live.overlay, 'tenant-email-preview');
+  assert.equal(
+    freeze.provenance_not_deployment_baselines.r4a_spa.index_sha256,
+    '6b211037ae70b510a9b5cfe316f006dbbc308ee3c94687ccea943b24cfd09f2e',
+  );
+  assert.equal(freeze.provenance_not_deployment_baselines.r4a_spa.must_not_automatically_replace_current, true);
   assert.equal(
     freeze.provenance_not_deployment_baselines.pre_r4a_spa.index_sha256,
     '342c2e1588f712ebf73f563a881c982941b955619c51c6a79a7834aace21538a',

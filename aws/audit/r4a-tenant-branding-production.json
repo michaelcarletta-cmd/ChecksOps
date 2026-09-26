@@ -19,7 +19,10 @@
     "claim_check": "/assets/CheckCommandCenter-DHNFge6N.js",
     "graph": "103/103",
     "missing": 0,
-    "html_fallbacks": 0
+    "html_fallbacks": 0,
+    "historical_provenance_only": true,
+    "must_not_automatically_replace_current": true,
+    "superseded_by": "tenant-email-preview"
   },
   "build": {
     "mode": "production",

@@ -88,6 +88,18 @@
         "aws/production/SES_FROM.md"
       ]
     },
+    "tenant-email-preview": {
+      "owners": ["@michaelcarletta-cmd"],
+      "description": "Accepted Tenant Email Preview contract. Dedicated preview source and freeze records only. TenantBrandingSettings.tsx mount is contract-tested, not wholly locked.",
+      "paths": [
+        "src/lib/signatureRequestSender.ts",
+        "src/components/settings/SignatureRequestEmailPreview.tsx",
+        "scripts/lib/tenant-email-preview-freeze.mjs",
+        "aws/audit/tenant-email-preview-production-freeze.json",
+        "aws/tests/tenant-email-preview-production-freeze.test.mjs",
+        "tests/signature-request-email-preview.test.mjs"
+      ]
+    },
     "partner-sharing": {
       "owners": ["@michaelcarletta-cmd"],
       "description": "Partner share/revoke lifecycle and C1C visibility contract. SQL 31/32/33/34 are APPLIED IN PRODUCTION; do not reapply. Ownership and visibility are separate.",

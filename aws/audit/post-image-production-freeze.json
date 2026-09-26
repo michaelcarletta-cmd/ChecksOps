@@ -201,13 +201,12 @@
     "bucket": "checksops-production-frontend-806168576068",
     "cloudfront_apex": "https://checksops.com",
     "current_live": {
-      "index_sha256": "6b211037ae70b510a9b5cfe316f006dbbc308ee3c94687ccea943b24cfd09f2e",
-      "index_version_id": "advEv5N0JfqM41odUraOM7kCH6Z2snP3",
-      "index_last_modified": "2026-09-26T19:26:02+00:00",
-      "main": "assets/index-CS_JpvZg.js",
-      "main_sha256": "d9c389999ceadb1aa20a38d41457400e4a44193709f06b41b31304d817f31916",
-      "claim_check": "assets/CheckCommandCenter-DHNFge6N.js",
-      "claim_check_sha256": "96ddcbd1458e990f85105d9685cfccafc98a0273ef8ccff79179e7465caf628f",
+      "index_sha256": "58c867a066a32813e47f454aeadf7166c609ca9b7b3bb17be6c9f1a6a71d109b",
+      "index_version_id": "KoqxddGRI3swQom6uSEhLcRASAgwbkR9",
+      "index_last_modified": "2026-09-26T23:21:06+00:00",
+      "main": "assets/index-BAD1KYoF.js",
+      "main_sha256": "bdd262a81426b2c772961e8dde3e10fe626a2717a69a4644f001c3cffba001e6",
+      "claim_check": "assets/CheckCommandCenter-Bv3f8RK7.js",
       "recursive_object_count": 103,
       "missing_count": 0,
       "html_fallback_count": 0,
@@ -217,38 +216,40 @@
         "claim_check": {
           "present": true,
           "files": [
-            "assets/CheckCommandCenter-DHNFge6N.js"
+            "assets/CheckCommandCenter-Bv3f8RK7.js"
           ]
         },
         "payee_endorsements": {
           "present": true,
           "files": [
-            "assets/Endorse-DSbvr3UQ.js",
-            "assets/EndorsementChecklist-Cj8sP6OW.js",
-            "assets/SharedCheckEndorsements-BJ7W8Ppz.js"
+            "assets/Endorse-BJRj1ptU.js",
+            "assets/EndorsementChecklist-D0sy4jbj.js",
+            "assets/SharedCheckEndorsements-B2zP0F5C.js"
           ]
         },
         "mortgage_desk": {
           "present": true,
           "files": [
-            "assets/MortgageCompaniesDirectory-GYO7N1fG.js",
-            "assets/AdminMortgageOps-BaPTZ75m.js",
-            "assets/MortgageOpsLogin-RskDS9nM.js",
-            "assets/MortgageOpsQueue-BPxEoA3R.js",
-            "assets/MortgageCompanyEditorDialog-DsvdG63I.js"
+            "assets/MortgageCompaniesDirectory-Dnk8G4U8.js",
+            "assets/AdminMortgageOps-DkUPrGfk.js",
+            "assets/MortgageOpsLogin-DrtbOv2x.js",
+            "assets/MortgageOpsQueue-CM12gXPk.js",
+            "assets/MortgageCompanyEditorDialog-BxL-36x5.js"
           ]
         },
         "admin_tenant_moov_billing": {
           "present": true,
           "files": [
-            "assets/AdminTenants-CSK6IA-1.js",
-            "assets/AdminFinancialModel-CnhqzPB4.js",
-            "assets/WalletOps-DO22Lt9U.js"
+            "assets/AdminTenants-BIzN3WmF.js",
+            "assets/AdminFinancialModel-Cufdv0ka.js",
+            "assets/WalletOps-CuGq2wSv.js"
           ]
         }
       },
-      "overlay": "r4a-tenant-branding"
+      "overlay": "tenant-email-preview",
+      "role": "current_accepted_provenance_not_rollback_pin"
     },
+    "objects_are_historical_r4a_snapshot": true,
     "objects": [
       {
         "key": "index.html",
@@ -1110,6 +1111,25 @@
       "storage.mjs": "c3ddf79b01118d2e972adbc42fda8b472c3f87474436f03af56e053aa49285d3",
       "storage-paths.mjs": "74638148e16d47c34e5ec2af6aa3e4adf8aef3d4aeb934141980cae5d1e22fb4"
     },
+    "r4a_spa": {
+      "index_sha256": "6b211037ae70b510a9b5cfe316f006dbbc308ee3c94687ccea943b24cfd09f2e",
+      "index_version_id": "advEv5N0JfqM41odUraOM7kCH6Z2snP3",
+      "index_last_modified": "2026-09-26T19:26:02+00:00",
+      "main": "assets/index-CS_JpvZg.js",
+      "main_sha256": "d9c389999ceadb1aa20a38d41457400e4a44193709f06b41b31304d817f31916",
+      "claim_check": "assets/CheckCommandCenter-DHNFge6N.js",
+      "claim_check_sha256": "96ddcbd1458e990f85105d9685cfccafc98a0273ef8ccff79179e7465caf628f",
+      "recursive_object_count": 103,
+      "missing_count": 0,
+      "html_fallback_count": 0,
+      "must_not_automatically_replace_current": true,
+      "note": "Accepted R4A production SPA immediately before the Tenant Email Preview promotion. Historical provenance only. Must never automatically replace the newer Email Preview SPA."
+    },
+    "staging_email_preview_spa": {
+      "index_sha256": "3201c90ca4ca8ae9b1e854fa666b17d8a04c18e01771f358ade2907e95548773",
+      "never_production_authority": true,
+      "note": "Staging Email Preview SPA. Never production authority."
+    },
     "pre_r4a_spa": {
       "index_sha256": "342c2e1588f712ebf73f563a881c982941b955619c51c6a79a7834aace21538a",
       "index_version_id": "1Lz3xzicHX5y2PT2S1lteJDbx_c7YRd0",
@@ -1182,7 +1202,11 @@
     "r4a_branding": "tests/r4a-tenant-branding.test.mjs",
     "reject_page_relative_tenant_logos": true,
     "require_tenant_branding_settings": true,
-    "reject_sending_domain_ui": true
+    "reject_sending_domain_ui": true,
+    "tenant_email_preview": "scripts/lib/tenant-email-preview-freeze.mjs",
+    "email_preview_from": "{Current Tenant Name} <support@checksops.com>",
+    "reject_via_checksops_preview": true,
+    "reject_noreply_preview": true
   },
   "out_of_scope": [
     "R4B storage write-auth / stored logo_url migration / SQL",
@@ -1221,6 +1245,8 @@
         "Supabase logo resolution"
       ]
     },
-    "r4b_implemented": false
+    "r4b_implemented": false,
+    "successor_overlay": "tenant-email-preview",
+    "spa_bundle_now_historical_provenance_only": true
   }
 }

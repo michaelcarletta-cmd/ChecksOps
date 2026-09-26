@@ -12,7 +12,10 @@
     "indexSha256": "6b211037ae70b510a9b5cfe316f006dbbc308ee3c94687ccea943b24cfd09f2e",
     "indexVersionId": "advEv5N0JfqM41odUraOM7kCH6Z2snP3",
     "entry": "/assets/index-CS_JpvZg.js",
-    "claimCheck": "/assets/CheckCommandCenter-DHNFge6N.js"
+    "claimCheck": "/assets/CheckCommandCenter-DHNFge6N.js",
+    "historical_provenance_only": true,
+    "must_not_automatically_replace_current": true,
+    "superseded_by": "tenant-email-preview"
   },
   "historical_reference": [
     "cursor/freedom-tenant-branding-fix-491d (rewriteTenantLogoUrl concept; not merged)",
