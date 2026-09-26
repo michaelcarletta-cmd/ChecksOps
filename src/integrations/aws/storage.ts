@@ -4,6 +4,9 @@ import {
   awsApiBaseUrl,
 } from "@/lib/awsStaging";
 import { toStorageObjectPath } from "@/lib/storagePath";
+import { rewriteTenantLogoUrl } from "@/lib/tenantLogoUrl";
+
+export { resolveTenantLogoUrl, rewriteTenantLogoUrl } from "@/lib/tenantLogoUrl";
 
 const storageError = (message: string, statusCode = 403) => ({
   message,
@@ -62,7 +65,9 @@ export function rewriteStorageFields(value: unknown): unknown {
   if (!value || typeof value !== "object") return rewriteSupabaseStorageUrl(value);
   const out: Record<string, unknown> = {};
   for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
-    if (typeof nested === "string" && /(_url|logoUrl)$/i.test(key)) {
+    if (typeof nested === "string" && /^(logo_url|logoUrl)$/i.test(key)) {
+      out[key] = rewriteTenantLogoUrl(nested);
+    } else if (typeof nested === "string" && /(_url|logoUrl)$/i.test(key)) {
       out[key] = rewriteSupabaseStorageUrl(nested);
     } else if (nested && typeof nested === "object") {
       out[key] = rewriteStorageFields(nested);
