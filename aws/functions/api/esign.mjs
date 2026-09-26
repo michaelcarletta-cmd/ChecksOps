@@ -6,12 +6,35 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { withIdentityWrite } from './data.mjs';
 import { sendViaSesOrSink } from './email.mjs';
-import { resolveEmailBranding } from './email-branding.mjs';
+import {
+  PLATFORM_SUPPORT_EMAIL,
+  formatFromHeader,
+  resolveEmailBranding,
+} from './email-branding.mjs';
 import { escapeHtml, renderChecksOpsEmail } from './email-layout.mjs';
 
 const TOKEN_EXPIRY_HOURS = 72;
 
 export const hashToken = (raw) => createHash('sha256').update(String(raw), 'utf8').digest('hex');
+
+const stripViaChecksOps = (name) => String(name || '')
+  .replace(/\s+via\s+ChecksOps\s*$/i, '')
+  .trim();
+
+/**
+ * Signature-request From only. Does not change shared resolveEmailBranding.
+ * Display name is the request-owning tenant company/display name; address is
+ * always support@checksops.com.
+ */
+export const signatureRequestFromHeader = (resolved = {}) => {
+  const name = stripViaChecksOps(
+    resolved.companySubtitle
+    || resolved.companyName
+    || resolved.fromName
+    || '',
+  );
+  return formatFromHeader(name, PLATFORM_SUPPORT_EMAIL);
+};
 
 export const generateRawToken = () => randomBytes(32).toString('hex');
 
@@ -179,7 +202,7 @@ export const runSendSignatureRequest = async ({
   branding.logoUrl = resolved.logoUrl;
   branding.esign_email_header_color = resolved.primaryColor;
   branding.esign_email_button_color = resolved.primaryColor;
-  const mailFrom = resolved.from;
+  const mailFrom = signatureRequestFromHeader(resolved);
   const mailReplyTo = resolved.replyTo;
 
   const claimId = request.claim_id || null;
@@ -340,6 +363,7 @@ export const runSendSignatureRequest = async ({
     ok: !allFailed,
     statusCode: allFailed ? 500 : 200,
     mode: 'aws_ses_or_sink',
+    from: mailFrom,
     results,
     sent: results.filter((row) => row.success).length,
     failed: results.filter((row) => !row.success).length,
