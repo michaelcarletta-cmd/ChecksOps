@@ -770,12 +770,20 @@ export const handleDeleteCheck = async (event, deps = {}) => {
     // Some legacy schemas may still hold non-financial FK references (ex: claim_checks, loss_draft_tracking)
     // that are not cascading. Only attempt to clean those up if the delete actually fails with an FK error.
     let rows = [];
+    // IMPORTANT: any failed statement aborts the entire transaction until a rollback.
+    // Use a savepoint so we can safely recover from FK violations and retry after
+    // best-effort cleanup of non-financial links.
+    await client.query('SAVEPOINT delete_check_attempt');
     try {
       rows = (await client.query(
         'DELETE FROM public.check_intake_items WHERE id = $1::uuid RETURNING id',
         [looked.check.id],
       )).rows;
+      await client.query('RELEASE SAVEPOINT delete_check_attempt');
     } catch (error) {
+      // Recover transaction state before any further queries.
+      try { await client.query('ROLLBACK TO SAVEPOINT delete_check_attempt'); } catch { /* ignore */ }
+      try { await client.query('RELEASE SAVEPOINT delete_check_attempt'); } catch { /* ignore */ }
       if (error?.code !== '23503') throw error; // not a foreign key violation
 
       // Retry path: attempt best-effort cleanup of non-financial claim/escrow links, then retry delete.
