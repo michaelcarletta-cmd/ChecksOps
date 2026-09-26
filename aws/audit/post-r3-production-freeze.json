@@ -1,0 +1,1173 @@
+{
+  "schema": "checksops.post-r3-production-freeze.v1",
+  "captured_at": "2026-09-25T18:46:35.343Z",
+  "production_application_state_changed_by_this_workstream": false,
+  "authority": "Freshly downloaded live production. Git main is not the deployment baseline. The freeze manifest is an invariant/provenance source and MUST NOT force future deploys to start from a frozen ZIP if live has moved.",
+  "lambda": {
+    "function_name": "checksops-production-prep-api",
+    "account": "806168576068",
+    "region": "us-east-1",
+    "CodeSha256": "o/U/pbZ2FR38T3HI6A6kUxp9wik4pci92KmEVfmhF6I=",
+    "package_sha256": "a3f53fa5b676151dfc4f71c8e80ea4531a7dc22938a5c8bdd8a98455f9a117a2",
+    "RevisionId": "470ad806-c710-415b-8f93-59232d8ee13c",
+    "LastModified": "2026-09-25T18:35:08.000+0000",
+    "CodeSize": 11258349,
+    "fingerprint": {
+      "Runtime": "nodejs22.x",
+      "Role": "arn:aws:iam::806168576068:role/checksops-production-api-execution",
+      "Handler": "index.handler",
+      "Timeout": 45,
+      "MemorySize": 1024,
+      "Architectures": [
+        "arm64"
+      ],
+      "VpcConfig": {
+        "VpcId": "vpc-09f2268778966ce97",
+        "SubnetIds": [
+          "subnet-092e4e41821fba6c4",
+          "subnet-0df2518070c5b9ff0"
+        ],
+        "SecurityGroupIds": [
+          "sg-0bc4695a666baf49b",
+          "sg-0fe2698f236959353"
+        ]
+      },
+      "EnvKeys": [
+        "AWS_ACTUM_ENABLED",
+        "AWS_APPLICATION_WORKFLOW_WRITES_ENABLED",
+        "AWS_CHECKALT_ENABLED",
+        "AWS_CHECKALT_STATUS_RECONCILE_ENABLED",
+        "AWS_CHECK_WORKFLOW_WRITES_ENABLED",
+        "AWS_COGNITO_MFA_PREFERRED",
+        "AWS_EMAIL_ALLOWLIST_DOMAINS",
+        "AWS_EMAIL_FROM",
+        "AWS_EMAIL_MODE",
+        "AWS_ENDORSEMENT_AUTO_ADVANCE",
+        "AWS_ENDORSEMENT_RESEND_ALLOW_ANY_RECIPIENT",
+        "AWS_ENDORSEMENT_RESEND_ENABLED",
+        "AWS_ENDPOINT_URL_SECRETS_MANAGER",
+        "AWS_FINANCIAL_PERMISSIONS_ACTIVATED",
+        "AWS_FINANCIAL_SANDBOX_SIMULATION_ENABLED",
+        "AWS_MOOV_BILLING_DESTINATION_ACCOUNT_ID",
+        "AWS_MOOV_BILLING_DESTINATION_PAYMENT_METHOD_ID",
+        "AWS_MOOV_ENABLED",
+        "AWS_MOOV_MONTHLY_BILLING_ENABLED",
+        "AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST",
+        "AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED",
+        "AWS_MOOV_TRANSFER_POST_ENABLED",
+        "AWS_PLAID_ENABLED",
+        "AWS_PROVIDER_EXECUTION_ENABLED",
+        "AWS_PROVIDER_LIVE_READS_ENABLED",
+        "AWS_PROVIDER_RECIPIENT_BANK_VERIFY_WRITES_ENABLED",
+        "AWS_PROVIDER_RECIPIENT_KYC_TOS_WRITES_ENABLED",
+        "AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED",
+        "AWS_PROVIDER_WEBHOOK_DRY_RUN",
+        "AWS_QUICKBOOKS_ENABLED",
+        "AWS_RECIPIENT_BANK_VERIFY_STATE_TABLE",
+        "AWS_STORAGE_WRITES_ENABLED",
+        "AWS_WRITES_ENABLED",
+        "AZURE_DI_SECRET_ID",
+        "CHECKSOPS_DB_BRIDGE_TOKEN",
+        "CHECKSOPS_ENV",
+        "CHECKSOPS_SECRET_EPOCH",
+        "COGNITO_CLIENT_ID",
+        "COGNITO_USER_POOL_ID",
+        "COGNITO_WEBAUTHN_ORIGIN",
+        "COGNITO_WEBAUTHN_RP_ID",
+        "DATABASE_NAME",
+        "DATABASE_SECRET_ARN",
+        "FILES_BUCKET",
+        "FINANCIAL_TOTP_WRAP_KEY_ARN",
+        "MOOV_WEBHOOK_SECRET_ARN",
+        "PROVIDER_SECRETS_ARN",
+        "SIGN_BASE_URL"
+      ],
+      "Layers": [],
+      "TracingConfig": "Active",
+      "EphemeralStorage": {
+        "Size": 512
+      }
+    },
+    "contains": [
+      "R2 identity/invite-lock recovery",
+      "Delete Check backend behavior",
+      "S2 endorsement material invalidation",
+      "S5 workflow / workflow-rpc",
+      "S11 financial idempotency",
+      "S14 deposited/payee protections",
+      "Moov monthly billing",
+      "newer billing engine/handlers",
+      "R3 OCR/intake recovery"
+    ]
+  },
+  "protected_files": {
+    "identity-env.mjs": "e814546feded3a323461b3a7a8369e3d8a09f9a5d306d68973e15389b871f443",
+    "tenant-admin.mjs": "2e4a30da6f8eb8504044ab1159ba0ecb79403ecef97c067d3581e08917eb8244",
+    "workflow.mjs": "85274058cbe4db085ac7ee558c0165a593b5bd6c7cd5ad844ce16571b5d70059",
+    "workflow-rpc.mjs": "165aee3f695c51b509054b4c03db82f833ac67c41fb290351aa2815bae31a0b2",
+    "endorsement-material-invalidation.mjs": "8a345898d19ed791f9a5c2e94f7c9bfb95f05508d1cce514b82ea165e2f32af1",
+    "financial-remaining.mjs": "e608c00f65623bfc226eecd7d216d64141e610f2a2c1b0cb841f9736d5397989",
+    "financial-idempotency.mjs": "14c6ca7a4bd5ea18b681d1cb83921b83b1a933255d0ef1a60546ad1fffe2f96e",
+    "check-deposited.mjs": "395ddec5c88e2290fc72f2ab86ef2c934fe7654c7f2309a8176e1147ce32edf1",
+    "tenant-billing-destination.mjs": "4c0d72def4eb82ef6507853a5cd8aba29f6d8c5058e17f1b23db52ace9815621",
+    "tenant-billing-engine.mjs": "f17199aaf630d015313ea80ab4cdf5d19af0b7fb6e189833587a36471453605d",
+    "tenant-billing-handlers.mjs": "d64c7538317d6b20df6a28e3551cfec73cdc60ab47546e8d8059951c87b423e1",
+    "app-services.mjs": "09745fb570098b6309aeeba748541663f0b9259e9a0ea22309878f11de54e7b8",
+    "scheduled.mjs": "78daabb298f187b180e1435cc75c3bd519179aab82a0b83a9632a5f41c577090",
+    "allowed-tables.json": "a1772c723bc07fbc0d02bda2fd02a4915b1a41944ca2f7b368602117634868cb",
+    "providers/webhook-apply.mjs": "e26a617a576aea568ffd9d112a58fff3efc516ab54e9e2eabc1f22d0b8fc52bf",
+    "ocr-parse.mjs": "16c15529f9bb4d975baa31ba5cbe824dd3eee4bd984487f7e4717b77c8878ede",
+    "ocr-descriptive-persist.mjs": "32c2cecc723ad4253558d39fdbba13aa20e6e4a04b1886e9e7e6e7e1f66748ae",
+    "check-ocr-provider.mjs": "2d2eaa6a4deb02b257f2928d71cc6b6d3f501ee480adb479266bd0930f41e2dc"
+  },
+  "protected_file_labels": {
+    "identity-env.mjs": "R2 identity lock",
+    "tenant-admin.mjs": "R2 invite / tenant-admin",
+    "workflow.mjs": "Delete Check / S5",
+    "workflow-rpc.mjs": "Delete Check / S5",
+    "endorsement-material-invalidation.mjs": "S2",
+    "financial-remaining.mjs": "S14",
+    "financial-idempotency.mjs": "S11",
+    "check-deposited.mjs": "S14",
+    "tenant-billing-destination.mjs": "Moov monthly billing",
+    "tenant-billing-engine.mjs": "Moov monthly billing (newer live)",
+    "tenant-billing-handlers.mjs": "Moov monthly billing (newer live)",
+    "app-services.mjs": "Moov / Class A",
+    "scheduled.mjs": "Moov scheduled",
+    "allowed-tables.json": "write allowlist",
+    "providers/webhook-apply.mjs": "Moov webhook apply",
+    "ocr-parse.mjs": "R3",
+    "ocr-descriptive-persist.mjs": "R3",
+    "check-ocr-provider.mjs": "R3"
+  },
+  "sql_invariants": {
+    "ocr_persist_extracted_amount": {
+      "signature": "public.ocr_persist_extracted_amount(p_check_id uuid, p_amount numeric)",
+      "returns": "jsonb",
+      "migration": 42,
+      "present_in_production": true,
+      "reapply_forbidden": true,
+      "source": "Already captured R3 SQL-gate evidence. This workstream did not run SQL."
+    }
+  },
+  "tests": {
+    "r3_regression_against_live_package": "107/107 PASS",
+    "protected_file_hash_preservation": "PASS",
+    "safeguard_unit_tests": "18/18 PASS"
+  },
+  "spa": {
+    "bucket": "checksops-production-frontend-806168576068",
+    "cloudfront_apex": "https://checksops.com",
+    "current_live": {
+      "index_sha256": "0fb105c58a5afeb8dd6fe4a497db1df012a0473f85da02484d9a7a4417ff4f87",
+      "index_version_id": "8SaYIyB6Vu9Yyb56agkS.j4ua4z2ZJWY",
+      "index_last_modified": "2026-09-25T18:38:14Z",
+      "main": "assets/index-GHTPHbRW.js",
+      "main_sha256": "d726623a64ca6f38a97d1f1a37f41f63f4fcc9578f8ad1bd60ee7281ebe6ec4d",
+      "claim_check": "assets/CheckCommandCenter-D3bX7ola.js",
+      "claim_check_sha256": "520117f30184846490f52a72c6909d1af3d755318813d4873e1f98ee058af19a",
+      "recursive_object_count": 102,
+      "missing_count": 0,
+      "html_fallback_count": 0,
+      "cloudfront_checked": 102,
+      "cloudfront_failures": 0,
+      "required_surfaces": {
+        "claim_check": {
+          "present": true,
+          "files": [
+            "assets/CheckCommandCenter-D3bX7ola.js"
+          ]
+        },
+        "payee_endorsements": {
+          "present": true,
+          "files": [
+            "assets/Endorse-B9CEK-4B.js",
+            "assets/EndorsementChecklist-55vtpS3y.js",
+            "assets/SharedCheckEndorsements-1nmmeZUV.js"
+          ]
+        },
+        "mortgage_desk": {
+          "present": true,
+          "files": [
+            "assets/MortgageCompaniesDirectory-CMATNDEx.js",
+            "assets/AdminMortgageOps-BNjYi5Lk.js",
+            "assets/MortgageOpsLogin-BnJOG0IZ.js",
+            "assets/MortgageOpsQueue-qcUELfcN.js",
+            "assets/MortgageCompanyEditorDialog-W1WEwr1Q.js"
+          ]
+        },
+        "admin_tenant_moov_billing": {
+          "present": true,
+          "files": [
+            "assets/AdminTenants-B8YBe1tR.js",
+            "assets/AdminFinancialModel-DajpLyFK.js",
+            "assets/WalletOps-CDuIsAAB.js"
+          ]
+        }
+      }
+    },
+    "objects": [
+      {
+        "key": "index.html",
+        "sha256": "0fb105c58a5afeb8dd6fe4a497db1df012a0473f85da02484d9a7a4417ff4f87",
+        "bytes": 3498,
+        "etag": "4f5aec276cfffe1ce5bda6616590d397",
+        "versionId": "8SaYIyB6Vu9Yyb56agkS.j4ua4z2ZJWY",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "favicon.png",
+        "sha256": "c3f002a2af91055ab2accb95415a08c917c551ca0da3f2bc3a8ff3bd19542a27",
+        "bytes": 73026,
+        "etag": "f541a87c8b9272b28b45cd08af32ee6a",
+        "versionId": "WvaHaFSJpOkqsgyN4y2Uj4Yq4RX4CX1S",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "pwa-192.png",
+        "sha256": "8afc969bd561269c1de325787c727d3918ea92a788fb824042d93c0438ff9351",
+        "bytes": 940414,
+        "etag": "167379c1e57c3b67eafc6e7b73810433",
+        "versionId": "1g186rhFjEgiTNwfDPWRrWLQgWo1X8HA",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/index-GHTPHbRW.js",
+        "sha256": "d726623a64ca6f38a97d1f1a37f41f63f4fcc9578f8ad1bd60ee7281ebe6ec4d",
+        "bytes": 900749,
+        "etag": "f904c40bfbec937e55e63cc20b1b5d00",
+        "versionId": "fFpvfKd0lDMPjx5j3t5DXoHi_r8L_LBZ",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/index-BbhoCT-2.css",
+        "sha256": "aa5283e7943fa21e1f97be0056dec96fb7dde4e230689ae35a23ffba2d69172b",
+        "bytes": 134930,
+        "etag": "ac94765653cd337bf22433a87766d45e",
+        "versionId": "eMP5sdMLSF8NnY20FPpNHQRikLyf5lzo",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/browser-DKbYAQah.js",
+        "sha256": "31df4ae47e91b2ff21e0e23a5f4981444ff3fa10b4f0792d92ac426687a4dac1",
+        "bytes": 296,
+        "etag": "6d8e350dba47b5e8ed9a99917ca3ccfa",
+        "versionId": "ym6fodpuRIDK_QN5HtmruEkWFpYEgbeO",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/CheckCommandCenter-D3bX7ola.js",
+        "sha256": "520117f30184846490f52a72c6909d1af3d755318813d4873e1f98ee058af19a",
+        "bytes": 445136,
+        "etag": "35272b184181508ec9d00f5fae5ea095",
+        "versionId": "O8_o.pGFfHY5R46BmQSzzEdoLK.8mWYS",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/browser-DL3kb7mT.js",
+        "sha256": "dbcf0687ca3dff61826323d3d4ef130f1a78e705f125aa3c488e5a54a02bc09c",
+        "bytes": 24193,
+        "etag": "fe7e911fef76bc6788866599a782845f",
+        "versionId": "Zsfuvl5BtRZQH6zPvXelbNE_KbpH07AF",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/DepositReports-LUFR0wno.js",
+        "sha256": "ed104483adda1dccd2961c074ba0c2feeac8328c1512868c93375a4105820b57",
+        "bytes": 3410,
+        "etag": "c6d883425d48cc7030cd7d3a74690c93",
+        "versionId": "yahxyPnHreCuyIMjdXNbefrTzsm9fm4V",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/MortgageCompaniesDirectory-CMATNDEx.js",
+        "sha256": "8ee065a3b3935152e3a5eeddb8c6525813c4f910abf86b35c0349302d6bbb5b2",
+        "bytes": 5693,
+        "etag": "c93e2ac47925cbd43cf3e23be352f634",
+        "versionId": "2L.ayAsa6ehlbEVSE.ZAVRgurb5jQ0nW",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/Payments-CIy7nQKi.js",
+        "sha256": "538996b4c903141f204b3dbe9f47292d7e6aae4f75869e34811405d8d596722e",
+        "bytes": 85724,
+        "etag": "09a64845ec88938efa9c381b0537fb73",
+        "versionId": "5EBnyJDiR0X4VbrAePgDEZ7Kk4EyFHOw",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/CashJobs-iVJI5efY.js",
+        "sha256": "a71776e855bdaf0ef8fcc81e73503d116eb456f61913a57a3ee8f22911bc007b",
+        "bytes": 35653,
+        "etag": "7a9a778b7e7ac9bf16844000f515c800",
+        "versionId": "2MBrg9bDsrzuT0Ks3ogo_k_P3Jt2KKbz",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/Sign-BAzuPETO.js",
+        "sha256": "cc5e00fdbf3ca97e895aab1030a34cd1dee6c5def0e30c58e5d4439cf0693097",
+        "bytes": 16398,
+        "etag": "422104f697f52fc2e6603fde20e5b641",
+        "versionId": "DZvUsyOrFhkDtgjlxK8zVH71YpLL_FhZ",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/Endorse-B9CEK-4B.js",
+        "sha256": "37c4cb8f17b43ff8b296f5af21512aa0f08c988f6e8df3eb22beb8658403fd1e",
+        "bytes": 13842,
+        "etag": "55fe4feb4c1f4cad085c0c329c982f7b",
+        "versionId": "f90L2_E7EvxfE4Y086K.A2qlCyWRMU_l",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/PaymentDirectionPage-Bm-eMnrv.js",
+        "sha256": "8cc3b50a31f37630cb743b43a6d6165e90e27fd28182211857991dc2ce35e9c6",
+        "bytes": 5467,
+        "etag": "a23dd6f2ca48a1b7829f85b0e585a2b8",
+        "versionId": "6YCNab_lz5vnw9SgHzxMU02jZRVF44MC",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/WhiteLabelApp-BE8bfRi0.js",
+        "sha256": "100550270f956ef6ec1f7109dc9b3da58dfb93fd3f697f3190831b67edb113f6",
+        "bytes": 5545,
+        "etag": "bafeedf779489d0371e76ed5f1412f6e",
+        "versionId": "mY6y1aj.fGXhZulGkfW54roPKNUn7YQ2",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/CheckOpsLanding-aNkWHecj.js",
+        "sha256": "b56451d263949ab99e4deed9b751dcc20e58f950c1c49a529543fcdc652b3d13",
+        "bytes": 792,
+        "etag": "b736398f72b9ba61c3063119386036ab",
+        "versionId": "vsEZ2EE8uGF.JDcOo5WBf4OPffiI1UYo",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/CheckOpsPricing-CQaEM2aP.js",
+        "sha256": "3e3d67d29828ca8189d2f67547bf2c03cd95b631ecc09fb80080751d73f0eaef",
+        "bytes": 10360,
+        "etag": "e8c3aa15c75f184ce9dd896e33c2e867",
+        "versionId": "N8C3w3NMbJr1sUfwNuvQkTSKPgBi0G5H",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/CheckOpsSecurity-BFc5hM5O.js",
+        "sha256": "3837152131f158b7ff79a69b3341494d3436d03e793259b11e5e269d940c5bbd",
+        "bytes": 14983,
+        "etag": "687a168530f0c64a93e55175d7c0227b",
+        "versionId": "wzzhH1alziH4id7ttLom7OdQJUtlttxP",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/CheckOpsLogin-BRJP2sNf.js",
+        "sha256": "2bf5a5954bb22975ba46efc4913a49fdd42a627739c3c9c7086bcb12fe97cfe6",
+        "bytes": 6784,
+        "etag": "74d2a115963ee3c72cf1e68335632269",
+        "versionId": "WY33yexP1YNz.r.AGWOcue7egE.Geuoj",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/CheckOpsSignup-BgKZNJGw.js",
+        "sha256": "0d8202b4ee3b8c3d91f2002fdb774f59aaf0d07099e634c1fbfcc191eb1ca5bf",
+        "bytes": 4771,
+        "etag": "bd9f77976c86679828bd29a70792071f",
+        "versionId": "S1B8gpXgU2cfCBjUn.BpD3uoxN.sId1u",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/AccountSecurity-BIS4B8H2.js",
+        "sha256": "bf6657a10411bb4f3f773b65f41c915d8f5b9756aad27400f8add4b6f05f8b03",
+        "bytes": 1764,
+        "etag": "c1edf3013e43bb65245919416ba76461",
+        "versionId": "59iFZ_ZQGhTCokS7p6PCdKHzrh12J1LQ",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/CheckOpsResetPassword-BUR_3l9p.js",
+        "sha256": "6192141f3fc40fd7d6ef32a504ad362eee3c2c7a856b691d8856c8abc4c8ff59",
+        "bytes": 3316,
+        "etag": "d21a60ba629d74fccfdc3c38ed64d093",
+        "versionId": "e9oPe37I9Kmc4I8ojFgGiXAXhKNl8OUq",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/NotFound-9RR7XedI.js",
+        "sha256": "7960e9f369e7fd100f4893ee64744319b17053c9bf32873b843e05e278f572ba",
+        "bytes": 629,
+        "etag": "d33fd185d2c5b2a4b4af60901ca771b9",
+        "versionId": "pszttzK0iTGhx7.FJjyI_87mhBKTGTaj",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/Unsubscribe-Bo33JdiH.js",
+        "sha256": "646814142157acd5aecc4bbba0875df046f36f733a492ab77d0a861d4d88cb43",
+        "bytes": 2959,
+        "etag": "86e5a766346eb24e1a97fd5214273161",
+        "versionId": "8Unv_jchGQ64jj0TR_Ua17JhwMJbn0fX",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/RecipientPaymentSetup-B-MVOHIz.js",
+        "sha256": "78c26746f229845bd9aff4b1766874041a23e015661cbe3526df85d2f226de42",
+        "bytes": 14252,
+        "etag": "3b7112b728d5ce09b295f3ba2972e867",
+        "versionId": "OGkOWr6wKxOl75wCCs68uKMa_0ZoYGQU",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/AdminTenants-B8YBe1tR.js",
+        "sha256": "f28cddf89d9e29957d672b2df630db34c88f5be5ca886d791e63f53ef76bf82f",
+        "bytes": 108191,
+        "etag": "7ba5b9499f303bcf8385f7976af7da7f",
+        "versionId": "VT5CIXrFLtxMZP53BrszjxsNOVThHoYV",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/AdminMortgageOps-BNjYi5Lk.js",
+        "sha256": "3e0ea936a00841df34b3023cbf7fe763870edd4634f2487bdc0b28bf7712fff3",
+        "bytes": 11691,
+        "etag": "d8ac4e8e9220662526328d465c296caf",
+        "versionId": "Zr7G6SbB91AhdxaM4fWSvCpyMF9nsoWo",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/AdminFinancialModel-DajpLyFK.js",
+        "sha256": "7b68d784c9c9096d6a704a2b728f76b35a0638b33b7932f33a1fe44659a3793e",
+        "bytes": 91490,
+        "etag": "0701552f438e8dd23f08cb5392477b28",
+        "versionId": "3HDY6vJS.C5kbo1VObrLVNhZK.VMeKzp",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/VerifyAccountStart-Bqpau106.js",
+        "sha256": "244e4198d0f8e47993eba86b5c4550799bb33eda091b7e12c6a99e03e9bfea77",
+        "bytes": 1175,
+        "etag": "a7b1e595f61547c84dd7c5e2d8ddba21",
+        "versionId": "nLJOAjDin4.JuhxJjMoqhoq3nzWaV2Cx",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/PrivacyNotice-ghe8npn8.js",
+        "sha256": "e58705f793b3135c5c2b22c6de7646f00df082024e7b04b024d13238f160b152",
+        "bytes": 9414,
+        "etag": "0be79945d053bbcd33fc8d6f4e630f6f",
+        "versionId": "fEOPuo.1UQ_p9mnoutBh_1oODEV_qKqy",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/Terms-bGB60-aO.js",
+        "sha256": "5afc21077c41e0fead8916c30ba9b5ae83235a232a7b74a134cbdcaa95e556e6",
+        "bytes": 14523,
+        "etag": "078ce64989aad79331893e1f7e993762",
+        "versionId": "jGB6eqn7p4rWG1VYVEYlM.6G2_H.Taf6",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/FindAPro-BEClkzMw.js",
+        "sha256": "0c161c0e45e0cfa591442e5088e0dc027d189a037ea8a692ddf3b2c44980f86b",
+        "bytes": 21499,
+        "etag": "65b49718a05d8b9fcab479afc9d9376d",
+        "versionId": "XouHpT_SJvvHy_d2V2UQphFQVeSuQwWN",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/HomeownerCheckUpload-DibNvfOW.js",
+        "sha256": "7e0d6d4b71b22c2574482bed8f7a6c2dcce09210579ec0a958cc2125ad8a7a20",
+        "bytes": 12721,
+        "etag": "f9194d5fb4c2c267469131584eb40b84",
+        "versionId": "uTbxDgf93trm37nbUik7GAbSZ_bJrSvB",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/HomeownerClaimPortal-B7wcbXR7.js",
+        "sha256": "01c90236c2a37622f4046aa4b3fa59f4a59e72ac7b67c1a75b25fb6fc0c315ec",
+        "bytes": 23233,
+        "etag": "6ef684cadef8636f0a4a99fdcaa30e05",
+        "versionId": "ty.6QE6eEpdzCnvfWvUxteJ93p9qAwiT",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/HomeownerLedger-trvPZolS.js",
+        "sha256": "cf0c54c229c76c2abbe0f31d63d5ee29e19a1c7e6afbf87dc413a89a893cd8b8",
+        "bytes": 25235,
+        "etag": "6c3beaac5f61df0297feb60bdfc07ff9",
+        "versionId": "qvMnHxG_qLdiIkrWb3JZfjrDxe8LxT5l",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/PublicInvoicePage-DgbiETI4.js",
+        "sha256": "44b87c51b147e10469ad638b55bc46a5774c04eecc5fc8da5f870c66ba2ae536",
+        "bytes": 9289,
+        "etag": "d81e5fc14a4abc27a588b9c2194f048f",
+        "versionId": "CzNRFd_wxNF85G.tSIbR6GvLp47KzJVL",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/MortgageOpsLogin-BnJOG0IZ.js",
+        "sha256": "2f76d25035050ef835199ab311b68571e60d5648c11c81a0d0b93a08223ef656",
+        "bytes": 5279,
+        "etag": "d5d292db75d554b8c9fbdfbea847d091",
+        "versionId": "YVN_UQXGqfTa8BsIvAMgj2oG4iM0j68p",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/MortgageOpsQueue-qcUELfcN.js",
+        "sha256": "a76cf693e2ddef8c0c9c91412b0776abd6e0e6601d4ac79d18a42ee4004d44b9",
+        "bytes": 58520,
+        "etag": "4d44614726ec221ed609d4015cd4940a",
+        "versionId": "Z.qA6cZ8Vx42pkCwJEaID8I3ND2YFVQh",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/compressCheckImage-BLRzGZRc.js",
+        "sha256": "863768c93bc25edda6c92d1991f0ad19d78924c1196c08854df32075f081109a",
+        "bytes": 53497,
+        "etag": "32ce00c76b92d8fcafc118a2a0ea0ee7",
+        "versionId": ".bBYpwos.ZBz9my1.hAQBMRnPELNDxDG",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/CheckImageCropper-AFPVfRWC.js",
+        "sha256": "e09e21c5d75af573bd29a86c1826841f2fddb4185e6fcd13e24a6aa1cb470e2c",
+        "bytes": 9267,
+        "etag": "17c910afadf335da0909049e6bde47c7",
+        "versionId": "Dx33fJBahGjurRXCD5xoCaMjuDqQ28sc",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/LossDraftDocsManager-DmNmaFXO.js",
+        "sha256": "2d05a48bee37ed82c7c71dde99bbdf763936c334cdf027a4addfae90c6b24c22",
+        "bytes": 23454,
+        "etag": "d08375f496570a578e05ebaba5a56d0e",
+        "versionId": "yFscgmiqzDG1gjSkBhxQDuA.j4L1FL2s",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/pen-line-CLK6VojY.js",
+        "sha256": "c40eb7359dd75ea58377e201911ccbaff1efe9dd78f9d02eeadc9464382ffb9f",
+        "bytes": 446,
+        "etag": "b403d460285ce2ab63583ce37e84e06a",
+        "versionId": "ABd6Rk7iruAj3G7fYn33f3cstxLmAUsf",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/dollar-sign-xV8lmstt.js",
+        "sha256": "b01198bab7f7c2fb460df60f546b79ab9eab4c280c2bbe1b1eabf8172a695f29",
+        "bytes": 387,
+        "etag": "008aed41cb4ec481966e8a702b881acc",
+        "versionId": "btDp8BDjNhCB_0.x0Lhq8QJ1hsI8LZUi",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/MortgageCompanyEditorDialog-W1WEwr1Q.js",
+        "sha256": "b510bb3fcc9c7e6b169a3d5fb1691e1f476b406b9c816ef5ee2844350a882d07",
+        "bytes": 4987,
+        "etag": "a2efa45ca24dc95ced4c89a3594940fe",
+        "versionId": "6ujFZCJu_WQ4Azwc299_e.i49G9jAi5a",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/printer-Bc1iks5j.js",
+        "sha256": "10ca0605536f93db2cfa407c183c99bffa76dc260483c0504bfbea02acdb302c",
+        "bytes": 488,
+        "etag": "0d014681fc55a39e88c43a7db243a049",
+        "versionId": "8YkBmYtdCcv0lpblY5reoqU38G5R3dFA",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/useFinancialGuard-LcQPGF7g.js",
+        "sha256": "1c9ecb2d8d37c87722b5b6ce21645fafb4a797e92bc238db8a0f62cd61dad4f8",
+        "bytes": 1957,
+        "etag": "33306572794ecefa4ef171a1942982b4",
+        "versionId": "ejTN1WWkR15HIsC1Hz43dhrWPNkvCfBu",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/Skeletons-BBf9pDMO.js",
+        "sha256": "0da081f67387270309b38fedc64c911150194a70254fc2e65e372287f241e159",
+        "bytes": 974,
+        "etag": "b147489eca85b9aac353d845212f2f41",
+        "versionId": "QAQv2RwJUHyUaxcOPeivKL999ZEhPArS",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/skeleton-CU-_rr9e.js",
+        "sha256": "3c91143ed1e800db15431d82238cc079ab826ecc914ee88888c2619ac409980d",
+        "bytes": 173,
+        "etag": "e5e1bb4ed770fd915f5d250e2e8c6679",
+        "versionId": "t8hIREKTze9M_Bn_7QqfZoB.dzx9.p_K",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/radio-group-D7F4_udQ.js",
+        "sha256": "d7d4a9a38fe3c8cfdbebb3e135815546ca383dcc3368e1dd39b3fe0399da7644",
+        "bytes": 4000,
+        "etag": "e3467dbcac43f749e4c25f233f69dd44",
+        "versionId": "vosRLkFsr.xhHTUAPJkY3GRZZqylTo8D",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/useWallet-Da90BTZk.js",
+        "sha256": "38f77b153d662bc2db6c2ce89a74085e14817585b25e7ecb976881f47009986c",
+        "bytes": 2285,
+        "etag": "2d5286a53d10876077ecdca7c87c9cb7",
+        "versionId": "7t6gSsqxu0ZbOogWe.3yqKkXTjZZbf_U",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/zap-C0CL4pB8.js",
+        "sha256": "95dcb2652f8ef2d54e32763ec03ceaace6bc2f6e96c5f2ae518df6e77d292b78",
+        "bytes": 431,
+        "etag": "02935c214d6b5f8eb167615bc3b4ed98",
+        "versionId": "K5s62w3zBtVN_SmBWbICbe9yhv7RT1yL",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/calendar-range-CNxl3fdV.js",
+        "sha256": "794c7c34d2170ac6eabafaff60d9ed71271fe4c81fb25d909cf0c426270c275a",
+        "bytes": 583,
+        "etag": "efb1355a8574d50cd664f9f50115342a",
+        "versionId": "YNkedYFrRIqRl0px3KIy2zUeIk64buQD",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/slider-CVJBIbl_.js",
+        "sha256": "48df5da4d0d471f3d27fe33cc6a699c545035b4056a03cedbdde6913c0fdd52f",
+        "bytes": 8250,
+        "etag": "0e9918d63aa0c40b3d5338edf1f43455",
+        "versionId": "0ifEvz4bgDrKm1dHmsk8ax4xx8eo0WTb",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/dropdown-menu-Dcf20JIp.js",
+        "sha256": "ca4ef79036b68383ef7d5538090730dac9b98f43f79d7a268092e2e3c410bb72",
+        "bytes": 21441,
+        "etag": "10203baa3090b8d8aee9912526f4cfb1",
+        "versionId": "mS2oBBPYO51TBbWBGUNvWzbhks0d5HDc",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/chevron-right-BMpmNFsY.js",
+        "sha256": "dbea41516eae3885125cbab71292653dd5bcf7e0e9394d0418fccc0e0e642aa9",
+        "bytes": 298,
+        "etag": "f4a26472b06ac012c4a6edeeb26e014a",
+        "versionId": "inKOJEuMvLUtoqFvOOA1fVRhiNRBfqV1",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/trending-up-DG-oBLGA.js",
+        "sha256": "e10ac95ae953273a6bc449187faf66d9824baf2f8e7013810ece0c25a366e170",
+        "bytes": 373,
+        "etag": "ea38331740b26b5c09c8c7c49b544354",
+        "versionId": "wKL63kYaoOh9GfNj5FG5aS7Qysi74Czw",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/SettingsPageShell-AOIwwQYL.js",
+        "sha256": "590d476d489bfededb2165b1409b50256051c444a7d38f06c566c203f28e9157",
+        "bytes": 197,
+        "etag": "6a6b180a1af79380c75d4b11e4625c64",
+        "versionId": "ywPr95v7ssazPpdWjJqyQ4Z0KFqHs3DT",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/signer-display-templates-B5YRNMRm.js",
+        "sha256": "4e64621f6e3908a18395d9820223599a7be5fd6025dab29fb3a072e03f78741c",
+        "bytes": 4414,
+        "etag": "5c7ef9792014ba7462c74f95e27aa93c",
+        "versionId": "2ztidzywppuWAlHjOJ3DJ9YTsa9yKjQq",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/publicWorkflowApi-tsJGZZxq.js",
+        "sha256": "419f41c777638c806b21c846ba68ce9754eea8dce19036681cb1e94863402a21",
+        "bytes": 818,
+        "etag": "9a3f80afc512ef2468da3af7f19f3dff",
+        "versionId": "w3X00AdTeBNw3OPXjFsfZMlO7UmNJfhM",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/CheckOpsLogo-CiG7iqHM.js",
+        "sha256": "b0e04db809c97a52167ab08f4944f7edac0f73a1af9df403a9d8c4ae92dfe05c",
+        "bytes": 341,
+        "etag": "a16e8aefd5ecc19289ed8e5532340fc4",
+        "versionId": "CY671ZFaRyfkUsSEV8G_R2iQifF_B5TU",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/log-in-C9e7irSz.js",
+        "sha256": "7859a1fe4d8bd40908c80e69ac7ff32cc9225abf871e9fe3695762905896f149",
+        "bytes": 712,
+        "etag": "e618906626586e0d7f77a6bdd3a6fe88",
+        "versionId": "ExtmYA5RtndemlG3pOdbwYdU2DM_zGrT",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/fingerprint-Bd-WjH1a.js",
+        "sha256": "d6a026fe99f1dd31d5e0f0cb8753c52f3346ef2c05b256de049fe67c7e624e4c",
+        "bytes": 772,
+        "etag": "e904fb4bead4787fc30eb6f047155bed",
+        "versionId": "81IOWUt03ncYoUfMmFiaFHhbMfKbjKUN",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/goToChecksOpsHome-DW2A7RyB.js",
+        "sha256": "30fc0da1c4722fd949ecdc67a2042702f59d554ea57d8b3ff76a725f37be6592",
+        "bytes": 436,
+        "etag": "fd4600d8cb1e6655e855282066357388",
+        "versionId": "EX4BU_DPdx1gJjn5eVAJZbSGSVJoTZdj",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/CheckAltSettings-B5lOsYYQ.js",
+        "sha256": "1b0b0911c25ce3496762792b7ad6299090ba096ada9ad6a5fe0f0297bba26316",
+        "bytes": 21398,
+        "etag": "856ddf52bd278648dcddde08afdc6ce6",
+        "versionId": "GxuQ_q1DeJpdoDmJh9K66T7U6W8_rPo_",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/briefcase-DEOTw-cy.js",
+        "sha256": "234cd6e83a37f481867853809b3698f3fcd270d5581963aa95f95196570e1b80",
+        "bytes": 389,
+        "etag": "3a6bf516991af5e5dfa265d124c3f2a2",
+        "versionId": "CL9sVzl.iW_ppwSMu9na_njO0iNb_nj8",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/calculator-fwaTNSAT.js",
+        "sha256": "7c49fd6c6471572b43075accb8fe0e7156344574eaf0b5e60e2f15314ef14c4d",
+        "bytes": 699,
+        "etag": "e9b5ab564173f8020d90fde578a9be05",
+        "versionId": "5_cGZUskdQUqSEThk5xD8h_YvZvPVnNF",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/generateCategoricalChart-C2NuoOT8.js",
+        "sha256": "bf76b30276ab352900b4c3f725f3534187ac04d073faa505be7a3dad6760d064",
+        "bytes": 372175,
+        "etag": "b8133d72b86f7070b0daa86e087427c3",
+        "versionId": "eZZSHSQbN31jszT6AR6oQ5pNhYzkZgnU",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/tiny-invariant-CopsF_GD.js",
+        "sha256": "a8e1644e75f95e7cf4e976cf70ad7b48b28f3de1dc1ca6f849e1b76050e2bfcf",
+        "bytes": 82,
+        "etag": "c6f66daf7d7dd9dc01f11b6310750791",
+        "versionId": "1iPdM91defdYTi8zsugjKy75xqhgns5R",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/chart-line-MUksJID9.js",
+        "sha256": "7dd2fb8bd8f9c623689240578f2e22eaaafc58cf2ea9e8372c4c58464c10fc7f",
+        "bytes": 352,
+        "etag": "6ccb4902c1ed487114b8ea59852857a5",
+        "versionId": "K8pbCWYhszo9ECBoViOKiZmREoPCHrKA",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/sheet-BGrt5zed.js",
+        "sha256": "8144bfb4f7bc4f4c8624ac9b79b8ea8f232fc8ecb78aa5c5f730ea75011146ff",
+        "bytes": 2276,
+        "etag": "335fc7088bec877a1b735a2212184d81",
+        "versionId": "d1DBOwv5qJxvM.MYcjDDt95d5b875W9f",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/types-4og3oiYD.js",
+        "sha256": "c9a310dbe4ac90d1425a97e1feda5d8e5d434ad8ba5f9f1fb4793dd852c142aa",
+        "bytes": 53396,
+        "etag": "714dd0ce7d605e7ce5fbbed95460ee42",
+        "versionId": "EMe3gN3HeKymv6P952Y873BUTKU1.Cfa",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/image-plus-BEpprzIG.js",
+        "sha256": "f5690fe7933a6ff9ca4c6facbd7853fc3a97f04133f9b4d392472810305ccd03",
+        "bytes": 531,
+        "etag": "6af400b849f25296796e593b258cb4d3",
+        "versionId": "hBtHm2dam70ubVyNy7TbrWvWYhtyXTmK",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/pen-tool-BUFA5tM2.js",
+        "sha256": "c9e1921112dfd3cad3ed98e554b4a268bf42f5e03e5f6140ddb47d649a34fc24",
+        "bytes": 639,
+        "etag": "791ac534aa511fa623d1c6590cf7554d",
+        "versionId": "ehNk5Q55K9NhVLjU5SA.GYCm0bmk56wG",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/mortgage-ops-logo-CLzzuJdo.js",
+        "sha256": "2cd801d92f73751885e76cd2c581ea66d79c2e3ecf5dbe79de3fcd857c1eb5eb",
+        "bytes": 1285,
+        "etag": "f4b37ada61c2cd6c6c2c17eaaff2bdcb",
+        "versionId": "PXdLY3Z9aW85bIcUJRW0yEKM8HwFakem",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/prepareCheckAltDeposit-EWLRTQEy.js",
+        "sha256": "4a5d8cc6444170fe72069fb368a20e314b1e9682de99cac2cea1d1e6fbf14a99",
+        "bytes": 2325,
+        "etag": "1843d8905e051eb63e3fd101fa30c5fb",
+        "versionId": "Px8V01hvdDYQJJfPFBCQjI8T805FutM9",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/ReturnedChecksPanel-DspKlD0i.js",
+        "sha256": "543860ac2354e5e639857746171154db694f70675d3f4e70faf061fa4926dd36",
+        "bytes": 6649,
+        "etag": "b0de9c93b329a3f4878b70c43ff945bd",
+        "versionId": "sPgXMBrGlzpE.iouGMJE2l4rjhbO3Oyp",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/EndorsementChecklist-55vtpS3y.js",
+        "sha256": "5e1432bbb74005bed49b5dad507e8c05c0b183b6ef5cda40eee142b0e04177e1",
+        "bytes": 28366,
+        "etag": "ea88b65f18f5e51e311f557f4673ac2c",
+        "versionId": "9jJDxSh5k4fCPUwA5_kGVKccVcDI0RHc",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/SharedCheckEndorsements-1nmmeZUV.js",
+        "sha256": "348ca2fab6845e1e9a1fecc7b425e99e3e1d90bfef89b4332857ed687f58e976",
+        "bytes": 6591,
+        "etag": "ca58f3ed21862a03d8344499c340715a",
+        "versionId": "Hqq2tfWzoLP6j0iRsZ_.WeTdF7f0821p",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/SharedCheckPaymentDirection-DR3fWuqr.js",
+        "sha256": "387cf17306380e79c5efd0f5d99e7a25fe7e38546d7162b3df6d719b2e435ee6",
+        "bytes": 14456,
+        "etag": "d30c1726bb8616ea0dc5a559d6f0e99e",
+        "versionId": "AtbSi630CicA2JkTJLUzcczqDuXZ7V4R",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/CheckFilesSection-xaXC_YtT.js",
+        "sha256": "1685a5e435a8c943296832ce50a1e8575eb8cba08a42de595f2bc59161fa58c0",
+        "bytes": 5836,
+        "etag": "0fae79a13d9dace422d7b7e1914d9f74",
+        "versionId": "4.4SFd2nDohPU1113zurVxlCCLIb1KjV",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/DepositPacketGenerator-ByFk3Qiw.js",
+        "sha256": "078a1fe5d233ad54759612a76bb11d09ea9c1a812d3f81d58918bc19a3927d81",
+        "bytes": 10168,
+        "etag": "229a7c6a20198182958dcac5be73c70d",
+        "versionId": "fdOpgAX80UmQpDzo4IYcRoLBkt_HbksR",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/HomeownerSubmittedChecksInbox-6ecjFX9s.js",
+        "sha256": "f36e791878ca6063e22e98c90f13513646a575438324fc2afe925fd4b094f5c9",
+        "bytes": 7472,
+        "etag": "3d4e5dd2568790655edbe550c0af0102",
+        "versionId": "_oINh9rvD3cVbPeRRC51ibZDk00jkavi",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/SendHomeownerUploadLink-DzWeaWNP.js",
+        "sha256": "c845d05b0f4bca58292b2d105ee5637ffd25ec65cc3a55fcf814f9fafc53f416",
+        "bytes": 6111,
+        "etag": "5981ecc1bb3a6fc094232e6eb45235ef",
+        "versionId": "C6KQJ2iekewBPiLSCK1zO72N2c5YeUGe",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/BankDepositReconciliation-Dz5aIiuX.js",
+        "sha256": "1c6800e9812fb6218d4de9a6055df9f56a00fd20f388187bebced1fc17c29acf",
+        "bytes": 10398,
+        "etag": "26ddc3a7eb6b0154872f4d264a4031bb",
+        "versionId": "8EcABLwWx58d9ssWwRVXEG.YgPlZG_Tc",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/LossPreventionPanel-Eqb4VUE0.js",
+        "sha256": "4aeeb751c8e108eb3076575f444ed848bd245796da2d7ce3cd9b5c3ca97cf586",
+        "bytes": 5793,
+        "etag": "8709d53bcb6f9b042ab267c4f66d050e",
+        "versionId": "1hZvcYcel_BIc7fHhOfYGhwB8vcq_WT7",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/CheckMessagesPanel-24mrRPGs.js",
+        "sha256": "1f4e772a4bd9c605f01e24940cc847e27372686034d8598dbc4681051755c763",
+        "bytes": 8027,
+        "etag": "28a415cca7db75b3a45b9019f788d0cf",
+        "versionId": "_zt6Myp90kVYCCmWeCz0wDDkdxVjGH8y",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/workflow-CggtWL6r.js",
+        "sha256": "7fc23dfaf1a1ec7d1ad04bb60ed3a9f39b269fbbf9abf8f1af00b341619208f2",
+        "bytes": 639,
+        "etag": "960a919268f40240a7bafed6a1f0eb51",
+        "versionId": "6hUP3Bjfov_Q_MjEfuvTv__MuZ4tULAe",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/tag-VnAsOi_D.js",
+        "sha256": "5327ab82622de2df211840f6e4fbb006dfd2bd500667d1a4b021195e8ed72fae",
+        "bytes": 495,
+        "etag": "87a721377ca0c2e531ef1da227a21471",
+        "versionId": "bTvJNFTISR9V8dcM0veRC9duVPyyF8Zj",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/WalletOps-CDuIsAAB.js",
+        "sha256": "dd43d1f8898716f6f5d11f86e510e8478cccacdee02d8fbb1d7880d51c665bf1",
+        "bytes": 56298,
+        "etag": "ccd198d194b87c2887f50fa875dfec33",
+        "versionId": "62HsFPrlLF.GMF.I7PvueyTXERUOabS0",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/CheckCenterMarketing-B5c-K3p7.js",
+        "sha256": "4b551d3c621fd04ec9d24133c3ccfe1ae6d582230b3b1a427be460f38d7ac200",
+        "bytes": 37182,
+        "etag": "3f7ac6dc39573cccc3692425bf73467b",
+        "versionId": "ob3vdKHqX7g3m_F.VXKbg7mFCcPguqg0",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/homeowner-ops-logo-DIsKSNbs.png",
+        "sha256": "4af4da2426cfb87efe8da3d84cc4c73199f647e86ea397db9e02d3b5fb83ad37",
+        "bytes": 536346,
+        "etag": "08ec62ab4c8a39fd382ac2e54df531d4",
+        "versionId": "9p.60yWRiocqiFY4iZtmg_K8XkugQGUY",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/FieldPlacementEditor-MLvdGzP5.js",
+        "sha256": "0c8d01c160b2246a0192e0941d1b1c43bf172e67a6a3478b164645da24e01d9c",
+        "bytes": 887308,
+        "etag": "456bace805ed13285ac81fb7cf23cfe2",
+        "versionId": "Z3kTSPuel1NiYmi4Vd0tI9LEv7mF.14U",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/FieldPlacementEditor-C7U9D9nZ.css",
+        "sha256": "16732afcb2023c17b73c3562cf4f5054d89d58841b86abf88cae8c26693a99e6",
+        "bytes": 9294,
+        "etag": "26be8126dd36ab7a84d374673b4eaa19",
+        "versionId": "K2cQFqe59A.X738tv5Hpg4KswGT0YkhG",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/heic2any-ZGCDCnIP.js",
+        "sha256": "1cc806d27550f707f7e3712ce9406c7199bdb81e49197ed129a97fce28e03934",
+        "bytes": 1352839,
+        "etag": "46b94ded99b78416f27ae41a0dd45649",
+        "versionId": "ckXifL96AsTiHuJ3pBnc3jlm3AbRJ7DK",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/checksops-logo-dark-CYQASaW6.png",
+        "sha256": "f68ffeb29c6972033efdefdd92f22e4f7945f6037820562b5a1138a0ec398823",
+        "bytes": 534399,
+        "etag": "6eba2c5f168cc7259c9d4c30b2d762d0",
+        "versionId": "XCIFb53rtnmYHcIHA7AVSo21hXXRpOH0",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/mortgage-ops-logo-wBDgDqEM.png",
+        "sha256": "0d7d2f6f847e6cd9aeb4f3e57d605e802e619d22912aa4e9602149e01b002799",
+        "bytes": 513812,
+        "etag": "f362b0867c00ea504d79daae16b44be3",
+        "versionId": "HPeFSNsPDxxmx_7wge2vbH4FaJ8kPOc8",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/jspdf.es.min-D5HnTLeH.js",
+        "sha256": "822fe0eb89966fa1345bf8f0e252aabb36a9419f572e4a01731ae9e65a958f48",
+        "bytes": 415935,
+        "etag": "cc39c4b3eacdf56eca817bb4b802de13",
+        "versionId": "agGcdRRZYj9ZvpWCPk9hvUL9TPrFg45.",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/__vite-browser-external-BIHI7g3E.js",
+        "sha256": "82507b0bb9ac4affaeb17c40968d830cbd6d14a2ffa04d8994faf1a78e58e1b5",
+        "bytes": 33,
+        "etag": "6d80cc4e06a6915da6c0b9a50019d37e",
+        "versionId": "_9luM9hVZT0z8rhuMgrQyPuTWGXraQXQ",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/html2canvas.esm-CBrSDip1.js",
+        "sha256": "b4f3add809a6d59f46260e8fd56cab240f3153def977386b230a839e8cb0b281",
+        "bytes": 202301,
+        "etag": "9f7a6f3253ff960324a674ef838012f2",
+        "versionId": "qr.Ljzp__VbWRlSXfiMKxg4fADxRvq_v",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/purify.es-Dqc4LzU4.js",
+        "sha256": "ff8f2912a2a10091484814d315c693255af2ac8e79313e9862cc8ddb0e8690c5",
+        "bytes": 22875,
+        "etag": "cfecdd0fe22915bb96cc2e105c2b1bad",
+        "versionId": "du9cge40yKKSHOJYpjEB_ESZdOD30Z2Y",
+        "missing": false,
+        "htmlFallback": false
+      },
+      {
+        "key": "assets/index.es-ZOiJwSp7.js",
+        "sha256": "b3879cf10cea056baef59c6bbc540b6bfc5c2b95f9fbeb6e5ad8fd033f3b4390",
+        "bytes": 150884,
+        "etag": "3a0ad5cbe3b8c64290c096f1e849089e",
+        "versionId": "8oqOmV0MrJFalZd2mL.02X4ALFsCSSMi",
+        "missing": false,
+        "htmlFallback": false
+      }
+    ]
+  },
+  "provenance_not_deployment_baselines": {
+    "note": "Historical hashes below are provenance only. They MUST NOT be used as instructions to roll production backward. Future deploys start from current live.",
+    "obsolete_lambda_CodeSha256": [
+      "DMWpDQ... (obsolete pre-billing production pin)",
+      "KdqRSVd7D7rpBNEsmZPlQ08J+H+E7rOjfaidTvgyNXE= (immediate pre-R3 live; billing-only vs DMWpDQ)"
+    ],
+    "obsolete_r3_candidate_zips": [
+      "bae57b... / CodeSha256 uuV7Pco... (must not be deployed)"
+    ],
+    "accepted_r1_spa_at_2026-09-25T17:19:12Z": {
+      "index": "ffa6c8354fc6aae86e5f684bdd1025012a2fc59a407424b87fd22d12fac70baf",
+      "index_version_id": "MarEkrFtsgcP56EkceG6j0IOOcK_FL1t",
+      "main": "assets/index-DcU_cK7_.js",
+      "main_sha256": "e5ae61237cc587876eb60581452c618fe79272d9daddab4211e7ee5f9d58c89b",
+      "claim_check": "assets/CheckCommandCenter-CYCiVxBh.js",
+      "claim_check_sha256": "ccdd2a187a1246f75587c27dd65b6a94b3d1cad024ea35922b52997c6f737b59",
+      "artifact": "/opt/cursor/artifacts/r1-2d-prod-candidate",
+      "tree_sha256": "15c9ab29a958a63f2ea30355984c3528089622a632e0db3e89aa3719a9568b46",
+      "still_in_s3_as_historical_objects": true,
+      "no_longer_live_index": true,
+      "superseded_at": "2026-09-25T18:38:14Z"
+    }
+  },
+  "configuration_rewrite_audit": {
+    "available": false,
+    "cloudtrail_lookup_events": "AccessDeniedException for ChecksOpsCursorCloudStaging",
+    "configservice": "AccessDeniedException",
+    "finding": "Unresolved audit gap. Do not guess caller/principal. Current Lambda LastModified/RevisionId match the accepted R3 UpdateFunctionCode at 2026-09-25T18:35:08Z and the configuration fingerprint is unchanged versus that deploy. Earlier LastModified moves with unchanged CodeSha256 remain unattributed.",
+    "guard_protection": "Future overlays fail closed on CodeSha256 or RevisionId TOCTOU drift and never call UpdateFunctionConfiguration unless a separately authorized operation requests it."
+  },
+  "out_of_scope_unresolved_decisions": [
+    "production password-auth intent",
+    "AWS_ENDORSEMENT_AUTO_ADVANCE intended production value",
+    "Mortgage hire lock that never reached accepted production",
+    "R4 logo/branding improvements"
+  ],
+  "safeguards": {
+    "lambda": "scripts/production-lambda-overlay-guard.mjs",
+    "spa": "scripts/production-spa-promote-guard.mjs",
+    "s3_sync_delete_prohibited": true,
+    "index_last": true,
+    "start_from_current_live": true
+  }
+}
