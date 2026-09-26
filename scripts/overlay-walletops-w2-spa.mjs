@@ -63,7 +63,7 @@ const main = async () => {
       VITE_COGNITO_USER_POOL_CLIENT_ID: STAGING_CLIENT,
     };
   const mode = production ? 'production' : 'aws';
-  const built = spawnSync('npx', ['vite', 'build', '--mode', mode, '--outDir', outDir], {
+  const built = spawnSync('npx', ['vite', 'build', '--mode', mode, '--outDir', outDir, '--emptyOutDir'], {
     cwd: ROOT,
     env: { ...process.env, ...env },
     encoding: 'utf8',

@@ -65,6 +65,7 @@ const mustReplace = (text, find, insert, label) => {
   if (!text.includes(find)) return { text, applied: false, reason: 'anchor_missing', label };
   return { text: text.replace(find, insert), applied: true, label };
 };
+const slimSteps = (steps) => steps.map(({ text, ...rest }) => rest);
 
 const patchDb = (text) => {
   const steps = [];
@@ -224,7 +225,7 @@ const main = async () => {
     throw new Error(`db_patch_failed:${JSON.stringify(dbPatched.steps)}`);
   }
   fs.writeFileSync(dbPath, dbPatched.text);
-  overlayManifest.push({ file: 'providers/parity/db.mjs', action: 'patch', steps: dbPatched.steps, afterHash: sha256(dbPath) });
+  overlayManifest.push({ file: 'providers/parity/db.mjs', action: 'patch', steps: slimSteps(dbPatched.steps), afterHash: sha256(dbPath) });
 
   const onboardPath = path.join(afterPkg, 'providers/parity/moov-onboard.mjs');
   const onboardPatched = patchOnboard(fs.readFileSync(onboardPath, 'utf8'));
@@ -232,7 +233,7 @@ const main = async () => {
     throw new Error(`onboard_patch_failed:${JSON.stringify(onboardPatched.steps)}`);
   }
   fs.writeFileSync(onboardPath, onboardPatched.text);
-  overlayManifest.push({ file: 'providers/parity/moov-onboard.mjs', action: 'patch', steps: onboardPatched.steps, afterHash: sha256(onboardPath) });
+  overlayManifest.push({ file: 'providers/parity/moov-onboard.mjs', action: 'patch', steps: slimSteps(onboardPatched.steps), afterHash: sha256(onboardPath) });
 
   const moneyPath = path.join(afterPkg, 'providers/parity/moov-money.mjs');
   const moneyPatched = patchMoney(fs.readFileSync(moneyPath, 'utf8'));
@@ -240,7 +241,7 @@ const main = async () => {
     throw new Error(`money_patch_failed:${JSON.stringify(moneyPatched.steps)}`);
   }
   fs.writeFileSync(moneyPath, moneyPatched.text);
-  overlayManifest.push({ file: 'providers/parity/moov-money.mjs', action: 'patch', steps: moneyPatched.steps, afterHash: sha256(moneyPath) });
+  overlayManifest.push({ file: 'providers/parity/moov-money.mjs', action: 'patch', steps: slimSteps(moneyPatched.steps), afterHash: sha256(moneyPath) });
 
   const beforeFiles = new Map(walk(beforePkg).map((file) => [path.relative(beforePkg, file), sha256(file)]));
   const afterFiles = new Map(walk(afterPkg).map((file) => [path.relative(afterPkg, file), sha256(file)]));
