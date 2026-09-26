@@ -7,6 +7,17 @@
     "aws/functions/api/providers/production/"
   ],
   "ownership_groups": {
+    "delete-check-contract": {
+      "owners": ["@michaelcarletta-cmd"],
+      "description": "Accepted production Delete Check contract (workflow delete handler + bridge). Any change must preserve invariants and update locks.",
+      "paths": [
+        "aws/functions/api/workflow.mjs",
+        "src/integrations/aws/deleteCheckBridge.ts",
+        "aws/tests/frontend-delete-check-bridge.test.mjs",
+        "ops/release-locks/contracts/delete-check-contract.json",
+        "ops/release-locks/proof/delete-check-production-acceptance-2026-09-26.md"
+      ]
+    },
     "identity-cognito": {
       "owners": [
         "@michaelcarletta-cmd"
@@ -224,6 +235,7 @@
         ".github/CODEOWNERS",
         "aws/template.yaml",
         "aws/samconfig.toml",
+        "aws/cutover/scripts/",
         "aws/cutover/production/",
         "aws/production/LIVE_RESOURCES.md"
       ]
