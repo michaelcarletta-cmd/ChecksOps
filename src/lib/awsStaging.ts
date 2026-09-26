@@ -37,6 +37,26 @@ export function isAwsStaging(): boolean {
   return String(import.meta.env.VITE_AUTH_PROVIDER || "").toLowerCase() === "cognito";
 }
 
+const PRODUCTION_CHECKSOPS_HOSTS = new Set(["checksops.com", "www.checksops.com"]);
+
+/** Presentation-only. Does not invert isAwsStaging() or change API/Auth. */
+export function isProductionChecksOpsHostname(hostname?: string): boolean {
+  const host = String(hostname ?? "").toLowerCase();
+  return PRODUCTION_CHECKSOPS_HOSTS.has(host);
+}
+
+/**
+ * Amber banner / login "AWS staging" chrome.
+ * Cognito production on checksops.com / www.checksops.com stays AWS-mode
+ * but must not render the staging presentation.
+ */
+export function shouldShowAwsStagingBanner(hostname?: string): boolean {
+  if (!isAwsStaging()) return false;
+  const host = hostname
+    ?? (typeof window !== "undefined" ? window.location.hostname : "");
+  return !isProductionChecksOpsHostname(host);
+}
+
 /**
  * AWS API base for Cognito builds.
  * Production Step 2: VITE_CHECKSOPS_API_URL=/prep (or same-origin) resolves

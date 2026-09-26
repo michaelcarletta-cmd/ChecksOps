@@ -12,7 +12,7 @@ import { Loader2, ArrowLeft, KeyRound, Mail, CheckCircle2 } from "lucide-react";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
 import { useAuth } from "@/hooks/useAuth";
 import { isPlatformOwner } from "@/lib/masterMerchant";
-import { isAwsStaging, isAwsStagingHttpsPasskeysEnabled } from "@/lib/awsStaging";
+import { isAwsStaging, isAwsStagingHttpsPasskeysEnabled, shouldShowAwsStagingBanner } from "@/lib/awsStaging";
 import { signInWithAwsPasskey } from "@/lib/awsPasskeys";
 import { passkeysSupported, sendMagicLink, signInWithPasskey } from "@/lib/passkeys";
 import { readPendingAwsEmailOtp, startAwsEmailOtp, verifyAwsEmailOtp } from "@/lib/awsPasswordless";
@@ -23,6 +23,7 @@ export default function CheckOpsLogin() {
   const { toast } = useToast();
   const { user, loading: authLoading } = useAuth();
   const awsStaging = isAwsStaging();
+  const awsStagingChrome = shouldShowAwsStagingBanner();
   const awsHttpsPasskeys = isAwsStagingHttpsPasskeysEnabled();
   const pendingAws = awsStaging ? readPendingAwsEmailOtp() : null;
   const [email, setEmail] = useState(pendingAws?.email || "");
@@ -131,7 +132,7 @@ export default function CheckOpsLogin() {
         <CardHeader className="text-center space-y-3 pb-2">
           <div className="mx-auto"><CheckOpsLogo className="h-16 md:h-20" /></div>
           <CardTitle className="text-xl md:text-2xl">Sign in to ChecksOps</CardTitle>
-          <p className="text-xs text-muted-foreground">Access your organization's check workflows.{awsStaging ? " AWS staging." : ""}</p>
+          <p className="text-xs text-muted-foreground">Access your organization's check workflows.{awsStagingChrome ? " AWS staging." : ""}</p>
         </CardHeader>
         <CardContent className="pt-2 space-y-4">
           {linkSent ? (

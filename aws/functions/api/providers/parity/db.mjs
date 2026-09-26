@@ -54,7 +54,9 @@ export const canSendPayments = async (client, userId, tenantId, memberships) => 
   return ['owner', 'admin', 'manager'].includes(membershipRole(memberships, tenantId));
 };
 
-export const loadConnectedMethod = async (client, { tenantId, providerAccountId, externalRecipientId = null }) => {
+export const loadConnectedMethod = async (client, {
+  tenantId, providerAccountId, externalRecipientId = null, environment = 'sandbox',
+}) => {
   if (externalRecipientId) {
     return (await client.query(
       `SELECT * FROM public.payment_provider_methods
@@ -65,11 +67,11 @@ export const loadConnectedMethod = async (client, { tenantId, providerAccountId,
   }
   return (await client.query(
     `SELECT * FROM public.payment_provider_methods
-     WHERE tenant_id = $1::uuid AND provider = 'moov' AND environment = 'sandbox'
+     WHERE tenant_id = $1::uuid AND provider = 'moov' AND environment = $3
        AND provider_account_id = $2 AND connection_status = 'connected'
      ORDER BY is_default DESC NULLS LAST, created_at DESC NULLS LAST
      LIMIT 1`,
-    [tenantId, providerAccountId],
+    [tenantId, providerAccountId, environment],
   )).rows[0] || null;
 };
 
