@@ -69,18 +69,33 @@ narrow `/storage/sign` grant for that reconstructed sibling, existing
 
 ## Current live SPA pin
 
+Updated after the accepted R4A tenant-branding production promotion. The
+previous post-image SPA (`342c2e15…` / `index-CK2xJ5OO.js`) is provenance only.
+
 | Field | Value |
 | --- | --- |
-| Index SHA256 | `342c2e1588f712ebf73f563a881c982941b955619c51c6a79a7834aace21538a` |
-| Index VersionId | `1Lz3xzicHX5y2PT2S1lteJDbx_c7YRd0` |
-| Index LastModified | `2026-09-26T14:14:10Z` |
-| Entry | `assets/index-CK2xJ5OO.js` |
-| Entry SHA256 | `bb4eddf90b7443abd9d9c5a3b6f4fb5559704330337e112afb61ecd3c62fcf36` |
-| Claim Check | `assets/CheckCommandCenter-D2WjirVB.js` |
-| Claim Check SHA256 | `5421eb9f818e3602920de9f39714b6a5f53fa8e7272c2fd6470b2f95d9e84483` |
-| Recursive objects | 102 |
+| Index SHA256 | `6b211037ae70b510a9b5cfe316f006dbbc308ee3c94687ccea943b24cfd09f2e` |
+| Index VersionId | `advEv5N0JfqM41odUraOM7kCH6Z2snP3` |
+| Index LastModified | `2026-09-26T19:26:02Z` |
+| Entry | `assets/index-CS_JpvZg.js` |
+| Claim Check | `assets/CheckCommandCenter-DHNFge6N.js` |
+| Recursive objects | 103 |
 | Missing | 0 |
 | HTML fallbacks | 0 |
+| Overlay | R4A tenant branding |
+
+## Accepted R4A branding contract
+
+Protected SPA behavior. A later overlay must not silently restore:
+
+- page-relative tenant logo URLs
+- `CompanyBrandingSettings` on the tenant branding tab
+- Sending-domain / `EmailSenderSettings` UI
+- Supabase logo resolution
+
+Relative AWS logo paths resolve through `/prep/storage/public?bucket=tenant-logos`.
+Valid absolute URLs stay usable. Missing logos use the existing fallback.
+R4B (stored `logo_url` migration / storage write-auth) is not implemented.
 
 ## Production data-plane contract
 

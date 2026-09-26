@@ -7,7 +7,13 @@
   "scope": "R4A SPA-only tenant branding UI overlay. No Lambda, SQL, Cognito, IAM, SES, Moov, billing, Claim Check, or storage write-auth changes.",
   "r4b_implemented": false,
   "lambda_deployed": false,
-  "production_promoted": false,
+  "production_promoted": true,
+  "production_spa": {
+    "indexSha256": "6b211037ae70b510a9b5cfe316f006dbbc308ee3c94687ccea943b24cfd09f2e",
+    "indexVersionId": "advEv5N0JfqM41odUraOM7kCH6Z2snP3",
+    "entry": "/assets/index-CS_JpvZg.js",
+    "claimCheck": "/assets/CheckCommandCenter-DHNFge6N.js"
+  },
   "historical_reference": [
     "cursor/freedom-tenant-branding-fix-491d (rewriteTenantLogoUrl concept; not merged)",
     "GitHub PRs #369 #349 #464 #462 were not readable (404) and were not merged"

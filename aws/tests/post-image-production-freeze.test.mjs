@@ -23,16 +23,21 @@ test('freeze pins the accepted live Lambda, not R3 or pre-compat hashes', () => 
 });
 
 test('freeze pins the accepted live SPA graph', () => {
-  assert.equal(freeze.spa.current_live.index_sha256, '342c2e1588f712ebf73f563a881c982941b955619c51c6a79a7834aace21538a');
-  assert.equal(freeze.spa.current_live.index_version_id, '1Lz3xzicHX5y2PT2S1lteJDbx_c7YRd0');
-  assert.equal(freeze.spa.current_live.main, 'assets/index-CK2xJ5OO.js');
-  assert.equal(freeze.spa.current_live.claim_check, 'assets/CheckCommandCenter-D2WjirVB.js');
+  assert.equal(freeze.spa.current_live.index_sha256, '6b211037ae70b510a9b5cfe316f006dbbc308ee3c94687ccea943b24cfd09f2e');
+  assert.equal(freeze.spa.current_live.index_version_id, 'advEv5N0JfqM41odUraOM7kCH6Z2snP3');
+  assert.equal(freeze.spa.current_live.main, 'assets/index-CS_JpvZg.js');
+  assert.equal(freeze.spa.current_live.claim_check, 'assets/CheckCommandCenter-DHNFge6N.js');
   assert.equal(freeze.spa.current_live.missing_count, 0);
   assert.equal(freeze.spa.current_live.html_fallback_count, 0);
-  assert.equal(freeze.spa.objects.length, 102);
+  assert.equal(freeze.spa.objects.length, 103);
   assert.equal(freeze.spa.current_live.required_surfaces.claim_check.present, true);
   assert.equal(freeze.spa.current_live.required_surfaces.mortgage_desk.present, true);
   assert.equal(freeze.spa.current_live.required_surfaces.admin_tenant_moov_billing.present, true);
+  assert.equal(freeze.spa.current_live.overlay, 'r4a-tenant-branding');
+  assert.equal(
+    freeze.provenance_not_deployment_baselines.pre_r4a_spa.index_sha256,
+    '342c2e1588f712ebf73f563a881c982941b955619c51c6a79a7834aace21538a',
+  );
 });
 
 test('accepted image compatibility files are frozen at current hashes', () => {
@@ -57,7 +62,11 @@ test('production data-plane contract is Cognito + same-origin /prep', () => {
   assert.equal(built.ok, true, built.errors.join('\n'));
 });
 
-test('freeze did not authorize a production mutation', () => {
-  assert.equal(freeze.production_application_state_changed_by_this_workstream, false);
-  assert.match(JSON.stringify(freeze.out_of_scope), /R4 branding/);
+test('R4A branding is the accepted SPA overlay; R4B remains out of scope', () => {
+  assert.equal(freeze.accepted_r4a_branding.status, 'PRODUCTION_ACCEPTED');
+  assert.equal(freeze.accepted_r4a_branding.r4b_implemented, false);
+  assert.match(JSON.stringify(freeze.out_of_scope), /R4B/);
+  assert.equal(freeze.lambda.CodeSha256, 'HzqcBPqWAtyIM61iEKHOdpfiO2lEPi8vWilo9xIcb9w=');
+  assert.equal(freeze.current_observed_lambda.CodeSha256, 'Hhij5GWW/GDBcRE+4wYomml96R+6IWwFJPczbz5YLZM=');
+  assert.notEqual(freeze.current_observed_lambda.CodeSha256, freeze.lambda.CodeSha256);
 });
