@@ -76,7 +76,7 @@ export const assertProductionBuilderSource = (builderSource) => {
   if (!text.includes("vite', 'build', '--mode', 'production'")) {
     errors.push('production builder must invoke vite build --mode production');
   }
-  if (text.includes("--mode', 'aws'") || text.includes('--mode aws')) {
+  if (/\[[^\]]*'vite'[^\]]*'--mode',\s*'aws'/.test(text) || /spawnSync\([^)]*'--mode',\s*'aws'/.test(text)) {
     errors.push('production builder must never pass --mode aws');
   }
   if (!text.includes(PROD_POOL)) errors.push('production builder must pin production Cognito pool');

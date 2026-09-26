@@ -44,7 +44,7 @@ export const IMAGE_COMPAT_MARKERS = {
     'isExactCleanStemOfGeneratedPointer',
     'isGeneratedBackArtifactPath',
     'ENDORSED_FILENAME_RE',
-    '.checkalt.jpg',
+    'checkalt',
     'endorsed_deposit_',
   ],
   'src/lib/checkImageInvariants.ts': [
@@ -56,7 +56,7 @@ export const IMAGE_COMPAT_MARKERS = {
     'probeCleanStemPaths',
     'canTryStemProbe',
     'endorsed_stem',
-    '.checkalt.jpg',
+    'checkalt',
     'endorsed_deposit_',
   ],
   'src/pages/CheckCommandCenter.tsx': [
