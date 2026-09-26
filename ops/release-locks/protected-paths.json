@@ -88,6 +88,19 @@
         "aws/production/SES_FROM.md"
       ]
     },
+    "signature-sender": {
+      "owners": ["@michaelcarletta-cmd"],
+      "description": "Accepted signature-request From contract. Protects esign.mjs only; shared resolveEmailBranding remains independent. Overlay of this file requires an explicit allowlist.",
+      "paths": [
+        "aws/functions/api/esign.mjs",
+        "aws/audit/signature-sender-production-freeze.json",
+        "scripts/lib/signature-sender-freeze.mjs",
+        "aws/tests/signature-from-name.test.mjs",
+        "aws/tests/signature-sender-production-freeze.test.mjs",
+        "aws/tests/fixtures/historical-pre-fix-esign-37c5c742.mjs",
+        "ops/release-locks/tests/signature-sender-invariants.test.mjs"
+      ]
+    },
     "partner-sharing": {
       "owners": ["@michaelcarletta-cmd"],
       "description": "Partner share/revoke lifecycle and C1C visibility contract. SQL 31/32/33/34 are APPLIED IN PRODUCTION; do not reapply. Ownership and visibility are separate.",

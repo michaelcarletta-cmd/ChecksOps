@@ -1,8 +1,302 @@
 {
   "version": 1,
   "fail_closed": true,
-  "notes": "Reviewed exceptions for PR #359 Manager / Bank Deposits / Partner name repair. Paths are exact protected files. SQL 31-34 and Partner Codes are unchanged.",
+  "notes": "Includes reviewed exceptions so PR #504 can protect the accepted signature-sender contract without taking over unrelated open PRs.",
   "allow": [
+    {
+      "other_pr": 448,
+      "path": "aws/functions/api/esign.mjs",
+      "reason": "PR #504 newly protects the accepted signature-sender esign.mjs contract. This other PR already lists that file for unrelated work and does not own this freeze.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 447,
+      "path": "aws/functions/api/esign.mjs",
+      "reason": "PR #504 newly protects the accepted signature-sender esign.mjs contract. This other PR already lists that file for unrelated work and does not own this freeze.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 446,
+      "path": "aws/functions/api/esign.mjs",
+      "reason": "PR #504 newly protects the accepted signature-sender esign.mjs contract. This other PR already lists that file for unrelated work and does not own this freeze.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 445,
+      "path": "aws/functions/api/esign.mjs",
+      "reason": "PR #504 newly protects the accepted signature-sender esign.mjs contract. This other PR already lists that file for unrelated work and does not own this freeze.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 444,
+      "path": "aws/functions/api/esign.mjs",
+      "reason": "PR #504 newly protects the accepted signature-sender esign.mjs contract. This other PR already lists that file for unrelated work and does not own this freeze.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 443,
+      "path": "aws/functions/api/esign.mjs",
+      "reason": "PR #504 newly protects the accepted signature-sender esign.mjs contract. This other PR already lists that file for unrelated work and does not own this freeze.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 442,
+      "path": "aws/functions/api/esign.mjs",
+      "reason": "PR #504 newly protects the accepted signature-sender esign.mjs contract. This other PR already lists that file for unrelated work and does not own this freeze.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 441,
+      "path": "aws/functions/api/esign.mjs",
+      "reason": "PR #504 newly protects the accepted signature-sender esign.mjs contract. This other PR already lists that file for unrelated work and does not own this freeze.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 288,
+      "path": "aws/functions/api/esign.mjs",
+      "reason": "PR #504 newly protects the accepted signature-sender esign.mjs contract. This other PR already lists that file for unrelated work and does not own this freeze.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 282,
+      "path": "aws/functions/api/esign.mjs",
+      "reason": "PR #504 newly protects the accepted signature-sender esign.mjs contract. This other PR already lists that file for unrelated work and does not own this freeze.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 233,
+      "path": "aws/functions/api/esign.mjs",
+      "reason": "PR #504 newly protects the accepted signature-sender esign.mjs contract. This other PR already lists that file for unrelated work and does not own this freeze.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 448,
+      "path": ".github/CODEOWNERS",
+      "reason": "PR #504 updates CODEOWNERS for the signature-sender freeze. PR #448 already edits CODEOWNERS for unrelated production work.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 501,
+      "path": "ops/release-locks/",
+      "reason": "PR #504 adds the signature-sender freeze under ops/release-locks/. This other PR already edits that control plane for unrelated work and does not own the accepted esign.mjs sender contract.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 463,
+      "path": "ops/release-locks/",
+      "reason": "PR #504 adds the signature-sender freeze under ops/release-locks/. This other PR already edits that control plane for unrelated work and does not own the accepted esign.mjs sender contract.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 461,
+      "path": "ops/release-locks/",
+      "reason": "PR #504 adds the signature-sender freeze under ops/release-locks/. This other PR already edits that control plane for unrelated work and does not own the accepted esign.mjs sender contract.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 460,
+      "path": "ops/release-locks/",
+      "reason": "PR #504 adds the signature-sender freeze under ops/release-locks/. This other PR already edits that control plane for unrelated work and does not own the accepted esign.mjs sender contract.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 451,
+      "path": "ops/release-locks/",
+      "reason": "PR #504 adds the signature-sender freeze under ops/release-locks/. This other PR already edits that control plane for unrelated work and does not own the accepted esign.mjs sender contract.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 449,
+      "path": "ops/release-locks/",
+      "reason": "PR #504 adds the signature-sender freeze under ops/release-locks/. This other PR already edits that control plane for unrelated work and does not own the accepted esign.mjs sender contract.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 448,
+      "path": "ops/release-locks/",
+      "reason": "PR #504 adds the signature-sender freeze under ops/release-locks/. This other PR already edits that control plane for unrelated work and does not own the accepted esign.mjs sender contract.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 447,
+      "path": "ops/release-locks/",
+      "reason": "PR #504 adds the signature-sender freeze under ops/release-locks/. This other PR already edits that control plane for unrelated work and does not own the accepted esign.mjs sender contract.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 446,
+      "path": "ops/release-locks/",
+      "reason": "PR #504 adds the signature-sender freeze under ops/release-locks/. This other PR already edits that control plane for unrelated work and does not own the accepted esign.mjs sender contract.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 445,
+      "path": "ops/release-locks/",
+      "reason": "PR #504 adds the signature-sender freeze under ops/release-locks/. This other PR already edits that control plane for unrelated work and does not own the accepted esign.mjs sender contract.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 444,
+      "path": "ops/release-locks/",
+      "reason": "PR #504 adds the signature-sender freeze under ops/release-locks/. This other PR already edits that control plane for unrelated work and does not own the accepted esign.mjs sender contract.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 443,
+      "path": "ops/release-locks/",
+      "reason": "PR #504 adds the signature-sender freeze under ops/release-locks/. This other PR already edits that control plane for unrelated work and does not own the accepted esign.mjs sender contract.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 442,
+      "path": "ops/release-locks/",
+      "reason": "PR #504 adds the signature-sender freeze under ops/release-locks/. This other PR already edits that control plane for unrelated work and does not own the accepted esign.mjs sender contract.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 441,
+      "path": "ops/release-locks/",
+      "reason": "PR #504 adds the signature-sender freeze under ops/release-locks/. This other PR already edits that control plane for unrelated work and does not own the accepted esign.mjs sender contract.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 439,
+      "path": "ops/release-locks/",
+      "reason": "PR #504 adds the signature-sender freeze under ops/release-locks/. This other PR already edits that control plane for unrelated work and does not own the accepted esign.mjs sender contract.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 501,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #504 adds the signature-sender freeze under ops/release-locks/. This other PR already edits that control plane for unrelated work and does not own the accepted esign.mjs sender contract.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 463,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #504 adds the signature-sender freeze under ops/release-locks/. This other PR already edits that control plane for unrelated work and does not own the accepted esign.mjs sender contract.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 461,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #504 adds the signature-sender freeze under ops/release-locks/. This other PR already edits that control plane for unrelated work and does not own the accepted esign.mjs sender contract.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 460,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #504 adds the signature-sender freeze under ops/release-locks/. This other PR already edits that control plane for unrelated work and does not own the accepted esign.mjs sender contract.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 451,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #504 adds the signature-sender freeze under ops/release-locks/. This other PR already edits that control plane for unrelated work and does not own the accepted esign.mjs sender contract.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 449,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #504 adds the signature-sender freeze under ops/release-locks/. This other PR already edits that control plane for unrelated work and does not own the accepted esign.mjs sender contract.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 448,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #504 adds the signature-sender freeze under ops/release-locks/. This other PR already edits that control plane for unrelated work and does not own the accepted esign.mjs sender contract.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 447,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #504 adds the signature-sender freeze under ops/release-locks/. This other PR already edits that control plane for unrelated work and does not own the accepted esign.mjs sender contract.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 446,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #504 adds the signature-sender freeze under ops/release-locks/. This other PR already edits that control plane for unrelated work and does not own the accepted esign.mjs sender contract.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 445,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #504 adds the signature-sender freeze under ops/release-locks/. This other PR already edits that control plane for unrelated work and does not own the accepted esign.mjs sender contract.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 444,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #504 adds the signature-sender freeze under ops/release-locks/. This other PR already edits that control plane for unrelated work and does not own the accepted esign.mjs sender contract.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 443,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #504 adds the signature-sender freeze under ops/release-locks/. This other PR already edits that control plane for unrelated work and does not own the accepted esign.mjs sender contract.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 442,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #504 adds the signature-sender freeze under ops/release-locks/. This other PR already edits that control plane for unrelated work and does not own the accepted esign.mjs sender contract.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 441,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #504 adds the signature-sender freeze under ops/release-locks/. This other PR already edits that control plane for unrelated work and does not own the accepted esign.mjs sender contract.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 439,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #504 adds the signature-sender freeze under ops/release-locks/. This other PR already edits that control plane for unrelated work and does not own the accepted esign.mjs sender contract.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
     {
       "other_pr": 369,
       "path": "ops/release-locks/locked-components.json",

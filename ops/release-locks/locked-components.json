@@ -287,6 +287,55 @@
       "open_pr_overlap": ["#233", "#231", "#255"],
       "notes": "Source preserved; template flag false; SQL NOT_APPLIED."
     },
+    "signature-sender": {
+      "id": "signature-sender",
+      "ownership_group": "signature-sender",
+      "classification": "SOURCE_LOCKED_NOT_ACTIVE",
+      "production_active": false,
+      "environment": "production",
+      "source": {
+        "git_sha": "b697b3a2e548d46d7abc95c769ee9499108a739f",
+        "tree_hash": "8e642781feb000acd76820ad9316ec5cbd8b5f9786b44484e71279506c08283c",
+        "merged": false,
+        "merged_pr": 504
+      },
+      "required_sql": [],
+      "artifact": {
+        "type": "lambda",
+        "name": "esign.mjs",
+        "version": null,
+        "hash": "b8f707dfc724a54fb5d973a11cb26380f3381baea26324c08aa30dc93cb5656e",
+        "cloudfront_distribution": null,
+        "lambda_name": "checksops-production-prep-api",
+        "lambda_version": null,
+        "lambda_alias": null
+      },
+      "production_validation": {
+        "completed": false,
+        "evidence_refs": [
+          "aws/audit/signature-sender-production-freeze.json",
+          "aws/tests/signature-from-name.test.mjs",
+          "aws/tests/signature-sender-production-freeze.test.mjs"
+        ],
+        "recorded_at": "2026-09-26T22:16:44.000Z"
+      },
+      "deployment_fingerprint": {
+        "recorded": true,
+        "lambda_name": "checksops-production-prep-api",
+        "notes": "Fresh read-only provenance after accepted signature-sender promotion: CodeSha256 9OLR9DMhuDrAUp5/TmT6+8bfQC2I6USFk+zwFkluJLQ= RevisionId a6a23fc9-a7cb-4e7c-b1c8-db9cb80ea150 package SHA256 f4e2d1f43321b83ac0529e7f4e64fafbc6df402d88e9448593ecf016496e24b4. These values are current provenance, not a permanent whole-Lambda rollback pin. Protected file is esign.mjs at SHA256 b8f707dfc724a54fb5d973a11cb26380f3381baea26324c08aa30dc93cb5656e."
+      },
+      "rollback": {
+        "git_sha": "b697b3a2e548d46d7abc95c769ee9499108a739f",
+        "artifact": null,
+        "notes": "Do not restore historical Lambda packages or pre-fix esign.mjs SHA256 37c5c742f516ce750a402c53214307eee429742e8eed8d4ef9399772516209c5. Future overlays must start from the then-current live production package, explicitly allowlist esign.mjs, preserve the signature sender invariant unless that invariant is itself being superseded, pass the signature-sender suite, use CodeSha256+RevisionId TOCTOU, and prove non-allowlisted files remain byte-identical. Recorded CodeSha256 is not a whole-Lambda rollback pin."
+      },
+      "missing_evidence": [
+        "PRODUCTION_LOCKED promotion is not claimed; no SQL and no whole-Lambda rollback pin",
+        "published Lambda version/alias is not a permanent rollback artifact"
+      ],
+      "open_pr_overlap": ["#504"],
+      "notes": "Accepted production contract: {Request-Owning Tenant Company/Display Name} <support@checksops.com>. Freedom example: Freedom Adjustment <support@checksops.com>. Signature requests must not append via ChecksOps. From address remains support@checksops.com. Request-owning tenant determines display name; request body cannot select another tenant. Reply-To remains independent. resolveEmailBranding() stays shared and may still append via ChecksOps for other mail. Classification is SOURCE_LOCKED_NOT_ACTIVE because PRODUCTION_LOCKED would require applied SQL and a whole-Lambda rollback pin, which this freeze explicitly forbids."
+    },
     "partner-sharing": {
       "id": "partner-sharing",
       "ownership_group": "partner-sharing",
@@ -600,7 +649,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "8a3ead386d99f0e825d54093ebcb8c174a8c758e",
-        "tree_hash": "d7ed7db31c345a0352b0ca7610c1f7d2763c8be2e96527c20a7eae3f840c258a",
+        "tree_hash": "42e81e8dd94c5cd006c5bc186f8ed1f4453e9f6be6263b865f5d3d828dad1bc4",
         "merged": true,
         "merged_pr": 343
       },

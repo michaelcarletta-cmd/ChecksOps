@@ -1,0 +1,80 @@
+{
+  "schema": "checksops.signature-sender-production-freeze.v1",
+  "status": "PRODUCTION_ACCEPTED",
+  "captured_at": "2026-09-26T22:16:44.000Z",
+  "freeze_datetime": "2026-09-26T22:16:44.000Z",
+  "production_application_state_changed_by_this_workstream": false,
+  "authority": "Fresh read-only GetFunction + package download after accepted signature-sender promotion. Git main is not the deployment baseline. Lambda CodeSha256/RevisionId are current provenance, not a permanent whole-Lambda rollback pin. Historical pre-fix esign.mjs is provenance only and MUST NOT be restored automatically.",
+  "lambda": {
+    "function_name": "checksops-production-prep-api",
+    "account": "806168576068",
+    "region": "us-east-1",
+    "CodeSha256": "9OLR9DMhuDrAUp5/TmT6+8bfQC2I6USFk+zwFkluJLQ=",
+    "package_sha256": "f4e2d1f43321b83ac0529e7f4e64fafbc6df402d88e9448593ecf016496e24b4",
+    "RevisionId": "a6a23fc9-a7cb-4e7c-b1c8-db9cb80ea150",
+    "LastModified": "2026-09-26T22:08:02.000+0000",
+    "CodeSize": 11630502,
+    "provenance_only": true,
+    "not_a_whole_lambda_rollback_pin": true,
+    "future_legitimate_overlays_may_change_codesha256": true
+  },
+  "protected_files": {
+    "esign.mjs": "b8f707dfc724a54fb5d973a11cb26380f3381baea26324c08aa30dc93cb5656e"
+  },
+  "protected_file_labels": {
+    "esign.mjs": "signature-request sender contract"
+  },
+  "source_files": {
+    "aws/functions/api/esign.mjs": "b8f707dfc724a54fb5d973a11cb26380f3381baea26324c08aa30dc93cb5656e"
+  },
+  "historical_restoration_forbidden": {
+    "esign.mjs": "37c5c742f516ce750a402c53214307eee429742e8eed8d4ef9399772516209c5",
+    "rule": "Never automatically restore the pre-fix esign.mjs. Historical packages/branches are provenance only."
+  },
+  "accepted_signature_sender": {
+    "status": "PRODUCTION_ACCEPTED",
+    "behavior_still_live": true,
+    "fresh_read_confirmed_at": "2026-09-26T22:16:44.000Z",
+    "contract": {
+      "from_template": "{Request-Owning Tenant Company/Display Name} <support@checksops.com>",
+      "freedom_example": "Freedom Adjustment <support@checksops.com>",
+      "from_address": "support@checksops.com",
+      "display_name_source": "request-owning tenant company/display name",
+      "must_not_append_via_checksops": true,
+      "request_body_cannot_select_another_tenant": true,
+      "reply_to_remains_independent": true,
+      "resolveEmailBranding_remains_shared": true,
+      "resolveEmailBranding_may_still_append_via_checksops": true,
+      "forbidden_from": [
+        "Freedom Adjustment via ChecksOps <support@checksops.com>",
+        "ChecksOps <support@checksops.com>",
+        "Freedom Adjustment <noreply@checksops.com>"
+      ]
+    }
+  },
+  "overlay_rule": {
+    "unauthorized_change": "A future production overlay that does NOT explicitly allowlist esign.mjs must preserve the accepted file byte-for-byte.",
+    "authorized_change": [
+      "start from the then-current live production package",
+      "explicitly allowlist esign.mjs",
+      "preserve the signature sender invariant unless that invariant itself is explicitly being superseded",
+      "pass the signature sender regression suite",
+      "use CodeSha256 + RevisionId TOCTOU protection",
+      "prove all non-allowlisted package files remain byte-identical"
+    ],
+    "do_not_require_historical_lambda_codesha256": true
+  },
+  "spa": {
+    "untouched_by_this_workstream": true,
+    "no_spa_build_or_deploy": true,
+    "accepted_r4a": {
+      "index_sha256": "6b211037ae70b510a9b5cfe316f006dbbc308ee3c94687ccea943b24cfd09f2e",
+      "index_version_id": "advEv5N0JfqM41odUraOM7kCH6Z2snP3"
+    },
+    "fresh_read": {
+      "index_sha256": "6b211037ae70b510a9b5cfe316f006dbbc308ee3c94687ccea943b24cfd09f2e",
+      "index_version_id": "advEv5N0JfqM41odUraOM7kCH6Z2snP3",
+      "index_last_modified": "2026-09-26T19:26:02+00:00"
+    }
+  }
+}

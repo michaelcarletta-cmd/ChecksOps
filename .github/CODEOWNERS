@@ -70,6 +70,14 @@
 /aws/migrations/proposed/NOT_APPLIED_20260910_tenant_email_ses_domain.sql @michaelcarletta-cmd
 /aws/docs/tenant-ses-email-domain.md @michaelcarletta-cmd
 
+/aws/functions/api/esign.mjs @michaelcarletta-cmd
+/aws/audit/signature-sender-production-freeze.json @michaelcarletta-cmd
+/scripts/lib/signature-sender-freeze.mjs @michaelcarletta-cmd
+/aws/tests/signature-from-name.test.mjs @michaelcarletta-cmd
+/aws/tests/signature-sender-production-freeze.test.mjs @michaelcarletta-cmd
+/aws/tests/fixtures/historical-pre-fix-esign-37c5c742.mjs @michaelcarletta-cmd
+/ops/release-locks/tests/signature-sender-invariants.test.mjs @michaelcarletta-cmd
+
 /aws/functions/api/partner-share-lifecycle.mjs @michaelcarletta-cmd
 /aws/functions/api/authorization.mjs @michaelcarletta-cmd
 /aws/rls/sql/31_partner_safe_read.sql @michaelcarletta-cmd
