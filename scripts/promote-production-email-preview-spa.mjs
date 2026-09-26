@@ -11,7 +11,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { assumeCursorRole } from './cognito-staging-token.mjs';
+import { assumeCursorRole, oidcToken } from './cognito-staging-token.mjs';
 import {
   assertNoSyncDelete,
   localManifest,
@@ -26,6 +26,7 @@ const REGION = 'us-east-1';
 const BUCKET = 'checksops-production-frontend-806168576068';
 const DISTRIBUTION = 'E1B0ZWWO5559U5';
 const LAMBDA = 'checksops-production-prep-api';
+const SPA_DEPLOY_ROLE = 'arn:aws:iam::806168576068:role/ChecksOpsProductionSpaDeploy';
 const PREFLIGHT_SHA = '6b211037ae70b510a9b5cfe316f006dbbc308ee3c94687ccea943b24cfd09f2e';
 const PREFLIGHT_VERSION = 'advEv5N0JfqM41odUraOM7kCH6Z2snP3';
 const FORBIDDEN_AWS = new Set([
@@ -70,6 +71,49 @@ const awsJson = (args) => {
 };
 
 const sha256File = (filePath) => createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+
+const applyCreds = (creds) => {
+  process.env.AWS_ACCESS_KEY_ID = creds.AccessKeyId;
+  process.env.AWS_SECRET_ACCESS_KEY = creds.SecretAccessKey;
+  process.env.AWS_SESSION_TOKEN = creds.SessionToken;
+  process.env.AWS_REGION = REGION;
+};
+
+const assumeProductionSpaDeployRole = async () => {
+  const session = 'tenant-email-preview-prod-spa';
+  try {
+    const creds = JSON.parse(execFileSync(AWS, [
+      'sts', 'assume-role-with-web-identity',
+      '--role-arn', SPA_DEPLOY_ROLE,
+      '--role-session-name', session,
+      '--web-identity-token', String(await oidcToken()),
+      '--duration-seconds', '3600',
+      '--output', 'json',
+    ], { encoding: 'utf8' })).Credentials;
+    applyCreds(creds);
+    return { ok: true, method: 'oidc', role: SPA_DEPLOY_ROLE };
+  } catch (oidcError) {
+    await assumeCursorRole('tenant-email-preview-prod-spa-bridge');
+    try {
+      const creds = JSON.parse(execFileSync(AWS, [
+        'sts', 'assume-role',
+        '--role-arn', SPA_DEPLOY_ROLE,
+        '--role-session-name', session,
+        '--duration-seconds', '3600',
+        '--output', 'json',
+      ], { encoding: 'utf8' })).Credentials;
+      applyCreds(creds);
+      return { ok: true, method: 'role-chain', role: SPA_DEPLOY_ROLE };
+    } catch (chainError) {
+      return {
+        ok: false,
+        role: SPA_DEPLOY_ROLE,
+        oidc: String(oidcError.stderr || oidcError.message || oidcError).slice(0, 400),
+        chain: String(chainError.stderr || chainError.message || chainError).slice(0, 400),
+      };
+    }
+  }
+};
 
 const headIndex = () => {
   const head = awsJson(['s3api', 'head-object', '--bucket', BUCKET, '--key', 'index.html']);
@@ -201,7 +245,15 @@ const main = async () => {
     return;
   }
 
-  await assumeCursorRole('tenant-email-preview-prod-spa');
+  const assumed = await assumeProductionSpaDeployRole();
+  if (!assumed.ok) {
+    report.ok = false;
+    report.stopped = 'PRODUCTION SPA DEPLOY ROLE NOT ASSUMABLE';
+    report.assume = assumed;
+    console.error(JSON.stringify(report, null, 2));
+    process.exit(3);
+  }
+  report.assume = assumed;
   const lambdaBefore = readLambdaPins();
   const liveHead = headIndex();
   const liveSha = downloadIndexSha();
