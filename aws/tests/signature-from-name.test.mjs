@@ -367,6 +367,36 @@ test('ledger and OTP keep platform ChecksOps sender override', async () => {
   assert.doesNotMatch(sent[1].from, /Freedom Adjustment <support@checksops\.com>/);
 });
 
+test('forbidden signature From forms are rejected by the accepted contract', async () => {
+  const sent = [];
+  const result = await runSendSignatureRequest({
+    mapping: { application_user_id: USER },
+    spoof: { ignored: true },
+    body: { requestId: REQUEST_A, tenantId: C1C, from: 'ChecksOps <support@checksops.com>' },
+    send: capturingMailer(sent),
+    client: sqlClient(signatureHandlers({
+      requestId: REQUEST_A,
+      claimId: CLAIM_A,
+      tenantId: FREEDOM,
+      signerId: SIGNER_A,
+      signerEmail: 'ada@freedomadj.com',
+    })),
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.from, 'Freedom Adjustment <support@checksops.com>');
+  assert.equal(sent[0].from, 'Freedom Adjustment <support@checksops.com>');
+  for (const forbidden of [
+    'Freedom Adjustment via ChecksOps <support@checksops.com>',
+    'ChecksOps <support@checksops.com>',
+    'Freedom Adjustment <noreply@checksops.com>',
+  ]) {
+    assert.notEqual(sent[0].from, forbidden);
+  }
+  assert.doesNotMatch(sent[0].from, /via ChecksOps/);
+  assert.doesNotMatch(sent[0].from, /noreply@checksops\.com/);
+  assert.match(sent[0].from, /^Freedom Adjustment <support@checksops\.com>$/);
+});
+
 test('generic transactional email still uses shared branding From', async () => {
   const branding = await resolveEmailBranding(sqlClient(tenantHandlers()), { tenantId: FREEDOM });
   assert.match(branding.from, /via ChecksOps/);

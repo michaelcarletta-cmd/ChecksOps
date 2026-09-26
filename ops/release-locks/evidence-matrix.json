@@ -92,6 +92,20 @@
       ],
       "open_pr_overlap": ["#315", "#310", "#309"]
     },
+    "signature-sender": {
+      "classification": "SOURCE_LOCKED_NOT_ACTIVE",
+      "git_sha": "b697b3a2e548d46d7abc95c769ee9499108a739f",
+      "merged_pr": 504,
+      "merge_commit": null,
+      "deployed_artifact": "live production esign.mjs SHA256 b8f707dfc724a54fb5d973a11cb26380f3381baea26324c08aa30dc93cb5656e on checksops-production-prep-api; Lambda CodeSha256 9OLR9DMhuDrAUp5/TmT6+8bfQC2I6USFk+zwFkluJLQ= is provenance only, not a rollback pin",
+      "applied_migrations": "none; signature-sender path does not apply SQL",
+      "environment": "production",
+      "missing_evidence": [
+        "PRODUCTION_LOCKED promotion is not claimed; no SQL and no whole-Lambda rollback pin",
+        "published Lambda version/alias is not a permanent rollback artifact"
+      ],
+      "open_pr_overlap": ["#504"]
+    },
     "tenant-email": {
       "classification": "SOURCE_LOCKED_NOT_ACTIVE",
       "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
