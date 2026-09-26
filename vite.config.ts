@@ -31,6 +31,26 @@ export default defineConfig(({ mode }) => {
       throw new Error("AWS staging build refused inherited production /prep or production Cognito ids. Use .env.aws.");
     }
   }
+  // Production Cognito SPA uses --mode production + .env.production.local.
+  // Never allow the staging execute-api / staging pool into that build.
+  if (awsMode && mode !== "aws") {
+    const apiUrl = String(awsEnv.VITE_CHECKSOPS_API_URL || "");
+    const poolId = String(awsEnv.VITE_COGNITO_USER_POOL_ID || "");
+    const appUrl = String(awsEnv.VITE_APP_URL || "");
+    if (apiUrl.includes("psr19uhop4") || poolId.startsWith("us-east-1_vPmQ7cL1F")) {
+      throw new Error("Production Cognito SPA build refused staging execute-api or staging Cognito ids.");
+    }
+    if (!poolId.startsWith("us-east-1_h00WorYMT")) {
+      throw new Error("Production Cognito SPA build requires VITE_COGNITO_USER_POOL_ID=us-east-1_h00WorYMT.");
+    }
+    const allowedApi = apiUrl === "/prep" || apiUrl === "same-origin" || apiUrl === "same-origin:/prep";
+    if (!allowedApi) {
+      throw new Error("Production Cognito SPA build requires VITE_CHECKSOPS_API_URL=/prep.");
+    }
+    if (appUrl && !appUrl.includes("https://checksops.com")) {
+      throw new Error("Production Cognito SPA build requires VITE_APP_URL=https://checksops.com.");
+    }
+  }
   const supabaseUrl = env.VITE_SUPABASE_URL || env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
   const supabasePublishableKey =
     env.VITE_SUPABASE_PUBLISHABLE_KEY ||
