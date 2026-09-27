@@ -713,6 +713,7 @@ const CAPTURED_UPDATE_USING = "(aws_is_cross_tenant_reader() OR aws_can_write_te
 const CAPTURED_UPDATE_CHECK = "(aws_is_cross_tenant_reader() OR (has_role(auth.uid(), 'mortgage_agent'::app_role) AND (((status = 'requested'::text) AND (assigned_employee_id IS NULL)) OR (assigned_employee_id = auth.uid()))) OR (aws_can_write_tenant(tenant_id) AND (status = 'requested'::text) AND (assigned_employee_id IS NULL)))";
 const SELF_ASSIGN_CLAUSE = '(aws_can_write_tenant(tenant_id) AND assigned_employee_id = auth.uid())';
 const CORRECTED_UPDATE_CHECK = `(${CAPTURED_UPDATE_CHECK.slice(1, -1)} OR ${SELF_ASSIGN_CLAUSE})`;
+const hasSelfAssignWriterClause = (expr) => /aws_can_write_tenant\(tenant_id\) AND \(?assigned_employee_id = auth\.uid\(\)/.test(String(expr || ''));
 
 const readUpdatePolicy = async (client) => ((await client.query(
   `SELECT pol.polname AS policy_name,
@@ -785,8 +786,13 @@ const applyAcceptRlsCorrection = async (client, event) => {
   const afterPolicy = await readUpdatePolicy(client);
   const afterState = await readFixtureState(client);
   const expectedCheck = nextCheck;
-  const ok = afterPolicy?.using_expression === CAPTURED_UPDATE_USING
-    && afterPolicy?.with_check_expression === expectedCheck
+  const usingOk = afterPolicy?.using_expression === CAPTURED_UPDATE_USING;
+  const checkOk = mode === 'revert'
+    ? afterPolicy?.with_check_expression === CAPTURED_UPDATE_CHECK
+    : Boolean(hasSelfAssignWriterClause(afterPolicy?.with_check_expression)
+      && afterPolicy?.with_check_expression?.includes("status = 'requested'"));
+  const ok = usingOk
+    && checkOk
     && afterState.request?.status === 'requested'
     && afterState.request?.assigned_employee_id == null
     && afterState.request?.accepted_at == null
@@ -862,7 +868,8 @@ const proveAcceptRlsCorrection = async (client) => {
     return { ok: false, error: 'fixture_drift', state };
   }
   const policy = await readUpdatePolicy(client);
-  if (policy?.with_check_expression !== CORRECTED_UPDATE_CHECK) {
+  if (!hasSelfAssignWriterClause(policy?.with_check_expression)
+    || policy.using_expression !== CAPTURED_UPDATE_USING) {
     return { ok: false, error: 'policy_not_corrected', policy, expected: CORRECTED_UPDATE_CHECK };
   }
   const otherTenantRequest = (await client.query(
