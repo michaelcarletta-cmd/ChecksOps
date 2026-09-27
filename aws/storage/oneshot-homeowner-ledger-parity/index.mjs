@@ -199,7 +199,7 @@ export const handler = async (event = {}) => {
     await client.query(fs.readFileSync(SQL_PATH, 'utf8'));
     const after = await inspectHelpers(client);
     const missing = ['aws_public_homeowner_ledger_by_token', 'aws_public_homeowner_ledger_remint_signer']
-      .filter((name) => !after.helpers.some((row) => row.name === name));
+      .filter((name) => !after.helpers.some((row) => row.proname === name));
     if (missing.length) throw new Error(`missing functions: ${missing.join(',')}`);
     await client.query('COMMIT');
     return {
