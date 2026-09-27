@@ -1,14 +1,15 @@
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Save } from "lucide-react";
+import { Loader2, Palette, Save } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { TenantLogo } from "@/components/branding/TenantLogo";
 import { resolveTenantLogoUrl } from "@/lib/tenantLogoUrl";
 import { SignatureRequestEmailPreview } from "@/components/settings/SignatureRequestEmailPreview";
+import { SettingsHero } from "@/components/settings/SettingsHero";
 
 type TenantBranding = {
   id: string;
@@ -22,7 +23,6 @@ type TenantBranding = {
 export function TenantBrandingSettings({ tenant }: { tenant: TenantBranding }) {
   const { toast } = useToast();
   const [primaryColor, setPrimaryColor] = useState(tenant.primary_color || "#3B82F6");
-  const [secondaryColor, setSecondaryColor] = useState(tenant.secondary_color || "#1E40AF");
   const [logoUrl, setLogoUrl] = useState(tenant.logo_url || "");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -61,7 +61,6 @@ export function TenantBrandingSettings({ tenant }: { tenant: TenantBranding }) {
       .from("tenants")
       .update({
         primary_color: primaryColor,
-        secondary_color: secondaryColor,
         logo_url: logoUrl || null,
       })
       .eq("id", tenant.id);
@@ -76,11 +75,15 @@ export function TenantBrandingSettings({ tenant }: { tenant: TenantBranding }) {
   const previewSrc = resolveTenantLogoUrl(logoUrl);
 
   return (
+    <div className="space-y-6">
+    <SettingsHero
+      title="Branding Settings"
+      description="Configure your organization's visual identity, contact information, and invoice presentation."
+      badge="Identity & Branding"
+      icon={<Palette className="h-4 w-4 text-primary" />}
+    />
     <Card data-testid="tenant-branding-settings">
-      <CardHeader>
-        <CardTitle className="text-sm">Branding & Appearance</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 pt-6">
         <div className="space-y-2">
           <Label className="text-xs">Logo</Label>
           <div className="flex flex-wrap items-center gap-2">
@@ -120,20 +123,11 @@ export function TenantBrandingSettings({ tenant }: { tenant: TenantBranding }) {
             </div>
           )}
         </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label className="text-xs">Primary Color</Label>
-            <div className="flex items-center gap-2">
-              <input type="color" value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} className="h-8 w-8 rounded cursor-pointer" />
-              <Input value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} className="font-mono text-xs" />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label className="text-xs">Secondary Color</Label>
-            <div className="flex items-center gap-2">
-              <input type="color" value={secondaryColor} onChange={(e) => setSecondaryColor(e.target.value)} className="h-8 w-8 rounded cursor-pointer" />
-              <Input value={secondaryColor} onChange={(e) => setSecondaryColor(e.target.value)} className="font-mono text-xs" />
-            </div>
+        <div className="space-y-2">
+          <Label className="text-xs">Primary Color</Label>
+          <div className="flex items-center gap-2">
+            <input type="color" value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} className="h-8 w-8 rounded cursor-pointer" />
+            <Input value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} className="font-mono text-xs" />
           </div>
         </div>
         <Button onClick={handleSave} disabled={saving} size="sm">
@@ -148,5 +142,6 @@ export function TenantBrandingSettings({ tenant }: { tenant: TenantBranding }) {
         />
       </CardContent>
     </Card>
+    </div>
   );
 }
