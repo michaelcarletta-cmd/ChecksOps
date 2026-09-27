@@ -22,10 +22,10 @@
       "production_active": false,
       "environment": "unknown",
       "source": {
-        "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
-        "tree_hash": "b2fc9e1152ca2ffbfac86c43fccdc22461dda17266bbea2d447f6d3f7cbb1bed",
-        "merged": true,
-        "merged_pr": null
+        "git_sha": "d3dde599a002b5c797dec16a4a2189cfe6ff95d0",
+        "tree_hash": "923d3633763cf7570d00f0e546c84e72d27f6f8622cba420238ca3fd0741fb48",
+        "merged": false,
+        "merged_pr": 505
       },
       "required_sql": [
         {
@@ -75,7 +75,7 @@
         "production identity mapping apply hash"
       ],
       "open_pr_overlap": ["#316", "#317", "#319", "#313", "#240"],
-      "notes": "Docs on main still say pool us-east-1_h00WorYMT has 0 users; later PRs claim Freedom Adjustment login after cutover. UNVERIFIED."
+      "notes": "Docs on main still say pool us-east-1_h00WorYMT has 0 users; later PRs claim Freedom Adjustment login after cutover. UNVERIFIED. 2026-09-27 metadata-only tree_hash reconciliation to accepted live Email Preview SPA client.ts at d3dde599a002b5c797dec16a4a2189cfe6ff95d0 (audit classification A). Cognito/passwordless/EMAIL_OTP/invite/tenant-isolation unchanged. Do not change identity source or Cognito. moov-webhooks, auto-deposit, and database-rls remain intentionally unreconciled."
     },
     "moov-webhooks": {
       "id": "moov-webhooks",
@@ -346,10 +346,10 @@
       "production_active": false,
       "environment": "source-only",
       "source": {
-        "git_sha": "bd97367b76a52444aa8b1438a3f035b6c4ea09b1",
-        "tree_hash": "ea919c1c1726542c2dff4c4e704b73d2d56db30098154ef577f27adbe0b4b2d1",
-        "merged": true,
-        "merged_pr": 354
+        "git_sha": "d3dde599a002b5c797dec16a4a2189cfe6ff95d0",
+        "tree_hash": "db21e0f5fbdd681f3d9edc73f60c8e31afaa9acc4ca29b22b82c98b7240f7914",
+        "merged": false,
+        "merged_pr": 505
       },
       "required_sql": [
         {
@@ -411,7 +411,7 @@
         "Lambda version serving partner-share-lifecycle.mjs / authorization.mjs"
       ],
       "open_pr_overlap": ["#339", "#347", "#342", "#332", "#327"],
-      "notes": "SQL 31/32/33/34 are APPLIED IN PRODUCTION (ledger apply_evidence + ops/release-locks/proof/c1c-partner-share-production-apply.md). Do not reapply. required_sql.applied stays false because SOURCE_LOCKED_NOT_ACTIVE cannot claim production-applied SQL. PR #359 retargets tree_hash for Manager navigation, tenants_public partner names, and the disposable shared-check READ fixture columns needed by SQL 33; SQL 31-34, Partner Codes, and shared_checks are unchanged. Ownership and visibility are separate; never transfer check tenant_id to repair partner access."
+      "notes": "SQL 31/32/33/34 are APPLIED IN PRODUCTION (ledger apply_evidence + ops/release-locks/proof/c1c-partner-share-production-apply.md). Do not reapply. required_sql.applied stays false because SOURCE_LOCKED_NOT_ACTIVE cannot claim production-applied SQL. PR #359 retargets tree_hash for Manager navigation, tenants_public partner names, and the disposable shared-check READ fixture columns needed by SQL 33; SQL 31-34, Partner Codes, and shared_checks are unchanged. Ownership and visibility are separate; never transfer check tenant_id to repair partner access. 2026-09-27 metadata-only tree_hash reconciliation to accepted live Claim Check / CCC image-compat source at d3dde599a002b5c797dec16a4a2189cfe6ff95d0 (audit classification A). Historical merged pin #354 remains documentary. Partner sharing/codes/permissions unchanged. SQL 31-34 not modified or reapplied."
     },
     "mortgage-ops": {
       "id": "mortgage-ops",
@@ -567,10 +567,10 @@
       "production_active": false,
       "environment": "unknown",
       "source": {
-        "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
-        "tree_hash": "e4a20f5b6983f9e66732d87b14c1574701ae2263f03211ee4cdf354ade75ad74",
-        "merged": true,
-        "merged_pr": null
+        "git_sha": "d3dde599a002b5c797dec16a4a2189cfe6ff95d0",
+        "tree_hash": "a4d2e613d5460ae1bf278a81666c8f8105ece1b89374ce82c2166c1550737a1a",
+        "merged": false,
+        "merged_pr": 505
       },
       "required_sql": [],
       "artifact": {
@@ -598,7 +598,7 @@
         "Secrets Manager version IDs (not secret values)"
       ],
       "open_pr_overlap": ["#316", "#314"],
-      "notes": "Name/config references only."
+      "notes": "Name/config references only. 2026-09-27 metadata-only tree_hash reconciliation to accepted live provider-flags.mjs at d3dde599a002b5c797dec16a4a2189cfe6ff95d0 (audit classification A). Secret values are never recorded. Do not modify provider flags, credentials, Secrets Manager, Moov, or CheckAlt. moov-webhooks, auto-deposit, and database-rls remain intentionally unreconciled."
     },
     "ocr-azure": {
       "id": "ocr-azure",
