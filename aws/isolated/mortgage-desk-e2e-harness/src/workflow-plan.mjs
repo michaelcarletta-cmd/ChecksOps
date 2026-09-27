@@ -81,7 +81,7 @@ export const FUTURE_RUN_INITIAL_PLAN = {
     'Moov / CheckAlt / ACH / deposit / Stripe',
     'UPDATE or DELETE pre-existing rows',
   ],
-  auth: 'Caller-supplied staging Cognito tokens at invoke time. Freedom staff token for send/queue; mortgage_agent token for accept/complete. Tokens are not stored in the function environment.',
+    auth: 'Existing dedicated synthetic identity only: application_user_id c7729c3e-d87b-46c6-973e-9c04fbdcc961 / Cognito sub b4d8d428-2081-706b-04b0-e4694e568059 / staging-mops-4b61bc@checksops.invalid. Do not add Freedom, C1C, or customer identities to the synthetic tenant. First run still needs a tenant_users + user_roles.admin fixture on that identity and a Cognito ID token. Tokens are not stored in the function environment.',
 };
 
 export const describeWorkflowPlan = () => ({
