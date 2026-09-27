@@ -494,6 +494,16 @@ export function hasImmutableProductionIdentifier(fingerprint) {
   return lambda || spa || cloudfront || sql;
 }
 
+export function isSpaOnlyProductionLock(component) {
+  const fp = component?.deployment_fingerprint;
+  return component?.artifact?.type === 'spa'
+    && isSha256(component?.artifact?.hash)
+    && fp?.recorded === true
+    && Boolean(fp.spa_bundle)
+    && isSha256(fp.spa_sha256)
+    && fp.spa_sha256 === component.artifact.hash;
+}
+
 export function productionLockedEvidenceErrors(component, id, root = null) {
   const errors = [];
   const prefix = `components.${id}`;
@@ -507,7 +517,9 @@ export function productionLockedEvidenceErrors(component, id, root = null) {
     errors.push(`${prefix}: PRODUCTION_LOCKED requires production_active=true`);
   }
   if (!Array.isArray(component.required_sql) || component.required_sql.length === 0) {
-    errors.push(`${prefix}: PRODUCTION_LOCKED requires required_sql with applied production hashes`);
+    if (!isSpaOnlyProductionLock(component)) {
+      errors.push(`${prefix}: PRODUCTION_LOCKED requires required_sql with applied production hashes`);
+    }
   } else {
     for (const row of component.required_sql) {
       if (row.applied !== true) {

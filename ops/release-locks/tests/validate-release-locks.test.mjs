@@ -34,12 +34,15 @@ function writeTree(files) {
   return dir;
 }
 
-test('origin/main-based manifest validates fail-closed with no PRODUCTION_LOCKED component', () => {
+test('origin/main-based manifest validates fail-closed with production-spa PRODUCTION_LOCKED', () => {
   const inputs = loadReleaseLockInputs(ROOT);
   const { errors } = validateReleaseLocks(inputs);
   assert.deepEqual(errors, []);
   const locked = Object.values(inputs.manifest.components).filter((c) => c.classification === 'PRODUCTION_LOCKED');
-  assert.equal(locked.length, 0);
+  assert.equal(locked.length, 1);
+  assert.equal(locked[0].id, 'production-spa');
+  assert.equal(locked[0].production_active, true);
+  assert.equal(locked[0].artifact.name, '/assets/index-BPbQUNFr.js');
   assert.equal(inputs.manifest.fail_closed, true);
   assert.equal(validateMain([], ROOT), 0);
 });
@@ -216,7 +219,17 @@ test('unverified component cannot be deployed by candidate', () => {
 
 test('production deploy intent without PRODUCTION_LOCKED fails', () => {
   const inputs = loadReleaseLockInputs(ROOT);
-  const errors = productionIntentErrors(inputs.manifest, { CHECKSOPS_PRODUCTION_DEPLOY: '1' });
+  const manifest = clone(inputs.manifest);
+  for (const component of Object.values(manifest.components)) {
+    if (component.classification === 'PRODUCTION_LOCKED') {
+      component.classification = 'UNVERIFIED';
+      component.production_active = false;
+      component.missing_evidence = component.missing_evidence?.length
+        ? component.missing_evidence
+        : ['unlocked for intent test'];
+    }
+  }
+  const errors = productionIntentErrors(manifest, { CHECKSOPS_PRODUCTION_DEPLOY: '1' });
   assert.ok(errors.some((row) => /no component is PRODUCTION_LOCKED/.test(row)));
   assert.deepEqual(liveCompareErrors(['--live']), [
     'live AWS comparison is disabled; supply a recorded --candidate fingerprint instead',
