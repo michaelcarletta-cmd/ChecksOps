@@ -80,7 +80,16 @@ export function CheckFilesSection({ checkIntakeItemId }: CheckFilesSectionProps)
       return data;
     },
   });
-  const linkedClaim = (checkClaim as any)?.claims || null;
+  const nestedClaim = (checkClaim as any)?.claims || null;
+  const resolvedClaimId = nestedClaim?.id || (checkClaim as any)?.claim_id || null;
+  const linkedClaim = nestedClaim || (resolvedClaimId
+    ? {
+        id: resolvedClaimId,
+        claim_number: null,
+        policyholder_name: null,
+        policyholder_email: null,
+      }
+    : null);
 
   const handleUpload = async (fileList: FileList | null) => {
     if (!fileList?.length) return;

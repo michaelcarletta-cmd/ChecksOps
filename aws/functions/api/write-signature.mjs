@@ -55,21 +55,44 @@ const lookupCheck = async (client, checkId) => {
   return { check: rows[0] };
 };
 
-export const executeSignatureRequests = async ({ client, op, values }) => {
-  if (op !== 'insert') return { error: 'operation_not_allowlisted', op, table: 'signature_requests' };
-  const claimId = values.claim_id || null;
+const sameUuid = (left, right) => String(left || '').toLowerCase() === String(right || '').toLowerCase();
+
+export const resolveSignatureRequestIds = async ({ client, values }) => {
+  const callerClaimId = values.claim_id || null;
   const checkId = values.check_intake_item_id || null;
-  if (!claimId && !checkId) {
+  if (!callerClaimId && !checkId) {
     return { error: 'missing_required_field', field: 'claim_id' };
   }
-  if (claimId) {
-    const claim = await lookupClaim(client, claimId);
-    if (claim.error) return claim;
-  }
+  if (callerClaimId && !isUuid(callerClaimId)) return { error: 'invalid_uuid', field: 'claim_id' };
+  if (checkId && !isUuid(checkId)) return { error: 'invalid_uuid', field: 'check_intake_item_id' };
+
   if (checkId) {
     const check = await lookupCheck(client, checkId);
     if (check.error) return check;
+    const linkedClaimId = check.check.claim_id || null;
+    if (callerClaimId && linkedClaimId && !sameUuid(callerClaimId, linkedClaimId)) {
+      return { error: 'claim_mismatch', message: 'claim_id does not match the authorized check' };
+    }
+    if (callerClaimId && !linkedClaimId) {
+      return { error: 'claim_mismatch', message: 'claim_id does not match the authorized check' };
+    }
+    return {
+      claimId: linkedClaimId,
+      checkId: check.check.id,
+    };
   }
+
+  const claim = await lookupClaim(client, callerClaimId);
+  if (claim.error) return claim;
+  return { claimId: claim.claim.id, checkId: null };
+};
+
+export const executeSignatureRequests = async ({ client, op, values }) => {
+  if (op !== 'insert') return { error: 'operation_not_allowlisted', op, table: 'signature_requests' };
+  const resolved = await resolveSignatureRequestIds({ client, values });
+  if (resolved.error) return resolved;
+  const claimId = resolved.claimId;
+  const checkId = resolved.checkId;
   const name = clip(values.document_name, 240);
   if (name?.error) return name;
   if (!name) return { error: 'missing_required_field', field: 'document_name' };

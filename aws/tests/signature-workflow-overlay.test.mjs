@@ -28,6 +28,9 @@ test('tenant Check Documents mounts the existing SignatureRequests component', (
   assert.match(files, /checkIntakeItemId=\{checkIntakeItemId\}/);
   assert.match(files, /preselected-sig-file/);
   assert.match(files, /Send for Homeowner Signature/);
+  assert.match(files, /resolvedClaimId/);
+  assert.match(files, /claim_id/);
+  assert.equal(files.includes('linkedClaim = (checkClaim as any)?.claims || null'), false);
 
   const requests = sourceOf('src/components/claim-detail/SignatureRequests.tsx');
   assert.match(requests, /checkIntakeItemId\?: string \| null/);
