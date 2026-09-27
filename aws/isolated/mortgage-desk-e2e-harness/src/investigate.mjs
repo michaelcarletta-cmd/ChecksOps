@@ -512,14 +512,17 @@ export const runReadOnlyInvestigate = async ({
     )).rows;
     out.definerUsage = [];
     for (const tenantId of [...syntheticTenantIds, FREEDOM_TENANT_ID, C1C_TENANT_ID]) {
+      await client.query('SAVEPOINT usage_probe');
       try {
         const row = (await readOnlyQuery(
           client,
           `SELECT public.get_tenant_check_usage($1::uuid) AS usage`,
           [tenantId],
         )).rows[0];
+        await client.query('RELEASE SAVEPOINT usage_probe');
         out.definerUsage.push({ tenantId, ok: true, usage: row?.usage || null });
       } catch (error) {
+        try { await client.query('ROLLBACK TO SAVEPOINT usage_probe'); } catch { /* keep read-only txn */ }
         out.definerUsage.push({ tenantId, ok: false, error: String(error.message || error).slice(0, 200) });
       }
     }
