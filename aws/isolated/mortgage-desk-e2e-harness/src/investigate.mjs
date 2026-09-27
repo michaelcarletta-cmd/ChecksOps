@@ -149,6 +149,7 @@ export const runReadOnlyInvestigate = async ({
     const tenantSelect = pick(tenantCols, [
       'id', 'name', 'slug', 'mortgage_ops_initial_rate_cents', 'mortgage_ops_additional_rate_cents',
       'moov_allowlisted', 'moov_environment', 'payment_provider', 'stripe_customer_id',
+      'is_test_account', 'is_system_tenant',
     ]);
     const claimSelect = pick(claimCols, [
       'id', 'claim_number', 'org_id', 'tenant_id', 'insured_name', 'claimant_name', 'status',
@@ -256,31 +257,89 @@ export const runReadOnlyInvestigate = async ({
     }
     out.tenantCreditBalances = creditBalances;
 
-    await applyIdentity(client, READONLY_PROBE_IDENTITIES[2] || READONLY_PROBE_IDENTITIES[0]);
-
-    const candidateClaims = [];
-    const seen = new Set();
-    const allClaimIds = [...claimsById.keys()];
-    if (claimTenantCol) {
-      const testTenantIds = out.tenantsVisible
-      .filter((tenant) => /test|synth|sandbox|demo|fixture|e2e/i.test(`${tenant.name || ''} ${tenant.slug || ''}`))
+    await applyIdentity(client, READONLY_PROBE_IDENTITIES[0]);
+    const syntheticTenantIds = out.tenantsVisible
+      .filter((tenant) => /synth|test|sandbox|demo|fixture|e2e/i.test(`${tenant.name || ''} ${tenant.slug || ''}`)
+        || tenant.is_test_account === true)
       .map((tenant) => tenant.id);
-    const extra = testTenantIds.length
-      ? (await readOnlyQuery(
+    out.syntheticTenantIds = syntheticTenantIds;
+    if (claimTenantCol && syntheticTenantIds.length) {
+      const extra = (await readOnlyQuery(
         client,
         `SELECT ${claimSelect.map((name) => `"${name}"`).join(', ')}
          FROM public.claims
          WHERE ${claimTenantCol} = ANY($1::uuid[])
          ORDER BY created_at DESC NULLS LAST
          LIMIT 40`,
-        [testTenantIds],
-      )).rows
-      : [];
-      for (const claim of extra) {
-        claimsById.set(claim.id, claim);
-        allClaimIds.push(claim.id);
-      }
+        [syntheticTenantIds],
+      )).rows;
+      for (const claim of extra) claimsById.set(claim.id, claim);
     }
+    out.syntheticTenantInventory = [];
+    for (const tenantId of syntheticTenantIds) {
+      const claimCount = claimTenantCol
+        ? (await readOnlyQuery(
+          client,
+          `SELECT count(*)::int AS n FROM public.claims WHERE ${claimTenantCol} = $1::uuid`,
+          [tenantId],
+        )).rows[0].n
+        : null;
+      const requestCount = (await readOnlyQuery(
+        client,
+        `SELECT count(*)::int AS n FROM public.mortgage_handling_requests WHERE tenant_id = $1::uuid`,
+        [tenantId],
+      )).rows[0].n;
+      const billing = (await readOnlyQuery(
+        client,
+        `SELECT id, event_type, status, unit_price_cents, claim_id, check_intake_item_id, mortgage_request_id, billed_at
+         FROM public.check_billing_events
+         WHERE tenant_id = $1::uuid
+           AND event_type IN ('mortgage_ops_initial', 'mortgage_ops_additional_check')
+         ORDER BY billed_at DESC NULLS LAST
+         LIMIT 30`,
+        [tenantId],
+      )).rows;
+      const requests = (await readOnlyQuery(
+        client,
+        `SELECT id, status, claim_id, check_intake_item_id, accepted_at, completed_at, note, created_at
+         FROM public.mortgage_handling_requests
+         WHERE tenant_id = $1::uuid
+         ORDER BY created_at DESC NULLS LAST
+         LIMIT 30`,
+        [tenantId],
+      )).rows;
+      const checks = (await readOnlyQuery(
+        client,
+        `SELECT id, claim_id, check_number, carrier_name, check_stage, created_at
+         FROM public.check_intake_items
+         WHERE tenant_id = $1::uuid
+         ORDER BY created_at DESC NULLS LAST
+         LIMIT 30`,
+        [tenantId],
+      )).rows;
+      out.syntheticTenantInventory.push({
+        tenantId,
+        tenant: tenantsById.get(tenantId) || null,
+        claimCount,
+        requestCount,
+        mortgageOpsBillingCount: billing.length,
+        mortgageOpsBilling: billing,
+        requests,
+        checks,
+      });
+    }
+    out.freedomAcceptanceFixtureProbe = (await readOnlyQuery(
+      client,
+      `SELECT count(*)::int AS request_count,
+              count(*) FILTER (WHERE note ILIKE '%acceptance%' OR note ILIKE '%SYNTHETIC%' OR note ILIKE '%MDE2E%')::int AS marked_count
+       FROM public.mortgage_handling_requests
+       WHERE tenant_id = $1::uuid`,
+      [FREEDOM_TENANT_ID],
+    )).rows[0];
+
+    const candidateClaims = [];
+    const seen = new Set();
+    const allClaimIds = [...claimsById.keys()];
 
     for (const claimId of allClaimIds) {
       if (seen.has(claimId)) continue;
