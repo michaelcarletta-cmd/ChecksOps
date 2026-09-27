@@ -17,6 +17,9 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { MortgageDeskShippingCard } from "@/components/loss-draft/MortgageDeskShippingCard";
+import { MortgageDeskReturnedBanner } from "@/components/loss-draft/MortgageDeskReturnedBanner";
+import { useAcknowledgeMortgageDeskReturn, useMortgageDeskReturnAlert } from "@/hooks/useMortgageDeskReturnAlert";
+import { useAuth } from "@/hooks/useAuth";
 
 
 type Props = {
@@ -26,6 +29,10 @@ type Props = {
 
 export function CheckMortgageMonitoring({ checkId, onRefresh }: Props) {
   const qc = useQueryClient();
+  const { user } = useAuth();
+  const { data: returnAlert } = useMortgageDeskReturnAlert(checkId);
+  const acknowledgeReturn = useAcknowledgeMortgageDeskReturn();
+  const [ackBusy, setAckBusy] = useState(false);
   const [trackingNumber, setTrackingNumber] = useState("");
   const [showTrackingInput, setShowTrackingInput] = useState(false);
   const [drawAmount, setDrawAmount] = useState("");
@@ -274,6 +281,28 @@ export function CheckMortgageMonitoring({ checkId, onRefresh }: Props) {
       )}
       {(deskOpen || deskRequest?.status === "completed") && (
         <MortgageDeskShippingCard checkIntakeItemId={checkId} />
+      )}
+
+      {deskRequest?.status === "completed" && returnAlert?.actionRequired && (
+        <MortgageDeskReturnedBanner
+          completedAt={returnAlert.completedAt || deskRequest.completed_at}
+          returnedAt={returnAlert.returnedAt}
+          acknowledging={ackBusy}
+          onAcknowledge={async () => {
+            if (!user?.id) return;
+            setAckBusy(true);
+            try {
+              await acknowledgeReturn({
+                checkId,
+                requestIds: returnAlert.unackedRequestIds,
+                senderId: user.id,
+              });
+              onRefresh?.();
+            } finally {
+              setAckBusy(false);
+            }
+          }}
+        />
       )}
 
       {deskRequest?.status === "completed" && (
