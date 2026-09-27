@@ -510,6 +510,19 @@ export const runReadOnlyInvestigate = async ({
          )
        ORDER BY 1, 2`,
     )).rows;
+    out.definerUsage = [];
+    for (const tenantId of [...syntheticTenantIds, FREEDOM_TENANT_ID, C1C_TENANT_ID]) {
+      try {
+        const row = (await readOnlyQuery(
+          client,
+          `SELECT public.get_tenant_check_usage($1::uuid) AS usage`,
+          [tenantId],
+        )).rows[0];
+        out.definerUsage.push({ tenantId, ok: true, usage: row?.usage || null });
+      } catch (error) {
+        out.definerUsage.push({ tenantId, ok: false, error: String(error.message || error).slice(0, 200) });
+      }
+    }
     out.claimsRls = (await readOnlyQuery(
       client,
       `SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity
