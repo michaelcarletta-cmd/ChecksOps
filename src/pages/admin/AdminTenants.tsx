@@ -505,7 +505,6 @@ function CompanyTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
 function BrandingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tenant) => void }) {
   const [logoUrl, setLogoUrl] = useState(tenant.logo_url || "");
   const [primary, setPrimary] = useState(tenant.primary_color || "#3B82F6");
-  const [secondary, setSecondary] = useState(tenant.secondary_color || "#1E293B");
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { saving, save } = useTenantSave(tenant, onUpdated);
@@ -586,20 +585,11 @@ function BrandingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Ten
           )}
           <Input value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} placeholder="...or paste a URL" className="text-xs" />
         </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label>Primary Color</Label>
-            <div className="flex gap-2">
-              <Input type="color" value={primary} onChange={(e) => setPrimary(e.target.value)} className="w-16 p-1 h-10" />
-              <Input value={primary} onChange={(e) => setPrimary(e.target.value)} />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label>Secondary Color</Label>
-            <div className="flex gap-2">
-              <Input type="color" value={secondary} onChange={(e) => setSecondary(e.target.value)} className="w-16 p-1 h-10" />
-              <Input value={secondary} onChange={(e) => setSecondary(e.target.value)} />
-            </div>
+        <div className="space-y-2">
+          <Label>Primary Color</Label>
+          <div className="flex gap-2">
+            <Input type="color" value={primary} onChange={(e) => setPrimary(e.target.value)} className="w-16 p-1 h-10" />
+            <Input value={primary} onChange={(e) => setPrimary(e.target.value)} />
           </div>
         </div>
         <Button onClick={() => save({ logo_url: logoUrl || null, primary_color: primary })} disabled={saving || uploading}>

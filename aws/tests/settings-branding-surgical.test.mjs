@@ -113,6 +113,17 @@ test('current branding write payloads are allowlisted; prior extras are the reje
   assert.equal(currentInvoice.error, undefined);
 });
 
+test('unsavable branding controls are not presented as editable saved settings', () => {
+  assert.doesNotMatch(adminBrandingTab, /Secondary Color/);
+  assert.doesNotMatch(adminBrandingTab, /setSecondary/);
+  assert.match(adminBrandingTab, /Primary Color/);
+  assert.match(adminBrandingTab, /Logo/);
+  assert.doesNotMatch(branding, /Invoice Accent Color/);
+  assert.doesNotMatch(branding, /Invoice Theme/);
+  assert.doesNotMatch(branding, /invoiceAccentColor/);
+  assert.doesNotMatch(branding, /invoiceTheme/);
+});
+
 test('tenant write allowlist was not broadened', () => {
   assert.equal(WRITE_ALLOWLIST.tenants.columns.has('secondary_color'), false);
   assert.equal(WRITE_ALLOWLIST.tenants.columns.has('invoice_accent_color'), false);
