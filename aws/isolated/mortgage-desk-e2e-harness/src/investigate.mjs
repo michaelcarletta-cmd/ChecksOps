@@ -319,7 +319,9 @@ export const runReadOnlyInvestigate = async ({
       )).rows;
       const requests = (await readOnlyQuery(
         client,
-        `SELECT id, status, claim_id, check_intake_item_id, accepted_at, completed_at, note, created_at
+        `SELECT id, status, claim_id, check_intake_item_id, accepted_at, completed_at, note, created_at,
+                claim_number, homeowner_name, policy_number, insurance_company, requested_by,
+                billing_status, billed_at, stripe_invoice_id, invoice_number
          FROM public.mortgage_handling_requests
          WHERE tenant_id = $1::uuid
          ORDER BY created_at DESC NULLS LAST
@@ -461,6 +463,62 @@ export const runReadOnlyInvestigate = async ({
       feeLineItems = { error: String(error.message || error).slice(0, 200) };
     }
     out.syntheticMoneyMovement = { moovInvoices, feeLineItems };
+    out.requestParentSummary = [];
+    for (const item of out.syntheticTenantInventory) {
+      const byClaim = new Map();
+      for (const req of item.requests || []) {
+        const key = req.claim_id || 'null';
+        const cur = byClaim.get(key) || {
+          tenantId: item.tenantId,
+          tenantName: item.tenant?.name || null,
+          claim_id: req.claim_id,
+          claim_number: req.claim_number || null,
+          homeowner_name: req.homeowner_name || null,
+          policy_number: req.policy_number || null,
+          insurance_company: req.insurance_company || null,
+          requestCount: 0,
+          acceptedAtValues: [],
+          billingStatuses: [],
+          stripeInvoiceIds: [],
+          invoiceNumbers: [],
+        };
+        cur.requestCount += 1;
+        if (req.accepted_at && !cur.acceptedAtValues.includes(req.accepted_at)) cur.acceptedAtValues.push(req.accepted_at);
+        if (req.billing_status && !cur.billingStatuses.includes(req.billing_status)) cur.billingStatuses.push(req.billing_status);
+        if (req.stripe_invoice_id && !cur.stripeInvoiceIds.includes(req.stripe_invoice_id)) cur.stripeInvoiceIds.push(req.stripe_invoice_id);
+        if (req.invoice_number && !cur.invoiceNumbers.includes(req.invoice_number)) cur.invoiceNumbers.push(req.invoice_number);
+        if (!cur.claim_number && req.claim_number) cur.claim_number = req.claim_number;
+        if (!cur.homeowner_name && req.homeowner_name) cur.homeowner_name = req.homeowner_name;
+        byClaim.set(key, cur);
+      }
+      out.requestParentSummary.push(...byClaim.values());
+    }
+    out.foreignKeys = (await readOnlyQuery(
+      client,
+      `SELECT conrelid::regclass::text AS from_table,
+              conname,
+              pg_get_constraintdef(oid) AS def
+       FROM pg_constraint
+       WHERE contype = 'f'
+         AND (
+           conrelid IN (
+             'public.mortgage_handling_requests'::regclass,
+             'public.check_intake_items'::regclass,
+             'public.check_billing_events'::regclass
+           )
+           OR confrelid IN ('public.claims'::regclass, 'public.check_intake_items'::regclass)
+         )
+       ORDER BY 1, 2`,
+    )).rows;
+    out.claimsRls = (await readOnlyQuery(
+      client,
+      `SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity
+       FROM pg_class c
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+       WHERE n.nspname = 'public'
+         AND c.relname IN ('claims', 'check_intake_items', 'mortgage_handling_requests', 'check_billing_events')
+       ORDER BY c.relname`,
+    )).rows;
 
     out.freedomAcceptanceFixtureProbe = (await readOnlyQuery(
       client,
