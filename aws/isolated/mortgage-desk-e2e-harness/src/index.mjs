@@ -1,8 +1,11 @@
 import { WRITE_ACTIONS } from './constants.mjs';
 import { refuseWriteAction } from './fail-closed.mjs';
+import { runReadOnlyInvestigate } from './investigate.mjs';
 import { runReadOnlyPreflight } from './preflight.mjs';
 import { captureApplicationShas, refuseOnShaDrift } from './sha-invariants.mjs';
 import { getSecretStringFromAws } from './db.mjs';
+
+const READONLY_ACTIONS = new Set(['preflight', 'investigate']);
 
 const parseEvent = (event = {}) => {
   if (!event || typeof event !== 'object') return { action: 'preflight' };
@@ -38,16 +41,24 @@ export const handler = async (event = {}, deps = {}) => {
     };
   }
 
-  if (action !== 'preflight') {
+  if (!READONLY_ACTIONS.has(action)) {
     return {
       ok: false,
       statusCode: 400,
       error: 'unknown_action',
       action,
-      allowed: ['preflight'],
+      allowed: [...READONLY_ACTIONS],
       refused: [...WRITE_ACTIONS],
       shas,
     };
+  }
+
+  if (action === 'investigate') {
+    return runReadOnlyInvestigate({
+      shas,
+      getSecretString,
+      openClient: deps.openClient,
+    });
   }
 
   return runReadOnlyPreflight({
