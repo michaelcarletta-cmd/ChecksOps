@@ -160,12 +160,17 @@ export const runSendSignatureRequest = async ({
     ? (await client.query(
       'SELECT public.aws_can_write_tenant($1::uuid) AS ok',
       [tenantId],
-    )).rows[0]?.ok
-    : true;
+    )).rows[0]?.ok === true
+    : (await client.query(
+      `SELECT (
+         public.has_role(auth.uid(), 'admin'::public.app_role)
+         OR public.has_role(auth.uid(), 'staff'::public.app_role)
+       ) AS ok`,
+    )).rows[0]?.ok === true;
   const canAgentManage = (await client.query(
     'SELECT public.aws_mortgage_agent_can_manage_signature($1::uuid) AS ok',
     [requestId],
-  )).rows[0]?.ok;
+  )).rows[0]?.ok === true;
   if (!canWriteTenant && !canAgentManage) {
     return { ok: false, statusCode: 403, error: 'forbidden', spoofFieldsIgnored: spoof };
   }
@@ -251,7 +256,7 @@ export const runSendSignatureRequest = async ({
   if (skipEmail) {
     for (const signer of signers) {
       await client.query(
-        `UPDATE public.signature_signers SET access_token = NULL WHERE id = $1::uuid`,
+        `UPDATE public.signature_signers SET access_token = '' WHERE id = $1::uuid`,
         [signer.id],
       );
     }
@@ -298,7 +303,7 @@ export const runSendSignatureRequest = async ({
       const delivery = sendResult.results?.[0]?.delivery || sendResult.mode;
       await client.query(
         `UPDATE public.signature_signers
-         SET access_token = NULL, delivery_status = 'sent', email_sent_at = now(),
+         SET access_token = '', delivery_status = 'sent', email_sent_at = now(),
              email_provider_message_id = $2
          WHERE id = $1::uuid`,
         [signer.id, messageId],
@@ -308,7 +313,7 @@ export const runSendSignatureRequest = async ({
       const errMsg = String(emailErr?.message || emailErr).slice(0, 300);
       await client.query(
         `UPDATE public.signature_signers
-         SET access_token = NULL, delivery_status = 'failed', delivery_error = $2
+         SET access_token = '', delivery_status = 'failed', delivery_error = $2
          WHERE id = $1::uuid`,
         [signer.id, errMsg],
       );
