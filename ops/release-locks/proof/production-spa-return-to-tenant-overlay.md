@@ -40,3 +40,20 @@ Files only:
 Build: `node scripts/build-production-aws-spa.mjs` (`vite --mode production`).
 Deploy: `per_object_put` to `checksops-production-frontend-806168576068`,
 CloudFront `E1B0ZWWO5559U5`. No Lambda write.
+
+## Accepted live production result
+
+| Field | Value |
+|---|---|
+| Entry | `/assets/index-CNfFeGaT.js` |
+| Entry SHA256 | `e203c755318928afd25a50e92525de819dd7550755a69ced110509646850676c` |
+| CSS | `/assets/index-CP4SLJzh.css` |
+| CSS SHA256 | `b9024ef6d6d5022a94eb3cbe01d2fb90f8fb10b3d2ca19a3a62d8092cad7ef10` |
+| index.html SHA256 | `2d5393baf7ecc3d9db8636d906eb4c8c01506f57cb075a8d5f659903d1ba78de` |
+| index VersionId | `eNIfUE7TgD037Efopz_SrevMKegKGjra` |
+| index ETag | `9f705b44d277a818d83a62d62063db9e` |
+| Last-Modified | `Sun, 27 Sep 2026 18:33:41 GMT` |
+| Overlay git SHA | `355e404b727f1ecad19da5f3ed55c94bf90298ad` |
+| CloudFront invalidation | `IBMLUOVDR25GQICK99QTADTDX2` |
+| Upload count | 103 objects, `index.html` last |
+| Production Lambda SHA | `9OLR9DMhuDrAUp5/TmT6+8bfQC2I6USFk+zwFkluJLQ=` (unchanged) |
