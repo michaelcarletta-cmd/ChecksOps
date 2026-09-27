@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO="$(cd "${ROOT}/../../.." && pwd)"
+REPO="$(cd "${ROOT}/../../../.." && pwd)"
 PACK="${ROOT}/pack"
 DIST="${ROOT}/dist"
 ZIP_NAME="checksops-staging-mde2e-identity-oneshot.zip"
