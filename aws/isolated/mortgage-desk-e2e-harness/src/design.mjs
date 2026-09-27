@@ -119,6 +119,25 @@ export const runReadOnlyDesign = async ({
       }
     }
 
+    out.tableGrants = (await readOnlyQuery(
+      client,
+      `SELECT table_name, grantee, privilege_type, is_grantable
+       FROM information_schema.role_table_grants
+       WHERE table_schema = 'public'
+         AND table_name = ANY($1::text[])
+       ORDER BY table_name, grantee, privilege_type`,
+      [FIXTURE_TABLES],
+    )).rows;
+    out.columnGrants = (await readOnlyQuery(
+      client,
+      `SELECT table_name, column_name, grantee, privilege_type
+       FROM information_schema.column_privileges
+       WHERE table_schema = 'public'
+         AND table_name = ANY($1::text[])
+         AND privilege_type IN ('INSERT', 'UPDATE', 'DELETE')
+       ORDER BY table_name, column_name, grantee, privilege_type`,
+      [FIXTURE_TABLES],
+    )).rows;
     out.claimsGrants = (await readOnlyQuery(
       client,
       `SELECT grantee, privilege_type, is_grantable
@@ -200,6 +219,7 @@ export const runReadOnlyDesign = async ({
       out.writeCapabilityByIdentity.push(await applyIdentity(client, probe));
     }
 
+    await applyIdentity(client, READONLY_PROBE_IDENTITIES[0]);
     out.fixtureRequestSummary = (await readOnlyQuery(
       client,
       `SELECT count(*)::int AS n,
