@@ -161,9 +161,12 @@ test('Gate 3A blocked record does not deploy and keeps execute-api', () => {
   assert.doesNotMatch(blocked, /ORIGIN_VERIFY_REQUIRE=true/);
 });
 
-test('banner and financial SQL remain untouched', () => {
+test('banner hides on production hosts without inverting isAwsStaging', () => {
   assert.match(banner, /AWS staging — Cognito \+ RDS/);
-  assert.doesNotMatch(banner, /window\.location\.hostname/);
+  assert.match(banner, /window\.location\.hostname/);
+  assert.match(banner, /checksops\.com/);
+  assert.match(banner, /www\.checksops\.com/);
+  assert.match(banner, /isAwsStaging\(\)/);
   assert.match(read('aws/financial/sql/64_financial_activation_grants.sql'), /DO NOT APPLY THIS FILE/);
   assert.match(read('aws/origin-verify/authorizer-config.json'), /"AuthorizerResultTtlInSeconds": 0/);
   assert.match(read('aws/origin-verify/options-route.json'), /OPTIONS \/\{\proxy\+\}/);
