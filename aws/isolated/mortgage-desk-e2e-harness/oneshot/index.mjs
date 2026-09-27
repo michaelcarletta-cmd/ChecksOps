@@ -195,6 +195,18 @@ const verifyIsolation = async (client, applicationUserId) => {
       `SELECT tenant_id, role FROM public.tenant_users WHERE user_id = $1::uuid ORDER BY tenant_id`,
       [applicationUserId],
     )).rows;
+    const claimsByOrg = (await client.query(
+      `SELECT coalesce(org_id::text, 'null') AS org_id, count(*)::int AS n
+       FROM public.claims
+       GROUP BY 1
+       ORDER BY n DESC`,
+    )).rows;
+    const checksByTenant = (await client.query(
+      `SELECT coalesce(tenant_id::text, 'null') AS tenant_id, count(*)::int AS n
+       FROM public.check_intake_items
+       GROUP BY 1
+       ORDER BY n DESC`,
+    )).rows;
     await client.query('ROLLBACK');
     const others = probed.filter((row) => row.tenant_id !== BILLING_TENANT_ID);
     return {
@@ -204,6 +216,8 @@ const verifyIsolation = async (client, applicationUserId) => {
       otherTenantsWritable: others.filter((row) => row.can_write).map((row) => row.tenant_id),
       otherTenantsAccessible: others.filter((row) => row.can_access).map((row) => row.tenant_id),
       otherTenantCount: others.length,
+      claimsByOrg,
+      checksByTenant,
       ...flags,
     };
   } catch (error) {
