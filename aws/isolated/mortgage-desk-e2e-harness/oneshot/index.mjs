@@ -16,12 +16,15 @@ const CA_PATH = [
   '/var/task/rds-global-bundle.pem',
 ].find((p) => fs.existsSync(p));
 
-const EMAIL = 'claims+mde2e@freedomadj.com';
+const EMAIL = 'mde2e@freedomadj.com';
+const LEFTOVER_PLUS_EMAIL = 'claims+mde2e@freedomadj.com';
+const LEFTOVER_PLUS_USER_ID = '97a1e063-bd9d-4c28-bcbe-b9b462a52894';
 const BILLING_TENANT_ID = '41cbc4b4-c5cd-4020-a6aa-0905e79dafe9';
 const FREEDOM_TENANT_ID = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
 const C1C_TENANT_ID = '4f172140-f57a-4744-8050-95f4f07b13b4';
 const ZERO_TENANT_ID = '22233ffe-7a69-4c46-88c3-1587dc525f1f';
 const EXISTING_INVALID_ID = 'c7729c3e-d87b-46c6-973e-9c04fbdcc961';
+const UNIQUENESS_EMAILS = new Set([EMAIL, LEFTOVER_PLUS_EMAIL]);
 const STAGING_HOST = 'checksops-staging.cyr0q4kcop3c.us-east-1.rds.amazonaws.com';
 const SYNTHETIC_NAME = 'SYNTHETIC / MDE2E / NOT A CUSTOMER';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -63,16 +66,20 @@ const openAdmin = async () => {
   return client;
 };
 
-const uniqueness = async (client) => {
+const uniqueness = async (client, email = EMAIL) => {
+  const target = String(email || EMAIL).trim().toLowerCase();
+  if (!UNIQUENESS_EMAILS.has(target)) {
+    throw new Error('email is not in the uniqueness allowlist');
+  }
   const identity = (await client.query(
     `SELECT application_user_id, email, status, cognito_sub IS NOT NULL AS has_cognito_sub
      FROM public.identity_accounts
      WHERE lower(email) = lower($1)`,
-    [EMAIL],
+    [target],
   )).rows;
   const profiles = (await client.query(
     `SELECT id, email, full_name FROM public.profiles WHERE lower(email) = lower($1)`,
-    [EMAIL],
+    [target],
   )).rows;
   const roles = (await client.query(
     `SELECT ur.user_id, ur.role, ia.email
@@ -80,7 +87,7 @@ const uniqueness = async (client) => {
      LEFT JOIN public.identity_accounts ia ON ia.application_user_id = ur.user_id
      WHERE lower(ia.email) = lower($1)
         OR ur.user_id IN (SELECT id FROM public.profiles WHERE lower(email) = lower($1))`,
-    [EMAIL],
+    [target],
   )).rows;
   const memberships = (await client.query(
     `SELECT tu.user_id, tu.tenant_id, tu.role
@@ -90,11 +97,11 @@ const uniqueness = async (client) => {
        UNION
        SELECT id FROM public.profiles WHERE lower(email) = lower($1)
      )`,
-    [EMAIL],
+    [target],
   )).rows;
   const unused = identity.length === 0 && profiles.length === 0 && roles.length === 0 && memberships.length === 0;
   return {
-    email: EMAIL,
+    email: target,
     unused,
     identityAccounts: identity,
     profiles,
@@ -107,6 +114,7 @@ const createRows = async (client, { applicationUserId, cognitoSub }) => {
   if (!UUID_RE.test(applicationUserId)) throw new Error('invalid application_user_id');
   if (!cognitoSub || String(cognitoSub) === applicationUserId) throw new Error('invalid cognito_sub');
   if (applicationUserId === EXISTING_INVALID_ID) throw new Error('refusing to reuse existing .invalid identity');
+  if (applicationUserId === LEFTOVER_PLUS_USER_ID) throw new Error('refusing to reuse leftover plus-address identity');
 
   const probe = await uniqueness(client);
   if (!probe.unused) {
@@ -239,7 +247,9 @@ export const handler = async (event = {}) => {
     out.identity = identity;
 
     if (action === 'uniqueness') {
-      out.uniqueness = await uniqueness(client);
+      const requested = String(event.email || EMAIL).trim().toLowerCase();
+      out.email = requested;
+      out.uniqueness = await uniqueness(client, requested);
       out.ok = out.uniqueness.unused;
       out.error = out.ok ? null : 'email_already_used';
       return out;
