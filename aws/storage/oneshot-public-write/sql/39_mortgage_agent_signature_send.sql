@@ -165,10 +165,28 @@ DROP POLICY IF EXISTS aws_write_esign_event_logs ON public.esign_event_logs;
 CREATE POLICY aws_write_esign_event_logs ON public.esign_event_logs
   FOR ALL TO authenticated
   USING (
-    public.aws_can_write_claim(claim_id)
-    OR public.aws_mortgage_agent_can_manage_signature(request_id)
+    request_id IS NULL
+    OR EXISTS (
+      SELECT 1
+      FROM public.signature_requests sr
+      WHERE sr.id = esign_event_logs.request_id
+        AND (
+          public.aws_can_write_check(sr.check_intake_item_id)
+          OR public.aws_can_write_claim(sr.claim_id)
+          OR public.aws_mortgage_agent_can_manage_signature(sr.id)
+        )
+    )
   )
   WITH CHECK (
-    public.aws_can_write_claim(claim_id)
-    OR public.aws_mortgage_agent_can_manage_signature(request_id)
+    request_id IS NULL
+    OR EXISTS (
+      SELECT 1
+      FROM public.signature_requests sr
+      WHERE sr.id = esign_event_logs.request_id
+        AND (
+          public.aws_can_write_check(sr.check_intake_item_id)
+          OR public.aws_can_write_claim(sr.claim_id)
+          OR public.aws_mortgage_agent_can_manage_signature(sr.id)
+        )
+    )
   );
