@@ -3,9 +3,13 @@ import { test } from 'node:test';
 import { createHash } from 'node:crypto';
 import { handler } from '../functions/api/index.mjs';
 import { hashToken } from '../functions/api/esign.mjs';
+
+process.env.FILES_BUCKET = process.env.FILES_BUCKET || 'checksops-staging-privatefilesbucket-erzqsolpucjp';
 import {
+  attachCompletedSignatureDocument,
   normalizeFieldValues,
   runPublicSignatureSubmit,
+  signedDocumentPath,
   validateRequiredFields,
 } from '../functions/api/signature-submit.mjs';
 
@@ -187,4 +191,214 @@ test('public signature-submit is no longer writes_disabled', async () => {
   const body = JSON.parse(result.body);
   assert.notEqual(body.error, 'writes_disabled');
   assert.equal(body.stage, 'esign_consent');
+});
+
+test('signed document path keeps the unsigned original path separate', () => {
+  assert.equal(
+    signedDocumentPath({ id: 'r1', claim_id: 'c1', check_intake_item_id: 'k1' }),
+    'signed/c1/r1-final.pdf',
+  );
+  assert.equal(
+    signedDocumentPath({ id: 'r2', claim_id: null, check_intake_item_id: 'k2' }),
+    'check-intake/k2/files/r2-final.pdf',
+  );
+});
+
+test('attachCompletedSignatureDocument copies signed PDF, skips duplicates, and does not overwrite LDD file_path', async () => {
+  const sqls = [];
+  const copies = [];
+  const client = sqlClient([
+    {
+      match: (sql) => sql.includes('SET final_pdf_path'),
+      result: (_params, sql) => {
+        sqls.push(sql);
+        return { rows: [], rowCount: 1 };
+      },
+    },
+    {
+      match: (sql) => sql.includes('FROM public.claim_files'),
+      result: () => ({ rows: [], rowCount: 0 }),
+    },
+    {
+      match: (sql) => sql.includes('INSERT INTO public.claim_files'),
+      result: (_params, sql) => {
+        sqls.push(sql);
+        return { rows: [{ id: 'cf1' }], rowCount: 1 };
+      },
+    },
+    {
+      match: (sql) => sql.includes('FROM public.check_files WHERE file_path'),
+      result: () => ({ rows: [{ check_intake_item_id: 'k1' }] }),
+    },
+    {
+      match: (sql) => sql.includes("category = 'signed_dtp'"),
+      result: () => ({ rows: [], rowCount: 0 }),
+    },
+    {
+      match: (sql) => sql.includes('INSERT INTO public.check_files'),
+      result: (_params, sql) => {
+        sqls.push(sql);
+        return { rows: [{ id: 'chk1' }], rowCount: 1 };
+      },
+    },
+    {
+      match: (sql) => sql.includes('UPDATE public.loss_draft_documents'),
+      result: (_params, sql) => {
+        sqls.push(sql);
+        return { rows: [], rowCount: 1 };
+      },
+    },
+  ]);
+
+  const first = await attachCompletedSignatureDocument(client, {
+    id: 'r1',
+    claim_id: 'c1',
+    check_intake_item_id: 'k1',
+    document_path: 'unsigned/orig.pdf',
+    document_name: 'Release.pdf',
+  }, {
+    copyObject: async ({ destRel }) => {
+      copies.push(destRel);
+    },
+  });
+  assert.equal(first.final_pdf_path, 'signed/c1/r1-final.pdf');
+  assert.equal(first.original_path, 'unsigned/orig.pdf');
+  assert.deepEqual(copies, ['signed/c1/r1-final.pdf']);
+  assert.equal(sqls.some((sql) => sql.includes('INSERT INTO public.claim_files')), true);
+  assert.equal(sqls.some((sql) => sql.includes('INSERT INTO public.check_files')), true);
+  const ldd = sqls.find((sql) => sql.includes('loss_draft_documents'));
+  assert.ok(ldd);
+  assert.equal(/file_path|file_name/.test(ldd), false);
+  assert.equal(/is_submitted|signature_status/.test(ldd), true);
+  assert.equal(sqls.some((sql) => /record_check_return|ready_for_deposit|approved_for_deposit|bill_mortgage/.test(sql)), false);
+
+  const dupSqls = [];
+  const dupClient = sqlClient([
+    {
+      match: (sql) => sql.includes('SET final_pdf_path'),
+      result: (_params, sql) => {
+        dupSqls.push(sql);
+        return { rows: [], rowCount: 1 };
+      },
+    },
+    {
+      match: (sql) => sql.includes('FROM public.claim_files'),
+      result: () => ({ rows: [{ id: 'existing-claim' }] }),
+    },
+    {
+      match: (sql) => sql.includes("category = 'signed_dtp'"),
+      result: () => ({ rows: [{ id: 'existing-check' }] }),
+    },
+    {
+      match: (sql) => sql.includes('UPDATE public.loss_draft_documents'),
+      result: (_params, sql) => {
+        dupSqls.push(sql);
+        return { rows: [], rowCount: 1 };
+      },
+    },
+  ]);
+  await attachCompletedSignatureDocument(dupClient, {
+    id: 'r1',
+    claim_id: 'c1',
+    check_intake_item_id: 'k1',
+    document_path: 'unsigned/orig.pdf',
+    document_name: 'Release.pdf',
+  }, { copyObject: async () => {} });
+  assert.equal(dupSqls.some((sql) => sql.includes('INSERT INTO public.claim_files')), false);
+  assert.equal(dupSqls.some((sql) => sql.includes('INSERT INTO public.check_files')), false);
+});
+
+test('successful submit without flattenPdf attaches signed document and still denies deposit', async () => {
+  let attached = false;
+  const sqls = [];
+  const result = await runPublicSignatureSubmit(eventOf({
+    token: 'tok',
+    eSignConsentAccepted: true,
+    fieldValues: { sig: 'data:image/png;base64,x' },
+  }), {
+    copyObject: async () => { attached = true; },
+    client: sqlClient([
+      {
+        match: (sql) => sql.includes('token_hash'),
+        result: () => ({ rows: [{
+          id: 's1',
+          status: 'pending',
+          expires_at: null,
+          signature_request_id: 'r1',
+          request_id: 'r1',
+          signing_order: 1,
+          signer_name: 'Ada',
+          document_name: 'Release',
+          document_path: 'unsigned/orig.pdf',
+          claim_id: 'c1',
+          check_intake_item_id: 'k1',
+          field_data: [{ id: 'sig', type: 'signature', signerIndex: 0, required: true, label: 'Sign' }],
+        }] }),
+      },
+      {
+        match: (sql) => sql.includes('FROM public.signature_fields'),
+        result: () => ({ rows: [] }),
+      },
+      {
+        match: (sql, params) => sql.includes("SET status = 'signed'") && params[0] === 's1',
+        result: (_params, sql) => {
+          sqls.push(sql);
+          return { rows: [{ id: 's1' }], rowCount: 1 };
+        },
+      },
+      {
+        match: (sql) => sql.includes('FROM public.signature_signers WHERE signature_request_id'),
+        result: () => ({ rows: [{ id: 's1', status: 'signed' }] }),
+      },
+      {
+        match: (sql) => sql.includes("SET status = 'completed'"),
+        result: (_params, sql) => {
+          sqls.push(sql);
+          return { rows: [], rowCount: 1 };
+        },
+      },
+      {
+        match: (sql) => sql.includes('SET final_pdf_path'),
+        result: (_params, sql) => {
+          sqls.push(sql);
+          return { rows: [], rowCount: 1 };
+        },
+      },
+      {
+        match: (sql) => sql.includes('FROM public.claim_files'),
+        result: () => ({ rows: [] }),
+      },
+      {
+        match: (sql) => sql.includes('INSERT INTO public.claim_files'),
+        result: (_params, sql) => {
+          sqls.push(sql);
+          return { rows: [{ id: 'cf1' }], rowCount: 1 };
+        },
+      },
+      {
+        match: (sql) => sql.includes("category = 'signed_dtp'"),
+        result: () => ({ rows: [] }),
+      },
+      {
+        match: (sql) => sql.includes('INSERT INTO public.check_files'),
+        result: (_params, sql) => {
+          sqls.push(sql);
+          return { rows: [{ id: 'chk1' }], rowCount: 1 };
+        },
+      },
+      {
+        match: (sql) => sql.includes('UPDATE public.loss_draft_documents'),
+        result: (_params, sql) => {
+          sqls.push(sql);
+          return { rows: [], rowCount: 1 };
+        },
+      },
+    ]),
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.allSigned, true);
+  assert.equal(result.depositAdvanceDenied, true);
+  assert.equal(attached, true);
+  assert.equal(sqls.some((sql) => sql.includes('SET final_pdf_path')), true);
+  assert.equal(sqls.some((sql) => /record_check_return|ready_for_deposit|approved_for_deposit|bill_mortgage/.test(sql)), false);
 });

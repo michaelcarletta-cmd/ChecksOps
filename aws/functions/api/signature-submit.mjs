@@ -4,15 +4,128 @@
  * Completes the request when every signer is signed. Does not call deposit RPCs.
  */
 import pg from 'pg';
+import { CopyObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { parseBody, ignoredSpoof } from './data.mjs';
 import { loadDatabaseCredentials } from './secrets.mjs';
 import { buildWriteClientConfig, sanitizePublicError } from './db-health.mjs';
 import { hashToken } from './esign.mjs';
 import { clientIpFromEvent, userAgentFromEvent } from './check-endorsement.mjs';
+import { normalizePath, s3KeyFor } from './storage-paths.mjs';
 
 const { Client } = pg;
 
 export const DEFAULT_SIGN_CONSENT = 'Electronic records and signature consent accepted before signing.';
+
+const filesBucket = () => process.env.FILES_BUCKET || '';
+const s3 = () => new S3Client({ region: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1' });
+
+export const signedDocumentPath = (request) => (
+  request.claim_id
+    ? `signed/${request.claim_id}/${request.id}-final.pdf`
+    : `check-intake/${request.check_intake_item_id}/files/${request.id}-final.pdf`
+);
+
+export const attachCompletedSignatureDocument = async (client, request, deps = {}) => {
+  const originalPath = request.document_path;
+  if (!originalPath) throw new Error('missing_document_path');
+  if (!request.claim_id && !request.check_intake_item_id) {
+    throw new Error('signature request is not linked to a claim or check');
+  }
+  const destRel = signedDocumentPath(request);
+  const srcKey = s3KeyFor('claim-files', normalizePath(originalPath, 'claim-files'));
+  const destKey = s3KeyFor('claim-files', normalizePath(destRel, 'claim-files'));
+  const bucket = filesBucket();
+  if (!bucket || !srcKey || !destKey) throw new Error('s3_not_configured');
+  const copyObject = deps.copyObject || (async () => {
+    const s3c = deps.s3 || s3();
+    await s3c.send(new HeadObjectCommand({ Bucket: bucket, Key: srcKey }));
+    try {
+      await s3c.send(new CopyObjectCommand({
+        Bucket: bucket,
+        Key: destKey,
+        CopySource: `${bucket}/${srcKey}`,
+        ContentType: 'application/pdf',
+        MetadataDirective: 'REPLACE',
+      }));
+    } catch {
+      const obj = await s3c.send(new GetObjectCommand({ Bucket: bucket, Key: srcKey }));
+      const bytes = Buffer.from(await obj.Body.transformToByteArray());
+      await s3c.send(new PutObjectCommand({
+        Bucket: bucket,
+        Key: destKey,
+        Body: bytes,
+        ContentType: 'application/pdf',
+      }));
+    }
+  });
+  await copyObject({ srcKey, destKey, destRel });
+
+  await safeQuery(
+    client,
+    `UPDATE public.signature_requests
+     SET final_pdf_path = $2, completion_status = 'completed'
+     WHERE id = $1::uuid`,
+    [request.id, destRel],
+  );
+
+  const signedName = `SIGNED - ${request.document_name}`;
+  if (request.claim_id) {
+    const existingClaim = (await safeQuery(
+      client,
+      `SELECT id FROM public.claim_files
+       WHERE claim_id = $1::uuid AND file_path = $2
+       LIMIT 1`,
+      [request.claim_id, destRel],
+    )).rows[0];
+    if (!existingClaim) {
+      await safeQuery(
+        client,
+        `INSERT INTO public.claim_files (claim_id, file_name, file_path, file_type)
+         VALUES ($1::uuid, $2, $3, 'application/pdf')`,
+        [request.claim_id, signedName, destRel],
+      );
+    }
+  }
+
+  let checkId = request.check_intake_item_id || null;
+  if (!checkId && originalPath) {
+    checkId = (await safeQuery(
+      client,
+      `SELECT check_intake_item_id FROM public.check_files WHERE file_path = $1 LIMIT 1`,
+      [originalPath],
+    )).rows[0]?.check_intake_item_id || null;
+  }
+  if (checkId) {
+    const existingCheck = (await safeQuery(
+      client,
+      `SELECT id FROM public.check_files
+       WHERE signature_request_id = $1::uuid AND category = 'signed_dtp'
+       LIMIT 1`,
+      [request.id],
+    )).rows[0];
+    if (!existingCheck) {
+      await safeQuery(
+        client,
+        `INSERT INTO public.check_files (
+           check_intake_item_id, file_name, file_path, file_type, category, source, signature_request_id
+         ) VALUES ($1::uuid, $2, $3, 'application/pdf', 'signed_dtp', 'system', $4::uuid)`,
+        [checkId, `${signedName}.pdf`, destRel, request.id],
+      );
+    }
+  }
+
+  await safeQuery(
+    client,
+    `UPDATE public.loss_draft_documents
+     SET is_submitted = true,
+         submitted_at = COALESCE(submitted_at, now()),
+         signature_status = 'signed',
+         signed_at = COALESCE(signed_at, now())
+     WHERE signature_request_id = $1::uuid`,
+    [request.id],
+  );
+  return { final_pdf_path: destRel, original_path: originalPath };
+};
 
 const publicDb = async (deps = {}) => {
   if (deps.client) return { client: deps.client, owned: false };
@@ -129,7 +242,7 @@ export const runPublicSignatureSubmit = async (event, deps = {}) => {
     const tokenHash = hashToken(token);
     const signer = (await safeQuery(
       client,
-      `SELECT s.*, r.id AS request_id, r.document_name, r.field_data, r.claim_id,
+      `SELECT s.*, r.id AS request_id, r.document_name, r.document_path, r.field_data, r.claim_id,
               r.check_intake_item_id, r.status AS request_status
        FROM public.signature_signers s
        JOIN public.signature_requests r ON r.id = s.signature_request_id
@@ -166,6 +279,7 @@ export const runPublicSignatureSubmit = async (event, deps = {}) => {
     const request = {
       id: signer.signature_request_id || signer.request_id,
       document_name: signer.document_name,
+      document_path: signer.document_path,
       field_data: signer.field_data,
       claim_id: signer.claim_id,
       check_intake_item_id: signer.check_intake_item_id,
@@ -240,12 +354,24 @@ export const runPublicSignatureSubmit = async (event, deps = {}) => {
       await safeQuery(
         client,
         `UPDATE public.signature_requests
-         SET status = 'completed', completed_at = now(), last_error = NULL
+         SET status = 'completed', completed_at = now(), last_error = NULL, completion_status = 'pending'
          WHERE id = $1::uuid`,
         [request.id],
       );
       if (typeof deps.flattenPdf === 'function') {
         try { await deps.flattenPdf({ request, signer }); } catch { /* best-effort */ }
+      } else {
+        try {
+          await attachCompletedSignatureDocument(client, request, deps);
+        } catch (attachErr) {
+          await safeQuery(
+            client,
+            `UPDATE public.signature_requests
+             SET completion_status = 'failed', last_error = $2
+             WHERE id = $1::uuid`,
+            [request.id, `PDF attach failed: ${String(attachErr?.message || attachErr).slice(0, 180)}`],
+          );
+        }
       }
     }
     await client.query('COMMIT');

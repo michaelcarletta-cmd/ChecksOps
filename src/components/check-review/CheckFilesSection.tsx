@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { SignatureRequests } from "@/components/claim-detail/SignatureRequests";
 
 interface CheckFilesSectionProps {
   checkIntakeItemId: string;
@@ -66,6 +67,20 @@ export function CheckFilesSection({ checkIntakeItemId }: CheckFilesSectionProps)
       return (data ?? []) as CheckFile[];
     },
   });
+
+  const { data: checkClaim } = useQuery({
+    queryKey: ["check-signature-claim", checkIntakeItemId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("check_intake_items")
+        .select("id, claim_id, claims:claim_id(id, claim_number, policyholder_name, policyholder_email)")
+        .eq("id", checkIntakeItemId)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+  const linkedClaim = (checkClaim as any)?.claims || null;
 
   const handleUpload = async (fileList: FileList | null) => {
     if (!fileList?.length) return;
@@ -278,6 +293,27 @@ export function CheckFilesSection({ checkIntakeItemId }: CheckFilesSectionProps)
                   >
                     <Download className="h-3.5 w-3.5" />
                   </Button>
+                  {/\.pdf$/i.test(file.file_name) && linkedClaim?.id && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 w-7 p-0 text-primary"
+                      onClick={() => {
+                        localStorage.setItem(
+                          "preselected_sig_file",
+                          JSON.stringify({
+                            id: file.id,
+                            file_name: file.file_name,
+                            file_path: file.file_path,
+                          }),
+                        );
+                        window.dispatchEvent(new Event("preselected-sig-file"));
+                      }}
+                      title="Send for Homeowner Signature"
+                    >
+                      <FileSignature className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="ghost"
@@ -315,6 +351,14 @@ export function CheckFilesSection({ checkIntakeItemId }: CheckFilesSectionProps)
           })
         )}
       </CardContent>
+
+      {linkedClaim?.id && (
+        <SignatureRequests
+          claimId={linkedClaim.id}
+          claim={linkedClaim}
+          checkIntakeItemId={checkIntakeItemId}
+        />
+      )}
 
       <Dialog open={!!preview} onOpenChange={() => setPreview(null)}>
         <DialogContent className="max-w-3xl max-h-[85vh]">

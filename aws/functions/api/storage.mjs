@@ -3,7 +3,7 @@ import pg from 'pg';
 import { GetObjectCommand, HeadObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { loadDatabaseCredentials } from './secrets.mjs';
-import { buildClientConfig, sanitizePublicError } from './db-health.mjs';
+import { buildClientConfig, buildWriteClientConfig, sanitizePublicError } from './db-health.mjs';
 import { parseBody, ignoredSpoof, withIdentity } from './data.mjs';
 import {
   APP_BUCKET_SET,
@@ -329,6 +329,54 @@ const publicClient = async (deps) => {
   return client;
 };
 
+export const recordPublicSignerViewed = async (deps, { signerId, requestId, claimId, alreadyViewed }) => {
+  if (!signerId || !requestId || alreadyViewed) return { recorded: false, reason: 'skipped' };
+  let writer = deps.writeClient;
+  let owned = false;
+  if (!writer) {
+    const loadCredentials = deps.loadDatabaseCredentials || loadDatabaseCredentials;
+    const createClient = deps.createWriteClient || deps.createClient || ((config) => new Client(config));
+    const credentials = await loadCredentials();
+    writer = createClient(buildWriteClientConfig(credentials, { queryTimeoutMillis: 8000 }));
+    owned = true;
+    await writer.connect();
+  }
+  try {
+    await writer.query('BEGIN');
+    await writer.query('SET TRANSACTION READ WRITE');
+    const viewed = await writer.query(
+      `UPDATE public.signature_signers
+       SET viewed_at = COALESCE(viewed_at, now())
+       WHERE id = $1::uuid AND viewed_at IS NULL
+       RETURNING id, viewed_at`,
+      [signerId],
+    );
+    await writer.query(
+      `UPDATE public.signature_requests
+       SET status = 'in_progress'
+       WHERE id = $1::uuid AND status = 'pending'`,
+      [requestId],
+    );
+    if (viewed.rowCount) {
+      await writer.query(
+        `INSERT INTO public.esign_event_logs (
+           request_id, signer_id, claim_id, stage, status, message, payload
+         ) VALUES ($1::uuid, $2::uuid, $3::uuid, 'signer_viewed', 'ok', 'Signer opened the document', '{}'::jsonb)`,
+        [requestId, signerId, claimId || null],
+      );
+    }
+    await writer.query('COMMIT');
+    return { recorded: viewed.rowCount > 0 };
+  } catch (error) {
+    try { await writer.query('ROLLBACK'); } catch { /* ignore */ }
+    return { recorded: false, error: sanitizePublicError(error) };
+  } finally {
+    if (owned) {
+      try { await writer.end(); } catch { /* ignore */ }
+    }
+  }
+};
+
 export const isPublicBrandingPath = async (client, bucket, rel) => {
   if (!PUBLIC_BRANDING_BUCKETS.includes(bucket)) return false;
   if (bucket === 'email-assets') return rel === 'checksops-logo.png';
@@ -461,10 +509,19 @@ export const handlePublicSignatureDocument = async (event, deps = {}) => {
       expiresIn: SIGNING_DOCUMENT_EXPIRES,
       maxExpires: SIGNING_DOCUMENT_EXPIRES,
     });
+    const view = await recordPublicSignerViewed(deps, {
+      signerId: row.signer?.id,
+      requestId: row.request?.id,
+      claimId: row.request?.claim_id || row.claim?.id,
+      alreadyViewed: Boolean(row.signer?.viewed_at),
+    });
     return {
       ok: true,
       statusCode: 200,
-      signer: row.signer,
+      signer: {
+        ...row.signer,
+        viewed_at: row.signer?.viewed_at || (view.recorded ? new Date().toISOString() : row.signer?.viewed_at),
+      },
       request: {
         ...row.request,
         claims: row.claim,
@@ -472,6 +529,7 @@ export const handlePublicSignatureDocument = async (event, deps = {}) => {
       fields: row.fields || [],
       presets: row.presets || [],
       signedUrl,
+      viewedRecorded: view.recorded === true,
       spoofFieldsIgnored: spoof,
     };
   } catch (error) {
