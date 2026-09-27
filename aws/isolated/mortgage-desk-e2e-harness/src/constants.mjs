@@ -37,6 +37,8 @@ export const BILLING_TENANT_ID = '41cbc4b4-c5cd-4020-a6aa-0905e79dafe9';
 export const ZERO_TENANT_ID = '22233ffe-7a69-4c46-88c3-1587dc525f1f';
 
 export const SYNTHETIC_MDE2E_EMAIL = 'claims+mde2e@freedomadj.com';
+export const SYNTHETIC_MDE2E_USER_ID = '97a1e063-bd9d-4c28-bcbe-b9b462a52894';
+export const SYNTHETIC_MDE2E_COGNITO_SUB = '94f8b498-6091-706c-886a-b821353e261d';
 
 export const CANDIDATE_SYNTHETIC_IDENTITIES = [
   {
@@ -45,7 +47,7 @@ export const CANDIDATE_SYNTHETIC_IDENTITIES = [
     label: 'staging_mops_invalid',
   },
   {
-    id: null,
+    id: SYNTHETIC_MDE2E_USER_ID,
     email: SYNTHETIC_MDE2E_EMAIL,
     label: 'staging_mde2e_plus_address',
   },

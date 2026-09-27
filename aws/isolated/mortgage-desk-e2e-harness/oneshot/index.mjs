@@ -152,6 +152,11 @@ const createRows = async (client, { applicationUserId, cognitoSub }) => {
 };
 
 const verifyIsolation = async (client, applicationUserId) => {
+  const catalog = (await client.query(
+    `SELECT id::text AS tenant_id, name, slug
+     FROM public.tenants
+     ORDER BY name`,
+  )).rows;
   await client.query('BEGIN');
   try {
     await client.query('SET LOCAL ROLE checksops');
@@ -173,6 +178,15 @@ const verifyIsolation = async (client, applicationUserId) => {
               public.aws_can_write_tenant($4::uuid) AS can_write_zero`,
       [BILLING_TENANT_ID, FREEDOM_TENANT_ID, C1C_TENANT_ID, ZERO_TENANT_ID],
     )).rows[0];
+    const probed = [];
+    for (const tenant of catalog) {
+      const row = (await client.query(
+        `SELECT public.aws_can_access_tenant($1::uuid) AS can_access,
+                public.aws_can_write_tenant($1::uuid) AS can_write`,
+        [tenant.tenant_id],
+      )).rows[0];
+      probed.push({ ...tenant, ...row });
+    }
     const roles = (await client.query(
       `SELECT role FROM public.user_roles WHERE user_id = $1::uuid ORDER BY role`,
       [applicationUserId],
@@ -182,7 +196,16 @@ const verifyIsolation = async (client, applicationUserId) => {
       [applicationUserId],
     )).rows;
     await client.query('ROLLBACK');
-    return { authUid: uid?.auth_uid || null, roles, memberships, ...flags };
+    const others = probed.filter((row) => row.tenant_id !== BILLING_TENANT_ID);
+    return {
+      authUid: uid?.auth_uid || null,
+      roles,
+      memberships,
+      otherTenantsWritable: others.filter((row) => row.can_write).map((row) => row.tenant_id),
+      otherTenantsAccessible: others.filter((row) => row.can_access).map((row) => row.tenant_id),
+      otherTenantCount: others.length,
+      ...flags,
+    };
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch { /* ignore */ }
     throw error;
