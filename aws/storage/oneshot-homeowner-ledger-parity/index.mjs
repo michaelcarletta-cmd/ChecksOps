@@ -310,6 +310,14 @@ export const handler = async (event = {}) => {
            AND grantee IN ('checksops', 'authenticated', 'PUBLIC')
          ORDER BY 1, 2, 3`,
       )).rows;
+      const foreign = (await client.query(
+        `SELECT r.id, r.claim_id, r.check_intake_item_id, c.tenant_id
+         FROM public.signature_requests r
+         JOIN public.check_intake_items c ON c.id = r.check_intake_item_id
+         WHERE c.tenant_id IS DISTINCT FROM '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a'::uuid
+         ORDER BY r.created_at DESC NULLS LAST
+         LIMIT 1`,
+      )).rows[0] || null;
       return {
         ok: true,
         mode,
@@ -318,6 +326,7 @@ export const handler = async (event = {}) => {
         request,
         signers,
         grants,
+        foreign,
         productionSupabaseChanged: false,
       };
     }
