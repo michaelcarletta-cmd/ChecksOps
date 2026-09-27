@@ -145,8 +145,8 @@ const cleanupFailedDraft = async (client) => {
 
 export const handler = async (event = {}) => {
   const mode = String(event.mode || process.env.APPLY_MODE || 'inspect');
-  if (!['inspect', 'apply', 'cleanup', 'verify'].includes(mode)) {
-    return { ok: false, error: 'mode must be inspect|apply|cleanup|verify' };
+  if (!['inspect', 'apply', 'cleanup', 'verify', 'snapshot', 'expire_signer'].includes(mode)) {
+    return { ok: false, error: 'mode must be inspect|apply|cleanup|verify|snapshot|expire_signer' };
   }
   if (!CA_PATH) return { ok: false, error: 'rds ca missing' };
   if ((mode === 'apply') && !SQL_PATH) return { ok: false, error: '69 sql missing' };
@@ -194,6 +194,98 @@ export const handler = async (event = {}) => {
         draft: draftBefore,
         productionSupabaseChanged: false,
       };
+    }
+    if (mode === 'snapshot') {
+      const checkId = event.checkId;
+      const claimId = event.claimId;
+      const requestId = event.requestId;
+      const check = checkId
+        ? (await client.query(
+          `SELECT id, status, check_stage, amount, claim_id, tenant_id
+           FROM public.check_intake_items WHERE id = $1::uuid`,
+          [checkId],
+        )).rows[0]
+        : null;
+      const claim = claimId
+        ? (await client.query(`SELECT id, status FROM public.claims WHERE id = $1::uuid`, [claimId])).rows[0]
+        : null;
+      const billing = checkId
+        ? (await client.query(
+          `SELECT id, event_type, amount, created_at
+           FROM public.check_billing_events
+           WHERE check_intake_item_id = $1::uuid
+           ORDER BY created_at`,
+          [checkId],
+        )).rows
+        : [];
+      const billingCount = billing.length;
+      const request = requestId
+        ? (await client.query(
+          `SELECT id, claim_id, check_intake_item_id, document_path, final_pdf_path, status, document_name
+           FROM public.signature_requests WHERE id = $1::uuid`,
+          [requestId],
+        )).rows[0]
+        : null;
+      const signers = requestId
+        ? (await client.query(
+          `SELECT id, signer_email, status, viewed_at, signed_at, expires_at
+           FROM public.signature_signers WHERE signature_request_id = $1::uuid`,
+          [requestId],
+        )).rows
+        : [];
+      const checkFiles = requestId
+        ? (await client.query(
+          `SELECT id, file_path, file_name, category, signature_request_id
+           FROM public.check_files
+           WHERE signature_request_id = $1::uuid
+              OR (check_intake_item_id = $2::uuid AND file_path = $3)`,
+          [requestId, checkId || null, request?.final_pdf_path || ''],
+        )).rows
+        : [];
+      const events = requestId
+        ? (await client.query(
+          `SELECT stage, status, message, created_at
+           FROM public.esign_event_logs
+           WHERE request_id = $1::uuid
+           ORDER BY created_at`,
+          [requestId],
+        )).rows
+        : [];
+      return {
+        ok: true,
+        mode,
+        check,
+        claim,
+        billingCount,
+        billing,
+        request,
+        signers,
+        checkFiles,
+        events,
+        productionSupabaseChanged: false,
+      };
+    }
+    if (mode === 'expire_signer') {
+      const signerId = event.signerId;
+      if (!signerId) return { ok: false, error: 'signerId required' };
+      const beforeSigner = (await client.query(
+        `SELECT id, signature_request_id, status, expires_at
+         FROM public.signature_signers WHERE id = $1::uuid`,
+        [signerId],
+      )).rows[0];
+      if (!beforeSigner) return { ok: false, error: 'signer_not_found' };
+      await client.query(
+        `UPDATE public.signature_signers
+         SET expires_at = now() - interval '1 hour'
+         WHERE id = $1::uuid`,
+        [signerId],
+      );
+      const afterSigner = (await client.query(
+        `SELECT id, signature_request_id, status, expires_at
+         FROM public.signature_signers WHERE id = $1::uuid`,
+        [signerId],
+      )).rows[0];
+      return { ok: true, mode, beforeSigner, afterSigner, productionSupabaseChanged: false };
     }
     await client.query('BEGIN');
     await client.query(fs.readFileSync(SQL_PATH, 'utf8'));
