@@ -21,11 +21,11 @@ const brandingSave = branding.slice(
 );
 const brandingHero = branding.slice(
   branding.indexOf('<SettingsHero'),
-  branding.indexOf('</SettingsHero>') + '</SettingsHero>'.length,
+  branding.indexOf('title="Company Information"'),
 );
-const adminSave = adminTenants.slice(
+const adminBrandingTab = adminTenants.slice(
   adminTenants.indexOf('function BrandingTab'),
-  adminTenants.indexOf('Save Branding') + 'Save Branding'.length,
+  adminTenants.indexOf('/* ---------------- Users Tab ---------------- */'),
 );
 
 test('Branding Settings hero matches the other Settings tab pattern', () => {
@@ -39,9 +39,9 @@ test('Branding Settings hero matches the other Settings tab pattern', () => {
 });
 
 test('Save Branding / company branding payloads omit the rejected columns', () => {
-  assert.match(adminSave, /Save Branding/);
-  assert.match(adminSave, /save\(\{ logo_url: logoUrl \|\| null, primary_color: primary \}\)/);
-  assert.equal(adminSave.includes('secondary_color'), false);
+  assert.match(adminBrandingTab, /Save Branding/);
+  assert.match(adminBrandingTab, /save\(\{ logo_url: logoUrl \|\| null, primary_color: primary \}\)/);
+  assert.equal(/save\(\{[^}]*secondary_color/.test(adminBrandingTab), false);
 
   assert.match(brandingSave, /company_name: companyName/);
   assert.match(brandingSave, /letterhead_url: letterheadUrl/);
