@@ -153,8 +153,10 @@ export const runReadOnlyInvestigate = async ({
     ]);
     const claimSelect = pick(claimCols, [
       'id', 'claim_number', 'org_id', 'tenant_id', 'insured_name', 'claimant_name', 'status',
-      'is_closed', 'created_at', 'created_by', 'homeowner_name',
+      'is_closed', 'created_at', 'created_by', 'homeowner_name', 'policyholder_name',
+      'insurance_company', 'claim_tracking_number',
     ]);
+    const claimNameCols = ['insured_name', 'claimant_name', 'homeowner_name', 'policyholder_name', 'insurance_company'];
     const claimTenantCol = claimCols.has('org_id') ? 'org_id' : (claimCols.has('tenant_id') ? 'tenant_id' : null);
 
     const tenantsById = new Map();
@@ -179,7 +181,7 @@ export const runReadOnlyInvestigate = async ({
           params.push(TEST_CLAIM_REGEX);
           where.push(`claim_number ~* $` + params.length);
         }
-        for (const col of ['insured_name', 'claimant_name', 'homeowner_name']) {
+        for (const col of claimNameCols) {
           if (claimCols.has(col)) {
             params.push(TEST_CLAIM_REGEX);
             where.push(`${col} ~* $` + params.length);
@@ -198,12 +200,28 @@ export const runReadOnlyInvestigate = async ({
         claims = (await readOnlyQuery(client, sql, params)).rows;
         for (const claim of claims) claimsById.set(claim.id, claim);
       }
+      const recentClaims = claimSelect.length
+        ? (await readOnlyQuery(
+          client,
+          `SELECT ${claimSelect.map((name) => `"${name}"`).join(', ')}
+           FROM public.claims
+           ORDER BY created_at DESC NULLS LAST
+           LIMIT 10`,
+        )).rows
+        : [];
+      const claimCountVisible = (await readOnlyQuery(
+        client,
+        `SELECT count(*)::int AS n FROM public.claims`,
+      )).rows[0]?.n ?? null;
       probeResults.push({
         ...applied,
         tenantCount: tenants.length,
         tenantIds: tenants.map((row) => row.id),
         testLikeClaimCount: claims.length,
         testLikeClaimIds: claims.map((row) => row.id),
+        claimCountVisible,
+        recentClaimIds: recentClaims.map((row) => row.id),
+        recentClaimNumbers: recentClaims.map((row) => row.claim_number || null),
       });
     }
     out.probes = probeResults;
@@ -328,6 +346,122 @@ export const runReadOnlyInvestigate = async ({
         checks,
       });
     }
+    const referencedClaimIds = [...new Set(
+      out.syntheticTenantInventory.flatMap((item) => (item.requests || []).map((row) => row.claim_id).filter(Boolean)),
+    )];
+    out.referencedClaims = [];
+    if (referencedClaimIds.length && claimSelect.length) {
+      out.referencedClaims = (await readOnlyQuery(
+        client,
+        `SELECT ${claimSelect.map((name) => `"${name}"`).join(', ')}
+         FROM public.claims
+         WHERE id = ANY($1::uuid[])`,
+        [referencedClaimIds],
+      )).rows;
+      const byClaimBilling = (await readOnlyQuery(
+        client,
+        `SELECT claim_id, event_type, status, unit_price_cents, count(*)::int AS n
+         FROM public.check_billing_events
+         WHERE claim_id = ANY($1::uuid[])
+           AND event_type IN ('mortgage_ops_initial', 'mortgage_ops_additional_check')
+         GROUP BY claim_id, event_type, status, unit_price_cents`,
+        [referencedClaimIds],
+      )).rows;
+      out.referencedClaimBilling = byClaimBilling;
+      for (const claim of out.referencedClaims) claimsById.set(claim.id, claim);
+    }
+    const referencedCheckIds = [...new Set(
+      out.syntheticTenantInventory.flatMap((item) => (item.requests || []).map((row) => row.check_intake_item_id).filter(Boolean)),
+    )];
+    out.referencedChecks = [];
+    if (referencedCheckIds.length) {
+      out.referencedChecks = (await readOnlyQuery(
+        client,
+        `SELECT id, tenant_id, claim_id, check_number, carrier_name, check_stage, created_at
+         FROM public.check_intake_items
+         WHERE id = ANY($1::uuid[])
+         ORDER BY created_at DESC NULLS LAST
+         LIMIT 80`,
+        [referencedCheckIds],
+      )).rows;
+    }
+    out.claimVisibilityByIdentity = [];
+    if (referencedClaimIds.length && claimSelect.length) {
+      for (const probe of READONLY_PROBE_IDENTITIES) {
+        const applied = await applyIdentity(client, probe);
+        const visible = (await readOnlyQuery(
+          client,
+          `SELECT ${claimSelect.map((name) => `"${name}"`).join(', ')}
+           FROM public.claims
+           WHERE id = ANY($1::uuid[])`,
+          [referencedClaimIds],
+        )).rows;
+        out.claimVisibilityByIdentity.push({
+          label: applied.label,
+          visibleCount: visible.length,
+          visibleClaimIds: visible.map((row) => row.id),
+          claims: visible,
+        });
+        for (const claim of visible) claimsById.set(claim.id, claim);
+      }
+      await applyIdentity(client, READONLY_PROBE_IDENTITIES[0]);
+    }
+    out.tenantClaimSamples = [];
+    for (const tenant of out.tenantsVisible) {
+      if (!claimTenantCol) continue;
+      const count = (await readOnlyQuery(
+        client,
+        `SELECT count(*)::int AS n FROM public.claims WHERE ${claimTenantCol} = $1::uuid`,
+        [tenant.id],
+      )).rows[0].n;
+      const sample = (await readOnlyQuery(
+        client,
+        `SELECT ${claimSelect.map((name) => `"${name}"`).join(', ')}
+         FROM public.claims
+         WHERE ${claimTenantCol} = $1::uuid
+         ORDER BY created_at DESC NULLS LAST
+         LIMIT 8`,
+        [tenant.id],
+      )).rows;
+      out.tenantClaimSamples.push({
+        tenantId: tenant.id,
+        tenantName: tenant.name,
+        claimCount: count,
+        sampleClaimIds: sample.map((row) => row.id),
+        sampleClaimNumbers: sample.map((row) => row.claim_number || null),
+      });
+      if (/synth|test|sandbox|demo|fixture|e2e/i.test(`${tenant.name || ''} ${tenant.slug || ''}`)) {
+        for (const claim of sample) claimsById.set(claim.id, claim);
+      }
+    }
+    let moovInvoices = null;
+    try {
+      moovInvoices = (await readOnlyQuery(
+        client,
+        `SELECT tenant_id, count(*)::int AS n
+         FROM public.moov_invoices
+         WHERE tenant_id = ANY($1::uuid[])
+         GROUP BY tenant_id`,
+        [syntheticTenantIds],
+      )).rows;
+    } catch (error) {
+      moovInvoices = { error: String(error.message || error).slice(0, 200) };
+    }
+    let feeLineItems = null;
+    try {
+      feeLineItems = (await readOnlyQuery(
+        client,
+        `SELECT tenant_id, count(*)::int AS n
+         FROM public.platform_fee_line_items
+         WHERE tenant_id = ANY($1::uuid[])
+         GROUP BY tenant_id`,
+        [syntheticTenantIds],
+      )).rows;
+    } catch (error) {
+      feeLineItems = { error: String(error.message || error).slice(0, 200) };
+    }
+    out.syntheticMoneyMovement = { moovInvoices, feeLineItems };
+
     out.freedomAcceptanceFixtureProbe = (await readOnlyQuery(
       client,
       `SELECT count(*)::int AS request_count,
@@ -337,6 +471,7 @@ export const runReadOnlyInvestigate = async ({
       [FREEDOM_TENANT_ID],
     )).rows[0];
 
+    const fixtureClaimIds = new Set(referencedClaimIds);
     const candidateClaims = [];
     const seen = new Set();
     const allClaimIds = [...claimsById.keys()];
@@ -400,7 +535,10 @@ export const runReadOnlyInvestigate = async ({
       }
 
       const testLike = /synthetic|mde2e|e2e|fixture|dummy|not negotiable|checksops-test|test claim|test-claim/i
-        .test([claim.claim_number, claim.insured_name, claim.claimant_name, claim.homeowner_name].filter(Boolean).join(' '));
+        .test([
+          claim.claim_number, claim.insured_name, claim.claimant_name, claim.homeowner_name,
+          claim.policyholder_name, claim.insurance_company,
+        ].filter(Boolean).join(' '));
       const hasInitial = billing.some((row) => row.event_type === 'mortgage_ops_initial');
       const hasAdditional = billing.some((row) => row.event_type === 'mortgage_ops_additional_check');
       const hasDeskHistory = requests.length > 0;
@@ -437,20 +575,44 @@ export const runReadOnlyInvestigate = async ({
         canUseWithoutUpdatingClaim: true,
         likelyRealCustomerClaim: !testLike && !dedicatedTenant,
         ratesMatch: Boolean(ratesMatch),
+        affectsExistingFixture: fixtureClaimIds.has(claimId),
+        safeToReuseAsNewCheckParent: Boolean(
+          (dedicatedTenant || testLike)
+          && !hasInitial
+          && !hasAdditional
+          && !hasDeskHistory
+          && !fixtureClaimIds.has(claimId)
+          && ratesMatch
+        ),
       });
     }
 
     out.candidateClaims = candidateClaims.sort((a, b) => {
       const score = (row) => (
-        (row.dedicatedTestTenant ? 8 : 0)
+        (row.safeToReuseAsNewCheckParent ? 16 : 0)
+        + (row.dedicatedTestTenant ? 8 : 0)
         + (row.testLikeClaim ? 4 : 0)
         + (row.wouldClassifyNewCheckAsInitial ? 2 : 0)
         + (row.ratesMatch ? 1 : 0)
         - (row.likelyRealCustomerClaim ? 6 : 0)
         - (row.hasMortgageDeskHistory ? 2 : 0)
+        - (row.affectsExistingFixture ? 8 : 0)
       );
       return score(b) - score(a);
     });
+
+    const billingTenant = out.tenantsVisible.find((tenant) => tenant.slug === 'synthetic-mortgage-ops-billing') || null;
+    const zeroTenant = out.tenantsVisible.find((tenant) => tenant.slug === 'synthetic-mortgage-ops-zero') || null;
+    const safeParents = candidateClaims.filter((row) => row.safeToReuseAsNewCheckParent);
+    out.recommendation = {
+      dedicatedBillingTenantId: billingTenant?.id || null,
+      dedicatedZeroTenantId: zeroTenant?.id || null,
+      safeParentCount: safeParents.length,
+      safeParentClaimIds: safeParents.map((row) => row.claimId),
+      preferredIfSafe: safeParents[0] || null,
+      doNotUseFixtureClaimIds: [...fixtureClaimIds],
+      doNotUseFreedomAsFirstChoice: true,
+    };
 
     out.safeCleanupWithoutExtraPrivileges = {
       check_intake_items: Boolean(out.privileges.check_intake_items?.DELETE),
@@ -467,7 +629,10 @@ export const runReadOnlyInvestigate = async ({
       stagingProviderExecutionExpected: false,
       stripeReporterSelectsAllRecordedEvents: true,
       stripeReporterRequiresCustomer: true,
-      leftoverBillingEventRisk: 'If status=recorded and the tenant has stripe_customer_id, a later Stripe reporter (if still wired to this database) could meter it. Isolation requires a tenant without stripe_customer_id, or an event type/status the reporter will not pick up.',
+      stripeReporterIsAwsClassA: false,
+      getTenantCheckUsageIncludesAllNonVoidedEvents: true,
+      leftoverBillingEventRisk: 'A leftover status=recorded mortgage_ops event is selected by the Lovable Stripe reporter with no event_type filter. That reporter is not an AWS Class A handler. It meters only when tenant_credit_balances.stripe_customer_id exists; otherwise it would mark the row failed. get_tenant_check_usage includes every non-voided event for that tenant. Isolation therefore requires the synthetic tenant to stay out of tenant_credit_balances and out of any real invoice/Moov debit job.',
+      syntheticMoneyMovement: out.syntheticMoneyMovement,
     };
 
     out.ok = true;
