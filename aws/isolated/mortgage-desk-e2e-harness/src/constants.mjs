@@ -36,11 +36,18 @@ export const READONLY_PROBE_IDENTITIES = [
 export const BILLING_TENANT_ID = '41cbc4b4-c5cd-4020-a6aa-0905e79dafe9';
 export const ZERO_TENANT_ID = '22233ffe-7a69-4c46-88c3-1587dc525f1f';
 
+export const SYNTHETIC_MDE2E_EMAIL = 'claims+mde2e@freedomadj.com';
+
 export const CANDIDATE_SYNTHETIC_IDENTITIES = [
   {
     id: 'c7729c3e-d87b-46c6-973e-9c04fbdcc961',
     email: 'staging-mops-4b61bc@checksops.invalid',
     label: 'staging_mops_invalid',
+  },
+  {
+    id: null,
+    email: SYNTHETIC_MDE2E_EMAIL,
+    label: 'staging_mde2e_plus_address',
   },
 ];
 
