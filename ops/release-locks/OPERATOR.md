@@ -30,10 +30,10 @@ The pre-existing `aws-migration-guards` failure is unrelated to this lock system
 - Recorded SQL `source_sha256` values must match file bytes.
 - The applied-migration ledger is **append-only against the trusted base ref** (`RELEASE_LOCK_BASE_SHA` or the verified merge base). Existing rows cannot be deleted, reordered in a meaning-changing way, mutated, or promoted from `applied=false` to `applied=true`. Application evidence is a **new** appended `apply_evidence` record linked to the original source record, with a tracked repository proof path and environment metadata.
 - This PR is the genesis ledger (`genesis=true`, `immutable_starting_point=true`). After merge, all future validation compares candidate history against the base-branch ledger.
-- `PRODUCTION_LOCKED` rejects self-attested booleans, `recorded=true` alone, and arbitrary 64-character hashes. SQL whose source contains `NOT_APPLIED` / `DO NOT APPLY` cannot be treated as applied. Proof and evidence references must be existing tracked repository paths. A deployment fingerprint must include at least one immutable production identifier (published Lambda version + code hash, SPA bundle filename + SHA-256, CloudFront distribution/deployment fingerprint, or applied SQL hash plus a database evidence record).
+- `PRODUCTION_LOCKED` rejects self-attested booleans, `recorded=true` alone, and arbitrary 64-character hashes. SQL whose source contains `NOT_APPLIED` / `DO NOT APPLY` cannot be treated as applied. Proof and evidence references must be existing tracked repository paths. A deployment fingerprint must include at least one immutable production identifier (published Lambda version + code hash, SPA bundle filename + SHA-256, CloudFront distribution/deployment fingerprint, or applied SQL hash plus a database evidence record). A SPA-only component may have empty `required_sql` only when `artifact.type=spa`, `artifact.hash` matches `deployment_fingerprint.spa_sha256`, and `spa_bundle` is recorded.
 - `production_active=true` is forbidden unless classification is `PRODUCTION_LOCKED`.
 - Duplicate JSON keys, unknown properties, incomplete classification names, component/group deletion with a replacement tree hash, and unowned files under watched production-provider directories fail closed.
-- A production deploy candidate fingerprint must match locked artifacts. Live AWS comparison is disabled on purpose.
+- A production deploy candidate fingerprint must match locked artifacts, except a `production-spa` overlay that declares `based_on_baseline` equal to the locked live pins. Stale/superseded bundles, unreconciled `main`, TOCTOU drift, lock/live mismatch, and `s3 sync --delete` fail closed. Live AWS comparison via `--live` is disabled on purpose.
 - Overlapping open PRs that already touch the same protected path fail CI unless an explicit `overlap-allowlist.json` exception is reviewed. Pagination of open PRs must be proven complete.
 
 Documentation, chat history, and “merged” status are **not** production locks.
@@ -102,7 +102,18 @@ Operators who wrap a deploy script MUST run:
 node scripts/production-deploy-guard.mjs --candidate path/to/fingerprint.json
 ```
 
-`CHECKSOPS_PRODUCTION_DEPLOY=1` fails unless a candidate fingerprint is supplied **and** the targeted components are `PRODUCTION_LOCKED` with matching hashes. `--live` always fails.
+`CHECKSOPS_PRODUCTION_DEPLOY=1` fails unless a candidate fingerprint is supplied **and** the targeted components are `PRODUCTION_LOCKED`. For `production-spa`, the candidate must be the locked live baseline or a narrow overlay whose `based_on_baseline` matches that baseline. `--live` always fails.
+
+## Production SPA baseline
+
+`production-spa` is the authoritative live frontend at `checksops.com`
+(`/assets/index-BPbQUNFr.js`). Proof:
+`ops/release-locks/proof/production-spa-baseline.md`.
+
+`origin/main` is not that SPA. Do not promote main, another branch, or a
+worktree unless the candidate contains or reconciles this baseline. If live
+production no longer matches the lock, refuse deployment; do not auto-fix
+production and do not restore an older baseline.
 
 ## Overlap exceptions
 

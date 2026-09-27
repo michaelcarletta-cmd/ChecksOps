@@ -13,7 +13,7 @@
     "auto_unlock_forbidden": true,
     "instructions_path": "ops/release-locks/OPERATOR.md"
   },
-  "notes": "Initial lock from origin/main 5567757e8286bd9e9f643689f6b7da5a7dfe06c7. No component is PRODUCTION_LOCKED. Repo docs conflict with claimed production cutover; live AWS was not queried.",
+  "notes": "production-spa is PRODUCTION_LOCKED to the live checksops.com SPA verified 2026-09-27 (index-BPbQUNFr.js). origin/main is not that baseline. Other components remain unlocked. This metadata does not deploy or write production.",
   "components": {
     "identity-cognito": {
       "id": "identity-cognito",
@@ -592,6 +592,66 @@
       "open_pr_overlap": [],
       "notes": "Protects the eight finalized OCR runtime files only. Shared providers/parity/checkalt-image.mjs is not owned here; OCR reuses named raster exports without claiming the CheckAlt module. Classification is STAGING_LOCKED_NOT_PRODUCTION because staging validation passed and production is not locked."
     },
+    "production-spa": {
+      "id": "production-spa",
+      "ownership_group": "production-spa",
+      "classification": "PRODUCTION_LOCKED",
+      "production_active": true,
+      "environment": "production",
+      "source": {
+        "git_sha": "6c679a120d5d4b0dd23d7035ecaf309558df29d0",
+        "tree_hash": "8a794da51c14a4520e987fcce8fc738e1dc196eca1b3f994fc17b57a2c2b2c7f",
+        "merged": false,
+        "merged_pr": 506
+      },
+      "required_sql": [],
+      "artifact": {
+        "type": "spa",
+        "name": "/assets/index-BPbQUNFr.js",
+        "version": "L.ND9yiehnJfDCocKdyFC_mRQZjchON3",
+        "hash": "78b393152e17e1eb223deced357f2276e7a5f00e214d2652d115347b2d2ed9d5",
+        "cloudfront_distribution": "E1B0ZWWO5559U5",
+        "lambda_name": "checksops-production-prep-api",
+        "lambda_version": null,
+        "lambda_alias": null
+      },
+      "production_validation": {
+        "completed": true,
+        "evidence_refs": [
+          "ops/release-locks/proof/production-spa-baseline.md"
+        ],
+        "recorded_at": "2026-09-27T01:34:04Z",
+        "environment": "production",
+        "component": "production-spa",
+        "git_sha": "6c679a120d5d4b0dd23d7035ecaf309558df29d0",
+        "artifact_identity": "/assets/index-BPbQUNFr.js",
+        "evidence_producer": "read-only live HTTPS verification of checksops.com",
+        "evidence_type": "production SPA baseline freeze"
+      },
+      "deployment_fingerprint": {
+        "recorded": true,
+        "spa_bundle": "/assets/index-BPbQUNFr.js",
+        "spa_sha256": "78b393152e17e1eb223deced357f2276e7a5f00e214d2652d115347b2d2ed9d5",
+        "cloudfront_id": "E1B0ZWWO5559U5",
+        "cloudfront_distribution": "E1B0ZWWO5559U5",
+        "cloudfront_deployment_fingerprint": "L.ND9yiehnJfDCocKdyFC_mRQZjchON3",
+        "lambda_name": "checksops-production-prep-api",
+        "lambda_version": null,
+        "lambda_code_hash": null,
+        "applied_sql_hash": null,
+        "database_evidence_record": null,
+        "config_hash": "244c4bd12bddc72e064723d87b6dbd6004a2d859b27200b0ca6747f189c73394",
+        "notes": "Accepted live production SPA 2026-09-27T01:34:04Z. Host checksops.com. Entry /assets/index-BPbQUNFr.js. index.html sha256 244c4bd12bddc72e064723d87b6dbd6004a2d859b27200b0ca6747f189c73394. S3 version L.ND9yiehnJfDCocKdyFC_mRQZjchON3. CloudFront E1B0ZWWO5559U5. Source lineage 1c2ec1ad7d3331f11f8cde61fdbc5cd363eb6720. Banner overlay 6c679a120d5d4b0dd23d7035ecaf309558df29d0. PRODUCTION: no staging banner. STAGING: banner visible. Other current production functionality preserved. origin/main is not this baseline."
+      },
+      "rollback": {
+        "git_sha": "1c2ec1ad7d3331f11f8cde61fdbc5cd363eb6720",
+        "artifact": "/assets/index-BAD1KYoF.js",
+        "notes": "Pre-overlay live lineage before the accepted banner fix. Do not restore this older SPA over the frozen baseline unless a reviewed unlock records a newer accepted live identity."
+      },
+      "missing_evidence": [],
+      "open_pr_overlap": ["#506"],
+      "notes": "Authoritative production frontend baseline. Future production SPA work must start from this live identity or a demonstrably newer accepted baseline. Do not promote main merely because it is main. SPA-only lock: no SQL. This PR records evidence only and does not deploy."
+    },
     "production-release": {
       "id": "production-release",
       "ownership_group": "production-release",
@@ -600,7 +660,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "8a3ead386d99f0e825d54093ebcb8c174a8c758e",
-        "tree_hash": "d7ed7db31c345a0352b0ca7610c1f7d2763c8be2e96527c20a7eae3f840c258a",
+        "tree_hash": "b9b38e62b4e03efb3a2bcb50548457eeafa16608e888459396bd61a9613c8abc",
         "merged": true,
         "merged_pr": 343
       },
@@ -630,13 +690,13 @@
         "notes": "Conflicting SPA fingerprints (index-C24V_ODo.js, index-reP2FWHf.js, open-PR index-CiOVNYWh.js). No single approved rollback on main."
       },
       "missing_evidence": [
-        "single approved production fingerprint on main",
+        "GitHub branch protection still required; live SPA fingerprint is recorded on production-spa, not this control-plane component",
         "GitHub branch protection requiring this workflow as a required status check",
         "code-owner review required",
         "direct pushes and administrator bypasses disabled"
       ],
       "open_pr_overlap": ["#316", "#317", "#319", "#325", "#333", "#326", "#328"],
-      "notes": "Control-plane lock tooling only. Hashing this validator with itself is not independent security. Repository evidence does not prove live AWS state. This PR does not own aws/cutover/PRODUCTION_SPA_LOCK.json from other PRs. PR #359 fetches the PR base branch in aws-migration-ci so the protected SQL 31-34 name-only diff can run on a shallow checkout. Overlap exceptions for that workflow file cover open PRs #316 and #319."
+      "notes": "Control-plane lock tooling only. Live accepted SPA identity is PRODUCTION_LOCKED on production-spa (index-BPbQUNFr.js); this component stays UNVERIFIED because GitHub enforcement is incomplete. Hashing this validator with itself is not independent security. Do not treat origin/main as the live SPA. This PR does not own aws/cutover/PRODUCTION_SPA_LOCK.json from other PRs."
     }
   }
 }

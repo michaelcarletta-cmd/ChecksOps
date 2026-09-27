@@ -168,6 +168,14 @@
         "aws/functions/api/textract-check-ocr.mjs"
       ]
     },
+    "production-spa": {
+      "owners": ["@michaelcarletta-cmd"],
+      "description": "Authoritative live production SPA baseline identity and fail-closed promotion helpers. Does not own application source on main; live artifact pins win until repository history is reconciled.",
+      "paths": [
+        "scripts/lib/production-spa-baseline.mjs",
+        "ops/release-locks/proof/production-spa-baseline.md"
+      ]
+    },
     "production-release": {
       "owners": ["@michaelcarletta-cmd"],
       "description": "Control-plane release-lock tooling, CI, template execution flags, production config examples. Changes here are control-plane changes and require this ownership group. Hashing a changed validator with itself is not independent security.",
