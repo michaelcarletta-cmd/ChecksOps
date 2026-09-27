@@ -10,6 +10,8 @@ import { BarChart3, Receipt, Landmark, ArrowDownCircle, CheckCircle2, Calendar }
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 import { TenantAutoApproveCard } from "./TenantAutoApproveCard";
+import { ConsolidatedInvoicePreview } from "./ConsolidatedInvoicePreview";
+import { invokeTenantBillingSnapshot } from "@/lib/billing/tenantBilling";
 
 
 export function TenantUsageTracker() {
@@ -24,6 +26,16 @@ export function TenantUsageTracker() {
     d.setDate(1);
     d.setMonth(d.getMonth() - i);
     return format(d, "yyyy-MM");
+  });
+
+  const { data: billingSnapshot } = useQuery({
+    queryKey: ["tenant-billing-snapshot", tenant?.id],
+    queryFn: async () => {
+      const result = await invokeTenantBillingSnapshot(tenant!.id);
+      if (!result.ok) throw new Error(result.error);
+      return result.data;
+    },
+    enabled: !!tenant?.id,
   });
 
   const { data: usage, isLoading: usageLoading } = useQuery({
@@ -57,30 +69,6 @@ export function TenantUsageTracker() {
     enabled: !!tenant?.id,
   });
 
-  // Mortgage-ops usage — completed requests inside the current billing month.
-  // Each row contributes services_cents (default $10) + shipping_cents.
-  const { data: mortgageOpsUsage } = useQuery({
-    queryKey: ["tenant-mortgage-ops-usage", tenant?.id, monthStart, monthEnd],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("mortgage_handling_requests")
-        .select("id, invoice_services_cents, invoice_shipping_cents, completed_at")
-        .eq("tenant_id", tenant!.id)
-        .not("completed_at", "is", null)
-        .gte("completed_at", monthStart)
-        .lte("completed_at", monthEnd);
-      if (error) throw error;
-      const rows = data ?? [];
-      const totalCents = rows.reduce(
-        (sum, r: any) =>
-          sum + (r.invoice_services_cents ?? 1000) + (r.invoice_shipping_cents ?? 0),
-        0,
-      );
-      return { count: rows.length, totalCents };
-    },
-    enabled: !!tenant?.id,
-  });
-
   if (usageLoading || fundsLoading) return <div className="p-8 text-center text-sm text-muted-foreground animate-pulse">Loading usage & funds data...</div>;
 
   const formatCurrency = (amount: number) => 
@@ -90,8 +78,26 @@ export function TenantUsageTracker() {
     .filter((f: any) => f.status === "settled")
     .reduce((sum: number, f: any) => sum + Number(f.payment_amount), 0);
 
+  const invoice = billingSnapshot?.invoice;
+
   return (
     <div className="space-y-6">
+      {invoice && (
+        <div className="space-y-2">
+          <ConsolidatedInvoicePreview
+            invoice={invoice}
+            title={`Current amount due · ${invoice.billing_period}`}
+            fundingLast4={billingSnapshot?.funding_source_last4 || billingSnapshot?.authorization?.account_number_last4}
+            destinationLabel={billingSnapshot?.destination?.label || "ChecksOps merchant"}
+          />
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs text-muted-foreground">
+            <div>Your check rate: {formatCurrency((billingSnapshot?.per_check_rate_cents || 0) / 100)}</div>
+            <div>Next Day: {formatCurrency((billingSnapshot?.next_day_rate_cents ?? 0) / 100)}</div>
+            <div>Same Day: {formatCurrency((billingSnapshot?.same_day_rate_cents ?? 0) / 100)}</div>
+            <div>Mortgage first / additional: {formatCurrency((billingSnapshot?.mortgage_ops_initial_rate_cents ?? 1000) / 100)} / {formatCurrency((billingSnapshot?.mortgage_ops_additional_rate_cents ?? 500) / 100)}</div>
+          </div>
+        </div>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="bg-gradient-to-br from-primary/10 to-blue-500/5 border-primary/20">
           <CardHeader className="pb-2">
@@ -127,14 +133,17 @@ export function TenantUsageTracker() {
           <CardContent>
             <div className="flex items-baseline gap-2">
               <span className="text-3xl font-bold">
-                {usage?.events?.filter((e: any) => e.event_type === 'mortgage_handling').length ?? 0}
+                {(invoice?.mortgage_ops_initial_count ?? 0) + (invoice?.mortgage_ops_additional_count ?? 0)}
               </span>
-              <span className="text-xs text-muted-foreground">mortgage requests</span>
+              <span className="text-xs text-muted-foreground">accepted checks</span>
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              Month-end total (services + shipping):{" "}
+              First: {invoice?.mortgage_ops_initial_count ?? 0} · Additional: {invoice?.mortgage_ops_additional_count ?? 0}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Mortgage Ops subtotal:{" "}
               <span className="font-semibold text-foreground">
-                {formatCurrency((usage?.events?.filter((e: any) => e.event_type === 'mortgage_handling').reduce((s: number, e: any) => s + (e.unit_price_cents ?? 0), 0) ?? 0) / 100)}
+                {formatCurrency((invoice?.mortgage_ops_usage_cents ?? 0) / 100)}
               </span>
             </p>
           </CardContent>

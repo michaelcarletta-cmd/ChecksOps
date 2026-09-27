@@ -70,6 +70,13 @@
 /aws/migrations/proposed/NOT_APPLIED_20260910_tenant_email_ses_domain.sql @michaelcarletta-cmd
 /aws/docs/tenant-ses-email-domain.md @michaelcarletta-cmd
 
+/src/lib/signatureRequestSender.ts @michaelcarletta-cmd
+/src/components/settings/SignatureRequestEmailPreview.tsx @michaelcarletta-cmd
+/scripts/lib/tenant-email-preview-freeze.mjs @michaelcarletta-cmd
+/aws/audit/tenant-email-preview-production-freeze.json @michaelcarletta-cmd
+/aws/tests/tenant-email-preview-production-freeze.test.mjs @michaelcarletta-cmd
+/tests/signature-request-email-preview.test.mjs @michaelcarletta-cmd
+
 /aws/functions/api/partner-share-lifecycle.mjs @michaelcarletta-cmd
 /aws/functions/api/authorization.mjs @michaelcarletta-cmd
 /aws/rls/sql/31_partner_safe_read.sql @michaelcarletta-cmd

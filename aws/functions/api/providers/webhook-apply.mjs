@@ -9,6 +9,7 @@ import { sanitize } from './parity/db.mjs';
 import { providerSandboxExecutionEnabled } from '../sandbox-flags.mjs';
 import { financialPermissionsActivated } from '../financial-flags.mjs';
 import { providerExecutionEnabled } from '../provider-flags.mjs';
+import { applyBillingProviderEvent } from '../tenant-billing-engine.mjs';
 
 const FUNDING_TERMINAL = ['completed', 'failed', 'returned', 'canceled'];
 
@@ -153,6 +154,15 @@ export async function applyMoovWebhook(client, payload, { mappedTenantId = null 
   const disputeId = data?.disputeID ?? data?.disputeId ?? null;
   if (!transferId && !disputeId) {
     return { applied: true, environment: 'sandbox', financialTablesMutated: mutations.length > 0, mutations };
+  }
+
+  if (transferId) {
+    const billing = await applyBillingProviderEvent(client, {
+      providerTransferId: transferId,
+      status: eventTypeToStatus(eventType),
+      reason: data?.failureReason ?? data?.reason ?? eventType,
+    }).catch(() => null);
+    if (billing?.applied) mutations.push('tenant_maintenance_payments');
   }
 
   if (disputeId) {

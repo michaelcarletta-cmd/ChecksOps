@@ -30,13 +30,15 @@ import { useRef } from "react";
 
 import { CheckAltSettings } from "@/components/settings/CheckAltSettings";
 import { CheckAltTenantAccountCard } from "@/components/settings/CheckAltTenantAccountCard";
-import { EmailSenderSettings } from "@/components/settings/EmailSenderSettings";
 import { ComplianceSettings } from "@/components/settings/ComplianceSettings";
 import { AdminReferralDashboard } from "@/components/settings/AdminReferralDashboard";
 import { PlatformAnnouncementsManager } from "@/components/admin/PlatformAnnouncementsManager";
 import { TenantProBadgeManagement } from "@/components/settings/TenantProBadgeManagement";
 
 import { TenantProvider } from "@/contexts/TenantContext";
+import { tenantMoovDefaults } from "@/lib/payments/tenantMoovDefaults";
+import { MonthlyTenantBillingPanel } from "@/components/admin/MonthlyTenantBillingPanel";
+import { invokeTenantBillingAdmin } from "@/lib/billing/tenantBilling";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DataView, FilterBar, type DataColumn } from "@/components/shell";
@@ -278,7 +280,7 @@ function CreateTenantDialog({ onCreated }: { onCreated: (t: Tenant) => void }) {
     setSubmitting(true);
     const { data, error } = await supabase
       .from("tenants")
-      .insert({ name: name.trim(), slug: slug.trim() })
+      .insert({ name: name.trim(), slug: slug.trim(), ...tenantMoovDefaults() })
       .select()
       .single();
     setSubmitting(false);
@@ -347,7 +349,7 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
 
           <TabsList className="flex w-full flex-wrap h-auto justify-start gap-1 p-1">
             <TabsTrigger value="company" className="flex-1 min-w-[110px] whitespace-nowrap"><Building2 className="w-4 h-4 mr-1" /> Company</TabsTrigger>
-            <TabsTrigger value="branding" className="flex-1 min-w-[150px] whitespace-nowrap"><Palette className="w-4 h-4 mr-1" /> Branding & Email</TabsTrigger>
+            <TabsTrigger value="branding" className="flex-1 min-w-[150px] whitespace-nowrap"><Palette className="w-4 h-4 mr-1" /> Branding</TabsTrigger>
             <TabsTrigger value="compliance" className="flex-1 min-w-[170px] whitespace-nowrap"><ShieldCheck className="w-4 h-4 mr-1" /> Compliance & Docs</TabsTrigger>
             <TabsTrigger value="integrations" className="flex-1 min-w-[130px] whitespace-nowrap"><Link2 className="w-4 h-4 mr-1" /> Integrations</TabsTrigger>
             
@@ -361,7 +363,6 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
           </TabsContent>
           <TabsContent value="branding" className="mt-6 space-y-6">
             <BrandingTab tenant={tenant} onUpdated={onUpdated} />
-            <EmailSenderSettings />
           </TabsContent>
           <TabsContent value="compliance" className="mt-6 space-y-8">
             <ComplianceSettings tenantId={tenant.id} />
@@ -371,8 +372,14 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
             <CheckAltTenantAccountCard />
           </TabsContent>
           <TabsContent value="billing" className="mt-6 space-y-6">
+            <MonthlyTenantBillingPanel
+              tenantId={tenant.id}
+              tenantName={tenant.name}
+              onRateSaved={(monthlyRateCents, referralDiscountCents) =>
+                onUpdated({ ...tenant, monthly_rate_cents: monthlyRateCents, referral_discount_cents: referralDiscountCents })
+              }
+            />
             <BillingTab tenant={tenant} onUpdated={onUpdated} />
-            <TenantBillingBankPanel tenantId={tenant.id} tenantName={tenant.name} />
             <TenantUsageInlinePanel tenantId={tenant.id} tenantName={tenant.name} />
           </TabsContent>
           <TabsContent value="pro-badge" className="mt-6">
@@ -801,20 +808,12 @@ function BillingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
 
         <Separator />
 
-        <div className="space-y-4">
-          <h3 className="text-sm font-medium">Moov Usage Fees</h3>
-          <p className="text-xs text-muted-foreground">These fees are tracked for visibility. Tenants pay these directly to Moov.</p>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <Label className="text-xs">Next Day Credit</Label>
-              <Input value="$0.75" disabled className="bg-muted/50" />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Same Day Credit</Label>
-              <Input value="$1.00" disabled className="bg-muted/50" />
-            </div>
-          </div>
-
+        <div className="space-y-2">
+          <h3 className="text-sm font-medium">Transaction speed fees</h3>
+          <p className="text-xs text-muted-foreground">
+            Next Day and Same Day tenant rates are edited in Monthly tenant billing above.
+            They accrue on the consolidated monthly invoice. Instant is not offered.
+          </p>
         </div>
 
         <Button 
@@ -846,7 +845,6 @@ function TenantBillingBankPanel({ tenantId, tenantName }: { tenantId: string; te
   const [bank, setBank] = useState<any>(null);
   const [billing, setBilling] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [charging, setCharging] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -881,38 +879,6 @@ function TenantBillingBankPanel({ tenantId, tenantName }: { tenantId: string; te
 
   useEffect(() => { load(); }, [tenantId]);
 
-  const pullNow = async () => {
-    setCharging(true);
-    const { data: t } = await supabase
-      .from("tenants")
-      .select("monthly_rate_cents, referral_discount_cents")
-      .eq("id", tenantId)
-      .maybeSingle();
-    const amount_cents = Math.max(
-      0,
-      (t?.monthly_rate_cents ?? 0) - (t?.referral_discount_cents ?? 0),
-    );
-    if (amount_cents <= 0) {
-      setCharging(false);
-      return sonnerToast.warning("No maintenance fee configured for this organization.");
-    }
-    const { data, error } = await supabase.functions.invoke("moov-tenant-fee-charge", {
-      body: {
-        tenant_id: tenantId,
-        amount_cents,
-        kind: "maintenance",
-        line_items: [{ label: "Monthly maintenance", amount_cents }],
-        send_invoice: true,
-      },
-    });
-    setCharging(false);
-    const failure = (data as any)?.error ?? (error ? await readFnError(error) : null);
-    if (failure) return sonnerToast.error(failure);
-    const r = (data as any)?.results?.[0];
-    if (r?.status === "submitted") sonnerToast.success(`ACH debit submitted for $${(r.amount_cents / 100).toFixed(2)}`);
-    else sonnerToast.info(JSON.stringify(r ?? data));
-  };
-
   const linkForBilling = async () => {
     if (!bank?.id) return;
     const payload = {
@@ -937,9 +903,8 @@ function TenantBillingBankPanel({ tenantId, tenantName }: { tenantId: string; te
       description={`Moov-verified account we pull maintenance fees from for ${tenantName}.`}
     >
       <div className="flex justify-end">
-        <Button size="sm" onClick={pullNow} disabled={charging}>
-          {charging ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
-          Pull maintenance fee now
+        <Button size="sm" variant="outline" disabled title="Use Pull now in Monthly tenant billing">
+          Use Pull now above
         </Button>
       </div>
 
@@ -993,7 +958,7 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
   const [tenantMeta, setTenantMeta] = useState<{ monthly_rate_cents: number; referral_discount_cents: number; is_founding_partner: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [pulling, setPulling] = useState(false);
+  const [snapshot, setSnapshot] = useState<any>(null);
 
   const range = (() => {
     if (scope === "month") {
@@ -1013,7 +978,7 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
     const endISO = new Date(range.end.getTime() - 1).toISOString();
 
     try {
-      const [usageRes, checkaltRes, moovRes, maintRes, tenantRes] = await Promise.all([
+      const [usageRes, checkaltRes, moovRes, maintRes, tenantRes, snapRes] = await Promise.all([
         supabase.rpc("get_tenant_check_usage", {
           _tenant_id: tenantId,
           _month_start: startISO,
@@ -1044,6 +1009,7 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
           .select("monthly_rate_cents, referral_discount_cents, is_founding_partner")
           .eq("id", tenantId)
           .maybeSingle(),
+        invokeTenantBillingAdmin({ action: "get", tenant_id: tenantId }),
       ]);
       if (usageRes.error) throw usageRes.error;
       setData(usageRes.data);
@@ -1059,6 +1025,7 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
       });
       setMaintenance(maintRes.data ?? []);
       setTenantMeta(tenantRes.data as any ?? null);
+      setSnapshot(snapRes.ok ? snapRes.data : null);
     } catch (e: any) {
       setError(e.message);
     }
@@ -1081,61 +1048,9 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
   const months = Array.from({ length: 12 }, (_, i) => ({ v: i, l: new Date(2020, i, 1).toLocaleString("en-US", { month: "long" }) }));
   const years = Array.from({ length: 5 }, (_, i) => now.getFullYear() - i);
 
-  // Consolidated billing: check processing fees ($4/check), Moov disbursement fees ($1 transfer),
-  // maintenance for the month (monthly_rate - referral discount). Applies only when scope=month.
-  const usageEvents: any[] = data?.events || [];
-  const checkProcessingCents = usageEvents.filter(e => e.event_type === 'check_processing').reduce((s, e) => s + (e.unit_price_cents ?? 0), 0);
-  const mortgageOpsCents = usageEvents.filter(e => e.event_type === 'mortgage_handling').reduce((s, e) => s + (e.unit_price_cents ?? 0), 0);
-  const disbursementCents = usageEvents.filter(e => e.event_type?.startsWith('moov_')).reduce((s, e) => s + (e.unit_price_cents ?? 0), 0);
-  
-  const grossMaintenance = tenantMeta?.monthly_rate_cents ?? 0;
-  const discount = tenantMeta?.referral_discount_cents ?? 0;
-  const netMaintenance = Math.max(0, grossMaintenance - discount);
-  const consolidatedTotalCents = checkProcessingCents + mortgageOpsCents + disbursementCents + netMaintenance;
-
-  const pullConsolidated = async () => {
-    if (scope !== "month") {
-      sonnerToast.error("Switch to a specific month to pull consolidated billing.");
-      return;
-    }
-    if (consolidatedTotalCents <= 0) {
-      sonnerToast.warning("Nothing to charge for this period.");
-      return;
-    }
-    const confirmed = window.confirm(
-      `Pull $${(consolidatedTotalCents / 100).toFixed(2)} from ${tenantName}'s verified bank account and email them an invoice?`
-    );
-    if (!confirmed) return;
-    setPulling(true);
-    const line_items = [
-      checkProcessingCents > 0 && { label: "Check processing", detail: `${usageEvents.filter(e => e.event_type === 'check_processing').length} checks`, amount_cents: checkProcessingCents },
-      disbursementCents > 0 && { label: "Moov disbursements", detail: `${usageEvents.filter(e => e.event_type?.startsWith('moov_')).length} txns`, amount_cents: disbursementCents },
-      mortgageOpsCents > 0 && { label: "MortgageOps handling", detail: `${mortgageCount} requests`, amount_cents: mortgageOpsCents },
-      grossMaintenance > 0 && { label: "Monthly maintenance", detail: range.label, amount_cents: grossMaintenance },
-      discount > 0 && { label: "Referral discount", detail: "applied to maintenance", amount_cents: -discount },
-    ].filter(Boolean);
-
-    const { data: resp, error } = await supabase.functions.invoke("moov-tenant-fee-charge", {
-      body: {
-        tenant_id: tenantId,
-        amount_cents: consolidatedTotalCents,
-        kind: "consolidated",
-        line_items,
-        period_label: range.label,
-        send_invoice: true,
-      },
-    });
-    setPulling(false);
-    const failure = (resp as any)?.error ?? (error ? await readFnError(error) : null);
-    if (failure) return sonnerToast.error(failure);
-    const r = (resp as any)?.results?.[0];
-    if (r?.status === "submitted") {
-      sonnerToast.success(
-        `ACH debit for $${(r.amount_cents / 100).toFixed(2)} submitted${r.invoice_sent ? " · invoice emailed" : r.invoice_error ? ` · invoice: ${r.invoice_error}` : ""}`
-      );
-      load();
-    } else sonnerToast.info(JSON.stringify(r ?? resp));
-  };
+  const invoice = snapshot?.invoice;
+  const grossMaintenance = invoice?.maintenance_rate_cents ?? tenantMeta?.monthly_rate_cents ?? 0;
+  const discount = invoice?.discount_cents ?? tenantMeta?.referral_discount_cents ?? 0;
 
   return (
     <SectionCard
@@ -1206,14 +1121,13 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
               <div className="rounded-lg border">
                 <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
                   <div>
-                    <h4 className="text-sm font-semibold">Consolidated Billing — {range.label}</h4>
+                    <h4 className="text-sm font-semibold">Consolidated invoice — {invoice ? `period ${invoice.billing_period}` : range.label}</h4>
                     <p className="text-[11px] text-muted-foreground">
-                      One ACH pull covers all ChecksOps fees for the month. Invoice is emailed automatically.
+                      Authoritative server snapshot. Pull Now is confirmed in Monthly tenant billing and never uses a browser-built total.
                     </p>
                   </div>
-                  <Button size="sm" onClick={pullConsolidated} disabled={pulling || consolidatedTotalCents <= 0}>
-                    {pulling ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
-                    Pull {fmt(consolidatedTotalCents)} & email invoice
+                  <Button size="sm" variant="outline" disabled title="Client-built pull is permanently disabled">
+                    Use Pull now above — server invoice only
                   </Button>
                 </div>
                 <table className="w-full text-sm">
@@ -1228,21 +1142,33 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
                   <tbody className="divide-y">
                     <tr>
                       <td className="px-4 py-2">Check Processing Usage</td>
-                      <td className="text-right px-4 py-2 tabular-nums">{checkCount} checks</td>
-                      <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">$4.00</td>
-                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(data?.events?.filter((e: any) => e.event_type === 'check_processing').reduce((s: number, e: any) => s + (e.unit_price_cents ?? 0), 0) ?? 0)}</td>
+                      <td className="text-right px-4 py-2 tabular-nums">{invoice?.check_count ?? checkCount} checks</td>
+                      <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">{fmt(snapshot?.per_check_rate_cents ?? 0)}</td>
+                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(invoice?.check_usage_cents ?? 0)}</td>
                     </tr>
                     <tr>
-                      <td className="px-4 py-2">MortgageOps Usage</td>
-                      <td className="text-right px-4 py-2 tabular-nums">{mortgageCount} requests</td>
-                      <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">$10.00 / $5.00</td>
-                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(data?.events?.filter((e: any) => e.event_type === 'mortgage_handling').reduce((s: number, e: any) => s + (e.unit_price_cents ?? 0), 0) ?? 0)}</td>
+                      <td className="px-4 py-2">Next Day</td>
+                      <td className="text-right px-4 py-2 tabular-nums">{invoice?.next_day_count ?? nextDay} txns</td>
+                      <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">{fmt(snapshot?.next_day_rate_cents ?? 0)}</td>
+                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(invoice?.next_day_usage_cents ?? 0)}</td>
                     </tr>
                     <tr>
-                      <td className="px-4 py-2">Disbursement Usage</td>
-                      <td className="text-right px-4 py-2 tabular-nums">{moov?.count ?? 0} txns</td>
-                      <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">$1.00</td>
-                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(data?.events?.filter((e: any) => e.event_type?.startsWith('moov_')).reduce((s: number, e: any) => s + (e.unit_price_cents ?? 0), 0) ?? 0)}</td>
+                      <td className="px-4 py-2">Same Day</td>
+                      <td className="text-right px-4 py-2 tabular-nums">{invoice?.same_day_count ?? sameDay} txns</td>
+                      <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">{fmt(snapshot?.same_day_rate_cents ?? 0)}</td>
+                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(invoice?.same_day_usage_cents ?? 0)}</td>
+                    </tr>
+                    <tr>
+                      <td className="px-4 py-2">Mortgage Ops — First Check</td>
+                      <td className="text-right px-4 py-2 tabular-nums">{invoice?.mortgage_ops_initial_count ?? 0} checks</td>
+                      <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">{fmt(snapshot?.mortgage_ops_initial_rate_cents ?? 0)}</td>
+                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(invoice?.mortgage_ops_initial_amount_cents ?? 0)}</td>
+                    </tr>
+                    <tr>
+                      <td className="px-4 py-2">Mortgage Ops — Additional Check</td>
+                      <td className="text-right px-4 py-2 tabular-nums">{invoice?.mortgage_ops_additional_count ?? 0} checks</td>
+                      <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">{fmt(snapshot?.mortgage_ops_additional_rate_cents ?? 0)}</td>
+                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(invoice?.mortgage_ops_additional_amount_cents ?? 0)}</td>
                     </tr>
                     <tr>
                       <td className="px-4 py-2">
@@ -1264,8 +1190,8 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
                       </tr>
                     )}
                     <tr className="bg-muted/30">
-                      <td className="px-4 py-2 font-semibold" colSpan={3}>Total to pull</td>
-                      <td className="text-right px-4 py-2 tabular-nums font-bold text-base">{fmt(consolidatedTotalCents)}</td>
+                      <td className="px-4 py-2 font-semibold" colSpan={3}>Current amount due</td>
+                      <td className="text-right px-4 py-2 tabular-nums font-bold text-base">{fmt(invoice?.amount_cents ?? snapshot?.current_amount_due_cents ?? 0)}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -1382,6 +1308,31 @@ function TenantManagementTable({
 
   const updateTenant = async (id: string, patch: Record<string, any>, silent = false) => {
     setBusyId(id);
+    const billingPatch = {
+      monthly_rate_cents: patch.monthly_rate_cents,
+      referral_discount_cents: patch.referral_discount_cents,
+    };
+    const hasBilling = Object.values(billingPatch).some((value) => value !== undefined);
+    if (hasBilling) {
+      const result = await invokeTenantBillingAdmin({
+        action: "update",
+        tenant_id: id,
+        ...billingPatch,
+      });
+      if (!result.ok) {
+        setBusyId(null);
+        toast({ title: "Update failed", description: result.error, variant: "destructive" });
+        return false;
+      }
+      delete patch.monthly_rate_cents;
+      delete patch.referral_discount_cents;
+    }
+    if (Object.keys(patch).length === 0) {
+      setBusyId(null);
+      if (!silent) toast({ title: "Saved" });
+      onChanged();
+      return true;
+    }
     const { error } = await supabase.from("tenants").update(patch as any).eq("id", id);
     setBusyId(null);
     if (error) {

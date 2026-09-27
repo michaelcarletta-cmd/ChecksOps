@@ -104,6 +104,20 @@
       ],
       "open_pr_overlap": ["#233", "#231", "#255"]
     },
+    "tenant-email-preview": {
+      "classification": "SOURCE_LOCKED_NOT_ACTIVE",
+      "git_sha": "c59e725cea1d5d18ed43fcd02ef6357952d67898",
+      "merged_pr": 505,
+      "merge_commit": null,
+      "deployed_artifact": "production SPA index 58c867a066a32813e47f454aeadf7166c609ca9b7b3bb17be6c9f1a6a71d109b / VersionId KoqxddGRI3swQom6uSEhLcRASAgwbkR9 /assets/index-BAD1KYoF.js recorded as provenance, not a permanent rollback pin",
+      "applied_migrations": "none; Email Preview is SPA-only",
+      "environment": "production",
+      "missing_evidence": [
+        "SPA SHA256/VersionId are accepted provenance, not a permanent PRODUCTION_LOCKED rollback pin",
+        "future overlay must explicitly supersede the Email Preview contract before changing protected preview files"
+      ],
+      "open_pr_overlap": ["#505"]
+    },
     "partner-sharing": {
       "classification": "SOURCE_LOCKED_NOT_ACTIVE",
       "git_sha": "9aac7bb5b1ed0a8d03e305552797a9acfacc7f64",
