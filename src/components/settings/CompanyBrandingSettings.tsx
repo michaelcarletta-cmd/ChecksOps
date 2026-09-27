@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Upload, Building2, Loader2, Sparkles, Image as ImageIcon, Layout } from "lucide-react";
+import { Upload, Building2, Loader2, Sparkles, Image as ImageIcon, Layout, Palette } from "lucide-react";
 
 import { SectionCard } from "./SectionCard";
 import { SettingsHero } from "./SettingsHero";
@@ -171,9 +171,7 @@ export function CompanyBrandingSettings() {
         company_address: address,
         company_phone: phone,
         company_email: email,
-        logo_url: logoUrl,
         letterhead_url: letterheadUrl,
-        updated_at: new Date().toISOString()
       };
 
       if (brandingId) {
@@ -202,11 +200,10 @@ export function CompanyBrandingSettings() {
           await supabase
             .from("tenants")
             .update({
+              logo_url: logoUrl,
               invoice_letterhead_url: invoiceLetterheadUrl,
               invoice_footer_note: invoiceFooterNote,
               invoice_default_terms: invoiceDefaultTerms,
-              invoice_accent_color: invoiceAccentColor,
-              invoice_theme: invoiceTheme,
             })
             .eq("id", tenantUser.tenant_id);
         }
@@ -224,9 +221,10 @@ export function CompanyBrandingSettings() {
     <div className="space-y-6">
       {/* Hero Section */}
       <SettingsHero
-        title="Company Settings"
+        title="Branding Settings"
         description="Configure your organization's visual identity, contact information, and invoice presentation."
         badge="Identity & Branding"
+        icon={<Palette className="h-4 w-4 text-primary" />}
       />
 
       <div className="grid gap-6">
