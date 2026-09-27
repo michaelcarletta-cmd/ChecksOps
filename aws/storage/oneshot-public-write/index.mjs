@@ -72,10 +72,12 @@ const inspect = async (client) => {
     WHERE n.nspname = 'public'
       AND p.proname IN (
         'aws_public_signature_by_token_hash',
+        'aws_public_signature_canonical_pdf_path',
         'aws_public_signature_mark_viewed',
         'aws_public_signature_submit',
         'aws_public_signature_attach_signed',
         'aws_public_signature_set_completion_error',
+        'aws_mortgage_agent_assigned_to_context',
         'aws_mortgage_agent_can_manage_signature',
         'aws_mortgage_agent_can_initiate_signature',
         'aws_can_write_tenant'
