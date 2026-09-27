@@ -33,6 +33,23 @@ export const READONLY_PROBE_IDENTITIES = [
   { id: '3af0234c-de1b-4819-938d-fa4f9390811b', email: 'asukanick@condition1commercial.com', label: 'c1c_admin' },
 ];
 
+export const BILLING_TENANT_ID = '41cbc4b4-c5cd-4020-a6aa-0905e79dafe9';
+export const ZERO_TENANT_ID = '22233ffe-7a69-4c46-88c3-1587dc525f1f';
+
+export const CANDIDATE_SYNTHETIC_IDENTITIES = [
+  {
+    id: 'c7729c3e-d87b-46c6-973e-9c04fbdcc961',
+    email: 'staging-mops-4b61bc@checksops.invalid',
+    label: 'staging_mops_invalid',
+  },
+];
+
+export const CUSTOMER_EMAIL_SUFFIXES = [
+  '@freedomadj.com',
+  '@condition1commercial.com',
+  '@homeheropros.com',
+];
+
 export const EXPECTED_INITIAL_RATE_CENTS = 1000;
 export const EXPECTED_ADDITIONAL_RATE_CENTS = 500;
 

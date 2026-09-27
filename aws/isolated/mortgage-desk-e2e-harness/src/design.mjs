@@ -1,9 +1,94 @@
-import { FIXTURE_TABLES, READONLY_PROBE_IDENTITIES } from './constants.mjs';
+import {
+  BILLING_TENANT_ID,
+  C1C_TENANT_ID,
+  CANDIDATE_SYNTHETIC_IDENTITIES,
+  CUSTOMER_EMAIL_SUFFIXES,
+  FIXTURE_TABLES,
+  FREEDOM_TENANT_ID,
+  READONLY_PROBE_IDENTITIES,
+  ZERO_TENANT_ID,
+} from './constants.mjs';
 import { closeClient, loadStagingAppSecret, openReadOnlyClient, readOnlyQuery } from './db.mjs';
 import { evaluateFailClosed } from './fail-closed.mjs';
 
-const BILLING_TENANT_ID = '41cbc4b4-c5cd-4020-a6aa-0905e79dafe9';
-const ZERO_TENANT_ID = '22233ffe-7a69-4c46-88c3-1587dc525f1f';
+const isCustomerEmail = (email) => {
+  const value = String(email || '').toLowerCase();
+  return CUSTOMER_EMAIL_SUFFIXES.some((suffix) => value.endsWith(suffix));
+};
+
+const catalogIdentity = async (client, identity) => {
+  const applied = await applyIdentity(client, identity);
+  let memberships = [];
+  let roles = [];
+  let profile = null;
+  try {
+    memberships = (await readOnlyQuery(
+      client,
+      `SELECT tenant_id, role
+       FROM public.tenant_users
+       WHERE user_id = $1::uuid
+       ORDER BY tenant_id, role`,
+      [identity.id],
+    )).rows;
+  } catch (error) {
+    memberships = { error: String(error.message || error).slice(0, 200) };
+  }
+  try {
+    roles = (await readOnlyQuery(
+      client,
+      `SELECT role FROM public.user_roles WHERE user_id = $1::uuid ORDER BY role`,
+      [identity.id],
+    )).rows.map((row) => row.role);
+  } catch (error) {
+    roles = { error: String(error.message || error).slice(0, 200) };
+  }
+  try {
+    profile = (await readOnlyQuery(
+      client,
+      `SELECT id, email, full_name, approval_status
+       FROM public.profiles
+       WHERE id = $1::uuid`,
+      [identity.id],
+    )).rows[0] || null;
+  } catch (error) {
+    profile = { error: String(error.message || error).slice(0, 200) };
+  }
+  let tenantFlags = {};
+  try {
+    tenantFlags = (await readOnlyQuery(
+      client,
+      `SELECT public.aws_can_access_tenant($1::uuid) AS can_access_billing,
+              public.aws_can_write_tenant($1::uuid) AS can_write_billing,
+              public.aws_can_access_tenant($2::uuid) AS can_access_zero,
+              public.aws_can_write_tenant($2::uuid) AS can_write_zero,
+              public.aws_can_access_tenant($3::uuid) AS can_access_freedom,
+              public.aws_can_write_tenant($3::uuid) AS can_write_freedom,
+              public.aws_can_access_tenant($4::uuid) AS can_access_c1c,
+              public.aws_can_write_tenant($4::uuid) AS can_write_c1c`,
+      [BILLING_TENANT_ID, ZERO_TENANT_ID, FREEDOM_TENANT_ID, C1C_TENANT_ID],
+    )).rows[0] || {};
+  } catch (error) {
+    tenantFlags = { error: String(error.message || error).slice(0, 200) };
+  }
+  const membershipList = Array.isArray(memberships) ? memberships : [];
+  const roleList = Array.isArray(roles) ? roles : [];
+  const tenantIds = membershipList.map((row) => row.tenant_id);
+  return {
+    ...applied,
+    customerEmail: isCustomerEmail(identity.email),
+    memberships,
+    roles,
+    profile,
+    ...tenantFlags,
+    dedicatedToBillingTenant: tenantIds.length === 1 && tenantIds[0] === BILLING_TENANT_ID,
+    hasFreedomOrC1cMembership: tenantIds.includes(FREEDOM_TENANT_ID) || tenantIds.includes(C1C_TENANT_ID),
+    hasAdminRole: roleList.includes('admin'),
+    hasStaffRole: roleList.includes('staff'),
+    hasMortgageAgentRole: roleList.includes('mortgage_agent'),
+    canCoverSendAndAccept: roleList.includes('admin')
+      || (roleList.includes('staff') && roleList.includes('mortgage_agent')),
+  };
+};
 
 const applyIdentity = async (client, identity) => {
   await readOnlyQuery(client, `SELECT set_config('request.app_user_id', $1, true) AS app_user_id`, [identity.id]);
@@ -269,7 +354,105 @@ export const runReadOnlyDesign = async ({
       sendPathSetsRequestClaimIdInSpaOnly: true,
       awsExecuteMortgageRequestsOmitsClaimId: true,
       accrueFallsBackToCheckClaimIdThenNullMeansInitial: true,
+      checkClaimIdColumnGrantToChecksops: false,
+      requestClaimIdInsertGrantToChecksops: true,
+      requestClaimIdUpdateGrantToChecksops: false,
+      classificationUsesCoalesceRequestThenCheck: true,
     };
+
+    try {
+      out.identityAccounts = (await readOnlyQuery(
+        client,
+        `SELECT application_user_id, email, status, cognito_sub IS NOT NULL AS has_cognito_sub
+         FROM public.identity_accounts
+         ORDER BY email NULLS LAST`,
+      )).rows;
+    } catch (error) {
+      out.identityAccounts = { error: String(error.message || error).slice(0, 200) };
+    }
+
+    const accountList = Array.isArray(out.identityAccounts) ? out.identityAccounts : [];
+    const accountById = new Map(accountList.map((row) => [row.application_user_id, row]));
+    out.identityCatalog = [];
+    const seen = new Set();
+    const toCatalog = [
+      ...CANDIDATE_SYNTHETIC_IDENTITIES,
+      ...READONLY_PROBE_IDENTITIES,
+      ...accountList.map((row) => ({
+        id: row.application_user_id,
+        email: row.email,
+        label: row.email || row.application_user_id,
+        status: row.status,
+        has_cognito_sub: row.has_cognito_sub,
+      })),
+    ];
+    for (const identity of toCatalog) {
+      if (!identity?.id || seen.has(identity.id)) continue;
+      seen.add(identity.id);
+      const account = accountById.get(identity.id) || {};
+      out.identityCatalog.push({
+        ...(await catalogIdentity(client, identity)),
+        status: identity.status || account.status || null,
+        has_cognito_sub: identity.has_cognito_sub ?? account.has_cognito_sub ?? null,
+      });
+    }
+
+    out.dedicatedSyntheticCandidates = out.identityCatalog.filter((row) => (
+      !row.customerEmail
+      && row.has_cognito_sub !== false
+      && !row.hasFreedomOrC1cMembership
+    ));
+
+    out.identityTableColumns = (await readOnlyQuery(
+      client,
+      `SELECT table_name, column_name, data_type, is_nullable, column_default
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name IN ('tenant_users', 'user_roles', 'identity_accounts', 'profiles')
+       ORDER BY table_name, ordinal_position`,
+    )).rows;
+    out.identityTableRequired = (await readOnlyQuery(
+      client,
+      `SELECT table_name, column_name, data_type
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name IN ('tenant_users', 'user_roles', 'identity_accounts', 'profiles')
+         AND is_nullable = 'NO' AND column_default IS NULL
+       ORDER BY table_name, ordinal_position`,
+    )).rows;
+    out.identityForeignKeys = (await readOnlyQuery(
+      client,
+      `SELECT conname, conrelid::regclass AS from_table, confrelid::regclass AS to_table,
+              pg_get_constraintdef(oid) AS def
+       FROM pg_constraint
+       WHERE contype = 'f'
+         AND conrelid IN (
+           'public.tenant_users'::regclass,
+           'public.user_roles'::regclass,
+           'public.identity_accounts'::regclass,
+           'public.profiles'::regclass
+         )
+       ORDER BY 1`,
+    )).rows;
+    out.checkRequiredColumns = (await readOnlyQuery(
+      client,
+      `SELECT column_name, data_type, is_nullable, column_default
+       FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'check_intake_items'
+         AND is_nullable = 'NO' AND column_default IS NULL
+       ORDER BY ordinal_position`,
+    )).rows;
+    out.checkClaimIdDefault = (await readOnlyQuery(
+      client,
+      `SELECT column_name, data_type, is_nullable, column_default
+       FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'check_intake_items'
+         AND column_name IN ('id', 'tenant_id', 'claim_id', 'uploaded_by', 'status', 'check_stage')
+       ORDER BY ordinal_position`,
+    )).rows;
+    out.checkClaimIdGrants = (out.columnGrants || []).filter((row) => (
+      row.table_name === 'check_intake_items' && row.column_name === 'claim_id'
+    ));
 
     out.ok = true;
     out.error = null;
