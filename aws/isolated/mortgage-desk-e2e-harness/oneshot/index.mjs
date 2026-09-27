@@ -394,6 +394,317 @@ const linkRequestClaim = async (client, event) => {
   return { ok: true, rowsUpdated: 1, request: row[0] };
 };
 
+const STOPPED_REQUEST_ID = '33ccc90a-d708-48bf-aa47-3a24a4743fc7';
+const STOPPED_CLAIM_ID = '4627380f-34d6-44b6-88fd-8f43029640b9';
+const STOPPED_CHECK_ID = 'd14033ac-51bb-4c1a-af64-da073e64ee2f';
+
+const diagnoseAccept = async (client, event) => {
+  const requestId = event.requestId || STOPPED_REQUEST_ID;
+  const claimId = event.claimId || STOPPED_CLAIM_ID;
+  const checkId = event.checkId || STOPPED_CHECK_ID;
+  if (![requestId, claimId, checkId].every((id) => UUID_RE.test(id))) {
+    throw new Error('invalid diagnose ids');
+  }
+  if (requestId !== STOPPED_REQUEST_ID || claimId !== STOPPED_CLAIM_ID || checkId !== STOPPED_CHECK_ID) {
+    return { ok: false, error: 'diagnose_limited_to_stopped_fixture' };
+  }
+
+  const request = (await client.query(
+    `SELECT id, tenant_id, check_intake_item_id, claim_id, status, assigned_employee_id,
+            accepted_at, completed_at, requested_by, mortgage_company, loan_number,
+            billing_status, billed_at, stripe_invoice_id, created_at, updated_at
+     FROM public.mortgage_handling_requests WHERE id = $1::uuid`,
+    [requestId],
+  )).rows[0] || null;
+  const billing = (await client.query(
+    `SELECT id, event_type, status, unit_price_cents, tenant_id, claim_id,
+            check_intake_item_id, mortgage_request_id
+     FROM public.check_billing_events
+     WHERE tenant_id = $1::uuid
+       AND (
+         mortgage_request_id = $2::uuid
+         OR check_intake_item_id = $3::uuid
+         OR claim_id = $4::uuid
+       )`,
+    [BILLING_TENANT_ID, requestId, checkId, claimId],
+  )).rows;
+  const policies = (await client.query(
+    `SELECT pol.polname AS policy_name,
+            CASE pol.polcmd
+              WHEN 'r' THEN 'SELECT'
+              WHEN 'a' THEN 'INSERT'
+              WHEN 'w' THEN 'UPDATE'
+              WHEN 'd' THEN 'DELETE'
+              WHEN '*' THEN 'ALL'
+            END AS command,
+            CASE WHEN pol.polpermissive THEN 'PERMISSIVE' ELSE 'RESTRICTIVE' END AS permissive,
+            ARRAY(SELECT r.rolname FROM pg_roles r WHERE r.oid = ANY(pol.polroles) ORDER BY 1) AS roles,
+            pg_get_expr(pol.polqual, pol.polrelid) AS using_expression,
+            pg_get_expr(pol.polwithcheck, pol.polrelid) AS with_check_expression
+     FROM pg_policy pol
+     JOIN pg_class c ON c.oid = pol.polrelid
+     JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'public' AND c.relname = 'mortgage_handling_requests'
+     ORDER BY command, policy_name`,
+  )).rows;
+  const rlsFlags = (await client.query(
+    `SELECT c.relrowsecurity, c.relforcerowsecurity
+     FROM pg_class c
+     JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'public' AND c.relname = 'mortgage_handling_requests'`,
+  )).rows[0] || null;
+  const roleMemberships = (await client.query(
+    `SELECT r.rolname AS role, r.rolbypassrls, r.rolinherit,
+            ARRAY(
+              SELECT m.rolname FROM pg_auth_members am
+              JOIN pg_roles m ON m.oid = am.roleid
+              WHERE am.member = r.oid ORDER BY 1
+            ) AS member_of
+     FROM pg_roles r
+     WHERE r.rolname IN ('checksops', 'authenticated')
+     ORDER BY 1`,
+  )).rows;
+  const tableGrants = (await client.query(
+    `SELECT grantee, privilege_type
+     FROM information_schema.role_table_grants
+     WHERE table_schema = 'public'
+       AND table_name = 'mortgage_handling_requests'
+       AND grantee IN ('checksops', 'authenticated', 'PUBLIC')
+     ORDER BY 1, 2`,
+  )).rows;
+  const columnGrants = (await client.query(
+    `SELECT column_name, grantee, privilege_type
+     FROM information_schema.column_privileges
+     WHERE table_schema = 'public'
+       AND table_name = 'mortgage_handling_requests'
+       AND privilege_type IN ('INSERT', 'UPDATE')
+       AND grantee IN ('checksops', 'authenticated')
+       AND column_name IN (
+         'assigned_employee_id', 'status', 'accepted_at', 'updated_at',
+         'claim_id', 'tenant_id', 'check_intake_item_id'
+       )
+     ORDER BY 1, 2, 3`,
+  )).rows;
+  const triggers = (await client.query(
+    `SELECT t.tgname, t.tgenabled, pg_get_triggerdef(t.oid) AS def,
+            p.proname AS function_name, p.prosecdef AS security_definer
+     FROM pg_trigger t
+     JOIN pg_class c ON c.oid = t.tgrelid
+     JOIN pg_namespace n ON n.oid = c.relnamespace
+     JOIN pg_proc p ON p.oid = t.tgfoid
+     WHERE n.nspname = 'public'
+       AND c.relname = 'mortgage_handling_requests'
+       AND NOT t.tgisinternal
+     ORDER BY t.tgname`,
+  )).rows;
+  const triggerFunctions = {};
+  for (const trig of triggers) {
+    if (triggerFunctions[trig.function_name]) continue;
+    triggerFunctions[trig.function_name] = ((await client.query(
+      `SELECT pg_get_functiondef(p.oid) AS def
+       FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+       WHERE n.nspname = 'public' AND p.proname = $1`,
+      [trig.function_name],
+    )).rows[0] || {}).def || null;
+  }
+  const helper = async (sig) => {
+    try {
+      return (await client.query(`SELECT pg_get_functiondef($1::regprocedure) AS def`, [sig])).rows[0]?.def || null;
+    } catch (error) {
+      return { error: String(error.message || error).slice(0, 200) };
+    }
+  };
+  const helpers = {
+    'auth.uid()': await helper('auth.uid()'),
+    'public.aws_can_write_tenant(uuid)': await helper('public.aws_can_write_tenant(uuid)'),
+    'public.aws_can_access_tenant(uuid)': await helper('public.aws_can_access_tenant(uuid)'),
+    'public.aws_is_authenticated()': await helper('public.aws_is_authenticated()'),
+    'public.aws_is_cross_tenant_reader()': await helper('public.aws_is_cross_tenant_reader()'),
+    'public.has_role(uuid, public.app_role)': await helper('public.has_role(uuid, public.app_role)'),
+    'public.accrue_mortgage_ops_billing(uuid)': await helper('public.accrue_mortgage_ops_billing(uuid)'),
+  };
+  const fks = (await client.query(
+    `SELECT conname, pg_get_constraintdef(oid) AS def
+     FROM pg_constraint
+     WHERE conrelid = 'public.mortgage_handling_requests'::regclass AND contype = 'f'
+     ORDER BY 1`,
+  )).rows;
+  const authUsersPresent = (await client.query(
+    `SELECT EXISTS(SELECT 1 FROM auth.users WHERE id = $1::uuid) AS present`,
+    [MDE2E_USER_ID],
+  )).rows[0];
+  const caller = {
+    userRoles: (await client.query(
+      `SELECT role FROM public.user_roles WHERE user_id = $1::uuid ORDER BY 1`,
+      [MDE2E_USER_ID],
+    )).rows,
+    tenantUsers: (await client.query(
+      `SELECT tenant_id, role FROM public.tenant_users WHERE user_id = $1::uuid ORDER BY 1`,
+      [MDE2E_USER_ID],
+    )).rows,
+  };
+  const successfulAccepts = (await client.query(
+    `SELECT r.id, r.tenant_id, t.name AS tenant_name, r.status, r.assigned_employee_id,
+            r.accepted_at, r.requested_by, r.claim_id IS NOT NULL AS has_claim_id,
+            p.email AS assigned_email,
+            ARRAY(SELECT ur.role FROM public.user_roles ur WHERE ur.user_id = r.assigned_employee_id ORDER BY 1) AS assigned_roles,
+            EXISTS(
+              SELECT 1 FROM public.tenant_users tu
+              WHERE tu.user_id = r.assigned_employee_id AND tu.tenant_id = r.tenant_id
+            ) AS assigned_is_tenant_member
+     FROM public.mortgage_handling_requests r
+     LEFT JOIN public.tenants t ON t.id = r.tenant_id
+     LEFT JOIN public.profiles p ON p.id = r.assigned_employee_id
+     WHERE r.accepted_at IS NOT NULL AND r.id <> $1::uuid
+     ORDER BY r.accepted_at DESC
+     LIMIT 12`,
+    [requestId],
+  )).rows;
+
+  let appContext = null;
+  let visibleRequest = [];
+  let policyEvaluations = [];
+  await client.query('BEGIN');
+  try {
+    await client.query('SET LOCAL ROLE checksops');
+    await client.query('SET LOCAL row_security = on');
+    await client.query("SELECT set_config('request.app_user_id', $1, true)", [MDE2E_USER_ID]);
+    await client.query("SELECT set_config('request.jwt.claim.email', $1, true)", [EMAIL]);
+    appContext = (await client.query(
+      `SELECT current_user,
+              current_setting('request.app_user_id', true) AS app_user_id,
+              current_setting('request.jwt.claim.email', true) AS email_guc,
+              auth.uid()::text AS auth_uid,
+              auth.email() AS auth_email,
+              public.aws_is_authenticated() AS aws_is_authenticated,
+              public.aws_is_cross_tenant_reader() AS cross_tenant_reader,
+              public.is_master_owner() AS is_master_owner,
+              public.is_platform_owner() AS is_platform_owner,
+              public.aws_can_access_tenant($1::uuid) AS can_access_billing,
+              public.aws_can_write_tenant($1::uuid) AS can_write_billing,
+              public.has_role(auth.uid(), 'admin'::public.app_role) AS has_admin,
+              public.has_role(auth.uid(), 'staff'::public.app_role) AS has_staff,
+              public.has_role(auth.uid(), 'mortgage_agent'::public.app_role) AS has_mortgage_agent`,
+      [BILLING_TENANT_ID],
+    )).rows[0];
+    visibleRequest = (await client.query(
+      `SELECT id, tenant_id, status, assigned_employee_id, accepted_at, claim_id, check_intake_item_id
+       FROM public.mortgage_handling_requests WHERE id = $1::uuid`,
+      [requestId],
+    )).rows;
+    for (const pol of policies) {
+      if (!['UPDATE', 'ALL'].includes(pol.command)) continue;
+      const item = {
+        policy_name: pol.policy_name,
+        command: pol.command,
+        permissive: pol.permissive,
+        roles: pol.roles,
+        using_expression: pol.using_expression,
+        with_check_expression: pol.with_check_expression,
+      };
+      try {
+        item.using_current_row = (await client.query(
+          `SELECT (${pol.using_expression || 'TRUE'}) AS ok
+           FROM public.mortgage_handling_requests WHERE id = $1::uuid`,
+          [requestId],
+        )).rows[0]?.ok ?? null;
+      } catch (error) {
+        item.using_error = String(error.message || error).slice(0, 200);
+      }
+      try {
+        item.with_check_proposed_row = (await client.query(
+          `SELECT (${pol.with_check_expression || 'TRUE'}) AS ok
+           FROM (
+             SELECT $2::uuid AS tenant_id,
+                    'in_progress'::text AS status,
+                    $3::uuid AS assigned_employee_id,
+                    now() AS accepted_at,
+                    $4::uuid AS claim_id,
+                    $5::uuid AS check_intake_item_id,
+                    requested_by,
+                    id
+             FROM public.mortgage_handling_requests
+             WHERE id = $1::uuid
+           ) mortgage_handling_requests`,
+          [requestId, BILLING_TENANT_ID, MDE2E_USER_ID, claimId, checkId],
+        )).rows[0]?.ok ?? null;
+      } catch (error) {
+        item.with_check_error = String(error.message || error).slice(0, 200);
+      }
+      policyEvaluations.push(item);
+    }
+    await client.query('ROLLBACK');
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+    throw error;
+  }
+
+  const checksopsMemberOfAuthenticated = roleMemberships.some(
+    (row) => row.role === 'checksops' && (row.member_of || []).includes('authenticated'),
+  );
+  const applicable = policyEvaluations.filter((pol) => {
+    const roles = pol.roles || [];
+    return roles.length === 0
+      || roles.includes('PUBLIC')
+      || roles.includes('checksops')
+      || (checksopsMemberOfAuthenticated && roles.includes('authenticated'));
+  });
+  const permissiveUsing = applicable.filter((p) => p.permissive === 'PERMISSIVE' && p.using_current_row === true);
+  const permissiveCheck = applicable.filter((p) => p.permissive === 'PERMISSIVE' && p.with_check_proposed_row === true);
+  const restrictiveUsingFail = applicable.filter((p) => p.permissive === 'RESTRICTIVE' && p.using_current_row !== true);
+  const restrictiveCheckFail = applicable.filter((p) => p.permissive === 'RESTRICTIVE' && p.with_check_proposed_row !== true);
+  const requestAfter = (await client.query(
+    `SELECT id, status, assigned_employee_id, accepted_at, claim_id, check_intake_item_id, tenant_id
+     FROM public.mortgage_handling_requests WHERE id = $1::uuid`,
+    [requestId],
+  )).rows[0] || null;
+
+  return {
+    ok: true,
+    request,
+    billing,
+    policies,
+    rlsFlags,
+    roleMemberships,
+    tableGrants,
+    columnGrants,
+    triggers,
+    triggerFunctions,
+    helpers,
+    fks,
+    authUsersPresent,
+    caller,
+    successfulAccepts,
+    appContext,
+    visibleRequest,
+    policyEvaluations,
+    rlsCombination: {
+      applicablePolicyNames: applicable.map((p) => p.policy_name),
+      permissiveUsingPass: permissiveUsing.map((p) => p.policy_name),
+      permissiveWithCheckPass: permissiveCheck.map((p) => p.policy_name),
+      restrictiveUsingFail: restrictiveUsingFail.map((p) => p.policy_name),
+      restrictiveWithCheckFail: restrictiveCheckFail.map((p) => p.policy_name),
+      wouldReject: permissiveUsing.length === 0
+        || permissiveCheck.length === 0
+        || restrictiveUsingFail.length > 0
+        || restrictiveCheckFail.length > 0,
+    },
+    proposed: {
+      tenant_id: BILLING_TENANT_ID,
+      status: 'in_progress',
+      assigned_employee_id: MDE2E_USER_ID,
+      accepted_at: 'COALESCE(accepted_at, now())',
+      claim_id: request?.claim_id || null,
+      check_intake_item_id: request?.check_intake_item_id || null,
+    },
+    requestAfter,
+    unchanged: requestAfter
+      && requestAfter.status === 'requested'
+      && requestAfter.assigned_employee_id == null
+      && requestAfter.accepted_at == null,
+  };
+};
+
 const readBilling = async (client, event) => {
   const requestId = event.requestId;
   const checkId = event.checkId;
@@ -477,6 +788,11 @@ export const handler = async (event = {}) => {
       out.ok = true;
       out.readOnly = true;
       return out;
+    }
+
+    if (action === 'diagnose_accept') {
+      const diagnosed = await diagnoseAccept(client, event);
+      return { ...out, ...diagnosed, readOnly: true, rowsCreated: 0 };
     }
 
     out.error = 'unknown_action';
