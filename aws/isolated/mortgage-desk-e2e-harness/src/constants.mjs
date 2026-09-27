@@ -37,8 +37,8 @@ export const BILLING_TENANT_ID = '41cbc4b4-c5cd-4020-a6aa-0905e79dafe9';
 export const ZERO_TENANT_ID = '22233ffe-7a69-4c46-88c3-1587dc525f1f';
 
 export const SYNTHETIC_MDE2E_EMAIL = 'mde2e@freedomadj.com';
-export const SYNTHETIC_MDE2E_USER_ID = null;
-export const SYNTHETIC_MDE2E_COGNITO_SUB = null;
+export const SYNTHETIC_MDE2E_USER_ID = '76f581d7-6c8a-48d6-932c-2e93dc68b0f4';
+export const SYNTHETIC_MDE2E_COGNITO_SUB = 'a41834c8-90a1-7099-f0e5-163d5793dc0e';
 
 export const LEFTOVER_PLUS_ADDRESS_IDENTITY = {
   email: 'claims+mde2e@freedomadj.com',
