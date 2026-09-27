@@ -93,7 +93,7 @@ export const EMAIL_PREVIEW_MARKERS = {
     'Email Preview',
     'formatSignatureRequestFrom',
     'TenantLogo',
-    'support@checksops.com',
+    'PLATFORM_SUPPORT_EMAIL',
   ],
   mount: [
     'SignatureRequestEmailPreview',
