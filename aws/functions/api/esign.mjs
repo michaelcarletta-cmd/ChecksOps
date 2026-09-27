@@ -135,6 +135,14 @@ const loadClaimsContext = async (client, request) => {
   return {};
 };
 
+export const signatureRequestAlreadyComplete = (request, signers = []) => {
+  const status = String(request?.status || '').toLowerCase();
+  if (status === 'completed' || status === 'signed') return true;
+  return Array.isArray(signers)
+    && signers.length > 0
+    && signers.every((signer) => String(signer?.status || '').toLowerCase() === 'signed');
+};
+
 export const runSendSignatureRequest = async ({
   client, mapping, body, spoof, send,
 }) => {
@@ -191,6 +199,9 @@ export const runSendSignatureRequest = async ({
   )).rows[0]?.ok === true;
   if (!canWriteTenant && !canAgentManage) {
     return { ok: false, statusCode: 403, error: 'forbidden', spoofFieldsIgnored: spoof };
+  }
+  if (signatureRequestAlreadyComplete(request, signers)) {
+    return { ok: false, statusCode: 409, error: 'already_signed', spoofFieldsIgnored: spoof };
   }
 
   const resolved = await resolveEmailBranding(client, {

@@ -90,4 +90,20 @@ test('AWS staging write allowlist exposes only the existing signature tables', (
   assert.match(esign, /withSavepoint/);
   assert.match(esign, /touchClaimLatestSignature/);
   assert.match(esign, /ROLLBACK TO SAVEPOINT/);
+  assert.match(esign, /signatureRequestAlreadyComplete/);
+  assert.match(esign, /already_signed/);
+  assert.match(esign, /statusCode: 409/);
+});
+
+test('Resend is hidden for completed or already-signed requests', () => {
+  const requests = sourceOf('src/components/claim-detail/SignatureRequests.tsx');
+  assert.match(requests, /requestAlreadySigned/);
+  assert.match(requests, /canResendRequest/);
+  assert.match(requests, /canResendRequest\(request\) && \(/);
+  assert.match(requests, /signer\.status !== "signed" && !requestAlreadySigned\(request\)/);
+
+  const ops = sourceOf('src/pages/mortgage-ops/MortgageOpsRequestDetail.tsx');
+  assert.match(ops, /function canResendSignature/);
+  assert.match(ops, /canResendSignature\(s\) && \(/);
+  assert.match(ops, /status === "completed" \|\| status === "signed"/);
 });

@@ -462,6 +462,18 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
     return <Badge variant={variant}>{label}</Badge>;
   };
 
+  const requestAlreadySigned = (request: any) => {
+    const status = String(request?.status || "");
+    if (status === "completed" || status === "signed") return true;
+    const list = request?.signature_signers || [];
+    return list.length > 0 && list.every((signer: any) => signer.status === "signed");
+  };
+
+  const canResendRequest = (request: any) => {
+    if (requestAlreadySigned(request)) return false;
+    return request.status === "failed" || request.status === "pending";
+  };
+
   const getSignerStatusLabel = (signer: any) => {
     if (signer.status === "signed") return `Signed ${new Date(signer.signed_at!).toLocaleDateString()}`;
     if (signer.viewed_at) return `Viewed ${new Date(signer.viewed_at).toLocaleDateString()}`;
@@ -814,7 +826,7 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
                     >
                       {request.final_pdf_path ? "View Signed PDF" : "Open Document"}
                     </Button>
-                    {(request.status === "failed" || request.status === "pending") && (
+                    {canResendRequest(request) && (
                       <Button
                         variant="outline"
                         size="sm"
@@ -888,7 +900,7 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
                           <span className="text-muted-foreground">({signer.signer_email})</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          {signer.delivery_status === "failed" && (
+                          {signer.delivery_status === "failed" && signer.status !== "signed" && !requestAlreadySigned(request) && (
                             <Button
                               variant="ghost"
                               size="sm"

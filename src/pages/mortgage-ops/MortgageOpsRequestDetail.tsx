@@ -1294,7 +1294,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
                           <div className="flex items-center justify-between gap-2">
                             <span className="truncate font-medium">{s.document_name}</span>
                             <div className="flex items-center gap-1">
-                              {s.status !== "completed" && s.status !== "cancelled" && s.status !== "declined" && (
+                              {canResendSignature(s) && (
                                 <Button
                                   size="sm"
                                   variant="ghost"
@@ -1642,6 +1642,15 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
     </Dialog>
     </>
   );
+}
+
+function canResendSignature(request: { status?: string; signature_signers?: { status?: string }[] }) {
+  const status = String(request?.status || "").toLowerCase();
+  if (status === "completed" || status === "signed" || status === "cancelled" || status === "declined") {
+    return false;
+  }
+  const signers = request?.signature_signers || [];
+  return !(signers.length > 0 && signers.every((signer) => String(signer?.status || "").toLowerCase() === "signed"));
 }
 
 function Field({ label, value, className }: { label: React.ReactNode; value: React.ReactNode; className?: string }) {
