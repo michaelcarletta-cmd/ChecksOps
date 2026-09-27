@@ -19,11 +19,15 @@ const CA_PATH = [
 const EMAIL = 'mde2e@freedomadj.com';
 const LEFTOVER_PLUS_EMAIL = 'claims+mde2e@freedomadj.com';
 const LEFTOVER_PLUS_USER_ID = '97a1e063-bd9d-4c28-bcbe-b9b462a52894';
+const C1C_ADMIN_USER_ID = '3af0234c-de1b-4819-938d-fa4f9390811b';
+const C1C_ADMIN_EMAIL = 'asukanick@condition1commercial.com';
+const OTHER_ASSIGNEE_ID = '233c588f-dc33-4307-8c3f-3da49c9fd2b3';
 const BILLING_TENANT_ID = '41cbc4b4-c5cd-4020-a6aa-0905e79dafe9';
 const FREEDOM_TENANT_ID = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
 const C1C_TENANT_ID = '4f172140-f57a-4744-8050-95f4f07b13b4';
 const ZERO_TENANT_ID = '22233ffe-7a69-4c46-88c3-1587dc525f1f';
 const EXISTING_INVALID_ID = 'c7729c3e-d87b-46c6-973e-9c04fbdcc961';
+const EXISTING_INVALID_EMAIL = 'staging-mops-4b61bc@checksops.invalid';
 const UNIQUENESS_EMAILS = new Set([EMAIL, LEFTOVER_PLUS_EMAIL]);
 const STAGING_HOST = 'checksops-staging.cyr0q4kcop3c.us-east-1.rds.amazonaws.com';
 const SYNTHETIC_NAME = 'SYNTHETIC / MDE2E / NOT A CUSTOMER';
@@ -705,6 +709,272 @@ const diagnoseAccept = async (client, event) => {
   };
 };
 
+const CAPTURED_UPDATE_USING = "(aws_is_cross_tenant_reader() OR aws_can_write_tenant(tenant_id) OR (has_role(auth.uid(), 'mortgage_agent'::app_role) AND (((status = 'requested'::text) AND (assigned_employee_id IS NULL)) OR (assigned_employee_id = auth.uid()))))";
+const CAPTURED_UPDATE_CHECK = "(aws_is_cross_tenant_reader() OR (has_role(auth.uid(), 'mortgage_agent'::app_role) AND (((status = 'requested'::text) AND (assigned_employee_id IS NULL)) OR (assigned_employee_id = auth.uid()))) OR (aws_can_write_tenant(tenant_id) AND (status = 'requested'::text) AND (assigned_employee_id IS NULL)))";
+const SELF_ASSIGN_CLAUSE = '(aws_can_write_tenant(tenant_id) AND assigned_employee_id = auth.uid())';
+const CORRECTED_UPDATE_CHECK = `(${CAPTURED_UPDATE_CHECK.slice(1, -1)} OR ${SELF_ASSIGN_CLAUSE})`;
+
+const readUpdatePolicy = async (client) => ((await client.query(
+  `SELECT pol.polname AS policy_name,
+          CASE pol.polcmd WHEN 'w' THEN 'UPDATE' ELSE pol.polcmd::text END AS command,
+          CASE WHEN pol.polpermissive THEN 'PERMISSIVE' ELSE 'RESTRICTIVE' END AS permissive,
+          ARRAY(SELECT r.rolname FROM pg_roles r WHERE r.oid = ANY(pol.polroles) ORDER BY 1) AS roles,
+          pg_get_expr(pol.polqual, pol.polrelid) AS using_expression,
+          pg_get_expr(pol.polwithcheck, pol.polrelid) AS with_check_expression
+   FROM pg_policy pol
+   JOIN pg_class c ON c.oid = pol.polrelid
+   JOIN pg_namespace n ON n.oid = c.relnamespace
+   WHERE n.nspname = 'public'
+     AND c.relname = 'mortgage_handling_requests'
+     AND pol.polname = 'aws_update_mortgage_handling_requests'`,
+)).rows[0] || null);
+
+const readFixtureState = async (client) => {
+  const request = (await client.query(
+    `SELECT id, tenant_id, check_intake_item_id, claim_id, status,
+            assigned_employee_id, accepted_at, completed_at, requested_by
+     FROM public.mortgage_handling_requests WHERE id = $1::uuid`,
+    [STOPPED_REQUEST_ID],
+  )).rows[0] || null;
+  const billing = (await client.query(
+    `SELECT id, event_type, status, unit_price_cents
+     FROM public.check_billing_events
+     WHERE tenant_id = $1::uuid
+       AND (
+         mortgage_request_id = $2::uuid
+         OR check_intake_item_id = $3::uuid
+         OR claim_id = $4::uuid
+       )`,
+    [BILLING_TENANT_ID, STOPPED_REQUEST_ID, STOPPED_CHECK_ID, STOPPED_CLAIM_ID],
+  )).rows;
+  return { request, billing, billingCount: billing.length };
+};
+
+const applyAcceptRlsCorrection = async (client, event) => {
+  const mode = String(event.mode || 'apply').trim();
+  const beforePolicy = await readUpdatePolicy(client);
+  const beforeState = await readFixtureState(client);
+  if (!beforePolicy) return { ok: false, error: 'update_policy_missing', beforePolicy, beforeState };
+  if (beforePolicy.using_expression !== CAPTURED_UPDATE_USING) {
+    return { ok: false, error: 'using_expression_drift', beforePolicy, beforeState };
+  }
+  if (mode === 'apply' && beforePolicy.with_check_expression !== CAPTURED_UPDATE_CHECK) {
+    return { ok: false, error: 'with_check_not_prechange_baseline', beforePolicy, beforeState };
+  }
+  if (mode === 'revert' && beforePolicy.with_check_expression !== CORRECTED_UPDATE_CHECK
+    && beforePolicy.with_check_expression !== CAPTURED_UPDATE_CHECK) {
+    return { ok: false, error: 'with_check_unknown_cannot_revert', beforePolicy, beforeState };
+  }
+  if (beforeState.request?.status !== 'requested'
+    || beforeState.request?.assigned_employee_id
+    || beforeState.request?.accepted_at
+    || beforeState.billingCount !== 0) {
+    return { ok: false, error: 'fixture_drift', beforePolicy, beforeState };
+  }
+
+  const nextCheck = mode === 'revert' ? CAPTURED_UPDATE_CHECK : CORRECTED_UPDATE_CHECK;
+  await client.query(
+    `DROP POLICY IF EXISTS aws_update_mortgage_handling_requests ON public.mortgage_handling_requests`,
+  );
+  await client.query(
+    `CREATE POLICY aws_update_mortgage_handling_requests ON public.mortgage_handling_requests
+       FOR UPDATE TO authenticated
+       USING (${CAPTURED_UPDATE_USING})
+       WITH CHECK (${nextCheck})`,
+  );
+  const afterPolicy = await readUpdatePolicy(client);
+  const afterState = await readFixtureState(client);
+  const expectedCheck = nextCheck;
+  const ok = afterPolicy?.using_expression === CAPTURED_UPDATE_USING
+    && afterPolicy?.with_check_expression === expectedCheck
+    && afterState.request?.status === 'requested'
+    && afterState.request?.assigned_employee_id == null
+    && afterState.request?.accepted_at == null
+    && afterState.billingCount === 0;
+  return {
+    ok,
+    error: ok ? null : 'policy_apply_mismatch',
+    mode,
+    beforePolicy,
+    afterPolicy,
+    beforeState,
+    afterState,
+    expectedUsing: CAPTURED_UPDATE_USING,
+    expectedCheck,
+  };
+};
+
+const evalWithCheck = async (client, { userId, email, assignedTo, tenantId, requestId }) => {
+  await client.query('BEGIN');
+  try {
+    await client.query('SET LOCAL ROLE checksops');
+    await client.query('SET LOCAL row_security = on');
+    await client.query("SELECT set_config('request.app_user_id', $1, true)", [userId]);
+    await client.query("SELECT set_config('request.jwt.claim.email', $1, true)", [email || '']);
+    const ctx = (await client.query(
+      `SELECT auth.uid()::text AS auth_uid,
+              public.aws_can_write_tenant($1::uuid) AS can_write_target_tenant,
+              public.aws_can_write_tenant($2::uuid) AS can_write_billing,
+              public.has_role(auth.uid(), 'admin'::public.app_role) AS has_admin,
+              public.has_role(auth.uid(), 'mortgage_agent'::public.app_role) AS has_mortgage_agent,
+              public.aws_is_cross_tenant_reader() AS cross_tenant_reader`,
+      [tenantId, BILLING_TENANT_ID],
+    )).rows[0];
+    const policy = await readUpdatePolicy(client);
+    const usingOk = (await client.query(
+      `SELECT (${policy.using_expression}) AS ok
+       FROM public.mortgage_handling_requests WHERE id = $1::uuid`,
+      [requestId],
+    )).rows[0]?.ok ?? null;
+    const checkOk = (await client.query(
+      `SELECT (${policy.with_check_expression}) AS ok
+       FROM (
+         VALUES (
+           $1::uuid,
+           'in_progress'::text,
+           $2::uuid,
+           now(),
+           $3::uuid,
+           $4::uuid,
+           $5::uuid,
+           $6::uuid
+         )
+       ) AS mortgage_handling_requests(
+         tenant_id, status, assigned_employee_id, accepted_at,
+         claim_id, check_intake_item_id, requested_by, id
+       )`,
+      [tenantId, assignedTo, STOPPED_CLAIM_ID, STOPPED_CHECK_ID, userId, requestId],
+    )).rows[0]?.ok ?? null;
+    await client.query('ROLLBACK');
+    return { ctx, usingOk, checkOk, with_check_expression: policy.with_check_expression };
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+    return { error: String(error.message || error).slice(0, 300) };
+  }
+};
+
+const proveAcceptRlsCorrection = async (client) => {
+  const state = await readFixtureState(client);
+  if (state.request?.status !== 'requested'
+    || state.request?.assigned_employee_id
+    || state.request?.accepted_at
+    || state.billingCount !== 0) {
+    return { ok: false, error: 'fixture_drift', state };
+  }
+  const policy = await readUpdatePolicy(client);
+  if (policy?.with_check_expression !== CORRECTED_UPDATE_CHECK) {
+    return { ok: false, error: 'policy_not_corrected', policy, expected: CORRECTED_UPDATE_CHECK };
+  }
+  const otherTenantRequest = (await client.query(
+    `SELECT id, tenant_id, status, assigned_employee_id
+     FROM public.mortgage_handling_requests
+     WHERE tenant_id IS DISTINCT FROM $1::uuid
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [BILLING_TENANT_ID],
+  )).rows[0] || null;
+
+  const allowSelf = await evalWithCheck(client, {
+    userId: MDE2E_USER_ID,
+    email: EMAIL,
+    assignedTo: MDE2E_USER_ID,
+    tenantId: BILLING_TENANT_ID,
+    requestId: STOPPED_REQUEST_ID,
+  });
+  const rejectOtherAssignee = await evalWithCheck(client, {
+    userId: MDE2E_USER_ID,
+    email: EMAIL,
+    assignedTo: OTHER_ASSIGNEE_ID,
+    tenantId: BILLING_TENANT_ID,
+    requestId: STOPPED_REQUEST_ID,
+  });
+  const rejectOtherTenantAdmin = await evalWithCheck(client, {
+    userId: C1C_ADMIN_USER_ID,
+    email: C1C_ADMIN_EMAIL,
+    assignedTo: C1C_ADMIN_USER_ID,
+    tenantId: BILLING_TENANT_ID,
+    requestId: STOPPED_REQUEST_ID,
+  });
+  const rejectNoAccess = await evalWithCheck(client, {
+    userId: EXISTING_INVALID_ID,
+    email: EXISTING_INVALID_EMAIL,
+    assignedTo: EXISTING_INVALID_ID,
+    tenantId: BILLING_TENANT_ID,
+    requestId: STOPPED_REQUEST_ID,
+  });
+  let rejectOtherTenantRequest = { skipped: true };
+  if (otherTenantRequest) {
+    rejectOtherTenantRequest = {
+      otherTenantRequest,
+      ...(await evalWithCheck(client, {
+        userId: MDE2E_USER_ID,
+        email: EMAIL,
+        assignedTo: MDE2E_USER_ID,
+        tenantId: otherTenantRequest.tenant_id,
+        requestId: otherTenantRequest.id,
+      })),
+    };
+  } else {
+    rejectOtherTenantRequest = await evalWithCheck(client, {
+      userId: MDE2E_USER_ID,
+      email: EMAIL,
+      assignedTo: MDE2E_USER_ID,
+      tenantId: FREEDOM_TENANT_ID,
+      requestId: STOPPED_REQUEST_ID,
+    });
+    rejectOtherTenantRequest.note = 'no other-tenant request found; evaluated Freedom tenant_id against the stopped row identity';
+  }
+
+  const proofs = {
+    allow_self_assign_in_progress: {
+      expect: true,
+      checkOk: allowSelf.checkOk,
+      usingOk: allowSelf.usingOk,
+      pass: allowSelf.checkOk === true && allowSelf.usingOk === true,
+      detail: allowSelf,
+    },
+    reject_assign_other_user: {
+      expect: false,
+      checkOk: rejectOtherAssignee.checkOk,
+      pass: rejectOtherAssignee.checkOk === false,
+      detail: rejectOtherAssignee,
+    },
+    reject_other_tenant_admin: {
+      expect: false,
+      checkOk: rejectOtherTenantAdmin.checkOk,
+      pass: rejectOtherTenantAdmin.checkOk === false,
+      detail: rejectOtherTenantAdmin,
+    },
+    reject_no_tenant_access: {
+      expect: false,
+      checkOk: rejectNoAccess.checkOk,
+      pass: rejectNoAccess.checkOk === false,
+      detail: rejectNoAccess,
+    },
+    reject_other_tenant_request: {
+      expect: false,
+      checkOk: rejectOtherTenantRequest.checkOk,
+      pass: rejectOtherTenantRequest.checkOk === false,
+      detail: rejectOtherTenantRequest,
+    },
+  };
+  const unexpectedAllows = Object.entries(proofs)
+    .filter(([, p]) => p.expect === false && p.checkOk === true)
+    .map(([name]) => name);
+  const failedRequired = Object.entries(proofs)
+    .filter(([, p]) => p.pass !== true)
+    .map(([name]) => name);
+  return {
+    ok: failedRequired.length === 0,
+    error: failedRequired.length ? 'rls_proof_failed' : null,
+    unexpectedAllows,
+    failedRequired,
+    policy,
+    state,
+    proofs,
+  };
+};
+
 const readBilling = async (client, event) => {
   const requestId = event.requestId;
   const checkId = event.checkId;
@@ -793,6 +1063,21 @@ export const handler = async (event = {}) => {
     if (action === 'diagnose_accept') {
       const diagnosed = await diagnoseAccept(client, event);
       return { ...out, ...diagnosed, readOnly: true, rowsCreated: 0 };
+    }
+
+    if (action === 'apply_accept_rls') {
+      const applied = await applyAcceptRlsCorrection(client, { mode: 'apply' });
+      return { ...out, ...applied, readOnly: false, rowsCreated: 0 };
+    }
+
+    if (action === 'revert_accept_rls') {
+      const reverted = await applyAcceptRlsCorrection(client, { mode: 'revert' });
+      return { ...out, ...reverted, readOnly: false, rowsCreated: 0 };
+    }
+
+    if (action === 'prove_accept_rls') {
+      const proved = await proveAcceptRlsCorrection(client);
+      return { ...out, ...proved, readOnly: true, rowsCreated: 0 };
     }
 
     out.error = 'unknown_action';
