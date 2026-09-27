@@ -327,7 +327,7 @@ const createCheck = async (client, event) => {
   const allowed = new Set([
     'id', 'tenant_id', 'claim_id', 'uploaded_by', 'check_number', 'payee_line',
     'front_image_path', 'status', 'review_notes', 'carrier_name', 'detected_claim_number',
-    'amount', 'check_stage', 'ocr_status', 'funds_type',
+    'amount',
   ]);
   const unknown = requiredWithoutDefault(columns).filter((name) => !allowed.has(name));
   if (unknown.length) return { ok: false, error: 'unexpected_required_check_columns', unknown, rowsCreated: 0 };
@@ -349,9 +349,6 @@ const createCheck = async (client, event) => {
   add('carrier_name', SYNTHETIC_LABEL);
   add('detected_claim_number', runMarker);
   add('amount', 0);
-  add('check_stage', 'intake');
-  add('ocr_status', 'skipped');
-  add('funds_type', 'synthetic_test');
   const placeholders = fields.map((_, i) => `$${i + 1}`);
   try {
     const row = (await client.query(
