@@ -13,8 +13,14 @@ const CA_CANDIDATES = [
   path.join(ROOT, '..', '..', 'rls', 'oneshot', 'rds-global-bundle.pem'),
 ];
 const CA_PATH = CA_CANDIDATES.find((p) => fs.existsSync(p));
-const WRITE_SQL = fs.readFileSync(path.join(ROOT, '..', 'sql', '02_public_signature_write_helpers.sql'), 'utf8');
-const AGENT_SQL = fs.readFileSync(path.join(ROOT, '..', '..', 'rls', 'sql', '39_mortgage_agent_signature_send.sql'), 'utf8');
+const sqlCandidates = (name) => [
+  path.join(ROOT, 'sql', name),
+  path.join(ROOT, '..', 'sql', name),
+  path.join(ROOT, '..', '..', 'rls', 'sql', name),
+  path.join(ROOT, '..', '..', 'storage', 'sql', name),
+].find((p) => fs.existsSync(p));
+const WRITE_SQL = fs.readFileSync(sqlCandidates('02_public_signature_write_helpers.sql'), 'utf8');
+const AGENT_SQL = fs.readFileSync(sqlCandidates('39_mortgage_agent_signature_send.sql'), 'utf8');
 
 const PUBLIC_FUNCS = [
   'aws_public_signature_by_token_hash(text)',
