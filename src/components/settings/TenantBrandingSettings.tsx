@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -83,7 +83,10 @@ export function TenantBrandingSettings({ tenant }: { tenant: TenantBranding }) {
       icon={<Palette className="h-4 w-4 text-primary" />}
     />
     <Card data-testid="tenant-branding-settings">
-      <CardContent className="space-y-4 pt-6">
+      <CardHeader>
+        <CardTitle className="text-sm">Branding & Appearance</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
         <div className="space-y-2">
           <Label className="text-xs">Logo</Label>
           <div className="flex flex-wrap items-center gap-2">
