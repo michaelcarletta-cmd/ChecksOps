@@ -1,7 +1,16 @@
 import { isAwsStaging } from "@/lib/awsStaging";
 
+function isProductionChecksOpsHost(): boolean {
+  if (typeof window === "undefined") return false;
+  const host = String(window.location.hostname || "").toLowerCase();
+  return host === "checksops.com" || host === "www.checksops.com";
+}
+
 export function AwsStagingBanner() {
-  if (!isAwsStaging()) return null;
+  // isAwsStaging() is the Cognito/AWS-mode switch, not a hostname check.
+  // Production AWS builds bake VITE_AUTH_PROVIDER=cognito, so hide the
+  // amber banner on the production apex/www hosts only.
+  if (!isAwsStaging() || isProductionChecksOpsHost()) return null;
   return (
     <div
       data-testid="aws-staging-banner"

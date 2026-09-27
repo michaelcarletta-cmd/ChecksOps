@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Upload, Building2, Loader2, Sparkles, Image as ImageIcon, Layout } from "lucide-react";
+import { Upload, Building2, Loader2, Sparkles, Image as ImageIcon, Layout, Palette } from "lucide-react";
 
 import { SectionCard } from "./SectionCard";
 import { SettingsHero } from "./SettingsHero";
@@ -21,8 +21,6 @@ export function CompanyBrandingSettings() {
   const [invoiceLetterheadUrl, setInvoiceLetterheadUrl] = useState<string | null>(null);
   const [invoiceFooterNote, setInvoiceFooterNote] = useState("");
   const [invoiceDefaultTerms, setInvoiceDefaultTerms] = useState("");
-  const [invoiceAccentColor, setInvoiceAccentColor] = useState("#3B82F6");
-  const [invoiceTheme, setInvoiceTheme] = useState<"light" | "dark">("light");
   
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -66,17 +64,16 @@ export function CompanyBrandingSettings() {
       if (tenantUser) {
         const { data: tenant } = await supabase
           .from("tenants")
-          .select("invoice_letterhead_url, invoice_footer_note, invoice_default_terms, invoice_accent_color, invoice_theme, primary_color")
+          .select("logo_url, invoice_letterhead_url, invoice_footer_note, invoice_default_terms")
           .eq("id", tenantUser.tenant_id)
           .maybeSingle();
         
         if (tenant) {
           const t = tenant as any;
+          if (t.logo_url) setLogoUrl(t.logo_url);
           setInvoiceLetterheadUrl(t.invoice_letterhead_url || null);
           setInvoiceFooterNote(t.invoice_footer_note || "");
           setInvoiceDefaultTerms(t.invoice_default_terms || "");
-          setInvoiceAccentColor(t.invoice_accent_color || t.primary_color || "#3B82F6");
-          setInvoiceTheme(t.invoice_theme === "dark" ? "dark" : "light");
         }
       }
     }
@@ -171,9 +168,7 @@ export function CompanyBrandingSettings() {
         company_address: address,
         company_phone: phone,
         company_email: email,
-        logo_url: logoUrl,
         letterhead_url: letterheadUrl,
-        updated_at: new Date().toISOString()
       };
 
       if (brandingId) {
@@ -202,11 +197,10 @@ export function CompanyBrandingSettings() {
           await supabase
             .from("tenants")
             .update({
+              logo_url: logoUrl,
               invoice_letterhead_url: invoiceLetterheadUrl,
               invoice_footer_note: invoiceFooterNote,
               invoice_default_terms: invoiceDefaultTerms,
-              invoice_accent_color: invoiceAccentColor,
-              invoice_theme: invoiceTheme,
             })
             .eq("id", tenantUser.tenant_id);
         }
@@ -224,9 +218,10 @@ export function CompanyBrandingSettings() {
     <div className="space-y-6">
       {/* Hero Section */}
       <SettingsHero
-        title="Company Settings"
+        title="Branding Settings"
         description="Configure your organization's visual identity, contact information, and invoice presentation."
         badge="Identity & Branding"
+        icon={<Palette className="h-4 w-4 text-primary" />}
       />
 
       <div className="grid gap-6">
@@ -412,59 +407,6 @@ export function CompanyBrandingSettings() {
                 rows={3}
               />
               <p className="text-xs text-muted-foreground mt-1">Default terms added to every new invoice</p>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <Label>Invoice Accent Color</Label>
-                <div className="mt-2 flex items-center gap-3">
-                  <input
-                    type="color"
-                    aria-label="Invoice accent color"
-                    value={invoiceAccentColor}
-                    onChange={(e) => setInvoiceAccentColor(e.target.value)}
-                    className="h-10 w-14 cursor-pointer rounded-md border border-border bg-transparent p-1"
-                  />
-                  <Input
-                    value={invoiceAccentColor}
-                    onChange={(e) => setInvoiceAccentColor(e.target.value)}
-                    placeholder="#3B82F6"
-                    className="font-mono"
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Used for headings, totals, and the Pay now button
-                </p>
-              </div>
-
-              <div>
-                <Label>Invoice Theme</Label>
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  {(["light", "dark"] as const).map((mode) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => setInvoiceTheme(mode)}
-                      className={`rounded-lg border p-3 text-left transition-colors ${
-                        invoiceTheme === mode
-                          ? "border-primary ring-1 ring-primary"
-                          : "border-border hover:bg-muted/50"
-                      }`}
-                    >
-                      <div
-                        className={`mb-2 h-10 rounded-md border ${
-                          mode === "light" ? "bg-white border-neutral-200" : "bg-neutral-900 border-neutral-700"
-                        }`}
-                        style={{ borderTopColor: invoiceAccentColor, borderTopWidth: 4 }}
-                      />
-                      <span className="text-sm capitalize">{mode}</span>
-                    </button>
-                  ))}
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Applies to the customer-facing invoice page
-                </p>
-              </div>
             </div>
           </div>
         </SectionCard>
