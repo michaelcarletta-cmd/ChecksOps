@@ -41,17 +41,20 @@ test('tenant Check Documents mounts the existing SignatureRequests component', (
 test('AWS viewed + attach overlay does not add a second signing engine or overwrite LDD originals', () => {
   const storage = sourceOf('aws/functions/api/storage.mjs');
   assert.match(storage, /export const recordPublicSignerViewed/);
-  assert.match(storage, /signer_viewed/);
+  assert.match(storage, /aws_public_signature_mark_viewed/);
   assert.match(storage, /handlePublicSignatureDocument/);
-  assert.equal(storage.includes("SET status = 'in_progress'"), true);
+  assert.equal(storage.includes("SET status = 'in_progress'"), false);
 
   const submit = sourceOf('aws/functions/api/signature-submit.mjs');
   assert.match(submit, /export const attachCompletedSignatureDocument/);
-  assert.match(submit, /signed_dtp/);
-  assert.match(submit, /final_pdf_path/);
-  const ldd = submit.slice(submit.indexOf('UPDATE public.loss_draft_documents'));
-  assert.match(ldd, /signature_status = 'signed'/);
-  assert.equal(/^[\s\S]*file_path/.test(ldd.slice(0, 400)), false);
+  assert.match(submit, /aws_public_signature_attach_signed/);
+  assert.match(submit, /aws_public_signature_submit/);
+  assert.equal(submit.includes('INSERT INTO public.claim_files'), false);
+  const helpers = sourceOf('aws/storage/sql/02_public_signature_write_helpers.sql');
+  assert.match(helpers, /signed_dtp/);
+  assert.match(helpers, /final_pdf_path/);
+  assert.match(helpers, /signature_status = 'signed'/);
+  assert.equal(helpers.includes('SET document_path'), false);
 
   const lovable = sourceOf('supabase/functions/submit-signature/index.ts');
   const lovableLdd = lovable.slice(lovable.indexOf('loss_draft_documents'));

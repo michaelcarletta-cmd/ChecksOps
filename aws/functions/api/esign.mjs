@@ -156,14 +156,18 @@ export const runSendSignatureRequest = async ({
     )).rows[0];
     tenantId = ck?.tenant_id || null;
   }
-  if (tenantId) {
-    const canWrite = (await client.query(
+  const canWriteTenant = tenantId
+    ? (await client.query(
       'SELECT public.aws_can_write_tenant($1::uuid) AS ok',
       [tenantId],
-    )).rows[0]?.ok;
-    if (!canWrite) {
-      return { ok: false, statusCode: 403, error: 'forbidden', spoofFieldsIgnored: spoof };
-    }
+    )).rows[0]?.ok
+    : true;
+  const canAgentManage = (await client.query(
+    'SELECT public.aws_mortgage_agent_can_manage_signature($1::uuid) AS ok',
+    [requestId],
+  )).rows[0]?.ok;
+  if (!canWriteTenant && !canAgentManage) {
+    return { ok: false, statusCode: 403, error: 'forbidden', spoofFieldsIgnored: spoof };
   }
 
   const resolved = await resolveEmailBranding(client, {
@@ -258,16 +262,16 @@ export const runSendSignatureRequest = async ({
        WHERE id = $1::uuid`,
       [requestId],
     );
-    if (claimId) {
-      await client.query(
-        `UPDATE public.claims SET latest_signature_request_id = $2::uuid, updated_at = now() WHERE id = $1::uuid`,
-        [claimId, requestId],
-      );
-    }
-    return {
-      ok: true,
-      statusCode: 200,
-      mode: 'manual_bypass',
+  if (claimId) {
+    await client.query(
+      `UPDATE public.claims SET latest_signature_request_id = $2::uuid, updated_at = now() WHERE id = $1::uuid`,
+      [claimId, requestId],
+    ).catch(() => {});
+  }
+  return {
+    ok: true,
+    statusCode: 200,
+    mode: 'manual_bypass',
       signerLinks,
       provider: 'aws_ses_or_sink',
       spoofFieldsIgnored: spoof,
@@ -333,7 +337,7 @@ export const runSendSignatureRequest = async ({
     await client.query(
       `UPDATE public.claims SET latest_signature_request_id = $2::uuid, updated_at = now() WHERE id = $1::uuid`,
       [claimId, requestId],
-    );
+    ).catch(() => {});
   }
 
   return {

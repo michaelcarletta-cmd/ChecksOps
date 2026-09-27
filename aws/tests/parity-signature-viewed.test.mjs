@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { test } from 'node:test';
 import {
   handlePublicSignatureDocument,
@@ -35,49 +36,36 @@ test('recordPublicSignerViewed skips when already viewed and does not open a wri
       throw new Error('must_not_create_write_client');
     },
   }, {
-    signerId: 's1',
-    requestId: 'r1',
-    claimId: 'c1',
+    tokenHash: 'a'.repeat(64),
     alreadyViewed: true,
   });
   assert.deepEqual(result, { recorded: false, reason: 'skipped' });
   assert.equal(created, false);
 });
 
-test('first public document open records viewed_at, moves pending to in_progress, and logs signer_viewed', async () => {
+test('first public document open records viewed_at through the token-scoped helper', async () => {
+  const tokenHash = 'b'.repeat(64);
   const writer = writeClient([
     {
-      match: (sql) => sql.includes('SET viewed_at'),
-      result: () => ({ rows: [{ id: 's1', viewed_at: '2026-09-27T19:00:00.000Z' }], rowCount: 1 }),
-    },
-    {
-      match: (sql) => sql.includes("SET status = 'in_progress'"),
-      result: () => ({ rows: [], rowCount: 1 }),
-    },
-    {
-      match: (sql) => sql.includes("stage, status, message") && sql.includes('esign_event_logs'),
-      result: () => ({ rows: [], rowCount: 1 }),
+      match: (sql) => sql.includes('aws_public_signature_mark_viewed'),
+      result: () => ({
+        rows: [{ doc: { ok: true, recorded: true, viewed_at: '2026-09-27T19:00:00.000Z' } }],
+        rowCount: 1,
+      }),
     },
   ]);
   const result = await recordPublicSignerViewed({ writeClient: writer }, {
-    signerId: 's1',
-    requestId: 'r1',
-    claimId: 'c1',
+    tokenHash,
     alreadyViewed: false,
   });
   assert.equal(result.recorded, true);
-  assert.equal(writer.sqls.some((row) => row.sql.includes('SET viewed_at') && row.params[0] === 's1'), true);
-  assert.equal(writer.sqls.some((row) => row.sql.includes("status = 'in_progress'") && row.params[0] === 'r1'), true);
-  const log = writer.sqls.find((row) => row.sql.includes('esign_event_logs'));
-  assert.ok(log);
-  assert.equal(log.params[0], 'r1');
-  assert.equal(log.params[1], 's1');
-  assert.equal(log.params[2], 'c1');
-  assert.match(log.sql, /signer_viewed/);
+  assert.equal(writer.sqls.some((row) => row.sql.includes('aws_public_signature_mark_viewed') && row.params[0] === tokenHash), true);
+  assert.equal(writer.sqls.some((row) => /UPDATE public.signature_signers/.test(row.sql)), false);
   assert.equal(writer.sqls.some((row) => /record_check_return|ready_for_deposit|bill_mortgage/.test(row.sql)), false);
 });
 
 test('handlePublicSignatureDocument records viewed after a successful document presign', async () => {
+  const tokenHash = createHash('sha256').update('token-long-enough').digest('hex');
   const doc = {
     signer: { id: 's1', viewed_at: null, expires_at: null },
     request: { id: 'r1', document_path: 'unsigned/orig.pdf', claim_id: 'c1', status: 'pending' },
@@ -94,16 +82,8 @@ test('handlePublicSignatureDocument records viewed after a successful document p
   ]);
   const writer = writeClient([
     {
-      match: (sql) => sql.includes('SET viewed_at'),
-      result: () => ({ rows: [{ id: 's1', viewed_at: '2026-09-27T19:00:00.000Z' }], rowCount: 1 }),
-    },
-    {
-      match: (sql) => sql.includes("SET status = 'in_progress'"),
-      result: () => ({ rows: [], rowCount: 1 }),
-    },
-    {
-      match: (sql) => sql.includes('esign_event_logs'),
-      result: () => ({ rows: [], rowCount: 1 }),
+      match: (sql) => sql.includes('aws_public_signature_mark_viewed'),
+      result: () => ({ rows: [{ doc: { ok: true, recorded: true, viewed_at: '2026-09-27T19:00:00.000Z' } }], rowCount: 1 }),
     },
   ]);
   const key = 'files/claim-files/unsigned/orig.pdf';
@@ -133,5 +113,5 @@ test('handlePublicSignatureDocument records viewed after a successful document p
   assert.equal(result.ok, true, JSON.stringify(result));
   assert.equal(result.viewedRecorded, true);
   assert.match(result.signedUrl, /presigned/);
-  assert.equal(writer.sqls.some((row) => row.sql.includes('SET viewed_at')), true);
+  assert.equal(writer.sqls.some((row) => row.sql.includes('aws_public_signature_mark_viewed') && row.params[0] === tokenHash), true);
 });

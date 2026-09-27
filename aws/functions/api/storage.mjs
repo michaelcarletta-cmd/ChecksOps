@@ -329,8 +329,8 @@ const publicClient = async (deps) => {
   return client;
 };
 
-export const recordPublicSignerViewed = async (deps, { signerId, requestId, claimId, alreadyViewed }) => {
-  if (!signerId || !requestId || alreadyViewed) return { recorded: false, reason: 'skipped' };
+export const recordPublicSignerViewed = async (deps, { tokenHash, alreadyViewed }) => {
+  if (!tokenHash || alreadyViewed) return { recorded: false, reason: 'skipped' };
   let writer = deps.writeClient;
   let owned = false;
   if (!writer) {
@@ -342,33 +342,15 @@ export const recordPublicSignerViewed = async (deps, { signerId, requestId, clai
     await writer.connect();
   }
   try {
-    await writer.query('BEGIN');
-    await writer.query('SET TRANSACTION READ WRITE');
-    const viewed = await writer.query(
-      `UPDATE public.signature_signers
-       SET viewed_at = COALESCE(viewed_at, now())
-       WHERE id = $1::uuid AND viewed_at IS NULL
-       RETURNING id, viewed_at`,
-      [signerId],
-    );
-    await writer.query(
-      `UPDATE public.signature_requests
-       SET status = 'in_progress'
-       WHERE id = $1::uuid AND status = 'pending'`,
-      [requestId],
-    );
-    if (viewed.rowCount) {
-      await writer.query(
-        `INSERT INTO public.esign_event_logs (
-           request_id, signer_id, claim_id, stage, status, message, payload
-         ) VALUES ($1::uuid, $2::uuid, $3::uuid, 'signer_viewed', 'ok', 'Signer opened the document', '{}'::jsonb)`,
-        [requestId, signerId, claimId || null],
-      );
+    const row = (await writer.query(
+      'SELECT public.aws_public_signature_mark_viewed($1) AS doc',
+      [tokenHash],
+    )).rows[0]?.doc;
+    if (!row?.ok) {
+      return { recorded: false, error: row?.error || 'viewed_denied' };
     }
-    await writer.query('COMMIT');
-    return { recorded: viewed.rowCount > 0 };
+    return { recorded: row.recorded === true, viewed_at: row.viewed_at || null };
   } catch (error) {
-    try { await writer.query('ROLLBACK'); } catch { /* ignore */ }
     return { recorded: false, error: sanitizePublicError(error) };
   } finally {
     if (owned) {
@@ -510,9 +492,7 @@ export const handlePublicSignatureDocument = async (event, deps = {}) => {
       maxExpires: SIGNING_DOCUMENT_EXPIRES,
     });
     const view = await recordPublicSignerViewed(deps, {
-      signerId: row.signer?.id,
-      requestId: row.request?.id,
-      claimId: row.request?.claim_id || row.claim?.id,
+      tokenHash,
       alreadyViewed: Boolean(row.signer?.viewed_at),
     });
     return {
