@@ -609,3 +609,99 @@ test('Tranche 3 intake image path must be scoped to the same check', async () =>
   assert.equal(denied.statusCode, 403);
 });
 
+test('signature request/signer inserts reuse the existing engine and deny completed status', async () => {
+  assert.equal(WRITE_ALLOWLIST.signature_requests.ops.has('insert'), true);
+  assert.equal(WRITE_ALLOWLIST.signature_requests.ops.has('update'), false);
+  assert.equal(WRITE_ALLOWLIST.signature_signers.columns.has('token_hash'), false);
+  const CLAIM = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const REQ = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const client = mockClient();
+  const orig = client.query.bind(client);
+  client.query = async (sql, params) => {
+    if (/FROM public.claims/.test(sql)) return { rows: [{ id: CLAIM }] };
+    if (/FROM public.check_intake_items/.test(sql)) return { rows: [{ id: CHECK_ID, claim_id: CLAIM }] };
+    if (/FROM public.signature_requests WHERE id/.test(sql)) return { rows: [{ id: REQ }] };
+    if (/INSERT INTO public.signature_requests/.test(sql)) {
+      client.queries.push({ sql, params });
+      return { rows: [{ id: REQ, status: params[6], document_path: params[3] }] };
+    }
+    if (/INSERT INTO public.signature_signers/.test(sql)) {
+      client.queries.push({ sql, params });
+      return { rows: [{ id: 's1', signer_email: params[2] }] };
+    }
+    return orig(sql, params);
+  };
+
+  const created = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'signature_requests',
+    op: 'insert',
+    values: {
+      claim_id: CLAIM,
+      check_intake_item_id: CHECK_ID,
+      document_name: 'SYNTHETIC Release',
+      document_path: `check-intake/${CHECK_ID}/files/unsigned.pdf`,
+      document_type: 'authorization',
+      field_data: [{ id: 'sig', type: 'signature', signerIndex: 0 }],
+      status: 'draft',
+    },
+  }), depsFor(client));
+  assert.equal(created.ok, true, JSON.stringify(created));
+
+  const completed = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'signature_requests',
+    op: 'insert',
+    values: {
+      claim_id: CLAIM,
+      document_name: 'Nope',
+      document_path: `check-intake/${CHECK_ID}/files/unsigned.pdf`,
+      status: 'completed',
+    },
+  }), depsFor(client));
+  assert.equal(completed.statusCode, 403);
+  assert.equal(completed.error, 'column_not_allowlisted');
+
+  const signer = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'signature_signers',
+    op: 'insert',
+    values: {
+      signature_request_id: REQ,
+      signer_name: 'Ada Homeowner',
+      signer_email: 'ada@example.invalid',
+      signer_type: 'policyholder',
+      signing_order: 1,
+      token_hash: 'must-be-ignored',
+    },
+  }), depsFor(client));
+  assert.equal(signer.ok, true, JSON.stringify(signer));
+  const insert = client.queries.find((q) => String(q.sql).includes('INSERT INTO public.signature_signers'));
+  assert.equal(insert.sql.includes('token_hash'), false);
+});
+
+test('check_files can link signature_request_id without moving check stage', async () => {
+  const REQ = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const client = mockClient({
+    rows: [{ id: '55555555-5555-4555-8555-555555555555', check_intake_item_id: CHECK_ID }],
+  });
+  const orig = client.query.bind(client);
+  client.query = async (sql, params) => {
+    if (/UPDATE public.check_files/.test(sql)) {
+      client.queries.push({ sql, params });
+      return { rows: [{ id: '55555555-5555-4555-8555-555555555555', signature_request_id: params[0] }] };
+    }
+    return orig(sql, params);
+  };
+  const result = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_files',
+    op: 'update',
+    values: { signature_request_id: REQ },
+    filters: [
+      { column: 'check_intake_item_id', op: 'eq', value: CHECK_ID },
+      { column: 'file_path', op: 'eq', value: `check-intake/${CHECK_ID}/files/a.pdf` },
+    ],
+  }), depsFor(client));
+  assert.equal(result.ok, true, JSON.stringify(result));
+  const update = client.queries.find((q) => String(q.sql).includes('UPDATE public.check_files'));
+  assert.match(update.sql, /signature_request_id/);
+  assert.equal(update.sql.includes('check_stage'), false);
+});
+

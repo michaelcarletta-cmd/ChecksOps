@@ -66,3 +66,17 @@ test('overlay does not introduce a replacement public signing route or token sys
   assert.equal(index.includes('/public/signature-submit-v2'), false);
   assert.equal(index.includes('another_signing'), false);
 });
+
+test('AWS staging write allowlist exposes only the existing signature tables', () => {
+  const allow = sourceOf('aws/functions/api/write-allowlist.mjs');
+  assert.match(allow, /signature_requests:/);
+  assert.match(allow, /signature_signers:/);
+  assert.match(allow, /signature_request_id/);
+  const client = sourceOf('src/integrations/aws/client.ts');
+  assert.match(client, /"signature_requests"/);
+  assert.match(client, /"signature_signers"/);
+  const writer = sourceOf('aws/functions/api/write-signature.mjs');
+  assert.match(writer, /status !== 'draft'/);
+  assert.equal(writer.includes('bill-mortgage'), false);
+  assert.equal(writer.includes('ready_for_deposit'), false);
+});
