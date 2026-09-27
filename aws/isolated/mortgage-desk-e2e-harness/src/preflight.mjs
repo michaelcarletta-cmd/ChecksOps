@@ -24,6 +24,16 @@ const PRIVILEGE_SQL = `
   ORDER BY table_name, privilege_type
 `;
 
+const EFFECTIVE_PRIVILEGE_SQL = `
+  SELECT
+    t AS table_name,
+    has_table_privilege(current_user, format('public.%I', t), 'SELECT') AS select,
+    has_table_privilege(current_user, format('public.%I', t), 'INSERT') AS insert,
+    has_table_privilege(current_user, format('public.%I', t), 'UPDATE') AS update,
+    has_table_privilege(current_user, format('public.%I', t), 'DELETE') AS delete
+  FROM unnest($1::text[]) AS t
+`;
+
 const COLUMN_SQL = `
   SELECT table_name, column_name, is_nullable, data_type, column_default
   FROM information_schema.columns
@@ -34,29 +44,36 @@ const COLUMN_SQL = `
 
 const FK_SQL = `
   SELECT
-    tc.table_name AS from_table,
-    kcu.column_name AS from_column,
-    ccu.table_name AS to_table,
-    ccu.column_name AS to_column,
-    rc.delete_rule,
-    rc.update_rule,
-    tc.constraint_name
-  FROM information_schema.table_constraints tc
-  JOIN information_schema.key_column_usage kcu
-    ON tc.constraint_name = kcu.constraint_name
-   AND tc.table_schema = kcu.table_schema
-  JOIN information_schema.referential_constraints rc
-    ON rc.constraint_name = tc.constraint_name
-   AND rc.constraint_schema = tc.table_schema
-  JOIN information_schema.constraint_column_usage ccu
-    ON ccu.constraint_name = rc.unique_constraint_name
-   AND ccu.constraint_schema = rc.unique_constraint_schema
-  WHERE tc.constraint_type = 'FOREIGN KEY'
-    AND tc.table_schema = 'public'
-    AND (
-      tc.table_name = ANY($1::text[])
-      OR ccu.table_name = ANY($1::text[])
-    )
+    src.relname AS from_table,
+    src_att.attname AS from_column,
+    tgt.relname AS to_table,
+    tgt_att.attname AS to_column,
+    CASE con.confdeltype
+      WHEN 'a' THEN 'NO ACTION'
+      WHEN 'r' THEN 'RESTRICT'
+      WHEN 'c' THEN 'CASCADE'
+      WHEN 'n' THEN 'SET NULL'
+      WHEN 'd' THEN 'SET DEFAULT'
+    END AS delete_rule,
+    CASE con.confupdtype
+      WHEN 'a' THEN 'NO ACTION'
+      WHEN 'r' THEN 'RESTRICT'
+      WHEN 'c' THEN 'CASCADE'
+      WHEN 'n' THEN 'SET NULL'
+      WHEN 'd' THEN 'SET DEFAULT'
+    END AS update_rule,
+    con.conname AS constraint_name
+  FROM pg_constraint con
+  JOIN pg_class src ON src.oid = con.conrelid
+  JOIN pg_namespace nsp ON nsp.oid = src.relnamespace
+  JOIN pg_class tgt ON tgt.oid = con.confrelid
+  JOIN unnest(con.conkey) WITH ORDINALITY AS src_cols(attnum, ord) ON TRUE
+  JOIN unnest(con.confkey) WITH ORDINALITY AS tgt_cols(attnum, ord) ON tgt_cols.ord = src_cols.ord
+  JOIN pg_attribute src_att ON src_att.attrelid = src.oid AND src_att.attnum = src_cols.attnum
+  JOIN pg_attribute tgt_att ON tgt_att.attrelid = tgt.oid AND tgt_att.attnum = tgt_cols.attnum
+  WHERE con.contype = 'f'
+    AND nsp.nspname = 'public'
+    AND (src.relname = ANY($1::text[]) OR tgt.relname = ANY($1::text[]))
   ORDER BY from_table, from_column
 `;
 
@@ -99,6 +116,34 @@ const privilegeMap = (rows) => {
     out[row.table_name][row.privilege_type] = true;
   }
   return out;
+};
+
+const effectivePrivilegeMap = (rows) => {
+  const out = {};
+  for (const row of rows) {
+    out[row.table_name] = {
+      SELECT: Boolean(row.select),
+      INSERT: Boolean(row.insert),
+      UPDATE: Boolean(row.update),
+      DELETE: Boolean(row.delete),
+    };
+  }
+  return out;
+};
+
+const applyReadOnlyIdentityContext = async (client) => {
+  await readOnlyQuery(
+    client,
+    `SELECT set_config('request.app_user_id', $1, true) AS app_user_id`,
+    [MORTGAGE_AGENT_USER_ID],
+  );
+  await readOnlyQuery(
+    client,
+    `SELECT set_config('request.jwt.claim.email', $1, true) AS email`,
+    [MORTGAGE_AGENT_EMAIL],
+  );
+  const uid = (await readOnlyQuery(client, `SELECT auth.uid()::text AS auth_uid`)).rows[0]?.auth_uid || null;
+  return { applied: true, authUid: uid };
 };
 
 export const runReadOnlyPreflight = async ({
@@ -179,24 +224,41 @@ export const runReadOnlyPreflight = async ({
     }
 
     const privilegeRows = (await readOnlyQuery(client, PRIVILEGE_SQL, [FIXTURE_TABLES])).rows;
-    out.privileges = privilegeMap(privilegeRows);
+    const effectiveRows = (await readOnlyQuery(client, EFFECTIVE_PRIVILEGE_SQL, [FIXTURE_TABLES])).rows;
+    out.directGrantsToCurrentUser = privilegeMap(privilegeRows);
+    out.privileges = effectivePrivilegeMap(effectiveRows);
     out.privilegeProbe = FIXTURE_TABLES.map((table) => ({
       table,
       SELECT: Boolean(out.privileges[table]?.SELECT),
       INSERT: Boolean(out.privileges[table]?.INSERT),
       UPDATE: Boolean(out.privileges[table]?.UPDATE),
       DELETE: Boolean(out.privileges[table]?.DELETE),
+      source: 'has_table_privilege including inherited roles; no GRANT issued',
     }));
     out.grantsIssued = 0;
 
     const columns = (await readOnlyQuery(client, COLUMN_SQL, [FIXTURE_TABLES])).rows;
     const notNull = (await readOnlyQuery(client, NOT_NULL_SQL, [FIXTURE_TABLES])).rows;
     const fks = (await readOnlyQuery(client, FK_SQL, [FIXTURE_TABLES])).rows;
+    const requiredWithoutDefault = columns.filter((col) => col.is_nullable === 'NO' && !col.column_default);
+    const rls = (await readOnlyQuery(
+      client,
+      `SELECT c.relname AS table_name, c.relrowsecurity AS rls, c.relforcerowsecurity AS force_rls
+       FROM pg_class c
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+       WHERE n.nspname = 'public' AND c.relname = ANY($1::text[])
+       ORDER BY c.relname`,
+      [FIXTURE_TABLES.concat(['tenants', 'user_roles', 'identity_accounts'])],
+    )).rows;
     out.schema = {
       notNullColumns: notNull,
+      requiredWithoutDefault: requiredWithoutDefault,
       foreignKeys: fks,
       columnCount: columns.length,
+      rowLevelSecurity: rls,
     };
+
+    out.readOnlyIdentityContext = await applyReadOnlyIdentityContext(client);
 
     const rates = (await readOnlyQuery(
       client,
@@ -212,9 +274,10 @@ export const runReadOnlyPreflight = async ({
       tenantName: rates.name,
       mortgage_ops_initial_rate_cents: rates.mortgage_ops_initial_rate_cents,
       mortgage_ops_additional_rate_cents: rates.mortgage_ops_additional_rate_cents,
-      initialMatches: rates.mortgage_ops_initial_rate_cents === EXPECTED_INITIAL_RATE_CENTS,
-      additionalMatches: rates.mortgage_ops_additional_rate_cents === EXPECTED_ADDITIONAL_RATE_CENTS,
-    } : { missing: true, initialMatches: false, additionalMatches: false };
+      initialMatches: Number(rates.mortgage_ops_initial_rate_cents) === EXPECTED_INITIAL_RATE_CENTS,
+      additionalMatches: Number(rates.mortgage_ops_additional_rate_cents) === EXPECTED_ADDITIONAL_RATE_CENTS,
+      observedAfterReadOnlyIdentityContext: true,
+    } : { missing: true, initialMatches: false, additionalMatches: false, observedAfterReadOnlyIdentityContext: true };
 
     const launch = (await readOnlyQuery(
       client,
@@ -235,6 +298,17 @@ export const runReadOnlyPreflight = async ({
       `SELECT role FROM public.user_roles WHERE user_id = $1::uuid ORDER BY role`,
       [MORTGAGE_AGENT_USER_ID],
     )).rows.map((row) => row.role);
+    let hasRoleFn = null;
+    try {
+      hasRoleFn = (await readOnlyQuery(
+        client,
+        `SELECT public.has_role($1::uuid, 'mortgage_agent'::public.app_role) AS mortgage_agent,
+                public.has_role($1::uuid, 'admin'::public.app_role) AS admin`,
+        [MORTGAGE_AGENT_USER_ID],
+      )).rows[0] || null;
+    } catch (error) {
+      hasRoleFn = { error: String(error.message || error).slice(0, 200) };
+    }
     let identityAccount = null;
     const identityPresent = (await readOnlyQuery(
       client,
@@ -254,9 +328,14 @@ export const runReadOnlyPreflight = async ({
       userId: MORTGAGE_AGENT_USER_ID,
       email: MORTGAGE_AGENT_EMAIL,
       roles: agentRoles,
-      hasMortgageAgentRole: agentRoles.includes('mortgage_agent') || agentRoles.includes('admin'),
+      hasRoleFunction: hasRoleFn,
+      hasMortgageAgentRole: agentRoles.includes('mortgage_agent')
+        || agentRoles.includes('admin')
+        || hasRoleFn?.mortgage_agent === true
+        || hasRoleFn?.admin === true,
       identityAccountStatus: identityAccount?.status || null,
       hasCognitoSub: Boolean(identityAccount?.cognito_sub),
+      readOnlyIdentityAuthUid: out.readOnlyIdentityContext?.authUid || null,
     };
 
     const functionDef = (await readOnlyQuery(

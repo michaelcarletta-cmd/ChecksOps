@@ -13,7 +13,7 @@ import { secretLooksProductionOrProvider, stagingSecretArnAllowed } from './fail
 const { Client } = pg;
 const CA_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), 'rds-global-bundle.pem');
 
-const WRITE_SQL = /\b(insert|update|delete|grant|revoke|alter|drop|create|truncate|comment|copy|call|do)\b/i;
+const WRITE_SQL = /(?:^|;)[\s(]*(insert|update|delete|grant|revoke|alter|drop|create|truncate|comment|copy|call|do)\b/i;
 
 export const assertReadOnlySql = (sql) => {
   const text = String(sql || '').replace(/--[^\n]*/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ');

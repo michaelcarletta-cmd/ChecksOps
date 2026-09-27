@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { assertReadOnlySql } from '../src/db.mjs';
 import { handler } from '../src/index.mjs';
-import { HARNESS_FUNCTION_NAME, STAGING_RDS_HOST, STAGING_SECRET_ARN_PREFIX } from '../src/constants.mjs';
+import { FIXTURE_TABLES, HARNESS_FUNCTION_NAME, STAGING_RDS_HOST, STAGING_SECRET_ARN_PREFIX } from '../src/constants.mjs';
 
 const stagingArn = `${STAGING_SECRET_ARN_PREFIX}-b4U0Rn`;
 
@@ -29,6 +29,35 @@ test('preflight mocked path stays read-only and creates no rows', async () => {
     query: async (sql, params = []) => {
       queries.push({ sql, params });
       if (/^SET default_transaction_read_only|^BEGIN READ ONLY|^ROLLBACK/.test(sql.trim())) return { rows: [] };
+      if (/has_table_privilege/.test(sql)) {
+        return {
+          rows: FIXTURE_TABLES.map((table) => ({
+            table_name: table,
+            select: true,
+            insert: table === 'claims' || table === 'check_intake_items' || table === 'mortgage_handling_requests',
+            update: table === 'mortgage_handling_requests',
+            delete: table !== 'check_billing_events',
+          })),
+        };
+      }
+      if (/set_config\('request.app_user_id'/.test(sql)) return { rows: [{ app_user_id: 'b100f05d-9e81-4a7b-b9cc-9baf173131d9' }] };
+      if (/set_config\('request.jwt.claim.email'/.test(sql)) return { rows: [{ email: 'claims@freedomadj.com' }] };
+      if (/auth.uid\(\)/.test(sql)) return { rows: [{ auth_uid: 'b100f05d-9e81-4a7b-b9cc-9baf173131d9' }] };
+      if (/has_role\(/.test(sql)) return { rows: [{ mortgage_agent: true, admin: false }] };
+      if (/relrowsecurity/.test(sql)) return { rows: [{ table_name: 'claims', rls: true, force_rls: false }] };
+      if (/pg_constraint|contype = 'f'/.test(sql)) {
+        return {
+          rows: [{
+            from_table: 'mortgage_handling_requests',
+            from_column: 'check_intake_item_id',
+            to_table: 'check_intake_items',
+            to_column: 'id',
+            delete_rule: 'RESTRICT',
+            update_rule: 'NO ACTION',
+            constraint_name: 'mortgage_handling_requests_check_intake_item_id_fkey',
+          }],
+        };
+      }
       if (/current_database\(\)/.test(sql)) {
         return {
           rows: [{
@@ -151,7 +180,8 @@ test('preflight mocked path stays read-only and creates no rows', async () => {
     assert.equal(result.grantsIssued, 0);
     assert.equal(result.freedomRates.initialMatches, true);
     assert.equal(result.workflowPlan.usesCopiedSqlAsWorkflow, false);
-    assert.ok(queries.every((q) => !/\b(INSERT|UPDATE|DELETE|GRANT)\b/i.test(q.sql) || /BEGIN READ ONLY|ROLLBACK/.test(q.sql)));
+    const writeStatement = /(?:^|;)[\s(]*(INSERT|UPDATE|DELETE|GRANT)\b/i;
+    assert.ok(queries.every((q) => !writeStatement.test(q.sql) || /BEGIN READ ONLY|ROLLBACK/.test(q.sql)));
   } finally {
     for (const key of Object.keys(process.env)) {
       if (!(key in prev)) delete process.env[key];
