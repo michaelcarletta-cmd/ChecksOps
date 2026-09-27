@@ -74,21 +74,39 @@ export const emailText = (signer, request, signUrl, branding = {}) => {
   return layout.text;
 };
 
-const logEvent = async (client, row) => {
-  await client.query(
-    `INSERT INTO public.esign_event_logs (
-       request_id, signer_id, claim_id, stage, status, message, payload
-     ) VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7::jsonb)`,
-    [
-      row.request_id,
-      row.signer_id,
-      row.claim_id,
-      row.stage,
-      row.status,
-      row.message,
-      JSON.stringify(row.payload || {}),
-    ],
-  ).catch(() => {});
+const withSavepoint = async (client, name, fn) => {
+  await client.query(`SAVEPOINT ${name}`);
+  try {
+    const out = await fn();
+    await client.query(`RELEASE SAVEPOINT ${name}`);
+    return out;
+  } catch {
+    try { await client.query(`ROLLBACK TO SAVEPOINT ${name}`); } catch { /* ignore */ }
+    return null;
+  }
+};
+
+const logEvent = async (client, row) => withSavepoint(client, 'esign_log', () => client.query(
+  `INSERT INTO public.esign_event_logs (
+     request_id, signer_id, claim_id, stage, status, message, payload
+   ) VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7::jsonb)`,
+  [
+    row.request_id,
+    row.signer_id,
+    row.claim_id,
+    row.stage,
+    row.status,
+    row.message,
+    JSON.stringify(row.payload || {}),
+  ],
+));
+
+const touchClaimLatestSignature = async (client, claimId, requestId) => {
+  if (!claimId) return null;
+  return withSavepoint(client, 'claim_touch', () => client.query(
+    `UPDATE public.claims SET latest_signature_request_id = $2::uuid, updated_at = now() WHERE id = $1::uuid`,
+    [claimId, requestId],
+  ));
 };
 
 const loadClaimsContext = async (client, request) => {
@@ -205,12 +223,16 @@ export const runSendSignatureRequest = async ({
   for (const signer of signers) {
     const rawToken = generateRawToken();
     const tokenHash = hashToken(rawToken);
-    await client.query(
+    const minted = await client.query(
       `UPDATE public.signature_signers
        SET access_token = $2, token_hash = $3, expires_at = $4::timestamptz
-       WHERE id = $1::uuid`,
+       WHERE id = $1::uuid
+       RETURNING id`,
       [signer.id, rawToken, tokenHash, expiresAt],
     );
+    if (!minted.rowCount) {
+      return { ok: false, statusCode: 403, error: 'signer_update_denied', spoofFieldsIgnored: spoof };
+    }
     signer._rawToken = rawToken;
     signer._signUrl = `${appUrl}/sign?token=${rawToken}`;
     signerLinks.push({
@@ -229,7 +251,7 @@ export const runSendSignatureRequest = async ({
     )).rows[0];
     if (!existing) {
       for (const field of fieldData) {
-        await client.query(
+        await withSavepoint(client, 'sig_field', () => client.query(
           `INSERT INTO public.signature_fields (
              id, signature_request_id, signer_index, field_type, label, page, x, y, width, height, required, placeholder, checkbox_label
            ) VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
@@ -248,7 +270,7 @@ export const runSendSignatureRequest = async ({
             field.placeholder || null,
             field.checkboxLabel || null,
           ],
-        ).catch(() => {});
+        ));
       }
     }
   }
@@ -267,12 +289,7 @@ export const runSendSignatureRequest = async ({
        WHERE id = $1::uuid`,
       [requestId],
     );
-  if (claimId) {
-    await client.query(
-      `UPDATE public.claims SET latest_signature_request_id = $2::uuid, updated_at = now() WHERE id = $1::uuid`,
-      [claimId, requestId],
-    ).catch(() => {});
-  }
+  await touchClaimLatestSignature(client, claimId, requestId);
   return {
     ok: true,
     statusCode: 200,
@@ -325,11 +342,12 @@ export const runSendSignatureRequest = async ({
   const someFailed = results.some((row) => !row.success);
   const allSucceeded = results.length > 0 && results.every((row) => row.success);
   const providerStatus = allSucceeded ? 'emails_sent' : allFailed ? 'emails_failed' : 'emails_partially_failed';
-  await client.query(
+  const persisted = await client.query(
     `UPDATE public.signature_requests
      SET status = $2, delivery_mode = 'aws_ses_or_sink', sent_at = CASE WHEN $3 THEN NULL ELSE now() END,
          last_error = $4, last_attempted_at = now(), provider_status = $5
-     WHERE id = $1::uuid`,
+     WHERE id = $1::uuid
+     RETURNING id, status, delivery_mode, sent_at`,
     [
       requestId,
       allFailed ? 'failed' : 'pending',
@@ -338,12 +356,10 @@ export const runSendSignatureRequest = async ({
       providerStatus,
     ],
   );
-  if (claimId) {
-    await client.query(
-      `UPDATE public.claims SET latest_signature_request_id = $2::uuid, updated_at = now() WHERE id = $1::uuid`,
-      [claimId, requestId],
-    ).catch(() => {});
+  if (!persisted.rowCount) {
+    return { ok: false, statusCode: 403, error: 'request_update_denied', spoofFieldsIgnored: spoof };
   }
+  await touchClaimLatestSignature(client, claimId, requestId);
 
   return {
     ok: !allFailed,
@@ -355,6 +371,7 @@ export const runSendSignatureRequest = async ({
     total: results.length,
     provider: 'aws_ses_or_sink',
     lovableConnector: false,
+    persisted: persisted.rows[0] || null,
     spoofFieldsIgnored: spoof,
   };
 };

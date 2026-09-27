@@ -145,8 +145,8 @@ const cleanupFailedDraft = async (client) => {
 
 export const handler = async (event = {}) => {
   const mode = String(event.mode || process.env.APPLY_MODE || 'inspect');
-  if (!['inspect', 'apply', 'cleanup', 'verify', 'snapshot', 'expire_signer'].includes(mode)) {
-    return { ok: false, error: 'mode must be inspect|apply|cleanup|verify|snapshot|expire_signer' };
+  if (!['inspect', 'apply', 'cleanup', 'verify', 'snapshot', 'expire_signer', 'lookup_tokens', 'debug_send'].includes(mode)) {
+    return { ok: false, error: 'mode must be inspect|apply|cleanup|verify|snapshot|expire_signer|lookup_tokens|debug_send' };
   }
   if (!CA_PATH) return { ok: false, error: 'rds ca missing' };
   if ((mode === 'apply') && !SQL_PATH) return { ok: false, error: '69 sql missing' };
@@ -201,7 +201,7 @@ export const handler = async (event = {}) => {
       const requestId = event.requestId;
       const check = checkId
         ? (await client.query(
-          `SELECT id, status, check_stage, amount, claim_id, tenant_id
+          `SELECT id, status, check_stage, claim_id, tenant_id
            FROM public.check_intake_items WHERE id = $1::uuid`,
           [checkId],
         )).rows[0]
@@ -211,7 +211,7 @@ export const handler = async (event = {}) => {
         : null;
       const billing = checkId
         ? (await client.query(
-          `SELECT id, event_type, amount, created_at
+          `SELECT id, event_type, created_at
            FROM public.check_billing_events
            WHERE check_intake_item_id = $1::uuid
            ORDER BY created_at`,
@@ -262,6 +262,121 @@ export const handler = async (event = {}) => {
         signers,
         checkFiles,
         events,
+        productionSupabaseChanged: false,
+      };
+    }
+    if (mode === 'lookup_tokens') {
+      const claimId = event.claimId;
+      const requestId = event.requestId;
+      const tokens = claimId
+        ? (await client.query(
+          `SELECT id, token, claim_id, homeowner_email, homeowner_name, revoked_at, expires_at
+           FROM public.homeowner_ledger_tokens
+           WHERE claim_id = $1::uuid
+           ORDER BY created_at DESC NULLS LAST
+           LIMIT 20`,
+          [claimId],
+        )).rows
+        : [];
+      const amountCols = (await client.query(
+        `SELECT column_name
+         FROM information_schema.columns
+         WHERE table_schema = 'public'
+           AND table_name = 'check_intake_items'
+           AND column_name ILIKE '%amount%'
+         ORDER BY 1`,
+      )).rows.map((row) => row.column_name);
+      const request = requestId
+        ? (await client.query(
+          `SELECT id, claim_id, check_intake_item_id, document_name, document_path, final_pdf_path,
+                  status, delivery_mode, provider_status, last_error, sent_at
+           FROM public.signature_requests WHERE id = $1::uuid`,
+          [requestId],
+        )).rows[0]
+        : null;
+      const signers = requestId
+        ? (await client.query(
+          `SELECT id, signer_email, status, delivery_status, token_hash IS NOT NULL AS has_hash,
+                  expires_at, email_sent_at
+           FROM public.signature_signers WHERE signature_request_id = $1::uuid`,
+          [requestId],
+        )).rows
+        : [];
+      const grants = (await client.query(
+        `SELECT table_name, grantee, privilege_type
+         FROM information_schema.role_table_grants
+         WHERE table_schema = 'public'
+           AND table_name IN ('signature_requests', 'signature_signers')
+           AND grantee IN ('checksops', 'authenticated', 'PUBLIC')
+         ORDER BY 1, 2, 3`,
+      )).rows;
+      return {
+        ok: true,
+        mode,
+        tokens,
+        amountCols,
+        request,
+        signers,
+        grants,
+        productionSupabaseChanged: false,
+      };
+    }
+    if (mode === 'debug_send') {
+      const requestId = event.requestId;
+      const userId = event.userId;
+      const policies = (await client.query(
+        `SELECT tablename, policyname, cmd, roles::text, qual, with_check
+         FROM pg_policies
+         WHERE schemaname = 'public'
+           AND tablename IN ('signature_requests', 'signature_signers')
+         ORDER BY 1, 2`,
+      )).rows;
+      const membership = (await client.query(
+        `SELECT r.rolname, ARRAY(SELECT a.rolname FROM pg_auth_members m JOIN pg_roles a ON a.oid = m.roleid WHERE m.member = r.oid) AS member_of,
+                r.rolbypassrls
+         FROM pg_roles r
+         WHERE r.rolname IN ('checksops', 'authenticated', 'checksops_admin')`,
+      )).rows;
+      const triggers = (await client.query(
+        `SELECT t.tgname,
+                pg_get_triggerdef(t.oid) AS def,
+                p.proname,
+                pg_get_functiondef(p.oid) AS fn
+         FROM pg_trigger t
+         JOIN pg_class c ON c.oid = t.tgrelid
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         JOIN pg_proc p ON p.oid = t.tgfoid
+         WHERE n.nspname = 'public'
+           AND c.relname IN ('signature_requests', 'signature_signers')
+           AND NOT t.tgisinternal
+         ORDER BY 1`,
+      )).rows;
+      await client.query('BEGIN');
+      await client.query('SET LOCAL ROLE checksops');
+      if (userId) await client.query("SELECT set_config('request.app_user_id', $1, true)", [userId]);
+      const updReq = await client.query(
+        `UPDATE public.signature_requests
+         SET status = 'pending', delivery_mode = 'debug', last_attempted_at = now()
+         WHERE id = $1::uuid
+         RETURNING id, status, delivery_mode`,
+        [requestId],
+      );
+      const updSig = await client.query(
+        `UPDATE public.signature_signers
+         SET delivery_status = 'debug'
+         WHERE signature_request_id = $1::uuid
+         RETURNING id, delivery_status`,
+        [requestId],
+      );
+      await client.query('ROLLBACK');
+      return {
+        ok: true,
+        mode,
+        policies,
+        membership,
+        triggers,
+        updReq: updReq.rows,
+        updSig: updSig.rows,
         productionSupabaseChanged: false,
       };
     }

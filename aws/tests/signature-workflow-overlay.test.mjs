@@ -85,4 +85,9 @@ test('AWS staging write allowlist exposes only the existing signature tables', (
   assert.match(writer, /status !== 'draft'/);
   assert.equal(writer.includes('bill-mortgage'), false);
   assert.equal(writer.includes('ready_for_deposit'), false);
+
+  const esign = sourceOf('aws/functions/api/esign.mjs');
+  assert.match(esign, /withSavepoint/);
+  assert.match(esign, /touchClaimLatestSignature/);
+  assert.match(esign, /ROLLBACK TO SAVEPOINT/);
 });
