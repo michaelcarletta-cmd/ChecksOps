@@ -25,8 +25,14 @@ cp "${ROOT}/package.json" "${PACK}/package.json"
 cp "${ROOT}/src/"*.mjs "${PACK}/"
 cp "${CA_SRC}" "${PACK}/rds-global-bundle.pem"
 
-if grep -R -nE 'sk-[A-Za-z0-9]{10,}|checksops_admin|PROVIDER_SECRETS' "${PACK}" --include='*.mjs' --include='*.json' >/dev/null; then
+# Refuse packed live credential material. Fail-closed source may mention
+# checksops_admin / PROVIDER_SECRETS_ARN as values it rejects.
+if grep -R -nE 'sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|BEGIN (RSA |OPENSSH )?PRIVATE KEY|aws_secret_access_key[[:space:]]*[:=]' "${PACK}" --include='*.mjs' --include='*.json' >/dev/null; then
   echo "refusing pack: forbidden secret material" >&2
+  exit 1
+fi
+if grep -R -nE 'rds-db-credentials/checksops-staging/checksops_admin/|"PROVIDER_SECRETS_ARN":[[:space:]]*"arn:' "${PACK}" --include='*.mjs' --include='*.json' >/dev/null; then
+  echo "refusing pack: admin or provider secret value present" >&2
   exit 1
 fi
 
