@@ -105,6 +105,19 @@ test("staging mobile-composer pin overlays the selector SPA and leaves productio
   assert.equal(pin.ACCEPTED_STAGING_SIGNATURE_MOBILE_COMPOSER_SPA.signing_engine_untouched, true);
 });
 
+test("production mobile-composer pin overlays DRoG4LeT and leaves the API unchanged", async () => {
+  const pin = await import("../scripts/lib/accepted-production-spa-signature-mobile-composer.mjs");
+  assert.equal(pin.ACCEPTED_PRODUCTION_SIGNATURE_MOBILE_COMPOSER_SPA.spa_bundle, "/assets/index-BkzeBHTL.js");
+  assert.equal(pin.ACCEPTED_PRODUCTION_SIGNATURE_MOBILE_COMPOSER_SPA.spa_sha256, "e6f1fd9d97aa31d1ad705bfaf14004dff004159c87027c4848b9793c2181e787");
+  assert.equal(pin.ACCEPTED_PRODUCTION_SIGNATURE_MOBILE_COMPOSER_SPA.index_html_sha256, "c85afc1a685e551810259d4bc179a06dd10043eaa9e05b2de272757ea3292de7");
+  assert.equal(pin.ACCEPTED_PRODUCTION_SIGNATURE_MOBILE_COMPOSER_SPA.s3_version, "cknrbiGObviCUsPCB58bSOyeLta87W2V");
+  assert.equal(pin.ACCEPTED_PRODUCTION_SIGNATURE_MOBILE_COMPOSER_SPA.production_lambda_sha, "gHoAYTlh/WLTAovN7/hfwuvmBNuMjKZaC+zMzBsAOSw=");
+  assert.equal(pin.ACCEPTED_PRODUCTION_SIGNATURE_MOBILE_COMPOSER_SPA.based_on_baseline.spa_bundle, "/assets/index-DRoG4LeT.js");
+  assert.equal(pin.ACCEPTED_PRODUCTION_SIGNATURE_MOBILE_COMPOSER_SPA.selector_preserved, true);
+  assert.equal(pin.ACCEPTED_PRODUCTION_SIGNATURE_MOBILE_COMPOSER_SPA.not_staging_wholesale, true);
+  assert.equal(pin.ACCEPTED_PRODUCTION_SIGNATURE_MOBILE_COMPOSER_SPA.staging_spa_not_deployed, "/assets/index-BgpqIBFW.js");
+});
+
 test("production mobile-composer promote script overlays DRoG4LeT and refuses staging wholesale", () => {
   const script = readFileSync("scripts/promote-production-signature-mobile-composer-spa.mjs", "utf8");
   assert.match(script, /LIVE_ENTRY = '\/assets\/index-DRoG4LeT\.js'/);
