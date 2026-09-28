@@ -10,6 +10,9 @@ import { Upload, Building2, Loader2, Sparkles, Image as ImageIcon, Layout } from
 
 import { SectionCard } from "./SectionCard";
 import { SettingsHero } from "./SettingsHero";
+import { TenantLogo } from "@/components/branding/TenantLogo";
+import { resolveTenantLogoUrl } from "@/lib/tenantLogoUrl";
+import { useNavigate, useLocation } from "react-router-dom";
 
 export function CompanyBrandingSettings() {
   const [companyName, setCompanyName] = useState("");
@@ -19,6 +22,7 @@ export function CompanyBrandingSettings() {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [letterheadUrl, setLetterheadUrl] = useState<string | null>(null);
   const [invoiceLetterheadUrl, setInvoiceLetterheadUrl] = useState<string | null>(null);
+  const [tenantLogoUrl, setTenantLogoUrl] = useState<string | null>(null);
   const [invoiceFooterNote, setInvoiceFooterNote] = useState("");
   const [invoiceDefaultTerms, setInvoiceDefaultTerms] = useState("");
   const [invoiceAccentColor, setInvoiceAccentColor] = useState("#3B82F6");
@@ -30,6 +34,8 @@ export function CompanyBrandingSettings() {
   const [saving, setSaving] = useState(false);
   const [brandingId, setBrandingId] = useState<string | null>(null);
   const { toast } = useToast();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     loadSettings();
@@ -66,13 +72,14 @@ export function CompanyBrandingSettings() {
       if (tenantUser) {
         const { data: tenant } = await supabase
           .from("tenants")
-          .select("invoice_letterhead_url, invoice_footer_note, invoice_default_terms, invoice_accent_color, invoice_theme, primary_color")
+          .select("logo_url, invoice_letterhead_url, invoice_footer_note, invoice_default_terms, invoice_accent_color, invoice_theme, primary_color")
           .eq("id", tenantUser.tenant_id)
           .maybeSingle();
         
         if (tenant) {
           const t = tenant as any;
           setInvoiceLetterheadUrl(t.invoice_letterhead_url || null);
+          setTenantLogoUrl(resolveTenantLogoUrl(t.logo_url) || t.logo_url || null);
           setInvoiceFooterNote(t.invoice_footer_note || "");
           setInvoiceDefaultTerms(t.invoice_default_terms || "");
           setInvoiceAccentColor(t.invoice_accent_color || t.primary_color || "#3B82F6");
@@ -360,36 +367,39 @@ export function CompanyBrandingSettings() {
           title="Invoice Branding"
           icon={<Layout className="h-4 w-4 text-emerald-500" />}
           accent="bg-gradient-to-r from-emerald-500/60 to-emerald-500/10"
-          description="Customize the visual presentation and default terms of your customer-facing invoices."
+          description="Invoices use the same logo configured in Branding & Appearance. There is no separate invoice logo."
         >
           <div className="space-y-4">
             <div>
-              <Label>Invoice Letterhead</Label>
-              <div className="mt-2">
-                <Label
-                  htmlFor="invoice-letterhead-upload"
-                  className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
-                >
-                  <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                    {invoiceLetterheadUrl ? (
-                      <img src={invoiceLetterheadUrl} alt="Invoice Letterhead Preview" className="h-20 object-contain mb-2" />
-                    ) : (
-                      <Upload className="h-8 w-8 text-muted-foreground mb-2" />
-                    )}
-                    <p className="text-sm text-muted-foreground">
-                      {uploadingInvoice ? "Uploading..." : "Click to upload invoice letterhead"}
-                    </p>
-                  </div>
-                </Label>
-                <Input
-                  id="invoice-letterhead-upload"
-                  type="file"
-                  accept="image/*"
-                  onChange={handleInvoiceLetterheadUpload}
-                  className="hidden"
-                  disabled={uploadingInvoice}
-                />
-              </div>
+              <Label>Invoice logo</Label>
+              <p className="text-xs text-muted-foreground mt-1 mb-2">
+                This is the tenant logo from Branding & Appearance.
+              </p>
+              {tenantLogoUrl ? (
+                <div className="inline-flex items-center rounded-md border bg-white p-3">
+                  <TenantLogo
+                    src={tenantLogoUrl}
+                    alt="Invoice logo"
+                    className="max-h-16 object-contain"
+                  />
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No logo configured. Add one in Branding & Appearance.
+                </p>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-3"
+                onClick={() => {
+                  const base = location.pathname.replace(/\/settings.*$/, "") || "/freedom";
+                  navigate(`${base}/settings?tab=branding`);
+                }}
+              >
+                Branding & Appearance
+              </Button>
             </div>
 
             <div>
