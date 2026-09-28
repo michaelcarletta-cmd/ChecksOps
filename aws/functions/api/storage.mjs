@@ -3,7 +3,7 @@ import pg from 'pg';
 import { GetObjectCommand, HeadObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { loadDatabaseCredentials } from './secrets.mjs';
-import { buildClientConfig, sanitizePublicError } from './db-health.mjs';
+import { buildClientConfig, buildWriteClientConfig, sanitizePublicError } from './db-health.mjs';
 import { parseBody, ignoredSpoof, withIdentity } from './data.mjs';
 import {
   APP_BUCKET_SET,
@@ -444,6 +444,37 @@ const publicClient = async (deps) => {
   return client;
 };
 
+
+export const recordPublicSignerViewed = async (deps, { tokenHash, alreadyViewed }) => {
+  if (!tokenHash || alreadyViewed) return { recorded: false, reason: 'skipped' };
+  let writer = deps.writeClient;
+  let owned = false;
+  if (!writer) {
+    const loadCredentials = deps.loadDatabaseCredentials || loadDatabaseCredentials;
+    const createClient = deps.createWriteClient || deps.createClient || ((config) => new Client(config));
+    const credentials = await loadCredentials();
+    writer = createClient(buildWriteClientConfig(credentials, { queryTimeoutMillis: 8000 }));
+    owned = true;
+    await writer.connect();
+  }
+  try {
+    const row = (await writer.query(
+      'SELECT public.aws_public_signature_mark_viewed($1) AS doc',
+      [tokenHash],
+    )).rows[0]?.doc;
+    if (!row?.ok) {
+      return { recorded: false, error: row?.error || 'viewed_denied' };
+    }
+    return { recorded: row.recorded === true, viewed_at: row.viewed_at || null };
+  } catch (error) {
+    return { recorded: false, error: sanitizePublicError(error) };
+  } finally {
+    if (owned) {
+      try { await writer.end(); } catch { /* ignore */ }
+    }
+  }
+};
+
 export const isPublicBrandingPath = async (client, bucket, rel) => {
   if (!PUBLIC_BRANDING_BUCKETS.includes(bucket)) return false;
   if (bucket === 'email-assets') return rel === 'checksops-logo.png';
@@ -577,10 +608,17 @@ export const handlePublicSignatureDocument = async (event, deps = {}) => {
       expiresIn: SIGNING_DOCUMENT_EXPIRES,
       maxExpires: SIGNING_DOCUMENT_EXPIRES,
     });
+    const view = await recordPublicSignerViewed(deps, {
+      tokenHash,
+      alreadyViewed: Boolean(row.signer?.viewed_at),
+    });
     return {
       ok: true,
       statusCode: 200,
-      signer: row.signer,
+      signer: {
+        ...row.signer,
+        viewed_at: row.signer?.viewed_at || (view.recorded ? new Date().toISOString() : row.signer?.viewed_at),
+      },
       request: {
         ...row.request,
         claims: row.claim,
@@ -588,6 +626,7 @@ export const handlePublicSignatureDocument = async (event, deps = {}) => {
       fields: row.fields || [],
       presets: row.presets || [],
       signedUrl,
+      viewedRecorded: view.recorded === true,
       spoofFieldsIgnored: spoof,
     };
   } catch (error) {

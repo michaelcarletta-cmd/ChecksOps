@@ -90,10 +90,14 @@ export const evaluateOverlayCandidate = ({
 }) => {
   const errors = [];
   const diff = diffZipContents(liveZip, candidateZip);
-  if (diff.onlyLeft.length || diff.onlyRight.length) {
-    errors.push(`package entry set changed: onlyLive=${diff.onlyLeft.join(',')} onlyCandidate=${diff.onlyRight.join(',')}`);
+  if (diff.onlyLeft.length) {
+    errors.push(`package entries removed from live: ${diff.onlyLeft.join(',')}`);
   }
-  errors.push(...assertAllowlistOnly(diff.changed, allowlist).errors);
+  const unauthorizedNew = diff.onlyRight.filter((name) => !allowlist.includes(name));
+  if (unauthorizedNew.length) {
+    errors.push(`unauthorized new package entries: ${unauthorizedNew.join(',')}`);
+  }
+  errors.push(...assertAllowlistOnly([...diff.changed, ...diff.onlyRight], allowlist).errors);
   const candidateHashes = zipContentHashes(candidateZip);
   if (protectedHashes) {
     for (const [name, sha] of Object.entries(protectedHashes)) {

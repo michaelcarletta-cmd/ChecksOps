@@ -232,6 +232,7 @@ export const handler = async (event) => {
     });
   }
 
+
   const brandingLogoPath = path.replace(/^\/prep(?=\/|$)/, '') || '/';
   if (method === 'GET' && (brandingLogoPath === '/branding/logo' || /^\/branding\/logo\/[0-9a-fA-F-]{36}$/.test(brandingLogoPath))) {
     const result = await handleBrandingLogo({ ...event, rawPath: brandingLogoPath });
