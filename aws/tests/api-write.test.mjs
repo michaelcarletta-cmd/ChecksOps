@@ -609,3 +609,63 @@ test('Tranche 3 intake image path must be scoped to the same check', async () =>
   assert.equal(denied.statusCode, 403);
 });
 
+test('authorized claim_number update keeps UUID and tenant; extras and inserts stay denied', async () => {
+  const claimId = '8ff57eaf-f200-4466-a1cf-2debb56c88a8';
+  const tenantId = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
+  const snapshot = {
+    id: claimId,
+    org_id: tenantId,
+    claim_number: 'CLM-OLD',
+    status: 'tracking',
+    policyholder_name: 'Jane Doe',
+    insurance_company: 'Acme',
+  };
+  const queries = [];
+  const client = mockClient();
+  const originalQuery = client.query.bind(client);
+  client.query = async (sql, params) => {
+    queries.push({ sql, params });
+    if (/FROM public.claims WHERE id = \$1::uuid LIMIT 1/.test(sql)) {
+      return { rows: [snapshot] };
+    }
+    if (/FROM public.tenant_users WHERE user_id = \$1::uuid AND tenant_id = \$2::uuid LIMIT 1/.test(sql)) {
+      return { rows: params[1] === tenantId ? [{ ok: 1 }] : [] };
+    }
+    if (/UPDATE public.claims/.test(sql)) {
+      return { rows: [{ ...snapshot, claim_number: params[1] }] };
+    }
+    return originalQuery(sql, params);
+  };
+
+  const ok = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'claims',
+    op: 'update',
+    values: { claim_number: 'CLM-NEW' },
+    filters: [{ column: 'id', op: 'eq', value: claimId }],
+    single: true,
+  }), { ...depsFor(client), forceWorkflow: true });
+  assert.equal(ok.ok, true);
+  assert.equal(ok.data.id, claimId);
+  assert.equal(ok.data.claim_number, 'CLM-NEW');
+  assert.equal(ok.data.org_id, tenantId);
+  assert.equal(ok.data.status, 'tracking');
+  assert.equal(ok.data.policyholder_name, 'Jane Doe');
+
+  const extra = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'claims',
+    op: 'update',
+    values: { claim_number: 'CLM-NEW', policyholder_name: 'rewritten', amount: 1 },
+    filters: [{ column: 'id', op: 'eq', value: claimId }],
+  }), { ...depsFor(client), forceWorkflow: true });
+  assert.equal(extra.statusCode, 403);
+  assert.equal(extra.error, 'column_not_allowlisted');
+
+  const created = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'claims',
+    op: 'insert',
+    values: { claim_number: 'CLM-BRAND-NEW' },
+  }), { ...depsFor(client), forceWorkflow: true });
+  assert.equal(created.statusCode, 403);
+  assert.equal(created.error, 'operation_not_allowlisted');
+});
+

@@ -18,6 +18,7 @@ import {
   filterSelectableClaims,
   isCheckClaimLinkDenied,
   newTrackingClaimInsert,
+  planClaimNumberSave,
 } from "@/lib/checkClaimLinkGuard";
 
 interface Props {
@@ -103,8 +104,39 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
 
   const linkMutation = useMutation({
     mutationFn: async (claimNumber: string) => {
-      const trimmed = claimNumber.trim();
-      if (!trimmed) throw new Error("Enter a claim number");
+      const plan = planClaimNumberSave({ existingClaimId: claimId, claimNumber });
+
+      if (plan.mode === "update_existing") {
+        const { data: existing, error: existingErr } = await supabase
+          .from("claims")
+          .select("id, claim_number, policyholder_name, org_id, status, insurance_company, policyholder_address")
+          .eq("id", plan.claimId)
+          .single();
+        if (existingErr) throw existingErr;
+        if (!existing?.id) throw new Error(claimLinkUserMessage("missing_claim"));
+
+        const { data: updated, error: updateErr } = await supabase
+          .from("claims")
+          .update({ claim_number: plan.claimNumber })
+          .eq("id", plan.claimId)
+          .select("id, claim_number, policyholder_name, org_id, status, insurance_company, policyholder_address")
+          .single();
+        if (updateErr) throw updateErr;
+        if (!updated?.id || String(updated.id) !== String(plan.claimId)) {
+          throw new Error("Claim number save did not keep the existing claim.");
+        }
+
+        return {
+          created: false,
+          updatedExisting: true,
+          claimNumber: updated.claim_number,
+          claimId: updated.id,
+          previousClaimId: plan.claimId,
+          policyholderName: updated.policyholder_name,
+        };
+      }
+
+      const trimmed = plan.claimNumber;
 
       // Look up existing claim by claim_number (case-insensitive)
       const { data: checkRow, error: checkErr } = await supabase
@@ -218,10 +250,16 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
       }, 100);
 
       toast({
-        title: res.created ? "Claim tracker created" : "Linked to claim",
-        description: res.created
-          ? `Now tracking funds for ${res.claimNumber}. Enter the settlement amounts to monitor releases.`
-          : `${res.claimNumber}${res.policyholderName ? ` — ${res.policyholderName}` : ""}`,
+        title: res.updatedExisting
+          ? "Claim number updated"
+          : res.created
+            ? "Claim tracker created"
+            : "Linked to claim",
+        description: res.updatedExisting
+          ? `${res.claimNumber}${res.policyholderName ? ` — ${res.policyholderName}` : ""}`
+          : res.created
+            ? `Now tracking funds for ${res.claimNumber}. Enter the settlement amounts to monitor releases.`
+            : `${res.claimNumber}${res.policyholderName ? ` — ${res.policyholderName}` : ""}`,
       });
     },
     onError: (e: any) => {

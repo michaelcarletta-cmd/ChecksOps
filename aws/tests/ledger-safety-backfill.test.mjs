@@ -8,6 +8,7 @@ import {
   filterSelectableClaims,
   isCheckClaimLinkDenied,
   newTrackingClaimInsert,
+  planClaimNumberSave,
   resolveAutoLinkCandidate,
 } from '../../src/lib/checkClaimLinkGuard.ts';
 import { fundsReceivedForClaim, fundsReceivedFromScopedIntakeRows } from '../../src/lib/claimLedgerSync.ts';
@@ -143,6 +144,29 @@ test('new tracking claim is created with the check tenant/org', () => {
   assert.equal(row.status, 'tracking');
   assert.equal(row.org_id, TENANT_A);
   assert.equal(row.claim_number, 'CL-NEW');
+});
+
+test('existing claim number save updates in place and does not create or relink', () => {
+  const existing = planClaimNumberSave({ existingClaimId: CLAIM_A, claimNumber: '  CLM-NEW  ' });
+  assert.equal(existing.mode, 'update_existing');
+  assert.equal(existing.claimId, CLAIM_A);
+  assert.equal(existing.claimNumber, 'CLM-NEW');
+
+  const unlinked = planClaimNumberSave({ existingClaimId: null, claimNumber: 'CLM-LINK' });
+  assert.equal(unlinked.mode, 'link_or_create');
+  assert.equal(unlinked.claimNumber, 'CLM-LINK');
+
+  assert.throws(() => planClaimNumberSave({ existingClaimId: CLAIM_A, claimNumber: '   ' }));
+
+  const src = readFileSync('src/components/payments/ClaimLedgerCard.tsx', 'utf8');
+  assert.match(src, /planClaimNumberSave/);
+  assert.match(src, /mode === "update_existing"/);
+  assert.match(src, /\.from\("claims"\)[\s\S]*\.update\(\{ claim_number: plan\.claimNumber \}\)/);
+  assert.match(src, /Claim number save did not keep the existing claim/);
+  const updateBlock = src.slice(src.indexOf('plan.mode === "update_existing"'), src.indexOf('const trimmed = plan.claimNumber'));
+  assert.equal(/\.insert\(/.test(updateBlock), false);
+  assert.equal(/detected_claim_number/.test(updateBlock), false);
+  assert.equal(/claim_id:/.test(updateBlock), false);
 });
 
 test('manual link uses the same guard as the database', () => {
