@@ -159,6 +159,8 @@
   "suppressed_emails",
   "tenant_bank_accounts",
   "tenant_billing_accounts",
+  "tenant_billing_settings",
+  "platform_billing_destination",
   "tenant_credit_balances",
   "tenant_credit_transactions",
   "tenant_documents",
