@@ -407,7 +407,7 @@ const insertFixture = async (client, email) => {
     `INSERT INTO public.check_intake_items (${cols.join(', ')})
      VALUES (${typed.join(', ')})
      RETURNING id, claim_id, tenant_id, check_number, amount, status, check_stage,
-               ocr_status, front_image_path, back_image_path, payee_line`,
+               ocr_status, front_image_path, back_image_path, payee_line, case_id`,
     vals,
   )).rows[0];
 
