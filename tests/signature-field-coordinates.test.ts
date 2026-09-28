@@ -105,6 +105,20 @@ test("staging mobile-composer pin overlays the selector SPA and leaves productio
   assert.equal(pin.ACCEPTED_STAGING_SIGNATURE_MOBILE_COMPOSER_SPA.signing_engine_untouched, true);
 });
 
+test("production mobile-composer promote script overlays DRoG4LeT and refuses staging wholesale", () => {
+  const script = readFileSync("scripts/promote-production-signature-mobile-composer-spa.mjs", "utf8");
+  assert.match(script, /LIVE_ENTRY = '\/assets\/index-DRoG4LeT\.js'/);
+  assert.match(script, /LIVE_ENTRY_SHA = '97998b6014bdbd1ddc387bf18c68cd6347ca5fea0bdf85321f59a2a0d11e64aa'/);
+  assert.match(script, /LIVE_VERSION = 'nsdZAqxVImyWhdQSY8A\.w_qGjbO_xhgM'/);
+  assert.match(script, /CANDIDATE_ENTRY = '\/assets\/index-BkzeBHTL\.js'/);
+  assert.match(script, /gHoAYTlh\/WLTAovN7\/hfwuvmBNuMjKZaC\+zMzBsAOSw=/);
+  assert.match(script, /Select a file from claim\/check files/);
+  assert.match(script, /index-BgpqIBFW\.js/);
+  assert.match(script, /per_object_put/);
+  assert.match(script, /forbidden Lambda mutation/);
+  assert.match(script, /spa_drift/);
+});
+
 test("composer uses display scale and percent internals without changing /sign or selector", () => {
   const editor = readFileSync("src/components/claim-detail/FieldPlacementEditor.tsx", "utf8");
   const wizard = readFileSync("src/components/claim-detail/SignatureRequests.tsx", "utf8");
