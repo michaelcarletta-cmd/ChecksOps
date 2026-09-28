@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FIXTURE = path.join(ROOT, 'scripts/sig-wizard-mobile-fixture.html');
 const OUT = '/opt/cursor/artifacts';
-const PORT = 4177;
+const PORT = Number(process.env.SIG_WIZARD_FIXTURE_PORT || 4178);
 
 const chromeBin = [
   process.env.CHROME_PATH,
@@ -68,10 +68,11 @@ fs.mkdirSync(OUT, { recursive: true });
 const results = [];
 try {
   for (const item of cases) {
-    const url = `http://127.0.0.1:${PORT}/?step=${item.step}&signers=${item.signers}${item.desktop ? '&desktop=1' : ''}`;
-    const file = path.join(OUT, `sig_wizard_step${item.step}_${item.width}${item.signers > 1 ? '_two_signers' : ''}.png`);
-    const shot = await runChrome([`--window-size=${item.width},980`, `--screenshot=${file}`, url]);
-    const dumped = await runChrome([`--window-size=${item.width},980`, '--virtual-time-budget=3000', '--dump-dom', url]);
+    const url = `http://127.0.0.1:${PORT}/?step=${item.step}&signers=${item.signers}&width=${item.width}${item.desktop ? '&desktop=1' : ''}`;
+    const file = path.join(OUT, `sig_step${item.step}_w${item.width}${item.signers > 1 ? '_two_signers' : ''}${item.desktop ? '_desktop' : ''}.png`);
+    const chromeWidth = Math.max(item.width + 40, 360);
+    const shot = await runChrome([`--window-size=${chromeWidth},1100`, `--screenshot=${file}`, url]);
+    const dumped = await runChrome([`--window-size=${chromeWidth},1100`, '--virtual-time-budget=4000', '--dump-dom', url]);
     const proofMatch = dumped.stdout.match(/<pre id="proof"[^>]*>([^<]*)<\/pre>/);
     let proof = null;
     try { proof = proofMatch ? JSON.parse(proofMatch[1].replace(/&quot;/g, '"')) : null; } catch { proof = { parse_error: true, raw: proofMatch?.[1] }; }
@@ -83,13 +84,23 @@ try {
       overflowX: proof?.overflowX === true,
       buttonsInside: proof?.buttonsInside === true,
       titleVisible: proof?.titleFullyVisible === true,
+      widthHonored: proof?.phoneWidth === item.width,
+      dialogInsidePhone: proof?.dialogInsidePhone === true,
     });
   }
 } finally {
   server.close();
 }
 
-const ok = results.every((row) => row.screenshot_ok && row.proof && row.overflowX === false && row.buttonsInside && row.titleVisible);
+const ok = results.every((row) => (
+  row.screenshot_ok
+  && row.proof
+  && row.overflowX === false
+  && row.buttonsInside
+  && row.titleVisible
+  && row.widthHonored
+  && row.dialogInsidePhone
+));
 const report = { ok, chrome: chromeBin, results };
 fs.writeFileSync(path.join(OUT, 'sig-wizard-mobile-fixture-shots.json'), JSON.stringify(report, null, 2));
 console.log(JSON.stringify(report, null, 2));
