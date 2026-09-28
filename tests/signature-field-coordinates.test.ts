@@ -152,6 +152,34 @@ test("composer uses display scale and percent internals without changing /sign o
   assert.match(sign, /x: f\.x/);
 });
 
+test("staging Step 3 mobile pin overlays BgpqIBFW and leaves production BkzeBHTL", async () => {
+  const pin = await import("../scripts/lib/accepted-staging-spa-signature-step3-mobile.mjs");
+  assert.equal(pin.ACCEPTED_STAGING_SIGNATURE_STEP3_MOBILE_SPA.spa_bundle, "/assets/index-tfpHiJF1.js");
+  assert.equal(pin.ACCEPTED_STAGING_SIGNATURE_STEP3_MOBILE_SPA.overlay_from, "/assets/index-BgpqIBFW.js");
+  assert.equal(pin.ACCEPTED_STAGING_SIGNATURE_STEP3_MOBILE_SPA.staging_lambda_sha, "nTisqcTLXpgw0Ej9kl7PosXn9a+BYcdBRSEvb5IIh5s=");
+  assert.equal(pin.ACCEPTED_STAGING_SIGNATURE_STEP3_MOBILE_SPA.production_untouched.spa_bundle, "/assets/index-BkzeBHTL.js");
+  assert.equal(pin.ACCEPTED_STAGING_SIGNATURE_STEP3_MOBILE_SPA.production_untouched.api, "gHoAYTlh/WLTAovN7/hfwuvmBNuMjKZaC+zMzBsAOSw=");
+  assert.equal(pin.ACCEPTED_STAGING_SIGNATURE_STEP3_MOBILE_SPA.selector_preserved, true);
+  assert.equal(pin.ACCEPTED_STAGING_SIGNATURE_STEP3_MOBILE_SPA.step2_composer_preserved, true);
+  assert.equal(pin.ACCEPTED_STAGING_SIGNATURE_STEP3_MOBILE_SPA.production_untouched_flag, true);
+});
+
+test("wizard Step 3 stacks footer actions and wraps the title on phones", () => {
+  const wizard = readFileSync("src/components/claim-detail/SignatureRequests.tsx", "utf8");
+  assert.match(wizard, /w-\[calc\(100%-2rem\)\]/);
+  assert.match(wizard, /pr-8/);
+  assert.match(wizard, /break-words/);
+  assert.match(wizard, /flex-wrap items-center justify-between/);
+  assert.match(wizard, /Add Signer/);
+  assert.match(wizard, /Generate Link Only/);
+  assert.match(wizard, /Send for Signature/);
+  assert.match(wizard, /flex-col gap-2 sm:flex-row sm:items-center sm:justify-between/);
+  assert.match(wizard, /flex-col gap-2 sm:w-auto sm:flex-row sm:justify-end/);
+  assert.match(wizard, /className="w-full sm:w-auto"/);
+  assert.match(wizard, /Select a file from claim\/check files/);
+  assert.match(wizard, /displayPageWidth|FieldPlacementEditor/);
+});
+
 function roundish(value: number) {
   return parseFloat(value.toFixed(4));
 }
