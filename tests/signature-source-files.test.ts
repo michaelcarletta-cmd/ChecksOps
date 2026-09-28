@@ -97,6 +97,14 @@ test("signature request fields keep the selected path and check id", () => {
   assert.equal(fields.document_path, `check-intake/${CHECK_A}/files/ui.pdf`);
 });
 
+test("production pin records the overlay SPA and unchanged API", async () => {
+  const pin = await import("../scripts/lib/accepted-production-spa-signature-check-file.mjs");
+  assert.equal(pin.ACCEPTED_PRODUCTION_SIGNATURE_CHECK_FILE_SPA.spa_bundle, "/assets/index-DRoG4LeT.js");
+  assert.equal(pin.ACCEPTED_PRODUCTION_SIGNATURE_CHECK_FILE_SPA.production_lambda_sha, "gHoAYTlh/WLTAovN7/hfwuvmBNuMjKZaC+zMzBsAOSw=");
+  assert.equal(pin.ACCEPTED_PRODUCTION_SIGNATURE_CHECK_FILE_SPA.based_on_baseline.spa_bundle, "/assets/index-BMBDIhiu.js");
+  assert.equal(pin.ACCEPTED_PRODUCTION_SIGNATURE_CHECK_FILE_SPA.not_staging_wholesale, true);
+});
+
 test("staging pin stays on the accepted check-file selector bundle", async () => {
   const pin = await import("../scripts/lib/accepted-staging-spa-signature-check-file.mjs");
   assert.equal(pin.ACCEPTED_STAGING_SIGNATURE_CHECK_FILE_SPA.spa_bundle, "/assets/index-gNnhTSog.js");
