@@ -96,6 +96,25 @@ export function newTrackingClaimInsert(claimNumber: string, checkTenantId: strin
   };
 }
 
+export type ClaimNumberSavePlan =
+  | { mode: "update_existing"; claimId: string; claimNumber: string }
+  | { mode: "link_or_create"; claimNumber: string };
+
+/** Existing linked claims rename in place. Unlinked checks still link or create. */
+export function planClaimNumberSave(opts: {
+  existingClaimId?: string | null;
+  claimNumber: string;
+}): ClaimNumberSavePlan {
+  const claimNumber = String(opts.claimNumber || "").trim();
+  if (!claimNumber) {
+    throw new Error("Enter a claim number");
+  }
+  if (opts.existingClaimId) {
+    return { mode: "update_existing", claimId: String(opts.existingClaimId), claimNumber };
+  }
+  return { mode: "link_or_create", claimNumber };
+}
+
 export function resolveAutoLinkCandidate(opts: {
   freedomClaimId?: string | null;
   freedomClaimNumber?: string | null;
