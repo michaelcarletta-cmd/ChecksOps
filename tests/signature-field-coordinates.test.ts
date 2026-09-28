@@ -94,6 +94,17 @@ test("clamping keeps a dragged field on the page", () => {
   assert.equal(moved.y, 0);
 });
 
+test("staging mobile-composer pin overlays the selector SPA and leaves production DRoG4LeT", async () => {
+  const pin = await import("../scripts/lib/accepted-staging-spa-signature-mobile-composer.mjs");
+  assert.equal(pin.ACCEPTED_STAGING_SIGNATURE_MOBILE_COMPOSER_SPA.spa_bundle, "/assets/index-BgpqIBFW.js");
+  assert.equal(pin.ACCEPTED_STAGING_SIGNATURE_MOBILE_COMPOSER_SPA.overlay_from, "/assets/index-gNnhTSog.js");
+  assert.equal(pin.ACCEPTED_STAGING_SIGNATURE_MOBILE_COMPOSER_SPA.staging_lambda_sha, "nTisqcTLXpgw0Ej9kl7PosXn9a+BYcdBRSEvb5IIh5s=");
+  assert.equal(pin.ACCEPTED_STAGING_SIGNATURE_MOBILE_COMPOSER_SPA.production_untouched.spa_bundle, "/assets/index-DRoG4LeT.js");
+  assert.equal(pin.ACCEPTED_STAGING_SIGNATURE_MOBILE_COMPOSER_SPA.production_untouched.api, "gHoAYTlh/WLTAovN7/hfwuvmBNuMjKZaC+zMzBsAOSw=");
+  assert.equal(pin.ACCEPTED_STAGING_SIGNATURE_MOBILE_COMPOSER_SPA.selector_preserved, true);
+  assert.equal(pin.ACCEPTED_STAGING_SIGNATURE_MOBILE_COMPOSER_SPA.signing_engine_untouched, true);
+});
+
 test("composer uses display scale and percent internals without changing /sign or selector", () => {
   const editor = readFileSync("src/components/claim-detail/FieldPlacementEditor.tsx", "utf8");
   const wizard = readFileSync("src/components/claim-detail/SignatureRequests.tsx", "utf8");
