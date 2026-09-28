@@ -2,14 +2,15 @@ import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supa
 import { bindMoovEnvironment, moovConfigured, moovEnvironment } from "./moovClient.ts";
 
 /**
- * Rollout safety for every Moov edge function.
+ * Safety for every Moov edge function.
  *
- * Moov is off globally. It only runs when ALL of these are true:
- *   1. MOOV_ENABLED === "true"        (global internal-test switch)
- *   2. tenants.moov_allowlisted       (per-tenant allowlist)
- *   3. Moov API credentials exist for the configured environment
+ * Moov is generally available to every ChecksOps tenant. It runs when:
+ *   1. MOOV_ENABLED is not explicitly "false"  (emergency kill switch)
+ *   2. Moov API credentials exist for the tenant's environment
  *
- * Actum and Plaid never reach this code path.
+ * There is no Freedom-only, pilot, or per-tenant allowlist. Identity/KYB,
+ * ToS, bank verification, wallet, and capability checks still apply before
+ * money movement. Actum and Plaid never reach this code path.
  */
 
 export const corsHeaders: Record<string, string> = {
@@ -32,8 +33,10 @@ export function serviceClient(): SupabaseClient {
   );
 }
 
-export function moovGloballyEnabled(): boolean {
-  return (Deno.env.get("MOOV_ENABLED") ?? "false").toLowerCase() === "true";
+export function moovGloballyEnabled(env: { get(name: string): string | undefined } = Deno.env): boolean {
+  const raw = env.get("MOOV_ENABLED");
+  if (raw == null || raw === "") return true;
+  return raw.toLowerCase() === "true";
 }
 
 export interface MoovCaller {
@@ -46,7 +49,7 @@ export interface MoovCaller {
 
 /**
  * Authenticates the caller, confirms tenant membership, and enforces the
- * global flag + tenant allowlist + credential presence.
+ * global kill switch + credential presence. Every tenant may use Moov.
  */
 export async function requireMoovCaller(
   req: Request,
@@ -94,13 +97,10 @@ export async function requireMoovCaller(
 
   const { data: tenant } = await supabase
     .from("tenants")
-    .select("id, moov_allowlisted, moov_environment")
+    .select("id, moov_environment")
     .eq("id", tenantId)
     .maybeSingle();
   if (!tenant) return json({ error: "Organization not found" }, 404);
-  if (!(tenant as any).moov_allowlisted) {
-    return json({ error: "This organization is not enabled for this payment provider." }, 403);
-  }
 
   // Per-tenant environment: test tenants run against Moov's sandbox ledger so
   // no real money moves, while live tenants stay on production credentials.
