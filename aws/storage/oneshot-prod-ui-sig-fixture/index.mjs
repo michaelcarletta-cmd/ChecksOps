@@ -207,15 +207,34 @@ const isolationFor = async (client, ids) => {
     check_endorsements: await scoped('check_endorsements', [['check_id', checkId]]),
     check_payees: await scoped('check_payees', [['check_id', checkId]]),
     check_files: await scoped('check_files', [['check_intake_item_id', checkId]]),
-    check_cases: await scoped('check_cases', [['id', checkId]]),
-    provider_ops: await scoped('aws_provider_sandbox_operations', [
-      ['check_id', checkId],
-      ['claim_id', claimId],
-    ]),
-    financial_ops: await scoped('aws_financial_operations', [
-      ['check_id', checkId],
-      ['claim_id', claimId],
-    ]),
+    check_cases: await q(
+      `SELECT id, tenant_id, status FROM public.check_cases
+       WHERE id = (SELECT case_id FROM public.check_intake_items WHERE id = $1::uuid)`,
+      [checkId],
+    ),
+    provider_ops: await q(
+      `SELECT id, operation_type, provider, amount_cents, status, production_execution
+       FROM public.aws_provider_sandbox_operations
+       WHERE metadata::text ILIKE $1 OR metadata::text ILIKE $2`,
+      [`%${checkId}%`, `%${claimId}%`],
+    ),
+    financial_ops: await q(
+      `SELECT id, operation_type, provider, resource_type, resource_id, amount_cents,
+              status, live_provider_called
+       FROM public.aws_financial_operations
+       WHERE resource_id IN ($1::uuid, $2::uuid)`,
+      [checkId, claimId],
+    ),
+    money_snapshot: await q(`
+      SELECT
+        (SELECT count(*) FROM public.deposit_items) AS deposit_items,
+        (SELECT count(*) FROM public.disbursement_splits) AS disbursement_splits,
+        (SELECT count(*) FROM public.payment_transfers) AS payment_transfers,
+        (SELECT count(*) FROM public.check_billing_events) AS check_billing_events,
+        (SELECT count(*) FROM public.mortgage_handling_requests) AS mortgage_handling_requests,
+        (SELECT count(*) FROM public.aws_financial_operations) AS aws_financial_operations,
+        (SELECT count(*) FROM public.aws_provider_sandbox_operations) AS aws_provider_sandbox_operations
+    `),
     ledger_tokens: await q(
       `SELECT id, homeowner_email, revoked_at, expires_at IS NULL AS never_expires
        FROM public.homeowner_ledger_tokens WHERE id = $1::uuid`,
@@ -560,6 +579,17 @@ export const handler = async (event = {}) => {
     await client.query('BEGIN');
     let dry;
     try {
+      const moneyBefore = (await client.query(`
+        SELECT
+          (SELECT count(*) FROM public.deposit_items) AS deposit_items,
+          (SELECT count(*) FROM public.disbursement_splits) AS disbursement_splits,
+          (SELECT count(*) FROM public.payment_transfers) AS payment_transfers,
+          (SELECT count(*) FROM public.check_billing_events) AS check_billing_events,
+          (SELECT count(*) FROM public.mortgage_handling_requests) AS mortgage_handling_requests,
+          (SELECT count(*) FROM public.aws_financial_operations) AS aws_financial_operations,
+          (SELECT count(*) FROM public.aws_provider_sandbox_operations) AS aws_provider_sandbox_operations,
+          (SELECT count(*) FROM public.signature_requests) AS signature_requests
+      `)).rows[0];
       dry = await insertFixture(client, authorized.email);
       dry.isolation = await isolationFor(client, {
         claimId: dry.claim.id,
@@ -570,7 +600,18 @@ export const handler = async (event = {}) => {
         claimId: dry.claim.id,
         checkId: dry.check.id,
       });
+      dry.money_before = moneyBefore;
+      dry.money_after = dry.isolation.money_snapshot?.[0] || null;
+      const moneyDrift = Object.keys(moneyBefore).filter((key) => (
+        dry.money_after && String(dry.money_after[key]) !== String(moneyBefore[key])
+      ));
       dry.isolation_gate = isolationOk(dry.isolation);
+      if (moneyDrift.length) {
+        dry.isolation_gate = {
+          ok: false,
+          problems: [...dry.isolation_gate.problems, ...moneyDrift.map((key) => `money_drift:${key}`)],
+        };
+      }
     } catch (error) {
       await client.query('ROLLBACK');
       return {
