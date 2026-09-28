@@ -213,19 +213,10 @@ export function InvoicesTab() {
           </Button>
         </CardHeader>
         <CardContent>
-          {branding?.logo_url ? (
-            <div className="inline-flex items-center rounded-md border bg-white p-3">
-              <TenantLogo
-                src={branding.logo_url}
-                alt={branding.name ? `${branding.name} logo` : "Tenant logo"}
-                className="max-h-14 object-contain"
-              />
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              No logo configured. Add one in Branding & Appearance.
-            </p>
-          )}
+          <InvoiceBrandingLogoPreview
+            src={branding?.logo_url}
+            alt={branding?.name ? `${branding.name} logo` : "Tenant logo"}
+          />
         </CardContent>
       </Card>
 
@@ -563,6 +554,26 @@ function InvoiceActions({
   );
 }
 
+
+const NO_LOGO_MESSAGE = "No logo configured. Add one in Branding & Appearance.";
+
+function InvoiceBrandingLogoPreview({ src, alt }: { src?: string | null; alt: string }) {
+  const [failed, setFailed] = useState(false);
+  const url = resolveTenantLogoUrl(src) || "";
+  if (!url || failed) {
+    return <p className="text-sm text-muted-foreground">{NO_LOGO_MESSAGE}</p>;
+  }
+  return (
+    <div className="inline-flex items-center rounded-md border bg-white p-3">
+      <img
+        src={url}
+        alt={alt}
+        className="max-h-14 object-contain"
+        onError={() => setFailed(true)}
+      />
+    </div>
+  );
+}
 
 function SummaryTile({
   icon: Icon, title, value, hint,

@@ -62,7 +62,9 @@ test('invoice branding UI uses tenants.logo_url and does not add invoice_logo_ur
   assert.equal(/invoice_logo_url/.test(invoicesTab), false);
   const branding = readFileSync(path.join(ROOT, '../../src/components/settings/CompanyBrandingSettings.tsx'), 'utf8');
   assert.match(branding, /No logo configured\. Add one in Branding & Appearance\./);
+  assert.match(invoicesTab, /InvoiceBrandingLogoPreview/);
   assert.equal(/invoice-letterhead-upload/.test(branding), false);
+  assert.equal(/invoice_logo_url/.test(branding), false);
   const onboard = readFileSync(path.join(ROOT, '../functions/api/providers/parity/moov-onboard.mjs'), 'utf8');
   assert.equal(/logoUrl|logoURL|imageURL/.test(onboard.slice(onboard.indexOf('action === \'create\''))), false);
 });

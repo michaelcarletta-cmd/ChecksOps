@@ -36,3 +36,14 @@ test('rewriteLogoFields resolves logo_url without touching another tenant row', 
   assert.match(rows[0].logo_url, /tenant-a%2Flogo\.png/);
   assert.equal(rows[1].logo_url, null);
 });
+
+test('already-absolute AWS public resolver URLs stay absolute', () => {
+  const abs = 'https://checksops.com/prep/storage/public?bucket=tenant-logos&path=2eff5f1a-929d-4ce3-9a8b-cd96b98df42a%2Flogo.png';
+  assert.equal(resolveTenantLogoUrl(abs, '/prep'), abs);
+});
+
+test('prefixed bucket paths keep their bucket', () => {
+  const url = resolveTenantLogoUrl('tenant-logos/tenant-b/logo.png', '/prep');
+  assert.match(String(url), /bucket=tenant-logos/);
+  assert.match(String(url), /path=tenant-b%2Flogo\.png/);
+});

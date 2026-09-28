@@ -381,6 +381,11 @@ export function CompanyBrandingSettings() {
                     src={tenantLogoUrl}
                     alt="Invoice logo"
                     className="max-h-16 object-contain"
+                    fallback={
+                      <p className="text-sm text-muted-foreground">
+                        No logo configured. Add one in Branding & Appearance.
+                      </p>
+                    }
                   />
                 </div>
               ) : (
