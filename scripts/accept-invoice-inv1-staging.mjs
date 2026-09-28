@@ -80,8 +80,12 @@ const main = async () => {
       body: { action: 'create', tenant_id: FREEDOM, line_items: [] },
     })
     : { ok: false, error: 'no_token' };
+  const unknownTenant = '00000000-0000-4000-8000-000000000001';
   const cross = token
     ? await api('/functions/v1/moov-invoice', { token, body: { action: 'preflight', tenant_id: OTHER } })
+    : { ok: false, error: 'no_token' };
+  const unknown = token
+    ? await api('/functions/v1/moov-invoice', { token, body: { action: 'preflight', tenant_id: unknownTenant } })
     : { ok: false, error: 'no_token' };
 
   const report = {
@@ -116,14 +120,28 @@ const main = async () => {
       setupRequired: missing.status === 409 && missing.data?.error === 'Set up your payment account first.',
     },
     isolation: {
-      status: cross.status,
-      error: cross.data?.error || cross.error || null,
-      denied: cross.status === 403 || cross.data?.error === 'cross_tenant_denied',
+      otherTenant: {
+        tenant_id: OTHER,
+        status: cross.status,
+        error: cross.data?.error || cross.error || null,
+      },
+      unknownTenant: {
+        tenant_id: unknownTenant,
+        status: unknown.status,
+        error: unknown.data?.error || unknown.error || null,
+      },
+      denied: [cross, unknown].some((row) => (
+        row.status === 403
+        || row.status === 404
+        || row.data?.error === 'cross_tenant_denied'
+        || row.data?.error === 'Organization not found'
+      )),
     },
     productionAccountNeverUsed: !mentions(synthetic.data, FREEDOM_PROD)
       && !mentions(freedom.data, FREEDOM_PROD)
       && !mentions(missing.data, FREEDOM_PROD)
-      && !mentions(cross.data, FREEDOM_PROD),
+      && !mentions(cross.data, FREEDOM_PROD)
+      && !mentions(unknown.data, FREEDOM_PROD),
   };
   await writeFile(`${OUT}/staging-acceptance.json`, JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));

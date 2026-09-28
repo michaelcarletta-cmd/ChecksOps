@@ -21,6 +21,9 @@ const API = TARGET === 'production'
   ? 'checksops-production-prep-api'
   : 'checksops-staging-api';
 const EXPECTED_SHA = process.env.INV1_EXPECTED_SHA || '';
+const ADD_IF_MISSING = [
+  'providers/parity/moov-provider-env.mjs',
+];
 const FROZEN = [
   'tenant-billing-engine.mjs',
   'tenant-billing-destination.mjs',
@@ -170,6 +173,22 @@ const main = async () => {
   }
   fs.writeFileSync(onboardPath, patched.text);
 
+  const added = [];
+  for (const rel of ADD_IF_MISSING) {
+    const dest = path.join(afterPkg, rel);
+    if (fs.existsSync(dest)) continue;
+    const src = path.join(ROOT, 'aws/functions/api', rel);
+    if (!fs.existsSync(src)) throw new Error(`missing_helper_source:${rel}`);
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.copyFileSync(src, dest);
+    added.push({
+      file: rel,
+      action: 'add_if_missing',
+      afterHash: sha256(dest),
+      reasonChanged: 'Existing W2 provider-environment helper required by the invoice import. Added only because the live package did not already contain it.',
+    });
+  }
+
   const beforeFiles = new Map(walk(beforePkg).map((file) => [path.relative(beforePkg, file), sha256(file)]));
   const afterFiles = new Map(walk(afterPkg).map((file) => [path.relative(afterPkg, file), sha256(file)]));
   const changed = [];
@@ -179,9 +198,11 @@ const main = async () => {
     else unchanged.push({ file: rel, sha256: hash, reason: 'unchanged' });
   }
   for (const rel of FROZEN) {
+    if (!beforeFiles.has(rel) && ADD_IF_MISSING.includes(rel)) continue;
     if (beforeFiles.get(rel) !== afterFiles.get(rel)) throw new Error(`frozen_file_changed:${rel}`);
   }
-  const unexpected = changed.filter((row) => row.file !== 'providers/parity/moov-onboard.mjs');
+  const allowed = new Set(['providers/parity/moov-onboard.mjs', ...added.map((row) => row.file)]);
+  const unexpected = changed.filter((row) => !allowed.has(row.file));
   if (unexpected.length) throw new Error(`unexpected_overlay_changes:${unexpected.map((r) => r.file).join(',')}`);
 
   const zipOut = path.join(tmp, 'overlay.zip');
@@ -219,7 +240,7 @@ const main = async () => {
       candidateSha: sha256(onboardPath),
       reasonChanged: 'Reuse W2 requireMoovProviderEnvironment + failClosedMissingAccount for moov-invoice; add non-mutating preflight. Invoice API version/scopes unchanged.',
       steps: patched.steps,
-    }],
+    }, ...added],
     unchangedProof: unchanged.filter((row) => FROZEN.includes(row.file)),
     changed,
     monthlyPost: afterVars.AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST || null,
