@@ -28,6 +28,7 @@ import { TenantDocumentLibrary } from "@/components/settings/TenantDocumentLibra
 import { TenantPartnerManager } from "./TenantPartnerManager";
 import { ComplianceSettings } from "@/components/settings/ComplianceSettings";
 import { CompanyBrandingSettings } from "@/components/settings/CompanyBrandingSettings";
+import { TenantLogo } from "@/components/branding/TenantLogo";
 import { SettingsHero } from "@/components/settings/SettingsHero";
 import { SectionCard } from "@/components/settings/SectionCard";
 
@@ -138,7 +139,7 @@ export function WhiteLabelSettings() {
       <header className="h-14 border-b border-border/70 bg-background/95 backdrop-blur flex items-center px-4 sticky top-0 z-10">
         <div className="flex items-center gap-3">
           {tenant?.logo_url ? (
-            <img src={tenant.logo_url} alt={tenant.name} className="h-8 object-contain" />
+            <TenantLogo src={tenant.logo_url} alt={tenant.name} className="h-8 object-contain" />
           ) : (
             <span className="text-sm font-medium">{tenant?.name || "Settings"}</span>
           )}
@@ -212,6 +213,7 @@ export function WhiteLabelSettings() {
               </TabsContent>
 
               <TabsContent value="branding" className="space-y-6">
+                {tenant && <BrandingSettings tenant={tenant} />}
                 <CompanyBrandingSettings />
                 <EmailSenderSettings />
               </TabsContent>
@@ -596,7 +598,7 @@ function BrandingSettings({ tenant }: { tenant: any }) {
           </div>
           {logoUrl && (
             <div className="mt-2 p-3 border border-border/60 rounded-md inline-block bg-white">
-              <img src={logoUrl} alt="Logo preview" className="h-10 object-contain" />
+              <TenantLogo src={logoUrl} alt="Logo preview" className="h-10 object-contain" />
             </div>
           )}
         </div>
