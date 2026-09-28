@@ -14,6 +14,10 @@ import { Badge } from "@/components/ui/badge";
 const FieldPlacementEditor = lazy(() => import("./FieldPlacementEditor").then((m) => ({ default: m.FieldPlacementEditor })));
 import { SignatureDiagnostics } from "./SignatureDiagnostics";
 import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
+import {
+  mergeClaimAndCheckSignatureFiles,
+  signatureSourceFilesQueryKey,
+} from "@/lib/signature-source-files";
 
 interface SignatureRequestsProps {
   claimId: string;
@@ -89,33 +93,39 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
     },
   });
 
-  const { data: claimPdfFiles } = useQuery({
-    queryKey: ["claim-pdf-files", claimId, checkIntakeItemId],
+  const { data: claimPdfFiles, refetch: refetchSourceFiles } = useQuery({
+    queryKey: signatureSourceFilesQueryKey(claimId, checkIntakeItemId),
     queryFn: async () => {
       const { data, error } = await supabase
         .from("claim_files")
-        .select("*")
+        .select("id, file_name, file_path, uploaded_at, claim_id")
         .eq("claim_id", claimId)
-        .or("file_name.ilike.%.pdf,file_name.ilike.%.docx")
         .order("uploaded_at", { ascending: false });
       if (error) throw error;
-      const claimRows = (data || []).map((row) => ({ ...row, _source: "claim_file" as const }));
-      if (!checkIntakeItemId) return claimRows;
-      const { data: checkFiles, error: checkErr } = await supabase
-        .from("check_files")
-        .select("id, file_name, file_path, created_at")
-        .eq("check_intake_item_id", checkIntakeItemId)
-        .or("file_name.ilike.%.pdf,file_name.ilike.%.docx")
-        .order("created_at", { ascending: false });
-      if (checkErr) throw checkErr;
-      const checkRows = (checkFiles || []).map((row) => ({
-        ...row,
-        uploaded_at: row.created_at,
-        _source: "check_file" as const,
-      }));
-      return [...checkRows, ...claimRows];
+      let checkFiles: Array<Record<string, unknown>> = [];
+      if (checkIntakeItemId) {
+        const { data: checkRows, error: checkErr } = await supabase
+          .from("check_files")
+          .select("id, file_name, file_path, created_at, check_intake_item_id")
+          .eq("check_intake_item_id", checkIntakeItemId)
+          .order("created_at", { ascending: false });
+        if (checkErr) throw checkErr;
+        checkFiles = checkRows || [];
+      }
+      return mergeClaimAndCheckSignatureFiles({
+        claimFiles: data || [],
+        checkFiles,
+        checkIntakeItemId,
+      });
     },
+    refetchOnMount: "always",
   });
+
+  useEffect(() => {
+    if (isCreateOpen) {
+      void refetchSourceFiles();
+    }
+  }, [isCreateOpen, refetchSourceFiles]);
 
   const { data: requests, isLoading } = useQuery({
     queryKey: ["signature-requests", claimId],
@@ -601,14 +611,14 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
                       }
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select a file from claim files" />
+                        <SelectValue placeholder="Select a file from claim/check files" />
                       </SelectTrigger>
                       <SelectContent>
                         {claimPdfFiles?.length === 0 && (
-                          <div className="px-3 py-2 text-sm text-muted-foreground">No PDF or DOCX files found for this claim</div>
+                          <div className="px-3 py-2 text-sm text-muted-foreground">No PDF or DOCX files found for this claim/check</div>
                         )}
                         {claimPdfFiles?.map((file) => (
-                          <SelectItem key={file.id} value={file.id}>
+                          <SelectItem key={`${file._source}:${file.id}`} value={file.id}>
                             {file.file_name}
                           </SelectItem>
                         ))}

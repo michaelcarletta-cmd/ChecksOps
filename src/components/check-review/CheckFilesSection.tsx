@@ -25,6 +25,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { SignatureRequests } from "@/components/claim-detail/SignatureRequests";
+import { signatureSourceFilesQueryKey } from "@/lib/signature-source-files";
 
 interface CheckFilesSectionProps {
   checkIntakeItemId: string;
@@ -123,6 +124,7 @@ export function CheckFilesSection({ checkIntakeItemId }: CheckFilesSectionProps)
       }
       toast({ title: "Uploaded" });
       qc.invalidateQueries({ queryKey: ["check-files", checkIntakeItemId] });
+      qc.invalidateQueries({ queryKey: signatureSourceFilesQueryKey(resolvedClaimId, checkIntakeItemId) });
     } catch (err: any) {
       toast({
         title: "Upload failed",
@@ -147,6 +149,7 @@ export function CheckFilesSection({ checkIntakeItemId }: CheckFilesSectionProps)
     onSuccess: () => {
       toast({ title: "File deleted" });
       qc.invalidateQueries({ queryKey: ["check-files", checkIntakeItemId] });
+      qc.invalidateQueries({ queryKey: signatureSourceFilesQueryKey(resolvedClaimId, checkIntakeItemId) });
     },
     onError: (err: Error) =>
       toast({
