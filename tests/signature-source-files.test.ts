@@ -97,6 +97,13 @@ test("signature request fields keep the selected path and check id", () => {
   assert.equal(fields.document_path, `check-intake/${CHECK_A}/files/ui.pdf`);
 });
 
+test("staging pin stays on the accepted check-file selector bundle", async () => {
+  const pin = await import("../scripts/lib/accepted-staging-spa-signature-check-file.mjs");
+  assert.equal(pin.ACCEPTED_STAGING_SIGNATURE_CHECK_FILE_SPA.spa_bundle, "/assets/index-gNnhTSog.js");
+  assert.equal(pin.ACCEPTED_STAGING_SIGNATURE_CHECK_FILE_SPA.staging_lambda_sha, "nTisqcTLXpgw0Ej9kl7PosXn9a+BYcdBRSEvb5IIh5s=");
+  assert.equal(pin.ACCEPTED_STAGING_SIGNATURE_CHECK_FILE_SPA.production_untouched.spa_bundle, "/assets/index-BMBDIhiu.js");
+});
+
 test("wizard and files tab share the signature source query key", () => {
   const wizard = readFileSync("src/components/claim-detail/SignatureRequests.tsx", "utf8");
   const files = readFileSync("src/components/check-review/CheckFilesSection.tsx", "utf8");
