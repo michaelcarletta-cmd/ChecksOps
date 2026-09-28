@@ -107,92 +107,115 @@ const triggersOf = async (client, table) => (
 
 const isolationFor = async (client, ids) => {
   const q = async (sql, params = []) => {
+    await client.query('SAVEPOINT iso_q');
     try {
-      return (await client.query(sql, params)).rows;
+      const rows = (await client.query(sql, params)).rows;
+      await client.query('RELEASE SAVEPOINT iso_q');
+      return rows;
     } catch (error) {
+      await client.query('ROLLBACK TO SAVEPOINT iso_q');
       return [{ _error: String(error.message || error).slice(0, 240) }];
     }
   };
+  const colSet = async (table) => {
+    const rows = await q(
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = $1`,
+      [table],
+    );
+    return new Set(rows.map((row) => row.column_name).filter(Boolean));
+  };
+  const scoped = async (table, prefer) => {
+    const cols = await colSet(table);
+    if (cols.size === 0) return [];
+    const { claimId, checkId } = ids;
+    const clauses = [];
+    const params = [];
+    const add = (column, value) => {
+      if (!cols.has(column)) return;
+      params.push(value);
+      clauses.push(`${column} = $${params.length}::uuid`);
+    };
+    for (const [column, value] of prefer) add(column, value);
+    if (!clauses.length) {
+      return [{ _note: `no scoped id column on ${table}`, columns: [...cols] }];
+    }
+    const selectCols = ['id', 'check_id', 'check_intake_item_id', 'claim_id', 'amount', 'event_type', 'status']
+      .filter((name) => cols.has(name))
+      .join(', ');
+    return q(
+      `SELECT ${selectCols || '1'} FROM public.${table} WHERE ${clauses.join(' OR ')}`,
+      params,
+    );
+  };
   const { claimId, checkId, tokenId } = ids;
   return {
-    signature_requests: await q(
-      `SELECT id, status, document_name FROM public.signature_requests
-       WHERE claim_id = $1::uuid OR check_intake_item_id = $2::uuid`,
-      [claimId, checkId],
-    ),
-    check_billing_events: await q(
-      `SELECT id FROM public.check_billing_events
-       WHERE check_id = $1::uuid OR check_intake_item_id = $1::uuid`,
-      [checkId],
-    ).catch(async () => q(
-      `SELECT id FROM public.check_billing_events WHERE check_id = $1::uuid`,
-      [checkId],
-    )),
-    deposit_items: await q(
-      `SELECT id FROM public.deposit_items WHERE check_intake_item_id = $1::uuid`,
-      [checkId],
-    ),
-    disbursement_splits: await q(
-      `SELECT id FROM public.disbursement_splits WHERE check_intake_item_id = $1::uuid`,
-      [checkId],
-    ),
-    payment_transfers: await q(
-      `SELECT id FROM public.payment_transfers WHERE check_intake_item_id = $1::uuid`,
-      [checkId],
-    ),
-    platform_fee_line_items: await q(
-      `SELECT id FROM public.platform_fee_line_items
-       WHERE check_intake_item_id = $1::uuid OR claim_id = $2::uuid`,
-      [checkId, claimId],
-    ),
-    mortgage_handling_requests: await q(
-      `SELECT id FROM public.mortgage_handling_requests
-       WHERE check_id = $1::uuid OR claim_id = $2::uuid`,
-      [checkId, claimId],
-    ),
-    claim_payments: await q(
-      `SELECT id, amount FROM public.claim_payments WHERE check_intake_item_id = $1::uuid`,
-      [checkId],
-    ),
-    claim_checks: await q(
-      `SELECT id, amount FROM public.claim_checks WHERE check_intake_item_id = $1::uuid`,
-      [checkId],
-    ),
-    homeowner_ledger_events: await q(
-      `SELECT id, event_type, amount FROM public.homeowner_ledger_events
-       WHERE check_id = $1::uuid OR claim_id = $2::uuid`,
-      [checkId, claimId],
-    ),
+    signature_requests: await scoped('signature_requests', [
+      ['claim_id', claimId],
+      ['check_intake_item_id', checkId],
+    ]),
+    check_billing_events: await scoped('check_billing_events', [
+      ['check_intake_item_id', checkId],
+      ['check_id', checkId],
+      ['claim_id', claimId],
+    ]),
+    deposit_items: await scoped('deposit_items', [
+      ['check_intake_item_id', checkId],
+      ['check_id', checkId],
+      ['claim_id', claimId],
+    ]),
+    disbursement_splits: await scoped('disbursement_splits', [
+      ['check_intake_item_id', checkId],
+      ['check_id', checkId],
+      ['claim_id', claimId],
+    ]),
+    payment_transfers: await scoped('payment_transfers', [
+      ['check_intake_item_id', checkId],
+      ['check_id', checkId],
+      ['claim_id', claimId],
+    ]),
+    platform_fee_line_items: await scoped('platform_fee_line_items', [
+      ['check_intake_item_id', checkId],
+      ['check_id', checkId],
+      ['claim_id', claimId],
+    ]),
+    mortgage_handling_requests: await scoped('mortgage_handling_requests', [
+      ['check_id', checkId],
+      ['check_intake_item_id', checkId],
+      ['claim_id', claimId],
+    ]),
+    claim_payments: await scoped('claim_payments', [
+      ['check_intake_item_id', checkId],
+      ['claim_id', claimId],
+    ]),
+    claim_checks: await scoped('claim_checks', [
+      ['check_intake_item_id', checkId],
+      ['claim_id', claimId],
+    ]),
+    homeowner_ledger_events: await scoped('homeowner_ledger_events', [
+      ['check_id', checkId],
+      ['claim_id', claimId],
+    ]),
     tenant_usage_logs: await q(
       `SELECT id, event_type, amount_cents, description
        FROM public.tenant_usage_logs
        WHERE tenant_id = $1::uuid
          AND created_at >= now() - interval '2 minutes'
-         AND description ILIKE '%intake%'`,
+         AND (description ILIKE '%UI SIGNATURE TEST%' OR description ILIKE '%intake%')`,
       [FREEDOM_TENANT_ID],
     ),
-    check_endorsements: await q(
-      `SELECT id FROM public.check_endorsements WHERE check_id = $1::uuid`,
-      [checkId],
-    ),
-    check_payees: await q(
-      `SELECT id FROM public.check_payees WHERE check_id = $1::uuid`,
-      [checkId],
-    ),
-    check_files: await q(
-      `SELECT id, file_name FROM public.check_files WHERE check_intake_item_id = $1::uuid`,
-      [checkId],
-    ),
-    provider_ops: await q(
-      `SELECT id FROM public.aws_provider_sandbox_operations
-       WHERE check_id = $1::uuid OR claim_id = $2::uuid`,
-      [checkId, claimId],
-    ),
-    financial_ops: await q(
-      `SELECT id FROM public.aws_financial_operations
-       WHERE check_id = $1::uuid OR claim_id = $2::uuid`,
-      [checkId, claimId],
-    ),
+    check_endorsements: await scoped('check_endorsements', [['check_id', checkId]]),
+    check_payees: await scoped('check_payees', [['check_id', checkId]]),
+    check_files: await scoped('check_files', [['check_intake_item_id', checkId]]),
+    check_cases: await scoped('check_cases', [['id', checkId]]),
+    provider_ops: await scoped('aws_provider_sandbox_operations', [
+      ['check_id', checkId],
+      ['claim_id', claimId],
+    ]),
+    financial_ops: await scoped('aws_financial_operations', [
+      ['check_id', checkId],
+      ['claim_id', claimId],
+    ]),
     ledger_tokens: await q(
       `SELECT id, homeowner_email, revoked_at, expires_at IS NULL AS never_expires
        FROM public.homeowner_ledger_tokens WHERE id = $1::uuid`,
@@ -204,9 +227,13 @@ const isolationFor = async (client, ids) => {
 const countsFor = async (client, ids) => {
   const { claimId, checkId } = ids;
   const one = async (sql, params) => {
+    await client.query('SAVEPOINT iso_count');
     try {
-      return Number((await client.query(sql, params)).rows[0]?.n || 0);
+      const n = Number((await client.query(sql, params)).rows[0]?.n || 0);
+      await client.query('RELEASE SAVEPOINT iso_count');
+      return n;
     } catch {
+      await client.query('ROLLBACK TO SAVEPOINT iso_count');
       return null;
     }
   };
@@ -409,14 +436,16 @@ const insertFixture = async (client, email) => {
 };
 
 const isolationOk = (iso) => {
-  const empty = (rows, extraOk = () => false) => {
+  const empty = (rows) => {
     if (!Array.isArray(rows)) return false;
-    if (rows.length === 1 && rows[0]?._error) {
-      const msg = String(rows[0]._error);
-      if (/does not exist|column .* does not exist/i.test(msg)) return true;
-      return false;
+    if (rows.length === 0) return true;
+    if (rows.every((row) => row?._error || row?._note)) {
+      return rows.every((row) => {
+        const msg = String(row._error || row._note || '');
+        return /does not exist|no scoped id column/i.test(msg);
+      });
     }
-    return rows.length === 0 || extraOk(rows);
+    return false;
   };
   const problems = [];
   if (!empty(iso.signature_requests)) problems.push('signature_requests');
@@ -432,6 +461,10 @@ const isolationOk = (iso) => {
   if (!empty(iso.check_endorsements)) problems.push('check_endorsements');
   if (!empty(iso.check_payees)) problems.push('check_payees');
   if (!empty(iso.check_files)) problems.push('check_files');
+  const moneyEvents = (iso.homeowner_ledger_events || []).filter((row) => (
+    row.event_type && !['check_received'].includes(row.event_type)
+  ));
+  if (moneyEvents.length) problems.push('homeowner_ledger_events_non_received');
   return { ok: problems.length === 0, problems };
 };
 
