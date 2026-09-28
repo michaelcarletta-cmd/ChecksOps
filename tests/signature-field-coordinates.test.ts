@@ -164,6 +164,20 @@ test("staging Step 3 mobile pin overlays BgpqIBFW and leaves production BkzeBHTL
   assert.equal(pin.ACCEPTED_STAGING_SIGNATURE_STEP3_MOBILE_SPA.production_untouched_flag, true);
 });
 
+test("production Step 3 promote script overlays BkzeBHTL and refuses staging wholesale", () => {
+  const script = readFileSync("scripts/promote-production-signature-step3-mobile-spa.mjs", "utf8");
+  assert.match(script, /LIVE_ENTRY = '\/assets\/index-BkzeBHTL\.js'/);
+  assert.match(script, /LIVE_ENTRY_SHA = 'e6f1fd9d97aa31d1ad705bfaf14004dff004159c87027c4848b9793c2181e787'/);
+  assert.match(script, /LIVE_VERSION = 'cknrbiGObviCUsPCB58bSOyeLta87W2V'/);
+  assert.match(script, /CANDIDATE_ENTRY = '\/assets\/index-C5ku3IDF\.js'/);
+  assert.match(script, /gHoAYTlh\/WLTAovN7\/hfwuvmBNuMjKZaC\+zMzBsAOSw=/);
+  assert.match(script, /Select a file from claim\/check files/);
+  assert.match(script, /index-tfpHiJF1\.js/);
+  assert.match(script, /per_object_put/);
+  assert.match(script, /forbidden Lambda mutation/);
+  assert.match(script, /spa_drift/);
+});
+
 test("wizard Step 3 stacks footer actions and wraps the title on phones", () => {
   const wizard = readFileSync("src/components/claim-detail/SignatureRequests.tsx", "utf8");
   assert.match(wizard, /w-\[calc\(100%-2rem\)\]/);
