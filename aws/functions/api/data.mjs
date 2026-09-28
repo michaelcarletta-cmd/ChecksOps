@@ -189,6 +189,64 @@ export const resolveClaims = async (event) => {
   return { ok: true, claims };
 };
 
+/**
+ * COMMIT of an aborted PostgreSQL transaction completes as ROLLBACK
+ * without throwing. Treat that as failure so HTTP success cannot outlive
+ * a rolled-back write.
+ */
+export const classifyTrackedSqlFailure = (error, sqlText) => {
+  const sql = String(sqlText || '');
+  const tableMatch = sql.match(/\b(?:INTO|UPDATE|FROM|TABLE)\s+public\.([a-z_][a-z0-9_]*)/i);
+  return {
+    sqlstate: error?.code || null,
+    table: tableMatch?.[1] || null,
+    operation: (sql.trim().split(/\s+/)[0] || '').toUpperCase() || null,
+    message: sanitizeLogText(sanitizePublicError(error), 200),
+  };
+};
+
+export const trackClientSqlFailures = (client) => {
+  const failures = [];
+  const original = typeof client.query === 'function' ? client.query.bind(client) : null;
+  if (!original) return failures;
+  client.query = (...args) => {
+    const result = original(...args);
+    const record = (error) => {
+      failures.push(classifyTrackedSqlFailure(error, args[0]));
+      throw error;
+    };
+    if (result && typeof result.then === 'function') return result.catch(record);
+    return result;
+  };
+  return failures;
+};
+
+export const commitWriteTransaction = async (client) => {
+  const committed = await client.query('COMMIT');
+  const tag = String(committed?.command || 'COMMIT').toUpperCase();
+  if (tag === 'ROLLBACK') {
+    const error = new Error('transaction_not_committed');
+    error.code = 'TRANSACTION_NOT_COMMITTED';
+    throw error;
+  }
+  return committed;
+};
+
+export const logCommitFailure = (error, failures = [], event = null) => {
+  const first = failures[0] || classifyTrackedSqlFailure(error, 'COMMIT');
+  console.error(JSON.stringify({
+    service: 'checksops-api',
+    event: 'write_transaction_not_committed',
+    firstSqlstate: first.sqlstate,
+    firstTable: first.table,
+    firstOperation: first.operation,
+    firstMessage: first.message,
+    requestId: event?.requestContext?.requestId || null,
+    route: event?.rawPath || event?.requestContext?.http?.path || null,
+  }));
+  return first;
+};
+
 export const withIdentity = async (event, fn, deps = {}) => {
   const claimsResult = await resolveClaims(event);
   if (!claimsResult.ok) return claimsResult;
@@ -200,6 +258,7 @@ export const withIdentity = async (event, fn, deps = {}) => {
   const commit = deps.commit === true;
   let client;
   let didCommit = false;
+  let sqlFailures = [];
   try {
     const credentials = await loadCredentials();
     const config = write
@@ -207,6 +266,7 @@ export const withIdentity = async (event, fn, deps = {}) => {
       : buildClientConfig(credentials, { queryTimeoutMillis: 12000 });
     client = createClient(config);
     await client.connect();
+    sqlFailures = trackClientSqlFailures(client);
     await client.query('BEGIN');
     if (write) {
       await client.query('SET TRANSACTION READ WRITE');
@@ -233,8 +293,22 @@ export const withIdentity = async (event, fn, deps = {}) => {
     const result = await fn({ client, mapping, claims: claimsResult.claims, body, spoof });
     const status = Number(result?.statusCode || (result?.ok === false ? 400 : 200));
     if (commit && result?.ok !== false && status < 400) {
-      await client.query('COMMIT');
-      didCommit = true;
+      try {
+        await commitWriteTransaction(client);
+        didCommit = true;
+      } catch (commitError) {
+        if (client && !didCommit) {
+          try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+        }
+        logCommitFailure(commitError, sqlFailures, event);
+        return {
+          ok: false,
+          statusCode: 503,
+          error: 'transaction_not_committed',
+          message: 'Write transaction did not commit',
+          spoofFieldsIgnored: spoof,
+        };
+      }
     } else {
       await client.query('ROLLBACK');
     }
