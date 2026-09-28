@@ -164,6 +164,34 @@ test("staging Step 3 mobile pin overlays BgpqIBFW and leaves production BkzeBHTL
   assert.equal(pin.ACCEPTED_STAGING_SIGNATURE_STEP3_MOBILE_SPA.production_untouched_flag, true);
 });
 
+test("production Step 3 pin overlays BkzeBHTL and leaves the API unchanged", async () => {
+  const pin = await import("../scripts/lib/accepted-production-spa-signature-step3-mobile.mjs");
+  assert.equal(pin.ACCEPTED_PRODUCTION_SIGNATURE_STEP3_MOBILE_SPA.spa_bundle, "/assets/index-C5ku3IDF.js");
+  assert.equal(pin.ACCEPTED_PRODUCTION_SIGNATURE_STEP3_MOBILE_SPA.spa_sha256, "bd5428a1ff1ca99b0908a54200376bb6ca6afe0d2f61414e49b4cdea1f368c11");
+  assert.equal(pin.ACCEPTED_PRODUCTION_SIGNATURE_STEP3_MOBILE_SPA.index_html_sha256, "495fce2d8733d422a8676a9a4008ea31a6126ec4ac5ed33106aa68596f693548");
+  assert.equal(pin.ACCEPTED_PRODUCTION_SIGNATURE_STEP3_MOBILE_SPA.s3_version, "8Y_w37g4znTqBsFeg1QHezFHdFSO0nSE");
+  assert.equal(pin.ACCEPTED_PRODUCTION_SIGNATURE_STEP3_MOBILE_SPA.production_lambda_sha, "gHoAYTlh/WLTAovN7/hfwuvmBNuMjKZaC+zMzBsAOSw=");
+  assert.equal(pin.ACCEPTED_PRODUCTION_SIGNATURE_STEP3_MOBILE_SPA.based_on_baseline.spa_bundle, "/assets/index-BkzeBHTL.js");
+  assert.equal(pin.ACCEPTED_PRODUCTION_SIGNATURE_STEP3_MOBILE_SPA.selector_preserved, true);
+  assert.equal(pin.ACCEPTED_PRODUCTION_SIGNATURE_STEP3_MOBILE_SPA.step2_composer_preserved, true);
+  assert.equal(pin.ACCEPTED_PRODUCTION_SIGNATURE_STEP3_MOBILE_SPA.not_staging_wholesale, true);
+  assert.equal(pin.ACCEPTED_PRODUCTION_SIGNATURE_STEP3_MOBILE_SPA.staging_spa_not_deployed, "/assets/index-tfpHiJF1.js");
+});
+
+test("production Step 3 promote script overlays BkzeBHTL and refuses staging wholesale", () => {
+  const script = readFileSync("scripts/promote-production-signature-step3-mobile-spa.mjs", "utf8");
+  assert.match(script, /LIVE_ENTRY = '\/assets\/index-BkzeBHTL\.js'/);
+  assert.match(script, /LIVE_ENTRY_SHA = 'e6f1fd9d97aa31d1ad705bfaf14004dff004159c87027c4848b9793c2181e787'/);
+  assert.match(script, /LIVE_VERSION = 'cknrbiGObviCUsPCB58bSOyeLta87W2V'/);
+  assert.match(script, /CANDIDATE_ENTRY = '\/assets\/index-C5ku3IDF\.js'/);
+  assert.match(script, /gHoAYTlh\/WLTAovN7\/hfwuvmBNuMjKZaC\+zMzBsAOSw=/);
+  assert.match(script, /Select a file from claim\/check files/);
+  assert.match(script, /index-tfpHiJF1\.js/);
+  assert.match(script, /per_object_put/);
+  assert.match(script, /forbidden Lambda mutation/);
+  assert.match(script, /spa_drift/);
+});
+
 test("wizard Step 3 stacks footer actions and wraps the title on phones", () => {
   const wizard = readFileSync("src/components/claim-detail/SignatureRequests.tsx", "utf8");
   assert.match(wizard, /w-\[calc\(100%-2rem\)\]/);
