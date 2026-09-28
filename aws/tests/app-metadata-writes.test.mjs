@@ -181,6 +181,13 @@ test('claims allowlist is update-only for claim_number', () => {
   assert.ok(!WRITE_ALLOWLIST.claims.columns.has('org_id'));
   assert.ok(!WRITE_ALLOWLIST.claims.columns.has('status'));
   assert.ok(!WRITE_ALLOWLIST.claims.columns.has('amount'));
+  const grant = readFileSync('aws/workflows/sql/70_staging_claims_number_grant.sql', 'utf8');
+  const grantLines = grant.split('\n').filter((line) => !line.trim().startsWith('--')).join('\n');
+  assert.match(grantLines, /GRANT UPDATE \(claim_number, updated_at\) ON TABLE public\.claims TO checksops;/);
+  assert.doesNotMatch(grantLines, /GRANT INSERT/);
+  assert.doesNotMatch(grantLines, /GRANT DELETE/);
+  assert.doesNotMatch(grantLines, /ENABLE ROW LEVEL SECURITY|FORCE ROW LEVEL SECURITY|CREATE POLICY/);
+  assert.doesNotMatch(grantLines, /payment_transfers|checkalt_deposits|claim_payments/);
 });
 
 test('authorized tenant member can rename an existing claim in place', async () => {
