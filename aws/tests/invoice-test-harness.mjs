@@ -52,12 +52,29 @@ export function fakeInvoiceClient(store) {
         const match = store.tenants.find((row) => row.id === params[0]);
         return { rows: match ? [match] : [{}] };
       }
+      if (text.includes('SAVEPOINT') || text.includes('RELEASE SAVEPOINT') || text.includes('ROLLBACK TO SAVEPOINT')) {
+        return { rows: [], command: 'SAVEPOINT' };
+      }
+      if (text.includes('FROM public.moov_invoice_customers') && text.includes('moov_account_id =')) {
+        const match = store.customers.find((row) => (
+          row.tenant_id === params[0]
+          && row.environment === params[1]
+          && row.moov_account_id === params[2]
+        ));
+        return { rows: match ? [match] : [] };
+      }
       if (text.includes('FROM public.moov_invoice_customers')) {
         const [tenantId, environment, email] = params;
         const match = store.customers.find((row) => (
           row.tenant_id === tenantId
           && row.environment === environment
           && String(row.email).toLowerCase() === String(email).toLowerCase()
+        ));
+        return { rows: match ? [match] : [] };
+      }
+      if (text.includes('FROM public.moov_invoices') && text.includes('moov_invoice_id =')) {
+        const match = store.invoices.find((row) => (
+          row.tenant_id === params[0] && row.moov_invoice_id === params[1]
         ));
         return { rows: match ? [match] : [] };
       }
@@ -174,6 +191,7 @@ export function recordingFetch(options = {}) {
   const invoiceById = new Map();
   let customers = 0;
   let invoices = 0;
+  for (const inv of options.invoices || []) invoiceById.set(inv.invoiceID, inv);
   const fetchImpl = async (url, init = {}) => {
     const href = String(url);
     const method = String(init.method || 'GET').toUpperCase();
@@ -216,6 +234,19 @@ export function recordingFetch(options = {}) {
       };
       invoiceById.set(id, next);
       return jsonOk(next);
+    }
+    if (method === 'GET' && /\/accounts\/[0-9a-f-]{8}-[0-9a-f-]{4}-[0-9a-f-]{4}-[0-9a-f-]{4}-[0-9a-f-]{12}$/i.test(href.replace(/\?.*$/, ''))) {
+      const id = href.replace(/\?.*$/, '').split('/accounts/')[1];
+      return jsonOk(options.accounts?.[id] || {
+        accountID: id,
+        accountType: 'individual',
+        profile: {
+          individual: {
+            name: { firstName: 'Pat', lastName: 'Customer' },
+            email: 'pat@example.test',
+          },
+        },
+      });
     }
     if (method === 'GET' && /\/invoices\/([^/?]+)/.test(href)) {
       const id = href.match(/\/invoices\/([^/?]+)/)[1];

@@ -1190,6 +1190,58 @@ const loadInvoiceCustomer = async (client, tenantId, environment, email) => (
   )
 ).rows[0] || null;
 
+const loadInvoiceCustomerByAccount = async (client, tenantId, environment, moovAccountId) => {
+  if (!moovAccountId) return null;
+  return (await client.query(
+    `SELECT id, moov_account_id FROM public.moov_invoice_customers
+     WHERE tenant_id = $1::uuid AND environment = $2 AND moov_account_id = $3
+     LIMIT 1`,
+    [tenantId, environment, moovAccountId],
+  )).rows[0] || null;
+};
+
+const loadInvoiceByMoovId = async (client, tenantId, moovInvoiceId) => {
+  if (!moovInvoiceId) return null;
+  return (await client.query(
+    `SELECT * FROM public.moov_invoices
+     WHERE tenant_id = $1::uuid AND moov_invoice_id = $2
+     LIMIT 1`,
+    [tenantId, moovInvoiceId],
+  )).rows[0] || null;
+};
+
+const invoiceItemsFromProvider = (invoice) => {
+  const raw = invoice?.lineItems?.items || invoice?.lineItems || [];
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item) => ({
+    name: String(item?.name || '').trim(),
+    unit_price: invoiceDecimal(item?.basePrice || item?.unitPrice) || Number(item?.unit_price) || 0,
+    quantity: Number(item?.quantity || 1),
+  })).filter((item) => item.name);
+};
+
+const persistInvoiceCustomer = async (client, {
+  tenantId, environment, displayName, email, phone, customerType, moovAccountId, userId,
+}) => {
+  await client.query('SAVEPOINT invoice_customer');
+  try {
+    const saved = (await client.query(
+      `INSERT INTO public.moov_invoice_customers
+        (tenant_id, environment, display_name, email, phone, customer_type, moov_account_id, created_by)
+       VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING id`,
+      [tenantId, environment, displayName, email, phone ?? null, customerType, moovAccountId, userId],
+    )).rows[0];
+    await client.query('RELEASE SAVEPOINT invoice_customer');
+    return saved?.id ?? null;
+  } catch {
+    try { await client.query('ROLLBACK TO SAVEPOINT invoice_customer'); } catch { /* ignore */ }
+    const existing = await loadInvoiceCustomer(client, tenantId, environment, email)
+      || await loadInvoiceCustomerByAccount(client, tenantId, environment, moovAccountId);
+    return existing?.id ?? null;
+  }
+};
+
 const loadTenantInvoice = async (client, tenantId, invoiceId) => {
   if (!invoiceId) return null;
   return (await client.query(
@@ -1239,6 +1291,121 @@ export const invoice = {
         });
       }
 
+      if (action === 'recover') {
+        const moovInvoiceId = String(body.moov_invoice_id || '').trim();
+        if (!moovInvoiceId) return fail('moov_invoice_id is required', 400);
+        const already = await loadInvoiceByMoovId(client, ctx.tenantId, moovInvoiceId);
+        if (already) {
+          return jsonResult({
+            success: true,
+            invoice: already,
+            recovered: false,
+            alreadyPresent: true,
+            liveProviderCalled: false,
+            apiVersion: INVOICE_API_VERSION,
+          });
+        }
+        const inv = await moovFetch(`/accounts/${merchantAccountId}/invoices/${moovInvoiceId}`, {
+          scopes: invoiceScopes(merchantAccountId),
+          apiVersion: INVOICE_API_VERSION,
+          fetchImpl,
+        });
+        if (!inv?.invoiceID || inv.invoiceID !== moovInvoiceId) {
+          return fail('Provider invoice mismatch', 409);
+        }
+        const customerAccountId = inv.customerAccountID;
+        if (!customerAccountId) return fail('Invoice has no customer account', 502);
+        let customerAccount = null;
+        try {
+          customerAccount = await moovFetch(`/accounts/${customerAccountId}`, {
+            scopes: ['/accounts.read'],
+            apiVersion: INVOICE_API_VERSION,
+            fetchImpl,
+          });
+        } catch { /* invoice already carries display name/email */ }
+        const customerEmail = String(
+          inv.customerEmail
+          || customerAccount?.profile?.business?.email
+          || customerAccount?.profile?.individual?.email
+          || '',
+        ).trim().toLowerCase();
+        const customerName = String(
+          inv.customerDisplayName
+          || customerAccount?.profile?.business?.legalBusinessName
+          || [customerAccount?.profile?.individual?.name?.firstName, customerAccount?.profile?.individual?.name?.lastName]
+            .filter(Boolean).join(' ')
+          || customerEmail,
+        ).trim();
+        if (!customerEmail) return fail('Provider invoice is missing a customer email', 502);
+        const customerType = customerAccount?.accountType === 'individual' ? 'individual' : 'business';
+        let existing = await loadInvoiceCustomerByAccount(client, ctx.tenantId, environment, customerAccountId)
+          || await loadInvoiceCustomer(client, ctx.tenantId, environment, customerEmail);
+        let customerRowId = existing?.id ?? null;
+        if (!customerRowId) {
+          customerRowId = await persistInvoiceCustomer(client, {
+            tenantId: ctx.tenantId,
+            environment,
+            displayName: customerName,
+            email: customerEmail,
+            phone: null,
+            customerType,
+            moovAccountId: customerAccountId,
+            userId,
+          });
+        }
+        const items = invoiceItemsFromProvider(inv);
+        const amount = invoiceDecimal(inv.totalAmount) || invoiceLineItemsTotal(items);
+        const row = (await client.query(
+          `INSERT INTO public.moov_invoices
+            (tenant_id, environment, moov_account_id, moov_invoice_id, invoice_number,
+             customer_id, customer_name, customer_email, customer_moov_account_id,
+             description, line_items, total_amount, paid_amount, status,
+             invoice_date, due_date, payment_link_url, public_token, sent_at,
+             claim_id, last_synced_at, provider_metadata, created_by)
+           VALUES
+            ($1::uuid, $2, $3, $4, $5,
+             $6::uuid, $7, $8, $9,
+             $10, $11::jsonb, $12, $13, $14,
+             $15, $16, $17, $18, $19,
+             $20::uuid, now(), $21::jsonb, $22)
+           RETURNING *`,
+          [
+            ctx.tenantId, environment, merchantAccountId, inv.invoiceID,
+            inv.invoiceNumber ?? null, customerRowId, customerName, customerEmail,
+            customerAccountId, inv.description ? String(inv.description).slice(0, 500) : null,
+            JSON.stringify(items),
+            invoiceDecimal(inv.totalAmount) || amount,
+            invoiceDecimal(inv.paidAmount),
+            inv.status ?? 'draft',
+            inv.invoiceDate ?? inv.createdOn ?? null,
+            inv.dueDate ?? null,
+            inv.paymentLinkURL ?? null, randomUUID(),
+            inv.sentOn ?? null,
+            null, JSON.stringify(sanitize(inv)), userId,
+          ],
+        )).rows[0];
+        await logPaymentEvent(client, {
+          tenant_id: ctx.tenantId,
+          event_type: inv.sentOn ? 'invoice.recovered_sent' : 'invoice.recovered',
+          new_status: inv.status ?? 'draft',
+          environment,
+          provider_metadata: {
+            invoiceID: inv.invoiceID,
+            invoiceNumber: inv.invoiceNumber,
+            recovered: true,
+          },
+        });
+        return jsonResult({
+          success: true,
+          invoice: row,
+          recovered: true,
+          alreadyPresent: false,
+          liveProviderCalled: true,
+          providerWrites: false,
+          apiVersion: INVOICE_API_VERSION,
+        });
+      }
+
       if (action === 'create' || action === 'create_and_send') {
         const customerName = String(body.customer_name ?? '').trim();
         const customerEmail = String(body.customer_email ?? '').trim().toLowerCase();
@@ -1272,23 +1439,16 @@ export const invoice = {
           customerAccountId = created?.accountID;
           if (!customerAccountId) return fail('Could not create the customer record', 502);
           createdCustomer = true;
-          try {
-            const saved = (await client.query(
-              `INSERT INTO public.moov_invoice_customers
-                (tenant_id, environment, display_name, email, phone, customer_type, moov_account_id, created_by)
-               VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8)
-               RETURNING id`,
-              [
-                ctx.tenantId, environment, customerName, customerEmail,
-                body.customer_phone ?? null, customerType, customerAccountId, userId,
-              ],
-            )).rows[0];
-            customerRowId = saved?.id ?? null;
-          } catch {
-            existing = await loadInvoiceCustomer(client, ctx.tenantId, environment, customerEmail);
-            customerRowId = existing?.id ?? customerRowId;
-            customerAccountId = existing?.moov_account_id ?? customerAccountId;
-          }
+          customerRowId = await persistInvoiceCustomer(client, {
+            tenantId: ctx.tenantId,
+            environment,
+            displayName: customerName,
+            email: customerEmail,
+            phone: body.customer_phone ?? null,
+            customerType,
+            moovAccountId: customerAccountId,
+            userId,
+          });
         }
 
         const invoice = await moovFetch(`/accounts/${merchantAccountId}/invoices`, {
