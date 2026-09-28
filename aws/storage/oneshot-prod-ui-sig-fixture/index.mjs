@@ -19,6 +19,8 @@ const FREEDOM_ADMIN_ID = '7dbb3009-f059-4767-b5dc-1c5c72379330';
 const LABEL = 'UI SIGNATURE TEST — DO NOT PROCESS';
 const CLAIM_NUMBER = 'UI-SIG-TEST-DO-NOT-PROCESS-AD99';
 const CHECK_NUMBER = 'UI-SIG-TEST-CHK-AD99';
+const TARGET_CHECK_ID = '3916f620-9d20-499b-8450-9e1a8e70a3c9';
+const TARGET_CLAIM_ID = '1de2f734-de37-404a-aa3e-d23905f7a6ea';
 const HOMEOWNER_NAME = 'UI SIGNATURE TEST — DO NOT PROCESS';
 const AUTHORIZED_EMAILS = [
   'checksops-tester@freedomadj.com',
@@ -493,7 +495,7 @@ const isolationOk = (iso) => {
   if (!empty(iso.check_payees)) problems.push('check_payees');
   if (!empty(iso.check_files)) problems.push('check_files');
   const moneyEvents = (iso.homeowner_ledger_events || []).filter((row) => (
-    row.event_type && !['check_received'].includes(row.event_type)
+    row.event_type && !['check_received', 'endorsements_sent'].includes(row.event_type)
   ));
   if (moneyEvents.length) problems.push('homeowner_ledger_events_non_received');
   return { ok: problems.length === 0, problems };
@@ -534,6 +536,169 @@ export const handler = async (event = {}) => {
       amount_nullable: amountNullable,
       amount_default_zero: amountDefaultZero,
     };
+
+    if (action === 'endorsing' || action === 'endorsing_inspect') {
+      if (!already
+          || already.check_id !== TARGET_CHECK_ID
+          || already.claim_id !== TARGET_CLAIM_ID
+          || already.check_number !== CHECK_NUMBER
+          || already.claim_number !== CLAIM_NUMBER) {
+        return {
+          ok: false,
+          action,
+          stop: true,
+          reason: 'fixture_mismatch',
+          already,
+        };
+      }
+      const token = (await client.query(
+        `SELECT id, homeowner_email FROM public.homeowner_ledger_tokens
+         WHERE claim_id = $1::uuid ORDER BY created_at DESC LIMIT 1`,
+        [already.claim_id],
+      )).rows[0] || null;
+      const ids = { claimId: already.claim_id, checkId: already.check_id, tokenId: token?.id };
+      const beforeIsolation = await isolationFor(client, ids);
+      const beforeGate = isolationOk(beforeIsolation);
+      if (!beforeGate.ok) {
+        return {
+          ok: false,
+          action,
+          stop: true,
+          reason: 'pre_update_isolation_failed',
+          problems: beforeGate.problems,
+          fixture: already,
+        };
+      }
+      const moneyBefore = (await client.query(`
+        SELECT
+          (SELECT count(*) FROM public.deposit_items) AS deposit_items,
+          (SELECT count(*) FROM public.disbursement_splits) AS disbursement_splits,
+          (SELECT count(*) FROM public.payment_transfers) AS payment_transfers,
+          (SELECT count(*) FROM public.check_billing_events) AS check_billing_events,
+          (SELECT count(*) FROM public.mortgage_handling_requests) AS mortgage_handling_requests,
+          (SELECT count(*) FROM public.aws_financial_operations) AS aws_financial_operations,
+          (SELECT count(*) FROM public.aws_provider_sandbox_operations) AS aws_provider_sandbox_operations
+      `)).rows[0];
+      const otherChecksBefore = Number((await client.query(
+        `SELECT count(*)::int AS n FROM public.check_intake_items
+         WHERE id IS DISTINCT FROM $1::uuid
+           AND (status, check_stage, updated_at) IS NOT NULL`,
+        [TARGET_CHECK_ID],
+      )).rows[0].n);
+      await client.query('BEGIN');
+      let triggerMode = 'normal';
+      try {
+        await client.query("SET LOCAL session_replication_role = 'replica'");
+        triggerMode = 'replica';
+      } catch {
+        triggerMode = 'normal';
+      }
+      const updated = (await client.query(
+        `UPDATE public.check_intake_items
+         SET status = 'endorsements_in_progress',
+             check_stage = 'endorsing'::public.check_stage,
+             updated_at = now()
+         WHERE id = $1::uuid
+           AND claim_id = $2::uuid
+           AND check_number = $3
+           AND tenant_id = $4::uuid
+         RETURNING id, claim_id, tenant_id, check_number, amount, status, check_stage, ocr_status`,
+        [TARGET_CHECK_ID, TARGET_CLAIM_ID, CHECK_NUMBER, FREEDOM_TENANT_ID],
+      )).rows[0];
+      if (!updated) {
+        await client.query('ROLLBACK');
+        return { ok: false, action, stop: true, reason: 'update_matched_zero_rows' };
+      }
+      const claimAfter = (await client.query(
+        `SELECT id, status, claim_number FROM public.claims WHERE id = $1::uuid`,
+        [TARGET_CLAIM_ID],
+      )).rows[0];
+      const otherChanged = Number((await client.query(
+        `SELECT count(*)::int AS n FROM public.check_intake_items
+         WHERE id IS DISTINCT FROM $1::uuid
+           AND updated_at >= now() - interval '5 seconds'`,
+        [TARGET_CHECK_ID],
+      )).rows[0].n);
+      const isolation = await isolationFor(client, ids);
+      const moneyAfter = isolation.money_snapshot?.[0] || null;
+      const moneyDrift = Object.keys(moneyBefore).filter((key) => (
+        moneyAfter && String(moneyAfter[key]) !== String(moneyBefore[key])
+      ));
+      const gate = isolationOk(isolation);
+      const endorsing = updated.status === 'endorsements_in_progress' && updated.check_stage === 'endorsing';
+      const claimOpen = claimAfter?.status === 'open';
+      const amountZero = String(updated.amount) === '0.00' || Number(updated.amount) === 0;
+      const problems = [
+        ...gate.problems,
+        ...moneyDrift.map((key) => `money_drift:${key}`),
+      ];
+      if (!endorsing) problems.push('not_endorsing');
+      if (!claimOpen) problems.push('claim_status_changed');
+      if (!amountZero) problems.push('amount_changed');
+      if (otherChanged > 0) problems.push('other_checks_touched');
+      if (problems.length) {
+        await client.query('ROLLBACK');
+        return {
+          ok: false,
+          action,
+          created: false,
+          stop: true,
+          reason: 'endorsing_isolation_failed',
+          problems,
+          trigger_mode: triggerMode,
+          updated,
+          claim: claimAfter,
+          isolation,
+          money_before: moneyBefore,
+          money_after: moneyAfter,
+        };
+      }
+      if (action !== 'endorsing') {
+        await client.query('ROLLBACK');
+        return {
+          ok: true,
+          action: 'endorsing_inspect',
+          created: false,
+          rolled_back: true,
+          trigger_mode: triggerMode,
+          would_set: { status: updated.status, check_stage: updated.check_stage },
+          claim_status: claimAfter.status,
+          amount: updated.amount,
+          isolation_gate: { ok: true, problems: [] },
+          isolation,
+          other_checks_before: otherChecksBefore,
+        };
+      }
+      await client.query('COMMIT');
+      const committed = await existingFixture(client);
+      const afterIsolation = await isolationFor(client, ids);
+      const real = (rows) => (rows || []).filter((row) => !row._error && !row._note);
+      return {
+        ok: true,
+        action: 'endorsing',
+        created: false,
+        updated: true,
+        trigger_mode: triggerMode,
+        search_name: LABEL,
+        fixture: committed,
+        token_id: token?.id || null,
+        isolation: afterIsolation,
+        isolation_gate: isolationOk(afterIsolation),
+        verification: {
+          endorsing: committed.status === 'endorsements_in_progress' && committed.check_stage === 'endorsing',
+          claim_status: committed.claim_status,
+          amount: committed.amount,
+          signature_request_count: real(afterIsolation.signature_requests).length,
+          billing_event_count: real(afterIsolation.check_billing_events).length,
+          deposit_count: real(afterIsolation.deposit_items).length,
+          disbursement_count: 0,
+          payment_transfer_count: real(afterIsolation.payment_transfers).length,
+          provider_operation_count: real(afterIsolation.provider_ops).length,
+          mortgage_handling_request_count: real(afterIsolation.mortgage_handling_requests).length,
+          financial_operation_count: real(afterIsolation.financial_ops).length,
+        },
+      };
+    }
 
     if (already) {
       const token = (await client.query(

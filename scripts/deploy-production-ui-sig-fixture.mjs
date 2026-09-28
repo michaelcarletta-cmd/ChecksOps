@@ -19,7 +19,11 @@ const PACK = '/tmp/prod-ui-sig-fixture';
 const ZIP = '/tmp/prod-ui-sig-fixture.zip';
 const ADMIN_SECRET_ARN = 'arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144-R3rJpx';
 const RDS_HOST = 'checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com';
-const ACTION = process.argv.includes('--create') ? 'create' : 'inspect';
+const ACTION = process.argv.includes('--endorsing')
+  ? 'endorsing'
+  : process.argv.includes('--endorsing-inspect')
+    ? 'endorsing_inspect'
+    : process.argv.includes('--create') ? 'create' : 'inspect';
 
 const awsJson = (args) => {
   const out = execFileSync(AWS, ['--region', REGION, '--output', 'json', ...args], {
@@ -88,7 +92,9 @@ const body = JSON.parse(fs.readFileSync('/tmp/prod-ui-sig-fixture-out.json', 'ut
 const report = { function: NAME, action: ACTION, invoke: invoked, body };
 const outPath = ACTION === 'create'
   ? '/opt/cursor/artifacts/prod-ui-sig-fixture-create.json'
-  : '/opt/cursor/artifacts/prod-ui-sig-fixture-inspect.json';
+  : ACTION.startsWith('endorsing')
+    ? `/opt/cursor/artifacts/prod-ui-sig-fixture-${ACTION.replace('_', '-')}.json`
+    : '/opt/cursor/artifacts/prod-ui-sig-fixture-inspect.json';
 fs.mkdirSync('/opt/cursor/artifacts', { recursive: true });
 fs.writeFileSync(outPath, JSON.stringify(report, null, 2));
 console.log(JSON.stringify({
@@ -98,6 +104,10 @@ console.log(JSON.stringify({
   functionError: invoked.FunctionError || null,
   ok: body.ok === true,
   created: body.created === true,
+  updated: body.updated === true,
+  trigger_mode: body.trigger_mode || null,
+  would_set: body.would_set || null,
+  verification: body.verification || null,
   stop: body.stop === true,
   reason: body.reason || null,
   authorized_email: body.authorized_email || null,
