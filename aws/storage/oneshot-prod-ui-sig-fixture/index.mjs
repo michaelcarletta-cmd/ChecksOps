@@ -107,13 +107,19 @@ const triggersOf = async (client, table) => (
 
 const isolationFor = async (client, ids) => {
   const q = async (sql, params = []) => {
-    await client.query('SAVEPOINT iso_q');
+    let usedSavepoint = false;
+    try {
+      await client.query('SAVEPOINT iso_q');
+      usedSavepoint = true;
+    } catch {
+      usedSavepoint = false;
+    }
     try {
       const rows = (await client.query(sql, params)).rows;
-      await client.query('RELEASE SAVEPOINT iso_q');
+      if (usedSavepoint) await client.query('RELEASE SAVEPOINT iso_q');
       return rows;
     } catch (error) {
-      await client.query('ROLLBACK TO SAVEPOINT iso_q');
+      if (usedSavepoint) await client.query('ROLLBACK TO SAVEPOINT iso_q');
       return [{ _error: String(error.message || error).slice(0, 240) }];
     }
   };
@@ -246,13 +252,19 @@ const isolationFor = async (client, ids) => {
 const countsFor = async (client, ids) => {
   const { claimId, checkId } = ids;
   const one = async (sql, params) => {
-    await client.query('SAVEPOINT iso_count');
+    let usedSavepoint = false;
+    try {
+      await client.query('SAVEPOINT iso_count');
+      usedSavepoint = true;
+    } catch {
+      usedSavepoint = false;
+    }
     try {
       const n = Number((await client.query(sql, params)).rows[0]?.n || 0);
-      await client.query('RELEASE SAVEPOINT iso_count');
+      if (usedSavepoint) await client.query('RELEASE SAVEPOINT iso_count');
       return n;
     } catch {
-      await client.query('ROLLBACK TO SAVEPOINT iso_count');
+      if (usedSavepoint) await client.query('ROLLBACK TO SAVEPOINT iso_count');
       return null;
     }
   };
