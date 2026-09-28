@@ -269,7 +269,7 @@ const countsFor = async (client, ids) => {
     ),
     billing_event_count: await one(
       `SELECT count(*)::int AS n FROM public.check_billing_events
-       WHERE check_id = $1::uuid OR check_intake_item_id = $1::uuid`,
+       WHERE check_intake_item_id = $1::uuid`,
       [checkId],
     ),
     deposit_count: await one(
@@ -587,8 +587,7 @@ export const handler = async (event = {}) => {
           (SELECT count(*) FROM public.check_billing_events) AS check_billing_events,
           (SELECT count(*) FROM public.mortgage_handling_requests) AS mortgage_handling_requests,
           (SELECT count(*) FROM public.aws_financial_operations) AS aws_financial_operations,
-          (SELECT count(*) FROM public.aws_provider_sandbox_operations) AS aws_provider_sandbox_operations,
-          (SELECT count(*) FROM public.signature_requests) AS signature_requests
+          (SELECT count(*) FROM public.aws_provider_sandbox_operations) AS aws_provider_sandbox_operations
       `)).rows[0];
       dry = await insertFixture(client, authorized.email);
       dry.isolation = await isolationFor(client, {
@@ -647,6 +646,8 @@ export const handler = async (event = {}) => {
           isolation: dry.isolation,
           isolation_gate: dry.isolation_gate,
           counts: dry.counts,
+          money_before: dry.money_before,
+          money_after: dry.money_after,
         },
         check_triggers: schema.check_triggers.map((t) => ({ name: t.tgname, fn: t.fn })),
         claim_triggers: schema.claim_triggers.map((t) => t.tgname),
