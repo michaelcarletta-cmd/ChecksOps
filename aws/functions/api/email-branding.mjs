@@ -4,6 +4,7 @@
  * Unverified tenant custom From addresses are Reply-To only.
  */
 import { defaultFromAddress, defaultReplyTo, normalizeEmail } from './email-policy.mjs';
+import { resolveEmailTenantLogoUrl } from './tenant-logo-path.mjs';
 
 export const PLATFORM_SUPPORT_EMAIL = 'support@checksops.com';
 export const PLATFORM_PRIMARY_COLOR = '#1a56db';
@@ -147,7 +148,7 @@ export const resolveEmailBranding = async (client, { tenantId = null, senderOver
   if (client?.query) {
     try {
       tenant = (await client.query(
-        `SELECT name, logo_url, primary_color, is_system_tenant,
+        `SELECT id::text AS id, name, logo_url, primary_color, is_system_tenant,
                 email_from_name, email_from_address, email_reply_to
          FROM public.tenants WHERE id = $1::uuid LIMIT 1`,
         [tenantId],
@@ -199,7 +200,11 @@ export const resolveEmailBranding = async (client, { tenantId = null, senderOver
   const primaryColor = isSafeHexColor(tenant.primary_color)
     ? String(tenant.primary_color).trim()
     : platform.primaryColor;
-  const logoUrl = safeHttpUrl(tenant.logo_url, platform.logoUrl);
+  const logoUrl = resolveEmailTenantLogoUrl({
+    tenantId: tenant.id || tenantId,
+    logoUrl: tenant.logo_url,
+    origin: emailAssetOrigin(),
+  }) || platform.logoUrl;
 
   if (verified) {
     return {

@@ -25,7 +25,6 @@ const SENDER = "src/lib/signatureRequestSender.ts";
 
 const UNTOUCHED_BACKEND = {
   "aws/functions/api/esign.mjs": "37c5c742f516ce750a402c53214307eee429742e8eed8d4ef9399772516209c5",
-  "aws/functions/api/email-branding.mjs": "c2832603700060c48bc905e6b1e7301b5ed96aa951ab9c28f58a014828e02190",
   "aws/functions/api/email.mjs": "e7ff4c1aa46cfd90d188e3ed56a7a066f62b5c79a3a77b45be013d9bf384adac",
 };
 
@@ -34,8 +33,7 @@ const UNTOUCHED_IMAGE_COMPAT = {
   "src/pages/CheckCommandCenter.tsx": "32436906507f3e8f183a0f393dd43ea66bd7eeb4dd2fca33087e737a6b7984d4",
 };
 
-const UNTOUCHED_R4A_RESOLVER = {
-  "src/lib/tenantLogoUrl.ts": "4a7d568ba509c7913d1ceb19e7dca1ac8e980cae2749a2ca9f1ef18cd65f41b5",
+const UNTOUCHED_R4A_TENANT_LOGO = {
   "src/components/branding/TenantLogo.tsx": "aff9c277cbbffcab018c0bf0959a7a6018e5bb6e56552cc880b28cfa0a498371",
 };
 
@@ -131,15 +129,22 @@ test("preview does not introduce a Supabase runtime dependency", () => {
   }
 });
 
-test("R4A logo resolver and TenantLogo stay byte-identical", () => {
-  for (const [rel, expected] of Object.entries(UNTOUCHED_R4A_RESOLVER)) {
-    assert.equal(sha256(rel), expected, `${rel} must remain the accepted R4A resolver`);
+test("R4A logo resolver contract and TenantLogo stay intact", () => {
+  for (const [rel, expected] of Object.entries(UNTOUCHED_R4A_TENANT_LOGO)) {
+    assert.equal(sha256(rel), expected, `${rel} must remain the accepted TenantLogo`);
   }
+  const resolver = read(RESOLVER);
+  assert.match(resolver, /export function resolveTenantLogoUrl/);
+  assert.match(resolver, /canonicalStoredTenantLogo/);
+  assert.match(resolver, /\/storage\/public\?bucket=/);
   const branding = read(BRANDING);
   assert.match(branding, /resolveTenantLogoUrl\(logoUrl\)/);
   assert.match(branding, /<TenantLogo src=\{logoUrl\}/);
   assert.match(branding, /<SignatureRequestEmailPreview/);
   assert.match(branding, /logoUrl=\{logoUrl\}/);
+  const emailBranding = read("aws/functions/api/email-branding.mjs");
+  assert.match(emailBranding, /resolveEmailTenantLogoUrl/);
+  assert.doesNotMatch(emailBranding, /safeHttpUrl\(tenant\.logo_url\)/);
 });
 
 test("protected backend and Claim Check files stay byte-identical", () => {

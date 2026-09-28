@@ -7,7 +7,7 @@ import { Loader2, Palette, Save } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { TenantLogo } from "@/components/branding/TenantLogo";
-import { resolveTenantLogoUrl } from "@/lib/tenantLogoUrl";
+import { canonicalStoredTenantLogo, resolveTenantLogoUrl } from "@/lib/tenantLogoUrl";
 import { SignatureRequestEmailPreview } from "@/components/settings/SignatureRequestEmailPreview";
 import { SettingsHero } from "@/components/settings/SettingsHero";
 
@@ -45,8 +45,7 @@ export function TenantBrandingSettings({ tenant }: { tenant: TenantBranding }) {
         .from("tenant-logos")
         .upload(path, file, { upsert: true, contentType: file.type });
       if (upErr) throw upErr;
-      const { data } = supabase.storage.from("tenant-logos").getPublicUrl(path);
-      setLogoUrl(data.publicUrl);
+      setLogoUrl(path);
       toast({ title: "Logo uploaded", description: "Click Save to apply." });
     } catch (e: any) {
       toast({ title: "Upload failed", description: e.message, variant: "destructive" });
@@ -61,7 +60,7 @@ export function TenantBrandingSettings({ tenant }: { tenant: TenantBranding }) {
       .from("tenants")
       .update({
         primary_color: primaryColor,
-        logo_url: logoUrl || null,
+        logo_url: canonicalStoredTenantLogo(logoUrl),
       })
       .eq("id", tenant.id);
     setSaving(false);

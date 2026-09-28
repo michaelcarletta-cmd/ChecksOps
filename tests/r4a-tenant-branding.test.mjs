@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { resolveTenantLogoUrl, rewriteTenantLogoUrl } from "../src/lib/tenantLogoUrl.ts";
+import { canonicalStoredTenantLogo, resolveTenantLogoUrl, rewriteTenantLogoUrl } from "../src/lib/tenantLogoUrl.ts";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const API = "https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging";
@@ -94,6 +94,20 @@ test("Freedom login and header still render TenantLogo", () => {
   assert.match(header, /src=\{tenant\?\.logo_url\}/);
   assert.match(settings, /TenantLogo/);
   assert.match(logo, /resolveTenantLogoUrl/);
+});
+
+test("AWS logo uploads persist a relative object path, not /prep/storage/public", () => {
+  const branding = fs.readFileSync(path.join(ROOT, "src/components/settings/TenantBrandingSettings.tsx"), "utf8");
+  assert.match(branding, /setLogoUrl\(path\)/);
+  assert.doesNotMatch(branding, /setLogoUrl\(.*publicUrl/);
+  assert.equal(
+    canonicalStoredTenantLogo("https://checksops.com/prep/storage/public?bucket=tenant-logos&path=2eff5f1a-929d-4ce3-9a8b-cd96b98df42a%2Flogo-1.png"),
+    "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/logo-1.png",
+  );
+  assert.equal(
+    canonicalStoredTenantLogo("https://nbcqwpysqgyxrrbgtmkw.supabase.co/storage/v1/object/public/tenant-logos/4f172140-f57a-4744-8050-95f4f07b13b4/1778078357240.png"),
+    "https://nbcqwpysqgyxrrbgtmkw.supabase.co/storage/v1/object/public/tenant-logos/4f172140-f57a-4744-8050-95f4f07b13b4/1778078357240.png",
+  );
 });
 
 test("resolver does not introduce a Supabase runtime URL or SDK", () => {

@@ -17,6 +17,11 @@ import {
   s3KeyFor,
 } from './storage-paths.mjs';
 import { MORTGAGE_LIBRARY_STORAGE_AUTH_SQL } from './mortgage-library-docs.mjs';
+import {
+  isUuid,
+  normalizeTenantLogoObjectPath,
+  storedLogoMatchesRequest,
+} from './tenant-logo-path.mjs';
 
 const { Client } = pg;
 
@@ -233,6 +238,72 @@ const objectExists = async (deps, key) => {
   }
 };
 
+const getObjectBytes = async (deps, key) => {
+  const s3 = defaultS3(deps);
+  const out = await s3.send(new GetObjectCommand({
+    Bucket: filesBucket(),
+    Key: key,
+  }));
+  let bytes = Buffer.alloc(0);
+  if (Buffer.isBuffer(out?.Body)) bytes = out.Body;
+  else if (out?.Body?.transformToByteArray) bytes = Buffer.from(await out.Body.transformToByteArray());
+  else if (typeof out?.bytes !== 'undefined') bytes = Buffer.from(out.bytes);
+  return {
+    bytes,
+    contentType: out?.ContentType || 'image/png',
+  };
+};
+
+export const handleBrandingLogo = async (event, deps = {}) => {
+  const query = event?.queryStringParameters || {};
+  const rawPath = String(event?.rawPath || event?.requestContext?.http?.path || '');
+  const fromPath = rawPath.match(/\/branding\/logo\/([0-9a-fA-F-]{36})/)?.[1];
+  const tenantId = String(fromPath || query.tenantId || query.tenant_id || '').trim();
+  const spoof = ignoredSpoof(event, parseBody(event));
+  if (!isUuid(tenantId)) {
+    return { ok: false, statusCode: 400, error: 'invalid_tenant', spoofFieldsIgnored: spoof };
+  }
+  let client;
+  try {
+    client = await publicClient(deps);
+    const row = (await client.query(
+      `SELECT id::text AS id, logo_url FROM tenants_public WHERE id = $1::uuid LIMIT 1`,
+      [tenantId],
+    )).rows[0];
+    const objectPath = normalizeTenantLogoObjectPath(row?.logo_url);
+    if (!objectPath) {
+      return { ok: false, statusCode: 404, error: 'logo_not_found', spoofFieldsIgnored: spoof };
+    }
+    const key = s3KeyFor('tenant-logos', objectPath);
+    if (!(await objectExists(deps, key))) {
+      return { ok: false, statusCode: 404, error: 'object_not_in_s3', spoofFieldsIgnored: spoof };
+    }
+    const object = await getObjectBytes(deps, key);
+    return {
+      ok: true,
+      statusCode: 200,
+      binary: true,
+      contentType: /^image\//i.test(object.contentType) ? object.contentType : 'image/png',
+      body: object.bytes,
+      tenantId: tenantId.toLowerCase(),
+      path: objectPath,
+      spoofFieldsIgnored: spoof,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      statusCode: 503,
+      error: 'branding_logo_failed',
+      message: sanitizePublicError(error),
+      spoofFieldsIgnored: spoof,
+    };
+  } finally {
+    if (client) {
+      try { await client.end(); } catch { /* ignore */ }
+    }
+  }
+};
+
 export const handleStorageSign = async (event, deps = {}) => withIdentity(event, async ({ client, mapping, claims, body, spoof }) => {
   const bucket = String(body.bucket || '').trim();
   const denied = denyBucket(bucket);
@@ -377,11 +448,12 @@ export const isPublicBrandingPath = async (client, bucket, rel) => {
   if (!PUBLIC_BRANDING_BUCKETS.includes(bucket)) return false;
   if (bucket === 'email-assets') return rel === 'checksops-logo.png';
   if (bucket === 'tenant-logos') {
+    const requested = normalizeTenantLogoObjectPath(rel);
+    if (!requested) return false;
     const result = await client.query(
-      `SELECT 1 FROM tenants_public WHERE logo_url IS NOT NULL AND split_part(logo_url, '?', 1) LIKE '%' || $1 LIMIT 1`,
-      [rel],
+      `SELECT logo_url FROM tenants_public WHERE logo_url IS NOT NULL`,
     );
-    return result.rows.length > 0;
+    return (result.rows || []).some((row) => storedLogoMatchesRequest(row.logo_url, requested));
   }
   if (bucket === 'company-branding') {
     const branding = await client.query(

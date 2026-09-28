@@ -131,7 +131,11 @@ test('production build guard rejects staging API/Cognito configuration', () => {
       VITE_COGNITO_USER_POOL_CLIENT_ID: '3ja9fqaq2fjkv3i6up2varcqpe',
     },
   }).ok, true);
-  const staging = parseEnvText(fs.readFileSync(path.join(ROOT, '.env.aws'), 'utf8'));
+  const stagingEnvPath = ['.env.aws', '.env.aws.example']
+    .map((rel) => path.join(ROOT, rel))
+    .find((abs) => fs.existsSync(abs));
+  assert.ok(stagingEnvPath, 'expected .env.aws or .env.aws.example for the staging reject proof');
+  const staging = parseEnvText(fs.readFileSync(stagingEnvPath, 'utf8'));
   assert.equal(assertProductionSpaBuild({
     mode: 'aws',
     env: staging,

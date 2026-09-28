@@ -19,6 +19,7 @@ import { TenantProBadgeManagement } from "./TenantProBadgeManagement";
 import { TenantPaymentAccountPanel } from "./TenantPaymentAccountPanel";
 import { TenantSecurityCompliance } from "./TenantSecurityCompliance";
 import { tenantMoovDefaults } from "@/lib/payments/tenantMoovDefaults";
+import { canonicalStoredTenantLogo, resolveTenantLogoUrl } from "@/lib/tenantLogoUrl";
 
 interface TenantForm {
   name: string;
@@ -107,8 +108,7 @@ export function TenantManagement() {
         .from("tenant-logos")
         .upload(path, file, { upsert: true, contentType: file.type });
       if (uploadError) throw uploadError;
-      const { data: urlData } = supabase.storage.from("tenant-logos").getPublicUrl(path);
-      setForm((prev) => ({ ...prev, logo_url: urlData.publicUrl }));
+      setForm((prev) => ({ ...prev, logo_url: path }));
       toast({ title: "Logo uploaded" });
     } catch (e: any) {
       toast({ title: "Upload failed", description: e.message, variant: "destructive" });
@@ -122,7 +122,7 @@ export function TenantManagement() {
       const { error } = await supabase.from("tenants").insert({
         name: f.name,
         slug: f.slug.toLowerCase().replace(/[^a-z0-9-]/g, "-"),
-        logo_url: f.logo_url || null,
+        logo_url: canonicalStoredTenantLogo(f.logo_url),
         primary_color: f.primary_color,
         secondary_color: f.secondary_color,
         custom_domain: f.custom_domain || null,
@@ -151,7 +151,7 @@ export function TenantManagement() {
     mutationFn: async ({ id, data }: { id: string; data: Partial<TenantForm> }) => {
       const { error } = await supabase.from("tenants").update({
         name: data.name,
-        logo_url: data.logo_url || null,
+        logo_url: canonicalStoredTenantLogo(data.logo_url),
         primary_color: data.primary_color,
         secondary_color: data.secondary_color,
         custom_domain: data.custom_domain || null,
@@ -275,7 +275,7 @@ export function TenantManagement() {
       />
       {form.logo_url ? (
         <div className="flex items-center gap-3 p-3 border border-border rounded-lg bg-muted/30">
-          <img src={form.logo_url} alt="Logo" className="h-10 max-w-[140px] object-contain rounded" onError={(e) => (e.currentTarget.style.display = "none")} />
+          <img src={resolveTenantLogoUrl(form.logo_url) || ""} alt="Logo" className="h-10 max-w-[140px] object-contain rounded" onError={(e) => (e.currentTarget.style.display = "none")} />
           <div className="flex gap-1 ml-auto">
             <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
               Replace
@@ -513,7 +513,7 @@ export function TenantManagement() {
             <Card key={t.id}>
               <CardContent className="p-4 flex items-center gap-4">
                 <div className="p-2 rounded-lg bg-muted">
-                  {t.logo_url ? <img src={t.logo_url} alt={t.name} className="h-5 w-5 object-contain" /> : <Building2 className="h-5 w-5 text-muted-foreground" />}
+                  {t.logo_url ? <img src={resolveTenantLogoUrl(t.logo_url) || ""} alt={t.name} className="h-5 w-5 object-contain" /> : <Building2 className="h-5 w-5 text-muted-foreground" />}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">

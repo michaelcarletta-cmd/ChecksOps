@@ -45,7 +45,10 @@ test("second tenant resolves independently", () => {
 });
 
 test("R4A logo resolver and Sending-domain absence stay intact", () => {
-  assert.equal(sha256("src/lib/tenantLogoUrl.ts"), "4a7d568ba509c7913d1ceb19e7dca1ac8e980cae2749a2ca9f1ef18cd65f41b5");
+  const resolver = read("src/lib/tenantLogoUrl.ts");
+  assert.match(resolver, /export function resolveTenantLogoUrl/);
+  assert.match(resolver, /canonicalStoredTenantLogo/);
+  assert.match(resolver, /\/storage\/public\?bucket=/);
   assert.equal(resolveTenantLogoUrl("", "/prep"), null);
   const branding = read("src/components/settings/TenantBrandingSettings.tsx");
   const settings = read("src/components/white-label/WhiteLabelSettings.tsx");

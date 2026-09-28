@@ -19,11 +19,26 @@ export const EMAIL_PREVIEW_SOURCE_PINS = {
 
 export const EMAIL_PREVIEW_MOUNT_FILE = 'src/components/settings/TenantBrandingSettings.tsx';
 
-export const R4A_LOGO_RESOLVER_PINS = {
+/** Historical byte pins. Resolver contract is marker-based so persist-path repairs can land. */
+export const HISTORICAL_R4A_LOGO_RESOLVER_PINS = {
   'src/lib/tenantLogoUrl.ts':
     '4a7d568ba509c7913d1ceb19e7dca1ac8e980cae2749a2ca9f1ef18cd65f41b5',
   'src/components/branding/TenantLogo.tsx':
     'aff9c277cbbffcab018c0bf0959a7a6018e5bb6e56552cc880b28cfa0a498371',
+};
+
+export const R4A_LOGO_RESOLVER_PINS = HISTORICAL_R4A_LOGO_RESOLVER_PINS;
+
+export const R4A_LOGO_RESOLVER_MARKERS = {
+  'src/lib/tenantLogoUrl.ts': [
+    'export function resolveTenantLogoUrl',
+    '/storage/public?bucket=',
+    'tenant-logos',
+    'canonicalStoredTenantLogo',
+  ],
+  'src/components/branding/TenantLogo.tsx': [
+    'resolveTenantLogoUrl',
+  ],
 };
 
 export const ACCEPTED_PRODUCTION_SPA = {
@@ -294,10 +309,22 @@ export const assertEmailPreviewSourcePins = (root) => {
   } else {
     errors.push(...assertPreviewMount(fs.readFileSync(mountPath, 'utf8')).errors);
   }
-  for (const [rel, expected] of Object.entries(R4A_LOGO_RESOLVER_PINS)) {
+  for (const [rel, markers] of Object.entries(R4A_LOGO_RESOLVER_MARKERS)) {
     const filePath = path.join(root, rel);
-    const hash = sha256File(filePath);
-    if (hash !== expected) errors.push(`${rel} hash ${hash} != accepted R4A pin ${expected}`);
+    if (!fs.existsSync(filePath)) {
+      errors.push(`accepted R4A resolver file missing: ${rel}`);
+      continue;
+    }
+    const src = fs.readFileSync(filePath, 'utf8');
+    for (const marker of markers) {
+      if (!src.includes(marker)) errors.push(`${rel} missing R4A contract marker: ${marker}`);
+    }
+    if (rel.endsWith('TenantLogo.tsx')) {
+      const hash = sha256File(filePath);
+      if (hash !== HISTORICAL_R4A_LOGO_RESOLVER_PINS[rel]) {
+        errors.push(`${rel} hash ${hash} != accepted TenantLogo pin ${HISTORICAL_R4A_LOGO_RESOLVER_PINS[rel]}`);
+      }
+    }
   }
   return errors.length ? fail(errors) : ok();
 };

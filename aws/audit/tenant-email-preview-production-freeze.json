@@ -54,7 +54,16 @@
     ]
   },
   "preserved_r4a_logo_resolver": {
-    "src/lib/tenantLogoUrl.ts": "4a7d568ba509c7913d1ceb19e7dca1ac8e980cae2749a2ca9f1ef18cd65f41b5",
+    "contract_not_whole_file_hash": true,
+    "src/lib/tenantLogoUrl.ts": {
+      "historical_hash": "4a7d568ba509c7913d1ceb19e7dca1ac8e980cae2749a2ca9f1ef18cd65f41b5",
+      "required_markers": [
+        "export function resolveTenantLogoUrl",
+        "/storage/public?bucket=",
+        "tenant-logos",
+        "canonicalStoredTenantLogo"
+      ]
+    },
     "src/components/branding/TenantLogo.tsx": "aff9c277cbbffcab018c0bf0959a7a6018e5bb6e56552cc880b28cfa0a498371",
     "missing_logo_fallback": "null / displayName text"
   },

@@ -59,11 +59,11 @@ test('Branding Settings hero matches the other Settings tab pattern', () => {
 
 test('Save Branding / company branding payloads omit the rejected columns', () => {
   assert.match(adminBrandingTab, /Save Branding/);
-  assert.match(adminBrandingTab, /save\(\{ logo_url: logoUrl \|\| null, primary_color: primary \}\)/);
+  assert.match(adminBrandingTab, /save\(\{ logo_url: canonicalStoredTenantLogo\(logoUrl\), primary_color: primary \}\)/);
   assert.equal(/save\(\{[^}]*secondary_color/.test(adminBrandingTab), false);
 
   assert.match(tenantSave, /primary_color: primaryColor/);
-  assert.match(tenantSave, /logo_url: logoUrl \|\| null/);
+  assert.match(tenantSave, /logo_url: canonicalStoredTenantLogo\(logoUrl\)/);
   assert.doesNotMatch(tenantSave, /secondary_color/);
   assert.doesNotMatch(tenantSave, /invoice_accent_color/);
   assert.doesNotMatch(tenantSave, /invoice_theme/);

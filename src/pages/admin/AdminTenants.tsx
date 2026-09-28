@@ -38,6 +38,7 @@ import { TenantProBadgeManagement } from "@/components/settings/TenantProBadgeMa
 import { TenantProvider } from "@/contexts/TenantContext";
 import { tenantMoovDefaults } from "@/lib/payments/tenantMoovDefaults";
 import { MonthlyTenantBillingPanel } from "@/components/admin/MonthlyTenantBillingPanel";
+import { canonicalStoredTenantLogo, resolveTenantLogoUrl } from "@/lib/tenantLogoUrl";
 import { invokeTenantBillingAdmin } from "@/lib/billing/tenantBilling";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -531,8 +532,7 @@ function BrandingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Ten
       const path = `${tenant.id}/${Date.now()}.${ext}`;
       const { error: uploadError } = await supabase.storage.from("tenant-logos").upload(path, file, { upsert: true });
       if (uploadError) throw uploadError;
-      const { data: urlData } = supabase.storage.from("tenant-logos").getPublicUrl(path);
-      setLogoUrl(urlData.publicUrl);
+      setLogoUrl(path);
       toast({ title: "Logo uploaded", description: "Click Save Branding to apply." });
     } catch (e: any) {
       toast({ title: "Upload failed", description: e.message, variant: "destructive" });
@@ -563,7 +563,7 @@ function BrandingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Ten
           />
           {logoUrl ? (
             <div className="flex items-center gap-3 rounded border border-border bg-muted/30 p-2">
-              <img src={logoUrl} alt="Logo" className="h-12 max-w-[160px] object-contain rounded bg-white p-1" onError={(e) => (e.currentTarget.style.display = "none")} />
+              <img src={resolveTenantLogoUrl(logoUrl) || ""} alt="Logo" className="h-12 max-w-[160px] object-contain rounded bg-white p-1" onError={(e) => (e.currentTarget.style.display = "none")} />
               <div className="flex gap-2">
                 <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
                   {uploading ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Upload className="w-3 h-3 mr-1" />} Replace
@@ -599,7 +599,7 @@ function BrandingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Ten
             <Input value={primary} onChange={(e) => setPrimary(e.target.value)} />
           </div>
         </div>
-        <Button onClick={() => save({ logo_url: logoUrl || null, primary_color: primary })} disabled={saving || uploading}>
+        <Button onClick={() => save({ logo_url: canonicalStoredTenantLogo(logoUrl), primary_color: primary })} disabled={saving || uploading}>
           {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Save Branding
         </Button>
     </SectionCard>

@@ -73,3 +73,66 @@ export function rewriteTenantLogoUrl(value: unknown, explicitApiBase?: string): 
   if (typeof value !== "string") return value;
   return resolveTenantLogoUrl(value, explicitApiBase) ?? value;
 }
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const SAFE_SEGMENT = /^[A-Za-z0-9._-]+$/;
+
+const twoSegmentObjectPath = (raw: string): string | null => {
+  let objectPath = raw.replace(/^\/+/, "");
+  if (!objectPath || objectPath.includes("..") || objectPath.includes("://") || objectPath.includes("?") || objectPath.includes("#")) {
+    return null;
+  }
+  objectPath = objectPath.replace(/^files\//, "");
+  if (objectPath.startsWith("tenant-logos/")) objectPath = objectPath.slice("tenant-logos/".length);
+  const parts = objectPath.split("/").filter(Boolean);
+  if (parts.length !== 2) return null;
+  if (parts.some((seg) => !SAFE_SEGMENT.test(seg))) return null;
+  return parts.join("/");
+};
+
+const isAwsPublicStorageLogoUrl = (value: string): boolean => {
+  try {
+    const url = value.startsWith("http") ? new URL(value) : value.startsWith("/") ? new URL(value, "https://checksops.com") : null;
+    if (!url || !url.pathname.includes("/storage/public")) return false;
+    return url.searchParams.get("bucket") === "tenant-logos" && Boolean(url.searchParams.get("path"));
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Persist rule for tenants.logo_url after AWS upload/save.
+ * Relative object path or /prep/storage/public?... → `<tenant-id>/<file>`.
+ * Legitimate external HTTPS (C1C Supabase, CDN) is kept unchanged.
+ */
+export function canonicalStoredTenantLogo(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (isAwsPublicStorageLogoUrl(trimmed)) {
+    try {
+      const url = trimmed.startsWith("http") ? new URL(trimmed) : new URL(trimmed, "https://checksops.com");
+      return twoSegmentObjectPath(url.searchParams.get("path") || "");
+    } catch {
+      return null;
+    }
+  }
+  if (!trimmed.includes("://") && !trimmed.startsWith("/storage/public")) {
+    return twoSegmentObjectPath(trimmed);
+  }
+  if (/^https:\/\//i.test(trimmed) && !trimmed.includes("/storage/public?")) {
+    try {
+      const url = new URL(trimmed);
+      if (url.username || url.password) return null;
+      return trimmed;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+export function isCanonicalRelativeTenantLogo(value: string | null | undefined): boolean {
+  const path = typeof value === "string" ? twoSegmentObjectPath(value.trim()) : null;
+  return Boolean(path && UUID_RE.test(path.split("/")[0]));
+}
