@@ -2,21 +2,19 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { invoice } from '../functions/api/providers/parity/moov-onboard.mjs';
 import { resetMoovTokenCache, withMoovContext } from '../functions/api/providers/parity/moov-client.mjs';
-
-const FREEDOM = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
-const FREEDOM_PROD = '60922058-7eca-4889-81dd-5720d7b9de96';
-const PLATFORM = '41cb5d67-4911-4bef-aad5-d8ee9c582208';
-const STAGING_TENANT = 'a2c0fbfe-e8c5-42dc-bc32-2c4edf8f2074';
-const STAGING_ACCOUNT = '11111111-2222-4333-8444-555555555555';
-
-const accountRow = (tenantId, environment, providerAccountId) => ({
-  tenant_id: tenantId,
-  provider: 'moov',
-  environment,
-  provider_account_id: providerAccountId,
-  onboarding_status: 'verified',
-  can_receive_payments: true,
-});
+import {
+  FREEDOM,
+  FREEDOM_PROD,
+  PLATFORM,
+  STAGING_ACCOUNT,
+  STAGING_TENANT,
+  accountRow,
+  ctxOf,
+  fakeInvoiceClient,
+  invoiceStore,
+  recordingFetch,
+  sandboxMoovCtx,
+} from './invoice-test-harness.mjs';
 
 const fakeClient = (rows) => ({
   query: async (sql, params) => {
@@ -27,42 +25,7 @@ const fakeClient = (rows) => ({
   },
 });
 
-const ctxOf = (tenantId, environment) => ({
-  tenantId,
-  environment,
-  isAdmin: false,
-  moovContext: { sandboxPlatformAccountId: PLATFORM, productionPlatformAccountId: PLATFORM },
-});
-
 const lineItems = [{ name: 'INV1 fixture', unit_price: 1, quantity: 1 }];
-
-const recordingFetch = () => {
-  const calls = [];
-  const fetchImpl = async (url, init = {}) => {
-    const href = String(url);
-    calls.push({ url: href, method: init.method || 'GET', body: init.body || null });
-    const payload = href.includes('/oauth2/token')
-      ? { access_token: 'fixture-token', expires_in: 3600 }
-      : { invoiceID: 'inv-fixture', status: 'draft' };
-    const text = JSON.stringify(payload);
-    return {
-      ok: true,
-      status: 200,
-      json: async () => payload,
-      text: async () => text,
-      headers: { get: () => null },
-    };
-  };
-  return { calls, fetchImpl };
-};
-
-const sandboxMoovCtx = (fetchImpl) => ({
-  environment: 'sandbox',
-  sandboxPublicKey: 'pk_sandbox',
-  sandboxSecretKey: 'sk_sandbox',
-  sandboxOrigin: 'https://checksops.com',
-  fetchImpl,
-});
 
 test('production Freedom invoice preflight uses production merchant account', async () => {
   const result = await invoice.run({
@@ -131,9 +94,17 @@ for (const action of ['create', 'create_and_send']) {
   test(`${action} posts to the tenant merchant account, not platform`, async () => {
     resetMoovTokenCache();
     const { calls, fetchImpl } = recordingFetch();
+    const store = invoiceStore({ accounts: [accountRow(STAGING_TENANT, 'sandbox', STAGING_ACCOUNT)] });
     const result = await withMoovContext(sandboxMoovCtx(fetchImpl), () => invoice.run({
-      client: fakeClient([accountRow(STAGING_TENANT, 'sandbox', STAGING_ACCOUNT)]),
-      body: { action, tenant_id: STAGING_TENANT, line_items: lineItems },
+      client: fakeInvoiceClient(store),
+      body: {
+        action,
+        tenant_id: STAGING_TENANT,
+        customer_name: 'INV1 Fixture Co',
+        customer_email: 'inv1@example.test',
+        customer_type: 'business',
+        line_items: lineItems,
+      },
       ctx: ctxOf(STAGING_TENANT, 'sandbox'),
       fetchImpl,
     }));
@@ -145,5 +116,7 @@ for (const action of ['create', 'create_and_send']) {
     assert.match(invoicePosts[0].url, new RegExp(`/accounts/${STAGING_ACCOUNT}/invoices`));
     assert.doesNotMatch(invoicePosts[0].url, new RegExp(PLATFORM));
     assert.doesNotMatch(invoicePosts[0].url, new RegExp(FREEDOM_PROD));
+    assert.equal(invoicePosts[0].body.customerAccountID, 'cust-1');
+    assert.equal(invoicePosts[0].body.customer, undefined);
   });
 }
