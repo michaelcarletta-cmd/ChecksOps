@@ -168,6 +168,26 @@ const persistFailed = (check, result, persistError) => ({
   approvedForDeposit: false,
 });
 
+export const updateOptionalClaimCheckStage = async (client, checkId) => {
+  const linked = await persistAutoAdvanceWrite(
+    client,
+    `SELECT id FROM public.claim_checks WHERE check_intake_item_id = $1::uuid LIMIT 1`,
+    [checkId],
+    { statement: 'SELECT claim_checks', table: 'claim_checks' },
+  );
+  if (!linked.rowCount) {
+    return { skipped: true, rowCount: 0 };
+  }
+  return persistAutoAdvanceWrite(
+    client,
+    `UPDATE public.claim_checks
+     SET check_stage = 'ready_for_deposit', updated_at = now()
+     WHERE check_intake_item_id = $1::uuid`,
+    [checkId],
+    { statement: 'UPDATE claim_checks', table: 'claim_checks' },
+  );
+};
+
 const canWriteTenant = async (client, tenantId) => {
   if (!tenantId) return false;
   const ok = (await safeQuery(
@@ -441,14 +461,7 @@ export const applyAutoAdvanceIfEligible = async (client, checkId, result, { offi
           [checkId],
           { statement: 'UPDATE check_intake_items', table: 'check_intake_items' },
         );
-        await persistAutoAdvanceWrite(
-          client,
-          `UPDATE public.claim_checks
-           SET check_stage = 'ready_for_deposit', updated_at = now()
-           WHERE check_intake_item_id = $1::uuid`,
-          [checkId],
-          { statement: 'UPDATE claim_checks', table: 'claim_checks' },
-        );
+        await updateOptionalClaimCheckStage(client, checkId);
       } catch (error) {
         return persistFailed(check, result, error.persistError || classifyPersistFailure(error, {
           statement: 'UPDATE check_intake_items',
@@ -480,14 +493,7 @@ export const applyAutoAdvanceIfEligible = async (client, checkId, result, { offi
       [checkId],
       { statement: 'UPDATE check_intake_items', table: 'check_intake_items' },
     );
-    await persistAutoAdvanceWrite(
-      client,
-      `UPDATE public.claim_checks
-       SET check_stage = 'ready_for_deposit', updated_at = now()
-       WHERE check_intake_item_id = $1::uuid`,
-      [checkId],
-      { statement: 'UPDATE claim_checks', table: 'claim_checks' },
-    );
+    await updateOptionalClaimCheckStage(client, checkId);
     await persistAutoAdvanceWrite(
       client,
       `INSERT INTO public.check_audit_log (

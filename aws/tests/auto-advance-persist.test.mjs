@@ -145,8 +145,11 @@ test('successful persist writes status stage recommendation and audit', async ()
         check.deposit_recommendation = 'ready_for_deposit';
         return { rows: [check], rowCount: 1 };
       }
-      if (/UPDATE public.claim_checks/.test(compact)) {
+      if (/FROM public.claim_checks/.test(compact) && !/UPDATE/.test(compact)) {
         return { rows: [], rowCount: 0 };
+      }
+      if (/UPDATE public.claim_checks/.test(compact)) {
+        throw new Error('claim_checks UPDATE must be skipped when no linked row exists');
       }
       if (/INSERT INTO public.check_audit_log/.test(compact)) {
         return { rows: [], rowCount: 1 };
@@ -163,7 +166,7 @@ test('successful persist writes status stage recommendation and audit', async ()
   assert.equal(check.check_stage, 'ready_for_deposit');
   assert.equal(check.deposit_recommendation, 'ready_for_deposit');
   assert.equal(captured.some((row) => /INSERT INTO public.check_audit_log/.test(row.sql)), true);
-  assert.equal(captured.some((row) => /UPDATE public.claim_checks/.test(row.sql)), true);
+  assert.equal(captured.some((row) => /UPDATE public.claim_checks/.test(row.sql)), false);
 });
 
 test('missing optional claim_checks row does not abort intake persist', async () => {
@@ -180,8 +183,11 @@ test('missing optional claim_checks row does not abort intake persist', async ()
         check.deposit_recommendation = 'ready_for_deposit';
         return { rows: [check], rowCount: 1 };
       }
-      if (/UPDATE public.claim_checks/.test(compact)) {
+      if (/FROM public.claim_checks/.test(compact) && !/UPDATE/.test(compact)) {
         return { rows: [], rowCount: 0 };
+      }
+      if (/UPDATE public.claim_checks/.test(compact)) {
+        throw new Error('claim_checks UPDATE must be skipped when no linked row exists');
       }
       if (/INSERT INTO public.check_audit_log/.test(compact)) {
         return { rows: [], rowCount: 1 };
@@ -209,11 +215,13 @@ test('failure rolls back later persist statements', async () => {
       if (/UPDATE public.check_intake_items/.test(compact)) {
         return { rows: [], rowCount: 1 };
       }
+      if (/FROM public.claim_checks/.test(compact) && !/UPDATE/.test(compact)) {
+        return { rows: [{ id: 'claim-check-1' }], rowCount: 1 };
+      }
       if (/UPDATE public.claim_checks/.test(compact)) {
-        const error = new Error('permission denied for column check_stage');
+        const error = new Error('permission denied for table claim_checks');
         error.code = '42501';
         error.table = 'claim_checks';
-        error.column = 'check_stage';
         throw error;
       }
       return { rows: [], rowCount: 0 };
