@@ -17,6 +17,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DOCUMENT_TYPE_OPTIONS, SIGNER_DISPLAY_TEMPLATES, getFieldTemplateKey } from "@/lib/signer-display-templates";
 import { useDocumentPresets } from "@/hooks/useDocumentPresets";
+import {
+  DESKTOP_COMPOSER_DOCX_WIDTH,
+  DESKTOP_COMPOSER_PAGE_WIDTH,
+  clampPercentField,
+  clientPointToPercent,
+  defaultFieldSizePercent,
+  displayPageWidth,
+  looksLikePercentField,
+  toPersistedPercentField,
+} from "@/lib/signature-field-coordinates";
 
 // Set up PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -47,6 +57,8 @@ interface FieldPlacementEditorProps {
 
 export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, signerCount }: FieldPlacementEditorProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
+  const pageHostRef = useRef<HTMLDivElement>(null);
+  const [displayWidth, setDisplayWidth] = useState<number | null>(null);
   const [fields, setFields] = useState<Field[]>([]);
   const [activeTool, setActiveTool] = useState<"signature" | "date" | "text" | "checkbox" | null>(null);
   const [currentSignerIndex, setCurrentSignerIndex] = useState(0);
@@ -57,7 +69,7 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
   // PDF state
   const [numPages, setNumPages] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageWidth, setPageWidth] = useState(600);
+  const [pageWidth, setPageWidth] = useState(DESKTOP_COMPOSER_PAGE_WIDTH);
   const [pageHeight, setPageHeight] = useState(800);
   
   // Save template dialog state
@@ -146,6 +158,22 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
 
   const isDocxMode = !!docxData;
 
+  useEffect(() => {
+    const el = pageHostRef.current;
+    if (!el) return;
+    const update = () => {
+      const measured = displayPageWidth(
+        el.clientWidth,
+        isDocxMode ? DESKTOP_COMPOSER_DOCX_WIDTH : DESKTOP_COMPOSER_PAGE_WIDTH,
+      );
+      setDisplayWidth(measured);
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [isDocxMode, documentUrl, docxHtml, isLoading]);
+
   // Save template mutation
   const saveTemplateMutation = useMutation({
     mutationFn: async () => {
@@ -154,7 +182,7 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
         .insert([{
           name: templateName,
           description: templateDescription,
-          field_data: fields as any,
+          field_data: fields.map((field) => toPersistedPercentField(field)) as any,
         }]);
       if (error) throw error;
     },
@@ -203,37 +231,43 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
     if ((e.target as HTMLElement).closest('.field-indicator')) return;
     if ((e.target as HTMLElement).closest('.field-picker')) return;
 
-    const rect = overlayRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const point = clientPointToPercent(e.clientX, e.clientY, overlayRef.current.getBoundingClientRect());
 
     if (activeTool) {
-      addField(activeTool, x, y);
+      addField(activeTool, point.x, point.y);
       setActiveTool(null);
     } else {
-      setPendingClickPos({ x, y });
+      setPendingClickPos(point);
     }
+  };
+
+  const overlaySize = () => {
+    const rect = overlayRef.current?.getBoundingClientRect();
+    return {
+      width: rect?.width || displayWidth || pageWidth || DESKTOP_COMPOSER_PAGE_WIDTH,
+      height: rect?.height || pageHeight || 800,
+    };
   };
 
   const addField = (type: "signature" | "date" | "text" | "checkbox", x: number, y: number) => {
     const fieldId = `${type}-${Date.now()}`;
-    const width = type === "signature" ? 150 : type === "checkbox" ? 20 : type === "date" ? 100 : 120;
-    const height = type === "signature" ? 50 : type === "checkbox" ? 20 : 25;
+    const size = overlaySize();
+    const defaults = defaultFieldSizePercent(type, size.width, size.height);
 
-    const newField: Field = {
+    const newField: Field = clampPercentField({
       id: fieldId,
       type,
       x,
       y,
-      width,
-      height,
+      width: defaults.width,
+      height: defaults.height,
       label: type === "signature" ? `Signature ${currentSignerIndex + 1}` :
              type === "date" ? "Date" : 
              type === "checkbox" ? "Checkbox" : "Text Field",
       required: true,
       signerIndex: currentSignerIndex,
       page: currentPage,
-    };
+    });
 
     const updatedFields = [...fields, newField];
     setFields(updatedFields);
@@ -248,61 +282,66 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
     }
   };
 
-  const handleFieldMouseDown = (e: React.MouseEvent, fieldId: string) => {
+  const handleFieldPointerDown = (e: React.PointerEvent, fieldId: string) => {
     e.preventDefault();
     e.stopPropagation();
-    
+    if (activeTool) return;
+
     const field = fields.find(f => f.id === fieldId);
-    if (!field) return;
-    
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    if (!field || !overlayRef.current) return;
+
+    const pos = clientPointToPercent(e.clientX, e.clientY, overlayRef.current.getBoundingClientRect());
     setDragOffset({
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
+      x: pos.x - field.x,
+      y: pos.y - field.y,
     });
     setDraggingField(fieldId);
   };
 
-  // Use document-level listeners for reliable drag/resize tracking
+  // Use document-level listeners so mouse and touch drags stay on the page
   useEffect(() => {
-    const handleDocMouseMove = (e: MouseEvent) => {
+    const handleDocPointerMove = (e: PointerEvent) => {
       if (!overlayRef.current) return;
       if (!draggingField && !resizingField) return;
 
       const rect = overlayRef.current.getBoundingClientRect();
 
       if (resizingField) {
-        const newWidth = Math.max(20, e.clientX - rect.left - resizeStart.x + resizeStart.width);
-        const newHeight = Math.max(15, e.clientY - rect.top - resizeStart.y + resizeStart.height);
+        const dw = ((e.clientX - resizeStart.x) / (rect.width || 1)) * 100;
+        const dh = ((e.clientY - resizeStart.y) / (rect.height || 1)) * 100;
         setFields(prev => prev.map(f =>
-          f.id === resizingField ? { ...f, width: newWidth, height: newHeight } : f
+          f.id === resizingField
+            ? clampPercentField({ ...f, width: resizeStart.width + dw, height: resizeStart.height + dh })
+            : f
         ));
         return;
       }
 
       if (draggingField) {
-        const newX = Math.max(0, e.clientX - rect.left - dragOffset.x);
-        const newY = Math.max(0, e.clientY - rect.top - dragOffset.y);
+        const pos = clientPointToPercent(e.clientX, e.clientY, rect);
         setFields(prev => prev.map(f =>
-          f.id === draggingField ? { ...f, x: newX, y: newY } : f
+          f.id === draggingField
+            ? clampPercentField({ ...f, x: pos.x - dragOffset.x, y: pos.y - dragOffset.y })
+            : f
         ));
       }
     };
 
-    const handleDocMouseUp = () => {
+    const handleDocPointerUp = () => {
       if (draggingField || resizingField) {
         wasDraggingRef.current = true;
         setDraggingField(null);
         setResizingField(null);
-        // onFieldsChange will be called via the effect below
       }
     };
 
-    document.addEventListener('mousemove', handleDocMouseMove);
-    document.addEventListener('mouseup', handleDocMouseUp);
+    document.addEventListener('pointermove', handleDocPointerMove);
+    document.addEventListener('pointerup', handleDocPointerUp);
+    document.addEventListener('pointercancel', handleDocPointerUp);
     return () => {
-      document.removeEventListener('mousemove', handleDocMouseMove);
-      document.removeEventListener('mouseup', handleDocMouseUp);
+      document.removeEventListener('pointermove', handleDocPointerMove);
+      document.removeEventListener('pointerup', handleDocPointerUp);
+      document.removeEventListener('pointercancel', handleDocPointerUp);
     };
   }, [draggingField, resizingField, dragOffset, resizeStart]);
 
@@ -313,27 +352,19 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
     }
   }, [draggingField, resizingField]);
 
-  // Convert pixel coordinates to percentages (0-100) relative to overlay size
-  const emitFieldsAsPercentages = useCallback((pixelFields: Field[]) => {
-    const overlay = overlayRef.current;
-    if (!overlay || pixelFields.length === 0) {
-      onFieldsChange(pixelFields.length === 0 ? [] : pixelFields);
+  // Persist the existing 0-100 document model. Display scale must not change this.
+  const emitFieldsAsPercentages = useCallback((nextFields: Field[]) => {
+    if (nextFields.length === 0) {
+      onFieldsChange([]);
       return;
     }
-    const rect = overlay.getBoundingClientRect();
-    const ow = rect.width || 600;
-    const oh = rect.height || 800;
-    const converted = pixelFields.map(f => ({
-      ...f,
-      x: parseFloat(((f.x / ow) * 100).toFixed(4)),
-      y: parseFloat(((f.y / oh) * 100).toFixed(4)),
-      width: parseFloat(((f.width / ow) * 100).toFixed(4)),
-      height: parseFloat(((f.height / oh) * 100).toFixed(4)),
-    }));
-    onFieldsChange(converted);
+    const size = overlayRef.current?.getBoundingClientRect();
+    onFieldsChange(nextFields.map((field) => (
+      toPersistedPercentField(field, size?.width, size?.height)
+    )));
   }, [onFieldsChange]);
 
-  const handleResizeMouseDown = (e: React.MouseEvent, fieldId: string) => {
+  const handleResizePointerDown = (e: React.PointerEvent, fieldId: string) => {
     e.preventDefault();
     e.stopPropagation();
 
@@ -341,8 +372,8 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
     if (!field || !overlayRef.current) return;
 
     setResizeStart({
-      x: field.x,
-      y: field.y,
+      x: e.clientX,
+      y: e.clientY,
       width: field.width,
       height: field.height,
     });
@@ -362,29 +393,18 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
     toast({ title: "All fields cleared" });
   };
 
-  // Load template — templates are stored in percentages, convert back to pixels for display
-  const pixelsFromPercent = useCallback((percentFields: Field[]): Field[] => {
-    const overlay = overlayRef.current;
-    const ow = overlay ? overlay.getBoundingClientRect().width : 600;
-    const oh = overlay ? overlay.getBoundingClientRect().height : 800;
-    return percentFields.map(f => ({
-      ...f,
-      x: (f.x / 100) * ow,
-      y: (f.y / 100) * oh,
-      width: (f.width / 100) * ow,
-      height: (f.height / 100) * oh,
-    }));
-  }, []);
-
   const loadTemplate = (templateId: string) => {
     const template = templates?.find(t => t.id === templateId);
     if (!template) return;
 
     clearAllFields();
     const templateFields = (Array.isArray(template.field_data) ? template.field_data : []) as unknown as Field[];
-    // Templates may be in percentages — check if values look like percentages (< 100)
-    const looksLikePercent = templateFields.length > 0 && templateFields.every(f => f.x <= 100 && f.y <= 100);
-    const displayFields = looksLikePercent ? pixelsFromPercent(templateFields) : templateFields;
+    const size = overlaySize();
+    const displayFields = templateFields.map((field) => (
+      looksLikePercentField(field)
+        ? toPersistedPercentField(field)
+        : toPersistedPercentField(field, size.width, size.height)
+    ));
     setFields(displayFields);
     emitFieldsAsPercentages(displayFields);
     toast({ title: `Template "${template.name}" loaded` });
@@ -428,13 +448,13 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-2">
+    <div className="space-y-3 sm:space-y-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <Label>Place Fields on Document</Label>
         <div className="flex gap-2 flex-wrap">
           {/* Load Template */}
           <Select value={selectedTemplateId} onValueChange={(id) => { setSelectedTemplateId(id); loadTemplate(id); }}>
-            <SelectTrigger className="w-[200px]">
+            <SelectTrigger className="w-full min-w-0 sm:w-[200px]">
               <SelectValue placeholder="Load template..." />
             </SelectTrigger>
             <SelectContent>
@@ -519,7 +539,7 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
               setSelectedDocType(docType);
               applyDocTypeLabels(docType);
             }}>
-              <SelectTrigger className="w-[200px]">
+              <SelectTrigger className="w-full min-w-0 sm:w-[200px]">
                 <SelectValue placeholder="Apply label template..." />
               </SelectTrigger>
               <SelectContent>
@@ -534,39 +554,43 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
         </div>
       </div>
 
-      <Card className="p-4">
-        {/* Tool buttons */}
-        <div className="flex gap-2 mb-4 flex-wrap">
+      <Card className="p-3 sm:p-4">
+        {/* Tool buttons — compact 2-column toolbar on phones */}
+        <div className="grid grid-cols-2 gap-2 mb-3 sm:mb-4 sm:flex sm:flex-wrap">
           <Button
             variant={activeTool === "signature" ? "default" : "outline"}
             size="sm"
+            className="h-9 text-xs sm:text-sm"
             onClick={() => setActiveTool(activeTool === "signature" ? null : "signature")}
           >
-            <Pencil className="w-4 h-4 mr-2" />
+            <Pencil className="w-4 h-4 mr-1.5 sm:mr-2" />
             Add Signature
           </Button>
           <Button
             variant={activeTool === "date" ? "default" : "outline"}
             size="sm"
+            className="h-9 text-xs sm:text-sm"
             onClick={() => setActiveTool(activeTool === "date" ? null : "date")}
           >
-            <Calendar className="w-4 h-4 mr-2" />
+            <Calendar className="w-4 h-4 mr-1.5 sm:mr-2" />
             Add Date
           </Button>
           <Button
             variant={activeTool === "text" ? "default" : "outline"}
             size="sm"
+            className="h-9 text-xs sm:text-sm"
             onClick={() => setActiveTool(activeTool === "text" ? null : "text")}
           >
-            <Type className="w-4 h-4 mr-2" />
+            <Type className="w-4 h-4 mr-1.5 sm:mr-2" />
             Add Text
           </Button>
           <Button
             variant={activeTool === "checkbox" ? "default" : "outline"}
             size="sm"
+            className="h-9 text-xs sm:text-sm"
             onClick={() => setActiveTool(activeTool === "checkbox" ? null : "checkbox")}
           >
-            <CheckSquare className="w-4 h-4 mr-2" />
+            <CheckSquare className="w-4 h-4 mr-1.5 sm:mr-2" />
             Add Checkbox
           </Button>
         </div>
@@ -579,7 +603,7 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
 
         {/* Page navigation */}
         {numPages > 1 && (
-          <div className="flex items-center justify-center gap-4 mb-4">
+          <div className="flex items-center justify-center gap-2 mb-3 sm:gap-4 sm:mb-4">
             <Button
               variant="outline"
               size="sm"
@@ -587,7 +611,7 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
               disabled={currentPage <= 1}
             >
               <ChevronLeft className="w-4 h-4" />
-              Previous
+              <span className="hidden sm:inline">Previous</span>
             </Button>
             <span className="text-sm">
               Page {currentPage} of {numPages}
@@ -604,21 +628,29 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
           </div>
         )}
 
-        {/* Document rendering with overlay */}
-        <div className="border rounded overflow-auto bg-muted/30 flex justify-center p-4">
-          {isLoading && (
-            <div className="flex items-center justify-center h-96 w-full">
-              <p className="text-muted-foreground">Loading document...</p>
-            </div>
-          )}
-          
-          <div className="relative inline-block">
+        {/* Document rendering with overlay — page width follows the host, aspect stays native */}
+        <div className="border rounded overflow-x-hidden bg-muted/30 p-2 sm:p-4">
+          <div
+            ref={pageHostRef}
+            className={`relative mx-auto w-full min-w-0 ${isDocxMode ? "max-w-[650px]" : "max-w-[600px]"}`}
+          >
+            {isLoading && (
+              <div className="flex items-center justify-center h-48 w-full sm:h-96">
+                <p className="text-muted-foreground">Loading document...</p>
+              </div>
+            )}
+
             {/* DOCX rendered as HTML */}
             {isDocxMode && docxHtml && (
               <div
                 ref={docxContainerRef}
                 className="bg-white text-black shadow-md docx-preview"
-                style={{ width: 650, minHeight: 800, padding: '48px 56px', boxSizing: 'border-box' }}
+                style={{
+                  width: "100%",
+                  maxWidth: DESKTOP_COMPOSER_DOCX_WIDTH,
+                  padding: "clamp(16px, 6vw, 48px) clamp(16px, 7vw, 56px)",
+                  boxSizing: "border-box",
+                }}
                 dangerouslySetInnerHTML={{ __html: docxHtml }}
               />
             )}
@@ -630,12 +662,12 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
                 onLoadSuccess={onDocumentLoadSuccess}
                 onLoadError={onDocumentLoadError}
                 loading={
-                  <div className="flex items-center justify-center h-96 w-full max-w-[600px]">
+                  <div className="flex items-center justify-center h-48 w-full sm:h-96">
                     <p className="text-muted-foreground">Loading PDF...</p>
                   </div>
                 }
                 error={
-                  <div className="flex flex-col items-center justify-center h-96 w-full max-w-[600px] bg-muted/20 border rounded">
+                  <div className="flex flex-col items-center justify-center h-48 w-full bg-muted/20 border rounded sm:h-96">
                     <p className="text-muted-foreground mb-4">Could not load PDF preview</p>
                     <Button variant="outline" onClick={() => window.open(documentUrl, '_blank')}>
                       Open PDF in New Tab
@@ -643,13 +675,17 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
                   </div>
                 }
               >
-                <Page
-                  pageNumber={currentPage}
-                  width={600}
-                  onLoadSuccess={onPageLoadSuccess}
-                  renderTextLayer={false}
-                  renderAnnotationLayer={false}
-                />
+                {displayWidth ? (
+                  <Page
+                    pageNumber={currentPage}
+                    width={displayWidth}
+                    onLoadSuccess={onPageLoadSuccess}
+                    renderTextLayer={false}
+                    renderAnnotationLayer={false}
+                  />
+                ) : (
+                  <div className="h-48 w-full" />
+                )}
               </Document>
             )}
             
@@ -657,26 +693,26 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
             {(!isLoading && (isDocxMode ? docxHtml : !isDocxMode)) && (
               <div
                 ref={overlayRef}
-                className={`absolute inset-0 ${draggingField ? 'cursor-grabbing' : activeTool ? 'cursor-crosshair' : 'cursor-pointer'}`}
+                className={`absolute inset-0 ${draggingField || resizingField ? "cursor-grabbing touch-none" : activeTool ? "cursor-crosshair" : "cursor-pointer"}`}
                 onClick={handleOverlayClick}
               >
                 {/* Render field indicators for current page */}
                 {fields.filter(f => f.page === currentPage).map((field) => (
                   <div
                     key={field.id}
-                    className={`field-indicator absolute border-2 border-dashed flex items-center justify-center text-xs font-bold select-none ${
+                    className={`field-indicator absolute border-2 border-dashed flex items-center justify-center text-[10px] sm:text-xs font-bold select-none touch-none ${
                       draggingField === field.id || resizingField === field.id ? 'opacity-70' : ''
                     } ${!activeTool ? 'cursor-move' : ''}`}
                     style={{
-                      left: field.x,
-                      top: field.y,
-                      width: field.width,
-                      height: field.height,
+                      left: `${field.x}%`,
+                      top: `${field.y}%`,
+                      width: `${field.width}%`,
+                      height: `${field.height}%`,
                       borderColor: colors[field.type],
                       backgroundColor: colors[field.type] + "33",
                       color: colors[field.type],
                     }}
-                    onMouseDown={(e) => !activeTool && handleFieldMouseDown(e, field.id)}
+                    onPointerDown={(e) => handleFieldPointerDown(e, field.id)}
                     onDoubleClick={(e) => {
                       e.stopPropagation();
                       removeField(field.id);
@@ -685,11 +721,11 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
                     {field.type === "checkbox" ? "☐" : field.label}
                     {/* Resize handle */}
                     <div
-                      className="absolute bottom-0 right-0 w-3 h-3 cursor-se-resize bg-current opacity-50 hover:opacity-100"
+                      className="absolute bottom-0 right-0 w-4 h-4 sm:w-3 sm:h-3 cursor-se-resize bg-current opacity-50 hover:opacity-100"
                       style={{ 
                         clipPath: 'polygon(100% 0, 100% 100%, 0 100%)',
                       }}
-                      onMouseDown={(e) => handleResizeMouseDown(e, field.id)}
+                      onPointerDown={(e) => handleResizePointerDown(e, field.id)}
                     />
                   </div>
                 ))}
@@ -697,10 +733,10 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
                 {/* Field type picker popup */}
                 {pendingClickPos && (
                   <div 
-                    className="field-picker absolute bg-popover border rounded-lg shadow-lg p-2 z-50"
+                    className="field-picker absolute bg-popover border rounded-lg shadow-lg p-2 z-50 max-w-[11rem]"
                     style={{ 
-                      left: Math.min(pendingClickPos.x, 450), 
-                      top: pendingClickPos.y 
+                      left: `min(${pendingClickPos.x}%, calc(100% - 11rem))`,
+                      top: `${pendingClickPos.y}%`,
                     }}
                   >
                     <div className="text-xs text-muted-foreground mb-2">Select field type:</div>

@@ -532,7 +532,7 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
               Request Signature
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-4xl max-h-[90vh] min-w-0 overflow-x-hidden overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Create Signature Request - Step {currentStep} of 3</DialogTitle>
               <DialogDescription>
@@ -698,8 +698,8 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
               </div>
             )}
 
-            <DialogFooter>
-              <div className="flex justify-between w-full">
+            <DialogFooter className="sticky bottom-0 z-10 bg-background pt-2">
+              <div className="flex justify-between w-full gap-2">
                 <div>
                   {currentStep > 1 && (
                     <Button
