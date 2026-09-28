@@ -17,6 +17,7 @@ import {
   scopes,
 } from './moov-client.mjs';
 import { fail, jsonResult } from './caller.mjs';
+import { failClosedMissingAccount, requireMoovProviderEnvironment } from './moov-provider-env.mjs';
 import { sendViaSesOrSink } from '../../email.mjs';
 import { renderTransactionalTemplate } from '../../email-templates.mjs';
 import { emailAssetOrigin, resolveEmailBranding } from '../../email-branding.mjs';
@@ -1097,10 +1098,26 @@ const INVOICE_API_VERSION = 'v2026.07.00';
 
 export const invoice = {
   run: async ({ client, body, ctx, fetchImpl }) => {
-    const account = await loadMoovAccount(client, ctx.tenantId, 'sandbox');
-    if (!account?.provider_account_id) return fail('Set up your payment account first.', 409);
+    const envRes = requireMoovProviderEnvironment(ctx);
+    if (!envRes.ok) {
+      return fail(envRes.message || envRes.error, envRes.statusCode || 503, { error: envRes.error });
+    }
+    const account = await loadMoovAccount(client, ctx.tenantId, envRes.environment);
+    const missing = failClosedMissingAccount(account, envRes.environment);
+    if (missing) return fail(missing.message || missing.error, missing.statusCode, { error: missing.error });
     const accountId = account.provider_account_id;
     const action = body.action || 'create';
+    if (action === 'preflight') {
+      return jsonResult({
+        success: true,
+        preflight: true,
+        tenant_id: ctx.tenantId,
+        environment: envRes.environment,
+        merchantAccountId: accountId,
+        liveProviderCalled: false,
+        apiVersion: INVOICE_API_VERSION,
+      });
+    }
     if (action === 'list') {
       const data = await moovFetch(`/accounts/${accountId}/invoices`, {
         scopes: [`/accounts/${accountId}/invoices.read`], apiVersion: INVOICE_API_VERSION, fetchImpl,
