@@ -532,10 +532,12 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
               Request Signature
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-4xl max-h-[90vh] min-w-0 overflow-x-hidden overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Create Signature Request - Step {currentStep} of 3</DialogTitle>
-              <DialogDescription>
+          <DialogContent className="w-[calc(100%-2rem)] max-w-4xl max-h-[90vh] min-w-0 overflow-x-hidden overflow-y-auto p-4 sm:p-6">
+            <DialogHeader className="min-w-0 space-y-1.5 pr-8 text-left">
+              <DialogTitle className="text-base leading-snug break-words sm:text-lg">
+                Create Signature Request - Step {currentStep} of 3
+              </DialogTitle>
+              <DialogDescription className="text-left">
                 {currentStep === 1 && "Select a document source"}
                 {currentStep === 2 && "Place signature and date fields on the document"}
                 {currentStep === 3 && "Configure signers"}
@@ -544,7 +546,7 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
 
             {/* Step 1: Source Selection */}
             {currentStep === 1 && (
-              <div className="space-y-4">
+              <div className="min-w-0 space-y-4">
                 <div>
                   <Label>Document Source</Label>
                   <Select value={sourceType} onValueChange={(v) => { setSourceType(v as any); setSelectedTemplate(null); setSelectedClaimFile(null); setUploadedFile(null); }}>
@@ -646,17 +648,17 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
 
             {/* Step 3: Signer Configuration */}
             {currentStep === 3 && (
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <Label>Signers (in order)</Label>
-                  <Button type="button" variant="outline" size="sm" onClick={addSigner}>
+              <div className="min-w-0 space-y-3">
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                  <Label className="min-w-0">Signers (in order)</Label>
+                  <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={addSigner}>
                     <Plus className="w-3 h-3 mr-1" />
                     Add Signer
                   </Button>
                 </div>
                 {signers.map((signer, index) => (
-                  <div key={index} className="flex gap-2 items-start">
-                    <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div key={index} className="flex min-w-0 items-start gap-2">
+                    <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-3">
                       <Input
                         placeholder="Name"
                         value={signer.name}
@@ -698,12 +700,13 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
               </div>
             )}
 
-            <DialogFooter className="sticky bottom-0 z-10 bg-background pt-2">
-              <div className="flex justify-between w-full gap-2">
-                <div>
+            <DialogFooter className="sticky bottom-0 z-10 min-w-0 bg-background pt-2">
+              <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex w-full min-w-0 sm:w-auto">
                   {currentStep > 1 && (
                     <Button
                       variant="outline"
+                      className="w-full sm:w-auto"
                       onClick={() => setCurrentStep((currentStep - 1) as 1 | 2 | 3)}
                     >
                       <ChevronLeft className="w-4 h-4 mr-2" />
@@ -711,9 +714,10 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
                     </Button>
                   )}
                 </div>
-                <div className="flex gap-2">
+                <div className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:flex-row sm:justify-end">
                   {currentStep === 1 && sourceType === "template" && (
                     <Button
+                      className="w-full sm:w-auto"
                       onClick={() => generateDocumentMutation.mutate()}
                       disabled={!selectedTemplate || generateDocumentMutation.isPending}
                     >
@@ -732,6 +736,7 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
                   )}
                   {currentStep === 1 && sourceType === "claim_file" && (
                     <Button
+                      className="w-full sm:w-auto"
                       onClick={() => useClaimFileMutation.mutate()}
                       disabled={!selectedClaimFile || useClaimFileMutation.isPending}
                     >
@@ -750,6 +755,7 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
                   )}
                   {currentStep === 1 && sourceType === "upload" && (
                     <Button
+                      className="w-full sm:w-auto"
                       onClick={() => uploadFileMutation.mutate()}
                       disabled={!uploadedFile || uploadFileMutation.isPending}
                     >
@@ -767,7 +773,7 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
                     </Button>
                   )}
                   {currentStep === 2 && (
-                    <Button onClick={() => setCurrentStep(3)}>
+                    <Button className="w-full sm:w-auto" onClick={() => setCurrentStep(3)}>
                       Next
                       <ChevronRight className="w-4 h-4 ml-2" />
                     </Button>
@@ -776,6 +782,7 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
                     <>
                       <Button
                         variant="outline"
+                        className="w-full sm:w-auto"
                         onClick={() => createRequestMutation.mutate({ skipEmail: true })}
                         disabled={signers.some(s => !s.name || !s.email) || createRequestMutation.isPending}
                       >
@@ -783,6 +790,7 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
                         Generate Link Only
                       </Button>
                       <Button
+                        className="w-full sm:w-auto"
                         onClick={() => createRequestMutation.mutate({ skipEmail: false })}
                         disabled={signers.some(s => !s.name || !s.email) || createRequestMutation.isPending}
                       >

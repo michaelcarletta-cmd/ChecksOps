@@ -152,6 +152,22 @@ test("composer uses display scale and percent internals without changing /sign o
   assert.match(sign, /x: f\.x/);
 });
 
+test("wizard Step 3 stacks footer actions and wraps the title on phones", () => {
+  const wizard = readFileSync("src/components/claim-detail/SignatureRequests.tsx", "utf8");
+  assert.match(wizard, /w-\[calc\(100%-2rem\)\]/);
+  assert.match(wizard, /pr-8/);
+  assert.match(wizard, /break-words/);
+  assert.match(wizard, /flex-wrap items-center justify-between/);
+  assert.match(wizard, /Add Signer/);
+  assert.match(wizard, /Generate Link Only/);
+  assert.match(wizard, /Send for Signature/);
+  assert.match(wizard, /flex-col gap-2 sm:flex-row sm:items-center sm:justify-between/);
+  assert.match(wizard, /flex-col gap-2 sm:w-auto sm:flex-row sm:justify-end/);
+  assert.match(wizard, /className="w-full sm:w-auto"/);
+  assert.match(wizard, /Select a file from claim\/check files/);
+  assert.match(wizard, /displayPageWidth|FieldPlacementEditor/);
+});
+
 function roundish(value: number) {
   return parseFloat(value.toFixed(4));
 }
