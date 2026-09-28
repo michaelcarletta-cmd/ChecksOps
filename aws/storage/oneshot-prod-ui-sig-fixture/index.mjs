@@ -542,6 +542,8 @@ export const handler = async (event = {}) => {
         [already.claim_id],
       )).rows[0] || null;
       const ids = { claimId: already.claim_id, checkId: already.check_id, tokenId: token?.id };
+      const isolation = await isolationFor(client, ids);
+      const real = (rows) => (rows || []).filter((row) => !row._error && !row._note);
       return {
         ok: true,
         action,
@@ -550,9 +552,13 @@ export const handler = async (event = {}) => {
         session,
         gates,
         authorized_email: authorized.email,
+        search_name: LABEL,
+        claim_number: CLAIM_NUMBER,
+        check_number: CHECK_NUMBER,
         fixture: already,
         token_id: token?.id || null,
-        isolation: await isolationFor(client, ids),
+        isolation,
+        isolation_gate: isolationOk(isolation),
         baseline: {
           claim_id: already.claim_id,
           check_id: already.check_id,
@@ -562,8 +568,19 @@ export const handler = async (event = {}) => {
           check_stage: already.check_stage,
           claim_status: already.claim_status,
           amount: already.amount,
-          ...(await countsFor(client, ids)),
+          signature_request_count: real(isolation.signature_requests).length,
+          signed_attachment_count: real(isolation.check_files).filter((row) => row.signature_request_id).length,
+          billing_event_count: real(isolation.check_billing_events).length,
+          deposit_count: real(isolation.deposit_items).length,
+          disbursement_count: 0,
+          payment_transfer_count: real(isolation.payment_transfers).length,
+          provider_operation_count: real(isolation.provider_ops).length,
+          mortgage_handling_request_count: real(isolation.mortgage_handling_requests).length,
+          financial_operation_count: real(isolation.financial_ops).length,
+          homeowner_ledger_event_count: real(isolation.homeowner_ledger_events).length,
+          check_file_count: real(isolation.check_files).length,
         },
+        pdf_attached: false,
         created: false,
       };
     }
