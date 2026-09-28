@@ -177,6 +177,8 @@ const createFixture = async (client) => {
     push('status', 'endorsements_in_progress');
     push('check_stage', 'endorsing');
     push('check_source', 'insurance');
+    push('front_image_path', 'ui-sig-checkfile-staging/DO-NOT-PROCESS-NO-IMAGE.txt');
+    push('payee_line', null);
     const typed = cols.map((name, i) => {
       if (name === 'tenant_id' || name === 'claim_id') return `$${i + 1}::uuid`;
       if (name === 'amount') return `$${i + 1}::numeric`;
@@ -344,6 +346,7 @@ export const handler = async (event = {}) => {
         const cols = ['tenant_id', 'claim_id', 'check_number', 'amount'];
         const vals = [FREEDOM_TENANT_ID, fixture.claim_id, OTHER_CHECK_NUMBER, 0];
         if (names.has('status')) { cols.push('status'); vals.push('needs_review'); }
+        if (names.has('front_image_path')) { cols.push('front_image_path'); vals.push('ui-sig-checkfile-staging/DO-NOT-PROCESS-NO-IMAGE.txt'); }
         const typed = cols.map((name, i) => (
           name === 'tenant_id' || name === 'claim_id' ? `$${i + 1}::uuid` : name === 'amount' ? `$${i + 1}::numeric` : `$${i + 1}`
         ));
