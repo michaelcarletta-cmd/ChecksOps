@@ -189,6 +189,22 @@ export const resolveClaims = async (event) => {
   return { ok: true, claims };
 };
 
+/**
+ * COMMIT of an aborted PostgreSQL transaction completes as ROLLBACK
+ * without throwing. Treat that as failure so HTTP success cannot outlive
+ * a rolled-back write.
+ */
+export const commitWriteTransaction = async (client) => {
+  const committed = await client.query('COMMIT');
+  const tag = String(committed?.command || 'COMMIT').toUpperCase();
+  if (tag === 'ROLLBACK') {
+    const error = new Error('transaction_not_committed');
+    error.code = 'TRANSACTION_NOT_COMMITTED';
+    throw error;
+  }
+  return committed;
+};
+
 export const withIdentity = async (event, fn, deps = {}) => {
   const claimsResult = await resolveClaims(event);
   if (!claimsResult.ok) return claimsResult;
@@ -233,8 +249,21 @@ export const withIdentity = async (event, fn, deps = {}) => {
     const result = await fn({ client, mapping, claims: claimsResult.claims, body, spoof });
     const status = Number(result?.statusCode || (result?.ok === false ? 400 : 200));
     if (commit && result?.ok !== false && status < 400) {
-      await client.query('COMMIT');
-      didCommit = true;
+      try {
+        await commitWriteTransaction(client);
+        didCommit = true;
+      } catch {
+        if (client && !didCommit) {
+          try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+        }
+        return {
+          ok: false,
+          statusCode: 503,
+          error: 'transaction_not_committed',
+          message: 'Write transaction did not commit',
+          spoofFieldsIgnored: spoof,
+        };
+      }
     } else {
       await client.query('ROLLBACK');
     }

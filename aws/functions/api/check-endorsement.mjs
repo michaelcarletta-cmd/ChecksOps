@@ -131,6 +131,43 @@ const safeQuery = async (client, sql, params = []) => {
   }
 };
 
+export const classifyPersistFailure = (error, meta = {}) => ({
+  statement: meta.statement || null,
+  table: meta.table || error?.table || null,
+  column: error?.column || null,
+  constraint: error?.constraint || null,
+  schema: error?.schema || null,
+  code: error?.code || null,
+  message: sanitizePublicError(error).slice(0, 300),
+  transactionState: 'aborted',
+});
+
+export const persistAutoAdvanceWrite = async (client, sql, params, meta) => {
+  try {
+    return await client.query(sql, params);
+  } catch (error) {
+    const persistError = classifyPersistFailure(error, meta);
+    const wrapped = new Error(persistError.message);
+    wrapped.code = persistError.code;
+    wrapped.persistError = persistError;
+    throw wrapped;
+  }
+};
+
+const persistFailed = (check, result, persistError) => ({
+  ...result,
+  ok: false,
+  statusCode: 503,
+  success: false,
+  error: 'auto_advance_persist_failed',
+  persistError,
+  depositAdvanceDenied: true,
+  advance_check_on_endorsement_complete: 'persist_failed',
+  newStatus: check?.status || null,
+  readyForDeposit: false,
+  approvedForDeposit: false,
+});
+
 const canWriteTenant = async (client, tenantId) => {
   if (!tenantId) return false;
   const ok = (await safeQuery(
@@ -355,26 +392,35 @@ export const applyAutoAdvanceIfEligible = async (client, checkId, result, { offi
         advance_check_on_endorsement_complete: 'already_ready',
       };
     }
-    await safeQuery(
-      client,
-      `UPDATE public.check_intake_items
-       SET status = 'branch_deposit_required', updated_at = now()
-       WHERE id = $1::uuid
-         AND deposited_at IS NULL
-         AND status IS DISTINCT FROM 'deposited'`,
-      [checkId],
-    );
-    await safeQuery(
-      client,
-      `INSERT INTO public.check_audit_log (
-         check_id, event_type, event_description, event_data, tenant_id
-       ) VALUES (
-         $1::uuid, 'all_endorsements_complete',
-         'All endorsements complete — routed to branch deposit workflow',
-         $2::jsonb, $3::uuid
-       )`,
-      [checkId, JSON.stringify({ deposit_path: 'branch_deposit_required' }), check.tenant_id || null],
-    );
+    try {
+      await persistAutoAdvanceWrite(
+        client,
+        `UPDATE public.check_intake_items
+         SET status = 'branch_deposit_required', updated_at = now()
+         WHERE id = $1::uuid
+           AND deposited_at IS NULL
+           AND status IS DISTINCT FROM 'deposited'`,
+        [checkId],
+        { statement: 'UPDATE check_intake_items', table: 'check_intake_items' },
+      );
+      await persistAutoAdvanceWrite(
+        client,
+        `INSERT INTO public.check_audit_log (
+           check_id, event_type, event_description, event_data, tenant_id
+         ) VALUES (
+           $1::uuid, 'all_endorsements_complete',
+           'All endorsements complete — routed to branch deposit workflow',
+           $2::jsonb, $3::uuid
+         )`,
+        [checkId, JSON.stringify({ deposit_path: 'branch_deposit_required' }), check.tenant_id || null],
+        { statement: 'INSERT check_audit_log', table: 'check_audit_log' },
+      );
+    } catch (error) {
+      return persistFailed(check, result, error.persistError || classifyPersistFailure(error, {
+        statement: 'UPDATE check_intake_items',
+        table: 'check_intake_items',
+      }));
+    }
     return { ...result, ...allowDepositAdvance('branch_deposit_required') };
   }
 
@@ -382,24 +428,33 @@ export const applyAutoAdvanceIfEligible = async (client, checkId, result, { offi
     && String(check.deposit_recommendation || '') === 'ready_for_deposit';
   if (alreadyReady) {
     if (String(check.check_stage || '') !== 'ready_for_deposit') {
-      await safeQuery(
-        client,
-        `UPDATE public.check_intake_items
-         SET check_stage = 'ready_for_deposit', updated_at = now()
-         WHERE id = $1::uuid
-           AND deposited_at IS NULL
-           AND status IS DISTINCT FROM 'deposited'
-           AND status IS DISTINCT FROM 'voided'
-           AND status IS DISTINCT FROM 'loss_draft_required'`,
-        [checkId],
-      );
-      await safeQuery(
-        client,
-        `UPDATE public.claim_checks
-         SET check_stage = 'ready_for_deposit', updated_at = now()
-         WHERE check_intake_item_id = $1::uuid`,
-        [checkId],
-      );
+      try {
+        await persistAutoAdvanceWrite(
+          client,
+          `UPDATE public.check_intake_items
+           SET check_stage = 'ready_for_deposit', updated_at = now()
+           WHERE id = $1::uuid
+             AND deposited_at IS NULL
+             AND status IS DISTINCT FROM 'deposited'
+             AND status IS DISTINCT FROM 'voided'
+             AND status IS DISTINCT FROM 'loss_draft_required'`,
+          [checkId],
+          { statement: 'UPDATE check_intake_items', table: 'check_intake_items' },
+        );
+        await persistAutoAdvanceWrite(
+          client,
+          `UPDATE public.claim_checks
+           SET check_stage = 'ready_for_deposit', updated_at = now()
+           WHERE check_intake_item_id = $1::uuid`,
+          [checkId],
+          { statement: 'UPDATE claim_checks', table: 'claim_checks' },
+        );
+      } catch (error) {
+        return persistFailed(check, result, error.persistError || classifyPersistFailure(error, {
+          statement: 'UPDATE check_intake_items',
+          table: 'check_intake_items',
+        }));
+      }
     }
     return {
       ...result,
@@ -408,47 +463,57 @@ export const applyAutoAdvanceIfEligible = async (client, checkId, result, { offi
     };
   }
 
-  await safeQuery(
-    client,
-    `UPDATE public.check_intake_items
-     SET status = 'approved_for_deposit',
-         deposit_recommendation = 'ready_for_deposit',
-         check_stage = 'ready_for_deposit',
-         updated_at = now()
-     WHERE id = $1::uuid
-       AND deposited_at IS NULL
-       AND status IS DISTINCT FROM 'deposited'
-       AND status IS DISTINCT FROM 'voided'
-       AND status IS DISTINCT FROM 'loss_draft_required'
-       AND check_stage IS DISTINCT FROM 'loss_draft'`,
-    [checkId],
-  );
-  await safeQuery(
-    client,
-    `UPDATE public.claim_checks
-     SET check_stage = 'ready_for_deposit', updated_at = now()
-     WHERE check_intake_item_id = $1::uuid`,
-    [checkId],
-  );
-  await safeQuery(
-    client,
-    `INSERT INTO public.check_audit_log (
-       check_id, event_type, event_description, event_data, tenant_id
-     ) VALUES (
-       $1::uuid, 'all_endorsements_complete',
-       'All endorsements complete — ready for deposit',
-       $2::jsonb, $3::uuid
-     )`,
-    [
-      checkId,
-      JSON.stringify({
-        status: 'approved_for_deposit',
-        deposit_recommendation: 'ready_for_deposit',
-        check_stage: 'ready_for_deposit',
-      }),
-      check.tenant_id || null,
-    ],
-  );
+  try {
+    await persistAutoAdvanceWrite(
+      client,
+      `UPDATE public.check_intake_items
+       SET status = 'approved_for_deposit',
+           deposit_recommendation = 'ready_for_deposit',
+           check_stage = 'ready_for_deposit',
+           updated_at = now()
+       WHERE id = $1::uuid
+         AND deposited_at IS NULL
+         AND status IS DISTINCT FROM 'deposited'
+         AND status IS DISTINCT FROM 'voided'
+         AND status IS DISTINCT FROM 'loss_draft_required'
+         AND check_stage IS DISTINCT FROM 'loss_draft'`,
+      [checkId],
+      { statement: 'UPDATE check_intake_items', table: 'check_intake_items' },
+    );
+    await persistAutoAdvanceWrite(
+      client,
+      `UPDATE public.claim_checks
+       SET check_stage = 'ready_for_deposit', updated_at = now()
+       WHERE check_intake_item_id = $1::uuid`,
+      [checkId],
+      { statement: 'UPDATE claim_checks', table: 'claim_checks' },
+    );
+    await persistAutoAdvanceWrite(
+      client,
+      `INSERT INTO public.check_audit_log (
+         check_id, event_type, event_description, event_data, tenant_id
+       ) VALUES (
+         $1::uuid, 'all_endorsements_complete',
+         'All endorsements complete — ready for deposit',
+         $2::jsonb, $3::uuid
+       )`,
+      [
+        checkId,
+        JSON.stringify({
+          status: 'approved_for_deposit',
+          deposit_recommendation: 'ready_for_deposit',
+          check_stage: 'ready_for_deposit',
+        }),
+        check.tenant_id || null,
+      ],
+      { statement: 'INSERT check_audit_log', table: 'check_audit_log' },
+    );
+  } catch (error) {
+    return persistFailed(check, result, error.persistError || classifyPersistFailure(error, {
+      statement: 'UPDATE check_intake_items',
+      table: 'check_intake_items',
+    }));
+  }
   return { ...result, ...allowDepositAdvance('approved_for_deposit') };
 };
 
@@ -874,6 +939,23 @@ export const runAuthenticatedEndorsement = async ({
       refreshOfficialRear: false,
       compositeDeps,
     });
+    if (completion?.ok === false || completion?.error === 'auto_advance_persist_failed') {
+      return {
+        ok: false,
+        statusCode: Number(completion.statusCode || 503),
+        success: false,
+        action: 'finalize_existing_endorsements',
+        endorsementRowsMutated: false,
+        payeeRowsMutated: false,
+        providerSubmitted: false,
+        liveProviderCalled: false,
+        productionExecution: false,
+        ...completion,
+        ok: false,
+        success: false,
+        spoofFieldsIgnored: spoof,
+      };
+    }
     return {
       ok: true,
       statusCode: 200,
