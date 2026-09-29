@@ -75,12 +75,8 @@ const sqlClient = ({ memberships = {}, roles = {}, documents = {}, drafts = {}, 
       return { rows: requestsByCheck[params[0]] || [] };
     }
     if (/FROM public\.mortgage_handling_requests/.test(sql)) {
-      return { rows: params[0] === REQUEST_A ? [{ id: REQUEST_A, tenant_id: TENANT_A, claim_id: CLAIM_A, status: 'completed', assigned_employee_id: AGENT, billing_status: 'unbilled', billed_at: null, flat_fee_cents: null, mortgage_company: 'Test Mortgage' }] : [] };
+      return { rows: params[0] === REQUEST_A ? [{ id: REQUEST_A, tenant_id: TENANT_A, claim_id: CLAIM_A, assigned_employee_id: AGENT, billing_status: 'unbilled' }] : [] };
     }
-    if (/SELECT 1 FROM public\.mortgage_handling_requests/.test(String(sql).replace(/\s+/g, ' '))) return { rows: [] };
-    if (/INSERT INTO public\.platform_fee_line_items/.test(sql)) return { rows: [{ id: 'fee-1' }], rowCount: 1 };
-    if (/SELECT id FROM public\.platform_fee_line_items/.test(String(sql).replace(/\s+/g, ' '))) return { rows: [{ id: 'fee-1' }], rowCount: 1 };
-    if (/UPDATE public\.mortgage_handling_requests/.test(sql)) return { rows: [], rowCount: 1 };
     return { rows: [] };
   },
 });
@@ -94,7 +90,7 @@ test('tenant admins are not Mortgage Desk billing staff', () => {
   assert.equal(authorizedForMortgageBilling(['admin'], { is_platform: true }), true);
 });
 
-test('tenant admin cannot bill mortgage handling; assigned agent accrues usage without provider execution', async () => {
+test('tenant admin cannot bill mortgage handling; assigned agent and owner fail closed', async () => {
   const tenantAdmin = await runBillMortgageHandling({
     mapping: { application_user_id: ADMIN_A },
     body: { request_id: REQUEST_A },
@@ -104,6 +100,8 @@ test('tenant admin cannot bill mortgage handling; assigned agent accrues usage w
   assert.equal(tenantAdmin.statusCode, 403);
   assert.equal(tenantAdmin.error, 'not_authorized');
   assert.equal(tenantAdmin.billed, false);
+  assert.equal(tenantAdmin.platformFeeLineItemsWritten, false);
+  assert.equal(tenantAdmin.checkBillingEventsWritten, false);
 
   const agent = await runBillMortgageHandling({
     mapping: { application_user_id: AGENT },
@@ -111,9 +109,11 @@ test('tenant admin cannot bill mortgage handling; assigned agent accrues usage w
     spoof: {},
     client: sqlClient({ roles: { [AGENT]: ['mortgage_agent'] } }),
   });
-  assert.equal(agent.statusCode, 200);
-  assert.equal(agent.billed, true);
-  assert.equal(agent.flat_fee_cents, 1000);
+  assert.equal(agent.statusCode, 403);
+  assert.equal(agent.error, 'production_execution_blocked');
+  assert.equal(agent.billed, false);
+  assert.equal(agent.platformFeeLineItemsWritten, false);
+  assert.equal(agent.checkBillingEventsWritten, false);
   assert.equal(agent.liveStripeCalled, false);
   assert.equal(agent.liveMoovCalled, false);
   assert.equal(agent.providerExecution, false);
@@ -127,6 +127,8 @@ test('tenant admin cannot bill mortgage handling; assigned agent accrues usage w
   assert.equal(unrelated.statusCode, 403);
   assert.equal(unrelated.error, 'not_assigned_to_you');
   assert.equal(unrelated.billed, false);
+  assert.equal(unrelated.platformFeeLineItemsWritten, false);
+  assert.equal(unrelated.checkBillingEventsWritten, false);
   assert.equal(unrelated.liveStripeCalled, false);
   assert.equal(unrelated.liveMoovCalled, false);
   assert.equal(unrelated.providerExecution, false);
@@ -144,9 +146,11 @@ test('tenant admin cannot bill mortgage handling; assigned agent accrues usage w
     spoof: {},
     client: ownerClient,
   });
-  assert.equal(owner.statusCode, 200);
-  assert.equal(owner.billed, true);
-  assert.equal(owner.flat_fee_cents, 1000);
+  assert.equal(owner.statusCode, 403);
+  assert.equal(owner.error, 'production_execution_blocked');
+  assert.equal(owner.billed, false);
+  assert.equal(owner.platformFeeLineItemsWritten, false);
+  assert.equal(owner.checkBillingEventsWritten, false);
   assert.equal(owner.liveStripeCalled, false);
   assert.equal(owner.liveMoovCalled, false);
   assert.equal(owner.providerExecution, false);

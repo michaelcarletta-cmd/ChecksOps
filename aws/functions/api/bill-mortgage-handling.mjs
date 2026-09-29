@@ -1,12 +1,24 @@
 /**
- * Mortgage Desk usage billing bridge.
+ * Named bill-mortgage-handling handler. Always fail-closed.
  *
- * Records completed Mortgage Desk work as an unbilled platform fee line item.
- * It never calls Stripe/Moov and never moves money; the existing periodic Moov
- * fee rollup is responsible for collecting accrued platform fees.
+ * Accept-time AWS billing (check_billing_events mortgage_ops_initial /
+ * mortgage_ops_additional_check → monthly invoice → Collection V2) is
+ * authoritative. This Complete-time endpoint stays reachable as Class A so
+ * the Mortgage Desk UI can invoke it, but it must never create a second
+ * collectible fee.
+ *
+ * Does not write platform_fee_line_items or check_billing_events, call
+ * Stripe/Moov, or enable money movement.
+ *
+ * Authorization: Mortgage Desk staff (`mortgage_agent`) or platform owner.
+ * Tenant `user_roles.admin` is not a mortgage agent and cannot bill.
+ * Assigned-agent check is enforced for non-owners; an authorized Complete
+ * still returns production_execution_blocked.
  */
 import { withIdentityWrite } from './data.mjs';
 import { USER_ROLES_SQL } from './identity.mjs';
+import { financialPermissionsActivated, financialFlagSnapshot } from './financial-flags.mjs';
+import { denyProviderExecution, flagSnapshot, providerExecutionEnabled } from './provider-flags.mjs';
 
 const safeQuery = async (client, sql, params = []) => {
   try {
@@ -24,142 +36,63 @@ export const authorizedForMortgageBilling = (roles = [], owner = {}) => {
   return owner?.is_master === true || owner?.is_platform === true;
 };
 
-const denied = (spoof, extra) => ({
-  ok: false,
+const closed = (spoof, extra = {}) => ({
   liveStripeCalled: false,
   liveMoovCalled: false,
   providerExecution: false,
-  ...extra,
+  billed: false,
+  platformFeeLineItemsWritten: false,
+  checkBillingEventsWritten: false,
   spoofFieldsIgnored: spoof,
+  ...extra,
+});
+
+export const denyBillMortgageExecution = (spoof, requestId) => ({
+  ...denyProviderExecution('stripe', 'bill-mortgage-handling', {
+    error: 'production_execution_blocked',
+    message: 'Mortgage handling charges stay disabled. Stripe/Moov execution is not enabled. Accept-time check_billing_events remains the collectible ledger.',
+  }),
+  ...closed(spoof, { request_id: requestId || null }),
+  AWS_FINANCIAL_PERMISSIONS_ACTIVATED: financialPermissionsActivated(),
+  AWS_PROVIDER_EXECUTION_ENABLED: providerExecutionEnabled(),
+  flags: {
+    ...flagSnapshot(),
+    ...financialFlagSnapshot(),
+  },
 });
 
 export const runBillMortgageHandling = async ({ client, mapping, body, spoof }) => {
   const requestId = typeof body.request_id === 'string' ? body.request_id : null;
-  if (!requestId) return denied(spoof, { statusCode: 400, error: 'request_id required', billed: false });
+  if (!requestId) {
+    return closed(spoof, { ok: false, statusCode: 400, error: 'request_id required' });
+  }
 
   const roles = (await safeQuery(client, USER_ROLES_SQL, [mapping.application_user_id])).rows
     .map((row) => row.role);
   const owner = (await safeQuery(client, PLATFORM_OWNER_SQL)).rows[0] || {};
   if (!authorizedForMortgageBilling(roles, owner)) {
-    return denied(spoof, { statusCode: 403, error: 'not_authorized', billed: false, platformFeeLineItemsWritten: false });
+    return closed(spoof, { ok: false, statusCode: 403, error: 'not_authorized' });
   }
 
   const request = (await safeQuery(
     client,
-    `SELECT id, tenant_id, claim_id, status, assigned_employee_id, billing_status, billed_at,
-            flat_fee_cents, mortgage_company, mortgage_servicer
+    `SELECT id, tenant_id, assigned_employee_id, billing_status
        FROM public.mortgage_handling_requests
       WHERE id = $1::uuid
-      FOR UPDATE`,
+      LIMIT 1`,
     [requestId],
   )).rows[0];
 
   if (!request) {
-    return denied(spoof, { statusCode: 404, error: 'request_not_found', billed: false, platformFeeLineItemsWritten: false });
-  }
-  if (request.status !== 'completed') {
-    return denied(spoof, { statusCode: 409, error: 'request_not_completed', billed: false, platformFeeLineItemsWritten: false });
+    return closed(spoof, { ok: false, statusCode: 404, error: 'request_not_found' });
   }
 
   const isOwner = owner?.is_master === true || owner?.is_platform === true;
   if (!isOwner && request.assigned_employee_id !== mapping.application_user_id) {
-    return denied(spoof, { statusCode: 403, error: 'not_assigned_to_you', billed: false, platformFeeLineItemsWritten: false });
+    return closed(spoof, { ok: false, statusCode: 403, error: 'not_assigned_to_you' });
   }
 
-  if (request.billing_status === 'billed' && request.billed_at) {
-    return {
-      ok: true,
-      statusCode: 200,
-      request_id: requestId,
-      already_billed: true,
-      billed: true,
-      flat_fee_cents: Number(request.flat_fee_cents || 0),
-      platformFeeLineItemsWritten: false,
-      liveStripeCalled: false,
-      liveMoovCalled: false,
-      providerExecution: false,
-      spoofFieldsIgnored: spoof,
-    };
-  }
-
-  let feeCents = Number(request.flat_fee_cents || 0);
-  if (!(feeCents > 0)) {
-    let additional = false;
-    if (request.claim_id) {
-      const sibling = (await safeQuery(
-        client,
-        `SELECT 1
-           FROM public.mortgage_handling_requests
-          WHERE claim_id = $1::uuid
-            AND id <> $2::uuid
-            AND billing_status = 'billed'
-          LIMIT 1`,
-        [request.claim_id, requestId],
-      )).rows[0];
-      additional = !!sibling;
-    }
-    feeCents = additional ? 500 : 1000;
-  }
-
-  const company = request.mortgage_company || request.mortgage_servicer || 'mortgage company';
-  const sourceReference = `mortgage_handling:${requestId}`;
-  const inserted = await client.query(
-    `INSERT INTO public.platform_fee_line_items (
-       tenant_id, fee_code, description, quantity, unit_cents, amount_cents,
-       claim_id, status, source_reference, metadata
-     ) VALUES (
-       $1::uuid, 'mortgage_handling', $2::text, 1, $3::int, $3::int,
-       $4::uuid, 'unbilled', $5::text, $6::jsonb
-     )
-     ON CONFLICT (tenant_id, source_reference) WHERE source_reference IS NOT NULL
-     DO NOTHING
-     RETURNING id`,
-    [
-      request.tenant_id,
-      `Mortgage handling — ${company}`,
-      feeCents,
-      request.claim_id || null,
-      sourceReference,
-      JSON.stringify({ request_id: requestId, mortgage_company: request.mortgage_company || null }),
-    ],
-  );
-
-  const lineItemExists = inserted.rowCount > 0 || !!(await client.query(
-    `SELECT id FROM public.platform_fee_line_items
-      WHERE tenant_id = $1::uuid AND source_reference = $2::text
-      LIMIT 1`,
-    [request.tenant_id, sourceReference],
-  )).rows[0];
-
-  if (!lineItemExists) {
-    return denied(spoof, { statusCode: 500, error: 'usage_record_failed', billed: false, platformFeeLineItemsWritten: false });
-  }
-
-  await client.query(
-    `UPDATE public.mortgage_handling_requests
-        SET billing_status = 'billed',
-            billed_at = COALESCE(billed_at, now()),
-            flat_fee_cents = $2::int,
-            billing_error = NULL,
-            updated_at = now()
-      WHERE id = $1::uuid`,
-    [requestId, feeCents],
-  );
-
-  return {
-    ok: true,
-    statusCode: 200,
-    request_id: requestId,
-    already_billed: inserted.rowCount === 0,
-    billed: true,
-    flat_fee_cents: feeCents,
-    platformFeeLineItemsWritten: inserted.rowCount > 0,
-    source_reference: sourceReference,
-    liveStripeCalled: false,
-    liveMoovCalled: false,
-    providerExecution: false,
-    spoofFieldsIgnored: spoof,
-  };
+  return denyBillMortgageExecution(spoof, requestId);
 };
 
 export const handleBillMortgageHandling = (event, deps = {}) => (
