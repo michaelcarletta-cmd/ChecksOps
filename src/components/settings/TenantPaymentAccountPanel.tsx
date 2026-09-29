@@ -4,8 +4,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, RefreshCw, Link2, Copy, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
 
@@ -72,7 +70,7 @@ export function TenantPaymentAccountPanel({ tenantId, tenantName, isOpen, onClos
         supabase
           .from("tenants")
           .select(
-            "id, name, payment_provider, moov_account_id, moov_allowlisted, payment_status, bank_connection_status, bank_name, bank_last_four, last_sync",
+            "id, name, payment_provider, moov_account_id, payment_status, bank_connection_status, bank_name, bank_last_four, last_sync",
           )
           .eq("id", tenantId)
           .maybeSingle(),
@@ -105,18 +103,6 @@ export function TenantPaymentAccountPanel({ tenantId, tenantName, isOpen, onClos
   };
 
   const refresh = () => qc.invalidateQueries({ queryKey: ["tenant-payment-account", tenantId] });
-
-  const toggleAllowlist = useMutation({
-    mutationFn: async (next: boolean) => {
-      const { error } = await supabase.from("tenants").update({ moov_allowlisted: next } as any).eq("id", tenantId);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast({ title: "Updated" });
-      refresh();
-    },
-    onError: (e: any) => toast({ title: "Couldn't update", description: e.message, variant: "destructive" }),
-  });
 
   const createAccount = useMutation({
     mutationFn: () => invoke("moov-account-create", { tenant_id: tenantId }),
@@ -182,18 +168,6 @@ export function TenantPaymentAccountPanel({ tenantId, tenantName, isOpen, onClos
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="flex items-center justify-between rounded-md border p-3">
-              <div>
-                <Label className="text-sm">Payments enabled for this organization</Label>
-                <p className="text-xs text-muted-foreground">Allowlists them for the new payment rail.</p>
-              </div>
-              <Switch
-                checked={!!tenant.moov_allowlisted}
-                onCheckedChange={(v) => toggleAllowlist.mutate(v)}
-                disabled={toggleAllowlist.isPending}
-              />
-            </div>
-
             <div className="rounded-md border p-3 divide-y divide-border/60">
               <Row label="Provider account">
                 {acct?.provider_account_id ? (
