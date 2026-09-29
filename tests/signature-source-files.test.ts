@@ -103,6 +103,8 @@ test("Files tab remounts SignatureRequests and the wizard can select check files
   assert.match(files, /import \{ SignatureRequests \}/);
   assert.match(files, /<SignatureRequests/);
   assert.match(files, /checkIntakeItemId=\{checkIntakeItemId\}/);
+  assert.match(files, /\.select\("id, claim_id"\)/);
+  assert.doesNotMatch(files, /claims:claim_id/);
   assert.match(files, /signatureSourceFilesQueryKey/);
   assert.match(wizard, /signatureSourceFilesQueryKey/);
   assert.match(wizard, /mergeClaimAndCheckSignatureFiles/);

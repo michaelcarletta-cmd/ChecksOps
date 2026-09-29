@@ -74,23 +74,22 @@ export function CheckFilesSection({ checkIntakeItemId }: CheckFilesSectionProps)
     queryFn: async () => {
       const { data, error } = await supabase
         .from("check_intake_items")
-        .select("id, claim_id, claims:claim_id(id, claim_number, policyholder_name, policyholder_email)")
+        .select("id, claim_id")
         .eq("id", checkIntakeItemId)
         .maybeSingle();
       if (error) throw error;
       return data;
     },
   });
-  const nestedClaim = (checkClaim as any)?.claims || null;
-  const resolvedClaimId = nestedClaim?.id || (checkClaim as any)?.claim_id || null;
-  const linkedClaim = nestedClaim || (resolvedClaimId
+  const resolvedClaimId = checkClaim?.claim_id || null;
+  const linkedClaim = resolvedClaimId
     ? {
         id: resolvedClaimId,
         claim_number: null,
         policyholder_name: null,
         policyholder_email: null,
       }
-    : null);
+    : null;
 
   const handleUpload = async (fileList: FileList | null) => {
     if (!fileList?.length) return;
