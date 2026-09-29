@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'node:url';
-import { assumeCursorRole } from './cognito-staging-token.mjs';
+import { assumeCursorRole } from './lib/assume-cursor-role.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const AWS = process.env.AWS_CLI || '/usr/local/bin/aws';

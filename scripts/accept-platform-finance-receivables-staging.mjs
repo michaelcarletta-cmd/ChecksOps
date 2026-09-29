@@ -9,7 +9,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { assumeCursorRole } from './cognito-staging-token.mjs';
+import { assumeCursorRole } from './lib/assume-cursor-role.mjs';
 import {
   assembleReceivables,
   classifyPaymentStatus,

@@ -3,7 +3,7 @@
  * Deploy Platform Finance receivables SPA to staging only.
  */
 import { execFileSync } from 'node:child_process';
-import { assumeCursorRole } from './cognito-staging-token.mjs';
+import { assumeCursorRole } from './lib/assume-cursor-role.mjs';
 
 const AWS = process.env.AWS_CLI || '/usr/local/bin/aws';
 const REGION = 'us-east-1';
