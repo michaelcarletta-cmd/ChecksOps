@@ -16,6 +16,7 @@ const TENANT_B = '22222222-2222-4222-8222-222222222222';
 const OWNER_A = 'a1000000-0000-4000-8000-000000000001';
 const MEMBER_A = 'a1000000-0000-4000-8000-000000000002';
 const AGENT = 'a1000000-0000-4000-8000-000000000004';
+const OTHER_AGENT = 'a1000000-0000-4000-8000-000000000005';
 const ADMIN_A = 'a1000000-0000-4000-8000-000000000009';
 const DOC_A = 'b1000000-0000-4000-8000-000000000001';
 const REQUEST_A = 'c1000000-0000-4000-8000-000000000001';
@@ -116,6 +117,39 @@ test('tenant admin cannot bill mortgage handling; assigned agent accrues usage w
   assert.equal(agent.liveStripeCalled, false);
   assert.equal(agent.liveMoovCalled, false);
   assert.equal(agent.providerExecution, false);
+
+  const unrelated = await runBillMortgageHandling({
+    mapping: { application_user_id: OTHER_AGENT },
+    body: { request_id: REQUEST_A },
+    spoof: {},
+    client: sqlClient({ roles: { [OTHER_AGENT]: ['mortgage_agent'] } }),
+  });
+  assert.equal(unrelated.statusCode, 403);
+  assert.equal(unrelated.error, 'not_assigned_to_you');
+  assert.equal(unrelated.billed, false);
+  assert.equal(unrelated.liveStripeCalled, false);
+  assert.equal(unrelated.liveMoovCalled, false);
+  assert.equal(unrelated.providerExecution, false);
+
+  const ownerClient = sqlClient({ roles: { [OWNER_A]: [] } });
+  ownerClient.query = async (sql, params = []) => {
+    if (/is_master_owner|is_platform_owner/.test(sql)) {
+      return { rows: [{ is_master: true, is_platform: true }] };
+    }
+    return sqlClient({ roles: { [OWNER_A]: [] } }).query(sql, params);
+  };
+  const owner = await runBillMortgageHandling({
+    mapping: { application_user_id: OWNER_A },
+    body: { request_id: REQUEST_A },
+    spoof: {},
+    client: ownerClient,
+  });
+  assert.equal(owner.statusCode, 200);
+  assert.equal(owner.billed, true);
+  assert.equal(owner.flat_fee_cents, 1000);
+  assert.equal(owner.liveStripeCalled, false);
+  assert.equal(owner.liveMoovCalled, false);
+  assert.equal(owner.providerExecution, false);
 });
 
 test('library manage requires tenant owner/admin membership; agents and other tenants are denied', async () => {
