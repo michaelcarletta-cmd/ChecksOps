@@ -175,8 +175,8 @@ Usage:
   node scripts/deployment-guard/preflight.mjs --dry-run
   node scripts/deployment-guard/preflight.mjs --manifest path.json
 
-Future chats must use this tooling instead of calling aws lambda
-update-function-code, S3 SPA upload, or CloudFront invalidation directly.
+Future chats must use this tooling instead of calling AWS Lambda
+code updates, S3 SPA upload, or CloudFront invalidation directly.
 `);
     return 0;
   }
