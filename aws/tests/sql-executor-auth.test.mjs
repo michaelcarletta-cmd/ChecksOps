@@ -198,6 +198,26 @@ test('sql-apply receipt cannot authorize executor invoke', () => {
   assert.equal(refused.code, CODES.RECEIPT_MISMATCH);
 });
 
+test('official preflight forwards executor authorization fields', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-sql-pre-'));
+  const input = executorInput();
+  const file = path.join(dir, 'manifest.json');
+  fs.writeFileSync(file, `${JSON.stringify({ ...input, contract_results: { 'claim-ledger': { ok: true }, 'tenant-isolation': { ok: true }, 'financial-write-protections': { ok: true } } })}\n`);
+  const result = spawnSync(process.execPath, [
+    path.join(ROOT, 'scripts/deployment-guard/preflight.mjs'),
+    '--input', file,
+    '--environment', 'staging',
+    '--component', 'staging-sql',
+    '--type', 'sql-executor-invoke',
+    '--workstream-id', 'claim-ledger',
+    '--commit', AUTHORIZED_SQL44.commit,
+  ], { encoding: 'utf8', cwd: ROOT, env: { ...process.env, CHECKSOPS_DEPLOYMENT_GUARD_ROOT: dir } });
+  assert.equal(result.status, 0, result.stderr);
+  const parsed = JSON.parse(result.stdout);
+  assert.equal(parsed.ok, true, parsed.message);
+  assert.equal(parsed.details.evaluation.sql_executor_allowed, true);
+});
+
 test('unguarded sql-executor-invoke fails before AWS', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-sql-inv-'));
   const log = path.join(dir, 'aws-calls.log');
