@@ -3,7 +3,7 @@
  * Staff Cognito identity; SES/sink delivery; SHA-256 token hashes.
  * Does not call DocuSign/HelloSign/Lovable. Does not move money.
  */
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { withIdentityWrite } from './data.mjs';
 import { sendViaSesOrSink } from './email.mjs';
 import { resolveEmailBranding } from './email-branding.mjs';
@@ -117,14 +117,139 @@ const loadClaimsContext = async (client, request) => {
   return {};
 };
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const optionalUuid = (value) => {
+  if (value == null || value === '') return null;
+  const text = String(value);
+  return UUID_RE.test(text) ? text : null;
+};
+
+export const normalizeCreateSigners = (raw) => {
+  const list = Array.isArray(raw) ? raw : [];
+  return list.map((row, index) => ({
+    signer_name: String(row?.signer_name || row?.name || '').trim(),
+    signer_email: String(row?.signer_email || row?.email || '').trim(),
+    signer_type: String(row?.signer_type || row?.type || 'policyholder').trim() || 'policyholder',
+    signing_order: Number(row?.signing_order ?? row?.order ?? index + 1) || index + 1,
+  })).filter((row) => row.signer_name && row.signer_email);
+};
+
+const resolveCreateTenantId = async (client, { claimId, checkIntakeItemId }) => {
+  if (claimId) {
+    const claim = (await client.query(
+      `SELECT org_id AS tenant_id FROM public.claims WHERE id = $1::uuid LIMIT 1`,
+      [claimId],
+    )).rows[0];
+    if (claim?.tenant_id) return claim.tenant_id;
+  }
+  if (checkIntakeItemId) {
+    const intake = (await client.query(
+      `SELECT tenant_id FROM public.check_intake_items WHERE id = $1::uuid LIMIT 1`,
+      [checkIntakeItemId],
+    )).rows[0];
+    if (intake?.tenant_id) return intake.tenant_id;
+  }
+  return null;
+};
+
+/**
+ * Class A create branch. Inserts signature_requests + signature_signers and
+ * optionally links check_files. Does not use generic /data/write.
+ */
+export const createSignatureRequestRows = async ({ client, mapping, body, spoof }) => {
+  const claimId = optionalUuid(body.claim_id ?? body.claimId);
+  const checkIntakeItemId = optionalUuid(body.check_intake_item_id ?? body.checkIntakeItemId);
+  const documentName = String(body.document_name ?? body.documentName ?? '').trim();
+  const documentPath = String(body.document_path ?? body.documentPath ?? '').trim();
+  const documentType = String(body.document_type ?? body.documentType ?? '').trim() || null;
+  const fieldData = Array.isArray(body.field_data)
+    ? body.field_data
+    : (Array.isArray(body.fieldData) ? body.fieldData : []);
+  const signers = normalizeCreateSigners(body.signers);
+  if (!documentName || !documentPath) {
+    return { ok: false, statusCode: 400, error: 'document_name and document_path are required', spoofFieldsIgnored: spoof };
+  }
+  if (!claimId && !checkIntakeItemId) {
+    return { ok: false, statusCode: 400, error: 'claim_id or check_intake_item_id is required', spoofFieldsIgnored: spoof };
+  }
+  if (!signers.length) {
+    return { ok: false, statusCode: 400, error: 'at least one signer is required', spoofFieldsIgnored: spoof };
+  }
+
+  const tenantId = await resolveCreateTenantId(client, { claimId, checkIntakeItemId });
+  if (tenantId) {
+    const canWrite = (await client.query(
+      'SELECT public.aws_can_write_tenant($1::uuid) AS ok',
+      [tenantId],
+    )).rows[0]?.ok;
+    if (!canWrite) {
+      return { ok: false, statusCode: 403, error: 'forbidden', spoofFieldsIgnored: spoof };
+    }
+  }
+
+  const requestId = randomUUID();
+  const createdBy = optionalUuid(mapping?.application_user_id);
+  const inserted = (await client.query(
+    `INSERT INTO public.signature_requests (
+       id, claim_id, check_intake_item_id, document_name, document_path, document_type,
+       field_data, status, created_by
+     ) VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7::jsonb, 'draft', $8::uuid)
+     RETURNING *`,
+    [
+      requestId,
+      claimId,
+      checkIntakeItemId,
+      documentName,
+      documentPath,
+      documentType,
+      JSON.stringify(fieldData),
+      createdBy,
+    ],
+  )).rows[0];
+  if (!inserted) {
+    return { ok: false, statusCode: 500, error: 'failed_to_create_request', spoofFieldsIgnored: spoof };
+  }
+
+  for (const signer of signers) {
+    await client.query(
+      `INSERT INTO public.signature_signers (
+         id, signature_request_id, signer_name, signer_email, signer_type, signing_order, status, access_token
+       ) VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, 'pending', $7)`,
+      [
+        randomUUID(),
+        requestId,
+        signer.signer_name,
+        signer.signer_email,
+        signer.signer_type,
+        signer.signing_order,
+        generateRawToken(),
+      ],
+    );
+  }
+
+  if (checkIntakeItemId && documentPath) {
+    await client.query(
+      `UPDATE public.check_files
+       SET signature_request_id = $1::uuid
+       WHERE check_intake_item_id = $2::uuid AND file_path = $3`,
+      [requestId, checkIntakeItemId, documentPath],
+    );
+  }
+
+  return { ok: true, requestId, request: inserted, spoofFieldsIgnored: spoof };
+};
+
 export const runSendSignatureRequest = async ({
   client, mapping, body, spoof, send,
 }) => {
-  const requestId = body.requestId || body.request_id;
+  let requestId = body.requestId || body.request_id || null;
   const skipEmail = body.skipEmail === true;
   const senderOverride = body.senderOverride || body.sender_override || null;
   if (!requestId) {
-    return { ok: false, statusCode: 400, error: 'requestId is required', spoofFieldsIgnored: spoof };
+    const created = await createSignatureRequestRows({ client, mapping, body, spoof });
+    if (created.ok === false) return created;
+    requestId = created.requestId;
   }
 
   const request = (await client.query(
@@ -267,6 +392,7 @@ export const runSendSignatureRequest = async ({
     return {
       ok: true,
       statusCode: 200,
+      requestId,
       mode: 'manual_bypass',
       signerLinks,
       provider: 'aws_ses_or_sink',
@@ -339,6 +465,7 @@ export const runSendSignatureRequest = async ({
   return {
     ok: !allFailed,
     statusCode: allFailed ? 500 : 200,
+    requestId,
     mode: 'aws_ses_or_sink',
     results,
     sent: results.filter((row) => row.success).length,

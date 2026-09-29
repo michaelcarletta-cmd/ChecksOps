@@ -76,6 +76,7 @@ test('signature request uses shared layout and calls mailer once', async () => {
     ]),
   });
   assert.equal(result.ok, true);
+  assert.equal(result.requestId, REQUEST);
   assert.equal(sent.length, 1);
   assert.match(sent[0].html, /checksops-logo\.png/);
   assert.match(sent[0].html, /Review &amp; Sign Document|Review & Sign Document/);
