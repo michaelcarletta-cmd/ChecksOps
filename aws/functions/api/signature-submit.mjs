@@ -2,17 +2,305 @@
  * Public /public/signature-submit (Lovable submit-signature).
  * Token-hash lookup, consent, signer order, field validation.
  * Completes the request when every signer is signed. Does not call deposit RPCs.
+ *
+ * Live production baseline (2026-09-28T20:08:11, CodeSha256
+ * aU5OCyV4qm6057bFWDF2T9KEkZPVvmav4qoiFczpaCM=) plus stamp-in-place
+ * finalization. attachCompletedSignatureDocument no longer CopyObject's the
+ * original PDF.
  */
 import pg from 'pg';
+import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { parseBody, ignoredSpoof } from './data.mjs';
 import { loadDatabaseCredentials } from './secrets.mjs';
 import { buildWriteClientConfig, sanitizePublicError } from './db-health.mjs';
 import { hashToken } from './esign.mjs';
 import { clientIpFromEvent, userAgentFromEvent } from './check-endorsement.mjs';
+import { normalizePath, s3KeyFor } from './storage-paths.mjs';
 
 const { Client } = pg;
 
 export const DEFAULT_SIGN_CONSENT = 'Electronic records and signature consent accepted before signing.';
+
+const filesBucket = () => process.env.FILES_BUCKET || '';
+const s3 = () => new S3Client({ region: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1' });
+
+export const signedDocumentPath = (request) => (
+  request.claim_id
+    ? `signed/${request.claim_id}/${request.id}-final.pdf`
+    : `check-intake/${request.check_intake_item_id}/files/${request.id}-final.pdf`
+);
+
+const parseJson = (raw, fallback) => {
+  if (raw == null) return fallback;
+  if (typeof raw === 'object') return raw;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
+};
+
+const asDataUri = (value) => {
+  if (typeof value !== 'string') return null;
+  return value.startsWith('data:') ? value : null;
+};
+
+const fieldEntryValue = (entry) => {
+  if (entry == null) return null;
+  if (typeof entry === 'string' || typeof entry === 'boolean' || typeof entry === 'number') return entry;
+  if (typeof entry === 'object') return entry.value ?? entry.checked ?? null;
+  return null;
+};
+
+export const mergeSignerFieldValues = (signers = [], fields = [], valueRows = []) => {
+  const fieldsById = new Map(fields.map((field) => [String(field.id), field]));
+  const valuesBySignerField = new Map();
+  for (const row of valueRows) {
+    valuesBySignerField.set(`${row.signer_id}:${row.field_id}`, row);
+  }
+  return signers.map((signer) => {
+    const raw = parseJson(signer.field_values, {}) || {};
+    const signerIndex = (signer.signing_order || 1) - 1;
+    const merged = {};
+    const considerIds = new Set([
+      ...Object.keys(raw),
+      ...fields.filter((field) => Number(field.signer_index) === signerIndex).map((field) => String(field.id)),
+      ...valueRows.filter((row) => row.signer_id === signer.id).map((row) => String(row.field_id)),
+    ]);
+    for (const id of considerIds) {
+      const field = fieldsById.get(String(id));
+      const stored = raw[id];
+      const valueRow = valuesBySignerField.get(`${signer.id}:${id}`);
+      const normalizedStored = stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : null;
+      const value = fieldEntryValue(stored)
+        ?? (valueRow?.value != null ? valueRow.value : null)
+        ?? (valueRow && field?.field_type === 'checkbox' ? valueRow.checked : null);
+      merged[id] = {
+        field_type: normalizedStored?.field_type || normalizedStored?.type || field?.field_type || field?.type || (asDataUri(value) ? 'signature' : null),
+        field_label: normalizedStored?.field_label || normalizedStored?.label || field?.label || null,
+        value,
+        page: normalizedStored?.page ?? field?.page ?? 1,
+        x: normalizedStored?.x ?? field?.x ?? 0,
+        y: normalizedStored?.y ?? field?.y ?? 0,
+        width: normalizedStored?.width ?? field?.width ?? 33,
+        height: normalizedStored?.height ?? field?.height ?? 6,
+      };
+    }
+    return { ...signer, field_values: merged };
+  });
+};
+
+export const loadMergedSignerFieldValues = async (client, requestId, deps = {}) => {
+  const query = deps.query || ((sql, params) => client.query(sql, params));
+  const safe = async (sql, params) => {
+    try {
+      return await query(sql, params);
+    } catch {
+      return { rows: [] };
+    }
+  };
+  const signers = (await safe(
+    `SELECT id, signer_name, signing_order, field_values
+     FROM public.signature_signers
+     WHERE signature_request_id = $1::uuid
+     ORDER BY signing_order, created_at`,
+    [requestId],
+  )).rows;
+  const fields = (await safe(
+    `SELECT id, signer_index, field_type, label, page, x, y, width, height
+     FROM public.signature_fields
+     WHERE signature_request_id = $1::uuid
+     ORDER BY created_at`,
+    [requestId],
+  )).rows;
+  const valueRows = (await safe(
+    `SELECT v.field_id, v.signer_id, v.value, v.checked
+     FROM public.signature_field_values v
+     JOIN public.signature_fields f ON f.id = v.field_id
+     WHERE f.signature_request_id = $1::uuid`,
+    [requestId],
+  )).rows;
+  return mergeSignerFieldValues(signers, fields, valueRows);
+};
+
+const decodeDataImage = (value) => {
+  const raw = String(value || '');
+  const comma = raw.indexOf(',');
+  if (!raw.startsWith('data:') || comma < 0) return null;
+  const meta = raw.slice(5, comma);
+  const payload = raw.slice(comma + 1);
+  const bytes = meta.includes('base64')
+    ? Buffer.from(payload, 'base64')
+    : Buffer.from(decodeURIComponent(payload), 'utf8');
+  return { mime: meta.split(';')[0] || 'image/png', bytes };
+};
+
+/**
+ * Stamp stored field values onto source PDF bytes.
+ * Placement math matches Lovable generateFlattenedPdf (percent 0-100).
+ */
+export const stampSignaturePdf = async (pdfBytes, signersWithValues = []) => {
+  const input = pdfBytes instanceof Uint8Array ? pdfBytes : new Uint8Array(pdfBytes);
+  const header = String.fromCharCode(...input.slice(0, 5));
+  if (header !== '%PDF-') throw new Error('source_document_is_not_pdf');
+
+  const pdfDoc = await PDFDocument.load(input);
+  const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const pageCount = pdfDoc.getPageCount();
+  let stampedImages = 0;
+
+  for (const signer of signersWithValues) {
+    const fieldValues = signer.field_values || {};
+    for (const field of Object.values(fieldValues)) {
+      if (!field) continue;
+      const pageIndex = (field.page || 1) - 1;
+      const pages = pdfDoc.getPages();
+      if (pageIndex < 0 || pageIndex >= pages.length) continue;
+      const page = pages[pageIndex];
+      const pageHeight = page.getHeight();
+      const pageWidth = page.getWidth();
+      const x = (Number(field.x) / 100) * pageWidth;
+      const y = pageHeight - ((Number(field.y) / 100) * pageHeight) - ((Number(field.height) || 5) / 100) * pageHeight;
+      const w = (Number(field.width) / 100) * pageWidth;
+      const h = ((Number(field.height) || 5) / 100) * pageHeight;
+
+      if (field.field_type === 'signature' && asDataUri(field.value)) {
+        try {
+          const decoded = decodeDataImage(field.value);
+          if (!decoded?.bytes?.length) continue;
+          let embeddedImage;
+          if (String(field.value).includes('image/png') || String(decoded.mime).includes('png')) {
+            embeddedImage = await pdfDoc.embedPng(decoded.bytes);
+          } else {
+            try {
+              embeddedImage = await pdfDoc.embedPng(decoded.bytes);
+            } catch {
+              embeddedImage = await pdfDoc.embedJpg(decoded.bytes);
+            }
+          }
+          const aspectRatio = embeddedImage.width / embeddedImage.height;
+          const drawH = Math.min(h, w / aspectRatio);
+          const drawW = drawH * aspectRatio;
+          page.drawImage(embeddedImage, {
+            x,
+            y: y + (h - drawH),
+            width: drawW,
+            height: drawH,
+          });
+          stampedImages += 1;
+        } catch {
+          page.drawText('[Signature on file]', {
+            x,
+            y: y + h / 2 - 5,
+            size: 10,
+            font: helvetica,
+            color: rgb(0.3, 0.3, 0.3),
+          });
+        }
+      } else if (field.field_type === 'date' && field.value) {
+        page.drawText(String(field.value), {
+          x,
+          y: y + h / 2 - 5,
+          size: 11,
+          font: helvetica,
+          color: rgb(0, 0, 0),
+        });
+      } else if (field.field_type === 'text' && field.value) {
+        page.drawText(String(field.value), {
+          x,
+          y: y + h / 2 - 5,
+          size: 11,
+          font: helvetica,
+          color: rgb(0, 0, 0),
+        });
+      } else if (field.field_type === 'checkbox') {
+        const boxSize = Math.min(h * 0.7, w * 0.7, 14);
+        const boxX = x + 2;
+        const boxY = y + (h - boxSize) / 2;
+        page.drawRectangle({
+          x: boxX,
+          y: boxY,
+          width: boxSize,
+          height: boxSize,
+          borderColor: rgb(0.2, 0.2, 0.2),
+          borderWidth: 1.2,
+          color: rgb(1, 1, 1),
+        });
+        if (field.value) {
+          const margin = boxSize * 0.2;
+          const lx = boxX + margin;
+          const ly = boxY + margin;
+          const rx = boxX + boxSize - margin;
+          const ry = boxY + boxSize - margin;
+          const midX = boxX + boxSize * 0.38;
+          const midY = boxY + margin;
+          page.drawLine({
+            start: { x: lx, y: ly + (ry - ly) * 0.5 },
+            end: { x: midX, y: midY },
+            thickness: 1.8,
+            color: rgb(0.1, 0.4, 0.1),
+          });
+          page.drawLine({
+            start: { x: midX, y: midY },
+            end: { x: rx, y: ry },
+            thickness: 1.8,
+            color: rgb(0.1, 0.4, 0.1),
+          });
+        }
+      }
+    }
+  }
+
+  if (stampedImages < 1) throw new Error('no_signature_image_to_stamp');
+  if (pdfDoc.getPageCount() !== pageCount) throw new Error('page_count_changed');
+  return await pdfDoc.save();
+};
+
+export const attachCompletedSignatureDocument = async (client, request, deps = {}) => {
+  const tokenHash = deps.tokenHash || request.token_hash;
+  if (!tokenHash) throw new Error('missing_token_hash');
+  const originalPath = request.document_path;
+  if (!originalPath) throw new Error('missing_document_path');
+  if (!request.claim_id && !request.check_intake_item_id) {
+    throw new Error('signature request is not linked to a claim or check');
+  }
+  const destRel = request.final_rel || signedDocumentPath(request);
+  const srcKey = s3KeyFor('claim-files', normalizePath(originalPath, 'claim-files'));
+  const destKey = s3KeyFor('claim-files', normalizePath(destRel, 'claim-files'));
+  const bucket = filesBucket();
+  if (!bucket || !srcKey || !destKey) throw new Error('s3_not_configured');
+
+  const stampAndPut = deps.stampAndPut || (async () => {
+    const s3c = deps.s3 || s3();
+    await s3c.send(new HeadObjectCommand({ Bucket: bucket, Key: srcKey }));
+    const obj = await s3c.send(new GetObjectCommand({ Bucket: bucket, Key: srcKey }));
+    const originalBytes = Buffer.from(await obj.Body.transformToByteArray());
+    const signers = deps.signersWithValues || await loadMergedSignerFieldValues(client, request.id, deps);
+    const stamped = await (deps.stampSignaturePdf || stampSignaturePdf)(originalBytes, signers);
+    await s3c.send(new PutObjectCommand({
+      Bucket: bucket,
+      Key: destKey,
+      Body: Buffer.from(stamped),
+      ContentType: 'application/pdf',
+    }));
+    return { destRel, destKey, originalBytes, stamped };
+  });
+  await stampAndPut({ srcKey, destKey, destRel });
+
+  const attached = (await client.query(
+    'SELECT public.aws_public_signature_attach_signed($1, $2) AS doc',
+    [tokenHash, destRel],
+  )).rows[0]?.doc;
+  if (!attached?.ok) {
+    throw new Error(attached?.error || 'attach_denied');
+  }
+  return {
+    final_pdf_path: attached.final_pdf_path || destRel,
+    original_path: attached.original_path || originalPath,
+    already_attached: attached.already_attached === true,
+  };
+};
 
 const publicDb = async (deps = {}) => {
   if (deps.client) return { client: deps.client, owned: false };
@@ -127,125 +415,111 @@ export const runPublicSignatureSubmit = async (event, deps = {}) => {
     await client.query('BEGIN');
     await client.query('SET TRANSACTION READ WRITE');
     const tokenHash = hashToken(token);
-    const signer = (await safeQuery(
-      client,
-      `SELECT s.*, r.id AS request_id, r.document_name, r.field_data, r.claim_id,
-              r.check_intake_item_id, r.status AS request_status
-       FROM public.signature_signers s
-       JOIN public.signature_requests r ON r.id = s.signature_request_id
-       WHERE s.token_hash = $1
-       LIMIT 1`,
+    const lookup = (await client.query(
+      'SELECT public.aws_public_signature_by_token_hash($1) AS doc',
       [tokenHash],
-    )).rows[0];
-    if (!signer) {
+    )).rows[0]?.doc;
+    if (!lookup?.signer?.id || !lookup?.request?.id) {
       await client.query('ROLLBACK');
       return { ok: false, statusCode: 404, stage: 'fetch_signer', error: 'Invalid or expired signing token', spoofFieldsIgnored: spoof };
     }
-    if (signer.expires_at && new Date(signer.expires_at) < new Date()) {
+    if (lookup.signer?.expires_at && new Date(lookup.signer.expires_at) < new Date()) {
       await client.query('ROLLBACK');
       return { ok: false, statusCode: 403, stage: 'token_expired', error: 'This signing link has expired. Please request a new one.', spoofFieldsIgnored: spoof };
     }
-    if (signer.status === 'signed') {
+    const waitingFor = lookup.waiting_for || [];
+    if (waitingFor.length) {
       await client.query('ROLLBACK');
-      return { ok: false, statusCode: 400, stage: 'already_signed', error: 'Document already signed', alreadySigned: true, spoofFieldsIgnored: spoof };
-    }
-    if ((signer.signing_order || 1) > 1) {
-      const prior = (await safeQuery(
-        client,
-        `SELECT id FROM public.signature_signers
-         WHERE signature_request_id = $1::uuid
-           AND signing_order < $2
-           AND status IS DISTINCT FROM 'signed'`,
-        [signer.signature_request_id || signer.request_id, signer.signing_order],
-      )).rows;
-      if (prior.length) {
-        await client.query('ROLLBACK');
-        return { ok: false, statusCode: 403, stage: 'signer_order_blocked', error: 'A prior signer must complete before you can sign.', spoofFieldsIgnored: spoof };
-      }
+      return { ok: false, statusCode: 403, stage: 'signer_order_blocked', error: 'A prior signer must complete before you can sign.', spoofFieldsIgnored: spoof };
     }
     const request = {
-      id: signer.signature_request_id || signer.request_id,
-      document_name: signer.document_name,
-      field_data: signer.field_data,
-      claim_id: signer.claim_id,
-      check_intake_item_id: signer.check_intake_item_id,
+      id: lookup.request.id,
+      document_name: lookup.request.document_name,
+      document_path: lookup.request.document_path,
+      field_data: lookup.request.field_data,
+      claim_id: lookup.request.claim_id,
+      check_intake_item_id: lookup.request.check_intake_item_id,
+      token_hash: tokenHash,
     };
-    const signerFields = await loadSignerFields(client, request, signer);
-    const validationErrors = validateRequiredFields(signerFields, body.fieldValues || {});
-    if (validationErrors.length) {
-      await client.query('ROLLBACK');
-      return {
-        ok: false,
-        statusCode: 400,
-        stage: 'field_validation',
-        error: validationErrors.join('; '),
-        validationErrors,
-        spoofFieldsIgnored: spoof,
-      };
+    const signer = lookup.signer;
+    if (signer.status !== 'signed') {
+      const signerFields = lookup.fields?.length
+        ? lookup.fields.map((field) => ({
+          id: field.id,
+          type: field.field_type || field.type,
+          label: field.label,
+          required: field.required,
+          page: field.page,
+          x: field.x,
+          y: field.y,
+          width: field.width,
+          height: field.height,
+        }))
+        : await loadSignerFields(client, request, signer);
+      const validationErrors = validateRequiredFields(signerFields, body.fieldValues || {});
+      if (validationErrors.length) {
+        await client.query('ROLLBACK');
+        return {
+          ok: false,
+          statusCode: 400,
+          stage: 'field_validation',
+          error: validationErrors.join('; '),
+          validationErrors,
+          spoofFieldsIgnored: spoof,
+        };
+      }
     }
-    const normalizedValues = normalizeFieldValues(signerFields, body.fieldValues || {});
     const ip = clientIpFromEvent(event);
     const ua = userAgentFromEvent(event);
-    const updated = (await client.query(
-      `UPDATE public.signature_signers
-       SET status = 'signed',
-           signed_at = now(),
-           field_values = $2::jsonb,
-           ip_address = $3,
-           user_agent = $4
-       WHERE id = $1::uuid AND status IS DISTINCT FROM 'signed'
-       RETURNING id`,
-      [signer.id, JSON.stringify(normalizedValues), ip, ua],
-    )).rows[0];
-    if (!updated) {
+    const submitted = (await client.query(
+      'SELECT public.aws_public_signature_submit($1, $2::jsonb, $3, $4, $5) AS doc',
+      [
+        tokenHash,
+        JSON.stringify(body.fieldValues || {}),
+        ip,
+        ua,
+        typeof body.consentText === 'string' ? body.consentText : DEFAULT_SIGN_CONSENT,
+      ],
+    )).rows[0]?.doc;
+    if (!submitted?.ok) {
+      await client.query('ROLLBACK');
+      if (submitted?.error === 'invalid_token') {
+        return { ok: false, statusCode: 404, stage: 'fetch_signer', error: 'Invalid or expired signing token', spoofFieldsIgnored: spoof };
+      }
+      if (submitted?.error === 'expired') {
+        return { ok: false, statusCode: 403, stage: 'token_expired', error: 'This signing link has expired. Please request a new one.', spoofFieldsIgnored: spoof };
+      }
+      if (submitted?.error === 'signer_order_blocked') {
+        return { ok: false, statusCode: 403, stage: 'signer_order_blocked', error: 'A prior signer must complete before you can sign.', spoofFieldsIgnored: spoof };
+      }
+      if (submitted?.error === 'request_not_eligible') {
+        return { ok: false, statusCode: 403, stage: 'request_not_eligible', error: 'This signing request is no longer available.', spoofFieldsIgnored: spoof };
+      }
+      return { ok: false, statusCode: 400, stage: 'signature_submit_denied', error: submitted?.error || 'signature_submit_denied', spoofFieldsIgnored: spoof };
+    }
+    request.id = submitted.request_id || request.id;
+    request.claim_id = submitted.claim_id ?? request.claim_id;
+    request.check_intake_item_id = submitted.check_intake_item_id ?? request.check_intake_item_id;
+    request.document_path = submitted.document_path || request.document_path;
+    request.document_name = submitted.document_name || request.document_name;
+    request.final_rel = submitted.final_rel || signedDocumentPath(request);
+    const allSigned = submitted.all_signed === true || submitted.request_completed === true;
+    if (submitted.already_signed === true && !allSigned) {
       await client.query('ROLLBACK');
       return { ok: false, statusCode: 400, stage: 'already_signed', error: 'Document already signed', alreadySigned: true, spoofFieldsIgnored: spoof };
     }
-    for (const field of signerFields) {
-      await safeQuery(
-        client,
-        `INSERT INTO public.signature_field_values (field_id, signer_id, value, checked)
-         VALUES ($1::uuid, $2::uuid, $3, $4)`,
-        [
-          field.id,
-          signer.id,
-          body.fieldValues?.[field.id] != null ? String(body.fieldValues[field.id]) : null,
-          field.type === 'checkbox' ? Boolean(body.fieldValues?.[field.id]) : false,
-        ],
-      );
-    }
-    await safeQuery(
-      client,
-      `INSERT INTO public.esign_event_logs (
-         request_id, signer_id, claim_id, stage, status, message, payload
-       ) VALUES ($1::uuid, $2::uuid, $3::uuid, 'signer_signed', 'ok', $4, $5::jsonb)`,
-      [
-        request.id,
-        signer.id,
-        request.claim_id || null,
-        `${signer.signer_name || 'Signer'} signed the document`,
-        JSON.stringify({
-          e_sign_consent_accepted: true,
-          consent_text: typeof body.consentText === 'string' ? body.consentText : DEFAULT_SIGN_CONSENT,
-        }),
-      ],
-    );
-    const allSigners = (await safeQuery(
-      client,
-      `SELECT id, status FROM public.signature_signers WHERE signature_request_id = $1::uuid`,
-      [request.id],
-    )).rows;
-    const allSigned = allSigners.length > 0 && allSigners.every((row) => row.status === 'signed');
     if (allSigned) {
-      await safeQuery(
-        client,
-        `UPDATE public.signature_requests
-         SET status = 'completed', completed_at = now(), last_error = NULL
-         WHERE id = $1::uuid`,
-        [request.id],
-      );
       if (typeof deps.flattenPdf === 'function') {
         try { await deps.flattenPdf({ request, signer }); } catch { /* best-effort */ }
+      } else {
+        try {
+          await attachCompletedSignatureDocument(client, request, { ...deps, tokenHash });
+        } catch (attachErr) {
+          await client.query(
+            'SELECT public.aws_public_signature_set_completion_error($1, $2) AS doc',
+            [tokenHash, `PDF attach failed: ${String(attachErr?.message || attachErr).slice(0, 180)}`],
+          );
+        }
       }
     }
     await client.query('COMMIT');
@@ -255,6 +529,7 @@ export const runPublicSignatureSubmit = async (event, deps = {}) => {
       success: true,
       allSigned,
       requestCompleted: allSigned,
+      alreadySigned: submitted.already_signed === true,
       depositAdvanceDenied: true,
       spoofFieldsIgnored: spoof,
     };
