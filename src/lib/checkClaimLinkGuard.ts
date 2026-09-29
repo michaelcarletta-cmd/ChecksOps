@@ -103,6 +103,22 @@ export type ClaimNumberSavePlan =
 export const CLAIM_NUMBER_SAVE_SELECT =
   "id, claim_number, policyholder_name, org_id, status, insurance_company, policyholder_address";
 
+export const CLAIM_LEDGER_NOT_LINKED =
+  "This check is not linked to a claim.";
+
+/**
+ * Authoritative ChecksOps link is check_intake_items.claim_id.
+ * Prefer the live row, then the already-loaded claim, then the parent prop.
+ * Do not invent a UUID from a displayed/OCR claim number.
+ */
+export function resolveAuthoritativeClaimId(opts: {
+  liveCheckClaimId?: string | null;
+  loadedClaimId?: string | null;
+  claimIdProp?: string | null;
+}) {
+  return opts.liveCheckClaimId || opts.loadedClaimId || opts.claimIdProp || null;
+}
+
 /** Existing linked claims rename in place. Unlinked checks still link or create. */
 export function planClaimNumberSave(opts: {
   existingClaimId?: string | null;
