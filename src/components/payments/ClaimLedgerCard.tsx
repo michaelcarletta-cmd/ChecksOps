@@ -18,7 +18,6 @@ import {
   filterSelectableClaims,
   isCheckClaimLinkDenied,
   CLAIM_NUMBER_SAVE_SELECT,
-  newTrackingClaimInsert,
   planClaimNumberSave,
 } from "@/lib/checkClaimLinkGuard";
 
@@ -173,7 +172,7 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
       }
 
       let matched = sameOrg[0] as { id: string; claim_number: string; policyholder_name?: string | null; org_id?: string | null } | undefined;
-      let created = false;
+      const created = false;
 
       if (!matched && unassigned.length) {
         throw new Error(claimLinkUserMessage("unassigned_claim"));
@@ -183,20 +182,7 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
       }
 
       if (!matched) {
-        if (!checkRow.tenant_id) {
-          throw new Error(claimLinkUserMessage("missing_check_tenant"));
-        }
-        const { data: newClaim, error: insertErr } = await supabase
-          .from("claims")
-          .insert(newTrackingClaimInsert(trimmed, checkRow.tenant_id))
-          .select("id, claim_number, policyholder_name, org_id")
-          .single();
-        if (insertErr) throw insertErr;
-        if (!newClaim?.org_id || String(newClaim.org_id) !== String(checkRow.tenant_id)) {
-          throw new Error(claimLinkUserMessage("unassigned_claim"));
-        }
-        matched = newClaim;
-        created = true;
+        throw new Error("Claim Ledger Save only updates an existing claim.");
       } else {
         const decision = evaluateCheckClaimLink({
           checkTenantId: checkRow.tenant_id,
