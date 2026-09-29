@@ -4,11 +4,41 @@
  * check-intake/{checkId}/files/ paths. Does not touch Files-tab upload.
  */
 
-const GENERATE_OLD = 'K=`signatures/${r}/${Date.now()}-${s.fileName}`,H=new Blob([S],{type:P}),{error:U}=await d.storage.from("claim-files").upload(K,H);if(U)throw U;';
-const GENERATE_NEW = 'if(!j)throw new Error("Signature upload requires a check-scoped path");K=`check-intake/${j}/files/${Date.now()}-${crypto.randomUUID()}-${s.fileName}`,H=new Blob([S],{type:P}),{error:U}=await d.storage.from("claim-files").upload(K,H);if(U)throw U;{const{error:__cf}=await d.from("check_files").insert({check_intake_item_id:j,file_name:s.fileName||"Document",file_path:K,file_type:P,file_size:H.size,category:"other",source:"manual"});if(__cf)throw __cf;b.invalidateQueries({queryKey:["signature-source-files",r,j]});b.invalidateQueries({queryKey:["check-files",j]});}';
+const GENERATE_OLD = ',K=`signatures/${r}/${Date.now()}-${s.fileName}`,H=new Blob([S],{type:P}),{error:U}=await d.storage.from("claim-files").upload(K,H);if(U)throw U;';
+const GENERATE_NEW = ';if(!j)throw new Error("Signature upload requires a check-scoped path");K=`check-intake/${j}/files/${Date.now()}-${crypto.randomUUID()}-${s.fileName}`,H=new Blob([S],{type:P}),{error:U}=await d.storage.from("claim-files").upload(K,H);if(U)throw U;{const{error:__cf}=await d.from("check_files").insert({check_intake_item_id:j,file_name:s.fileName||"Document",file_path:K,file_type:P,file_size:H.size,category:"other",source:"manual"});if(__cf)throw __cf;b.invalidateQueries({queryKey:["signature-source-files",r,j]});b.invalidateQueries({queryKey:["check-files",j]});}';
 
-const DIRECT_OLD = 'c=`signatures/${r}/${Date.now()}-${a}`,{error:S}=await d.storage.from("claim-files").upload(c,E);if(S)throw S;';
-const DIRECT_NEW = 'if(!j)throw new Error("Signature upload requires a check-scoped path");c=`check-intake/${j}/files/${Date.now()}-${crypto.randomUUID()}-${a}`,{error:S}=await d.storage.from("claim-files").upload(c,E);if(S)throw S;{const{error:__cf}=await d.from("check_files").insert({check_intake_item_id:j,file_name:E.name,file_path:c,file_type:E.type||null,file_size:E.size,category:"other",source:"manual"});if(__cf)throw __cf;b.invalidateQueries({queryKey:["signature-source-files",r,j]});b.invalidateQueries({queryKey:["check-files",j]});}';
+const DIRECT_OLD = ',c=`signatures/${r}/${Date.now()}-${a}`,{error:S}=await d.storage.from("claim-files").upload(c,E);if(S)throw S;';
+const DIRECT_NEW = ';if(!j)throw new Error("Signature upload requires a check-scoped path");c=`check-intake/${j}/files/${Date.now()}-${crypto.randomUUID()}-${a}`,{error:S}=await d.storage.from("claim-files").upload(c,E);if(S)throw S;{const{error:__cf}=await d.from("check_files").insert({check_intake_item_id:j,file_name:E.name,file_path:c,file_type:E.type||null,file_size:E.size,category:"other",source:"manual"});if(__cf)throw __cf;b.invalidateQueries({queryKey:["signature-source-files",r,j]});b.invalidateQueries({queryKey:["check-files",j]});}';
+
+export const COMMA_IF = ',if(!j)throw new Error("Signature upload requires a check-scoped path")';
+export const SEMICOLON_IF = ';if(!j)throw new Error("Signature upload requires a check-scoped path")';
+
+/** Two-character repair for the live overlay: comma-if → semicolon-if. No other edits. */
+export const repairLiveFilesCommaIf = (source) => {
+  const js = String(source);
+  const sites = js.split(COMMA_IF).length - 1;
+  if (sites !== 2) {
+    throw new Error(`expected exactly two comma-if sites, found ${sites}`);
+  }
+  const next = js.replaceAll(COMMA_IF, SEMICOLON_IF);
+  if (next.includes(COMMA_IF)) {
+    throw new Error('comma-if sites remain after repair');
+  }
+  if ((next.split(SEMICOLON_IF).length - 1) !== 2) {
+    throw new Error('semicolon-if site count is not 2 after repair');
+  }
+  if (next.length !== js.length) {
+    throw new Error('repair changed file length');
+  }
+  let changed = 0;
+  for (let i = 0; i < js.length; i += 1) {
+    if (js[i] !== next[i]) changed += 1;
+  }
+  if (changed !== 2) {
+    throw new Error(`repair changed ${changed} bytes; expected 2`);
+  }
+  return next;
+};
 
 const FILES_TAB_UPLOAD = 'check-intake/${l}/files/${Date.now()}-${crypto.randomUUID()}-${i}';
 
@@ -38,6 +68,9 @@ export const patchLiveFilesSignatureUploads = (source) => {
   }
   if ((next.match(/Signature upload requires a check-scoped path/g) || []).length !== 2) {
     throw new Error('missing-check refusal was not applied to both Signature uploads');
+  }
+  if (next.includes(COMMA_IF)) {
+    throw new Error('path overlay inserted if into a comma declaration');
   }
   return next;
 };
