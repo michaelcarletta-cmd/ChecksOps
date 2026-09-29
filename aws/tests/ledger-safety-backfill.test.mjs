@@ -272,8 +272,10 @@ test('existing claim number save updates in place and does not create or relink'
   assert.match(src, /Start New Claim Ledger/);
   assert.match(src, /Existing claim found/);
   assert.match(src, /claimLedgerDiscoverySummary/);
-  assert.match(src, /No Claim Ledger has been created yet/);
   assert.match(src, /Typing a claim number does not create a claim/);
+  const guardSrc = readFileSync('src/lib/checkClaimLinkGuard.ts', 'utf8');
+  assert.match(guardSrc, /No Claim Ledger has been created yet/);
+  assert.match(guardSrc, /checks found for this claim number/);
   assert.match(src, /\.from\("check_intake_items"\)[\s\S]*\.select\("id, claim_id"\)/);
   assert.equal(/newTrackingClaimInsert/.test(src), false);
   assert.equal(/\.from\("claims"\)[\s\S]*\.insert\(/.test(src), false);

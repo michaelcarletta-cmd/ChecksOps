@@ -127,6 +127,14 @@ max_connections = 20
   };
   try {
     psql(`
+      DO $$ BEGIN
+        CREATE ROLE authenticated NOLOGIN;
+      EXCEPTION WHEN duplicate_object THEN NULL;
+      END $$;
+      DO $$ BEGIN
+        CREATE ROLE checksops NOLOGIN;
+      EXCEPTION WHEN duplicate_object THEN NULL;
+      END $$;
       CREATE FUNCTION public.ocr_claim_number_key(p_value text) RETURNS text
       LANGUAGE sql IMMUTABLE AS $$ SELECT NULLIF(lower(btrim(p_value)), ''); $$;
       CREATE TABLE public.claims (
