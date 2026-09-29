@@ -157,6 +157,97 @@ export function claimLedgerUserMessage(code: string | null | undefined) {
   }
 }
 
+export type ClaimLedgerInspectResult = {
+  ok?: boolean;
+  code?: string | null;
+  can_create?: boolean;
+  can_link?: boolean;
+  claim_id?: string | null;
+  claim_number?: string | null;
+  policyholder_name?: string | null;
+  same_tenant_detected_count?: number;
+  same_tenant_unlinked_count?: number;
+  same_tenant_already_linked_count?: number;
+  associated_check_count?: number;
+  linked_check_count?: number;
+  already_linked_sibling_count?: number;
+};
+
+export type ClaimLedgerDiscoverySummary = {
+  kind: "not_found" | "ocr_group";
+  headline: string;
+  lines: string[];
+};
+
+function asCount(value: unknown) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.trunc(n) : 0;
+}
+
+/** Inspect no_match copy. OCR candidates are discovery evidence, not ownership. */
+export function claimLedgerDiscoverySummary(
+  result: ClaimLedgerInspectResult | null | undefined,
+): ClaimLedgerDiscoverySummary | null {
+  if (!result || result.code !== "no_match") return null;
+  const detected = asCount(result.same_tenant_detected_count);
+  const unlinked = asCount(result.same_tenant_unlinked_count);
+  const already = asCount(result.same_tenant_already_linked_count);
+  const claimNumber = String(result.claim_number || "").trim();
+  if (detected <= 0 && unlinked <= 0) {
+    return {
+      kind: "not_found",
+      headline: "No existing claim with that number in this tenant.",
+      lines: [],
+    };
+  }
+  const checkCount = detected > 0 ? detected : unlinked;
+  const lines = [
+    checkCount === 1
+      ? "1 check found for this claim number."
+      : `${checkCount} checks found for this claim number.`,
+    "No Claim Ledger has been created yet.",
+  ];
+  if (already > 0) {
+    lines.push(
+      already === 1
+        ? "1 already-linked check stays on its current ledger."
+        : `${already} already-linked checks stay on their current ledgers.`,
+    );
+  }
+  return {
+    kind: "ocr_group",
+    headline: claimNumber ? `Claim #${claimNumber}` : "Claim number",
+    lines,
+  };
+}
+
+export function claimLedgerCreatedSummary(
+  result: ClaimLedgerInspectResult | null | undefined,
+) {
+  const associated = asCount(result?.associated_check_count) || asCount(result?.linked_check_count);
+  const skipped = asCount(result?.already_linked_sibling_count);
+  const claimNumber = String(result?.claim_number || "").trim();
+  const lines = ["Claim Ledger created."];
+  if (associated > 0) {
+    lines.push(
+      associated === 1
+        ? "1 check associated with this claim."
+        : `${associated} checks associated with this claim.`,
+    );
+  }
+  if (skipped > 0) {
+    lines.push(
+      skipped === 1
+        ? "1 already-linked check was left unchanged."
+        : `${skipped} already-linked checks were left unchanged.`,
+    );
+  }
+  return {
+    headline: claimNumber ? `Claim #${claimNumber}` : "Claim Ledger",
+    lines,
+  };
+}
+
 /**
  * Authoritative ChecksOps link is check_intake_items.claim_id.
  * Prefer the live row, then the already-loaded claim, then the parent prop.

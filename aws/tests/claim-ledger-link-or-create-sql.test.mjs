@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -32,7 +32,7 @@ test('SQL 44 is a narrow Claim Ledger RPC and does not broaden generic writes', 
   assert.match(SQL44, /FOR UPDATE/);
   assert.match(SQL44, /INSERT INTO public\.claims \(claim_number, status, org_id\)/);
   assert.match(SQL44, /SET claim_id = v_same_id/);
-  assert.match(SQL44, /SET claim_id = v_new_id/);
+  assert.match(SQL44, /SET claim_id = v_target_id/);
   assert.match(SQL44, /AND claim_id IS NULL/);
   assert.match(SQL44, /already_linked/);
   assert.match(SQL44, /unique_violation/);
@@ -43,10 +43,16 @@ test('SQL 44 is a narrow Claim Ledger RPC and does not broaden generic writes', 
   assert.match(SQL44, /c\.org_id IS NULL/);
   assert.match(SQL44, /ev\.claim_id = c\.id/);
   assert.match(SQL44, /link_existing does NOT assign claims\.org_id/);
+  assert.match(SQL44, /same_tenant_detected_count/);
+  assert.match(SQL44, /same_tenant_unlinked_count/);
+  assert.match(SQL44, /FOR UPDATE OF s SKIP LOCKED/);
+  assert.match(SQL44, /ocr_claim_number_key\(s\.detected_claim_number\) = v_key/);
+  assert.match(SQL44, /ocr_claim_number_key\(i\.detected_claim_number\) = v_key/);
+  assert.match(SQL44, /detected_claim_number is NOT ownership evidence/);
+  assert.match(SQL44, /Ownership counts[\s\S]*never[\s\S]*detected_claim_number as eligibility/);
   assert.doesNotMatch(SQL44, /UPDATE public\.claims[\s\S]*org_id/);
   assert.doesNotMatch(SQL44, /ev\.detected_claim_number/);
   assert.doesNotMatch(SQL44, /SET\s+detected_claim_number/);
-  assert.doesNotMatch(SQL44, /ocr_claim_number_key\(.*detected_claim_number/);
   assert.doesNotMatch(SQL44, /GRANT UPDATE/);
   assert.doesNotMatch(SQL44, /GRANT INSERT/);
   assert.match(SQL44, /GRANT EXECUTE ON FUNCTION public\.claim_ledger_link_or_create/);
@@ -240,8 +246,22 @@ max_connections = 20
     ));
     assert.equal(ocrInspect.code, 'no_match');
     assert.equal(ocrInspect.can_create, true);
+    assert.equal(ocrInspect.same_tenant_detected_count, 1);
+    assert.equal(ocrInspect.same_tenant_unlinked_count, 1);
+    assert.equal(ocrInspect.same_tenant_already_linked_count, 0);
+    assert.equal(ocrInspect.claim_number, 'CL-OCR-ONLY');
     assert.equal(psql(`SELECT claim_id IS NULL FROM public.check_intake_items WHERE id = '${ocrOnly}'`), 't');
     assert.equal(psql(`SELECT count(*) FROM public.claims WHERE public.ocr_claim_number_key(claim_number) = 'cl-ocr-only'`), '0');
+
+    const ocrCreated = JSON.parse(psql(
+      `SELECT public.claim_ledger_link_or_create('${ocrOnly}','${TENANT_A}','CL-OCR-ONLY','create_new');`,
+    ));
+    assert.equal(ocrCreated.code, 'created');
+    assert.equal(ocrCreated.associated_check_count, 1);
+    assert.equal(ocrCreated.already_linked_sibling_count, 0);
+    assert.equal(psql(`SELECT claim_id FROM public.check_intake_items WHERE id = '${ocrOnly}'`), ocrCreated.claim_id);
+    assert.equal(psql(`SELECT count(*) FROM public.claims WHERE public.ocr_claim_number_key(claim_number) = 'cl-ocr-only'`), '1');
+    assert.equal(psql(`SELECT amount::text FROM public.check_intake_items WHERE id = '${ocrOnly}'`), '12');
 
     const foreignOrg = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3';
     const foreignCheck = '33333333-3333-4333-8333-333333333338';
@@ -336,6 +356,141 @@ max_connections = 20
     assert.equal(psql(`SELECT claim_id FROM public.check_intake_items WHERE id = '${legacyUnlinked}'`), legacyClaim);
     assert.equal(psql(`SELECT org_id IS NULL FROM public.claims WHERE id = '${legacyClaim}'`), 't');
     assert.equal(psql(`SELECT amount::text FROM public.check_intake_items WHERE id = '${legacyUnlinked}'`), '11');
+
+    const g1 = '44444444-4444-4444-8444-444444444441';
+    const g2 = '44444444-4444-4444-8444-444444444442';
+    const g3 = '44444444-4444-4444-8444-444444444443';
+    const g4 = '44444444-4444-4444-8444-444444444444';
+    const foreignOcr = '44444444-4444-4444-8444-444444444445';
+    const alreadyOcr = '44444444-4444-4444-8444-444444444446';
+    const mixedOcr = '44444444-4444-4444-8444-444444444447';
+    psql(`
+      INSERT INTO public.check_intake_items (id, tenant_id, claim_id, detected_claim_number, check_stage, amount, deposited_at)
+      VALUES
+        ('${g1}', '${TENANT_A}', NULL, '695064-GQ', 'review', 100, '2026-01-01 00:00:00+00'),
+        ('${g2}', '${TENANT_A}', NULL, '695064-gq', 'endorsing', 200, NULL),
+        ('${g3}', '${TENANT_A}', NULL, ' 695064-GQ ', 'review', 300, NULL),
+        ('${g4}', '${TENANT_A}', NULL, '695064-GQ', 'endorsing', 400, NULL),
+        ('${foreignOcr}', '${TENANT_B}', NULL, '695064-GQ', 'review', 999, NULL),
+        ('${alreadyOcr}', '${TENANT_A}', '${CLAIM_A}', '695064-GQ', 'review', 50, NULL),
+        ('${mixedOcr}', '${TENANT_B}', NULL, '695064-GQ', 'review', 888, NULL);
+    `);
+    const fourInspect = JSON.parse(psql(
+      `SELECT public.claim_ledger_link_or_create('${g1}','${TENANT_A}','695064-GQ','inspect');`,
+    ));
+    assert.equal(fourInspect.code, 'no_match');
+    assert.equal(fourInspect.can_create, true);
+    assert.equal(fourInspect.same_tenant_detected_count, 5);
+    assert.equal(fourInspect.same_tenant_unlinked_count, 4);
+    assert.equal(fourInspect.same_tenant_already_linked_count, 1);
+    assert.equal(fourInspect.claim_number, '695064-GQ');
+
+    const foreignInspectOcr = JSON.parse(psql(
+      `SELECT public.claim_ledger_link_or_create('${foreignOcr}','${TENANT_B}','695064-GQ','inspect');`,
+    ));
+    assert.equal(foreignInspectOcr.code, 'no_match');
+    assert.equal(foreignInspectOcr.same_tenant_detected_count, 2);
+    assert.equal(foreignInspectOcr.same_tenant_unlinked_count, 2);
+
+    const fingerprintBefore = psql(`
+      SELECT id::text || '|' || coalesce(claim_id::text, '') || '|' || amount::text || '|' ||
+             coalesce(deposited_at::text, '') || '|' || check_stage
+      FROM public.check_intake_items
+      WHERE id IN ('${g1}','${g2}','${g3}','${g4}','${foreignOcr}','${alreadyOcr}','${mixedOcr}')
+      ORDER BY id
+    `);
+    const grouped = JSON.parse(psql(
+      `SELECT public.claim_ledger_link_or_create('${g1}','${TENANT_A}','695064-GQ','create_new');`,
+    ));
+    assert.equal(grouped.code, 'created');
+    assert.equal(grouped.created, true);
+    assert.equal(grouped.associated_check_count, 4);
+    assert.equal(grouped.already_linked_sibling_count, 1);
+    assert.equal(psql(`SELECT count(*) FROM public.claims WHERE public.ocr_claim_number_key(claim_number) = '695064-gq'`), '1');
+    assert.equal(psql(`SELECT count(DISTINCT claim_id) FROM public.check_intake_items WHERE id IN ('${g1}','${g2}','${g3}','${g4}')`), '1');
+    assert.equal(psql(`SELECT claim_id FROM public.check_intake_items WHERE id = '${g2}'`), grouped.claim_id);
+    assert.equal(psql(`SELECT claim_id FROM public.check_intake_items WHERE id = '${alreadyOcr}'`), CLAIM_A);
+    assert.equal(psql(`SELECT claim_id IS NULL FROM public.check_intake_items WHERE id = '${foreignOcr}'`), 't');
+    assert.equal(psql(`SELECT claim_id IS NULL FROM public.check_intake_items WHERE id = '${mixedOcr}'`), 't');
+    assert.equal(psql(`SELECT amount::text FROM public.check_intake_items WHERE id = '${g1}'`), '100');
+    assert.equal(psql(`SELECT check_stage FROM public.check_intake_items WHERE id = '${g1}'`), 'review');
+    assert.equal(psql(`SELECT deposited_at IS NOT NULL FROM public.check_intake_items WHERE id = '${g1}'`), 't');
+    assert.equal(psql(`SELECT amount::text FROM public.check_intake_items WHERE id = '${g2}'`), '200');
+    assert.equal(psql(`SELECT check_stage FROM public.check_intake_items WHERE id = '${g2}'`), 'endorsing');
+    assert.equal(psql(`SELECT deposited_at IS NULL FROM public.check_intake_items WHERE id = '${g2}'`), 't');
+    assert.equal(psql(`SELECT tenant_id FROM public.check_intake_items WHERE id = '${foreignOcr}'`), TENANT_B);
+    const fingerprintAfterForeign = psql(`
+      SELECT id::text || '|' || coalesce(claim_id::text, '') || '|' || amount::text || '|' ||
+             coalesce(deposited_at::text, '') || '|' || check_stage
+      FROM public.check_intake_items
+      WHERE id IN ('${foreignOcr}','${alreadyOcr}','${mixedOcr}')
+      ORDER BY id
+    `);
+    const fingerprintBeforeForeign = fingerprintBefore
+      .split('\n')
+      .filter((row) => row.startsWith(foreignOcr) || row.startsWith(alreadyOcr) || row.startsWith(mixedOcr))
+      .join('\n');
+    assert.equal(fingerprintAfterForeign, fingerprintBeforeForeign);
+
+    const secondResolves = JSON.parse(psql(
+      `SELECT public.claim_ledger_link_or_create('${g2}','${TENANT_A}','695064-GQ','inspect');`,
+    ));
+    assert.equal(secondResolves.code, 'already_linked');
+    assert.equal(secondResolves.claim_id, grouped.claim_id);
+
+    const alreadyCreate = JSON.parse(psql(
+      `SELECT public.claim_ledger_link_or_create('${alreadyOcr}','${TENANT_A}','695064-GQ','create_new');`,
+    ));
+    assert.equal(alreadyCreate.code, 'already_linked');
+    assert.equal(alreadyCreate.claim_id, CLAIM_A);
+    assert.equal(psql(`SELECT claim_id FROM public.check_intake_items WHERE id = '${alreadyOcr}'`), CLAIM_A);
+    assert.equal(psql(`SELECT count(*) FROM public.claims WHERE public.ocr_claim_number_key(claim_number) = '695064-gq'`), '1');
+
+    const raceA = '55555555-5555-4555-8555-555555555551';
+    const raceB = '55555555-5555-4555-8555-555555555552';
+    psql(`
+      INSERT INTO public.check_intake_items (id, tenant_id, claim_id, detected_claim_number, check_stage, amount)
+      VALUES
+        ('${raceA}', '${TENANT_A}', NULL, '695064-RACE', 'review', 1),
+        ('${raceB}', '${TENANT_A}', NULL, '695064-RACE', 'review', 2);
+    `);
+    const holder = spawn(path.join(PG_BIN, 'psql'), [
+      '-h', pgData, '-p', String(port), '-U', 'ubuntu', '-d', 'postgres',
+      '-v', 'ON_ERROR_STOP=1', '-At', '-c',
+      `BEGIN; INSERT INTO public.claims (claim_number, status, org_id) VALUES ('695064-RACE', 'tracking', '${TENANT_A}'); SELECT pg_sleep(1.5); COMMIT;`,
+    ], { encoding: 'utf8' });
+    let holderOut = '';
+    let holderErr = '';
+    holder.stdout.on('data', (chunk) => { holderOut += chunk; });
+    holder.stderr.on('data', (chunk) => { holderErr += chunk; });
+    const holderDone = new Promise((resolve) => holder.on('close', resolve));
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const raced = JSON.parse(psql(
+      `SELECT public.claim_ledger_link_or_create('${raceA}','${TENANT_A}','695064-RACE','create_new');`,
+    ));
+    const holderStatus = await holderDone;
+    if (holderStatus !== 0 && !/unique|duplicate/i.test(`${holderErr} ${holderOut}`)) {
+      throw new Error(`race holder failed (${holderStatus}): ${holderErr || holderOut}`);
+    }
+    assert.equal(raced.ok, true);
+    assert.ok(['linked', 'created'].includes(raced.code), JSON.stringify(raced));
+    assert.equal(psql(`SELECT count(*) FROM public.claims WHERE public.ocr_claim_number_key(claim_number) = '695064-race'`), '1');
+    assert.equal(psql(`SELECT claim_id IS NOT NULL FROM public.check_intake_items WHERE id = '${raceA}'`), 't');
+    const raceClaim = psql(`SELECT claim_id FROM public.check_intake_items WHERE id = '${raceA}'`);
+    const raceSibling = JSON.parse(psql(
+      `SELECT public.claim_ledger_link_or_create('${raceB}','${TENANT_A}','695064-RACE','create_new');`,
+    ));
+    assert.ok(['linked', 'already_linked', 'existing_found'].includes(raceSibling.code), JSON.stringify(raceSibling));
+    if (raceSibling.code === 'existing_found') {
+      const linkRace = JSON.parse(psql(
+        `SELECT public.claim_ledger_link_or_create('${raceB}','${TENANT_A}','695064-RACE','link_existing');`,
+      ));
+      assert.equal(linkRace.code, 'linked');
+    }
+    assert.equal(psql(`SELECT claim_id FROM public.check_intake_items WHERE id = '${raceB}'`), raceClaim);
+    assert.equal(psql(`SELECT count(*) FROM public.claims WHERE public.ocr_claim_number_key(claim_number) = '695064-race'`), '1');
+    assert.equal(psql(`SELECT amount::text FROM public.check_intake_items WHERE id = '${raceA}'`), '1');
+    assert.equal(psql(`SELECT amount::text FROM public.check_intake_items WHERE id = '${raceB}'`), '2');
   } finally {
     run(path.join(PG_BIN, 'pg_ctl'), ['-D', pgData, '-m', 'fast', '-w', 'stop']);
   }

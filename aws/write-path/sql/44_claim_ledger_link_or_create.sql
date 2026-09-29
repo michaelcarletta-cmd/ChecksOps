@@ -8,8 +8,10 @@
 --
 -- Actions:
 --   inspect       — lock check, report already_linked / existing_found / no_match / ambiguous
---   link_existing — SET check_intake_items.claim_id to the unique eligible match only
---   create_new    — INSERT one tracking claim (org_id = tenant) + SET claim_id atomically
+--                    no_match also reports same-tenant detected_claim_number candidate counts
+--   link_existing — SET check_intake_items.claim_id on THIS check only to the unique eligible match
+--   create_new    — INSERT one tracking claim (org_id = tenant)
+--                    + SET claim_id on this check and same-tenant unlinked OCR siblings
 --
 -- Eligible existing ledger for this tenant (inspect / link_existing):
 --   1. claims.org_id = current check tenant_id
@@ -19,13 +21,25 @@
 --      AND no linked check belongs to another tenant
 --
 -- detected_claim_number is NOT ownership evidence and is NOT a ledger.
--- OCR-only numbers with no eligible claims row stay no_match.
+-- OCR/detected_claim_number is DISCOVERY evidence only.
+-- Ownership counts (v_same_count / v_other_count / v_ambiguous_own) never
+-- treat detected_claim_number as eligibility.
+-- OCR-only numbers with no eligible claims row stay no_match, but inspect
+-- reports same-tenant candidate checks so the UI can offer Start New Claim Ledger.
+--
+-- create_new groups only:
+--   same tenant_id
+--   claim_id IS NULL
+--   current check id OR exact ocr_claim_number_key(detected_claim_number)
+-- Already-linked checks are never rewritten. Foreign-tenant OCR is never linked.
 --
 -- Null-org claims linked across MORE THAN ONE tenant: ambiguous, fail closed.
 -- Foreign non-null org_id: denied. Do not LIMIT 1 before counting eligible rows.
 --
 -- link_existing does NOT assign claims.org_id (legacy ownership stays NULL).
 -- create_new still sets org_id on the new row.
+-- unique_violation resolves to the eligible existing ledger and links remaining
+-- same-tenant unlinked candidates instead of inserting a duplicate.
 --
 -- Already-linked checks return the existing claim and never relink or create.
 -- Existing claim_id is never rewritten.
@@ -61,6 +75,12 @@ DECLARE
   v_other_org uuid;
   v_new_id uuid;
   v_after uuid;
+  v_target_id uuid;
+  v_detected_count int := 0;
+  v_unlinked_count int := 0;
+  v_already_linked_sib int := 0;
+  v_linked_count int := 0;
+  v_associated_count int := 0;
 BEGIN
   IF p_check_id IS NULL OR p_tenant_id IS NULL THEN
     RETURN jsonb_build_object('ok', false, 'persisted', false, 'created', false, 'linked', false, 'code', 'invalid_args');
@@ -178,6 +198,16 @@ BEGIN
       )
     );
 
+  -- Discovery only: same-tenant OCR candidates. Never ownership.
+  SELECT
+    count(*),
+    count(*) FILTER (WHERE i.claim_id IS NULL),
+    count(*) FILTER (WHERE i.claim_id IS NOT NULL)
+    INTO v_detected_count, v_unlinked_count, v_already_linked_sib
+  FROM public.check_intake_items i
+  WHERE i.tenant_id IS NOT DISTINCT FROM p_tenant_id
+    AND public.ocr_claim_number_key(i.detected_claim_number) = v_key;
+
   IF COALESCE(v_same_count, 0) > 1 OR COALESCE(v_ambiguous_own, 0) > 0 THEN
     RETURN jsonb_build_object(
       'ok', false,
@@ -237,7 +267,11 @@ BEGIN
       'code', 'no_match',
       'can_create', (COALESCE(v_other_count, 0) = 0),
       'claim_id', NULL,
-      'check_claim_id', NULL
+      'claim_number', v_incoming,
+      'check_claim_id', NULL,
+      'same_tenant_detected_count', COALESCE(v_detected_count, 0),
+      'same_tenant_unlinked_count', COALESCE(v_unlinked_count, 0),
+      'same_tenant_already_linked_count', COALESCE(v_already_linked_sib, 0)
     );
   END IF;
 
@@ -301,10 +335,11 @@ BEGIN
     INSERT INTO public.claims (claim_number, status, org_id)
     VALUES (v_incoming, 'tracking', p_tenant_id)
     RETURNING id INTO v_new_id;
+    v_target_id := v_new_id;
   EXCEPTION
     WHEN unique_violation THEN
-      SELECT c.id, c.org_id
-        INTO v_same_id, v_other_org
+      SELECT c.id, c.claim_number, c.policyholder_name, c.org_id
+        INTO v_same_id, v_same_number, v_same_name, v_other_org
       FROM public.claims c
       WHERE public.ocr_claim_number_key(c.claim_number) = v_key
         AND (
@@ -326,47 +361,98 @@ BEGIN
             )
           )
         );
-      IF v_same_id IS NOT NULL THEN
+      IF v_same_id IS NULL THEN
         RETURN jsonb_build_object(
           'ok', false,
           'persisted', false,
           'created', false,
           'linked', false,
-          'code', 'existing_found',
-          'claim_id', v_same_id
+          'code', 'claim_number_conflict'
         );
       END IF;
+      v_target_id := v_same_id;
+      v_new_id := NULL;
+  END;
+
+  WITH locked AS (
+    SELECT s.id
+    FROM public.check_intake_items s
+    WHERE s.tenant_id IS NOT DISTINCT FROM p_tenant_id
+      AND s.claim_id IS NULL
+      AND (
+        s.id = p_check_id
+        OR public.ocr_claim_number_key(s.detected_claim_number) = v_key
+      )
+    ORDER BY s.id
+    FOR UPDATE OF s SKIP LOCKED
+  )
+  UPDATE public.check_intake_items AS i
+     SET claim_id = v_target_id,
+         updated_at = now()
+    FROM locked
+   WHERE i.id = locked.id
+     AND i.tenant_id IS NOT DISTINCT FROM p_tenant_id
+     AND i.claim_id IS NULL;
+  GET DIAGNOSTICS v_linked_count = ROW_COUNT;
+
+  SELECT claim_id
+    INTO v_after
+  FROM public.check_intake_items
+  WHERE id = p_check_id;
+
+  IF v_after IS NULL THEN
+    UPDATE public.check_intake_items
+       SET claim_id = v_target_id,
+           updated_at = now()
+     WHERE id = p_check_id
+       AND tenant_id IS NOT DISTINCT FROM p_tenant_id
+       AND claim_id IS NULL
+    RETURNING claim_id INTO v_after;
+  END IF;
+
+  IF v_after IS NULL OR v_after IS DISTINCT FROM v_target_id THEN
+    IF v_after IS NOT NULL THEN
       RETURN jsonb_build_object(
-        'ok', false,
+        'ok', true,
         'persisted', false,
         'created', false,
         'linked', false,
-        'code', 'claim_number_conflict'
+        'code', 'already_linked',
+        'claim_id', v_after,
+        'check_claim_id', v_after
       );
-  END;
-
-  UPDATE public.check_intake_items
-     SET claim_id = v_new_id,
-         updated_at = now()
-   WHERE id = p_check_id
-     AND tenant_id IS NOT DISTINCT FROM p_tenant_id
-     AND claim_id IS NULL
-  RETURNING claim_id INTO v_after;
-
-  IF v_after IS NULL OR v_after IS DISTINCT FROM v_new_id THEN
+    END IF;
     RAISE EXCEPTION 'claim_ledger_link_failed'
       USING ERRCODE = 'P0001';
   END IF;
 
+  SELECT count(*)
+    INTO v_associated_count
+  FROM public.check_intake_items i
+  WHERE i.tenant_id IS NOT DISTINCT FROM p_tenant_id
+    AND i.claim_id IS NOT DISTINCT FROM v_target_id;
+
+  SELECT count(*)
+    INTO v_already_linked_sib
+  FROM public.check_intake_items i
+  WHERE i.tenant_id IS NOT DISTINCT FROM p_tenant_id
+    AND public.ocr_claim_number_key(i.detected_claim_number) = v_key
+    AND i.claim_id IS NOT NULL
+    AND i.claim_id IS DISTINCT FROM v_target_id;
+
   RETURN jsonb_build_object(
     'ok', true,
     'persisted', true,
-    'created', true,
+    'created', (v_new_id IS NOT NULL),
     'linked', true,
-    'code', 'created',
-    'claim_id', v_new_id,
-    'claim_number', v_incoming,
-    'check_claim_id', v_after
+    'code', CASE WHEN v_new_id IS NOT NULL THEN 'created' ELSE 'linked' END,
+    'claim_id', v_target_id,
+    'claim_number', COALESCE(v_same_number, v_incoming),
+    'policyholder_name', v_same_name,
+    'check_claim_id', v_after,
+    'linked_check_count', COALESCE(v_linked_count, 0),
+    'associated_check_count', COALESCE(v_associated_count, 0),
+    'already_linked_sibling_count', COALESCE(v_already_linked_sib, 0)
   );
 END;
 $$;

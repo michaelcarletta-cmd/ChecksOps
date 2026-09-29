@@ -5,6 +5,8 @@ import {
   assertCheckClaimLinkAllowed,
   CLAIM_LEDGER_LINK_RPC,
   claimIsSelectableForTenant,
+  claimLedgerCreatedSummary,
+  claimLedgerDiscoverySummary,
   claimLedgerLinkOrCreateArgs,
   claimLedgerUserMessage,
   claimNumberSaveWritePayload,
@@ -186,6 +188,49 @@ test('existing claim number save updates in place and does not create or relink'
   });
   assert.equal(CLAIM_LEDGER_LINK_RPC, 'claim_ledger_link_or_create');
   assert.match(claimLedgerUserMessage('cross_tenant'), /another tenant/);
+  const existingLedger = claimLedgerDiscoverySummary({
+    code: 'existing_found',
+    claim_number: '695064-GQ',
+  });
+  assert.equal(existingLedger, null);
+  const oneOcr = claimLedgerDiscoverySummary({
+    code: 'no_match',
+    claim_number: '695064-GQ',
+    same_tenant_detected_count: 1,
+    same_tenant_unlinked_count: 1,
+    same_tenant_already_linked_count: 0,
+  });
+  assert.equal(oneOcr.kind, 'ocr_group');
+  assert.equal(oneOcr.headline, 'Claim #695064-GQ');
+  assert.deepEqual(oneOcr.lines, [
+    '1 check found for this claim number.',
+    'No Claim Ledger has been created yet.',
+  ]);
+  const fourOcr = claimLedgerDiscoverySummary({
+    code: 'no_match',
+    claim_number: '695064-GQ',
+    same_tenant_detected_count: 4,
+    same_tenant_unlinked_count: 4,
+    same_tenant_already_linked_count: 0,
+  });
+  assert.equal(fourOcr.headline, 'Claim #695064-GQ');
+  assert.equal(fourOcr.lines[0], '4 checks found for this claim number.');
+  const emptyOcr = claimLedgerDiscoverySummary({
+    code: 'no_match',
+    can_create: true,
+    same_tenant_detected_count: 0,
+    same_tenant_unlinked_count: 0,
+  });
+  assert.equal(emptyOcr.kind, 'not_found');
+  const skipped = claimLedgerCreatedSummary({
+    code: 'created',
+    claim_number: '695064-GQ',
+    associated_check_count: 4,
+    already_linked_sibling_count: 1,
+  });
+  assert.equal(skipped.headline, 'Claim #695064-GQ');
+  assert.ok(skipped.lines.includes('4 checks associated with this claim.'));
+  assert.ok(skipped.lines.includes('1 already-linked check was left unchanged.'));
   assert.throws(() => claimLedgerLinkOrCreateArgs({
     checkId: CHECK_ID,
     claimNumber: '   ',
@@ -226,6 +271,8 @@ test('existing claim number save updates in place and does not create or relink'
   assert.match(src, /Link Existing Ledger/);
   assert.match(src, /Start New Claim Ledger/);
   assert.match(src, /Existing claim found/);
+  assert.match(src, /claimLedgerDiscoverySummary/);
+  assert.match(src, /No Claim Ledger has been created yet/);
   assert.match(src, /Typing a claim number does not create a claim/);
   assert.match(src, /\.from\("check_intake_items"\)[\s\S]*\.select\("id, claim_id"\)/);
   assert.equal(/newTrackingClaimInsert/.test(src), false);

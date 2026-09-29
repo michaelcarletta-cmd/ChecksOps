@@ -42,6 +42,9 @@ test('combined SPA source keeps Claim Ledger find/link/create and update-only sa
   assert.match(card, /Link Existing Ledger/);
   assert.match(card, /Start New Claim Ledger/);
   assert.match(card, /Existing claim found/);
+  assert.match(card, /claimLedgerDiscoverySummary/);
+  assert.match(card, /No Claim Ledger has been created yet/);
+  assert.match(card, /checks found for this claim number/);
   assert.match(card, /claim_ledger_link_or_create|CLAIM_LEDGER_LINK_RPC/);
   assert.match(card, /handleLedgerAction\("inspect"\)/);
   assert.match(card, /handleLedgerAction\("link_existing"\)/);
@@ -54,6 +57,8 @@ test('combined SPA source keeps Claim Ledger find/link/create and update-only sa
   const guard = read('src/lib/checkClaimLinkGuard.ts');
   assert.match(guard, /export const CLAIM_LEDGER_LINK_RPC = "claim_ledger_link_or_create"/);
   assert.match(guard, /Claim Ledger Save only writes an in-place claim_number update/);
+  assert.match(guard, /export function claimLedgerDiscoverySummary/);
+  assert.match(guard, /OCR candidates are discovery evidence, not ownership/);
 
   const ccc = read('src/pages/CheckCommandCenter.tsx');
   assert.match(ccc, /ClaimLedgerCard/);

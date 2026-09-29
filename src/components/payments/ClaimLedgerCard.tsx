@@ -16,6 +16,8 @@ import {
   CLAIM_LEDGER_LINK_RPC,
   CLAIM_LEDGER_NOT_LINKED,
   CLAIM_NUMBER_SAVE_SELECT,
+  claimLedgerCreatedSummary,
+  claimLedgerDiscoverySummary,
   claimLedgerLinkOrCreateArgs,
   claimLedgerUserMessage,
   claimLinkUserMessage,
@@ -299,15 +301,18 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
       if (res?.code === "linked" || res?.code === "created") {
         setTimeout(() => setEditorOpen(true), 100);
       }
+      const created = res?.code === "created" ? claimLedgerCreatedSummary(res) : null;
       toast({
         title: res?.code === "created"
-          ? "Claim tracker created"
+          ? "Claim Ledger created"
           : res?.code === "linked"
             ? "Linked to claim"
             : "Claim ledger ready",
-        description: res?.claim_number
-          ? `${res.claim_number}${res.policyholder_name ? ` — ${res.policyholder_name}` : ""}`
-          : undefined,
+        description: created
+          ? created.lines.slice(1).join(" ") || created.headline
+          : res?.claim_number
+            ? `${res.claim_number}${res.policyholder_name ? ` — ${res.policyholder_name}` : ""}`
+            : undefined,
       });
     },
     onError: (e: any) => {
@@ -435,11 +440,24 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
           {inspectResult?.code === "no_match" && inspectResult?.can_create === false && (
             <p className="text-xs text-destructive">{claimLedgerUserMessage("cross_tenant")}</p>
           )}
-          {inspectResult?.code === "no_match" && inspectResult?.can_create !== false && (
-            <p className="text-xs text-muted-foreground">
-              No existing claim with that number in this tenant.
-            </p>
-          )}
+          {inspectResult?.code === "no_match" && inspectResult?.can_create !== false && (() => {
+            const discovery = claimLedgerDiscoverySummary(inspectResult);
+            if (!discovery) return null;
+            return (
+              <div className="space-y-1 text-xs text-muted-foreground">
+                {discovery.kind === "ocr_group" ? (
+                  <>
+                    <p className="font-medium text-foreground">{discovery.headline}</p>
+                    {discovery.lines.map((line) => (
+                      <p key={line}>{line}</p>
+                    ))}
+                  </>
+                ) : (
+                  <p>{discovery.headline}</p>
+                )}
+              </div>
+            );
+          })()}
           {inspectResult?.code === "ambiguous" && (
             <p className="text-xs text-destructive">{claimLedgerUserMessage("ambiguous")}</p>
           )}

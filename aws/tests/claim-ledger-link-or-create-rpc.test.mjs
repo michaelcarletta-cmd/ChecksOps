@@ -290,6 +290,34 @@ test('inspect RPC never writes claims or claim_id itself', async () => {
   assert.equal(client.queries.some((q) => /UPDATE public\.claims/.test(String(q.sql))), false);
 });
 
+test('inspect no_match discovery counts pass through without writes', async () => {
+  const client = mockClient({
+    rpcResult: {
+      ok: true,
+      code: 'no_match',
+      can_create: true,
+      created: false,
+      linked: false,
+      persisted: false,
+      claim_number: '695064-GQ',
+      same_tenant_detected_count: 4,
+      same_tenant_unlinked_count: 4,
+      same_tenant_already_linked_count: 0,
+    },
+  });
+  const result = await executeSafeWriteRpc({
+    client,
+    mapping: { application_user_id: APP_ID },
+    name: 'claim_ledger_link_or_create',
+    args: { p_check_id: CHECK_ID, p_claim_number: '695064-GQ', p_action: 'inspect' },
+  });
+  assert.equal(result.data.code, 'no_match');
+  assert.equal(result.data.same_tenant_detected_count, 4);
+  assert.equal(result.data.same_tenant_unlinked_count, 4);
+  assert.equal(client.queries.some((q) => /INSERT INTO public\.claims/.test(String(q.sql))), false);
+  assert.equal(client.queries.some((q) => /UPDATE public\.check_intake_items/.test(String(q.sql))), false);
+});
+
 test('HTTP /data/rpc inspect succeeds and unknown RPC stays disabled', async () => {
   const client = mockClient({
     rpcResult: { ok: true, code: 'no_match', can_create: true, created: false, linked: false },
