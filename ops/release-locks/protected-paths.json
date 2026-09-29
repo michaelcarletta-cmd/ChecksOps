@@ -8,7 +8,9 @@
   ],
   "ownership_groups": {
     "identity-cognito": {
-      "owners": ["@michaelcarletta-cmd"],
+      "owners": [
+        "@michaelcarletta-cmd"
+      ],
       "description": "Cognito routing, identity mapping, production pool/client references",
       "paths": [
         "src/integrations/aws/client.ts",
@@ -20,7 +22,9 @@
       ]
     },
     "moov-webhooks": {
-      "owners": ["@michaelcarletta-cmd"],
+      "owners": [
+        "@michaelcarletta-cmd"
+      ],
       "description": "Moov webhook receive/apply paths and receipt SQL",
       "paths": [
         "aws/functions/api/providers/webhooks.mjs",
@@ -33,7 +37,9 @@
       ]
     },
     "checkalt-submission": {
-      "owners": ["@michaelcarletta-cmd"],
+      "owners": [
+        "@michaelcarletta-cmd"
+      ],
       "description": "CheckAlt submission, eligibility, images, and production writer SQL. Explicit files only; Moov or future provider siblings are not captured.",
       "paths": [
         "aws/functions/api/providers/production/checkalt-approve.mjs",
@@ -59,7 +65,9 @@
       ]
     },
     "financial-ledger": {
-      "owners": ["@michaelcarletta-cmd"],
+      "owners": [
+        "@michaelcarletta-cmd"
+      ],
       "description": "Financial execution flags, ledger, reconciliation, activation SQL",
       "paths": [
         "aws/functions/api/financial.mjs",
@@ -78,7 +86,9 @@
       ]
     },
     "tenant-email": {
-      "owners": ["@michaelcarletta-cmd"],
+      "owners": [
+        "@michaelcarletta-cmd"
+      ],
       "description": "Tenant SES/email domain settings",
       "paths": [
         "aws/functions/api/tenant-email-domain.mjs",
@@ -89,7 +99,9 @@
       ]
     },
     "partner-sharing": {
-      "owners": ["@michaelcarletta-cmd"],
+      "owners": [
+        "@michaelcarletta-cmd"
+      ],
       "description": "Partner share/revoke lifecycle and C1C visibility contract. SQL 31/32/33/34 are APPLIED IN PRODUCTION; do not reapply. Ownership and visibility are separate.",
       "paths": [
         "aws/functions/api/partner-share-lifecycle.mjs",
@@ -111,7 +123,9 @@
       ]
     },
     "mortgage-ops": {
-      "owners": ["@michaelcarletta-cmd"],
+      "owners": [
+        "@michaelcarletta-cmd"
+      ],
       "description": "Mortgage Ops library parity SQL and API (SQL previously unapplied)",
       "paths": [
         "aws/rls/sql/29_mortgage_ops_library_parity.sql",
@@ -123,7 +137,9 @@
       ]
     },
     "auto-deposit": {
-      "owners": ["@michaelcarletta-cmd"],
+      "owners": [
+        "@michaelcarletta-cmd"
+      ],
       "description": "Deposit automation / tenant auto-deposit (production activation forbidden without lock update)",
       "paths": [
         "supabase/functions/deposit-daily-automation/index.ts",
@@ -134,7 +150,9 @@
       ]
     },
     "database-rls": {
-      "owners": ["@michaelcarletta-cmd"],
+      "owners": [
+        "@michaelcarletta-cmd"
+      ],
       "description": "Database RLS, write allowlist, and financial authorization helpers",
       "paths": [
         "aws/rls/sql/",
@@ -145,7 +163,9 @@
       ]
     },
     "provider-secrets": {
-      "owners": ["@michaelcarletta-cmd"],
+      "owners": [
+        "@michaelcarletta-cmd"
+      ],
       "description": "Provider secret name/config references (values must never be committed)",
       "paths": [
         "aws/functions/api/provider-secrets.mjs",
@@ -155,7 +175,9 @@
       ]
     },
     "ocr-azure": {
-      "owners": ["@michaelcarletta-cmd"],
+      "owners": [
+        "@michaelcarletta-cmd"
+      ],
       "description": "Finalized Textract+Azure check OCR runtime. Eight explicit files only. Does not own shared CheckAlt image primitives in providers/parity/checkalt-image.mjs; OCR reuses named exports from that module without claiming it.",
       "paths": [
         "aws/functions/api/ocr.mjs",
@@ -169,7 +191,9 @@
       ]
     },
     "production-spa": {
-      "owners": ["@michaelcarletta-cmd"],
+      "owners": [
+        "@michaelcarletta-cmd"
+      ],
       "description": "Authoritative live production SPA baseline identity and fail-closed promotion helpers. Does not own application source on main; live artifact pins win until repository history is reconciled.",
       "paths": [
         "scripts/lib/production-spa-baseline.mjs",
@@ -177,10 +201,14 @@
       ]
     },
     "production-release": {
-      "owners": ["@michaelcarletta-cmd"],
+      "owners": [
+        "@michaelcarletta-cmd"
+      ],
       "description": "Control-plane release-lock tooling, CI, template execution flags, production config examples. Changes here are control-plane changes and require this ownership group. Hashing a changed validator with itself is not independent security.",
       "control_plane": true,
-      "tree_hash_exclude": ["ops/release-locks/locked-components.json"],
+      "tree_hash_exclude": [
+        "ops/release-locks/locked-components.json"
+      ],
       "paths": [
         "ops/release-locks/",
         "ops/release-locks/locked-components.json",
@@ -196,6 +224,18 @@
         "aws/samconfig.toml",
         "aws/cutover/production/",
         "aws/production/LIVE_RESOURCES.md"
+      ]
+    },
+    "freedom-platform-funding": {
+      "owners": [
+        "@michaelcarletta-cmd"
+      ],
+      "description": "Freedom \u2192 ChecksOps production funding contract. Protects behavior/invariants, not a whole-Lambda SHA. Shared money-path files are watched by the deploy guard and are not whole-file locked here.",
+      "paths": [
+        "ops/release-locks/contracts/freedom-platform-funding-contract.json",
+        "ops/release-locks/tests/freedom-platform-funding-contract.test.mjs",
+        "ops/release-locks/proof/freedom-platform-funding-freeze.md",
+        "scripts/lib/freedom-platform-funding-contract.mjs"
       ]
     }
   }

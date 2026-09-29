@@ -98,6 +98,26 @@ test('direct staging SPA writer fails before AWS mutation', () => {
   assert.equal(result.awsLog, '');
 });
 
+test('official production Lambda apply fails before AWS mutation without a receipt', () => {
+  const result = spawnWriter('scripts/deployment-guard/production-lambda-apply.mjs', [
+    '--confirm-apply',
+    '--zip', '/tmp/missing-candidate.zip',
+  ]);
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stderr}${result.stdout}`, /DEPLOYMENT_GUARD_REQUIRED/);
+  assert.equal(result.awsLog, '');
+});
+
+test('official production SPA apply fails before AWS mutation without a receipt', () => {
+  const result = spawnWriter('scripts/deployment-guard/production-spa-apply.mjs', [
+    '--confirm-apply',
+    '--dist', '/tmp/missing-dist',
+  ]);
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stderr}${result.stdout}`, /DEPLOYMENT_GUARD_REQUIRED/);
+  assert.equal(result.awsLog, '');
+});
+
 test('direct SQL executor invoke fails before AWS mutation', () => {
   const result = spawnWriter('scripts/deployment-guard/sql-executor-invoke.mjs', []);
   assert.notEqual(result.status, 0);

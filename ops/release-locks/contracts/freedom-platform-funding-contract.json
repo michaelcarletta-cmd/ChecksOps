@@ -1,0 +1,119 @@
+{
+  "id": "freedom-platform-funding",
+  "version": 1,
+  "fail_closed": true,
+  "protects": "behavior",
+  "does_not_pin": "whole Lambda CodeSha256",
+  "classification": "SOURCE_LOCKED_NOT_ACTIVE",
+  "recorded_at": "2026-09-29T15:14:59Z",
+  "live_production_baseline": {
+    "lambda_name": "checksops-production-prep-api",
+    "code_sha256_base64": "nJup1+WVcsX99QzhmLvEpG+CRurINFAXLn+3osQBeQc=",
+    "revision_id": "cea215e3-649b-477a-bcfc-e907bf670b87",
+    "last_modified": "2026-09-29T14:52:05.000+0000",
+    "note": "Authoritative at freeze time. Future overlays must re-read CURRENT live production. An older repository ZIP or Lambda package must never restore this funding path over newer production."
+  },
+  "spa_baseline": {
+    "js": "index-DJNHggvS.js",
+    "css": "index-D9SwIqYu.css",
+    "js_sha256": "40a7ad700091a26d328f90f695004e4c086143d1e6ae8e2aba35d8cc9c006380",
+    "css_sha256": "d758a18b1d5b772febc87282f5dbe383955b5b1935a55c815fa69b579a6d4b9d",
+    "index_sha256": "79f7aa0df9f071b73c49a8b17e4cb1041ecd375fda0ddbcbbb31bbae146469f2",
+    "index_last_modified": "2026-09-29T11:26:02+00:00"
+  },
+  "identities": {
+    "freedom_tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+    "freedom_moov_account_id": "60922058-7eca-4889-81dd-5720d7b9de96",
+    "freedom_bank_last4": "4573",
+    "freedom_bank_name": "WELLS FARGO BANK",
+    "freedom_bank_account_id": "61062c38-a79e-4f62-bb64-32ddecf3d37c",
+    "freedom_stored_credit_standard_method_id": "7a78a544-340d-46fd-a4a4-228661374da7",
+    "freedom_ach_debit_fund_method_id": "a02c1c81-9ca6-434d-accc-ea4471a70ef2",
+    "freedom_ach_debit_collect_method_id": "128977bb-5034-4e8b-89ed-b10982105aa3",
+    "checksops_platform_account_id": "41cb5d67-4911-4bef-aad5-d8ee9c582208",
+    "checksops_platform_wallet_id": "72630a70-4954-4761-b652-e8beff1ad02c",
+    "checksops_platform_wallet_payment_method_id": "c70a90f2-9bcc-4084-8263-d5a0fb5d806c"
+  },
+  "known_good_transfer": {
+    "kind": "billing_verification",
+    "amount_cents": 100,
+    "currency": "USD",
+    "provider_transfer_id": "367c5353-ed20-430b-b767-c3e5d47f28ad",
+    "local_payment_id": "414d81a2-186b-4e42-8ea1-47077d77a85c",
+    "idempotency_key": "billing_verification:2eff5f1a-929d-4ce3-9a8b-cd96b98df42a:f0ff0dbf-f5e5-4924-a060-811e7e568c8c",
+    "provider_status_at_freeze": "pending",
+    "ach_status_at_freeze": "originated",
+    "created_on": "2026-09-25T20:46:55Z",
+    "completed_on": null,
+    "local_status_at_freeze": "submitted",
+    "local_settled_at": null,
+    "description": "ChecksOps billing verification $1.00",
+    "provider_environment": "production",
+    "source_account_id": "60922058-7eca-4889-81dd-5720d7b9de96",
+    "source_method_id": "a02c1c81-9ca6-434d-accc-ea4471a70ef2",
+    "source_rail": "ach-debit-fund",
+    "source_bank_last4": "4573",
+    "destination_account_id": "41cb5d67-4911-4bef-aad5-d8ee9c582208",
+    "destination_wallet_id": "72630a70-4954-4761-b652-e8beff1ad02c",
+    "destination_payment_method_id": "c70a90f2-9bcc-4084-8263-d5a0fb5d806c",
+    "duplicate_check": {
+      "provider_transfer_count": 1,
+      "local_verification_row_count": 1,
+      "same_provider_transfer_local_rows": 1,
+      "payment_transfers_rows": 0,
+      "wallet_funding_requests_rows": 0
+    }
+  },
+  "invariants": {
+    "A_source_tenant": "Funding initiated for Freedom resolves tenant 2eff5f1a-929d-4ce3-9a8b-cd96b98df42a.",
+    "B_source_account": "Freedom source is Moov account 60922058-7eca-4889-81dd-5720d7b9de96.",
+    "C_source_bank": "Approved funding source resolves to the authorized Freedom Wells Fargo last4 4573 ach-debit-fund method. No first-available / first-wallet / other-tenant / platform-bank / sandbox fallback.",
+    "D_destination": "Destination is explicit ChecksOps platform account 41cb5d67-4911-4bef-aad5-d8ee9c582208 and wallet 72630a70-4954-4761-b652-e8beff1ad02c (payment method c70a90f2-9bcc-4084-8263-d5a0fb5d806c). No first-wallet fallback.",
+    "E_direction": "Money direction is Freedom tenant funding source → ChecksOps platform destination. Never reverse.",
+    "F_environment": "Production funding must resolve production Moov resources. No sandbox fallback in production.",
+    "G_tenant_isolation": "Another tenant cannot use Freedom's bank/payment method. Freedom cannot resolve another tenant's funding source.",
+    "H_idempotency": "The same logical funding operation must not create a second provider transfer.",
+    "I_provider_response": "Provider transfer ID and status must be persisted and reconcilable against the local financial row.",
+    "J_fail_closed": "Missing or ambiguous account, bank, wallet, environment, tenant, authorization, or provider configuration must STOP the transfer. Never guess."
+  },
+  "forbidden_fallbacks": [
+    "first_available_payment_method",
+    "first_wallet",
+    "first_bank",
+    "other_tenant_source",
+    "platform_bank_as_source",
+    "sandbox_in_production",
+    "reverse_source_destination",
+    "checksops_as_source",
+    "freedom_as_destination"
+  ],
+  "monthly_billing_separation": {
+    "AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST": "false",
+    "AWS_MOOV_BILLING_VERIFICATION_POST_ENABLED": "false",
+    "note": "Funding-path success does not authorize monthly automated billing. Those gates stay false unless a separate explicitly authorized workstream changes them."
+  },
+  "overlay_rule": {
+    "required_steps": [
+      "download_or_read_current_live_production",
+      "compare_protected_funding_invariants",
+      "run_funding_contract_tests",
+      "apply_only_intended_narrow_delta",
+      "perform_toctou_immediately_before_deployment",
+      "stop_on_unexplained_funding_path_drift"
+    ],
+    "old_artifact_restore_forbidden": true
+  },
+  "watched_runtime_paths": [
+    "aws/functions/api/tenant-billing-destination.mjs",
+    "aws/functions/api/tenant-billing-engine.mjs",
+    "aws/functions/api/providers/parity/moov-money.mjs",
+    "aws/functions/api/providers/parity/moov-rails.mjs",
+    "aws/functions/api/providers/parity/moov-client.mjs",
+    "aws/functions/api/providers/parity/caller.mjs",
+    "aws/functions/api/financial.mjs",
+    "aws/functions/api/financial-flags.mjs",
+    "aws/functions/api/financial-idempotency.mjs",
+    "ops/release-locks/contracts/freedom-platform-funding-contract.json",
+    "scripts/lib/freedom-platform-funding-contract.mjs"
+  ]
+}

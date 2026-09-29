@@ -33,6 +33,21 @@
       "note": "Official SPA entry. Requires receipt, then refuses live S3/CloudFront mutation in this phase."
     },
     {
+      "path": "scripts/deployment-guard/production-lambda-apply.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["lambda-update-function-code"],
+      "shared_target": true,
+      "function_name_default": "checksops-production-prep-api",
+      "note": "Official production Lambda overlay apply. Requires a signed receipt, --confirm-apply, live TOCTOU, and RevisionId CAS. Never changes env."
+    },
+    {
+      "path": "scripts/deployment-guard/production-spa-apply.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["spa-index-upload", "cloudfront-invalidation"],
+      "shared_target": true,
+      "note": "Official production SPA apply. Requires a production-spa spa-promote receipt, --confirm-apply, live index TOCTOU, and per-object put. Refuses staging."
+    },
+    {
       "path": "scripts/deployment-guard/wrap-legacy.mjs",
       "classification": "GUARDED",
       "capabilities": ["legacy-wrapper"]
