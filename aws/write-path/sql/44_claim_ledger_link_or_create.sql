@@ -8,12 +8,27 @@
 --
 -- Actions:
 --   inspect       — lock check, report already_linked / existing_found / no_match / ambiguous
---   link_existing — SET claim_id to the unique same-tenant match only
---   create_new    — INSERT one tracking claim + SET claim_id atomically
+--   link_existing — SET check_intake_items.claim_id to the unique eligible match only
+--   create_new    — INSERT one tracking claim (org_id = tenant) + SET claim_id atomically
+--
+-- Eligible existing ledger for this tenant (inspect / link_existing):
+--   1. claims.org_id = current check tenant_id
+--   OR
+--   2. claims.org_id IS NULL AND a check_intake_items row already has
+--      claim_id = claims.id AND that check's tenant_id = current tenant
+--      AND no linked check belongs to another tenant
+--
+-- detected_claim_number is NOT ownership evidence and is NOT a ledger.
+-- OCR-only numbers with no eligible claims row stay no_match.
+--
+-- Null-org claims linked across MORE THAN ONE tenant: ambiguous, fail closed.
+-- Foreign non-null org_id: denied. Do not LIMIT 1 before counting eligible rows.
+--
+-- link_existing does NOT assign claims.org_id (legacy ownership stays NULL).
+-- create_new still sets org_id on the new row.
 --
 -- Already-linked checks return the existing claim and never relink or create.
 -- Existing claim_id is never rewritten.
--- Cross-tenant matches cannot be linked. Ambiguous matches fail closed.
 -- Does not write amount, deposited_at, check_stage, or settlement columns.
 -- Does not change Review detected_claim_number behavior.
 
@@ -41,9 +56,9 @@ DECLARE
   v_same_number text;
   v_same_name text;
   v_same_count int;
-  v_other_id uuid;
-  v_other_org uuid;
   v_other_count int;
+  v_ambiguous_own int;
+  v_other_org uuid;
   v_new_id uuid;
   v_after uuid;
 BEGIN
@@ -96,21 +111,74 @@ BEGIN
     );
   END IF;
 
-  SELECT c.id, c.claim_number, c.policyholder_name, count(*) OVER ()
-    INTO v_same_id, v_same_number, v_same_name, v_same_count
-  FROM public.claims c
-  WHERE c.org_id IS NOT DISTINCT FROM p_tenant_id
-    AND public.ocr_claim_number_key(c.claim_number) = v_key
-  LIMIT 1;
-
-  SELECT c.id, c.org_id, count(*) OVER ()
-    INTO v_other_id, v_other_org, v_other_count
+  SELECT count(*)
+    INTO v_same_count
   FROM public.claims c
   WHERE public.ocr_claim_number_key(c.claim_number) = v_key
-    AND c.org_id IS DISTINCT FROM p_tenant_id
-  LIMIT 1;
+    AND (
+      c.org_id IS NOT DISTINCT FROM p_tenant_id
+      OR (
+        c.org_id IS NULL
+        AND EXISTS (
+          SELECT 1
+          FROM public.check_intake_items ev
+          WHERE ev.claim_id = c.id
+            AND ev.tenant_id IS NOT DISTINCT FROM p_tenant_id
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM public.check_intake_items ev
+          WHERE ev.claim_id = c.id
+            AND ev.tenant_id IS NOT NULL
+            AND ev.tenant_id IS DISTINCT FROM p_tenant_id
+        )
+      )
+    );
 
-  IF COALESCE(v_same_count, 0) > 1 THEN
+  SELECT count(*)
+    INTO v_ambiguous_own
+  FROM public.claims c
+  WHERE public.ocr_claim_number_key(c.claim_number) = v_key
+    AND c.org_id IS NULL
+    AND EXISTS (
+      SELECT 1
+      FROM public.check_intake_items ev
+      WHERE ev.claim_id = c.id
+        AND ev.tenant_id IS NOT DISTINCT FROM p_tenant_id
+    )
+    AND EXISTS (
+      SELECT 1
+      FROM public.check_intake_items ev
+      WHERE ev.claim_id = c.id
+        AND ev.tenant_id IS NOT NULL
+        AND ev.tenant_id IS DISTINCT FROM p_tenant_id
+    );
+
+  SELECT count(*)
+    INTO v_other_count
+  FROM public.claims c
+  WHERE public.ocr_claim_number_key(c.claim_number) = v_key
+    AND (
+      (c.org_id IS NOT NULL AND c.org_id IS DISTINCT FROM p_tenant_id)
+      OR (
+        c.org_id IS NULL
+        AND EXISTS (
+          SELECT 1
+          FROM public.check_intake_items ev
+          WHERE ev.claim_id = c.id
+            AND ev.tenant_id IS NOT NULL
+            AND ev.tenant_id IS DISTINCT FROM p_tenant_id
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM public.check_intake_items ev
+          WHERE ev.claim_id = c.id
+            AND ev.tenant_id IS NOT DISTINCT FROM p_tenant_id
+        )
+      )
+    );
+
+  IF COALESCE(v_same_count, 0) > 1 OR COALESCE(v_ambiguous_own, 0) > 0 THEN
     RETURN jsonb_build_object(
       'ok', false,
       'persisted', false,
@@ -118,6 +186,32 @@ BEGIN
       'linked', false,
       'code', 'ambiguous'
     );
+  END IF;
+
+  IF COALESCE(v_same_count, 0) = 1 THEN
+    SELECT c.id, c.claim_number, c.policyholder_name
+      INTO v_same_id, v_same_number, v_same_name
+    FROM public.claims c
+    WHERE public.ocr_claim_number_key(c.claim_number) = v_key
+      AND (
+        c.org_id IS NOT DISTINCT FROM p_tenant_id
+        OR (
+          c.org_id IS NULL
+          AND EXISTS (
+            SELECT 1
+            FROM public.check_intake_items ev
+            WHERE ev.claim_id = c.id
+              AND ev.tenant_id IS NOT DISTINCT FROM p_tenant_id
+          )
+          AND NOT EXISTS (
+            SELECT 1
+            FROM public.check_intake_items ev
+            WHERE ev.claim_id = c.id
+              AND ev.tenant_id IS NOT NULL
+              AND ev.tenant_id IS DISTINCT FROM p_tenant_id
+          )
+        )
+      );
   END IF;
 
   IF v_action = 'inspect' THEN
@@ -141,7 +235,7 @@ BEGIN
       'created', false,
       'linked', false,
       'code', 'no_match',
-      'can_create', (v_other_id IS NULL),
+      'can_create', (COALESCE(v_other_count, 0) = 0),
       'claim_id', NULL,
       'check_claim_id', NULL
     );
@@ -149,7 +243,7 @@ BEGIN
 
   IF v_action = 'link_existing' THEN
     IF v_same_id IS NULL THEN
-      IF v_other_id IS NOT NULL THEN
+      IF COALESCE(v_other_count, 0) > 0 THEN
         RETURN jsonb_build_object('ok', false, 'persisted', false, 'created', false, 'linked', false, 'code', 'cross_tenant');
       END IF;
       RETURN jsonb_build_object('ok', false, 'persisted', false, 'created', false, 'linked', false, 'code', 'no_match');
@@ -193,7 +287,7 @@ BEGIN
     );
   END IF;
 
-  IF v_other_id IS NOT NULL THEN
+  IF COALESCE(v_other_count, 0) > 0 THEN
     RETURN jsonb_build_object(
       'ok', false,
       'persisted', false,
@@ -213,8 +307,26 @@ BEGIN
         INTO v_same_id, v_other_org
       FROM public.claims c
       WHERE public.ocr_claim_number_key(c.claim_number) = v_key
-      LIMIT 1;
-      IF v_same_id IS NOT NULL AND v_other_org IS NOT DISTINCT FROM p_tenant_id THEN
+        AND (
+          c.org_id IS NOT DISTINCT FROM p_tenant_id
+          OR (
+            c.org_id IS NULL
+            AND EXISTS (
+              SELECT 1
+              FROM public.check_intake_items ev
+              WHERE ev.claim_id = c.id
+                AND ev.tenant_id IS NOT DISTINCT FROM p_tenant_id
+            )
+            AND NOT EXISTS (
+              SELECT 1
+              FROM public.check_intake_items ev
+              WHERE ev.claim_id = c.id
+                AND ev.tenant_id IS NOT NULL
+                AND ev.tenant_id IS DISTINCT FROM p_tenant_id
+            )
+          )
+        );
+      IF v_same_id IS NOT NULL THEN
         RETURN jsonb_build_object(
           'ok', false,
           'persisted', false,

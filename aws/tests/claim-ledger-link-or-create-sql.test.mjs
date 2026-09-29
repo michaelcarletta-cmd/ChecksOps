@@ -38,6 +38,15 @@ test('SQL 44 is a narrow Claim Ledger RPC and does not broaden generic writes', 
   assert.match(SQL44, /unique_violation/);
   assert.match(SQL44, /cross_tenant/);
   assert.match(SQL44, /ambiguous/);
+  assert.match(SQL44, /SELECT count\(\*\).*v_same_count/s);
+  assert.match(SQL44, /v_ambiguous_own/);
+  assert.match(SQL44, /c\.org_id IS NULL/);
+  assert.match(SQL44, /ev\.claim_id = c\.id/);
+  assert.match(SQL44, /link_existing does NOT assign claims\.org_id/);
+  assert.doesNotMatch(SQL44, /UPDATE public\.claims[\s\S]*org_id/);
+  assert.doesNotMatch(SQL44, /ev\.detected_claim_number/);
+  assert.doesNotMatch(SQL44, /SET\s+detected_claim_number/);
+  assert.doesNotMatch(SQL44, /ocr_claim_number_key\(.*detected_claim_number/);
   assert.doesNotMatch(SQL44, /GRANT UPDATE/);
   assert.doesNotMatch(SQL44, /GRANT INSERT/);
   assert.match(SQL44, /GRANT EXECUTE ON FUNCTION public\.claim_ledger_link_or_create/);
@@ -196,6 +205,137 @@ max_connections = 20
     assert.equal(cross.ok, false);
     assert.ok(['cross_tenant', 'no_match'].includes(cross.code));
     assert.equal(psql(`SELECT claim_id IS NULL FROM public.check_intake_items WHERE id = '${check4}'`), 't');
+
+    const legacyClaim = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2';
+    const legacyLinked = '33333333-3333-4333-8333-333333333335';
+    const legacyUnlinked = '33333333-3333-4333-8333-333333333336';
+    const ocrOnly = '33333333-3333-4333-8333-333333333337';
+    psql(`
+      INSERT INTO public.claims (id, claim_number, status, org_id, policyholder_name)
+      VALUES ('${legacyClaim}', 'CL-LEGACY', 'tracking', NULL, 'Lee');
+      INSERT INTO public.check_intake_items (id, tenant_id, claim_id, detected_claim_number, check_stage, amount, deposited_at)
+      VALUES
+        ('${legacyLinked}', '${TENANT_A}', '${legacyClaim}', 'CL-LEGACY', 'review', 10, NULL),
+        ('${legacyUnlinked}', '${TENANT_A}', NULL, 'CL-LEGACY', 'review', 11, NULL),
+        ('${ocrOnly}', '${TENANT_A}', NULL, 'CL-OCR-ONLY', 'review', 12, NULL);
+    `);
+    const inspectBefore = psql(`
+      SELECT claim_id::text || '|' || amount::text || '|' || coalesce(deposited_at::text, '') || '|' || check_stage
+      FROM public.check_intake_items WHERE id = '${legacyUnlinked}'
+    `);
+    const legacyFound = JSON.parse(psql(
+      `SELECT public.claim_ledger_link_or_create('${legacyUnlinked}','${TENANT_A}','CL-LEGACY','inspect');`,
+    ));
+    assert.equal(legacyFound.code, 'existing_found');
+    assert.equal(legacyFound.claim_id, legacyClaim);
+    assert.equal(legacyFound.persisted, false);
+    assert.equal(psql(`
+      SELECT claim_id::text || '|' || amount::text || '|' || coalesce(deposited_at::text, '') || '|' || check_stage
+      FROM public.check_intake_items WHERE id = '${legacyUnlinked}'
+    `), inspectBefore);
+    assert.equal(psql(`SELECT org_id IS NULL FROM public.claims WHERE id = '${legacyClaim}'`), 't');
+
+    const ocrInspect = JSON.parse(psql(
+      `SELECT public.claim_ledger_link_or_create('${ocrOnly}','${TENANT_A}','CL-OCR-ONLY','inspect');`,
+    ));
+    assert.equal(ocrInspect.code, 'no_match');
+    assert.equal(ocrInspect.can_create, true);
+    assert.equal(psql(`SELECT claim_id IS NULL FROM public.check_intake_items WHERE id = '${ocrOnly}'`), 't');
+    assert.equal(psql(`SELECT count(*) FROM public.claims WHERE public.ocr_claim_number_key(claim_number) = 'cl-ocr-only'`), '0');
+
+    const foreignOrg = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3';
+    const foreignCheck = '33333333-3333-4333-8333-333333333338';
+    psql(`
+      INSERT INTO public.claims (id, claim_number, status, org_id)
+      VALUES ('${foreignOrg}', 'CL-FOREIGN', 'tracking', '${TENANT_B}');
+      INSERT INTO public.check_intake_items (id, tenant_id, claim_id)
+      VALUES ('${foreignCheck}', '${TENANT_A}', NULL);
+    `);
+    const foreignInspect = JSON.parse(psql(
+      `SELECT public.claim_ledger_link_or_create('${foreignCheck}','${TENANT_A}','CL-FOREIGN','inspect');`,
+    ));
+    assert.equal(foreignInspect.code, 'no_match');
+    assert.equal(foreignInspect.can_create, false);
+    const foreignLink = JSON.parse(psql(
+      `SELECT public.claim_ledger_link_or_create('${foreignCheck}','${TENANT_A}','CL-FOREIGN','link_existing');`,
+    ));
+    assert.equal(foreignLink.code, 'cross_tenant');
+    assert.equal(psql(`SELECT claim_id IS NULL FROM public.check_intake_items WHERE id = '${foreignCheck}'`), 't');
+
+    const otherLegacy = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4';
+    const otherLegacyLinked = '33333333-3333-4333-8333-333333333339';
+    const otherLegacyProbe = '33333333-3333-4333-8333-33333333333a';
+    psql(`
+      INSERT INTO public.claims (id, claim_number, status, org_id)
+      VALUES ('${otherLegacy}', 'CL-OTHER-LEG', 'tracking', NULL);
+      INSERT INTO public.check_intake_items (id, tenant_id, claim_id)
+      VALUES
+        ('${otherLegacyLinked}', '${TENANT_B}', '${otherLegacy}'),
+        ('${otherLegacyProbe}', '${TENANT_A}', NULL);
+    `);
+    const otherLegacyInspect = JSON.parse(psql(
+      `SELECT public.claim_ledger_link_or_create('${otherLegacyProbe}','${TENANT_A}','CL-OTHER-LEG','inspect');`,
+    ));
+    assert.equal(otherLegacyInspect.code, 'no_match');
+    assert.equal(otherLegacyInspect.can_create, false);
+    const otherLegacyLink = JSON.parse(psql(
+      `SELECT public.claim_ledger_link_or_create('${otherLegacyProbe}','${TENANT_A}','CL-OTHER-LEG','link_existing');`,
+    ));
+    assert.equal(otherLegacyLink.code, 'cross_tenant');
+    assert.equal(psql(`SELECT claim_id IS NULL FROM public.check_intake_items WHERE id = '${otherLegacyProbe}'`), 't');
+
+    const splitClaim = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa5';
+    const splitA = '33333333-3333-4333-8333-33333333333b';
+    const splitB = '33333333-3333-4333-8333-33333333333c';
+    const splitProbe = '33333333-3333-4333-8333-33333333333d';
+    psql(`
+      INSERT INTO public.claims (id, claim_number, status, org_id)
+      VALUES ('${splitClaim}', 'CL-SPLIT', 'tracking', NULL);
+      INSERT INTO public.check_intake_items (id, tenant_id, claim_id)
+      VALUES
+        ('${splitA}', '${TENANT_A}', '${splitClaim}'),
+        ('${splitB}', '${TENANT_B}', '${splitClaim}'),
+        ('${splitProbe}', '${TENANT_A}', NULL);
+    `);
+    const splitInspect = JSON.parse(psql(
+      `SELECT public.claim_ledger_link_or_create('${splitProbe}','${TENANT_A}','CL-SPLIT','inspect');`,
+    ));
+    assert.equal(splitInspect.ok, false);
+    assert.equal(splitInspect.code, 'ambiguous');
+    const splitLink = JSON.parse(psql(
+      `SELECT public.claim_ledger_link_or_create('${splitProbe}','${TENANT_A}','CL-SPLIT','link_existing');`,
+    ));
+    assert.equal(splitLink.code, 'ambiguous');
+    assert.equal(psql(`SELECT claim_id IS NULL FROM public.check_intake_items WHERE id = '${splitProbe}'`), 't');
+    assert.equal(psql(`SELECT org_id IS NULL FROM public.claims WHERE id = '${splitClaim}'`), 't');
+
+    const dupKeyA = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa6';
+    const dupKeyB = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa7';
+    const dupProbe = '33333333-3333-4333-8333-33333333333e';
+    psql(`
+      INSERT INTO public.claims (id, claim_number, status, org_id)
+      VALUES
+        ('${dupKeyA}', 'CL-DUP', 'tracking', '${TENANT_A}'),
+        ('${dupKeyB}', 'cl-dup', 'tracking', '${TENANT_A}');
+      INSERT INTO public.check_intake_items (id, tenant_id, claim_id)
+      VALUES ('${dupProbe}', '${TENANT_A}', NULL);
+    `);
+    const dupInspect = JSON.parse(psql(
+      `SELECT public.claim_ledger_link_or_create('${dupProbe}','${TENANT_A}','CL-DUP','inspect');`,
+    ));
+    assert.equal(dupInspect.ok, false);
+    assert.equal(dupInspect.code, 'ambiguous');
+    assert.equal(psql(`SELECT claim_id IS NULL FROM public.check_intake_items WHERE id = '${dupProbe}'`), 't');
+
+    const legacyLink = JSON.parse(psql(
+      `SELECT public.claim_ledger_link_or_create('${legacyUnlinked}','${TENANT_A}','CL-LEGACY','link_existing');`,
+    ));
+    assert.equal(legacyLink.code, 'linked');
+    assert.equal(legacyLink.claim_id, legacyClaim);
+    assert.equal(legacyLink.check_claim_id, legacyClaim);
+    assert.equal(psql(`SELECT claim_id FROM public.check_intake_items WHERE id = '${legacyUnlinked}'`), legacyClaim);
+    assert.equal(psql(`SELECT org_id IS NULL FROM public.claims WHERE id = '${legacyClaim}'`), 't');
+    assert.equal(psql(`SELECT amount::text FROM public.check_intake_items WHERE id = '${legacyUnlinked}'`), '11');
   } finally {
     run(path.join(PG_BIN, 'pg_ctl'), ['-D', pgData, '-m', 'fast', '-w', 'stop']);
   }
