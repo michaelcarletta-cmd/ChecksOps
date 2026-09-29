@@ -11,11 +11,11 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Landmark, ShieldCheck, AlertTriangle, Info } from "lucide-react";
 import { useTenantFilter } from "@/hooks/useTenantFilter";
+import { invokeTenantBillingAuthorize } from "@/lib/billing/tenantBilling";
 
 /**
- * Maintenance-fee billing: pick which of your already-verified bank accounts
- * (added via Moov in the Bank Account panel) should be
- * debited monthly. No manual routing/account entry — ever.
+ * Monthly ChecksOps subscription funding source.
+ * A connected bank alone is not enough — ACH authorization is required.
  */
 export function TenantBillingAccountPanel() {
   const { tenantId } = useTenantFilter();
@@ -23,14 +23,13 @@ export function TenantBillingAccountPanel() {
   const [selectedId, setSelectedId] = useState<string>("");
   const [authorized, setAuthorized] = useState(false);
 
-  // Currently-linked billing account
   const { data: billing, isLoading: loadingBilling } = useQuery({
     queryKey: ["tenant-billing-account", tenantId],
     enabled: !!tenantId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tenant_billing_accounts")
-        .select("id, stakeholder_account_id, ach_authorized_at, auto_debit_enabled, verification_status")
+        .select("id, provider_payment_method_id, ach_authorized_at, auto_debit_enabled, verification_status, account_number_last4, nickname")
         .eq("tenant_id", tenantId!)
         .maybeSingle();
       if (error) throw error;
@@ -38,82 +37,72 @@ export function TenantBillingAccountPanel() {
     },
   });
 
-  // Verified bank accounts available to bill from
   const { data: accounts = [], isLoading: loadingAccounts } = useQuery({
-    queryKey: ["tenant-verified-bank-accounts", tenantId],
+    queryKey: ["tenant-connected-billing-methods", tenantId],
     enabled: !!tenantId,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("stakeholder_accounts")
-        .select("id, nickname, chk_acct, acct_type, custname, verification_status, verified_at")
+        .from("payment_provider_methods")
+        .select("id, provider_payment_method_id, holder_name, last_four, nickname, connection_status, can_send, verification_status")
         .eq("tenant_id", tenantId!)
-        .eq("is_active", true)
-        .in("verification_status", ["verified", "admin_override"])
-        .order("verified_at", { ascending: false, nullsFirst: false });
+        .eq("connection_status", "connected")
+        .order("updated_at", { ascending: false });
       if (error) throw error;
-      return data ?? [];
+      return (data ?? []).filter((row: any) => row.provider_payment_method_id);
     },
   });
 
   useEffect(() => {
-    if (billing?.stakeholder_account_id) setSelectedId(billing.stakeholder_account_id);
-  }, [billing?.stakeholder_account_id]);
+    if (billing?.provider_payment_method_id) setSelectedId(billing.provider_payment_method_id);
+  }, [billing?.provider_payment_method_id]);
 
-  const linkedAccount = accounts.find((a: any) => a.id === billing?.stakeholder_account_id);
+  const linkedAccount = accounts.find((a: any) => a.provider_payment_method_id === billing?.provider_payment_method_id);
 
   const linkAccount = useMutation({
     mutationFn: async () => {
-      if (!selectedId) throw new Error("Select a verified bank account");
+      if (!selectedId) throw new Error("Select a connected bank account");
       if (!authorized) throw new Error("You must authorize ACH debits");
-
-      const acct = accounts.find((a: any) => a.id === selectedId);
-      if (!acct) throw new Error("Account not found");
-
-      const payload = {
+      const result = await invokeTenantBillingAuthorize({
         tenant_id: tenantId,
-        stakeholder_account_id: selectedId,
-        nickname: acct.nickname,
-        account_holder_name: acct.custname,
-        account_type: acct.acct_type === "C" ? "checking" : "savings",
-        entity_type: "business",
-        verification_status: acct.verification_status,
-        ach_authorized_at: new Date().toISOString(),
+        provider_payment_method_id: selectedId,
+        authorized: true,
         auto_debit_enabled: true,
-      };
-
-      if (billing?.id) {
-        const { error } = await supabase
-          .from("tenant_billing_accounts")
-          .update(payload)
-          .eq("id", billing.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from("tenant_billing_accounts")
-          .insert(payload as any);
-        if (error) throw error;
-      }
+      });
+      if (!result.ok) throw new Error(result.error);
     },
     onSuccess: () => {
-      toast.success("Billing account linked — auto-debit is on");
+      toast.success("Monthly subscription billing account authorized");
       setAuthorized(false);
       qc.invalidateQueries({ queryKey: ["tenant-billing-account", tenantId] });
     },
-    onError: (e: any) => toast.error(e?.message ?? "Failed to link account"),
+    onError: (e: any) => toast.error(e?.message ?? "Failed to authorize billing account"),
   });
 
   const toggleAutoDebit = useMutation({
     mutationFn: async (enabled: boolean) => {
-      const { error } = await supabase
-        .from("tenant_billing_accounts")
-        .update({ auto_debit_enabled: enabled })
-        .eq("tenant_id", tenantId!);
-      if (error) throw error;
+      if (!enabled) {
+        const result = await invokeTenantBillingAuthorize({
+          tenant_id: tenantId,
+          action: "pause",
+          auto_debit_enabled: false,
+        });
+        if (!result.ok) throw new Error(result.error);
+        return;
+      }
+      if (!selectedId) throw new Error("Select a connected bank account first");
+      const result = await invokeTenantBillingAuthorize({
+        tenant_id: tenantId,
+        provider_payment_method_id: selectedId,
+        authorized: true,
+        auto_debit_enabled: true,
+      });
+      if (!result.ok) throw new Error(result.error);
     },
     onSuccess: () => {
       toast.success("Auto-debit preference updated");
       qc.invalidateQueries({ queryKey: ["tenant-billing-account", tenantId] });
     },
+    onError: (e: any) => toast.error(e?.message ?? "Failed to update auto-debit"),
   });
 
   const isLoading = loadingBilling || loadingAccounts;
@@ -123,10 +112,10 @@ export function TenantBillingAccountPanel() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <Landmark className="h-4 w-4" />
-          Monthly fee auto-billing
+          Monthly subscription auto-billing
         </CardTitle>
         <CardDescription>
-          Choose which of your verified bank accounts ChecksOps should debit each month for <strong>maintenance fees, check processing fees, and payment processing fees</strong>. All bank accounts are added through the secure bank login in the Bank Account section — no manual entry.
+          Choose which connected Moov bank account ChecksOps may debit for the monthly platform subscription only. This is not used for insurance check processing or disbursement.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -136,7 +125,7 @@ export function TenantBillingAccountPanel() {
           <Alert>
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription className="text-xs">
-              You don't have any verified bank accounts yet. Add one in the <strong>Bank Account</strong> section using bank sign-in (Moov), then return here to enable auto-billing.
+              You don't have a connected Moov bank account yet. Add one in the <strong>Bank Account</strong> section, then return here to authorize monthly subscription billing.
             </AlertDescription>
           </Alert>
         ) : (
@@ -144,15 +133,15 @@ export function TenantBillingAccountPanel() {
             {linkedAccount && (
               <div className="flex items-center justify-between p-3 border rounded-md bg-muted/30">
                 <div>
-                  <div className="text-sm font-medium">{linkedAccount.nickname}</div>
+                  <div className="text-sm font-medium">{linkedAccount.nickname || linkedAccount.holder_name}</div>
                   <div className="text-xs text-muted-foreground">
-                    {linkedAccount.custname} · {linkedAccount.acct_type === "C" ? "Checking" : "Savings"} · {linkedAccount.chk_acct ? `••••${linkedAccount.chk_acct.slice(-4)}` : "Account pending"}
+                    {linkedAccount.holder_name} · ••••{linkedAccount.last_four || "????"}
                   </div>
                 </div>
                 <div className="flex flex-col items-end gap-1">
                   <Badge variant="default" className="text-[10px]">
                     <ShieldCheck className="h-3 w-3 mr-1" />
-                    Verified via Moov
+                    Connected via Moov
                   </Badge>
                   {billing?.ach_authorized_at && (
                     <span className="text-[10px] text-muted-foreground">
@@ -171,25 +160,25 @@ export function TenantBillingAccountPanel() {
                   onCheckedChange={(c) => toggleAutoDebit.mutate(!!c)}
                 />
                 <Label htmlFor="auto-debit" className="text-xs cursor-pointer">
-                  Enable monthly auto-debit (maintenance + check processing + payment processing)
+                  Enable monthly subscription auto-debit
                 </Label>
               </div>
             )}
 
             <div className="space-y-3 p-3 border rounded-md">
               <div className="text-xs font-medium">
-                {linkedAccount ? "Change billing account" : "Link a billing account"}
+                {linkedAccount ? "Change billing account" : "Authorize a billing account"}
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Choose a verified bank account</Label>
+                <Label className="text-xs">Choose a connected bank account</Label>
                 <Select value={selectedId} onValueChange={setSelectedId}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select an account…" />
                   </SelectTrigger>
                   <SelectContent>
                     {accounts.map((a: any) => (
-                      <SelectItem key={a.id} value={a.id}>
-                        {a.nickname} · {a.chk_acct ? `••••${a.chk_acct.slice(-4)}` : "Account pending"} · {a.custname}
+                      <SelectItem key={a.provider_payment_method_id} value={a.provider_payment_method_id}>
+                        {a.nickname || a.holder_name} · ••••{a.last_four || "????"}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -204,7 +193,7 @@ export function TenantBillingAccountPanel() {
                   className="mt-0.5"
                 />
                 <Label htmlFor="ach-auth" className="text-xs leading-snug cursor-pointer">
-                  I authorize ChecksOps to initiate monthly ACH debits from the selected account for <strong>maintenance fees, check processing fees, and payment processing fees</strong>, until I revoke this authorization in writing. Amounts may vary based on monthly usage and any referral discounts applied.
+                  I authorize ChecksOps to initiate monthly ACH debits from the selected account for the ChecksOps platform subscription, until I revoke this authorization. A connected bank alone is not sufficient.
                 </Label>
               </div>
 
@@ -218,7 +207,7 @@ export function TenantBillingAccountPanel() {
                   onClick={() => linkAccount.mutate()}
                   disabled={linkAccount.isPending || !selectedId || !authorized}
                 >
-                  {linkedAccount ? "Replace" : "Link account"}
+                  {linkedAccount ? "Replace" : "Authorize account"}
                 </Button>
               </div>
             </div>

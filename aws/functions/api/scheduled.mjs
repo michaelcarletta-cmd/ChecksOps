@@ -8,6 +8,7 @@ import { handleProcessEmailQueue } from './email-queue.mjs';
 import { handleTenantDomainRecheckCron } from './tenant-email-domain-handlers.mjs';
 import { handleCheckOcrBacklog } from './ocr.mjs';
 import { handleCheckAltStatusReconcileJob } from './providers/production/checkalt-status-reconcile.mjs';
+import { handleMonthlyBillingScheduled } from './tenant-billing-handlers.mjs';
 
 const FINANCIAL_JOBS = new Set([
   'deposit-daily-automation',
@@ -97,6 +98,13 @@ export const handleScheduledRequest = async (event, path, deps = {}) => {
       message: 'check-ocr-backlog remains staff-invoked under Cognito identity for RLS',
       spoofFieldsIgnored: spoof,
     };
+  }
+  // EventBridge requirement (not created by ChecksOpsCursorCloudStaging):
+  // rule moov-monthly-tenant-billing, cron(15 6 * * ? *), target POST
+  // https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging/scheduled
+  // header x-scheduled-job-secret, body {"job":"moov-monthly-tenant-billing"}.
+  if (job === 'moov-monthly-tenant-billing') {
+    return handleMonthlyBillingScheduled(event, deps);
   }
 
   return {

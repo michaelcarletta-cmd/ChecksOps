@@ -14,7 +14,7 @@ import { facilitatorAccountId } from "../_shared/moovClient.ts";
 // Freedom Adjustment funding account — Freedom Adjustment is just a tenant.
 //
 // Actum and Plaid disbursement paths are untouched; this only runs for tenants
-// resolved to the Moov rail and on the allowlist.
+// resolved to the Moov rail. Every tenant may use Moov; readiness still applies.
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });

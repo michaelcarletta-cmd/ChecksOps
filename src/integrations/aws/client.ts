@@ -4,6 +4,7 @@ import {
   awsApiBaseUrl,
 } from "@/lib/awsStaging";
 import { createAwsStorageAdapter, rewriteStorageFields } from "./storage";
+import { buildWorkflowDeleteCheckBody } from "./deleteCheckBridge";
 import {
   invokeAwsCheckAltProviderFunction,
   isLegacyCheckAltProviderFunction,
@@ -914,10 +915,10 @@ export function createAwsStagingClient(options: AwsStagingClientOptions = {}) {
         return { data: body.data ?? body, error: null };
       }
       if (name === "admin_delete_check") {
-        const checkId = String(args.p_check_id || args.check_id || "");
+        const { checkId, body: deleteBody } = buildWorkflowDeleteCheckBody(args);
         const { response, body } = await apiFetch(`/workflow/checks/${encodeURIComponent(checkId)}`, {
           method: "DELETE",
-          body: JSON.stringify({ check_id: checkId }),
+          body: JSON.stringify(deleteBody),
         }, token);
         if (response.status === 401) {
           writeStored(null);
