@@ -18,6 +18,7 @@ import { TenantUsageDashboard } from "./TenantUsageDashboard";
 import { TenantProBadgeManagement } from "./TenantProBadgeManagement";
 import { TenantPaymentAccountPanel } from "./TenantPaymentAccountPanel";
 import { TenantSecurityCompliance } from "./TenantSecurityCompliance";
+import { tenantMoovDefaults } from "@/lib/payments/tenantMoovDefaults";
 
 interface TenantForm {
   name: string;
@@ -131,6 +132,7 @@ export function TenantManagement() {
         email_reply_to: f.email_reply_to || null,
         email_provider: f.email_provider,
         email_provider_config: f.email_provider_config,
+        ...tenantMoovDefaults(),
       });
       if (error) throw error;
     },
