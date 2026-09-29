@@ -17,6 +17,7 @@ import {
   LIVE_FILES,
   LEFT_IN_PLACE_ENTRY,
   PINNED_CURRENT_LIVE,
+  PRE_INLINE_FILES_SHA256,
 } from './lib/live-sig-baseline.mjs';
 import {
   assertUntouchedHostGraph,
@@ -167,11 +168,14 @@ const stopOnDrift = (live, label) => {
     console.error(JSON.stringify({ stop: 'host_drift', label, error: String(error) }, null, 2));
     process.exit(3);
   }
-  if (live.files_sha256 !== PINNED_CURRENT_LIVE.files_sha256) {
+  const expectedFiles = label === 'after-write'
+    ? PINNED_CURRENT_LIVE.files_sha256
+    : PRE_INLINE_FILES_SHA256;
+  if (live.files_sha256 !== expectedFiles) {
     console.error(JSON.stringify({
       stop: 'files_drift',
       label,
-      expected: PINNED_CURRENT_LIVE.files_sha256,
+      expected: expectedFiles,
       actual: live.files_sha256,
     }, null, 2));
     process.exit(3);

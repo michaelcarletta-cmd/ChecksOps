@@ -18,7 +18,7 @@ const liveHtml = readFileSync("tests/fixtures/current-live-index.html", "utf8");
 test("current live baseline pins the single-entry repair, not the retired SPA", () => {
   assert.equal(PINNED_CURRENT_LIVE.html_entry, "/assets/index-DJNHggvS.js");
   assert.equal(PINNED_CURRENT_LIVE.djnh_sha256, "40a7ad700091a26d328f90f695004e4c086143d1e6ae8e2aba35d8cc9c006380");
-  assert.equal(PINNED_CURRENT_LIVE.files_sha256, "85363ebdac367c620e4058cb2e19501f6b6cd70d987b88d8bfb0dff73876e4c5");
+  assert.equal(PINNED_CURRENT_LIVE.files_sha256, "4df3bc2795eb6811e2afa4b36aeb688b7a1cf064cb6045fa5667728954d5d2d4");
   assert.equal(RETIRED_OLDER_SPA.files, "/assets/CheckFilesSection-DC3uOrqc.js");
   assert.equal(RETIRED_OLDER_SPA.ccc, "/assets/CheckCommandCenter-B-yV-W5w.js");
   assert.notEqual(PINNED_CURRENT_LIVE.djnh_sha256, RETIRED_OLDER_SPA.djnh_sha256);

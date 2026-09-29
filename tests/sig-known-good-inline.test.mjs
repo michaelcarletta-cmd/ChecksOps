@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { PINNED_CURRENT_LIVE } from '../scripts/lib/live-sig-baseline.mjs';
+import { PINNED_CURRENT_LIVE, PRE_INLINE_FILES_SHA256 } from '../scripts/lib/live-sig-baseline.mjs';
 import {
   LIVE_FPE,
   assertInlineFilesOnlyWrites,
@@ -28,8 +28,8 @@ test('transplant keeps current Files shell and drops the overlay import', () => 
     knownGoodChseJs: knownGood,
   });
   const next = writes['assets/CheckFilesSection-0Fmhwbep.js'];
-  assert.equal(report.files_before_sha256, PINNED_CURRENT_LIVE.files_sha256);
-  assert.notEqual(report.files_sha256, PINNED_CURRENT_LIVE.files_sha256);
+  assert.equal(report.files_before_sha256, PRE_INLINE_FILES_SHA256);
+  assert.equal(report.files_sha256, PINNED_CURRENT_LIVE.files_sha256);
   assertTransplantedFiles(next);
   assert.match(next, /from"\.\/compressCheckImage-Df2Tsl9J\.js"/);
   assert.match(next, /import"\.\/CheckImageCropper-BlGyQebC\.js"/);

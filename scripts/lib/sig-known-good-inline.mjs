@@ -8,6 +8,7 @@
 import { createHash } from 'node:crypto';
 import {
   PINNED_CURRENT_LIVE,
+  PRE_INLINE_FILES_SHA256,
   sha256,
 } from './live-sig-baseline.mjs';
 
@@ -102,7 +103,7 @@ export function assertUntouchedHostGraph({ indexHtml, entryJs, cccJs, dtpJs }) {
 
 export function assertLiveFilesBeforeTransplant(filesJs) {
   const text = String(filesJs);
-  if (sha256(text) !== PINNED_CURRENT_LIVE.files_sha256) {
+  if (sha256(text) !== PRE_INLINE_FILES_SHA256) {
     throw new Error(`live Files drifted before transplant ${sha256(text)}`);
   }
   if (!text.includes('from"./SignatureRequests-ipdlcpz2.js"')) {
@@ -185,7 +186,7 @@ export function transplantKnownGoodSignature({ liveFilesJs, knownGoodChseJs }) {
     report: {
       files_key: 'assets/CheckFilesSection-0Fmhwbep.js',
       files_sha256: sha256(next),
-      files_before_sha256: PINNED_CURRENT_LIVE.files_sha256,
+      files_before_sha256: PRE_INLINE_FILES_SHA256,
       ipdlcpz2_left_in_place: true,
       fpe: LIVE_FPE,
       host_untouched: [

@@ -20,6 +20,10 @@ export const LIVE_SIG = '/assets/SignatureRequests-ipdlcpz2.js';
 export const LIVE_SIG_CSS = '/assets/SignatureRequests-fsarOgFO.css';
 export const LEFT_IN_PLACE_ENTRY = '/assets/index-QKetcACR.js';
 
+/** Files chunk immediately before the known-good Signature inline transplant. */
+export const PRE_INLINE_FILES_SHA256 =
+  '85363ebdac367c620e4058cb2e19501f6b6cd70d987b88d8bfb0dff73876e4c5';
+
 export const PINNED_CURRENT_LIVE = Object.freeze({
   index_html_sha256: '79f7aa0df9f071b73c49a8b17e4cb1041ecd375fda0ddbcbbb31bbae146469f2',
   html_entry: CANONICAL_ENTRY,
@@ -27,7 +31,8 @@ export const PINNED_CURRENT_LIVE = Object.freeze({
   djnh_sha256: '40a7ad700091a26d328f90f695004e4c086143d1e6ae8e2aba35d8cc9c006380',
   qketcacr_sha256: '40a7ad700091a26d328f90f695004e4c086143d1e6ae8e2aba35d8cc9c006380',
   ccc_sha256: '33ba79e66e3d6e0ca7d00f90479a626a62785c2c63c4fdb1708bd706b2f1fe95',
-  files_sha256: '85363ebdac367c620e4058cb2e19501f6b6cd70d987b88d8bfb0dff73876e4c5',
+  files_sha256: '4df3bc2795eb6811e2afa4b36aeb688b7a1cf064cb6045fa5667728954d5d2d4',
+  files_version: '5lWKfwQWIH52IdS6ZZShI2PPFu_7USfn',
   dtp_sha256: '04cd3d058b482568f86eec308183d5007a25f2fd818bad1b7f59976cf35c87d3',
   sig_sha256: '8a9765729cf6902b33a2bcb007b05e93e9ee90b2301c2ce65e6f2be85c441a9f',
 });
@@ -89,8 +94,11 @@ export function assertCurrentLiveGraph({
   if (!String(filesJs).includes('from"./index-DJNHggvS.js"')) {
     errors.push('Files chunk does not import canonical entry');
   }
-  if (!String(filesJs).includes('from"./SignatureRequests-ipdlcpz2.js"')) {
-    errors.push('Files chunk lost current SignatureRequests import');
+  if (String(filesJs).includes('from"./SignatureRequests-ipdlcpz2.js"')) {
+    errors.push('Files chunk still imports the broken SignatureRequests overlay');
+  }
+  if (!String(filesJs).includes('Send for Signature') || !String(filesJs).includes('function Ss(')) {
+    errors.push('Files chunk lost the inlined known-good Signature implementation');
   }
   if (!String(filesJs).includes('.select("id, claim_id")')) {
     errors.push('Files chunk lost id, claim_id select');
