@@ -28,7 +28,7 @@ Targeted DB overlay of the trigger function is still required before production 
 | `check-reconciliation` | Class A stale / loss-draft / dashboard alerts | Tenant-scoped for non-admins; S3 orphan walk skipped |
 | `send-payment-direction-request` | SES/sink Class A template | No Resend, no Telnyx, no Lovable connector |
 | `admin-reset-totp` | Cognito `AdminSetUserMFAPreference` disable + global sign-out | Does not import users, enable preferred MFA, or change pool MFA (production MFA stays OFF) |
-| `bill-mortgage-handling` | Named Class A handler | Always `production_execution_blocked`; no Stripe/Moov; no `platform_fee_line_items` |
+| `bill-mortgage-handling` | Named Class A handler | Ledger accrual only: may create one idempotent `platform_fee_line_items` usage fee for completed Mortgage Desk work. Does not call Stripe or Moov and does not initiate money movement. Collection occurs later through the existing monthly Moov platform-fee rollup. |
 | Sept 3 `tg_mirror_payee_to_endorsement` | `aws/write-path/sql/38_parity_payee_mirror_and_returns.sql` | Rename deletes stale unsigned row then upserts; no `preferred_auth_method` |
 | Returned-check columns | `ADD COLUMN IF NOT EXISTS` for `check_intake_items.returned_*` and `checkalt_deposits.return_*` | Isolated rehearsal apply only; never auto-applied to live `checksops` |
 
