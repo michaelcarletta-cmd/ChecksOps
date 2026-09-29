@@ -106,6 +106,57 @@ export const CLAIM_NUMBER_SAVE_SELECT =
 export const CLAIM_LEDGER_NOT_LINKED =
   "This check is not linked to a claim.";
 
+export type ClaimLedgerLinkAction = "inspect" | "link_existing" | "create_new";
+
+export const CLAIM_LEDGER_LINK_RPC = "claim_ledger_link_or_create";
+
+export function claimLedgerLinkOrCreateArgs(opts: {
+  checkId: string;
+  claimNumber: string;
+  action: ClaimLedgerLinkAction;
+}) {
+  const claimNumber = String(opts.claimNumber || "").trim();
+  if (!claimNumber) {
+    throw new Error("Enter a claim number");
+  }
+  if (!opts.checkId) {
+    throw new Error("Missing check");
+  }
+  if (!["inspect", "link_existing", "create_new"].includes(opts.action)) {
+    throw new Error("Invalid Claim Ledger action");
+  }
+  return {
+    p_check_id: String(opts.checkId),
+    p_claim_number: claimNumber,
+    p_action: opts.action,
+  };
+}
+
+export function claimLedgerUserMessage(code: string | null | undefined) {
+  switch (code) {
+    case "existing_found":
+      return "An existing claim already uses that number. Link it instead of creating a new ledger.";
+    case "no_match":
+      return "No existing claim with that number was found for this tenant.";
+    case "ambiguous":
+      return "More than one claim matches that number. The check was not linked.";
+    case "cross_tenant":
+      return "That claim number belongs to another tenant. The check was not linked.";
+    case "claim_number_conflict":
+      return "Another claim already uses that number. A new ledger was not created.";
+    case "already_linked":
+      return "This check is already linked to a claim.";
+    case "check_not_found":
+    case "tenant_mismatch":
+      return "This check was not found or is not writable.";
+    case "invalid_args":
+    case "invalid_action":
+      return "Enter a claim number and choose Find, Link, or Start New Ledger.";
+    default:
+      return "The Claim Ledger action was rejected. The check was not changed.";
+  }
+}
+
 /**
  * Authoritative ChecksOps link is check_intake_items.claim_id.
  * Prefer the live row, then the already-loaded claim, then the parent prop.
@@ -119,7 +170,7 @@ export function resolveAuthoritativeClaimId(opts: {
   return opts.liveCheckClaimId || opts.loadedClaimId || opts.claimIdProp || null;
 }
 
-/** Existing linked claims rename in place. Unlinked checks still link or create. */
+/** Existing linked claims rename in place. Unlinked checks use claim_ledger_link_or_create. */
 export function planClaimNumberSave(opts: {
   existingClaimId?: string | null;
   claimNumber: string;

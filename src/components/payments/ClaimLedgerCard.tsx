@@ -13,11 +13,15 @@ import { ClaimSettlementEditor } from "./ClaimSettlementEditor";
 import { getDepositLabel } from "@/lib/depositLabel";
 import { fundsReceivedFromScopedIntakeRows } from "@/lib/claimLedgerSync";
 import {
+  CLAIM_LEDGER_LINK_RPC,
   CLAIM_LEDGER_NOT_LINKED,
   CLAIM_NUMBER_SAVE_SELECT,
+  claimLedgerLinkOrCreateArgs,
+  claimLedgerUserMessage,
   claimLinkUserMessage,
   planClaimNumberSave,
   resolveAuthoritativeClaimId,
+  type ClaimLedgerLinkAction,
 } from "@/lib/checkClaimLinkGuard";
 
 interface Props {
@@ -38,6 +42,7 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
   const [input, setInput] = useState(detectedClaimNumber ?? "");
   const [saving, setSaving] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [inspectResult, setInspectResult] = useState<any>(null);
 
   // Read-only mode (partner viewing a shared check): fetch via SECURITY
   // DEFINER RPC that validates access through shared_checks, so partner
@@ -230,6 +235,100 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
     linkMutation.mutate({ claimNumber: input, existingClaimId });
   };
 
+  const ledgerRpc = useMutation({
+    mutationFn: async (action: ClaimLedgerLinkAction) => {
+      const args = claimLedgerLinkOrCreateArgs({
+        checkId: checkIntakeItemId,
+        claimNumber: input,
+        action,
+      });
+      const { data, error } = await (supabase as any).rpc(CLAIM_LEDGER_LINK_RPC, args);
+      if (error) throw error;
+      const result = data || {};
+      if (action === "inspect") return result;
+      if (result.ok === false) {
+        const err = new Error(claimLedgerUserMessage(result.code));
+        (err as Error & { code?: string }).code = result.code;
+        throw err;
+      }
+      if (result.code !== "linked" && result.code !== "created" && result.code !== "already_linked") {
+        throw new Error(claimLedgerUserMessage(result.code));
+      }
+      const { data: proof, error: proofErr } = await supabase
+        .from("check_intake_items")
+        .select("id, claim_id")
+        .eq("id", checkIntakeItemId)
+        .maybeSingle();
+      if (proofErr) throw proofErr;
+      if (String(proof?.claim_id || "") !== String(result.claim_id || "")) {
+        throw new Error("Authoritative claim_id did not match the returned claim.");
+      }
+      return { ...result, check_claim_id: proof?.claim_id };
+    },
+    onSuccess: (res) => {
+      if (
+        res?.code === "existing_found"
+        || res?.code === "no_match"
+        || res?.code === "ambiguous"
+        || res?.code === "cross_tenant"
+        || res?.code === "claim_number_conflict"
+        || (res?.ok === false && res?.code !== "already_linked")
+      ) {
+        setInspectResult(res);
+        return;
+      }
+      if (res?.claim_id && onLinked) onLinked(res.claim_id);
+      qc.invalidateQueries({ queryKey: ["intake-check"] });
+      qc.invalidateQueries({ queryKey: ["check-detail"] });
+      qc.invalidateQueries({ queryKey: ["check-detail", checkIntakeItemId] });
+      qc.invalidateQueries({ queryKey: ["claim-ledger"] });
+      qc.invalidateQueries({ queryKey: ["claim-ledger-settlement"] });
+      qc.invalidateQueries({ queryKey: ["claim-ledger-checks"] });
+      qc.invalidateQueries({ queryKey: ["claim-ledger-check-link"] });
+      qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+      qc.invalidateQueries({ queryKey: ["review-settlement-check"] });
+      qc.invalidateQueries({ queryKey: ["loss-draft"] });
+      qc.invalidateQueries({ queryKey: ["loss-drafts"] });
+      if (res?.claim_id) {
+        qc.invalidateQueries({ queryKey: ["claim-ledger", res.claim_id] });
+        qc.invalidateQueries({ queryKey: ["claim-ledger-settlement", res.claim_id] });
+        qc.invalidateQueries({ queryKey: ["claim-ledger-checks", res.claim_id] });
+      }
+      setInspectResult(null);
+      setEditing(false);
+      if (res?.code === "linked" || res?.code === "created") {
+        setTimeout(() => setEditorOpen(true), 100);
+      }
+      toast({
+        title: res?.code === "created"
+          ? "Claim tracker created"
+          : res?.code === "linked"
+            ? "Linked to claim"
+            : "Claim ledger ready",
+        description: res?.claim_number
+          ? `${res.claim_number}${res.policyholder_name ? ` — ${res.policyholder_name}` : ""}`
+          : undefined,
+      });
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Could not update Claim Ledger",
+        description: e.message || claimLedgerUserMessage(e.code),
+        variant: "destructive",
+      });
+    },
+    onSettled: () => setSaving(false),
+  });
+
+  const handleLedgerAction = (action: ClaimLedgerLinkAction) => {
+    if (!input.trim()) {
+      toast({ title: "Enter a claim number", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    ledgerRpc.mutate(action);
+  };
+
   // Read-only & no claim resolved → render a small placeholder so the
   // partner still sees the section but doesn't get a link/edit form.
   if (readOnly && !effectiveClaimId) {
@@ -273,19 +372,80 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
         <CardHeader className="pb-2">
           <CardTitle className="text-sm flex items-center gap-2">
             <Link2 className="h-4 w-4 text-amber-600" />
-            This check is not linked to a claim
+            Claim Ledger
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2">
+        <CardContent className="space-y-3">
           <p className="text-xs text-muted-foreground">
-            Claim Ledger Save only updates an existing linked claim. It cannot create
-            or attach a claim. {detectedClaimNumber
-              ? "The detected number below is OCR text, not a claim link."
-              : "No claim_id is set on this check."}
+            This check is not linked to a claim yet. Find an existing ledger or
+            deliberately start a new one. Typing a claim number does not create a claim.
           </p>
           {detectedClaimNumber ? (
-            <p className="text-sm font-medium">Detected (unlinked): {detectedClaimNumber}</p>
+            <p className="text-xs text-muted-foreground">
+              Detected (OCR, not a link): <span className="font-medium text-foreground">{detectedClaimNumber}</span>
+            </p>
           ) : null}
+          <div className="space-y-2">
+            <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Claim #</label>
+            <Input
+              value={input}
+              onChange={(e) => {
+                setInput(e.target.value);
+                setInspectResult(null);
+              }}
+              placeholder="Enter claim number"
+              className="h-8 text-sm"
+            />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={saving || !input.trim()}
+              onClick={() => handleLedgerAction("inspect")}
+            >
+              {saving ? "Looking…" : "Find Existing Claim"}
+            </Button>
+            {inspectResult?.code === "existing_found" && (
+              <Button
+                size="sm"
+                disabled={saving}
+                onClick={() => handleLedgerAction("link_existing")}
+              >
+                Link Existing Ledger
+              </Button>
+            )}
+            {inspectResult?.code === "no_match" && inspectResult?.can_create !== false && (
+              <Button
+                size="sm"
+                disabled={saving}
+                onClick={() => handleLedgerAction("create_new")}
+              >
+                Start New Claim Ledger
+              </Button>
+            )}
+          </div>
+          {inspectResult?.code === "existing_found" && (
+            <p className="text-xs">
+              Existing claim found
+              {inspectResult.claim_number ? ` — #${inspectResult.claim_number}` : ""}
+              {inspectResult.policyholder_name ? ` · ${inspectResult.policyholder_name}` : ""}
+            </p>
+          )}
+          {inspectResult?.code === "no_match" && inspectResult?.can_create === false && (
+            <p className="text-xs text-destructive">{claimLedgerUserMessage("cross_tenant")}</p>
+          )}
+          {inspectResult?.code === "no_match" && inspectResult?.can_create !== false && (
+            <p className="text-xs text-muted-foreground">
+              No existing claim with that number in this tenant.
+            </p>
+          )}
+          {inspectResult?.code === "ambiguous" && (
+            <p className="text-xs text-destructive">{claimLedgerUserMessage("ambiguous")}</p>
+          )}
+          {(inspectResult?.code === "cross_tenant" || inspectResult?.code === "claim_number_conflict") && (
+            <p className="text-xs text-destructive">{claimLedgerUserMessage(inspectResult.code)}</p>
+          )}
         </CardContent>
       </Card>
     );
