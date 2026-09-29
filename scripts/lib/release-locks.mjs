@@ -34,10 +34,15 @@ export const CONTROL_PLANE_FILES = Object.freeze([
   'scripts/validate-release-locks.mjs',
   'scripts/check-pr-path-overlap.mjs',
   'scripts/production-deploy-guard.mjs',
+  'scripts/deployment-guard/preflight.mjs',
+  '.cursor/rules/deployment-guard.mdc',
+  'aws/tests/deployment-guard.test.mjs',
 ]);
 
 export const CONTROL_PLANE_PREFIXES = Object.freeze([
   'ops/release-locks/',
+  'ops/deployment-guard/',
+  'scripts/deployment-guard/',
 ]);
 
 export const REQUIRED_WORKFLOW_INVOCATIONS = Object.freeze([
@@ -45,6 +50,8 @@ export const REQUIRED_WORKFLOW_INVOCATIONS = Object.freeze([
   'scripts/check-pr-path-overlap.mjs',
   'scripts/production-deploy-guard.mjs',
   'ops/release-locks/tests/',
+  'scripts/deployment-guard/',
+  'aws/tests/deployment-guard.test.mjs',
 ]);
 
 export const DEFAULT_PATHS = {

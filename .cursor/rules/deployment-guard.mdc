@@ -1,0 +1,77 @@
+---
+description: Permanent ChecksOps deployment safeguard. Independent workstreams must not overwrite shared staging or production.
+alwaysApply: true
+---
+
+# ChecksOps deployment safeguard
+
+Independent **source work** may happen concurrently.
+
+Independent **deployment to a shared target** may not overwrite another workstream.
+
+## Mandatory tooling
+
+Use the official safe deployment tooling. Do not deploy directly when it exists.
+
+```bash
+node scripts/deployment-guard/preflight.mjs --dry-run
+node scripts/deployment-guard/manifest.mjs
+node scripts/deployment-guard/lease.mjs acquire
+node scripts/production-deploy-guard.mjs --candidate path/to/fingerprint.json
+```
+
+Source of truth:
+
+- `ops/deployment-guard/README.md`
+- `ops/deployment-guard/protected-targets.json`
+- `ops/deployment-guard/accepted-contracts.json`
+- `ops/release-locks/OPERATOR.md`
+
+## Never
+
+- Deploy without a workstream identity (`workstream_id`, branch, commit SHA, target, owned components, preflight live fingerprint, build timestamp)
+- Call `aws lambda update-function-code`, S3 SPA upload, `index.html` replacement, or CloudFront invalidation while bypassing the guard
+- Reclaim staging or production
+- Reuse an old Lambda ZIP, `/tmp` package, stale `dist/`, or previously built SPA
+- Overlay a workstream's old package over newer live state
+- Overlay two workstreams' changes to the **same** Lambda member — stop with `SOURCE_RECONCILIATION_REQUIRED`
+- Put an old `index.html` back if the live fingerprint changed — stop with `DEPLOYMENT_COLLISION`
+- Replace an RPC whose live definition drifted — stop with `SQL_COLLISION`
+- Infer production approval from a previous workstream
+- Merge or deploy this safeguard as part of a feature PR
+
+## Lambda
+
+For shared functions (`checksops-staging-api`, `checksops-production-prep-api`):
+
+1. Download the **current** live ZIP immediately before deploy
+2. Record `CodeSha256`, `RevisionId`, `LastModified`
+3. Overlay **only** declared owned members
+4. Prove non-owned members are byte-identical
+5. Re-read `CodeSha256` + `RevisionId` immediately before `UpdateFunctionCode`
+6. If either changed: `DEPLOYMENT_COLLISION` — do not reclaim
+7. Use RevisionId compare-and-swap
+8. Verify non-owned members after deploy
+
+## SPA
+
+Vite builds cannot be independently overlaid. Require a fresh clean build and
+re-read live `index.html` immediately before switching. If multiple workstreams
+contain frontend changes: `SOURCE_COMPOSITION_REQUIRED`.
+
+## Leases
+
+Obtain a short-lived deployment lease for a shared target/component. Coding
+and tests may continue without a lease. Expired leases must be detectable;
+never leave staging permanently locked.
+
+## Production
+
+Stronger than staging: current fingerprint, accepted composition, successful
+staging acceptance, second fingerprint immediately before write, and an
+**explicit** production approval marker.
+
+## If live state drifted after preflight
+
+STOP. Preserve unrelated work. Reconcile at the source. Do not restore the
+old baseline.

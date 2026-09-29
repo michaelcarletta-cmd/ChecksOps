@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "fail_closed": true,
+  "region": "us-east-1",
+  "account": "806168576068",
+  "notes": "Shared staging/production targets that independent workstreams must not overwrite. This file does not deploy or mutate AWS.",
+  "environments": {
+    "staging": {
+      "lambdas": [
+        {
+          "id": "staging-api",
+          "name": "checksops-staging-api",
+          "shared": true,
+          "overlay_required": true,
+          "revision_cas": true
+        },
+        {
+          "id": "staging-rehearsal-oneshot",
+          "name": "checksops-staging-rehearsal-oneshot",
+          "shared": true,
+          "overlay_required": true,
+          "revision_cas": true
+        },
+        {
+          "id": "staging-partner-integrity",
+          "name": "checksops-staging-partner-integrity-3bce",
+          "shared": true,
+          "overlay_required": true,
+          "revision_cas": true
+        }
+      ],
+      "spa": {
+        "id": "staging-spa",
+        "host": "https://staging.checksops.com",
+        "cloudfront_id": null,
+        "s3_bucket": null,
+        "index_cas": true,
+        "fresh_clean_build": true,
+        "notes": "Record the live staging frontend bucket/distribution when independently verified. Do not guess."
+      }
+    },
+    "production": {
+      "lambdas": [
+        {
+          "id": "production-prep-api",
+          "name": "checksops-production-prep-api",
+          "shared": true,
+          "overlay_required": true,
+          "revision_cas": true
+        }
+      ],
+      "spa": {
+        "id": "production-spa",
+        "host": "https://checksops.com",
+        "cloudfront_id": "E1B0ZWWO5559U5",
+        "s3_bucket": "checksops-production-frontend-806168576068",
+        "locked_component": "production-spa",
+        "index_cas": true,
+        "fresh_clean_build": true,
+        "requires_explicit_approval": true
+      }
+    }
+  }
+}

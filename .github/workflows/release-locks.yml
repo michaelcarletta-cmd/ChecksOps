@@ -50,6 +50,12 @@ jobs:
       - name: Production deploy guard (CI, no AWS)
         run: node scripts/production-deploy-guard.mjs
 
+      - name: Deployment guard preflight (dry-run, no AWS)
+        run: node scripts/deployment-guard/preflight.mjs --dry-run
+
+      - name: Deployment guard unit tests (no AWS)
+        run: node --test aws/tests/deployment-guard.test.mjs
+
       - name: Protected-path overlap against other open PRs
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         env:

@@ -1,0 +1,163 @@
+{
+  "version": 1,
+  "fail_closed": true,
+  "notes": "Inventory of scripts capable of mutating shared staging/production. Do not delete them in this workstream. LEGACY/BYPASS and NEEDS_GUARD scripts must call scripts/deployment-guard/require-guard.mjs before any live write, or fail closed.",
+  "classifications": ["SAFE", "NEEDS_GUARD", "LEGACY/BYPASS"],
+  "migration": {
+    "required_hook": "scripts/deployment-guard/require-guard.mjs",
+    "required_preflight": "scripts/deployment-guard/preflight.mjs",
+    "rule": "Import assertGuardCleared() and refuse to write unless a fresh preflight receipt exists. Do not rewrite these scripts in this safeguard PR."
+  },
+  "scripts": [
+    {
+      "path": "aws/cloudfront/apply-step1.mjs",
+      "classification": "LEGACY/BYPASS",
+      "capabilities": ["cloudfront_update"],
+      "notes": "Updates production CloudFront distribution. Must call require-guard before any future use."
+    },
+    {
+      "path": "aws/cloudfront/spa-fallback.js",
+      "classification": "SAFE",
+      "capabilities": ["index_html_replace"],
+      "notes": "CloudFront viewer function source. Not a deploy driver."
+    },
+    {
+      "path": "aws/cutover/scripts/hardening-batch3-apply.mjs",
+      "classification": "LEGACY/BYPASS",
+      "capabilities": ["lambda_update_function_code", "production_deploy"],
+      "notes": "Downloads live prep Lambda ZIP, overlays members, UpdateFunctionCode without RevisionId CAS or lease."
+    },
+    {
+      "path": "aws/cutover/scripts/hardening-batch4-apply.mjs",
+      "classification": "LEGACY/BYPASS",
+      "capabilities": ["lambda_update_function_code", "production_deploy"],
+      "notes": "Same overlay pattern as batch3. Must not be reused as a replacement baseline."
+    },
+    {
+      "path": "aws/cutover/scripts/hardening-batch5-apply.mjs",
+      "classification": "NEEDS_GUARD",
+      "capabilities": ["production_deploy"],
+      "notes": "CloudTrail/monitoring stack apply. Not Lambda overlay, but production mutating."
+    },
+    {
+      "path": "aws/db-copy/lib/plan.mjs",
+      "classification": "SAFE",
+      "capabilities": ["sql_rpc_apply"],
+      "notes": "Prints planned psql commands. Does not apply."
+    },
+    {
+      "path": "aws/db-copy/rehearsal/scripts/bridge-db-rehearsal.mjs",
+      "classification": "LEGACY/BYPASS",
+      "capabilities": ["lambda_update_function_code", "staging_deploy"],
+      "notes": "Can UpdateFunctionCode on a staging oneshot Lambda."
+    },
+    {
+      "path": "aws/db-copy/rehearsal/scripts/bridge-storage-copy.mjs",
+      "classification": "NEEDS_GUARD",
+      "capabilities": ["s3_spa_upload"],
+      "notes": "S3 copy for storage rehearsal, not SPA index.html, but still shared-bucket capable."
+    },
+    {
+      "path": "aws/functions/api/homeowner.mjs",
+      "classification": "SAFE",
+      "capabilities": ["s3_spa_upload"],
+      "notes": "Application object upload. Not a frontend deploy script."
+    },
+    {
+      "path": "aws/functions/api/providers/egress.mjs",
+      "classification": "SAFE",
+      "capabilities": ["staging_deploy"],
+      "notes": "Mentions staging API. Runtime code, not a deploy driver."
+    },
+    {
+      "path": "aws/origin-verify/apply-gate3a.mjs",
+      "classification": "LEGACY/BYPASS",
+      "capabilities": ["lambda_update_function_code"],
+      "notes": "UpdateFunctionCode without centralized overlay membership proof."
+    },
+    {
+      "path": "aws/origin-verify/apply-gate3b.mjs",
+      "classification": "LEGACY/BYPASS",
+      "capabilities": ["cloudfront_update"],
+      "notes": "Updates CloudFront distribution config."
+    },
+    {
+      "path": "aws/origin-verify/lib.mjs",
+      "classification": "SAFE",
+      "capabilities": ["production_deploy"],
+      "notes": "Shared constants/helpers."
+    },
+    {
+      "path": "aws/origin-verify/operator-apply-gate3b.mjs",
+      "classification": "LEGACY/BYPASS",
+      "capabilities": ["cloudfront_update"],
+      "notes": "Operator wrapper for CloudFront update."
+    },
+    {
+      "path": "aws/providers/oneshot/ensure-staging-nat.mjs",
+      "classification": "NEEDS_GUARD",
+      "capabilities": ["staging_deploy"],
+      "notes": "Staging network mutation helper."
+    },
+    {
+      "path": "aws/providers/oneshot/prove-lambda-egress.mjs",
+      "classification": "NEEDS_GUARD",
+      "capabilities": ["staging_deploy"],
+      "notes": "May touch staging Lambda configuration."
+    },
+    {
+      "path": "aws/storage/bridge-copy.mjs",
+      "classification": "NEEDS_GUARD",
+      "capabilities": ["s3_spa_upload"],
+      "notes": "Storage copy, not SPA promote, but S3 write-capable."
+    },
+    {
+      "path": "aws/write-path/scripts/run-parity-schema-rehearsal.mjs",
+      "classification": "LEGACY/BYPASS",
+      "capabilities": ["lambda_update_function_code", "staging_deploy"],
+      "notes": "Can UpdateFunctionCode on staging."
+    },
+    {
+      "path": "aws/write-path/scripts/validate-parity-schema.mjs",
+      "classification": "SAFE",
+      "capabilities": ["sql_rpc_apply"],
+      "notes": "Static SQL validation."
+    },
+    {
+      "path": "scripts/c1c-partner-share-aws-inspect.mjs",
+      "classification": "LEGACY/BYPASS",
+      "capabilities": ["lambda_update_function_code", "staging_deploy"],
+      "notes": "Inspect helper that can create/update a staging oneshot Lambda."
+    },
+    {
+      "path": "scripts/check-recipient-tax-profile-migrations.mjs",
+      "classification": "SAFE",
+      "capabilities": ["sql_rpc_apply"],
+      "notes": "Static migration lint."
+    },
+    {
+      "path": "scripts/lib/production-spa-baseline.mjs",
+      "classification": "SAFE",
+      "capabilities": ["s3_spa_upload"],
+      "notes": "Fingerprint helper. Forbids s3 sync --delete. Never writes AWS."
+    },
+    {
+      "path": "scripts/production-deploy-guard.mjs",
+      "classification": "SAFE",
+      "capabilities": ["production_deploy"],
+      "notes": "Existing production fingerprint guard. Reused by this system. Never writes AWS."
+    },
+    {
+      "path": "scripts/run-hosted-tax-profile-containment.mjs",
+      "classification": "NEEDS_GUARD",
+      "capabilities": ["sql_rpc_apply"],
+      "notes": "Can apply hosted SQL. Must obtain a SQL lease + live definition CAS."
+    },
+    {
+      "path": "scripts/staging-partner-integrity-inspect.mjs",
+      "classification": "LEGACY/BYPASS",
+      "capabilities": ["lambda_update_function_code", "staging_deploy"],
+      "notes": "Inspect helper that can UpdateFunctionCode on a staging oneshot Lambda."
+    }
+  ]
+}

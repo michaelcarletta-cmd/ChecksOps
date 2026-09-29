@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "fail_closed": true,
+  "notes": "Extensible registry of accepted functionality. Add contracts; do not hardcode only today's features. A disappeared or failing accepted contract is REGRESSION_DETECTED.",
+  "contracts": [
+    {
+      "id": "review-claim-save",
+      "title": "Review Claim # Save",
+      "accepted": true,
+      "test": "aws/tests/wave1-review-patches.test.mjs",
+      "required_for": ["staging", "production"]
+    },
+    {
+      "id": "claim-ledger",
+      "title": "Claim Ledger",
+      "accepted": true,
+      "test": "aws/tests/ledger-safety-pg.test.mjs",
+      "required_for": ["staging", "production"]
+    },
+    {
+      "id": "signature-requests",
+      "title": "Signature Requests",
+      "accepted": true,
+      "test": "aws/tests/parity-signature-submit.test.mjs",
+      "required_for": ["staging", "production"]
+    },
+    {
+      "id": "check-files",
+      "title": "Check Files",
+      "accepted": true,
+      "test": "aws/tests/check-image-invariants.test.mjs",
+      "required_for": ["staging", "production"]
+    },
+    {
+      "id": "check-command-center-responsive-layout",
+      "title": "Check Command Center responsive layout",
+      "accepted": true,
+      "test": "src/pages/CheckCommandCenter.tsx",
+      "required_for": ["staging", "production"],
+      "notes": "Source presence contract until a dedicated layout test is registered."
+    },
+    {
+      "id": "ocr",
+      "title": "OCR",
+      "accepted": true,
+      "test": "aws/tests/ocr-azure-client.test.mjs",
+      "required_for": ["staging", "production"]
+    },
+    {
+      "id": "moov",
+      "title": "Moov",
+      "accepted": true,
+      "test": "aws/tests/api-moov-m62d-static-deploy-gate.test.mjs",
+      "required_for": ["staging", "production"]
+    },
+    {
+      "id": "checkalt",
+      "title": "CheckAlt",
+      "accepted": true,
+      "test": "aws/tests/api-checkalt-production.test.mjs",
+      "required_for": ["staging", "production"]
+    },
+    {
+      "id": "tenant-isolation",
+      "title": "Tenant isolation",
+      "accepted": true,
+      "test": "aws/tests/tenant-security-compliance.test.mjs",
+      "required_for": ["staging", "production"]
+    },
+    {
+      "id": "financial-write-protections",
+      "title": "Financial write protections",
+      "accepted": true,
+      "test": "aws/tests/api-financial.test.mjs",
+      "required_for": ["staging", "production"]
+    },
+    {
+      "id": "partner-sharing",
+      "title": "Partner sharing invariants",
+      "accepted": true,
+      "test": "aws/tests/partner-sharing-invariants.test.mjs",
+      "required_for": ["staging", "production"]
+    },
+    {
+      "id": "production-spa-baseline",
+      "title": "Accepted production SPA baseline",
+      "accepted": true,
+      "test": "ops/release-locks/proof/production-spa-baseline.md",
+      "required_for": ["production"]
+    }
+  ]
+}

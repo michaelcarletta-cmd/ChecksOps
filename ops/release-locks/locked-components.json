@@ -295,7 +295,7 @@
       "environment": "source-only",
       "source": {
         "git_sha": "bd97367b76a52444aa8b1438a3f035b6c4ea09b1",
-        "tree_hash": "ea919c1c1726542c2dff4c4e704b73d2d56db30098154ef577f27adbe0b4b2d1",
+        "tree_hash": "5ca194bc28ab21c840c1178bedb7863b66939c8bcf9e425b347dbbec2da641a9",
         "merged": true,
         "merged_pr": 354
       },
@@ -556,7 +556,7 @@
       "environment": "staging",
       "source": {
         "git_sha": "8a3ead386d99f0e825d54093ebcb8c174a8c758e",
-        "tree_hash": "9ecc8ae0c814947afb1badc354b467831b24eec09cb8a60bdb454cb6abfb2801",
+        "tree_hash": "f427516ee1ea870165b438244efac59b252c010dc994e52fdfe0957375e12932",
         "merged": true,
         "merged_pr": 370
       },
@@ -660,7 +660,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "8a3ead386d99f0e825d54093ebcb8c174a8c758e",
-        "tree_hash": "b9b38e62b4e03efb3a2bcb50548457eeafa16608e888459396bd61a9613c8abc",
+        "tree_hash": "eba070fd920cbfacf94ab96bbd0543f7d2ea05b190917e527adb04908749f55f",
         "merged": true,
         "merged_pr": 343
       },
@@ -696,7 +696,7 @@
         "direct pushes and administrator bypasses disabled"
       ],
       "open_pr_overlap": ["#316", "#317", "#319", "#325", "#333", "#326", "#328"],
-      "notes": "Control-plane lock tooling only. Live accepted SPA identity is PRODUCTION_LOCKED on production-spa (index-BPbQUNFr.js); this component stays UNVERIFIED because GitHub enforcement is incomplete. Hashing this validator with itself is not independent security. Do not treat origin/main as the live SPA. This PR does not own aws/cutover/PRODUCTION_SPA_LOCK.json from other PRs."
+      "notes": "Control-plane lock tooling plus the complementary ops/deployment-guard cross-workstream deploy safeguard. Live accepted SPA identity is PRODUCTION_LOCKED on production-spa (index-BPbQUNFr.js); this component stays UNVERIFIED because GitHub enforcement is incomplete. Hashing this validator with itself is not independent security. Do not treat origin/main as the live SPA. This PR does not own aws/cutover/PRODUCTION_SPA_LOCK.json from other PRs. The deployment guard is source-only and does not deploy."
     }
   }
 }
