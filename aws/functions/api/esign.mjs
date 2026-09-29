@@ -345,26 +345,36 @@ export const runSendSignatureRequest = async ({
     )).rows[0];
     if (!existing) {
       for (const field of fieldData) {
-        await client.query(
-          `INSERT INTO public.signature_fields (
-             id, signature_request_id, signer_index, field_type, label, page, x, y, width, height, required, placeholder, checkbox_label
-           ) VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-          [
-            field.id || null,
-            requestId,
-            field.signerIndex ?? 0,
-            field.type,
-            field.label || null,
-            field.page ?? 1,
-            field.x ?? 0,
-            field.y ?? 0,
-            field.width ?? 33,
-            field.height ?? 6,
-            field.required !== false,
-            field.placeholder || null,
-            field.checkboxLabel || null,
-          ],
-        ).catch(() => {});
+        const fieldId = optionalUuid(field.id);
+        const fieldValues = [
+          requestId,
+          field.signerIndex ?? 0,
+          field.type,
+          field.label || null,
+          field.page ?? 1,
+          field.x ?? 0,
+          field.y ?? 0,
+          field.width ?? 33,
+          field.height ?? 6,
+          field.required !== false,
+          field.placeholder || null,
+          field.checkboxLabel || null,
+        ];
+        if (fieldId) {
+          await client.query(
+            `INSERT INTO public.signature_fields (
+               id, signature_request_id, signer_index, field_type, label, page, x, y, width, height, required, placeholder, checkbox_label
+             ) VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+            [fieldId, ...fieldValues],
+          );
+        } else {
+          await client.query(
+            `INSERT INTO public.signature_fields (
+               signature_request_id, signer_index, field_type, label, page, x, y, width, height, required, placeholder, checkbox_label
+             ) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+            fieldValues,
+          );
+        }
       }
     }
   }

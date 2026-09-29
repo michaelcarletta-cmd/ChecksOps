@@ -64,7 +64,8 @@ const recordingClient = () => {
         return { rows: [row], rowCount: 1 };
       }
       if (compact.includes('INSERT INTO public.signature_fields')) {
-        rows.fields.push({
+        const explicitId = compact.includes('id, signature_request_id');
+        rows.fields.push(explicitId ? {
           id: params[0],
           signature_request_id: params[1],
           signer_index: params[2],
@@ -75,6 +76,25 @@ const recordingClient = () => {
           y: params[7],
           width: params[8],
           height: params[9],
+          required: params[10],
+          placeholder: params[11],
+          checkbox_label: params[12],
+          omitted_id: false,
+        } : {
+          id: null,
+          signature_request_id: params[0],
+          signer_index: params[1],
+          field_type: params[2],
+          label: params[3],
+          page: params[4],
+          x: params[5],
+          y: params[6],
+          width: params[7],
+          height: params[8],
+          required: params[9],
+          placeholder: params[10],
+          checkbox_label: params[11],
+          omitted_id: true,
         });
         return { rows: [], rowCount: 1 };
       }
@@ -267,6 +287,194 @@ test('signer insert throw rolls back via withIdentityWrite commit policy', async
   );
   assert.equal(client.rows.requests.length, 1);
   assert.equal(client.rows.signers.length, 0);
+});
+
+test('non-UUID field ids omit id so Postgres DEFAULT gen_random_uuid() applies', async () => {
+  const client = recordingClient();
+  const result = await runSendSignatureRequest({
+    mapping,
+    spoof,
+    body: createBody({
+      field_data: [{
+        id: 'signature-1790706277046',
+        type: 'signature',
+        signerIndex: 0,
+        label: 'Sign here',
+        page: 2,
+        x: 11,
+        y: 22,
+        width: 40,
+        height: 8,
+        required: true,
+        placeholder: 'Sign',
+        checkboxLabel: null,
+      }, {
+        id: 'date-1790691690138',
+        type: 'date',
+        signerIndex: 1,
+        label: 'Date',
+        page: 2,
+        x: 50,
+        y: 60,
+        width: 20,
+        height: 6,
+        required: false,
+        placeholder: null,
+        checkboxLabel: 'Done',
+      }],
+    }),
+    send: capturingMailer([]),
+    client,
+  });
+  assert.equal(result.ok, true);
+  assert.equal(wouldCommit(result), true);
+  assert.equal(client.rows.fields.length, 2);
+  assert.equal(client.rows.fields[0].omitted_id, true);
+  assert.equal(client.rows.fields[0].id, null);
+  assert.equal(client.rows.fields[0].signature_request_id, result.requestId);
+  assert.equal(client.rows.fields[0].field_type, 'signature');
+  assert.equal(client.rows.fields[0].label, 'Sign here');
+  assert.equal(client.rows.fields[0].page, 2);
+  assert.equal(client.rows.fields[0].x, 11);
+  assert.equal(client.rows.fields[0].y, 22);
+  assert.equal(client.rows.fields[0].width, 40);
+  assert.equal(client.rows.fields[0].height, 8);
+  assert.equal(client.rows.fields[0].required, true);
+  assert.equal(client.rows.fields[0].placeholder, 'Sign');
+  assert.equal(client.rows.fields[0].signer_index, 0);
+  assert.equal(client.rows.fields[1].omitted_id, true);
+  assert.equal(client.rows.fields[1].field_type, 'date');
+  assert.equal(client.rows.fields[1].checkbox_label, 'Done');
+  assert.equal(client.rows.fields[1].required, false);
+  assert.equal(client.rows.fields[1].signer_index, 1);
+  const fieldInserts = client.calls.filter((call) => call.sql.includes('INSERT INTO public.signature_fields'));
+  assert.equal(fieldInserts.every((call) => !call.sql.includes('id, signature_request_id')), true);
+  assert.equal(fieldInserts.every((call) => !call.params.includes('signature-1790706277046')), true);
+  assert.equal(client.rows.requests.length, 1);
+  assert.equal(client.rows.signers.length, 1);
+});
+
+test('valid UUID field ids are still bound as $1::uuid', async () => {
+  const client = recordingClient();
+  const fieldId = '11111111-1111-4111-8111-111111111111';
+  const result = await runSendSignatureRequest({
+    mapping,
+    spoof,
+    body: createBody({
+      field_data: [{
+        id: fieldId,
+        type: 'signature',
+        signerIndex: 0,
+        label: 'Sign',
+        page: 1,
+        x: 10,
+        y: 20,
+        width: 33,
+        height: 6,
+      }],
+    }),
+    send: capturingMailer([]),
+    client,
+  });
+  assert.equal(result.ok, true);
+  assert.equal(client.rows.fields[0].omitted_id, false);
+  assert.equal(client.rows.fields[0].id, fieldId);
+  const fieldInsert = client.calls.find((call) => call.sql.includes('INSERT INTO public.signature_fields'));
+  assert.match(fieldInsert.sql, /id, signature_request_id/);
+  assert.equal(fieldInsert.params[0], fieldId);
+  assert.equal(fieldInsert.params[1], result.requestId);
+});
+
+test('field insert error is not swallowed and prevents commit', async () => {
+  const client = recordingClient();
+  const original = client.query;
+  client.query = async (sql, params = []) => {
+    if (String(sql).includes('INSERT INTO public.signature_fields')) {
+      const error = new Error('invalid input syntax for type uuid: "signature-1790706277046"');
+      error.code = '22P02';
+      throw error;
+    }
+    return original(sql, params);
+  };
+  await assert.rejects(
+    () => runSendSignatureRequest({
+      mapping,
+      spoof,
+      body: createBody(),
+      send: capturingMailer([]),
+      client,
+    }),
+    (error) => {
+      assert.equal(error.code, '22P02');
+      assert.match(String(error.message), /invalid input syntax for type uuid/);
+      assert.doesNotMatch(String(error.message), /25P02|aborted/);
+      return true;
+    },
+  );
+  assert.equal(client.rows.requests.length, 1);
+  assert.equal(client.rows.signers.length, 1);
+  assert.equal(client.rows.fields.length, 0);
+  assert.equal(wouldCommit({ ok: false, statusCode: 503 }), false);
+});
+
+test('existing requestId send still skips request/signer inserts when field_data is present', async () => {
+  const sent = [];
+  const inserts = [];
+  const client = {
+    query: async (sql, params = []) => {
+      const compact = String(sql).replace(/\s+/g, ' ');
+      if (compact.includes('INSERT INTO public.signature_requests') || compact.includes('INSERT INTO public.signature_signers')) {
+        inserts.push(compact);
+      }
+      if (compact.includes('INSERT INTO public.signature_fields')) {
+        inserts.push(compact);
+        return { rows: [], rowCount: 1 };
+      }
+      if (compact.includes('FROM public.signature_requests')) {
+        return { rows: [{
+          id: REQUEST,
+          document_name: 'Release',
+          claim_id: CLAIM,
+          field_data: [{ id: 'signature-1790706277046', type: 'signature', signerIndex: 0, label: 'Sign', page: 1, x: 1, y: 2, width: 33, height: 6 }],
+        }] };
+      }
+      if (compact.includes('FROM public.signature_signers')) {
+        return { rows: [{ id: SIGNER, signer_name: 'Ada', signer_email: 'ada@example.com' }] };
+      }
+      if (compact.includes('FROM public.signature_fields')) {
+        return { rows: [] };
+      }
+      if (compact.includes('FROM public.claims')) {
+        return { rows: [{ id: CLAIM, claim_number: 'CL-1', policyholder_name: 'Ada', tenant_id: TENANT }] };
+      }
+      if (compact.includes('aws_can_write_tenant')) {
+        return { rows: [{ ok: true }] };
+      }
+      return { rows: [], rowCount: 0 };
+    },
+  };
+  const result = await runSendSignatureRequest({
+    mapping,
+    spoof,
+    body: { requestId: REQUEST },
+    send: capturingMailer(sent),
+    client,
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.requestId, REQUEST);
+  assert.equal(inserts.filter((sql) => sql.includes('signature_requests') || sql.includes('signature_signers')).length, 0);
+  assert.equal(inserts.some((sql) => sql.includes('signature_fields') && !sql.includes('id, signature_request_id')), true);
+  assert.equal(sent.length, 1);
+});
+
+test('field insert no longer swallows errors in runSendSignatureRequest', () => {
+  const source = readFileSync(new URL('../functions/api/esign.mjs', import.meta.url), 'utf8');
+  const start = source.indexOf('const fieldData = request.field_data || [];');
+  const end = source.indexOf('if (skipEmail)', start);
+  const block = source.slice(start, end);
+  assert.match(block, /optionalUuid\(field\.id\)/);
+  assert.doesNotMatch(block, /\.catch\(\(\) => \{\}\)/);
+  assert.match(block, /VALUES \(\$1::uuid, \$2, \$3, \$4, \$5, \$6, \$7, \$8, \$9, \$10, \$11, \$12\)/);
 });
 
 test('frontend AWS write allowlist still excludes signature tables', () => {
