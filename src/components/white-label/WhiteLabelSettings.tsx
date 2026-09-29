@@ -18,8 +18,7 @@ import {
   ArrowDownToLine, FileBarChart, Gift, ShieldCheck, FileText
 } from "lucide-react";
 import { ReferralSettings } from "@/components/settings/ReferralSettings";
-import { EmailSenderSettings } from "@/components/settings/EmailSenderSettings";
-import { Mail } from "lucide-react";
+import { TenantBrandingSettings } from "@/components/settings/TenantBrandingSettings";
 import { CheckCenterHelpPanel } from "@/components/check-review/CheckCenterHelp";
 import { StakeholderAccountSettings } from "@/components/disbursement/StakeholderAccountSettings";
 import { TenantBankAccountSettings } from "@/components/settings/TenantBankAccountSettings";
@@ -27,8 +26,8 @@ import { TenantUserManager } from "./TenantUserManager";
 import { TenantDocumentLibrary } from "@/components/settings/TenantDocumentLibrary";
 import { TenantPartnerManager } from "./TenantPartnerManager";
 import { ComplianceSettings } from "@/components/settings/ComplianceSettings";
-import { CompanyBrandingSettings } from "@/components/settings/CompanyBrandingSettings";
 import { SettingsHero } from "@/components/settings/SettingsHero";
+import { TenantLogo } from "@/components/branding/TenantLogo";
 import { SectionCard } from "@/components/settings/SectionCard";
 
 import { ContractorServiceAreaCard } from "@/components/networking/ContractorServiceAreaCard";
@@ -137,11 +136,12 @@ export function WhiteLabelSettings() {
     <div className="min-h-screen bg-background">
       <header className="h-14 border-b border-border/70 bg-background/95 backdrop-blur flex items-center px-4 sticky top-0 z-10">
         <div className="flex items-center gap-3">
-          {tenant?.logo_url ? (
-            <img src={tenant.logo_url} alt={tenant.name} className="h-8 object-contain" />
-          ) : (
-            <span className="text-sm font-medium">{tenant?.name || "Settings"}</span>
-          )}
+          <TenantLogo
+            src={tenant?.logo_url}
+            alt={tenant?.name || "Tenant logo"}
+            className="h-8 object-contain"
+            fallback={<span className="text-sm font-medium">{tenant?.name || "Settings"}</span>}
+          />
         </div>
         <div className="ml-auto flex items-center gap-2">
           <Dialog>
@@ -175,7 +175,7 @@ export function WhiteLabelSettings() {
             {canManageTenant && <TabsTrigger value="users" className="text-xs gap-1"><Users className="h-3 w-3" />Users</TabsTrigger>}
             {canManageTenant && <TabsTrigger value="partners" className="text-xs gap-1"><Link2 className="h-3 w-3" />Partners</TabsTrigger>}
             {canManageTenant && <TabsTrigger value="banking" className="text-xs gap-1"><Banknote className="h-3 w-3" />Bank Account/Stakeholders</TabsTrigger>}
-            {canManageTenant && <TabsTrigger value="branding" className="text-xs gap-1"><Palette className="h-3 w-3" />Branding & Email</TabsTrigger>}
+            {canManageTenant && <TabsTrigger value="branding" className="text-xs gap-1"><Palette className="h-3 w-3" />Branding</TabsTrigger>}
             <TabsTrigger value="referrals" className="text-xs gap-1"><Gift className="h-3 w-3" />Referrals</TabsTrigger>
             {canManageTenant && <TabsTrigger value="compliance" className="text-xs gap-1"><ShieldCheck className="h-3 w-3" />Compliance & Docs</TabsTrigger>}
             <TabsTrigger value="directory" className="text-xs gap-1"><SearchIcon className="h-3 w-3" />Find-a-Pro Directory</TabsTrigger>
@@ -212,8 +212,7 @@ export function WhiteLabelSettings() {
               </TabsContent>
 
               <TabsContent value="branding" className="space-y-6">
-                <CompanyBrandingSettings />
-                <EmailSenderSettings />
+                {tenant && <TenantBrandingSettings tenant={tenant} />}
               </TabsContent>
             </>
           )}
@@ -497,130 +496,3 @@ function BankingSettings({ tenantId }: { tenantId: string }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  Branding Settings                                                   */
-/* ------------------------------------------------------------------ */
-
-function BrandingSettings({ tenant }: { tenant: any }) {
-  const { toast } = useToast();
-  const [primaryColor, setPrimaryColor] = useState(tenant.primary_color || "#3B82F6");
-  const [secondaryColor, setSecondaryColor] = useState(tenant.secondary_color || "#1E40AF");
-  const [logoUrl, setLogoUrl] = useState(tenant.logo_url || "");
-  const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState(false);
-
-  const handleLogoUpload = async (file: File) => {
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      toast({ title: "Invalid file", description: "Please choose an image file (PNG, JPG, SVG).", variant: "destructive" });
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      toast({ title: "File too large", description: "Logo must be under 5MB.", variant: "destructive" });
-      return;
-    }
-    setUploading(true);
-    try {
-      const ext = file.name.split(".").pop() || "png";
-      const path = `${tenant.id}/logo-${Date.now()}.${ext}`;
-      const { error: upErr } = await supabase.storage
-        .from("tenant-logos")
-        .upload(path, file, { upsert: true, contentType: file.type });
-      if (upErr) throw upErr;
-      const { data } = supabase.storage.from("tenant-logos").getPublicUrl(path);
-      setLogoUrl(data.publicUrl);
-      toast({ title: "Logo uploaded", description: "Click Save to apply." });
-    } catch (e: any) {
-      toast({ title: "Upload failed", description: e.message, variant: "destructive" });
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleSave = async () => {
-    setSaving(true);
-    const { error } = await supabase
-      .from("tenants")
-      .update({
-        primary_color: primaryColor,
-        secondary_color: secondaryColor,
-        logo_url: logoUrl || null,
-      })
-      .eq("id", tenant.id);
-    setSaving(false);
-    if (error) {
-      toast({ title: "Failed to save", description: error.message, variant: "destructive" });
-    } else {
-      toast({ title: "Branding updated", description: "Refresh to see changes." });
-    }
-  };
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-sm">Branding & Appearance</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <Label className="text-xs">Logo</Label>
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              id="logo-upload-input"
-              type="file"
-              accept="image/png,image/jpeg,image/svg+xml,image/webp"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) handleLogoUpload(f);
-                e.target.value = "";
-              }}
-            />
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={uploading}
-              onClick={() => document.getElementById("logo-upload-input")?.click()}
-            >
-              {uploading ? "Uploading..." : logoUrl ? "Replace logo" : "Upload logo"}
-            </Button>
-            {logoUrl && (
-              <Button type="button" variant="ghost" size="sm" onClick={() => setLogoUrl("")}>
-                Remove
-              </Button>
-            )}
-          </div>
-          <div className="space-y-1">
-            <Label className="text-[10px] uppercase text-muted-foreground">Or paste a URL</Label>
-            <Input value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} placeholder="https://..." />
-          </div>
-          {logoUrl && (
-            <div className="mt-2 p-3 border border-border/60 rounded-md inline-block bg-white">
-              <img src={logoUrl} alt="Logo preview" className="h-10 object-contain" />
-            </div>
-          )}
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label className="text-xs">Primary Color</Label>
-            <div className="flex items-center gap-2">
-              <input type="color" value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} className="h-8 w-8 rounded cursor-pointer" />
-              <Input value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} className="font-mono text-xs" />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label className="text-xs">Secondary Color</Label>
-            <div className="flex items-center gap-2">
-              <input type="color" value={secondaryColor} onChange={(e) => setSecondaryColor(e.target.value)} className="h-8 w-8 rounded cursor-pointer" />
-              <Input value={secondaryColor} onChange={(e) => setSecondaryColor(e.target.value)} className="font-mono text-xs" />
-            </div>
-          </div>
-        </div>
-        <Button onClick={handleSave} disabled={saving} size="sm">
-          {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Save className="h-4 w-4 mr-1" />}
-          Save Branding
-        </Button>
-      </CardContent>
-    </Card>
-  );
-}

@@ -43,18 +43,12 @@ export class BridgeError extends Error {
   }
 }
 
-/** True when the Moov rail may run at all for this organization. */
+/** True when the Moov rail may run at all. Every tenant is eligible. */
 export async function moovBridgeAvailable(
-  supabase: SupabaseClient,
-  tenantId: string,
+  _supabase: SupabaseClient,
+  _tenantId: string,
 ): Promise<boolean> {
-  if (!moovGloballyEnabled() || !moovConfigured()) return false;
-  const { data } = await supabase
-    .from("tenants")
-    .select("moov_allowlisted")
-    .eq("id", tenantId)
-    .maybeSingle();
-  return !!(data as any)?.moov_allowlisted;
+  return moovGloballyEnabled() && moovConfigured();
 }
 
 async function attachBank(moovAccountId: string, processorToken: string) {

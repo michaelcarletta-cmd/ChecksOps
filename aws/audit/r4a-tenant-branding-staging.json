@@ -1,0 +1,55 @@
+{
+  "schema": "checksops.r4a-tenant-branding-staging.v1",
+  "status": "STAGING_ACCEPTED",
+  "captured_at": "2026-09-26T18:48:00.000Z",
+  "baseline": "post-image-production-freeze",
+  "authority": "aws/audit/post-image-production-freeze.json",
+  "scope": "R4A SPA-only tenant branding UI overlay. No Lambda, SQL, Cognito, IAM, SES, Moov, billing, Claim Check, or storage write-auth changes.",
+  "r4b_implemented": false,
+  "lambda_deployed": false,
+  "production_promoted": true,
+  "production_spa": {
+    "indexSha256": "6b211037ae70b510a9b5cfe316f006dbbc308ee3c94687ccea943b24cfd09f2e",
+    "indexVersionId": "advEv5N0JfqM41odUraOM7kCH6Z2snP3",
+    "entry": "/assets/index-CS_JpvZg.js",
+    "claimCheck": "/assets/CheckCommandCenter-DHNFge6N.js"
+  },
+  "historical_reference": [
+    "cursor/freedom-tenant-branding-fix-491d (rewriteTenantLogoUrl concept; not merged)",
+    "GitHub PRs #369 #349 #464 #462 were not readable (404) and were not merged"
+  ],
+  "files_changed": [
+    "src/lib/tenantLogoUrl.ts",
+    "src/integrations/aws/storage.ts",
+    "src/components/branding/TenantLogo.tsx",
+    "src/components/settings/TenantBrandingSettings.tsx",
+    "src/components/white-label/WhiteLabelSettings.tsx",
+    "src/pages/admin/AdminTenants.tsx",
+    "tests/r4a-tenant-branding.test.mjs",
+    "tests/tenant-logo-isolation.test.mjs"
+  ],
+  "frozen_files_unchanged": {
+    "src/lib/checkImageInvariants.ts": "41a42c8df6f61b52b2683a300310c3f0498531ee991c5492347e216dc418d802",
+    "src/pages/CheckCommandCenter.tsx": "32436906507f3e8f183a0f393dd43ea66bd7eeb4dd2fca33087e737a6b7984d4",
+    "aws/functions/api/storage.mjs": "b6923ff66786f5604bda229c21e9309a3d7e49ba0ee2edaf07106690228eed56",
+    "aws/functions/api/storage-paths.mjs": "278329e5230b2ddd6675e4cad9839d2193da8655ca4676573702dca3f90e9d09"
+  },
+  "staging_spa": {
+    "host": "https://staging.checksops.com",
+    "bucket": "checksops-staging-frontend-c48b",
+    "distribution": "E1CG52WRQZI7X1",
+    "indexSha256": "804495ccc27acfcbf702982f619a911224f632e732bcead889974dc30133a067",
+    "entry": "/assets/index-BWBrCrFe.js",
+    "claimCheck": "/assets/CheckCommandCenter-49OKZQ_s.js",
+    "invalidation": "IB2VELWFSJMV870OTHLRNE6DH4"
+  },
+  "lambda_untouched_by_this_workstream": {
+    "production_function": "checksops-production-prep-api",
+    "production_live_CodeSha256": "Hhij5GWW/GDBcRE+4wYomml96R+6IWwFJPczbz5YLZM=",
+    "production_live_RevisionId": "be35da81-e564-4f07-aa7b-19cce3fb95dc",
+    "production_freeze_CodeSha256": "HzqcBPqWAtyIM61iEKHOdpfiO2lEPi8vWilo9xIcb9w=",
+    "note": "Live production Lambda drifted after the freeze via a concurrent workstream. R4A did not deploy or mutate Lambda.",
+    "staging_function": "checksops-staging-api",
+    "staging_CodeSha256": "U2veBoccUbthwAXZ8b1TiZFkmL6c41EASYxMmX4OZXQ="
+  }
+}

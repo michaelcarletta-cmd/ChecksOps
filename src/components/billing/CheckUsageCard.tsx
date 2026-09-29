@@ -17,7 +17,7 @@ interface UsageEvent {
   unit_price_cents: number;
   currency: string;
   status: string;
-  event_type?: "check_processing" | "moov_same_day" | "moov_instant" | "mortgage_handling";
+  event_type?: "check_processing" | "moov_same_day" | "moov_next_day" | "mortgage_handling";
 }
 
 interface UsagePayload {
@@ -127,15 +127,15 @@ export function CheckUsageCard() {
             </div>
           </div>
           <div className="rounded-lg bg-muted/30 p-3">
-            <div className="text-xs text-muted-foreground">Same Day ACH</div>
+            <div className="text-xs text-muted-foreground">Next Day ACH</div>
             <div className="text-2xl font-bold">
-              {isLoading ? "—" : data?.events?.filter(e => e.event_type === 'moov_same_day').length ?? 0}
+              {isLoading ? "—" : data?.events?.filter(e => e.event_type === 'moov_next_day').length ?? 0}
             </div>
           </div>
           <div className="rounded-lg bg-muted/30 p-3">
-            <div className="text-xs text-muted-foreground">Instant ACH</div>
+            <div className="text-xs text-muted-foreground">Same Day ACH</div>
             <div className="text-2xl font-bold">
-              {isLoading ? "—" : data?.events?.filter(e => e.event_type === 'moov_instant').length ?? 0}
+              {isLoading ? "—" : data?.events?.filter(e => e.event_type === 'moov_same_day').length ?? 0}
             </div>
           </div>
         </div>
@@ -146,7 +146,7 @@ export function CheckUsageCard() {
             {isLoading ? "—" : showBillingAmounts ? formatCents(data?.amount_cents ?? 0, data?.currency) : "$—"}
           </div>
           <p className="text-[10px] text-muted-foreground mt-1">
-            * Moov fees ($1.00 same day, $1.50 instant) are paid directly to Moov.
+            ChecksOps check and speed fees accrue on the monthly consolidated invoice. Instant is not billed.
             {!showBillingAmounts && " Processing fees are managed by Freedom Adjustment."}
           </p>
         </div>

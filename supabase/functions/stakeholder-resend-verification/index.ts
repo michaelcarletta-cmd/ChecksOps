@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { moovGloballyEnabled } from "../_shared/moovGuard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -88,7 +89,7 @@ serve(async (req) => {
 
     // Moov is the payment rail: send the recipient to the branded Moov-backed
     // setup page (/pay-setup/:token) instead of the legacy bank-login flow.
-    if ((Deno.env.get("MOOV_ENABLED") ?? "false").toLowerCase() === "true") {
+    if (moovGloballyEnabled()) {
       const moovLink = await ensureMoovRecipientLink({
         supabase,
         authHeader,

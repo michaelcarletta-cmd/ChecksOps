@@ -1,0 +1,39 @@
+{
+  "schema": "checksops.r4a-tenant-branding-production.v1",
+  "status": "PRODUCTION_ACCEPTED",
+  "captured_at": "2026-09-26T19:45:00.000Z",
+  "r4b_implemented": false,
+  "lambda_deployed": false,
+  "preflight_spa": {
+    "index_sha256": "342c2e1588f712ebf73f563a881c982941b955619c51c6a79a7834aace21538a",
+    "index_version_id": "1Lz3xzicHX5y2PT2S1lteJDbx_c7YRd0",
+    "entry": "assets/index-CK2xJ5OO.js",
+    "claim_check": "assets/CheckCommandCenter-D2WjirVB.js",
+    "graph": "102/102",
+    "matched_post_image_freeze": true
+  },
+  "production_spa": {
+    "index_sha256": "6b211037ae70b510a9b5cfe316f006dbbc308ee3c94687ccea943b24cfd09f2e",
+    "index_version_id": "advEv5N0JfqM41odUraOM7kCH6Z2snP3",
+    "entry": "/assets/index-CS_JpvZg.js",
+    "claim_check": "/assets/CheckCommandCenter-DHNFge6N.js",
+    "graph": "103/103",
+    "missing": 0,
+    "html_fallbacks": 0
+  },
+  "build": {
+    "mode": "production",
+    "VITE_AUTH_PROVIDER": "cognito",
+    "VITE_APP_URL": "https://checksops.com",
+    "VITE_CHECKSOPS_API_URL": "/prep",
+    "VITE_COGNITO_USER_POOL_ID": "us-east-1_h00WorYMT",
+    "VITE_COGNITO_USER_POOL_CLIENT_ID": "3ja9fqaq2fjkv3i6up2varcqpe"
+  },
+  "lambda": {
+    "before_CodeSha256": "Hhij5GWW/GDBcRE+4wYomml96R+6IWwFJPczbz5YLZM=",
+    "before_RevisionId": "be35da81-e564-4f07-aa7b-19cce3fb95dc",
+    "after_CodeSha256": "Hhij5GWW/GDBcRE+4wYomml96R+6IWwFJPczbz5YLZM=",
+    "after_RevisionId": "be35da81-e564-4f07-aa7b-19cce3fb95dc",
+    "untouched": true
+  }
+}

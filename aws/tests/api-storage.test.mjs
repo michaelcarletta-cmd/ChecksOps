@@ -6,8 +6,11 @@ import {
   handleStoragePublic,
   handleStorageWritesDisabled,
   authorizeObject,
+  authorizeCleanStemSibling,
+  authorizeSignedObject,
   BUCKET_AUTH_SQL,
   CHECK_INTAKE_CLAIM_FILES_AUTH_SQL,
+  CLEAN_STEM_POINTER_LOOKUP_SQL,
   clampExpires,
   SIGNING_DOCUMENT_EXPIRES,
 } from '../functions/api/storage.mjs';
@@ -467,6 +470,109 @@ test('check-scoped .checkalt.jpg remains writable via the check UUID prefix', as
   }), depsFor(mockClient({ writeCheck: true }), { forceStorageWrites: true }));
   assert.equal(result.ok, true, JSON.stringify(result));
   assert.equal(result.path, path);
+});
+
+test('authorizeSignedObject allows exact endorsed-stem .jpg reconstructed from generated back pointer', async () => {
+  const FOLDER = '7dbb3009-f059-4767-b5dc-1c5c72379330';
+  const CHECK_ID_OTHER = 'b71c634c-8ec4-4d18-83cd-aff36b726a31';
+  const generated = `checks/${FOLDER}/unclaimed/1788459753367_back_IMG_1190_cropped_endorsed_1790258244171.svg`;
+  const clean = `checks/${FOLDER}/unclaimed/1788459753367_back_IMG_1190_cropped.jpg`;
+  const client = mockClient({ authorize: false });
+  client.query = async (sql, params) => {
+    client.queries.push({ sql, params });
+    if (sql === 'BEGIN' || sql === 'ROLLBACK') return { rows: [] };
+    if (sql.startsWith('SELECT set_config')) return { rows: [{ set_config: params[1] }] };
+    if (sql === LOOKUP_MAPPING_SQL) return { rows: [{ application_user_id: APP_ID, cognito_sub: COGNITO_SUB, email: 'checksops-tester@freedomadj.com', status: 'active' }] };
+    if (String(sql).includes('FROM public.tenant_users')) return { rows: [{ role: 'admin' }] };
+    if (sql === CLEAN_STEM_POINTER_LOOKUP_SQL) {
+      assert.equal(params[0], '.jpg');
+      assert.equal(params[1], clean);
+      assert.equal(String(params[1]).includes(CHECK_ID_OTHER), false);
+      return { rows: [{ back_image_path: generated, back_image_original_path: null, back_image_deposit_path: null }] };
+    }
+    if (String(sql).startsWith('SELECT 1 FROM')) return { rows: [] };
+    return { rows: [] };
+  };
+  const key = `files/claim-files/${clean}`;
+  const result = await handleStorageSign(jwtEvent('/storage/sign', 'POST', {
+    bucket: 'claim-files',
+    path: clean,
+  }), depsFor(client, { keys: new Set([key]) }));
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(result.path, clean);
+  assert.match(result.signedUrl, /presigned/);
+  assert.match(CLEAN_STEM_POINTER_LOOKUP_SQL, /regexp_replace/);
+  assert.equal(CHECK_INTAKE_CLAIM_FILES_AUTH_SQL.includes('endorsed_clean_stem'), false);
+});
+
+test('authorizeSignedObject allows exact endorsed-stem .jpeg and .png', async () => {
+  const cases = [
+    { ext: '.jpeg', generated: 'checks/shared/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/back-1781799562017_endorsed_1783956012422.png', clean: 'checks/shared/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/back-1781799562017.jpeg' },
+    { ext: '.png', generated: 'checks/x/scan_endorsed_1.svg', clean: 'checks/x/scan.png' },
+  ];
+  for (const row of cases) {
+    const client = mockClient({ authorize: false });
+    client.query = async (sql, params) => {
+      if (sql === 'BEGIN' || sql === 'ROLLBACK') return { rows: [] };
+      if (sql.startsWith('SELECT set_config')) return { rows: [{ set_config: params[1] }] };
+      if (sql === LOOKUP_MAPPING_SQL) return { rows: [{ application_user_id: APP_ID, cognito_sub: COGNITO_SUB, email: 'checksops-tester@freedomadj.com', status: 'active' }] };
+      if (String(sql).includes('FROM public.tenant_users')) return { rows: [{ role: 'admin' }] };
+      if (sql === CLEAN_STEM_POINTER_LOOKUP_SQL) {
+        assert.equal(params[0], row.ext);
+        return { rows: [{ back_image_path: row.generated, back_image_original_path: null, back_image_deposit_path: null }] };
+      }
+      if (String(sql).startsWith('SELECT 1 FROM')) return { rows: [] };
+      return { rows: [] };
+    };
+    const result = await handleStorageSign(jwtEvent('/storage/sign', 'POST', {
+      bucket: 'claim-files',
+      path: row.clean,
+    }), depsFor(client, { keys: new Set([`files/claim-files/${row.clean}`]) }));
+    assert.equal(result.ok, true, `${row.ext} ${JSON.stringify(result)}`);
+    assert.equal(result.path, row.clean);
+  }
+});
+
+test('authorizeSignedObject refuses nonexistent stem, checkalt, deposit, unrelated JPEG, and another check image', async () => {
+  const generated = 'checks/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/scan_endorsed_1.svg';
+  const denied = [
+    { path: 'checks/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/scan.jpg', rows: [], label: 'nonexistent stem' },
+    { path: 'checks/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/scan.checkalt.jpg', rows: [{ back_image_path: generated }], label: 'checkalt' },
+    { path: 'checks/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/endorsed_deposit_aaa.jpg', rows: [{ back_image_path: 'checks/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/endorsed_deposit_aaa.jpg' }], label: 'endorsed_deposit' },
+    { path: 'checks/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/other.jpg', rows: [{ back_image_path: generated }], label: 'unrelated jpeg' },
+    { path: 'checks/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/scan.jpg', rows: [{ back_image_path: generated }], label: 'other check' },
+  ];
+  for (const row of denied) {
+    const client = mockClient({ authorize: false });
+    client.query = async (sql, params) => {
+      if (sql === 'BEGIN' || sql === 'ROLLBACK') return { rows: [] };
+      if (sql.startsWith('SELECT set_config')) return { rows: [{ set_config: params[1] }] };
+      if (sql === LOOKUP_MAPPING_SQL) return { rows: [{ application_user_id: APP_ID, cognito_sub: COGNITO_SUB, email: 'checksops-tester@freedomadj.com', status: 'active' }] };
+      if (String(sql).includes('FROM public.tenant_users')) return { rows: [{ role: 'admin' }] };
+      if (sql === CLEAN_STEM_POINTER_LOOKUP_SQL) return { rows: row.rows };
+      if (String(sql).startsWith('SELECT 1 FROM')) return { rows: [] };
+      return { rows: [] };
+    };
+    const result = await handleStorageSign(jwtEvent('/storage/sign', 'POST', {
+      bucket: 'claim-files',
+      path: row.path,
+    }), depsFor(client, { keys: new Set([`files/claim-files/${row.path}`]) }));
+    assert.equal(result.ok, false, row.label);
+    assert.equal(result.statusCode, 403, row.label);
+  }
+});
+
+test('authorizeObject write/read SQL path is unchanged for stored original pointers', async () => {
+  const original = 'checks/00a0775e-cf79-4c97-8cd4-cfbbd57976d3/back-1783951493333.jpeg';
+  const client = mockClient({ authorize: true });
+  const auth = await authorizeObject(client, 'claim-files', original);
+  assert.equal(auth.authorized, true);
+  assert.equal(auth.rel, original);
+  const stem = await authorizeCleanStemSibling(client, 'claim-files', original);
+  assert.equal(stem.authorized, false);
+  const signed = await authorizeSignedObject(client, 'claim-files', original);
+  assert.equal(signed.authorized, true);
+  assert.equal(signed.via, undefined);
 });
 
 test('official rear .checkalt.jpg presign stamps endorsement fingerprint', async () => {

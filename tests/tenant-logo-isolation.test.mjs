@@ -6,8 +6,8 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-test("tenant logo upload paths are tenant-scoped in WhiteLabelSettings", () => {
-  const src = fs.readFileSync(path.join(ROOT, "src/components/white-label/WhiteLabelSettings.tsx"), "utf8");
+test("tenant logo upload paths are tenant-scoped in TenantBrandingSettings", () => {
+  const src = fs.readFileSync(path.join(ROOT, "src/components/settings/TenantBrandingSettings.tsx"), "utf8");
   assert.match(src, /from\("tenant-logos"\)/);
   assert.match(src, /\$\{tenant\.id\}\/logo-\$\{Date\.now\(\)\}\./);
   assert.ok(src.includes("upload(path, file"), "expected logo upload to call upload(path, file)");
