@@ -1,0 +1,24 @@
+{
+  "id": "tenant-collection-v2-spa-candidate",
+  "clean_build": true,
+  "built_at": "2026-09-29T20:08:27Z",
+  "source_composition": {
+    "base": "cursor/platform-finance-receivables-prod-2d41 live SPA index-CXdgFa1W.js",
+    "forward_ported": [
+      "src/components/admin/PlatformReceivablesLedger.tsx",
+      "src/components/admin/TenantBillingHistoryPanel.tsx"
+    ],
+    "wholesale_staging_spa": false
+  },
+  "live": {
+    "index_html_sha256": "3d8a78314f0abfd02f17aea5c239dd899ceb76a5169e4ff2bc9682ef5ef0d7c3",
+    "entry_bundle": "/assets/index-CXdgFa1W.js",
+    "css": "/assets/index-D3j8hrEX.css"
+  },
+  "candidate": {
+    "index_html_sha256": "2a8e5245d18a4a84b6175cace303dff9c06b27e5114e4cc439fe9854b2e53575",
+    "entry_bundle": "/assets/index-C9QrEEkl.js",
+    "css": "/assets/index-D3j8hrEX.css",
+    "entry_sha256": "10c0aab80ddc918744c5acdad0e25ef75d957aaf5c0409707abf06f9e35864f9"
+  }
+}

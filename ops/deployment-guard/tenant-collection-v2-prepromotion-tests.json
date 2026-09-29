@@ -1,0 +1,46 @@
+{
+  "id": "tenant-collection-v2-prepromotion-tests",
+  "ran_at": "2026-09-29T20:06:00Z",
+  "workstream_id": "tenant-collection-v2-prod-2d41",
+  "commit": "d214b46b4",
+  "results": {
+    "tenant_collection_v2_mandatory": { "ok": true, "detail": "32/32" },
+    "tenant_collection_v2_complete": { "ok": true, "detail": "38/38" },
+    "freedom_platform_funding": { "ok": true, "detail": "23/23" },
+    "deployment_guard": { "ok": true, "detail": "96/96" },
+    "scan_bypass": { "ok": true },
+    "claim_ledger": {
+      "ok": true,
+      "detail": "accepted-contract + discovery-grouping + link-or-create SQL 14/15 with --experimental-strip-types; 1 skipped (PostgreSQL 16 initdb not installed)"
+    },
+    "review_claim_save": { "ok": true, "detail": "15/15" },
+    "signature_requests": { "ok": true, "detail": "5/5" },
+    "check_files": { "ok": true, "detail": "2/2" },
+    "tenant_isolation": { "ok": true, "detail": "14/14" },
+    "financial_write_protections": { "ok": true, "detail": "api-write 25/25" },
+    "tenant_receivables": { "ok": true, "detail": "15/15" },
+    "ui_walletops_layout": { "ok": true },
+    "ui_spa_composition": { "ok": true, "detail": "3/3" },
+    "frontend_contracts": { "ok": true, "detail": "28/28" },
+    "moov": { "ok": true, "detail": "32/32 API + file-rules 20/21 (pre-existing invalid-purpose assertion)" },
+    "mortgage_ops": { "ok": true, "detail": "37/37 core; parity-bill-mortgage blocked by pre-existing ocr-parse.mjs SyntaxError" },
+    "checkalt_runnable": {
+      "ok": true,
+      "detail": "73-77 passing across runnable suites; deposit-preflight and pending-sync load-fail on pre-existing ocr-parse.mjs SyntaxError"
+    }
+  },
+  "pre_existing_not_fixed": {
+    "ocr_parse_syntaxerror": {
+      "file": "aws/functions/api/ocr-parse.mjs",
+      "line": 251,
+      "error": "Invalid regular expression unterminated group",
+      "live_identical": true,
+      "action": "not fixed in this workstream"
+    },
+    "ocr_azure_tree_hash": {
+      "recorded": "9ecc8ae0c814947afb1badc354b467831b24eec09cb8a60bdb454cb6abfb2801",
+      "actual": "f427516ee1ea870165b438244efac59b252c010dc994e52fdfe0957375e12932",
+      "action": "not fixed in this workstream"
+    }
+  }
+}
