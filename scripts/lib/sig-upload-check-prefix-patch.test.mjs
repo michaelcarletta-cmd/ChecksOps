@@ -4,6 +4,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import {
   COMMA_IF,
+  GRAPH_B_ICON_IMPORTS,
+  GRAPH_B_ICON_LOCALS,
   IF_THEN_C,
   IF_THEN_CONST_C,
   IF_THEN_CONST_K,
@@ -12,6 +14,7 @@ import {
   patchLiveFilesSignatureUploads,
   repairLiveFilesCommaIf,
   repairLiveFilesConstRestore,
+  repairLiveFilesDropGraphBIcons,
 } from './sig-upload-check-prefix-patch.mjs';
 
 const require = createRequire(import.meta.url);
@@ -110,4 +113,53 @@ test('semicolon-repaired live Files bytes take the const restore', (t) => {
   assert.equal(repaired.includes('check-intake/${l}/files/${Date.now()}-${crypto.randomUUID()}-${i}'), true);
   assert.equal(repaired.includes('signatures/${r}/'), false);
   assert.equal(ast.type, 'Program');
+});
+
+const GRAPH_B_LIVE = '/tmp/sig-drop-graph-b-icons/files-live.js';
+
+test('Graph B icon drop recreates ps/ws/re with the DJN Ye factory', () => {
+  const sample = [
+    'import{m as Ye,a as F}from"./index-DJNHggvS.js";',
+    GRAPH_B_ICON_IMPORTS,
+    'import{c as L}from"./compressCheckImage-Df2Tsl9J.js";',
+    'const g="claim-files";',
+    'const sigReq=(({Ye,ps,ws,re})=>{const Ue=Ye("Activity",[]);function Ss({claimId:r,claim:p,checkIntakeItemId:j=null}){',
+    'if(!j)throw new Error("Signature upload requires a check-scoped path");const K=`check-intake/${j}/files/${Date.now()}-${crypto.randomUUID()}-${s.fileName}`,H=new Blob([S],{type:P}),{error:U}=await d.storage.from("claim-files").upload(K,H);',
+    'if(!j)throw new Error("Signature upload requires a check-scoped path");const c=`check-intake/${j}/files/${Date.now()}-${crypto.randomUUID()}-${a}`,{error:S}=await d.storage.from("claim-files").upload(c,E);',
+    'const x=`check-intake/${l}/files/${Date.now()}-${crypto.randomUUID()}-${i}`;return Ss;})({Ye,fs,ps,ws,re});function ee({checkIntakeItemId:l}){}',
+  ].join('');
+  const repaired = repairLiveFilesDropGraphBIcons(sample);
+  assert.equal(repaired.includes(GRAPH_B_ICON_IMPORTS), false);
+  assert.equal(repaired.includes(GRAPH_B_ICON_LOCALS), true);
+  assert.equal(repaired.includes('circle-check-big-DbOxWV8k.js'), false);
+  assert.equal(repaired.includes('chevron-left-DsjQvYNH.js'), false);
+  assert.equal(repaired.includes('chevron-right-CTYLC974.js'), false);
+  assert.equal(repaired.includes('index-C5ku3IDF.js'), false);
+  assert.equal(repaired.includes('const K=`check-intake/${j}/files/${Date.now()}-${crypto.randomUUID()}-${s.fileName}`,H=new Blob([S],{type:P}),{error:U}='), true);
+  assert.equal(repaired.includes('const c=`check-intake/${j}/files/${Date.now()}-${crypto.randomUUID()}-${a}`,{error:S}='), true);
+  assert.equal(repaired.includes('check-intake/${l}/files/${Date.now()}-${crypto.randomUUID()}-${i}'), true);
+  assert.equal(repaired.includes('signatures/${'), false);
+});
+
+test('current live Files SHA 87540e2f takes the Graph B icon drop', (t) => {
+  if (!existsSync(GRAPH_B_LIVE)) {
+    t.skip('current live Files bytes not present');
+    return;
+  }
+  const source = readFileSync(GRAPH_B_LIVE, 'utf8');
+  acorn.parse(source, { ecmaVersion: 'latest', sourceType: 'module' });
+  const repaired = repairLiveFilesDropGraphBIcons(source);
+  acorn.parse(repaired, { ecmaVersion: 'latest', sourceType: 'module' });
+  assert.equal(repaired.includes('circle-check-big-DbOxWV8k.js'), false);
+  assert.equal(repaired.includes('chevron-left-DsjQvYNH.js'), false);
+  assert.equal(repaired.includes('chevron-right-CTYLC974.js'), false);
+  assert.equal(repaired.includes('index-C5ku3IDF.js'), false);
+  assert.equal(repaired.includes('const ps=Ye("CircleCheckBig"'), true);
+  assert.equal(repaired.includes('const ws=Ye("ChevronLeft"'), true);
+  assert.equal(repaired.includes('const re=Ye("ChevronRight"'), true);
+  assert.equal(repaired.includes('function Ss({claimId:r,claim:p,checkIntakeItemId:j=null})'), true);
+  assert.equal(repaired.includes('const K=`check-intake/${j}/files/${Date.now()}-${crypto.randomUUID()}-${s.fileName}`,H=new Blob([S],{type:P}),{error:U}='), true);
+  assert.equal(repaired.includes('const c=`check-intake/${j}/files/${Date.now()}-${crypto.randomUUID()}-${a}`,{error:S}='), true);
+  assert.equal(repaired.includes('check-intake/${l}/files/${Date.now()}-${crypto.randomUUID()}-${i}'), true);
+  assert.equal(repaired.includes('signatures/${'), false);
 });

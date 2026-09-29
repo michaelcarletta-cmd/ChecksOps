@@ -107,3 +107,79 @@ export const patchLiveFilesSignatureUploads = (source) => {
   }
   return next;
 };
+
+export const GRAPH_B_ICON_IMPORTS = [
+  'import{C as ps}from"./circle-check-big-DbOxWV8k.js";',
+  'import{C as ws}from"./chevron-left-DsjQvYNH.js";',
+  'import{C as re}from"./chevron-right-CTYLC974.js";',
+].join('');
+
+export const GRAPH_B_ICON_LOCALS = [
+  'const ps=Ye("CircleCheckBig",[["path",{d:"M21.801 10A10 10 0 1 1 17 3.335",key:"yps3ct"}],["path",{d:"m9 11 3 3L22 4",key:"1pflzl"}]]);',
+  'const ws=Ye("ChevronLeft",[["path",{d:"m15 18-6-6 6-6",key:"1wnfg3"}]]);',
+  'const re=Ye("ChevronRight",[["path",{d:"m9 18 6-6-6-6",key:"mthhwq"}]]);',
+].join('');
+
+const GRAPH_B_ICON_FILES = [
+  'circle-check-big-DbOxWV8k.js',
+  'chevron-left-DsjQvYNH.js',
+  'chevron-right-CTYLC974.js',
+  'index-C5ku3IDF.js',
+];
+
+/** Drop leftover Graph B lucide imports that pull index-C5ku3IDF.js. */
+export const repairLiveFilesDropGraphBIcons = (source) => {
+  const js = String(source);
+  if (!js.includes('import{m as Ye,')) {
+    throw new Error('live Files chunk lost the DJN lucide factory Ye import');
+  }
+  if (!js.includes(GRAPH_B_ICON_IMPORTS)) {
+    throw new Error('live Files chunk is missing the Graph B icon import block');
+  }
+  if ((js.split(GRAPH_B_ICON_IMPORTS).length - 1) !== 1) {
+    throw new Error('expected exactly one Graph B icon import block');
+  }
+  if (!js.includes('const g="claim-files";')) {
+    throw new Error('live Files chunk lost the claim-files bucket const');
+  }
+  const withoutImports = js.replace(GRAPH_B_ICON_IMPORTS, '');
+  if (withoutImports.includes(GRAPH_B_ICON_IMPORTS)) {
+    throw new Error('Graph B icon imports remain after removal');
+  }
+  const next = withoutImports.replace(
+    'const g="claim-files";',
+    `const g="claim-files";${GRAPH_B_ICON_LOCALS}`,
+  );
+  if (!next.includes(GRAPH_B_ICON_LOCALS)) {
+    throw new Error('DJN-bound ps/ws/re locals were not inserted');
+  }
+  if ((next.split('const ps=Ye("CircleCheckBig"').length - 1) !== 1
+    || (next.split('const ws=Ye("ChevronLeft"').length - 1) !== 1
+    || (next.split('const re=Ye("ChevronRight"').length - 1) !== 1) {
+    throw new Error('expected exactly one DJN-bound local for ps, ws, and re');
+  }
+  for (const name of GRAPH_B_ICON_FILES) {
+    if (next.includes(name)) {
+      throw new Error(`patched Files chunk still references ${name}`);
+    }
+  }
+  if (!next.includes('function Ss({claimId:r,claim:p,checkIntakeItemId:j=null})')) {
+    throw new Error('icon retarget lost inlined SignatureRequests');
+  }
+  if (!next.includes('const K=`check-intake/${j}/files/${Date.now()}-${crypto.randomUUID()}-${s.fileName}`,H=new Blob([S],{type:P}),{error:U}=')) {
+    throw new Error('icon retarget changed the generate-document upload path');
+  }
+  if (!next.includes('const c=`check-intake/${j}/files/${Date.now()}-${crypto.randomUUID()}-${a}`,{error:S}=')) {
+    throw new Error('icon retarget changed the direct Signature upload path');
+  }
+  if (!next.includes(FILES_TAB_UPLOAD)) {
+    throw new Error('icon retarget changed the Files-tab upload path');
+  }
+  if (next.includes('signatures/${r}/') || next.includes('signatures/${')) {
+    throw new Error('icon retarget reintroduced signatures/ upload paths');
+  }
+  if (!next.includes(',fs,ps,ws,re});function ee({checkIntakeItemId:l})')) {
+    throw new Error('icon retarget lost IIFE bindings for ps/ws/re');
+  }
+  return next;
+};
