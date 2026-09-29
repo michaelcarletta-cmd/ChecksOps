@@ -1,0 +1,186 @@
+{
+  "id": "tenant-collection-v2-staging-provider-backed",
+  "title": "V2 staging provider-backed collection",
+  "verdict": "V2 STAGING PROVIDER-BACKED COLLECTION — ACCEPTED",
+  "captured_at": "2026-09-29T21:01:30Z",
+  "workstream_id": "tenant-collection-v2-staging-provider-2d41",
+  "branch": "cursor/tenant-collection-v2-staging-provider-2d41",
+  "environment": "staging-only",
+  "production_collection_authorized": false,
+  "freedom_production_collection_started": false,
+  "A_staging_baseline": {
+    "function_name": "checksops-staging-api",
+    "codeSha256": "NUPzpqR0h6dlwN8rIhiczyNT8ZKXUM9vSFtlqO1LA/s=",
+    "revisionId": "bc0b1b4a-4a80-48d0-8eec-75ef616eb835",
+    "lastModified": "2026-09-29T19:50:23.000+0000",
+    "CHECKSOPS_ENV": "staging",
+    "moov_environment": "sandbox",
+    "destination_account": "36b79957-ce7a-4ca7-a68f-30986c9e47bb",
+    "destination_payment_method": "3c3133e7-5489-4af8-9d9a-4b0cf6bad362",
+    "AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST": false,
+    "AWS_MOOV_BILLING_VERIFICATION_POST_ENABLED": false,
+    "AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED": null,
+    "shared_api_unchanged": true,
+    "fail_closed_production_moov": false,
+    "v2_hashes_match_accepted": true
+  },
+  "B_production_readonly_baseline": {
+    "function_name": "checksops-production-prep-api",
+    "codeSha256_freedom_prep": "s7fEdoI9HXCQhheLoa6i08Zl4UJ+tyU1HDUk5StoVqs=",
+    "revisionId_freedom_prep": "cd740e42-5574-4326-931d-a45ca5cb00f6",
+    "codeSha256_this_test_start": "X0xat8ZosDmRLjp7uXn+C3DxT+RD3I5APSVpI/GOGaU=",
+    "revisionId_this_test_start": "cdfbde4c-475c-41bb-b3c4-e626c48d2517",
+    "lastModified_this_test_start": "2026-09-29T20:50:31.000+0000",
+    "independent_workstream_drift": true,
+    "reverted": false,
+    "v2_hashes_still_match_accepted": true,
+    "AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST": false,
+    "AWS_MOOV_BILLING_VERIFICATION_POST_ENABLED": false,
+    "this_workstream_production_writes": 0
+  },
+  "C_synthetic_tenant": {
+    "id": "3bef00a5-0bf4-41ba-abf8-5fb4e2b73d43",
+    "name": "ChecksOps Pipeline Test",
+    "sandbox_moov_account_id": "1d59a6a8-3307-4687-8367-1495293ecc73",
+    "sandbox_wallet_id": "58571121-67ea-4e10-abae-6c9680ac455d",
+    "sandbox_wallet_payment_method": "1eb24c1c-b7ab-45cd-8775-332da40b9647",
+    "sandbox_bank_payment_method": "8a0f6ffa-a549-48f5-bb8e-f5b6a9d9cfff",
+    "sandbox_bank_last4": "4321",
+    "isolated": true,
+    "not_freedom": true,
+    "not_c1c": true,
+    "preferred_dedicated_billing_tenant_unused": {
+      "id": "1ca29fed-4b71-44ce-9650-54b7215f5c3a",
+      "reason": "Sandbox bank last4 9992 is unverified (status new) and has credit rails only. No ach-debit-fund."
+    }
+  },
+  "D_sandbox_source_destination": {
+    "source_wallet_pm": "1eb24c1c-b7ab-45cd-8775-332da40b9647",
+    "source_bank_pm": "8a0f6ffa-a549-48f5-bb8e-f5b6a9d9cfff",
+    "source_rail": "ach-debit-fund",
+    "destination_account": "36b79957-ce7a-4ca7-a68f-30986c9e47bb",
+    "destination_wallet": "9e06749a-a720-4430-b426-8f959737920d",
+    "destination_pm": "3c3133e7-5489-4af8-9d9a-4b0cf6bad362",
+    "destination_mode": "sandbox",
+    "not_production_checksops_wallet": true
+  },
+  "E_obligation_id": "32554e85-74a0-48e1-b131-aa6d7f338c03",
+  "F_pre_write_calculation": {
+    "amount_due": "$139.00",
+    "wallet_available": "$0.00",
+    "wallet_leg": "$0.00",
+    "bank_leg": "$139.00",
+    "existing_v2_provider_transfer": "NONE",
+    "pass": true
+  },
+  "G_expected_split": {
+    "amountDueCents": 13900,
+    "walletAmountCents": 0,
+    "bankAmountCents": 13900
+  },
+  "H_provider_transfer_id": "5edcc6f2-c07c-47ff-936a-769a4d3b51ae",
+  "I_provider_amount_status": {
+    "amount_cents": 13900,
+    "currency": "USD",
+    "status": "pending",
+    "createdOn": "2026-09-29T20:59:52Z",
+    "source_payment_method": "8a0f6ffa-a549-48f5-bb8e-f5b6a9d9cfff",
+    "source_type": "ach-debit-fund",
+    "destination_payment_method": "3c3133e7-5489-4af8-9d9a-4b0cf6bad362",
+    "destination_type": "moov-wallet",
+    "idempotency_key": "billing-2099-01-3bef00a5-0bf4-41ba-abf8-5fb4e2b73d43-bank",
+    "metadata": {
+      "collection_contract": "tenant-collection-v2",
+      "checksops_period": "2099-01",
+      "checksops_tenant_id": "3bef00a5-0bf4-41ba-abf8-5fb4e2b73d43",
+      "checksops_payment_id": "32554e85-74a0-48e1-b131-aa6d7f338c03",
+      "checksops_leg": "ach_debit"
+    },
+    "provider_environment": "sandbox",
+    "created_by": "accepted_v2_submitOccurrence_collectTenantObligation",
+    "manual_moov_post": false
+  },
+  "J_local_occurrence_id": "32554e85-74a0-48e1-b131-aa6d7f338c03",
+  "K_local_transfer_leg": {
+    "id": "969fc56b-dcaf-45ef-be91-130d41f5f4c4",
+    "leg_type": "ach_debit",
+    "amount_cents": 13900,
+    "provider_transfer_id": "5edcc6f2-c07c-47ff-936a-769a4d3b51ae",
+    "provider_status": "submitted",
+    "idempotency_key": "billing-2099-01-3bef00a5-0bf4-41ba-abf8-5fb4e2b73d43-bank",
+    "wallet_leg_created": false
+  },
+  "L_allocation": {
+    "obligation_total_cents": 13900,
+    "wallet_allocation_cents": 0,
+    "bank_allocation_cents": 13900
+  },
+  "M_audit_event_records": {
+    "obligation_notes_contain_collection_v2_snapshot": true,
+    "obligation_notes_contain_provider_transfer_id": true,
+    "payment_transfers_row": "969fc56b-dcaf-45ef-be91-130d41f5f4c4",
+    "collection_contract": "tenant-collection-v2",
+    "fixture_marked": "STAGING V2 ACCEPTANCE FIXTURE $139"
+  },
+  "N_second_execution_result": {
+    "invoked": true,
+    "ok": true,
+    "reused_provider_transfer_id": "5edcc6f2-c07c-47ff-936a-769a4d3b51ae",
+    "new_wallet_leg": false,
+    "new_bank_leg": false
+  },
+  "O_provider_matching_transfer_count_after_retry": 1,
+  "P_optional_40_99": {
+    "performed": false,
+    "skipped": true,
+    "reason": "Synthetic tenant sandbox wallet available is $0.00. Crediting $40 would require a separate sandbox funding transfer outside the V2 collection path."
+  },
+  "Q_tenant_isolation": {
+    "cannot_use_other_tenant_wallet": true,
+    "cannot_use_other_tenant_bank": true,
+    "collect_refused_other_tenant_source": true,
+    "collect_error": "cross_tenant_wallet",
+    "provider_writes_for_other_tenant": 0,
+    "isolated": true
+  },
+  "R_v2_38_38": "38/38",
+  "mandatory_32_32": "32/32",
+  "S_funding_23_23": "23/23",
+  "T_production_lambda_before_after": {
+    "before_this_workstream_freedom_prep": "s7fEdoI9HXCQhheLoa6i08Zl4UJ+tyU1HDUk5StoVqs=",
+    "at_this_test_freeze": "X0xat8ZosDmRLjp7uXn+C3DxT+RD3I5APSVpI/GOGaU=",
+    "after_this_test": "X0xat8ZosDmRLjp7uXn+C3DxT+RD3I5APSVpI/GOGaU=",
+    "this_workstream_changed_production_lambda": false,
+    "independent_drift_reported_not_reverted": true
+  },
+  "U_production_billing_flags_before_after": {
+    "AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST_before": false,
+    "AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST_after": false,
+    "AWS_MOOV_BILLING_VERIFICATION_POST_ENABLED_before": false,
+    "AWS_MOOV_BILLING_VERIFICATION_POST_ENABLED_after": false
+  },
+  "V_proof_production_zero_provider_writes": {
+    "this_workstream_production_moov_posts": 0,
+    "production_lambda_env_writes": 0,
+    "production_sql_writes": 0,
+    "production_inspect_mutated": false,
+    "production_live_monthly_transfers": [],
+    "shared_staging_api_sandbox_post_flag_left_unset": true
+  },
+  "W_proof_freedom_untouched": {
+    "freedom_september_obligation_exists": false,
+    "freedom_139_v2_transfer_exists": false,
+    "freedom_wells_fargo_4573_debited": false,
+    "production_checksops_wallet_received_v2_139": false,
+    "production_amount_13900_history": []
+  },
+  "success_criteria": {
+    "actual_moov_sandbox_provider_post_through_v2": true,
+    "exactly_13900_cents_requested": true,
+    "zero_wallet_139_bank": true,
+    "local_records_reconciled": true,
+    "retry_no_duplicate": true,
+    "tenant_isolation_passed": true,
+    "production_not_touched_by_this_workstream": true
+  }
+}
