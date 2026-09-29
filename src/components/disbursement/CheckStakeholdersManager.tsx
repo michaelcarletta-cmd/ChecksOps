@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Plus, X, Users, Handshake, ShieldCheck, MailCheck, Lock, Home, Link2, Loader2, Search, UserPlus } from "lucide-react";
 import { VERIFICATION_BADGE_CLASS, VERIFICATION_LABEL, type VerificationStatus } from "@/lib/banking";
-import { isMoovAllowedForTenant } from "@/lib/payments/featureFlags";
+import { PAYMENT_FLAGS } from "@/lib/payments/featureFlags";
 import { SendHomeownerBankLinkDialog } from "./SendHomeownerBankLinkDialog";
 import { AddExternalStakeholderDialog } from "./AddExternalStakeholderDialog";
 import { SendCheckTrackingLinkButton } from "@/components/homeowner-ledger/SendCheckTrackingLinkButton";
@@ -219,7 +219,7 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
     onError: (e: any) => toast({ title: "Couldn't remove", description: e.message, variant: "destructive" }),
   });
 
-  const moovAllowed = isMoovAllowedForTenant((tenant as any)?.moov_allowlisted);
+  const moovAllowed = PAYMENT_FLAGS.USE_MOOV;
 
 
   return (
