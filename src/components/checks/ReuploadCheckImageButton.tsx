@@ -8,6 +8,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { CheckImageCropper } from "@/components/checks/CheckImageCropper";
+import { ensureOfficialCheckAltArtifact, isRasterPath } from "@/lib/prepareCheckAltDeposit";
 
 /**
  * Admin-only "Reupload Front/Back Image" button. Uploads a new image to the
@@ -93,6 +94,17 @@ export function ReuploadCheckImageButton({
         .eq("id", checkId);
       if (updErr) throw updErr;
 
+      // Official CheckAlt front is the `.checkalt.jpg` sibling of front_image_path.
+      // Prepare it here so Deposit image check does not treat a successful
+      // re-upload as front_missing. Rear official artifacts come from the
+      // endorsed deposit JPEG after Adjust Received Endorsement — never the raw back.
+      if (side === "front" && isRasterPath(path)) {
+        try {
+          await ensureOfficialCheckAltArtifact(path, "front");
+        } catch {
+          // Source path is persisted; official prep can retry on Deposit view.
+        }
+      }
 
       // Best-effort audit log
       try {
@@ -115,6 +127,7 @@ export function ReuploadCheckImageButton({
       qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
       qc.invalidateQueries({ queryKey: ["check-back-img-shared", checkId] });
       qc.invalidateQueries({ queryKey: ["check-back-img-original-for-adjuster", checkId] });
+      qc.invalidateQueries({ queryKey: ["checkalt-image-compliance", checkId] });
       onUploaded?.();
     } catch (e: any) {
       toast({

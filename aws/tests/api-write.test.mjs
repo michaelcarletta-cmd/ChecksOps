@@ -208,6 +208,9 @@ test('POST /data/write updates check_intake_items endorsement render fields', as
   assert.equal(result.data?.id, CHECK_ID);
   const update = client.queries.find((q) => String(q.sql).startsWith('UPDATE public.check_intake_items'));
   assert.ok(update);
+  const stamp = client.queries.find((q) => String(q.sql).includes('jsonb_build_object'));
+  assert.ok(stamp, 'completed official rear write must stamp checkalt_rear_fingerprint');
+  assert.equal(stamp.params[1], 'checkalt_rear_fingerprint');
 });
 
 test('POST /data/write upserts check_message_reads as mapped UUID and ignores spoofed ids', async () => {

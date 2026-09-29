@@ -35,6 +35,9 @@ const sqlClient = (handlers) => mockClient((sql, params) => {
   for (const handler of handlers) {
     if (handler.match(compact, params)) return handler.result(params, compact);
   }
+  if (compact.includes('UPDATE public.check_payees')) {
+    return { rows: [{ id: params[0], endorsement_status: params[1] || params[2] }], rowCount: 1 };
+  }
   return { rows: [], rowCount: 0 };
 });
 
@@ -247,6 +250,13 @@ test('in-person sign requires image consent and stays fail-closed on deposit', a
       {
         match: (sql) => sql.includes('aws_can_write_tenant'),
         result: () => ({ rows: [{ ok: true }] }),
+      },
+      {
+        match: (sql) => sql.includes("SET status = 'signed'"),
+        result: () => ({
+          rows: [{ id: ENDORSE_ID, status: 'signed', payee_id: null, payee_name: 'Jane', check_id: CHECK_ID }],
+          rowCount: 1,
+        }),
       },
       {
         match: (sql) => sql.includes('SELECT status, payee_type'),

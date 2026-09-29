@@ -319,7 +319,10 @@ export const handleWrite = async (event, deps = {}) => {
     if (executed.error) {
       const status = ['invalid_uuid', 'missing_required_field', 'invalid_field'].includes(executed.error)
         ? 400
-        : 403;
+        : executed.error === 'provider_rear_fingerprint_stamp_failed'
+          || executed.error === 'payee_status_sync_failed'
+          ? 503
+          : 403;
       return denied(spoof, { statusCode: status, ...executed });
     }
 

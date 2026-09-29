@@ -43,6 +43,9 @@ const sqlClient = (handlers) => mockClient((sql, params) => {
   for (const handler of handlers) {
     if (handler.match(compact, params)) return handler.result(params, compact);
   }
+  if (compact.includes('UPDATE public.check_payees')) {
+    return { rows: [{ id: params[0], endorsement_status: params[1] || params[2] }], rowCount: 1 };
+  }
   return { rows: [], rowCount: 0 };
 });
 
@@ -173,8 +176,24 @@ test('FIX3 force-complete uses finalize path and never resets signed rows', asyn
       match: (sql) => sql.includes('FROM public.check_endorsements WHERE check_id'),
       result: () => ({
         rows: [
-          { id: 'e1', status: 'signed', payee_type: 'insured', signature_image_url: 'data:image/png;base64,keep' },
-          { id: 'e2', status: 'pending', payee_type: 'public_adjuster', signature_image_url: null },
+          {
+            id: 'e1',
+            payee_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',
+            payee_name: 'Insured',
+            check_id: CHECK_ID,
+            status: 'signed',
+            payee_type: 'insured',
+            signature_image_url: 'data:image/png;base64,keep',
+          },
+          {
+            id: 'e2',
+            payee_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1',
+            payee_name: 'PA',
+            check_id: CHECK_ID,
+            status: 'pending',
+            payee_type: 'public_adjuster',
+            signature_image_url: null,
+          },
         ],
       }),
     },

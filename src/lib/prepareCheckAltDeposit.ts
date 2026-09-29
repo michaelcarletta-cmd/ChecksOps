@@ -4,13 +4,13 @@ import {
   CHECKALT_IMAGE_ERROR,
   evaluateCheckAltImageCompliance,
   isCheckAltArtifactPath,
+  isRasterClaimPath,
   measureBlob,
   normalizeBlobToCheckAltCanvas,
   toCheckAltPath,
 } from "@/lib/checkaltImageCompliance";
 
-const isRasterPath = (path: string | null | undefined) =>
-  !!path && /\.(jpe?g|png|webp)$/i.test(path);
+export const isRasterPath = isRasterClaimPath;
 
 async function downloadBlob(path: string) {
   const { data, error } = await supabase.storage.from(CHECK_IMAGES_BUCKET).download(path);
@@ -45,6 +45,14 @@ async function writeCheckAltArtifact(sourcePath: string, blob: Blob) {
   );
   if (error) throw new Error(`CheckAlt image upload failed: ${error.message}`);
   return preparedPath;
+}
+
+export async function ensureOfficialCheckAltArtifact(
+  path: string,
+  side: "front" | "rear",
+  force = false,
+) {
+  return prepareRasterToCheckAlt(path, side, force);
 }
 
 async function prepareRasterToCheckAlt(path: string, side: "front" | "rear", force = false) {

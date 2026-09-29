@@ -24,6 +24,7 @@ import {
   loadCheckPayees,
   stampCheckAltRearFingerprint,
 } from './providers/production/checkalt-eligibility.mjs';
+import { synchronizePayeesFromEndorsements } from './endorsement-payee-sync.mjs';
 import { loadDepositsForCheck, pickBlockingDeposit } from './providers/production/checkalt-idempotency.mjs';
 import { normalizePath, s3KeyFor } from './storage-paths.mjs';
 
@@ -729,6 +730,7 @@ export const compositeEndorsementSignatures = async ({
   );
 
   if (check.tenant_id && deps.stampFingerprint !== false) {
+    await synchronizePayeesFromEndorsements(client, check.id);
     const payees = await loadCheckPayees(client, check.id, check.tenant_id);
     const endorsements = await loadCheckEndorsements(client, check.id, check.tenant_id);
     await stampCheckAltRearFingerprint(client, check.id, check.tenant_id, payees, endorsements);
