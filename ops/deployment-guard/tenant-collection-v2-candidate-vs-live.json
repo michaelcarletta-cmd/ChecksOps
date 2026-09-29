@@ -1,0 +1,126 @@
+{
+  "function_name": "checksops-production-prep-api",
+  "live_zip": "/tmp/tcv2-live-now.zip",
+  "live_zip_sha256": "b2ba2d4ab1515d46b9d90b407e6b1df839b9fad528a285a61ca288d35048ecd8",
+  "candidate_zip": "/tmp/tcv2-candidate.zip",
+  "candidate_zip_sha256": "08c491c1b4404cc1c0354d994b452815258de25e3e0b65318c8145a19610f3ac",
+  "owned_members": [
+    "tenant-collection-v2.mjs",
+    "tenant-collection-contract-v2.mjs",
+    "tenant-billing-engine.mjs",
+    "providers/parity/tenant-receivables.mjs"
+  ],
+  "applied": {
+    "added": [
+      "tenant-collection-v2.mjs",
+      "tenant-collection-contract-v2.mjs"
+    ],
+    "patched": [
+      "tenant-billing-engine.mjs",
+      "providers/parity/tenant-receivables.mjs"
+    ]
+  },
+  "manifest": {
+    "added": [
+      "tenant-collection-contract-v2.mjs",
+      "tenant-collection-v2.mjs"
+    ],
+    "changed": [
+      "providers/parity/tenant-receivables.mjs",
+      "tenant-billing-engine.mjs"
+    ],
+    "deleted": [],
+    "unexpectedAdded": [],
+    "unexpectedChanged": [],
+    "unexpectedDeleted": [],
+    "expected": true,
+    "protectedProof": {
+      "tenant-billing-destination.mjs": {
+        "live": "7f9f24569d8d3112bcb829380de17b56ac5076fe8a8b38fd6a7633b44bcdfd80",
+        "candidate": "7f9f24569d8d3112bcb829380de17b56ac5076fe8a8b38fd6a7633b44bcdfd80",
+        "identical": true
+      },
+      "tenant-billing-handlers.mjs": {
+        "live": "8aeb8b7f431742249ace72ee32c1cbc1bf62789565a1eaa9a0249aa00c48586c",
+        "candidate": "8aeb8b7f431742249ace72ee32c1cbc1bf62789565a1eaa9a0249aa00c48586c",
+        "identical": true
+      },
+      "app-services.mjs": {
+        "live": "09745fb570098b6309aeeba748541663f0b9259e9a0ea22309878f11de54e7b8",
+        "candidate": "09745fb570098b6309aeeba748541663f0b9259e9a0ea22309878f11de54e7b8",
+        "identical": true
+      },
+      "scheduled.mjs": {
+        "live": "78daabb298f187b180e1435cc75c3bd519179aab82a0b83a9632a5f41c577090",
+        "candidate": "78daabb298f187b180e1435cc75c3bd519179aab82a0b83a9632a5f41c577090",
+        "identical": true
+      },
+      "providers/parity/caller.mjs": {
+        "live": "7468817d3f968a1a90b2ce8b595584eb6812cc1662d0ae9a1ed708491272507d",
+        "candidate": "7468817d3f968a1a90b2ce8b595584eb6812cc1662d0ae9a1ed708491272507d",
+        "identical": true
+      },
+      "providers/parity/moov-functions.mjs": {
+        "live": "17cb25931af6d1b855fe45c8c97bb6ef3921d485ecc7c573973f186e1d51e953",
+        "candidate": "17cb25931af6d1b855fe45c8c97bb6ef3921d485ecc7c573973f186e1d51e953",
+        "identical": true
+      },
+      "providers/parity/moov-onboard.mjs": {
+        "live": "230d0e7544f4ead66115473be1092b3bd9d4310f82652a542239473347f217ac",
+        "candidate": "230d0e7544f4ead66115473be1092b3bd9d4310f82652a542239473347f217ac",
+        "identical": true
+      },
+      "providers/parity/moov-money.mjs": {
+        "live": "ab27005db014987b84341a9049e72fe6ff694cb7704c0ab2f043447c05caed7b",
+        "candidate": "ab27005db014987b84341a9049e72fe6ff694cb7704c0ab2f043447c05caed7b",
+        "identical": true
+      },
+      "write-allowlist.mjs": {
+        "live": "b18fee520f1919f2d72f8b303a385b627579805fe1a6d694ac0ea684b05d8859",
+        "candidate": "b18fee520f1919f2d72f8b303a385b627579805fe1a6d694ac0ea684b05d8859",
+        "identical": true
+      },
+      "write-app-metadata.mjs": {
+        "live": "1adaaef0f796fe454c3e71490ada83334be67c317c12707cf567fc8b27cd5820",
+        "candidate": "1adaaef0f796fe454c3e71490ada83334be67c317c12707cf567fc8b27cd5820",
+        "identical": true
+      },
+      "write.mjs": {
+        "live": "e9646dcc3b29e533e57206cd90885d3e43525a07a9334a1cff7a617f2d0e4a91",
+        "candidate": "e9646dcc3b29e533e57206cd90885d3e43525a07a9334a1cff7a617f2d0e4a91",
+        "identical": true
+      },
+      "workflow-rpc.mjs": {
+        "live": "09bb37e6af8c9501f0af61ecc6cba6b8381971ae210e0f1a0ed05939dcb82c88",
+        "candidate": "09bb37e6af8c9501f0af61ecc6cba6b8381971ae210e0f1a0ed05939dcb82c88",
+        "identical": true
+      },
+      "ocr-parse.mjs": {
+        "live": "16c15529f9bb4d975baa31ba5cbe824dd3eee4bd984487f7e4717b77c8878ede",
+        "candidate": "16c15529f9bb4d975baa31ba5cbe824dd3eee4bd984487f7e4717b77c8878ede",
+        "identical": true
+      }
+    },
+    "owned": {
+      "tenant-collection-v2.mjs": {
+        "live": null,
+        "candidate": "8a66f54d3c2785162a1643218e18b4d3c251230cf2a7f98a1ecb4ede8939fb66"
+      },
+      "tenant-collection-contract-v2.mjs": {
+        "live": null,
+        "candidate": "9ec5ae45db34c0795570f401cc2b1c3fa78f04764870bf6b651c21278433ed5d"
+      },
+      "tenant-billing-engine.mjs": {
+        "live": "267fb89559d2c39c70d9227cc3b1ea3a0d45c7576ed1641f880b109b23d41241",
+        "candidate": "65b75735825f9a06955d5daba603f74835d106cabf52eb449153c856a59dae2f"
+      },
+      "providers/parity/tenant-receivables.mjs": {
+        "live": "c83f4eae3a1653f0d7aa85682a0542fe55b15131dbc0b016aab7263b5033ea79",
+        "candidate": "0d8f8f20f4939e79551b4a1aa5b3305bb791cea7ca684f4428594ad359179477"
+      }
+    }
+  },
+  "env_changed": false,
+  "sql": false,
+  "billing_activation": false
+}
