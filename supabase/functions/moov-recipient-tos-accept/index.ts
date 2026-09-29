@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { moovFetch, bindMoovEnvironment, moovConfigured, moovEnvironment, scopes } from "../_shared/moovClient.ts";
-import { corsHeaders, json, sanitize } from "../_shared/moovGuard.ts";
+import { corsHeaders, json, moovGloballyEnabled, sanitize } from "../_shared/moovGuard.ts";
 import {
   dropTokenFromBody,
   rejectForgedRecipientTos,
@@ -21,7 +21,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    if ((Deno.env.get("MOOV_ENABLED") ?? "false").toLowerCase() !== "true") {
+    if (!moovGloballyEnabled()) {
       return json({ error: "This payment provider is not enabled." }, 403);
     }
 
