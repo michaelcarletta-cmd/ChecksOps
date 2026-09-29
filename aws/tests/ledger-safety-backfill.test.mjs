@@ -3,7 +3,10 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import {
   assertCheckClaimLinkAllowed,
+  CLAIM_LEDGER_LINK_RPC,
   claimIsSelectableForTenant,
+  claimLedgerLinkOrCreateArgs,
+  claimLedgerUserMessage,
   claimNumberSaveWritePayload,
   evaluateCheckClaimLink,
   filterSelectableClaims,
@@ -171,6 +174,24 @@ test('existing claim number save updates in place and does not create or relink'
   });
   assert.throws(() => claimNumberSaveWritePayload(unlinked), /in-place claim_number update/);
 
+  const inspect = claimLedgerLinkOrCreateArgs({
+    checkId: CHECK_ID,
+    claimNumber: '  CLM-LINK  ',
+    action: 'inspect',
+  });
+  assert.deepEqual(inspect, {
+    p_check_id: CHECK_ID,
+    p_claim_number: 'CLM-LINK',
+    p_action: 'inspect',
+  });
+  assert.equal(CLAIM_LEDGER_LINK_RPC, 'claim_ledger_link_or_create');
+  assert.match(claimLedgerUserMessage('cross_tenant'), /another tenant/);
+  assert.throws(() => claimLedgerLinkOrCreateArgs({
+    checkId: CHECK_ID,
+    claimNumber: '   ',
+    action: 'create_new',
+  }));
+
   assert.equal(resolveAuthoritativeClaimId({
     liveCheckClaimId: CLAIM_A,
     loadedClaimId: CLAIM_B,
@@ -200,14 +221,19 @@ test('existing claim number save updates in place and does not create or relink'
   assert.match(src, /Claim number save did not keep the existing claim/);
   assert.match(src, /handleLinkedSave/);
   assert.match(src, /onClick=\{handleLinkedSave\}/);
-  assert.match(src, /This check is not linked to a claim/);
-  assert.match(src, /Claim Ledger Save only updates an existing linked claim/);
+  assert.match(src, /claim_ledger_link_or_create|CLAIM_LEDGER_LINK_RPC/);
+  assert.match(src, /Find Existing Claim/);
+  assert.match(src, /Link Existing Ledger/);
+  assert.match(src, /Start New Claim Ledger/);
+  assert.match(src, /Existing claim found/);
+  assert.match(src, /Typing a claim number does not create a claim/);
   assert.match(src, /\.from\("check_intake_items"\)[\s\S]*\.select\("id, claim_id"\)/);
   assert.equal(/newTrackingClaimInsert/.test(src), false);
   assert.equal(/\.from\("claims"\)[\s\S]*\.insert\(/.test(src), false);
   assert.equal(/const handleSave/.test(src), false);
   assert.equal(/onClick=\{handleSave\}/.test(src), false);
   assert.equal(/ilike\("claim_number"/.test(src), false);
+  assert.doesNotMatch(src, /Claim Ledger Save only updates an existing linked claim/);
   const updateBlock = src.slice(src.indexOf('plan.mode === "update_existing"'), src.indexOf('throw new Error(CLAIM_LEDGER_NOT_LINKED)'));
   assert.equal(/\.insert\(/.test(updateBlock), false);
   assert.equal(/detected_claim_number/.test(updateBlock), false);
