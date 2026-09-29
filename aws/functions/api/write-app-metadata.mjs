@@ -530,6 +530,22 @@ export const executeTenantsNarrow = async ({ client, mapping, values, filters })
       out[col] = text;
     }
   }
+  if ('invoice_accent_color' in values) {
+    const text = clip(values.invoice_accent_color, 40);
+    if (text?.error) return text;
+    if (text && !/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(text)) {
+      return { error: 'invalid_field', field: 'invoice_accent_color' };
+    }
+    out.invoice_accent_color = text;
+  }
+  if ('invoice_theme' in values) {
+    const text = clip(values.invoice_theme, 16);
+    if (text?.error) return text;
+    if (text && text !== 'light' && text !== 'dark') {
+      return { error: 'invalid_field', field: 'invoice_theme' };
+    }
+    out.invoice_theme = text;
+  }
   if (!Object.keys(out).length) return { error: 'missing_required_field', field: 'values' };
   const built = buildSet(out);
   built.params.push(id);
