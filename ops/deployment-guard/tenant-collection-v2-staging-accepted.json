@@ -5,7 +5,7 @@
   "production_accepted": false,
   "accepted_at": "2026-09-29T19:50:23Z",
   "branch": "cursor/tenant-collection-v2-2d41",
-  "source_commit": "90d219cb376e17e13857713d8dfd1c7e310553dc",
+  "source_commit": "a3a6f0b27282070392a97a0b45a7c4b51f1d5755",
   "production": {
     "lambda_code_sha256": "ao0jPWwG3Zxy2C7hdr+OWY4EOmhA241BfI7F9iIzT0s=",
     "lambda_revision_id": "dbd48b24-f3f2-4966-b561-9f38c7b118cb",
