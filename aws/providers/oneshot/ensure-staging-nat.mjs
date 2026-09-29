@@ -15,6 +15,7 @@
  * Usage: node aws/providers/oneshot/ensure-staging-nat.mjs
  */
 import { execFileSync } from 'node:child_process';
+import { enforceScriptGuard } from '../../../scripts/deployment-guard/require-guard.mjs';
 
 const REGION = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1';
 const VPC_ID = process.env.STAGING_VPC_ID || 'vpc-09f2268778966ce97';
@@ -39,6 +40,12 @@ const awsOk = (args) => {
 };
 
 const main = () => {
+  enforceScriptGuard({
+    script: import.meta.url,
+    target_environment: 'staging',
+    target_component: 'staging-nat',
+    deployment_type: 'infra-mutate',
+  });
   const identity = awsOk(['sts', 'get-caller-identity']);
   if (!identity.ok) {
     return {

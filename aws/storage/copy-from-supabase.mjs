@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawn } from 'node:child_process';
 import { APP_BUCKET_SET, SKIP_BUCKET_SET, s3KeyFor } from '../functions/api/storage-paths.mjs';
+import { enforceS3Target } from '../../scripts/deployment-guard/require-guard.mjs';
 
 const PROD_URL = process.env.SUPABASE_URL || 'https://nbcqwpysqgyxrrbgtmkw.supabase.co';
 const ANON = process.env.SUPABASE_ANON_KEY ||
@@ -124,6 +125,10 @@ const copyOne = async (obj, stats) => {
 };
 
 const main = async () => {
+  enforceS3Target({
+    script: import.meta.url,
+    bucket: BUCKET,
+  });
   const inventoryPath = process.argv[2] || '/tmp/storage-inventory/dump-objects.json';
   const inventory = JSON.parse(await readFile(inventoryPath, 'utf8'));
   const objects = inventory.objects || [];

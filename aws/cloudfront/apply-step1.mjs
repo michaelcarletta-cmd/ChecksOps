@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildStep1Config } from './build-step1-config.mjs';
+import { enforceScriptGuard } from '../../scripts/deployment-guard/require-guard.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const AWS = process.env.AWS_CLI || `${process.env.HOME}/.local/bin/aws`;
@@ -20,6 +21,13 @@ if (process.env.CHECKSOPS_APPLY_CF_STEP1 !== 'APPLY_GATE1') {
   console.error('refusing: set CHECKSOPS_APPLY_CF_STEP1=APPLY_GATE1');
   process.exit(2);
 }
+
+enforceScriptGuard({
+  script: import.meta.url,
+  target_environment: 'production',
+  target_component: 'production-spa',
+  deployment_type: 'cloudfront-update',
+});
 
 const awsJson = (args, input) => {
   const r = spawnSync(AWS, ['--region', 'us-east-1', '--output', 'json', ...args], {

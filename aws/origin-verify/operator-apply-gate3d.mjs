@@ -38,6 +38,7 @@ import {
   waitForLambdaReady,
 } from './gate3d-lib.mjs';
 import { validateGate3d } from './validate-gate3d.mjs';
+import { enforceScriptGuard } from '../../scripts/deployment-guard/require-guard.mjs';
 
 export const plan = {
   gate: '3D',
@@ -172,6 +173,13 @@ if (isCli) {
     }));
     process.exit(2);
   }
+
+  enforceScriptGuard({
+    script: import.meta.url,
+    target_environment: 'production',
+    target_component: 'checksops-production-origin-verify',
+    deployment_type: 'lambda-overlay',
+  });
 
   try {
     requireCloudShellTty(process.stdin);

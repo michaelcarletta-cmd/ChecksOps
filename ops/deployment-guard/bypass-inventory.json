@@ -1,0 +1,231 @@
+{
+  "version": 2,
+  "generated_for": "cursor/deployment-guard-safeguard-febc",
+  "notes": "Phase 2 enforcement registry. MUST_REFUSE_DIRECT writers call enforceScriptGuard before AWS mutation. NON_SHARED/SAFE oneshots call enforceSharedLambdaTarget so they cannot be retargeted at shared APIs. Do not delete these scripts.",
+  "classifications": ["GUARDED", "MUST_WRAP", "MUST_REFUSE_DIRECT", "NON_SHARED/SAFE", "SAFE"],
+  "scripts": [
+    {
+      "path": "scripts/production-deploy-guard.mjs",
+      "classification": "SAFE",
+      "capabilities": ["production-fingerprint-compare"],
+      "note": "Fingerprint compare only. Never writes AWS."
+    },
+    {
+      "path": "scripts/validate-release-locks.mjs",
+      "classification": "SAFE",
+      "capabilities": ["source-lock-validation"]
+    },
+    {
+      "path": "scripts/check-pr-path-overlap.mjs",
+      "classification": "SAFE",
+      "capabilities": ["pr-overlap"]
+    },
+    {
+      "path": "scripts/deployment-guard/preflight.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["preflight", "receipt"],
+      "note": "Official evaluate/receipt issuer. Does not mutate AWS."
+    },
+    {
+      "path": "scripts/deployment-guard/spa-upload.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["spa-index-upload"],
+      "note": "Official SPA entry. Requires receipt, then refuses live S3/CloudFront mutation in this phase."
+    },
+    {
+      "path": "scripts/deployment-guard/wrap-legacy.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["legacy-wrapper"]
+    },
+    {
+      "path": "scripts/deployment-guard/lambda-overlay.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["lambda-overlay-evaluate"]
+    },
+    {
+      "path": "scripts/deployment-guard/spa-promote.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["spa-evaluate"]
+    },
+    {
+      "path": "scripts/deployment-guard/sql-apply.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["sql-evaluate"]
+    },
+    {
+      "path": "scripts/deployment-guard/lease.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["lease"]
+    },
+    {
+      "path": "scripts/deployment-guard/verify-live.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["verify-live"]
+    },
+    {
+      "path": "scripts/deployment-guard/manifest.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["manifest"]
+    },
+    {
+      "path": "scripts/deployment-guard/scan-bypass.mjs",
+      "classification": "SAFE",
+      "capabilities": ["bypass-scanner"],
+      "scanner_allow_mention": true,
+      "note": "Scanner only. Never writes AWS."
+    },
+    {
+      "path": "aws/cutover/scripts/hardening-batch3-apply.mjs",
+      "classification": "MUST_REFUSE_DIRECT",
+      "capabilities": ["lambda-update-function-code", "cognito-config"],
+      "shared_target": true,
+      "function_name_default": "checksops-production-prep-api"
+    },
+    {
+      "path": "aws/cutover/scripts/hardening-batch4-apply.mjs",
+      "classification": "MUST_REFUSE_DIRECT",
+      "capabilities": ["lambda-update-function-code"],
+      "shared_target": true,
+      "function_name_default": "checksops-production-prep-api"
+    },
+    {
+      "path": "aws/cutover/scripts/hardening-batch5-apply.mjs",
+      "classification": "MUST_REFUSE_DIRECT",
+      "capabilities": ["cloudformation"],
+      "shared_target": true
+    },
+    {
+      "path": "aws/origin-verify/apply-gate3a.mjs",
+      "classification": "MUST_REFUSE_DIRECT",
+      "capabilities": ["lambda-update-function-code", "lambda-create-function"],
+      "shared_target": true,
+      "function_name_default": "checksops-production-origin-verify"
+    },
+    {
+      "path": "aws/origin-verify/apply-gate3b.mjs",
+      "classification": "MUST_REFUSE_DIRECT",
+      "capabilities": ["cloudfront-update-distribution"],
+      "shared_target": true
+    },
+    {
+      "path": "aws/origin-verify/operator-apply-gate3b.mjs",
+      "classification": "MUST_REFUSE_DIRECT",
+      "capabilities": ["cloudfront-update-distribution"],
+      "shared_target": true
+    },
+    {
+      "path": "aws/cloudfront/apply-step1.mjs",
+      "classification": "MUST_REFUSE_DIRECT",
+      "capabilities": ["cloudfront-update-distribution", "cloudfront-function"],
+      "shared_target": true
+    },
+    {
+      "path": "aws/origin-verify/apply-gate3d.mjs",
+      "classification": "MUST_REFUSE_DIRECT",
+      "capabilities": ["lambda-update-function-configuration"],
+      "shared_target": true
+    },
+    {
+      "path": "aws/origin-verify/operator-apply-gate3d.mjs",
+      "classification": "MUST_REFUSE_DIRECT",
+      "capabilities": ["lambda-update-function-configuration"],
+      "shared_target": true
+    },
+    {
+      "path": "aws/origin-verify/rollback-gate3d.mjs",
+      "classification": "MUST_REFUSE_DIRECT",
+      "capabilities": ["lambda-update-function-configuration"],
+      "shared_target": true
+    },
+    {
+      "path": "aws/origin-verify/operator-rollback-gate3d.mjs",
+      "classification": "MUST_REFUSE_DIRECT",
+      "capabilities": ["lambda-update-function-configuration"],
+      "shared_target": true
+    },
+    {
+      "path": "scripts/run-hosted-tax-profile-containment.mjs",
+      "classification": "MUST_REFUSE_DIRECT",
+      "capabilities": ["sql-apply"],
+      "shared_target": true,
+      "note": "CLI apply mode requires a receipt. runCli() test harness is unchanged."
+    },
+    {
+      "path": "aws/storage/bridge-copy.mjs",
+      "classification": "MUST_REFUSE_DIRECT",
+      "capabilities": ["s3-put-object"],
+      "shared_target": true
+    },
+    {
+      "path": "aws/storage/copy-from-supabase.mjs",
+      "classification": "MUST_REFUSE_DIRECT",
+      "capabilities": ["s3-put-object"],
+      "shared_target": true
+    },
+    {
+      "path": "aws/db-copy/rehearsal/scripts/bridge-storage-copy.mjs",
+      "classification": "MUST_REFUSE_DIRECT",
+      "capabilities": ["s3-put-object"],
+      "shared_target": true
+    },
+    {
+      "path": "scripts/staging-partner-integrity-inspect.mjs",
+      "classification": "NON_SHARED/SAFE",
+      "capabilities": ["lambda-update-function-code", "lambda-create-function"],
+      "shared_target": false,
+      "function_name_default": "checksops-staging-partner-integrity-3bce"
+    },
+    {
+      "path": "scripts/c1c-partner-share-aws-inspect.mjs",
+      "classification": "NON_SHARED/SAFE",
+      "capabilities": ["lambda-update-function-code", "lambda-create-function"],
+      "shared_target": false
+    },
+    {
+      "path": "aws/db-copy/rehearsal/scripts/bridge-db-rehearsal.mjs",
+      "classification": "NON_SHARED/SAFE",
+      "capabilities": ["lambda-update-function-code", "lambda-create-function"],
+      "shared_target": false,
+      "function_name_default": "checksops-staging-rehearsal-oneshot"
+    },
+    {
+      "path": "aws/write-path/scripts/run-parity-schema-rehearsal.mjs",
+      "classification": "NON_SHARED/SAFE",
+      "capabilities": ["lambda-update-function-code"],
+      "shared_target": false,
+      "function_name_default": "checksops-staging-rehearsal-oneshot"
+    },
+    {
+      "path": "aws/origin-verify/apply-gate3c.mjs",
+      "classification": "MUST_REFUSE_DIRECT",
+      "capabilities": ["apigateway-update"],
+      "shared_target": true,
+      "note": "Plan-only unless CHECKSOPS_STEP3_EXECUTE=1; execute path requires a receipt."
+    },
+    {
+      "path": "aws/providers/oneshot/ensure-staging-nat.mjs",
+      "classification": "MUST_REFUSE_DIRECT",
+      "capabilities": ["infra-mutate"],
+      "shared_target": true
+    },
+    {
+      "path": "aws/origin-verify/rollback-gate3.mjs",
+      "classification": "SAFE",
+      "capabilities": ["rollback-plan"],
+      "note": "Always plan-only; exits before AWS mutation."
+    },
+    {
+      "path": "aws/origin-verify/gate3d-lib.mjs",
+      "classification": "MUST_WRAP",
+      "capabilities": ["lambda-update-function-configuration"],
+      "shared_target": true,
+      "scanner_allow_mention": true,
+      "note": "Library used by guarded Gate 3D CLIs and unit tests with injected AWS. Not a direct CLI."
+    }
+  ],
+  "migration": {
+    "do_not_delete": true,
+    "direct_invocation": "fails with DEPLOYMENT_GUARD_REQUIRED unless a valid short-lived receipt exists",
+    "wrapper": "node scripts/deployment-guard/wrap-legacy.mjs --input manifest.json -- node <legacy-script>"
+  }
+}
