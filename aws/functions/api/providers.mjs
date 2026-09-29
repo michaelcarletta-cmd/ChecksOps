@@ -4,6 +4,8 @@ import {
   denyProviderExecution,
   executionAllowed,
   flagSnapshot,
+  isProductionChecksOpsRuntime,
+  moovTransferPostEnabled,
   providerEnabled,
   providerExecutionEnabled,
   providerLiveReadsEnabled,
@@ -13,6 +15,7 @@ import { providerSecretsConfigured } from './provider-secrets.mjs';
 import {
   ACTUM_BOUNDARY,
   FUNCTION_BY_NAME,
+  OP_CLASS,
   PROVIDER_FUNCTIONS,
   classifyFunction,
 } from './providers/catalog.mjs';
@@ -369,7 +372,11 @@ export const handleFunctionInvoke = async (event, name, deps = {}) => {
     return denyCheckAltMutationUnderStatusRead(name);
   }
 
-  if (executionAllowed(spec.provider) && spec.aws !== 'db_status' && spec.aws !== 'webhook') {
+  const productionMoov = isProductionChecksOpsRuntime()
+    && spec.provider === 'moov'
+    && executionAllowed('moov');
+
+  if (executionAllowed(spec.provider) && spec.aws !== 'db_status' && spec.aws !== 'webhook' && !productionMoov) {
     return denyProviderExecution(spec.provider, spec.name, {
       error: 'production_execution_blocked',
       message: 'Production provider flags stay false. Staging never uses production Moov/CheckAlt keys. Enable AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED for sandbox/UAT ports only.',
@@ -377,7 +384,15 @@ export const handleFunctionInvoke = async (event, name, deps = {}) => {
     });
   }
 
-  if (providerSandboxExecutionEnabled() && hasParityHandler(name)) {
+  if (productionMoov && (spec.class === OP_CLASS.MONEY_MOVEMENT || spec.class === OP_CLASS.DISBURSEMENT)
+    && !moovTransferPostEnabled()) {
+    return denyProviderExecution('moov', spec.name, {
+      error: 'moov_transfer_post_disabled',
+      message: 'Moov is generally available for onboarding. Real-money transfers stay held by AWS_MOOV_TRANSFER_POST_ENABLED.',
+    });
+  }
+
+  if ((providerSandboxExecutionEnabled() || productionMoov) && hasParityHandler(name)) {
     return runParityHandler(name, event, deps);
   }
 

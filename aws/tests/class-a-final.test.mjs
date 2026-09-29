@@ -52,6 +52,8 @@ test('class A registry includes final cleanup functions', () => {
     'homeowner-upload-otp-verify',
     'tenant-domain-check',
     'tenant-tax-profiles',
+    'tenant-billing-admin',
+    'tenant-billing-authorize',
   ]) {
     assert.ok(CLASS_A_FUNCTIONS.has(name), name);
   }

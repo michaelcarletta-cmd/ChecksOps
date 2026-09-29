@@ -634,56 +634,32 @@ export const walletFundOnClear = {
 };
 
 export const tenantFeeCharge = {
-  requireAdmin: true,
-  run: async ({ client, mapping, body, ctx, fetchImpl }) => {
-    const tenantId = body.tenant_id || ctx.tenantId;
-    const lines = Array.isArray(body.line_items) ? body.line_items : [];
-    const amount = lines.reduce((s, l) => s + Math.max(0, Number(l.amount_cents) || 0), 0) || Number(body.amount_cents);
-    if (!Number.isFinite(amount) || amount <= 0) return fail('Amount must be greater than zero.', 400);
-    const account = await loadMoovAccount(client, tenantId, 'sandbox');
-    if (!account?.provider_account_id) return fail('Set up your payment account first.', 409);
-    const source = await loadConnectedMethod(client, { tenantId, providerAccountId: account.provider_account_id });
-    if (!source) return fail('Connect an eligible business bank account first.', 409);
-    const sourceMethodId = await resolveDebitSourceMethodId(client, source, account.provider_account_id, fetchImpl);
-    const facilitatorId = await facilitatorAccountId(account.provider_account_id, fetchImpl);
-    const methods = await moovFetch(`/accounts/${facilitatorId}/payment-methods`, {
-      scopes: scopes.paymentMethodsRead(facilitatorId), fetchImpl,
-    }).catch(() => []);
-    const dest = (methods ?? []).find((m) => m?.paymentMethodType === 'moov-wallet');
-    const destId = dest?.paymentMethodID ?? dest?.paymentMethodId;
-    if (!sourceMethodId || !destId) return fail('Platform fee destination is not configured.', 409);
-    const key = body.idempotency_key ?? `tenant-fee:${tenantId}:${amount}:${body.period || 'adhoc'}`;
-    const existing = await existingTransferByKey(client, tenantId, key);
-    if (existing) return jsonResult({ success: true, duplicate: true, transfer: existing });
-    const draft = await insertTransferDraft(client, {
-      tenant_id: tenantId, idempotency_key: key, amount_cents: amount,
-      description: body.description ?? 'ChecksOps platform fee',
-      source_tenant_account_id: account.provider_account_id,
-      source_payment_method_id: source.id,
-      leg_role: 'platform_fee',
-      created_by: mapping.application_user_id,
-    });
-    let created;
-    try {
-      ({ created } = await postFacilitatorTransfer({
-        facilitatorHint: account.provider_account_id,
-        sourceMethodId, destMethodId: destId, amount,
-        description: body.description ?? 'ChecksOps platform fee',
-        metadata: { checksops_transfer_id: draft.id, checksops_tenant_id: tenantId, kind: 'platform_fee' },
-        idempotencyKey: `checksops-fee-${draft.id}`,
-        fetchImpl,
-      }));
-    } catch (e) {
-      await updateTransferAfterMoov(client, draft.id, { status: 'failed', failure_reason: e.message });
-      return fail(e.message, 502, { liveProviderCalled: true });
+  requireAdmin: false,
+  run: async ({ client, mapping, body, fetchImpl }) => {
+    const { actorIsPlatformOwner, chargeTenantPeriod, periodKey } = await import('../../tenant-billing-engine.mjs');
+    if (!(await actorIsPlatformOwner(client))) {
+      return fail('platform_owner_required', 403, {
+        message: 'Monthly billing administration is limited to the ChecksOps platform owner.',
+      });
     }
-    const finalTransfer = await updateTransferAfterMoov(client, draft.id, {
-      provider_transfer_id: created?.transferID ?? created?.transferId ?? null,
-      provider_status: created?.status ?? null,
-      status: normalizeTransferStatus(created?.status),
-      provider_metadata: sanitize(created ?? {}),
+    const tenantId = body.tenant_id;
+    if (!tenantId) return fail('tenant_id is required', 400);
+    const charged = await chargeTenantPeriod(client, {
+      tenantId,
+      period: body.period || periodKey(),
+      recordedBy: mapping.application_user_id,
+      fetchImpl,
     });
-    return jsonResult({ success: true, transfer: finalTransfer, liveProviderCalled: true });
+    if (!charged.ok) {
+      return fail(charged.error || 'billing_not_ready', charged.statusCode || 409, charged);
+    }
+    return jsonResult({
+      success: true,
+      pull: charged,
+      occurrence: charged.occurrence,
+      simulated: charged.simulated === true,
+      liveProviderCalled: charged.liveProviderCalled === true,
+    });
   },
 };
 
