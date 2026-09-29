@@ -2,7 +2,7 @@
  * Normalize Azure prebuilt-check.us fields to ChecksOps MICR + descriptive supplemental.
  * Descriptive values stay supplemental here; merge decides canonical precedence.
  */
-import { abaRoutingChecksumOk, digitsOnly, splitPayees } from './ocr-parse.mjs';
+import { abaRoutingChecksumOk, cleanPayeeLine, digitsOnly, splitPayees } from './ocr-parse.mjs';
 
 const STATES = { VERIFIED: 'VERIFIED', REVIEW_REQUIRED: 'REVIEW_REQUIRED', MISSING: 'MISSING' };
 const ACCOUNT_MIN = 6;
@@ -107,7 +107,7 @@ export const normalizeAzureMicr = (document = {}, { printedCheckNumber = null } 
   const payTo = fieldValue(fields.PayTo);
   const bankName = fieldValue(fields.BankName);
   const memo = fieldValue(fields.Memo);
-  const payeeLine = trimText(payTo.raw);
+  const payeeLine = cleanPayeeLine(trimText(payTo.raw));
   const wordText = trimText(wordAmount.raw);
 
   return {
