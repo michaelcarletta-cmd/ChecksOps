@@ -7,11 +7,16 @@
 # Do not add a second owner here to take over another open PR's files.
 
 /ops/release-locks/ @michaelcarletta-cmd
+/ops/deployment-guard/ @michaelcarletta-cmd
+/scripts/deployment-guard/ @michaelcarletta-cmd
 /scripts/lib/release-locks.mjs @michaelcarletta-cmd
 /scripts/lib/production-spa-baseline.mjs @michaelcarletta-cmd
 /scripts/validate-release-locks.mjs @michaelcarletta-cmd
 /scripts/check-pr-path-overlap.mjs @michaelcarletta-cmd
 /scripts/production-deploy-guard.mjs @michaelcarletta-cmd
+/.cursor/rules/deployment-guard.mdc @michaelcarletta-cmd
+/aws/tests/deployment-guard.test.mjs @michaelcarletta-cmd
+/AGENTS.md @michaelcarletta-cmd
 /.github/workflows/release-locks.yml @michaelcarletta-cmd
 /.github/workflows/aws-migration-ci.yml @michaelcarletta-cmd
 /.github/workflows/tax-profile-migration-guard.yml @michaelcarletta-cmd

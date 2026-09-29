@@ -94,6 +94,22 @@ Unlocking means a reviewed PR that:
 
 Do not “unlock” by editing AWS, applying SQL, or force-pushing `main`.
 
+## Cross-workstream deployment guard
+
+Independent source work may happen concurrently. Independent deployment to a
+shared staging/production target may not overwrite another workstream.
+
+Official tooling (plan-only; this guide does not authorize AWS writes):
+
+```bash
+node scripts/deployment-guard/preflight.mjs --dry-run
+node scripts/deployment-guard/lease.mjs acquire --workstream-id <id> --environment staging --component checksops-staging-api --commit <sha>
+```
+
+Rules for future chats: `.cursor/rules/deployment-guard.mdc` and `AGENTS.md`.
+If live state drifted after preflight: STOP. Never reclaim, restore an old
+`dist`, or reuse an old Lambda ZIP. See `ops/deployment-guard/README.md`.
+
 ## Production deploy guard
 
 Operators who wrap a deploy script MUST run:
