@@ -387,12 +387,6 @@ export const runSendSignatureRequest = async ({
        WHERE id = $1::uuid`,
       [requestId],
     );
-    if (claimId) {
-      await client.query(
-        `UPDATE public.claims SET latest_signature_request_id = $2::uuid, updated_at = now() WHERE id = $1::uuid`,
-        [claimId, requestId],
-      );
-    }
     return {
       ok: true,
       statusCode: 200,
@@ -459,12 +453,6 @@ export const runSendSignatureRequest = async ({
       providerStatus,
     ],
   );
-  if (claimId) {
-    await client.query(
-      `UPDATE public.claims SET latest_signature_request_id = $2::uuid, updated_at = now() WHERE id = $1::uuid`,
-      [claimId, requestId],
-    );
-  }
 
   return {
     ok: !allFailed,
