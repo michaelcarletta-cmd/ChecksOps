@@ -66,6 +66,55 @@ const denied = (spoof, extra) => ({
   ...extra,
 });
 
+const IDENT_NAME = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+const safeIdent = (value) => {
+  const text = String(value || '').slice(0, 80);
+  return IDENT_NAME.test(text) ? text : '[rejected]';
+};
+const eventRequestId = (event) => {
+  const raw = event?.requestContext?.requestId
+    || event?.requestContext?.http?.requestId
+    || event?.headers?.['x-amzn-requestid']
+    || event?.headers?.['x-request-id']
+    || null;
+  return raw ? String(raw).slice(0, 80) : null;
+};
+const rowColumnNames = (values) => {
+  const row = Array.isArray(values) ? values[0] : values;
+  if (!row || typeof row !== 'object') return [];
+  return Object.keys(row).map(safeIdent).slice(0, 40);
+};
+
+/** Staging-only reject metadata. Never includes tokens, cookies, or field values. */
+export const buildRejectedWriteLog = ({ event, mapping, claims, body, reason, statusCode }) => ({
+  service: 'checksops-api',
+  event: 'write_rejected',
+  env: 'staging',
+  diagnostic: 'pr532-write-reject',
+  timestamp: new Date().toISOString(),
+  requestId: eventRequestId(event),
+  cognitoSub: claims?.sub ? String(claims.sub).slice(0, 80) : null,
+  applicationUserId: mapping?.application_user_id ? String(mapping.application_user_id).slice(0, 80) : null,
+  table: safeIdent(body?.table),
+  op: safeIdent(String(body?.op || body?.operation || '').toLowerCase()),
+  valueColumns: rowColumnNames(body?.values || body?.payload || body?.row),
+  filterColumns: (Array.isArray(body?.filters) ? body.filters : [])
+    .map((filter) => safeIdent(filter?.column))
+    .filter((column) => column && column !== '[rejected]')
+    .slice(0, 20),
+  reason: safeIdent(reason) === '[rejected]'
+    ? String(reason || '').replace(/[^a-z0-9_]/gi, '').slice(0, 80) || '[rejected]'
+    : String(reason || '').slice(0, 80),
+  statusCode: Number(statusCode) || null,
+});
+
+export const logRejectedWrite = (opts) => {
+  if (String(process.env.CHECKSOPS_ENV || '') !== 'staging') return null;
+  const row = buildRejectedWriteLog(opts);
+  console.info(JSON.stringify(row));
+  return row;
+};
+
 const executeCheckMessageReads = async ({ client, mapping, op, values, filters }) => {
   const uid = mapping.application_user_id;
   const checkId = values.check_id || filterCheckId(filters);
@@ -281,15 +330,31 @@ export const handleWrite = async (event, deps = {}) => {
   const spoof = ignoredSpoof(event, body);
   const enabled = deps.forceEnabled === true || writesEnabled();
   if (!enabled) {
-    return withIdentity(event, async () => denied(spoof, {
-      error: 'writes_disabled',
-      message: 'AWS writes are disabled by server-side kill switch AWS_WRITES_ENABLED',
-    }), deps);
+    return withIdentity(event, async ({ mapping, claims, body: parsed }) => {
+      const extra = {
+        error: 'writes_disabled',
+        message: 'AWS writes are disabled by server-side kill switch AWS_WRITES_ENABLED',
+      };
+      logRejectedWrite({ event, mapping, claims, body: parsed || body, reason: extra.error, statusCode: 403 });
+      return denied(spoof, extra);
+    }, deps);
   }
 
   return withIdentityWrite(event, async ({ client, mapping, claims, body, spoof }) => {
+    const reject = (extra) => {
+      const result = denied(spoof, extra);
+      logRejectedWrite({
+        event,
+        mapping,
+        claims,
+        body,
+        reason: extra.error,
+        statusCode: result.statusCode,
+      });
+      return result;
+    };
     if (body.sql || body.query || body.where || body.rawSql) {
-      return denied(spoof, {
+      return reject({
         error: 'generic_sql_denied',
         message: 'Arbitrary SQL, table names, and WHERE clauses are not accepted',
       });
@@ -299,7 +364,7 @@ export const handleWrite = async (event, deps = {}) => {
         .map((filter) => String(filter?.column || ''))
         .filter((column) => column && specFilterDenied(body.table, column));
       if (bad.length) {
-        return denied(spoof, { error: 'column_not_allowlisted', columns: bad });
+        return reject({ error: 'column_not_allowlisted', columns: bad });
       }
     }
 
@@ -320,18 +385,18 @@ export const handleWrite = async (event, deps = {}) => {
       const status = ['invalid_uuid', 'missing_required_field', 'invalid_field'].includes(executed.error)
         ? 400
         : 403;
-      return denied(spoof, { statusCode: status, ...executed });
+      return reject({ statusCode: status, ...executed });
     }
 
     let data = executed.rows || [];
     if (body.single) {
       if (data.length !== 1) {
-        return denied(spoof, { statusCode: 406, error: 'not_single', data: null });
+        return reject({ statusCode: 406, error: 'not_single', data: null });
       }
       data = data[0];
     } else if (body.maybeSingle) {
       if (data.length > 1) {
-        return denied(spoof, { statusCode: 406, error: 'not_single', data: null });
+        return reject({ statusCode: 406, error: 'not_single', data: null });
       }
       data = data[0] || null;
     }
