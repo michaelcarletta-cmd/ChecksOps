@@ -19,6 +19,7 @@ Repository validation protects the release process. It cannot independently prov
 | `overlap-allowlist.json` | Explicit exceptions for overlapping open PRs (empty by default) |
 | `evidence-matrix.json` | Discovery snapshot used for the initial classification |
 | `OPERATOR.md` | How to update, unlock, or record production evidence |
+| `contracts/freedom-platform-funding-contract.json` | Freedom → ChecksOps funding behavior contract (not a whole-Lambda pin) |
 
 Control-plane paths: `.github/CODEOWNERS`, `.github/workflows/release-locks.yml`, `ops/release-locks/**`, `scripts/lib/release-locks.mjs`, `scripts/validate-release-locks.mjs`, `scripts/check-pr-path-overlap.mjs`, `scripts/production-deploy-guard.mjs`.
 
@@ -39,6 +40,7 @@ node --test ops/release-locks/tests/*.test.mjs
 node scripts/production-deploy-guard.mjs
 CHECKSOPS_PRODUCTION_DEPLOY=1 node scripts/production-deploy-guard.mjs
 node scripts/check-pr-path-overlap.mjs --require
+node --test ops/release-locks/tests/freedom-platform-funding-contract.test.mjs
 ```
 
 CI workflow: `.github/workflows/release-locks.yml` (pinned action SHAs, `merge_group` trigger). Existing AWS migration CI and tax-profile migration guards are unchanged.

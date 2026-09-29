@@ -3,6 +3,8 @@
  * Production deployment guard.
  *
  * Compares a release-candidate fingerprint file with the approved manifest.
+ * Candidates that touch the Freedom → ChecksOps funding path fail closed
+ * until the funding contract tests pass and the contract is revalidated.
  * Never calls AWS. Live comparison is intentionally unimplemented so the
  * guard stays fail-closed without production credentials.
  *
@@ -19,6 +21,10 @@ import {
   repoRootFrom,
   validateReleaseLocks,
 } from './lib/release-locks.mjs';
+import {
+  fundingDeployGuardErrors,
+  parseChangedFilesArg,
+} from './lib/freedom-platform-funding-contract.mjs';
 import { loadReleaseLockInputs } from './validate-release-locks.mjs';
 
 export function compareCandidate(manifest, candidate) {
@@ -90,6 +96,7 @@ export function main(argv = process.argv.slice(2), root = repoRootFrom(import.me
   const { errors: manifestErrors } = validateReleaseLocks(inputs);
   const errors = [...manifestErrors, ...liveCompareErrors(argv), ...productionIntentErrors(inputs.manifest, env)];
   const idx = argv.indexOf('--candidate');
+  const extraPaths = parseChangedFilesArg(argv, root);
   if (idx >= 0) {
     const candidatePath = argv[idx + 1];
     if (!candidatePath || !fs.existsSync(path.resolve(root, candidatePath))) {
@@ -97,9 +104,12 @@ export function main(argv = process.argv.slice(2), root = repoRootFrom(import.me
     } else {
       const candidate = loadJson(path.resolve(root, candidatePath));
       errors.push(...compareCandidate(inputs.manifest, candidate));
+      errors.push(...fundingDeployGuardErrors(candidate, root, extraPaths));
     }
   } else if (env.CHECKSOPS_PRODUCTION_DEPLOY === '1' || env.CHECKSOPS_PRODUCTION_DEPLOY === 'APPLY') {
     errors.push('production deploy intent requires --candidate fingerprint');
+  } else if (extraPaths.length) {
+    errors.push(...fundingDeployGuardErrors({ changed_paths: extraPaths }, root, extraPaths));
   }
   if (errors.length) {
     console.error('production deploy guard failed:');

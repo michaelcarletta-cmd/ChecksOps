@@ -467,7 +467,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "9aac7bb5b1ed0a8d03e305552797a9acfacc7f64",
-        "tree_hash": "a67d882ccedcffb80007aa936f270398dd62617220c2b0ab790c4a8612002fbd",
+        "tree_hash": "483b209a596cae0bddf7407a8dc340942a15277b2ad0b89e5923d6664e59046c",
         "merged": false,
         "merged_pr": null
       },
@@ -506,7 +506,7 @@
         "production RLS catalog hash"
       ],
       "open_pr_overlap": ["#289", "#249", "#288", "#350", "#310"],
-      "notes": "Path-hashed only. Adding 33_partner_stage_totals.sql and 34_c1c_partner_visibility.sql changes this tree. Those two files plus 31/32 are APPLIED IN PRODUCTION for partner sharing; do not reapply. PR #310 adds a different 33_ tenant-billing file and must not overwrite the partner-share 33/34 contract."
+      "notes": "Path-hashed only. Adding 33_partner_stage_totals.sql and 34_c1c_partner_visibility.sql changes this tree. Those two files plus 31/32 are APPLIED IN PRODUCTION for partner sharing; do not reapply. PR #310 adds a different 33_ tenant-billing file and must not overwrite the partner-share 33/34 contract. Tree hash retargeted on the inherited INV stack to include 43_payment_event_log_write.sql; this funding-freeze PR does not change those SQL bytes."
     },
     "provider-secrets": {
       "id": "provider-secrets",
@@ -516,7 +516,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
-        "tree_hash": "e4a20f5b6983f9e66732d87b14c1574701ae2263f03211ee4cdf354ade75ad74",
+        "tree_hash": "a4d2e613d5460ae1bf278a81666c8f8105ece1b89374ce82c2166c1550737a1a",
         "merged": true,
         "merged_pr": null
       },
@@ -546,7 +546,7 @@
         "Secrets Manager version IDs (not secret values)"
       ],
       "open_pr_overlap": ["#316", "#314"],
-      "notes": "Name/config references only."
+      "notes": "Name/config references only. Tree hash retargeted on the inherited INV stack to current provider-secret helper bytes; this funding-freeze PR does not change those files."
     },
     "ocr-azure": {
       "id": "ocr-azure",
@@ -592,6 +592,51 @@
       "open_pr_overlap": [],
       "notes": "Protects the eight finalized OCR runtime files only. Shared providers/parity/checkalt-image.mjs is not owned here; OCR reuses named raster exports without claiming the CheckAlt module. Classification is STAGING_LOCKED_NOT_PRODUCTION because staging validation passed and production is not locked."
     },
+    "freedom-platform-funding": {
+      "id": "freedom-platform-funding",
+      "ownership_group": "freedom-platform-funding",
+      "classification": "SOURCE_LOCKED_NOT_ACTIVE",
+      "production_active": false,
+      "environment": "production",
+      "source": {
+        "git_sha": "109b8dbb76711f0a6f1d83a1cc8d24f55f0bdc93",
+        "tree_hash": "f0429720e459320c420ee9c543168604257a6e552663590643bdd0d4ed05b60c",
+        "merged": false,
+        "merged_pr": null
+      },
+      "required_sql": [],
+      "artifact": {
+        "type": "config",
+        "name": "freedom-platform-funding-contract",
+        "version": "1",
+        "hash": null,
+        "cloudfront_distribution": null,
+        "lambda_name": "checksops-production-prep-api",
+        "lambda_version": null,
+        "lambda_alias": null
+      },
+      "production_validation": {
+        "completed": false,
+        "evidence_refs": [
+          "ops/release-locks/proof/freedom-platform-funding-freeze.md",
+          "ops/release-locks/contracts/freedom-platform-funding-contract.json"
+        ],
+        "recorded_at": "2026-09-29T15:14:59Z"
+      },
+      "deployment_fingerprint": null,
+      "rollback": {
+        "git_sha": "109b8dbb76711f0a6f1d83a1cc8d24f55f0bdc93",
+        "artifact": null,
+        "notes": "This lock does not pin or roll back the whole production Lambda. Current live production remains authoritative. Do not restore an older ZIP or Lambda package over newer production."
+      },
+      "missing_evidence": [
+        "whole-Lambda CodeSha256 is intentionally unpinned; live SHA is freeze evidence only",
+        "local tenant_maintenance_payments.settled_at remains null at freeze",
+        "payment_event_log has no row for provider transfer 367c5353-ed20-430b-b767-c3e5d47f28ad"
+      ],
+      "open_pr_overlap": [],
+      "notes": "Protects Freedom → ChecksOps funding BEHAVIOR and does not pin an obsolete whole-Lambda SHA. Known-good provider transfer 367c5353-ed20-430b-b767-c3e5d47f28ad. Monthly billing PRODUCTION_POST stays false."
+    },
     "production-release": {
       "id": "production-release",
       "ownership_group": "production-release",
@@ -600,7 +645,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "8a3ead386d99f0e825d54093ebcb8c174a8c758e",
-        "tree_hash": "d7ed7db31c345a0352b0ca7610c1f7d2763c8be2e96527c20a7eae3f840c258a",
+        "tree_hash": "3190548cbc196009526798f31f40898b8ea8f6d8824fa118f1ef532e96b1bd32",
         "merged": true,
         "merged_pr": 343
       },
