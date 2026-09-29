@@ -11,6 +11,7 @@ import { evaluateAcceptedContracts, loadContractRegistry } from './contracts.mjs
 import { evaluateProductionGate } from './production.mjs';
 import { verifyLiveState } from './verify-live.mjs';
 import { receiptDir } from './paths.mjs';
+import { issueReceipt } from './receipt.mjs';
 
 export function loadJson(root, rel) {
   return JSON.parse(fs.readFileSync(path.join(root, rel), 'utf8'));
@@ -99,14 +100,24 @@ function withAws(result, aws) {
   return result;
 }
 
-export function writeReceipt(root, result) {
+export function writeReceipt(root, result, extras = {}) {
+  const identity = result.details?.identity || {};
+  const issued = issueReceipt(root, {
+    workstream_id: extras.workstream_id || identity.workstream_id,
+    branch: extras.branch || identity.branch,
+    commit: extras.commit || identity.commit,
+    operator: extras.operator || identity.operator,
+    target_environment: extras.target_environment || identity.target_environment,
+    target_component: extras.target_component || extras.component || identity.target_component,
+    deployment_type: extras.deployment_type || identity.deployment_type,
+    owned_components: extras.owned_components || identity.owned_components,
+    preflight_live_fingerprint: extras.preflight_live_fingerprint || identity.preflight_live_fingerprint,
+    lease: extras.lease || result.details?.lease || null,
+  }, { now: extras.now, ttlMs: extras.ttl_ms });
+  if (!issued.ok) return issued;
   const dir = receiptDir(root);
   fs.mkdirSync(dir, { recursive: true });
-  const id = result.details?.identity?.workstream_id || 'unknown';
-  const env = result.details?.identity?.target_environment || 'unknown';
-  const file = path.join(dir, `${env}::${id}::${Date.now()}.json`);
-  fs.writeFileSync(file, `${JSON.stringify({ ...result, written_at: new Date().toISOString() }, null, 2)}\n`);
-  return file;
+  return issued.details.file;
 }
 
 export {

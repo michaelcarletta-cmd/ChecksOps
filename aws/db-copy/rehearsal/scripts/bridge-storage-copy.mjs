@@ -34,6 +34,7 @@ import {
   supabaseBucketFromS3Key,
 } from '../../../storage/bridge-lib.mjs';
 import { SKIP_BUCKET_SET } from '../../../functions/api/storage-paths.mjs';
+import { enforceS3Target } from '../../../../scripts/deployment-guard/require-guard.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../../..');
 const PROD_FUNCTIONS = process.env.BRIDGE_URL
@@ -330,6 +331,10 @@ const copyOne = async (obj, signedUrl, stats, token) => {
 };
 
 const main = async () => {
+  enforceS3Target({
+    script: import.meta.url,
+    bucket: FILES_BUCKET,
+  });
   const token = await loadToken();
   const expectedHash = process.env.CHECKSOPS_STORAGE_MIGRATION_TOKEN_SHA256;
   if (expectedHash && sha256Hex(token) !== String(expectedHash).toLowerCase()) {

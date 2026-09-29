@@ -69,6 +69,37 @@
       "environment": "production",
       "collision_on_rpc_drift": true,
       "release_lock_ledger": "ops/release-locks/applied-migrations.ledger.json"
+    },
+    {
+      "id": "checksops-production-origin-verify",
+      "kind": "lambda",
+      "environment": "production",
+      "function_name": "checksops-production-origin-verify",
+      "region": "us-east-1"
+    },
+    {
+      "id": "staging-private-files",
+      "kind": "s3",
+      "environment": "staging",
+      "bucket": "checksops-staging-privatefilesbucket-erzqsolpucjp"
+    },
+    {
+      "id": "production-cloudtrail",
+      "kind": "cloudformation",
+      "environment": "production",
+      "stack": "checksops-production-cloudtrail"
+    },
+    {
+      "id": "production-http-api",
+      "kind": "apigateway",
+      "environment": "production",
+      "api_id": "kiqojucc02"
+    },
+    {
+      "id": "staging-nat",
+      "kind": "infra",
+      "environment": "staging",
+      "vpc_id": "vpc-09f2268778966ce97"
     }
   ]
 }

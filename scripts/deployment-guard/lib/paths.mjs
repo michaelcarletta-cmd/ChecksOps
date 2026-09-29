@@ -1,9 +1,19 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export function repoRootFrom(metaUrl = import.meta.url) {
+  let dir = path.dirname(fileURLToPath(metaUrl));
+  for (let i = 0; i < 10; i += 1) {
+    if (fs.existsSync(path.join(dir, 'ops/deployment-guard/protected-targets.json'))) {
+      return dir;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
   const here = path.dirname(fileURLToPath(metaUrl));
-  return path.resolve(here, '../../..');
+  return path.resolve(here, path.basename(here) === 'lib' ? '../../..' : '../..');
 }
 
 export const DEFAULT_PATHS = Object.freeze({

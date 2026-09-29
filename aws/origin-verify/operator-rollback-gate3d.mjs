@@ -14,6 +14,7 @@ import {
   requirePrivilegedOperator,
   rollbackOriginVerifyRequireAndConfirm,
 } from './gate3d-lib.mjs';
+import { enforceScriptGuard } from '../../scripts/deployment-guard/require-guard.mjs';
 
 const plan = {
   gate: '3D',
@@ -43,6 +44,13 @@ if (String(process.env.CHECKSOPS_OPERATOR_ROLLBACK_GATE3D || '') !== 'I_UNDERSTA
   }));
   process.exit(2);
 }
+
+enforceScriptGuard({
+  script: import.meta.url,
+  target_environment: 'production',
+  target_component: 'checksops-production-origin-verify',
+  deployment_type: 'lambda-overlay',
+});
 
 const identity = awsJson(['sts', 'get-caller-identity']);
 requirePrivilegedOperator(identity);

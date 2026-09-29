@@ -21,6 +21,12 @@ Use official safe deployment tooling only:
 
 Never deploy directly when this guarded tooling exists.
 
+Shared-target writers refuse with `DEPLOYMENT_GUARD_REQUIRED` unless a
+short-lived receipt exists for this workstream, environment, component,
+commit, live fingerprint, lease, and owned files. A staging Lambda receipt
+does not authorize SPA or production. An environment variable cannot bypass
+this.
+
 Never:
 
 - reclaim an environment

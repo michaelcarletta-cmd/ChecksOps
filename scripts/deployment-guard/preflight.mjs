@@ -68,8 +68,21 @@ export function main(argv = process.argv.slice(2), root = repoRootFrom(import.me
   }
 
   const result = evaluateDeployment(payload, { root, env, skip_contracts: flags['skip-contracts'] === true });
-  if (result.ok && flags.receipt) {
-    result.details.receipt = writeReceipt(root, result);
+  if (result.ok && (flags.receipt || payload.lease)) {
+    const file = writeReceipt(root, result, {
+      workstream_id: payload.workstream_id,
+      branch: payload.branch,
+      commit: payload.commit,
+      operator: payload.operator,
+      target_environment: payload.target_environment,
+      target_component: payload.target_component,
+      deployment_type: payload.deployment_type,
+      owned_components: payload.owned_components,
+      preflight_live_fingerprint: payload.preflight_live_fingerprint,
+      lease: payload.lease,
+    });
+    result.details.receipt = file;
+    result.details.lease = payload.lease || result.details.lease;
   }
   return printResult(result);
 }

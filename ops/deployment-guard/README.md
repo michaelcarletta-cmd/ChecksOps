@@ -45,20 +45,22 @@ ZIP, or overwrite newer live state.
 ## Official commands
 
 ```bash
-# Identity + evaluate (no AWS)
+# Identity + evaluate + receipt (no AWS)
 node scripts/deployment-guard/manifest.mjs --input path/to/workstream.json
-node scripts/deployment-guard/preflight.mjs --input path/to/workstream.json
+node scripts/deployment-guard/preflight.mjs --acquire-lease --receipt --input path/to/workstream.json
 node scripts/deployment-guard/lease.mjs acquire --workstream-id ID --environment staging --component checksops-staging-api --commit $(git rev-parse HEAD)
 node scripts/deployment-guard/lambda-overlay.mjs --input path/to/overlay.json
 node scripts/deployment-guard/spa-promote.mjs --input path/to/spa.json
+node scripts/deployment-guard/spa-upload.mjs --environment production
 node scripts/deployment-guard/sql-apply.mjs --input path/to/sql.json
 node scripts/deployment-guard/verify-live.mjs --input path/to/live.json
+node scripts/deployment-guard/scan-bypass.mjs
 
 # Legacy script (must not be invoked directly against a shared target)
 node scripts/deployment-guard/wrap-legacy.mjs --input path/to/workstream.json -- node aws/cutover/scripts/hardening-batch4-apply.mjs
 
 # Tests (no live AWS)
-node --test aws/tests/deployment-guard.test.mjs
+npm run test:deployment-guard
 ```
 
 Never:
@@ -146,12 +148,38 @@ feature branches. Local lease state is `.deployment-guard/` (gitignored).
 
 1. Keep scripts in tree (do not delete).
 2. Classify in `bypass-inventory.json`.
-3. Shared-target writers must `requireDeploymentGuard(...)` or run through
-   `wrap-legacy.mjs`.
+3. Shared-target writers call `enforceScriptGuard` / `enforceSharedLambdaTarget`
+   / `enforceS3Target` before AWS mutation.
 4. Overlay scripts must pass through `evaluateLambdaOverlay` (owned members +
    fresh live ZIP + RevisionId CAS) before `UpdateFunctionCode`.
-5. A later reviewed PR may insert the import; this PR only provides the API
-   and wrapper so current feature work is not rewritten.
+5. Direct invocation without a receipt fails with `DEPLOYMENT_GUARD_REQUIRED`.
+
+## Phase 2 — repository enforcement
+
+Inventoried writers cannot mutate a shared target unless a short-lived
+machine-readable receipt exists. Receipts live under
+`.deployment-guard/receipts/${environment}::${component}.json` and bind:
+
+- `workstream_id`
+- `target_environment`
+- `target_component`
+- `commit`
+- `deployment_type`
+- `preflight_live_fingerprint`
+- `lease`
+- `expiry` (15 minutes default, 60 minutes max)
+
+A staging Lambda receipt cannot authorize staging SPA or production.
+`CHECKSOPS_DEPLOYMENT_GUARD_APPLY`, `CHECKSOPS_DEPLOYMENT_GUARD_BYPASS`, and
+`CHECKSOPS_SKIP_DEPLOYMENT_GUARD` are not bypasses.
+
+CI runs `scripts/deployment-guard/scan-bypass.mjs` against a reviewed
+registry. New unregistered `update-function-code`, SPA `index.html` upload,
+CloudFront mutation, CloudFormation mutate, or API Gateway route/integration
+writers fail the scan.
+
+`npm run deploy:staging` and `npm run deploy:production` are evaluate-only
+guarded entrypoints. They do not write AWS.
 
 ## IAM hardening (recommendations only; not applied)
 

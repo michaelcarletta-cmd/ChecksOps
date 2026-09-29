@@ -1294,6 +1294,15 @@ export async function runCli({
 
 const isDirect = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isDirect) {
+  if (process.argv.slice(2).includes('apply')) {
+    const { enforceScriptGuard } = await import('./deployment-guard/require-guard.mjs');
+    enforceScriptGuard({
+      script: import.meta.url,
+      target_environment: 'production',
+      target_component: 'production-sql',
+      deployment_type: 'sql-apply',
+    });
+  }
   runCli().then((code) => {
     process.exitCode = code;
   }, () => {

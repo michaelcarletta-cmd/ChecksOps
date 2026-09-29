@@ -418,7 +418,7 @@ test('bypass inventory classifies known writers and does not delete them', () =>
   const inventory = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/bypass-inventory.json'), 'utf8'));
   assert.equal(inventory.migration.do_not_delete, true);
   const byPath = Object.fromEntries(inventory.scripts.map((row) => [row.path, row]));
-  assert.equal(byPath['aws/cutover/scripts/hardening-batch4-apply.mjs'].classification, 'LEGACY/BYPASS');
+  assert.equal(byPath['aws/cutover/scripts/hardening-batch4-apply.mjs'].classification, 'MUST_REFUSE_DIRECT');
   assert.equal(byPath['scripts/production-deploy-guard.mjs'].classification, 'SAFE');
   for (const row of inventory.scripts) {
     assert.ok(fs.existsSync(path.join(ROOT, row.path)), row.path);

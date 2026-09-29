@@ -17,6 +17,12 @@ export const DEPLOYMENT_TYPES = Object.freeze([
   'spa-promote',
   'sql-apply',
   'cloudfront-invalidation',
+  'cloudfront-update',
+  'cloudformation',
+  's3-object-write',
+  'lambda-oneshot',
+  'apigateway-update',
+  'infra-mutate',
   'verify-only',
 ]);
 

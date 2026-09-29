@@ -8,6 +8,7 @@
 import { execFileSync } from 'node:child_process';
 import { cpSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { enforceScriptGuard } from '../../../scripts/deployment-guard/require-guard.mjs';
 
 const AWS = process.env.AWS_CLI || `${process.env.HOME}/.local/bin/aws`;
 const REGION = 'us-east-1';
@@ -19,6 +20,13 @@ if (!process.argv.includes('--confirm-batch3')) {
   console.error(JSON.stringify({ error: 'refusing_batch3_apply' }));
   process.exit(2);
 }
+
+enforceScriptGuard({
+  script: import.meta.url,
+  target_environment: 'production',
+  target_component: 'checksops-production-prep-api',
+  deployment_type: 'lambda-overlay',
+});
 
 const run = (args) => {
   try {
