@@ -16,6 +16,9 @@ import {
   repairLiveFilesConstRestore,
   repairLiveFilesDropGraphBIcons,
   repairLiveFilesDiagCollapsible,
+  repairLiveFilesCreateClassA,
+  LIVE_CREATE_GENERIC_INSERT,
+  LIVE_CREATE_CLASS_A_INVOKE,
   SIG_EXTRA_IMPORT_WITH_DQ,
   SIG_EXTRA_IMPORT_NO_DQ,
   DIAG_COLLAPSIBLE_WRAPPERS,
@@ -222,5 +225,30 @@ test('current live Files SHA a66a2329 takes the diagnostics Collapsible wrappers
   assert.equal(repaired.includes('const K=`check-intake/${j}/files/${Date.now()}-${crypto.randomUUID()}-${s.fileName}`,H=new Blob([S],{type:P}),{error:U}='), true);
   assert.equal(repaired.includes('const c=`check-intake/${j}/files/${Date.now()}-${crypto.randomUUID()}-${a}`,{error:S}='), true);
   assert.equal(repaired.includes('check-intake/${l}/files/${Date.now()}-${crypto.randomUUID()}-${i}'), true);
+  assert.equal(repaired.includes('signatures/${'), false);
+});
+
+const CREATE_LIVE = '/tmp/sig-write-disabled/CheckFilesSection-0Fmhwbep.js';
+
+test('Class A create retarget removes generic inserts and keeps upload/UI', (t) => {
+  if (!existsSync(CREATE_LIVE)) {
+    t.skip('current live Files bytes not present');
+    return;
+  }
+  const source = readFileSync(CREATE_LIVE, 'utf8');
+  assert.equal(source.includes(LIVE_CREATE_GENERIC_INSERT), true);
+  const repaired = repairLiveFilesCreateClassA(source);
+  acorn.parse(repaired, { ecmaVersion: 'latest', sourceType: 'module' });
+  assert.equal(repaired.includes(LIVE_CREATE_GENERIC_INSERT), false);
+  assert.equal(repaired.includes(LIVE_CREATE_CLASS_A_INVOKE), true);
+  assert.equal(repaired.includes('.from("signature_requests").insert'), false);
+  assert.equal(repaired.includes('.from("signature_signers").insert'), false);
+  assert.equal(repaired.includes('function Ss({claimId:r,claim:p,checkIntakeItemId:j=null})'), true);
+  assert.equal(repaired.includes('Send for Signature'), true);
+  assert.equal(repaired.includes('const K=`check-intake/${j}/files/${Date.now()}-${crypto.randomUUID()}-${s.fileName}`,H=new Blob([S],{type:P}),{error:U}='), true);
+  assert.equal(repaired.includes('const c=`check-intake/${j}/files/${Date.now()}-${crypto.randomUUID()}-${a}`,{error:S}='), true);
+  assert.equal(repaired.includes('check-intake/${l}/files/${Date.now()}-${crypto.randomUUID()}-${i}'), true);
+  assert.equal(repaired.includes('const Ze=({open:o,onOpenChange:n'), true);
+  assert.equal(repaired.includes('index-C5ku3IDF.js'), false);
   assert.equal(repaired.includes('signatures/${'), false);
 });

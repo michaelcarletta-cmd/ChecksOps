@@ -267,3 +267,64 @@ export const repairLiveFilesDiagCollapsible = (source) => {
   }
   return next;
 };
+
+export const LIVE_CREATE_GENERIC_INSERT = '{data:S,error:P}=await d.from("signature_requests").insert({claim_id:r,check_intake_item_id:j||null,document_name:c,document_path:v,document_type:fs(c),field_data:o,status:"draft"}).select().single();if(P)throw P;j&&v&&await d.from("check_files").update({signature_request_id:S.id}).eq("check_intake_item_id",j).eq("file_path",v);const K=y.map(A=>({signature_request_id:S.id,signer_name:A.name,signer_email:A.email,signer_type:A.type,signing_order:A.order})),{error:H}=await d.from("signature_signers").insert(K);if(H)throw H;const{data:U,error:M}=await d.functions.invoke("send-signature-request",{body:{requestId:S.id,skipEmail:s}});';
+
+export const LIVE_CREATE_CLASS_A_INVOKE = '{data:U,error:M}=await d.functions.invoke("send-signature-request",{body:{claim_id:r,check_intake_item_id:j||null,document_name:c,document_path:v,document_type:fs(c),field_data:o,signers:y.map(A=>({name:A.name,email:A.email,type:A.type,order:A.order})),skipEmail:s}});';
+
+export const LIVE_CREATE_RETURN_OLD = 'return{...S,mode:(U==null?void 0:U.mode)||(s?"manual_bypass":"delivered")}';
+export const LIVE_CREATE_RETURN_NEW = 'return{id:U==null?void 0:U.requestId,...U,mode:(U==null?void 0:U.mode)||(s?"manual_bypass":"delivered")}';
+
+/** Retarget the inlined Signature create mutation onto Class A send-signature-request. */
+export const repairLiveFilesCreateClassA = (source) => {
+  const js = String(source);
+  if ((js.split(LIVE_CREATE_GENERIC_INSERT).length - 1) !== 1) {
+    throw new Error('expected exactly one generic signature_requests insert create site');
+  }
+  if ((js.split(LIVE_CREATE_RETURN_OLD).length - 1) !== 1) {
+    throw new Error('expected exactly one create-mutation return {...S,mode}');
+  }
+  const next = js
+    .replace(LIVE_CREATE_GENERIC_INSERT, LIVE_CREATE_CLASS_A_INVOKE)
+    .replace(LIVE_CREATE_RETURN_OLD, LIVE_CREATE_RETURN_NEW);
+  if (next.includes(LIVE_CREATE_GENERIC_INSERT) || next.includes('.from("signature_requests").insert')) {
+    throw new Error('generic signature_requests insert remains after Class A retarget');
+  }
+  if (next.includes('.from("signature_signers").insert')) {
+    throw new Error('generic signature_signers insert remains after Class A retarget');
+  }
+  if (!next.includes(LIVE_CREATE_CLASS_A_INVOKE)) {
+    throw new Error('Class A create invoke was not inserted');
+  }
+  if (!next.includes(LIVE_CREATE_RETURN_NEW)) {
+    throw new Error('Class A create return was not inserted');
+  }
+  if (!next.includes('function Ss({claimId:r,claim:p,checkIntakeItemId:j=null})')) {
+    throw new Error('Class A retarget lost inlined SignatureRequests');
+  }
+  if (!next.includes('const K=`check-intake/${j}/files/${Date.now()}-${crypto.randomUUID()}-${s.fileName}`,H=new Blob([S],{type:P}),{error:U}=')) {
+    throw new Error('Class A retarget changed the generate-document upload path');
+  }
+  if (!next.includes('const c=`check-intake/${j}/files/${Date.now()}-${crypto.randomUUID()}-${a}`,{error:S}=')) {
+    throw new Error('Class A retarget changed the direct Signature upload path');
+  }
+  if (!next.includes(FILES_TAB_UPLOAD)) {
+    throw new Error('Class A retarget changed the Files-tab upload path');
+  }
+  if (next.includes('signatures/${r}/') || next.includes('signatures/${')) {
+    throw new Error('Class A retarget reintroduced signatures/ upload paths');
+  }
+  if (next.includes('index-C5ku3IDF.js')) {
+    throw new Error('Class A retarget reintroduced index-C5ku3IDF.js');
+  }
+  if (!next.includes('const Ze=({open:o,onOpenChange:n') || !next.includes('const ps=Ye("CircleCheckBig"')) {
+    throw new Error('Class A retarget changed diagnostics wrappers or icons');
+  }
+  if (!next.includes('W.mutate({skipEmail:!1})') || !next.includes('Send for Signature')) {
+    throw new Error('Class A retarget lost Send for Signature');
+  }
+  if (!next.includes('Failed to create request')) {
+    throw new Error('Class A retarget lost create-error toast');
+  }
+  return next;
+};
