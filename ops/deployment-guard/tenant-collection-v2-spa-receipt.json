@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "kind": "deployment-guard-receipt",
+  "issued_at": "2026-09-29T20:10:17.131Z",
+  "expiry": "2026-09-29T20:25:17.131Z",
+  "workstream_id": "tenant-collection-v2-prod-2d41",
+  "branch": "cursor/tenant-collection-v2-prod-2d41",
+  "commit": "8e8fde63dafd3c3cfa2fc179c2c56323f2957b64",
+  "operator": "cursor-cloud-agent",
+  "target_environment": "production",
+  "target_component": "production-spa",
+  "deployment_type": "spa-promote",
+  "owned_components": [
+    "src/components/admin/PlatformReceivablesLedger.tsx",
+    "src/components/admin/TenantBillingHistoryPanel.tsx",
+    "index.html"
+  ],
+  "preflight_live_fingerprint": {
+    "index_html_sha256": "3d8a78314f0abfd02f17aea5c239dd899ceb76a5169e4ff2bc9682ef5ef0d7c3",
+    "entry_bundle": "/assets/index-CXdgFa1W.js",
+    "version_id": "a9l3or6qBPbAniYr_cCU.OhyGh6I0XZS"
+  },
+  "lease": {
+    "workstream_id": "tenant-collection-v2-prod-2d41",
+    "component": "production-spa",
+    "environment": "production",
+    "acquired_at": "2026-09-29T20:10:17.129Z",
+    "expiry": "2026-09-29T20:25:17.129Z",
+    "commit": "8e8fde63dafd3c3cfa2fc179c2c56323f2957b64",
+    "operator": "cursor-cloud-agent",
+    "replaced_expired": false,
+    "previous_workstream": null
+  },
+  "mac": "53b89cb3ea03f117ac5405a450b6011d786c439a7cd6add7a54ec2d3ac0ddde1"
+}

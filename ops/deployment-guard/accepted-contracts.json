@@ -125,6 +125,25 @@
       "invariants": ["cross-tenant reads/writes remain denied"]
     },
     {
+      "id": "tenant-collection-v2",
+      "title": "Tenant Collection Contract v2 code (not collection activation)",
+      "accepted": true,
+      "enabled": true,
+      "production_code_accepted": true,
+      "collection_activated": false,
+      "environments": ["staging", "production"],
+      "components": ["checksops-staging-api", "checksops-production-prep-api"],
+      "deployment_types": ["lambda-overlay"],
+      "test": "aws/tests/tenant-collection-v2.test.mjs",
+      "invariants": [
+        "wallet first",
+        "bank remainder only",
+        "one obligation / multiple legs",
+        "pending/originated is not received",
+        "collection remains gated until explicit activation"
+      ]
+    },
+    {
       "id": "financial-write-protections",
       "title": "financial write protections",
       "accepted": true,

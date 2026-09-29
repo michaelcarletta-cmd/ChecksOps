@@ -1,0 +1,48 @@
+{
+  "id": "tenant-collection-v2-production-freeze",
+  "captured_at": "2026-09-29T19:59:00Z",
+  "workstream_id": "tenant-collection-v2-prod-2d41",
+  "authoritative": "NEW LIVE PRODUCTION",
+  "previous_accepted_baseline_superseded": true,
+  "previous_accepted_baseline": {
+    "lambda_code_sha256": "ao0jPWwG3Zxy2C7hdr+OWY4EOmhA241BfI7F9iIzT0s=",
+    "lambda_revision_id": "dbd48b24-f3f2-4966-b561-9f38c7b118cb",
+    "spa_entry": "/assets/index-CXdgFa1W.js",
+    "note": "Do not restore. Live Lambda moved after receivables acceptance."
+  },
+  "function_name": "checksops-production-prep-api",
+  "lambda": {
+    "CodeSha256": "srotSrFRXUa52QtAfmsd+Dm5+tUoooWmHKKI01BI7Ng=",
+    "RevisionId": "4fa2ae6f-b62e-4a76-9ba2-0f2e0e8736d4",
+    "LastModified": "2026-09-29T19:51:22.000+0000",
+    "CodeSize": 11690750
+  },
+  "spa": {
+    "bucket": "checksops-production-frontend-806168576068",
+    "index_html_sha256": "3d8a78314f0abfd02f17aea5c239dd899ceb76a5169e4ff2bc9682ef5ef0d7c3",
+    "entry_bundle": "/assets/index-CXdgFa1W.js",
+    "css": "/assets/index-D3j8hrEX.css",
+    "version_id": "a9l3or6qBPbAniYr_cCU.OhyGh6I0XZS",
+    "etag": "7cb4498faa5179144870b2d02e7de0e5",
+    "last_modified": "2026-09-29T19:17:52+00:00"
+  },
+  "flags": {
+    "AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST": false,
+    "AWS_MOOV_BILLING_VERIFICATION_POST_ENABLED": false,
+    "AWS_MOOV_MONTHLY_BILLING_ENABLED": true,
+    "AWS_MOOV_BILLING_DESTINATION_ACCOUNT_ID": "41cb5d67-4911-4bef-aad5-d8ee9c582208",
+    "AWS_MOOV_BILLING_DESTINATION_PAYMENT_METHOD_ID": "c70a90f2-9bcc-4084-8263-d5a0fb5d806c",
+    "CHECKSOPS_ENV": "production-prep"
+  },
+  "destination": {
+    "account_id": "41cb5d67-4911-4bef-aad5-d8ee9c582208",
+    "wallet_id": "72630a70-4954-4761-b652-e8beff1ad02c",
+    "wallet_payment_method_id": "c70a90f2-9bcc-4084-8263-d5a0fb5d806c"
+  },
+  "live_zip_sha256": "b2ba2d4ab1515d46b9d90b407e6b1df839b9fad528a285a61ca288d35048ecd8",
+  "live_has_collection_v2": false,
+  "sql": false,
+  "env_change": false,
+  "sweep_change": false,
+  "scheduler_added": false
+}
