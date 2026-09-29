@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { RefreshCw, Wallet, TrendingUp, TrendingDown, DollarSign, Landmark } from "lucide-react";
+import { PlatformReceivablesLedger, type ReceivableRow, type ReceivableTotals } from "@/components/admin/PlatformReceivablesLedger";
 
 type Bucket = {
   fees_cents: number;
@@ -41,6 +42,10 @@ type TreasuryResponse = {
     totals: Bucket;
     months: (Bucket & { month: string })[];
     tenants: (Bucket & { tenant_id: string; tenant_name: string })[];
+  };
+  receivables?: {
+    rows: ReceivableRow[];
+    totals: ReceivableTotals;
   };
 };
 
@@ -306,6 +311,11 @@ export function PlatformTreasuryPanel() {
           )}
         </CardContent>
       </Card>
+
+      <PlatformReceivablesLedger
+        rows={data?.receivables?.rows ?? []}
+        totals={data?.receivables?.totals}
+      />
     </div>
   );
 }

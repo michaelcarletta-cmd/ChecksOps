@@ -16,7 +16,7 @@ import {
   scopes,
   withMoovContext,
 } from './moov-client.mjs';
-import { fail, jsonResult, moovParityContext } from './caller.mjs';
+import { fail, jsonResult, moovParityContext, isChecksOpsPlatformOwner } from './caller.mjs';
 import { loadMoovAccount, logPaymentEvent, sanitize } from './db.mjs';
 import { readWallet, syncWallet } from './moov-wallet.mjs';
 import {
@@ -62,7 +62,83 @@ import {
   sweepConfig,
 } from './moov-onboard.mjs';
 
-const wrap = (handler) => async (event, deps = {}) => {
+const wrapPlatformOwnerRead = (handler) => async (event, deps = {}) => {
+  const { withIdentity } = await import('../../data.mjs');
+  const { loadSandboxCredentials } = await import('../../sandbox-credentials.mjs');
+  const loader = typeof deps.loadSandboxCredentials === 'function'
+    ? deps.loadSandboxCredentials
+    : loadSandboxCredentials;
+  return withIdentity(event, async ({ client, mapping, claims, body, spoof }) => {
+    const isOwner = await isChecksOpsPlatformOwner(client);
+    if (!isOwner) {
+      return fail('Platform owner access required', 403, {
+        spoofFieldsIgnored: spoof,
+        applicationUserId: mapping.application_user_id,
+      });
+    }
+    const loaded = await loader();
+    const secrets = loaded.secrets || {};
+    const moovContext = {
+      environment: 'sandbox',
+      sandboxPublicKey: loaded.moov?.publicKey || null,
+      sandboxSecretKey: loaded.moov?.secretKey || null,
+      sandboxPlatformAccountId: loaded.moov?.platformAccountId || null,
+      sandboxOrigin: loaded.moov?.origin || 'https://checksops.com',
+      apiVersion: loaded.moov?.apiVersion || secrets.MOOV_SANDBOX_API_VERSION || 'v2024.01.00',
+      productionPublicKey: null,
+      productionSecretKey: null,
+      productionPlatformAccountId: null,
+    };
+    const ctx = {
+      tenantId: null,
+      isAdmin: false,
+      isPlatformOwner: true,
+      environment: 'sandbox',
+      userId: mapping.application_user_id,
+      memberships: [],
+      moovContext,
+      loaded,
+    };
+    try {
+      const fetchImpl = deps.fetchImpl || fetch;
+      const result = await withMoovContext({ ...moovContext, fetchImpl }, () => handler.run({
+        client, mapping, claims, body, spoof, ctx, fetchImpl, event,
+      }));
+      return {
+        ...result,
+        spoofFieldsIgnored: spoof,
+        applicationUserId: mapping.application_user_id,
+        authUid: mapping.application_user_id,
+        cognitoSub: claims.sub,
+        productionExecution: false,
+        environment: 'sandbox',
+        apiVersion: moovContext.apiVersion,
+      };
+    } catch (error) {
+      const { isProviderNetworkError, providerEgressFailure } = await import('../../sandbox-credentials.mjs');
+      if (isProviderNetworkError(error)) {
+        return {
+          ...providerEgressFailure('moov'),
+          spoofFieldsIgnored: spoof,
+          applicationUserId: mapping.application_user_id,
+        };
+      }
+      const status = error instanceof MoovError ? (error.status || 502) : 500;
+      return fail(error.message, status, {
+        spoofFieldsIgnored: spoof,
+        applicationUserId: mapping.application_user_id,
+        liveProviderCalled: true,
+      });
+    }
+  }, deps);
+};
+
+const wrap = (handler) => {
+  if (handler.platformOwnerOnly === true) return wrapPlatformOwnerRead(handler);
+  return wrapTenantParity(handler);
+};
+
+const wrapTenantParity = (handler) => async (event, deps = {}) => {
   const { withIdentityWrite } = await import('../../data.mjs');
   const { loadSandboxCredentials } = await import('../../sandbox-credentials.mjs');
   const loader = typeof deps.loadSandboxCredentials === 'function'

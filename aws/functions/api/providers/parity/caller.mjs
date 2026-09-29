@@ -41,6 +41,12 @@ export async function isPlatformAdmin(client, userId) {
   return Boolean(row);
 }
 
+/** Established ChecksOps master-admin contract. Tenant user_roles.admin never qualifies. */
+export async function isChecksOpsPlatformOwner(client) {
+  const row = (await client.query('SELECT public.is_platform_owner() AS is_owner')).rows[0];
+  return row?.is_owner === true;
+}
+
 export async function resolveTenant(client, { userId, body, memberships, requireAdmin = false }) {
   const claimed = body?.tenant_id || body?.tenantId || null;
   if (claimed && !UUID_RE.test(String(claimed))) return fail('invalid_uuid', 400, { field: 'tenant_id' });
