@@ -113,6 +113,9 @@ const depsFor = (client) => ({
 
 test('allowlist rejects financial tables and unknown columns; ignores spoof identity keys', () => {
   assert.equal(denyTableReason('claim_payments'), 'financial_or_provider');
+  assert.equal(denyTableReason('tenant_billing_accounts'), null);
+  assert.equal(WRITE_ALLOWLIST.tenant_billing_accounts.ops.has('insert'), true);
+  assert.equal(WRITE_ALLOWLIST.tenant_billing_accounts.columns.has('ach_authorized_by'), false);
   assert.equal(denyTableReason('check_intake_items'), null);
   assert.equal(WRITE_ALLOWLIST.check_intake_items.ops.has('insert'), false);
   assert.equal(denyTableReason('moov_unknown'), 'unknown_table');

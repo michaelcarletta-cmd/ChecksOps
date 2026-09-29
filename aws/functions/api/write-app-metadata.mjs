@@ -412,6 +412,199 @@ export const executeTenantUsers = async ({ client, mapping, op, values, filters 
   return { rows };
 };
 
+const ACCOUNT_TYPES = new Set(['checking', 'savings']);
+const ENTITY_TYPES = new Set(['business', 'consumer']);
+const VERIFICATION_STATUSES = new Set(['pending', 'verified', 'admin_override', 'failed']);
+
+const canWriteBillingTenant = async (client, userId, tenantId) => {
+  if (!isUuid(tenantId)) return false;
+  if (await memberOfTenant(client, userId, tenantId)) return true;
+  const owner = (await client.query(
+    'SELECT public.aws_can_write_tenant($1::uuid) AS ok',
+    [tenantId],
+  )).rows[0];
+  return owner?.ok === true;
+};
+
+const stakeholderOnTenant = async (client, stakeholderId, tenantId) => {
+  if (!isUuid(stakeholderId) || !isUuid(tenantId)) return false;
+  const rows = (await client.query(
+    `SELECT id FROM public.stakeholder_accounts
+     WHERE id = $1::uuid AND tenant_id = $2::uuid
+     LIMIT 1`,
+    [stakeholderId, tenantId],
+  )).rows;
+  return rows.length > 0;
+};
+
+export const executeTenantBillingAccounts = async ({ client, mapping, op, values, filters }) => {
+  if (op !== 'insert' && op !== 'update') {
+    return { error: 'operation_not_allowlisted', op };
+  }
+
+  const resolveTenantId = async () => {
+    const fromValues = values.tenant_id;
+    const fromFilter = eqFilter(filters, 'tenant_id');
+    const fromId = eqFilter(filters, 'id');
+    if (isUuid(fromValues)) return fromValues;
+    if (isUuid(fromFilter)) return fromFilter;
+    if (isUuid(fromId)) {
+      const existing = (await client.query(
+        'SELECT tenant_id FROM public.tenant_billing_accounts WHERE id = $1::uuid',
+        [fromId],
+      )).rows[0];
+      return existing?.tenant_id || null;
+    }
+    return null;
+  };
+
+  const tenantId = await resolveTenantId();
+  if (!isUuid(tenantId)) return { error: 'invalid_uuid', field: 'tenant_id' };
+  if (!(await canWriteBillingTenant(client, mapping.application_user_id, tenantId))) {
+    return { error: 'not_authorized', message: 'Cannot write another tenant billing account' };
+  }
+
+  if (op === 'insert') {
+    const stakeholderId = values.stakeholder_account_id;
+    if (!isUuid(stakeholderId)) return { error: 'invalid_uuid', field: 'stakeholder_account_id' };
+    if (!(await stakeholderOnTenant(client, stakeholderId, tenantId))) {
+      return { error: 'not_authorized', message: 'Bank account must belong to the same tenant' };
+    }
+    const accountType = String(values.account_type || 'checking').toLowerCase();
+    const entityType = String(values.entity_type || 'business').toLowerCase();
+    const verificationStatus = String(values.verification_status || 'verified').toLowerCase();
+    if (!ACCOUNT_TYPES.has(accountType)) return { error: 'invalid_field', field: 'account_type' };
+    if (!ENTITY_TYPES.has(entityType)) return { error: 'invalid_field', field: 'entity_type' };
+    if (!VERIFICATION_STATUSES.has(verificationStatus)) {
+      return { error: 'invalid_field', field: 'verification_status' };
+    }
+    const nickname = clip(values.nickname, 120);
+    if (nickname?.error) return nickname;
+    const holder = clip(values.account_holder_name, 200);
+    if (holder?.error || !holder) {
+      return holder?.error || { error: 'missing_required_field', field: 'account_holder_name' };
+    }
+    const last4 = clip(values.account_number_last4, 4);
+    if (last4?.error) return last4;
+    const authorizedAt = values.ach_authorized_at || new Date().toISOString();
+    const autoDebit = values.auto_debit_enabled === false || values.auto_debit_enabled === 'false'
+      ? false
+      : true;
+    const rows = (await client.query(
+      `INSERT INTO public.tenant_billing_accounts (
+         tenant_id, stakeholder_account_id, nickname, account_holder_name,
+         account_type, entity_type, verification_status, account_number_last4,
+         ach_authorized_at, auto_debit_enabled
+       ) VALUES (
+         $1::uuid, $2::uuid, $3::text, $4::text,
+         $5::text, $6::text, $7::text, $8::text,
+         $9::timestamptz, $10::boolean
+       ) RETURNING *`,
+      [
+        tenantId,
+        stakeholderId,
+        nickname,
+        holder,
+        accountType,
+        entityType,
+        verificationStatus,
+        last4,
+        authorizedAt,
+        autoDebit,
+      ],
+    )).rows;
+    return { rows };
+  }
+
+  const id = eqFilter(filters, 'id');
+  const tenantFilter = eqFilter(filters, 'tenant_id');
+  const existing = id
+    ? (await client.query(
+      'SELECT id, tenant_id FROM public.tenant_billing_accounts WHERE id = $1::uuid',
+      [id],
+    )).rows[0]
+    : (await client.query(
+      'SELECT id, tenant_id FROM public.tenant_billing_accounts WHERE tenant_id = $1::uuid',
+      [tenantId],
+    )).rows[0];
+  if (!existing) return { error: 'rls_denied', message: 'billing account not writable' };
+  if (existing.tenant_id !== tenantId) {
+    return { error: 'not_authorized', message: 'Cannot write another tenant billing account' };
+  }
+  if (isUuid(tenantFilter) && tenantFilter !== existing.tenant_id) {
+    return { error: 'not_authorized', message: 'Cannot retarget tenant_id' };
+  }
+
+  const out = {};
+  if ('stakeholder_account_id' in values) {
+    if (!isUuid(values.stakeholder_account_id)) {
+      return { error: 'invalid_uuid', field: 'stakeholder_account_id' };
+    }
+    if (!(await stakeholderOnTenant(client, values.stakeholder_account_id, existing.tenant_id))) {
+      return { error: 'not_authorized', message: 'Bank account must belong to the same tenant' };
+    }
+    out.stakeholder_account_id = values.stakeholder_account_id;
+  }
+  if ('nickname' in values) {
+    const text = clip(values.nickname, 120);
+    if (text?.error) return text;
+    out.nickname = text;
+  }
+  if ('account_holder_name' in values) {
+    const text = clip(values.account_holder_name, 200);
+    if (text?.error || !text) {
+      return text?.error || { error: 'missing_required_field', field: 'account_holder_name' };
+    }
+    out.account_holder_name = text;
+  }
+  if ('account_type' in values) {
+    const accountType = String(values.account_type).toLowerCase();
+    if (!ACCOUNT_TYPES.has(accountType)) return { error: 'invalid_field', field: 'account_type' };
+    out.account_type = accountType;
+  }
+  if ('entity_type' in values) {
+    const entityType = String(values.entity_type).toLowerCase();
+    if (!ENTITY_TYPES.has(entityType)) return { error: 'invalid_field', field: 'entity_type' };
+    out.entity_type = entityType;
+  }
+  if ('verification_status' in values) {
+    const verificationStatus = String(values.verification_status).toLowerCase();
+    if (!VERIFICATION_STATUSES.has(verificationStatus)) {
+      return { error: 'invalid_field', field: 'verification_status' };
+    }
+    out.verification_status = verificationStatus;
+  }
+  if ('account_number_last4' in values) {
+    const last4 = clip(values.account_number_last4, 4);
+    if (last4?.error) return last4;
+    out.account_number_last4 = last4;
+  }
+  if ('ach_authorized_at' in values) {
+    out.ach_authorized_at = values.ach_authorized_at;
+  }
+  if ('auto_debit_enabled' in values) {
+    out.auto_debit_enabled = values.auto_debit_enabled === true || values.auto_debit_enabled === 'true';
+  }
+  if (!Object.keys(out).length) return { error: 'missing_required_field', field: 'values' };
+
+  const casts = {
+    stakeholder_account_id: 'uuid',
+    ach_authorized_at: 'timestamptz',
+    auto_debit_enabled: 'boolean',
+  };
+  const built = buildSet(out, casts);
+  built.params.push(existing.id, existing.tenant_id);
+  const rows = (await client.query(
+    `UPDATE public.tenant_billing_accounts
+     SET ${built.sets.join(', ')}, updated_at = now()
+     WHERE id = $${built.next}::uuid AND tenant_id = $${built.next + 1}::uuid
+     RETURNING *`,
+    built.params,
+  )).rows;
+  if (!rows.length) return { error: 'rls_denied', message: 'billing account not writable' };
+  return { rows };
+};
+
 export const executeProfiles = async ({ client, mapping, values, filters }) => {
   const id = eqFilter(filters, 'id') || mapping.application_user_id;
   if (!isUuid(id)) return { error: 'invalid_uuid', field: 'id' };
@@ -867,6 +1060,8 @@ export const executeAppMetadataWrite = async ({ client, mapping, table, op, valu
       return executePrivacyAck({ client, mapping, values });
     case 'tenant_users':
       return executeTenantUsers({ client, mapping, op, values, filters });
+    case 'tenant_billing_accounts':
+      return executeTenantBillingAccounts({ client, mapping, op, values, filters });
     case 'cash_jobs':
       return executeCashJobs({ client, mapping, op, values, filters });
     case 'cash_job_line_items':
