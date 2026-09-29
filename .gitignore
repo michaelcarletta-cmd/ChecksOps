@@ -31,3 +31,6 @@ aws/.aws-sam/
 
 # AWS SAM build output
 aws/.aws-sam/
+
+# Deployment-guard local leases/receipts (never commit live locks)
+.deployment-guard/

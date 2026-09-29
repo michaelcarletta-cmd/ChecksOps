@@ -1,0 +1,155 @@
+{
+  "version": 1,
+  "generated_for": "cursor/deployment-guard-safeguard-febc",
+  "notes": "Inventory only. Do not delete these scripts yet. NEEDS_GUARD and LEGACY/BYPASS scripts must call requireDeploymentGuard or be invoked through wrap-legacy.mjs. Direct shared-target writes remain a bypass until those call sites are migrated.",
+  "classifications": ["SAFE", "NEEDS_GUARD", "LEGACY/BYPASS"],
+  "scripts": [
+    {
+      "path": "scripts/production-deploy-guard.mjs",
+      "classification": "SAFE",
+      "capabilities": ["production-fingerprint-compare"],
+      "note": "Existing release-lock candidate fingerprint guard. Never calls AWS. Complements this live-collision guard; do not replace it."
+    },
+    {
+      "path": "scripts/validate-release-locks.mjs",
+      "classification": "SAFE",
+      "capabilities": ["source-lock-validation"],
+      "note": "Repository lock validation only."
+    },
+    {
+      "path": "scripts/check-pr-path-overlap.mjs",
+      "classification": "SAFE",
+      "capabilities": ["pr-overlap"],
+      "note": "Source-path overlap among open PRs. Does not protect live deploy TOCTOU."
+    },
+    {
+      "path": "scripts/deployment-guard/preflight.mjs",
+      "classification": "SAFE",
+      "capabilities": ["preflight"],
+      "note": "Official guard entry. Evaluate-only unless a later reviewed apply path is used."
+    },
+    {
+      "path": "scripts/staging-partner-integrity-inspect.mjs",
+      "classification": "NEEDS_GUARD",
+      "capabilities": ["lambda-update-function-code", "lambda-update-function-configuration", "lambda-create-function"],
+      "shared_target": false,
+      "function_name_default": "checksops-staging-partner-integrity-3bce",
+      "note": "Creates/updates a disposable oneshot Lambda, not checksops-staging-api. Still a write. Must not be retargeted at a shared API without the guard."
+    },
+    {
+      "path": "scripts/c1c-partner-share-aws-inspect.mjs",
+      "classification": "NEEDS_GUARD",
+      "capabilities": ["lambda-update-function-code", "lambda-update-function-configuration", "lambda-create-function"],
+      "shared_target": false,
+      "note": "Oneshot inspect Lambda. Same wrapping rule if pointed at a shared function."
+    },
+    {
+      "path": "scripts/run-hosted-tax-profile-containment.mjs",
+      "classification": "NEEDS_GUARD",
+      "capabilities": ["sql-apply"],
+      "shared_target": true,
+      "note": "Authorized hosted SQL wrapper. Must obtain a deployment lease + SQL collision check before apply. Do not use supabase db push."
+    },
+    {
+      "path": "aws/cutover/scripts/hardening-batch3-apply.mjs",
+      "classification": "LEGACY/BYPASS",
+      "capabilities": ["lambda-update-function-code", "cognito-config"],
+      "shared_target": true,
+      "function_name_default": "checksops-production-prep-api",
+      "note": "Downloads live ZIP and overlays named members, then UpdateFunctionCode without RevisionId CAS, lease, or membership proof. Must call requireDeploymentGuard or be run only via wrap-legacy.mjs."
+    },
+    {
+      "path": "aws/cutover/scripts/hardening-batch4-apply.mjs",
+      "classification": "LEGACY/BYPASS",
+      "capabilities": ["lambda-update-function-code"],
+      "shared_target": true,
+      "function_name_default": "checksops-production-prep-api",
+      "note": "Same overlay-without-CAS pattern as batch 3. Do not invoke directly against the shared prep API."
+    },
+    {
+      "path": "aws/cutover/scripts/hardening-batch5-apply.mjs",
+      "classification": "NEEDS_GUARD",
+      "capabilities": ["cloudformation"],
+      "shared_target": true,
+      "note": "Production CloudTrail/monitoring stack apply. Not Lambda ZIP, but a shared production write."
+    },
+    {
+      "path": "aws/origin-verify/apply-gate3a.mjs",
+      "classification": "LEGACY/BYPASS",
+      "capabilities": ["lambda-update-function-code", "secretsmanager"],
+      "shared_target": true,
+      "note": "Production authorizer Lambda UpdateFunctionCode. Has its own confirm env, not the central guard."
+    },
+    {
+      "path": "aws/origin-verify/apply-gate3b.mjs",
+      "classification": "LEGACY/BYPASS",
+      "capabilities": ["cloudfront-update-distribution"],
+      "shared_target": true,
+      "note": "Updates production CloudFront distribution."
+    },
+    {
+      "path": "aws/origin-verify/operator-apply-gate3b.mjs",
+      "classification": "LEGACY/BYPASS",
+      "capabilities": ["cloudfront-update-distribution"],
+      "shared_target": true,
+      "note": "Operator CloudFront apply path."
+    },
+    {
+      "path": "aws/cloudfront/apply-step1.mjs",
+      "classification": "LEGACY/BYPASS",
+      "capabilities": ["cloudfront-update-distribution", "cloudfront-function"],
+      "shared_target": true,
+      "note": "Creates/publishes CloudFront function and updates E1B0ZWWO5559U5."
+    },
+    {
+      "path": "aws/db-copy/rehearsal/scripts/bridge-db-rehearsal.mjs",
+      "classification": "NEEDS_GUARD",
+      "capabilities": ["lambda-update-function-code", "lambda-create-function", "sql-apply"],
+      "shared_target": false,
+      "function_name_default": "checksops-staging-rehearsal-oneshot",
+      "note": "Rehearsal oneshot. Must not be pointed at checksops-staging-api."
+    },
+    {
+      "path": "aws/write-path/scripts/run-parity-schema-rehearsal.mjs",
+      "classification": "NEEDS_GUARD",
+      "capabilities": ["lambda-update-function-code", "sql-apply"],
+      "shared_target": false,
+      "function_name_default": "checksops-staging-rehearsal-oneshot",
+      "note": "Rehearsal oneshot for schema parity."
+    },
+    {
+      "path": "aws/db-copy/rehearsal/scripts/bridge-storage-copy.mjs",
+      "classification": "NEEDS_GUARD",
+      "capabilities": ["s3-put-object"],
+      "shared_target": true,
+      "note": "S3 object writes for rehearsal storage copy. Not SPA index.html, but a shared-bucket write."
+    },
+    {
+      "path": "aws/storage/bridge-copy.mjs",
+      "classification": "NEEDS_GUARD",
+      "capabilities": ["s3-put-object"],
+      "shared_target": true,
+      "note": "S3 put-object copy path."
+    },
+    {
+      "path": "aws/storage/copy-from-supabase.mjs",
+      "classification": "NEEDS_GUARD",
+      "capabilities": ["s3-put-object"],
+      "shared_target": true,
+      "note": "S3 put-object from Supabase copy."
+    },
+    {
+      "path": "aws/origin-verify/gate3d-lib.mjs",
+      "classification": "NEEDS_GUARD",
+      "capabilities": ["lambda-update-function-configuration"],
+      "shared_target": true,
+      "note": "Can change origin-verify Lambda configuration. Not UpdateFunctionCode."
+    }
+  ],
+  "migration": {
+    "do_not_delete": true,
+    "required_pattern": "import { requireDeploymentGuard } from '<repo>/scripts/deployment-guard/require-guard.mjs'; requireDeploymentGuard({...});",
+    "or_wrapper": "node scripts/deployment-guard/wrap-legacy.mjs --input manifest.json -- node <legacy-script>",
+    "fail_closed_when": "classification is NEEDS_GUARD or LEGACY/BYPASS and the script writes a shared target without a passing guard receipt + lease"
+  }
+}

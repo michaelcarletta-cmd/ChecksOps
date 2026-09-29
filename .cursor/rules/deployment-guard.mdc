@@ -1,0 +1,50 @@
+---
+description: Permanent ChecksOps cross-workstream deployment safeguard
+alwaysApply: true
+---
+
+# Deployment safeguard (mandatory)
+
+Independent source work may happen concurrently. Independent deployment to a
+shared staging or production target may not overwrite another workstream.
+
+Use official safe deployment tooling only:
+
+- `node scripts/deployment-guard/preflight.mjs`
+- `node scripts/deployment-guard/lease.mjs`
+- `node scripts/deployment-guard/lambda-overlay.mjs`
+- `node scripts/deployment-guard/spa-promote.mjs`
+- `node scripts/deployment-guard/sql-apply.mjs`
+- `node scripts/deployment-guard/verify-live.mjs`
+- `node scripts/deployment-guard/manifest.mjs`
+- `node scripts/production-deploy-guard.mjs` (production fingerprint vs release-locks)
+
+Never deploy directly when this guarded tooling exists.
+
+Never:
+
+- reclaim an environment
+- reuse an old Lambda ZIP, `/tmp` package, stale `dist`, or previous SPA build
+- overwrite another workstream's live members
+- put an old `index.html` back
+- restore a previous baseline because "we were here first"
+- `aws lambda update-function-code` against `checksops-staging-api` or `checksops-production-prep-api` outside the overlay evaluator
+- `sam deploy` a thin template over a live overlay Lambda
+- infer production approval from a previous workstream
+
+If live state changed after preflight (CodeSha256, RevisionId, index.html, SQL
+definition): **STOP** with `DEPLOYMENT_COLLISION`. Do not reclaim.
+
+If two workstreams changed the same Lambda member: **STOP** with
+`SOURCE_RECONCILIATION_REQUIRED` and reconcile in source.
+
+If multiple workstreams contain frontend changes: **STOP** with
+`SOURCE_COMPOSITION_REQUIRED` and build one combined candidate.
+
+Preserve unrelated work. Overlay only declared owned members onto a freshly
+downloaded live package.
+
+This rule supplements enforcement in `scripts/deployment-guard/`. It is not
+the only safeguard. Do not deploy this guard. Do not change AWS, staging,
+production, or database data unless a separately reviewed apply workstream
+explicitly authorizes it.
