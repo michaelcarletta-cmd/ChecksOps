@@ -46,6 +46,58 @@ const filterCheckId = (filters = []) => {
   return match?.value || null;
 };
 
+const eqIdFilter = (filters = []) => {
+  const match = (filters || []).find((filter) => filter?.column === 'id' && (filter.op || 'eq') === 'eq');
+  return match?.value || null;
+};
+
+const peelReviewClaimNumber = (table, op, row = {}) => {
+  if (table !== 'check_intake_items' || op !== 'update') {
+    return { row, hasClaim: false, claimNumber: undefined };
+  }
+  if (!Object.prototype.hasOwnProperty.call(row, 'detected_claim_number')) {
+    return { row, hasClaim: false, claimNumber: undefined };
+  }
+  const next = { ...row };
+  const claimNumber = next.detected_claim_number;
+  delete next.detected_claim_number;
+  return { row: next, hasClaim: true, claimNumber };
+};
+
+const remainingIntakeKeys = (row = {}) => (
+  Object.keys(row).filter((key) => key !== 'updated_at')
+);
+
+const executeReviewClaimSave = async ({ client, checkId, tenantId, claimNumber }) => {
+  const invalid = requireUuid('id', checkId);
+  if (invalid) return invalid;
+  const invalidTenant = requireUuid('tenant_id', tenantId);
+  if (invalidTenant) return { error: 'invalid_uuid', field: 'tenant_id' };
+  const rpc = await client.query(
+    'SELECT public.review_save_detected_claim_number($1::uuid, $2::uuid, $3::text) AS result',
+    [checkId, tenantId, claimNumber == null ? null : String(claimNumber)],
+  );
+  const result = rpc.rows?.[0]?.result || {};
+  if (result.ok === false) {
+    return {
+      error: result.code || 'claim_save_failed',
+      message: `Review claim # save failed (${result.code || 'error'})`,
+    };
+  }
+  if (result.code === 'locked') {
+    return {
+      error: 'check_locked',
+      message: 'Claim # cannot be changed on a deposited, voided, or returned check',
+    };
+  }
+  const rows = (await client.query(
+    'SELECT * FROM public.check_intake_items WHERE id = $1::uuid',
+    [checkId],
+  )).rows;
+  if (!rows.length) return { error: 'rls_denied', message: 'check not writable' };
+  return { rows, claimResult: result };
+};
+
 const okResult = ({ mapping, claims, spoof, data, count = null }) => ({
   ok: true,
   statusCode: 200,
@@ -272,7 +324,28 @@ export const executeAllowlistedWrite = async ({
 
   const raw = firstRow(body.values || body.payload || body.row);
   if (raw.error) return raw;
-  const picked = pickAllowlistedValues(table, raw.row);
+  const peeled = peelReviewClaimNumber(table, op, raw.row);
+  let claimSave = null;
+  if (peeled.hasClaim) {
+    const checkId = eqIdFilter(body.filters || []);
+    const invalid = requireUuid('id', checkId);
+    if (invalid) return invalid;
+    const looked = await client.query(
+      'SELECT id, tenant_id FROM public.check_intake_items WHERE id = $1::uuid',
+      [checkId],
+    );
+    const check = looked.rows?.[0];
+    if (!check) return { error: 'rls_denied', message: 'check not found or not writable' };
+    claimSave = await executeReviewClaimSave({
+      client,
+      checkId,
+      tenantId: check.tenant_id,
+      claimNumber: peeled.claimNumber,
+    });
+    if (claimSave.error) return claimSave;
+    if (!remainingIntakeKeys(peeled.row).length) return claimSave;
+  }
+  const picked = pickAllowlistedValues(table, peeled.row);
   if (picked.error) return picked;
 
   const required = spec.requiredForWrite[op] || [];
