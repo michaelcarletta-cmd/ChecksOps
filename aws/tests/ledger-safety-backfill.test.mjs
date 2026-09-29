@@ -10,6 +10,7 @@ import {
   isCheckClaimLinkDenied,
   newTrackingClaimInsert,
   planClaimNumberSave,
+  resolveAuthoritativeClaimId,
   resolveAutoLinkCandidate,
 } from '../../src/lib/checkClaimLinkGuard.ts';
 import { fundsReceivedForClaim, fundsReceivedFromScopedIntakeRows } from '../../src/lib/claimLedgerSync.ts';
@@ -170,22 +171,48 @@ test('existing claim number save updates in place and does not create or relink'
   });
   assert.throws(() => claimNumberSaveWritePayload(unlinked), /in-place claim_number update/);
 
+  assert.equal(resolveAuthoritativeClaimId({
+    liveCheckClaimId: CLAIM_A,
+    loadedClaimId: CLAIM_B,
+    claimIdProp: null,
+  }), CLAIM_A);
+  assert.equal(resolveAuthoritativeClaimId({
+    liveCheckClaimId: null,
+    loadedClaimId: CLAIM_B,
+    claimIdProp: CLAIM_A,
+  }), CLAIM_B);
+  assert.equal(resolveAuthoritativeClaimId({
+    liveCheckClaimId: null,
+    loadedClaimId: null,
+    claimIdProp: CLAIM_A,
+  }), CLAIM_A);
+  assert.equal(resolveAuthoritativeClaimId({
+    liveCheckClaimId: null,
+    loadedClaimId: null,
+    claimIdProp: null,
+  }), null);
+
   const src = readFileSync('src/components/payments/ClaimLedgerCard.tsx', 'utf8');
   assert.match(src, /planClaimNumberSave/);
+  assert.match(src, /resolveAuthoritativeClaimId/);
   assert.match(src, /mode === "update_existing"/);
   assert.match(src, /\.from\("claims"\)[\s\S]*\.update\(\{ claim_number: plan\.claimNumber \}\)/);
   assert.match(src, /Claim number save did not keep the existing claim/);
   assert.match(src, /handleLinkedSave/);
-  assert.match(src, /existingClaimId: resolveExistingClaimId\(\)/);
   assert.match(src, /onClick=\{handleLinkedSave\}/);
-  assert.match(src, /Claim Ledger Save only updates an existing claim/);
+  assert.match(src, /This check is not linked to a claim/);
+  assert.match(src, /Claim Ledger Save only updates an existing linked claim/);
+  assert.match(src, /\.from\("check_intake_items"\)[\s\S]*\.select\("id, claim_id"\)/);
   assert.equal(/newTrackingClaimInsert/.test(src), false);
   assert.equal(/\.from\("claims"\)[\s\S]*\.insert\(/.test(src), false);
-  const updateBlock = src.slice(src.indexOf('plan.mode === "update_existing"'), src.indexOf('const trimmed = plan.claimNumber'));
+  assert.equal(/const handleSave/.test(src), false);
+  assert.equal(/onClick=\{handleSave\}/.test(src), false);
+  assert.equal(/ilike\("claim_number"/.test(src), false);
+  const updateBlock = src.slice(src.indexOf('plan.mode === "update_existing"'), src.indexOf('throw new Error(CLAIM_LEDGER_NOT_LINKED)'));
   assert.equal(/\.insert\(/.test(updateBlock), false);
   assert.equal(/detected_claim_number/.test(updateBlock), false);
-  assert.equal(/claim_id:/.test(updateBlock), false);
-  assert.match(updateBlock, /if \(vars\.existingClaimId\)/);
+  assert.equal(/\.from\("check_intake_items"\)[\s\S]{0,80}\.update\(/.test(src), false);
+  assert.equal(/detected_claim_number:\s*trimmed/.test(src), false);
 
   const ccc = readFileSync('src/pages/CheckCommandCenter.tsx', 'utf8');
   assert.match(ccc, /lg:flex-row/);
@@ -361,7 +388,7 @@ test('successful link invalidates Received queries without a full reload', () =>
   const src = readFileSync('src/components/payments/ClaimLedgerCard.tsx', 'utf8');
   assert.match(src, /fundsReceivedFromScopedIntakeRows/);
   assert.equal(/fundsReceivedForClaim/.test(src), false);
-  assert.match(src, /filterSelectableClaims/);
+  assert.match(src, /resolveAuthoritativeClaimId/);
   assert.match(src, /invalidateQueries\(\{ queryKey: \["claim-ledger-checks", res\.claimId\] \}\)/);
   assert.match(src, /invalidateQueries\(\{ queryKey: \["check-detail", checkIntakeItemId\] \}\)/);
   assert.equal(/applyClaimLedgerSync/.test(src), false);
@@ -372,7 +399,7 @@ test('successful link invalidates Received queries without a full reload', () =>
 test('ClaimLedgerCard Received uses the actual scoped query shape without row.claim_id', () => {
   const src = readFileSync('src/components/payments/ClaimLedgerCard.tsx', 'utf8');
   const siblingQuery = src.match(
-    /ownerSiblingChecks[\s\S]*?\.select\("([^"]+)"\)[\s\S]*?\.eq\("claim_id", claimId!\)/,
+    /ownerSiblingChecks[\s\S]*?\.select\("([^"]+)"\)[\s\S]*?\.eq\("claim_id", linkedClaimId!\)/,
   );
   assert.equal(Boolean(siblingQuery), true);
   assert.equal(siblingQuery?.[1].includes('claim_id'), false);

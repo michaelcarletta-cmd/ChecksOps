@@ -13,12 +13,11 @@ import { ClaimSettlementEditor } from "./ClaimSettlementEditor";
 import { getDepositLabel } from "@/lib/depositLabel";
 import { fundsReceivedFromScopedIntakeRows } from "@/lib/claimLedgerSync";
 import {
-  claimLinkUserMessage,
-  evaluateCheckClaimLink,
-  filterSelectableClaims,
-  isCheckClaimLinkDenied,
+  CLAIM_LEDGER_NOT_LINKED,
   CLAIM_NUMBER_SAVE_SELECT,
+  claimLinkUserMessage,
   planClaimNumberSave,
+  resolveAuthoritativeClaimId,
 } from "@/lib/checkClaimLinkGuard";
 
 interface Props {
@@ -55,14 +54,34 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
     },
   });
 
+  const { data: liveCheckLink, isFetched: liveLinkFetched } = useQuery({
+    queryKey: ["claim-ledger-check-link", checkIntakeItemId],
+    enabled: !!checkIntakeItemId && !readOnly,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("check_intake_items")
+        .select("id, claim_id")
+        .eq("id", checkIntakeItemId)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const linkedClaimId = resolveAuthoritativeClaimId({
+    liveCheckClaimId: liveCheckLink?.claim_id ?? null,
+    loadedClaimId: null,
+    claimIdProp: claimId,
+  });
+
   const { data: ownerClaim } = useQuery({
-    queryKey: ["claim-ledger", claimId],
-    enabled: !!claimId && !readOnly,
+    queryKey: ["claim-ledger", linkedClaimId],
+    enabled: !!linkedClaimId && !readOnly,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("claims")
         .select("id, claim_number, policyholder_name, policyholder_address")
-        .eq("id", claimId!)
+        .eq("id", linkedClaimId!)
         .maybeSingle();
       if (error) throw error;
       return data;
@@ -70,13 +89,13 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
   });
 
   const { data: ownerSettlement } = useQuery({
-    queryKey: ["claim-ledger-settlement", claimId],
-    enabled: !!claimId && !readOnly,
+    queryKey: ["claim-ledger-settlement", linkedClaimId],
+    enabled: !!linkedClaimId && !readOnly,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("claim_settlements")
         .select("*")
-        .eq("claim_id", claimId!)
+        .eq("claim_id", linkedClaimId!)
         .maybeSingle();
       if (error) throw error;
       return data;
@@ -84,13 +103,13 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
   });
 
   const { data: ownerSiblingChecks = [] } = useQuery({
-    queryKey: ["claim-ledger-checks", claimId],
-    enabled: !!claimId && !readOnly,
+    queryKey: ["claim-ledger-checks", linkedClaimId],
+    enabled: !!linkedClaimId && !readOnly,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("check_intake_items")
         .select("id, check_number, amount, carrier_name, issue_date, status, check_stage, created_at")
-        .eq("claim_id", claimId!)
+        .eq("claim_id", linkedClaimId!)
         .order("issue_date", { ascending: false, nullsFirst: false });
       if (error) throw error;
       return data ?? [];
@@ -100,9 +119,13 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
   const claim: any = readOnly ? rpcData?.claim : ownerClaim;
   const settlement: any = readOnly ? rpcData?.settlement : ownerSettlement;
   const siblingChecks: any[] = readOnly ? (rpcData?.sibling_checks ?? []) : ownerSiblingChecks;
-  const effectiveClaimId = readOnly ? (rpcData?.claim?.id ?? null) : claimId;
+  const effectiveClaimId = readOnly ? (rpcData?.claim?.id ?? null) : linkedClaimId;
 
-  const resolveExistingClaimId = () => claimId || claim?.id || null;
+  const resolveExistingClaimId = () => resolveAuthoritativeClaimId({
+    liveCheckClaimId: liveCheckLink?.claim_id ?? null,
+    loadedClaimId: claim?.id ?? null,
+    claimIdProp: claimId,
+  });
 
   const linkMutation = useMutation({
     mutationFn: async (vars: { claimNumber: string; existingClaimId?: string | null }) => {
@@ -141,79 +164,7 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
         };
       }
 
-      if (vars.existingClaimId) {
-        throw new Error("Claim number save did not keep the existing claim.");
-      }
-
-      const trimmed = plan.claimNumber;
-
-      // Look up existing claim by claim_number (case-insensitive)
-      const { data: checkRow, error: checkErr } = await supabase
-        .from("check_intake_items")
-        .select("id, claim_id, amount, tenant_id")
-        .eq("id", checkIntakeItemId)
-        .single();
-      if (checkErr) throw checkErr;
-
-      const { data: matches, error: lookupErr } = await supabase
-        .from("claims")
-        .select("id, claim_number, policyholder_name, org_id")
-        .ilike("claim_number", trimmed)
-        .limit(5);
-      if (lookupErr) throw lookupErr;
-
-      const sameOrg = filterSelectableClaims(matches ?? [], checkRow.tenant_id);
-      const unassigned = (matches ?? []).filter((row: { org_id?: string | null }) => !row.org_id);
-      const foreign = (matches ?? []).filter((row: { org_id?: string | null }) => (
-        row.org_id && String(row.org_id) !== String(checkRow.tenant_id || "")
-      ));
-      if (sameOrg.length > 1) {
-        throw new Error(`Multiple claims match "${trimmed}". Please disambiguate.`);
-      }
-
-      let matched = sameOrg[0] as { id: string; claim_number: string; policyholder_name?: string | null; org_id?: string | null } | undefined;
-      const created = false;
-
-      if (!matched && unassigned.length) {
-        throw new Error(claimLinkUserMessage("unassigned_claim"));
-      }
-      if (!matched && foreign.length) {
-        throw new Error(claimLinkUserMessage("cross_org"));
-      }
-
-      if (!matched) {
-        throw new Error("Claim Ledger Save only updates an existing claim.");
-      } else {
-        const decision = evaluateCheckClaimLink({
-          checkTenantId: checkRow.tenant_id,
-          claimId: matched.id,
-          claimExists: true,
-          claimOrgId: matched.org_id,
-        });
-        if (!decision.allowed) {
-          throw new Error(claimLinkUserMessage(decision.reason));
-        }
-      }
-
-      const previousClaimId = checkRow.claim_id ?? null;
-      const { error } = await supabase
-        .from("check_intake_items")
-        .update({ detected_claim_number: trimmed, claim_id: matched.id })
-        .eq("id", checkIntakeItemId);
-      if (error) {
-        if (isCheckClaimLinkDenied(error)) {
-          throw new Error(claimLinkUserMessage(error.message));
-        }
-        throw error;
-      }
-
-      return {
-        created,
-        claimNumber: matched.claim_number,
-        claimId: matched.id,
-        previousClaimId,
-        policyholderName: matched.policyholder_name,
-      };
+      throw new Error(CLAIM_LEDGER_NOT_LINKED);
     },
     onSuccess: (res) => {
       if (onLinked) onLinked(res.claimId);
@@ -223,6 +174,7 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
       qc.invalidateQueries({ queryKey: ["claim-ledger"] });
       qc.invalidateQueries({ queryKey: ["claim-ledger-settlement"] });
       qc.invalidateQueries({ queryKey: ["claim-ledger-checks"] });
+      qc.invalidateQueries({ queryKey: ["claim-ledger-check-link"] });
       qc.invalidateQueries({ queryKey: ["check-intake-items"] });
       qc.invalidateQueries({ queryKey: ["review-settlement-check"] });
       // Invalidate loss draft queries to ensure the UI updates with the new claim link
@@ -264,20 +216,12 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
     onSettled: () => setSaving(false),
   });
 
-  const handleSave = () => {
-    setSaving(true);
-    linkMutation.mutate({
-      claimNumber: input,
-      existingClaimId: resolveExistingClaimId(),
-    });
-  };
-
   const handleLinkedSave = () => {
     const existingClaimId = resolveExistingClaimId();
     if (!existingClaimId) {
       toast({
         title: "Could not save claim",
-        description: "This check is not linked to a claim.",
+        description: CLAIM_LEDGER_NOT_LINKED,
         variant: "destructive",
       });
       return;
@@ -308,32 +252,40 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
   }
 
   // ─── Unlinked state ─────────────────────────────────────────────
-  if (!readOnly && !claimId) {
+  if (!readOnly && !linkedClaimId) {
+    if (!liveLinkFetched) {
+      return (
+        <Card className="border-amber-500/30 bg-amber-500/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Link2 className="h-4 w-4 text-amber-600" />
+              Claim Ledger
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground">Loading claim link…</p>
+          </CardContent>
+        </Card>
+      );
+    }
     return (
       <Card className="border-amber-500/30 bg-amber-500/5">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm flex items-center gap-2">
             <Link2 className="h-4 w-4 text-amber-600" />
-            Link this check to a claim
+            This check is not linked to a claim
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
           <p className="text-xs text-muted-foreground">
-            {detectedClaimNumber
-              ? "OCR detected the claim number below — confirm or correct it. If a matching claim exists in the CRM we'll link to it; otherwise we'll start a new tracker so you can still enter RCV, ACV, deductible and watch funds add up."
-              : "Enter the claim number from the check. If it doesn't match a CRM claim, we'll create a tracker so you can still log RCV, ACV, ordinance & law, etc. and track every check against the same total."}
+            Claim Ledger Save only updates an existing linked claim. It cannot create
+            or attach a claim. {detectedClaimNumber
+              ? "The detected number below is OCR text, not a claim link."
+              : "No claim_id is set on this check."}
           </p>
-          <div className="flex gap-2">
-            <Input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Claim number"
-              className="h-8 text-sm"
-            />
-            <Button size="sm" disabled={saving || !input.trim()} onClick={handleSave}>
-              {saving ? "Linking..." : "Link"}
-            </Button>
-          </div>
+          {detectedClaimNumber ? (
+            <p className="text-sm font-medium">Detected (unlinked): {detectedClaimNumber}</p>
+          ) : null}
         </CardContent>
       </Card>
     );
@@ -557,11 +509,11 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
           )}
         </div>
 
-        {!readOnly && claimId && (
+        {!readOnly && linkedClaimId && (
           <ClaimSettlementEditor
             open={editorOpen}
             onOpenChange={setEditorOpen}
-            claimId={claimId}
+            claimId={linkedClaimId}
             settlement={settlement}
           />
         )}
