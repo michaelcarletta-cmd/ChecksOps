@@ -130,7 +130,7 @@ test('stampSignaturePdf writes a visible signature at stored coordinates', async
   const srcImages = String(original.toString('latin1')).match(/\/Subtype\s*\/Image/g)?.length || 0;
   const outImages = String(stamped.toString('latin1')).match(/\/Subtype\s*\/Image/g)?.length || 0;
   assert.ok(outImages > srcImages, `stamped images ${outImages} should exceed source ${srcImages}`);
-  assert.match(stamped.toString('latin1'), /IHDR/);
+  assert.match(stamped.toString('latin1'), /\/Subtype\s*\/Image[\s\S]{0,160}\/Width 400/);
 
   const page = srcDoc.getPages()[0];
   const box = fieldBoxPdf(page.getWidth(), page.getHeight(), PLACEMENT);
