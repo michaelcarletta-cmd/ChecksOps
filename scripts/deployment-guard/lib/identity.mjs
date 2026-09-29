@@ -16,6 +16,7 @@ export const DEPLOYMENT_TYPES = Object.freeze([
   'lambda-overlay',
   'spa-promote',
   'sql-apply',
+  'sql-executor-invoke',
   'cloudfront-invalidation',
   'cloudfront-update',
   'cloudformation',

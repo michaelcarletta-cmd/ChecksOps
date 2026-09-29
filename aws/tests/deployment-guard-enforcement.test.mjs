@@ -88,6 +88,20 @@ test('direct SPA writer fails before AWS mutation', () => {
   assert.equal(result.awsLog, '');
 });
 
+test('direct staging SPA writer fails before AWS mutation', () => {
+  const result = spawnWriter('scripts/deployment-guard/staging-spa-upload.mjs', ['--environment', 'staging']);
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stderr}${result.stdout}`, /DEPLOYMENT_GUARD_REQUIRED/);
+  assert.equal(result.awsLog, '');
+});
+
+test('direct SQL executor invoke fails before AWS mutation', () => {
+  const result = spawnWriter('scripts/deployment-guard/sql-executor-invoke.mjs', []);
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stderr}${result.stdout}`, /DEPLOYMENT_GUARD_REQUIRED/);
+  assert.equal(result.awsLog, '');
+});
+
 test('direct CloudFront writer fails before AWS mutation', () => {
   const result = spawnWriter('aws/cloudfront/apply-step1.mjs', [], {
     CHECKSOPS_APPLY_CF_STEP1: 'APPLY_GATE1',

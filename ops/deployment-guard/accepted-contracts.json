@@ -21,7 +21,7 @@
       "enabled": true,
       "environments": ["staging", "production"],
       "components": ["*"],
-      "deployment_types": ["lambda-overlay", "sql-apply"],
+      "deployment_types": ["lambda-overlay", "sql-apply", "sql-executor-invoke"],
       "test": "aws/tests/ledger-safety-pg.test.mjs",
       "invariants": ["ledger writes are tenant-scoped", "no silent backfill of unrelated ledger rows"]
     },
@@ -109,7 +109,7 @@
       "enabled": true,
       "environments": ["staging", "production"],
       "components": ["*"],
-      "deployment_types": ["lambda-overlay", "sql-apply"],
+      "deployment_types": ["lambda-overlay", "sql-apply", "sql-executor-invoke"],
       "test": "aws/tests/api-write.test.mjs",
       "invariants": ["financial writes stay gated; no inferred production money-flag enablement"]
     }

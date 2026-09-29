@@ -344,6 +344,21 @@ test('unexpected ZIP addition or deletion fails closed', () => {
   assert.deepEqual(deleted.details.unexpected_deleted, ['other']);
 });
 
+test('vpc_executor flag does not let sql-apply skip the live definition hash', () => {
+  const result = evaluateSqlApply(identity({
+    deployment_type: 'sql-apply',
+    vpc_executor: true,
+    owned_components: ['aws/write-path/sql/44_claim_ledger_link_or_create.sql'],
+    filename: 'aws/write-path/sql/44_claim_ledger_link_or_create.sql',
+    migration_id: '44_claim_ledger_link_or_create',
+    source_sha256: 'a'.repeat(64),
+    expected_live_definition_sha256: 'b'.repeat(64),
+    preflight_live_fingerprint: { sql: 'b'.repeat(64) },
+  }));
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.SQL_COLLISION);
+});
+
 test('silent SQL backfill is rejected', () => {
   const result = evaluateSqlApply(identity({
     deployment_type: 'sql-apply',

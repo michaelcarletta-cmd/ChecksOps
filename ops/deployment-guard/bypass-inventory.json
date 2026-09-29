@@ -53,6 +53,26 @@
       "capabilities": ["sql-evaluate"]
     },
     {
+      "path": "scripts/deployment-guard/sql-executor-invoke.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["sql-executor-invoke"],
+      "note": "Official staging VPC SQL executor invoke. Requires a sql-executor-invoke receipt. Never accepts arbitrary SQL. Never targets production or shared APIs."
+    },
+    {
+      "path": "scripts/deployment-guard/sql-executor-ensure.mjs",
+      "classification": "NON_SHARED/SAFE",
+      "capabilities": ["lambda-update-function-code", "lambda-create-function"],
+      "shared_target": false,
+      "function_name_default": "checksops-staging-guarded-sql-executor",
+      "note": "Creates/updates only checksops-staging-guarded-sql-executor. Cannot retarget shared APIs or checksops-staging-sql44-2d41."
+    },
+    {
+      "path": "scripts/deployment-guard/staging-spa-upload.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["spa-index-upload", "cloudfront-invalidation"],
+      "note": "Official staging SPA upload. Requires a staging-frontend spa-promote receipt. Refuses production."
+    },
+    {
       "path": "scripts/deployment-guard/lease.mjs",
       "classification": "GUARDED",
       "capabilities": ["lease"]

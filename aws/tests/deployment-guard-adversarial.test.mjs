@@ -85,6 +85,8 @@ const DIRECT_WRITERS = [
   ['aws/cutover/scripts/hardening-batch4-apply.mjs', ['--confirm-batch4']],
   ['aws/cutover/scripts/hardening-batch5-apply.mjs', ['--confirm-batch5']],
   ['scripts/deployment-guard/spa-upload.mjs', ['--environment', 'production']],
+  ['scripts/deployment-guard/sql-executor-invoke.mjs', []],
+  ['scripts/deployment-guard/staging-spa-upload.mjs', ['--environment', 'staging']],
   ['aws/cloudfront/apply-step1.mjs', [], { CHECKSOPS_APPLY_CF_STEP1: 'APPLY_GATE1' }],
   ['scripts/run-hosted-tax-profile-containment.mjs', ['apply']],
 ];
