@@ -4,15 +4,77 @@
  * Completes the request when every signer is signed. Does not call deposit RPCs.
  */
 import pg from 'pg';
+import { CopyObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { parseBody, ignoredSpoof } from './data.mjs';
 import { loadDatabaseCredentials } from './secrets.mjs';
 import { buildWriteClientConfig, sanitizePublicError } from './db-health.mjs';
 import { hashToken } from './esign.mjs';
 import { clientIpFromEvent, userAgentFromEvent } from './check-endorsement.mjs';
+import { normalizePath, s3KeyFor } from './storage-paths.mjs';
 
 const { Client } = pg;
 
 export const DEFAULT_SIGN_CONSENT = 'Electronic records and signature consent accepted before signing.';
+
+const filesBucket = () => process.env.FILES_BUCKET || '';
+const s3 = () => new S3Client({ region: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1' });
+
+export const signedDocumentPath = (request) => (
+  request.claim_id
+    ? `signed/${request.claim_id}/${request.id}-final.pdf`
+    : `check-intake/${request.check_intake_item_id}/files/${request.id}-final.pdf`
+);
+
+export const attachCompletedSignatureDocument = async (client, request, deps = {}) => {
+  const tokenHash = deps.tokenHash || request.token_hash;
+  if (!tokenHash) throw new Error('missing_token_hash');
+  const originalPath = request.document_path;
+  if (!originalPath) throw new Error('missing_document_path');
+  if (!request.claim_id && !request.check_intake_item_id) {
+    throw new Error('signature request is not linked to a claim or check');
+  }
+  const destRel = request.final_rel || signedDocumentPath(request);
+  const srcKey = s3KeyFor('claim-files', normalizePath(originalPath, 'claim-files'));
+  const destKey = s3KeyFor('claim-files', normalizePath(destRel, 'claim-files'));
+  const bucket = filesBucket();
+  if (!bucket || !srcKey || !destKey) throw new Error('s3_not_configured');
+  const copyObject = deps.copyObject || (async () => {
+    const s3c = deps.s3 || s3();
+    await s3c.send(new HeadObjectCommand({ Bucket: bucket, Key: srcKey }));
+    try {
+      await s3c.send(new CopyObjectCommand({
+        Bucket: bucket,
+        Key: destKey,
+        CopySource: `${bucket}/${srcKey}`,
+        ContentType: 'application/pdf',
+        MetadataDirective: 'REPLACE',
+      }));
+    } catch {
+      const obj = await s3c.send(new GetObjectCommand({ Bucket: bucket, Key: srcKey }));
+      const bytes = Buffer.from(await obj.Body.transformToByteArray());
+      await s3c.send(new PutObjectCommand({
+        Bucket: bucket,
+        Key: destKey,
+        Body: bytes,
+        ContentType: 'application/pdf',
+      }));
+    }
+  });
+  await copyObject({ srcKey, destKey, destRel });
+
+  const attached = (await client.query(
+    'SELECT public.aws_public_signature_attach_signed($1, $2) AS doc',
+    [tokenHash, destRel],
+  )).rows[0]?.doc;
+  if (!attached?.ok) {
+    throw new Error(attached?.error || 'attach_denied');
+  }
+  return {
+    final_pdf_path: attached.final_pdf_path || destRel,
+    original_path: attached.original_path || originalPath,
+    already_attached: attached.already_attached === true,
+  };
+};
 
 const publicDb = async (deps = {}) => {
   if (deps.client) return { client: deps.client, owned: false };
@@ -127,125 +189,111 @@ export const runPublicSignatureSubmit = async (event, deps = {}) => {
     await client.query('BEGIN');
     await client.query('SET TRANSACTION READ WRITE');
     const tokenHash = hashToken(token);
-    const signer = (await safeQuery(
-      client,
-      `SELECT s.*, r.id AS request_id, r.document_name, r.field_data, r.claim_id,
-              r.check_intake_item_id, r.status AS request_status
-       FROM public.signature_signers s
-       JOIN public.signature_requests r ON r.id = s.signature_request_id
-       WHERE s.token_hash = $1
-       LIMIT 1`,
+    const lookup = (await client.query(
+      'SELECT public.aws_public_signature_by_token_hash($1) AS doc',
       [tokenHash],
-    )).rows[0];
-    if (!signer) {
+    )).rows[0]?.doc;
+    if (!lookup?.signer?.id || !lookup?.request?.id) {
       await client.query('ROLLBACK');
       return { ok: false, statusCode: 404, stage: 'fetch_signer', error: 'Invalid or expired signing token', spoofFieldsIgnored: spoof };
     }
-    if (signer.expires_at && new Date(signer.expires_at) < new Date()) {
+    if (lookup.signer?.expires_at && new Date(lookup.signer.expires_at) < new Date()) {
       await client.query('ROLLBACK');
       return { ok: false, statusCode: 403, stage: 'token_expired', error: 'This signing link has expired. Please request a new one.', spoofFieldsIgnored: spoof };
     }
-    if (signer.status === 'signed') {
+    const waitingFor = lookup.waiting_for || [];
+    if (waitingFor.length) {
       await client.query('ROLLBACK');
-      return { ok: false, statusCode: 400, stage: 'already_signed', error: 'Document already signed', alreadySigned: true, spoofFieldsIgnored: spoof };
-    }
-    if ((signer.signing_order || 1) > 1) {
-      const prior = (await safeQuery(
-        client,
-        `SELECT id FROM public.signature_signers
-         WHERE signature_request_id = $1::uuid
-           AND signing_order < $2
-           AND status IS DISTINCT FROM 'signed'`,
-        [signer.signature_request_id || signer.request_id, signer.signing_order],
-      )).rows;
-      if (prior.length) {
-        await client.query('ROLLBACK');
-        return { ok: false, statusCode: 403, stage: 'signer_order_blocked', error: 'A prior signer must complete before you can sign.', spoofFieldsIgnored: spoof };
-      }
+      return { ok: false, statusCode: 403, stage: 'signer_order_blocked', error: 'A prior signer must complete before you can sign.', spoofFieldsIgnored: spoof };
     }
     const request = {
-      id: signer.signature_request_id || signer.request_id,
-      document_name: signer.document_name,
-      field_data: signer.field_data,
-      claim_id: signer.claim_id,
-      check_intake_item_id: signer.check_intake_item_id,
+      id: lookup.request.id,
+      document_name: lookup.request.document_name,
+      document_path: lookup.request.document_path,
+      field_data: lookup.request.field_data,
+      claim_id: lookup.request.claim_id,
+      check_intake_item_id: lookup.request.check_intake_item_id,
+      token_hash: tokenHash,
     };
-    const signerFields = await loadSignerFields(client, request, signer);
-    const validationErrors = validateRequiredFields(signerFields, body.fieldValues || {});
-    if (validationErrors.length) {
-      await client.query('ROLLBACK');
-      return {
-        ok: false,
-        statusCode: 400,
-        stage: 'field_validation',
-        error: validationErrors.join('; '),
-        validationErrors,
-        spoofFieldsIgnored: spoof,
-      };
+    const signer = lookup.signer;
+    if (signer.status !== 'signed') {
+      const signerFields = lookup.fields?.length
+        ? lookup.fields.map((field) => ({
+          id: field.id,
+          type: field.field_type || field.type,
+          label: field.label,
+          required: field.required,
+          page: field.page,
+          x: field.x,
+          y: field.y,
+          width: field.width,
+          height: field.height,
+        }))
+        : await loadSignerFields(client, request, signer);
+      const validationErrors = validateRequiredFields(signerFields, body.fieldValues || {});
+      if (validationErrors.length) {
+        await client.query('ROLLBACK');
+        return {
+          ok: false,
+          statusCode: 400,
+          stage: 'field_validation',
+          error: validationErrors.join('; '),
+          validationErrors,
+          spoofFieldsIgnored: spoof,
+        };
+      }
     }
-    const normalizedValues = normalizeFieldValues(signerFields, body.fieldValues || {});
     const ip = clientIpFromEvent(event);
     const ua = userAgentFromEvent(event);
-    const updated = (await client.query(
-      `UPDATE public.signature_signers
-       SET status = 'signed',
-           signed_at = now(),
-           field_values = $2::jsonb,
-           ip_address = $3,
-           user_agent = $4
-       WHERE id = $1::uuid AND status IS DISTINCT FROM 'signed'
-       RETURNING id`,
-      [signer.id, JSON.stringify(normalizedValues), ip, ua],
-    )).rows[0];
-    if (!updated) {
+    const submitted = (await client.query(
+      'SELECT public.aws_public_signature_submit($1, $2::jsonb, $3, $4, $5) AS doc',
+      [
+        tokenHash,
+        JSON.stringify(body.fieldValues || {}),
+        ip,
+        ua,
+        typeof body.consentText === 'string' ? body.consentText : DEFAULT_SIGN_CONSENT,
+      ],
+    )).rows[0]?.doc;
+    if (!submitted?.ok) {
+      await client.query('ROLLBACK');
+      if (submitted?.error === 'invalid_token') {
+        return { ok: false, statusCode: 404, stage: 'fetch_signer', error: 'Invalid or expired signing token', spoofFieldsIgnored: spoof };
+      }
+      if (submitted?.error === 'expired') {
+        return { ok: false, statusCode: 403, stage: 'token_expired', error: 'This signing link has expired. Please request a new one.', spoofFieldsIgnored: spoof };
+      }
+      if (submitted?.error === 'signer_order_blocked') {
+        return { ok: false, statusCode: 403, stage: 'signer_order_blocked', error: 'A prior signer must complete before you can sign.', spoofFieldsIgnored: spoof };
+      }
+      if (submitted?.error === 'request_not_eligible') {
+        return { ok: false, statusCode: 403, stage: 'request_not_eligible', error: 'This signing request is no longer available.', spoofFieldsIgnored: spoof };
+      }
+      return { ok: false, statusCode: 400, stage: 'signature_submit_denied', error: submitted?.error || 'signature_submit_denied', spoofFieldsIgnored: spoof };
+    }
+    request.id = submitted.request_id || request.id;
+    request.claim_id = submitted.claim_id ?? request.claim_id;
+    request.check_intake_item_id = submitted.check_intake_item_id ?? request.check_intake_item_id;
+    request.document_path = submitted.document_path || request.document_path;
+    request.document_name = submitted.document_name || request.document_name;
+    request.final_rel = submitted.final_rel || signedDocumentPath(request);
+    const allSigned = submitted.all_signed === true || submitted.request_completed === true;
+    if (submitted.already_signed === true && !allSigned) {
       await client.query('ROLLBACK');
       return { ok: false, statusCode: 400, stage: 'already_signed', error: 'Document already signed', alreadySigned: true, spoofFieldsIgnored: spoof };
     }
-    for (const field of signerFields) {
-      await safeQuery(
-        client,
-        `INSERT INTO public.signature_field_values (field_id, signer_id, value, checked)
-         VALUES ($1::uuid, $2::uuid, $3, $4)`,
-        [
-          field.id,
-          signer.id,
-          body.fieldValues?.[field.id] != null ? String(body.fieldValues[field.id]) : null,
-          field.type === 'checkbox' ? Boolean(body.fieldValues?.[field.id]) : false,
-        ],
-      );
-    }
-    await safeQuery(
-      client,
-      `INSERT INTO public.esign_event_logs (
-         request_id, signer_id, claim_id, stage, status, message, payload
-       ) VALUES ($1::uuid, $2::uuid, $3::uuid, 'signer_signed', 'ok', $4, $5::jsonb)`,
-      [
-        request.id,
-        signer.id,
-        request.claim_id || null,
-        `${signer.signer_name || 'Signer'} signed the document`,
-        JSON.stringify({
-          e_sign_consent_accepted: true,
-          consent_text: typeof body.consentText === 'string' ? body.consentText : DEFAULT_SIGN_CONSENT,
-        }),
-      ],
-    );
-    const allSigners = (await safeQuery(
-      client,
-      `SELECT id, status FROM public.signature_signers WHERE signature_request_id = $1::uuid`,
-      [request.id],
-    )).rows;
-    const allSigned = allSigners.length > 0 && allSigners.every((row) => row.status === 'signed');
     if (allSigned) {
-      await safeQuery(
-        client,
-        `UPDATE public.signature_requests
-         SET status = 'completed', completed_at = now(), last_error = NULL
-         WHERE id = $1::uuid`,
-        [request.id],
-      );
       if (typeof deps.flattenPdf === 'function') {
         try { await deps.flattenPdf({ request, signer }); } catch { /* best-effort */ }
+      } else {
+        try {
+          await attachCompletedSignatureDocument(client, request, { ...deps, tokenHash });
+        } catch (attachErr) {
+          await client.query(
+            'SELECT public.aws_public_signature_set_completion_error($1, $2) AS doc',
+            [tokenHash, `PDF attach failed: ${String(attachErr?.message || attachErr).slice(0, 180)}`],
+          );
+        }
       }
     }
     await client.query('COMMIT');
@@ -255,6 +303,7 @@ export const runPublicSignatureSubmit = async (event, deps = {}) => {
       success: true,
       allSigned,
       requestCompleted: allSigned,
+      alreadySigned: submitted.already_signed === true,
       depositAdvanceDenied: true,
       spoofFieldsIgnored: spoof,
     };

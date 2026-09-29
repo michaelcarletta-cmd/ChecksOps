@@ -19,6 +19,7 @@ import type { LossDraftRecord } from "@/hooks/queries/useLossDraft";
 import { ClaimLedgerCard } from "@/components/payments/ClaimLedgerCard";
 import { ClaimSettlementEditor } from "@/components/payments/ClaimSettlementEditor";
 import { useQuery } from "@tanstack/react-query";
+import { useAcknowledgeMortgageDeskReturn, useMortgageDeskReturnAlert } from "@/hooks/useMortgageDeskReturnAlert";
 
 
 
@@ -89,6 +90,8 @@ export function LossDraftActionsTab({ lossDraftId, draft, onChanged }: Props) {
   });
 
 
+  const { data: returnAlert } = useMortgageDeskReturnAlert(draft.check_intake_item_id);
+  const acknowledgeReturn = useAcknowledgeMortgageDeskReturn();
   const isMonitored = draft.monitoring_type !== "not_monitored";
   const actionButtons = isMonitored ? MONITORED_ACTIONS : NOT_MONITORED_ACTIONS;
   const availableActions = actionButtons.filter(a =>
@@ -110,6 +113,13 @@ export function LossDraftActionsTab({ lossDraftId, draft, onChanged }: Props) {
         p_extra: extra,
       });
       if (error) throw error;
+      if (draft.check_intake_item_id && returnAlert?.actionRequired && returnAlert.unackedRequestIds.length) {
+        await acknowledgeReturn({
+          checkId: draft.check_intake_item_id,
+          requestIds: returnAlert.unackedRequestIds,
+          senderId: user.id,
+        });
+      }
       toast({ title: "Action completed", description: `${action.replace(/_/g, " ")} applied successfully.` });
       setPendingAction(null);
       setActionAmount("");
