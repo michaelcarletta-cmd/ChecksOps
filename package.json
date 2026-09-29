@@ -25,7 +25,7 @@
     "test:tax-profile-migration-guard": "node --test supabase/security/migration-guard.test.mjs",
     "test:hosted-tax-containment-wrapper": "node --test supabase/security/hosted-containment-wrapper.test.mjs",
     "check:tax-profile-migrations": "node scripts/check-recipient-tax-profile-migrations.mjs",
-    "test:deployment-guard": "node --test aws/tests/deployment-guard.test.mjs aws/tests/deployment-guard-enforcement.test.mjs aws/tests/deployment-guard-adversarial.test.mjs aws/tests/sql-executor-auth.test.mjs aws/tests/guarded-sql-executor.test.mjs",
+    "test:deployment-guard": "node --test aws/tests/deployment-guard.test.mjs aws/tests/deployment-guard-enforcement.test.mjs aws/tests/deployment-guard-adversarial.test.mjs aws/tests/sql-executor-auth.test.mjs aws/tests/guarded-sql-executor.test.mjs aws/tests/claim-ledger-accepted-contract.test.mjs",
     "deploy:guard:preflight": "node scripts/deployment-guard/preflight.mjs",
     "deploy:guard:lease": "node scripts/deployment-guard/lease.mjs",
     "deploy:guard:scan": "node scripts/deployment-guard/scan-bypass.mjs",

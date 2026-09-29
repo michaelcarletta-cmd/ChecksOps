@@ -16,14 +16,36 @@
     },
     {
       "id": "claim-ledger",
-      "title": "Claim Ledger",
+      "title": "Claim Ledger discovery and grouping",
       "accepted": true,
       "enabled": true,
       "environments": ["staging", "production"],
       "components": ["*"],
-      "deployment_types": ["lambda-overlay", "sql-apply", "sql-executor-invoke"],
-      "test": "aws/tests/ledger-safety-pg.test.mjs",
-      "invariants": ["ledger writes are tenant-scoped", "no silent backfill of unrelated ledger rows"]
+      "deployment_types": ["spa-promote", "lambda-overlay", "sql-apply", "sql-executor-invoke"],
+      "test": "aws/tests/claim-ledger-accepted-contract.test.mjs",
+      "tests": [
+        "aws/tests/claim-ledger-accepted-contract.test.mjs",
+        "aws/tests/claim-ledger-discovery-grouping.test.mjs",
+        "aws/tests/claim-ledger-link-or-create-sql.test.mjs",
+        "aws/tests/ledger-safety-pg.test.mjs"
+      ],
+      "evidence": "ops/deployment-guard/claim-ledger-accepted-695064-gq.json",
+      "invariants": [
+        "ledger writes are tenant-scoped",
+        "no silent backfill of unrelated ledger rows",
+        "existing real ledger discovery",
+        "same-tenant OCR/detected-number discovery",
+        "OCR remains discovery evidence, not ownership",
+        "one ledger for multiple same-tenant unlinked checks",
+        "all eligible unlinked siblings associate with that ledger",
+        "already-linked checks never move",
+        "foreign-tenant checks never associate",
+        "duplicate/race protection",
+        "linked claim-number Save remains update-only",
+        "generic claims INSERT remains denied",
+        "generic claim_id UPDATE remains denied",
+        "financial/check state remains untouched"
+      ]
     },
     {
       "id": "signature-requests",

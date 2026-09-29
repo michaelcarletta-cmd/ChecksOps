@@ -459,6 +459,36 @@ test('accepted-contracts registry is extensible and includes required seeds', ()
   }
 });
 
+test('claim-ledger accepted contract covers the 695064-GQ freeze', () => {
+  const registry = loadContractRegistry(ROOT);
+  const contract = registry.contracts.find((row) => row.id === 'claim-ledger');
+  assert.ok(contract);
+  assert.equal(contract.accepted, true);
+  assert.equal(contract.test, 'aws/tests/claim-ledger-accepted-contract.test.mjs');
+  assert.equal(contract.evidence, 'ops/deployment-guard/claim-ledger-accepted-695064-gq.json');
+  for (const type of ['spa-promote', 'lambda-overlay', 'sql-apply', 'sql-executor-invoke']) {
+    assert.ok((contract.deployment_types || []).includes(type), type);
+  }
+  for (const invariant of [
+    'existing real ledger discovery',
+    'same-tenant OCR/detected-number discovery',
+    'OCR remains discovery evidence, not ownership',
+    'one ledger for multiple same-tenant unlinked checks',
+    'all eligible unlinked siblings associate with that ledger',
+    'already-linked checks never move',
+    'foreign-tenant checks never associate',
+    'duplicate/race protection',
+    'linked claim-number Save remains update-only',
+    'generic claims INSERT remains denied',
+    'generic claim_id UPDATE remains denied',
+    'financial/check state remains untouched',
+  ]) {
+    assert.ok((contract.invariants || []).includes(invariant), invariant);
+  }
+  assert.ok(fs.existsSync(path.join(ROOT, contract.test)));
+  assert.ok(fs.existsSync(path.join(ROOT, contract.evidence)));
+});
+
 test('cursor rule and AGENTS.md instruct future chats to use the guard', () => {
   const rule = fs.readFileSync(path.join(ROOT, '.cursor/rules/deployment-guard.mdc'), 'utf8');
   const agents = fs.readFileSync(path.join(ROOT, 'AGENTS.md'), 'utf8');
