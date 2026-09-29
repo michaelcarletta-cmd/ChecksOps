@@ -17,6 +17,7 @@ import {
   evaluateCheckClaimLink,
   filterSelectableClaims,
   isCheckClaimLinkDenied,
+  CLAIM_NUMBER_SAVE_SELECT,
   newTrackingClaimInsert,
   planClaimNumberSave,
 } from "@/lib/checkClaimLinkGuard";
@@ -102,14 +103,19 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
   const siblingChecks: any[] = readOnly ? (rpcData?.sibling_checks ?? []) : ownerSiblingChecks;
   const effectiveClaimId = readOnly ? (rpcData?.claim?.id ?? null) : claimId;
 
+  const resolveExistingClaimId = () => claimId || claim?.id || null;
+
   const linkMutation = useMutation({
-    mutationFn: async (claimNumber: string) => {
-      const plan = planClaimNumberSave({ existingClaimId: claimId, claimNumber });
+    mutationFn: async (vars: { claimNumber: string; existingClaimId?: string | null }) => {
+      const plan = planClaimNumberSave({
+        existingClaimId: vars.existingClaimId ?? null,
+        claimNumber: vars.claimNumber,
+      });
 
       if (plan.mode === "update_existing") {
         const { data: existing, error: existingErr } = await supabase
           .from("claims")
-          .select("id, claim_number, policyholder_name, org_id, status, insurance_company, policyholder_address")
+          .select(CLAIM_NUMBER_SAVE_SELECT)
           .eq("id", plan.claimId)
           .single();
         if (existingErr) throw existingErr;
@@ -119,7 +125,7 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
           .from("claims")
           .update({ claim_number: plan.claimNumber })
           .eq("id", plan.claimId)
-          .select("id, claim_number, policyholder_name, org_id, status, insurance_company, policyholder_address")
+          .select(CLAIM_NUMBER_SAVE_SELECT)
           .single();
         if (updateErr) throw updateErr;
         if (!updated?.id || String(updated.id) !== String(plan.claimId)) {
@@ -134,6 +140,10 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
           previousClaimId: plan.claimId,
           policyholderName: updated.policyholder_name,
         };
+      }
+
+      if (vars.existingClaimId) {
+        throw new Error("Claim number save did not keep the existing claim.");
       }
 
       const trimmed = plan.claimNumber;
@@ -270,7 +280,24 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
 
   const handleSave = () => {
     setSaving(true);
-    linkMutation.mutate(input);
+    linkMutation.mutate({
+      claimNumber: input,
+      existingClaimId: resolveExistingClaimId(),
+    });
+  };
+
+  const handleLinkedSave = () => {
+    const existingClaimId = resolveExistingClaimId();
+    if (!existingClaimId) {
+      toast({
+        title: "Could not save claim",
+        description: "This check is not linked to a claim.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setSaving(true);
+    linkMutation.mutate({ claimNumber: input, existingClaimId });
   };
 
   // Read-only & no claim resolved → render a small placeholder so the
@@ -463,7 +490,7 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
               placeholder="Re-link to a different claim number"
               className="h-8 text-sm"
             />
-            <Button size="sm" disabled={saving || !input.trim()} onClick={handleSave}>
+            <Button size="sm" disabled={saving || !input.trim()} onClick={handleLinkedSave}>
               {saving ? "Saving..." : "Save"}
             </Button>
           </div>

@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import {
   assertCheckClaimLinkAllowed,
   claimIsSelectableForTenant,
+  claimNumberSaveWritePayload,
   evaluateCheckClaimLink,
   filterSelectableClaims,
   isCheckClaimLinkDenied,
@@ -158,15 +159,35 @@ test('existing claim number save updates in place and does not create or relink'
 
   assert.throws(() => planClaimNumberSave({ existingClaimId: CLAIM_A, claimNumber: '   ' }));
 
+  const write = claimNumberSaveWritePayload(existing);
+  assert.deepEqual(write, {
+    table: 'claims',
+    op: 'update',
+    values: { claim_number: 'CLM-NEW' },
+    filters: [{ column: 'id', op: 'eq', value: CLAIM_A }],
+    single: true,
+    select: 'id, claim_number, policyholder_name, org_id, status, insurance_company, policyholder_address',
+  });
+  assert.throws(() => claimNumberSaveWritePayload(unlinked), /in-place claim_number update/);
+
   const src = readFileSync('src/components/payments/ClaimLedgerCard.tsx', 'utf8');
   assert.match(src, /planClaimNumberSave/);
   assert.match(src, /mode === "update_existing"/);
   assert.match(src, /\.from\("claims"\)[\s\S]*\.update\(\{ claim_number: plan\.claimNumber \}\)/);
   assert.match(src, /Claim number save did not keep the existing claim/);
+  assert.match(src, /handleLinkedSave/);
+  assert.match(src, /existingClaimId: resolveExistingClaimId\(\)/);
+  assert.match(src, /onClick=\{handleLinkedSave\}/);
   const updateBlock = src.slice(src.indexOf('plan.mode === "update_existing"'), src.indexOf('const trimmed = plan.claimNumber'));
   assert.equal(/\.insert\(/.test(updateBlock), false);
   assert.equal(/detected_claim_number/.test(updateBlock), false);
   assert.equal(/claim_id:/.test(updateBlock), false);
+  assert.match(updateBlock, /if \(vars\.existingClaimId\)/);
+
+  const ccc = readFileSync('src/pages/CheckCommandCenter.tsx', 'utf8');
+  assert.match(ccc, /lg:flex-row/);
+  assert.match(ccc, /selectedCheck \? "58%" : "80%"/);
+  assert.match(ccc, /selectedCheck \? "42%" : "20%"/);
 });
 
 test('manual link uses the same guard as the database', () => {
