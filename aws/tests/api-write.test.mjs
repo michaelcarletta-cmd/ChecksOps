@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { handler } from '../functions/api/index.mjs';
 import { LOOKUP_MAPPING_SQL } from '../functions/api/identity.mjs';
-import { handleWrite } from '../functions/api/write.mjs';
+import { buildRejectedWriteLog, handleWrite } from '../functions/api/write.mjs';
 import {
   CLIENT_IDENTITY_KEYS,
   denyTableReason,
@@ -667,5 +667,43 @@ test('authorized claim_number update keeps UUID and tenant; extras and inserts s
   }), { ...depsFor(client), forceWorkflow: true });
   assert.equal(created.statusCode, 403);
   assert.equal(created.error, 'operation_not_allowlisted');
+});
+
+test('staging write-reject diagnostics omit values, tokens, and PII', () => {
+  const row = buildRejectedWriteLog({
+    event: {
+      requestContext: { requestId: 'req-pr532-diag' },
+      headers: { authorization: 'Bearer SUPER-SECRET-TOKEN', cookie: 'sid=abc' },
+    },
+    mapping: { application_user_id: APP_ID },
+    claims: { sub: COGNITO_SUB },
+    body: {
+      table: 'claims',
+      op: 'insert',
+      values: {
+        claim_number: 'SECRET-CLAIM-NUMBER',
+        status: 'tracking',
+        org_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a',
+      },
+      filters: [{ column: 'id', op: 'eq', value: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }],
+    },
+    reason: 'operation_not_allowlisted',
+    statusCode: 403,
+  });
+  const serialized = JSON.stringify(row);
+  assert.equal(row.event, 'write_rejected');
+  assert.equal(row.table, 'claims');
+  assert.equal(row.op, 'insert');
+  assert.deepEqual(row.valueColumns, ['claim_number', 'status', 'org_id']);
+  assert.deepEqual(row.filterColumns, ['id']);
+  assert.equal(row.reason, 'operation_not_allowlisted');
+  assert.equal(row.requestId, 'req-pr532-diag');
+  assert.equal(row.applicationUserId, APP_ID);
+  assert.equal(row.cognitoSub, COGNITO_SUB);
+  assert.equal(serialized.includes('SECRET-CLAIM-NUMBER'), false);
+  assert.equal(serialized.includes('SUPER-SECRET-TOKEN'), false);
+  assert.equal(serialized.includes('sid=abc'), false);
+  assert.equal(serialized.includes('Bearer'), false);
+  assert.equal(serialized.includes('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'), false);
 });
 
