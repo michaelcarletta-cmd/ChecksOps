@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
   PAYMENT_STATUS,
   EXCEPTION,
+  billingMonthOf,
   extractProviderTransferId,
   extractKind,
   parseLineItemsFromNotes,
@@ -42,6 +43,12 @@ const tenants = new Map([
   [FREEDOM_TENANT, { name: 'Freedom Adjustment' }],
   [OTHER_TENANT, { name: 'Condition One Commercial' }],
 ]);
+
+test('billing month accepts ISO strings and Date objects from pg', () => {
+  assert.equal(billingMonthOf('2026-09-01', '2026-08-20T16:26:20Z'), '2026-09');
+  assert.equal(billingMonthOf(null, '2026-08-20T16:26:20Z'), '2026-08');
+  assert.equal(billingMonthOf(new Date('2026-09-01T00:00:00Z')), '2026-09');
+});
 
 test('extracts provider transfer from notes, not bank metadata', () => {
   assert.equal(extractProviderTransferId(freedomPayment.notes), FREEDOM_TRANSFER_ID);

@@ -61,11 +61,21 @@ export const feeTypeLabel = (kind) => {
   return String(kind || 'Fee').replace(/[_-]/g, ' ');
 };
 
-export const billingMonthOf = (periodStart, fallbackIso = null) => {
-  const src = periodStart || fallbackIso || '';
-  const month = String(src).slice(0, 7);
-  return /^\d{4}-\d{2}$/.test(month) ? month : null;
+const monthFromValue = (value) => {
+  if (value == null || value === '') return null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().slice(0, 7);
+  }
+  const raw = String(value);
+  if (/^\d{4}-\d{2}/.test(raw)) return raw.slice(0, 7);
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 7);
+  return null;
 };
+
+export const billingMonthOf = (periodStart, fallbackIso = null) => (
+  monthFromValue(periodStart) || monthFromValue(fallbackIso)
+);
 
 export const billingPeriodLabel = (month) => {
   if (!month || !/^\d{4}-\d{2}$/.test(month)) return 'Unknown period';
