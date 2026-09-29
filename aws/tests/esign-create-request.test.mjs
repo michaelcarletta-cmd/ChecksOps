@@ -492,3 +492,74 @@ test('backend WRITE_ALLOWLIST still excludes signature tables', () => {
   assert.equal(source.includes('signature_signers'), false);
   assert.equal(source.includes('signature_fields'), false);
 });
+
+const signerUpdates = (client) => client.calls.filter((call) => (
+  call.sql.includes('UPDATE public.signature_signers')
+));
+
+test('sent update no longer writes NULL to access_token', async () => {
+  const client = recordingClient();
+  const result = await runSendSignatureRequest({
+    mapping,
+    spoof,
+    body: createBody(),
+    send: capturingMailer([]),
+    client,
+  });
+  assert.equal(result.ok, true);
+  const sent = signerUpdates(client).find((call) => call.sql.includes("delivery_status = 'sent'"));
+  assert.equal(Boolean(sent), true);
+  assert.match(sent.sql, /delivery_status = 'sent'/);
+  assert.match(sent.sql, /email_sent_at = now\(\)/);
+  assert.match(sent.sql, /email_provider_message_id = \$2/);
+  assert.doesNotMatch(sent.sql, /access_token\s*=\s*NULL/i);
+  assert.equal(sent.params.includes(null), false);
+});
+
+test('failed update no longer writes NULL to access_token', async () => {
+  const client = recordingClient();
+  const result = await runSendSignatureRequest({
+    mapping,
+    spoof,
+    body: createBody(),
+    send: async () => {
+      throw new Error('ses_unavailable');
+    },
+    client,
+  });
+  assert.equal(result.ok, false);
+  const failed = signerUpdates(client).find((call) => call.sql.includes("delivery_status = 'failed'"));
+  assert.equal(Boolean(failed), true);
+  assert.match(failed.sql, /delivery_error = \$2/);
+  assert.doesNotMatch(failed.sql, /access_token\s*=\s*NULL/i);
+  assert.equal(failed.params[1], 'ses_unavailable');
+});
+
+test('skipEmail path no longer writes NULL to access_token', async () => {
+  const client = recordingClient();
+  const result = await runSendSignatureRequest({
+    mapping,
+    spoof,
+    body: createBody({ skipEmail: true }),
+    send: capturingMailer([]),
+    client,
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.mode, 'manual_bypass');
+  const nullClears = signerUpdates(client).filter((call) => /access_token\s*=\s*NULL/i.test(call.sql));
+  assert.equal(nullClears.length, 0);
+  assert.equal(
+    signerUpdates(client).some((call) => call.sql.includes("delivery_status = 'sent'") || call.sql.includes("delivery_status = 'failed'")),
+    false,
+  );
+});
+
+test('token_hash remains the public lookup and token mint is unchanged', () => {
+  const esign = readFileSync(new URL('../functions/api/esign.mjs', import.meta.url), 'utf8');
+  const submit = readFileSync(new URL('../functions/api/signature-submit.mjs', import.meta.url), 'utf8');
+  assert.match(esign, /SET access_token = \$2, token_hash = \$3, expires_at = \$4::timestamptz/);
+  assert.doesNotMatch(esign, /access_token\s*=\s*NULL/i);
+  assert.match(esign, /optionalUuid\(field\.id\)/);
+  assert.match(submit, /WHERE s\.token_hash = \$1/);
+  assert.doesNotMatch(submit, /WHERE[\s\S]*access_token\s*=/);
+});
