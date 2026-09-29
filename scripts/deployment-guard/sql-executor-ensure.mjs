@@ -106,7 +106,7 @@ export function main(argv = process.argv.slice(2), env = process.env, root = rep
     awsJson([
       'lambda', 'update-function-configuration',
       '--function-name', functionName,
-      '--timeout', '60',
+      '--timeout', '120',
       '--memory-size', '256',
       '--environment', JSON.stringify(environment),
     ], env);
@@ -118,7 +118,7 @@ export function main(argv = process.argv.slice(2), env = process.env, root = rep
       '--runtime', 'nodejs20.x',
       '--role', roleArn,
       '--handler', 'index.handler',
-      '--timeout', '60',
+      '--timeout', '120',
       '--memory-size', '256',
       '--zip-file', `fileb://${packed.zip}`,
       '--environment', JSON.stringify(environment),

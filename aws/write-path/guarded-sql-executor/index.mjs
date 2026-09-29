@@ -87,9 +87,7 @@ async function defaultConnect() {
   if (!arn || !/checksops_admin/i.test(arn)) {
     throw new Error('ADMIN_SECRET_ARN must be the staging checksops_admin secret');
   }
-  const sm = new SecretsManagerClient({
-    endpoint: process.env.SECRETS_MANAGER_ENDPOINT || undefined,
-  });
+  const sm = new SecretsManagerClient({});
   const secret = await sm.send(new GetSecretValueCommand({ SecretId: arn }));
   const parsed = JSON.parse(secret.SecretString);
   if (!/checksops_admin/i.test(parsed.username || '')) {
