@@ -183,3 +183,87 @@ export const repairLiveFilesDropGraphBIcons = (source) => {
   }
   return next;
 };
+
+export const DJN_COLLAPSIBLE_IMPORTS = 'dq as Ze,dr as Ie,';
+export const DJN_COLLAPSIBLE_SS_IMPORT = 'ds as ss,';
+
+export const SIG_EXTRA_IMPORT_WITH_DQ = 'import{m as Ye,ag as ke,dq as Ze,dr as Ie,bM as es,T as je,ds as ss,a9 as Le,aQ as ts,bw as Te,cU as sigScroll,bc as is,c as le,_ as ns,bl as rs,aS as Fe,bb as ls,h as sigY,am as se,an as te,ao as ae,ap as ie,aq as sigQ,I as fe,aO as ne,bu as os,e as cs,aP as pe,g as Ee}from"./index-DJNHggvS.js";';
+
+export const SIG_EXTRA_IMPORT_NO_DQ = 'import{m as Ye,ag as ke,bM as es,T as je,a9 as Le,aQ as ts,bw as Te,cU as sigScroll,bc as is,c as le,_ as ns,bl as rs,aS as Fe,bb as ls,h as sigY,am as se,an as te,ao as ae,ap as ie,aq as sigQ,I as fe,aO as ne,bu as os,e as cs,aP as pe,g as Ee}from"./index-DJNHggvS.js";';
+
+export const CHEVRON_RIGHT_LOCAL = 'const re=Ye("ChevronRight",[["path",{d:"m9 18 6-6-6-6",key:"mthhwq"}]]);';
+
+export const DIAG_COLLAPSIBLE_WRAPPERS = [
+  'const Ze=({open:o,onOpenChange:n,children:c,className:a,...r})=>e.jsx("details",{open:!!o,className:a,onToggle:t=>{n&&n(t.currentTarget.open)},...r,children:c});',
+  'const Ie=({children:c,className:a,...r})=>e.jsx("summary",{className:a,...r,children:c});',
+  'const ss=({children:c,className:a,...r})=>e.jsx("div",{className:a,...r,children:c});',
+].join('');
+
+/** Replace Graph B Collapsible bindings (DJN dq/dr/ds) with host-element wrappers. */
+export const repairLiveFilesDiagCollapsible = (source) => {
+  const js = String(source);
+  if (!js.includes(SIG_EXTRA_IMPORT_WITH_DQ)) {
+    throw new Error('live Files chunk is missing the Graph B dq/dr/ds Collapsible import block');
+  }
+  if ((js.split(SIG_EXTRA_IMPORT_WITH_DQ).length - 1) !== 1) {
+    throw new Error('expected exactly one Graph B Collapsible import block');
+  }
+  if (!js.includes(CHEVRON_RIGHT_LOCAL)) {
+    throw new Error('live Files chunk lost the DJN-bound ChevronRight local');
+  }
+  if (!js.includes('const ps=Ye("CircleCheckBig"') || !js.includes('const ws=Ye("ChevronLeft"')) {
+    throw new Error('live Files chunk lost the DJN-bound ps/ws icon locals');
+  }
+  const withoutImports = js.replace(SIG_EXTRA_IMPORT_WITH_DQ, SIG_EXTRA_IMPORT_NO_DQ);
+  if (withoutImports.includes(SIG_EXTRA_IMPORT_WITH_DQ) || withoutImports.includes(DJN_COLLAPSIBLE_IMPORTS) || withoutImports.includes(DJN_COLLAPSIBLE_SS_IMPORT)) {
+    throw new Error('DJN dq/dr/ds Collapsible imports remain after removal');
+  }
+  const next = withoutImports.replace(
+    CHEVRON_RIGHT_LOCAL,
+    `${CHEVRON_RIGHT_LOCAL}${DIAG_COLLAPSIBLE_WRAPPERS}`,
+  );
+  if (!next.includes(DIAG_COLLAPSIBLE_WRAPPERS)) {
+    throw new Error('diagnostics host wrappers were not inserted');
+  }
+  if ((next.split('const Ze=({open:o,onOpenChange:n').length - 1) !== 1
+    || (next.split('const Ie=({children:c,className:a').length - 1) !== 1
+    || (next.split('const ss=({children:c,className:a').length - 1) !== 1) {
+    throw new Error('expected exactly one host wrapper for Ze, Ie, and ss');
+  }
+  if (next.includes('dq as Ze') || next.includes('dr as Ie') || next.includes('ds as ss')) {
+    throw new Error('patched Files chunk still imports DJN dq/dr/ds as Ze/Ie/ss');
+  }
+  if (next.includes('index-C5ku3IDF.js')) {
+    throw new Error('collapsible repair reintroduced index-C5ku3IDF.js');
+  }
+  for (const name of GRAPH_B_ICON_FILES) {
+    if (next.includes(name)) {
+      throw new Error(`collapsible repair reintroduced ${name}`);
+    }
+  }
+  if (!next.includes('const ps=Ye("CircleCheckBig"') || !next.includes('const ws=Ye("ChevronLeft"') || !next.includes(CHEVRON_RIGHT_LOCAL)) {
+    throw new Error('collapsible repair changed the DJN-bound icon locals');
+  }
+  if (!next.includes('function Ss({claimId:r,claim:p,checkIntakeItemId:j=null})')) {
+    throw new Error('collapsible repair lost inlined SignatureRequests');
+  }
+  if (!next.includes('e.jsxs(Ze,{open:v,onOpenChange:()=>T(v?null:i.id)')) {
+    throw new Error('collapsible repair lost diagnostics open/close');
+  }
+  if (!next.includes('const K=`check-intake/${j}/files/${Date.now()}-${crypto.randomUUID()}-${s.fileName}`,H=new Blob([S],{type:P}),{error:U}=')) {
+    throw new Error('collapsible repair changed the generate-document upload path');
+  }
+  if (!next.includes('const c=`check-intake/${j}/files/${Date.now()}-${crypto.randomUUID()}-${a}`,{error:S}=')) {
+    throw new Error('collapsible repair changed the direct Signature upload path');
+  }
+  if (!next.includes(FILES_TAB_UPLOAD)) {
+    throw new Error('collapsible repair changed the Files-tab upload path');
+  }
+  if (next.includes('signatures/${r}/') || next.includes('signatures/${')) {
+    throw new Error('collapsible repair reintroduced signatures/ upload paths');
+  }
+  if (!next.includes(',fs,ps,ws,re});function ee({checkIntakeItemId:l})')) {
+    throw new Error('collapsible repair lost IIFE bindings for ps/ws/re');
+  }
+  return next;
+};

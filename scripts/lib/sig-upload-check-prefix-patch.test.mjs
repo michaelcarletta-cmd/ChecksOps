@@ -15,6 +15,11 @@ import {
   repairLiveFilesCommaIf,
   repairLiveFilesConstRestore,
   repairLiveFilesDropGraphBIcons,
+  repairLiveFilesDiagCollapsible,
+  SIG_EXTRA_IMPORT_WITH_DQ,
+  SIG_EXTRA_IMPORT_NO_DQ,
+  DIAG_COLLAPSIBLE_WRAPPERS,
+  CHEVRON_RIGHT_LOCAL,
 } from './sig-upload-check-prefix-patch.mjs';
 
 const require = createRequire(import.meta.url);
@@ -158,6 +163,62 @@ test('current live Files SHA 87540e2f takes the Graph B icon drop', (t) => {
   assert.equal(repaired.includes('const ws=Ye("ChevronLeft"'), true);
   assert.equal(repaired.includes('const re=Ye("ChevronRight"'), true);
   assert.equal(repaired.includes('function Ss({claimId:r,claim:p,checkIntakeItemId:j=null})'), true);
+  assert.equal(repaired.includes('const K=`check-intake/${j}/files/${Date.now()}-${crypto.randomUUID()}-${s.fileName}`,H=new Blob([S],{type:P}),{error:U}='), true);
+  assert.equal(repaired.includes('const c=`check-intake/${j}/files/${Date.now()}-${crypto.randomUUID()}-${a}`,{error:S}='), true);
+  assert.equal(repaired.includes('check-intake/${l}/files/${Date.now()}-${crypto.randomUUID()}-${i}'), true);
+  assert.equal(repaired.includes('signatures/${'), false);
+});
+
+const COLLAPSIBLE_LIVE = '/tmp/sig-fix-collapsible/files-live.js';
+
+test('diagnostics Collapsible bindings become host-element wrappers', () => {
+  const sample = [
+    'import{j as e}from"./index-DJNHggvS.js";',
+    SIG_EXTRA_IMPORT_WITH_DQ,
+    'const g="claim-files";',
+    'const ps=Ye("CircleCheckBig",[]);',
+    'const ws=Ye("ChevronLeft",[]);',
+    CHEVRON_RIGHT_LOCAL,
+    'const sigReq=(({Ye,Ze,Ie,ss,ps,ws,re})=>{const Ue=Ye("Activity",[]);function js(){return e.jsxs(Ze,{open:v,onOpenChange:()=>T(v?null:i.id),children:[e.jsx(Ie,{className:"w-full"}),e.jsx(ss,{})]})}function Ss({claimId:r,claim:p,checkIntakeItemId:j=null}){',
+    'if(!j)throw new Error("Signature upload requires a check-scoped path");const K=`check-intake/${j}/files/${Date.now()}-${crypto.randomUUID()}-${s.fileName}`,H=new Blob([S],{type:P}),{error:U}=await d.storage.from("claim-files").upload(K,H);',
+    'if(!j)throw new Error("Signature upload requires a check-scoped path");const c=`check-intake/${j}/files/${Date.now()}-${crypto.randomUUID()}-${a}`,{error:S}=await d.storage.from("claim-files").upload(c,E);',
+    'const x=`check-intake/${l}/files/${Date.now()}-${crypto.randomUUID()}-${i}`;return Ss;})({Ye,fs,ps,ws,re});function ee({checkIntakeItemId:l}){}',
+  ].join('');
+  const repaired = repairLiveFilesDiagCollapsible(sample);
+  assert.equal(repaired.includes(SIG_EXTRA_IMPORT_WITH_DQ), false);
+  assert.equal(repaired.includes(SIG_EXTRA_IMPORT_NO_DQ), true);
+  assert.equal(repaired.includes(DIAG_COLLAPSIBLE_WRAPPERS), true);
+  assert.equal(repaired.includes('dq as Ze'), false);
+  assert.equal(repaired.includes('dr as Ie'), false);
+  assert.equal(repaired.includes('ds as ss'), false);
+  assert.equal(repaired.includes('index-C5ku3IDF.js'), false);
+  assert.equal(repaired.includes('const ps=Ye("CircleCheckBig"'), true);
+  assert.equal(repaired.includes('const ws=Ye("ChevronLeft"'), true);
+  assert.equal(repaired.includes(CHEVRON_RIGHT_LOCAL), true);
+  assert.equal(repaired.includes('e.jsxs(Ze,{open:v,onOpenChange:()=>T(v?null:i.id)'), true);
+  assert.equal(repaired.includes('const K=`check-intake/${j}/files/${Date.now()}-${crypto.randomUUID()}-${s.fileName}`,H=new Blob([S],{type:P}),{error:U}='), true);
+  assert.equal(repaired.includes('signatures/${'), false);
+});
+
+test('current live Files SHA a66a2329 takes the diagnostics Collapsible wrappers', (t) => {
+  if (!existsSync(COLLAPSIBLE_LIVE)) {
+    t.skip('current live Files bytes not present');
+    return;
+  }
+  const source = readFileSync(COLLAPSIBLE_LIVE, 'utf8');
+  acorn.parse(source, { ecmaVersion: 'latest', sourceType: 'module' });
+  const repaired = repairLiveFilesDiagCollapsible(source);
+  acorn.parse(repaired, { ecmaVersion: 'latest', sourceType: 'module' });
+  assert.equal(repaired.includes('dq as Ze'), false);
+  assert.equal(repaired.includes('dr as Ie'), false);
+  assert.equal(repaired.includes('ds as ss'), false);
+  assert.equal(repaired.includes('index-C5ku3IDF.js'), false);
+  assert.equal(repaired.includes(DIAG_COLLAPSIBLE_WRAPPERS), true);
+  assert.equal(repaired.includes('const ps=Ye("CircleCheckBig"'), true);
+  assert.equal(repaired.includes('const ws=Ye("ChevronLeft"'), true);
+  assert.equal(repaired.includes('const re=Ye("ChevronRight"'), true);
+  assert.equal(repaired.includes('function Ss({claimId:r,claim:p,checkIntakeItemId:j=null})'), true);
+  assert.equal(repaired.includes('e.jsxs(Ze,{open:v,onOpenChange:()=>T(v?null:i.id)'), true);
   assert.equal(repaired.includes('const K=`check-intake/${j}/files/${Date.now()}-${crypto.randomUUID()}-${s.fileName}`,H=new Blob([S],{type:P}),{error:U}='), true);
   assert.equal(repaired.includes('const c=`check-intake/${j}/files/${Date.now()}-${crypto.randomUUID()}-${a}`,{error:S}='), true);
   assert.equal(repaired.includes('check-intake/${l}/files/${Date.now()}-${crypto.randomUUID()}-${i}'), true);
