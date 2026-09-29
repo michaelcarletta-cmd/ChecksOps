@@ -273,6 +273,23 @@ test('#455 Review Save still routes to review RPC and #532 linked update stays u
   assert.equal(updateClient.queries.some((q) => /INSERT INTO public\.claims/.test(String(q.sql))), false);
 });
 
+test('inspect RPC never writes claims or claim_id itself', async () => {
+  const client = mockClient({
+    rpcResult: { ok: true, code: 'existing_found', created: false, linked: false, persisted: false, claim_id: CLAIM_ID },
+  });
+  const result = await executeSafeWriteRpc({
+    client,
+    mapping: { application_user_id: APP_ID },
+    name: 'claim_ledger_link_or_create',
+    args: { p_check_id: CHECK_ID, p_claim_number: 'CL-EXIST', p_action: 'inspect' },
+  });
+  assert.equal(result.data.code, 'existing_found');
+  assert.equal(result.data.persisted, false);
+  assert.equal(client.queries.some((q) => /UPDATE public\.check_intake_items/.test(String(q.sql))), false);
+  assert.equal(client.queries.some((q) => /INSERT INTO public\.claims/.test(String(q.sql))), false);
+  assert.equal(client.queries.some((q) => /UPDATE public\.claims/.test(String(q.sql))), false);
+});
+
 test('HTTP /data/rpc inspect succeeds and unknown RPC stays disabled', async () => {
   const client = mockClient({
     rpcResult: { ok: true, code: 'no_match', can_create: true, created: false, linked: false },
