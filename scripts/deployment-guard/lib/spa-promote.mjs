@@ -70,9 +70,15 @@ export function evaluateSpaPromote(input = {}) {
   });
   if (!composition.ok) return composition;
 
+  if (!input.immediately_before) {
+    return failMany([errorEntry(
+      CODES.DEPLOYMENT_COLLISION,
+      'mutation-boundary index fingerprint (immediately_before) is required; preflight alone is not sufficient',
+    )], CODES.DEPLOYMENT_COLLISION);
+  }
   const toctou = evaluateIndexToctou({
     preflight: input.preflight,
-    immediatelyBefore: input.immediately_before || input.preflight,
+    immediatelyBefore: input.immediately_before,
   });
   if (!toctou.ok) return toctou;
 

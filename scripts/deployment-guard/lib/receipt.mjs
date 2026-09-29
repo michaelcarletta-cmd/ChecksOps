@@ -3,6 +3,7 @@ import path from 'node:path';
 import { CODES, errorEntry, failMany, ok } from './errors.mjs';
 import { receiptDir, leaseKey } from './paths.mjs';
 import { inspectLease } from './lease.mjs';
+import { signReceipt, verifyReceiptMac } from './issuer.mjs';
 
 export const RECEIPT_KIND = 'deployment-guard-receipt';
 export const DEFAULT_RECEIPT_TTL_MS = 15 * 60 * 1000;
@@ -34,10 +35,35 @@ export function buildReceipt(input = {}, { now = Date.now(), ttlMs = DEFAULT_REC
   };
 }
 
+function requireActiveMatchingLease(root, receipt, now = Date.now()) {
+  const live = inspectLease(root, receipt.target_environment, receipt.target_component, now);
+  if (!live.ok) return live;
+  if (!live.details.present || live.details.expired) {
+    return failMany([errorEntry(
+      CODES.LEASE_EXPIRED,
+      'cannot issue a receipt without an active lease for this environment/component',
+    )], CODES.LEASE_EXPIRED);
+  }
+  const holder = live.details.lease;
+  if (holder.workstream_id !== receipt.workstream_id
+    || holder.commit !== receipt.commit
+    || holder.environment !== receipt.target_environment
+    || holder.component !== receipt.target_component) {
+    return failMany([errorEntry(
+      CODES.RECEIPT_MISMATCH,
+      'cannot issue a receipt unless the active lease matches this workstream, commit, and target',
+    )], CODES.RECEIPT_MISMATCH);
+  }
+  return ok({ lease: holder });
+}
+
 export function issueReceipt(root, input, opts = {}) {
-  const receipt = buildReceipt(input, opts);
-  const check = validateReceiptShape(receipt);
-  if (!check.ok) return check;
+  const unsigned = buildReceipt(input, opts);
+  const shape = validateReceiptShape(unsigned, { requireMac: false });
+  if (!shape.ok) return shape;
+  const lease = requireActiveMatchingLease(root, unsigned, opts.now);
+  if (!lease.ok) return lease;
+  const receipt = signReceipt(root, unsigned);
   const file = receiptFile(root, receipt.target_environment, receipt.target_component);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = `${file}.${process.pid}.tmp`;
@@ -71,7 +97,7 @@ export function loadReceipt(root, spec = {}, env = process.env) {
   return { file: null, receipt: null };
 }
 
-function validateReceiptShape(receipt) {
+function validateReceiptShape(receipt, { requireMac = true } = {}) {
   const errors = [];
   if (!receipt || receipt.corrupt) {
     errors.push(errorEntry(CODES.DEPLOYMENT_GUARD_REQUIRED, 'deployment guard receipt is missing or corrupt'));
@@ -79,6 +105,9 @@ function validateReceiptShape(receipt) {
   }
   if (receipt.kind !== RECEIPT_KIND) {
     errors.push(errorEntry(CODES.DEPLOYMENT_GUARD_REQUIRED, 'file is not a deployment-guard receipt'));
+  }
+  if (requireMac && !/^[0-9a-f]{64}$/.test(String(receipt.mac || ''))) {
+    errors.push(errorEntry(CODES.RECEIPT_FORGED, 'receipt is missing issuer MAC; hand-written JSON is not an authorization'));
   }
   if (!receipt.workstream_id) errors.push(errorEntry(CODES.ANONYMOUS_DEPLOYMENT, 'receipt missing workstream_id'));
   if (!/^[0-9a-f]{40}$/.test(String(receipt.commit || ''))) {
@@ -102,8 +131,14 @@ function validateReceiptShape(receipt) {
 }
 
 export function validateReceipt(receipt, expected = {}, { now = Date.now(), root = null } = {}) {
-  const shape = validateReceiptShape(receipt);
+  const shape = validateReceiptShape(receipt, { requireMac: true });
   if (!shape.ok) return shape;
+  if (!root || !verifyReceiptMac(root, receipt)) {
+    return failMany([errorEntry(
+      CODES.RECEIPT_FORGED,
+      'receipt MAC is missing or does not match the local issuer key; hand-edited JSON is not valid',
+    )], CODES.RECEIPT_FORGED);
+  }
   const errors = [];
   if (Date.parse(receipt.expiry) <= now) {
     errors.push(errorEntry(CODES.RECEIPT_EXPIRED, 'deployment guard receipt has expired', {

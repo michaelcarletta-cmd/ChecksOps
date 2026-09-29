@@ -14,8 +14,9 @@ export const SCAN_PATTERNS = Object.freeze([
   { id: 'cloudfront-create-invalidation', re: /create-invalidation/ },
   { id: 'sam-deploy', re: /\bsam\s+deploy\b/ },
   { id: 'cloudformation-mutate', re: /(?:create-stack|update-stack|cloudformation\s+deploy)\b/ },
-  { id: 's3-spa-index', re: /s3(?:api)?[\s'"`]+(?:sync|cp|put-object)[\s\S]{0,120}index\.html|index\.html[\s\S]{0,80}s3(?:api)?[\s'"`]+(?:sync|cp|put-object)/ },
+  { id: 's3-spa-index', re: /s3(?:api)?[\s'"` ,]+(?:sync|cp|put-object)[\s\S]{0,160}index\.html|index\.html[\s\S]{0,120}s3(?:api)?[\s'"` ,]+(?:sync|cp|put-object)/ },
   { id: 'apigateway-mutate', re: /apigatewayv2['"`\s,\[]+(?:create-route|update-route|update-integration)\b/ },
+  { id: 'sql-psql-exec', re: /(?:execFileSync|spawnSync|execSync)\(\s*['"`]psql['"`]/ },
 ]);
 
 const SKIP_DIR = new Set(['node_modules', '.git', 'dist', '.aws-sam', '.deployment-guard', '.cursor']);

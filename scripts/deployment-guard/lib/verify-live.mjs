@@ -43,3 +43,32 @@ export function verifyLiveState(input = {}) {
   errors.push(errorEntry(CODES.INVALID_MANIFEST, `verify-live does not recognize kind ${kind || '(missing)'}`));
   return failMany(errors);
 }
+
+export function evaluateInterruptedApply(input = {}) {
+  if (input.rollback_to_previous === true || input.reclaim === true) {
+    return failMany([errorEntry(
+      CODES.STALE_PACKAGE,
+      'interrupted apply must not automatically roll back to an older package or reclaim the environment',
+    )], CODES.STALE_PACKAGE);
+  }
+  if (input.mutated === true && input.verified !== true) {
+    return ok({
+      status: 'UNKNOWN',
+      reconciliation_required: true,
+      reclaim_forbidden: true,
+      rollback: false,
+    });
+  }
+  if (input.lease_acquired === true && input.mutated !== true) {
+    return ok({
+      status: 'LEASE_HELD_OR_EXPIRED',
+      reclaim_forbidden: true,
+      rollback: false,
+    });
+  }
+  return ok({
+    status: input.verified === true ? 'VERIFIED' : 'NOT_STARTED',
+    reclaim_forbidden: true,
+    rollback: false,
+  });
+}

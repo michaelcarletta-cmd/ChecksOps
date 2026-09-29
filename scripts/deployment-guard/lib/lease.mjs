@@ -59,6 +59,52 @@ export function inspectLease(root, environment, component, now = Date.now()) {
   });
 }
 
+const LOCK_STALE_MS = 10_000;
+const LOCK_WAIT_MS = 250;
+
+function sleepMs(ms) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) { /* exclusive-lock backoff */ }
+}
+
+function withLeaseLock(root, environment, component, fn) {
+  const file = leaseFile(root, environment, component);
+  const lockPath = `${file}.lock`;
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const deadline = Date.now() + LOCK_WAIT_MS;
+  for (;;) {
+    try {
+      const fd = fs.openSync(lockPath, 'wx');
+      try {
+        fs.writeSync(fd, `${process.pid}\n${Date.now()}\n`);
+        return fn();
+      } finally {
+        try { fs.closeSync(fd); } catch { /* ignore */ }
+        try { fs.unlinkSync(lockPath); } catch { /* ignore */ }
+      }
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+      try {
+        const st = fs.statSync(lockPath);
+        if (Date.now() - st.mtimeMs > LOCK_STALE_MS) {
+          try { fs.unlinkSync(lockPath); } catch { /* raced */ }
+          continue;
+        }
+      } catch {
+        continue;
+      }
+      if (Date.now() >= deadline) {
+        return failMany([errorEntry(
+          CODES.LEASE_HELD,
+          'exclusive lease lock is held by another process; concurrent acquire is blocked',
+          { environment, component },
+        )], CODES.LEASE_HELD);
+      }
+      sleepMs(5);
+    }
+  }
+}
+
 export function acquireLease(root, input = {}, now = Date.now()) {
   const workstreamId = String(input.workstream_id || '').trim();
   const component = String(input.component || '').trim();
@@ -69,41 +115,43 @@ export function acquireLease(root, input = {}, now = Date.now()) {
     return failMany([errorEntry(CODES.ANONYMOUS_DEPLOYMENT, 'lease acquire requires workstream_id, component, environment, and commit SHA')], CODES.ANONYMOUS_DEPLOYMENT);
   }
 
-  const current = inspectLease(root, environment, component, now);
-  if (!current.ok) return current;
-  if (current.details.present && !current.details.expired) {
-    const holder = current.details.lease;
-    if (holder.workstream_id !== workstreamId) {
-      return failMany([errorEntry(
-        CODES.LEASE_HELD,
-        `active deployment lease is held by ${holder.workstream_id}; concurrent deploy of ${environment}/${component} is blocked. Source work may continue.`,
-        {
-          holder: holder.workstream_id,
-          component,
-          environment,
-          acquired_at: holder.acquired_at,
-          expiry: holder.expiry,
-          commit: holder.commit,
-        },
-      )], CODES.LEASE_HELD);
+  return withLeaseLock(root, environment, component, () => {
+    const current = inspectLease(root, environment, component, now);
+    if (!current.ok) return current;
+    if (current.details.present && !current.details.expired) {
+      const holder = current.details.lease;
+      if (holder.workstream_id !== workstreamId) {
+        return failMany([errorEntry(
+          CODES.LEASE_HELD,
+          `active deployment lease is held by ${holder.workstream_id}; concurrent deploy of ${environment}/${component} is blocked. Source work may continue.`,
+          {
+            holder: holder.workstream_id,
+            component,
+            environment,
+            acquired_at: holder.acquired_at,
+            expiry: holder.expiry,
+            commit: holder.commit,
+          },
+        )], CODES.LEASE_HELD);
+      }
     }
-  }
 
-  const acquiredAt = new Date(nowMs(now)).toISOString();
-  const expiry = new Date(nowMs(now) + ttl).toISOString();
-  const lease = {
-    workstream_id: workstreamId,
-    component,
-    environment,
-    acquired_at: acquiredAt,
-    expiry,
-    commit,
-    operator: input.operator || null,
-    replaced_expired: Boolean(current.details.present && current.details.expired),
-    previous_workstream: current.details.present && current.details.expired ? current.details.lease.workstream_id : null,
-  };
-  const file = writeLease(root, lease);
-  return ok({ lease, file, acquired: true });
+    const acquiredAt = new Date(nowMs(now)).toISOString();
+    const expiry = new Date(nowMs(now) + ttl).toISOString();
+    const lease = {
+      workstream_id: workstreamId,
+      component,
+      environment,
+      acquired_at: acquiredAt,
+      expiry,
+      commit,
+      operator: input.operator || null,
+      replaced_expired: Boolean(current.details.present && current.details.expired),
+      previous_workstream: current.details.present && current.details.expired ? current.details.lease.workstream_id : null,
+    };
+    const file = writeLease(root, lease);
+    return ok({ lease, file, acquired: true });
+  });
 }
 
 export function releaseLease(root, input = {}, now = Date.now()) {

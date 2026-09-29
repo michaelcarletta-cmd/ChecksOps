@@ -173,6 +173,13 @@ A staging Lambda receipt cannot authorize staging SPA or production.
 `CHECKSOPS_DEPLOYMENT_GUARD_APPLY`, `CHECKSOPS_DEPLOYMENT_GUARD_BYPASS`, and
 `CHECKSOPS_SKIP_DEPLOYMENT_GUARD` are not bypasses.
 
+Receipts are HMAC-SHA256-signed with a local issuer key at
+`.deployment-guard/issuer.key` (gitignored, never a repo secret). Hand-written
+JSON without that MAC is `RECEIPT_FORGED`. This is repository collision
+protection, not an AWS security boundary: a process that can read the local
+key or call `issueReceipt` after `acquireLease` can still obtain a valid
+receipt. Out-of-repo AWS/CloudShell authority is a later IAM phase.
+
 CI runs `scripts/deployment-guard/scan-bypass.mjs` against a reviewed
 registry. New unregistered `update-function-code`, SPA `index.html` upload,
 CloudFront mutation, CloudFormation mutate, or API Gateway route/integration

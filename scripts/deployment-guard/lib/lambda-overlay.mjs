@@ -193,9 +193,16 @@ export function evaluateLambdaOverlay(input = {}) {
   });
   if (!sameFile.ok) return sameFile;
 
+  if (!input.immediately_before) {
+    errors.push(errorEntry(
+      CODES.DEPLOYMENT_COLLISION,
+      'mutation-boundary fingerprint (immediately_before) is required; preflight alone is not sufficient',
+    ));
+    return failMany(errors, CODES.DEPLOYMENT_COLLISION);
+  }
   const cas = evaluateFingerprintCas({
     preflight: input.preflight,
-    immediatelyBefore: input.immediately_before || input.preflight,
+    immediatelyBefore: input.immediately_before,
   });
   if (!cas.ok) return cas;
 

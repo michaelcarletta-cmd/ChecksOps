@@ -77,6 +77,7 @@ export function refuseUnguardedDeploy(spec = {}, ctx = {}) {
   if (!validated.ok) {
     if (validated.code === CODES.RECEIPT_MISMATCH
       || validated.code === CODES.RECEIPT_EXPIRED
+      || validated.code === CODES.RECEIPT_FORGED
       || validated.code === CODES.LEASE_HELD
       || validated.code === CODES.LEASE_EXPIRED
       || validated.code === CODES.DEPLOYMENT_COLLISION) {

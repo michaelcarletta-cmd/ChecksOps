@@ -24,7 +24,12 @@ export function evaluateSqlCollision({
   if (!target_environment) errors.push(errorEntry(CODES.INVALID_MANIFEST, 'SQL apply requires target_environment'));
 
   const liveHash = live_definition_sha256 || (live_definition != null ? hashSqlDefinition(live_definition) : null);
-  if (expected_live_definition_sha256 && liveHash && expected_live_definition_sha256 !== liveHash) {
+  if (!expected_live_definition_sha256 || !liveHash) {
+    errors.push(errorEntry(CODES.SQL_COLLISION, 'SQL apply requires expected and live definition hashes immediately before apply; preflight alone is not sufficient', {
+      filename,
+      migration_id,
+    }));
+  } else if (expected_live_definition_sha256 !== liveHash) {
     errors.push(errorEntry(CODES.SQL_COLLISION, 'live SQL/RPC definition differs from the expected baseline; never automatically replace an unexpectedly changed RPC', {
       filename,
       migration_id,
