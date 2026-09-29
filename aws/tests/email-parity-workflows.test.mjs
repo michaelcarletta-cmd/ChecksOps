@@ -73,6 +73,17 @@ test('signature request uses shared layout and calls mailer once', async () => {
         match: (sql) => sql.includes('aws_can_write_tenant'),
         result: () => ({ rows: [{ ok: true }] }),
       },
+      {
+        match: (sql) => sql.includes('UPDATE public.signature_signers'),
+        result: () => ({ rows: [{ id: SIGNER }], rowCount: 1 }),
+      },
+      {
+        match: (sql) => sql.includes('UPDATE public.signature_requests'),
+        result: () => ({
+          rows: [{ id: REQUEST, status: 'pending', delivery_mode: 'aws_ses_or_sink', sent_at: new Date().toISOString() }],
+          rowCount: 1,
+        }),
+      },
     ]),
   });
   assert.equal(result.ok, true);

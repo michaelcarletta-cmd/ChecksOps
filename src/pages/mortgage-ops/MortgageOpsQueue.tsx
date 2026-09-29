@@ -16,6 +16,7 @@ import mortgageOpsLogo from "@/assets/mortgage-ops-logo.png";
 import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
 import { SettingsHero } from "@/components/settings/SettingsHero";
 import { useAwsPollingFallback } from "@/hooks/useAwsPollingFallback";
+import { ensureMortgageDeskReturnMessage } from "@/hooks/useMortgageDeskReturnAlert";
 
 interface Request {
   id: string;
@@ -163,11 +164,11 @@ export default function MortgageOpsQueue() {
       // Notify the tenant thread + homeowner timeline (best-effort, never blocks)
       const row = [...mine, ...available, ...completed].find((r) => r.id === id);
       if (row?.check_intake_item_id) {
-        void supabase.from("check_messages").insert({
-          check_id: row.check_intake_item_id,
-          sender_id: user?.id ?? null,
-          body: `✅ ChecksOps Mortgage Desk completed work with ${row.mortgage_company || row.mortgage_servicer || "the mortgage company"}.${notes ? ` Notes: ${notes}` : ""}`,
-        } as any);
+        void ensureMortgageDeskReturnMessage(supabase, {
+          checkId: row.check_intake_item_id,
+          requestId: id,
+          senderId: user?.id ?? null,
+        });
         void supabase.from("homeowner_ledger_events").insert({
           check_intake_item_id: row.check_intake_item_id,
           claim_id: row.claim_id,
@@ -411,7 +412,7 @@ export default function MortgageOpsQueue() {
                         disabled={busyId === r.id}
                         onClick={() => handleStatus(r.id, "completed")}
                       >
-                        <CheckCircle2 className="h-4 w-4 mr-1" /> Mark complete
+                        <CheckCircle2 className="h-4 w-4 mr-1" /> Complete & Return to Tenant
                       </Button>
                       <Button
                         variant="ghost"

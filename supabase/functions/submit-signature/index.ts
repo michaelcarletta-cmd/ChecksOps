@@ -683,13 +683,10 @@ Deno.serve(async (req) => {
             .select("id")
             .eq("signature_request_id", request.id);
           if (ldDocs && ldDocs.length > 0) {
-            const signedName = `SIGNED - ${request.document_name}.pdf`;
             for (const ld of ldDocs) {
               await sb
                 .from("loss_draft_documents")
                 .update({
-                  file_path: storagePath,
-                  file_name: signedName,
                   is_submitted: true,
                   submitted_at: completedAt,
                   signature_status: "signed",

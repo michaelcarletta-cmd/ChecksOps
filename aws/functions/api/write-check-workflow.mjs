@@ -640,17 +640,36 @@ const executeCheckFiles = async ({ client, mapping, op, values, filters }) => {
     return { rows };
   }
 
-  const id = eqFilter(filters, 'id');
-  const invalid = requireUuid('id', id);
-  if (invalid) return invalid;
-  const existing = (await client.query(
-    `SELECT f.id, f.check_intake_item_id, c.tenant_id
-     FROM public.check_files f
-     JOIN public.check_intake_items c ON c.id = f.check_intake_item_id
-     WHERE f.id = $1::uuid`,
-    [id],
-  )).rows;
+  const idFilter = eqFilter(filters, 'id');
+  const checkIdFilter = eqFilter(filters, 'check_intake_item_id');
+  const pathFilter = eqFilter(filters, 'file_path');
+  let existing;
+  if (idFilter) {
+    const invalid = requireUuid('id', idFilter);
+    if (invalid) return invalid;
+    existing = (await client.query(
+      `SELECT f.id, f.check_intake_item_id, c.tenant_id
+       FROM public.check_files f
+       JOIN public.check_intake_items c ON c.id = f.check_intake_item_id
+       WHERE f.id = $1::uuid`,
+      [idFilter],
+    )).rows;
+  } else if (checkIdFilter && pathFilter) {
+    const invalid = requireUuid('check_intake_item_id', checkIdFilter);
+    if (invalid) return invalid;
+    existing = (await client.query(
+      `SELECT f.id, f.check_intake_item_id, c.tenant_id
+       FROM public.check_files f
+       JOIN public.check_intake_items c ON c.id = f.check_intake_item_id
+       WHERE f.check_intake_item_id = $1::uuid AND f.file_path = $2
+       LIMIT 1`,
+      [checkIdFilter, pathFilter],
+    )).rows;
+  } else {
+    return { error: 'missing_required_field', field: 'id' };
+  }
   if (!existing.length) return { error: 'rls_denied', message: 'file not found or not writable' };
+  const id = existing[0].id;
 
   if (op === 'delete') {
     const rows = (await client.query(
@@ -676,10 +695,17 @@ const executeCheckFiles = async ({ client, mapping, op, values, filters }) => {
     }
     out.category = category;
   }
+  if ('signature_request_id' in values) {
+    const sigId = values.signature_request_id;
+    if (sigId !== null && sigId !== '' && !isUuid(sigId)) {
+      return { error: 'invalid_uuid', field: 'signature_request_id' };
+    }
+    out.signature_request_id = sigId || null;
+  }
   if (!Object.keys(out).length) {
     return { error: 'missing_required_field', field: 'values', table: 'check_files', op: 'update' };
   }
-  const built = buildSet(out, {});
+  const built = buildSet(out, { signature_request_id: 'uuid' });
   // check_files has no updated_at; strip the extra set from buildSet
   built.sets = built.sets.filter((part) => !part.startsWith('updated_at'));
   built.params.push(id);
@@ -1375,6 +1401,10 @@ export const executeCheckWorkflowWrite = async ({ client, mapping, table, op, va
   if (table === 'contractor_profiles') return executeContractorProfiles({ client, mapping, values, filters });
   if (table === 'audit_logs') return executeAuditLogsTable({ client, mapping, values });
   if (table === 'user_sessions') return executeUserSessionsTable({ client, mapping, op, values, filters });
+  if (table === 'signature_requests' || table === 'signature_signers') {
+    const { executeSignatureWrite } = await import('./write-signature.mjs');
+    return executeSignatureWrite({ client, mapping, table, op, values, filters });
+  }
   if ([
     'notifications', 'tenant_documents', 'loss_draft_documents', 'mortgage_companies',
     'shared_check_messages', 'profiles', 'company_branding', 'referral_alerts',

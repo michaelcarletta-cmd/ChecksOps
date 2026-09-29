@@ -252,6 +252,10 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
   } | null>(null);
   const [placedFields, setPlacedFields] = useState<any[]>([]);
   const [sending, setSending] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmName, setConfirmName] = useState("");
+  const [confirmEmail, setConfirmEmail] = useState("");
+  const [resendingId, setResendingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!requestId) return;
@@ -647,12 +651,36 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
     }
   };
 
+  const openSendConfirm = () => {
+    const homeownerEmail = req?.homeowner_email || claim?.policyholder_email || "";
+    const homeownerName = req?.homeowner_name || claim?.policyholder_name || "";
+    setConfirmEmail(homeownerEmail);
+    setConfirmName(homeownerName);
+    setConfirmOpen(true);
+  };
+
+  const resendSignatureRequest = async (requestId: string) => {
+    setResendingId(requestId);
+    try {
+      const { error } = await supabase.functions.invoke("send-signature-request", {
+        body: { requestId, skipEmail: false, senderOverride: "checksops" },
+      });
+      if (error) throw error;
+      toast.success("Signature request resent");
+      void load();
+    } catch (e: any) {
+      toast.error(e?.message || "Resend failed");
+    } finally {
+      setResendingId(null);
+    }
+  };
+
   const sendPlacedSignatureRequest = async () => {
     if (!pendingDoc || !check?.id || !user?.id || !req?.claim_id) return;
-    const homeownerEmail = req?.homeowner_email || claim?.policyholder_email;
-    const homeownerName = req?.homeowner_name || claim?.policyholder_name;
+    const homeownerEmail = confirmEmail.trim() || req?.homeowner_email || claim?.policyholder_email;
+    const homeownerName = confirmName.trim() || req?.homeowner_name || claim?.policyholder_name;
     if (!homeownerEmail || !homeownerName) {
-      toast.error("Missing homeowner email or name");
+      toast.error("Confirm the homeowner name and email before sending");
       return;
     }
     setSending(true);
@@ -712,6 +740,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
       });
 
       toast.success("Sent to homeowner for signature");
+      setConfirmOpen(false);
       setPlacerOpen(false);
       setPendingDoc(null);
       setPlacedFields([]);
@@ -1264,9 +1293,22 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
                         <li key={s.id} className="py-2 space-y-1">
                           <div className="flex items-center justify-between gap-2">
                             <span className="truncate font-medium">{s.document_name}</span>
-                            <Badge variant={s.status === "completed" ? "default" : s.status === "declined" || s.status === "failed" ? "destructive" : "secondary"} className="text-[10px]">
-                              {s.status.replace("_", " ")}
-                            </Badge>
+                            <div className="flex items-center gap-1">
+                              {canResendSignature(s) && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-6 px-2 text-[10px]"
+                                  disabled={resendingId === s.id}
+                                  onClick={() => void resendSignatureRequest(s.id)}
+                                >
+                                  {resendingId === s.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Resend"}
+                                </Button>
+                              )}
+                              <Badge variant={s.status === "completed" ? "default" : s.status === "declined" || s.status === "failed" ? "destructive" : "secondary"} className="text-[10px]">
+                                {s.status.replace("_", " ")}
+                              </Badge>
+                            </div>
                           </div>
                           <div className="text-[11px] text-muted-foreground">
                             Sent {formatDistanceToNow(new Date(s.created_at), { addSuffix: true })}
@@ -1565,18 +1607,50 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
           >
             Save draft (don't send yet)
           </Button>
-          <Button onClick={sendPlacedSignatureRequest} disabled={sending}>
-            {sending ? (
-              <><Loader2 className="h-4 w-4 animate-spin mr-1" /> Sending…</>
-            ) : (
-              <><Send className="h-4 w-4 mr-1" /> Send to homeowner ({placedFields.length} field{placedFields.length === 1 ? "" : "s"})</>
-            )}
+          <Button onClick={openSendConfirm} disabled={sending}>
+            <Send className="h-4 w-4 mr-1" /> Confirm email & send ({placedFields.length} field{placedFields.length === 1 ? "" : "s"})
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <Dialog open={confirmOpen} onOpenChange={(v) => { if (!sending) setConfirmOpen(v); }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Confirm homeowner email</DialogTitle>
+          <DialogDescription>
+            Review or correct the homeowner name and email before sending this document through the existing signature system.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div>
+            <div className="text-[10px] uppercase text-muted-foreground">Homeowner name</div>
+            <Input value={confirmName} onChange={(e) => setConfirmName(e.target.value)} />
+          </div>
+          <div>
+            <div className="text-[10px] uppercase text-muted-foreground">Homeowner email</div>
+            <Input type="email" value={confirmEmail} onChange={(e) => setConfirmEmail(e.target.value)} />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setConfirmOpen(false)} disabled={sending}>Cancel</Button>
+          <Button onClick={() => void sendPlacedSignatureRequest()} disabled={sending || !confirmEmail.trim() || !confirmName.trim()}>
+            {sending ? <><Loader2 className="h-4 w-4 animate-spin mr-1" /> Sending…</> : "Send for signature"}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
     </>
   );
+}
+
+function canResendSignature(request: { status?: string; signature_signers?: { status?: string }[] }) {
+  const status = String(request?.status || "").toLowerCase();
+  if (status === "completed" || status === "signed" || status === "cancelled" || status === "declined") {
+    return false;
+  }
+  const signers = request?.signature_signers || [];
+  return !(signers.length > 0 && signers.every((signer) => String(signer?.status || "").toLowerCase() === "signed"));
 }
 
 function Field({ label, value, className }: { label: React.ReactNode; value: React.ReactNode; className?: string }) {
