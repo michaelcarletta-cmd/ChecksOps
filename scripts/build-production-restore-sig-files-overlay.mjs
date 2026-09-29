@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import esbuild from 'esbuild';
+import { REFUSE_OLDER_SPA } from './lib/live-sig-baseline.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const LIVE_DIR = process.env.CHECKSOPS_LIVE_SPA_DIR || '/tmp/prod-sig-overlay/live';
@@ -30,6 +31,7 @@ const shimDir = path.join(ROOT, 'scripts/overlays/restore-sig-files-ui/shims');
 const srcRoot = path.join(ROOT, 'src');
 
 const main = async () => {
+  throw new Error(REFUSE_OLDER_SPA);
   const liveIndex = path.join(LIVE_DIR, LIVE_ENTRY);
   const liveFiles = path.join(LIVE_DIR, LIVE_FILES);
   const liveCcc = path.join(LIVE_DIR, LIVE_CCC);

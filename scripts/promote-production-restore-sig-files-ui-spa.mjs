@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { REFUSE_OLDER_SPA, REFUSE_PROD_DEPLOY } from './lib/live-sig-baseline.mjs';
 
 const AWS = process.env.AWS_CLI || `${process.env.HOME}/.local/bin/aws`;
 const REGION = 'us-east-1';
@@ -187,6 +188,7 @@ const assertLiveBaseline = (pins) => {
 };
 
 const main = async () => {
+  throw new Error(`${REFUSE_OLDER_SPA} ${REFUSE_PROD_DEPLOY}`);
   await assumeCursor('restore-sig-files-ui-prod-preflight');
   const lambdaBefore = awsJson(['lambda', 'get-function-configuration', '--function-name', LAMBDA]);
 

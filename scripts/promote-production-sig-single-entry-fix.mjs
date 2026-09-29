@@ -25,6 +25,7 @@ import {
   parseHtmlEntry,
   sha256,
 } from './lib/repair-sig-single-entry.mjs';
+import { REFUSE_PROD_DEPLOY } from './lib/live-sig-baseline.mjs';
 
 const AWS = process.env.AWS_CLI || `${process.env.HOME}/.local/bin/aws`;
 const REGION = 'us-east-1';
@@ -192,6 +193,7 @@ const stopOnDrift = (live, label) => {
 };
 
 const main = async () => {
+  throw new Error(REFUSE_PROD_DEPLOY);
   await assumeCursor('sig-single-entry-fix-preflight');
   const lambdaBefore = awsJson(['lambda', 'get-function-configuration', '--function-name', LAMBDA]);
 
