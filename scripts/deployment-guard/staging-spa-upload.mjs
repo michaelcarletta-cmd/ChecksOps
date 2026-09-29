@@ -6,6 +6,7 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs, printResult } from './lib/cli.mjs';
@@ -41,11 +42,14 @@ export function readLiveIndexFingerprint(bucket = STAGING_BUCKET, env = process.
     throw new Error('staging-spa-upload must never read/write the production bucket');
   }
   const head = awsJson(['s3api', 'head-object', '--bucket', bucket, '--key', 'index.html'], env);
-  const body = execFileSync(AWS, [
+  const tmp = path.join(os.tmpdir(), `staging-index-${process.pid}.html`);
+  execFileSync(AWS, [
     '--region', REGION, 's3api', 'get-object',
     '--bucket', bucket, '--key', 'index.html',
-    '/dev/stdout',
+    tmp,
   ], { encoding: 'utf8', env });
+  const body = fs.readFileSync(tmp, 'utf8');
+  try { fs.unlinkSync(tmp); } catch { /* ignore */ }
   return {
     index_html_sha256: sha256Text(body),
     entry_bundle: entryFromHtml(body),
