@@ -17,6 +17,9 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 const SHA = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const SHA_B = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
 const NOW = Date.parse('2026-09-29T16:00:00.000Z');
+// Isolate process.env so a leftover live CHECKSOPS_DEPLOYMENT_GUARD_RECEIPT
+// cannot replace the intact in-memory receipt under test.
+const ISOLATED_ENV = {};
 
 function tmpRoot() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-guard-enf-'));
@@ -88,6 +91,20 @@ test('direct SPA writer fails before AWS mutation', () => {
   assert.equal(result.awsLog, '');
 });
 
+test('direct staging SPA writer fails before AWS mutation', () => {
+  const result = spawnWriter('scripts/deployment-guard/staging-spa-upload.mjs', ['--environment', 'staging']);
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stderr}${result.stdout}`, /DEPLOYMENT_GUARD_REQUIRED/);
+  assert.equal(result.awsLog, '');
+});
+
+test('direct SQL executor invoke fails before AWS mutation', () => {
+  const result = spawnWriter('scripts/deployment-guard/sql-executor-invoke.mjs', []);
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stderr}${result.stdout}`, /DEPLOYMENT_GUARD_REQUIRED/);
+  assert.equal(result.awsLog, '');
+});
+
 test('direct CloudFront writer fails before AWS mutation', () => {
   const result = spawnWriter('aws/cloudfront/apply-step1.mjs', [], {
     CHECKSOPS_APPLY_CF_STEP1: 'APPLY_GATE1',
@@ -104,7 +121,7 @@ test('direct SQL writer fails before mutation', () => {
   assert.equal(result.awsLog, '');
 });
 
-test('wrong workstream receipt is rejected', () => {
+test('intact receipt presented for a different workstream is RECEIPT_MISMATCH', () => {
   const root = tmpRoot();
   const issued = issueValidReceipt(root);
   const result = refuseUnguardedDeploy({
@@ -113,7 +130,7 @@ test('wrong workstream receipt is rejected', () => {
     deployment_type: 'lambda-overlay',
     workstream_id: 'workstream-b',
     receipt: issued.receipt,
-  }, { root, now: NOW + 1000 });
+  }, { root, now: NOW + 1000, env: ISOLATED_ENV });
   assert.equal(result.ok, false);
   assert.equal(result.code, CODES.RECEIPT_MISMATCH);
 });
@@ -131,7 +148,7 @@ test('expired receipt is rejected', () => {
   assert.equal(result.code, CODES.RECEIPT_EXPIRED);
 });
 
-test('wrong component receipt is rejected', () => {
+test('intact receipt presented for a different component is RECEIPT_MISMATCH', () => {
   const root = tmpRoot();
   const issued = issueValidReceipt(root);
   const result = refuseUnguardedDeploy({
@@ -140,7 +157,7 @@ test('wrong component receipt is rejected', () => {
     deployment_type: 'spa-promote',
     workstream_id: 'workstream-a',
     receipt: issued.receipt,
-  }, { root, now: NOW + 1000 });
+  }, { root, now: NOW + 1000, env: ISOLATED_ENV });
   assert.equal(result.ok, false);
   assert.equal(result.code, CODES.RECEIPT_MISMATCH);
 });
@@ -157,7 +174,7 @@ test('staging receipt cannot authorize production', () => {
     deployment_type: 'lambda-overlay',
     workstream_id: 'workstream-a',
     receipt: issued.receipt,
-  }, { root, now: NOW + 1000 });
+  }, { root, now: NOW + 1000, env: ISOLATED_ENV });
   assert.equal(result.ok, false);
   assert.equal(result.code, CODES.RECEIPT_MISMATCH);
 });
@@ -172,7 +189,7 @@ test('stale fingerprint is rejected', () => {
     workstream_id: 'workstream-a',
     preflight_live_fingerprint: { codeSha256: 'newer-live', revisionId: 'rev-9' },
     receipt: issued.receipt,
-  }, { root, now: NOW + 1000 });
+  }, { root, now: NOW + 1000, env: ISOLATED_ENV });
   assert.equal(result.ok, false);
   assert.equal(result.code, CODES.DEPLOYMENT_COLLISION);
 });
@@ -205,7 +222,7 @@ test('valid guarded invocation reaches the mutation boundary using mocked AWS on
     workstream_id: 'workstream-a',
     commit: SHA,
     receipt: issued.receipt,
-  }, { root, now: Date.now() });
+  }, { root, now: Date.now(), env: ISOLATED_ENV });
   assert.equal(authorized.ok, true);
 
   const spawned = spawnWriter('aws/cutover/scripts/hardening-batch4-apply.mjs', ['--confirm-batch4'], {

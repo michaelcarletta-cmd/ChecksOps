@@ -4,9 +4,9 @@ import { useTenantFilter } from "@/hooks/useTenantFilter";
 import { PAYMENT_FLAGS, isMoovAllowedForTenant } from "@/lib/payments/featureFlags";
 
 /**
- * Whether the platform payment provider (sandbox) may be used by the current
- * organization. Requires both the global internal-test flag and the
- * per-organization allowlist — the backend enforces the same rules.
+ * Whether the platform payment provider may be used by the current
+ * organization. Moov is generally available; money movement is still gated
+ * by identity/KYB, ToS, bank verification, wallet, and capability checks.
  */
 export function usePaymentProviderEligibility() {
   const { tenantId } = useTenantFilter();
@@ -18,24 +18,23 @@ export function usePaymentProviderEligibility() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tenants")
-        .select("moov_allowlisted, moov_environment")
+        .select("moov_environment")
         .eq("id", tenantId!)
         .maybeSingle();
       if (error) throw error;
       return {
-        allowlisted: !!(data as any)?.moov_allowlisted,
-        environment: ((data as any)?.moov_environment ?? "sandbox") as string,
+        environment: ((data as any)?.moov_environment ?? "production") as string,
       };
     },
   });
 
   return {
     tenantId,
-    allowlisted: data?.allowlisted ?? false,
-    environment: data?.environment ?? "sandbox",
+    allowlisted: true,
+    environment: data?.environment ?? "production",
     globallyEnabled: PAYMENT_FLAGS.USE_MOOV,
-    /** True only when the platform rail may actually be exercised. */
-    enabled: isMoovAllowedForTenant(data?.allowlisted),
+    /** True when Moov is on and this session has an organization. */
+    enabled: isMoovAllowedForTenant() && !!tenantId,
     isLoading,
   };
 }

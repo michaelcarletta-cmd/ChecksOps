@@ -34,3 +34,6 @@ aws/.aws-sam/
 
 # Deployment-guard local leases/receipts (never commit live locks)
 .deployment-guard/
+
+# Packed copies of guard libs for the VPC SQL executor (created by tests/pack)
+aws/write-path/guarded-sql-executor/lib/

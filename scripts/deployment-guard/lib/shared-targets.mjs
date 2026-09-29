@@ -17,6 +17,11 @@ export const SHARED_LAMBDAS = Object.freeze({
 });
 
 export const SHARED_SPA_BUCKETS = Object.freeze({
+  'checksops-staging-frontend-c48b': {
+    target_environment: 'staging',
+    target_component: 'staging-frontend',
+    deployment_type: 'spa-promote',
+  },
   'checksops-production-frontend-806168576068': {
     target_environment: 'production',
     target_component: 'production-spa',
@@ -33,6 +38,11 @@ export const SHARED_FILE_BUCKETS = Object.freeze({
 });
 
 export const SHARED_CLOUDFRONT = Object.freeze({
+  E1CG52WRQZI7X1: {
+    target_environment: 'staging',
+    target_component: 'staging-frontend',
+    deployment_type: 'cloudfront-invalidation',
+  },
   E1B0ZWWO5559U5: {
     target_environment: 'production',
     target_component: 'production-spa',
