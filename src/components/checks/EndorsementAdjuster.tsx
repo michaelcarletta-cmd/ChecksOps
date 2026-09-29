@@ -30,7 +30,7 @@ import {
   SignatureAsset,
 } from "@/lib/endorsementDepositRender";
 import { CHECK_IMAGES_BUCKET } from "@/lib/storageBuckets";
-import { assertCleanBackOriginalPath } from "@/lib/checkImageInvariants";
+import { assertCleanBackOriginalPath, depositImagePersistPatch } from "@/lib/checkImageInvariants";
 import { logAudit } from "@/hooks/useAuditLog";
 
 interface SignedEndorsementAsset extends SignatureAsset {
@@ -526,20 +526,20 @@ export function EndorsementAdjuster({
         });
       if (uploadErr) throw uploadErr;
 
+      const persist = depositImagePersistPatch(depositPath, originalImagePath, {
+        request_id: requestId,
+        renderer_version: ENDORSEMENT_RENDERER_VERSION,
+        mime_type: result.mimeType,
+        width: result.width,
+        height: result.height,
+        bytes: result.bytes,
+        override: savedOverrideRef.current,
+      });
       const { error: updateErr } = await supabase
         .from("check_intake_items")
         .update({
-          back_image_deposit_path: depositPath,
+          ...persist,
           endorsement_render_status: "completed",
-          endorsement_render_meta: {
-            request_id: requestId,
-            renderer_version: ENDORSEMENT_RENDERER_VERSION,
-            mime_type: result.mimeType,
-            width: result.width,
-            height: result.height,
-            bytes: result.bytes,
-            override: savedOverrideRef.current,
-          } as any,
           updated_at: new Date().toISOString(),
         })
         .eq("id", checkId);

@@ -9,6 +9,9 @@ import {
   APP_BUCKET_SET,
   PUBLIC_BRANDING_BUCKETS,
   SKIP_BUCKET_SET,
+  endorsedGeneratedStem,
+  isExactCleanStemOfGeneratedPointer,
+  isNarrowCleanStemPath,
   normalizePath,
   pathCandidates,
   s3KeyFor,
@@ -160,6 +163,47 @@ export const authorizeObject = async (client, bucket, objectPath, { userId } = {
   return { authorized: false, reason: 'not_authorized', rel, candidates };
 };
 
+/** Read-only: find generated back pointers that reconstruct to this exact clean stem. */
+export const CLEAN_STEM_POINTER_LOOKUP_SQL = `SELECT back_image_path, back_image_original_path, back_image_deposit_path
+FROM check_intake_items
+WHERE regexp_replace(split_part(COALESCE(back_image_path, ''), '?', 1), '_endorsed(_[0-9]+)?\\.[^.]+$', '', 'i') || $1 = $2
+   OR regexp_replace(split_part(COALESCE(back_image_original_path, ''), '?', 1), '_endorsed(_[0-9]+)?\\.[^.]+$', '', 'i') || $1 = $2
+   OR regexp_replace(split_part(COALESCE(back_image_deposit_path, ''), '?', 1), '_endorsed(_[0-9]+)?\\.[^.]+$', '', 'i') || $1 = $2
+LIMIT 10`;
+
+const extensionOf = (rel) => {
+  const match = String(rel || '').match(/(\.[^.]+)$/);
+  return match ? match[1].toLowerCase() : '';
+};
+
+export const authorizeCleanStemSibling = async (client, bucket, objectPath) => {
+  if (bucket !== 'claim-files') return { authorized: false, reason: 'wrong_bucket' };
+  const relRaw = normalizePath(objectPath, bucket);
+  if (!relRaw) return { authorized: false, reason: 'invalid_path' };
+  const rel = relRaw.split('?')[0];
+  if (!isNarrowCleanStemPath(rel)) return { authorized: false, reason: 'not_clean_stem' };
+  const ext = extensionOf(rel);
+  if (!['.jpg', '.jpeg', '.png'].includes(ext)) return { authorized: false, reason: 'not_clean_stem' };
+  const result = await client.query(CLEAN_STEM_POINTER_LOOKUP_SQL, [ext, rel]);
+  for (const row of result.rows || []) {
+    for (const pointer of [row.back_image_path, row.back_image_original_path, row.back_image_deposit_path]) {
+      if (!endorsedGeneratedStem(pointer)) continue;
+      if (isExactCleanStemOfGeneratedPointer(rel, pointer)) {
+        return { authorized: true, rel, via: 'endorsed_clean_stem', generatedPointer: pointer };
+      }
+    }
+  }
+  return { authorized: false, reason: 'not_authorized', rel };
+};
+
+export const authorizeSignedObject = async (client, bucket, objectPath, { userId } = {}) => {
+  const auth = await authorizeObject(client, bucket, objectPath, { userId });
+  if (auth.authorized) return auth;
+  const stem = await authorizeCleanStemSibling(client, bucket, objectPath);
+  if (stem.authorized) return { ...stem, candidates: auth.candidates || pathCandidates(bucket, objectPath) };
+  return auth;
+};
+
 const presignGet = async (deps, key, { expiresIn, downloadName, contentType, maxExpires } = {}) => {
   const sign = deps.getSignedUrl || getSignedUrl;
   const s3 = defaultS3(deps);
@@ -194,7 +238,7 @@ export const handleStorageSign = async (event, deps = {}) => withIdentity(event,
   const denied = denyBucket(bucket);
   if (denied) return { ...denied, spoofFieldsIgnored: spoof };
   const objectPath = body.path || body.paths?.[0];
-  const auth = await authorizeObject(client, bucket, objectPath, { userId: mapping.application_user_id });
+  const auth = await authorizeSignedObject(client, bucket, objectPath, { userId: mapping.application_user_id });
   if (!auth.authorized) {
     return {
       ok: false,
@@ -245,7 +289,7 @@ export const handleStorageSignMany = async (event, deps = {}) => withIdentity(ev
   const expiresIn = clampExpires(body.expiresIn || body.expires_in, DEFAULT_EXPIRES);
   const data = [];
   for (const objectPath of paths) {
-    const auth = await authorizeObject(client, bucket, objectPath, { userId: mapping.application_user_id });
+    const auth = await authorizeSignedObject(client, bucket, objectPath, { userId: mapping.application_user_id });
     if (!auth.authorized) {
       data.push({ path: objectPath, signedUrl: null, error: 'storage_forbidden' });
       continue;

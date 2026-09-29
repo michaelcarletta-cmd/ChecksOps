@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { LOOKUP_MAPPING_SQL, TENANT_MEMBERSHIP_SQL } from '../functions/api/identity.mjs';
 import { handleProviderRequest } from '../functions/api/providers.mjs';
 import { resetMoovTokenCache } from '../functions/api/providers/parity/moov-client.mjs';
+import { loadTenantMoovEnv } from '../functions/api/providers/parity/caller.mjs';
 import { selectRail } from '../functions/api/providers/parity/rail-router.mjs';
 import { formatCheckAltUserAmount } from '../functions/api/providers/amounts.mjs';
 import { syntheticCheckRaster } from '../functions/api/providers/parity/checkalt-image.mjs';
@@ -138,8 +139,8 @@ const parityClient = ({
         return { rows: [{ tenant_id: FREEDOM_TENANT, role: 'admin', tenant_name: 'Freedom', tenant_slug: 'freedom' }] };
       }
       if (sql.includes('FROM public.user_roles')) return { rows: [{ role: 'admin' }] };
-      if (sql.includes('FROM public.tenants') && sql.includes('moov_allowlisted')) {
-        return { rows: [{ moov_allowlisted: true, moov_environment: 'sandbox' }] };
+      if (sql.includes('FROM public.tenants') && sql.includes('moov_environment')) {
+        return { rows: [{ moov_environment: 'sandbox' }] };
       }
       if (sql.includes('FROM public.tenants')) {
         return { rows: [{ id: FREEDOM_TENANT, name: 'Freedom', legal_business_name: 'Freedom Adj', email_reply_to: 'ops@example.com' }] };
@@ -595,4 +596,12 @@ test('checkalt depositor identity is never the UAT API login', async () => {
     assert.equal(result.statusCode, 400);
     assert.equal(result.error, 'uat_depositor_must_not_be_api_login');
   });
+});
+
+test('loadTenantMoovEnv does not reject a tenant that was never allowlisted', async () => {
+  const client = {
+    query: async () => ({ rows: [{ moov_allowlisted: false, moov_environment: 'production' }] }),
+  };
+  const env = await loadTenantMoovEnv(client, FREEDOM_TENANT);
+  assert.equal(env, 'production');
 });
