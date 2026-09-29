@@ -37,6 +37,7 @@ import { PlatformAnnouncementsManager } from "@/components/admin/PlatformAnnounc
 import { TenantProBadgeManagement } from "@/components/settings/TenantProBadgeManagement";
 
 import { TenantProvider } from "@/contexts/TenantContext";
+import { tenantMoovDefaults } from "@/lib/payments/tenantMoovDefaults";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DataView, FilterBar, type DataColumn } from "@/components/shell";
@@ -278,7 +279,7 @@ function CreateTenantDialog({ onCreated }: { onCreated: (t: Tenant) => void }) {
     setSubmitting(true);
     const { data, error } = await supabase
       .from("tenants")
-      .insert({ name: name.trim(), slug: slug.trim() })
+      .insert({ name: name.trim(), slug: slug.trim(), ...tenantMoovDefaults() })
       .select()
       .single();
     setSubmitting(false);
