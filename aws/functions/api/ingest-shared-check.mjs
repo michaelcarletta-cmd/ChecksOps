@@ -279,8 +279,9 @@ export const persistIngestInline = async (client, plan) => {
       sourceTenantId = existing.rows[0].id;
     } else {
       const created = await client.query(
-        `INSERT INTO public.tenants (name, slug, plan_tier)
-         VALUES ($1, $2, 'starter')
+        `INSERT INTO public.tenants
+           (name, slug, plan_tier, payment_provider, moov_allowlisted, moov_environment)
+         VALUES ($1, $2, 'starter', 'moov', true, 'production')
          RETURNING id`,
         [`${plan.source_tenant_name || 'External'} (${plan.source_app || 'partner'})`, externalSlug],
       );

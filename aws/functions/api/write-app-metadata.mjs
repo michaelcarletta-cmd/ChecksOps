@@ -4,6 +4,7 @@
 import { ident } from './data.mjs';
 import { isAllowedTenantDocumentDocType } from './mortgage-library-doc-types.mjs';
 import { canManageTenantDocumentLibrary, mortgageAgentCanWriteTenantLossDraft } from './mortgage-library-docs.mjs';
+import { tenantMoovDefaults } from './tenant-moov-defaults.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isUuid = (value) => UUID_RE.test(String(value || ''));
@@ -513,7 +514,44 @@ export const executeReferralAlerts = async ({ client, values, filters }) => {
   return { rows };
 };
 
-export const executeTenantsNarrow = async ({ client, mapping, values, filters }) => {
+const actorIsPlatformAdmin = async (client, userId) => {
+  const owner = (await client.query(
+    `SELECT COALESCE(public.is_platform_owner(), false) AS is_owner,
+            COALESCE(public.is_master_owner(), false) AS is_master`,
+  )).rows[0] || {};
+  if (owner.is_owner === true || owner.is_master === true) return true;
+  const role = (await client.query(
+    `SELECT 1 FROM public.user_roles WHERE user_id = $1::uuid AND role = 'admin' LIMIT 1`,
+    [userId],
+  )).rows[0];
+  return Boolean(role);
+};
+
+export const executeTenantsCreate = async ({ client, mapping, values }) => {
+  if (!(await actorIsPlatformAdmin(client, mapping.application_user_id))) {
+    return { error: 'not_authorized', message: 'Platform admin required to create a tenant' };
+  }
+  const name = clip(values.name, 200);
+  if (name?.error || !name) return name?.error || { error: 'missing_required_field', field: 'name' };
+  const slug = clip(values.slug, 80);
+  if (slug?.error || !slug) return slug?.error || { error: 'missing_required_field', field: 'slug' };
+  const normalizedSlug = String(slug).toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/^-+|-+$/g, '');
+  if (!normalizedSlug) return { error: 'invalid_field', field: 'slug' };
+  const defaults = tenantMoovDefaults();
+  const rows = (await client.query(
+    `INSERT INTO public.tenants
+       (name, slug, payment_provider, moov_allowlisted, moov_environment)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING *`,
+    [name, normalizedSlug, defaults.payment_provider, defaults.moov_allowlisted, defaults.moov_environment],
+  )).rows;
+  return { rows };
+};
+
+export const executeTenantsNarrow = async ({ client, mapping, op, values, filters }) => {
+  if (op === 'insert') {
+    return executeTenantsCreate({ client, mapping, values });
+  }
   const id = eqFilter(filters, 'id');
   if (!isUuid(id)) return { error: 'invalid_uuid', field: 'id' };
   if (!(await memberOfTenant(client, mapping.application_user_id, id))) {
@@ -862,7 +900,7 @@ export const executeAppMetadataWrite = async ({ client, mapping, table, op, valu
     case 'referral_alerts':
       return executeReferralAlerts({ client, values, filters });
     case 'tenants':
-      return executeTenantsNarrow({ client, mapping, values, filters });
+      return executeTenantsNarrow({ client, mapping, op, values, filters });
     case 'privacy_notice_acknowledgments':
       return executePrivacyAck({ client, mapping, values });
     case 'tenant_users':

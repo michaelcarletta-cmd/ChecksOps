@@ -97,16 +97,6 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      const { data: tenant } = await supabase
-        .from("tenants").select("moov_allowlisted").eq("id", row.tenant_id).maybeSingle();
-      if (!(tenant as any)?.moov_allowlisted) {
-        await supabase.from("wallet_funding_queue")
-          .update({ status: "skipped", last_error: "Organization is not enabled for this payment provider." })
-          .eq("id", row.id);
-        skipped++;
-        continue;
-      }
-
       const result = await fundWalletFromBank(supabase, {
         tenantId: row.tenant_id,
         amountCents: row.fund_cents,
