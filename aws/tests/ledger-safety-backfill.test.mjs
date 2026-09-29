@@ -178,6 +178,9 @@ test('existing claim number save updates in place and does not create or relink'
   assert.match(src, /handleLinkedSave/);
   assert.match(src, /existingClaimId: resolveExistingClaimId\(\)/);
   assert.match(src, /onClick=\{handleLinkedSave\}/);
+  assert.match(src, /Claim Ledger Save only updates an existing claim/);
+  assert.equal(/newTrackingClaimInsert/.test(src), false);
+  assert.equal(/\.from\("claims"\)[\s\S]*\.insert\(/.test(src), false);
   const updateBlock = src.slice(src.indexOf('plan.mode === "update_existing"'), src.indexOf('const trimmed = plan.claimNumber'));
   assert.equal(/\.insert\(/.test(updateBlock), false);
   assert.equal(/detected_claim_number/.test(updateBlock), false);
