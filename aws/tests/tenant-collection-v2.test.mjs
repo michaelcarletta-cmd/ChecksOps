@@ -262,7 +262,7 @@ test('11 wallet success + bank failure', async () => {
   });
   assert.equal(result.ok, false);
   assert.equal(result.wallet_applied_cents, 4000);
-  assert.equal(result.collection_status, COLLECTION_STATUS.FAILED);
+  assert.equal(result.collection_status, COLLECTION_STATUS.PARTIALLY_PAID_BANK_FAILED);
   assert.equal(result.amount_received_cents, 0);
   assert.equal(result.outstanding_cents, 13900);
 });

@@ -40,6 +40,12 @@ export const FALLBACK_SELECTIONS = new Set([
   'first_wallet', 'first_bank', 'first_available_payment_method',
   'other_tenant_source', 'platform_bank_as_source', 'sandbox_in_production',
 ]);
+export const WALLET_FALLBACK_SELECTIONS = new Set([
+  'first_wallet', 'first_available_payment_method', 'other_tenant_source',
+]);
+export const BANK_FALLBACK_SELECTIONS = new Set([
+  'first_bank', 'first_available_payment_method', 'platform_bank_as_source',
+]);
 
 const asCents = (value) => {
   const n = Math.trunc(Number(value) || 0);
@@ -133,9 +139,13 @@ export const classifyCollectionStatus = ({ amountDueCents, legs = [] } = {}) => 
   const wallet = legs.find((leg) => leg.leg_type === LEG_TYPE.WALLET);
   const bank = legs.find((leg) => leg.leg_type === LEG_TYPE.BANK);
   if (due > 0 && received >= due) return COLLECTION_STATUS.PAID;
-  const walletSettled = wallet && isSettlementReceived(statusOf(wallet));
+  const walletCreated = wallet && (
+    isSettlementReceived(statusOf(wallet))
+    || isInFlight(statusOf(wallet))
+    || Boolean(wallet.provider_transfer_id)
+  );
   const bankFailed = bank && isFailedStatus(statusOf(bank));
-  if (walletSettled && bankFailed && received < due) {
+  if (walletCreated && bankFailed && received < due) {
     return COLLECTION_STATUS.PARTIALLY_PAID_BANK_FAILED;
   }
   if (received > 0 && received < due) return COLLECTION_STATUS.PARTIALLY_PAID;
@@ -350,6 +360,13 @@ export function assertTenantWalletSource({
 } = {}) {
   const errors = [];
   if (!wallet) errors.push('tenant_wallet_unresolved');
+  if (environment === 'production' && (
+    allowSandboxFallback
+    || wallet?.environment === 'sandbox'
+    || wallet?.provider_account_id === CHECKSOPS_SANDBOX_MERCHANT_ACCOUNT_ID
+  )) {
+    errors.push('sandbox_resource_in_production');
+  }
   if (wallet && wallet.tenant_id && wallet.tenant_id !== tenantId) {
     errors.push('cross_tenant_wallet');
   }
@@ -358,14 +375,7 @@ export function assertTenantWalletSource({
   }
   if (wallet && !wallet.provider_wallet_id) errors.push('tenant_wallet_id_unresolved');
   if (wallet && !wallet.provider_payment_method_id) errors.push('tenant_wallet_payment_method_unresolved');
-  if (selection && FALLBACK_SELECTIONS.has(selection)) errors.push(`wallet_fallback:${selection}`);
-  if (environment === 'production' && (
-    allowSandboxFallback
-    || wallet?.environment === 'sandbox'
-    || wallet?.provider_account_id === CHECKSOPS_SANDBOX_MERCHANT_ACCOUNT_ID
-  )) {
-    errors.push('sandbox_resource_in_production');
-  }
+  if (selection && WALLET_FALLBACK_SELECTIONS.has(selection)) errors.push(`wallet_fallback:${selection}`);
   if (wallet?.provider_account_id === CHECKSOPS_PLATFORM_ACCOUNT_ID) {
     errors.push('platform_wallet_used_as_source');
   }
@@ -386,7 +396,7 @@ export function assertTenantBankSource({
     errors.push('cross_tenant_bank');
   }
   if (!debit?.sourceMethodId) errors.push('bank_debit_source_unresolved');
-  if (selection && FALLBACK_SELECTIONS.has(selection)) errors.push(`bank_fallback:${selection}`);
+  if (selection && BANK_FALLBACK_SELECTIONS.has(selection)) errors.push(`bank_fallback:${selection}`);
   if (debit?.sourceAccountId === CHECKSOPS_PLATFORM_ACCOUNT_ID) {
     errors.push('platform_chase_used_as_source');
   }
@@ -411,7 +421,7 @@ export async function resolveTenantWalletSource(client, {
   fetchImpl,
   deps = {},
 } = {}) {
-  if (deps.selection && FALLBACK_SELECTIONS.has(deps.selection)) {
+  if (deps.selection && WALLET_FALLBACK_SELECTIONS.has(deps.selection)) {
     return { ok: false, error: `wallet_fallback:${deps.selection}`, statusCode: 409 };
   }
   let wallet = deps.wallet || null;
@@ -464,7 +474,7 @@ export async function resolveTenantBankSource(client, {
   fetchImpl,
   deps = {},
 } = {}) {
-  if (deps.selection && FALLBACK_SELECTIONS.has(deps.selection)) {
+  if (deps.selection && BANK_FALLBACK_SELECTIONS.has(deps.selection)) {
     return { ok: false, error: `bank_fallback:${deps.selection}`, statusCode: 409 };
   }
   const resolver = deps.resolveBillingDebitSource;
@@ -756,7 +766,7 @@ export async function collectTenantObligation(client, {
     if (walletResult.leg) knownLegs.push(walletResult.leg);
   }
 
-  const remaining = remainingUnpaidCents({ amountDueCents, legs: knownLegs });
+  const remaining = remainingUnpaidCents({ amountDueCents, legs: uniqueLegs(knownLegs) });
   let bankResult = null;
   if (remaining > 0) {
     const bankSource = await resolveTenantBankSource(client, {
