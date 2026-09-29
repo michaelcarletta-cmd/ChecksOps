@@ -41,7 +41,7 @@ function executorInput(overrides = {}) {
     intended_replacement_sha256: AUTHORIZED_SQL44.intended_replacement_sha256,
     expected_live_definition_sha256: EXPECTED_LIVE,
     one_use_id: 'sql44-apply-0001',
-    expiry: '2026-09-29T18:15:00.000Z',
+    expiry: new Date(Math.max(Date.now(), NOW_MS) + 15 * 60 * 1000).toISOString(),
     action: 'authorize',
     function_name: 'checksops-staging-guarded-sql-executor',
     build_timestamp: NOW,
