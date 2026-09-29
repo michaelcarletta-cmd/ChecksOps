@@ -5,6 +5,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
 
+export type CollectionLeg = {
+  leg_type?: string;
+  amount_cents?: number;
+  provider_transfer_id?: string | null;
+  status?: string;
+  provider_status?: string;
+  idempotency_key?: string;
+  submitted_at?: string | null;
+  completed_at?: string | null;
+};
+
 export type ReceivableRow = {
   tenant_id: string;
   tenant_name: string;
@@ -15,6 +26,9 @@ export type ReceivableRow = {
   amount_billed_cents: number;
   amount_received_cents: number;
   balance_cents: number;
+  wallet_applied_cents?: number;
+  bank_ach_cents?: number;
+  collection_legs?: CollectionLeg[];
   payment_status: string;
   ach_status: string | null;
   initiated_at: string | null;
@@ -44,10 +58,12 @@ const money = (cents: number) =>
 
 const statusTone = (status: string) => {
   if (status === "SETTLED") return "bg-emerald-500/15 text-emerald-400 border-emerald-500/30";
-  if (status === "ORIGINATED" || status === "SUBMITTED" || status === "SCHEDULED") {
+  if (status === "ORIGINATED" || status === "SUBMITTED" || status === "SCHEDULED" || status === "PARTIALLY PAID") {
     return "bg-amber-500/15 text-amber-400 border-amber-500/30";
   }
-  if (status === "FAILED" || status === "RETURNED") return "bg-red-500/15 text-red-400 border-red-500/30";
+  if (status === "FAILED" || status === "RETURNED" || status === "PARTIALLY PAID / BANK FAILED" || status === "RECONCILIATION REQUIRED") {
+    return "bg-red-500/15 text-red-400 border-red-500/30";
+  }
   return "text-muted-foreground";
 };
 
@@ -204,9 +220,11 @@ export function PlatformReceivablesLedger({
                 <TableHead>Tenant</TableHead>
                 <TableHead>Billing month</TableHead>
                 <TableHead>Fee type</TableHead>
-                <TableHead className="text-right">Billed</TableHead>
+                <TableHead className="text-right">Due</TableHead>
+                <TableHead className="text-right">Wallet</TableHead>
+                <TableHead className="text-right">Bank ACH</TableHead>
                 <TableHead className="text-right">Received</TableHead>
-                <TableHead className="text-right">Balance</TableHead>
+                <TableHead className="text-right">Outstanding</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Initiated</TableHead>
                 <TableHead>Settled</TableHead>
@@ -214,9 +232,9 @@ export function PlatformReceivablesLedger({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {visible.length === 0 ? (
+                  {visible.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center text-sm text-muted-foreground py-8">
+                  <TableCell colSpan={12} className="text-center text-sm text-muted-foreground py-8">
                     No tenant-fee receivables for this filter.
                   </TableCell>
                 </TableRow>
@@ -230,6 +248,8 @@ export function PlatformReceivablesLedger({
                     <TableCell>{row.billing_period_label}</TableCell>
                     <TableCell>{row.fee_type}</TableCell>
                     <TableCell className="text-right">{money(row.amount_billed_cents)}</TableCell>
+                    <TableCell className="text-right">{money(row.wallet_applied_cents ?? 0)}</TableCell>
+                    <TableCell className="text-right">{money(row.bank_ach_cents ?? 0)}</TableCell>
                     <TableCell className="text-right">{money(row.amount_received_cents)}</TableCell>
                     <TableCell className="text-right">{money(row.balance_cents)}</TableCell>
                     <TableCell>
@@ -250,7 +270,7 @@ export function PlatformReceivablesLedger({
                   </TableRow>
                   {openId === row.local_operation_id && (
                     <TableRow key={`${row.local_operation_id}-details`}>
-                      <TableCell colSpan={10}>
+                      <TableCell colSpan={12}>
                         <div className="space-y-2 text-sm">
                           {row.line_items?.length ? (
                             <div className="space-y-1">
@@ -268,6 +288,20 @@ export function PlatformReceivablesLedger({
                             </div>
                           ) : (
                             <p className="text-muted-foreground">No stored fee breakdown on this operation.</p>
+                          )}
+                          {!!row.collection_legs?.length && (
+                            <div className="space-y-1 pt-2">
+                              {row.collection_legs.map((leg, index) => (
+                                <div key={leg.idempotency_key || `${leg.leg_type}-${index}`} className="flex justify-between text-xs">
+                                  <span>
+                                    {leg.leg_type === "wallet" ? "Wallet provider transfer" : "Bank provider transfer"}
+                                    {leg.provider_transfer_id ? ` ${leg.provider_transfer_id}` : ""}
+                                    {` · ${leg.provider_status || leg.status || "unknown"}`}
+                                  </span>
+                                  <span>{money(Number(leg.amount_cents || 0))}</span>
+                                </div>
+                              ))}
+                            </div>
                           )}
                           <p className="text-xs text-muted-foreground">
                             Local operation {row.local_operation_id}

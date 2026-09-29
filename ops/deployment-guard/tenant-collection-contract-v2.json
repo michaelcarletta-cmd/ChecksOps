@@ -1,0 +1,43 @@
+{
+  "id": "tenant-collection-v2",
+  "version": "2.0.0",
+  "status": "PROPOSED / STAGING",
+  "production_accepted": false,
+  "title": "Tenant Collection Contract v2 — wallet first, bank remainder",
+  "does_not_replace": "freedom-platform-funding",
+  "environment": "staging",
+  "preserves": [
+    "explicit tenant identity",
+    "explicit production environment",
+    "explicit source",
+    "explicit ChecksOps destination",
+    "tenant isolation",
+    "idempotency",
+    "provider/local reconciliation",
+    "fail closed",
+    "no first-wallet fallback",
+    "no first-bank fallback"
+  ],
+  "adds": [
+    "wallet-first",
+    "bank-remainder-only",
+    "one-obligation/multiple-leg model",
+    "provider-timeout reconciliation",
+    "partial-payment preservation",
+    "settlement-aware receivables",
+    "retry-only-unpaid-remainder"
+  ],
+  "destination": {
+    "account_id": "41cb5d67-4911-4bef-aad5-d8ee9c582208",
+    "wallet_id": "72630a70-4954-4761-b652-e8beff1ad02c",
+    "wallet_payment_method_id": "c70a90f2-9bcc-4084-8263-d5a0fb5d806c"
+  },
+  "production_gates": {
+    "AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST": false,
+    "AWS_MOOV_BILLING_VERIFICATION_POST_ENABLED": false
+  },
+  "sql_required": false,
+  "env_change_required": false,
+  "moov_infrastructure_changed": false,
+  "production_deployment": false
+}

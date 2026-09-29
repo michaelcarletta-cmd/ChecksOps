@@ -70,7 +70,7 @@ export function TenantBillingHistoryPanel({ tenantId, tenantName }: { tenantId: 
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-4">
           <div>
-            <p className="text-xs uppercase text-muted-foreground">Current month due</p>
+            <p className="text-xs uppercase text-muted-foreground">Amount due</p>
             <p className="text-xl font-semibold">{money(summary?.current_month_amount_due_cents ?? 0)}</p>
           </div>
           <div>
