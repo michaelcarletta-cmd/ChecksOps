@@ -1,11 +1,13 @@
 {
   "id": "tenant-collection-v2",
   "version": "2.0.0",
-  "status": "PROPOSED / STAGING",
+  "status": "PRODUCTION CODE ACCEPTED / COLLECTION NOT ACTIVATED",
   "production_accepted": false,
+  "production_code_accepted": true,
+  "collection_activated": false,
   "title": "Tenant Collection Contract v2 — wallet first, bank remainder",
   "does_not_replace": "freedom-platform-funding",
-  "environment": "staging",
+  "environment": "production",
   "preserves": [
     "explicit tenant identity",
     "explicit production environment",
@@ -39,5 +41,6 @@
   "sql_required": false,
   "env_change_required": false,
   "moov_infrastructure_changed": false,
-  "production_deployment": false
+  "production_deployment": true,
+  "collection_activation": false
 }

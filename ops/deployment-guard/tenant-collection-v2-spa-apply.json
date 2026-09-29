@@ -1,0 +1,21 @@
+{
+  "ok": true,
+  "code": null,
+  "message": null,
+  "details": {
+    "environment": "production",
+    "bucket": "checksops-production-frontend-806168576068",
+    "uploaded_count": 107,
+    "candidate_entry": "/assets/index-C9QrEEkl.js",
+    "candidate_index_sha256": "2a8e5245d18a4a84b6175cace303dff9c06b27e5114e4cc439fe9854b2e53575",
+    "before_entry": "/assets/index-CXdgFa1W.js",
+    "before_index_sha256": "3d8a78314f0abfd02f17aea5c239dd899ceb76a5169e4ff2bc9682ef5ef0d7c3",
+    "after_entry": "/assets/index-C9QrEEkl.js",
+    "after_index_sha256": "2a8e5245d18a4a84b6175cace303dff9c06b27e5114e4cc439fe9854b2e53575",
+    "invalidation_id": "ICSG55YUMKR4GRD05SOJ7YUE1X",
+    "receipt": "/workspace/.deployment-guard/receipts/production::production-spa.json",
+    "deploy_mode": "per_object_put",
+    "staging_untouched": true
+  },
+  "errors": []
+}

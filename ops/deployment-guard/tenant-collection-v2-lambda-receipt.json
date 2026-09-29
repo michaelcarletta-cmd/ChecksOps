@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "kind": "deployment-guard-receipt",
+  "issued_at": "2026-09-29T20:10:17.075Z",
+  "expiry": "2026-09-29T20:25:17.075Z",
+  "workstream_id": "tenant-collection-v2-prod-2d41",
+  "branch": "cursor/tenant-collection-v2-prod-2d41",
+  "commit": "8e8fde63dafd3c3cfa2fc179c2c56323f2957b64",
+  "operator": "cursor-cloud-agent",
+  "target_environment": "production",
+  "target_component": "checksops-production-prep-api",
+  "deployment_type": "lambda-overlay",
+  "owned_components": [
+    "tenant-collection-v2.mjs",
+    "tenant-collection-contract-v2.mjs",
+    "tenant-billing-engine.mjs",
+    "providers/parity/tenant-receivables.mjs"
+  ],
+  "preflight_live_fingerprint": {
+    "codeSha256": "srotSrFRXUa52QtAfmsd+Dm5+tUoooWmHKKI01BI7Ng=",
+    "revisionId": "4fa2ae6f-b62e-4a76-9ba2-0f2e0e8736d4",
+    "lastModified": "2026-09-29T19:51:22.000+0000"
+  },
+  "lease": {
+    "workstream_id": "tenant-collection-v2-prod-2d41",
+    "component": "checksops-production-prep-api",
+    "environment": "production",
+    "acquired_at": "2026-09-29T20:10:17.073Z",
+    "expiry": "2026-09-29T20:25:17.073Z",
+    "commit": "8e8fde63dafd3c3cfa2fc179c2c56323f2957b64",
+    "operator": "cursor-cloud-agent",
+    "replaced_expired": false,
+    "previous_workstream": null
+  },
+  "mac": "e660b57ee07cda81d261332de8ca547d9cadd74811344b2888da78a01c8ffd72"
+}

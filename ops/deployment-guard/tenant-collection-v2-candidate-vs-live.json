@@ -1,9 +1,9 @@
 {
   "function_name": "checksops-production-prep-api",
-  "live_zip": "/tmp/tcv2-live-now.zip",
+  "live_zip": "/tmp/tcv2-live-fresh.zip",
   "live_zip_sha256": "b2ba2d4ab1515d46b9d90b407e6b1df839b9fad528a285a61ca288d35048ecd8",
-  "candidate_zip": "/tmp/tcv2-candidate.zip",
-  "candidate_zip_sha256": "08c491c1b4404cc1c0354d994b452815258de25e3e0b65318c8145a19610f3ac",
+  "candidate_zip": "/tmp/tcv2-candidate-fresh.zip",
+  "candidate_zip_sha256": "b3b7c476823d1d709086178ba1aea2d3c665e1427eb725351c3524e52b6856ab",
   "owned_members": [
     "tenant-collection-v2.mjs",
     "tenant-collection-contract-v2.mjs",

@@ -1,0 +1,90 @@
+{
+  "id": "tenant-collection-v2",
+  "title": "Tenant Collection Contract v2 — wallet first, bank remainder",
+  "state": "PRODUCTION CODE ACCEPTED / COLLECTION NOT ACTIVATED",
+  "production_code_accepted": true,
+  "collection_activated": false,
+  "accepted_at": "2026-09-29T20:12:00Z",
+  "workstream_id": "tenant-collection-v2-prod-2d41",
+  "branch": "cursor/tenant-collection-v2-prod-2d41",
+  "source_commit": "8e8fde63dafd3c3cfa2fc179c2c56323f2957b64",
+  "provenance": {
+    "accepted_staging_branch": "cursor/tenant-collection-v2-2d41",
+    "accepted_staging_commit": "0f80ee431c458c31be9ba10518ef07bc0c565ef0",
+    "staging_lambda_sha256": "NUPzpqR0h6dlwN8rIhiczyNT8ZKXUM9vSFtlqO1LA/s=",
+    "staging_zip_not_used_as_production_baseline": true
+  },
+  "live_before": {
+    "function_name": "checksops-production-prep-api",
+    "codeSha256": "srotSrFRXUa52QtAfmsd+Dm5+tUoooWmHKKI01BI7Ng=",
+    "revisionId": "4fa2ae6f-b62e-4a76-9ba2-0f2e0e8736d4",
+    "lastModified": "2026-09-29T19:51:22.000+0000",
+    "codeSize": 11690750,
+    "spa_entry": "/assets/index-CXdgFa1W.js",
+    "spa_index_html_sha256": "3d8a78314f0abfd02f17aea5c239dd899ceb76a5169e4ff2bc9682ef5ef0d7c3"
+  },
+  "live_after": {
+    "function_name": "checksops-production-prep-api",
+    "codeSha256": "s7fEdoI9HXCQhheLoa6i08Zl4UJ+tyU1HDUk5StoVqs=",
+    "revisionId": "cd740e42-5574-4326-931d-a45ca5cb00f6",
+    "lastModified": "2026-09-29T20:10:28.000+0000",
+    "codeSize": 11702177,
+    "spa_entry": "/assets/index-C9QrEEkl.js",
+    "spa_index_html_sha256": "2a8e5245d18a4a84b6175cace303dff9c06b27e5114e4cc439fe9854b2e53575",
+    "spa_s3_version": "WB1fUd6ZL6zzZ06WJyzI11WweMpqeZgS",
+    "cloudfront_invalidation_id": "ICSG55YUMKR4GRD05SOJ7YUE1X"
+  },
+  "previous_accepted_baseline_superseded": {
+    "codeSha256": "ao0jPWwG3Zxy2C7hdr+OWY4EOmhA241BfI7F9iIzT0s=",
+    "revisionId": "dbd48b24-f3f2-4966-b561-9f38c7b118cb",
+    "restored": false,
+    "note": "Live had already moved. New live was authoritative."
+  },
+  "runtime_files_changed": [
+    "tenant-collection-v2.mjs",
+    "tenant-collection-contract-v2.mjs",
+    "tenant-billing-engine.mjs",
+    "providers/parity/tenant-receivables.mjs"
+  ],
+  "protected_byte_identical": {
+    "tenant-billing-destination.mjs": true,
+    "tenant-billing-handlers.mjs": true,
+    "app-services.mjs": true,
+    "scheduled.mjs": true,
+    "providers/parity/caller.mjs": true,
+    "providers/parity/moov-functions.mjs": true,
+    "providers/parity/moov-onboard.mjs": true,
+    "providers/parity/moov-money.mjs": true,
+    "write-allowlist.mjs": true,
+    "write.mjs": true,
+    "ocr-parse.mjs": true
+  },
+  "flags": {
+    "AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST": false,
+    "AWS_MOOV_BILLING_VERIFICATION_POST_ENABLED": false
+  },
+  "destination": {
+    "account_id": "41cb5d67-4911-4bef-aad5-d8ee9c582208",
+    "wallet_id": "72630a70-4954-4761-b652-e8beff1ad02c",
+    "wallet_payment_method_id": "c70a90f2-9bcc-4084-8263-d5a0fb5d806c",
+    "changed": false
+  },
+  "sql": false,
+  "env_changed": false,
+  "sweep_changed": false,
+  "production_scheduler_added_or_enabled": false,
+  "production_moov_writes": 0,
+  "production_transfers_created": 0,
+  "collection_invoked": false,
+  "freedom_transfer_mutated": false,
+  "funding_contract_preserved": true,
+  "receipts": {
+    "lambda": "ops/deployment-guard/tenant-collection-v2-lambda-receipt.json",
+    "spa": "ops/deployment-guard/tenant-collection-v2-spa-receipt.json"
+  },
+  "toctou": {
+    "lambda_matched_receipt_baseline": true,
+    "spa_matched_receipt_baseline": true,
+    "collision": false
+  }
+}
