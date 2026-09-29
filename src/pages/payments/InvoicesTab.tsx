@@ -18,8 +18,11 @@ import { useIsMobile } from "@/hooks/use-mobile";
 
 import { useMoovInvoices, type InvoiceLineItem } from "@/hooks/useMoovInvoices";
 import { usePaymentAccount } from "@/hooks/usePaymentAccount";
+import { useTenantFilter } from "@/hooks/useTenantFilter";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate, useLocation } from "react-router-dom";
+import { TenantLogo } from "@/components/branding/TenantLogo";
+import { resolveTenantLogoUrl } from "@/lib/tenantLogoUrl";
 import {
   Plus, Trash2, Send, Link2, MoreHorizontal, RefreshCw, Loader2, FileText, Clock, CheckCircle2, Ban, Settings,
 } from "lucide-react";
@@ -46,6 +49,7 @@ export function InvoicesTab() {
   const location = useLocation();
   const { invoices, createInvoice, sendInvoice, resendInvoice, cancelInvoice, deleteInvoice, syncInvoices } = useMoovInvoices();
   const { account } = usePaymentAccount();
+  const { tenantId } = useTenantFilter();
   const isMobile = useIsMobile();
 
 
@@ -57,7 +61,8 @@ export function InvoicesTab() {
   const [dueDate, setDueDate] = useState("");
   const [items, setItems] = useState<InvoiceLineItem[]>([emptyItem()]);
   const [branding, setBranding] = useState<{
-    invoice_letterhead_url: string | null;
+    name: string | null;
+    logo_url: string | null;
     invoice_footer_note: string | null;
     invoice_default_terms: string | null;
   } | null>(null);
@@ -87,35 +92,33 @@ export function InvoicesTab() {
   }, []);
 
   useEffect(() => {
-    if (open) {
-      const loadBranding = async () => {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          const { data: tenantUser } = await supabase
-            .from("tenant_users")
-            .select("tenant_id")
-            .eq("user_id", user.id)
-            .maybeSingle();
-          
-          if (tenantUser) {
-            const { data: tenant } = await supabase
-              .from("tenants")
-              .select("invoice_letterhead_url, invoice_footer_note, invoice_default_terms")
-              .eq("id", tenantUser.tenant_id)
-              .maybeSingle();
-            
-            if (tenant) {
-              setBranding(tenant);
-              if (tenant.invoice_default_terms) {
-                setDescription(tenant.invoice_default_terms);
-              }
-            }
-          }
+    if (!tenantId) return;
+    const loadBranding = async () => {
+      const { data: tenant } = await supabase
+        .from("tenants")
+        .select("name, logo_url, invoice_footer_note, invoice_default_terms")
+        .eq("id", tenantId)
+        .maybeSingle();
+      if (tenant) {
+        setBranding({
+          name: tenant.name ?? null,
+          logo_url: resolveTenantLogoUrl(tenant.logo_url) || tenant.logo_url || null,
+          invoice_footer_note: tenant.invoice_footer_note ?? null,
+          invoice_default_terms: tenant.invoice_default_terms ?? null,
+        });
+        if (open && tenant.invoice_default_terms) {
+          setDescription(tenant.invoice_default_terms);
         }
-      };
-      loadBranding();
-    }
-  }, [open]);
+      }
+    };
+    loadBranding();
+  }, [tenantId, open]);
+
+  const brandingSettingsPath = () => {
+    const isWhiteLabel = location.pathname.includes("/wl/");
+    const base = isWhiteLabel ? location.pathname.split("/payments")[0] : (location.pathname.split("/payments")[0] || "/freedom");
+    return `${base}/settings?tab=branding`;
+  };
 
 
   const rows = invoices.data ?? [];
@@ -197,6 +200,27 @@ export function InvoicesTab() {
       </div>
 
       <Card>
+        <CardHeader className="flex flex-col gap-3 space-y-0 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <CardTitle className="text-base">Invoice Branding</CardTitle>
+            <CardDescription>
+              Uses the same logo configured in Branding & Appearance.
+            </CardDescription>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => navigate(brandingSettingsPath())}>
+            <Settings className="h-4 w-4 mr-2" />
+            Branding & Appearance
+          </Button>
+        </CardHeader>
+        <CardContent>
+          <InvoiceBrandingLogoPreview
+            src={branding?.logo_url}
+            alt={branding?.name ? `${branding.name} logo` : "Tenant logo"}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
         <CardHeader className="flex flex-col gap-3 space-y-0 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
           <div className="min-w-0">
             <CardTitle className="text-base">Invoices</CardTitle>
@@ -210,13 +234,7 @@ export function InvoicesTab() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => {
-                const isWhiteLabel = location.pathname.includes('/wl/');
-                const base = isWhiteLabel ? location.pathname.split('/payments')[0] : '/freedom';
-                const tab = isWhiteLabel ? 'branding' : 'organization';
-                const section = isWhiteLabel ? '' : '&section=branding';
-                navigate(`${base}/settings?tab=${tab}${section}`);
-              }}
+              onClick={() => navigate(brandingSettingsPath())}
               className="hidden sm:flex"
             >
               <Settings className="h-4 w-4 mr-2" />
@@ -248,12 +266,12 @@ export function InvoicesTab() {
                   </DialogDescription>
                 </DialogHeader>
 
-                {branding?.invoice_letterhead_url && (
+                {branding?.logo_url && (
                   <div className="mb-4 flex justify-center border-b pb-4">
-                    <img 
-                      src={branding.invoice_letterhead_url} 
-                      alt="Invoice Letterhead" 
-                      className="max-h-16 object-contain opacity-80" 
+                    <TenantLogo
+                      src={branding.logo_url}
+                      alt={branding.name ? `${branding.name} logo` : "Tenant logo"}
+                      className="max-h-16 object-contain opacity-80"
                     />
                   </div>
                 )}
@@ -536,6 +554,26 @@ function InvoiceActions({
   );
 }
 
+
+const NO_LOGO_MESSAGE = "No logo configured. Add one in Branding & Appearance.";
+
+function InvoiceBrandingLogoPreview({ src, alt }: { src?: string | null; alt: string }) {
+  const [failed, setFailed] = useState(false);
+  const url = resolveTenantLogoUrl(src) || "";
+  if (!url || failed) {
+    return <p className="text-sm text-muted-foreground">{NO_LOGO_MESSAGE}</p>;
+  }
+  return (
+    <div className="inline-flex items-center rounded-md border bg-white p-3">
+      <img
+        src={url}
+        alt={alt}
+        className="max-h-14 object-contain"
+        onError={() => setFailed(true)}
+      />
+    </div>
+  );
+}
 
 function SummaryTile({
   icon: Icon, title, value, hint,

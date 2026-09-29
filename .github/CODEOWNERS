@@ -11,6 +11,7 @@
 /scripts/validate-release-locks.mjs @michaelcarletta-cmd
 /scripts/check-pr-path-overlap.mjs @michaelcarletta-cmd
 /scripts/production-deploy-guard.mjs @michaelcarletta-cmd
+/scripts/lib/freedom-platform-funding-contract.mjs @michaelcarletta-cmd
 /.github/workflows/release-locks.yml @michaelcarletta-cmd
 /.github/workflows/aws-migration-ci.yml @michaelcarletta-cmd
 /.github/workflows/tax-profile-migration-guard.yml @michaelcarletta-cmd

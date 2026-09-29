@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { AlertCircle, CheckCircle2, Clock, FileText, Lock, ExternalLink, Ban, Calendar } from "lucide-react";
+import { TenantLogo } from "@/components/branding/TenantLogo";
 
 interface InvoiceLineItem {
   name: string;
@@ -148,17 +149,16 @@ export default function PublicInvoicePage() {
       <div className="mx-auto max-w-3xl">
         {/* Header / Letterhead */}
         <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          {tenant.invoice_letterhead_url ? (
-            <img
-              src={tenant.invoice_letterhead_url}
-              alt={tenant.name}
-              className="max-h-20 object-contain"
-            />
-          ) : tenant.logo_url ? (
-            <img
+          {tenant.logo_url ? (
+            <TenantLogo
               src={tenant.logo_url}
               alt={tenant.name}
-              className="max-h-14 object-contain"
+              className="max-h-16 object-contain"
+              fallback={
+                <div className="text-2xl font-bold" style={{ color: primary }}>
+                  {tenant.name}
+                </div>
+              }
             />
           ) : (
             <div className="text-2xl font-bold" style={{ color: primary }}>

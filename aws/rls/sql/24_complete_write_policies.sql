@@ -442,6 +442,11 @@ CREATE POLICY aws_write_notifications ON public.notifications
   USING (public.aws_can_write_claim(claim_id))
   WITH CHECK (public.aws_can_write_claim(claim_id));
 
+DROP POLICY IF EXISTS aws_write_payment_event_log ON public.payment_event_log;
+CREATE POLICY aws_write_payment_event_log ON public.payment_event_log
+  FOR INSERT TO authenticated
+  WITH CHECK (public.aws_can_write_tenant(tenant_id));
+
 DROP POLICY IF EXISTS aws_write_payment_method_verifications ON public.payment_method_verifications;
 CREATE POLICY aws_write_payment_method_verifications ON public.payment_method_verifications
   FOR ALL TO authenticated

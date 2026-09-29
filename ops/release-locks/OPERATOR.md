@@ -104,6 +104,32 @@ node scripts/production-deploy-guard.mjs --candidate path/to/fingerprint.json
 
 `CHECKSOPS_PRODUCTION_DEPLOY=1` fails unless a candidate fingerprint is supplied **and** the targeted components are `PRODUCTION_LOCKED` with matching hashes. `--live` always fails.
 
+A candidate that touches the Freedom → ChecksOps funding path
+(`ops/release-locks/contracts/freedom-platform-funding-contract.json` and the
+watched resolver/idempotency/provider-POST paths listed there) fails closed
+until the funding contract tests pass and `funding_contract.validated` /
+`tests_passed` are explicitly set. Changed source, destination, Moov
+environment, payment-method resolution, idempotency, provider POST, or
+financial persistence is **not** auto-approved.
+
+## Freedom → ChecksOps funding overlay rule
+
+Future production overlays that touch the funding path MUST:
+
+1. Download/read **CURRENT** live production (Lambda SHA, destination env, flags).
+2. Compare protected funding invariants in `ops/release-locks/contracts/freedom-platform-funding-contract.json`.
+3. Run `node --test ops/release-locks/tests/freedom-platform-funding-contract.test.mjs`.
+4. Apply only the intended narrow delta.
+5. Perform TOCTOU immediately before deployment.
+6. **STOP** on unexplained funding-path drift.
+
+An old repository ZIP or old Lambda package must **never** restore the funding
+path over newer production. This lock does **not** pin a whole-Lambda SHA.
+
+`AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST` and
+`AWS_MOOV_BILLING_VERIFICATION_POST_ENABLED` stay `false` unless a separate
+explicitly authorized workstream changes them.
+
 ## Overlap exceptions
 
 `overlap-allowlist.json` is empty. An exception must name:

@@ -295,6 +295,15 @@ test('deploy guard with production intent and no valid candidate fails', () => {
   assert.equal(guardMain([], ROOT, { CHECKSOPS_PRODUCTION_DEPLOY: '1' }), 1);
 });
 
+test('deploy guard fails closed when a funding-path candidate is not revalidated', () => {
+  const file = path.join(os.tmpdir(), 'funding-guard-candidate.json');
+  fs.writeFileSync(file, JSON.stringify({
+    environment: 'staging',
+    changed_paths: ['aws/functions/api/tenant-billing-destination.mjs'],
+  }));
+  assert.equal(guardMain(['--candidate', file], ROOT, {}), 1);
+});
+
 test('clean manifest validation succeeds against the trusted base after genesis merge', () => {
   const inputs = loadReleaseLockInputs(ROOT);
   const { errors, genesis } = validateReleaseLocks(inputs);

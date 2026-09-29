@@ -179,6 +179,19 @@
       ],
       "open_pr_overlap": []
     },
+    "freedom-platform-funding": {
+      "classification": "SOURCE_LOCKED_NOT_ACTIVE",
+      "git_sha": "109b8dbb76711f0a6f1d83a1cc8d24f55f0bdc93",
+      "deployed_artifact": "behavior contract; live Lambda SHA recorded as freeze evidence only and is not pinned",
+      "applied_migrations": "none; safeguard does not apply SQL",
+      "environment": "production",
+      "missing_evidence": [
+        "whole-Lambda CodeSha256 is intentionally unpinned; live SHA is freeze evidence only",
+        "local tenant_maintenance_payments.settled_at remains null at freeze",
+        "payment_event_log has no row for provider transfer 367c5353-ed20-430b-b767-c3e5d47f28ad"
+      ],
+      "open_pr_overlap": []
+    },
     "production-release": {
       "classification": "UNVERIFIED",
       "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
