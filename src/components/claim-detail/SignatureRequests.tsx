@@ -19,6 +19,21 @@ import {
   signatureSourceFilesQueryKey,
 } from "@/lib/signature-source-files";
 
+const CHECK_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** AWS claim-files writes must use a check-scoped prefix. Never fall back to signatures/{claimId}. */
+export const buildCheckScopedSignatureUploadPath = (
+  checkIntakeItemId: string | null | undefined,
+  name: string,
+) => {
+  const checkId = String(checkIntakeItemId || "").trim();
+  if (!CHECK_UUID_RE.test(checkId)) {
+    throw new Error("Signature upload requires a check-scoped path");
+  }
+  const sanitized = String(name || "document").replace(/[^a-zA-Z0-9.\-_]/g, "_");
+  return `check-intake/${checkId}/files/${Date.now()}-${crypto.randomUUID()}-${sanitized}`;
+};
+
 interface SignatureRequestsProps {
   claimId: string;
   claim: any;
@@ -169,13 +184,26 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
         ? "application/pdf" 
         : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
-      const fileName = `signatures/${claimId}/${Date.now()}-${docData.fileName}`;
+      const fileName = buildCheckScopedSignatureUploadPath(checkIntakeItemId, docData.fileName);
       const blob = new Blob([contentUint8], { type: mimeType });
       
       const { error: uploadError } = await supabase.storage
         .from("claim-files")
         .upload(fileName, blob);
       if (uploadError) throw uploadError;
+
+      const { error: fileRowError } = await supabase.from("check_files").insert({
+        check_intake_item_id: checkIntakeItemId,
+        file_name: docData.fileName || "Document",
+        file_path: fileName,
+        file_type: mimeType,
+        file_size: blob.size,
+        category: "other",
+        source: "manual",
+      });
+      if (fileRowError) throw fileRowError;
+      queryClient.invalidateQueries({ queryKey: signatureSourceFilesQueryKey(claimId, checkIntakeItemId) });
+      queryClient.invalidateQueries({ queryKey: ["check-files", checkIntakeItemId] });
 
       const { data: urlData } = await supabase.storage
         .from("claim-files")
@@ -238,12 +266,25 @@ export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: 
       if (!isPDF && !isDocx) throw new Error("Please upload a PDF or DOCX file");
 
       const sanitizedName = uploadedFile.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
-      const fileName = `signatures/${claimId}/${Date.now()}-${sanitizedName}`;
+      const fileName = buildCheckScopedSignatureUploadPath(checkIntakeItemId, sanitizedName);
 
       const { error: uploadError } = await supabase.storage
         .from("claim-files")
         .upload(fileName, uploadedFile);
       if (uploadError) throw uploadError;
+
+      const { error: fileRowError } = await supabase.from("check_files").insert({
+        check_intake_item_id: checkIntakeItemId,
+        file_name: uploadedFile.name,
+        file_path: fileName,
+        file_type: uploadedFile.type || null,
+        file_size: uploadedFile.size,
+        category: "other",
+        source: "manual",
+      });
+      if (fileRowError) throw fileRowError;
+      queryClient.invalidateQueries({ queryKey: signatureSourceFilesQueryKey(claimId, checkIntakeItemId) });
+      queryClient.invalidateQueries({ queryKey: ["check-files", checkIntakeItemId] });
 
       const { data: urlData, error: urlError } = await supabase.storage
         .from("claim-files")
