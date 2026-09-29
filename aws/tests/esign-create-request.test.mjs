@@ -554,6 +554,58 @@ test('skipEmail path no longer writes NULL to access_token', async () => {
   );
 });
 
+test('send path does not UPDATE claims.latest_signature_request_id', async () => {
+  const client = recordingClient();
+  const result = await runSendSignatureRequest({
+    mapping,
+    spoof,
+    body: createBody(),
+    send: capturingMailer([]),
+    client,
+  });
+  assert.equal(result.ok, true);
+  assert.equal(wouldCommit(result), true);
+  assert.equal(
+    client.calls.some((call) => /UPDATE public\.claims/i.test(call.sql) && /latest_signature_request_id/.test(call.sql)),
+    false,
+  );
+  assert.equal(client.calls.some((call) => call.sql.includes('INSERT INTO public.signature_requests')), true);
+  assert.equal(client.calls.some((call) => call.sql.includes('INSERT INTO public.signature_signers')), true);
+  assert.equal(client.calls.some((call) => call.sql.includes('UPDATE public.check_files')), true);
+});
+
+test('skipEmail path does not UPDATE claims.latest_signature_request_id', async () => {
+  const client = recordingClient();
+  const result = await runSendSignatureRequest({
+    mapping,
+    spoof,
+    body: createBody({ skipEmail: true }),
+    send: capturingMailer([]),
+    client,
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.mode, 'manual_bypass');
+  assert.equal(
+    client.calls.some((call) => /UPDATE public\.claims/i.test(call.sql) && /latest_signature_request_id/.test(call.sql)),
+    false,
+  );
+});
+
+test('runSendSignatureRequest source no longer contains claims pointer updates', () => {
+  const esign = readFileSync(new URL('../functions/api/esign.mjs', import.meta.url), 'utf8');
+  const start = esign.indexOf('export const runSendSignatureRequest');
+  const end = esign.indexOf('export const handleSendSignatureRequest');
+  const block = esign.slice(start, end);
+  assert.equal(block.includes('latest_signature_request_id'), false);
+  assert.equal(block.includes('UPDATE public.claims'), false);
+  assert.match(block, /createSignatureRequestRows/);
+  assert.match(block, /optionalUuid\(field\.id\)/);
+  assert.match(block, /SET access_token = \$2, token_hash = \$3/);
+  assert.doesNotMatch(block, /access_token\s*=\s*NULL/i);
+  assert.match(esign, /UPDATE public\.check_files/);
+  assert.equal((esign.match(/UPDATE public\.claims SET latest_signature_request_id/g) || []).length, 0);
+});
+
 test('token_hash remains the public lookup and token mint is unchanged', () => {
   const esign = readFileSync(new URL('../functions/api/esign.mjs', import.meta.url), 'utf8');
   const submit = readFileSync(new URL('../functions/api/signature-submit.mjs', import.meta.url), 'utf8');
