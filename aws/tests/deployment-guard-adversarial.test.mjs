@@ -23,6 +23,9 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 const SHA = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const SHA_B = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
 const NOW = Date.parse('2026-09-29T16:00:00.000Z');
+// Isolate process.env so a leftover live CHECKSOPS_DEPLOYMENT_GUARD_RECEIPT
+// cannot replace the intact in-memory receipt under test.
+const ISOLATED_ENV = {};
 
 function tmpRoot() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-guard-adv-'));
@@ -171,7 +174,7 @@ test('D. new unregistered Lambda/SPA/CloudFront/SQL writers fail the scanner', (
   assert.match(joined, /rogue-sql/);
 });
 
-test('E. receipt reuse across workstream/commit/component/environment is rejected', () => {
+test('E. intact receipt reuse across workstream/commit/component/environment is RECEIPT_MISMATCH', () => {
   const root = tmpRoot();
   const issued = issueValidReceipt(root);
   const cases = [
@@ -181,7 +184,7 @@ test('E. receipt reuse across workstream/commit/component/environment is rejecte
     { workstream_id: 'workstream-a', commit: SHA, target_environment: 'production', target_component: 'checksops-production-prep-api', deployment_type: 'spa-promote' },
   ];
   for (const expected of cases) {
-    const result = refuseUnguardedDeploy({ ...expected, receipt: issued.receipt }, { root, now: NOW + 1000 });
+    const result = refuseUnguardedDeploy({ ...expected, receipt: issued.receipt }, { root, now: NOW + 1000, env: ISOLATED_ENV });
     assert.equal(result.ok, false, JSON.stringify(expected));
     assert.equal(result.code, CODES.RECEIPT_MISMATCH);
   }
@@ -196,7 +199,7 @@ test('E. receipt reuse across workstream/commit/component/environment is rejecte
     deployment_type: 'lambda-overlay',
     workstream_id: 'workstream-a',
     receipt: staging.receipt,
-  }, { root, now: NOW + 1000 });
+  }, { root, now: NOW + 1000, env: ISOLATED_ENV });
   assert.equal(crossEnv.ok, false);
   assert.equal(crossEnv.code, CODES.RECEIPT_MISMATCH);
 
@@ -216,7 +219,7 @@ test('E. receipt reuse across workstream/commit/component/environment is rejecte
     workstream_id: 'workstream-a',
     preflight_live_fingerprint: { codeSha256: 'newer-live', revisionId: 'rev-9' },
     receipt: issued.receipt,
-  }, { root, now: NOW + 1000 });
+  }, { root, now: NOW + 1000, env: ISOLATED_ENV });
   assert.equal(stale.ok, false);
   assert.equal(stale.code, CODES.DEPLOYMENT_COLLISION);
 });
@@ -252,7 +255,7 @@ test('hand-written receipt JSON is rejected even when fields match', () => {
     workstream_id: 'workstream-a',
     commit: SHA,
     receipt: forged,
-  }, { root, now: NOW + 1000 });
+  }, { root, now: NOW + 1000, env: ISOLATED_ENV });
   assert.equal(result.ok, false);
   assert.equal(result.code, CODES.RECEIPT_FORGED);
 

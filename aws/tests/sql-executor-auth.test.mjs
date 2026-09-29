@@ -193,7 +193,8 @@ test('sql-apply receipt cannot authorize executor invoke', () => {
     workstream_id: 'claim-ledger',
     commit: AUTHORIZED_SQL44.commit,
     receipt: issued.details.receipt,
-  }, { root, now: NOW_MS + 1000 });
+  }, { root, now: NOW_MS + 1000, env: {} });
+  // Intact sql-apply receipt used for a different deployment_type.
   assert.equal(refused.ok, false);
   assert.equal(refused.code, CODES.RECEIPT_MISMATCH);
 });
