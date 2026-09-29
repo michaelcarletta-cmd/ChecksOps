@@ -87,6 +87,7 @@ export function main(argv = process.argv.slice(2), env = process.env, root = rep
       RDS_HOST: rehearsal.Environment?.Variables?.RDS_HOST || 'checksops-staging.cyr0q4kcop3c.us-east-1.rds.amazonaws.com',
       DATABASE_NAME: 'checksops',
       EXECUTOR_IDENTITY: SQL_EXECUTOR_FUNCTION,
+      SECRETS_MANAGER_ENDPOINT: rehearsal.Environment?.Variables?.SECRETS_MANAGER_ENDPOINT || '',
     },
   };
   const vpcConfig = `SubnetIds=${(vpc.SubnetIds || []).join(',')},SecurityGroupIds=${(vpc.SecurityGroupIds || []).join(',')}`;
