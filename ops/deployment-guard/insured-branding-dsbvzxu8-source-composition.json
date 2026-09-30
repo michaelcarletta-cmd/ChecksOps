@@ -1,0 +1,57 @@
+{
+  "id": "insured-branding-dsbvzxu8-source-composition",
+  "workstream_id": "insured-name-branding-fix-51c8",
+  "accepted_composition": true,
+  "wholesale_restore": false,
+  "live_at_compose": {
+    "captured_at": "2026-09-30T21:24:35.303Z",
+    "production_spa": "/assets/index-DSbVZXu8.js",
+    "production_index_html_sha256": "e93fe5488c013aed91626da1ee608978f702796a24e08350306ccb4c3163e75f",
+    "production_s3_version": "Jc2Nyp5THf1j30gf21cQHeMoApSs8uDw",
+    "staging_spa": "/assets/index-DSbVZXu8.js",
+    "production_lambda": "jN5d0C340DZlKM7/zbxxiZk+atoAqv9CI2quPZq5IG8=",
+    "production_revision": "a37c1225-1287-4070-9ef5-be5f04f9efe8",
+    "staging_lambda": "xaIA0kUDPuc8UmYPpei9zIX9PjN/DCVdjJzeqGQifiQ=",
+    "do_not_restore": [
+      "/assets/index-QDJiUFF1.js",
+      "/assets/index-DbYbvb6d.js",
+      "/assets/index-C_fh5VBD.js",
+      "/assets/index-CEKjixtZ.js"
+    ]
+  },
+  "base_source": {
+    "branch": "cursor/claim-settlement-amount-writer-a2a4",
+    "commit": "82460c8c2",
+    "pr": 582,
+    "reason": "Current live production and staging SPA entry DSbVZXu8. Hostname-guard + settlement intercept. Must not be overwritten by an older settings SPA."
+  },
+  "composed_owned_files": [
+    "src/lib/tenantLogoUrl.ts",
+    "src/components/branding/TenantLogo.tsx",
+    "src/components/deposit-ops/BankDepositReconciliation.tsx",
+    "src/components/settings/CompanyBrandingSettings.tsx",
+    "src/components/settings/EmailSenderSettings.tsx",
+    "src/components/white-label/WhiteLabelLogin.tsx",
+    "src/components/white-label/WhiteLabelCheckCenter.tsx",
+    "src/components/white-label/WhiteLabelSettings.tsx",
+    "src/pages/PublicInvoicePage.tsx",
+    "src/pages/payments/InvoicesTab.tsx",
+    "aws/functions/api/tenant-settings-handlers.mjs",
+    "aws/functions/api/tenant-email-domain-handlers.mjs"
+  ],
+  "intentionally_untouched_from_live_spa_source": [
+    "index.html hostname-guard / production-banner hide",
+    "src/components/payments/ClaimLedgerCard.tsx",
+    "src/components/claim-detail/SignatureRequests.tsx",
+    "src/pages/WalletOps.tsx",
+    "aws/functions/api/workflow-rpc.mjs",
+    "aws/functions/api/workflow.mjs",
+    "aws/functions/api/write-claim-settlement.mjs",
+    "aws/functions/api/ocr-parse.mjs",
+    "aws/functions/api/storage.mjs"
+  ],
+  "notes": [
+    "DSbVZXu8 still rendered Payee/payee_line and lacked tenantLogoUrl. Overlay restores accepted date-grouped deposits plus Insured Name and branding persist/render without replacing the settlement SPA.",
+    "Lambda apply overlays only the two branding handlers onto a freshly downloaded live ZIP."
+  ]
+}

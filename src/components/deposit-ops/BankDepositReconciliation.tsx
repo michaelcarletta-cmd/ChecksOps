@@ -3,14 +3,13 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenantFilter } from "@/hooks/useTenantFilter";
 import { TenantAutoApproveCard } from "@/components/billing/TenantAutoApproveCard";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Banknote, ChevronDown, ChevronRight, Clock, Settings } from "lucide-react";
+import { ChevronDown, ChevronRight, Settings } from "lucide-react";
 import { format, parseISO } from "date-fns";
 
 interface DepositRow {
@@ -23,15 +22,32 @@ interface DepositRow {
   check_intake_items: {
     check_number: string | null;
     carrier_name: string | null;
-    payee_line: string | null;
     detected_claim_number: string | null;
+    claim_id: string | null;
+    claims?: { policyholder_name: string | null } | { policyholder_name: string | null }[] | null;
   } | null;
 }
+
+/** Canonical insured/policyholder name from the linked claim. Never falls back to payee_line. */
+export const insuredNameFromDeposit = (row: {
+  check_intake_items?: {
+    claim_id?: string | null;
+    claims?: { policyholder_name?: string | null } | { policyholder_name?: string | null }[] | null;
+    policyholder_name?: string | null;
+  } | null;
+} | null | undefined) => {
+  const item = row?.check_intake_items;
+  if (!item?.claim_id) return "—";
+  const linked = Array.isArray(item.claims) ? item.claims[0] : item.claims;
+  const name = linked?.policyholder_name ?? item.policyholder_name;
+  const trimmed = typeof name === "string" ? name.trim() : "";
+  return trimmed || "—";
+};
 
 const fmtMoney = (n: number | null | undefined) =>
   `$${(n ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-/** Bank-credit day from persisted FinCapture depositDate (cleared_at) or submitted_at. */
+/** Submission day from persisted submitted_at. Missing dates stay unknown. */
 export const bankDepositDayKey = (iso: string | null | undefined) => {
   if (!iso) return "unknown";
   const day = String(iso).slice(0, 10);
@@ -41,9 +57,27 @@ export const bankDepositDayKey = (iso: string | null | undefined) => {
 export const sumDepositAmounts = (rows: { amount: number | null | undefined }[]) =>
   rows.reduce((s, r) => s + Number(r.amount ?? 0), 0);
 
-/** Settled only when local status is cleared and provider depositDate was stored. */
-export const isBankDepositSettled = (row: { status?: string | null; cleared_at?: string | null }) =>
-  row?.status === "cleared" && Boolean(row?.cleared_at);
+export const groupDepositsBySubmissionDate = <T extends { submitted_at?: string | null }>(
+  rows: T[],
+): { dayKey: string; rows: T[]; total: number }[] => {
+  const map = new Map<string, T[]>();
+  for (const row of rows) {
+    const dayKey = bankDepositDayKey(row.submitted_at);
+    if (!map.has(dayKey)) map.set(dayKey, []);
+    map.get(dayKey)!.push(row);
+  }
+  return Array.from(map.entries())
+    .map(([dayKey, groupRows]) => ({
+      dayKey,
+      rows: groupRows,
+      total: sumDepositAmounts(groupRows),
+    }))
+    .sort((a, b) => {
+      if (a.dayKey === "unknown") return 1;
+      if (b.dayKey === "unknown") return -1;
+      return b.dayKey.localeCompare(a.dayKey);
+    });
+};
 
 const labelForDay = (dayKey: string) => {
   if (dayKey === "unknown") return "Date unknown";
@@ -58,7 +92,6 @@ interface DepositGroup {
   key: string;
   dayKey: string;
   label: string;
-  settled: boolean;
   total: number;
   rows: DepositRow[];
 }
@@ -76,14 +109,42 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
       const { data, error } = await supabase
         .from("checkalt_deposits")
         .select(
-          "id, checkalt_reference, amount, status, cleared_at, submitted_at, check_intake_items(check_number, carrier_name, payee_line, detected_claim_number)",
+          "id, checkalt_reference, amount, status, cleared_at, submitted_at, check_intake_items(check_number, carrier_name, detected_claim_number, claim_id, claims:claim_id(policyholder_name))",
         )
         .eq("tenant_id", tenantId as string)
         .not("status", "in", "(rejected,returned,error,declined)")
         .order("submitted_at", { ascending: false })
         .limit(1000);
       if (error) throw error;
-      return (data ?? []) as unknown as DepositRow[];
+      const rows = (data ?? []) as unknown as DepositRow[];
+      const claimIds = Array.from(
+        new Set(rows.map((r) => r.check_intake_items?.claim_id).filter((id): id is string => Boolean(id))),
+      );
+      const missing = claimIds.filter((id) => {
+        const row = rows.find((r) => r.check_intake_items?.claim_id === id);
+        const linked = Array.isArray(row?.check_intake_items?.claims)
+          ? row?.check_intake_items?.claims[0]
+          : row?.check_intake_items?.claims;
+        return !linked?.policyholder_name;
+      });
+      if (missing.length) {
+        const { data: claims } = await supabase
+          .from("claims")
+          .select("id, policyholder_name")
+          .in("id", missing);
+        const map = new Map((claims ?? []).map((c: { id: string; policyholder_name: string | null }) => [c.id, c.policyholder_name]));
+        for (const row of rows) {
+          const id = row.check_intake_items?.claim_id;
+          if (!id || !row.check_intake_items) continue;
+          const existing = Array.isArray(row.check_intake_items.claims)
+            ? row.check_intake_items.claims[0]
+            : row.check_intake_items.claims;
+          if (!existing?.policyholder_name) {
+            row.check_intake_items.claims = { policyholder_name: map.get(id) ?? null };
+          }
+        }
+      }
+      return rows;
     },
   });
 
@@ -96,7 +157,7 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
         r.checkalt_reference,
         item?.check_number,
         item?.carrier_name,
-        item?.payee_line,
+        insuredNameFromDeposit(r),
         item?.detected_claim_number,
         r.amount != null ? String(r.amount) : null,
       ]
@@ -104,30 +165,13 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
         .some((v) => String(v).toLowerCase().includes(q));
     });
 
-    const map = new Map<string, DepositGroup>();
-    for (const row of rows) {
-      const settled = isBankDepositSettled(row);
-      const dayKey = bankDepositDayKey(row.cleared_at ?? row.submitted_at);
-      const key = `${settled ? "settled" : "pending"}:${dayKey}`;
-      if (!map.has(key)) {
-        map.set(key, {
-          key,
-          dayKey,
-          label: labelForDay(dayKey),
-          settled,
-          total: 0,
-          rows: [],
-        });
-      }
-      const g = map.get(key)!;
-      g.rows.push(row);
-      g.total = sumDepositAmounts(g.rows);
-    }
-
-    return Array.from(map.values()).sort((a, b) => {
-      if (a.settled !== b.settled) return a.settled ? 1 : -1;
-      return b.key.localeCompare(a.key);
-    });
+    return groupDepositsBySubmissionDate(rows).map((g) => ({
+      key: g.dayKey,
+      dayKey: g.dayKey,
+      label: labelForDay(g.dayKey),
+      total: g.total,
+      rows: g.rows,
+    }));
   }, [data, searchQuery]);
 
   const visibleGroups = useMemo(() => {
@@ -145,9 +189,6 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
       return next;
     });
   }, [jumpDate, groups]);
-
-  const settledTotal = visibleGroups.filter((g) => g.settled).reduce((s, g) => s + g.total, 0);
-  const pendingTotal = visibleGroups.filter((g) => !g.settled).reduce((s, g) => s + g.total, 0);
 
   if (isLoading) {
     return (
@@ -196,32 +237,9 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
         <TenantAutoApproveCard tenantId={tenantId} />
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-2">
-              <Banknote className="h-3.5 w-3.5" /> Settled into your bank
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="text-2xl font-semibold tabular-nums">{fmtMoney(settledTotal)}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-2">
-              <Clock className="h-3.5 w-3.5" /> In transit / not yet cleared
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="text-2xl font-semibold tabular-nums">{fmtMoney(pendingTotal)}</div>
-          </CardContent>
-        </Card>
-      </div>
-
       <p className="text-xs text-muted-foreground">
-        Each row below is one bank credit. Expand a day to see exactly which checks make up that amount.
-        Daily total equals the sum of the checks shown.
+        Checks are grouped by the date they were submitted for deposit. Later clearing status does not split a day.
+        These records are deposit submissions, not confirmed bank credits. Daily total equals the sum of the checks shown.
       </p>
 
       {visibleGroups.length === 0 && (
@@ -245,9 +263,6 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
               <div className="flex items-center gap-2 min-w-0">
                 {isOpen ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
                 <span className="font-medium truncate">{g.label}</span>
-                <Badge variant={g.settled ? "default" : "secondary"} className="text-[10px]">
-                  {g.settled ? "Settled" : "Pending"}
-                </Badge>
                 <span className="text-xs text-muted-foreground whitespace-nowrap">
                   {g.rows.length} check{g.rows.length === 1 ? "" : "s"}
                 </span>
@@ -263,7 +278,7 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
                       <TableRow>
                         <TableHead className="whitespace-nowrap">Check #</TableHead>
                         <TableHead className="whitespace-nowrap">Carrier</TableHead>
-                        <TableHead className="whitespace-nowrap">Payee</TableHead>
+                        <TableHead className="whitespace-nowrap">Insured Name</TableHead>
                         <TableHead className="whitespace-nowrap">Claim #</TableHead>
                         <TableHead className="whitespace-nowrap">Reference</TableHead>
                         <TableHead className="whitespace-nowrap">Status</TableHead>
@@ -275,7 +290,7 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
                         <TableRow key={r.id}>
                           <TableCell className="whitespace-nowrap">{r.check_intake_items?.check_number ?? "—"}</TableCell>
                           <TableCell className="max-w-[180px] truncate">{r.check_intake_items?.carrier_name ?? "—"}</TableCell>
-                          <TableCell className="max-w-[220px] truncate">{r.check_intake_items?.payee_line ?? "—"}</TableCell>
+                          <TableCell className="max-w-[220px] truncate">{insuredNameFromDeposit(r)}</TableCell>
                           <TableCell className="whitespace-nowrap">{r.check_intake_items?.detected_claim_number ?? "—"}</TableCell>
                           <TableCell className="whitespace-nowrap font-mono text-xs">{r.checkalt_reference ?? "—"}</TableCell>
                           <TableCell className="whitespace-nowrap capitalize text-xs text-muted-foreground">
@@ -298,12 +313,12 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
                     size="sm"
                     variant="outline"
                     onClick={() => {
-                      const header = "Check #,Carrier,Payee,Claim #,Reference,Status,Amount";
+                      const header = "Check #,Carrier,Insured Name,Claim #,Reference,Status,Amount";
                       const lines = g.rows.map((r) =>
                         [
                           r.check_intake_items?.check_number ?? "",
                           r.check_intake_items?.carrier_name ?? "",
-                          r.check_intake_items?.payee_line ?? "",
+                          insuredNameFromDeposit(r) === "—" ? "" : insuredNameFromDeposit(r),
                           r.check_intake_items?.detected_claim_number ?? "",
                           r.checkalt_reference ?? "",
                           r.status ?? "",
@@ -316,7 +331,7 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
                       const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
                       const a = document.createElement("a");
                       a.href = url;
-                      a.download = `bank-deposit-${g.key.replace(":", "-")}.csv`;
+                      a.download = `bank-deposit-${g.dayKey}.csv`;
                       a.click();
                       URL.revokeObjectURL(url);
                     }}
