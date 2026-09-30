@@ -1,7 +1,7 @@
 {
   "id": "qdji-dsb-recovery-source-composition",
   "workstream_id": "regression-recovery-matrix-f477",
-  "accepted_composition": false,
+  "accepted_composition": true,
   "wholesale_restore": false,
   "production_writes_this_task": 0,
   "lambda_writes_this_task": 0,
