@@ -1,0 +1,94 @@
+{
+  "id": "walletops-activity-recovery-reconcile-source",
+  "verdict": "CURRENT_STAGING_SOURCE_IDENTIFIED",
+  "live_spa": {
+    "entry": "/assets/index-DvVldu_B.js",
+    "index_html_sha256": "21caa4e7988482e8c608495d8e69e72e6d956d8d3d6b6532bdd694790ca28d6b",
+    "walletops": "/assets/WalletOps-0gB4KnAq.js"
+  },
+  "source": {
+    "workstream": "cursor/settings-billing-branding-deposits-51c8",
+    "pr": "https://github.com/michaelcarletta-cmd/ChecksOps/pull/567",
+    "cloud_agent": "bc-c413824f-1040-4e4b-90c5-70d2053051c8",
+    "spa_compose_commit": "2bbc0967e",
+    "spa_compose_message": "Compose WalletOps UX frontend as-is for staging SPA",
+    "last_commit_before_spa_last_modified": "cb14c2e38",
+    "frontend_src_identical_through": [
+      "2bbc0967e",
+      "cb14c2e38",
+      "9dca99e25",
+      "ffb32e3b4"
+    ],
+    "isolated_worktree_from": "ffb32e3b4c1a52b0660fa56184745e379537d1c6",
+    "proof": [
+      "Live index-DvVldu_B.js contains settings-only strings: tenant-company-branding-save, There is no separate invoice logo, Logo uploaded — click Save branding to apply, Invoices use the same logo configured in Branding.",
+      "Live WalletOps-0gB4KnAq.js contains Payout Preferences + Payment Account + Funding & Billing + isWalletDestination + maybeSingle.",
+      "Live WalletOps-0gB4KnAq.js does not contain selectPaymentWallet, ambiguous_wallet, or tenantMoovEnvironment.",
+      "src/ frontend tree is byte-identical from 2bbc0967e through ffb32e3b4 (git diff --stat empty).",
+      "S3 LastModified window 2026-09-30T18:28:00-18:29:16Z matches the settings workstream SPA upload, not this recovery branch.",
+      "Recovery HEAD d855f2076 is not the live staging composition."
+    ]
+  },
+  "independent_changes_preserved": [
+    "monthly auto-billing save/consent (TenantBillingAccountPanel + tenant-settings-handlers)",
+    "company/invoice/email branding (CompanyBrandingSettings, EmailSenderSettings, tenantLogoUrl)",
+    "stakeholder verification (StakeholderAccountSettings, moov-stakeholder-status)",
+    "bank-deposit history (BankDepositReconciliation date grouping)",
+    "signature requests (untouched)",
+    "claim-number work (untouched)",
+    "OCR (settings-branch copies preserved, not modified)",
+    "Mortgage Ops (untouched)",
+    "CheckAlt (untouched)"
+  ],
+  "shared_file_overlap": {
+    "src/hooks/useWalletOps.ts": {
+      "settings_sha256": "d055e471fdbc969dba455b2d0741e95c8d6cb331d97aa34f18d71b35e1e21de4",
+      "fundingux_sha256": "d055e471fdbc969dba455b2d0741e95c8d6cb331d97aa34f18d71b35e1e21de4",
+      "recovery_sha256": "ba9af3cc764736fb3d5ebe2c1ef1b55c2aa32ae955bc4caa4c4cbae8c1c5bae5",
+      "overlap": "settings matched funding-ux pre-recovery. No settings-only hunks. Forward-port recovery environment-aware select + ambiguous_wallet catch."
+    },
+    "src/lib/payments/wallets.ts": {
+      "settings_sha256": "de7cb3ca79292528c5a168ff6964497f5d8e9540637ce861d3637c0cee4a0ec2",
+      "fundingux_sha256": "de7cb3ca79292528c5a168ff6964497f5d8e9540637ce861d3637c0cee4a0ec2",
+      "recovery_sha256": "82efb952bf5529496cc33171fcd36f504ae3000e71c30df3162a065ed0f354f0",
+      "overlap": "settings matched funding-ux. Forward-port environment-aware readWallet only."
+    },
+    "src/hooks/usePaymentProviderEligibility.ts": {
+      "settings_sha256": "4e46f2b91491e69b53a43d2d6d4d8bb69d46ff46b3f922bacd65cdb057358cfe",
+      "fundingux_sha256": "4e46f2b91491e69b53a43d2d6d4d8bb69d46ff46b3f922bacd65cdb057358cfe",
+      "recovery_sha256": "70c41673cd37a22a20ce55a58665a37c3fa31c5683f0aa6e716938a9f1a9b6a0",
+      "overlap": "additive tenantMoovEnvironment + environmentReady only. No settings hunk collision."
+    },
+    "src/pages/WalletOps.tsx": {
+      "settings_sha256": "a1e5fe4f495cf80f72880456d5ee3c8accf9dd77625a64e4dbf6b57a1c2ee234",
+      "fundingux_sha256": "a1e5fe4f495cf80f72880456d5ee3c8accf9dd77625a64e4dbf6b57a1c2ee234",
+      "recovery_sha256": "4077ec158c635bb566fcc032c629d81f9d246ccf39cb021b75c16df70fefbdbf",
+      "overlap": "settings matched funding-ux (still has Payment Account + Payout Preferences). Forward-port Item #4 removal plus credit = isWalletDestination && !isWalletSource."
+    },
+    "src/lib/payments/walletRelativeTransfers.ts": {
+      "all_match": "f7fc912539dfb3f68847f2c12e8e4df4bed43357790e6f1e240e2ce0a190711f",
+      "overlap": "none — left untouched"
+    },
+    "src/lib/payments/selectPaymentWallet.ts": {
+      "settings": "absent",
+      "recovery": "added"
+    },
+    "src/lib/payments/reconcileWalletFundingTransfer.ts": {
+      "settings": "absent",
+      "recovery": "added"
+    }
+  },
+  "forward_ported_from": "d855f2076b1648f49d7f17c74e0c25e1cc8ebb78",
+  "files_changed": [
+    "src/lib/payments/selectPaymentWallet.ts",
+    "src/lib/payments/reconcileWalletFundingTransfer.ts",
+    "src/hooks/useWalletOps.ts",
+    "src/hooks/usePaymentProviderEligibility.ts",
+    "src/lib/payments/wallets.ts",
+    "src/pages/WalletOps.tsx",
+    "scripts/test-walletops-layout.mjs",
+    "aws/tests/walletops-wallet-select.test.mjs",
+    "aws/tests/walletops-wallet-funding-reconcile.test.mjs",
+    "aws/tests/walletops-wallet-relative.test.mjs"
+  ]
+}

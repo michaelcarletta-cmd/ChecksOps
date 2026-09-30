@@ -1,0 +1,165 @@
+{
+  "id": "walletops-activity-recovery-staging-accepted",
+  "verdict": "WALLETOPS ACTIVITY RECOVERY — STAGING ACCEPTED",
+  "captured_at": "2026-09-30T18:56:10Z",
+  "workstream_id": "walletops-activity-recovery-staging-2d41",
+  "branch": "cursor/walletops-activity-recovery-staging-2d41",
+  "commit": "62b50307da2e3c37e7f48c535316d0dfe264f865",
+  "recovery_source_head": "d855f2076b1648f49d7f17c74e0c25e1cc8ebb78",
+  "pr": "https://github.com/michaelcarletta-cmd/ChecksOps/pull/569",
+  "lambda_updated": false,
+  "production_promoted": false,
+  "production_db_writes": 0,
+  "provider_money_writes": 0,
+  "A_fresh_staging_fingerprint_before": {
+    "index_html_sha256": "21caa4e7988482e8c608495d8e69e72e6d956d8d3d6b6532bdd694790ca28d6b",
+    "entry_bundle": "/assets/index-DvVldu_B.js",
+    "entry_js_sha256": "fb88e40f0eae85c08d92511811e89ad2679d89a48818f7b9f4a1bef3b8045379",
+    "walletops": "/assets/WalletOps-0gB4KnAq.js",
+    "walletops_sha256": "4a0aa1baccf104ba7a0ebb3840225a2653377e070736e14dc11049c259d44da2",
+    "index_last_modified": "2026-09-30T18:29:16+00:00",
+    "lambda": {
+      "function": "checksops-staging-api",
+      "CodeSha256": "//BfiiKna/KRIuX8NEPipSyagIVFxM/5BY7nTaT7OUs=",
+      "RevisionId": "3698b6c6-3d83-444b-ace3-0eb80e362adc",
+      "LastModified": "2026-09-30T18:25:59.000+0000"
+    }
+  },
+  "B_fresh_production_readonly": {
+    "index_html_sha256": "d0d59415d6692713f73b8edabefec10a261f1b7a85d6f4a6abd719f9011b3eb4",
+    "entry_bundle": "/assets/index-C_fh5VBD.js",
+    "walletops": "/assets/WalletOps-2AGadvlz.js",
+    "walletops_sha256": "85a3b9776a2db63acb661545f2c006b74699224357f0be59db96349aee063439",
+    "index_last_modified": "2026-09-30T18:06:18+00:00",
+    "lambda": {
+      "function": "checksops-production-prep-api",
+      "CodeSha256": "pxZj4G6pGntJrkcRO5uNNEbiyvDpCOKPiWAboDnPvBA=",
+      "RevisionId": "3bccd144-4e61-422f-8151-9ed0fe713aac",
+      "LastModified": "2026-09-30T16:25:23.000+0000"
+    },
+    "unchanged_after_staging_deploy": true
+  },
+  "C_source_composition": {
+    "live_before": "/assets/index-DvVldu_B.js",
+    "workstream": "cursor/settings-billing-branding-deposits-51c8",
+    "pr": 567,
+    "spa_compose_commit": "2bbc0967e",
+    "isolated_from": "ffb32e3b4c1a52b0660fa56184745e379537d1c6",
+    "frontend_src_identical_through": ["2bbc0967e", "cb14c2e38", "9dca99e25", "ffb32e3b4"],
+    "proof": "Live DvVldu_B contained settings-only branding/email strings and WalletOps still had Payout Preferences + maybeSingle. src/ identical from compose commit through settings HEAD."
+  },
+  "D_independent_changes_preserved": [
+    "monthly auto-billing save/consent",
+    "company/invoice/email branding",
+    "stakeholder verification",
+    "bank-deposit history",
+    "signature requests",
+    "claim-number work",
+    "OCR",
+    "Mortgage Ops",
+    "CheckAlt"
+  ],
+  "E_shared_file_overlap": "settings WalletOps files matched funding-ux pre-recovery; no settings-only hunks in the four shared files. Forward-port was additive/recovery-only.",
+  "F_forward_ported_hunks": [
+    "src/lib/payments/selectPaymentWallet.ts",
+    "src/lib/payments/reconcileWalletFundingTransfer.ts",
+    "src/hooks/useWalletOps.ts",
+    "src/hooks/usePaymentProviderEligibility.ts",
+    "src/lib/payments/wallets.ts",
+    "src/pages/WalletOps.tsx"
+  ],
+  "G_files_changed": [
+    "src/lib/payments/selectPaymentWallet.ts",
+    "src/lib/payments/reconcileWalletFundingTransfer.ts",
+    "src/hooks/useWalletOps.ts",
+    "src/hooks/usePaymentProviderEligibility.ts",
+    "src/lib/payments/wallets.ts",
+    "src/pages/WalletOps.tsx",
+    "scripts/test-walletops-layout.mjs",
+    "aws/tests/walletops-wallet-select.test.mjs",
+    "aws/tests/walletops-wallet-funding-reconcile.test.mjs",
+    "aws/tests/walletops-wallet-relative.test.mjs"
+  ],
+  "H_tests": {
+    "wallet_select": "8/8",
+    "wallet_funding_reconcile": "5/5",
+    "wallet_relative": "20/20",
+    "walletops_layout": "12/12",
+    "v2": "38/38",
+    "funding": "23/23",
+    "receivables": "15/15",
+    "isolation": "portal/mortgage 8/8 + tenant-logo 2/2"
+  },
+  "I_v2_hashes": {
+    "tenant-collection-v2.mjs": "8a66f54d3c2785162a1643218e18b4d3c251230cf2a7f98a1ecb4ede8939fb66",
+    "tenant-collection-contract-v2.mjs": "9ec5ae45db34c0795570f401cc2b1c3fa78f04764870bf6b651c21278433ed5d",
+    "tenant-billing-engine.mjs": "65b75735825f9a06955d5daba603f74835d106cabf52eb449153c856a59dae2f",
+    "note": "settings source does not contain tenant-receivables.mjs; that file was not restored"
+  },
+  "J_item4": {
+    "walletops_payment_account_management": "ABSENT",
+    "walletops_payout_preferences": "ABSENT",
+    "compliance_payment_account_setup": "PRESENT in live entry (Payment Account Setup)",
+    "funding_and_billing": "PRESENT",
+    "recent_activity": "PRESENT",
+    "pending_in_out": "PRESENT"
+  },
+  "K_toctou": {
+    "result": "NO DRIFT",
+    "phase1_index_sha256": "21caa4e7988482e8c608495d8e69e72e6d956d8d3d6b6532bdd694790ca28d6b",
+    "immediately_before_index_sha256": "21caa4e7988482e8c608495d8e69e72e6d956d8d3d6b6532bdd694790ca28d6b",
+    "entry_match": true,
+    "lambda_match": true,
+    "deployed": true
+  },
+  "L_new_staging_assets": {
+    "index_html_sha256": "aebe4624f1e72479f1b8466ab47bcd6a7577ae0d562da4c9e9043dd9e6cb41f4",
+    "entry_bundle": "/assets/index-CfEPSd2I.js",
+    "entry_js_sha256": "80ba3010edb6f9f6335cf8409c8e420a1dc0385bf90fd32b0b0676a44ada46d2",
+    "css": "/assets/index-C6onCFE-.css",
+    "walletops": "/assets/WalletOps-CsjzGSHb.js",
+    "walletops_sha256": "9e24ef6be21fb97a7395fc59778c1567dc771012a8cd89d6d1f7ef268045e905"
+  },
+  "M_staging_deployment": {
+    "bucket": "checksops-staging-frontend-c48b",
+    "distribution": "E1CG52WRQZI7X1",
+    "invalidation_id": "I6KI6QGEN3Y0299DORAWYPC6DL",
+    "uploaded_count": 108,
+    "s3_sync_delete": false,
+    "lambda_deployed": false,
+    "cloudfront_index_entry": "/assets/index-CfEPSd2I.js",
+    "production_untouched": true
+  },
+  "N_environment_selection": {
+    "checksops.com": "production",
+    "staging.checksops.com": "sandbox",
+    "localhost_unknown": "tenant moov_environment else sandbox",
+    "two_wallets_same_env": "ambiguous_wallet",
+    "never_rows_0": true,
+    "live_bundle_contains_ambiguous_wallet": true,
+    "live_bundle_contains_staging_host": true
+  },
+  "O_five_shaped_staging": {
+    "pending": "Pending In $5 + activity visible",
+    "completed": "Pending In $0 + activity still visible",
+    "no_real_production_transaction": true
+  },
+  "P_139_shaped_staging": {
+    "pending_out": "$0",
+    "billing_activity": "visible $139"
+  },
+  "Q_billing_activity": {
+    "checksops_billing_not_limited_to_wallet_involved": true,
+    "split_bill_only_wallet_leg_pending_out": true,
+    "duplicate_provider_transfer_id_counted_once": true,
+    "cross_tenant_excluded": true
+  },
+  "R_provider_financial_writes": 0,
+  "S_production_writes": 0,
+  "T_production_status": "READ-ONLY. SPA index-C_fh5VBD.js and Lambda pxZj4G6p… Rev 3bccd144 unchanged.",
+  "U_proposed_production_next_step": {
+    "do_not_do_now": true,
+    "provider_transfer_id": "9f9df312-32a9-4999-ace9-fc2b00669c75",
+    "action": "After separate approval, persist the existing production $5 via reconcileWalletFundingTransfer (no provider POST/PATCH). Do not promote this SPA to production in the same step unless independently approved."
+  }
+}
