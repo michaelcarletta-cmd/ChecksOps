@@ -1,0 +1,15 @@
+{
+  "id": "walletops-activity-recovery-staging-stop",
+  "verdict": "WALLETOPS ACTIVITY RECOVERY — CODE COMPLETE / STAGING NOT DEPLOYED",
+  "reason": "Live staging SPA entry /assets/index-DvVldu_B.js (2026-09-30T18:29:16Z) is a concurrent workstream baseline. Phase 0 TOCTOU matched that baseline. Overlaying this branch's full SPA would replace it. Source of DvVldu_B is not this worktree, so a hunk-level forward-port could not be proven.",
+  "toctou": {
+    "phase0_index_sha256": "21caa4e7988482e8c608495d8e69e72e6d956d8d3d6b6532bdd694790ca28d6b",
+    "live_index_sha256": "21caa4e7988482e8c608495d8e69e72e6d956d8d3d6b6532bdd694790ca28d6b",
+    "match": true,
+    "lambda_match": true,
+    "deployed": false
+  },
+  "production_writes": 0,
+  "staging_writes": 0,
+  "provider_money_writes": 0
+}
