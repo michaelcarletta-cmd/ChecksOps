@@ -1,0 +1,28 @@
+{
+  "id": "walletops-item4-preservation",
+  "workstream_id": "walletops-funding-prod-2d41",
+  "presentation_only": true,
+  "backend_writes_required": false,
+  "payout_preferences_render_init_side_effect": false,
+  "payout_preferences_save_was_click_only": true,
+  "useSweepConfig_still_read_for_funding_billing": true,
+  "hashes_unchanged": {
+    "src/hooks/useSweepConfig.ts": "5587d498c4289d2f5634da2672f8adc17d722e017ef8bd197217404f9530cf88",
+    "supabase/functions/moov-sweep-config/index.ts": "80f57ee57854f6c59737dd1620b86ab972a847c828d932abfd0558c1749e3acc",
+    "src/components/payments/PaymentAccountPanel.tsx": "a7f9fcb58e568d35932871366b7c0d4c2456967d08518597a9a0677642d5e2a5",
+    "src/components/settings/ComplianceSettings.tsx": "48aa9de78f949a829b1ff0e24a3f3d643c12c12c948546fe7414c957bb16194c",
+    "src/components/white-label/WhiteLabelSettings.tsx": "47001da02e9630933e9dee1cdd1ed91ad1bc74971536f24c6c261c2eb0d08e5a"
+  },
+  "v2_hashes_unchanged": {
+    "aws/functions/api/tenant-collection-v2.mjs": "8a66f54d3c2785162a1643218e18b4d3c251230cf2a7f98a1ecb4ede8939fb66",
+    "aws/functions/api/tenant-collection-contract-v2.mjs": "9ec5ae45db34c0795570f401cc2b1c3fa78f04764870bf6b651c21278433ed5d",
+    "aws/functions/api/tenant-billing-engine.mjs": "65b75735825f9a06955d5daba603f74835d106cabf52eb449153c856a59dae2f",
+    "aws/functions/api/providers/parity/tenant-receivables.mjs": "0d8f8f20f4939e79551b4a1aa5b3305bb791cea7ca684f4428594ad359179477"
+  },
+  "payment_account_access": {
+    "walletops_section_removed": true,
+    "compliance_settings_title": "Payment Account Setup",
+    "white_label_tab": "Compliance & Docs",
+    "component_not_deleted": "src/components/payments/PaymentAccountPanel.tsx"
+  }
+}

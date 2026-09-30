@@ -1,0 +1,60 @@
+{
+  "id": "walletops-funding-prod-source-composition",
+  "workstream_id": "walletops-funding-prod-2d41",
+  "wholesale_staging_spa": false,
+  "lambda_updated": false,
+  "production_updated": false,
+  "item4_presentation_only": true,
+  "base": {
+    "kind": "current-live-production-spa-source",
+    "commit": "8e8fde63dafd3c3cfa2fc179c2c56323f2957b64",
+    "message": "Pass accepted source composition through official SPA preflight.",
+    "reason": "Live production SPA entry /assets/index-C9QrEEkl.js was built from this source (receivables + Collection V2 frontend). WalletOps.tsx is identical to 75e9297a9.",
+    "live_entry": "/assets/index-C9QrEEkl.js",
+    "live_index_html_sha256": "67466d1e1fde618baa3e12aa6b3f3d2651390eee19c7e05004ffc05629a363d2"
+  },
+  "forward_ported": [
+    "src/lib/payments/walletRelativeTransfers.ts",
+    "src/hooks/useWalletOps.ts",
+    "src/pages/WalletOps.tsx"
+  ],
+  "item4_hunks": [
+    "src/pages/WalletOps.tsx: remove Payment Account SectionCard and PaymentAccountPanel/PaymentReadinessPanel/VerificationDocumentsPanel wiring",
+    "src/pages/WalletOps.tsx: remove Payout Preferences SectionCard and handleSavePayoutSpeed/save.mutateAsync",
+    "src/pages/WalletOps.tsx: keep Funding & Billing, Pending In/Out, Recent Wallet Activity, useSweepConfig reads"
+  ],
+  "intentionally_untouched": [
+    "src/components/settings/ComplianceSettings.tsx",
+    "src/components/white-label/WhiteLabelSettings.tsx",
+    "src/components/payments/PaymentAccountPanel.tsx",
+    "src/hooks/useSweepConfig.ts",
+    "supabase/functions/moov-sweep-config/index.ts",
+    "aws/functions/api/tenant-collection-v2.mjs",
+    "aws/functions/api/tenant-collection-contract-v2.mjs",
+    "aws/functions/api/tenant-billing-engine.mjs",
+    "aws/functions/api/providers/parity/tenant-receivables.mjs",
+    "src/components/white-label/CompanyBrandingSettings.tsx",
+    "src/pages/PublicInvoicePage.tsx",
+    "src/pages/payments/InvoicesTab.tsx"
+  ],
+  "kept_from_production_base": [
+    "src/components/admin/PlatformReceivablesLedger.tsx",
+    "src/components/admin/PlatformTreasuryPanel.tsx",
+    "src/components/admin/TenantBillingHistoryPanel.tsx",
+    "src/pages/admin/AdminTenants.tsx"
+  ],
+  "isolated_build": {
+    "worktree": "/tmp/walletops-prod-spa-src",
+    "baseline_commit": "8e8fde63dafd3c3cfa2fc179c2c56323f2957b64",
+    "mode": "aws",
+    "clean_build": true,
+    "not_from_staging_dist": true,
+    "not_from_old_production_dist": true,
+    "env": {
+      "VITE_AUTH_PROVIDER": "cognito",
+      "VITE_APP_URL": "https://checksops.com",
+      "VITE_CHECKSOPS_API_URL": "/prep",
+      "note": "Matches live C9QrEEkl.js baked values. Staging execute-api URL was not used."
+    }
+  }
+}
