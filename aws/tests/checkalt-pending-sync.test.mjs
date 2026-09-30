@@ -128,8 +128,10 @@ test('Bank Deposits never treats status=cleared without cleared_at as settled', 
   assert.equal(isBankDepositSettled({ status: 'submitted', cleared_at: null }), false);
   assert.equal(applyCheckAltSettlementInvariant('cleared', { statusCode: 200 }), 'submitted');
   const src = fs.readFileSync(path.join(SPA, 'components/deposit-ops/BankDepositReconciliation.tsx'), 'utf8');
-  assert.match(src, /isBankDepositSettled\(row\)/);
+  assert.match(src, /groupDepositsBySubmissionDate/);
+  assert.match(src, /bankDepositDayKey\(row\.submitted_at\)/);
   assert.equal(/const settled = !!row\.cleared_at/.test(src), false);
+  assert.equal(/Settled into your bank/.test(src), false);
 });
 
 test('scheduled CheckAlt status job stays disabled and is not a money job', async () => {
