@@ -322,10 +322,9 @@ export const runSaveTenantBillingAccount = async ({ client, mapping, body, spoof
 };
 
 const brandingUrl = (value) => {
-  if (value === undefined) return undefined;
-  if (value === null || value === '') return null;
+  if (value === undefined || value === null || value === '') return undefined;
   const text = String(value).trim();
-  if (!text) return null;
+  if (!text) return undefined;
   if (text.startsWith('/') || !text.includes('://')) {
     if (text.length > 512) return { error: 'invalid_field', field: 'logo_url' };
     return text;

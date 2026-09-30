@@ -158,6 +158,7 @@ export function WhiteLabelLogin() {
             src={tenant.logo_url}
             alt={tenant.name}
             className="h-10 md:h-12 mx-auto object-contain"
+            tenantId={tenant.id}
           />
           <div>
             <CardTitle className="text-xl md:text-2xl">{tenant.name}</CardTitle>

@@ -228,14 +228,15 @@ export const runSaveEmailBranding = async ({ client, mapping, body, spoof }) => 
   }
   if ('logoUrl' in body || 'logo_url' in body) {
     const raw = body.logoUrl ?? body.logo_url;
-    if (raw === null || raw === '') tenantPatch.logo_url = null;
-    else {
+    if (raw !== null && raw !== '') {
       const text = String(raw).trim();
-      const ok = text.startsWith('/') || !text.includes('://') || isSafeHttpUrl(text);
-      if (!ok) {
-        return { ok: false, statusCode: 400, error: 'invalid_field', field: 'logo_url', spoofFieldsIgnored: spoof };
+      if (text) {
+        const ok = text.startsWith('/') || !text.includes('://') || isSafeHttpUrl(text);
+        if (!ok) {
+          return { ok: false, statusCode: 400, error: 'invalid_field', field: 'logo_url', spoofFieldsIgnored: spoof };
+        }
+        tenantPatch.logo_url = text.includes('://') ? safeHttpUrl(text, null) : text;
       }
-      tenantPatch.logo_url = text.includes('://') ? safeHttpUrl(text, null) : text;
     }
   }
   if (Object.keys(tenantPatch).length) {

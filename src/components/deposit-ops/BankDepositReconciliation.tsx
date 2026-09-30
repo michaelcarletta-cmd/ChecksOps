@@ -22,10 +22,27 @@ interface DepositRow {
   check_intake_items: {
     check_number: string | null;
     carrier_name: string | null;
-    payee_line: string | null;
     detected_claim_number: string | null;
+    claim_id: string | null;
+    claims?: { policyholder_name: string | null } | { policyholder_name: string | null }[] | null;
   } | null;
 }
+
+/** Canonical insured/policyholder name from the linked claim. Never falls back to payee_line. */
+export const insuredNameFromDeposit = (row: {
+  check_intake_items?: {
+    claim_id?: string | null;
+    claims?: { policyholder_name?: string | null } | { policyholder_name?: string | null }[] | null;
+    policyholder_name?: string | null;
+  } | null;
+} | null | undefined) => {
+  const item = row?.check_intake_items;
+  if (!item?.claim_id) return "—";
+  const linked = Array.isArray(item.claims) ? item.claims[0] : item.claims;
+  const name = linked?.policyholder_name ?? item.policyholder_name;
+  const trimmed = typeof name === "string" ? name.trim() : "";
+  return trimmed || "—";
+};
 
 const fmtMoney = (n: number | null | undefined) =>
   `$${(n ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -92,14 +109,42 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
       const { data, error } = await supabase
         .from("checkalt_deposits")
         .select(
-          "id, checkalt_reference, amount, status, cleared_at, submitted_at, check_intake_items(check_number, carrier_name, payee_line, detected_claim_number)",
+          "id, checkalt_reference, amount, status, cleared_at, submitted_at, check_intake_items(check_number, carrier_name, detected_claim_number, claim_id, claims:claim_id(policyholder_name))",
         )
         .eq("tenant_id", tenantId as string)
         .not("status", "in", "(rejected,returned,error,declined)")
         .order("submitted_at", { ascending: false })
         .limit(1000);
       if (error) throw error;
-      return (data ?? []) as unknown as DepositRow[];
+      const rows = (data ?? []) as unknown as DepositRow[];
+      const claimIds = Array.from(
+        new Set(rows.map((r) => r.check_intake_items?.claim_id).filter((id): id is string => Boolean(id))),
+      );
+      const missing = claimIds.filter((id) => {
+        const row = rows.find((r) => r.check_intake_items?.claim_id === id);
+        const linked = Array.isArray(row?.check_intake_items?.claims)
+          ? row?.check_intake_items?.claims[0]
+          : row?.check_intake_items?.claims;
+        return !linked?.policyholder_name;
+      });
+      if (missing.length) {
+        const { data: claims } = await supabase
+          .from("claims")
+          .select("id, policyholder_name")
+          .in("id", missing);
+        const map = new Map((claims ?? []).map((c: { id: string; policyholder_name: string | null }) => [c.id, c.policyholder_name]));
+        for (const row of rows) {
+          const id = row.check_intake_items?.claim_id;
+          if (!id || !row.check_intake_items) continue;
+          const existing = Array.isArray(row.check_intake_items.claims)
+            ? row.check_intake_items.claims[0]
+            : row.check_intake_items.claims;
+          if (!existing?.policyholder_name) {
+            row.check_intake_items.claims = { policyholder_name: map.get(id) ?? null };
+          }
+        }
+      }
+      return rows;
     },
   });
 
@@ -112,7 +157,7 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
         r.checkalt_reference,
         item?.check_number,
         item?.carrier_name,
-        item?.payee_line,
+        insuredNameFromDeposit(r),
         item?.detected_claim_number,
         r.amount != null ? String(r.amount) : null,
       ]
@@ -233,7 +278,7 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
                       <TableRow>
                         <TableHead className="whitespace-nowrap">Check #</TableHead>
                         <TableHead className="whitespace-nowrap">Carrier</TableHead>
-                        <TableHead className="whitespace-nowrap">Payee</TableHead>
+                        <TableHead className="whitespace-nowrap">Insured Name</TableHead>
                         <TableHead className="whitespace-nowrap">Claim #</TableHead>
                         <TableHead className="whitespace-nowrap">Reference</TableHead>
                         <TableHead className="whitespace-nowrap">Status</TableHead>
@@ -245,7 +290,7 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
                         <TableRow key={r.id}>
                           <TableCell className="whitespace-nowrap">{r.check_intake_items?.check_number ?? "—"}</TableCell>
                           <TableCell className="max-w-[180px] truncate">{r.check_intake_items?.carrier_name ?? "—"}</TableCell>
-                          <TableCell className="max-w-[220px] truncate">{r.check_intake_items?.payee_line ?? "—"}</TableCell>
+                          <TableCell className="max-w-[220px] truncate">{insuredNameFromDeposit(r)}</TableCell>
                           <TableCell className="whitespace-nowrap">{r.check_intake_items?.detected_claim_number ?? "—"}</TableCell>
                           <TableCell className="whitespace-nowrap font-mono text-xs">{r.checkalt_reference ?? "—"}</TableCell>
                           <TableCell className="whitespace-nowrap capitalize text-xs text-muted-foreground">
@@ -268,12 +313,12 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
                     size="sm"
                     variant="outline"
                     onClick={() => {
-                      const header = "Check #,Carrier,Payee,Claim #,Reference,Status,Amount";
+                      const header = "Check #,Carrier,Insured Name,Claim #,Reference,Status,Amount";
                       const lines = g.rows.map((r) =>
                         [
                           r.check_intake_items?.check_number ?? "",
                           r.check_intake_items?.carrier_name ?? "",
-                          r.check_intake_items?.payee_line ?? "",
+                          insuredNameFromDeposit(r) === "—" ? "" : insuredNameFromDeposit(r),
                           r.check_intake_items?.detected_claim_number ?? "",
                           r.checkalt_reference ?? "",
                           r.status ?? "",
