@@ -38,3 +38,12 @@ test('live Signature draft inserts remain allowlisted', () => {
   assert.ok(WRITE_ALLOWLIST.signature_signers.columns.has('signer_email'));
   assert.match(WORKFLOW_SRC, /executeSignatureWrite/);
 });
+
+test('live tenant create stays next to claims save', () => {
+  const META_SRC = readFileSync('aws/functions/api/write-app-metadata.mjs', 'utf8');
+  assert.equal(WRITE_ALLOWLIST.tenants.ops.has('insert'), true);
+  assert.equal(WRITE_ALLOWLIST.tenants.ops.has('update'), true);
+  assert.ok(WRITE_ALLOWLIST.tenants.columns.has('slug'));
+  assert.match(META_SRC, /export const executeTenantsCreate/);
+  assert.match(META_SRC, /export const executeClaimsNumberUpdate/);
+});
