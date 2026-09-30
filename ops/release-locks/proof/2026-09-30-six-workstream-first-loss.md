@@ -217,5 +217,135 @@ replace.
   or #579 safeguard source
 - Rebuild from `origin/main`
 - Treat delete-check lock refresh as a SPA identity
+- Delete, update, hide, or re-OCR any check / `checkalt_deposits` row
+  while investigating “unknown” checks
+
+---
+
+## Reported-symptom acceptance (required)
+
+A recovered candidate is **not** accepted on bundle hashes alone. It must
+restore the two user-reported surfaces below, and the “unknown” checks
+must be classified read-only as existing vs new. **Do not delete or
+modify any checks** during that classification or during apply.
+
+### A. Correct Moov account status
+
+Live `DSbVZXu8` / current `main` `StakeholderAccountSettings.tsx` uses a
+single badge (`Not verified` / `Failed` / …) and does **not** emit
+`Bank verified` or `Provider linked`. `QDJiUFF1` (PR #581) does.
+
+Accepted #581 rule (`84ba11f4` `StakeholderAccountSettings.tsx`):
+
+- `verification_status === "verified"` → **Bank verified**
+- Moov `provider_account_id` present and bank not verified → **Provider
+  linked**, tooltip: “A Moov account exists. This is not bank
+  verification.”
+- Do not treat provider-linked as bank-verified
+- WalletOps recovery (`9afb57fe`) must also select the
+  environment-specific operating wallet (`environmentReady` /
+  `selectPaymentWallet`)
+
+Acceptance checks (read-only, no association writes):
+
+1. Candidate SPA contains `Bank verified` and `Provider linked`.
+2. For one known Freedom stakeholder with a Moov id and unverified bank:
+   UI shows **Provider linked** and **not** Bank verified.
+3. For a bank-verified stakeholder: **Bank verified** regardless of Moov
+   id.
+4. WalletOps activity uses the production operating wallet, not a
+   sandbox/other-env wallet.
+
+PR #584 already recorded that homeowner
+`2ad87468-15cd-437c-ba9c-c4a896dc5365` has no provider account. Do not
+associate any of the four `M*** C***` Moov accounts as part of
+acceptance.
+
+### B. Tenant logo
+
+Live `DSbVZXu8` entry has **zero** `tenantLogoUrl`. Logo **bytes were not
+deleted**. Read-only GET
+`https://checksops.com/prep/branding/logo/2eff5f1a-929d-4ce3-9a8b-cd96b98df42a`
+at 2026-09-30T22:40:49Z returned HTTP 200 `image/png` 796240 bytes,
+PNG 3000×599, sha256
+`8fe8caf15f55d20f6c7a6b71f14dd6e1b80d6b0fa384bb10a1e581fc17c6801f`.
+
+Acceptance checks:
+
+1. Candidate includes `src/lib/tenantLogoUrl.ts` and `TenantLogo` from
+   `b97a8dc6` (PR #584). Login/header/invoices resolve
+   `/prep/branding/logo/{tenantId}`, not a raw `/storage/public` hop as
+   the primary display URL.
+2. Repeat the same GET: still 200 PNG with the same sha256 (or a newer
+   operator-uploaded logo). Storage must not have been cleared.
+3. Authenticated render (when a session exists): Freedom tenant header
+   shows that PNG.
+4. Blank branding save must not persist `logo_url=null`
+   (`persistableLogoField` / #584 handlers).
+
+### C. Newly visible “unknown” checks — existing vs new (read-only)
+
+**Do not DELETE/UPDATE `check_intake_items` or `checkalt_deposits`.**
+
+Two SPA strings exist. Classify both.
+
+#### C1. Bank Deposits group `Date unknown` (primary)
+
+`bankDepositDayKey(null)` returns `"unknown"`; UI label **Date unknown**.
+
+| SPA | Grouping key | When a row is “unknown” |
+|---|---|---|
+| Live `DSbVZXu8` / `82460c8c2` | `cleared_at ?? submitted_at` | both timestamps null / unparseable |
+| #581 `QDJiUFF1` / #584 recover | `submitted_at` only | `submitted_at` null even if `cleared_at` exists |
+
+None of the six workstreams insert `check_intake_items` except a unit-test
+fixture in `ocr-rerun-stability.test.ts`. The deposit query is
+`.from("checkalt_deposits").select(...).limit(1000)` — **read of existing
+rows**. The unknown bucket is a **client regroup**, not a create.
+
+Read-only classification (later apply workstream / operator):
+
+```sql
+-- evaluate-only; do not apply from this file
+SELECT d.id AS deposit_id,
+       d.check_intake_item_id,
+       d.status,
+       d.submitted_at,
+       d.cleared_at,
+       d.created_at,
+       i.created_at AS check_created_at,
+       i.check_number
+  FROM checkalt_deposits d
+  LEFT JOIN check_intake_items i ON i.id = d.check_intake_item_id
+ WHERE d.tenant_id = :tenant
+   AND d.status NOT IN ('rejected','returned','error','declined')
+   AND d.submitted_at IS NULL
+ ORDER BY d.created_at;
+```
+
+| If | Meaning |
+|---|---|
+| `d.created_at` and `i.created_at` both `< 2026-09-30 20:15 UTC` | **Existing records** exposed/mislabeled by the submission-date grouper |
+| `i.created_at >= 2026-09-30 20:15 UTC` | Treat as a **genuinely new check**; these six workstreams have **no** production insert path — investigate outside this compose |
+| Row exists only after a user upload in the window | New intake, not a compose bug; **do not delete** |
+
+Until that SELECT is run, code evidence says the unknown deposit group is
+**existing `checkalt_deposits`**, not new intake created by #575/#576/#581/#582/#579/#586.
+
+The recovered candidate **will still show Date unknown** for rows with
+null `submitted_at`. That is correct grouping, not a reason to delete
+those checks. Acceptance is: same deposit ids as the live query, no extra
+inserts, Insured Name column (not `payee_line`) on those existing rows.
+
+#### C2. Check Command Center `Unknown insured`
+
+Live `CheckCommandCenter-CEe5Z_6a.js` and `QDJi` `…BdkfEkL_.js` both
+contain **4** `Unknown insured` strings (fallback when
+`policyholder_name`, insured payee, and `extractInsuredName(payee_line)`
+are empty). Chunk sizes 451128 vs 451156 — not a query rewrite.
+
+If a file band says **Unknown insured**, it is the same fallback on both
+sides of the #582 SPA replace. It is a **label**, not a new row. Confirm
+with the check’s `id` / `created_at` (read-only). Do not delete.
 
 This file is not an apply receipt.
