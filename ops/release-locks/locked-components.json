@@ -74,7 +74,13 @@
         "deployed SPA Cognito fingerprint on main",
         "production identity mapping apply hash"
       ],
-      "open_pr_overlap": ["#316", "#317", "#319", "#313", "#240"],
+      "open_pr_overlap": [
+        "#316",
+        "#317",
+        "#319",
+        "#313",
+        "#240"
+      ],
       "notes": "Docs on main still say pool us-east-1_h00WorYMT has 0 users; later PRs claim Freedom Adjustment login after cutover. UNVERIFIED."
     },
     "moov-webhooks": {
@@ -111,7 +117,9 @@
       },
       "production_validation": {
         "completed": false,
-        "evidence_refs": ["aws/cutover/WEBHOOK_TRANSITION.md"],
+        "evidence_refs": [
+          "aws/cutover/WEBHOOK_TRANSITION.md"
+        ],
         "recorded_at": null
       },
       "deployment_fingerprint": null,
@@ -125,7 +133,11 @@
         "signed webhook receipt hash",
         "independent proof the Supabase Moov webhook is disabled"
       ],
-      "open_pr_overlap": ["#314", "#315", "#308"],
+      "open_pr_overlap": [
+        "#314",
+        "#315",
+        "#308"
+      ],
       "notes": "WEBHOOK_TRANSITION.md on main still says production URLs remain on Supabase. Background claims AWS accepted events. UNVERIFIED."
     },
     "checkalt-submission": {
@@ -162,7 +174,9 @@
       },
       "production_validation": {
         "completed": false,
-        "evidence_refs": ["aws/financial/sql/65_checkalt_production_writer.sql"],
+        "evidence_refs": [
+          "aws/financial/sql/65_checkalt_production_writer.sql"
+        ],
         "recorded_at": null
       },
       "deployment_fingerprint": null,
@@ -176,7 +190,13 @@
         "writer SQL apply hash",
         "deployed Lambda version"
       ],
-      "open_pr_overlap": ["#327", "#332", "#339", "#322", "#323"],
+      "open_pr_overlap": [
+        "#327",
+        "#332",
+        "#339",
+        "#322",
+        "#323"
+      ],
       "notes": "template.yaml on main keeps AWS_CHECKALT_ENABLED false. PR #359 retargets tree_hash for persistPollOutcome FinCapture depositDate mapping only. Writer SQL remains NOT_APPLIED. UNVERIFIED."
     },
     "financial-ledger": {
@@ -221,7 +241,9 @@
       },
       "production_validation": {
         "completed": false,
-        "evidence_refs": ["aws/financial/PRODUCTION_ACTIVATION_RUNBOOK.md"],
+        "evidence_refs": [
+          "aws/financial/PRODUCTION_ACTIVATION_RUNBOOK.md"
+        ],
         "recorded_at": null
       },
       "deployment_fingerprint": null,
@@ -234,7 +256,11 @@
         "production financial permission flag",
         "reconciliation apply proof"
       ],
-      "open_pr_overlap": ["#315", "#310", "#309"],
+      "open_pr_overlap": [
+        "#315",
+        "#310",
+        "#309"
+      ],
       "notes": "Freedom Adjustment reconciliation is claimed in background/open PRs, not proven on origin/main."
     },
     "tenant-email": {
@@ -271,7 +297,9 @@
       },
       "production_validation": {
         "completed": false,
-        "evidence_refs": ["aws/docs/tenant-ses-email-domain.md"],
+        "evidence_refs": [
+          "aws/docs/tenant-ses-email-domain.md"
+        ],
         "recorded_at": null
       },
       "deployment_fingerprint": null,
@@ -284,7 +312,11 @@
         "production SES enablement proof",
         "SQL apply hash"
       ],
-      "open_pr_overlap": ["#233", "#231", "#255"],
+      "open_pr_overlap": [
+        "#233",
+        "#231",
+        "#255"
+      ],
       "notes": "Source preserved; template flag false; SQL NOT_APPLIED."
     },
     "partner-sharing": {
@@ -358,7 +390,13 @@
         "production SPA bundle fingerprint after publishing the reviewed main SHA",
         "Lambda version serving partner-share-lifecycle.mjs / authorization.mjs"
       ],
-      "open_pr_overlap": ["#339", "#347", "#342", "#332", "#327"],
+      "open_pr_overlap": [
+        "#339",
+        "#347",
+        "#342",
+        "#332",
+        "#327"
+      ],
       "notes": "SQL 31/32/33/34 are APPLIED IN PRODUCTION (ledger apply_evidence + ops/release-locks/proof/c1c-partner-share-production-apply.md). Do not reapply. required_sql.applied stays false because SOURCE_LOCKED_NOT_ACTIVE cannot claim production-applied SQL. PR #359 retargets tree_hash for Manager navigation, tenants_public partner names, and the disposable shared-check READ fixture columns needed by SQL 33; SQL 31-34, Partner Codes, and shared_checks are unchanged. Ownership and visibility are separate; never transfer check tenant_id to repair partner access."
     },
     "mortgage-ops": {
@@ -403,7 +441,9 @@
       },
       "production_validation": {
         "completed": false,
-        "evidence_refs": ["aws/rls/sql/29_mortgage_ops_library_parity.sql"],
+        "evidence_refs": [
+          "aws/rls/sql/29_mortgage_ops_library_parity.sql"
+        ],
         "recorded_at": null
       },
       "deployment_fingerprint": null,
@@ -415,7 +455,11 @@
       "missing_evidence": [
         "production or staging apply proof for SQL 29/30"
       ],
-      "open_pr_overlap": ["#249", "#248", "#282"],
+      "open_pr_overlap": [
+        "#249",
+        "#248",
+        "#282"
+      ],
       "notes": "Matches background: merged code-only; SQL previously reported unapplied."
     },
     "auto-deposit": {
@@ -456,7 +500,12 @@
         "merged tenant auto-deposit source",
         "production activation proof"
       ],
-      "open_pr_overlap": ["#342", "#339", "#327", "#332"],
+      "open_pr_overlap": [
+        "#342",
+        "#339",
+        "#327",
+        "#332"
+      ],
       "notes": "Validated-as-ready in background is not production-locked. PR #339 is draft and not on main."
     },
     "database-rls": {
@@ -505,7 +554,13 @@
       "missing_evidence": [
         "production RLS catalog hash"
       ],
-      "open_pr_overlap": ["#289", "#249", "#288", "#350", "#310"],
+      "open_pr_overlap": [
+        "#289",
+        "#249",
+        "#288",
+        "#350",
+        "#310"
+      ],
       "notes": "Path-hashed only. Adding 33_partner_stage_totals.sql and 34_c1c_partner_visibility.sql changes this tree. Those two files plus 31/32 are APPLIED IN PRODUCTION for partner sharing; do not reapply. PR #310 adds a different 33_ tenant-billing file and must not overwrite the partner-share 33/34 contract."
     },
     "provider-secrets": {
@@ -533,7 +588,9 @@
       },
       "production_validation": {
         "completed": false,
-        "evidence_refs": ["aws/financial/CHECKALT_PRODUCTION_SECRET_CONTRACT.md"],
+        "evidence_refs": [
+          "aws/financial/CHECKALT_PRODUCTION_SECRET_CONTRACT.md"
+        ],
         "recorded_at": null
       },
       "deployment_fingerprint": null,
@@ -545,20 +602,23 @@
       "missing_evidence": [
         "Secrets Manager version IDs (not secret values)"
       ],
-      "open_pr_overlap": ["#316", "#314"],
+      "open_pr_overlap": [
+        "#316",
+        "#314"
+      ],
       "notes": "Name/config references only."
     },
     "ocr-azure": {
       "id": "ocr-azure",
       "ownership_group": "ocr-azure",
-      "classification": "STAGING_LOCKED_NOT_PRODUCTION",
+      "classification": "UNVERIFIED",
       "production_active": false,
-      "environment": "staging",
+      "environment": "unknown",
       "source": {
-        "git_sha": "8a3ead386d99f0e825d54093ebcb8c174a8c758e",
-        "tree_hash": "9ecc8ae0c814947afb1badc354b467831b24eec09cb8a60bdb454cb6abfb2801",
-        "merged": true,
-        "merged_pr": 370
+        "git_sha": "4c52e1835a4e5b677b763e6095acc67c951b74ee",
+        "tree_hash": "9ae779b2de694bcf7c36741b90bc0296527791b80165e3cac925e1383ee68fee",
+        "merged": false,
+        "merged_pr": 561
       },
       "required_sql": [],
       "artifact": {
@@ -585,12 +645,13 @@
         "notes": "Staging-validated OCR/Azure runtime from merged PR #370. Not production-locked. Do not deploy or unlock from this lock PR."
       },
       "missing_evidence": [
-        "production Lambda version serving the locked OCR runtime",
+        "staging revalidation of OCR runtime after merged changes #385, #389, #530, #531 and parser repair #561",
+        "production Lambda version serving the reconciled OCR runtime",
         "immutable production deployment fingerprint",
         "production OCR validation evidence"
       ],
       "open_pr_overlap": [],
-      "notes": "Protects the eight finalized OCR runtime files only. Shared providers/parity/checkalt-image.mjs is not owned here; OCR reuses named raster exports without claiming the CheckAlt module. Classification is STAGING_LOCKED_NOT_PRODUCTION because staging validation passed and production is not locked."
+      "notes": "Fail-closed reconciliation only. The protected OCR tree has advanced beyond the original PR #370 staging lock through merged OCR changes #385, #389, #530 and #531, with PR #561 correcting only the malformed payee-continuation regex introduced by #531. Classification is deliberately downgraded to UNVERIFIED until the reconciled runtime is revalidated; this manifest change does not deploy, restore, or modify AWS, production, Signature, Partner Sharing, Cognito, database/RLS, Moov, Mortgage Ops, Claim Ledger, or SPA artifacts."
     },
     "production-spa": {
       "id": "production-spa",
@@ -649,7 +710,9 @@
         "notes": "Pre-overlay live lineage before the accepted banner fix. Do not restore this older SPA over the frozen baseline unless a reviewed unlock records a newer accepted live identity."
       },
       "missing_evidence": [],
-      "open_pr_overlap": ["#506"],
+      "open_pr_overlap": [
+        "#506"
+      ],
       "notes": "Authoritative production frontend baseline. Future production SPA work must start from this live identity or a demonstrably newer accepted baseline. Do not promote main merely because it is main. SPA-only lock: no SQL. This PR records evidence only and does not deploy."
     },
     "production-release": {
@@ -695,7 +758,15 @@
         "code-owner review required",
         "direct pushes and administrator bypasses disabled"
       ],
-      "open_pr_overlap": ["#316", "#317", "#319", "#325", "#333", "#326", "#328"],
+      "open_pr_overlap": [
+        "#316",
+        "#317",
+        "#319",
+        "#325",
+        "#333",
+        "#326",
+        "#328"
+      ],
       "notes": "Control-plane lock tooling only. Live accepted SPA identity is PRODUCTION_LOCKED on production-spa (index-BPbQUNFr.js); this component stays UNVERIFIED because GitHub enforcement is incomplete. Hashing this validator with itself is not independent security. Do not treat origin/main as the live SPA. This PR does not own aws/cutover/PRODUCTION_SPA_LOCK.json from other PRs."
     }
   }
