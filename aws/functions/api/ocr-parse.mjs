@@ -248,8 +248,8 @@ const pickPayee = (idx) => {
       const nextText = String(l.text || '').trim();
       if (!nextText) continue;
       const boundaryContinues = !accumulatedPayee
-        || /(?:\\band\\b|&|＆|﹠|／|\\/|;|；)\\s*$/i.test(accumulatedPayee)
-        || /^\\s*(?:\\band\\b|&|＆|﹠|／|\\/|;|；)/i.test(nextText);
+        || /(?:\band\b|&|＆|﹠|／|\/|;|；)\s*$/i.test(accumulatedPayee)
+        || /^\s*(?:\band\b|&|＆|﹠|／|\/|;|；)/i.test(nextText);
       if (!boundaryContinues) continue;
       extras.push(l);
       accumulatedPayee = accumulatedPayee ? `${accumulatedPayee} ${nextText}` : nextText;
