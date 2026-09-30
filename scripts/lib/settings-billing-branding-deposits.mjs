@@ -34,6 +34,26 @@ export const REVIEWED_PRODUCTION_SPA = Object.freeze({
   ...ACCEPTED_PRODUCTION_SPA,
 });
 
+export const CURRENT_LIVE_PRODUCTION_SPA = Object.freeze({
+  host: 'https://checksops.com',
+  spa_bundle: '/assets/index-DbYbvb6d.js',
+  spa_sha256: '1dfbe6c4d2a77027b7ac3cf89eece450b4d9b290b829a2d88ff0244332e6e47c',
+  index_html_sha256: '705f86309699aa6df4e15f12d0e8b0e3c31ff742eed18195859f7cd226e18040',
+  s3_version: 'FVo1QSfkEI4csW.r3iuuFu0rds.pzPKN',
+  last_modified: '2026-09-30T20:01:34+00:00',
+  walletops: '/assets/WalletOps-j3z9RyZ7.js',
+  source_pr: 575,
+});
+
+export const CURRENT_LIVE_PRODUCTION_LAMBDA = Object.freeze({
+  function_name: 'checksops-production-prep-api',
+  codeSha256: 'RaFQKBA489aj69N8e76eCQdzlJ2ijkA1YFNFPa+D9r4=',
+  revisionId: '33e3f02d-3a97-4b8e-be31-4e104b7027f3',
+  lastModified: '2026-09-30T19:56:32.000+0000',
+  source_pr: 576,
+  workflow_sha256: 'bd18db71ab9277eea74add41f99ed5324841a163815a756578f60cfd50bf7bab',
+});
+
 export const COMPOSED_SPA_CANDIDATE = Object.freeze({
   spa_bundle: '/assets/index-CEKjixtZ.js',
   spa_sha256: 'bd36849ef6b63f2d10b03225f2796427440baddd9c9caf508eff76ba2bc18fae',
@@ -53,9 +73,12 @@ export const MUST_PRESERVE_LAMBDA_MEMBERS = Object.freeze(['esign.mjs']);
 
 export const INDEPENDENT_FIXES = Object.freeze([
   'WalletOps Item #4',
+  'WalletOps activity recovery',
   'signature',
   'Claim Ledger',
   'OCR',
+  'endorsement new_stage',
+  'production banner hide',
 ]);
 
 export const SETTINGS_SOURCE_FILES = Object.freeze([
@@ -74,14 +97,19 @@ export const HISTORICAL_SPA_BUNDLES = Object.freeze([
   ...SUPERSEDED_PRODUCTION_SPA_BUNDLES,
   '/assets/index-DvVldu_B.js',
   '/assets/index-CfEPSd2I.js',
+  '/assets/index-C_fh5VBD.js',
+  '/assets/index-CEKjixtZ.js',
 ]);
 
 export const REGRESSION_MARKERS = Object.freeze({
   walletops_hides_payment_account: { file: 'src/pages/WalletOps.tsx', must_not: 'title="Payment Account"' },
   walletops_hides_payout_preferences: { file: 'src/pages/WalletOps.tsx', must_not: 'title="Payout Preferences"' },
   walletops_keeps_go_to_payment_account: { file: 'src/pages/WalletOps.tsx', must: 'Go to Payment Account' },
+  walletops_activity_recovery_credit: { file: 'src/pages/WalletOps.tsx', must: 'row.isWalletDestination && !row.isWalletSource' },
   email_sender_identity: { file: 'src/components/settings/EmailSenderSettings.tsx', must: 'Sender identity' },
+  email_no_sending_subdomain_ui: { file: 'src/components/settings/EmailSenderSettings.tsx', must_not: 'Sending subdomain' },
   branding_invoice_accent: { file: 'src/components/settings/CompanyBrandingSettings.tsx', must: 'invoice_accent_color' },
+  production_banner_hide: { file: 'index.html', must: 'checksops-production-host' },
   deposits_exclusion: { file: 'src/components/deposit-ops/BankDepositReconciliation.tsx', must: 'rejected,returned,error,declined' },
   stakeholder_bank_verified: { file: 'src/components/disbursement/StakeholderAccountSettings.tsx', must: 'Bank verified' },
   stakeholder_provider_linked: { file: 'src/components/disbursement/StakeholderAccountSettings.tsx', must: 'Provider linked' },

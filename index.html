@@ -6,6 +6,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta http-equiv="Content-Security-Policy" content="frame-ancestors 'self' https://freedomclaims.work https://freedomclaims.lovable.app https://*.lovable.app" />
     <meta name="theme-color" content="#0f172a" />
+    <script>
+      (function () {
+        if (window.location.hostname === "checksops.com" || window.location.hostname === "www.checksops.com") {
+          document.documentElement.classList.add("checksops-production-host");
+        }
+      })();
+    </script>
+    <style>
+      .checksops-production-host [data-testid="aws-staging-banner"] { display: none !important; }
+    </style>
     <link rel="apple-touch-icon" href="/pwa-192.png" />
     <title>ChecksOps</title>
     <meta name="description" content="Insurance check endorsement and deposit workflow management.">

@@ -17,6 +17,8 @@ const FORBIDDEN_ENTRIES = [
   'index-C9QrEEkl.js',
   'index-C_fh5VBD.js',
   'index-BhNaw7aH.js',
+  'index-CEKjixtZ.js',
+  'index-DbYbvb6d.js',
 ];
 
 const sha256File = (file) => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
@@ -49,7 +51,11 @@ check('deposits_exclusion', depositJs.includes('rejected,returned,error,declined
 check('stakeholder_bank_vs_provider', combined.includes('Bank verified') && combined.includes('Provider linked'));
 check('branding_invoice_accent', combined.includes('invoice_accent_color') || combined.includes('invoiceAccentColor'));
 check('email_sender_identity', combined.includes('Sender identity'));
+check('email_no_sending_subdomain_ui', !combined.includes('Sending subdomain'));
+check('production_banner_hide', html.includes('checksops-production-host') && html.includes('aws-staging-banner'));
 check('not_wholesale_staging_spa', entryName !== 'index-DvVldu_B.js');
+check('not_retry_old_candidate', entryName !== 'index-CEKjixtZ.js');
+check('not_restore_live_or_previous_baseline', entryName !== 'index-DbYbvb6d.js' && entryName !== 'index-C_fh5VBD.js');
 
 const failed = checks.filter((row) => row.ok !== true);
 const report = {

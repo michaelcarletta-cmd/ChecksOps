@@ -13,7 +13,7 @@
     "auto_unlock_forbidden": true,
     "instructions_path": "ops/release-locks/OPERATOR.md"
   },
-  "notes": "production-spa is PRODUCTION_LOCKED to the live checksops.com SPA verified 2026-09-30 (index-C_fh5VBD.js). index-BPbQUNFr.js is historical evidence only and is not a restoration target. origin/main is not that baseline. settings-billing-branding-deposits is STAGING_LOCKED_NOT_PRODUCTION for accepted settings/billing/branding/deposit behavior and the SPA preflight composition fix (application 17fa334d69fb9ca673bcde462b5bb0632e42f3dc, tooling 6059f03918cdba8858ad53a512aa030051bffb11). Historical artifact hashes are provenance, not rollback targets. Other components remain unlocked. This metadata does not deploy or write production.",
+  "notes": "production-spa remains PRODUCTION_LOCKED to the recorded C_fh5VBD pin; live checksops.com has since advanced to index-DbYbvb6d.js and Lambda RaFQKBA… . Those newer identities are not restore targets for the older pin. settings-billing-branding-deposits is STAGING_LOCKED_NOT_PRODUCTION for accepted settings/billing/branding/deposit behavior and the SPA preflight composition fix (application 17fa334d69fb9ca673bcde462b5bb0632e42f3dc, tooling 6059f03918cdba8858ad53a512aa030051bffb11). Historical artifact hashes are provenance, not rollback targets. Future settings builds must compose onto current live source. Other components remain unlocked. This metadata does not deploy or write production.",
   "components": {
     "identity-cognito": {
       "id": "identity-cognito",
@@ -621,7 +621,7 @@
       "environment": "staging",
       "source": {
         "git_sha": "17fa334d69fb9ca673bcde462b5bb0632e42f3dc",
-        "tree_hash": "b071aaad9234eebff1c86ecbd083b321dace9e04521a0d1519973a698b1435aa",
+        "tree_hash": "915c1d052334b975ff2d9e63d61b0617c8524fd4cba5831ea494f0c810e41e03",
         "merged": false,
         "merged_pr": 570
       },
@@ -666,15 +666,15 @@
       },
       "rollback": {
         "git_sha": "338ede0e6313bfcf88feac36101d67a20c756fd9",
-        "artifact": "/assets/index-C_fh5VBD.js",
-        "notes": "Rollback means compose onto the current live production identity, not restore this older pin after a newer accepted live identity exists. Historical hashes are not restoration targets."
+        "artifact": "/assets/index-DbYbvb6d.js",
+        "notes": "Rollback means compose onto the current live production identity (index-DbYbvb6d.js / Lambda RaFQKBA…), not restore C_fh5VBD, CEKjixtZ, or 17fa334d. Historical hashes are not restoration targets."
       },
       "missing_evidence": [
         "production live apply fingerprint after an authorized guarded apply",
         "authenticated user acceptance (isolated HTTP login NOT ESTABLISHED)"
       ],
       "open_pr_overlap": ["#570", "#567", "#566"],
-      "notes": "Accepted settings/billing/branding/deposit behavior and official SPA preflight composition forwarding. Application candidate SHA 17fa334d69fb9ca673bcde462b5bb0632e42f3dc. Deployment-tooling fix SHA 6059f03918cdba8858ad53a512aa030051bffb11. Historical artifact hashes are provenance, not rollback targets. Future builds must reconcile these fixes with current live source. Stop on drift, missing invariants, or source conflicts. Preserve WalletOps Item #4, signature, Claim Ledger, OCR, and other independent fixes. Does not authorize homeowner association or lift the item #3 hold."
+      "notes": "Accepted settings/billing/branding/deposit behavior and official SPA preflight composition forwarding. Application candidate SHA 17fa334d69fb9ca673bcde462b5bb0632e42f3dc. Deployment-tooling fix SHA 6059f03918cdba8858ad53a512aa030051bffb11. Historical artifact hashes are provenance, not rollback targets. Future builds must reconcile these fixes with current live source (index-DbYbvb6d.js / Lambda RaFQKBA…). Stop on drift, missing invariants, or source conflicts. Preserve WalletOps Item #4, activity recovery, production banner hide, signature, Claim Ledger, OCR, endorsement new_stage, and other independent fixes. Does not authorize homeowner association or lift the item #3 hold."
     },
     "production-spa": {
       "id": "production-spa",

@@ -198,7 +198,7 @@ export default function WalletOps() {
         detail: `${row.from_label} → ${row.to_label}`,
         route: `${row.from_label} → ${row.to_label}`,
         kind: "transfer" as const,
-        credit: row.kind === "pending_in",
+        credit: row.isWalletDestination && !row.isWalletSource,
         amountCents: row.amountCents,
         balanceCents: null as number | null,
         status: row.transfer.provider_status || row.transfer.status || null,

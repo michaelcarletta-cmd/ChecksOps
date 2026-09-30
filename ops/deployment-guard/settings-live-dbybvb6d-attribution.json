@@ -1,0 +1,90 @@
+{
+  "id": "settings-live-dbybvb6d-attribution",
+  "captured_at": "2026-09-30T20:02:33.381Z",
+  "stop_before_production_apply": true,
+  "do_not_restore_previous_baseline": true,
+  "do_not_retry_old_candidate": "17fa334d69fb9ca673bcde462b5bb0632e42f3dc",
+  "live_production": {
+    "spa": {
+      "entry": "/assets/index-DbYbvb6d.js",
+      "entry_sha256": "1dfbe6c4d2a77027b7ac3cf89eece450b4d9b290b829a2d88ff0244332e6e47c",
+      "walletops": "/assets/WalletOps-j3z9RyZ7.js",
+      "index_html_sha256": "705f86309699aa6df4e15f12d0e8b0e3c31ff742eed18195859f7cd226e18040",
+      "s3_version": "FVo1QSfkEI4csW.r3iuuFu0rds.pzPKN",
+      "last_modified": "2026-09-30T20:01:34+00:00"
+    },
+    "lambda": {
+      "function_name": "checksops-production-prep-api",
+      "codeSha256": "RaFQKBA489aj69N8e76eCQdzlJ2ijkA1YFNFPa+D9r4=",
+      "revisionId": "33e3f02d-3a97-4b8e-be31-4e104b7027f3",
+      "lastModified": "2026-09-30T19:56:32.000+0000"
+    }
+  },
+  "attribution": {
+    "spa_index_DbYbvb6d": {
+      "confidence": "high",
+      "pr": 575,
+      "url": "https://github.com/michaelcarletta-cmd/ChecksOps/pull/575",
+      "branch": "cursor/walletops-activity-recovery-prod-2d41",
+      "agent": "bc-f8b0cb28-9f1a-4ac4-bf5e-3e6649f72d41",
+      "accepted_commit": "9afb57fe52a42c0a84e4e07b3a7618c20c0d815c",
+      "promotion_commit": "50b8a94e48604b39682e463f0f8a723f6455ce1e",
+      "source": "isolated worktree of funding-prod 6cc1f0f3439f039f67af8aa62de6b79b5ad907b9 (live C_fh5VBD) plus six WalletOps activity-recovery hunks",
+      "not": ["whole recovery branch", "staging dist", "settings candidate 17fa334d"],
+      "invalidation": "I8NPTRCR5LEG310VNQ1ZLQYKS5",
+      "lambda_at_spa_apply": "pxZj4G6pGntJrkcRO5uNNEbiyvDpCOKPiWAboDnPvBA="
+    },
+    "lambda_RaFQKBA": {
+      "confidence": "high",
+      "pr": 576,
+      "url": "https://github.com/michaelcarletta-cmd/ChecksOps/pull/576",
+      "branch": "cursor/endorsing-confirmation-deploy-0fb6",
+      "agent": "bc-0f07b8bb-0093-466e-b94e-c64db1520fb6",
+      "before": {
+        "codeSha256": "pxZj4G6pGntJrkcRO5uNNEbiyvDpCOKPiWAboDnPvBA=",
+        "revisionId": "3bccd144-4e61-422f-8151-9ed0fe713aac"
+      },
+      "overlay": {
+        "only_member": "workflow.mjs",
+        "sha256": "bd18db71ab9277eea74add41f99ed5324841a163815a756578f60cfd50bf7bab",
+        "hunk": "data: { ...rows[0], new_stage: rows[0].check_stage }"
+      },
+      "spa_sql_untouched": true
+    },
+    "index_html_200134": {
+      "confidence": "uncertain",
+      "what_changed": "index.html only; still points at index-DbYbvb6d.js; adds checksops-production-host class + CSS hide for [data-testid=aws-staging-banner]",
+      "s3_version": "FVo1QSfkEI4csW.r3iuuFu0rds.pzPKN",
+      "not_found_in": [
+        "cursor/walletops-activity-recovery-prod-2d41",
+        "cursor/endorsing-confirmation-deploy-0fb6",
+        "cursor/walletops-guard-protect-2d41",
+        "cursor/compose-prod-spa-settings-51c8"
+      ],
+      "preserve": true
+    }
+  },
+  "settings_present_on_live_source": [
+    "CompanyBrandingSettings invoice_accent_color",
+    "BankDepositReconciliation rejected,returned,error,declined exclusion",
+    "EmailSenderSettings still has Sender identity AND Sending subdomain UI (Class A incomplete)"
+  ],
+  "settings_missing_from_live": {
+    "item_1": [
+      "EmailSenderSettings Class A: remove Sending subdomain UI",
+      "tenantLogoUrl.ts AWS public-storage resolver used by CompanyBrandingSettings"
+    ],
+    "item_2": [
+      "tenant-settings-handlers.mjs absent on live Lambda",
+      "moov-stakeholder-status.mjs absent on live Lambda",
+      "app-services.mjs missing save-tenant-billing-account and tenant-company-branding-save routes",
+      "tenant-email-domain-handlers.mjs missing branding color/logo persist on domain save",
+      "moov-functions.mjs missing stakeholder reconcile + bank_verified/identity_status"
+    ],
+    "item_5": [
+      "StakeholderAccountSettings Bank verified vs Provider linked labels",
+      "TenantBillingAccountPanel settings persist path"
+    ],
+    "item_3": "homeowner Moov association remains unfixed and unauthorized"
+  }
+}
