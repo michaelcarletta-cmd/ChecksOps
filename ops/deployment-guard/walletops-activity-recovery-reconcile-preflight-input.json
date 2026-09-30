@@ -1,0 +1,65 @@
+{
+  "workstream_id": "walletops-activity-recovery-staging-2d41",
+  "branch": "cursor/walletops-activity-recovery-staging-2d41",
+  "commit": "62b50307da2e3c37e7f48c535316d0dfe264f865",
+  "operator": "cursor-cloud-agent",
+  "target_environment": "staging",
+  "target_component": "staging-frontend",
+  "deployment_type": "spa-promote",
+  "owned_components": [
+    "src/lib/payments/selectPaymentWallet.ts",
+    "src/lib/payments/reconcileWalletFundingTransfer.ts",
+    "src/hooks/useWalletOps.ts",
+    "src/hooks/usePaymentProviderEligibility.ts",
+    "src/lib/payments/wallets.ts",
+    "src/pages/WalletOps.tsx",
+    "scripts/test-walletops-layout.mjs",
+    "aws/tests/walletops-wallet-select.test.mjs",
+    "aws/tests/walletops-wallet-funding-reconcile.test.mjs",
+    "aws/tests/walletops-wallet-relative.test.mjs",
+    "index.html"
+  ],
+  "frontend_workstreams": [
+    "settings-billing-branding-deposits-51c8",
+    "walletops-activity-recovery-staging-2d41"
+  ],
+  "accepted_composition": true,
+  "accepted_source_composition": true,
+  "source_composition_manifest": "ops/deployment-guard/walletops-activity-recovery-reconcile-source.json",
+  "clean_build": true,
+  "dist": {
+    "clean_build": true,
+    "origin": "fresh-clean-build",
+    "path": "/tmp/walletops-staging-reconcile/dist"
+  },
+  "preflight": {
+    "index_html_sha256": "21caa4e7988482e8c608495d8e69e72e6d956d8d3d6b6532bdd694790ca28d6b",
+    "entry_bundle": "/assets/index-DvVldu_B.js",
+    "etag": "cb71d6998bb5edc80a6eca6c4418d312",
+    "last_modified": "2026-09-30T18:29:16+00:00"
+  },
+  "preflight_live_fingerprint": {
+    "index_html_sha256": "21caa4e7988482e8c608495d8e69e72e6d956d8d3d6b6532bdd694790ca28d6b",
+    "entry_bundle": "/assets/index-DvVldu_B.js",
+    "etag": "cb71d6998bb5edc80a6eca6c4418d312",
+    "last_modified": "2026-09-30T18:29:16+00:00"
+  },
+  "immediately_before": {
+    "index_html_sha256": "21caa4e7988482e8c608495d8e69e72e6d956d8d3d6b6532bdd694790ca28d6b",
+    "entry_bundle": "/assets/index-DvVldu_B.js",
+    "etag": "cb71d6998bb5edc80a6eca6c4418d312",
+    "last_modified": "2026-09-30T18:29:16+00:00"
+  },
+  "contract_results": {
+    "review-claim-save": { "ok": true, "detail": "not touched; wave1-review-patches unchanged" },
+    "claim-ledger": { "ok": true, "detail": "not touched" },
+    "signature-requests": { "ok": true, "detail": "not touched" },
+    "check-files": { "ok": true, "detail": "not touched" },
+    "check-command-center-responsive": { "ok": true, "detail": "test-walletops-layout 12/12 including Item #4 and environment-aware wallet reads" },
+    "moov": { "ok": true, "detail": "no Moov financial writes; wallet selection is frontend-only" },
+    "checkalt": { "ok": true, "detail": "CheckAlt files not modified" },
+    "tenant-isolation": { "ok": true, "detail": "wallet-relative + select + reconcile cross-tenant tests plus portal/mortgage/logo isolation" }
+  },
+  "restore_previous_index": false,
+  "reclaim_staging": false
+}
