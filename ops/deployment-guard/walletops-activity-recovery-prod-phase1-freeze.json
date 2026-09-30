@@ -1,0 +1,47 @@
+{
+  "id": "walletops-activity-recovery-prod-phase1-freeze",
+  "captured_at": "2026-09-30T19:42:30Z",
+  "workstream_id": "walletops-activity-recovery-prod-2d41",
+  "branch": "cursor/walletops-activity-recovery-prod-2d41",
+  "workspace_head": "cce62847456d53064e95e89349d05b8ade0cdbf5",
+  "writes": 0,
+  "production": {
+    "index_html_sha256": "d0d59415d6692713f73b8edabefec10a261f1b7a85d6f4a6abd719f9011b3eb4",
+    "entry_bundle": "/assets/index-C_fh5VBD.js",
+    "entry_js_sha256": "a357373bef9e41b004f887ee312ca239f64236706c826afb69400312e6fbad22",
+    "css": "/assets/index-CwQaUh9K.css",
+    "walletops": "/assets/WalletOps-2AGadvlz.js",
+    "walletops_sha256": "85a3b9776a2db63acb661545f2c006b74699224357f0be59db96349aee063439",
+    "s3_etag": "4c0584f350c68f75a4a09e0b3ced9576",
+    "s3_last_modified": "2026-09-30T18:06:18+00:00",
+    "s3_version_id": "VrLJwkt.ge_P4S2pjYAX5YX_uAoP8A6F",
+    "cloudfront_index_sha256": "d0d59415d6692713f73b8edabefec10a261f1b7a85d6f4a6abd719f9011b3eb4",
+    "cloudfront_entry": "/assets/index-C_fh5VBD.js",
+    "s3_and_cloudfront_match": true,
+    "drift_from_funding_prod_accepted": false
+  },
+  "lambda_evidence_only": {
+    "function": "checksops-production-prep-api",
+    "CodeSha256": "pxZj4G6pGntJrkcRO5uNNEbiyvDpCOKPiWAboDnPvBA=",
+    "RevisionId": "3bccd144-4e61-422f-8151-9ed0fe713aac",
+    "LastModified": "2026-09-30T16:25:23.000+0000",
+    "unchanged": true
+  },
+  "live_walletops_strings": {
+    "Funding & Billing": true,
+    "Pending in": true,
+    "Pending out": true,
+    "Recent Wallet Activity": true,
+    "Payout Preferences": false,
+    "Go to Payment Account": true,
+    "ChecksOps Billing": true,
+    "ambiguous_wallet": false,
+    "selectPaymentWallet": false
+  },
+  "worktrees": [
+    {"path": "/workspace", "branch": "cursor/walletops-activity-recovery-prod-2d41", "head": "cce62847456d53064e95e89349d05b8ade0cdbf5"},
+    {"path": "/tmp/walletops-activity-recovery-prod-src", "detached": "6cc1f0f3439f039f67af8aa62de6b79b5ad907b9", "role": "isolated production compose"},
+    {"path": "/tmp/walletops-prod-spa-src", "detached": "8e8fde63dafd3c3cfa2fc179c2c56323f2957b64", "role": "prior C_fh5VBD isolated source; not reused"},
+    {"path": "/tmp/walletops-staging-reconcile", "branch": "cursor/walletops-activity-recovery-staging-2d41", "head": "fa27d388409e54bbcbdfafa43035e8eacbc21631", "role": "staging acceptance evidence only"}
+  ]
+}

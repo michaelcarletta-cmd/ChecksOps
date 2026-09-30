@@ -1,0 +1,192 @@
+{
+  "id": "walletops-activity-recovery-prod-source-composition",
+  "workstream_id": "walletops-activity-recovery-prod-2d41",
+  "branch": "cursor/walletops-activity-recovery-prod-2d41",
+  "accepted_composition": true,
+  "accepted_source_composition": true,
+  "wholesale_staging_spa": false,
+  "wholesale_old_production_dist": false,
+  "lambda_updated": false,
+  "production_updated": false,
+  "db_writes": 0,
+  "provider_financial_writes": 0,
+  "reconcile_executed": false,
+  "frontend_only": true,
+  "fresh_production_baseline": {
+    "kind": "current-live-production-spa-source",
+    "source_branch": "cursor/walletops-funding-prod-2d41",
+    "source_commit": "6cc1f0f3439f039f67af8aa62de6b79b5ad907b9",
+    "spa_compose_commit_note": "src/ files identical to isolated C_fh5VBD compose (8e8fde63d + accepted funding UX hunks). Later commits on funding-prod are evidence-only.",
+    "live_entry": "/assets/index-C_fh5VBD.js",
+    "live_walletops": "/assets/WalletOps-2AGadvlz.js",
+    "live_index_html_sha256": "d0d59415d6692713f73b8edabefec10a261f1b7a85d6f4a6abd719f9011b3eb4",
+    "reason": "Live production SPA still matches the accepted WalletOps funding-prod + Item #4 promotion. No concurrent production SPA drift at compose time."
+  },
+  "accepted_walletops_recovery_hunks": {
+    "source": "cursor/walletops-activity-recovery-2d41 and staging-accepted compose",
+    "staging_acceptance": "ops/deployment-guard/walletops-activity-recovery-staging-accepted.json",
+    "files": {
+      "src/lib/payments/selectPaymentWallet.ts": {
+        "kind": "new",
+        "sha256": "132e72a842e35bb166c1734f1bd256a1ce1392540bc94f888bfed4346fca1760",
+        "hunk": "environment-aware operating-wallet selection; production host -> production; staging host -> sandbox; same-environment ambiguity throws ambiguous_wallet; never rows[0]"
+      },
+      "src/lib/payments/reconcileWalletFundingTransfer.ts": {
+        "kind": "new",
+        "sha256": "f9c8dc2ab73551e157585c6f898fd836c917a8d93e53933adbda7c39d179bf8d",
+        "hunk": "helper present in composition for later reads; this production operation MUST NOT execute another recovery or DB write",
+        "execute_recovery": false
+      },
+      "src/hooks/useWalletOps.ts": {
+        "kind": "narrow",
+        "from_sha256": "d055e471fdbc969dba455b2d0741e95c8d6cb331d97aa34f18d71b35e1e21de4",
+        "to_sha256": "ba9af3cc764736fb3d5ebe2c1ef1b55c2aa32ae955bc4caa4c4cbae8c1c5bae5",
+        "from_index": "33e723e2d",
+        "to_index": "9be8d20af",
+        "hunks": [
+          "resolveWalletOpsEnvironment + selectPaymentWallet",
+          "filter payment_wallets by environment; drop maybeSingle all-operating",
+          "ambiguous_wallet fails safe (wallet=null)",
+          "query waits for environmentReady"
+        ]
+      },
+      "src/hooks/usePaymentProviderEligibility.ts": {
+        "kind": "narrow",
+        "from_sha256": "4e46f2b91491e69b53a43d2d6d4d8bb69d46ff46b3f922bacd65cdb057358cfe",
+        "to_sha256": "70c41673cd37a22a20ce55a58665a37c3fa31c5683f0aa6e716938a9f1a9b6a0",
+        "from_index": "84c5c64bb",
+        "to_index": "0a6bb8af3",
+        "hunks": ["tenantMoovEnvironment", "environmentReady"]
+      },
+      "src/lib/payments/wallets.ts": {
+        "kind": "narrow",
+        "from_sha256": "de7cb3ca79292528c5a168ff6964497f5d8e9540637ce861d3637c0cee4a0ec2",
+        "to_sha256": "82efb952bf5529496cc33171fcd36f504ae3000e71c30df3162a065ed0f354f0",
+        "from_index": "e287adf99",
+        "to_index": "e555eb315",
+        "hunks": ["readWallet environment-aware selectPaymentWallet; drop maybeSingle"]
+      },
+      "src/pages/WalletOps.tsx": {
+        "kind": "narrow",
+        "from_sha256": "71320e170c9d7d3218c3c45e2ed02c1908d002d00bfe1c044f573bfc572a8a2a",
+        "to_sha256": "4077ec158c635bb566fcc032c629d81f9d246ccf39cb021b75c16df70fefbdbf",
+        "from_index": "73dd76138",
+        "to_index": "86333bc21",
+        "hunks": ["credit: row.isWalletDestination && !row.isWalletSource so completed $5 stays a credit in Recent Activity"],
+        "item4_untouched": true
+      }
+    }
+  },
+  "previously_accepted_protected_in_baseline": [
+    "WalletOps accepted funding UX",
+    "wallet-relative Pending In / Pending Out",
+    "Funding & Billing",
+    "Item #4 (Payment Account and Payout Preferences absent from WalletOps)",
+    "Recent Activity",
+    "monthly billing / collection safeguards",
+    "company/invoice/email branding",
+    "stakeholder verification",
+    "bank-deposit history",
+    "signature-request work",
+    "claim-number work",
+    "OCR/MICR/payee parsing",
+    "Mortgage Ops",
+    "CheckAlt",
+    "tenant onboarding",
+    "delete-check safeguards",
+    "endorsement safeguards",
+    "accepted V2 collection behavior",
+    "receivables admin",
+    "Payment Account Setup remains in Compliance/Documents"
+  ],
+  "concurrent_workstreams_untouched": [
+    "monthly auto-billing save/consent",
+    "company/invoice/email branding",
+    "stakeholder verification",
+    "bank-deposit history",
+    "signature requests",
+    "claim-number",
+    "OCR",
+    "Mortgage Ops",
+    "CheckAlt",
+    "V2 collection files",
+    "wallet-first billing",
+    "bank fallback",
+    "Moov transfer execution",
+    "billing idempotency",
+    "receivables",
+    "Mortgage Ops charges",
+    "sweeps"
+  ],
+  "shared_files": {
+    "src/hooks/useWalletOps.ts": "production funding-prod version + accepted recovery hunks only; wallet-relative summarizeWalletOps preserved",
+    "src/hooks/usePaymentProviderEligibility.ts": "production version + two additive fields only",
+    "src/lib/payments/wallets.ts": "production version + environment-aware readWallet only",
+    "src/pages/WalletOps.tsx": "production Item #4 + funding UX preserved; one-line credit sign only",
+    "src/lib/payments/walletRelativeTransfers.ts": "unchanged sha256 f7fc912539dfb3f68847f2c12e8e4df4bed43357790e6f1e240e2ce0a190711f"
+  },
+  "intentionally_untouched": [
+    "src/lib/payments/walletRelativeTransfers.ts",
+    "src/components/settings/ComplianceSettings.tsx",
+    "src/components/white-label/WhiteLabelSettings.tsx",
+    "src/components/payments/PaymentAccountPanel.tsx",
+    "src/hooks/useSweepConfig.ts",
+    "supabase/functions/moov-sweep-config/index.ts",
+    "aws/functions/api/tenant-collection-v2.mjs",
+    "aws/functions/api/tenant-collection-contract-v2.mjs",
+    "aws/functions/api/tenant-billing-engine.mjs",
+    "aws/functions/api/providers/parity/tenant-receivables.mjs",
+    "aws/functions/api/providers/parity/moov-money.mjs",
+    "src/components/white-label/CompanyBrandingSettings.tsx",
+    "src/pages/PublicInvoicePage.tsx",
+    "src/pages/payments/InvoicesTab.tsx",
+    "src/components/admin/PlatformReceivablesLedger.tsx",
+    "src/components/admin/PlatformTreasuryPanel.tsx",
+    "src/components/admin/TenantBillingHistoryPanel.tsx"
+  ],
+  "protected_v2_hashes": {
+    "aws/functions/api/tenant-collection-v2.mjs": "8a66f54d3c2785162a1643218e18b4d3c251230cf2a7f98a1ecb4ede8939fb66",
+    "aws/functions/api/tenant-collection-contract-v2.mjs": "9ec5ae45db34c0795570f401cc2b1c3fa78f04764870bf6b651c21278433ed5d",
+    "aws/functions/api/tenant-billing-engine.mjs": "65b75735825f9a06955d5daba603f74835d106cabf52eb449153c856a59dae2f",
+    "aws/functions/api/providers/parity/tenant-receivables.mjs": "0d8f8f20f4939e79551b4a1aa5b3305bb791cea7ca684f4428594ad359179477"
+  },
+  "item4": {
+    "walletops_payment_account_management": "ABSENT",
+    "walletops_payout_preferences": "ABSENT",
+    "walletops_retains": ["Available", "Pending In", "Pending Out", "Funding & Billing", "Recent Activity"],
+    "compliance_payment_account_setup": "PRESENT"
+  },
+  "known_preexisting_read_model": {
+    "issue": "payment_transfers reads are tenant-scoped and not environment-scoped",
+    "blocking": false,
+    "do_not_fix_in_this_workstream": true,
+    "local_five_row": {
+      "id": "63f892d9-a0f4-4f62-9373-262d6c361c90",
+      "provider_transfer_id": "9f9df312-32a9-4999-ace9-fc2b00669c75",
+      "local_environment": "sandbox",
+      "mismatch": "NON-BLOCKING",
+      "do_not_rerun_reconciliation": true,
+      "do_not_recreate_provider_transfer": true
+    }
+  },
+  "isolated_build": {
+    "worktree": "/tmp/walletops-activity-recovery-prod-src",
+    "baseline_commit": "6cc1f0f3439f039f67af8aa62de6b79b5ad907b9",
+    "mode": "aws",
+    "clean_build": true,
+    "not_from_staging_dist": true,
+    "not_from_old_production_dist": true,
+    "not_from_this_whole_branch": true,
+    "env": {
+      "VITE_AUTH_PROVIDER": "cognito",
+      "VITE_APP_URL": "https://checksops.com",
+      "VITE_CHECKSOPS_API_URL": "/prep",
+      "VITE_COGNITO_USER_POOL_ID": "us-east-1_h00WorYMT",
+      "note": "Matches live C_fh5VBD.js baked values. Staging execute-api URL was not used. Workspace .env.aws (staging) was not copied."
+    }
+  },
+  "collision_check": {
+    "result": "SAFE",
+    "proof": "git diff --stat origin/cursor/walletops-funding-prod-2d41 origin/cursor/walletops-activity-recovery-2d41 -- src/ is exactly the six accepted recovery files. Isolated funding-prod src/ hashes matched live C_fh5VBD source. Staging reconcile branch contains unrelated branding/settings/stakeholder files and was not used as the production baseline."
+  }
+}
