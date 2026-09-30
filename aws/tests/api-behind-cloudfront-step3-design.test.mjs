@@ -156,10 +156,13 @@ test('Step 3 role template is gated and least-privilege', () => {
 });
 
 test('staging banner is suppressed on production hosts and financial SQL stays unapplied', () => {
+  const indexHtml = read('index.html');
   assert.match(banner, /AWS staging — Cognito \+ RDS/);
   assert.match(banner, /window\.location\.hostname/);
   assert.match(banner, /checksops\.com/);
   assert.match(banner, /www\.checksops\.com/);
   assert.match(banner, /isAwsStaging\(\)/);
+  assert.match(indexHtml, /checksops-production-host/);
+  assert.match(indexHtml, /data-testid="aws-staging-banner"/);
   assert.match(financialSql, /DO NOT APPLY THIS FILE/);
 });
