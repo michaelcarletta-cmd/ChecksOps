@@ -20,6 +20,7 @@ import { useMoovInvoices, type InvoiceLineItem } from "@/hooks/useMoovInvoices";
 import { usePaymentAccount } from "@/hooks/usePaymentAccount";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate, useLocation } from "react-router-dom";
+import { TenantLogo } from "@/components/branding/TenantLogo";
 import {
   Plus, Trash2, Send, Link2, MoreHorizontal, RefreshCw, Loader2, FileText, Clock, CheckCircle2, Ban, Settings,
 } from "lucide-react";
@@ -58,6 +59,7 @@ export function InvoicesTab() {
   const [items, setItems] = useState<InvoiceLineItem[]>([emptyItem()]);
   const [branding, setBranding] = useState<{
     invoice_letterhead_url: string | null;
+    logo_url: string | null;
     invoice_footer_note: string | null;
     invoice_default_terms: string | null;
   } | null>(null);
@@ -100,7 +102,7 @@ export function InvoicesTab() {
           if (tenantUser) {
             const { data: tenant } = await supabase
               .from("tenants")
-              .select("invoice_letterhead_url, invoice_footer_note, invoice_default_terms")
+              .select("invoice_letterhead_url, logo_url, invoice_footer_note, invoice_default_terms")
               .eq("id", tenantUser.tenant_id)
               .maybeSingle();
             
@@ -248,12 +250,13 @@ export function InvoicesTab() {
                   </DialogDescription>
                 </DialogHeader>
 
-                {branding?.invoice_letterhead_url && (
+                {(branding?.invoice_letterhead_url || branding?.logo_url) && (
                   <div className="mb-4 flex justify-center border-b pb-4">
-                    <img 
-                      src={branding.invoice_letterhead_url} 
-                      alt="Invoice Letterhead" 
-                      className="max-h-16 object-contain opacity-80" 
+                    <TenantLogo
+                      src={branding.invoice_letterhead_url || branding.logo_url}
+                      alt="Invoice Letterhead"
+                      className="max-h-16 object-contain opacity-80"
+                      assetBucket={branding.invoice_letterhead_url ? "company-branding" : "tenant-logos"}
                     />
                   </div>
                 )}
