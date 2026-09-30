@@ -9,14 +9,11 @@
   "ownership_groups": {
     "delete-check-contract": {
       "owners": ["@michaelcarletta-cmd"],
-      "description": "Accepted production Delete Check contract (workflow delete handler + bridge). Any change must preserve invariants and update locks.",
+      "description": "Accepted Delete Check bridge contract (UI -> AWS RPC dispatcher). Any change must preserve reason forwarding invariants and update locks.",
       "paths": [
-        "aws/functions/api/workflow.mjs",
-        "aws/tests/api-workflow.test.mjs",
-        "aws/tests/frontend-admin-delete-check-dispatcher.test.mjs",
         "src/integrations/aws/deleteCheckBridge.ts",
         "src/integrations/aws/client.ts",
-        "aws/tests/frontend-delete-check-bridge.test.mjs",
+        "src/components/checks/AdminDeleteCheckButton.tsx",
         "ops/release-locks/contracts/delete-check-contract.json",
         "ops/release-locks/proof/delete-check-production-acceptance-2026-09-26.md"
       ]
