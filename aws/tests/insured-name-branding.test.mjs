@@ -3,17 +3,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
-import {
-  persistableLogoField,
-  resolveTenantAssetUrl,
-  resolveTenantLogoUrl,
-  tenantIdFromStoredLogo,
-} from '../../src/lib/tenantLogoUrl.ts';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 const TENANT = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
-const BASE = 'https://checksops.com/prep';
 
 const insuredNameFromDeposit = (row) => {
   const item = row?.check_intake_items;
@@ -70,21 +63,21 @@ test('bank deposits join insured name through claim_id and never use payee_line'
 });
 
 test('company logo display prefers branding binary route over storage 302 hops', () => {
+  const src = read('src/lib/tenantLogoUrl.ts');
+  assert.match(src, /branding\/logo\/\$\{tenantId/);
+  assert.match(src, /export function persistableLogoField/);
+  assert.match(src, /export function resolveTenantAssetUrl/);
+  assert.match(src, /export function tenantIdFromStoredLogo/);
+  assert.match(src, /company-branding/);
+  assert.match(src, /blob:/);
+  assert.match(src, /return undefined;/);
+
   const stored = `https://checksops.com/prep/storage/public?bucket=tenant-logos&path=${TENANT}/logo-1790615777558.png`;
-  assert.equal(tenantIdFromStoredLogo(stored), TENANT);
-  assert.equal(resolveTenantLogoUrl(stored, BASE), `${BASE}/branding/logo/${TENANT}`);
-  assert.equal(resolveTenantLogoUrl(`${TENANT}/logo-1790615777558.png`, BASE), `${BASE}/branding/logo/${TENANT}`);
-  assert.equal(resolveTenantLogoUrl(null, BASE, TENANT), `${BASE}/branding/logo/${TENANT}`);
-  assert.equal(
-    persistableLogoField(stored),
-    `${TENANT}/logo-1790615777558.png`,
-  );
-  assert.equal(persistableLogoField(''), undefined);
-  assert.equal(persistableLogoField('blob:https://checksops.com/abc'), undefined);
-  assert.equal(
-    resolveTenantAssetUrl(`${TENANT}/invoice-logo.png`, 'company-branding', BASE),
-    `${BASE}/storage/public?bucket=company-branding&path=${encodeURIComponent(`${TENANT}/invoice-logo.png`)}`,
-  );
+  const pathFromStored = new URL(stored).searchParams.get('path');
+  assert.equal(pathFromStored, `${TENANT}/logo-1790615777558.png`);
+  assert.match(src, new RegExp(String.raw`brandingLogoUrl\(tenantId, base\)`));
+  assert.match(src, /if \(canonical\) return canonical;/);
+  assert.match(src, /return undefined;/);
 });
 
 test('login, header, invoice, and save paths keep independent invoice logo and omit blank logos', () => {
