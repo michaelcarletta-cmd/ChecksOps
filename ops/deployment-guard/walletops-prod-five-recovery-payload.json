@@ -1,0 +1,58 @@
+{
+  "helper": "reconcileWalletFundingTransfer",
+  "normalize": {
+    "provider_status": "pending",
+    "local_status": "pending"
+  },
+  "input": {
+    "tenantId": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+    "environment": "production",
+    "amountCents": 500,
+    "providerTransferId": "9f9df312-32a9-4999-ace9-fc2b00669c75",
+    "providerStatus": "pending",
+    "description": "Balance funding",
+    "sourceAccountId": "60922058-7eca-4889-81dd-5720d7b9de96",
+    "localSourcePaymentMethodId": "8eb5b26e-6f66-435c-a578-880fb7fc14dd",
+    "sourcePaymentMethodId": "a02c1c81-9ca6-434d-accc-ea4471a70ef2",
+    "destinationPaymentMethodId": "744ea734-f5e3-4b31-bb92-38f85fd29b91"
+  },
+  "payload": {
+    "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+    "provider": "moov",
+    "environment": "production",
+    "status": "pending",
+    "provider_status": "pending",
+    "amount_cents": 500,
+    "platform_fee_cents": 0,
+    "net_amount_cents": 500,
+    "speed": "standard",
+    "description": "Balance funding",
+    "source_tenant_account_id": "60922058-7eca-4889-81dd-5720d7b9de96",
+    "source_payment_method_id": "8eb5b26e-6f66-435c-a578-880fb7fc14dd",
+    "destination_payment_method_id": null,
+    "wallet_id": null,
+    "leg_role": "wallet_funding",
+    "provider_transfer_id": "9f9df312-32a9-4999-ace9-fc2b00669c75",
+    "provider_metadata": {
+      "source_payment_method_id": "a02c1c81-9ca6-434d-accc-ea4471a70ef2",
+      "destination_payment_method_id": "744ea734-f5e3-4b31-bb92-38f85fd29b91",
+      "checksops_kind": "wallet_funding"
+    },
+    "created_by": null
+  },
+  "first_action": "insert",
+  "second_action": "update",
+  "memory_row_count": 1,
+  "expected_walletops_after_frontend_promotion": {
+    "pendingInCents": 500,
+    "pendingOutCents": 0,
+    "five_purpose": "Wallet Funding",
+    "five_kind": "pending_in",
+    "five_from": "WELLS FARGO ••••4573",
+    "five_to": "Freedom Adjustment Wallet",
+    "five_visible": true,
+    "billing_count": 1,
+    "billing_amount": 13900,
+    "note": "$5 wallet funding: Pending In = +$5; Recent Activity visible as pending"
+  }
+}

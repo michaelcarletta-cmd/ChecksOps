@@ -1,0 +1,16 @@
+{
+  "index": {
+    "url": "https://checksops.com/assets/index-C_fh5VBD.js",
+    "sha256": "a357373bef9e41b004f887ee312ca239f64236706c826afb69400312e6fbad22",
+    "etag": "\"718327a14e3b8b30bf47f3299d2b50c1\"",
+    "last_modified": "Wed, 30 Sep 2026 18:05:59 GMT",
+    "bytes": 896075
+  },
+  "css": {
+    "url": "https://checksops.com/assets/index-CwQaUh9K.css",
+    "sha256": "7536514c8e951de02f0f8fb732413bc0f0996fcca02927a571e073c9d190ace5",
+    "etag": "\"a32db65c479860fe5c71fc11d2aea073\"",
+    "last_modified": "Wed, 30 Sep 2026 18:06:00 GMT",
+    "bytes": 134993
+  }
+}

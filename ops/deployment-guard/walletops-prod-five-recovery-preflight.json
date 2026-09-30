@@ -1,0 +1,166 @@
+{
+  "id": "walletops-prod-five-recovery-preflight",
+  "status": "PREFLIGHT \u2014 WRITE NOT YET EXECUTED",
+  "captured_at": "2026-09-30T19:09:10Z",
+  "branch": "cursor/walletops-prod-five-recovery-2d41",
+  "helper": "src/lib/payments/reconcileWalletFundingTransfer.ts",
+  "oneshot": "checksops-prod-wallet-fund-recover-2d41",
+  "do_not_post_provider": true,
+  "do_not_deploy_spa": true,
+  "do_not_update_production_prep_api": true,
+  "provider": {
+    "ok": true,
+    "fetched_via_account": "60922058-7eca-4889-81dd-5720d7b9de96",
+    "http": 200,
+    "oauth_token_post_only": true,
+    "provider_writes": {
+      "POST": 0,
+      "PATCH": 0,
+      "PUT": 0,
+      "DELETE": 0,
+      "oauth_token_posts_only": 1
+    },
+    "provider_transfer_id": "9f9df312-32a9-4999-ace9-fc2b00669c75",
+    "status": "pending",
+    "amount_cents": 500,
+    "currency": "USD",
+    "description": "Balance funding",
+    "createdOn": "2026-09-29T15:44:36Z",
+    "updatedOn": null,
+    "completedOn": null,
+    "failedOn": null,
+    "canceledOn": null,
+    "source_payment_method_id": "a02c1c81-9ca6-434d-accc-ea4471a70ef2",
+    "destination_payment_method_id": "744ea734-f5e3-4b31-bb92-38f85fd29b91",
+    "source_type": "ach-debit-fund",
+    "dest_type": "moov-wallet",
+    "ach": {
+      "status": "originated",
+      "traceNumber": "273976360896947",
+      "initiatedOn": "2026-09-29T15:44:36.363448Z",
+      "originatedOn": "2026-09-29T18:15:03.941077Z",
+      "completedOn": null,
+      "returnedOn": null,
+      "debitHoldPeriod": "2-days"
+    },
+    "match": {
+      "amount_ok": true,
+      "source_ok": true,
+      "dest_ok": true,
+      "id_ok": true
+    },
+    "lists": {
+      "60922058-7eca-4889-81dd-5720d7b9de96": {
+        "http": 200,
+        "count": 5,
+        "has_five": true,
+        "has_139": true,
+        "ids": [
+          "b31c7752-031f-4b8b-9b6e-82dd0aaed2cb",
+          "9f9df312-32a9-4999-ace9-fc2b00669c75",
+          "367c5353-ed20-430b-b767-c3e5d47f28ad",
+          "4e39f67f-383f-44d4-b5f8-212d4cc29bb0",
+          "15946bc6-7e80-42d2-99a3-5a3793b24d2e"
+        ]
+      },
+      "41cb5d67-4911-4bef-aad5-d8ee9c582208": {
+        "http": 200,
+        "count": 7,
+        "has_five": true,
+        "has_139": true,
+        "ids": [
+          "b31c7752-031f-4b8b-9b6e-82dd0aaed2cb",
+          "9f9df312-32a9-4999-ace9-fc2b00669c75",
+          "367c5353-ed20-430b-b767-c3e5d47f28ad",
+          "4e39f67f-383f-44d4-b5f8-212d4cc29bb0",
+          "15946bc6-7e80-42d2-99a3-5a3793b24d2e",
+          "dacaf768-97ab-4ea6-90b9-869ae99efb78",
+          "8a23259b-b670-4ace-aa5a-89cad332c0da"
+        ]
+      }
+    },
+    "fetched_at": "2026-09-30T19:08:53.974Z"
+  },
+  "payload": {
+    "helper": "reconcileWalletFundingTransfer",
+    "normalize": {
+      "provider_status": "pending",
+      "local_status": "pending"
+    },
+    "input": {
+      "tenantId": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "environment": "production",
+      "amountCents": 500,
+      "providerTransferId": "9f9df312-32a9-4999-ace9-fc2b00669c75",
+      "providerStatus": "pending",
+      "description": "Balance funding",
+      "sourceAccountId": "60922058-7eca-4889-81dd-5720d7b9de96",
+      "localSourcePaymentMethodId": "8eb5b26e-6f66-435c-a578-880fb7fc14dd",
+      "sourcePaymentMethodId": "a02c1c81-9ca6-434d-accc-ea4471a70ef2",
+      "destinationPaymentMethodId": "744ea734-f5e3-4b31-bb92-38f85fd29b91"
+    },
+    "payload": {
+      "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "provider": "moov",
+      "environment": "production",
+      "status": "pending",
+      "provider_status": "pending",
+      "amount_cents": 500,
+      "platform_fee_cents": 0,
+      "net_amount_cents": 500,
+      "speed": "standard",
+      "description": "Balance funding",
+      "source_tenant_account_id": "60922058-7eca-4889-81dd-5720d7b9de96",
+      "source_payment_method_id": "8eb5b26e-6f66-435c-a578-880fb7fc14dd",
+      "destination_payment_method_id": null,
+      "wallet_id": null,
+      "leg_role": "wallet_funding",
+      "provider_transfer_id": "9f9df312-32a9-4999-ace9-fc2b00669c75",
+      "provider_metadata": {
+        "source_payment_method_id": "a02c1c81-9ca6-434d-accc-ea4471a70ef2",
+        "destination_payment_method_id": "744ea734-f5e3-4b31-bb92-38f85fd29b91",
+        "checksops_kind": "wallet_funding"
+      },
+      "created_by": null
+    },
+    "first_action": "insert",
+    "second_action": "update",
+    "memory_row_count": 1,
+    "expected_walletops_after_frontend_promotion": {
+      "pendingInCents": 500,
+      "pendingOutCents": 0,
+      "five_purpose": "Wallet Funding",
+      "five_kind": "pending_in",
+      "five_from": "WELLS FARGO \u2022\u2022\u2022\u20224573",
+      "five_to": "Freedom Adjustment Wallet",
+      "five_visible": true,
+      "billing_count": 1,
+      "billing_amount": 13900,
+      "note": "$5 wallet funding: Pending In = +$5; Recent Activity visible as pending"
+    }
+  },
+  "spa_before": {
+    "entry": "/assets/index-C_fh5VBD.js",
+    "index_html_sha256": "d0d59415d6692713f73b8edabefec10a261f1b7a85d6f4a6abd719f9011b3eb4",
+    "index": {
+      "url": "https://checksops.com/assets/index-C_fh5VBD.js",
+      "sha256": "a357373bef9e41b004f887ee312ca239f64236706c826afb69400312e6fbad22",
+      "etag": "\"718327a14e3b8b30bf47f3299d2b50c1\"",
+      "last_modified": "Wed, 30 Sep 2026 18:05:59 GMT",
+      "bytes": 896075
+    },
+    "css": {
+      "url": "https://checksops.com/assets/index-CwQaUh9K.css",
+      "sha256": "7536514c8e951de02f0f8fb732413bc0f0996fcca02927a571e073c9d190ace5",
+      "etag": "\"a32db65c479860fe5c71fc11d2aea073\"",
+      "last_modified": "Wed, 30 Sep 2026 18:06:00 GMT",
+      "bytes": 134993
+    }
+  },
+  "lambda_before": {
+    "function_name": "checksops-production-prep-api",
+    "CodeSha256": "pxZj4G6pGntJrkcRO5uNNEbiyvDpCOKPiWAboDnPvBA=",
+    "RevisionId": "3bccd144-4e61-422f-8151-9ed0fe713aac",
+    "LastModified": "2026-09-30T16:25:23.000+0000"
+  }
+}
