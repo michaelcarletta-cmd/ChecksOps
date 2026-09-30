@@ -1,0 +1,46 @@
+{
+  "id": "settings-dbybvb6d-staging-acceptance",
+  "verdict": "STAGING ACCEPTED — COMPOSED ONTO LIVE DbYbvb6d; STOP BEFORE PRODUCTION",
+  "captured_at": "2026-09-30T20:18:29.236Z",
+  "workstream_id": "settings-billing-branding-deposits-51c8",
+  "branch": "cursor/compose-live-dbybvb6d-settings-51c8",
+  "candidate_sha": "84ba11f4c5fbc5a98652768dc72cb1e58757ea14",
+  "source_compose_sha": "2cd3cd2e7f366784986da0f635cf4827d8062fbf",
+  "do_not_restore": [
+    "/assets/index-C_fh5VBD.js",
+    "/assets/index-CEKjixtZ.js",
+    "/assets/index-DbYbvb6d.js"
+  ],
+  "do_not_retry_old_candidate": "17fa334d69fb9ca673bcde462b5bb0632e42f3dc",
+  "staging": {
+    "host": "https://staging.checksops.com/",
+    "spa_bundle": "/assets/index-QDJiUFF1.js",
+    "spa_sha256": "19ae149deecc2d06792dece4b27ba30bf198a146a4325645f6e4468d5afd92c7",
+    "index_html_sha256": "5d35bd47b200ce7a5dbfd562bef1fcb4daa52f7ea89a1207e0b00e2150f12467",
+    "walletops": "/assets/WalletOps-D5mOeN7Q.js",
+    "walletops_sha256": "7dd4e22371f35917ece1fe604f7ad5c5ac00f6ea34e21bc765eb68c6b96a0af3",
+    "deposits": "/assets/BankDepositReconciliation-CNd9vt9D.js",
+    "invalidation_id": "I9LK4OKDTFVPSP9MXIRDZFRBTU",
+    "lambda_code_sha256": "8qy9FEOQrvCQo/Wj/RmB3rsdpTXxz+OtAEwngfu9CgI=",
+    "lambda_revision_id": "3f8b94fd-6244-42f6-898b-6a8837ed32b0",
+    "lambda_overlay_applied_this_run": false,
+    "lambda_reason": "Fresh staging download already contained the five settings members byte-identical to this candidate. workflow.mjs bd18db71 (endorsing) and workflow-rpc.mjs 45f73954 (PR #577 Claim Ledger) preserved. No-op overlay was not applied.",
+    "isolated_http_login": "NOT_ESTABLISHED",
+    "authenticated_user_acceptance": false,
+    "deployed_code_verification": true
+  },
+  "production_untouched": {
+    "spa_bundle": "/assets/index-DbYbvb6d.js",
+    "spa_sha256": "1dfbe6c4d2a77027b7ac3cf89eece450b4d9b290b829a2d88ff0244332e6e47c",
+    "index_html_sha256": "705f86309699aa6df4e15f12d0e8b0e3c31ff742eed18195859f7cd226e18040",
+    "s3_version": "FVo1QSfkEI4csW.r3iuuFu0rds.pzPKN",
+    "lambda_code_sha256": "RaFQKBA489aj69N8e76eCQdzlJ2ijkA1YFNFPa+D9r4=",
+    "lambda_revision_id": "33e3f02d-3a97-4b8e-be31-4e104b7027f3",
+    "banner_preserved": true
+  },
+  "lease": {
+    "replaced_expired": true,
+    "previous_workstream": "settings-billing-branding-deposits-51c8",
+    "reclaim": false
+  }
+}
