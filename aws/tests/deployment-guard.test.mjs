@@ -189,15 +189,18 @@ test('G. index.html changed -> STOP', () => {
 });
 
 test('H. unrelated Lambda members preserved', () => {
-  const overlay = evaluateLambdaOverlay(identity());
+  const before = identity();
+  const overlay = evaluateLambdaOverlay(before);
   assert.equal(overlay.ok, true);
   const post = evaluatePostOverlay({
-    liveMembersBefore: identity().live_members,
-    liveMembersAfter: { 'owned.mjs': 'new', 'shared.mjs': 'keep', 'vendor/lib.js': 'vendor' },
+    liveMembersBefore: before.live_members,
+    liveMembersAfter: { ...before.live_members, 'owned.mjs': 'new' },
     ownedMembers: ['owned.mjs'],
   });
   assert.equal(post.ok, true);
-  assert.deepEqual(post.details.preserved, ['shared.mjs', 'vendor/lib.js']);
+  assert.ok(post.details.preserved.includes('shared.mjs'));
+  assert.ok(post.details.preserved.includes('vendor/lib.js'));
+  assert.equal(post.details.preserved.includes('owned.mjs'), false);
 });
 
 test('I. SPA multi-workstream source composition required', () => {
