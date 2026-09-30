@@ -24,6 +24,7 @@ test('classifies all audit rpc_disabled names', () => {
     'admin_delete_check',
     'admin_override_check_status',
     'admin_set_contractor_pro',
+    'admin_set_check_claim',
     'apply_referral_code',
     'assign_deposit_owner',
     'backfill_check_billing_events',
@@ -69,6 +70,8 @@ test('classifies all audit rpc_disabled names', () => {
   assert.equal(SAFE_WRITE_RPCS.has('save_checkalt_settings'), true);
   assert.equal(SAFE_WRITE_RPCS.has('save_checkalt_tenant_auto_deposit'), true);
   assert.equal(SAFE_WRITE_RPCS.has('accept_mortgage_handling_request'), true);
+  assert.equal(SAFE_WRITE_RPCS.has('admin_set_check_claim'), true);
+  assert.equal(SAFE_WRITE_RPCS.has('claim_ledger_link_or_create'), true);
   assert.ok(SAFE_LOSS_DRAFT_ACTIONS.has('mark_sent'));
   assert.equal(SAFE_LOSS_DRAFT_ACTIONS.has('mark_escrowed'), false);
 });
@@ -192,6 +195,43 @@ test('accept_mortgage_handling_request assigns caller', async () => {
   assert.equal(result.error, undefined);
   assert.equal(result.data.status, 'in_progress');
   assert.equal(result.data.assigned_employee_id, APP_ID);
+});
+
+test('accept_mortgage_handling_request keeps the live usage-accrual call site', async () => {
+  const src = (await import('node:fs')).readFileSync(new URL('../functions/api/workflow-rpc.mjs', import.meta.url), 'utf8');
+  assert.match(src, /accrueMortgageOpsAcceptedRequest/);
+  assert.match(src, /tenant-billing-engine\.mjs/);
+  const client = mockClient();
+  const result = await executeSafeWriteRpc({
+    client,
+    mapping: { application_user_id: APP_ID },
+    name: 'accept_mortgage_handling_request',
+    args: { _request_id: REQUEST_ID },
+  });
+  assert.equal(result.error, undefined);
+  assert.equal(result.data.status, 'in_progress');
+});
+
+test('admin_set_check_claim is routed and refuses deposited checks', async () => {
+  const CLAIM = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const client = mockClient({ roles: [{ role: 'admin' }] });
+  const original = client.query;
+  client.query = async (sql, params) => {
+    if (/FROM public.check_intake_items/.test(sql)) {
+      return { rows: [{ id: CHECK_ID, tenant_id: FREEDOM, claim_id: null, deposited_at: '2026-09-01', amount: 1, status: 'deposited' }] };
+    }
+    if (/FROM public.tenant_users/.test(sql)) {
+      return { rows: [{ ok: 1 }] };
+    }
+    return original(sql, params);
+  };
+  const result = await executeSafeWriteRpc({
+    client,
+    mapping: { application_user_id: APP_ID },
+    name: 'admin_set_check_claim',
+    args: { p_check_id: CHECK_ID, p_claim_id: CLAIM },
+  });
+  assert.equal(result.error, 'already_deposited');
 });
 
 test('loss_draft_action blocks financial amount actions', async () => {
