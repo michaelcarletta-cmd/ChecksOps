@@ -5,7 +5,11 @@
   "in_repo_enforced": [
     "signed receipts for inventoried shared-target writers",
     "exclusive local lease per environment/component",
-    "fresh mutation-boundary live fingerprint (immediately_before)",
+    "fresh mutation-boundary live fingerprint with required fields and captured_at",
+    "exclusive lock required for every shared-target mutation (omit lease or require_exclusive_lock fails)",
+    "accepted composition candidate content hashes (file names alone fail)",
+    "preserved-member integrity fails when live or candidate hashes are missing",
+    "verified git-merge-base ancestry (reconciled_with_main=true is not evidence)",
     "stale SPA dist and stale full Lambda package rejection",
     "accepted-contract and accepted-composition regression gates",
     "worktree/branch isolation evaluator",

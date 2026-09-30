@@ -59,13 +59,20 @@ cannot bypass the guard.
 
 ## Exclusive lock + fresh live fingerprint
 
-- Acquire an **exclusive** lease for the environment and component.
+- Every shared-target mutation requires `require_exclusive_lock=true`
+  **and** an exclusive lease object. Omitting either fails closed.
 - Do not reclaim or steal another workstream's active lock.
-- Capture a **fresh** live fingerprint immediately before write
-  (`CodeSha256` + `RevisionId`, `index.html` + entry bundle, or SQL
-  definition). Preflight alone is not sufficient.
+- Capture a **fresh** live fingerprint immediately before write with
+  complete type-specific fields and ISO `captured_at` on both preflight
+  and immediately-before snapshots (`CodeSha256` + `RevisionId`,
+  `index.html` + entry bundle, or SQL definition). Preflight alone is
+  not sufficient.
 - If live state drifted after preflight: **STOP** with
   `DEPLOYMENT_COLLISION`. Do not restore the previous package.
+- `reconciled_with_main=true` is not evidence. Mutating evaluates need
+  verified `git-merge-base` ancestry plus accepted-path composition
+  hashes. File names alone are not enough; missing live or candidate
+  member hashes fail closed.
 
 ## Reject stale artifacts
 

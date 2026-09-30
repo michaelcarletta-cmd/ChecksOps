@@ -35,8 +35,11 @@ Inventoried `MUST_REFUSE_DIRECT` scripts fail closed with `DEPLOYMENT_GUARD_REQU
 Independent Cursor chats must also follow `.cursor/rules/preserve-builds.mdc`:
 separate branches and worktrees, preserve accepted fixes, reconcile against
 current main and `ops/deployment-guard/accepted-source-composition.json`,
-reject stale SPA/full Lambda packages, require exclusive locks and a fresh
-live fingerprint, run accepted regression checks, and never automatically
+reject stale SPA/full Lambda packages, require exclusive locks
+(`require_exclusive_lock=true` plus a lease), a complete live fingerprint
+with `captured_at`, verified git-merge-base ancestry (not
+`reconciled_with_main=true`), candidate content hashes for accepted
+composition, run accepted regression checks, and never automatically
 roll back over another workstream.
 
 See `.cursor/rules/deployment-guard.mdc`, `.cursor/rules/preserve-builds.mdc`,

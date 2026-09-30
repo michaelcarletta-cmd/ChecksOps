@@ -24,6 +24,7 @@ import {
   planLambdaApply,
 } from '../../scripts/deployment-guard/lib/lambda-overlay.mjs';
 import { evaluateSourceComposition, evaluateSpaPromote } from '../../scripts/deployment-guard/lib/spa-promote.mjs';
+import { evidenceForPreservedPaths, loadCompositionRegistry } from '../../scripts/deployment-guard/lib/source-composition.mjs';
 import { evaluateSqlApply, hashSqlDefinition } from '../../scripts/deployment-guard/lib/sql-apply.mjs';
 import { acquireLease, inspectLease, releaseLease } from '../../scripts/deployment-guard/lib/lease.mjs';
 import {
@@ -42,25 +43,54 @@ const MAIN = 'cccccccccccccccccccccccccccccccccccccccc';
 const NOW = '2026-09-29T16:00:00.000Z';
 
 function identity(overrides = {}) {
+  const deploymentType = overrides.deployment_type || 'lambda-overlay';
+  const evidence = evidenceForPreservedPaths(loadCompositionRegistry(ROOT), deploymentType);
+  const workstreamId = overrides.workstream_id || 'workstream-a';
+  const commit = overrides.commit || SHA;
+  const currentMain = Object.hasOwn(overrides, 'current_main_sha') ? overrides.current_main_sha : MAIN;
+  const mergeBase = Object.hasOwn(overrides, 'merge_base_sha') ? overrides.merge_base_sha : MAIN;
+  const lambdaFingerprint = {
+    codeSha256: 'live-code',
+    revisionId: 'rev-1',
+    lastModified: NOW,
+    captured_at: NOW,
+  };
   return {
-    workstream_id: 'workstream-a',
+    workstream_id: workstreamId,
     branch: 'cursor/guard-a',
-    commit: SHA,
+    commit,
     operator: 'test-agent',
     target_environment: 'staging',
     deployment_type: 'lambda-overlay',
     owned_members: ['owned.mjs'],
     owned_components: ['owned.mjs'],
-    preflight: { codeSha256: 'live-code', revisionId: 'rev-1', lastModified: NOW },
-    preflight_live_fingerprint: { codeSha256: 'live-code', revisionId: 'rev-1', lastModified: NOW },
+    require_exclusive_lock: true,
+    lease: {
+      workstream_id: workstreamId,
+      component: overrides.target_component || 'checksops-staging-api',
+      environment: 'staging',
+      commit,
+      acquired_at: NOW,
+      expiry: '2026-09-29T16:15:00.000Z',
+    },
+    preflight: lambdaFingerprint,
+    preflight_live_fingerprint: lambdaFingerprint,
     build_timestamp: NOW,
     package: { origin: 'fresh-live-download', downloaded_at: NOW, preflight_at: NOW },
-    live_members: { 'owned.mjs': 'old', 'shared.mjs': 'keep', 'vendor/lib.js': 'vendor' },
-    candidate_members: { 'owned.mjs': 'new', 'shared.mjs': 'keep', 'vendor/lib.js': 'vendor' },
-    immediately_before: { codeSha256: 'live-code', revisionId: 'rev-1' },
-    current_main_sha: MAIN,
-    merge_base_sha: MAIN,
+    live_members: { ...evidence.live_members, 'owned.mjs': 'old', 'shared.mjs': 'keep', 'vendor/lib.js': 'vendor' },
+    candidate_members: { ...evidence.candidate_members, 'owned.mjs': 'new', 'shared.mjs': 'keep', 'vendor/lib.js': 'vendor' },
+    accepted_paths_vs_main: evidence.accepted_paths_vs_main,
+    immediately_before: { codeSha256: 'live-code', revisionId: 'rev-1', captured_at: NOW },
+    current_main_sha: currentMain,
+    merge_base_sha: mergeBase,
     reconciled_with_main: true,
+    git_ancestry: {
+      method: 'git-merge-base',
+      is_ancestor: true,
+      current_main_sha: currentMain || MAIN,
+      merge_base_sha: mergeBase || MAIN,
+      commit,
+    },
     worktree: '/tmp/worktree-a',
     ...overrides,
   };

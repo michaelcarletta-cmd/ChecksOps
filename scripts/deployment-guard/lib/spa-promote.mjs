@@ -61,6 +61,8 @@ export function evaluateSpaPromote(input = {}) {
       composition_manifest: input.source_composition_manifest,
       accepted_composition: input.accepted_composition === true,
       frontend_workstreams: input.frontend_workstreams || [],
+      candidate_members: input.candidate_members,
+      candidate_contents: input.candidate_contents,
     })
     : evaluateSourceComposition({
       frontend_workstreams: input.frontend_workstreams || [],

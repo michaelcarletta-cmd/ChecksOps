@@ -208,7 +208,10 @@ Additional fail-closed checks on mutating evaluates:
 - separate branch + worktree isolation (`WORKTREE_ISOLATION_REQUIRED`)
 - reconcile against current `origin/main` (`MAIN_RECONCILIATION_REQUIRED`)
 - accepted source-composition registry (`ops/deployment-guard/accepted-source-composition.json`)
-- exclusive lease + mutation-boundary live fingerprint
+- exclusive lease + `require_exclusive_lock=true` (omitting either fails)
+- mutation-boundary live fingerprint with complete fields and `captured_at`
+- verified `git-merge-base` ancestry (not `reconciled_with_main=true`)
+- accepted composition **content hashes** (file names alone fail)
 - reject stale SPA dist and stale/full Lambda packages
 - accepted-contract **and** accepted-composition regression gates
 - no automatic rollback / reclaim over another workstream
@@ -216,7 +219,9 @@ Additional fail-closed checks on mutating evaluates:
 Preserved accepted work includes Signature Requests, Claim Ledger /
 claim-number Save, OCR, and endorsement fixes. A boolean
 `accepted_composition` flag is not enough; the composed file list must
-include every accepted preserved path.
+include every accepted preserved path **and** SHA-256 candidate hashes.
+Preserved-member integrity fails when live or candidate hashes are
+missing.
 
 Remaining holes that in-repo scripts cannot close (IAM, out-of-repo AWS
 CLI, per-checkout leases) are listed in

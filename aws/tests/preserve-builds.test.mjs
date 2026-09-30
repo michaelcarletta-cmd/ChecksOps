@@ -17,6 +17,10 @@ import { evaluatePackageProvenance, evaluateDistFreshness } from '../../scripts/
 import { evaluateSpaPromote } from '../../scripts/deployment-guard/lib/spa-promote.mjs';
 import {
   evaluateAcceptedSourceComposition,
+  evaluateGitAncestry,
+  evaluateMainReconciliation,
+  evaluatePreservedMemberIntegrity,
+  evidenceForPreservedPaths,
   loadCompositionRegistry,
   passingCompositionResults,
   requiredPreservedPaths,
@@ -41,11 +45,32 @@ function spaFiles() {
   return requiredPreservedPaths(loadCompositionRegistry(ROOT), { deployment_type: 'spa-promote' });
 }
 
-function mutatingBase(overrides = {}) {
+function gitAncestry({ commit = SHA, current_main_sha = MAIN, merge_base_sha = MAIN } = {}) {
   return {
-    workstream_id: 'cursor/preserve-a',
+    method: 'git-merge-base',
+    is_ancestor: true,
+    current_main_sha,
+    merge_base_sha,
+    commit,
+  };
+}
+
+function mutatingBase(overrides = {}) {
+  const deploymentType = overrides.deployment_type || 'spa-promote';
+  const evidence = evidenceForPreservedPaths(loadCompositionRegistry(ROOT), deploymentType);
+  const workstreamId = overrides.workstream_id || 'cursor/preserve-a';
+  const commit = overrides.commit || SHA;
+  const currentMain = Object.hasOwn(overrides, 'current_main_sha') ? overrides.current_main_sha : MAIN;
+  const mergeBase = Object.hasOwn(overrides, 'merge_base_sha') ? overrides.merge_base_sha : MAIN;
+  const spaFingerprint = {
+    index_html_sha256: 'idx-1',
+    entry_bundle: '/assets/index-aaa.js',
+    captured_at: NOW,
+  };
+  return {
+    workstream_id: workstreamId,
     branch: 'cursor/preserve-a',
-    commit: SHA,
+    commit,
     operator: 'test-agent',
     target_environment: 'staging',
     target_component: 'staging-frontend',
@@ -53,17 +78,34 @@ function mutatingBase(overrides = {}) {
     owned_components: ['index.html'],
     owned_members: ['index.html'],
     worktree: '/tmp/worktree-a',
-    current_main_sha: MAIN,
-    merge_base_sha: MAIN,
+    current_main_sha: currentMain,
+    merge_base_sha: mergeBase,
     reconciled_with_main: true,
+    git_ancestry: gitAncestry({
+      commit,
+      current_main_sha: currentMain || MAIN,
+      merge_base_sha: mergeBase || MAIN,
+    }),
+    require_exclusive_lock: true,
+    lease: {
+      workstream_id: workstreamId,
+      component: 'staging-frontend',
+      environment: 'staging',
+      commit,
+      acquired_at: NOW,
+      expiry: '2026-09-30T16:15:00.000Z',
+    },
     build_timestamp: NOW,
-    preflight: { index_html_sha256: 'idx-1', entry_bundle: '/assets/index-aaa.js' },
-    preflight_live_fingerprint: { index_html_sha256: 'idx-1', entry_bundle: '/assets/index-aaa.js' },
-    immediately_before: { index_html_sha256: 'idx-1', entry_bundle: '/assets/index-aaa.js' },
+    preflight: spaFingerprint,
+    preflight_live_fingerprint: spaFingerprint,
+    immediately_before: spaFingerprint,
     dist: { clean_build: true },
     clean_build: true,
     frontend_workstreams: ['cursor/preserve-a'],
-    source_composition_manifest: { files: spaFiles() },
+    source_composition_manifest: { files: evidence.files, members: evidence.members },
+    live_members: evidence.live_members,
+    candidate_members: evidence.candidate_members,
+    accepted_paths_vs_main: evidence.accepted_paths_vs_main,
     ...overrides,
   };
 }
@@ -183,21 +225,24 @@ test('stale full Lambda packages and stale SPA builds are rejected', () => {
 
 test('fresh live fingerprint is required and must post-date the exclusive lease', () => {
   const missing = evaluateFreshLiveFingerprint({
-    preflight: { codeSha256: 'a' },
+    deployment_type: 'lambda-overlay',
+    preflight: { codeSha256: 'a', revisionId: '1', captured_at: NOW },
   });
   assert.equal(missing.ok, false);
   assert.equal(missing.code, CODES.DEPLOYMENT_COLLISION);
 
   const drifted = evaluateFreshLiveFingerprint({
-    preflight: { codeSha256: 'a', revisionId: '1' },
-    immediately_before: { codeSha256: 'b', revisionId: '1' },
+    deployment_type: 'lambda-overlay',
+    preflight: { codeSha256: 'a', revisionId: '1', captured_at: NOW },
+    immediately_before: { codeSha256: 'b', revisionId: '1', captured_at: NOW },
   });
   assert.equal(drifted.ok, false);
   assert.equal(drifted.code, CODES.DEPLOYMENT_COLLISION);
 
   const beforeLease = evaluateFreshLiveFingerprint({
-    preflight: { codeSha256: 'a' },
-    immediately_before: { codeSha256: 'a', captured_at: '2026-09-30T15:00:00.000Z' },
+    deployment_type: 'lambda-overlay',
+    preflight: { codeSha256: 'a', revisionId: '1', captured_at: '2026-09-30T15:00:00.000Z' },
+    immediately_before: { codeSha256: 'a', revisionId: '1', captured_at: '2026-09-30T15:00:00.000Z' },
     lease: { acquired_at: '2026-09-30T16:00:00.000Z' },
   });
   assert.equal(beforeLease.ok, false);
@@ -211,7 +256,8 @@ test('automatic rollback or lock steal is forbidden', () => {
 
   const steal = evaluateExclusiveDeployLock({
     workstream_id: 'cursor/a',
-    lease: { workstream_id: 'cursor/b' },
+    require_exclusive_lock: true,
+    lease: { workstream_id: 'cursor/b', acquired_at: NOW },
     steal_lease: true,
   });
   assert.equal(steal.ok, false);
@@ -338,6 +384,109 @@ test('accepted composition and contract test files still exist', () => {
   const endorsement = registry.contracts.find((row) => row.id === 'endorsement');
   assert.ok(endorsement);
   assert.ok(fs.existsSync(path.join(ROOT, endorsement.test)));
+});
+
+test('accepted composition rejects file-name-only manifests without content hashes', () => {
+  const result = evaluateAcceptedSourceComposition({
+    registry: loadCompositionRegistry(ROOT),
+    deployment_type: 'spa-promote',
+    accepted_composition: true,
+    frontend_workstreams: ['cursor/a', 'cursor/b'],
+    composition_manifest: { files: spaFiles() },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.SOURCE_COMPOSITION_REQUIRED);
+  assert.ok(result.details.missing_content_hashes.includes('src/components/payments/ClaimLedgerCard.tsx'));
+});
+
+test('preserved-member integrity fails when live and candidate hashes are both missing', () => {
+  const direct = evaluatePreservedMemberIntegrity({
+    liveMembers: {},
+    candidateMembers: {},
+    ownedMembers: [],
+    preservedPaths: ['src/components/payments/ClaimLedgerCard.tsx'],
+  });
+  assert.equal(direct.ok, false);
+  assert.equal(direct.code, CODES.SOURCE_COMPOSITION_REQUIRED);
+  assert.deepEqual(direct.details.missing_member_evidence, ['src/components/payments/ClaimLedgerCard.tsx']);
+
+  const omitted = evaluatePreserveBuilds(mutatingBase({
+    live_members: undefined,
+    candidate_members: undefined,
+  }), { skip_contracts: true, compositionRegistry: loadCompositionRegistry(ROOT) });
+  assert.equal(omitted.ok, false);
+  assert.equal(omitted.code, CODES.SOURCE_COMPOSITION_REQUIRED);
+  assert.ok(omitted.details.missing_member_evidence.includes('src/components/payments/ClaimLedgerCard.tsx'));
+});
+
+test('exclusive lock fails when the lease or requirement flag is omitted', () => {
+  const omittedFlag = evaluateExclusiveDeployLock({
+    workstream_id: 'cursor/a',
+    lease: { workstream_id: 'cursor/a', acquired_at: NOW },
+  });
+  assert.equal(omittedFlag.ok, false);
+  assert.equal(omittedFlag.code, CODES.LEASE_EXPIRED);
+
+  const disabled = evaluateExclusiveDeployLock({
+    workstream_id: 'cursor/a',
+    require_exclusive_lock: false,
+    lease: { workstream_id: 'cursor/a', acquired_at: NOW },
+  });
+  assert.equal(disabled.ok, false);
+  assert.equal(disabled.code, CODES.LEASE_EXPIRED);
+
+  const omittedLease = evaluatePreserveBuilds(mutatingBase({
+    lease: undefined,
+  }), { skip_contracts: true, compositionRegistry: loadCompositionRegistry(ROOT) });
+  assert.equal(omittedLease.ok, false);
+  assert.equal(omittedLease.code, CODES.LEASE_EXPIRED);
+});
+
+test('incomplete fingerprints and missing captured_at fail closed', () => {
+  const incomplete = evaluateFreshLiveFingerprint({
+    deployment_type: 'lambda-overlay',
+    preflight: { captured_at: NOW },
+    immediately_before: { captured_at: NOW },
+  });
+  assert.equal(incomplete.ok, false);
+  assert.equal(incomplete.code, CODES.DEPLOYMENT_COLLISION);
+  assert.ok(incomplete.details.missing_fingerprint_fields.includes('codeSha256'));
+
+  const missingCaptured = evaluateFreshLiveFingerprint({
+    deployment_type: 'spa-promote',
+    preflight: { index_html_sha256: 'idx-1', entry_bundle: '/assets/index-aaa.js' },
+    immediately_before: { index_html_sha256: 'idx-1', entry_bundle: '/assets/index-aaa.js' },
+  });
+  assert.equal(missingCaptured.ok, false);
+  assert.equal(missingCaptured.code, CODES.DEPLOYMENT_COLLISION);
+  assert.ok(missingCaptured.details.missing_fingerprint_fields.includes('captured_at'));
+});
+
+test('reconciled_with_main=true is not a substitute for git ancestry evidence', () => {
+  const shaMismatch = evaluateMainReconciliation({
+    current_main_sha: MAIN,
+    merge_base_sha: STALE_MAIN,
+    reconciled_with_main: true,
+    git_ancestry: gitAncestry({ current_main_sha: MAIN, merge_base_sha: STALE_MAIN }),
+  });
+  assert.equal(shaMismatch.ok, false);
+  assert.equal(shaMismatch.code, CODES.MAIN_RECONCILIATION_REQUIRED);
+
+  const missingAncestry = evaluateGitAncestry({
+    current_main_sha: MAIN,
+    merge_base_sha: MAIN,
+    commit: SHA,
+    reconciled_with_main: true,
+  });
+  assert.equal(missingAncestry.ok, false);
+  assert.equal(missingAncestry.code, CODES.MAIN_RECONCILIATION_REQUIRED);
+
+  const omitted = evaluatePreserveBuilds(mutatingBase({
+    reconciled_with_main: true,
+    git_ancestry: undefined,
+  }), { skip_contracts: true, compositionRegistry: loadCompositionRegistry(ROOT) });
+  assert.equal(omitted.ok, false);
+  assert.equal(omitted.code, CODES.MAIN_RECONCILIATION_REQUIRED);
 });
 
 test('enforcement-gaps registry records remaining out-of-repo holes', () => {

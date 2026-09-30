@@ -19,7 +19,7 @@ import {
 import { acquireLease } from '../../scripts/deployment-guard/lib/lease.mjs';
 import { issueReceipt } from '../../scripts/deployment-guard/lib/receipt.mjs';
 import { refuseUnguardedDeploy } from '../../scripts/deployment-guard/require-guard.mjs';
-import { loadCompositionRegistry, passingCompositionResults } from '../../scripts/deployment-guard/lib/source-composition.mjs';
+import { evidenceForPreservedPaths, loadCompositionRegistry, passingCompositionResults } from '../../scripts/deployment-guard/lib/source-composition.mjs';
 import { loadContractRegistry, passingContractResults } from '../../scripts/deployment-guard/lib/contracts.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -28,15 +28,22 @@ const NOW_MS = Date.parse(NOW);
 const EXPECTED_LIVE = 'af784b78408b77ed928d1c815309e8da3459e9ebd3f4f6068321b9f33dd2a078';
 
 function executorInput(overrides = {}) {
-  const preflight = authorizationFingerprint({
-    ...AUTHORIZED_SQL44,
-    expected_live_definition_sha256: EXPECTED_LIVE,
-    one_use_id: 'sql44-apply-0001',
-  });
+  const preflight = {
+    ...authorizationFingerprint({
+      ...AUTHORIZED_SQL44,
+      expected_live_definition_sha256: EXPECTED_LIVE,
+      one_use_id: 'sql44-apply-0001',
+    }),
+    captured_at: NOW,
+  };
+  const evidence = evidenceForPreservedPaths(loadCompositionRegistry(ROOT), SQL_EXECUTOR_DEPLOYMENT_TYPE);
+  const commit = overrides.commit || AUTHORIZED_SQL44.commit;
+  const currentMain = overrides.current_main_sha || 'cccccccccccccccccccccccccccccccccccccccc';
+  const mergeBase = overrides.merge_base_sha || 'cccccccccccccccccccccccccccccccccccccccc';
   return {
     workstream_id: 'claim-ledger',
     branch: 'cursor/ledger-guarded-main-a2a4',
-    commit: AUTHORIZED_SQL44.commit,
+    commit,
     operator: 'test-agent',
     target_environment: 'staging',
     target_component: 'staging-sql',
@@ -52,12 +59,31 @@ function executorInput(overrides = {}) {
     action: 'authorize',
     function_name: 'checksops-staging-guarded-sql-executor',
     build_timestamp: NOW,
+    require_exclusive_lock: true,
+    lease: {
+      workstream_id: 'claim-ledger',
+      component: 'staging-sql',
+      environment: 'staging',
+      commit,
+      acquired_at: NOW,
+      expiry: new Date(Math.max(Date.now(), NOW_MS) + 15 * 60 * 1000).toISOString(),
+    },
     preflight_live_fingerprint: preflight,
     preflight,
     immediately_before: preflight,
-    current_main_sha: 'cccccccccccccccccccccccccccccccccccccccc',
-    merge_base_sha: 'cccccccccccccccccccccccccccccccccccccccc',
+    current_main_sha: currentMain,
+    merge_base_sha: mergeBase,
     reconciled_with_main: true,
+    git_ancestry: {
+      method: 'git-merge-base',
+      is_ancestor: true,
+      current_main_sha: currentMain,
+      merge_base_sha: mergeBase,
+      commit,
+    },
+    live_members: evidence.live_members,
+    candidate_members: evidence.candidate_members,
+    accepted_paths_vs_main: evidence.accepted_paths_vs_main,
     worktree: '/tmp/worktree-ledger',
     ...overrides,
   };
