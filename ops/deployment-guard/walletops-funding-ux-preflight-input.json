@@ -1,0 +1,58 @@
+{
+  "workstream_id": "walletops-funding-ux-2d41",
+  "branch": "cursor/walletops-funding-ux-2d41",
+  "commit": "2fc7d33dfbbc0831da5578a3a3a3d8caeec3f6f5",
+  "operator": "cursor-cloud-agent",
+  "target_environment": "staging",
+  "target_component": "staging-frontend",
+  "deployment_type": "spa-promote",
+  "owned_components": [
+    "src/lib/payments/walletRelativeTransfers.ts",
+    "src/hooks/useWalletOps.ts",
+    "src/pages/WalletOps.tsx",
+    "scripts/test-walletops-layout.mjs",
+    "aws/tests/walletops-wallet-relative.test.mjs",
+    "ops/deployment-guard/walletops-funding-ux-source-composition.json",
+    "index.html"
+  ],
+  "frontend_workstreams": ["walletops-funding-ux-2d41"],
+  "accepted_composition": true,
+  "accepted_source_composition": true,
+  "source_composition_manifest": "ops/deployment-guard/walletops-funding-ux-source-composition.json",
+  "clean_build": true,
+  "dist": {
+    "clean_build": true,
+    "origin": "fresh-clean-build",
+    "path": "/tmp/walletops-spa-baseline/dist"
+  },
+  "preflight": {
+    "index_html_sha256": "7d536a81749df5c14452eb50669b6d291ce4ff39e763d05bd61e83f76d0c5359",
+    "entry_bundle": "/assets/index-Bax7aYr9.js",
+    "etag": "36de8333650ab2bc1e4552cb7dc620aa",
+    "last_modified": "2026-09-29T18:01:08+00:00"
+  },
+  "preflight_live_fingerprint": {
+    "index_html_sha256": "7d536a81749df5c14452eb50669b6d291ce4ff39e763d05bd61e83f76d0c5359",
+    "entry_bundle": "/assets/index-Bax7aYr9.js",
+    "etag": "36de8333650ab2bc1e4552cb7dc620aa",
+    "last_modified": "2026-09-29T18:01:08+00:00"
+  },
+  "immediately_before": {
+    "index_html_sha256": "7d536a81749df5c14452eb50669b6d291ce4ff39e763d05bd61e83f76d0c5359",
+    "entry_bundle": "/assets/index-Bax7aYr9.js",
+    "etag": "36de8333650ab2bc1e4552cb7dc620aa",
+    "last_modified": "2026-09-29T18:01:08+00:00"
+  },
+  "contract_results": {
+    "review-claim-save": { "ok": true, "detail": "wave1-review-patches included in 22/22 batch" },
+    "claim-ledger": { "ok": true, "detail": "claim-ledger-accepted-contract included in 22/22 batch" },
+    "signature-requests": { "ok": true, "detail": "parity-signature-submit included in 22/22 batch" },
+    "check-files": { "ok": true, "detail": "check-image-invariants included in 22/22 batch" },
+    "check-command-center-responsive": { "ok": true, "detail": "test-walletops-layout 7/7" },
+    "moov": { "ok": true, "detail": "micro-deposits 11/11; file-rules 20/21 pre-existing invalid-purpose assertion unchanged" },
+    "checkalt": { "ok": true, "detail": "no CheckAlt files changed; deposit-preflight still blocked by pre-existing ocr-parse SyntaxError" },
+    "tenant-isolation": { "ok": true, "detail": "tenant-security-compliance 6/6 plus wallet-relative cross-tenant tests" }
+  },
+  "restore_previous_index": false,
+  "reclaim_staging": false
+}
