@@ -38,8 +38,9 @@ current main and `ops/deployment-guard/accepted-source-composition.json`,
 reject stale SPA/full Lambda packages, require exclusive locks
 (`require_exclusive_lock=true` plus a lease), a complete live fingerprint
 with `captured_at`, verified git-merge-base ancestry (not
-`reconciled_with_main=true`), candidate content hashes for accepted
-composition, run accepted regression checks, and never automatically
+`reconciled_with_main=true`), candidate content hashes observed from
+artifact bytes, git-merge-base ancestry observed by Git commands, run
+accepted regression checks, and never automatically
 roll back over another workstream.
 
 See `.cursor/rules/deployment-guard.mdc`, `.cursor/rules/preserve-builds.mdc`,

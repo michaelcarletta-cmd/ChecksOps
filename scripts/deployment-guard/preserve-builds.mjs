@@ -20,6 +20,7 @@ export function main(argv = process.argv.slice(2), root = repoRootFrom(import.me
     compositionRegistry: loadCompositionRegistry(root),
     skip_contracts: flags['skip-contracts'] === true,
     require_mutating_only: false,
+    official: true,
   });
   return printResult(result);
 }

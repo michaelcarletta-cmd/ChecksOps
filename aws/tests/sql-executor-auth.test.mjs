@@ -237,6 +237,12 @@ test('sql-apply receipt cannot authorize executor invoke', () => {
 test('official preflight forwards executor authorization fields', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-sql-pre-'));
   const input = executorInput();
+  delete input.candidate_members;
+  delete input.live_members;
+  delete input.git_ancestry;
+  delete input.accepted_paths_vs_main;
+  delete input.current_main_sha;
+  delete input.merge_base_sha;
   const file = path.join(dir, 'manifest.json');
   fs.writeFileSync(file, `${JSON.stringify({
     ...input,

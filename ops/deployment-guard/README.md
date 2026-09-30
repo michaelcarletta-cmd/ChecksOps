@@ -210,8 +210,9 @@ Additional fail-closed checks on mutating evaluates:
 - accepted source-composition registry (`ops/deployment-guard/accepted-source-composition.json`)
 - exclusive lease + `require_exclusive_lock=true` (omitting either fails)
 - mutation-boundary live fingerprint with complete fields and `captured_at`
-- verified `git-merge-base` ancestry (not `reconciled_with_main=true`)
-- accepted composition **content hashes** (file names alone fail)
+- verified `git-merge-base` ancestry from Git commands (not caller JSON)
+- accepted composition **content hashes** from artifact bytes (file names
+  or fabricated JSON hashes fail)
 - reject stale SPA dist and stale/full Lambda packages
 - accepted-contract **and** accepted-composition regression gates
 - no automatic rollback / reclaim over another workstream

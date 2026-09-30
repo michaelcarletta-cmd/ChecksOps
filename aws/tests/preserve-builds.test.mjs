@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -34,6 +35,13 @@ import {
 } from '../../scripts/deployment-guard/lib/preserve-builds.mjs';
 import { evaluateWorktreeIsolation } from '../../scripts/deployment-guard/lib/worktree.mjs';
 import { scanRepository } from '../../scripts/deployment-guard/scan-bypass.mjs';
+import {
+  evaluateObservationBinding,
+  hashFileBytes,
+  observeCandidateMembers,
+  observeGitAncestry,
+  observePreserveEvidence,
+} from '../../scripts/deployment-guard/lib/observe.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SHA = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -487,6 +495,82 @@ test('reconciled_with_main=true is not a substitute for git ancestry evidence', 
   }), { skip_contracts: true, compositionRegistry: loadCompositionRegistry(ROOT) });
   assert.equal(omitted.ok, false);
   assert.equal(omitted.code, CODES.MAIN_RECONCILIATION_REQUIRED);
+});
+
+test('trusted collector hashes artifact bytes and reads ancestry from git commands', () => {
+  const probe = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-observe-'));
+  const rel = 'src/components/payments/ClaimLedgerCard.tsx';
+  const bytes = fs.readFileSync(path.join(ROOT, rel));
+  assert.equal(hashFileBytes(ROOT, rel), createHash('sha256').update(bytes).digest('hex'));
+
+  const observed = observeCandidateMembers(ROOT, [rel]);
+  assert.equal(observed.ok, true);
+  assert.equal(observed.details.source, 'artifact-bytes');
+  assert.equal(observed.details.candidate_members[rel], hashFileBytes(ROOT, rel));
+
+  const ancestry = observeGitAncestry(ROOT);
+  assert.equal(ancestry.ok, true, ancestry.message);
+  assert.equal(ancestry.details.source, 'git-merge-base');
+  assert.equal(ancestry.details.git_ancestry.method, 'git-merge-base');
+  assert.equal(ancestry.details.git_ancestry.observed, true);
+  assert.match(ancestry.details.current_main_sha, /^[0-9a-f]{40}$/);
+  assert.equal(ancestry.details.merge_base_sha, ancestry.details.current_main_sha);
+
+  const evidence = observePreserveEvidence({
+    root: ROOT,
+    registry: loadCompositionRegistry(ROOT),
+    deployment_type: 'spa-promote',
+  });
+  assert.equal(evidence.ok, true, evidence.message);
+  assert.equal(evidence.details.candidate_source, 'artifact-bytes');
+  assert.equal(evidence.details.ancestry_source, 'git-merge-base');
+  assert.equal(evidence.details.collector, 'scripts/deployment-guard/lib/observe.mjs');
+  fs.rmSync(probe, { recursive: true, force: true });
+});
+
+test('official path rejects fabricated candidate hashes and git ancestry', () => {
+  const composition = loadCompositionRegistry(ROOT);
+  const files = spaFiles();
+  const fakeMembers = Object.fromEntries(files.map((file) => [file, '0'.repeat(64)]));
+  const fabricated = mutatingBase({
+    candidate_members: fakeMembers,
+    live_members: fakeMembers,
+    source_composition_manifest: { files, members: fakeMembers },
+    current_main_sha: MAIN,
+    merge_base_sha: MAIN,
+    git_ancestry: gitAncestry(),
+  });
+
+  const binding = evaluateObservationBinding(fabricated, observePreserveEvidence({
+    root: ROOT,
+    registry: composition,
+    deployment_type: 'spa-promote',
+  }));
+  assert.equal(binding.ok, false);
+  assert.equal(binding.code, CODES.SOURCE_COMPOSITION_REQUIRED);
+  assert.ok(binding.details.fabricated_member_hashes.includes('src/components/payments/ClaimLedgerCard.tsx'));
+
+  const result = evaluatePreserveBuilds(fabricated, {
+    official: true,
+    root: ROOT,
+    skip_contracts: true,
+    compositionRegistry: composition,
+  });
+  assert.equal(result.ok, false);
+  assert.ok(
+    result.code === CODES.SOURCE_COMPOSITION_REQUIRED
+    || result.code === CODES.MAIN_RECONCILIATION_REQUIRED,
+    result.message,
+  );
+
+  const cli = spawnSync(process.execPath, [
+    path.join(ROOT, 'scripts/deployment-guard/preserve-builds.mjs'),
+    '--json',
+    JSON.stringify(fabricated),
+    '--skip-contracts',
+  ], { encoding: 'utf8', cwd: ROOT });
+  assert.notEqual(cli.status, 0);
+  assert.match(`${cli.stderr}${cli.stdout}`, /artifact bytes|git-merge-base observation|cannot substitute/);
 });
 
 test('enforcement-gaps registry records remaining out-of-repo holes', () => {

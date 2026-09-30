@@ -66,6 +66,9 @@ export function evaluateDeployment(input = {}, ctx = {}) {
       registry,
       compositionRegistry,
       skip_contracts: true,
+      official: ctx.official === true,
+      git: ctx.git,
+      trusted_observation: ctx.trusted_observation,
     });
     if (!preserve.ok) return withAws(preserve, aws);
   }

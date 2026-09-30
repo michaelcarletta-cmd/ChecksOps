@@ -93,7 +93,12 @@ export function main(argv = process.argv.slice(2), root = repoRootFrom(import.me
     payload.lease = lease.details.lease;
   }
 
-  const result = evaluateDeployment(payload, { root, env, skip_contracts: flags['skip-contracts'] === true });
+  const result = evaluateDeployment(payload, {
+    root,
+    env,
+    skip_contracts: flags['skip-contracts'] === true,
+    official: true,
+  });
   if (result.ok && (flags.receipt || payload.lease)) {
     const file = writeReceipt(root, result, {
       workstream_id: payload.workstream_id,

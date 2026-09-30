@@ -11,6 +11,7 @@ import {
 import { evaluateWorktreeIsolation } from './worktree.mjs';
 import { evaluateDistFreshness, evaluatePackageProvenance } from './packages.mjs';
 import { evaluateInterruptedApply } from './verify-live.mjs';
+import { applyOfficialObservation } from './observe.mjs';
 
 export const REQUIRED_FINGERPRINT_FIELDS = Object.freeze({
   'lambda-overlay': Object.freeze(['codeSha256', 'revisionId', 'captured_at']),
@@ -281,34 +282,41 @@ export function evaluateRequiredRegressionChecks({
 }
 
 export function evaluatePreserveBuilds(input = {}, ctx = {}) {
-  const deploymentType = input.deployment_type;
+  let payload = input;
+  if (ctx.official === true || ctx.require_trusted_observation === true) {
+    const binding = applyOfficialObservation(input, ctx);
+    if (!binding.ok) return binding;
+    payload = binding.details.bound;
+  }
+
+  const deploymentType = payload.deployment_type;
   const mutating = isMutatingDeployment(deploymentType);
   if (!mutating && ctx.require_mutating_only !== false) {
     return ok({ skipped: true, reason: 'non-mutating' });
   }
 
-  const isolation = evaluateWorktreeIsolation(input);
+  const isolation = evaluateWorktreeIsolation(payload);
   if (!isolation.ok) return isolation;
 
-  const rollback = evaluateNoAutomaticRollback(input);
+  const rollback = evaluateNoAutomaticRollback(payload);
   if (!rollback.ok) return rollback;
 
-  const main = evaluateMainReconciliation(input);
+  const main = evaluateMainReconciliation(payload);
   if (!main.ok) return main;
 
-  if (input.package) {
-    const pkg = evaluatePackageProvenance(input.package);
+  if (payload.package) {
+    const pkg = evaluatePackageProvenance(payload.package);
     if (!pkg.ok) return pkg;
   }
-  if (input.dist || input.clean_build != null || deploymentType === 'spa-promote') {
-    const dist = evaluateDistFreshness(input.dist || { clean_build: input.clean_build });
+  if (payload.dist || payload.clean_build != null || deploymentType === 'spa-promote') {
+    const dist = evaluateDistFreshness(payload.dist || { clean_build: payload.clean_build });
     if (!dist.ok) return dist;
   }
 
-  const fingerprint = evaluateFreshLiveFingerprint(input);
+  const fingerprint = evaluateFreshLiveFingerprint(payload);
   if (!fingerprint.ok) return fingerprint;
 
-  const lock = evaluateExclusiveDeployLock(input);
+  const lock = evaluateExclusiveDeployLock(payload);
   if (!lock.ok) return lock;
 
   let composition = ok({ skipped: !ctx.compositionRegistry });
@@ -316,18 +324,18 @@ export function evaluatePreserveBuilds(input = {}, ctx = {}) {
     composition = evaluateAcceptedSourceComposition({
       registry: ctx.compositionRegistry,
       deployment_type: deploymentType,
-      composition_manifest: input.source_composition_manifest,
-      accepted_composition: input.accepted_composition === true,
-      frontend_workstreams: input.frontend_workstreams || [],
-      candidate_members: input.candidate_members,
-      candidate_contents: input.candidate_contents,
+      composition_manifest: payload.source_composition_manifest,
+      accepted_composition: payload.accepted_composition === true,
+      frontend_workstreams: payload.frontend_workstreams || [],
+      candidate_members: payload.candidate_members,
+      candidate_contents: payload.candidate_contents,
     });
     if (!composition.ok) return composition;
 
     const members = evaluatePreservedMemberIntegrity({
-      liveMembers: input.live_members,
-      candidateMembers: input.candidate_members || composition.details.composition_members,
-      ownedMembers: input.owned_members || input.owned_components,
+      liveMembers: payload.live_members,
+      candidateMembers: payload.candidate_members || composition.details.composition_members,
+      ownedMembers: payload.owned_members || payload.owned_components,
       preservedPaths: requiredPreservedPaths(ctx.compositionRegistry, { deployment_type: deploymentType }),
     });
     if (!members.ok) return members;
@@ -338,11 +346,11 @@ export function evaluatePreserveBuilds(input = {}, ctx = {}) {
     regressions = evaluateRequiredRegressionChecks({
       registry: ctx.registry,
       compositionRegistry: ctx.compositionRegistry,
-      environment: input.target_environment,
-      component: input.target_component,
+      environment: payload.target_environment,
+      component: payload.target_component,
       deployment_type: deploymentType,
-      results: input.contract_results || {},
-      previously_accepted: input.previously_accepted,
+      results: payload.contract_results || {},
+      previously_accepted: payload.previously_accepted,
     });
     if (!regressions.ok) return regressions;
   }
@@ -356,5 +364,10 @@ export function evaluatePreserveBuilds(input = {}, ctx = {}) {
     regressions: regressions.details,
     rollback: rollback.details,
     reclaim_forbidden: true,
+    observation: {
+      candidate_source: 'artifact-bytes',
+      ancestry_source: 'git-merge-base',
+      trusted: ctx.official === true || ctx.require_trusted_observation === true,
+    },
   });
 }
