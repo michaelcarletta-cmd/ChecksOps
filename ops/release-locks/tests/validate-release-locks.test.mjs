@@ -39,10 +39,14 @@ test('origin/main-based manifest validates fail-closed with production-spa PRODU
   const { errors } = validateReleaseLocks(inputs);
   assert.deepEqual(errors, []);
   const locked = Object.values(inputs.manifest.components).filter((c) => c.classification === 'PRODUCTION_LOCKED');
-  assert.equal(locked.length, 1);
-  assert.equal(locked[0].id, 'production-spa');
-  assert.equal(locked[0].production_active, true);
-  assert.equal(locked[0].artifact.name, '/assets/index-C_fh5VBD.js');
+  const ids = locked.map((c) => c.id).sort();
+  assert.deepEqual(ids, ['production-spa', 'settings-billing-branding-deposits']);
+  const productionSpa = locked.find((c) => c.id === 'production-spa');
+  assert.equal(productionSpa.production_active, true);
+  assert.equal(productionSpa.artifact.name, '/assets/index-C_fh5VBD.js');
+  const settings = locked.find((c) => c.id === 'settings-billing-branding-deposits');
+  assert.equal(settings.production_active, true);
+  assert.equal(settings.artifact.name, '/assets/index-QDJiUFF1.js');
   assert.equal(inputs.manifest.fail_closed, true);
   assert.equal(validateMain([], ROOT), 0);
 });

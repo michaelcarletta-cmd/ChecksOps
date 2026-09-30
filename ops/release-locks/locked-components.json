@@ -659,7 +659,7 @@
         "cloudfront_deployment_fingerprint": "IEEF8WPGTAFVCF2ZHV1LGGTRI8",
         "lambda_name": "checksops-production-prep-api",
         "lambda_version": null,
-        "lambda_code_hash": "JlChQagI3F26AEcQrFHRPvNsVLRGmO8nR9RKMK7ERJ0=",
+        "lambda_code_hash": null,
         "applied_sql_hash": null,
         "database_evidence_record": null,
         "config_hash": "5d35bd47b200ce7a5dbfd562bef1fcb4daa52f7ea89a1207e0b00e2150f12467",
@@ -742,7 +742,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "d5418ab63cb9af8024c746c4393c0f801f15fd1d",
-        "tree_hash": "4903dc012ce245bad74ef058600a08e8bf388ffbfba435fb2b94515da01b212b",
+        "tree_hash": "56573b0b2959c8e0f5c834d1b6257d3835e861544fae56de3dfcc6fab0ff017f",
         "merged": true,
         "merged_pr": null
       },
