@@ -1,0 +1,21 @@
+{
+  "id": "tenant-collection-v2-sweep-investigation",
+  "changed_sweep_configuration": false,
+  "disabled_sweeps": false,
+  "introduced_reserve": false,
+  "source": [
+    "supabase/functions/_shared/sweepRules.ts",
+    "supabase/functions/_shared/moovSweeps.ts",
+    "supabase/functions/moov-sweep-config/index.ts",
+    "aws/functions/api/providers/parity/moov-onboard.mjs"
+  ],
+  "answers": {
+    "A": "Moov executes enabled sweep configs on its own daily schedule. ChecksOps does not schedule the transfer; it only reads/writes the sweep-config resource.",
+    "B": "Yes. A tenant sweep with minimumBalance 0 pushes all AVAILABLE wallet funds to the settlement bank. That can empty the wallet before monthly ChecksOps collection if the sweep runs first.",
+    "C": "Not reliably. Collection reads current available balance at charge time. If sweep already ran, available is 0 and collection falls through to 100% bank ACH.",
+    "D": "No existing sequencing mechanism between Moov daily sweep and ChecksOps monthly billing / Pull Now.",
+    "E": "A wallet reserve / minimumBalance equal to expected monthly fees would make wallet-first collection predictable. Not introduced in this workstream.",
+    "F": "Yes. Raising sweep minimumBalance would retain funds in the tenant wallet and change tenant payout expectations (less daily sweep to their bank)."
+  },
+  "recommendation": "Keep current sweep configs unchanged. Collect wallet-first against whatever is available at charge time. If production promotion is later approved, schedule monthly collection before the tenant sweep window or propose an explicit reserve after operator review. Do not change minimumBalance in this workstream."
+}

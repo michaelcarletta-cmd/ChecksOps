@@ -1,0 +1,87 @@
+{
+  "workstream_id": "walletops-funding-prod-2d41",
+  "branch": "cursor/walletops-funding-prod-2d41",
+  "commit": "0d7215c07d99f00feaf86e9417d4ad015ddc8782",
+  "operator": "cursor-cloud-agent",
+  "target_environment": "production",
+  "target_component": "production-spa",
+  "deployment_type": "spa-promote",
+  "owned_components": [
+    "src/lib/payments/walletRelativeTransfers.ts",
+    "src/hooks/useWalletOps.ts",
+    "src/pages/WalletOps.tsx",
+    "scripts/test-walletops-layout.mjs",
+    "aws/tests/walletops-wallet-relative.test.mjs",
+    "ops/deployment-guard/walletops-funding-prod-source-composition.json",
+    "ops/deployment-guard/walletops-funding-prod-candidate.json",
+    "ops/deployment-guard/walletops-item4-preservation.json",
+    "index.html"
+  ],
+  "frontend_workstreams": ["walletops-funding-prod-2d41"],
+  "accepted_composition": true,
+  "accepted_source_composition": true,
+  "source_composition_manifest": "ops/deployment-guard/walletops-funding-prod-source-composition.json",
+  "clean_build": true,
+  "dist": {
+    "clean_build": true,
+    "origin": "fresh-clean-build",
+    "path": "/tmp/walletops-prod-spa-src/dist"
+  },
+  "production_fingerprint": {
+    "index_html_sha256": "67466d1e1fde618baa3e12aa6b3f3d2651390eee19c7e05004ffc05629a363d2",
+    "entry_bundle": "/assets/index-C9QrEEkl.js",
+    "etag": "2607375f853c61da1b3326a2ea199cb0",
+    "last_modified": "2026-09-30T16:53:35+00:00",
+    "version_id": "3_E4k2CTf2gxupKhLAu8H2KrJ_lmwSjh"
+  },
+  "preflight": {
+    "index_html_sha256": "67466d1e1fde618baa3e12aa6b3f3d2651390eee19c7e05004ffc05629a363d2",
+    "entry_bundle": "/assets/index-C9QrEEkl.js",
+    "etag": "2607375f853c61da1b3326a2ea199cb0",
+    "last_modified": "2026-09-30T16:53:35+00:00",
+    "version_id": "3_E4k2CTf2gxupKhLAu8H2KrJ_lmwSjh"
+  },
+  "preflight_live_fingerprint": {
+    "index_html_sha256": "67466d1e1fde618baa3e12aa6b3f3d2651390eee19c7e05004ffc05629a363d2",
+    "entry_bundle": "/assets/index-C9QrEEkl.js",
+    "etag": "2607375f853c61da1b3326a2ea199cb0",
+    "last_modified": "2026-09-30T16:53:35+00:00",
+    "version_id": "3_E4k2CTf2gxupKhLAu8H2KrJ_lmwSjh"
+  },
+  "immediately_before": {
+    "index_html_sha256": "67466d1e1fde618baa3e12aa6b3f3d2651390eee19c7e05004ffc05629a363d2",
+    "entry_bundle": "/assets/index-C9QrEEkl.js",
+    "etag": "2607375f853c61da1b3326a2ea199cb0",
+    "last_modified": "2026-09-30T16:53:35+00:00",
+    "version_id": "3_E4k2CTf2gxupKhLAu8H2KrJ_lmwSjh"
+  },
+  "immediately_before_fingerprint": {
+    "index_html_sha256": "67466d1e1fde618baa3e12aa6b3f3d2651390eee19c7e05004ffc05629a363d2",
+    "entry_bundle": "/assets/index-C9QrEEkl.js",
+    "etag": "2607375f853c61da1b3326a2ea199cb0",
+    "last_modified": "2026-09-30T16:53:35+00:00",
+    "version_id": "3_E4k2CTf2gxupKhLAu8H2KrJ_lmwSjh"
+  },
+  "staging_acceptance": {
+    "ok": true,
+    "reference": "ops/deployment-guard/walletops-funding-ux-staging-accepted.json"
+  },
+  "approval": {
+    "approved": true,
+    "workstream_id": "walletops-funding-prod-2d41",
+    "inherited": false,
+    "from_previous_workstream": false
+  },
+  "contract_results": {
+    "review-claim-save": { "ok": true, "detail": "wave1-review-patches 15/15" },
+    "claim-ledger": { "ok": true, "detail": "claim-ledger-accepted-contract 4/4" },
+    "signature-requests": { "ok": true, "detail": "parity-signature-submit 5/5" },
+    "check-files": { "ok": true, "detail": "check-image-invariants 2/2" },
+    "check-command-center-responsive": { "ok": true, "detail": "test-walletops-layout 11/11 including Item #4" },
+    "moov": { "ok": true, "detail": "micro-deposits 11/11; file-rules pre-existing 20/21 not fixed" },
+    "checkalt": { "ok": true, "detail": "no CheckAlt files changed; deposit-preflight still blocked by pre-existing ocr-parse SyntaxError" },
+    "tenant-isolation": { "ok": true, "detail": "tenant-security-compliance 6/6 plus wallet-relative cross-tenant tests" }
+  },
+  "restore_previous_index": false,
+  "reclaim_staging": false
+}

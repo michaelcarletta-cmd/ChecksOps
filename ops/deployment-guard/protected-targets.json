@@ -1,0 +1,105 @@
+{
+  "version": 1,
+  "fail_closed": true,
+  "notes": "Shared deployment targets. Independent source work may proceed concurrently. Independent deployment to these targets may not overwrite another workstream.",
+  "environments": {
+    "staging": {
+      "stronger_than_source": true,
+      "weaker_than_production": true,
+      "requires_lease": true,
+      "requires_explicit_approval": false
+    },
+    "production": {
+      "stronger_than_staging": true,
+      "requires_lease": true,
+      "requires_explicit_approval": true,
+      "requires_staging_acceptance": true,
+      "requires_second_fingerprint_before_write": true
+    }
+  },
+  "targets": [
+    {
+      "id": "checksops-staging-api",
+      "kind": "lambda",
+      "environment": "staging",
+      "function_name": "checksops-staging-api",
+      "region": "us-east-1",
+      "overlay_required": true,
+      "full_replace_forbidden": true,
+      "revision_id_cas": true
+    },
+    {
+      "id": "checksops-production-prep-api",
+      "kind": "lambda",
+      "environment": "production",
+      "function_name": "checksops-production-prep-api",
+      "region": "us-east-1",
+      "overlay_required": true,
+      "full_replace_forbidden": true,
+      "revision_id_cas": true
+    },
+    {
+      "id": "staging-frontend",
+      "kind": "spa",
+      "environment": "staging",
+      "host": "https://staging.checksops.com",
+      "index_toctou": true,
+      "s3_sync_delete_forbidden": true
+    },
+    {
+      "id": "production-spa",
+      "kind": "spa",
+      "environment": "production",
+      "host": "https://checksops.com",
+      "s3_bucket": "checksops-production-frontend-806168576068",
+      "cloudfront_id": "E1B0ZWWO5559U5",
+      "index_toctou": true,
+      "s3_sync_delete_forbidden": true,
+      "release_lock_component": "production-spa"
+    },
+    {
+      "id": "staging-sql",
+      "kind": "sql",
+      "environment": "staging",
+      "collision_on_rpc_drift": true
+    },
+    {
+      "id": "production-sql",
+      "kind": "sql",
+      "environment": "production",
+      "collision_on_rpc_drift": true,
+      "release_lock_ledger": "ops/release-locks/applied-migrations.ledger.json"
+    },
+    {
+      "id": "checksops-production-origin-verify",
+      "kind": "lambda",
+      "environment": "production",
+      "function_name": "checksops-production-origin-verify",
+      "region": "us-east-1"
+    },
+    {
+      "id": "staging-private-files",
+      "kind": "s3",
+      "environment": "staging",
+      "bucket": "checksops-staging-privatefilesbucket-erzqsolpucjp"
+    },
+    {
+      "id": "production-cloudtrail",
+      "kind": "cloudformation",
+      "environment": "production",
+      "stack": "checksops-production-cloudtrail"
+    },
+    {
+      "id": "production-http-api",
+      "kind": "apigateway",
+      "environment": "production",
+      "api_id": "kiqojucc02"
+    },
+    {
+      "id": "staging-nat",
+      "kind": "infra",
+      "environment": "staging",
+      "vpc_id": "vpc-09f2268778966ce97"
+    }
+  ]
+}

@@ -22,6 +22,7 @@ import {
   sha256Buffer,
   tokenMatches,
 } from './bridge-lib.mjs';
+import { enforceS3Target } from '../../scripts/deployment-guard/require-guard.mjs';
 
 const PROD_FUNCTIONS = process.env.BRIDGE_URL
   || 'https://nbcqwpysqgyxrrbgtmkw.supabase.co/functions/v1/aws-staging-storage-bridge';
@@ -161,6 +162,10 @@ const copyOne = async (obj, signedUrl, stats) => {
 };
 
 const main = async () => {
+  enforceS3Target({
+    script: import.meta.url,
+    bucket: BUCKET,
+  });
   const inventoryPath = process.argv[2] || '/tmp/storage-inventory/dump-objects.json';
   const inventory = JSON.parse(await readFile(inventoryPath, 'utf8'));
   const token = await loadToken();

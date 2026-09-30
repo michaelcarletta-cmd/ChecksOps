@@ -14,13 +14,18 @@ import { Badge } from "@/components/ui/badge";
 const FieldPlacementEditor = lazy(() => import("./FieldPlacementEditor").then((m) => ({ default: m.FieldPlacementEditor })));
 import { SignatureDiagnostics } from "./SignatureDiagnostics";
 import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
+import {
+  mergeClaimAndCheckSignatureFiles,
+  signatureSourceFilesQueryKey,
+} from "@/lib/signature-source-files";
 
 interface SignatureRequestsProps {
   claimId: string;
   claim: any;
+  checkIntakeItemId?: string | null;
 }
 
-export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
+export function SignatureRequests({ claimId, claim, checkIntakeItemId = null }: SignatureRequestsProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -60,6 +65,9 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
 
   useEffect(() => {
     checkPreselectedFile();
+    const onPreselected = () => checkPreselectedFile();
+    window.addEventListener("preselected-sig-file", onPreselected);
+    return () => window.removeEventListener("preselected-sig-file", onPreselected);
   }, []);
   const [signers, setSigners] = useState([
     { name: claim.policyholder_name || "", email: claim.policyholder_email || "", type: "policyholder", order: 1 }
@@ -85,19 +93,39 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
     },
   });
 
-  const { data: claimPdfFiles } = useQuery({
-    queryKey: ["claim-pdf-files", claimId],
+  const { data: claimPdfFiles, refetch: refetchSourceFiles } = useQuery({
+    queryKey: signatureSourceFilesQueryKey(claimId, checkIntakeItemId),
     queryFn: async () => {
       const { data, error } = await supabase
         .from("claim_files")
-        .select("*")
+        .select("id, file_name, file_path, uploaded_at, claim_id")
         .eq("claim_id", claimId)
-        .or("file_name.ilike.%.pdf,file_name.ilike.%.docx")
         .order("uploaded_at", { ascending: false });
       if (error) throw error;
-      return data;
+      let checkFiles: Array<Record<string, unknown>> = [];
+      if (checkIntakeItemId) {
+        const { data: checkRows, error: checkErr } = await supabase
+          .from("check_files")
+          .select("id, file_name, file_path, created_at, check_intake_item_id")
+          .eq("check_intake_item_id", checkIntakeItemId)
+          .order("created_at", { ascending: false });
+        if (checkErr) throw checkErr;
+        checkFiles = checkRows || [];
+      }
+      return mergeClaimAndCheckSignatureFiles({
+        claimFiles: data || [],
+        checkFiles,
+        checkIntakeItemId,
+      });
     },
+    refetchOnMount: "always",
   });
+
+  useEffect(() => {
+    if (isCreateOpen) {
+      void refetchSourceFiles();
+    }
+  }, [isCreateOpen, refetchSourceFiles]);
 
   const { data: requests, isLoading } = useQuery({
     queryKey: ["signature-requests", claimId],
@@ -268,6 +296,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
         .from("signature_requests")
         .insert({
           claim_id: claimId,
+          check_intake_item_id: checkIntakeItemId || null,
           document_name: docName,
           document_path: generatedDocPath,
           document_type: detectDocumentType(docName),
@@ -277,6 +306,14 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
         .select()
         .single();
       if (requestError) throw requestError;
+
+      if (checkIntakeItemId && generatedDocPath) {
+        await supabase
+          .from("check_files")
+          .update({ signature_request_id: request.id })
+          .eq("check_intake_item_id", checkIntakeItemId)
+          .eq("file_path", generatedDocPath);
+      }
 
       const signersData = signers.map((s) => ({
         signature_request_id: request.id,
@@ -505,7 +542,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
                     <SelectContent>
                       <SelectItem value="template">Generate from Template</SelectItem>
                       <SelectItem value="upload">Upload a File</SelectItem>
-                      <SelectItem value="claim_file">Use Existing Claim File</SelectItem>
+                      <SelectItem value="claim_file">Use Existing Claim/Check File</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -554,7 +591,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
 
                 {sourceType === "claim_file" && (
                   <div>
-                    <Label>Claim File (PDF or DOCX)</Label>
+                    <Label>Existing file (PDF or DOCX)</Label>
                     <Select
                       value={selectedClaimFile?.id}
                       onValueChange={(id) =>
@@ -562,14 +599,14 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
                       }
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select a file from claim files" />
+                        <SelectValue placeholder="Select a file from claim/check files" />
                       </SelectTrigger>
                       <SelectContent>
                         {claimPdfFiles?.length === 0 && (
-                          <div className="px-3 py-2 text-sm text-muted-foreground">No PDF or DOCX files found for this claim</div>
+                          <div className="px-3 py-2 text-sm text-muted-foreground">No PDF or DOCX files found for this claim/check</div>
                         )}
                         {claimPdfFiles?.map((file) => (
-                          <SelectItem key={file.id} value={file.id}>
+                          <SelectItem key={`${file._source}:${file.id}`} value={file.id}>
                             {file.file_name}
                           </SelectItem>
                         ))}

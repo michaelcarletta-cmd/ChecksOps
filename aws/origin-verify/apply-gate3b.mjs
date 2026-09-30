@@ -18,6 +18,7 @@ import {
   requireStep3Temp,
   shouldExecute,
 } from './lib.mjs';
+import { enforceScriptGuard } from '../../scripts/deployment-guard/require-guard.mjs';
 
 refuseRequireMode();
 requireGate('CHECKSOPS_APPLY_GATE3B');
@@ -33,6 +34,13 @@ if (!shouldExecute()) {
   }));
   process.exit(2);
 }
+
+enforceScriptGuard({
+  script: import.meta.url,
+  target_environment: 'production',
+  target_component: 'production-spa',
+  deployment_type: 'cloudfront-update',
+});
 
 const identity = requireStep3Temp();
 let secret;

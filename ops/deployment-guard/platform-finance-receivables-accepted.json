@@ -1,0 +1,69 @@
+{
+  "id": "platform-finance-receivables",
+  "title": "Platform Finance READ + tenant receivables + tenant Billing History",
+  "accepted_at": "2026-09-29T19:17:52Z",
+  "environment": "production",
+  "workstream_id": "platform-finance-receivables-prod-2d41",
+  "branch": "cursor/platform-finance-receivables-prod-2d41",
+  "source_commit": "33714a26a8e0e33a73befdf339c9c590ba3ec640",
+  "git_baseline": "d5418ab63cb9af8024c746c4393c0f801f15fd1d",
+  "wallet_first_billing": false,
+  "funding_execution_changed": false,
+  "billing_execution_changed": false,
+  "sql": false,
+  "env": false,
+  "moov_provider_writes": 0,
+  "transfers_created": 0,
+  "lambda": {
+    "function_name": "checksops-production-prep-api",
+    "before": {
+      "codeSha256": "Ge2pNCQWMVsLyZ/yl6r/DCadqIf54rcFAIc5iyNWtXo=",
+      "revisionId": "2792bf07-3309-4d5a-99a6-a335f460c918",
+      "lastModified": "2026-09-29T18:52:36.000+0000"
+    },
+    "after": {
+      "codeSha256": "ao0jPWwG3Zxy2C7hdr+OWY4EOmhA241BfI7F9iIzT0s=",
+      "revisionId": "dbd48b24-f3f2-4966-b561-9f38c7b118cb",
+      "lastModified": "2026-09-29T19:16:15.000+0000",
+      "codeSize": 11690767
+    },
+    "overlay_members": [
+      "providers/parity/tenant-receivables.mjs",
+      "providers/parity/caller.mjs",
+      "providers/parity/moov-functions.mjs",
+      "providers/parity/moov-onboard.mjs"
+    ]
+  },
+  "spa": {
+    "before": {
+      "entry_bundle": "/assets/index-DJNHggvS.js",
+      "index_html_sha256": "79f7aa0df9f071b73c49a8b17e4cb1041ecd375fda0ddbcbbb31bbae146469f2"
+    },
+    "after": {
+      "entry_bundle": "/assets/index-CXdgFa1W.js",
+      "index_html_sha256": "3d8a78314f0abfd02f17aea5c239dd899ceb76a5169e4ff2bc9682ef5ef0d7c3",
+      "spa_sha256": "dd6a1c70eb11b2fe3f8f0901daaedc29d5a1482e4100ddcdb1822770a2f05b28",
+      "s3_version": "a9l3or6qBPbAniYr_cCU.OhyGh6I0XZS"
+    }
+  },
+  "protected_byte_identical": {
+    "moov-money.mjs": true,
+    "write-allowlist.mjs": true,
+    "write-app-metadata.mjs": true,
+    "write.mjs": true,
+    "workflow-rpc.mjs": true,
+    "tenant-billing-engine.mjs": true,
+    "tenant-billing-destination.mjs": true
+  },
+  "acceptance": {
+    "platform_account_id": "41cb5d67-4911-4bef-aad5-d8ee9c582208",
+    "platform_wallet_id": "72630a70-4954-4761-b652-e8beff1ad02c",
+    "platform_settlement_bank": "Chase 7649",
+    "freedom_tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+    "freedom_transfer_id": "367c5353-ed20-430b-b767-c3e5d47f28ad",
+    "freedom_local_id": "414d81a2-186b-4e42-8ea1-47077d77a85c",
+    "freedom_received_cents": 0,
+    "freedom_status": "SUBMITTED",
+    "tenant_isolation": true
+  }
+}

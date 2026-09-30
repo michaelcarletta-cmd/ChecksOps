@@ -1,0 +1,147 @@
+{
+  "id": "walletops-funding-ux-staging-accepted",
+  "verdict": "WALLETOPS WALLET-RELATIVE FUNDING UX — STAGING ACCEPTED",
+  "captured_at": "2026-09-30T17:25:00Z",
+  "workstream_id": "walletops-funding-ux-2d41",
+  "branch": "cursor/walletops-funding-ux-2d41",
+  "commit": "2fc7d33dfbbc0831da5578a3a3a3d8caeec3f6f5",
+  "production_promoted": false,
+  "lambda_updated": false,
+  "money_movement_changed": false,
+  "provider_writes": { "POST": 0, "PATCH": 0, "PUT": 0, "DELETE": 0 },
+  "A_branch_worktree": {
+    "branch": "cursor/walletops-funding-ux-2d41",
+    "isolated_from": "e8662a2d433a920fd092e3e07fd1dea81e3378e1",
+    "spa_build_worktree": "/tmp/walletops-spa-baseline",
+    "spa_build_baseline_commit": "75e9297a93a62eee8416bd4869685f8a5ed2a512"
+  },
+  "B_original_git": {
+    "starting_branch_before_isolation": "cursor/freedom-v2-live-collection-2d41",
+    "starting_head": "e8662a2d433a920fd092e3e07fd1dea81e3378e1",
+    "starting_status": "clean except new helper/test files",
+    "unrelated_changes_overwritten": false
+  },
+  "C_staging_freeze": {
+    "lambda": {
+      "function": "checksops-staging-api",
+      "CodeSha256": "NUPzpqR0h6dlwN8rIhiczyNT8ZKXUM9vSFtlqO1LA/s=",
+      "RevisionId": "bc0b1b4a-4a80-48d0-8eec-75ef616eb835",
+      "LastModified": "2026-09-29T19:50:23Z"
+    },
+    "spa": {
+      "bucket": "checksops-staging-frontend-c48b",
+      "index_html_sha256": "7d536a81749df5c14452eb50669b6d291ce4ff39e763d05bd61e83f76d0c5359",
+      "entry_bundle": "/assets/index-Bax7aYr9.js",
+      "LastModified": "2026-09-29T18:01:08Z"
+    }
+  },
+  "D_production_readonly_freeze": {
+    "lambda": {
+      "function": "checksops-production-prep-api",
+      "CodeSha256": "pxZj4G6pGntJrkcRO5uNNEbiyvDpCOKPiWAboDnPvBA=",
+      "RevisionId": "3bccd144-4e61-422f-8151-9ed0fe713aac",
+      "LastModified": "2026-09-30T16:25:23Z",
+      "note": "Independent later workstream SHA; not reverted"
+    },
+    "spa": {
+      "entry_bundle": "/assets/index-C9QrEEkl.js",
+      "index_html_sha256": "67466d1e1fde618baa3e12aa6b3f3d2651390eee19c7e05004ffc05629a363d2",
+      "LastModified": "2026-09-30T16:53:35Z"
+    }
+  },
+  "E_root_cause": "useWalletOps.ts treated every in-flight payment_transfers row with leg_role !== 'funding' as Pending Out. Freedom $5 wallet funding uses leg_role wallet_funding (not funding) and dest=Freedom wallet, so it was counted Out. Freedom $139 V2 bank collection uses leg_role ach_debit and dest=ChecksOps wallet, so it was also counted Out. 500+13900=14400.",
+  "F_five_provider_truth": {
+    "provider_transfer_id": "9f9df312-32a9-4999-ace9-fc2b00669c75",
+    "amount_cents": 500,
+    "description": "Balance funding",
+    "source_payment_method_id": "a02c1c81-9ca6-434d-accc-ea4471a70ef2",
+    "source_type": "ach-debit-fund Wells Fargo 4573",
+    "destination_payment_method_id": "744ea734-f5e3-4b31-bb92-38f85fd29b91",
+    "destination_type": "Freedom wallet",
+    "old_classification": "pending_out (leg_role wallet_funding !== funding)",
+    "correct_classification": "pending_in"
+  },
+  "G_139_provider_truth": {
+    "provider_transfer_id": "b31c7752-031f-4b8b-9b6e-82dd0aaed2cb",
+    "amount_cents": 13900,
+    "description": "ChecksOps subscription 2026-09 bank",
+    "source_payment_method_id": "a02c1c81-9ca6-434d-accc-ea4471a70ef2",
+    "source_type": "ach-debit-fund Wells Fargo 4573",
+    "destination_payment_method_id": "c70a90f2-9bcc-4084-8263-d5a0fb5d806c",
+    "destination_type": "ChecksOps platform wallet",
+    "old_classification": "pending_out (leg_role ach_debit !== funding)",
+    "correct_classification": "neither wallet pending; billing activity $139 wallet $0 + bank $139"
+  },
+  "H_canonical_rule": "pendingIn = pending && dest===tenantWalletPM && source!==tenantWalletPM; pendingOut = pending && source===tenantWalletPM && dest!==tenantWalletPM; else neither. Statuses from WALLET_PENDING_STATUSES. Dedupe by provider_transfer_id.",
+  "I_files_changed": [
+    "src/lib/payments/walletRelativeTransfers.ts",
+    "src/hooks/useWalletOps.ts",
+    "src/pages/WalletOps.tsx",
+    "scripts/test-walletops-layout.mjs",
+    "aws/tests/walletops-wallet-relative.test.mjs",
+    "ops/deployment-guard/walletops-funding-ux-source-composition.json",
+    "ops/deployment-guard/walletops-funding-ux-preflight-input.json",
+    "ops/deployment-guard/walletops-funding-ux-staging-accepted.json"
+  ],
+  "J_behavior_changed": "WalletOps Pending In/Out are wallet-relative. Funding & Billing section added. Billing activity remains visible when bank legs are excluded from Pending Out.",
+  "K_files_not_changed": [
+    "aws/functions/api/tenant-collection-v2.mjs",
+    "aws/functions/api/tenant-collection-contract-v2.mjs",
+    "aws/functions/api/tenant-billing-engine.mjs",
+    "aws/functions/api/providers/parity/tenant-receivables.mjs",
+    "Moov POST/PATCH/PUT/DELETE paths",
+    "production SPA",
+    "staging Lambda",
+    "production Lambda"
+  ],
+  "L_v2_hashes": {
+    "before_after_identical": true,
+    "tenant-collection-v2.mjs": "8a66f54d3c2785162a1643218e18b4d3c251230cf2a7f98a1ecb4ede8939fb66",
+    "tenant-collection-contract-v2.mjs": "9ec5ae45db34c0795570f401cc2b1c3fa78f04764870bf6b651c21278433ed5d",
+    "tenant-billing-engine.mjs": "65b75735825f9a06955d5daba603f74835d106cabf52eb449153c856a59dae2f",
+    "providers/parity/tenant-receivables.mjs": "0d8f8f20f4939e79551b4a1aa5b3305bb791cea7ca684f4428594ad359179477"
+  },
+  "M_tests_added": "aws/tests/walletops-wallet-relative.test.mjs — cases 1-15 plus Freedom $5+$139 and cross-tenant isolation (18 tests)",
+  "N_regression": {
+    "wallet_relative": "18/18",
+    "walletops_layout": "7/7",
+    "v2": "38/38",
+    "funding": "23/23",
+    "tenant_receivables": "15/15",
+    "tenant_security_compliance": "6/6",
+    "spa_contracts_batch": "22/22",
+    "moov_micro_deposits": "11/11",
+    "preexisting_not_fixed": {
+      "parity-payment-direction.test.mjs": "load-fail pre-existing ocr-parse.mjs unterminated-group regex",
+      "scripts/test-moov-file-rules.mjs": "20/21 pre-existing invalid-purpose assertion",
+      "scripts/test-moov-readiness.mjs": "12/15 pre-existing readiness assertions",
+      "aws/tests/api-write.test.mjs": "11/25 fail 401-vs-403 / env-dependent write-path fixtures; no financial files changed",
+      "aws/tests/api-provider-gates.test.mjs": "5/10 fail 401!==403",
+      "aws/tests/api-financial.test.mjs": "8/14 fail 401!==403"
+    }
+  },
+  "O_toctou": {
+    "result": "NO DRIFT",
+    "staging_spa_unchanged_since_freeze": true,
+    "staging_lambda_unchanged_since_freeze": true
+  },
+  "P_staging_deployed": {
+    "bucket": "checksops-staging-frontend-c48b",
+    "distribution": "E1CG52WRQZI7X1",
+    "invalidation_id": "I3VUAEJMJQB4IALXKJMYHLE8YP",
+    "candidate_entry": "/assets/index-BhNaw7aH.js",
+    "after_index_sha256": "be0cc8fc896028b1b99417004a72bae394b13caf31937f4cb9fc4dd2da2c4a60",
+    "walletops_chunk": "/assets/WalletOps-CEajGjiJ.js",
+    "cloudfront_index_entry": "/assets/index-BhNaw7aH.js",
+    "cloudfront_walletops_has_funding_billing": true
+  },
+  "Q_available": "$0 (Freedom wallet available_cents was $0 at collection; UI still reads payment_wallets.available_cents)",
+  "R_pending_in": "$5.00 when the $5 bank→wallet funding is still pending; $0 if that transfer has completed",
+  "S_pending_out": "$0.00 for the Freedom-shaped $139 bank-funded bill",
+  "T_billing_display": "ChecksOps Billing / September 2026 / $139.00 / Wallet $0 + Wells Fargo ••••4573 $139 / Pending (or current provider status)",
+  "U_provider_writes": "ZERO money-movement POST/PATCH/PUT/DELETE. OAuth token POST only during a later GET attempt that returned 401; Phase 1 GET truth already recorded.",
+  "V_v2_unchanged": true,
+  "W_lambda_unchanged": true,
+  "X_production": "READ-ONLY. SPA and Lambda fingerprints unchanged by this workstream. Not promoted.",
+  "Y_concurrent_drift": "None on staging during this run. Production Lambda SHA was already independently drifted before this workstream and was not reverted."
+}

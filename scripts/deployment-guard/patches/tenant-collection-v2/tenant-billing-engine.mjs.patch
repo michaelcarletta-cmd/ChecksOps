@@ -1,0 +1,241 @@
+--- tenant-billing-engine.mjs
++++ tenant-billing-engine.mjs
+@@ -18,6 +18,11 @@
+   resolveBillingDestination,
+   resolveBillingMoovContext,
+ } from './tenant-billing-destination.mjs';
++import {
++  collectTenantObligation,
++  classifyCollectionStatus,
++  receivedCentsFromLegs,
++} from './tenant-collection-v2.mjs';
+ 
+ export const BILLING_STATUSES = ['due', 'submitted', 'settled', 'failed', 'returned'];
+ const TERMINAL_SUCCESS = new Set(['settled']);
+@@ -1121,10 +1126,6 @@
+   if (occurrence.status === 'returned') {
+     return { ok: true, duplicate: true, occurrence, reason: 'already_returned' };
+   }
+-  if (IN_FLIGHT.has(occurrence.status) && occurrence.provider_transfer_id) {
+-    return { ok: true, duplicate: true, occurrence, reason: 'already_submitted' };
+-  }
+-
+   const simulate = billingShouldSimulate(deps);
+   const env = readiness.environment;
+   if (env === 'production' && !monthlyBillingProductionPostEnabled() && !simulate) {
+@@ -1134,72 +1135,61 @@
+     });
+   }
+ 
+-  let providerTransferId = occurrence.provider_transfer_id;
+-  let providerStatus = occurrence.status;
+-  let failure = null;
+-  let debitSource = null;
+-  if (simulate) {
++  const simulatedPost = async ({ amount, idempotencyKey }) => {
+     if (deps.simulateResult === 'failed') {
+-      failure = deps.simulateFailure || 'simulated_provider_rejection';
+-      providerStatus = 'failed';
+-    } else {
+-      providerTransferId = providerTransferId || `sim:${occurrence.id}`;
+-      providerStatus = 'submitted';
++      const error = new Error(deps.simulateFailure || 'simulated_provider_rejection');
++      throw error;
+     }
+-  } else {
+-    const debit = await resolveBillingDebitSource(client, {
+-      authorization: readiness.authorization,
+-      fetchImpl,
+-    });
+-    if (!debit.ok) {
+-      return debit;
++    if (deps.simulateWalletFail && String(idempotencyKey).endsWith('-wallet')) {
++      throw new Error(deps.simulateWalletFail);
+     }
+-    debitSource = debit;
+-    try {
+-      const created = await postTransfer({
+-        sourceMethodId: debit.sourceMethodId,
+-        destMethodId: destination.paymentMethodId,
+-        amount: occurrence.amount_cents,
+-        description: `ChecksOps subscription ${occurrence.billing_period}`,
+-        metadata: {
+-          checksops_kind: 'monthly_subscription',
+-          checksops_tenant_id: occurrence.tenant_id,
+-          checksops_payment_id: occurrence.id,
+-          checksops_period: occurrence.billing_period,
+-        },
+-        idempotencyKey: occurrence.idempotence_key,
+-        fetchImpl,
+-        facilitatorAccountId: destination.accountId,
+-        environment: readiness.environment || destination.environment || billingEnvironment(),
+-        deps,
+-      });
+-      providerTransferId = created?.transferID || created?.transferId || providerTransferId;
+-      providerStatus = 'submitted';
+-    } catch (error) {
+-      failure = error.message || 'moov_request_rejected';
+-      providerStatus = 'failed';
++    if (deps.simulateBankFail && String(idempotencyKey).endsWith('-bank')) {
++      throw new Error(deps.simulateBankFail);
+     }
+-  }
++    return { transferID: `sim:${idempotencyKey}`, status: 'submitted', amount };
++  };
++
++  const collected = await collectTenantObligation(client, {
++    occurrence,
++    readiness,
++    destination,
++    fetchImpl,
++    deps: { ...deps, simulate },
++    postTransfer: deps.postTransfer || (simulate ? simulatedPost : postTransfer),
++    resolveBillingDebitSource: deps.resolveBillingDebitSource || resolveBillingDebitSource,
++  });
++
++  const providerTransferId = collected.legs?.find((leg) => leg.provider_transfer_id)?.provider_transfer_id
++    || occurrence.provider_transfer_id
++    || null;
++  const providerStatus = collected.ok
++    ? (collected.collection_status === 'PAID' && collected.amount_received_cents >= occurrence.amount_cents
++      ? 'settled'
++      : 'submitted')
++    : (collected.error === 'RECONCILIATION_REQUIRED' ? 'failed' : 'failed');
++  const failure = collected.ok ? null : collected.error;
+ 
+   const saved = (await client.query(
+     `UPDATE public.tenant_maintenance_payments SET
+        status = $2,
+        provider_transfer_id = COALESCE($3, provider_transfer_id),
+-       submitted_at = CASE WHEN $2 = 'submitted' THEN COALESCE(submitted_at, now()) ELSE submitted_at END,
++       submitted_at = CASE WHEN $2 IN ('submitted', 'failed') THEN COALESCE(submitted_at, now()) ELSE submitted_at END,
+        failure_reason = $4,
+        notes = COALESCE(notes, '') || $5
+      WHERE id = $1::uuid
+      RETURNING *`,
+     [
+       occurrence.id,
+-      providerStatus,
++      collected.occurrence?.status || providerStatus,
+       providerTransferId,
+       failure,
+-      failure ? ` · fail:${failure}` : (providerTransferId ? ` · moov:${providerTransferId}` : ''),
++      failure
++        ? ` · fail:${failure}`
++        : (providerTransferId ? ` · moov:${providerTransferId}` : ''),
+     ],
+-  )).rows[0];
++  ).catch(() => ({ rows: [occurrence] }))).rows[0];
+ 
+-  if (providerStatus === 'submitted' && readiness.settings) {
++  if ((saved?.status === 'submitted' || collected.ok) && readiness.settings) {
+     const nextStart = nextBillingDate(readiness.settings.billing_day_of_month || 1, new Date());
+     await client.query(
+       `UPDATE public.tenant_billing_settings
+@@ -1210,14 +1200,14 @@
+   }
+ 
+   return {
+-    ok: !failure,
++    ...collected,
++    ok: collected.ok,
+     simulated: simulate,
+     occurrence: saved,
+-    liveProviderCalled: !simulate && !failure,
++    liveProviderCalled: !simulate && Boolean(collected.liveProviderCalled),
+     error: failure,
+-    resolvedDebitSourceMethodId: debitSource?.sourceMethodId || null,
+-    resolvedDebitSourceRail: debitSource?.sourceRail || null,
+-    resolvedDebitSourceAccountId: debitSource?.sourceAccountId || null,
++    resolvedDebitSourceMethodId: collected.resolvedDebitSourceMethodId || null,
++    resolvedWalletSourceMethodId: collected.resolvedWalletSourceMethodId || null,
+   };
+ }
+ 
+@@ -1539,21 +1529,70 @@
+         : null;
+   if (!mapped) return { applied: false, skipped: 'unmapped_status', status: normalized };
+ 
++  const collectionLeg = (await client.query(
++    `SELECT * FROM public.payment_transfers
++     WHERE provider_transfer_id = $1
++     LIMIT 1`,
++    [providerTransferId],
++  ).catch(() => ({ rows: [] }))).rows[0] || null;
++  if (collectionLeg) {
++    await client.query(
++      `UPDATE public.payment_transfers SET
++         status = $2,
++         provider_status = $3,
++         completed_at = CASE WHEN $2 = 'settled' THEN COALESCE(completed_at, now()) ELSE completed_at END,
++         failure_reason = CASE WHEN $2 IN ('failed','returned') THEN COALESCE($4, failure_reason) ELSE failure_reason END,
++         updated_at = now()
++       WHERE id = $1::uuid`,
++      [collectionLeg.id, mapped, normalized, reason],
++    ).catch(() => {});
++  }
++
+   const existing = (await client.query(
+     `SELECT * FROM public.tenant_maintenance_payments
+      WHERE provider_transfer_id = $1
++        OR id::text = $2
++        OR notes LIKE $3
+      LIMIT 1`,
+-    [providerTransferId],
+-  )).rows[0];
++    [
++      providerTransferId,
++      collectionLeg?.provider_metadata?.obligation_id || '',
++      `%${providerTransferId}%`,
++    ],
++  ).catch(() => ({ rows: [] }))).rows[0];
+   if (!existing) return { applied: false, skipped: 'no_billing_occurrence' };
+ 
+-  if (existing.status === 'returned' && mapped !== 'returned') {
++  if (existing.status === 'returned' && mapped !== 'returned' && !collectionLeg) {
+     return { applied: false, skipped: 'already_returned', occurrence: existing };
+   }
+-  if (existing.status === mapped) {
++  if (existing.status === mapped && !collectionLeg) {
+     return { applied: true, duplicate: true, occurrence: existing };
+   }
+ 
++  let nextStatus = mapped;
++  if (collectionLeg) {
++    const siblingLegs = (await client.query(
++      `SELECT * FROM public.payment_transfers
++       WHERE provider_metadata->>'obligation_id' = $1`,
++      [String(existing.id)],
++    ).catch(() => ({ rows: [] }))).rows.map((row) => ({
++      ...row,
++      leg_type: row.provider_metadata?.leg_type || row.leg_role,
++    }));
++    const received = receivedCentsFromLegs(siblingLegs);
++    const collectionStatus = classifyCollectionStatus({
++      amountDueCents: existing.amount_cents,
++      legs: siblingLegs,
++    });
++    nextStatus = received >= Number(existing.amount_cents || 0)
++      ? 'settled'
++      : collectionStatus === 'RECONCILIATION REQUIRED'
++        ? 'failed'
++        : siblingLegs.some((row) => ['submitted', 'pending', 'originated'].includes(String(row.status || '').toLowerCase()))
++          ? 'submitted'
++          : mapped;
++  }
++
+   const saved = (await client.query(
+     `UPDATE public.tenant_maintenance_payments SET
+        status = $2,
+@@ -1563,9 +1602,9 @@
+        failure_reason = CASE WHEN $2 IN ('failed','returned') THEN COALESCE($3, failure_reason) ELSE failure_reason END
+      WHERE id = $1::uuid
+      RETURNING *`,
+-    [existing.id, mapped, reason],
++    [existing.id, nextStatus, reason],
+   )).rows[0];
+-  return { applied: true, occurrence: saved, previous: existing.status };
++  return { applied: true, occurrence: saved, previous: existing.status, collection_leg: collectionLeg };
+ }
+ 
+ export async function saveBillingSettings(client, {

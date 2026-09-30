@@ -877,6 +877,55 @@ export const executeCashJobAttachments = async ({ client, mapping, op, values, f
   return { error: 'operation_not_allowlisted', op };
 };
 
+export const executeClaimsNumberUpdate = async ({ client, mapping, op, values, filters }) => {
+  if (op !== 'update') return { error: 'operation_not_allowlisted', op };
+  const id = eqFilter(filters, 'id');
+  if (!isUuid(id)) return { error: 'invalid_uuid', field: 'id' };
+  if (!('claim_number' in values)) return { error: 'missing_required_field', field: 'claim_number' };
+  const claimNumber = clip(values.claim_number, 120);
+  if (claimNumber?.error || !claimNumber) {
+    return claimNumber?.error || { error: 'missing_required_field', field: 'claim_number' };
+  }
+
+  const existing = (await client.query(
+    `SELECT id, org_id, claim_number, status, policyholder_name, policyholder_address, insurance_company
+     FROM public.claims WHERE id = $1::uuid LIMIT 1`,
+    [id],
+  )).rows[0];
+  if (!existing) return { error: 'rls_denied', message: 'claim not found' };
+  if (!existing.org_id) {
+    return { error: 'not_authorized', message: 'Unassigned claims cannot be edited until they have a tenant' };
+  }
+  if (!(await memberOfTenant(client, mapping.application_user_id, existing.org_id))) {
+    return { error: 'not_authorized', message: 'Not a member of the claim tenant' };
+  }
+
+  if (String(existing.claim_number || '') === claimNumber) {
+    return { rows: [existing] };
+  }
+
+  try {
+    const rows = (await client.query(
+      `UPDATE public.claims
+       SET claim_number = $2::text,
+           updated_at = now()
+       WHERE id = $1::uuid AND org_id = $3::uuid
+       RETURNING *`,
+      [id, claimNumber, existing.org_id],
+    )).rows;
+    if (!rows.length) return { error: 'rls_denied', message: 'claim not writable' };
+    return { rows };
+  } catch (error) {
+    if (error?.code === '23505') {
+      return {
+        error: 'claim_number_conflict',
+        message: 'Another claim already uses that claim number. The existing claim was not changed.',
+      };
+    }
+    throw error;
+  }
+};
+
 export const executeAppMetadataWrite = async ({ client, mapping, table, op, values, filters }) => {
   switch (table) {
     case 'notifications':
@@ -913,6 +962,8 @@ export const executeAppMetadataWrite = async ({ client, mapping, table, op, valu
       return executeCashJobAttachments({ client, mapping, op, values, filters });
     case 'homeowner_ledger_events':
       return executeHomeownerLedgerEvents({ client, mapping, values });
+    case 'claims':
+      return executeClaimsNumberUpdate({ client, mapping, op, values, filters });
     default:
       return { error: 'table_not_allowlisted', table };
   }

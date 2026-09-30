@@ -35,6 +35,7 @@ import {
   waitForLambdaReady,
 } from './gate3d-lib.mjs';
 import { validateGate3d } from './validate-gate3d.mjs';
+import { enforceScriptGuard } from '../../scripts/deployment-guard/require-guard.mjs';
 
 requireGate('CHECKSOPS_APPLY_GATE3D');
 requireGate('CHECKSOPS_GATE3D_ENFORCE', 'I_ACCEPT_REQUIRE_MODE');
@@ -66,6 +67,13 @@ if (!shouldExecute()) {
   }));
   process.exit(2);
 }
+
+enforceScriptGuard({
+  script: import.meta.url,
+  target_environment: 'production',
+  target_component: 'checksops-production-origin-verify',
+  deployment_type: 'lambda-overlay',
+});
 
 if (!idTokenPresent()) {
   console.error('CHECKSOPS_GATE3D_ID_TOKEN_required');

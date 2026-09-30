@@ -17,6 +17,7 @@ import {
   requireStep3Temp,
   shouldExecute,
 } from './lib.mjs';
+import { enforceScriptGuard } from '../../scripts/deployment-guard/require-guard.mjs';
 
 refuseRequireMode();
 requireGate('CHECKSOPS_APPLY_GATE3C');
@@ -35,6 +36,13 @@ if (!shouldExecute()) {
   }));
   process.exit(2);
 }
+
+enforceScriptGuard({
+  script: import.meta.url,
+  target_environment: 'production',
+  target_component: 'production-http-api',
+  deployment_type: 'apigateway-update',
+});
 
 const identity = requireStep3Temp();
 

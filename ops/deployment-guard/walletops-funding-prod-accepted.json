@@ -1,0 +1,21 @@
+{
+  "id": "walletops-funding-prod-accepted",
+  "verdict": "WALLETOPS WALLET-RELATIVE FUNDING UX + ITEM #4 — PRODUCTION ACCEPTED",
+  "captured_at": "2026-09-30T18:08:00Z",
+  "workstream_id": "walletops-funding-prod-2d41",
+  "branch": "cursor/walletops-funding-prod-2d41",
+  "commit": "0d8df67bbd6f11c72f7e14c76d6af59fc233f0c3",
+  "lambda_updated": false,
+  "money_movement_changed": false,
+  "provider_writes": { "POST": 0, "PATCH": 0, "PUT": 0, "DELETE": 0 },
+  "db_writes": 0,
+  "migrations": 0,
+  "deployed": {
+    "entry": "/assets/index-C_fh5VBD.js",
+    "walletops": "/assets/WalletOps-2AGadvlz.js",
+    "index_html_sha256": "d0d59415d6692713f73b8edabefec10a261f1b7a85d6f4a6abd719f9011b3eb4",
+    "invalidation_id": "I9HB75UV31UU2H8CK1X6H2SC33",
+    "cloudfront": "E1B0ZWWO5559U5",
+    "s3_and_cloudfront_match": true
+  }
+}

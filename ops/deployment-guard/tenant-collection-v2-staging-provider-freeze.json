@@ -1,0 +1,108 @@
+{
+  "id": "tenant-collection-v2-staging-provider-backed",
+  "title": "V2 staging provider-backed collection — freeze and pre-write stop gate",
+  "captured_at": "2026-09-29T20:58:30Z",
+  "workstream_id": "tenant-collection-v2-staging-provider-2d41",
+  "branch": "cursor/tenant-collection-v2-staging-provider-2d41",
+  "state": "GATE PASSED / NOT YET COLLECTED",
+  "environment": "staging-only",
+  "production_writes": 0,
+  "A_staging_baseline": {
+    "function_name": "checksops-staging-api",
+    "codeSha256": "NUPzpqR0h6dlwN8rIhiczyNT8ZKXUM9vSFtlqO1LA/s=",
+    "revisionId": "bc0b1b4a-4a80-48d0-8eec-75ef616eb835",
+    "lastModified": "2026-09-29T19:50:23.000+0000",
+    "codeSize": 11702194,
+    "CHECKSOPS_ENV": "staging",
+    "moov_environment": "sandbox",
+    "destination_account": "36b79957-ce7a-4ca7-a68f-30986c9e47bb",
+    "destination_payment_method": "3c3133e7-5489-4af8-9d9a-4b0cf6bad362",
+    "AWS_MOOV_ENABLED": "false",
+    "AWS_MOOV_MONTHLY_BILLING_ENABLED": "true",
+    "AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST": "false",
+    "AWS_MOOV_BILLING_VERIFICATION_POST_ENABLED": "false",
+    "AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED": null,
+    "provider_secret_keys": ["MOOV_SANDBOX_* only"],
+    "fail_closed_production_moov": false,
+    "v2_hashes_match_accepted": true
+  },
+  "B_production_readonly_baseline": {
+    "function_name": "checksops-production-prep-api",
+    "codeSha256_at_freedom_prep": "s7fEdoI9HXCQhheLoa6i08Zl4UJ+tyU1HDUk5StoVqs=",
+    "revisionId_at_freedom_prep": "cd740e42-5574-4326-931d-a45ca5cb00f6",
+    "codeSha256_now": "X0xat8ZosDmRLjp7uXn+C3DxT+RD3I5APSVpI/GOGaU=",
+    "revisionId_now": "cdfbde4c-475c-41bb-b3c4-e626c48d2517",
+    "lastModified_now": "2026-09-29T20:50:31.000+0000",
+    "independent_workstream_drift": true,
+    "reverted": false,
+    "v2_hashes_still_match_accepted": true,
+    "AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST": "false",
+    "AWS_MOOV_BILLING_VERIFICATION_POST_ENABLED": "false",
+    "destination_account": "41cb5d67-4911-4bef-aad5-d8ee9c582208",
+    "destination_payment_method": "c70a90f2-9bcc-4084-8263-d5a0fb5d806c",
+    "this_workstream_production_writes": 0
+  },
+  "C_synthetic_tenant": {
+    "preferred_dedicated_billing_tenant": {
+      "id": "1ca29fed-4b71-44ce-9650-54b7215f5c3a",
+      "name": "SYNTHETIC Monthly Billing Test",
+      "sandbox_account": "5d211f44-3cc8-44aa-9923-d4d725f92714",
+      "mode": "sandbox",
+      "bank_last4": "9992",
+      "bank_status": "new",
+      "rails": ["ach-credit-standard", "ach-credit-same-day", "rtp-credit"],
+      "ach_debit_fund": null,
+      "wallet": null,
+      "used": false,
+      "reason": "Existing dedicated billing tenant has no verified ACH debit-fund rail."
+    },
+    "selected": {
+      "id": "3bef00a5-0bf4-41ba-abf8-5fb4e2b73d43",
+      "name": "ChecksOps Pipeline Test",
+      "slug": "pipeline-test-68d1b910",
+      "isolated": true,
+      "not_freedom": true,
+      "not_c1c": true,
+      "sandbox_moov_account_id": "1d59a6a8-3307-4687-8367-1495293ecc73",
+      "sandbox_wallet_id": "58571121-67ea-4e10-abae-6c9680ac455d",
+      "sandbox_wallet_payment_method": "1eb24c1c-b7ab-45cd-8775-332da40b9647",
+      "sandbox_bank_payment_method_debit_fund": "8a0f6ffa-a549-48f5-bb8e-f5b6a9d9cfff",
+      "sandbox_bank_last4": "4321",
+      "wallet_available_cents": 0
+    }
+  },
+  "D_sandbox_source_destination": {
+    "source_wallet_pm": "1eb24c1c-b7ab-45cd-8775-332da40b9647",
+    "source_bank_pm": "8a0f6ffa-a549-48f5-bb8e-f5b6a9d9cfff",
+    "destination_account": "36b79957-ce7a-4ca7-a68f-30986c9e47bb",
+    "destination_wallet": "9e06749a-a720-4430-b426-8f959737920d",
+    "destination_pm": "3c3133e7-5489-4af8-9d9a-4b0cf6bad362",
+    "destination_mode": "sandbox",
+    "not_production_checksops_wallet": true
+  },
+  "E_obligation": {
+    "period": "2099-01",
+    "amount_cents": 13900,
+    "created": false,
+    "id": null,
+    "note": "Unique staging fixture period. Will be created by accepted createOrGetOccurrence."
+  },
+  "F_pre_write_calculation": {
+    "amount_due": "$139.00",
+    "wallet_available": "$0.00",
+    "wallet_leg": "$0.00",
+    "bank_leg": "$139.00",
+    "existing_v2_provider_transfer": "NONE",
+    "pass": true,
+    "posted": false
+  },
+  "R_v2_38_38": "38/38",
+  "mandatory_32_32": "32/32",
+  "S_funding_23_23": "23/23",
+  "accepted_v2_hashes": {
+    "tenant-collection-v2.mjs": "8a66f54d3c2785162a1643218e18b4d3c251230cf2a7f98a1ecb4ede8939fb66",
+    "tenant-collection-contract-v2.mjs": "9ec5ae45db34c0795570f401cc2b1c3fa78f04764870bf6b651c21278433ed5d",
+    "tenant-billing-engine.mjs": "65b75735825f9a06955d5daba603f74835d106cabf52eb449153c856a59dae2f",
+    "providers/parity/tenant-receivables.mjs": "0d8f8f20f4939e79551b4a1aa5b3305bb791cea7ca684f4428594ad359179477"
+  }
+}

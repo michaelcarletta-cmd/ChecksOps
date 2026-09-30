@@ -1,0 +1,81 @@
+{
+  "id": "claim-ledger-accepted-695064-gq",
+  "contract_id": "claim-ledger",
+  "accepted": true,
+  "environment": "staging",
+  "production_changed": false,
+  "accepted_at": "2026-09-29T18:14:40.141Z",
+  "claim_number": "695064-GQ",
+  "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+  "created_claim_id": "398df4b8-f23a-476f-b856-ff864a4148b8",
+  "created_at": "2026-09-29T18:12:09.658Z",
+  "claim_status": "tracking",
+  "behavior": {
+    "same_tenant_checks_discovered": 4,
+    "public_claims_rows_created": 1,
+    "previously_unlinked_checks_linked": 4,
+    "duplicate_ledger": false,
+    "foreign_tenant_links": false,
+    "financial_or_provider_state_changed": false
+  },
+  "checks": [
+    {
+      "id": "00062a57-13b5-493d-a996-cf6e72d5cc89",
+      "amount": "7040.80",
+      "deposited_at": null,
+      "check_stage": "endorsing",
+      "claim_id_before": null,
+      "claim_id_after": "398df4b8-f23a-476f-b856-ff864a4148b8"
+    },
+    {
+      "id": "3ebc2f0f-1cf7-47b5-9b0b-ac9ce6bdace9",
+      "amount": "7677.39",
+      "deposited_at": null,
+      "check_stage": "endorsing",
+      "claim_id_before": null,
+      "claim_id_after": "398df4b8-f23a-476f-b856-ff864a4148b8"
+    },
+    {
+      "id": "6238a632-84f1-4eea-a352-2cf639ebe4b4",
+      "amount": "1531.66",
+      "deposited_at": null,
+      "check_stage": "review",
+      "claim_id_before": null,
+      "claim_id_after": "398df4b8-f23a-476f-b856-ff864a4148b8"
+    },
+    {
+      "id": "66174175-ccd3-4d15-a0e2-49aeeb074fc5",
+      "amount": "6145.73",
+      "deposited_at": null,
+      "check_stage": "review",
+      "claim_id_before": null,
+      "claim_id_after": "398df4b8-f23a-476f-b856-ff864a4148b8"
+    }
+  ],
+  "staging_fingerprints": {
+    "spa_entry": "/assets/index-Bax7aYr9.js",
+    "api_lambda_sha256": "OzfDx3keAu695zQ8d29AfE6nizJo88Ju4UBy3uNaoKI=",
+    "sql44_definition_sha256": "96d038c97a85bc3e49346442862c044e1e16ec1eb062519b4ad277bd998063a5"
+  },
+  "source_pins": {
+    "sql44_file": "aws/write-path/sql/44_claim_ledger_link_or_create.sql",
+    "sql44_source_sha256": "059f10e936f27439b9fddae7030b76fe594d6538087de389ab07950fefdf8763",
+    "sql44_source_commit": "0d965fb5a6ec190cc0b5e8edf29352a917382b30",
+    "check_claim_link_guard": "src/lib/checkClaimLinkGuard.ts",
+    "claim_ledger_card": "src/components/payments/ClaimLedgerCard.tsx"
+  },
+  "invariants": [
+    "existing real ledger discovery",
+    "same-tenant OCR/detected-number discovery",
+    "OCR remains discovery evidence, not ownership",
+    "one ledger for multiple same-tenant unlinked checks",
+    "all eligible unlinked siblings associate with that ledger",
+    "already-linked checks never move",
+    "foreign-tenant checks never associate",
+    "duplicate/race protection",
+    "linked claim-number Save remains update-only",
+    "generic claims INSERT remains denied",
+    "generic claim_id UPDATE remains denied",
+    "financial/check state remains untouched"
+  ]
+}
