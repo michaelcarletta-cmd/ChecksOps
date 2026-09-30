@@ -8,6 +8,12 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { withIdentity } from './data.mjs';
 import { normalizePath, s3KeyFor } from './storage-paths.mjs';
+import {
+  attachCompletedSignatureDocument,
+  isSupportedSignatureImage,
+  mapSubmittedFieldValues,
+  signedDocumentPath,
+} from './signature-submit.mjs';
 
 const s3 = () => new S3Client({ region: process.env.AWS_REGION || 'us-east-1' });
 const filesBucket = () => process.env.FILES_BUCKET || '';
@@ -197,28 +203,192 @@ export const handleContractsPdf = async (event) => withIdentity(event, async ({
   return { ok: true, statusCode: 200, signedUrl: uploaded.url, path: uploaded.path, spoofFieldsIgnored: spoof };
 }, { write: true, commit: true });
 
-export const handleRetryPdfGeneration = async (event) => withIdentity(event, async ({
-  client, body, spoof,
-}) => {
+const parseJson = (raw, fallback) => {
+  if (raw == null) return fallback;
+  if (typeof raw === 'object') return raw;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
+};
+
+const fieldEntryValue = (entry) => {
+  if (entry == null) return null;
+  if (typeof entry === 'string' || typeof entry === 'boolean' || typeof entry === 'number') return entry;
+  if (typeof entry === 'object') return entry.value ?? entry.checked ?? null;
+  return null;
+};
+
+/**
+ * Rebuild signersWithValues from persisted rows only.
+ * Exact field id, then unique editor-id / placement correspondence.
+ * Never assigns the first available signature image to an unrelated field.
+ */
+export const reconstructRetrySignersWithValues = ({
+  signers = [],
+  fields = [],
+  valueRows = [],
+  fieldData = [],
+} = {}) => {
+  const parsedFieldData = Array.isArray(fieldData)
+    ? fieldData
+    : (typeof fieldData === 'string' ? parseJson(fieldData, []) : []);
+  const valuesBySigner = new Map();
+  for (const row of valueRows) {
+    const signerId = String(row.signer_id);
+    if (!valuesBySigner.has(signerId)) valuesBySigner.set(signerId, []);
+    valuesBySigner.get(signerId).push(row);
+  }
+
+  const reconstructed = signers.map((signer) => {
+    const signerIndex = (signer.signing_order || 1) - 1;
+    const signerFields = fields.filter((field) => (
+      Number(field.signer_index ?? field.signerIndex) === signerIndex
+    ));
+    const submitted = { ...(parseJson(signer.field_values, {}) || {}) };
+    for (const row of valuesBySigner.get(String(signer.id)) || []) {
+      const fieldId = String(row.field_id);
+      if (fieldEntryValue(submitted[fieldId]) != null) continue;
+      if (row.value != null) submitted[fieldId] = row.value;
+      else if (row.checked != null) submitted[fieldId] = row.checked;
+    }
+    return {
+      id: signer.id,
+      signer_name: signer.signer_name,
+      signing_order: signer.signing_order,
+      token_hash: signer.token_hash,
+      field_values: mapSubmittedFieldValues(signerFields, submitted, parsedFieldData),
+    };
+  });
+
+  const signatureFields = fields.filter((field) => (
+    (field.field_type || field.type) === 'signature'
+  ));
+  if (!signatureFields.length) {
+    throw new Error('insufficient_signature_data');
+  }
+  for (const field of signatureFields) {
+    const fieldId = String(field.id);
+    const matches = reconstructed.flatMap((signer) => {
+      const entry = signer.field_values?.[fieldId];
+      return entry ? [{ signer, entry }] : [];
+    });
+    if (matches.length !== 1) {
+      throw new Error('cannot_associate_signature_image');
+    }
+    if (!isSupportedSignatureImage(matches[0].entry.value)) {
+      throw new Error('missing_signature_image');
+    }
+  }
+  return reconstructed;
+};
+
+export const runRetryPdfGeneration = async ({ client, body, spoof }, deps = {}) => {
   const requestId = body.requestId || body.request_id;
-  if (!requestId) return { ok: false, statusCode: 400, error: 'missing_request_id', spoofFieldsIgnored: spoof };
-  const bytes = await buildSimplePdf('Signature certificate (staging retry)', [`Request ${requestId}`]);
-  const rel = `docs/signatures/${requestId}-${Date.now()}.pdf`;
-  const uploaded = await putPdf(rel, bytes);
-  await client.query(
+  if (!requestId) {
+    return { ok: false, statusCode: 400, error: 'missing_request_id', spoofFieldsIgnored: spoof };
+  }
+
+  const request = (await client.query(
+    `SELECT id, status, document_name, document_path, field_data,
+            claim_id, check_intake_item_id, final_pdf_path, completion_status, last_error
+     FROM public.signature_requests
+     WHERE id = $1::uuid
+     LIMIT 1`,
+    [requestId],
+  )).rows[0];
+  if (!request) {
+    return { ok: false, statusCode: 404, error: 'request_not_found', spoofFieldsIgnored: spoof };
+  }
+  if (request.status !== 'completed') {
+    return { ok: false, statusCode: 400, error: 'request_not_completed', spoofFieldsIgnored: spoof };
+  }
+  if (!request.document_path) {
+    return { ok: false, statusCode: 400, error: 'missing_document_path', spoofFieldsIgnored: spoof };
+  }
+  if (!request.claim_id && !request.check_intake_item_id) {
+    return { ok: false, statusCode: 400, error: 'signature request is not linked to a claim or check', spoofFieldsIgnored: spoof };
+  }
+
+  const signers = (await client.query(
+    `SELECT id, signer_name, signing_order, field_values, token_hash, status
+     FROM public.signature_signers
+     WHERE signature_request_id = $1::uuid
+     ORDER BY signing_order, created_at`,
+    [requestId],
+  )).rows;
+  const fields = (await client.query(
+    `SELECT id, signer_index, field_type, label, page, x, y, width, height
+     FROM public.signature_fields
+     WHERE signature_request_id = $1::uuid
+     ORDER BY created_at`,
+    [requestId],
+  )).rows;
+  const valueRows = (await client.query(
+    `SELECT v.field_id, v.signer_id, v.value, v.checked
+     FROM public.signature_field_values v
+     JOIN public.signature_fields f ON f.id = v.field_id
+     WHERE f.signature_request_id = $1::uuid`,
+    [requestId],
+  )).rows;
+
+  let signersWithValues;
+  try {
+    signersWithValues = reconstructRetrySignersWithValues({
+      signers,
+      fields,
+      valueRows,
+      fieldData: request.field_data,
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      statusCode: 400,
+      error: String(error?.message || error),
+      spoofFieldsIgnored: spoof,
+    };
+  }
+
+  const tokenHash = signers.find((signer) => signer.token_hash)?.token_hash || null;
+  const destRel = signedDocumentPath(request);
+  const attach = deps.attachCompletedSignatureDocument || attachCompletedSignatureDocument;
+  const attached = await attach(client, {
+    ...request,
+    token_hash: tokenHash,
+    final_rel: destRel,
+  }, {
+    ...deps,
+    tokenHash,
+    signersWithValues,
+  });
+
+  const updated = await client.query(
     `UPDATE public.signature_requests
-     SET certificate_pdf_path = $2, updated_at = now()
+     SET final_pdf_path = $2,
+         completion_status = 'completed',
+         last_error = NULL,
+         updated_at = now()
      WHERE id = $1::uuid`,
-    [requestId, uploaded.path],
-  ).catch(() => {});
+    [requestId, attached.final_pdf_path || destRel],
+  );
+  if (!updated.rowCount) {
+    throw new Error('final_pdf_path_update_failed');
+  }
+
   return {
     ok: true,
     statusCode: 200,
-    path: uploaded.path,
-    signedUrl: uploaded.url,
+    final_pdf_path: attached.final_pdf_path || destRel,
+    path: attached.final_pdf_path || destRel,
     spoofFieldsIgnored: spoof,
   };
-}, { write: true, commit: true });
+};
+
+export const handleRetryPdfGeneration = async (event, deps = {}) => {
+  const identity = deps.withIdentity || withIdentity;
+  return identity(event, async (ctx) => runRetryPdfGeneration(ctx, deps), { write: true, commit: true });
+};
 
 export const handleGenerateInvoice = async (event) => withIdentity(event, async ({
   body, spoof,
