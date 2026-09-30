@@ -478,6 +478,48 @@
       "reason": "PR #439 owns staging branding/public assets metadata. PR #562 does not alter those workflows; #439 must rebase onto main before any later merge.",
       "expires": "2026-10-31",
       "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 504,
+      "path": "ops/release-locks/overlap-allowlist.json",
+      "reason": "PR #562 adds exact-path reviewed overlap exceptions in the release-control allowlist. PR #504 also touches this control-plane file; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 463,
+      "path": "ops/release-locks/overlap-allowlist.json",
+      "reason": "PR #562 adds exact-path reviewed overlap exceptions in the release-control allowlist. PR #463 also touches this control-plane file; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 461,
+      "path": "ops/release-locks/overlap-allowlist.json",
+      "reason": "PR #562 adds exact-path reviewed overlap exceptions in the release-control allowlist. PR #461 also touches this control-plane file; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 460,
+      "path": "ops/release-locks/overlap-allowlist.json",
+      "reason": "PR #562 adds exact-path reviewed overlap exceptions in the release-control allowlist. PR #460 also touches this control-plane file; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 451,
+      "path": "ops/release-locks/overlap-allowlist.json",
+      "reason": "PR #562 adds exact-path reviewed overlap exceptions in the release-control allowlist. PR #451 also touches this control-plane file; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 449,
+      "path": "ops/release-locks/overlap-allowlist.json",
+      "reason": "PR #562 adds exact-path reviewed overlap exceptions in the release-control allowlist. PR #449 also touches this control-plane file; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
     }
   ]
 }
