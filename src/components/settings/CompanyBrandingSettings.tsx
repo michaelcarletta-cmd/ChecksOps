@@ -1,17 +1,31 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Upload, Building2, Loader2, Sparkles, Image as ImageIcon, Layout } from "lucide-react";
+import { Upload, Building2, Loader2, Image as ImageIcon, Layout } from "lucide-react";
+import { useTenantFilter } from "@/hooks/useTenantFilter";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { SectionCard } from "./SectionCard";
 import { SettingsHero } from "./SettingsHero";
 
+async function uploadTenantAsset(tenantId: string, file: File, kind: string) {
+  const ext = file.name.split(".").pop() || "png";
+  const path = `${tenantId}/${kind}-${Date.now()}.${ext}`;
+  const { error } = await supabase.storage
+    .from("tenant-logos")
+    .upload(path, file, { upsert: true, contentType: file.type });
+  if (error) throw error;
+  const { data } = supabase.storage.from("tenant-logos").getPublicUrl(path);
+  return data?.publicUrl || path;
+}
+
 export function CompanyBrandingSettings() {
+  const { tenantId } = useTenantFilter();
+  const qc = useQueryClient();
   const [companyName, setCompanyName] = useState("");
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
@@ -28,58 +42,39 @@ export function CompanyBrandingSettings() {
   const [uploading, setUploading] = useState(false);
   const [uploadingInvoice, setUploadingInvoice] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [brandingId, setBrandingId] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
-    loadSettings();
-  }, []);
+    if (tenantId) void loadSettings();
+  }, [tenantId]);
+
+  const applyTenant = (tenant: any) => {
+    if (!tenant) return;
+    setCompanyName(tenant.name || "");
+    setAddress(tenant.business_address || "");
+    setPhone(tenant.business_phone || "");
+    setEmail(tenant.email_reply_to || "");
+    setLogoUrl(tenant.logo_url || null);
+    setLetterheadUrl(tenant.invoice_letterhead_url || null);
+    setInvoiceLetterheadUrl(tenant.invoice_letterhead_url || null);
+    setInvoiceFooterNote(tenant.invoice_footer_note || "");
+    setInvoiceDefaultTerms(tenant.invoice_default_terms || "");
+    setInvoiceAccentColor(tenant.invoice_accent_color || tenant.primary_color || "#3B82F6");
+    setInvoiceTheme(tenant.invoice_theme === "dark" ? "dark" : "light");
+  };
 
   const loadSettings = async () => {
-    // 1. Get branding details from company_branding
-    const { data: brandingData } = await supabase
-      .from("company_branding" as any)
-      .select("*")
-      .limit(1)
+    if (!tenantId) return;
+    const { data: tenant, error } = await supabase
+      .from("tenants")
+      .select("name, business_address, business_phone, email_reply_to, logo_url, invoice_letterhead_url, invoice_footer_note, invoice_default_terms, invoice_accent_color, invoice_theme, primary_color")
+      .eq("id", tenantId)
       .maybeSingle();
-    
-    if (brandingData) {
-      const branding = brandingData as any;
-      setBrandingId(branding.id);
-      setCompanyName(branding.company_name || "");
-      setAddress(branding.company_address || "");
-      setPhone(branding.company_phone || "");
-      setEmail(branding.company_email || "");
-      setLogoUrl(branding.logo_url || null);
-      setLetterheadUrl(branding.letterhead_url || null);
+    if (error) {
+      toast({ title: "Could not load branding", description: error.message, variant: "destructive" });
+      return;
     }
-
-    // 2. Get invoice-specific settings from the current tenant
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      const { data: tenantUser } = await supabase
-        .from("tenant_users")
-        .select("tenant_id")
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      if (tenantUser) {
-        const { data: tenant } = await supabase
-          .from("tenants")
-          .select("invoice_letterhead_url, invoice_footer_note, invoice_default_terms, invoice_accent_color, invoice_theme, primary_color")
-          .eq("id", tenantUser.tenant_id)
-          .maybeSingle();
-        
-        if (tenant) {
-          const t = tenant as any;
-          setInvoiceLetterheadUrl(t.invoice_letterhead_url || null);
-          setInvoiceFooterNote(t.invoice_footer_note || "");
-          setInvoiceDefaultTerms(t.invoice_default_terms || "");
-          setInvoiceAccentColor(t.invoice_accent_color || t.primary_color || "#3B82F6");
-          setInvoiceTheme(t.invoice_theme === "dark" ? "dark" : "light");
-        }
-      }
-    }
+    applyTenant(tenant);
   };
 
   const handleInvoiceLetterheadUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -93,14 +88,9 @@ export function CompanyBrandingSettings() {
 
     setUploadingInvoice(true);
     try {
-      const path = `invoice_letterhead_${Date.now()}.${file.name.split(".").pop()}`;
-      const { error } = await supabase.storage.from("company-branding").upload(path, file);
-      
-      if (error) throw error;
-
-      const { data: urlData } = supabase.storage.from("company-branding").getPublicUrl(path);
-      
-      setInvoiceLetterheadUrl(urlData?.publicUrl || null);
+      if (!tenantId) throw new Error("Select a tenant first");
+      const url = await uploadTenantAsset(tenantId, file, "invoice-letterhead");
+      setInvoiceLetterheadUrl(url);
       toast({ title: "Invoice letterhead uploaded successfully" });
     } catch (error: any) {
       toast({ title: "Upload failed", description: error.message, variant: "destructive" });
@@ -120,14 +110,10 @@ export function CompanyBrandingSettings() {
 
     setUploading(true);
     try {
-      const path = `letterhead_${Date.now()}.${file.name.split(".").pop()}`;
-      const { error } = await supabase.storage.from("company-branding").upload(path, file);
-      
-      if (error) throw error;
-
-      const { data: urlData } = supabase.storage.from("company-branding").getPublicUrl(path);
-      
-      setLetterheadUrl(urlData?.publicUrl || null);
+      if (!tenantId) throw new Error("Select a tenant first");
+      const url = await uploadTenantAsset(tenantId, file, "letterhead");
+      setLetterheadUrl(url);
+      if (!invoiceLetterheadUrl) setInvoiceLetterheadUrl(url);
       toast({ title: "Letterhead uploaded successfully" });
     } catch (error: any) {
       toast({ title: "Upload failed", description: error.message, variant: "destructive" });
@@ -147,14 +133,9 @@ export function CompanyBrandingSettings() {
 
     setUploadingLogo(true);
     try {
-      const path = `logo_${Date.now()}.${file.name.split(".").pop()}`;
-      const { error } = await supabase.storage.from("company-branding").upload(path, file);
-      
-      if (error) throw error;
-
-      const { data: urlData } = supabase.storage.from("company-branding").getPublicUrl(path);
-      
-      setLogoUrl(urlData?.publicUrl || null);
+      if (!tenantId) throw new Error("Select a tenant first");
+      const url = await uploadTenantAsset(tenantId, file, "logo");
+      setLogoUrl(url);
       toast({ title: "Company logo uploaded successfully" });
     } catch (error: any) {
       toast({ title: "Upload failed", description: error.message, variant: "destructive" });
@@ -164,54 +145,34 @@ export function CompanyBrandingSettings() {
   };
 
   const saveSettings = async () => {
+    if (!tenantId) {
+      toast({ title: "Select a tenant first", variant: "destructive" });
+      return;
+    }
     setSaving(true);
     try {
-      const brandingData = {
-        company_name: companyName,
-        company_address: address,
-        company_phone: phone,
-        company_email: email,
-        logo_url: logoUrl,
-        letterhead_url: letterheadUrl,
-        updated_at: new Date().toISOString()
-      };
-
-      if (brandingId) {
-        await supabase
-          .from("company_branding" as any)
-          .update(brandingData)
-          .eq("id", brandingId);
-      } else {
-        const { data } = await supabase
-          .from("company_branding" as any)
-          .insert(brandingData)
-          .select()
-          .single();
-        if (data) setBrandingId((data as any).id);
-      }
-
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: tenantUser } = await supabase
-          .from("tenant_users")
-          .select("tenant_id")
-          .eq("user_id", user.id)
-          .maybeSingle();
-        
-        if (tenantUser) {
-          await supabase
-            .from("tenants")
-            .update({
-              invoice_letterhead_url: invoiceLetterheadUrl,
-              invoice_footer_note: invoiceFooterNote,
-              invoice_default_terms: invoiceDefaultTerms,
-              invoice_accent_color: invoiceAccentColor,
-              invoice_theme: invoiceTheme,
-            })
-            .eq("id", tenantUser.tenant_id);
-        }
-      }
-
+      const { data, error } = await supabase.functions.invoke("tenant-company-branding-save", {
+        body: {
+          tenant_id: tenantId,
+          company_name: companyName,
+          company_address: address,
+          company_phone: phone,
+          company_email: email,
+          logo_url: logoUrl,
+          letterhead_url: letterheadUrl,
+          invoice_letterhead_url: invoiceLetterheadUrl || letterheadUrl,
+          invoice_footer_note: invoiceFooterNote,
+          invoice_default_terms: invoiceDefaultTerms,
+          invoice_accent_color: invoiceAccentColor,
+          invoice_theme: invoiceTheme,
+        },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).message || (data as any).error);
+      applyTenant((data as any)?.tenant);
+      qc.invalidateQueries({ queryKey: ["tenant-branding-for-email", tenantId] });
+      qc.invalidateQueries({ queryKey: ["tenant-email-settings", tenantId] });
+      qc.invalidateQueries({ queryKey: ["tenant-email-preview", tenantId] });
       toast({ title: "Company settings saved" });
     } catch (error: any) {
       toast({ title: "Error saving settings", description: error.message, variant: "destructive" });

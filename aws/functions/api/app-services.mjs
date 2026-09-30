@@ -82,6 +82,10 @@ import { handleAdminResetTotp } from './admin-reset-totp.mjs';
 import { handleBillMortgageHandling } from './bill-mortgage-handling.mjs';
 import { handleCheckAltDepositPreflight } from './providers/production/checkalt-preflight.mjs';
 import { handleTaxProfiles } from './tax-profiles.mjs';
+import {
+  handleSaveTenantBillingAccount,
+  handleSaveTenantCompanyBranding,
+} from './tenant-settings-handlers.mjs';
 
 export const CLASS_A_FUNCTIONS = new Set([
   // Email
@@ -151,6 +155,8 @@ export const CLASS_A_FUNCTIONS = new Set([
   // Mortgage desk hire (Cognito + identity_accounts)
   'hire-mortgage-agent',
   'tenant-tax-profiles',
+  'save-tenant-billing-account',
+  'tenant-company-branding-save',
   // Public directory
   'public-contractor-directory',
   'lookup-partner-code-public',
@@ -305,6 +311,10 @@ export const handleAppServiceRequest = async (event, path, method) => {
       return handleHireMortgageAgent(event);
     case 'tenant-tax-profiles':
       return handleTaxProfiles(event);
+    case 'save-tenant-billing-account':
+      return handleSaveTenantBillingAccount(event);
+    case 'tenant-company-branding-save':
+      return handleSaveTenantCompanyBranding(event);
     case 'public-contractor-directory':
     case 'contractor-directory-search':
       return handlePublicContractorDirectory(event);

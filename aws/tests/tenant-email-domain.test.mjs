@@ -600,7 +600,9 @@ test('class A registry includes branding routes; frontend never writes domain_st
   assert.doesNotMatch(ui, /domain_status\s*:\s*['"`]/);
   assert.doesNotMatch(ui, /update\([\s\S]{0,200}domain_status/);
   assert.doesNotMatch(ui, /upsert\([\s\S]{0,200}domain_status/);
-  assert.match(ui, /tenant-domain-disable/);
+  assert.doesNotMatch(ui, /tenant-domain-disable/);
+  assert.doesNotMatch(ui, /Sending subdomain/);
+  assert.match(ui, /tenant-email-branding-save/);
   assert.match(ui, /tenant-email-preview/);
   assert.match(ui, /noreply@checksops\.com/);
   assert.doesNotMatch(ui, /notify\.checksops\.com/);
