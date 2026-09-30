@@ -46,6 +46,7 @@ import {
   summarizeDelta,
 } from '../../lib/db-bridge.mjs';
 import { parseGeneratedDatabaseTypes } from '../../lib/parse-types.mjs';
+import { enforceSharedLambdaTarget } from '../../../../scripts/deployment-guard/require-guard.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
 const AWS = process.env.AWS_CLI || `${process.env.HOME}/.local/bin/aws`;
@@ -541,6 +542,10 @@ STOP FOR REVIEW. Production cutover was not performed.
 };
 
 const main = async () => {
+  enforceSharedLambdaTarget({
+    script: import.meta.url,
+    functionName: LAMBDA_NAME,
+  });
   const applyDdlOverlay = process.argv.includes('--apply-ddl-overlay');
   const applyChecksopsDdl = process.argv.includes('--apply-checksops-ddl');
   const resumeLambda = process.argv.includes('--resume-lambda') || applyDdlOverlay;

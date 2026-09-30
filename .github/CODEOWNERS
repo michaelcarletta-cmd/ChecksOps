@@ -8,6 +8,7 @@
 
 /ops/release-locks/ @michaelcarletta-cmd
 /scripts/lib/release-locks.mjs @michaelcarletta-cmd
+/scripts/lib/production-spa-baseline.mjs @michaelcarletta-cmd
 /scripts/validate-release-locks.mjs @michaelcarletta-cmd
 /scripts/check-pr-path-overlap.mjs @michaelcarletta-cmd
 /scripts/production-deploy-guard.mjs @michaelcarletta-cmd

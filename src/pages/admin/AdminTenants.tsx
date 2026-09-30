@@ -4,6 +4,7 @@ import { PLATFORM_OWNER_EMAIL, isPlatformOwner } from "@/lib/masterMerchant";
 import { TenantMoovIdentityCard } from "@/components/admin/TenantMoovIdentityCard";
 import { PlatformBankPanel } from "@/components/admin/PlatformBankPanel";
 import { PlatformTreasuryPanel } from "@/components/admin/PlatformTreasuryPanel";
+import { TenantBillingHistoryPanel } from "@/components/admin/TenantBillingHistoryPanel";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -374,6 +375,7 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
           <TabsContent value="billing" className="mt-6 space-y-6">
             <BillingTab tenant={tenant} onUpdated={onUpdated} />
             <TenantBillingBankPanel tenantId={tenant.id} tenantName={tenant.name} />
+            <TenantBillingHistoryPanel tenantId={tenant.id} tenantName={tenant.name} />
             <TenantUsageInlinePanel tenantId={tenant.id} tenantName={tenant.name} />
           </TabsContent>
           <TabsContent value="pro-badge" className="mt-6">

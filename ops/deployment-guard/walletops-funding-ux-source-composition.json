@@ -1,0 +1,32 @@
+{
+  "id": "walletops-funding-ux-source-composition",
+  "workstream_id": "walletops-funding-ux-2d41",
+  "wholesale_staging_spa": false,
+  "lambda_updated": false,
+  "production_updated": false,
+  "base": {
+    "kind": "current-live-staging-spa-source",
+    "commit": "75e9297a93a62eee8416bd4869685f8a5ed2a512",
+    "message": "Discover same-tenant OCR claim numbers and group one ledger.",
+    "reason": "Last frontend source commit before the live staging SPA upload at 2026-09-29T18:01:08Z (index-Bax7aYr9.js)."
+  },
+  "forward_ported": [
+    "src/lib/payments/walletRelativeTransfers.ts",
+    "src/hooks/useWalletOps.ts",
+    "src/pages/WalletOps.tsx"
+  ],
+  "intentionally_excluded_later_frontend": [
+    "src/components/admin/PlatformReceivablesLedger.tsx",
+    "src/components/admin/TenantBillingHistoryPanel.tsx",
+    "src/components/admin/PlatformTreasuryPanel.tsx"
+  ],
+  "candidate": {
+    "clean_build": true,
+    "mode": "aws",
+    "worktree": "/tmp/walletops-spa-baseline",
+    "index_html_sha256": "be0cc8fc896028b1b99417004a72bae394b13caf31937f4cb9fc4dd2da2c4a60",
+    "entry_bundle": "/assets/index-BhNaw7aH.js",
+    "walletops_chunk": "/assets/WalletOps-CEajGjiJ.js",
+    "css": "/assets/index-DgosuTnh.css"
+  }
+}

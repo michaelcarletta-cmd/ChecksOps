@@ -1,0 +1,147 @@
+--- providers/parity/tenant-receivables.mjs
++++ providers/parity/tenant-receivables.mjs
+@@ -8,6 +8,7 @@
+  * Bank name, last4, and Moov description are display-only.
+  * Does not POST/PATCH Moov, create transfers, or change billing calculation.
+  */
++import { collectionRowFields } from '../../tenant-collection-v2.mjs';
+ 
+ export const PAYMENT_STATUS = Object.freeze({
+   DUE: 'DUE',
+@@ -18,6 +19,9 @@
+   FAILED: 'FAILED',
+   RETURNED: 'RETURNED',
+   CANCELED: 'CANCELED',
++  PARTIALLY_PAID: 'PARTIALLY PAID',
++  PARTIALLY_PAID_BANK_FAILED: 'PARTIALLY PAID / BANK FAILED',
++  RECONCILIATION_REQUIRED: 'RECONCILIATION REQUIRED',
+ });
+ 
+ export const EXCEPTION = Object.freeze({
+@@ -169,21 +173,45 @@
+   return row?.name || row || 'Unknown tenant';
+ };
+ 
++const collectionStatusToPayment = (status) => {
++  const raw = String(status || '');
++  if (raw === 'PAID') return PAYMENT_STATUS.SETTLED;
++  if (raw === 'PARTIALLY PAID / BANK FAILED') return PAYMENT_STATUS.PARTIALLY_PAID_BANK_FAILED;
++  if (raw === 'PARTIALLY_PAID' || raw === 'PARTIALLY PAID') return PAYMENT_STATUS.PARTIALLY_PAID;
++  if (raw === 'RECONCILIATION REQUIRED') return PAYMENT_STATUS.RECONCILIATION_REQUIRED;
++  if (raw === 'WALLET_PENDING' || raw === 'BANK_PENDING' || raw === 'BOTH_PENDING') {
++    return PAYMENT_STATUS.SUBMITTED;
++  }
++  if (raw === 'FAILED') return PAYMENT_STATUS.FAILED;
++  if (raw === 'DUE') return PAYMENT_STATUS.DUE;
++  return null;
++};
++
+ export const rowFromMaintenancePayment = (payment, {
+   tenants = new Map(),
+   provider = null,
++  legs = [],
+ } = {}) => {
+   const providerTransferId = extractProviderTransferId(payment.notes, payment.provider_transfer_id);
+   const kind = extractKind(payment);
+-  const month = billingMonthOf(payment.period_start, payment.submitted_at || payment.created_at);
+-  const paymentStatus = classifyPaymentStatus({
++  const month = billingMonthOf(payment.period_start || payment.billing_period, payment.submitted_at || payment.created_at);
++  let paymentStatus = classifyPaymentStatus({
+     localStatus: payment.status,
+     providerStatus: provider?.status,
+     achStatus: provider?.achStatus || provider?.rail?.status,
+     settledAt: provider?.completedOn || payment.settled_at,
+   });
+   const billed = Number(payment.amount_cents || 0);
+-  const received = receivedCentsFor(paymentStatus, billed);
++  let received = receivedCentsFor(paymentStatus, billed);
++  let walletApplied = 0;
++  let bankAch = 0;
++  if (legs.length) {
++    const fields = collectionRowFields({ amountDueCents: billed, legs });
++    walletApplied = fields.wallet_applied_cents;
++    bankAch = fields.bank_ach_cents;
++    received = fields.amount_received_cents;
++    paymentStatus = collectionStatusToPayment(fields.collection_status) || paymentStatus;
++  }
+   let lineItems = parseLineItemsFromNotes(payment.notes);
+   if (!lineItems.length && kind === 'billing_verification') {
+     lineItems = [{ label: 'Billing verification', amount_cents: billed }];
+@@ -200,6 +228,9 @@
+     amount_billed_cents: billed,
+     amount_received_cents: received,
+     balance_cents: billed - received,
++    wallet_applied_cents: walletApplied,
++    bank_ach_cents: bankAch,
++    collection_legs: legs,
+     payment_status: paymentStatus,
+     ach_status: provider?.achStatus || provider?.rail?.status || null,
+     initiated_at: payment.submitted_at || payment.created_at || null,
+@@ -275,6 +306,7 @@
+   occurrences = [],
+   tenants = new Map(),
+   providerByTransferId = new Map(),
++  legsByObligationId = new Map(),
+ } = {}) => {
+   const seenProviderIds = new Set();
+   const rows = [];
+@@ -282,7 +314,8 @@
+   for (const payment of payments) {
+     const providerId = extractProviderTransferId(payment.notes, payment.provider_transfer_id);
+     const provider = providerId ? providerByTransferId.get(providerId) || null : null;
+-    const row = rowFromMaintenancePayment(payment, { tenants, provider });
++    const legs = legsByObligationId.get(payment.id) || payment.collection_legs || [];
++    const row = rowFromMaintenancePayment(payment, { tenants, provider, legs });
+     row.exceptions = reconcileExceptions({
+       localRow: payment,
+       provider,
+@@ -334,7 +367,9 @@
+     row_count: 0,
+   };
+   for (const row of rows) {
+-    const key = row.provider_transfer_id || `local:${row.local_operation_id}`;
++    const key = row.collection_legs?.length
++      ? `obligation:${row.local_operation_id}`
++      : (row.provider_transfer_id || `local:${row.local_operation_id}`);
+     if (seen.has(key)) continue;
+     seen.add(key);
+     totals.amount_billed_cents += Number(row.amount_billed_cents || 0);
+@@ -467,11 +502,38 @@
+     client.query('SELECT id::text AS id, name FROM public.tenants').then((r) => r.rows).catch(() => []),
+   ]);
+   const tenantMap = new Map(tenants.map((row) => [row.id, row]));
++  const transferRows = tenantId
++    ? (await client.query(
++      `SELECT * FROM public.payment_transfers
++       WHERE tenant_id = $1::uuid
++         AND (
++           provider_metadata->>'collection_contract' = 'tenant-collection-v2'
++           OR leg_role IN ('wallet', 'ach_debit')
++         )`,
++      [tenantId],
++    ).then((r) => r.rows).catch(() => []))
++    : (await client.query(
++      `SELECT * FROM public.payment_transfers
++       WHERE provider_metadata->>'collection_contract' = 'tenant-collection-v2'
++          OR leg_role IN ('wallet', 'ach_debit')`,
++    ).then((r) => r.rows).catch(() => []));
++  const legsByObligationId = new Map();
++  for (const row of transferRows) {
++    const obligationId = row.provider_metadata?.obligation_id || null;
++    if (!obligationId) continue;
++    if (!legsByObligationId.has(obligationId)) legsByObligationId.set(obligationId, []);
++    legsByObligationId.get(obligationId).push({
++      ...row,
++      obligation_id: obligationId,
++      leg_type: row.provider_metadata?.leg_type || row.leg_role,
++    });
++  }
+   const assembled = assembleReceivables({
+     payments,
+     occurrences,
+     tenants: tenantMap,
+     providerByTransferId,
++    legsByObligationId,
+   });
+   const filtered = filterReceivables(assembled, { billingMonth, tenantId, paymentStatus });
+   return {

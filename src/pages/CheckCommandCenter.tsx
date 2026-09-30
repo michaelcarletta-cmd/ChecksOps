@@ -1515,7 +1515,7 @@ export default function CheckCommandCenter() {
         )}
 
         {activeTab === "fundsreleased" && (
-          <div className="mt-3 flex flex-col md:flex-row gap-4" style={{ minHeight: "calc(100vh - 400px)" }}>
+          <div className="mt-3 flex flex-col lg:flex-row gap-4 min-w-0" style={{ minHeight: "calc(100vh - 400px)" }}>
             <Card
               className={`overflow-hidden transition-all duration-300 ease-in-out md:flex-shrink-0 w-full ${isMobile && selectedCheck ? "hidden" : ""}`}
               style={!isMobile ? { width: selectedCheck ? "40%" : "100%" } : undefined}
@@ -1544,7 +1544,7 @@ export default function CheckCommandCenter() {
                       return <div className="p-8 text-center text-muted-foreground">No funds released yet</div>;
                     }
                     return (
-                    <Table className="border-separate border-spacing-y-0 border-spacing-x-0">
+                    <Table className="min-w-[760px] border-separate border-spacing-y-0 border-spacing-x-0">
                       <TableHeader>
                         <TableRow>
                           <TableHead>Check</TableHead>
@@ -1982,8 +1982,8 @@ export default function CheckCommandCenter() {
           <div className="mt-3 flex flex-col md:flex-row gap-4" style={{ minHeight: "calc(100vh - 400px)" }}>
             {/* Check list — hidden on mobile when a check is selected */}
             <Card
-              className={`overflow-hidden transition-all duration-300 ease-in-out md:flex-shrink-0 w-full ${isMobile && selectedCheck ? "hidden" : ""}`}
-              style={!isMobile ? { width: selectedCheck ? "40%" : "80%" } : undefined}
+              className={`overflow-hidden transition-all duration-300 ease-in-out lg:flex-shrink-0 w-full min-w-0 ${isMobile && selectedCheck ? "hidden" : ""}`}
+              style={!isMobile ? { width: selectedCheck ? "58%" : "80%" } : undefined}
             >
               <CardContent className="p-0 h-full">
                 {bulkSelected.size > 0 && (
@@ -2259,8 +2259,8 @@ export default function CheckCommandCenter() {
                         const paddingTop = virtualItems.length > 0 ? virtualItems[0].start : 0;
                         const paddingBottom = virtualItems.length > 0 ? totalSize - virtualItems[virtualItems.length - 1].end : 0;
                         return (
-                          <div ref={queueScrollRef} className="overflow-auto h-[calc(100vh-460px)] min-h-[300px]">
-                            <Table>
+                          <div ref={queueScrollRef} className="overflow-x-auto overflow-y-auto h-[calc(100vh-460px)] min-h-[300px] min-w-0">
+                            <Table className="min-w-[760px]">
                               {headerRow}
                               <TableBody>
                                 {paddingTop > 0 && (
@@ -2354,8 +2354,8 @@ export default function CheckCommandCenter() {
 
             {/* Detail panel — hidden on mobile when no check selected */}
             <div
-              className={`transition-all duration-300 ease-in-out md:flex-shrink-0 overflow-hidden w-full ${isMobile && !selectedCheck ? "hidden" : ""}`}
-              style={!isMobile ? { width: selectedCheck ? "60%" : "20%" } : undefined}
+              className={`transition-all duration-300 ease-in-out lg:flex-shrink-0 overflow-hidden w-full min-w-0 ${isMobile && !selectedCheck ? "hidden" : ""}`}
+              style={!isMobile ? { width: selectedCheck ? "42%" : "20%" } : undefined}
             >
               {selectedCheck ? (
                 <div className="space-y-2">

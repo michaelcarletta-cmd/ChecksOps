@@ -23,6 +23,7 @@ import {
   redactCli,
   refuseRequireMode,
 } from './lib.mjs';
+import { enforceScriptGuard } from '../../scripts/deployment-guard/require-guard.mjs';
 
 export const EXPECTED_API_ORIGIN = 'ProductionPrepHttpApi';
 export const EXPECTED_API_DOMAIN = 'kiqojucc02.execute-api.us-east-1.amazonaws.com';
@@ -60,6 +61,13 @@ if (String(process.env.CHECKSOPS_OPERATOR_GATE3B || '') !== 'I_UNDERSTAND_PRODUC
   }));
   process.exit(2);
 }
+
+enforceScriptGuard({
+  script: import.meta.url,
+  target_environment: 'production',
+  target_component: 'production-spa',
+  deployment_type: 'cloudfront-update',
+});
 
 const identity = awsJson(['sts', 'get-caller-identity']);
 const arn = String(identity.Arn || '');

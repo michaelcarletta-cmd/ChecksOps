@@ -1,0 +1,181 @@
+{
+  "id": "tenant-collection-v2-freedom-prep-stop-gate",
+  "title": "Freedom-only Tenant Collection V2 controlled activation — STOP before provider write",
+  "captured_at": "2026-09-29T20:27:00Z",
+  "workstream_id": "tenant-collection-v2-freedom-prep-2d41",
+  "branch": "cursor/tenant-collection-v2-freedom-prep-2d41",
+  "state": "READY / NOT COLLECTED",
+  "production_code_accepted": true,
+  "collection_activated": false,
+  "tenant": {
+    "name": "Freedom Adjustment",
+    "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+    "only_tenant": true,
+    "excluded": ["C1C", "any other tenant", "synthetic tenants", "test tenants"]
+  },
+  "A_current_lambda": {
+    "function_name": "checksops-production-prep-api",
+    "codeSha256": "s7fEdoI9HXCQhheLoa6i08Zl4UJ+tyU1HDUk5StoVqs=",
+    "revisionId": "cd740e42-5574-4326-931d-a45ca5cb00f6",
+    "lastModified": "2026-09-29T20:10:28.000+0000",
+    "codeSize": 11702177,
+    "moved_since_v2_promotion": false,
+    "spa_entry": "/assets/index-C9QrEEkl.js",
+    "spa_index_html_sha256": "2a8e5245d18a4a84b6175cace303dff9c06b27e5114e4cc439fe9854b2e53575"
+  },
+  "B_v2_runtime_present": {
+    "present": true,
+    "drift": false,
+    "member_hashes_match_accepted_promotion": {
+      "tenant-collection-v2.mjs": "8a66f54d3c2785162a1643218e18b4d3c251230cf2a7f98a1ecb4ede8939fb66",
+      "tenant-collection-contract-v2.mjs": "9ec5ae45db34c0795570f401cc2b1c3fa78f04764870bf6b651c21278433ed5d",
+      "tenant-billing-engine.mjs": "65b75735825f9a06955d5daba603f74835d106cabf52eb449153c856a59dae2f",
+      "providers/parity/tenant-receivables.mjs": "0d8f8f20f4939e79551b4a1aa5b3305bb791cea7ca684f4428594ad359179477"
+    },
+    "protected_byte_identical": true
+  },
+  "C_billing_period": {
+    "utc_date": "2026-09-29",
+    "billing_day_of_month": 1,
+    "accrual_period": "2026-09",
+    "collection_period": "2026-08",
+    "default_pull_period": "2026-09",
+    "reason": "UTC day 29 !== billing day 1, so defaultPullPeriodKey is the accruing month"
+  },
+  "D_existing_accepted_calculation": {
+    "engine": "buildConsolidatedInvoice({ persist: false })",
+    "source": "existing production read-only inspect checksops-prod-v3e-inspect-2d41 + checksops-prod-sql47-inspect-2d41 (SET default_transaction_read_only=on)",
+    "formula": "maintenance - discount + check_processing + moov_next_day + moov_same_day + mortgage_ops_initial + mortgage_ops_additional_check",
+    "maintenance_rate_cents": 10000,
+    "discount_cents": 500,
+    "maintenance_net_cents": 9500,
+    "check_count": 11,
+    "check_rate_cents": 400,
+    "check_usage_cents": 4400,
+    "next_day_count": 0,
+    "next_day_usage_cents": 0,
+    "same_day_count": 0,
+    "same_day_usage_cents": 0,
+    "mortgage_ops_initial_count": 0,
+    "mortgage_ops_initial_amount_cents": 0,
+    "mortgage_ops_additional_count": 0,
+    "mortgage_ops_additional_amount_cents": 0,
+    "usage_total_cents": 4400,
+    "amount_cents": 13900,
+    "invented": false,
+    "fake_invoice_created": false
+  },
+  "E_total_amount_due_cents": 13900,
+  "F_existing_obligation_id": null,
+  "G_not_already_collected": {
+    "september_monthly_occurrences": [],
+    "september_allocations_count": 0,
+    "september_allocations_cents": 0,
+    "live_monthly_transfers": [],
+    "v2_wallet_leg": null,
+    "v2_bank_leg": null,
+    "historical_verification_not_used": {
+      "provider": "367c5353-ed20-430b-b767-c3e5d47f28ad",
+      "local": "414d81a2-186b-4e42-8ea1-47077d77a85c",
+      "kind": "billing_verification",
+      "amount_cents": 100,
+      "status_local": "submitted",
+      "status_provider": "pending",
+      "retried": false,
+      "mutated": false
+    }
+  },
+  "H_freedom_wallet_id": "3e6286ca-a19c-45f6-aad9-f73dac5f0358",
+  "I_wallet_available_cents": 0,
+  "J_wallet_payment_method_id": "744ea734-f5e3-4b31-bb92-38f85fd29b91",
+  "K_wells_fargo_4573": {
+    "bank_account_id": "61062c38-a79e-4f62-bb64-32ddecf3d37c",
+    "bank_name": "WELLS FARGO BANK",
+    "account_type": "checking",
+    "last_four": "4573",
+    "status": "verified",
+    "ach_debit_fund_payment_method_id": "a02c1c81-9ca6-434d-accc-ea4471a70ef2",
+    "ach_debit_collect_payment_method_id": "128977bb-5034-4e8b-89ed-b10982105aa3",
+    "stored_authorization_method_id": "7a78a544-340d-46fd-a4a4-228661374da7",
+    "stored_authorization_rail": "ach-credit-standard",
+    "resolved_debit_rail": "ach-debit-fund"
+  },
+  "L_checksops_destination": {
+    "account_id": "41cb5d67-4911-4bef-aad5-d8ee9c582208",
+    "wallet_id": "72630a70-4954-4761-b652-e8beff1ad02c",
+    "wallet_payment_method_id": "c70a90f2-9bcc-4084-8263-d5a0fb5d806c",
+    "verified_live": true,
+    "replacements_created": false
+  },
+  "M_proposed_wallet_cents": 0,
+  "N_proposed_bank_cents": 13900,
+  "O_wallet_idempotency_key": "billing-2026-09-2eff5f1a-929d-4ce3-9a8b-cd96b98df42a-wallet",
+  "P_bank_idempotency_key": "billing-2026-09-2eff5f1a-929d-4ce3-9a8b-cd96b98df42a-bank",
+  "Q_existing_provider_transfer_collision_search": {
+    "freedom_transfers_listed": 4,
+    "v2_key_matches": 0,
+    "amount_13900_to_checksops": 0,
+    "unrelated_in_flight": [
+      {
+        "transfer_id": "9f9df312-32a9-4999-ace9-fc2b00669c75",
+        "amount_cents": 500,
+        "description": "Balance funding",
+        "status": "pending",
+        "destination": "freedom_wallet_not_checksops",
+        "v2_obligation": false
+      },
+      {
+        "transfer_id": "367c5353-ed20-430b-b767-c3e5d47f28ad",
+        "amount_cents": 100,
+        "description": "ChecksOps billing verification $1.00",
+        "status": "pending",
+        "v2_obligation": false
+      }
+    ]
+  },
+  "R_v2_mandatory": "32/32",
+  "S_v2_complete": "38/38",
+  "T_funding_contract": "23/23",
+  "U_production_billing_post": false,
+  "V_verification_post": false,
+  "W_scheduler_change": false,
+  "X_sweep_change": false,
+  "Y_provider_writes": 0,
+  "Z_transfers_created": 0,
+  "additional_safety": {
+    "tenant_isolation": "31/31 (official isolation suites + extras)",
+    "financial_write_protections": "25/25",
+    "deployment_guard": "27/27",
+    "c1c_collected": false,
+    "env_key_count": 49,
+    "env_changed": false,
+    "sql_changed": false,
+    "deployed": false,
+    "freedom_dollar_retried": false
+  },
+  "proposed_collection_plan": {
+    "freedom_amount_due": "$139.00",
+    "current_available_wallet": "$0.00",
+    "proposed_wallet_leg": "$0.00",
+    "proposed_bank_leg": "$139.00",
+    "source_wallet_id": "3e6286ca-a19c-45f6-aad9-f73dac5f0358",
+    "source_wallet_payment_method": "744ea734-f5e3-4b31-bb92-38f85fd29b91",
+    "source_bank_ending": "4573",
+    "source_bank_payment_method": "a02c1c81-9ca6-434d-accc-ea4471a70ef2",
+    "destination_account": "41cb5d67-4911-4bef-aad5-d8ee9c582208",
+    "destination_wallet": "72630a70-4954-4761-b652-e8beff1ad02c",
+    "destination_payment_method": "c70a90f2-9bcc-4084-8263-d5a0fb5d806c",
+    "billing_obligation_id": null,
+    "billing_obligation_identity": "monthly_subscription:2eff5f1a-929d-4ce3-9a8b-cd96b98df42a:2026-09",
+    "billing_period": "2026-09",
+    "wallet_idempotency_key": "billing-2026-09-2eff5f1a-929d-4ce3-9a8b-cd96b98df42a-wallet",
+    "bank_idempotency_key": "billing-2026-09-2eff5f1a-929d-4ce3-9a8b-cd96b98df42a-bank",
+    "current_production_flags": {
+      "AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST": false,
+      "AWS_MOOV_BILLING_VERIFICATION_POST_ENABLED": false
+    }
+  },
+  "ready": true,
+  "collected": false,
+  "stop_before_provider_write": true
+}

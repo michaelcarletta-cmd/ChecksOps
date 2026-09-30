@@ -394,8 +394,9 @@ export const handleCheckOcrIntake = async (event, injected = {}) => {
     rpcError = String(error?.message || error).slice(0, 240);
   }
 
-  // Post-OCR application handoff: issue_date + pending payee candidates only.
-  // Extraction/merge/redaction stay unchanged. Amount and MICR are not persisted.
+  // Post-OCR application handoff: descriptive fields + verified Azure MICR only.
+  // MICR persistence is intentionally narrow: never persist REVIEW_REQUIRED values,
+  // never overwrite an existing nonblank routing/account value, and never touch amount/status.
   try {
     await client.query('SAVEPOINT ocr_descriptive_handoff');
     await persistOcrDescriptiveHandoff({
@@ -412,6 +413,35 @@ export const handleCheckOcrIntake = async (event, injected = {}) => {
     await client.query('RELEASE SAVEPOINT ocr_descriptive_handoff');
   } catch {
     try { await client.query('ROLLBACK TO SAVEPOINT ocr_descriptive_handoff'); } catch { /* ignore */ }
+  }
+
+  const verifiedRouting = parsed.micr_routing_state === 'VERIFIED' ? parsed.routing_number : null;
+  const verifiedAccount = parsed.micr_account_state === 'VERIFIED' ? parsed.account_number : null;
+  if (verifiedRouting || verifiedAccount) {
+    try {
+      await client.query('SAVEPOINT ocr_micr_handoff');
+      await client.query(
+        `UPDATE public.check_intake_items
+         SET routing_number = CASE
+               WHEN (routing_number IS NULL OR btrim(routing_number) = '') AND $2::text IS NOT NULL
+                 THEN $2::text
+               ELSE routing_number
+             END,
+             account_number = CASE
+               WHEN (account_number IS NULL OR btrim(account_number) = '') AND $3::text IS NOT NULL
+                 THEN $3::text
+               ELSE account_number
+             END,
+             updated_at = now()
+         WHERE id = $1::uuid`,
+        [checkId, verifiedRouting, verifiedAccount],
+      );
+      await client.query('RELEASE SAVEPOINT ocr_micr_handoff');
+      ocrLog({ event: 'ocr_micr_persist', ok: true, code: 'verified_only' });
+    } catch {
+      try { await client.query('ROLLBACK TO SAVEPOINT ocr_micr_handoff'); } catch { /* ignore */ }
+      ocrLog({ event: 'ocr_micr_persist', ok: false, code: 'write_failed' });
+    }
   }
 
   try {

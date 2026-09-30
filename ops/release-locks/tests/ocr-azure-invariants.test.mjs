@@ -164,7 +164,8 @@ test('OCR runtime capability markers remain intact', () => {
   assert.ok(safeLog, 'safeOcrLog whitelist body must remain');
   assert.doesNotMatch(safeLog[0], /routing_number|account_number|api_key|payee|amount|micr_check/);
 
-  // 17. Routing/account/MICR/amount are not newly persisted by this OCR path.
+  // 17. Only VERIFIED Azure MICR may fill blank routing/account fields.
+  //     Existing nonblank values remain authoritative; amount/status remain untouched.
   assert.match(ocr, /fallback_descriptive_only/);
   assert.match(ocr, /Do not touch ocr_status\/amount\/detected_claim_number/);
   const descriptiveUpdate = ocr.match(
@@ -172,6 +173,15 @@ test('OCR runtime capability markers remain intact', () => {
   );
   assert.ok(descriptiveUpdate, 'descriptive-only UPDATE must remain');
   assert.doesNotMatch(descriptiveUpdate[0], /routing_number|account_number|micr_check_number|amount =/);
+  assert.match(ocr, /parsed\.micr_routing_state === 'VERIFIED' \? parsed\.routing_number : null/);
+  assert.match(ocr, /parsed\.micr_account_state === 'VERIFIED' \? parsed\.account_number : null/);
+  const micrUpdate = ocr.match(
+    /UPDATE public\.check_intake_items[\s\S]{0,900}routing_number = CASE[\s\S]{0,900}account_number = CASE[\s\S]{0,900}WHERE id = \$1::uuid/,
+  );
+  assert.ok(micrUpdate, 'verified MICR persistence UPDATE must remain');
+  assert.match(micrUpdate[0], /routing_number IS NULL OR btrim\(routing_number\) = ''/);
+  assert.match(micrUpdate[0], /account_number IS NULL OR btrim\(account_number\) = ''/);
+  assert.doesNotMatch(micrUpdate[0], /amount\s*=|status\s*=|check_stage\s*=/);
 
   // 18. OCR does not trigger CheckAlt or Moov.
   for (const [rel, src] of [

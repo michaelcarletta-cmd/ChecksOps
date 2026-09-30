@@ -1,0 +1,265 @@
+{
+  "id": "freedom-v2-final-production-prewrite",
+  "title": "Freedom V2 final production pre-write — read-only / dry-run",
+  "verdict": "FREEDOM V2 PRODUCTION PRE-WRITE — READY",
+  "captured_at": "2026-09-29T22:35:30Z",
+  "workstream_id": "freedom-v2-final-prewrite-2d41",
+  "branch": "cursor/freedom-v2-final-prewrite-2d41",
+  "mode": "READ-ONLY / DRY-RUN ONLY",
+  "collected": false,
+  "september_obligation_created": false,
+  "provider_posted": false,
+  "wells_fargo_4573_debited": false,
+  "production_transfer_created": false,
+  "monthly_billing_enabled_changed": false,
+  "env_changed": false,
+  "deployed": false,
+  "A_current_production_lambda": {
+    "function_name": "checksops-production-prep-api",
+    "codeSha256": "X0xat8ZosDmRLjp7uXn+C3DxT+RD3I5APSVpI/GOGaU=",
+    "revisionId": "cdfbde4c-475c-41bb-b3c4-e626c48d2517",
+    "lastModified": "2026-09-29T20:50:31.000+0000",
+    "codeSize": 11702115,
+    "state": "Active",
+    "env_count": 49,
+    "authoritative_current_live_package": true,
+    "older_sha_not_expected": true,
+    "unchanged_after_this_prewrite": true
+  },
+  "B_v2_protected_hashes": {
+    "stop": false,
+    "accepted_v2_match": true,
+    "tenant-collection-v2.mjs": {
+      "sha256": "8a66f54d3c2785162a1643218e18b4d3c251230cf2a7f98a1ecb4ede8939fb66",
+      "match_accepted": true
+    },
+    "tenant-collection-contract-v2.mjs": {
+      "sha256": "9ec5ae45db34c0795570f401cc2b1c3fa78f04764870bf6b651c21278433ed5d",
+      "match_accepted": true
+    },
+    "tenant-billing-engine.mjs": {
+      "sha256": "65b75735825f9a06955d5daba603f74835d106cabf52eb449153c856a59dae2f",
+      "match_accepted": true
+    },
+    "providers/parity/tenant-receivables.mjs": {
+      "sha256": "0d8f8f20f4939e79551b4a1aa5b3305bb791cea7ca684f4428594ad359179477",
+      "match_accepted": true
+    },
+    "protected_match_promotion_snapshot": true,
+    "funding_and_payment_direction_in_live_zip": {
+      "providers/parity/wallet-funding.mjs": "967f67e042ac8330bfdf12557ff132db8b6e98aee95b32355c4be3308b2fdbbf",
+      "payment-direction-email.mjs": "e72aa1d5a9e6956378a91470803a6b8f63f9cc7518dd4d5307795acd60350560"
+    }
+  },
+  "C_billing_calculation": {
+    "engine": "buildConsolidatedInvoice({ persist: false })",
+    "source": "existing production inspects checksops-prod-v3e-inspect-2d41 and checksops-prod-sql47-inspect-2d41 (SET default_transaction_read_only=on, mutated=false)",
+    "recomputed_from_current_production_data": true,
+    "hardcoded": false,
+    "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+    "period": "2026-09",
+    "tenant_rates": {
+      "monthly_rate_cents": 10000,
+      "referral_discount_cents": 500
+    },
+    "maintenance_rate_cents": 10000,
+    "discount_cents": 500,
+    "maintenance_net_cents": 9500,
+    "usage_total_cents": 4400,
+    "default_check_rate_cents": 400,
+    "derived_check_count": 11,
+    "derived_check_usage_cents": 4400,
+    "derived_moov_speed_fees_cents": 0,
+    "derived_mortgage_ops_cents": 0,
+    "amount_cents": 13900,
+    "formula": "maintenance_net + usage_total = 9500 + 4400 = 13900",
+    "composition_note": "Inspect returns amount/maintenance_net/usage_total only. usage_total 4400 is exactly 11 × DEFAULT_CHECK_RATE 400. assembleInvoiceTotals adds Moov and Mortgage Ops into usage_total, so those lines are $0 unless they replaced check quantity 1:1. Same persist:false path on this period previously returned 11 checks / $0 Moov / $0 Mortgage Ops; current totals are unchanged."
+  },
+  "D_amount_due": {
+    "amount_cents": 13900,
+    "amount_usd": "$139.00",
+    "matches_accepted_freedom_september_v2": true
+  },
+  "E_existing_obligation_search": {
+    "monthly_obligation": "NONE",
+    "septemberOccurrences": [],
+    "collection_occurrence": "NONE",
+    "septemberAllocations": { "count": 0, "amount_cents": 0 },
+    "allocation": "NONE",
+    "liveMonthlyTransfers": [],
+    "history": [],
+    "historical_verification_excluded": {
+      "local": "414d81a2-186b-4e42-8ea1-47077d77a85c",
+      "provider": "367c5353-ed20-430b-b767-c3e5d47f28ad",
+      "kind": "billing_verification",
+      "amount_cents": 100,
+      "billing_period": null
+    }
+  },
+  "F_wallet_available_balance": {
+    "account": "60922058-7eca-4889-81dd-5720d7b9de96",
+    "wallet": "3e6286ca-a19c-45f6-aad9-f73dac5f0358",
+    "wallet_pm": "744ea734-f5e3-4b31-bb92-38f85fd29b91",
+    "available_cents": 0,
+    "available_usd": "$0.00",
+    "pending_cents": null,
+    "pending_counted": false,
+    "source": "Moov production GET /accounts/{id}/wallets/{walletId}"
+  },
+  "G_bank_authorization": {
+    "last4": "4573",
+    "bank_name": "WELLS FARGO BANK",
+    "account_type": "checking",
+    "bank_account_id": "61062c38-a79e-4f62-bb64-32ddecf3d37c",
+    "status": "verified",
+    "authorized": true,
+    "auto_debit_enabled": true,
+    "ach_authorized_at": "2026-09-25T17:04:12.808Z",
+    "debit_fund_pm": "a02c1c81-9ca6-434d-accc-ea4471a70ef2",
+    "debit_fund_type": "ach-debit-fund",
+    "debit_fund_status": "verified",
+    "stored_authorization_pm": "7a78a544-340d-46fd-a4a4-228661374da7",
+    "stored_authorization_rail": "ach-credit-standard",
+    "v2_resolves_debit_fund_not_credit_standard": true
+  },
+  "H_destination_verification": {
+    "account": "41cb5d67-4911-4bef-aad5-d8ee9c582208",
+    "wallet": "72630a70-4954-4761-b652-e8beff1ad02c",
+    "wallet_pm": "c70a90f2-9bcc-4084-8263-d5a0fb5d806c",
+    "label": "ChecksOps production merchant",
+    "env_destination_account": "41cb5d67-4911-4bef-aad5-d8ee9c582208",
+    "env_destination_pm": "c70a90f2-9bcc-4084-8263-d5a0fb5d806c",
+    "matches_expected": true,
+    "created_or_replaced": false
+  },
+  "I_local_collision_search": {
+    "wallet_key": "billing-2026-09-2eff5f1a-929d-4ce3-9a8b-cd96b98df42a-wallet",
+    "bank_key": "billing-2026-09-2eff5f1a-929d-4ce3-9a8b-cd96b98df42a-bank",
+    "result": "NONE",
+    "successfulProductionTransfers": [],
+    "payment_transfers_by_env_status": [
+      { "environment": "sandbox", "status": "processing", "count": 1 }
+    ],
+    "production_moov_payment_transfers": 0,
+    "note": "Existing inspect groups all Moov payment_transfers by environment/status. Only one sandbox processing row exists (staging provider-backed leftover). Zero production payment_transfers of any status, so the V2 keys cannot exist locally."
+  },
+  "J_provider_collision_search": {
+    "method": "GET only",
+    "dest_transfers_listed": 6,
+    "freedom_transfers_listed": 4,
+    "v2_freedom_sept_139_to_checksops": 0,
+    "keyed_v2": 0,
+    "amount_13900": 0,
+    "excluded_non_v2": [
+      {
+        "id": "367c5353-ed20-430b-b767-c3e5d47f28ad",
+        "amt": 100,
+        "desc": "ChecksOps billing verification $1.00",
+        "reason": "historical_billing_verification_1"
+      },
+      {
+        "id": "9f9df312-32a9-4999-ace9-fc2b00669c75",
+        "amt": 500,
+        "desc": "Balance funding",
+        "reason": "unrelated_balance_funding_5"
+      }
+    ],
+    "collision": false
+  },
+  "K_calculated_wallet_leg": {
+    "available_cents": 0,
+    "walletAmountCents": 0,
+    "wallet_key": "billing-2026-09-2eff5f1a-929d-4ce3-9a8b-cd96b98df42a-wallet",
+    "skipped": true
+  },
+  "L_calculated_bank_leg": {
+    "bankAmountCents": 13900,
+    "bank_key": "billing-2026-09-2eff5f1a-929d-4ce3-9a8b-cd96b98df42a-bank"
+  },
+  "M_exact_idempotency_keys": {
+    "wallet": "billing-2026-09-2eff5f1a-929d-4ce3-9a8b-cd96b98df42a-wallet",
+    "bank": "billing-2026-09-2eff5f1a-929d-4ce3-9a8b-cd96b98df42a-bank",
+    "obligation_identity": "monthly_subscription:2eff5f1a-929d-4ce3-9a8b-cd96b98df42a:2026-09"
+  },
+  "N_v2_tests": {
+    "mandatory": "32/32",
+    "full": "38/38",
+    "tenant_isolation_case_32": "pass",
+    "receivables_tenant_isolation": "pass"
+  },
+  "O_funding_contract": "23/23",
+  "P_provider_writes": 0,
+  "Q_db_writes": 0,
+  "R_production_changes": {
+    "lambda_deploy": 0,
+    "sql_changes": 0,
+    "env_changes": 0,
+    "scheduler_changes": 0,
+    "sweep_changes": 0,
+    "moov_account_replacement": 0,
+    "wallet_replacement": 0,
+    "bank_replacement": 0,
+    "AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST": false,
+    "AWS_MOOV_BILLING_VERIFICATION_POST_ENABLED": false,
+    "AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED": false,
+    "billingShouldSimulate_in_production": true,
+    "eventbridge_list_rules": "AccessDenied (unchanged; no enable attempted)",
+    "payment_direction_test_note": "parity-payment-direction.test.mjs failed to load because app-services.mjs pulls a pre-existing unterminated-group regex (ocr-parse). Not a V2 regression. V2 isolation and receivables isolation passed."
+  },
+  "S_exact_next_operation": {
+    "posted": false,
+    "path": "submitOccurrence → collectTenantObligation → wallet-first calculation → bank remainder → deterministic idempotency → provider transfer persistence/reconciliation",
+    "same_v2_path_as_accepted_staging": true,
+    "accepted_staging_proof": {
+      "obligation": "$139",
+      "wallet": "$0",
+      "bank": "$139",
+      "sandbox_transfer": "5edcc6f2",
+      "retry_reused_same_transfer": true,
+      "provider_matching_transfer_count_after_retry": 1
+    },
+    "would_perform": {
+      "source_account": "60922058-7eca-4889-81dd-5720d7b9de96",
+      "source_payment_method": "a02c1c81-9ca6-434d-accc-ea4471a70ef2",
+      "source_rail": "ach-debit-fund",
+      "source_bank": "Wells Fargo checking 4573",
+      "destination_account": "41cb5d67-4911-4bef-aad5-d8ee9c582208",
+      "destination_wallet": "72630a70-4954-4761-b652-e8beff1ad02c",
+      "destination_payment_method": "c70a90f2-9bcc-4084-8263-d5a0fb5d806c",
+      "amount_cents": 13900,
+      "idempotency_key": "billing-2026-09-2eff5f1a-929d-4ce3-9a8b-cd96b98df42a-bank",
+      "description": "ChecksOps subscription 2026-09 bank"
+    },
+    "planner_proof": {
+      "package": "current live production zip members",
+      "wallet_leg_skipped": true,
+      "bank_leg_would_post_13900": true,
+      "fetch_calls": 0,
+      "provider_posts_performed": 0,
+      "db_client_passed": false,
+      "memory_store_only": true,
+      "postTransfer_aborted_with": "DRY_RUN_NO_PROVIDER_WRITE"
+    }
+  },
+  "final_no_write_proof": {
+    "freedom_september_obligation": "NONE",
+    "freedom_v2_transfer": "NONE",
+    "wells_fargo_4573_debited": false,
+    "production_checksops_wallet_received_139_v2": false,
+    "provider_POST_count": 0,
+    "production_database_writes": 0,
+    "lambda_deploy": 0,
+    "sql_changes": 0,
+    "env_changes": 0,
+    "scheduler_changes": 0,
+    "sweep_changes": 0,
+    "inspect_identity_read_only": "on",
+    "inspect_mutated": false,
+    "inspect_liveDebitCreated": false,
+    "lambda_sha_before": "X0xat8ZosDmRLjp7uXn+C3DxT+RD3I5APSVpI/GOGaU=",
+    "lambda_sha_after": "X0xat8ZosDmRLjp7uXn+C3DxT+RD3I5APSVpI/GOGaU="
+  },
+  "ready": true,
+  "stop": true,
+  "do_not_collect_the_139": true
+}

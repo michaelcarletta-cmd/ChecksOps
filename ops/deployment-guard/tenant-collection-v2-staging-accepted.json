@@ -1,0 +1,41 @@
+{
+  "id": "tenant-collection-v2",
+  "title": "Tenant Collection Contract v2 \u2014 wallet first, bank remainder",
+  "status": "STAGING ACCEPTED; PRODUCTION CODE ACCEPTED / COLLECTION NOT ACTIVATED",
+  "production_accepted": false,
+  "accepted_at": "2026-09-29T19:50:23Z",
+  "branch": "cursor/tenant-collection-v2-2d41",
+  "source_commit": "a3a6f0b27282070392a97a0b45a7c4b51f1d5755",
+  "production": {
+    "lambda_code_sha256": "s7fEdoI9HXCQhheLoa6i08Zl4UJ+tyU1HDUk5StoVqs=",
+    "lambda_revision_id": "cd740e42-5574-4326-931d-a45ca5cb00f6",
+    "spa_entry": "/assets/index-C9QrEEkl.js",
+    "monthly_billing_production_post": false,
+    "billing_verification_post_enabled": false,
+    "transfers_created": 0,
+    "moov_writes": 0,
+    "deployed": true,
+    "collection_activated": false
+  },
+  "staging": {
+    "function_name": "checksops-staging-api",
+    "code_sha256": "NUPzpqR0h6dlwN8rIhiczyNT8ZKXUM9vSFtlqO1LA/s=",
+    "revision_id": "bc0b1b4a-4a80-48d0-8eec-75ef616eb835",
+    "package_sha256": "3543f3a6a47487a765c0df2b22189ccf2353f1929750cf6f485b65a8ed4b03fb",
+    "last_modified": "2026-09-29T19:50:23.000+0000",
+    "monthly_billing_production_post": false,
+    "billing_verification_post_enabled": false
+  },
+  "tests": {
+    "collection_matrix": "38/38",
+    "mandatory_cases": "32/32",
+    "tenant_receivables": "15/15",
+    "funding_contract": "23/23"
+  },
+  "sql": false,
+  "env_change": false,
+  "moov_infrastructure_changed": false,
+  "sweep_configuration_changed": false,
+  "production_code_accepted": true,
+  "collection_activated": false
+}

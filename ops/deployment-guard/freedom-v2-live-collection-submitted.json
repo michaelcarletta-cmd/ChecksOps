@@ -1,0 +1,112 @@
+{
+  "id": "freedom-v2-live-collection",
+  "title": "Freedom V2 controlled live $139 collection",
+  "verdict": "FREEDOM V2 LIVE $139 COLLECTION — SUBMITTED AND RECONCILED",
+  "captured_at": "2026-09-29T22:46:40Z",
+  "workstream_id": "freedom-v2-live-collection-2d41",
+  "branch": "cursor/freedom-v2-live-collection-2d41",
+  "authorization": "one real production collection only — Freedom 2026-09 $139",
+  "A_production_lambda": {
+    "function_name": "checksops-production-prep-api",
+    "codeSha256": "X0xat8ZosDmRLjp7uXn+C3DxT+RD3I5APSVpI/GOGaU=",
+    "revisionId": "cdfbde4c-475c-41bb-b3c4-e626c48d2517",
+    "lastModified": "2026-09-29T20:50:31.000+0000",
+    "unchanged": true,
+    "not_reverted": true
+  },
+  "B_v2_protected_hashes": {
+    "match": true,
+    "tenant-collection-v2.mjs": "8a66f54d3c2785162a1643218e18b4d3c251230cf2a7f98a1ecb4ede8939fb66",
+    "tenant-collection-contract-v2.mjs": "9ec5ae45db34c0795570f401cc2b1c3fa78f04764870bf6b651c21278433ed5d",
+    "tenant-billing-engine.mjs": "65b75735825f9a06955d5daba603f74835d106cabf52eb449153c856a59dae2f",
+    "providers/parity/tenant-receivables.mjs": "0d8f8f20f4939e79551b4a1aa5b3305bb791cea7ca684f4428594ad359179477"
+  },
+  "C_recomputed_bill": {
+    "engine": "buildConsolidatedInvoice({ persist: false }) then chargeTenantPeriod",
+    "hardcoded": false,
+    "maintenance_rate_cents": 10000,
+    "discount_cents": 500,
+    "maintenance_net_cents": 9500,
+    "check_count": 11,
+    "check_usage_cents": 4400,
+    "next_day_usage_cents": 0,
+    "same_day_usage_cents": 0,
+    "mortgage_ops_usage_cents": 0,
+    "amount_cents": 13900
+  },
+  "D_final_wallet_available": {
+    "wallet": "3e6286ca-a19c-45f6-aad9-f73dac5f0358",
+    "available_cents": 0,
+    "pending_counted": false
+  },
+  "E_final_split": {
+    "wallet_cents": 0,
+    "bank_cents": 13900,
+    "wallet_provider_posts": 0
+  },
+  "F_source_bank": {
+    "bank": "WELLS FARGO BANK",
+    "last4": "4573",
+    "account_type": "checking",
+    "bank_account_id": "61062c38-a79e-4f62-bb64-32ddecf3d37c",
+    "debit_fund_pm": "a02c1c81-9ca6-434d-accc-ea4471a70ef2",
+    "status": "verified"
+  },
+  "G_destination_wallet": {
+    "account": "41cb5d67-4911-4bef-aad5-d8ee9c582208",
+    "wallet": "72630a70-4954-4761-b652-e8beff1ad02c",
+    "wallet_pm": "c70a90f2-9bcc-4084-8263-d5a0fb5d806c"
+  },
+  "H_obligation_id": "72b622f9-b68f-4032-a971-a854dbcfbf57",
+  "I_collection_occurrence_id": "72b622f9-b68f-4032-a971-a854dbcfbf57",
+  "J_local_bank_leg_id": "ab2895c9-2ba8-4c21-a818-7f83abdb068c",
+  "K_moov_production_transfer_id": "b31c7752-031f-4b8b-9b6e-82dd0aaed2cb",
+  "L_moov_status": "pending",
+  "M_exact_amount_cents": 13900,
+  "N_idempotency_key": "billing-2026-09-2eff5f1a-929d-4ce3-9a8b-cd96b98df42a-bank",
+  "O_allocation": {
+    "count": 11,
+    "amount_cents": 4400,
+    "table": "tenant_invoice_allocations",
+    "note": "11 check lines ($44). Maintenance $95 lives on the $139 obligation."
+  },
+  "P_matching_provider_transfer_count": 1,
+  "Q_production_post_flags_after": {
+    "official_function": "checksops-production-prep-api",
+    "AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST": false,
+    "AWS_MOOV_BILLING_VERIFICATION_POST_ENABLED": false,
+    "changed": false
+  },
+  "R_scheduler_state": {
+    "eventbridge_enabled": false,
+    "change_attempted": false
+  },
+  "S_other_tenants_untouched": {
+    "c1c_or_other_2026_09_occurrences": [],
+    "untouched": true
+  },
+  "execution": {
+    "path": "chargeTenantPeriod → createOrGetOccurrence → allocateInvoiceLines → submitOccurrence → collectTenantObligation",
+    "oneshot": "checksops-prod-v2-live-collect-2d41",
+    "official_api_not_modified": true,
+    "provider_post_count": 1,
+    "wallet_posts": 0,
+    "idempotency_replay_posts": 0,
+    "idempotency_replay_match_count": 1,
+    "collection_status": "BANK_PENDING",
+    "initial_provider_status": "created",
+    "later_provider_status": "pending",
+    "simulated": false
+  },
+  "success": {
+    "exactly_one_139_production_transfer": true,
+    "source_freedom_wells_fargo_4573": true,
+    "destination_checksops_production_wallet": true,
+    "through_v2": true,
+    "matching_local_records": true,
+    "no_second_transfer": true
+  },
+  "stop": true,
+  "do_not_collect_c1c": true,
+  "do_not_enable_automatic_billing": true
+}
