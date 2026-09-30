@@ -1,0 +1,73 @@
+{
+  "ok": true,
+  "fetched_via_account": "60922058-7eca-4889-81dd-5720d7b9de96",
+  "http": 200,
+  "oauth_token_post_only": true,
+  "provider_writes": {
+    "POST": 0,
+    "PATCH": 0,
+    "PUT": 0,
+    "DELETE": 0,
+    "oauth_token_posts_only": 1
+  },
+  "provider_transfer_id": "9f9df312-32a9-4999-ace9-fc2b00669c75",
+  "status": "pending",
+  "amount_cents": 500,
+  "currency": "USD",
+  "description": "Balance funding",
+  "createdOn": "2026-09-29T15:44:36Z",
+  "updatedOn": null,
+  "completedOn": null,
+  "failedOn": null,
+  "canceledOn": null,
+  "source_payment_method_id": "a02c1c81-9ca6-434d-accc-ea4471a70ef2",
+  "destination_payment_method_id": "744ea734-f5e3-4b31-bb92-38f85fd29b91",
+  "source_type": "ach-debit-fund",
+  "dest_type": "moov-wallet",
+  "ach": {
+    "status": "originated",
+    "traceNumber": "273976360896947",
+    "initiatedOn": "2026-09-29T15:44:36.363448Z",
+    "originatedOn": "2026-09-29T18:15:03.941077Z",
+    "completedOn": null,
+    "returnedOn": null,
+    "debitHoldPeriod": "2-days"
+  },
+  "match": {
+    "amount_ok": true,
+    "source_ok": true,
+    "dest_ok": true,
+    "id_ok": true
+  },
+  "lists": {
+    "60922058-7eca-4889-81dd-5720d7b9de96": {
+      "http": 200,
+      "count": 5,
+      "has_five": true,
+      "has_139": true,
+      "ids": [
+        "b31c7752-031f-4b8b-9b6e-82dd0aaed2cb",
+        "9f9df312-32a9-4999-ace9-fc2b00669c75",
+        "367c5353-ed20-430b-b767-c3e5d47f28ad",
+        "4e39f67f-383f-44d4-b5f8-212d4cc29bb0",
+        "15946bc6-7e80-42d2-99a3-5a3793b24d2e"
+      ]
+    },
+    "41cb5d67-4911-4bef-aad5-d8ee9c582208": {
+      "http": 200,
+      "count": 7,
+      "has_five": true,
+      "has_139": true,
+      "ids": [
+        "b31c7752-031f-4b8b-9b6e-82dd0aaed2cb",
+        "9f9df312-32a9-4999-ace9-fc2b00669c75",
+        "367c5353-ed20-430b-b767-c3e5d47f28ad",
+        "4e39f67f-383f-44d4-b5f8-212d4cc29bb0",
+        "15946bc6-7e80-42d2-99a3-5a3793b24d2e",
+        "dacaf768-97ab-4ea6-90b9-869ae99efb78",
+        "8a23259b-b670-4ace-aa5a-89cad332c0da"
+      ]
+    }
+  },
+  "fetched_at": "2026-09-30T19:08:53.974Z"
+}

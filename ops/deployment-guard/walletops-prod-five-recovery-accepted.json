@@ -1,0 +1,152 @@
+{
+  "id": "walletops-prod-five-recovery-accepted",
+  "verdict": "FREEDOM EXISTING $5 WALLET FUNDING — LOCAL RECOVERY ACCEPTED",
+  "captured_at": "2026-09-30T19:11:30Z",
+  "workstream_id": "walletops-prod-five-recovery-2d41",
+  "branch": "cursor/walletops-prod-five-recovery-2d41",
+  "helper": "reconcileWalletFundingTransfer",
+  "oneshot": "checksops-prod-wallet-fund-recover-2d41",
+  "do_not_promote_frontend": true,
+  "A_provider_status": {
+    "provider_transfer_id": "9f9df312-32a9-4999-ace9-fc2b00669c75",
+    "status": "pending",
+    "ach_status": "originated",
+    "traceNumber": "273976360896947"
+  },
+  "B_provider_amount_source_dest": {
+    "amount_cents": 500,
+    "source": "a02c1c81-9ca6-434d-accc-ea4471a70ef2",
+    "destination": "744ea734-f5e3-4b31-bb92-38f85fd29b91",
+    "match": true
+  },
+  "C_pre_recovery_local_row_count": 1,
+  "D_duplicate_check": {
+    "verdict": "EXISTING_SINGLE_ROW",
+    "note": "One local payment_transfers row already held provider_transfer_id 9f9df312. Environment column is sandbox (original oneshot persist). Production-filtered candidate query was empty. Helper finds by provider_transfer_id and therefore UPDATEd that row. No second row inserted.",
+    "existing_id": "63f892d9-a0f4-4f62-9373-262d6c361c90",
+    "existing_environment": "sandbox",
+    "ambiguous": false
+  },
+  "E_reconciliation_payload": {
+    "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+    "provider": "moov",
+    "environment": "production",
+    "status": "pending",
+    "provider_status": "pending",
+    "amount_cents": 500,
+    "platform_fee_cents": 0,
+    "net_amount_cents": 500,
+    "speed": "standard",
+    "description": "Balance funding",
+    "source_tenant_account_id": "60922058-7eca-4889-81dd-5720d7b9de96",
+    "source_payment_method_id": "8eb5b26e-6f66-435c-a578-880fb7fc14dd",
+    "destination_payment_method_id": null,
+    "wallet_id": "473ceaca-3534-467b-8d92-49baa53f6c68",
+    "leg_role": "wallet_funding",
+    "provider_transfer_id": "9f9df312-32a9-4999-ace9-fc2b00669c75",
+    "provider_metadata": {
+      "source_payment_method_id": "a02c1c81-9ca6-434d-accc-ea4471a70ef2",
+      "destination_payment_method_id": "744ea734-f5e3-4b31-bb92-38f85fd29b91",
+      "checksops_kind": "wallet_funding"
+    }
+  },
+  "F_method": "reconcileWalletFundingTransfer → UPDATE existing row (STATUS_RECONCILE_FIELDS only). Environment left unchanged because it is outside the helper contract.",
+  "G_post_recovery_local_row": {
+    "id": "63f892d9-a0f4-4f62-9373-262d6c361c90",
+    "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+    "environment": "sandbox",
+    "status": "pending",
+    "provider_status": "pending",
+    "amount_cents": 500,
+    "leg_role": "wallet_funding",
+    "source_payment_method_id": "8eb5b26e-6f66-435c-a578-880fb7fc14dd",
+    "destination_payment_method_id": null,
+    "provider_metadata": {
+      "checksops_kind": "wallet_funding",
+      "source_payment_method_id": "a02c1c81-9ca6-434d-accc-ea4471a70ef2",
+      "destination_payment_method_id": "744ea734-f5e3-4b31-bb92-38f85fd29b91"
+    },
+    "provider_transfer_id": "9f9df312-32a9-4999-ace9-fc2b00669c75",
+    "wallet_id": "473ceaca-3534-467b-8d92-49baa53f6c68",
+    "idempotency_key": "wallet-fund:2eff5f1a-929d-4ce3-9a8b-cd96b98df42a:operating:500"
+  },
+  "H_post_recovery_row_count": 1,
+  "I_second_run": {
+    "action": "update",
+    "row_id": "63f892d9-a0f4-4f62-9373-262d6c361c90",
+    "row_count": 1,
+    "no_second_row": true,
+    "no_second_provider_transaction": true
+  },
+  "J_provider_transfer_count": {
+    "freedom_before": 5,
+    "freedom_after": 5,
+    "platform_before": 7,
+    "platform_after": 7
+  },
+  "K_proof_no_new_moov_transfer": {
+    "same_id": "9f9df312-32a9-4999-ace9-fc2b00669c75",
+    "freedom_ids_unchanged": true,
+    "platform_ids_unchanged": true,
+    "provider_POST": 0
+  },
+  "L_139_untouched": {
+    "provider_transfer_id": "b31c7752-031f-4b8b-9b6e-82dd0aaed2cb",
+    "local_id": "ab2895c9-2ba8-4c21-a818-7f83abdb068c",
+    "billing_id": "72b622f9-b68f-4032-a971-a854dbcfbf57",
+    "local_md5": "237e22e510b22b16a5522ba8f1e96999",
+    "billing_md5": "f5e73c67db0a7bdfd954fa43b5618055",
+    "billing_status": "due",
+    "untouched": true
+  },
+  "M_other_payment_transfers_unchanged": {
+    "other_count": 1,
+    "other_hash": "128c2555c5287e1d2cefcff920d55cb6",
+    "untouched": true
+  },
+  "N_billing_wallet_bank_unchanged": {
+    "billing_untouched": true,
+    "wallets_untouched": true,
+    "banks_untouched": true,
+    "wallet_available_cents": 0,
+    "bank_id": "8eb5b26e-6f66-435c-a578-880fb7fc14dd"
+  },
+  "O_production_spa": {
+    "before": "/assets/index-C_fh5VBD.js",
+    "after": "/assets/index-C_fh5VBD.js",
+    "index_html_sha256": "d0d59415d6692713f73b8edabefec10a261f1b7a85d6f4a6abd719f9011b3eb4",
+    "entry_sha256": "a357373bef9e41b004f887ee312ca239f64236706c826afb69400312e6fbad22",
+    "unchanged": true
+  },
+  "P_lambda": {
+    "function_name": "checksops-production-prep-api",
+    "before": "pxZj4G6pGntJrkcRO5uNNEbiyvDpCOKPiWAboDnPvBA=",
+    "after": "pxZj4G6pGntJrkcRO5uNNEbiyvDpCOKPiWAboDnPvBA=",
+    "RevisionId": "3bccd144-4e61-422f-8151-9ed0fe713aac",
+    "unchanged": true
+  },
+  "Q_provider_financial_writes": {
+    "POST": 0,
+    "PATCH": 0,
+    "PUT": 0,
+    "DELETE": 0,
+    "oauth_token_posts_only": true
+  },
+  "R_db_writes": {
+    "tables": ["payment_transfers"],
+    "operation": "UPDATE existing 63f892d9 only",
+    "inserts": 0,
+    "rows_modified": 1,
+    "second_run_same_row": true
+  },
+  "S_expected_walletops_after_frontend_promotion": {
+    "pending_in": "+$5.00",
+    "pending_out": "$0.00",
+    "recent_activity": "Wallet Funding · Wells Fargo ••••4573 → Freedom Adjustment Wallet · $5.00 · pending",
+    "billing_139": "ChecksOps Billing / September 2026 / $139 / wallet $0 + bank $139 / due",
+    "note": "Provider status is still pending. WalletOps transfer reads are tenant-scoped, so the sandbox-labeled recovered row is visible after the accepted frontend is promoted. Destination PM now lives in provider_metadata so classifyWalletRelativeTransfer returns pending_in."
+  },
+  "T_production_frontend_deployment_status": "UNCHANGED — not promoted",
+  "stop": true,
+  "do_not_promote_frontend_yet": true
+}
