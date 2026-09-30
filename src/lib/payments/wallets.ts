@@ -1,4 +1,10 @@
 import { supabase } from "@/integrations/supabase/client";
+import {
+  PaymentWalletSelectionError,
+  resolveWalletOpsEnvironment,
+  selectPaymentWallet,
+  type PaymentWalletRow,
+} from "@/lib/payments/selectPaymentWallet";
 
 /**
  * Provider-agnostic access to organization balances (wallets).
@@ -106,15 +112,38 @@ export async function fundWallet(input: {
 export async function readWallet(
   tenantId: string,
   walletType: WalletType = "operating",
+  environment?: string | null,
 ): Promise<Wallet | null> {
+  const hostname = typeof window === "undefined" ? "" : window.location.hostname;
+  const walletEnvironment = resolveWalletOpsEnvironment({
+    hostname,
+    tenantMoovEnvironment: environment,
+    appUrl: import.meta.env.VITE_APP_URL,
+  });
   const { data, error } = await supabase
     .from("payment_wallets")
     .select("*")
     .eq("tenant_id", tenantId)
     .eq("wallet_type", walletType)
-    .maybeSingle();
+    .eq("environment", walletEnvironment);
   if (error) throw error;
-  return (data as Wallet) ?? null;
+  let row: PaymentWalletRow | null = null;
+  try {
+    row = selectPaymentWallet((data ?? []) as PaymentWalletRow[], {
+      tenantId,
+      walletType,
+      environment: walletEnvironment,
+    });
+  } catch (selectionError) {
+    if (
+      !(selectionError instanceof PaymentWalletSelectionError)
+      || selectionError.code !== "ambiguous_wallet"
+    ) {
+      throw selectionError;
+    }
+    return null;
+  }
+  return (row as Wallet) ?? null;
 }
 
 /** Opens a per-matter sub-ledger inside a trust balance. */
