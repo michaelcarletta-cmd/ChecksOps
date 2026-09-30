@@ -1,0 +1,91 @@
+{
+  "workstream_id": "walletops-activity-recovery-prod-2d41",
+  "branch": "cursor/walletops-activity-recovery-prod-2d41",
+  "commit": "9afb57fe52a42c0a84e4e07b3a7618c20c0d815c",
+  "operator": "cursor-cloud-agent",
+  "target_environment": "production",
+  "target_component": "production-spa",
+  "deployment_type": "spa-promote",
+  "owned_components": [
+    "src/lib/payments/selectPaymentWallet.ts",
+    "src/lib/payments/reconcileWalletFundingTransfer.ts",
+    "src/hooks/useWalletOps.ts",
+    "src/hooks/usePaymentProviderEligibility.ts",
+    "src/lib/payments/wallets.ts",
+    "src/pages/WalletOps.tsx",
+    "scripts/test-walletops-layout.mjs",
+    "aws/tests/walletops-wallet-select.test.mjs",
+    "aws/tests/walletops-wallet-funding-reconcile.test.mjs",
+    "aws/tests/walletops-wallet-relative.test.mjs",
+    "ops/deployment-guard/walletops-activity-recovery-prod-source-composition.json",
+    "ops/deployment-guard/walletops-activity-recovery-prod-candidate.json",
+    "index.html"
+  ],
+  "frontend_workstreams": ["walletops-activity-recovery-prod-2d41"],
+  "accepted_composition": true,
+  "accepted_source_composition": true,
+  "source_composition_manifest": "ops/deployment-guard/walletops-activity-recovery-prod-source-composition.json",
+  "clean_build": true,
+  "dist": {
+    "clean_build": true,
+    "origin": "fresh-clean-build",
+    "path": "/tmp/walletops-activity-recovery-prod-src/dist"
+  },
+  "production_fingerprint": {
+    "index_html_sha256": "d0d59415d6692713f73b8edabefec10a261f1b7a85d6f4a6abd719f9011b3eb4",
+    "entry_bundle": "/assets/index-C_fh5VBD.js",
+    "etag": "4c0584f350c68f75a4a09e0b3ced9576",
+    "last_modified": "2026-09-30T18:06:18+00:00",
+    "version_id": "VrLJwkt.ge_P4S2pjYAX5YX_uAoP8A6F"
+  },
+  "preflight": {
+    "index_html_sha256": "d0d59415d6692713f73b8edabefec10a261f1b7a85d6f4a6abd719f9011b3eb4",
+    "entry_bundle": "/assets/index-C_fh5VBD.js",
+    "etag": "4c0584f350c68f75a4a09e0b3ced9576",
+    "last_modified": "2026-09-30T18:06:18+00:00",
+    "version_id": "VrLJwkt.ge_P4S2pjYAX5YX_uAoP8A6F"
+  },
+  "preflight_live_fingerprint": {
+    "index_html_sha256": "d0d59415d6692713f73b8edabefec10a261f1b7a85d6f4a6abd719f9011b3eb4",
+    "entry_bundle": "/assets/index-C_fh5VBD.js",
+    "etag": "4c0584f350c68f75a4a09e0b3ced9576",
+    "last_modified": "2026-09-30T18:06:18+00:00",
+    "version_id": "VrLJwkt.ge_P4S2pjYAX5YX_uAoP8A6F"
+  },
+  "immediately_before": {
+    "index_html_sha256": "d0d59415d6692713f73b8edabefec10a261f1b7a85d6f4a6abd719f9011b3eb4",
+    "entry_bundle": "/assets/index-C_fh5VBD.js",
+    "etag": "4c0584f350c68f75a4a09e0b3ced9576",
+    "last_modified": "2026-09-30T18:06:18+00:00",
+    "version_id": "VrLJwkt.ge_P4S2pjYAX5YX_uAoP8A6F"
+  },
+  "immediately_before_fingerprint": {
+    "index_html_sha256": "d0d59415d6692713f73b8edabefec10a261f1b7a85d6f4a6abd719f9011b3eb4",
+    "entry_bundle": "/assets/index-C_fh5VBD.js",
+    "etag": "4c0584f350c68f75a4a09e0b3ced9576",
+    "last_modified": "2026-09-30T18:06:18+00:00",
+    "version_id": "VrLJwkt.ge_P4S2pjYAX5YX_uAoP8A6F"
+  },
+  "staging_acceptance": {
+    "ok": true,
+    "reference": "ops/deployment-guard/walletops-activity-recovery-staging-accepted.json"
+  },
+  "approval": {
+    "approved": true,
+    "workstream_id": "walletops-activity-recovery-prod-2d41",
+    "inherited": false,
+    "from_previous_workstream": false
+  },
+  "contract_results": {
+    "review-claim-save": { "ok": true, "detail": "wave1-review-patches 15/15" },
+    "claim-ledger": { "ok": true, "detail": "claim-ledger-accepted-contract 4/4" },
+    "signature-requests": { "ok": true, "detail": "parity-signature-submit 5/5" },
+    "check-files": { "ok": true, "detail": "check-image-invariants 2/2" },
+    "check-command-center-responsive": { "ok": true, "detail": "test-walletops-layout 12/12 including Item #4 and environment-aware wallet reads" },
+    "moov": { "ok": true, "detail": "file-rules 20/21 pre-existing invalid-purpose fail; not introduced by this workstream" },
+    "checkalt": { "ok": true, "detail": "no CheckAlt files changed" },
+    "tenant-isolation": { "ok": true, "detail": "tenant-security-compliance 6/6 plus wallet-relative and wallet-select cross-tenant tests" }
+  },
+  "restore_previous_index": false,
+  "reclaim_staging": false
+}
