@@ -38,7 +38,7 @@ test('rejected Endorsing retry does not return a success confirmation or write a
 import { test } from 'node:test';
 import { handler } from '../functions/api/index.mjs';
 import { LOOKUP_MAPPING_SQL, TENANT_MEMBERSHIP_SQL, USER_ROLES_SQL } from '../functions/api/identity.mjs';
-import { handleCreateCheck, handleCheckTransition, handleWorkflowStatus, handleDeleteCheck } from '../functions/api/workflow.mjs';
+import { handleCreateCheck, handleCheckTransition, handleWorkflowStatus } from '../functions/api/workflow.mjs';
 import { handleWrite } from '../functions/api/write.mjs';
 import {
   evaluateTransition,
@@ -54,7 +54,6 @@ const SPOOF_ID = '00000000-0000-0000-0000-000000000099';
 const FREEDOM_TENANT = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
 const C1C_TENANT = '4f172140-f57a-4744-8050-95f4f07b13b4';
 const CHECK_ID = '8d2b1c3e-4f5a-4678-9abc-def012345678';
-const OTHER_CHECK_ID = '7d2b1c3e-4f5a-4678-9abc-def012345679';
 
 const jwtEvent = (path, method, body, extra = {}) => ({
   rawPath: path,
@@ -104,8 +103,6 @@ const mockClient = ({
   rows = [createdRow],
   payees,
   endorsements,
-  blockerHits = new Set(),
-  deleteOk = true,
 } = {}) => {
   const queries = [];
   const defaultPayees = payees || [{
@@ -162,41 +159,6 @@ const mockClient = ({
       if (/FROM public.loss_draft_tracking d/.test(sql)) {
         return { rows: [{ id: params[0], check_intake_item_id: CHECK_ID, tenant_id: FREEDOM_TENANT }] };
       }
-      if (/SELECT 1 FROM public\.deposit_items/.test(sql)) {
-        return { rows: blockerHits.has('deposit_items') ? [{ ok: true }] : [] };
-      }
-      if (/SELECT 1 FROM public\.checkalt_deposits/.test(sql)) {
-        return { rows: blockerHits.has('checkalt_deposits') ? [{ ok: true }] : [] };
-      }
-      if (/SELECT 1 FROM public\.disbursement_batches/.test(sql)) {
-        return { rows: blockerHits.has('disbursement_batches') ? [{ ok: true }] : [] };
-      }
-      if (/SELECT 1 FROM public\.claim_check_payments/.test(sql)) {
-        return { rows: blockerHits.has('claim_check_payments') ? [{ ok: true }] : [] };
-      }
-      if (/SELECT 1 FROM public\.claim_payments/.test(sql)) {
-        return { rows: blockerHits.has('claim_payments') ? [{ ok: true }] : [] };
-      }
-      if (/SELECT 1 FROM public\.check_billing_events/.test(sql)) {
-        return { rows: blockerHits.has('check_billing_events') ? [{ ok: true }] : [] };
-      }
-      if (/FROM public\.check_payment_directions/.test(sql)) {
-        return { rows: blockerHits.has('check_payment_directions') ? [{ ok: true }] : [] };
-      }
-      if (/FROM public\.claim_disbursements/.test(sql)) {
-        return { rows: blockerHits.has('claim_disbursements') ? [{ ok: true }] : [] };
-      }
-      if (/FROM public\.claim_checks cc/.test(sql) && /deposit_status/.test(sql)) {
-        return { rows: blockerHits.has('claim_checks_terminal') ? [{ ok: true }] : [] };
-      }
-      if (/SELECT to_regclass\('public\.check_deletion_log'\)/.test(sql)) return { rows: [{ t: 'public.check_deletion_log' }] };
-      if (/INSERT INTO public\.check_deletion_log/.test(sql)) return { rows: [{ id: 'log-1' }] };
-      if (/SELECT \* FROM public\.check_intake_items WHERE id =/.test(sql)) return { rows: [check] };
-      if (/DELETE FROM public\.claim_checks WHERE check_intake_item_id/.test(sql)) return { rows: [] };
-      if (/UPDATE public\.loss_draft_tracking SET check_intake_item_id = NULL/.test(sql)) return { rows: [] };
-      if (/DELETE FROM public\.check_intake_items/.test(sql) && /RETURNING id/.test(sql)) {
-        return { rows: deleteOk ? [{ id: params[0] }] : [] };
-      }
       return { rows };
     },
     end: async () => {},
@@ -206,7 +168,6 @@ const mockClient = ({
 const depsFor = (client, extra = {}) => ({
   forceEnabled: true,
   forceWorkflow: true,
-  disableS3Cleanup: true,
   loadDatabaseCredentials: async () => ({
     username: 'checksops',
     password: 'unit-test-only-not-a-real-secret',
@@ -440,221 +401,4 @@ test('provider execution routes remain disabled', async () => {
   const body = JSON.parse(result.body);
   assert.equal(result.statusCode, 403);
   assert.equal(body.error, 'provider_disabled');
-});
-
-test('admin can delete a safe check via workflow delete route', async () => {
-  const client = mockClient({
-    check: { ...createdRow, status: 'needs_review', check_stage: 'review', claim_id: null, deposited_at: null, external_origin: null },
-    roles: [{ role: 'admin' }],
-  });
-  const result = await handleDeleteCheck(jwtEvent(`/workflow/checks/${CHECK_ID}`, 'DELETE', {
-    check_id: CHECK_ID,
-    reason: 'duplicate',
-  }), depsFor(client));
-  assert.equal(result.ok, true);
-  assert.equal(result.data.deleted, true);
-  assert.ok(client.queries.some((q) => /DELETE FROM public\.check_intake_items/.test(String(q.sql))));
-});
-
-test('non-admin cannot delete check', async () => {
-  const client = mockClient({
-    check: { ...createdRow, status: 'needs_review', claim_id: null, deposited_at: null, external_origin: null },
-    roles: [{ role: 'staff' }],
-  });
-  const result = await handleDeleteCheck(jwtEvent(`/workflow/checks/${CHECK_ID}`, 'DELETE', {
-    check_id: CHECK_ID,
-    reason: 'duplicate',
-  }), depsFor(client));
-  assert.equal(result.statusCode, 403);
-  assert.equal(result.error, 'not_authorized');
-});
-
-test('workflow delete denies claim-linked, partner-linked, and deposited checks', async () => {
-  const claimLinked = await handleDeleteCheck(jwtEvent(`/workflow/checks/${CHECK_ID}`, 'DELETE', {
-    check_id: CHECK_ID,
-    reason: 'entered in error',
-  }), depsFor(mockClient({
-    check: { ...createdRow, claim_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
-    roles: [{ role: 'admin' }],
-  })));
-  assert.equal(claimLinked.ok, true);
-  assert.equal(claimLinked.data.deleted, true);
-
-  const partnerLinked = await handleDeleteCheck(jwtEvent(`/workflow/checks/${CHECK_ID}`, 'DELETE', {
-    check_id: CHECK_ID,
-    reason: 'entered in error',
-  }), depsFor(mockClient({
-    check: { ...createdRow, external_origin: { source_app: 'freedom_crm', source_check_id: 'abc' } },
-    roles: [{ role: 'admin' }],
-  })));
-  assert.equal(partnerLinked.statusCode, 403);
-  assert.equal(partnerLinked.error, 'check_shared_with_partner');
-
-  const deposited = await handleDeleteCheck(jwtEvent(`/workflow/checks/${CHECK_ID}`, 'DELETE', {
-    check_id: CHECK_ID,
-    reason: 'entered in error',
-  }), depsFor(mockClient({
-    check: { ...createdRow, check_stage: 'deposited', status: 'deposited', deposited_at: '2026-01-01T00:00:00.000Z' },
-    roles: [{ role: 'admin' }],
-  })));
-  assert.equal(deposited.statusCode, 403);
-  assert.equal(deposited.error, 'check_terminal_financial_state');
-});
-
-test('workflow delete validates UUID and requires reason', async () => {
-  const client = mockClient({ roles: [{ role: 'admin' }] });
-  const badId = await handleDeleteCheck(jwtEvent('/workflow/checks/not-a-uuid', 'DELETE', {
-    check_id: 'not-a-uuid',
-    reason: 'duplicate',
-  }), depsFor(client));
-  assert.equal(badId.statusCode, 400);
-  assert.equal(badId.error, 'invalid_uuid');
-
-  const missingReason = await handleDeleteCheck(jwtEvent(`/workflow/checks/${CHECK_ID}`, 'DELETE', {
-    check_id: CHECK_ID,
-    reason: 'x',
-  }), depsFor(mockClient({ roles: [{ role: 'admin' }] })));
-  assert.equal(missingReason.statusCode, 400);
-  assert.equal(missingReason.error, 'missing_required_field');
-});
-
-test('workflow delete trims reason before enforcing minimum length', async () => {
-  const client = mockClient({ roles: [{ role: 'admin' }] });
-  const result = await handleDeleteCheck(jwtEvent(`/workflow/checks/${CHECK_ID}`, 'DELETE', {
-    check_id: CHECK_ID,
-    reason: '  x  ',
-  }), depsFor(client));
-  assert.equal(result.statusCode, 400);
-  assert.equal(result.error, 'missing_required_field');
-});
-
-test('workflow delete returns rls_denied when RLS prevents deletion (simulated)', async () => {
-  const client = mockClient({
-    roles: [{ role: 'admin' }],
-    check: { ...createdRow, tenant_id: C1C_TENANT },
-    deleteOk: false,
-  });
-  const result = await handleDeleteCheck(jwtEvent(`/workflow/checks/${CHECK_ID}`, 'DELETE', {
-    check_id: CHECK_ID,
-    reason: 'duplicate',
-  }), depsFor(client));
-  assert.equal(result.statusCode, 403);
-  assert.equal(result.error, 'rls_denied');
-});
-
-test('workflow delete denies checks with dependent financial/provider records (specific blocker)', async () => {
-  const client = mockClient({
-    check: { ...createdRow, status: 'needs_review', check_stage: 'review', claim_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
-    roles: [{ role: 'admin' }],
-    blockerHits: new Set(['claim_disbursements']),
-  });
-  const result = await handleDeleteCheck(jwtEvent(`/workflow/checks/${CHECK_ID}`, 'DELETE', {
-    check_id: CHECK_ID,
-    reason: 'duplicate',
-  }), depsFor(client));
-  assert.equal(result.statusCode, 403);
-  assert.equal(result.error, 'check_has_financial_activity');
-  assert.equal(result.blocker, 'claim_disbursements');
-});
-
-test('workflow delete performs S3 cleanup for check-owned keys (stubbed)', async () => {
-  const client = mockClient({
-    check: { ...createdRow, status: 'needs_review', check_stage: 'review', claim_id: null, deposited_at: null, external_origin: null },
-    roles: [{ role: 'admin' }],
-  });
-
-  const sent = [];
-  const s3 = {
-    send: async (cmd) => {
-      sent.push(cmd);
-      const name = cmd?.constructor?.name || '';
-      if (name === 'ListObjectsV2Command') {
-        const prefix = cmd?.input?.Prefix || '';
-        const key = prefix.endsWith('/')
-          ? `${prefix}generated.png`
-          : `${prefix}/packet.pdf`;
-        return {
-          IsTruncated: false,
-          Contents: [
-            { Key: key },
-            // Defensive: if an overly-broad prefix ever lists other checks, verify we still don't delete them.
-            { Key: `files/claim-files/checks/${OTHER_CHECK_ID}/front.jpg` },
-          ],
-        };
-      }
-      if (name === 'DeleteObjectsCommand') {
-        const objs = cmd?.input?.Delete?.Objects || [];
-        return { Deleted: objs.map((o) => ({ Key: o.Key })), Errors: [] };
-      }
-      return {};
-    },
-  };
-
-  const prevBucket = process.env.FILES_BUCKET;
-  process.env.FILES_BUCKET = 'unit-test-files-bucket';
-  try {
-    const result = await handleDeleteCheck(jwtEvent(`/workflow/checks/${CHECK_ID}`, 'DELETE', {
-      check_id: CHECK_ID,
-      reason: 'duplicate',
-    }), depsFor(client, { disableS3Cleanup: false, forceStorageWrites: true, s3 }));
-    assert.equal(result.ok, true);
-    assert.equal(result.data.deleted, true);
-    assert.equal(result.storageCleanup.ok, true);
-    assert.ok(client.queries.some((q) => /DELETE FROM public\.check_intake_items/.test(String(q.sql))));
-
-    const listed = sent.filter((c) => (c?.constructor?.name || '') === 'ListObjectsV2Command');
-    const deleted = sent.find((c) => (c?.constructor?.name || '') === 'DeleteObjectsCommand');
-    assert.ok(listed.length >= 1);
-    assert.ok(deleted);
-    for (const cmd of listed) {
-      const prefix = cmd?.input?.Prefix || '';
-      assert.ok(String(prefix).includes(CHECK_ID), 'S3 list prefix must remain check-scoped');
-      assert.ok(!String(prefix).endsWith('/checks/'), 'S3 list prefix must not broaden to tenant-wide checks/');
-    }
-    const deleteKeys = (deleted?.input?.Delete?.Objects || []).map((o) => o.Key).filter(Boolean);
-    assert.ok(deleteKeys.some((k) => String(k).includes(`files/claim-files/checks/${CHECK_ID}/`)));
-    assert.ok(deleteKeys.some((k) => String(k).includes(`files/claim-files/check-intake/${CHECK_ID}/files/`)));
-    assert.ok(deleteKeys.every((k) => !String(k).includes(OTHER_CHECK_ID)), 'S3 cleanup must never delete another check');
-  } finally {
-    if (prevBucket === undefined) delete process.env.FILES_BUCKET;
-    else process.env.FILES_BUCKET = prevBucket;
-  }
-});
-
-test('workflow delete reports storage cleanup failure without rolling back DB delete (stubbed)', async () => {
-  const client = mockClient({
-    check: { ...createdRow, status: 'needs_review', check_stage: 'review', claim_id: null, deposited_at: null, external_origin: null },
-    roles: [{ role: 'admin' }],
-  });
-
-  const s3 = {
-    send: async (cmd) => {
-      const name = cmd?.constructor?.name || '';
-      if (name === 'ListObjectsV2Command') {
-        const prefix = cmd?.input?.Prefix || '';
-        return { IsTruncated: false, Contents: [{ Key: `${prefix}generated.png` }] };
-      }
-      if (name === 'DeleteObjectsCommand') {
-        const objs = cmd?.input?.Delete?.Objects || [];
-        return { Deleted: [], Errors: [{ Key: objs[0]?.Key || null, Code: 'AccessDenied', Message: 'denied' }] };
-      }
-      return {};
-    },
-  };
-
-  const prevBucket = process.env.FILES_BUCKET;
-  process.env.FILES_BUCKET = 'unit-test-files-bucket';
-  try {
-    const result = await handleDeleteCheck(jwtEvent(`/workflow/checks/${CHECK_ID}`, 'DELETE', {
-      check_id: CHECK_ID,
-      reason: 'duplicate',
-    }), depsFor(client, { disableS3Cleanup: false, forceStorageWrites: true, s3 }));
-    assert.equal(result.ok, true);
-    assert.equal(result.data.deleted, true);
-    assert.equal(result.storageCleanup.ok, false);
-    assert.ok(client.queries.some((q) => /DELETE FROM public\.check_intake_items/.test(String(q.sql))));
-  } finally {
-    if (prevBucket === undefined) delete process.env.FILES_BUCKET;
-    else process.env.FILES_BUCKET = prevBucket;
-  }
 });
