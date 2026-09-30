@@ -41,15 +41,30 @@
       "bytes": 796240,
       "sha256": "8fe8caf15f55d20f6c7a6b71f14dd6e1b80d6b0fa384bb10a1e581fc17c6801f",
       "captured_at_utc": "2026-09-30T22:40:49Z",
+      "reread_at_utc": "2026-09-30T22:43:37Z",
+      "reread_http": 200,
+      "reread_sha256": "8fe8caf15f55d20f6c7a6b71f14dd6e1b80d6b0fa384bb10a1e581fc17c6801f",
       "restore_from": "b97a8dc6de16305c11b9e52e92ea167abdfabc8d tenantLogoUrl.ts + TenantLogo.tsx"
     },
     "unknown_checks": {
       "do_not_delete_or_modify": true,
       "primary_ui": "Bank Deposits Date unknown group (bankDepositDayKey null -> unknown)",
+      "verdict": "existing_records_exposed_or_mislabeled_by_spa",
       "verdict_without_db_select": "existing checkalt_deposits regrouped by SPA; six workstreams have no production check_intake_items insert",
+      "live_chunk": "BankDepositReconciliation-5yI_j5mi.js",
+      "live_chunk_sha256": "f70b1830dc9a7ce76e55ca9a7c332b092f7a6d907390e053d1da1f75c58f3a38",
+      "live_grouper": "cleared_at ?? submitted_at",
+      "qdji_chunk": "BankDepositReconciliation-CNd9vt9D.js",
+      "qdji_chunk_sha256": "d494d87c3fd2c31908402660228b069eaa25ab1f8fd5649dbe508259c968a718",
+      "qdji_grouper": "submitted_at only",
+      "live_and_qdji_chunk_insert_upsert_delete": 0,
       "ccc_unknown_insured_count_dsb": 4,
-      "ccc_unknown_insured_count_qdji": 4
-    }
+      "ccc_unknown_insured_count_qdji": 4,
+      "classification_test": "aws/tests/unknown-check-spa-relabel.test.mjs",
+      "checks_deleted_or_modified_this_task": 0
+    },
+    "reread_at_utc": "2026-09-30T22:43:34Z",
+    "reread_live_unchanged": true
   },
   "do_not_restore": [
     "/assets/index-BPbQUNFr.js",

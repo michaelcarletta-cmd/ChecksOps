@@ -168,9 +168,12 @@ base, then copy the seven WalletOps files from `9afb57fe` and the two
 | `save_claim_settlement_breakdown` | live settlement (#582) kept |
 | `checksops-production-host` | hostname-guard kept |
 | `environmentReady` | WalletOps recovery (#575) restored |
-| `tenantLogoUrl` | branding (#584) restored |
+| `Bank verified` and `Provider linked` | Moov account status (#581 `StakeholderAccountSettings.tsx`) |
+| `tenantLogoUrl` / `TenantLogo` | branding (#584) restored |
+| Freedom logo GET still 200 PNG sha256 `8fe8caf1…17c6801f` (or newer operator upload) | tenant logo bytes not deleted |
 | Insured Name / `submitted_at` grouping, not `payee_line` | deposits #5 + #584 |
 | billing consent persist path | item #1 from #581 |
+| Same `checkalt_deposits.id` set; no intake insert | unknown checks are existing rows |
 
 If any marker is missing: `SOURCE_COMPOSITION_REQUIRED`. Do not promote.
 
@@ -269,6 +272,10 @@ deleted**. Read-only GET
 at 2026-09-30T22:40:49Z returned HTTP 200 `image/png` 796240 bytes,
 PNG 3000×599, sha256
 `8fe8caf15f55d20f6c7a6b71f14dd6e1b80d6b0fa384bb10a1e581fc17c6801f`.
+Re-read 2026-09-30T22:43:37Z: same 200 PNG and sha256. Historical
+`index-QDJiUFF1.js` (sha256 `19ae149d…afd92c7`) still HTTPS-200 and
+contains `Bank verified` + `Provider linked`; live `index-DSbVZXu8.js`
+contains neither and has zero `tenantLogoUrl`.
 
 Acceptance checks:
 
@@ -329,13 +336,35 @@ SELECT d.id AS deposit_id,
 | `i.created_at >= 2026-09-30 20:15 UTC` | Treat as a **genuinely new check**; these six workstreams have **no** production insert path — investigate outside this compose |
 | Row exists only after a user upload in the window | New intake, not a compose bug; **do not delete** |
 
-Until that SELECT is run, code evidence says the unknown deposit group is
-**existing `checkalt_deposits`**, not new intake created by #575/#576/#581/#582/#579/#586.
+**Verdict (read-only, no SQL write, no check mutate):** these are
+**existing records exposed or mislabeled by the SPA**, not genuinely new
+intake created by the six workstreams.
 
-The recovered candidate **will still show Date unknown** for rows with
-null `submitted_at`. That is correct grouping, not a reason to delete
-those checks. Acceptance is: same deposit ids as the live query, no extra
-inserts, Insured Name column (not `payee_line`) on those existing rows.
+HTTPS re-read **2026-09-30T22:43:34Z** (still `DSbVZXu8` / S3
+`Jc2Nyp5T…`):
+
+| Artifact | SHA256 | Query | Grouper | insert/upsert/delete |
+|---|---|---|---|---|
+| Live `BankDepositReconciliation-5yI_j5mi.js` | `f70b1830dc9a7ce76e55ca9a7c332b092f7a6d907390e053d1da1f75c58f3a38` | `.from("checkalt_deposits").select(...)` | `cleared_at ?? submitted_at` | **0** |
+| Historical `BankDepositReconciliation-CNd9vt9D.js` (QDJi) | `d494d87c3fd2c31908402660228b069eaa25ab1f8fd5649dbe508259c968a718` | same select | `submitted_at` only (`groupDepositsBySubmissionDate`) | **0** |
+
+Same three existing fixture ids (`aws/tests/unknown-check-spa-relabel.test.mjs`):
+
+| Deposit id | submitted_at | cleared_at | Live DSb label | #581/#584 recover label |
+|---|---|---|---|---|
+| `dep-existing-both-dates` | set | set | dated | dated |
+| `dep-existing-cleared-only` | null | set | dated (cleared day) | **Date unknown** |
+| `dep-existing-neither-date` | null | null | **Date unknown** | **Date unknown** |
+
+#581 is the first SPA that **moved already-persisted deposits** into
+**Date unknown** whenever `submitted_at` is null. Live #582 put the
+cleared-day fallback back. Neither chunk creates rows. The recovered
+candidate **will still show Date unknown** for null `submitted_at`. That
+is correct grouping of the **same ids**, not a reason to delete.
+
+Operator SELECT above confirms `created_at` if a session exists. It is
+not required to classify the six-workstream writes: they have no
+production insert path. **Do not delete.**
 
 #### C2. Check Command Center `Unknown insured`
 

@@ -311,8 +311,16 @@ only if live pins still match or it recomposes.
    - Keep hostname-guard `index.html` and settlement intercept
 3. Prove the candidate entry contains: `save_claim_settlement_breakdown`,
    `checksops-production-host`, `environmentReady` (or equivalent recovery
-   markers), `tenantLogoUrl`, deposit submission-date grouping / Insured
-   Name (not `payee_line`). Fail closed if any accepted marker is absent
+   markers), `Bank verified` + `Provider linked`, `tenantLogoUrl`, deposit
+   submission-date grouping / Insured Name (not `payee_line`). Repeat the
+   Freedom logo GET
+   (`/prep/branding/logo/2eff5f1a-929d-4ce3-9a8b-cd96b98df42a`) and accept
+   only if it is still HTTP 200 PNG (sha256
+   `8fe8caf15f55d20f6c7a6b71f14dd6e1b80d6b0fa384bb10a1e581fc17c6801f` or a
+   newer operator upload). Classify “unknown” checks as existing
+   `checkalt_deposits` ids (see
+   `aws/tests/unknown-check-spa-relabel.test.mjs`); do not delete them.
+   Fail closed if any accepted marker is absent
    (`SOURCE_COMPOSITION_REQUIRED`).
 4. Lambda: overlay only members whose live hashes drifted from the
    accepted set. Fresh live ZIP. Never main `workflow.mjs`.
@@ -330,6 +338,18 @@ only if live pins still match or it recomposes.
 - Restore `DbYbvb6d` or `QDJiUFF1` over `DSbVZXu8`.
 - Treat PR #579 as a deployable recovery.
 - Infer production approval from this matrix.
+- Delete or modify any check / `checkalt_deposits` row while
+  investigating “unknown” checks.
+
+### Reported-symptom acceptance (required before apply)
+
+| Symptom | Live now (22:43:34Z still `DSbVZXu8`) | Recovered candidate must |
+|---|---|---|
+| Moov account status | Entry has **0** `Bank verified` / `Provider linked`. QDJi historical entry still has both. | Restore `84ba11f4` `StakeholderAccountSettings.tsx`. Bank-verified vs provider-linked stay distinct. Do not associate homeowner `2ad87468-…`. |
+| Tenant logo | Entry has **0** `tenantLogoUrl`. Logo GET still 200 PNG sha256 `8fe8caf1…17c6801f` (796240 bytes). | Restore `b97a8dc6` `tenantLogoUrl.ts` + `TenantLogo`. Bytes must still be present. |
+| “Unknown” checks | Live deposit chunk groups `cleared_at ?? submitted_at`. QDJi groups `submitted_at` only. Both are **select-only**. CCC `Unknown insured` count **4** on both. | Treat as **existing records** regrouped/mislabeled by the SPA. Same ids. **Do not delete.** |
+
+Classification test: `aws/tests/unknown-check-spa-relabel.test.mjs`.
 
 ---
 
