@@ -25,7 +25,10 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../.
 
 const DELETE_CHECK_FILES = Object.freeze([
   'aws/functions/api/workflow.mjs',
+  'aws/tests/api-workflow.test.mjs',
+  'aws/tests/frontend-admin-delete-check-dispatcher.test.mjs',
   'src/integrations/aws/deleteCheckBridge.ts',
+  'src/integrations/aws/client.ts',
   'aws/tests/frontend-delete-check-bridge.test.mjs',
   'ops/release-locks/contracts/delete-check-contract.json',
   'ops/release-locks/proof/delete-check-production-acceptance-2026-09-26.md',
@@ -92,8 +95,10 @@ test('delete-check-contract records accepted production provenance', () => {
 test('Delete Check capability markers remain intact (workflow + bridge)', () => {
   const workflow = read('aws/functions/api/workflow.mjs');
   const bridge = read('src/integrations/aws/deleteCheckBridge.ts');
+  const client = read('src/integrations/aws/client.ts');
   const workflowTests = read('aws/tests/api-workflow.test.mjs');
   const bridgeTests = read('aws/tests/frontend-delete-check-bridge.test.mjs');
+  const dispatcherTests = read('aws/tests/frontend-admin-delete-check-dispatcher.test.mjs');
 
   // 1. Admin-only.
   assert.match(workflow, /Only admins can delete checks/);
@@ -155,6 +160,14 @@ test('Delete Check capability markers remain intact (workflow + bridge)', () => 
   assert.match(bridge, /if \(reason\.length\) body\.reason = reason;/);
   assert.match(bridgeTests, /bridge sends reason \+ actor_id[\s\S]{0,40}\(trimmed\)/);
   assert.match(bridgeTests, /assert\.equal\(body\.reason, "duplicate"\)/);
+
+  // Dispatcher invariant: the actual runtime dispatch in client.ts must forward deleteBody (not {check_id} only).
+  assert.match(client, /import \{ buildWorkflowDeleteCheckBody \} from "\.\/deleteCheckBridge";/);
+  assert.match(client, /if \(name === "admin_delete_check"\) \{/);
+  assert.match(client, /const \{ checkId, body: deleteBody \} = buildWorkflowDeleteCheckBody\(args\);/);
+  assert.match(client, /body:\s*JSON\.stringify\(deleteBody\)/);
+  assert.match(dispatcherTests, /dispatcher forwards delete body from shared helper/);
+  assert.doesNotMatch(client, /JSON\.stringify\(\{\s*check_id\s*:\s*checkId\s*\}\)/);
 });
 
 test('delete-check lock introduces no new validator errors for this component', () => {
