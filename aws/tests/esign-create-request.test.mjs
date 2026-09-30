@@ -612,6 +612,7 @@ test('token_hash remains the public lookup and token mint is unchanged', () => {
   assert.match(esign, /SET access_token = \$2, token_hash = \$3, expires_at = \$4::timestamptz/);
   assert.doesNotMatch(esign, /access_token\s*=\s*NULL/i);
   assert.match(esign, /optionalUuid\(field\.id\)/);
-  assert.match(submit, /WHERE s\.token_hash = \$1/);
+  assert.match(submit, /aws_public_signature_by_token_hash/);
+  assert.match(submit, /hashToken\(token\)/);
   assert.doesNotMatch(submit, /WHERE[\s\S]*access_token\s*=/);
 });
