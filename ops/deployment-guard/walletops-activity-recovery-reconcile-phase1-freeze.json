@@ -1,0 +1,66 @@
+{
+  "id": "walletops-activity-recovery-reconcile-phase1-freeze",
+  "captured_at": "2026-09-30T18:47:00Z",
+  "writes_at_freeze": 0,
+  "git": {
+    "workspace_branch": "cursor/walletops-activity-recovery-2d41",
+    "workspace_head": "d855f2076b1648f49d7f17c74e0c25e1cc8ebb78",
+    "workspace_status": "clean",
+    "reconcile_branch": "cursor/walletops-activity-recovery-staging-2d41",
+    "reconcile_isolated_from": "ffb32e3b4c1a52b0660fa56184745e379537d1c6",
+    "reconcile_isolated_from_branch": "cursor/settings-billing-branding-deposits-51c8",
+    "recovery_source_head": "d855f2076b1648f49d7f17c74e0c25e1cc8ebb78"
+  },
+  "worktrees": [
+    { "path": "/workspace", "head": "d855f2076", "branch": "cursor/walletops-activity-recovery-2d41" },
+    { "path": "/tmp/walletops-staging-reconcile", "head": "ffb32e3b4", "branch": "cursor/walletops-activity-recovery-staging-2d41" },
+    { "path": "/tmp/ff-wt", "head": "e60b49e48", "note": "detached" },
+    { "path": "/tmp/inv7-prod-spa-src", "head": "4d0839849", "note": "detached" },
+    { "path": "/tmp/main-guarded-check", "head": "d5418ab63", "note": "detached" },
+    { "path": "/tmp/walletops-prod-spa-src", "head": "8e8fde63d", "note": "detached" },
+    { "path": "/tmp/walletops-spa-baseline", "head": "75e9297a9", "note": "detached" }
+  ],
+  "staging": {
+    "host": "staging.checksops.com",
+    "bucket": "checksops-staging-frontend-c48b",
+    "index_html_sha256": "21caa4e7988482e8c608495d8e69e72e6d956d8d3d6b6532bdd694790ca28d6b",
+    "entry_bundle": "/assets/index-DvVldu_B.js",
+    "entry_js_sha256": "fb88e40f0eae85c08d92511811e89ad2679d89a48818f7b9f4a1bef3b8045379",
+    "css": "/assets/index-CwBYjIQV.css",
+    "walletops": "/assets/WalletOps-0gB4KnAq.js",
+    "walletops_sha256": "4a0aa1baccf104ba7a0ebb3840225a2653377e070736e14dc11049c259d44da2",
+    "index_etag": "cb71d6998bb5edc80a6eca6c4418d312",
+    "index_last_modified": "2026-09-30T18:29:16+00:00",
+    "walletops_last_modified": "2026-09-30T18:28:37+00:00",
+    "entry_last_modified": "2026-09-30T18:28:55+00:00",
+    "unchanged_from_prior_stop": true,
+    "lambda": {
+      "function": "checksops-staging-api",
+      "CodeSha256": "//BfiiKna/KRIuX8NEPipSyagIVFxM/5BY7nTaT7OUs=",
+      "RevisionId": "3698b6c6-3d83-444b-ace3-0eb80e362adc",
+      "LastModified": "2026-09-30T18:25:59.000+0000",
+      "CodeSize": 11709071
+    }
+  },
+  "production_readonly": {
+    "host": "checksops.com",
+    "bucket": "checksops-production-frontend-806168576068",
+    "index_html_sha256": "d0d59415d6692713f73b8edabefec10a261f1b7a85d6f4a6abd719f9011b3eb4",
+    "entry_bundle": "/assets/index-C_fh5VBD.js",
+    "entry_js_sha256": "a357373bef9e41b004f887ee312ca239f64236706c826afb69400312e6fbad22",
+    "css": "/assets/index-CwQaUh9K.css",
+    "walletops": "/assets/WalletOps-2AGadvlz.js",
+    "walletops_sha256": "85a3b9776a2db63acb661545f2c006b74699224357f0be59db96349aee063439",
+    "index_etag": "4c0584f350c68f75a4a09e0b3ced9576",
+    "index_last_modified": "2026-09-30T18:06:18+00:00",
+    "index_version_id": "VrLJwkt.ge_P4S2pjYAX5YX_uAoP8A6F",
+    "walletops_last_modified": "2026-09-30T18:05:45+00:00",
+    "lambda": {
+      "function": "checksops-production-prep-api",
+      "CodeSha256": "pxZj4G6pGntJrkcRO5uNNEbiyvDpCOKPiWAboDnPvBA=",
+      "RevisionId": "3bccd144-4e61-422f-8151-9ed0fe713aac",
+      "LastModified": "2026-09-30T16:25:23.000+0000",
+      "CodeSize": 11704982
+    }
+  }
+}
