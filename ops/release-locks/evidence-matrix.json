@@ -180,18 +180,15 @@
       "open_pr_overlap": []
     },
     "settings-billing-branding-deposits": {
-      "classification": "STAGING_LOCKED_NOT_PRODUCTION",
-      "git_sha": "17fa334d69fb9ca673bcde462b5bb0632e42f3dc",
-      "merged_pr": 570,
+      "classification": "PRODUCTION_LOCKED",
+      "git_sha": "84ba11f4c5fbc5a98652768dc72cb1e58757ea14",
+      "merged_pr": 581,
       "merge_commit": null,
-      "deployed_artifact": "staging /assets/index-CEKjixtZ.js sha256 bd36849ef6b63f2d10b03225f2796427440baddd9c9caf508eff76ba2bc18fae; tooling-fix SHA 6059f03918cdba8858ad53a512aa030051bffb11; production apply not recorded as PRODUCTION_LOCKED",
+      "deployed_artifact": "production /assets/index-QDJiUFF1.js sha256 19ae149deecc2d06792dece4b27ba30bf198a146a4325645f6e4468d5afd92c7; Lambda JlChQagI3F26AEcQrFHRPvNsVLRGmO8nR9RKMK7ERJ0=; tooling-fix SHA 6059f03918cdba8858ad53a512aa030051bffb11; authenticated user acceptance NOT ESTABLISHED",
       "applied_migrations": "none; settings overlay does not apply SQL",
-      "environment": "staging",
-      "missing_evidence": [
-        "production live apply fingerprint after an authorized guarded apply",
-        "authenticated user acceptance (isolated HTTP login NOT ESTABLISHED)"
-      ],
-      "open_pr_overlap": ["#570", "#567", "#566"]
+      "environment": "production",
+      "missing_evidence": [],
+      "open_pr_overlap": ["#581", "#570", "#567", "#566"]
     },
     "production-spa": {
       "classification": "PRODUCTION_LOCKED",

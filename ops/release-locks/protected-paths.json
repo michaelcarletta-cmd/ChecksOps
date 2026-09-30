@@ -198,6 +198,7 @@
       "paths": [
         "scripts/lib/settings-billing-branding-deposits.mjs",
         "ops/release-locks/proof/settings-billing-branding-deposits-staging-acceptance.md",
+        "ops/release-locks/proof/settings-billing-branding-deposits-production-apply.md",
         "ops/release-locks/tests/settings-billing-branding-deposits.test.mjs",
         "ops/deployment-guard/settings-prod-spa-source-composition.json",
         "scripts/deployment-guard/preflight.mjs",

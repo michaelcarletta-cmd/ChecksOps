@@ -106,14 +106,18 @@ node scripts/production-deploy-guard.mjs --candidate path/to/fingerprint.json
 
 ## Settings / billing / branding / deposits
 
-`settings-billing-branding-deposits` is `STAGING_LOCKED_NOT_PRODUCTION`.
-Proof: `ops/release-locks/proof/settings-billing-branding-deposits-staging-acceptance.md`.
+`settings-billing-branding-deposits` is `PRODUCTION_LOCKED` for deployed-code
+verification of items #1, #2, and #5. Authenticated user acceptance remains
+**NOT ESTABLISHED**.
+Proof: `ops/release-locks/proof/settings-billing-branding-deposits-production-apply.md`.
 
 Recorded source:
 
-- Application candidate `17fa334d69fb9ca673bcde462b5bb0632e42f3dc`
+- Application candidate `84ba11f4c5fbc5a98652768dc72cb1e58757ea14`
+- Staging evidence `65609c6e333b76e1291bf3c87fa133d41d17481a`
 - SPA preflight composition-forwarding fix `6059f03918cdba8858ad53a512aa030051bffb11`
-- Staging acceptance: `/assets/index-CEKjixtZ.js`
+- Production SPA: `/assets/index-QDJiUFF1.js`
+- Production Lambda: `JlChQagI3F26AEcQrFHRPvNsVLRGmO8nR9RKMK7ERJ0=`
 
 Historical artifact hashes (including earlier production SPA pins and prior
 Lambda packages) are **provenance only**. They are not rollback targets.

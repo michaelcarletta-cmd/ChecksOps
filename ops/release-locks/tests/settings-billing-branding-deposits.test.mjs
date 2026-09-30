@@ -44,6 +44,7 @@ test('settings ownership group exists and does not claim WalletOps/OCR/signature
   assert.ok(!group.paths.some((rel) => rel.includes('partner-share')));
   assert.ok(group.paths.includes('scripts/lib/settings-billing-branding-deposits.mjs'));
   assert.ok(group.paths.includes('ops/release-locks/proof/settings-billing-branding-deposits-staging-acceptance.md'));
+  assert.ok(group.paths.includes('ops/release-locks/proof/settings-billing-branding-deposits-production-apply.md'));
   assert.ok(group.paths.includes('scripts/deployment-guard/preflight.mjs'));
   assert.ok(group.paths.includes('scripts/deployment-guard/lib/production.mjs'));
 
@@ -55,18 +56,21 @@ test('settings ownership group exists and does not claim WalletOps/OCR/signature
   }
 });
 
-test('settings component is staging-locked, not production-active, and records both SHAs', () => {
+test('settings component is production-locked with deployed-code evidence and records both SHAs', () => {
   const manifest = loadJson(path.join(ROOT, 'ops/release-locks/locked-components.json'));
   const component = manifest.components[SETTINGS_COMPONENT_ID];
-  assert.equal(component.classification, 'STAGING_LOCKED_NOT_PRODUCTION');
-  assert.equal(component.production_active, false);
+  assert.equal(component.classification, 'PRODUCTION_LOCKED');
+  assert.equal(component.production_active, true);
   assert.equal(component.source.git_sha, APPLICATION_CANDIDATE_SHA);
   assert.match(component.notes, new RegExp(TOOLING_FIX_SHA));
   assert.match(component.notes, /[Hh]istorical artifact hashes are provenance/);
   assert.match(component.notes, /reconcile/);
-  assert.ok(component.production_validation.evidence_refs.some((ref) => /staging/i.test(ref)));
+  assert.match(component.notes, /NOT ESTABLISHED/);
+  assert.match(component.notes, /item #5/);
+  assert.ok(component.production_validation.evidence_refs.some((ref) => /production-apply/i.test(ref)));
   assert.equal(component.artifact.name, STAGING_ACCEPTANCE.spa_bundle);
   assert.equal(component.artifact.hash, STAGING_ACCEPTANCE.spa_sha256);
+  assert.equal(component.artifact.name, COMPOSED_SPA_CANDIDATE.spa_bundle);
 });
 
 test('accepted settings/billing/branding/deposit and composition-preflight markers remain', () => {
@@ -127,29 +131,34 @@ test('historical restore and live drift fail closed', () => {
   assert.ok(reconcileErrors.some((row) => /homeowner/.test(row)));
 });
 
-test('production-deploy-guard refuses settings deploy and historical restore', () => {
+test('production-deploy-guard refuses historical restore and still requires live reconciliation', () => {
   const manifest = loadJson(path.join(ROOT, 'ops/release-locks/locked-components.json'));
   const component = manifest.components[SETTINGS_COMPONENT_ID];
-  assert.ok(compareSettingsCandidate(component, { deploy: true }).some((row) => /not PRODUCTION_LOCKED/.test(row)));
+  assert.equal(compareSettingsCandidate(component, {
+    deploy: true,
+    spa_bundle: COMPOSED_SPA_CANDIDATE.spa_bundle,
+    reconcile_with_live_source: true,
+  }).length, 0);
   assert.ok(compareSettingsCandidate(component, { spa_bundle: '/assets/index-BPbQUNFr.js' }).some((row) => /provenance/.test(row)));
+  assert.ok(compareSettingsCandidate(component, { spa_bundle: '/assets/index-DbYbvb6d.js' }).some((row) => /provenance/.test(row)));
   const candidate = {
     environment: 'production',
     approved: true,
     components: {
       [SETTINGS_COMPONENT_ID]: {
         deploy: true,
-        spa_bundle: COMPOSED_SPA_CANDIDATE.spa_bundle,
+        spa_bundle: '/assets/index-CEKjixtZ.js',
         reconcile_with_live_source: true,
       },
     },
   };
   const errors = compareCandidate(manifest, candidate);
-  assert.ok(errors.some((row) => /not PRODUCTION_LOCKED/.test(row)));
+  assert.ok(errors.some((row) => /provenance/.test(row)));
 });
 
 test('full release-lock manifest still validates after the settings lock', () => {
   const inputs = loadReleaseLockInputs(ROOT);
   const { errors } = validateReleaseLocks(inputs);
   assert.deepEqual(errors, []);
-  assert.equal(inputs.manifest.components[SETTINGS_COMPONENT_ID].classification, 'STAGING_LOCKED_NOT_PRODUCTION');
+  assert.equal(inputs.manifest.components[SETTINGS_COMPONENT_ID].classification, 'PRODUCTION_LOCKED');
 });

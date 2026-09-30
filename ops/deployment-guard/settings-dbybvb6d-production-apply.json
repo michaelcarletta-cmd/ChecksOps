@@ -1,0 +1,44 @@
+{
+  "id": "settings-dbybvb6d-production-apply",
+  "verdict": "PRODUCTION APPLIED — DEPLOYED-CODE VERIFIED; AUTHENTICATED ACCEPTANCE NOT ESTABLISHED",
+  "captured_at": "2026-09-30T20:36:44Z",
+  "workstream_id": "settings-billing-branding-deposits-51c8",
+  "branch": "cursor/compose-live-dbybvb6d-settings-51c8",
+  "candidate_sha": "84ba11f4c5fbc5a98652768dc72cb1e58757ea14",
+  "source_compose_sha": "2cd3cd2e7f366784986da0f635cf4827d8062fbf",
+  "staging_evidence_sha": "65609c6e333b76e1291bf3c87fa133d41d17481a",
+  "tooling_fix_sha": "6059f03918cdba8858ad53a512aa030051bffb11",
+  "item_numbering": {
+    "1": "Monthly billing bank-selection/consent persistence without initiating collection",
+    "2": "Company, invoice, and email branding persistence, including logo/color and sending-subdomain UI removal",
+    "5": "Deposit submission-date grouping, daily totals, expandable checks, and preserved exclusion filters",
+    "not_item_5": "Stakeholder Bank verified / Provider linked labels"
+  },
+  "do_not_restore": [
+    "/assets/index-C_fh5VBD.js",
+    "/assets/index-CEKjixtZ.js",
+    "/assets/index-DbYbvb6d.js"
+  ],
+  "production": {
+    "spa_bundle": "/assets/index-QDJiUFF1.js",
+    "spa_sha256": "19ae149deecc2d06792dece4b27ba30bf198a146a4325645f6e4468d5afd92c7",
+    "index_html_sha256": "5d35bd47b200ce7a5dbfd562bef1fcb4daa52f7ea89a1207e0b00e2150f12467",
+    "s3_version": "NNalIXDhhdaOovnqFQwZVSJ99V0BFZz9",
+    "invalidation_id": "IEEF8WPGTAFVCF2ZHV1LGGTRI8",
+    "walletops": "/assets/WalletOps-D5mOeN7Q.js",
+    "walletops_sha256": "7dd4e22371f35917ece1fe604f7ad5c5ac00f6ea34e21bc765eb68c6b96a0af3",
+    "deposits": "/assets/BankDepositReconciliation-CNd9vt9D.js",
+    "deposits_sha256": "d494d87c3fd2c31908402660228b069eaa25ab1f8fd5649dbe508259c968a718",
+    "banner_preserved": true,
+    "lambda_code_sha256": "JlChQagI3F26AEcQrFHRPvNsVLRGmO8nR9RKMK7ERJ0=",
+    "lambda_revision_id": "d00d17e6-1d0a-4418-a72e-23ab1ccd4157",
+    "lambda_before_code_sha256": "RaFQKBA489aj69N8e76eCQdzlJ2ijkA1YFNFPa+D9r4=",
+    "lambda_before_revision_id": "33e3f02d-3a97-4b8e-be31-4e104b7027f3",
+    "configuration_keys": 49,
+    "isolated_http_login": "NOT_ESTABLISHED",
+    "authenticated_user_acceptance": false,
+    "deployed_code_verification": true
+  },
+  "spa_role": "ChecksOpsProductionSpaDeploy",
+  "lambda_role": "ChecksOpsCursorCloudStaging"
+}

@@ -7,20 +7,22 @@ import { ACCEPTED_PRODUCTION_SPA, SUPERSEDED_PRODUCTION_SPA_BUNDLES, normalizeSp
 
 export const SETTINGS_COMPONENT_ID = 'settings-billing-branding-deposits';
 
-export const APPLICATION_CANDIDATE_SHA = '17fa334d69fb9ca673bcde462b5bb0632e42f3dc';
+export const APPLICATION_CANDIDATE_SHA = '84ba11f4c5fbc5a98652768dc72cb1e58757ea14';
 export const TOOLING_FIX_SHA = '6059f03918cdba8858ad53a512aa030051bffb11';
+export const STAGING_EVIDENCE_SHA = '65609c6e333b76e1291bf3c87fa133d41d17481a';
+export const SOURCE_COMPOSE_SHA = '2cd3cd2e7f366784986da0f635cf4827d8062fbf';
 export const WORKSTREAM_ID = 'settings-billing-branding-deposits-51c8';
 
 export const STAGING_ACCEPTANCE = Object.freeze({
   host: 'https://staging.checksops.com/',
-  spa_bundle: '/assets/index-CEKjixtZ.js',
-  spa_sha256: 'bd36849ef6b63f2d10b03225f2796427440baddd9c9caf508eff76ba2bc18fae',
-  index_html_sha256: 'bd9cb1cb5d8d76e3979d96101d0cfae5578beaeaadcd1670ebc2e9176a0fa6ee',
-  invalidation_id: 'I9YHW13PUL6USXM8D5QRO07W1X',
-  lambda_code_sha256: '//BfiiKna/KRIuX8NEPipSyagIVFxM/5BY7nTaT7OUs=',
-  lambda_revision_id: '3698b6c6-3d83-444b-ace3-0eb80e362adc',
+  spa_bundle: '/assets/index-QDJiUFF1.js',
+  spa_sha256: '19ae149deecc2d06792dece4b27ba30bf198a146a4325645f6e4468d5afd92c7',
+  index_html_sha256: '5d35bd47b200ce7a5dbfd562bef1fcb4daa52f7ea89a1207e0b00e2150f12467',
+  invalidation_id: 'I9LK4OKDTFVPSP9MXIRDZFRBTU',
+  lambda_code_sha256: '8qy9FEOQrvCQo/Wj/RmB3rsdpTXxz+OtAEwngfu9CgI=',
+  lambda_revision_id: '3f8b94fd-6244-42f6-898b-6a8837ed32b0',
   isolated_http_login: 'NOT_ESTABLISHED',
-  reference: 'https://staging.checksops.com/ /assets/index-CEKjixtZ.js index_html_sha256=bd9cb1cb5d8d76e3979d96101d0cfae5578beaeaadcd1670ebc2e9176a0fa6ee invalidation=I9YHW13PUL6USXM8D5QRO07W1X commit=17fa334d69fb9ca673bcde462b5bb0632e42f3dc',
+  reference: 'https://staging.checksops.com/ /assets/index-QDJiUFF1.js sha256=19ae149deecc2d06792dece4b27ba30bf198a146a4325645f6e4468d5afd92c7 invalidation=I9LK4OKDTFVPSP9MXIRDZFRBTU candidate=84ba11f4c5fbc5a98652768dc72cb1e58757ea14 evidence=65609c6e333b76e1291bf3c87fa133d41d17481a',
 });
 
 export const REVIEWED_PRODUCTION_LAMBDA = Object.freeze({
@@ -36,22 +38,25 @@ export const REVIEWED_PRODUCTION_SPA = Object.freeze({
 
 export const CURRENT_LIVE_PRODUCTION_SPA = Object.freeze({
   host: 'https://checksops.com',
-  spa_bundle: '/assets/index-DbYbvb6d.js',
-  spa_sha256: '1dfbe6c4d2a77027b7ac3cf89eece450b4d9b290b829a2d88ff0244332e6e47c',
-  index_html_sha256: '705f86309699aa6df4e15f12d0e8b0e3c31ff742eed18195859f7cd226e18040',
-  s3_version: 'FVo1QSfkEI4csW.r3iuuFu0rds.pzPKN',
-  last_modified: '2026-09-30T20:01:34+00:00',
-  walletops: '/assets/WalletOps-j3z9RyZ7.js',
-  source_pr: 575,
+  spa_bundle: '/assets/index-QDJiUFF1.js',
+  spa_sha256: '19ae149deecc2d06792dece4b27ba30bf198a146a4325645f6e4468d5afd92c7',
+  index_html_sha256: '5d35bd47b200ce7a5dbfd562bef1fcb4daa52f7ea89a1207e0b00e2150f12467',
+  s3_version: 'NNalIXDhhdaOovnqFQwZVSJ99V0BFZz9',
+  last_modified: '2026-09-30T20:35:47+00:00',
+  walletops: '/assets/WalletOps-D5mOeN7Q.js',
+  walletops_sha256: '7dd4e22371f35917ece1fe604f7ad5c5ac00f6ea34e21bc765eb68c6b96a0af3',
+  deposits: '/assets/BankDepositReconciliation-CNd9vt9D.js',
+  invalidation_id: 'IEEF8WPGTAFVCF2ZHV1LGGTRI8',
+  source_candidate: '84ba11f4c5fbc5a98652768dc72cb1e58757ea14',
 });
 
 export const CURRENT_LIVE_PRODUCTION_LAMBDA = Object.freeze({
   function_name: 'checksops-production-prep-api',
-  codeSha256: 'RaFQKBA489aj69N8e76eCQdzlJ2ijkA1YFNFPa+D9r4=',
-  revisionId: '33e3f02d-3a97-4b8e-be31-4e104b7027f3',
-  lastModified: '2026-09-30T19:56:32.000+0000',
-  source_pr: 576,
+  codeSha256: 'JlChQagI3F26AEcQrFHRPvNsVLRGmO8nR9RKMK7ERJ0=',
+  revisionId: 'd00d17e6-1d0a-4418-a72e-23ab1ccd4157',
+  lastModified: '2026-09-30T20:31:23.000+0000',
   workflow_sha256: 'bd18db71ab9277eea74add41f99ed5324841a163815a756578f60cfd50bf7bab',
+  overlay_members: 5,
 });
 
 export const COMPOSED_SPA_CANDIDATE = Object.freeze({
@@ -101,6 +106,7 @@ export const HISTORICAL_SPA_BUNDLES = Object.freeze([
   '/assets/index-CfEPSd2I.js',
   '/assets/index-C_fh5VBD.js',
   '/assets/index-CEKjixtZ.js',
+  '/assets/index-DbYbvb6d.js',
 ]);
 
 export const REGRESSION_MARKERS = Object.freeze({
@@ -113,6 +119,9 @@ export const REGRESSION_MARKERS = Object.freeze({
   branding_invoice_accent: { file: 'src/components/settings/CompanyBrandingSettings.tsx', must: 'invoice_accent_color' },
   production_banner_hide: { file: 'index.html', must: 'checksops-production-host' },
   deposits_exclusion: { file: 'src/components/deposit-ops/BankDepositReconciliation.tsx', must: 'rejected,returned,error,declined' },
+  deposits_submission_date_grouping: { file: 'src/components/deposit-ops/BankDepositReconciliation.tsx', must: 'groupDepositsBySubmissionDate' },
+  deposits_not_cleared_fallback: { file: 'src/components/deposit-ops/BankDepositReconciliation.tsx', must_not: 'cleared_at ?? submitted_at' },
+  billing_refuses_collection: { file: 'src/components/settings/TenantBillingAccountPanel.tsx', must: 'Billing save unexpectedly started a collection' },
   stakeholder_bank_verified: { file: 'src/components/disbursement/StakeholderAccountSettings.tsx', must: 'Bank verified' },
   stakeholder_provider_linked: { file: 'src/components/disbursement/StakeholderAccountSettings.tsx', must: 'Provider linked' },
   preflight_forwards_composition: { file: 'scripts/deployment-guard/preflight.mjs', must: 'accepted_source_composition: input.accepted_source_composition' },

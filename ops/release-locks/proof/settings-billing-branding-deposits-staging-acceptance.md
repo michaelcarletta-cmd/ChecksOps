@@ -4,9 +4,11 @@ This file records accepted behavior and provenance. It does **not** deploy,
 associate any homeowner account, change configuration or provider flags,
 initiate charges, move money, or send test client emails.
 
-Classification remains `STAGING_LOCKED_NOT_PRODUCTION` until a later reviewed
-PR attaches production-locked evidence. This lock does not lift the production
-hold for item #3 (homeowner Moov association).
+This file remains staging provenance. Production-locked deployed-code evidence
+is recorded in
+`ops/release-locks/proof/settings-billing-branding-deposits-production-apply.md`.
+This lock does not lift the hold for item #3 (homeowner Moov association).
+Authenticated user acceptance remains **NOT ESTABLISHED**.
 
 ## Source SHAs
 
