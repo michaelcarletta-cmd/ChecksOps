@@ -17,7 +17,7 @@ import { enforceS3Target, enforceScriptGuard } from './require-guard.mjs';
 import { evaluateIndexToctou } from './lib/spa-promote.mjs';
 import {
   COMPOSED_SPA_CANDIDATE,
-  REVIEWED_PRODUCTION_SPA,
+  CURRENT_LIVE_PRODUCTION_SPA,
   evaluateHistoricalRestore,
   evaluateReviewedBaselineMatch,
 } from '../lib/settings-billing-branding-deposits.mjs';
@@ -128,7 +128,7 @@ export function evaluateProductionSpaPolicy({
   distDir,
   immediatelyBefore,
   receiptFingerprint,
-  reviewed = REVIEWED_PRODUCTION_SPA,
+  reviewed = CURRENT_LIVE_PRODUCTION_SPA,
   composed = COMPOSED_SPA_CANDIDATE,
 } = {}) {
   if (environment !== 'production' || bucket === STAGING_BUCKET) {
@@ -155,7 +155,7 @@ export function evaluateProductionSpaPolicy({
   const restore = evaluateHistoricalRestore({ candidateBundle: candidateEntry });
   if (!restore.ok) return fail(restore.code, restore.message, { candidate_entry: candidateEntry });
   if (candidateEntry !== composed.spa_bundle) {
-    return fail(CODES.STALE_PACKAGE, 'candidate entry is not the reviewed composed SPA index-CEKjixtZ.js', {
+    return fail(CODES.STALE_PACKAGE, 'candidate entry is not the reviewed composed SPA built from current live source', {
       candidate_entry: candidateEntry,
       required_entry: composed.spa_bundle,
     });

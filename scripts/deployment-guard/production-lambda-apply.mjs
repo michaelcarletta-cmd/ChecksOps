@@ -15,7 +15,7 @@ import { evaluateFingerprintCas } from './lib/lambda-overlay.mjs';
 import { enforceScriptGuard, enforceSharedLambdaTarget } from './require-guard.mjs';
 import {
   OWNED_LAMBDA_MEMBERS,
-  REVIEWED_PRODUCTION_LAMBDA,
+  CURRENT_LIVE_PRODUCTION_LAMBDA,
   evaluateReviewedBaselineMatch,
 } from '../lib/settings-billing-branding-deposits.mjs';
 
@@ -57,7 +57,7 @@ export function evaluateProductionLambdaPolicy({
   zipPath,
   receiptFingerprint,
   immediatelyBefore,
-  reviewed = REVIEWED_PRODUCTION_LAMBDA,
+  reviewed = CURRENT_LIVE_PRODUCTION_LAMBDA,
 } = {}) {
   if (environment === 'staging' || functionName === 'checksops-staging-api') {
     return fail(CODES.GUARD_APPLY_FORBIDDEN, 'production-lambda-apply must never target staging');

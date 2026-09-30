@@ -55,10 +55,12 @@ export const CURRENT_LIVE_PRODUCTION_LAMBDA = Object.freeze({
 });
 
 export const COMPOSED_SPA_CANDIDATE = Object.freeze({
-  spa_bundle: '/assets/index-CEKjixtZ.js',
-  spa_sha256: 'bd36849ef6b63f2d10b03225f2796427440baddd9c9caf508eff76ba2bc18fae',
-  index_html_sha256: 'bd9cb1cb5d8d76e3979d96101d0cfae5578beaeaadcd1670ebc2e9176a0fa6ee',
-  based_on_live: ACCEPTED_PRODUCTION_SPA.spa_bundle,
+  spa_bundle: '/assets/index-QDJiUFF1.js',
+  spa_sha256: '19ae149deecc2d06792dece4b27ba30bf198a146a4325645f6e4468d5afd92c7',
+  index_html_sha256: '5d35bd47b200ce7a5dbfd562bef1fcb4daa52f7ea89a1207e0b00e2150f12467',
+  based_on_live: '/assets/index-DbYbvb6d.js',
+  walletops: '/assets/WalletOps-D5mOeN7Q.js',
+  deposits: '/assets/BankDepositReconciliation-CNd9vt9D.js',
 });
 
 export const OWNED_LAMBDA_MEMBERS = Object.freeze([

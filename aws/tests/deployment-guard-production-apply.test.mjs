@@ -14,8 +14,8 @@ import { evaluateProductionLambdaPolicy } from '../../scripts/deployment-guard/p
 import { evaluateProductionSpaPolicy } from '../../scripts/deployment-guard/production-spa-upload.mjs';
 import {
   COMPOSED_SPA_CANDIDATE,
-  REVIEWED_PRODUCTION_LAMBDA,
-  REVIEWED_PRODUCTION_SPA,
+  CURRENT_LIVE_PRODUCTION_LAMBDA,
+  CURRENT_LIVE_PRODUCTION_SPA,
 } from '../../scripts/lib/settings-billing-branding-deposits.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -30,8 +30,8 @@ function writeZip() {
 test('production Lambda policy refuses staging, missing confirm, missing zip, and live drift', () => {
   const zip = writeZip();
   const live = {
-    codeSha256: REVIEWED_PRODUCTION_LAMBDA.codeSha256,
-    revisionId: REVIEWED_PRODUCTION_LAMBDA.revisionId,
+    codeSha256: CURRENT_LIVE_PRODUCTION_LAMBDA.codeSha256,
+    revisionId: CURRENT_LIVE_PRODUCTION_LAMBDA.revisionId,
   };
   assert.equal(evaluateProductionLambdaPolicy({
     environment: 'staging',
@@ -85,15 +85,15 @@ test('production Lambda policy refuses staging, missing confirm, missing zip, an
 test('production SPA policy refuses historical restore, wrong entry, and live drift', () => {
   const dist = path.join(ROOT, 'dist');
   const live = {
-    spa_bundle: REVIEWED_PRODUCTION_SPA.spa_bundle,
-    entry_bundle: REVIEWED_PRODUCTION_SPA.spa_bundle,
-    spa_sha256: REVIEWED_PRODUCTION_SPA.spa_sha256,
-    index_html_sha256: REVIEWED_PRODUCTION_SPA.index_html_sha256,
-    s3_version: REVIEWED_PRODUCTION_SPA.s3_version,
+    spa_bundle: CURRENT_LIVE_PRODUCTION_SPA.spa_bundle,
+    entry_bundle: CURRENT_LIVE_PRODUCTION_SPA.spa_bundle,
+    spa_sha256: CURRENT_LIVE_PRODUCTION_SPA.spa_sha256,
+    index_html_sha256: CURRENT_LIVE_PRODUCTION_SPA.index_html_sha256,
+    s3_version: CURRENT_LIVE_PRODUCTION_SPA.s3_version,
   };
   const receipt = {
-    index_html_sha256: REVIEWED_PRODUCTION_SPA.index_html_sha256,
-    entry_bundle: REVIEWED_PRODUCTION_SPA.spa_bundle,
+    index_html_sha256: CURRENT_LIVE_PRODUCTION_SPA.index_html_sha256,
+    entry_bundle: CURRENT_LIVE_PRODUCTION_SPA.spa_bundle,
   };
 
   assert.equal(evaluateProductionSpaPolicy({
