@@ -86,6 +86,7 @@ test('#539 claim-ledger registry entry is complete enough for future deploys', (
   for (const rel of contract.tests || []) {
     assert.ok(fs.existsSync(path.join(ROOT, rel)), rel);
   }
+  assert.ok((contract.tests || []).includes('aws/tests/claim-ledger-link-or-create-rpc.test.mjs'));
 });
 
 test('accepted SQL 44 source is unchanged and still groups same-tenant OCR siblings', () => {
@@ -139,4 +140,9 @@ test('generic claims INSERT and claim_id UPDATE remain denied; linked Save stays
   assert.match(card, /Existing claim found/);
   assert.match(card, /Link Existing Ledger/);
   assert.match(card, /plan\.mode === "update_existing"/);
+
+  const workflow = read('aws/functions/api/workflow-rpc.mjs');
+  assert.match(workflow, /export const SAFE_WRITE_RPCS = new Set\([\s\S]*'claim_ledger_link_or_create'/);
+  assert.match(workflow, /const executeClaimLedgerLinkOrCreate/);
+  assert.match(workflow, /case 'claim_ledger_link_or_create'/);
 });

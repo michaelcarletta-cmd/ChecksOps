@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "fail_closed": true,
+  "notes": "Inspect the actual Lambda candidate composition (live ZIP + overlay sources), not unrelated source tests. A Signature, Moov, OCR, Claim #, or Mortgage Desk overlay must fail if it drops an accepted behavior.",
+  "markers": [
+    {
+      "id": "A",
+      "title": "peelReviewClaimNumber / SQL43 routing",
+      "members": ["write.mjs"],
+      "patterns": ["peelReviewClaimNumber", "review_save_detected_claim_number"]
+    },
+    {
+      "id": "B",
+      "title": "claims.claim_number update-only path",
+      "members": ["write-allowlist.mjs", "write-app-metadata.mjs"],
+      "all_of": [
+        { "member": "write-allowlist.mjs", "patterns": ["claims:", "claim_number"] },
+        { "member": "write-app-metadata.mjs", "patterns": ["executeClaimsNumberUpdate"] }
+      ]
+    },
+    {
+      "id": "C",
+      "title": "SAFE_WRITE_RPCS claim_ledger_link_or_create",
+      "members": ["workflow-rpc.mjs"],
+      "patterns": ["SAFE_WRITE_RPCS", "claim_ledger_link_or_create"]
+    },
+    {
+      "id": "D",
+      "title": "executeClaimLedgerLinkOrCreate",
+      "members": ["workflow-rpc.mjs"],
+      "patterns": ["executeClaimLedgerLinkOrCreate"]
+    },
+    {
+      "id": "E",
+      "title": "Signature write functionality",
+      "members": ["write-signature.mjs", "write-allowlist.mjs", "write-check-workflow.mjs"],
+      "all_of": [
+        { "member": "write-signature.mjs", "patterns": ["executeSignatureWrite", "signature_requests", "signature_signers"] },
+        { "member": "write-allowlist.mjs", "patterns": ["signature_requests:", "signature_signers:"] },
+        { "member": "write-check-workflow.mjs", "patterns": ["executeSignatureWrite"] }
+      ]
+    },
+    {
+      "id": "F",
+      "title": "admin_set_check_claim",
+      "members": ["workflow-rpc.mjs"],
+      "patterns": ["admin_set_check_claim", "executeAdminSetCheckClaim"]
+    },
+    {
+      "id": "G",
+      "title": "mortgage-ops accept accrual",
+      "members": ["workflow-rpc.mjs"],
+      "patterns": ["accrueMortgageOpsAcceptedRequest"]
+    },
+    {
+      "id": "H",
+      "title": "endorsement-material invalidation",
+      "members": ["write-check-workflow.mjs", "endorsement-material-invalidation.mjs"],
+      "all_of": [
+        { "member": "write-check-workflow.mjs", "patterns": ["invalidateEndorsementsForMaterialPayeeChange"] },
+        { "member": "endorsement-material-invalidation.mjs", "patterns": ["invalidateEndorsementsForMaterialPayeeChange"] }
+      ]
+    },
+    {
+      "id": "I",
+      "title": "Admin tenant-create",
+      "members": ["write-app-metadata.mjs", "write-allowlist.mjs"],
+      "all_of": [
+        { "member": "write-app-metadata.mjs", "patterns": ["executeTenantsCreate"] },
+        { "member": "write-allowlist.mjs", "patterns": ["tenants:", "insert: ['name', 'slug']"] }
+      ]
+    }
+  ]
+}
