@@ -179,6 +179,20 @@
       ],
       "open_pr_overlap": []
     },
+    "settings-billing-branding-deposits": {
+      "classification": "STAGING_LOCKED_NOT_PRODUCTION",
+      "git_sha": "17fa334d69fb9ca673bcde462b5bb0632e42f3dc",
+      "merged_pr": 570,
+      "merge_commit": null,
+      "deployed_artifact": "staging /assets/index-CEKjixtZ.js sha256 bd36849ef6b63f2d10b03225f2796427440baddd9c9caf508eff76ba2bc18fae; tooling-fix SHA 6059f03918cdba8858ad53a512aa030051bffb11; production apply not recorded as PRODUCTION_LOCKED",
+      "applied_migrations": "none; settings overlay does not apply SQL",
+      "environment": "staging",
+      "missing_evidence": [
+        "production live apply fingerprint after an authorized guarded apply",
+        "authenticated user acceptance (isolated HTTP login NOT ESTABLISHED)"
+      ],
+      "open_pr_overlap": ["#570", "#567", "#566"]
+    },
     "production-spa": {
       "classification": "PRODUCTION_LOCKED",
       "git_sha": "338ede0e6313bfcf88feac36101d67a20c756fd9",

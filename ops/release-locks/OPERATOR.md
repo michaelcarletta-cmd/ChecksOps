@@ -104,6 +104,27 @@ node scripts/production-deploy-guard.mjs --candidate path/to/fingerprint.json
 
 `CHECKSOPS_PRODUCTION_DEPLOY=1` fails unless a candidate fingerprint is supplied **and** the targeted components are `PRODUCTION_LOCKED`. For `production-spa`, the candidate must be the locked live baseline or a narrow overlay whose `based_on_baseline` matches that baseline. `--live` always fails.
 
+## Settings / billing / branding / deposits
+
+`settings-billing-branding-deposits` is `STAGING_LOCKED_NOT_PRODUCTION`.
+Proof: `ops/release-locks/proof/settings-billing-branding-deposits-staging-acceptance.md`.
+
+Recorded source:
+
+- Application candidate `17fa334d69fb9ca673bcde462b5bb0632e42f3dc`
+- SPA preflight composition-forwarding fix `6059f03918cdba8858ad53a512aa030051bffb11`
+- Staging acceptance: `/assets/index-CEKjixtZ.js`
+
+Historical artifact hashes (including earlier production SPA pins and prior
+Lambda packages) are **provenance only**. They are not rollback targets.
+Future builds must reconcile these fixes with **current live source**. Stop
+on live drift, missing invariants, or source conflicts. Do not restore an
+older SPA or Lambda package over newer work.
+
+This component does not own WalletOps, signature, Claim Ledger, or OCR.
+Those independent fixes remain with their own locks. This guide does not
+authorize homeowner association.
+
 ## Production SPA baseline
 
 `production-spa` is the authoritative live frontend at `checksops.com`
