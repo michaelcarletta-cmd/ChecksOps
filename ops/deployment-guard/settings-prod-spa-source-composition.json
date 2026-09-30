@@ -1,0 +1,42 @@
+{
+  "id": "settings-prod-spa-source-composition",
+  "workstream_id": "settings-billing-branding-deposits-51c8",
+  "accepted_composition": true,
+  "wholesale_staging_spa": false,
+  "do_not_promote": [
+    "/assets/index-DvVldu_B.js",
+    "/assets/index-BPbQUNFr.js",
+    "/assets/index-C9QrEEkl.js"
+  ],
+  "production_base": {
+    "kind": "current-live-production-spa-source",
+    "live_entry": "/assets/index-C_fh5VBD.js",
+    "live_index_html_sha256": "d0d59415d6692713f73b8edabefec10a261f1b7a85d6f4a6abd719f9011b3eb4",
+    "live_entry_sha256": "a357373bef9e41b004f887ee312ca239f64236706c826afb69400312e6fbad22",
+    "live_s3_version": "VrLJwkt.ge_P4S2pjYAX5YX_uAoP8A6F",
+    "source_branch": "cursor/walletops-funding-prod-2d41",
+    "item4_commit": "338ede0e6313bfcf88feac36101d67a20c756fd9",
+    "isolated_build_baseline": "8e8fde63dafd3c3cfa2fc179c2c56323f2957b64",
+    "apply_commit": "261ceae7a56162648eba9310ebdda23b124d3e4c",
+    "reason": "Live checksops.com entry index-C_fh5VBD.js was built from 8e8fde63 plus WalletOps wallet-relative files and Item #4 (hide Payment Account / Payout Preferences)."
+  },
+  "kept_from_production_base": [
+    "src/pages/WalletOps.tsx",
+    "src/hooks/useWalletOps.ts",
+    "src/lib/payments/walletRelativeTransfers.ts"
+  ],
+  "composed_from_settings_workstream": [
+    "src/components/deposit-ops/BankDepositReconciliation.tsx",
+    "src/components/disbursement/StakeholderAccountSettings.tsx",
+    "src/components/settings/CompanyBrandingSettings.tsx",
+    "src/components/settings/EmailSenderSettings.tsx",
+    "src/components/settings/TenantBillingAccountPanel.tsx",
+    "src/lib/tenantLogoUrl.ts"
+  ],
+  "intentionally_untouched_from_production": [
+    "src/components/admin/PlatformReceivablesLedger.tsx",
+    "src/components/admin/PlatformTreasuryPanel.tsx",
+    "src/components/admin/TenantBillingHistoryPanel.tsx",
+    "src/pages/admin/AdminTenants.tsx"
+  ]
+}

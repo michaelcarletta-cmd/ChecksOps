@@ -1,7 +1,7 @@
 {
   "version": 1,
   "fail_closed": true,
-  "notes": "Reviewed exact-path overlap exceptions. These entries do not merge, close, edit, deploy, or authorize any other PR. They require every overlapping PR to rebase onto current main before any later merge so independent Cursor workstreams cannot overwrite the finalized OCR/release-lock state.",
+  "notes": "Reviewed exact-path overlap exceptions. These entries do not merge, close, edit, deploy, or authorize any other PR. Independent workstreams must rebase onto current main before later merge. Historical artifact hashes are provenance, not rollback targets.",
   "allow": [
     {
       "other_pr": 369,
@@ -589,6 +589,447 @@
       "path": "ops/release-locks/protected-paths.json",
       "reason": "PR #562 explicitly protects the release-lock path manifest while reconciling exact-path overlap handling. PR #448 also touches this control-plane file; this exception acknowledges parallel review only and does not edit, merge, close, deploy, or authorize that independent workstream.",
       "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 567,
+      "path": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #567 also touches aws/functions/api/tenant-email-domain-handlers.mjs; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 448,
+      "path": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #448 also touches aws/functions/api/tenant-email-domain-handlers.mjs; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 447,
+      "path": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #447 also touches aws/functions/api/tenant-email-domain-handlers.mjs; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 446,
+      "path": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #446 also touches aws/functions/api/tenant-email-domain-handlers.mjs; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 445,
+      "path": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #445 also touches aws/functions/api/tenant-email-domain-handlers.mjs; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 444,
+      "path": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #444 also touches aws/functions/api/tenant-email-domain-handlers.mjs; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 443,
+      "path": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #443 also touches aws/functions/api/tenant-email-domain-handlers.mjs; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 442,
+      "path": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #442 also touches aws/functions/api/tenant-email-domain-handlers.mjs; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 441,
+      "path": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #441 also touches aws/functions/api/tenant-email-domain-handlers.mjs; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 439,
+      "path": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #439 also touches aws/functions/api/tenant-email-domain-handlers.mjs; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 369,
+      "path": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #369 also touches aws/functions/api/tenant-email-domain-handlers.mjs; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 351,
+      "path": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #351 also touches aws/functions/api/tenant-email-domain-handlers.mjs; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 349,
+      "path": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #349 also touches aws/functions/api/tenant-email-domain-handlers.mjs; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 288,
+      "path": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #288 also touches aws/functions/api/tenant-email-domain-handlers.mjs; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 282,
+      "path": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #282 also touches aws/functions/api/tenant-email-domain-handlers.mjs; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 223,
+      "path": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #223 also touches aws/functions/api/tenant-email-domain-handlers.mjs; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 218,
+      "path": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #218 also touches aws/functions/api/tenant-email-domain-handlers.mjs; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 216,
+      "path": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #216 also touches aws/functions/api/tenant-email-domain-handlers.mjs; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 215,
+      "path": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #215 also touches aws/functions/api/tenant-email-domain-handlers.mjs; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 210,
+      "path": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #210 also touches aws/functions/api/tenant-email-domain-handlers.mjs; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 566,
+      "path": "ops/release-locks/",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #566 also touches ops/release-locks/; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 565,
+      "path": "ops/release-locks/",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #565 also touches ops/release-locks/; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 560,
+      "path": "ops/release-locks/",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #560 also touches ops/release-locks/; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 538,
+      "path": "ops/release-locks/",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #538 also touches ops/release-locks/; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 536,
+      "path": "ops/release-locks/",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #536 also touches ops/release-locks/; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 525,
+      "path": "ops/release-locks/",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #525 also touches ops/release-locks/; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 512,
+      "path": "ops/release-locks/",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #512 also touches ops/release-locks/; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 505,
+      "path": "ops/release-locks/",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #505 also touches ops/release-locks/; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 504,
+      "path": "ops/release-locks/",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #504 also touches ops/release-locks/; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 501,
+      "path": "ops/release-locks/",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #501 also touches ops/release-locks/; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 448,
+      "path": "ops/release-locks/",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #448 also touches ops/release-locks/; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 566,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #566 also touches ops/release-locks/locked-components.json; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 565,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #565 also touches ops/release-locks/locked-components.json; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 566,
+      "path": "ops/release-locks/proof/production-spa-baseline.md",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #566 also touches ops/release-locks/proof/production-spa-baseline.md; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 565,
+      "path": "ops/release-locks/proof/production-spa-baseline.md",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #565 also touches ops/release-locks/proof/production-spa-baseline.md; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 566,
+      "path": "scripts/deployment-guard/lib/production.mjs",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #566 also touches scripts/deployment-guard/lib/production.mjs; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 565,
+      "path": "scripts/deployment-guard/lib/production.mjs",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #565 also touches scripts/deployment-guard/lib/production.mjs; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 566,
+      "path": "scripts/deployment-guard/preflight.mjs",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #566 also touches scripts/deployment-guard/preflight.mjs; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 565,
+      "path": "scripts/deployment-guard/preflight.mjs",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #565 also touches scripts/deployment-guard/preflight.mjs; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 549,
+      "path": "scripts/deployment-guard/preflight.mjs",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #549 also touches scripts/deployment-guard/preflight.mjs; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 538,
+      "path": "scripts/deployment-guard/preflight.mjs",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #538 also touches scripts/deployment-guard/preflight.mjs; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 566,
+      "path": "scripts/lib/production-spa-baseline.mjs",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #566 also touches scripts/lib/production-spa-baseline.mjs; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 565,
+      "path": "scripts/lib/production-spa-baseline.mjs",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #565 also touches scripts/lib/production-spa-baseline.mjs; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 566,
+      "path": ".github/CODEOWNERS",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #566 also touches .github/CODEOWNERS; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 565,
+      "path": ".github/CODEOWNERS",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #565 also touches .github/CODEOWNERS; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 560,
+      "path": ".github/CODEOWNERS",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #560 also touches .github/CODEOWNERS; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 538,
+      "path": ".github/CODEOWNERS",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #538 also touches .github/CODEOWNERS; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 536,
+      "path": ".github/CODEOWNERS",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #536 also touches .github/CODEOWNERS; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 525,
+      "path": ".github/CODEOWNERS",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #525 also touches .github/CODEOWNERS; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 512,
+      "path": ".github/CODEOWNERS",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #512 also touches .github/CODEOWNERS; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 505,
+      "path": ".github/CODEOWNERS",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #505 also touches .github/CODEOWNERS; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 504,
+      "path": ".github/CODEOWNERS",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #504 also touches .github/CODEOWNERS; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 448,
+      "path": ".github/CODEOWNERS",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #448 also touches .github/CODEOWNERS; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 566,
+      "path": "ops/release-locks/protected-paths.json",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #566 also touches ops/release-locks/protected-paths.json; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 565,
+      "path": "ops/release-locks/protected-paths.json",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #565 also touches ops/release-locks/protected-paths.json; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 566,
+      "path": "scripts/production-deploy-guard.mjs",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #566 also touches scripts/production-deploy-guard.mjs; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 565,
+      "path": "scripts/production-deploy-guard.mjs",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #565 also touches scripts/production-deploy-guard.mjs; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 560,
+      "path": "scripts/production-deploy-guard.mjs",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #560 also touches scripts/production-deploy-guard.mjs; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 536,
+      "path": "scripts/production-deploy-guard.mjs",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #536 also touches scripts/production-deploy-guard.mjs; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 566,
+      "path": "scripts/deployment-guard/production-lambda-apply.mjs",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #566 also touches scripts/deployment-guard/production-lambda-apply.mjs; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 565,
+      "path": "scripts/deployment-guard/production-lambda-apply.mjs",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #565 also touches scripts/deployment-guard/production-lambda-apply.mjs; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 547,
+      "path": "scripts/deployment-guard/production-lambda-apply.mjs",
+      "reason": "PR #570 records accepted settings/billing/branding/deposit locks and official production apply writers. PR #547 also touches scripts/deployment-guard/production-lambda-apply.mjs; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 577,
+      "path": "scripts/deployment-guard/preflight.mjs",
+      "reason": "PR #570 records official SPA preflight composition forwarding. PR #577 also touches preflight.mjs; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-12-31",
       "review_condition": "other-PR-must-rebase-before-merge"
     }
   ]

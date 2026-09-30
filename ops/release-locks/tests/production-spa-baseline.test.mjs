@@ -54,8 +54,8 @@ test('production-spa lock records the accepted live baseline', () => {
   assert.equal(component.deployment_fingerprint.config_hash, ACCEPTED_PRODUCTION_SPA.index_html_sha256);
   assert.equal(component.deployment_fingerprint.cloudfront_deployment_fingerprint, ACCEPTED_PRODUCTION_SPA.s3_version);
   assert.equal(component.deployment_fingerprint.cloudfront_id, ACCEPTED_PRODUCTION_SPA.cloudfront_id);
-  assert.equal(component.source.git_sha, ACCEPTED_PRODUCTION_SPA.banner_overlay);
-  assert.equal(component.rollback.git_sha, ACCEPTED_PRODUCTION_SPA.source_lineage);
+  assert.equal(component.source.git_sha, ACCEPTED_PRODUCTION_SPA.source_lineage);
+  assert.equal(component.rollback.git_sha, ACCEPTED_PRODUCTION_SPA.banner_overlay);
   assert.equal(isSpaOnlyProductionLock(component), true);
   assert.deepEqual(component.required_sql, []);
   assert.deepEqual(component.missing_evidence, []);
@@ -72,7 +72,7 @@ test('SPA-only PRODUCTION_LOCKED with empty SQL is allowed only with recorded sp
       completed: true,
       environment: 'production',
       component: 'production-spa',
-      git_sha: ACCEPTED_PRODUCTION_SPA.banner_overlay,
+      git_sha: ACCEPTED_PRODUCTION_SPA.source_lineage,
       artifact_identity: ACCEPTED_PRODUCTION_SPA.spa_bundle,
       recorded_at: ACCEPTED_PRODUCTION_SPA.accepted_at,
       evidence_producer: 'test',

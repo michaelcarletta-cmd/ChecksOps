@@ -16,6 +16,7 @@ import { useTenantFilter } from "@/hooks/useTenantFilter";
  * Maintenance-fee billing: pick which of your already-verified bank accounts
  * (added via Moov in the Bank Account panel) should be
  * debited monthly. No manual routing/account entry — ever.
+ * Save records ACH consent only and never starts a collection.
  */
 export function TenantBillingAccountPanel() {
   const { tenantId } = useTenantFilter();
@@ -23,22 +24,26 @@ export function TenantBillingAccountPanel() {
   const [selectedId, setSelectedId] = useState<string>("");
   const [authorized, setAuthorized] = useState(false);
 
-  // Currently-linked billing account
   const { data: billing, isLoading: loadingBilling } = useQuery({
     queryKey: ["tenant-billing-account", tenantId],
     enabled: !!tenantId,
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await supabase.functions.invoke("save-tenant-billing-account", {
+        body: { tenant_id: tenantId, action: "get" },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      if ((data as any)?.authorization) return (data as any).authorization;
+      const fallback = await supabase
         .from("tenant_billing_accounts")
         .select("id, stakeholder_account_id, ach_authorized_at, auto_debit_enabled, verification_status")
         .eq("tenant_id", tenantId!)
         .maybeSingle();
-      if (error) throw error;
-      return data;
+      if (fallback.error) throw fallback.error;
+      return fallback.data;
     },
   });
 
-  // Verified bank accounts available to bill from
   const { data: accounts = [], isLoading: loadingAccounts } = useQuery({
     queryKey: ["tenant-verified-bank-accounts", tenantId],
     enabled: !!tenantId,
@@ -48,7 +53,7 @@ export function TenantBillingAccountPanel() {
         .select("id, nickname, chk_acct, acct_type, custname, verification_status, verified_at")
         .eq("tenant_id", tenantId!)
         .eq("is_active", true)
-        .in("verification_status", ["verified", "admin_override"])
+        .eq("verification_status", "verified")
         .order("verified_at", { ascending: false, nullsFirst: false });
       if (error) throw error;
       return data ?? [];
@@ -65,34 +70,21 @@ export function TenantBillingAccountPanel() {
     mutationFn: async () => {
       if (!selectedId) throw new Error("Select a verified bank account");
       if (!authorized) throw new Error("You must authorize ACH debits");
-
-      const acct = accounts.find((a: any) => a.id === selectedId);
-      if (!acct) throw new Error("Account not found");
-
-      const payload = {
-        tenant_id: tenantId,
-        stakeholder_account_id: selectedId,
-        nickname: acct.nickname,
-        account_holder_name: acct.custname,
-        account_type: acct.acct_type === "C" ? "checking" : "savings",
-        entity_type: "business",
-        verification_status: acct.verification_status,
-        ach_authorized_at: new Date().toISOString(),
-        auto_debit_enabled: true,
-      };
-
-      if (billing?.id) {
-        const { error } = await supabase
-          .from("tenant_billing_accounts")
-          .update(payload)
-          .eq("id", billing.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from("tenant_billing_accounts")
-          .insert(payload as any);
-        if (error) throw error;
+      const { data, error } = await supabase.functions.invoke("save-tenant-billing-account", {
+        body: {
+          tenant_id: tenantId,
+          action: "save",
+          stakeholder_account_id: selectedId,
+          authorized: true,
+          auto_debit_enabled: true,
+        },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).message || (data as any).error);
+      if ((data as any)?.charged === true || (data as any)?.collection_initiated === true) {
+        throw new Error("Billing save unexpectedly started a collection");
       }
+      return data;
     },
     onSuccess: () => {
       toast.success("Billing account linked — auto-debit is on");
@@ -104,16 +96,22 @@ export function TenantBillingAccountPanel() {
 
   const toggleAutoDebit = useMutation({
     mutationFn: async (enabled: boolean) => {
-      const { error } = await supabase
-        .from("tenant_billing_accounts")
-        .update({ auto_debit_enabled: enabled })
-        .eq("tenant_id", tenantId!);
+      const { data, error } = await supabase.functions.invoke("save-tenant-billing-account", {
+        body: {
+          tenant_id: tenantId,
+          action: "toggle_auto_debit",
+          auto_debit_enabled: enabled,
+        },
+      });
       if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).message || (data as any).error);
+      return data;
     },
     onSuccess: () => {
       toast.success("Auto-debit preference updated");
       qc.invalidateQueries({ queryKey: ["tenant-billing-account", tenantId] });
     },
+    onError: (e: any) => toast.error(e?.message ?? "Failed to update auto-debit"),
   });
 
   const isLoading = loadingBilling || loadingAccounts;
@@ -126,7 +124,7 @@ export function TenantBillingAccountPanel() {
           Monthly fee auto-billing
         </CardTitle>
         <CardDescription>
-          Choose which of your verified bank accounts ChecksOps should debit each month for <strong>maintenance fees, check processing fees, and payment processing fees</strong>. All bank accounts are added through the secure bank login in the Bank Account section — no manual entry.
+          Choose which of your verified bank accounts ChecksOps should debit each month for <strong>maintenance fees, check processing fees, and payment processing fees</strong>. All bank accounts are added through the secure bank login in the Bank Account section — no manual entry. Saving authorization does not charge your account.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

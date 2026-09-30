@@ -73,6 +73,28 @@
       "note": "Official staging SPA upload. Requires a staging-frontend spa-promote receipt. Refuses production."
     },
     {
+      "path": "scripts/deployment-guard/production-lambda-apply.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["lambda-update-function-code"],
+      "shared_target": true,
+      "function_name_default": "checksops-production-prep-api",
+      "note": "Official production Lambda overlay apply. Requires a checksops-production-prep-api lambda-overlay receipt, production approval, and immediately-before CodeSha256/RevisionId match to the reviewed baseline. Overlay-only. Never changes env. Never restores an older package."
+    },
+    {
+      "path": "scripts/deployment-guard/production-spa-upload.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["spa-index-upload", "cloudfront-invalidation"],
+      "note": "Official production SPA upload. Requires a production-spa spa-promote receipt, production approval, and immediately-before fingerprints matching the reviewed live baseline. Per-object put only. Refuses historical restore."
+    },
+    {
+      "path": "scripts/deployment-guard/staging-lambda-apply.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["lambda-update-function-code"],
+      "shared_target": true,
+      "function_name_default": "checksops-staging-api",
+      "note": "Official staging Lambda overlay apply. Requires a checksops-staging-api lambda-overlay receipt. Refuses production. Re-reads CodeSha256 + RevisionId immediately before write. Never changes env."
+    },
+    {
       "path": "scripts/deployment-guard/lease.mjs",
       "classification": "GUARDED",
       "capabilities": ["lease"]

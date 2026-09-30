@@ -3,8 +3,10 @@
 This file is repository evidence for the already-live production frontend.
 It does **not** deploy, upload, invalidate, or modify AWS.
 
-Read-only live verification on 2026-09-27 confirmed that production still
-serves this baseline. Metadata in this PR only records and protects it.
+Read-only live verification on 2026-09-30 confirmed that production serves
+`/assets/index-C_fh5VBD.js`. Older pins (`index-BPbQUNFr.js`,
+`index-C9QrEEkl.js`, and earlier) are historical evidence only. They are
+**not** restoration targets.
 
 ## Accepted live production SPA
 
@@ -13,18 +15,20 @@ serves this baseline. Metadata in this PR only records and protects it.
 | Host | `https://checksops.com` |
 | CloudFront | `E1B0ZWWO5559U5` |
 | S3 bucket | `checksops-production-frontend-806168576068` |
-| Entry | `/assets/index-BPbQUNFr.js` |
-| Entry JS SHA256 | `78b393152e17e1eb223deced357f2276e7a5f00e214d2652d115347b2d2ed9d5` |
-| index.html SHA256 | `244c4bd12bddc72e064723d87b6dbd6004a2d859b27200b0ca6747f189c73394` |
-| index.html S3 version | `L.ND9yiehnJfDCocKdyFC_mRQZjchON3` |
-| Last-Modified | `Sun, 27 Sep 2026 01:34:04 GMT` |
+| Entry | `/assets/index-C_fh5VBD.js` |
+| Entry JS SHA256 | `a357373bef9e41b004f887ee312ca239f64236706c826afb69400312e6fbad22` |
+| index.html SHA256 | `d0d59415d6692713f73b8edabefec10a261f1b7a85d6f4a6abd719f9011b3eb4` |
+| index.html S3 version | `VrLJwkt.ge_P4S2pjYAX5YX_uAoP8A6F` |
+| Last-Modified | `Wed, 30 Sep 2026 18:06:18 GMT` |
+| Source lineage | `338ede0e6313bfcf88feac36101d67a20c756fd9` (WalletOps Item #4 on isolated `8e8fde63` base) |
+| Apply evidence | `261ceae7a56162648eba9310ebdda23b124d3e4c` / workstream `walletops-funding-prod-2d41` |
 | Banner overlay commit | `6c679a120d5d4b0dd23d7035ecaf309558df29d0` |
-| Live source lineage before overlay | `1c2ec1ad7d3331f11f8cde61fdbc5cd363eb6720` |
 
 ## Accepted behavior
 
-- PRODUCTION (`checksops.com` / `www.checksops.com`): no yellow Staging banner
+- PRODUCTION (`checksops.com` / `www.checksops.com`): staging banner hidden via production-host CSS
 - STAGING (`staging.checksops.com`): yellow Staging banner remains visible
+- WalletOps Item #4: Payment Account and Payout Preferences sections hidden
 - Other current production functionality: preserved
 
 ## Provenance
@@ -33,8 +37,8 @@ serves this baseline. Metadata in this PR only records and protects it.
 branch, or another worktree must demonstrate that it contains or reconciles
 this accepted production SPA. If it cannot, deployment must be refused.
 
-Do not restore a superseded entry (`index-BAD1KYoF.js` or earlier conflicting
-bundle names) over this baseline.
+Do not restore a superseded entry (`index-BPbQUNFr.js`, `index-C9QrEEkl.js`,
+`index-BAD1KYoF.js`, or earlier) over this baseline.
 
 ## Fail-closed promotion rules
 
@@ -52,13 +56,21 @@ write.
 
 HTTPS `GET https://checksops.com/` returned:
 
-- `last-modified: Sun, 27 Sep 2026 01:34:04 GMT`
-- `x-amz-version-id: L.ND9yiehnJfDCocKdyFC_mRQZjchON3`
-- index.html SHA256 `244c4bd12bddc72e064723d87b6dbd6004a2d859b27200b0ca6747f189c73394`
-- entry `/assets/index-BPbQUNFr.js`
-- entry SHA256 `78b393152e17e1eb223deced357f2276e7a5f00e214d2652d115347b2d2ed9d5`
+- `last-modified: Wed, 30 Sep 2026 18:06:18 GMT`
+- `x-amz-version-id: VrLJwkt.ge_P4S2pjYAX5YX_uAoP8A6F`
+- index.html SHA256 `d0d59415d6692713f73b8edabefec10a261f1b7a85d6f4a6abd719f9011b3eb4`
+- entry `/assets/index-C_fh5VBD.js`
+- entry SHA256 `a357373bef9e41b004f887ee312ca239f64236706c826afb69400312e6fbad22`
 
-Exact match to the accepted baseline. Freeze proceeded.
+Exact match to the accepted live identity. This lock update records that
+identity. It does not deploy or restore.
+
+## Historical pins (do not restore)
+
+| Entry | index.html SHA256 | S3 version | Recorded |
+|---|---|---|---|
+| `/assets/index-BPbQUNFr.js` | `244c4bd12bddc72e064723d87b6dbd6004a2d859b27200b0ca6747f189c73394` | `L.ND9yiehnJfDCocKdyFC_mRQZjchON3` | 2026-09-27 |
+| `/assets/index-C9QrEEkl.js` | `67466d1e1fde618baa3e12aa6b3f3d2651390eee19c7e05004ffc05629a363d2` | `3_E4k2CTf2gxupKhLAu8H2KrJ_lmwSjh` | 2026-09-30 16:53Z |
 
 Lambda identity was requested for continuity only and was not modified.
 This task performed **zero** production writes.
