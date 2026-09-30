@@ -1,0 +1,97 @@
+{
+  "id": "settings-prod-spa-source-composition",
+  "workstream_id": "settings-billing-branding-deposits-51c8",
+  "accepted_composition": true,
+  "wholesale_staging_spa": false,
+  "do_not_restore": [
+    "/assets/index-DvVldu_B.js",
+    "/assets/index-BPbQUNFr.js",
+    "/assets/index-C9QrEEkl.js",
+    "/assets/index-C_fh5VBD.js",
+    "/assets/index-CEKjixtZ.js",
+    "/assets/index-DbYbvb6d.js"
+  ],
+  "production_base": {
+    "kind": "current-live-production-spa-source",
+    "live_entry": "/assets/index-DbYbvb6d.js",
+    "live_entry_sha256": "1dfbe6c4d2a77027b7ac3cf89eece450b4d9b290b829a2d88ff0244332e6e47c",
+    "live_walletops": "/assets/WalletOps-j3z9RyZ7.js",
+    "live_index_html_sha256": "705f86309699aa6df4e15f12d0e8b0e3c31ff742eed18195859f7cd226e18040",
+    "live_s3_version": "FVo1QSfkEI4csW.r3iuuFu0rds.pzPKN",
+    "live_index_last_modified": "2026-09-30T20:01:34+00:00",
+    "source_branch": "cursor/walletops-activity-recovery-prod-2d41",
+    "accepted_commit": "9afb57fe52a42c0a84e4e07b3a7618c20c0d815c",
+    "promotion_commit": "50b8a94e48604b39682e463f0f8a723f6455ce1e",
+    "funding_prod_baseline": "6cc1f0f3439f039f67af8aa62de6b79b5ad907b9",
+    "pr": 575,
+    "agent": "bc-f8b0cb28-9f1a-4ac4-bf5e-3e6649f72d41",
+    "invalidation": "I8NPTRCR5LEG310VNQ1ZLQYKS5",
+    "reason": "Live checksops.com entry index-DbYbvb6d.js is the accepted WalletOps activity-recovery production SPA (funding-prod C_fh5VBD source plus six recovery hunks). Later index.html rewrite at 20:01:34 keeps the same JS entry and adds production-banner hide CSS."
+  },
+  "lambda_base": {
+    "function_name": "checksops-production-prep-api",
+    "codeSha256": "RaFQKBA489aj69N8e76eCQdzlJ2ijkA1YFNFPa+D9r4=",
+    "revisionId": "33e3f02d-3a97-4b8e-be31-4e104b7027f3",
+    "lastModified": "2026-09-30T19:56:32.000+0000",
+    "pr": 576,
+    "branch": "cursor/endorsing-confirmation-deploy-0fb6",
+    "agent": "bc-0f07b8bb-0093-466e-b94e-c64db1520fb6",
+    "owned_member": "workflow.mjs",
+    "workflow_sha256": "bd18db71ab9277eea74add41f99ed5324841a163815a756578f60cfd50bf7bab",
+    "reason": "Narrow live overlay of handleCheckTransition success payload new_stage from check_stage. SPA/SQL untouched by that apply."
+  },
+  "attribution_uncertainty": {
+    "index_html_20_01_34_rewrite": "Same DbYbvb6d entry plus checksops-production-host banner CSS. No matching git commit found on WalletOps recovery, endorsing, settings, or guard-protect branches. Preserve banner behavior; do not attribute the rewrite to a specific workstream."
+  },
+  "kept_from_production_base": [
+    "src/pages/WalletOps.tsx",
+    "src/hooks/useWalletOps.ts",
+    "src/hooks/usePaymentProviderEligibility.ts",
+    "src/lib/payments/wallets.ts",
+    "src/lib/payments/selectPaymentWallet.ts",
+    "src/lib/payments/reconcileWalletFundingTransfer.ts",
+    "src/lib/payments/walletRelativeTransfers.ts",
+    "index.html production-banner hide"
+  ],
+  "composed_from_settings_workstream": [
+    "src/components/deposit-ops/BankDepositReconciliation.tsx",
+    "src/components/disbursement/StakeholderAccountSettings.tsx",
+    "src/components/settings/CompanyBrandingSettings.tsx",
+    "src/components/settings/EmailSenderSettings.tsx",
+    "src/components/settings/TenantBillingAccountPanel.tsx",
+    "src/lib/tenantLogoUrl.ts"
+  ],
+  "already_present_on_live_spa_source": [
+    "CompanyBrandingSettings invoice_accent_color",
+    "BankDepositReconciliation rejected,returned,error,declined exclusion"
+  ],
+  "missing_from_live_and_composed": [
+    "EmailSenderSettings Class A sender-identity (remove Sending subdomain UI)",
+    "StakeholderAccountSettings Bank verified vs Provider linked",
+    "tenantLogoUrl AWS public-storage resolver",
+    "TenantBillingAccountPanel settings workstream persist path",
+    "Lambda tenant-settings-handlers.mjs",
+    "Lambda moov-stakeholder-status.mjs",
+    "Lambda app-services settings routes",
+    "Lambda tenant-email-domain-handlers branding/logo persist",
+    "Lambda moov-functions stakeholder reconcile"
+  ],
+  "intentionally_untouched_from_production": [
+    "src/components/admin/PlatformReceivablesLedger.tsx",
+    "src/components/admin/PlatformTreasuryPanel.tsx",
+    "src/components/admin/TenantBillingHistoryPanel.tsx",
+    "src/pages/admin/AdminTenants.tsx",
+    "claim-number / Claim Ledger routing",
+    "signature request files",
+    "OCR files",
+    "endorsement / workflow.mjs new_stage",
+    "esign.mjs",
+    "workflow-rpc.mjs"
+  ],
+  "do_not_retry": {
+    "old_application_candidate": "17fa334d69fb9ca673bcde462b5bb0632e42f3dc",
+    "old_staging_spa": "/assets/index-CEKjixtZ.js",
+    "old_reviewed_production_spa": "/assets/index-C_fh5VBD.js",
+    "old_reviewed_production_lambda": "pxZj4G6pGntJrkcRO5uNNEbiyvDpCOKPiWAboDnPvBA="
+  }
+}

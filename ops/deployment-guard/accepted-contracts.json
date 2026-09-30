@@ -125,6 +125,23 @@
       "invariants": ["cross-tenant reads/writes remain denied"]
     },
     {
+      "id": "settings-billing-branding-deposits",
+      "title": "Settings billing branding deposits and SPA composition preflight",
+      "accepted": true,
+      "enabled": true,
+      "environments": ["staging", "production"],
+      "components": ["production-spa", "checksops-production-prep-api", "staging-frontend", "checksops-staging-api"],
+      "deployment_types": ["spa-promote", "lambda-overlay"],
+      "test": "ops/release-locks/tests/settings-billing-branding-deposits.test.mjs",
+      "invariants": [
+        "settings/billing/branding/deposit behavior remains accepted",
+        "SPA preflight forwards accepted_source_composition",
+        "historical artifact hashes are not rollback targets",
+        "future builds reconcile with current live source",
+        "WalletOps, signature, Claim Ledger, OCR remain independent"
+      ]
+    },
+    {
       "id": "financial-write-protections",
       "title": "financial write protections",
       "accepted": true,

@@ -24,6 +24,10 @@ import {
   PRODUCTION_SPA_ID,
   compareProductionSpaCandidate,
 } from './lib/production-spa-baseline.mjs';
+import {
+  SETTINGS_COMPONENT_ID,
+  compareSettingsCandidate,
+} from './lib/settings-billing-branding-deposits.mjs';
 
 export function compareCandidate(manifest, candidate) {
   const errors = [];
@@ -36,6 +40,9 @@ export function compareCandidate(manifest, candidate) {
   }
   for (const [id, component] of Object.entries(manifest.components || {})) {
     const row = candidate.components?.[id];
+    if (id === SETTINGS_COMPONENT_ID) {
+      errors.push(...compareSettingsCandidate(component, row));
+    }
     if (component.classification !== 'PRODUCTION_LOCKED') {
       if (row?.deploy === true || row?.production_active === true) {
         errors.push(`${id}: candidate deploys a component that is not PRODUCTION_LOCKED`);

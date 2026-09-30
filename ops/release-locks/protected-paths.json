@@ -190,6 +190,27 @@
         "aws/functions/api/textract-check-ocr.mjs"
       ]
     },
+    "settings-billing-branding-deposits": {
+      "owners": [
+        "@michaelcarletta-cmd"
+      ],
+      "description": "Accepted settings/billing/branding/deposit behavior and official SPA preflight composition forwarding. Future builds must reconcile these fixes with current live source. Historical artifact hashes are provenance, not rollback targets. Does not own WalletOps, signature, Claim Ledger, OCR, or tenant-email path ownership.",
+      "paths": [
+        "scripts/lib/settings-billing-branding-deposits.mjs",
+        "ops/release-locks/proof/settings-billing-branding-deposits-staging-acceptance.md",
+        "ops/release-locks/proof/settings-billing-branding-deposits-production-apply.md",
+        "ops/release-locks/tests/settings-billing-branding-deposits.test.mjs",
+        "ops/deployment-guard/settings-prod-spa-source-composition.json",
+        "scripts/deployment-guard/preflight.mjs",
+        "scripts/deployment-guard/lib/production.mjs",
+        "scripts/deployment-guard/build-production-settings-overlay.mjs",
+        "scripts/deployment-guard/production-lambda-apply.mjs",
+        "scripts/deployment-guard/production-spa-upload.mjs",
+        "scripts/verify-composed-spa-bundle.mjs",
+        "aws/tests/deployment-guard-spa-composition-preflight.test.mjs",
+        "aws/tests/deployment-guard-production-apply.test.mjs"
+      ]
+    },
     "production-spa": {
       "owners": [
         "@michaelcarletta-cmd"

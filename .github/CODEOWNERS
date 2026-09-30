@@ -111,6 +111,19 @@
 /aws/functions/api/ocr-normalize-azure.mjs @michaelcarletta-cmd
 /aws/functions/api/textract-check-ocr.mjs @michaelcarletta-cmd
 
+/scripts/lib/settings-billing-branding-deposits.mjs @michaelcarletta-cmd
+/ops/release-locks/proof/settings-billing-branding-deposits-staging-acceptance.md @michaelcarletta-cmd
+/ops/release-locks/tests/settings-billing-branding-deposits.test.mjs @michaelcarletta-cmd
+/ops/deployment-guard/settings-prod-spa-source-composition.json @michaelcarletta-cmd
+/scripts/deployment-guard/preflight.mjs @michaelcarletta-cmd
+/scripts/deployment-guard/lib/production.mjs @michaelcarletta-cmd
+/scripts/deployment-guard/build-production-settings-overlay.mjs @michaelcarletta-cmd
+/scripts/deployment-guard/production-lambda-apply.mjs @michaelcarletta-cmd
+/scripts/deployment-guard/production-spa-upload.mjs @michaelcarletta-cmd
+/scripts/verify-composed-spa-bundle.mjs @michaelcarletta-cmd
+/aws/tests/deployment-guard-spa-composition-preflight.test.mjs @michaelcarletta-cmd
+/aws/tests/deployment-guard-production-apply.test.mjs @michaelcarletta-cmd
+
 /aws/template.yaml @michaelcarletta-cmd
 /aws/samconfig.toml @michaelcarletta-cmd
 /aws/cutover/production/ @michaelcarletta-cmd

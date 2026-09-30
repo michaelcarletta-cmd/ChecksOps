@@ -14,16 +14,16 @@ const hooks = readFileSync(join(root, "src/hooks/useWalletOps.ts"), "utf8");
 const sweep = readFileSync(join(root, "supabase/functions/moov-sweep-config/index.ts"), "utf8");
 const walletSync = readFileSync(join(root, "supabase/functions/moov-wallet-sync/index.ts"), "utf8");
 const transferStatus = readFileSync(join(root, "supabase/functions/moov-transfer-status/index.ts"), "utf8");
+const compliance = readFileSync(join(root, "src/components/settings/ComplianceSettings.tsx"), "utf8");
+const whiteLabel = readFileSync(join(root, "src/components/white-label/WhiteLabelSettings.tsx"), "utf8");
 
 const tests = [];
 const test = (name, fn) => tests.push([name, fn]);
 
 test("Recent Wallet Activity sits in the main grid as a large box", () => {
   const activity = page.indexOf('title="Recent Wallet Activity"');
-  const payout = page.indexOf('title="Payout Preferences"');
   const gridClose = page.indexOf("Running Balance");
-  assert.ok(activity > 0 && payout > 0);
-  assert.ok(activity < payout, "activity should appear before payout preferences");
+  assert.ok(activity > 0);
   assert.ok(activity < gridClose, "activity should be above running balance");
   assert.match(page, /lg:col-span-2/);
 });
@@ -40,15 +40,66 @@ test("Refresh balances forces a provider sync", () => {
   assert.match(walletSync, /skipProviderFetch: !force && !isVerified/);
 });
 
-test("Payout preferences acknowledge a connected settlement bank", () => {
-  assert.match(page, /is connected\. Load payout speeds from the bank/);
+test("Sweep backend still resolves settlement bank and rails", () => {
   assert.match(sweep, /pickSettlementMethod/);
   assert.match(sweep, /resolveRails/);
+  assert.doesNotMatch(page, /save\.mutateAsync/);
+  assert.doesNotMatch(page, /handleSavePayoutSpeed/);
 });
 
 test("Check status does not fail the whole request when nothing is in flight", () => {
   assert.match(transferStatus, /if \(!rows\?\.length\)/);
   assert.match(hooks, /invokeErrorMessage/);
+});
+
+test("Pending In/Out are wallet-relative, not every tenant transfer", () => {
+  assert.match(hooks, /summarizeWalletOps/);
+  assert.match(hooks, /source_payment_method_id, destination_payment_method_id/);
+  assert.doesNotMatch(hooks, /leg_role !== ["']funding["']/);
+  assert.match(page, /Funding & Billing/);
+  assert.match(page, /Wallet first, then connected bank for the remainder/);
+});
+
+test("Billing activity remains visible even when the bank leg is not Pending Out", () => {
+  assert.match(page, /ChecksOps Billing/);
+  assert.match(page, /Funding: Wallet/);
+  assert.match(hooks, /tenant_maintenance_payments/);
+});
+
+test("Item #4 WalletOps does not render Payment Account management", () => {
+  assert.doesNotMatch(page, /title="Payment Account"/);
+  assert.doesNotMatch(page, /Open Payment Account/);
+  assert.doesNotMatch(page, /PaymentAccountPanel/);
+  assert.doesNotMatch(page, /PaymentReadinessPanel/);
+});
+
+test("Item #4 WalletOps does not render Payout Preferences", () => {
+  assert.doesNotMatch(page, /title="Payout Preferences"/);
+  assert.doesNotMatch(page, /walletops-rail/);
+  assert.doesNotMatch(page, /Save payout preference/);
+});
+
+test("Item #4 Compliance and Documents still provides Payment Account", () => {
+  assert.match(whiteLabel, /Compliance & Docs/);
+  assert.match(whiteLabel, /<ComplianceSettings \/>/);
+  assert.match(compliance, /title="Payment Account Setup"/);
+  assert.match(compliance, /PaymentAccountPanel/);
+  assert.match(compliance, /PaymentReadinessPanel/);
+});
+
+test("Item #4 Funding & Billing and pending cards remain", () => {
+  assert.match(page, /Funding & Billing/);
+  assert.match(page, /Pending in/);
+  assert.match(page, /Pending out/);
+  assert.match(page, /Recent Wallet Activity/);
+  assert.match(page, /Available operating balance/);
+});
+
+test("WalletOps wallet reads are environment-aware and never maybeSingle all operating rows", () => {
+  assert.match(hooks, /selectPaymentWallet/);
+  assert.match(hooks, /resolveWalletOpsEnvironment/);
+  assert.match(hooks, /\.eq\("environment", walletEnvironment\)/);
+  assert.doesNotMatch(hooks, /\.eq\("wallet_type", "operating"\)[\s\S]{0,80}\.maybeSingle\(\)/);
 });
 
 let failed = 0;

@@ -104,11 +104,39 @@ node scripts/production-deploy-guard.mjs --candidate path/to/fingerprint.json
 
 `CHECKSOPS_PRODUCTION_DEPLOY=1` fails unless a candidate fingerprint is supplied **and** the targeted components are `PRODUCTION_LOCKED`. For `production-spa`, the candidate must be the locked live baseline or a narrow overlay whose `based_on_baseline` matches that baseline. `--live` always fails.
 
+## Settings / billing / branding / deposits
+
+`settings-billing-branding-deposits` is `PRODUCTION_LOCKED` for deployed-code
+verification of items #1, #2, and #5. Authenticated user acceptance remains
+**NOT ESTABLISHED**.
+Proof: `ops/release-locks/proof/settings-billing-branding-deposits-production-apply.md`.
+
+Recorded source:
+
+- Application candidate `84ba11f4c5fbc5a98652768dc72cb1e58757ea14`
+- Staging evidence `65609c6e333b76e1291bf3c87fa133d41d17481a`
+- SPA preflight composition-forwarding fix `6059f03918cdba8858ad53a512aa030051bffb11`
+- Production SPA: `/assets/index-QDJiUFF1.js`
+- Production Lambda: `JlChQagI3F26AEcQrFHRPvNsVLRGmO8nR9RKMK7ERJ0=`
+
+Historical artifact hashes (including earlier production SPA pins and prior
+Lambda packages) are **provenance only**. They are not rollback targets.
+Future builds must reconcile these fixes with **current live source**. Stop
+on live drift, missing invariants, or source conflicts. Do not restore an
+older SPA or Lambda package over newer work.
+
+This component does not own WalletOps, signature, Claim Ledger, or OCR.
+Those independent fixes remain with their own locks. This guide does not
+authorize homeowner association.
+
 ## Production SPA baseline
 
 `production-spa` is the authoritative live frontend at `checksops.com`
-(`/assets/index-BPbQUNFr.js`). Proof:
+(`/assets/index-C_fh5VBD.js`). Proof:
 `ops/release-locks/proof/production-spa-baseline.md`.
+
+Older pins (`index-BPbQUNFr.js`, `index-C9QrEEkl.js`) are historical
+evidence only and are not restoration targets.
 
 `origin/main` is not that SPA. Do not promote main, another branch, or a
 worktree unless the candidate contains or reconciles this baseline. If live

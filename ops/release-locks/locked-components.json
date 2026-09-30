@@ -13,7 +13,7 @@
     "auto_unlock_forbidden": true,
     "instructions_path": "ops/release-locks/OPERATOR.md"
   },
-  "notes": "production-spa is PRODUCTION_LOCKED to the live checksops.com SPA verified 2026-09-27 (index-BPbQUNFr.js). origin/main is not that baseline. Other components remain unlocked. This metadata does not deploy or write production.",
+  "notes": "production-spa remains PRODUCTION_LOCKED to the recorded C_fh5VBD pin as provenance. Live checksops.com is now index-QDJiUFF1.js / Lambda JlChQag… after the guarded settings apply. Those older pins (C_fh5VBD, DbYbvb6d, RaFQKBA, CEKjixtZ, 17fa334d) are not restore targets. settings-billing-branding-deposits is PRODUCTION_LOCKED for deployed-code verification of items #1, #2, and #5 (application 84ba11f4c5fbc5a98652768dc72cb1e58757ea14, staging evidence 65609c6e333b76e1291bf3c87fa133d41d17481a, tooling 6059f03918cdba8858ad53a512aa030051bffb11). Authenticated user acceptance remains NOT ESTABLISHED. Historical artifact hashes are provenance, not rollback targets. Future settings builds must compose onto current live source. Other components remain unlocked.",
   "components": {
     "identity-cognito": {
       "id": "identity-cognito",
@@ -251,7 +251,7 @@
       "environment": "source-only",
       "source": {
         "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
-        "tree_hash": "ba67f886fecc7bf93a158f19e594a88e324a7222cfd3be00d9e18901d1cec428",
+        "tree_hash": "c2c98d82f8c4d839c236d3a395acd21a4f47e2a858905bd07adbbd2234488da0",
         "merged": true,
         "merged_pr": null
       },
@@ -613,6 +613,67 @@
       "open_pr_overlap": [],
       "notes": "Fail-closed reconciliation only. The protected OCR tree has advanced beyond the original PR #370 staging lock through merged OCR changes #385, #389, #530 and #531, with PR #561 correcting only the malformed payee-continuation regex introduced by #531. Classification is deliberately downgraded to UNVERIFIED until the reconciled runtime is revalidated; this manifest change does not deploy, restore, or modify AWS, production, Signature, Partner Sharing, Cognito, database/RLS, Moov, Mortgage Ops, Claim Ledger, or SPA artifacts."
     },
+    "settings-billing-branding-deposits": {
+      "id": "settings-billing-branding-deposits",
+      "ownership_group": "settings-billing-branding-deposits",
+      "classification": "PRODUCTION_LOCKED",
+      "production_active": true,
+      "environment": "production",
+      "source": {
+        "git_sha": "84ba11f4c5fbc5a98652768dc72cb1e58757ea14",
+        "tree_hash": "2835e606c2794e0b3abd163393cca30ed11aade15cd6ac97ec457227d01bf5e6",
+        "merged": false,
+        "merged_pr": 581
+      },
+      "required_sql": [],
+      "artifact": {
+        "type": "spa",
+        "name": "/assets/index-QDJiUFF1.js",
+        "version": "NNalIXDhhdaOovnqFQwZVSJ99V0BFZz9",
+        "hash": "19ae149deecc2d06792dece4b27ba30bf198a146a4325645f6e4468d5afd92c7",
+        "cloudfront_distribution": "E1B0ZWWO5559U5",
+        "lambda_name": "checksops-production-prep-api",
+        "lambda_version": null,
+        "lambda_alias": null
+      },
+      "production_validation": {
+        "completed": true,
+        "evidence_refs": [
+          "ops/release-locks/proof/settings-billing-branding-deposits-production-apply.md",
+          "ops/release-locks/proof/settings-billing-branding-deposits-staging-acceptance.md"
+        ],
+        "recorded_at": "2026-09-30T20:36:44Z",
+        "environment": "production",
+        "component": "settings-billing-branding-deposits",
+        "git_sha": "84ba11f4c5fbc5a98652768dc72cb1e58757ea14",
+        "artifact_identity": "/assets/index-QDJiUFF1.js",
+        "evidence_producer": "official receipt-backed production-lambda-apply and production-spa-upload plus live S3/HTTPS/Lambda member verification",
+        "evidence_type": "deployed-code verification of production settings/billing/branding/deposit apply"
+      },
+      "deployment_fingerprint": {
+        "recorded": true,
+        "spa_bundle": "/assets/index-QDJiUFF1.js",
+        "spa_sha256": "19ae149deecc2d06792dece4b27ba30bf198a146a4325645f6e4468d5afd92c7",
+        "cloudfront_id": "E1B0ZWWO5559U5",
+        "cloudfront_distribution": "E1B0ZWWO5559U5",
+        "cloudfront_deployment_fingerprint": "IEEF8WPGTAFVCF2ZHV1LGGTRI8",
+        "lambda_name": "checksops-production-prep-api",
+        "lambda_version": null,
+        "lambda_code_hash": null,
+        "applied_sql_hash": null,
+        "database_evidence_record": null,
+        "config_hash": "5d35bd47b200ce7a5dbfd562bef1fcb4daa52f7ea89a1207e0b00e2150f12467",
+        "notes": "Guarded production apply of candidate 84ba11f4c5fbc5a98652768dc72cb1e58757ea14. SPA index-QDJiUFF1.js. Lambda JlChQag… / RevisionId d00d17e6-1d0a-4418-a72e-23ab1ccd4157. Staging evidence 65609c6e333b76e1291bf3c87fa133d41d17481a. Tooling-fix SHA 6059f03918cdba8858ad53a512aa030051bffb11. Isolated HTTP login NOT ESTABLISHED. Authenticated user acceptance is not claimed. Historical hashes are provenance, not rollback targets."
+      },
+      "rollback": {
+        "git_sha": "84ba11f4c5fbc5a98652768dc72cb1e58757ea14",
+        "artifact": "/assets/index-QDJiUFF1.js",
+        "notes": "Rollback means compose onto the current live production identity (index-QDJiUFF1.js / Lambda JlChQag…), not restore DbYbvb6d, C_fh5VBD, CEKjixtZ, or 17fa334d. Historical hashes are not restoration targets."
+      },
+      "missing_evidence": [],
+      "open_pr_overlap": ["#581", "#570", "#567", "#566"],
+      "notes": "Deployed-code PRODUCTION_LOCKED for items #1 billing persist/no collection, #2 branding persist including logo/color and sending-subdomain UI removal, and #5 deposit submission-date grouping/daily totals/expandable checks/exclusion filters. Stakeholder labels are not item #5. Application candidate SHA 84ba11f4c5fbc5a98652768dc72cb1e58757ea14. Staging evidence SHA 65609c6e333b76e1291bf3c87fa133d41d17481a. Deployment-tooling fix SHA 6059f03918cdba8858ad53a512aa030051bffb11. Authenticated user acceptance NOT ESTABLISHED. Historical artifact hashes are provenance, not rollback targets. Future builds must reconcile these fixes with current live source (index-QDJiUFF1.js / Lambda JlChQag…). Stop on drift, missing invariants, or source conflicts. Preserve WalletOps Item #4, activity recovery, production banner hide, signature, Claim Ledger, OCR, endorsement new_stage, and other independent fixes. Does not authorize homeowner association or lift the item #3 hold."
+    },
     "production-spa": {
       "id": "production-spa",
       "ownership_group": "production-spa",
@@ -620,17 +681,17 @@
       "production_active": true,
       "environment": "production",
       "source": {
-        "git_sha": "6c679a120d5d4b0dd23d7035ecaf309558df29d0",
-        "tree_hash": "8a794da51c14a4520e987fcce8fc738e1dc196eca1b3f994fc17b57a2c2b2c7f",
+        "git_sha": "338ede0e6313bfcf88feac36101d67a20c756fd9",
+        "tree_hash": "f28904f5bfbf4f68977977fa410a70ebd933f82754efba21120871edba3b48b7",
         "merged": false,
-        "merged_pr": 506
+        "merged_pr": null
       },
       "required_sql": [],
       "artifact": {
         "type": "spa",
-        "name": "/assets/index-BPbQUNFr.js",
-        "version": "L.ND9yiehnJfDCocKdyFC_mRQZjchON3",
-        "hash": "78b393152e17e1eb223deced357f2276e7a5f00e214d2652d115347b2d2ed9d5",
+        "name": "/assets/index-C_fh5VBD.js",
+        "version": "VrLJwkt.ge_P4S2pjYAX5YX_uAoP8A6F",
+        "hash": "a357373bef9e41b004f887ee312ca239f64236706c826afb69400312e6fbad22",
         "cloudfront_distribution": "E1B0ZWWO5559U5",
         "lambda_name": "checksops-production-prep-api",
         "lambda_version": null,
@@ -644,34 +705,34 @@
         "recorded_at": "2026-09-27T01:34:04Z",
         "environment": "production",
         "component": "production-spa",
-        "git_sha": "6c679a120d5d4b0dd23d7035ecaf309558df29d0",
-        "artifact_identity": "/assets/index-BPbQUNFr.js",
+        "git_sha": "338ede0e6313bfcf88feac36101d67a20c756fd9",
+        "artifact_identity": "/assets/index-C_fh5VBD.js",
         "evidence_producer": "read-only live HTTPS verification of checksops.com",
         "evidence_type": "production SPA baseline freeze"
       },
       "deployment_fingerprint": {
         "recorded": true,
-        "spa_bundle": "/assets/index-BPbQUNFr.js",
-        "spa_sha256": "78b393152e17e1eb223deced357f2276e7a5f00e214d2652d115347b2d2ed9d5",
+        "spa_bundle": "/assets/index-C_fh5VBD.js",
+        "spa_sha256": "a357373bef9e41b004f887ee312ca239f64236706c826afb69400312e6fbad22",
         "cloudfront_id": "E1B0ZWWO5559U5",
         "cloudfront_distribution": "E1B0ZWWO5559U5",
-        "cloudfront_deployment_fingerprint": "L.ND9yiehnJfDCocKdyFC_mRQZjchON3",
+        "cloudfront_deployment_fingerprint": "VrLJwkt.ge_P4S2pjYAX5YX_uAoP8A6F",
         "lambda_name": "checksops-production-prep-api",
         "lambda_version": null,
         "lambda_code_hash": null,
         "applied_sql_hash": null,
         "database_evidence_record": null,
-        "config_hash": "244c4bd12bddc72e064723d87b6dbd6004a2d859b27200b0ca6747f189c73394",
-        "notes": "Accepted live production SPA 2026-09-27T01:34:04Z. Host checksops.com. Entry /assets/index-BPbQUNFr.js. index.html sha256 244c4bd12bddc72e064723d87b6dbd6004a2d859b27200b0ca6747f189c73394. S3 version L.ND9yiehnJfDCocKdyFC_mRQZjchON3. CloudFront E1B0ZWWO5559U5. Source lineage 1c2ec1ad7d3331f11f8cde61fdbc5cd363eb6720. Banner overlay 6c679a120d5d4b0dd23d7035ecaf309558df29d0. PRODUCTION: no staging banner. STAGING: banner visible. Other current production functionality preserved. origin/main is not this baseline."
+        "config_hash": "d0d59415d6692713f73b8edabefec10a261f1b7a85d6f4a6abd719f9011b3eb4",
+        "notes": "Accepted live production SPA 2026-09-30T18:06:18Z. Host checksops.com. Entry /assets/index-C_fh5VBD.js. index.html sha256 d0d59415d6692713f73b8edabefec10a261f1b7a85d6f4a6abd719f9011b3eb4. S3 version VrLJwkt.ge_P4S2pjYAX5YX_uAoP8A6F. CloudFront E1B0ZWWO5559U5. Source lineage 338ede0e6313bfcf88feac36101d67a20c756fd9. Historical pins index-BPbQUNFr.js and index-C9QrEEkl.js are not restoration targets. PRODUCTION: staging banner hidden. Other current production functionality preserved. origin/main is not this baseline."
       },
       "rollback": {
-        "git_sha": "1c2ec1ad7d3331f11f8cde61fdbc5cd363eb6720",
-        "artifact": "/assets/index-BAD1KYoF.js",
-        "notes": "Pre-overlay live lineage before the accepted banner fix. Do not restore this older SPA over the frozen baseline unless a reviewed unlock records a newer accepted live identity."
+        "git_sha": "6c679a120d5d4b0dd23d7035ecaf309558df29d0",
+        "artifact": "/assets/index-BPbQUNFr.js",
+        "notes": "Previous freeze (2026-09-27). Historical evidence only. Do not restore this older SPA over the current live identity unless a reviewed unlock records a newer accepted live identity."
       },
       "missing_evidence": [],
       "open_pr_overlap": ["#506"],
-      "notes": "Authoritative production frontend baseline. Future production SPA work must start from this live identity or a demonstrably newer accepted baseline. Do not promote main merely because it is main. SPA-only lock: no SQL. This PR records evidence only and does not deploy."
+      "notes": "Authoritative production frontend baseline. Future production SPA work must start from this live identity (index-C_fh5VBD.js) or a demonstrably newer accepted baseline. Do not restore index-BPbQUNFr.js. Do not promote main merely because it is main. SPA-only lock: no SQL. This change records live evidence only and does not deploy."
     },
     "production-release": {
       "id": "production-release",
@@ -681,7 +742,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "d5418ab63cb9af8024c746c4393c0f801f15fd1d",
-        "tree_hash": "aeff94e68383a05e088b9c1a66ce2afcfb0d26ffd5e6e137e94c77df34ad85ee",
+        "tree_hash": "56573b0b2959c8e0f5c834d1b6257d3835e861544fae56de3dfcc6fab0ff017f",
         "merged": true,
         "merged_pr": null
       },

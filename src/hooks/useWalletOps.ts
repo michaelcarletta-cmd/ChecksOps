@@ -9,6 +9,12 @@ import {
   type PaymentMethodLabel,
   type WalletOpsTransferRow,
 } from "@/lib/payments/walletRelativeTransfers";
+import {
+  PaymentWalletSelectionError,
+  resolveWalletOpsEnvironment,
+  selectPaymentWallet,
+  type PaymentWalletRow,
+} from "@/lib/payments/selectPaymentWallet";
 
 
 export type WalletOpsReadinessState = "ready" | "pending" | "action_required" | "not_started";
@@ -27,12 +33,18 @@ export type WalletOpsClassifiedTransfer = ReturnType<typeof summarizeWalletOps>[
  * wallet-relative direction. Bank → ChecksOps billing is not Pending Out.
  */
 export function useWalletOpsTransfers(limit = 25) {
-  const { tenantId, enabled } = usePaymentProviderEligibility();
+  const { tenantId, enabled, tenantMoovEnvironment, environmentReady } = usePaymentProviderEligibility();
   const { tenant } = useTenant();
+  const hostname = typeof window === "undefined" ? "" : window.location.hostname;
+  const walletEnvironment = resolveWalletOpsEnvironment({
+    hostname,
+    tenantMoovEnvironment,
+    appUrl: import.meta.env.VITE_APP_URL,
+  });
 
   return useQuery({
-    queryKey: ["wallet-ops-transfers", tenantId, tenant?.name, limit],
-    enabled: !!tenantId && enabled,
+    queryKey: ["wallet-ops-transfers", tenantId, tenant?.name, walletEnvironment, limit],
+    enabled: !!tenantId && enabled && environmentReady,
     staleTime: 30_000,
     queryFn: async () => {
       const [transfersRes, walletRes, methodsRes, billingRes] = await Promise.all([
@@ -46,10 +58,10 @@ export function useWalletOpsTransfers(limit = 25) {
           .limit(limit),
         supabase
           .from("payment_wallets")
-          .select("id, tenant_id, provider_payment_method_id, provider_wallet_id, provider_metadata")
+          .select("id, tenant_id, wallet_type, environment, provider_payment_method_id, provider_wallet_id, provider_metadata")
           .eq("tenant_id", tenantId!)
           .eq("wallet_type", "operating")
-          .maybeSingle(),
+          .eq("environment", walletEnvironment),
         supabase
           .from("payment_provider_methods")
           .select("id, tenant_id, provider_payment_method_id, last_four, bank_name, rail_payment_method_ids, is_default, connection_status")
@@ -66,10 +78,19 @@ export function useWalletOpsTransfers(limit = 25) {
       if (walletRes.error) throw walletRes.error;
 
       const rows = (transfersRes.data ?? []) as WalletOpsTransfer[];
-      const wallet = walletRes.data as {
-        provider_payment_method_id?: string | null;
-        provider_metadata?: Record<string, unknown> | null;
-      } | null;
+      let wallet: PaymentWalletRow | null = null;
+      try {
+        wallet = selectPaymentWallet((walletRes.data ?? []) as PaymentWalletRow[], {
+          tenantId: tenantId!,
+          walletType: "operating",
+          environment: walletEnvironment,
+        });
+      } catch (error) {
+        if (!(error instanceof PaymentWalletSelectionError) || error.code !== "ambiguous_wallet") {
+          throw error;
+        }
+        wallet = null;
+      }
       const methods = ((methodsRes.error ? [] : methodsRes.data ?? []) as PaymentMethodLabel[]).filter(
         (row) => !row.tenant_id || row.tenant_id === tenantId,
       );
@@ -202,19 +223,42 @@ export interface RunningBalancePoint {
  * straight from `payment_wallet_ledger` (balance_after_cents is authoritative).
  */
 export function useWalletRunningBalance(walletType: "operating" | "trust" = "operating", limit = 60) {
-  const { tenantId, enabled } = usePaymentProviderEligibility();
+  const { tenantId, enabled, tenantMoovEnvironment, environmentReady } = usePaymentProviderEligibility();
+  const hostname = typeof window === "undefined" ? "" : window.location.hostname;
+  const walletEnvironment = resolveWalletOpsEnvironment({
+    hostname,
+    tenantMoovEnvironment,
+    appUrl: import.meta.env.VITE_APP_URL,
+  });
 
   return useQuery({
-    queryKey: ["wallet-running-balance", tenantId, walletType, limit],
-    enabled: !!tenantId && enabled,
+    queryKey: ["wallet-running-balance", tenantId, walletType, walletEnvironment, limit],
+    enabled: !!tenantId && enabled && environmentReady,
     staleTime: 30_000,
     queryFn: async () => {
-      const { data: wallet } = await supabase
+      const { data: walletRows, error: walletError } = await supabase
         .from("payment_wallets")
-        .select("id")
+        .select("id, tenant_id, wallet_type, environment")
         .eq("tenant_id", tenantId!)
         .eq("wallet_type", walletType)
-        .maybeSingle();
+        .eq("environment", walletEnvironment);
+      if (walletError) throw walletError;
+      let wallet: PaymentWalletRow | null = null;
+      try {
+        wallet = selectPaymentWallet((walletRows ?? []) as PaymentWalletRow[], {
+          tenantId: tenantId!,
+          walletType,
+          environment: walletEnvironment,
+        });
+      } catch (selectionError) {
+        if (
+          !(selectionError instanceof PaymentWalletSelectionError)
+          || selectionError.code !== "ambiguous_wallet"
+        ) {
+          throw selectionError;
+        }
+        wallet = null;
+      }
       if (!wallet?.id) return { points: [] as RunningBalancePoint[] };
 
       const { data, error } = await supabase
