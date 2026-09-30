@@ -81,6 +81,28 @@
       "invariants": ["command center remains usable at responsive breakpoints"]
     },
     {
+      "id": "endorsement",
+      "title": "Endorsement completion and verified staging lock",
+      "accepted": true,
+      "enabled": true,
+      "environments": ["staging", "production"],
+      "components": ["*"],
+      "deployment_types": ["spa-promote", "lambda-overlay", "sql-apply"],
+      "test": "aws/tests/endorsement-verified-staging-lock.test.mjs",
+      "tests": [
+        "aws/tests/endorsement-verified-staging-lock.test.mjs",
+        "aws/tests/parity-check-endorsement.test.mjs",
+        "aws/tests/wave1-endorsement-completion.test.mjs",
+        "aws/tests/api-workflow.test.mjs"
+      ],
+      "invariants": [
+        "public endorsement path remains available",
+        "endorsement completion remains fail-closed",
+        "legacy auto-ready endorsement trigger stays dropped",
+        "review-stage endorsement confirmation remains intact"
+      ]
+    },
+    {
       "id": "ocr",
       "title": "OCR",
       "accepted": true,

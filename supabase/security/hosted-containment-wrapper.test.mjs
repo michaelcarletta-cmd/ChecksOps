@@ -931,8 +931,8 @@ test('git authorization uses allowlisted absolute binary and ignores PATH', () =
     assert.doesNotMatch(String(inside.stderr || ''), /hijacked/);
   } finally {
     process.env.PATH = prevPath;
-    fs.rmSync(hijack, { recursive: true, force: true });
-    fs.rmSync(tmp, { recursive: true, force: true });
+    fs.rmSync(hijack, { recursive: true, force: true, maxRetries: 8, retryDelay: 25 });
+    fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 8, retryDelay: 25 });
   }
 });
 

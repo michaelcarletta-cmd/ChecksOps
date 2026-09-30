@@ -29,7 +29,13 @@ export function main(argv = process.argv.slice(2), root = repoRootFrom(import.me
     preflight_live_fingerprint: input.preflight || input.preflight_live_fingerprint,
     immediately_before: input.immediately_before,
     live_members: input.live_members,
+    live_baseline: input.live_baseline,
+    deployment_artifact: input.deployment_artifact || input.candidate_artifact,
     candidate_members: input.candidate_members,
+    candidate_contents: input.candidate_contents,
+    require_exclusive_lock: input.require_exclusive_lock,
+    lease: input.lease,
+    git_ancestry: input.git_ancestry || input.ancestry,
     peer_sources: input.peer_sources,
     package: input.package,
     dist: input.dist,
@@ -37,6 +43,23 @@ export function main(argv = process.argv.slice(2), root = repoRootFrom(import.me
     frontend_workstreams: input.frontend_workstreams,
     accepted_composition: input.accepted_composition,
     source_composition_manifest: input.source_composition_manifest,
+    worktree: input.worktree || input.worktree_path,
+    peer_workstreams: input.peer_workstreams,
+    current_main_sha: input.current_main_sha || input.origin_main_sha,
+    merge_base_sha: input.merge_base_sha,
+    claimed_main_sha: input.claimed_main_sha,
+    reconciled_with_main: input.reconciled_with_main,
+    accepted_paths_vs_main: input.accepted_paths_vs_main,
+    dirty_unrelated_paths: input.dirty_unrelated_paths,
+    shared_worktree: input.shared_worktree,
+    independent_task: input.independent_task,
+    cursor_chat: input.cursor_chat,
+    rollback_to_previous: input.rollback_to_previous,
+    auto_rollback: input.auto_rollback,
+    restore_baseline: input.restore_baseline,
+    reclaim: input.reclaim,
+    fingerprint_captured_at: input.fingerprint_captured_at,
+    fingerprint_max_age_ms: input.fingerprint_max_age_ms,
     filename: input.filename,
     migration_id: input.migration_id,
     source_sha256: input.source_sha256,
@@ -72,7 +95,12 @@ export function main(argv = process.argv.slice(2), root = repoRootFrom(import.me
     payload.lease = lease.details.lease;
   }
 
-  const result = evaluateDeployment(payload, { root, env, skip_contracts: flags['skip-contracts'] === true });
+  const result = evaluateDeployment(payload, {
+    root,
+    env,
+    skip_contracts: flags.has('skip-contracts'),
+    official: true,
+  });
   if (result.ok && (flags.receipt || payload.lease)) {
     const file = writeReceipt(root, result, {
       workstream_id: payload.workstream_id,

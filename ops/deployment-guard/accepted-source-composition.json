@@ -1,0 +1,100 @@
+{
+  "version": 1,
+  "fail_closed": true,
+  "required_base": "origin/main",
+  "notes": "Accepted combined-source manifests. Independent chats must reconcile against current main and preserve these paths. A boolean accepted_composition flag is not enough. Do not reopen the architecture.",
+  "preserved_contracts": [
+    "signature-requests",
+    "claim-ledger",
+    "review-claim-save",
+    "ocr",
+    "endorsement"
+  ],
+  "manifests": [
+    {
+      "id": "moov-claim-ledger-signature-spa",
+      "accepted": true,
+      "kind": "spa",
+      "test": "aws/tests/moov-claim-ledger-spa-composition.test.mjs",
+      "preserved_paths": [
+        "src/lib/payments/featureFlags.ts",
+        "src/lib/payments/tenantMoovDefaults.ts",
+        "src/hooks/usePaymentProviderEligibility.ts",
+        "src/components/settings/TenantPaymentAccountPanel.tsx",
+        "src/pages/admin/AdminTenants.tsx",
+        "src/components/settings/TenantManagement.tsx",
+        "src/components/disbursement/CheckStakeholdersManager.tsx",
+        "src/components/payments/ClaimLedgerCard.tsx",
+        "src/lib/checkClaimLinkGuard.ts",
+        "src/pages/CheckCommandCenter.tsx",
+        "src/components/check-review/CheckFilesSection.tsx",
+        "src/components/claim-detail/SignatureRequests.tsx",
+        "src/lib/signature-source-files.ts"
+      ],
+      "invariants": [
+        "Moov GA frontend behavior",
+        "Claim Ledger find/link/create and update-only save",
+        "Send for Homeowner Signature"
+      ]
+    },
+    {
+      "id": "claim-ledger-accepted-695064-gq",
+      "accepted": true,
+      "kind": "spa+lambda+sql",
+      "evidence": "ops/deployment-guard/claim-ledger-accepted-695064-gq.json",
+      "test": "aws/tests/claim-ledger-accepted-contract.test.mjs",
+      "preserved_paths": [
+        "aws/write-path/sql/44_claim_ledger_link_or_create.sql",
+        "src/lib/checkClaimLinkGuard.ts",
+        "src/components/payments/ClaimLedgerCard.tsx"
+      ],
+      "invariants": [
+        "existing real ledger discovery",
+        "linked claim-number Save remains update-only",
+        "OCR remains discovery evidence, not ownership"
+      ]
+    },
+    {
+      "id": "endorsement-verified-lock",
+      "accepted": true,
+      "kind": "lambda+sql+spa",
+      "test": "aws/tests/endorsement-verified-staging-lock.test.mjs",
+      "tests": [
+        "aws/tests/endorsement-verified-staging-lock.test.mjs",
+        "aws/tests/parity-check-endorsement.test.mjs",
+        "aws/tests/wave1-endorsement-completion.test.mjs",
+        "aws/tests/api-workflow.test.mjs"
+      ],
+      "preserved_paths": [
+        "aws/functions/api/check-endorsement.mjs",
+        "aws/functions/api/endorsement-parity.mjs",
+        "aws/functions/api/endorsement-completion.mjs",
+        "aws/functions/api/workflow.mjs",
+        "aws/migrations/20260916_endorsement_verified_staging_lock.sql"
+      ],
+      "invariants": [
+        "public endorsement path remains available",
+        "endorsement completion remains fail-closed",
+        "legacy auto-ready endorsement trigger stays dropped",
+        "review-stage endorsement confirmation remains intact"
+      ]
+    },
+    {
+      "id": "ocr-azure-textract",
+      "accepted": true,
+      "kind": "lambda",
+      "test": "ops/release-locks/tests/ocr-azure-invariants.test.mjs",
+      "preserved_paths": [
+        "aws/functions/api/ocr.mjs",
+        "aws/functions/api/ocr-azure-image.mjs",
+        "aws/functions/api/ocr-parse.mjs",
+        "aws/functions/api/check-ocr-provider.mjs",
+        "aws/functions/api/azure-check-ocr.mjs",
+        "aws/functions/api/textract-check-ocr.mjs"
+      ],
+      "invariants": [
+        "Azure+Textract OCR runtime remains the accepted provider path"
+      ]
+    }
+  ]
+}

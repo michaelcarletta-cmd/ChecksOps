@@ -8,11 +8,25 @@ import { evaluateSpaPromote } from './spa-promote.mjs';
 import { evaluateSqlApply } from './sql-apply.mjs';
 import { evaluateSqlExecutorAuthorization } from './sql-executor-auth.mjs';
 import { acquireLease, inspectLease, releaseLease } from './lease.mjs';
-import { evaluateAcceptedContracts, loadContractRegistry } from './contracts.mjs';
+import { loadContractRegistry } from './contracts.mjs';
 import { evaluateProductionGate } from './production.mjs';
 import { verifyLiveState } from './verify-live.mjs';
-import { receiptDir } from './paths.mjs';
+import { receiptDir, repoRootFrom } from './paths.mjs';
 import { issueReceipt } from './receipt.mjs';
+import { loadCompositionRegistry } from './source-composition.mjs';
+import { evaluatePreserveBuilds, evaluateRequiredRegressionChecks } from './preserve-builds.mjs';
+
+function loadRegistryFromRoots(loader, ...roots) {
+  for (const candidate of roots) {
+    if (!candidate) continue;
+    try {
+      return loader(candidate);
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error;
+    }
+  }
+  return null;
+}
 
 export function loadJson(root, rel) {
   return JSON.parse(fs.readFileSync(path.join(root, rel), 'utf8'));
@@ -38,10 +52,31 @@ export function evaluateDeployment(input = {}, ctx = {}) {
   const production = evaluateProductionGate(input);
   if (!production.ok) return withAws(production, aws);
 
-  if (root && ctx.skip_contracts !== true) {
-    const registry = ctx.registry || loadContractRegistry(root);
-    const contracts = evaluateAcceptedContracts({
+  const fallbackRoot = repoRootFrom(import.meta.url);
+  const registry = ctx.registry || (ctx.skip_contracts === true
+    ? null
+    : loadRegistryFromRoots(loadContractRegistry, root, fallbackRoot));
+  const compositionRegistry = ctx.compositionRegistry || (ctx.skip_preserve_builds === true
+    ? null
+    : loadRegistryFromRoots(loadCompositionRegistry, root, fallbackRoot));
+
+  if (ctx.skip_preserve_builds !== true) {
+    const preserve = evaluatePreserveBuilds(input, {
+      root,
       registry,
+      compositionRegistry,
+      skip_contracts: true,
+      official: ctx.official === true,
+      git: ctx.git,
+      trusted_observation: ctx.trusted_observation,
+    });
+    if (!preserve.ok) return withAws(preserve, aws);
+  }
+
+  if (root && ctx.skip_contracts !== true) {
+    const contracts = evaluateRequiredRegressionChecks({
+      registry: registry || loadContractRegistry(root),
+      compositionRegistry: compositionRegistry || (root ? loadCompositionRegistry(root) : null),
       environment: input.target_environment,
       component: input.target_component,
       deployment_type: input.deployment_type,

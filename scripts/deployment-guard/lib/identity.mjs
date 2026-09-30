@@ -106,6 +106,9 @@ export function buildManifest(input, extras = {}) {
     reclaim_forbidden: true,
     restore_forbidden: true,
     stale_package_forbidden: true,
+    preserve_accepted_fixes: true,
+    worktree_isolation_required: true,
+    main_reconciliation_required: true,
   };
   return ok(manifest);
 }

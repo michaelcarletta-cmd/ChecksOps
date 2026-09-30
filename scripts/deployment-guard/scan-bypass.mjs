@@ -10,6 +10,7 @@ import { repoRootFrom } from './lib/paths.mjs';
 
 export const SCAN_PATTERNS = Object.freeze([
   { id: 'lambda-update-function-code', re: /(?:^|[\s'"`])update-function-code(?:$|[\s'"`])/ },
+  { id: 'lambda-sdk-update-function-code', re: /UpdateFunctionCodeCommand|\.updateFunctionCode\s*\(/ },
   { id: 'cloudfront-update-distribution', re: /(?:^|[\s'"`])update-distribution(?:$|[\s'"`])/ },
   { id: 'cloudfront-create-invalidation', re: /create-invalidation/ },
   { id: 'sam-deploy', re: /\bsam\s+deploy\b/ },

@@ -19,7 +19,9 @@ export function repoRootFrom(metaUrl = import.meta.url) {
 export const DEFAULT_PATHS = Object.freeze({
   targets: 'ops/deployment-guard/protected-targets.json',
   contracts: 'ops/deployment-guard/accepted-contracts.json',
+  composition: 'ops/deployment-guard/accepted-source-composition.json',
   inventory: 'ops/deployment-guard/bypass-inventory.json',
+  gaps: 'ops/deployment-guard/enforcement-gaps.json',
   readme: 'ops/deployment-guard/README.md',
 });
 

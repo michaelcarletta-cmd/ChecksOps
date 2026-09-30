@@ -14,6 +14,7 @@ node scripts/deployment-guard/spa-promote.mjs --input <spa.json>
 node scripts/deployment-guard/sql-apply.mjs --input <sql.json>
 node scripts/deployment-guard/verify-live.mjs --input <live.json>
 node scripts/deployment-guard/manifest.mjs --input <identity.json>
+node scripts/deployment-guard/preserve-builds.mjs --input <preserve.json>
 node scripts/production-deploy-guard.mjs --candidate <fingerprint.json>
 ```
 
@@ -31,4 +32,18 @@ Rules:
 
 Inventoried `MUST_REFUSE_DIRECT` scripts fail closed with `DEPLOYMENT_GUARD_REQUIRED` unless a valid short-lived receipt exists. Issue one via `preflight.mjs --acquire-lease --receipt` or `wrap-legacy.mjs`. Hand-written receipt JSON is `RECEIPT_FORGED`. A staging receipt cannot authorize production. An environment variable cannot bypass the guard.
 
-See `.cursor/rules/deployment-guard.mdc` and `ops/deployment-guard/README.md`.
+Independent Cursor chats must also follow `.cursor/rules/preserve-builds.mdc`:
+separate branches and worktrees, preserve accepted fixes, reconcile against
+current main and `ops/deployment-guard/accepted-source-composition.json`,
+reject stale SPA/full Lambda packages, require exclusive locks
+(`require_exclusive_lock=true` plus a lease), a complete live fingerprint
+with `captured_at`, verified git-merge-base ancestry (not
+`reconciled_with_main=true`), candidate content hashes observed from
+the deployment artifact bound to the declared commit (not repository
+source alone), live hashes from a freshly captured baseline with a
+verified fingerprint, git-merge-base ancestry observed by Git commands, run
+accepted regression checks, and never automatically
+roll back over another workstream.
+
+See `.cursor/rules/deployment-guard.mdc`, `.cursor/rules/preserve-builds.mdc`,
+and `ops/deployment-guard/README.md`.

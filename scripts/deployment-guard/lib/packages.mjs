@@ -5,7 +5,11 @@ export const REJECTED_PACKAGE_ORIGINS = Object.freeze([
   'tmp-deployment-package',
   'stale-dist',
   'previously-built-spa',
+  'previous-spa-build',
+  'cached-dist',
   'branch-local-full-lambda',
+  'full-lambda-from-branch',
+  'stale-full-lambda',
   'reused-old-zip',
   'reclaim-baseline',
 ]);
@@ -30,6 +34,19 @@ export function evaluatePackageProvenance(pkg = {}) {
   }
   if (pkg.reclaim === true) {
     errors.push(errorEntry(CODES.STALE_PACKAGE, 'reclaim/restore packages are forbidden'));
+  }
+  if (pkg.kind === 'full-lambda' || pkg.full_replace === true || pkg.includes_unrelated_members === true) {
+    errors.push(errorEntry(
+      CODES.STALE_PACKAGE,
+      'stale or full Lambda packages are forbidden on overlay targets; download CURRENT live ZIP and overlay owned members only',
+      { kind: pkg.kind || 'full-lambda' },
+    ));
+  }
+  if (pkg.expected_live_code_sha256 && pkg.live_code_sha256 && pkg.expected_live_code_sha256 !== pkg.live_code_sha256) {
+    errors.push(errorEntry(CODES.STALE_PACKAGE, 'package live fingerprint does not match CURRENT CodeSha256', {
+      expected_live_code_sha256: pkg.expected_live_code_sha256,
+      live_code_sha256: pkg.live_code_sha256,
+    }));
   }
   if (pkg.downloaded_at && pkg.preflight_at && Date.parse(pkg.downloaded_at) < Date.parse(pkg.preflight_at)) {
     errors.push(errorEntry(CODES.STALE_PACKAGE, 'package was downloaded before this preflight; download CURRENT live state immediately before deployment', {
@@ -62,6 +79,15 @@ export function evaluateDistFreshness(dist = {}) {
   }
   if (dist.reused_index === true || dist.restore_previous_index === true) {
     errors.push(errorEntry(CODES.STALE_PACKAGE, 'never put an old index.html back or restore a previous dist'));
+  }
+  if (dist.built_from_stale_main === true || dist.source_commit_stale === true) {
+    errors.push(errorEntry(CODES.STALE_PACKAGE, 'SPA build was produced from a stale main; rebuild from the reconciled composed source'));
+  }
+  if (dist.source_commit && dist.current_commit && dist.source_commit !== dist.current_commit) {
+    errors.push(errorEntry(CODES.STALE_PACKAGE, 'SPA dist commit does not match the current composed source commit', {
+      source_commit: dist.source_commit,
+      current_commit: dist.current_commit,
+    }));
   }
   if (errors.length) return failMany(errors, CODES.STALE_PACKAGE);
   return ok({ clean_build: true });

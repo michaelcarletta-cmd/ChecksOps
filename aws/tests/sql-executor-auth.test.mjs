@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -19,6 +19,8 @@ import {
 import { acquireLease } from '../../scripts/deployment-guard/lib/lease.mjs';
 import { issueReceipt } from '../../scripts/deployment-guard/lib/receipt.mjs';
 import { refuseUnguardedDeploy } from '../../scripts/deployment-guard/require-guard.mjs';
+import { evidenceForPreservedPaths, loadCompositionRegistry, passingCompositionResults, requiredPreservedPaths } from '../../scripts/deployment-guard/lib/source-composition.mjs';
+import { loadContractRegistry, passingContractResults } from '../../scripts/deployment-guard/lib/contracts.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const NOW = '2026-09-29T18:00:00.000Z';
@@ -26,10 +28,22 @@ const NOW_MS = Date.parse(NOW);
 const EXPECTED_LIVE = 'af784b78408b77ed928d1c815309e8da3459e9ebd3f4f6068321b9f33dd2a078';
 
 function executorInput(overrides = {}) {
+  const preflight = {
+    ...authorizationFingerprint({
+      ...AUTHORIZED_SQL44,
+      expected_live_definition_sha256: EXPECTED_LIVE,
+      one_use_id: 'sql44-apply-0001',
+    }),
+    captured_at: NOW,
+  };
+  const evidence = evidenceForPreservedPaths(loadCompositionRegistry(ROOT), SQL_EXECUTOR_DEPLOYMENT_TYPE);
+  const commit = overrides.commit || AUTHORIZED_SQL44.commit;
+  const currentMain = overrides.current_main_sha || 'cccccccccccccccccccccccccccccccccccccccc';
+  const mergeBase = overrides.merge_base_sha || 'cccccccccccccccccccccccccccccccccccccccc';
   return {
     workstream_id: 'claim-ledger',
     branch: 'cursor/ledger-guarded-main-a2a4',
-    commit: AUTHORIZED_SQL44.commit,
+    commit,
     operator: 'test-agent',
     target_environment: 'staging',
     target_component: 'staging-sql',
@@ -45,11 +59,32 @@ function executorInput(overrides = {}) {
     action: 'authorize',
     function_name: 'checksops-staging-guarded-sql-executor',
     build_timestamp: NOW,
-    preflight_live_fingerprint: authorizationFingerprint({
-      ...AUTHORIZED_SQL44,
-      expected_live_definition_sha256: EXPECTED_LIVE,
-      one_use_id: 'sql44-apply-0001',
-    }),
+    require_exclusive_lock: true,
+    lease: {
+      workstream_id: 'claim-ledger',
+      component: 'staging-sql',
+      environment: 'staging',
+      commit,
+      acquired_at: NOW,
+      expiry: new Date(Math.max(Date.now(), NOW_MS) + 15 * 60 * 1000).toISOString(),
+    },
+    preflight_live_fingerprint: preflight,
+    preflight,
+    immediately_before: preflight,
+    current_main_sha: currentMain,
+    merge_base_sha: mergeBase,
+    reconciled_with_main: true,
+    git_ancestry: {
+      method: 'git-merge-base',
+      is_ancestor: true,
+      current_main_sha: currentMain,
+      merge_base_sha: mergeBase,
+      commit,
+    },
+    live_members: evidence.live_members,
+    candidate_members: evidence.candidate_members,
+    accepted_paths_vs_main: evidence.accepted_paths_vs_main,
+    worktree: '/tmp/worktree-ledger',
     ...overrides,
   };
 }
@@ -199,11 +234,52 @@ test('sql-apply receipt cannot authorize executor invoke', () => {
   assert.equal(refused.code, CODES.RECEIPT_MISMATCH);
 });
 
+function officialSqlObservation(commit, fingerprint) {
+  const files = requiredPreservedPaths(loadCompositionRegistry(ROOT), {
+    deployment_type: SQL_EXECUTOR_DEPLOYMENT_TYPE,
+  });
+  const artifact = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-sql-artifact-'));
+  const baseline = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-sql-live-'));
+  for (const rel of files) {
+    const bytes = String(rel).endsWith('.sql')
+      ? execFileSync('git', ['show', `${commit}:${rel}`], { cwd: ROOT })
+      : fs.readFileSync(path.join(ROOT, rel));
+    for (const root of [artifact, baseline]) {
+      const dest = path.join(root, rel);
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.writeFileSync(dest, bytes);
+    }
+  }
+  return {
+    deployment_artifact: { path: artifact, commit, kind: 'sql-bundle' },
+    live_baseline: {
+      path: baseline,
+      origin: 'fresh-live-download',
+      kind: 'sql-bundle',
+      fingerprint,
+    },
+  };
+}
+
 test('official preflight forwards executor authorization fields', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-sql-pre-'));
   const input = executorInput();
+  delete input.candidate_members;
+  delete input.live_members;
+  delete input.git_ancestry;
+  delete input.accepted_paths_vs_main;
+  delete input.current_main_sha;
+  delete input.merge_base_sha;
+  const observation = officialSqlObservation(input.commit, input.preflight);
   const file = path.join(dir, 'manifest.json');
-  fs.writeFileSync(file, `${JSON.stringify({ ...input, contract_results: { 'claim-ledger': { ok: true }, 'tenant-isolation': { ok: true }, 'financial-write-protections': { ok: true } } })}\n`);
+  fs.writeFileSync(file, `${JSON.stringify({
+    ...input,
+    ...observation,
+    contract_results: {
+      ...passingContractResults(loadContractRegistry(ROOT)),
+      ...passingCompositionResults(loadCompositionRegistry(ROOT)),
+    },
+  })}\n`);
   const result = spawnSync(process.execPath, [
     path.join(ROOT, 'scripts/deployment-guard/preflight.mjs'),
     '--input', file,

@@ -24,6 +24,7 @@ import {
   planLambdaApply,
 } from '../../scripts/deployment-guard/lib/lambda-overlay.mjs';
 import { evaluateSourceComposition, evaluateSpaPromote } from '../../scripts/deployment-guard/lib/spa-promote.mjs';
+import { evidenceForPreservedPaths, loadCompositionRegistry } from '../../scripts/deployment-guard/lib/source-composition.mjs';
 import { evaluateSqlApply, hashSqlDefinition } from '../../scripts/deployment-guard/lib/sql-apply.mjs';
 import { acquireLease, inspectLease, releaseLease } from '../../scripts/deployment-guard/lib/lease.mjs';
 import {
@@ -38,25 +39,59 @@ import { requireDeploymentGuard } from '../../scripts/deployment-guard/require-g
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SHA = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const SHA_B = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+const MAIN = 'cccccccccccccccccccccccccccccccccccccccc';
 const NOW = '2026-09-29T16:00:00.000Z';
 
 function identity(overrides = {}) {
+  const deploymentType = overrides.deployment_type || 'lambda-overlay';
+  const evidence = evidenceForPreservedPaths(loadCompositionRegistry(ROOT), deploymentType);
+  const workstreamId = overrides.workstream_id || 'workstream-a';
+  const commit = overrides.commit || SHA;
+  const currentMain = Object.hasOwn(overrides, 'current_main_sha') ? overrides.current_main_sha : MAIN;
+  const mergeBase = Object.hasOwn(overrides, 'merge_base_sha') ? overrides.merge_base_sha : MAIN;
+  const lambdaFingerprint = {
+    codeSha256: 'live-code',
+    revisionId: 'rev-1',
+    lastModified: NOW,
+    captured_at: NOW,
+  };
   return {
-    workstream_id: 'workstream-a',
+    workstream_id: workstreamId,
     branch: 'cursor/guard-a',
-    commit: SHA,
+    commit,
     operator: 'test-agent',
     target_environment: 'staging',
     deployment_type: 'lambda-overlay',
     owned_members: ['owned.mjs'],
     owned_components: ['owned.mjs'],
-    preflight: { codeSha256: 'live-code', revisionId: 'rev-1', lastModified: NOW },
-    preflight_live_fingerprint: { codeSha256: 'live-code', revisionId: 'rev-1', lastModified: NOW },
+    require_exclusive_lock: true,
+    lease: {
+      workstream_id: workstreamId,
+      component: overrides.target_component || 'checksops-staging-api',
+      environment: 'staging',
+      commit,
+      acquired_at: NOW,
+      expiry: '2026-09-29T16:15:00.000Z',
+    },
+    preflight: lambdaFingerprint,
+    preflight_live_fingerprint: lambdaFingerprint,
     build_timestamp: NOW,
     package: { origin: 'fresh-live-download', downloaded_at: NOW, preflight_at: NOW },
-    live_members: { 'owned.mjs': 'old', 'shared.mjs': 'keep', 'vendor/lib.js': 'vendor' },
-    candidate_members: { 'owned.mjs': 'new', 'shared.mjs': 'keep', 'vendor/lib.js': 'vendor' },
-    immediately_before: { codeSha256: 'live-code', revisionId: 'rev-1' },
+    live_members: { ...evidence.live_members, 'owned.mjs': 'old', 'shared.mjs': 'keep', 'vendor/lib.js': 'vendor' },
+    candidate_members: { ...evidence.candidate_members, 'owned.mjs': 'new', 'shared.mjs': 'keep', 'vendor/lib.js': 'vendor' },
+    accepted_paths_vs_main: evidence.accepted_paths_vs_main,
+    immediately_before: { codeSha256: 'live-code', revisionId: 'rev-1', captured_at: NOW },
+    current_main_sha: currentMain,
+    merge_base_sha: mergeBase,
+    reconciled_with_main: true,
+    git_ancestry: {
+      method: 'git-merge-base',
+      is_ancestor: true,
+      current_main_sha: currentMain || MAIN,
+      merge_base_sha: mergeBase || MAIN,
+      commit,
+    },
+    worktree: '/tmp/worktree-a',
     ...overrides,
   };
 }
@@ -124,7 +159,7 @@ test('D. same owned file concurrently changed -> reconciliation required', () =>
 });
 
 test('E. old ZIP rejected', () => {
-  for (const origin of ['saved-live-zip', 'tmp-deployment-package', 'reused-old-zip', 'branch-local-full-lambda', 'reclaim-baseline']) {
+  for (const origin of ['saved-live-zip', 'tmp-deployment-package', 'reused-old-zip', 'branch-local-full-lambda', 'full-lambda-from-branch', 'stale-full-lambda', 'reclaim-baseline']) {
     const result = evaluatePackageProvenance({ origin });
     assert.equal(result.ok, false, origin);
     assert.equal(result.code, CODES.STALE_PACKAGE, origin);
@@ -154,15 +189,18 @@ test('G. index.html changed -> STOP', () => {
 });
 
 test('H. unrelated Lambda members preserved', () => {
-  const overlay = evaluateLambdaOverlay(identity());
+  const before = identity();
+  const overlay = evaluateLambdaOverlay(before);
   assert.equal(overlay.ok, true);
   const post = evaluatePostOverlay({
-    liveMembersBefore: identity().live_members,
-    liveMembersAfter: { 'owned.mjs': 'new', 'shared.mjs': 'keep', 'vendor/lib.js': 'vendor' },
+    liveMembersBefore: before.live_members,
+    liveMembersAfter: { ...before.live_members, 'owned.mjs': 'new' },
     ownedMembers: ['owned.mjs'],
   });
   assert.equal(post.ok, true);
-  assert.deepEqual(post.details.preserved, ['shared.mjs', 'vendor/lib.js']);
+  assert.ok(post.details.preserved.includes('shared.mjs'));
+  assert.ok(post.details.preserved.includes('vendor/lib.js'));
+  assert.equal(post.details.preserved.includes('owned.mjs'), false);
 });
 
 test('I. SPA multi-workstream source composition required', () => {
@@ -454,6 +492,7 @@ test('accepted-contracts registry is extensible and includes required seeds', ()
     'checkalt',
     'tenant-isolation',
     'financial-write-protections',
+    'endorsement',
   ]) {
     assert.ok(ids.includes(id), id);
   }
@@ -491,11 +530,22 @@ test('claim-ledger accepted contract covers the 695064-GQ freeze', () => {
 
 test('cursor rule and AGENTS.md instruct future chats to use the guard', () => {
   const rule = fs.readFileSync(path.join(ROOT, '.cursor/rules/deployment-guard.mdc'), 'utf8');
+  const preserve = fs.readFileSync(path.join(ROOT, '.cursor/rules/preserve-builds.mdc'), 'utf8');
   const agents = fs.readFileSync(path.join(ROOT, 'AGENTS.md'), 'utf8');
-  for (const text of [rule, agents]) {
+  for (const text of [rule, agents, preserve]) {
     assert.match(text, /scripts\/deployment-guard/);
     assert.match(text, /reclaim/i);
     assert.match(text, /DEPLOYMENT_COLLISION/);
     assert.match(text, /SOURCE_RECONCILIATION_REQUIRED/);
   }
+  assert.match(preserve, /alwaysApply: true/);
+  assert.match(preserve, /separate git branch/i);
+  assert.match(preserve, /separate worktree/i);
+  assert.match(preserve, /origin\/main/);
+  assert.match(preserve, /stale SPA/);
+  assert.match(preserve, /full Lambda/);
+  assert.match(preserve, /Signature Requests/);
+  assert.match(preserve, /Claim Ledger/);
+  assert.match(preserve, /OCR/);
+  assert.match(preserve, /Endorsement/);
 });
