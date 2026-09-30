@@ -17,6 +17,7 @@ Use official safe deployment tooling only:
 - `node scripts/deployment-guard/sql-apply.mjs`
 - `node scripts/deployment-guard/verify-live.mjs`
 - `node scripts/deployment-guard/manifest.mjs`
+- `node scripts/deployment-guard/preserve-builds.mjs`
 - `node scripts/production-deploy-guard.mjs` (production fingerprint vs release-locks)
 
 Never deploy directly when this guarded tooling exists.
@@ -49,6 +50,12 @@ If multiple workstreams contain frontend changes: **STOP** with
 
 Preserve unrelated work. Overlay only declared owned members onto a freshly
 downloaded live package.
+
+Independent chats must also follow `.cursor/rules/preserve-builds.mdc`:
+separate branches/worktrees, reconcile with current main and accepted
+source composition, reject stale SPA/full Lambda packages, run accepted
+regression checks, and never automatically roll back over another
+workstream.
 
 This rule supplements enforcement in `scripts/deployment-guard/`. It is not
 the only safeguard. Do not deploy this guard. Do not change AWS, staging,

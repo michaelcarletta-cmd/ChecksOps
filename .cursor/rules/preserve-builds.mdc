@@ -1,0 +1,97 @@
+---
+description: Preserve accepted ChecksOps builds and fixes across independent Cursor chats
+alwaysApply: true
+---
+
+# Preserve accepted builds (mandatory)
+
+This rule extends `.cursor/rules/deployment-guard.mdc`. It does not replace
+it. Independent Cursor chats may edit source concurrently. They may not
+overwrite accepted fixes, restore an older baseline, or deploy a stale build.
+
+## Isolation
+
+- Use a **separate git branch** for every independent task.
+- Use a **separate worktree** when two chats or agents can mutate files at
+  the same time. Do not share a dirty working tree.
+- Never commit, restore, or deploy another workstream's unrelated files.
+- Reconcile against **current `origin/main`** plus the accepted
+  source-composition registry before combining or deploying.
+
+## Preserve accepted work
+
+Keep every accepted fix and every unrelated live member. Do not reopen the
+architecture. At minimum preserve:
+
+- Signature Requests
+- Claim-number Save and Claim Ledger discovery/grouping
+- OCR (Azure + Textract accepted path)
+- Endorsement completion / verified endorsement lock
+
+If an accepted path, contract, or composition invariant would regress:
+**STOP**. Do not deploy.
+
+Registries (extend; do not replace):
+
+- `ops/deployment-guard/accepted-contracts.json`
+- `ops/deployment-guard/accepted-source-composition.json`
+- `ops/deployment-guard/claim-ledger-accepted-695064-gq.json`
+- `ops/release-locks/`
+
+## Deployment
+
+Deploy only through the existing guarded workflow:
+
+- `node scripts/deployment-guard/preflight.mjs`
+- `node scripts/deployment-guard/lease.mjs`
+- `node scripts/deployment-guard/lambda-overlay.mjs`
+- `node scripts/deployment-guard/spa-promote.mjs`
+- `node scripts/deployment-guard/sql-apply.mjs`
+- `node scripts/deployment-guard/verify-live.mjs`
+- `node scripts/deployment-guard/manifest.mjs`
+- `node scripts/deployment-guard/preserve-builds.mjs`
+- `node scripts/production-deploy-guard.mjs`
+
+Shared-target writers still require a short-lived signed receipt. A staging
+Lambda receipt does not authorize SPA or production. An environment variable
+cannot bypass the guard.
+
+## Exclusive lock + fresh live fingerprint
+
+- Acquire an **exclusive** lease for the environment and component.
+- Do not reclaim or steal another workstream's active lock.
+- Capture a **fresh** live fingerprint immediately before write
+  (`CodeSha256` + `RevisionId`, `index.html` + entry bundle, or SQL
+  definition). Preflight alone is not sufficient.
+- If live state drifted after preflight: **STOP** with
+  `DEPLOYMENT_COLLISION`. Do not restore the previous package.
+
+## Reject stale artifacts
+
+Refuse:
+
+- stale SPA `dist/` / previously built `index.html`
+- stale full Lambda packages, saved live ZIPs, `/tmp` packages
+- branch-local full Lambda baselines
+- `sam deploy` of a thin template over a live overlay Lambda
+- automatic rollback, reclaim, or "we were here first" restore
+
+Lambda shared APIs are overlay-only onto a freshly downloaded live ZIP.
+SPA deploys require a clean build from the reconciled composed source.
+
+## Regression checks
+
+Before any guarded deploy, accepted-contract and accepted-composition
+tests must run and pass. Missing or failed results are
+`REGRESSION_DETECTED`.
+
+## Never
+
+- overwrite accepted fixes or unrelated changes
+- deploy from a mixed shared worktree
+- skip reconciliation with current main
+- bypass the guarded workflow
+- automatically roll back or restore over another workstream
+
+This workstream does not deploy, change AWS, change staging, change
+production, or change database data.

@@ -1,6 +1,6 @@
 {
-  "version": 2,
-  "generated_for": "cursor/deployment-guard-safeguard-febc",
+  "version": 3,
+  "generated_for": "cursor/preserve-builds-safeguard-771b",
   "notes": "Phase 2 enforcement registry. MUST_REFUSE_DIRECT writers call enforceScriptGuard before AWS mutation. NON_SHARED/SAFE oneshots call enforceSharedLambdaTarget so they cannot be retargeted at shared APIs. Do not delete these scripts.",
   "classifications": ["GUARDED", "MUST_WRAP", "MUST_REFUSE_DIRECT", "NON_SHARED/SAFE", "SAFE"],
   "scripts": [
@@ -93,6 +93,12 @@
       "capabilities": ["bypass-scanner"],
       "scanner_allow_mention": true,
       "note": "Scanner only. Never writes AWS."
+    },
+    {
+      "path": "scripts/deployment-guard/preserve-builds.mjs",
+      "classification": "SAFE",
+      "capabilities": ["preserve-builds-evaluate"],
+      "note": "Official isolate/reconcile/stale-artifact evaluator. Does not mutate AWS."
     },
     {
       "path": "aws/cutover/scripts/hardening-batch3-apply.mjs",

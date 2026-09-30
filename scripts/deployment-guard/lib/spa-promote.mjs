@@ -1,6 +1,12 @@
 import { CODES, errorEntry, failMany, ok } from './errors.mjs';
 import { evaluateDistFreshness } from './packages.mjs';
 import { validateWorkstreamIdentity } from './identity.mjs';
+import {
+  evaluateAcceptedSourceComposition,
+  evaluateSourceComposition,
+} from './source-composition.mjs';
+
+export { evaluateSourceComposition };
 
 export function evaluateIndexToctou({ preflight, immediatelyBefore }) {
   const errors = [];
@@ -22,21 +28,6 @@ export function evaluateIndexToctou({ preflight, immediatelyBefore }) {
   }
   if (errors.length) return failMany(errors, CODES.DEPLOYMENT_COLLISION);
   return ok({ index_html_sha256: immediatelyBefore.index_html_sha256 });
-}
-
-export function evaluateSourceComposition({ frontend_workstreams = [], accepted_composition = false, composition_manifest = null }) {
-  const distinct = [...new Set(frontend_workstreams.filter(Boolean))];
-  if (distinct.length > 1 && accepted_composition !== true) {
-    return failMany([errorEntry(
-      CODES.SOURCE_COMPOSITION_REQUIRED,
-      'multiple workstreams contain frontend changes; build one combined source candidate before SPA promote',
-      {
-        workstreams: distinct,
-        composition_manifest: composition_manifest || null,
-      },
-    )], CODES.SOURCE_COMPOSITION_REQUIRED);
-  }
-  return ok({ workstreams: distinct, accepted_composition: accepted_composition === true || distinct.length <= 1 });
 }
 
 export function evaluateSpaPromote(input = {}) {
@@ -63,11 +54,19 @@ export function evaluateSpaPromote(input = {}) {
     return failMany([errorEntry(CODES.INVALID_MANIFEST, 'SPA promote requires a source composition manifest')], CODES.INVALID_MANIFEST);
   }
 
-  const composition = evaluateSourceComposition({
-    frontend_workstreams: input.frontend_workstreams || [],
-    accepted_composition: input.accepted_composition === true,
-    composition_manifest: input.source_composition_manifest,
-  });
+  const composition = input.composition_registry
+    ? evaluateAcceptedSourceComposition({
+      registry: input.composition_registry,
+      deployment_type: 'spa-promote',
+      composition_manifest: input.source_composition_manifest,
+      accepted_composition: input.accepted_composition === true,
+      frontend_workstreams: input.frontend_workstreams || [],
+    })
+    : evaluateSourceComposition({
+      frontend_workstreams: input.frontend_workstreams || [],
+      accepted_composition: input.accepted_composition === true,
+      composition_manifest: input.source_composition_manifest,
+    });
   if (!composition.ok) return composition;
 
   if (!input.immediately_before) {

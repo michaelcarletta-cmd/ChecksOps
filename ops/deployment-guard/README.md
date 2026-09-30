@@ -55,6 +55,7 @@ node scripts/deployment-guard/spa-upload.mjs --environment production
 node scripts/deployment-guard/sql-apply.mjs --input path/to/sql.json
 node scripts/deployment-guard/verify-live.mjs --input path/to/live.json
 node scripts/deployment-guard/scan-bypass.mjs
+node scripts/deployment-guard/preserve-builds.mjs
 
 # Legacy script (must not be invoked directly against a shared target)
 node scripts/deployment-guard/wrap-legacy.mjs --input path/to/workstream.json -- node aws/cutover/scripts/hardening-batch4-apply.mjs
@@ -187,6 +188,39 @@ writers fail the scan.
 
 `npm run deploy:staging` and `npm run deploy:production` are evaluate-only
 guarded entrypoints. They do not write AWS.
+
+## Phase 3 — preserve accepted builds
+
+Independent Cursor chats must not overwrite accepted fixes or deploy a
+stale SPA/Lambda package. This phase extends the existing guard; it does
+not replace leases, receipts, overlays, or release-locks.
+
+Always-apply Cursor rule: `.cursor/rules/preserve-builds.mdc`.
+
+Official evaluator:
+
+```bash
+node scripts/deployment-guard/preserve-builds.mjs --input path/to/preserve.json
+```
+
+Additional fail-closed checks on mutating evaluates:
+
+- separate branch + worktree isolation (`WORKTREE_ISOLATION_REQUIRED`)
+- reconcile against current `origin/main` (`MAIN_RECONCILIATION_REQUIRED`)
+- accepted source-composition registry (`ops/deployment-guard/accepted-source-composition.json`)
+- exclusive lease + mutation-boundary live fingerprint
+- reject stale SPA dist and stale/full Lambda packages
+- accepted-contract **and** accepted-composition regression gates
+- no automatic rollback / reclaim over another workstream
+
+Preserved accepted work includes Signature Requests, Claim Ledger /
+claim-number Save, OCR, and endorsement fixes. A boolean
+`accepted_composition` flag is not enough; the composed file list must
+include every accepted preserved path.
+
+Remaining holes that in-repo scripts cannot close (IAM, out-of-repo AWS
+CLI, per-checkout leases) are listed in
+`ops/deployment-guard/enforcement-gaps.json`.
 
 ## IAM hardening (recommendations only; not applied)
 

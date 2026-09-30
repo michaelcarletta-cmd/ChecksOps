@@ -38,6 +38,7 @@ import { requireDeploymentGuard } from '../../scripts/deployment-guard/require-g
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SHA = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const SHA_B = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+const MAIN = 'cccccccccccccccccccccccccccccccccccccccc';
 const NOW = '2026-09-29T16:00:00.000Z';
 
 function identity(overrides = {}) {
@@ -57,6 +58,10 @@ function identity(overrides = {}) {
     live_members: { 'owned.mjs': 'old', 'shared.mjs': 'keep', 'vendor/lib.js': 'vendor' },
     candidate_members: { 'owned.mjs': 'new', 'shared.mjs': 'keep', 'vendor/lib.js': 'vendor' },
     immediately_before: { codeSha256: 'live-code', revisionId: 'rev-1' },
+    current_main_sha: MAIN,
+    merge_base_sha: MAIN,
+    reconciled_with_main: true,
+    worktree: '/tmp/worktree-a',
     ...overrides,
   };
 }
@@ -124,7 +129,7 @@ test('D. same owned file concurrently changed -> reconciliation required', () =>
 });
 
 test('E. old ZIP rejected', () => {
-  for (const origin of ['saved-live-zip', 'tmp-deployment-package', 'reused-old-zip', 'branch-local-full-lambda', 'reclaim-baseline']) {
+  for (const origin of ['saved-live-zip', 'tmp-deployment-package', 'reused-old-zip', 'branch-local-full-lambda', 'full-lambda-from-branch', 'stale-full-lambda', 'reclaim-baseline']) {
     const result = evaluatePackageProvenance({ origin });
     assert.equal(result.ok, false, origin);
     assert.equal(result.code, CODES.STALE_PACKAGE, origin);
@@ -454,6 +459,7 @@ test('accepted-contracts registry is extensible and includes required seeds', ()
     'checkalt',
     'tenant-isolation',
     'financial-write-protections',
+    'endorsement',
   ]) {
     assert.ok(ids.includes(id), id);
   }
@@ -491,11 +497,22 @@ test('claim-ledger accepted contract covers the 695064-GQ freeze', () => {
 
 test('cursor rule and AGENTS.md instruct future chats to use the guard', () => {
   const rule = fs.readFileSync(path.join(ROOT, '.cursor/rules/deployment-guard.mdc'), 'utf8');
+  const preserve = fs.readFileSync(path.join(ROOT, '.cursor/rules/preserve-builds.mdc'), 'utf8');
   const agents = fs.readFileSync(path.join(ROOT, 'AGENTS.md'), 'utf8');
-  for (const text of [rule, agents]) {
+  for (const text of [rule, agents, preserve]) {
     assert.match(text, /scripts\/deployment-guard/);
     assert.match(text, /reclaim/i);
     assert.match(text, /DEPLOYMENT_COLLISION/);
     assert.match(text, /SOURCE_RECONCILIATION_REQUIRED/);
   }
+  assert.match(preserve, /alwaysApply: true/);
+  assert.match(preserve, /separate git branch/i);
+  assert.match(preserve, /separate worktree/i);
+  assert.match(preserve, /origin\/main/);
+  assert.match(preserve, /stale SPA/);
+  assert.match(preserve, /full Lambda/);
+  assert.match(preserve, /Signature Requests/);
+  assert.match(preserve, /Claim Ledger/);
+  assert.match(preserve, /OCR/);
+  assert.match(preserve, /Endorsement/);
 });

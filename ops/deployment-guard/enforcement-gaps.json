@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "generated_for": "cursor/preserve-builds-safeguard-771b",
+  "notes": "Repository controls cannot stop out-of-repo AWS authority. This file records remaining gaps after in-repo enforcement. Do not treat this list as authorization to bypass the guard.",
+  "in_repo_enforced": [
+    "signed receipts for inventoried shared-target writers",
+    "exclusive local lease per environment/component",
+    "fresh mutation-boundary live fingerprint (immediately_before)",
+    "stale SPA dist and stale full Lambda package rejection",
+    "accepted-contract and accepted-composition regression gates",
+    "worktree/branch isolation evaluator",
+    "main reconciliation evaluator",
+    "bypass scanner for registered CLI writers"
+  ],
+  "gaps": [
+    {
+      "id": "out-of-repo-aws-cli",
+      "severity": "high",
+      "summary": "A human or agent with AWS credentials can still call aws lambda update-function-code, aws s3 cp, or CloudFront APIs outside this repository.",
+      "mitigation": "IAM deny on shared functions/buckets except a dedicated deploy role that requires RevisionId CAS. Not applied in this workstream."
+    },
+    {
+      "id": "local-lease-not-distributed",
+      "severity": "high",
+      "summary": "Leases live under .deployment-guard/ in the checkout. Separate machines, CloudShell sessions, or unsynchronized worktrees do not share the lock unless they point CHECKSOPS_DEPLOYMENT_GUARD_ROOT at the same directory.",
+      "mitigation": "Require a shared lock root for staging/production apply, plus IAM so only the guarded role can write."
+    },
+    {
+      "id": "local-issuer-key",
+      "severity": "medium",
+      "summary": "Receipt MACs use a gitignored local issuer key. A process that can read that key or call issueReceipt after acquireLease can mint a valid receipt.",
+      "mitigation": "Treat receipts as collision protection, not an AWS security boundary."
+    },
+    {
+      "id": "cursor-runtime-aws-credentials",
+      "severity": "high",
+      "summary": "If a Cursor chat environment has AWS credentials, it can invoke the AWS CLI directly even after in-repo scripts refuse.",
+      "mitigation": "Do not grant Cursor oneshot roles lambda:UpdateFunctionCode, s3:PutObject on index.html, or CloudFront mutate on shared targets."
+    },
+    {
+      "id": "codeowners-advisory",
+      "severity": "medium",
+      "summary": "CODEOWNERS is advisory until branch protection requires owner review and disables administrator bypass.",
+      "mitigation": "GitHub branch-protection configuration (out of band)."
+    },
+    {
+      "id": "sdk-runtime-writers",
+      "severity": "low",
+      "summary": "Lambda application code uses S3 PutObject for tenant files. Those are data-plane writes, not deploys, and are not receipt-gated.",
+      "mitigation": "Keep scanner focused on deploy-time writers. Do not confuse file uploads with SPA/Lambda deploys."
+    },
+    {
+      "id": "iam-not-applied",
+      "severity": "high",
+      "summary": "Recommended IAM denies from ops/deployment-guard/README.md are not applied by this workstream.",
+      "mitigation": "Separate reviewed IAM apply workstream."
+    }
+  ]
+}

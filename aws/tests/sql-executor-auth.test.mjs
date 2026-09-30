@@ -26,6 +26,11 @@ const NOW_MS = Date.parse(NOW);
 const EXPECTED_LIVE = 'af784b78408b77ed928d1c815309e8da3459e9ebd3f4f6068321b9f33dd2a078';
 
 function executorInput(overrides = {}) {
+  const preflight = authorizationFingerprint({
+    ...AUTHORIZED_SQL44,
+    expected_live_definition_sha256: EXPECTED_LIVE,
+    one_use_id: 'sql44-apply-0001',
+  });
   return {
     workstream_id: 'claim-ledger',
     branch: 'cursor/ledger-guarded-main-a2a4',
@@ -45,11 +50,13 @@ function executorInput(overrides = {}) {
     action: 'authorize',
     function_name: 'checksops-staging-guarded-sql-executor',
     build_timestamp: NOW,
-    preflight_live_fingerprint: authorizationFingerprint({
-      ...AUTHORIZED_SQL44,
-      expected_live_definition_sha256: EXPECTED_LIVE,
-      one_use_id: 'sql44-apply-0001',
-    }),
+    preflight_live_fingerprint: preflight,
+    preflight,
+    immediately_before: preflight,
+    current_main_sha: 'cccccccccccccccccccccccccccccccccccccccc',
+    merge_base_sha: 'cccccccccccccccccccccccccccccccccccccccc',
+    reconciled_with_main: true,
+    worktree: '/tmp/worktree-ledger',
     ...overrides,
   };
 }
