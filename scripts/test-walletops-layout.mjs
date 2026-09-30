@@ -20,12 +20,16 @@ const test = (name, fn) => tests.push([name, fn]);
 
 test("Recent Wallet Activity sits in the main grid as a large box", () => {
   const activity = page.indexOf('title="Recent Wallet Activity"');
-  const payout = page.indexOf('title="Payout Preferences"');
   const gridClose = page.indexOf("Running Balance");
-  assert.ok(activity > 0 && payout > 0);
-  assert.ok(activity < payout, "activity should appear before payout preferences");
+  assert.ok(activity > 0);
   assert.ok(activity < gridClose, "activity should be above running balance");
   assert.match(page, /lg:col-span-2/);
+});
+
+test("production Item #4 hides Payment Account and Payout Preferences sections", () => {
+  assert.doesNotMatch(page, /title="Payment Account"/);
+  assert.doesNotMatch(page, /title="Payout Preferences"/);
+  assert.match(page, /Go to Payment Account/);
 });
 
 test("Balances by Organization is removed", () => {
@@ -40,8 +44,9 @@ test("Refresh balances forces a provider sync", () => {
   assert.match(walletSync, /skipProviderFetch: !force && !isVerified/);
 });
 
-test("Payout preferences acknowledge a connected settlement bank", () => {
-  assert.match(page, /is connected\. Load payout speeds from the bank/);
+test("Treasury card still reads settlement bank and payout speed", () => {
+  assert.match(page, /Settlement bank/);
+  assert.match(page, /Payout speed/);
   assert.match(sweep, /pickSettlementMethod/);
   assert.match(sweep, /resolveRails/);
 });
