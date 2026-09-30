@@ -3,8 +3,9 @@
 This file is repository evidence for the already-live production frontend.
 It does **not** deploy, upload, invalidate, or modify AWS.
 
-Read-only live verification on 2026-09-27 confirmed that production still
-serves this baseline. Metadata in this PR only records and protects it.
+Read-only live verification on 2026-09-30 confirmed that production now
+serves the baseline recorded here. Metadata in this PR only records and
+protects it.
 
 ## Accepted live production SPA
 
@@ -13,11 +14,11 @@ serves this baseline. Metadata in this PR only records and protects it.
 | Host | `https://checksops.com` |
 | CloudFront | `E1B0ZWWO5559U5` |
 | S3 bucket | `checksops-production-frontend-806168576068` |
-| Entry | `/assets/index-BPbQUNFr.js` |
-| Entry JS SHA256 | `78b393152e17e1eb223deced357f2276e7a5f00e214d2652d115347b2d2ed9d5` |
-| index.html SHA256 | `244c4bd12bddc72e064723d87b6dbd6004a2d859b27200b0ca6747f189c73394` |
-| index.html S3 version | `L.ND9yiehnJfDCocKdyFC_mRQZjchON3` |
-| Last-Modified | `Sun, 27 Sep 2026 01:34:04 GMT` |
+| Entry | `/assets/index-DSbVZXu8.js` |
+| Entry JS SHA256 | `8da351ee4060d065e626b382fec06acf9a7099317184980979b95468e7e4bbe5` |
+| index.html SHA256 | `e93fe5488c013aed91626da1ee608978f702796a24e08350306ccb4c3163e75f` |
+| index.html S3 version | `Jc2Nyp5THf1j30gf21cQHeMoApSs8uDw` |
+| Last-Modified | `Wed, 30 Sep 2026 21:20:11 GMT` |
 | Banner overlay commit | `6c679a120d5d4b0dd23d7035ecaf309558df29d0` |
 | Live source lineage before overlay | `1c2ec1ad7d3331f11f8cde61fdbc5cd363eb6720` |
 
@@ -33,8 +34,8 @@ serves this baseline. Metadata in this PR only records and protects it.
 branch, or another worktree must demonstrate that it contains or reconciles
 this accepted production SPA. If it cannot, deployment must be refused.
 
-Do not restore a superseded entry (`index-BAD1KYoF.js` or earlier conflicting
-bundle names) over this baseline.
+Do not restore a superseded entry (`index-BPbQUNFr.js`, `index-BAD1KYoF.js`,
+or earlier conflicting bundle names) over this baseline.
 
 ## Fail-closed promotion rules
 
@@ -52,11 +53,11 @@ write.
 
 HTTPS `GET https://checksops.com/` returned:
 
-- `last-modified: Sun, 27 Sep 2026 01:34:04 GMT`
-- `x-amz-version-id: L.ND9yiehnJfDCocKdyFC_mRQZjchON3`
-- index.html SHA256 `244c4bd12bddc72e064723d87b6dbd6004a2d859b27200b0ca6747f189c73394`
-- entry `/assets/index-BPbQUNFr.js`
-- entry SHA256 `78b393152e17e1eb223deced357f2276e7a5f00e214d2652d115347b2d2ed9d5`
+- `last-modified: Wed, 30 Sep 2026 21:20:11 GMT`
+- `x-amz-version-id: Jc2Nyp5THf1j30gf21cQHeMoApSs8uDw`
+- index.html SHA256 `e93fe5488c013aed91626da1ee608978f702796a24e08350306ccb4c3163e75f`
+- entry `/assets/index-DSbVZXu8.js`
+- entry SHA256 `8da351ee4060d065e626b382fec06acf9a7099317184980979b95468e7e4bbe5`
 
 Exact match to the accepted baseline. Freeze proceeded.
 

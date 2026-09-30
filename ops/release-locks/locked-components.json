@@ -13,7 +13,7 @@
     "auto_unlock_forbidden": true,
     "instructions_path": "ops/release-locks/OPERATOR.md"
   },
-  "notes": "production-spa is PRODUCTION_LOCKED to the live checksops.com SPA verified 2026-09-27 (index-BPbQUNFr.js). origin/main is not that baseline. Other components remain unlocked. This metadata does not deploy or write production.",
+  "notes": "production-spa is PRODUCTION_LOCKED to the live checksops.com SPA verified 2026-09-30 (index-DSbVZXu8.js). origin/main is not guaranteed to be that baseline. Other components remain unlocked. This metadata does not deploy or write production.",
   "components": {
     "identity-cognito": {
       "id": "identity-cognito",
@@ -621,16 +621,16 @@
       "environment": "production",
       "source": {
         "git_sha": "6c679a120d5d4b0dd23d7035ecaf309558df29d0",
-        "tree_hash": "8a794da51c14a4520e987fcce8fc738e1dc196eca1b3f994fc17b57a2c2b2c7f",
+        "tree_hash": "cba50dfaa041e7ddd5b0ec657e744f97b5525fd117391a6432bee2e8a73ef323",
         "merged": false,
         "merged_pr": 506
       },
       "required_sql": [],
       "artifact": {
         "type": "spa",
-        "name": "/assets/index-BPbQUNFr.js",
-        "version": "L.ND9yiehnJfDCocKdyFC_mRQZjchON3",
-        "hash": "78b393152e17e1eb223deced357f2276e7a5f00e214d2652d115347b2d2ed9d5",
+        "name": "/assets/index-DSbVZXu8.js",
+        "version": "Jc2Nyp5THf1j30gf21cQHeMoApSs8uDw",
+        "hash": "8da351ee4060d065e626b382fec06acf9a7099317184980979b95468e7e4bbe5",
         "cloudfront_distribution": "E1B0ZWWO5559U5",
         "lambda_name": "checksops-production-prep-api",
         "lambda_version": null,
@@ -641,33 +641,33 @@
         "evidence_refs": [
           "ops/release-locks/proof/production-spa-baseline.md"
         ],
-        "recorded_at": "2026-09-27T01:34:04Z",
+        "recorded_at": "2026-09-30T21:20:11Z",
         "environment": "production",
         "component": "production-spa",
         "git_sha": "6c679a120d5d4b0dd23d7035ecaf309558df29d0",
-        "artifact_identity": "/assets/index-BPbQUNFr.js",
+        "artifact_identity": "/assets/index-DSbVZXu8.js",
         "evidence_producer": "read-only live HTTPS verification of checksops.com",
         "evidence_type": "production SPA baseline freeze"
       },
       "deployment_fingerprint": {
         "recorded": true,
-        "spa_bundle": "/assets/index-BPbQUNFr.js",
-        "spa_sha256": "78b393152e17e1eb223deced357f2276e7a5f00e214d2652d115347b2d2ed9d5",
+        "spa_bundle": "/assets/index-DSbVZXu8.js",
+        "spa_sha256": "8da351ee4060d065e626b382fec06acf9a7099317184980979b95468e7e4bbe5",
         "cloudfront_id": "E1B0ZWWO5559U5",
         "cloudfront_distribution": "E1B0ZWWO5559U5",
-        "cloudfront_deployment_fingerprint": "L.ND9yiehnJfDCocKdyFC_mRQZjchON3",
+        "cloudfront_deployment_fingerprint": "Jc2Nyp5THf1j30gf21cQHeMoApSs8uDw",
         "lambda_name": "checksops-production-prep-api",
         "lambda_version": null,
         "lambda_code_hash": null,
         "applied_sql_hash": null,
         "database_evidence_record": null,
-        "config_hash": "244c4bd12bddc72e064723d87b6dbd6004a2d859b27200b0ca6747f189c73394",
-        "notes": "Accepted live production SPA 2026-09-27T01:34:04Z. Host checksops.com. Entry /assets/index-BPbQUNFr.js. index.html sha256 244c4bd12bddc72e064723d87b6dbd6004a2d859b27200b0ca6747f189c73394. S3 version L.ND9yiehnJfDCocKdyFC_mRQZjchON3. CloudFront E1B0ZWWO5559U5. Source lineage 1c2ec1ad7d3331f11f8cde61fdbc5cd363eb6720. Banner overlay 6c679a120d5d4b0dd23d7035ecaf309558df29d0. PRODUCTION: no staging banner. STAGING: banner visible. Other current production functionality preserved. origin/main is not this baseline."
+        "config_hash": "e93fe5488c013aed91626da1ee608978f702796a24e08350306ccb4c3163e75f",
+        "notes": "Accepted live production SPA 2026-09-30T21:20:11Z. Host checksops.com. Entry /assets/index-DSbVZXu8.js. index.html sha256 e93fe5488c013aed91626da1ee608978f702796a24e08350306ccb4c3163e75f. S3 version Jc2Nyp5THf1j30gf21cQHeMoApSs8uDw. CloudFront E1B0ZWWO5559U5. Source lineage 1c2ec1ad7d3331f11f8cde61fdbc5cd363eb6720. Banner overlay 6c679a120d5d4b0dd23d7035ecaf309558df29d0. PRODUCTION: no staging banner. STAGING: banner visible. Other current production functionality preserved. origin/main is not this baseline."
       },
       "rollback": {
         "git_sha": "1c2ec1ad7d3331f11f8cde61fdbc5cd363eb6720",
-        "artifact": "/assets/index-BAD1KYoF.js",
-        "notes": "Pre-overlay live lineage before the accepted banner fix. Do not restore this older SPA over the frozen baseline unless a reviewed unlock records a newer accepted live identity."
+        "artifact": "/assets/index-BPbQUNFr.js",
+        "notes": "Previous accepted live baseline. Do not restore this older SPA over the frozen baseline unless a reviewed unlock records a newer accepted live identity."
       },
       "missing_evidence": [],
       "open_pr_overlap": ["#506"],
@@ -681,7 +681,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "d5418ab63cb9af8024c746c4393c0f801f15fd1d",
-        "tree_hash": "aeff94e68383a05e088b9c1a66ce2afcfb0d26ffd5e6e137e94c77df34ad85ee",
+        "tree_hash": "1e35c6e5f5fed2d914ed05b358f5c816de3f6e7dff21691cda01028fe2dd7cd2",
         "merged": true,
         "merged_pr": null
       },
