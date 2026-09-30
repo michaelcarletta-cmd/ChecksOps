@@ -1,22 +1,11 @@
-import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
-import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   ArrowDownLeft,
   ArrowUpRight,
-  BadgeCheck,
   Banknote,
   Clock,
   Gauge,
@@ -26,7 +15,6 @@ import {
   Sparkles,
   TrendingUp,
   Wallet,
-  Zap,
 } from "lucide-react";
 import {
   Area,
@@ -41,7 +29,6 @@ import { useWallet } from "@/hooks/useWallet";
 import { useSweepConfig } from "@/hooks/useSweepConfig";
 import {
   useRefreshTransferStatuses,
-  useWalletOpsReadiness,
   useWalletOpsTransfers,
   useWalletRunningBalance,
 } from "@/hooks/useWalletOps";
@@ -50,14 +37,11 @@ import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibi
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/contexts/TenantContext";
 import { useToast } from "@/hooks/use-toast";
-import { SWEEP_RAIL_HINT, SWEEP_RAIL_LABEL, type SweepPushRail } from "@/lib/payments/sweeps";
+import { SWEEP_RAIL_LABEL } from "@/lib/payments/sweeps";
 import { WalletPanel } from "@/components/payments/WalletPanel";
 import { AutoFundingPanel } from "@/components/payments/AutoFundingPanel";
 
 import { MoovTreasuryPanel } from "@/components/payments/MoovTreasuryPanel";
-import { PaymentAccountPanel } from "@/components/payments/PaymentAccountPanel";
-import { PaymentReadinessPanel } from "@/components/payments/PaymentReadinessPanel";
-import { VerificationDocumentsPanel } from "@/components/payments/VerificationDocumentsPanel";
 
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 
@@ -136,16 +120,13 @@ export default function WalletOps() {
   const {
     config,
     settlementMethod,
-    pushRails,
     history,
     stale,
     refresh: refreshSweeps,
-    save,
   } = useSweepConfig("operating");
   const { data: transferData, isLoading: transfersLoading } = useWalletOpsTransfers();
   const refreshStatuses = useRefreshTransferStatuses();
 
-  const { data: readiness } = useWalletOpsReadiness();
   const { data: runningData, isLoading: runningLoading } = useWalletRunningBalance("operating");
 
   const runningPoints = runningData?.points ?? [];
@@ -155,7 +136,6 @@ export default function WalletOps() {
   }));
 
 
-  const [payoutRail, setPayoutRail] = useState<SweepPushRail | "">("");
   const refreshingBalances = refreshWallet.isPending || refreshSweeps.isPending;
 
   const tenantBase = tenant?.slug
@@ -174,9 +154,6 @@ export default function WalletOps() {
         : "Pending sync";
 
   const sweepsOn = config?.status === "enabled";
-  const effectiveRail = (payoutRail || (config?.push_rail as SweepPushRail) || pushRails[0] || "") as
-    | SweepPushRail
-    | "";
 
   const lastSweep = history?.[0];
   const pendingOut = transferData?.pendingOutCents ?? 0;
@@ -258,26 +235,6 @@ export default function WalletOps() {
     } catch (e) {
       toast({
         title: "Could not refresh balances",
-        description: (e as Error).message,
-        variant: "destructive",
-      });
-    }
-  }
-
-  async function handleSavePayoutSpeed() {
-    if (!effectiveRail) return;
-    try {
-      await save.mutateAsync({
-        pushRail: effectiveRail,
-        minimumBalanceCents: minimumCents,
-        statementDescriptor: config?.statement_descriptor ?? null,
-        status: sweepsOn ? "enabled" : "disabled",
-        enablePull: true,
-      });
-      toast({ title: "Payout speed updated" });
-    } catch (e) {
-      toast({
-        title: "Could not update payout speed",
         description: (e as Error).message,
         variant: "destructive",
       });
@@ -618,129 +575,6 @@ export default function WalletOps() {
             )}
           </SectionCard>
         </div>
-
-        {/* Readiness shortcut */}
-        <SectionCard
-          title="Payment Account"
-          icon={<BadgeCheck className="h-4 w-4 text-emerald-500" />}
-          accent="bg-gradient-to-r from-emerald-500/60 to-emerald-500/10"
-          action={
-            <Badge
-              variant="outline"
-              className={READINESS_COPY[readiness?.overall ?? "not_started"].tone}
-            >
-              {READINESS_COPY[readiness?.overall ?? "not_started"].label}
-            </Badge>
-          }
-        >
-          <div className="space-y-2">
-            {(readiness?.checks ?? []).slice(0, 5).map((c) => (
-              <div key={c.id} className="flex items-center justify-between gap-2 text-sm">
-                <span className="truncate">{c.label}</span>
-                <Badge variant="outline" className={`text-[10px] ${READINESS_COPY[c.state].tone}`}>
-                  {READINESS_COPY[c.state].label}
-                </Badge>
-              </div>
-            ))}
-            {!readiness && (
-              <p className="text-sm text-muted-foreground">Checking your account status…</p>
-            )}
-          </div>
-          <Separator />
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-sm text-muted-foreground">
-              Settlement bank {settlementMethod ? "connected" : "not connected"}
-            </span>
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button size="sm">Open Payment Account</Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>Payment Account Setup</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <PaymentAccountPanel />
-                  <PaymentReadinessPanel />
-                  <VerificationDocumentsPanel />
-                </div>
-              </DialogContent>
-            </Dialog>
-          </div>
-        </SectionCard>
-
-        {/* Payout preferences */}
-        <SectionCard
-          title="Payout Preferences"
-          icon={<Zap className="h-4 w-4 text-violet-500" />}
-          accent="bg-gradient-to-r from-violet-500/60 to-violet-500/10"
-        >
-          {pushRails.length === 0 ? (
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                {settlementMethod
-                  ? `${settlementMethod.bank_name ?? "Bank"} ••${settlementMethod.last_four ?? "----"} is connected. Load payout speeds from the bank to choose how quickly funds are sent.`
-                  : "Connect and verify a settlement bank to choose payout speeds."}
-              </p>
-              {settlementMethod && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={refreshingBalances}
-                  onClick={handleRefreshBalances}
-                >
-                  {refreshingBalances ? (
-                    <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <RefreshCw className="mr-2 h-3.5 w-3.5" />
-                  )}
-                  Load payout speeds
-                </Button>
-              )}
-            </div>
-          ) : (
-            <>
-              <div className="space-y-1.5">
-                <Label htmlFor="walletops-rail">Default payout speed</Label>
-                <Select
-                  value={effectiveRail}
-                  onValueChange={(v) => setPayoutRail(v as SweepPushRail)}
-                  disabled={!isAdmin}
-                >
-                  <SelectTrigger id="walletops-rail">
-                    <SelectValue placeholder="Choose a speed" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {pushRails.map((r) => (
-                      <SelectItem key={r} value={r}>
-                        {SWEEP_RAIL_LABEL[r] ?? r}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {effectiveRail && (
-                  <p className="text-xs text-muted-foreground">{SWEEP_RAIL_HINT[effectiveRail]}</p>
-                )}
-              </div>
-
-              <div className="rounded-lg border border-violet-500/20 bg-violet-500/5 p-3 text-xs text-muted-foreground">
-                Instant delivery is used automatically when the receiving bank supports it; otherwise the
-                payment falls back to same-day or standard ACH so it always lands.
-              </div>
-
-              {isAdmin ? (
-                <Button onClick={handleSavePayoutSpeed} disabled={save.isPending || !effectiveRail}>
-                  {save.isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
-                  Save payout preference
-                </Button>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  Only administrators can change payout preferences.
-                </p>
-              )}
-            </>
-          )}
-        </SectionCard>
       </div>
 
       {/* Running balance */}
