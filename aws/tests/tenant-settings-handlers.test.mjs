@@ -154,11 +154,13 @@ const memory = (opts = {}) => {
   };
 };
 
-test('class A billing and branding names are registered without WalletOps collection names', () => {
+test('class A billing and branding names keep WalletOps and settings handlers', () => {
   assert.equal(CLASS_A_FUNCTIONS.has('save-tenant-billing-account'), true);
   assert.equal(CLASS_A_FUNCTIONS.has('tenant-company-branding-save'), true);
-  assert.equal(CLASS_A_FUNCTIONS.has('tenant-billing-authorize'), false);
-  assert.equal(CLASS_A_FUNCTIONS.has('tenant-billing-admin'), false);
+  assert.equal(CLASS_A_FUNCTIONS.has('tenant-billing-authorize'), true);
+  assert.equal(CLASS_A_FUNCTIONS.has('tenant-billing-admin'), true);
+  assert.equal(CLASS_A_FUNCTIONS.has('tenant-email-branding-save'), true);
+  assert.equal(CLASS_A_FUNCTIONS.has('tenant-email-branding-get'), true);
 });
 
 test('billing save requires tenant admin, verified owned account, and ACH consent', async () => {
@@ -343,6 +345,18 @@ test('branding save denies non-admins and does not invent company_branding write
   assert.match(src, /UPDATE public\.tenants SET/);
 });
 
+test('reconciled dispatcher keeps WalletOps funding wrap and stakeholder bank sync', () => {
+  const moov = read('aws/functions/api/providers/parity/moov-functions.mjs');
+  const app = read('aws/functions/api/app-services.mjs');
+  assert.match(moov, /wrapPlatformOwnerRead/);
+  assert.match(moov, /reconcileStakeholderBankStatuses/);
+  assert.match(moov, /initiate-wallet-funding/);
+  assert.match(app, /handleSaveTenantBillingAccount/);
+  assert.match(app, /handleTenantBillingAuthorize/);
+  assert.match(app, /handleSaveTenantCompanyBranding/);
+  assert.match(app, /tenant-email-branding-save/);
+});
+
 test('SPA billing and branding use the Class A paths instead of generic writes', () => {
   const billing = read('src/components/settings/TenantBillingAccountPanel.tsx');
   const company = read('src/components/settings/CompanyBrandingSettings.tsx');
@@ -354,6 +368,8 @@ test('SPA billing and branding use the Class A paths instead of generic writes',
   assert.doesNotMatch(billing, /\.from\("tenant_billing_accounts"\)[\s\S]*\.(insert|update|upsert)/);
   assert.match(company, /tenant-company-branding-save/);
   assert.match(company, /tenant-logos/);
+  assert.match(company, /canonicalStoredTenantLogo/);
+  assert.match(company, /Invoices use the same logo configured in Branding & Appearance/);
   assert.doesNotMatch(company, /company_branding/);
   assert.match(email, /tenant-email-branding-save/);
   assert.match(email, /primaryColor/);
