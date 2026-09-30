@@ -1,0 +1,321 @@
+{
+  "id": "walletops-activity-missing-diagnosis",
+  "verdict": "WALLETOPS ACTIVITY BACKEND GAP + FRONTEND HOOK ABORT",
+  "title": "Freedom WalletOps missing $5 activity and $139 billing — read-only diagnosis",
+  "captured_at": "2026-09-30T18:31:30Z",
+  "workstream_id": "walletops-activity-followup-2d41",
+  "branch": "cursor/walletops-funding-prod-2d41",
+  "commit": "261ceae7a56162648eba9310ebdda23b124d3e4c",
+  "git_status": "clean at freeze",
+  "stop_after_diagnosis": true,
+  "deployed": false,
+  "code_changed": false,
+  "lambda_updated": false,
+  "s3_writes": 0,
+  "db_writes": 0,
+  "migrations": 0,
+  "provider_writes": {
+    "POST": 0,
+    "PATCH": 0,
+    "PUT": 0,
+    "DELETE": 0,
+    "oauth_token_posts_only": 2,
+    "note": "OAuth client_credentials POST only. First attempt Cloudflare 1010. Second succeeded. No transfer POST/PATCH/PUT/DELETE."
+  },
+  "A_fresh_production_spa": {
+    "host": "https://checksops.com",
+    "index_html_sha256": "d0d59415d6692713f73b8edabefec10a261f1b7a85d6f4a6abd719f9011b3eb4",
+    "entry": "/assets/index-C_fh5VBD.js",
+    "entry_sha256": "a357373bef9e41b004f887ee312ca239f64236706c826afb69400312e6fbad22",
+    "entry_etag": "718327a14e3b8b30bf47f3299d2b50c1",
+    "entry_last_modified": "2026-09-30T18:05:59+00:00",
+    "walletops_chunk": "/assets/WalletOps-2AGadvlz.js",
+    "walletops_sha256": "85a3b9776a2db63acb661545f2c006b74699224357f0be59db96349aee063439",
+    "walletops_etag": "8dfb384d9aa50a2276a9e0662a6e392f",
+    "walletops_last_modified": "2026-09-30T18:05:45+00:00",
+    "css": "/assets/index-CwQaUh9K.css",
+    "index_last_modified": "Wed, 30 Sep 2026 18:06:18 GMT",
+    "s3_version_id": "VrLJwkt.ge_P4S2pjYAX5YX_uAoP8A6F",
+    "s3_and_cloudfront_match": true,
+    "matches_accepted_walletops_prod": true,
+    "drift": false,
+    "live_chunk_contains": {
+      "Funding & Billing": true,
+      "Pending in": true,
+      "Pending out": true,
+      "ChecksOps Billing": true,
+      "Payout Preferences": false,
+      "Go to Payment Account empty-state link only": true,
+      "wallet_relative_classifier": true,
+      "drops_kind_neither_from_activity": false
+    }
+  },
+  "B_fresh_lambda": {
+    "function_name": "checksops-production-prep-api",
+    "CodeSha256": "pxZj4G6pGntJrkcRO5uNNEbiyvDpCOKPiWAboDnPvBA=",
+    "RevisionId": "3bccd144-4e61-422f-8151-9ed0fe713aac",
+    "LastModified": "2026-09-30T16:25:23.000+0000",
+    "CodeSize": 11704982,
+    "unchanged_from_accepted_walletops_prod": true,
+    "drift": false
+  },
+  "C_five_provider_status": {
+    "provider_transfer_id": "9f9df312-32a9-4999-ace9-fc2b00669c75",
+    "status": "pending",
+    "amount_cents": 500,
+    "description": "Balance funding",
+    "createdOn": "2026-09-29T15:44:36Z",
+    "updated_ach": {
+      "initiatedOn": "2026-09-29T15:44:36.363448Z",
+      "originatedOn": "2026-09-29T18:15:03.941077Z",
+      "ach_status": "originated",
+      "debitHoldPeriod": "2-days",
+      "traceNumber": "273976360896947"
+    },
+    "completedOn": null,
+    "failedOn": null,
+    "canceledOn": null,
+    "method": "GET /accounts/{freedom|checksops}/transfers/{id}",
+    "http": 200
+  },
+  "D_five_source_destination": {
+    "source_payment_method_id": "a02c1c81-9ca6-434d-accc-ea4471a70ef2",
+    "source_type": "ach-debit-fund",
+    "source_account": "60922058-7eca-4889-81dd-5720d7b9de96",
+    "source_bank": "WELLS FARGO BANK ••••4573",
+    "destination_payment_method_id": "744ea734-f5e3-4b31-bb92-38f85fd29b91",
+    "destination_type": "moov-wallet",
+    "destination_account": "60922058-7eca-4889-81dd-5720d7b9de96",
+    "destination_wallet": "3e6286ca-a19c-45f6-aad9-f73dac5f0358",
+    "path": "Wells Fargo ••••4573 → Freedom wallet"
+  },
+  "E_139_provider_status": {
+    "provider_transfer_id": "b31c7752-031f-4b8b-9b6e-82dd0aaed2cb",
+    "status": "pending",
+    "amount_cents": 13900,
+    "description": "ChecksOps subscription 2026-09 bank",
+    "createdOn": "2026-09-29T22:46:18Z",
+    "updated_ach": {
+      "initiatedOn": "2026-09-29T22:46:18.256306Z",
+      "originatedOn": "2026-09-30T14:00:04.329208Z",
+      "ach_status": "originated",
+      "debitHoldPeriod": "2-days",
+      "traceNumber": "273976360903626"
+    },
+    "completedOn": null,
+    "failedOn": null,
+    "canceledOn": null,
+    "method": "GET /accounts/{freedom|checksops}/transfers/{id}",
+    "http": 200
+  },
+  "F_139_source_destination": {
+    "source_payment_method_id": "a02c1c81-9ca6-434d-accc-ea4471a70ef2",
+    "source_type": "ach-debit-fund",
+    "source_account": "60922058-7eca-4889-81dd-5720d7b9de96",
+    "source_bank": "WELLS FARGO BANK ••••4573",
+    "destination_payment_method_id": "c70a90f2-9bcc-4084-8263-d5a0fb5d806c",
+    "destination_type": "moov-wallet",
+    "destination_account": "41cb5d67-4911-4bef-aad5-d8ee9c582208",
+    "destination_wallet": "72630a70-4954-4761-b652-e8beff1ad02c",
+    "path": "Freedom Wells Fargo ••••4573 → ChecksOps platform wallet"
+  },
+  "G_freedom_wallet_balance": {
+    "wallet": "3e6286ca-a19c-45f6-aad9-f73dac5f0358",
+    "status": "active",
+    "available_cents": 0,
+    "available_usd": "$0.00",
+    "pending_component_exposed": false,
+    "provider_fields": ["availableBalance", "status", "walletID", "walletType"],
+    "method": "GET /accounts/60922058-7eca-4889-81dd-5720d7b9de96/wallets/3e6286ca-a19c-45f6-aad9-f73dac5f0358",
+    "note": "Pending $5 has not settled into available. Provider does not expose a pending wallet component on this GET."
+  },
+  "H_api_returns_five": false,
+  "H_detail": {
+    "payment_transfers_row": null,
+    "production_moov_payment_transfers_count": 1,
+    "that_one_row": "ab2895c9-2ba8-4c21-a818-7f83abdb068c ($139)",
+    "sandbox_moov_pending_count": 1,
+    "sandbox_row_is_not_the_five": true,
+    "inspect": "checksops-prod-sql47-inspect-2d41 SET default_transaction_read_only=on mutated=false",
+    "conclusion": "Provider has the $5. Production payment_transfers does not. WalletOps reads payment_transfers via /data/query, not live Moov transfers."
+  },
+  "I_api_returns_139_transfer": {
+    "db_has_row": true,
+    "id": "ab2895c9-2ba8-4c21-a818-7f83abdb068c",
+    "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+    "environment": "production",
+    "status": "submitted",
+    "amount_cents": 13900,
+    "provider_transfer_id": "b31c7752-031f-4b8b-9b6e-82dd0aaed2cb",
+    "created_at": "2026-09-29T22:46:17.662Z",
+    "completed_at": null,
+    "authenticated_hook_consumes_it": false,
+    "reason_not_consumed": "useWalletOpsTransfers throws before summarizeWalletOps"
+  },
+  "J_api_returns_september_billing_occurrence": {
+    "db_has_row": true,
+    "id": "72b622f9-b68f-4032-a971-a854dbcfbf57",
+    "occurrence_kind": "monthly_subscription",
+    "amount_cents": 13900,
+    "billing_period": "2026-09",
+    "status": "due",
+    "provider_transfer_id": "b31c7752-031f-4b8b-9b6e-82dd0aaed2cb",
+    "authenticated_hook_consumes_it": false,
+    "reason_not_consumed": "same useWalletOpsTransfers abort"
+  },
+  "K_five_disappears_at": {
+    "step": "backend payment_transfers persistence — row never exists",
+    "pipeline": [
+      "1 backend/API: NO payment_transfers row for 9f9df312. /data/query cannot return it.",
+      "2 useWalletOps: never receives the $5 row",
+      "3 summarizeWalletOps: never sees it",
+      "4 WalletOps.tsx: cannot render it",
+      "5 additionally: even a later persist would currently be discarded because the hook aborts on payment_wallets maybeSingle 406"
+    ],
+    "not_dropped_by": [
+      "wallet-relative classifier as activity filter",
+      "leg_role=wallet_funding activity omit",
+      "status normalization",
+      "limit 25",
+      "dedupe"
+    ]
+  },
+  "L_139_disappears_at": {
+    "step": "src/hooks/useWalletOps.ts queryFn — walletRes.error throw after payment_wallets maybeSingle 406",
+    "pipeline": [
+      "1 backend/API: YES — payment_transfers ab2895c9 and tenant_maintenance_payments 72b622f9 exist",
+      "2 /data/query payment_transfers would return the $139 if the hook completed",
+      "3 Promise.all also queries payment_wallets WHERE tenant_id=Freedom AND wallet_type=operating maybeSingle",
+      "4 Freedom has TWO operating wallets (sandbox + production). aws/functions/api/data.mjs maybeSingle returns 406 not_single when rows.length > 1",
+      "5 src/integrations/aws/client.ts maps non-OK to error",
+      "6 useWalletOps.ts `if (walletRes.error) throw walletRes.error` aborts the entire queryFn",
+      "7 transferData is undefined → pendingIn/Out default $0, billing=[], classified=[], recentActivity empty",
+      "8 Available still works because it uses syncWallet → moov-wallet-sync, not this hook"
+    ],
+    "freedom_operating_wallets": [
+      {
+        "environment": "sandbox",
+        "provider_wallet_id": "3e6286ca-a19c-45f6-aad9-f73dac5f0358",
+        "provider_payment_method_id": "744ea734-f5e3-4b31-bb92-38f85fd29b91"
+      },
+      {
+        "environment": "production",
+        "provider_wallet_id": "3e6286ca-a19c-45f6-aad9-f73dac5f0358",
+        "provider_payment_method_id": "744ea734-f5e3-4b31-bb92-38f85fd29b91"
+      }
+    ],
+    "same_abort_empties": [
+      "Pending In",
+      "Pending Out",
+      "Funding & Billing",
+      "Recent Activity",
+      "useWalletRunningBalance ledger (same maybeSingle)"
+    ]
+  },
+  "M_wallet_relative_classifier_filtering_activity": false,
+  "M_detail": {
+    "correct_use": "Pending In / Pending Out totals only",
+    "live_WalletOps_tsx": "recentActivity = billingActivity + classifiedTransfers.filter(!row.billing) + ledger. Does NOT drop kind==='neither'",
+    "live_chunk_confirmed": "/assets/WalletOps-2AGadvlz.js",
+    "summarizeWalletOps": "retains neither rows in transfers[]",
+    "regression_checked": "accepted wallet-relative classifier was NOT reused as an activity filter"
+  },
+  "N_root_cause": {
+    "empty_walletops_activity": "useWalletOpsTransfers aborts because Freedom has two payment_wallets operating rows and payment_wallets is queried with maybeSingle. AWS /data/query treats multiple rows as 406 not_single. The hook throws and defaults Pending/Activity/Billing to empty while Available still syncs from the provider.",
+    "missing_five_even_after_hook_fix": "WALLETOPS ACTIVITY BACKEND GAP — no production payment_transfers row for provider transfer 9f9df312. Wallet funding was never persisted locally. WalletOps does not list live Moov transfers.",
+    "139_is_not_a_data_absence": "Local bank leg and September occurrence already exist. They are discarded by the hook abort, not by wallet-relative classification."
+  },
+  "O_verdict": {
+    "kind": "MIXED",
+    "five": "WALLETOPS ACTIVITY BACKEND GAP",
+    "one_thirty_nine": "frontend/read-model only (hook abort on payment_wallets maybeSingle)",
+    "do_not_silently_expand_into_lambda": true,
+    "do_not_persist_five_without_approval": true,
+    "do_not_deploy_yet": true
+  },
+  "P_files_that_would_need_changing": {
+    "frontend_only_for_139_and_hook_abort": [
+      "src/hooks/useWalletOps.ts"
+    ],
+    "likely_same_maybeSingle_bug": [
+      "src/hooks/useWalletOps.ts useWalletRunningBalance",
+      "src/lib/payments/wallets.ts readWallet"
+    ],
+    "not_required_for_139": [
+      "src/lib/payments/walletRelativeTransfers.ts",
+      "src/pages/WalletOps.tsx activity filter"
+    ],
+    "backend_required_for_five_after_separate_approval": {
+      "missing_endpoint_or_table": "payment_transfers row for provider_transfer_id 9f9df312-32a9-4999-ace9-fc2b00669c75",
+      "required_fields": [
+        "tenant_id=2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+        "provider=moov",
+        "environment=production",
+        "amount_cents=500",
+        "status/provider_status=pending (current provider status)",
+        "provider_transfer_id=9f9df312-32a9-4999-ace9-fc2b00669c75",
+        "description=Balance funding",
+        "source payment method a02c1c81 (column or provider_metadata)",
+        "destination payment method 744ea734 (column or provider_metadata)",
+        "leg_role=wallet_funding if that remains the historical shape"
+      ],
+      "narrowest_backend_change": "Persist the EXISTING Moov transfer into payment_transfers. Do not POST a new transfer. Do not retry collection. Do not recollect $139.",
+      "shared_file_impact": "payment_transfers write path / wallet-fund persist. Must not touch V2 collection files."
+    }
+  },
+  "Q_shared_file_overlap": {
+    "useWalletOps.ts": "WalletOps + any other consumer of useWalletOpsTransfers / useWalletRunningBalance",
+    "wallets.ts readWallet": "other payment UI that reads operating wallet with maybeSingle",
+    "do_not_touch": [
+      "aws/functions/api/tenant-collection-v2.mjs",
+      "aws/functions/api/tenant-collection-contract-v2.mjs",
+      "aws/functions/api/tenant-billing-engine.mjs",
+      "aws/functions/api/providers/parity/tenant-receivables.mjs",
+      "monthly auto-billing consent",
+      "branding",
+      "stakeholder verification",
+      "bank-deposit history",
+      "signature",
+      "claim-number",
+      "OCR",
+      "Mortgage Ops",
+      "CheckAlt"
+    ]
+  },
+  "R_writes_deploys": {
+    "spa_s3_writes": 0,
+    "cloudfront_invalidations": 0,
+    "lambda_updates": 0,
+    "db_writes": 0,
+    "provider_money_writes": 0,
+    "billing_writes": 0,
+    "transfer_retries": 0,
+    "production_restored": false,
+    "accepted_walletops_deployment_disturbed": false,
+    "wallet_relative_classification_undone": false,
+    "old_144_pending_out_restored": false,
+    "confirmation": "writes/deploys = ZERO"
+  },
+  "live_chunk_activity_rule": "billing rows + non-billing classified transfers + ledger; neither remains visible",
+  "expected_if_hook_fixed_and_five_persisted": {
+    "pending_in": "$5.00 while 9f9df312 remains pending",
+    "pending_out": "$0.00",
+    "recent_activity_five": "Wallet Funding Wells Fargo ••••4573 → Freedom Wallet $5.00 pending",
+    "billing_139": "ChecksOps Billing / September 2026 / $139.00 / Wallet $0 + Wells Fargo ••••4573 $139 / current status pending"
+  },
+  "inspect_proof": {
+    "function": "checksops-prod-sql47-inspect-2d41",
+    "ok": true,
+    "mutated": false,
+    "liveDebitCreated": false,
+    "identity": {
+      "database": "checksops",
+      "db_user": "checksops_admin",
+      "read_only": "on"
+    }
+  },
+  "staging_untouched": {
+    "bucket": "checksops-staging-frontend-c48b",
+    "index_last_modified": "2026-09-30T17:22:39+00:00"
+  }
+}
