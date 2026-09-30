@@ -1,7 +1,7 @@
 {
   "version": 1,
   "fail_closed": true,
-  "notes": "Reviewed exceptions for PR #359 Manager / Bank Deposits / Partner name repair. Paths are exact protected files. SQL 31-34 and Partner Codes are unchanged.",
+  "notes": "Reviewed exact-path overlap exceptions. These entries do not merge, close, edit, deploy, or authorize any other PR. They require every overlapping PR to rebase onto current main before any later merge so independent Cursor workstreams cannot overwrite the finalized OCR/release-lock state.",
   "allow": [
     {
       "other_pr": 369,
@@ -289,6 +289,195 @@
       "reason": "PR 359 fetches the PR base branch so the SQL 31-34 name-only guard works on a shallow checkout; production SPA lock PR 319 also touches this workflow.",
       "expires": "2026-12-31",
       "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 561,
+      "path": "aws/functions/api/ocr-parse.mjs",
+      "reason": "PR #562 supersedes the same two-line OCR parser repair carried by PR #561. This exception allows review without closing or modifying the earlier branch; only #562 is intended to finalize the repair.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 486,
+      "path": "aws/functions/api/ocr-parse.mjs",
+      "reason": "PR #486 is an older OCR overlay workstream touching the same parser. PR #562 must not modify that branch; the overlap is acknowledged so #486 must rebase onto main before any later merge.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 482,
+      "path": "aws/functions/api/ocr-parse.mjs",
+      "reason": "PR #482 is an older OCR intake restoration workstream touching the same parser. PR #562 must not modify that branch; the overlap is acknowledged so #482 must rebase onto main before any later merge.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 455,
+      "path": "aws/functions/api/ocr-parse.mjs",
+      "reason": "PR #455 is an older OCR extraction workstream touching the same parser. PR #562 must not modify that branch; the overlap is acknowledged so #455 must rebase onto main before any later merge.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 560,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #560 owns Signature safeguard metadata. PR #562 changes only release-lock metadata and must not alter Signature runtime; #560 must rebase onto main before any later merge.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 547,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #547 owns Tenant Collection V2 metadata. PR #562 changes only release-lock metadata and must not alter Tenant Collection runtime; #547 must rebase onto main before any later merge.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 538,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #538 owns deployment-guard safeguard metadata. PR #562 preserves that work and changes only current reconciliation metadata; #538 must rebase onto main before any later merge.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 536,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #536 owns Freedom platform funding freeze metadata. PR #562 does not alter its runtime behavior; #536 must rebase onto main before any later merge.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 525,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #525 owns tenant logo contract metadata. PR #562 does not alter tenant-logo runtime behavior; #525 must rebase onto main before any later merge.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 512,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #512 owns Mortgage Desk return-to-tenant metadata. PR #562 does not alter Mortgage Desk runtime behavior; #512 must rebase onto main before any later merge.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 505,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #505 owns tenant email preview freeze metadata. PR #562 does not alter tenant email runtime behavior; #505 must rebase onto main before any later merge.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 504,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #504 owns signature sender freeze metadata. PR #562 does not alter Signature runtime behavior; #504 must rebase onto main before any later merge.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 501,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #501 owns Delete Check safeguard metadata. PR #562 does not alter Delete Check runtime behavior; #501 must rebase onto main before any later merge.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 463,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #463 owns production Cognito identity-lock metadata. PR #562 does not alter Cognito runtime behavior; #463 must rebase onto main before any later merge.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 461,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #461 owns production onboarding acceptance metadata. PR #562 does not alter onboarding runtime behavior; #461 must rebase onto main before any later merge.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 460,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #460 owns production tenant onboarding IAM metadata. PR #562 does not alter onboarding runtime behavior; #460 must rebase onto main before any later merge.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 451,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #451 owns staging tenant onboarding acceptance metadata. PR #562 does not alter onboarding runtime behavior; #451 must rebase onto main before any later merge.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 449,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #449 owns post-cutover Supabase retirement metadata. PR #562 does not alter that runtime behavior; #449 must rebase onto main before any later merge.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 448,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #448 owns Moov production execution readiness metadata. PR #562 does not alter Moov runtime behavior; #448 must rebase onto main before any later merge.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 447,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #447 owns CheckAlt production deposit preflight metadata. PR #562 does not alter CheckAlt runtime behavior; #447 must rebase onto main before any later merge.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 446,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #446 owns homeowner ledger and first-check readiness metadata. PR #562 does not alter that runtime behavior; #446 must rebase onto main before any later merge.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 445,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #445 owns production SES activation metadata. PR #562 does not alter SES runtime behavior; #445 must rebase onto main before any later merge.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 444,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #444 owns production staff acceptance metadata. PR #562 does not alter staff-session runtime behavior; #444 must rebase onto main before any later merge.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 443,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #443 owns frozen production baseline and SES readiness metadata. PR #562 does not alter that runtime behavior; #443 must rebase onto main before any later merge.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 442,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #442 owns production OCR, branding and public workflow promotion metadata. PR #562 does not modify that branch or its runtime; #442 must rebase onto main before any later merge.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 441,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #441 owns staging public Sign/Endorse/Upload workflow metadata. PR #562 does not alter those workflows; #441 must rebase onto main before any later merge.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 439,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #439 owns staging branding/public assets metadata. PR #562 does not alter those workflows; #439 must rebase onto main before any later merge.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
     }
   ]
 }
