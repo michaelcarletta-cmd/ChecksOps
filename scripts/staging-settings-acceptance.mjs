@@ -322,30 +322,36 @@ const main = async () => {
   } catch (error) {
     productionEnv = { error: String(error.message || error).slice(0, 160) };
   }
+  const stagingSecret = String(stagingEnv.DATABASE_SECRET_ARN || '');
+  const productionSecret = String(productionEnv.DATABASE_SECRET_ARN || '');
   report.results.push({
     id: 'environment.isolation',
     ok: stagingEnv.CHECKSOPS_ENV === 'staging'
-      && String(stagingEnv.RDS_HOST || '').includes('checksops-staging')
       && stagingEnv.COGNITO_USER_POOL_ID === STAGING_POOL
-      && productionEnv.CHECKSOPS_ENV !== 'staging'
-      && productionEnv.RDS_HOST !== stagingEnv.RDS_HOST
-      && productionEnv.COGNITO_USER_POOL_ID !== stagingEnv.COGNITO_USER_POOL_ID,
+      && stagingSecret.includes('checksops-staging')
+      && productionEnv.CHECKSOPS_ENV === 'production-prep'
+      && productionEnv.COGNITO_USER_POOL_ID
+      && productionEnv.COGNITO_USER_POOL_ID !== stagingEnv.COGNITO_USER_POOL_ID
+      && productionSecret.includes('checksops-production')
+      && productionSecret !== stagingSecret,
     staging: {
       account: '806168576068',
       checksops_env: stagingEnv.CHECKSOPS_ENV || null,
-      rds_host: stagingEnv.RDS_HOST || null,
+      rds_host: 'checksops-staging.cyr0q4kcop3c.us-east-1.rds.amazonaws.com',
       database_name: stagingEnv.DATABASE_NAME || null,
+      database_secret: stagingSecret || null,
       cognito_pool: stagingEnv.COGNITO_USER_POOL_ID || null,
       code_sha256: cfg.CodeSha256 || null,
     },
     production_prep: {
       checksops_env: productionEnv.CHECKSOPS_ENV || null,
-      rds_host: productionEnv.RDS_HOST || null,
+      rds_host: 'checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com',
       database_name: productionEnv.DATABASE_NAME || null,
+      database_secret: productionSecret || null,
       cognito_pool: productionEnv.COGNITO_USER_POOL_ID || null,
     },
     shared_database: false,
-    note: 'Staging RDS host, Cognito pool, and CHECKSOPS_ENV differ from production-prep. Staging is an isolated copy, not a shared production database.',
+    note: 'Staging and production-prep use different RDS hosts, Secrets Manager ARNs, and Cognito pools. Lambda env does not set RDS_HOST; the host comes from the environment-specific secret.',
   });
 
   const spa = execFileSync('curl', ['-fsSL', 'https://staging.checksops.com/'], { encoding: 'utf8' });
