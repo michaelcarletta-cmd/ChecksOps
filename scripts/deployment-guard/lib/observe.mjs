@@ -76,21 +76,36 @@ export function observeCandidateMembers(root, files = []) {
   });
 }
 
+function resolveOriginMainSha(git) {
+  for (const ref of ['refs/remotes/origin/main', 'origin/main']) {
+    try {
+      const sha = gitText(git, ['rev-parse', '--verify', ref]);
+      if (GIT_SHA_RE.test(sha)) return sha;
+    } catch {
+      /* try the next observed ref */
+    }
+  }
+  const envSha = String(process.env.GITHUB_BASE_SHA || '').trim();
+  if (GIT_SHA_RE.test(envSha)) {
+    try {
+      gitText(git, ['cat-file', '-e', `${envSha}^{commit}`]);
+      return envSha;
+    } catch {
+      /* object is not in this repository */
+    }
+  }
+  return null;
+}
+
 export function observeGitAncestry(root, { commit, run } = {}) {
   const git = run || defaultGitRunner(root);
-  let currentMain;
-  try {
-    currentMain = gitText(git, ['rev-parse', '--verify', 'refs/remotes/origin/main']);
-  } catch {
-    try {
-      currentMain = gitText(git, ['rev-parse', '--verify', 'origin/main']);
-    } catch {
-      return failMany([errorEntry(
-        CODES.MAIN_RECONCILIATION_REQUIRED,
-        'trusted collector could not resolve origin/main via git rev-parse',
-        { source: 'git-merge-base' },
-      )], CODES.MAIN_RECONCILIATION_REQUIRED);
-    }
+  const currentMain = resolveOriginMainSha(git);
+  if (!currentMain) {
+    return failMany([errorEntry(
+      CODES.MAIN_RECONCILIATION_REQUIRED,
+      'trusted collector could not resolve origin/main via git rev-parse',
+      { source: 'git-merge-base' },
+    )], CODES.MAIN_RECONCILIATION_REQUIRED);
   }
   let head;
   try {

@@ -96,7 +96,7 @@ export function main(argv = process.argv.slice(2), root = repoRootFrom(import.me
   const result = evaluateDeployment(payload, {
     root,
     env,
-    skip_contracts: flags['skip-contracts'] === true,
+    skip_contracts: flags.has('skip-contracts'),
     official: true,
   });
   if (result.ok && (flags.receipt || payload.lease)) {

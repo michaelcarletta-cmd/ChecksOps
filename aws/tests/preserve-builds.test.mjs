@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -497,8 +497,41 @@ test('reconciled_with_main=true is not a substitute for git ancestry evidence', 
   assert.equal(omitted.code, CODES.MAIN_RECONCILIATION_REQUIRED);
 });
 
+function gitAt(cwd, args) {
+  return execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+}
+
+function makeObservedGitWorktree() {
+  const origin = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-obs-origin-'));
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-obs-work-'));
+  const rel = 'src/components/payments/ClaimLedgerCard.tsx';
+  gitAt(origin, ['init', '-b', 'main']);
+  gitAt(origin, ['config', 'user.email', 'ci@example.com']);
+  gitAt(origin, ['config', 'user.name', 'ci']);
+  fs.mkdirSync(path.join(origin, path.dirname(rel)), { recursive: true });
+  fs.writeFileSync(path.join(origin, rel), 'accepted-artifact-bytes\n');
+  gitAt(origin, ['add', rel]);
+  gitAt(origin, ['-c', 'commit.gpgsign=false', 'commit', '-m', 'base']);
+  execFileSync('git', ['clone', origin, work], { encoding: 'utf8' });
+  gitAt(work, ['config', 'user.email', 'ci@example.com']);
+  gitAt(work, ['config', 'user.name', 'ci']);
+  const registry = {
+    manifests: [{
+      id: 'fixture-spa',
+      accepted: true,
+      kind: 'spa',
+      preserved_paths: [rel],
+    }],
+  };
+  fs.mkdirSync(path.join(work, 'ops/deployment-guard'), { recursive: true });
+  fs.writeFileSync(
+    path.join(work, 'ops/deployment-guard/accepted-source-composition.json'),
+    `${JSON.stringify(registry)}\n`,
+  );
+  return { origin, work, rel, registry };
+}
+
 test('trusted collector hashes artifact bytes and reads ancestry from git commands', () => {
-  const probe = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-observe-'));
   const rel = 'src/components/payments/ClaimLedgerCard.tsx';
   const bytes = fs.readFileSync(path.join(ROOT, rel));
   assert.equal(hashFileBytes(ROOT, rel), createHash('sha256').update(bytes).digest('hex'));
@@ -508,7 +541,8 @@ test('trusted collector hashes artifact bytes and reads ancestry from git comman
   assert.equal(observed.details.source, 'artifact-bytes');
   assert.equal(observed.details.candidate_members[rel], hashFileBytes(ROOT, rel));
 
-  const ancestry = observeGitAncestry(ROOT);
+  const fixture = makeObservedGitWorktree();
+  const ancestry = observeGitAncestry(fixture.work);
   assert.equal(ancestry.ok, true, ancestry.message);
   assert.equal(ancestry.details.source, 'git-merge-base');
   assert.equal(ancestry.details.git_ancestry.method, 'git-merge-base');
@@ -517,44 +551,43 @@ test('trusted collector hashes artifact bytes and reads ancestry from git comman
   assert.equal(ancestry.details.merge_base_sha, ancestry.details.current_main_sha);
 
   const evidence = observePreserveEvidence({
-    root: ROOT,
-    registry: loadCompositionRegistry(ROOT),
+    root: fixture.work,
+    registry: fixture.registry,
     deployment_type: 'spa-promote',
   });
   assert.equal(evidence.ok, true, evidence.message);
   assert.equal(evidence.details.candidate_source, 'artifact-bytes');
   assert.equal(evidence.details.ancestry_source, 'git-merge-base');
   assert.equal(evidence.details.collector, 'scripts/deployment-guard/lib/observe.mjs');
-  fs.rmSync(probe, { recursive: true, force: true });
+  assert.equal(evidence.details.candidate_members[fixture.rel], hashFileBytes(fixture.work, fixture.rel));
 });
 
 test('official path rejects fabricated candidate hashes and git ancestry', () => {
-  const composition = loadCompositionRegistry(ROOT);
-  const files = spaFiles();
-  const fakeMembers = Object.fromEntries(files.map((file) => [file, '0'.repeat(64)]));
+  const fixture = makeObservedGitWorktree();
+  const fakeMembers = { [fixture.rel]: '0'.repeat(64) };
   const fabricated = mutatingBase({
     candidate_members: fakeMembers,
     live_members: fakeMembers,
-    source_composition_manifest: { files, members: fakeMembers },
+    source_composition_manifest: { files: [fixture.rel], members: fakeMembers },
     current_main_sha: MAIN,
     merge_base_sha: MAIN,
     git_ancestry: gitAncestry(),
   });
 
   const binding = evaluateObservationBinding(fabricated, observePreserveEvidence({
-    root: ROOT,
-    registry: composition,
+    root: fixture.work,
+    registry: fixture.registry,
     deployment_type: 'spa-promote',
   }));
   assert.equal(binding.ok, false);
   assert.equal(binding.code, CODES.SOURCE_COMPOSITION_REQUIRED);
-  assert.ok(binding.details.fabricated_member_hashes.includes('src/components/payments/ClaimLedgerCard.tsx'));
+  assert.ok(binding.details.fabricated_member_hashes.includes(fixture.rel));
 
   const result = evaluatePreserveBuilds(fabricated, {
     official: true,
-    root: ROOT,
+    root: fixture.work,
     skip_contracts: true,
-    compositionRegistry: composition,
+    compositionRegistry: fixture.registry,
   });
   assert.equal(result.ok, false);
   assert.ok(
@@ -565,10 +598,12 @@ test('official path rejects fabricated candidate hashes and git ancestry', () =>
 
   const cli = spawnSync(process.execPath, [
     path.join(ROOT, 'scripts/deployment-guard/preserve-builds.mjs'),
+    '--root',
+    fixture.work,
     '--json',
     JSON.stringify(fabricated),
     '--skip-contracts',
-  ], { encoding: 'utf8', cwd: ROOT });
+  ], { encoding: 'utf8', cwd: fixture.work });
   assert.notEqual(cli.status, 0);
   assert.match(`${cli.stderr}${cli.stdout}`, /artifact bytes|git-merge-base observation|cannot substitute/);
 });

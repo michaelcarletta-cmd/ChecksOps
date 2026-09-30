@@ -14,11 +14,12 @@ import { repoRootFrom } from './lib/paths.mjs';
 export function main(argv = process.argv.slice(2), root = repoRootFrom(import.meta.url)) {
   const { flags, opts } = parseArgs(argv);
   const input = readInput(opts, {});
+  const resolvedRoot = opts.root || root;
   const result = evaluatePreserveBuilds(input, {
-    root,
-    registry: flags['skip-contracts'] ? null : loadContractRegistry(root),
-    compositionRegistry: loadCompositionRegistry(root),
-    skip_contracts: flags['skip-contracts'] === true,
+    root: resolvedRoot,
+    registry: flags.has('skip-contracts') ? null : loadContractRegistry(resolvedRoot),
+    compositionRegistry: loadCompositionRegistry(resolvedRoot),
+    skip_contracts: flags.has('skip-contracts'),
     require_mutating_only: false,
     official: true,
   });
