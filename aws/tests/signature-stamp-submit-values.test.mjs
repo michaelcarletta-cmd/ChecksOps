@@ -380,11 +380,63 @@ test('9 attach without signersWithValues still re-reads merged DB values', async
   assert.equal(merged[0].field_values[PERSISTED_ID_A].value, pngUri);
 });
 
+const submitEvent = (fieldValues) => ({
+  headers: {},
+  body: JSON.stringify({
+    token: 'tok',
+    eSignConsentAccepted: true,
+    fieldValues,
+  }),
+  requestContext: { http: { method: 'POST', path: '/public/signature-submit' } },
+});
+
+const submitClient = ({ fields, fieldData, extraSql = {} }) => ({
+  query: async (sql, params) => {
+    if (String(sql).includes('aws_public_signature_by_token_hash')) {
+      return { rows: [{
+        doc: {
+          signer: { id: 's1', status: 'pending', expires_at: null, signing_order: 1, signer_name: 'Ada' },
+          request: {
+            id: 'req-1',
+            claim_id: 'claim-1',
+            document_path: 'docs/source.pdf',
+            document_name: 'Release',
+            field_data: fieldData,
+          },
+          fields,
+          waiting_for: [],
+        },
+      }] };
+    }
+    if (String(sql).includes('aws_public_signature_submit')) {
+      return { rows: [{
+        doc: {
+          ok: true,
+          all_signed: true,
+          request_completed: true,
+          request_id: 'req-1',
+          claim_id: 'claim-1',
+          document_path: 'docs/source.pdf',
+        },
+      }] };
+    }
+    if (String(sql).includes('aws_public_signature_attach_signed')) {
+      return { rows: [{ doc: { ok: true, final_pdf_path: params[1] } }] };
+    }
+    if (String(sql).includes('FROM public.signature_fields')) {
+      return extraSql.signature_fields || { rows: [] };
+    }
+    if (/BEGIN|COMMIT|ROLLBACK|SET TRANSACTION/.test(sql)) return { rows: [] };
+    throw new Error(`unexpected sql: ${sql}`);
+  },
+  connect: async () => {},
+  end: async () => {},
+});
+
 test('4 completion receives the submitted value instead of a DB miss', async () => {
   process.env.FILES_BUCKET = 'test-files-bucket';
   const pngUri = signatureDataUri(MAGENTA, 400, 90);
   const original = await makeSourcePdf();
-  let capturedSigners = null;
   const s3 = {
     send: async (cmd) => {
       if (cmd.constructor?.name === 'GetObjectCommand') {
@@ -393,77 +445,57 @@ test('4 completion receives the submitted value instead of a DB miss', async () 
       return {};
     },
   };
-  const client = {
-    query: async (sql, params) => {
-      if (String(sql).includes('aws_public_signature_by_token_hash')) {
-        return { rows: [{
-          doc: {
-            signer: { id: 's1', status: 'pending', expires_at: null, signing_order: 1, signer_name: 'Ada' },
-            request: {
-              id: 'req-1',
-              claim_id: 'claim-1',
-              document_path: 'docs/source.pdf',
-              document_name: 'Release',
-              field_data: [{ id: EDITOR_ID_A, type: 'signature', signerIndex: 0, required: true, ...PLACEMENT_A }],
-            },
-            fields: [{
-              id: PERSISTED_ID_A,
-              field_type: 'signature',
-              required: true,
-              label: 'Sign',
-              signer_index: 0,
-              ...PLACEMENT_A,
-            }],
-            waiting_for: [],
-          },
-        }] };
-      }
-      if (String(sql).includes('aws_public_signature_submit')) {
-        return { rows: [{
-          doc: {
-            ok: true,
-            all_signed: true,
-            request_completed: true,
-            request_id: 'req-1',
-            claim_id: 'claim-1',
-            document_path: 'docs/source.pdf',
-          },
-        }] };
-      }
-      if (String(sql).includes('aws_public_signature_attach_signed')) {
-        return { rows: [{ doc: { ok: true, final_pdf_path: params[1] } }] };
-      }
-      if (/BEGIN|COMMIT|ROLLBACK|SET TRANSACTION/.test(sql)) return { rows: [] };
-      throw new Error(`unexpected sql: ${sql}`);
-    },
-    connect: async () => {},
-    end: async () => {},
-  };
 
-  const result = await runPublicSignatureSubmit({
-    headers: {},
-    body: JSON.stringify({
-      token: 'tok',
-      eSignConsentAccepted: true,
-      fieldValues: { [EDITOR_ID_A]: pngUri },
+  let capturedFromUuid = null;
+  const uuidResult = await runPublicSignatureSubmit(submitEvent({ [PERSISTED_ID_A]: pngUri }), {
+    client: submitClient({
+      fields: [{
+        id: PERSISTED_ID_A,
+        field_type: 'signature',
+        required: true,
+        label: 'Sign',
+        signer_index: 0,
+        ...PLACEMENT_A,
+      }],
+      fieldData: [{ id: EDITOR_ID_A, type: 'signature', signerIndex: 0, required: true, ...PLACEMENT_A }],
     }),
-    requestContext: { http: { method: 'POST', path: '/public/signature-submit' } },
-  }, {
-    client,
     s3,
     stampSignaturePdf: async (_bytes, signers) => {
-      capturedSigners = signers;
+      capturedFromUuid = signers;
       return _bytes;
     },
   });
+  assert.equal(uuidResult.ok, true);
+  assert.equal(uuidResult.allSigned, true);
+  assert.equal(capturedFromUuid[0].field_values[PERSISTED_ID_A].value, pngUri);
+  assert.equal(capturedFromUuid[0].field_values[PERSISTED_ID_A].x, PLACEMENT_A.x);
+  assert.equal(capturedFromUuid[0].field_values[PERSISTED_ID_A].y, PLACEMENT_A.y);
 
-  assert.equal(result.ok, true);
-  assert.equal(result.allSigned, true);
-  assert.ok(capturedSigners, 'completion must receive signersWithValues');
-  assert.equal(capturedSigners[0].field_values[PERSISTED_ID_A].value, pngUri);
-  assert.equal(capturedSigners[0].field_values[PERSISTED_ID_A].x, PLACEMENT_A.x);
-  assert.equal(capturedSigners[0].field_values[PERSISTED_ID_A].y, PLACEMENT_A.y);
-  assert.equal(capturedSigners[0].field_values[EDITOR_ID_A], undefined);
+  let capturedFromEditor = null;
+  const editorResult = await runPublicSignatureSubmit(submitEvent({ [EDITOR_ID_A]: pngUri }), {
+    client: submitClient({
+      fields: [{
+        id: PERSISTED_ID_A,
+        field_type: 'signature',
+        required: false,
+        label: 'Sign',
+        signer_index: 0,
+        ...PLACEMENT_A,
+      }],
+      fieldData: [{ id: EDITOR_ID_A, type: 'signature', signerIndex: 0, required: true, ...PLACEMENT_A }],
+    }),
+    s3,
+    stampSignaturePdf: async (_bytes, signers) => {
+      capturedFromEditor = signers;
+      return _bytes;
+    },
+  });
+  assert.equal(editorResult.ok, true);
+  assert.ok(capturedFromEditor, 'completion must receive signersWithValues');
+  assert.equal(capturedFromEditor[0].field_values[PERSISTED_ID_A].value, pngUri);
+  assert.equal(capturedFromEditor[0].field_values[PERSISTED_ID_A].x, PLACEMENT_A.x);
+  assert.equal(capturedFromEditor[0].field_values[PERSISTED_ID_A].y, PLACEMENT_A.y);
+  assert.equal(capturedFromEditor[0].field_values[EDITOR_ID_A], undefined);
 });
 
 test('attach with explicit signersWithValues does not re-read signer field rows', async () => {
