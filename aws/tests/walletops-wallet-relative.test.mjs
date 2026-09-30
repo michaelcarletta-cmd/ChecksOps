@@ -383,6 +383,64 @@ test('other tenant billing and wallet do not leak into this tenant', () => {
   assert.equal(summary.billing.length, 0);
 });
 
+test('completed $5 funding leaves Pending In $0 but remains in activity', () => {
+  const summary = summarizeWalletOps({
+    tenantId: FREEDOM,
+    tenantWalletPaymentMethodId: WALLET_PM,
+    methods,
+    transfers: [transfer({
+      id: 'five-done',
+      provider_transfer_id: '9f9df312-32a9-4999-ace9-fc2b00669c75',
+      status: 'completed',
+      provider_status: 'completed',
+      description: 'Balance funding',
+      leg_role: 'wallet_funding',
+    })],
+  });
+  assert.equal(summary.pendingInCents, 0);
+  assert.equal(summary.pendingOutCents, 0);
+  assert.equal(summary.transfers.length, 1);
+  assert.equal(summary.transfers[0].purpose, 'Wallet Funding');
+  assert.equal(summary.transfers[0].isWalletDestination, true);
+  assert.equal(summary.transfers[0].kind, 'neither');
+});
+
+test('$139 bank → ChecksOps is not wallet pending and remains billing activity', () => {
+  const summary = summarizeWalletOps({
+    tenantId: FREEDOM,
+    tenantWalletPaymentMethodId: WALLET_PM,
+    methods,
+    occurrences: [{
+      id: '72b622f9-b68f-4032-a971-a854dbcfbf57',
+      tenant_id: FREEDOM,
+      amount_cents: 13900,
+      billing_period: '2026-09',
+      occurrence_kind: 'monthly_subscription',
+      status: 'pending',
+    }],
+    transfers: [transfer({
+      id: 'ab2895c9-2ba8-4c21-a818-7f83abdb068c',
+      amount_cents: 13900,
+      description: 'ChecksOps subscription 2026-09 bank',
+      source_payment_method_id: BANK_PM,
+      destination_payment_method_id: CHECKSOPS_PM,
+      provider_transfer_id: 'b31c7752-031f-4b8b-9b6e-82dd0aaed2cb',
+      provider_metadata: {
+        collection_contract: 'tenant-collection-v2',
+        checksops_period: '2026-09',
+        checksops_payment_id: '72b622f9-b68f-4032-a971-a854dbcfbf57',
+      },
+    })],
+  });
+  assert.equal(summary.pendingInCents, 0);
+  assert.equal(summary.pendingOutCents, 0);
+  assert.equal(summary.billing.length, 1);
+  assert.equal(summary.billing[0].amount_cents, 13900);
+  assert.equal(summary.billing[0].wallet_cents, 0);
+  assert.equal(summary.billing[0].bank_cents, 13900);
+  assert.equal(summary.billing[0].period, '2026-09');
+});
+
 test('dedupe helper keeps the first provider id', () => {
   const rows = dedupeTransfers([
     transfer({ id: 'a', provider_transfer_id: 'p' }),
