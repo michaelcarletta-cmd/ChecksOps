@@ -28,6 +28,7 @@ import { TenantDocumentLibrary } from "@/components/settings/TenantDocumentLibra
 import { TenantPartnerManager } from "./TenantPartnerManager";
 import { ComplianceSettings } from "@/components/settings/ComplianceSettings";
 import { CompanyBrandingSettings } from "@/components/settings/CompanyBrandingSettings";
+import { TenantLogo } from "@/components/branding/TenantLogo";
 import { SettingsHero } from "@/components/settings/SettingsHero";
 import { SectionCard } from "@/components/settings/SectionCard";
 
@@ -137,11 +138,13 @@ export function WhiteLabelSettings() {
     <div className="min-h-screen bg-background">
       <header className="h-14 border-b border-border/70 bg-background/95 backdrop-blur flex items-center px-4 sticky top-0 z-10">
         <div className="flex items-center gap-3">
-          {tenant?.logo_url ? (
-            <img src={tenant.logo_url} alt={tenant.name} className="h-8 object-contain" />
-          ) : (
-            <span className="text-sm font-medium">{tenant?.name || "Settings"}</span>
-          )}
+          <TenantLogo
+            src={tenant?.logo_url}
+            alt={tenant?.name || "Settings"}
+            className="h-8 object-contain"
+            tenantId={tenant?.id}
+            fallback={<span className="text-sm font-medium">{tenant?.name || "Settings"}</span>}
+          />
         </div>
         <div className="ml-auto flex items-center gap-2">
           <Dialog>

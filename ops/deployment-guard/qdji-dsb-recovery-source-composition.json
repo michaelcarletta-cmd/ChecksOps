@@ -1,0 +1,81 @@
+{
+  "id": "qdji-dsb-recovery-source-composition",
+  "workstream_id": "regression-recovery-matrix-f477",
+  "accepted_composition": false,
+  "wholesale_restore": false,
+  "production_writes_this_task": 0,
+  "lambda_writes_this_task": 0,
+  "unknown_checks_mutated": 0,
+  "base_source": {
+    "commit": "82460c8c2ebbc8c7996b9cc233058015933120df",
+    "pr": 582,
+    "reason": "Live DSbVZXu8 tree: hostname-guard + settlement intercept. Do not restore QDJiUFF1 or DbYbvb6d as the entry."
+  },
+  "live_at_compose_https": {
+    "captured_at_utc": "2026-09-30T22:43:34Z",
+    "production_spa": "/assets/index-DSbVZXu8.js",
+    "production_index_html_sha256": "e93fe5488c013aed91626da1ee608978f702796a24e08350306ccb4c3163e75f",
+    "production_s3_version": "Jc2Nyp5THf1j30gf21cQHeMoApSs8uDw",
+    "do_not_restore": [
+      "/assets/index-QDJiUFF1.js",
+      "/assets/index-DbYbvb6d.js",
+      "/assets/index-C_fh5VBD.js",
+      "/assets/index-C8adM6cZ.js"
+    ]
+  },
+  "compiled_comparison": "ops/release-locks/proof/2026-09-30-qdji-vs-dsb-compiled-comparison.md",
+  "overlays": {
+    "keep_from_82460c8c2": [
+      "index.html",
+      "src/integrations/aws/client.ts",
+      "src/components/payments/ClaimLedgerCard.tsx",
+      "aws/functions/api/write-claim-settlement.mjs",
+      "aws/functions/api/workflow-rpc.mjs"
+    ],
+    "from_b97a8dc6_pr584": [
+      "src/lib/tenantLogoUrl.ts",
+      "src/components/branding/TenantLogo.tsx",
+      "src/components/deposit-ops/BankDepositReconciliation.tsx",
+      "src/components/settings/CompanyBrandingSettings.tsx",
+      "src/components/settings/EmailSenderSettings.tsx",
+      "src/components/white-label/WhiteLabelLogin.tsx",
+      "src/components/white-label/WhiteLabelCheckCenter.tsx",
+      "src/components/white-label/WhiteLabelSettings.tsx",
+      "src/pages/PublicInvoicePage.tsx",
+      "src/pages/payments/InvoicesTab.tsx",
+      "aws/functions/api/tenant-settings-handlers.mjs",
+      "aws/functions/api/tenant-email-domain-handlers.mjs"
+    ],
+    "from_9afb57fe_pr575": [
+      "src/pages/WalletOps.tsx",
+      "src/hooks/useWalletOps.ts",
+      "src/hooks/usePaymentProviderEligibility.ts",
+      "src/lib/payments/wallets.ts",
+      "src/lib/payments/selectPaymentWallet.ts",
+      "src/lib/payments/reconcileWalletFundingTransfer.ts",
+      "src/lib/payments/walletRelativeTransfers.ts"
+    ],
+    "from_84ba11f4_pr581": [
+      "src/components/settings/TenantBillingAccountPanel.tsx",
+      "src/components/disbursement/StakeholderAccountSettings.tsx",
+      "src/components/admin/PlatformReceivablesLedger.tsx",
+      "src/components/admin/TenantBillingHistoryPanel.tsx",
+      "src/components/admin/PlatformTreasuryPanel.tsx",
+      "src/pages/admin/AdminTenants.tsx",
+      "aws/functions/api/app-services.mjs",
+      "aws/functions/api/providers/parity/moov-functions.mjs",
+      "aws/functions/api/providers/parity/moov-stakeholder-status.mjs"
+    ]
+  },
+  "intentionally_untouched": [
+    "aws/functions/api/workflow.mjs (live patched endorsing + delete-check; never main as apply source)",
+    "src/components/claim-detail/SignatureRequests.tsx",
+    "ocr/MICR/payee/issue-date parsers",
+    "unknown check_intake_items / checkalt_deposits rows"
+  ],
+  "notes": [
+    "SPA-only candidate. Lambda members are in source for a later overlay evaluator. This task does not write Lambda or production SPA.",
+    "DSb-only payout-speed / DKIM / invoice-letterhead / cleared_at grouping are pre-settings main behavior that reappeared when #582 built from main. They are regressions of accepted QDJi settings/WalletOps, not later legitimate features to keep.",
+    "save_claim_settlement_breakdown and hostname-guard are the legitimate post-QDJi additions and are kept."
+  ]
+}

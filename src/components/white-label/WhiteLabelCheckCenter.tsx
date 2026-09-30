@@ -52,6 +52,7 @@ export function WhiteLabelCheckCenter() {
             src={tenant?.logo_url}
             alt={tenant?.name || "Tenant logo"}
             className="h-7 md:h-8 object-contain flex-shrink-0"
+            tenantId={tenant?.id}
             fallback={(
               <div className="min-w-0">
                 <span className="text-sm font-semibold truncate block">{tenant?.name || "Check Center"}</span>

@@ -395,6 +395,55 @@ function createBuilder(table: string, store: SessionStore) {
           statusText: "OK",
         };
       }
+      if (state.table === "claim_settlements" && (state.op === "insert" || state.op === "update")) {
+        const restoredSettlement = await store.restoreSession();
+        const settlementToken = restoredSettlement.session?.access_token;
+        if (!settlementToken) {
+          return {
+            data: null,
+            error: postgrestError("JWT expired", "PGRST301"),
+            count: null,
+            status: 401,
+            statusText: "Unauthorized",
+          };
+        }
+        const values = (state.payload && typeof state.payload === "object")
+          ? state.payload as Record<string, unknown>
+          : {};
+        const idFilter = state.filters.find((filter) => (
+          filter.column === "id" && filter.op === "eq"
+        ));
+        const { response, body } = await apiFetch("/data/rpc", {
+          method: "POST",
+          body: JSON.stringify({
+            name: "save_claim_settlement_breakdown",
+            args: {
+              ...values,
+              settlement_id: idFilter?.value ?? values.id ?? null,
+            },
+          }),
+        }, settlementToken);
+        if (response.status === 401) {
+          store.writeStored(null);
+          store.emit("SIGNED_OUT", null);
+        }
+        if (!response.ok) {
+          return {
+            data: body.data ?? null,
+            error: postgrestError(String(body.message || body.error || "rpc_failed"), String(body.error || "42501")),
+            count: body.count ?? null,
+            status: response.status,
+            statusText: response.statusText,
+          };
+        }
+        return {
+          data: body.data ?? null,
+          error: null,
+          count: body.count ?? null,
+          status: 200,
+          statusText: "OK",
+        };
+      }
       if (state.table === "checkalt_config" && state.op === "update") {
         const restoredWrite = await store.restoreSession();
         const writeToken = restoredWrite.session?.access_token;
