@@ -10,6 +10,7 @@ import { ignoredSpoof, IS_PLATFORM_OWNER_SQL, parseBody, withIdentity, withIdent
 import { USER_ROLES_SQL } from './identity.mjs';
 import { applicationWorkflowWritesEnabled } from './workflow-flags.mjs';
 import { writesEnabled } from './write-allowlist.mjs';
+import { executeClaimSettlementBreakdownWrite, SAVE_CLAIM_SETTLEMENT_BREAKDOWN } from './write-claim-settlement.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isUuid = (value) => UUID_RE.test(String(value || ''));
@@ -85,6 +86,7 @@ export const SAFE_WRITE_RPC_CLASSIFICATION = {
   ensure_partner_stakeholders: 'provider_dependent',
   save_checkalt_settings: 'safe_now',
   save_checkalt_tenant_auto_deposit: 'safe_now',
+  save_claim_settlement_breakdown: 'safe_now',
 };
 
 /** RPCs executed via POST /data/rpc write path. */
@@ -108,6 +110,7 @@ export const SAFE_WRITE_RPCS = new Set([
   'save_checkalt_settings',
   'save_checkalt_tenant_auto_deposit',
   'claim_ledger_link_or_create',
+  SAVE_CLAIM_SETTLEMENT_BREAKDOWN,
 ]);
 
 const SESSION_RPCS = new Set(['register_session', 'validate_session', 'invalidate_session', 'log_audit']);
@@ -1301,6 +1304,9 @@ export const executeSafeWriteRpc = async ({ client, mapping, name, args }) => {
       return executeDepositAction({ client, mapping, args });
     case 'claim_ledger_link_or_create':
       return executeClaimLedgerLinkOrCreate({ client, mapping, args });
+    case SAVE_CLAIM_SETTLEMENT_BREAKDOWN:
+    case 'save_claim_settlement_breakdown':
+      return executeClaimSettlementBreakdownWrite({ client, mapping, args });
     default:
       return { error: 'rpc_disabled', name };
   }
@@ -1343,6 +1349,8 @@ export const handleSafeWriteRpc = async (event, deps = {}) => {
         || executed.error === 'invalid_field'
         || executed.error === 'missing_required_field'
         || executed.error === 'invalid_status'
+        || executed.error === 'unknown_column'
+        || executed.error === 'column_not_allowlisted'
         ? 400
         : 403;
       return denied(spoof, { statusCode: status, name, ...executed });

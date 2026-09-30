@@ -24,7 +24,7 @@ const SHA = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const NOW = '2026-09-29T16:00:00.000Z';
 const MARKERS = loadAcceptedCompositionMarkers(ROOT);
 
-const REQUIRED_IDS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
+const REQUIRED_IDS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
 
 function overlayInput(overrides = {}) {
   return {
@@ -110,6 +110,7 @@ test('current source composition satisfies every accepted marker', () => {
     'write-check-workflow.mjs': fs.readFileSync(path.join(ROOT, 'aws/functions/api/write-check-workflow.mjs'), 'utf8'),
     'write-signature.mjs': fs.readFileSync(path.join(ROOT, 'aws/functions/api/write-signature.mjs'), 'utf8'),
     'workflow-rpc.mjs': fs.readFileSync(path.join(ROOT, 'aws/functions/api/workflow-rpc.mjs'), 'utf8'),
+    'write-claim-settlement.mjs': fs.readFileSync(path.join(ROOT, 'aws/functions/api/write-claim-settlement.mjs'), 'utf8'),
     'endorsement-material-invalidation.mjs': fs.readFileSync(
       path.join(ROOT, 'aws/functions/api/endorsement-material-invalidation.mjs'),
       'utf8',

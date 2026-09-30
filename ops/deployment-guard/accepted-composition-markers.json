@@ -69,6 +69,29 @@
         { "member": "write-app-metadata.mjs", "patterns": ["executeTenantsCreate"] },
         { "member": "write-allowlist.mjs", "patterns": ["tenants:", "insert: ['name', 'slug']"] }
       ]
+    },
+    {
+      "id": "J",
+      "title": "Claim Ledger settlement-breakdown writer",
+      "accepted": false,
+      "members": ["write-claim-settlement.mjs", "workflow-rpc.mjs"],
+      "all_of": [
+        {
+          "member": "write-claim-settlement.mjs",
+          "patterns": [
+            "executeClaimSettlementBreakdownWrite",
+            "SETTLEMENT_BREAKDOWN_COLUMNS",
+            "save_claim_settlement_breakdown"
+          ]
+        },
+        {
+          "member": "workflow-rpc.mjs",
+          "patterns": [
+            "save_claim_settlement_breakdown",
+            "executeClaimSettlementBreakdownWrite"
+          ]
+        }
+      ]
     }
   ]
 }

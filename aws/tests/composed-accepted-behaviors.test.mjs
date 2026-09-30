@@ -122,6 +122,15 @@ test('Check Files can attach a signature_request_id', () => {
   assert.equal(WRITE_ALLOWLIST.check_files.filterColumns.has('file_path'), true);
 });
 
+test('dedicated settlement-breakdown RPC is routed and generic table write stays denied', () => {
+  assert.equal(SAFE_WRITE_RPCS.has('save_claim_settlement_breakdown'), true);
+  assert.match(WORKFLOW_RPC, /executeClaimSettlementBreakdownWrite/);
+  assert.equal(WRITE_ALLOWLIST.claim_settlements, undefined);
+  const clientSrc = readFileSync('src/integrations/aws/client.ts', 'utf8');
+  assert.match(clientSrc, /save_claim_settlement_breakdown/);
+  assert.doesNotMatch(clientSrc, /"claim_settlements",/);
+});
+
 test('Moov/provider flags stay off the tenant client allowlist', () => {
   assert.equal(WRITE_ALLOWLIST.tenants.columns.has('moov_allowlisted'), false);
   assert.equal(WRITE_ALLOWLIST.tenants.columns.has('payment_provider'), false);

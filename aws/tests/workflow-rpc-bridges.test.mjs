@@ -72,6 +72,7 @@ test('classifies all audit rpc_disabled names', () => {
   assert.equal(SAFE_WRITE_RPCS.has('accept_mortgage_handling_request'), true);
   assert.equal(SAFE_WRITE_RPCS.has('admin_set_check_claim'), true);
   assert.equal(SAFE_WRITE_RPCS.has('claim_ledger_link_or_create'), true);
+  assert.equal(SAFE_WRITE_RPCS.has('save_claim_settlement_breakdown'), true);
   assert.ok(SAFE_LOSS_DRAFT_ACTIONS.has('mark_sent'));
   assert.equal(SAFE_LOSS_DRAFT_ACTIONS.has('mark_escrowed'), false);
 });
