@@ -369,7 +369,7 @@ export const handleCheckTransition = async (event, deps = {}) => {
       mapping,
       claims,
       spoof,
-      data: rows[0],
+      data: { ...rows[0], new_stage: rows[0].check_stage },
       extra: {
         action,
         fromStatus: looked.check.status,

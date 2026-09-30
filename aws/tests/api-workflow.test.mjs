@@ -1,4 +1,40 @@
 import assert from 'node:assert/strict';
+
+test('review RPC returns saved new_stage confirmation for the review screen', async () => {
+  for (const [path, fromStatus, stage] of [
+    ['endorsements_in_progress', 'needs_review', 'endorsing'],
+    ['revert_to_review', 'endorsements_in_progress', 'review'],
+    ['approved_for_deposit', 'needs_review', 'ready_for_deposit'],
+  ]) {
+    const client = mockClient({ check: { ...createdRow, status: fromStatus } });
+    const result = await handleCheckTransition(jwtEvent('/workflow/transition', 'POST', {
+      check_id: CHECK_ID,
+      p_deposit_path: path,
+    }), depsFor(client));
+    assert.equal(result.ok, true);
+    assert.equal(result.data.new_stage, stage);
+    assert.equal(result.data.new_stage, result.data.check_stage);
+    assert.equal(result.data.id, CHECK_ID);
+    assert.equal(result.data.tenant_id, FREEDOM_TENANT);
+    assert.equal(result.providerExecution, false);
+    assert.equal(client.queries.filter(q => q.sql === 'COMMIT').length, 1);
+  }
+});
+
+test('rejected Endorsing retry does not return a success confirmation or write again', async () => {
+  const client = mockClient({ check: {
+    ...createdRow, status: 'endorsements_in_progress', check_stage: 'endorsing',
+  } });
+  const result = await handleCheckTransition(jwtEvent('/workflow/transition', 'POST', {
+    check_id: CHECK_ID,
+    p_deposit_path: 'endorsements_in_progress',
+  }), depsFor(client));
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'invalid_transition');
+  assert.equal(result.data?.new_stage, undefined);
+  assert.equal(client.queries.some(q => /UPDATE public.check_intake_items/.test(q.sql)), false);
+});
+
 import { test } from 'node:test';
 import { handler } from '../functions/api/index.mjs';
 import { LOOKUP_MAPPING_SQL, TENANT_MEMBERSHIP_SQL, USER_ROLES_SQL } from '../functions/api/identity.mjs';
