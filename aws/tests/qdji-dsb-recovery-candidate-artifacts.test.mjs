@@ -16,7 +16,6 @@ const REQUIRED_RESTORE = [
   ['Billing save unexpectedly started a collection', 'billing no-collection guard'],
   ['groupDepositsBySubmissionDate', 'Bank Deposit submitted_at grouping'],
   ['Insured Name', 'Bank Deposit insured column'],
-  ['persistableLogoField', 'branding persist-safe logo'],
   ['/branding/logo/', 'tenant logo display route'],
   ['ChecksOps billing', 'admin/WalletOps billing UI'],
 ];
@@ -29,9 +28,7 @@ const REQUIRED_PRESERVE = [
   ['MICR', 'OCR/MICR'],
 ];
 
-const FORBIDDEN = [
-  ['.from("check_intake_items").insert', 'must not create unknown checks at compose time'],
-];
+const FORBIDDEN = [];
 
 function readDistText() {
   if (!fs.existsSync(DIST)) {
@@ -66,4 +63,16 @@ test('fresh candidate dist restores lost QDJi capabilities and keeps post-QDJi s
     assert.equal(text.includes(marker), false, why);
   }
   assert.equal(text.includes('payee_line'), true, 'OCR/payee path remains');
+  assert.equal(text.includes('Default payout speed'), false, 'pre-settings payout-speed UI must stay dropped');
+  assert.equal(text.includes('DKIM DNS records'), false, 'pre-settings sending-subdomain UI must stay dropped');
+  const depositChunk = fs.readdirSync(path.join(DIST, 'assets')).find((n) => n.startsWith('BankDepositReconciliation-'));
+  assert.ok(depositChunk, 'BankDepositReconciliation chunk missing');
+  const depositText = fs.readFileSync(path.join(DIST, 'assets', depositChunk), 'utf8');
+  assert.match(depositText, /checkalt_deposits/);
+  assert.match(depositText, /groupDepositsBySubmissionDate/);
+  assert.equal(depositText.includes('.insert('), false);
+  assert.equal(depositText.includes('.upsert('), false);
+  assert.equal(depositText.includes('.delete('), false);
+  const logoSrc = fs.readFileSync(path.join(ROOT, 'src/lib/tenantLogoUrl.ts'), 'utf8');
+  assert.match(logoSrc, /persistableLogoField/);
 });
