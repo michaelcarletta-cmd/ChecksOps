@@ -71,22 +71,22 @@ test('ocr-azure ownership group covers the eight runtime files only', () => {
   );
 });
 
-test('ocr-azure is staging-locked and not production-active', () => {
+test('ocr-azure reconciled lineage fails closed as UNVERIFIED and not production-active', () => {
   const manifest = loadJson(path.join(ROOT, 'ops/release-locks/locked-components.json'));
   const component = manifest.components['ocr-azure'];
   assert.ok(component, 'ocr-azure manifest component is required');
   assert.equal(component.id, 'ocr-azure');
   assert.equal(component.ownership_group, 'ocr-azure');
-  assert.equal(component.classification, 'STAGING_LOCKED_NOT_PRODUCTION');
+  assert.equal(component.classification, 'UNVERIFIED');
   assert.equal(component.production_active, false);
-  assert.equal(component.environment, 'staging');
-  assert.equal(component.source.git_sha, '8a3ead386d99f0e825d54093ebcb8c174a8c758e');
-  assert.equal(component.source.merged, true);
-  assert.equal(component.source.merged_pr, 370);
+  assert.equal(component.environment, 'unknown');
+  assert.equal(component.source.git_sha, '4c52e1835a4e5b677b763e6095acc67c951b74ee');
+  assert.equal(component.source.merged, false);
+  assert.equal(component.source.merged_pr, 561);
   assert.ok((component.required_sql || []).length === 0);
-  const refs = component.production_validation?.evidence_refs || [];
-  assert.ok(refs.some((ref) => /staging/i.test(ref)));
-  assert.ok((component.missing_evidence || []).length > 0);
+  assert.equal(component.production_validation?.completed, false);
+  assert.ok((component.missing_evidence || []).some((row) => /staging revalidation/i.test(row)));
+  assert.match(component.notes || '', /Fail-closed reconciliation only/i);
 });
 
 test('OCR runtime capability markers remain intact', () => {
