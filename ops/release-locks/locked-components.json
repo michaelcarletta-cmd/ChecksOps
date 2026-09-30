@@ -13,7 +13,7 @@
     "auto_unlock_forbidden": true,
     "instructions_path": "ops/release-locks/OPERATOR.md"
   },
-  "notes": "production-spa is PRODUCTION_LOCKED to the live checksops.com SPA verified 2026-09-27 (index-BPbQUNFr.js). origin/main is not that baseline. Other components remain unlocked. This metadata does not deploy or write production.",
+  "notes": "production-spa is PRODUCTION_LOCKED to the live checksops.com SPA verified 2026-09-30 (index-C_fh5VBD.js). index-BPbQUNFr.js is historical evidence only and is not a restoration target. origin/main is not that baseline. Other components remain unlocked. This metadata does not deploy or write production.",
   "components": {
     "identity-cognito": {
       "id": "identity-cognito",
@@ -251,7 +251,7 @@
       "environment": "source-only",
       "source": {
         "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
-        "tree_hash": "ba67f886fecc7bf93a158f19e594a88e324a7222cfd3be00d9e18901d1cec428",
+        "tree_hash": "c2c98d82f8c4d839c236d3a395acd21a4f47e2a858905bd07adbbd2234488da0",
         "merged": true,
         "merged_pr": null
       },
@@ -620,17 +620,17 @@
       "production_active": true,
       "environment": "production",
       "source": {
-        "git_sha": "6c679a120d5d4b0dd23d7035ecaf309558df29d0",
-        "tree_hash": "8a794da51c14a4520e987fcce8fc738e1dc196eca1b3f994fc17b57a2c2b2c7f",
+        "git_sha": "338ede0e6313bfcf88feac36101d67a20c756fd9",
+        "tree_hash": "f28904f5bfbf4f68977977fa410a70ebd933f82754efba21120871edba3b48b7",
         "merged": false,
-        "merged_pr": 506
+        "merged_pr": null
       },
       "required_sql": [],
       "artifact": {
         "type": "spa",
-        "name": "/assets/index-BPbQUNFr.js",
-        "version": "L.ND9yiehnJfDCocKdyFC_mRQZjchON3",
-        "hash": "78b393152e17e1eb223deced357f2276e7a5f00e214d2652d115347b2d2ed9d5",
+        "name": "/assets/index-C_fh5VBD.js",
+        "version": "VrLJwkt.ge_P4S2pjYAX5YX_uAoP8A6F",
+        "hash": "a357373bef9e41b004f887ee312ca239f64236706c826afb69400312e6fbad22",
         "cloudfront_distribution": "E1B0ZWWO5559U5",
         "lambda_name": "checksops-production-prep-api",
         "lambda_version": null,
@@ -644,34 +644,34 @@
         "recorded_at": "2026-09-27T01:34:04Z",
         "environment": "production",
         "component": "production-spa",
-        "git_sha": "6c679a120d5d4b0dd23d7035ecaf309558df29d0",
-        "artifact_identity": "/assets/index-BPbQUNFr.js",
+        "git_sha": "338ede0e6313bfcf88feac36101d67a20c756fd9",
+        "artifact_identity": "/assets/index-C_fh5VBD.js",
         "evidence_producer": "read-only live HTTPS verification of checksops.com",
         "evidence_type": "production SPA baseline freeze"
       },
       "deployment_fingerprint": {
         "recorded": true,
-        "spa_bundle": "/assets/index-BPbQUNFr.js",
-        "spa_sha256": "78b393152e17e1eb223deced357f2276e7a5f00e214d2652d115347b2d2ed9d5",
+        "spa_bundle": "/assets/index-C_fh5VBD.js",
+        "spa_sha256": "a357373bef9e41b004f887ee312ca239f64236706c826afb69400312e6fbad22",
         "cloudfront_id": "E1B0ZWWO5559U5",
         "cloudfront_distribution": "E1B0ZWWO5559U5",
-        "cloudfront_deployment_fingerprint": "L.ND9yiehnJfDCocKdyFC_mRQZjchON3",
+        "cloudfront_deployment_fingerprint": "VrLJwkt.ge_P4S2pjYAX5YX_uAoP8A6F",
         "lambda_name": "checksops-production-prep-api",
         "lambda_version": null,
         "lambda_code_hash": null,
         "applied_sql_hash": null,
         "database_evidence_record": null,
-        "config_hash": "244c4bd12bddc72e064723d87b6dbd6004a2d859b27200b0ca6747f189c73394",
-        "notes": "Accepted live production SPA 2026-09-27T01:34:04Z. Host checksops.com. Entry /assets/index-BPbQUNFr.js. index.html sha256 244c4bd12bddc72e064723d87b6dbd6004a2d859b27200b0ca6747f189c73394. S3 version L.ND9yiehnJfDCocKdyFC_mRQZjchON3. CloudFront E1B0ZWWO5559U5. Source lineage 1c2ec1ad7d3331f11f8cde61fdbc5cd363eb6720. Banner overlay 6c679a120d5d4b0dd23d7035ecaf309558df29d0. PRODUCTION: no staging banner. STAGING: banner visible. Other current production functionality preserved. origin/main is not this baseline."
+        "config_hash": "d0d59415d6692713f73b8edabefec10a261f1b7a85d6f4a6abd719f9011b3eb4",
+        "notes": "Accepted live production SPA 2026-09-30T18:06:18Z. Host checksops.com. Entry /assets/index-C_fh5VBD.js. index.html sha256 d0d59415d6692713f73b8edabefec10a261f1b7a85d6f4a6abd719f9011b3eb4. S3 version VrLJwkt.ge_P4S2pjYAX5YX_uAoP8A6F. CloudFront E1B0ZWWO5559U5. Source lineage 338ede0e6313bfcf88feac36101d67a20c756fd9. Historical pins index-BPbQUNFr.js and index-C9QrEEkl.js are not restoration targets. PRODUCTION: staging banner hidden. Other current production functionality preserved. origin/main is not this baseline."
       },
       "rollback": {
-        "git_sha": "1c2ec1ad7d3331f11f8cde61fdbc5cd363eb6720",
-        "artifact": "/assets/index-BAD1KYoF.js",
-        "notes": "Pre-overlay live lineage before the accepted banner fix. Do not restore this older SPA over the frozen baseline unless a reviewed unlock records a newer accepted live identity."
+        "git_sha": "6c679a120d5d4b0dd23d7035ecaf309558df29d0",
+        "artifact": "/assets/index-BPbQUNFr.js",
+        "notes": "Previous freeze (2026-09-27). Historical evidence only. Do not restore this older SPA over the current live identity unless a reviewed unlock records a newer accepted live identity."
       },
       "missing_evidence": [],
       "open_pr_overlap": ["#506"],
-      "notes": "Authoritative production frontend baseline. Future production SPA work must start from this live identity or a demonstrably newer accepted baseline. Do not promote main merely because it is main. SPA-only lock: no SQL. This PR records evidence only and does not deploy."
+      "notes": "Authoritative production frontend baseline. Future production SPA work must start from this live identity (index-C_fh5VBD.js) or a demonstrably newer accepted baseline. Do not restore index-BPbQUNFr.js. Do not promote main merely because it is main. SPA-only lock: no SQL. This change records live evidence only and does not deploy."
     },
     "production-release": {
       "id": "production-release",
@@ -681,7 +681,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "d5418ab63cb9af8024c746c4393c0f801f15fd1d",
-        "tree_hash": "aeff94e68383a05e088b9c1a66ce2afcfb0d26ffd5e6e137e94c77df34ad85ee",
+        "tree_hash": "7a82ef245eef9db728886b0ebe63670efd91f95b3ee4cba480602e385af5afde",
         "merged": true,
         "merged_pr": null
       },
