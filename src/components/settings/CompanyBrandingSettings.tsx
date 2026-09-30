@@ -8,28 +8,30 @@ import { supabase } from "@/integrations/supabase/client";
 import { Upload, Building2, Loader2, Image as ImageIcon, Layout } from "lucide-react";
 import { useTenantFilter } from "@/hooks/useTenantFilter";
 import { useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useLocation } from "react-router-dom";
 import { TenantLogo } from "@/components/branding/TenantLogo";
-import { canonicalStoredTenantLogo, resolveTenantLogoUrl } from "@/lib/tenantLogoUrl";
+import { persistableLogoField } from "@/lib/tenantLogoUrl";
 
 import { SectionCard } from "./SectionCard";
 import { SettingsHero } from "./SettingsHero";
 
-async function uploadTenantAsset(tenantId: string, file: File, kind: string) {
+async function uploadTenantAsset(
+  tenantId: string,
+  file: File,
+  kind: string,
+  bucket: "tenant-logos" | "company-branding" = "tenant-logos",
+) {
   const ext = file.name.split(".").pop() || "png";
   const path = `${tenantId}/${kind}-${Date.now()}.${ext}`;
   const { error } = await supabase.storage
-    .from("tenant-logos")
+    .from(bucket)
     .upload(path, file, { upsert: true, contentType: file.type });
   if (error) throw error;
-  return canonicalStoredTenantLogo(path) || path;
+  return persistableLogoField(path) || path;
 }
 
 export function CompanyBrandingSettings() {
   const { tenantId } = useTenantFilter();
   const qc = useQueryClient();
-  const navigate = useNavigate();
-  const location = useLocation();
   const [companyName, setCompanyName] = useState("");
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
@@ -57,9 +59,9 @@ export function CompanyBrandingSettings() {
     setAddress(tenant.business_address || "");
     setPhone(tenant.business_phone || "");
     setEmail(tenant.email_reply_to || "");
-    setLogoUrl(canonicalStoredTenantLogo(tenant.logo_url) || tenant.logo_url || null);
-    setLetterheadUrl(canonicalStoredTenantLogo(tenant.invoice_letterhead_url) || tenant.invoice_letterhead_url || null);
-    setInvoiceLetterheadUrl(canonicalStoredTenantLogo(tenant.invoice_letterhead_url) || tenant.invoice_letterhead_url || null);
+    setLogoUrl(persistableLogoField(tenant.logo_url) || tenant.logo_url || null);
+    setLetterheadUrl(persistableLogoField(tenant.invoice_letterhead_url) || tenant.invoice_letterhead_url || null);
+    setInvoiceLetterheadUrl(persistableLogoField(tenant.invoice_letterhead_url) || tenant.invoice_letterhead_url || null);
     setInvoiceFooterNote(tenant.invoice_footer_note || "");
     setInvoiceDefaultTerms(tenant.invoice_default_terms || "");
     setInvoiceAccentColor(tenant.invoice_accent_color || tenant.primary_color || "#3B82F6");
@@ -92,9 +94,9 @@ export function CompanyBrandingSettings() {
     setUploading(true);
     try {
       if (!tenantId) throw new Error("Select a tenant first");
-      const url = await uploadTenantAsset(tenantId, file, "letterhead");
+      const url = await uploadTenantAsset(tenantId, file, "letterhead", "company-branding");
       setLetterheadUrl(url);
-      if (!invoiceLetterheadUrl) setInvoiceLetterheadUrl(url);
+      setInvoiceLetterheadUrl(url);
       toast({ title: "Letterhead uploaded successfully" });
     } catch (error: any) {
       toast({ title: "Upload failed", description: error.message, variant: "destructive" });
@@ -103,6 +105,29 @@ export function CompanyBrandingSettings() {
     }
   };
   
+  const handleInvoiceLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Please upload an image file (PNG, JPG)", variant: "destructive" });
+      return;
+    }
+
+    setUploading(true);
+    try {
+      if (!tenantId) throw new Error("Select a tenant first");
+      const url = await uploadTenantAsset(tenantId, file, "invoice-logo", "company-branding");
+      setInvoiceLetterheadUrl(url);
+      setLetterheadUrl(url);
+      toast({ title: "Invoice logo uploaded successfully" });
+    } catch (error: any) {
+      toast({ title: "Upload failed", description: error.message, variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -115,7 +140,7 @@ export function CompanyBrandingSettings() {
     setUploadingLogo(true);
     try {
       if (!tenantId) throw new Error("Select a tenant first");
-      const url = await uploadTenantAsset(tenantId, file, "logo");
+      const url = await uploadTenantAsset(tenantId, file, "logo", "tenant-logos");
       setLogoUrl(url);
       toast({ title: "Company logo uploaded successfully" });
     } catch (error: any) {
@@ -132,6 +157,8 @@ export function CompanyBrandingSettings() {
     }
     setSaving(true);
     try {
+      const persistLogo = persistableLogoField(logoUrl);
+      const persistInvoice = persistableLogoField(invoiceLetterheadUrl || letterheadUrl);
       const { data, error } = await supabase.functions.invoke("tenant-company-branding-save", {
         body: {
           tenant_id: tenantId,
@@ -139,9 +166,8 @@ export function CompanyBrandingSettings() {
           company_address: address,
           company_phone: phone,
           company_email: email,
-          logo_url: canonicalStoredTenantLogo(logoUrl) || logoUrl,
-          letterhead_url: canonicalStoredTenantLogo(letterheadUrl) || letterheadUrl,
-          invoice_letterhead_url: canonicalStoredTenantLogo(invoiceLetterheadUrl || letterheadUrl) || invoiceLetterheadUrl || letterheadUrl,
+          ...(persistLogo ? { logo_url: persistLogo } : {}),
+          ...(persistInvoice ? { invoice_letterhead_url: persistInvoice } : {}),
           invoice_footer_note: invoiceFooterNote,
           invoice_default_terms: invoiceDefaultTerms,
           invoice_accent_color: invoiceAccentColor,
@@ -233,7 +259,7 @@ export function CompanyBrandingSettings() {
               
               {logoUrl && (
                 <div className="border rounded-lg p-4 bg-muted/50 flex items-center justify-center">
-                  <TenantLogo src={resolveTenantLogoUrl(logoUrl) || logoUrl} alt="Company logo" className="h-12 w-auto object-contain" />
+                  <TenantLogo src={logoUrl} alt="Company logo" className="h-12 w-auto object-contain" tenantId={tenantId} />
                 </div>
               )}
               
@@ -268,7 +294,7 @@ export function CompanyBrandingSettings() {
               
               {letterheadUrl && (
                 <div className="border rounded-lg p-4 bg-muted/50 flex items-center justify-center">
-                  <TenantLogo src={resolveTenantLogoUrl(letterheadUrl) || letterheadUrl} alt="Company letterhead" className="h-12 w-auto object-contain" />
+                  <TenantLogo src={letterheadUrl} alt="Company letterhead" className="h-12 w-auto object-contain" assetBucket="company-branding" />
                 </div>
               )}
               
@@ -302,40 +328,46 @@ export function CompanyBrandingSettings() {
           title="Invoice Branding"
           icon={<Layout className="h-4 w-4 text-emerald-500" />}
           accent="bg-gradient-to-r from-emerald-500/60 to-emerald-500/10"
-          description="Invoices use the same logo configured in Branding & Appearance. There is no separate invoice logo."
+          description="Invoice logo is stored independently. Invoice preview uses this logo when set, otherwise the company logo."
         >
           <div className="space-y-4">
             <div>
               <Label>Invoice logo</Label>
               <p className="text-xs text-muted-foreground mt-1 mb-2">
-                This is the tenant logo from Branding & Appearance.
+                Persists to the invoice letterhead field. Leave blank to keep the existing invoice logo and fall back to the company logo on invoices.
               </p>
-              {logoUrl ? (
-                <div className="inline-flex items-center rounded-md border bg-white p-3">
+              {(invoiceLetterheadUrl || logoUrl) && (
+                <div className="inline-flex items-center rounded-md border bg-white p-3 mb-2">
                   <TenantLogo
-                    src={resolveTenantLogoUrl(logoUrl) || logoUrl}
+                    src={invoiceLetterheadUrl || logoUrl}
                     alt="Invoice logo"
                     className="max-h-16 object-contain"
-                    fallback={<p className="text-sm text-muted-foreground">No logo configured. Add one in Branding & Appearance.</p>}
+                    assetBucket={invoiceLetterheadUrl ? "company-branding" : "tenant-logos"}
+                    tenantId={invoiceLetterheadUrl ? undefined : tenantId}
+                    fallback={<p className="text-sm text-muted-foreground">No invoice logo yet — company logo will be used.</p>}
                   />
                 </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  No logo configured. Add one above or in Branding & Appearance.
-                </p>
               )}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="mt-3"
-                onClick={() => {
-                  const base = location.pathname.replace(/\/settings.*$/, "") || "/freedom";
-                  navigate(`${base}/settings?tab=branding`);
-                }}
-              >
-                Branding & Appearance
-              </Button>
+              <Label htmlFor="invoice-logo-upload" className="cursor-pointer">
+                <div className="border-2 border-dashed rounded-lg p-4 text-center hover:bg-muted/50 transition-colors">
+                  {uploading ? (
+                    <Loader2 className="h-6 w-6 mx-auto mb-2 animate-spin text-muted-foreground" />
+                  ) : (
+                    <Upload className="h-6 w-6 mx-auto mb-2 text-muted-foreground" />
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    {uploading ? "Uploading..." : "Click to upload an independent invoice logo"}
+                  </p>
+                </div>
+              </Label>
+              <Input
+                id="invoice-logo-upload"
+                type="file"
+                accept="image/*"
+                onChange={handleInvoiceLogoUpload}
+                className="hidden"
+                disabled={uploading}
+              />
             </div>
 
             <div>

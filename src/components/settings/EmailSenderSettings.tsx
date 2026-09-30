@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { toast } from "sonner";
 import { Loader2, Mail, ShieldCheck, Upload } from "lucide-react";
+import { persistableLogoField, resolveTenantLogoUrl } from "@/lib/tenantLogoUrl";
 import { SectionCard } from "./SectionCard";
 import { SettingsHero } from "./SettingsHero";
 
@@ -171,12 +172,13 @@ export function EmailSenderSettings() {
     mutationFn: async () => {
       if (!tenantId) throw new Error("No tenant");
       if (!canConfigure) throw new Error("Not authorized");
+      const persistLogo = persistableLogoField(logoUrlEdit);
       return invokeFunction<BrandingPayload>("tenant-email-branding-save", {
         tenantId,
         fromName: fromName.trim(),
         replyTo: replyTo.trim(),
         primaryColor: primaryColorEdit,
-        logoUrl: logoUrlEdit,
+        ...(persistLogo ? { logoUrl: persistLogo } : {}),
       });
     },
     onSuccess: () => {
@@ -202,8 +204,8 @@ export function EmailSenderSettings() {
         .from("tenant-logos")
         .upload(path, file, { upsert: true, contentType: file.type });
       if (error) throw error;
-      const { data } = supabase.storage.from("tenant-logos").getPublicUrl(path);
-      setLogoUrlEdit(data?.publicUrl || path);
+      const stored = persistableLogoField(path) || path;
+      setLogoUrlEdit(stored);
       toast.success("Logo uploaded — click Save branding to apply");
     } catch (err) {
       toast.error(errorMessage(err, "Logo upload failed"));
@@ -247,7 +249,7 @@ export function EmailSenderSettings() {
 
           <div className="flex flex-wrap items-center gap-4 rounded-md border bg-muted/30 p-3">
             {logoUrl ? (
-              <img src={logoUrl} alt={`${tenantName} logo`} className="h-10 max-w-[180px] object-contain" />
+              <img src={resolveTenantLogoUrl(logoUrl) || logoUrl} alt={`${tenantName} logo`} className="h-10 max-w-[180px] object-contain" />
             ) : (
               <div className="text-xs text-muted-foreground">No tenant logo yet — ChecksOps logo is used in mail.</div>
             )}
@@ -267,7 +269,7 @@ export function EmailSenderSettings() {
               <Label>Email logo</Label>
               <div className="flex items-center gap-3">
                 {logoUrl ? (
-                  <img src={logoUrl} alt={`${tenantName} logo`} className="h-10 max-w-[160px] object-contain" />
+                  <img src={resolveTenantLogoUrl(logoUrl) || logoUrl} alt={`${tenantName} logo`} className="h-10 max-w-[160px] object-contain" />
                 ) : (
                   <span className="text-xs text-muted-foreground">No logo</span>
                 )}

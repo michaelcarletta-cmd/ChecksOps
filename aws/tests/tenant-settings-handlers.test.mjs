@@ -356,6 +356,32 @@ test('company branding updates only intended tenant fields', async () => {
   assert.equal(reloaded.invoice_theme, 'dark');
 });
 
+test('blank branding save omits empty logos and does not erase stored values', async () => {
+  const client = memory({
+    tenant: {
+      logo_url: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/logo-1790615777558.png',
+      invoice_letterhead_url: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/invoice-logo.png',
+    },
+  });
+  const saved = await applyTenantCompanyBranding(client, TENANT, {
+    company_name: 'Freedom Claims',
+    logo_url: '',
+    invoice_letterhead_url: null,
+    letterhead_url: '',
+    invoice_footer_note: 'Keep note',
+  });
+  assert.equal(saved.ok, true);
+  assert.equal(saved.tenant.logo_url, '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/logo-1790615777558.png');
+  assert.equal(saved.tenant.invoice_letterhead_url, '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/invoice-logo.png');
+  assert.equal(saved.tenant.invoice_footer_note, 'Keep note');
+  assert.equal(saved.saved.includes('logo_url'), false);
+  assert.equal(saved.saved.includes('invoice_letterhead_url'), false);
+  const updateSql = client.state.queries.find((row) => row.sql.startsWith('UPDATE public.tenants SET'));
+  assert.ok(updateSql);
+  assert.equal(/logo_url =/.test(updateSql.sql), false);
+  assert.equal(/invoice_letterhead_url =/.test(updateSql.sql), false);
+});
+
 test('branding save denies non-admins and does not invent company_branding writes', async () => {
   const denied = await runSaveTenantCompanyBranding({
     client: memory({ membershipRole: 'member' }),
@@ -392,10 +418,13 @@ test('SPA billing and branding use the Class A paths instead of generic writes',
   assert.doesNotMatch(billing, /\.from\("tenant_billing_accounts"\)[\s\S]*\.(insert|update|upsert)/);
   assert.match(company, /tenant-company-branding-save/);
   assert.match(company, /tenant-logos/);
-  assert.match(company, /canonicalStoredTenantLogo/);
-  assert.match(company, /Invoices use the same logo configured in Branding & Appearance/);
-  assert.doesNotMatch(company, /company_branding/);
+  assert.match(company, /company-branding/);
+  assert.match(company, /persistableLogoField/);
+  assert.match(company, /invoice-logo-upload/);
+  assert.match(company, /invoice_letterhead_url/);
+  assert.doesNotMatch(company, /from\("company_branding"\)/);
   assert.match(email, /tenant-email-branding-save/);
+  assert.match(email, /persistableLogoField/);
   assert.match(email, /primaryColor/);
   assert.match(email, /logoUrl/);
   assert.doesNotMatch(email, /Sending subdomain/);
