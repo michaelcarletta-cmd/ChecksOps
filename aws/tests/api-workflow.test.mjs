@@ -38,7 +38,7 @@ test('rejected Endorsing retry does not return a success confirmation or write a
 import { test } from 'node:test';
 import { handler } from '../functions/api/index.mjs';
 import { LOOKUP_MAPPING_SQL, TENANT_MEMBERSHIP_SQL, USER_ROLES_SQL } from '../functions/api/identity.mjs';
-import { handleCreateCheck, handleCheckTransition, handleWorkflowStatus } from '../functions/api/workflow.mjs';
+import { handleCreateCheck, handleCheckTransition, handleWorkflowStatus, handleDeleteCheck } from '../functions/api/workflow.mjs';
 import { handleWrite } from '../functions/api/write.mjs';
 import {
   evaluateTransition,
@@ -206,6 +206,7 @@ const mockClient = ({
 const depsFor = (client, extra = {}) => ({
   forceEnabled: true,
   forceWorkflow: true,
+  disableS3Cleanup: true,
   loadDatabaseCredentials: async () => ({
     username: 'checksops',
     password: 'unit-test-only-not-a-real-secret',
