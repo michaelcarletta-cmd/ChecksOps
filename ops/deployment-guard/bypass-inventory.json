@@ -73,6 +73,14 @@
       "note": "Official staging SPA upload. Requires a staging-frontend spa-promote receipt. Refuses production."
     },
     {
+      "path": "scripts/deployment-guard/staging-lambda-apply.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["lambda-update-function-code"],
+      "shared_target": true,
+      "function_name_default": "checksops-staging-api",
+      "note": "Official staging Lambda overlay apply. Requires a checksops-staging-api lambda-overlay receipt. Refuses production. Re-reads CodeSha256 + RevisionId immediately before write. Never changes env."
+    },
+    {
       "path": "scripts/deployment-guard/lease.mjs",
       "classification": "GUARDED",
       "capabilities": ["lease"]
