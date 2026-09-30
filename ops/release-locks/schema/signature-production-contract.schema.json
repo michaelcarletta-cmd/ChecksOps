@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "$id": "https://checksops.local/ops/release-locks/signature-production-contract.schema.json",
+  "title": "ChecksOps Signature production contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "fail_closed",
+    "component_id",
+    "rule",
+    "acceptance_role",
+    "accepted_at",
+    "provenance",
+    "invariants",
+    "owned_paths",
+    "deploy_policy"
+  ],
+  "properties": {
+    "contract_version": { "type": "integer", "const": 1 },
+    "fail_closed": { "type": "boolean", "const": true },
+    "component_id": { "type": "string", "const": "signature-workflow" },
+    "rule": { "type": "string", "minLength": 20 },
+    "acceptance_role": {
+      "type": "string",
+      "const": "acceptance_evidence_not_restore_target"
+    },
+    "accepted_at": { "type": "string", "minLength": 1 },
+    "proof": { "type": "string", "minLength": 1 },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entry",
+        "sign_bundle",
+        "sign_sha256",
+        "files_bundle",
+        "files_sha256",
+        "lambda_name",
+        "lambda_code_sha256"
+      ],
+      "properties": {
+        "host": { "type": "string" },
+        "entry": { "type": "string" },
+        "sign_bundle": { "type": "string" },
+        "sign_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "files_bundle": { "type": "string" },
+        "files_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "lambda_name": { "type": "string" },
+        "lambda_code_sha256": { "type": "string", "minLength": 8 },
+        "notes": { "type": "string" }
+      }
+    },
+    "invariants": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["forbidden", "required"],
+      "properties": {
+        "forbidden": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "required": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "owned_paths": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "deploy_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "read_live_first",
+        "never_restore_accepted_bytes",
+        "overlay_current_live_only",
+        "stop_on_unreconciled_drift",
+        "refuse_dropped_invariants",
+        "safe_modes"
+      ],
+      "properties": {
+        "read_live_first": { "type": "boolean", "const": true },
+        "never_restore_accepted_bytes": { "type": "boolean", "const": true },
+        "overlay_current_live_only": { "type": "boolean", "const": true },
+        "stop_on_unreconciled_drift": { "type": "boolean", "const": true },
+        "refuse_dropped_invariants": { "type": "boolean", "const": true },
+        "safe_modes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

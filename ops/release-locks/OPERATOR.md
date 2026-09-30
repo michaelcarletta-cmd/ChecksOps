@@ -115,6 +115,37 @@ worktree unless the candidate contains or reconciles this baseline. If live
 production no longer matches the lock, refuse deployment; do not auto-fix
 production and do not restore an older baseline.
 
+## Signature production contract
+
+`signature-workflow` freezes accepted Signature **behavior**, not a permanent
+byte restore of `index-C9QrEEkl.js`, `Sign-DfWZrlqT.js`,
+`CheckFilesSection-BJZPqPpX.js`, or Lambda `pxZj4G6p…`.
+
+Those identities are recorded in
+`ops/release-locks/signature-production-contract.json` as
+`acceptance_evidence_not_restore_target`.
+
+A future production write that touches Sign, the Files Signature wizard,
+`esign.mjs`, `signature-submit.mjs`, `documents.mjs`, or the production API
+Lambda must:
+
+1. Read the current live SPA/Lambda first (`preflight_production` + `live_production`).
+2. Overlay onto **that live identity** (`based_on_live`).
+3. Prove `signature_invariants_passed=true`.
+4. If live is no longer the 2026-09-30 acceptance snapshot, set
+   `reconciled_signature_contract=true` after the invariants still pass.
+5. Never set `restore_accepted_bytes`, `restore_old_dist`, or
+   `restore_old_lambda_zip`.
+
+`CHECKSOPS_PRODUCTION_DEPLOY=1` plus a candidate that deploys those modules
+without a `signature-workflow` fingerprint fails closed. Unrelated Files or
+Lambda work may set `touches_signature_modules=false` when it truly does not
+ship those files.
+
+Do not promote `signature-workflow` to `PRODUCTION_LOCKED` with the accepted
+Sign/Files/Lambda hashes in `artifact.hash`. That would teach a future agent
+to restore old bytes.
+
 ## Overlap exceptions
 
 `overlap-allowlist.json` is empty. An exception must name:

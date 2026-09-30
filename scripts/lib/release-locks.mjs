@@ -59,6 +59,8 @@ export const DEFAULT_PATHS = {
   overlapAllowlist: 'ops/release-locks/overlap-allowlist.json',
   evidence: 'ops/release-locks/evidence-matrix.json',
   workflow: '.github/workflows/release-locks.yml',
+  signatureContract: 'ops/release-locks/signature-production-contract.json',
+  signatureContractSchema: 'ops/release-locks/schema/signature-production-contract.schema.json',
 };
 
 export function repoRootFrom(metaUrl = import.meta.url) {
@@ -1050,6 +1052,7 @@ export function validateReleaseLocks({
   base = {},
   workflowText = null,
   genesis = false,
+  signatureContract = null,
 }) {
   const errors = [];
   if (manifest.fail_closed !== true) {
@@ -1062,6 +1065,18 @@ export function validateReleaseLocks({
   if (schemas.evidence && evidence) errors.push(...validateSchemaDocument(evidence, schemas.evidence));
   if (schemas.protectedPaths && protectedPaths) {
     errors.push(...validateSchemaDocument(protectedPaths, schemas.protectedPaths));
+  }
+  if (schemas.signatureContract && !signatureContract) {
+    errors.push('signature-production-contract.json is required when its schema is loaded');
+  }
+  if (schemas.signatureContract && signatureContract) {
+    errors.push(...validateSchemaDocument(signatureContract, schemas.signatureContract));
+    if (signatureContract.component_id && !manifest.components?.[signatureContract.component_id]) {
+      errors.push('signature-production-contract component_id is missing from the lock manifest');
+    }
+    if (signatureContract.acceptance_role !== 'acceptance_evidence_not_restore_target') {
+      errors.push('signature-production-contract must treat accepted SHAs as provenance, not restore targets');
+    }
   }
   errors.push(...componentIdErrors(manifest, protectedPaths));
   const hashes = computeOwnershipHashes(root, protectedPaths);

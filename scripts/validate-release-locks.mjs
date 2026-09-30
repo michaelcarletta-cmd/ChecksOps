@@ -45,11 +45,13 @@ export function loadReleaseLockInputs(root = repoRootFrom(import.meta.url), env 
     ledger: loadJson(path.join(root, DEFAULT_PATHS.ledger)),
     allowlist: loadJson(path.join(root, DEFAULT_PATHS.overlapAllowlist)),
     evidence: loadJson(path.join(root, DEFAULT_PATHS.evidence)),
+    signatureContract: loadJson(path.join(root, DEFAULT_PATHS.signatureContract)),
     schemas: {
       ledger: loadJson(path.join(root, DEFAULT_PATHS.ledgerSchema)),
       allowlist: loadJson(path.join(root, DEFAULT_PATHS.allowlistSchema)),
       evidence: loadJson(path.join(root, DEFAULT_PATHS.evidenceSchema)),
       protectedPaths: loadJson(path.join(root, DEFAULT_PATHS.protectedPathsSchema)),
+      signatureContract: loadJson(path.join(root, DEFAULT_PATHS.signatureContractSchema)),
     },
     base: {
       sha: baseSha,
