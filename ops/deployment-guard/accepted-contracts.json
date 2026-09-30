@@ -144,6 +144,38 @@
       ]
     },
     {
+      "id": "walletops-activity-recovery",
+      "title": "WalletOps activity recovery accepted composition",
+      "accepted": true,
+      "enabled": true,
+      "environments": ["production"],
+      "components": ["production-spa"],
+      "deployment_types": ["spa-promote"],
+      "test": "aws/tests/protected-composition.test.mjs",
+      "tests": [
+        "aws/tests/walletops-wallet-select.test.mjs",
+        "aws/tests/walletops-wallet-funding-reconcile.test.mjs",
+        "aws/tests/walletops-wallet-relative.test.mjs",
+        "scripts/test-walletops-layout.mjs",
+        "aws/tests/tenant-collection-v2.test.mjs",
+        "ops/release-locks/tests/freedom-platform-funding-contract.test.mjs",
+        "aws/tests/tenant-receivables.test.mjs",
+        "aws/tests/tenant-security-compliance.test.mjs"
+      ],
+      "evidence": "ops/deployment-guard/walletops-activity-recovery-prod-accepted.json",
+      "protected_composition": "ops/deployment-guard/protected-composition/walletops-activity-recovery.json",
+      "invariants": [
+        "environment-aware operating-wallet selection",
+        "Pending In / Pending Out remain wallet-relative",
+        "bank-funded ChecksOps billing is not tenant-wallet Pending Out",
+        "Funding & Billing remains present",
+        "Recent Activity remains present",
+        "Payment Account management remains absent from WalletOps",
+        "Payout Preferences remains absent from WalletOps",
+        "recovered provider transfer 9f9df312-32a9-4999-ace9-fc2b00669c75 is never recreated because a later candidate cannot see it"
+      ]
+    },
+    {
       "id": "financial-write-protections",
       "title": "financial write protections",
       "accepted": true,

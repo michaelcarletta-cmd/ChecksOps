@@ -45,7 +45,7 @@
       "classification": "GUARDED",
       "capabilities": ["spa-index-upload", "cloudfront-invalidation"],
       "shared_target": true,
-      "note": "Official production SPA apply. Requires a production-spa spa-promote receipt, --confirm-apply, live index TOCTOU, and per-object put. Refuses staging."
+      "note": "Official production SPA apply. Requires a production-spa spa-promote receipt (preflight already enforced protected-composition), --confirm-apply, live index TOCTOU with PRODUCTION_DRIFT_RECOMPOSITION_REQUIRED, and per-object put. Refuses staging."
     },
     {
       "path": "scripts/deployment-guard/wrap-legacy.mjs",
@@ -262,5 +262,27 @@
     "do_not_delete": true,
     "direct_invocation": "fails with DEPLOYMENT_GUARD_REQUIRED unless a valid short-lived receipt exists",
     "wrapper": "node scripts/deployment-guard/wrap-legacy.mjs --input manifest.json -- node <legacy-script>"
-  }
+  },
+  "remaining_production_spa_bypasses": [
+    {
+      "path": "operator aws s3 sync / aws s3 cp of checksops-production-frontend-806168576068",
+      "classification": "EMERGENCY_MANUAL",
+      "note": "Out-of-repo CloudShell/console/IAM can still put index.html. Do not delete emergency recovery. Normal production SPA deploys must use production-spa-apply after a signed spa-promote receipt."
+    },
+    {
+      "path": "aws/cutover/API_BEHIND_CLOUDFRONT_DESIGN.md",
+      "classification": "HISTORICAL_DOC",
+      "note": "Documents an old S3 sync of the production frontend bucket. Not an executable writer."
+    },
+    {
+      "path": "scripts/deployment-guard/spa-upload.mjs",
+      "classification": "GUARDED",
+      "note": "Evaluate-only. Receipt required; no S3/CloudFront write."
+    },
+    {
+      "path": "scripts/deployment-guard/staging-spa-upload.mjs",
+      "classification": "GUARDED",
+      "note": "Official staging writer. Refuses the production bucket."
+    }
+  ]
 }

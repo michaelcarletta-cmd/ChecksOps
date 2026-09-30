@@ -56,7 +56,7 @@ export function evaluateDeployment(input = {}, ctx = {}) {
     specific = evaluateLambdaOverlay(input);
     if (specific.ok) specific = planLambdaApply(specific, { apply: input.apply === true, env: ctx.env || process.env });
   } else if (input.deployment_type === 'spa-promote') {
-    specific = evaluateSpaPromote(input);
+    specific = evaluateSpaPromote(input, ctx);
   } else if (input.deployment_type === 'sql-apply') {
     specific = evaluateSqlApply(input);
   } else if (input.deployment_type === 'sql-executor-invoke') {

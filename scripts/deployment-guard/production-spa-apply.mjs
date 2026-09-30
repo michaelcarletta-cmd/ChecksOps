@@ -4,7 +4,8 @@
  *
  * Requires a valid signed receipt for production-spa.
  * Re-reads live index.html + entry bundle immediately before the index switch (TOCTOU).
- * If production moved: STOP DEPLOYMENT_COLLISION. Do not write. Do not regenerate.
+ * If production moved: STOP PRODUCTION_DRIFT_RECOMPOSITION_REQUIRED.
+ * Do not write. Do not regenerate. Do not restore an older baseline.
  * Uploads per-object (no s3 sync --delete). Never targets staging.
  */
 import { execFileSync } from 'node:child_process';
@@ -156,11 +157,15 @@ export function main(argv = process.argv.slice(2), env = process.env) {
   try {
     immediatelyBefore = readLiveIndexFingerprint(bucket, env);
   } catch (error) {
-    return printResult(fail(CODES.DEPLOYMENT_COLLISION, `failed to re-read live SPA before write: ${error.message}`));
+    return printResult(fail(
+      CODES.PRODUCTION_DRIFT_RECOMPOSITION_REQUIRED,
+      `failed to re-read live SPA before write: ${error.message}`,
+    ));
   }
   const toctou = evaluateIndexToctou({
     preflight,
     immediatelyBefore,
+    driftCode: CODES.PRODUCTION_DRIFT_RECOMPOSITION_REQUIRED,
   });
   if (!toctou.ok) return printResult(toctou);
 

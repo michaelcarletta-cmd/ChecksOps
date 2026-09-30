@@ -1,26 +1,31 @@
 import { CODES, errorEntry, failMany, ok } from './errors.mjs';
 import { evaluateDistFreshness } from './packages.mjs';
 import { validateWorkstreamIdentity } from './identity.mjs';
+import { evaluateProtectedComposition } from './protected-composition.mjs';
 
-export function evaluateIndexToctou({ preflight, immediatelyBefore }) {
+export function evaluateIndexToctou({
+  preflight,
+  immediatelyBefore,
+  driftCode = CODES.DEPLOYMENT_COLLISION,
+} = {}) {
   const errors = [];
   if (!preflight?.index_html_sha256 || !immediatelyBefore?.index_html_sha256) {
     errors.push(errorEntry(CODES.DEPLOYMENT_COLLISION, 'SPA promote requires current and immediately-before index.html fingerprints'));
     return failMany(errors, CODES.DEPLOYMENT_COLLISION);
   }
   if (preflight.index_html_sha256 !== immediatelyBefore.index_html_sha256) {
-    errors.push(errorEntry(CODES.DEPLOYMENT_COLLISION, 'live index.html changed after preflight; stop and never put the old index.html back', {
+    errors.push(errorEntry(driftCode, 'live index.html changed after preflight; stop and never put the old index.html back', {
       preflight_index_html_sha256: preflight.index_html_sha256,
       live_index_html_sha256: immediatelyBefore.index_html_sha256,
     }));
   }
   if (preflight.entry_bundle && immediatelyBefore.entry_bundle && preflight.entry_bundle !== immediatelyBefore.entry_bundle) {
-    errors.push(errorEntry(CODES.DEPLOYMENT_COLLISION, 'live entry bundle changed after preflight', {
+    errors.push(errorEntry(driftCode, 'live entry bundle changed after preflight', {
       preflight_entry_bundle: preflight.entry_bundle,
       live_entry_bundle: immediatelyBefore.entry_bundle,
     }));
   }
-  if (errors.length) return failMany(errors, CODES.DEPLOYMENT_COLLISION);
+  if (errors.length) return failMany(errors, driftCode);
   return ok({ index_html_sha256: immediatelyBefore.index_html_sha256 });
 }
 
@@ -39,7 +44,7 @@ export function evaluateSourceComposition({ frontend_workstreams = [], accepted_
   return ok({ workstreams: distinct, accepted_composition: accepted_composition === true || distinct.length <= 1 });
 }
 
-export function evaluateSpaPromote(input = {}) {
+export function evaluateSpaPromote(input = {}, ctx = {}) {
   const identity = validateWorkstreamIdentity({
     workstream_id: input.workstream_id,
     branch: input.branch,
@@ -76,14 +81,33 @@ export function evaluateSpaPromote(input = {}) {
       'mutation-boundary index fingerprint (immediately_before) is required; preflight alone is not sufficient',
     )], CODES.DEPLOYMENT_COLLISION);
   }
+  const productionToctou = input.target_environment === 'production';
   const toctou = evaluateIndexToctou({
     preflight: input.preflight,
     immediatelyBefore: input.immediately_before,
+    driftCode: productionToctou
+      ? CODES.PRODUCTION_DRIFT_RECOMPOSITION_REQUIRED
+      : CODES.DEPLOYMENT_COLLISION,
   });
   if (!toctou.ok) return toctou;
 
+  // Restore/reclaim is checked before protected composition so an old-index
+  // restore remains STALE_PACKAGE even on a production candidate.
   if (input.restore_previous_index === true || input.reclaim_staging === true) {
     return failMany([errorEntry(CODES.STALE_PACKAGE, 'never reclaim staging or restore a previous index.html/dist')], CODES.STALE_PACKAGE);
+  }
+
+  if (input.skip_protected_composition !== true && ctx.skip_protected_composition !== true) {
+    const protectedComposition = evaluateProtectedComposition(input, ctx);
+    if (!protectedComposition.ok) return protectedComposition;
+    return ok({
+      spa_promote_allowed: true,
+      index_html_sha256: toctou.details.index_html_sha256,
+      entry_bundle: input.preflight.entry_bundle,
+      composition: composition.details,
+      protected_composition: protectedComposition.details,
+      reclaim_forbidden: true,
+    });
   }
 
   return ok({

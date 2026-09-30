@@ -1,0 +1,85 @@
+{
+  "id": "walletops-activity-recovery",
+  "title": "WalletOps activity recovery",
+  "accepted": true,
+  "enabled": true,
+  "verdict": "WALLETOPS ACTIVITY RECOVERY — PRODUCTION ACCEPTED",
+  "evidence": "ops/deployment-guard/walletops-activity-recovery-prod-accepted.json",
+  "source_composition": "ops/deployment-guard/walletops-activity-recovery-prod-source-composition.json",
+  "environments": ["production"],
+  "components": ["production-spa"],
+  "deployment_types": ["spa-promote"],
+  "pin_hashed_spa_filenames": false,
+  "acceptance_evidence_assets": {
+    "note": "Evidence only. Future legitimate builds will hash differently. Do not require these names.",
+    "entry": "/assets/index-DbYbvb6d.js",
+    "walletops": "/assets/WalletOps-j3z9RyZ7.js"
+  },
+  "behaviors": [
+    "environment-aware operating-wallet selection",
+    "checksops.com resolves production wallet",
+    "staging.checksops.com resolves sandbox wallet",
+    "same-environment duplicate wallet ambiguity fails safely",
+    "Pending In / Pending Out remain wallet-relative",
+    "pending bank → Freedom wallet funding contributes Pending In",
+    "completed wallet funding leaves Pending In but remains in Recent Activity",
+    "bank-funded ChecksOps billing does NOT become tenant-wallet Pending Out",
+    "ChecksOps Billing remains visible in WalletOps activity",
+    "Funding & Billing remains present",
+    "Recent Activity remains present",
+    "Payment Account management remains absent from WalletOps",
+    "Payout Preferences remains absent from WalletOps",
+    "Payment Account remains available in Compliance/Documents",
+    "recovered provider transfer 9f9df312-32a9-4999-ace9-fc2b00669c75 must never be recreated/retried merely because a later candidate cannot see it",
+    "accepted V2 collection behavior remains unchanged"
+  ],
+  "required_regression_tests": {
+    "wallet-select": "aws/tests/walletops-wallet-select.test.mjs",
+    "wallet-funding-reconcile": "aws/tests/walletops-wallet-funding-reconcile.test.mjs",
+    "wallet-relative": "aws/tests/walletops-wallet-relative.test.mjs",
+    "walletops-layout": "scripts/test-walletops-layout.mjs",
+    "tenant-collection-v2": "aws/tests/tenant-collection-v2.test.mjs",
+    "funding-contract": "ops/release-locks/tests/freedom-platform-funding-contract.test.mjs",
+    "tenant-receivables": "aws/tests/tenant-receivables.test.mjs",
+    "tenant-isolation": "aws/tests/tenant-security-compliance.test.mjs"
+  },
+  "shared_files": [
+    "src/hooks/useWalletOps.ts",
+    "src/hooks/usePaymentProviderEligibility.ts",
+    "src/lib/payments/wallets.ts",
+    "src/pages/WalletOps.tsx",
+    "src/lib/payments/walletRelativeTransfers.ts",
+    "src/lib/payments/selectPaymentWallet.ts",
+    "src/lib/payments/reconcileWalletFundingTransfer.ts"
+  ],
+  "source_contracts": [
+    "environment_aware_wallet_selection",
+    "production_host_selects_production_wallet",
+    "staging_host_selects_sandbox_wallet",
+    "ambiguous_wallet_fails_safe",
+    "no_maybeSingle_unscoped_operating_wallets",
+    "no_rows_0_wallet_pick",
+    "funding_and_billing_present",
+    "recent_activity_present",
+    "payout_preferences_absent_from_walletops",
+    "payment_account_management_absent_from_walletops",
+    "payment_account_present_in_compliance",
+    "pending_wallet_funding_is_pending_in",
+    "completed_funding_remains_activity",
+    "bank_billing_is_not_wallet_pending_out"
+  ],
+  "do_not_recreate_provider_transfer_ids": [
+    "9f9df312-32a9-4999-ace9-fc2b00669c75"
+  ],
+  "protected_file_hashes": {
+    "aws/functions/api/tenant-collection-v2.mjs": "8a66f54d3c2785162a1643218e18b4d3c251230cf2a7f98a1ecb4ede8939fb66",
+    "aws/functions/api/tenant-collection-contract-v2.mjs": "9ec5ae45db34c0795570f401cc2b1c3fa78f04764870bf6b651c21278433ed5d",
+    "aws/functions/api/tenant-billing-engine.mjs": "65b75735825f9a06955d5daba603f74835d106cabf52eb449153c856a59dae2f",
+    "aws/functions/api/providers/parity/tenant-receivables.mjs": "0d8f8f20f4939e79551b4a1aa5b3305bb791cea7ca684f4428594ad359179477"
+  },
+  "absence_based_deletion": "forbidden_unless_superseded",
+  "supersession": {
+    "allowed": true,
+    "requires": ["composition_id", "approved", "evidence", "replacement_tests"]
+  }
+}

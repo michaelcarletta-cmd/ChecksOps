@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "fail_closed": true,
+  "notes": "Accepted production compositions. Register one manifest per accepted workstream. Do not invent manifests whose final accepted contract is unknown. A later candidate must prove every enabled manifest still holds, or explicitly supersede it.",
+  "manifests": [
+    {
+      "id": "walletops-activity-recovery",
+      "path": "walletops-activity-recovery.json",
+      "enabled": true,
+      "accepted": true,
+      "environments": ["production"],
+      "components": ["production-spa"],
+      "deployment_types": ["spa-promote"]
+    }
+  ]
+}

@@ -8,9 +8,9 @@ import { parseArgs, printResult, readInput } from './lib/cli.mjs';
 import { evaluateSpaPromote } from './lib/spa-promote.mjs';
 import { repoRootFrom } from './lib/paths.mjs';
 
-export function main(argv = process.argv.slice(2), _root = repoRootFrom(import.meta.url)) {
+export function main(argv = process.argv.slice(2), root = repoRootFrom(import.meta.url)) {
   const { opts } = parseArgs(argv);
-  return printResult(evaluateSpaPromote(readInput(opts, {})));
+  return printResult(evaluateSpaPromote(readInput(opts, {}), { root }));
 }
 
 const isDirect = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
