@@ -213,6 +213,7 @@
         "ops/release-locks/",
         "ops/release-locks/locked-components.json",
         "ops/release-locks/overlap-allowlist.json",
+        "ops/release-locks/protected-paths.json",
         "scripts/validate-release-locks.mjs",
         "scripts/check-pr-path-overlap.mjs",
         "scripts/production-deploy-guard.mjs",
