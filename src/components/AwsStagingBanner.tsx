@@ -1,7 +1,15 @@
 import { isAwsStaging } from "@/lib/awsStaging";
 
 export function AwsStagingBanner() {
+  const hostname =
+    typeof window === "undefined" ? "" : window.location.hostname.toLowerCase();
+
+  if (hostname === "checksops.com" || hostname === "www.checksops.com") {
+    return null;
+  }
+
   if (!isAwsStaging()) return null;
+
   return (
     <div
       data-testid="aws-staging-banner"
