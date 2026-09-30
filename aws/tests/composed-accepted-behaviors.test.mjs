@@ -117,6 +117,11 @@ test('endorsement-material invalidation stays wired on payee updates', () => {
   assert.match(invalidation, /MATERIAL_PAYEE_FIELDS/);
 });
 
+test('Check Files can attach a signature_request_id', () => {
+  assert.equal(WRITE_ALLOWLIST.check_files.columns.has('signature_request_id'), true);
+  assert.equal(WRITE_ALLOWLIST.check_files.filterColumns.has('file_path'), true);
+});
+
 test('Moov/provider flags stay off the tenant client allowlist', () => {
   assert.equal(WRITE_ALLOWLIST.tenants.columns.has('moov_allowlisted'), false);
   assert.equal(WRITE_ALLOWLIST.tenants.columns.has('payment_provider'), false);
