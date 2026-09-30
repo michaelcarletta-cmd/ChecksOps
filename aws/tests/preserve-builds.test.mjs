@@ -595,21 +595,22 @@ function cloneObservedWork(origin) {
   return { work, commit: gitAt(work, ['rev-parse', 'HEAD']) };
 }
 
-function makeObservedGitWorktree() {
+function makeObservedGitWorktree({
+  candidateBundle = 'assets/index-aaa.js',
+  liveBundle = 'assets/index-aaa.js',
+} = {}) {
   const origin = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-obs-origin-'));
   const rel = 'src/components/payments/ClaimLedgerCard.tsx';
-  const indexHtml = '<!doctype html><script type="module" src="/assets/index-aaa.js"></script>\n';
+  const indexHtml = `<!doctype html><script type="module" src="/${candidateBundle}"></script>\n`;
   const bundle = 'console.log("candidate-bundle")\n';
-  const liveIndex = '<!doctype html><script type="module" src="/assets/index-aaa.js"></script>\n';
-  const liveBundle = 'console.log("live-bundle")\n';
+  const liveIndex = `<!doctype html><script type="module" src="/${liveBundle}"></script>\n`;
+  const liveBundleBytes = 'console.log("live-bundle")\n';
   const artifact = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-obs-artifact-'));
   writeMemberTree(artifact, {
     'index.html': indexHtml,
-    'assets/index-aaa.js': bundle,
+    [candidateBundle]: bundle,
   });
-  const digest = hashArtifactDigest(artifact, {
-    entryBundle: '/assets/index-aaa.js',
-  });
+  const digest = hashArtifactDigest(artifact);
   const registry = {
     manifests: [{
       id: 'fixture-spa',
@@ -627,9 +628,9 @@ function makeObservedGitWorktree() {
   const baseline = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-obs-live-'));
   writeMemberTree(baseline, {
     'index.html': liveIndex,
-    'assets/index-aaa.js': liveBundle,
+    [liveBundle]: liveBundleBytes,
   });
-  const spaHashes = hashSpaLiveFiles(baseline, '/assets/index-aaa.js');
+  const spaHashes = hashSpaLiveFiles(baseline);
   const fingerprint = {
     ...spaHashes,
     captured_at: NOW,
@@ -993,6 +994,66 @@ test('repository paths map to Lambda ZIP members and compiled SPA assets', () =>
     )['src/components/payments/ClaimLedgerCard.tsx'],
     'assets/index-BPbQUNFr.js',
   );
+});
+
+test('official CLI accepts live index-OLD.js and candidate index-NEW.js independently', () => {
+  const fixture = makeObservedGitWorktree({
+    candidateBundle: 'assets/index-NEW.js',
+    liveBundle: 'assets/index-OLD.js',
+  });
+  assert.equal(fs.existsSync(path.join(fixture.live_baseline.path, 'assets/index-NEW.js')), false);
+  assert.equal(fs.existsSync(path.join(fixture.deployment_artifact.path, 'assets/index-OLD.js')), false);
+
+  const evidence = observePreserveEvidence({
+    root: fixture.work,
+    registry: fixture.registry,
+    deployment_type: 'spa-promote',
+    commit: fixture.commit,
+    deployment_artifact: fixture.deployment_artifact,
+    live_baseline: fixture.live_baseline,
+    fingerprint: fixture.fingerprint,
+  });
+  assert.equal(evidence.ok, true, evidence.message);
+  assert.deepEqual(evidence.details.deployed_files, ['index.html', 'assets/index-NEW.js']);
+  assert.deepEqual(evidence.details.live_deployed_files, ['index.html', 'assets/index-OLD.js']);
+  assert.equal(evidence.details.candidate_entry_bundle, '/assets/index-NEW.js');
+  assert.equal(evidence.details.live_entry_bundle, '/assets/index-OLD.js');
+  assert.ok(evidence.details.candidate_members['assets/index-NEW.js']);
+  assert.ok(evidence.details.live_members['assets/index-OLD.js']);
+  assert.equal(evidence.details.candidate_members['assets/index-OLD.js'], undefined);
+  assert.equal(evidence.details.live_members['assets/index-NEW.js'], undefined);
+  assert.equal(evidence.details.fingerprint_bytes_verified, true);
+
+  const input = mutatingBase({
+    commit: fixture.commit,
+    deployment_type: 'spa-promote',
+    owned_components: ['index.html'],
+    owned_members: ['index.html'],
+    worktree: fixture.work,
+    deployment_artifact: fixture.deployment_artifact,
+    live_baseline: fixture.live_baseline,
+    preflight: fixture.fingerprint,
+    immediately_before: fixture.fingerprint,
+    source_composition_manifest: { files: [fixture.rel] },
+    candidate_members: undefined,
+    live_members: undefined,
+    current_main_sha: undefined,
+    merge_base_sha: undefined,
+    git_ancestry: undefined,
+    accepted_paths_vs_main: undefined,
+  });
+  const cli = spawnSync(process.execPath, [
+    path.join(ROOT, 'scripts/deployment-guard/preserve-builds.mjs'),
+    '--root',
+    fixture.work,
+    '--json',
+    JSON.stringify(input),
+    '--skip-contracts',
+  ], { encoding: 'utf8', cwd: fixture.work });
+  assert.equal(cli.status, 0, `${cli.stderr}${cli.stdout}`);
+  const parsed = JSON.parse(cli.stdout);
+  assert.equal(parsed.ok, true, parsed.message);
+  assert.equal(parsed.details.observation.trusted, true);
 });
 
 test('real Vite SPA dist is accepted without copying source files into the artifact', () => {

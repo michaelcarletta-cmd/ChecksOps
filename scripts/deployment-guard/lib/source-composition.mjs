@@ -396,6 +396,8 @@ export function evaluatePreservedMemberIntegrity({
   candidateMembers = {},
   ownedMembers = [],
   preservedPaths = [],
+  livePaths = null,
+  candidatePaths = null,
 } = {}) {
   const owned = new Set(ownedMembers || []);
   const live = liveMembers && typeof liveMembers === 'object' ? liveMembers : {};
@@ -403,14 +405,22 @@ export function evaluatePreservedMemberIntegrity({
   const errors = [];
   const unexpected = [];
   const missingEvidence = [];
-  for (const file of preservedPaths || []) {
+  const requiredLive = livePaths == null ? (preservedPaths || []) : livePaths;
+  const requiredCandidate = candidatePaths == null ? (preservedPaths || []) : candidatePaths;
+  for (const file of requiredLive) {
+    if (live[file] == null || live[file] === '') missingEvidence.push(file);
+  }
+  for (const file of requiredCandidate) {
+    if ((candidate[file] == null || candidate[file] === '') && !missingEvidence.includes(file)) {
+      missingEvidence.push(file);
+    }
+  }
+  const comparePaths = [...new Set([...requiredLive, ...requiredCandidate])];
+  for (const file of comparePaths) {
+    if (owned.has(file)) continue;
     const liveHash = live[file];
     const candidateHash = candidate[file];
-    if (liveHash == null || liveHash === '' || candidateHash == null || candidateHash === '') {
-      missingEvidence.push(file);
-      continue;
-    }
-    if (owned.has(file)) continue;
+    if (liveHash == null || liveHash === '' || candidateHash == null || candidateHash === '') continue;
     if (candidateHash !== liveHash) unexpected.push(file);
   }
   if (missingEvidence.length) {

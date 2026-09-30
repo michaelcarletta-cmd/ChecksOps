@@ -145,12 +145,21 @@ export function hashArtifactMember(artifactPath, rel) {
   throw new Error(`deployment artifact must be a Lambda ZIP or SPA directory: ${artifactPath}`);
 }
 
+export function entryBundleFromIndexHtml(indexBytes) {
+  const match = String(indexBytes || '').match(/\bsrc=["']([^"']+\.js)["']/i);
+  return match ? match[1].replace(/^\//, '') : '';
+}
+
 export function hashSpaLiveFiles(dir, entryBundle) {
   const indexBytes = fs.readFileSync(resolveInside(dir, 'index.html'));
-  let bundleRel = String(entryBundle || '').trim().replace(/^\//, '');
+  let bundleRel = entryBundleFromIndexHtml(indexBytes);
   if (!bundleRel) {
-    const match = indexBytes.toString('utf8').match(/\bsrc=["']([^"']+\.js)["']/i);
-    bundleRel = match ? match[1].replace(/^\//, '') : '';
+    const hinted = String(entryBundle || '').trim().replace(/^\//, '');
+    try {
+      if (hinted && fs.existsSync(resolveInside(dir, hinted))) bundleRel = hinted;
+    } catch {
+      /* hinted path is not inside this tree */
+    }
   }
   if (!bundleRel) {
     throw new Error('SPA baseline is missing a referenced entry bundle');
@@ -220,12 +229,12 @@ export function verifyLiveBaselineBytes(baselinePath, fingerprint, {
   if (isSpaBaseline(kind, deployment_type)) {
     let hashed;
     try {
-      hashed = hashSpaLiveFiles(abs, fp.entry_bundle);
+      hashed = hashSpaLiveFiles(abs);
     } catch {
       return failMany([errorEntry(
         CODES.DEPLOYMENT_COLLISION,
-        'live SPA baseline must include actual index.html and referenced bundle bytes',
-        { path: abs },
+        'live SPA baseline must include actual index.html and referenced bundle bytes; substituted baseline bytes fail closed',
+        { path: abs, mismatched_baseline_bytes: ['index.html'] },
       )], CODES.DEPLOYMENT_COLLISION);
     }
     const expectedIndex = String(fp.index_html_sha256 || '').trim();
@@ -289,14 +298,13 @@ export function observeSourceMembers({
   });
 }
 
-function resolveEntryBundle(artifactPath, artifact = {}, fingerprint = {}) {
-  const hinted = artifact.entry_bundle || artifact.entryBundle || fingerprint.entry_bundle;
-  if (hinted) return String(hinted).trim();
-  if (!artifactPath) return '';
-  const abs = path.resolve(artifactPath);
-  if (isZipFile(abs) || !fs.existsSync(abs) || !fs.statSync(abs).isDirectory()) return '';
+function resolveEntryBundleFromDir(dir) {
+  if (!dir) return '';
+  const abs = path.resolve(dir);
+  if (!fs.existsSync(abs) || isZipFile(abs)) return '';
   try {
-    return hashSpaLiveFiles(abs, hinted).entry_bundle;
+    if (!fs.statSync(abs).isDirectory()) return '';
+    return hashSpaLiveFiles(abs).entry_bundle;
   } catch {
     return '';
   }
@@ -305,10 +313,8 @@ function resolveEntryBundle(artifactPath, artifact = {}, fingerprint = {}) {
 export function resolveDeployedMemberPlan(sourceFiles = [], {
   deployment_type,
   artifactPath,
-  artifact,
-  fingerprint,
 } = {}) {
-  const entry_bundle = resolveEntryBundle(artifactPath, artifact, fingerprint);
+  const entry_bundle = resolveEntryBundleFromDir(artifactPath);
   const member_map = sourceToDeployedMap(sourceFiles, { deployment_type, entry_bundle });
   let deployed_files = deployedMembersFromSourcePaths(sourceFiles, { deployment_type, entry_bundle });
   if (deployment_type === 'spa-promote' && entry_bundle) {
@@ -816,18 +822,20 @@ export function observePreserveEvidence({
       run,
     });
     if (!source.ok) return source;
-    const plan = resolveDeployedMemberPlan(files, {
+    const candidatePlan = resolveDeployedMemberPlan(files, {
       deployment_type,
       artifactPath: artifactPathOf(artifact),
-      artifact,
-      fingerprint: expectedFingerprint,
+    });
+    const livePlan = resolveDeployedMemberPlan(files, {
+      deployment_type,
+      artifactPath: String(baseline?.path || baseline?.file || baseline?.zip || '').trim(),
     });
     const artifacts = observeDeploymentArtifactMembers({
       artifact,
-      files: plan.deployed_files,
+      files: candidatePlan.deployed_files,
       commit: declaredCommit,
       root,
-      member_map: plan.member_map,
+      member_map: candidatePlan.member_map,
     });
     if (!artifacts.ok) return artifacts;
     const build = observeTrustedBuildEvidence({
@@ -836,7 +844,7 @@ export function observePreserveEvidence({
       artifactDigest: artifacts.details.artifact_digest,
       files,
       candidateMembers: artifacts.details.candidate_members,
-      memberMap: plan.member_map,
+      memberMap: candidatePlan.member_map,
       run,
       gitPath: artifact?.build_evidence_path || input?.build_evidence?.git_path,
       deployment_type,
@@ -844,7 +852,7 @@ export function observePreserveEvidence({
     if (!build.ok) return build;
     const live = observeLiveBaselineMembers({
       baseline,
-      files: plan.deployed_files,
+      files: livePlan.deployed_files,
       fingerprint: expectedFingerprint,
       deployment_type,
     });
@@ -853,7 +861,7 @@ export function observePreserveEvidence({
     if (!ancestry.ok) return ancestry;
     const git = run || defaultGitRunner(root);
     const reconcileFiles = files.filter((file) => {
-      if (deployment_type === 'spa-promote') return isSpaSourcePath(file) || plan.member_map[file];
+      if (deployment_type === 'spa-promote') return isSpaSourcePath(file) || candidatePlan.member_map[file];
       if (deployment_type === 'lambda-overlay') return isLambdaSourcePath(file);
       if (deployment_type === 'sql-apply' || deployment_type === 'sql-executor-invoke') {
         return isSqlSourcePath(file);
@@ -869,8 +877,11 @@ export function observePreserveEvidence({
       files,
       source_files: files,
       source_members: source.details.source_members,
-      deployed_files: plan.deployed_files,
-      member_map: plan.member_map,
+      deployed_files: candidatePlan.deployed_files,
+      live_deployed_files: livePlan.deployed_files,
+      member_map: candidatePlan.member_map,
+      candidate_entry_bundle: candidatePlan.entry_bundle,
+      live_entry_bundle: livePlan.entry_bundle,
       candidate_members: artifacts.details.candidate_members,
       live_members: live.details.live_members,
       accepted_paths_vs_main,
@@ -899,6 +910,7 @@ export function observePreserveEvidence({
     source_files: files,
     source_members: {},
     deployed_files: [],
+    live_deployed_files: [],
     member_map: {},
     candidate_members: {},
     live_members: {},
@@ -922,6 +934,7 @@ export function bindObservedInput(input, observed) {
     live_members: observed.live_members,
     source_members: observed.source_members,
     deployed_files: observed.deployed_files,
+    live_deployed_files: observed.live_deployed_files,
     member_map: observed.member_map,
     git_ancestry: observed.git_ancestry,
     current_main_sha: observed.current_main_sha,

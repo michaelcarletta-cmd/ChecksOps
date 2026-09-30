@@ -338,8 +338,9 @@ export function evaluatePreserveBuilds(input = {}, ctx = {}) {
       || payload.deployed_files
       || requiredPreservedPaths(ctx.compositionRegistry, { deployment_type: deploymentType });
     const owned = [...(payload.owned_members || payload.owned_components || [])];
-    if (deploymentType === 'spa-promote' && officialObservation?.deployed_files) {
-      owned.push(...officialObservation.deployed_files);
+    if (deploymentType === 'spa-promote' && officialObservation) {
+      owned.push(...(officialObservation.deployed_files || []));
+      owned.push(...(officialObservation.live_deployed_files || []));
     }
     const members = evaluatePreservedMemberIntegrity({
       liveMembers: payload.live_members,
@@ -348,6 +349,8 @@ export function evaluatePreserveBuilds(input = {}, ctx = {}) {
         : (payload.candidate_members || composition.details.composition_members),
       ownedMembers: owned,
       preservedPaths: deployedPaths,
+      livePaths: officialObservation?.live_deployed_files || null,
+      candidatePaths: officialObservation?.deployed_files || null,
     });
     if (!members.ok) return members;
   }
