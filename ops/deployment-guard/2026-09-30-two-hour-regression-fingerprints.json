@@ -25,6 +25,32 @@
     "immediately_before_working_spa": "/assets/index-QDJiUFF1.js",
     "proof": "ops/release-locks/proof/2026-09-30-six-workstream-first-loss.md"
   },
+  "reported_symptom_acceptance": {
+    "moov_account_status": {
+      "live_dSb_has_bank_verified_label": false,
+      "qdji_has_bank_verified_and_provider_linked": true,
+      "restore_from": "84ba11f4c5fbc5a98652768dc72cb1e58757ea14 StakeholderAccountSettings.tsx",
+      "do_not_associate_homeowner": "2ad87468-15cd-437c-ba9c-c4a896dc5365"
+    },
+    "tenant_logo": {
+      "live_dSb_has_tenantLogoUrl": false,
+      "bytes_still_present": true,
+      "readonly_get": "https://checksops.com/prep/branding/logo/2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "http": 200,
+      "content_type": "image/png",
+      "bytes": 796240,
+      "sha256": "8fe8caf15f55d20f6c7a6b71f14dd6e1b80d6b0fa384bb10a1e581fc17c6801f",
+      "captured_at_utc": "2026-09-30T22:40:49Z",
+      "restore_from": "b97a8dc6de16305c11b9e52e92ea167abdfabc8d tenantLogoUrl.ts + TenantLogo.tsx"
+    },
+    "unknown_checks": {
+      "do_not_delete_or_modify": true,
+      "primary_ui": "Bank Deposits Date unknown group (bankDepositDayKey null -> unknown)",
+      "verdict_without_db_select": "existing checkalt_deposits regrouped by SPA; six workstreams have no production check_intake_items insert",
+      "ccc_unknown_insured_count_dsb": 4,
+      "ccc_unknown_insured_count_qdji": 4
+    }
+  },
   "do_not_restore": [
     "/assets/index-BPbQUNFr.js",
     "/assets/index-C9QrEEkl.js",
