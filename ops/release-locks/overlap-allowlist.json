@@ -520,6 +520,76 @@
       "reason": "PR #562 adds exact-path reviewed overlap exceptions in the release-control allowlist. PR #449 also touches this control-plane file; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
       "expires": "2026-10-31",
       "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 560,
+      "path": "ops/release-locks/protected-paths.json",
+      "reason": "PR #562 explicitly protects the release-lock path manifest while reconciling exact-path overlap handling. PR #560 also touches this control-plane file; this exception acknowledges parallel review only and does not edit, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 547,
+      "path": "ops/release-locks/protected-paths.json",
+      "reason": "PR #562 explicitly protects the release-lock path manifest while reconciling exact-path overlap handling. PR #547 also touches this control-plane file; this exception acknowledges parallel review only and does not edit, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 538,
+      "path": "ops/release-locks/protected-paths.json",
+      "reason": "PR #562 explicitly protects the release-lock path manifest while reconciling exact-path overlap handling. PR #538 also touches this control-plane file; this exception acknowledges parallel review only and does not edit, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 536,
+      "path": "ops/release-locks/protected-paths.json",
+      "reason": "PR #562 explicitly protects the release-lock path manifest while reconciling exact-path overlap handling. PR #536 also touches this control-plane file; this exception acknowledges parallel review only and does not edit, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 525,
+      "path": "ops/release-locks/protected-paths.json",
+      "reason": "PR #562 explicitly protects the release-lock path manifest while reconciling exact-path overlap handling. PR #525 also touches this control-plane file; this exception acknowledges parallel review only and does not edit, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 512,
+      "path": "ops/release-locks/protected-paths.json",
+      "reason": "PR #562 explicitly protects the release-lock path manifest while reconciling exact-path overlap handling. PR #512 also touches this control-plane file; this exception acknowledges parallel review only and does not edit, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 505,
+      "path": "ops/release-locks/protected-paths.json",
+      "reason": "PR #562 explicitly protects the release-lock path manifest while reconciling exact-path overlap handling. PR #505 also touches this control-plane file; this exception acknowledges parallel review only and does not edit, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 504,
+      "path": "ops/release-locks/protected-paths.json",
+      "reason": "PR #562 explicitly protects the release-lock path manifest while reconciling exact-path overlap handling. PR #504 also touches this control-plane file; this exception acknowledges parallel review only and does not edit, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 501,
+      "path": "ops/release-locks/protected-paths.json",
+      "reason": "PR #562 explicitly protects the release-lock path manifest while reconciling exact-path overlap handling. PR #501 also touches this control-plane file; this exception acknowledges parallel review only and does not edit, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 448,
+      "path": "ops/release-locks/protected-paths.json",
+      "reason": "PR #562 explicitly protects the release-lock path manifest while reconciling exact-path overlap handling. PR #448 also touches this control-plane file; this exception acknowledges parallel review only and does not edit, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
     }
   ]
 }
