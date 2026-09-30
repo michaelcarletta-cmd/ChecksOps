@@ -19,6 +19,8 @@ import {
 import { acquireLease } from '../../scripts/deployment-guard/lib/lease.mjs';
 import { issueReceipt } from '../../scripts/deployment-guard/lib/receipt.mjs';
 import { refuseUnguardedDeploy } from '../../scripts/deployment-guard/require-guard.mjs';
+import { loadCompositionRegistry, passingCompositionResults } from '../../scripts/deployment-guard/lib/source-composition.mjs';
+import { loadContractRegistry, passingContractResults } from '../../scripts/deployment-guard/lib/contracts.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const NOW = '2026-09-29T18:00:00.000Z';
@@ -210,7 +212,13 @@ test('official preflight forwards executor authorization fields', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-sql-pre-'));
   const input = executorInput();
   const file = path.join(dir, 'manifest.json');
-  fs.writeFileSync(file, `${JSON.stringify({ ...input, contract_results: { 'claim-ledger': { ok: true }, 'tenant-isolation': { ok: true }, 'financial-write-protections': { ok: true } } })}\n`);
+  fs.writeFileSync(file, `${JSON.stringify({
+    ...input,
+    contract_results: {
+      ...passingContractResults(loadContractRegistry(ROOT)),
+      ...passingCompositionResults(loadCompositionRegistry(ROOT)),
+    },
+  })}\n`);
   const result = spawnSync(process.execPath, [
     path.join(ROOT, 'scripts/deployment-guard/preflight.mjs'),
     '--input', file,

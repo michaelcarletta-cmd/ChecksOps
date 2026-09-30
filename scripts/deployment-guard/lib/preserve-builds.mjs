@@ -4,6 +4,7 @@ import {
   evaluateAcceptedSourceComposition,
   evaluateMainReconciliation,
   evaluatePreservedMemberIntegrity,
+  manifestApplies,
   requiredPreservedPaths,
 } from './source-composition.mjs';
 import { evaluateWorktreeIsolation } from './worktree.mjs';
@@ -154,6 +155,7 @@ export function evaluateRequiredRegressionChecks({
   const extraIds = [];
   for (const row of (compositionRegistry?.manifests || [])) {
     if (row.accepted !== true || row.enabled === false) continue;
+    if (!manifestApplies(row, { deployment_type })) continue;
     const tests = [...new Set([row.test, ...(row.tests || [])].filter(Boolean))];
     const key = `composition:${row.id}`;
     extraIds.push(key);

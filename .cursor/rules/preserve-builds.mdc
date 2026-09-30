@@ -29,7 +29,8 @@ architecture. At minimum preserve:
 - Endorsement completion / verified endorsement lock
 
 If an accepted path, contract, or composition invariant would regress:
-**STOP**. Do not deploy.
+**STOP** with `SOURCE_RECONCILIATION_REQUIRED`,
+`SOURCE_COMPOSITION_REQUIRED`, or `REGRESSION_DETECTED`. Do not deploy.
 
 Registries (extend; do not replace):
 

@@ -11,10 +11,22 @@ import { acquireLease, inspectLease, releaseLease } from './lease.mjs';
 import { loadContractRegistry } from './contracts.mjs';
 import { evaluateProductionGate } from './production.mjs';
 import { verifyLiveState } from './verify-live.mjs';
-import { receiptDir } from './paths.mjs';
+import { receiptDir, repoRootFrom } from './paths.mjs';
 import { issueReceipt } from './receipt.mjs';
 import { loadCompositionRegistry } from './source-composition.mjs';
 import { evaluatePreserveBuilds, evaluateRequiredRegressionChecks } from './preserve-builds.mjs';
+
+function loadRegistryFromRoots(loader, ...roots) {
+  for (const candidate of roots) {
+    if (!candidate) continue;
+    try {
+      return loader(candidate);
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error;
+    }
+  }
+  return null;
+}
 
 export function loadJson(root, rel) {
   return JSON.parse(fs.readFileSync(path.join(root, rel), 'utf8'));
@@ -40,9 +52,13 @@ export function evaluateDeployment(input = {}, ctx = {}) {
   const production = evaluateProductionGate(input);
   if (!production.ok) return withAws(production, aws);
 
-  const registry = ctx.registry || (root && ctx.skip_contracts !== true ? loadContractRegistry(root) : null);
-  const compositionRegistry = ctx.compositionRegistry
-    || (root && ctx.skip_preserve_builds !== true ? loadCompositionRegistry(root) : null);
+  const fallbackRoot = repoRootFrom(import.meta.url);
+  const registry = ctx.registry || (ctx.skip_contracts === true
+    ? null
+    : loadRegistryFromRoots(loadContractRegistry, root, fallbackRoot));
+  const compositionRegistry = ctx.compositionRegistry || (ctx.skip_preserve_builds === true
+    ? null
+    : loadRegistryFromRoots(loadCompositionRegistry, root, fallbackRoot));
 
   if (ctx.skip_preserve_builds !== true) {
     const preserve = evaluatePreserveBuilds(input, {
