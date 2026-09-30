@@ -19,7 +19,15 @@ import { inflateRawSync } from 'node:zlib';
 import fs from 'node:fs';
 import path from 'node:path';
 import { CODES, errorEntry, failMany, ok } from './errors.mjs';
-import { requiredPreservedPaths } from './source-composition.mjs';
+import {
+  compiledSpaDeployedMembers,
+  deployedMembersFromSourcePaths,
+  isLambdaSourcePath,
+  isSpaSourcePath,
+  isSqlSourcePath,
+  requiredPreservedPaths,
+  sourceToDeployedMap,
+} from './source-composition.mjs';
 
 const GIT_SHA_RE = /^[0-9a-f]{40}$/;
 export const CANDIDATE_EVIDENCE_PATH = 'ops/deployment-guard/candidate-artifact.json';
@@ -246,12 +254,80 @@ export function verifyLiveBaselineBytes(baselinePath, fingerprint, {
   return ok({ kind: kind || deployment_type || 'other', bytes_verified: false, skipped: true });
 }
 
+export function observeSourceMembers({
+  root,
+  commit,
+  files = [],
+  run,
+} = {}) {
+  const declared = String(commit || '').trim();
+  if (!root || !GIT_SHA_RE.test(declared)) {
+    return failMany([errorEntry(
+      CODES.SOURCE_COMPOSITION_REQUIRED,
+      'source-composition evidence requires a repository root and the exact source commit',
+    )], CODES.SOURCE_COMPOSITION_REQUIRED);
+  }
+  const git = run || defaultGitRunner(root);
+  const members = {};
+  const missing = [];
+  for (const file of files) {
+    const digest = hashGitPath(git, declared, file);
+    if (!digest) missing.push(file);
+    else members[file] = digest;
+  }
+  if (missing.length) {
+    return failMany([errorEntry(
+      CODES.SOURCE_COMPOSITION_REQUIRED,
+      'source-composition evidence is missing git objects at the declared commit',
+      { missing_source_paths: missing, declared_commit: declared },
+    )], CODES.SOURCE_COMPOSITION_REQUIRED);
+  }
+  return ok({
+    source_files: [...files],
+    source_members: members,
+    source: 'git-show',
+  });
+}
+
+function resolveEntryBundle(artifactPath, artifact = {}, fingerprint = {}) {
+  const hinted = artifact.entry_bundle || artifact.entryBundle || fingerprint.entry_bundle;
+  if (hinted) return String(hinted).trim();
+  if (!artifactPath) return '';
+  const abs = path.resolve(artifactPath);
+  if (isZipFile(abs) || !fs.existsSync(abs) || !fs.statSync(abs).isDirectory()) return '';
+  try {
+    return hashSpaLiveFiles(abs, hinted).entry_bundle;
+  } catch {
+    return '';
+  }
+}
+
+export function resolveDeployedMemberPlan(sourceFiles = [], {
+  deployment_type,
+  artifactPath,
+  artifact,
+  fingerprint,
+} = {}) {
+  const entry_bundle = resolveEntryBundle(artifactPath, artifact, fingerprint);
+  const member_map = sourceToDeployedMap(sourceFiles, { deployment_type, entry_bundle });
+  let deployed_files = deployedMembersFromSourcePaths(sourceFiles, { deployment_type, entry_bundle });
+  if (deployment_type === 'spa-promote' && entry_bundle) {
+    deployed_files = compiledSpaDeployedMembers(entry_bundle);
+  }
+  return {
+    member_map,
+    deployed_files,
+    entry_bundle: entry_bundle || null,
+  };
+}
+
 export function observeTrustedBuildEvidence({
   root,
   commit,
   artifactDigest,
   files = [],
   candidateMembers = {},
+  memberMap = {},
   run,
   gitPath,
   deployment_type,
@@ -301,15 +377,34 @@ export function observeTrustedBuildEvidence({
     });
   }
 
-  const bindFiles = deployment_type === 'sql-apply' || deployment_type === 'sql-executor-invoke'
-    ? files.filter((file) => String(file).endsWith('.sql'))
-    : files;
+  if (deployment_type === 'spa-promote') {
+    return failMany([errorEntry(
+      CODES.SOURCE_COMPOSITION_REQUIRED,
+      'SPA candidate digest must match trusted build evidence at the source commit; compiled assets cannot be bound by commit labels',
+      { artifact_digest: digest, declared_commit: declared },
+    )], CODES.SOURCE_COMPOSITION_REQUIRED);
+  }
+  const bindPairs = [];
+  if (deployment_type === 'sql-apply' || deployment_type === 'sql-executor-invoke') {
+    for (const file of files.filter((rel) => isSqlSourcePath(rel))) {
+      bindPairs.push({ source: file, member: file });
+    }
+  } else if (deployment_type === 'lambda-overlay') {
+    const map = memberMap && Object.keys(memberMap).length
+      ? memberMap
+      : sourceToDeployedMap(files.filter(isLambdaSourcePath), { deployment_type });
+    for (const [source, member] of Object.entries(map)) {
+      bindPairs.push({ source, member });
+    }
+  } else {
+    for (const file of files) bindPairs.push({ source: file, member: file });
+  }
   const missing = [];
   const mismatched = [];
-  for (const file of bindFiles) {
-    const gitHash = hashGitPath(git, declared, file);
-    if (!gitHash) missing.push(file);
-    else if (gitHash !== candidateMembers[file]) mismatched.push(file);
+  for (const pair of bindPairs) {
+    const gitHash = hashGitPath(git, declared, pair.source);
+    if (!gitHash) missing.push(pair.source);
+    else if (gitHash !== candidateMembers[pair.member]) mismatched.push(pair.member);
   }
   if (missing.length || mismatched.length) {
     return failMany([errorEntry(
@@ -521,6 +616,7 @@ export function observeDeploymentArtifactMembers({
   files = [],
   commit,
   root,
+  member_map = {},
 } = {}) {
   const binding = evaluateArtifactCommitBinding(artifact, commit);
   if (!binding.ok) return binding;
@@ -539,10 +635,17 @@ export function observeDeploymentArtifactMembers({
       { path: artifactPath },
     )], CODES.SOURCE_COMPOSITION_REQUIRED);
   }
+  if (!files.length) {
+    return failMany([errorEntry(
+      CODES.SOURCE_COMPOSITION_REQUIRED,
+      'no deployed members mapped from preserved source paths; do not insert repository source files into the artifact to satisfy the guard',
+      { member_map, source: 'deployment-artifact' },
+    )], CODES.SOURCE_COMPOSITION_REQUIRED);
+  }
   const hashed = hashMemberList(
     artifactPath,
     files,
-    'trusted collector could not read candidate members from the deployment artifact',
+    'trusted collector could not read mapped candidate members from the deployment artifact',
     'deployment-artifact',
   );
   if (!hashed.ok) return hashed;
@@ -561,8 +664,10 @@ export function observeDeploymentArtifactMembers({
   }
   return ok({
     files: [...files],
+    deployed_files: [...files],
     candidate_members: hashed.details.members,
     members: hashed.details.members,
+    member_map,
     artifact_path: artifactPath,
     artifact_commit: binding.details.commit,
     artifact_digest,
@@ -650,15 +755,23 @@ export function observeLiveBaselineMembers({
     deployment_type,
   });
   if (!bytes.ok) return bytes;
+  if (!files.length) {
+    return failMany([errorEntry(
+      CODES.SOURCE_COMPOSITION_REQUIRED,
+      'no deployed members mapped from preserved source paths; missing live evidence fails closed',
+      { source: 'fresh-live-baseline' },
+    )], CODES.SOURCE_COMPOSITION_REQUIRED);
+  }
   const hashed = hashMemberList(
     abs,
     files,
-    'trusted collector could not read live members from the freshly captured deployment baseline',
+    'trusted collector could not read mapped live members from the freshly captured deployment baseline',
     'fresh-live-baseline',
   );
   if (!hashed.ok) return hashed;
   return ok({
     files: [...files],
+    deployed_files: [...files],
     live_members: hashed.details.members,
     members: hashed.details.members,
     baseline_path: abs,
@@ -694,11 +807,27 @@ export function observePreserveEvidence({
   const declaredCommit = String(commit || input?.commit || '').trim();
 
   if (files.length) {
+    const commitBinding = evaluateArtifactCommitBinding(artifact, declaredCommit);
+    if (!commitBinding.ok) return commitBinding;
+    const source = observeSourceMembers({
+      root,
+      commit: declaredCommit,
+      files,
+      run,
+    });
+    if (!source.ok) return source;
+    const plan = resolveDeployedMemberPlan(files, {
+      deployment_type,
+      artifactPath: artifactPathOf(artifact),
+      artifact,
+      fingerprint: expectedFingerprint,
+    });
     const artifacts = observeDeploymentArtifactMembers({
       artifact,
-      files,
+      files: plan.deployed_files,
       commit: declaredCommit,
       root,
+      member_map: plan.member_map,
     });
     if (!artifacts.ok) return artifacts;
     const build = observeTrustedBuildEvidence({
@@ -707,6 +836,7 @@ export function observePreserveEvidence({
       artifactDigest: artifacts.details.artifact_digest,
       files,
       candidateMembers: artifacts.details.candidate_members,
+      memberMap: plan.member_map,
       run,
       gitPath: artifact?.build_evidence_path || input?.build_evidence?.git_path,
       deployment_type,
@@ -714,7 +844,7 @@ export function observePreserveEvidence({
     if (!build.ok) return build;
     const live = observeLiveBaselineMembers({
       baseline,
-      files,
+      files: plan.deployed_files,
       fingerprint: expectedFingerprint,
       deployment_type,
     });
@@ -722,13 +852,25 @@ export function observePreserveEvidence({
     const ancestry = observeGitAncestry(root, { commit: declaredCommit, run });
     if (!ancestry.ok) return ancestry;
     const git = run || defaultGitRunner(root);
-    const accepted_paths_vs_main = files.map((file) => ({
+    const reconcileFiles = files.filter((file) => {
+      if (deployment_type === 'spa-promote') return isSpaSourcePath(file) || plan.member_map[file];
+      if (deployment_type === 'lambda-overlay') return isLambdaSourcePath(file);
+      if (deployment_type === 'sql-apply' || deployment_type === 'sql-executor-invoke') {
+        return isSqlSourcePath(file);
+      }
+      return true;
+    });
+    const accepted_paths_vs_main = reconcileFiles.map((file) => ({
       path: file,
       main: hashGitPath(git, ancestry.details.current_main_sha, file),
-      candidate: artifacts.details.candidate_members[file],
+      candidate: source.details.source_members[file],
     }));
     return ok({
       files,
+      source_files: files,
+      source_members: source.details.source_members,
+      deployed_files: plan.deployed_files,
+      member_map: plan.member_map,
       candidate_members: artifacts.details.candidate_members,
       live_members: live.details.live_members,
       accepted_paths_vs_main,
@@ -740,6 +882,7 @@ export function observePreserveEvidence({
       candidate_source: 'deployment-artifact',
       live_source: 'fresh-live-baseline',
       ancestry_source: 'git-merge-base',
+      source_evidence_source: 'git-show',
       build_evidence_source: build.details.source,
       artifact_commit: artifacts.details.artifact_commit,
       artifact_digest: artifacts.details.artifact_digest,
@@ -753,6 +896,10 @@ export function observePreserveEvidence({
   if (!ancestry.ok) return ancestry;
   return ok({
     files,
+    source_files: files,
+    source_members: {},
+    deployed_files: [],
+    member_map: {},
     candidate_members: {},
     live_members: {},
     accepted_paths_vs_main: [],
@@ -773,14 +920,17 @@ export function bindObservedInput(input, observed) {
     ...input,
     candidate_members: observed.candidate_members,
     live_members: observed.live_members,
+    source_members: observed.source_members,
+    deployed_files: observed.deployed_files,
+    member_map: observed.member_map,
     git_ancestry: observed.git_ancestry,
     current_main_sha: observed.current_main_sha,
     merge_base_sha: observed.merge_base_sha,
     accepted_paths_vs_main: observed.accepted_paths_vs_main,
     source_composition_manifest: {
       ...(input.source_composition_manifest || {}),
-      files: observed.files,
-      members: observed.candidate_members,
+      files: observed.source_files || observed.files,
+      members: observed.source_members,
     },
   };
 }
@@ -798,15 +948,26 @@ export function evaluateObservationBinding(input = {}, observation) {
   }
   const observed = observation.details;
   const errors = [];
+  const deployedObserved = observed.candidate_members || {};
+  const sourceObserved = observed.source_members || {};
   const callerMembers = {
     ...(input.candidate_members || {}),
+  };
+  const callerSource = {
+    ...(input.source_members || {}),
     ...(input.source_composition_manifest?.members || {}),
     ...(input.source_composition_manifest?.hashes || {}),
   };
   const fabricatedHashes = [];
   for (const [file, digest] of Object.entries(callerMembers)) {
     if (digest == null || digest === '') continue;
-    if (observed.candidate_members[file] !== String(digest)) {
+    if (deployedObserved[file] !== String(digest)) {
+      fabricatedHashes.push(file);
+    }
+  }
+  for (const [file, digest] of Object.entries(callerSource)) {
+    if (digest == null || digest === '') continue;
+    if (sourceObserved[file] !== String(digest) && !fabricatedHashes.includes(file)) {
       fabricatedHashes.push(file);
     }
   }

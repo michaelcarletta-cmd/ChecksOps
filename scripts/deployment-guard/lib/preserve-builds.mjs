@@ -329,16 +329,25 @@ export function evaluatePreserveBuilds(input = {}, ctx = {}) {
       composition_manifest: payload.source_composition_manifest,
       accepted_composition: payload.accepted_composition === true,
       frontend_workstreams: payload.frontend_workstreams || [],
-      candidate_members: payload.candidate_members,
+      candidate_members: payload.source_members || payload.source_composition_manifest?.members || payload.candidate_members,
       candidate_contents: payload.candidate_contents,
     });
     if (!composition.ok) return composition;
 
+    const deployedPaths = officialObservation?.deployed_files
+      || payload.deployed_files
+      || requiredPreservedPaths(ctx.compositionRegistry, { deployment_type: deploymentType });
+    const owned = [...(payload.owned_members || payload.owned_components || [])];
+    if (deploymentType === 'spa-promote' && officialObservation?.deployed_files) {
+      owned.push(...officialObservation.deployed_files);
+    }
     const members = evaluatePreservedMemberIntegrity({
       liveMembers: payload.live_members,
-      candidateMembers: payload.candidate_members || composition.details.composition_members,
-      ownedMembers: payload.owned_members || payload.owned_components,
-      preservedPaths: requiredPreservedPaths(ctx.compositionRegistry, { deployment_type: deploymentType }),
+      candidateMembers: officialObservation
+        ? payload.candidate_members
+        : (payload.candidate_members || composition.details.composition_members),
+      ownedMembers: owned,
+      preservedPaths: deployedPaths,
     });
     if (!members.ok) return members;
   }

@@ -8,6 +8,73 @@ const GIT_SHA_RE = /^[0-9a-f]{40}$/;
 const SHA256_RE = /^[0-9a-f]{64}$/;
 const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/;
 const ANCESTRY_METHODS = new Set(['git-merge-base', 'merge-base']);
+export const LAMBDA_SOURCE_PREFIX = 'aws/functions/api/';
+
+function normalizeRel(rel) {
+  return String(rel || '').replace(/\\/g, '/').replace(/^\.\//, '');
+}
+
+export function isSqlSourcePath(rel) {
+  return normalizeRel(rel).endsWith('.sql');
+}
+
+export function isLambdaSourcePath(rel) {
+  return normalizeRel(rel).startsWith(LAMBDA_SOURCE_PREFIX);
+}
+
+export function isSpaSourcePath(rel) {
+  const n = normalizeRel(rel);
+  return n.startsWith('src/') || n === 'index.html' || n.startsWith('public/');
+}
+
+export function repoPathToLambdaMember(repoPath) {
+  const n = normalizeRel(repoPath);
+  if (!n.startsWith(LAMBDA_SOURCE_PREFIX)) return null;
+  return n.slice(LAMBDA_SOURCE_PREFIX.length);
+}
+
+export function compiledSpaDeployedMembers(entryBundle) {
+  const bundle = String(entryBundle || '').trim().replace(/^\//, '');
+  const members = ['index.html'];
+  if (bundle) members.push(bundle);
+  return members;
+}
+
+export function sourceToDeployedMap(sourcePaths = [], {
+  deployment_type,
+  entry_bundle,
+} = {}) {
+  const map = {};
+  if (deployment_type === 'spa-promote') {
+    const compiled = compiledSpaDeployedMembers(entry_bundle);
+    const bundle = compiled[1] || compiled[0];
+    for (const src of sourcePaths) {
+      map[normalizeRel(src)] = bundle;
+    }
+    return map;
+  }
+  if (deployment_type === 'sql-apply' || deployment_type === 'sql-executor-invoke') {
+    for (const src of sourcePaths) {
+      if (isSqlSourcePath(src)) map[normalizeRel(src)] = normalizeRel(src);
+    }
+    return map;
+  }
+  if (deployment_type === 'lambda-overlay') {
+    for (const src of sourcePaths) {
+      const member = repoPathToLambdaMember(src);
+      if (member) map[normalizeRel(src)] = member;
+    }
+    return map;
+  }
+  return map;
+}
+
+export function deployedMembersFromSourcePaths(sourcePaths = [], opts = {}) {
+  if (opts.deployment_type === 'spa-promote') {
+    return compiledSpaDeployedMembers(opts.entry_bundle);
+  }
+  return [...new Set(Object.values(sourceToDeployedMap(sourcePaths, opts)))];
+}
 
 export function hashContent(text) {
   return createHash('sha256').update(String(text ?? ''), 'utf8').digest('hex');
