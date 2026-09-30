@@ -1,0 +1,143 @@
+{
+  "id": "2026-09-30-two-hour-regression-fingerprints",
+  "kind": "read-only-recovery-matrix",
+  "window_start_et": "2026-09-30T16:15:00-04:00",
+  "window_start_utc": "2026-09-30T20:15:00Z",
+  "captured_at_utc": "2026-09-30T22:18:21Z",
+  "production_writes_this_task": 0,
+  "aws_management_api_calls_this_task": 0,
+  "do_not_restore": [
+    "/assets/index-BPbQUNFr.js",
+    "/assets/index-C9QrEEkl.js",
+    "/assets/index-C_fh5VBD.js",
+    "/assets/index-CEKjixtZ.js",
+    "/assets/index-DbYbvb6d.js",
+    "/assets/index-QDJiUFF1.js",
+    "/assets/index-DvVldu_B.js"
+  ],
+  "do_not_rebuild_from": ["origin/main", "e3e4649478a0c3978065b71b0528dd93baa8dac1"],
+  "pre_window_production": {
+    "observed_at_utc": "2026-09-30T20:18:29Z",
+    "source": "settings workstream immediately-before / post-staging verify (bc-c413824f)",
+    "spa": {
+      "entry": "/assets/index-DbYbvb6d.js",
+      "entry_sha256": "1dfbe6c4d2a77027b7ac3cf89eece450b4d9b290b829a2d88ff0244332e6e47c",
+      "index_html_sha256": "705f86309699aa6df4e15f12d0e8b0e3c31ff742eed18195859f7cd226e18040",
+      "s3_version": "FVo1QSfkEI4csW.r3iuuFu0rds.pzPKN",
+      "last_modified": "2026-09-30T20:01:34Z",
+      "walletops_chunk": "/assets/WalletOps-j3z9RyZ7.js",
+      "walletops_sha256": "bf3ccfbeeb8d5bd61397f54c26504a3d04ca77f861f1fbb1d0638d6a60760a83",
+      "banner_hide": true
+    },
+    "lambda": {
+      "name": "checksops-production-prep-api",
+      "code_sha256": "RaFQKBA489aj69N8e76eCQdzlJ2ijkA1YFNFPa+D9r4=",
+      "revision_id": "33e3f02d-3a97-4b8e-be31-4e104b7027f3",
+      "last_modified": "2026-09-30T19:56:32.000+0000",
+      "owned_member": "workflow.mjs",
+      "workflow_sha256": "bd18db71ab9277eea74add41f99ed5324841a163815a756578f60cfd50bf7bab"
+    }
+  },
+  "current_live_production": {
+    "observed_at_utc": "2026-09-30T22:18:21Z",
+    "source": "HTTPS GET https://checksops.com/ (this investigation, read-only)",
+    "spa": {
+      "entry": "/assets/index-DSbVZXu8.js",
+      "entry_sha256": "8da351ee4060d065e626b382fec06acf9a7099317184980979b95468e7e4bbe5",
+      "index_html_sha256": "e93fe5488c013aed91626da1ee608978f702796a24e08350306ccb4c3163e75f",
+      "s3_version": "Jc2Nyp5THf1j30gf21cQHeMoApSs8uDw",
+      "etag": "f92d3a12bd1f8eec9c200dbe71c05ae3",
+      "last_modified": "2026-09-30T21:20:11Z",
+      "css": "/assets/index-DgosuTnh.css",
+      "css_sha256": "ea80f9b7ce0048409157f50638622d8fbe364c5763340e417e15715a74b9968f",
+      "js_s3_version": "mF3Q2LJgEBd0TU4EU1MYziK115abX6lD",
+      "js_last_modified": "2026-09-30T21:19:37Z",
+      "hostname_guard_in_index_html": true,
+      "save_claim_settlement_breakdown_in_entry": true,
+      "environmentReady_in_entry": false,
+      "tenantLogoUrl_in_entry": false
+    },
+    "lambda": {
+      "name": "checksops-production-prep-api",
+      "code_sha256": "jN5d0C340DZlKM7/zbxxiZk+atoAqv9CI2quPZq5IG8=",
+      "revision_id": "a37c1225-1287-4070-9ef5-be5f04f9efe8",
+      "source": "PR 582 / PR 584 re-read; this task did not call AWS Lambda APIs"
+    }
+  },
+  "intermediate_production_writes_in_window": [
+    {
+      "when_utc": "2026-09-30T20:31:23Z",
+      "component": "lambda",
+      "writer": "bc-c413824f PR 581",
+      "from": "RaFQKBA489aj69N8e76eCQdzlJ2ijkA1YFNFPa+D9r4=",
+      "to": "JlChQagI3F26AEcQrFHRPvNsVLRGmO8nR9RKMK7ERJ0=",
+      "invalidation": null
+    },
+    {
+      "when_utc": "2026-09-30T20:35:47Z",
+      "component": "spa",
+      "writer": "bc-c413824f PR 581",
+      "from": "/assets/index-DbYbvb6d.js",
+      "to": "/assets/index-QDJiUFF1.js",
+      "to_sha256": "19ae149deecc2d06792dece4b27ba30bf198a146a4325645f6e4468d5afd92c7",
+      "index_html_sha256": "5d35bd47b200ce7a5dbfd562bef1fcb4daa52f7ea89a1207e0b00e2150f12467",
+      "s3_version": "NNalIXDhhdaOovnqFQwZVSJ99V0BFZz9",
+      "invalidation": "IEEF8WPGTAFVCF2ZHV1LGGTRI8"
+    },
+    {
+      "when_utc": "2026-09-30T21:11:00Z",
+      "component": "lambda",
+      "writer": "bc-5f3c64b4 PR 582",
+      "from": "JlChQagI3F26AEcQrFHRPvNsVLRGmO8nR9RKMK7ERJ0=",
+      "to": "jN5d0C340DZlKM7/zbxxiZk+atoAqv9CI2quPZq5IG8=",
+      "note": "timestamp approximate from agent artifacts"
+    },
+    {
+      "when_utc": "2026-09-30T21:20:11Z",
+      "component": "spa",
+      "writer": "bc-5f3c64b4 PR 582",
+      "from": "/assets/index-QDJiUFF1.js",
+      "to": "/assets/index-DSbVZXu8.js",
+      "invalidation": "ICJ7PG1IS6CFP3I4BGR2ZQE6E",
+      "s3_version": "Jc2Nyp5THf1j30gf21cQHeMoApSs8uDw"
+    }
+  ],
+  "working_implementations": {
+    "walletops_activity_recovery": {
+      "commit": "9afb57fe52a42c0a84e4e07b3a7618c20c0d815c",
+      "promotion_commit": "50b8a94e48604b39682e463f0f8a723f6455ce1e",
+      "pr": 575,
+      "branch": "cursor/walletops-activity-recovery-prod-2d41",
+      "live_artifact_when_accepted": "/assets/index-DbYbvb6d.js"
+    },
+    "hostname_banner_guard": {
+      "commit": "e3e4649478a0c3978065b71b0528dd93baa8dac1",
+      "pr": 578,
+      "present_on_current_live_index_html": true
+    },
+    "endorsing_confirmation": {
+      "source_merged": "23c4a0e36ba4113f50ede6c61000acad826e4f94",
+      "overlay_pr": 576,
+      "workflow_sha256": "bd18db71ab9277eea74add41f99ed5324841a163815a756578f60cfd50bf7bab",
+      "applied_before_window": true
+    },
+    "settings_1_2_5": {
+      "application_commit": "84ba11f4c5fbc5a98652768dc72cb1e58757ea14",
+      "compose_commit": "2cd3cd2e7f366784986da0f635cf4827d8062fbf",
+      "pr": 581,
+      "live_artifact_when_applied": "/assets/index-QDJiUFF1.js"
+    },
+    "settlement_writer": {
+      "source_commit": "38e659b467b726c15501ae6acefc39d20fc0cd4e",
+      "compose_commit": "82460c8c2ebbc8c7996b9cc233058015933120df",
+      "pr": 582,
+      "live_artifact_now": "/assets/index-DSbVZXu8.js"
+    },
+    "insured_name_branding_compose": {
+      "commit": "be29ba3918322b76f4155bed4950efe5b373d709",
+      "pr": 584,
+      "staging_only": "/assets/index-C8adM6cZ.js",
+      "must_not_promote_over_newer_live": true
+    }
+  }
+}
