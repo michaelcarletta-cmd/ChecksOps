@@ -95,6 +95,13 @@ test("Item #4 Funding & Billing and pending cards remain", () => {
   assert.match(page, /Available operating balance/);
 });
 
+test("WalletOps wallet reads are environment-aware and never maybeSingle all operating rows", () => {
+  assert.match(hooks, /selectPaymentWallet/);
+  assert.match(hooks, /resolveWalletOpsEnvironment/);
+  assert.match(hooks, /\.eq\("environment", walletEnvironment\)/);
+  assert.doesNotMatch(hooks, /\.eq\("wallet_type", "operating"\)[\s\S]{0,80}\.maybeSingle\(\)/);
+});
+
 let failed = 0;
 for (const [name, fn] of tests) {
   try {
