@@ -1,0 +1,77 @@
+{
+  "id": "walletops-five-environment-gate",
+  "verdict": "$5 ENVIRONMENT MISMATCH — NON-BLOCKING",
+  "spa_promotion": "GO",
+  "stop_after_gate": true,
+  "do_not_promote_in_this_step": true,
+  "captured_at": "2026-09-30T19:20:00Z",
+  "branch": "cursor/walletops-five-env-gate-2d41",
+  "provider_writes": 0,
+  "db_writes": 0,
+  "spa_writes": 0,
+  "lambda_writes": 0,
+  "cloudfront_invalidations": 0,
+  "A_exact_query": {
+    "source": "src/hooks/useWalletOps.ts useWalletOpsTransfers",
+    "construction": [
+      ".from(\"payment_transfers\")",
+      ".select(\"id, tenant_id, amount_cents, status, provider_status, speed, selected_rail, description, created_at, completed_at, leg_role, is_facilitator_fee, source_payment_method_id, destination_payment_method_id, provider_metadata, provider_transfer_id, idempotency_key, wallet_id\")",
+      ".eq(\"tenant_id\", tenantId!)",
+      ".order(\"created_at\", { ascending: false })",
+      ".limit(limit)"
+    ],
+    "post_query_filter": "rows.filter((row) => !row.tenant_id || row.tenant_id === tenantId)",
+    "backend": "/data/query runSelect(client, body) forwards caller filters only; AWS client eq() does not inject environment",
+    "rls": "aws_select_payment_transfers USING (aws_is_cross_tenant_reader() OR aws_can_access_tenant(tenant_id)) — no environment predicate"
+  },
+  "B_filters_environment": false,
+  "C_row_63f892d9_returned_on_checksops_com": "YES",
+  "D_pending_in": {
+    "pendingInCents": 500,
+    "pendingOutCents": 0,
+    "kind": "pending_in"
+  },
+  "E_recent_activity": {
+    "visible": true,
+    "title": "Wallet Funding",
+    "credit": true,
+    "amount_cents": 500,
+    "status": "pending",
+    "from": "WELLS FARGO ••••4573",
+    "to": "Freedom Adjustment Wallet"
+  },
+  "F_canonical_environment_contract": {
+    "column_default": "sandbox",
+    "unique": "(provider, environment, provider_transfer_id) WHERE provider_transfer_id IS NOT NULL",
+    "real_production_139": {
+      "id": "ab2895c9-2ba8-4c21-a818-7f83abdb068c",
+      "provider_transfer_id": "b31c7752-031f-4b8b-9b6e-82dd0aaed2cb",
+      "environment": "production"
+    },
+    "canonical_for_a_real_production_moov_transfer": "production"
+  },
+  "G_why_sandbox": {
+    "schema_default": "environment text NOT NULL DEFAULT 'sandbox'",
+    "aws_wallet_fund": "insertTransferDraft hardcodes VALUES (..., 'moov', 'sandbox', 'ready', ...)",
+    "aws_wallet_fund_path": "loadMoovAccount(..., 'sandbox') + syncWallet(..., environment: 'sandbox')",
+    "idempotency_key": "wallet-fund:2eff5f1a-929d-4ce3-9a8b-cd96b98df42a:operating:500",
+    "note": "The original oneshot persist used the sandbox-only AWS walletFund draft insert while posting the real production Moov transfer 9f9df312. Helper recovery did not rewrite environment."
+  },
+  "H_verdict": "$5 ENVIRONMENT MISMATCH — NON-BLOCKING",
+  "I_cross_environment_leakage": {
+    "transfers_separated_by_environment": false,
+    "wallets_separated_by_environment": true,
+    "freedom_sandbox_and_production_wallets_share_pm": "744ea734-f5e3-4b31-bb92-38f85fd29b91",
+    "current_freedom_rows": "only 63f892d9 ($5 mislabeled sandbox, real production Moov) and ab2895c9 ($139 production). No extra sandbox test transfer exists.",
+    "structural_issue": "tenant-only payment_transfers reads would also return a genuine sandbox test transfer for the same tenant. Report only; do not redesign in this gate.",
+    "this_five_does_not_introduce_the_issue": true
+  },
+  "J_narrow_correction": "NONE — do not UPDATE environment for cosmetic consistency. Hypothetical sandbox→production on 63f892d9 would be unique-safe (no production row already holds 9f9df312) but is not required for visibility.",
+  "K_provider_writes": 0,
+  "L_db_writes": 0,
+  "M_deployment_writes": 0,
+  "N_spa_promotion": "GO",
+  "proof_tests": "aws/tests/walletops-five-environment-gate.test.mjs 7/7 pass",
+  "do_not_write_row": true,
+  "do_not_promote_in_this_step": true
+}
