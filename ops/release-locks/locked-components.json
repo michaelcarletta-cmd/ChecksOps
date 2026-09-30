@@ -551,14 +551,14 @@
     "ocr-azure": {
       "id": "ocr-azure",
       "ownership_group": "ocr-azure",
-      "classification": "STAGING_LOCKED_NOT_PRODUCTION",
+      "classification": "UNVERIFIED",
       "production_active": false,
-      "environment": "staging",
+      "environment": "unknown",
       "source": {
-        "git_sha": "8a3ead386d99f0e825d54093ebcb8c174a8c758e",
-        "tree_hash": "9ecc8ae0c814947afb1badc354b467831b24eec09cb8a60bdb454cb6abfb2801",
-        "merged": true,
-        "merged_pr": 370
+        "git_sha": "4c52e1835a4e5b677b763e6095acc67c951b74ee",
+        "tree_hash": "9ae779b2de694bcf7c36741b90bc0296527791b80165e3cac925e1383ee68fee",
+        "merged": false,
+        "merged_pr": 561
       },
       "required_sql": [],
       "artifact": {
@@ -585,12 +585,13 @@
         "notes": "Staging-validated OCR/Azure runtime from merged PR #370. Not production-locked. Do not deploy or unlock from this lock PR."
       },
       "missing_evidence": [
-        "production Lambda version serving the locked OCR runtime",
+        "staging revalidation of OCR runtime after merged changes #385, #389, #530, #531 and parser repair #561",
+        "production Lambda version serving the reconciled OCR runtime",
         "immutable production deployment fingerprint",
         "production OCR validation evidence"
       ],
       "open_pr_overlap": [],
-      "notes": "Protects the eight finalized OCR runtime files only. Shared providers/parity/checkalt-image.mjs is not owned here; OCR reuses named raster exports without claiming the CheckAlt module. Classification is STAGING_LOCKED_NOT_PRODUCTION because staging validation passed and production is not locked."
+      "notes": "Fail-closed reconciliation only. The protected OCR tree has advanced beyond the original PR #370 staging lock through merged OCR changes #385, #389, #530 and #531, with PR #561 correcting only the malformed payee-continuation regex introduced by #531. Classification is deliberately downgraded to UNVERIFIED until the reconciled runtime is revalidated; this manifest change does not deploy, restore, or modify AWS, production, Signature, Partner Sharing, Cognito, database/RLS, Moov, Mortgage Ops, Claim Ledger, or SPA artifacts."
     },
     "production-spa": {
       "id": "production-spa",
