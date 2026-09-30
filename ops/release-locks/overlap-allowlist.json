@@ -590,6 +590,69 @@
       "reason": "PR #562 explicitly protects the release-lock path manifest while reconciling exact-path overlap handling. PR #448 also touches this control-plane file; this exception acknowledges parallel review only and does not edit, merge, close, deploy, or authorize that independent workstream.",
       "expires": "2026-10-31",
       "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 582,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #579 only reconciles the production-release tree_hash after verified CI fetch-depth and live-byte binding; it does not deploy or alter the claim-settlement workstream. PR #582 must rebase onto current main before any later merge.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 581,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #579 only reconciles the production-release tree_hash after verified CI fetch-depth and live-byte binding; it does not deploy or alter the settings apply workstream. PR #581 must rebase onto current main before any later merge.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 570,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #579 only reconciles the production-release tree_hash after verified CI fetch-depth and live-byte binding; it does not deploy or alter the composed settings SPA workstream. PR #570 must rebase onto current main before any later merge.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 566,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #579 only reconciles the production-release tree_hash after verified CI fetch-depth and live-byte binding; it does not deploy or alter the WalletOps production workstream. PR #566 must rebase onto current main before any later merge.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 565,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #579 only reconciles the production-release tree_hash after verified CI fetch-depth and live-byte binding; it does not deploy or alter the WalletOps funding UX workstream. PR #565 must rebase onto current main before any later merge.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 582,
+      "path": "ops/release-locks/overlap-allowlist.json",
+      "reason": "PR #579 adds reviewed exact-path overlap exceptions for concurrent open PRs. PR #582 also touches this control-plane file; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 581,
+      "path": "ops/release-locks/overlap-allowlist.json",
+      "reason": "PR #579 adds reviewed exact-path overlap exceptions for concurrent open PRs. PR #581 also touches this control-plane file; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 570,
+      "path": "ops/release-locks/overlap-allowlist.json",
+      "reason": "PR #579 adds reviewed exact-path overlap exceptions for concurrent open PRs. PR #570 also touches this control-plane file; this exception acknowledges parallel review only and does not modify, merge, close, deploy, or authorize that independent workstream.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
+    },
+    {
+      "other_pr": 585,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #579 only reconciles the production-release tree_hash after verified live-byte binding; it does not deploy or alter the Delete Check workstream. PR #585 must rebase onto current main before any later merge.",
+      "expires": "2026-10-31",
+      "review_condition": "other-PR-must-rebase-before-merge"
     }
   ]
 }
