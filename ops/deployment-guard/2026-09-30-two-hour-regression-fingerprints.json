@@ -6,6 +6,25 @@
   "captured_at_utc": "2026-09-30T22:18:21Z",
   "production_writes_this_task": 0,
   "aws_management_api_calls_this_task": 0,
+  "scoped_workstreams": [
+    "bc-5e70b10c-280d-453c-ae28-6fe4dd6a771b",
+    "bc-d61f3d7d-7e9b-4253-8392-bbafef85fb87",
+    "bc-c413824f-1040-4e4b-90c5-70d2053051c8",
+    "bc-5f3c64b4-4a2f-4663-9dc6-8626cebaa2a4",
+    "bc-f8b0cb28-9f1a-4ac4-bf5e-3e6649f72d41",
+    "bc-0f07b8bb-0093-466e-b94e-c64db1520fb6"
+  ],
+  "first_composition_loss": {
+    "workstream": "Check view, claim number save",
+    "agent": "bc-5f3c64b4-4a2f-4663-9dc6-8626cebaa2a4",
+    "pr": 582,
+    "when_utc": "2026-09-30T21:20:11Z",
+    "write": "production SPA index-DSbVZXu8.js replaced index-QDJiUFF1.js",
+    "source_commit": "82460c8c2ebbc8c7996b9cc233058015933120df",
+    "invalidation": "ICJ7PG1IS6CFP3I4BGR2ZQE6E",
+    "immediately_before_working_spa": "/assets/index-QDJiUFF1.js",
+    "proof": "ops/release-locks/proof/2026-09-30-six-workstream-first-loss.md"
+  },
   "do_not_restore": [
     "/assets/index-BPbQUNFr.js",
     "/assets/index-C9QrEEkl.js",
