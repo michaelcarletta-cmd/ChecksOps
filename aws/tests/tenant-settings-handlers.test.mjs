@@ -293,6 +293,22 @@ test('changing the selected account and toggling auto-debit update the existing 
   assert.equal(paused.ok, true);
   assert.equal(paused.authorization.auto_debit_enabled, false);
   assert.equal(paused.collection_initiated, false);
+
+  const resumed = await runSaveTenantBillingAccount({
+    client,
+    mapping,
+    spoof,
+    body: { tenant_id: TENANT, action: 'toggle_auto_debit', auto_debit_enabled: true },
+  });
+  assert.equal(resumed.ok, true);
+  assert.equal(resumed.authorization.auto_debit_enabled, true);
+  assert.equal(resumed.charged, false);
+  assert.equal(resumed.collection_initiated, false);
+  assert.equal(client.state.billing.account_number_encrypted, 'kept');
+  assert.equal(
+    client.state.queries.some((row) => /transfer|collect|charge|moovFetch|\/transfers/i.test(row.sql)),
+    false,
+  );
 });
 
 test('company branding updates only intended tenant fields', async () => {
@@ -330,6 +346,14 @@ test('company branding updates only intended tenant fields', async () => {
 
   const invalid = await applyTenantCompanyBranding(client, TENANT, { invoice_accent_color: 'red' });
   assert.equal(invalid.error, 'invalid_field');
+
+  const reloaded = { ...client.state.tenant };
+  assert.equal(reloaded.logo_url, 'https://cdn.freedomadj.com/logo.png');
+  assert.equal(reloaded.invoice_letterhead_url, 'https://cdn.freedomadj.com/letter.png');
+  assert.equal(reloaded.invoice_accent_color, '#3b82f6');
+  assert.equal(reloaded.invoice_footer_note, 'Pay in 15');
+  assert.equal(reloaded.invoice_default_terms, 'Net 30');
+  assert.equal(reloaded.invoice_theme, 'dark');
 });
 
 test('branding save denies non-admins and does not invent company_branding writes', async () => {

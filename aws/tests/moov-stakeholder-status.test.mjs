@@ -32,6 +32,88 @@ test('bank and identity statuses stay independent', () => {
   );
 });
 
+test('reconcile persists bank status onto the matching stakeholder and refetch stays distinct from identity', async () => {
+  const store = new Map();
+  const STAKE_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  store.set(STAKE, {
+    id: STAKE,
+    tenant_id: TENANT,
+    verification_status: 'unverified',
+    provider: 'moov',
+    provider_account_id: 'acct_homeowner',
+    provider_bank_account_id: null,
+    provider_last_four: null,
+    provider_bank_name: null,
+    verified_at: null,
+  });
+  store.set(STAKE_B, {
+    id: STAKE_B,
+    tenant_id: TENANT,
+    verification_status: 'pending',
+    provider: 'moov',
+    provider_account_id: 'acct_other',
+    provider_bank_account_id: null,
+    provider_last_four: null,
+    provider_bank_name: null,
+    verified_at: null,
+  });
+  const client = {
+    query: async (sql, params = []) => {
+      if (String(sql).includes('UPDATE public.stakeholder_accounts')) {
+        const row = store.get(params[0]);
+        assert.ok(row, 'must update the targeted stakeholder id');
+        assert.equal(params[5], TENANT);
+        row.verification_status = params[1];
+        row.provider_bank_account_id = params[2] || row.provider_bank_account_id;
+        row.provider_last_four = params[3] || row.provider_last_four;
+        row.provider_bank_name = params[4] || row.provider_bank_name;
+        if (params[1] === 'verified') row.verified_at = row.verified_at || '2026-09-30T00:00:00.000Z';
+        store.set(row.id, { ...row });
+        return { rows: [store.get(row.id)] };
+      }
+      return { rows: [] };
+    },
+  };
+  const synced = await reconcileStakeholderBankStatuses(client, {
+    tenantId: TENANT,
+    stakeholders: [...store.values()],
+    fetchAccount: async (accountId) => {
+      if (accountId === 'acct_homeowner') {
+        return { profile: { individual: { verification: { status: 'verified' } } } };
+      }
+      return { verification: { status: 'pending' } };
+    },
+    fetchBanks: async (accountId) => {
+      if (accountId === 'acct_homeowner') {
+        return [{
+          bankAccountID: 'bank_homeowner',
+          verificationStatus: 'verified',
+          lastFourAccountNumber: '9911',
+          bankName: 'Isolated Bank',
+        }];
+      }
+      return [{ verificationStatus: 'pending' }];
+    },
+  });
+  const homeowner = synced.find((row) => row.id === STAKE);
+  const other = synced.find((row) => row.id === STAKE_B);
+  assert.equal(homeowner.verification_status, 'verified');
+  assert.equal(homeowner.identity_status, 'verified');
+  assert.equal(homeowner.conflated, false);
+  assert.equal(other.verification_status, 'pending');
+  assert.equal(other.identity_status, 'pending');
+
+  const refetched = store.get(STAKE);
+  const refetchedOther = store.get(STAKE_B);
+  assert.equal(refetched.verification_status, 'verified');
+  assert.equal(refetched.provider_bank_account_id, 'bank_homeowner');
+  assert.equal(refetched.provider_last_four, '9911');
+  assert.equal(refetchedOther.verification_status, 'pending');
+  assert.equal(Object.hasOwn(refetched, 'identity_status'), false);
+  assert.equal(homeowner.identity_status, 'verified');
+  assert.notEqual(refetched.verification_status, undefined);
+});
+
 test('reconcile writes bank status, never treats a provider account id as verified', async () => {
   const updates = [];
   const client = {

@@ -146,6 +146,28 @@ test('Bank Deposits exposes date jump, Auto-Deposit only, and TOTAL = sum of che
   assert.equal(/deposit_date/.test(src), false);
 });
 
+const EXCLUDED_BANK_DEPOSIT_STATUSES = Object.freeze(['rejected', 'returned', 'error', 'declined']);
+
+test('Bank Deposits query excludes rejected/returned/error/declined before grouping', () => {
+  const src = fs.readFileSync(path.join(spaRoot, 'components/deposit-ops/BankDepositReconciliation.tsx'), 'utf8');
+  assert.match(src, /\.not\("status", "in", "\(rejected,returned,error,declined\)"\)/);
+  const rawSameDay = [
+    { id: 'r', submitted_at: '2026-08-20T14:00:00.000Z', status: 'rejected', amount: 100 },
+    { id: 's', submitted_at: '2026-08-20T15:00:00.000Z', status: 'submitted', amount: 200 },
+    { id: 'c', submitted_at: '2026-08-20T16:00:00.000Z', status: 'cleared', amount: 50 },
+  ];
+  const groupingFixture = groupDepositsBySubmissionDate(rawSameDay);
+  assert.equal(groupingFixture.length, 1);
+  assert.equal(groupingFixture[0].dayKey, '2026-08-20');
+  assert.deepEqual(groupingFixture[0].rows.map((row) => row.status).sort(), ['cleared', 'rejected', 'submitted']);
+  const uiRows = rawSameDay.filter((row) => !EXCLUDED_BANK_DEPOSIT_STATUSES.includes(row.status));
+  const uiGroups = groupDepositsBySubmissionDate(uiRows);
+  assert.equal(uiGroups.length, 1);
+  assert.deepEqual(uiGroups[0].rows.map((row) => row.status).sort(), ['cleared', 'submitted']);
+  assert.equal(uiGroups[0].total, 250);
+  assert.equal(uiGroups[0].rows.some((row) => EXCLUDED_BANK_DEPOSIT_STATUSES.includes(row.status)), false);
+});
+
 test('SQL 35 recreates tenants_public as public-column security_invoker=false', () => {
   const sql = fs.readFileSync(path.join(ROOT, 'rls/sql/35_manager_partner_parity.sql'), 'utf8');
   assert.match(sql, /CREATE VIEW public\.tenants_public/);
