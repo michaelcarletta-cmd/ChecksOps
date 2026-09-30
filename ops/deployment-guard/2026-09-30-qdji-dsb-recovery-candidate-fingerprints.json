@@ -70,6 +70,16 @@
   },
   "tests": {
     "source_and_artifact": "aws/tests/unknown-check-spa-relabel.test.mjs, insured-name-branding.test.mjs, manager-bank-deposits-partners.test.mjs, checkalt-pending-sync.test.mjs, moov-stakeholder-status.test.mjs, qdji-dsb-recovery-candidate-artifacts.test.mjs",
-    "artifact_test": "pass after persistableLogoField minified-name adjustment; deposit chunk insert/upsert/delete=0"
+    "artifact_test": "pass after persistableLogoField minified-name adjustment; deposit chunk insert/upsert/delete=0",
+    "recovery_28_suite": "28 pass / 0 fail after DSb-absent capability trace",
+    "capability_equivalence": "aws/tests/dsb-candidate-capability-equivalence.test.mjs 3 pass"
+  },
+  "dsb_absent_capabilities": {
+    "default_payout_speed": "equivalent_via_moov_treasury_panel",
+    "invoice_letterhead_upload": "equivalent_via_independent_invoice_logo",
+    "dkim_sending_subdomain": "live_ui_feature_disabled_ses_flag_false",
+    "source_changed": false,
+    "rebuild_required": false,
+    "proof": "ops/release-locks/proof/2026-09-30-dsb-absent-capability-trace.md"
   }
 }

@@ -38,8 +38,9 @@ Compiled QDJi vs DSb compare:
 | Signature Requests | yes | yes | yes (`signature` ×261) | Preserve |
 | OCR / MICR / payee / issue date | yes | yes | yes | Preserve |
 | Endorsing `new_stage` (SPA marker) | ×3 | ×3 | ×3 | Preserve; live Lambda `workflow.mjs` not applied here |
-| WalletOps payout-speed / Default payout speed | no | DSb-only (pre-settings main) | **absent** | Not later-legit; do not keep |
-| DKIM / sending-subdomain / invoice letterhead | no | DSb-only (pre-settings main) | **absent** | Not later-legit; do not keep |
+| WalletOps inline Default payout speed | no | yes (duplicate of treasury panel) | **absent string**; **Manage sweeps → MoovTreasuryPanel** still writes `pushRail` | Equivalent replacement; see capability trace |
+| DKIM / sending-subdomain | no | UI present; SES flag **false** (503) | platform sender + persist-safe branding | Live form is disabled; not a working capability |
+| Invoice letterhead upload | no | `#invoice-letterhead-upload` | **independent invoice logo → `invoice_letterhead_url`** | Equivalent replacement (renamed control) |
 | Unknown Date unknown deposits | client regroup | client regroup | same ids, submitted_at grouper | Existing records; **do not delete** |
 
 ---
@@ -78,6 +79,10 @@ This task did not write `checksops-production-prep-api`.
 
 `persistableLogoField` is present in source and minified out of the bundle;
 compiled proof is `/branding/logo/` ×3.
+
+DSb-absent strings (payout speed / DKIM / letterhead) traced in
+`ops/release-locks/proof/2026-09-30-dsb-absent-capability-trace.md`.
+None required a compose add or rebuild.
 
 Fingerprints:
 `ops/deployment-guard/2026-09-30-qdji-dsb-recovery-candidate-fingerprints.json`.
