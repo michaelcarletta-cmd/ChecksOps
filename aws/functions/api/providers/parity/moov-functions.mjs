@@ -19,6 +19,7 @@ import {
 import { fail, jsonResult, moovParityContext } from './caller.mjs';
 import { loadMoovAccount, logPaymentEvent, sanitize } from './db.mjs';
 import { readWallet, syncWallet } from './moov-wallet.mjs';
+import { reconcileStakeholderBankStatuses } from './moov-stakeholder-status.mjs';
 import {
   cancelWalletFunding,
   calculatePaymentFunding,
@@ -467,7 +468,17 @@ const sync = {
   run: async ({ client, ctx, fetchImpl }) => {
     const account = await loadMoovAccount(client, ctx.tenantId, 'sandbox');
     if (!account?.provider_account_id) {
-      return jsonResult({ success: true, status: 'not_started', account: account ?? null, liveProviderCalled: false });
+      const stakeholders = await reconcileStakeholderBankStatuses(client, {
+        tenantId: ctx.tenantId,
+        fetchImpl,
+      }).catch(() => []);
+      return jsonResult({
+        success: true,
+        status: 'not_started',
+        account: account ?? null,
+        liveProviderCalled: stakeholders.some((row) => !row.skipped && !row.error),
+        stakeholders,
+      });
     }
     const accountId = account.provider_account_id;
     const remote = await moovFetch(`/accounts/${accountId}`, { scopes: scopes.accountRead(accountId), fetchImpl });
@@ -492,7 +503,20 @@ const sync = {
         JSON.stringify(sanitize({ remote, banks })),
       ],
     );
-    return jsonResult({ success: true, status: onboarding, liveProviderCalled: true });
+    const stakeholders = await reconcileStakeholderBankStatuses(client, {
+      tenantId: ctx.tenantId,
+      fetchImpl,
+    }).catch(() => []);
+    return jsonResult({
+      success: true,
+      status: onboarding,
+      liveProviderCalled: true,
+      identity_status: verification,
+      bank_verified: Array.isArray(banks)
+        ? banks.some((row) => String(row?.status || row?.verificationStatus || '').toLowerCase() === 'verified')
+        : false,
+      stakeholders,
+    });
   },
 };
 
