@@ -15,13 +15,7 @@
 /.github/workflows/release-locks.yml @michaelcarletta-cmd
 /.github/workflows/aws-migration-ci.yml @michaelcarletta-cmd
 /.github/workflows/tax-profile-migration-guard.yml @michaelcarletta-cmd
-/.github/workflows/deployment-guard.yml @michaelcarletta-cmd
 /.github/CODEOWNERS @michaelcarletta-cmd
-
-/ops/deployment-guard/ @michaelcarletta-cmd
-/scripts/deployment-guard/ @michaelcarletta-cmd
-/.cursor/rules/deployment-guard.mdc @michaelcarletta-cmd
-/.cursor/rules/preserve-builds.mdc @michaelcarletta-cmd
 
 /src/integrations/aws/client.ts @michaelcarletta-cmd
 /src/lib/awsStaging.ts @michaelcarletta-cmd
