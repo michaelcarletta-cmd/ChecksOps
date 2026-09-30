@@ -172,7 +172,7 @@ const OTHER_TENANT = '11111111-1111-4111-8111-111111111111';
 
 test('claims allowlist is update-only for claim_number', () => {
   const awsClient = readFileSync('src/integrations/aws/client.ts', 'utf8');
-  assert.match(awsClient, /const AWS_WRITE_TABLES = new Set\(\[[\s\S]*"claims",[\s\S]*\]\)/);
+  assert.match(awsClient, /const AWS_WRITE_TABLES = new Set\(\[[\s\S]*"claims",[\s\S]*"signature_requests",[\s\S]*"signature_signers",[\s\S]*\]\)/);
   assert.equal(WRITE_ALLOWLIST.claims.tranche, 6);
   assert.equal(WRITE_ALLOWLIST.claims.ops.has('update'), true);
   assert.equal(WRITE_ALLOWLIST.claims.ops.has('insert'), false);

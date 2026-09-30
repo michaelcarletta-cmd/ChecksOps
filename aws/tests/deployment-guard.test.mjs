@@ -34,6 +34,7 @@ import {
 import { evaluateProductionGate } from '../../scripts/deployment-guard/lib/production.mjs';
 import { evaluateDeployment } from '../../scripts/deployment-guard/lib/guard.mjs';
 import { requireDeploymentGuard } from '../../scripts/deployment-guard/require-guard.mjs';
+import { fixtureCandidateContents, loadAcceptedCompositionMarkers } from '../../scripts/deployment-guard/lib/accepted-composition.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SHA = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -56,6 +57,7 @@ function identity(overrides = {}) {
     package: { origin: 'fresh-live-download', downloaded_at: NOW, preflight_at: NOW },
     live_members: { 'owned.mjs': 'old', 'shared.mjs': 'keep', 'vendor/lib.js': 'vendor' },
     candidate_members: { 'owned.mjs': 'new', 'shared.mjs': 'keep', 'vendor/lib.js': 'vendor' },
+    candidate_contents: fixtureCandidateContents(loadAcceptedCompositionMarkers(ROOT)),
     immediately_before: { codeSha256: 'live-code', revisionId: 'rev-1' },
     ...overrides,
   };

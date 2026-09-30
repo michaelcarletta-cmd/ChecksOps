@@ -30,6 +30,8 @@ export function main(argv = process.argv.slice(2), root = repoRootFrom(import.me
     immediately_before: input.immediately_before,
     live_members: input.live_members,
     candidate_members: input.candidate_members,
+    candidate_contents: input.candidate_contents,
+    accepted_composition_markers: input.accepted_composition_markers,
     peer_sources: input.peer_sources,
     package: input.package,
     dist: input.dist,

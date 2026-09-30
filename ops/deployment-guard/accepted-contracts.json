@@ -27,6 +27,7 @@
         "aws/tests/claim-ledger-accepted-contract.test.mjs",
         "aws/tests/claim-ledger-discovery-grouping.test.mjs",
         "aws/tests/claim-ledger-link-or-create-sql.test.mjs",
+        "aws/tests/claim-ledger-link-or-create-rpc.test.mjs",
         "aws/tests/ledger-safety-pg.test.mjs"
       ],
       "evidence": "ops/deployment-guard/claim-ledger-accepted-695064-gq.json",

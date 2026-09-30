@@ -1,6 +1,7 @@
 import { CODES, errorEntry, failMany, ok } from './errors.mjs';
 import { evaluatePackageProvenance } from './packages.mjs';
 import { validateWorkstreamIdentity } from './identity.mjs';
+import { evaluateAcceptedComposition, markersFromRepo } from './accepted-composition.mjs';
 
 export function normalizeMembers(members) {
   if (!members) return {};
@@ -217,6 +218,13 @@ export function evaluateLambdaOverlay(input = {}) {
 
   if (errors.length) return failMany(errors);
 
+  const composition = evaluateAcceptedComposition({
+    candidate_contents: input.candidate_contents,
+    markers: input.accepted_composition_markers || markersFromRepo(),
+    required: true,
+  });
+  if (!composition.ok) return composition;
+
   return ok({
     overlay_allowed: true,
     owned_changed: membership.details.owned_changed,
@@ -226,6 +234,7 @@ export function evaluateLambdaOverlay(input = {}) {
       compareAndSwap: true,
     },
     reclaim_forbidden: true,
+    accepted_composition: composition.details,
   });
 }
 
