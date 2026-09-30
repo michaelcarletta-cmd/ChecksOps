@@ -12,6 +12,23 @@ import { Loader2, FileSignature, Check, AlertTriangle, Clock, Eye, Send } from "
 import { resolveFieldDisplay, detectDocumentType } from "@/lib/signer-display-templates";
 import { publicWorkflowRequest } from "@/lib/publicWorkflowApi";
 
+export const SIGN_PREVIEW_NARROW_MQ = "(max-width: 767px)";
+
+/** Narrow frames follow container width; height is derived so width and height are not set as an independent short rectangle. Desktop keeps the live 70vh / 400px frame. */
+export function signPreviewFrameStyle(narrow: boolean) {
+  if (!narrow) {
+    return { height: "70vh", minHeight: "400px" };
+  }
+  return {
+    width: "100%",
+    maxWidth: "100%",
+    height: "max(90dvh, 160vw)",
+    minHeight: 0,
+    display: "block",
+    border: 0,
+  };
+}
+
 export default function Sign() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token");
@@ -37,6 +54,18 @@ export default function Sign() {
   const [activeStep, setActiveStep] = useState<"review" | "sign">("review");
   const [drawingFields, setDrawingFields] = useState<Record<string, boolean>>({});
   const [eSignConsentAccepted, setESignConsentAccepted] = useState(false);
+  const [narrowPreview, setNarrowPreview] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia(SIGN_PREVIEW_NARROW_MQ).matches;
+  });
+
+  useEffect(() => {
+    const mq = window.matchMedia(SIGN_PREVIEW_NARROW_MQ);
+    const onChange = () => setNarrowPreview(mq.matches);
+    onChange();
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
 
   const eSignConsentText = "I agree to use electronic records and electronic signatures for this document. I intend my electronic signature to be legally binding, and I understand I may decline to sign electronically and request another process.";
 
@@ -494,11 +523,11 @@ export default function Sign() {
             </div>
 
             {documentUrl && (
-              <div className="border border-gray-200 rounded-lg overflow-hidden shadow-sm bg-white">
+              <div className="border border-gray-200 rounded-lg overflow-auto shadow-sm bg-white">
                 <iframe
                   src={documentUrl}
                   className="w-full bg-white"
-                  style={{ height: "70vh", minHeight: "400px" }}
+                  style={signPreviewFrameStyle(narrowPreview)}
                   title="Document Preview"
                 />
               </div>
