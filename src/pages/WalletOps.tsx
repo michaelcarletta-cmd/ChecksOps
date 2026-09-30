@@ -182,29 +182,66 @@ export default function WalletOps() {
   const pendingOut = transferData?.pendingOutCents ?? 0;
   const pendingIn = transferData?.pendingInCents ?? 0;
   const minimumCents = config?.minimum_balance_cents ?? 0;
+  const billingActivity = transferData?.billing ?? [];
+  const classifiedTransfers = transferData?.classified ?? [];
+  const fundingBank = settlementMethod
+    ? `${settlementMethod.bank_name ?? "Bank"} ••••${settlementMethod.last_four ?? "----"}`
+    : "Not connected";
+  const billingTransferKeys = new Set(
+    billingActivity.flatMap((row) => row.transfer_ids.map((id) => String(id))),
+  );
 
   const recentActivity = [
+    ...billingActivity.map((bill) => ({
+      key: `billing-${bill.id}`,
+      at: bill.period ? `${bill.period}-01` : new Date().toISOString(),
+      title: "ChecksOps Billing",
+      subtitle: bill.period_label,
+      detail: `Funding: Wallet ${money(bill.wallet_cents)} + ${fundingBank} ${money(bill.bank_cents)}`,
+      route: `To: ChecksOps`,
+      kind: "billing" as const,
+      credit: false,
+      amountCents: bill.amount_cents,
+      balanceCents: null as number | null,
+      status: bill.status,
+      walletCents: bill.wallet_cents,
+      bankCents: bill.bank_cents,
+    })),
+    ...classifiedTransfers
+      .filter((row) => {
+        if (row.billing) return false;
+        const providerId = String(row.transfer.provider_transfer_id || "");
+        return !billingTransferKeys.has(providerId) && !billingTransferKeys.has(row.transfer.id);
+      })
+      .map((row) => ({
+        key: `transfer-${row.transfer.id}`,
+        at: row.transfer.created_at || new Date().toISOString(),
+        title: row.purpose,
+        subtitle: new Date(row.transfer.created_at || Date.now()).toLocaleString(),
+        detail: `${row.from_label} → ${row.to_label}`,
+        route: `${row.from_label} → ${row.to_label}`,
+        kind: "transfer" as const,
+        credit: row.kind === "pending_in",
+        amountCents: row.amountCents,
+        balanceCents: null as number | null,
+        status: row.transfer.provider_status || row.transfer.status || null,
+        walletCents: null as number | null,
+        bankCents: null as number | null,
+      })),
     ...ledger.map((entry) => ({
       key: `ledger-${entry.id}`,
       at: entry.created_at,
       title: ENTRY_LABEL[entry.entry_type] ?? entry.entry_type,
       subtitle: new Date(entry.created_at).toLocaleString(),
+      detail: null as string | null,
+      route: null as string | null,
       kind: "ledger" as const,
       credit: entry.direction === "credit",
       amountCents: entry.amount_cents,
       balanceCents: entry.balance_after_cents,
       status: null as string | null,
-    })),
-    ...(transferData?.transfers ?? []).map((t) => ({
-      key: `transfer-${t.id}`,
-      at: t.created_at,
-      title: t.is_facilitator_fee ? "Processing fee" : t.description || "Payout",
-      subtitle: new Date(t.created_at).toLocaleString(),
-      kind: "transfer" as const,
-      credit: false,
-      amountCents: t.amount_cents,
-      balanceCents: null as number | null,
-      status: t.status,
+      walletCents: null as number | null,
+      bankCents: null as number | null,
     })),
   ]
     .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
@@ -338,6 +375,65 @@ export default function WalletOps() {
           </div>
         </div>
       </div>
+
+      <SectionCard
+        title="Funding & Billing"
+        icon={<Landmark className="h-4 w-4 text-primary" />}
+        accent="bg-gradient-to-r from-primary/60 to-primary/10"
+      >
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Wallet</p>
+            <p className="mt-0.5 font-medium">{walletLoading ? "…" : balanceLabel}</p>
+            <p className="text-xs text-muted-foreground">Available operating balance</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Primary funding account</p>
+            <p className="mt-0.5 font-medium">{fundingBank}</p>
+            <p className="text-xs text-muted-foreground">Connected bank for this organization</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">ChecksOps billing</p>
+            <p className="mt-0.5 font-medium">Wallet first, then connected bank for the remainder</p>
+            <p className="text-xs text-muted-foreground">
+              Available wallet funds are used first. Any remainder is collected from {fundingBank}.
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Automatic payouts</p>
+            <p className="mt-0.5 font-medium">{sweepsOn ? "On" : "Off"}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Minimum retained balance</p>
+            <p className="mt-0.5 font-medium">{money(minimumCents)}</p>
+          </div>
+        </div>
+        {billingActivity.length > 0 && (
+          <div className="divide-y rounded-md border">
+            {billingActivity.map((bill) => (
+              <div key={bill.id} className="flex flex-col gap-1 px-3 py-2.5 text-sm sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="font-medium">ChecksOps Billing</p>
+                  <p className="text-xs text-muted-foreground">{bill.period_label}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Funding: Wallet {money(bill.wallet_cents)} + {fundingBank} {money(bill.bank_cents)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">To: ChecksOps</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] ${STATUS_TONE[bill.status.toLowerCase()] ?? "border-amber-500/40 text-amber-500 bg-amber-500/5"}`}
+                  >
+                    {bill.status}
+                  </Badge>
+                  <span className="font-semibold">{money(bill.amount_cents)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </SectionCard>
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Wallet & Treasury */}
@@ -481,6 +577,14 @@ export default function WalletOps() {
                     <div className="min-w-0">
                       <p className="truncate font-medium">{item.title}</p>
                       <p className="text-xs text-muted-foreground">{item.subtitle}</p>
+                      {item.detail && (
+                        <p className="text-xs text-muted-foreground">{item.detail}</p>
+                      )}
+                      {item.kind === "billing" && item.walletCents != null && item.bankCents != null && (
+                        <p className="text-xs text-muted-foreground">
+                          Wallet {money(item.walletCents)} · Bank {money(item.bankCents)}
+                        </p>
+                      )}
                     </div>
                     {item.kind === "ledger" ? (
                       <div className="text-right">
@@ -502,7 +606,10 @@ export default function WalletOps() {
                         >
                           {item.status}
                         </Badge>
-                        <span className="font-semibold">{money(item.amountCents)}</span>
+                        <span className={item.credit ? "font-semibold text-emerald-500" : "font-semibold"}>
+                          {item.kind === "transfer" && item.credit ? "+" : item.kind === "transfer" ? "−" : ""}
+                          {money(item.amountCents)}
+                        </span>
                       </div>
                     )}
                   </div>

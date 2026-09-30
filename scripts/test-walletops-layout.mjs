@@ -51,6 +51,20 @@ test("Check status does not fail the whole request when nothing is in flight", (
   assert.match(hooks, /invokeErrorMessage/);
 });
 
+test("Pending In/Out are wallet-relative, not every tenant transfer", () => {
+  assert.match(hooks, /summarizeWalletOps/);
+  assert.match(hooks, /source_payment_method_id, destination_payment_method_id/);
+  assert.doesNotMatch(hooks, /leg_role !== ["']funding["']/);
+  assert.match(page, /Funding & Billing/);
+  assert.match(page, /Wallet first, then connected bank for the remainder/);
+});
+
+test("Billing activity remains visible even when the bank leg is not Pending Out", () => {
+  assert.match(page, /ChecksOps Billing/);
+  assert.match(page, /Funding: Wallet/);
+  assert.match(hooks, /tenant_maintenance_payments/);
+});
+
 let failed = 0;
 for (const [name, fn] of tests) {
   try {
