@@ -24,10 +24,13 @@ Rules:
 - Never reuse an old build, ZIP, or dist.
 - Never overwrite another workstream.
 - Stop on live-state drift (`DEPLOYMENT_COLLISION`).
+- Production SPA fingerprint drift immediately before apply is `PRODUCTION_DRIFT_RECOMPOSITION_REQUIRED`. Do not write. Recompose onto the NEW live baseline.
+- Production SPA promote must prove every enabled `ops/deployment-guard/protected-composition/` manifest (`PROTECTED_COMPOSITION_REQUIRED` / `REGRESSION_DETECTED`). Candidate branch HEAD is not whole production source. Absence from a candidate does not authorize removal.
 - Reconcile same-file Lambda changes (`SOURCE_RECONCILIATION_REQUIRED`).
 - Combine frontend sources when multiple workstreams changed the SPA (`SOURCE_COMPOSITION_REQUIRED`).
 - Preserve unrelated live members.
 - Production requires explicit approval for **this** workstream plus a staging acceptance reference.
+- A later deploy does not implicitly supersede an accepted composition. Supersession requires `composition_id`, `approved`, evidence, replacement tests, and an updated manifest.
 
 Inventoried `MUST_REFUSE_DIRECT` scripts fail closed with `DEPLOYMENT_GUARD_REQUIRED` unless a valid short-lived receipt exists. Issue one via `preflight.mjs --acquire-lease --receipt` or `wrap-legacy.mjs`. Hand-written receipt JSON is `RECEIPT_FORGED`. A staging receipt cannot authorize production. An environment variable cannot bypass the guard.
 

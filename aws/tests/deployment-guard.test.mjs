@@ -454,6 +454,7 @@ test('accepted-contracts registry is extensible and includes required seeds', ()
     'checkalt',
     'tenant-isolation',
     'financial-write-protections',
+    'walletops-activity-recovery',
   ]) {
     assert.ok(ids.includes(id), id);
   }

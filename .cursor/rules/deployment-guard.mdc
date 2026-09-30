@@ -41,6 +41,25 @@ Never:
 If live state changed after preflight (CodeSha256, RevisionId, index.html, SQL
 definition): **STOP** with `DEPLOYMENT_COLLISION`. Do not reclaim.
 
+Production SPA fingerprint drift (preflight vs immediately-before, or a
+candidate composed onto an obsolete live baseline): **STOP** with
+`PRODUCTION_DRIFT_RECOMPOSITION_REQUIRED`. Do not write production objects.
+Recompose onto the NEW live baseline. Never restore an old dist or index.html.
+
+Production SPA promote must prove every enabled manifest under
+`ops/deployment-guard/protected-composition/`. Missing evidence is
+`PROTECTED_COMPOSITION_REQUIRED`. A failed WalletOps/V2/funding/receivables
+regression is `REGRESSION_DETECTED`. Shared WalletOps file edits are allowed
+but trigger those regressions. Hashed SPA filenames are evidence only.
+
+A later chat with a stale worktree, its own passing feature tests, or an old
+dist must not overwrite accepted production behavior. Official path:
+
+`preflight` → protected-composition check → TOCTOU → `production-spa-apply`.
+
+Intentional change of a protected contract requires explicit supersession
+(`composition_id`, `approved`, evidence, replacement tests, updated manifest).
+
 If two workstreams changed the same Lambda member: **STOP** with
 `SOURCE_RECONCILIATION_REQUIRED` and reconcile in source.
 

@@ -23,7 +23,10 @@ export function evaluateProductionGate(input = {}) {
     const a = JSON.stringify(input.production_fingerprint);
     const b = JSON.stringify(input.immediately_before_fingerprint);
     if (a !== b) {
-      errors.push(errorEntry(CODES.DEPLOYMENT_COLLISION, 'production changed between checks; stop', {
+      const driftCode = input.deployment_type === 'spa-promote'
+        ? CODES.PRODUCTION_DRIFT_RECOMPOSITION_REQUIRED
+        : CODES.DEPLOYMENT_COLLISION;
+      errors.push(errorEntry(driftCode, 'production changed between checks; stop and recompose onto the NEW live baseline', {
         preflight: input.production_fingerprint,
         immediately_before: input.immediately_before_fingerprint,
       }));
@@ -45,9 +48,11 @@ export function evaluateProductionGate(input = {}) {
   }
 
   if (errors.length) {
-    const code = errors.some((row) => row.code === CODES.DEPLOYMENT_COLLISION)
-      ? CODES.DEPLOYMENT_COLLISION
-      : errors[0].code;
+    const code = errors.some((row) => row.code === CODES.PRODUCTION_DRIFT_RECOMPOSITION_REQUIRED)
+      ? CODES.PRODUCTION_DRIFT_RECOMPOSITION_REQUIRED
+      : errors.some((row) => row.code === CODES.DEPLOYMENT_COLLISION)
+        ? CODES.DEPLOYMENT_COLLISION
+        : errors[0].code;
     return failMany(errors, code);
   }
   return ok({

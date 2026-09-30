@@ -27,7 +27,7 @@ release-locks. Future chats must satisfy **both**.
 | Lambda overlay CAS | not implemented | CodeSha256 + RevisionId |
 | Stale ZIP/dist | superseded SPA bundles (prod) | reject all old packages |
 | Same-file Lambda member | not implemented | `SOURCE_RECONCILIATION_REQUIRED` |
-| Accepted feature contracts | implicit via tests/locks | extensible registry |
+| Accepted feature contracts | implicit via tests/locks | extensible registry + `protected-composition/` |
 | Staging lease | none | short-lived local lease |
 | Cursor inheritance | OPERATOR.md (human) | `.cursor/rules` + `AGENTS.md` |
 
@@ -38,9 +38,16 @@ Independent **source** work may happen concurrently.
 Independent **deployment** to a shared target may not overwrite another
 workstream.
 
-If live state changed after a workstream's preflight: **STOP**. Never restore,
-reclaim, redeploy an old baseline, put an old dist back, reuse an old Lambda
-ZIP, or overwrite newer live state.
+If live state changed after a workstream's preflight: **STOP** with
+`DEPLOYMENT_COLLISION` (Lambda/SQL) or `PRODUCTION_DRIFT_RECOMPOSITION_REQUIRED`
+(production SPA). Never restore, reclaim, redeploy an old baseline, put an old
+dist back, reuse an old Lambda ZIP, or overwrite newer live state.
+
+Production SPA promote must also prove every enabled accepted composition in
+`ops/deployment-guard/protected-composition/`. WalletOps activity recovery is
+the first registered manifest. Missing evidence is
+`PROTECTED_COMPOSITION_REQUIRED`. Candidate branch HEAD is not equivalent to
+whole production source. Absence from a candidate does not authorize removal.
 
 ## Official commands
 

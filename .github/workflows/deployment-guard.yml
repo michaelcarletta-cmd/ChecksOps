@@ -28,7 +28,7 @@ jobs:
           node-version: '20'
 
       - name: Run deployment-guard tests (no AWS)
-        run: node --test aws/tests/deployment-guard.test.mjs aws/tests/deployment-guard-enforcement.test.mjs aws/tests/deployment-guard-adversarial.test.mjs aws/tests/claim-ledger-accepted-contract.test.mjs
+        run: node --test aws/tests/deployment-guard.test.mjs aws/tests/deployment-guard-enforcement.test.mjs aws/tests/deployment-guard-adversarial.test.mjs aws/tests/claim-ledger-accepted-contract.test.mjs aws/tests/protected-composition.test.mjs
 
       - name: Scan for unregistered shared-target writers
         run: node scripts/deployment-guard/scan-bypass.mjs
