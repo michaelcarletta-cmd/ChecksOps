@@ -134,7 +134,7 @@ test('apply and rollback are plan-only without explicit production and execute g
   assert.match(validatePlan.stdout, /authenticated read-only \/prep\/data\/query=200/);
 });
 
-test('live apply refuses without ID token and never treats skipped auth as pass', () => {
+test('live apply is blocked by deployment guard before legacy ID-token gating', () => {
   assert.match(apply, /idTokenPresent\(\)/);
   assert.match(apply, /requireLiveIdToken\(\)/);
   assert.match(apply, /CHECKSOPS_GATE3D_ID_TOKEN_required/);
@@ -149,7 +149,7 @@ test('live apply refuses without ID token and never treats skipped auth as pass'
     CHECKSOPS_STEP3_EXECUTE: '1',
   });
   assert.equal(missingToken.status, 2);
-  assert.match(missingToken.stderr, /CHECKSOPS_GATE3D_ID_TOKEN_required/);
+  assert.match(missingToken.stderr, /DEPLOYMENT_GUARD_REQUIRED/);
   refuteSecrets(`${missingToken.stdout}${missingToken.stderr}`);
 });
 
@@ -240,7 +240,7 @@ test('waitForLambdaReady requires Active and Successful and fails closed', () =>
   );
 });
 
-test('privileged-operator path is separately gated and refuses Step3Temp', () => {
+test('privileged-operator path remains separately gated and direct execution is guard-blocked', () => {
   assert.match(operatorApply, /requirePrivilegedOperator/);
   assert.match(operatorRollback, /requirePrivilegedOperator/);
   assert.match(operatorApply, /806168576068/);
@@ -295,8 +295,8 @@ test('privileged-operator path is separately gated and refuses Step3Temp', () =>
     CHECKSOPS_OPERATOR_EXECUTE: '1',
   });
   assert.equal(missingTty.status, 2);
-  assert.match(missingTty.stderr, /cloudshell_tty_required/);
-  assert.doesNotMatch(missingTty.stderr, /CHECKSOPS_GATE3D_ID_TOKEN_required/);
+  assert.match(missingTty.stderr, /DEPLOYMENT_GUARD_REQUIRED/);
+  assert.doesNotMatch(missingTty.stderr, /CHECKSOPS_GATE3D_ID_TOKEN_required|cloudshell_tty_required/);
   refuteSecrets(`${missingTty.stdout}${missingTty.stderr}`);
 });
 
