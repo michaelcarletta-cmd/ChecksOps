@@ -22,7 +22,6 @@ export const OWNED_MEMBERS = Object.freeze([
   'tenant-email-domain-handlers.mjs',
   'providers/parity/moov-functions.mjs',
   'providers/parity/moov-stakeholder-status.mjs',
-  'providers/parity/caller.mjs',
 ]);
 
 const sha256File = (file) => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
