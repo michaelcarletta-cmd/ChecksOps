@@ -1,0 +1,70 @@
+{
+  "id": "walletops-activity-recovery-prod-candidate",
+  "workstream_id": "walletops-activity-recovery-prod-2d41",
+  "clean_build": true,
+  "built_at": "2026-09-30T19:44:01Z",
+  "source_composition": "ops/deployment-guard/walletops-activity-recovery-prod-source-composition.json",
+  "wholesale_staging_spa": false,
+  "not_from_old_production_dist": true,
+  "isolated_worktree": "/tmp/walletops-activity-recovery-prod-src",
+  "baseline_commit": "6cc1f0f3439f039f67af8aa62de6b79b5ad907b9",
+  "live": {
+    "index_html_sha256": "d0d59415d6692713f73b8edabefec10a261f1b7a85d6f4a6abd719f9011b3eb4",
+    "entry_bundle": "/assets/index-C_fh5VBD.js",
+    "entry_sha256": "a357373bef9e41b004f887ee312ca239f64236706c826afb69400312e6fbad22",
+    "css": "/assets/index-CwQaUh9K.css",
+    "walletops_chunk": "/assets/WalletOps-2AGadvlz.js",
+    "walletops_sha256": "85a3b9776a2db63acb661545f2c006b74699224357f0be59db96349aee063439",
+    "etag": "4c0584f350c68f75a4a09e0b3ced9576",
+    "last_modified": "2026-09-30T18:06:18+00:00",
+    "version_id": "VrLJwkt.ge_P4S2pjYAX5YX_uAoP8A6F"
+  },
+  "candidate": {
+    "dist": "/tmp/walletops-activity-recovery-prod-src/dist",
+    "index_html_sha256": "3cf8cb8c41894c919bb8b79db884bbf5e626b2896a7a7efb1a6f14f6b0cd3744",
+    "entry_bundle": "/assets/index-DbYbvb6d.js",
+    "entry_sha256": "1dfbe6c4d2a77027b7ac3cf89eece450b4d9b290b829a2d88ff0244332e6e47c",
+    "css": "/assets/index-CwQaUh9K.css",
+    "css_sha256": "7536514c8e951de02f0f8fb732413bc0f0996fcca02927a571e073c9d190ace5",
+    "walletops_chunk": "/assets/WalletOps-j3z9RyZ7.js",
+    "walletops_sha256": "bf3ccfbeeb8d5bd61397f54c26504a3d04ca77f861f1fbb1d0638d6a60760a83",
+    "preserved_production_host_guard": true,
+    "forbidden_reused_entries_absent": ["DJNHggvS", "BPbQUNFr", "B4Tts4y1", "Da1p11Te", "Bax7aYr9", "BhNaw7aH", "C9QrEEkl", "C_fh5VBD", "DvVldu_B", "CfEPSd2I"]
+  },
+  "candidate_contracts": {
+    "api_base": "/prep",
+    "app_url": "https://checksops.com",
+    "auth_provider": "cognito",
+    "staging_execute_api_absent": true,
+    "raw_production_execute_api_absent": true,
+    "staging_cognito_pool_absent": true,
+    "funding_and_billing_present": true,
+    "recent_activity_present": true,
+    "pending_in_out_present": true,
+    "ambiguous_wallet_present": true,
+    "payment_account_section_absent": true,
+    "payout_preferences_section_absent": true,
+    "empty_state_payments_link_only": "Go to Payment Account",
+    "compliance_payment_account_setup_present_in_entry": true,
+    "staging_banner_absent": true
+  },
+  "tests": {
+    "wallet_select": "8/8",
+    "wallet_funding_reconcile": "5/5",
+    "wallet_relative": "20/20",
+    "walletops_layout": "12/12",
+    "v2": "38/38",
+    "funding": "23/23",
+    "receivables": "15/15",
+    "isolation": "6/6"
+  },
+  "protected_v2_hashes_unchanged": true,
+  "item4": {
+    "walletops_payment_account_management": "ABSENT",
+    "walletops_payout_preferences": "ABSENT",
+    "compliance_payment_account_setup": "PRESENT",
+    "funding_and_billing": "PRESENT",
+    "recent_activity": "PRESENT",
+    "pending_in_out": "PRESENT"
+  }
+}
