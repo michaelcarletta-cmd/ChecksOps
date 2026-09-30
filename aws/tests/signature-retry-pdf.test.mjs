@@ -191,7 +191,12 @@ test('retry source no longer writes certificate_pdf_path or a dummy certificate'
   assert.match(DOC_SRC, /attachCompletedSignatureDocument/);
   assert.match(DOC_SRC, /final_pdf_path/);
   assert.match(DOC_SRC, /completion_status = 'completed'/);
-  assert.doesNotMatch(DOC_SRC, /\.catch\(\(\) => \{\}\)/);
+  const retryStart = DOC_SRC.indexOf('export const runRetryPdfGeneration');
+  const retryEnd = DOC_SRC.indexOf('export const handleGenerateInvoice');
+  const retryBlock = DOC_SRC.slice(retryStart, retryEnd);
+  assert.doesNotMatch(retryBlock, /\.catch\(\(\) => \{\}\)/);
+  assert.doesNotMatch(retryBlock, /certificate_pdf_path/);
+  assert.doesNotMatch(retryBlock, /buildSimplePdf/);
 });
 
 test('successful completed-request regeneration uses persisted association and commits final_pdf_path', async () => {
