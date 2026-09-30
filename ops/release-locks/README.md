@@ -18,6 +18,7 @@ Repository validation protects the release process. It cannot independently prov
 | `applied-migrations.ledger.json` | Append-only SQL source/apply ledger (genesis immutable starting point) |
 | `overlap-allowlist.json` | Explicit exceptions for overlapping open PRs (empty by default) |
 | `evidence-matrix.json` | Discovery snapshot used for the initial classification |
+| `signature-production-contract.json` | Accepted Signature behavior contract (SHAs are provenance, not restore targets) |
 | `OPERATOR.md` | How to update, unlock, or record production evidence |
 
 Control-plane paths: `.github/CODEOWNERS`, `.github/workflows/release-locks.yml`, `ops/release-locks/**`, `scripts/lib/release-locks.mjs`, `scripts/validate-release-locks.mjs`, `scripts/check-pr-path-overlap.mjs`, `scripts/production-deploy-guard.mjs`.
@@ -29,7 +30,7 @@ Control-plane paths: `.github/CODEOWNERS`, `.github/workflows/release-locks.yml`
 3. `STAGING_LOCKED_NOT_PRODUCTION` — verified in staging only.
 4. `UNVERIFIED` — evidence incomplete, conflicting, or stale.
 
-`production-spa` is `PRODUCTION_LOCKED` to the live production frontend. Other components stay unlocked. Documentation and merged PRs alone are not sufficient. `origin/main` is not the live SPA.
+`production-spa` is `PRODUCTION_LOCKED` to the live production frontend. `signature-workflow` is `SOURCE_LOCKED_NOT_ACTIVE` so accepted Sign/Files/Lambda SHAs stay provenance, not bytes to restore. Other components stay unlocked. Documentation and merged PRs alone are not sufficient. `origin/main` is not the live SPA.
 
 ## Checks
 

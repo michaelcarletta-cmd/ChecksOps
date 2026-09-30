@@ -1,0 +1,70 @@
+{
+  "contract_version": 1,
+  "fail_closed": true,
+  "component_id": "signature-workflow",
+  "rule": "Preserve accepted Signature behavior. Do not blindly restore accepted bytes after legitimate newer production work.",
+  "acceptance_role": "acceptance_evidence_not_restore_target",
+  "accepted_at": "2026-09-30T02:20:00Z",
+  "proof": "ops/release-locks/proof/signature-workflow-acceptance.md",
+  "provenance": {
+    "host": "https://checksops.com",
+    "entry": "index-C9QrEEkl.js",
+    "sign_bundle": "assets/Sign-DfWZrlqT.js",
+    "sign_sha256": "9f228f47e57f3f79723dc30aa5f0aed2b6facf70e1c5015d7b04dfba028d805b",
+    "files_bundle": "assets/CheckFilesSection-BJZPqPpX.js",
+    "files_sha256": "df1b95f4a85d04901d2d707e2feae7f3c77e605744cc5ffe9011d2872a4fb969",
+    "lambda_name": "checksops-production-prep-api",
+    "lambda_code_sha256": "pxZj4G6pGntJrkcRO5uNNEbiyvDpCOKPiWAboDnPvBA=",
+    "notes": "These identities record the accepted 2026-09-30 production graph. They are provenance, not permanent put-object/Lambda ZIP restore targets."
+  },
+  "invariants": {
+    "forbidden": [
+      "signatures/{claimId} upload paths",
+      "generic frontend inserts into signature_requests",
+      "generic frontend inserts into signature_signers",
+      "access_token = NULL",
+      "UPDATE claims SET latest_signature_request_id",
+      "certificate_pdf_path",
+      "dummy Signature certificate (staging retry) generation",
+      "swallowed Retry SQL failure",
+      "first-signature-wins field mapping",
+      "removal of submitted data:image/... stamping support",
+      "independent mobile iframe 70vh + minHeight:400px sizing on narrow screens"
+    ],
+    "required": [
+      "Class A create/send via createSignatureRequestRows / send-signature-request",
+      "optionalUuid(field.id) for non-UUID editor field ids",
+      "token / token_hash creation without nulling access_token",
+      "submitted data:image/... survives submit → stamp",
+      "deterministic field coordinates and mapping",
+      "Retry regeneration writes/links the real final signed PDF",
+      "multiple fields/signers cannot cross-map",
+      "check-scoped Signature upload check-intake/{checkId}/files/...",
+      "mobile Sign preview derived height on narrow viewports"
+    ]
+  },
+  "owned_paths": [
+    "src/pages/Sign.tsx",
+    "aws/functions/api/esign.mjs",
+    "aws/functions/api/signature-submit.mjs",
+    "aws/functions/api/documents.mjs",
+    "scripts/lib/signature-production-contract.mjs",
+    "scripts/lib/sig-mobile-sign-preview-patch.mjs",
+    "scripts/lib/sig-c9qr-bjz-files-patch.mjs",
+    "ops/release-locks/signature-production-contract.json",
+    "ops/release-locks/proof/signature-workflow-acceptance.md",
+    "ops/release-locks/schema/signature-production-contract.schema.json",
+    "ops/release-locks/tests/signature-workflow-invariants.test.mjs"
+  ],
+  "deploy_policy": {
+    "read_live_first": true,
+    "never_restore_accepted_bytes": true,
+    "overlay_current_live_only": true,
+    "stop_on_unreconciled_drift": true,
+    "refuse_dropped_invariants": true,
+    "safe_modes": [
+      "per_object_put",
+      "lambda_overlay"
+    ]
+  }
+}

@@ -179,6 +179,19 @@
       ],
       "open_pr_overlap": []
     },
+    "signature-workflow": {
+      "classification": "SOURCE_LOCKED_NOT_ACTIVE",
+      "git_sha": "4b5a821850190c45397242a3f62b894a4a20c869",
+      "merged_pr": null,
+      "merge_commit": null,
+      "deployed_artifact": "acceptance provenance: Sign-DfWZrlqT.js 9f228f47…; CheckFilesSection-BJZPqPpX.js df1b95f4…; Lambda pxZj4G6p…; entry index-C9QrEEkl.js. Not a restore target.",
+      "applied_migrations": "none; Signature path does not apply SQL from this lock",
+      "environment": "production",
+      "missing_evidence": [
+        "Accepted SHAs are provenance only; a future live identity must be re-read and must not be overwritten by restoring this snapshot"
+      ],
+      "open_pr_overlap": ["#559", "#558", "#557"]
+    },
     "production-spa": {
       "classification": "PRODUCTION_LOCKED",
       "git_sha": "6c679a120d5d4b0dd23d7035ecaf309558df29d0",

@@ -9,6 +9,13 @@
 /ops/release-locks/ @michaelcarletta-cmd
 /scripts/lib/release-locks.mjs @michaelcarletta-cmd
 /scripts/lib/production-spa-baseline.mjs @michaelcarletta-cmd
+/scripts/lib/signature-production-contract.mjs @michaelcarletta-cmd
+/scripts/lib/sig-mobile-sign-preview-patch.mjs @michaelcarletta-cmd
+/scripts/lib/sig-c9qr-bjz-files-patch.mjs @michaelcarletta-cmd
+/src/pages/Sign.tsx @michaelcarletta-cmd
+/aws/functions/api/esign.mjs @michaelcarletta-cmd
+/aws/functions/api/signature-submit.mjs @michaelcarletta-cmd
+/aws/functions/api/documents.mjs @michaelcarletta-cmd
 /scripts/validate-release-locks.mjs @michaelcarletta-cmd
 /scripts/check-pr-path-overlap.mjs @michaelcarletta-cmd
 /scripts/production-deploy-guard.mjs @michaelcarletta-cmd

@@ -168,6 +168,23 @@
         "aws/functions/api/textract-check-ocr.mjs"
       ]
     },
+    "signature-workflow": {
+      "owners": ["@michaelcarletta-cmd"],
+      "description": "Accepted Signature production behavior contract. Owns Sign, Class A esign create/send, submit/stamp, Retry PDF, and overlay helpers. Does not own the entire Files chunk, SPA entry, Lambda package, or write-allowlist. Accepted SHAs are provenance, not restore targets.",
+      "paths": [
+        "src/pages/Sign.tsx",
+        "aws/functions/api/esign.mjs",
+        "aws/functions/api/signature-submit.mjs",
+        "aws/functions/api/documents.mjs",
+        "scripts/lib/signature-production-contract.mjs",
+        "scripts/lib/sig-mobile-sign-preview-patch.mjs",
+        "scripts/lib/sig-c9qr-bjz-files-patch.mjs",
+        "ops/release-locks/signature-production-contract.json",
+        "ops/release-locks/proof/signature-workflow-acceptance.md",
+        "ops/release-locks/schema/signature-production-contract.schema.json",
+        "ops/release-locks/tests/signature-workflow-invariants.test.mjs"
+      ]
+    },
     "production-spa": {
       "owners": ["@michaelcarletta-cmd"],
       "description": "Authoritative live production SPA baseline identity and fail-closed promotion helpers. Does not own application source on main; live artifact pins win until repository history is reconciled.",

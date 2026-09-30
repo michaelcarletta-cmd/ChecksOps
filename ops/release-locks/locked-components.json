@@ -295,7 +295,7 @@
       "environment": "source-only",
       "source": {
         "git_sha": "bd97367b76a52444aa8b1438a3f035b6c4ea09b1",
-        "tree_hash": "ea919c1c1726542c2dff4c4e704b73d2d56db30098154ef577f27adbe0b4b2d1",
+        "tree_hash": "5ca194bc28ab21c840c1178bedb7863b66939c8bcf9e425b347dbbec2da641a9",
         "merged": true,
         "merged_pr": 354
       },
@@ -556,7 +556,7 @@
       "environment": "staging",
       "source": {
         "git_sha": "8a3ead386d99f0e825d54093ebcb8c174a8c758e",
-        "tree_hash": "9ecc8ae0c814947afb1badc354b467831b24eec09cb8a60bdb454cb6abfb2801",
+        "tree_hash": "f427516ee1ea870165b438244efac59b252c010dc994e52fdfe0957375e12932",
         "merged": true,
         "merged_pr": 370
       },
@@ -591,6 +591,61 @@
       ],
       "open_pr_overlap": [],
       "notes": "Protects the eight finalized OCR runtime files only. Shared providers/parity/checkalt-image.mjs is not owned here; OCR reuses named raster exports without claiming the CheckAlt module. Classification is STAGING_LOCKED_NOT_PRODUCTION because staging validation passed and production is not locked."
+    },
+    "signature-workflow": {
+      "id": "signature-workflow",
+      "ownership_group": "signature-workflow",
+      "classification": "SOURCE_LOCKED_NOT_ACTIVE",
+      "production_active": false,
+      "environment": "production",
+      "source": {
+        "git_sha": "4b5a821850190c45397242a3f62b894a4a20c869",
+        "tree_hash": "8f3be69996bf9ad1e7be0b2efdc1fd8f449c18f11bb363893172ab95a9c9194c",
+        "merged": false,
+        "merged_pr": null
+      },
+      "required_sql": [],
+      "artifact": {
+        "type": "none",
+        "name": null,
+        "version": null,
+        "hash": null,
+        "cloudfront_distribution": "E1B0ZWWO5559U5",
+        "lambda_name": "checksops-production-prep-api",
+        "lambda_version": null,
+        "lambda_alias": null
+      },
+      "production_validation": {
+        "completed": false,
+        "evidence_refs": [
+          "ops/release-locks/proof/signature-workflow-acceptance.md",
+          "ops/release-locks/signature-production-contract.json"
+        ],
+        "recorded_at": "2026-09-30T02:20:00Z"
+      },
+      "deployment_fingerprint": {
+        "recorded": true,
+        "spa_bundle": "assets/Sign-DfWZrlqT.js",
+        "spa_sha256": "9f228f47e57f3f79723dc30aa5f0aed2b6facf70e1c5015d7b04dfba028d805b",
+        "cloudfront_id": "E1B0ZWWO5559U5",
+        "cloudfront_distribution": "E1B0ZWWO5559U5",
+        "cloudfront_deployment_fingerprint": null,
+        "lambda_name": "checksops-production-prep-api",
+        "lambda_version": null,
+        "lambda_code_hash": null,
+        "applied_sql_hash": null,
+        "database_evidence_record": null,
+        "config_hash": null,
+        "notes": "Acceptance provenance only. Sign SHA 9f228f47…, Files SHA df1b95f4…, Lambda pxZj4G6p…, entry index-C9QrEEkl.js. Do not restore these bytes over a newer live graph."
+      },
+      "rollback": {
+        "git_sha": "4b5a821850190c45397242a3f62b894a4a20c869",
+        "artifact": "assets/Sign-DfWZrlqT.js",
+        "notes": "Do not roll production back to this acceptance snapshot after legitimate newer Signature work is live. Overlay current live and keep invariants."
+      },
+      "missing_evidence": [],
+      "open_pr_overlap": ["#559", "#558", "#557"],
+      "notes": "SOURCE_LOCKED_NOT_ACTIVE on purpose: accepted production SHAs are provenance, not a PRODUCTION_LOCKED byte pin. Future deploys must read live first, overlay the current live baseline, prove invariants, and must not restore C9Qr/BJZ/Sign/pxZj4G6p merely because those SHAs match this record."
     },
     "production-spa": {
       "id": "production-spa",
@@ -660,7 +715,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "8a3ead386d99f0e825d54093ebcb8c174a8c758e",
-        "tree_hash": "b9b38e62b4e03efb3a2bcb50548457eeafa16608e888459396bd61a9613c8abc",
+        "tree_hash": "e75c7d21c23b24363500e51eb98e75110b5a9ac031371dcd51d8b26b0f31938c",
         "merged": true,
         "merged_pr": 343
       },

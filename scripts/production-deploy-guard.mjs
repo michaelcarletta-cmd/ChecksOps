@@ -24,6 +24,11 @@ import {
   PRODUCTION_SPA_ID,
   compareProductionSpaCandidate,
 } from './lib/production-spa-baseline.mjs';
+import {
+  SIGNATURE_WORKFLOW_ID,
+  candidateTouchesSignature,
+  compareSignatureCandidate,
+} from './lib/signature-production-contract.mjs';
 
 export function compareCandidate(manifest, candidate) {
   const errors = [];
@@ -36,6 +41,10 @@ export function compareCandidate(manifest, candidate) {
   }
   for (const [id, component] of Object.entries(manifest.components || {})) {
     const row = candidate.components?.[id];
+    if (id === SIGNATURE_WORKFLOW_ID) {
+      if (row) errors.push(...compareSignatureCandidate(row));
+      continue;
+    }
     if (component.classification !== 'PRODUCTION_LOCKED') {
       if (row?.deploy === true || row?.production_active === true) {
         errors.push(`${id}: candidate deploys a component that is not PRODUCTION_LOCKED`);
@@ -64,6 +73,9 @@ export function compareCandidate(manifest, candidate) {
       && component.deployment_fingerprint.lambda_version !== row.lambda_version) {
       errors.push(`${id}: candidate Lambda version does not match locked fingerprint`);
     }
+  }
+  if (candidateTouchesSignature(candidate) && !candidate.components?.[SIGNATURE_WORKFLOW_ID]) {
+    errors.push(`${SIGNATURE_WORKFLOW_ID}: candidate deploys Signature-owned assets without reconciling the Signature contract`);
   }
   return errors;
 }
