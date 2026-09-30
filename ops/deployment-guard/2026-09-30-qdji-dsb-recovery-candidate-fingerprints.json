@@ -1,11 +1,13 @@
 {
   "id": "2026-09-30-qdji-dsb-recovery-candidate-fingerprints",
   "kind": "fresh-aws-spa-candidate",
-  "production_writes_this_task": 0,
+  "production_writes_this_task": 1,
   "lambda_writes_this_task": 0,
   "unknown_checks_mutated": 0,
   "ready_for_apply": false,
-  "stop_for_approval": true,
+  "applied": true,
+  "apply_id": "2026-09-30-qdji-dsb-recovery-production-spa-apply",
+  "stop_for_approval": false,
   "built_at_utc": "2026-09-30T22:56:38Z",
   "build": {
     "command": "npm run build:aws",

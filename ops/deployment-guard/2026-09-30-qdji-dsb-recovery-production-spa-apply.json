@@ -1,0 +1,161 @@
+{
+  "id": "2026-09-30-qdji-dsb-recovery-production-spa-apply",
+  "verdict": "PRODUCTION SPA APPLIED \u2014 LIVE HTTPS AND S3 MATCH APPROVED CANDIDATE; ACCEPTANCE MARKERS PASSED",
+  "applied_at_utc": "2026-09-30T23:36:22Z",
+  "workstream_id": "regression-recovery-matrix-f477",
+  "branch": "cursor/compose-qdji-dsb-recovery-f477",
+  "commit": "e2056c095065151dc6bb2a487157e9663b1ef695",
+  "writer": "scripts/deployment-guard/production-spa-upload.mjs",
+  "deploy_role": "ChecksOpsProductionSpaDeploy",
+  "deploy_mode": "per_object_put",
+  "lambda_writes": 0,
+  "database_writes": 0,
+  "unknown_checks_mutated": 0,
+  "before": {
+    "entry": "/assets/index-DSbVZXu8.js",
+    "entry_sha256": "8da351ee4060d065e626b382fec06acf9a7099317184980979b95468e7e4bbe5",
+    "index_html_sha256": "e93fe5488c013aed91626da1ee608978f702796a24e08350306ccb4c3163e75f",
+    "s3_version": "Jc2Nyp5THf1j30gf21cQHeMoApSs8uDw",
+    "etag": "f92d3a12bd1f8eec9c200dbe71c05ae3",
+    "last_modified": "2026-09-30T21:20:11Z"
+  },
+  "after": {
+    "entry": "/assets/index-CvCKsSsX.js",
+    "entry_sha256": "cd55efcde625c03ab8bba60decec3c4d6b3bb53e3a8e45dd6a4c2b9991065007",
+    "index_html_sha256": "0dac8cbceba15a086567511c447279c6a439c9c120079ebebb19309a8bf24e89",
+    "s3_version": "rLJElCrQEl1AqJJuW4YuKC.xuo06gfiV",
+    "etag": "b2d4400446f1ef8b6a84896b5c11bcd2",
+    "last_modified": "2026-09-30T23:36:22Z",
+    "invalidation_id": "I5IAEE2NQOGRSI1QIPIZPYX04B",
+    "uploaded_count": 108,
+    "https_and_s3_match": true
+  },
+  "tenant_logo_readonly": {
+    "http": 200,
+    "content_type": "image/png",
+    "bytes": 796240,
+    "sha256": "8fe8caf15f55d20f6c7a6b71f14dd6e1b80d6b0fa384bb10a1e581fc17c6801f"
+  },
+  "acceptance": {
+    "live_entry": "/assets/index-CvCKsSsX.js",
+    "live_entry_sha256": "cd55efcde625c03ab8bba60decec3c4d6b3bb53e3a8e45dd6a4c2b9991065007",
+    "live_index_sha256": "0dac8cbceba15a086567511c447279c6a439c9c120079ebebb19309a8bf24e89",
+    "logo": {
+      "http": 200,
+      "content_type": "image/png",
+      "bytes": 796240,
+      "sha256": "8fe8caf15f55d20f6c7a6b71f14dd6e1b80d6b0fa384bb10a1e581fc17c6801f"
+    },
+    "markers": {
+      "Bank verified": 1,
+      "Provider linked": 1,
+      "Bank pending": 1,
+      "save-tenant-billing-account": 3,
+      "Billing save unexpectedly started a collection": 1,
+      "ChecksOps billing": 2,
+      "monthly_subscription": 3,
+      "groupDepositsBySubmissionDate": 1,
+      "Insured Name": 2,
+      "/branding/logo/": 3,
+      "save_claim_settlement_breakdown": 1,
+      "checksops-production-host": 2,
+      "delete_check": 2,
+      "Delete Check": 1,
+      "signature": 70,
+      "OCR": 9,
+      "MICR": 0,
+      "issue date": 3,
+      "new_stage": 3,
+      "environmentReady": 3,
+      "Wallet first, then connected bank": 1
+    },
+    "per_file": {
+      "entry": {
+        "Bank verified": 1,
+        "Provider linked": 1,
+        "Bank pending": 1,
+        "environmentReady": 1,
+        "save-tenant-billing-account": 3,
+        "groupDepositsBySubmissionDate": 0,
+        "save_claim_settlement_breakdown": 1,
+        "checksops-production-host": 0,
+        "Delete Check": 0,
+        "delete_check": 1,
+        "signature": 7,
+        "/branding/logo/": 3
+      },
+      "index": {
+        "Bank verified": 0,
+        "Provider linked": 0,
+        "Bank pending": 0,
+        "environmentReady": 0,
+        "save-tenant-billing-account": 0,
+        "groupDepositsBySubmissionDate": 0,
+        "save_claim_settlement_breakdown": 0,
+        "checksops-production-host": 2,
+        "Delete Check": 0,
+        "delete_check": 0,
+        "signature": 0,
+        "/branding/logo/": 0
+      },
+      "WalletOps": {
+        "Bank verified": 0,
+        "Provider linked": 0,
+        "Bank pending": 0,
+        "environmentReady": 2,
+        "save-tenant-billing-account": 0,
+        "groupDepositsBySubmissionDate": 0,
+        "save_claim_settlement_breakdown": 0,
+        "checksops-production-host": 0,
+        "Delete Check": 0,
+        "delete_check": 0,
+        "signature": 0,
+        "/branding/logo/": 0
+      },
+      "BankDeposit": {
+        "Bank verified": 0,
+        "Provider linked": 0,
+        "Bank pending": 0,
+        "environmentReady": 0,
+        "save-tenant-billing-account": 0,
+        "groupDepositsBySubmissionDate": 1,
+        "save_claim_settlement_breakdown": 0,
+        "checksops-production-host": 0,
+        "Delete Check": 0,
+        "delete_check": 0,
+        "signature": 0,
+        "/branding/logo/": 0
+      },
+      "CCC": {
+        "Bank verified": 0,
+        "Provider linked": 0,
+        "Bank pending": 0,
+        "environmentReady": 0,
+        "save-tenant-billing-account": 0,
+        "groupDepositsBySubmissionDate": 0,
+        "save_claim_settlement_breakdown": 0,
+        "checksops-production-host": 0,
+        "Delete Check": 1,
+        "delete_check": 1,
+        "signature": 63,
+        "/branding/logo/": 0
+      }
+    },
+    "failures": [],
+    "ok": true
+  },
+  "receipt": {
+    "file": "/workspace/.deployment-guard/receipts/production::production-spa.json",
+    "workstream_id": "regression-recovery-matrix-f477",
+    "commit": "e2056c095065151dc6bb2a487157e9663b1ef695",
+    "expiry": "2026-09-30T23:49:41.432Z"
+  },
+  "do_not_restore": [
+    "/assets/index-DSbVZXu8.js",
+    "/assets/index-QDJiUFF1.js",
+    "/assets/index-DbYbvb6d.js",
+    "/assets/index-C_fh5VBD.js",
+    "/assets/index-CEKjixtZ.js",
+    "/assets/index-BPbQUNFr.js"
+  ]
+}

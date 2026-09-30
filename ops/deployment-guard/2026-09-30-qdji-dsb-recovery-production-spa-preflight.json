@@ -1,0 +1,89 @@
+{
+  "workstream_id": "regression-recovery-matrix-f477",
+  "branch": "cursor/compose-qdji-dsb-recovery-f477",
+  "commit": "e2056c095065151dc6bb2a487157e9663b1ef695",
+  "operator": "cursor-agent-bc-2bea5caf",
+  "target_environment": "production",
+  "target_component": "production-spa",
+  "deployment_type": "spa-promote",
+  "owned_components": [
+    "index.html",
+    "assets/index-CvCKsSsX.js"
+  ],
+  "accepted_source_composition": true,
+  "accepted_composition": true,
+  "source_composition_manifest": "ops/deployment-guard/qdji-dsb-recovery-source-composition.json",
+  "frontend_workstreams": [
+    "regression-recovery-matrix-f477"
+  ],
+  "restore_previous_index": false,
+  "reclaim_staging": false,
+  "build_timestamp": "2026-09-30T22:56:38Z",
+  "dist": {
+    "clean_build": true,
+    "built_at": "2026-09-30T22:56:38Z",
+    "entry": "/assets/index-CvCKsSsX.js",
+    "entry_sha256": "cd55efcde625c03ab8bba60decec3c4d6b3bb53e3a8e45dd6a4c2b9991065007",
+    "index_html_sha256": "0dac8cbceba15a086567511c447279c6a439c9c120079ebebb19309a8bf24e89",
+    "reused_index": false,
+    "restore_previous_index": false
+  },
+  "approval": {
+    "approved": true,
+    "workstream_id": "regression-recovery-matrix-f477",
+    "inherited": false,
+    "from_previous_workstream": false,
+    "scope": "production-spa-only",
+    "candidate": "/assets/index-CvCKsSsX.js",
+    "candidate_sha256": "cd55efcde625c03ab8bba60decec3c4d6b3bb53e3a8e45dd6a4c2b9991065007"
+  },
+  "staging_acceptance": {
+    "ok": true,
+    "reference": "recovery-28-suite + capability-equivalence on candidate index-CvCKsSsX.js sha256 cd55efcde625c03ab8bba60decec3c4d6b3bb53e3a8e45dd6a4c2b9991065007; user-approved 2026-09-30 production SPA recovery; PR #584 staging insured-branding compose"
+  },
+  "preflight": {
+    "index_html_sha256": "e93fe5488c013aed91626da1ee608978f702796a24e08350306ccb4c3163e75f",
+    "entry_bundle": "/assets/index-DSbVZXu8.js",
+    "spa_bundle": "/assets/index-DSbVZXu8.js",
+    "spa_sha256": "8da351ee4060d065e626b382fec06acf9a7099317184980979b95468e7e4bbe5",
+    "s3_version": "Jc2Nyp5THf1j30gf21cQHeMoApSs8uDw",
+    "etag": "f92d3a12bd1f8eec9c200dbe71c05ae3",
+    "last_modified": "2026-09-30T21:20:11+00:00"
+  },
+  "preflight_live_fingerprint": {
+    "index_html_sha256": "e93fe5488c013aed91626da1ee608978f702796a24e08350306ccb4c3163e75f",
+    "entry_bundle": "/assets/index-DSbVZXu8.js",
+    "spa_bundle": "/assets/index-DSbVZXu8.js",
+    "spa_sha256": "8da351ee4060d065e626b382fec06acf9a7099317184980979b95468e7e4bbe5",
+    "s3_version": "Jc2Nyp5THf1j30gf21cQHeMoApSs8uDw",
+    "etag": "f92d3a12bd1f8eec9c200dbe71c05ae3",
+    "last_modified": "2026-09-30T21:20:11+00:00"
+  },
+  "immediately_before": {
+    "index_html_sha256": "e93fe5488c013aed91626da1ee608978f702796a24e08350306ccb4c3163e75f",
+    "entry_bundle": "/assets/index-DSbVZXu8.js",
+    "spa_bundle": "/assets/index-DSbVZXu8.js",
+    "spa_sha256": "8da351ee4060d065e626b382fec06acf9a7099317184980979b95468e7e4bbe5",
+    "s3_version": "Jc2Nyp5THf1j30gf21cQHeMoApSs8uDw",
+    "etag": "f92d3a12bd1f8eec9c200dbe71c05ae3",
+    "last_modified": "2026-09-30T21:20:11+00:00"
+  },
+  "production_fingerprint": {
+    "index_html_sha256": "e93fe5488c013aed91626da1ee608978f702796a24e08350306ccb4c3163e75f",
+    "entry_bundle": "/assets/index-DSbVZXu8.js",
+    "spa_bundle": "/assets/index-DSbVZXu8.js",
+    "spa_sha256": "8da351ee4060d065e626b382fec06acf9a7099317184980979b95468e7e4bbe5",
+    "s3_version": "Jc2Nyp5THf1j30gf21cQHeMoApSs8uDw",
+    "etag": "f92d3a12bd1f8eec9c200dbe71c05ae3",
+    "last_modified": "2026-09-30T21:20:11+00:00"
+  },
+  "immediately_before_fingerprint": {
+    "index_html_sha256": "e93fe5488c013aed91626da1ee608978f702796a24e08350306ccb4c3163e75f",
+    "entry_bundle": "/assets/index-DSbVZXu8.js",
+    "spa_bundle": "/assets/index-DSbVZXu8.js",
+    "spa_sha256": "8da351ee4060d065e626b382fec06acf9a7099317184980979b95468e7e4bbe5",
+    "s3_version": "Jc2Nyp5THf1j30gf21cQHeMoApSs8uDw",
+    "etag": "f92d3a12bd1f8eec9c200dbe71c05ae3",
+    "last_modified": "2026-09-30T21:20:11+00:00"
+  }
+}
