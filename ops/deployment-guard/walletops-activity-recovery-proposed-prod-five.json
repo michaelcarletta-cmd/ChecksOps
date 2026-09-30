@@ -1,0 +1,44 @@
+{
+  "id": "walletops-activity-recovery-proposed-prod-five",
+  "status": "PROPOSED — NOT EXECUTED",
+  "provider_transfer_id": "9f9df312-32a9-4999-ace9-fc2b00669c75",
+  "fresh_get_at": "2026-09-30T18:41:00Z",
+  "fresh_provider_status": "pending",
+  "amount_cents": 500,
+  "description": "Balance funding",
+  "do_not_post_provider": true,
+  "do_not_run_until_authorized": true,
+  "canonical_helper": "src/lib/payments/reconcileWalletFundingTransfer.ts",
+  "operation": {
+    "1": "GET /accounts/60922058-7eca-4889-81dd-5720d7b9de96/transfers/9f9df312-32a9-4999-ace9-fc2b00669c75",
+    "2": "SELECT payment_transfers WHERE provider_transfer_id = 9f9df312-32a9-4999-ace9-fc2b00669c75 LIMIT 1",
+    "3a_if_exists": "UPDATE only status, provider_status, provider_metadata, description, amount_cents, net_amount_cents. Do not insert.",
+    "3b_if_absent": "INSERT exactly one payment_transfers row via reconcileWalletFundingTransfer / buildWalletFundingRecoveryRow",
+    "4": "Re-run the same operation. Expect update of the same row. Row count for this provider_transfer_id remains 1."
+  },
+  "insert_row": {
+    "tenant_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+    "provider": "moov",
+    "environment": "production",
+    "status": "pending",
+    "provider_status": "pending",
+    "amount_cents": 500,
+    "platform_fee_cents": 0,
+    "net_amount_cents": 500,
+    "speed": "standard",
+    "description": "Balance funding",
+    "source_tenant_account_id": "60922058-7eca-4889-81dd-5720d7b9de96",
+    "source_payment_method_id": "8eb5b26e-6f66-435c-a578-880fb7fc14dd",
+    "destination_payment_method_id": null,
+    "wallet_id": "LOOK UP payment_wallets WHERE tenant_id=Freedom AND environment=production AND wallet_type=operating",
+    "leg_role": "wallet_funding",
+    "provider_transfer_id": "9f9df312-32a9-4999-ace9-fc2b00669c75",
+    "provider_metadata": {
+      "source_payment_method_id": "a02c1c81-9ca6-434d-accc-ea4471a70ef2",
+      "destination_payment_method_id": "744ea734-f5e3-4b31-bb92-38f85fd29b91",
+      "checksops_kind": "wallet_funding"
+    }
+  },
+  "why_source_column_is_local_id": "payment_transfers.source_payment_method_id references payment_provider_methods.id. Freedom Wells Fargo local id is 8eb5b26e. Moov debit-fund PM a02c1c81 belongs in provider_metadata, matching V2 legs.",
+  "future_gap": "Official moov-wallet-fund already persist-before-POST. AWS walletFund is sandbox-only. This $5 production transfer was created outside that path, so no local draft exists. Wiring reconcile into the POST path would change shared financial execution; not done. Future official fundings are already persisted. Historical/oneshot production fundings need this idempotent recover-by-provider_transfer_id."
+}

@@ -1,0 +1,32 @@
+{
+  "id": "walletops-activity-recovery-source-composition",
+  "branch": "cursor/walletops-activity-recovery-2d41",
+  "isolated_from": "cursor/walletops-funding-prod-2d41",
+  "lambda_updated": false,
+  "production_updated": false,
+  "staging_spa_deployed": false,
+  "changed": [
+    "src/lib/payments/selectPaymentWallet.ts",
+    "src/lib/payments/reconcileWalletFundingTransfer.ts",
+    "src/hooks/useWalletOps.ts",
+    "src/hooks/usePaymentProviderEligibility.ts",
+    "src/lib/payments/wallets.ts",
+    "src/pages/WalletOps.tsx",
+    "scripts/test-walletops-layout.mjs",
+    "aws/tests/walletops-wallet-select.test.mjs",
+    "aws/tests/walletops-wallet-funding-reconcile.test.mjs",
+    "aws/tests/walletops-wallet-relative.test.mjs"
+  ],
+  "intentionally_untouched": [
+    "aws/functions/api/tenant-collection-v2.mjs",
+    "aws/functions/api/tenant-collection-contract-v2.mjs",
+    "aws/functions/api/tenant-billing-engine.mjs",
+    "aws/functions/api/providers/parity/tenant-receivables.mjs",
+    "aws/functions/api/providers/parity/moov-money.mjs"
+  ],
+  "shared_file_collision": {
+    "useWalletOps.ts": "workspace hash matched walletops-prod-spa-src and walletops-spa-baseline. inv7-prod-spa-src differs (older). Reconciled at hunk level on this branch only.",
+    "wallets.ts": "workspace matched the WalletOps worktrees. No foreign hunk overwrite.",
+    "staging_spa": "Live staging entry /assets/index-DvVldu_B.js is not this workstream. Not overwritten."
+  }
+}

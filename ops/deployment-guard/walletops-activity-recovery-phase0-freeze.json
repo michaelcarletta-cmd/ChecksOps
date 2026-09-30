@@ -1,0 +1,38 @@
+{
+  "id": "walletops-activity-recovery-phase0-freeze",
+  "captured_at": "2026-09-30T18:40:00Z",
+  "branch": "cursor/walletops-activity-recovery-2d41",
+  "git_head_at_branch_create": "6cc1f0f3439f039f67af8aa62de6b79b5ad907b9",
+  "base_branch": "cursor/walletops-funding-prod-2d41",
+  "production": {
+    "spa_entry": "/assets/index-C_fh5VBD.js",
+    "index_html_sha256": "d0d59415d6692713f73b8edabefec10a261f1b7a85d6f4a6abd719f9011b3eb4",
+    "walletops": "/assets/WalletOps-2AGadvlz.js",
+    "lambda": {
+      "function": "checksops-production-prep-api",
+      "CodeSha256": "pxZj4G6pGntJrkcRO5uNNEbiyvDpCOKPiWAboDnPvBA=",
+      "RevisionId": "3bccd144-4e61-422f-8151-9ed0fe713aac",
+      "LastModified": "2026-09-30T16:25:23.000+0000"
+    }
+  },
+  "staging": {
+    "spa_entry": "/assets/index-DvVldu_B.js",
+    "index_html_sha256": "21caa4e7988482e8c608495d8e69e72e6d956d8d3d6b6532bdd694790ca28d6b",
+    "walletops": "/assets/WalletOps-0gB4KnAq.js",
+    "index_last_modified": "2026-09-30T18:29:16+00:00",
+    "note": "Staging drifted after prior WalletOps UX accept. Current live entry is authoritative for TOCTOU. Source of DvVldu_B is not this branch.",
+    "lambda": {
+      "function": "checksops-staging-api",
+      "CodeSha256": "//BfiiKna/KRIuX8NEPipSyagIVFxM/5BY7nTaT7OUs=",
+      "RevisionId": "3698b6c6-3d83-444b-ace3-0eb80e362adc",
+      "LastModified": "2026-09-30T18:25:59.000+0000"
+    }
+  },
+  "v2_protected_hashes": {
+    "tenant-collection-v2.mjs": "8a66f54d3c2785162a1643218e18b4d3c251230cf2a7f98a1ecb4ede8939fb66",
+    "tenant-collection-contract-v2.mjs": "9ec5ae45db34c0795570f401cc2b1c3fa78f04764870bf6b651c21278433ed5d",
+    "tenant-billing-engine.mjs": "65b75735825f9a06955d5daba603f74835d106cabf52eb449153c856a59dae2f",
+    "providers/parity/tenant-receivables.mjs": "0d8f8f20f4939e79551b4a1aa5b3305bb791cea7ca684f4428594ad359179477"
+  },
+  "writes_at_freeze": 0
+}
