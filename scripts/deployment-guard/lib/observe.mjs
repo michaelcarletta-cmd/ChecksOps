@@ -7,7 +7,11 @@
  * comes from git rev-parse / merge-base / merge-base --is-ancestor.
  * Caller JSON is never treated as an observation. Repository source
  * hashes are not proof that the ZIP or SPA being deployed contains
- * those bytes. Missing live evidence fails closed.
+ * those bytes. Missing live evidence fails closed. Live ZIP/SPA
+ * fingerprints are verified from actual bytes (AWS CodeSha256 /
+ * index.html + bundle hashes), not caller metadata alone. Candidate
+ * artifact digests are bound to git-stored build evidence at the
+ * declared commit.
  */
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -18,11 +22,13 @@ import { CODES, errorEntry, failMany, ok } from './errors.mjs';
 import { requiredPreservedPaths } from './source-composition.mjs';
 
 const GIT_SHA_RE = /^[0-9a-f]{40}$/;
+export const CANDIDATE_EVIDENCE_PATH = 'ops/deployment-guard/candidate-artifact.json';
 const FINGERPRINT_ID_FIELDS = Object.freeze([
   'codeSha256',
   'revisionId',
   'index_html_sha256',
   'entry_bundle',
+  'entry_bundle_sha256',
   'sql',
 ]);
 
@@ -45,6 +51,14 @@ function gitText(run, args) {
 
 export function hashBytes(bytes) {
   return createHash('sha256').update(asBytes(bytes)).digest('hex');
+}
+
+export function sha256Base64(bytes) {
+  return createHash('sha256').update(asBytes(bytes)).digest('base64');
+}
+
+export function hashLambdaCodeSha256(zipPath) {
+  return sha256Base64(fs.readFileSync(zipPath));
 }
 
 function resolveInside(root, rel) {
@@ -121,6 +135,199 @@ export function hashArtifactMember(artifactPath, rel) {
   const stat = fs.statSync(abs);
   if (stat.isDirectory()) return hashFileBytes(abs, rel);
   throw new Error(`deployment artifact must be a Lambda ZIP or SPA directory: ${artifactPath}`);
+}
+
+export function hashSpaLiveFiles(dir, entryBundle) {
+  const indexBytes = fs.readFileSync(resolveInside(dir, 'index.html'));
+  let bundleRel = String(entryBundle || '').trim().replace(/^\//, '');
+  if (!bundleRel) {
+    const match = indexBytes.toString('utf8').match(/\bsrc=["']([^"']+\.js)["']/i);
+    bundleRel = match ? match[1].replace(/^\//, '') : '';
+  }
+  if (!bundleRel) {
+    throw new Error('SPA baseline is missing a referenced entry bundle');
+  }
+  const bundleBytes = fs.readFileSync(resolveInside(dir, bundleRel));
+  return {
+    index_html_sha256: hashBytes(indexBytes),
+    entry_bundle_sha256: hashBytes(bundleBytes),
+    entry_bundle: `/${bundleRel}`.replace(/^\/+/, '/'),
+  };
+}
+
+export function hashArtifactDigest(artifactPath, { files = [], entryBundle } = {}) {
+  const abs = path.resolve(artifactPath);
+  if (isZipFile(abs)) return hashBytes(fs.readFileSync(abs));
+  const indexPath = path.join(abs, 'index.html');
+  if (fs.existsSync(indexPath)) {
+    const hashed = hashSpaLiveFiles(abs, entryBundle);
+    return hashBytes(`${hashed.index_html_sha256}:${hashed.entry_bundle_sha256}`);
+  }
+  const parts = [];
+  for (const file of [...files].sort()) {
+    parts.push(`${file}:${hashArtifactMember(abs, file)}`);
+  }
+  return hashBytes(parts.join('\n'));
+}
+
+function isLambdaBaseline(kind, deploymentType, baselinePath) {
+  return kind === 'lambda-zip'
+    || deploymentType === 'lambda-overlay'
+    || (baselinePath && isZipFile(baselinePath) && deploymentType !== 'spa-promote');
+}
+
+function isSpaBaseline(kind, deploymentType) {
+  return kind === 'spa-dist' || deploymentType === 'spa-promote';
+}
+
+export function verifyLiveBaselineBytes(baselinePath, fingerprint, {
+  kind,
+  deployment_type,
+} = {}) {
+  const abs = path.resolve(baselinePath);
+  const fp = fingerprint && typeof fingerprint === 'object' ? fingerprint : {};
+  if (isLambdaBaseline(kind, deployment_type, abs)) {
+    if (!isZipFile(abs)) {
+      return failMany([errorEntry(
+        CODES.DEPLOYMENT_COLLISION,
+        'live Lambda baseline must be the actual downloaded ZIP; caller CodeSha256 metadata is not evidence',
+        { path: abs },
+      )], CODES.DEPLOYMENT_COLLISION);
+    }
+    const actual = hashLambdaCodeSha256(abs);
+    const expected = String(fp.codeSha256 || '').trim();
+    if (!expected || actual !== expected) {
+      return failMany([errorEntry(
+        CODES.DEPLOYMENT_COLLISION,
+        'live Lambda ZIP SHA-256 (base64) does not match captured AWS CodeSha256; substituted baseline bytes fail closed',
+        { observed_codeSha256: actual, captured_codeSha256: expected || null },
+      )], CODES.DEPLOYMENT_COLLISION);
+    }
+    return ok({
+      kind: 'lambda-zip',
+      codeSha256: actual,
+      bytes_verified: true,
+    });
+  }
+  if (isSpaBaseline(kind, deployment_type)) {
+    let hashed;
+    try {
+      hashed = hashSpaLiveFiles(abs, fp.entry_bundle);
+    } catch {
+      return failMany([errorEntry(
+        CODES.DEPLOYMENT_COLLISION,
+        'live SPA baseline must include actual index.html and referenced bundle bytes',
+        { path: abs },
+      )], CODES.DEPLOYMENT_COLLISION);
+    }
+    const expectedIndex = String(fp.index_html_sha256 || '').trim();
+    const expectedBundle = String(fp.entry_bundle_sha256 || '').trim();
+    const mismatched = [];
+    if (!expectedIndex || hashed.index_html_sha256 !== expectedIndex) mismatched.push('index.html');
+    if (!expectedBundle || hashed.entry_bundle_sha256 !== expectedBundle) mismatched.push('entry_bundle');
+    if (mismatched.length) {
+      return failMany([errorEntry(
+        CODES.DEPLOYMENT_COLLISION,
+        'live SPA index.html or bundle bytes do not match captured hashes; substituted baseline bytes fail closed',
+        {
+          mismatched_baseline_bytes: mismatched,
+          observed_index_html_sha256: hashed.index_html_sha256,
+          observed_entry_bundle_sha256: hashed.entry_bundle_sha256,
+        },
+      )], CODES.DEPLOYMENT_COLLISION);
+    }
+    return ok({
+      kind: 'spa-dist',
+      index_html_sha256: hashed.index_html_sha256,
+      entry_bundle_sha256: hashed.entry_bundle_sha256,
+      bytes_verified: true,
+    });
+  }
+  return ok({ kind: kind || deployment_type || 'other', bytes_verified: false, skipped: true });
+}
+
+export function observeTrustedBuildEvidence({
+  root,
+  commit,
+  artifactDigest,
+  files = [],
+  candidateMembers = {},
+  run,
+  gitPath,
+  deployment_type,
+} = {}) {
+  const declared = String(commit || '').trim();
+  const digest = String(artifactDigest || '').trim();
+  if (!GIT_SHA_RE.test(declared) || !digest) {
+    return failMany([errorEntry(
+      CODES.SOURCE_COMPOSITION_REQUIRED,
+      'candidate artifact digest must be bound to trusted build evidence for the exact source commit',
+    )], CODES.SOURCE_COMPOSITION_REQUIRED);
+  }
+  const git = run || defaultGitRunner(root);
+  const evidenceRel = String(gitPath || CANDIDATE_EVIDENCE_PATH).trim();
+  let attestation = null;
+  try {
+    attestation = JSON.parse(gitText(git, ['show', `${declared}:${evidenceRel}`]));
+  } catch {
+    attestation = null;
+  }
+  if (attestation && typeof attestation === 'object' && !Array.isArray(attestation)) {
+    const recorded = String(attestation.artifact_sha256 || attestation.digest || '').trim();
+    if (!recorded || recorded !== digest) {
+      return failMany([errorEntry(
+        CODES.SOURCE_COMPOSITION_REQUIRED,
+        'candidate artifact digest does not match trusted build evidence at the source commit; a matching commit label is not enough',
+        {
+          artifact_digest: digest,
+          evidence_digest: recorded || null,
+          evidence_commit: declared,
+          evidence_path: evidenceRel,
+        },
+      )], CODES.SOURCE_COMPOSITION_REQUIRED);
+    }
+    if (attestation.commit && String(attestation.commit) !== declared) {
+      return failMany([errorEntry(
+        CODES.SOURCE_COMPOSITION_REQUIRED,
+        'trusted build evidence commit does not match the declared source commit',
+        { evidence_commit: attestation.commit, declared_commit: declared },
+      )], CODES.SOURCE_COMPOSITION_REQUIRED);
+    }
+    return ok({
+      source: 'git-attestation',
+      artifact_digest: digest,
+      evidence_path: evidenceRel,
+      evidence_commit: declared,
+    });
+  }
+
+  const bindFiles = deployment_type === 'sql-apply' || deployment_type === 'sql-executor-invoke'
+    ? files.filter((file) => String(file).endsWith('.sql'))
+    : files;
+  const missing = [];
+  const mismatched = [];
+  for (const file of bindFiles) {
+    const gitHash = hashGitPath(git, declared, file);
+    if (!gitHash) missing.push(file);
+    else if (gitHash !== candidateMembers[file]) mismatched.push(file);
+  }
+  if (missing.length || mismatched.length) {
+    return failMany([errorEntry(
+      CODES.SOURCE_COMPOSITION_REQUIRED,
+      'candidate artifact is not bound to git objects at the declared commit; falsely labeled artifacts fail closed',
+      {
+        artifact_digest: digest,
+        missing_git_members: missing,
+        mismatched_git_members: mismatched,
+        declared_commit: declared,
+      },
+    )], CODES.SOURCE_COMPOSITION_REQUIRED);
+  }
+  return ok({
+    source: 'git-show',
+    artifact_digest: digest,
+    evidence_commit: declared,
+  });
 }
 
 function hashMemberList(artifactPath, files, missingLabel, source) {
@@ -339,12 +546,26 @@ export function observeDeploymentArtifactMembers({
     'deployment-artifact',
   );
   if (!hashed.ok) return hashed;
+  let artifact_digest;
+  try {
+    artifact_digest = hashArtifactDigest(artifactPath, {
+      files,
+      entryBundle: artifact.entry_bundle || artifact.entryBundle,
+    });
+  } catch {
+    return failMany([errorEntry(
+      CODES.SOURCE_COMPOSITION_REQUIRED,
+      'trusted collector could not hash the deployment artifact digest',
+      { path: artifactPath },
+    )], CODES.SOURCE_COMPOSITION_REQUIRED);
+  }
   return ok({
     files: [...files],
     candidate_members: hashed.details.members,
     members: hashed.details.members,
     artifact_path: artifactPath,
     artifact_commit: binding.details.commit,
+    artifact_digest,
     observed: true,
     source: 'deployment-artifact',
   });
@@ -405,6 +626,7 @@ export function observeLiveBaselineMembers({
   baseline,
   files = [],
   fingerprint,
+  deployment_type,
 } = {}) {
   const verified = verifyLiveBaselineFingerprint(baseline, fingerprint);
   if (!verified.ok) return verified;
@@ -423,6 +645,11 @@ export function observeLiveBaselineMembers({
       { path: abs },
     )], CODES.SOURCE_COMPOSITION_REQUIRED);
   }
+  const bytes = verifyLiveBaselineBytes(abs, fingerprint, {
+    kind: baseline.kind,
+    deployment_type,
+  });
+  if (!bytes.ok) return bytes;
   const hashed = hashMemberList(
     abs,
     files,
@@ -437,6 +664,7 @@ export function observeLiveBaselineMembers({
     baseline_path: abs,
     fingerprint: verified.details.fingerprint,
     fingerprint_verified: true,
+    fingerprint_bytes_verified: bytes.details.bytes_verified === true,
     observed: true,
     source: 'fresh-live-baseline',
   });
@@ -473,10 +701,22 @@ export function observePreserveEvidence({
       root,
     });
     if (!artifacts.ok) return artifacts;
+    const build = observeTrustedBuildEvidence({
+      root,
+      commit: declaredCommit,
+      artifactDigest: artifacts.details.artifact_digest,
+      files,
+      candidateMembers: artifacts.details.candidate_members,
+      run,
+      gitPath: artifact?.build_evidence_path || input?.build_evidence?.git_path,
+      deployment_type,
+    });
+    if (!build.ok) return build;
     const live = observeLiveBaselineMembers({
       baseline,
       files,
       fingerprint: expectedFingerprint,
+      deployment_type,
     });
     if (!live.ok) return live;
     const ancestry = observeGitAncestry(root, { commit: declaredCommit, run });
@@ -500,8 +740,11 @@ export function observePreserveEvidence({
       candidate_source: 'deployment-artifact',
       live_source: 'fresh-live-baseline',
       ancestry_source: 'git-merge-base',
+      build_evidence_source: build.details.source,
       artifact_commit: artifacts.details.artifact_commit,
+      artifact_digest: artifacts.details.artifact_digest,
       fingerprint_verified: true,
+      fingerprint_bytes_verified: live.details.fingerprint_bytes_verified === true,
       collector: 'scripts/deployment-guard/lib/observe.mjs',
     });
   }
@@ -546,10 +789,11 @@ export function evaluateObservationBinding(input = {}, observation) {
   if (!observation || observation.ok !== true
     || observation.details?.candidate_source !== 'deployment-artifact'
     || observation.details?.live_source !== 'fresh-live-baseline'
-    || observation.details?.ancestry_source !== 'git-merge-base') {
+    || observation.details?.ancestry_source !== 'git-merge-base'
+    || !['git-attestation', 'git-show'].includes(observation.details?.build_evidence_source)) {
     return failMany([errorEntry(
       CODES.SOURCE_COMPOSITION_REQUIRED,
-      'official mutating evaluate requires trusted collector observation of the deployment artifact, fresh live baseline, and git-merge-base',
+      'official mutating evaluate requires trusted collector observation of the deployment artifact, fresh live baseline, git-merge-base, and commit-bound build evidence',
     )], CODES.SOURCE_COMPOSITION_REQUIRED);
   }
   const observed = observation.details;

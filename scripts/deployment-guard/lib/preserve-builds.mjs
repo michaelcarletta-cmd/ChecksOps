@@ -283,10 +283,12 @@ export function evaluateRequiredRegressionChecks({
 
 export function evaluatePreserveBuilds(input = {}, ctx = {}) {
   let payload = input;
+  let officialObservation = null;
   if (ctx.official === true || ctx.require_trusted_observation === true) {
     const binding = applyOfficialObservation(input, ctx);
     if (!binding.ok) return binding;
     payload = binding.details.bound;
+    officialObservation = binding.details.observation || null;
   }
 
   const deploymentType = payload.deployment_type;
@@ -368,6 +370,7 @@ export function evaluatePreserveBuilds(input = {}, ctx = {}) {
       candidate_source: 'deployment-artifact',
       live_source: 'fresh-live-baseline',
       ancestry_source: 'git-merge-base',
+      build_evidence_source: officialObservation?.build_evidence_source || null,
       trusted: ctx.official === true || ctx.require_trusted_observation === true,
     },
   });

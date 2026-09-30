@@ -36,10 +36,14 @@ import {
 import { evaluateWorktreeIsolation } from '../../scripts/deployment-guard/lib/worktree.mjs';
 import { scanRepository } from '../../scripts/deployment-guard/scan-bypass.mjs';
 import {
+  CANDIDATE_EVIDENCE_PATH,
   evaluateObservationBinding,
+  hashArtifactDigest,
   hashArtifactMember,
   hashBytes,
   hashFileBytes,
+  hashLambdaCodeSha256,
+  hashSpaLiveFiles,
   observeCandidateMembers,
   observeGitAncestry,
   observePreserveEvidence,
@@ -559,20 +563,36 @@ function writeStoredZip(zipPath, files) {
   fs.writeFileSync(zipPath, Buffer.concat([...chunks, cdBuf, eocd]));
 }
 
-function makeObservedGitWorktree({ artifactBody } = {}) {
+function makeObservedGitWorktree({ artifactBody, asZip = false } = {}) {
   const origin = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-obs-origin-'));
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-obs-work-'));
   const rel = 'src/components/payments/ClaimLedgerCard.tsx';
+  const body = artifactBody || 'accepted-artifact-bytes\n';
+  const indexHtml = '<!doctype html><script type="module" src="/assets/index-aaa.js"></script>\n';
+  const bundle = 'console.log("candidate-bundle")\n';
+  const liveIndex = '<!doctype html><script type="module" src="/assets/index-aaa.js"></script>\n';
+  const liveBundle = 'console.log("live-bundle")\n';
+  const artifact = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-obs-artifact-'));
+  let artifactPath = artifact;
+  if (asZip) {
+    artifactPath = path.join(artifact, 'package.zip');
+    writeStoredZip(artifactPath, { [rel]: body });
+  } else {
+    writeMemberTree(artifact, {
+      [rel]: body,
+      'index.html': indexHtml,
+      'assets/index-aaa.js': bundle,
+    });
+  }
+  const digest = hashArtifactDigest(artifactPath, {
+    files: [rel],
+    entryBundle: '/assets/index-aaa.js',
+  });
   gitAt(origin, ['init', '-b', 'main']);
   gitAt(origin, ['config', 'user.email', 'ci@example.com']);
   gitAt(origin, ['config', 'user.name', 'ci']);
   fs.mkdirSync(path.join(origin, path.dirname(rel)), { recursive: true });
   fs.writeFileSync(path.join(origin, rel), 'accepted-worktree-bytes\n');
-  gitAt(origin, ['add', rel]);
-  gitAt(origin, ['-c', 'commit.gpgsign=false', 'commit', '-m', 'base']);
-  execFileSync('git', ['clone', origin, work], { encoding: 'utf8' });
-  gitAt(work, ['config', 'user.email', 'ci@example.com']);
-  gitAt(work, ['config', 'user.name', 'ci']);
   const registry = {
     manifests: [{
       id: 'fixture-spa',
@@ -581,20 +601,30 @@ function makeObservedGitWorktree({ artifactBody } = {}) {
       preserved_paths: [rel],
     }],
   };
-  fs.mkdirSync(path.join(work, 'ops/deployment-guard'), { recursive: true });
+  fs.mkdirSync(path.join(origin, 'ops/deployment-guard'), { recursive: true });
   fs.writeFileSync(
-    path.join(work, 'ops/deployment-guard/accepted-source-composition.json'),
+    path.join(origin, 'ops/deployment-guard/accepted-source-composition.json'),
     `${JSON.stringify(registry)}\n`,
   );
+  fs.writeFileSync(
+    path.join(origin, CANDIDATE_EVIDENCE_PATH),
+    `${JSON.stringify({ artifact_sha256: digest })}\n`,
+  );
+  gitAt(origin, ['add', rel, 'ops/deployment-guard']);
+  gitAt(origin, ['-c', 'commit.gpgsign=false', 'commit', '-m', 'base']);
+  execFileSync('git', ['clone', origin, work], { encoding: 'utf8' });
+  gitAt(work, ['config', 'user.email', 'ci@example.com']);
+  gitAt(work, ['config', 'user.name', 'ci']);
   const commit = gitAt(work, ['rev-parse', 'HEAD']);
-  const body = artifactBody || 'accepted-artifact-bytes\n';
-  const artifact = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-obs-artifact-'));
   const baseline = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-obs-live-'));
-  writeMemberTree(artifact, { [rel]: body });
-  writeMemberTree(baseline, { [rel]: body });
+  writeMemberTree(baseline, {
+    [rel]: body,
+    'index.html': liveIndex,
+    'assets/index-aaa.js': liveBundle,
+  });
+  const spaHashes = hashSpaLiveFiles(baseline, '/assets/index-aaa.js');
   const fingerprint = {
-    index_html_sha256: 'idx-1',
-    entry_bundle: '/assets/index-aaa.js',
+    ...spaHashes,
     captured_at: NOW,
   };
   return {
@@ -604,8 +634,18 @@ function makeObservedGitWorktree({ artifactBody } = {}) {
     registry,
     commit,
     fingerprint,
-    deployment_artifact: { path: artifact, commit, kind: 'spa-dist' },
-    live_baseline: { path: baseline, origin: 'fresh-live-download', fingerprint },
+    artifact_digest: digest,
+    deployment_artifact: {
+      path: artifactPath,
+      commit,
+      kind: asZip ? 'lambda-zip' : 'spa-dist',
+    },
+    live_baseline: {
+      path: baseline,
+      origin: 'fresh-live-download',
+      kind: 'spa-dist',
+      fingerprint,
+    },
   };
 }
 
@@ -641,8 +681,11 @@ test('trusted collector hashes deployment-artifact bytes and reads ancestry from
   assert.equal(evidence.details.candidate_source, 'deployment-artifact');
   assert.equal(evidence.details.live_source, 'fresh-live-baseline');
   assert.equal(evidence.details.ancestry_source, 'git-merge-base');
+  assert.equal(evidence.details.build_evidence_source, 'git-attestation');
   assert.equal(evidence.details.collector, 'scripts/deployment-guard/lib/observe.mjs');
   assert.equal(evidence.details.fingerprint_verified, true);
+  assert.equal(evidence.details.fingerprint_bytes_verified, true);
+  assert.equal(evidence.details.artifact_digest, fixture.artifact_digest);
   assert.equal(
     evidence.details.candidate_members[fixture.rel],
     hashArtifactMember(fixture.deployment_artifact.path, fixture.rel),
@@ -708,20 +751,20 @@ test('artifact or declared-commit mismatch fails closed', () => {
   assert.equal(mismatched.details.artifact_commit, fixture.commit);
   assert.notEqual(mismatched.details.artifact_commit, mismatched.details.declared_commit);
 
-  const zipPath = path.join(os.tmpdir(), `checksops-obs-${process.pid}.zip`);
-  writeStoredZip(zipPath, { [fixture.rel]: 'zip-member-bytes\n' });
+  const zipped = makeObservedGitWorktree({ artifactBody: 'zip-member-bytes\n', asZip: true });
   const zipEvidence = observePreserveEvidence({
-    root: fixture.work,
-    registry: fixture.registry,
+    root: zipped.work,
+    registry: zipped.registry,
     deployment_type: 'spa-promote',
-    commit: fixture.commit,
-    deployment_artifact: { path: zipPath, commit: fixture.commit, kind: 'lambda-zip' },
-    live_baseline: fixture.live_baseline,
-    fingerprint: fixture.fingerprint,
+    commit: zipped.commit,
+    deployment_artifact: zipped.deployment_artifact,
+    live_baseline: zipped.live_baseline,
+    fingerprint: zipped.fingerprint,
   });
   assert.equal(zipEvidence.ok, true, zipEvidence.message);
-  assert.equal(zipEvidence.details.candidate_members[fixture.rel], hashBytes('zip-member-bytes\n'));
-  assert.notEqual(zipEvidence.details.candidate_members[fixture.rel], hashFileBytes(fixture.work, fixture.rel));
+  assert.equal(zipEvidence.details.candidate_members[zipped.rel], hashBytes('zip-member-bytes\n'));
+  assert.notEqual(zipEvidence.details.candidate_members[zipped.rel], hashFileBytes(zipped.work, zipped.rel));
+  assert.equal(zipEvidence.details.build_evidence_source, 'git-attestation');
 
   const driftedFingerprint = observePreserveEvidence({
     root: fixture.work,
@@ -792,7 +835,93 @@ test('official path rejects fabricated candidate hashes and git ancestry', () =>
     '--skip-contracts',
   ], { encoding: 'utf8', cwd: fixture.work });
   assert.notEqual(cli.status, 0);
-  assert.match(`${cli.stderr}${cli.stdout}`, /deployment artifact|declared commit|live evidence|cannot substitute|git-merge-base observation/);
+  assert.match(`${cli.stderr}${cli.stdout}`, /deployment artifact|declared commit|live evidence|cannot substitute|git-merge-base observation|build evidence/);
+});
+
+test('substituted live baseline bytes fail even when fingerprint metadata matches', () => {
+  const fixture = makeObservedGitWorktree();
+  fs.writeFileSync(path.join(fixture.live_baseline.path, 'index.html'), 'substituted-index\n');
+  const spa = observePreserveEvidence({
+    root: fixture.work,
+    registry: fixture.registry,
+    deployment_type: 'spa-promote',
+    commit: fixture.commit,
+    deployment_artifact: fixture.deployment_artifact,
+    live_baseline: fixture.live_baseline,
+    fingerprint: fixture.fingerprint,
+  });
+  assert.equal(spa.ok, false);
+  assert.equal(spa.code, CODES.DEPLOYMENT_COLLISION);
+  assert.match(spa.message, /index.html|bundle bytes|substituted baseline/i);
+  assert.ok(spa.details.mismatched_baseline_bytes.includes('index.html'));
+
+  const zipPath = path.join(os.tmpdir(), `checksops-live-${process.pid}.zip`);
+  writeStoredZip(zipPath, { 'owned.mjs': 'live-zip\n' });
+  const codeSha256 = hashLambdaCodeSha256(zipPath);
+  writeStoredZip(zipPath, { 'owned.mjs': 'substituted-zip\n' });
+  const lambda = observePreserveEvidence({
+    root: fixture.work,
+    registry: {
+      manifests: [{
+        id: 'fixture-lambda',
+        accepted: true,
+        kind: 'lambda',
+        preserved_paths: [fixture.rel],
+      }],
+    },
+    deployment_type: 'lambda-overlay',
+    commit: fixture.commit,
+    deployment_artifact: fixture.deployment_artifact,
+    live_baseline: {
+      path: zipPath,
+      origin: 'fresh-live-download',
+      kind: 'lambda-zip',
+      fingerprint: {
+        codeSha256,
+        revisionId: 'rev-1',
+        captured_at: NOW,
+      },
+    },
+    fingerprint: {
+      codeSha256,
+      revisionId: 'rev-1',
+      captured_at: NOW,
+    },
+  });
+  assert.equal(lambda.ok, false);
+  assert.equal(lambda.code, CODES.DEPLOYMENT_COLLISION);
+  assert.match(lambda.message, /CodeSha256|substituted baseline/i);
+  assert.notEqual(lambda.details.observed_codeSha256, codeSha256);
+});
+
+test('falsely labeled candidate artifacts fail despite matching commit labels', () => {
+  const fixture = makeObservedGitWorktree();
+  fs.writeFileSync(
+    path.join(fixture.deployment_artifact.path, 'assets/index-aaa.js'),
+    'falsely-labeled-bundle\n',
+  );
+  const labeled = {
+    ...fixture.deployment_artifact,
+    commit: fixture.commit,
+    source_commit: fixture.commit,
+  };
+  const result = observePreserveEvidence({
+    root: fixture.work,
+    registry: fixture.registry,
+    deployment_type: 'spa-promote',
+    commit: fixture.commit,
+    deployment_artifact: labeled,
+    live_baseline: fixture.live_baseline,
+    fingerprint: fixture.fingerprint,
+    build_evidence: {
+      commit: fixture.commit,
+      artifact_sha256: fixture.artifact_digest,
+    },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.SOURCE_COMPOSITION_REQUIRED);
+  assert.match(result.message, /build evidence|commit label|falsely labeled/i);
+  assert.notEqual(result.details.artifact_digest, fixture.artifact_digest);
 });
 
 test('enforcement-gaps registry records remaining out-of-repo holes', () => {

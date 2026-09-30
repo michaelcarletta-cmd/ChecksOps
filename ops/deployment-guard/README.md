@@ -212,8 +212,12 @@ Additional fail-closed checks on mutating evaluates:
 - mutation-boundary live fingerprint with complete fields and `captured_at`
 - verified `git-merge-base` ancestry from Git commands (not caller JSON)
 - accepted composition **content hashes** from the exact Lambda ZIP or SPA
-  bound to the declared commit (file names, repository source, or
-  fabricated JSON hashes fail)
+  (file names, repository source, or fabricated JSON hashes fail)
+- candidate artifact digest bound to git-stored build evidence at the
+  declared commit (matching commit labels is not enough)
+- live Lambda ZIP hashed to AWS CodeSha256 (base64) and live SPA
+  `index.html` plus referenced bundle hashed to captured fingerprints
+  (caller metadata alone is not enough)
 - live member hashes from a freshly captured deployment baseline with a
   verified fingerprint (missing live evidence fails closed; candidate
   hashes are never copied into `live_members`)

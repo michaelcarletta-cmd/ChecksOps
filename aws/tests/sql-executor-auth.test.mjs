@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -241,7 +241,9 @@ function officialSqlObservation(commit, fingerprint) {
   const artifact = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-sql-artifact-'));
   const baseline = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-sql-live-'));
   for (const rel of files) {
-    const bytes = fs.readFileSync(path.join(ROOT, rel));
+    const bytes = String(rel).endsWith('.sql')
+      ? execFileSync('git', ['show', `${commit}:${rel}`], { cwd: ROOT })
+      : fs.readFileSync(path.join(ROOT, rel));
     for (const root of [artifact, baseline]) {
       const dest = path.join(root, rel);
       fs.mkdirSync(path.dirname(dest), { recursive: true });
@@ -249,10 +251,11 @@ function officialSqlObservation(commit, fingerprint) {
     }
   }
   return {
-    deployment_artifact: { path: artifact, commit, kind: 'spa-dist' },
+    deployment_artifact: { path: artifact, commit, kind: 'sql-bundle' },
     live_baseline: {
       path: baseline,
       origin: 'fresh-live-download',
+      kind: 'sql-bundle',
       fingerprint,
     },
   };
