@@ -1,0 +1,244 @@
+{
+  "id": "walletops-activity-recovery-prod-accepted",
+  "verdict": "WALLETOPS ACTIVITY RECOVERY — PRODUCTION ACCEPTED",
+  "captured_at": "2026-09-30T19:49:30Z",
+  "workstream_id": "walletops-activity-recovery-prod-2d41",
+  "branch": "cursor/walletops-activity-recovery-prod-2d41",
+  "commit": "9afb57fe52a42c0a84e4e07b3a7618c20c0d815c",
+  "frontend_only": true,
+  "lambda_updated": false,
+  "db_writes": 0,
+  "reconcile_executed": false,
+  "provider_financial_writes": 0,
+  "moov_financial_writes": 0,
+  "oauth_token_posts_only": 3,
+  "A_fresh_preflight_production_fingerprint": {
+    "index_html_sha256": "d0d59415d6692713f73b8edabefec10a261f1b7a85d6f4a6abd719f9011b3eb4",
+    "entry_bundle": "/assets/index-C_fh5VBD.js",
+    "entry_js_sha256": "a357373bef9e41b004f887ee312ca239f64236706c826afb69400312e6fbad22",
+    "walletops": "/assets/WalletOps-2AGadvlz.js",
+    "walletops_sha256": "85a3b9776a2db63acb661545f2c006b74699224357f0be59db96349aee063439",
+    "s3_version_id": "VrLJwkt.ge_P4S2pjYAX5YX_uAoP8A6F",
+    "etag": "4c0584f350c68f75a4a09e0b3ced9576",
+    "last_modified": "2026-09-30T18:06:18+00:00",
+    "lambda": {
+      "CodeSha256": "pxZj4G6pGntJrkcRO5uNNEbiyvDpCOKPiWAboDnPvBA=",
+      "RevisionId": "3bccd144-4e61-422f-8151-9ed0fe713aac"
+    }
+  },
+  "B_current_production_source_composition": {
+    "authoritative_baseline": "cursor/walletops-funding-prod-2d41",
+    "baseline_commit": "6cc1f0f3439f039f67af8aa62de6b79b5ad907b9",
+    "live_before": "/assets/index-C_fh5VBD.js",
+    "proof": "Live C_fh5VBD src/ hashes matched funding-prod. Isolated leftover 8e8fde63d+funding hunks identical to funding-prod HEAD src/.",
+    "manifest": "ops/deployment-guard/walletops-activity-recovery-prod-source-composition.json",
+    "not_from_this_whole_branch": true,
+    "not_from_staging_dist": true
+  },
+  "C_shared_file_hunk_reconciliation": {
+    "result": "SAFE",
+    "src_diff_funding_prod_vs_activity_recovery": "exactly six accepted recovery files",
+    "shared": {
+      "src/hooks/useWalletOps.ts": "production + env-aware selectPaymentWallet; wallet-relative summarizeWalletOps preserved",
+      "src/hooks/usePaymentProviderEligibility.ts": "production + tenantMoovEnvironment + environmentReady",
+      "src/lib/payments/wallets.ts": "production + environment-aware readWallet",
+      "src/pages/WalletOps.tsx": "production Item #4 + funding UX preserved; credit = isWalletDestination && !isWalletSource",
+      "src/lib/payments/walletRelativeTransfers.ts": "unchanged f7fc912539dfb3f68847f2c12e8e4df4bed43357790e6f1e240e2ce0a190711f"
+    }
+  },
+  "D_independent_work_preserved": [
+    "monthly auto-billing save/consent",
+    "company/invoice/email branding",
+    "stakeholder verification",
+    "bank-deposit history",
+    "signature requests",
+    "claim-number",
+    "OCR",
+    "Mortgage Ops",
+    "CheckAlt",
+    "V2 collection",
+    "receivables",
+    "Item #4",
+    "wallet-relative Pending In/Out",
+    "Funding & Billing"
+  ],
+  "E_candidate_files_changed": [
+    "src/lib/payments/selectPaymentWallet.ts",
+    "src/lib/payments/reconcileWalletFundingTransfer.ts",
+    "src/hooks/useWalletOps.ts",
+    "src/hooks/usePaymentProviderEligibility.ts",
+    "src/lib/payments/wallets.ts",
+    "src/pages/WalletOps.tsx",
+    "scripts/test-walletops-layout.mjs",
+    "aws/tests/walletops-wallet-select.test.mjs",
+    "aws/tests/walletops-wallet-funding-reconcile.test.mjs",
+    "aws/tests/walletops-wallet-relative.test.mjs"
+  ],
+  "F_candidate_tests": {
+    "wallet_select": "8/8",
+    "wallet_funding_reconcile": "5/5",
+    "wallet_relative": "20/20",
+    "walletops_layout": "12/12",
+    "v2": "38/38",
+    "funding": "23/23",
+    "receivables": "15/15",
+    "isolation": "6/6",
+    "wave1_review_patches": "15/15",
+    "claim_ledger": "4/4",
+    "signature_submit": "5/5",
+    "check_image_invariants": "2/2",
+    "moov_file_rules": "20/21 pre-existing invalid-purpose fail"
+  },
+  "G_v2_protected_hashes": {
+    "aws/functions/api/tenant-collection-v2.mjs": "8a66f54d3c2785162a1643218e18b4d3c251230cf2a7f98a1ecb4ede8939fb66",
+    "aws/functions/api/tenant-collection-contract-v2.mjs": "9ec5ae45db34c0795570f401cc2b1c3fa78f04764870bf6b651c21278433ed5d",
+    "aws/functions/api/tenant-billing-engine.mjs": "65b75735825f9a06955d5daba603f74835d106cabf52eb449153c856a59dae2f",
+    "aws/functions/api/providers/parity/tenant-receivables.mjs": "0d8f8f20f4939e79551b4a1aa5b3305bb791cea7ca684f4428594ad359179477",
+    "unchanged": true
+  },
+  "H_item4": {
+    "walletops_payment_account_management": "ABSENT",
+    "walletops_payout_preferences": "ABSENT",
+    "walletops_retains": ["Available", "Pending In", "Pending Out", "Funding & Billing", "Recent Activity"],
+    "compliance_payment_account_setup": "PRESENT in live entry",
+    "empty_state_link_only": "Go to Payment Account"
+  },
+  "I_production_toctou": {
+    "result": "NO DRIFT",
+    "phase1_index_sha256": "d0d59415d6692713f73b8edabefec10a261f1b7a85d6f4a6abd719f9011b3eb4",
+    "immediately_before_index_sha256": "d0d59415d6692713f73b8edabefec10a261f1b7a85d6f4a6abd719f9011b3eb4",
+    "entry_match": true,
+    "s3_version_match": true,
+    "lambda_match": true,
+    "apply_before_entry": "/assets/index-C_fh5VBD.js"
+  },
+  "J_deployment_role_workflow": {
+    "role": "ChecksOpsProductionSpaDeploy",
+    "workflow": "scripts/deployment-guard/production-spa-apply.mjs",
+    "receipt": "/workspace/.deployment-guard/receipts/production::production-spa.json",
+    "lease_replaced_expired": "walletops-funding-prod-2d41",
+    "deploy_mode": "per_object_put",
+    "s3_sync_delete": false,
+    "oidc_assume": "sts:AssumeRoleWithWebIdentity"
+  },
+  "K_new_production_hashes": {
+    "index_html_sha256": "3cf8cb8c41894c919bb8b79db884bbf5e626b2896a7a7efb1a6f14f6b0cd3744",
+    "entry_bundle": "/assets/index-DbYbvb6d.js",
+    "entry_js_sha256": "1dfbe6c4d2a77027b7ac3cf89eece450b4d9b290b829a2d88ff0244332e6e47c",
+    "css": "/assets/index-CwQaUh9K.css",
+    "walletops": "/assets/WalletOps-j3z9RyZ7.js",
+    "walletops_sha256": "bf3ccfbeeb8d5bd61397f54c26504a3d04ca77f861f1fbb1d0638d6a60760a83",
+    "s3_version_id": "FgtKGHwqYg2rJcb0ptCu4B3r880agPjL",
+    "s3_etag": "3fdc738918893a14ebebe5e0d8e6684a",
+    "s3_last_modified": "2026-09-30T19:47:48+00:00"
+  },
+  "L_cloudfront_invalidation": {
+    "distribution": "E1B0ZWWO5559U5",
+    "invalidation_id": "I8NPTRCR5LEG310VNQ1ZLQYKS5",
+    "paths": ["/index.html", "/assets/*"],
+    "cloudfront_index_entry": "/assets/index-DbYbvb6d.js",
+    "cloudfront_index_sha256": "3cf8cb8c41894c919bb8b79db884bbf5e626b2896a7a7efb1a6f14f6b0cd3744",
+    "s3_and_cloudfront_match": true
+  },
+  "M_lambda_before_after": {
+    "before": {
+      "CodeSha256": "pxZj4G6pGntJrkcRO5uNNEbiyvDpCOKPiWAboDnPvBA=",
+      "RevisionId": "3bccd144-4e61-422f-8151-9ed0fe713aac"
+    },
+    "after": {
+      "CodeSha256": "pxZj4G6pGntJrkcRO5uNNEbiyvDpCOKPiWAboDnPvBA=",
+      "RevisionId": "3bccd144-4e61-422f-8151-9ed0fe713aac"
+    },
+    "unchanged": true
+  },
+  "N_db_writes": 0,
+  "O_provider_financial_writes": 0,
+  "P_live_bundle_verification": {
+    "environment_aware_wallet_selection": true,
+    "ambiguous_wallet_present": true,
+    "funding_and_billing": true,
+    "recent_activity": true,
+    "pending_in_out": true,
+    "item4_payout_preferences_absent": true,
+    "item4_payment_account_management_absent": true,
+    "compliance_payment_account_setup_present": true,
+    "staging_execute_api_absent": true,
+    "staging_banner_absent": true,
+    "api_base": "/prep",
+    "app_url": "https://checksops.com"
+  },
+  "Q_authenticated_freedom_available": {
+    "value": "$0.00",
+    "source": "Moov GET /accounts/60922058-7eca-4889-81dd-5720d7b9de96/wallets",
+    "available_cents": 0,
+    "cognito_browser_session": "unavailable in this environment; provider GET used"
+  },
+  "R_authenticated_freedom_pending_in": {
+    "value": "$5.00",
+    "cents": 500,
+    "provider_status": "pending",
+    "source": "accepted local row 63f892d9 + current Moov GET pending + summarizeWalletOps"
+  },
+  "S_authenticated_freedom_pending_out": {
+    "value": "$0.00",
+    "cents": 0,
+    "note": "$139 bank→ChecksOps is not wallet Pending Out"
+  },
+  "T_five_recent_activity": {
+    "visible": true,
+    "label": "Wallet Funding",
+    "amount": "$5",
+    "route": "WELLS FARGO ••••4573 → Freedom Adjustment Wallet",
+    "status": "pending",
+    "provider_transfer_id": "9f9df312-32a9-4999-ace9-fc2b00669c75",
+    "local_row": "63f892d9-a0f4-4f62-9373-262d6c361c90",
+    "not_recreated": true
+  },
+  "U_139_checksops_billing": {
+    "visible": true,
+    "label": "ChecksOps Billing",
+    "period": "September 2026",
+    "amount": "$139",
+    "status": "pending",
+    "provider_transfer_id": "b31c7752-031f-4b8b-9b6e-82dd0aaed2cb",
+    "not_wallet_pending_out": true
+  },
+  "V_billing_funding_breakdown": {
+    "wallet": "$0",
+    "bank": "Wells Fargo ••••4573 $139",
+    "wallet_cents": 0,
+    "bank_cents": 13900
+  },
+  "W_concurrent_workstream_preservation": {
+    "production_baseline_not_replaced_wholesale": true,
+    "v2_files_unchanged": true,
+    "item4_unchanged": true,
+    "staging_not_written_by_this_workstream": true,
+    "note": "Staging index independently moved to /assets/index-CEKjixtZ.js after our Phase 1. This workstream did not write staging."
+  },
+  "X_final_production_status": "WALLETOPS ACTIVITY RECOVERY — PRODUCTION ACCEPTED",
+  "known_preexisting_read_model": {
+    "issue": "payment_transfers reads are tenant-scoped and not environment-scoped",
+    "local_five_environment": "sandbox",
+    "mismatch": "NON-BLOCKING",
+    "do_not_start_environment_cleanup": true
+  },
+  "protected_contract_for_later_builds": [
+    "environment-aware operating-wallet selection",
+    "production host selects production wallet",
+    "staging host selects sandbox wallet",
+    "same-environment ambiguity fails as ambiguous_wallet",
+    "wallet-relative Pending In / Pending Out",
+    "$5 wallet funding remains visible in activity",
+    "pending $5 contributes Pending In",
+    "completed $5 remains in Recent Activity",
+    "$139 bank-funded ChecksOps billing does not become wallet Pending Out",
+    "$139 remains visible as ChecksOps Billing",
+    "Funding & Billing remains present",
+    "Recent Activity remains present",
+    "Payment Account management remains absent from WalletOps",
+    "Payout Preferences remains absent from WalletOps",
+    "Payment Account remains available through Compliance/Documents",
+    "recovered provider transfer 9f9df312-32a9-4999-ace9-fc2b00669c75 must never be recreated/retried merely because a later build cannot see it"
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "ok": true,
+  "code": null,
+  "message": null,
+  "details": {
+    "environment": "production",
+    "bucket": "checksops-production-frontend-806168576068",
+    "uploaded_count": 107,
+    "candidate_entry": "/assets/index-DbYbvb6d.js",
+    "candidate_index_sha256": "3cf8cb8c41894c919bb8b79db884bbf5e626b2896a7a7efb1a6f14f6b0cd3744",
+    "before_entry": "/assets/index-C_fh5VBD.js",
+    "before_index_sha256": "d0d59415d6692713f73b8edabefec10a261f1b7a85d6f4a6abd719f9011b3eb4",
+    "after_entry": "/assets/index-DbYbvb6d.js",
+    "after_index_sha256": "3cf8cb8c41894c919bb8b79db884bbf5e626b2896a7a7efb1a6f14f6b0cd3744",
+    "invalidation_id": "I8NPTRCR5LEG310VNQ1ZLQYKS5",
+    "receipt": "/workspace/.deployment-guard/receipts/production::production-spa.json",
+    "deploy_mode": "per_object_put",
+    "s3_sync_delete": false,
+    "staging_untouched": true,
+    "lambda_updated": false,
+    "role": "ChecksOpsProductionSpaDeploy"
+  },
+  "errors": []
+}
