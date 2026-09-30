@@ -365,7 +365,8 @@ export function evaluatePreserveBuilds(input = {}, ctx = {}) {
     rollback: rollback.details,
     reclaim_forbidden: true,
     observation: {
-      candidate_source: 'artifact-bytes',
+      candidate_source: 'deployment-artifact',
+      live_source: 'fresh-live-baseline',
       ancestry_source: 'git-merge-base',
       trusted: ctx.official === true || ctx.require_trusted_observation === true,
     },

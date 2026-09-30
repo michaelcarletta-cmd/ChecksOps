@@ -70,10 +70,14 @@ cannot bypass the guard.
 - If live state drifted after preflight: **STOP** with
   `DEPLOYMENT_COLLISION`. Do not restore the previous package.
 - `reconciled_with_main=true` is not evidence. Official mutating
-  evaluates observe candidate SHA-256 hashes from artifact bytes and
-  ancestry from `git rev-parse` / `git merge-base`. Caller JSON cannot
-  substitute for those observations. File names alone are not enough;
-  missing live or candidate member hashes fail closed.
+  evaluates observe candidate SHA-256 hashes from the exact deployment
+  artifact (Lambda ZIP or SPA) bound to the declared commit, live
+  member hashes from a freshly captured deployment baseline whose
+  fingerprint is verified, and ancestry from `git rev-parse` /
+  `git merge-base`. Hashing repository source is not proof the ZIP or
+  SPA contains those bytes. Caller JSON cannot substitute. File names
+  alone are not enough; missing live or candidate member hashes fail
+  closed. Do not copy candidate hashes into live evidence.
 
 ## Reject stale artifacts
 

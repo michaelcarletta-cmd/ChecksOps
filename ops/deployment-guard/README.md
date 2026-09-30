@@ -211,8 +211,12 @@ Additional fail-closed checks on mutating evaluates:
 - exclusive lease + `require_exclusive_lock=true` (omitting either fails)
 - mutation-boundary live fingerprint with complete fields and `captured_at`
 - verified `git-merge-base` ancestry from Git commands (not caller JSON)
-- accepted composition **content hashes** from artifact bytes (file names
-  or fabricated JSON hashes fail)
+- accepted composition **content hashes** from the exact Lambda ZIP or SPA
+  bound to the declared commit (file names, repository source, or
+  fabricated JSON hashes fail)
+- live member hashes from a freshly captured deployment baseline with a
+  verified fingerprint (missing live evidence fails closed; candidate
+  hashes are never copied into `live_members`)
 - reject stale SPA dist and stale/full Lambda packages
 - accepted-contract **and** accepted-composition regression gates
 - no automatic rollback / reclaim over another workstream

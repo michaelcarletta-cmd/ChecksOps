@@ -39,7 +39,9 @@ reject stale SPA/full Lambda packages, require exclusive locks
 (`require_exclusive_lock=true` plus a lease), a complete live fingerprint
 with `captured_at`, verified git-merge-base ancestry (not
 `reconciled_with_main=true`), candidate content hashes observed from
-artifact bytes, git-merge-base ancestry observed by Git commands, run
+the deployment artifact bound to the declared commit (not repository
+source alone), live hashes from a freshly captured baseline with a
+verified fingerprint, git-merge-base ancestry observed by Git commands, run
 accepted regression checks, and never automatically
 roll back over another workstream.
 

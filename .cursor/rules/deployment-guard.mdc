@@ -55,7 +55,9 @@ Independent chats must also follow `.cursor/rules/preserve-builds.mdc`:
 separate branches/worktrees, reconcile with current main using verified
 git-merge-base ancestry observed by Git commands (not caller JSON or
 `reconciled_with_main=true`), require accepted composition content
-hashes observed from artifact bytes, exclusive locks, and complete live
+hashes observed from the deployment artifact bound to the declared
+commit, live hashes from a freshly captured baseline with a verified
+fingerprint, exclusive locks, and complete live
 fingerprints with `captured_at`, reject stale SPA/full Lambda packages,
 run accepted regression checks, and never automatically roll back over
 another workstream.

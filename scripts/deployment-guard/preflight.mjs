@@ -29,6 +29,8 @@ export function main(argv = process.argv.slice(2), root = repoRootFrom(import.me
     preflight_live_fingerprint: input.preflight || input.preflight_live_fingerprint,
     immediately_before: input.immediately_before,
     live_members: input.live_members,
+    live_baseline: input.live_baseline,
+    deployment_artifact: input.deployment_artifact || input.candidate_artifact,
     candidate_members: input.candidate_members,
     candidate_contents: input.candidate_contents,
     require_exclusive_lock: input.require_exclusive_lock,

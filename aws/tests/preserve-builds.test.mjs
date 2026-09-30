@@ -37,6 +37,8 @@ import { evaluateWorktreeIsolation } from '../../scripts/deployment-guard/lib/wo
 import { scanRepository } from '../../scripts/deployment-guard/scan-bypass.mjs';
 import {
   evaluateObservationBinding,
+  hashArtifactMember,
+  hashBytes,
   hashFileBytes,
   observeCandidateMembers,
   observeGitAncestry,
@@ -373,7 +375,7 @@ test('preserve-builds CLI fails closed and never mentions AWS writes', () => {
     '--skip-contracts',
   ], { encoding: 'utf8' });
   assert.notEqual(cli.status, 0);
-  assert.match(cli.stderr, /WORKTREE_ISOLATION_REQUIRED|MAIN_RECONCILIATION_REQUIRED/);
+  assert.match(cli.stderr, /WORKTREE_ISOLATION_REQUIRED|MAIN_RECONCILIATION_REQUIRED|SOURCE_COMPOSITION_REQUIRED/);
 });
 
 test('accepted composition and contract test files still exist', () => {
@@ -501,7 +503,63 @@ function gitAt(cwd, args) {
   return execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
 }
 
-function makeObservedGitWorktree() {
+function writeMemberTree(root, files) {
+  for (const [rel, body] of Object.entries(files)) {
+    fs.mkdirSync(path.join(root, path.dirname(rel)), { recursive: true });
+    fs.writeFileSync(path.join(root, rel), body);
+  }
+}
+
+function crc32(buf) {
+  let crc = ~0;
+  for (const byte of buf) {
+    crc ^= byte;
+    for (let i = 0; i < 8; i += 1) crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+  }
+  return (~crc) >>> 0;
+}
+
+function writeStoredZip(zipPath, files) {
+  const chunks = [];
+  const central = [];
+  let offset = 0;
+  for (const [name, body] of Object.entries(files)) {
+    const data = Buffer.isBuffer(body) ? body : Buffer.from(body);
+    const nameBuf = Buffer.from(name.replace(/\\/g, '/'), 'utf8');
+    const crc = crc32(data);
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(0, 8);
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(data.length, 18);
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(nameBuf.length, 26);
+    const localEntry = Buffer.concat([local, nameBuf, data]);
+    chunks.push(localEntry);
+    const cd = Buffer.alloc(46);
+    cd.writeUInt32LE(0x02014b50, 0);
+    cd.writeUInt16LE(20, 4);
+    cd.writeUInt16LE(20, 6);
+    cd.writeUInt32LE(crc, 16);
+    cd.writeUInt32LE(data.length, 20);
+    cd.writeUInt32LE(data.length, 24);
+    cd.writeUInt16LE(nameBuf.length, 28);
+    cd.writeUInt32LE(offset, 42);
+    central.push(Buffer.concat([cd, nameBuf]));
+    offset += localEntry.length;
+  }
+  const cdBuf = Buffer.concat(central);
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(central.length, 8);
+  eocd.writeUInt16LE(central.length, 10);
+  eocd.writeUInt32LE(cdBuf.length, 12);
+  eocd.writeUInt32LE(offset, 16);
+  fs.writeFileSync(zipPath, Buffer.concat([...chunks, cdBuf, eocd]));
+}
+
+function makeObservedGitWorktree({ artifactBody } = {}) {
   const origin = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-obs-origin-'));
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-obs-work-'));
   const rel = 'src/components/payments/ClaimLedgerCard.tsx';
@@ -509,7 +567,7 @@ function makeObservedGitWorktree() {
   gitAt(origin, ['config', 'user.email', 'ci@example.com']);
   gitAt(origin, ['config', 'user.name', 'ci']);
   fs.mkdirSync(path.join(origin, path.dirname(rel)), { recursive: true });
-  fs.writeFileSync(path.join(origin, rel), 'accepted-artifact-bytes\n');
+  fs.writeFileSync(path.join(origin, rel), 'accepted-worktree-bytes\n');
   gitAt(origin, ['add', rel]);
   gitAt(origin, ['-c', 'commit.gpgsign=false', 'commit', '-m', 'base']);
   execFileSync('git', ['clone', origin, work], { encoding: 'utf8' });
@@ -528,10 +586,30 @@ function makeObservedGitWorktree() {
     path.join(work, 'ops/deployment-guard/accepted-source-composition.json'),
     `${JSON.stringify(registry)}\n`,
   );
-  return { origin, work, rel, registry };
+  const commit = gitAt(work, ['rev-parse', 'HEAD']);
+  const body = artifactBody || 'accepted-artifact-bytes\n';
+  const artifact = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-obs-artifact-'));
+  const baseline = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-obs-live-'));
+  writeMemberTree(artifact, { [rel]: body });
+  writeMemberTree(baseline, { [rel]: body });
+  const fingerprint = {
+    index_html_sha256: 'idx-1',
+    entry_bundle: '/assets/index-aaa.js',
+    captured_at: NOW,
+  };
+  return {
+    origin,
+    work,
+    rel,
+    registry,
+    commit,
+    fingerprint,
+    deployment_artifact: { path: artifact, commit, kind: 'spa-dist' },
+    live_baseline: { path: baseline, origin: 'fresh-live-download', fingerprint },
+  };
 }
 
-test('trusted collector hashes artifact bytes and reads ancestry from git commands', () => {
+test('trusted collector hashes deployment-artifact bytes and reads ancestry from git commands', () => {
   const rel = 'src/components/payments/ClaimLedgerCard.tsx';
   const bytes = fs.readFileSync(path.join(ROOT, rel));
   assert.equal(hashFileBytes(ROOT, rel), createHash('sha256').update(bytes).digest('hex'));
@@ -554,30 +632,139 @@ test('trusted collector hashes artifact bytes and reads ancestry from git comman
     root: fixture.work,
     registry: fixture.registry,
     deployment_type: 'spa-promote',
+    commit: fixture.commit,
+    deployment_artifact: fixture.deployment_artifact,
+    live_baseline: fixture.live_baseline,
+    fingerprint: fixture.fingerprint,
   });
   assert.equal(evidence.ok, true, evidence.message);
-  assert.equal(evidence.details.candidate_source, 'artifact-bytes');
+  assert.equal(evidence.details.candidate_source, 'deployment-artifact');
+  assert.equal(evidence.details.live_source, 'fresh-live-baseline');
   assert.equal(evidence.details.ancestry_source, 'git-merge-base');
   assert.equal(evidence.details.collector, 'scripts/deployment-guard/lib/observe.mjs');
-  assert.equal(evidence.details.candidate_members[fixture.rel], hashFileBytes(fixture.work, fixture.rel));
+  assert.equal(evidence.details.fingerprint_verified, true);
+  assert.equal(
+    evidence.details.candidate_members[fixture.rel],
+    hashArtifactMember(fixture.deployment_artifact.path, fixture.rel),
+  );
+  assert.notEqual(
+    evidence.details.candidate_members[fixture.rel],
+    hashFileBytes(fixture.work, fixture.rel),
+  );
+  assert.equal(
+    evidence.details.live_members[fixture.rel],
+    hashArtifactMember(fixture.live_baseline.path, fixture.rel),
+  );
+});
+
+test('missing live baseline evidence fails closed and does not copy candidate hashes', () => {
+  const fixture = makeObservedGitWorktree();
+  const missing = observePreserveEvidence({
+    root: fixture.work,
+    registry: fixture.registry,
+    deployment_type: 'spa-promote',
+    commit: fixture.commit,
+    deployment_artifact: fixture.deployment_artifact,
+    fingerprint: fixture.fingerprint,
+  });
+  assert.equal(missing.ok, false);
+  assert.equal(missing.code, CODES.SOURCE_COMPOSITION_REQUIRED);
+  assert.match(missing.message, /live|baseline|fails closed/i);
+  assert.equal(missing.details.live_members, undefined);
+
+  const official = evaluatePreserveBuilds(mutatingBase({
+    commit: fixture.commit,
+    deployment_artifact: fixture.deployment_artifact,
+    live_members: undefined,
+    candidate_members: undefined,
+    preflight: fixture.fingerprint,
+    immediately_before: fixture.fingerprint,
+  }), {
+    official: true,
+    root: fixture.work,
+    skip_contracts: true,
+    compositionRegistry: fixture.registry,
+  });
+  assert.equal(official.ok, false);
+  assert.equal(official.code, CODES.SOURCE_COMPOSITION_REQUIRED);
+});
+
+test('artifact or declared-commit mismatch fails closed', () => {
+  const fixture = makeObservedGitWorktree();
+  const otherCommit = 'ffffffffffffffffffffffffffffffffffffffff';
+  const mismatched = observePreserveEvidence({
+    root: fixture.work,
+    registry: fixture.registry,
+    deployment_type: 'spa-promote',
+    commit: otherCommit,
+    deployment_artifact: fixture.deployment_artifact,
+    live_baseline: fixture.live_baseline,
+    fingerprint: fixture.fingerprint,
+  });
+  assert.equal(mismatched.ok, false);
+  assert.equal(mismatched.code, CODES.SOURCE_COMPOSITION_REQUIRED);
+  assert.match(mismatched.message, /declared commit|deployment artifact/i);
+  assert.equal(mismatched.details.declared_commit, otherCommit);
+  assert.equal(mismatched.details.artifact_commit, fixture.commit);
+  assert.notEqual(mismatched.details.artifact_commit, mismatched.details.declared_commit);
+
+  const zipPath = path.join(os.tmpdir(), `checksops-obs-${process.pid}.zip`);
+  writeStoredZip(zipPath, { [fixture.rel]: 'zip-member-bytes\n' });
+  const zipEvidence = observePreserveEvidence({
+    root: fixture.work,
+    registry: fixture.registry,
+    deployment_type: 'spa-promote',
+    commit: fixture.commit,
+    deployment_artifact: { path: zipPath, commit: fixture.commit, kind: 'lambda-zip' },
+    live_baseline: fixture.live_baseline,
+    fingerprint: fixture.fingerprint,
+  });
+  assert.equal(zipEvidence.ok, true, zipEvidence.message);
+  assert.equal(zipEvidence.details.candidate_members[fixture.rel], hashBytes('zip-member-bytes\n'));
+  assert.notEqual(zipEvidence.details.candidate_members[fixture.rel], hashFileBytes(fixture.work, fixture.rel));
+
+  const driftedFingerprint = observePreserveEvidence({
+    root: fixture.work,
+    registry: fixture.registry,
+    deployment_type: 'spa-promote',
+    commit: fixture.commit,
+    deployment_artifact: fixture.deployment_artifact,
+    live_baseline: {
+      ...fixture.live_baseline,
+      fingerprint: { ...fixture.fingerprint, index_html_sha256: 'idx-stale' },
+    },
+    fingerprint: fixture.fingerprint,
+  });
+  assert.equal(driftedFingerprint.ok, false);
+  assert.equal(driftedFingerprint.code, CODES.DEPLOYMENT_COLLISION);
+  assert.ok(driftedFingerprint.details.mismatched_fingerprint_fields.includes('index_html_sha256'));
 });
 
 test('official path rejects fabricated candidate hashes and git ancestry', () => {
   const fixture = makeObservedGitWorktree();
   const fakeMembers = { [fixture.rel]: '0'.repeat(64) };
   const fabricated = mutatingBase({
+    commit: fixture.commit,
     candidate_members: fakeMembers,
     live_members: fakeMembers,
     source_composition_manifest: { files: [fixture.rel], members: fakeMembers },
     current_main_sha: MAIN,
     merge_base_sha: MAIN,
     git_ancestry: gitAncestry(),
+    deployment_artifact: fixture.deployment_artifact,
+    live_baseline: fixture.live_baseline,
+    preflight: fixture.fingerprint,
+    immediately_before: fixture.fingerprint,
   });
 
   const binding = evaluateObservationBinding(fabricated, observePreserveEvidence({
     root: fixture.work,
     registry: fixture.registry,
     deployment_type: 'spa-promote',
+    commit: fixture.commit,
+    deployment_artifact: fixture.deployment_artifact,
+    live_baseline: fixture.live_baseline,
+    fingerprint: fixture.fingerprint,
   }));
   assert.equal(binding.ok, false);
   assert.equal(binding.code, CODES.SOURCE_COMPOSITION_REQUIRED);
@@ -605,7 +792,7 @@ test('official path rejects fabricated candidate hashes and git ancestry', () =>
     '--skip-contracts',
   ], { encoding: 'utf8', cwd: fixture.work });
   assert.notEqual(cli.status, 0);
-  assert.match(`${cli.stderr}${cli.stdout}`, /artifact bytes|git-merge-base observation|cannot substitute/);
+  assert.match(`${cli.stderr}${cli.stdout}`, /deployment artifact|declared commit|live evidence|cannot substitute|git-merge-base observation/);
 });
 
 test('enforcement-gaps registry records remaining out-of-repo holes', () => {

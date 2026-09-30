@@ -19,7 +19,7 @@ import {
 import { acquireLease } from '../../scripts/deployment-guard/lib/lease.mjs';
 import { issueReceipt } from '../../scripts/deployment-guard/lib/receipt.mjs';
 import { refuseUnguardedDeploy } from '../../scripts/deployment-guard/require-guard.mjs';
-import { evidenceForPreservedPaths, loadCompositionRegistry, passingCompositionResults } from '../../scripts/deployment-guard/lib/source-composition.mjs';
+import { evidenceForPreservedPaths, loadCompositionRegistry, passingCompositionResults, requiredPreservedPaths } from '../../scripts/deployment-guard/lib/source-composition.mjs';
 import { loadContractRegistry, passingContractResults } from '../../scripts/deployment-guard/lib/contracts.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -234,6 +234,30 @@ test('sql-apply receipt cannot authorize executor invoke', () => {
   assert.equal(refused.code, CODES.RECEIPT_MISMATCH);
 });
 
+function officialSqlObservation(commit, fingerprint) {
+  const files = requiredPreservedPaths(loadCompositionRegistry(ROOT), {
+    deployment_type: SQL_EXECUTOR_DEPLOYMENT_TYPE,
+  });
+  const artifact = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-sql-artifact-'));
+  const baseline = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-sql-live-'));
+  for (const rel of files) {
+    const bytes = fs.readFileSync(path.join(ROOT, rel));
+    for (const root of [artifact, baseline]) {
+      const dest = path.join(root, rel);
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.writeFileSync(dest, bytes);
+    }
+  }
+  return {
+    deployment_artifact: { path: artifact, commit, kind: 'spa-dist' },
+    live_baseline: {
+      path: baseline,
+      origin: 'fresh-live-download',
+      fingerprint,
+    },
+  };
+}
+
 test('official preflight forwards executor authorization fields', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-sql-pre-'));
   const input = executorInput();
@@ -243,9 +267,11 @@ test('official preflight forwards executor authorization fields', () => {
   delete input.accepted_paths_vs_main;
   delete input.current_main_sha;
   delete input.merge_base_sha;
+  const observation = officialSqlObservation(input.commit, input.preflight);
   const file = path.join(dir, 'manifest.json');
   fs.writeFileSync(file, `${JSON.stringify({
     ...input,
+    ...observation,
     contract_results: {
       ...passingContractResults(loadContractRegistry(ROOT)),
       ...passingCompositionResults(loadCompositionRegistry(ROOT)),
