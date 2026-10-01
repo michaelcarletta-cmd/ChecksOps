@@ -128,6 +128,7 @@ export function AdminDeleteCheckButton({
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               rows={3}
+              maxLength={2000}
               disabled={deleting}
             />
             <p className="text-xs text-muted-foreground">

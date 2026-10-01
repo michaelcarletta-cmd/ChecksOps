@@ -422,7 +422,7 @@ export const handleDeleteCheck = async (event, deps = {}) => {
       return denied(spoof, { error: 'admin_required', message: 'Only admins can delete checks' });
     }
     const reason = String(body.reason || body.p_reason || '').trim();
-    if (reason.length < 3) {
+    if (reason.length < 3 || reason.length > 2000) {
       return denied(spoof, { error: 'deletion_reason_required', message: 'A deletion reason (min 3 characters) is required' });
     }
     if (looked.check.claim_id) {
@@ -438,10 +438,13 @@ export const handleDeleteCheck = async (event, deps = {}) => {
       });
     }
     await client.query(
-      `INSERT INTO public.audit_logs (user_id, action, record_type, record_id, old_values, metadata)
-       VALUES ($1::uuid, 'admin_delete_check', 'check', $2::uuid, $3::jsonb, $4::jsonb)`,
+      `INSERT INTO public.audit_logs (
+         user_id, action, record_type, record_id, old_values, new_values, metadata
+       ) VALUES ($1::uuid, $2::text, $3::text, $4::text, $5::jsonb, NULL, $6::jsonb)`,
       [
         mapping.application_user_id,
+        'admin_delete_check',
+        'check',
         looked.check.id,
         JSON.stringify(looked.check),
         JSON.stringify({ reason }),

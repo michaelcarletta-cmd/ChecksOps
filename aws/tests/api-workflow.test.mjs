@@ -268,7 +268,7 @@ test('admin delete uses the server-derived admin identity, requires a reason, an
   assert.equal(client.queries.filter((q) => /INSERT INTO public\.audit_logs/.test(q.sql)).length, 1);
   const audit = client.queries.find((q) => /INSERT INTO public\.audit_logs/.test(q.sql));
   assert.equal(audit.params[0], APP_ID);
-  assert.equal(JSON.parse(audit.params[3]).reason, 'Duplicate intake');
+  assert.equal(audit.params[5], JSON.stringify({ reason: 'Duplicate intake' }));
   assert.ok(client.queries.findIndex((q) => /INSERT INTO public\.audit_logs/.test(q.sql))
     < client.queries.findIndex((q) => /DELETE FROM public\.check_intake_items/.test(q.sql)));
 });

@@ -492,6 +492,7 @@ export function AdminCheckTracker({ searchQuery = "" }: { searchQuery?: string }
               onChange={(e) => setDeleteReason(e.target.value)}
               placeholder="Enter a reason (at least 3 characters)"
               rows={3}
+              maxLength={2000}
               disabled={!!deleting}
             />
           </div>

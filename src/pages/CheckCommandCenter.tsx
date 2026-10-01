@@ -7,7 +7,7 @@ import {
 } from "@/lib/checkaltDepositOrchestrator";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
-import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { isAwsStaging, awsApiBaseUrl } from "@/lib/awsStaging";
 import { CheckAltImageComplianceCard } from "@/components/checks/CheckAltImageComplianceCard";
@@ -200,7 +200,7 @@ import {
   FUNDS_TYPE_OPTIONS,
 } from "@/features/check-command/status";
 import { useCheckCommandRealtime } from "@/features/check-command/useCheckCommandRealtime";
-import { optimisticStage, optimisticRemove } from "@/features/check-command/optimistic";
+import { optimisticStage } from "@/features/check-command/optimistic";
 
 
 /* ------------------------------------------------------------------ */
