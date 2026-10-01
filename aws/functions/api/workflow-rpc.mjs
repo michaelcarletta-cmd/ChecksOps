@@ -10,6 +10,7 @@ import { ignoredSpoof, IS_PLATFORM_OWNER_SQL, parseBody, withIdentity, withIdent
 import { USER_ROLES_SQL } from './identity.mjs';
 import { applicationWorkflowWritesEnabled } from './workflow-flags.mjs';
 import { writesEnabled } from './write-allowlist.mjs';
+import { executeAdminOverrideCheckStatus } from './admin-override-check-status.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isUuid = (value) => UUID_RE.test(String(value || ''));
@@ -59,7 +60,7 @@ export const SAFE_WRITE_RPC_CLASSIFICATION = {
   record_check_return: 'safe_now',
   resolve_check_return: 'safe_now',
   get_payment_direction_by_token: 'financial_sensitive',
-  admin_override_check_status: 'financial_sensitive',
+  admin_override_check_status: 'safe_now',
   admin_delete_check: 'already_bridged', // client → DELETE /workflow/checks
   deposit_action: 'safe_now_subset', // money / provider-sensitive actions remain disabled
   assign_deposit_owner: 'financial_sensitive',
@@ -106,6 +107,7 @@ export const SAFE_WRITE_RPCS = new Set([
   'save_checkalt_settings',
   'save_checkalt_tenant_auto_deposit',
   'claim_ledger_link_or_create',
+  'admin_override_check_status',
 ]);
 
 const SESSION_RPCS = new Set(['register_session', 'validate_session', 'invalidate_session', 'log_audit']);
@@ -1207,6 +1209,8 @@ export const executeSafeWriteRpc = async ({ client, mapping, name, args }) => {
       return executeDepositAction({ client, mapping, args });
     case 'claim_ledger_link_or_create':
       return executeClaimLedgerLinkOrCreate({ client, mapping, args });
+    case 'admin_override_check_status':
+      return executeAdminOverrideCheckStatus({ client, mapping, args });
     default:
       return { error: 'rpc_disabled', name };
   }
