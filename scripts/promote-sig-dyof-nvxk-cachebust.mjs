@@ -53,7 +53,9 @@ const FORBIDDEN_KEYS = [
   'assets/Sign-DfWZrlqT.js',
 ];
 
-const oidcToken = () => new Promise((resolve, reject) => {
+let cachedOidc = null;
+
+const fetchOidcToken = () => new Promise((resolve, reject) => {
   const req = http.request({
     socketPath: '/run/cursor/api.sock',
     path: '/v1/tokens/oidc',
@@ -63,14 +65,37 @@ const oidcToken = () => new Promise((resolve, reject) => {
     const chunks = [];
     res.on('data', (d) => chunks.push(d));
     res.on('end', () => {
-      try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')).token); }
-      catch (error) { reject(error); }
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+        const token = body.token || body.id_token || null;
+        if (!token || !String(token).startsWith('eyJ')) {
+          reject(new Error(`oidc token missing or not a JWT: ${JSON.stringify(body).slice(0, 200)}`));
+          return;
+        }
+        resolve(String(token));
+      } catch (error) { reject(error); }
     });
   });
   req.on('error', reject);
   req.write(JSON.stringify({ aud: 'sts.amazonaws.com' }));
   req.end();
 });
+
+const oidcToken = async () => {
+  if (cachedOidc) return cachedOidc;
+  let lastError = null;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    try {
+      cachedOidc = await fetchOidcToken();
+      return cachedOidc;
+    } catch (error) {
+      lastError = error;
+      cachedOidc = null;
+      await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
+    }
+  }
+  throw lastError || new Error('oidc token unavailable');
+};
 
 const applyCreds = (creds) => {
   process.env.AWS_ACCESS_KEY_ID = creds.AccessKeyId;
@@ -117,15 +142,29 @@ const assumeCursor = async (session) => {
 };
 
 const assumeSpa = async (session = 'sig-dyof-nvxk-cachebust') => {
-  const creds = JSON.parse(execFileSync(AWS, [
-    'sts', 'assume-role-with-web-identity',
-    '--role-arn', SPA_DEPLOY_ROLE,
-    '--role-session-name', session,
-    '--web-identity-token', String(await oidcToken()),
-    '--duration-seconds', '3600',
-    '--output', 'json',
-  ], { encoding: 'utf8' })).Credentials;
-  applyCreds(creds);
+  try {
+    const creds = JSON.parse(execFileSync(AWS, [
+      'sts', 'assume-role-with-web-identity',
+      '--role-arn', SPA_DEPLOY_ROLE,
+      '--role-session-name', session,
+      '--web-identity-token', String(await oidcToken()),
+      '--duration-seconds', '3600',
+      '--output', 'json',
+    ], { encoding: 'utf8' })).Credentials;
+    applyCreds(creds);
+    return { ok: true, method: 'oidc' };
+  } catch (oidcError) {
+    await assumeCursor(`${session}-bridge`);
+    const creds = JSON.parse(execFileSync(AWS, [
+      'sts', 'assume-role',
+      '--role-arn', SPA_DEPLOY_ROLE,
+      '--role-session-name', session,
+      '--duration-seconds', '3600',
+      '--output', 'json',
+    ], { encoding: 'utf8' })).Credentials;
+    applyCreds(creds);
+    return { ok: true, method: 'role-chain', oidc: String(oidcError.stderr || oidcError.message || oidcError).slice(0, 200) };
+  }
 };
 
 const getObject = (key, dest) => {
