@@ -35,6 +35,7 @@ const jwtEvent = (body) => ({
 
 const mockClient = ({
   roles = [{ role: 'admin' }],
+  tenantRole = 'operator',
   check = {
     id: CHECK_ID,
     tenant_id: FREEDOM,
@@ -68,7 +69,7 @@ const mockClient = ({
         return { rows: check ? [check] : [] };
       }
       if (/FROM public.tenant_users/.test(sql)) {
-        return { rows: check?.tenant_id === FREEDOM ? [{ '?column?': 1 }] : [] };
+        return { rows: check?.tenant_id === FREEDOM ? [{ role: tenantRole }] : [] };
       }
       if (/UPDATE public.check_intake_items/.test(sql)) return { rows: [] };
       if (/UPDATE public.claim_checks/.test(sql)) return { rows: [] };
@@ -166,8 +167,8 @@ test('staff outside the tenant cannot override', async () => {
   assert.equal(result.error, 'not_authorized');
 });
 
-test('tenant user without admin role can override', async () => {
-  const client = mockClient({ roles: [{ role: 'staff' }] });
+test('tenant operator without admin role can override', async () => {
+  const client = mockClient({ roles: [{ role: 'staff' }], tenantRole: 'operator' });
   const result = await executeAdminOverrideCheckStatus({
     client,
     mapping: { application_user_id: APP_ID },
@@ -175,6 +176,17 @@ test('tenant user without admin role can override', async () => {
   });
   assert.equal(result.error, undefined);
   assert.equal(result.data.new_status, 'needs_review');
+});
+
+test('tenant viewer cannot override', async () => {
+  const client = mockClient({ roles: [{ role: 'staff' }], tenantRole: 'viewer' });
+  const result = await executeAdminOverrideCheckStatus({
+    client,
+    mapping: { application_user_id: APP_ID },
+    args: { p_check_id: CHECK_ID, p_new_status: 'needs_review' },
+  });
+  assert.equal(result.error, 'not_authorized');
+  assert.equal(client.queries.some((q) => /UPDATE public.check_intake_items/.test(q.sql)), false);
 });
 
 test('outsider without tenant membership is rejected', async () => {
