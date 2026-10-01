@@ -86,7 +86,11 @@ export function createGhFetchPage(execFile = execFileSync, { repo, pathTemplate 
   return function fetchPage(page, pageSize) {
     try {
       const endpoint = pathTemplate(page, pageSize);
-      const raw = execFile('gh', ['api', '--include', endpoint], { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 });
+      const raw = execFile('gh', ['api', '--include', endpoint], {
+        encoding: 'utf8',
+        maxBuffer: 10 * 1024 * 1024,
+        timeout: 20_000,
+      });
       const parsed = parseGhApiIncludeOutput(raw);
       if (!parsed.status || parsed.status >= 400) {
         return { ok: false, error: `GitHub API ${parsed.status || 'failure'} for ${endpoint}` };
