@@ -148,7 +148,17 @@ function hasFile(files, rel) {
   return Object.prototype.hasOwnProperty.call(files, rel);
 }
 
-const MERCHANT_CAPABILITY_CODES = ['transfers', 'send-funds', 'wallet', 'send-funds.ach'];
+const MERCHANT_CAPABILITY_CODES = ['transfers', 'collect-funds.ach', 'send-funds.ach', 'wallet.balance'];
+const LEGACY_CAPABILITY_REQUEST_IDS = ['send-funds', 'collect-funds', 'wallet'];
+
+function quotedCapability(src, code) {
+  return String(src || '').includes(`'${code}'`) || String(src || '').includes(`"${code}"`);
+}
+
+function requestsLegacyCapability(src, code) {
+  const escaped = String(code).replace(/\./g, '\\.');
+  return new RegExp(`capabilities\\s*:\\s*\\[[^\\]]*[\\'"\`]${escaped}[\\'"\`]`).test(String(src || ''));
+}
 
 export function evaluateMoovSourceContracts(files = {}) {
   const out = {};
@@ -190,18 +200,26 @@ export function evaluateMoovSourceContracts(files = {}) {
       && !/> Override</.test(operating);
   }
   if (hasFile(files, 'aws/functions/api/providers/parity/moov-functions.mjs')
-    || hasFile(files, 'aws/functions/api/providers/parity/moov-onboard.mjs')) {
+    || hasFile(files, 'aws/functions/api/providers/parity/moov-onboard.mjs')
+    || hasFile(files, 'aws/functions/api/providers/parity/moov-capabilities.mjs')
+    || hasFile(files, 'supabase/functions/_shared/moovCapabilities.ts')) {
     const onboard = `${files['aws/functions/api/providers/parity/moov-functions.mjs'] || ''}\n${files['aws/functions/api/providers/parity/moov-onboard.mjs'] || ''}`;
-    out.moov_merchant_capability_codes = MERCHANT_CAPABILITY_CODES.every((code) => onboard.includes(`'${code}'`) || onboard.includes(`"${code}"`));
+    const capMod = `${files['aws/functions/api/providers/parity/moov-capabilities.mjs'] || ''}\n${files['supabase/functions/_shared/moovCapabilities.ts'] || ''}`;
+    const sources = `${capMod}\n${onboard}`;
+    out.moov_merchant_capability_codes = MERCHANT_CAPABILITY_CODES.every((code) => quotedCapability(sources, code))
+      && /MERCHANT_CAPABILITIES/.test(onboard || capMod)
+      && !LEGACY_CAPABILITY_REQUEST_IDS.some((code) => requestsLegacyCapability(onboard, code));
     out.moov_sync_writes_stakeholder_banks = /applyMoovBanksToStakeholders/.test(onboard)
       && /syncLinkedStakeholderBanks/.test(onboard);
   }
   if (hasFile(files, 'supabase/functions/moov-onboarding-link/index.ts')) {
     const link = String(files['supabase/functions/moov-onboarding-link/index.ts'] || '');
-    out.moov_onboarding_link_collect_funds = /collect-funds/.test(link)
-      && /transfers/.test(link)
-      && /send-funds/.test(link)
-      && /wallet/.test(link);
+    const capMod = `${files['aws/functions/api/providers/parity/moov-capabilities.mjs'] || ''}\n${files['supabase/functions/_shared/moovCapabilities.ts'] || ''}`;
+    out.moov_onboarding_link_collect_funds = /MERCHANT_CAPABILITIES/.test(link)
+      && /collect-funds\.ach/.test(`${capMod}\n${link}`)
+      && !requestsLegacyCapability(link, 'collect-funds')
+      && !requestsLegacyCapability(link, 'send-funds')
+      && !requestsLegacyCapability(link, 'wallet');
   }
   if (hasFile(files, 'supabase/functions/moov-webhook/index.ts')
     || hasFile(files, 'aws/functions/api/providers/webhook-apply.mjs')) {

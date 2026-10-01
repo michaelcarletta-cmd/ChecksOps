@@ -58,6 +58,8 @@ const SOURCE_PATHS = [
   'aws/functions/api/providers/parity/moov-stakeholder-sync.mjs',
   'aws/functions/api/providers/parity/moov-functions.mjs',
   'aws/functions/api/providers/parity/moov-onboard.mjs',
+  'aws/functions/api/providers/parity/moov-capabilities.mjs',
+  'supabase/functions/_shared/moovCapabilities.ts',
   'supabase/functions/moov-onboarding-link/index.ts',
   'supabase/functions/moov-webhook/index.ts',
   'aws/functions/api/providers/webhook-apply.mjs',

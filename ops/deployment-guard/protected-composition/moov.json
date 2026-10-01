@@ -21,8 +21,8 @@
     "moov-sync writes verified last four and status onto stakeholder_accounts",
     "Moov bank verification webhooks write stakeholder verification through the linked recipient, even when provider_account_id is missing",
     "Settings does not offer an admin Override button for Moov bank verification",
-    "merchant capability request keeps transfers, send-funds, wallet, send-funds.ach",
-    "hosted onboarding-link still requests collect-funds"
+    "merchant capability request keeps transfers, collect-funds.ach, send-funds.ach, wallet.balance",
+    "hosted onboarding-link requests collect-funds.ach"
   ],
   "required_regression_tests": {
     "moov-spa-composition": "aws/tests/moov-claim-ledger-spa-composition.test.mjs",
@@ -39,6 +39,8 @@
     "src/components/payments/PaymentAccountPanel.tsx",
     "aws/functions/api/providers/parity/moov-functions.mjs",
     "aws/functions/api/providers/parity/moov-onboard.mjs",
+    "aws/functions/api/providers/parity/moov-capabilities.mjs",
+    "supabase/functions/_shared/moovCapabilities.ts",
     "supabase/functions/moov-onboarding-link/index.ts",
     "supabase/functions/moov-webhook/index.ts",
     "aws/functions/api/providers/webhook-apply.mjs"
@@ -60,10 +62,9 @@
   ],
   "capability_codes": [
     "transfers",
-    "send-funds",
-    "collect-funds",
-    "wallet",
-    "send-funds.ach"
+    "collect-funds.ach",
+    "send-funds.ach",
+    "wallet.balance"
   ],
   "absence_based_deletion": "forbidden_unless_superseded",
   "supersession": {
