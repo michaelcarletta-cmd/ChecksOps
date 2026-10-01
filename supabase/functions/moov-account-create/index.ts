@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { moovFetch, scopes } from "../_shared/moovClient.ts";
+import { MERCHANT_CAPABILITIES, MOOV_CAPABILITIES_API_VERSION } from "../_shared/moovCapabilities.ts";
 import { corsHeaders, json, isResponse, logPaymentEvent, requireMoovCaller, sanitize } from "../_shared/moovGuard.ts";
 
 // Creates (once) the tenant's own connected Moov business account.
@@ -89,6 +90,7 @@ serve(async (req) => {
       method: "POST",
       scopes: scopes.accountsWrite(),
       idempotencyKey,
+      apiVersion: MOOV_CAPABILITIES_API_VERSION,
       body: {
         accountType: "business",
         profile: {
@@ -102,7 +104,7 @@ serve(async (req) => {
           },
 
         },
-        capabilities: ["transfers", "send-funds", "wallet", "send-funds.ach"],
+        capabilities: [...MERCHANT_CAPABILITIES],
         // Provider-issued ToS acceptance token from the hosted ToS component.
         // Absent when the tenant will finish in hosted onboarding instead.
         ...(tosToken ? { termsOfService: { token: tosToken } } : {}),

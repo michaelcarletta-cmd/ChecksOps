@@ -16,7 +16,16 @@ import {
   scopes,
   withMoovContext,
 } from './moov-client.mjs';
+<<<<<<< HEAD
 import { fail, jsonResult, moovParityContext } from './caller.mjs';
+=======
+import { fail, jsonResult, moovParityContext, isChecksOpsPlatformOwner } from './caller.mjs';
+import {
+  MERCHANT_CAPABILITIES,
+  MOOV_CAPABILITIES_API_VERSION,
+  missingRequestedCapabilities,
+} from './moov-capabilities.mjs';
+>>>>>>> f0748ac84 (Switch Moov merchant requests to granular ACH capabilities.)
 import { loadMoovAccount, logPaymentEvent, sanitize } from './db.mjs';
 import { readWallet, syncWallet } from './moov-wallet.mjs';
 import {
@@ -160,6 +169,7 @@ const accountCreate = {
       method: 'POST',
       scopes: scopes.accountsWrite(),
       idempotencyKey,
+      apiVersion: MOOV_CAPABILITIES_API_VERSION,
       fetchImpl,
       body: {
         accountType: 'business',
@@ -173,7 +183,7 @@ const accountCreate = {
             address: addr ?? undefined,
           },
         },
-        capabilities: ['transfers', 'send-funds', 'wallet', 'send-funds.ach'],
+        capabilities: [...MERCHANT_CAPABILITIES],
         ...(tosToken ? { termsOfService: { token: tosToken } } : {}),
         foreignID: tenantId,
         metadata: { checksops_tenant_id: tenantId },
@@ -209,7 +219,7 @@ const accountCreate = {
       already_existed: false,
       account: saved,
       liveProviderCalled: true,
-      request: { path: '/accounts', method: 'POST', headers: lastMoovRequestHeaders(), pinnedVersion: 'v2024.01.00' },
+      request: { path: '/accounts', method: 'POST', headers: lastMoovRequestHeaders(), pinnedVersion: MOOV_CAPABILITIES_API_VERSION },
     });
   },
 };
@@ -475,6 +485,16 @@ const sync = {
     const banks = await moovFetch(`/accounts/${accountId}/bank-accounts`, { scopes: scopes.bankAccountsRead(accountId), fetchImpl }).catch(() => []);
     const flags = capabilityFlags(caps);
     const verification = remote?.profile?.business?.verification?.status ?? remote?.verification?.status ?? null;
+    const missing = missingRequestedCapabilities(caps, MERCHANT_CAPABILITIES);
+    if (missing.length > 0 && String(verification || '').toLowerCase() !== 'failed') {
+      await moovFetch(`/accounts/${accountId}/capabilities`, {
+        method: 'POST',
+        scopes: scopes.capabilitiesWrite(accountId),
+        apiVersion: MOOV_CAPABILITIES_API_VERSION,
+        fetchImpl,
+        body: { capabilities: missing },
+      }).catch(() => {});
+    }
     const onboarding = normalizeOnboardingStatus({
       verificationStatus: verification,
       capabilities: caps,

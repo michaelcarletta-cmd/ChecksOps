@@ -6,6 +6,11 @@ import {
   safeLastFour,
   scopes,
 } from "../_shared/moovClient.ts";
+import {
+  MERCHANT_CAPABILITIES,
+  MOOV_CAPABILITIES_API_VERSION,
+  missingRequestedCapabilities,
+} from "../_shared/moovCapabilities.ts";
 import { fetchRailMethodIds, saveMethodRails } from "../_shared/moovRails.ts";
 import { corsHeaders, json, isResponse, logPaymentEvent, requireMoovCaller, sanitize } from "../_shared/moovGuard.ts";
 
@@ -252,24 +257,16 @@ serve(async (req) => {
     }
 
     // 4. Proactive Capability Requests.
-    // ChecksOps only requests capabilities required for the specific product configuration.
-    // We always need send-funds (for ACH disbursement) and wallet.balance (for treasury).
-    // We only request collect-funds.ach if the tenant has explicitly started a collection workflow.
-    const requiredCaps = ["send-funds.ach", "wallet.balance"];
-    
-    // Check if we actually need collection capabilities (e.g. for fee collection or fund pulls)
-    // For now, we keep it explicit: unless the platform configuration demands it, we don't request it.
-    if (account.provider_metadata?.checksops_requires_collection) {
-      requiredCaps.push("collect-funds.ach");
-    }
-
-    const missing = requiredCaps.filter(req => !capList.some(c => c.capability === req || c.capability === req.split(".")[0]));
+    // Request the granular ACH collect/send + wallet.balance set Moov now requires.
+    // Legacy family IDs do not count — existing accounts still get the new IDs.
+    const missing = missingRequestedCapabilities(capList, MERCHANT_CAPABILITIES);
     
     if (missing.length > 0 && verificationStatus !== "failed") {
       try {
         await moovFetch(`/accounts/${accountId}/capabilities`, {
           method: "POST",
           scopes: scopes.capabilitiesWrite(accountId),
+          apiVersion: MOOV_CAPABILITIES_API_VERSION,
           body: { capabilities: missing }
         });
         console.log(`[moov-sync] Requested required capabilities: ${missing.join(", ")}`);

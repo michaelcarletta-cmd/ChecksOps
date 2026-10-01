@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { moovFetch, bindMoovEnvironment, moovConfigured, moovEnvironment, safeLastFour, scopes } from "../_shared/moovClient.ts";
+import { MOOV_CAPABILITIES_API_VERSION, RECIPIENT_CAPABILITIES } from "../_shared/moovCapabilities.ts";
 import { corsHeaders, json, sanitize } from "../_shared/moovGuard.ts";
 import {
   identityRequirementsOutstanding,
@@ -127,7 +128,8 @@ serve(async (req) => {
       await moovFetch<any>(`/accounts/${accountId}/capabilities`, {
         method: "POST",
         scopes: scopes.capabilitiesWrite(accountId),
-        body: { capabilities: ["transfers"] },
+        apiVersion: MOOV_CAPABILITIES_API_VERSION,
+        body: { capabilities: [...RECIPIENT_CAPABILITIES] },
       });
     } catch (e) {
       console.error("[moov-recipient-bank-add] capabilities", (e as Error).message);
