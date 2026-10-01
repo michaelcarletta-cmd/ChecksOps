@@ -192,7 +192,13 @@ export function TenantBankAccountSettings() {
       toast({ title: "Account marked as verified (admin override)" });
       qc.invalidateQueries({ queryKey: ["tenant-primary-accounts"] });
     },
-    onError: (e: any) => toast({ title: "Override failed", description: e.message, variant: "destructive" }),
+    onError: (e: any) => toast({
+      title: "Override failed",
+      description: e.message === "writes_disabled"
+        ? "Admin override is not enabled on this environment yet."
+        : e.message,
+      variant: "destructive",
+    }),
   });
 
   if (isLoading) return <div className="text-sm text-muted-foreground p-4">Loading...</div>;
