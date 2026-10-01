@@ -14,6 +14,7 @@ import { evaluateAcceptedContracts, loadContractRegistry, passingContractResults
 import { evaluateProductionGate } from '../../scripts/deployment-guard/lib/production.mjs';
 import { evaluateIndexToctou, evaluateSpaPromote } from '../../scripts/deployment-guard/lib/spa-promote.mjs';
 import {
+  evaluateMoovSourceContracts,
   evaluateProtectedComposition,
   evaluateWalletOpsSourceContracts,
   loadProtectedCompositionRegistry,
@@ -47,6 +48,12 @@ const SOURCE_PATHS = [
   'src/lib/payments/reconcileWalletFundingTransfer.ts',
   'src/components/settings/ComplianceSettings.tsx',
   'src/components/white-label/WhiteLabelSettings.tsx',
+  'src/lib/payments/featureFlags.ts',
+  'src/lib/payments/tenantMoovDefaults.ts',
+  'src/components/disbursement/StakeholderAccountSettings.tsx',
+  'aws/functions/api/providers/parity/moov-functions.mjs',
+  'aws/functions/api/providers/parity/moov-onboard.mjs',
+  'supabase/functions/moov-onboarding-link/index.ts',
 ];
 
 function readRepo(rel) {
@@ -118,9 +125,8 @@ function codesOf(result) {
 test('registry is multi-manifest and only registers known accepted work', () => {
   const registry = loadProtectedCompositionRegistry(ROOT);
   assert.equal(registry.fail_closed, true);
-  assert.equal(registry.manifests.length, 1);
-  assert.equal(registry.manifests[0].id, 'walletops-activity-recovery');
   const ids = registry.manifests.map((row) => row.id);
+  assert.deepEqual(ids, ['walletops-activity-recovery', 'moov']);
   for (const invented of ['signature', 'claim-number', 'OCR', 'billing', 'mortgage-ops']) {
     assert.equal(ids.includes(invented), false, invented);
   }
@@ -158,11 +164,33 @@ test('current accepted WalletOps source satisfies source contracts', () => {
   }
 });
 
+test('current accepted Moov source satisfies capability contracts', () => {
+  const results = evaluateMoovSourceContracts(loadWalletOpsFiles());
+  for (const [id, result] of Object.entries(results)) {
+    assert.equal(result.ok, true, id);
+  }
+});
+
+test('removing Bank verified / Provider linked Moov status is rejected', () => {
+  const files = loadWalletOpsFiles({
+    'src/components/disbursement/StakeholderAccountSettings.tsx': readRepo('src/components/disbursement/StakeholderAccountSettings.tsx')
+      .replaceAll('Bank verified', 'Verified')
+      .replaceAll('Provider linked', '')
+      .replaceAll('moov-sync', 'noop-sync'),
+  });
+  const result = evaluateProtectedComposition(validInput({
+    candidate_source: { files },
+  }), { root: ROOT });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.REGRESSION_DETECTED);
+  assert.match(JSON.stringify(result.errors), /moov_bank_verified_status|moov_provider_linked_status|moov_status_refresh/);
+});
+
 test('valid candidate that preserves accepted behavior is ALLOW', () => {
   const result = evaluateProtectedComposition(validInput(), { root: ROOT });
   assert.equal(result.ok, true, result.message);
   assert.equal(result.details.protected_composition, 'preserved');
-  assert.deepEqual(result.details.manifests, ['walletops-activity-recovery']);
+  assert.deepEqual(result.details.manifests, ['walletops-activity-recovery', 'moov']);
 
   const official = evaluateDeployment(validInput(), { root: ROOT });
   assert.equal(official.ok, true, official.message);

@@ -60,6 +60,11 @@ dist must not overwrite accepted production behavior. Official path:
 Intentional change of a protected contract requires explicit supersession
 (`composition_id`, `approved`, evidence, replacement tests, updated manifest).
 
+No Cursor agent directly deploys an SPA. Every production SPA must pass a
+composition gate that compares the candidate against a protected production
+capability manifest. Current enabled manifests: WalletOps activity recovery
+and Moov.
+
 If two workstreams changed the same Lambda member: **STOP** with
 `SOURCE_RECONCILIATION_REQUIRED` and reconcile in source.
 

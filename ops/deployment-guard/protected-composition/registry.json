@@ -11,6 +11,15 @@
       "environments": ["production"],
       "components": ["production-spa"],
       "deployment_types": ["spa-promote"]
+    },
+    {
+      "id": "moov",
+      "path": "moov.json",
+      "enabled": true,
+      "accepted": true,
+      "environments": ["production"],
+      "components": ["production-spa"],
+      "deployment_types": ["spa-promote"]
     }
   ]
 }

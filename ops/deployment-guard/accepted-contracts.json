@@ -100,7 +100,16 @@
       "components": ["*"],
       "deployment_types": ["lambda-overlay", "spa-promote"],
       "test": "scripts/test-moov-file-rules.mjs",
-      "invariants": ["Moov file/readiness rules remain enforced"]
+      "tests": [
+        "scripts/test-moov-file-rules.mjs",
+        "aws/tests/moov-claim-ledger-spa-composition.test.mjs"
+      ],
+      "protected_composition": "ops/deployment-guard/protected-composition/moov.json",
+      "invariants": [
+        "Moov file/readiness rules remain enforced",
+        "Moov is generally available to every tenant when USE_MOOV is on",
+        "Stakeholder accounts show Bank verified separately from Provider linked"
+      ]
     },
     {
       "id": "checkalt",

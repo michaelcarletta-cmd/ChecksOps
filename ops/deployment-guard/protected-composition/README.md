@@ -26,9 +26,17 @@ Hashed SPA filenames (`index-….js`) are acceptance evidence only.
 
 Add one JSON file here and list it in `registry.json`.
 
+Registered now:
+
+- `walletops-activity-recovery`
+- `moov` (GA + stakeholder Bank verified / Provider linked + capability codes)
+
 Do not fabricate a manifest unless that workstream has a known final accepted
 contract. Signature, claim-number, OCR, billing, and Mortgage Ops can be
 registered later the same way.
+
+No Cursor agent directly deploys an SPA. The official path compares the
+candidate against every enabled protected production capability manifest.
 
 ## Supersession
 

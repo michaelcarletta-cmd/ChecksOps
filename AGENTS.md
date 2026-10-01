@@ -31,6 +31,7 @@ Rules:
 - Preserve unrelated live members.
 - Production requires explicit approval for **this** workstream plus a staging acceptance reference.
 - A later deploy does not implicitly supersede an accepted composition. Supersession requires `composition_id`, `approved`, evidence, replacement tests, and an updated manifest.
+- No Cursor agent directly deploys an SPA. Every production SPA must pass a composition gate that compares the candidate against every enabled protected production capability manifest in `ops/deployment-guard/protected-composition/`.
 
 Inventoried `MUST_REFUSE_DIRECT` scripts fail closed with `DEPLOYMENT_GUARD_REQUIRED` unless a valid short-lived receipt exists. Issue one via `preflight.mjs --acquire-lease --receipt` or `wrap-legacy.mjs`. Hand-written receipt JSON is `RECEIPT_FORGED`. A staging receipt cannot authorize production. An environment variable cannot bypass the guard.
 

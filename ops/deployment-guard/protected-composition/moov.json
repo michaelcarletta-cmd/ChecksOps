@@ -1,0 +1,56 @@
+{
+  "id": "moov",
+  "title": "Moov accepted production capability",
+  "accepted": true,
+  "enabled": true,
+  "verdict": "MOOV ACCEPTED COMPOSITION — DEPLOYMENT GUARD PROTECTED",
+  "evidence": "aws/tests/moov-claim-ledger-spa-composition.test.mjs",
+  "environments": ["production"],
+  "components": ["production-spa"],
+  "deployment_types": ["spa-promote"],
+  "pin_hashed_spa_filenames": false,
+  "no_direct_spa_deploy": true,
+  "behaviors": [
+    "Moov is generally available to every tenant when USE_MOOV is on",
+    "tenantMoovDefaults assigns production wallets to live tenants and sandbox to test accounts",
+    "Stakeholder accounts show Bank verified separately from Provider linked",
+    "moov-sync can refresh stakeholder verification status",
+    "merchant capability request keeps transfers, send-funds, wallet, send-funds.ach",
+    "hosted onboarding-link still requests collect-funds"
+  ],
+  "required_regression_tests": {
+    "moov-spa-composition": "aws/tests/moov-claim-ledger-spa-composition.test.mjs",
+    "moov-file-rules": "scripts/test-moov-file-rules.mjs"
+  },
+  "shared_files": [
+    "src/lib/payments/featureFlags.ts",
+    "src/lib/payments/tenantMoovDefaults.ts",
+    "src/hooks/usePaymentProviderEligibility.ts",
+    "src/components/disbursement/StakeholderAccountSettings.tsx",
+    "src/components/payments/PaymentAccountPanel.tsx",
+    "aws/functions/api/providers/parity/moov-functions.mjs",
+    "aws/functions/api/providers/parity/moov-onboard.mjs",
+    "supabase/functions/moov-onboarding-link/index.ts"
+  ],
+  "source_contracts": [
+    "moov_generally_available",
+    "moov_tenant_defaults",
+    "moov_bank_verified_status",
+    "moov_provider_linked_status",
+    "moov_status_refresh",
+    "moov_merchant_capability_codes",
+    "moov_onboarding_link_collect_funds"
+  ],
+  "capability_codes": [
+    "transfers",
+    "send-funds",
+    "collect-funds",
+    "wallet",
+    "send-funds.ach"
+  ],
+  "absence_based_deletion": "forbidden_unless_superseded",
+  "supersession": {
+    "allowed": true,
+    "requires": ["composition_id", "approved", "evidence", "replacement_tests"]
+  }
+}
