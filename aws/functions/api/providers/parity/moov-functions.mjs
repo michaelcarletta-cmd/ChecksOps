@@ -18,6 +18,7 @@ import {
 } from './moov-client.mjs';
 import { fail, jsonResult, moovParityContext, isChecksOpsPlatformOwner } from './caller.mjs';
 import { loadMoovAccount, logPaymentEvent, sanitize } from './db.mjs';
+import { applyMoovBanksToStakeholders, syncLinkedStakeholderBanks } from './moov-stakeholder-sync.mjs';
 import { readWallet, syncWallet } from './moov-wallet.mjs';
 import {
   cancelWalletFunding,
@@ -585,7 +586,31 @@ const sync = {
         JSON.stringify(sanitize({ remote, banks })),
       ],
     );
-    return jsonResult({ success: true, status: onboarding, liveProviderCalled: true });
+    await applyMoovBanksToStakeholders(client, {
+      tenantId: ctx.tenantId,
+      environment: 'sandbox',
+      providerAccountId: accountId,
+      banks: Array.isArray(banks) ? banks : [],
+      operatingOnly: true,
+    }).catch(() => ({ updated: 0 }));
+    const linked = await syncLinkedStakeholderBanks(client, {
+      tenantId: ctx.tenantId,
+      environment: 'sandbox',
+      skipAccountIds: [accountId],
+      fetchBanks: async (linkedAccountId) => {
+        const listed = await moovFetch(`/accounts/${linkedAccountId}/bank-accounts`, {
+          scopes: scopes.bankAccountsRead(linkedAccountId),
+          fetchImpl,
+        }).catch(() => []);
+        return Array.isArray(listed) ? listed : [];
+      },
+    }).catch(() => ({ accounts: 0, updated: 0 }));
+    return jsonResult({
+      success: true,
+      status: onboarding,
+      liveProviderCalled: true,
+      stakeholder_accounts_updated: Number(linked?.updated || 0),
+    });
   },
 };
 

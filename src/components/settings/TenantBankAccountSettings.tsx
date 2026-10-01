@@ -18,6 +18,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { usePaymentRail } from "@/hooks/usePaymentRail";
 import { SettingsHero } from "./SettingsHero";
 import { SectionCard } from "./SectionCard";
+import { decorateStakeholderBank } from "@/lib/payments/stakeholderBankDisplay";
 
 
 export function TenantBankAccountSettings() {
@@ -38,17 +39,33 @@ export function TenantBankAccountSettings() {
       // (subcontractors, vendors, sales reps) belong in the Stakeholder
       // Accounts section below, and homeowner-linked accounts belong to the
       // homeowner on a specific check/claim — never show either here.
-      const { data, error } = await supabase
-        .from("stakeholder_accounts")
-        .select("id, nickname, chk_acct, acct_type, is_active, custname, verification_status, verified_at, is_primary, origin, account_type")
-        .eq("tenant_id", tenant!.id)
-        .eq("is_active", true)
-        .or("account_type.eq.operating,origin.eq.provider_connected")
-        .neq("origin", "homeowner_link")
-        .order("verified_at", { ascending: false, nullsFirst: false })
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data ?? [];
+      const [accountsRes, tenantRes, methodsRes] = await Promise.all([
+        supabase
+          .from("stakeholder_accounts")
+          .select("id, nickname, chk_acct, acct_type, is_active, custname, verification_status, verified_at, is_primary, origin, account_type, provider_last_four, provider_bank_name, provider_account_id")
+          .eq("tenant_id", tenant!.id)
+          .eq("is_active", true)
+          .or("account_type.eq.operating,origin.eq.provider_connected")
+          .neq("origin", "homeowner_link")
+          .order("verified_at", { ascending: false, nullsFirst: false })
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("tenants")
+          .select("bank_last_four, bank_name, bank_connection_status")
+          .eq("id", tenant!.id)
+          .maybeSingle(),
+        supabase
+          .from("payment_provider_methods")
+          .select("last_four, bank_name, verification_status, connection_status, provider_account_id, external_recipient_id")
+          .eq("tenant_id", tenant!.id)
+          .eq("provider", "moov"),
+      ]);
+      if (accountsRes.error) throw accountsRes.error;
+      return (accountsRes.data ?? []).map((acct: any) => decorateStakeholderBank(acct, {
+        tenantBank: tenantRes.data ?? null,
+        methods: methodsRes.error ? [] : methodsRes.data ?? [],
+        recipients: [],
+      }));
     },
   });
 
@@ -244,7 +261,7 @@ export function TenantBankAccountSettings() {
                       </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground font-mono">
-                      {acct.chk_acct ? `••••${acct.chk_acct.slice(-4)}` : "Account pending"} · {acct.acct_type === "C" ? "Checking" : "Savings"} · {acct.custname}
+                      {acct.display_last_four_label} · {acct.acct_type === "C" ? "Checking" : "Savings"} · {acct.custname}
                     </p>
                   </div>
                   <div className="flex items-center gap-1">
@@ -284,14 +301,14 @@ export function TenantBankAccountSettings() {
                 <BankVerification
                   accountId={acct.id}
                   accountNickname={acct.nickname}
-                  accountLast4={acct.chk_acct?.slice(-4) ?? ""}
+                  accountLast4={acct.display_last_four ?? acct.chk_acct?.slice(-4) ?? ""}
                   verificationStatus={acct.verification_status ?? "unverified"}
                   verificationSource={(acct as any).verification_source ?? "moov"}
                 />
                 <AchAuthorizationForm
                   stakeholderAccountId={acct.id}
                   accountNickname={acct.nickname}
-                  accountLast4={acct.chk_acct?.slice(-4) ?? ""}
+                  accountLast4={acct.display_last_four ?? acct.chk_acct?.slice(-4) ?? ""}
                   custname={acct.custname}
                 />
               </React.Fragment>

@@ -8,6 +8,10 @@ import {
 } from "../_shared/moovClient.ts";
 import { fetchRailMethodIds, saveMethodRails } from "../_shared/moovRails.ts";
 import { corsHeaders, json, isResponse, logPaymentEvent, requireMoovCaller, sanitize } from "../_shared/moovGuard.ts";
+import {
+  applyTenantBanksToOperatingStakeholders,
+  syncLinkedStakeholderBanks,
+} from "../_shared/moovStakeholderSync.ts";
 
 // Server-side capability + account + bank synchronization.
 //
@@ -318,6 +322,27 @@ serve(async (req) => {
         last_sync: nowIso,
       })
       .eq("id", tenant_id);
+
+    try {
+      await applyTenantBanksToOperatingStakeholders(supabase, {
+        tenantId: tenant_id,
+        providerAccountId: accountId,
+        banks: banks ?? [],
+      });
+      await syncLinkedStakeholderBanks(supabase, {
+        tenantId: tenant_id,
+        environment,
+        skipAccountIds: [accountId],
+        fetchBanks: async (linkedAccountId) => {
+          const linked = await moovFetch<any[]>(`/accounts/${linkedAccountId}/bank-accounts`, {
+            scopes: scopes.bankAccountsRead(linkedAccountId),
+          }).catch(() => [] as any[]);
+          return Array.isArray(linked) ? linked : [];
+        },
+      });
+    } catch (e) {
+      console.warn("[moov-sync] stakeholder bank mirror skipped", (e as Error).message);
+    }
 
     if (previousStatus !== onboardingStatus) {
       await logPaymentEvent(supabase, {

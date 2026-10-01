@@ -172,11 +172,21 @@ export function evaluateMoovSourceContracts(files = {}) {
       && /A Moov account exists\. This is not bank verification/.test(stakeholders);
     out.moov_status_refresh = /moov-sync/.test(stakeholders)
       && /Refresh status/.test(stakeholders);
+    out.moov_stakeholder_status_from_linked_tables = /decorateStakeholderBank/.test(stakeholders)
+      && /external_payment_recipients/.test(stakeholders);
+  }
+  if (hasFile(files, 'src/components/settings/TenantBankAccountSettings.tsx')) {
+    const operating = String(files['src/components/settings/TenantBankAccountSettings.tsx'] || '');
+    out.moov_settings_last_four_from_provider = /provider_last_four/.test(operating)
+      && /decorateStakeholderBank/.test(operating)
+      && /display_last_four_label/.test(operating);
   }
   if (hasFile(files, 'aws/functions/api/providers/parity/moov-functions.mjs')
     || hasFile(files, 'aws/functions/api/providers/parity/moov-onboard.mjs')) {
     const onboard = `${files['aws/functions/api/providers/parity/moov-functions.mjs'] || ''}\n${files['aws/functions/api/providers/parity/moov-onboard.mjs'] || ''}`;
     out.moov_merchant_capability_codes = MERCHANT_CAPABILITY_CODES.every((code) => onboard.includes(`'${code}'`) || onboard.includes(`"${code}"`));
+    out.moov_sync_writes_stakeholder_banks = /applyMoovBanksToStakeholders/.test(onboard)
+      && /syncLinkedStakeholderBanks/.test(onboard);
   }
   if (hasFile(files, 'supabase/functions/moov-onboarding-link/index.ts')) {
     const link = String(files['supabase/functions/moov-onboarding-link/index.ts'] || '');

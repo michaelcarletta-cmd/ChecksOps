@@ -53,6 +53,9 @@ const SOURCE_PATHS = [
   'src/lib/payments/featureFlags.ts',
   'src/lib/payments/tenantMoovDefaults.ts',
   'src/components/disbursement/StakeholderAccountSettings.tsx',
+  'src/components/settings/TenantBankAccountSettings.tsx',
+  'src/lib/payments/stakeholderBankDisplay.ts',
+  'aws/functions/api/providers/parity/moov-stakeholder-sync.mjs',
   'aws/functions/api/providers/parity/moov-functions.mjs',
   'aws/functions/api/providers/parity/moov-onboard.mjs',
   'supabase/functions/moov-onboarding-link/index.ts',
@@ -171,6 +174,30 @@ test('current accepted Moov source satisfies capability contracts', () => {
   for (const [id, result] of Object.entries(results)) {
     assert.equal(result.ok, true, id);
   }
+});
+
+test('removing Settings Moov last-four / stakeholder sync is rejected', () => {
+  const files = loadWalletOpsFiles({
+    'src/components/settings/TenantBankAccountSettings.tsx': readRepo('src/components/settings/TenantBankAccountSettings.tsx')
+      .replaceAll('decorateStakeholderBank', 'identity')
+      .replaceAll('provider_last_four', 'chk_acct')
+      .replaceAll('display_last_four_label', 'chk_acct'),
+    'src/components/disbursement/StakeholderAccountSettings.tsx': readRepo('src/components/disbursement/StakeholderAccountSettings.tsx')
+      .replaceAll('decorateStakeholderBank', 'identity')
+      .replaceAll('external_payment_recipients', 'stakeholder_accounts'),
+    'aws/functions/api/providers/parity/moov-functions.mjs': readRepo('aws/functions/api/providers/parity/moov-functions.mjs')
+      .replaceAll('applyMoovBanksToStakeholders', 'noopBanks')
+      .replaceAll('syncLinkedStakeholderBanks', 'noopLinked'),
+  });
+  const result = evaluateProtectedComposition(validInput({
+    candidate_source: { files },
+  }), { root: ROOT });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.REGRESSION_DETECTED);
+  assert.match(
+    JSON.stringify(result.errors),
+    /moov_settings_last_four_from_provider|moov_stakeholder_status_from_linked_tables|moov_sync_writes_stakeholder_banks/,
+  );
 });
 
 test('removing Bank verified / Provider linked Moov status is rejected', () => {
