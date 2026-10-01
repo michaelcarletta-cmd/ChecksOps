@@ -169,7 +169,7 @@ const mockClient = ({
       if (/SELECT file_path FROM public\.loss_draft_documents/.test(sql)) {
         return { rows: [{ file_path: 'escrow/claim-not-this-check.pdf' }] };
       }
-      if (/UPDATE public\.loss_draft_tracking SET check_intake_item_id = NULL/.test(sql)) {
+      if (/DELETE FROM public\.loss_draft_tracking WHERE check_intake_item_id/.test(sql)) {
         return { rows: [] };
       }
       if (/INSERT INTO public.check_intake_items/.test(sql)) return { rows };
@@ -452,7 +452,7 @@ test('admin can delete a safe check via workflow delete route', async () => {
   }), depsFor(client));
   assert.equal(result.ok, true);
   assert.equal(result.data.deleted, true);
-  assert.ok(client.queries.some((q) => /UPDATE public\.loss_draft_tracking SET check_intake_item_id = NULL/.test(String(q.sql))));
+  assert.ok(client.queries.some((q) => /DELETE FROM public\.loss_draft_tracking WHERE check_intake_item_id/.test(String(q.sql))));
   assert.ok(client.queries.some((q) => /DELETE FROM public\.check_intake_items/.test(String(q.sql))));
 });
 
@@ -554,7 +554,7 @@ test('workflow delete performs S3 cleanup for check-owned keys (stubbed)', async
     assert.equal(result.ok, true);
     assert.equal(result.data.deleted, true);
     assert.equal(result.storageCleanup.ok, true);
-    assert.ok(client.queries.some((q) => /UPDATE public\.loss_draft_tracking SET check_intake_item_id = NULL/.test(String(q.sql))));
+    assert.ok(client.queries.some((q) => /DELETE FROM public\.loss_draft_tracking WHERE check_intake_item_id/.test(String(q.sql))));
     assert.ok(client.queries.some((q) => /DELETE FROM public\.check_intake_items/.test(String(q.sql))));
     assert.ok(!client.queries.some((q) => /FROM public\.loss_draft_documents/.test(String(q.sql))));
 

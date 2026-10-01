@@ -727,12 +727,16 @@ export const handleDeleteCheck = async (event, deps = {}) => {
       try { await client.query('RELEASE SAVEPOINT delete_audit_snapshot'); } catch { /* ignore */ }
     }
 
-    // Loss drafts are claim-owned and only optionally point at a check.
-    // check_intake_item_id has no ON DELETE action; unlink like admin_delete_check.
+    // Loss drafts optionally point at a check with no ON DELETE action.
+    // The application role cannot SET check_intake_item_id NULL: that column
+    // is omitted from the T5 UPDATE grant, and aws_write_loss_draft_tracking
+    // WITH CHECK uses aws_can_write_check(check_intake_item_id), which is
+    // false after the value becomes NULL. DELETE is granted and USING still
+    // sees the old check id, so remove the check-scoped row instead.
     await client.query('SAVEPOINT delete_unlink_loss_draft');
     try {
       await client.query(
-        'UPDATE public.loss_draft_tracking SET check_intake_item_id = NULL WHERE check_intake_item_id = $1::uuid',
+        'DELETE FROM public.loss_draft_tracking WHERE check_intake_item_id = $1::uuid',
         [looked.check.id],
       );
       await client.query('RELEASE SAVEPOINT delete_unlink_loss_draft');
@@ -744,7 +748,7 @@ export const handleDeleteCheck = async (event, deps = {}) => {
       } else if (error?.code === '42501') {
         return denied(spoof, {
           error: 'cleanup_denied',
-          message: 'Refusing to delete: unable to unlink loss draft tracking',
+          message: 'Refusing to delete: unable to clear loss draft tracking',
           blocker: 'loss_draft_tracking',
         });
       } else {
@@ -753,7 +757,7 @@ export const handleDeleteCheck = async (event, deps = {}) => {
     }
 
     // Rely on FK ON DELETE CASCADE for dependent records (payees/files/messages/etc).
-    // Loss drafts are unlinked above; financial/provider tables are the remaining non-cascading holders.
+    // Loss drafts are cleared above; financial/provider tables are the remaining non-cascading holders.
     const rows = (await client.query(
       'DELETE FROM public.check_intake_items WHERE id = $1::uuid AND claim_id IS NULL RETURNING id',
       [looked.check.id],
